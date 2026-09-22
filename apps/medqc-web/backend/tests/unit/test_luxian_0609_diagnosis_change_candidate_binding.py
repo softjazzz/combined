@@ -41,7 +41,7 @@ def _course(document_id: str, record_time: str | None) -> dict[str, str]:
 
 async def _evaluate_courses(*course_rows: dict[str, str]):
     return await _evaluate_selected(
-        ("LX0609-074",),
+        ("LX0609-12-02-01",),
         {
             "diagnosis": _diagnoses(),
             "daily_course_record": course_rows,
@@ -83,7 +83,7 @@ async def test_074_untimed_matching_candidate_beats_known_early_candidate():
 
     assert reduced[0].final_state is CustomerFinalState.DATA_GAP
     assert reduced[0].reason_code == "authoritative_time_missing"
-    assert dict(execution.customer_display_facts)["LX0609-074"] == {
+    assert dict(execution.customer_display_facts)["LX0609-12-02-01"] == {
         "failure_kind": "diagnosis_change_documentation_time_missing",
         "diagnosis_change_count": 1,
         "untimed_document_count": 1,

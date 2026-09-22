@@ -19,15 +19,15 @@ from sqlalchemy import text
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 ROOT = BACKEND_DIR.parent
 DEFAULT_CASE_MAP = ROOT / "tmp-lx0609-0426-current-audit" / "private-case-map.json"
-EXPECTED_LUXIAN_0609_RULE_IDS = tuple(
-    f"LX0609-{number:03d}" for number in range(1, 50)
+EXPECTED_LUXIAN_0609_RULE_IDS = (
+    "LX0609-01-01-01", "LX0609-01-02-01", "LX0609-04-02-01", "LX0609-09-01-01", "LX0609-02-01-01", "LX0609-02-01-02", "LX0609-02-01-03", "LX0609-02-01-04", "LX0609-02-01-05", "LX0609-06-01-02", "LX0609-06-01-04", "LX0609-06-01-05", "LX0609-06-02-03", "LX0609-06-03-03", "LX0609-06-03-04", "LX0609-12-01-01", "LX0609-12-01-02", "LX0609-01-01-02", "LX0609-06-02-02", "LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03", "LX0609-03-01-04", "LX0609-04-02-03", "LX0609-04-02-04", "LX0609-05-02-01", "LX0609-08-01-04", "LX0609-05-01-01", "LX0609-04-01-01", "LX0609-04-02-02", "LX0609-04-02-05", "LX0609-04-03-01", "LX0609-11-01-01", "LX0609-11-02-01", "LX0609-11-02-02", "LX0609-04-04-01", "LX0609-04-04-02", "LX0609-04-04-03", "LX0609-04-01-02", "LX0609-04-01-03", "LX0609-11-03-01", "LX0609-11-03-02", "LX0609-07-01-01", "LX0609-07-01-02", "LX0609-07-02-01", "LX0609-07-02-02", "LX0609-07-03-01", "LX0609-07-04-01", "LX0609-07-04-02",
 )
 _CASE_LABEL = re.compile(r"case-\d{2}")
 _FIXED10_CASE_LABELS = tuple(f"case-{index:02d}" for index in range(1, 11))
-_COURSE_SEVERITY_RULE_IDS = ("LX0609-008", "LX0609-009")
+_COURSE_SEVERITY_RULE_IDS = ("LX0609-02-01-04", "LX0609-02-01-05")
 _SAFE_CODE = re.compile(r"^[a-z][a-z0-9_.-]{0,127}$")
 _SHA256 = re.compile(r"^[a-f0-9]{64}$")
-_PROMPT_RULE_ID = re.compile(r"\bLX0609-\d{3}\b")
+_PROMPT_RULE_ID = re.compile(r"\bLX0609-\d{2}-\d{2}-\d{2}\b")
 _RULE_STATES = frozenset(
     {
         "compliant",
@@ -150,7 +150,7 @@ def resolve_full_luxian_0609_rule_ids(
         inventory = load_luxian_0609_dependency_inventory()
     rule_ids = [str(getattr(item, "rule_id", "") or "").strip() for item in inventory]
     if tuple(rule_ids) != EXPECTED_LUXIAN_0609_RULE_IDS:
-        raise RuntimeError("全49点回归必须显式包含49个客户规则ID，且顺序为LX0609-001..049")
+        raise RuntimeError("全49点回归必须显式包含79点主资料中的冻结首49条客户规则ID")
     return rule_ids
 
 
@@ -1073,14 +1073,14 @@ async def _evaluate_runtime_flag_ab_case(
         comparison["state_differences"] = state_differences
     if mode_label == "unified_engine":
         expected_typed_rule_ids = (
-            "LX0609-001",
-            "LX0609-002",
-            "LX0609-004",
-            "LX0609-005",
-            "LX0609-006",
-            "LX0609-007",
-            "LX0609-008",
-            "LX0609-009",
+            "LX0609-01-01-01",
+            "LX0609-01-02-01",
+            "LX0609-09-01-01",
+            "LX0609-02-01-01",
+            "LX0609-02-01-02",
+            "LX0609-02-01-03",
+            "LX0609-02-01-04",
+            "LX0609-02-01-05",
         )
         if tuple(item["rule_id"] for item in typed_decision_audits) != (
             expected_typed_rule_ids
@@ -1091,12 +1091,12 @@ async def _evaluate_runtime_flag_ab_case(
         typed_007_audit = next(
             item
             for item in typed_decision_audits
-            if item["rule_id"] == "LX0609-007"
+            if item["rule_id"] == "LX0609-02-01-03"
         )
         typed_basic_audits = tuple(
             item
             for item in typed_decision_audits
-            if item["rule_id"] in {"LX0609-001", "LX0609-005", "LX0609-006"}
+            if item["rule_id"] in {"LX0609-01-01-01", "LX0609-02-01-01", "LX0609-02-01-02"}
         )
         if family_reader_calls["baseline"] > 0 and any(
             item["final_state"] != "data_gap"
@@ -1105,11 +1105,11 @@ async def _evaluate_runtime_flag_ab_case(
         ):
             raise RuntimeError("固定10例缺少权威入院时间时基础时限族必须为data_gap")
         expected_migration_rule_ids = {
-            "LX0609-001",
-            "LX0609-005",
-            "LX0609-006",
-            "LX0609-008",
-            "LX0609-009",
+            "LX0609-01-01-01",
+            "LX0609-02-01-01",
+            "LX0609-02-01-02",
+            "LX0609-02-01-04",
+            "LX0609-02-01-05",
         }
         if course_severity_expected_matrix is None:
             raise RuntimeError("008/009固定病例事实矩阵不完整")
@@ -1131,7 +1131,7 @@ async def _evaluate_runtime_flag_ab_case(
             for item in comparison.get("state_differences", ())
             if item["rule_id"] not in expected_migration_rule_ids
             or (
-                item["rule_id"] in {"LX0609-001", "LX0609-005", "LX0609-006"}
+                item["rule_id"] in {"LX0609-01-01-01", "LX0609-02-01-01", "LX0609-02-01-02"}
                 and item["candidate_status"] != "data_gap"
             )
         )
@@ -1153,8 +1153,8 @@ async def _evaluate_runtime_flag_ab_case(
             item.rule_id: item for item in load_luxian_0609_rule_contracts()
         }
         if (
-            int(contracts_by_id["LX0609-008"].max_llm_calls_per_rule) != 0
-            or int(contracts_by_id["LX0609-009"].max_llm_calls_per_rule) > 1
+            int(contracts_by_id["LX0609-02-01-04"].max_llm_calls_per_rule) != 0
+            or int(contracts_by_id["LX0609-02-01-05"].max_llm_calls_per_rule) > 1
         ):
             raise RuntimeError("008/009模型调用合同异常")
         course_severity_candidate_llm_calls = sum(

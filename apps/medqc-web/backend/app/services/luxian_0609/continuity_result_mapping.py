@@ -9,28 +9,28 @@ from typing import Any
 
 
 CONTINUITY_CUSTOMER_RULE_IDS = frozenset(
-    {"LX0609-069", "LX0609-071", "LX0609-072", "LX0609-073", "LX0609-074"}
+    {"LX0609-04-02-07", "LX0609-10-01-01", "LX0609-10-02-01", "LX0609-10-02-02", "LX0609-12-02-01"}
 )
 
 _KINDS_BY_RULE = {
-    "LX0609-069": frozenset({
+    "LX0609-04-02-07": frozenset({
         "consultation_timeliness_check", "consultation_business_time_missing",
     }),
-    "LX0609-071": frozenset({
+    "LX0609-10-01-01": frozenset({
         "physician_handoff_timeliness_check", "physician_handoff_multi_event_check",
         "physician_handoff_association_failed", "physician_handoff_record_time_missing",
         "physician_handoff_identity_missing", "physician_signature_timeline_incomplete",
         "physician_change_time_missing",
     }),
-    "LX0609-072": frozenset({
+    "LX0609-10-02-01": frozenset({
         "transfer_record_timeliness_check", "transfer_records_missing",
         "transfer_event_association_gap",
     }),
-    "LX0609-073": frozenset({
+    "LX0609-10-02-02": frozenset({
         "transfer_record_presence_check", "transfer_records_missing",
         "transfer_event_association_gap",
     }),
-    "LX0609-074": frozenset({
+    "LX0609-12-02-01": frozenset({
         "diagnosis_change_documentation_check", "diagnosis_change_association_failed",
         "diagnosis_change_documentation_time_missing",
     }),

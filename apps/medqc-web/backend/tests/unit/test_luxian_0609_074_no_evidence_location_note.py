@@ -1,4 +1,4 @@
-"""LX0609-074 空证据定位说明的交付合同。
+"""LX0609-12-02-01 空证据定位说明的交付合同。
 
 锁定三件事：
 1. 「结构化诊断声明成立、病程未记录理由与依据」的确定问题（`non_compliant`
@@ -103,7 +103,7 @@ def _declared_change_without_document_id_rows() -> dict:
 async def test_074_structured_declaration_projects_its_parent_admission_record() -> None:
     client = _DiagnosisChangeClient()
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-074",), _declared_change_only_rows(), llm_client=client
+        ("LX0609-12-02-01",), _declared_change_only_rows(), llm_client=client
     )
 
     assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
@@ -111,7 +111,7 @@ async def test_074_structured_declaration_projects_its_parent_admission_record()
     assert client.calls == []
 
     final = _canonical_extended_result(
-        rule_id="LX0609-074",
+        rule_id="LX0609-12-02-01",
         snapshot=snapshot,
         materials=materials,
         result=execution,
@@ -145,12 +145,12 @@ async def test_074_empty_evidence_explanation_reaches_customer_delivery_path() -
 
     client = _DiagnosisChangeClient()
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-074",),
+        ("LX0609-12-02-01",),
         _declared_change_without_document_id_rows(),
         llm_client=client,
     )
     final = _canonical_extended_result(
-        rule_id="LX0609-074",
+        rule_id="LX0609-12-02-01",
         snapshot=snapshot,
         materials=materials,
         result=execution,
@@ -174,14 +174,14 @@ async def test_074_empty_evidence_explanation_reaches_customer_delivery_path() -
 async def test_074_non_compliant_with_evidence_does_not_get_explanation() -> None:
     client = _DiagnosisChangeClient()
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-074",), _declared_change_with_marked_course_rows(), llm_client=client
+        ("LX0609-12-02-01",), _declared_change_with_marked_course_rows(), llm_client=client
     )
 
     assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
     assert execution.llm_call_count == 0
 
     final = _canonical_extended_result(
-        rule_id="LX0609-074",
+        rule_id="LX0609-12-02-01",
         snapshot=snapshot,
         materials=materials,
         result=execution,
@@ -207,7 +207,7 @@ async def test_074_compliant_does_not_get_explanation() -> None:
         )
     )
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-074",),
+        ("LX0609-12-02-01",),
         {
             "admission_record_diagnosis": (
                 {"diagnosis_type": "修正诊断", "diagnosis_name": "细菌性肺炎"},
@@ -222,7 +222,7 @@ async def test_074_compliant_does_not_get_explanation() -> None:
     assert reduced[0].final_state is CustomerFinalState.COMPLIANT
 
     final = _canonical_extended_result(
-        rule_id="LX0609-074",
+        rule_id="LX0609-12-02-01",
         snapshot=snapshot,
         materials=materials,
         result=execution,
@@ -237,7 +237,7 @@ async def test_074_compliant_does_not_get_explanation() -> None:
 async def test_074_not_applicable_does_not_get_explanation() -> None:
     client = _DiagnosisChangeClient()
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-074",),
+        ("LX0609-12-02-01",),
         {
             "admission_record_diagnosis": (
                 {"diagnosis_type": "入院诊断", "diagnosis_name": "肺部感染"},
@@ -257,7 +257,7 @@ async def test_074_not_applicable_does_not_get_explanation() -> None:
     assert reduced[0].final_state is CustomerFinalState.NOT_APPLICABLE
 
     final = _canonical_extended_result(
-        rule_id="LX0609-074",
+        rule_id="LX0609-12-02-01",
         snapshot=snapshot,
         materials=materials,
         result=execution,

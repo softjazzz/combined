@@ -130,11 +130,11 @@ async def test_engine_resolves_registry_and_passes_one_snapshot_to_every_family(
     )
     report = await Luxian0609ExecutionEngine(registry=registry).execute(
         executor_batches=(
-            ("basic_timeliness", ("LX0609-001",)),
-            ("surgery_gate", ("LX0609-003",)),
+            ("basic_timeliness", ("LX0609-01-01-01",)),
+            ("surgery_gate", ("LX0609-04-02-01",)),
         ),
         snapshot=snapshot,
-        contracts=_contracts("LX0609-001", "LX0609-003"),
+        contracts=_contracts("LX0609-01-01-01", "LX0609-04-02-01"),
         default_deadline_seconds=1.0,
         max_concurrency=1,
     )
@@ -148,8 +148,8 @@ async def test_engine_resolves_registry_and_passes_one_snapshot_to_every_family(
         "surgery_gate",
     ]
     assert seen == [
-        ("a", snapshot, ("LX0609-001",)),
-        ("b", snapshot, ("LX0609-003",)),
+        ("a", snapshot, ("LX0609-01-01-01",)),
+        ("b", snapshot, ("LX0609-04-02-01",)),
     ]
     assert seen[0][1] is seen[1][1]
 
@@ -182,11 +182,11 @@ async def test_engine_runs_independent_families_with_bounded_concurrency():
     task = asyncio.create_task(
         Luxian0609ExecutionEngine(registry=registry).execute(
             executor_batches=(
-                ("basic_timeliness", ("LX0609-001",)),
-                ("surgery_gate", ("LX0609-003",)),
+                ("basic_timeliness", ("LX0609-01-01-01",)),
+                ("surgery_gate", ("LX0609-04-02-01",)),
             ),
             snapshot=_snapshot(),
-            contracts=_contracts("LX0609-001", "LX0609-003"),
+            contracts=_contracts("LX0609-01-01-01", "LX0609-04-02-01"),
             default_deadline_seconds=1.0,
             max_concurrency=2,
         )
@@ -215,8 +215,8 @@ async def test_engine_rejects_missing_or_cyclic_dependencies(cycle: bool):
             depends_on=("surgery_gate",),
         )
     ]
-    batches = (("basic_timeliness", ("LX0609-001",)),)
-    contracts = _contracts("LX0609-001")
+    batches = (("basic_timeliness", ("LX0609-01-01-01",)),)
+    contracts = _contracts("LX0609-01-01-01")
     if cycle:
         registrations.append(
             ExecutorRegistration(
@@ -226,10 +226,10 @@ async def test_engine_rejects_missing_or_cyclic_dependencies(cycle: bool):
             )
         )
         batches = (
-            ("basic_timeliness", ("LX0609-001",)),
-            ("surgery_gate", ("LX0609-003",)),
+            ("basic_timeliness", ("LX0609-01-01-01",)),
+            ("surgery_gate", ("LX0609-04-02-01",)),
         )
-        contracts = _contracts("LX0609-001", "LX0609-003")
+        contracts = _contracts("LX0609-01-01-01", "LX0609-04-02-01")
 
     with pytest.raises(
         ValueError,
@@ -273,11 +273,11 @@ async def test_engine_preserves_explicit_dependency_order():
     )
     await Luxian0609ExecutionEngine(registry=registry).execute(
         executor_batches=(
-            ("basic_timeliness", ("LX0609-001",)),
-            ("surgery_gate", ("LX0609-003",)),
+            ("basic_timeliness", ("LX0609-01-01-01",)),
+            ("surgery_gate", ("LX0609-04-02-01",)),
         ),
         snapshot=_snapshot(),
-        contracts=_contracts("LX0609-001", "LX0609-003"),
+        contracts=_contracts("LX0609-01-01-01", "LX0609-04-02-01"),
         default_deadline_seconds=1.0,
         max_concurrency=2,
     )
@@ -307,12 +307,12 @@ async def test_engine_isolates_timeout_and_exception_without_echoing_error():
     )
     report = await Luxian0609ExecutionEngine(registry=registry).execute(
         executor_batches=(
-            ("basic_timeliness", ("LX0609-001",)),
-            ("surgery_gate", ("LX0609-003",)),
-            ("exam_lab", ("LX0609-010",)),
+            ("basic_timeliness", ("LX0609-01-01-01",)),
+            ("surgery_gate", ("LX0609-04-02-01",)),
+            ("exam_lab", ("LX0609-06-01-02",)),
         ),
         snapshot=_snapshot(),
-        contracts=_contracts("LX0609-001", "LX0609-003", "LX0609-010"),
+        contracts=_contracts("LX0609-01-01-01", "LX0609-04-02-01", "LX0609-06-01-02"),
         default_deadline_seconds=0.01,
         max_concurrency=3,
     )
@@ -352,11 +352,11 @@ async def test_engine_isolates_executor_internal_cancellation():
     )
     report = await Luxian0609ExecutionEngine(registry=registry).execute(
         executor_batches=(
-            ("basic_timeliness", ("LX0609-001",)),
-            ("surgery_gate", ("LX0609-003",)),
+            ("basic_timeliness", ("LX0609-01-01-01",)),
+            ("surgery_gate", ("LX0609-04-02-01",)),
         ),
         snapshot=_snapshot(),
-        contracts=_contracts("LX0609-001", "LX0609-003"),
+        contracts=_contracts("LX0609-01-01-01", "LX0609-04-02-01"),
         default_deadline_seconds=1.0,
         max_concurrency=2,
     )
@@ -384,10 +384,10 @@ async def test_engine_converts_invalid_envelope_to_family_technical_results():
     events: list[str] = []
     report = await Luxian0609ExecutionEngine(registry=registry).execute(
         executor_batches=(
-            ("basic_timeliness", ("LX0609-001", "LX0609-002")),
+            ("basic_timeliness", ("LX0609-01-01-01", "LX0609-01-02-01")),
         ),
         snapshot=_snapshot(),
-        contracts=_contracts("LX0609-001", "LX0609-002"),
+        contracts=_contracts("LX0609-01-01-01", "LX0609-01-02-01"),
         default_deadline_seconds=1.0,
         max_concurrency=1,
         trace_sink=lambda event: events.append(str(event["event"])),
@@ -398,8 +398,8 @@ async def test_engine_converts_invalid_envelope_to_family_technical_results():
     assert failure.failure_kind == "contract"
     assert failure.reason_code == "family_result_missing"
     assert [item["rule_id"] for item in failure.envelope.results] == [
-        "LX0609-001",
-        "LX0609-002",
+        "LX0609-01-01-01",
+        "LX0609-01-02-01",
     ]
     assert [item["status"] for item in failure.envelope.results] == [
         "technical_error",
@@ -423,9 +423,9 @@ async def test_engine_rejects_rule_contract_executor_mismatch():
 
     with pytest.raises(ValueError, match="family rule contract executor mismatch"):
         await Luxian0609ExecutionEngine(registry=registry).execute(
-            executor_batches=(("basic_timeliness", ("LX0609-003",)),),
+            executor_batches=(("basic_timeliness", ("LX0609-04-02-01",)),),
             snapshot=_snapshot(),
-            contracts=_contracts("LX0609-003"),
+            contracts=_contracts("LX0609-04-02-01"),
             default_deadline_seconds=1.0,
             max_concurrency=1,
         )
@@ -448,9 +448,9 @@ async def test_engine_propagates_parent_cancellation():
     )
     task = asyncio.create_task(
         Luxian0609ExecutionEngine(registry=registry).execute(
-            executor_batches=(("basic_timeliness", ("LX0609-001",)),),
+            executor_batches=(("basic_timeliness", ("LX0609-01-01-01",)),),
             snapshot=_snapshot(),
-            contracts=_contracts("LX0609-001"),
+            contracts=_contracts("LX0609-01-01-01"),
             default_deadline_seconds=10.0,
             max_concurrency=1,
         )
@@ -494,11 +494,11 @@ async def test_engine_internal_failure_aborts_queued_families_and_cleans_tasks(
     with pytest.raises(RuntimeError, match="validator failed"):
         await Luxian0609ExecutionEngine(registry=registry).execute(
             executor_batches=(
-                ("basic_timeliness", ("LX0609-001",)),
-                ("exam_lab", ("LX0609-010",)),
+                ("basic_timeliness", ("LX0609-01-01-01",)),
+                ("exam_lab", ("LX0609-06-01-02",)),
             ),
             snapshot=_snapshot(),
-            contracts=_contracts("LX0609-001", "LX0609-010"),
+            contracts=_contracts("LX0609-01-01-01", "LX0609-06-01-02"),
             default_deadline_seconds=1.0,
             max_concurrency=1,
         )

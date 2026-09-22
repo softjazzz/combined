@@ -1584,7 +1584,7 @@ export function useCustomerSampleValidationController() {
               .trim()
               .toUpperCase(),
           )
-          .filter((ruleId) => /^LX0609-\d{3}$/u.test(ruleId)),
+          .filter((ruleId) => /^LX0609-(?!00)\d{2}-(?!00)\d{2}-(?!00)\d{2}$/u.test(ruleId)),
       ),
     ).sort()
   }

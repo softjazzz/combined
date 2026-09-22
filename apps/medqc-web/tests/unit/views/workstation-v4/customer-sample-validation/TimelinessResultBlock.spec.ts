@@ -20,7 +20,7 @@ function buildItem(
   customer_display_facts?: Record<string, unknown>,
 ): SingleRecordQcResultItem {
   return {
-    rule_id: 'LX0609-002',
+    rule_id: 'LX0609-01-02-01',
     rule_name: '首次病程记录',
     status,
     conclusion: '已核对时限事实。',

@@ -13,7 +13,7 @@ import re
 from typing import Any
 
 
-DIFFICULT_CASE_CUSTOMER_RULE_ID = "LX0609-050"
+DIFFICULT_CASE_CUSTOMER_RULE_ID = "LX0609-03-02-01"
 _DATETIME = re.compile(
     r"\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}"
     r"(?:\.\d{1,6})?(?:Z|[+-]\d{2}:?\d{2})?"

@@ -18,13 +18,13 @@ async def _evaluate_062(
     rows_by_source, *, llm_client=None, unavailable_sources=frozenset()
 ):
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-062",),
+        ("LX0609-08-01-02",),
         rows_by_source,
         llm_client=llm_client,
         unavailable_sources=unavailable_sources,
     )
     canonical = _canonical_extended_result(
-        rule_id="LX0609-062",
+        rule_id="LX0609-08-01-02",
         snapshot=snapshot,
         materials=materials,
         result=execution,
@@ -254,8 +254,8 @@ async def test_062_single_row_model_path_does_not_bind_mismatched_material_rows(
         mismatched_document_rows,
     )
     execution = await execute_luxian_0609_native_extended_document_rules(
-        rule_ids=("LX0609-062",),
-        decision_rule_ids=("LX0609-062",),
+        rule_ids=("LX0609-08-01-02",),
+        decision_rule_ids=("LX0609-08-01-02",),
         evidence_snapshot=snapshot,
         evidence_materials=materials,
         llm_client=InvalidClient(),

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.luxian_0609_identity_test_support import published_rule_ids
+
 from dataclasses import replace
 import json
 
@@ -357,10 +359,10 @@ def test_only_bounded_registered_sources_may_claim_complete_or_truncated() -> No
 
 
 def test_rule_source_resolution_preserves_catalog_order_and_never_claims_unproven_complete() -> None:
-    selected = ("LX0609-029", "LX0609-030", "LX0609-032")
+    selected = ("LX0609-04-01-01", "LX0609-04-02-02", "LX0609-04-03-01")
     resolved = resolve_luxian_0609_rule_sources(selected)
     assert tuple(resolved) == selected
-    assert resolved["LX0609-030"][0].document_type == "surgery_record"
+    assert resolved["LX0609-04-02-02"][0].document_type == "surgery_record"
     assert all(
         entry.default_completeness is SourceCompleteness.UNPROVEN
         for entries in resolved.values()
@@ -371,7 +373,7 @@ def test_rule_source_resolution_preserves_catalog_order_and_never_claims_unprove
 
 
 def test_exam_lab_rules_bind_current_visit_nondrug_orders() -> None:
-    selected = ("LX0609-010", "LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015")
+    selected = ("LX0609-06-01-02", "LX0609-06-01-04", "LX0609-06-01-05", "LX0609-06-03-03", "LX0609-06-03-04")
 
     resolved = resolve_luxian_0609_decision_support_source_keys(selected)
 
@@ -394,18 +396,18 @@ def test_059_binds_only_event_order_and_course_decision_support_sources() -> Non
     assert snapshot.identity_dict()["source_registry_version"] == SOURCE_REGISTRY_VERSION
     assert json.loads(snapshot.canonical_json())["source_registry_version"] == SOURCE_REGISTRY_VERSION
 
-    resolved = resolve_luxian_0609_decision_support_source_keys(("LX0609-059",))
+    resolved = resolve_luxian_0609_decision_support_source_keys(("LX0609-05-03-01",))
     assert set(resolved) == set(expected_sources)
     assert set(resolved) <= set(load_luxian_0609_source_registry())
     contracts = {
         item.rule_id: item for item in load_luxian_0609_rule_contracts()
     }
-    assert contracts["LX0609-059"].applicable_documents == expected_sources
+    assert contracts["LX0609-05-03-01"].applicable_documents == expected_sources
 
 
 def test_consultation_execution_rules_bind_evaluation_horizon() -> None:
     resolved = resolve_luxian_0609_decision_support_source_keys(
-        ("LX0609-020", "LX0609-023")
+        ("LX0609-03-01-01", "LX0609-03-01-04")
     )
 
     assert "evaluation_context.horizon" in resolved
@@ -413,9 +415,9 @@ def test_consultation_execution_rules_bind_evaluation_horizon() -> None:
 
 def test_transfusion_rules_bind_both_event_sources_and_keep_billing_isolated() -> None:
     clinical = resolve_luxian_0609_decision_support_source_keys(
-        tuple(f"LX0609-{index:03d}" for index in range(41, 49))
+        published_rule_ids(41, 48)
     )
-    billing = resolve_luxian_0609_decision_support_source_keys(("LX0609-049",))
+    billing = resolve_luxian_0609_decision_support_source_keys(("LX0609-07-04-02",))
 
     assert "bloodtrans_record" in clinical
     assert "mr_bloodtrans" in clinical

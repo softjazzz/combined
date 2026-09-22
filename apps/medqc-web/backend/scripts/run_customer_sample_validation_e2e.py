@@ -55,7 +55,7 @@ _SAFE_RESULT_STATUSES = frozenset(
         "skipped",
     }
 )
-_RULE_ID_PATTERN = re.compile(r"^LX0609-\d{3}$")
+_RULE_ID_PATTERN = re.compile(r"^LX0609-\d{2}-\d{2}-\d{2}$")
 _OPERATION_REF_PATTERN = re.compile(r"^sample-op-[0-9a-f]{24}$")
 _SCOPE_HASH_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 _EXPORT_MIME_MARKERS = {

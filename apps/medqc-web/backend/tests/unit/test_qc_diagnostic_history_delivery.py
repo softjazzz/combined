@@ -13,7 +13,7 @@ def arguments():
     workspace.get_batch_job.return_value = {"status": "completed"}
     workspace.get_latest_luxian_0609_record_result.return_value = {
         "state": "ready", "job_id": "job", "record_ref": "ref",
-        "items": [{"rule_id": "LX0609-032", "status": "not_applicable", "reason_code": "trigger_absent_complete"}],
+        "items": [{"rule_id": "LX0609-04-03-01", "status": "not_applicable", "reason_code": "trigger_absent_complete"}],
     }
     return dict(workspace=workspace, owner="owner", job_id="job", record_ref="ref",
                 institute_id="synthetic-institute", patient_id="synthetic-patient", visit_id="synthetic-visit")

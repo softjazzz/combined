@@ -115,15 +115,15 @@ async def test_fast5_supports_family_and_catalog_ordered_subsets():
         evaluation_as_of_date="2026-07-20",
         sample_kind="synthetic",
         family="surgery",
-        selected_rule_ids=("LX0609-025", "LX0609-033"),
+        selected_rule_ids=("LX0609-04-02-04", "LX0609-11-01-01"),
         bundle_loader=loader,
         runner=runner,
         llm_client=SimpleNamespace(model="test-model"),
         base_settings=SimpleNamespace(),
     )
 
-    assert calls == [("LX0609-025", "LX0609-033")] * 5
-    assert result["selected_rule_ids"] == ["LX0609-025", "LX0609-033"]
+    assert calls == [("LX0609-04-02-04", "LX0609-11-01-01")] * 5
+    assert result["selected_rule_ids"] == ["LX0609-04-02-04", "LX0609-11-01-01"]
     assert result["summary"]["judgment_count"] == 10
 
 
@@ -163,7 +163,7 @@ def test_fast5_rejects_invalid_or_noncanonical_scope_before_loading():
     with pytest.raises(fast5.Fast5ContractError, match="scope"):
         fast5._resolve_selected_rule_ids(
             family="course",
-            selected_rule_ids=("LX0609-017", "LX0609-008"),
+            selected_rule_ids=("LX0609-12-01-02", "LX0609-02-01-04"),
         )
 
 

@@ -771,6 +771,12 @@ export async function runManualSamplePool(
   }
   const sampleItemIds = normalizeUniqueValues(payload?.sample_item_ids, 'sample_item_ids')
   const selectedRuleIds = normalizeUniqueValues(payload?.selected_rule_ids, 'selected_rule_ids')
+  const invalidLuxianRuleId = selectedRuleIds.find(
+    (ruleId) => /^LX0609-/iu.test(ruleId) && !/^LX0609-\d{2}-\d{2}-\d{2}$/u.test(ruleId),
+  )
+  if (invalidLuxianRuleId) {
+    throw new Error(`selected_rule_ids 包含无效的 LX0609 四段式编号：${invalidLuxianRuleId}`)
+  }
   const recordRefs = (payload?.record_refs || []).map((item) => ({
     institute_id: String(item?.institute_id || '').trim(),
     patient_id: String(item?.patient_id || '').trim(),

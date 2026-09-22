@@ -18,21 +18,21 @@ from app.services.sichuan_qc_service import SichuanQCService
 
 
 _CROSS_FAMILY_RULE_IDS = (
-    "LX0609-016",  # 病程
-    "LX0609-023",  # 会诊（020/021/022 因来源缺失暂停）
-    "LX0609-033",  # 手术
-    "LX0609-012",  # 检查检验
-    "LX0609-045",  # 输血
-    "LX0609-052",  # 扩展文书（危急值）
+    "LX0609-12-01-01",  # 病程
+    "LX0609-03-01-04",  # 会诊（020/021/022 因来源缺失暂停）
+    "LX0609-11-01-01",  # 手术
+    "LX0609-06-01-05",  # 检查检验
+    "LX0609-07-02-01",  # 输血
+    "LX0609-06-04-01",  # 扩展文书（危急值）
 )
 
 _FAMILY_REPRESENTATIVE_RULE_IDS = {
-    "course": "LX0609-016",
-    "consultation": "LX0609-023",
-    "surgery": "LX0609-033",
-    "exam_lab": "LX0609-012",
-    "transfusion": "LX0609-045",
-    "extended": "LX0609-052",
+    "course": "LX0609-12-01-01",
+    "consultation": "LX0609-03-01-04",
+    "surgery": "LX0609-11-01-01",
+    "exam_lab": "LX0609-06-01-05",
+    "transfusion": "LX0609-07-02-01",
+    "extended": "LX0609-06-04-01",
 }
 
 
@@ -247,7 +247,7 @@ class _PromptCaptureClient:
             "choices": [{"message": {"content": json.dumps({
                 "schema_version": "lx0609-exam-lab-text-facts-v3",
                 "facts": [{
-                    "rule_id": "LX0609-012",
+                    "rule_id": "LX0609-06-01-05",
                     "applicability": "applicable",
                     "semantic_state": "present",
                     "positive_state": "positive",
@@ -309,7 +309,7 @@ async def test_typed_native_prompt_and_canonical_are_invariant_to_scene_summary_
 
     first = await service.evaluate_running_final_bundle_input(
         bundle=_scene_bundle(variant="short"),
-        rule_ids=["LX0609-012"],
+        rule_ids=["LX0609-06-01-05"],
         rule_set_key=LUXIAN_0609_RULE_SET_KEY,
         evaluation_as_of_date="2026-04-30",
         evaluation_horizon_policy="frozen_task_date",
@@ -323,7 +323,7 @@ async def test_typed_native_prompt_and_canonical_are_invariant_to_scene_summary_
     }
     second = await service.evaluate_running_final_bundle_input(
         bundle=_scene_bundle(variant="long"),
-        rule_ids=["LX0609-012"],
+        rule_ids=["LX0609-06-01-05"],
         rule_set_key=LUXIAN_0609_RULE_SET_KEY,
         evaluation_as_of_date="2026-04-30",
         evaluation_horizon_policy="frozen_task_date",

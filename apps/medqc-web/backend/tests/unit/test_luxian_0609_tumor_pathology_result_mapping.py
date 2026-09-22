@@ -19,14 +19,14 @@ def _checked_sources() -> list[dict[str, str]]:
 
 
 def _facts(*, rule_id: str, state: str) -> dict[str, object]:
-    if rule_id == "LX0609-013":
+    if rule_id == "LX0609-06-02-03":
         return {
             "verification_kind": "pathology_result_documentation_check",
             "pathology_trigger_sources": ["pathology_exam_report"],
             "checked_target_sources": _checked_sources(),
             "requirement_met": state == "met",
         }
-    if rule_id == "LX0609-019":
+    if rule_id == "LX0609-06-02-02":
         if state == "missing":
             return {
                 "failure_kind": "pathology_sampling_not_documented",
@@ -40,7 +40,7 @@ def _facts(*, rule_id: str, state: str) -> dict[str, object]:
             "documented_sources": ["surgery_record"],
             "requirement_met": True,
         }
-    if rule_id == "LX0609-026":
+    if rule_id == "LX0609-05-02-01":
         field_results = {
             "drug_name": "matched",
             "dose": "matched",
@@ -70,16 +70,16 @@ def _facts(*, rule_id: str, state: str) -> dict[str, object]:
 @pytest.mark.parametrize(
     ("rule_id", "state", "status"),
     [
-        ("LX0609-013", "met", "compliant"),
-        ("LX0609-013", "not_met", "non_compliant"),
-        ("LX0609-019", "documented", "compliant"),
-        ("LX0609-019", "missing", "non_compliant"),
-        ("LX0609-026", "matched", "compliant"),
-        ("LX0609-026", "mismatched", "non_compliant"),
-        ("LX0609-026", "unknown", "data_gap"),
-        ("LX0609-026", "missing", "data_gap"),
-        ("LX0609-027", "met", "compliant"),
-        ("LX0609-027", "not_met", "non_compliant"),
+        ("LX0609-06-02-03", "met", "compliant"),
+        ("LX0609-06-02-03", "not_met", "non_compliant"),
+        ("LX0609-06-02-02", "documented", "compliant"),
+        ("LX0609-06-02-02", "missing", "non_compliant"),
+        ("LX0609-05-02-01", "matched", "compliant"),
+        ("LX0609-05-02-01", "mismatched", "non_compliant"),
+        ("LX0609-05-02-01", "unknown", "data_gap"),
+        ("LX0609-05-02-01", "missing", "data_gap"),
+        ("LX0609-08-01-04", "met", "compliant"),
+        ("LX0609-08-01-04", "not_met", "non_compliant"),
     ],
 )
 def test_tumor_pathology_status_contract_preserves_active_facts(
@@ -112,15 +112,15 @@ def test_tumor_pathology_status_contract_preserves_active_facts(
 @pytest.mark.parametrize(
     ("rule_id", "state", "incorrect_status"),
     [
-        ("LX0609-013", "met", "non_compliant"),
-        ("LX0609-013", "not_met", "data_gap"),
-        ("LX0609-019", "documented", "non_compliant"),
-        ("LX0609-019", "missing", "data_gap"),
-        ("LX0609-026", "matched", "data_gap"),
-        ("LX0609-026", "mismatched", "compliant"),
-        ("LX0609-026", "unknown", "non_compliant"),
-        ("LX0609-027", "not_met", "compliant"),
-        ("LX0609-027", "not_met", "uncertain"),
+        ("LX0609-06-02-03", "met", "non_compliant"),
+        ("LX0609-06-02-03", "not_met", "data_gap"),
+        ("LX0609-06-02-02", "documented", "non_compliant"),
+        ("LX0609-06-02-02", "missing", "data_gap"),
+        ("LX0609-05-02-01", "matched", "data_gap"),
+        ("LX0609-05-02-01", "mismatched", "compliant"),
+        ("LX0609-05-02-01", "unknown", "non_compliant"),
+        ("LX0609-08-01-04", "not_met", "compliant"),
+        ("LX0609-08-01-04", "not_met", "uncertain"),
     ],
 )
 def test_tumor_pathology_finalizer_fail_closes_status_fact_conflicts(
@@ -150,7 +150,7 @@ def test_tumor_pathology_finalizer_rejects_invalid_facts_even_for_technical_erro
 ):
     finalized, handled = finalize_luxian_0609_executor_customer_display_facts(
         result={
-            "rule_id": "LX0609-013",
+            "rule_id": "LX0609-06-02-03",
             "status": "technical_error",
             "reason_code": "native_failure",
             "customer_display_facts": {"forged": True},

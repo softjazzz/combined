@@ -90,7 +90,7 @@ def test_diagnostic_semantic_snapshot_excludes_original_text():
             },
         ),
         episodes=(model_episode,),
-        statuses={"LX0609-022": ("non_compliant", "requirement_violated")},
+        statuses={"LX0609-03-01-03": ("non_compliant", "requirement_violated")},
     )
 
     assert snapshot["schema_version"] == "consultation-semantic-snapshot-v1"
@@ -185,12 +185,12 @@ def test_embedded_consultation_opinion_is_clear_without_field_label():
     )
 
     statuses = episode._strong_explicit_consultation_statuses(
-        selected=("LX0609-022",),
+        selected=("LX0609-03-01-03",),
         documents=documents,
         execution_projection=None,
     )
 
-    assert statuses == {"LX0609-022": ("compliant", "requirement_satisfied")}
+    assert statuses == {"LX0609-03-01-03": ("compliant", "requirement_satisfied")}
 
 
 def test_conditional_embedded_opinion_is_not_upgraded_to_clear():
@@ -248,7 +248,7 @@ async def test_batch_preserves_explicit_clear_022_when_model_marks_one_episode_v
     ]))
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03", "LX0609-03-01-04"),
         institute_id="i",
         patient_id="p",
         visit_id="v",
@@ -272,7 +272,7 @@ async def test_batch_preserves_explicit_clear_022_when_model_marks_one_episode_v
     assert len(client.prompts) == 1
     assert "不得因为recommendations为空" in client.prompts[0]
     assert result.results[2]["metadata"]["executor_type"] == "program"
-    display = dict(result.customer_display_facts)["LX0609-022"]
+    display = dict(result.customer_display_facts)["LX0609-03-01-03"]
     assert display["semantic_state"] == "clear"
     assert "source_document_ids" not in display
     assert [item["semantic_state"] for item in display["episode_results"]] == [
@@ -557,13 +557,13 @@ def test_partial_coverage_with_grounded_quote_triggers_020_non_compliant():
     assert assessment.recommendation_coverage_state == "partial"
     assert assessment.uncovered_source_quotes == ("复查肝功能",)
     assert episode._execution_outcome(
-        "LX0609-020",
+        "LX0609-03-01-01",
         episodes=(model_episode,),
         completed_recommendations=completed,
         assessments=(assessment,),
     ) == ("non_compliant", "requirement_violated")
     assert episode._execution_outcome(
-        "LX0609-020",
+        "LX0609-03-01-01",
         episodes=(model_episode,),
         completed_recommendations=completed,
         assessments=(assessment,),
@@ -701,7 +701,7 @@ def test_partial_coverage_covering_own_quote_cannot_fail_020(uncovered):
     assert assessment.coverage_confidence == "low"
     assert assessment.uncovered_source_quotes == ()
     assert episode._execution_outcome(
-        "LX0609-020",
+        "LX0609-03-01-01",
         episodes=(model_episode,),
         completed_recommendations=completed,
         assessments=(assessment,),
@@ -774,7 +774,7 @@ def test_shared_source_quote_atomic_items_cannot_fail_020_on_coverage():
         item.recommendation_coverage_state for item in assessments
     ] == ["unknown", "unknown"]
     assert episode._execution_outcome(
-        "LX0609-020",
+        "LX0609-03-01-01",
         episodes=(model_episode,),
         completed_recommendations=completed,
         assessments=assessments,
@@ -958,7 +958,7 @@ def test_023_specific_and_unknown_cannot_be_declared_fully_compliant():
     )
 
     assert episode._execution_outcome(
-        "LX0609-023",
+        "LX0609-03-01-04",
         episodes=(model_episode,),
         completed_recommendations=completed,
         assessments=assessments,
@@ -977,7 +977,7 @@ def test_023_high_generic_remains_non_compliant():
     )
 
     assert episode._execution_outcome(
-        "LX0609-023",
+        "LX0609-03-01-04",
         episodes=(model_episode,),
         completed_recommendations=completed,
         assessments=assessments,
@@ -999,7 +999,7 @@ def test_023_generic_trace_fails_regardless_of_confidence(confidence):
     )
 
     assert episode._execution_outcome(
-        "LX0609-023",
+        "LX0609-03-01-04",
         episodes=(model_episode,),
         completed_recommendations=completed,
         assessments=assessments,
@@ -1020,7 +1020,7 @@ def test_023_any_confirmed_no_trace_is_non_compliant():
     )
 
     assert episode._execution_outcome(
-        "LX0609-023",
+        "LX0609-03-01-04",
         episodes=(model_episode,),
         completed_recommendations=completed,
         assessments=assessments,
@@ -1039,7 +1039,7 @@ def test_023_specific_and_missing_is_non_compliant():
     )
 
     assert episode._execution_outcome(
-        "LX0609-023",
+        "LX0609-03-01-04",
         episodes=(model_episode,),
         completed_recommendations=completed,
         assessments=assessments,
@@ -1195,7 +1195,7 @@ def _window_session(
         )
 
     return build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-020", "LX0609-023"),
+        selected_rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -1374,22 +1374,22 @@ async def test_two_rows_can_merge_into_one_real_episode(monkeypatch):
     monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda **_: _rows("申请会诊", "专科会诊意见"))
     client = _Client(_payload(episodes=[_episode("consultation_record-1", ["consultation_record-1", "consultation_record-2"])]))
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-021", "LX0609-022"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+        rule_ids=("LX0609-03-01-02", "LX0609-03-01-03"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
     assert [item["status"] for item in result.results] == ["compliant", "compliant"]
     assert result.llm_call_count == 1
     assert "专科会诊意见" in client.prompts[0]
     assert all("consultation_record-1" not in repr(item) for item in result.results)
     display = dict(result.customer_display_facts)
-    assert display["LX0609-021"]["semantic_state"] == "clear"
-    assert display["LX0609-021"]["episode_count"] == 1
-    assert display["LX0609-021"]["document_count"] == 2
-    assert display["LX0609-022"]["semantic_state"] == "clear"
-    assert display["LX0609-022"]["checked_requirement"] == "给出针对当前病情的明确诊疗意见"
+    assert display["LX0609-03-01-02"]["semantic_state"] == "clear"
+    assert display["LX0609-03-01-02"]["episode_count"] == 1
+    assert display["LX0609-03-01-02"]["document_count"] == 2
+    assert display["LX0609-03-01-03"]["semantic_state"] == "clear"
+    assert display["LX0609-03-01-03"]["checked_requirement"] == "给出针对当前病情的明确诊疗意见"
     snapshot = result.diagnostic_semantic_snapshot
     assert snapshot is not None
     assert snapshot["schema_version"] == "consultation-semantic-snapshot-v1"
-    assert snapshot["synthesized_rule_states"]["LX0609-022"]["status"] == "compliant"
+    assert snapshot["synthesized_rule_states"]["LX0609-03-01-03"]["status"] == "compliant"
     assert all("text" not in item for item in snapshot["semantic_documents"])
 
 
@@ -1424,7 +1424,7 @@ async def test_material_reference_binding_keeps_anonymous_prompt_sequence_unchan
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-021", "LX0609-022"),
+        selected_rule_ids=("LX0609-03-01-02", "LX0609-03-01-03"),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -1452,14 +1452,14 @@ async def test_material_reference_binding_keeps_anonymous_prompt_sequence_unchan
     )
 
     raw_result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-021", "LX0609-022"),
+        rule_ids=("LX0609-03-01-02", "LX0609-03-01-03"),
         institute_id="I", patient_id="P", visit_id="V", source_schema=None,
         llm_client=raw_client,
         # 本用例比较两次调用各自构建的提示词，必须绕过第一阶段事实冻结。
         opinion_freeze_rebuild=True,
     )
     material_result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-021", "LX0609-022"),
+        rule_ids=("LX0609-03-01-02", "LX0609-03-01-03"),
         institute_id="I", patient_id="P", visit_id="V", source_schema=None,
         llm_client=material_client,
         evidence_snapshot=session.snapshot,
@@ -1493,7 +1493,7 @@ async def test_unparseable_consultation_material_binding_is_technical_error_with
         "record_content": "会诊意见：建议复查血常规。",
     },)
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-022",),
+        selected_rule_ids=("LX0609-03-01-03",),
         institute_id="I", patient_id="P", visit_id="V", source_schema=None,
         created_at="2026-07-22T00:00:00+08:00",
         row_reader=lambda **_: SnapshotSourceRows.create(
@@ -1511,12 +1511,12 @@ async def test_unparseable_consultation_material_binding_is_technical_error_with
     client = _Client(_payload(episodes=[]))
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-022",),
+        rule_ids=("LX0609-03-01-03",),
         institute_id="I", patient_id="P", visit_id="V", source_schema=None,
         llm_client=client,
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
-        decision_rule_ids=("LX0609-022",),
+        decision_rule_ids=("LX0609-03-01-03",),
     )
 
     assert result.results == ()
@@ -1573,7 +1573,7 @@ async def test_022_mixed_opinions_preserve_each_episode_for_customer_explanation
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-022",),
+        rule_ids=("LX0609-03-01-03",),
         institute_id="i",
         patient_id="p",
         visit_id="v",
@@ -1582,7 +1582,7 @@ async def test_022_mixed_opinions_preserve_each_episode_for_customer_explanation
     )
 
     assert result.results[0]["status"] == "non_compliant"
-    assert dict(result.customer_display_facts)["LX0609-022"]["episode_results"] == [
+    assert dict(result.customer_display_facts)["LX0609-03-01-03"]["episode_results"] == [
         {
             "episode_index": 1,
             "semantic_state": "clear",
@@ -1634,7 +1634,7 @@ async def test_document_identity_allows_semantic_merge_without_application_id(
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-021", "LX0609-022"),
+        rule_ids=("LX0609-03-01-02", "LX0609-03-01-03"),
         institute_id="i",
         patient_id="p",
         visit_id="v",
@@ -1675,11 +1675,11 @@ async def test_020_document_copies_share_one_semantically_confirmed_event(monkey
         }),
     )
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
     assert [item["status"] for item in result.results] == ["compliant", "compliant"]
-    facts = dict(result.customer_display_facts)["LX0609-020"]
+    facts = dict(result.customer_display_facts)["LX0609-03-01-01"]
     assert facts["completed_opinion_episode_count"] == 1
     assert facts["recommendation_count"] == 1
     assert result.llm_call_count == 2
@@ -1699,7 +1699,7 @@ async def test_document_identity_does_not_resolve_uncertain_event_association(mo
         episodes=[], unresolved=["consultation_record-1", "consultation_record-2"],
     ))
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
     assert {item["status"] for item in result.results} == {"uncertain"}
@@ -1726,7 +1726,7 @@ async def test_document_identity_allows_independent_real_events_without_applicat
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-021", "LX0609-022"),
+        rule_ids=("LX0609-03-01-02", "LX0609-03-01-03"),
         institute_id="i",
         patient_id="p",
         visit_id="v",
@@ -1773,7 +1773,7 @@ async def test_many_real_documents_without_application_id_keep_semantic_event_co
     ))
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-021", "LX0609-022"),
+        rule_ids=("LX0609-03-01-02", "LX0609-03-01-03"),
         institute_id="i",
         patient_id="p",
         visit_id="v",
@@ -1815,7 +1815,7 @@ async def test_distinct_consultation_business_keys_cannot_merge_into_one_episode
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-021", "LX0609-022"),
+        rule_ids=("LX0609-03-01-02", "LX0609-03-01-03"),
         institute_id="i",
         patient_id="p",
         visit_id="v",
@@ -1861,7 +1861,7 @@ async def test_application_alias_can_join_split_documents_into_one_episode(monke
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-021", "LX0609-022"),
+        rule_ids=("LX0609-03-01-02", "LX0609-03-01-03"),
         institute_id="i",
         patient_id="p",
         visit_id="v",
@@ -1925,7 +1925,7 @@ async def test_authoritative_event_group_merges_model_split_application_and_opin
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03", "LX0609-03-01-04"),
         institute_id="i",
         patient_id="p",
         visit_id="v",
@@ -1967,7 +1967,7 @@ async def test_pure_signature_template_is_excluded_before_episode_prompt(monkeyp
         }],
     )]))
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-021", "LX0609-022"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+        rule_ids=("LX0609-03-01-02", "LX0609-03-01-03"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
     assert [item["status"] for item in result.results] == ["compliant", "compliant"]
     assert template not in client.prompts[0]
@@ -1984,7 +1984,7 @@ async def test_only_pure_signature_templates_are_not_applicable_without_llm(monk
     )
     client = _Client(_payload(episodes=[]))
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-021", "LX0609-022"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+        rule_ids=("LX0609-03-01-02", "LX0609-03-01-03"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
     assert [item["status"] for item in result.results] == ["not_applicable", "not_applicable"]
     assert result.llm_call_count == 0
@@ -2003,7 +2003,7 @@ async def test_signature_with_substantive_opinion_remains_in_episode_prompt(monk
         "consultation_record-1", ["consultation_record-1"], application="absent",
     )]))
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-022",), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+        rule_ids=("LX0609-03-01-03",), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
     assert result.results[0]["status"] == "compliant"
     assert substantive in client.prompts[0]
@@ -2020,7 +2020,7 @@ async def test_split_application_and_opinion_keep_distinct_role_refs(monkeypatch
         opinion_refs=["consultation_record-2"],
     )]))
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-021", "LX0609-022"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+        rule_ids=("LX0609-03-01-02", "LX0609-03-01-03"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
     assert [item["status"] for item in result.results] == ["compliant", "compliant"]
     assert "application_refs" in client.prompts[0]
@@ -2259,7 +2259,7 @@ async def test_preoperative_mdt_is_non_target_not_an_ordinary_consultation(monke
     client = _Client(_payload(episodes=[], non_target=["consultation_record-1"]))
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-021", "LX0609-022"),
+        rule_ids=("LX0609-03-01-02", "LX0609-03-01-03"),
         institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
@@ -2282,7 +2282,7 @@ async def test_mdt_non_target_does_not_enter_recommendation_execution_stage(monk
     client = _SequentialClient(_payload(episodes=[], non_target=["consultation_record-1"]))
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
@@ -2310,7 +2310,7 @@ async def test_same_document_generic_execution_is_not_a_020_execution_record(mon
     )]))
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="i",
         patient_id="p",
         visit_id="v",
@@ -2351,7 +2351,7 @@ async def test_explicit_anesthesia_assessment_is_non_target_before_any_llm(monke
     )]))
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03", "LX0609-03-01-04"),
         institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
@@ -2383,7 +2383,7 @@ async def test_ordinary_pain_consultation_is_not_excluded_by_specialty_name(monk
     )]))
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-021", "LX0609-022"),
+        rule_ids=("LX0609-03-01-02", "LX0609-03-01-03"),
         institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
@@ -2415,7 +2415,7 @@ async def test_two_recommendations_one_specific_and_one_absent_is_020_non_compli
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
@@ -2452,7 +2452,7 @@ async def test_execution_prompt_forbids_planned_symptom_only_and_unrelated_treat
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
@@ -2490,7 +2490,7 @@ async def test_semantic_neuroblock_recommendation_can_link_to_different_specific
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
     assert [item["status"] for item in result.results] == ["compliant", "compliant"]
@@ -2521,7 +2521,7 @@ async def test_one_execution_document_can_explicitly_cover_two_recommendations(m
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
@@ -2556,7 +2556,7 @@ async def test_same_category_generic_execution_is_vague_for_each_rehabilitation_
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
     assert [item["status"] for item in result.results] == ["compliant", "non_compliant"]
@@ -2575,7 +2575,7 @@ async def test_clear_opinion_without_actionable_recommendation_skips_second_stag
     )]))
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
@@ -2956,7 +2956,7 @@ def test_mixed_follow_up_recommendations_share_filtered_prompt_and_display_scope
         for item in completed
     )
     facts = episode._consultation_execution_display_facts(
-        rule_id="LX0609-023",
+        rule_id="LX0609-03-01-04",
         status="non_compliant",
         episodes=(model_episode,),
         completed_recommendations=completed,
@@ -3007,7 +3007,7 @@ async def test_all_follow_up_recommendations_do_not_start_stage_two_or_count(
     ]))
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="i",
         patient_id="p",
         visit_id="v-follow-up-only",
@@ -3021,10 +3021,10 @@ async def test_all_follow_up_recommendations_do_not_start_stage_two_or_count(
     ]
     assert len(client.prompts) == 1
     facts = dict(result.customer_display_facts)
-    assert facts["LX0609-020"]["recommendation_count"] == 0
-    assert facts["LX0609-020"]["missing_execution_count"] == 0
-    assert facts["LX0609-023"]["recommendation_count"] == 0
-    assert facts["LX0609-023"]["missing_execution_count"] == 0
+    assert facts["LX0609-03-01-01"]["recommendation_count"] == 0
+    assert facts["LX0609-03-01-01"]["missing_execution_count"] == 0
+    assert facts["LX0609-03-01-04"]["recommendation_count"] == 0
+    assert facts["LX0609-03-01-04"]["missing_execution_count"] == 0
 
 
 def test_many_document_events_share_bounded_stage_two_candidates_without_repeated_refs():
@@ -3383,7 +3383,7 @@ def test_parse_executions_translates_short_aliases_before_safety_checks():
 async def test_opinion_only_document_is_application_absent_and_021_not_applicable(monkeypatch):
     monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda **_: _rows("明确专科处理意见"))
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-021", "LX0609-022"), institute_id="i", patient_id="p", visit_id="v", source_schema=None,
+        rule_ids=("LX0609-03-01-02", "LX0609-03-01-03"), institute_id="i", patient_id="p", visit_id="v", source_schema=None,
         llm_client=_Client(_payload(episodes=[_episode(
             "consultation_record-1", ["consultation_record-1"], application="absent",
         )])),
@@ -3411,7 +3411,7 @@ async def test_c29_opinion_headings_override_model_application_role(monkeypatch)
     )]))
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-021", "LX0609-022"),
+        rule_ids=("LX0609-03-01-02", "LX0609-03-01-03"),
         institute_id="i",
         patient_id="p",
         visit_id="v",
@@ -3573,7 +3573,7 @@ async def test_opinion_only_episode_with_absent_application_cannot_carry_an_appl
     )]))
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-021", "LX0609-022"),
+        rule_ids=("LX0609-03-01-02", "LX0609-03-01-03"),
         institute_id="i",
         patient_id="p",
         visit_id="v",
@@ -3601,7 +3601,7 @@ async def test_single_document_with_clear_application_and_opinion_can_share_its_
         lambda **_: _rows("明确申请目的；明确专科处理意见"),
     )
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-021", "LX0609-022"),
+        rule_ids=("LX0609-03-01-02", "LX0609-03-01-03"),
         institute_id="i",
         patient_id="p",
         visit_id="v",
@@ -3630,7 +3630,7 @@ async def test_duplicate_sync_and_non_target_do_not_create_extra_episode(monkeyp
         non_target=["consultation_record-3"],
     ))
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-021", "LX0609-022"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+        rule_ids=("LX0609-03-01-02", "LX0609-03-01-03"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
     assert [item["status"] for item in result.results] == ["compliant", "not_applicable"]
     assert result.llm_call_count == 1
@@ -3650,7 +3650,7 @@ async def test_021_022_state_table(monkeypatch, application, opinion, expected):
     monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda **_: _rows("会诊文书"))
     client = _Client(_payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"], application, opinion)]))
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-021", "LX0609-022"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+        rule_ids=("LX0609-03-01-02", "LX0609-03-01-03"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
     assert tuple(item["status"] for item in result.results) == expected
 
@@ -3675,7 +3675,7 @@ async def test_specific_application_purpose_stabilizes_llm_vague_to_clear(monkey
     )]))
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-021", "LX0609-022"),
+        rule_ids=("LX0609-03-01-02", "LX0609-03-01-03"),
         institute_id="i",
         patient_id="p",
         visit_id="v",
@@ -3722,7 +3722,7 @@ def test_explicit_no_special_treatment_with_dynamic_ecg_follow_up_stabilizes_022
     parsed = episode._parse(payload, documents)
 
     assert parsed[0].opinion_state == "clear"
-    assert episode._outcome("LX0609-022", parsed) == (
+    assert episode._outcome("LX0609-03-01-03", parsed) == (
         "compliant",
         "requirement_satisfied",
     )
@@ -3759,7 +3759,7 @@ def test_generic_possible_check_or_medication_does_not_stabilize_022_to_clear(co
     parsed = episode._parse(payload, documents)
 
     assert parsed[0].opinion_state == "vague"
-    assert episode._outcome("LX0609-022", parsed) == (
+    assert episode._outcome("LX0609-03-01-03", parsed) == (
         "non_compliant",
         "requirement_violated",
     )
@@ -3782,7 +3782,7 @@ async def test_generic_application_vague_remains_non_compliant(monkeypatch):
     )]))
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-021", "LX0609-022"),
+        rule_ids=("LX0609-03-01-02", "LX0609-03-01-03"),
         institute_id="i",
         patient_id="p",
         visit_id="v",
@@ -3799,7 +3799,7 @@ async def test_medium_or_low_confidence_is_evaluation_unknown(monkeypatch, confi
     monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda **_: _rows("会诊文书"))
     client = _Client(_payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"], confidence=confidence)]))
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-021", "LX0609-022"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+        rule_ids=("LX0609-03-01-02", "LX0609-03-01-03"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
     assert {item["status"] for item in result.results} == {"uncertain"}
 
@@ -3816,7 +3816,7 @@ async def test_medium_or_low_confidence_is_evaluation_unknown(monkeypatch, confi
 async def test_invalid_episode_payload_is_technical_error(monkeypatch, payload):
     monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda **_: _rows("一", "二"))
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-021", "LX0609-022"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=_Client(payload),
+        rule_ids=("LX0609-03-01-02", "LX0609-03-01-03"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=_Client(payload),
     )
     assert {item["status"] for item in result.results} == {"technical_error"}
     assert {item["metadata"]["reason_code"] for item in result.results} == {
@@ -3850,7 +3850,7 @@ async def test_unresolved_episode_is_evaluation_unknown_without_second_stage(mon
         lambda **_: _rows("会诊文书"),
     )
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-021", "LX0609-022"),
+        rule_ids=("LX0609-03-01-02", "LX0609-03-01-03"),
         institute_id="i",
         patient_id="p",
         visit_id="v",
@@ -3869,13 +3869,13 @@ async def test_zero_input_does_not_call_model_and_source_error_is_technical(monk
     client = _Client(_payload(episodes=[]))
     monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda **_: [])
     empty = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-021", "LX0609-022"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+        rule_ids=("LX0609-03-01-02", "LX0609-03-01-03"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
     assert empty.llm_call_count == 0
     assert {item["status"] for item in empty.results} == {"not_applicable"}
     monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda **_: (_ for _ in ()).throw(SourceEvidenceQueryError("safe")))
     failed = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-021",), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+        rule_ids=("LX0609-03-01-02",), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
     assert failed.results[0]["status"] == "technical_error"
 
@@ -3888,14 +3888,14 @@ async def test_typed_decision_preserves_terminal_source_reason_code(monkeypatch)
         lambda **_: (_ for _ in ()).throw(episode._SourceGap()),
     )
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-021",),
+        rule_ids=("LX0609-03-01-02",),
         institute_id="i",
         patient_id="p",
         visit_id="v",
         source_schema=None,
         llm_client=None,
         evidence_snapshot=_snapshot(),
-        decision_rule_ids=("LX0609-021",),
+        decision_rule_ids=("LX0609-03-01-02",),
     )
     assert result.results == ()
     assert [item.reason_code for item in result.decisions] == ["source_unavailable"]
@@ -3908,7 +3908,7 @@ async def test_typed_explicit_non_target_document_uses_allowed_not_applicable_re
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-021",),
+        rule_ids=("LX0609-03-01-02",),
         institute_id="i",
         patient_id="p",
         visit_id="v",
@@ -3916,7 +3916,7 @@ async def test_typed_explicit_non_target_document_uses_allowed_not_applicable_re
         llm_client=None,
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
-        decision_rule_ids=("LX0609-021",),
+        decision_rule_ids=("LX0609-03-01-02",),
     )
 
     assert result.results == ()
@@ -3931,7 +3931,7 @@ async def test_typed_low_confidence_episode_is_conflict_not_source_gap():
         rows_by_source={"consultation_record": tuple(_rows("会诊文书"))}
     )
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-021",),
+        rule_ids=("LX0609-03-01-02",),
         institute_id="i",
         patient_id="p",
         visit_id="v",
@@ -3941,7 +3941,7 @@ async def test_typed_low_confidence_episode_is_conflict_not_source_gap():
         )])),
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
-        decision_rule_ids=("LX0609-021",),
+        decision_rule_ids=("LX0609-03-01-02",),
     )
     assert result.results == ()
     assert result.decisions[0].evidence_state is episode.EvidenceState.CONFLICT
@@ -3953,7 +3953,7 @@ async def test_typed_low_confidence_episode_is_conflict_not_source_gap():
 async def test_parse_failure_and_model_failure_are_technical(monkeypatch):
     monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda **_: _rows("会诊文书"))
     parsed = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-021",), institute_id="i", patient_id="p", visit_id="v", source_schema=None,
+        rule_ids=("LX0609-03-01-02",), institute_id="i", patient_id="p", visit_id="v", source_schema=None,
         llm_client=_Client("not-json"),
     )
     assert parsed.results[0]["status"] == "technical_error"
@@ -3964,7 +3964,7 @@ async def test_parse_failure_and_model_failure_are_technical(monkeypatch):
             raise RuntimeError("MODEL_SECRET")
 
     broken = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-021",), institute_id="i", patient_id="p", visit_id="v", source_schema=None,
+        rule_ids=("LX0609-03-01-02",), institute_id="i", patient_id="p", visit_id="v", source_schema=None,
         llm_client=_BrokenClient(),
     )
     assert broken.results[0]["status"] == "technical_error"
@@ -3981,7 +3981,7 @@ async def test_fenced_single_json_keeps_phase_one_states(monkeypatch):
     )]), ensure_ascii=False)
     wrapped = f"以下为结构化结果：\n```json\n{payload}\n```\n请按 JSON 处理。"
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-021", "LX0609-022"), institute_id="i", patient_id="p", visit_id="v", source_schema=None,
+        rule_ids=("LX0609-03-01-02", "LX0609-03-01-03"), institute_id="i", patient_id="p", visit_id="v", source_schema=None,
         llm_client=_Client(wrapped),
     )
     assert [item["status"] for item in result.results] == ["non_compliant", "compliant"]
@@ -4001,7 +4001,7 @@ async def test_fenced_single_json_keeps_phase_one_states(monkeypatch):
 async def test_wrapped_or_multiple_or_forged_json_stays_fail_closed(monkeypatch, raw):
     monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda **_: _rows("会诊文书"))
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-021", "LX0609-022"), institute_id="i", patient_id="p", visit_id="v", source_schema=None,
+        rule_ids=("LX0609-03-01-02", "LX0609-03-01-03"), institute_id="i", patient_id="p", visit_id="v", source_schema=None,
         llm_client=_Client(raw()),
     )
     assert {item["status"] for item in result.results} == {"technical_error"}
@@ -4016,14 +4016,14 @@ async def test_output_does_not_leak_text_or_model_response(monkeypatch):
     secret = "CONSULTATION_BODY_SECRET_20260720"
     monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda **_: _rows(secret))
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-021",), institute_id="i", patient_id="p", visit_id="v", source_schema=None,
+        rule_ids=("LX0609-03-01-02",), institute_id="i", patient_id="p", visit_id="v", source_schema=None,
         llm_client=_Client(_payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])])),
     )
     rendered = repr(result)
     assert secret not in rendered
     assert "consultation_documents" not in rendered
     assert "model_raw_response" not in rendered
-    episode_facts = dict(result.customer_display_facts)["LX0609-021"]["episode_results"]
+    episode_facts = dict(result.customer_display_facts)["LX0609-03-01-02"]["episode_results"]
     assert [{
         key: item[key]
         for key in ("episode_index", "semantic_state", "record_time", "document_title")
@@ -4062,7 +4062,7 @@ async def test_shared_specific_execution_can_cover_two_clear_episodes_without_un
         ),
     )
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03", "LX0609-03-01-04"),
         institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
     assert [item["status"] for item in result.results] == ["compliant", "compliant", "compliant", "compliant"]
@@ -4112,7 +4112,7 @@ async def test_020_023_execution_state_mapping(monkeypatch, execution_state, exp
         _execution({"episode_ref": "consultation_record-1", "execution_state": execution_state, "execution_refs": refs, "confidence": "high"}),
     )
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
     assert tuple(item["status"] for item in result.results) == expected
     assert result.llm_call_count == 2
@@ -4167,7 +4167,7 @@ async def test_020_023_specific_course_trace_does_not_require_structured_order(m
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="i",
         patient_id="p",
         visit_id="v",
@@ -4176,7 +4176,7 @@ async def test_020_023_specific_course_trace_does_not_require_structured_order(m
     )
 
     assert [item["status"] for item in result.results] == ["compliant", "compliant"]
-    display = dict(result.customer_display_facts)["LX0609-020"]
+    display = dict(result.customer_display_facts)["LX0609-03-01-01"]
     assert display["relation_state"] == "all_linked"
     assert display["completed_opinion_episode_count"] == 1
     assert display["recommendation_count"] == 1
@@ -4243,7 +4243,7 @@ async def test_020_023_accept_exact_course_ref_when_model_omits_redundant_quote(
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="i",
         patient_id="p",
         visit_id="v",
@@ -4254,8 +4254,8 @@ async def test_020_023_accept_exact_course_ref_when_model_omits_redundant_quote(
     assert [item["status"] for item in result.results] == ["compliant", "compliant"]
     assert result.llm_call_count == 2
     facts = dict(result.customer_display_facts)
-    assert "source_document_refs" not in facts["LX0609-023"]
-    assert facts["LX0609-023"]["specific_execution_count"] == 1
+    assert "source_document_refs" not in facts["LX0609-03-01-04"]
+    assert facts["LX0609-03-01-04"]["specific_execution_count"] == 1
 
 
 @pytest.mark.asyncio
@@ -4341,7 +4341,7 @@ async def test_020_023_rechecks_only_low_confidence_execution_assessment_once(
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="i",
         patient_id="p",
         visit_id="v",
@@ -4388,7 +4388,7 @@ async def test_020_generic_course_trace_is_compliant_but_023_is_non_compliant(mo
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
@@ -4441,7 +4441,7 @@ async def test_023_accepts_specific_order_match_without_course_trace(monkeypatch
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
@@ -4635,7 +4635,7 @@ async def test_023_order_only_execution_is_judged_without_any_course_candidate(
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="i", patient_id="p", visit_id="v",
         source_schema=None, llm_client=client,
     )
@@ -4650,7 +4650,7 @@ async def test_023_order_only_execution_is_judged_without_any_course_candidate(
     assert (
         order_row.get("generic_name") or order_row["order_name"]
     ) in client.prompts[1]
-    display = dict(result.customer_display_facts)["LX0609-023"]
+    display = dict(result.customer_display_facts)["LX0609-03-01-04"]
     assert display["relation_state"] == (
         "specific_execution" if is_specific else "execution_missing_or_generic"
     )
@@ -4694,7 +4694,7 @@ async def test_023_pre_consultation_order_only_candidate_is_not_an_execution(
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="i", patient_id="p", visit_id="v",
         source_schema=None, llm_client=client,
     )
@@ -4731,7 +4731,7 @@ async def test_023_post_consultation_order_after_source_limit_reaches_stage_two(
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="i", patient_id="p", visit_id="v",
         source_schema=None, llm_client=client,
     )
@@ -4746,7 +4746,7 @@ async def test_023_post_consultation_order_after_source_limit_reaches_stage_two(
         target_row["order_name"] in text
         for text in _stage_two_candidate_texts(client.prompts[1])
     )
-    display = dict(result.customer_display_facts)["LX0609-023"]
+    display = dict(result.customer_display_facts)["LX0609-03-01-04"]
     assert display["specific_execution_count"] == 1
     assert [
         item["source_type"]
@@ -4840,7 +4840,7 @@ async def test_complete_daily_trace_closes_020_023_when_senior_source_is_incompl
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
@@ -4904,7 +4904,7 @@ async def test_020_display_facts_bind_selected_opinion_and_execution_documents(
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020",),
+        rule_ids=("LX0609-03-01-01",),
         institute_id="i",
         patient_id="p",
         visit_id="v",
@@ -4912,7 +4912,7 @@ async def test_020_display_facts_bind_selected_opinion_and_execution_documents(
         llm_client=client,
     )
 
-    facts = dict(result.customer_display_facts)["LX0609-020"]
+    facts = dict(result.customer_display_facts)["LX0609-03-01-01"]
     assert "source_document_refs" not in facts
     assert facts["specific_execution_count"] == 1
 
@@ -4983,7 +4983,7 @@ async def test_020_accepts_episode_bound_explicit_non_execution_decision_in_opin
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="i",
         patient_id="p",
         visit_id="v",
@@ -5079,7 +5079,7 @@ async def test_023_rechecks_high_generic_label_that_conflicts_with_concrete_acti
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="i",
         patient_id="p",
         visit_id="v",
@@ -5169,7 +5169,7 @@ async def test_020_023_include_each_authorized_execution_evidence_category_once(
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="i", patient_id="p", visit_id="v", source_schema=None,
         llm_client=client,
     )
@@ -5177,10 +5177,10 @@ async def test_020_023_include_each_authorized_execution_evidence_category_once(
     assert [item["status"] for item in result.results] == ["compliant", "compliant"]
     assert result.llm_call_count == 2
     assert result.total_tokens == 32
-    safe_facts = dict(result.customer_display_facts)["LX0609-020"]
+    safe_facts = dict(result.customer_display_facts)["LX0609-03-01-01"]
     assert "source_document_refs" not in safe_facts
     assert safe_facts["specific_execution_count"] == 1
-    for rule_id in ("LX0609-020", "LX0609-023"):
+    for rule_id in ("LX0609-03-01-01", "LX0609-03-01-04"):
         facts = dict(result.customer_display_facts)[rule_id]
         assert facts["specific_execution_count"] == 1
         assert "source_document_refs" not in facts
@@ -5245,7 +5245,7 @@ def test_020_recommendation_evidence_keeps_each_recommendation_refs():
         )
 
     facts = episode._consultation_execution_display_facts(
-        rule_id="LX0609-020",
+        rule_id="LX0609-03-01-01",
         status="compliant",
         episodes=episodes,
         completed_recommendations=completed,
@@ -5336,8 +5336,8 @@ def test_020_023_display_limits_each_recommendation_refs_without_changing_semant
             candidates=candidates,
         )
         for rule_id, status in (
-            ("LX0609-020", "evaluation_unknown"),
-            ("LX0609-023", "non_compliant"),
+            ("LX0609-03-01-01", "evaluation_unknown"),
+            ("LX0609-03-01-04", "non_compliant"),
         )
     }
     safe_facts, invalid_rule_ids = episode._safe_customer_display_facts(
@@ -5346,8 +5346,8 @@ def test_020_023_display_limits_each_recommendation_refs_without_changing_semant
 
     assert invalid_rule_ids == frozenset()
     safe_by_rule = dict(safe_facts)
-    assert safe_by_rule["LX0609-020"]["relation_state"] == "association_unresolved"
-    assert safe_by_rule["LX0609-023"]["relation_state"] == (
+    assert safe_by_rule["LX0609-03-01-01"]["relation_state"] == "association_unresolved"
+    assert safe_by_rule["LX0609-03-01-04"]["relation_state"] == (
         "execution_missing_or_generic"
     )
     assert all(
@@ -5444,7 +5444,7 @@ async def test_020_023_keep_action_matched_exam_lab_and_surgery_evidence(
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="i", patient_id="p", visit_id="v", source_schema=None,
         llm_client=client,
     )
@@ -5514,7 +5514,7 @@ async def test_020_uses_actual_exam_time_not_preconsultation_request_time(monkey
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020",),
+        rule_ids=("LX0609-03-01-01",),
         institute_id="i", patient_id="p", visit_id="v", source_schema=None,
         llm_client=client,
     )
@@ -5581,7 +5581,7 @@ async def test_020_excludes_surgery_completed_before_consultation(monkeypatch):
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020",),
+        rule_ids=("LX0609-03-01-01",),
         institute_id="i", patient_id="p", visit_id="v", source_schema=None,
         llm_client=client,
     )
@@ -5671,7 +5671,7 @@ async def test_020_non_compliant_facts_list_each_recommendation_and_only_locate_
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020",),
+        rule_ids=("LX0609-03-01-01",),
         institute_id="i",
         patient_id="p",
         visit_id="v",
@@ -5682,7 +5682,7 @@ async def test_020_non_compliant_facts_list_each_recommendation_and_only_locate_
     assert result.results[0]["status"] == "non_compliant"
     assert result.llm_call_count == 2
     assert result.total_tokens == 32
-    facts = dict(result.customer_display_facts)["LX0609-020"]
+    facts = dict(result.customer_display_facts)["LX0609-03-01-01"]
     assert facts["recommendation_results"] == [
         {
             "episode_index": 1,
@@ -5768,7 +5768,7 @@ def test_023_non_compliant_keeps_late_offending_episode_and_execution_reference(
     )
 
     facts = episode._consultation_execution_display_facts(
-        rule_id="LX0609-023",
+        rule_id="LX0609-03-01-04",
         status="non_compliant",
         episodes=episodes,
         completed_recommendations=completed,
@@ -5827,7 +5827,7 @@ async def test_023_late_offending_episode_is_in_decision_and_projected_customer_
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -5835,11 +5835,11 @@ async def test_023_late_offending_episode_is_in_decision_and_projected_customer_
         llm_client=client,
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
-        decision_rule_ids=("LX0609-020", "LX0609-023"),
+        decision_rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
     )
 
     decision_023 = next(
-        item for item in result.decisions if item.rule_id == "LX0609-023"
+        item for item in result.decisions if item.rule_id == "LX0609-03-01-04"
     )
     consultation_rows_by_ref = dict(
         session.materials.document_rows(
@@ -5867,7 +5867,7 @@ async def test_023_late_offending_episode_is_in_decision_and_projected_customer_
     assert len(decision_023.fact_refs) == 8
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=(decision_023,),
-        expected_rule_ids=("LX0609-023",),
+        expected_rule_ids=("LX0609-03-01-04",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
@@ -5911,7 +5911,7 @@ async def test_material_binding_failure_isolated_to_the_selected_typed_rule(
     original_selector = episode.select_consultation_rule_material_refs
 
     def reject_023_binding(**kwargs):
-        if kwargs["rule_id"] == "LX0609-023":
+        if kwargs["rule_id"] == "LX0609-03-01-04":
             raise ValueError("consultation internal reference cannot be uniquely bound")
         return original_selector(**kwargs)
 
@@ -5922,7 +5922,7 @@ async def test_material_binding_failure_isolated_to_the_selected_typed_rule(
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -5930,14 +5930,14 @@ async def test_material_binding_failure_isolated_to_the_selected_typed_rule(
         llm_client=client,
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
-        decision_rule_ids=("LX0609-020", "LX0609-023"),
+        decision_rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
     )
 
     decisions_by_rule = {item.rule_id: item for item in result.decisions}
-    assert decisions_by_rule["LX0609-020"].reason_code == "requirement_satisfied"
-    assert decisions_by_rule["LX0609-023"].reason_code == "snapshot_mismatch"
-    assert decisions_by_rule["LX0609-023"].fact_refs == ()
-    assert "LX0609-023" not in dict(result.customer_display_facts)
+    assert decisions_by_rule["LX0609-03-01-01"].reason_code == "requirement_satisfied"
+    assert decisions_by_rule["LX0609-03-01-04"].reason_code == "snapshot_mismatch"
+    assert decisions_by_rule["LX0609-03-01-04"].fact_refs == ()
+    assert "LX0609-03-01-04" not in dict(result.customer_display_facts)
 
 
 @pytest.mark.asyncio
@@ -6005,7 +6005,7 @@ async def test_real_partial_candidate_material_mapping_only_fails_the_dependent_
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -6013,17 +6013,17 @@ async def test_real_partial_candidate_material_mapping_only_fails_the_dependent_
         llm_client=client,
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
-        decision_rule_ids=("LX0609-020", "LX0609-023"),
+        decision_rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
     )
 
     decisions_by_rule = {item.rule_id: item for item in result.decisions}
-    assert decisions_by_rule["LX0609-020"].reason_code == "requirement_violated"
-    assert decisions_by_rule["LX0609-020"].fact_refs
-    assert decisions_by_rule["LX0609-023"].reason_code == "snapshot_mismatch"
-    assert decisions_by_rule["LX0609-023"].fact_refs == ()
+    assert decisions_by_rule["LX0609-03-01-01"].reason_code == "requirement_violated"
+    assert decisions_by_rule["LX0609-03-01-01"].fact_refs
+    assert decisions_by_rule["LX0609-03-01-04"].reason_code == "snapshot_mismatch"
+    assert decisions_by_rule["LX0609-03-01-04"].fact_refs == ()
     safe_facts_by_rule = dict(result.customer_display_facts)
-    assert "LX0609-020" in safe_facts_by_rule
-    assert "LX0609-023" not in safe_facts_by_rule
+    assert "LX0609-03-01-01" in safe_facts_by_rule
+    assert "LX0609-03-01-04" not in safe_facts_by_rule
 
 
 @pytest.mark.asyncio
@@ -6049,13 +6049,13 @@ async def test_020_course_source_incomplete_is_data_gap_even_when_order_exists(m
     client = _SequentialClient(_payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]))
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
     assert [item["status"] for item in result.results] == ["data_gap", "data_gap"]
     assert result.llm_call_count == 1
-    facts = dict(result.customer_display_facts)["LX0609-020"]
+    facts = dict(result.customer_display_facts)["LX0609-03-01-01"]
     # 受控展示事实中的建议数量必须与逐项投影一致，避免来源不完整时
     # 把未进入二阶段核对的语义提取数量冒充 recommendation_count。
     assert facts["recommendation_count"] == len(facts["recommendation_results"])
@@ -6105,7 +6105,7 @@ async def test_empty_course_artifact_does_not_make_020_source_incomplete(
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="i", patient_id="p", visit_id="v",
         source_schema=None, llm_client=client,
     )
@@ -6158,7 +6158,7 @@ async def test_course_time_is_recovered_from_same_document_id_without_guessing(
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="i", patient_id="p", visit_id="v",
         source_schema=None, llm_client=client,
     )
@@ -6184,7 +6184,7 @@ async def test_different_general_treatment_must_be_absent_not_linked(monkeypatch
         _execution({"episode_ref": "consultation_record-1", "execution_state": "absent", "execution_refs": [], "confidence": "high"}),
     )
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
     assert [item["status"] for item in result.results] == ["non_compliant", "non_compliant"]
     assert "无关治疗或同部位一般治疗都不是已经执行" in client.prompts[1]
@@ -6210,7 +6210,7 @@ async def test_023_evaluates_generic_trace_when_another_opinion_has_no_execution
         ),
     )
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
     assert [item["status"] for item in result.results] == ["non_compliant", "non_compliant"]
 
@@ -6256,7 +6256,7 @@ async def test_confirmed_missing_execution_is_not_hidden_by_another_unknown_reco
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="i", patient_id="p", visit_id="v",
         source_schema=None, llm_client=client,
     )
@@ -6308,7 +6308,7 @@ async def test_confirmed_generic_execution_is_not_hidden_by_another_unknown_reco
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="i", patient_id="p", visit_id="v",
         source_schema=None, llm_client=client,
     )
@@ -6333,7 +6333,7 @@ async def test_second_stage_rejects_forged_execution_ref(monkeypatch):
         _execution({"episode_ref": "consultation_record-1", "execution_state": "linked_specific", "execution_refs": ["daily_course_record-999"], "confidence": "high"}),
     )
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
     assert {item["status"] for item in result.results} == {"technical_error"}
     assert {item["metadata"]["reason_code"] for item in result.results} == {
@@ -6353,7 +6353,7 @@ async def test_precise_candidate_earlier_than_opinion_is_not_sent_to_second_stag
     monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda *, source_key, **_: source_rows[source_key])
     client = _SequentialClient(_payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]))
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
     assert [item["status"] for item in result.results] == [
         "non_compliant",
@@ -6415,7 +6415,7 @@ async def test_020_explicit_fast_path_cannot_use_course_before_current_opinion(
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020",),
+        rule_ids=("LX0609-03-01-01",),
         institute_id="i",
         patient_id="p",
         visit_id="v",
@@ -6447,7 +6447,7 @@ async def test_same_day_date_only_candidate_can_be_semantically_linked(monkeypat
         }),
     )
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
     assert [item["status"] for item in result.results] == ["compliant", "compliant"]
     assert result.llm_call_count == 2
@@ -6487,7 +6487,7 @@ async def test_same_day_date_only_candidate_does_not_block_later_specific_link(m
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
@@ -6517,7 +6517,7 @@ async def test_source_error_outranks_same_day_imprecise_candidate_without_second
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
@@ -6533,7 +6533,7 @@ async def test_no_completed_opinion_skips_second_call(monkeypatch):
         "consultation_record-1", ["consultation_record-1"], opinion="absent",
     )]))
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
     assert [item["status"] for item in result.results] == ["not_applicable", "not_applicable"]
     assert result.llm_call_count == 1
@@ -6551,7 +6551,7 @@ async def test_020_023_without_authoritative_stay_window_is_data_gap_without_llm
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="i",
         patient_id="p",
         visit_id="v",
@@ -6571,7 +6571,7 @@ async def test_020_023_missing_llm_client_is_technical_error():
     })
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -6612,7 +6612,7 @@ async def test_stage_two_stay_window_gap_does_not_downgrade_021_022(monkeypatch)
     )]))
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03", "LX0609-03-01-04"),
         institute_id="i",
         patient_id="p",
         visit_id="v",
@@ -6658,7 +6658,7 @@ async def test_020_023_window_horizon_observation_reason_does_not_change_existin
         )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -6666,7 +6666,7 @@ async def test_020_023_window_horizon_observation_reason_does_not_change_existin
         llm_client=None,
         evidence_materials=session.materials,
         evidence_snapshot=session.snapshot,
-        decision_rule_ids=("LX0609-020", "LX0609-023"),
+        decision_rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
     )
 
     assert result.results == ()
@@ -6697,7 +6697,7 @@ async def test_020_023_window_filters_post_discharge_candidate_as_complete_absen
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"), institute_id="I", patient_id="P", visit_id="V",
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"), institute_id="I", patient_id="P", visit_id="V",
         source_schema=None, llm_client=client, evidence_snapshot=session.snapshot, evidence_materials=session.materials,
     )
 
@@ -6747,9 +6747,9 @@ async def test_020_023_window_allows_in_stay_specific_execution_and_binds_window
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"), institute_id="I", patient_id="P", visit_id="V",
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"), institute_id="I", patient_id="P", visit_id="V",
         source_schema=None, llm_client=client, evidence_snapshot=session.snapshot, evidence_materials=session.materials,
-        decision_rule_ids=("LX0609-020", "LX0609-023"),
+        decision_rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
     )
 
     assert result.results == ()
@@ -6785,7 +6785,7 @@ async def test_020_023_window_allows_in_stay_specific_execution_and_binds_window
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-020", "LX0609-023"),
+        expected_rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
@@ -6836,7 +6836,7 @@ async def test_020_023_retries_one_transient_stage_two_transport_failure_without
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03", "LX0609-03-01-04"),
         institute_id="I", patient_id="P", visit_id="V", source_schema=None, llm_client=client,
         evidence_snapshot=session.snapshot, evidence_materials=session.materials,
     )
@@ -6863,7 +6863,7 @@ async def test_020_023_stops_after_second_transient_stage_two_transport_failure(
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03", "LX0609-03-01-04"),
         institute_id="I", patient_id="P", visit_id="V", source_schema=None, llm_client=client,
         evidence_snapshot=session.snapshot, evidence_materials=session.materials,
     )
@@ -6956,7 +6956,7 @@ async def test_020_023_logs_only_safe_stage_two_transport_failure_classification
 
     with caplog.at_level(logging.WARNING, logger=episode.__name__):
         result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-            rule_ids=("LX0609-020", "LX0609-023"),
+            rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
             institute_id="I", patient_id="P", visit_id="V", source_schema=None,
             llm_client=client, evidence_snapshot=session.snapshot,
             evidence_materials=session.materials,
@@ -7016,7 +7016,7 @@ async def test_020_023_does_not_retry_stage_two_4xx_or_identity_contract_failure
             second_stage_response,
         )
         result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-            rule_ids=("LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023"),
+            rule_ids=("LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03", "LX0609-03-01-04"),
             institute_id="I", patient_id="P", visit_id="V", source_schema=None, llm_client=client,
             evidence_snapshot=session.snapshot, evidence_materials=session.materials,
         )
@@ -7051,7 +7051,7 @@ async def test_020_023_retries_one_stage_two_shape_error_with_same_prompt():
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="I", patient_id="P", visit_id="V", source_schema=None,
         llm_client=client, evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
@@ -7080,7 +7080,7 @@ async def test_020_023_stops_after_second_stage_two_shape_error():
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="I", patient_id="P", visit_id="V", source_schema=None,
         llm_client=client, evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
@@ -7137,11 +7137,11 @@ async def test_stage_two_shape_retry_does_not_add_missing_supplement_or_recheck(
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="I", patient_id="P", visit_id="V", source_schema=None,
         llm_client=client, evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
-        decision_rule_ids=("LX0609-020", "LX0609-023"),
+        decision_rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
     )
 
     assert result.llm_call_count == 3
@@ -7150,7 +7150,7 @@ async def test_stage_two_shape_retry_does_not_add_missing_supplement_or_recheck(
         "semantic_low_confidence",
         "linkage_unresolved",
     ]
-    facts = dict(result.customer_display_facts)["LX0609-020"]
+    facts = dict(result.customer_display_facts)["LX0609-03-01-01"]
     assert [item["execution_state"] for item in facts["recommendation_results"]] == [
         "specific",
         "unknown",
@@ -7177,7 +7177,7 @@ async def test_stage_two_shape_retry_skips_low_confidence_recheck():
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="I", patient_id="P", visit_id="V", source_schema=None,
         llm_client=client, evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
@@ -7220,7 +7220,7 @@ async def test_020_023_accepts_omitted_optional_execution_quotes():
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -7228,7 +7228,7 @@ async def test_020_023_accepts_omitted_optional_execution_quotes():
         llm_client=client,
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
-        decision_rule_ids=("LX0609-020", "LX0609-023"),
+        decision_rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
     )
 
     assert [item.reason_code for item in result.decisions] == [
@@ -7288,7 +7288,7 @@ async def test_020_023_reasks_only_omitted_recommendation_once():
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -7296,7 +7296,7 @@ async def test_020_023_reasks_only_omitted_recommendation_once():
         llm_client=client,
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
-        decision_rule_ids=("LX0609-020", "LX0609-023"),
+        decision_rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
     )
 
     assert [item.reason_code for item in result.decisions] == [
@@ -7340,7 +7340,7 @@ async def test_020_023_omission_retry_preserves_parsed_and_marks_remaining_unkno
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -7348,7 +7348,7 @@ async def test_020_023_omission_retry_preserves_parsed_and_marks_remaining_unkno
         llm_client=client,
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
-        decision_rule_ids=("LX0609-020", "LX0609-023"),
+        decision_rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
     )
 
     assert [item.reason_code for item in result.decisions] == [
@@ -7356,7 +7356,7 @@ async def test_020_023_omission_retry_preserves_parsed_and_marks_remaining_unkno
         "linkage_unresolved",
     ]
     assert result.llm_call_count == 3
-    facts = dict(result.customer_display_facts)["LX0609-020"]
+    facts = dict(result.customer_display_facts)["LX0609-03-01-01"]
     assert [item["execution_state"] for item in facts["recommendation_results"]] == [
         "specific",
         "unknown",
@@ -7412,7 +7412,7 @@ async def test_020_023_invalid_or_failed_omission_retry_does_not_overwrite_first
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -7420,7 +7420,7 @@ async def test_020_023_invalid_or_failed_omission_retry_does_not_overwrite_first
         llm_client=client,
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
-        decision_rule_ids=("LX0609-020", "LX0609-023"),
+        decision_rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
     )
 
     assert [item.reason_code for item in result.decisions] == [
@@ -7428,7 +7428,7 @@ async def test_020_023_invalid_or_failed_omission_retry_does_not_overwrite_first
         "linkage_unresolved",
     ]
     assert result.llm_call_count == 3
-    facts = dict(result.customer_display_facts)["LX0609-020"]
+    facts = dict(result.customer_display_facts)["LX0609-03-01-01"]
     assert [item["execution_state"] for item in facts["recommendation_results"]] == [
         "specific",
         "unknown",
@@ -7451,7 +7451,7 @@ async def test_020_023_semantic_contract_failure_keeps_typed_decision_technical_
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -7459,7 +7459,7 @@ async def test_020_023_semantic_contract_failure_keeps_typed_decision_technical_
         llm_client=client,
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
-        decision_rule_ids=("LX0609-020", "LX0609-023"),
+        decision_rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
     )
 
     assert [item.reason_code for item in result.decisions] == [
@@ -7468,7 +7468,7 @@ async def test_020_023_semantic_contract_failure_keeps_typed_decision_technical_
     ]
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-020", "LX0609-023"),
+        expected_rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
@@ -7478,7 +7478,7 @@ async def test_020_023_semantic_contract_failure_keeps_typed_decision_technical_
     ]
     assert all(item.reason_code == "model_invalid_output" for item in reduced)
     canonical = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-020"}, {"rule_id": "LX0609-023"}],
+        wrapper_rules=[{"rule_id": "LX0609-03-01-01"}, {"rule_id": "LX0609-03-01-04"}],
         execution_results=list(result.results),
         reduced_decisions=reduced,
         customer_display_facts=result.customer_display_facts,
@@ -7540,7 +7540,7 @@ async def test_020_023_unresolvable_execution_identity_remains_technical_error(i
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -7548,7 +7548,7 @@ async def test_020_023_unresolvable_execution_identity_remains_technical_error(i
         llm_client=client,
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
-        decision_rule_ids=("LX0609-020", "LX0609-023"),
+        decision_rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
     )
 
     assert [item.reason_code for item in result.decisions] == [
@@ -7600,7 +7600,7 @@ async def test_020_023_misplaced_course_ref_only_marks_its_recommendation_unknow
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -7608,14 +7608,14 @@ async def test_020_023_misplaced_course_ref_only_marks_its_recommendation_unknow
         llm_client=client,
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
-        decision_rule_ids=("LX0609-020", "LX0609-023"),
+        decision_rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
     )
 
     assert [item.reason_code for item in result.decisions] == [
         "semantic_low_confidence",
         "linkage_unresolved",
     ]
-    facts = dict(result.customer_display_facts)["LX0609-020"]
+    facts = dict(result.customer_display_facts)["LX0609-03-01-01"]
     assert [item["execution_state"] for item in facts["recommendation_results"]] == [
         "specific",
         "unknown",
@@ -7657,7 +7657,7 @@ async def test_020_023_rejects_nested_stage_two_reference_values_as_technical_er
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03", "LX0609-03-01-04"),
         institute_id="I", patient_id="P", visit_id="V", source_schema=None, llm_client=client,
         evidence_snapshot=session.snapshot, evidence_materials=session.materials,
     )
@@ -7693,7 +7693,7 @@ async def test_020_023_window_allows_later_specific_execution_when_admission_reg
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"), institute_id="I", patient_id="P", visit_id="V",
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"), institute_id="I", patient_id="P", visit_id="V",
         source_schema=None, llm_client=client, evidence_snapshot=session.snapshot, evidence_materials=session.materials,
     )
 
@@ -7712,7 +7712,7 @@ async def test_020_023_window_query_error_is_technical_without_llm():
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"), institute_id="I", patient_id="P", visit_id="V",
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"), institute_id="I", patient_id="P", visit_id="V",
         source_schema=None, llm_client=client, evidence_snapshot=session.snapshot, evidence_materials=session.materials,
     )
 
@@ -7731,17 +7731,17 @@ async def test_typed_020_023_use_final_status_and_safe_snapshot_refs(monkeypatch
         "daily_course_record": tuple(_rows("已落实会诊意见", day=3, hour_start=2)),
     })
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"), institute_id="I", patient_id="P", visit_id="V", source_schema=None,
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"), institute_id="I", patient_id="P", visit_id="V", source_schema=None,
         llm_client=_SequentialClient(
             _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]),
             _execution({"episode_ref": "consultation_record-1", "execution_state": "linked_specific", "execution_refs": ["daily_course_record-1"], "confidence": "high"}),
         ),
         evidence_snapshot=session.snapshot, evidence_materials=session.materials,
-        decision_rule_ids=("LX0609-020", "LX0609-023"),
+        decision_rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
     )
     assert result.results == ()
     assert [(item.rule_id, item.qc_direction.value) for item in result.decisions] == [
-        ("LX0609-020", "satisfied"), ("LX0609-023", "satisfied"),
+        ("LX0609-03-01-01", "satisfied"), ("LX0609-03-01-04", "satisfied"),
     ]
     assert all(item.fact_refs for item in result.decisions)
     rendered = repr(result)
@@ -7798,7 +7798,7 @@ async def test_many_or_long_course_candidates_remain_available_to_stage_two(
         }),
     )
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
     assert [item["status"] for item in result.results] == ["compliant", "compliant"]
     assert result.llm_call_count == 2
@@ -7833,7 +7833,7 @@ async def test_course_candidate_over_hard_content_budget_is_data_gap_without_sec
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
@@ -7877,7 +7877,7 @@ async def test_typed_complete_course_scope_over_twelve_rows_reaches_stage_two():
         }),
     )
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -7885,7 +7885,7 @@ async def test_typed_complete_course_scope_over_twelve_rows_reaches_stage_two():
         llm_client=client,
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
-        decision_rule_ids=("LX0609-020", "LX0609-023"),
+        decision_rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
     )
     assert result.results == ()
     assert [item.evidence_state for item in result.decisions] == [
@@ -7898,7 +7898,7 @@ async def test_typed_complete_course_scope_over_twelve_rows_reaches_stage_two():
     ]
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-020", "LX0609-023"),
+        expected_rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
@@ -7934,7 +7934,7 @@ async def test_stage_two_prompt_scope_gap_returns_unknown_without_crash(monkeypa
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -7993,7 +7993,7 @@ async def test_link_diagnostics_does_not_treat_order_only_candidate_as_course_ex
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -8032,7 +8032,7 @@ async def test_stage_two_source_error_is_technical_without_second_call(monkeypat
     monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", _read)
     client = _SequentialClient(_payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]))
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
     assert {item["status"] for item in result.results} == {"technical_error"}
     assert result.llm_call_count == 1
@@ -8069,7 +8069,7 @@ async def test_invalid_stage_one_output_is_not_frozen(monkeypatch, tmp_path):
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-021", "LX0609-022"),
+        rule_ids=("LX0609-03-01-02", "LX0609-03-01-03"),
         institute_id="i",
         patient_id="p",
         visit_id="v-freeze-invalid",
@@ -8121,7 +8121,7 @@ async def test_ungrounded_stage_one_quote_is_not_frozen(monkeypatch, tmp_path):
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-021", "LX0609-022"),
+        rule_ids=("LX0609-03-01-02", "LX0609-03-01-03"),
         institute_id="i",
         patient_id="p",
         visit_id="v-freeze-ungrounded",
@@ -8214,7 +8214,7 @@ async def test_valid_stage_one_output_is_frozen_then_reused_without_model_call(
         )
     )
     first = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-021", "LX0609-022"),
+        rule_ids=("LX0609-03-01-02", "LX0609-03-01-03"),
         institute_id="i",
         patient_id="p",
         visit_id="v-freeze-valid",
@@ -8239,7 +8239,7 @@ async def test_valid_stage_one_output_is_frozen_then_reused_without_model_call(
         )
     )
     second = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-021", "LX0609-022"),
+        rule_ids=("LX0609-03-01-02", "LX0609-03-01-03"),
         institute_id="i",
         patient_id="p",
         visit_id="v-freeze-valid",
@@ -8318,7 +8318,7 @@ async def test_repeated_recommendation_text_without_execution_evidence_is_missin
         }]},
     )
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="i", patient_id="p", visit_id="v",
         source_schema=None, llm_client=client,
     )
@@ -8327,12 +8327,12 @@ async def test_repeated_recommendation_text_without_execution_evidence_is_missin
         "non_compliant",
     ]
     facts = dict(result.customer_display_facts)
-    assert facts["LX0609-020"]["generic_execution_count"] == 0
-    assert facts["LX0609-020"]["missing_execution_count"] == 1
-    assert facts["LX0609-023"]["generic_execution_count"] == 0
-    assert facts["LX0609-023"]["missing_execution_count"] == 1
+    assert facts["LX0609-03-01-01"]["generic_execution_count"] == 0
+    assert facts["LX0609-03-01-01"]["missing_execution_count"] == 1
+    assert facts["LX0609-03-01-04"]["generic_execution_count"] == 0
+    assert facts["LX0609-03-01-04"]["missing_execution_count"] == 1
     assert (
-        facts["LX0609-023"]["recommendation_evidence"][0]["execution_state"]
+        facts["LX0609-03-01-04"]["recommendation_evidence"][0]["execution_state"]
         == "missing"
     )
 
@@ -8371,13 +8371,13 @@ async def test_specific_result_bearing_record_is_compliant_without_copy_comparis
         }]},
     )
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="i", patient_id="p", visit_id="v",
         source_schema=None, llm_client=client,
     )
     assert [item["status"] for item in result.results] == ["compliant", "compliant"]
     facts = dict(result.customer_display_facts)
-    assert facts["LX0609-023"]["generic_execution_count"] == 0
+    assert facts["LX0609-03-01-04"]["generic_execution_count"] == 0
 
 
 def _mixed_candidate_sources():
@@ -8412,7 +8412,7 @@ async def test_untimed_order_does_not_block_linked_execution_candidate(monkeypat
         }),
     )
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
     assert [item["status"] for item in result.results] == ["compliant", "compliant"]
     assert result.llm_call_count == 2
@@ -8432,7 +8432,7 @@ async def test_untimed_unrelated_order_does_not_block_absent_test_recommendation
         _execution({"episode_ref": "consultation_record-1", "execution_state": "absent", "execution_refs": [], "confidence": "high"}),
     )
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
     assert [item["status"] for item in result.results] == [
         "non_compliant",
@@ -8478,7 +8478,7 @@ async def test_test_recommendation_absent_ignores_incomplete_unrelated_drug_sour
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
     assert [item["status"] for item in result.results] == [
@@ -8500,7 +8500,7 @@ async def test_medication_recommendation_absent_is_data_gap_when_drug_source_inc
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
     assert [item["status"] for item in result.results] == [
@@ -8558,7 +8558,7 @@ async def test_specific_execution_stays_compliant_when_unrelated_source_is_incom
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
     assert [item["status"] for item in result.results] == ["compliant", "compliant"]
@@ -8577,7 +8577,7 @@ async def test_other_recommendation_absent_is_data_gap_when_needed_source_is_inc
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
     assert [item["status"] for item in result.results] == [
@@ -8603,7 +8603,7 @@ async def test_absent_action_uses_high_confidence_llm_judgment(monkeypatch, acti
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
     assert [item["status"] for item in result.results] == [
@@ -8689,7 +8689,7 @@ async def test_structured_non_order_evidence_cannot_replace_course_execution_rec
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"), institute_id="I", patient_id="P", visit_id="V", source_schema=None, llm_client=client,
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"), institute_id="I", patient_id="P", visit_id="V", source_schema=None, llm_client=client,
         evidence_materials=session.materials, evidence_snapshot=session.snapshot,
     )
 
@@ -8772,7 +8772,7 @@ async def test_structured_exam_with_course_respects_recommendation_time_scope(
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -8789,7 +8789,7 @@ async def test_structured_exam_with_course_respects_recommendation_time_scope(
     assert result.llm_call_count == expected_calls
     assert len(client.prompts) == expected_calls
     if expected_calls == 2:
-        evidence = dict(result.customer_display_facts)["LX0609-020"][
+        evidence = dict(result.customer_display_facts)["LX0609-03-01-01"][
             "recommendation_evidence"
         ][1]
         assert evidence["execution_state"] == "unknown"
@@ -8865,7 +8865,7 @@ async def test_later_recommendation_without_post_consultation_course_is_determin
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -8881,7 +8881,7 @@ async def test_later_recommendation_without_post_consultation_course_is_determin
     ]
     assert result.llm_call_count == 2
     assert len(client.prompts) == 2
-    display = dict(result.customer_display_facts)["LX0609-020"]
+    display = dict(result.customer_display_facts)["LX0609-03-01-01"]
     assert [
         item["execution_state"] for item in display["recommendation_results"]
     ] == ["specific", "missing"]
@@ -8973,7 +8973,7 @@ async def test_stage_two_top_level_array_retries_once(monkeypatch):
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="i",
         patient_id="p",
         visit_id="v",
@@ -9064,7 +9064,7 @@ async def test_direct_reader_keeps_nondrug_order_as_structured_evidence_without_
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="i",
         patient_id="p",
         visit_id="v",
@@ -9099,7 +9099,7 @@ async def test_out_of_window_candidate_is_not_scope_gap_or_prompt_input(monkeypa
         _execution({"episode_ref": "consultation_record-1", "execution_state": "absent", "execution_refs": [], "confidence": "high"}),
     )
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
     assert [item["status"] for item in result.results] == [
         "non_compliant",
@@ -9116,7 +9116,7 @@ async def test_complete_empty_candidate_sources_use_absence_without_second_call(
     monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda *, source_key, **_: source_rows[source_key])
     client = _SequentialClient(_payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]))
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
     assert [item["status"] for item in result.results] == [
         "non_compliant",
@@ -9137,7 +9137,7 @@ async def test_no_usable_candidate_with_technical_source_is_technical_without_se
     monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", _read)
     client = _SequentialClient(_payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]))
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
     assert {item["status"] for item in result.results} == {"technical_error"}
     assert result.llm_call_count == 1

@@ -24,14 +24,14 @@ def test_050_mapping_strips_legacy_private_payload_without_reading_it() -> None:
     }
 
     assert safe_difficult_case_customer_display_facts(
-        rule_id="LX0609-050", raw=raw
+        rule_id="LX0609-03-02-01", raw=raw
     ) == _NON_COMPLIANT_FACTS
 
 
 def test_050_finalizer_keeps_decision_and_rejects_status_fact_conflict() -> None:
     finalized, handled = finalize_luxian_0609_executor_customer_display_facts(
         result={
-            "rule_id": "LX0609-050",
+            "rule_id": "LX0609-03-02-01",
             "status": "non_compliant",
             "reason_code": "required_document_missing",
         },
@@ -43,7 +43,7 @@ def test_050_finalizer_keeps_decision_and_rejects_status_fact_conflict() -> None
 
     conflict, handled = finalize_luxian_0609_executor_customer_display_facts(
         result={
-            "rule_id": "LX0609-050",
+            "rule_id": "LX0609-03-02-01",
             "status": "compliant",
             "reason_code": "requirement_satisfied",
             "findings": "不应保留",
@@ -65,7 +65,7 @@ def test_050_scope_uncertainty_requires_uncertain_status() -> None:
     }
     finalized, _ = finalize_luxian_0609_executor_customer_display_facts(
         result={
-            "rule_id": "LX0609-050",
+            "rule_id": "LX0609-03-02-01",
             "status": "uncertain",
             "reason_code": "diagnosis_scope_uncertain",
         },

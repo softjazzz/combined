@@ -14,13 +14,13 @@ def test_record_count_does_not_prove_surgery_association(record_count):
         'postoperative_first_course_count': record_count,
     }
     before = deepcopy(facts)
-    finding = customer_finding_from_controlled_facts(rule_id='LX0609-066', facts=facts)
+    finding = customer_finding_from_controlled_facts(rule_id='LX0609-04-05-03', facts=facts)
     assert finding == f'已确认实施手术 1 台，找到术后首次病程记录 {record_count} 份。'
     assert facts == before
 
 
 def test_insufficient_record_count_keeps_unresolved_explanation():
-    finding = customer_finding_from_controlled_facts(rule_id='LX0609-066', facts={
+    finding = customer_finding_from_controlled_facts(rule_id='LX0609-04-05-03', facts={
         'verification_kind': 'postoperative_first_course_presence_check',
         'performed_surgery_count': 2,
         'postoperative_first_course_count': 1,

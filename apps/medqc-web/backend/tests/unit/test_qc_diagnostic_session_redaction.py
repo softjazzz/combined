@@ -13,7 +13,7 @@ from app.services.qc_diagnostics.contracts import DiagnosticPackageError
 
 
 COORDINATES = ("hospital-test", "patient-test", "visit-test")
-RULES = ("LX0609-012", "LX0609-020", "LX0609-029", "LX0609-076")
+RULES = ("LX0609-06-01-05", "LX0609-03-01-01", "LX0609-04-01-01", "LX0609-04-02-08")
 FIELDS = frozenset({"institute_id", "patient_id", "visit_id", "patient_name", "content",
     "document_id", "record_content", "admission_datetime", "discharge_datetime", "present", "row_ref",
     "horizon_date", "horizon_datetime", "basis", "surgery_order", "complete", "performed", "emergency_rescue"})

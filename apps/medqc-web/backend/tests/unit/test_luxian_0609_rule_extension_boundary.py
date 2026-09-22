@@ -94,7 +94,7 @@ def _session():
         )
 
     return build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-001",),
+        selected_rule_ids=("LX0609-01-01-01",),
         institute_id="I",
         patient_id="P",
         visit_id="V",

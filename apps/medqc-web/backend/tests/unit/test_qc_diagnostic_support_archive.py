@@ -10,14 +10,14 @@ from app.services.qc_diagnostics.support_archive import build_support_archive
 def fixture():
     return {
         "build_identity": {"available": True, "git_commit": "a" * 40, "build_id": "test"},
-        "execution_inputs": {"selected_rule_ids": ["LX0609-007"],
+        "execution_inputs": {"selected_rule_ids": ["LX0609-02-01-03"],
             "snapshot": {"observations": [{"source_key": "senior_course_record", "query_state": "empty",
                 "completeness": "complete", "record_count": 0}]},
             "sources": {"admission_record": {"rows": [{"document_id": "doc-test-1",
                 "record_content": "姓名：张测试；2026-02-02 查房", "record_time": "2026-02-02 10:00:00"}],
                 "truncated": False, "limit_rows": 100}, "senior_course_record": {"rows": [], "truncated": False, "limit_rows": 100}}},
         "execution_context": {"medical_text": "张测试 doc-test-1", "source_schema": "cdm", "runtime_settings": {}},
-        "saved_result": {"job_id": "job-test", "items": [{"rule_id": "LX0609-007", "status": "data_gap",
+        "saved_result": {"job_id": "job-test", "items": [{"rule_id": "LX0609-02-01-03", "status": "data_gap",
             "evidence": [{"document_id": "doc-test-1"}]}]},
         "calls": [{"logical_call_id": "call-1", "attempt_no": 1, "executor_key": "course",
             "request": {"model": "test", "messages": [{"role": "user", "content": "张测试 doc-test-1"}]},
@@ -36,7 +36,7 @@ def test_complete_capture_empty_source_and_model_timeout_are_diagnostic_evidence
     assert meta["capture_completeness"] == "complete"
     assert files["manifest.json"]["source_issues"] == []
     assert files["model-calls.json"][0]["error_kind"] == "timeout"
-    assert files["rules/LX0609-007.json"]["results"][0]["status"] == "data_gap"
+    assert files["rules/LX0609-02-01-03.json"]["results"][0]["status"] == "data_gap"
     assert files["privacy-report.json"]["dates_preserved"] is True
 
 

@@ -151,7 +151,7 @@ def _source_document_refs(
 def evaluate_structured_pretransfusion_application(
     documents: Mapping[str, Any],
 ) -> AssessmentOutcome | None:
-    """按输血申请单结构化事实核对 LX0609-044；非结构化旧资料交还调用方。"""
+    """按输血申请单结构化事实核对 LX0609-07-01-02；非结构化旧资料交还调用方。"""
 
     applications = [
         row

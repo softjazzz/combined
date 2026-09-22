@@ -21,7 +21,7 @@ async def test_admin_owned_result_prepare_confirm_download(monkeypatch):
     workspace.get_batch_job.return_value = {"status": "completed"}
     workspace.get_latest_luxian_0609_record_result.return_value = {
         "state": "ready", "job_id": "job", "record_ref": "ref",
-        "items": [{"rule_id": "LX0609-032", "status": "not_applicable", "reason_code": "trigger_absent_complete"}],
+        "items": [{"rule_id": "LX0609-04-03-01", "status": "not_applicable", "reason_code": "trigger_absent_complete"}],
     }
     monkeypatch.setattr(qc_diagnostics, "_workspace", lambda: workspace)
     monkeypatch.setattr(qc_diagnostics, "_delivery", HistoryDelivery())

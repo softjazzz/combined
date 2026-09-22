@@ -1,4 +1,4 @@
-"""LX0609-069 会诊业务时间缺口的受控事实与客户展示。"""
+"""LX0609-04-02-07 会诊业务时间缺口的受控事实与客户展示。"""
 
 import pytest
 
@@ -28,7 +28,7 @@ from app.services.luxian_0609.extended_document.consultation_timeliness import (
 def _gap_decision():
     return reduce_luxian_0609_rule_decision(
         RuleDecision(
-            rule_id="LX0609-069",
+            rule_id="LX0609-04-02-07",
             snapshot_hash="a" * 64,
             applicability=ApplicabilityState.APPLICABLE,
             evidence_state=EvidenceState.DATA_GAP,
@@ -96,7 +96,7 @@ def test_consultation_business_time_gap_mapping_accepts_exact_shape() -> None:
     }
 
     assert safe_continuity_customer_display_facts(
-        rule_id="LX0609-069", raw=raw
+        rule_id="LX0609-04-02-07", raw=raw
     ) == raw
 
 
@@ -114,7 +114,7 @@ def test_consultation_business_time_gap_mapping_accepts_exact_shape() -> None:
 )
 def test_consultation_business_time_gap_mapping_rejects_invalid_shapes(raw) -> None:
     assert safe_continuity_customer_display_facts(
-        rule_id="LX0609-069", raw=raw
+        rule_id="LX0609-04-02-07", raw=raw
     ) is None
 
 

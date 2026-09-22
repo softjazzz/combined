@@ -9,6 +9,11 @@ def test_transfusion_customer_fact_contracts_are_not_owned_by_aggregator() -> No
     source = inspect.getsource(aggregator)
 
     assert all(
-        f"LX0609-{number:03d}" not in source for number in range(41, 49)
+        rule_id not in source
+        for rule_id in (
+            "LX0609-11-03-01", "LX0609-11-03-02", "LX0609-07-01-01",
+            "LX0609-07-01-02", "LX0609-07-02-01", "LX0609-07-02-02",
+            "LX0609-07-03-01", "LX0609-07-04-01",
+        )
     )
-    assert "LX0609-049" not in source
+    assert "LX0609-07-04-02" not in source

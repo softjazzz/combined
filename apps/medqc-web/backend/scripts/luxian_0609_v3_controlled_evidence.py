@@ -7,94 +7,94 @@ from typing import Any, Sequence
 
 PROVISIONAL_RULE_IDS = frozenset(
     {
-        "LX0609-050",
-        "LX0609-054",
-        "LX0609-055",
-        "LX0609-056",
-        "LX0609-057",
-        "LX0609-059",
-        "LX0609-063",
-        "LX0609-075",
+        "LX0609-03-02-01",
+        "LX0609-05-01-02",
+        "LX0609-05-01-03",
+        "LX0609-05-01-04",
+        "LX0609-05-01-05",
+        "LX0609-05-03-01",
+        "LX0609-08-01-03",
+        "LX0609-10-03-01",
     }
 )
 
 # 每条规则只绑定一份权威验收病例。其余同族病例仍可用于人工探索，但不再
 # 自动生成 pending 黄金答案。
-RULE_NUMBERS_BY_CASE: dict[int, tuple[int, ...]] = {
-    1: (1, 2, 4, 5, 6),
-    2: (1, 2, 4, 5, 6),
-    4: (1, 2, 4, 5, 6),
-    5: (7, 16, 18),
-    6: (8, 17),
-    7: (9,),
-    10: (10, 11),
-    11: (12, 52, 53),
-    12: (14, 15),
-    13: (20, 21, 22, 23, 69),
-    14: (20, 21, 22, 69),
-    16: (20, 21, 22, 69),
-    17: (3, 24, 25, 28, 31),
-    18: (29, 30, 32, 33),
-    19: (34, 35, 36, 37, 38),
-    20: (39, 40),
-    21: (64, 65, 66),
-    22: (75,),
-    23: (41, 42, 43, 44, 45, 46, 47, 48, 49, 70),
-    24: (41,),
-    25: (42, 43, 44),
-    26: (45, 47),
-    27: (46, 48),
-    28: (13, 19, 26, 27),
-    29: (13, 19, 26, 27),
-    31: (61, 62, 63, 67, 68),
-    32: (50,),
-    33: (51, 60),
-    34: (54, 55, 56, 57, 58, 59),
-    35: (54, 55, 57, 58),
-    36: (71, 72, 73, 74),
-    37: (71, 72, 74),
-    38: (73,),
+RULE_IDS_BY_CASE: dict[int, tuple[str, ...]] = {
+    1: ("LX0609-01-01-01", "LX0609-01-02-01", "LX0609-09-01-01", "LX0609-02-01-01", "LX0609-02-01-02"),
+    2: ("LX0609-01-01-01", "LX0609-01-02-01", "LX0609-09-01-01", "LX0609-02-01-01", "LX0609-02-01-02"),
+    4: ("LX0609-01-01-01", "LX0609-01-02-01", "LX0609-09-01-01", "LX0609-02-01-01", "LX0609-02-01-02"),
+    5: ("LX0609-02-01-03", "LX0609-12-01-01", "LX0609-01-01-02"),
+    6: ("LX0609-02-01-04", "LX0609-12-01-02"),
+    7: ("LX0609-02-01-05",),
+    10: ("LX0609-06-01-02", "LX0609-06-01-04"),
+    11: ("LX0609-06-01-05", "LX0609-06-04-01", "LX0609-06-04-02"),
+    12: ("LX0609-06-03-03", "LX0609-06-03-04"),
+    13: ("LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03", "LX0609-03-01-04", "LX0609-04-02-07"),
+    14: ("LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03", "LX0609-04-02-07"),
+    16: ("LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03", "LX0609-04-02-07"),
+    17: ("LX0609-04-02-01", "LX0609-04-02-03", "LX0609-04-02-04", "LX0609-05-01-01", "LX0609-04-02-05"),
+    18: ("LX0609-04-01-01", "LX0609-04-02-02", "LX0609-04-03-01", "LX0609-11-01-01"),
+    19: ("LX0609-11-02-01", "LX0609-11-02-02", "LX0609-04-04-01", "LX0609-04-04-02", "LX0609-04-04-03"),
+    20: ("LX0609-04-01-02", "LX0609-04-01-03"),
+    21: ("LX0609-04-05-01", "LX0609-04-05-02", "LX0609-04-05-03"),
+    22: ("LX0609-10-03-01",),
+    23: ("LX0609-11-01-01", "LX0609-11-02-01", "LX0609-07-01-01", "LX0609-07-01-02", "LX0609-07-02-01", "LX0609-07-02-02", "LX0609-07-03-01", "LX0609-07-04-01", "LX0609-07-04-02", "LX0609-07-01-03"),
+    24: ("LX0609-11-01-01",),
+    25: ("LX0609-11-02-01", "LX0609-07-01-01", "LX0609-07-01-02"),
+    26: ("LX0609-07-02-01", "LX0609-07-03-01"),
+    27: ("LX0609-07-02-02", "LX0609-07-04-01"),
+    28: ("LX0609-06-02-03", "LX0609-06-02-02", "LX0609-05-02-01", "LX0609-08-01-04"),
+    29: ("LX0609-06-02-03", "LX0609-06-02-02", "LX0609-05-02-01", "LX0609-08-01-04"),
+    31: ("LX0609-08-01-01", "LX0609-08-01-02", "LX0609-08-01-03", "LX0609-08-02-01", "LX0609-08-02-02"),
+    32: ("LX0609-03-02-01",),
+    33: ("LX0609-09-02-01", "LX0609-04-02-06"),
+    34: ("LX0609-05-01-02", "LX0609-05-01-03", "LX0609-05-01-04", "LX0609-05-01-05", "LX0609-05-01-06", "LX0609-05-03-01"),
+    35: ("LX0609-05-01-02", "LX0609-05-01-03", "LX0609-05-01-05", "LX0609-05-01-06"),
+    36: ("LX0609-10-01-01", "LX0609-10-02-01", "LX0609-10-02-02", "LX0609-12-02-01"),
+    37: ("LX0609-10-01-01", "LX0609-10-02-01", "LX0609-12-02-01"),
+    38: ("LX0609-10-02-02",),
 }
 
 NON_COMPLIANT_RULE_IDS = frozenset(
     {
-        "LX0609-010",
-        "LX0609-011",
-        "LX0609-012",
-        "LX0609-050",
-        "LX0609-052",
-        "LX0609-053",
+        "LX0609-06-01-02",
+        "LX0609-06-01-04",
+        "LX0609-06-01-05",
+        "LX0609-03-02-01",
+        "LX0609-06-04-01",
+        "LX0609-06-04-02",
     }
 )
 
 _NON_COMPLIANT_RULE_IDS_BY_CASE = {
     2: frozenset(
-        {"LX0609-001", "LX0609-002", "LX0609-004", "LX0609-005", "LX0609-006"}
+        {"LX0609-01-01-01", "LX0609-01-02-01", "LX0609-09-01-01", "LX0609-02-01-01", "LX0609-02-01-02"}
     ),
-    24: frozenset({"LX0609-041"}),
-    25: frozenset({"LX0609-042", "LX0609-043", "LX0609-044"}),
-    26: frozenset({"LX0609-045", "LX0609-047"}),
-    27: frozenset({"LX0609-046", "LX0609-048"}),
-    29: frozenset({"LX0609-013", "LX0609-019", "LX0609-026", "LX0609-027"}),
-    14: frozenset({"LX0609-020", "LX0609-021", "LX0609-022", "LX0609-069"}),
-    35: frozenset({"LX0609-054", "LX0609-055", "LX0609-057", "LX0609-058"}),
-    37: frozenset({"LX0609-071", "LX0609-072", "LX0609-074"}),
-    38: frozenset({"LX0609-073"}),
+    24: frozenset({"LX0609-11-03-01"}),
+    25: frozenset({"LX0609-11-03-02", "LX0609-07-01-01", "LX0609-07-01-02"}),
+    26: frozenset({"LX0609-07-02-01", "LX0609-07-03-01"}),
+    27: frozenset({"LX0609-07-02-02", "LX0609-07-04-01"}),
+    29: frozenset({"LX0609-06-02-03", "LX0609-06-02-02", "LX0609-05-02-01", "LX0609-08-01-04"}),
+    14: frozenset({"LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03", "LX0609-04-02-07"}),
+    35: frozenset({"LX0609-05-01-02", "LX0609-05-01-03", "LX0609-05-01-05", "LX0609-05-01-06"}),
+    37: frozenset({"LX0609-10-01-01", "LX0609-10-02-01", "LX0609-12-02-01"}),
+    38: frozenset({"LX0609-10-02-02"}),
 }
 
 _STATUS_OVERRIDES_BY_CASE = {
     16: {
-        "LX0609-020": "not_applicable",
-        "LX0609-021": "not_applicable",
-        "LX0609-022": "not_applicable",
-        "LX0609-069": "not_applicable",
+        "LX0609-03-01-01": "not_applicable",
+        "LX0609-03-01-02": "not_applicable",
+        "LX0609-03-01-03": "not_applicable",
+        "LX0609-04-02-07": "not_applicable",
     },
 }
 
 
 def _gold(
     case_index: int,
-    rule_number: int,
+    rule_id: str,
     expected_status: str,
     expected_reason_code: str,
     trigger_facts: tuple[str, ...],
@@ -104,7 +104,7 @@ def _gold(
     return {
         "case_index": case_index,
         "fixture_ref": f"0426-v3:case-{case_index:03d}",
-        "rule_id": f"LX0609-{rule_number:03d}",
+        "rule_id": rule_id,
         "expected_status": expected_status,
         "expected_reason_code": expected_reason_code,
         "trigger_facts": list(trigger_facts),
@@ -116,43 +116,43 @@ def _gold(
 # 仅包含已经人工复核、用于正式验收的37条断言。它与134条探索覆盖矩阵分离，
 # 不参与规则执行；后续修复以这里冻结的状态、事实、资料和证据角色为准。
 GOLD_ACCEPTANCE_CONTRACTS: tuple[dict[str, Any], ...] = (
-    _gold(2, 1, "non_compliant", "timeliness_requirement_not_met", ("入院记录超过入院后24小时完成",), ("inpat_registration", "admission_record"), ("start_time", "target_document_time")),
-    _gold(2, 2, "non_compliant", "timeliness_requirement_not_met", ("首次病程超过入院后8小时完成",), ("inpat_registration", "first_course_record"), ("start_time", "target_document_time")),
-    _gold(2, 4, "non_compliant", "timeliness_requirement_not_met", ("抢救记录超过抢救结束后6小时完成",), ("rescue_record",), ("rescue_end_time", "target_document_time")),
-    _gold(2, 5, "non_compliant", "timeliness_requirement_not_met", ("主治医师首次查房超过入院后48小时",), ("inpat_registration", "senior_course_record"), ("start_time", "target_document_time")),
-    _gold(2, 6, "non_compliant", "timeliness_requirement_not_met", ("最高级别医师首次查房超过入院后72小时",), ("inpat_registration", "senior_course_record"), ("start_time", "target_document_time")),
-    _gold(6, 8, "compliant", "round_frequency_requirement_satisfied", ("存在病重医嘱且每两天至少一份查房病程",), ("inpat_nondrug_order", "daily_course_record", "inpat_registration"), ("severity_order", "course_timeline")),
-    _gold(6, 17, "compliant", "copy_similarity_within_threshold", ("多份病程记录表达不同病情变化且最高相似度不超过70%",), ("daily_course_record",), ("compared_document", "similarity_measure")),
-    _gold(11, 10, "compliant", "exam_reason_documented", ("CT或MRI检查前病程已记录检查原因",), ("exam_master", "daily_course_record"), ("exam_event", "pre_exam_course")),
-    _gold(11, 11, "compliant", "exam_result_recorded_within_24h", ("影像报告出具后24小时内病程已记录结果",), ("exam_item_report", "daily_course_record"), ("report", "post_report_course")),
-    _gold(11, 12, "non_compliant", "positive_exam_analysis_missing", ("阳性影像报告出具已满24小时且病程仅记录结果未作分析",), ("exam_item_report", "daily_course_record", "evaluation_horizon"), ("positive_report", "post_report_course", "evaluation_horizon")),
-    _gold(11, 14, "compliant", "culture_result_recorded_within_24h", ("细菌培养报告出具后24小时内病程已记录结果",), ("labtest_item_report", "daily_course_record"), ("culture_report", "post_report_course")),
-    _gold(11, 15, "non_compliant", "positive_culture_analysis_missing", ("阳性培养报告出具已满24小时且病程未分析阳性菌",), ("labtest_item_report", "daily_course_record", "evaluation_horizon"), ("positive_culture_report", "post_report_course", "evaluation_horizon")),
-    _gold(11, 52, "non_compliant", "critical_value_disposition_late", ("危急值报告后超过6小时才记录处置",), ("labtest_item_report", "crisis_value_record"), ("critical_value_report", "disposition_record")),
-    _gold(11, 53, "non_compliant", "critical_value_disposition_missing", ("存在PL或PH危急值且未找到处置记录",), ("labtest_item_report", "crisis_value_record"), ("critical_value_report", "disposition_record")),
-    _gold(14, 20, "non_compliant", "consultation_execution_missing", ("会诊意见形成且评价窗口成熟，完整执行资料中无执行记录",), ("consultation_record", "daily_course_record", "inpat_nondrug_order", "evaluation_horizon"), ("consultation_opinion", "execution_search_window")),
-    _gold(14, 21, "non_compliant", "purpose_vague", ("会诊申请仅写请相关科室协助诊治，目的不明确",), ("consultation_record",), ("consultation_request",)),
-    _gold(14, 22, "non_compliant", "opinion_vague", ("会诊意见仅写必要时检查或药物治疗，意见不明确",), ("consultation_record",), ("consultation_opinion",)),
-    _gold(14, 69, "non_compliant", "consultation_record_late", ("会诊记录超过申请后24小时完成",), ("consultation_record",), ("consultation_request_time", "consultation_record_time")),
-    _gold(18, 29, "compliant", "presurg_summary_present", ("当前住院存在手术医嘱且存在术前小结",), ("surgery_application", "inpat_nondrug_order", "presurg_summary"), ("surgery_order", "target_document")),
-    _gold(18, 30, "compliant", "surgery_record_present", ("当前住院存在手术医嘱且存在正式手术记录",), ("surgery_application", "inpat_nondrug_order", "surgery_record"), ("surgery_order", "target_document")),
-    _gold(18, 32, "compliant", "surgery_safecheck_present", ("当前住院存在正式手术记录且存在手术安全核查表",), ("surgery_record", "surgery_safecheck_record"), ("formal_surgery_record", "target_document")),
-    _gold(18, 33, "compliant", "surgery_consent_present", ("当前住院存在正式手术记录且存在手术知情同意书",), ("surgery_record", "surgery_inform_consent"), ("formal_surgery_record", "target_document")),
-    _gold(25, 42, "non_compliant", "transfusion_consent_incomplete", ("存在输血事实且输血知情同意书签名或签署时间不完整",), ("blood_transfusion_application", "transfusion_consent"), ("transfusion_event", "consent_document")),
-    _gold(25, 43, "non_compliant", "pretransfusion_nine_tests_incomplete", ("输血前九项检查不完整",), ("blood_transfusion_application", "labtest_item_report"), ("transfusion_event", "pretransfusion_tests")),
-    _gold(25, 44, "non_compliant", "pretransfusion_assessment_missing", ("存在输血事实但未找到输血前评估",), ("blood_transfusion_application", "daily_course_record"), ("transfusion_event", "pretransfusion_assessment")),
-    _gold(29, 13, "non_compliant", "pathology_result_not_documented", ("存在病理结果但手术记录或病程未记录",), ("pathology_report", "surgery_record", "daily_course_record"), ("pathology_report", "clinical_document")),
-    _gold(29, 19, "non_compliant", "pathology_sampling_not_documented", ("存在病理取材事件但手术记录或病程未记录取材情况",), ("pathology_report", "surgery_record", "daily_course_record"), ("pathology_sampling", "clinical_document")),
-    _gold(29, 26, "non_compliant", "chemotherapy_order_course_mismatch", ("恶性肿瘤化疗病程与医嘱的药物、剂量、方法或时间不一致",), ("inpat_drug_order", "daily_course_record", "diagnosis"), ("chemotherapy_order", "chemotherapy_course")),
-    _gold(29, 27, "non_compliant", "tumor_discharge_plan_missing", ("恶性肿瘤患者出院记录缺少肿瘤后续治疗计划",), ("diagnosis", "discharge_record"), ("tumor_diagnosis", "discharge_plan")),
-    _gold(32, 50, "non_compliant", "difficult_case_discussion_missing", ("入院7天后诊断仍不明确且无疑难病历讨论",), ("inpat_registration", "diagnosis", "difficult_case_discussion"), ("diagnostic_timeline", "target_document")),
-    _gold(35, 54, "non_compliant", "antimicrobial_reason_missing", ("抗菌药物使用或调整时病程未记录理由",), ("inpat_drug_order", "daily_course_record"), ("antimicrobial_order", "reason_documentation")),
-    _gold(35, 55, "non_compliant", "antimicrobial_effect_evaluation_missing", ("抗菌药物使用48至72小时内无效果评价",), ("inpat_drug_order", "daily_course_record"), ("antimicrobial_order", "effect_evaluation")),
-    _gold(35, 57, "non_compliant", "empiric_antimicrobial_reason_missing", ("经验用药未说明理由且未记录无样可采原因",), ("inpat_drug_order", "daily_course_record", "labtest_master"), ("empiric_antimicrobial_order", "reason_documentation")),
-    _gold(35, 58, "non_compliant", "special_antimicrobial_expert_support_missing", ("使用特殊级抗菌药物但缺少专家查房或会诊记录",), ("inpat_drug_order", "senior_course_record", "consultation_record"), ("special_antimicrobial_order", "expert_support")),
-    _gold(37, 71, "non_compliant", "handover_record_missing_or_late", ("经治医师变更且缺少按时完成的交接班记录",), ("doctor_assignment", "handover_record"), ("doctor_change_event", "handover_document")),
-    _gold(37, 72, "non_compliant", "transfer_record_late", ("转科后24小时内未完成转入或转出记录",), ("transfer_order", "transfer_record"), ("transfer_event", "transfer_document")),
-    _gold(37, 74, "non_compliant", "diagnosis_revision_rationale_missing", ("修正或补充诊断时未记录理由及诊断依据",), ("diagnosis", "daily_course_record"), ("diagnosis_change", "rationale_documentation")),
+    _gold(2, "LX0609-01-01-01", "non_compliant", "timeliness_requirement_not_met", ("入院记录超过入院后24小时完成",), ("inpat_registration", "admission_record"), ("start_time", "target_document_time")),
+    _gold(2, "LX0609-01-02-01", "non_compliant", "timeliness_requirement_not_met", ("首次病程超过入院后8小时完成",), ("inpat_registration", "first_course_record"), ("start_time", "target_document_time")),
+    _gold(2, "LX0609-09-01-01", "non_compliant", "timeliness_requirement_not_met", ("抢救记录超过抢救结束后6小时完成",), ("rescue_record",), ("rescue_end_time", "target_document_time")),
+    _gold(2, "LX0609-02-01-01", "non_compliant", "timeliness_requirement_not_met", ("主治医师首次查房超过入院后48小时",), ("inpat_registration", "senior_course_record"), ("start_time", "target_document_time")),
+    _gold(2, "LX0609-02-01-02", "non_compliant", "timeliness_requirement_not_met", ("最高级别医师首次查房超过入院后72小时",), ("inpat_registration", "senior_course_record"), ("start_time", "target_document_time")),
+    _gold(6, "LX0609-02-01-04", "compliant", "round_frequency_requirement_satisfied", ("存在病重医嘱且每两天至少一份查房病程",), ("inpat_nondrug_order", "daily_course_record", "inpat_registration"), ("severity_order", "course_timeline")),
+    _gold(6, "LX0609-12-01-02", "compliant", "copy_similarity_within_threshold", ("多份病程记录表达不同病情变化且最高相似度不超过70%",), ("daily_course_record",), ("compared_document", "similarity_measure")),
+    _gold(11, "LX0609-06-01-02", "compliant", "exam_reason_documented", ("CT或MRI检查前病程已记录检查原因",), ("exam_master", "daily_course_record"), ("exam_event", "pre_exam_course")),
+    _gold(11, "LX0609-06-01-04", "compliant", "exam_result_recorded_within_24h", ("影像报告出具后24小时内病程已记录结果",), ("exam_item_report", "daily_course_record"), ("report", "post_report_course")),
+    _gold(11, "LX0609-06-01-05", "non_compliant", "positive_exam_analysis_missing", ("阳性影像报告出具已满24小时且病程仅记录结果未作分析",), ("exam_item_report", "daily_course_record", "evaluation_horizon"), ("positive_report", "post_report_course", "evaluation_horizon")),
+    _gold(11, "LX0609-06-03-03", "compliant", "culture_result_recorded_within_24h", ("细菌培养报告出具后24小时内病程已记录结果",), ("labtest_item_report", "daily_course_record"), ("culture_report", "post_report_course")),
+    _gold(11, "LX0609-06-03-04", "non_compliant", "positive_culture_analysis_missing", ("阳性培养报告出具已满24小时且病程未分析阳性菌",), ("labtest_item_report", "daily_course_record", "evaluation_horizon"), ("positive_culture_report", "post_report_course", "evaluation_horizon")),
+    _gold(11, "LX0609-06-04-01", "non_compliant", "critical_value_disposition_late", ("危急值报告后超过6小时才记录处置",), ("labtest_item_report", "crisis_value_record"), ("critical_value_report", "disposition_record")),
+    _gold(11, "LX0609-06-04-02", "non_compliant", "critical_value_disposition_missing", ("存在PL或PH危急值且未找到处置记录",), ("labtest_item_report", "crisis_value_record"), ("critical_value_report", "disposition_record")),
+    _gold(14, "LX0609-03-01-01", "non_compliant", "consultation_execution_missing", ("会诊意见形成且评价窗口成熟，完整执行资料中无执行记录",), ("consultation_record", "daily_course_record", "inpat_nondrug_order", "evaluation_horizon"), ("consultation_opinion", "execution_search_window")),
+    _gold(14, "LX0609-03-01-02", "non_compliant", "purpose_vague", ("会诊申请仅写请相关科室协助诊治，目的不明确",), ("consultation_record",), ("consultation_request",)),
+    _gold(14, "LX0609-03-01-03", "non_compliant", "opinion_vague", ("会诊意见仅写必要时检查或药物治疗，意见不明确",), ("consultation_record",), ("consultation_opinion",)),
+    _gold(14, "LX0609-04-02-07", "non_compliant", "consultation_record_late", ("会诊记录超过申请后24小时完成",), ("consultation_record",), ("consultation_request_time", "consultation_record_time")),
+    _gold(18, "LX0609-04-01-01", "compliant", "presurg_summary_present", ("当前住院存在手术医嘱且存在术前小结",), ("surgery_application", "inpat_nondrug_order", "presurg_summary"), ("surgery_order", "target_document")),
+    _gold(18, "LX0609-04-02-02", "compliant", "surgery_record_present", ("当前住院存在手术医嘱且存在正式手术记录",), ("surgery_application", "inpat_nondrug_order", "surgery_record"), ("surgery_order", "target_document")),
+    _gold(18, "LX0609-04-03-01", "compliant", "surgery_safecheck_present", ("当前住院存在正式手术记录且存在手术安全核查表",), ("surgery_record", "surgery_safecheck_record"), ("formal_surgery_record", "target_document")),
+    _gold(18, "LX0609-11-01-01", "compliant", "surgery_consent_present", ("当前住院存在正式手术记录且存在手术知情同意书",), ("surgery_record", "surgery_inform_consent"), ("formal_surgery_record", "target_document")),
+    _gold(25, "LX0609-11-02-01", "non_compliant", "transfusion_consent_incomplete", ("存在输血事实且输血知情同意书签名或签署时间不完整",), ("blood_transfusion_application", "transfusion_consent"), ("transfusion_event", "consent_document")),
+    _gold(25, "LX0609-07-01-01", "non_compliant", "pretransfusion_nine_tests_incomplete", ("输血前九项检查不完整",), ("blood_transfusion_application", "labtest_item_report"), ("transfusion_event", "pretransfusion_tests")),
+    _gold(25, "LX0609-07-01-02", "non_compliant", "pretransfusion_assessment_missing", ("存在输血事实但未找到输血前评估",), ("blood_transfusion_application", "daily_course_record"), ("transfusion_event", "pretransfusion_assessment")),
+    _gold(29, "LX0609-06-02-03", "non_compliant", "pathology_result_not_documented", ("存在病理结果但手术记录或病程未记录",), ("pathology_report", "surgery_record", "daily_course_record"), ("pathology_report", "clinical_document")),
+    _gold(29, "LX0609-06-02-02", "non_compliant", "pathology_sampling_not_documented", ("存在病理取材事件但手术记录或病程未记录取材情况",), ("pathology_report", "surgery_record", "daily_course_record"), ("pathology_sampling", "clinical_document")),
+    _gold(29, "LX0609-05-02-01", "non_compliant", "chemotherapy_order_course_mismatch", ("恶性肿瘤化疗病程与医嘱的药物、剂量、方法或时间不一致",), ("inpat_drug_order", "daily_course_record", "diagnosis"), ("chemotherapy_order", "chemotherapy_course")),
+    _gold(29, "LX0609-08-01-04", "non_compliant", "tumor_discharge_plan_missing", ("恶性肿瘤患者出院记录缺少肿瘤后续治疗计划",), ("diagnosis", "discharge_record"), ("tumor_diagnosis", "discharge_plan")),
+    _gold(32, "LX0609-03-02-01", "non_compliant", "difficult_case_discussion_missing", ("入院7天后诊断仍不明确且无疑难病历讨论",), ("inpat_registration", "diagnosis", "difficult_case_discussion"), ("diagnostic_timeline", "target_document")),
+    _gold(35, "LX0609-05-01-02", "non_compliant", "antimicrobial_reason_missing", ("抗菌药物使用或调整时病程未记录理由",), ("inpat_drug_order", "daily_course_record"), ("antimicrobial_order", "reason_documentation")),
+    _gold(35, "LX0609-05-01-03", "non_compliant", "antimicrobial_effect_evaluation_missing", ("抗菌药物使用48至72小时内无效果评价",), ("inpat_drug_order", "daily_course_record"), ("antimicrobial_order", "effect_evaluation")),
+    _gold(35, "LX0609-05-01-05", "non_compliant", "empiric_antimicrobial_reason_missing", ("经验用药未说明理由且未记录无样可采原因",), ("inpat_drug_order", "daily_course_record", "labtest_master"), ("empiric_antimicrobial_order", "reason_documentation")),
+    _gold(35, "LX0609-05-01-06", "non_compliant", "special_antimicrobial_expert_support_missing", ("使用特殊级抗菌药物但缺少专家查房或会诊记录",), ("inpat_drug_order", "senior_course_record", "consultation_record"), ("special_antimicrobial_order", "expert_support")),
+    _gold(37, "LX0609-10-01-01", "non_compliant", "handover_record_missing_or_late", ("经治医师变更且缺少按时完成的交接班记录",), ("doctor_assignment", "handover_record"), ("doctor_change_event", "handover_document")),
+    _gold(37, "LX0609-10-02-01", "non_compliant", "transfer_record_late", ("转科后24小时内未完成转入或转出记录",), ("transfer_order", "transfer_record"), ("transfer_event", "transfer_document")),
+    _gold(37, "LX0609-12-02-01", "non_compliant", "diagnosis_revision_rationale_missing", ("修正或补充诊断时未记录理由及诊断依据",), ("diagnosis", "daily_course_record"), ("diagnosis_change", "rationale_documentation")),
 )
 
 
@@ -340,9 +340,6 @@ def expected_status_for_case(case_index: int, rule_id: str) -> str:
         return "non_compliant"
     return "non_compliant" if rule_id in NON_COMPLIANT_RULE_IDS else "compliant"
 
-
-def _rule_id(number: int) -> str:
-    return f"LX0609-{number:03d}"
 
 
 def _clear_visit_rows(
@@ -1221,12 +1218,11 @@ def apply_controlled_evidence(
         case.source_item["synthetic_golden_answers"] = []
     covered: set[str] = set()
     tier_counts: Counter[str] = Counter()
-    for case_index, numbers in RULE_NUMBERS_BY_CASE.items():
+    for case_index, rule_ids in RULE_IDS_BY_CASE.items():
         case = case_by_index[case_index]
         evidence_refs = list(dict.fromkeys(refs_by_case[case_index]))
         answers = list(existing_answers_by_case.get(case_index) or [])
-        for number in numbers:
-            rule_id = _rule_id(number)
+        for rule_id in rule_ids:
             tier = "provisional" if rule_id in PROVISIONAL_RULE_IDS else "formal"
             status = expected_status_for_case(case_index, rule_id)
             answers.append(
@@ -1272,7 +1268,7 @@ def apply_controlled_evidence(
                 tier_counts[tier] += 1
         case.source_item["synthetic_golden_answers"] = normalized_answers
     for case_index, existing_answers in existing_answers_by_case.items():
-        if case_index in RULE_NUMBERS_BY_CASE or not existing_answers:
+        if case_index in RULE_IDS_BY_CASE or not existing_answers:
             continue
         case = case_by_index[case_index]
         evidence_refs = list(dict.fromkeys(refs_by_case.get(case_index) or []))

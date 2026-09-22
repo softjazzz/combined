@@ -21,7 +21,7 @@ async def test_capture_requires_owned_unchanged_result_and_explicit_download(mon
     workspace.get_batch_job.return_value = {"scope": "final", "status": "completed", "filters": {"diagnostic_capture": True}}
     workspace.get_latest_luxian_0609_record_result.return_value = {
         "state": "ready", "job_id": job_id, "record_ref": "ref",
-        "items": [{"rule_id": "LX0609-007"}],
+        "items": [{"rule_id": "LX0609-02-01-03"}],
     }
     monkeypatch.setattr(qc_diagnostics, "_workspace", lambda: workspace)
     monkeypatch.setattr(support_store, "_ROOT", tmp_path)
@@ -36,7 +36,7 @@ async def test_capture_requires_owned_unchanged_result_and_explicit_download(mon
         assert (await client.post(base + "/start", json=selection)).json() == {"job_id": job_id}
         payload = create.call_args.args[1]
         assert payload.diagnostic_capture is True
-        assert payload.rule_ids == ["LX0609-007"]
+        assert payload.rule_ids == ["LX0609-02-01-03"]
         assert payload.record_refs == [{"institute_id": "I", "patient_id": "P", "visit_id": "V"}]
         support_store._write_status(job_id, {"state": "ready", "capture_completeness": "partial"})
         support_store._path(job_id, ".zip").write_bytes(b"PKtest")

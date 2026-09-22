@@ -34,7 +34,7 @@ _CREDENTIAL = re.compile(
 )
 _ID_CARD = re.compile(r"(?<!\d)\d{17}[\dXx](?!\d)")
 _PHONE = re.compile(r"(?<!\d)1[3-9]\d{9}(?!\d)")
-_RULE_ORDER = ("LX0609-029", "LX0609-030", "LX0609-032")
+_RULE_ORDER = ("LX0609-04-01-01", "LX0609-04-02-02", "LX0609-04-03-01")
 _ORDER_PAIR = ("current_visit_surgery_order_confirmed", "inpat_nondrug_order")
 _PERFORMED_PAIRS = frozenset({
     ("current_visit_surgery_confirmed", "surgery_application"),
@@ -42,9 +42,9 @@ _PERFORMED_PAIRS = frozenset({
     ("current_visit_surgery_confirmed", "mr_surgery"),
 })
 _RULE_CONTRACT = MappingProxyType({
-    "LX0609-029": ("presurg_summary", (), (), frozenset({_ORDER_PAIR, *_PERFORMED_PAIRS})),
-    "LX0609-030": ("surgery_record", (), (), frozenset({_ORDER_PAIR, *_PERFORMED_PAIRS})),
-    "LX0609-032": ("surgery_safecheck_record", ("LX0609-030",), ("informational_parent_only",), _PERFORMED_PAIRS),
+    "LX0609-04-01-01": ("presurg_summary", (), (), frozenset({_ORDER_PAIR, *_PERFORMED_PAIRS})),
+    "LX0609-04-02-02": ("surgery_record", (), (), frozenset({_ORDER_PAIR, *_PERFORMED_PAIRS})),
+    "LX0609-04-03-01": ("surgery_safecheck_record", ("LX0609-04-02-02",), ("informational_parent_only",), _PERFORMED_PAIRS),
 })
 
 
@@ -77,7 +77,7 @@ class TargetQualification:
     qualified_document_count: int
 
     def __post_init__(self) -> None:
-        if self.rule_id not in ("LX0609-029", "LX0609-032") or self.target_source_key != _RULE_CONTRACT[self.rule_id][0]:
+        if self.rule_id not in ("LX0609-04-01-01", "LX0609-04-03-01") or self.target_source_key != _RULE_CONTRACT[self.rule_id][0]:
             raise ValueError("invalid target qualification")
         _code("qualification_visit_ref", self.visit_ref)
         if self.qualification_policy_version != TARGET_QUALIFICATION_POLICY_VERSION:
@@ -334,7 +334,7 @@ def build_luxian_0609_deterministic_gate_shadow(*, plan: Any, manifest: Any, bun
     required_qualification_rules = tuple(
         rule.rule_id
         for rule in plan.planned_rules
-        if rule.rule_id in ("LX0609-029", "LX0609-032")
+        if rule.rule_id in ("LX0609-04-01-01", "LX0609-04-03-01")
         and entries[rule.target_source_key].query_status is manifest_module.QueryStatus.AVAILABLE
     )
     if tuple(qualification_by_rule) != required_qualification_rules:
@@ -394,7 +394,7 @@ def build_luxian_0609_deterministic_gate_shadow(*, plan: Any, manifest: Any, bun
                 manifest_module.QueryStatus.ERROR: TargetResolution.ERROR,
             }
             target_resolution = target_map[target.query_status]
-            if rule.rule_id in ("LX0609-029", "LX0609-032") and target.query_status is manifest_module.QueryStatus.AVAILABLE:
+            if rule.rule_id in ("LX0609-04-01-01", "LX0609-04-03-01") and target.query_status is manifest_module.QueryStatus.AVAILABLE:
                 qualification = qualification_by_rule[rule.rule_id]
                 if qualification.qualified_document_count == 0:
                     target_resolution = TargetResolution.EMPTY

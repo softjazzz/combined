@@ -1,4 +1,4 @@
-"""LX0609-059 诊疗事件、医嘱与病程一致性的事件级事实执行器。
+"""LX0609-05-03-01 诊疗事件、医嘱与病程一致性的事件级事实执行器。
 
 本模块只负责一个冻结的小闭环：先用结构化业务键将实际发生的诊疗事件
 与医嘱一一关联，再用至多一次受控模型调用判断病程是否记录了同一事件。
@@ -491,7 +491,7 @@ async def evaluate_lx0609_059_treatment_order_consistency(
     token_counter: Callable[[str], int] | None = None,
     redaction_terms: Sequence[str] | str = (),
 ) -> TreatmentOrderConsistencyResult:
-    """计算 LX0609-059 的事件级事实，调用模型不超过一次。"""
+    """计算 LX0609-05-03-01 的事件级事实，调用模型不超过一次。"""
 
     readiness_failure = _readiness_failure(source_readiness)
     if readiness_failure is not None:

@@ -39,7 +39,7 @@ _NOT_MATURE_EVENT = {
 
 _FACTS_BY_CASE = {
     "054_compliant": (
-        "LX0609-054",
+        "LX0609-05-01-02",
         "compliant",
         {
             "verification_kind": "antimicrobial_reason_documentation_check",
@@ -50,7 +50,7 @@ _FACTS_BY_CASE = {
         },
     ),
     "054_non_compliant": (
-        "LX0609-054",
+        "LX0609-05-01-02",
         "non_compliant",
         {
             "verification_kind": "antimicrobial_reason_documentation_check",
@@ -61,7 +61,7 @@ _FACTS_BY_CASE = {
         },
     ),
     "054_association_failed": (
-        "LX0609-054",
+        "LX0609-05-01-02",
         "data_gap",
         {
             "verification_kind": "antimicrobial_reason_documentation_check",
@@ -72,7 +72,7 @@ _FACTS_BY_CASE = {
         },
     ),
     "055_compliant": (
-        "LX0609-055",
+        "LX0609-05-01-03",
         "compliant",
         {
             "verification_kind": "antimicrobial_effect_evaluation_check",
@@ -85,7 +85,7 @@ _FACTS_BY_CASE = {
         },
     ),
     "055_non_compliant": (
-        "LX0609-055",
+        "LX0609-05-01-03",
         "non_compliant",
         {
             "verification_kind": "antimicrobial_effect_evaluation_check",
@@ -98,7 +98,7 @@ _FACTS_BY_CASE = {
         },
     ),
     "055_window_not_mature": (
-        "LX0609-055",
+        "LX0609-05-01-03",
         "not_applicable",
         {
             "verification_kind": "antimicrobial_effect_evaluation_check",
@@ -112,7 +112,7 @@ _FACTS_BY_CASE = {
         },
     ),
     "055_horizon_missing": (
-        "LX0609-055",
+        "LX0609-05-01-03",
         "data_gap",
         {
             "verification_kind": "antimicrobial_effect_evaluation_check",
@@ -125,7 +125,7 @@ _FACTS_BY_CASE = {
         },
     ),
     "057_compliant": (
-        "LX0609-057",
+        "LX0609-05-01-05",
         "compliant",
         {
             "verification_kind": "empiric_antimicrobial_reason_check",
@@ -135,7 +135,7 @@ _FACTS_BY_CASE = {
         },
     ),
     "057_non_compliant": (
-        "LX0609-057",
+        "LX0609-05-01-05",
         "non_compliant",
         {
             "verification_kind": "empiric_antimicrobial_reason_check",
@@ -145,7 +145,7 @@ _FACTS_BY_CASE = {
         },
     ),
     "058_compliant": (
-        "LX0609-058",
+        "LX0609-05-01-06",
         "compliant",
         {
             "verification_kind": "special_antimicrobial_expert_support_check",
@@ -159,7 +159,7 @@ _FACTS_BY_CASE = {
         },
     ),
     "058_late_support": (
-        "LX0609-058",
+        "LX0609-05-01-06",
         "non_compliant",
         {
             "verification_kind": "special_antimicrobial_expert_support_check",
@@ -173,7 +173,7 @@ _FACTS_BY_CASE = {
         },
     ),
     "058_time_missing": (
-        "LX0609-058",
+        "LX0609-05-01-06",
         "data_gap",
         {
             "verification_kind": "special_antimicrobial_expert_support_check",
@@ -187,7 +187,7 @@ _FACTS_BY_CASE = {
         },
     ),
     "058_association_failed": (
-        "LX0609-058",
+        "LX0609-05-01-06",
         "data_gap",
         {
             "verification_kind": "special_antimicrobial_expert_support_check",
@@ -256,10 +256,10 @@ def test_055_c03_three_mature_event_windows_survive_mapping_and_envelope() -> No
     raw = _055_facts(*events)
     raw["unmatched_antimicrobials"] = ["头孢呋辛", "左氧氟沙星"]
 
-    safe = safe_antimicrobial_customer_display_facts(rule_id="LX0609-055", raw=raw)
+    safe = safe_antimicrobial_customer_display_facts(rule_id="LX0609-05-01-03", raw=raw)
     finalized, handled = finalize_luxian_0609_executor_customer_display_facts(
         result={
-            "rule_id": "LX0609-055",
+            "rule_id": "LX0609-05-01-03",
             "status": "non_compliant",
             "reason_code": "threshold_exceeded",
         },
@@ -294,7 +294,7 @@ def test_055_datetime_event_state_keeps_exact_48_72_boundaries(
     raw = _055_facts(event)
 
     assert safe_antimicrobial_customer_display_facts(
-        rule_id="LX0609-055", raw=raw
+        rule_id="LX0609-05-01-03", raw=raw
     ) == raw
 
 
@@ -314,7 +314,7 @@ def test_055_date_only_window_uses_conservative_state_without_elapsed(
     raw = _055_facts(event)
 
     assert safe_antimicrobial_customer_display_facts(
-        rule_id="LX0609-055", raw=raw
+        rule_id="LX0609-05-01-03", raw=raw
     ) == raw
 
 
@@ -328,11 +328,11 @@ def test_055_immature_window_status_contract_is_preserved(
 ) -> None:
     raw = _055_facts(event)
     raw["window_state"] = window_state
-    safe = safe_antimicrobial_customer_display_facts(rule_id="LX0609-055", raw=raw)
+    safe = safe_antimicrobial_customer_display_facts(rule_id="LX0609-05-01-03", raw=raw)
 
     assert safe == raw
     assert antimicrobial_customer_fact_status_is_valid(
-        rule_id="LX0609-055", status="not_applicable", safe_facts=safe
+        rule_id="LX0609-05-01-03", status="not_applicable", safe_facts=safe
     )
 
 
@@ -340,11 +340,11 @@ def test_055_not_applicable_allows_evaluated_mature_event_with_immature_event() 
     raw = _055_facts(deepcopy(_MATURE_EVENT), deepcopy(_NOT_MATURE_EVENT))
     raw["evaluation_intervals"] = [60.0]
     raw["window_state"] = "evaluation_window_not_mature"
-    safe = safe_antimicrobial_customer_display_facts(rule_id="LX0609-055", raw=raw)
+    safe = safe_antimicrobial_customer_display_facts(rule_id="LX0609-05-01-03", raw=raw)
 
     assert safe == raw
     assert antimicrobial_customer_fact_status_is_valid(
-        rule_id="LX0609-055", status="not_applicable", safe_facts=safe
+        rule_id="LX0609-05-01-03", status="not_applicable", safe_facts=safe
     )
 
 
@@ -360,11 +360,11 @@ def test_055_not_applicable_rejects_missing_immaturity_or_mature_evaluation(
     else:
         raw = _055_facts(deepcopy(_MATURE_EVENT), deepcopy(_NOT_MATURE_EVENT))
     raw["window_state"] = "evaluation_window_not_mature"
-    safe = safe_antimicrobial_customer_display_facts(rule_id="LX0609-055", raw=raw)
+    safe = safe_antimicrobial_customer_display_facts(rule_id="LX0609-05-01-03", raw=raw)
 
     assert safe is not None
     assert not antimicrobial_customer_fact_status_is_valid(
-        rule_id="LX0609-055", status="not_applicable", safe_facts=safe
+        rule_id="LX0609-05-01-03", status="not_applicable", safe_facts=safe
     )
 
 
@@ -377,10 +377,10 @@ def test_055_empty_and_partial_data_gap_windows_remain_legal() -> None:
         "elapsed_hours": -24.0,
     })
     for raw in (empty, conflict):
-        safe = safe_antimicrobial_customer_display_facts(rule_id="LX0609-055", raw=raw)
+        safe = safe_antimicrobial_customer_display_facts(rule_id="LX0609-05-01-03", raw=raw)
         assert safe == raw
         assert antimicrobial_customer_fact_status_is_valid(
-            rule_id="LX0609-055", status="data_gap", safe_facts=safe
+            rule_id="LX0609-05-01-03", status="data_gap", safe_facts=safe
         )
 
 
@@ -408,7 +408,7 @@ def test_055_rejects_unknown_identity_time_number_and_arithmetic_conflicts(
         raw["event_windows"][0][field] = value
 
     assert safe_antimicrobial_customer_display_facts(
-        rule_id="LX0609-055", raw=raw
+        rule_id="LX0609-05-01-03", raw=raw
     ) is None
 
 
@@ -426,11 +426,11 @@ def test_055_rejects_final_status_window_contradictions(
 ) -> None:
     raw = _055_facts(deepcopy(_MATURE_EVENT))
     raw.update(changes)
-    safe = safe_antimicrobial_customer_display_facts(rule_id="LX0609-055", raw=raw)
+    safe = safe_antimicrobial_customer_display_facts(rule_id="LX0609-05-01-03", raw=raw)
 
     assert safe is not None
     assert not antimicrobial_customer_fact_status_is_valid(
-        rule_id="LX0609-055", status=status, safe_facts=safe
+        rule_id="LX0609-05-01-03", status=status, safe_facts=safe
     )
 
 
@@ -439,7 +439,7 @@ def test_055_invalid_event_facts_fail_closed_in_finalizer() -> None:
 
     finalized, handled = finalize_luxian_0609_executor_customer_display_facts(
         result={
-            "rule_id": "LX0609-055",
+            "rule_id": "LX0609-05-01-03",
             "status": "non_compliant",
             "reason_code": "threshold_exceeded",
             "customer_evidence": [{"source_type": "must-be-cleared"}],
@@ -489,7 +489,7 @@ def test_antimicrobial_contract_failure_safely_downgrades_to_technical_error(
 ) -> None:
     finalized, handled = finalize_luxian_0609_executor_customer_display_facts(
         result={
-            "rule_id": "LX0609-058",
+            "rule_id": "LX0609-05-01-06",
             "status": status,
             "reason_code": "executor_reason",
             "findings": "执行器结论",

@@ -76,9 +76,9 @@ async def test_027_uncertainty_without_suspicion_is_not_applicable(source, prewa
         material = rows if key == source else [{"document_id": "discharge", "record_content": "出院后复诊。"}] if key == "discharge_record" else []
         return SnapshotSourceRows.create(source_key=key, rows=material, truncated=False, limit_rows=50)
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-027",), institute_id="I", patient_id="P", visit_id="V", source_schema=None,
+        selected_rule_ids=("LX0609-08-01-04",), institute_id="I", patient_id="P", visit_id="V", source_schema=None,
         created_at="2026-01-09T09:00:00+08:00", row_reader=reader,
-        additional_source_keys=resolve_legacy_executor_material_source_keys(("tumor_pathology",), selected_rule_ids=("LX0609-027",)),
+        additional_source_keys=resolve_legacy_executor_material_source_keys(("tumor_pathology",), selected_rule_ids=("LX0609-08-01-04",)),
     )
     client = OfflineClient()
     resolver = MalignancyFactResolver(client)
@@ -87,16 +87,16 @@ async def test_027_uncertainty_without_suspicion_is_not_applicable(source, prewa
         await resolver.resolve((MalignancySource(source, "available", session.materials.rows(source)),))
         assert resolver.claim_usage().llm_call_count == 1
     result = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
-        rule_ids=("LX0609-027",), wrapper_rules=[{"rule_id": "LX0609-027", "custom_prompt": "{medical_text}"}], evidence_payload=None,
+        rule_ids=("LX0609-08-01-04",), wrapper_rules=[{"rule_id": "LX0609-08-01-04", "custom_prompt": "{medical_text}"}], evidence_payload=None,
         institute_id="I", patient_id="P", visit_id="V", source_schema=None, llm_client=client,
-        evidence_snapshot=session.snapshot, evidence_materials=session.materials, decision_rule_ids=("LX0609-027",),
+        evidence_snapshot=session.snapshot, evidence_materials=session.materials, decision_rule_ids=("LX0609-08-01-04",),
         malignancy_resolver=resolver,
     )
     assert result.decisions[0].applicability.value == "not_applicable"
     assert result.decisions[0].reason_code == "trigger_absent_complete"
     assert result.customer_display_facts == ()
-    reduced = bind_and_reduce_luxian_0609_rule_decisions(decisions=result.decisions, expected_rule_ids=("LX0609-027",), snapshot=session.snapshot, evidence_materials=session.materials)[0]
-    final = finalize_luxian_0609_reduced_customer_result(decision=reduced, raw_customer_display_facts=dict(result.customer_display_facts).get("LX0609-027"), evidence_snapshot=session.snapshot, evidence_materials=session.materials)
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(decisions=result.decisions, expected_rule_ids=("LX0609-08-01-04",), snapshot=session.snapshot, evidence_materials=session.materials)[0]
+    final = finalize_luxian_0609_reduced_customer_result(decision=reduced, raw_customer_display_facts=dict(result.customer_display_facts).get("LX0609-08-01-04"), evidence_snapshot=session.snapshot, evidence_materials=session.materials)
     assert reduced.final_state.value == "not_applicable"
     assert final["status"] == "not_applicable"
     assert final["reason_code"] == "trigger_absent_complete"
@@ -183,27 +183,27 @@ async def test_027_explicit_suspicion_stays_data_gap_with_uncertain_facts(source
             material = []
         return SnapshotSourceRows.create(source_key=key, rows=material, truncated=False, limit_rows=50)
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-027",), institute_id="I", patient_id="P", visit_id="V", source_schema=None,
+        selected_rule_ids=("LX0609-08-01-04",), institute_id="I", patient_id="P", visit_id="V", source_schema=None,
         created_at="2026-01-09T09:00:00+08:00", row_reader=reader,
-        additional_source_keys=resolve_legacy_executor_material_source_keys(("tumor_pathology",), selected_rule_ids=("LX0609-027",)),
+        additional_source_keys=resolve_legacy_executor_material_source_keys(("tumor_pathology",), selected_rule_ids=("LX0609-08-01-04",)),
     )
     client = OfflineClient()
     result = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
-        rule_ids=("LX0609-027",), wrapper_rules=[{"rule_id": "LX0609-027", "custom_prompt": "{medical_text}"}], evidence_payload=None,
+        rule_ids=("LX0609-08-01-04",), wrapper_rules=[{"rule_id": "LX0609-08-01-04", "custom_prompt": "{medical_text}"}], evidence_payload=None,
         institute_id="I", patient_id="P", visit_id="V", source_schema=None, llm_client=client,
-        evidence_snapshot=session.snapshot, evidence_materials=session.materials, decision_rule_ids=("LX0609-027",),
+        evidence_snapshot=session.snapshot, evidence_materials=session.materials, decision_rule_ids=("LX0609-08-01-04",),
     )
     decision = result.decisions[0]
     assert (decision.applicability.value, decision.reason_code) == ("applicable", "required_field_missing")
     # M17：恢复携带「恶性性质未决」事实，客户才能看到未决可疑线索。
     facts = dict(result.customer_display_facts)
-    assert set(facts) == {"LX0609-027"}
-    uncertain_facts = facts["LX0609-027"]
+    assert set(facts) == {"LX0609-08-01-04"}
+    uncertain_facts = facts["LX0609-08-01-04"]
     assert uncertain_facts["verification_kind"] == "malignant_diagnosis_applicability_uncertain"
     assert uncertain_facts["malignancy_state"] == "unknown"
     assert isinstance(uncertain_facts["uncertain_diagnosis_count"], int)
     assert uncertain_facts["uncertain_diagnosis_count"] >= 1
-    reduced = bind_and_reduce_luxian_0609_rule_decisions(decisions=result.decisions, expected_rule_ids=("LX0609-027",), snapshot=session.snapshot, evidence_materials=session.materials)[0]
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(decisions=result.decisions, expected_rule_ids=("LX0609-08-01-04",), snapshot=session.snapshot, evidence_materials=session.materials)[0]
     final = finalize_luxian_0609_reduced_customer_result(
         decision=reduced, raw_customer_display_facts=uncertain_facts,
         evidence_snapshot=session.snapshot, evidence_materials=session.materials,
@@ -228,7 +228,7 @@ async def test_027_explicit_suspicion_stays_data_gap_with_uncertain_facts(source
 @pytest.mark.parametrize("count", [True, 0, -1, "1"])
 def test_uncertainty_display_rejects_invalid_count(count):
     from app.services.luxian_0609.tumor_pathology_result_mapping import safe_tumor_pathology_customer_display_facts
-    assert safe_tumor_pathology_customer_display_facts(rule_id="LX0609-027", raw={
+    assert safe_tumor_pathology_customer_display_facts(rule_id="LX0609-08-01-04", raw={
         "verification_kind": "malignant_diagnosis_applicability_uncertain",
         "malignancy_state": "unknown", "uncertain_diagnosis_count": count,
     }) is None
@@ -266,26 +266,26 @@ async def test_027_not_applicable_uses_source_level_refs_and_projects_no_evidenc
         ] if source == "discharge_record" else []
         return SnapshotSourceRows.create(source_key=source, rows=rows, truncated=False, limit_rows=50)
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-027",), institute_id="I", patient_id="P", visit_id="V", source_schema=None,
+        selected_rule_ids=("LX0609-08-01-04",), institute_id="I", patient_id="P", visit_id="V", source_schema=None,
         created_at="2026-01-09T09:00:00+08:00", row_reader=reader,
-        additional_source_keys=resolve_legacy_executor_material_source_keys(("tumor_pathology",), selected_rule_ids=("LX0609-027",)),
+        additional_source_keys=resolve_legacy_executor_material_source_keys(("tumor_pathology",), selected_rule_ids=("LX0609-08-01-04",)),
     )
     result = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
-        rule_ids=("LX0609-027",), wrapper_rules=[{"rule_id": "LX0609-027", "custom_prompt": "{medical_text}"}], evidence_payload=None,
+        rule_ids=("LX0609-08-01-04",), wrapper_rules=[{"rule_id": "LX0609-08-01-04", "custom_prompt": "{medical_text}"}], evidence_payload=None,
         institute_id="I", patient_id="P", visit_id="V", source_schema=None, llm_client=OfflineClient(),
-        evidence_snapshot=session.snapshot, evidence_materials=session.materials, decision_rule_ids=("LX0609-027",),
+        evidence_snapshot=session.snapshot, evidence_materials=session.materials, decision_rule_ids=("LX0609-08-01-04",),
     )
     # 事实引用回落到 027 的来源级快照引用（5 个观察来源），不含单条诊断行定位。
     expected_source_refs = {
         observation.snapshot_ref.removeprefix("sha256:")
         for observation in session.snapshot.observations
-        if observation.source_key in tumor._TYPED_RULE_SOURCE_KEYS["LX0609-027"]
+        if observation.source_key in tumor._TYPED_RULE_SOURCE_KEYS["LX0609-08-01-04"]
     }
     assert set(result.decisions[0].fact_refs) == expected_source_refs
     selected_rows = [row for ref, row in session.materials.document_rows("discharge_record_diagnosis", snapshot=session.snapshot) if ref in result.decisions[0].fact_refs]
     assert selected_rows == []
-    reduced = bind_and_reduce_luxian_0609_rule_decisions(decisions=result.decisions, expected_rule_ids=("LX0609-027",), snapshot=session.snapshot, evidence_materials=session.materials)[0]
-    final = finalize_luxian_0609_reduced_customer_result(decision=reduced, raw_customer_display_facts=dict(result.customer_display_facts).get("LX0609-027"), evidence_snapshot=session.snapshot, evidence_materials=session.materials)
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(decisions=result.decisions, expected_rule_ids=("LX0609-08-01-04",), snapshot=session.snapshot, evidence_materials=session.materials)[0]
+    final = finalize_luxian_0609_reduced_customer_result(decision=reduced, raw_customer_display_facts=dict(result.customer_display_facts).get("LX0609-08-01-04"), evidence_snapshot=session.snapshot, evidence_materials=session.materials)
     assert final["status"] == "not_applicable"
     assert final["reason_code"] == "trigger_absent_complete"
     assert not final.get("customer_evidence")

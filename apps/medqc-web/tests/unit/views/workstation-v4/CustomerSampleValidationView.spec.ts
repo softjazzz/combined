@@ -883,65 +883,64 @@ function buildRuleSets() {
 }
 
 const luxian0609RuleNames: Record<string, string> = {
-  'LX0609-001': '入院记录：入院后24小时内是否完成',
-  'LX0609-002': '首次病程：入院后 8 小时内无首次病程记录',
-  'LX0609-003': '手术记录：手术后24小时内是否完成',
-  'LX0609-004': '抢救记录：抢救结束后6小时内是否完成',
-  'LX0609-005': '上级医生查房记录：入院后 48 小时内无主治医师首次查房记录',
-  'LX0609-006': '上级医生查房记录：入院后 72小时内无最高级别首次查房记录',
-  'LX0609-007': '查房记录：病情稳定患者3天内无查房病程记录',
-  'LX0609-008': '查房记录：病重患者2天内无查房病程记录',
-  'LX0609-009': '查房记录：病危患者未每天记录查房病程',
-  'LX0609-010': 'CT/MRI 检查记录：CT/MRI检查前有无病程记录',
-  'LX0609-011': 'CT/MRI 检查记录：影像报告出具后24小时内未记录',
-  'LX0609-012': 'CT/MRI 检查记录：阳性结果未进行分析',
-  'LX0609-013': '病理检查：病理检查结果在手术记录、病程中未记录',
-  'LX0609-014': '细菌培养记录：细菌培养结果在病程中未记录',
-  'LX0609-015': '细菌培养结果无分析：阳性菌在病程记录中无分析',
-  'LX0609-016': '不合理复制病历：首次病程记录病例特点与入院记录完全相同',
-  'LX0609-017': '不合理复制病历：2次以上病程记录完全相同',
-  'LX0609-018': '主诉能导出第一诊断：主诉书写不规范或不能导出第一诊断',
-  'LX0609-019': '病理检查：取材情况未在病程记录/手术记录中记录',
-  'LX0609-020': '会诊记录：有会诊记录单无请会诊执行记录',
-  'LX0609-021': '会诊记录：会诊申请单会诊目的不明确',
-  'LX0609-022': '会诊记录：会诊记录单会诊意见不明确',
-  'LX0609-023': '会诊记录：请会诊执行记录不规范',
-  'LX0609-024': '手术记录：恶性肿瘤手术记录未书写淋巴结清扫情况',
-  'LX0609-025': '手术记录：未记录植入物名称、规格及数量',
-  'LX0609-026': '恶性肿瘤化学治疗记录：病程化疗记录与医嘱不一致',
-  'LX0609-027': '出院记录：恶性肿瘤患者缺少出院后治疗计划',
-  'LX0609-028': '抗菌药物使用记录：预防使用抗菌药物时间超过规定',
-  'LX0609-029': '术前小结：无术前小结',
-  'LX0609-030': '手术记录：无手术记录',
-  'LX0609-031': '手术记录：手术记录非手术者签字',
-  'LX0609-032': '手术安全核查表：无手术安全核查表',
-  'LX0609-033': '手术知情同意书：无手术知情同意书',
-  'LX0609-034': '麻醉知情同意书：无麻醉知情同意书',
-  'LX0609-035': '麻醉知情同意书：填写不规范',
-  'LX0609-036': '麻醉访视：无麻醉术前/术后访视记录',
-  'LX0609-037': '麻醉访视：记录填写不规范',
-  'LX0609-038': '麻醉记录单：无麻醉记录单',
-  'LX0609-039': '术前讨论记录：无术前讨论或术者未参加',
-  'LX0609-040': '术前多学科讨论记录：四级手术术前讨论未多学科讨论',
-  'LX0609-041': '输血知情同意书：无输血知情同意书',
-  'LX0609-042': '输血知情同意书：填写或签名不完整',
-  'LX0609-043': '输血前辅助检查：输血前常规检查不完整',
-  'LX0609-044': '输血前评估：无输血前评估记录或记录不完整',
-  'LX0609-045': '输血记录：无输血病程记录',
-  'LX0609-046': '输血记录：输血病程记录不完整或不规范',
-  'LX0609-047': '输血后评价：无输血后评价',
-  'LX0609-048': '输血记录：术中输血相关内容记录不一致',
-  'LX0609-049': '输血医嘱：输血医嘱与收费不一致',
+  'LX0609-01-01-01': '入院记录：入院后24小时内是否完成',
+  'LX0609-01-02-01': '首次病程：入院后 8 小时内无首次病程记录',
+  'LX0609-04-02-01': '手术记录：手术后24小时内是否完成',
+  'LX0609-09-01-01': '抢救记录：抢救结束后6小时内是否完成',
+  'LX0609-02-01-01': '上级医生查房记录：入院后 48 小时内无主治医师首次查房记录',
+  'LX0609-02-01-02': '上级医生查房记录：入院后 72小时内无最高级别首次查房记录',
+  'LX0609-02-01-03': '查房记录：病情稳定患者3天内无查房病程记录',
+  'LX0609-02-01-04': '查房记录：病重患者2天内无查房病程记录',
+  'LX0609-02-01-05': '查房记录：病危患者未每天记录查房病程',
+  'LX0609-06-01-02': 'CT/MRI 检查记录：CT/MRI检查前有无病程记录',
+  'LX0609-06-01-04': 'CT/MRI 检查记录：影像报告出具后24小时内未记录',
+  'LX0609-06-01-05': 'CT/MRI 检查记录：阳性结果未进行分析',
+  'LX0609-06-02-03': '病理检查：病理检查结果在手术记录、病程中未记录',
+  'LX0609-06-03-03': '细菌培养记录：细菌培养结果在病程中未记录',
+  'LX0609-06-03-04': '细菌培养结果无分析：阳性菌在病程记录中无分析',
+  'LX0609-12-01-01': '不合理复制病历：首次病程记录病例特点与入院记录完全相同',
+  'LX0609-12-01-02': '不合理复制病历：2次以上病程记录完全相同',
+  'LX0609-01-01-02': '主诉能导出第一诊断：主诉书写不规范或不能导出第一诊断',
+  'LX0609-06-02-02': '病理检查：取材情况未在病程记录/手术记录中记录',
+  'LX0609-03-01-01': '会诊记录：有会诊记录单无请会诊执行记录',
+  'LX0609-03-01-02': '会诊记录：会诊申请单会诊目的不明确',
+  'LX0609-03-01-03': '会诊记录：会诊记录单会诊意见不明确',
+  'LX0609-03-01-04': '会诊记录：请会诊执行记录不规范',
+  'LX0609-04-02-03': '手术记录：恶性肿瘤手术记录未书写淋巴结清扫情况',
+  'LX0609-04-02-04': '手术记录：未记录植入物名称、规格及数量',
+  'LX0609-05-02-01': '恶性肿瘤化学治疗记录：病程化疗记录与医嘱不一致',
+  'LX0609-08-01-04': '出院记录：恶性肿瘤患者缺少出院后治疗计划',
+  'LX0609-05-01-01': '抗菌药物使用记录：预防使用抗菌药物时间超过规定',
+  'LX0609-04-01-01': '术前小结：无术前小结',
+  'LX0609-04-02-02': '手术记录：无手术记录',
+  'LX0609-04-02-05': '手术记录：手术记录非手术者签字',
+  'LX0609-04-03-01': '手术安全核查表：无手术安全核查表',
+  'LX0609-11-01-01': '手术知情同意书：无手术知情同意书',
+  'LX0609-11-02-01': '麻醉知情同意书：无麻醉知情同意书',
+  'LX0609-11-02-02': '麻醉知情同意书：填写不规范',
+  'LX0609-04-04-01': '麻醉访视：无麻醉术前/术后访视记录',
+  'LX0609-04-04-02': '麻醉访视：记录填写不规范',
+  'LX0609-04-04-03': '麻醉记录单：无麻醉记录单',
+  'LX0609-04-01-02': '术前讨论记录：无术前讨论或术者未参加',
+  'LX0609-04-01-03': '术前多学科讨论记录：四级手术术前讨论未多学科讨论',
+  'LX0609-11-03-01': '输血知情同意书：无输血知情同意书',
+  'LX0609-11-03-02': '输血知情同意书：填写或签名不完整',
+  'LX0609-07-01-01': '输血前辅助检查：输血前常规检查不完整',
+  'LX0609-07-01-02': '输血前评估：无输血前评估记录或记录不完整',
+  'LX0609-07-02-01': '输血记录：无输血病程记录',
+  'LX0609-07-02-02': '输血记录：输血病程记录不完整或不规范',
+  'LX0609-07-03-01': '输血后评价：无输血后评价',
+  'LX0609-07-04-01': '输血记录：术中输血相关内容记录不一致',
+  'LX0609-07-04-02': '输血医嘱：输血医嘱与收费不一致',
 }
 
 function buildLuxian0609Rules() {
-  return Array.from({ length: 49 }, (_, index) => {
-    const ruleId = `LX0609-${String(index + 1).padStart(3, '0')}`
+  return Object.entries(luxian0609RuleNames).map(([ruleId, ruleName], index) => {
     return {
       rule_id: ruleId,
       rule_code: ruleId,
-      name: luxian0609RuleNames[ruleId] || `${ruleId} 质控点`,
-      description: luxian0609RuleNames[ruleId] || `${ruleId} 质控点`,
+      name: ruleName || `${ruleId} 质控点`,
+      description: ruleName || `${ruleId} 质控点`,
       required_documents_label: '病程记录',
       mapped_rule_ids: [`SC-${String(index + 1).padStart(3, '0')}`],
       primary_execution_rule_id: `SC-${String(index + 1).padStart(3, '0')}`,
@@ -1129,7 +1128,7 @@ describe('CustomerSampleValidationView', () => {
             record_ids: ['V001'],
             created_at: '2026-06-30T10:30:00Z',
             filters: {
-              selected_rule_ids: ['LX0609-001', 'LX0609-002', 'LX0609-005'],
+              selected_rule_ids: ['LX0609-01-01-01', 'LX0609-01-02-01', 'LX0609-02-01-01'],
             },
             summary: {
               total_records: 1,
@@ -1146,7 +1145,7 @@ describe('CustomerSampleValidationView', () => {
             },
             items: [
               {
-                rule_code: 'LX0609-002',
+                rule_code: 'LX0609-01-02-01',
                 rule_name: '首次病程：入院后 8 小时内无首次病程记录',
                 record_id: 'V001',
                 status: 'non_compliant',
@@ -1154,7 +1153,7 @@ describe('CustomerSampleValidationView', () => {
                 findings: '首次病程记录未在入院后8小时内完成。',
               },
               {
-                rule_code: 'LX0609-018',
+                rule_code: 'LX0609-01-01-02',
                 rule_name: '主诉能导出第一诊断',
                 record_id: 'V001',
                 status: 'non_compliant',
@@ -1162,7 +1161,7 @@ describe('CustomerSampleValidationView', () => {
                 findings: '主诉不能导出第一诊断。',
               },
               {
-                rule_code: 'LX0609-005',
+                rule_code: 'LX0609-02-01-01',
                 rule_name: '上级医生查房记录',
                 record_id: 'V001',
                 status: 'data_gap',
@@ -1294,7 +1293,7 @@ describe('CustomerSampleValidationView', () => {
           coverage_type: 'llm_intrinsic',
           issue_category: '客户自建测试病历',
           expected_scene: 'running',
-          candidate_rule_ids: ['LX0609-001'],
+          candidate_rule_ids: ['LX0609-01-01-01'],
           include_in_batch_1: true,
           matched_institute_id: 'H1',
           matched_patient_id: 'P_EDIT_COPY',
@@ -1376,7 +1375,7 @@ describe('CustomerSampleValidationView', () => {
           record_ids: ['V001'],
           created_at: '2026-06-30T10:30:00Z',
           filters: {
-            selected_rule_ids: ['LX0609-001', 'LX0609-002', 'LX0609-005'],
+            selected_rule_ids: ['LX0609-01-01-01', 'LX0609-01-02-01', 'LX0609-02-01-01'],
           },
           summary: {
             total_records: 1,
@@ -1392,7 +1391,7 @@ describe('CustomerSampleValidationView', () => {
               findings: [
                 {
                   id: 'review-1',
-                  rule_id: 'LX0609-020',
+                  rule_id: 'LX0609-03-01-01',
                   severity: 'P1',
                   suggested_status: 'not_applicable',
                   customer_message: '当前病历未见会诊文书证据，本项不宜作为会诊执行问题展示。',
@@ -1537,12 +1536,12 @@ describe('CustomerSampleValidationView', () => {
         created_at: '2026-07-05T15:34:38Z',
         filters: {
           selected_rule_ids: [
-            'LX0609-007',
-            'LX0609-008',
-            'LX0609-009',
-            'LX0609-016',
-            'LX0609-017',
-            'LX0609-018',
+            'LX0609-02-01-03',
+            'LX0609-02-01-04',
+            'LX0609-02-01-05',
+            'LX0609-12-01-01',
+            'LX0609-12-01-02',
+            'LX0609-01-01-02',
           ],
         },
         summary: {
@@ -1628,7 +1627,7 @@ describe('CustomerSampleValidationView', () => {
           record_ids: ['V001'],
           created_at: '2026-07-02T13:59:35Z',
           filters: {
-            selected_rule_ids: ['LX0609-001', 'LX0609-002', 'LX0609-004'],
+            selected_rule_ids: ['LX0609-01-01-01', 'LX0609-01-02-01', 'LX0609-09-01-01'],
           },
           summary: {
             display_status_counts: {
@@ -1652,7 +1651,7 @@ describe('CustomerSampleValidationView', () => {
           record_ids: ['V001'],
           created_at: '2026-07-02T13:59:35Z',
           filters: {
-            selected_rule_ids: ['LX0609-001', 'LX0609-002', 'LX0609-004'],
+            selected_rule_ids: ['LX0609-01-01-01', 'LX0609-01-02-01', 'LX0609-09-01-01'],
           },
           summary: {
             display_status_counts: {
@@ -1746,14 +1745,14 @@ describe('CustomerSampleValidationView', () => {
     expect(wrapper.text()).toContain('8个质控族')
     expect(wrapper.text()).toContain('49 个质控点')
     expect(wrapper.text()).toContain('查看质控点')
-    expect(wrapper.text()).not.toContain('LX0609-041')
-    expect(wrapper.text()).not.toContain('LX0609-049')
+    expect(wrapper.text()).not.toContain('LX0609-11-03-01')
+    expect(wrapper.text()).not.toContain('LX0609-07-04-02')
     expect(wrapper.text()).not.toContain('闸门未过 3/9')
     expect(wrapper.text()).not.toContain('证据待补强 10')
 
     await expandLuxianFamily(wrapper, '输血')
 
-    expect(wrapper.text()).toContain('LX0609-049')
+    expect(wrapper.text()).toContain('LX0609-07-04-02')
     expect(wrapper.text()).toContain('输血医嘱：输血医嘱与收费不一致')
 
     const internalButton = wrapper
@@ -2852,8 +2851,8 @@ describe('CustomerSampleValidationView', () => {
         execution_rule_count: 3,
         filters: {
           rule_set_key: 'luxian_0609_qc_v1',
-          selected_rule_ids: ['LX0609-020', 'LX0609-021'],
-          scoped_customer_rule_ids: ['LX0609-020', 'LX0609-021'],
+          selected_rule_ids: ['LX0609-03-01-01', 'LX0609-03-01-02'],
+          scoped_customer_rule_ids: ['LX0609-03-01-01', 'LX0609-03-01-02'],
           rule_ids: ['LX-017', 'CL-250', 'SC-068'],
           record_rule_map: {
             V001: ['LX-017', 'CL-250', 'SC-068'],
@@ -2863,7 +2862,7 @@ describe('CustomerSampleValidationView', () => {
         },
         items: [
           {
-            rule_id: 'LX0609-020',
+            rule_id: 'LX0609-03-01-01',
             record_id: 'V001',
             status: 'data_gap',
             result_status: 'data_gap',
@@ -2888,8 +2887,8 @@ describe('CustomerSampleValidationView', () => {
     }
     expect(detail.customer_rule_count).toBe(2)
     expect(detail.execution_rule_count).toBe(3)
-    expect(detail.filters?.selected_rule_ids).toEqual(['LX0609-020', 'LX0609-021'])
-    expect(detail.filters?.scoped_customer_rule_ids).toEqual(['LX0609-020', 'LX0609-021'])
+    expect(detail.filters?.selected_rule_ids).toEqual(['LX0609-03-01-01', 'LX0609-03-01-02'])
+    expect(detail.filters?.scoped_customer_rule_ids).toEqual(['LX0609-03-01-01', 'LX0609-03-01-02'])
     expect(detail.filters?.record_rule_map).toEqual({
       V001: ['LX-017', 'CL-250', 'SC-068'],
     })
@@ -3112,22 +3111,22 @@ describe('CustomerSampleValidationView', () => {
 
   it('病历池列表隐藏验证范围长规则串并保留精简操作', async () => {
     const selectedRuleIds = [
-      'LX0609-003',
-      'LX0609-024',
-      'LX0609-025',
-      'LX0609-028',
-      'LX0609-029',
-      'LX0609-030',
-      'LX0609-031',
-      'LX0609-032',
-      'LX0609-033',
-      'LX0609-034',
-      'LX0609-035',
-      'LX0609-036',
-      'LX0609-037',
-      'LX0609-038',
-      'LX0609-039',
-      'LX0609-040',
+      'LX0609-04-02-01',
+      'LX0609-04-02-03',
+      'LX0609-04-02-04',
+      'LX0609-05-01-01',
+      'LX0609-04-01-01',
+      'LX0609-04-02-02',
+      'LX0609-04-02-05',
+      'LX0609-04-03-01',
+      'LX0609-11-01-01',
+      'LX0609-11-02-01',
+      'LX0609-11-02-02',
+      'LX0609-04-04-01',
+      'LX0609-04-04-02',
+      'LX0609-04-04-03',
+      'LX0609-04-01-02',
+      'LX0609-04-01-03',
     ]
     getManualSamplePoolRecords.mockResolvedValueOnce({
       success: true,
@@ -3172,7 +3171,7 @@ describe('CustomerSampleValidationView', () => {
     expect(wrapper.find('.customer-sample-rule-id-chip').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('按质控点创建 · 手术麻醉')
     expect(wrapper.text()).not.toContain('手术麻醉16个质控点')
-    expect(wrapper.text()).not.toContain('LX0609-028、LX0609-029、LX0609-030')
+    expect(wrapper.text()).not.toContain('LX0609-05-01-01、LX0609-04-01-01、LX0609-04-02-02')
     const actionCellText = wrapper.find('.customer-sample-action-cell').text()
     expect(actionCellText).toContain('查看病历')
     expect(actionCellText).toContain('查看结果')
@@ -3203,8 +3202,8 @@ describe('CustomerSampleValidationView', () => {
     const wrapper = await mountView()
 
     await expandLuxianFamily(wrapper, '会诊质量')
-    const lx020 = wrapper.find('input.luxian-rule-checkbox[value="LX0609-020"]')
-    const lx021 = wrapper.find('input.luxian-rule-checkbox[value="LX0609-021"]')
+    const lx020 = wrapper.find('input.luxian-rule-checkbox[value="LX0609-03-01-01"]')
+    const lx021 = wrapper.find('input.luxian-rule-checkbox[value="LX0609-03-01-02"]')
     expect(lx020.exists()).toBe(true)
     expect(lx021.exists()).toBe(true)
     await lx020.setValue(true)
@@ -3225,7 +3224,7 @@ describe('CustomerSampleValidationView', () => {
         max_parallel_records: 16,
         validation_mode: 'customer',
         rule_set_key: 'luxian_0609_qc_v1',
-        selected_rule_ids: ['LX0609-020', 'LX0609-021'],
+        selected_rule_ids: ['LX0609-03-01-01', 'LX0609-03-01-02'],
       },
       { timeout: 90000 },
     )
@@ -3418,8 +3417,8 @@ describe('CustomerSampleValidationView', () => {
     const wrapper = await mountView()
 
     await expandLuxianFamily(wrapper, '会诊质量')
-    const lx020 = wrapper.find('input.luxian-rule-checkbox[value="LX0609-020"]')
-    const lx021 = wrapper.find('input.luxian-rule-checkbox[value="LX0609-021"]')
+    const lx020 = wrapper.find('input.luxian-rule-checkbox[value="LX0609-03-01-01"]')
+    const lx021 = wrapper.find('input.luxian-rule-checkbox[value="LX0609-03-01-02"]')
     await lx020.setValue(true)
     await lx021.setValue(true)
 
@@ -3437,8 +3436,8 @@ describe('CustomerSampleValidationView', () => {
 
     expect(createManualTestMedicalRecord).toHaveBeenCalledTimes(1)
     expect(createManualTestMedicalRecord.mock.calls[0][0].selected_rule_ids).toEqual([
-      'LX0609-020',
-      'LX0609-021',
+      'LX0609-03-01-01',
+      'LX0609-03-01-02',
     ])
     expect(runManualSamplePool).toHaveBeenCalledWith(
       'customer-created-test-records-v1',
@@ -3450,7 +3449,7 @@ describe('CustomerSampleValidationView', () => {
         max_parallel_records: 1,
         validation_mode: 'customer',
         rule_set_key: 'luxian_0609_qc_v1',
-        selected_rule_ids: ['LX0609-020', 'LX0609-021'],
+        selected_rule_ids: ['LX0609-03-01-01', 'LX0609-03-01-02'],
       },
       { timeout: 90000 },
     )
@@ -3502,7 +3501,7 @@ describe('CustomerSampleValidationView', () => {
     const wrapper = await mountView()
 
     await expandLuxianFamily(wrapper, '肿瘤病理')
-    const lx013 = wrapper.find('input.luxian-rule-checkbox[value="LX0609-013"]')
+    const lx013 = wrapper.find('input.luxian-rule-checkbox[value="LX0609-06-02-03"]')
     expect(lx013.exists()).toBe(true)
     await lx013.setValue(true)
 
@@ -3570,27 +3569,24 @@ describe('CustomerSampleValidationView', () => {
         max_parallel_records: 16,
         group_by_luxian_family: true,
         selected_rule_ids: [
-          'LX0609-001',
-          'LX0609-002',
-          'LX0609-004',
-          'LX0609-005',
-          'LX0609-006',
-          'LX0609-007',
-          'LX0609-008',
-          'LX0609-009',
-          'LX0609-016',
-          'LX0609-017',
-          'LX0609-018',
+          'LX0609-01-01-01',
+          'LX0609-01-01-02',
+          'LX0609-01-02-01',
+          'LX0609-02-01-01',
+          'LX0609-02-01-02',
+          'LX0609-02-01-03',
+          'LX0609-02-01-04',
+          'LX0609-02-01-05',
+          'LX0609-09-01-01',
+          'LX0609-12-01-01',
+          'LX0609-12-01-02',
         ],
       }),
     )
   })
 
   it('LX0609 质控点范围支持一次性选择全部规则族', async () => {
-    const allRuleIds = Array.from(
-      { length: 49 },
-      (_, index) => `LX0609-${String(index + 1).padStart(3, '0')}`,
-    )
+    const allRuleIds = Object.keys(luxian0609RuleNames).sort()
     runManualSamplePool.mockResolvedValueOnce({
       success: true,
       data: {
@@ -3599,8 +3595,8 @@ describe('CustomerSampleValidationView', () => {
         job_kind: 'parent',
         child_job_ids: ['child-basic', 'child-tumor'],
         family_scopes: [
-          { key: 'basic_timeliness', name: '基础时限', rule_ids: ['LX0609-001'] },
-          { key: 'tumor_pathology', name: '肿瘤病理', rule_ids: ['LX0609-013'] },
+          { key: 'basic_timeliness', name: '基础时限', rule_ids: ['LX0609-01-01-01'] },
+          { key: 'tumor_pathology', name: '肿瘤病理', rule_ids: ['LX0609-06-02-03'] },
         ],
         child_jobs: [
           {
@@ -3611,7 +3607,7 @@ describe('CustomerSampleValidationView', () => {
             status: 'queued',
             family_key: 'basic_timeliness',
             family_name: '基础时限',
-            filters: { scoped_customer_rule_ids: ['LX0609-001'] },
+            filters: { scoped_customer_rule_ids: ['LX0609-01-01-01'] },
           },
           {
             id: 'child-tumor',
@@ -3621,7 +3617,7 @@ describe('CustomerSampleValidationView', () => {
             status: 'queued',
             family_key: 'tumor_pathology',
             family_name: '肿瘤病理',
-            filters: { scoped_customer_rule_ids: ['LX0609-013'] },
+            filters: { scoped_customer_rule_ids: ['LX0609-06-02-03'] },
           },
         ],
         sample_item_count: 1,
@@ -3699,7 +3695,7 @@ describe('CustomerSampleValidationView', () => {
     expect(routerPush).toHaveBeenLastCalledWith({
       name: 'WorkstationV4SyntheticCaseNew',
       query: {
-        ruleIds: 'LX0609-010,LX0609-011,LX0609-012,LX0609-014,LX0609-015',
+        ruleIds: 'LX0609-06-01-02,LX0609-06-01-04,LX0609-06-01-05,LX0609-06-03-03,LX0609-06-03-04',
         ruleFamily: 'exam_lab',
       },
     })

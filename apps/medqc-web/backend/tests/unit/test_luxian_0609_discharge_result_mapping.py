@@ -24,7 +24,7 @@ def test_061_executor_facts_survive_final_delivery(seconds, status):
         discharge_rows=({"record_time": (discharge + timedelta(seconds=seconds)).isoformat()},),
     )
     result, handled = finalize_luxian_0609_executor_customer_display_facts(
-        result={"rule_id": "LX0609-061", "status": outcome.final_state, "reason_code": outcome.reason_code},
+        result={"rule_id": "LX0609-08-01-01", "status": outcome.final_state, "reason_code": outcome.reason_code},
         raw_facts=outcome.display_facts,
     )
     assert handled
@@ -33,7 +33,7 @@ def test_061_executor_facts_survive_final_delivery(seconds, status):
     assert result["customer_display_facts"] == outcome.display_facts
     if seconds < 0:
         assert not discharge_customer_fact_status_is_valid(
-            rule_id="LX0609-061", status="compliant", safe_facts=result["customer_display_facts"])
+            rule_id="LX0609-08-01-01", status="compliant", safe_facts=result["customer_display_facts"])
 
 
 @pytest.mark.parametrize("invalid", [float("nan"), float("inf"), float("-inf"), True, "-2"])
@@ -45,7 +45,7 @@ def test_061_still_rejects_invalid_interval_values(invalid):
         "threshold_hours": 24,
         "actual_interval_hours": invalid,
     }
-    assert safe_discharge_customer_display_facts(rule_id="LX0609-061", raw=raw) is None
+    assert safe_discharge_customer_display_facts(rule_id="LX0609-08-01-01", raw=raw) is None
 
 
 def test_061_accepts_evaluation_context_horizon_source_through_finalizer():
@@ -59,7 +59,7 @@ def test_061_accepts_evaluation_context_horizon_source_through_finalizer():
     }
 
     result, handled = finalize_luxian_0609_executor_customer_display_facts(
-        result={"rule_id": "LX0609-061", "status": "compliant", "reason_code": "ok"},
+        result={"rule_id": "LX0609-08-01-01", "status": "compliant", "reason_code": "ok"},
         raw_facts=raw,
     )
 
@@ -73,7 +73,7 @@ def test_061_accepts_evaluation_context_horizon_source_through_finalizer():
     ("rule_id", "raw", "status"),
     [
         (
-            "LX0609-061",
+            "LX0609-08-01-01",
             {
                 "verification_kind": "discharge_record_timeliness_check",
                 "discharge_time": "2026-06-26 08:31:00",
@@ -85,7 +85,7 @@ def test_061_accepts_evaluation_context_horizon_source_through_finalizer():
             "non_compliant",
         ),
         (
-            "LX0609-062",
+            "LX0609-08-01-02",
             {
                 "verification_kind": "discharge_medication_completeness_check",
                 "medication_count": 1,
@@ -95,7 +95,7 @@ def test_061_accepts_evaluation_context_horizon_source_through_finalizer():
             "compliant",
         ),
         (
-            "LX0609-063",
+            "LX0609-08-01-03",
             {
                 "verification_kind": "discharge_diagnosis_consistency_check",
                 "authoritative_diagnoses": ["肺炎"],
@@ -105,7 +105,7 @@ def test_061_accepts_evaluation_context_horizon_source_through_finalizer():
             "non_compliant",
         ),
         (
-            "LX0609-067",
+            "LX0609-08-02-01",
             {
                 "verification_kind": "predischarge_course_presence_check",
                 "discharge_date": "2026-07-03",
@@ -115,7 +115,7 @@ def test_061_accepts_evaluation_context_horizon_source_through_finalizer():
             "data_gap",
         ),
         (
-            "LX0609-068",
+            "LX0609-08-02-02",
             {
                 "failure_kind": "senior_discharge_approval_missing",
                 "discharge_date": "2026-07-03",
@@ -142,7 +142,7 @@ def test_discharge_mapping_preserves_public_facts_and_status_contract(
 
 @pytest.mark.parametrize(
     "rule_id",
-    ["LX0609-061", "LX0609-062", "LX0609-063", "LX0609-067", "LX0609-068"],
+    ["LX0609-08-01-01", "LX0609-08-01-02", "LX0609-08-01-03", "LX0609-08-02-01", "LX0609-08-02-02"],
 )
 def test_discharge_mapping_owns_only_the_migrated_rules(rule_id: str) -> None:
     assert is_discharge_customer_rule(rule_id)
@@ -162,7 +162,7 @@ def test_discharge_mapping_strips_private_document_identifier() -> None:
         ],
     }
 
-    assert safe_discharge_customer_display_facts(rule_id="LX0609-067", raw=raw) == {
+    assert safe_discharge_customer_display_facts(rule_id="LX0609-08-02-01", raw=raw) == {
         "verification_kind": "predischarge_course_presence_check",
         "discharge_date": "2026-07-03",
         "checked_dates": ["2026-07-02", "2026-07-03"],
@@ -189,7 +189,7 @@ def test_068_preserves_active_daily_and_senior_approval_paths(
         "approval_path": approval_path,
     }
 
-    assert safe_discharge_customer_display_facts(rule_id="LX0609-068", raw=raw) == raw
+    assert safe_discharge_customer_display_facts(rule_id="LX0609-08-02-02", raw=raw) == raw
 
 
 def test_068_rejects_unapproved_source_or_path() -> None:
@@ -202,7 +202,7 @@ def test_068_rejects_unapproved_source_or_path() -> None:
         "approval_path": "automatic_discharge",
     }
 
-    assert safe_discharge_customer_display_facts(rule_id="LX0609-068", raw=raw) is None
+    assert safe_discharge_customer_display_facts(rule_id="LX0609-08-02-02", raw=raw) is None
 
 
 def test_aggregator_has_no_discharge_family_specific_rule_reference() -> None:

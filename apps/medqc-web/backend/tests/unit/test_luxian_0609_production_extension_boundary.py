@@ -41,7 +41,7 @@ def test_production_master_loader_accepts_declarative_078_079_extension(
 
     payload = json.loads(rule_master_module._MASTER_PATH.read_text(encoding="utf-8"))
     assert isinstance(payload["rules"], list)
-    for rule_id in ("LX0609-078", "LX0609-079"):
+    for rule_id in ("LX0609-04-01-04", "LX0609-04-01-05"):
         copied = dict(payload["rules"][-1])
         copied["rule_id"] = rule_id
         payload["rules"].append(copied)
@@ -56,8 +56,8 @@ def test_production_master_loader_accepts_declarative_078_079_extension(
         rule_master_module.load_luxian_0609_rule_master.cache_clear()
 
     assert tuple(entry.rule_id for entry in entries[-2:]) == (
-        "LX0609-078",
-        "LX0609-079",
+        "LX0609-04-01-04",
+        "LX0609-04-01-05",
     )
 
 
@@ -71,7 +71,7 @@ def test_production_phase_loader_accepts_master_declared_078_079_extension(
         rule_master_module._MASTER_PATH.read_text(encoding="utf-8")
     )
     assert isinstance(master_payload["rules"], list)
-    for rule_id in ("LX0609-078", "LX0609-079"):
+    for rule_id in ("LX0609-04-01-04", "LX0609-04-01-05"):
         master_entry = dict(master_payload["rules"][-1])
         master_entry["rule_id"] = rule_id
         master_payload["rules"].append(master_entry)
@@ -88,8 +88,8 @@ def test_production_phase_loader_accepts_master_declared_078_079_extension(
         phase_scope_module.load_luxian_0609_phase_scope.cache_clear()
 
     assert tuple(entry.rule_id for entry in entries[-2:]) == (
-        "LX0609-078",
-        "LX0609-079",
+        "LX0609-04-01-04",
+        "LX0609-04-01-05",
     )
 
 
@@ -104,7 +104,7 @@ def test_incomplete_wrapper_catalog_fails_closed_after_master_and_phase_accept_0
     )
     assert isinstance(master_payload["rules"], list)
     master_payload["rules"].append(
-        {**master_payload["rules"][-1], "rule_id": "LX0609-078"}
+        {**master_payload["rules"][-1], "rule_id": "LX0609-04-01-04"}
     )
     master_extension_path = tmp_path / "rule-master-with-078.json"
     _write_json(master_extension_path, master_payload)
@@ -117,10 +117,10 @@ def test_incomplete_wrapper_catalog_fails_closed_after_master_and_phase_accept_0
         assert tuple(
             entry.rule_id
             for entry in rule_master_module.load_luxian_0609_rule_master()
-        )[-1] == "LX0609-078"
+        )[-1] == "LX0609-04-01-04"
         assert (
             phase_scope_module.load_luxian_0609_phase_scope()[-1].rule_id
-            == "LX0609-078"
+            == "LX0609-04-01-04"
         )
         with pytest.raises(ValueError, match="execution catalog drifted"):
             rule_catalog_module.load_luxian_0609_rules()
@@ -164,7 +164,7 @@ def _production_evidence_session() -> Luxian0609EvidenceReadSession:
         )
 
     return build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-001", "LX0609-006"),
+        selected_rule_ids=("LX0609-01-01-01", "LX0609-02-01-02"),
         institute_id="extension-test-institute",
         patient_id="extension-test-patient",
         visit_id="extension-test-visit",
@@ -304,11 +304,11 @@ async def test_existing_native_and_semantic_rules_use_production_plan_binding_an
 
     context, results, client = await _run_production_selection(
         monkeypatch,
-        ("LX0609-001", "LX0609-006"),
+        ("LX0609-01-01-01", "LX0609-02-01-02"),
     )
     assert context.package_plan is not None
     assert context.package_plan.native_executor_batches == (
-        ("basic_timeliness", ("LX0609-001", "LX0609-006")),
+        ("basic_timeliness", ("LX0609-01-01-01", "LX0609-02-01-02")),
     )
     assert context.package_plan.compatibility_rule_ids == ()
     assert context.package_plan.compatibility_execution_rule_ids == ()
@@ -323,13 +323,13 @@ async def test_existing_native_and_semantic_rules_use_production_plan_binding_an
             "prompt_tokens": 40,
             "completion_tokens": 12,
             "total_tokens": 52,
-            "covered_customer_rule_ids": ["LX0609-001", "LX0609-006"],
+            "covered_customer_rule_ids": ["LX0609-01-01-01", "LX0609-02-01-02"],
             "latency_ms": 200.0,
         }
     ]
     assert [item.rule_id for item in context.reduced_decisions] == [
-        "LX0609-001",
-        "LX0609-006",
+        "LX0609-01-01-01",
+        "LX0609-02-01-02",
     ]
     assert [item.final_state.value for item in context.reduced_decisions] == [
         "compliant",
@@ -340,8 +340,8 @@ async def test_existing_native_and_semantic_rules_use_production_plan_binding_an
     assert context.native_llm_call_count == 1
     assert context.native_total_tokens == 52
     assert [item["rule_id"] for item in results] == [
-        "LX0609-001",
-        "LX0609-006",
+        "LX0609-01-01-01",
+        "LX0609-02-01-02",
     ]
     assert [item["status"] for item in results] == [
         "compliant",
@@ -371,15 +371,15 @@ async def test_single_rule_and_combined_selection_keep_canonical_and_semantic_in
 
     context_001, results_001, client_001 = await _run_production_selection(
         monkeypatch,
-        ("LX0609-001",),
+        ("LX0609-01-01-01",),
     )
     context_006, results_006, client_006 = await _run_production_selection(
         monkeypatch,
-        ("LX0609-006",),
+        ("LX0609-02-01-02",),
     )
     context_both, results_both, client_both = await _run_production_selection(
         monkeypatch,
-        ("LX0609-001", "LX0609-006"),
+        ("LX0609-01-01-01", "LX0609-02-01-02"),
     )
 
     assert [
@@ -402,6 +402,6 @@ async def test_single_rule_and_combined_selection_keep_canonical_and_semantic_in
         item["rule_id"]: _normalized_canonical_item(item) for item in results_both
     }
     assert canonical_both == {
-        "LX0609-001": canonical_001,
-        "LX0609-006": canonical_006,
+        "LX0609-01-01-01": canonical_001,
+        "LX0609-02-01-02": canonical_006,
     }

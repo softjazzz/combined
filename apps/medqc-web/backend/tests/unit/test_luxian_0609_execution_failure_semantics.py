@@ -41,7 +41,7 @@ def _all_native_settings(**overrides):
 async def test_snapshot_build_failure_is_distinct_from_missing_snapshot(
     monkeypatch,
 ) -> None:
-    selected = ("LX0609-001",)
+    selected = ("LX0609-01-01-01",)
     package_plan = Luxian0609PackagePlan(
         selected_rule_ids=selected,
         native_sync_rule_ids=selected,
@@ -73,10 +73,10 @@ async def test_snapshot_build_failure_is_distinct_from_missing_snapshot(
         "load_luxian_0609_rules",
         lambda: [
             {
-                "rule_id": "LX0609-001",
-                "name": "LX0609-001",
-                "mapped_rule_ids": ["RAW-LX0609-001"],
-                "primary_execution_rule_id": "RAW-LX0609-001",
+                "rule_id": "LX0609-01-01-01",
+                "name": "LX0609-01-01-01",
+                "mapped_rule_ids": ["RAW-LX0609-01-01-01"],
+                "primary_execution_rule_id": "RAW-LX0609-01-01-01",
                 "trigger_condition": "test",
                 "dependency_type": "单文书",
                 "data_dependencies": [],
@@ -106,7 +106,7 @@ async def test_snapshot_build_failure_is_distinct_from_missing_snapshot(
     assert executable == []
     assert legacy_calls == 0
     assert context.unified_engine_used is True
-    assert [item["rule_id"] for item in context.native_results] == ["LX0609-001"]
+    assert [item["rule_id"] for item in context.native_results] == ["LX0609-01-01-01"]
     assert context.native_results[0]["status"] == "technical_error"
     assert (
         context.native_results[0]["metadata"]["reason_code"]
@@ -119,7 +119,7 @@ async def test_snapshot_build_failure_is_distinct_from_missing_snapshot(
 async def test_extended_rules_require_evidence_session_without_unified_engine(
     monkeypatch,
 ) -> None:
-    selected = ("LX0609-060",)
+    selected = ("LX0609-04-02-06",)
     package_plan = Luxian0609PackagePlan(
         selected_rule_ids=selected,
         native_sync_rule_ids=(),
@@ -151,10 +151,10 @@ async def test_extended_rules_require_evidence_session_without_unified_engine(
         "load_luxian_0609_rules",
         lambda: [
             {
-                "rule_id": "LX0609-060",
+                "rule_id": "LX0609-04-02-06",
                 "name": "死亡患者无死亡记录",
-                "mapped_rule_ids": ["LX0609-060"],
-                "primary_execution_rule_id": "LX0609-060",
+                "mapped_rule_ids": ["LX0609-04-02-06"],
+                "primary_execution_rule_id": "LX0609-04-02-06",
                 "trigger_condition": "test",
                 "dependency_type": "单文书",
                 "data_dependencies": [],
@@ -187,7 +187,7 @@ async def test_extended_rules_require_evidence_session_without_unified_engine(
     assert executable == []
     assert executor_calls == 0
     assert context.unified_engine_used is False
-    assert [item["rule_id"] for item in context.native_results] == ["LX0609-060"]
+    assert [item["rule_id"] for item in context.native_results] == ["LX0609-04-02-06"]
     assert context.native_results[0]["status"] == "technical_error"
     assert (
         context.native_results[0]["metadata"]["reason_code"]

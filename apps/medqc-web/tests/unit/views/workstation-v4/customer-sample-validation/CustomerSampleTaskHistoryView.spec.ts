@@ -107,7 +107,7 @@ function buildCompletedJob() {
     record_ids: ['208790', '359787'],
     created_at: '2026-07-31T08:30:00Z',
     filters: {
-      selected_rule_ids: ['LX0609-002', 'LX0609-016'],
+      selected_rule_ids: ['LX0609-01-02-01', 'LX0609-12-01-01'],
     },
     summary: {
       total_records: 2,
@@ -117,7 +117,7 @@ function buildCompletedJob() {
       },
       history_issue_summaries: [
         {
-          rule_id: 'LX0609-002',
+          rule_id: 'LX0609-01-02-01',
           text: '首次病程记录未在入院后8小时内完成',
         },
       ],
@@ -202,7 +202,7 @@ describe('CustomerSampleTaskHistoryView', () => {
     expect(wrapper.text()).toContain('泸县0609质控点验证 v1')
     expect(wrapper.text()).toContain('2 份病历')
     expect(wrapper.text()).toContain('发现需关注结果：不合规 1')
-    expect(wrapper.text()).toContain('LX0609-002 首次病程记录未在入院后8小时内完成')
+    expect(wrapper.text()).toContain('LX0609-01-02-01 首次病程记录未在入院后8小时内完成')
     expect(wrapper.text()).toContain('合规 1')
   })
 

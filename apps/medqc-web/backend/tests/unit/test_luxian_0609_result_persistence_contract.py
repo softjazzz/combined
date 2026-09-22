@@ -156,7 +156,7 @@ def test_complete_batch_job_does_not_commit_completed_when_canonical_envelope_wr
                     "institute_id": "inst-1",
                     "patient_id": "patient-1",
                     "visit_id": "visit-1",
-                    "rule_id": "LX0609-001",
+                    "rule_id": "LX0609-01-01-01",
                     "status": "compliant",
                 }
             ],
@@ -191,7 +191,7 @@ def test_complete_batch_job_rejects_malformed_result_without_completing(
                     "institute_id": "inst-1",
                     "patient_id": "patient-1",
                     "visit_id": "visit-1",
-                    "rule_id": "LX0609-001",
+                    "rule_id": "LX0609-01-01-01",
                     "status": "compliant",
                 },
                 "invalid-result-item",
@@ -227,7 +227,7 @@ def test_complete_batch_job_rejects_unexplained_non_compliant_without_completing
                     "institute_id": "inst-1",
                     "patient_id": "patient-1",
                     "visit_id": "visit-1",
-                    "rule_id": "LX0609-071",
+                    "rule_id": "LX0609-10-01-01",
                     "status": "non_compliant",
                     "result_status": "non_compliant",
                     "display_status": "non_compliant",
@@ -272,7 +272,7 @@ def test_complete_batch_job_commits_task_and_canonical_envelope_once(
                 "institute_id": "inst-1",
                 "patient_id": "patient-1",
                 "visit_id": "visit-1",
-                "rule_id": "LX0609-001",
+                "rule_id": "LX0609-01-01-01",
                 "status": "compliant",
             }
         ],
@@ -321,7 +321,7 @@ def test_complete_batch_job_canceled_before_completion_does_not_write_envelopes(
                 "institute_id": "inst-1",
                 "patient_id": "patient-1",
                 "visit_id": "visit-1",
-                "rule_id": "LX0609-001",
+                "rule_id": "LX0609-01-01-01",
                 "status": "compliant",
             }
         ],
@@ -360,7 +360,7 @@ def test_refresh_parent_canceled_before_final_child_does_not_write_envelopes(
                             "institute_id": "inst-1",
                             "patient_id": "patient-1",
                             "visit_id": "visit-1",
-                            "rule_id": "LX0609-001",
+                            "rule_id": "LX0609-01-01-01",
                             "status": "compliant",
                         }
                     ]
@@ -402,7 +402,7 @@ def test_refresh_parent_completed_writes_envelopes_before_single_commit(
             "job_kind": "parent",
             "status": "completed",
             "summary": {"progress": {"step_key": "completed"}},
-            "children": [{"items": [{"rule_id": "LX0609-001", "status": "compliant"}]}],
+            "children": [{"items": [{"rule_id": "LX0609-01-01-01", "status": "compliant"}]}],
         },
     )
     write_commit_counts: list[int] = []
@@ -531,7 +531,7 @@ def test_complete_batch_job_rejects_luxian_result_without_frozen_case_envelope(
         CustomQCWorkspaceService().complete_batch_job(
             job_id="job-1",
             summary={"total_records": 1, "success_count": 1},
-            items=[{"rule_id": "LX0609-001", "status": "compliant"}],
+            items=[{"rule_id": "LX0609-01-01-01", "status": "compliant"}],
             failed_records=[],
         )
 
@@ -551,8 +551,8 @@ def test_complete_batch_job_rejects_incomplete_luxian_rule_delivery(
             "created_by": "reviewer-1",
             "filters_json": (
                 '{"rule_set_key":"luxian_0609_qc_v1",'
-                '"rule_ids":["LX0609-001","LX0609-002"],'
-                '"paused_customer_rule_ids":["LX0609-033"],'
+                '"rule_ids":["LX0609-01-01-01","LX0609-01-02-01"],'
+                '"paused_customer_rule_ids":["LX0609-11-01-01"],'
                 '"record_refs":[{"institute_id":"inst-1",'
                 '"patient_id":"patient-1","visit_id":"visit-1"}]}'
             ),
@@ -569,14 +569,14 @@ def test_complete_batch_job_rejects_incomplete_luxian_rule_delivery(
                     "institute_id": "inst-1",
                     "patient_id": "patient-1",
                     "visit_id": "visit-1",
-                    "rule_id": "LX0609-001",
+                    "rule_id": "LX0609-01-01-01",
                     "status": "compliant",
                 },
                 {
                     "institute_id": "inst-1",
                     "patient_id": "patient-1",
                     "visit_id": "visit-1",
-                    "rule_id": "LX0609-033",
+                    "rule_id": "LX0609-11-01-01",
                     "status": "not_executed",
                 },
             ],

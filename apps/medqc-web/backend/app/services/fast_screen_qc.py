@@ -647,7 +647,7 @@ def _apply_copy_content_result_fallback_for_pack(
     bundle: dict[str, Any],
 ) -> dict[str, Any]:
     normalized_rule_id = _normalize_fast_screen_rule_id(item.get("rule_id") or item.get("rule_code"))
-    if normalized_rule_id != "LX0609-017":
+    if normalized_rule_id != "LX0609-12-01-02":
         return item
 
     metadata = item.get("metadata")
@@ -730,7 +730,7 @@ def _apply_copy_content_result_fallback_for_pack(
 
     patched = qc_service._apply_copy_content_semantic_fallback(
         rule_input=SimpleNamespace(
-            rule_id="LX0609-017",
+            rule_id="LX0609-12-01-02",
             source_documents=source_documents,
         ),
         engine_result=item,
@@ -1793,7 +1793,7 @@ def _build_lx0609_copy_guard_item(
     document_type: str,
 ) -> dict[str, Any] | None:
     rule_id = str(rule.get("rule_id") or rule.get("rule_code") or "").strip().upper()
-    if rule_id != "LX0609-016" or _evidence_payload_has_first_course_content(evidence_payload):
+    if rule_id != "LX0609-12-01-01" or _evidence_payload_has_first_course_content(evidence_payload):
         return None
     return {
         "rule_id": rule_id,
@@ -2238,7 +2238,7 @@ async def run_final_fast_screen(
                     metadata.update(criteria_metadata)
                     item.update(criteria_metadata)
                 normalized_rule_id = str(item.get("rule_id") or item.get("rule_code") or "").strip().upper()
-                if normalized_rule_id == "LX0609-016":
+                if normalized_rule_id == "LX0609-12-01-01":
                     guard_item = _build_lx0609_copy_guard_item(
                         rule={
                             "rule_id": normalized_rule_id,

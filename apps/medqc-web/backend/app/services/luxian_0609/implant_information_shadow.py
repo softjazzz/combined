@@ -1,4 +1,4 @@
-"""LX0609-025 植入物信息影子运行。
+"""LX0609-04-02-04 植入物信息影子运行。
 
 影子运行只复用正式请求已经冻结的 Evidence Session，不创建新快照、不回读
 源库，也不参与正式规则结果、Token 汇总或 Canonical 写入。
@@ -31,7 +31,7 @@ from .surgery_text_fact_contract import LX0609_025_REQUIRED_FIELDS
 
 
 LUXIAN_0609_025_SHADOW_CONTRACT_VERSION = "lx0609-025-shadow-v1"
-_RULE_ID = "LX0609-025"
+_RULE_ID = "LX0609-04-02-04"
 _ALLOWED_FIELDS = frozenset(LX0609_025_REQUIRED_FIELDS)
 _ALLOWED_FINAL_STATES = frozenset(
     {"compliant", "non_compliant", "not_applicable", "data_gap"}

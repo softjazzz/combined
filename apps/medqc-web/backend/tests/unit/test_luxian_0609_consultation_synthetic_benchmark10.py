@@ -76,20 +76,20 @@ def test_synthetic_benchmark_runs_one_warmup_and_ten_formal_rounds() -> None:
     assert all(
         item["status_by_rule"]
         == {
-            "LX0609-020": "compliant",
-            "LX0609-021": "compliant",
-            "LX0609-022": "compliant",
-            "LX0609-023": "compliant",
+            "LX0609-03-01-01": "compliant",
+            "LX0609-03-01-02": "compliant",
+            "LX0609-03-01-03": "compliant",
+            "LX0609-03-01-04": "compliant",
         }
         for item in report["runs"]
     )
     assert all(
         item["reason_code_by_rule"]
         == {
-            "LX0609-020": "requirement_satisfied",
-            "LX0609-021": "requirement_satisfied",
-            "LX0609-022": "requirement_satisfied",
-            "LX0609-023": "requirement_satisfied",
+            "LX0609-03-01-01": "requirement_satisfied",
+            "LX0609-03-01-02": "requirement_satisfied",
+            "LX0609-03-01-03": "requirement_satisfied",
+            "LX0609-03-01-04": "requirement_satisfied",
         }
         for item in report["runs"]
     )

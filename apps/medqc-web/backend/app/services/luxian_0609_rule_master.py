@@ -8,15 +8,16 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Mapping
 
 
-LUXIAN_0609_RULE_MASTER_SCHEMA_VERSION = "lx0609-rule-master-v1"
-LUXIAN_0609_RULE_MASTER_VERSION = "2026-09-05-r3"
-LUXIAN_0609_RULE_DEFINITION_VERSION = "lx0609-defined-scope-2026-09-05-r3"
+LUXIAN_0609_RULE_MASTER_SCHEMA_VERSION = "lx0609-rule-master-v2"
+LUXIAN_0609_RULE_MASTER_VERSION = "2026-09-22-identity-v1"
+LUXIAN_0609_RULE_DEFINITION_VERSION = "lx0609-defined-scope-2026-09-22-identity-v1"
 
 _MASTER_PATH = (
     Path(__file__).resolve().parent.parent
@@ -37,6 +38,7 @@ _POLICY_SOURCE_ORDER = (
 )
 _POLICY_SOURCE_CODES = frozenset(_POLICY_SOURCE_ORDER)
 _MAX_POLICY_TEXT_LENGTH = 240
+_RULE_ID_PATTERN = re.compile(r"^LX0609-(?!00)\d{2}-(?!00)\d{2}-(?!00)\d{2}$")
 
 
 def _clean(value: Any) -> str:
@@ -59,6 +61,8 @@ class Luxian0609RuleMasterEntry:
     pending_reason_code: str = ""
 
     def __post_init__(self) -> None:
+        if not _RULE_ID_PATTERN.fullmatch(self.rule_id):
+            raise ValueError("invalid LX0609 rule identity")
         if self.implementation_status not in _IMPLEMENTATION_STATUSES:
             raise ValueError(f"invalid LX0609 implementation status: {self.rule_id}")
         if not self.source_document or not self.qc_point:
@@ -189,12 +193,9 @@ def compile_luxian_0609_rule_master(
 
     if not entries:
         raise ValueError("LX0609 rule master must contain at least one rule")
-    expected_ids = tuple(
-        f"LX0609-{index:03d}" for index in range(1, len(entries) + 1)
-    )
     actual_ids = tuple(entry.rule_id for entry in entries)
-    if actual_ids != expected_ids:
-        raise ValueError("LX0609 rule master must contain continuous ordered rule IDs")
+    if len(set(actual_ids)) != len(actual_ids):
+        raise ValueError("LX0609 rule master must contain unique rule IDs")
     return tuple(entries)
 
 

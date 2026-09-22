@@ -35,7 +35,7 @@ def test_result_analysis_router_forwards_running_scope_and_visible_status_only(c
     response = client.get(
         "/api/v1/workstation/qc-result-analysis/luxian-0609?"
         "care_phase=inpatient&department=ICU&doctor=%E5%BC%A0%E5%8C%BB%E7%94%9F&"
-        "rule_id=LX0609-017&result_status=data_gap&page=2&page_size=10",
+        "rule_id=LX0609-12-01-02&result_status=data_gap&page=2&page_size=10",
         headers={"Authorization": "Bearer test-token"},
     )
 
@@ -44,7 +44,7 @@ def test_result_analysis_router_forwards_running_scope_and_visible_status_only(c
     assert captured["care_phase"] == "inpatient"
     assert captured["department"] == "ICU"
     assert captured["doctor"] == "张医生"
-    assert captured["rule_id"] == "LX0609-017"
+    assert captured["rule_id"] == "LX0609-12-01-02"
     assert captured["result_status"] == "data_gap"
     assert captured["page"] == 2
     assert captured["page_size"] == 10

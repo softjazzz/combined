@@ -6,6 +6,10 @@ from types import SimpleNamespace
 
 import app.services.custom_qc_workspace_service as workspace
 import app.services.qc_workspace.canonical_result_store as canonical
+from tests.luxian_0609_identity_test_support import published_rule_ids
+
+
+_PROJECTED_RULE_IDS = published_rule_ids(1, 72)
 
 
 class CaptureSession:
@@ -22,7 +26,7 @@ def item(visit=0, rule=1):
     return {
         'record_id': f'visit-{visit}', 'visit_id': f'visit-{visit}',
         'institute_id': 'synthetic-inst', 'patient_id': f'patient-{visit}',
-        'rule_id': f'LX0609-{rule:03d}', 'status': 'compliant',
+        'rule_id': _PROJECTED_RULE_IDS[rule - 1], 'status': 'compliant',
         'result_status': 'compliant', 'display_status': 'compliant',
         'is_compliant': True, 'reason_code': 'requirement_satisfied',
         'customer_evidence': [{

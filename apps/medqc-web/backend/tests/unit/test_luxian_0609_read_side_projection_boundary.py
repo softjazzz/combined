@@ -24,7 +24,7 @@ def test_direct_customer_projection_keeps_bare_legacy_payload_fail_closed() -> N
     with pytest.raises(ValueError, match=LX0609_CUSTOMER_RESULT_CONTRACT_ERROR):
         project_customer_safe_result_item(
             {
-                "rule_id": "LX0609-020",
+                "rule_id": "LX0609-03-01-01",
                 "status": "non_compliant",
                 "result_status": "non_compliant",
                 "is_compliant": False,
@@ -50,7 +50,7 @@ def test_historical_batch_detail_isolates_bare_legacy_item_without_failing_the_j
             "items": [
                 {
                     "record_id": "legacy-record",
-                    "rule_id": "LX0609-020",
+                    "rule_id": "LX0609-03-01-01",
                     "status": "non_compliant",
                     "result_status": "non_compliant",
                     "is_compliant": False,
@@ -75,7 +75,7 @@ def test_batch_detail_keeps_current_canonical_contract_error_fail_closed() -> No
                 "items": [
                     {
                         "record_id": "current-record",
-                        "rule_id": "LX0609-020",
+                        "rule_id": "LX0609-03-01-01",
                         "schema_version": "lx0609-customer-result-v2",
                         "rule_version": "current-version",
                         "status": "non_compliant",
@@ -93,7 +93,7 @@ def test_current_canonical_projection_preserves_renderer_conclusion_and_suggesti
     projected = project_customer_safe_result_item(
         {
             "schema_version": "lx0609-customer-result-v2",
-            "rule_id": "LX0609-050",
+            "rule_id": "LX0609-03-02-01",
             "status": "non_compliant",
             "result_status": "non_compliant",
             "display_status": "non_compliant",
@@ -126,7 +126,7 @@ def test_current_canonical_projection_rejects_status_field_mismatch() -> None:
         project_customer_safe_result_item(
             {
                 "schema_version": "lx0609-customer-result-v2",
-                "rule_id": "LX0609-020",
+                "rule_id": "LX0609-03-01-01",
                 "status": "compliant",
                 "result_status": "uncertain",
                 "display_status": "compliant",

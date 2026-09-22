@@ -181,10 +181,10 @@ def test_finalizer_accepts_executor_safe_facts_and_rejects_internal_document_ids
     }
 
     assert validate_luxian_0609_executor_customer_display_facts(
-        rule_id="LX0609-001", raw=safe_facts
+        rule_id="LX0609-01-01-01", raw=safe_facts
     ) == safe_facts
     assert validate_luxian_0609_executor_customer_display_facts(
-        rule_id="LX0609-001",
+        rule_id="LX0609-01-01-01",
         raw={**safe_facts, "source_document_id": "ADM-INTERNAL"},
     ) is None
 
@@ -192,15 +192,15 @@ def test_finalizer_accepts_executor_safe_facts_and_rejects_internal_document_ids
 def test_aggregator_safely_downgrades_executor_facts_with_internal_document_id():
     session = _frozen_session()
     execution = execute_luxian_0609_native_basic_timeliness(
-        rule_ids=("LX0609-001",),
-        decision_rule_ids=("LX0609-001",),
+        rule_ids=("LX0609-01-01-01",),
+        decision_rule_ids=("LX0609-01-01-01",),
         evidence_payload=None,
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=execution.decisions,
-        expected_rule_ids=("LX0609-001",),
+        expected_rule_ids=("LX0609-01-01-01",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
@@ -210,12 +210,12 @@ def test_aggregator_safely_downgrades_executor_facts_with_internal_document_id()
         wrapper_rules=[
             rule
             for rule in load_luxian_0609_rules()
-            if rule["rule_id"] == "LX0609-001"
+            if rule["rule_id"] == "LX0609-01-01-01"
         ],
         execution_results=[],
         reduced_decisions=reduced,
         customer_display_facts=(
-            ("LX0609-001", {**safe_facts, "source_document_id": "FORGED"}),
+            ("LX0609-01-01-01", {**safe_facts, "source_document_id": "FORGED"}),
         ),
         format_evidence=False,
         audit_context={

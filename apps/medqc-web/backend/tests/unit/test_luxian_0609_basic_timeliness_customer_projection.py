@@ -15,35 +15,35 @@ from app.services.luxian_0609.canonical_result_finalizer import (
 
 
 _WITHIN_FACTS_BY_RULE = {
-    "LX0609-001": {
+    "LX0609-01-01-01": {
         "failure_kind": "timeliness_requirement_satisfied",
         "target_document": "admission_record",
         "timeliness_state": "within",
         "threshold_hours": 24,
         "source_label": "入院记录",
     },
-    "LX0609-002": {
+    "LX0609-01-02-01": {
         "failure_kind": "timeliness_requirement_satisfied",
         "target_document": "first_course_record",
         "timeliness_state": "within",
         "threshold_hours": 8,
         "source_label": "首次病程记录",
     },
-    "LX0609-004": {
+    "LX0609-09-01-01": {
         "failure_kind": "timeliness_requirement_satisfied",
         "target_document": "rescue_record",
         "timeliness_state": "within",
         "threshold_hours": 6,
         "source_label": "抢救记录",
     },
-    "LX0609-005": {
+    "LX0609-02-01-01": {
         "failure_kind": "timeliness_requirement_satisfied",
         "target_document": "attending_course_record",
         "timeliness_state": "within",
         "threshold_hours": 48,
         "source_label": "主治医师首次查房记录",
     },
-    "LX0609-006": {
+    "LX0609-02-01-02": {
         "failure_kind": "timeliness_requirement_satisfied",
         "target_document": "senior_course_record",
         "timeliness_state": "within",
@@ -96,13 +96,13 @@ def test_lx004_data_gap_fact_shape_is_accepted_without_reinterpreting_rescue_log
     }
 
     safe_facts = safe_basic_timeliness_customer_display_facts(
-        rule_id="LX0609-004",
+        rule_id="LX0609-09-01-01",
         raw=raw_facts,
     )
 
     assert safe_facts == raw_facts
     assert basic_timeliness_customer_fact_status_is_valid(
-        rule_id="LX0609-004",
+        rule_id="LX0609-09-01-01",
         status="data_gap",
         safe_facts=safe_facts,
     )
@@ -121,12 +121,12 @@ def test_lx001_uncertain_conflict_fact_shape_is_accepted():
     }
 
     safe_facts = safe_basic_timeliness_customer_display_facts(
-        rule_id="LX0609-001",
+        rule_id="LX0609-01-01-01",
         raw=raw_facts,
     )
 
     assert basic_timeliness_customer_fact_status_is_valid(
-        rule_id="LX0609-001",
+        rule_id="LX0609-01-01-01",
         status="uncertain",
         safe_facts=safe_facts,
     )
@@ -136,11 +136,11 @@ def test_lx001_uncertain_conflict_fact_shape_is_accepted():
     ("status", "raw_facts"),
     [
         ("compliant", None),
-        ("non_compliant", _WITHIN_FACTS_BY_RULE["LX0609-001"]),
+        ("non_compliant", _WITHIN_FACTS_BY_RULE["LX0609-01-01-01"]),
         (
             "compliant",
             {
-                **_WITHIN_FACTS_BY_RULE["LX0609-001"],
+                **_WITHIN_FACTS_BY_RULE["LX0609-01-01-01"],
                 "source_document_refs": ["forged-internal-ref"],
             },
         ),
@@ -152,7 +152,7 @@ def test_basic_timeliness_contract_failure_safely_downgrades_to_technical_error(
     raw_facts: object,
 ):
     finalized, handled = finalize_luxian_0609_executor_customer_display_facts(
-        result=_executor_result("LX0609-001", status),
+        result=_executor_result("LX0609-01-01-01", status),
         raw_facts=raw_facts,
     )
 

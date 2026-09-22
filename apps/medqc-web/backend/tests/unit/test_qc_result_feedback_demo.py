@@ -86,7 +86,7 @@ def test_demo_account_can_load_current_feedback(monkeypatch):
         {
             "root_job_id": "root-1",
             "record_ref": "rec_0123456789abcdef01234567",
-            "rule_id": "LX0609-001",
+            "rule_id": "LX0609-01-01-01",
             "original_status": "compliant",
             "feedback_type": "correct",
             "expected_status": None,
@@ -107,7 +107,7 @@ def test_demo_account_can_load_current_feedback(monkeypatch):
     )
 
     assert response.status_code == 200
-    assert response.json()["data"]["items"]["LX0609-001"]["feedback_type"] == "correct"
+    assert response.json()["data"]["items"]["LX0609-01-01-01"]["feedback_type"] == "correct"
 
 
 class _WorkspaceRecords:
@@ -132,7 +132,7 @@ def test_demo_account_can_load_all_feedback_with_safe_record_context(monkeypatch
             {
                 "root_job_id": "root-1",
                 "record_ref": "rec_0123456789abcdef01234567",
-                "rule_id": "LX0609-001",
+                "rule_id": "LX0609-01-01-01",
                 "original_status": "compliant",
                 "feedback_type": "correct",
                 "expected_status": None,
@@ -146,7 +146,7 @@ def test_demo_account_can_load_all_feedback_with_safe_record_context(monkeypatch
             {
                 "root_job_id": "root-2",
                 "record_ref": "rec_abcdefabcdefabcdefabcdef",
-                "rule_id": "LX0609-012",
+                "rule_id": "LX0609-06-01-05",
                 "original_status": "non_compliant",
                 "feedback_type": "incorrect",
                 "expected_status": "data_gap",
@@ -179,7 +179,7 @@ def test_demo_account_can_load_all_feedback_with_safe_record_context(monkeypatch
     assert response.status_code == 200
     assert response.json()["data"]["total"] == 2
     feedback = response.json()["data"]["items"][1]
-    assert feedback["rule_id"] == "LX0609-012"
+    assert feedback["rule_id"] == "LX0609-06-01-05"
     assert feedback["rule_name"] == "CT/MRI阳性结果分析"
     assert feedback["patient_name"] == "冯丽平"
     assert feedback["record_number"] == "208790"
@@ -230,7 +230,7 @@ def test_admin_role_without_fixed_demo_identity_is_rejected(monkeypatch):
 def test_demo_account_can_submit_current_feedback(monkeypatch):
     store = _FeedbackStore()
     response = _client(monkeypatch, DEMO_USER, store).put(
-        "/api/v1/qc/sichuan/workspace/result-feedback-demo/LX0609-001",
+        "/api/v1/qc/sichuan/workspace/result-feedback-demo/LX0609-01-01-01",
         json={
             "root_job_id": "root-1",
             "record_ref": "rec_0123456789abcdef01234567",
@@ -242,14 +242,14 @@ def test_demo_account_can_submit_current_feedback(monkeypatch):
     )
 
     assert response.status_code == 200
-    assert response.json()["data"]["rule_id"] == "LX0609-001"
+    assert response.json()["data"]["rule_id"] == "LX0609-01-01-01"
     assert store.saved[0]["root_job_id"] == "root-1"
 
 
 def test_sensitive_comment_is_rejected_without_echoing_input(monkeypatch):
     sensitive_comment = "患者电话 13812345678"
     response = _client(monkeypatch, DEMO_USER, _FeedbackStore()).put(
-        "/api/v1/qc/sichuan/workspace/result-feedback-demo/LX0609-001",
+        "/api/v1/qc/sichuan/workspace/result-feedback-demo/LX0609-01-01-01",
         json={
             "root_job_id": "root-1",
             "record_ref": "rec_0123456789abcdef01234567",
@@ -270,7 +270,7 @@ def test_hospital_identity_like_digits_are_rejected_without_echoing_input(
     monkeypatch, sensitive_comment
 ):
     response = _client(monkeypatch, DEMO_USER, _FeedbackStore()).put(
-        "/api/v1/qc/sichuan/workspace/result-feedback-demo/LX0609-001",
+        "/api/v1/qc/sichuan/workspace/result-feedback-demo/LX0609-01-01-01",
         json={
             "root_job_id": "root-1",
             "record_ref": "rec_0123456789abcdef01234567",
@@ -356,7 +356,7 @@ def _canonical_row(*, root_job_id="root-1", record_ref="rec_0123456789abcdef0123
                 "rule_set_version": version,
                 "items": [
                     {
-                        "rule_id": "LX0609-001",
+                        "rule_id": "LX0609-01-01-01",
                         "rule_name": "入院记录完成时限",
                         "status": "non_compliant",
                         "reason_code": "missing_record",
@@ -375,7 +375,7 @@ def _feedback_row():
         "id": "feedback-1",
         "root_job_id": "root-1",
         "record_ref": "rec_0123456789abcdef01234567",
-        "rule_id": "LX0609-001",
+        "rule_id": "LX0609-01-01-01",
         "original_status": "non_compliant",
         "feedback_type": "incorrect",
         "expected_status": "not_applicable",
@@ -412,7 +412,7 @@ def test_store_rejects_child_root_or_missing_canonical_result(monkeypatch):
         store.save(
             root_job_id="child-1",
             record_ref="rec_0123456789abcdef01234567",
-            rule_id="LX0609-001",
+            rule_id="LX0609-01-01-01",
             created_by="admin-001",
             payload=_payload(root_job_id="child-1"),
         )
@@ -430,7 +430,7 @@ def test_store_rejects_duplicate_or_mismatched_rule_version_envelopes(monkeypatc
         store.save(
             root_job_id="root-1",
             record_ref="rec_0123456789abcdef01234567",
-            rule_id="LX0609-001",
+            rule_id="LX0609-01-01-01",
             created_by="admin-001",
             payload=_payload(),
         )
@@ -447,7 +447,7 @@ def test_store_rejects_envelope_owned_by_another_account(monkeypatch):
         store.save(
             root_job_id="root-1",
             record_ref="rec_0123456789abcdef01234567",
-            rule_id="LX0609-001",
+            rule_id="LX0609-01-01-01",
             created_by="admin-001",
             payload=_payload(),
         )
@@ -472,7 +472,7 @@ def test_store_reads_canonical_but_only_writes_feedback_table(monkeypatch):
     result = store.save(
         root_job_id="root-1",
         record_ref="rec_0123456789abcdef01234567",
-        rule_id="LX0609-001",
+        rule_id="LX0609-01-01-01",
         created_by="admin-001",
         payload=_payload(),
     )

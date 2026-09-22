@@ -103,10 +103,10 @@ function resolveControlledEvidenceFieldPath(
   normalizedFieldPath?: string,
 ) {
   if (normalizedFieldPath) return normalizedFieldPath
-  // 018 的安全文书引用仅指向入院记录；主诉是该规则唯一允许展示的原文子段。
+  // LX0609-01-01-02 的安全文书引用仅指向入院记录；主诉是该规则唯一允许展示的原文子段。
   // 这是前端授权态定位，不会把正文写回持久化质控结果。
   if (
-    ruleId.trim().toUpperCase() === 'LX0609-018' &&
+    ruleId.trim().toUpperCase() === 'LX0609-01-01-02' &&
     sourceType.trim().toLowerCase() === 'admission_record'
   ) {
     return 'chief_complaint'
@@ -127,7 +127,7 @@ export function buildRecommendationEvidence(
   const ruleId = String(item.rule_id || item.rule_code || '')
     .trim()
     .toUpperCase()
-  if (!['LX0609-020', 'LX0609-023'].includes(ruleId)) return []
+  if (!['LX0609-03-01-01', 'LX0609-03-01-04'].includes(ruleId)) return []
   const facts = item.customer_display_facts
   if (!facts || typeof facts !== 'object' || Array.isArray(facts)) return []
   const entries = (facts as Record<string, unknown>).recommendation_evidence
@@ -275,7 +275,8 @@ export function buildRecordComparisonIssues(
       const notExecuted = resolveCustomerQcNotExecutedPresentation({ status })
       return {
         key,
-        rule_code: String(item.rule_code || item.rule_id || '未知规则'),
+        // 统一解释器已经收敛 rule_id/rule_code；展示与反馈 key 只能复用这一身份。
+        rule_code: normalized.ruleId === 'UNKNOWN' ? '未知规则' : normalized.ruleId,
         rule_name: String(item.rule_name || '未知质控点'),
         status,
         status_text: resolveStatusText(status),

@@ -67,10 +67,10 @@ EXECUTOR_SURGERY_PRESENCE = "surgery_presence"
 EXECUTOR_SURGERY_MDT = "surgery_mdt"
 _CONSULTATION_FAMILY_RULE_IDS = frozenset(
     {
-        "LX0609-020",
-        "LX0609-021",
-        "LX0609-022",
-        "LX0609-023",
+        "LX0609-03-01-01",
+        "LX0609-03-01-02",
+        "LX0609-03-01-03",
+        "LX0609-03-01-04",
     }
 )
 
@@ -366,7 +366,7 @@ def build_luxian_0609_package_plan(
                 item.executor_key == SURGERY_DOCUMENT_EXECUTOR_KEY
                 and native_surgery_document_enabled
                 and (
-                    item.rule_id != "LX0609-029"
+                    item.rule_id != "LX0609-04-01-01"
                     or native_surgery_document_029_enabled
                 )
             )

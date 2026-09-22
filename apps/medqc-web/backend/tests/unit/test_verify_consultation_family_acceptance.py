@@ -115,7 +115,7 @@ def test_variant_subprocess_decodes_utf8_json_output() -> None:
         variant_root=workspace_root,
     )
     application_result = next(
-        item for item in replay["results"] if item["rule_id"] == "LX0609-021"
+        item for item in replay["results"] if item["rule_id"] == "LX0609-03-01-02"
     )
 
     assert application_result["facts"]["checked_requirement"] == (

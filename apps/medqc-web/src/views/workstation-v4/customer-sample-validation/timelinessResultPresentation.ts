@@ -52,7 +52,7 @@ function timelinessLabel(
   item: SingleRecordQcResultItem,
   sourceLabel: string,
 ): string {
-  if (key === 'anchor_time' && item.rule_id === 'LX0609-002') return '入院时间'
+  if (key === 'anchor_time' && item.rule_id === 'LX0609-01-02-01') return '入院时间'
   if (key === 'observed_time' && sourceLabel) return `${sourceLabel}时间`
   return TIMELINESS_FACT_LABELS[key]
 }

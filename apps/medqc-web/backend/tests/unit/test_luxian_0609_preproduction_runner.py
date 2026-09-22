@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.luxian_0609_identity_test_support import published_rule_ids
+
 from dataclasses import dataclass
 import hashlib
 from pathlib import Path
@@ -15,7 +17,7 @@ from app.services.luxian_0609.execution_contract import FamilyUsageAttribution
 
 
 def _all_rule_ids() -> tuple[str, ...]:
-    return tuple(f"LX0609-{index:03d}" for index in range(1, 50))
+    return published_rule_ids(1, 49)
 
 
 def _bundle() -> dict:
@@ -51,9 +53,7 @@ class _FakeContext:
             prompt_tokens=30,
             completion_tokens=10,
             total_tokens=40,
-            covered_customer_rule_ids=tuple(
-                f"LX0609-{index:03d}" for index in range(1, 50)
-            ),
+            covered_customer_rule_ids=_all_rule_ids(),
             latency_ms=250.0,
         ),
     )
@@ -270,33 +270,33 @@ async def test_preproduction_runner_is_independent_ordered_and_privacy_safe(monk
         if item.source_contract_state == "typed_shadow_v1"
     }
     typed_source_only_rule_ids = {
-        "LX0609-050",
-        "LX0609-051",
-        "LX0609-052",
-        "LX0609-053",
-        "LX0609-054",
-        "LX0609-055",
-        "LX0609-056",
-        "LX0609-057",
-        "LX0609-058",
-        "LX0609-060",
-        "LX0609-061",
-        "LX0609-062",
-        "LX0609-063",
-        "LX0609-064",
-        "LX0609-065",
-        "LX0609-066",
-        "LX0609-067",
-        "LX0609-068",
-        "LX0609-069",
-        "LX0609-070",
-        "LX0609-071",
-        "LX0609-072",
-        "LX0609-073",
-        "LX0609-074",
-        "LX0609-075",
-        "LX0609-076",
-        "LX0609-077",
+        "LX0609-03-02-01",
+        "LX0609-09-02-01",
+        "LX0609-06-04-01",
+        "LX0609-06-04-02",
+        "LX0609-05-01-02",
+        "LX0609-05-01-03",
+        "LX0609-05-01-04",
+        "LX0609-05-01-05",
+        "LX0609-05-01-06",
+        "LX0609-04-02-06",
+        "LX0609-08-01-01",
+        "LX0609-08-01-02",
+        "LX0609-08-01-03",
+        "LX0609-04-05-01",
+        "LX0609-04-05-02",
+        "LX0609-04-05-03",
+        "LX0609-08-02-01",
+        "LX0609-08-02-02",
+        "LX0609-04-02-07",
+        "LX0609-07-01-03",
+        "LX0609-10-01-01",
+        "LX0609-10-02-01",
+        "LX0609-10-02-02",
+        "LX0609-12-02-01",
+        "LX0609-10-03-01",
+        "LX0609-04-02-08",
+        "LX0609-01-02-02",
     }
     assert typed_source_rule_ids - typed_contract_rule_ids == typed_source_only_rule_ids
     # 025/059 合同升级后，当前已有 50 条规则使用非 v1 决策合同；
@@ -419,16 +419,16 @@ async def test_preproduction_runner_builds_rule_bound_opaque_evidence_attestatio
         for value in evidence_hashes
     )
     assert captured_attestations[0] == {
-        "rule_id": "LX0609-001",
+        "rule_id": "LX0609-01-01-01",
         "evidence_hash": captured_attestations[0]["evidence_hash"],
         "observed_state": "compliant",
         "reason_code": "verified",
     }
     direct_row = next(
-        item for item in captured_attestations if item["rule_id"] == "LX0609-029"
+        item for item in captured_attestations if item["rule_id"] == "LX0609-04-01-01"
     )
     assert direct_row == {
-        "rule_id": "LX0609-029",
+        "rule_id": "LX0609-04-01-01",
         "evidence_hash": direct_row["evidence_hash"],
         "observed_state": "compliant",
         "reason_code": "verified",
@@ -544,7 +544,7 @@ def test_evidence_attestation_identity_uses_only_bound_evidence_material():
 
     changed_fact = hashlib.sha256(b"changed-fact").hexdigest()
     fact_selected, fact_traces, fact_results, fact_context = _attestation_inputs(
-        fact_overrides={"LX0609-001": (changed_fact,)}
+        fact_overrides={"LX0609-01-01-01": (changed_fact,)}
     )
     fact_hashes = _attestation_map(
         selected=fact_selected,
@@ -552,12 +552,12 @@ def test_evidence_attestation_identity_uses_only_bound_evidence_material():
         raw_results=fact_results,
         context=fact_context,
     )
-    assert fact_hashes["LX0609-001"] != baseline["LX0609-001"]
-    assert fact_hashes["LX0609-002"] == baseline["LX0609-002"]
+    assert fact_hashes["LX0609-01-01-01"] != baseline["LX0609-01-01-01"]
+    assert fact_hashes["LX0609-01-02-01"] == baseline["LX0609-01-02-01"]
 
     changed_snapshot = hashlib.sha256(b"changed-snapshot").hexdigest()
     snap_selected, snap_traces, snap_results, snap_context = _attestation_inputs(
-        snapshot_overrides={"LX0609-002": changed_snapshot}
+        snapshot_overrides={"LX0609-01-02-01": changed_snapshot}
     )
     snap_hashes = _attestation_map(
         selected=snap_selected,
@@ -565,10 +565,10 @@ def test_evidence_attestation_identity_uses_only_bound_evidence_material():
         raw_results=snap_results,
         context=snap_context,
     )
-    assert snap_hashes["LX0609-002"] != baseline["LX0609-002"]
+    assert snap_hashes["LX0609-01-02-01"] != baseline["LX0609-01-02-01"]
 
     eval_selected, eval_traces, eval_results, eval_context = _attestation_inputs(
-        evaluator_overrides={"LX0609-003": "trusted-evaluator-v2"}
+        evaluator_overrides={"LX0609-04-02-01": "trusted-evaluator-v2"}
     )
     eval_hashes = _attestation_map(
         selected=eval_selected,
@@ -576,7 +576,7 @@ def test_evidence_attestation_identity_uses_only_bound_evidence_material():
         raw_results=eval_results,
         context=eval_context,
     )
-    assert eval_hashes["LX0609-003"] != baseline["LX0609-003"]
+    assert eval_hashes["LX0609-04-02-01"] != baseline["LX0609-04-02-01"]
 
 
 @pytest.mark.parametrize("invalid_kind", ["missing", "duplicate", "extra"])
@@ -590,9 +590,9 @@ def test_evidence_attestation_rejects_incomplete_or_ambiguous_trace(invalid_kind
         traces.append(
             {
                 **traces[0],
-                "rule_id": "LX0609-029",
+                "rule_id": "LX0609-04-01-01",
                 "snapshot_hash": dict(context.evidence_snapshot_rule_refs)[
-                    "LX0609-029"
+                    "LX0609-04-01-01"
                 ],
             }
         )
@@ -619,7 +619,7 @@ def test_evidence_attestation_rejects_missing_or_mismatched_decision_truth(
     elif invalid_kind == "direct_state_mismatch":
         raw_results[0]["status"] = "non_compliant"
     else:
-        trace_index = selected.index("LX0609-029")
+        trace_index = selected.index("LX0609-04-01-01")
         traces[trace_index]["reason_code"] = ""
 
     with pytest.raises(ValueError, match="attestation|decision trace"):
@@ -635,9 +635,9 @@ def test_evidence_attestation_rejects_missing_or_mismatched_decision_truth(
 @pytest.mark.parametrize(
     "selected",
     [
-        ("LX0609-001", "LX0609-001"),
-        ("LX0609-002", "LX0609-001"),
-        ("LX0609-078",),
+        ("LX0609-01-01-01", "LX0609-01-01-01"),
+        ("LX0609-01-02-01", "LX0609-01-01-01"),
+        ("LX0609-04-01-04",),
         ("SC-001",),
         (),
     ],
@@ -793,6 +793,9 @@ import sys
 from types import SimpleNamespace
 
 from app.services.luxian_0609 import preproduction_runner as runner
+from app.services.luxian_0609_rule_master import load_luxian_0609_rule_master
+
+RULE_IDS = tuple(entry.rule_id for entry in load_luxian_0609_rule_master()[:49])
 
 assert "app.services.sichuan_qc_service" not in sys.modules
 
@@ -809,12 +812,12 @@ async def prepare(**_):
 def aggregate(*, orchestrated, **_):
     orchestrated["results"] = [
         {
-            "rule_id": f"LX0609-{index:03d}",
-            "rule_code": f"LX0609-{index:03d}",
+            "rule_id": rule_id,
+            "rule_code": rule_id,
             "status": "not_applicable",
             "is_compliant": True,
         }
-        for index in range(1, 50)
+        for rule_id in RULE_IDS
     ]
     return orchestrated
 
@@ -824,9 +827,7 @@ runner.aggregate_luxian_0609_orchestrated_results = aggregate
 async def main():
     result = await runner.run_luxian_0609_preproduction(
         bundle={"scene": "running"},
-        selected_customer_rule_ids=tuple(
-            f"LX0609-{index:03d}" for index in range(1, 50)
-        ),
+        selected_customer_rule_ids=RULE_IDS,
         evaluation_as_of_date="2026-07-17",
         llm_client=object(),
         base_settings=SimpleNamespace(),

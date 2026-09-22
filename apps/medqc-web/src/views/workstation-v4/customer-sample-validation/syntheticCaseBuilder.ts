@@ -59,28 +59,28 @@ const LUXIAN_0609_SYNTHETIC_RULE_FAMILY_DEFINITIONS = [
     name: '基础时限',
     description: '覆盖入院记录、首次病程、抢救记录和上级医师首次查房时限。',
     templateKey: 'basic-timeliness-defect',
-    ruleIds: ['LX0609-001', 'LX0609-002', 'LX0609-004', 'LX0609-005', 'LX0609-006'],
+    ruleIds: ['LX0609-01-01-01', 'LX0609-01-02-01', 'LX0609-09-01-01', 'LX0609-02-01-01', 'LX0609-02-01-02'],
   },
   {
     key: 'critical_rounds',
     name: '查房病程',
     description: '覆盖查房频次、病程复制、主诉和诊断依据等病程质量问题。',
     templateKey: 'critical-round-defect',
-    ruleIds: ['LX0609-007', 'LX0609-008', 'LX0609-009', 'LX0609-016', 'LX0609-017', 'LX0609-018'],
+    ruleIds: ['LX0609-02-01-03', 'LX0609-02-01-04', 'LX0609-02-01-05', 'LX0609-12-01-01', 'LX0609-12-01-02', 'LX0609-01-01-02'],
   },
   {
     key: 'ct_mri_culture',
     name: '检查检验',
     description: '覆盖 CT/MRI、细菌培养结果记录与阳性结果分析。',
     templateKey: 'ct-mri-culture-defect',
-    ruleIds: ['LX0609-010', 'LX0609-011', 'LX0609-012', 'LX0609-014', 'LX0609-015'],
+    ruleIds: ['LX0609-06-01-02', 'LX0609-06-01-04', 'LX0609-06-01-05', 'LX0609-06-03-03', 'LX0609-06-03-04'],
   },
   {
     key: 'consultation_quality',
     name: '会诊质量',
     description: '覆盖会诊目的、会诊意见和会诊执行记录。',
     templateKey: 'consultation-quality-defect',
-    ruleIds: ['LX0609-020', 'LX0609-021', 'LX0609-022', 'LX0609-023'],
+    ruleIds: ['LX0609-03-01-01', 'LX0609-03-01-02', 'LX0609-03-01-03', 'LX0609-03-01-04'],
   },
   {
     key: 'surgery_anesthesia',
@@ -88,22 +88,22 @@ const LUXIAN_0609_SYNTHETIC_RULE_FAMILY_DEFINITIONS = [
     description: '覆盖手术记录、术前小结、知情同意、核查表、麻醉记录和术前讨论。',
     templateKey: 'surgery-anesthesia-defect',
     ruleIds: [
-      'LX0609-003',
-      'LX0609-024',
-      'LX0609-025',
-      'LX0609-028',
-      'LX0609-029',
-      'LX0609-030',
-      'LX0609-031',
-      'LX0609-032',
-      'LX0609-033',
-      'LX0609-034',
-      'LX0609-035',
-      'LX0609-036',
-      'LX0609-037',
-      'LX0609-038',
-      'LX0609-039',
-      'LX0609-040',
+      'LX0609-04-02-01',
+      'LX0609-04-02-03',
+      'LX0609-04-02-04',
+      'LX0609-05-01-01',
+      'LX0609-04-01-01',
+      'LX0609-04-02-02',
+      'LX0609-04-02-05',
+      'LX0609-04-03-01',
+      'LX0609-11-01-01',
+      'LX0609-11-02-01',
+      'LX0609-11-02-02',
+      'LX0609-04-04-01',
+      'LX0609-04-04-02',
+      'LX0609-04-04-03',
+      'LX0609-04-01-02',
+      'LX0609-04-01-03',
     ],
   },
   {
@@ -112,15 +112,15 @@ const LUXIAN_0609_SYNTHETIC_RULE_FAMILY_DEFINITIONS = [
     description: '覆盖输血知情同意、输血前检查、输血前后评价和医嘱收费一致性。',
     templateKey: 'transfusion-defect',
     ruleIds: [
-      'LX0609-041',
-      'LX0609-042',
-      'LX0609-043',
-      'LX0609-044',
-      'LX0609-045',
-      'LX0609-046',
-      'LX0609-047',
-      'LX0609-048',
-      'LX0609-049',
+      'LX0609-11-03-01',
+      'LX0609-11-03-02',
+      'LX0609-07-01-01',
+      'LX0609-07-01-02',
+      'LX0609-07-02-01',
+      'LX0609-07-02-02',
+      'LX0609-07-03-01',
+      'LX0609-07-04-01',
+      'LX0609-07-04-02',
     ],
   },
   {
@@ -128,7 +128,7 @@ const LUXIAN_0609_SYNTHETIC_RULE_FAMILY_DEFINITIONS = [
     name: '肿瘤病理',
     description: '覆盖病理结果、取材情况、化疗记录和肿瘤出院治疗计划。',
     templateKey: 'tumor-pathology-chemo-defect',
-    ruleIds: ['LX0609-013', 'LX0609-019', 'LX0609-026', 'LX0609-027'],
+    ruleIds: ['LX0609-06-02-03', 'LX0609-06-02-02', 'LX0609-05-02-01', 'LX0609-08-01-04'],
   },
 ] as const
 
@@ -140,7 +140,7 @@ export function buildSyntheticCaseRuleFamiliesFromCatalog(
     const ruleId = String(rule.rule_id || rule.rule_code || '')
       .trim()
       .toUpperCase()
-    if (/^LX0609-\d{3}$/u.test(ruleId)) {
+    if (/^LX0609-(?!00)\d{2}-(?!00)\d{2}-(?!00)\d{2}$/u.test(ruleId)) {
       ruleById.set(ruleId, rule)
     }
   })
@@ -346,6 +346,7 @@ export function normalizeRuleIds(ruleIds: string[]): string[] {
             .trim()
             .toUpperCase(),
         )
+        .filter((ruleId) => /^LX0609-(?!00)\d{2}-(?!00)\d{2}-(?!00)\d{2}$/u.test(ruleId))
         .filter(Boolean),
     ),
   ).sort()

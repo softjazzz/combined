@@ -52,7 +52,7 @@ async def _entry(monkeypatch, frozen):
     if frozen is not None:
         bundle["evaluation_horizon_snapshot"] = frozen
     result = await SichuanQCService().evaluate_running_final_bundle_input(
-        bundle=bundle, rule_ids=["LX0609-007"], rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        bundle=bundle, rule_ids=["LX0609-02-01-03"], rule_set_key=LUXIAN_0609_RULE_SET_KEY,
         evaluation_horizon_policy="authoritative_discharge", use_execution_cache=False,
     )
     assert len(captured) == 1
@@ -68,7 +68,7 @@ async def test_frozen_discharge_survives_entry_and_offline_round_trip(monkeypatc
     assert horizon["horizon_datetime"] == "2026-06-10T09:30:00"
     assert session.materials.rows(SOURCE)[0]["discharge_datetime"] == "2026-07-20 10:00:00"
     frozen = freeze_execution_inputs(
-        session, selected_rule_ids=("LX0609-007",), evaluation_as_of_date=None,
+        session, selected_rule_ids=("LX0609-02-01-03",), evaluation_as_of_date=None,
         evaluation_horizon_policy="authoritative_discharge", horizon_unavailable_reason=None,
     )
 

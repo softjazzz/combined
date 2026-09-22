@@ -14,7 +14,7 @@ import re
 from typing import Any
 
 
-DEATH_DOCUMENT_CUSTOMER_RULE_IDS = frozenset({"LX0609-051", "LX0609-060"})
+DEATH_DOCUMENT_CUSTOMER_RULE_IDS = frozenset({"LX0609-09-02-01", "LX0609-04-02-06"})
 _DATETIME = re.compile(
     r"\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}"
     r"(?:\.\d{1,6})?(?:Z|[+-]\d{2}:?\d{2})?"
@@ -156,9 +156,9 @@ def safe_death_document_customer_display_facts(
     if not isinstance(raw, Mapping):
         return None
     normalized = str(rule_id or "").strip().upper()
-    if normalized == "LX0609-051":
+    if normalized == "LX0609-09-02-01":
         return _safe_051(raw)
-    if normalized == "LX0609-060":
+    if normalized == "LX0609-04-02-06":
         return _safe_060(raw)
     return None
 
@@ -176,7 +176,7 @@ def death_document_customer_fact_status_is_valid(
     if not isinstance(safe_facts, Mapping):
         return False
     normalized_rule_id = str(rule_id or "").strip().upper()
-    if normalized_rule_id == "LX0609-060":
+    if normalized_rule_id == "LX0609-04-02-06":
         count = safe_facts.get("death_record_count")
         return (
             isinstance(count, int)

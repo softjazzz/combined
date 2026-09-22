@@ -1,10 +1,16 @@
 <template>
-  <section class="exam-event-block" data-testid="exam-event-facts">
+  <section
+    class="exam-event-block"
+    data-testid="exam-event-facts"
+  >
     <header class="exam-event-header">
       <h4>逐次检查核对</h4>
       <span>按报告时间展示适用性与分析记录</span>
     </header>
-    <div class="exam-event-summary" data-testid="exam-event-summary">
+    <div
+      class="exam-event-summary"
+      data-testid="exam-event-summary"
+    >
       <span>{{ presentation.totalLabel }}</span>
       <span>{{ presentation.positiveLabel }}</span>
       <span class="is-danger">{{ presentation.issueLabel }}</span>
@@ -19,7 +25,10 @@
         <div class="exam-event-row-head">
           <span class="exam-event-position">第 {{ event.eventPosition }} 次</span>
           <time>{{ event.reportTime }}</time>
-          <span class="exam-event-status" :class="`is-${event.tone}`">{{ event.statusLabel }}</span>
+          <span
+            class="exam-event-status"
+            :class="`is-${event.tone}`"
+          >{{ event.statusLabel }}</span>
         </div>
         <p>{{ event.description }}</p>
       </article>

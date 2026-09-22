@@ -9,7 +9,7 @@ from app.services.luxian_0609.canonical_result_finalizer import finalize_luxian_
 from app.services.luxian_0609.tumor_pathology_result_mapping import safe_tumor_pathology_customer_display_facts
 
 
-async def _run(reports, *, rule_id="LX0609-013"):
+async def _run(reports, *, rule_id="LX0609-06-02-03"):
     def reader(**kwargs):
         key = kwargs["source_key"]
         return SnapshotSourceRows.create(source_key=key, rows=reports if key == "pathology_exam_report" else [], truncated=False, limit_rows=50)
@@ -53,7 +53,7 @@ async def test_valid_time_without_final_diagnosis_is_specific_gap(extra):
 async def test_019_uses_same_specific_report_gap_contract():
     result = await _run(
         [{"document_id": "report-019", "report_datetime": "2026-07-01 10:00:00"}],
-        rule_id="LX0609-019",
+        rule_id="LX0609-06-02-02",
     )
 
     assert result["status"] == "data_gap"
@@ -108,7 +108,7 @@ def test_pathology_gap_facts_reject_non_string_states(
     diagnosis_state, time_state
 ):
     assert safe_tumor_pathology_customer_display_facts(
-        rule_id="LX0609-013",
+        rule_id="LX0609-06-02-03",
         raw={
             "verification_kind": "pathology_report_field_gap",
             "report_gaps": [

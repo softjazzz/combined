@@ -61,7 +61,7 @@ def _unknown_015_response() -> dict[str, Any]:
                             "schema_version": SCHEMA_VERSION,
                             "facts": [
                                 {
-                                    "rule_id": "LX0609-015",
+                                    "rule_id": "LX0609-06-03-04",
                                     "applicability": "unknown",
                                     "semantic_state": "unknown",
                                     "positive_state": "unknown",
@@ -92,7 +92,7 @@ def test_identified_organism_promotes_projection_and_parser_to_positive() -> Non
 
     fact = parse_exam_lab_fact_response(
         response=_unknown_015_response(),
-        selected_rule_ids=["LX0609-015"],
+        selected_rule_ids=["LX0609-06-03-04"],
         projection=projection,
     )[0]
     assert fact.positive_state == "positive"
@@ -320,7 +320,7 @@ def test_prompt_uses_identified_organism_policy_without_drug_sensitivity_prerequ
         [_culture_row("尿一般细菌培养", None)]
     )
     prompt = build_exam_lab_fact_prompt(
-        selected_rule_ids=["LX0609-015"],
+        selected_rule_ids=["LX0609-06-03-04"],
         projection=projection,
     )
 

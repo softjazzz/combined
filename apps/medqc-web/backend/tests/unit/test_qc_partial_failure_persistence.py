@@ -31,7 +31,7 @@ def storage(monkeypatch):
             rule_name="测试", scope="final", total_records=1,
             filters_json=json.dumps({
                 "rule_set_key": "luxian_0609_qc_v1",
-                "rule_ids": ["LX0609-011", "LX0609-012"],
+                "rule_ids": ["LX0609-06-01-04", "LX0609-06-01-05"],
                 "record_refs": [
                     {"institute_id": "test-i", "patient_id": "test-p", "visit_id": "test-v"}
                 ],
@@ -47,16 +47,16 @@ def storage(monkeypatch):
 def _payload():
     identity = {"institute_id": "test-i", "patient_id": "test-p", "visit_id": "test-v"}
     item = {
-        **identity, "rule_id": "LX0609-011", "rule_version": "2026-06-09",
+        **identity, "rule_id": "LX0609-06-01-04", "rule_version": "2026-06-09",
         "schema_version": "lx0609-customer-result-v2",
         "status": "compliant", "result_status": "compliant", "display_status": "compliant",
         "is_compliant": True, "reason_code": "exam_result_recorded", "findings": "已记录检查结果。",
     }
-    failure = {**identity, "rule_id": "LX0609-012", "reason_code": "model_invalid_output", "error_phase": "result_status"}
+    failure = {**identity, "rule_id": "LX0609-06-01-05", "reason_code": "model_invalid_output", "error_phase": "result_status"}
     summary = {
         "total_records": 1, "success_count": 0, "failed_count": 1, "compliant_records": 0,
         "execution_status": "partial_failed", "completed_rule_count": 1, "failed_rule_count": 1,
-        "failed_rule_ids": ["LX0609-012"],
+        "failed_rule_ids": ["LX0609-06-01-05"],
         "automatic_failed_rule_retry": {
             "max_attempts": 3,
             "completed_attempts": 0,
@@ -80,16 +80,16 @@ def test_partial_delivery_selects_only_complete_records_without_failures():
     record_a = {"institute_id": "test-i", "patient_id": "test-pa", "visit_id": "test-va"}
     record_b = {"institute_id": "test-i", "patient_id": "test-pb", "visit_id": "test-vb"}
     items = [
-        {**record_a, "rule_id": "LX0609-011"},
-        {**record_b, "rule_id": "LX0609-011"},
-        {**record_b, "rule_id": "LX0609-012"},
+        {**record_a, "rule_id": "LX0609-06-01-04"},
+        {**record_b, "rule_id": "LX0609-06-01-04"},
+        {**record_b, "rule_id": "LX0609-06-01-05"},
     ]
-    failures = [{**record_a, "rule_id": "LX0609-012"}]
+    failures = [{**record_a, "rule_id": "LX0609-06-01-05"}]
 
     selected_items, selected_refs = select_complete_record_items(
         items=items,
         failures=failures,
-        expected_rule_ids=["LX0609-011", "LX0609-012"],
+        expected_rule_ids=["LX0609-06-01-04", "LX0609-06-01-05"],
     )
 
     assert [item["visit_id"] for item in selected_items] == ["test-vb", "test-vb"]
@@ -102,10 +102,10 @@ def test_partial_delivery_fails_closed_when_failure_identity_is_incomplete():
             "institute_id": "test-i",
             "patient_id": "test-p",
             "visit_id": "test-v",
-            "rule_id": "LX0609-011",
+            "rule_id": "LX0609-06-01-04",
         }],
-        failures=[{"visit_id": "test-v", "rule_id": "LX0609-012"}],
-        expected_rule_ids=["LX0609-011"],
+        failures=[{"visit_id": "test-v", "rule_id": "LX0609-06-01-05"}],
+        expected_rule_ids=["LX0609-06-01-04"],
     )
 
     assert selected_items == ()
@@ -189,7 +189,7 @@ def test_failed_job_persists_valid_items_and_operational_failure(storage, all_fa
     summary, items, failures = _payload()
     if all_failed:
         items = []
-        failures.append({**failures[0], "rule_id": "LX0609-011"})
+        failures.append({**failures[0], "rule_id": "LX0609-06-01-04"})
         summary.update(execution_status="failed", completed_rule_count=0, failed_rule_count=2, failed_count=2)
     service.complete_batch_job(job_id="partial-job", summary=summary, items=items, failed_records=failures)
     with engine.connect() as connection:
@@ -216,7 +216,7 @@ def test_failed_job_persists_valid_items_and_operational_failure(storage, all_fa
         "delay_seconds": 0.0,
     }
     assert len(safe["items"]) == len(items)
-    assert safe["failed_records"][0]["rule_id"] == "LX0609-012"
+    assert safe["failed_records"][0]["rule_id"] == "LX0609-06-01-05"
 
 
 def test_failed_child_keeps_parent_failed_and_other_compliant_case_count(storage):
@@ -260,7 +260,7 @@ def test_partial_job_writes_only_fully_completed_record_envelopes(storage, monke
                 filters_json=json.dumps({
                     "rule_set_key": "luxian_0609_qc_v1",
                     "rule_set_version": "2026-06-09",
-                    "rule_ids": ["LX0609-011", "LX0609-012"],
+                    "rule_ids": ["LX0609-06-01-04", "LX0609-06-01-05"],
                     "record_refs": [record_a, record_b],
                 }),
             )
@@ -281,13 +281,13 @@ def test_partial_job_writes_only_fully_completed_record_envelopes(storage, monke
         }
 
     items = [
-        item(record_a, "LX0609-011"),
-        item(record_b, "LX0609-011"),
-        item(record_b, "LX0609-012"),
+        item(record_a, "LX0609-06-01-04"),
+        item(record_b, "LX0609-06-01-04"),
+        item(record_b, "LX0609-06-01-05"),
     ]
     failures = [{
         **record_a,
-        "rule_id": "LX0609-012",
+        "rule_id": "LX0609-06-01-05",
         "reason_code": "model_invalid_output",
         "error_phase": "result_status",
     }]
@@ -298,7 +298,7 @@ def test_partial_job_writes_only_fully_completed_record_envelopes(storage, monke
         "execution_status": "partial_failed",
         "completed_rule_count": 3,
         "failed_rule_count": 1,
-        "failed_rule_ids": ["LX0609-012"],
+        "failed_rule_ids": ["LX0609-06-01-05"],
     }
     captured = {}
 
@@ -370,7 +370,7 @@ def test_partial_envelope_writer_narrows_record_contract_without_mutating_job(mo
         "id": "partial-job",
         "filters_json": json.dumps({
             "rule_set_key": "luxian_0609_qc_v1",
-            "rule_ids": ["LX0609-011"],
+            "rule_ids": ["LX0609-06-01-04"],
             "record_refs": [record_a, record_b],
         }),
     }
@@ -389,7 +389,7 @@ def test_partial_envelope_writer_narrows_record_contract_without_mutating_job(mo
     service._write_record_result_envelopes(
         object(),
         job_row=job_row,
-        items=[{**record_b, "rule_id": "LX0609-011"}],
+        items=[{**record_b, "rule_id": "LX0609-06-01-04"}],
         now=datetime(2026, 9, 15),
         expected_record_refs=[CaseRef.from_mapping(record_b)],
     )
@@ -432,11 +432,11 @@ def test_retry_partial_failure_preserves_valid_items_and_queues_only_failed_rule
     assert retried is not None
     assert retried["status"] == "queued"
     assert len(retried["items"]) == 1
-    assert retried["items"][0]["rule_id"] == "LX0609-011"
+    assert retried["items"][0]["rule_id"] == "LX0609-06-01-04"
     assert retried["items"][0]["status"] == "compliant"
-    assert retried["failed_records"][0]["rule_id"] == "LX0609-012"
+    assert retried["failed_records"][0]["rule_id"] == "LX0609-06-01-05"
     retry_scope = retried["filters"]["failed_rule_retry"]
-    assert retry_scope["rule_ids"] == ["LX0609-012"]
+    assert retry_scope["rule_ids"] == ["LX0609-06-01-05"]
     assert retry_scope["record_refs"] == [
         {"institute_id": "test-i", "patient_id": "test-p", "visit_id": "test-v"}
     ]
@@ -449,8 +449,8 @@ def test_retry_partial_failure_preserves_valid_items_and_queues_only_failed_rule
         hmac_key="synthetic-test-key",
     )
     assert len(safe["items"]) == 1
-    assert safe["items"][0]["rule_id"] == "LX0609-011"
-    assert safe["failed_records"][0]["rule_id"] == "LX0609-012"
+    assert safe["items"][0]["rule_id"] == "LX0609-06-01-04"
+    assert safe["failed_records"][0]["rule_id"] == "LX0609-06-01-05"
     with engine.connect() as connection:
         row = dict(connection.execute(sa.select(table)).mappings().one())
     assert json.loads(row["items_json"]) == items
@@ -478,8 +478,8 @@ async def test_retry_route_returns_customer_safe_partial_result(storage, monkeyp
 
     payload = response["data"]
     assert payload["summary"]["execution_status"] == "partial_failed"
-    assert payload["items"][0]["rule_id"] == "LX0609-011"
-    assert payload["failed_records"][0]["rule_id"] == "LX0609-012"
+    assert payload["items"][0]["rule_id"] == "LX0609-06-01-04"
+    assert payload["failed_records"][0]["rule_id"] == "LX0609-06-01-05"
     serialized = json.dumps(payload, ensure_ascii=False)
     assert "test-p" not in serialized
     assert "test-v" not in serialized

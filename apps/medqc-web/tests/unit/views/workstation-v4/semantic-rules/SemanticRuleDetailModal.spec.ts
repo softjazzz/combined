@@ -16,8 +16,8 @@ const modalStubs = {
 
 function makeRule(overrides: Partial<SemanticRuleItem> = {}): SemanticRuleItem {
   return {
-    rule_id: 'LX0609-020',
-    rule_code: 'LX0609-020',
+    rule_id: 'LX0609-03-01-01',
+    rule_code: 'LX0609-03-01-01',
     name: '会诊意见及执行情况记录',
     description: '旧包装器描述，不得展示给客户。',
     category: '会诊记录',

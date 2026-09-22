@@ -49,7 +49,7 @@ def test_customer_display_facts_keep_96_recommendation_evidence_entries():
 def test_diagnostic_trace_keeps_structured_semantic_snapshot_without_text():
     trace = _result_diagnostic_trace(
         {
-            "rule_id": "LX0609-022",
+            "rule_id": "LX0609-03-01-03",
             "status": "non_compliant",
         },
         {
@@ -597,8 +597,8 @@ def test_latest_luxian_record_result_is_read_by_server_bound_record(client, sich
         job_id=str(job["id"]),
         summary={"total_records": 2},
         items=[
-            {"record_id": "visit-lx-1", "rule_id": "LX0609-018", "status": "non_compliant"},
-            {"record_id": "visit-lx-2", "rule_id": "LX0609-018", "status": "compliant"},
+            {"record_id": "visit-lx-1", "rule_id": "LX0609-01-01-02", "status": "non_compliant"},
+            {"record_id": "visit-lx-2", "rule_id": "LX0609-01-01-02", "status": "compliant"},
         ],
         failed_records=[],
     )
@@ -615,7 +615,7 @@ def test_latest_luxian_record_result_is_read_by_server_bound_record(client, sich
         job_id=str(newer_job["id"]),
         summary={"total_records": 1},
         items=[
-            {"record_id": "visit-lx-1", "rule_id": "LX0609-018", "status": "compliant"},
+            {"record_id": "visit-lx-1", "rule_id": "LX0609-01-01-02", "status": "compliant"},
         ],
         failed_records=[],
     )

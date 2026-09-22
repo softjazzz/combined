@@ -145,7 +145,7 @@ def _typed_decision_session(
 
 def _typed_044_llm_session():
     return _typed_decision_session(
-        selected_rule_ids=("LX0609-044",),
+        selected_rule_ids=("LX0609-07-01-02",),
         bloodtrans_content="输血记录正文，记录实际输注过程及观察情况。",
         source_rows={
             "blood_application": [
@@ -163,7 +163,7 @@ def _typed_044_llm_session():
 
 def _typed_046_llm_session():
     return _typed_decision_session(
-        selected_rule_ids=("LX0609-046",),
+        selected_rule_ids=("LX0609-07-02-02",),
         bloodtrans_content=(
             "输血目的：纠正贫血；开始时间17:53输入A型Rh(D)阳性2U，"
             "18:27输注完毕。输血过程顺利，未见输血不良反应。"
@@ -204,11 +204,11 @@ def test_typed_transfusion_preserves_only_approved_canonical_reasons(
     canonical_reason,
     expected_final_state,
 ):
-    session = _typed_decision_session(selected_rule_ids=("LX0609-045",))
+    session = _typed_decision_session(selected_rule_ids=("LX0609-07-02-01",))
 
     decision = transfusion._typed_decision_from_outcome(
         outcome=transfusion._TransfusionRuleOutcome(
-            rule_id="LX0609-045",
+            rule_id="LX0609-07-02-01",
             status=status,
             reason_code=raw_reason,
             executor_type="program",
@@ -218,7 +218,7 @@ def test_typed_transfusion_preserves_only_approved_canonical_reasons(
 
     canonical = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=(decision,),
-        expected_rule_ids=("LX0609-045",),
+        expected_rule_ids=("LX0609-07-02-01",),
         snapshot=session.snapshot,
     )[0]
 
@@ -275,8 +275,8 @@ async def test_typed_044_llm_failure_semantics_bind_and_reduce(
     client = None if model_output is None else _Client([model_output])
 
     result = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-044",),
-        wrapper_rules=[_wrapper("LX0609-044")],
+        rule_ids=("LX0609-07-01-02",),
+        wrapper_rules=[_wrapper("LX0609-07-01-02")],
         evidence_payload=_documents(),
         institute_id="I",
         patient_id="P",
@@ -285,11 +285,11 @@ async def test_typed_044_llm_failure_semantics_bind_and_reduce(
         llm_client=client,
         evidence_materials=session.materials,
         evidence_snapshot=session.snapshot,
-        decision_rule_ids=("LX0609-044",),
+        decision_rule_ids=("LX0609-07-01-02",),
     )
     canonical = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-044",),
+        expected_rule_ids=("LX0609-07-01-02",),
         snapshot=session.snapshot,
     )
 
@@ -348,8 +348,8 @@ async def test_typed_046_llm_failure_semantics_bind_and_reduce(
     client = None if model_output is None else _Client([model_output])
 
     result = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-046",),
-        wrapper_rules=[_wrapper("LX0609-046")],
+        rule_ids=("LX0609-07-02-02",),
+        wrapper_rules=[_wrapper("LX0609-07-02-02")],
         evidence_payload=_documents(),
         institute_id="I",
         patient_id="P",
@@ -358,11 +358,11 @@ async def test_typed_046_llm_failure_semantics_bind_and_reduce(
         llm_client=client,
         evidence_materials=session.materials,
         evidence_snapshot=session.snapshot,
-        decision_rule_ids=("LX0609-046",),
+        decision_rule_ids=("LX0609-07-02-02",),
     )
     canonical = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-046",),
+        expected_rule_ids=("LX0609-07-02-02",),
         snapshot=session.snapshot,
     )
 
@@ -389,7 +389,7 @@ async def test_typed_045_generic_bool_model_failures_bind_and_reduce(
     expected_tokens,
 ):
     session = _typed_decision_session(
-        selected_rule_ids=("LX0609-045",),
+        selected_rule_ids=("LX0609-07-02-01",),
         bloodtrans_content="患者已完成输血治疗，过程资料记录较为简略。",
     )
     monkeypatch.setattr(
@@ -400,8 +400,8 @@ async def test_typed_045_generic_bool_model_failures_bind_and_reduce(
     client = _Client([model_output])
 
     result = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-045",),
-        wrapper_rules=[_wrapper("LX0609-045")],
+        rule_ids=("LX0609-07-02-01",),
+        wrapper_rules=[_wrapper("LX0609-07-02-01")],
         evidence_payload=_documents(),
         institute_id="I",
         patient_id="P",
@@ -410,11 +410,11 @@ async def test_typed_045_generic_bool_model_failures_bind_and_reduce(
         llm_client=client,
         evidence_materials=session.materials,
         evidence_snapshot=session.snapshot,
-        decision_rule_ids=("LX0609-045",),
+        decision_rule_ids=("LX0609-07-02-01",),
     )
     canonical = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-045",),
+        expected_rule_ids=("LX0609-07-02-01",),
         snapshot=session.snapshot,
     )
 
@@ -431,10 +431,10 @@ async def test_typed_045_uses_snapshot_material_not_conflicting_legacy_payload(
     monkeypatch,
 ):
     complete_session = _typed_decision_session(
-        selected_rule_ids=("LX0609-045",),
+        selected_rule_ids=("LX0609-07-02-01",),
     )
     incomplete_session = _typed_decision_session(
-        selected_rule_ids=("LX0609-045",),
+        selected_rule_ids=("LX0609-07-02-01",),
         bloodtrans_content="输血过程中患者生命体征平稳。",
     )
     monkeypatch.setattr(
@@ -445,8 +445,8 @@ async def test_typed_045_uses_snapshot_material_not_conflicting_legacy_payload(
         ),
     )
     common = {
-        "rule_ids": ("LX0609-045",),
-        "wrapper_rules": [_wrapper("LX0609-045")],
+        "rule_ids": ("LX0609-07-02-01",),
+        "wrapper_rules": [_wrapper("LX0609-07-02-01")],
         # 旧 payload 故意始终给出强合规材料；typed 结果必须随 snapshot material 改变。
         "evidence_payload": _documents(
             bloodtrans_record=[
@@ -464,7 +464,7 @@ async def test_typed_045_uses_snapshot_material_not_conflicting_legacy_payload(
         "visit_id": "V",
         "source_schema": None,
         "llm_client": None,
-        "decision_rule_ids": ("LX0609-045",),
+        "decision_rule_ids": ("LX0609-07-02-01",),
     }
 
     complete = await transfusion.execute_luxian_0609_native_transfusion_rules(
@@ -512,7 +512,7 @@ async def test_typed_045_uses_snapshot_material_not_conflicting_legacy_payload(
 async def test_typed_044_uses_same_session_material_and_ignores_stale_payload(
     monkeypatch,
 ):
-    session = _typed_decision_session(selected_rule_ids=("LX0609-044",))
+    session = _typed_decision_session(selected_rule_ids=("LX0609-07-01-02",))
     monkeypatch.setattr(
         transfusion,
         "read_luxian_0609_native_source_rows",
@@ -522,8 +522,8 @@ async def test_typed_044_uses_same_session_material_and_ignores_stale_payload(
     )
 
     result = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-044",),
-        wrapper_rules=[_wrapper("LX0609-044")],
+        rule_ids=("LX0609-07-01-02",),
+        wrapper_rules=[_wrapper("LX0609-07-01-02")],
         # 与同一 session 材料冲突：旧 payload 明确声称缺少输血前评估。
         evidence_payload=_documents(
             bloodtrans_record=[{"content": "明确未记录输血前评估。"}],
@@ -537,12 +537,12 @@ async def test_typed_044_uses_same_session_material_and_ignores_stale_payload(
         llm_client=None,
         evidence_materials=session.materials,
         evidence_snapshot=session.snapshot,
-        decision_rule_ids=("LX0609-044",),
+        decision_rule_ids=("LX0609-07-01-02",),
     )
 
     assert result.results == ()
     assert result.llm_call_count == 0
-    assert [item.rule_id for item in result.decisions] == ["LX0609-044"]
+    assert [item.rule_id for item in result.decisions] == ["LX0609-07-01-02"]
     assert (
         reduce_luxian_0609_rule_decision(result.decisions[0]).final_state.value
         == "compliant"
@@ -553,9 +553,9 @@ async def test_typed_044_uses_same_session_material_and_ignores_stale_payload(
 
 @pytest.mark.asyncio
 async def test_typed_044_material_change_changes_state_snapshot_and_refs(monkeypatch):
-    complete_session = _typed_decision_session(selected_rule_ids=("LX0609-044",))
+    complete_session = _typed_decision_session(selected_rule_ids=("LX0609-07-01-02",))
     missing_session = _typed_decision_session(
-        selected_rule_ids=("LX0609-044",),
+        selected_rule_ids=("LX0609-07-01-02",),
         bloodtrans_content="输血过程中患者生命体征平稳。",
     )
     monkeypatch.setattr(
@@ -564,8 +564,8 @@ async def test_typed_044_material_change_changes_state_snapshot_and_refs(monkeyp
         lambda **_kwargs: (_ for _ in ()).throw(AssertionError("no live read")),
     )
     common = {
-        "rule_ids": ("LX0609-044",),
-        "wrapper_rules": [_wrapper("LX0609-044")],
+        "rule_ids": ("LX0609-07-01-02",),
+        "wrapper_rules": [_wrapper("LX0609-07-01-02")],
         "evidence_payload": _documents(
             bloodtrans_record=[{"content": "输血前评估完整且风险已说明。"}]
         ),
@@ -574,7 +574,7 @@ async def test_typed_044_material_change_changes_state_snapshot_and_refs(monkeyp
         "visit_id": "V",
         "source_schema": None,
         "llm_client": None,
-        "decision_rule_ids": ("LX0609-044",),
+        "decision_rule_ids": ("LX0609-07-01-02",),
     }
 
     complete = await transfusion.execute_luxian_0609_native_transfusion_rules(
@@ -650,7 +650,7 @@ async def test_typed_044_dedicated_fact_precedes_auxiliary_source_four_states(
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-044",),
+        selected_rule_ids=("LX0609-07-01-02",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -665,8 +665,8 @@ async def test_typed_044_dedicated_fact_precedes_auxiliary_source_four_states(
     )
 
     result = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-044",),
-        wrapper_rules=[_wrapper("LX0609-044")],
+        rule_ids=("LX0609-07-01-02",),
+        wrapper_rules=[_wrapper("LX0609-07-01-02")],
         evidence_payload=_documents(),
         institute_id="I",
         patient_id="P",
@@ -675,7 +675,7 @@ async def test_typed_044_dedicated_fact_precedes_auxiliary_source_four_states(
         llm_client=None,
         evidence_materials=session.materials,
         evidence_snapshot=session.snapshot,
-        decision_rule_ids=("LX0609-044",),
+        decision_rule_ids=("LX0609-07-01-02",),
     )
     decision = result.decisions[0]
 
@@ -692,7 +692,7 @@ async def test_typed_044_optional_llm_keeps_raw_call_token_and_state_semantics(
 ):
     grey_content = "输血前评估记录：患者存在输血指征，其他风险资料待结合判断。"
     session = _typed_decision_session(
-        selected_rule_ids=("LX0609-044",),
+        selected_rule_ids=("LX0609-07-01-02",),
         bloodtrans_content=grey_content,
         daily_content="输血后继续观察。",
     )
@@ -709,8 +709,8 @@ async def test_typed_044_optional_llm_keeps_raw_call_token_and_state_semantics(
     raw_client = _Client([{"is_compliant": False}])
     typed_client = _Client([{"is_compliant": False}])
     common = {
-        "rule_ids": ("LX0609-044",),
-        "wrapper_rules": [_wrapper("LX0609-044")],
+        "rule_ids": ("LX0609-07-01-02",),
+        "wrapper_rules": [_wrapper("LX0609-07-01-02")],
         "evidence_payload": payload,
         "institute_id": "I",
         "patient_id": "P",
@@ -727,7 +727,7 @@ async def test_typed_044_optional_llm_keeps_raw_call_token_and_state_semantics(
         llm_client=typed_client,
         evidence_materials=session.materials,
         evidence_snapshot=session.snapshot,
-        decision_rule_ids=("LX0609-044",),
+        decision_rule_ids=("LX0609-07-01-02",),
     )
 
     assert raw.results[0]["status"] == "non_compliant"
@@ -745,12 +745,12 @@ async def test_remaining_transfusion_typed_scope_is_ordered_and_fails_closed(
     monkeypatch,
 ):
     selected = (
-        "LX0609-041",
-        "LX0609-042",
-        "LX0609-043",
-        "LX0609-044",
-        "LX0609-048",
-        "LX0609-049",
+        "LX0609-11-03-01",
+        "LX0609-11-03-02",
+        "LX0609-07-01-01",
+        "LX0609-07-01-02",
+        "LX0609-07-04-01",
+        "LX0609-07-04-02",
     )
 
     def read(**kwargs):
@@ -817,15 +817,15 @@ async def test_remaining_transfusion_typed_scope_is_ordered_and_fails_closed(
         for item in result.decisions
     }
     assert states == {
-        "LX0609-041": "non_compliant",
-        "LX0609-042": "not_applicable",
-        "LX0609-043": "non_compliant",
-        "LX0609-044": "non_compliant",
-        "LX0609-048": "not_applicable",
-        "LX0609-049": "data_gap",
+        "LX0609-11-03-01": "non_compliant",
+        "LX0609-11-03-02": "not_applicable",
+        "LX0609-07-01-01": "non_compliant",
+        "LX0609-07-01-02": "non_compliant",
+        "LX0609-07-04-01": "not_applicable",
+        "LX0609-07-04-02": "data_gap",
     }
     decision_by_rule = {item.rule_id: item for item in result.decisions}
-    assert decision_by_rule["LX0609-042"].reason_code == "eligibility_not_met"
+    assert decision_by_rule["LX0609-11-03-02"].reason_code == "eligibility_not_met"
     bound = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
         expected_rule_ids=selected,
@@ -838,11 +838,11 @@ async def test_remaining_transfusion_typed_scope_is_ordered_and_fails_closed(
 @pytest.mark.asyncio
 async def test_remaining_typed_rules_do_not_promote_proxy_sources_or_call_model():
     selected = (
-        "LX0609-041",
-        "LX0609-042",
-        "LX0609-043",
-        "LX0609-048",
-        "LX0609-049",
+        "LX0609-11-03-01",
+        "LX0609-11-03-02",
+        "LX0609-07-01-01",
+        "LX0609-07-04-01",
+        "LX0609-07-04-02",
     )
     private_marker = "PRIVATE_TRANSFUSION_PROXY_MARKER"
 
@@ -927,11 +927,11 @@ async def test_remaining_typed_rules_do_not_promote_proxy_sources_or_call_model(
 @pytest.mark.asyncio
 async def test_remaining_typed_rules_are_not_applicable_only_after_complete_no_transfusion():
     selected = (
-        "LX0609-041",
-        "LX0609-042",
-        "LX0609-043",
-        "LX0609-048",
-        "LX0609-049",
+        "LX0609-11-03-01",
+        "LX0609-11-03-02",
+        "LX0609-07-01-01",
+        "LX0609-07-04-01",
+        "LX0609-07-04-02",
     )
 
     def read(**kwargs):
@@ -978,11 +978,11 @@ async def test_remaining_typed_rules_are_not_applicable_only_after_complete_no_t
 @pytest.mark.asyncio
 async def test_remaining_typed_rules_surface_shared_trigger_query_error_without_echo():
     selected = (
-        "LX0609-041",
-        "LX0609-042",
-        "LX0609-043",
-        "LX0609-048",
-        "LX0609-049",
+        "LX0609-11-03-01",
+        "LX0609-11-03-02",
+        "LX0609-07-01-01",
+        "LX0609-07-04-01",
+        "LX0609-07-04-02",
     )
     private_error = "PRIVATE SQL Bearer_secret 13800138000"
 
@@ -1074,7 +1074,7 @@ async def test_typed_transfusion_material_failures_do_not_fallback_to_payload(
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-045",),
+        selected_rule_ids=("LX0609-07-02-01",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -1089,8 +1089,8 @@ async def test_typed_transfusion_material_failures_do_not_fallback_to_payload(
     )
 
     result = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-045",),
-        wrapper_rules=[_wrapper("LX0609-045")],
+        rule_ids=("LX0609-07-02-01",),
+        wrapper_rules=[_wrapper("LX0609-07-02-01")],
         evidence_payload=_documents(),
         institute_id="I",
         patient_id="P",
@@ -1099,7 +1099,7 @@ async def test_typed_transfusion_material_failures_do_not_fallback_to_payload(
         llm_client=None,
         evidence_materials=session.materials,
         evidence_snapshot=session.snapshot,
-        decision_rule_ids=("LX0609-045",),
+        decision_rule_ids=("LX0609-07-02-01",),
     )
     reduced = reduce_luxian_0609_rule_decision(result.decisions[0])
 
@@ -1134,7 +1134,7 @@ async def test_transfusion_trigger_consumes_shared_material_without_live_reader(
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-041",),
+        selected_rule_ids=("LX0609-11-03-01",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -1152,8 +1152,8 @@ async def test_transfusion_trigger_consumes_shared_material_without_live_reader(
     )
 
     result = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-041",),
-        wrapper_rules=[_wrapper("LX0609-041")],
+        rule_ids=("LX0609-11-03-01",),
+        wrapper_rules=[_wrapper("LX0609-11-03-01")],
         evidence_payload=_documents(bloodtrans_record=[]),
         institute_id="I",
         patient_id="P",
@@ -1184,7 +1184,7 @@ async def test_transfusion_truncated_shared_trigger_source_is_data_gap(monkeypat
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-041",),
+        selected_rule_ids=("LX0609-11-03-01",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -1202,8 +1202,8 @@ async def test_transfusion_truncated_shared_trigger_source_is_data_gap(monkeypat
     )
 
     result = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-041",),
-        wrapper_rules=[_wrapper("LX0609-041")],
+        rule_ids=("LX0609-11-03-01",),
+        wrapper_rules=[_wrapper("LX0609-11-03-01")],
         evidence_payload=_documents(bloodtrans_record=[]),
         institute_id="I",
         patient_id="P",
@@ -1307,8 +1307,8 @@ async def test_typed_transfusion_event_triggers_but_shell_record_fails_closed(mo
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _typed_reader)
     client = _Client([{"is_compliant": True}])
     typed = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-045",),
-        wrapper_rules=[_wrapper("LX0609-045")],
+        rule_ids=("LX0609-07-02-01",),
+        wrapper_rules=[_wrapper("LX0609-07-02-01")],
         evidence_payload=_documents(bloodtrans_record=[{"content": "空模板"}]),
         institute_id="safe-institute",
         patient_id="safe-patient",
@@ -1326,8 +1326,8 @@ async def test_typed_transfusion_event_triggers_but_shell_record_fails_closed(mo
 
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _shell_reader)
     shell = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-045",),
-        wrapper_rules=[_wrapper("LX0609-045")],
+        rule_ids=("LX0609-07-02-01",),
+        wrapper_rules=[_wrapper("LX0609-07-02-01")],
         evidence_payload=_documents(bloodtrans_record=[]),
         institute_id="safe-institute",
         patient_id="safe-patient",
@@ -1347,8 +1347,8 @@ async def test_045_substantive_dedicated_course_record_is_compliant_without_mode
     client = _Client([{"is_compliant": False}])
 
     result = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-045",),
-        wrapper_rules=[_wrapper("LX0609-045")],
+        rule_ids=("LX0609-07-02-01",),
+        wrapper_rules=[_wrapper("LX0609-07-02-01")],
         evidence_payload=_documents(
             bloodtrans_record=[
                 {
@@ -1385,8 +1385,8 @@ async def test_045_projects_the_checked_transfusion_document_ids_for_evidence(
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
 
     result = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-045",),
-        wrapper_rules=[_wrapper("LX0609-045")],
+        rule_ids=("LX0609-07-02-01",),
+        wrapper_rules=[_wrapper("LX0609-07-02-01")],
         evidence_payload=_documents(
             bloodtrans_record=[
                 {
@@ -1410,7 +1410,7 @@ async def test_045_projects_the_checked_transfusion_document_ids_for_evidence(
         llm_client=None,
     )
 
-    facts = dict(result.customer_display_facts)["LX0609-045"]
+    facts = dict(result.customer_display_facts)["LX0609-07-02-01"]
     assert facts["source_document_ids"] == [
         "bloodtrans-045-1",
         "bloodtrans-045-2",
@@ -1421,7 +1421,7 @@ async def test_045_projects_the_checked_transfusion_document_ids_for_evidence(
 async def test_045_typed_shadow_returns_bound_decision_instead_of_raw_result(
     monkeypatch,
 ):
-    session = _typed_decision_session(selected_rule_ids=("LX0609-045",))
+    session = _typed_decision_session(selected_rule_ids=("LX0609-07-02-01",))
     monkeypatch.setattr(
         transfusion,
         "read_luxian_0609_native_source_rows",
@@ -1432,8 +1432,8 @@ async def test_045_typed_shadow_returns_bound_decision_instead_of_raw_result(
     client = _Client([])
 
     result = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-045",),
-        wrapper_rules=[_wrapper("LX0609-045")],
+        rule_ids=("LX0609-07-02-01",),
+        wrapper_rules=[_wrapper("LX0609-07-02-01")],
         evidence_payload=_documents(
             bloodtrans_record=[
                 {
@@ -1452,11 +1452,11 @@ async def test_045_typed_shadow_returns_bound_decision_instead_of_raw_result(
         llm_client=client,
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
-        decision_rule_ids=("LX0609-045",),
+        decision_rule_ids=("LX0609-07-02-01",),
     )
 
     assert result.results == ()
-    assert [item.rule_id for item in result.decisions] == ["LX0609-045"]
+    assert [item.rule_id for item in result.decisions] == ["LX0609-07-02-01"]
     assert result.decisions[0].snapshot_hash == session.snapshot.snapshot_hash
     assert result.decisions[0].reason_code == "requirement_satisfied"
     assert result.decisions[0].fact_refs
@@ -1472,7 +1472,7 @@ async def test_045_typed_shadow_returns_bound_decision_instead_of_raw_result(
     ("rule_id", "payload", "outputs", "performed", "expected_status"),
     (
         (
-            "LX0609-045",
+            "LX0609-07-02-01",
             _documents(
                 bloodtrans_record=[
                     {
@@ -1488,7 +1488,7 @@ async def test_045_typed_shadow_returns_bound_decision_instead_of_raw_result(
             "compliant",
         ),
         (
-            "LX0609-045",
+            "LX0609-07-02-01",
             _documents(
                 bloodtrans_record=[
                     {"content": "患者已完成输血治疗，过程资料记录较为简略。"}
@@ -1499,14 +1499,14 @@ async def test_045_typed_shadow_returns_bound_decision_instead_of_raw_result(
             "non_compliant",
         ),
         (
-            "LX0609-045",
+            "LX0609-07-02-01",
             _documents(daily_course_record=[]),
             [],
             True,
             "data_gap",
         ),
         (
-            "LX0609-046",
+            "LX0609-07-02-02",
             _documents(
                 bloodtrans_record=[
                     {
@@ -1522,7 +1522,7 @@ async def test_045_typed_shadow_returns_bound_decision_instead_of_raw_result(
             "compliant",
         ),
         (
-            "LX0609-046",
+            "LX0609-07-02-02",
             _documents(
                 bloodtrans_record=[
                     {"content": "输血目的：纠正贫血；输注红细胞，过程平稳。"}
@@ -1533,14 +1533,14 @@ async def test_045_typed_shadow_returns_bound_decision_instead_of_raw_result(
             "non_compliant",
         ),
         (
-            "LX0609-046",
+            "LX0609-07-02-02",
             _documents(daily_course_record=[]),
             [],
             True,
             "non_compliant",
         ),
         (
-            "LX0609-047",
+            "LX0609-07-03-01",
             _documents(
                 bloodtrans_record=[
                     {
@@ -1557,7 +1557,7 @@ async def test_045_typed_shadow_returns_bound_decision_instead_of_raw_result(
             "compliant",
         ),
         (
-            "LX0609-047",
+            "LX0609-07-03-01",
             _documents(
                 bloodtrans_record=[
                     {"content": "2026-01-01 16:10 输血结束。"}
@@ -1569,7 +1569,7 @@ async def test_045_typed_shadow_returns_bound_decision_instead_of_raw_result(
             "data_gap",
         ),
         (
-            "LX0609-047",
+            "LX0609-07-03-01",
             _documents(
                 bloodtrans_record=[{"content": "输血结束，继续观察。"}],
             ),
@@ -1578,7 +1578,7 @@ async def test_045_typed_shadow_returns_bound_decision_instead_of_raw_result(
             "data_gap",
         ),
         (
-            "LX0609-047",
+            "LX0609-07-03-01",
             _documents(bloodtrans_record=[], daily_course_record=[]),
             [],
             False,
@@ -1656,9 +1656,9 @@ async def test_typed_045_047_preserves_raw_state_order_and_model_usage(
 
 @pytest.mark.asyncio
 async def test_typed_transfusion_session_and_refs_fail_closed(monkeypatch):
-    session = _typed_decision_session(selected_rule_ids=("LX0609-045",))
+    session = _typed_decision_session(selected_rule_ids=("LX0609-07-02-01",))
     other_session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-045",),
+        selected_rule_ids=("LX0609-07-02-01",),
         institute_id="OTHER-I",
         patient_id="OTHER-P",
         visit_id="OTHER-V",
@@ -1677,15 +1677,15 @@ async def test_typed_transfusion_session_and_refs_fail_closed(monkeypatch):
         lambda **_kwargs: (_ for _ in ()).throw(AssertionError("no live read")),
     )
     common = {
-        "rule_ids": ("LX0609-045",),
-        "wrapper_rules": [_wrapper("LX0609-045")],
+        "rule_ids": ("LX0609-07-02-01",),
+        "wrapper_rules": [_wrapper("LX0609-07-02-01")],
         "evidence_payload": _documents(),
         "institute_id": "I",
         "patient_id": "P",
         "visit_id": "V",
         "source_schema": None,
         "llm_client": _Client([]),
-        "decision_rule_ids": ("LX0609-045",),
+        "decision_rule_ids": ("LX0609-07-02-01",),
     }
 
     with pytest.raises(ValueError, match="one evidence session"):
@@ -1703,7 +1703,7 @@ async def test_typed_transfusion_session_and_refs_fail_closed(monkeypatch):
     forged = replace(typed.decisions[0], fact_refs=("f" * 64,))
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=(forged,),
-        expected_rule_ids=("LX0609-045",),
+        expected_rule_ids=("LX0609-07-02-01",),
         snapshot=session.snapshot,
     )
 
@@ -1735,8 +1735,8 @@ async def test_046_each_complete_dedicated_record_is_compliant_without_model(
         },
     ]
     result = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-046",),
-        wrapper_rules=[_wrapper("LX0609-046")],
+        rule_ids=("LX0609-07-02-02",),
+        wrapper_rules=[_wrapper("LX0609-07-02-02")],
         evidence_payload=_documents(
             bloodtrans_record=complete_rows,
             daily_course_record=[{"content": "病程记录：继续观察治疗。"}],
@@ -1784,8 +1784,8 @@ async def test_046_checks_every_transfusion_record_beyond_prompt_projection_limi
     )
 
     result = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-046",),
-        wrapper_rules=[_wrapper("LX0609-046")],
+        rule_ids=("LX0609-07-02-02",),
+        wrapper_rules=[_wrapper("LX0609-07-02-02")],
         evidence_payload=_documents(bloodtrans_record=rows),
         institute_id="safe-institute",
         patient_id="safe-patient",
@@ -1798,7 +1798,7 @@ async def test_046_checks_every_transfusion_record_beyond_prompt_projection_limi
     assert result.results[0]["metadata"]["reason_code"] == (
         "transfusion_course_record_incomplete"
     )
-    facts = dict(result.customer_display_facts)["LX0609-046"]
+    facts = dict(result.customer_display_facts)["LX0609-07-02-02"]
     assert facts["record_count"] == 9
     assert facts["incomplete_record_count"] == 1
     assert facts["missing_fields"] == ["component", "dose"]
@@ -1813,8 +1813,8 @@ async def test_046_recognizes_complete_customer_narrative_wording(monkeypatch):
     client = _Client([{"is_compliant": False}])
 
     result = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-046",),
-        wrapper_rules=[_wrapper("LX0609-046")],
+        rule_ids=("LX0609-07-02-02",),
+        wrapper_rules=[_wrapper("LX0609-07-02-02")],
         evidence_payload=_documents(
             bloodtrans_record=[
                 {
@@ -1849,8 +1849,8 @@ async def test_046_incomplete_or_cross_record_fields_are_deterministic_defect(
     client = _Client([{"is_compliant": True}])
 
     result = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-046",),
-        wrapper_rules=[_wrapper("LX0609-046")],
+        rule_ids=("LX0609-07-02-02",),
+        wrapper_rules=[_wrapper("LX0609-07-02-02")],
         evidence_payload=_documents(
             bloodtrans_record=[
                 {
@@ -1880,7 +1880,7 @@ async def test_046_incomplete_or_cross_record_fields_are_deterministic_defect(
         "transfusion_course_record_incomplete"
     )
     assert result.results[0]["metadata"]["executor_type"] == "program"
-    facts = dict(result.customer_display_facts)["LX0609-046"]
+    facts = dict(result.customer_display_facts)["LX0609-07-02-02"]
     assert facts["missing_fields"] == [
         "component",
         "dose",
@@ -1904,7 +1904,7 @@ async def test_046_llm_confirms_explicit_component_from_same_record_and_preserve
         "患者生命体征平稳，未见寒战、皮疹及输血不良反应。"
     )
     session = _typed_decision_session(
-        selected_rule_ids=("LX0609-046",),
+        selected_rule_ids=("LX0609-07-02-02",),
         bloodtrans_content=record,
     )
     client = _Client([
@@ -1917,8 +1917,8 @@ async def test_046_llm_confirms_explicit_component_from_same_record_and_preserve
     ])
 
     result = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-046",),
-        wrapper_rules=[_wrapper("LX0609-046")],
+        rule_ids=("LX0609-07-02-02",),
+        wrapper_rules=[_wrapper("LX0609-07-02-02")],
         evidence_payload=_documents(
             bloodtrans_record=[{"document_id": "typed-transfusion-document", "content": record}],
             daily_course_record=[{"content": "不得进入046成分识别提示词。"}],
@@ -1930,20 +1930,20 @@ async def test_046_llm_confirms_explicit_component_from_same_record_and_preserve
         llm_client=client,
         evidence_materials=session.materials,
         evidence_snapshot=session.snapshot,
-        decision_rule_ids=("LX0609-046",),
+        decision_rule_ids=("LX0609-07-02-02",),
     )
 
     assert result.results == ()
     assert reduce_luxian_0609_rule_decision(result.decisions[0]).final_state.value == "compliant"
     canonical = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-046",),
+        expected_rule_ids=("LX0609-07-02-02",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
     assert canonical[0].final_state.value == "compliant"
     assert canonical[0].reason_code == "requirement_satisfied"
-    facts = dict(result.customer_display_facts)["LX0609-046"]
+    facts = dict(result.customer_display_facts)["LX0609-07-02-02"]
     assert facts["missing_fields"] == []
     assert facts["source_document_ids"] == ["typed-transfusion-document"]
     assert result.llm_call_count == 1
@@ -2021,8 +2021,8 @@ async def test_046_llm_rejects_inferred_component_or_invalid_quote(
     )
     client = _Client([model_output])
     result = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-046",),
-        wrapper_rules=[_wrapper("LX0609-046")],
+        rule_ids=("LX0609-07-02-02",),
+        wrapper_rules=[_wrapper("LX0609-07-02-02")],
         evidence_payload=_documents(
             bloodtrans_record=[{"document_id": "blood-046-type-only", "content": record}],
         ),
@@ -2038,7 +2038,7 @@ async def test_046_llm_rejects_inferred_component_or_invalid_quote(
     assert result.llm_call_count == 1
     assert result.total_tokens == (0 if isinstance(model_output, Exception) else 110)
     if expected_status == "non_compliant":
-        assert dict(result.customer_display_facts)["LX0609-046"]["missing_fields"] == ["component"]
+        assert dict(result.customer_display_facts)["LX0609-07-02-02"]["missing_fields"] == ["component"]
 
 
 @pytest.mark.asyncio
@@ -2061,8 +2061,8 @@ async def test_046_llm_accepts_component_that_includes_blood_type_but_not_type_o
         }
     ])
     result = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-046",),
-        wrapper_rules=[_wrapper("LX0609-046")],
+        rule_ids=("LX0609-07-02-02",),
+        wrapper_rules=[_wrapper("LX0609-07-02-02")],
         evidence_payload=_documents(
             bloodtrans_record=[
                 {"document_id": "blood-046-ab-red-suspension", "content": record}
@@ -2086,8 +2086,8 @@ async def test_missing_consent_projection_is_data_gap_and_other_rules_are_not_bl
     client = _Client([{"is_compliant": True}])
 
     result = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-041", "LX0609-042", "LX0609-045"),
-        wrapper_rules=[_wrapper("LX0609-041"), _wrapper("LX0609-042"), _wrapper("LX0609-045")],
+        rule_ids=("LX0609-11-03-01", "LX0609-11-03-02", "LX0609-07-02-01"),
+        wrapper_rules=[_wrapper("LX0609-11-03-01"), _wrapper("LX0609-11-03-02"), _wrapper("LX0609-07-02-01")],
         evidence_payload=_documents(consent_form=[]),
         institute_id="safe-institute",
         patient_id="safe-patient",
@@ -2118,12 +2118,12 @@ async def test_dedicated_record_precedes_missing_daily_projection_for_044_047(
     }
 
     result = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-044", "LX0609-045", "LX0609-046", "LX0609-047"),
+        rule_ids=("LX0609-07-01-02", "LX0609-07-02-01", "LX0609-07-02-02", "LX0609-07-03-01"),
         wrapper_rules=[
-            _wrapper("LX0609-044"),
-            _wrapper("LX0609-045"),
-            _wrapper("LX0609-046"),
-            _wrapper("LX0609-047"),
+            _wrapper("LX0609-07-01-02"),
+            _wrapper("LX0609-07-02-01"),
+            _wrapper("LX0609-07-02-02"),
+            _wrapper("LX0609-07-03-01"),
         ],
         evidence_payload=_documents(
             bloodtrans_record=[complete_record],
@@ -2139,13 +2139,13 @@ async def test_dedicated_record_precedes_missing_daily_projection_for_044_047(
 
     assert [item["status"] for item in result.results] == ["compliant"] * 4
     display_facts = dict(result.customer_display_facts)
-    assert display_facts["LX0609-044"]["checked_fields"] == [
+    assert display_facts["LX0609-07-01-02"]["checked_fields"] == [
         "indication",
         "laboratory_indicator",
         "risk_history_or_status",
     ]
-    assert display_facts["LX0609-044"]["missing_fields"] == []
-    assert display_facts["LX0609-046"]["checked_fields"] == [
+    assert display_facts["LX0609-07-01-02"]["missing_fields"] == []
+    assert display_facts["LX0609-07-02-02"]["checked_fields"] == [
         "component",
         "dose",
         "process_observation",
@@ -2153,7 +2153,7 @@ async def test_dedicated_record_precedes_missing_daily_projection_for_044_047(
         "reason_or_indication",
         "start_and_end_time",
     ]
-    assert display_facts["LX0609-046"]["missing_fields"] == []
+    assert display_facts["LX0609-07-02-02"]["missing_fields"] == []
     assert result.llm_call_count == 0
     assert result.total_tokens == 0
     assert client.prompts == []
@@ -2175,11 +2175,11 @@ async def test_dedicated_record_proves_044_046_defects_before_daily_projection(
     }
 
     result = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-044", "LX0609-046", "LX0609-047"),
+        rule_ids=("LX0609-07-01-02", "LX0609-07-02-02", "LX0609-07-03-01"),
         wrapper_rules=[
-            _wrapper("LX0609-044"),
-            _wrapper("LX0609-046"),
-            _wrapper("LX0609-047"),
+            _wrapper("LX0609-07-01-02"),
+            _wrapper("LX0609-07-02-02"),
+            _wrapper("LX0609-07-03-01"),
         ],
         evidence_payload=_documents(
             bloodtrans_record=[record_without_purpose],
@@ -2208,7 +2208,7 @@ async def test_dedicated_record_proves_044_046_defects_before_daily_projection(
         "posttransfusion_evaluation_time_unavailable"
     )
     assert dict(result.customer_display_facts) == {
-        "LX0609-044": {
+        "LX0609-07-01-02": {
             "failure_kind": "pretransfusion_assessment_missing",
             "performed_transfusion_confirmed": True,
             "checked_fields": [
@@ -2227,7 +2227,7 @@ async def test_dedicated_record_proves_044_046_defects_before_daily_projection(
                 }
             ],
         },
-        "LX0609-046": {
+        "LX0609-07-02-02": {
             "failure_kind": "transfusion_course_record_incomplete",
             "performed_transfusion_confirmed": True,
             "record_count": 1,
@@ -2463,8 +2463,8 @@ async def test_047_missing_authoritative_end_stays_data_gap_without_daily_projec
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
 
     result = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-047",),
-        wrapper_rules=[_wrapper("LX0609-047")],
+        rule_ids=("LX0609-07-03-01",),
+        wrapper_rules=[_wrapper("LX0609-07-03-01")],
         evidence_payload=_documents(
             bloodtrans_record=[{"content": "输血结束，继续观察，未见输血不良反应。"}],
             daily_course_record=[],
@@ -2508,8 +2508,8 @@ async def test_043_incomplete_test_contract_is_data_gap_without_model(monkeypatc
         },
     ):
         result = await transfusion.execute_luxian_0609_native_transfusion_rules(
-            rule_ids=("LX0609-043",),
-            wrapper_rules=[_wrapper("LX0609-043")],
+            rule_ids=("LX0609-07-01-01",),
+            wrapper_rules=[_wrapper("LX0609-07-01-01")],
             evidence_payload=_documents(**lab_documents),
             institute_id="safe-institute",
             patient_id="safe-patient",
@@ -2535,8 +2535,8 @@ async def test_047_posttransfusion_evaluation_is_deterministic_without_model(mon
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
 
     same_record = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-047",),
-        wrapper_rules=[_wrapper("LX0609-047")],
+        rule_ids=("LX0609-07-03-01",),
+        wrapper_rules=[_wrapper("LX0609-07-03-01")],
         evidence_payload=_documents(
             bloodtrans_record=[
                 {
@@ -2566,14 +2566,14 @@ async def test_047_posttransfusion_evaluation_is_deterministic_without_model(mon
     )
     assert same_record.results[0]["metadata"]["executor_type"] == "program"
     assert same_record.llm_call_count == 0
-    same_record_facts = dict(same_record.customer_display_facts)["LX0609-047"]
+    same_record_facts = dict(same_record.customer_display_facts)["LX0609-07-03-01"]
     assert same_record_facts["transfusion_end_time"] == "2026-06-05 16:10:00"
     assert same_record_facts["evaluation_time"] == "2026-06-05 16:20:00"
     assert same_record_facts["elapsed_hours"] == 0.17
 
     later_course = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-047",),
-        wrapper_rules=[_wrapper("LX0609-047")],
+        rule_ids=("LX0609-07-03-01",),
+        wrapper_rules=[_wrapper("LX0609-07-03-01")],
         evidence_payload=_documents(
             bloodtrans_record=[
                 {"content": "2026-06-05 16:10输血结束，输注过程顺利。"}
@@ -2611,8 +2611,8 @@ async def test_047_accepts_controlled_timezone_and_postposition_forms(
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
 
     result = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-047",),
-        wrapper_rules=[_wrapper("LX0609-047")],
+        rule_ids=("LX0609-07-03-01",),
+        wrapper_rules=[_wrapper("LX0609-07-03-01")],
         evidence_payload=_documents(
             bloodtrans_record=[
                 {
@@ -2669,8 +2669,8 @@ async def test_047_allows_final_summary_but_preserves_explicit_missing_statement
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
 
     result = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-047",),
-        wrapper_rules=[_wrapper("LX0609-047")],
+        rule_ids=("LX0609-07-03-01",),
+        wrapper_rules=[_wrapper("LX0609-07-03-01")],
         evidence_payload=_documents(
             bloodtrans_record=[
                 {"content": content, "record_time": datetime(2026, 6, 5, 16, 20)}
@@ -2706,8 +2706,8 @@ async def test_047_distinguishes_normal_evaluation_from_missing_documentation(
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
 
     result = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-047",),
-        wrapper_rules=[_wrapper("LX0609-047")],
+        rule_ids=("LX0609-07-03-01",),
+        wrapper_rules=[_wrapper("LX0609-07-03-01")],
         evidence_payload=_documents(
             bloodtrans_record=[
                 {
@@ -2735,8 +2735,8 @@ async def test_047_rejects_pre_end_or_unrelated_observation_and_requires_end_tim
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
 
     no_post_evaluation = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-047",),
-        wrapper_rules=[_wrapper("LX0609-047")],
+        rule_ids=("LX0609-07-03-01",),
+        wrapper_rules=[_wrapper("LX0609-07-03-01")],
         evidence_payload=_documents(
             bloodtrans_record=[
                 {
@@ -2766,8 +2766,8 @@ async def test_047_rejects_pre_end_or_unrelated_observation_and_requires_end_tim
     assert no_post_evaluation.llm_call_count == 0
 
     missing_end_time = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-047",),
-        wrapper_rules=[_wrapper("LX0609-047")],
+        rule_ids=("LX0609-07-03-01",),
+        wrapper_rules=[_wrapper("LX0609-07-03-01")],
         evidence_payload=_documents(
             bloodtrans_record=[
                 {"content": "输注完毕后复查血红蛋白上升，症状改善。"}
@@ -2802,8 +2802,8 @@ async def test_047_rejects_planned_time_weak_context_and_unresolved_end_rows(
         *, blood_rows: list[dict], daily_rows: list[dict]
     ) -> transfusion.NativeTransfusionExecutionResult:
         return await transfusion.execute_luxian_0609_native_transfusion_rules(
-            rule_ids=("LX0609-047",),
-            wrapper_rules=[_wrapper("LX0609-047")],
+            rule_ids=("LX0609-07-03-01",),
+            wrapper_rules=[_wrapper("LX0609-07-03-01")],
             evidence_payload=_documents(
                 bloodtrans_record=blood_rows,
                 daily_course_record=daily_rows,
@@ -2890,8 +2890,8 @@ async def test_044_clear_pretransfusion_assessment_truth_is_deterministic_withou
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
 
     missing = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-044",),
-        wrapper_rules=[_wrapper("LX0609-044")],
+        rule_ids=("LX0609-07-01-02",),
+        wrapper_rules=[_wrapper("LX0609-07-01-02")],
         evidence_payload=_documents(
             bloodtrans_record=[
                 {
@@ -2916,8 +2916,8 @@ async def test_044_clear_pretransfusion_assessment_truth_is_deterministic_withou
     assert missing.llm_call_count == 0
 
     complete = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-044",),
-        wrapper_rules=[_wrapper("LX0609-044")],
+        rule_ids=("LX0609-07-01-02",),
+        wrapper_rules=[_wrapper("LX0609-07-01-02")],
         evidence_payload=_documents(
             bloodtrans_record=[{"content": "输血记录：按评估及医嘱完成输注。"}],
             blood_application=[
@@ -2944,8 +2944,8 @@ async def test_044_clear_pretransfusion_assessment_truth_is_deterministic_withou
 
     gray_client = _Client([{"is_compliant": True}])
     gray = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-044",),
-        wrapper_rules=[_wrapper("LX0609-044")],
+        rule_ids=("LX0609-07-01-02",),
+        wrapper_rules=[_wrapper("LX0609-07-01-02")],
         evidence_payload=_documents(
             bloodtrans_record=[{"content": "输血记录：已记录输血指征，输注过程平稳。"}],
             blood_application=[],
@@ -2966,8 +2966,8 @@ async def test_044_clear_pretransfusion_assessment_truth_is_deterministic_withou
 
     split_client = _Client([{"is_compliant": False}])
     split = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-044",),
-        wrapper_rules=[_wrapper("LX0609-044")],
+        rule_ids=("LX0609-07-01-02",),
+        wrapper_rules=[_wrapper("LX0609-07-01-02")],
         evidence_payload=_documents(
             bloodtrans_record=[{"content": "输血前评估：患者具有输血指征。"}],
             blood_application=[{"content": "患者贫血，血红蛋白降低。"}],
@@ -2985,8 +2985,8 @@ async def test_044_clear_pretransfusion_assessment_truth_is_deterministic_withou
 
     application_client = _Client([{"is_compliant": True}])
     application_gray = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-044",),
-        wrapper_rules=[_wrapper("LX0609-044")],
+        rule_ids=("LX0609-07-01-02",),
+        wrapper_rules=[_wrapper("LX0609-07-01-02")],
         evidence_payload=_documents(
             bloodtrans_record=[{"content": "输血记录：按医嘱完成输注。"}],
             blood_application=[
@@ -3021,8 +3021,8 @@ async def test_044_same_record_purpose_without_assessment_marker_is_non_complian
     client = _Client([])
 
     result = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-044",),
-        wrapper_rules=[_wrapper("LX0609-044")],
+        rule_ids=("LX0609-07-01-02",),
+        wrapper_rules=[_wrapper("LX0609-07-01-02")],
         evidence_payload=_documents(
             bloodtrans_record=[
                 {
@@ -3060,8 +3060,8 @@ async def test_044_transfusion_purpose_without_preassessment_is_non_compliant_wi
     client = _Client([{"is_compliant": True}])
 
     result = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-044",),
-        wrapper_rules=[_wrapper("LX0609-044")],
+        rule_ids=("LX0609-07-01-02",),
+        wrapper_rules=[_wrapper("LX0609-07-01-02")],
         evidence_payload=_documents(
             bloodtrans_record=[
                 {"content": "输血目的：纠正贫血；患者血红蛋白降低。"}
@@ -3099,8 +3099,8 @@ async def test_044_uses_one_bounded_llm_call_for_legacy_application_reason(
     )
 
     result = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-044",),
-        wrapper_rules=[_wrapper("LX0609-044")],
+        rule_ids=("LX0609-07-01-02",),
+        wrapper_rules=[_wrapper("LX0609-07-01-02")],
         evidence_payload=_documents(
             mr_bloodtrans=[
                 {"transfution_datetime": "2026-08-20 14:00:00"}
@@ -3146,8 +3146,8 @@ async def test_044_llm_uncertain_is_evaluation_unknown_not_model_error(monkeypat
     )
 
     result = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-044",),
-        wrapper_rules=[_wrapper("LX0609-044")],
+        rule_ids=("LX0609-07-01-02",),
+        wrapper_rules=[_wrapper("LX0609-07-01-02")],
         evidence_payload=_documents(
             mr_bloodtrans=[{"transfution_datetime": "2026-08-20 14:00:00"}],
             blood_application=[{
@@ -3186,8 +3186,8 @@ async def test_044_rejects_llm_reason_quote_outside_application_text(monkeypatch
     )
 
     result = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-044",),
-        wrapper_rules=[_wrapper("LX0609-044")],
+        rule_ids=("LX0609-07-01-02",),
+        wrapper_rules=[_wrapper("LX0609-07-01-02")],
         evidence_payload=_documents(
             mr_bloodtrans=[
                 {"transfution_datetime": "2026-08-20 14:00:00"}
@@ -3221,8 +3221,8 @@ async def test_048_does_not_claim_three_document_mismatch_before_comparison_cont
 ):
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
     result = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-048",),
-        wrapper_rules=[_wrapper("LX0609-048")],
+        rule_ids=("LX0609-07-04-01",),
+        wrapper_rules=[_wrapper("LX0609-07-04-01")],
         evidence_payload=_documents(
             surgery_record=[
                 {"surgery_process": "术中出血约800ml，输注红细胞2U。"}
@@ -3244,7 +3244,7 @@ async def test_048_does_not_claim_three_document_mismatch_before_comparison_cont
         "transfusion_comparison_fields_unavailable"
     )
     assert result.customer_display_facts == ((
-        "LX0609-048",
+        "LX0609-07-04-01",
         {
             "failure_kind": "transfusion_comparison_fields_missing",
             "missing_fields_by_source": {
@@ -3262,8 +3262,8 @@ async def test_048_without_credible_intraoperative_transfusion_is_not_applicable
 ):
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
     result = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-048",),
-        wrapper_rules=[_wrapper("LX0609-048")],
+        rule_ids=("LX0609-07-04-01",),
+        wrapper_rules=[_wrapper("LX0609-07-04-01")],
         evidence_payload=_documents(
             surgery_record=[{"record_content": "中心静脉置管术，过程顺利。"}],
             anesthesia_record=[],
@@ -3286,7 +3286,7 @@ async def test_048_without_credible_intraoperative_transfusion_is_not_applicable
 
 @pytest.mark.asyncio
 async def test_041_042_use_dedicated_consent_and_return_controlled_facts() -> None:
-    selected = ("LX0609-041", "LX0609-042")
+    selected = ("LX0609-11-03-01", "LX0609-11-03-02")
 
     def read(**kwargs):
         rows = {
@@ -3344,8 +3344,8 @@ async def test_041_042_use_dedicated_consent_and_return_controlled_facts() -> No
         for item in result.decisions
     ] == ["compliant", "compliant"]
     facts = dict(result.customer_display_facts)
-    assert facts["LX0609-041"]["consent_count"] == 1
-    assert facts["LX0609-042"]["checked_fields"] == [
+    assert facts["LX0609-11-03-01"]["consent_count"] == 1
+    assert facts["LX0609-11-03-02"]["checked_fields"] == [
         "patient_information",
         "diagnosis",
         "indication",
@@ -3413,7 +3413,7 @@ def test_043_public_pretransfusion_row_resolvers_preserve_item_and_admission_con
 
 @pytest.mark.asyncio
 async def test_043_checks_nine_items_before_transfusion_and_returns_times() -> None:
-    selected = ("LX0609-043",)
+    selected = ("LX0609-07-01-01",)
     names = [
         "乙肝表面抗原",
         "乙肝表面抗体",
@@ -3462,7 +3462,7 @@ async def test_043_checks_nine_items_before_transfusion_and_returns_times() -> N
     )
     result = await transfusion.execute_luxian_0609_native_transfusion_rules(
         rule_ids=selected,
-        wrapper_rules=[_wrapper("LX0609-043")],
+        wrapper_rules=[_wrapper("LX0609-07-01-01")],
         evidence_payload=_documents(),
         institute_id="I",
         patient_id="P",
@@ -3475,7 +3475,7 @@ async def test_043_checks_nine_items_before_transfusion_and_returns_times() -> N
     )
 
     assert reduce_luxian_0609_rule_decision(result.decisions[0]).final_state.value == "compliant"
-    facts = dict(result.customer_display_facts)["LX0609-043"]
+    facts = dict(result.customer_display_facts)["LX0609-07-01-01"]
     assert len(facts["checked_items"]) == 9
     assert facts["latest_test_time"] == "2026-06-05 10:00:00"
     assert facts["transfusion_time"] == "2026-06-05 14:20:00"
@@ -3497,8 +3497,8 @@ async def test_048_compares_component_and_dose_across_three_documents(
 ) -> None:
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
     result = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-048",),
-        wrapper_rules=[_wrapper("LX0609-048")],
+        rule_ids=("LX0609-07-04-01",),
+        wrapper_rules=[_wrapper("LX0609-07-04-01")],
         evidence_payload=_documents(
             surgery_record=[{"record_content": "术中输注红细胞2U。"}],
             anesthesia_record=[{"record_content": "术中输注红细胞2U。"}],
@@ -3512,7 +3512,7 @@ async def test_048_compares_component_and_dose_across_three_documents(
     )
 
     assert result.results[0]["status"] == expected_status
-    facts = dict(result.customer_display_facts)["LX0609-048"]
+    facts = dict(result.customer_display_facts)["LX0609-07-04-01"]
     assert (facts.get("verification_kind") or facts.get("failure_kind")) == expected_kind
     assert set(facts["comparison_matrix"]) == {
         "surgery_record",
@@ -3526,7 +3526,7 @@ async def test_conservative_transfusion_gaps_explain_missing_material_not_patien
     monkeypatch,
 ):
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
-    selected = ("LX0609-041", "LX0609-042", "LX0609-043", "LX0609-049")
+    selected = ("LX0609-11-03-01", "LX0609-11-03-02", "LX0609-07-01-01", "LX0609-07-04-02")
     result = await transfusion.execute_luxian_0609_native_transfusion_rules(
         rule_ids=selected,
         wrapper_rules=[_wrapper(rule_id) for rule_id in selected],
@@ -3571,8 +3571,8 @@ async def test_source_error_and_invalid_model_output_fail_closed_without_echo(mo
 
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _failed_reader)
     result = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-041", "LX0609-049"),
-        wrapper_rules=[_wrapper("LX0609-041"), _wrapper("LX0609-049")],
+        rule_ids=("LX0609-11-03-01", "LX0609-07-04-02"),
+        wrapper_rules=[_wrapper("LX0609-11-03-01"), _wrapper("LX0609-07-04-02")],
         evidence_payload=_documents(bloodtrans_record=[]),
         institute_id="safe-institute",
         patient_id="safe-patient",
@@ -3585,8 +3585,8 @@ async def test_source_error_and_invalid_model_output_fail_closed_without_echo(mo
 
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
     invalid = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-049",),
-        wrapper_rules=[_wrapper("LX0609-049")],
+        rule_ids=("LX0609-07-04-02",),
+        wrapper_rules=[_wrapper("LX0609-07-04-02")],
         evidence_payload=_documents(),
         institute_id="safe-institute",
         patient_id="safe-patient",
@@ -3599,7 +3599,7 @@ async def test_source_error_and_invalid_model_output_fail_closed_without_echo(mo
 
 
 def test_transfusion_consent_sources_never_alias_surgery_consent() -> None:
-    for rule_id in ("LX0609-041", "LX0609-042"):
+    for rule_id in ("LX0609-11-03-01", "LX0609-11-03-02"):
         assert "surgery_inform_consent" not in transfusion._typed_rule_source_keys(
             rule_id
         )

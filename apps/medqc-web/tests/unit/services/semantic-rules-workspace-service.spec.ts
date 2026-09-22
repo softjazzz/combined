@@ -138,8 +138,8 @@ describe('semantic rules workspace service', () => {
 
   it('应识别泸县0609包装规则并支持映射规则搜索', () => {
     const normalized = normalizeSemanticRule({
-      rule_id: 'LX0609-001',
-      rule_code: 'LX0609-001',
+      rule_id: 'LX0609-01-01-01',
+      rule_code: 'LX0609-01-01-01',
       name: '入院记录24小时内完成',
       description: '客户质控点',
       category: '入院记录',
@@ -150,7 +150,7 @@ describe('semantic rules workspace service', () => {
       applicable_documents: ['admission_record'],
     })
 
-    expect(normalized.rule_id).toBe('LX0609-001')
+    expect(normalized.rule_id).toBe('LX0609-01-01-01')
     expect(normalized.primary_execution_rule_id).toBe('SC-002')
     expect(
       filterSemanticRules([normalized], {
@@ -162,9 +162,52 @@ describe('semantic rules workspace service', () => {
     ).toHaveLength(1)
   })
 
+  it('旧三位泸县编号不得进入主链，四段式 rule_code 必须与 rule_id 同身份', () => {
+    const legacy = normalizeSemanticRule({
+      rule_id: 'LX0609-001',
+      rule_code: 'LX0609-001',
+      name: '历史编号不应被静默兼容',
+    })
+    expect(legacy.rule_id).toBe('')
+    expect(legacy.rule_code).toBeUndefined()
+
+    const lowerCaseLegacy = normalizeSemanticRule({
+      rule_id: 'lx0609-001',
+      name: '大小写变化也不能绕过旧编号拒绝',
+    })
+    expect(lowerCaseLegacy.rule_id).toBe('')
+    expect(lowerCaseLegacy.rule_code).toBeUndefined()
+
+    const current = normalizeSemanticRule({
+      rule_id: 'LX0609-01-01-01',
+      rule_code: 'LX0609-001',
+      mapped_rule_ids: ['LX0609-001', 'SC-002'],
+      primary_execution_rule_id: 'LX0609-001',
+      name: '四段式编号保持唯一身份',
+    })
+    expect(current.rule_id).toBe('')
+    expect(current.rule_code).toBeUndefined()
+    expect(current.mapped_rule_ids).toEqual(['SC-002'])
+    expect(current.primary_execution_rule_id).toBeUndefined()
+  })
+
+  it.each([
+    ['LX0609-001', 'LX0609-01-01-01'],
+    ['LX0609-01-01-01', 'LX0609-01-02-01'],
+    ['LX0609-00-01-01', 'LX0609-00-01-01'],
+  ])('拒绝不一致或非法LX身份：%s / %s', (rule_id, rule_code) => {
+    expect(normalizeSemanticRule({ rule_id, rule_code }).rule_id).toBe('')
+  })
+
+  it('同一合法LX编号可规范大小写', () => {
+    const rule = normalizeSemanticRule({ rule_id: 'lx0609-06-01-02', rule_code: 'LX0609-06-01-02' })
+    expect(rule.rule_id).toBe('LX0609-06-01-02')
+    expect(rule.rule_code).toBe(rule.rule_id)
+  })
+
   it('仅在客户政策对象完整时保留总表口径，不得用旧包装器字段补造', () => {
     const withPolicy = normalizeSemanticRule({
-      rule_id: 'LX0609-025',
+      rule_id: 'LX0609-04-02-04',
       name: '植入物相关记录符合率',
       description: '旧包装器描述',
       customer_text: '旧客户说明',
@@ -184,7 +227,7 @@ describe('semantic rules workspace service', () => {
     })
 
     const incompletePolicy = normalizeSemanticRule({
-      rule_id: 'LX0609-025',
+      rule_id: 'LX0609-04-02-04',
       name: '植入物相关记录符合率',
       customer_text: '旧客户说明',
       customer_policy: {

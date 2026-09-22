@@ -24,7 +24,7 @@ from app.services.luxian_0609.canonical_result_finalizer import (
 )
 
 
-RULE_IDS = ("LX0609-030", "LX0609-032")
+RULE_IDS = ("LX0609-04-02-02", "LX0609-04-03-01")
 
 
 def _execute_and_aggregate(
@@ -381,7 +381,7 @@ def test_surgery_presence_facts_are_finalizer_validated_and_aggregator_has_no_03
     """030/032 的 facts 合同不再由聚合器重解释 target_document。"""
 
     assert validate_luxian_0609_executor_customer_display_facts(
-        rule_id="LX0609-030",
+        rule_id="LX0609-04-02-02",
         raw={
             "verification_kind": "surgery_document_present",
             "target_document": "surgery_record",
@@ -395,8 +395,8 @@ def test_surgery_presence_facts_are_finalizer_validated_and_aggregator_has_no_03
     aggregator_contract_source = inspect.getsource(
         safe_luxian_0609_customer_display_facts
     )
-    assert "LX0609-030" not in aggregator_contract_source
-    assert "LX0609-032" not in aggregator_contract_source
+    assert "LX0609-04-02-02" not in aggregator_contract_source
+    assert "LX0609-04-03-01" not in aggregator_contract_source
 
 
 def test_surgery_presence_invalid_typed_facts_fail_closed_per_rule() -> None:
@@ -418,12 +418,12 @@ def test_surgery_presence_invalid_typed_facts_fail_closed_per_rule() -> None:
         wrapper_rules=[
             rule
             for rule in load_luxian_0609_rules()
-            if rule["rule_id"] == "LX0609-030"
+            if rule["rule_id"] == "LX0609-04-02-02"
         ],
         execution_results=[],
         reduced_decisions=(reduced[0],),
         customer_display_facts=(
-            ("LX0609-030", {"raw_private_text": "PRIVATE-030-FACT"}),
+            ("LX0609-04-02-02", {"raw_private_text": "PRIVATE-030-FACT"}),
         ),
         format_evidence=False,
         audit_context={

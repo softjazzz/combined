@@ -20,7 +20,7 @@ class Explosive:
 
 
 def _plan():
-    return planner.build_luxian_0609_shadow_plan(visit_ref=VISIT, selected_rule_ids=["LX0609-030"], scoped_customer_rule_ids=["LX0609-030"], record_rule_map={VISIT: ["LX0609-030"]}, planner_schema_version="planner-v1", rule_plan_version="029-030-032-v1", created_at=CREATED)
+    return planner.build_luxian_0609_shadow_plan(visit_ref=VISIT, selected_rule_ids=["LX0609-04-02-02"], scoped_customer_rule_ids=["LX0609-04-02-02"], record_rule_map={VISIT: ["LX0609-04-02-02"]}, planner_schema_version="planner-v1", rule_plan_version="029-030-032-v1", created_at=CREATED)
 
 
 def _inputs():
@@ -36,7 +36,7 @@ def _inputs():
 
 
 def _call(**kwargs):
-    return runtime_shadow_hook.run_luxian_0609_runtime_shadow(visit_ref=VISIT, selected_rule_ids=["LX0609-030"], scoped_customer_rule_ids=["LX0609-030"], record_rule_map={VISIT: ["LX0609-030"]}, **kwargs)
+    return runtime_shadow_hook.run_luxian_0609_runtime_shadow(visit_ref=VISIT, selected_rule_ids=["LX0609-04-02-02"], scoped_customer_rule_ids=["LX0609-04-02-02"], record_rule_map={VISIT: ["LX0609-04-02-02"]}, **kwargs)
 
 
 def test_disabled_does_not_read_downstream_inputs():
@@ -108,8 +108,8 @@ def test_provider_029_qualification_keeps_raw_available_but_requires_pre_surgery
 
     monkeypatch.setattr(runtime_shadow_input_provider, "read_luxian_0609_runtime_source_rows", _reader)
     result = runtime_shadow_hook.run_luxian_0609_runtime_shadow(
-        visit_ref=VISIT, selected_rule_ids=["LX0609-029"], scoped_customer_rule_ids=["LX0609-029"],
-        record_rule_map={VISIT: ["LX0609-029"]}, institute_id="i", patient_id="p",
+        visit_ref=VISIT, selected_rule_ids=["LX0609-04-01-01"], scoped_customer_rule_ids=["LX0609-04-01-01"],
+        record_rule_map={VISIT: ["LX0609-04-01-01"]}, institute_id="i", patient_id="p",
         settings=SimpleNamespace(LUXIAN_0609_RUNTIME_SHADOW_ENABLED=True),
     )
     assert result["disposition"] == "completed"
@@ -133,8 +133,8 @@ def test_provider_032_qualification_rejects_empty_shell_without_changing_source_
 
     monkeypatch.setattr(runtime_shadow_input_provider, "read_luxian_0609_runtime_source_rows", _reader)
     result = runtime_shadow_hook.run_luxian_0609_runtime_shadow(
-        visit_ref=VISIT, selected_rule_ids=["LX0609-032"], scoped_customer_rule_ids=["LX0609-032"],
-        record_rule_map={VISIT: ["LX0609-032"]}, institute_id="i", patient_id="p",
+        visit_ref=VISIT, selected_rule_ids=["LX0609-04-03-01"], scoped_customer_rule_ids=["LX0609-04-03-01"],
+        record_rule_map={VISIT: ["LX0609-04-03-01"]}, institute_id="i", patient_id="p",
         settings=SimpleNamespace(LUXIAN_0609_RUNTIME_SHADOW_ENABLED=True),
     )
     assert result["disposition"] == "completed"
@@ -154,7 +154,7 @@ def test_live_native_infrastructure_failure_remains_shadow_error(monkeypatch):
         "execute_luxian_0609_native_rules",
         lambda **_: SimpleNamespace(
             results=(),
-            planned_rule_ids=("LX0609-030",),
+            planned_rule_ids=("LX0609-04-02-02",),
             execution_fingerprint="",
             terminal_reason_code="native_execution_failure",
         ),

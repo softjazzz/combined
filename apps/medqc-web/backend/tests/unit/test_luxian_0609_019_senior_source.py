@@ -70,7 +70,7 @@ def _session(
         )
 
     return build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-019",),
+        selected_rule_ids=("LX0609-06-02-02",),
         institute_id="safe-institute",
         patient_id="safe-patient",
         visit_id="safe-visit",
@@ -78,15 +78,15 @@ def _session(
         created_at=CREATED_AT,
         row_reader=reader,
         additional_source_keys=resolve_legacy_executor_material_source_keys(
-            ("tumor_pathology",), selected_rule_ids=("LX0609-019",)
+            ("tumor_pathology",), selected_rule_ids=("LX0609-06-02-02",)
         ),
     )
 
 
 async def _execute(session, client):
     return await tumor.execute_luxian_0609_native_tumor_pathology_rules(
-        rule_ids=("LX0609-019",),
-        wrapper_rules=[_wrapper("LX0609-019")],
+        rule_ids=("LX0609-06-02-02",),
+        wrapper_rules=[_wrapper("LX0609-06-02-02")],
         evidence_payload={},
         institute_id="safe-institute",
         patient_id="safe-patient",
@@ -95,13 +95,13 @@ async def _execute(session, client):
         llm_client=client,
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
-        decision_rule_ids=("LX0609-019",),
+        decision_rule_ids=("LX0609-06-02-02",),
     )
 
 
 def test_019_declares_senior_course_as_decision_support_source() -> None:
     assert "senior_course_record" in resolve_luxian_0609_decision_support_source_keys(
-        ("LX0609-019",)
+        ("LX0609-06-02-02",)
     )
 
 
@@ -109,7 +109,7 @@ def test_019_runtime_prompt_accepts_senior_as_course_sampling_evidence() -> None
     prompt = next(
         item["custom_prompt"]
         for item in load_luxian_0609_rules()
-        if item["rule_id"] == "LX0609-019"
+        if item["rule_id"] == "LX0609-06-02-02"
     )
 
     assert (
@@ -137,7 +137,7 @@ async def test_019_c30_senior_text_enters_single_semantic_call_and_exact_refs() 
         "senior_course_record", snapshot=session.snapshot
     )[0][0]
     assert senior_ref.removeprefix("sha256:") in result.decisions[0].fact_refs
-    facts = dict(result.customer_display_facts)["LX0609-019"]
+    facts = dict(result.customer_display_facts)["LX0609-06-02-02"]
     assert [item["source"] for item in facts["checked_target_sources"]] == [
         "surgery_record",
         "daily_course_record",
@@ -156,14 +156,14 @@ async def test_019_senior_documented_sampling_is_programmatic() -> None:
 
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-019",),
+        expected_rule_ids=("LX0609-06-02-02",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )[0]
     assert reduced.final_state.value == "compliant"
     assert reduced.reason_code == "requirement_satisfied"
     assert result.llm_call_count == 0
-    facts = dict(result.customer_display_facts)["LX0609-019"]
+    facts = dict(result.customer_display_facts)["LX0609-06-02-02"]
     assert facts["documented_sources"] == ["senior_course_record"]
 
 
@@ -199,7 +199,7 @@ def test_019_mapping_accepts_legacy_two_sources_and_new_three_sources() -> None:
             ],
         }
         safe = safe_tumor_pathology_customer_display_facts(
-            rule_id="LX0609-019", raw=raw
+            rule_id="LX0609-06-02-02", raw=raw
         )
         assert safe is not None
         assert [item["source"] for item in safe["checked_target_sources"]] == list(
@@ -209,7 +209,7 @@ def test_019_mapping_accepts_legacy_two_sources_and_new_three_sources() -> None:
 
 def test_019_mapping_rejects_senior_documented_with_legacy_checked_sources() -> None:
     assert safe_tumor_pathology_customer_display_facts(
-        rule_id="LX0609-019",
+        rule_id="LX0609-06-02-02",
         raw={
             "verification_kind": "pathology_sampling_documentation_check",
             "pathology_trigger_sources": ["pathology_exam_master"],
@@ -237,7 +237,7 @@ def test_019_renderer_names_only_checked_target_sources(
     checked_sources: tuple[str, ...], expected_scope: str
 ) -> None:
     finding = customer_finding_from_controlled_facts(
-        rule_id="LX0609-019",
+        rule_id="LX0609-06-02-02",
         facts={
             "failure_kind": "pathology_sampling_not_documented",
             "pathology_trigger_sources": ["pathology_exam_master"],
@@ -255,7 +255,7 @@ def test_019_renderer_names_only_checked_target_sources(
 def test_019_trigger_absent_does_not_claim_target_sources_were_checked() -> None:
     decision = reduce_luxian_0609_rule_decision(
         RuleDecision(
-            rule_id="LX0609-019",
+            rule_id="LX0609-06-02-02",
             snapshot_hash=SNAPSHOT_HASH,
             applicability=ApplicabilityState.NOT_APPLICABLE,
             evidence_state=EvidenceState.SUFFICIENT,
@@ -278,8 +278,8 @@ async def test_013_does_not_consume_senior_course_source() -> None:
     session = _session(senior_rows=({"record_content": C30_SENIOR_TEXT},))
     client = _Client([{"is_compliant": True}])
     result = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
-        rule_ids=("LX0609-013",),
-        wrapper_rules=[_wrapper("LX0609-013")],
+        rule_ids=("LX0609-06-02-03",),
+        wrapper_rules=[_wrapper("LX0609-06-02-03")],
         evidence_payload={},
         institute_id="safe-institute",
         patient_id="safe-patient",
@@ -288,7 +288,7 @@ async def test_013_does_not_consume_senior_course_source() -> None:
         llm_client=client,
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
-        decision_rule_ids=("LX0609-013",),
+        decision_rule_ids=("LX0609-06-02-03",),
     )
 
     assert result.llm_call_count == 1

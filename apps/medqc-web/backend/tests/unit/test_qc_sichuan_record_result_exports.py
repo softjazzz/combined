@@ -58,7 +58,7 @@ class _Workspace:
             "is_complete": True,
             "items": [
                 {
-                    "rule_id": "LX0609-001",
+                    "rule_id": "LX0609-01-01-01",
                     "rule_name": "入院记录及时完成",
                     "source_document": "入院记录",
                     "qc_point": "入院后24小时内完成",
@@ -83,7 +83,7 @@ class _Workspace:
                 "is_complete": True,
                 "items": [
                     {
-                        "rule_id": "LX0609-001",
+                        "rule_id": "LX0609-01-01-01",
                         "source_document": "入院记录",
                         "qc_point": "入院后24小时内完成",
                         "status": "non_compliant",

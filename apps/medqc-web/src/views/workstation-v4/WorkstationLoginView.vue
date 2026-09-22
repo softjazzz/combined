@@ -117,7 +117,7 @@ const handleDemoLogin = async (account: (typeof demoAccounts)[number]) => {
             class="login-hospital-logo"
             width="2172"
             height="724"
-          />
+          >
         </div>
       </header>
 
@@ -129,7 +129,7 @@ const handleDemoLogin = async (account: (typeof demoAccounts)[number]) => {
               src="@/assets/images/login-slogan-calligraphy-v3.png"
               alt="让病案质控，更智能，更清晰。基于大模型的医疗质控工作台"
               class="login-slogan-art"
-            />
+            >
           </h1>
         </section>
 
@@ -171,8 +171,12 @@ const handleDemoLogin = async (account: (typeof demoAccounts)[number]) => {
                 @click="showDemoAccounts = !showDemoAccounts"
               >
                 <div>
-                  <div class="text-[15px] font-bold text-slate-800">演示账号快速登录</div>
-                  <div class="mt-0.5 text-xs text-slate-500">功能演示：admin / admin888</div>
+                  <div class="text-[15px] font-bold text-slate-800">
+                    演示账号快速登录
+                  </div>
+                  <div class="mt-0.5 text-xs text-slate-500">
+                    功能演示：admin / admin888
+                  </div>
                 </div>
                 <div
                   class="flex h-8 w-8 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-slate-200/50"

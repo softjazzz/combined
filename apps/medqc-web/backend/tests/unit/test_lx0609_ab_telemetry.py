@@ -26,6 +26,12 @@ def _load_runner():
 runner = _load_runner()
 
 
+def test_default_rule_ids_resolve_in_current_rule_catalog() -> None:
+    catalog_rule_ids = {rule["rule_id"] for rule in runner.load_luxian_0609_rules()}
+
+    assert set(runner.DEFAULT_SELECTED_RULE_IDS) <= catalog_rule_ids
+
+
 class FakeClient:
     def __init__(self, responses: list[dict[str, Any] | Exception] | None = None) -> None:
         self.model = "fake-model"
@@ -119,7 +125,7 @@ async def test_one_shared_call_is_counted_once_for_multiple_rules() -> None:
         stage="fact_extraction",
         record_id="record-1",
         family_key="surgery_anesthesia",
-        rule_ids=["LX0609-029", "LX0609-030"],
+        rule_ids=["LX0609-04-01-01", "LX0609-04-02-02"],
     ):
         await wrapped.generate("shared fact prompt")
 
@@ -127,7 +133,7 @@ async def test_one_shared_call_is_counted_once_for_multiple_rules() -> None:
     entry = telemetry["llm_call_ledger"][0]
     assert telemetry["llm_call_count"] == 1
     assert telemetry["total_tokens"] == 12
-    assert entry["rule_ids"] == ["LX0609-029", "LX0609-030"]
+    assert entry["rule_ids"] == ["LX0609-04-01-01", "LX0609-04-02-02"]
     assert entry["cache_hit"] is None
     assert entry["cache_observation"] == "unavailable"
 
@@ -142,10 +148,10 @@ async def test_fact_extraction_internal_calls_keep_family_specific_attribution()
         stage="fact_extraction",
         record_id="record-1",
         family_key="multi_family",
-        rule_ids=["LX0609-029", "LX0609-030", "LX0609-019"],
+        rule_ids=["LX0609-04-01-01", "LX0609-04-02-02", "LX0609-06-02-02"],
         rule_ids_by_family={
-            "surgery_anesthesia": ["LX0609-029", "LX0609-030"],
-            "tumor_pathology": ["LX0609-019"],
+            "surgery_anesthesia": ["LX0609-04-01-01", "LX0609-04-02-02"],
+            "tumor_pathology": ["LX0609-06-02-02"],
         },
     ):
         await wrapped.generate("抽取与“手术麻醉”相关的事实")
@@ -153,8 +159,8 @@ async def test_fact_extraction_internal_calls_keep_family_specific_attribution()
 
     entries = ledger.entries(stage="fact_extraction", record_id="record-1")
     assert [(entry["family_key"], entry["rule_ids"]) for entry in entries] == [
-        ("surgery_anesthesia", ["LX0609-029", "LX0609-030"]),
-        ("tumor_pathology", ["LX0609-019"]),
+        ("surgery_anesthesia", ["LX0609-04-01-01", "LX0609-04-02-02"]),
+        ("tumor_pathology", ["LX0609-06-02-02"]),
     ]
 
 
@@ -168,7 +174,7 @@ async def test_usage_breakdown_preserves_unattributed_tokens() -> None:
         stage="semantic_evaluation",
         record_id="record-1",
         family_key="single_rule_b2",
-        rule_ids=["LX0609-029"],
+        rule_ids=["LX0609-04-01-01"],
     ):
         await wrapped.generate("usage prompt")
 
@@ -192,7 +198,7 @@ async def test_failed_call_has_sanitized_ledger_entry_and_zero_unknown_tokens() 
         stage="semantic_evaluation",
         record_id="record-1",
         family_key="single_rule_b2",
-        rule_ids=["LX0609-029"],
+        rule_ids=["LX0609-04-01-01"],
     ):
         await wrapped.generate("prompt with private content")
 
@@ -225,7 +231,7 @@ async def test_malformed_usage_still_records_exactly_one_failed_capture() -> Non
         stage="fact_extraction",
         record_id="record-1",
         family_key="surgery_anesthesia",
-        rule_ids=["LX0609-029"],
+        rule_ids=["LX0609-04-01-01"],
     ):
         await wrapped.generate("malformed usage prompt")
 
@@ -252,7 +258,7 @@ async def test_response_normalization_failure_records_once_and_rethrows() -> Non
         stage="semantic_evaluation",
         record_id="record-1",
         family_key="single_rule_b2",
-        rule_ids=["LX0609-029"],
+        rule_ids=["LX0609-04-01-01"],
     ):
         await wrapped.generate("normalization prompt")
 
@@ -278,7 +284,7 @@ async def test_fallback_stage_is_independently_attributed() -> None:
         stage="fallback",
         record_id="record-1",
         family_key="surgery_anesthesia",
-        rule_ids=["LX0609-032"],
+        rule_ids=["LX0609-04-03-01"],
     ):
         await wrapped.generate("fallback prompt")
 
@@ -300,7 +306,7 @@ async def test_concurrent_calls_have_unique_ids_and_exact_totals() -> None:
             stage="semantic_evaluation",
             record_id=f"record-{index}",
             family_key="single_rule_b2",
-            rule_ids=["LX0609-029"],
+            rule_ids=["LX0609-04-01-01"],
         ):
             await wrapped.generate(f"prompt-{index}")
 
@@ -325,7 +331,7 @@ async def test_client_counter_mismatch_is_exposed() -> None:
         stage="fact_extraction",
         record_id="record-1",
         family_key="surgery_anesthesia",
-        rule_ids=["LX0609-029"],
+        rule_ids=["LX0609-04-01-01"],
     ):
         await wrapped.generate("mismatch prompt")
     client.total_tokens += 9
@@ -355,7 +361,7 @@ async def test_prompt_hash_is_present_without_prompt_or_credentials() -> None:
         stage="fact_extraction",
         record_id="record-1",
         family_key="surgery_anesthesia",
-        rule_ids=["LX0609-029"],
+        rule_ids=["LX0609-04-01-01"],
     ):
         await wrapped.generate(secret_prompt)
 
@@ -400,17 +406,17 @@ async def test_runner_compatibility_aliases_match_stage_summary(monkeypatch: pyt
     monkeypatch.setattr(
         runner,
         "evaluate_luxian_0609_gates_from_facts",
-        lambda **_kwargs: SimpleNamespace(decisions={"LX0609-029": decision}),
+        lambda **_kwargs: SimpleNamespace(decisions={"LX0609-04-01-01": decision}),
     )
     monkeypatch.setattr(
         runner,
         "_rule_catalog",
-        lambda _rule_ids: {"LX0609-029": {"rule_id": "LX0609-029", "name": "test"}},
+        lambda _rule_ids: {"LX0609-04-01-01": {"rule_id": "LX0609-04-01-01", "name": "test"}},
     )
 
     result = await runner.run_fact_gate_plus_trimmed_qc(
         record_ids=["record-1"],
-        selected_rule_ids=["LX0609-029"],
+        selected_rule_ids=["LX0609-04-01-01"],
         families=["surgery_anesthesia"],
         model="fake-model",
     )
@@ -424,7 +430,7 @@ async def test_runner_compatibility_aliases_match_stage_summary(monkeypatch: pyt
     assert result["fact_extraction_llm_total_tokens"] == result["gate_llm_total_tokens"] == fact_stage["total_tokens"] == 5
     assert result["b2_llm_call_count"] == semantic_stage["call_count"] == 1
     assert result["b2_llm_total_tokens"] == semantic_stage["total_tokens"] == 10
-    assert result["rows"][("record-1", "LX0609-029")]["tokens_additive"] is False
+    assert result["rows"][("record-1", "LX0609-04-01-01")]["tokens_additive"] is False
     assert telemetry["telemetry_invariant_ok"] is True
 
 
@@ -437,8 +443,8 @@ def test_compare_and_markdown_do_not_sum_shared_rule_tokens(tmp_path: Path) -> N
         "item_count": 2,
         "status_counter": {"compliant": 2},
         "rows": {
-            ("record-1", "LX0609-029"): {"status": "compliant", "duration_sec": 1, "tokens": 10},
-            ("record-2", "LX0609-029"): {"status": "compliant", "duration_sec": 1, "tokens": 10},
+            ("record-1", "LX0609-04-01-01"): {"status": "compliant", "duration_sec": 1, "tokens": 10},
+            ("record-2", "LX0609-04-01-01"): {"status": "compliant", "duration_sec": 1, "tokens": 10},
         },
     }
     telemetry = {
@@ -455,7 +461,7 @@ def test_compare_and_markdown_do_not_sum_shared_rule_tokens(tmp_path: Path) -> N
         },
     }
     trimmed_rows = {
-        ("record-1", "LX0609-029"): {
+        ("record-1", "LX0609-04-01-01"): {
             "status": "compliant",
             "duration_sec": 2,
             "duration_additive": False,
@@ -464,7 +470,7 @@ def test_compare_and_markdown_do_not_sum_shared_rule_tokens(tmp_path: Path) -> N
             "token_attribution": "shared_fact_extraction_non_additive",
             "shared_call_ids": ["call-1"],
         },
-        ("record-2", "LX0609-029"): {
+        ("record-2", "LX0609-04-01-01"): {
             "status": "compliant",
             "duration_sec": 2,
             "duration_additive": False,
@@ -484,7 +490,7 @@ def test_compare_and_markdown_do_not_sum_shared_rule_tokens(tmp_path: Path) -> N
         "telemetry": telemetry,
     }
     comparison = runner.compare(full, trimmed)
-    stat = comparison["rule_stats"]["LX0609-029"]
+    stat = comparison["rule_stats"]["LX0609-04-01-01"]
     assert stat["fact_gate_record_tokens_sum"] is None
     assert stat["fact_gate_shared_duration_sum_sec"] is None
     assert stat["fact_gate_unique_call_ids"] == ["call-1"]
@@ -498,7 +504,7 @@ def test_compare_and_markdown_do_not_sum_shared_rule_tokens(tmp_path: Path) -> N
             "model": "fake-model",
             "parallel_records": 1,
             "record_ids": ["record-1", "record-2"],
-            "selected_rule_ids": ["LX0609-029"],
+            "selected_rule_ids": ["LX0609-04-01-01"],
         },
         output,
     )
@@ -519,7 +525,7 @@ def test_full_text_rows_do_not_emit_patient_name(monkeypatch: pytest.MonkeyPatch
                 "items": [
                     {
                         "record_id": "record-1",
-                        "rule_id": "LX0609-029",
+                        "rule_id": "LX0609-04-01-01",
                         "status": "compliant",
                         "patient_name": "person-name",
                         "evidence": "person-name has a short evidence fragment",
@@ -528,7 +534,7 @@ def test_full_text_rows_do_not_emit_patient_name(monkeypatch: pytest.MonkeyPatch
                 ],
                 "summary": {},
                 "filters": {
-                    "selected_rule_ids": ["LX0609-029"],
+                    "selected_rule_ids": ["LX0609-04-01-01"],
                     "patient_name": "person-name",
                     "id_card": id_card,
                     "nested": {"phone": phone},
@@ -538,7 +544,7 @@ def test_full_text_rows_do_not_emit_patient_name(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(runner, "CustomQCWorkspaceService", FakeWorkspaceService)
 
     result = runner.load_full_text_job("job")
-    row = result["rows"][("record-1", "LX0609-029")]
+    row = result["rows"][("record-1", "LX0609-04-01-01")]
     serialized = json.dumps(
         {**result, "rows": runner._stringify_row_keys(result["rows"])},
         ensure_ascii=False,
@@ -547,7 +553,7 @@ def test_full_text_rows_do_not_emit_patient_name(monkeypatch: pytest.MonkeyPatch
     assert "person-name" not in serialized
     assert id_card not in serialized
     assert phone not in serialized
-    assert result["filters"] == {"selected_rule_ids": ["LX0609-029"]}
+    assert result["filters"] == {"selected_rule_ids": ["LX0609-04-01-01"]}
     assert "[REDACTED]" in row["evidence"]
 
 
@@ -576,7 +582,7 @@ def test_report_boundary_sanitizes_gate_b2_compare_and_markdown(tmp_path: Path) 
         "item_count": 1,
         "status_counter": {"compliant": 1},
         "rows": {
-            ("record-1", "LX0609-029"): {
+            ("record-1", "LX0609-04-01-01"): {
                 "record_id": "record-1",
                 "status": "compliant",
                 "duration_sec": 0,
@@ -587,7 +593,7 @@ def test_report_boundary_sanitizes_gate_b2_compare_and_markdown(tmp_path: Path) 
     }
     trimmed_row = {
         "record_id": "record-1",
-        "rule_id": "LX0609-029",
+        "rule_id": "LX0609-04-01-01",
         "status": "compliant",
         "duration_sec": 0,
         "duration_additive": False,
@@ -606,7 +612,7 @@ def test_report_boundary_sanitizes_gate_b2_compare_and_markdown(tmp_path: Path) 
         "llm_total_tokens": 0,
         "item_count": 1,
         "status_counter": {"compliant": 1},
-        "rows": {("record-1", "LX0609-029"): trimmed_row},
+        "rows": {("record-1", "LX0609-04-01-01"): trimmed_row},
         "telemetry": {
             "telemetry_schema_version": runner.TELEMETRY_SCHEMA_VERSION,
             "llm_call_count": 0,
@@ -627,7 +633,7 @@ def test_report_boundary_sanitizes_gate_b2_compare_and_markdown(tmp_path: Path) 
         "model": "fake-model",
         "parallel_records": 1,
         "record_ids": ["record-1"],
-        "selected_rule_ids": ["LX0609-029"],
+        "selected_rule_ids": ["LX0609-04-01-01"],
     }
     terms = {"record-1": [name]}
 

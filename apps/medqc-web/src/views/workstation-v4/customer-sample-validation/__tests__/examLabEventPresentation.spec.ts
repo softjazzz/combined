@@ -24,7 +24,7 @@ const BACKEND_RENDERER_PATH = resolve(
 
 function buildItem(
   eventResults: Record<string, unknown>[],
-  ruleId = 'LX0609-012',
+  ruleId = 'LX0609-06-01-05',
 ): SingleRecordQcResultItem {
   return {
     rule_id: ruleId,
@@ -63,7 +63,7 @@ function singleRow(eventStatus: unknown, positiveState: unknown) {
   return buildExamLabEventPresentation(buildItem([buildRow(eventStatus, positiveState, 0)]))
 }
 
-describe('012/015 逐次检查 not_applicable 文案', () => {
+describe('LX0609-06-01-05/LX0609-06-03-04 逐次检查 not_applicable 文案', () => {
   it('positive_state=positive 输出「评价窗口尚未届满」且正面标记为真', () => {
     const presentation = singleRow('not_applicable', 'positive')
 
@@ -142,7 +142,7 @@ describe('012/015 逐次检查 not_applicable 文案', () => {
   })
 })
 
-describe('012/015 逐次检查 not_applicable 缺失 positive_state 的现状（与任务书预期不同）', () => {
+describe('LX0609-06-01-05/LX0609-06-03-04 逐次检查 not_applicable 缺失 positive_state 的现状（与任务书预期不同）', () => {
   // 任务书要求「positive_state 缺失 → 未确认本次检查为需分析的目标事件，本项不适用」，
   // 但现有实现对 positive_state 做白名单校验：缺失（undefined）会被判为非法输入，
   // 整个 presentation 返回 null（客户侧表现为整块「逐次检查核对」消失），而不是退化为
@@ -165,7 +165,7 @@ describe('012/015 逐次检查 not_applicable 缺失 positive_state 的现状（
   })
 })
 
-describe('012/015 逐次检查其余分支口径保持不变', () => {
+describe('LX0609-06-01-05/LX0609-06-03-04 逐次检查其余分支口径保持不变', () => {
   it('non_compliant 保持既有 danger / 未完成分析 文案', () => {
     const presentation = singleRow('non_compliant', 'positive')
 
@@ -217,7 +217,7 @@ describe('012/015 逐次检查其余分支口径保持不变', () => {
   )
 })
 
-describe('012/015 逐次检查非法输入返回 null', () => {
+describe('LX0609-06-01-05/LX0609-06-03-04 逐次检查非法输入返回 null', () => {
   it.each(['possibly', 'POSITIVE', 'not_relevant', '', undefined, null, 1])(
     '非法 positive_state（%s）返回 null',
     (positiveState) => {
@@ -244,7 +244,7 @@ describe('012/015 逐次检查非法输入返回 null', () => {
   it('非检查检验逐次核对规则返回 null', () => {
     expect(
       buildExamLabEventPresentation(
-        buildItem([buildRow('not_applicable', 'positive', 0)], 'LX0609-010'),
+        buildItem([buildRow('not_applicable', 'positive', 0)], 'LX0609-06-01-02'),
       ),
     ).toBeNull()
   })
@@ -258,7 +258,7 @@ describe('012/015 逐次检查非法输入返回 null', () => {
   })
 })
 
-describe('011/014 报告结果记录逐次核对', () => {
+describe('LX0609-06-01-04/LX0609-06-03-03 报告结果记录逐次核对', () => {
   it('将多次检查转换为摘要和逐次状态，不再展示一整段编号文本', () => {
     const item = buildItem(
       [
@@ -282,7 +282,7 @@ describe('011/014 报告结果记录逐次核对', () => {
           interval_hours: 22.75,
         },
       ],
-      'LX0609-011',
+      'LX0609-06-01-04',
     )
     const facts = item.customer_display_facts as Record<string, unknown>
     facts.requirement = 'result_recording_within_24h'
@@ -314,7 +314,7 @@ describe('011/014 报告结果记录逐次核对', () => {
   })
 })
 
-describe('012 多事件 not_applicable 文案与后端 customer_renderer.py 跨端一致', () => {
+describe('LX0609-06-01-05 多事件 not_applicable 文案与后端 customer_renderer.py 跨端一致', () => {
   it('后端源文件存在', () => {
     expect(existsSync(BACKEND_RENDERER_PATH), `未找到后端渲染器：${BACKEND_RENDERER_PATH}`).toBe(
       true,
@@ -334,7 +334,7 @@ describe('012 多事件 not_applicable 文案与后端 customer_renderer.py 跨�
     }
   })
 
-  it('后端源文件仍覆盖 012/015 多事件 not_applicable 分支', () => {
+  it('后端源文件仍覆盖 LX0609-06-01-05/LX0609-06-03-04 多事件 not_applicable 分支', () => {
     const source = readFileSync(BACKEND_RENDERER_PATH, 'utf8')
 
     expect(source).toContain('elif event_status == "not_applicable":')

@@ -83,7 +83,7 @@ async def test_only_guidance_results_are_not_applicable_without_model(monkeypatc
     snapshot, materials = _typed_session(
         monkeypatch, exam_rows=(master,), exam_report_rows=(report,)
     )
-    rules = ("LX0609-011", "LX0609-012")
+    rules = ("LX0609-06-01-04", "LX0609-06-01-05")
     result = await native.execute_luxian_0609_native_exam_lab_rules(
         rule_ids=rules,
         wrapper_rules=[_wrapper(r) for r in rules],
@@ -111,14 +111,14 @@ def test_unknown_model_answer_does_not_turn_known_non_result_event_into_failure(
                         "positive_state": "unknown",
                         "course_doc_positions": [],
                     }
-                    for rule in ("LX0609-011", "LX0609-012")
+                    for rule in ("LX0609-06-01-04", "LX0609-06-01-05")
                 ],
             }
         )
     }
     partition = parse_exam_lab_fact_response_isolated(
         response=response,
-        selected_rule_ids=("LX0609-011", "LX0609-012"),
+        selected_rule_ids=("LX0609-06-01-04", "LX0609-06-01-05"),
         projection=projection,
     )
     assert not partition.rule_failures
@@ -143,7 +143,7 @@ def test_guidance_flag_never_changes_010_or_its_prompt():
         imaging_events=(replace(event, guidance_only=False),),
     )
     fact = ExamLabEventFact(
-        "LX0609-010", "applicable", "absent", "not_relevant", (), event.document_refs
+        "LX0609-06-01-02", "applicable", "absent", "not_relevant", (), event.document_refs
     )
     assert native._single_text_fact_outcome(
         rule_id=fact.rule_id, fact=fact, projection=projection
@@ -151,9 +151,9 @@ def test_guidance_flag_never_changes_010_or_its_prompt():
         rule_id=fact.rule_id, fact=fact, projection=ordinary
     )
     assert build_exam_lab_fact_prompt(
-        selected_rule_ids=("LX0609-010",), projection=projection
+        selected_rule_ids=("LX0609-06-01-02",), projection=projection
     ) == build_exam_lab_fact_prompt(
-        selected_rule_ids=("LX0609-010",), projection=ordinary
+        selected_rule_ids=("LX0609-06-01-02",), projection=ordinary
     )
 
 
@@ -191,7 +191,7 @@ def _mixed_projection_and_payload():
                 "positive_state": "unknown" if event.guidance_only else "positive",
                 "course_doc_positions": [] if event.guidance_only else [1],
             }
-            for rule in ("LX0609-011", "LX0609-012")
+            for rule in ("LX0609-06-01-04", "LX0609-06-01-05")
             for position, event in enumerate(projection.imaging_events, 1)
         ],
     }
@@ -202,7 +202,7 @@ def test_mixed_events_keep_diagnostic_facts_and_guidance_not_applicable():
     projection, payload = _mixed_projection_and_payload()
     partition = parse_exam_lab_fact_response_isolated(
         response={"content": json.dumps(payload)},
-        selected_rule_ids=("LX0609-011", "LX0609-012"),
+        selected_rule_ids=("LX0609-06-01-04", "LX0609-06-01-05"),
         projection=projection,
     )
     assert not partition.rule_failures
@@ -216,7 +216,7 @@ def test_mixed_events_keep_diagnostic_facts_and_guidance_not_applicable():
     )
     baseline = native.parse_exam_lab_fact_response(
         response={"content": json.dumps(payload)},
-        selected_rule_ids=("LX0609-011", "LX0609-012"),
+        selected_rule_ids=("LX0609-06-01-04", "LX0609-06-01-05"),
         projection=ordinary,
     )
     for fact in partition.facts:
@@ -248,7 +248,7 @@ def test_guidance_role_does_not_accept_invalid_model_output(invalid):
     guidance_fact = next(
         f
         for f in payload["facts"]
-        if f["rule_id"] == "LX0609-011"
+        if f["rule_id"] == "LX0609-06-01-04"
         and projection.imaging_events[f["event_position"] - 1].guidance_only
     )
     if invalid == "reference":
@@ -261,15 +261,15 @@ def test_guidance_role_does_not_accept_invalid_model_output(invalid):
     if invalid in {"enum", "guidance_course"}:
         partition = parse_exam_lab_fact_response_isolated(
             response=response,
-            selected_rule_ids=("LX0609-011", "LX0609-012"),
+            selected_rule_ids=("LX0609-06-01-04", "LX0609-06-01-05"),
             projection=projection,
         )
-        assert partition.rule_failures == {"LX0609-011": "value"}
-        assert all(f.rule_id == "LX0609-012" for f in partition.facts)
+        assert partition.rule_failures == {"LX0609-06-01-04": "value"}
+        assert all(f.rule_id == "LX0609-06-01-05" for f in partition.facts)
     else:
         with pytest.raises(ExamLabFactParseError):
             parse_exam_lab_fact_response_isolated(
                 response=response,
-                selected_rule_ids=("LX0609-011", "LX0609-012"),
+                selected_rule_ids=("LX0609-06-01-04", "LX0609-06-01-05"),
                 projection=projection,
             )

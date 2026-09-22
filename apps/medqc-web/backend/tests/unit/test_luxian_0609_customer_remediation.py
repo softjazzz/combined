@@ -69,7 +69,7 @@ def test_every_active_non_terminal_result_has_safe_action_semantics(
         reason_code="controlled_test_reason",
     )
 
-    if status == "data_gap" and rule_id in {"LX0609-029", "LX0609-054", "LX0609-055", "LX0609-058", "LX0609-061", "LX0609-069"}:
+    if status == "data_gap" and rule_id in {"LX0609-04-01-01", "LX0609-05-01-02", "LX0609-05-01-03", "LX0609-05-01-06", "LX0609-08-01-01", "LX0609-04-02-07"}:
         assert "重新评估" in suggestion, (rule_id, status, suggestion)
     else:
         assert expected in suggestion, (rule_id, status, suggestion)
@@ -106,7 +106,7 @@ def test_pending_or_not_executed_rule_has_no_deterministic_remediation(
 def test_non_problem_states_do_not_generate_remediation(status: str) -> None:
     assert (
         build_customer_remediation_suggestion(
-            rule_id="LX0609-022",
+            rule_id="LX0609-03-01-03",
             status=status,
         )
         == ""
@@ -127,7 +127,7 @@ def test_non_terminal_states_have_action_semantics(
     expected: str,
 ) -> None:
     suggestion = build_customer_remediation_suggestion(
-        rule_id="LX0609-023",
+        rule_id="LX0609-03-01-04",
         status=status,
         reason_code=reason_code,
     )
@@ -142,7 +142,7 @@ def test_controlled_episode_facts_identify_the_consultations_to_revise() -> None
     """022 暂停后不再交付逐条会诊定位模板；受控事实仍由执行器产出。"""
 
     suggestion = build_customer_remediation_suggestion(
-        rule_id="LX0609-022",
+        rule_id="LX0609-03-01-03",
         status="non_compliant",
         reason_code="requirement_violated",
         facts={
@@ -171,7 +171,7 @@ def test_controlled_episode_facts_identify_the_consultations_to_revise() -> None
 
 def test_non_compliant_consultation_advice_does_not_mix_data_gap_instructions() -> None:
     suggestion = build_customer_remediation_suggestion(
-        rule_id="LX0609-023",
+        rule_id="LX0609-03-01-04",
         status="non_compliant",
         reason_code="requirement_violated",
     )
@@ -185,7 +185,7 @@ def test_non_compliant_consultation_advice_does_not_mix_data_gap_instructions() 
 
 def test_030_order_only_advice_requires_execution_check_before_record_remediation() -> None:
     suggestion = build_customer_remediation_suggestion(
-        rule_id="LX0609-030",
+        rule_id="LX0609-04-02-02",
         status="non_compliant",
         reason_code="required_document_missing",
         facts={
@@ -211,7 +211,7 @@ def test_030_order_only_renderer_does_not_claim_surgery_was_performed() -> None:
     }
     decision = reduce_luxian_0609_rule_decision(
         RuleDecision(
-            rule_id="LX0609-030",
+            rule_id="LX0609-04-02-02",
             snapshot_hash=SNAPSHOT_HASH,
             applicability=ApplicabilityState.APPLICABLE,
             evidence_state=EvidenceState.SUFFICIENT,
@@ -235,7 +235,7 @@ def test_030_order_only_renderer_does_not_claim_surgery_was_performed() -> None:
 
 def test_controlled_missing_fields_are_named_without_echoing_raw_content() -> None:
     suggestion = build_customer_remediation_suggestion(
-        rule_id="LX0609-062",
+        rule_id="LX0609-08-01-02",
         status="non_compliant",
         reason_code="requirement_violated",
         facts={"missing_fields": ["dose", "route"]},
@@ -246,7 +246,7 @@ def test_controlled_missing_fields_are_named_without_echoing_raw_content() -> No
     assert "原始病历" not in suggestion
 
 
-@pytest.mark.parametrize("rule_id", ("LX0609-022", "LX0609-060", "LX0609-062"))
+@pytest.mark.parametrize("rule_id", ("LX0609-03-01-03", "LX0609-04-02-06", "LX0609-08-01-02"))
 def test_unrelated_fact_strings_never_enter_the_remediation(rule_id: str) -> None:
     private_marker = "PRIVATE_PATIENT_ABC_13800138000"
     facts = {
@@ -287,7 +287,7 @@ def test_renderer_structures_non_terminal_state_actions(
 ) -> None:
     decision = reduce_luxian_0609_rule_decision(
         RuleDecision(
-            rule_id="LX0609-023",
+            rule_id="LX0609-03-01-04",
             snapshot_hash=SNAPSHOT_HASH,
             applicability=applicability,
             evidence_state=evidence_state,

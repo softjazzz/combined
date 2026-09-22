@@ -1,7 +1,7 @@
 [
   {
-    "rule_id": "LX0609-051",
-    "rule_code": "LX0609-051",
+    "rule_id": "LX0609-09-02-01",
+    "rule_code": "LX0609-09-02-01",
     "name": "死亡病历讨论记录：患者死亡后7天未书写死亡病历讨论记录",
     "description": "死亡患者应在死亡后7天内完成死亡病历讨论记录。",
     "positive_example": "患者死亡后7天内已完成死亡病历讨论记录。",
@@ -14,12 +14,12 @@
     "executor_type": "program",
     "rule_version": "2026-07-31",
     "prompt_version": "none",
-    "mapped_rule_ids": ["LX0609-051"],
-    "primary_execution_rule_id": "LX0609-051"
+    "mapped_rule_ids": ["LX0609-09-02-01"],
+    "primary_execution_rule_id": "LX0609-09-02-01"
   },
   {
-    "rule_id": "LX0609-060",
-    "rule_code": "LX0609-060",
+    "rule_id": "LX0609-04-02-06",
+    "rule_code": "LX0609-04-02-06",
     "name": "死亡记录：死亡患者无死亡记录",
     "description": "已确认死亡的住院患者必须有死亡记录。",
     "positive_example": "患者已死亡，病历中存在死亡记录。",
@@ -32,12 +32,12 @@
     "executor_type": "program",
     "rule_version": "2026-07-31",
     "prompt_version": "none",
-    "mapped_rule_ids": ["LX0609-060"],
-    "primary_execution_rule_id": "LX0609-060"
+    "mapped_rule_ids": ["LX0609-04-02-06"],
+    "primary_execution_rule_id": "LX0609-04-02-06"
   },
   {
-    "rule_id": "LX0609-061",
-    "rule_code": "LX0609-061",
+    "rule_id": "LX0609-08-01-01",
+    "rule_code": "LX0609-08-01-01",
     "name": "出院记录：出院记录未在出院后24小时内完成",
     "description": "出院患者的出院记录应在出院后24小时内完成。",
     "positive_example": "出院记录在患者出院后24小时内完成。",
@@ -50,12 +50,12 @@
     "executor_type": "program",
     "rule_version": "2026-07-31",
     "prompt_version": "none",
-    "mapped_rule_ids": ["LX0609-061"],
-    "primary_execution_rule_id": "LX0609-061"
+    "mapped_rule_ids": ["LX0609-08-01-01"],
+    "primary_execution_rule_id": "LX0609-08-01-01"
   },
   {
-    "rule_id": "LX0609-062",
-    "rule_code": "LX0609-062",
+    "rule_id": "LX0609-08-01-02",
+    "rule_code": "LX0609-08-01-02",
     "name": "出院记录：出院带药不详细",
     "description": "有出院带药时，应记录药品名称、剂量、给药途径和用药时间。",
     "positive_example": "出院带药已完整记录药品名称、剂量、给药途径和用药时间。",
@@ -68,12 +68,12 @@
     "executor_type": "program",
     "rule_version": "2026-07-31",
     "prompt_version": "none",
-    "mapped_rule_ids": ["LX0609-062"],
-    "primary_execution_rule_id": "LX0609-062"
+    "mapped_rule_ids": ["LX0609-08-01-02"],
+    "primary_execution_rule_id": "LX0609-08-01-02"
   },
   {
-    "rule_id": "LX0609-064",
-    "rule_code": "LX0609-064",
+    "rule_id": "LX0609-04-05-01",
+    "rule_code": "LX0609-04-05-01",
     "name": "术后连续三天查房记录：术后三天无连续病程记录或术者查房记录",
     "description": "术后连续三天均应有病程记录，且至少包含一次术者查房记录。",
     "positive_example": "术后第1至第3天均有病程记录，且其中包含术者查房记录。",
@@ -86,12 +86,12 @@
     "executor_type": "program",
     "rule_version": "2026-07-31",
     "prompt_version": "none",
-    "mapped_rule_ids": ["LX0609-064"],
-    "primary_execution_rule_id": "LX0609-064"
+    "mapped_rule_ids": ["LX0609-04-05-01"],
+    "primary_execution_rule_id": "LX0609-04-05-01"
   },
   {
-    "rule_id": "LX0609-065",
-    "rule_code": "LX0609-065",
+    "rule_id": "LX0609-04-05-02",
+    "rule_code": "LX0609-04-05-02",
     "name": "术后三天内上级医师查房记录：无术后三天内上级医师查看病人记录",
     "description": "实施手术后72小时内应有上级医师查房记录。",
     "positive_example": "实施手术后72小时内已有上级医师查房记录。",
@@ -104,12 +104,12 @@
     "executor_type": "program",
     "rule_version": "2026-07-31",
     "prompt_version": "none",
-    "mapped_rule_ids": ["LX0609-065"],
-    "primary_execution_rule_id": "LX0609-065"
+    "mapped_rule_ids": ["LX0609-04-05-02"],
+    "primary_execution_rule_id": "LX0609-04-05-02"
   },
   {
-    "rule_id": "LX0609-066",
-    "rule_code": "LX0609-066",
+    "rule_id": "LX0609-04-05-03",
+    "rule_code": "LX0609-04-05-03",
     "name": "术后首次病程记录：无术后首次病程记录",
     "description": "实施手术后应有术后首次病程记录。",
     "positive_example": "实施手术后已完成术后首次病程记录。",
@@ -122,12 +122,12 @@
     "executor_type": "program",
     "rule_version": "2026-07-31",
     "prompt_version": "none",
-    "mapped_rule_ids": ["LX0609-066"],
-    "primary_execution_rule_id": "LX0609-066"
+    "mapped_rule_ids": ["LX0609-04-05-03"],
+    "primary_execution_rule_id": "LX0609-04-05-03"
   },
   {
-    "rule_id": "LX0609-067",
-    "rule_code": "LX0609-067",
+    "rule_id": "LX0609-08-02-01",
+    "rule_code": "LX0609-08-02-01",
     "name": "出院前病程记录：无出院前一天或当天的病程记录",
     "description": "出院前一天或出院当天应有病程记录。",
     "positive_example": "出院前一天或出院当天已有病程记录。",
@@ -140,12 +140,12 @@
     "executor_type": "program",
     "rule_version": "2026-07-31",
     "prompt_version": "none",
-    "mapped_rule_ids": ["LX0609-067"],
-    "primary_execution_rule_id": "LX0609-067"
+    "mapped_rule_ids": ["LX0609-08-02-01"],
+    "primary_execution_rule_id": "LX0609-08-02-01"
   },
   {
-    "rule_id": "LX0609-068",
-    "rule_code": "LX0609-068",
+    "rule_id": "LX0609-08-02-02",
+    "rule_code": "LX0609-08-02-02",
     "name": "出院前病程记录：无上级医师同意出院的意见",
     "description": "出院前一天或当天的病程记录应有明确的上级医师同意出院意见；自动出院时，应记录请示上级医师并完成自动出院书签署。",
     "positive_example": "病程记录明确写明上级医师同意出院；或记录家属要求自动出院、已请示上级医师并签署自动出院书。",
@@ -158,12 +158,12 @@
     "executor_type": "program",
     "rule_version": "2026-07-31",
     "prompt_version": "none",
-    "mapped_rule_ids": ["LX0609-068"],
-    "primary_execution_rule_id": "LX0609-068"
+    "mapped_rule_ids": ["LX0609-08-02-02"],
+    "primary_execution_rule_id": "LX0609-08-02-02"
   },
   {
-    "rule_id": "LX0609-069",
-    "rule_code": "LX0609-069",
+    "rule_id": "LX0609-04-02-07",
+    "rule_code": "LX0609-04-02-07",
     "name": "会诊记录：会诊记录单未在会诊申请24小时内完成",
     "description": "会诊记录应在同一会诊申请发出后24小时内完成。",
     "positive_example": "会诊记录在对应会诊申请发出后24小时内完成。",
@@ -176,12 +176,12 @@
     "executor_type": "program",
     "rule_version": "2026-07-31",
     "prompt_version": "none",
-    "mapped_rule_ids": ["LX0609-069"],
-    "primary_execution_rule_id": "LX0609-069"
+    "mapped_rule_ids": ["LX0609-04-02-07"],
+    "primary_execution_rule_id": "LX0609-04-02-07"
   },
   {
-    "rule_id": "LX0609-071",
-    "rule_code": "LX0609-071",
+    "rule_id": "LX0609-10-01-01",
+    "rule_code": "LX0609-10-01-01",
     "name": "交接班记录：经治医师变更时无交接班记录或未按时完成",
     "description": "经治医师变更时，交班记录应在交班前完成，接班记录应在接班后24小时内完成。",
     "positive_example": "经治医师变更时，交班记录已提前完成，接班记录在24小时内完成。",
@@ -194,12 +194,12 @@
     "executor_type": "program",
     "rule_version": "2026-07-31",
     "prompt_version": "none",
-    "mapped_rule_ids": ["LX0609-071"],
-    "primary_execution_rule_id": "LX0609-071"
+    "mapped_rule_ids": ["LX0609-10-01-01"],
+    "primary_execution_rule_id": "LX0609-10-01-01"
   },
   {
-    "rule_id": "LX0609-072",
-    "rule_code": "LX0609-072",
+    "rule_id": "LX0609-10-02-01",
+    "rule_code": "LX0609-10-02-01",
     "name": "转科记录：转科病人24小时内未完成转入、转出记录",
     "description": "有转科医嘱时，转入和转出记录均应在24小时内完成。",
     "positive_example": "转科医嘱下达后24小时内已完成转入和转出记录。",
@@ -212,12 +212,12 @@
     "executor_type": "program",
     "rule_version": "2026-07-31",
     "prompt_version": "none",
-    "mapped_rule_ids": ["LX0609-072"],
-    "primary_execution_rule_id": "LX0609-072"
+    "mapped_rule_ids": ["LX0609-10-02-01"],
+    "primary_execution_rule_id": "LX0609-10-02-01"
   },
   {
-    "rule_id": "LX0609-073",
-    "rule_code": "LX0609-073",
+    "rule_id": "LX0609-10-02-02",
+    "rule_code": "LX0609-10-02-02",
     "name": "转科记录：有转科医嘱无转入、转出记录",
     "description": "有转科医嘱时必须同时存在转入记录和转出记录。",
     "positive_example": "存在转科医嘱，且同时存在转入记录和转出记录。",
@@ -230,12 +230,12 @@
     "executor_type": "program",
     "rule_version": "2026-07-31",
     "prompt_version": "none",
-    "mapped_rule_ids": ["LX0609-073"],
-    "primary_execution_rule_id": "LX0609-073"
+    "mapped_rule_ids": ["LX0609-10-02-02"],
+    "primary_execution_rule_id": "LX0609-10-02-02"
   },
   {
-    "rule_id": "LX0609-074",
-    "rule_code": "LX0609-074",
+    "rule_id": "LX0609-12-02-01",
+    "rule_code": "LX0609-12-02-01",
     "name": "病程记录：修正或补充诊断时未记录理由及诊断依据",
     "description": "诊断发生修正或补充时，病程记录应说明修改理由和诊断依据。",
     "positive_example": "诊断修正或补充后，后续病程记录已说明修改理由和诊断依据。",
@@ -248,12 +248,12 @@
     "executor_type": "program",
     "rule_version": "2026-07-31",
     "prompt_version": "none",
-    "mapped_rule_ids": ["LX0609-074"],
-    "primary_execution_rule_id": "LX0609-074"
+    "mapped_rule_ids": ["LX0609-12-02-01"],
+    "primary_execution_rule_id": "LX0609-12-02-01"
   },
   {
-    "rule_id": "LX0609-050",
-    "rule_code": "LX0609-050",
+    "rule_id": "LX0609-03-02-01",
+    "rule_code": "LX0609-03-02-01",
     "name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
     "description": "入院满7天仍有诊断不明确受控表述时，应有疑难病历讨论记录。",
     "positive_example": "入院第7天诊断仍不明确，已完成疑难病历讨论。",
@@ -266,12 +266,12 @@
     "executor_type": "program",
     "rule_version": "2026-08-02",
     "prompt_version": "none",
-    "mapped_rule_ids": ["LX0609-050"],
-    "primary_execution_rule_id": "LX0609-050"
+    "mapped_rule_ids": ["LX0609-03-02-01"],
+    "primary_execution_rule_id": "LX0609-03-02-01"
   },
   {
-    "rule_id": "LX0609-052",
-    "rule_code": "LX0609-052",
+    "rule_id": "LX0609-06-04-01",
+    "rule_code": "LX0609-06-04-01",
     "name": "危急值记录：6小时内未书写危急值处置记录",
     "description": "检验结果标识PL或PH时，自报告时间起6小时内应有危急值处置记录。",
     "positive_example": "PH危急值报告后1.5小时完成处置记录。",
@@ -284,12 +284,12 @@
     "executor_type": "program",
     "rule_version": "2026-08-02",
     "prompt_version": "none",
-    "mapped_rule_ids": ["LX0609-052"],
-    "primary_execution_rule_id": "LX0609-052"
+    "mapped_rule_ids": ["LX0609-06-04-01"],
+    "primary_execution_rule_id": "LX0609-06-04-01"
   },
   {
-    "rule_id": "LX0609-053",
-    "rule_code": "LX0609-053",
+    "rule_id": "LX0609-06-04-02",
+    "rule_code": "LX0609-06-04-02",
     "name": "危急值记录：危急值报告后无处置记录",
     "description": "检验结果标识PL或PH时，应有对应危急值处置记录。",
     "positive_example": "PH危急值报告后存在对应处置记录。",
@@ -302,12 +302,12 @@
     "executor_type": "program",
     "rule_version": "2026-08-02",
     "prompt_version": "none",
-    "mapped_rule_ids": ["LX0609-053"],
-    "primary_execution_rule_id": "LX0609-053"
+    "mapped_rule_ids": ["LX0609-06-04-02"],
+    "primary_execution_rule_id": "LX0609-06-04-02"
   },
   {
-    "rule_id": "LX0609-054",
-    "rule_code": "LX0609-054",
+    "rule_id": "LX0609-05-01-02",
+    "rule_code": "LX0609-05-01-02",
     "name": "抗菌药物：用药调整无充分理由",
     "description": "抗菌药物使用、停用、更换或联合时，应记录受控用药理由。",
     "positive_example": "记录重症感染及联合覆盖耐药菌的理由。",
@@ -320,12 +320,12 @@
     "executor_type": "program",
     "rule_version": "2026-08-02-provisional",
     "prompt_version": "none",
-    "mapped_rule_ids": ["LX0609-054"],
-    "primary_execution_rule_id": "LX0609-054"
+    "mapped_rule_ids": ["LX0609-05-01-02"],
+    "primary_execution_rule_id": "LX0609-05-01-02"
   },
   {
-    "rule_id": "LX0609-055",
-    "rule_code": "LX0609-055",
+    "rule_id": "LX0609-05-01-03",
+    "rule_code": "LX0609-05-01-03",
     "name": "抗菌药物：48至72小时内无效果评价",
     "description": "抗菌药物启用后48至72小时内应记录疗效和客观指标评价。",
     "positive_example": "用药72小时记录体温、白细胞和方案调整。",
@@ -338,12 +338,12 @@
     "executor_type": "program",
     "rule_version": "2026-08-02-provisional",
     "prompt_version": "none",
-    "mapped_rule_ids": ["LX0609-055"],
-    "primary_execution_rule_id": "LX0609-055"
+    "mapped_rule_ids": ["LX0609-05-01-03"],
+    "primary_execution_rule_id": "LX0609-05-01-03"
   },
   {
-    "rule_id": "LX0609-056",
-    "rule_code": "LX0609-056",
+    "rule_id": "LX0609-05-01-04",
+    "rule_code": "LX0609-05-01-04",
     "name": "抗菌药物：两个以上重点抗菌药物使用前无病原学检查",
     "description": "两个以上重点抗菌药物联合使用前应留取病原学标本。",
     "positive_example": "两种特殊级抗菌药物使用前已留取血培养。",
@@ -356,12 +356,12 @@
     "executor_type": "program",
     "rule_version": "2026-08-02-provisional",
     "prompt_version": "none",
-    "mapped_rule_ids": ["LX0609-056"],
-    "primary_execution_rule_id": "LX0609-056"
+    "mapped_rule_ids": ["LX0609-05-01-04"],
+    "primary_execution_rule_id": "LX0609-05-01-04"
   },
   {
-    "rule_id": "LX0609-057",
-    "rule_code": "LX0609-057",
+    "rule_id": "LX0609-05-01-05",
+    "rule_code": "LX0609-05-01-05",
     "name": "抗菌药物：经验用药未说明理由",
     "description": "经验性使用抗菌药物时应说明理由；无样可采时应说明原因。",
     "positive_example": "记录重症感染经验覆盖理由且已留取培养。",
@@ -374,12 +374,12 @@
     "executor_type": "program",
     "rule_version": "2026-08-02-provisional",
     "prompt_version": "none",
-    "mapped_rule_ids": ["LX0609-057"],
-    "primary_execution_rule_id": "LX0609-057"
+    "mapped_rule_ids": ["LX0609-05-01-05"],
+    "primary_execution_rule_id": "LX0609-05-01-05"
   },
   {
-    "rule_id": "LX0609-058",
-    "rule_code": "LX0609-058",
+    "rule_id": "LX0609-05-01-06",
+    "rule_code": "LX0609-05-01-06",
     "name": "抗菌药物：特殊级用药缺少专家查房或会诊",
     "description": "特殊级抗菌药物按泸县2025目录识别，使用时应有专家查房或会诊记录。",
     "positive_example": "使用美罗培南且存在感染专家会诊记录。",
@@ -392,12 +392,12 @@
     "executor_type": "program",
     "rule_version": "2026-08-02",
     "prompt_version": "none",
-    "mapped_rule_ids": ["LX0609-058"],
-    "primary_execution_rule_id": "LX0609-058"
+    "mapped_rule_ids": ["LX0609-05-01-06"],
+    "primary_execution_rule_id": "LX0609-05-01-06"
   },
   {
-    "rule_id": "LX0609-059",
-    "rule_code": "LX0609-059",
+    "rule_id": "LX0609-05-03-01",
+    "rule_code": "LX0609-05-03-01",
     "name": "医嘱：诊疗医嘱与病程记录不一致",
     "description": "按实际发生的诊疗事件逐项核对医嘱与病程；事件和医嘱仅可通过 order_id、application_id、event_code 严格关联，禁止药名共现或最近时间猜测，再由单次受控语义核对判断病程是否记录同一事件。",
     "positive_example": "实际诊疗事件通过同一业务键唯一关联到已执行医嘱，病程明确记录同一次事件的分析、判断或处置。",
@@ -458,12 +458,12 @@
         "right_fact": "course_record.analysis_or_disposition"
       }
     ],
-    "mapped_rule_ids": ["LX0609-059"],
-    "primary_execution_rule_id": "LX0609-059"
+    "mapped_rule_ids": ["LX0609-05-03-01"],
+    "primary_execution_rule_id": "LX0609-05-03-01"
   },
   {
-    "rule_id": "LX0609-063",
-    "rule_code": "LX0609-063",
+    "rule_id": "LX0609-08-01-03",
+    "rule_code": "LX0609-08-01-03",
     "name": "出院记录：出院诊断或死亡诊断错填漏填顺序错误",
     "description": "当前临时口径按权威诊断表与出院记录诊断表逐项、顺序比较。",
     "positive_example": "权威诊断与出院记录诊断名称及顺序一致。",
@@ -476,12 +476,12 @@
     "executor_type": "program",
     "rule_version": "2026-08-02-provisional",
     "prompt_version": "none",
-    "mapped_rule_ids": ["LX0609-063"],
-    "primary_execution_rule_id": "LX0609-063"
+    "mapped_rule_ids": ["LX0609-08-01-03"],
+    "primary_execution_rule_id": "LX0609-08-01-03"
   },
   {
-    "rule_id": "LX0609-070",
-    "rule_code": "LX0609-070",
+    "rule_id": "LX0609-07-01-03",
+    "rule_code": "LX0609-07-01-03",
     "name": "输血前评估：未做输血前相关九项检查",
     "description": "输血前九项为乙肝五项、艾滋、丙肝、梅毒和谷丙转氨酶。",
     "positive_example": "输血前九项检验均已完成。",
@@ -494,12 +494,12 @@
     "executor_type": "program",
     "rule_version": "2026-08-02",
     "prompt_version": "none",
-    "mapped_rule_ids": ["LX0609-070"],
-    "primary_execution_rule_id": "LX0609-070"
+    "mapped_rule_ids": ["LX0609-07-01-03"],
+    "primary_execution_rule_id": "LX0609-07-01-03"
   },
   {
-    "rule_id": "LX0609-075",
-    "rule_code": "LX0609-075",
+    "rule_id": "LX0609-10-03-01",
+    "rule_code": "LX0609-10-03-01",
     "name": "有创操作记录：有创操作医嘱无有创操作记录",
     "description": "当前临时有创操作目录命中医嘱时，应存在同名操作记录。",
     "positive_example": "中心静脉置管医嘱存在对应操作记录。",
@@ -512,12 +512,12 @@
     "executor_type": "program",
     "rule_version": "2026-08-02-provisional",
     "prompt_version": "none",
-    "mapped_rule_ids": ["LX0609-075"],
-    "primary_execution_rule_id": "LX0609-075"
+    "mapped_rule_ids": ["LX0609-10-03-01"],
+    "primary_execution_rule_id": "LX0609-10-03-01"
   },
   {
-    "rule_id": "LX0609-076",
-    "rule_code": "LX0609-076",
+    "rule_id": "LX0609-04-02-08",
+    "rule_code": "LX0609-04-02-08",
     "name": "死亡记录：死亡时间缺失",
     "description": "死亡记录必须填写具体死亡时间；记录完成时间或提交时间不得替代死亡时间。",
     "positive_example": "死亡记录的死亡时间字段或正文明确记载具体死亡日期和时刻。",
@@ -542,12 +542,12 @@
         "unit": "boolean"
       }
     ],
-    "mapped_rule_ids": ["LX0609-076"],
-    "primary_execution_rule_id": "LX0609-076"
+    "mapped_rule_ids": ["LX0609-04-02-08"],
+    "primary_execution_rule_id": "LX0609-04-02-08"
   },
   {
-    "rule_id": "LX0609-077",
-    "rule_code": "LX0609-077",
+    "rule_id": "LX0609-01-02-02",
+    "rule_code": "LX0609-01-02-02",
     "name": "首次病程记录：鉴别诊断未与第一诊断相关联",
     "description": "首次病程记录中已写出的鉴别诊断应围绕初步诊断中的第一诊断展开。",
     "positive_example": "第一诊断为急性胆囊炎，鉴别诊断围绕消化性溃疡穿孔、急性胰腺炎展开。",
@@ -570,13 +570,13 @@
         "right_fact": "first_course_record.differential_diagnosis"
       }
     ],
-    "mapped_rule_ids": ["LX0609-077"],
-    "primary_execution_rule_id": "LX0609-077",
+    "mapped_rule_ids": ["LX0609-01-02-02"],
+    "primary_execution_rule_id": "LX0609-01-02-02",
     "allowed_result_statuses": ["compliant", "non_compliant", "data_gap"]
   },
   {
-    "rule_id": "LX0609-078",
-    "rule_code": "LX0609-078",
+    "rule_id": "LX0609-04-01-04",
+    "rule_code": "LX0609-04-01-04",
     "name": "术前小结：内容不完整",
     "description": "已存在术前小结的简要病情、术前诊断、手术指征、拟施手术和麻醉方式等内容应完整。",
     "positive_example": "同一份术前小结完整记录病情、诊断、指征、手术方案、麻醉方式、注意事项及术者术前查看情况。",
@@ -590,13 +590,13 @@
     "rule_version": "2026-09-20",
     "prompt_version": "lx0609-078-v1",
     "criteria": [{"criterion_id":"preop_summary_completeness","label":"术前小结内容完整","kind":"completeness","failure_reason_code":"requirement_violated","source_fact":"presurg_summary.content","operator":"complete","expected":true,"unit":"boolean"}],
-    "mapped_rule_ids": ["LX0609-078"],
-    "primary_execution_rule_id": "LX0609-078",
+    "mapped_rule_ids": ["LX0609-04-01-04"],
+    "primary_execution_rule_id": "LX0609-04-01-04",
     "allowed_result_statuses": ["compliant", "non_compliant", "not_applicable", "data_gap"]
   },
   {
-    "rule_id": "LX0609-079",
-    "rule_code": "LX0609-079",
+    "rule_id": "LX0609-04-01-05",
+    "rule_code": "LX0609-04-01-05",
     "name": "术前讨论记录：内容不完整",
     "description": "已存在术前讨论记录的术前准备、方案、风险防范、参与者、讨论意见、主持人小结、日期和签名等内容应完整。",
     "positive_example": "同一份术前讨论记录完整记录准备情况、方案、风险防范、参加人员及职务、具体意见、主持人小结、日期和记录者签名。",
@@ -610,8 +610,8 @@
     "rule_version": "2026-09-20",
     "prompt_version": "lx0609-079-v1",
       "criteria": [{"criterion_id":"preop_discussion_completeness","label":"术前讨论记录内容完整","kind":"completeness","failure_reason_code":"requirement_violated","source_fact":"presurg_discussion.structured_content","operator":"complete","expected":true,"unit":"boolean"}],
-    "mapped_rule_ids": ["LX0609-079"],
-    "primary_execution_rule_id": "LX0609-079",
+    "mapped_rule_ids": ["LX0609-04-01-05"],
+    "primary_execution_rule_id": "LX0609-04-01-05",
     "allowed_result_statuses": ["compliant", "non_compliant", "not_applicable", "data_gap"]
   }
 ]

@@ -27,7 +27,7 @@ from app.services.luxian_0609.treatment_order_consistency_shadow import (
 )
 
 
-RULE_ID = "LX0609-059"
+RULE_ID = "LX0609-05-03-01"
 COORDINATES = ("PRIVATE-INSTITUTE", "PRIVATE-PATIENT", "PRIVATE-VISIT")
 
 
@@ -164,7 +164,7 @@ def test_059_shadow_setting_defaults_off(monkeypatch: pytest.MonkeyPatch) -> Non
     ("enabled", "selected_rule_ids", "coordinates"),
     (
         (False, (RULE_ID,), COORDINATES),
-        (True, ("LX0609-001",), COORDINATES),
+        (True, ("LX0609-01-01-01",), COORDINATES),
         (True, (RULE_ID,), ("", COORDINATES[1], COORDINATES[2])),
     ),
 )
@@ -190,7 +190,7 @@ def test_missing_evidence_session_does_not_attach_shadow_metadata(monkeypatch: p
     _, context = prepare(
         monkeypatch,
         config=settings(),
-        selected_rule_ids=("LX0609-050", RULE_ID),
+        selected_rule_ids=("LX0609-03-02-01", RULE_ID),
         llm_client=llm,
     )
     assert llm.calls == 0
@@ -202,11 +202,11 @@ def test_enabled_shadow_calls_llm_once_attaches_safe_summary_and_keeps_formal_to
 ) -> None:
     llm = FakeLLM()
     executable_rules, context = prepare(
-        monkeypatch, config=settings(), selected_rule_ids=("LX0609-050", RULE_ID),
+        monkeypatch, config=settings(), selected_rule_ids=("LX0609-03-02-01", RULE_ID),
         session=evidence_session(), llm_client=llm,
     )
     shadow = attach(context)["luxian_0609_059_shadow"]
-    assert [item["rule_id"] for item in executable_rules] == ["LX0609-050"]
+    assert [item["rule_id"] for item in executable_rules] == ["LX0609-03-02-01"]
     assert llm.calls == 1
     assert shadow == {
         "shadow_only": True, "release_eligible": False,
@@ -239,7 +239,7 @@ def test_enabled_shadow_calls_llm_once_attaches_safe_summary_and_keeps_formal_to
 def test_missing_material_source_is_controlled_and_keeps_formal_result(monkeypatch: pytest.MonkeyPatch) -> None:
     llm = FakeLLM()
     _, context = prepare(
-        monkeypatch, config=settings(), selected_rule_ids=("LX0609-050", RULE_ID),
+        monkeypatch, config=settings(), selected_rule_ids=("LX0609-03-02-01", RULE_ID),
         session=evidence_session(omit_source="exam_item_report"),
         llm_client=llm,
     )
@@ -266,7 +266,7 @@ def test_shadow_failures_fail_open_and_keep_formal_059_not_executed(
             invalid_core,
         )
     _, context = prepare(
-        monkeypatch, config=settings(), selected_rule_ids=("LX0609-050", RULE_ID),
+        monkeypatch, config=settings(), selected_rule_ids=("LX0609-03-02-01", RULE_ID),
         session=evidence_session(), llm_client=llm,
     )
     shadow = attach(context)["luxian_0609_059_shadow"]

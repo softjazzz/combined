@@ -234,7 +234,7 @@ def test_result_mapping_does_not_turn_source_observation_into_document_ref(monke
 
     decision = build_exam_lab_rule_decision(
         outcome=ExamLabOutcome(
-            rule_id="LX0609-011",
+            rule_id="LX0609-06-01-04",
             status="compliant",
             reason_code="ignored_for_compliant",
         ),
@@ -264,7 +264,7 @@ def test_result_mapping_preserves_invalid_selected_fact_ref_for_binding_failure(
     invalid_ref = "f" * 64
     decision = build_exam_lab_rule_decision(
         outcome=ExamLabOutcome(
-            rule_id="LX0609-011",
+            rule_id="LX0609-06-01-04",
             status="compliant",
             reason_code="ignored_for_compliant",
             fact_refs=(invalid_ref,),
@@ -276,7 +276,7 @@ def test_result_mapping_preserves_invalid_selected_fact_ref_for_binding_failure(
 
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=(decision,),
-        expected_rule_ids=("LX0609-011",),
+        expected_rule_ids=("LX0609-06-01-04",),
         snapshot=snapshot,
         evidence_materials=materials,
     )
@@ -304,7 +304,7 @@ def test_result_mapping_preserves_specific_exam_lab_data_gap_reason(
 
     decision = build_exam_lab_rule_decision(
         outcome=ExamLabOutcome(
-            rule_id="LX0609-011",
+            rule_id="LX0609-06-01-04",
             status="data_gap",
             reason_code=internal_reason,
         ),
@@ -321,7 +321,7 @@ def test_result_mapping_preserves_not_mature_reason_as_not_applicable(monkeypatc
 
     decision = build_exam_lab_rule_decision(
         outcome=ExamLabOutcome(
-            rule_id="LX0609-012",
+            rule_id="LX0609-06-01-05",
             status="not_applicable",
             reason_code="evaluation_window_not_mature",
         ),
@@ -339,7 +339,7 @@ def test_result_mapping_exposes_semantic_unknown_as_uncertain(monkeypatch):
 
     decision = build_exam_lab_rule_decision(
         outcome=ExamLabOutcome(
-            rule_id="LX0609-012",
+            rule_id="LX0609-06-01-05",
             status="evaluation_unknown",
             reason_code="exam_lab_text_fact_unknown",
         ),
@@ -349,7 +349,7 @@ def test_result_mapping_exposes_semantic_unknown_as_uncertain(monkeypatch):
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=(decision,),
-        expected_rule_ids=("LX0609-012",),
+        expected_rule_ids=("LX0609-06-01-05",),
         snapshot=snapshot,
     )
 
@@ -424,7 +424,7 @@ def _fact_response(
                     positive_state
                     if positive_state is not None
                     else "positive"
-                    if rule_id in {"LX0609-012", "LX0609-015"}
+                    if rule_id in {"LX0609-06-01-05", "LX0609-06-03-04"}
                     else "not_relevant"
                 ),
                 "course_doc_positions": (
@@ -464,19 +464,19 @@ async def test_typed_strict_schema_client_receives_dynamic_schema_on_first_and_i
         ),
         evaluation_horizon_rows=({"horizon_date": "2026-04-27"},),
     )
-    first_response = _fact_response(("LX0609-011", "LX0609-012"))
+    first_response = _fact_response(("LX0609-06-01-04", "LX0609-06-01-05"))
     first_response["facts"][0]["semantic_state"] = "unsupported"
-    retry_response = _fact_response(("LX0609-011",), semantic_state="present")
+    retry_response = _fact_response(("LX0609-06-01-04",), semantic_state="present")
     client = _StrictSchemaClient([first_response, retry_response])
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
-        rule_ids=("LX0609-011", "LX0609-012"),
-        wrapper_rules=[_wrapper("LX0609-011"), _wrapper("LX0609-012")],
+        rule_ids=("LX0609-06-01-04", "LX0609-06-01-05"),
+        wrapper_rules=[_wrapper("LX0609-06-01-04"), _wrapper("LX0609-06-01-05")],
         evidence_payload=None,
         llm_client=client,
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-011", "LX0609-012"),
+        decision_rule_ids=("LX0609-06-01-04", "LX0609-06-01-05"),
     )
 
     assert result.llm_call_count == 2
@@ -502,11 +502,11 @@ async def test_typed_strict_schema_client_receives_dynamic_schema_on_first_and_i
     assert first_fact_schema["additionalProperties"] is False
     assert retry_fact_schema["additionalProperties"] is False
     assert first_fact_schema["properties"]["rule_id"]["enum"] == [
-        "LX0609-011",
-        "LX0609-012",
+        "LX0609-06-01-04",
+        "LX0609-06-01-05",
     ]
     assert retry_fact_schema["properties"]["rule_id"]["enum"] == [
-        "LX0609-011"
+        "LX0609-06-01-04"
     ]
 
 
@@ -529,20 +529,20 @@ async def test_typed_strict_schema_client_receives_schema_on_batch_retry(monkeyp
         ),
     )
     response = _fact_response(
-        ("LX0609-014", "LX0609-015"),
+        ("LX0609-06-03-03", "LX0609-06-03-04"),
         applicability="unknown",
         semantic_state="unknown",
     )
     client = _StrictSchemaClient(["plain text", response])
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
-        rule_ids=("LX0609-014", "LX0609-015"),
-        wrapper_rules=[_wrapper("LX0609-014"), _wrapper("LX0609-015")],
+        rule_ids=("LX0609-06-03-03", "LX0609-06-03-04"),
+        wrapper_rules=[_wrapper("LX0609-06-03-03"), _wrapper("LX0609-06-03-04")],
         evidence_payload=None,
         llm_client=client,
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-014", "LX0609-015"),
+        decision_rule_ids=("LX0609-06-03-03", "LX0609-06-03-04"),
     )
 
     assert result.llm_call_count == 2
@@ -552,7 +552,7 @@ async def test_typed_strict_schema_client_receives_schema_on_batch_retry(monkeyp
         assert response_format["type"] == "json_schema"
         assert response_format["json_schema"]["schema"]["properties"]["facts"][
             "items"
-        ]["properties"]["rule_id"]["enum"] == ["LX0609-014", "LX0609-015"]
+        ]["properties"]["rule_id"]["enum"] == ["LX0609-06-03-03", "LX0609-06-03-04"]
 
 
 @pytest.mark.asyncio
@@ -612,16 +612,16 @@ async def test_typed_exam_department_can_prove_non_target_without_model(monkeypa
     client = _Client([])
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
-        rule_ids=("LX0609-010", "LX0609-011", "LX0609-012"),
+        rule_ids=("LX0609-06-01-02", "LX0609-06-01-04", "LX0609-06-01-05"),
         wrapper_rules=[
             _wrapper(rule_id)
-            for rule_id in ("LX0609-010", "LX0609-011", "LX0609-012")
+            for rule_id in ("LX0609-06-01-02", "LX0609-06-01-04", "LX0609-06-01-05")
         ],
         evidence_payload=None,
         llm_client=client,
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-010", "LX0609-011", "LX0609-012"),
+        decision_rule_ids=("LX0609-06-01-02", "LX0609-06-01-04", "LX0609-06-01-05"),
     )
 
     assert [item.applicability.value for item in result.decisions] == [
@@ -846,13 +846,13 @@ async def test_subset_model_and_parse_failures_are_isolated_and_privacy_safe():
     client = _Client([RuntimeError(secret), f"not-json {secret}"])
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
-        rule_ids=("LX0609-014", "LX0609-015"),
-        wrapper_rules=[_wrapper("LX0609-014"), _wrapper("LX0609-015")],
+        rule_ids=("LX0609-06-03-03", "LX0609-06-03-04"),
+        wrapper_rules=[_wrapper("LX0609-06-03-03"), _wrapper("LX0609-06-03-04")],
         evidence_payload=_payload(culture="血培养检出细菌并已完成药敏试验"),
         llm_client=client,
     )
 
-    assert [item["rule_id"] for item in result.results] == ["LX0609-014", "LX0609-015"]
+    assert [item["rule_id"] for item in result.results] == ["LX0609-06-03-03", "LX0609-06-03-04"]
     assert [item["status"] for item in result.results] == ["data_gap", "data_gap"]
     assert result.llm_call_count == 2
     assert secret not in repr(result)
@@ -872,19 +872,19 @@ def test_text_fact_uses_authoritative_report_and_course_times_at_24h_boundary():
         ),
     )
     exact = ExamLabEventFact(
-        "LX0609-011", "applicable", "present", "not_relevant",
+        "LX0609-06-01-04", "applicable", "present", "not_relevant",
         ("D06-01",), ("E01-01", "D06-01"),
     )
     late = ExamLabEventFact(
-        "LX0609-011", "applicable", "present", "not_relevant",
+        "LX0609-06-01-04", "applicable", "present", "not_relevant",
         ("D06-02",), ("E01-01", "D06-02"),
     )
 
     assert exam_lab._text_fact_outcome(
-        rule_id="LX0609-011", facts=(exact,), projection=projection
+        rule_id="LX0609-06-01-04", facts=(exact,), projection=projection
     ).status == "compliant"
     assert exam_lab._text_fact_outcome(
-        rule_id="LX0609-011", facts=(late,), projection=projection
+        rule_id="LX0609-06-01-04", facts=(late,), projection=projection
     ).status == "non_compliant"
 
 
@@ -901,11 +901,11 @@ def test_positive_rule_with_complete_ambiguous_report_is_evaluation_unknown():
         ),
     )
     unknown = ExamLabEventFact(
-        "LX0609-015", "applicable", "unknown", "unknown", (), ("L03-01",),
+        "LX0609-06-03-04", "applicable", "unknown", "unknown", (), ("L03-01",),
     )
 
     assert exam_lab._text_fact_outcome(
-        rule_id="LX0609-015", facts=(unknown,), projection=projection
+        rule_id="LX0609-06-03-04", facts=(unknown,), projection=projection
     ).status == "evaluation_unknown"
 
 
@@ -922,11 +922,11 @@ def test_positive_rule_without_report_result_text_remains_data_gap():
         ),
     )
     unknown = ExamLabEventFact(
-        "LX0609-015", "applicable", "unknown", "unknown", (), ("L03-01",),
+        "LX0609-06-03-04", "applicable", "unknown", "unknown", (), ("L03-01",),
     )
 
     outcome = exam_lab._text_fact_outcome(
-        rule_id="LX0609-015", facts=(unknown,), projection=projection
+        rule_id="LX0609-06-03-04", facts=(unknown,), projection=projection
     )
 
     assert outcome.status == "data_gap"
@@ -947,11 +947,11 @@ def test_known_target_with_complete_but_ambiguous_course_semantics_is_unknown():
         ),
     )
     unknown = ExamLabEventFact(
-        "LX0609-011", "applicable", "unknown", "not_relevant", (), ("E01-01",),
+        "LX0609-06-01-04", "applicable", "unknown", "not_relevant", (), ("E01-01",),
     )
 
     outcome = exam_lab._text_fact_outcome(
-        rule_id="LX0609-011", facts=(unknown,), projection=projection
+        rule_id="LX0609-06-01-04", facts=(unknown,), projection=projection
     )
 
     assert outcome.status == "evaluation_unknown"
@@ -1041,7 +1041,7 @@ async def test_real_provider_to_lx012_preserves_missing_horizon_reason(monkeypat
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-012",),
+        selected_rule_ids=("LX0609-06-01-05",),
         institute_id="safe-institute",
         patient_id="safe-patient",
         visit_id="safe-visit",
@@ -1053,13 +1053,13 @@ async def test_real_provider_to_lx012_preserves_missing_horizon_reason(monkeypat
     )
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
-        rule_ids=("LX0609-012",),
-        wrapper_rules=[_wrapper("LX0609-012")],
+        rule_ids=("LX0609-06-01-05",),
+        wrapper_rules=[_wrapper("LX0609-06-01-05")],
         evidence_payload=None,
         llm_client=_Client([]),
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
-        decision_rule_ids=("LX0609-012",),
+        decision_rule_ids=("LX0609-06-01-05",),
     )
 
     assert result.decisions[0].reason_code == "authoritative_time_missing"
@@ -1284,25 +1284,25 @@ def test_fact_parser_requires_exact_rule_ids_and_rejects_event_or_time_fields():
             },),
         }
     )
-    valid = _fact_response(("LX0609-010",))
+    valid = _fact_response(("LX0609-06-01-02",))
     assert len(parse_exam_lab_fact_response(
         response={"content": json.dumps(valid)},
-        selected_rule_ids=("LX0609-010",),
+        selected_rule_ids=("LX0609-06-01-02",),
         projection=projection,
     )) == 1
 
-    invalid = _fact_response(("LX0609-010",))
+    invalid = _fact_response(("LX0609-06-01-02",))
     invalid["facts"][0]["event_ref"] = "EX001"
     with pytest.raises(ValueError, match="schema mismatch"):
         parse_exam_lab_fact_response(
             response={"content": json.dumps(invalid)},
-            selected_rule_ids=("LX0609-010",),
+            selected_rule_ids=("LX0609-06-01-02",),
             projection=projection,
         )
 
 
 def test_fact_prompt_supplies_one_replaceable_json_slot_per_selected_rule():
-    selected = ("LX0609-010", "LX0609-012", "LX0609-015")
+    selected = ("LX0609-06-01-02", "LX0609-06-01-05", "LX0609-06-03-04")
     projection = build_exam_lab_text_projection(
         rows_by_source={
             "exam_master": ({"exam_type": "CT", "exam_time": "2026-04-26 08:00:00"},),
@@ -1335,7 +1335,7 @@ def test_fact_prompt_supplies_one_replaceable_json_slot_per_selected_rule():
     {
         "schema_version": "lx0609-exam-lab-text-facts-v3",
         "facts": [{
-            "rule_id": "LX0609-010",
+            "rule_id": "LX0609-06-01-02",
             "applicability": "applicable",
             "semantic_state": "present",
             "positive_state": "not_relevant",
@@ -1344,7 +1344,7 @@ def test_fact_prompt_supplies_one_replaceable_json_slot_per_selected_rule():
     },
 ))
 def test_fact_parser_rejects_empty_or_partial_selected_rule_facts(payload):
-    selected = ("LX0609-010", "LX0609-011")
+    selected = ("LX0609-06-01-02", "LX0609-06-01-04")
     projection = build_exam_lab_text_projection(
         rows_by_source={
             "exam_master": ({"exam_type": "CT", "exam_time": "2026-04-26 08:00:00"},),
@@ -1364,7 +1364,7 @@ def test_fact_parser_rejects_empty_or_partial_selected_rule_facts(payload):
 
 
 def test_fact_parser_accepts_complete_multi_rule_response_after_prompt_contract():
-    selected = ("LX0609-010", "LX0609-011")
+    selected = ("LX0609-06-01-02", "LX0609-06-01-04")
     projection = build_exam_lab_text_projection(
         rows_by_source={
             "exam_master": ({"exam_type": "CT", "exam_time": "2026-04-26 08:00:00"},),
@@ -1394,12 +1394,12 @@ def test_fact_parser_python_owns_nonpositive_rule_applicability():
             },),
         }
     )
-    payload = _fact_response(("LX0609-010",))
+    payload = _fact_response(("LX0609-06-01-02",))
     payload["facts"][0]["applicability"] = "not_applicable"
 
     facts = parse_exam_lab_fact_response(
         response={"content": json.dumps(payload)},
-        selected_rule_ids=("LX0609-010",),
+        selected_rule_ids=("LX0609-06-01-02",),
         projection=projection,
     )
 
@@ -1443,7 +1443,7 @@ def test_fact_parser_uses_controlled_whole_report_imaging_classification(
         }
     )
     payload = _fact_response(
-        ("LX0609-012",),
+        ("LX0609-06-01-05",),
         applicability=model_applicability,
         semantic_state=("present" if model_applicability == "applicable" else "absent"),
         positive_state=model_positive,
@@ -1451,7 +1451,7 @@ def test_fact_parser_uses_controlled_whole_report_imaging_classification(
 
     facts = parse_exam_lab_fact_response(
         response={"content": json.dumps(payload)},
-        selected_rule_ids=("LX0609-012",),
+        selected_rule_ids=("LX0609-06-01-05",),
         projection=projection,
     )
 
@@ -1473,12 +1473,12 @@ def test_fact_parser_strong_negative_event_overrides_model_not_relevant():
             },),
         }
     )
-    payload = _fact_response(("LX0609-015",))
+    payload = _fact_response(("LX0609-06-03-04",))
     payload["facts"][0]["positive_state"] = "not_relevant"
 
     facts = parse_exam_lab_fact_response(
         response={"content": json.dumps(payload)},
-        selected_rule_ids=("LX0609-015",),
+        selected_rule_ids=("LX0609-06-03-04",),
         projection=projection,
     )
 
@@ -1504,11 +1504,11 @@ def test_fact_parser_maps_model_course_positions_to_real_evidence_refs():
             },),
         }
     )
-    payload = _fact_response(("LX0609-010",))
+    payload = _fact_response(("LX0609-06-01-02",))
     payload["facts"][0]["course_doc_positions"] = [2]
     facts = parse_exam_lab_fact_response(
         response={"content": json.dumps(payload)},
-        selected_rule_ids=("LX0609-010",),
+        selected_rule_ids=("LX0609-06-01-02",),
         projection=projection,
     )
 
@@ -1530,13 +1530,13 @@ def test_fact_parser_rejects_invalid_course_doc_positions(course_doc_positions):
             },),
         }
     )
-    payload = _fact_response(("LX0609-010",))
+    payload = _fact_response(("LX0609-06-01-02",))
     payload["facts"][0]["course_doc_positions"] = course_doc_positions
 
     with pytest.raises(ValueError, match="evidence ref mismatch"):
         parse_exam_lab_fact_response(
             response={"content": json.dumps(payload)},
-            selected_rule_ids=("LX0609-010",),
+            selected_rule_ids=("LX0609-06-01-02",),
             projection=projection,
         )
 
@@ -1567,12 +1567,12 @@ def test_fact_parser_downgrades_course_positions_inconsistent_with_semantic_stat
             },),
         }
     )
-    payload = _fact_response(("LX0609-010",), semantic_state=semantic_state)
+    payload = _fact_response(("LX0609-06-01-02",), semantic_state=semantic_state)
     payload["facts"][0]["course_doc_positions"] = course_doc_positions
 
     facts = parse_exam_lab_fact_response(
         response={"content": json.dumps(payload)},
-        selected_rule_ids=("LX0609-010",),
+        selected_rule_ids=("LX0609-06-01-02",),
         projection=projection,
     )
 
@@ -1593,13 +1593,13 @@ def test_fact_parser_rejects_legacy_model_reference_fields(legacy_field):
             },),
         }
     )
-    payload = _fact_response(("LX0609-010",))
+    payload = _fact_response(("LX0609-06-01-02",))
     payload["facts"][0][legacy_field] = ["D06-01"]
 
     with pytest.raises(ValueError, match="schema mismatch"):
         parse_exam_lab_fact_response(
             response={"content": json.dumps(payload)},
-            selected_rule_ids=("LX0609-010",),
+            selected_rule_ids=("LX0609-06-01-02",),
             projection=projection,
         )
 
@@ -1617,15 +1617,15 @@ def test_fact_parser_ignores_known_family_ids_already_resolved_by_python():
             },),
         }
     )
-    payload = _fact_response(("LX0609-010", "LX0609-011"))
+    payload = _fact_response(("LX0609-06-01-02", "LX0609-06-01-04"))
 
     facts = parse_exam_lab_fact_response(
         response={"content": json.dumps(payload)},
-        selected_rule_ids=("LX0609-011",),
+        selected_rule_ids=("LX0609-06-01-04",),
         projection=projection,
     )
 
-    assert [item.rule_id for item in facts] == ["LX0609-011"]
+    assert [item.rule_id for item in facts] == ["LX0609-06-01-04"]
 
 
 def test_fact_parser_no_course_normalizes_impossible_present_to_absent():
@@ -1640,12 +1640,12 @@ def test_fact_parser_no_course_normalizes_impossible_present_to_absent():
             "labtest_master": (),
         }
     )
-    response = _fact_response(("LX0609-011",))
+    response = _fact_response(("LX0609-06-01-04",))
     response["facts"][0]["course_doc_positions"] = []
 
     facts = parse_exam_lab_fact_response(
         response={"choices": [{"message": {"content": json.dumps(response)}}]},
-        selected_rule_ids=("LX0609-011",),
+        selected_rule_ids=("LX0609-06-01-04",),
         projection=projection,
     )
 
@@ -1677,7 +1677,7 @@ def test_010_projects_first_course_time_and_reason_fields_for_llm():
     )
 
     prompt = build_exam_lab_fact_prompt(
-        selected_rule_ids=("LX0609-010",), projection=projection
+        selected_rule_ids=("LX0609-06-01-02",), projection=projection
     )
     assert "患者高龄，急性起病，伴发热咳嗽" in prompt
     assert "了解胸部情况及有无肺部感染" in prompt
@@ -1740,22 +1740,22 @@ async def _run_010_public_native(
     )
     client = _Client(list(llm_outputs))
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
-        rule_ids=("LX0609-010",),
-        wrapper_rules=[_wrapper("LX0609-010")],
+        rule_ids=("LX0609-06-01-02",),
+        wrapper_rules=[_wrapper("LX0609-06-01-02")],
         evidence_payload=None,
         llm_client=client,
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-010",),
+        decision_rule_ids=("LX0609-06-01-02",),
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-010",),
+        expected_rule_ids=("LX0609-06-01-02",),
         snapshot=snapshot,
         evidence_materials=materials,
     )
     canonical = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-010"}],
+        wrapper_rules=[{"rule_id": "LX0609-06-01-02"}],
         execution_results=list(result.results),
         reduced_decisions=reduced,
         customer_display_facts=result.customer_display_facts,
@@ -1803,7 +1803,7 @@ def test_010_prompt_exposes_all_and_only_preceding_48h_course_candidates():
     )
 
     prompt = build_exam_lab_fact_prompt(
-        selected_rule_ids=("LX0609-010",),
+        selected_rule_ids=("LX0609-06-01-02",),
         projection=projection,
     )
 
@@ -1848,22 +1848,22 @@ def test_rule_scoped_course_catalog_keeps_010_expansion_out_of_011():
     )
 
     prompt = build_exam_lab_fact_prompt(
-        selected_rule_ids=("LX0609-010", "LX0609-011"),
+        selected_rule_ids=("LX0609-06-01-02", "LX0609-06-01-04"),
         projection=projection,
     )
     catalog = json.loads(
         prompt.split("逐规则事件目录=", 1)[1].split("。010目录", 1)[0]
     )
 
-    assert catalog["LX0609-010"][0]["course_doc_positions"] == [1, 2]
-    assert catalog["LX0609-011"][0]["course_doc_positions"] == [2, 3, 4]
+    assert catalog["LX0609-06-01-02"][0]["course_doc_positions"] == [1, 2]
+    assert catalog["LX0609-06-01-04"][0]["course_doc_positions"] == [2, 3, 4]
 
-    payload = _fact_response(("LX0609-011",))
+    payload = _fact_response(("LX0609-06-01-04",))
     payload["facts"][0]["course_doc_positions"] = [1]
     with pytest.raises(ValueError, match="evidence ref mismatch"):
         parse_exam_lab_fact_response(
             response={"content": json.dumps(payload)},
-            selected_rule_ids=("LX0609-011",),
+            selected_rule_ids=("LX0609-06-01-04",),
             projection=projection,
         )
 
@@ -1895,23 +1895,23 @@ def test_non_010_keeps_nearest_pre_exam_course_outside_010_48h_window():
     )
 
     prompt = build_exam_lab_fact_prompt(
-        selected_rule_ids=("LX0609-010", "LX0609-011"),
+        selected_rule_ids=("LX0609-06-01-02", "LX0609-06-01-04"),
         projection=projection,
     )
     catalog = json.loads(
         prompt.split("逐规则事件目录=", 1)[1].split("。010目录", 1)[0]
     )
 
-    assert catalog["LX0609-010"][0]["course_doc_positions"] == []
-    assert catalog["LX0609-011"][0]["course_doc_positions"] == [1, 2]
+    assert catalog["LX0609-06-01-02"][0]["course_doc_positions"] == []
+    assert catalog["LX0609-06-01-04"][0]["course_doc_positions"] == [1, 2]
     assert "检查前72小时的最近病程" in prompt
 
-    payload = _fact_response(("LX0609-010",))
+    payload = _fact_response(("LX0609-06-01-02",))
     payload["facts"][0]["course_doc_positions"] = [1]
     with pytest.raises(ValueError, match="evidence ref mismatch"):
         parse_exam_lab_fact_response(
             response={"content": json.dumps(payload)},
-            selected_rule_ids=("LX0609-010",),
+            selected_rule_ids=("LX0609-06-01-02",),
             projection=projection,
         )
 
@@ -1941,13 +1941,13 @@ def test_010_parser_rejects_post_exam_course_reference():
             ),
         }
     )
-    payload = _fact_response(("LX0609-010",))
+    payload = _fact_response(("LX0609-06-01-02",))
     payload["facts"][0]["course_doc_positions"] = [2]
 
     with pytest.raises(ValueError, match="evidence ref mismatch"):
         parse_exam_lab_fact_response(
             response={"content": json.dumps(payload)},
-            selected_rule_ids=("LX0609-010",),
+            selected_rule_ids=("LX0609-06-01-02",),
             projection=projection,
         )
 
@@ -1979,14 +1979,14 @@ def test_010_prompt_example_uses_position_allowed_by_current_rule_catalog():
     )
 
     prompt = build_exam_lab_fact_prompt(
-        selected_rule_ids=("LX0609-010", "LX0609-011"),
+        selected_rule_ids=("LX0609-06-01-02", "LX0609-06-01-04"),
         projection=projection,
     )
 
-    assert '"LX0609-010":[{"event_position":1' in prompt
+    assert '"LX0609-06-01-02":[{"event_position":1' in prompt
     assert '"course_doc_positions":[2]' in prompt
     assert (
-        '"rule_id":"LX0609-010","applicability":"applicable",'
+        '"rule_id":"LX0609-06-01-02","applicability":"applicable",'
         '"semantic_state":"present","positive_state":"not_relevant",'
         '"course_doc_positions":[2]'
     ) in prompt
@@ -2187,7 +2187,7 @@ async def test_010_allows_one_course_to_cover_multiple_explicit_exam_events(monk
                 "schema_version": "lx0609-exam-lab-text-facts-v4",
                 "facts": [
                     {
-                        "rule_id": "LX0609-010",
+                        "rule_id": "LX0609-06-01-02",
                         "event_position": event_position,
                         "applicability": "applicable",
                         "semantic_state": "present",
@@ -2337,7 +2337,7 @@ async def test_010_public_native_uses_order_exam_report_contract(
         order_rows=order_rows,
         course_rows=course_rows,
         llm_outputs=(
-            (_fact_response(("LX0609-010",)),)
+            (_fact_response(("LX0609-06-01-02",)),)
             if expected_state == "compliant"
             else ()
         ),
@@ -2353,11 +2353,11 @@ async def test_010_public_native_uses_order_exam_report_contract(
     if expected_failure_kind == "exam_order_exam_association_failed":
         # 孤立检查主记录没有可触发医嘱；保留 data_gap 结论，但不产生已经
         # 被旧 strict 合同拒绝的 010 客户事实或文书证据。
-        assert "LX0609-010" not in dict(result.customer_display_facts)
+        assert "LX0609-06-01-02" not in dict(result.customer_display_facts)
         assert "customer_display_facts" not in canonical
         assert "customer_evidence" not in canonical
     elif expected_state in {"non_compliant", "data_gap"}:
-        facts = dict(result.customer_display_facts)["LX0609-010"]
+        facts = dict(result.customer_display_facts)["LX0609-06-01-02"]
         assert facts["failure_kind"] == expected_failure_kind
     assert result.llm_call_count == (1 if expected_state == "compliant" else 0)
     assert result.total_tokens == (110 if expected_state == "compliant" else 0)
@@ -2495,7 +2495,7 @@ async def test_010_multiple_exams_use_unique_name_and_pre_exam_time_when_course_
                 "schema_version": "lx0609-exam-lab-text-facts-v4",
                 "facts": [
                     {
-                        "rule_id": "LX0609-010",
+                        "rule_id": "LX0609-06-01-02",
                         "event_position": 1,
                         "applicability": "applicable",
                         "semantic_state": "present",
@@ -2503,7 +2503,7 @@ async def test_010_multiple_exams_use_unique_name_and_pre_exam_time_when_course_
                         "course_doc_positions": [1],
                     },
                     {
-                        "rule_id": "LX0609-010",
+                        "rule_id": "LX0609-06-01-02",
                         "event_position": 2,
                         "applicability": "applicable",
                         "semantic_state": "present",
@@ -2561,7 +2561,7 @@ async def test_010_ambiguous_order_exam_linkage_stays_data_gap(monkeypatch):
     assert decision.reason_code == "association_failed"
     assert canonical["status"] == "data_gap"
     assert canonical["reason_code"] == "association_failed"
-    facts = dict(result.customer_display_facts)["LX0609-010"]
+    facts = dict(result.customer_display_facts)["LX0609-06-01-02"]
     assert facts["failure_kind"] == "exam_order_exam_association_failed"
     assert facts["order_count"] == 1
     assert facts["exam_master_count"] == 2
@@ -2619,7 +2619,7 @@ async def test_010_reused_exam_id_across_orders_stays_data_gap(monkeypatch):
                 "schema_version": "lx0609-exam-lab-text-facts-v3",
                 "facts": [
                     {
-                        "rule_id": "LX0609-010",
+                        "rule_id": "LX0609-06-01-02",
                         "applicability": "applicable",
                         "semantic_state": "present",
                         "positive_state": "not_relevant",
@@ -2895,7 +2895,7 @@ async def test_010_pending_order_does_not_poison_executed_exam(monkeypatch):
                 "record_content": "因头部外伤拟行头颅CT明确颅脑损伤。",
             },
         ),
-        llm_outputs=(_fact_response(("LX0609-010",)),),
+        llm_outputs=(_fact_response(("LX0609-06-01-02",)),),
     )
 
     assert decision.reason_code == "requirement_satisfied"
@@ -2952,7 +2952,7 @@ async def test_010_multiple_pending_orders_do_not_poison_one_executed_exam(monke
                 "document_id": "RESCUE-DOC-1",
             },
         ),
-        llm_outputs=(_fact_response(("LX0609-010",)),),
+        llm_outputs=(_fact_response(("LX0609-06-01-02",)),),
     )
 
     assert decision.reason_code == "requirement_satisfied"
@@ -2991,7 +2991,7 @@ async def test_complete_empty_course_only_uses_one_model_call_for_imaging_state(
     client = _Client(
         [
             _fact_response(
-                ("LX0609-012",),
+                ("LX0609-06-01-05",),
                 applicability="applicable",
                 semantic_state="absent",
                 positive_state="positive",
@@ -3026,17 +3026,17 @@ async def test_complete_empty_course_only_uses_one_model_call_for_imaging_state(
     assert result.total_tokens == 110
     assert len(client.prompts) == 1
     facts = dict(result.customer_display_facts)
-    assert facts["LX0609-010"] == {
+    assert facts["LX0609-06-01-02"] == {
         "failure_kind": "exam_lab_requirement_not_documented",
         "subject": "ct_mri",
         "requirement": "reason_before_order",
         "event_phase": "order",
         "checked_sources": ["exam_lab_order", "course_record"],
     }
-    assert facts["LX0609-011"]["requirement"] == "result_recording_within_24h"
-    assert facts["LX0609-012"]["requirement"] == "positive_result_analysis_within_24h"
-    assert facts["LX0609-014"]["subject"] == "culture_susceptibility"
-    assert facts["LX0609-015"]["requirement"] == "positive_result_analysis_within_24h"
+    assert facts["LX0609-06-01-04"]["requirement"] == "result_recording_within_24h"
+    assert facts["LX0609-06-01-05"]["requirement"] == "positive_result_analysis_within_24h"
+    assert facts["LX0609-06-03-03"]["subject"] == "culture_susceptibility"
+    assert facts["LX0609-06-03-04"]["requirement"] == "positive_result_analysis_within_24h"
 
 
 @pytest.mark.asyncio
@@ -3085,17 +3085,17 @@ async def test_lx0609_012_gold_explicit_positive_without_analysis_is_defect(monk
     client = _Client([])
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
-        rule_ids=("LX0609-012",),
-        wrapper_rules=[_wrapper("LX0609-012")],
+        rule_ids=("LX0609-06-01-05",),
+        wrapper_rules=[_wrapper("LX0609-06-01-05")],
         evidence_payload=None,
         llm_client=client,
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-012",),
+        decision_rule_ids=("LX0609-06-01-05",),
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-012",),
+        expected_rule_ids=("LX0609-06-01-05",),
         snapshot=snapshot,
         evidence_materials=materials,
     )
@@ -3104,11 +3104,11 @@ async def test_lx0609_012_gold_explicit_positive_without_analysis_is_defect(monk
     assert result.llm_call_count == 0
     assert result.total_tokens == 0
     assert result.decisions[0].fact_refs
-    facts = dict(result.customer_display_facts)["LX0609-012"]
+    facts = dict(result.customer_display_facts)["LX0609-06-01-05"]
     assert facts["subject"] == "ct_mri"
     assert facts["reviewed_record_scope"] == "首次病程记录及后续病程记录"
     canonical = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-012"}],
+        wrapper_rules=[{"rule_id": "LX0609-06-01-05"}],
         execution_results=list(result.results),
         reduced_decisions=reduced,
         customer_display_facts=result.customer_display_facts,
@@ -3166,20 +3166,20 @@ async def test_lx0609_012_definite_abnormal_finding_is_positive_without_literal_
             },
         ),
     )
-    client = _Client([_fact_response(("LX0609-012",))])
+    client = _Client([_fact_response(("LX0609-06-01-05",))])
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
-        rule_ids=("LX0609-012",),
-        wrapper_rules=[_wrapper("LX0609-012")],
+        rule_ids=("LX0609-06-01-05",),
+        wrapper_rules=[_wrapper("LX0609-06-01-05")],
         evidence_payload=None,
         llm_client=client,
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-012",),
+        decision_rule_ids=("LX0609-06-01-05",),
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-012",),
+        expected_rule_ids=("LX0609-06-01-05",),
         snapshot=snapshot,
         evidence_materials=materials,
     )
@@ -3219,7 +3219,7 @@ async def test_lx0609_012_definite_abnormal_without_course_is_defect_after_matur
     client = _Client(
         [
             _fact_response(
-                ("LX0609-012",),
+                ("LX0609-06-01-05",),
                 applicability="applicable",
                 semantic_state="absent",
                 positive_state="positive",
@@ -3228,17 +3228,17 @@ async def test_lx0609_012_definite_abnormal_without_course_is_defect_after_matur
     )
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
-        rule_ids=("LX0609-012",),
-        wrapper_rules=[_wrapper("LX0609-012")],
+        rule_ids=("LX0609-06-01-05",),
+        wrapper_rules=[_wrapper("LX0609-06-01-05")],
         evidence_payload=None,
         llm_client=client,
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-012",),
+        decision_rule_ids=("LX0609-06-01-05",),
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-012",),
+        expected_rule_ids=("LX0609-06-01-05",),
         snapshot=snapshot,
         evidence_materials=materials,
     )
@@ -3283,20 +3283,20 @@ async def test_lx0609_012_mixed_normal_and_chronic_abnormal_report_is_positive(
             },
         ),
     )
-    client = _Client([_fact_response(("LX0609-012",))])
+    client = _Client([_fact_response(("LX0609-06-01-05",))])
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
-        rule_ids=("LX0609-012",),
-        wrapper_rules=[_wrapper("LX0609-012")],
+        rule_ids=("LX0609-06-01-05",),
+        wrapper_rules=[_wrapper("LX0609-06-01-05")],
         evidence_payload=None,
         llm_client=client,
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-012",),
+        decision_rule_ids=("LX0609-06-01-05",),
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-012",),
+        expected_rule_ids=("LX0609-06-01-05",),
         snapshot=snapshot,
         evidence_materials=materials,
     )
@@ -3359,29 +3359,29 @@ async def test_lx0609_015_structured_positive_culture_with_pending_observation_i
     )
     client = _Client([
         _fact_response(
-            ("LX0609-015",),
+            ("LX0609-06-03-04",),
             applicability="unknown",
             semantic_state="unknown",
         )
     ])
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
-        rule_ids=("LX0609-015",),
-        wrapper_rules=[_wrapper("LX0609-015")],
+        rule_ids=("LX0609-06-03-04",),
+        wrapper_rules=[_wrapper("LX0609-06-03-04")],
         evidence_payload=None,
         llm_client=client,
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-015",),
+        decision_rule_ids=("LX0609-06-03-04",),
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-015",),
+        expected_rule_ids=("LX0609-06-03-04",),
         snapshot=snapshot,
         evidence_materials=materials,
     )
     canonical = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-015"}],
+        wrapper_rules=[{"rule_id": "LX0609-06-03-04"}],
         execution_results=list(result.results),
         reduced_decisions=reduced,
         customer_display_facts=result.customer_display_facts,
@@ -3458,7 +3458,7 @@ async def test_lx0609_015_does_not_bind_independent_catheter_culture_action(
         "schema_version": "lx0609-exam-lab-text-facts-v3",
         "facts": [
             {
-                "rule_id": "LX0609-015",
+                "rule_id": "LX0609-06-03-04",
                 "applicability": "applicable",
                 "semantic_state": "present",
                 "positive_state": "positive",
@@ -3471,22 +3471,22 @@ async def test_lx0609_015_does_not_bind_independent_catheter_culture_action(
     # parser 仍会在结果投影前安全收口，而不是仅依赖 Python 强短语分支。
     monkeypatch.setattr(exam_lab, "_strong_semantic_fact", lambda **_kwargs: None)
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
-        rule_ids=("LX0609-015",),
-        wrapper_rules=[_wrapper("LX0609-015")],
+        rule_ids=("LX0609-06-03-04",),
+        wrapper_rules=[_wrapper("LX0609-06-03-04")],
         evidence_payload=None,
         llm_client=_Client([response]),
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-015",),
+        decision_rule_ids=("LX0609-06-03-04",),
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-015",),
+        expected_rule_ids=("LX0609-06-03-04",),
         snapshot=snapshot,
         evidence_materials=materials,
     )
     canonical = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-015"}],
+        wrapper_rules=[{"rule_id": "LX0609-06-03-04"}],
         execution_results=list(result.results),
         reduced_decisions=reduced,
         customer_display_facts=result.customer_display_facts,
@@ -3540,13 +3540,13 @@ async def test_lx0609_015_same_culture_action_remains_compliant(monkeypatch):
     )
     client = _Client([])
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
-        rule_ids=("LX0609-015",),
-        wrapper_rules=[_wrapper("LX0609-015")],
+        rule_ids=("LX0609-06-03-04",),
+        wrapper_rules=[_wrapper("LX0609-06-03-04")],
         evidence_payload=None,
         llm_client=client,
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-015",),
+        decision_rule_ids=("LX0609-06-03-04",),
     )
 
     assert result.decisions[0].qc_direction.value == "satisfied"
@@ -3647,7 +3647,7 @@ async def test_lx0609_012_gold_positive_gate_outcomes(
     )
     client = _Client([
         _fact_response(
-            ("LX0609-012",),
+            ("LX0609-06-01-05",),
             applicability=model_applicability,
             semantic_state=model_semantic,
             positive_state=model_positive,
@@ -3656,17 +3656,17 @@ async def test_lx0609_012_gold_positive_gate_outcomes(
     ])
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
-        rule_ids=("LX0609-012",),
-        wrapper_rules=[_wrapper("LX0609-012")],
+        rule_ids=("LX0609-06-01-05",),
+        wrapper_rules=[_wrapper("LX0609-06-01-05")],
         evidence_payload=None,
         llm_client=client,
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-012",),
+        decision_rule_ids=("LX0609-06-01-05",),
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-012",),
+        expected_rule_ids=("LX0609-06-01-05",),
         snapshot=snapshot,
         evidence_materials=materials,
     )
@@ -3679,7 +3679,7 @@ async def test_lx0609_012_gold_positive_gate_outcomes(
     else:
         assert all(item.fact_refs for item in result.decisions)
     canonical = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-012"}],
+        wrapper_rules=[{"rule_id": "LX0609-06-01-05"}],
         execution_results=list(result.results),
         reduced_decisions=reduced,
         customer_display_facts=result.customer_display_facts,
@@ -3717,13 +3717,13 @@ async def test_lx0609_012_not_mature_window_stays_not_applicable_through_canonic
         ),
     )
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
-        rule_ids=("LX0609-012",),
-        wrapper_rules=[_wrapper("LX0609-012")],
+        rule_ids=("LX0609-06-01-05",),
+        wrapper_rules=[_wrapper("LX0609-06-01-05")],
         evidence_payload=None,
         llm_client=_Client(
             [
                 _fact_response(
-                    ("LX0609-012",),
+                    ("LX0609-06-01-05",),
                     applicability="applicable",
                     semantic_state="absent",
                     positive_state="positive",
@@ -3732,16 +3732,16 @@ async def test_lx0609_012_not_mature_window_stays_not_applicable_through_canonic
         ),
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-012",),
+        decision_rule_ids=("LX0609-06-01-05",),
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-012",),
+        expected_rule_ids=("LX0609-06-01-05",),
         snapshot=snapshot,
         evidence_materials=materials,
     )
     canonical = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-012"}],
+        wrapper_rules=[{"rule_id": "LX0609-06-01-05"}],
         execution_results=list(result.results),
         reduced_decisions=reduced,
         customer_display_facts=result.customer_display_facts,
@@ -3788,28 +3788,28 @@ async def test_lx0609_012_complete_ambiguous_semantics_is_model_failure(
         ),
     )
     unknown_response = _fact_response(
-        ("LX0609-012",),
+        ("LX0609-06-01-05",),
         applicability="applicable",
         semantic_state="unknown",
         positive_state="positive",
     )
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
-        rule_ids=("LX0609-012",),
-        wrapper_rules=[_wrapper("LX0609-012")],
+        rule_ids=("LX0609-06-01-05",),
+        wrapper_rules=[_wrapper("LX0609-06-01-05")],
         evidence_payload=None,
         llm_client=_Client([unknown_response, unknown_response]),
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-012",),
+        decision_rule_ids=("LX0609-06-01-05",),
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-012",),
+        expected_rule_ids=("LX0609-06-01-05",),
         snapshot=snapshot,
         evidence_materials=materials,
     )
     canonical = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-012"}],
+        wrapper_rules=[{"rule_id": "LX0609-06-01-05"}],
         execution_results=list(result.results),
         reduced_decisions=reduced,
         customer_display_facts=result.customer_display_facts,
@@ -3850,15 +3850,15 @@ def _ambiguous_exam_projection() -> ExamLabTextProjection:
     (
         # 分支一：模型未给出适用性结论（applicability=unknown）。
         ExamLabEventFact(
-            "LX0609-012", "unknown", "unknown", "unknown", (), ("E01-01",)
+            "LX0609-06-01-05", "unknown", "unknown", "unknown", (), ("E01-01",)
         ),
         # 分支二：阳性三态未定（positive_state=unknown）。
         ExamLabEventFact(
-            "LX0609-012", "applicable", "present", "unknown", (), ("E01-01",)
+            "LX0609-06-01-05", "applicable", "present", "unknown", (), ("E01-01",)
         ),
         # 分支三：报告语义未定（semantic_state=unknown）。
         ExamLabEventFact(
-            "LX0609-012", "applicable", "unknown", "positive", (), ("E01-01",)
+            "LX0609-06-01-05", "applicable", "unknown", "positive", (), ("E01-01",)
         ),
     ),
 )
@@ -3866,7 +3866,7 @@ def test_lx0609_012_semantic_unknown_branches_are_contract_data_gap(fact):
     """012 的三个语义不确定分支都必须落在契约允许集合内，不再产出 uncertain。"""
 
     outcome = exam_lab._text_fact_outcome(
-        rule_id="LX0609-012", facts=(fact,), projection=_ambiguous_exam_projection()
+        rule_id="LX0609-06-01-05", facts=(fact,), projection=_ambiguous_exam_projection()
     )
 
     assert outcome.status == "data_gap"
@@ -3879,16 +3879,16 @@ def test_lx0609_012_semantic_unknown_branches_are_contract_data_gap(fact):
 def test_contract_status_conformance_is_scoped_to_lx0609_012():
     """契约收敛只作用于 012；012 的允许状态与其它规则一律原样透传。"""
 
-    assert exam_lab._contract_allowed_status("LX0609-012", "evaluation_unknown") == (
+    assert exam_lab._contract_allowed_status("LX0609-06-01-05", "evaluation_unknown") == (
         "data_gap"
     )
     for allowed in ("compliant", "non_compliant", "not_applicable", "data_gap"):
-        assert exam_lab._contract_allowed_status("LX0609-012", allowed) == allowed
+        assert exam_lab._contract_allowed_status("LX0609-06-01-05", allowed) == allowed
     # 执行失败语义不在本任务范围，保持原样，避免掩盖可重试语义。
-    assert exam_lab._contract_allowed_status("LX0609-012", "technical_error") == (
+    assert exam_lab._contract_allowed_status("LX0609-06-01-05", "technical_error") == (
         "technical_error"
     )
-    for other_rule_id in ("LX0609-010", "LX0609-011", "LX0609-014", "LX0609-015"):
+    for other_rule_id in ("LX0609-06-01-02", "LX0609-06-01-04", "LX0609-06-03-03", "LX0609-06-03-04"):
         assert (
             exam_lab._contract_allowed_status(other_rule_id, "evaluation_unknown")
             == "evaluation_unknown"
@@ -3909,11 +3909,11 @@ def test_contract_status_conformance_is_scoped_to_lx0609_012():
         ),
     )
     unknown_culture = ExamLabEventFact(
-        "LX0609-015", "applicable", "unknown", "unknown", (), ("L03-01",)
+        "LX0609-06-03-04", "applicable", "unknown", "unknown", (), ("L03-01",)
     )
     assert (
         exam_lab._text_fact_outcome(
-            rule_id="LX0609-015",
+            rule_id="LX0609-06-03-04",
             facts=(unknown_culture,),
             projection=culture_projection,
         ).status
@@ -3950,28 +3950,28 @@ async def test_lx0609_012_model_failure_is_not_delivered_as_contract_status(
         ),
     )
     unknown_response = _fact_response(
-        ("LX0609-012",),
+        ("LX0609-06-01-05",),
         applicability="unknown",
         semantic_state="unknown",
         positive_state="unknown",
     )
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
-        rule_ids=("LX0609-012",),
-        wrapper_rules=[_wrapper("LX0609-012")],
+        rule_ids=("LX0609-06-01-05",),
+        wrapper_rules=[_wrapper("LX0609-06-01-05")],
         evidence_payload=None,
         llm_client=_Client([unknown_response, unknown_response]),
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-012",),
+        decision_rule_ids=("LX0609-06-01-05",),
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-012",),
+        expected_rule_ids=("LX0609-06-01-05",),
         snapshot=snapshot,
         evidence_materials=materials,
     )
     canonical = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-012"}],
+        wrapper_rules=[{"rule_id": "LX0609-06-01-05"}],
         execution_results=list(result.results),
         reduced_decisions=reduced,
         customer_display_facts=result.customer_display_facts,
@@ -4030,20 +4030,20 @@ async def test_noncompliant_exam_lab_facts_keep_only_explicit_report_document_id
         },),
     )
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
-        rule_ids=("LX0609-011", "LX0609-014"),
-        wrapper_rules=[_wrapper("LX0609-011"), _wrapper("LX0609-014")],
+        rule_ids=("LX0609-06-01-04", "LX0609-06-03-03"),
+        wrapper_rules=[_wrapper("LX0609-06-01-04"), _wrapper("LX0609-06-03-03")],
         evidence_payload={},
         llm_client=_Client([]),
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-011", "LX0609-014"),
+        decision_rule_ids=("LX0609-06-01-04", "LX0609-06-03-03"),
     )
 
     facts = dict(result.customer_display_facts)
-    assert facts["LX0609-011"]["source_document_ids"] == [
+    assert facts["LX0609-06-01-04"]["source_document_ids"] == [
         "exam-report-document-1"
     ]
-    assert facts["LX0609-014"]["source_document_ids"] == [
+    assert facts["LX0609-06-03-03"]["source_document_ids"] == [
         "lab-report-document-1"
     ]
     assert [item.qc_direction.value for item in result.decisions] == [
@@ -4111,7 +4111,7 @@ def test_fact_parser_requires_exactly_the_five_selected_rule_ids(mutation):
     elif mutation == "duplicate":
         payload["facts"][-1] = dict(payload["facts"][0])
     else:
-        payload["facts"].append({**payload["facts"][0], "rule_id": "LX0609-013"})
+        payload["facts"].append({**payload["facts"][0], "rule_id": "LX0609-06-02-03"})
 
     with pytest.raises(ValueError):
         parse_exam_lab_fact_response(
@@ -4123,7 +4123,7 @@ def test_fact_parser_requires_exactly_the_five_selected_rule_ids(mutation):
 
 def test_post_rule_absence_needs_exact_mature_horizon_and_date_is_conservative():
     fact = ExamLabEventFact(
-        "LX0609-011", "applicable", "absent", "not_relevant", (), ("E01-01",)
+        "LX0609-06-01-04", "applicable", "absent", "not_relevant", (), ("E01-01",)
     )
 
     def outcome(*, precise=None, horizon_date=None):
@@ -4139,7 +4139,7 @@ def test_post_rule_absence_needs_exact_mature_horizon_and_date_is_conservative()
             horizon_date=horizon_date,
         )
         return exam_lab._text_fact_outcome(
-            rule_id="LX0609-011", facts=(fact,), projection=projection
+            rule_id="LX0609-06-01-04", facts=(fact,), projection=projection
         ).status
 
     assert outcome(precise=datetime(2026, 4, 27, 10)) == "non_compliant"
@@ -4250,11 +4250,11 @@ def test_lx012_preserves_specific_evaluation_window_state_and_reason(
         }
     )
     fact = ExamLabEventFact(
-        "LX0609-012", "applicable", "absent", "positive", (), ("E01-01",)
+        "LX0609-06-01-05", "applicable", "absent", "positive", (), ("E01-01",)
     )
 
     outcome = exam_lab._text_fact_outcome(
-        rule_id="LX0609-012", facts=(fact,), projection=projection
+        rule_id="LX0609-06-01-05", facts=(fact,), projection=projection
     )
 
     assert outcome.status == expected_status
@@ -4263,7 +4263,7 @@ def test_lx012_preserves_specific_evaluation_window_state_and_reason(
 
 def test_report_before_course_reference_needs_mature_horizon_before_defect():
     fact = ExamLabEventFact(
-        "LX0609-011", "applicable", "present", "not_relevant",
+        "LX0609-06-01-04", "applicable", "present", "not_relevant",
         ("D06-01",), ("E01-01", "D06-01"),
     )
 
@@ -4279,7 +4279,7 @@ def test_report_before_course_reference_needs_mature_horizon_before_defect():
             precise_horizon=horizon,
         )
         return exam_lab._text_fact_outcome(
-            rule_id="LX0609-011", facts=(fact,), projection=projection
+            rule_id="LX0609-06-01-04", facts=(fact,), projection=projection
         ).status
 
     assert outcome(datetime(2026, 4, 27, 9, 59, 59)) == "not_applicable"
@@ -4303,17 +4303,17 @@ async def test_executor_passes_controlled_evaluation_horizon_into_post_rule(monk
         },),
     )
     client = _Client([
-        _fact_response(("LX0609-011",), semantic_state="absent")
+        _fact_response(("LX0609-06-01-04",), semantic_state="absent")
     ])
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
-        rule_ids=("LX0609-011",),
-        wrapper_rules=[_wrapper("LX0609-011")],
+        rule_ids=("LX0609-06-01-04",),
+        wrapper_rules=[_wrapper("LX0609-06-01-04")],
         evidence_payload=None,
         llm_client=client,
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-011",),
+        decision_rule_ids=("LX0609-06-01-04",),
     )
 
     assert result.decisions[0].qc_direction.value == "defect"
@@ -4335,12 +4335,12 @@ def test_report_time_cannot_replace_missing_course_record_time():
         }
     )
     fact = ExamLabEventFact(
-        "LX0609-011", "applicable", "present", "not_relevant",
+        "LX0609-06-01-04", "applicable", "present", "not_relevant",
         ("D06-01",), ("E01-01", "D06-01"),
     )
 
     outcome = exam_lab._text_fact_outcome(
-        rule_id="LX0609-011", facts=(fact,), projection=projection
+        rule_id="LX0609-06-01-04", facts=(fact,), projection=projection
     )
 
     assert outcome.status == "data_gap"
@@ -4352,8 +4352,8 @@ async def test_missing_projection_is_data_gap_and_does_not_call_model():
     client = _Client([])
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
-        rule_ids=("LX0609-010", "LX0609-015"),
-        wrapper_rules=[_wrapper("LX0609-010"), _wrapper("LX0609-015")],
+        rule_ids=("LX0609-06-01-02", "LX0609-06-03-04"),
+        wrapper_rules=[_wrapper("LX0609-06-01-02"), _wrapper("LX0609-06-03-04")],
         evidence_payload=None,
         llm_client=client,
     )
@@ -4368,11 +4368,11 @@ async def test_typed_all_empty_complete_sources_are_not_applicable_in_requested_
 ):
     snapshot, materials = _typed_session(monkeypatch)
     requested_order = (
-        "LX0609-015",
-        "LX0609-010",
-        "LX0609-014",
-        "LX0609-012",
-        "LX0609-011",
+        "LX0609-06-03-04",
+        "LX0609-06-01-02",
+        "LX0609-06-03-03",
+        "LX0609-06-01-05",
+        "LX0609-06-01-04",
     )
     client = _Client([])
 
@@ -4510,8 +4510,8 @@ async def test_empty_exam_lab_tables_treat_unexecuted_orders_as_not_applicable(
         "target_report_missing",
     ]
     facts = dict(result.customer_display_facts)
-    assert all(rule_id not in facts for rule_id in ("LX0609-010", "LX0609-011", "LX0609-012"))
-    for rule_id in ("LX0609-014", "LX0609-015"):
+    assert all(rule_id not in facts for rule_id in ("LX0609-06-01-02", "LX0609-06-01-04", "LX0609-06-01-05"))
+    for rule_id in ("LX0609-06-03-03", "LX0609-06-03-04"):
         assert facts[rule_id]["trigger_orders"] == [
             {
                 "order_name": "痰一般细菌培养及药敏",
@@ -4531,8 +4531,8 @@ async def test_empty_exam_lab_tables_treat_unexecuted_orders_as_not_applicable(
     public_facts = {
         item["rule_id"]: item.get("customer_display_facts") for item in canonical
     }
-    assert all(public_facts[rule_id] is None for rule_id in ("LX0609-010", "LX0609-011", "LX0609-012"))
-    assert all(public_facts[rule_id]["trigger_orders"] for rule_id in ("LX0609-014", "LX0609-015"))
+    assert all(public_facts[rule_id] is None for rule_id in ("LX0609-06-01-02", "LX0609-06-01-04", "LX0609-06-01-05"))
+    assert all(public_facts[rule_id]["trigger_orders"] for rule_id in ("LX0609-06-03-03", "LX0609-06-03-04"))
     assert result.llm_call_count == 0
     assert client.prompts == []
     assert all(item.fact_refs for item in result.decisions)
@@ -4556,13 +4556,13 @@ async def test_target_exam_report_without_report_time_has_specific_gap_reason(mo
     client = _Client([])
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
-        rule_ids=("LX0609-011",),
-        wrapper_rules=[_wrapper("LX0609-011")],
+        rule_ids=("LX0609-06-01-04",),
+        wrapper_rules=[_wrapper("LX0609-06-01-04")],
         evidence_payload=None,
         llm_client=client,
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-011",),
+        decision_rule_ids=("LX0609-06-01-04",),
     )
 
     assert result.decisions[0].reason_code == "authoritative_report_time_missing"
@@ -4646,7 +4646,7 @@ async def test_typed_decisions_bind_through_unified_reducer(monkeypatch):
     )
     response = _fact_response(exam_lab.EXAM_LAB_RULE_IDS)
     for fact in response["facts"]:
-        if fact["rule_id"] == "LX0609-010":
+        if fact["rule_id"] == "LX0609-06-01-02":
             continue
         fact["course_doc_positions"] = [2]
     client = _Client([response])
@@ -4677,7 +4677,7 @@ async def test_typed_decisions_bind_through_unified_reducer(monkeypatch):
     assert "阳性影像结果" not in repr(result)
     assert "阳性培养结果" not in repr(result)
     display_facts = dict(result.customer_display_facts)
-    for rule_id in ("LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015"):
+    for rule_id in ("LX0609-06-01-04", "LX0609-06-01-05", "LX0609-06-03-03", "LX0609-06-03-04"):
         assert display_facts[rule_id]["verification_kind"] == (
             "exam_lab_requirement_checked"
         )
@@ -4744,11 +4744,11 @@ async def test_six_ct_mri_events_are_checked_independently_in_one_model_call(
             "applicability": "applicable",
             "semantic_state": "present",
             "positive_state": (
-                "positive" if rule_id == "LX0609-012" else "not_relevant"
+                "positive" if rule_id == "LX0609-06-01-05" else "not_relevant"
             ),
             "course_doc_positions": [event_position],
         }
-        for rule_id in ("LX0609-011", "LX0609-012")
+        for rule_id in ("LX0609-06-01-04", "LX0609-06-01-05")
         for event_position in range(1, 7)
     ]
     client = _Client([
@@ -4759,13 +4759,13 @@ async def test_six_ct_mri_events_are_checked_independently_in_one_model_call(
     ])
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
-        rule_ids=("LX0609-011", "LX0609-012"),
-        wrapper_rules=[_wrapper("LX0609-011"), _wrapper("LX0609-012")],
+        rule_ids=("LX0609-06-01-04", "LX0609-06-01-05"),
+        wrapper_rules=[_wrapper("LX0609-06-01-04"), _wrapper("LX0609-06-01-05")],
         evidence_payload=None,
         llm_client=client,
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-011", "LX0609-012"),
+        decision_rule_ids=("LX0609-06-01-04", "LX0609-06-01-05"),
     )
 
     assert [item.qc_direction.value for item in result.decisions] == [
@@ -4780,7 +4780,7 @@ async def test_six_ct_mri_events_are_checked_independently_in_one_model_call(
     assert "每个规则与事件组合各一条" in client.prompts[0]
     assert "每个rule_id各一条" not in client.prompts[0]
     display_facts = dict(result.customer_display_facts)
-    for rule_id in ("LX0609-011", "LX0609-012"):
+    for rule_id in ("LX0609-06-01-04", "LX0609-06-01-05"):
         assert display_facts[rule_id]["event_count"] == 6
         assert [
             item["event_position"]
@@ -4831,7 +4831,7 @@ def test_multi_event_parser_localizes_course_outside_the_event_window():
         "schema_version": "lx0609-exam-lab-text-facts-v4",
         "facts": [
             {
-                "rule_id": "LX0609-011",
+                "rule_id": "LX0609-06-01-04",
                 "event_position": 1,
                 "applicability": "applicable",
                 "semantic_state": "present",
@@ -4839,7 +4839,7 @@ def test_multi_event_parser_localizes_course_outside_the_event_window():
                 "course_doc_positions": [3],
             },
             {
-                "rule_id": "LX0609-011",
+                "rule_id": "LX0609-06-01-04",
                 "event_position": 2,
                 "applicability": "applicable",
                 "semantic_state": "present",
@@ -4851,7 +4851,7 @@ def test_multi_event_parser_localizes_course_outside_the_event_window():
 
     facts = parse_exam_lab_fact_response(
         response={"content": json.dumps(response, ensure_ascii=False)},
-        selected_rule_ids=("LX0609-011",),
+        selected_rule_ids=("LX0609-06-01-04",),
         projection=projection,
     )
 
@@ -4893,7 +4893,7 @@ def test_010_shared_course_only_mentioning_first_event_does_not_cover_second():
         "schema_version": "lx0609-exam-lab-text-facts-v4",
         "facts": [
             {
-                "rule_id": "LX0609-010",
+                "rule_id": "LX0609-06-01-02",
                 "event_position": event_position,
                 "applicability": "applicable",
                 "semantic_state": "present",
@@ -4906,7 +4906,7 @@ def test_010_shared_course_only_mentioning_first_event_does_not_cover_second():
 
     facts = parse_exam_lab_fact_response(
         response={"content": json.dumps(response, ensure_ascii=False)},
-        selected_rule_ids=("LX0609-010",),
+        selected_rule_ids=("LX0609-06-01-02",),
         projection=projection,
     )
 
@@ -4944,7 +4944,7 @@ def test_010_shared_course_different_same_modality_body_does_not_cover_second():
         "schema_version": "lx0609-exam-lab-text-facts-v4",
         "facts": [
             {
-                "rule_id": "LX0609-010",
+                "rule_id": "LX0609-06-01-02",
                 "event_position": event_position,
                 "applicability": "applicable",
                 "semantic_state": "present",
@@ -4957,7 +4957,7 @@ def test_010_shared_course_different_same_modality_body_does_not_cover_second():
 
     facts = parse_exam_lab_fact_response(
         response={"content": json.dumps(response, ensure_ascii=False)},
-        selected_rule_ids=("LX0609-010",),
+        selected_rule_ids=("LX0609-06-01-02",),
         projection=projection,
     )
 
@@ -5001,7 +5001,7 @@ def test_multi_event_parser_does_not_treat_imaging_result_restatement_as_analysi
         "schema_version": "lx0609-exam-lab-text-facts-v4",
         "facts": [
             {
-                "rule_id": "LX0609-012",
+                "rule_id": "LX0609-06-01-05",
                 "event_position": position,
                 "applicability": "applicable",
                 "semantic_state": "present",
@@ -5014,7 +5014,7 @@ def test_multi_event_parser_does_not_treat_imaging_result_restatement_as_analysi
 
     facts = parse_exam_lab_fact_response(
         response={"content": json.dumps(response, ensure_ascii=False)},
-        selected_rule_ids=("LX0609-012",),
+        selected_rule_ids=("LX0609-06-01-05",),
         projection=projection,
     )
 
@@ -5058,7 +5058,7 @@ def test_multi_event_parser_keeps_explicit_clinical_analysis_of_imaging_result()
         "schema_version": "lx0609-exam-lab-text-facts-v4",
         "facts": [
             {
-                "rule_id": "LX0609-012",
+                "rule_id": "LX0609-06-01-05",
                 "event_position": position,
                 "applicability": "applicable",
                 "semantic_state": "present",
@@ -5071,7 +5071,7 @@ def test_multi_event_parser_keeps_explicit_clinical_analysis_of_imaging_result()
 
     facts = parse_exam_lab_fact_response(
         response={"content": json.dumps(response, ensure_ascii=False)},
-        selected_rule_ids=("LX0609-012",),
+        selected_rule_ids=("LX0609-06-01-05",),
         projection=projection,
     )
 
@@ -5109,7 +5109,7 @@ async def test_multi_event_violation_is_not_hidden_by_another_event_data_gap(
         "schema_version": "lx0609-exam-lab-text-facts-v4",
         "facts": [
             {
-                "rule_id": "LX0609-011",
+                "rule_id": "LX0609-06-01-04",
                 "event_position": 1,
                 "applicability": "unknown",
                 "semantic_state": "unknown",
@@ -5117,7 +5117,7 @@ async def test_multi_event_violation_is_not_hidden_by_another_event_data_gap(
                 "course_doc_positions": [],
             },
             {
-                "rule_id": "LX0609-011",
+                "rule_id": "LX0609-06-01-04",
                 "event_position": 2,
                 "applicability": "applicable",
                 "semantic_state": "absent",
@@ -5128,18 +5128,18 @@ async def test_multi_event_violation_is_not_hidden_by_another_event_data_gap(
     }])
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
-        rule_ids=("LX0609-011",),
-        wrapper_rules=[_wrapper("LX0609-011")],
+        rule_ids=("LX0609-06-01-04",),
+        wrapper_rules=[_wrapper("LX0609-06-01-04")],
         evidence_payload=None,
         llm_client=client,
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-011",),
+        decision_rule_ids=("LX0609-06-01-04",),
     )
 
     assert result.decisions[0].qc_direction.value == "defect"
     assert result.llm_call_count == 1
-    display = dict(result.customer_display_facts)["LX0609-011"]
+    display = dict(result.customer_display_facts)["LX0609-06-01-04"]
     assert display["event_count"] == 2
     assert display["event_results"] == [
         {
@@ -5193,7 +5193,7 @@ async def test_012_mixed_positive_and_unknown_events_stop_at_model_failure(
         "schema_version": "lx0609-exam-lab-text-facts-v4",
         "facts": [
             {
-                "rule_id": "LX0609-012",
+                "rule_id": "LX0609-06-01-05",
                 "event_position": 1,
                 "applicability": "unknown",
                 "semantic_state": "unknown",
@@ -5201,7 +5201,7 @@ async def test_012_mixed_positive_and_unknown_events_stop_at_model_failure(
                 "course_doc_positions": [],
             },
             {
-                "rule_id": "LX0609-012",
+                "rule_id": "LX0609-06-01-05",
                 "event_position": 2,
                 "applicability": "applicable",
                 "semantic_state": "absent",
@@ -5213,17 +5213,17 @@ async def test_012_mixed_positive_and_unknown_events_stop_at_model_failure(
     client = _Client([unknown_response, unknown_response])
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
-        rule_ids=("LX0609-012",),
-        wrapper_rules=[_wrapper("LX0609-012")],
+        rule_ids=("LX0609-06-01-05",),
+        wrapper_rules=[_wrapper("LX0609-06-01-05")],
         evidence_payload=None,
         llm_client=client,
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-012",),
+        decision_rule_ids=("LX0609-06-01-05",),
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-012",),
+        expected_rule_ids=("LX0609-06-01-05",),
         snapshot=snapshot,
         evidence_materials=materials,
     )
@@ -5236,7 +5236,7 @@ async def test_012_mixed_positive_and_unknown_events_stop_at_model_failure(
     assert reduced[0].reason_code == "model_invalid_output"
 
     canonical = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-012"}],
+        wrapper_rules=[{"rule_id": "LX0609-06-01-05"}],
         execution_results=list(result.results),
         reduced_decisions=reduced,
         customer_display_facts=result.customer_display_facts,
@@ -5286,7 +5286,7 @@ async def test_012_mixed_data_gap_and_defect_projects_all_event_documents(
             "schema_version": "lx0609-exam-lab-text-facts-v4",
             "facts": [
                 {
-                    "rule_id": "LX0609-012",
+                    "rule_id": "LX0609-06-01-05",
                     "event_position": 1,
                     "applicability": "unknown",
                     "semantic_state": "unknown",
@@ -5294,7 +5294,7 @@ async def test_012_mixed_data_gap_and_defect_projects_all_event_documents(
                     "course_doc_positions": [],
                 },
                 {
-                    "rule_id": "LX0609-012",
+                    "rule_id": "LX0609-06-01-05",
                     "event_position": 2,
                     "applicability": "applicable",
                     "semantic_state": "absent",
@@ -5306,22 +5306,22 @@ async def test_012_mixed_data_gap_and_defect_projects_all_event_documents(
     ])
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
-        rule_ids=("LX0609-012",),
-        wrapper_rules=[_wrapper("LX0609-012")],
+        rule_ids=("LX0609-06-01-05",),
+        wrapper_rules=[_wrapper("LX0609-06-01-05")],
         evidence_payload=None,
         llm_client=client,
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-012",),
+        decision_rule_ids=("LX0609-06-01-05",),
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-012",),
+        expected_rule_ids=("LX0609-06-01-05",),
         snapshot=snapshot,
         evidence_materials=materials,
     )
     canonical = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-012"}],
+        wrapper_rules=[{"rule_id": "LX0609-06-01-05"}],
         execution_results=list(result.results),
         reduced_decisions=reduced,
         customer_display_facts=result.customer_display_facts,
@@ -5367,7 +5367,7 @@ async def test_multi_event_all_data_gap_still_delivers_each_event_detail(monkeyp
         "schema_version": "lx0609-exam-lab-text-facts-v4",
         "facts": [
             {
-                "rule_id": "LX0609-011",
+                "rule_id": "LX0609-06-01-04",
                 "event_position": event_position,
                 "applicability": "unknown",
                 "semantic_state": "unknown",
@@ -5379,17 +5379,17 @@ async def test_multi_event_all_data_gap_still_delivers_each_event_detail(monkeyp
     }])
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
-        rule_ids=("LX0609-011",),
-        wrapper_rules=[_wrapper("LX0609-011")],
+        rule_ids=("LX0609-06-01-04",),
+        wrapper_rules=[_wrapper("LX0609-06-01-04")],
         evidence_payload=None,
         llm_client=client,
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-011",),
+        decision_rule_ids=("LX0609-06-01-04",),
     )
 
     assert result.decisions[0].evidence_state.value == "data_gap"
-    display = dict(result.customer_display_facts)["LX0609-011"]
+    display = dict(result.customer_display_facts)["LX0609-06-01-04"]
     assert display["verification_kind"] == "exam_lab_event_review_incomplete"
     assert [item["event_status"] for item in display["event_results"]] == [
         "data_gap",
@@ -5425,18 +5425,18 @@ async def test_explicit_report_and_culture_action_phrases_use_python_without_mod
     client = _Client([])
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
-        rule_ids=("LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015"),
+        rule_ids=("LX0609-06-01-04", "LX0609-06-01-05", "LX0609-06-03-03", "LX0609-06-03-04"),
         wrapper_rules=[
-            _wrapper("LX0609-011"),
-            _wrapper("LX0609-012"),
-            _wrapper("LX0609-014"),
-            _wrapper("LX0609-015"),
+            _wrapper("LX0609-06-01-04"),
+            _wrapper("LX0609-06-01-05"),
+            _wrapper("LX0609-06-03-03"),
+            _wrapper("LX0609-06-03-04"),
         ],
         evidence_payload=None,
         llm_client=client,
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015"),
+        decision_rule_ids=("LX0609-06-01-04", "LX0609-06-01-05", "LX0609-06-03-03", "LX0609-06-03-04"),
     )
 
     assert [item.qc_direction.value for item in result.decisions] == [
@@ -5475,7 +5475,7 @@ async def test_explicit_result_only_course_closes_analysis_rules_without_model(m
         evaluation_horizon_rows=({"horizon_date": "2026-04-28"},),
     )
     client = _Client([])
-    rule_ids = ("LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015")
+    rule_ids = ("LX0609-06-01-04", "LX0609-06-01-05", "LX0609-06-03-03", "LX0609-06-03-04")
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
         rule_ids=rule_ids,
@@ -5526,13 +5526,13 @@ def test_pending_or_conditional_report_phrases_are_not_strong_evidence():
     )
 
     assert exam_lab._strong_semantic_fact(
-        rule_id="LX0609-011", projection=projection
+        rule_id="LX0609-06-01-04", projection=projection
     ) is None
     assert exam_lab._strong_semantic_fact(
-        rule_id="LX0609-014", projection=projection
+        rule_id="LX0609-06-03-03", projection=projection
     ) is None
     assert exam_lab._strong_semantic_fact(
-        rule_id="LX0609-015", projection=projection
+        rule_id="LX0609-06-03-04", projection=projection
     ) is None
 
 
@@ -5586,7 +5586,7 @@ def test_exam_lab_fact_prompt_contains_per_rule_decision_table_for_single_event(
     )
 
     prompt = build_exam_lab_fact_prompt(
-        selected_rule_ids=("LX0609-010", "LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015"),
+        selected_rule_ids=("LX0609-06-01-02", "LX0609-06-01-04", "LX0609-06-01-05", "LX0609-06-03-03", "LX0609-06-03-04"),
         projection=projection,
     )
 
@@ -5623,7 +5623,7 @@ def test_exam_lab_fact_response_format_builds_strict_v4_schema_with_event_positi
     assert len(projection.imaging_events) == 2
 
     response_format = build_exam_lab_fact_response_format(
-        selected_rule_ids=("LX0609-011",),
+        selected_rule_ids=("LX0609-06-01-04",),
         projection=projection,
     )
 
@@ -5688,16 +5688,16 @@ async def test_text_first_synthetic_missing_ct_reason_is_non_compliant_after_one
             "record_content": "常规病程记录，未说明检查原因。",
         },),
     )
-    client = _Client([_fact_response(("LX0609-010",), semantic_state="absent")])
+    client = _Client([_fact_response(("LX0609-06-01-02",), semantic_state="absent")])
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
-        rule_ids=("LX0609-010",),
-        wrapper_rules=[_wrapper("LX0609-010")],
+        rule_ids=("LX0609-06-01-02",),
+        wrapper_rules=[_wrapper("LX0609-06-01-02")],
         evidence_payload=None,
         llm_client=client,
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-010",),
+        decision_rule_ids=("LX0609-06-01-02",),
     )
 
     assert result.decisions[0].qc_direction.value == "defect"
@@ -5721,17 +5721,17 @@ async def test_text_first_synthetic_positive_culture_missing_record_or_action_is
         },),
         evaluation_horizon_rows=({"horizon_date": "2026-04-28"},),
     )
-    response = _fact_response(("LX0609-014", "LX0609-015"), semantic_state="absent")
+    response = _fact_response(("LX0609-06-03-03", "LX0609-06-03-04"), semantic_state="absent")
     client = _Client([response])
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
-        rule_ids=("LX0609-014", "LX0609-015"),
-        wrapper_rules=[_wrapper("LX0609-014"), _wrapper("LX0609-015")],
+        rule_ids=("LX0609-06-03-03", "LX0609-06-03-04"),
+        wrapper_rules=[_wrapper("LX0609-06-03-03"), _wrapper("LX0609-06-03-04")],
         evidence_payload=None,
         llm_client=client,
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-014", "LX0609-015"),
+        decision_rule_ids=("LX0609-06-03-03", "LX0609-06-03-04"),
     )
 
     assert [item.qc_direction.value for item in result.decisions] == ["defect", "defect"]
@@ -5751,22 +5751,22 @@ async def test_typed_source_error_and_unavailable_are_distinct_and_zero_model(mo
     client = _Client([])
 
     error_result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
-        rule_ids=("LX0609-010",),
-        wrapper_rules=[_wrapper("LX0609-010")],
+        rule_ids=("LX0609-06-01-02",),
+        wrapper_rules=[_wrapper("LX0609-06-01-02")],
         evidence_payload=None,
         llm_client=client,
         evidence_snapshot=error_snapshot,
         evidence_materials=error_materials,
-        decision_rule_ids=("LX0609-010",),
+        decision_rule_ids=("LX0609-06-01-02",),
     )
     unavailable_result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
-        rule_ids=("LX0609-014",),
-        wrapper_rules=[_wrapper("LX0609-014")],
+        rule_ids=("LX0609-06-03-03",),
+        wrapper_rules=[_wrapper("LX0609-06-03-03")],
         evidence_payload=None,
         llm_client=client,
         evidence_snapshot=unavailable_snapshot,
         evidence_materials=unavailable_materials,
-        decision_rule_ids=("LX0609-014",),
+        decision_rule_ids=("LX0609-06-03-03",),
     )
 
     assert error_result.decisions[0].evidence_state.value == "technical_error"
@@ -5800,13 +5800,13 @@ async def test_scoped_exam_lab_order_truncation_cannot_be_bypassed_by_course_fal
     client = _Client([])
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
-        rule_ids=("LX0609-010",),
-        wrapper_rules=[_wrapper("LX0609-010")],
+        rule_ids=("LX0609-06-01-02",),
+        wrapper_rules=[_wrapper("LX0609-06-01-02")],
         evidence_payload=None,
         llm_client=client,
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-010",),
+        decision_rule_ids=("LX0609-06-01-02",),
     )
 
     assert result.decisions[0].evidence_state.value == "data_gap"
@@ -5836,13 +5836,13 @@ async def test_cancelled_exam_order_does_not_create_native_trigger(monkeypatch):
     client = _Client([])
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
-        rule_ids=("LX0609-010",),
-        wrapper_rules=[_wrapper("LX0609-010")],
+        rule_ids=("LX0609-06-01-02",),
+        wrapper_rules=[_wrapper("LX0609-06-01-02")],
         evidence_payload=None,
         llm_client=client,
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-010",),
+        decision_rule_ids=("LX0609-06-01-02",),
     )
 
     assert result.decisions[0].applicability.value == "not_applicable"
@@ -5860,7 +5860,7 @@ async def test_exam_source_failure_does_not_pollute_culture_rules(monkeypatch):
         },),
         source_states={"exam_master": "error"},
     )
-    client = _Client([_fact_response(("LX0609-014", "LX0609-015"))])
+    client = _Client([_fact_response(("LX0609-06-03-03", "LX0609-06-03-04"))])
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
         rule_ids=exam_lab.EXAM_LAB_RULE_IDS,
@@ -5899,16 +5899,16 @@ async def test_exam_report_source_failure_blocks_010_report_completeness_check(m
         },),
         source_states={"exam_item_report": "error"},
     )
-    client = _Client([_fact_response(("LX0609-010",))])
+    client = _Client([_fact_response(("LX0609-06-01-02",))])
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
-        rule_ids=("LX0609-010",),
-        wrapper_rules=[_wrapper("LX0609-010")],
+        rule_ids=("LX0609-06-01-02",),
+        wrapper_rules=[_wrapper("LX0609-06-01-02")],
         evidence_payload=None,
         llm_client=client,
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-010",),
+        decision_rule_ids=("LX0609-06-01-02",),
     )
 
     assert result.decisions[0].evidence_state.value == "technical_error"
@@ -5932,13 +5932,13 @@ async def test_typed_model_failure_and_invalid_output_are_technical_errors_witho
     client = _Client([RuntimeError(secret)])
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
-        rule_ids=("LX0609-014", "LX0609-015"),
-        wrapper_rules=[_wrapper("LX0609-014"), _wrapper("LX0609-015")],
+        rule_ids=("LX0609-06-03-03", "LX0609-06-03-04"),
+        wrapper_rules=[_wrapper("LX0609-06-03-03"), _wrapper("LX0609-06-03-04")],
         evidence_payload=None,
         llm_client=client,
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-014", "LX0609-015"),
+        decision_rule_ids=("LX0609-06-03-03", "LX0609-06-03-04"),
     )
 
     assert [item.evidence_state.value for item in result.decisions] == [
@@ -5950,13 +5950,13 @@ async def test_typed_model_failure_and_invalid_output_are_technical_errors_witho
         "model_transport_error",
     ]
     invalid = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
-        rule_ids=("LX0609-014", "LX0609-015"),
-        wrapper_rules=[_wrapper("LX0609-014"), _wrapper("LX0609-015")],
+        rule_ids=("LX0609-06-03-03", "LX0609-06-03-04"),
+        wrapper_rules=[_wrapper("LX0609-06-03-03"), _wrapper("LX0609-06-03-04")],
         evidence_payload=None,
         llm_client=_Client([f"not-json {secret}"]),
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-014", "LX0609-015"),
+        decision_rule_ids=("LX0609-06-03-03", "LX0609-06-03-04"),
     )
     assert [item.reason_code for item in invalid.decisions] == [
         "model_invalid_output",
@@ -5986,13 +5986,13 @@ async def test_typed_invalid_model_output_records_safe_parse_failure_kind(monkey
     caplog.set_level(logging.WARNING, logger=exam_lab.__name__)
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
-        rule_ids=("LX0609-014", "LX0609-015"),
-        wrapper_rules=[_wrapper("LX0609-014"), _wrapper("LX0609-015")],
+        rule_ids=("LX0609-06-03-03", "LX0609-06-03-04"),
+        wrapper_rules=[_wrapper("LX0609-06-03-03"), _wrapper("LX0609-06-03-04")],
         evidence_payload=None,
         llm_client=client,
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-014", "LX0609-015"),
+        decision_rule_ids=("LX0609-06-03-03", "LX0609-06-03-04"),
     )
 
     assert [item.reason_code for item in result.decisions] == [
@@ -6034,16 +6034,16 @@ async def test_typed_unexpected_value_error_logs_safe_parse_failure_kind(monkeyp
     caplog.set_level(logging.WARNING, logger=exam_lab.__name__)
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
-        rule_ids=("LX0609-014", "LX0609-015"),
-        wrapper_rules=[_wrapper("LX0609-014"), _wrapper("LX0609-015")],
+        rule_ids=("LX0609-06-03-03", "LX0609-06-03-04"),
+        wrapper_rules=[_wrapper("LX0609-06-03-03"), _wrapper("LX0609-06-03-04")],
         evidence_payload=None,
         llm_client=_Client([
-            _fact_response(("LX0609-014", "LX0609-015")),
-            _fact_response(("LX0609-014", "LX0609-015")),
+            _fact_response(("LX0609-06-03-03", "LX0609-06-03-04")),
+            _fact_response(("LX0609-06-03-03", "LX0609-06-03-04")),
         ]),
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-014", "LX0609-015"),
+        decision_rule_ids=("LX0609-06-03-03", "LX0609-06-03-04"),
     )
 
     assert [item.reason_code for item in result.decisions] == [
@@ -6067,42 +6067,42 @@ async def test_typed_unexpected_value_error_logs_safe_parse_failure_kind(monkeyp
         ("plain text", "not_json"),
         ("{not-json}", "json_decode"),
         ({"schema_version": "unsupported", "facts": []}, "schema_version"),
-        (_fact_response(("LX0609-014",)), "scope"),
+        (_fact_response(("LX0609-06-03-03",)), "scope"),
         (
             {
-                **_fact_response(("LX0609-014", "LX0609-015")),
+                **_fact_response(("LX0609-06-03-03", "LX0609-06-03-04")),
                 "facts": [
                     {
                         **item,
                         "semantic_state": "unsupported",
                     }
-                    for item in _fact_response(("LX0609-014", "LX0609-015"))["facts"]
+                    for item in _fact_response(("LX0609-06-03-03", "LX0609-06-03-04"))["facts"]
                 ],
             },
             "value",
         ),
         (
             {
-                **_fact_response(("LX0609-014", "LX0609-015")),
+                **_fact_response(("LX0609-06-03-03", "LX0609-06-03-04")),
                 "facts": [
                     {
                         **item,
                         "course_doc_positions": [99],
                     }
-                    for item in _fact_response(("LX0609-014", "LX0609-015"))["facts"]
+                    for item in _fact_response(("LX0609-06-03-03", "LX0609-06-03-04"))["facts"]
                 ],
             },
             "evidence_ref",
         ),
         (
             {
-                **_fact_response(("LX0609-014", "LX0609-015")),
+                **_fact_response(("LX0609-06-03-03", "LX0609-06-03-04")),
                 "facts": [
                     {
                         **item,
                         "course_doc_refs": ["D06-01"],
                     }
-                    for item in _fact_response(("LX0609-014", "LX0609-015"))["facts"]
+                    for item in _fact_response(("LX0609-06-03-03", "LX0609-06-03-04"))["facts"]
                 ],
             },
             "value",
@@ -6126,13 +6126,13 @@ async def test_typed_parse_failures_keep_same_public_status_and_budget(
         ),
     )
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
-        rule_ids=("LX0609-014", "LX0609-015"),
-        wrapper_rules=[_wrapper("LX0609-014"), _wrapper("LX0609-015")],
+        rule_ids=("LX0609-06-03-03", "LX0609-06-03-04"),
+        wrapper_rules=[_wrapper("LX0609-06-03-03"), _wrapper("LX0609-06-03-04")],
         evidence_payload=None,
         llm_client=_Client([response, response]),
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-014", "LX0609-015"),
+        decision_rule_ids=("LX0609-06-03-03", "LX0609-06-03-04"),
     )
 
     assert [item.reason_code for item in result.decisions] == [
@@ -6150,33 +6150,33 @@ async def test_typed_scope_and_wrapper_duplicates_fail_closed(monkeypatch):
 
     with pytest.raises(ValueError, match="duplicate typed"):
         await exam_lab.execute_luxian_0609_native_exam_lab_rules(
-            rule_ids=("LX0609-010",),
-            wrapper_rules=[_wrapper("LX0609-010")],
+            rule_ids=("LX0609-06-01-02",),
+            wrapper_rules=[_wrapper("LX0609-06-01-02")],
             evidence_payload=None,
             llm_client=None,
             evidence_snapshot=snapshot,
             evidence_materials=materials,
-            decision_rule_ids=("LX0609-010", "LX0609-010"),
+            decision_rule_ids=("LX0609-06-01-02", "LX0609-06-01-02"),
         )
     with pytest.raises(ValueError, match="unsupported typed"):
         await exam_lab.execute_luxian_0609_native_exam_lab_rules(
-            rule_ids=("LX0609-010",),
-            wrapper_rules=[_wrapper("LX0609-010")],
+            rule_ids=("LX0609-06-01-02",),
+            wrapper_rules=[_wrapper("LX0609-06-01-02")],
             evidence_payload=None,
             llm_client=None,
             evidence_snapshot=snapshot,
             evidence_materials=materials,
-            decision_rule_ids=("LX0609-011",),
+            decision_rule_ids=("LX0609-06-01-04",),
         )
     with pytest.raises(ValueError, match="duplicate typed exam lab wrapper"):
         await exam_lab.execute_luxian_0609_native_exam_lab_rules(
-            rule_ids=("LX0609-010",),
-            wrapper_rules=[_wrapper("LX0609-010"), _wrapper("LX0609-010")],
+            rule_ids=("LX0609-06-01-02",),
+            wrapper_rules=[_wrapper("LX0609-06-01-02"), _wrapper("LX0609-06-01-02")],
             evidence_payload=None,
             llm_client=None,
             evidence_snapshot=snapshot,
             evidence_materials=materials,
-            decision_rule_ids=("LX0609-010",),
+            decision_rule_ids=("LX0609-06-01-02",),
         )
 
 
@@ -6196,26 +6196,26 @@ async def test_typed_and_legacy_rules_are_isolated_in_mixed_rollback_mode(monkey
     )
     client = _Client([
         _fact_response(
-            ("LX0609-010",),
+            ("LX0609-06-01-02",),
             semantic_state="unknown",
         )
     ])
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
-        rule_ids=("LX0609-010", "LX0609-014"),
-        wrapper_rules=[_wrapper("LX0609-010"), _wrapper("LX0609-014")],
+        rule_ids=("LX0609-06-01-02", "LX0609-06-03-03"),
+        wrapper_rules=[_wrapper("LX0609-06-01-02"), _wrapper("LX0609-06-03-03")],
         evidence_payload=_payload(),
         llm_client=client,
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-010",),
+        decision_rule_ids=("LX0609-06-01-02",),
     )
 
-    assert [item.rule_id for item in result.decisions] == ["LX0609-010"]
+    assert [item.rule_id for item in result.decisions] == ["LX0609-06-01-02"]
     assert result.decisions[0].qc_direction.value == "unknown"
     assert result.decisions[0].evidence_state.value == "conflict"
     assert result.decisions[0].reason_code == "semantic_output_unknown"
-    assert [item["rule_id"] for item in result.results] == ["LX0609-014"]
+    assert [item["rule_id"] for item in result.results] == ["LX0609-06-03-03"]
     assert result.results[0]["status"] == "data_gap"
     assert result.llm_call_count == 1
 
@@ -6302,11 +6302,11 @@ async def test_multi_event_unordered_model_facts_are_projected_in_ascending_orde
                     "applicability": "applicable",
                     "semantic_state": "present",
                     "positive_state": (
-                        "positive" if rule_id == "LX0609-012" else "not_relevant"
+                        "positive" if rule_id == "LX0609-06-01-05" else "not_relevant"
                     ),
                     "course_doc_positions": [event_position],
                 }
-                for rule_id in ("LX0609-011", "LX0609-012")
+                for rule_id in ("LX0609-06-01-04", "LX0609-06-01-05")
                 # 集合完整（1..4 各一条）但物理顺序乱序。
                 for event_position in (2, 3, 1, 4)
             ],
@@ -6314,22 +6314,22 @@ async def test_multi_event_unordered_model_facts_are_projected_in_ascending_orde
     ])
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
-        rule_ids=("LX0609-011", "LX0609-012"),
-        wrapper_rules=[_wrapper("LX0609-011"), _wrapper("LX0609-012")],
+        rule_ids=("LX0609-06-01-04", "LX0609-06-01-05"),
+        wrapper_rules=[_wrapper("LX0609-06-01-04"), _wrapper("LX0609-06-01-05")],
         evidence_payload=None,
         llm_client=client,
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-011", "LX0609-012"),
+        decision_rule_ids=("LX0609-06-01-04", "LX0609-06-01-05"),
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-011", "LX0609-012"),
+        expected_rule_ids=("LX0609-06-01-04", "LX0609-06-01-05"),
         snapshot=snapshot,
         evidence_materials=materials,
     )
     canonical = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-011"}, {"rule_id": "LX0609-012"}],
+        wrapper_rules=[{"rule_id": "LX0609-06-01-04"}, {"rule_id": "LX0609-06-01-05"}],
         execution_results=list(result.results),
         reduced_decisions=reduced,
         customer_display_facts=result.customer_display_facts,
@@ -6342,7 +6342,7 @@ async def test_multi_event_unordered_model_facts_are_projected_in_ascending_orde
     assert result.llm_call_count == 1
     assert not result.parse_failure_kinds
     display_facts = dict(result.customer_display_facts)
-    for rule_id in ("LX0609-011", "LX0609-012"):
+    for rule_id in ("LX0609-06-01-04", "LX0609-06-01-05"):
         assert display_facts[rule_id]["event_count"] == 4
         assert [
             item["event_position"]
@@ -6392,7 +6392,7 @@ async def test_multi_event_incomplete_position_set_still_fails_closed(
         "schema_version": "lx0609-exam-lab-text-facts-v4",
         "facts": [
             {
-                "rule_id": "LX0609-012",
+                "rule_id": "LX0609-06-01-05",
                 "event_position": event_position,
                 "applicability": "applicable",
                 "semantic_state": "present",
@@ -6406,22 +6406,22 @@ async def test_multi_event_incomplete_position_set_still_fails_closed(
     client = _Client([invalid, invalid])
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
-        rule_ids=("LX0609-012",),
-        wrapper_rules=[_wrapper("LX0609-012")],
+        rule_ids=("LX0609-06-01-05",),
+        wrapper_rules=[_wrapper("LX0609-06-01-05")],
         evidence_payload=None,
         llm_client=client,
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-012",),
+        decision_rule_ids=("LX0609-06-01-05",),
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-012",),
+        expected_rule_ids=("LX0609-06-01-05",),
         snapshot=snapshot,
         evidence_materials=materials,
     )
     canonical = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-012"}],
+        wrapper_rules=[{"rule_id": "LX0609-06-01-05"}],
         execution_results=list(result.results),
         reduced_decisions=reduced,
         customer_display_facts=result.customer_display_facts,
@@ -6467,7 +6467,7 @@ def test_event_projection_does_not_repair_duplicate_positions():
     )
     facts = tuple(
         ExamLabEventFact(
-            rule_id="LX0609-012",
+            rule_id="LX0609-06-01-05",
             applicability="unknown",
             semantic_state="unknown",
             positive_state="unknown",
@@ -6478,12 +6478,12 @@ def test_event_projection_does_not_repair_duplicate_positions():
         for _ in range(2)
     )
     outcome = exam_lab._text_fact_outcome(
-        rule_id="LX0609-012",
+        rule_id="LX0609-06-01-05",
         facts=facts,
         projection=projection,
     )
     display = exam_lab._display_facts_for_text_outcome(
-        rule_id="LX0609-012",
+        rule_id="LX0609-06-01-05",
         facts=facts,
         projection=projection,
         outcome=outcome,
@@ -6492,7 +6492,7 @@ def test_event_projection_does_not_repair_duplicate_positions():
     assert display["event_count"] == 2
     assert [item["event_position"] for item in display["event_results"]] == [1, 1]
     assert safe_exam_lab_customer_display_facts(
-        rule_id="LX0609-012", raw=display
+        rule_id="LX0609-06-01-05", raw=display
     ) is None
 
 
@@ -6520,28 +6520,28 @@ async def test_typed_value_failure_retries_only_failed_rule_and_keeps_valid_sibl
         ),
         evaluation_horizon_rows=({"horizon_date": "2026-04-27"},),
     )
-    first_response = _fact_response(("LX0609-011", "LX0609-012"))
+    first_response = _fact_response(("LX0609-06-01-04", "LX0609-06-01-05"))
     first_response["facts"][0]["semantic_state"] = "unsupported"
-    retry_response = _fact_response(("LX0609-011",), semantic_state="unsupported")
+    retry_response = _fact_response(("LX0609-06-01-04",), semantic_state="unsupported")
     client = _Client([first_response, retry_response])
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
-        rule_ids=("LX0609-011", "LX0609-012"),
-        wrapper_rules=[_wrapper("LX0609-011"), _wrapper("LX0609-012")],
+        rule_ids=("LX0609-06-01-04", "LX0609-06-01-05"),
+        wrapper_rules=[_wrapper("LX0609-06-01-04"), _wrapper("LX0609-06-01-05")],
         evidence_payload=None,
         llm_client=client,
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-011", "LX0609-012"),
+        decision_rule_ids=("LX0609-06-01-04", "LX0609-06-01-05"),
     )
 
     decisions = {item.rule_id: item for item in result.decisions}
-    assert decisions["LX0609-011"].evidence_state.value == "technical_error"
-    assert decisions["LX0609-011"].reason_code == "model_invalid_output"
-    assert decisions["LX0609-012"].evidence_state.value == "sufficient"
-    assert decisions["LX0609-012"].qc_direction.value == "satisfied"
+    assert decisions["LX0609-06-01-04"].evidence_state.value == "technical_error"
+    assert decisions["LX0609-06-01-04"].reason_code == "model_invalid_output"
+    assert decisions["LX0609-06-01-05"].evidence_state.value == "sufficient"
+    assert decisions["LX0609-06-01-05"].qc_direction.value == "satisfied"
     assert result.llm_call_count == 2
     assert len(client.prompts) == 2
-    assert '"rule_id":"LX0609-011"' in client.prompts[1]
-    assert '"rule_id":"LX0609-012"' not in client.prompts[1]
+    assert '"rule_id":"LX0609-06-01-04"' in client.prompts[1]
+    assert '"rule_id":"LX0609-06-01-05"' not in client.prompts[1]
     assert result.parse_failure_kinds == ("value",)

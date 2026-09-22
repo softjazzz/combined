@@ -35,121 +35,121 @@ FACT_REF = "b" * 64
     ("rule_id", "reason_code", "missing_sources", "expected"),
     [
         (
-            "LX0609-054",
+            "LX0609-05-01-02",
             "required_field_missing",
             [],
             "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。",
         ),
         (
-            "LX0609-054",
+            "LX0609-05-01-02",
             "source_unavailable",
             [],
             "本项质控所需的数据源尚未接入或本次未读取到，暂时无法完成判定。",
         ),
         (
-            "LX0609-054",
+            "LX0609-05-01-02",
             "source_empty",
             [],
             "本次未读取到完成本项质控所需的相关资料，暂时无法完成判定。",
         ),
         (
-            "LX0609-054",
+            "LX0609-05-01-02",
             "source_truncated",
             [],
             "相关资料数量超过本次读取范围，当前资料不完整，暂时无法完成本项质控。",
         ),
         (
-            "LX0609-054",
+            "LX0609-05-01-02",
             "source_readiness_unproven",
             [],
             "本项质控所需资料的同步状态尚未确认，暂时无法判断资料是否完整。",
         ),
         (
-            "LX0609-054",
+            "LX0609-05-01-02",
             "association_failed",
             [],
             "已读取到相关资料，但暂时无法准确关联对应事件与文书，无法完成本项质控。",
         ),
         (
-            "LX0609-054",
+            "LX0609-05-01-02",
             "linkage_unresolved",
             [],
             "现有资料不足以确认事件与文书的对应关系，暂时无法完成本项质控。",
         ),
         (
-            "LX0609-054",
+            "LX0609-05-01-02",
             "authoritative_time_missing",
             [],
             "缺少用于计算质控时限的权威时间，暂时无法完成本项质控。",
         ),
         (
-            "LX0609-054",
+            "LX0609-05-01-02",
             "target_report_missing",
             [],
             "已读取到目标检查检验医嘱，但未读取到对应的正式报告，暂时无法核对24小时要求。",
         ),
         (
-            "LX0609-054",
+            "LX0609-05-01-02",
             "authoritative_report_time_missing",
             [],
             "已读取到目标检查检验事件，但缺少权威报告时间，暂时无法核对24小时要求。",
         ),
         (
-            "LX0609-054",
+            "LX0609-05-01-02",
             "authoritative_time_conflict",
             [],
             "报告时间与本次住院的评价截止时间存在冲突，暂时无法完成本项质控。",
         ),
         (
-            "LX0609-054",
+            "LX0609-05-01-02",
             "evaluation_window_not_mature",
             [],
             "截至本次评价日期尚未满规则要求的观察时限，本次暂不判定缺陷。",
         ),
         (
-            "LX0609-054",
+            "LX0609-05-01-02",
             "applicability_source_gap",
             [],
             "缺少判断本质控点是否适用的关键资料，暂时无法继续判定。",
         ),
         (
-            "LX0609-069",
+            "LX0609-04-02-07",
             "source_unavailable",
             [],
             "当前机构会诊接口未提供会诊申请时间，无法核对会诊记录是否在申请发出后24小时内完成。",
         ),
         (
-            "LX0609-009",
+            "LX0609-02-01-05",
             "candidate_scope_incomplete",
             [],
             "本次病情变化候选超出单次自动核对的安全容量，暂未形成确定结论；现有资料无需补充，请重新执行本项质控，如仍出现请联系系统管理员。",
         ),
         (
-            "LX0609-028",
+            "LX0609-05-01-01",
             "required_field_missing",
             [],
             "已读取手术及用药资料，但尚缺切口等级、预防性用药属性或抗菌药物实际给药/停用时间中的至少一项；医嘱更新时间不能替代实际停用时间。",
         ),
         (
-            "LX0609-031",
+            "LX0609-04-02-05",
             "association_failed",
             [],
             "已读取手术主表和手术记录，但尚未取得可与每次手术对应的主刀医师签名，暂时无法完成签名资格核对。",
         ),
         (
-            "LX0609-048",
+            "LX0609-07-04-01",
             "transfusion_comparison_fields_unavailable",
             [],
             "已确认存在术中输血，但三份文书的比对资料不完整，暂时无法完成一致性核对。",
         ),
         (
-            "LX0609-048",
+            "LX0609-07-04-01",
             "transfusion_comparison_fields_unavailable",
             ["麻醉记录单"],
             "已确认存在术中输血，但缺少麻醉记录单，暂时无法完成手术记录、麻醉记录单和术后首次病程记录的一致性核对。",
         ),
         (
-            "LX0609-054",
+            "LX0609-05-01-02",
             "unexpected_gap",
             [],
             "现有资料不足，暂时无法完成本项质控；请补充或同步相关资料后重新评估。",
@@ -174,7 +174,7 @@ def test_data_gap_customer_message_freezes_finalizer_default_copy(
 
 def test_050_customer_finding_explains_local_diagnosis_scope_uncertainty() -> None:
     finding = customer_finding_from_controlled_facts(
-        rule_id="LX0609-050",
+        rule_id="LX0609-03-02-01",
         facts={
             "verification_kind": "uncertain_diagnosis_scope_unverified",
             "admission_time": "2026-06-01 08:00:00",
@@ -196,7 +196,7 @@ def test_050_customer_finding_explains_local_diagnosis_scope_uncertainty() -> No
 def test_050_scope_uncertainty_renders_without_reclassifying_the_reason() -> None:
     decision = reduce_luxian_0609_rule_decision(
         RuleDecision(
-            rule_id="LX0609-050",
+            rule_id="LX0609-03-02-01",
             snapshot_hash=SNAPSHOT_HASH,
             applicability=ApplicabilityState.UNKNOWN,
             evidence_state=EvidenceState.CONFLICT,
@@ -219,7 +219,7 @@ def test_054_order_without_confirmed_action_uses_neutral_not_applicable_copy() -
 
     decision = reduce_luxian_0609_rule_decision(
         RuleDecision(
-            rule_id="LX0609-054",
+            rule_id="LX0609-05-01-02",
             snapshot_hash=SNAPSHOT_HASH,
             applicability=ApplicabilityState.NOT_APPLICABLE,
             evidence_state=EvidenceState.SUFFICIENT,
@@ -240,7 +240,7 @@ def test_054_order_without_confirmed_action_uses_neutral_not_applicable_copy() -
 
 def test_058_customer_finding_distinguishes_expert_support_after_special_use() -> None:
     finding = customer_finding_from_controlled_facts(
-        rule_id="LX0609-058",
+        rule_id="LX0609-05-01-06",
         facts={
             "verification_kind": "special_antimicrobial_expert_support_check",
             "special_antimicrobials": ["美罗培南"],
@@ -262,7 +262,7 @@ def test_058_customer_finding_distinguishes_expert_support_after_special_use() -
 
 def test_058_customer_finding_confirms_expert_support_before_or_at_special_use() -> None:
     finding = customer_finding_from_controlled_facts(
-        rule_id="LX0609-058",
+        rule_id="LX0609-05-01-06",
         facts={
             "verification_kind": "special_antimicrobial_expert_support_check",
             "special_antimicrobials": ["美罗培南"],
@@ -283,7 +283,7 @@ def test_058_customer_finding_confirms_expert_support_before_or_at_special_use()
 
 def test_058_customer_finding_does_not_call_partial_support_late() -> None:
     finding = customer_finding_from_controlled_facts(
-        rule_id="LX0609-058",
+        rule_id="LX0609-05-01-06",
         facts={
             "verification_kind": "special_antimicrobial_expert_support_check",
             "special_antimicrobials": ["美罗培南", "万古霉素"],
@@ -301,7 +301,7 @@ def test_058_customer_finding_does_not_call_partial_support_late() -> None:
 
 def test_054_customer_finding_identifies_the_unmatched_antimicrobial() -> None:
     finding = customer_finding_from_controlled_facts(
-        rule_id="LX0609-054",
+        rule_id="LX0609-05-01-02",
         facts={
             "verification_kind": "antimicrobial_reason_documentation_check",
             "antimicrobials": ["美罗培南", "万古霉素"],
@@ -317,17 +317,17 @@ def test_054_customer_finding_identifies_the_unmatched_antimicrobial() -> None:
 @pytest.mark.parametrize(
     ("rule_id", "facts", "expected"),
     (
-        ("LX0609-054", {
+        ("LX0609-05-01-02", {
             "verification_kind": "antimicrobial_reason_documentation_check",
             "antimicrobials": ["美罗培南", "万古霉素"],
             "association_ambiguous": True,
         }, "已核对抗菌药物 美罗培南、万古霉素；现有病程未明确关联到具体药物使用或调整事件，暂无法逐项核对理由。"),
-        ("LX0609-055", {
+        ("LX0609-05-01-03", {
             "verification_kind": "antimicrobial_effect_evaluation_check",
             "antimicrobials": ["美罗培南", "万古霉素"],
             "association_ambiguous": True,
         }, "已核对抗菌药物 美罗培南、万古霉素；现有效果评价未明确关联到具体药物计划开始/启用事件，暂无法逐项核对 48～72 小时评价。"),
-        ("LX0609-058", {
+        ("LX0609-05-01-06", {
             "verification_kind": "special_antimicrobial_expert_support_check",
             "special_antimicrobials": ["美罗培南", "万古霉素"],
             "association_ambiguous": True,
@@ -342,7 +342,7 @@ def test_antimicrobial_customer_finding_explains_ambiguous_association(
 
 def test_069_customer_finding_identifies_each_consultation_and_the_late_one() -> None:
     finding = customer_finding_from_controlled_facts(
-        rule_id="LX0609-069",
+        rule_id="LX0609-04-02-07",
         facts={
             "verification_kind": "consultation_timeliness_check",
             "threshold_hours": 24,
@@ -375,7 +375,7 @@ def test_069_customer_finding_identifies_each_consultation_and_the_late_one() ->
 
 def test_001_blank_or_placeholder_admission_record_renders_specific_customer_copy() -> None:
     finding = customer_finding_from_controlled_facts(
-        rule_id="LX0609-001",
+        rule_id="LX0609-01-01-01",
         facts={
             "failure_kind": "timeliness_requirement_not_met",
             "target_document": "admission_record",
@@ -391,7 +391,7 @@ def test_001_blank_or_placeholder_admission_record_renders_specific_customer_cop
 
 def test_010_association_facts_render_exact_customer_counts() -> None:
     finding = customer_finding_from_controlled_facts(
-        rule_id="LX0609-010",
+        rule_id="LX0609-06-01-02",
         facts={
             "failure_kind": "exam_order_exam_association_failed",
             "subject": "ct_mri",
@@ -477,12 +477,12 @@ def test_010_association_facts_render_exact_customer_counts() -> None:
     ],
 )
 def test_007_boundary_overdue_renders_controlled_boundary_copy(facts, expected) -> None:
-    assert customer_finding_from_controlled_facts(rule_id="LX0609-007", facts=facts) == expected
+    assert customer_finding_from_controlled_facts(rule_id="LX0609-02-01-03", facts=facts) == expected
 
 
 def test_007_zero_rounds_exact_boundaries_render_without_fabricating_round_number() -> None:
     finding = customer_finding_from_controlled_facts(
-        rule_id="LX0609-007",
+        rule_id="LX0609-02-01-03",
         facts={
             "failure_kind": "course_record_interval_over_72h",
             "interval_start_source": "inpat_registration",
@@ -517,7 +517,7 @@ def test_010_other_deterministic_failures_render_specific_customer_copy(
     expected: str,
 ) -> None:
     finding = customer_finding_from_controlled_facts(
-        rule_id="LX0609-010",
+        rule_id="LX0609-06-01-02",
         facts={"failure_kind": failure_kind},
     )
 
@@ -527,7 +527,7 @@ def test_010_other_deterministic_failures_render_specific_customer_copy(
 def test_034_missing_anesthesia_consent_renders_specific_customer_copy() -> None:
     decision = reduce_luxian_0609_rule_decision(
         RuleDecision(
-            rule_id="LX0609-034",
+            rule_id="LX0609-11-02-01",
             snapshot_hash=SNAPSHOT_HASH,
             applicability=ApplicabilityState.APPLICABLE,
             evidence_state=EvidenceState.SUFFICIENT,
@@ -547,7 +547,7 @@ def test_034_missing_anesthesia_consent_renders_specific_customer_copy() -> None
 
 def test_068_compliant_message_covers_regular_and_automatic_discharge_paths() -> None:
     finding = compliant_customer_finding(
-        rule_id="LX0609-068",
+        rule_id="LX0609-08-02-02",
         criterion_results=(),
     )
 
@@ -558,7 +558,7 @@ def test_068_compliant_message_covers_regular_and_automatic_discharge_paths() ->
 
 def test_024_compliant_message_does_not_claim_dissection_when_reason_was_documented() -> None:
     finding = compliant_customer_finding(
-        rule_id="LX0609-024",
+        rule_id="LX0609-04-02-03",
         criterion_results=(),
     )
 
@@ -578,7 +578,7 @@ def test_017_semantic_template_pass_explains_high_similarity_without_threshold_c
     }
 
     finding = compliant_customer_finding(
-        rule_id="LX0609-017",
+        rule_id="LX0609-12-01-02",
         safe_customer_display_facts=facts,
     )
 
@@ -587,7 +587,7 @@ def test_017_semantic_template_pass_explains_high_similarity_without_threshold_c
     assert "未认定为实质复制" in finding
     assert "相似度达到或超过 70% 的重复记录" not in finding
     assert customer_finding_from_controlled_facts(
-        rule_id="LX0609-017", facts=facts
+        rule_id="LX0609-12-01-02", facts=facts
     ) == finding
 
 
@@ -620,7 +620,7 @@ def test_071_data_gap_facts_explain_existing_records_without_claiming_absence(
     expected,
 ) -> None:
     finding = customer_finding_from_controlled_facts(
-        rule_id="LX0609-071",
+        rule_id="LX0609-10-01-01",
         facts=facts,
     )
 
@@ -630,7 +630,7 @@ def test_071_data_gap_facts_explain_existing_records_without_claiming_absence(
 
 def test_071_single_change_association_gap_does_not_claim_multiple_changes() -> None:
     finding = customer_finding_from_controlled_facts(
-        rule_id="LX0609-071",
+        rule_id="LX0609-10-01-01",
         facts={
             "failure_kind": "physician_handoff_association_failed",
             "change_event_count": 1,
@@ -665,7 +665,7 @@ def test_071_reason_specific_data_gap_copy_is_factual(
 ) -> None:
     decision = reduce_luxian_0609_rule_decision(
         RuleDecision(
-            rule_id="LX0609-071",
+            rule_id="LX0609-10-01-01",
             snapshot_hash=SNAPSHOT_HASH,
             applicability=ApplicabilityState.APPLICABLE,
             evidence_state=EvidenceState.DATA_GAP,
@@ -686,7 +686,7 @@ def test_071_reason_specific_data_gap_copy_is_factual(
 def test_069_source_unavailable_copy_identifies_institution_source_gap() -> None:
     decision = reduce_luxian_0609_rule_decision(
         RuleDecision(
-            rule_id="LX0609-069",
+            rule_id="LX0609-04-02-07",
             snapshot_hash=SNAPSHOT_HASH,
             applicability=ApplicabilityState.UNKNOWN,
             evidence_state=EvidenceState.DATA_GAP,
@@ -710,7 +710,7 @@ def test_071_reason_copy_does_not_claim_that_handoff_records_exist(
 ) -> None:
     decision = reduce_luxian_0609_rule_decision(
         RuleDecision(
-            rule_id="LX0609-071",
+            rule_id="LX0609-10-01-01",
             snapshot_hash=SNAPSHOT_HASH,
             applicability=ApplicabilityState.APPLICABLE,
             evidence_state=EvidenceState.DATA_GAP,
@@ -736,7 +736,7 @@ def test_074_association_gap_uses_diagnosis_specific_copy_not_missing_reason_cop
     }
     decision = reduce_luxian_0609_rule_decision(
         RuleDecision(
-            rule_id="LX0609-074",
+            rule_id="LX0609-12-02-01",
             snapshot_hash=SNAPSHOT_HASH,
             applicability=ApplicabilityState.APPLICABLE,
             evidence_state=EvidenceState.DATA_GAP,
@@ -753,7 +753,7 @@ def test_074_association_gap_uses_diagnosis_specific_copy_not_missing_reason_cop
     )
 
     assert customer_finding_from_controlled_facts(
-        rule_id="LX0609-074",
+        rule_id="LX0609-12-02-01",
         facts=facts,
     ) == "已读取 3 条诊断记录，识别到 2 次诊断修改；多次修改无法与对应病程逐次唯一关联。"
     assert "已读取诊断记录" in rendered["evidence"]
@@ -770,7 +770,7 @@ def test_074_untimed_reason_and_basis_copy_does_not_claim_missing_documentation(
     }
     decision = reduce_luxian_0609_rule_decision(
         RuleDecision(
-            rule_id="LX0609-074",
+            rule_id="LX0609-12-02-01",
             snapshot_hash=SNAPSHOT_HASH,
             applicability=ApplicabilityState.APPLICABLE,
             evidence_state=EvidenceState.DATA_GAP,
@@ -787,7 +787,7 @@ def test_074_untimed_reason_and_basis_copy_does_not_claim_missing_documentation(
     )
 
     assert customer_finding_from_controlled_facts(
-        rule_id="LX0609-074",
+        rule_id="LX0609-12-02-01",
         facts=facts,
     ) == "已读取 1 份含修改理由和诊断依据的病程，但缺少权威记录时间，无法确认是否在诊断修改后完成。"
     assert "已读取含修改理由和诊断依据的病程" in rendered["evidence"]
@@ -797,7 +797,7 @@ def test_074_untimed_reason_and_basis_copy_does_not_claim_missing_documentation(
 
 def test_046_component_gap_uses_actual_transfused_component_copy_only_for_course_record() -> None:
     assert customer_finding_from_controlled_facts(
-        rule_id="LX0609-046",
+        rule_id="LX0609-07-02-02",
         facts={
             "failure_kind": "transfusion_course_record_incomplete",
             "record_count": 3,
@@ -810,7 +810,7 @@ def test_046_component_gap_uses_actual_transfused_component_copy_only_for_course
         "2 份未明确记录实际输注血液成分。"
     )
     assert customer_finding_from_controlled_facts(
-        rule_id="LX0609-042",
+        rule_id="LX0609-11-03-02",
         facts={
             "failure_kind": "transfusion_consent_incomplete",
             "missing_fields": ["component"],
@@ -822,7 +822,7 @@ def test_046_component_gap_uses_actual_transfused_component_copy_only_for_course
     ("rule_id", "facts", "expected_finding"),
     [
         (
-            "LX0609-029",
+            "LX0609-04-01-01",
             {
                 "failure_kind": "surgery_document_missing",
                 "target_document": "presurg_summary",
@@ -832,7 +832,7 @@ def test_046_component_gap_uses_actual_transfused_component_copy_only_for_course
             "已确认本次实施手术，但未找到对应的术前小结。",
         ),
         (
-            "LX0609-038",
+            "LX0609-04-04-03",
             {
                 "failure_kind": "anesthesia_record_missing",
                 "performed_anesthesia_confirmed": True,
@@ -857,43 +857,43 @@ def test_customer_finding_uses_existing_controlled_facts_instead_of_generic_copy
     ("rule_id", "expected_suggestion"),
     [
         (
-            "LX0609-012",
+            "LX0609-06-01-05",
             "请在检查报告出具后24小时内的病程中，记录阳性结果的临床意义、处置措施及后续计划。",
         ),
         (
-            "LX0609-015",
+            "LX0609-06-03-04",
             "请在培养报告出具后24小时内的病程中，记录阳性菌结果的临床意义、抗感染调整及后续计划。",
         ),
         (
-            "LX0609-017",
+            "LX0609-12-01-02",
             "请逐组核对结果列出的高相似病程，删除机械复制内容，并补充当日病情变化、检查结果和诊疗调整。",
         ),
         (
-            "LX0609-025",
+            "LX0609-04-02-04",
             "请在手术记录中补全结果列出的植入物名称、种类、规格/型号、材质及数量等缺项。",
         ),
         (
-            "LX0609-029",
+            "LX0609-04-01-01",
             "请为本次已实施手术补充术前小结，并记录术前诊断、手术指征、拟施手术及注意事项。",
         ),
         (
-            "LX0609-038",
+            "LX0609-04-04-03",
             "请补充本次麻醉记录单，并核对麻醉方式、用药、生命体征及术中事件记录。",
         ),
         (
-            "LX0609-040",
+            "LX0609-04-01-03",
             "请补充本次四级手术的术前多学科讨论记录，并记录参会科室、讨论意见及手术方案。",
         ),
         (
-            "LX0609-058",
+            "LX0609-05-01-06",
             "请补充使用特殊级抗菌药物前的专家查房或会诊意见，并记录用药依据。",
         ),
         (
-            "LX0609-064",
+            "LX0609-04-05-01",
             "请按每台手术分别补齐术后次日起连续3天的病程记录，并记录术者查房情况。",
         ),
         (
-            "LX0609-074",
+            "LX0609-12-02-01",
             "请对每次诊断修正或补充记录修改理由及诊断依据。",
         ),
     ],
@@ -940,7 +940,7 @@ def test_withheld_consultation_rules_no_longer_deliver_rule_specific_template() 
     """022 因会诊记录单来源缺失暂停，不再交付会诊记录单书写模板。"""
 
     withheld = render_luxian_0609_customer_result(
-        decision=_defect_decision("LX0609-022")
+        decision=_defect_decision("LX0609-03-01-03")
     )
 
     assert "修改对象：会诊记录单" not in withheld["suggestion"]
@@ -952,7 +952,7 @@ def test_surviving_consultation_rule_keeps_structured_action() -> None:
     """023 保留为会诊族唯一可执行规则，模板中写明会诊意见来自正文语义提取。"""
 
     result = render_luxian_0609_customer_result(
-        decision=_defect_decision("LX0609-023")
+        decision=_defect_decision("LX0609-03-01-04")
     )
 
     assert result["status"] == "non_compliant"
@@ -1000,56 +1000,61 @@ def test_every_customer_executable_rule_has_specific_action_instead_of_generic_a
 
 
 NOT_APPLICABLE_CASES = (
-    ("LX0609-004", "trigger_absent_complete"),
-    ("LX0609-006", "evaluation_window_not_mature"),
-    ("LX0609-007", "evaluation_window_not_mature"),
-    ("LX0609-003", "performed_event_absent"),
-    ("LX0609-007", "eligibility_not_met"),
-    ("LX0609-008", "trigger_absent_complete"),
-    ("LX0609-009", "trigger_absent_complete"),
-    ("LX0609-010", "trigger_absent_complete"),
-    ("LX0609-011", "trigger_absent_complete"),
-    ("LX0609-012", "trigger_absent_complete"),
-    ("LX0609-013", "trigger_absent_complete"),
-    ("LX0609-014", "trigger_absent_complete"),
-    ("LX0609-015", "trigger_absent_complete"),
-    ("LX0609-019", "trigger_absent_complete"),
-    ("LX0609-020", "trigger_absent_complete"),
-    ("LX0609-021", "trigger_absent_complete"),
-    ("LX0609-022", "trigger_absent_complete"),
-    ("LX0609-025", "performed_event_absent"),
-    ("LX0609-027", "trigger_absent_complete"),
-    ("LX0609-029", "performed_event_absent"),
-    ("LX0609-030", "performed_event_absent"),
-    ("LX0609-030", "trigger_absent_complete"),
-    ("LX0609-031", "performed_event_absent"),
-    ("LX0609-032", "performed_event_absent"),
-    ("LX0609-032", "trigger_absent_complete"),
-    ("LX0609-033", "performed_event_absent"),
-    ("LX0609-034", "performed_event_absent"),
-    ("LX0609-035", "performed_event_absent"),
-    ("LX0609-036", "performed_event_absent"),
-    ("LX0609-036", "eligibility_not_met"),
-    ("LX0609-037", "eligibility_not_met"),
-    ("LX0609-037", "performed_event_absent"),
-    ("LX0609-038", "performed_event_absent"),
-    ("LX0609-038", "eligibility_not_met"),
-    ("LX0609-039", "performed_event_absent"),
-    ("LX0609-039", "eligibility_not_met"),
-    ("LX0609-040", "performed_event_absent"),
-    ("LX0609-040", "trigger_absent_complete"),
-    ("LX0609-042", "eligibility_not_met"),
-) + tuple(
-    (f"LX0609-{index:03d}", "trigger_absent_complete")
-    for index in range(41, 49)
+    ("LX0609-09-01-01", "trigger_absent_complete"),
+    ("LX0609-02-01-02", "evaluation_window_not_mature"),
+    ("LX0609-02-01-03", "evaluation_window_not_mature"),
+    ("LX0609-04-02-01", "performed_event_absent"),
+    ("LX0609-02-01-03", "eligibility_not_met"),
+    ("LX0609-02-01-04", "trigger_absent_complete"),
+    ("LX0609-02-01-05", "trigger_absent_complete"),
+    ("LX0609-06-01-02", "trigger_absent_complete"),
+    ("LX0609-06-01-04", "trigger_absent_complete"),
+    ("LX0609-06-01-05", "trigger_absent_complete"),
+    ("LX0609-06-02-03", "trigger_absent_complete"),
+    ("LX0609-06-03-03", "trigger_absent_complete"),
+    ("LX0609-06-03-04", "trigger_absent_complete"),
+    ("LX0609-06-02-02", "trigger_absent_complete"),
+    ("LX0609-03-01-01", "trigger_absent_complete"),
+    ("LX0609-03-01-02", "trigger_absent_complete"),
+    ("LX0609-03-01-03", "trigger_absent_complete"),
+    ("LX0609-04-02-04", "performed_event_absent"),
+    ("LX0609-08-01-04", "trigger_absent_complete"),
+    ("LX0609-04-01-01", "performed_event_absent"),
+    ("LX0609-04-02-02", "performed_event_absent"),
+    ("LX0609-04-02-02", "trigger_absent_complete"),
+    ("LX0609-04-02-05", "performed_event_absent"),
+    ("LX0609-04-03-01", "performed_event_absent"),
+    ("LX0609-04-03-01", "trigger_absent_complete"),
+    ("LX0609-11-01-01", "performed_event_absent"),
+    ("LX0609-11-02-01", "performed_event_absent"),
+    ("LX0609-11-02-02", "performed_event_absent"),
+    ("LX0609-04-04-01", "performed_event_absent"),
+    ("LX0609-04-04-01", "eligibility_not_met"),
+    ("LX0609-04-04-02", "eligibility_not_met"),
+    ("LX0609-04-04-02", "performed_event_absent"),
+    ("LX0609-04-04-03", "performed_event_absent"),
+    ("LX0609-04-04-03", "eligibility_not_met"),
+    ("LX0609-04-01-02", "performed_event_absent"),
+    ("LX0609-04-01-02", "eligibility_not_met"),
+    ("LX0609-04-01-03", "performed_event_absent"),
+    ("LX0609-04-01-03", "trigger_absent_complete"),
+    ("LX0609-11-03-02", "eligibility_not_met"),
 ) + (
-    ("LX0609-051", "trigger_absent_complete"),
-    ("LX0609-058", "trigger_absent_complete"),
-    ("LX0609-060", "trigger_absent_complete"),
-    ("LX0609-063", "trigger_absent_complete"),
-    ("LX0609-070", "trigger_absent_complete"),
-    ("LX0609-072", "trigger_absent_complete"),
-    ("LX0609-073", "trigger_absent_complete"),
+    ("LX0609-11-03-01", "trigger_absent_complete"),
+    ("LX0609-11-03-02", "trigger_absent_complete"),
+    ("LX0609-07-01-01", "trigger_absent_complete"),
+    ("LX0609-07-01-02", "trigger_absent_complete"),
+    ("LX0609-07-02-01", "trigger_absent_complete"),
+    ("LX0609-07-02-02", "trigger_absent_complete"),
+    ("LX0609-07-03-01", "trigger_absent_complete"),
+    ("LX0609-07-04-01", "trigger_absent_complete"),
+    ("LX0609-09-02-01", "trigger_absent_complete"),
+    ("LX0609-05-01-06", "trigger_absent_complete"),
+    ("LX0609-04-02-06", "trigger_absent_complete"),
+    ("LX0609-08-01-03", "trigger_absent_complete"),
+    ("LX0609-07-01-03", "trigger_absent_complete"),
+    ("LX0609-10-02-01", "trigger_absent_complete"),
+    ("LX0609-10-02-02", "trigger_absent_complete"),
 )
 
 
@@ -1084,7 +1089,7 @@ def test_004_data_gap_reasons_have_specific_customer_messages(
 ) -> None:
     decision = reduce_luxian_0609_rule_decision(
         RuleDecision(
-            rule_id="LX0609-004",
+            rule_id="LX0609-09-01-01",
             snapshot_hash=SNAPSHOT_HASH,
             applicability=ApplicabilityState.APPLICABLE,
             evidence_state=EvidenceState.DATA_GAP,
@@ -1106,12 +1111,12 @@ def test_004_data_gap_reasons_have_specific_customer_messages(
 @pytest.mark.parametrize(
     ("rule_id", "reason_code", "expected_finding"),
     [
-        ("LX0609-004", "trigger_absent_complete", "未发现有效抢救事件"),
-        ("LX0609-006", "evaluation_window_not_mature", "入院尚未满72小时"),
-        ("LX0609-007", "evaluation_window_not_mature", "病情稳定观察时段尚未满3天"),
-        ("LX0609-010", "trigger_absent_complete", "未发现已实施的CT或MRI检查"),
-        ("LX0609-011", "trigger_absent_complete", "未发现已实施的CT或MRI检查"),
-        ("LX0609-012", "trigger_absent_complete", "未发现已实施并出具报告的CT或MRI检查"),
+        ("LX0609-09-01-01", "trigger_absent_complete", "未发现有效抢救事件"),
+        ("LX0609-02-01-02", "evaluation_window_not_mature", "入院尚未满72小时"),
+        ("LX0609-02-01-03", "evaluation_window_not_mature", "病情稳定观察时段尚未满3天"),
+        ("LX0609-06-01-02", "trigger_absent_complete", "未发现已实施的CT或MRI检查"),
+        ("LX0609-06-01-04", "trigger_absent_complete", "未发现已实施的CT或MRI检查"),
+        ("LX0609-06-01-05", "trigger_absent_complete", "未发现已实施并出具报告的CT或MRI检查"),
     ],
 )
 def test_not_applicable_reasons_have_specific_customer_messages(
@@ -1140,7 +1145,7 @@ def test_not_applicable_reasons_have_specific_customer_messages(
 
 def test_022_mixed_opinions_name_each_problematic_episode() -> None:
     finding = customer_finding_from_controlled_facts(
-        rule_id="LX0609-022",
+        rule_id="LX0609-03-01-03",
         facts={
             "verification_kind": "consultation_opinion_quality_check",
             "episode_count": 4,
@@ -1198,7 +1203,7 @@ def test_022_mixed_opinions_name_each_problematic_episode() -> None:
     ("rule_id", "facts", "expected"),
     [
         (
-            "LX0609-009",
+            "LX0609-02-01-05",
             {
                 "failure_kind": "critical_daily_record_coverage_satisfied",
                 "required_dates": ["2026-06-01", "2026-06-02"],
@@ -1207,7 +1212,7 @@ def test_022_mixed_opinions_name_each_problematic_episode() -> None:
             "病危观察期 2026-06-01 至 2026-06-02，共 2 天；每日病程 2/2 天，记录完整。本阶段仅核对病危期间每日病程。",
         ),
         (
-            "LX0609-012",
+            "LX0609-06-01-05",
             {
                 "failure_kind": "exam_lab_requirement_not_documented",
                 "report_time": "2026-06-02 14:00:00",
@@ -1218,17 +1223,17 @@ def test_022_mixed_opinions_name_each_problematic_episode() -> None:
             "CT/MRI 报告于 2026-06-02 14:00:00 出具。已核对首次病程记录及后续病程记录，找到 1 份报告后相关病程，最早相关病程时间 2026-06-02 18:00:00，间隔 4 小时，但病程未记录阳性结果的临床意义判断或相应处置。",
         ),
         (
-            "LX0609-020",
+            "LX0609-03-01-01",
             {"execution_record_state": "未发现执行记录"},
             "已找到会诊意见，但未发现对应的请会诊执行记录。",
         ),
         (
-            "LX0609-021",
+            "LX0609-03-01-02",
             {"consultation_assessment": "不符合要求"},
             "已核对会诊申请目的，其中未说明具体临床问题、会诊理由或明确目的。",
         ),
         (
-            "LX0609-021",
+            "LX0609-03-01-02",
             {
                 "verification_kind": "consultation_application_quality_check",
                 "episode_count": 4,
@@ -1240,7 +1245,7 @@ def test_022_mixed_opinions_name_each_problematic_episode() -> None:
             "共核对4次会诊申请，其中部分申请未说明具体临床问题、会诊理由或明确目的。",
         ),
         (
-            "LX0609-022",
+            "LX0609-03-01-03",
             {
                 "verification_kind": "consultation_opinion_quality_check",
                 "episode_count": 3,
@@ -1252,7 +1257,7 @@ def test_022_mixed_opinions_name_each_problematic_episode() -> None:
             "共核对3次会诊意见，均未给出针对当前病情的明确诊疗意见。",
         ),
         (
-            "LX0609-026",
+            "LX0609-05-02-01",
             {
                 "verification_kind": "chemotherapy_order_course_comparison",
                 "order_count": 1,
@@ -1266,7 +1271,7 @@ def test_022_mixed_opinions_name_each_problematic_episode() -> None:
             "已核对 1 条化疗医嘱及对应病程，剂量记录不一致。",
         ),
         (
-            "LX0609-040",
+            "LX0609-04-01-03",
             {
                 "performed_surgery_confirmed": True,
                 "procedure_kind": "surgery",
@@ -1279,7 +1284,7 @@ def test_022_mixed_opinions_name_each_problematic_episode() -> None:
             "已确认实施四级手术 硬脑膜外血肿清除术（01.2400X013）（等级来源：院内绩效分配），未找到术前多学科讨论记录。",
         ),
         (
-            "LX0609-042",
+            "LX0609-11-03-02",
             {
                 "failure_kind": "transfusion_consent_incomplete",
                 "missing_fields": ["patient_or_agent_signature", "signed_time"],
@@ -1287,7 +1292,7 @@ def test_022_mixed_opinions_name_each_problematic_episode() -> None:
             "输血知情同意书缺少：患者或代理人签名、精确到分钟的签署时间。",
         ),
         (
-            "LX0609-043",
+            "LX0609-07-01-01",
             {
                 "failure_kind": "pretransfusion_items_incomplete",
                 "missing_items": ["hiv", "syphilis", "alt"],
@@ -1295,7 +1300,7 @@ def test_022_mixed_opinions_name_each_problematic_episode() -> None:
             "输血前九项缺少：艾滋病病毒抗体、梅毒筛查、谷丙转氨酶。",
         ),
         (
-            "LX0609-044",
+            "LX0609-07-01-02",
             {
                 "verification_kind": "pretransfusion_assessment_complete",
                 "missing_fields": [],
@@ -1303,7 +1308,7 @@ def test_022_mixed_opinions_name_each_problematic_episode() -> None:
             "输血申请单已记录申请理由及输血前客观指标，且在实际输血前完成。",
         ),
         (
-            "LX0609-044",
+            "LX0609-07-01-02",
             {
                 "failure_kind": "pretransfusion_assessment_time_conflict",
                 "application_time": "2026-08-20 15:00:00",
@@ -1313,7 +1318,7 @@ def test_022_mixed_opinions_name_each_problematic_episode() -> None:
             "输血申请时间 2026-08-20 15:00:00 晚于实际输血时间 2026-08-20 14:00:00 60 分钟，时间顺序存在冲突。",
         ),
         (
-            "LX0609-044",
+            "LX0609-07-01-02",
             {
                 "failure_kind": "pretransfusion_assessment_missing",
                 "missing_fields": ["indication", "laboratory_indicator"],
@@ -1321,7 +1326,7 @@ def test_022_mixed_opinions_name_each_problematic_episode() -> None:
             "已确认实施输血，但未找到可核对的输血前评估记录。",
         ),
         (
-            "LX0609-046",
+            "LX0609-07-02-02",
             {
                 "verification_kind": "transfusion_course_record_complete",
                 "missing_fields": [],
@@ -1329,7 +1334,7 @@ def test_022_mixed_opinions_name_each_problematic_episode() -> None:
             "输血病程已记录指征、起止时间、血液成分、输注量、过程观察及反应处理。",
         ),
         (
-            "LX0609-047",
+            "LX0609-07-03-01",
             {
                 "verification_kind": "posttransfusion_evaluation_complete",
                 "transfusion_end_time": "2026-06-05 16:00:00",
@@ -1339,7 +1344,7 @@ def test_022_mixed_opinions_name_each_problematic_episode() -> None:
             "已在输血结束后 24 小时内完成效果评价，间隔 16 小时（结束时间 2026-06-05 16:00:00；评价时间 2026-06-06 08:00:00）。",
         ),
         (
-            "LX0609-055",
+            "LX0609-05-01-03",
             {
                 "verification_kind": "antimicrobial_effect_evaluation_check",
                 "antimicrobials": ["美罗培南", "万古霉素"],
@@ -1351,7 +1356,7 @@ def test_022_mixed_opinions_name_each_problematic_episode() -> None:
             "已核对抗菌药物 美罗培南、万古霉素；其中 万古霉素 未找到计划开始/启用后 48～72 小时内的效果评价记录。",
         ),
         (
-            "LX0609-061",
+            "LX0609-08-01-01",
             {
                 "verification_kind": "discharge_record_timeliness_check",
                 "record_time": "2026-06-09 09:00:00",
@@ -1361,7 +1366,7 @@ def test_022_mixed_opinions_name_each_problematic_episode() -> None:
             "出院记录时间早于权威出院时间 1小时（记录时间 2026-06-09 09:00:00；出院时间 2026-06-09 10:00:00），时间顺序存在冲突，暂无法判断是否在出院后 24 小时内完成。",
         ),
         (
-            "LX0609-066",
+            "LX0609-04-05-03",
             {
                 "verification_kind": "postoperative_first_course_presence_check",
                 "performed_surgery_count": 7,
@@ -1370,7 +1375,7 @@ def test_022_mixed_opinions_name_each_problematic_episode() -> None:
             "已确认实施手术 7 台，找到术后首次病程记录 2 份；尚不能逐台关联，暂无法确认每台手术均有对应记录。",
         ),
         (
-            "LX0609-048",
+            "LX0609-07-04-01",
             {
                 "failure_kind": "transfusion_comparison_fields_missing",
                 "missing_fields_by_source": {
@@ -1390,7 +1395,7 @@ def test_transfusion_controlled_facts_render_customer_readable_finding(
 
 def test_061_boundary_overdue_duration_does_not_round_to_threshold() -> None:
     finding = customer_finding_from_controlled_facts(
-        rule_id="LX0609-061",
+        rule_id="LX0609-08-01-01",
         facts={
             "verification_kind": "discharge_record_timeliness_check",
             "discharge_time": "2026-06-09 10:00:00",
@@ -1408,7 +1413,7 @@ def test_061_boundary_overdue_duration_does_not_round_to_threshold() -> None:
 
 def test_061_one_second_negative_interval_renders_a_time_conflict() -> None:
     finding = customer_finding_from_controlled_facts(
-        rule_id="LX0609-061",
+        rule_id="LX0609-08-01-01",
         facts={
             "verification_kind": "discharge_record_timeliness_check",
             "discharge_time": "2026-06-09 10:00:00",
@@ -1427,7 +1432,7 @@ def test_061_one_second_negative_interval_renders_a_time_conflict() -> None:
 
 def test_061_missing_record_time_does_not_render_none_values() -> None:
     finding = customer_finding_from_controlled_facts(
-        rule_id="LX0609-061",
+        rule_id="LX0609-08-01-01",
         facts={
             "failure_kind": "discharge_record_timeliness_check",
             "discharge_time": "2026-07-13 15:15:00",
@@ -1446,7 +1451,7 @@ def test_061_missing_record_time_does_not_render_none_values() -> None:
 
 def test_061_conflicting_authoritative_discharge_times_are_explicit() -> None:
     finding = customer_finding_from_controlled_facts(
-        rule_id="LX0609-061",
+        rule_id="LX0609-08-01-01",
         facts={
             "verification_kind": "discharge_record_timeliness_check",
             "discharge_time": None,
@@ -1468,7 +1473,7 @@ def test_061_conflicting_authoritative_discharge_times_are_explicit() -> None:
 
 def test_058_missing_drug_start_time_does_not_claim_expert_support_absent() -> None:
     finding = customer_finding_from_controlled_facts(
-        rule_id="LX0609-058",
+        rule_id="LX0609-05-01-06",
         facts={
             "failure_kind": "special_antimicrobial_expert_support_check",
             "special_antimicrobials": ["美罗培南"],
@@ -1527,7 +1532,7 @@ def test_020_customer_finding_lists_missing_recommendations_by_episode_and_actio
     }
 
     assert customer_finding_from_controlled_facts(
-        rule_id="LX0609-020", facts=facts
+        rule_id="LX0609-03-01-01", facts=facts
     ) == (
         "共核对3次已完成会诊的4条建议：3条已找到明确执行记录，"
         "1条未找到对应执行记录。未闭环：第2次会诊的检查类建议。"
@@ -1567,7 +1572,7 @@ def test_020_customer_finding_does_not_hide_generic_or_unknown_recommendations()
     }
 
     finding = customer_finding_from_controlled_facts(
-        rule_id="LX0609-020", facts=facts
+        rule_id="LX0609-03-01-01", facts=facts
     )
 
     assert "1条找到笼统执行痕迹" in finding
@@ -1576,7 +1581,7 @@ def test_020_customer_finding_does_not_hide_generic_or_unknown_recommendations()
 
 def test_021_customer_finding_identifies_the_specific_vague_consultation_application():
     finding = customer_finding_from_controlled_facts(
-        rule_id="LX0609-021",
+        rule_id="LX0609-03-01-02",
         facts={
             "verification_kind": "consultation_application_quality_check",
             "episode_count": 2,
@@ -1608,7 +1613,7 @@ def test_021_customer_finding_identifies_the_specific_vague_consultation_applica
 
 def test_controlled_finding_does_not_render_untrusted_matrix_values():
     finding = customer_finding_from_controlled_facts(
-        rule_id="LX0609-048",
+        rule_id="LX0609-07-04-01",
         facts={
             "failure_kind": "transfusion_records_inconsistent",
             "differing_fields": ["components"],
@@ -1622,7 +1627,7 @@ def test_controlled_finding_does_not_render_untrusted_matrix_values():
     assert "PRIVATE_CHART_BODY" not in finding
 
 
-@pytest.mark.parametrize("rule_id", ["LX0609-052", "LX0609-053"])
+@pytest.mark.parametrize("rule_id", ["LX0609-06-04-01", "LX0609-06-04-02"])
 def test_critical_value_missing_result_detail_renders_exact_gap(rule_id):
     finding = customer_finding_from_controlled_facts(
         rule_id=rule_id,
@@ -1641,7 +1646,7 @@ def test_critical_value_missing_result_detail_renders_exact_gap(rule_id):
 
 def test_anesthesia_visit_incomplete_facts_render_exact_customer_gaps():
     finding = customer_finding_from_controlled_facts(
-        rule_id="LX0609-037",
+        rule_id="LX0609-04-04-02",
         facts={
             "failure_kind": "anesthesia_visit_incomplete",
             "missing_fields_by_visit": {
@@ -1662,7 +1667,7 @@ def test_anesthesia_visit_incomplete_facts_render_exact_customer_gaps():
 
 def test_anesthesia_visit_complete_facts_render_compliance_reason():
     assert customer_finding_from_controlled_facts(
-        rule_id="LX0609-037",
+        rule_id="LX0609-04-04-02",
         facts={
             "verification_kind": "anesthesia_visits_complete",
             "performed_anesthesia_confirmed": True,
@@ -1739,7 +1744,7 @@ def _reduced(final_state: CustomerFinalState):
     applicability, evidence, direction, reason = dimensions[final_state]
     return reduce_luxian_0609_rule_decision(
         RuleDecision(
-            rule_id="LX0609-001",
+            rule_id="LX0609-01-01-01",
             snapshot_hash=SNAPSHOT_HASH,
             applicability=applicability,
             evidence_state=evidence,
@@ -1803,7 +1808,7 @@ def test_renderer_explains_data_gap_as_system_evidence_condition(
 ):
     decision = reduce_luxian_0609_rule_decision(
         RuleDecision(
-            rule_id="LX0609-001",
+            rule_id="LX0609-01-01-01",
             snapshot_hash=SNAPSHOT_HASH,
             applicability=ApplicabilityState.APPLICABLE,
             evidence_state=EvidenceState.DATA_GAP,
@@ -1823,7 +1828,7 @@ def test_renderer_explains_data_gap_as_system_evidence_condition(
 def test_006_required_field_gap_names_the_unverifiable_physician_title():
     decision = reduce_luxian_0609_rule_decision(
         RuleDecision(
-            rule_id="LX0609-006",
+            rule_id="LX0609-02-01-02",
             snapshot_hash=SNAPSHOT_HASH,
             applicability=ApplicabilityState.APPLICABLE,
             evidence_state=EvidenceState.DATA_GAP,
@@ -1844,7 +1849,7 @@ def test_006_required_field_gap_names_the_unverifiable_physician_title():
 def test_029_missing_surgery_time_explains_confirmed_trigger_and_linkage_gap():
     decision = reduce_luxian_0609_rule_decision(
         RuleDecision(
-            rule_id="LX0609-029",
+            rule_id="LX0609-04-01-01",
             snapshot_hash=SNAPSHOT_HASH,
             applicability=ApplicabilityState.UNKNOWN,
             evidence_state=EvidenceState.DATA_GAP,
@@ -1866,7 +1871,7 @@ def test_029_missing_surgery_time_explains_confirmed_trigger_and_linkage_gap():
 def test_029_association_gap_explains_confirmed_surgery_and_summary():
     decision = reduce_luxian_0609_rule_decision(
         RuleDecision(
-            rule_id="LX0609-029",
+            rule_id="LX0609-04-01-01",
             snapshot_hash=SNAPSHOT_HASH,
             applicability=ApplicabilityState.UNKNOWN,
             evidence_state=EvidenceState.DATA_GAP,
@@ -1894,27 +1899,27 @@ def test_029_association_gap_explains_confirmed_surgery_and_summary():
     ("rule_id", "expected_required", "expected_recommendation"),
     (
         (
-            "LX0609-054",
+            "LX0609-05-01-02",
             "每条抗菌药物医嘱对应的使用或调整动作、理由及关联时间",
             "逐条核对抗菌药物医嘱与病程",
         ),
         (
-            "LX0609-055",
+            "LX0609-05-01-03",
             "每条抗菌药物的计划开始/启用时间及对应的48至72小时效果评价",
             "核对每条抗菌药物的计划开始/启用时间",
         ),
         (
-            "LX0609-058",
+            "LX0609-05-01-06",
             "特殊级抗菌药物计划开始/启用时间与专家查房或会诊支持记录的关联",
             "核对特殊级抗菌药物计划开始/启用时间",
         ),
         (
-            "LX0609-061",
+            "LX0609-08-01-01",
             "权威出院时间与出院记录完成时间",
             "核对住院登记中的权威出院时间",
         ),
         (
-            "LX0609-069",
+            "LX0609-04-02-07",
             "每次会诊申请与对应会诊记录的业务关联、申请时间及完成时间",
             "逐次核对会诊申请与会诊记录",
         ),
@@ -1934,7 +1939,7 @@ def test_priority_data_gap_rules_explain_event_or_time_gap(
             qc_direction=QcDirection.UNKNOWN,
             reason_code=(
                 "association_failed"
-                if rule_id in {"LX0609-054", "LX0609-069"}
+                if rule_id in {"LX0609-05-01-02", "LX0609-04-02-07"}
                 else "authoritative_time_missing"
             ),
             fact_refs=(FACT_REF,),
@@ -1952,7 +1957,7 @@ def test_priority_data_gap_rules_explain_event_or_time_gap(
 def test_rule_009_candidate_scope_gap_has_rule_and_reason_specific_message() -> None:
     decision = reduce_luxian_0609_rule_decision(
         RuleDecision(
-            rule_id="LX0609-009",
+            rule_id="LX0609-02-01-05",
             snapshot_hash=SNAPSHOT_HASH,
             applicability=ApplicabilityState.APPLICABLE,
             evidence_state=EvidenceState.DATA_GAP,
@@ -1971,7 +1976,7 @@ def test_rule_009_candidate_scope_gap_has_rule_and_reason_specific_message() -> 
 
     other_rule = reduce_luxian_0609_rule_decision(
         RuleDecision(
-            rule_id="LX0609-054",
+            rule_id="LX0609-05-01-02",
             snapshot_hash=SNAPSHOT_HASH,
             applicability=ApplicabilityState.APPLICABLE,
             evidence_state=EvidenceState.DATA_GAP,
@@ -1989,7 +1994,7 @@ def test_rule_009_candidate_scope_gap_has_rule_and_reason_specific_message() -> 
 def test_rule_specific_gap_keeps_controlled_customer_reason_and_rule_context():
     decision = reduce_luxian_0609_rule_decision(
         RuleDecision(
-            rule_id="LX0609-033",
+            rule_id="LX0609-11-01-01",
             snapshot_hash=SNAPSHOT_HASH,
             applicability=ApplicabilityState.APPLICABLE,
             evidence_state=EvidenceState.DATA_GAP,
@@ -2041,7 +2046,7 @@ def test_lx0609_033_controlled_consent_facts_have_distinct_customer_explanations
     facts, expected
 ):
     assert customer_finding_from_controlled_facts(
-        rule_id="LX0609-033",
+        rule_id="LX0609-11-01-01",
         facts=facts,
     ) == expected
 
@@ -2049,7 +2054,7 @@ def test_lx0609_033_controlled_consent_facts_have_distinct_customer_explanations
 def test_lx0609_012_non_explicit_positive_has_customer_readable_gap_explanation():
     decision = reduce_luxian_0609_rule_decision(
         RuleDecision(
-            rule_id="LX0609-012",
+            rule_id="LX0609-06-01-05",
             snapshot_hash=SNAPSHOT_HASH,
             applicability=ApplicabilityState.UNKNOWN,
             evidence_state=EvidenceState.DATA_GAP,
@@ -2072,31 +2077,31 @@ def test_lx0609_012_non_explicit_positive_has_customer_readable_gap_explanation(
     ("rule_id", "reason_code", "expected_finding", "expected_suggestion"),
     (
         (
-            "LX0609-011",
+            "LX0609-06-01-04",
             "target_report_missing",
             "未读取到对应检查报告",
             "同步或核对对应的 CT/MRI 正式报告",
         ),
         (
-            "LX0609-011",
+            "LX0609-06-01-04",
             "authoritative_report_time_missing",
             "CT/MRI 报告缺少权威报告时间",
             "核对 CT/MRI 报告时间",
         ),
         (
-            "LX0609-012",
+            "LX0609-06-01-05",
             "association_failed",
             "CT/MRI 阳性结果与病程记录暂时无法唯一关联",
             "核对检查医嘱、报告和病程记录的业务关联标识",
         ),
         (
-            "LX0609-014",
+            "LX0609-06-03-03",
             "source_truncated",
             "细菌培养相关病程资料读取不完整",
             "完整同步细菌培养报告及报告后病程记录",
         ),
         (
-            "LX0609-015",
+            "LX0609-06-03-04",
             "required_field_missing",
             "阳性菌结果缺少可核对的结果或分析字段",
             "核对培养结果、阳性标志和分析病程",
@@ -2132,7 +2137,7 @@ def test_exam_lab_data_gap_explains_the_specific_missing_information(
 
 def test_lx0609_025_renders_each_surgery_missing_fields_without_barcode() -> None:
     finding = customer_finding_from_controlled_facts(
-        rule_id="LX0609-025",
+        rule_id="LX0609-04-02-04",
         facts={
             "failure_kind": "implant_information_incomplete",
             "missing_fields": ["implant_material", "implant_quantity"],
@@ -2163,7 +2168,7 @@ def test_lx0609_025_renders_each_surgery_missing_fields_without_barcode() -> Non
 
 def test_lx0609_025_complete_contract_lists_only_five_frozen_fields() -> None:
     finding = customer_finding_from_controlled_facts(
-        rule_id="LX0609-025",
+        rule_id="LX0609-04-02-04",
         facts={
             "verification_kind": "implant_information_complete",
             "performed_surgery_confirmed": True,
@@ -2193,7 +2198,7 @@ def test_lx0609_025_complete_contract_lists_only_five_frozen_fields() -> None:
 )
 @pytest.mark.parametrize(
     "rule_id",
-    ("LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015"),
+    ("LX0609-06-01-04", "LX0609-06-01-05", "LX0609-06-03-03", "LX0609-06-03-04"),
 )
 def test_exam_lab_window_gap_has_customer_readable_specific_explanation(
     rule_id,
@@ -2222,7 +2227,7 @@ def test_exam_lab_window_gap_has_customer_readable_specific_explanation(
 
 @pytest.mark.parametrize(
     "rule_id",
-    ("LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015"),
+    ("LX0609-06-01-04", "LX0609-06-01-05", "LX0609-06-03-03", "LX0609-06-03-04"),
 )
 def test_exam_lab_window_not_mature_is_customer_not_applicable(rule_id):
     decision = reduce_luxian_0609_rule_decision(
@@ -2298,10 +2303,10 @@ def test_012_multi_event_window_not_mature_and_negative_copies_are_distinct() ->
     negative_frozen = json.loads(json.dumps(negative_facts))
 
     window_finding = customer_finding_from_controlled_facts(
-        rule_id="LX0609-012", facts=window_facts
+        rule_id="LX0609-06-01-05", facts=window_facts
     )
     negative_finding = customer_finding_from_controlled_facts(
-        rule_id="LX0609-012", facts=negative_facts
+        rule_id="LX0609-06-01-05", facts=negative_facts
     )
 
     # 窗口未成熟：必须写明评价窗口尚未届满，不得断言报告未明确阳性。
@@ -2329,14 +2334,14 @@ def test_012_multi_event_unconfirmed_positive_state_uses_neutral_copy(
 ) -> None:
     facts = _multi_event_analysis_facts(second_event_positive_state=positive_state)
 
-    finding = customer_finding_from_controlled_facts(rule_id="LX0609-012", facts=facts)
+    finding = customer_finding_from_controlled_facts(rule_id="LX0609-06-01-05", facts=facts)
 
     assert NEUTRAL_NOT_APPLICABLE_COPY in finding
     assert WINDOW_NOT_MATURE_COPY not in finding
     assert NEGATIVE_NOT_APPLICABLE_COPY not in finding
 
 
-@pytest.mark.parametrize("rule_id", ["LX0609-011", "LX0609-014"])
+@pytest.mark.parametrize("rule_id", ["LX0609-06-01-04", "LX0609-06-03-03"])
 def test_record_rule_multi_event_not_applicable_copy_is_unchanged(rule_id) -> None:
     facts = _multi_event_analysis_facts(second_event_positive_state="not_relevant")
 
@@ -2352,57 +2357,57 @@ def test_record_rule_multi_event_not_applicable_copy_is_unchanged(rule_id) -> No
     ("rule_id", "expected_finding", "expected_evidence"),
     [
         (
-            "LX0609-013",
+            "LX0609-06-02-03",
             "暂无法核对病理结果是否记入手术记录或病程",
             "病理最终诊断",
         ),
         (
-            "LX0609-019",
+            "LX0609-06-02-02",
             "暂无法核对病理取材记录",
             "病理申请或报告来源",
         ),
         (
-            "LX0609-020",
+            "LX0609-03-01-01",
             "暂无法核对会诊意见是否具有对应执行记录",
             "后续病程执行记录",
         ),
         (
-            "LX0609-021",
+            "LX0609-03-01-02",
             "暂无法核对会诊申请目的是否明确",
             "具体临床问题、会诊理由",
         ),
         (
-            "LX0609-022",
+            "LX0609-03-01-03",
             "暂无法核对会诊意见是否明确",
             "明确诊疗意见",
         ),
         (
-            "LX0609-026",
+            "LX0609-05-02-01",
             "暂无法核对化疗记录与医嘱是否一致",
             "药名、剂量、用法、时间",
         ),
         (
-            "LX0609-027",
+            "LX0609-08-01-04",
             "暂无法核对恶性肿瘤出院治疗计划",
             "恶性肿瘤诊断依据",
         ),
         (
-            "LX0609-042",
+            "LX0609-11-03-02",
             "暂无法完整核对输血知情同意书",
             "患者或代理人签名",
         ),
         (
-            "LX0609-043",
+            "LX0609-07-01-01",
             "暂无法完整核对输血前九项检查",
             "乙肝五项",
         ),
         (
-            "LX0609-046",
+            "LX0609-07-02-02",
             "暂无法完整核对输血病程记录",
             "输血原因、起止时间",
         ),
         (
-            "LX0609-047",
+            "LX0609-07-03-01",
             "暂无法核对输血后24小时评价",
             "输血结束时间",
         ),
@@ -2435,13 +2440,13 @@ def test_task3_data_gap_names_the_customer_visible_missing_material(
 
 
 def test_rule_identity_and_name_come_only_from_the_trusted_catalog():
-    trusted = get_luxian_0609_rule("LX0609-001")
+    trusted = get_luxian_0609_rule("LX0609-01-01-01")
     result = render_luxian_0609_customer_result(
         decision=_reduced(CustomerFinalState.COMPLIANT),
     )
 
     assert trusted is not None
-    assert result["rule_id"] == result["rule_code"] == "LX0609-001"
+    assert result["rule_id"] == result["rule_code"] == "LX0609-01-01-01"
     assert result["rule_name"] == trusted["name"]
     assert result["rule_version"] == trusted["rule_version"]
 
@@ -2449,11 +2454,11 @@ def test_rule_identity_and_name_come_only_from_the_trusted_catalog():
 @pytest.mark.parametrize(
     ("rule_id", "expected_finding"),
     [
-        ("LX0609-001", "已确认入院记录在入院后 24 小时内完成。"),
-        ("LX0609-009", "已核对病危期间的查房记录，未发现应记录日期缺失。"),
-        ("LX0609-032", "已确认本次手术具备手术安全核查表。"),
-        ("LX0609-043", "已核对输血前常规检查，所需项目完整。"),
-        ("LX0609-048", "已核对术中输血相关记录，未发现文书间内容不一致。"),
+        ("LX0609-01-01-01", "已确认入院记录在入院后 24 小时内完成。"),
+        ("LX0609-02-01-05", "已核对病危期间的查房记录，未发现应记录日期缺失。"),
+        ("LX0609-04-03-01", "已确认本次手术具备手术安全核查表。"),
+        ("LX0609-07-01-01", "已核对输血前常规检查，所需项目完整。"),
+        ("LX0609-07-04-01", "已核对术中输血相关记录，未发现文书间内容不一致。"),
     ],
 )
 def test_compliant_result_explains_why_it_is_compliant(rule_id, expected_finding):
@@ -2480,7 +2485,7 @@ def test_compliant_result_explains_why_it_is_compliant(rule_id, expected_finding
 def test_lx037_parent_visit_missing_has_noncontradictory_customer_explanation():
     decision = reduce_luxian_0609_rule_decision(
         RuleDecision(
-            rule_id="LX0609-037",
+            rule_id="LX0609-04-04-02",
             snapshot_hash=SNAPSHOT_HASH,
             applicability=ApplicabilityState.NOT_APPLICABLE,
             evidence_state=EvidenceState.SUFFICIENT,
@@ -2495,13 +2500,13 @@ def test_lx037_parent_visit_missing_has_noncontradictory_customer_explanation():
 
     assert result["status"] == "not_applicable"
     assert "已确认实施麻醉" in result["findings"]
-    assert "LX0609-036" in result["evidence"]
+    assert "LX0609-04-04-01" in result["evidence"]
 
 
 def test_lx039_emergency_rescue_exception_uses_eligibility_customer_copy():
     decision = reduce_luxian_0609_rule_decision(
         RuleDecision(
-            rule_id="LX0609-039",
+            rule_id="LX0609-04-01-02",
             snapshot_hash=SNAPSHOT_HASH,
             applicability=ApplicabilityState.NOT_APPLICABLE,
             evidence_state=EvidenceState.SUFFICIENT,
@@ -2522,7 +2527,7 @@ def test_lx039_emergency_rescue_exception_uses_eligibility_customer_copy():
 def test_lx018_compliant_result_uses_controlled_criterion_values():
     decision = reduce_luxian_0609_rule_decision(
         RuleDecision(
-            rule_id="LX0609-018",
+            rule_id="LX0609-01-01-02",
             snapshot_hash=SNAPSHOT_HASH,
             applicability=ApplicabilityState.APPLICABLE,
             evidence_state=EvidenceState.SUFFICIENT,
@@ -2570,7 +2575,7 @@ def test_lx018_compliant_result_uses_controlled_criterion_values():
 def test_lx018_non_compliant_result_names_failed_diagnostic_direction():
     decision = reduce_luxian_0609_rule_decision(
         RuleDecision(
-            rule_id="LX0609-018",
+            rule_id="LX0609-01-01-02",
             snapshot_hash=SNAPSHOT_HASH,
             applicability=ApplicabilityState.APPLICABLE,
             evidence_state=EvidenceState.SUFFICIENT,
@@ -2614,7 +2619,7 @@ def test_lx018_customer_finding_preserves_full_medical_analysis():
     analysis = "主诉提供的症状和病程线索需要结合第一诊断判断。" * 20
     decision = reduce_luxian_0609_rule_decision(
         RuleDecision(
-            rule_id="LX0609-018",
+            rule_id="LX0609-01-01-02",
             snapshot_hash=SNAPSHOT_HASH,
             applicability=ApplicabilityState.APPLICABLE,
             evidence_state=EvidenceState.SUFFICIENT,
@@ -2656,7 +2661,7 @@ def test_lx018_customer_finding_preserves_full_medical_analysis():
 def test_data_gap_uses_unknown_criterion_label_to_name_missing_data():
     decision = reduce_luxian_0609_rule_decision(
         RuleDecision(
-            rule_id="LX0609-018",
+            rule_id="LX0609-01-01-02",
             snapshot_hash=SNAPSHOT_HASH,
             applicability=ApplicabilityState.APPLICABLE,
             evidence_state=EvidenceState.DATA_GAP,
@@ -2720,9 +2725,9 @@ def test_each_defined_rule_data_gap_names_customer_visible_missing_material(rule
 @pytest.mark.parametrize(
     ("rule_id", "expected_material"),
     (
-        ("LX0609-010", "CT/MRI"),
-        ("LX0609-017", "病程记录"),
-        ("LX0609-023", "会诊意见"),
+        ("LX0609-06-01-02", "CT/MRI"),
+        ("LX0609-12-01-02", "病程记录"),
+        ("LX0609-03-01-04", "会诊意见"),
     ),
 )
 def test_data_gap_for_event_rules_names_the_missing_customer_material(
@@ -2827,7 +2832,7 @@ def test_no_arbitrary_string_input_can_enter_customer_dto(marker):
 
 def test_renderer_accepts_only_reducer_owned_decision():
     raw = RuleDecision(
-        rule_id="LX0609-001",
+        rule_id="LX0609-01-01-01",
         snapshot_hash=SNAPSHOT_HASH,
         applicability=ApplicabilityState.APPLICABLE,
         evidence_state=EvidenceState.SUFFICIENT,
@@ -2882,7 +2887,7 @@ def test_safe_trace_is_separate_and_sink_failure_cannot_change_customer_result()
 
 def test_transfer_customer_facts_render_each_document_association_separately() -> None:
     finding = customer_finding_from_controlled_facts(
-        rule_id="LX0609-073",
+        rule_id="LX0609-10-02-02",
         facts={
             "verification_kind": "transfer_record_presence_check",
             "transfer_order_time": "2026-07-01 08:00:00",
@@ -2899,7 +2904,7 @@ def test_transfer_customer_facts_render_each_document_association_separately() -
 
 def test_transfer_timeliness_uses_a_readable_gap_when_interval_is_unavailable() -> None:
     finding = customer_finding_from_controlled_facts(
-        rule_id="LX0609-072",
+        rule_id="LX0609-10-02-01",
         facts={
             "verification_kind": "transfer_record_timeliness_check",
             "transfer_order_time": "2026-07-01 08:00:00",
@@ -2925,7 +2930,7 @@ def test_transfer_multi_event_gap_renders_counts_without_claiming_documents_miss
     }
     decision = reduce_luxian_0609_rule_decision(
         RuleDecision(
-            rule_id="LX0609-072",
+            rule_id="LX0609-10-02-01",
             snapshot_hash=SNAPSHOT_HASH,
             applicability=ApplicabilityState.APPLICABLE,
             evidence_state=EvidenceState.DATA_GAP,
@@ -2947,7 +2952,7 @@ def test_transfer_multi_event_gap_renders_counts_without_claiming_documents_miss
         "缺少可将各文书与具体转科事件对应的关联信息，暂无法逐次核对。"
     )
     assert customer_finding_from_controlled_facts(
-        rule_id="LX0609-072", facts=facts
+        rule_id="LX0609-10-02-01", facts=facts
     ) == expected
     assert rendered["findings"] == expected
     assert "文书缺失" not in rendered["findings"]
@@ -2957,7 +2962,7 @@ def test_transfer_multi_event_gap_renders_counts_without_claiming_documents_miss
 def test_transfer_multi_event_gap_does_not_invent_zero_count_record_evidence() -> None:
     decision = reduce_luxian_0609_rule_decision(
         RuleDecision(
-            rule_id="LX0609-073",
+            rule_id="LX0609-10-02-02",
             snapshot_hash=SNAPSHOT_HASH,
             applicability=ApplicabilityState.APPLICABLE,
             evidence_state=EvidenceState.DATA_GAP,

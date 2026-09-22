@@ -15,7 +15,7 @@ from typing import Any
 
 
 COURSE_QUALITY_CUSTOMER_RULE_IDS = frozenset({
-    "LX0609-007", "LX0609-008", "LX0609-009", "LX0609-016", "LX0609-017", "LX0609-018",
+    "LX0609-02-01-03", "LX0609-02-01-04", "LX0609-02-01-05", "LX0609-12-01-01", "LX0609-12-01-02", "LX0609-01-01-02",
 })
 _COURSE_SOURCES = frozenset({"daily_course_record", "senior_course_record"})
 _017_THRESHOLD_EXCEEDED_KIND = "copy_similarity_threshold_exceeded"
@@ -325,7 +325,7 @@ def safe_course_quality_customer_display_facts(*, rule_id: str, raw: Any) -> dic
     normalized = str(rule_id or "").strip().upper()
     if normalized not in COURSE_QUALITY_CUSTOMER_RULE_IDS or not isinstance(raw, Mapping):
         return None
-    validators = {"LX0609-007": _safe_007, "LX0609-008": _safe_008, "LX0609-009": _safe_009, "LX0609-016": _safe_016, "LX0609-017": _safe_017}
+    validators = {"LX0609-02-01-03": _safe_007, "LX0609-02-01-04": _safe_008, "LX0609-02-01-05": _safe_009, "LX0609-12-01-01": _safe_016, "LX0609-12-01-02": _safe_017}
     validator = validators.get(normalized)
     if validator is None:
         # 018 由 CriterionResult 承载受控语义事实；不存在单独 facts 时不触发合同失败。
@@ -339,11 +339,11 @@ def course_quality_customer_fact_status_is_valid(*, rule_id: str, status: str, r
         return True
     if str(status or "").strip().lower() == "technical_error":
         return True
-    if rule_id == "LX0609-007" and isinstance(raw_facts, Mapping) and raw_facts.get("failure_kind") == "course_interval_source_gap":
+    if rule_id == "LX0609-02-01-03" and isinstance(raw_facts, Mapping) and raw_facts.get("failure_kind") == "course_interval_source_gap":
         return safe_facts is not None and status == "data_gap"
-    if rule_id == "LX0609-007" and isinstance(raw_facts, Mapping) and raw_facts.get("failure_kind") == "course_interval_capacity_exceeded":
+    if rule_id == "LX0609-02-01-03" and isinstance(raw_facts, Mapping) and raw_facts.get("failure_kind") == "course_interval_capacity_exceeded":
         return safe_facts is not None and status == "non_compliant"
-    if rule_id != "LX0609-017":
+    if rule_id != "LX0609-12-01-02":
         return safe_facts is not None or raw_facts is None
     normalized_status = str(status or "").strip().lower()
     kind = raw_facts.get("failure_kind") if isinstance(raw_facts, Mapping) else None

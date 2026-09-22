@@ -759,7 +759,7 @@ function displayFactRows(item: SingleRecordQcResultItem) {
       if (!factLabels[key] || hiddenCustomerFactKeys.has(key)) return false
       return !(
         item.status === 'non_compliant' &&
-        ['LX0609-011', 'LX0609-012', 'LX0609-014', 'LX0609-015'].includes(item.rule_id) &&
+        ['LX0609-06-01-04', 'LX0609-06-01-05', 'LX0609-06-03-03', 'LX0609-06-03-04'].includes(item.rule_id) &&
         examLabInternalFactKeys.has(key)
       )
     })
@@ -786,7 +786,7 @@ function displayFactRows(item: SingleRecordQcResultItem) {
         .join('、')
       const sourceLabel = typeof facts.source_label === 'string' ? facts.source_label.trim() : ''
       const label =
-        key === 'anchor_time' && item.rule_id === 'LX0609-002'
+        key === 'anchor_time' && item.rule_id === 'LX0609-01-02-01'
           ? '入院时间'
           : key === 'observed_time' && sourceLabel
             ? `${sourceLabel}时间`
@@ -811,7 +811,7 @@ const implantFieldLabels: Record<string, string> = {
 }
 
 function implantEventFacts(item: SingleRecordQcResultItem) {
-  if (item.rule_id !== 'LX0609-025') return []
+  if (item.rule_id !== 'LX0609-04-02-04') return []
   if (
     item.customer_display_facts?.performed_surgery_confirmed !== true ||
     item.customer_display_facts?.source_label !== '手术记录' ||
@@ -859,10 +859,10 @@ function resultHeadline(item: SingleRecordQcResultViewItem) {
   const examHeadline = examLabEventPresentation(item)?.headline
   if (examHeadline) return examHeadline
 
-  // 018 的结论已包含完整医学分析；逐项判定区域会再次展示该分析。
+  // LX0609-01-01-02 的结论已包含完整医学分析；逐项判定区域会再次展示该分析。
   // 列表摘要只保留判定结论，完整内容仍在下方“医学分析”中查看，避免重复。
   if (
-    item.rule_id === 'LX0609-018' &&
+    item.rule_id === 'LX0609-01-01-02' &&
     item.criterion_results?.some(
       (criterion) =>
         criterion.criterion_id === 'diagnostic_direction' && criterion.medical_analysis,
@@ -910,7 +910,7 @@ function formatCopyPercentage(value: number): string {
 }
 
 function copyMatchPairs(item: SingleRecordQcResultItem) {
-  if (item.rule_id !== 'LX0609-017') return []
+  if (item.rule_id !== 'LX0609-12-01-02') return []
   const rawPairs = item.customer_display_facts?.copy_match_pairs
   if (!Array.isArray(rawPairs)) return []
   return rawPairs.slice(0, 4).flatMap((rawPair, rawIndex) => {
@@ -1219,7 +1219,7 @@ function displayEvidence(item: SingleRecordQcResultItem): SingleRecordQcEvidence
   const evidence = recommendationEvidenceForSingleRecord(item)
   if (
     item.status !== 'non_compliant' ||
-    !['LX0609-011', 'LX0609-012', 'LX0609-014', 'LX0609-015'].includes(item.rule_id)
+    !['LX0609-06-01-04', 'LX0609-06-01-05', 'LX0609-06-03-03', 'LX0609-06-03-04'].includes(item.rule_id)
   ) {
     return evidence
   }

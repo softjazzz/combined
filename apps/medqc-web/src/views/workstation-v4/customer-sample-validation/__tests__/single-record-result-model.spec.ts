@@ -8,7 +8,7 @@ import {
 describe('single-record recommendation evidence', () => {
   it('exposes signed nested refs with recommendation metadata', () => {
     const result = recommendationEvidenceForSingleRecord({
-      rule_id: 'LX0609-020',
+      rule_id: 'LX0609-03-01-01',
       customer_display_facts: {
         recommendation_evidence: [
           {
@@ -41,7 +41,7 @@ describe('single-record recommendation evidence', () => {
 
   it('ignores raw nested ids and keeps legacy evidence when no nested refs exist', () => {
     const result = recommendationEvidenceForSingleRecord({
-      rule_id: 'LX0609-020',
+      rule_id: 'LX0609-03-01-01',
       customer_display_facts: {
         recommendation_evidence: [
           {
@@ -63,7 +63,7 @@ describe('single-record recommendation evidence', () => {
 
   it('does not duplicate a flat ref already present in nested evidence', () => {
     const result = recommendationEvidenceForSingleRecord({
-      rule_id: 'LX0609-020',
+      rule_id: 'LX0609-03-01-01',
       customer_display_facts: {
         recommendation_evidence: [
           {
@@ -92,19 +92,19 @@ describe('grouped result presentation tabs', () => {
   it('keeps compliant and not-applicable rules in separate report sections', () => {
     const presentation = buildSingleRecordQcPresentation([
       {
-        rule_id: 'LX0609-001',
+        rule_id: 'LX0609-01-01-01',
         rule_name: '入院记录规则',
         status: 'compliant',
         source_document: '入院记录',
       },
       {
-        rule_id: 'LX0609-002',
+        rule_id: 'LX0609-01-02-01',
         rule_name: '手术记录规则',
         status: 'not_applicable',
         source_document: '手术记录',
       },
       {
-        rule_id: 'LX0609-003',
+        rule_id: 'LX0609-04-02-01',
         rule_name: '会诊记录规则',
         status: 'data_gap',
         source_document: '会诊记录',
@@ -115,7 +115,7 @@ describe('grouped result presentation tabs', () => {
     expect(presentation.counts.notApplicable).toBe(1)
     expect(presentation.sectionsByTab.compliant).toHaveLength(1)
     expect(presentation.sectionsByTab.not_applicable).toHaveLength(1)
-    expect(presentation.sectionsByTab.compliant[0].items[0].rule_id).toBe('LX0609-001')
-    expect(presentation.sectionsByTab.not_applicable[0].items[0].rule_id).toBe('LX0609-002')
+    expect(presentation.sectionsByTab.compliant[0].items[0].rule_id).toBe('LX0609-01-01-01')
+    expect(presentation.sectionsByTab.not_applicable[0].items[0].rule_id).toBe('LX0609-01-02-01')
   })
 })

@@ -21,7 +21,7 @@ def test_department_transfer_in_order_is_an_applicable_transfer_event(
     order_name: str,
 ) -> None:
     outcome = evaluate_transfer_documentation(
-        rule_id="LX0609-073",
+        rule_id="LX0609-10-02-02",
         nondrug_order_error="",
         transfer_in_error="",
         transfer_out_error="",
@@ -62,7 +62,7 @@ def test_non_final_or_non_clinical_transfer_text_does_not_trigger(
     order: dict[str, str],
 ) -> None:
     outcome = evaluate_transfer_documentation(
-        rule_id="LX0609-073",
+        rule_id="LX0609-10-02-02",
         nondrug_order_error="",
         transfer_in_error="",
         transfer_out_error="",
@@ -78,7 +78,7 @@ def test_non_final_or_non_clinical_transfer_text_does_not_trigger(
     )
 
 
-@pytest.mark.parametrize("rule_id", ("LX0609-072", "LX0609-073"))
+@pytest.mark.parametrize("rule_id", ("LX0609-10-02-01", "LX0609-10-02-02"))
 @pytest.mark.parametrize(
     ("order_names", "transfer_in_count", "transfer_out_count"),
     (
@@ -121,7 +121,7 @@ def test_multiple_transfer_events_report_count_only_association_gap(
     }
 
 
-@pytest.mark.parametrize("rule_id", ("LX0609-072", "LX0609-073"))
+@pytest.mark.parametrize("rule_id", ("LX0609-10-02-01", "LX0609-10-02-02"))
 def test_transfer_event_association_gap_accepts_only_nonnegative_counts(
     rule_id: str,
 ) -> None:
@@ -175,7 +175,7 @@ def test_transfer_event_association_gap_rejects_invalid_or_extra_fields(
     raw: dict[str, object],
 ) -> None:
     assert (
-        safe_continuity_customer_display_facts(rule_id="LX0609-072", raw=raw)
+        safe_continuity_customer_display_facts(rule_id="LX0609-10-02-01", raw=raw)
         is None
     )
 
@@ -272,7 +272,7 @@ def test_single_department_transfer_in_reuses_trigger_for_exact_binding() -> Non
         }
     )
     outcome = evaluate_transfer_documentation(
-        rule_id="LX0609-073",
+        rule_id="LX0609-10-02-02",
         nondrug_order_error="",
         transfer_in_error="",
         transfer_out_error="",

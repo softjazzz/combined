@@ -264,7 +264,7 @@ async def prepare_luxian_0609_execution(
         getattr(settings, "LUXIAN_0609_UNIFIED_ENGINE_ENABLED", False)
     )
     surgery_document_source_guard_required = bool(
-        {"LX0609-029", "LX0609-032"}.intersection(package_plan.executable_rule_ids)
+        {"LX0609-04-01-01", "LX0609-04-03-01"}.intersection(package_plan.executable_rule_ids)
     )
     extended_document_required = bool(
         set(EXTENDED_DOCUMENT_RULE_IDS).intersection(package_plan.executable_rule_ids)

@@ -107,7 +107,7 @@ def _decision(
     snapshot: Luxian0609EvidenceSnapshot,
     ref: str,
     *,
-    rule_id: str = "LX0609-007",
+    rule_id: str = "LX0609-02-01-03",
 ) -> RuleDecision:
     return RuleDecision(
         rule_id=rule_id,
@@ -252,7 +252,7 @@ def test_binding_rejects_document_ref_without_materials_or_for_another_rule_sour
     no_materials = _bind(snapshot, _decision(snapshot, daily_ref))
     cross_source = _bind(
         snapshot,
-        _decision(snapshot, daily_ref, rule_id="LX0609-030"),
+        _decision(snapshot, daily_ref, rule_id="LX0609-04-02-02"),
         materials,
     )
 

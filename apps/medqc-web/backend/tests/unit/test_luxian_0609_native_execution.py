@@ -120,18 +120,18 @@ def test_native_030_order_without_surgery_record_is_non_compliant_with_order_ref
     )
 
     result = native_execution.execute_luxian_0609_native_rules(
-        rule_ids=("LX0609-030",),
+        rule_ids=("LX0609-04-02-02",),
         visit_id="safe-visit",
         institute_id="safe-institute",
         patient_id="safe-patient",
         source_schema=None,
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-030",),
+        decision_rule_ids=("LX0609-04-02-02",),
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-030",),
+        expected_rule_ids=("LX0609-04-02-02",),
         snapshot=snapshot,
         evidence_materials=materials,
     )
@@ -146,7 +146,7 @@ def test_native_030_order_without_surgery_record_is_non_compliant_with_order_ref
     assert reduced[0].reason_code == "required_document_missing"
     assert result.customer_display_facts == (
         (
-            "LX0609-030",
+            "LX0609-04-02-02",
             {
                 "failure_kind": "surgery_document_missing",
                 "target_document": "surgery_record",
@@ -168,19 +168,19 @@ def test_native_030_performed_surgery_uses_performed_trigger_fact():
     )
 
     result = native_execution.execute_luxian_0609_native_rules(
-        rule_ids=("LX0609-030",),
+        rule_ids=("LX0609-04-02-02",),
         visit_id="safe-visit",
         institute_id="safe-institute",
         patient_id="safe-patient",
         source_schema=None,
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-030",),
+        decision_rule_ids=("LX0609-04-02-02",),
     )
 
     assert result.customer_display_facts == (
         (
-            "LX0609-030",
+            "LX0609-04-02-02",
             {
                 "verification_kind": "surgery_document_present",
                 "target_document": "surgery_record",
@@ -213,14 +213,14 @@ def test_native_030_1889002_order_only_does_not_claim_mr_surgery_as_performed():
     )
 
     result = native_execution.execute_luxian_0609_native_rules(
-        rule_ids=("LX0609-030",),
+        rule_ids=("LX0609-04-02-02",),
         visit_id="1889002",
         institute_id="safe-institute",
         patient_id="safe-patient",
         source_schema=None,
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-030",),
+        decision_rule_ids=("LX0609-04-02-02",),
     )
 
     expected_order_ref = materials.document_rows(
@@ -232,7 +232,7 @@ def test_native_030_1889002_order_only_does_not_claim_mr_surgery_as_performed():
     assert result.decisions[0].reason_code == "required_document_missing"
     assert result.customer_display_facts == (
         (
-            "LX0609-030",
+            "LX0609-04-02-02",
             {
                 "failure_kind": "surgery_document_missing",
                 "target_document": "surgery_record",
@@ -255,18 +255,18 @@ def test_native_030_uncertain_order_is_deliverable_data_gap():
     )
 
     result = native_execution.execute_luxian_0609_native_rules(
-        rule_ids=("LX0609-030",),
+        rule_ids=("LX0609-04-02-02",),
         visit_id="safe-visit",
         institute_id="safe-institute",
         patient_id="safe-patient",
         source_schema=None,
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-030",),
+        decision_rule_ids=("LX0609-04-02-02",),
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-030",),
+        expected_rule_ids=("LX0609-04-02-02",),
         snapshot=snapshot,
         evidence_materials=materials,
     )
@@ -302,8 +302,8 @@ def test_native_core_uses_provider_once_and_returns_exact_customer_order(monkeyp
                 finding_kind=SimpleNamespace(value=kind),
             )
             for rule_id, state, kind in (
-                ("LX0609-030", "compliant", "requirement_satisfied"),
-                ("LX0609-032", "non_compliant", "required_document_missing"),
+                ("LX0609-04-02-02", "compliant", "requirement_satisfied"),
+                ("LX0609-04-03-01", "non_compliant", "required_document_missing"),
             )
         ),
         fingerprint=lambda: "a" * 64,
@@ -341,7 +341,7 @@ def test_native_core_uses_provider_once_and_returns_exact_customer_order(monkeyp
     assert all(item["metadata"]["total_tokens"] == 0 for item in result.results)
     assert result.customer_display_facts == (
         (
-            "LX0609-032",
+            "LX0609-04-03-01",
             {
                 "failure_kind": "surgery_document_missing",
                 "target_document": "surgery_safecheck_record",
@@ -386,8 +386,8 @@ def test_native_core_emits_direct_rule_decisions_on_shared_snapshot(monkeypatch)
                 finding_kind=SimpleNamespace(value=kind),
             )
             for rule_id, state, kind in (
-                ("LX0609-030", "non_compliant", "required_document_missing"),
-                ("LX0609-032", "not_applicable", "not_applicable"),
+                ("LX0609-04-02-02", "non_compliant", "required_document_missing"),
+                ("LX0609-04-03-01", "not_applicable", "not_applicable"),
             )
         ),
         fingerprint=lambda: "b" * 64,
@@ -478,7 +478,7 @@ def test_native_032_multiple_surgeries_with_exact_minute_pairs_is_compliant(monk
             for index in range(8)
         ),
     )
-    plan = SimpleNamespace(planned_rules=[SimpleNamespace(rule_id="LX0609-032")])
+    plan = SimpleNamespace(planned_rules=[SimpleNamespace(rule_id="LX0609-04-03-01")])
     provided = SimpleNamespace(
         evidence_payload={"programmatic_timeline": {"documents": {}}},
         source_query_observations=(),
@@ -491,7 +491,7 @@ def test_native_032_multiple_surgeries_with_exact_minute_pairs_is_compliant(monk
     execution = SimpleNamespace(
         results=(
             SimpleNamespace(
-                rule_id="LX0609-032",
+                rule_id="LX0609-04-03-01",
                 final_state=SimpleNamespace(value="compliant"),
                 finding_kind=SimpleNamespace(value="requirement_satisfied"),
             ),
@@ -516,19 +516,19 @@ def test_native_032_multiple_surgeries_with_exact_minute_pairs_is_compliant(monk
     )
 
     result = native_execution.execute_luxian_0609_native_rules(
-        rule_ids=("LX0609-032",),
+        rule_ids=("LX0609-04-03-01",),
         visit_id="visit-native-multi",
         institute_id="inst-native-multi",
         patient_id="patient-native-multi",
         source_schema=None,
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-032",),
+        decision_rule_ids=("LX0609-04-03-01",),
     )
 
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-032",),
+        expected_rule_ids=("LX0609-04-03-01",),
         snapshot=snapshot,
         evidence_materials=materials,
     )
@@ -542,7 +542,7 @@ def test_native_032_multiple_surgeries_with_exact_minute_pairs_is_compliant(monk
     assert set(result.decisions[0].fact_refs) == expected_document_refs
     assert result.customer_display_facts == (
         (
-            "LX0609-032",
+            "LX0609-04-03-01",
             {
                 "verification_kind": "surgery_document_present",
                 "target_document": "surgery_safecheck_record",
@@ -1111,7 +1111,7 @@ def test_native_032_multiple_surgery_safecheck_linkage_failure_states(
             snapshot=snapshot,
             sources=sources,
         )
-    plan = SimpleNamespace(planned_rules=[SimpleNamespace(rule_id="LX0609-032")])
+    plan = SimpleNamespace(planned_rules=[SimpleNamespace(rule_id="LX0609-04-03-01")])
     provided = SimpleNamespace(
         evidence_payload={"programmatic_timeline": {"documents": {}}},
         source_query_observations=(),
@@ -1124,7 +1124,7 @@ def test_native_032_multiple_surgery_safecheck_linkage_failure_states(
     execution = SimpleNamespace(
         results=(
             SimpleNamespace(
-                rule_id="LX0609-032",
+                rule_id="LX0609-04-03-01",
                 final_state=SimpleNamespace(value="compliant"),
                 finding_kind=SimpleNamespace(value="requirement_satisfied"),
             ),
@@ -1149,19 +1149,19 @@ def test_native_032_multiple_surgery_safecheck_linkage_failure_states(
     )
 
     result = native_execution.execute_luxian_0609_native_rules(
-        rule_ids=("LX0609-032",),
+        rule_ids=("LX0609-04-03-01",),
         visit_id="visit-native-multi-linkage",
         institute_id="inst-native-multi-linkage",
         patient_id="patient-native-multi-linkage",
         source_schema=None,
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-032",),
+        decision_rule_ids=("LX0609-04-03-01",),
     )
 
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-032",),
+        expected_rule_ids=("LX0609-04-03-01",),
         snapshot=snapshot,
         evidence_materials=materials,
     )
@@ -1170,7 +1170,7 @@ def test_native_032_multiple_surgery_safecheck_linkage_failure_states(
     if expected_state == "compliant":
         assert result.customer_display_facts == (
             (
-                "LX0609-032",
+                "LX0609-04-03-01",
                 {
                     "verification_kind": "surgery_document_present",
                     "target_document": "surgery_safecheck_record",
@@ -1181,7 +1181,7 @@ def test_native_032_multiple_surgery_safecheck_linkage_failure_states(
     elif expected_state == "non_compliant":
         assert result.customer_display_facts == (
             (
-                "LX0609-032",
+                "LX0609-04-03-01",
                 {
                     "failure_kind": "surgery_document_missing",
                     "target_document": "surgery_safecheck_record",
@@ -1229,14 +1229,14 @@ def test_native_core_rule_decision_reducer_preserves_all_six_states(
 ):
     snapshot, _ = _typed_session()
     decision = native_execution._typed_rule_decision(
-        rule_id="LX0609-030",
+        rule_id="LX0609-04-02-02",
         final_state=source_state,
         snapshot=snapshot,
     )
 
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=(decision,),
-        expected_rule_ids=("LX0609-030",),
+        expected_rule_ids=("LX0609-04-02-02",),
         snapshot=snapshot,
     )
 
@@ -1341,7 +1341,7 @@ def test_native_032_formal_surgery_record_with_shell_safecheck_is_non_compliant(
         _reader,
     )
     result = native_execution.execute_luxian_0609_native_rules(
-        rule_ids=("LX0609-032",),
+        rule_ids=("LX0609-04-03-01",),
         visit_id="visit-native-mr-004",
         institute_id="inst-native-mr-004",
         patient_id="patient-native-mr-004",
@@ -1365,7 +1365,7 @@ def test_native_032_missing_safecheck_rows_has_missing_reason(monkeypatch):
         _reader,
     )
     result = native_execution.execute_luxian_0609_native_rules(
-        rule_ids=("LX0609-032",),
+        rule_ids=("LX0609-04-03-01",),
         visit_id="visit-native-mr-005",
         institute_id="inst-native-mr-005",
         patient_id="patient-native-mr-005",
@@ -1376,7 +1376,7 @@ def test_native_032_missing_safecheck_rows_has_missing_reason(monkeypatch):
     assert result.results[0]["metadata"]["reason_code"] == "required_document_missing"
     assert result.customer_display_facts == (
         (
-            "LX0609-032",
+            "LX0609-04-03-01",
             {
                 "failure_kind": "surgery_document_missing",
                 "target_document": "surgery_safecheck_record",
@@ -1400,7 +1400,7 @@ def test_native_032_safecheck_blank_rows_emit_blank_display_fact(monkeypatch):
         _reader,
     )
     result = native_execution.execute_luxian_0609_native_rules(
-        rule_ids=("LX0609-032",),
+        rule_ids=("LX0609-04-03-01",),
         visit_id="visit-native-mr-006",
         institute_id="inst-native-mr-006",
         patient_id="patient-native-mr-006",
@@ -1409,7 +1409,7 @@ def test_native_032_safecheck_blank_rows_emit_blank_display_fact(monkeypatch):
 
     assert result.customer_display_facts == (
         (
-            "LX0609-032",
+            "LX0609-04-03-01",
             {
                 "failure_kind": "surgery_document_blank",
                 "target_document": "surgery_safecheck_record",
@@ -1444,9 +1444,9 @@ def test_native_core_mr_surgery_error_without_alternative_positive_is_fail_close
 
 
 def test_native_wrapper_selection_accepts_customer_or_mapped_prepared_rule_id():
-    wrapper = {"rule_id": "LX0609-030", "mapped_rule_ids": ["LX-025", "SC-095"]}
-    assert native_execution.native_rule_ids_from_wrappers(wrapper_rules=[wrapper], prepared_rule_ids={"LX0609-030"}) == ("LX0609-030",)
-    assert native_execution.native_rule_ids_from_wrappers(wrapper_rules=[wrapper], prepared_rule_ids={"LX-025"}) == ("LX0609-030",)
+    wrapper = {"rule_id": "LX0609-04-02-02", "mapped_rule_ids": ["LX-025", "SC-095"]}
+    assert native_execution.native_rule_ids_from_wrappers(wrapper_rules=[wrapper], prepared_rule_ids={"LX0609-04-02-02"}) == ("LX0609-04-02-02",)
+    assert native_execution.native_rule_ids_from_wrappers(wrapper_rules=[wrapper], prepared_rule_ids={"LX-025"}) == ("LX0609-04-02-02",)
 
 
 def test_native_core_missing_coordinates_returns_complete_safe_technical_results():

@@ -40,7 +40,7 @@ export const syntheticCaseTemplates: SyntheticCaseTemplate[] = [
     name: '基础时限缺陷样本',
     family: '基础时限',
     description: '用于验证入院记录、首次病程、上级医师查房等时限规则。',
-    suggestedRuleIds: ['LX0609-001', 'LX0609-002', 'LX0609-005'],
+    suggestedRuleIds: ['LX0609-01-01-01', 'LX0609-01-02-01', 'LX0609-02-01-01'],
     basic: {
       caseTitle: '基础时限缺陷测试',
       patientName: '李某某',
@@ -114,21 +114,21 @@ export const syntheticCaseTemplates: SyntheticCaseTemplate[] = [
     ],
     goldenAnswers: [
       createGoldenAnswer({
-        qc_point_id: 'LX0609-001',
+        qc_point_id: 'LX0609-01-01-01',
         expected_status: 'non_compliant',
         trigger_facts: ['入院时间为2026-06-01 08:00', '入院记录记录时间为2026-06-02 10:00'],
         evidence_keywords: ['入院记录', '2026-06-02', '超过24小时'],
         human_reason: '入院记录完成时间晚于入院后24小时。',
       }),
       createGoldenAnswer({
-        qc_point_id: 'LX0609-002',
+        qc_point_id: 'LX0609-01-02-01',
         expected_status: 'non_compliant',
         trigger_facts: ['入院时间为2026-06-01 08:00', '首次病程记录时间为2026-06-01 19:00'],
         evidence_keywords: ['首次病程记录', '8小时', '11小时'],
         human_reason: '首次病程记录晚于入院后8小时。',
       }),
       createGoldenAnswer({
-        qc_point_id: 'LX0609-005',
+        qc_point_id: 'LX0609-02-01-01',
         expected_status: 'non_compliant',
         trigger_facts: ['入院48小时内未见主治医师首次查房记录'],
         evidence_keywords: ['上级医师查房记录', '2026-06-04', '48小时内未见'],
@@ -141,7 +141,7 @@ export const syntheticCaseTemplates: SyntheticCaseTemplate[] = [
     name: '检查检验阳性结果未分析',
     family: '检查检验',
     description: '用于验证 CT/MRI 阳性结果和细菌培养阳性结果在病程中的分析要求。',
-    suggestedRuleIds: ['LX0609-012', 'LX0609-014'],
+    suggestedRuleIds: ['LX0609-06-01-05', 'LX0609-06-03-03'],
     basic: {
       caseTitle: 'CT MRI 与细菌培养测试',
       patientName: '赵某某',
@@ -189,7 +189,7 @@ export const syntheticCaseTemplates: SyntheticCaseTemplate[] = [
     ],
     goldenAnswers: [
       createGoldenAnswer({
-        qc_point_id: 'LX0609-012',
+        qc_point_id: 'LX0609-06-01-05',
         expected_status: 'non_compliant',
         trigger_facts: [
           '2026-06-01 14:00 腰椎MRI报告阳性',
@@ -200,7 +200,7 @@ export const syntheticCaseTemplates: SyntheticCaseTemplate[] = [
           'MRI阳性结果后24小时内仅记录治疗延续，未分析影像阳性结果与症状、诊断或治疗方案的关系。',
       }),
       createGoldenAnswer({
-        qc_point_id: 'LX0609-014',
+        qc_point_id: 'LX0609-06-03-03',
         expected_status: 'non_compliant',
         trigger_facts: ['尿培养大肠埃希菌阳性', '报告后24小时内病程未分析阳性菌和药敏结果'],
         evidence_keywords: ['尿培养报告', '大肠埃希菌阳性', '药敏'],
@@ -213,7 +213,7 @@ export const syntheticCaseTemplates: SyntheticCaseTemplate[] = [
     name: '会诊质量缺陷样本',
     family: '会诊质量',
     description: '用于验证会诊目的、会诊意见和会诊执行记录是否清楚。',
-    suggestedRuleIds: ['LX0609-020', 'LX0609-021', 'LX0609-022'],
+    suggestedRuleIds: ['LX0609-03-01-01', 'LX0609-03-01-02', 'LX0609-03-01-03'],
     basic: {
       caseTitle: '会诊质量测试',
       patientName: '陈某某',
@@ -302,21 +302,21 @@ export const syntheticCaseTemplates: SyntheticCaseTemplate[] = [
     ],
     goldenAnswers: [
       createGoldenAnswer({
-        qc_point_id: 'LX0609-021',
+        qc_point_id: 'LX0609-03-01-02',
         expected_status: 'non_compliant',
         trigger_facts: ['会诊申请目的仅写请会诊'],
         evidence_keywords: ['会诊申请单', '申请目的：请会诊', '目的不明确'],
         human_reason: '会诊目的未说明具体需要解决的问题。',
       }),
       createGoldenAnswer({
-        qc_point_id: 'LX0609-022',
+        qc_point_id: 'LX0609-03-01-03',
         expected_status: 'non_compliant',
         trigger_facts: ['会诊意见使用必要时调整用药等泛化表述'],
         evidence_keywords: ['会诊记录单', '必要时调整用药', '不具备可执行性'],
         human_reason: '会诊意见缺少明确处理方案或可执行措施。',
       }),
       createGoldenAnswer({
-        qc_point_id: 'LX0609-020',
+        qc_point_id: 'LX0609-03-01-01',
         expected_status: 'non_compliant',
         trigger_facts: ['后续病程未记录会诊意见执行情况'],
         evidence_keywords: ['日常病程记录', '继续抑酸、补液、止血治疗', '未记录执行情况'],
@@ -329,7 +329,7 @@ export const syntheticCaseTemplates: SyntheticCaseTemplate[] = [
     name: '手术麻醉缺陷样本',
     family: '手术麻醉',
     description: '用于验证术后记录、手术安全核查和麻醉记录关键字段。',
-    suggestedRuleIds: ['LX0609-003', 'LX0609-038'],
+    suggestedRuleIds: ['LX0609-04-02-01', 'LX0609-04-04-03'],
     basic: {
       caseTitle: '手术麻醉测试',
       patientName: '王某某',
@@ -431,14 +431,14 @@ export const syntheticCaseTemplates: SyntheticCaseTemplate[] = [
     ],
     goldenAnswers: [
       createGoldenAnswer({
-        qc_point_id: 'LX0609-003',
+        qc_point_id: 'LX0609-04-02-01',
         expected_status: 'non_compliant',
         trigger_facts: ['手术结束时间为2026-06-01 11:30', '手术记录记录时间为2026-06-03 12:00'],
         evidence_keywords: ['手术结束时间', '记录时间', '超过术后24小时'],
         human_reason: '手术记录完成时间超过术后24小时。',
       }),
       createGoldenAnswer({
-        qc_point_id: 'LX0609-038',
+        qc_point_id: 'LX0609-04-04-03',
         expected_status: 'non_compliant',
         trigger_facts: ['存在麻醉记录', '麻醉方式、麻醉医师代码和关键用药剂量填写不完整'],
         evidence_keywords: ['麻醉记录', '麻醉方式', '填写不完整'],
@@ -451,7 +451,7 @@ export const syntheticCaseTemplates: SyntheticCaseTemplate[] = [
     name: '病重病危查房缺陷样本',
     family: '查房病程',
     description: '用于验证病重、病危医嘱期间的查房和病程记录频次。',
-    suggestedRuleIds: ['LX0609-008', 'LX0609-009'],
+    suggestedRuleIds: ['LX0609-02-01-04', 'LX0609-02-01-05'],
     basic: {
       caseTitle: '病重病危查房测试',
       patientName: '刘某某',
@@ -530,14 +530,14 @@ export const syntheticCaseTemplates: SyntheticCaseTemplate[] = [
     ],
     goldenAnswers: [
       createGoldenAnswer({
-        qc_point_id: 'LX0609-008',
+        qc_point_id: 'LX0609-02-01-04',
         expected_status: 'non_compliant',
         trigger_facts: ['2026-06-01 09:00 下达病重医嘱', '病重期间2天内未见查房病程记录'],
         evidence_keywords: ['病重医嘱', '未见病重患者日常病程', '上级医师查房记录'],
         human_reason: '病重医嘱持续期间，2天内缺少规定的查房或病程记录。',
       }),
       createGoldenAnswer({
-        qc_point_id: 'LX0609-009',
+        qc_point_id: 'LX0609-02-01-05',
         expected_status: 'non_compliant',
         trigger_facts: ['2026-06-02 09:00 下达病危医嘱', '病危当天未见每日病程或查房记录'],
         evidence_keywords: ['病危医嘱', '全天未见病危日常病程记录', '病情变化记录'],
@@ -550,7 +550,7 @@ export const syntheticCaseTemplates: SyntheticCaseTemplate[] = [
     name: '输血闭环缺陷样本',
     family: '输血',
     description: '用于验证输血知情同意、输血前检查、评估、后评价和医嘱收费一致性。',
-    suggestedRuleIds: ['LX0609-041', 'LX0609-043', 'LX0609-044', 'LX0609-047', 'LX0609-049'],
+    suggestedRuleIds: ['LX0609-11-03-01', 'LX0609-07-01-01', 'LX0609-07-01-02', 'LX0609-07-03-01', 'LX0609-07-04-02'],
     basic: {
       caseTitle: '输血闭环测试',
       patientName: '周某某',
@@ -606,35 +606,35 @@ export const syntheticCaseTemplates: SyntheticCaseTemplate[] = [
     ],
     goldenAnswers: [
       createGoldenAnswer({
-        qc_point_id: 'LX0609-041',
+        qc_point_id: 'LX0609-11-03-01',
         expected_status: 'non_compliant',
         trigger_facts: ['存在输血医嘱和输血记录', '未见输血知情同意书'],
         evidence_keywords: ['输血申请', '未见本次输血知情同意书', '输血记录'],
         human_reason: '有输血行为但缺少输血知情同意书。',
       }),
       createGoldenAnswer({
-        qc_point_id: 'LX0609-043',
+        qc_point_id: 'LX0609-07-01-01',
         expected_status: 'non_compliant',
         trigger_facts: ['存在输血治疗', '输血前常规检查不完整'],
         evidence_keywords: ['丙肝抗体', 'HIV抗体', '梅毒抗体', '未见完整报告'],
         human_reason: '输血前相关检查资料不完整。',
       }),
       createGoldenAnswer({
-        qc_point_id: 'LX0609-044',
+        qc_point_id: 'LX0609-07-01-02',
         expected_status: 'non_compliant',
         trigger_facts: ['存在输血治疗', '输血前评估记录不完整'],
         evidence_keywords: ['输血适应证', '输血风险评估', '未完整说明'],
         human_reason: '输血前评估缺少核心要素。',
       }),
       createGoldenAnswer({
-        qc_point_id: 'LX0609-047',
+        qc_point_id: 'LX0609-07-03-01',
         expected_status: 'non_compliant',
         trigger_facts: ['输血已完成', '未见输血后评价'],
         evidence_keywords: ['输血后', '未见', '疗效评价'],
         human_reason: '输血结束后缺少疗效评价和反应观察。',
       }),
       createGoldenAnswer({
-        qc_point_id: 'LX0609-049',
+        qc_point_id: 'LX0609-07-04-02',
         expected_status: 'non_compliant',
         trigger_facts: ['医嘱红细胞2U', '收费红细胞4U'],
         evidence_keywords: ['输血医嘱', '收费明细', '数量存在差异'],
@@ -647,7 +647,7 @@ export const syntheticCaseTemplates: SyntheticCaseTemplate[] = [
     name: '肿瘤病理化疗缺陷样本',
     family: '肿瘤病理',
     description: '用于验证病理结果、取材情况和化疗医嘱/病程记录一致性。',
-    suggestedRuleIds: ['LX0609-013', 'LX0609-019', 'LX0609-026'],
+    suggestedRuleIds: ['LX0609-06-02-03', 'LX0609-06-02-02', 'LX0609-05-02-01'],
     basic: {
       caseTitle: '肿瘤病理化疗测试',
       patientName: '黄某某',
@@ -703,21 +703,21 @@ export const syntheticCaseTemplates: SyntheticCaseTemplate[] = [
     ],
     goldenAnswers: [
       createGoldenAnswer({
-        qc_point_id: 'LX0609-013',
+        qc_point_id: 'LX0609-06-02-03',
         expected_status: 'non_compliant',
         trigger_facts: ['存在胃癌手术和病理报告', '病程未记录病理结果分析'],
         evidence_keywords: ['病理检查报告', '胃中分化腺癌', '病程记录未体现病理结果'],
         human_reason: '病理结果未在手术记录或病程中充分记录和分析。',
       }),
       createGoldenAnswer({
-        qc_point_id: 'LX0609-019',
+        qc_point_id: 'LX0609-06-02-02',
         expected_status: 'non_compliant',
         trigger_facts: ['手术记录存在取材送检场景', '取材情况记录不完整'],
         evidence_keywords: ['手术记录', '未详细记录病理取材部位', '送检标签'],
         human_reason: '手术记录中病理取材信息不完整。',
       }),
       createGoldenAnswer({
-        qc_point_id: 'LX0609-026',
+        qc_point_id: 'LX0609-05-02-01',
         expected_status: 'non_compliant',
         trigger_facts: ['存在化疗医嘱', '病程未记录化疗药物名称、剂量和时间'],
         evidence_keywords: ['化疗医嘱', '奥沙利铂', '病程记录未同步记录'],
@@ -735,17 +735,17 @@ export const syntheticCaseRuleFamilies: SyntheticCaseRuleFamily[] = [
     templateKey: 'basic-timeliness-defect',
     rules: [
       {
-        ruleId: 'LX0609-001',
+        ruleId: 'LX0609-01-01-01',
         name: '入院记录：入院后24小时内是否完成',
         requiredDocumentsLabel: '入院记录',
       },
       {
-        ruleId: 'LX0609-002',
+        ruleId: 'LX0609-01-02-01',
         name: '首次病程：入院后 8 小时内无首次病程记录',
         requiredDocumentsLabel: '首次病程记录',
       },
       {
-        ruleId: 'LX0609-005',
+        ruleId: 'LX0609-02-01-01',
         name: '上级医生查房记录：入院后 48 小时内无主治医师首次查房记录',
         requiredDocumentsLabel: '上级查房记录',
       },
@@ -758,12 +758,12 @@ export const syntheticCaseRuleFamilies: SyntheticCaseRuleFamily[] = [
     templateKey: 'ct-mri-culture-defect',
     rules: [
       {
-        ruleId: 'LX0609-012',
+        ruleId: 'LX0609-06-01-05',
         name: 'CT/MRI 检查记录：影像报告结果出具后24小时内阳性结果未进行分析',
         requiredDocumentsLabel: '病程记录、检查结果',
       },
       {
-        ruleId: 'LX0609-014',
+        ruleId: 'LX0609-06-03-03',
         name: '细菌培养记录：细菌培养结果在病程中未记录（报告出具后24小时内）',
         requiredDocumentsLabel: '病程记录、检验报告',
       },
@@ -776,17 +776,17 @@ export const syntheticCaseRuleFamilies: SyntheticCaseRuleFamily[] = [
     templateKey: 'consultation-quality-defect',
     rules: [
       {
-        ruleId: 'LX0609-020',
+        ruleId: 'LX0609-03-01-01',
         name: '会诊记录：有会诊记录单无请会诊执行记录',
         requiredDocumentsLabel: '会诊记录、日常病程记录',
       },
       {
-        ruleId: 'LX0609-021',
+        ruleId: 'LX0609-03-01-02',
         name: '会诊记录：会诊申请单会诊目的不明确',
         requiredDocumentsLabel: '会诊记录',
       },
       {
-        ruleId: 'LX0609-022',
+        ruleId: 'LX0609-03-01-03',
         name: '会诊记录：会诊记录单会诊意见不明确',
         requiredDocumentsLabel: '会诊记录',
       },
@@ -799,12 +799,12 @@ export const syntheticCaseRuleFamilies: SyntheticCaseRuleFamily[] = [
     templateKey: 'surgery-anesthesia-defect',
     rules: [
       {
-        ruleId: 'LX0609-003',
+        ruleId: 'LX0609-04-02-01',
         name: '手术记录：手术后24小时内是否完成',
         requiredDocumentsLabel: '手术记录',
       },
       {
-        ruleId: 'LX0609-038',
+        ruleId: 'LX0609-04-04-03',
         name: '麻醉记录单：无麻醉记录单（局麻除外）',
         requiredDocumentsLabel: '麻醉记录、手术记录',
       },
@@ -817,12 +817,12 @@ export const syntheticCaseRuleFamilies: SyntheticCaseRuleFamily[] = [
     templateKey: 'critical-round-defect',
     rules: [
       {
-        ruleId: 'LX0609-008',
+        ruleId: 'LX0609-02-01-04',
         name: '查房记录：病重患者2天内无查房病程记录',
         requiredDocumentsLabel: '病重医嘱、日常病程、上级查房记录',
       },
       {
-        ruleId: 'LX0609-009',
+        ruleId: 'LX0609-02-01-05',
         name: '查房记录：病危患者未每天记录查房病程或病情变化记录',
         requiredDocumentsLabel: '病危医嘱、日常病程、病情变化记录',
       },
@@ -835,27 +835,27 @@ export const syntheticCaseRuleFamilies: SyntheticCaseRuleFamily[] = [
     templateKey: 'transfusion-defect',
     rules: [
       {
-        ruleId: 'LX0609-041',
+        ruleId: 'LX0609-11-03-01',
         name: '输血知情同意书：无输血知情同意书',
         requiredDocumentsLabel: '输血医嘱、输血申请、输血记录',
       },
       {
-        ruleId: 'LX0609-043',
+        ruleId: 'LX0609-07-01-01',
         name: '输血前辅助检查：输血前常规检查不完整',
         requiredDocumentsLabel: '输血申请、检验报告',
       },
       {
-        ruleId: 'LX0609-044',
+        ruleId: 'LX0609-07-01-02',
         name: '输血前评估：无输血前评估记录或记录不完整',
         requiredDocumentsLabel: '病程记录、输血申请',
       },
       {
-        ruleId: 'LX0609-047',
+        ruleId: 'LX0609-07-03-01',
         name: '输血后评价：无输血后评价',
         requiredDocumentsLabel: '输血记录、输血后病程',
       },
       {
-        ruleId: 'LX0609-049',
+        ruleId: 'LX0609-07-04-02',
         name: '输血医嘱：输血医嘱与收费不一致',
         requiredDocumentsLabel: '输血医嘱、费用明细、输血记录',
       },
@@ -868,17 +868,17 @@ export const syntheticCaseRuleFamilies: SyntheticCaseRuleFamily[] = [
     templateKey: 'tumor-pathology-chemo-defect',
     rules: [
       {
-        ruleId: 'LX0609-013',
+        ruleId: 'LX0609-06-02-03',
         name: '病理检查：病理检查结果在手术记录、病程中未记录',
         requiredDocumentsLabel: '手术记录、病理报告、病程记录',
       },
       {
-        ruleId: 'LX0609-019',
+        ruleId: 'LX0609-06-02-02',
         name: '病理检查：取材情况未在病程记录或手术记录中记录',
         requiredDocumentsLabel: '手术记录、病理报告',
       },
       {
-        ruleId: 'LX0609-026',
+        ruleId: 'LX0609-05-02-01',
         name: '化疗记录：病程中化疗记录情况与医嘱不一致',
         requiredDocumentsLabel: '化疗医嘱、病程记录',
       },

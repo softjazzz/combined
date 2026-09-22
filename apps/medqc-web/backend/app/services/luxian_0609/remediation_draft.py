@@ -22,7 +22,7 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 # 只在这三个已经产出逐条会诊痕迹或会诊语义状态的规则上试点。
-REMEDIATION_DRAFT_RULE_IDS = frozenset({"LX0609-020", "LX0609-022", "LX0609-023"})
+REMEDIATION_DRAFT_RULE_IDS = frozenset({"LX0609-03-01-01", "LX0609-03-01-03", "LX0609-03-01-04"})
 
 _SUPPORTED_STATUS = "non_compliant"
 _MAX_CONCLUSION_CHARS = 400

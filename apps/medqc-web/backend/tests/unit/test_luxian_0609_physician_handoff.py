@@ -110,10 +110,10 @@ async def _execute(rows_by_source, *, unavailable_sources=frozenset()):
         unavailable_sources=unavailable_sources,
     )
     return await execute_luxian_0609_native_extended_document_rules(
-        rule_ids=("LX0609-071",),
+        rule_ids=("LX0609-10-01-01",),
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-071",),
+        decision_rule_ids=("LX0609-10-01-01",),
     )
 
 
@@ -186,7 +186,7 @@ async def test_071_explicit_change_order_uses_exact_shared_shift_time() -> None:
     assert decision.evidence_state is EvidenceState.SUFFICIENT
     assert decision.qc_direction is QcDirection.SATISFIED
     assert decision.reason_code == "requirement_satisfied"
-    assert dict(result.customer_display_facts)["LX0609-071"] == {
+    assert dict(result.customer_display_facts)["LX0609-10-01-01"] == {
         "verification_kind": "physician_handoff_timeliness_check",
         "change_time": "2026-08-20 08:00:00",
         "handoff_times": ["2026-08-20 07:50:00"],
@@ -315,7 +315,7 @@ async def test_071_structured_change_matches_shift_and_physician_identity() -> N
     assert decision.evidence_state is EvidenceState.SUFFICIENT
     assert decision.qc_direction is QcDirection.SATISFIED
     assert decision.reason_code == "requirement_satisfied"
-    facts = dict(result.customer_display_facts)["LX0609-071"]
+    facts = dict(result.customer_display_facts)["LX0609-10-01-01"]
     assert facts["source_document_refs"] == [
         {
             "source_type": "handoff_record",
@@ -364,7 +364,7 @@ async def test_071_uses_business_handoff_times_over_document_record_times() -> N
 
     decision = result.decisions[0]
     assert decision.qc_direction is QcDirection.SATISFIED
-    facts = dict(result.customer_display_facts)["LX0609-071"]
+    facts = dict(result.customer_display_facts)["LX0609-10-01-01"]
     assert facts["handoff_times"] == ["2026-08-20 07:50:00"]
     assert facts["handover_times"] == ["2026-08-20 14:00:00"]
 
@@ -493,7 +493,7 @@ async def test_071_stable_signature_change_without_handoff_is_non_compliant() ->
     assert decision.evidence_state is EvidenceState.SUFFICIENT
     assert decision.qc_direction is QcDirection.DEFECT
     assert decision.reason_code == "requirement_violated"
-    facts = dict(result.customer_display_facts)["LX0609-071"]
+    facts = dict(result.customer_display_facts)["LX0609-10-01-01"]
     assert facts["change_time"] == "2026-08-22 08:00:00"
     assert facts["source_document_refs"] == [
         {
@@ -580,6 +580,6 @@ async def test_071_multiple_stable_signature_changes_are_checked_independently()
 
     decision = result.decisions[0]
     assert decision.qc_direction is QcDirection.SATISFIED
-    facts = dict(result.customer_display_facts)["LX0609-071"]
+    facts = dict(result.customer_display_facts)["LX0609-10-01-01"]
     assert facts["verification_kind"] == "physician_handoff_multi_event_check"
     assert facts["change_event_count"] == 2

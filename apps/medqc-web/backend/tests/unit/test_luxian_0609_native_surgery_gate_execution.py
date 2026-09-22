@@ -194,26 +194,26 @@ class _JointSurgeryFactClient:
         )
         selected = tuple(
             rule_id
-            for rule_id in ("LX0609-024", "LX0609-025", "LX0609-028", "LX0609-033")
+            for rule_id in ("LX0609-04-02-03", "LX0609-04-02-04", "LX0609-05-01-01", "LX0609-11-01-01")
             if rule_id in prompt
         )
         assert selected
         evidence_refs = ["S01-01"]
-        if "LX0609-033" in selected and self.consent_evidence:
+        if "LX0609-11-01-01" in selected and self.consent_evidence:
             # 单条033与联合范围都必须明确锚定手术知情同意书。
             evidence_refs = (
                 ["S08-01"]
-                if selected == ("LX0609-033",)
+                if selected == ("LX0609-11-01-01",)
                 else ["S01-01", "S08-01"]
             )
         event: dict[str, object] = {"event_ref": "EV1", "evidence_refs": evidence_refs}
-        if "LX0609-024" in selected:
+        if "LX0609-04-02-03" in selected:
             event.update(
                 surgery_occurrence="performed",
                 malignant_relation="qualifying",
                 lymph_node_documentation="documented",
             )
-        if "LX0609-025" in selected:
+        if "LX0609-04-02-04" in selected:
             event.update(
                 surgery_occurrence="performed",
                 implant_use="actual_permanent_implant",
@@ -230,7 +230,7 @@ class _JointSurgeryFactClient:
                 implant_material="present",
                 implant_quantity="present",
             )
-        if "LX0609-028" in selected:
+        if "LX0609-05-01-01" in selected:
             event.update(
                 surgery_occurrence="performed",
                 incision_class="unknown",
@@ -242,7 +242,7 @@ class _JointSurgeryFactClient:
                 interval_scope="unknown",
                 special_extension_reason="unknown",
             )
-        if "LX0609-033" in selected:
+        if "LX0609-11-01-01" in selected:
             event.update(
                 consent_role="surgery_informed_consent",
                 consent_linkage="current_surgery",
@@ -361,7 +361,7 @@ def _surgery_text_fact(**overrides: object):
     return surgery.SurgeryEventFact(**values)
 
 
-def _snapshot_for_surgery(mode: str, *, selected_rule_id: str = "LX0609-024"):
+def _snapshot_for_surgery(mode: str, *, selected_rule_id: str = "LX0609-04-02-03"):
     def reader(**kwargs):
         source_key = kwargs["source_key"]
         if source_key == "surgery_record":
@@ -432,8 +432,8 @@ async def test_snapshot_performed_fact_replaces_surgery_gate_live_query(
     client = _Client([{"is_compliant": True}] if expected_calls else [])
 
     result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
-        rule_ids=("LX0609-024",),
-        wrapper_rules=[_wrapper("LX0609-024")],
+        rule_ids=("LX0609-04-02-03",),
+        wrapper_rules=[_wrapper("LX0609-04-02-03")],
         evidence_payload=_payload(
             facts=[_fact("current_visit_malignant_surgery_confirmed")]
         ),
@@ -462,11 +462,11 @@ def test_003_exact_gaps_survive_customer_finalization(end, record, reason, missi
     facts = []
     decision = surgery._typed_003_decision(snapshot=session.snapshot, materials=session.materials, customer_display_facts=facts)
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
-        decisions=(decision,), expected_rule_ids=("LX0609-003",), snapshot=session.snapshot,
+        decisions=(decision,), expected_rule_ids=("LX0609-04-02-01",), snapshot=session.snapshot,
         evidence_materials=session.materials,
     )[0]
     result = finalize_luxian_0609_reduced_customer_result(
-        decision=reduced, raw_customer_display_facts=dict(facts)["LX0609-003"],
+        decision=reduced, raw_customer_display_facts=dict(facts)["LX0609-04-02-01"],
         evidence_snapshot=session.snapshot, evidence_materials=session.materials,
     )
     assert result["status"] == "data_gap"
@@ -488,7 +488,7 @@ def test_003_multiple_candidate_end_times_report_association_gap():
     facts = []
     decision = surgery._typed_003_decision(snapshot=session.snapshot, materials=session.materials, customer_display_facts=facts)
     assert decision.reason_code == "association_failed"
-    assert surgery_timeliness_gap_display(dict(facts)["LX0609-003"])[0] == ["单台手术与手术记录的关联信息"]
+    assert surgery_timeliness_gap_display(dict(facts)["LX0609-04-02-01"])[0] == ["单台手术与手术记录的关联信息"]
 
 
 def _typed_003_session(
@@ -550,7 +550,7 @@ def _typed_003_session(
         )
 
     return build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-003",),
+        selected_rule_ids=("LX0609-04-02-01",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -586,9 +586,9 @@ async def test_typed_003_missing_document_uses_formal_horizon_after_independent_
         evaluation_as_of_date=evaluation_as_of_date,
     )
     result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
-        rule_ids=("LX0609-003",),
-        decision_rule_ids=("LX0609-003",),
-        wrapper_rules=[_wrapper("LX0609-003")],
+        rule_ids=("LX0609-04-02-01",),
+        decision_rule_ids=("LX0609-04-02-01",),
+        wrapper_rules=[_wrapper("LX0609-04-02-01")],
         evidence_payload={},
         institute_id="I",
         patient_id="P",
@@ -600,7 +600,7 @@ async def test_typed_003_missing_document_uses_formal_horizon_after_independent_
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-003",),
+        expected_rule_ids=("LX0609-04-02-01",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
@@ -623,9 +623,9 @@ async def test_typed_003_multiple_mr_surgery_events_with_same_end_time_are_data_
         evaluation_as_of_date="2026-01-03",
     )
     result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
-        rule_ids=("LX0609-003",),
-        decision_rule_ids=("LX0609-003",),
-        wrapper_rules=[_wrapper("LX0609-003")],
+        rule_ids=("LX0609-04-02-01",),
+        decision_rule_ids=("LX0609-04-02-01",),
+        wrapper_rules=[_wrapper("LX0609-04-02-01")],
         evidence_payload={},
         institute_id="I",
         patient_id="P",
@@ -637,7 +637,7 @@ async def test_typed_003_multiple_mr_surgery_events_with_same_end_time_are_data_
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-003",),
+        expected_rule_ids=("LX0609-04-02-01",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
@@ -667,9 +667,9 @@ async def test_typed_003_uses_same_session_authoritative_times_and_zero_model(
     client = _Client([{"is_compliant": False}])
 
     result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
-        rule_ids=("LX0609-003",),
-        decision_rule_ids=("LX0609-003",),
-        wrapper_rules=[_wrapper("LX0609-003")],
+        rule_ids=("LX0609-04-02-01",),
+        decision_rule_ids=("LX0609-04-02-01",),
+        wrapper_rules=[_wrapper("LX0609-04-02-01")],
         evidence_payload=_payload(
             facts=[_performed()],
             surgery_record=[{"surgery_begin_time": "NOT_A_TIME"}],
@@ -684,7 +684,7 @@ async def test_typed_003_uses_same_session_authoritative_times_and_zero_model(
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-003",),
+        expected_rule_ids=("LX0609-04-02-01",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
@@ -695,7 +695,7 @@ async def test_typed_003_uses_same_session_authoritative_times_and_zero_model(
     assert result.llm_call_count == 0
     assert result.customer_display_facts == (
         (
-            "LX0609-003",
+            "LX0609-04-02-01",
             {
                 "failure_kind": "surgery_record_within_threshold",
                 "performed_surgery_confirmed": True,
@@ -760,7 +760,7 @@ async def test_typed_003_uses_independent_negative_gate_when_terminal_mr_source_
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-003",),
+        selected_rule_ids=("LX0609-04-02-01",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -769,9 +769,9 @@ async def test_typed_003_uses_independent_negative_gate_when_terminal_mr_source_
         row_reader=reader,
     )
     result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
-        rule_ids=("LX0609-003",),
-        decision_rule_ids=("LX0609-003",),
-        wrapper_rules=[_wrapper("LX0609-003")],
+        rule_ids=("LX0609-04-02-01",),
+        decision_rule_ids=("LX0609-04-02-01",),
+        wrapper_rules=[_wrapper("LX0609-04-02-01")],
         evidence_payload={},
         institute_id="I",
         patient_id="P",
@@ -783,7 +783,7 @@ async def test_typed_003_uses_independent_negative_gate_when_terminal_mr_source_
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-003",),
+        expected_rule_ids=("LX0609-04-02-01",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
@@ -810,11 +810,11 @@ async def test_typed_remaining_surgery_gates_are_ordered_zero_model_and_fail_clo
     expected_reason: str | None,
 ) -> None:
     selected = (
-        "LX0609-024",
-        "LX0609-025",
-        "LX0609-028",
-        "LX0609-031",
-        "LX0609-033",
+        "LX0609-04-02-03",
+        "LX0609-04-02-04",
+        "LX0609-05-01-01",
+        "LX0609-04-02-05",
+        "LX0609-11-01-01",
     )
 
     def reader(**kwargs):
@@ -914,7 +914,7 @@ def _empty_033_consent_session(*, readiness_complete: bool):
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-033",),
+        selected_rule_ids=("LX0609-11-01-01",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -935,9 +935,9 @@ async def test_033_unproven_readiness_with_empty_source_is_data_gap_without_mode
     snapshot, materials = _empty_033_consent_session(readiness_complete=False)
     client = _Client([])
     result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
-        rule_ids=("LX0609-033",),
-        decision_rule_ids=("LX0609-033",),
-        wrapper_rules=[_wrapper("LX0609-033")],
+        rule_ids=("LX0609-11-01-01",),
+        decision_rule_ids=("LX0609-11-01-01",),
+        wrapper_rules=[_wrapper("LX0609-11-01-01")],
         evidence_payload={},
         institute_id="I",
         patient_id="P",
@@ -950,14 +950,14 @@ async def test_033_unproven_readiness_with_empty_source_is_data_gap_without_mode
 
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-033",),
+        expected_rule_ids=("LX0609-11-01-01",),
         snapshot=snapshot,
         evidence_materials=materials,
     )
     assert [item.final_state.value for item in reduced] == ["data_gap"]
     assert result.customer_display_facts == (
         (
-            "LX0609-033",
+            "LX0609-11-01-01",
             {
                 "failure_kind": "surgery_consent_source_unproven",
                 "consent_state": "source_unproven",
@@ -976,9 +976,9 @@ async def test_033_complete_readiness_with_empty_source_is_non_compliant_without
     snapshot, materials = _empty_033_consent_session(readiness_complete=True)
     client = _Client([])
     result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
-        rule_ids=("LX0609-033",),
-        decision_rule_ids=("LX0609-033",),
-        wrapper_rules=[_wrapper("LX0609-033")],
+        rule_ids=("LX0609-11-01-01",),
+        decision_rule_ids=("LX0609-11-01-01",),
+        wrapper_rules=[_wrapper("LX0609-11-01-01")],
         evidence_payload={},
         institute_id="I",
         patient_id="P",
@@ -991,14 +991,14 @@ async def test_033_complete_readiness_with_empty_source_is_non_compliant_without
 
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-033",),
+        expected_rule_ids=("LX0609-11-01-01",),
         snapshot=snapshot,
         evidence_materials=materials,
     )
     assert [item.final_state.value for item in reduced] == ["non_compliant"]
     assert result.customer_display_facts == (
         (
-            "LX0609-033",
+            "LX0609-11-01-01",
             {
                 "failure_kind": "surgery_consent_document_missing",
                 "consent_state": "missing",
@@ -1020,7 +1020,7 @@ async def test_033_complete_readiness_with_empty_source_is_non_compliant_without
 async def test_typed_024_025_028_033_share_one_current_surgery_fact_call() -> None:
     """033结构化签名无事件键时，与其余规则共用一次受控联合提取。"""
 
-    selected = ("LX0609-024", "LX0609-025", "LX0609-028", "LX0609-033")
+    selected = ("LX0609-04-02-03", "LX0609-04-02-04", "LX0609-05-01-01", "LX0609-11-01-01")
 
     def reader(**kwargs):
         source_key = kwargs["source_key"]
@@ -1237,7 +1237,7 @@ def test_031_multi_surgery_projects_each_signature_gap() -> None:
 
 @pytest.mark.asyncio
 async def test_typed_024_uses_explicit_nonmalignant_rescue_fact_without_llm() -> None:
-    selected = ("LX0609-024",)
+    selected = ("LX0609-04-02-03",)
     surgery_text = (
         "因外伤性颅内血肿行血肿清除术、去骨瓣减压术及硬脑膜修补术。"
         "术中人工硬脑膜一张覆盖缺损处，硬膜下置入颅内压监测探头一根。"
@@ -1298,7 +1298,7 @@ async def test_typed_024_uses_explicit_nonmalignant_rescue_fact_without_llm() ->
 async def test_typed_024_short_circuits_confirmed_lymph_fact_before_unrelated_source_overflow() -> None:
     """正式手术记录已确认清扫时，不被无关诊断行数门控为资料缺口。"""
 
-    selected = ("LX0609-024",)
+    selected = ("LX0609-04-02-03",)
     surgery_row = {
         "document_id": "c04-surgery-1",
         "surgery_begin_time": "2026-01-01 08:00:00+08",
@@ -1342,7 +1342,7 @@ async def test_typed_024_short_circuits_confirmed_lymph_fact_before_unrelated_so
     result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
         rule_ids=selected,
         decision_rule_ids=selected,
-        wrapper_rules=[_wrapper("LX0609-024")],
+        wrapper_rules=[_wrapper("LX0609-04-02-03")],
         evidence_payload={},
         institute_id="I",
         patient_id="P",
@@ -1400,7 +1400,7 @@ def test_deterministic_024_rejects_planned_or_negative_lymph_fact(
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-024",),
+        selected_rule_ids=("LX0609-04-02-03",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -1420,7 +1420,7 @@ def test_deterministic_024_rejects_planned_or_negative_lymph_fact(
 
 @pytest.mark.asyncio
 async def test_typed_024_complete_uncoded_nonmalignant_diagnosis_stops_before_surgery_llm():
-    selected = ("LX0609-024",)
+    selected = ("LX0609-04-02-03",)
 
     def reader(**kwargs):
         rows_by_source = {
@@ -1464,7 +1464,7 @@ async def test_typed_024_complete_uncoded_nonmalignant_diagnosis_stops_before_su
     result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
         rule_ids=selected,
         decision_rule_ids=selected,
-        wrapper_rules=[_wrapper("LX0609-024")],
+        wrapper_rules=[_wrapper("LX0609-04-02-03")],
         evidence_payload={},
         institute_id="I",
         patient_id="P",
@@ -1492,7 +1492,7 @@ async def test_typed_024_complete_uncoded_nonmalignant_diagnosis_stops_before_su
 async def test_joint_033_rejects_surgery_only_evidence_ref() -> None:
     """联合上下文中，033 不能只靠手术记录伪造同意书事实。"""
 
-    selected = ("LX0609-024", "LX0609-033")
+    selected = ("LX0609-04-02-03", "LX0609-11-01-01")
 
     def reader(**kwargs):
         rows_by_source = {
@@ -1552,7 +1552,7 @@ async def test_joint_033_rejects_surgery_only_evidence_ref() -> None:
 async def test_joint_fact_source_overflow_only_blocks_its_own_rule() -> None:
     """024 专属病理来源超限时，025 仍可使用其小型联合材料完成判断。"""
 
-    selected = ("LX0609-024", "LX0609-025")
+    selected = ("LX0609-04-02-03", "LX0609-04-02-04")
 
     def reader(**kwargs):
         source_key = kwargs["source_key"]
@@ -1609,13 +1609,13 @@ async def test_joint_fact_source_overflow_only_blocks_its_own_rule() -> None:
         evidence_materials=session.materials,
     )
     states = {item.rule_id: item.final_state.value for item in reduced}
-    assert states["LX0609-024"] == "data_gap"
-    assert by_rule["LX0609-024"].reason_code == "required_field_missing"
-    assert states["LX0609-025"] == "compliant"
+    assert states["LX0609-04-02-03"] == "data_gap"
+    assert by_rule["LX0609-04-02-03"].reason_code == "required_field_missing"
+    assert states["LX0609-04-02-04"] == "compliant"
     assert result.llm_call_count == 1
     assert len(client.prompts) == 1
-    assert "LX0609-025" in client.prompts[0]
-    assert "LX0609-024" not in client.prompts[0]
+    assert "LX0609-04-02-04" in client.prompts[0]
+    assert "LX0609-04-02-03" not in client.prompts[0]
 
 
 @pytest.mark.asyncio
@@ -1634,7 +1634,7 @@ async def test_typed_028_alone_binds_both_surgery_sources_without_snapshot_misma
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-028",),
+        selected_rule_ids=("LX0609-05-01-01",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -1643,9 +1643,9 @@ async def test_typed_028_alone_binds_both_surgery_sources_without_snapshot_misma
         row_reader=reader,
     )
     result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
-        rule_ids=("LX0609-028",),
-        decision_rule_ids=("LX0609-028",),
-        wrapper_rules=[_wrapper("LX0609-028")],
+        rule_ids=("LX0609-05-01-01",),
+        decision_rule_ids=("LX0609-05-01-01",),
+        wrapper_rules=[_wrapper("LX0609-05-01-01")],
         evidence_payload={},
         institute_id="I",
         patient_id="P",
@@ -1657,7 +1657,7 @@ async def test_typed_028_alone_binds_both_surgery_sources_without_snapshot_misma
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-028",),
+        expected_rule_ids=("LX0609-05-01-01",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
@@ -1732,9 +1732,9 @@ async def test_typed_003_preserves_time_and_source_boundaries(
     client = _Client([{"is_compliant": True}])
 
     result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
-        rule_ids=("LX0609-003",),
-        decision_rule_ids=("LX0609-003",),
-        wrapper_rules=[_wrapper("LX0609-003")],
+        rule_ids=("LX0609-04-02-01",),
+        decision_rule_ids=("LX0609-04-02-01",),
+        wrapper_rules=[_wrapper("LX0609-04-02-01")],
         evidence_payload=_payload(
             facts=[_performed()],
             surgery_record=[
@@ -1754,7 +1754,7 @@ async def test_typed_003_preserves_time_and_source_boundaries(
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-003",),
+        expected_rule_ids=("LX0609-04-02-01",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
@@ -1769,7 +1769,7 @@ async def test_typed_003_preserves_time_and_source_boundaries(
     if expected_state == "non_compliant":
         assert result.customer_display_facts == (
             (
-                "LX0609-003",
+                "LX0609-04-02-01",
                 {
                     "failure_kind": "surgery_record_late",
                     "performed_surgery_confirmed": True,
@@ -1784,7 +1784,7 @@ async def test_typed_003_preserves_time_and_source_boundaries(
     elif expected_state == "not_applicable":
         assert result.customer_display_facts == (
             (
-                "LX0609-003",
+                "LX0609-04-02-01",
                 {
                     "failure_kind": "surgery_not_performed",
                     "performed_surgery_confirmed": False,
@@ -1792,7 +1792,7 @@ async def test_typed_003_preserves_time_and_source_boundaries(
             ),
         )
     elif source_mode == "available" and expected_reason == "authoritative_time_missing":
-        assert dict(result.customer_display_facts)["LX0609-003"]["missing_fields"] == ["record_time"]
+        assert dict(result.customer_display_facts)["LX0609-04-02-01"]["missing_fields"] == ["record_time"]
     else:
         assert result.customer_display_facts == ()
 
@@ -1806,9 +1806,9 @@ async def test_typed_003_uses_unique_mr_surgery_time_without_keyword_fallback():
     )
     client = _Client([{"is_compliant": False}])
     result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
-        rule_ids=("LX0609-003",),
-        decision_rule_ids=("LX0609-003",),
-        wrapper_rules=[_wrapper("LX0609-003")],
+        rule_ids=("LX0609-04-02-01",),
+        decision_rule_ids=("LX0609-04-02-01",),
+        wrapper_rules=[_wrapper("LX0609-04-02-01")],
         evidence_payload=_payload(surgery_record=[{"record_content": "手术关键词"}]),
         institute_id="I",
         patient_id="P",
@@ -1820,7 +1820,7 @@ async def test_typed_003_uses_unique_mr_surgery_time_without_keyword_fallback():
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-003",),
+        expected_rule_ids=("LX0609-04-02-01",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
@@ -1853,7 +1853,7 @@ async def test_typed_003_prefers_surgery_end_time_over_begin_time():
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-003",),
+        selected_rule_ids=("LX0609-04-02-01",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -1862,9 +1862,9 @@ async def test_typed_003_prefers_surgery_end_time_over_begin_time():
         row_reader=reader,
     )
     result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
-        rule_ids=("LX0609-003",),
-        decision_rule_ids=("LX0609-003",),
-        wrapper_rules=[_wrapper("LX0609-003")],
+        rule_ids=("LX0609-04-02-01",),
+        decision_rule_ids=("LX0609-04-02-01",),
+        wrapper_rules=[_wrapper("LX0609-04-02-01")],
         evidence_payload=None,
         institute_id="I",
         patient_id="P",
@@ -1876,7 +1876,7 @@ async def test_typed_003_prefers_surgery_end_time_over_begin_time():
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-003",),
+        expected_rule_ids=("LX0609-04-02-01",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
@@ -1896,9 +1896,9 @@ async def test_typed_003_accepts_customer_iso_timezone_surgery_end_time():
     )
 
     result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
-        rule_ids=("LX0609-003",),
-        decision_rule_ids=("LX0609-003",),
-        wrapper_rules=[_wrapper("LX0609-003")],
+        rule_ids=("LX0609-04-02-01",),
+        decision_rule_ids=("LX0609-04-02-01",),
+        wrapper_rules=[_wrapper("LX0609-04-02-01")],
         evidence_payload=None,
         institute_id="I",
         patient_id="P",
@@ -1910,7 +1910,7 @@ async def test_typed_003_accepts_customer_iso_timezone_surgery_end_time():
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-003",),
+        expected_rule_ids=("LX0609-04-02-01",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
@@ -1919,7 +1919,7 @@ async def test_typed_003_accepts_customer_iso_timezone_surgery_end_time():
     assert reduced[0].reason_code == "requirement_within_threshold"
     assert result.customer_display_facts == (
         (
-            "LX0609-003",
+            "LX0609-04-02-01",
             {
                 "failure_kind": "surgery_record_within_threshold",
                 "performed_surgery_confirmed": True,
@@ -1945,9 +1945,9 @@ async def test_typed_003_normalizes_timestamptz_surgery_and_record_times_to_beij
     )
 
     result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
-        rule_ids=("LX0609-003",),
-        decision_rule_ids=("LX0609-003",),
-        wrapper_rules=[_wrapper("LX0609-003")],
+        rule_ids=("LX0609-04-02-01",),
+        decision_rule_ids=("LX0609-04-02-01",),
+        wrapper_rules=[_wrapper("LX0609-04-02-01")],
         evidence_payload=None,
         institute_id="I",
         patient_id="P",
@@ -1959,7 +1959,7 @@ async def test_typed_003_normalizes_timestamptz_surgery_and_record_times_to_beij
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-003",),
+        expected_rule_ids=("LX0609-04-02-01",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
@@ -1978,9 +1978,9 @@ async def test_typed_003_begin_time_without_end_time_is_data_gap():
         record_time=datetime(2026, 1, 2, 1, 0, 0),
     )
     result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
-        rule_ids=("LX0609-003",),
-        decision_rule_ids=("LX0609-003",),
-        wrapper_rules=[_wrapper("LX0609-003")],
+        rule_ids=("LX0609-04-02-01",),
+        decision_rule_ids=("LX0609-04-02-01",),
+        wrapper_rules=[_wrapper("LX0609-04-02-01")],
         evidence_payload=None,
         institute_id="I",
         patient_id="P",
@@ -1992,7 +1992,7 @@ async def test_typed_003_begin_time_without_end_time_is_data_gap():
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-003",),
+        expected_rule_ids=("LX0609-04-02-01",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
@@ -2013,9 +2013,9 @@ async def test_typed_003_uses_matching_anesthesia_surgery_end_time():
         anesthesia_surgery_end_time="2025-08-14 01:55:00+00:00",
     )
     result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
-        rule_ids=("LX0609-003",),
-        decision_rule_ids=("LX0609-003",),
-        wrapper_rules=[_wrapper("LX0609-003")],
+        rule_ids=("LX0609-04-02-01",),
+        decision_rule_ids=("LX0609-04-02-01",),
+        wrapper_rules=[_wrapper("LX0609-04-02-01")],
         evidence_payload=None,
         institute_id="I",
         patient_id="P",
@@ -2027,7 +2027,7 @@ async def test_typed_003_uses_matching_anesthesia_surgery_end_time():
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-003",),
+        expected_rule_ids=("LX0609-04-02-01",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
@@ -2045,7 +2045,7 @@ async def test_typed_003_uses_matching_anesthesia_surgery_end_time():
 
     final = finalize_luxian_0609_reduced_customer_result(
         decision=reduced[0],
-        raw_customer_display_facts=dict(result.customer_display_facts)["LX0609-003"],
+        raw_customer_display_facts=dict(result.customer_display_facts)["LX0609-04-02-01"],
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
@@ -2065,9 +2065,9 @@ async def test_typed_003_does_not_cross_bind_mismatched_anesthesia_event():
         anesthesia_surgery_end_time="2025-08-14 03:55:00+00:00",
     )
     result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
-        rule_ids=("LX0609-003",),
-        decision_rule_ids=("LX0609-003",),
-        wrapper_rules=[_wrapper("LX0609-003")],
+        rule_ids=("LX0609-04-02-01",),
+        decision_rule_ids=("LX0609-04-02-01",),
+        wrapper_rules=[_wrapper("LX0609-04-02-01")],
         evidence_payload=None,
         institute_id="I",
         patient_id="P",
@@ -2079,7 +2079,7 @@ async def test_typed_003_does_not_cross_bind_mismatched_anesthesia_event():
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-003",),
+        expected_rule_ids=("LX0609-04-02-01",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
@@ -2104,8 +2104,8 @@ async def test_003_snapshot_path_never_falls_back_to_mr_surgery_reader(monkeypat
         forbidden_reader,
     )
     result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
-        rule_ids=("LX0609-003",),
-        wrapper_rules=[_wrapper("LX0609-003")],
+        rule_ids=("LX0609-04-02-01",),
+        wrapper_rules=[_wrapper("LX0609-04-02-01")],
         evidence_payload=_payload(
             facts=[_performed()],
             surgery_record=[{"surgery_begin_time": "NOT_A_TIME"}],
@@ -2117,7 +2117,7 @@ async def test_003_snapshot_path_never_falls_back_to_mr_surgery_reader(monkeypat
         source_schema=None,
         llm_client=_Client([]),
         evidence_snapshot=_snapshot_for_surgery(
-            "exact", selected_rule_id="LX0609-003"
+            "exact", selected_rule_id="LX0609-04-02-01"
         ),
     )
 
@@ -2210,8 +2210,8 @@ async def test_025_legacy_llm_requires_field_level_implant_evidence_for_non_comp
     }])
 
     result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
-        rule_ids=("LX0609-025",),
-        wrapper_rules=[_wrapper("LX0609-025")],
+        rule_ids=("LX0609-04-02-04",),
+        wrapper_rules=[_wrapper("LX0609-04-02-04")],
         evidence_payload=_payload(
             facts=[
                 _performed(),
@@ -2251,8 +2251,8 @@ async def test_025_legacy_llm_requires_field_level_implant_evidence_for_non_comp
 async def test_003_rejects_nonexact_surgery_time_before_model(monkeypatch):
     monkeypatch.setattr(surgery, "read_luxian_0609_native_source_rows", lambda **_: [])
     result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
-        rule_ids=("LX0609-003",),
-        wrapper_rules=[_wrapper("LX0609-003")],
+        rule_ids=("LX0609-04-02-01",),
+        wrapper_rules=[_wrapper("LX0609-04-02-01")],
         evidence_payload=_payload(
             facts=[_performed()],
             surgery_record=[{"surgery_begin_time": "NOT_A_TIME"}],
@@ -2285,9 +2285,9 @@ async def test_live_strict_surgery_time_supplies_performed_fact_once(monkeypatch
         lambda **_: [{"surgery_begin_datetime": "2026-01-01 09:00:00+08"}],
     )
     result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
-        rule_ids=("LX0609-003", "LX0609-031", "LX0609-033"),
+        rule_ids=("LX0609-04-02-01", "LX0609-04-02-05", "LX0609-11-01-01"),
         wrapper_rules=[
-            _wrapper(rule_id) for rule_id in ("LX0609-003", "LX0609-031", "LX0609-033")
+            _wrapper(rule_id) for rule_id in ("LX0609-04-02-01", "LX0609-04-02-05", "LX0609-11-01-01")
         ],
         evidence_payload=_payload(
             facts=[
@@ -2313,8 +2313,8 @@ async def test_live_strict_surgery_time_supplies_performed_fact_once(monkeypatch
 async def test_024_silence_is_data_gap_and_explicit_negative_is_not_applicable():
     client = _Client([])
     result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
-        rule_ids=("LX0609-024",),
-        wrapper_rules=[_wrapper("LX0609-024")],
+        rule_ids=("LX0609-04-02-03",),
+        wrapper_rules=[_wrapper("LX0609-04-02-03")],
         evidence_payload=_payload(
             facts=[_performed()],
             pathology_exam_report=[{"diagnosis": "既往恶性肿瘤史，普通标本送检"}],
@@ -2332,8 +2332,8 @@ async def test_024_silence_is_data_gap_and_explicit_negative_is_not_applicable()
     assert client.prompts == []
 
     explicit_negative = await surgery.execute_luxian_0609_native_surgery_gate_rules(
-        rule_ids=("LX0609-024",),
-        wrapper_rules=[_wrapper("LX0609-024")],
+        rule_ids=("LX0609-04-02-03",),
+        wrapper_rules=[_wrapper("LX0609-04-02-03")],
         evidence_payload=_payload(
             facts=[
                 _performed(),
@@ -2357,8 +2357,8 @@ async def test_024_silence_is_data_gap_and_explicit_negative_is_not_applicable()
 @pytest.mark.asyncio
 async def test_025_silence_and_incomplete_source_are_data_gap_but_explicit_no_implant_is_na():
     silence = await surgery.execute_luxian_0609_native_surgery_gate_rules(
-        rule_ids=("LX0609-025",),
-        wrapper_rules=[_wrapper("LX0609-025")],
+        rule_ids=("LX0609-04-02-04",),
+        wrapper_rules=[_wrapper("LX0609-04-02-04")],
         evidence_payload=_payload(facts=[_performed()]),
         institute_id="",
         patient_id="",
@@ -2367,8 +2367,8 @@ async def test_025_silence_and_incomplete_source_are_data_gap_but_explicit_no_im
         llm_client=_Client([]),
     )
     incomplete = await surgery.execute_luxian_0609_native_surgery_gate_rules(
-        rule_ids=("LX0609-025",),
-        wrapper_rules=[_wrapper("LX0609-025")],
+        rule_ids=("LX0609-04-02-04",),
+        wrapper_rules=[_wrapper("LX0609-04-02-04")],
         evidence_payload=_payload(
             facts=[
                 _performed(),
@@ -2387,8 +2387,8 @@ async def test_025_silence_and_incomplete_source_are_data_gap_but_explicit_no_im
     )
 
     explicit_negative = await surgery.execute_luxian_0609_native_surgery_gate_rules(
-        rule_ids=("LX0609-025",),
-        wrapper_rules=[_wrapper("LX0609-025")],
+        rule_ids=("LX0609-04-02-04",),
+        wrapper_rules=[_wrapper("LX0609-04-02-04")],
         evidence_payload=_payload(
             facts=[
                 _performed(),
@@ -2424,7 +2424,7 @@ async def test_025_silence_and_incomplete_source_are_data_gap_but_explicit_no_im
 def test_025_nonactual_or_ambiguous_implant_use_is_data_gap(implant_use: str) -> None:
     """泛耗材、拟植入、取出旧物和沉默均不能被写成“未植入”。"""
     outcome = surgery._surgery_text_outcome(
-        rule_id="LX0609-025",
+        rule_id="LX0609-04-02-04",
         facts=(_surgery_text_fact(implant_use=implant_use),),
         projection=surgery.SurgeryTextProjection(
             context="<redacted>",
@@ -2471,7 +2471,7 @@ def test_025_actual_implant_field_contract_is_python_owned(
     expected: str,
 ) -> None:
     outcome = surgery._surgery_text_outcome(
-        rule_id="LX0609-025",
+        rule_id="LX0609-04-02-04",
         facts=(_surgery_text_fact(**{field: value}),),
         projection=surgery.SurgeryTextProjection(
             context="<redacted>",
@@ -2501,7 +2501,7 @@ def test_025_actual_implant_field_contract_is_python_owned(
 
 def test_025_all_five_customer_fields_are_required_and_barcode_is_not_checked() -> None:
     outcome = surgery._surgery_text_outcome(
-        rule_id="LX0609-025",
+        rule_id="LX0609-04-02-04",
         facts=(_surgery_text_fact(implant_material="missing"),),
         projection=surgery.SurgeryTextProjection(
             context="<redacted>",
@@ -2543,7 +2543,7 @@ def test_025_multiple_events_use_data_gap_then_non_compliant_then_compliant_prio
     )
 
     unknown_and_missing = surgery._surgery_text_outcome(
-        rule_id="LX0609-025",
+        rule_id="LX0609-04-02-04",
         facts=(
             _surgery_text_fact(implant_name="unknown"),
             _surgery_text_fact(event_ref="EV2", implant_quantity="missing"),
@@ -2551,7 +2551,7 @@ def test_025_multiple_events_use_data_gap_then_non_compliant_then_compliant_prio
         projection=projection,
     )
     data_gap = surgery._surgery_text_outcome(
-        rule_id="LX0609-025",
+        rule_id="LX0609-04-02-04",
         facts=(
             _surgery_text_fact(implant_name="unknown"),
             _surgery_text_fact(event_ref="EV2"),
@@ -2559,7 +2559,7 @@ def test_025_multiple_events_use_data_gap_then_non_compliant_then_compliant_prio
         projection=projection,
     )
     compliant = surgery._surgery_text_outcome(
-        rule_id="LX0609-025",
+        rule_id="LX0609-04-02-04",
         facts=(_surgery_text_fact(), _surgery_text_fact(event_ref="EV2")),
         projection=projection,
     )
@@ -2598,7 +2598,7 @@ def test_025_course_implant_reference_never_replaces_surgery_field_source() -> N
     )
 
     outcome = surgery._surgery_text_outcome(
-        rule_id="LX0609-025",
+        rule_id="LX0609-04-02-04",
         facts=(fact,),
         projection=projection,
     )
@@ -2628,7 +2628,7 @@ def test_025_course_only_reference_never_forges_surgery_document_id(
     )
 
     outcome = surgery._surgery_text_outcome(
-        rule_id="LX0609-025",
+        rule_id="LX0609-04-02-04",
         facts=(fact,),
         projection=projection,
     )
@@ -2656,7 +2656,7 @@ def test_025_multiple_events_point_to_the_surgery_record_with_missing_fields() -
     )
 
     outcome = surgery._surgery_text_outcome(
-        rule_id="LX0609-025",
+        rule_id="LX0609-04-02-04",
         facts=(
             _surgery_text_fact(
                 evidence_refs=("S01-01",),
@@ -2718,7 +2718,7 @@ def test_025_ambiguous_two_surgery_refs_fail_closed_without_forged_evidence() ->
     )
 
     outcome = surgery._surgery_text_outcome(
-        rule_id="LX0609-025",
+        rule_id="LX0609-04-02-04",
         facts=(fact,),
         projection=projection,
     )
@@ -2746,7 +2746,7 @@ def test_025_unknown_event_has_priority_over_other_event_missing_fields() -> Non
     )
 
     outcome = surgery._surgery_text_outcome(
-        rule_id="LX0609-025",
+        rule_id="LX0609-04-02-04",
         facts=(
             _surgery_text_fact(
                 evidence_refs=("S07-01",),
@@ -2780,8 +2780,8 @@ async def test_028_needs_i_ii_prophylaxis_and_complete_actual_interval():
         ),
     ]
     missing_interval = await surgery.execute_luxian_0609_native_surgery_gate_rules(
-        rule_ids=("LX0609-028",),
-        wrapper_rules=[_wrapper("LX0609-028")],
+        rule_ids=("LX0609-05-01-01",),
+        wrapper_rules=[_wrapper("LX0609-05-01-01")],
         evidence_payload=_payload(facts=base_facts),
         institute_id="",
         patient_id="",
@@ -2790,8 +2790,8 @@ async def test_028_needs_i_ii_prophylaxis_and_complete_actual_interval():
         llm_client=_Client([]),
     )
     non_target = await surgery.execute_luxian_0609_native_surgery_gate_rules(
-        rule_ids=("LX0609-028",),
-        wrapper_rules=[_wrapper("LX0609-028")],
+        rule_ids=("LX0609-05-01-01",),
+        wrapper_rules=[_wrapper("LX0609-05-01-01")],
         evidence_payload=_payload(
             facts=[
                 _performed(),
@@ -2818,9 +2818,9 @@ async def test_028_needs_i_ii_prophylaxis_and_complete_actual_interval():
 async def test_003_031_033_fail_closed_at_exact_boundaries(monkeypatch):
     monkeypatch.setattr(surgery, "read_luxian_0609_native_source_rows", lambda **_: [])
     result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
-        rule_ids=("LX0609-003", "LX0609-031", "LX0609-033"),
+        rule_ids=("LX0609-04-02-01", "LX0609-04-02-05", "LX0609-11-01-01"),
         wrapper_rules=[
-            _wrapper(rule_id) for rule_id in ("LX0609-003", "LX0609-031", "LX0609-033")
+            _wrapper(rule_id) for rule_id in ("LX0609-04-02-01", "LX0609-04-02-05", "LX0609-11-01-01")
         ],
         evidence_payload=_payload(
             facts=[_performed()],
@@ -2847,8 +2847,8 @@ async def test_model_error_invalid_json_and_sensitive_marker_never_echo():
     secret = "Bearer_secret_13800138000"
     facts = [_performed(), _fact("current_visit_malignant_surgery_confirmed")]
     failure = await surgery.execute_luxian_0609_native_surgery_gate_rules(
-        rule_ids=("LX0609-024",),
-        wrapper_rules=[_wrapper("LX0609-024")],
+        rule_ids=("LX0609-04-02-03",),
+        wrapper_rules=[_wrapper("LX0609-04-02-03")],
         evidence_payload=_payload(facts=facts),
         institute_id="",
         patient_id="",
@@ -2857,8 +2857,8 @@ async def test_model_error_invalid_json_and_sensitive_marker_never_echo():
         llm_client=_Client([RuntimeError(secret)]),
     )
     invalid = await surgery.execute_luxian_0609_native_surgery_gate_rules(
-        rule_ids=("LX0609-024",),
-        wrapper_rules=[_wrapper("LX0609-024")],
+        rule_ids=("LX0609-04-02-03",),
+        wrapper_rules=[_wrapper("LX0609-04-02-03")],
         evidence_payload=_payload(facts=facts),
         institute_id="",
         patient_id="",

@@ -171,31 +171,31 @@ LEGACY_EXECUTOR_MATERIAL_SOURCE_KEYS = {
 }
 
 LEGACY_RULE_MATERIAL_SOURCE_KEYS = {
-    "LX0609-001": ("admission_record", "inpat_registration"),
-    "LX0609-002": (
+    "LX0609-01-01-01": ("admission_record", "inpat_registration"),
+    "LX0609-01-02-01": (
         "admission_record",
         "first_course_record",
         "inpat_registration",
     ),
-    "LX0609-004": ("rescue_record",),
-    "LX0609-005": (
+    "LX0609-09-01-01": ("rescue_record",),
+    "LX0609-02-01-01": (
         "admission_record",
         "daily_course_record",
         "inpat_registration",
         "senior_course_record",
     ),
-    "LX0609-006": (
+    "LX0609-02-01-02": (
         "admission_record",
         "daily_course_record",
         "inpat_registration",
         "senior_course_record",
     ),
-    "LX0609-008": (
+    "LX0609-02-01-04": (
         "inpat_nondrug_order.severity_order",
         "daily_course_record",
         "senior_course_record",
     ),
-    "LX0609-009": (
+    "LX0609-02-01-05": (
         "inpat_nondrug_order.severity_order",
         "daily_course_record",
         "senior_course_record",
@@ -203,9 +203,9 @@ LEGACY_RULE_MATERIAL_SOURCE_KEYS = {
         "labtest_master",
         "labtest_item_report",
     ),
-    "LX0609-013": ("pathology_exam_master", "pathology_exam_report"),
-    "LX0609-019": ("pathology_exam_master", "pathology_exam_report"),
-    "LX0609-024": (
+    "LX0609-06-02-03": ("pathology_exam_master", "pathology_exam_report"),
+    "LX0609-06-02-02": ("pathology_exam_master", "pathology_exam_report"),
+    "LX0609-04-02-03": (
         "admission_record_diagnosis",
         "diagnosis",
         "discharge_record_diagnosis",
@@ -213,7 +213,7 @@ LEGACY_RULE_MATERIAL_SOURCE_KEYS = {
         "discharge_record",
         "pathology_exam_report",
     ),
-    "LX0609-026": (
+    "LX0609-05-02-01": (
         "admission_record_diagnosis",
         "diagnosis",
         "discharge_record_diagnosis",
@@ -224,16 +224,16 @@ LEGACY_RULE_MATERIAL_SOURCE_KEYS = {
         "daily_course_record",
     ),
     # 与 RuleDecision 来源契约保持一致：027 的裁剪上下文必须包含出院记录。
-    "LX0609-027": (
+    "LX0609-08-01-04": (
         "diagnosis",
         "discharge_record_diagnosis",
         "pathology_exam_report",
         "inpat_registration.discharge_horizon",
         "discharge_record",
     ),
-    "LX0609-077": ("first_course_record_diagnosis",),
-    "LX0609-078": ("presurg_summary", "surgery_record"),
-    "LX0609-079": ("presurg_discussion", "surgery_record"),
+    "LX0609-01-02-02": ("first_course_record_diagnosis",),
+    "LX0609-04-01-04": ("presurg_summary", "surgery_record"),
+    "LX0609-04-01-05": ("presurg_discussion", "surgery_record"),
 }
 
 

@@ -23,7 +23,7 @@ async def test_culture_mention_without_report_cannot_be_delivered_as_no_event(
             "record_content": "分泌物培养为金黄色葡萄球菌，现微生物提示MRSA，已更换抗感染用药。",
         },)},
     )
-    rules = ("LX0609-014", "LX0609-015")
+    rules = ("LX0609-06-03-03", "LX0609-06-03-04")
     client = _Client([])
     result = await module.execute_luxian_0609_native_exam_lab_rules(
         rule_ids=rules, wrapper_rules=[_wrapper(r) for r in rules],
@@ -70,7 +70,7 @@ async def test_culture_absence_requires_readable_sources_and_does_not_infer_posi
         consultation_rows=({"record_content": text},) if text else (),
         source_states={"consultation_record": state},
     )
-    rules = ("LX0609-014", "LX0609-015")
+    rules = ("LX0609-06-03-03", "LX0609-06-03-04")
     result = await module.execute_luxian_0609_native_exam_lab_rules(
         rule_ids=rules, wrapper_rules=[_wrapper(r) for r in rules],
         evidence_payload=None, llm_client=_Client([]),

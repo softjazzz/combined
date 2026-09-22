@@ -94,7 +94,7 @@ class _BrokenReadSession:
     ("rule_id", "raw", "expected"),
     [
         (
-            "LX0609-024",
+            "LX0609-04-02-03",
             {
                 "failure_kind": "lymph_node_dissection_not_documented",
                 "performed_surgery_confirmed": True,
@@ -109,7 +109,7 @@ class _BrokenReadSession:
             },
         ),
         (
-            "LX0609-025",
+            "LX0609-04-02-04",
             {
                 "failure_kind": "implant_information_incomplete",
                 "performed_surgery_confirmed": True,
@@ -142,7 +142,7 @@ class _BrokenReadSession:
             },
         ),
         (
-            "LX0609-028",
+            "LX0609-05-01-01",
             {
                 "failure_kind": "prophylaxis_duration_over_48h",
                 "incision_class": "I",
@@ -161,7 +161,7 @@ class _BrokenReadSession:
             },
         ),
         (
-            "LX0609-029",
+            "LX0609-04-01-01",
             {
                 "failure_kind": "surgery_document_missing",
                 "target_document": "presurg_summary",
@@ -176,7 +176,7 @@ class _BrokenReadSession:
             },
         ),
         (
-            "LX0609-030",
+            "LX0609-04-02-02",
             {
                 "failure_kind": "surgery_document_missing",
                 "target_document": "surgery_record",
@@ -189,7 +189,7 @@ class _BrokenReadSession:
             },
         ),
         (
-            "LX0609-032",
+            "LX0609-04-03-01",
             {
                 "failure_kind": "surgery_document_blank",
                 "target_document": "surgery_safecheck_record",
@@ -202,7 +202,7 @@ class _BrokenReadSession:
             },
         ),
         (
-            "LX0609-034",
+            "LX0609-11-02-01",
             {
                 "failure_kind": "anesthesia_consent_missing",
                 "performed_anesthesia_confirmed": True,
@@ -217,7 +217,7 @@ class _BrokenReadSession:
             },
         ),
         (
-            "LX0609-035",
+            "LX0609-11-02-02",
             {
                 "failure_kind": "anesthesia_consent_missing",
                 "performed_anesthesia_confirmed": True,
@@ -232,7 +232,7 @@ class _BrokenReadSession:
             },
         ),
         (
-            "LX0609-036",
+            "LX0609-04-04-01",
             {
                 "failure_kind": "anesthesia_visit_missing",
                 "performed_anesthesia_confirmed": True,
@@ -245,7 +245,7 @@ class _BrokenReadSession:
             },
         ),
         (
-            "LX0609-037",
+            "LX0609-04-04-02",
             {
                 "failure_kind": "anesthesia_visit_missing",
                 "performed_anesthesia_confirmed": True,
@@ -258,7 +258,7 @@ class _BrokenReadSession:
             },
         ),
         (
-            "LX0609-039",
+            "LX0609-04-01-02",
             {
                 "failure_kind": "preop_discussion_missing",
                 "performed_surgery_confirmed": True,
@@ -296,9 +296,9 @@ def test_store_projects_only_finalizer_validated_customer_facts(
 @pytest.mark.parametrize(
     ("rule_id", "raw"),
     [
-        ("LX0609-025", {"missing_fields": ["implant_material"]}),
+        ("LX0609-04-02-04", {"missing_fields": ["implant_material"]}),
         (
-            "LX0609-025",
+            "LX0609-04-02-04",
             {
                 "failure_kind": "implant_information_incomplete",
                 "performed_surgery_confirmed": True,
@@ -481,7 +481,7 @@ def test_completed_projection_indexes_summary_jobs_without_heavy_job_hydration(m
                     "delivery_mode": "canonical_straight_through",
                     "items": [
                         {
-                            "rule_id": "LX0609-001",
+                            "rule_id": "LX0609-01-01-01",
                             "status": "compliant",
                             "result_status": "compliant",
                             "is_compliant": True,
@@ -563,7 +563,7 @@ def test_completed_record_envelope_from_incomplete_task_is_ready(monkeypatch, ta
             "schema_version": "lx0609-record-result-envelope-v1",
             "delivery_mode": "canonical_straight_through",
             "items": [{
-                "rule_id": "LX0609-001",
+                "rule_id": "LX0609-01-01-01",
                 "status": "compliant",
                 "result_status": "compliant",
                 "is_compliant": True,
@@ -624,7 +624,7 @@ def test_running_retry_without_envelope_does_not_hide_previous_completed_result(
             "schema_version": "lx0609-record-result-envelope-v1",
             "delivery_mode": "canonical_straight_through",
             "items": [{
-                "rule_id": "LX0609-001",
+                "rule_id": "LX0609-01-01-01",
                 "status": "compliant",
                 "result_status": "compliant",
                 "is_compliant": True,
@@ -680,7 +680,7 @@ def test_completed_projection_rejects_removed_rule_from_current_catalog(monkeypa
                 "delivery_mode": "canonical_straight_through",
                 "items": [
                     {
-                        "rule_id": "LX0609-001",
+                        "rule_id": "LX0609-01-01-01",
                         "status": "compliant",
                         "result_status": "compliant",
                         "is_compliant": True,
@@ -747,13 +747,13 @@ def test_completed_projection_filters_known_customer_excluded_rule(monkeypatch):
                 "delivery_mode": "canonical_straight_through",
                 "items": [
                     {
-                        "rule_id": "LX0609-033",
+                        "rule_id": "LX0609-11-01-01",
                         "status": "not_executed",
                         "result_status": "not_executed",
                         "is_compliant": None,
                     },
                     {
-                        "rule_id": "LX0609-001",
+                        "rule_id": "LX0609-01-01-01",
                         "status": "compliant",
                         "result_status": "compliant",
                         "is_compliant": True,
@@ -782,7 +782,7 @@ def test_completed_projection_filters_known_customer_excluded_rule(monkeypatch):
     projection = result[identity]
     assert projection["status"] == "ready"
     assert projection["total_rule_count"] == 1
-    assert projection["items"][0]["rule_id"] == "LX0609-001"
+    assert projection["items"][0]["rule_id"] == "LX0609-01-01-01"
 
 
 def test_bulk_record_result_dtos_read_complete_canonical_items_in_one_batch(monkeypatch):
@@ -815,7 +815,7 @@ def test_bulk_record_result_dtos_read_complete_canonical_items_in_one_batch(monk
                 "record_ref": "rec_0123456789abcdef01234567",
                 "items": [
                     {
-                        "rule_id": "LX0609-001",
+                        "rule_id": "LX0609-01-01-01",
                         "status": "non_compliant",
                         "result_status": "non_compliant",
                         "is_compliant": False,
@@ -838,7 +838,7 @@ def test_bulk_record_result_dtos_read_complete_canonical_items_in_one_batch(monk
     dto = result[("inst-1", "patient-1", "visit-1")]
     assert dto["state"] == "ready"
     assert dto["record_ref"] == "rec_0123456789abcdef01234567"
-    assert dto["items"][0]["rule_id"] == "LX0609-001"
+    assert dto["items"][0]["rule_id"] == "LX0609-01-01-01"
     assert dto["items"][0]["source_document"] == "入院记录"
 
 
@@ -872,7 +872,7 @@ def test_single_record_result_does_not_fall_back_to_legacy_items_when_envelope_i
     legacy_item = {
         "record_id": "visit-1",
         "visit_id": "visit-1",
-        "rule_id": "LX0609-001",
+        "rule_id": "LX0609-01-01-01",
         "status": "non_compliant",
         "conclusion": "旧任务结果不得交付。",
     }
@@ -890,7 +890,7 @@ def test_single_record_result_does_not_fall_back_to_legacy_items_when_envelope_i
         institute_id="inst-1",
         patient_id="patient-1",
         visit_id="visit-1",
-        expected_rule_ids=["LX0609-001"],
+        expected_rule_ids=["LX0609-01-01-01"],
         rule_set_key="luxian_0609_qc_v1",
         rule_set_version="2026-06-09",
     )
@@ -918,7 +918,7 @@ def test_single_record_result_from_incomplete_task_is_ready_when_envelope_exists
         "record_ref": "rec_1234567890abcdef12345678",
         "items": [
             {
-                "rule_id": "LX0609-001",
+                "rule_id": "LX0609-01-01-01",
                 "status": "compliant",
                 "result_status": "compliant",
                 "is_compliant": True,
@@ -943,7 +943,7 @@ def test_single_record_result_from_incomplete_task_is_ready_when_envelope_exists
         institute_id="inst-1",
         patient_id="patient-1",
         visit_id="visit-1",
-        expected_rule_ids=["LX0609-001"],
+        expected_rule_ids=["LX0609-01-01-01"],
         rule_set_key="luxian_0609_qc_v1",
         rule_set_version="2026-06-09",
     )
@@ -969,7 +969,7 @@ def test_single_record_result_does_not_convert_database_read_error_to_not_found(
             institute_id="inst-1",
             patient_id="patient-1",
             visit_id="visit-1",
-            expected_rule_ids=["LX0609-001"],
+            expected_rule_ids=["LX0609-01-01-01"],
             rule_set_key="luxian_0609_qc_v1",
             rule_set_version="2026-06-09",
         )
@@ -1010,7 +1010,7 @@ def test_completed_projection_does_not_fall_back_when_newer_root_job_lacks_envel
                 "delivery_mode": "canonical_straight_through",
                 "items": [
                     {
-                        "rule_id": "LX0609-001",
+                        "rule_id": "LX0609-01-01-01",
                         "status": "compliant",
                         "result_status": "compliant",
                         "is_compliant": True,
@@ -1127,7 +1127,7 @@ def test_completed_projection_keeps_current_ready_when_newer_job_only_has_old_ve
                 "delivery_mode": "canonical_straight_through",
                 "items": [
                     {
-                        "rule_id": "LX0609-001",
+                        "rule_id": "LX0609-01-01-01",
                         "status": "compliant",
                         "result_status": "compliant",
                         "is_compliant": True,
@@ -1207,13 +1207,13 @@ def test_completed_projection_treats_current_job_with_only_old_version_envelope_
         ],
         [
             {
-                "rule_id": "LX0609-001",
+                "rule_id": "LX0609-01-01-01",
                 "status": "compliant",
                 "result_status": "compliant",
                 "is_compliant": True,
             },
             {
-                "rule_code": "LX0609-001",
+                "rule_code": "LX0609-01-01-01",
                 "status": "non_compliant",
                 "result_status": "non_compliant",
                 "is_compliant": False,
@@ -1270,7 +1270,7 @@ def test_single_record_result_rejects_historical_non_deliverable_status_without_
     monkeypatch,
 ):
     canonical_item = {
-        "rule_id": "LX0609-025",
+        "rule_id": "LX0609-04-02-04",
         "rule_name": "植入物相关记录",
         "status": "uncertain",
         "result_status": "uncertain",
@@ -1321,7 +1321,7 @@ def test_single_record_result_rejects_historical_non_deliverable_status_without_
         institute_id="inst-1",
         patient_id="patient-1",
         visit_id="visit-1",
-        expected_rule_ids=["LX0609-025"],
+        expected_rule_ids=["LX0609-04-02-04"],
         rule_set_key="luxian_0609_qc_v1",
         rule_set_version="2026-06-09",
     )
@@ -1399,7 +1399,7 @@ def test_single_record_result_rejects_rule_id_removed_from_current_catalog(monke
         "record_ref": "rec_1234567890abcdef12345678",
         "items": [
             {
-                "rule_id": "LX0609-001",
+                "rule_id": "LX0609-01-01-01",
                 "status": "compliant",
                 "result_status": "compliant",
                 "is_compliant": True,
@@ -1448,7 +1448,7 @@ def test_single_record_result_rejects_rule_id_removed_from_current_catalog(monke
         ],
         [
             {
-                "rule_id": "LX0609-025",
+                "rule_id": "LX0609-04-02-04",
                 "status": "invented_status",
                 "result_status": "invented_status",
                 "is_compliant": None,
@@ -1456,13 +1456,13 @@ def test_single_record_result_rejects_rule_id_removed_from_current_catalog(monke
         ],
         [
             {
-                "rule_id": "LX0609-025",
+                "rule_id": "LX0609-04-02-04",
                 "status": "compliant",
                 "result_status": "compliant",
                 "is_compliant": True,
             },
             {
-                "rule_id": "LX0609-025",
+                "rule_id": "LX0609-04-02-04",
                 "status": "non_compliant",
                 "result_status": "non_compliant",
                 "is_compliant": False,
@@ -1503,7 +1503,7 @@ def test_single_record_result_rejects_invalid_rule_identity_before_metadata_proj
         institute_id="inst-1",
         patient_id="patient-1",
         visit_id="visit-1",
-        expected_rule_ids=["LX0609-025"],
+        expected_rule_ids=["LX0609-04-02-04"],
         rule_set_key="luxian_0609_qc_v1",
         rule_set_version="2026-06-09",
     )
@@ -1520,7 +1520,7 @@ def test_single_record_result_rejects_malformed_item_mixed_with_valid_item(monke
         "record_ref": "rec_1234567890abcdef12345678",
         "items": [
             {
-                "rule_id": "LX0609-025",
+                "rule_id": "LX0609-04-02-04",
                 "status": "compliant",
                 "result_status": "compliant",
                 "is_compliant": True,
@@ -1546,7 +1546,7 @@ def test_single_record_result_rejects_malformed_item_mixed_with_valid_item(monke
         institute_id="inst-1",
         patient_id="patient-1",
         visit_id="visit-1",
-        expected_rule_ids=["LX0609-025"],
+        expected_rule_ids=["LX0609-04-02-04"],
     )
 
     assert result["state"] == "technical_error"
@@ -1558,26 +1558,26 @@ def test_single_record_result_rejects_malformed_item_mixed_with_valid_item(monke
     "canonical_item",
     [
         {
-            "rule_id": "LX0609-025",
+            "rule_id": "LX0609-04-02-04",
             "status": "compliant",
             "result_status": "compliant",
             "is_compliant": False,
         },
         {
-            "rule_id": "LX0609-025",
+            "rule_id": "LX0609-04-02-04",
             "status": "non_compliant",
             "result_status": "non_compliant",
             "is_compliant": True,
         },
         {
-            "rule_id": "LX0609-025",
+            "rule_id": "LX0609-04-02-04",
             "status": "data_gap",
             "result_status": "data_gap",
             "is_compliant": False,
         },
         *[
             {
-                "rule_id": "LX0609-025",
+                "rule_id": "LX0609-04-02-04",
                 "status": status,
                 "result_status": status,
                 "is_compliant": True,
@@ -1592,20 +1592,20 @@ def test_single_record_result_rejects_malformed_item_mixed_with_valid_item(monke
             )
         ],
         {
-            "rule_id": "LX0609-025",
+            "rule_id": "LX0609-04-02-04",
             "status": "non_compliant",
             "result_status": "uncertain",
             "is_compliant": False,
         },
         {
-            "rule_id": "LX0609-025",
+            "rule_id": "LX0609-04-02-04",
             "status": "non_compliant",
             "result_status": "non_compliant",
             "display_status": "uncertain",
             "is_compliant": False,
         },
         {
-            "rule_id": "LX0609-025",
+            "rule_id": "LX0609-04-02-04",
             "status": "COMPLIANT",
             "result_status": "COMPLIANT",
             "is_compliant": True,
@@ -1640,7 +1640,7 @@ def test_single_record_result_rejects_historical_canonical_status_inconsistency(
         institute_id="inst-1",
         patient_id="patient-1",
         visit_id="visit-1",
-        expected_rule_ids=["LX0609-025"],
+        expected_rule_ids=["LX0609-04-02-04"],
     )
 
     assert result["state"] == "technical_error"
@@ -1670,7 +1670,7 @@ def test_completed_projection_with_items_rejects_historical_status_inconsistency
                 "record_ref": "rec_1234567890abcdef12345678",
                 "items": [
                     {
-                        "rule_id": "LX0609-001",
+                        "rule_id": "LX0609-01-01-01",
                         "status": "compliant",
                         "result_status": "compliant",
                         "is_compliant": False,
@@ -1708,7 +1708,7 @@ def test_exact_batch_html_rejects_historical_status_inconsistency_without_legacy
         "record_ref": "rec_1234567890abcdef12345678",
         "items": [
             {
-                "rule_id": "LX0609-001",
+                "rule_id": "LX0609-01-01-01",
                 "status": "non_compliant",
                 "result_status": "non_compliant",
                 "is_compliant": True,
@@ -1771,7 +1771,7 @@ def test_writer_accepts_frozen_canonical_status_semantics(status, is_compliant):
         "visit_id": "visit-1",
         "institute_id": "inst-1",
         "patient_id": "patient-1",
-        "rule_id": "LX0609-001",
+        "rule_id": "LX0609-01-01-01",
         "status": status,
         "result_status": status,
         "display_status": status,
@@ -1809,7 +1809,7 @@ def test_writer_accepts_frozen_canonical_status_semantics(status, is_compliant):
 @pytest.mark.parametrize("status", ["uncertain", "technical_error"])
 def test_canonical_consistency_rejects_non_deliverable_status(status):
     item = {
-        "rule_id": "LX0609-001",
+        "rule_id": "LX0609-01-01-01",
         "status": status,
         "result_status": status,
         "is_compliant": None,
@@ -1826,7 +1826,7 @@ def test_writer_rejects_non_deliverable_status_before_mutating_any_envelope(stat
         "visit_id": "visit-1",
         "institute_id": "inst-1",
         "patient_id": "patient-1",
-        "rule_id": "LX0609-001",
+        "rule_id": "LX0609-01-01-01",
         "status": status,
         "result_status": status,
         "display_status": status,
@@ -1862,7 +1862,7 @@ def test_writer_rejects_unexplained_current_lx0609_defect_without_rejudging_stat
         "visit_id": "visit-1",
         "institute_id": "inst-1",
         "patient_id": "patient-1",
-        "rule_id": "LX0609-025",
+        "rule_id": "LX0609-04-02-04",
         "schema_version": "lx0609-customer-result-v2",
         "status": "non_compliant",
         "result_status": "non_compliant",
@@ -1903,7 +1903,7 @@ def test_writer_persists_finalizer_validated_customer_facts_unchanged():
         "checked_sources": ["surgery_record"],
     }
     expected_facts = validate_luxian_0609_executor_customer_display_facts(
-        rule_id="LX0609-024",
+        rule_id="LX0609-04-02-03",
         raw=raw_facts,
     )
 
@@ -1925,7 +1925,7 @@ def test_writer_persists_finalizer_validated_customer_facts_unchanged():
                 "visit_id": "visit-1",
                 "institute_id": "inst-1",
                 "patient_id": "patient-1",
-                "rule_id": "LX0609-024",
+                "rule_id": "LX0609-04-02-03",
                 "status": "non_compliant",
                 "result_status": "non_compliant",
                 "display_status": "non_compliant",
@@ -1962,7 +1962,7 @@ def test_writer_marks_envelope_as_canonical_straight_through():
                 "visit_id": "visit-1",
                 "institute_id": "inst-1",
                 "patient_id": "patient-1",
-                "rule_id": "LX0609-001",
+                "rule_id": "LX0609-01-01-01",
                 "status": "compliant",
                 "result_status": "compliant",
                 "reason_code": "requirement_satisfied",
@@ -1987,7 +1987,7 @@ def test_writer_uses_facade_envelope_item_projector(monkeypatch):
     session = _WriteSession()
     service = CustomQCWorkspaceService()
     projected_item = {
-        "rule_id": "LX0609-001",
+        "rule_id": "LX0609-01-01-01",
         "status": "compliant",
         "result_status": "compliant",
         "is_compliant": True,
@@ -2017,7 +2017,7 @@ def test_writer_uses_facade_envelope_item_projector(monkeypatch):
                 "visit_id": "visit-1",
                 "institute_id": "inst-1",
                 "patient_id": "patient-1",
-                "rule_id": "LX0609-001",
+                "rule_id": "LX0609-01-01-01",
                 "status": "compliant",
                 "result_status": "compliant",
                 "is_compliant": True,
@@ -2050,7 +2050,7 @@ def test_pending_rule_conclusion_remains_customer_text_through_canonical_deliver
         {"rule_id": rule_id}
         for rule_id in resolve_package_entry_execution_rule_ids(
             inventory=inventory,
-            selected_rule_ids=("LX0609-049",),
+            selected_rule_ids=("LX0609-07-04-02",),
         )
     ]
     executable_rules, context = asyncio.run(
@@ -2062,7 +2062,7 @@ def test_pending_rule_conclusion_remains_customer_text_through_canonical_deliver
             evidence_payload=None,
             llm_client=object(),
             settings=SimpleNamespace(**settings_values),
-            selected_customer_rule_ids=("LX0609-049",),
+            selected_customer_rule_ids=("LX0609-07-04-02",),
         )
     )
     assert executable_rules == []
@@ -2098,7 +2098,7 @@ def test_pending_rule_conclusion_remains_customer_text_through_canonical_deliver
                             "visit_id": "visit-1",
                         }
                     ],
-                    "scoped_customer_rule_ids": ["LX0609-049"],
+                    "scoped_customer_rule_ids": ["LX0609-07-04-02"],
                 }
             ),
         },
@@ -2124,7 +2124,7 @@ def test_pending_rule_conclusion_remains_customer_text_through_canonical_deliver
         institute_id="inst-1",
         patient_id="patient-1",
         visit_id="visit-1",
-        expected_rule_ids=["LX0609-049"],
+        expected_rule_ids=["LX0609-07-04-02"],
         rule_set_key="luxian_0609_qc_v1",
         rule_set_version="2026-06-09",
     )
@@ -2140,7 +2140,7 @@ def test_pending_rule_conclusion_remains_customer_text_through_canonical_deliver
 def test_typed_050_canonical_finding_survives_envelope_customer_projection() -> None:
     reduced = reduce_luxian_0609_rule_decision(
         RuleDecision(
-            rule_id="LX0609-050",
+            rule_id="LX0609-03-02-01",
             snapshot_hash="a" * 64,
             applicability=ApplicabilityState.APPLICABLE,
             evidence_state=EvidenceState.SUFFICIENT,
@@ -2160,10 +2160,10 @@ def test_typed_050_canonical_finding_survives_envelope_customer_projection() -> 
     }
     context = Luxian0609ExecutionContext(
         enabled=True,
-        wrapper_rules=[{"rule_id": "LX0609-050", "name": "疑难病例讨论"}],
+        wrapper_rules=[{"rule_id": "LX0609-03-02-01", "name": "疑难病例讨论"}],
         prepared_rule_count=1,
         reduced_decisions=(reduced,),
-        customer_display_facts=(("LX0609-050", controlled_facts),),
+        customer_display_facts=(("LX0609-03-02-01", controlled_facts),),
     )
 
     aggregated = aggregate_luxian_0609_orchestrated_results(
@@ -2202,7 +2202,7 @@ def test_typed_050_canonical_finding_survives_envelope_customer_projection() -> 
 def test_typed_050_scope_uncertainty_survives_safe_projection_without_raw_text() -> None:
     projected = project_customer_safe_result_item(
         {
-            "rule_id": "LX0609-050",
+            "rule_id": "LX0609-03-02-01",
             "status": "uncertain",
             "reason_code": "diagnosis_scope_uncertain",
             "customer_display_facts": {
@@ -2250,7 +2250,7 @@ def test_typed_050_customer_projection_rejects_non_datetime_controlled_facts(
     with pytest.raises(ValueError):
         project_customer_safe_result_item(
             {
-                "rule_id": "LX0609-050",
+                "rule_id": "LX0609-03-02-01",
                 "status": "non_compliant",
                 "is_compliant": False,
                 "customer_display_facts": facts,
@@ -2298,7 +2298,7 @@ def test_writer_rejects_invalid_or_conflicting_canonical_status_fields(
                     "visit_id": "visit-1",
                     "institute_id": "inst-1",
                     "patient_id": "patient-1",
-                    "rule_id": "LX0609-001",
+                    "rule_id": "LX0609-01-01-01",
                     "reason_code": "requirement_violated",
                     **invalid_fields,
                 }
@@ -2335,7 +2335,7 @@ def test_writer_validates_all_records_before_mutating_any_envelope():
                                 "visit_id": "visit-2",
                             },
                         ],
-                        "scoped_customer_rule_ids": ["LX0609-001"],
+                        "scoped_customer_rule_ids": ["LX0609-01-01-01"],
                     }
                 ),
             },
@@ -2345,7 +2345,7 @@ def test_writer_validates_all_records_before_mutating_any_envelope():
                     "visit_id": "visit-1",
                     "institute_id": "inst-1",
                     "patient_id": "patient-1",
-                    "rule_id": "LX0609-001",
+                    "rule_id": "LX0609-01-01-01",
                     "status": "compliant",
                     "result_status": "compliant",
                     "is_compliant": True,
@@ -2355,7 +2355,7 @@ def test_writer_validates_all_records_before_mutating_any_envelope():
                     "visit_id": "visit-2",
                     "institute_id": "inst-1",
                     "patient_id": "patient-2",
-                    "rule_id": "LX0609-001",
+                    "rule_id": "LX0609-01-01-01",
                     "status": "compliant",
                     "result_status": "compliant",
                     "is_compliant": False,
@@ -2377,7 +2377,7 @@ def test_writer_validates_all_records_before_mutating_any_envelope():
                 "visit_id": "visit-1",
                 "institute_id": "inst-1",
                 "patient_id": "patient-1",
-                "rule_id": "LX0609-001",
+                "rule_id": "LX0609-01-01-01",
                 "status": "compliant",
                 "result_status": "compliant",
                 "is_compliant": True,
@@ -2422,7 +2422,7 @@ def test_writer_rejects_incomplete_case_coordinate_before_mutating_any_envelope(
         "visit_id": "visit-1",
         "institute_id": "inst-1",
         "patient_id": "patient-1",
-        "rule_id": "LX0609-001",
+        "rule_id": "LX0609-01-01-01",
         "status": "compliant",
         "result_status": "compliant",
         "is_compliant": True,
@@ -2471,7 +2471,7 @@ def test_writer_rejects_non_compliant_without_controlled_explanation_before_muta
                     "visit_id": "visit-1",
                     "institute_id": "inst-1",
                     "patient_id": "patient-1",
-                    "rule_id": "LX0609-071",
+                    "rule_id": "LX0609-10-01-01",
                     "status": "non_compliant",
                     "result_status": "non_compliant",
                     "display_status": "non_compliant",
@@ -2506,7 +2506,7 @@ def test_writer_accepts_non_compliant_with_controlled_failed_criterion():
                 "visit_id": "visit-1",
                 "institute_id": "inst-1",
                 "patient_id": "patient-1",
-                "rule_id": "LX0609-071",
+                "rule_id": "LX0609-10-01-01",
                 "status": "non_compliant",
                 "result_status": "non_compliant",
                 "display_status": "non_compliant",
@@ -2549,7 +2549,7 @@ def test_writer_accepts_064_non_compliant_with_projected_multievent_facts():
                 "visit_id": "visit-1",
                 "institute_id": "inst-1",
                 "patient_id": "patient-1",
-                "rule_id": "LX0609-064",
+                "rule_id": "LX0609-04-05-01",
                 "status": "non_compliant",
                 "result_status": "non_compliant",
                 "display_status": "non_compliant",

@@ -50,15 +50,15 @@ async def _run(client, *, text=TEXT, structured=None, duplicate=False):
     rows = (row, {**row, "document_id": "discharge-other"}) if duplicate else (row,)
     snapshot, materials = _session({"discharge_record": rows})
     result = await execute_luxian_0609_native_extended_document_rules(
-        rule_ids=("LX0609-062",), decision_rule_ids=("LX0609-062",),
+        rule_ids=("LX0609-08-01-02",), decision_rule_ids=("LX0609-08-01-02",),
         evidence_snapshot=snapshot, evidence_materials=materials, llm_client=client,
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
-        decisions=result.decisions, expected_rule_ids=("LX0609-062",),
+        decisions=result.decisions, expected_rule_ids=("LX0609-08-01-02",),
         snapshot=snapshot, evidence_materials=materials,
     )
     canonical = _canonical_extended_result(
-        rule_id="LX0609-062", snapshot=snapshot, materials=materials,
+        rule_id="LX0609-08-01-02", snapshot=snapshot, materials=materials,
         result=result, reduced=reduced,
     )
     return result, canonical

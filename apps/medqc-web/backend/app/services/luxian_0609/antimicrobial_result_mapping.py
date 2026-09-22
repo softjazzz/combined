@@ -9,14 +9,14 @@ from typing import Any
 
 
 ANTIMICROBIAL_CUSTOMER_RULE_IDS = frozenset(
-    {"LX0609-054", "LX0609-055", "LX0609-057", "LX0609-058"}
+    {"LX0609-05-01-02", "LX0609-05-01-03", "LX0609-05-01-05", "LX0609-05-01-06"}
 )
 
 _KIND_BY_RULE = {
-    "LX0609-054": "antimicrobial_reason_documentation_check",
-    "LX0609-055": "antimicrobial_effect_evaluation_check",
-    "LX0609-057": "empiric_antimicrobial_reason_check",
-    "LX0609-058": "special_antimicrobial_expert_support_check",
+    "LX0609-05-01-02": "antimicrobial_reason_documentation_check",
+    "LX0609-05-01-03": "antimicrobial_effect_evaluation_check",
+    "LX0609-05-01-05": "empiric_antimicrobial_reason_check",
+    "LX0609-05-01-06": "special_antimicrobial_expert_support_check",
 }
 
 
@@ -173,7 +173,7 @@ def _safe_055_event(raw: Any, antimicrobials: list[str]) -> dict[str, Any] | Non
 
 
 def _safe_054(raw: Mapping[str, Any]) -> dict[str, Any] | None:
-    verification_kind = _KIND_BY_RULE["LX0609-054"]
+    verification_kind = _KIND_BY_RULE["LX0609-05-01-02"]
     if raw.get("verification_kind") != verification_kind:
         return None
     antimicrobials = _controlled_names(raw.get("antimicrobials"))
@@ -215,7 +215,7 @@ def _safe_055(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     raw_events = raw.get("event_windows")
     window_state = raw.get("window_state")
     if (
-        raw.get("verification_kind") != _KIND_BY_RULE["LX0609-055"]
+        raw.get("verification_kind") != _KIND_BY_RULE["LX0609-05-01-03"]
         or antimicrobials is None
         or len(set(antimicrobials)) != len(antimicrobials)
         or unmatched is None
@@ -236,7 +236,7 @@ def _safe_055(raw: Mapping[str, Any]) -> dict[str, Any] | None:
             return None
         events.append(event)
     facts: dict[str, Any] = {
-        "verification_kind": _KIND_BY_RULE["LX0609-055"],
+        "verification_kind": _KIND_BY_RULE["LX0609-05-01-03"],
         "antimicrobials": antimicrobials,
         "window_hours": window_hours,
         "evaluation_intervals": intervals,
@@ -254,14 +254,14 @@ def _safe_057(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     empiric_use_confirmed = raw.get("empiric_use_confirmed")
     reason_or_no_specimen_documented = raw.get("reason_or_no_specimen_documented")
     if (
-        raw.get("verification_kind") != _KIND_BY_RULE["LX0609-057"]
+        raw.get("verification_kind") != _KIND_BY_RULE["LX0609-05-01-05"]
         or antimicrobials is None
         or empiric_use_confirmed is not True
         or type(reason_or_no_specimen_documented) is not bool
     ):
         return None
     return {
-        "verification_kind": _KIND_BY_RULE["LX0609-057"],
+        "verification_kind": _KIND_BY_RULE["LX0609-05-01-05"],
         "antimicrobials": antimicrobials,
         "empiric_use_confirmed": True,
         "reason_or_no_specimen_documented": reason_or_no_specimen_documented,
@@ -290,7 +290,7 @@ def _safe_058(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     association_ambiguous = raw.get("association_ambiguous")
     if (
         set(raw) != expected_keys
-        or raw.get("verification_kind") != _KIND_BY_RULE["LX0609-058"]
+        or raw.get("verification_kind") != _KIND_BY_RULE["LX0609-05-01-06"]
         or medicines is None
         or unmatched is None
         or any(item not in medicines for item in unmatched)
@@ -328,7 +328,7 @@ def _safe_058(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     ):
         return None
     return {
-        "verification_kind": _KIND_BY_RULE["LX0609-058"],
+        "verification_kind": _KIND_BY_RULE["LX0609-05-01-06"],
         "special_antimicrobials": medicines,
         "expert_support_present": expert_present,
         "first_antimicrobial_time": first_time,
@@ -347,11 +347,11 @@ def safe_antimicrobial_customer_display_facts(
     normalized_rule_id = str(rule_id or "").strip().upper()
     if not isinstance(raw, Mapping) or normalized_rule_id not in _KIND_BY_RULE:
         return None
-    if normalized_rule_id == "LX0609-054":
+    if normalized_rule_id == "LX0609-05-01-02":
         return _safe_054(raw)
-    if normalized_rule_id == "LX0609-055":
+    if normalized_rule_id == "LX0609-05-01-03":
         return _safe_055(raw)
-    if normalized_rule_id == "LX0609-057":
+    if normalized_rule_id == "LX0609-05-01-05":
         return _safe_057(raw)
     return _safe_058(raw)
 
@@ -370,7 +370,7 @@ def antimicrobial_customer_fact_status_is_valid(
         return False
     normalized_rule_id = str(rule_id or "").strip().upper()
     association_ambiguous = safe_facts.get("association_ambiguous")
-    if normalized_rule_id == "LX0609-054":
+    if normalized_rule_id == "LX0609-05-01-02":
         unmatched = safe_facts.get("unmatched_antimicrobials")
         documented = safe_facts.get("reason_documented")
         if association_ambiguous is True:
@@ -383,7 +383,7 @@ def antimicrobial_customer_fact_status_is_valid(
             and isinstance(unmatched, list)
             and bool(unmatched)
         )
-    if normalized_rule_id == "LX0609-055":
+    if normalized_rule_id == "LX0609-05-01-03":
         unmatched = safe_facts.get("unmatched_antimicrobials")
         events = safe_facts.get("event_windows")
         intervals = safe_facts.get("evaluation_intervals")
@@ -443,7 +443,7 @@ def antimicrobial_customer_fact_status_is_valid(
         # 时间缺失/冲突等 data_gap 可合法携带空或部分窗口；只接受已验证形状，
         # 不在安全投影层重算执行器的失败原因。
         return normalized_status == "data_gap" and window_state is None
-    if normalized_rule_id == "LX0609-057":
+    if normalized_rule_id == "LX0609-05-01-05":
         documented = safe_facts.get("reason_or_no_specimen_documented")
         return (normalized_status == "compliant" and documented is True) or (
             normalized_status == "non_compliant" and documented is False

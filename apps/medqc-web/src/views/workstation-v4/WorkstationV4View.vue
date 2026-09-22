@@ -280,7 +280,10 @@
               <span class="paste-frontpage-preset__title">{{ preset.title }}</span>
               <span class="paste-frontpage-preset__subtitle">{{ preset.subtitle }}</span>
               <span class="paste-frontpage-preset__tags">
-                <span v-for="tag in preset.tags" :key="tag">{{ tag }}</span>
+                <span
+                  v-for="tag in preset.tags"
+                  :key="tag"
+                >{{ tag }}</span>
               </span>
             </button>
           </div>
@@ -293,7 +296,10 @@
           show-count
           :disabled="frontpageGenerating"
         />
-        <div v-if="frontpageGenerating" class="paste-frontpage-progress">
+        <div
+          v-if="frontpageGenerating"
+          class="paste-frontpage-progress"
+        >
           <FrontpageWorkspacePanel
             :generating="frontpageGenerating"
             :post-processing="frontpagePostProcessing"
@@ -316,7 +322,9 @@
           >
             清空
           </a-button>
-          <a-button @click="handlePasteFrontpageCancel"> 取消 </a-button>
+          <a-button @click="handlePasteFrontpageCancel">
+            取消
+          </a-button>
           <a-button
             type="primary"
             :loading="frontpageGenerating"

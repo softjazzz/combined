@@ -25,7 +25,7 @@ def _event(*, outcome: str, rule_id: str) -> dict[str, object]:
     }
     if outcome in {"timely", "overdue", "handled"}:
         event["disposition_time"] = "2026-06-01 10:00:00"
-    if rule_id == "LX0609-052" and outcome in {"timely", "overdue"}:
+    if rule_id == "LX0609-06-04-01" and outcome in {"timely", "overdue"}:
         event["interval_hours"] = 2.0 if outcome == "timely" else 7.0
     return event
 
@@ -34,7 +34,7 @@ def _facts(*, rule_id: str, outcome: str) -> dict[str, object]:
     facts: dict[str, object] = {
         "verification_kind": (
             "critical_value_timeliness_check"
-            if rule_id == "LX0609-052"
+            if rule_id == "LX0609-06-04-01"
             else "critical_value_disposition_presence_check"
         ),
         "critical_item_names": ["血钾"],
@@ -45,7 +45,7 @@ def _facts(*, rule_id: str, outcome: str) -> dict[str, object]:
         else [],
         "event_results": [_event(outcome=outcome, rule_id=rule_id)],
     }
-    if rule_id == "LX0609-052":
+    if rule_id == "LX0609-06-04-01":
         facts.update(threshold_hours=6, actual_interval_hours=[2.0])
     return facts
 
@@ -53,21 +53,21 @@ def _facts(*, rule_id: str, outcome: str) -> dict[str, object]:
 @pytest.mark.parametrize(
     ("rule_id", "facts", "status"),
     [
-        ("LX0609-052", _facts(rule_id="LX0609-052", outcome="timely"), "compliant"),
+        ("LX0609-06-04-01", _facts(rule_id="LX0609-06-04-01", outcome="timely"), "compliant"),
         (
-            "LX0609-052",
-            _facts(rule_id="LX0609-052", outcome="overdue"),
+            "LX0609-06-04-01",
+            _facts(rule_id="LX0609-06-04-01", outcome="overdue"),
             "non_compliant",
         ),
         (
-            "LX0609-052",
-            _facts(rule_id="LX0609-052", outcome="unhandled"),
+            "LX0609-06-04-01",
+            _facts(rule_id="LX0609-06-04-01", outcome="unhandled"),
             "non_compliant",
         ),
-        ("LX0609-053", _facts(rule_id="LX0609-053", outcome="handled"), "compliant"),
+        ("LX0609-06-04-02", _facts(rule_id="LX0609-06-04-02", outcome="handled"), "compliant"),
         (
-            "LX0609-053",
-            _facts(rule_id="LX0609-053", outcome="unhandled"),
+            "LX0609-06-04-02",
+            _facts(rule_id="LX0609-06-04-02", outcome="unhandled"),
             "non_compliant",
         ),
     ],
@@ -93,31 +93,31 @@ def test_critical_value_mapping_preserves_active_outcomes(
 
 
 def test_critical_value_mapping_preserves_window_not_mature() -> None:
-    facts = _facts(rule_id="LX0609-052", outcome="window_not_mature")
+    facts = _facts(rule_id="LX0609-06-04-01", outcome="window_not_mature")
     facts.update(
         evaluation_window_mature=False,
         deadline_times=["2026-06-01 14:00:00"],
         evaluation_time="2026-06-01 12:00:00",
     )
 
-    safe = safe_critical_value_customer_display_facts(rule_id="LX0609-052", raw=facts)
+    safe = safe_critical_value_customer_display_facts(rule_id="LX0609-06-04-01", raw=facts)
 
     assert safe == facts
     assert (
         critical_value_customer_fact_status_is_valid(
-            rule_id="LX0609-052", status="not_applicable", safe_facts=safe
+            rule_id="LX0609-06-04-01", status="not_applicable", safe_facts=safe
         )
         is True
     )
     assert (
         critical_value_customer_fact_status_is_valid(
-            rule_id="LX0609-052", status="non_compliant", safe_facts=safe
+            rule_id="LX0609-06-04-01", status="non_compliant", safe_facts=safe
         )
         is False
     )
 
 
-@pytest.mark.parametrize("rule_id", ["LX0609-052", "LX0609-053"])
+@pytest.mark.parametrize("rule_id", ["LX0609-06-04-01", "LX0609-06-04-02"])
 def test_critical_value_mapping_preserves_result_detail_gap(rule_id: str) -> None:
     facts = {
         "failure_kind": "critical_value_result_detail_missing",
@@ -140,22 +140,22 @@ def test_critical_value_mapping_preserves_horizon_gap() -> None:
         "verification_kind": "critical_value_evaluation_horizon_unavailable",
         "issue": "authoritative_time_missing",
     }
-    safe = safe_critical_value_customer_display_facts(rule_id="LX0609-052", raw=facts)
+    safe = safe_critical_value_customer_display_facts(rule_id="LX0609-06-04-01", raw=facts)
 
     assert safe == facts
     assert (
         critical_value_customer_fact_status_is_valid(
-            rule_id="LX0609-052", status="data_gap", safe_facts=safe
+            rule_id="LX0609-06-04-01", status="data_gap", safe_facts=safe
         )
         is True
     )
 
 
 def test_critical_value_finalizer_fail_closes_status_fact_conflict() -> None:
-    facts = _facts(rule_id="LX0609-052", outcome="timely")
+    facts = _facts(rule_id="LX0609-06-04-01", outcome="timely")
     finalized, handled = finalize_luxian_0609_executor_customer_display_facts(
         result={
-            "rule_id": "LX0609-052",
+            "rule_id": "LX0609-06-04-01",
             "status": "non_compliant",
             "reason_code": "threshold_exceeded",
             "customer_display_facts": facts,
@@ -178,7 +178,7 @@ def test_critical_value_finalizer_and_canonical_contract() -> None:
     }
     finalized, handled = finalize_luxian_0609_executor_customer_display_facts(
         result={
-            "rule_id": "LX0609-052",
+            "rule_id": "LX0609-06-04-01",
             "status": "data_gap",
             "reason_code": "required_field_missing",
         },
@@ -189,8 +189,8 @@ def test_critical_value_finalizer_and_canonical_contract() -> None:
     assert handled is True
     assert canonical["customer_display_facts"] == facts
     assert canonical["missing_sources"] == ["检验结果明细"]
-    assert finalizer_owns_executor_customer_display_facts("LX0609-052") is True
-    assert finalizer_requires_public_fact_ref_evidence("LX0609-052") is True
+    assert finalizer_owns_executor_customer_display_facts("LX0609-06-04-01") is True
+    assert finalizer_requires_public_fact_ref_evidence("LX0609-06-04-01") is True
 
 
 def test_aggregator_has_no_critical_value_rule_reference() -> None:
@@ -199,5 +199,5 @@ def test_aggregator_has_no_critical_value_rule_reference() -> None:
     )
     source = aggregator.read_text(encoding="utf-8")
 
-    assert "LX0609-052" not in source
-    assert "LX0609-053" not in source
+    assert "LX0609-06-04-01" not in source
+    assert "LX0609-06-04-02" not in source

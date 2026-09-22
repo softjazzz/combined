@@ -16,7 +16,7 @@ const DATA_GAP_SUGGESTION = '请补充或同步所需数据后重新评估。'
 
 const REASON_CATALOG: CustomerReasonDescriptor[] = [
   {
-    ruleId: 'LX0609-018',
+    ruleId: 'LX0609-01-01-02',
     reasonCode: 'complaint_too_long',
     summary: '主诉超过20字上限；诊断指向子结论以本次语义判断结果为准。',
     detail: '长度与能否导出第一诊断是两个独立子结论。',
@@ -24,7 +24,7 @@ const REASON_CATALOG: CustomerReasonDescriptor[] = [
     suggestion: '请精简主诉并保留诊断指向信息，确保与第一诊断一致。',
   },
   {
-    ruleId: 'LX0609-018',
+    ruleId: 'LX0609-01-01-02',
     reasonCode: 'complaint_too_short',
     summary: '该结果来自旧版主诉长度口径，请重新质控。',
     detail: '新版口径为主诉不超过20字。',
@@ -32,7 +32,7 @@ const REASON_CATALOG: CustomerReasonDescriptor[] = [
     suggestion: '请重新质控以获得新版口径结果。',
   },
   {
-    ruleId: 'LX0609-018',
+    ruleId: 'LX0609-01-01-02',
     reasonCode: 'complaint_too_short_semantic_unknown',
     summary: '该结果来自旧版主诉长度口径，请重新质控。',
     detail: '新版口径为主诉不超过20字。',
@@ -40,28 +40,28 @@ const REASON_CATALOG: CustomerReasonDescriptor[] = [
     suggestion: '请重新质控以获得新版口径结果。',
   },
   {
-    ruleId: 'LX0609-018',
+    ruleId: 'LX0609-01-01-02',
     reasonCode: 'complaint_lacks_diagnostic_clue',
     summary: '主诉仅描述症状，缺少可导出第一诊断的诊断指向信息。',
     requirement: '主诉应能导出第一诊断，且主诉长度应不超过20字。',
     suggestion: '请补充有诊断指向的主诉，并确保与第一诊断一致。',
   },
   {
-    ruleId: 'LX0609-018',
+    ruleId: 'LX0609-01-01-02',
     reasonCode: 'complaint_primary_diagnosis_mismatch',
     summary: '主诉及现病史不能支持首页第一诊断。',
     requirement: '主诉应能导出第一诊断，且主诉长度应不超过20字。',
     suggestion: '请补充有诊断指向的主诉，并确保与第一诊断一致。',
   },
   {
-    ruleId: 'LX0609-018',
+    ruleId: 'LX0609-01-01-02',
     reasonCode: 'threshold_exceeded',
     summary: '主诉规范性或其与第一诊断的对应性未通过检查。',
     requirement: '主诉应能导出第一诊断，且主诉长度应不超过20字。',
     suggestion: '请补充有诊断指向的主诉，并确保与第一诊断一致。',
   },
   {
-    ruleId: 'LX0609-018',
+    ruleId: 'LX0609-01-01-02',
     reasonCode: 'complaint_or_primary_diagnosis_unavailable',
     summary: '现有资料不足，暂不能判断主诉是否可导出第一诊断。',
     detail: '未取得可用于核对的主诉或第一诊断。',
@@ -69,14 +69,14 @@ const REASON_CATALOG: CustomerReasonDescriptor[] = [
     suggestion: '请补充或同步入院记录主诉及第一诊断后重新评估。',
   },
   {
-    ruleId: 'LX0609-025',
+    ruleId: 'LX0609-04-02-04',
     reasonCode: 'implant_information_incomplete',
     summary: '手术记录中的植入物信息不完整。',
     requirement: '植入物名称、种类、规格/型号、材质和数量应记录完整。',
     suggestion: '请核对并补充手术记录中的植入物信息。',
   },
   {
-    ruleId: 'LX0609-025',
+    ruleId: 'LX0609-04-02-04',
     summary: '手术记录中的植入物信息不完整。',
     detail: '本次结果未提供可展示的字段级缺失项，需结合原文核对具体缺项。',
     requirement: '植入物名称、种类、规格/型号、材质和数量应记录完整。',

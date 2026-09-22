@@ -31,9 +31,9 @@ def _projection(rule_id: str, status: str, reason: str | None, facts: dict) -> s
     from app.services.luxian_0609.customer_renderer import (
         customer_finding_from_controlled_facts, not_applicable_customer_message,
     )
-    if rule_id == "LX0609-066" and status == "compliant" and facts:
+    if rule_id == "LX0609-04-05-03" and status == "compliant" and facts:
         return customer_finding_from_controlled_facts(rule_id=rule_id, facts=facts)
-    if rule_id == "LX0609-032" and status == "not_applicable" and reason == "trigger_absent_complete":
+    if rule_id == "LX0609-04-03-01" and status == "not_applicable" and reason == "trigger_absent_complete":
         return not_applicable_customer_message(rule_id=rule_id, reason_code=reason)[0]
     return None
 
@@ -54,10 +54,10 @@ def build_history_documents(items: list[dict]) -> dict:
     for item in items:
         _require(type(item) is dict)
         rule_id, status = item.get("rule_id"), item.get("status")
-        _require(type(rule_id) is str and re.fullmatch(r"LX0609-[0-9]{3}", rule_id) is not None)
+        _require(type(rule_id) is str and re.fullmatch(r"LX0609-(?!00)[0-9]{2}-(?!00)[0-9]{2}-(?!00)[0-9]{2}", rule_id) is not None)
         _require(type(status) is str and status in STATUSES)
-        reason = "trigger_absent_complete" if rule_id == "LX0609-032" and item.get("reason_code") == "trigger_absent_complete" else None
-        facts = _facts(item.get("customer_display_facts")) if rule_id == "LX0609-066" else {}
+        reason = "trigger_absent_complete" if rule_id == "LX0609-04-03-01" and item.get("reason_code") == "trigger_absent_complete" else None
+        facts = _facts(item.get("customer_display_facts")) if rule_id == "LX0609-04-05-03" else {}
         rendered = _projection(rule_id, status, reason, facts)
         # 仅当原文逐字等于本地固定文案投影时保留；其余自由正文全部不导出。
         original = rendered if rendered and item.get("findings") == rendered else None
@@ -120,11 +120,11 @@ def validate_history(documents: dict) -> dict:
         _require(type(source) is dict and set(source) == {"rule_id", "display_facts"})
         _require(type(result) is dict and set(result) == {"rule_id", "status", "reason_code", "findings"})
         rule_id = source["rule_id"]
-        _require(type(rule_id) is str and re.fullmatch(r"LX0609-[0-9]{3}", rule_id) is not None)
+        _require(type(rule_id) is str and re.fullmatch(r"LX0609-(?!00)[0-9]{2}-(?!00)[0-9]{2}-(?!00)[0-9]{2}", rule_id) is not None)
         _require(result["rule_id"] == rule_id and type(result["status"]) is str and result["status"] in STATUSES)
-        _require(result["reason_code"] is None or (rule_id == "LX0609-032" and result["reason_code"] == "trigger_absent_complete"))
+        _require(result["reason_code"] is None or (rule_id == "LX0609-04-03-01" and result["reason_code"] == "trigger_absent_complete"))
         facts = source["display_facts"]
-        _require(type(facts) is dict and (not facts or (rule_id == "LX0609-066" and facts == _facts(facts) and set(facts) == FACT_KEYS)))
+        _require(type(facts) is dict and (not facts or (rule_id == "LX0609-04-05-03" and facts == _facts(facts) and set(facts) == FACT_KEYS)))
         rendered = _projection(rule_id, result["status"], result["reason_code"], facts)
         _require(result["findings"] is None or (rendered is not None and result["findings"] == rendered))
         ids.append(rule_id)

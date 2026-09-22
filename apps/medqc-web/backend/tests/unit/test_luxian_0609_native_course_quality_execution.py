@@ -124,7 +124,7 @@ def _severity_session(
         )
 
     return build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-008", "LX0609-009"),
+        selected_rule_ids=("LX0609-02-01-04", "LX0609-02-01-05"),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -139,8 +139,8 @@ def _severity_session(
 
 async def _run_typed_severity(session):
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-008", "LX0609-009"),
-        decision_rule_ids=("LX0609-008", "LX0609-009"),
+        rule_ids=("LX0609-02-01-04", "LX0609-02-01-05"),
+        decision_rule_ids=("LX0609-02-01-04", "LX0609-02-01-05"),
         wrapper_rules=[],
         evidence_payload=None,
         institute_id="I",
@@ -153,7 +153,7 @@ async def _run_typed_severity(session):
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-008", "LX0609-009"),
+        expected_rule_ids=("LX0609-02-01-04", "LX0609-02-01-05"),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
@@ -162,9 +162,9 @@ async def _run_typed_severity(session):
 
 async def _run_typed_009(session, client):
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-009",),
-        decision_rule_ids=("LX0609-009",),
-        wrapper_rules=[_wrapper("LX0609-009")],
+        rule_ids=("LX0609-02-01-05",),
+        decision_rule_ids=("LX0609-02-01-05",),
+        wrapper_rules=[_wrapper("LX0609-02-01-05")],
         evidence_payload=None,
         institute_id="I",
         patient_id="P",
@@ -176,7 +176,7 @@ async def _run_typed_009(session, client):
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-009",),
+        expected_rule_ids=("LX0609-02-01-05",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
@@ -336,7 +336,7 @@ class _UnexpectedLLMClient:
 
     async def generate(self, prompt: str, **_: Any) -> dict:
         self.prompts.append(prompt)
-        raise AssertionError("LX0609-017 不得调用 LLM")
+        raise AssertionError("LX0609-12-01-02 不得调用 LLM")
 
 
 class _CopyReviewClient:
@@ -425,7 +425,7 @@ async def test_course_017_consumes_shared_material_without_live_reader(
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-017",),
+        selected_rule_ids=("LX0609-12-01-02",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -446,8 +446,8 @@ async def test_course_017_consumes_shared_material_without_live_reader(
     )
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-017",),
-        wrapper_rules=[_wrapper("LX0609-017")],
+        rule_ids=("LX0609-12-01-02",),
+        wrapper_rules=[_wrapper("LX0609-12-01-02")],
         evidence_payload=_payload(documents={}),
         institute_id="I",
         patient_id="P",
@@ -496,7 +496,7 @@ async def test_typed_017_strong_copy_emits_bound_decision_without_customer_dto(
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-017",),
+        selected_rule_ids=("LX0609-12-01-02",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -514,9 +514,9 @@ async def test_typed_017_strong_copy_emits_bound_decision_without_customer_dto(
     )
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-017",),
-        decision_rule_ids=("LX0609-017",),
-        wrapper_rules=[_wrapper("LX0609-017")],
+        rule_ids=("LX0609-12-01-02",),
+        decision_rule_ids=("LX0609-12-01-02",),
+        wrapper_rules=[_wrapper("LX0609-12-01-02")],
         evidence_payload=_payload(
             documents={"daily_course_record": [_row("stale payload must not win")]}
         ),
@@ -532,7 +532,7 @@ async def test_typed_017_strong_copy_emits_bound_decision_without_customer_dto(
     assert result.results == ()
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-017",),
+        expected_rule_ids=("LX0609-12-01-02",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
@@ -540,7 +540,7 @@ async def test_typed_017_strong_copy_emits_bound_decision_without_customer_dto(
     assert reduced[0].fact_refs
     assert result.customer_display_facts == (
         (
-            "LX0609-017",
+            "LX0609-12-01-02",
             {
                 "failure_kind": "copy_similarity_threshold_exceeded",
                 "copy_similarity": 1.0,
@@ -621,7 +621,7 @@ async def test_typed_017_preserves_source_query_state_without_model(
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-017",),
+        selected_rule_ids=("LX0609-12-01-02",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -643,9 +643,9 @@ async def test_typed_017_preserves_source_query_state_without_model(
         ]
     )
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-017",),
-        decision_rule_ids=("LX0609-017",),
-        wrapper_rules=[_wrapper("LX0609-017")],
+        rule_ids=("LX0609-12-01-02",),
+        decision_rule_ids=("LX0609-12-01-02",),
+        wrapper_rules=[_wrapper("LX0609-12-01-02")],
         evidence_payload=None,
         institute_id="I",
         patient_id="P",
@@ -657,7 +657,7 @@ async def test_typed_017_preserves_source_query_state_without_model(
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-017",),
+        expected_rule_ids=("LX0609-12-01-02",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
@@ -697,7 +697,7 @@ async def test_typed_017_python_path_matches_raw_state_and_keeps_privacy():
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-017",),
+        selected_rule_ids=("LX0609-12-01-02",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -708,8 +708,8 @@ async def test_typed_017_python_path_matches_raw_state_and_keeps_privacy():
     raw_client = _CopyReviewClient("substantial_copy")
     typed_client = _CopyReviewClient("substantial_copy")
     raw = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-017",),
-        wrapper_rules=[_wrapper("LX0609-017")],
+        rule_ids=("LX0609-12-01-02",),
+        wrapper_rules=[_wrapper("LX0609-12-01-02")],
         evidence_payload=_payload(documents={}),
         institute_id="I",
         patient_id="P",
@@ -719,9 +719,9 @@ async def test_typed_017_python_path_matches_raw_state_and_keeps_privacy():
         evidence_materials=session.materials,
     )
     typed = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-017",),
-        decision_rule_ids=("LX0609-017",),
-        wrapper_rules=[_wrapper("LX0609-017")],
+        rule_ids=("LX0609-12-01-02",),
+        decision_rule_ids=("LX0609-12-01-02",),
+        wrapper_rules=[_wrapper("LX0609-12-01-02")],
         evidence_payload=_payload(
             documents={"daily_course_record": [_row("stale payload is irrelevant")]}
         ),
@@ -735,7 +735,7 @@ async def test_typed_017_python_path_matches_raw_state_and_keeps_privacy():
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=typed.decisions,
-        expected_rule_ids=("LX0609-017",),
+        expected_rule_ids=("LX0609-12-01-02",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
@@ -766,7 +766,7 @@ async def test_course_017_preserves_truncated_material_reason() -> None:
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-017",),
+        selected_rule_ids=("LX0609-12-01-02",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -777,8 +777,8 @@ async def test_course_017_preserves_truncated_material_reason() -> None:
     )
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-017",),
-        wrapper_rules=[_wrapper("LX0609-017")],
+        rule_ids=("LX0609-12-01-02",),
+        wrapper_rules=[_wrapper("LX0609-12-01-02")],
         evidence_payload=_payload(documents={}),
         institute_id="I",
         patient_id="P",
@@ -829,7 +829,7 @@ async def test_course_007_consumes_snapshot_fact_without_live_queries(
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-007",),
+        selected_rule_ids=("LX0609-02-01-03",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -854,7 +854,7 @@ async def test_course_007_consumes_snapshot_fact_without_live_queries(
     )
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-007",),
+        rule_ids=("LX0609-02-01-03",),
         wrapper_rules=[],
         evidence_payload=_payload(documents={}),
         institute_id="I",
@@ -897,7 +897,7 @@ async def test_course_007_emits_snapshot_bound_rule_decision_without_legacy_resu
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-007",),
+        selected_rule_ids=("LX0609-02-01-03",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -916,8 +916,8 @@ async def test_course_007_emits_snapshot_bound_rule_decision_without_legacy_resu
     )
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-007",),
-        decision_rule_ids=("LX0609-007",),
+        rule_ids=("LX0609-02-01-03",),
+        decision_rule_ids=("LX0609-02-01-03",),
         wrapper_rules=[],
         evidence_payload=None,
         institute_id="I",
@@ -930,10 +930,10 @@ async def test_course_007_emits_snapshot_bound_rule_decision_without_legacy_resu
     )
 
     assert result.results == ()
-    assert [item.rule_id for item in result.decisions] == ["LX0609-007"]
+    assert [item.rule_id for item in result.decisions] == ["LX0609-02-01-03"]
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-007",),
+        expected_rule_ids=("LX0609-02-01-03",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
@@ -989,7 +989,7 @@ async def test_course_007_uses_admission_to_first_record_maturity_boundary(
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-007",),
+        selected_rule_ids=("LX0609-02-01-03",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -999,8 +999,8 @@ async def test_course_007_uses_admission_to_first_record_maturity_boundary(
         row_reader=read,
     )
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-007",),
-        decision_rule_ids=("LX0609-007",),
+        rule_ids=("LX0609-02-01-03",),
+        decision_rule_ids=("LX0609-02-01-03",),
         wrapper_rules=[],
         evidence_payload=None,
         institute_id="I",
@@ -1013,7 +1013,7 @@ async def test_course_007_uses_admission_to_first_record_maturity_boundary(
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-007",),
+        expected_rule_ids=("LX0609-02-01-03",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
@@ -1046,7 +1046,7 @@ async def test_course_007_missing_candidate_time_only_blocks_a_mature_empty_wind
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-007",),
+        selected_rule_ids=("LX0609-02-01-03",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -1056,8 +1056,8 @@ async def test_course_007_missing_candidate_time_only_blocks_a_mature_empty_wind
         row_reader=read,
     )
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-007",),
-        decision_rule_ids=("LX0609-007",),
+        rule_ids=("LX0609-02-01-03",),
+        decision_rule_ids=("LX0609-02-01-03",),
         wrapper_rules=[],
         evidence_payload=None,
         institute_id="I",
@@ -1070,7 +1070,7 @@ async def test_course_007_missing_candidate_time_only_blocks_a_mature_empty_wind
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-007",),
+        expected_rule_ids=("LX0609-02-01-03",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
@@ -1104,7 +1104,7 @@ async def test_course_007_missing_candidate_time_blocks_an_otherwise_overdue_gap
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-007",),
+        selected_rule_ids=("LX0609-02-01-03",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -1114,8 +1114,8 @@ async def test_course_007_missing_candidate_time_blocks_an_otherwise_overdue_gap
         row_reader=read,
     )
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-007",),
-        decision_rule_ids=("LX0609-007",),
+        rule_ids=("LX0609-02-01-03",),
+        decision_rule_ids=("LX0609-02-01-03",),
         wrapper_rules=[],
         evidence_payload=None,
         institute_id="I",
@@ -1128,7 +1128,7 @@ async def test_course_007_missing_candidate_time_blocks_an_otherwise_overdue_gap
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-007",),
+        expected_rule_ids=("LX0609-02-01-03",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
@@ -1164,7 +1164,7 @@ async def test_course_007_does_not_count_explicit_non_round_course_document() ->
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-007",),
+        selected_rule_ids=("LX0609-02-01-03",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -1174,8 +1174,8 @@ async def test_course_007_does_not_count_explicit_non_round_course_document() ->
         row_reader=read,
     )
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-007",),
-        decision_rule_ids=("LX0609-007",),
+        rule_ids=("LX0609-02-01-03",),
+        decision_rule_ids=("LX0609-02-01-03",),
         wrapper_rules=[],
         evidence_payload=None,
         institute_id="I",
@@ -1188,7 +1188,7 @@ async def test_course_007_does_not_count_explicit_non_round_course_document() ->
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-007",),
+        expected_rule_ids=("LX0609-02-01-03",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
@@ -1234,7 +1234,7 @@ async def test_course_007_uses_date_only_evaluation_horizon_conservatively(
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-007",),
+        selected_rule_ids=("LX0609-02-01-03",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -1245,8 +1245,8 @@ async def test_course_007_uses_date_only_evaluation_horizon_conservatively(
     )
     assert "horizon_datetime" not in session.materials.rows("evaluation_context.horizon")[0]
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-007",),
-        decision_rule_ids=("LX0609-007",),
+        rule_ids=("LX0609-02-01-03",),
+        decision_rule_ids=("LX0609-02-01-03",),
         wrapper_rules=[],
         evidence_payload=None,
         institute_id="I",
@@ -1259,7 +1259,7 @@ async def test_course_007_uses_date_only_evaluation_horizon_conservatively(
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-007",),
+        expected_rule_ids=("LX0609-02-01-03",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
@@ -1267,7 +1267,7 @@ async def test_course_007_uses_date_only_evaluation_horizon_conservatively(
     assert reduced[0].final_state is expected_state
     assert reduced[0].reason_code == expected_reason
     if expected_state is CustomerFinalState.NON_COMPLIANT:
-        facts = dict(result.customer_display_facts)["LX0609-007"]
+        facts = dict(result.customer_display_facts)["LX0609-02-01-03"]
         assert facts["interval_end_source"] == "evaluation_context.horizon"
         assert facts["interval_end_date"] == evaluation_as_of_date
         assert facts["interval_end_precision"] == "date"
@@ -1294,7 +1294,7 @@ async def test_course_007_date_only_horizon_does_not_hide_exact_internal_gap() -
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-007",),
+        selected_rule_ids=("LX0609-02-01-03",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -1304,8 +1304,8 @@ async def test_course_007_date_only_horizon_does_not_hide_exact_internal_gap() -
         row_reader=read,
     )
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-007",),
-        decision_rule_ids=("LX0609-007",),
+        rule_ids=("LX0609-02-01-03",),
+        decision_rule_ids=("LX0609-02-01-03",),
         wrapper_rules=[],
         evidence_payload=None,
         institute_id="I",
@@ -1318,7 +1318,7 @@ async def test_course_007_date_only_horizon_does_not_hide_exact_internal_gap() -
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-007",),
+        expected_rule_ids=("LX0609-02-01-03",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
@@ -1351,7 +1351,7 @@ async def test_course_007_date_only_horizon_with_same_day_record_is_data_gap() -
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-007",),
+        selected_rule_ids=("LX0609-02-01-03",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -1361,8 +1361,8 @@ async def test_course_007_date_only_horizon_with_same_day_record_is_data_gap() -
         row_reader=read,
     )
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-007",),
-        decision_rule_ids=("LX0609-007",),
+        rule_ids=("LX0609-02-01-03",),
+        decision_rule_ids=("LX0609-02-01-03",),
         wrapper_rules=[],
         evidence_payload=None,
         institute_id="I",
@@ -1375,7 +1375,7 @@ async def test_course_007_date_only_horizon_with_same_day_record_is_data_gap() -
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-007",),
+        expected_rule_ids=("LX0609-02-01-03",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
@@ -1409,7 +1409,7 @@ async def test_course_007_checks_last_record_to_evaluation_horizon() -> None:
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-007",),
+        selected_rule_ids=("LX0609-02-01-03",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -1419,8 +1419,8 @@ async def test_course_007_checks_last_record_to_evaluation_horizon() -> None:
         row_reader=read,
     )
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-007",),
-        decision_rule_ids=("LX0609-007",),
+        rule_ids=("LX0609-02-01-03",),
+        decision_rule_ids=("LX0609-02-01-03",),
         wrapper_rules=[],
         evidence_payload=None,
         institute_id="I",
@@ -1433,7 +1433,7 @@ async def test_course_007_checks_last_record_to_evaluation_horizon() -> None:
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-007",),
+        expected_rule_ids=("LX0609-02-01-03",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
@@ -1496,7 +1496,7 @@ async def test_course_007_keeps_real_document_id_at_boundary_interval(
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-007",),
+        selected_rule_ids=("LX0609-02-01-03",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -1506,8 +1506,8 @@ async def test_course_007_keeps_real_document_id_at_boundary_interval(
         row_reader=read,
     )
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-007",),
-        decision_rule_ids=("LX0609-007",),
+        rule_ids=("LX0609-02-01-03",),
+        decision_rule_ids=("LX0609-02-01-03",),
         wrapper_rules=[],
         evidence_payload=None,
         institute_id="I",
@@ -1520,14 +1520,14 @@ async def test_course_007_keeps_real_document_id_at_boundary_interval(
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-007",),
+        expected_rule_ids=("LX0609-02-01-03",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
 
     assert scenario
     assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
-    facts = dict(result.customer_display_facts)["LX0609-007"]
+    facts = dict(result.customer_display_facts)["LX0609-02-01-03"]
     assert facts[expected_document_field[0]] == expected_document_field[1]
     if scenario == "admission_to_first":
         assert "interval_start_document_id" not in facts
@@ -1645,7 +1645,7 @@ async def test_course_007_typed_truth_table_is_python_only_and_fail_closed(
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-007",),
+        selected_rule_ids=("LX0609-02-01-03",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -1656,8 +1656,8 @@ async def test_course_007_typed_truth_table_is_python_only_and_fail_closed(
         additional_source_keys=("daily_course_record", "senior_course_record"),
     )
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-007",),
-        decision_rule_ids=("LX0609-007",),
+        rule_ids=("LX0609-02-01-03",),
+        decision_rule_ids=("LX0609-02-01-03",),
         wrapper_rules=[],
         evidence_payload=None,
         institute_id="I",
@@ -1669,7 +1669,7 @@ async def test_course_007_typed_truth_table_is_python_only_and_fail_closed(
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-007",),
+        expected_rule_ids=("LX0609-02-01-03",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
@@ -1681,7 +1681,7 @@ async def test_course_007_typed_truth_table_is_python_only_and_fail_closed(
     assert reduced[0].reason_code == expected_reason
     assert "2026-01" not in repr(result.decisions)
     if scenario == "over_72h":
-        assert result.customer_display_facts == (("LX0609-007", {
+        assert result.customer_display_facts == (("LX0609-02-01-03", {
             "failure_kind": "course_record_interval_over_72h",
             "interval_start_source": "daily_course_record",
             "interval_end_source": "daily_course_record",
@@ -1700,7 +1700,7 @@ async def test_course_007_typed_truth_table_is_python_only_and_fail_closed(
         }),)
         assert "首次查房" not in repr(result.customer_display_facts)
     elif scenario == "submit_time":
-        assert result.customer_display_facts == (("LX0609-007", {
+        assert result.customer_display_facts == (("LX0609-02-01-03", {
             "failure_kind": "course_record_interval_within_72h",
             "interval_start_source": "daily_course_record",
             "interval_end_source": "daily_course_record",
@@ -1716,14 +1716,14 @@ async def test_course_007_typed_truth_table_is_python_only_and_fail_closed(
             "recorded_dates": ["2026-01-01", "2026-01-02"],
         }),)
     elif scenario == "unstable":
-        assert result.customer_display_facts == (("LX0609-007", {
+        assert result.customer_display_facts == (("LX0609-02-01-03", {
             "failure_kind": "unstable_patient_order_present",
             "stable_course_rule_applicable": False,
         }),)
     elif scenario == "missing_time":
         assert result.customer_display_facts == ()
     elif scenario in {"unavailable", "truncated"}:
-        assert dict(result.customer_display_facts)["LX0609-007"] == {
+        assert dict(result.customer_display_facts)["LX0609-02-01-03"] == {
             "failure_kind": "course_interval_source_gap",
             "gap_source": "daily_course_record",
             "gap_kind": scenario,
@@ -1927,7 +1927,7 @@ async def test_2496813_009_daily_frequency_and_semantics_are_both_compliant():
     assert reduced[0].final_state is CustomerFinalState.COMPLIANT
     assert reduced[0].reason_code == "requirement_satisfied"
     assert result.llm_call_count == 0
-    assert dict(result.customer_display_facts)["LX0609-009"] == {
+    assert dict(result.customer_display_facts)["LX0609-02-01-05"] == {
         "failure_kind": "critical_daily_record_coverage_satisfied",
         "severity": "critical",
         "evaluated_scope": "critical_daily_course_coverage",
@@ -2307,7 +2307,7 @@ async def test_course_008_display_uses_largest_adjacent_gap_not_active_span_leng
     result, reduced = await _run_typed_severity(session)
 
     assert reduced[0].final_state is CustomerFinalState.COMPLIANT
-    assert dict(result.customer_display_facts)["LX0609-008"]["maximum_gap_days"] == 2
+    assert dict(result.customer_display_facts)["LX0609-02-01-04"]["maximum_gap_days"] == 2
 
 
 @pytest.mark.asyncio
@@ -2431,7 +2431,7 @@ async def test_course_008_009_emit_only_safe_missing_interval_facts() -> None:
     serious_result, serious_reduced = await _run_typed_severity(serious_session)
     assert serious_reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
     assert serious_result.customer_display_facts[0] == (
-        "LX0609-008",
+        "LX0609-02-01-04",
         {
             "failure_kind": "severity_course_gap_exceeded",
             "severity": "serious",
@@ -2460,7 +2460,7 @@ async def test_course_008_009_emit_only_safe_missing_interval_facts() -> None:
     critical_result, critical_reduced = await _run_typed_severity(critical_session)
     assert critical_reduced[1].final_state is CustomerFinalState.NON_COMPLIANT
     assert critical_result.customer_display_facts[0] == (
-        "LX0609-009",
+        "LX0609-02-01-05",
         {
             "failure_kind": "critical_daily_record_missing",
             "severity": "critical",
@@ -2498,9 +2498,9 @@ async def test_course_009_daily_complete_without_external_candidates_needs_no_mo
         evaluation_as_of_date="2026-01-03",
     )
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-009",),
-        decision_rule_ids=("LX0609-009",),
-        wrapper_rules=[_wrapper("LX0609-009")],
+        rule_ids=("LX0609-02-01-05",),
+        decision_rule_ids=("LX0609-02-01-05",),
+        wrapper_rules=[_wrapper("LX0609-02-01-05")],
         evidence_payload=None,
         institute_id="I",
         patient_id="P",
@@ -2512,7 +2512,7 @@ async def test_course_009_daily_complete_without_external_candidates_needs_no_mo
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-009",),
+        expected_rule_ids=("LX0609-02-01-05",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
@@ -2809,7 +2809,7 @@ async def test_course_009_course_record_is_documentation_not_a_model_candidate()
     assert reduced[0].reason_code == "requirement_satisfied"
     assert result.llm_call_count == 0
     assert client.prompts == []
-    facts = dict(result.customer_display_facts)["LX0609-009"]
+    facts = dict(result.customer_display_facts)["LX0609-02-01-05"]
     assert facts["failure_kind"] == "critical_daily_record_coverage_satisfied"
 
 
@@ -2844,7 +2844,7 @@ async def test_course_009_unknown_model_event_ref_fails_closed() -> None:
     assert reduced[0].final_state is CustomerFinalState.TECHNICAL_ERROR
     assert reduced[0].reason_code == "model_invalid_output"
     assert result.llm_call_count == 1
-    assert dict(result.customer_display_facts)["LX0609-009"]["failure_kind"] == (
+    assert dict(result.customer_display_facts)["LX0609-02-01-05"]["failure_kind"] == (
         "critical_daily_record_coverage_satisfied"
     )
 
@@ -3156,9 +3156,9 @@ async def test_course_009_semantic_prompt_ignores_unbound_payload_text() -> None
     client = _Client([{"events": []}])
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-009",),
-        decision_rule_ids=("LX0609-009",),
-        wrapper_rules=[_wrapper("LX0609-009")],
+        rule_ids=("LX0609-02-01-05",),
+        decision_rule_ids=("LX0609-02-01-05",),
+        wrapper_rules=[_wrapper("LX0609-02-01-05")],
         evidence_payload=None,
         institute_id="I",
         patient_id="P",
@@ -3170,7 +3170,7 @@ async def test_course_009_semantic_prompt_ignores_unbound_payload_text() -> None
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-009",),
+        expected_rule_ids=("LX0609-02-01-05",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
@@ -3294,9 +3294,9 @@ async def test_course_009_missing_day_stays_python_only_with_client_available() 
     client = _Client([{"semantic_state": "satisfied"}])
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-009",),
-        decision_rule_ids=("LX0609-009",),
-        wrapper_rules=[_wrapper("LX0609-009")],
+        rule_ids=("LX0609-02-01-05",),
+        decision_rule_ids=("LX0609-02-01-05",),
+        wrapper_rules=[_wrapper("LX0609-02-01-05")],
         evidence_payload=None,
         institute_id="I",
         patient_id="P",
@@ -3308,7 +3308,7 @@ async def test_course_009_missing_day_stays_python_only_with_client_available() 
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-009",),
+        expected_rule_ids=("LX0609-02-01-05",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
@@ -3334,9 +3334,9 @@ async def test_course_008_remains_python_only_with_client_available() -> None:
     client = _Client([{"semantic_state": "defect"}])
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-008",),
-        decision_rule_ids=("LX0609-008",),
-        wrapper_rules=[_wrapper("LX0609-008")],
+        rule_ids=("LX0609-02-01-04",),
+        decision_rule_ids=("LX0609-02-01-04",),
+        wrapper_rules=[_wrapper("LX0609-02-01-04")],
         evidence_payload=None,
         institute_id="I",
         patient_id="P",
@@ -3348,7 +3348,7 @@ async def test_course_008_remains_python_only_with_client_available() -> None:
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-008",),
+        expected_rule_ids=("LX0609-02-01-04",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
@@ -3381,9 +3381,9 @@ async def test_course_009_time_only_phase_does_not_project_text_to_llm() -> None
     }
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-009",),
-        decision_rule_ids=("LX0609-009",),
-        wrapper_rules=[_wrapper("LX0609-009")],
+        rule_ids=("LX0609-02-01-05",),
+        decision_rule_ids=("LX0609-02-01-05",),
+        wrapper_rules=[_wrapper("LX0609-02-01-05")],
         evidence_payload=_payload(
             documents={key: [_row(marker)] for key, marker in forbidden.items()}
         ),
@@ -3495,7 +3495,7 @@ async def test_course_009_real_semantic_capacity_limit_is_not_source_truncated()
 
     result, reduced = await _run_typed_009(session, client)
     canonical = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-009"}],
+        wrapper_rules=[{"rule_id": "LX0609-02-01-05"}],
         execution_results=[],
         reduced_decisions=reduced,
         customer_display_facts=result.customer_display_facts,
@@ -3555,7 +3555,7 @@ async def test_course_009_explicit_external_change_within_24h_is_compliant() -> 
     assert "PRIVATE-" not in client.prompts[0]
     assert "[external_event_ref=E01]" in client.prompts[0]
     assert "[course_event_ref=C02]" in client.prompts[0]
-    facts = dict(result.customer_display_facts)["LX0609-009"]
+    facts = dict(result.customer_display_facts)["LX0609-02-01-05"]
     assert facts["failure_kind"] == "critical_change_course_timely"
     assert facts["change_events"][0]["threshold_hours"] == 24
 
@@ -3587,7 +3587,7 @@ async def test_course_009_uses_authoritative_event_time_without_model_echo() -> 
 
     assert reduced[0].final_state is CustomerFinalState.COMPLIANT
     assert reduced[0].reason_code == "requirement_satisfied"
-    facts = dict(result.customer_display_facts)["LX0609-009"]
+    facts = dict(result.customer_display_facts)["LX0609-02-01-05"]
     assert facts["change_events"][0]["event_time"] == "2026-01-02 10:00:00"
 
 
@@ -3646,7 +3646,7 @@ async def test_course_009_explicit_change_without_course_within_24h_is_non_compl
     assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
     assert reduced[0].reason_code == "requirement_violated"
     assert result.llm_call_count == 1
-    assert dict(result.customer_display_facts)["LX0609-009"]["unmet_events"][0]["event_ref"] == "E01"
+    assert dict(result.customer_display_facts)["LX0609-02-01-05"]["unmet_events"][0]["event_ref"] == "E01"
 
 
 @pytest.mark.asyncio
@@ -3673,7 +3673,7 @@ async def test_course_009_change_deadline_is_delivered_through_production_canoni
 
     result, reduced = await _run_typed_009(session, client)
     canonical = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-009"}],
+        wrapper_rules=[{"rule_id": "LX0609-02-01-05"}],
         execution_results=[],
         reduced_decisions=reduced,
         customer_display_facts=result.customer_display_facts,
@@ -3708,7 +3708,7 @@ async def test_course_009_change_deadline_is_delivered_through_production_canoni
 async def test_course_009_missing_change_time_and_unresolved_course_are_delivered_as_data_gaps() -> None:
     def canonical_for() -> dict:
         return aggregate_luxian_0609_results(
-            wrapper_rules=[{"rule_id": "LX0609-009"}],
+            wrapper_rules=[{"rule_id": "LX0609-02-01-05"}],
             execution_results=[],
             reduced_decisions=reduced,
             customer_display_facts=result.customer_display_facts,
@@ -3792,7 +3792,7 @@ async def test_course_009_precise_horizon_before_change_24h_deadline_is_not_matu
         "corresponding_course_ref": "",
     }]}]))
     canonical = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-009"}],
+        wrapper_rules=[{"rule_id": "LX0609-02-01-05"}],
         execution_results=[],
         reduced_decisions=reduced,
         customer_display_facts=result.customer_display_facts,
@@ -3902,7 +3902,7 @@ async def test_course_007_source_failure_is_data_gap_without_live_query(
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-007",),
+        selected_rule_ids=("LX0609-02-01-03",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -3920,7 +3920,7 @@ async def test_course_007_source_failure_is_data_gap_without_live_query(
     )
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-007",),
+        rule_ids=("LX0609-02-01-03",),
         wrapper_rules=[],
         evidence_payload=_payload(documents={}),
         institute_id="I",
@@ -3942,26 +3942,26 @@ async def test_course_007_source_failure_is_data_gap_without_live_query(
 @pytest.mark.asyncio
 async def test_selected_rules_keep_customer_catalog_order_and_missing_projection_is_data_gap():
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-018", "LX0609-007", "LX0609-016"),
+        rule_ids=("LX0609-01-01-02", "LX0609-02-01-03", "LX0609-12-01-01"),
         wrapper_rules=[],
         evidence_payload=None,
         llm_client=None,
     )
 
     assert course.COURSE_QUALITY_RULE_IDS == (
-        "LX0609-007",
-        "LX0609-008",
-        "LX0609-009",
-        "LX0609-016",
-        "LX0609-017",
-        "LX0609-018",
-        "LX0609-077",
+        "LX0609-02-01-03",
+        "LX0609-02-01-04",
+        "LX0609-02-01-05",
+        "LX0609-12-01-01",
+        "LX0609-12-01-02",
+        "LX0609-01-01-02",
+        "LX0609-01-02-02",
     )
     assert course.EXECUTOR_KEY == "course_quality"
     assert [item["rule_id"] for item in result.results] == [
-        "LX0609-007",
-        "LX0609-016",
-        "LX0609-018",
+        "LX0609-02-01-03",
+        "LX0609-12-01-01",
+        "LX0609-01-01-02",
     ]
     assert [item["status"] for item in result.results] == ["data_gap"] * 3
     assert result.llm_call_count == 0
@@ -3999,8 +3999,8 @@ async def test_007_uses_only_daily_and_senior_record_time_without_model(
     client = _Client([{"is_compliant": False}])
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-007",),
-        wrapper_rules=[_wrapper("LX0609-007")],
+        rule_ids=("LX0609-02-01-03",),
+        wrapper_rules=[_wrapper("LX0609-02-01-03")],
         evidence_payload=_payload(
             documents={
                 "first_course_record": [_row("不得计入007", "2026-06-02 09:00:00")],
@@ -4038,8 +4038,8 @@ async def test_007_accepts_authoritative_record_datetime_fallback_without_model(
     )
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-007",),
-        wrapper_rules=[_wrapper("LX0609-007")],
+        rule_ids=("LX0609-02-01-03",),
+        wrapper_rules=[_wrapper("LX0609-02-01-03")],
         evidence_payload=_payload(documents={}),
         institute_id="safe-institute",
         patient_id="safe-patient",
@@ -4065,8 +4065,8 @@ async def test_007_unstable_order_is_not_applicable_without_reading_course_rows(
     )
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-007",),
-        wrapper_rules=[_wrapper("LX0609-007")],
+        rule_ids=("LX0609-02-01-03",),
+        wrapper_rules=[_wrapper("LX0609-02-01-03")],
         evidence_payload=_payload(documents={}),
         institute_id="safe-institute",
         patient_id="safe-patient",
@@ -4092,8 +4092,8 @@ async def test_007_missing_authoritative_record_times_is_data_gap_without_model(
     )
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-007",),
-        wrapper_rules=[_wrapper("LX0609-007")],
+        rule_ids=("LX0609-02-01-03",),
+        wrapper_rules=[_wrapper("LX0609-02-01-03")],
         evidence_payload=_payload(documents={}),
         institute_id="safe-institute",
         patient_id="safe-patient",
@@ -4133,8 +4133,8 @@ async def test_007_substantive_record_without_authoritative_time_blocks_non_comp
     client = _Client([])
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-007",),
-        wrapper_rules=[_wrapper("LX0609-007")],
+        rule_ids=("LX0609-02-01-03",),
+        wrapper_rules=[_wrapper("LX0609-02-01-03")],
         evidence_payload=_payload(documents={}),
         institute_id="safe-institute",
         patient_id="safe-patient",
@@ -4175,8 +4175,8 @@ async def test_007_substantive_record_without_time_does_not_downgrade_compliant_
     )
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-007",),
-        wrapper_rules=[_wrapper("LX0609-007")],
+        rule_ids=("LX0609-02-01-03",),
+        wrapper_rules=[_wrapper("LX0609-02-01-03")],
         evidence_payload=_payload(documents={}),
         institute_id="safe-institute",
         patient_id="safe-patient",
@@ -4193,8 +4193,8 @@ async def test_008_legacy_timeline_keeps_first_course_and_rescue_sources() -> No
     client = _Client([{"is_compliant": True}])
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-008",),
-        wrapper_rules=[_wrapper("LX0609-008")],
+        rule_ids=("LX0609-02-01-04",),
+        wrapper_rules=[_wrapper("LX0609-02-01-04")],
         evidence_payload=_payload(
             documents={
                 "first_course_record": [
@@ -4226,8 +4226,8 @@ async def test_008_009_require_current_visit_serious_or_critical_strong_fact():
     client = _Client([{"is_compliant": False}])
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-008", "LX0609-009"),
-        wrapper_rules=[_wrapper("LX0609-008"), _wrapper("LX0609-009")],
+        rule_ids=("LX0609-02-01-04", "LX0609-02-01-05"),
+        wrapper_rules=[_wrapper("LX0609-02-01-04"), _wrapper("LX0609-02-01-05")],
         evidence_payload=_payload(
             documents=documents,
             facts=[
@@ -4248,8 +4248,8 @@ async def test_008_009_require_current_visit_serious_or_critical_strong_fact():
 
     critical_client = _Client([{"is_compliant": True}])
     critical = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-008", "LX0609-009"),
-        wrapper_rules=[_wrapper("LX0609-008"), _wrapper("LX0609-009")],
+        rule_ids=("LX0609-02-01-04", "LX0609-02-01-05"),
+        wrapper_rules=[_wrapper("LX0609-02-01-04"), _wrapper("LX0609-02-01-05")],
         evidence_payload=_payload(
             documents=documents,
             facts=[
@@ -4267,8 +4267,8 @@ async def test_008_009_require_current_visit_serious_or_critical_strong_fact():
     assert "当前就诊存在病危医嘱" in critical_client.prompts[0]
 
     silence = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-008", "LX0609-009"),
-        wrapper_rules=[_wrapper("LX0609-008"), _wrapper("LX0609-009")],
+        rule_ids=("LX0609-02-01-04", "LX0609-02-01-05"),
+        wrapper_rules=[_wrapper("LX0609-02-01-04"), _wrapper("LX0609-02-01-05")],
         evidence_payload=_payload(documents=documents),
         llm_client=_Client([]),
     )
@@ -4276,8 +4276,8 @@ async def test_008_009_require_current_visit_serious_or_critical_strong_fact():
     assert silence.llm_call_count == 0
 
     explicit_negative = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-008", "LX0609-009"),
-        wrapper_rules=[_wrapper("LX0609-008"), _wrapper("LX0609-009")],
+        rule_ids=("LX0609-02-01-04", "LX0609-02-01-05"),
+        wrapper_rules=[_wrapper("LX0609-02-01-04"), _wrapper("LX0609-02-01-05")],
         evidence_payload=_payload(
             documents=documents,
             facts=[
@@ -4297,8 +4297,8 @@ async def test_008_009_require_current_visit_serious_or_critical_strong_fact():
 @pytest.mark.asyncio
 async def test_016_requires_two_comparable_documents_before_model():
     missing = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-016",),
-        wrapper_rules=[_wrapper("LX0609-016")],
+        rule_ids=("LX0609-12-01-01",),
+        wrapper_rules=[_wrapper("LX0609-12-01-01")],
         evidence_payload=_payload(documents={"admission_record": [_row("入院记录现病史。")]}),
         llm_client=_Client([]),
     )
@@ -4307,8 +4307,8 @@ async def test_016_requires_two_comparable_documents_before_model():
 
     client = _Client([{"is_compliant": False}])
     complete = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-016",),
-        wrapper_rules=[_wrapper("LX0609-016")],
+        rule_ids=("LX0609-12-01-01",),
+        wrapper_rules=[_wrapper("LX0609-12-01-01")],
         evidence_payload=_payload(
             documents={
                 "admission_record": [_row("入院记录现病史与病例特点。")],
@@ -4356,7 +4356,7 @@ async def test_2496813_016_contained_history_is_not_treated_as_complete_copy():
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-016",),
+        selected_rule_ids=("LX0609-12-01-01",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -4366,9 +4366,9 @@ async def test_2496813_016_contained_history_is_not_treated_as_complete_copy():
     )
     client = _Client([])
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-016",),
-        decision_rule_ids=("LX0609-016",),
-        wrapper_rules=[_wrapper("LX0609-016")],
+        rule_ids=("LX0609-12-01-01",),
+        decision_rule_ids=("LX0609-12-01-01",),
+        wrapper_rules=[_wrapper("LX0609-12-01-01")],
         evidence_payload=None,
         llm_client=client,
         evidence_snapshot=session.snapshot,
@@ -4376,7 +4376,7 @@ async def test_2496813_016_contained_history_is_not_treated_as_complete_copy():
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-016",),
+        expected_rule_ids=("LX0609-12-01-01",),
         snapshot=session.snapshot,
     )
 
@@ -4466,7 +4466,7 @@ async def test_typed_016_distinguishes_absent_unavailable_and_structured_compara
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-016",),
+        selected_rule_ids=("LX0609-12-01-01",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -4475,9 +4475,9 @@ async def test_typed_016_distinguishes_absent_unavailable_and_structured_compara
         row_reader=read,
     )
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-016",),
-        decision_rule_ids=("LX0609-016",),
-        wrapper_rules=[_wrapper("LX0609-016")],
+        rule_ids=("LX0609-12-01-01",),
+        decision_rule_ids=("LX0609-12-01-01",),
+        wrapper_rules=[_wrapper("LX0609-12-01-01")],
         evidence_payload=None,
         llm_client=_Client([]),
         evidence_snapshot=session.snapshot,
@@ -4485,7 +4485,7 @@ async def test_typed_016_distinguishes_absent_unavailable_and_structured_compara
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-016",),
+        expected_rule_ids=("LX0609-12-01-01",),
         snapshot=session.snapshot,
     )
 
@@ -4531,7 +4531,7 @@ async def test_typed_016_018_use_same_material_session_without_legacy_payload():
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-016", "LX0609-018"),
+        selected_rule_ids=("LX0609-12-01-01", "LX0609-01-01-02"),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -4548,9 +4548,9 @@ async def test_typed_016_018_use_same_material_session_without_legacy_payload():
         }]
     )
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-016", "LX0609-018"),
-        decision_rule_ids=("LX0609-016", "LX0609-018"),
-        wrapper_rules=[_wrapper("LX0609-016"), _wrapper("LX0609-018")],
+        rule_ids=("LX0609-12-01-01", "LX0609-01-01-02"),
+        decision_rule_ids=("LX0609-12-01-01", "LX0609-01-01-02"),
+        wrapper_rules=[_wrapper("LX0609-12-01-01"), _wrapper("LX0609-01-01-02")],
         evidence_payload=None,
         institute_id="I",
         patient_id="P",
@@ -4564,7 +4564,7 @@ async def test_typed_016_018_use_same_material_session_without_legacy_payload():
     assert result.results == ()
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-016", "LX0609-018"),
+        expected_rule_ids=("LX0609-12-01-01", "LX0609-01-01-02"),
         snapshot=session.snapshot,
     )
     assert [item.final_state.value for item in reduced] == [
@@ -4620,7 +4620,7 @@ async def test_typed_018_preserves_source_state_without_model(
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-018",),
+        selected_rule_ids=("LX0609-01-01-02",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -4642,9 +4642,9 @@ async def test_typed_018_preserves_source_state_without_model(
         ]
     )
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-018",),
-        decision_rule_ids=("LX0609-018",),
-        wrapper_rules=[_wrapper("LX0609-018")],
+        rule_ids=("LX0609-01-01-02",),
+        decision_rule_ids=("LX0609-01-01-02",),
+        wrapper_rules=[_wrapper("LX0609-01-01-02")],
         evidence_payload=None,
         llm_client=client,
         evidence_snapshot=session.snapshot,
@@ -4652,7 +4652,7 @@ async def test_typed_018_preserves_source_state_without_model(
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-018",),
+        expected_rule_ids=("LX0609-01-01-02",),
         snapshot=session.snapshot,
     )
 
@@ -4700,7 +4700,7 @@ async def test_typed_018_combines_length_and_diagnostic_direction(
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-018",),
+        selected_rule_ids=("LX0609-01-01-02",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -4719,9 +4719,9 @@ async def test_typed_018_combines_length_and_diagnostic_direction(
     )
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-018",),
-        decision_rule_ids=("LX0609-018",),
-        wrapper_rules=[_wrapper("LX0609-018")],
+        rule_ids=("LX0609-01-01-02",),
+        decision_rule_ids=("LX0609-01-01-02",),
+        wrapper_rules=[_wrapper("LX0609-01-01-02")],
         evidence_payload=None,
         llm_client=client,
         evidence_snapshot=session.snapshot,
@@ -4729,7 +4729,7 @@ async def test_typed_018_combines_length_and_diagnostic_direction(
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-018",),
+        expected_rule_ids=("LX0609-01-01-02",),
         snapshot=session.snapshot,
     )
 
@@ -4776,7 +4776,7 @@ async def test_typed_018_matches_raw_state_calls_and_tokens():
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-018",),
+        selected_rule_ids=("LX0609-01-01-02",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -4785,8 +4785,8 @@ async def test_typed_018_matches_raw_state_calls_and_tokens():
         row_reader=read,
     )
     raw = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-018",),
-        wrapper_rules=[_wrapper("LX0609-018")],
+        rule_ids=("LX0609-01-01-02",),
+        wrapper_rules=[_wrapper("LX0609-01-01-02")],
         evidence_payload=_payload(
             documents={
                 "admission_record": [admission_row],
@@ -4804,9 +4804,9 @@ async def test_typed_018_matches_raw_state_calls_and_tokens():
         ),
     )
     typed = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-018",),
-        decision_rule_ids=("LX0609-018",),
-        wrapper_rules=[_wrapper("LX0609-018")],
+        rule_ids=("LX0609-01-01-02",),
+        decision_rule_ids=("LX0609-01-01-02",),
+        wrapper_rules=[_wrapper("LX0609-01-01-02")],
         evidence_payload={"stale": "payload"},
         llm_client=_Client(
             [
@@ -4822,7 +4822,7 @@ async def test_typed_018_matches_raw_state_calls_and_tokens():
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=typed.decisions,
-        expected_rule_ids=("LX0609-018",),
+        expected_rule_ids=("LX0609-01-01-02",),
         snapshot=session.snapshot,
     )
 
@@ -4861,7 +4861,7 @@ async def test_typed_018_uses_only_authoritative_primary_diagnosis():
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-018",),
+        selected_rule_ids=("LX0609-01-01-02",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -4879,9 +4879,9 @@ async def test_typed_018_uses_only_authoritative_primary_diagnosis():
         ]
     )
     typed = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-018",),
-        decision_rule_ids=("LX0609-018",),
-        wrapper_rules=[_wrapper("LX0609-018")],
+        rule_ids=("LX0609-01-01-02",),
+        decision_rule_ids=("LX0609-01-01-02",),
+        wrapper_rules=[_wrapper("LX0609-01-01-02")],
         evidence_payload=None,
         llm_client=client,
         evidence_snapshot=session.snapshot,
@@ -4889,7 +4889,7 @@ async def test_typed_018_uses_only_authoritative_primary_diagnosis():
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=typed.decisions,
-        expected_rule_ids=("LX0609-018",),
+        expected_rule_ids=("LX0609-01-01-02",),
         snapshot=session.snapshot,
     )
 
@@ -4926,7 +4926,7 @@ async def test_typed_018_reads_only_first_numbered_diagnosis():
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-018",),
+        selected_rule_ids=("LX0609-01-01-02",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -4940,9 +4940,9 @@ async def test_typed_018_reads_only_first_numbered_diagnosis():
         "diagnostic_rationale_code": "supported",
     }])
     typed = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-018",),
-        decision_rule_ids=("LX0609-018",),
-        wrapper_rules=[_wrapper("LX0609-018")],
+        rule_ids=("LX0609-01-01-02",),
+        decision_rule_ids=("LX0609-01-01-02",),
+        wrapper_rules=[_wrapper("LX0609-01-01-02")],
         evidence_payload=None,
         llm_client=client,
         evidence_snapshot=session.snapshot,
@@ -4989,7 +4989,7 @@ async def test_typed_018_reads_admission_first_diagnosis_from_main_flag():
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-018",),
+        selected_rule_ids=("LX0609-01-01-02",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -5003,9 +5003,9 @@ async def test_typed_018_reads_admission_first_diagnosis_from_main_flag():
         "diagnostic_rationale_code": "supported",
     }])
     typed = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-018",),
-        decision_rule_ids=("LX0609-018",),
-        wrapper_rules=[_wrapper("LX0609-018")],
+        rule_ids=("LX0609-01-01-02",),
+        decision_rule_ids=("LX0609-01-01-02",),
+        wrapper_rules=[_wrapper("LX0609-01-01-02")],
         evidence_payload=None,
         llm_client=client,
         evidence_snapshot=session.snapshot,
@@ -5130,7 +5130,7 @@ async def test_typed_018_accepts_structured_complaint_when_record_content_is_emp
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-018",),
+        selected_rule_ids=("LX0609-01-01-02",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -5144,9 +5144,9 @@ async def test_typed_018_accepts_structured_complaint_when_record_content_is_emp
         "diagnostic_rationale_code": "supported",
     }])
     typed = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-018",),
-        decision_rule_ids=("LX0609-018",),
-        wrapper_rules=[_wrapper("LX0609-018")],
+        rule_ids=("LX0609-01-01-02",),
+        decision_rule_ids=("LX0609-01-01-02",),
+        wrapper_rules=[_wrapper("LX0609-01-01-02")],
         evidence_payload=None,
         llm_client=client,
         evidence_snapshot=session.snapshot,
@@ -5180,7 +5180,7 @@ async def test_typed_016_missing_structured_sections_is_data_gap_without_model()
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-016",),
+        selected_rule_ids=("LX0609-12-01-01",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -5189,9 +5189,9 @@ async def test_typed_016_missing_structured_sections_is_data_gap_without_model()
         row_reader=read,
     )
     typed = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-016",),
-        decision_rule_ids=("LX0609-016",),
-        wrapper_rules=[_wrapper("LX0609-016")],
+        rule_ids=("LX0609-12-01-01",),
+        decision_rule_ids=("LX0609-12-01-01",),
+        wrapper_rules=[_wrapper("LX0609-12-01-01")],
         evidence_payload=None,
         llm_client=_Client([RuntimeError("must not call model")]),
         evidence_snapshot=session.snapshot,
@@ -5199,7 +5199,7 @@ async def test_typed_016_missing_structured_sections_is_data_gap_without_model()
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=typed.decisions,
-        expected_rule_ids=("LX0609-016",),
+        expected_rule_ids=("LX0609-12-01-01",),
         snapshot=session.snapshot,
     )
 
@@ -5241,8 +5241,8 @@ async def test_016_preview_or_assembly_shell_is_data_gap_without_model(
     client = _Client([{"is_compliant": False}])
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-016",),
-        wrapper_rules=[_wrapper("LX0609-016")],
+        rule_ids=("LX0609-12-01-01",),
+        wrapper_rules=[_wrapper("LX0609-12-01-01")],
         evidence_payload=_payload(
             documents={
                 "admission_record": [_row("入院记录现病史与病例特点。")],
@@ -5263,8 +5263,8 @@ async def test_016_admission_preview_shell_is_data_gap_without_model():
     client = _Client([{"is_compliant": True}])
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-016",),
-        wrapper_rules=[_wrapper("LX0609-016")],
+        rule_ids=("LX0609-12-01-01",),
+        wrapper_rules=[_wrapper("LX0609-12-01-01")],
         evidence_payload=_payload(
             documents={
                 "admission_record": [
@@ -5498,7 +5498,7 @@ async def test_017_long_template_with_material_change_uses_one_review(monkeypatc
     )
     client = _CopyReviewClient("substantial_copy")
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-017",), wrapper_rules=[_wrapper("LX0609-017")],
+        rule_ids=("LX0609-12-01-02",), wrapper_rules=[_wrapper("LX0609-12-01-02")],
         evidence_payload=_payload(documents={}), institute_id="PRIVATE-INSTITUTE",
         patient_id="PRIVATE-PATIENT", visit_id="PRIVATE-VISIT",
         source_schema=None, llm_client=client,
@@ -5592,7 +5592,7 @@ async def test_017_semantic_review_invalid_response_fails_closed(
     client = _CopyReviewClient(response=response)
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-017",), wrapper_rules=[_wrapper("LX0609-017")],
+        rule_ids=("LX0609-12-01-02",), wrapper_rules=[_wrapper("LX0609-12-01-02")],
         evidence_payload=_payload(documents={}), institute_id="PRIVATE-I",
         patient_id="PRIVATE-P", visit_id="PRIVATE-V", source_schema=None,
         llm_client=client,
@@ -5631,7 +5631,7 @@ async def test_017_semantic_review_verdict_is_mapped_by_python_once(
     client = _CopyReviewClient(verdict)
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-017",), wrapper_rules=[_wrapper("LX0609-017")],
+        rule_ids=("LX0609-12-01-02",), wrapper_rules=[_wrapper("LX0609-12-01-02")],
         evidence_payload=_payload(documents={}), institute_id="I", patient_id="P",
         visit_id="V", source_schema=None, llm_client=client,
     )
@@ -5679,8 +5679,8 @@ async def test_017_confirmed_substantial_copy_takes_priority_over_uncertain_pair
     client = _MixedReviewClient()
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-017",),
-        wrapper_rules=[_wrapper("LX0609-017")],
+        rule_ids=("LX0609-12-01-02",),
+        wrapper_rules=[_wrapper("LX0609-12-01-02")],
         evidence_payload=_payload(documents={}),
         institute_id="I",
         patient_id="P",
@@ -5713,7 +5713,7 @@ async def test_017_high_similarity_uses_one_semantic_review(
         ] if kwargs["source_key"] == "daily_course_record" else [],
     )
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-017",), wrapper_rules=[_wrapper("LX0609-017")],
+        rule_ids=("LX0609-12-01-02",), wrapper_rules=[_wrapper("LX0609-12-01-02")],
         evidence_payload=_payload(documents={}), institute_id="I", patient_id="P",
         visit_id="V", source_schema=None, llm_client=_CopyReviewClient(),
     )
@@ -5793,8 +5793,8 @@ async def test_017_low_similarity_is_compliant_without_llm_call(monkeypatch):
     client = _UnexpectedLLMClient()
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-017",),
-        wrapper_rules=[_wrapper("LX0609-017")],
+        rule_ids=("LX0609-12-01-02",),
+        wrapper_rules=[_wrapper("LX0609-12-01-02")],
         evidence_payload=_payload(documents={}),
         institute_id="safe-institute",
         patient_id="safe-patient",
@@ -5855,8 +5855,8 @@ async def test_017_high_similarity_with_material_change_is_reviewed_once(monkeyp
     client = _CopyReviewClient()
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-017",),
-        wrapper_rules=[_wrapper("LX0609-017")],
+        rule_ids=("LX0609-12-01-02",),
+        wrapper_rules=[_wrapper("LX0609-12-01-02")],
         evidence_payload=_payload(documents={}),
         institute_id="safe-institute",
         patient_id="safe-patient",
@@ -5908,8 +5908,8 @@ async def test_017_long_template_block_with_material_change_is_reviewed_once(
     client = _CopyReviewClient()
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-017",),
-        wrapper_rules=[_wrapper("LX0609-017")],
+        rule_ids=("LX0609-12-01-02",),
+        wrapper_rules=[_wrapper("LX0609-12-01-02")],
         evidence_payload=_payload(documents={}),
         institute_id="safe-institute",
         patient_id="safe-patient",
@@ -5951,8 +5951,8 @@ async def test_017_high_similarity_nonidentical_current_update_is_reviewed_once(
     client = _CopyReviewClient()
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-017",),
-        wrapper_rules=[_wrapper("LX0609-017")],
+        rule_ids=("LX0609-12-01-02",),
+        wrapper_rules=[_wrapper("LX0609-12-01-02")],
         evidence_payload=_payload(documents={}),
         institute_id="safe-institute",
         patient_id="safe-patient",
@@ -5992,8 +5992,8 @@ async def test_017_high_similarity_does_not_call_llm_for_document_roles(monkeypa
     client = _UnexpectedLLMClient()
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-017",),
-        wrapper_rules=[_wrapper("LX0609-017")],
+        rule_ids=("LX0609-12-01-02",),
+        wrapper_rules=[_wrapper("LX0609-12-01-02")],
         evidence_payload=_payload(documents={}),
         institute_id="safe-institute",
         patient_id="safe-patient",
@@ -6032,8 +6032,8 @@ async def test_017_strong_similarity_is_programmatic_and_never_calls_model(
     client = _UnexpectedLLMClient()
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-017",),
-        wrapper_rules=[_wrapper("LX0609-017")],
+        rule_ids=("LX0609-12-01-02",),
+        wrapper_rules=[_wrapper("LX0609-12-01-02")],
         evidence_payload=_payload(documents={}),
         institute_id="safe-institute",
         patient_id="safe-patient",
@@ -6076,7 +6076,7 @@ async def test_typed_017_high_similarity_is_non_compliant_without_model():
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-017",),
+        selected_rule_ids=("LX0609-12-01-02",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -6086,9 +6086,9 @@ async def test_typed_017_high_similarity_is_non_compliant_without_model():
     )
     client = _UnexpectedLLMClient()
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-017",),
-        decision_rule_ids=("LX0609-017",),
-        wrapper_rules=[_wrapper("LX0609-017")],
+        rule_ids=("LX0609-12-01-02",),
+        decision_rule_ids=("LX0609-12-01-02",),
+        wrapper_rules=[_wrapper("LX0609-12-01-02")],
         evidence_payload=None,
         institute_id="I",
         patient_id="P",
@@ -6100,7 +6100,7 @@ async def test_typed_017_high_similarity_is_non_compliant_without_model():
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-017",),
+        expected_rule_ids=("LX0609-12-01-02",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
@@ -6150,7 +6150,7 @@ async def test_typed_017_keeps_exact_evidence_when_record_time_is_ambiguous():
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-017",),
+        selected_rule_ids=("LX0609-12-01-02",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -6159,9 +6159,9 @@ async def test_typed_017_keeps_exact_evidence_when_record_time_is_ambiguous():
         row_reader=read,
     )
     native = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-017",),
-        decision_rule_ids=("LX0609-017",),
-        wrapper_rules=[_wrapper("LX0609-017")],
+        rule_ids=("LX0609-12-01-02",),
+        decision_rule_ids=("LX0609-12-01-02",),
+        wrapper_rules=[_wrapper("LX0609-12-01-02")],
         evidence_payload=None,
         institute_id="I",
         patient_id="P",
@@ -6173,13 +6173,13 @@ async def test_typed_017_keeps_exact_evidence_when_record_time_is_ambiguous():
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=native.decisions,
-        expected_rule_ids=("LX0609-017",),
+        expected_rule_ids=("LX0609-12-01-02",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
 
     canonical = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-017", "name": "不合理复制病历"}],
+        wrapper_rules=[{"rule_id": "LX0609-12-01-02", "name": "不合理复制病历"}],
         execution_results=[],
         reduced_decisions=reduced,
         customer_display_facts=native.customer_display_facts,
@@ -6190,7 +6190,7 @@ async def test_typed_017_keeps_exact_evidence_when_record_time_is_ambiguous():
         format_evidence=False,
     )[0]
 
-    raw_facts = dict(native.customer_display_facts)["LX0609-017"]
+    raw_facts = dict(native.customer_display_facts)["LX0609-12-01-02"]
     assert len(raw_facts["copy_match_document_fingerprints"]) == 1
     assert all(
         value.startswith("sha256:")
@@ -6238,7 +6238,7 @@ async def test_typed_017_finds_non_adjacent_copy_across_twenty_course_records():
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-017",),
+        selected_rule_ids=("LX0609-12-01-02",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -6247,9 +6247,9 @@ async def test_typed_017_finds_non_adjacent_copy_across_twenty_course_records():
         row_reader=read,
     )
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-017",),
-        decision_rule_ids=("LX0609-017",),
-        wrapper_rules=[_wrapper("LX0609-017")],
+        rule_ids=("LX0609-12-01-02",),
+        decision_rule_ids=("LX0609-12-01-02",),
+        wrapper_rules=[_wrapper("LX0609-12-01-02")],
         evidence_payload=None,
         institute_id="I",
         patient_id="P",
@@ -6261,14 +6261,14 @@ async def test_typed_017_finds_non_adjacent_copy_across_twenty_course_records():
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-017",),
+        expected_rule_ids=("LX0609-12-01-02",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
 
     assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
     assert result.results == ()
-    facts = dict(result.customer_display_facts)["LX0609-017"]
+    facts = dict(result.customer_display_facts)["LX0609-12-01-02"]
     assert facts["copy_similarity"] == 1.0
     assert facts["copy_match_pairs"][0] == {
         "source_types": ["daily_course_record", "daily_course_record"],
@@ -6381,7 +6381,7 @@ async def test_typed_017_similarity_threshold_and_semantic_pass(
 
     monkeypatch.setattr(rules_016_017, "SequenceMatcher", _FixedSimilarityMatcher)
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-017",),
+        selected_rule_ids=("LX0609-12-01-02",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -6391,9 +6391,9 @@ async def test_typed_017_similarity_threshold_and_semantic_pass(
     )
     client = _CopyReviewClient(verdict) if verdict else _UnexpectedLLMClient()
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-017",),
-        decision_rule_ids=("LX0609-017",),
-        wrapper_rules=[_wrapper("LX0609-017")],
+        rule_ids=("LX0609-12-01-02",),
+        decision_rule_ids=("LX0609-12-01-02",),
+        wrapper_rules=[_wrapper("LX0609-12-01-02")],
         evidence_payload=None,
         institute_id="I",
         patient_id="P",
@@ -6405,7 +6405,7 @@ async def test_typed_017_similarity_threshold_and_semantic_pass(
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-017",),
+        expected_rule_ids=("LX0609-12-01-02",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
@@ -6435,7 +6435,7 @@ async def test_typed_017_similarity_threshold_and_semantic_pass(
                 "similarity": round(similarity, 4),
             }
         ]
-    actual_facts = dict(result.customer_display_facts)["LX0609-017"]
+    actual_facts = dict(result.customer_display_facts)["LX0609-12-01-02"]
     fingerprints = actual_facts.pop("copy_match_document_fingerprints", None)
     assert actual_facts == expected_facts
     if verdict:
@@ -6480,8 +6480,8 @@ async def test_017_high_similarity_fails_closed_when_semantic_review_fails(
     )
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-017",),
-        wrapper_rules=[_wrapper("LX0609-017")],
+        rule_ids=("LX0609-12-01-02",),
+        wrapper_rules=[_wrapper("LX0609-12-01-02")],
         evidence_payload=_payload(documents={}),
         institute_id="safe-institute",
         patient_id="safe-patient",
@@ -6534,8 +6534,8 @@ async def test_017_uses_complete_current_visit_sources_instead_of_truncated_bund
     monkeypatch.setattr(course, "read_luxian_0609_native_source_rows", _read)
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-017",),
-        wrapper_rules=[_wrapper("LX0609-017")],
+        rule_ids=("LX0609-12-01-02",),
+        wrapper_rules=[_wrapper("LX0609-12-01-02")],
         evidence_payload=_payload(documents={"daily_course_record": bundle_rows}),
         institute_id="safe-institute",
         patient_id="safe-patient",
@@ -6584,8 +6584,8 @@ async def test_017_complete_source_empty_or_failure_keeps_controlled_state(
     monkeypatch.setattr(course, "read_luxian_0609_native_source_rows", _read)
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-017",),
-        wrapper_rules=[_wrapper("LX0609-017")],
+        rule_ids=("LX0609-12-01-02",),
+        wrapper_rules=[_wrapper("LX0609-12-01-02")],
         evidence_payload=_payload(documents={"daily_course_record": [_row("旧投影内容不应兜底。")]}),
         institute_id="safe-institute",
         patient_id="safe-patient",
@@ -6620,8 +6620,8 @@ async def test_017_without_complete_coordinates_or_with_source_limit_is_data_gap
     monkeypatch.setattr(course, "read_luxian_0609_native_source_rows", _read)
 
     no_coordinates = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-017",),
-        wrapper_rules=[_wrapper("LX0609-017")],
+        rule_ids=("LX0609-12-01-02",),
+        wrapper_rules=[_wrapper("LX0609-12-01-02")],
         evidence_payload=_payload(
             documents={
                 "daily_course_record": [
@@ -6636,8 +6636,8 @@ async def test_017_without_complete_coordinates_or_with_source_limit_is_data_gap
     assert reader_calls == []
 
     truncated = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-017",),
-        wrapper_rules=[_wrapper("LX0609-017")],
+        rule_ids=("LX0609-12-01-02",),
+        wrapper_rules=[_wrapper("LX0609-12-01-02")],
         evidence_payload=_payload(documents={}),
         institute_id="safe-institute",
         patient_id="safe-patient",
@@ -6670,8 +6670,8 @@ async def test_017_does_not_treat_duplicate_database_rows_as_two_course_records(
     )
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-017",),
-        wrapper_rules=[_wrapper("LX0609-017")],
+        rule_ids=("LX0609-12-01-02",),
+        wrapper_rules=[_wrapper("LX0609-12-01-02")],
         evidence_payload=_payload(documents={}),
         institute_id="safe-institute",
         patient_id="safe-patient",
@@ -6711,8 +6711,8 @@ async def test_017_fast5_high_similarity_is_reviewed_once(
     )
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-017",),
-        wrapper_rules=[_wrapper("LX0609-017")],
+        rule_ids=("LX0609-12-01-02",),
+        wrapper_rules=[_wrapper("LX0609-12-01-02")],
         evidence_payload=_payload(documents={}),
         institute_id="I",
         patient_id="P",
@@ -6741,8 +6741,8 @@ async def test_017_fast5_missing_authoritative_course_time_is_data_gap(monkeypat
     )
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-017",),
-        wrapper_rules=[_wrapper("LX0609-017")],
+        rule_ids=("LX0609-12-01-02",),
+        wrapper_rules=[_wrapper("LX0609-12-01-02")],
         evidence_payload=_payload(documents={}),
         institute_id="I",
         patient_id="P",
@@ -6779,8 +6779,8 @@ async def test_017_compares_distinct_same_day_records_in_authoritative_time_orde
     )
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-017",),
-        wrapper_rules=[_wrapper("LX0609-017")],
+        rule_ids=("LX0609-12-01-02",),
+        wrapper_rules=[_wrapper("LX0609-12-01-02")],
         evidence_payload=_payload(documents={}),
         institute_id="I",
         patient_id="P",
@@ -6813,8 +6813,8 @@ async def test_017_same_timestamp_distinct_documents_are_data_gap(monkeypatch):
     )
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-017",),
-        wrapper_rules=[_wrapper("LX0609-017")],
+        rule_ids=("LX0609-12-01-02",),
+        wrapper_rules=[_wrapper("LX0609-12-01-02")],
         evidence_payload=_payload(documents={}),
         institute_id="I",
         patient_id="P",
@@ -6858,8 +6858,8 @@ async def test_017_same_day_distinct_content_is_compared_without_model_call(monk
     )
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-017",),
-        wrapper_rules=[_wrapper("LX0609-017")],
+        rule_ids=("LX0609-12-01-02",),
+        wrapper_rules=[_wrapper("LX0609-12-01-02")],
         evidence_payload=_payload(documents={}),
         institute_id="I",
         patient_id="P",
@@ -6886,8 +6886,8 @@ async def test_018_sends_only_lowest_structured_admission_diagnosis_to_model():
         ]
     )
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-018",),
-        wrapper_rules=[_wrapper("LX0609-018")],
+        rule_ids=("LX0609-01-01-02",),
+        wrapper_rules=[_wrapper("LX0609-01-01-02")],
         evidence_payload=_payload(
             documents={
                 "admission_record": [_row("主诉：反复胸痛3个月。现病史完整。")],
@@ -6942,8 +6942,8 @@ async def test_018_missing_or_conflicting_structured_order_fails_closed(
     diagnoses: list[dict[str, str]],
 ):
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-018",),
-        wrapper_rules=[_wrapper("LX0609-018")],
+        rule_ids=("LX0609-01-01-02",),
+        wrapper_rules=[_wrapper("LX0609-01-01-02")],
         evidence_payload=_payload(
             documents={
                 "admission_record": [_row("主诉：反复胸痛3个月。现病史完整。")],
@@ -6965,8 +6965,8 @@ async def test_018_requires_chief_complaint_and_primary_diagnosis():
         "diagnostic_rationale_code": "supported",
     }])
     incomplete = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-018",),
-        wrapper_rules=[_wrapper("LX0609-018")],
+        rule_ids=("LX0609-01-01-02",),
+        wrapper_rules=[_wrapper("LX0609-01-01-02")],
         evidence_payload=_payload(
             documents={"admission_record": [_row("现病史待查。")]}
         ),
@@ -6976,8 +6976,8 @@ async def test_018_requires_chief_complaint_and_primary_diagnosis():
     assert incomplete.llm_call_count == 0
 
     complete = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-018",),
-        wrapper_rules=[_wrapper("LX0609-018")],
+        rule_ids=("LX0609-01-01-02",),
+        wrapper_rules=[_wrapper("LX0609-01-01-02")],
         evidence_payload=_payload(
             documents={
                 "admission_record": [_row("主诉：反复胸痛3个月。现病史待查。")],
@@ -7010,8 +7010,8 @@ async def test_018_returns_safe_criterion_results_without_returning_admission_te
     )
     complaint = "胸痛" * 10 + "加"
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-018",),
-        wrapper_rules=[_wrapper("LX0609-018")],
+        rule_ids=("LX0609-01-01-02",),
+        wrapper_rules=[_wrapper("LX0609-01-01-02")],
         evidence_payload=_payload(
             documents={
                 "admission_record": [
@@ -7061,8 +7061,8 @@ async def test_018_length_boundary_allows_20_chars_and_rejects_21_chars():
     lengths = []
     for complaint in ("胸痛" * 10, "胸痛" * 10 + "加"):
         result = await course.execute_luxian_0609_native_course_quality_rules(
-            rule_ids=("LX0609-018",),
-            wrapper_rules=[_wrapper("LX0609-018")],
+            rule_ids=("LX0609-01-01-02",),
+            wrapper_rules=[_wrapper("LX0609-01-01-02")],
             evidence_payload=_payload(
                 documents={
                     "admission_record": [
@@ -7122,8 +7122,8 @@ async def test_018_model_failure_is_controlled_without_leaking_upstream_text():
     )
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-016", "LX0609-018"),
-        wrapper_rules=[_wrapper("LX0609-016"), _wrapper("LX0609-018")],
+        rule_ids=("LX0609-12-01-01", "LX0609-01-01-02"),
+        wrapper_rules=[_wrapper("LX0609-12-01-01"), _wrapper("LX0609-01-01-02")],
         evidence_payload=payload,
         llm_client=client,
     )
@@ -7271,7 +7271,7 @@ async def test_typed_018_model_failure_and_invalid_output_are_controlled(
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-018",),
+        selected_rule_ids=("LX0609-01-01-02",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -7281,9 +7281,9 @@ async def test_typed_018_model_failure_and_invalid_output_are_controlled(
     )
     client = _Client([model_output])
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-018",),
-        decision_rule_ids=("LX0609-018",),
-        wrapper_rules=[_wrapper("LX0609-018")],
+        rule_ids=("LX0609-01-01-02",),
+        decision_rule_ids=("LX0609-01-01-02",),
+        wrapper_rules=[_wrapper("LX0609-01-01-02")],
         evidence_payload=None,
         llm_client=client,
         evidence_snapshot=session.snapshot,
@@ -7291,7 +7291,7 @@ async def test_typed_018_model_failure_and_invalid_output_are_controlled(
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-018",),
+        expected_rule_ids=("LX0609-01-01-02",),
         snapshot=session.snapshot,
     )
 
@@ -7340,7 +7340,7 @@ async def test_typed_018_keeps_deterministic_length_failure_when_model_unresolve
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-018",),
+        selected_rule_ids=("LX0609-01-01-02",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -7350,9 +7350,9 @@ async def test_typed_018_keeps_deterministic_length_failure_when_model_unresolve
     )
     client = _Client([model_output])
     result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-018",),
-        decision_rule_ids=("LX0609-018",),
-        wrapper_rules=[_wrapper("LX0609-018")],
+        rule_ids=("LX0609-01-01-02",),
+        decision_rule_ids=("LX0609-01-01-02",),
+        wrapper_rules=[_wrapper("LX0609-01-01-02")],
         evidence_payload=None,
         llm_client=client,
         evidence_snapshot=session.snapshot,
@@ -7360,7 +7360,7 @@ async def test_typed_018_keeps_deterministic_length_failure_when_model_unresolve
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-018",),
+        expected_rule_ids=("LX0609-01-01-02",),
         snapshot=session.snapshot,
     )
 

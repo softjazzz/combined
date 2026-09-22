@@ -54,7 +54,7 @@ export function recommendationEvidenceForSingleRecord(
   item: Pick<SingleRecordQcResultItem, 'rule_id' | 'customer_display_facts' | 'evidence'>,
 ): SingleRecordQcEvidence[] {
   if (
-    !['LX0609-020', 'LX0609-023'].includes(
+    !['LX0609-03-01-01', 'LX0609-03-01-04'].includes(
       String(item.rule_id || '')
         .trim()
         .toUpperCase(),

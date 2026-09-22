@@ -72,7 +72,7 @@ def replay_documents(
             confidence=raw["confidence"],
         ))
         # 两个已经有真实缺陷回归的公开文案入口；不是第二套结果装配链。
-        if item["rule_id"] == "LX0609-066":
+        if item["rule_id"] == "LX0609-04-05-03":
             findings = customer_finding_from_controlled_facts(
                 rule_id=item["rule_id"], facts=item["display_facts"],
             )

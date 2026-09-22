@@ -65,7 +65,7 @@ const payload = {
   ],
   rule_distribution: [
     {
-      rule_id: 'LX0609-010',
+      rule_id: 'LX0609-06-01-02',
       rule_name: '检查记录：CT/MRI',
       non_compliant_count: 3,
       data_gap_count: 1,
@@ -120,7 +120,7 @@ describe('LuxianQcAnalyticsView', () => {
     )
     expect(wrapper.get('[data-testid="analytics-data-health"]').text()).toContain('数据状态')
     expect(wrapper.get('[data-testid="analytics-department-chart"]').text()).toContain('ICU')
-    expect(wrapper.get('[data-testid="analytics-rule-chart"]').text()).toContain('LX0609-010')
+    expect(wrapper.get('[data-testid="analytics-rule-chart"]').text()).toContain('LX0609-06-01-02')
     expect(wrapper.get('[data-testid="analytics-physician-chart"]').text()).toContain('张医生')
     expect(wrapper.get('[data-testid="analytics-rule-chart"]').text()).toContain('质控点问题 Top 5')
     expect(wrapper.text()).not.toContain('平均评分')

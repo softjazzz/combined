@@ -5,7 +5,10 @@
     data-testid="record-pool-qc-task-history-entry"
     @click="openHistory"
   >
-    <History :size="15" aria-hidden="true" />
+    <History
+      :size="15"
+      aria-hidden="true"
+    />
     最近质控任务
   </a-button>
 
@@ -29,7 +32,11 @@
 
     <div class="record-pool-task-history__toolbar">
       <span>可查看执行统计、调试快照并下载诊断包</span>
-      <a-button size="small" :loading="loading" @click="loadJobs">
+      <a-button
+        size="small"
+        :loading="loading"
+        @click="loadJobs"
+      >
         <RefreshCw :size="14" />刷新
       </a-button>
     </div>
@@ -40,7 +47,10 @@
         description="暂无病历池质控任务"
         class="record-pool-task-history__empty"
       />
-      <div v-else class="record-pool-task-history__list">
+      <div
+        v-else
+        class="record-pool-task-history__list"
+      >
         <button
           v-for="job in jobs"
           :key="job.id"
@@ -65,7 +75,10 @@
               <span>缓存命中 {{ job.summary?.cache_breakdown?.hit || 0 }}</span>
             </span>
           </span>
-          <ChevronRight :size="17" aria-hidden="true" />
+          <ChevronRight
+            :size="17"
+            aria-hidden="true"
+          />
         </button>
       </div>
     </a-spin>

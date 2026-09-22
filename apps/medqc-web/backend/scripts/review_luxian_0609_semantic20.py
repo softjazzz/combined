@@ -26,11 +26,11 @@ from app.services.luxian_0609.source_evidence_reader import read_luxian_0609_nat
 SCHEMA_VERSION = "lx0609-semantic20-review-v1"
 REVIEW_VERSION = "lx0609-semantic-second-review-v1"
 _TARGET_COUNTS = {
-    "LX0609-017": 20,
-    "LX0609-020": 14,
-    "LX0609-021": 16,
-    "LX0609-022": 16,
-    "LX0609-023": 14,
+    "LX0609-12-01-02": 20,
+    "LX0609-03-01-01": 14,
+    "LX0609-03-01-02": 16,
+    "LX0609-03-01-03": 16,
+    "LX0609-03-01-04": 14,
 }
 _TARGET_RULES = frozenset(_TARGET_COUNTS)
 _BUSINESS_STATES = frozenset(
@@ -49,7 +49,7 @@ _PARSE_ERROR_CODES = frozenset(
     }
 )
 _REASONS_BY_RULE = {
-    "LX0609-017": frozenset(
+    "LX0609-12-01-02": frozenset(
         {
             "substantive_dynamic_update_present",
             "unreasonable_copy_present",
@@ -58,7 +58,7 @@ _REASONS_BY_RULE = {
             "source_incomplete",
         }
     ),
-    "LX0609-020": frozenset(
+    "LX0609-03-01-01": frozenset(
         {
             "execution_record_present",
             "execution_record_missing",
@@ -66,13 +66,13 @@ _REASONS_BY_RULE = {
             "source_incomplete",
         }
     ),
-    "LX0609-021": frozenset(
+    "LX0609-03-01-02": frozenset(
         {"purpose_clear", "purpose_vague", "purpose_missing", "source_incomplete"}
     ),
-    "LX0609-022": frozenset(
+    "LX0609-03-01-03": frozenset(
         {"opinion_clear", "opinion_vague", "opinion_missing", "source_incomplete"}
     ),
-    "LX0609-023": frozenset(
+    "LX0609-03-01-04": frozenset(
         {
             "execution_specific",
             "execution_vague_or_copied",
@@ -83,7 +83,7 @@ _REASONS_BY_RULE = {
     ),
 }
 _CASE_RE = re.compile(r"^case-(?:0[1-9]|1[0-9]|20)$")
-_RULE_RE = re.compile(r"^LX0609-\d{3}$")
+_RULE_RE = re.compile(r"^LX0609-\d{2}-\d{2}-\d{2}$")
 _CODE_RE = re.compile(r"^[a-z][a-z0-9_]{0,127}$")
 _HASH_RE = re.compile(r"^[0-9a-f]{64}$")
 _FORBIDDEN_KEYS = frozenset(
@@ -228,7 +228,7 @@ def _parse_reviews(response: Mapping[str, Any], expected: Sequence[str]) -> dict
         if confidence not in _CONFIDENCE_BUCKETS:
             parsed[rule_id] = {"error_code": "parse_invalid_confidence"}
             continue
-        if rule_id == "LX0609-017":
+        if rule_id == "LX0609-12-01-02":
             # 无可比材料仍允许模型按先前合同返回明确NA。
             if state == "not_applicable" and reason == "insufficient_comparable_records":
                 parsed[rule_id] = {
@@ -359,12 +359,12 @@ def _copy_review_context(
 
 def _copy_prompt(context: str, safe_metrics: Mapping[str, Any]) -> str:
     return (
-        "本次规则=[LX0609-017]。你是LX0609独立语义二审器。只复核LX0609-017，不参考候选结果。"
+        "本次规则=[LX0609-12-01-02]。你是LX0609独立语义二审器。只复核LX0609-12-01-02，不参考候选结果。"
         "模板重复不等于复制；只有核心临床内容大段复用且缺少当日变化才是不合规。"
         "空白、签名、标题和固定格式壳本身不是复制证据。不得输出正文、引文或时间。\n"
         f"安全指标={json.dumps(dict(safe_metrics), ensure_ascii=False, sort_keys=True)}\n"
         f"裁剪上下文={context or '无可用灰区上下文'}\n"
-        "只输出JSON：{\"reviews\":[{\"rule_id\":\"LX0609-017\","
+        "只输出JSON：{\"reviews\":[{\"rule_id\":\"LX0609-12-01-02\","
         "\"substantive_updates\":{\"symptom\":true/false,\"objective\":true/false,"
         "\"assessment\":true/false,\"plan\":true/false},"
         "\"template_only_overlap\":true/false,\"unreasonable_copy\":true/false/null,"
@@ -380,10 +380,10 @@ def _consultation_prompt(rule_ids: Sequence[str], context: str) -> str:
         + "你是LX0609独立语义二审器。只复核下列会诊规则，不参考候选结果："
         + ",".join(rule_ids)
         + "。仅使用当前就诊裁剪会诊记录与相关病程；不得输出正文、引文或时间。\n"
-        + "业务口径：LX0609-020逐张会诊判断是否存在可唯一绑定的执行记录；笼统‘遵会诊意见’算有执行记录，"
-        + "但其质量由LX0609-023判断。LX0609-021只看申请段，具体症状、检查、诊断或评估任一项即目的明确。"
-        + "LX0609-022只看意见段，明确诊断或可执行的检查、治疗、用药、复查任一项即意见明确。"
-        + "LX0609-023逐张判断执行质量，笼统执行或照抄意见=non_compliant，完全没有执行记录=not_applicable；"
+        + "业务口径：LX0609-03-01-01逐张会诊判断是否存在可唯一绑定的执行记录；笼统‘遵会诊意见’算有执行记录，"
+        + "但其质量由LX0609-03-01-04判断。LX0609-03-01-02只看申请段，具体症状、检查、诊断或评估任一项即目的明确。"
+        + "LX0609-03-01-03只看意见段，明确诊断或可执行的检查、治疗、用药、复查任一项即意见明确。"
+        + "LX0609-03-01-04逐张判断执行质量，笼统执行或照抄意见=non_compliant，完全没有执行记录=not_applicable；"
         + "关联不唯一=evaluation_unknown而不是data_gap；只有来源读取失败或正文缺失=data_gap。\n"
         + "只能返回本次规则列表中的ID，不能返回任何未选规则。\n"
         + f"裁剪上下文={context or '无可用裁剪上下文'}\n"
@@ -464,7 +464,7 @@ async def build_semantic20_review(
                 )
             return cache[source_key]
 
-        copy_targets = [row for row in case_targets if row["rule_id"] == "LX0609-017"]
+        copy_targets = [row for row in case_targets if row["rule_id"] == "LX0609-12-01-02"]
         if copy_targets:
             try:
                 source_rows = {
@@ -488,7 +488,7 @@ async def build_semantic20_review(
                     )
                 else:
                     token_usage.update(_usage(response))
-                    parsed = _parse_reviews(response, ("LX0609-017",))["LX0609-017"]
+                    parsed = _parse_reviews(response, ("LX0609-12-01-02",))["LX0609-12-01-02"]
                     error_code = parsed.get("error_code")
                     if error_code:
                         output_rows.extend(
@@ -498,14 +498,14 @@ async def build_semantic20_review(
                         output_rows.append(
                             _output_row(
                                 target=copy_targets[0],
-                                candidate=candidates[(case["case_label"], "LX0609-017")],
+                                candidate=candidates[(case["case_label"], "LX0609-12-01-02")],
                                 review_status="completed", review_state=str(parsed["state"]),
                                 review_reason=str(parsed["reason"]),
                                 confidence=str(parsed["confidence"]), evidence_hashes=hashes,
                             )
                         )
 
-        consultation_targets = [row for row in case_targets if row["rule_id"] != "LX0609-017"]
+        consultation_targets = [row for row in case_targets if row["rule_id"] != "LX0609-12-01-02"]
         if consultation_targets:
             try:
                 source_rows = {

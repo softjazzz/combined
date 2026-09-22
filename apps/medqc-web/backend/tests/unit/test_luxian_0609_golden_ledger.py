@@ -37,7 +37,7 @@ def _safe_api_batch(*, status: str = "non_compliant") -> dict[str, object]:
                     "schema_version": "lx0609-preproduction-runner-v1",
                     "results": [
                         {
-                            "rule_id": "LX0609-001",
+                            "rule_id": "LX0609-01-01-01",
                             "status": status,
                             "metadata": {
                                 "reason_code": "deadline_exceeded",
@@ -96,7 +96,7 @@ def _v2_api_batch(
                     "prompt_tokens": 0,
                     "completion_tokens": 0,
                     "total_tokens": 0,
-                    "covered_customer_rule_ids": ["LX0609-001"],
+                    "covered_customer_rule_ids": ["LX0609-01-01-01"],
                     "latency_ms": 0.0,
                 }
             ],
@@ -171,7 +171,7 @@ def test_v2_candidate_uses_family_coverage_once_and_ignores_result_token_metadat
     )
     response["results"].append(
         {
-            "rule_id": "LX0609-009",
+            "rule_id": "LX0609-02-01-05",
             "status": "compliant",
             "metadata": {
                 "reason_code": "daily_record_complete",
@@ -196,8 +196,8 @@ def test_v2_candidate_uses_family_coverage_once_and_ignores_result_token_metadat
                     "completion_tokens": 20,
                     "total_tokens": 120,
                     "covered_customer_rule_ids": [
-                        "LX0609-001",
-                        "LX0609-009",
+                        "LX0609-01-01-01",
+                        "LX0609-02-01-05",
                     ],
                     "latency_ms": 8.0,
                 }
@@ -212,10 +212,10 @@ def test_v2_candidate_uses_family_coverage_once_and_ignores_result_token_metadat
     )
 
     by_rule = {row["rule_id"]: row for row in candidate["rows"]}
-    assert by_rule["LX0609-001"]["total_tokens"] == 0
-    assert by_rule["LX0609-009"]["prompt_tokens"] == 100
-    assert by_rule["LX0609-009"]["completion_tokens"] == 20
-    assert by_rule["LX0609-009"]["total_tokens"] == 120
+    assert by_rule["LX0609-01-01-01"]["total_tokens"] == 0
+    assert by_rule["LX0609-02-01-05"]["prompt_tokens"] == 100
+    assert by_rule["LX0609-02-01-05"]["completion_tokens"] == 20
+    assert by_rule["LX0609-02-01-05"]["total_tokens"] == 120
     assert response["metrics"]["total_tokens"] == 120
 
 
@@ -301,7 +301,7 @@ def test_safe_api_dto_builds_candidate_without_promoting_observed_state() -> Non
         {
             "case_label": "case-01",
             "selector_digest": "a" * 64,
-            "rule_id": "LX0609-001",
+            "rule_id": "LX0609-01-01-01",
             "decision_kind": "deterministic",
             "observed_state": "non_compliant",
             "observed_reason_code": "deadline_exceeded",
@@ -396,7 +396,7 @@ def test_candidate_exports_stable_blank_human_review_template(tmp_path: Path) ->
             "candidate_digest": candidate["candidate_digest"],
             "case_label": "case-01",
             "selector_digest": "a" * 64,
-            "rule_id": "LX0609-001",
+            "rule_id": "LX0609-01-01-01",
             "decision_kind": "deterministic",
             "expected_state": "",
             "expected_reason_code": "",
@@ -606,7 +606,7 @@ def test_review_template_cli_sorts_matrix_and_preserves_row_count(
     payload = _safe_api_batch()
     second = json.loads(json.dumps(payload["cases"][0]))
     second["case_label"] = "case-02"
-    second["response"]["results"][0]["rule_id"] = "LX0609-009"
+    second["response"]["results"][0]["rule_id"] = "LX0609-02-01-05"
     payload["cases"] = [second, payload["cases"][0]]
     candidate = ledger_builder.build_candidate_ledger(
         payload,
@@ -633,8 +633,8 @@ def test_review_template_cli_sorts_matrix_and_preserves_row_count(
         rows = list(csv.DictReader(handle))
     assert len(rows) == candidate["candidate_count"] == 2
     assert [(row["case_label"], row["rule_id"]) for row in rows] == [
-        ("case-01", "LX0609-001"),
-        ("case-02", "LX0609-009"),
+        ("case-01", "LX0609-01-01-01"),
+        ("case-02", "LX0609-02-01-05"),
     ]
     assert all(row["expected_state"] == "" for row in rows)
 

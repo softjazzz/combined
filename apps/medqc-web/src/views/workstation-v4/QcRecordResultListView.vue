@@ -4,14 +4,20 @@
       <div>
         <h1>
           {{ pageTitle
-          }}<span class="review-workbench-scope" :title="scopeLabel">{{
+          }}<span
+            class="review-workbench-scope"
+            :title="scopeLabel"
+          >{{
             isInpatient ? '在院' : '已出院'
           }}</span>
         </h1>
       </div>
     </section>
 
-    <nav class="qc-record-result-list-view__view-switch" aria-label="质控结果视图">
+    <nav
+      class="qc-record-result-list-view__view-switch"
+      aria-label="质控结果视图"
+    >
       <button
         type="button"
         data-testid="qc-result-view-records"
@@ -42,8 +48,15 @@
       />
     </div>
 
-    <section class="review-workbench-metrics" aria-label="质控结果汇总">
-      <div v-for="metric in metricItems" :key="metric.key" :class="`review-metric--${metric.key}`">
+    <section
+      class="review-workbench-metrics"
+      aria-label="质控结果汇总"
+    >
+      <div
+        v-for="metric in metricItems"
+        :key="metric.key"
+        :class="`review-metric--${metric.key}`"
+      >
         <span>{{ metric.key === 'priority' ? '确定问题' : metric.label }}</span>
         <strong>{{ metric.value }}</strong>
         <span>{{ metric.key === 'records' || metric.key === 'completed' ? '份' : '项' }}</span>
@@ -55,9 +68,15 @@
       class="qc-record-result-list-view__task-status review-workbench-task-status"
     />
 
-    <section v-if="activeView === 'records'" class="qc-record-result-list-view__workbench">
+    <section
+      v-if="activeView === 'records'"
+      class="qc-record-result-list-view__workbench"
+    >
       <div class="qc-record-result-list-view__toolbar">
-        <div class="qc-record-result-list-view__filters" aria-label="病历筛选条件">
+        <div
+          class="qc-record-result-list-view__filters"
+          aria-label="病历筛选条件"
+        >
           <label
             class="qc-record-result-list-view__filter-field qc-record-result-list-view__search-field"
           >
@@ -68,13 +87,21 @@
               placeholder="搜索患者、住院号、科室"
               aria-label="关键词筛选"
               @keydown.enter.prevent="applyFilters"
-            />
+            >
           </label>
           <label class="qc-record-result-list-view__filter-field">
             <span class="qc-record-result-list-view__field-label">科室</span>
-            <select v-model="activeDept" aria-label="科室筛选" @change="applyFilters">
+            <select
+              v-model="activeDept"
+              aria-label="科室筛选"
+              @change="applyFilters"
+            >
               <option value="全部科室">全部科室</option>
-              <option v-for="department in departmentOptions" :key="department" :value="department">
+              <option
+                v-for="department in departmentOptions"
+                :key="department"
+                :value="department"
+              >
                 {{ department }}
               </option>
             </select>
@@ -94,14 +121,14 @@
                 aria-label="开始日期筛选"
                 :value="startDate"
                 @change="updateStartDate"
-              />
+              >
               <span class="qc-record-result-list-view__date-separator">至</span>
               <input
                 type="date"
                 aria-label="结束日期筛选"
                 :value="endDate"
                 @change="updateEndDate"
-              />
+              >
             </div>
           </div>
           <button
@@ -114,7 +141,10 @@
           </button>
         </div>
         <div class="qc-record-result-list-view__toolbar-actions">
-          <div class="qc-record-result-list-view__export-menu" @focusout="handleExportMenuFocusOut">
+          <div
+            class="qc-record-result-list-view__export-menu"
+            @focusout="handleExportMenuFocusOut"
+          >
             <button
               class="qc-record-result-list-view__export-trigger"
               type="button"
@@ -125,9 +155,15 @@
               @click="exportMenuOpen = !exportMenuOpen"
               @keydown.esc="exportMenuOpen = false"
             >
-              <Download :size="15" aria-hidden="true" />
+              <Download
+                :size="15"
+                aria-hidden="true"
+              />
               {{ exporting ? '正在导出…' : '导出 Excel' }}
-              <ChevronDown :size="14" aria-hidden="true" />
+              <ChevronDown
+                :size="14"
+                aria-hidden="true"
+              />
             </button>
             <div
               v-if="exportMenuOpen"
@@ -175,8 +211,7 @@
               v-if="selectedCount > 0"
               class="qc-record-result-list-view__selected-count"
               role="status"
-              >已选 {{ selectedCount }} 份</span
-            >
+            >已选 {{ selectedCount }} 份</span>
           </div>
           <QcRecordResultTable
             :care-phase="carePhase"
@@ -189,7 +224,10 @@
             @update:selected-record-keys="updateSelectedRecordKeys"
           />
 
-          <footer v-if="serverTotal > 0" class="qc-record-result-list-view__pagination">
+          <footer
+            v-if="serverTotal > 0"
+            class="qc-record-result-list-view__pagination"
+          >
             <Pagination
               :current="currentPage"
               :page-size="pageSize"

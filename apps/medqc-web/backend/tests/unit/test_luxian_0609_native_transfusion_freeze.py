@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.luxian_0609_identity_test_support import published_rule_ids
+
 from datetime import datetime
 from typing import Any
 
@@ -86,7 +88,7 @@ async def _execute_and_aggregate(
 async def test_transfusion_freeze_complete_multiple_events_keeps_customer_contract() -> None:
     """冻结多次输血的记录、规范性与效果评价，并锁定客户证据坐标。"""
 
-    selected = ("LX0609-045", "LX0609-046", "LX0609-047")
+    selected = ("LX0609-07-02-01", "LX0609-07-02-02", "LX0609-07-03-01")
     first_record = (
         "输血目的：纠正贫血；开始时间14:20，输注去白悬浮红细胞2U，"
         "2026-06-05 16:10输血结束。输血后复查血红蛋白较前改善。"
@@ -138,21 +140,21 @@ async def test_transfusion_freeze_complete_multiple_events_keeps_customer_contra
     )
 
     facts = dict(execution.customer_display_facts)
-    assert facts["LX0609-045"] == {
+    assert facts["LX0609-07-02-01"] == {
         "verification_kind": "transfusion_course_record_present",
         "performed_transfusion_confirmed": True,
         "record_count": 2,
         "checked_sources": ["bloodtrans_record", "daily_course_record"],
         "source_document_ids": ["blood-freeze-1", "blood-freeze-2"],
     }
-    assert facts["LX0609-046"]["verification_kind"] == "transfusion_course_record_complete"
-    assert facts["LX0609-046"]["record_count"] == 2
-    assert facts["LX0609-046"]["incomplete_record_count"] == 0
-    assert facts["LX0609-046"]["source_document_ids"] == [
+    assert facts["LX0609-07-02-02"]["verification_kind"] == "transfusion_course_record_complete"
+    assert facts["LX0609-07-02-02"]["record_count"] == 2
+    assert facts["LX0609-07-02-02"]["incomplete_record_count"] == 0
+    assert facts["LX0609-07-02-02"]["source_document_ids"] == [
         "blood-freeze-1",
         "blood-freeze-2",
     ]
-    assert facts["LX0609-047"] == {
+    assert facts["LX0609-07-03-01"] == {
         "verification_kind": "posttransfusion_evaluation_complete",
         "performed_transfusion_confirmed": True,
         "threshold_hours": 24,
@@ -175,17 +177,17 @@ async def test_transfusion_freeze_complete_multiple_events_keeps_customer_contra
         "requirement_satisfied"
     ] * 3
     assert all(item["criterion_results"] == [] for item in customer_results)
-    assert by_rule_id["LX0609-045"]["findings"] == "已找到可核对的输血病程记录（2 份）。"
-    assert by_rule_id["LX0609-046"]["findings"] == (
+    assert by_rule_id["LX0609-07-02-01"]["findings"] == "已找到可核对的输血病程记录（2 份）。"
+    assert by_rule_id["LX0609-07-02-02"]["findings"] == (
         "输血病程已记录指征、起止时间、血液成分、输注量、过程观察及反应处理。"
     )
-    assert by_rule_id["LX0609-047"]["findings"] == (
+    assert by_rule_id["LX0609-07-03-01"]["findings"] == (
         "已在输血结束后 24 小时内完成效果评价，间隔 0.17 小时"
         "（结束时间 2026-06-05 19:00:00；评价时间 2026-06-05 19:10:00）。"
     )
     assert {
         (item["source_type"], item["source_document_id"])
-        for item in by_rule_id["LX0609-045"]["customer_evidence"]
+        for item in by_rule_id["LX0609-07-02-01"]["customer_evidence"]
     } == {
         ("bloodtrans_record", "blood-freeze-1"),
         ("bloodtrans_record", "blood-freeze-2"),
@@ -196,7 +198,7 @@ async def test_transfusion_freeze_complete_multiple_events_keeps_customer_contra
 async def test_transfusion_freeze_no_event_and_source_error_keep_distinct_states() -> None:
     """无输血与触发来源技术错误必须保持可区分，且不产生伪造客户证据。"""
 
-    selected = tuple(f"LX0609-{number:03d}" for number in range(41, 50))
+    selected = published_rule_ids(41, 49)
     absent_execution, absent_reduced, absent_results, _ = await _execute_and_aggregate(
         rule_ids=selected,
         rows_by_source={},
@@ -239,7 +241,7 @@ async def test_047_missing_evaluation_completion_time_stays_data_gap_through_agg
     """评价正文缺权威完成时间时，展示事实不得把资料缺口伪装成临床缺项。"""
 
     execution, reduced, customer_results, _ = await _execute_and_aggregate(
-        rule_ids=("LX0609-047",),
+        rule_ids=("LX0609-07-03-01",),
         rows_by_source={
             "mr_bloodtrans": [
                 {"transfution_datetime": datetime(2026, 6, 5, 14, 20)}

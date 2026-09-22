@@ -16,11 +16,11 @@ from typing import Any
 
 DISCHARGE_CUSTOMER_RULE_IDS = frozenset(
     {
-        "LX0609-061",
-        "LX0609-062",
-        "LX0609-063",
-        "LX0609-067",
-        "LX0609-068",
+        "LX0609-08-01-01",
+        "LX0609-08-01-02",
+        "LX0609-08-01-03",
+        "LX0609-08-02-01",
+        "LX0609-08-02-02",
     }
 )
 
@@ -274,21 +274,21 @@ def _safe_course_time_gap(raw: Mapping[str, Any]) -> dict[str, Any] | None:
 
 
 def discharge_course_time_gap_display(rule_id: str, raw: Any) -> tuple[list[str], str] | None:
-    kinds = {"LX0609-067": "predischarge_course_time_missing", "LX0609-068": "senior_discharge_approval_time_missing"}
+    kinds = {"LX0609-08-02-01": "predischarge_course_time_missing", "LX0609-08-02-02": "senior_discharge_approval_time_missing"}
     if not isinstance(raw, Mapping) or rule_id not in kinds or raw.get("failure_kind") != kinds[rule_id]:
         return None
     safe = _safe_course_time_gap(raw)
     if safe is None:
         return None
     count = safe["missing_time_count"]
-    description = (f"已找到{count}份含同意出院意见的病程记录" if rule_id == "LX0609-068" else f"已读取{count}份病程记录")
+    description = (f"已找到{count}份含同意出院意见的病程记录" if rule_id == "LX0609-08-02-02" else f"已读取{count}份病程记录")
     message = (f"出院日期{safe['discharge_date']}，核查窗口为{'、'.join(safe['checked_dates'])}。"
                f"{description}，但缺少有效记录时间，无法确认是否位于该窗口。请通过证据定位核对这些文书的时间。")
     return [f"相关病程记录的权威时间（{count}份）"], message
 
 
 def discharge_course_body_gap_display(rule_id: str, raw: Any) -> tuple[list[str], str] | None:
-    if rule_id != "LX0609-067" or not isinstance(raw, Mapping) or raw.get("failure_kind") != "predischarge_course_body_missing":
+    if rule_id != "LX0609-08-02-01" or not isinstance(raw, Mapping) or raw.get("failure_kind") != "predischarge_course_body_missing":
         return None
     safe = _safe_067(raw)
     if safe is None:
@@ -430,15 +430,15 @@ def safe_discharge_customer_display_facts(
     if not isinstance(raw, Mapping):
         return None
     normalized = str(rule_id or "").strip().upper()
-    if normalized == "LX0609-061":
+    if normalized == "LX0609-08-01-01":
         return _safe_061(raw)
-    if normalized == "LX0609-062":
+    if normalized == "LX0609-08-01-02":
         return _safe_062(raw)
-    if normalized == "LX0609-063":
+    if normalized == "LX0609-08-01-03":
         return _safe_063(raw)
-    if normalized == "LX0609-067":
+    if normalized == "LX0609-08-02-01":
         return _safe_067(raw)
-    if normalized == "LX0609-068":
+    if normalized == "LX0609-08-02-02":
         return _safe_068(raw)
     return None
 
@@ -456,7 +456,7 @@ def discharge_customer_fact_status_is_valid(
     if not isinstance(safe_facts, Mapping):
         return False
     normalized = str(rule_id or "").strip().upper()
-    if normalized == "LX0609-061":
+    if normalized == "LX0609-08-01-01":
         return normalized_status == (
             "data_gap"
             if safe_facts.get("actual_interval_hours") is None
@@ -465,7 +465,7 @@ def discharge_customer_fact_status_is_valid(
             if safe_facts["actual_interval_hours"] <= 24
             else "non_compliant"
         )
-    if normalized == "LX0609-062":
+    if normalized == "LX0609-08-01-02":
         if safe_facts.get("verification_kind") == "discharge_medication_extraction_pending":
             return normalized_status == {
                 "unknown": "uncertain", "data_gap": "data_gap", "technical_error": "technical_error",
@@ -473,7 +473,7 @@ def discharge_customer_fact_status_is_valid(
         return normalized_status == (
             "compliant" if not safe_facts.get("missing_fields") else "non_compliant"
         )
-    if normalized == "LX0609-063":
+    if normalized == "LX0609-08-01-03":
         if safe_facts.get("verification_kind") == "discharge_diagnosis_data_gap":
             return normalized_status == "data_gap"
         return normalized_status == (
@@ -481,11 +481,11 @@ def discharge_customer_fact_status_is_valid(
             if safe_facts.get("diagnoses_consistent") is True
             else "non_compliant"
         )
-    if normalized == "LX0609-067":
+    if normalized == "LX0609-08-02-01":
         return normalized_status == (
             "compliant" if safe_facts.get("course_present") is True else "data_gap"
         )
-    if normalized == "LX0609-068":
+    if normalized == "LX0609-08-02-02":
         return normalized_status == (
             "compliant" if safe_facts.get("approval_present") is True else "data_gap"
         )

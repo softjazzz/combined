@@ -36,7 +36,7 @@ function payload(
     is_complete: true,
     items: [
       {
-        rule_id: 'LX0609-001',
+        rule_id: 'LX0609-01-01-01',
         rule_name: '测试质控项',
         status: 'non_compliant',
         conclusion: '后端已保存的结论',

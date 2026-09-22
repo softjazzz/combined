@@ -92,7 +92,7 @@ from .sc_rule_family import (
 
 logger = logging.getLogger(__name__)
 
-_COPY_ROUND_RULE_IDS = {"CL-037", "CL-275", "LX0609-017"}
+_COPY_ROUND_RULE_IDS = {"CL-037", "CL-275", "LX0609-12-01-02"}
 _COPY_FIRST_COURSE_RULE_IDS = {"CL-273", "CL-274", "CL-276"}
 _COPY_SIGNAL_RULE_IDS = _COPY_ROUND_RULE_IDS | _COPY_FIRST_COURSE_RULE_IDS
 _COPY_SIMILARITY_THRESHOLD = 0.5
@@ -268,7 +268,7 @@ def _selected_luxian_0609_033_raw_rules(selected_rules: List[Dict[str, Any]]) ->
         if str(rule.get("rule_id") or rule.get("rule_code") or "").strip()
     }
     for wrapper in load_luxian_0609_rules():
-        if str(wrapper.get("rule_id") or wrapper.get("rule_code") or "").strip().upper() != "LX0609-033":
+        if str(wrapper.get("rule_id") or wrapper.get("rule_code") or "").strip().upper() != "LX0609-11-01-01":
             continue
         mapped_rule_ids = {
             str(rule_id or "").strip().upper()
@@ -291,7 +291,7 @@ def _build_luxian_0609_033_live_source_decisions(
         return {}
     if consent_document_present:
         return {
-            "LX0609-033": build_luxian_0609_033_live_source_decision(
+            "LX0609-11-01-01": build_luxian_0609_033_live_source_decision(
                 source_state="consent_document_present",
                 source_status="available",
                 source_row_count=1,
@@ -302,7 +302,7 @@ def _build_luxian_0609_033_live_source_decisions(
     visit_id = str((bundle or {}).get("visit_id") or "").strip()
     if not all((institute_id, patient_id, visit_id)):
         return {
-            "LX0609-033": build_luxian_0609_033_live_source_decision(
+            "LX0609-11-01-01": build_luxian_0609_033_live_source_decision(
                 source_state="unavailable", source_status="unavailable", source_row_count=0
             )
         }
@@ -328,7 +328,7 @@ def _build_luxian_0609_033_live_source_decisions(
         else:
             source_state = "nonexact_rows"
     return {
-        "LX0609-033": build_luxian_0609_033_live_source_decision(
+        "LX0609-11-01-01": build_luxian_0609_033_live_source_decision(
             source_state=source_state,
             source_status=source_status,
             source_row_count=row_count,
@@ -4153,7 +4153,7 @@ class SichuanQCService:
         has_new_plan = semantic_checks.get("has_new_plan")
         llm_raw_output = str(normalized.get("llm_raw_output") or "").strip()
         allow_program_only_fallback = (
-            rule_id in {"CL-275", "LX0609-017"}
+            rule_id in {"CL-275", "LX0609-12-01-02"}
             and not llm_raw_output
             and has_new_analysis is None
             and has_new_plan is None

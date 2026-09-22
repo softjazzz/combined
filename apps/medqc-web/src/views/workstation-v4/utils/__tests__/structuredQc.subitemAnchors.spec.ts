@@ -102,28 +102,28 @@ describe('formal qc subitem anchors mapping', () => {
     const result = mapSichuanEvaluationToStructuredQC({
       evaluation_results: [
         {
-          rule_id: 'LX0609-001',
+          rule_id: 'LX0609-01-01-01',
           rule_name: '入院记录时限',
           status: 'data_gap',
           is_compliant: false,
           findings: '缺少入院记录时间。',
         },
         {
-          rule_id: 'LX0609-002',
+          rule_id: 'LX0609-01-02-01',
           rule_name: '会诊闭环',
           status: 'data_quality_gap',
           is_compliant: false,
           findings: '缺少会诊执行记录。',
         },
         {
-          rule_id: 'LX0609-003',
+          rule_id: 'LX0609-04-02-01',
           rule_name: '输血记录',
           status: 'unsupported',
           is_compliant: true,
           findings: '该执行链路暂未接入。',
         },
         {
-          rule_id: 'LX0609-004',
+          rule_id: 'LX0609-09-01-01',
           rule_name: '手术麻醉',
           status: 'technical_error_internal',
           is_compliant: true,

@@ -118,6 +118,15 @@ def canonical_envelope_items_are_consistent(items: Any) -> bool:
         if not isinstance(item, dict):
             return False
         rule_id = _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
+        if rule_id.startswith("LX0609-"):
+            # 正式结果只接收目录中的唯一新身份；历史转换在离线迁移完成。
+            if get_luxian_0609_rule(rule_id) is None:
+                return False
+            if any(
+                _safe_text(item.get(key)).upper() not in {"", rule_id}
+                for key in ("rule_code", "qc_point_id", "customer_rule_id")
+            ):
+                return False
         status = _safe_text(item.get("status"))
         result_status = _safe_text(item.get("result_status"))
         display_status = _safe_text(item.get("display_status"))

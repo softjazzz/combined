@@ -40,7 +40,7 @@ def test_missing_time_does_not_hide_deterministic_copy(missing_first):
         return SnapshotSourceRows.create(source_key=source, rows=docs.get(source, []), truncated=False, limit_rows=50)
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-017",), institute_id="I", patient_id="P", visit_id="V",
+        selected_rule_ids=("LX0609-12-01-02",), institute_id="I", patient_id="P", visit_id="V",
         source_schema=None, created_at="2026-01-09T09:00:00+08:00", row_reader=reader,
     )
     selected = _selected_copy_document_refs(outcome=outcome, snapshot=session.snapshot, materials=session.materials)

@@ -69,40 +69,40 @@ FAMILY_QUOTAS: dict[str, int] = {
 }
 
 FAMILY_RULE_IDS: dict[str, list[str]] = {
-    "时限": ["LX0609-001", "LX0609-002", "LX0609-004", "LX0609-005", "LX0609-006"],
-    "查房/病重病危": ["LX0609-007", "LX0609-008", "LX0609-009", "LX0609-016", "LX0609-017", "LX0609-018"],
-    "检查检验": ["LX0609-010", "LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015"],
-    "会诊": ["LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023"],
+    "时限": ["LX0609-01-01-01", "LX0609-01-02-01", "LX0609-09-01-01", "LX0609-02-01-01", "LX0609-02-01-02"],
+    "查房/病重病危": ["LX0609-02-01-03", "LX0609-02-01-04", "LX0609-02-01-05", "LX0609-12-01-01", "LX0609-12-01-02", "LX0609-01-01-02"],
+    "检查检验": ["LX0609-06-01-02", "LX0609-06-01-04", "LX0609-06-01-05", "LX0609-06-03-03", "LX0609-06-03-04"],
+    "会诊": ["LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03", "LX0609-03-01-04"],
     "手术麻醉": [
-        "LX0609-003",
-        "LX0609-024",
-        "LX0609-025",
-        "LX0609-028",
-        "LX0609-029",
-        "LX0609-030",
-        "LX0609-031",
-        "LX0609-032",
-        "LX0609-033",
-        "LX0609-034",
-        "LX0609-035",
-        "LX0609-036",
-        "LX0609-037",
-        "LX0609-038",
-        "LX0609-039",
-        "LX0609-040",
+        "LX0609-04-02-01",
+        "LX0609-04-02-03",
+        "LX0609-04-02-04",
+        "LX0609-05-01-01",
+        "LX0609-04-01-01",
+        "LX0609-04-02-02",
+        "LX0609-04-02-05",
+        "LX0609-04-03-01",
+        "LX0609-11-01-01",
+        "LX0609-11-02-01",
+        "LX0609-11-02-02",
+        "LX0609-04-04-01",
+        "LX0609-04-04-02",
+        "LX0609-04-04-03",
+        "LX0609-04-01-02",
+        "LX0609-04-01-03",
     ],
     "输血": [
-        "LX0609-041",
-        "LX0609-042",
-        "LX0609-043",
-        "LX0609-044",
-        "LX0609-045",
-        "LX0609-046",
-        "LX0609-047",
-        "LX0609-048",
-        "LX0609-049",
+        "LX0609-11-03-01",
+        "LX0609-11-03-02",
+        "LX0609-07-01-01",
+        "LX0609-07-01-02",
+        "LX0609-07-02-01",
+        "LX0609-07-02-02",
+        "LX0609-07-03-01",
+        "LX0609-07-04-01",
+        "LX0609-07-04-02",
     ],
-    "肿瘤病理/化疗": ["LX0609-013", "LX0609-019", "LX0609-026", "LX0609-027"],
+    "肿瘤病理/化疗": ["LX0609-06-02-03", "LX0609-06-02-02", "LX0609-05-02-01", "LX0609-08-01-04"],
 }
 
 FAMILY_KEYWORDS: dict[str, tuple[str, ...]] = {
@@ -317,7 +317,7 @@ def _normalize_rule_ids(values: Any) -> list[str]:
     seen: set[str] = set()
     for item in values:
         rule_id = _text(item).upper()
-        if not rule_id or not re.match(r"^LX0609-\d{3}$", rule_id):
+        if not rule_id or not re.match(r"^LX0609-\d{2}-\d{2}-\d{2}$", rule_id):
             continue
         if rule_id not in seen:
             seen.add(rule_id)
@@ -342,14 +342,14 @@ def family_rules_from_text(family: str, text: str) -> list[str]:
     rules = list(FAMILY_RULE_IDS.get(family) or [])
     if family == "检查检验":
         if "MRI" in text.upper() or "CT" in text.upper() or "影像" in text:
-            return ["LX0609-012"]
+            return ["LX0609-06-01-05"]
         if "培养" in text or "细菌" in text:
-            return ["LX0609-014"]
+            return ["LX0609-06-03-03"]
     if family == "输血":
-        picked = [rule_id for rule_id in ("LX0609-041", "LX0609-043", "LX0609-044", "LX0609-047", "LX0609-049") if rule_id in rules]
+        picked = [rule_id for rule_id in ("LX0609-11-03-01", "LX0609-07-01-01", "LX0609-07-01-02", "LX0609-07-03-01", "LX0609-07-04-02") if rule_id in rules]
         return picked or rules
     if family == "肿瘤病理/化疗":
-        picked = [rule_id for rule_id in ("LX0609-013", "LX0609-019", "LX0609-026") if rule_id in rules]
+        picked = [rule_id for rule_id in ("LX0609-06-02-03", "LX0609-06-02-02", "LX0609-05-02-01") if rule_id in rules]
         return picked or rules
     return rules[:]
 

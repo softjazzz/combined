@@ -12,7 +12,17 @@ from typing import Any, Mapping
 
 
 TRANSFUSION_CUSTOMER_RULE_IDS = frozenset(
-    (*[f"LX0609-{number:03d}" for number in range(41, 49)], "LX0609-070")
+    {
+        "LX0609-11-03-01",
+        "LX0609-11-03-02",
+        "LX0609-07-01-01",
+        "LX0609-07-01-02",
+        "LX0609-07-02-01",
+        "LX0609-07-02-02",
+        "LX0609-07-03-01",
+        "LX0609-07-04-01",
+        "LX0609-07-01-03",
+    }
 )
 
 _PRETRANSFUSION_ALLOWED_ITEMS = {
@@ -20,11 +30,11 @@ _PRETRANSFUSION_ALLOWED_ITEMS = {
 }
 
 _SYSTEM_GAP_REASONS = {
-    "LX0609-041": "consent_source_unavailable",
-    "LX0609-042": "consent_signature_contract_unavailable",
-    "LX0609-043": "pretransfusion_item_contract_unavailable",
-    "LX0609-044": "pretransfusion_assessment_source_unavailable",
-    "LX0609-048": "transfusion_comparison_fields_unavailable",
+    "LX0609-11-03-01": "consent_source_unavailable",
+    "LX0609-11-03-02": "consent_signature_contract_unavailable",
+    "LX0609-07-01-01": "pretransfusion_item_contract_unavailable",
+    "LX0609-07-01-02": "pretransfusion_assessment_source_unavailable",
+    "LX0609-07-04-01": "transfusion_comparison_fields_unavailable",
 }
 
 
@@ -37,7 +47,7 @@ def is_transfusion_customer_rule(rule_id: str) -> bool:
 def is_transfusion_public_fact_ref_evidence_rule(rule_id: str) -> bool:
     """070 的客户证据只允许经过公共逐行 fact_refs 投影。"""
 
-    return str(rule_id or "").strip().upper() == "LX0609-070"
+    return str(rule_id or "").strip().upper() == "LX0609-07-01-03"
 
 
 def _controlled_list(
@@ -553,10 +563,10 @@ def _safe_048(raw: Mapping[str, Any]) -> dict[str, Any] | None:
 
 def _safe_requirement_missing(rule_id: str, raw: Mapping[str, Any]) -> dict[str, Any] | None:
     expected = {
-        "LX0609-044": ("pretransfusion_assessment", ["bloodtrans_record", "blood_application", "course_record"]),
-        "LX0609-046": ("purpose_or_indication", ["bloodtrans_record"]),
-        "LX0609-047": ("posttransfusion_evaluation", ["bloodtrans_record", "course_record"]),
-        "LX0609-048": ("postop_first_course_transfusion", ["surgery_record", "postsurg_firstcourse_record"]),
+        "LX0609-07-01-02": ("pretransfusion_assessment", ["bloodtrans_record", "blood_application", "course_record"]),
+        "LX0609-07-02-02": ("purpose_or_indication", ["bloodtrans_record"]),
+        "LX0609-07-03-01": ("posttransfusion_evaluation", ["bloodtrans_record", "course_record"]),
+        "LX0609-07-04-01": ("postop_first_course_transfusion", ["surgery_record", "postsurg_firstcourse_record"]),
     }.get(rule_id)
     if expected is None:
         return None
@@ -586,15 +596,15 @@ def safe_transfusion_customer_display_facts(
     if system_gap is not None:
         return system_gap
     checker = {
-        "LX0609-041": _safe_041,
-        "LX0609-042": _safe_042,
-        "LX0609-043": _safe_043,
-        "LX0609-044": _safe_044,
-        "LX0609-045": _safe_045,
-        "LX0609-046": _safe_046,
-        "LX0609-047": _safe_047,
-        "LX0609-048": _safe_048,
-        "LX0609-070": _safe_070,
+        "LX0609-11-03-01": _safe_041,
+        "LX0609-11-03-02": _safe_042,
+        "LX0609-07-01-01": _safe_043,
+        "LX0609-07-01-02": _safe_044,
+        "LX0609-07-02-01": _safe_045,
+        "LX0609-07-02-02": _safe_046,
+        "LX0609-07-03-01": _safe_047,
+        "LX0609-07-04-01": _safe_048,
+        "LX0609-07-01-03": _safe_070,
     }.get(normalized_rule_id)
     safe = checker(raw) if checker is not None else None
     return safe if safe is not None else _safe_requirement_missing(normalized_rule_id, raw)
@@ -608,7 +618,7 @@ def transfusion_customer_fact_status_is_valid(
     normalized_rule_id = str(rule_id or "").strip().upper()
     if normalized_rule_id not in TRANSFUSION_CUSTOMER_RULE_IDS:
         return True
-    if normalized_rule_id == "LX0609-070":
+    if normalized_rule_id == "LX0609-07-01-03":
         if status == "technical_error":
             return True
         if safe_facts is None:

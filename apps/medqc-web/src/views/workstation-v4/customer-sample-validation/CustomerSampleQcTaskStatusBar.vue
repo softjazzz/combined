@@ -14,7 +14,10 @@
       <div class="qc-task-status__layout">
         <div class="qc-task-status__header">
           <div class="qc-task-status__heading">
-            <span class="qc-task-status__indicator" aria-hidden="true" />
+            <span
+              class="qc-task-status__indicator"
+              aria-hidden="true"
+            />
             <div class="qc-task-status__title">
               <div>
                 <strong>{{ presentation?.statusTitle }}</strong>
@@ -50,7 +53,12 @@
               v-if="task.status === 'completed' && !task.read_only"
               placement="bottomRight"
             >
-              <a-button size="small" data-testid="qc-task-more-actions"> 更多 </a-button>
+              <a-button
+                size="small"
+                data-testid="qc-task-more-actions"
+              >
+                更多
+              </a-button>
               <template #overlay>
                 <a-menu>
                   <a-menu-item
@@ -106,7 +114,10 @@
             <i :style="{ width: `${presentation.progressPercent}%` }" />
           </div>
 
-          <div v-if="presentation?.isRunning" class="qc-task-status__progress-detail">
+          <div
+            v-if="presentation?.isRunning"
+            class="qc-task-status__progress-detail"
+          >
             <strong>
               {{
                 presentation.progressPercent > 0
@@ -132,7 +143,10 @@
               }}
             </div>
             <div class="qc-task-status__live-result-content">
-              <Transition name="qc-live-result" mode="out-in">
+              <Transition
+                name="qc-live-result"
+                mode="out-in"
+              >
                 <div
                   v-if="currentLiveResult"
                   :key="currentLiveResult.key"
@@ -189,7 +203,11 @@
                 class="qc-task-status__chips qc-task-status__chips--attention"
                 data-testid="qc-task-attention-statuses"
               >
-                <span v-for="chip in attentionStatusChips" :key="chip.key" :class="chip.className">
+                <span
+                  v-for="chip in attentionStatusChips"
+                  :key="chip.key"
+                  :class="chip.className"
+                >
                   {{ chip.label }} <strong>{{ chip.value }}</strong>
                 </span>
               </div>
@@ -199,7 +217,11 @@
                 data-testid="qc-task-other-statuses"
               >
                 <span>其他结果</span>
-                <span v-for="chip in neutralStatusChips" :key="chip.key" :class="chip.className">
+                <span
+                  v-for="chip in neutralStatusChips"
+                  :key="chip.key"
+                  :class="chip.className"
+                >
                   {{ chip.label }} <strong>{{ chip.value }}</strong>
                 </span>
               </div>

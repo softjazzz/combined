@@ -144,9 +144,9 @@ def select_consultation_rule_material_refs(
         return ()
     if status == "not_applicable" and reason_code != "eligibility_not_met":
         return ()
-    if rule_id in {"LX0609-021", "LX0609-022"}:
-        state_field = "application_state" if rule_id == "LX0609-021" else "opinion_state"
-        ref_field = "application_refs" if rule_id == "LX0609-021" else "opinion_refs"
+    if rule_id in {"LX0609-03-01-02", "LX0609-03-01-03"}:
+        state_field = "application_state" if rule_id == "LX0609-03-01-02" else "opinion_state"
+        ref_field = "application_refs" if rule_id == "LX0609-03-01-02" else "opinion_refs"
         selected_refs = tuple(
             dict.fromkeys(
                 _clean(reference)
@@ -169,7 +169,7 @@ def select_consultation_rule_material_refs(
             internal_refs=selected_refs,
         )
 
-    if rule_id not in {"LX0609-020", "LX0609-023"} or not episodes:
+    if rule_id not in {"LX0609-03-01-01", "LX0609-03-01-04"} or not episodes:
         return ()
     assessment_rows = tuple(assessments or ())
     assessment_by_recommendation = {
@@ -190,7 +190,7 @@ def select_consultation_rule_material_refs(
         item
         for item in episodes
         if not (
-            rule_id == "LX0609-020"
+            rule_id == "LX0609-03-01-01"
             and status == "non_compliant"
             and missing_episode_refs
         )
@@ -209,7 +209,7 @@ def select_consultation_rule_material_refs(
         )
     )
     candidate_refs: tuple[str, ...] = ()
-    if not (rule_id == "LX0609-020" and status == "non_compliant"):
+    if not (rule_id == "LX0609-03-01-01" and status == "non_compliant"):
         candidate_refs = tuple(
             dict.fromkeys(
                 _clean(reference)
@@ -238,11 +238,11 @@ def select_consultation_rule_material_refs(
         for assessment in assessment_rows:
             record_state = _clean(assessment.execution_record_state)
             offending = (
-                rule_id == "LX0609-020"
+                rule_id == "LX0609-03-01-01"
                 and record_state == "no_trace"
                 and not assessment.execution_refs
             ) or (
-                rule_id == "LX0609-023"
+                rule_id == "LX0609-03-01-04"
                 and record_state in {"generic_trace", "copied_opinion"}
             )
             if not offending:

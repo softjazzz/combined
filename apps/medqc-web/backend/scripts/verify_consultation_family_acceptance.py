@@ -208,7 +208,7 @@ def _allowlisted_public_facts(*, rule_id: str, raw: Any) -> dict[str, Any]:
             if isinstance(item, Mapping) and key in item
         }
 
-    if rule_id in {"LX0609-020", "LX0609-023"}:
+    if rule_id in {"LX0609-03-01-01", "LX0609-03-01-04"}:
         facts = select(
             raw,
             (
@@ -221,7 +221,7 @@ def _allowlisted_public_facts(*, rule_id: str, raw: Any) -> dict[str, Any]:
                 "relation_state",
             ),
         )
-        if rule_id == "LX0609-020" and isinstance(raw.get("recommendation_results"), list):
+        if rule_id == "LX0609-03-01-01" and isinstance(raw.get("recommendation_results"), list):
             facts["recommendation_results"] = [
                 select(
                     item,
@@ -254,7 +254,7 @@ def _allowlisted_public_facts(*, rule_id: str, raw: Any) -> dict[str, Any]:
                 evidence_items.append(projected)
             facts["recommendation_evidence"] = evidence_items
         return facts
-    if rule_id in {"LX0609-021", "LX0609-022"}:
+    if rule_id in {"LX0609-03-01-02", "LX0609-03-01-03"}:
         facts = select(
             raw,
             (

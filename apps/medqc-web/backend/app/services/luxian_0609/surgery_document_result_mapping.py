@@ -12,19 +12,19 @@ from typing import Any, Mapping
 
 SURGERY_DOCUMENT_CUSTOMER_RULE_IDS = frozenset(
     {
-        "LX0609-029",
-        "LX0609-034",
-        "LX0609-035",
-        "LX0609-036",
-        "LX0609-037",
-        "LX0609-038",
-        "LX0609-039",
-        "LX0609-078",
-        "LX0609-079",
+        "LX0609-04-01-01",
+        "LX0609-11-02-01",
+        "LX0609-11-02-02",
+        "LX0609-04-04-01",
+        "LX0609-04-04-02",
+        "LX0609-04-04-03",
+        "LX0609-04-01-02",
+        "LX0609-04-01-04",
+        "LX0609-04-01-05",
     }
 )
 SURGERY_DOCUMENT_PUBLIC_FACT_REF_EVIDENCE_RULE_IDS = frozenset(
-    {"LX0609-034", "LX0609-036", "LX0609-039", "LX0609-078", "LX0609-079"}
+    {"LX0609-11-02-01", "LX0609-04-04-01", "LX0609-04-01-02", "LX0609-04-01-04", "LX0609-04-01-05"}
 )
 
 _CONSENT_FIELDS = (
@@ -112,7 +112,7 @@ def _safe_029(raw: Mapping[str, Any]) -> dict[str, Any] | None:
 
 def _safe_034_035(rule_id: str, raw: Mapping[str, Any]) -> dict[str, Any] | None:
     if (
-        rule_id == "LX0609-034"
+        rule_id == "LX0609-11-02-01"
         and raw.get("verification_kind") == "anesthesia_consent_present"
         and raw.get("performed_anesthesia_confirmed") is True
         and raw.get("checked_sources") == ["consent_form"]
@@ -123,7 +123,7 @@ def _safe_034_035(rule_id: str, raw: Mapping[str, Any]) -> dict[str, Any] | None
             "checked_sources": ["consent_form"],
         }
     if (
-        rule_id == "LX0609-035"
+        rule_id == "LX0609-11-02-02"
         and raw.get("verification_kind") == "anesthesia_consent_complete"
         and raw.get("performed_anesthesia_confirmed") is True
         and raw.get("checked_fields") == list(_CONSENT_FIELDS)
@@ -134,7 +134,7 @@ def _safe_034_035(rule_id: str, raw: Mapping[str, Any]) -> dict[str, Any] | None
             "checked_fields": list(_CONSENT_FIELDS),
         }
     if (
-        rule_id == "LX0609-035"
+        rule_id == "LX0609-11-02-02"
         and raw.get("failure_kind") == "anesthesia_consent_incomplete"
         and raw.get("performed_anesthesia_confirmed") is True
         and isinstance(raw.get("missing_fields"), list)
@@ -165,7 +165,7 @@ def _safe_034_035(rule_id: str, raw: Mapping[str, Any]) -> dict[str, Any] | None
 
 def _safe_036_037(rule_id: str, raw: Mapping[str, Any]) -> dict[str, Any] | None:
     if (
-        rule_id == "LX0609-036"
+        rule_id == "LX0609-04-04-01"
         and raw.get("verification_kind") == "anesthesia_visits_present"
         and raw.get("performed_anesthesia_confirmed") is True
         and raw.get("checked_sources") == list(_VISIT_SOURCES)
@@ -176,7 +176,7 @@ def _safe_036_037(rule_id: str, raw: Mapping[str, Any]) -> dict[str, Any] | None
             "checked_sources": list(_VISIT_SOURCES),
         }
     if (
-        rule_id == "LX0609-037"
+        rule_id == "LX0609-04-04-02"
         and raw.get("verification_kind") == "anesthesia_visits_complete"
         and raw.get("performed_anesthesia_confirmed") is True
         and raw.get("checked_sources") == list(_VISIT_SOURCES)
@@ -192,7 +192,7 @@ def _safe_036_037(rule_id: str, raw: Mapping[str, Any]) -> dict[str, Any] | None
             },
         }
     if (
-        rule_id == "LX0609-037"
+        rule_id == "LX0609-04-04-02"
         and raw.get("failure_kind") == "anesthesia_visit_incomplete"
         and raw.get("performed_anesthesia_confirmed") is True
         and isinstance(raw.get("missing_fields_by_visit"), Mapping)
@@ -290,14 +290,14 @@ def _safe_039(raw: Mapping[str, Any]) -> dict[str, Any] | None:
 
 
 def _safe_preop_content(rule_id: str, raw: Mapping[str, Any]) -> dict[str, Any] | None:
-    target = {"LX0609-078": "presurg_summary", "LX0609-079": "presurg_discussion"}[rule_id]
+    target = {"LX0609-04-01-04": "presurg_summary", "LX0609-04-01-05": "presurg_discussion"}[rule_id]
     allowed = {
-        "LX0609-078": (
+        "LX0609-04-01-04": (
             "brief_condition", "preop_diagnosis", "surgical_indication",
             "planned_procedure", "planned_anesthesia", "precautions",
             "surgeon_preop_visit",
         ),
-        "LX0609-079": (
+        "LX0609-04-01-05": (
             "preop_preparation", "surgical_indication", "surgical_plan",
             "risk_and_prevention", "participants_with_titles", "specific_opinions",
             "chair_summary", "discussion_date", "recorder_signature",
@@ -376,15 +376,15 @@ def safe_surgery_document_customer_display_facts(
     normalized_rule_id = str(rule_id or "").strip().upper()
     if normalized_rule_id not in SURGERY_DOCUMENT_CUSTOMER_RULE_IDS or not isinstance(raw, Mapping):
         return None
-    if normalized_rule_id == "LX0609-029":
+    if normalized_rule_id == "LX0609-04-01-01":
         return _safe_029(raw)
-    if normalized_rule_id in {"LX0609-034", "LX0609-035"}:
+    if normalized_rule_id in {"LX0609-11-02-01", "LX0609-11-02-02"}:
         return _safe_034_035(normalized_rule_id, raw)
-    if normalized_rule_id in {"LX0609-036", "LX0609-037"}:
+    if normalized_rule_id in {"LX0609-04-04-01", "LX0609-04-04-02"}:
         return _safe_036_037(normalized_rule_id, raw)
-    if normalized_rule_id == "LX0609-038":
+    if normalized_rule_id == "LX0609-04-04-03":
         return _safe_038(raw)
-    if normalized_rule_id in {"LX0609-078", "LX0609-079"}:
+    if normalized_rule_id in {"LX0609-04-01-04", "LX0609-04-01-05"}:
         return _safe_preop_content(normalized_rule_id, raw)
     return _safe_039(raw)
 

@@ -96,33 +96,33 @@ from .surgery_procedure_catalog import catalog_surgery_state
 
 EXECUTOR_KEY = "extended_document"
 EXTENDED_DOCUMENT_RULE_IDS = (
-    "LX0609-050",
-    "LX0609-051",
-    "LX0609-052",
-    "LX0609-053",
-    "LX0609-054",
-    "LX0609-055",
-    "LX0609-056",
-    "LX0609-057",
-    "LX0609-058",
-    "LX0609-059",
-    "LX0609-060",
-    "LX0609-061",
-    "LX0609-062",
-    "LX0609-063",
-    "LX0609-064",
-    "LX0609-065",
-    "LX0609-066",
-    "LX0609-067",
-    "LX0609-068",
-    "LX0609-069",
-    "LX0609-070",
-    "LX0609-071",
-    "LX0609-072",
-    "LX0609-073",
-    "LX0609-074",
-    "LX0609-075",
-    "LX0609-076",
+    "LX0609-03-02-01",
+    "LX0609-09-02-01",
+    "LX0609-06-04-01",
+    "LX0609-06-04-02",
+    "LX0609-05-01-02",
+    "LX0609-05-01-03",
+    "LX0609-05-01-04",
+    "LX0609-05-01-05",
+    "LX0609-05-01-06",
+    "LX0609-05-03-01",
+    "LX0609-04-02-06",
+    "LX0609-08-01-01",
+    "LX0609-08-01-02",
+    "LX0609-08-01-03",
+    "LX0609-04-05-01",
+    "LX0609-04-05-02",
+    "LX0609-04-05-03",
+    "LX0609-08-02-01",
+    "LX0609-08-02-02",
+    "LX0609-04-02-07",
+    "LX0609-07-01-03",
+    "LX0609-10-01-01",
+    "LX0609-10-02-01",
+    "LX0609-10-02-02",
+    "LX0609-12-02-01",
+    "LX0609-10-03-01",
+    "LX0609-04-02-08",
 )
 
 EXTENDED_DOCUMENT_SOURCE_KEYS = (
@@ -1946,15 +1946,15 @@ async def execute_luxian_0609_native_extended_document_rules(
     horizon_rows, horizon_error = (
         _source_rows(evidence_materials, "evaluation_context.horizon")
         if {
-            "LX0609-051",
-            "LX0609-052",
-            "LX0609-055",
-            "LX0609-061",
-            "LX0609-064",
-            "LX0609-065",
-            "LX0609-067",
-            "LX0609-068",
-            "LX0609-072",
+            "LX0609-09-02-01",
+            "LX0609-06-04-01",
+            "LX0609-05-01-03",
+            "LX0609-08-01-01",
+            "LX0609-04-05-01",
+            "LX0609-04-05-02",
+            "LX0609-08-02-01",
+            "LX0609-08-02-02",
+            "LX0609-10-02-01",
         }.intersection(selected)
         else ((), "")
     )
@@ -1978,7 +1978,7 @@ async def execute_luxian_0609_native_extended_document_rules(
         critical_horizon_error,
     ) = (
         _critical_value_evaluation_horizon(horizon_rows, horizon_error)
-        if "LX0609-052" in selected
+        if "LX0609-06-04-01" in selected
         else (None, None, None)
     )
     (
@@ -1987,7 +1987,7 @@ async def execute_luxian_0609_native_extended_document_rules(
         antimicrobial_horizon_error,
     ) = (
         _critical_value_evaluation_horizon(horizon_rows, horizon_error)
-        if "LX0609-055" in selected
+        if "LX0609-05-01-03" in selected
         else (None, None, None)
     )
     (
@@ -1996,7 +1996,7 @@ async def execute_luxian_0609_native_extended_document_rules(
         transfer_horizon_error,
     ) = (
         _critical_value_evaluation_horizon(horizon_rows, horizon_error)
-        if "LX0609-072" in selected
+        if "LX0609-10-02-01" in selected
         else (None, None, None)
     )
     discharge_rows, discharge_error = _source_rows(
@@ -2035,7 +2035,7 @@ async def execute_luxian_0609_native_extended_document_rules(
     diagnosis_rows, diagnosis_error = _source_rows(evidence_materials, "diagnosis")
     mr_diagnosis_rows, mr_diagnosis_error = (
         _source_rows(evidence_materials, "mr_diagnosis")
-        if "LX0609-063" in selected
+        if "LX0609-08-01-03" in selected
         else ((), "")
     )
     mr_diagnosis_observed = _has_source_observation(
@@ -2049,7 +2049,7 @@ async def execute_luxian_0609_native_extended_document_rules(
         admission_diagnosis_error,
     ) = (
         _source_rows(evidence_materials, "admission_record_diagnosis")
-        if "LX0609-074" in selected
+        if "LX0609-12-02-01" in selected
         else ((), "")
     )
     diffcase_rows, diffcase_error = _source_rows(
@@ -2095,7 +2095,7 @@ async def execute_luxian_0609_native_extended_document_rules(
             snapshot=evidence_snapshot,
             materials=evidence_materials,
         )
-        if {"LX0609-064", "LX0609-065", "LX0609-066"}.intersection(selected)
+        if {"LX0609-04-05-01", "LX0609-04-05-02", "LX0609-04-05-03"}.intersection(selected)
         else None
     )
     critical_value_outcomes = {
@@ -2124,7 +2124,7 @@ async def execute_luxian_0609_native_extended_document_rules(
     } if set(selected).intersection(CRITICAL_VALUE_RULE_IDS) else {}
 
     for rule_id in selected:
-        if rule_id == "LX0609-059":
+        if rule_id == "LX0609-05-03-01":
             # 059 仍处于 pending_definition。正式编排不会派发它；若低层
             # 兼容入口收到该规则，只能报告执行合同错误，不能交付临床缺陷。
             decisions.append(
@@ -2138,7 +2138,7 @@ async def execute_luxian_0609_native_extended_document_rules(
             )
             continue
 
-        if rule_id == "LX0609-050":
+        if rule_id == "LX0609-03-02-01":
             source_error = (
                 (registration_error and admission_error)
                 or daily_error
@@ -2207,7 +2207,7 @@ async def execute_luxian_0609_native_extended_document_rules(
             ))
             continue
 
-        if rule_id in {"LX0609-052", "LX0609-053"}:
+        if rule_id in {"LX0609-06-04-01", "LX0609-06-04-02"}:
             outcome = critical_value_outcomes[rule_id]
             if outcome.display_facts is not None:
                 display.append((rule_id, outcome.display_facts))
@@ -2232,23 +2232,23 @@ async def execute_luxian_0609_native_extended_document_rules(
             continue
 
         if rule_id in {
-            "LX0609-054", "LX0609-055", "LX0609-056",
-            "LX0609-057", "LX0609-058", "LX0609-059",
+            "LX0609-05-01-02", "LX0609-05-01-03", "LX0609-05-01-04",
+            "LX0609-05-01-05", "LX0609-05-01-06", "LX0609-05-03-01",
         }:
             antimicrobial_orders = _antimicrobial_orders(drug_order_rows)
             rule_antimicrobial_orders = (
                 _055_treatment_orders(antimicrobial_orders)
-                if rule_id == "LX0609-055"
+                if rule_id == "LX0609-05-01-03"
                 else antimicrobial_orders
             )
             course_rows = (*daily_rows, *senior_rows)
             selected_antimicrobial_evidence_rows: list[Mapping[str, Any]] = []
             source_error = drug_order_error or (
-                "" if rule_id == "LX0609-058" else daily_error or senior_error
+                "" if rule_id == "LX0609-05-01-06" else daily_error or senior_error
             )
             if source_error:
                 final_state, reason_code = "data_gap", source_error
-            elif rule_id == "LX0609-054":
+            elif rule_id == "LX0609-05-01-02":
                 antimicrobial_action_extraction = (
                     await extract_confirmed_antimicrobial_actions(
                         course_rows, llm_client
@@ -2351,7 +2351,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                         }))
             elif not rule_antimicrobial_orders:
                 final_state, reason_code = "not_applicable", "trigger_absent_complete"
-            elif rule_id == "LX0609-055":
+            elif rule_id == "LX0609-05-01-03":
                 order_events = tuple(
                     (row, name, _antimicrobial_start_datetime(row))
                     for row in rule_antimicrobial_orders
@@ -2490,7 +2490,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 if final_state == "not_applicable":
                     display_facts["window_state"] = reason_code
                 display.append((rule_id, display_facts))
-            elif rule_id == "LX0609-056":
+            elif rule_id == "LX0609-05-01-04":
                 special_orders = tuple(
                     row for row in antimicrobial_orders
                     if _antimicrobial_names_in(row, _SPECIAL_ANTIMICROBIALS)
@@ -2520,7 +2520,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                         complete = any(value <= first_order for value in specimen_times)
                         final_state = "compliant" if complete else "non_compliant"
                         reason_code = "requirement_satisfied" if complete else "requirement_violated"
-            elif rule_id == "LX0609-057":
+            elif rule_id == "LX0609-05-01-05":
                 empiric_contexts, association_ambiguous = (
                     _empiric_antimicrobial_event_contexts(
                         antimicrobial_orders=antimicrobial_orders,
@@ -2563,7 +2563,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                         "empiric_use_confirmed": True,
                         "reason_or_no_specimen_documented": complete,
                     }))
-            elif rule_id == "LX0609-058":
+            elif rule_id == "LX0609-05-01-06":
                 special_events = tuple(
                     (row, name, _parse_lx0609_058_datetime(
                         row.get("planned_start_datetime") or row.get("prescribed_datetime")
@@ -2722,7 +2722,7 @@ async def execute_luxian_0609_native_extended_document_rules(
             ))
             continue
 
-        if rule_id == "LX0609-063":
+        if rule_id == "LX0609-08-01-03":
             authority_source_key = (
                 "mr_diagnosis" if mr_diagnosis_observed else "diagnosis"
             )
@@ -2828,7 +2828,7 @@ async def execute_luxian_0609_native_extended_document_rules(
             ))
             continue
 
-        if rule_id == "LX0609-070":
+        if rule_id == "LX0609-07-01-03":
             source_keys = (
                 "inpat_registration",
                 "mr_bloodtrans",
@@ -2892,7 +2892,7 @@ async def execute_luxian_0609_native_extended_document_rules(
             ))
             continue
 
-        if rule_id == "LX0609-075":
+        if rule_id == "LX0609-10-03-01":
             invasive_orders = tuple(
                 row for row in nondrug_order_rows
                 if any(name in _material_text(row) for name in _INVASIVE_PROCEDURES)
@@ -2931,7 +2931,7 @@ async def execute_luxian_0609_native_extended_document_rules(
             ))
             continue
 
-        if rule_id in {"LX0609-051", "LX0609-060", "LX0609-076"}:
+        if rule_id in {"LX0609-09-02-01", "LX0609-04-02-06", "LX0609-04-02-08"}:
             source_error = registration_error or death_error or discharge_error
             if source_error and death_state == "unknown":
                 decisions.append(
@@ -2983,7 +2983,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 )
                 continue
 
-        if rule_id == "LX0609-076":
+        if rule_id == "LX0609-04-02-08":
             try:
                 death_document_rows = evidence_materials.document_rows(
                     "death_record", snapshot=evidence_snapshot
@@ -3018,7 +3018,7 @@ async def execute_luxian_0609_native_extended_document_rules(
             )
             continue
 
-        if rule_id == "LX0609-060":
+        if rule_id == "LX0609-04-02-06":
             final_state = "compliant" if death_rows else "non_compliant"
             death_document_refs = _death_document_refs(
                 snapshot=evidence_snapshot,
@@ -3059,7 +3059,7 @@ async def execute_luxian_0609_native_extended_document_rules(
             )
             continue
 
-        if rule_id == "LX0609-051":
+        if rule_id == "LX0609-09-02-01":
             outcome = evaluate_death_discussion_timeliness(
                 death_time=death_time,
                 death_rows=death_rows,
@@ -3104,7 +3104,7 @@ async def execute_luxian_0609_native_extended_document_rules(
             )
             continue
 
-        if rule_id == "LX0609-061":
+        if rule_id == "LX0609-08-01-01":
             discharge_horizon_error = (
                 horizon_error
                 if horizon_error in _BLOCKING_DISCHARGE_HORIZON_ERRORS
@@ -3182,7 +3182,7 @@ async def execute_luxian_0609_native_extended_document_rules(
             )
             continue
 
-        if rule_id == "LX0609-062":
+        if rule_id == "LX0609-08-01-02":
             if discharge_error:
                 decisions.append(
                     _decision(
@@ -3364,7 +3364,7 @@ async def execute_luxian_0609_native_extended_document_rules(
             )
             continue
 
-        if rule_id == "LX0609-066":
+        if rule_id == "LX0609-04-05-03":
             assert surgery_applicability is not None
             gate_outcome = _surgery_applicability_outcome(surgery_applicability)
             surgery_events: tuple[_PostoperativeSurgeryEvent, ...] = ()
@@ -3476,7 +3476,7 @@ async def execute_luxian_0609_native_extended_document_rules(
             )
             continue
 
-        if rule_id in {"LX0609-064", "LX0609-065"}:
+        if rule_id in {"LX0609-04-05-01", "LX0609-04-05-02"}:
             assert surgery_applicability is not None
             gate_outcome = _surgery_applicability_outcome(surgery_applicability)
             surgery_events = _postoperative_surgery_events(
@@ -3516,7 +3516,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                         if event.surgery_end_time is None
                     ],
                 }))
-            elif rule_id == "LX0609-064" and (
+            elif rule_id == "LX0609-04-05-01" and (
                 window_gate := _postoperative_window_gate(
                     surgery_events=surgery_events,
                     horizon_rows=horizon_rows,
@@ -3525,7 +3525,7 @@ async def execute_luxian_0609_native_extended_document_rules(
             ) is not None:
                 final_state, reason_code, window_facts = window_gate
                 display.append((rule_id, window_facts))
-            elif rule_id == "LX0609-065" and (
+            elif rule_id == "LX0609-04-05-02" and (
                 senior_round_horizon := _postoperative_senior_round_evaluation_horizon(
                     surgery_events=surgery_events,
                     horizon_rows=horizon_rows,
@@ -3539,15 +3539,15 @@ async def execute_luxian_0609_native_extended_document_rules(
                 }))
             elif (
                 (daily_error or senior_error)
-                if rule_id == "LX0609-064"
+                if rule_id == "LX0609-04-05-01"
                 else senior_error
             ):
                 final_state, reason_code = "data_gap", (
                     daily_error or senior_error
-                    if rule_id == "LX0609-064"
+                    if rule_id == "LX0609-04-05-01"
                     else senior_error
                 )
-            elif rule_id == "LX0609-064" and any(
+            elif rule_id == "LX0609-04-05-01" and any(
                 event.surgeon_names
                 and all(
                     _physician_identity_is_masked(name)
@@ -3557,7 +3557,7 @@ async def execute_luxian_0609_native_extended_document_rules(
             ):
                 final_state, reason_code = "data_gap", "association_failed"
             else:
-                if rule_id == "LX0609-065":
+                if rule_id == "LX0609-04-05-02":
                     evaluation_time, evaluation_date, _ = (
                         _postoperative_senior_round_evaluation_horizon(
                             surgery_events=surgery_events,
@@ -3824,7 +3824,7 @@ async def execute_luxian_0609_native_extended_document_rules(
             )
             continue
 
-        if rule_id == "LX0609-067":
+        if rule_id == "LX0609-08-02-01":
             discharge_horizon_error = (
                 horizon_error
                 if horizon_error in _BLOCKING_DISCHARGE_HORIZON_ERRORS
@@ -3904,7 +3904,7 @@ async def execute_luxian_0609_native_extended_document_rules(
             )
             continue
 
-        if rule_id == "LX0609-068":
+        if rule_id == "LX0609-08-02-02":
             if death_state == "present":
                 decisions.append(
                     _decision(
@@ -4178,7 +4178,7 @@ async def execute_luxian_0609_native_extended_document_rules(
             )
             continue
 
-        if rule_id == "LX0609-069":
+        if rule_id == "LX0609-04-02-07":
             outcome = evaluate_consultation_timeliness(
                 consultation_rows=consultation_rows,
                 consultation_error=consultation_error,
@@ -4217,7 +4217,7 @@ async def execute_luxian_0609_native_extended_document_rules(
             )
             continue
 
-        if rule_id == "LX0609-071":
+        if rule_id == "LX0609-10-01-01":
             outcome = evaluate_physician_handoff(
                 physician_change_rows=physician_change_rows,
                 physician_change_error=physician_change_error,
@@ -4266,7 +4266,7 @@ async def execute_luxian_0609_native_extended_document_rules(
             )
             continue
 
-        if rule_id in {"LX0609-072", "LX0609-073"}:
+        if rule_id in {"LX0609-10-02-01", "LX0609-10-02-02"}:
             outcome = evaluate_transfer_documentation(
                 rule_id=rule_id,
                 nondrug_order_error=nondrug_order_error,
@@ -4313,7 +4313,7 @@ async def execute_luxian_0609_native_extended_document_rules(
             )
             continue
 
-        if rule_id == "LX0609-074":
+        if rule_id == "LX0609-12-02-01":
             if not diagnosis_rows:
                 course_event_rows = tuple(
                     (_row_text(row), source_key, row)

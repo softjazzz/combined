@@ -116,7 +116,7 @@ function buildRuleDebugSection(item: QcDebugResultItem, index: number): string {
   appendTextSection(lines, '处理建议', item.suggestion)
   appendTextSection(lines, '模型分析', item.model_analysis)
   if (
-    item.rule_id === 'LX0609-061' &&
+    item.rule_id === 'LX0609-08-01-01' &&
     item.customer_display_facts &&
     typeof item.customer_display_facts === 'object'
   ) {

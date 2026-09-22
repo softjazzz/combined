@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import csv
 import json
+from pathlib import Path
 
 import pytest
 
@@ -17,21 +19,34 @@ from app.services.luxian_0609_rule_master import (
 )
 
 
+def _frozen_rule_ids() -> tuple[str, ...]:
+    """迁移清单仅由测试读取，生产目录不依赖旧编号。"""
+    mapping_path = Path(__file__).resolve().parents[3] / "docs/plans/lx0609-four-part-rule-code-mapping-v1.csv"
+    with mapping_path.open(encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    return tuple(row["rule_id"] for row in sorted(rows, key=lambda row: row["legacy_rule_id"]))
+
+
 @pytest.mark.unit
-def test_rule_master_derives_its_continuous_scope_from_its_own_entries() -> None:
-    """新增末尾规则时，master 本身是唯一的规则集合权威。"""
+def test_rule_master_derives_its_scope_without_numeric_continuity() -> None:
+    """子类允许预留编号；目录直接决定规则集合，不靠旧三位范围。"""
 
     payload = json.loads(rule_master_module._MASTER_PATH.read_text(encoding="utf-8"))
     assert isinstance(payload["rules"], list)
     extension = dict(payload["rules"][-1])
-    extension["rule_id"] = "LX0609-080"
+    extension["rule_id"] = "LX0609-06-01-09"
     payload["rules"].append(extension)
 
     entries = compile_luxian_0609_rule_master(payload)
 
-    assert tuple(entry.rule_id for entry in entries) == tuple(
-        f"LX0609-{index:03d}" for index in range(1, 81)
-    )
+    assert tuple(entry.rule_id for entry in entries) == (*_frozen_rule_ids(), "LX0609-06-01-09")
+
+
+def test_rule_master_keeps_declared_order_instead_of_sorting_identity() -> None:
+    payload = json.loads(rule_master_module._MASTER_PATH.read_text(encoding="utf-8"))
+    payload["rules"] = list(reversed(payload["rules"]))
+    entries = compile_luxian_0609_rule_master(payload)
+    assert tuple(entry.rule_id for entry in entries) == tuple(reversed(_frozen_rule_ids()))
 
 
 @pytest.mark.unit
@@ -39,15 +54,16 @@ def test_rule_master_derives_its_continuous_scope_from_its_own_entries() -> None
     "invalid_scope",
     (
         "duplicate",
-        "gap",
-        "reordered",
         "zero",
+        "zero_category",
+        "zero_subcategory",
+        "zero_point",
         "malformed",
         "wrong_prefix",
         "empty",
     ),
 )
-def test_rule_master_rejects_noncontinuous_or_empty_scope(
+def test_rule_master_rejects_duplicate_malformed_or_empty_scope(
     invalid_scope: str,
 ) -> None:
     payload = json.loads(rule_master_module._MASTER_PATH.read_text(encoding="utf-8"))
@@ -55,39 +71,33 @@ def test_rule_master_rejects_noncontinuous_or_empty_scope(
     if invalid_scope == "duplicate":
         payload["rules"][-1] = {
             **payload["rules"][-1],
-            "rule_id": "LX0609-074",
+            "rule_id": "LX0609-12-02-01",
         }
-        match = "continuous ordered"
-    elif invalid_scope == "gap":
-        payload["rules"][-1] = {
-            **payload["rules"][-1],
-            "rule_id": "LX0609-078",
-        }
-        match = "continuous ordered"
-    elif invalid_scope == "reordered":
-        payload["rules"][-2], payload["rules"][-1] = (
-            payload["rules"][-1],
-            payload["rules"][-2],
-        )
-        match = "continuous ordered"
+        match = "unique rule IDs"
+    elif invalid_scope in {"zero_category", "zero_subcategory", "zero_point"}:
+        part = {"zero_category": 1, "zero_subcategory": 2, "zero_point": 3}[invalid_scope]
+        identity = "LX0609-01-01-01".split("-")
+        identity[part] = "00"
+        payload["rules"][0]["rule_id"] = "-".join(identity)
+        match = "invalid LX0609 rule identity"
     elif invalid_scope == "zero":
         payload["rules"][0] = {
             **payload["rules"][0],
             "rule_id": "LX0609-000",
         }
-        match = "continuous ordered"
+        match = "invalid LX0609 rule identity"
     elif invalid_scope == "malformed":
         payload["rules"][-1] = {
             **payload["rules"][-1],
             "rule_id": "LX0609-76",
         }
-        match = "continuous ordered"
+        match = "invalid LX0609 rule identity"
     elif invalid_scope == "wrong_prefix":
         payload["rules"][-1] = {
             **payload["rules"][-1],
             "rule_id": "SC-077",
         }
-        match = "continuous ordered"
+        match = "invalid LX0609 rule identity"
     else:
         payload["rules"] = []
         match = "at least one rule"
@@ -100,9 +110,7 @@ def test_rule_master_rejects_noncontinuous_or_empty_scope(
 def test_rule_master_is_the_complete_ordered_79_rule_scope():
     entries = load_luxian_0609_rule_master()
 
-    assert tuple(entry.rule_id for entry in entries) == tuple(
-        f"LX0609-{index:03d}" for index in range(1, 80)
-    )
+    assert tuple(entry.rule_id for entry in entries) == _frozen_rule_ids()
     assert len({entry.rule_id for entry in entries}) == 79
     assert get_luxian_0609_rule_master_summary() == {
         "total": 79,
@@ -110,8 +118,8 @@ def test_rule_master_is_the_complete_ordered_79_rule_scope():
         "contract_ready": 0,
         "pending_definition": 0,
     }
-    assert LUXIAN_0609_RULE_MASTER_VERSION == "2026-09-05-r3"
-    assert LUXIAN_0609_RULE_DEFINITION_VERSION == "lx0609-defined-scope-2026-09-05-r3"
+    assert LUXIAN_0609_RULE_MASTER_VERSION == "2026-09-22-identity-v1"
+    assert LUXIAN_0609_RULE_DEFINITION_VERSION == "lx0609-defined-scope-2026-09-22-identity-v1"
 
 
 @pytest.mark.unit
@@ -124,8 +132,8 @@ def test_execution_catalog_is_exactly_the_active_master_projection():
     execution_ids = tuple(rule["rule_id"] for rule in load_luxian_0609_rules())
 
     assert execution_ids == master_active_ids
-    assert "LX0609-052" in execution_ids
-    assert "LX0609-075" in execution_ids
+    assert "LX0609-06-04-01" in execution_ids
+    assert "LX0609-10-03-01" in execution_ids
 
 
 @pytest.mark.unit
@@ -137,8 +145,8 @@ def test_recently_defined_rules_are_activated_with_the_full_catalog():
     }
 
     assert ready_ids == set()
-    assert get_luxian_0609_rule_master_entry("lx0609-052").implementation_status == "active"
-    assert get_luxian_0609_rule_master_entry("LX0609-070").implementation_status == "active"
+    assert get_luxian_0609_rule_master_entry("lx0609-06-04-01").implementation_status == "active"
+    assert get_luxian_0609_rule_master_entry("LX0609-07-01-03").implementation_status == "active"
 
 
 @pytest.mark.unit
@@ -181,7 +189,7 @@ def test_rule_master_rejects_invalid_policy_metadata(
 ):
     with pytest.raises(ValueError, match=match):
         Luxian0609RuleMasterEntry(
-            rule_id="LX0609-001",
+            rule_id="LX0609-01-01-01",
             source_document="入院记录",
             qc_point="入院后24小时内是否完成",
             implementation_status="active",
@@ -194,7 +202,7 @@ def test_rule_master_rejects_invalid_policy_metadata(
 def test_rule_master_rejects_too_long_pending_definition_note():
     with pytest.raises(ValueError, match="pending definition note"):
         Luxian0609RuleMasterEntry(
-            rule_id="LX0609-001",
+            rule_id="LX0609-01-01-01",
             source_document="入院记录",
             qc_point="入院后24小时内是否完成",
             implementation_status="active",
@@ -208,54 +216,55 @@ def test_rule_master_rejects_too_long_pending_definition_note():
 def test_confirmed_policy_metadata_preserves_key_rule_contracts():
     entries = {entry.rule_id: entry for entry in load_luxian_0609_rule_master()}
 
-    assert entries["LX0609-009"].policy_sources == (
+    assert entries["LX0609-02-01-05"].policy_sources == (
         "sichuan_2023_standard",
         "customer_confirmed",
     )
-    assert "动态改变" in entries["LX0609-009"].policy_summary
-    assert "24小时" in entries["LX0609-009"].policy_summary
-    assert entries["LX0609-009"].pending_definition_note == ""
+    assert "动态改变" in entries["LX0609-02-01-05"].policy_summary
+    assert "24小时" in entries["LX0609-02-01-05"].policy_summary
+    assert entries["LX0609-02-01-05"].pending_definition_note == ""
 
-    assert entries["LX0609-010"].policy_sources == (
+    assert entries["LX0609-06-01-02"].policy_sources == (
         "sichuan_2026_handbook",
         "customer_confirmed",
         "hospital_local_extension",
     )
-    assert "order_id" in entries["LX0609-010"].policy_summary
-    assert "exam_id" in entries["LX0609-010"].policy_summary
-    assert entries["LX0609-010"].pending_definition_note == ""
+    assert "order_id" in entries["LX0609-06-01-02"].policy_summary
+    assert "exam_id" in entries["LX0609-06-01-02"].policy_summary
+    assert entries["LX0609-06-01-02"].pending_definition_note == ""
 
-    assert entries["LX0609-012"].policy_sources == (
+    assert entries["LX0609-06-01-05"].policy_sources == (
         "sichuan_2026_handbook",
         "customer_confirmed",
         "hospital_local_extension",
     )
-    assert "明确异常病灶或异常征象" in entries["LX0609-012"].policy_summary
-    assert "不要求原文出现“阳性”" in entries["LX0609-012"].policy_summary
-    assert "24小时" in entries["LX0609-012"].policy_summary
+    assert "明确异常病灶或异常征象" in entries["LX0609-06-01-05"].policy_summary
+    assert "不要求原文出现“阳性”" in entries["LX0609-06-01-05"].policy_summary
+    assert "24小时" in entries["LX0609-06-01-05"].policy_summary
 
-    assert entries["LX0609-017"].policy_sources == (
+    assert entries["LX0609-12-01-02"].policy_sources == (
         "sichuan_2026_handbook",
         "customer_confirmed",
         "hospital_local_extension",
     )
-    assert "相似度≥70%" in entries["LX0609-017"].policy_summary
-    assert "3至5组" in entries["LX0609-017"].policy_summary
-    assert "一次LLM" in entries["LX0609-017"].policy_summary
-    assert entries["LX0609-018"].policy_sources == (
+    assert "相似度≥70%" in entries["LX0609-12-01-02"].policy_summary
+    assert "3至5组" in entries["LX0609-12-01-02"].policy_summary
+    assert "一次LLM" in entries["LX0609-12-01-02"].policy_summary
+    assert entries["LX0609-01-01-02"].policy_sources == (
         "customer_confirmed",
         "hospital_local_extension",
     )
-    assert "主诉≤20字" in entries["LX0609-018"].policy_summary
+    assert "主诉≤20字" in entries["LX0609-01-01-02"].policy_summary
 
-    assert entries["LX0609-020"].policy_sources == (
+    assert entries["LX0609-03-01-01"].policy_sources == (
         "sichuan_2023_standard",
         "customer_confirmed",
     )
-    assert "会诊意见及执行情况" in entries["LX0609-020"].policy_summary
-    assert "仅“遵嘱执行”" in entries["LX0609-023"].policy_summary
+    assert "会诊意见及执行情况" in entries["LX0609-03-01-01"].policy_summary
+    assert "任一建议完全未找到执行证据" in entries["LX0609-03-01-04"].policy_summary
+    assert "未明确具体措施" in entries["LX0609-03-01-04"].policy_summary
 
-    implant = entries["LX0609-025"]
+    implant = entries["LX0609-04-02-04"]
     assert all(
         field in implant.policy_summary
         for field in ("名称", "种类", "规格或型号", "材质", "数量")
@@ -265,17 +274,17 @@ def test_confirmed_policy_metadata_preserves_key_rule_contracts():
     assert "正式手术记录" in implant.policy_summary
     assert "真实病例金标" in implant.pending_definition_note
 
-    treatment_order = entries["LX0609-059"]
+    treatment_order = entries["LX0609-05-03-01"]
     assert "暂不执行" in treatment_order.policy_summary
     assert "不得因资料缺失" in treatment_order.policy_summary
     assert "真实病例金标" in treatment_order.pending_definition_note
-    assert "院内绩效优先国家目录" in entries["LX0609-040"].policy_summary
-    assert "缺任一项" in entries["LX0609-044"].policy_summary
-    assert "暂不执行" in entries["LX0609-049"].policy_summary
-    assert "不得因收费资料缺失" in entries["LX0609-049"].policy_summary
-    assert "暂不执行" in entries["LX0609-056"].policy_summary
-    assert "不得因目录或病原学资料缺失" in entries["LX0609-056"].policy_summary
-    assert "暂不执行" in entries["LX0609-075"].policy_summary
-    assert "不得因目录或操作记录缺失" in entries["LX0609-075"].policy_summary
-    assert "乙肝五项、艾滋、丙肝、梅毒、谷丙转氨酶" in entries["LX0609-070"].policy_summary
-    assert "急诊补检" in entries["LX0609-070"].pending_definition_note
+    assert "院内绩效优先国家目录" in entries["LX0609-04-01-03"].policy_summary
+    assert "缺任一项" in entries["LX0609-07-01-02"].policy_summary
+    assert "暂不执行" in entries["LX0609-07-04-02"].policy_summary
+    assert "不得因收费资料缺失" in entries["LX0609-07-04-02"].policy_summary
+    assert "暂不执行" in entries["LX0609-05-01-04"].policy_summary
+    assert "不得因目录或病原学资料缺失" in entries["LX0609-05-01-04"].policy_summary
+    assert "暂不执行" in entries["LX0609-10-03-01"].policy_summary
+    assert "不得因目录或操作记录缺失" in entries["LX0609-10-03-01"].policy_summary
+    assert "乙肝五项、艾滋、丙肝、梅毒、谷丙转氨酶" in entries["LX0609-07-01-03"].policy_summary
+    assert "急诊补检" in entries["LX0609-07-01-03"].pending_definition_note

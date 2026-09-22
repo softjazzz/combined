@@ -9,7 +9,7 @@ from app.services.qc_diagnostics.history import build_history_documents, replay_
 
 
 def sample():
-    return [{"rule_id": "LX0609-066", "status": "compliant", "patient_name": "合成姓名",
+    return [{"rule_id": "LX0609-04-05-03", "status": "compliant", "patient_name": "合成姓名",
              "findings": "含合成姓名和13800138000的非受控正文",
              "customer_display_facts": {"verification_kind": "postoperative_first_course_presence_check",
                                         "performed_surgery_count": 3, "postoperative_first_course_count": 1,
@@ -36,7 +36,7 @@ def test_actual_saved_counts_reach_existing_renderer():
 
 
 def test_unsupported_rules_preserve_status_without_fake_facts():
-    docs = build_history_documents([{"rule_id": "LX0609-020", "status": "non_compliant"}])
+    docs = build_history_documents([{"rule_id": "LX0609-03-01-01", "status": "non_compliant"}])
     assert replay_history(docs)["results"][0]["supported"] is False
     assert docs["inputs.json"]["rules"][0]["display_facts"] == {}
 

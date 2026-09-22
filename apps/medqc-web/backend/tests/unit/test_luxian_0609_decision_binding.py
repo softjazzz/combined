@@ -66,7 +66,7 @@ def _snapshot() -> Luxian0609EvidenceSnapshot:
 def _decision(
     snapshot: Luxian0609EvidenceSnapshot,
     *,
-    rule_id: str = "LX0609-007",
+    rule_id: str = "LX0609-02-01-03",
     snapshot_hash: str | None = None,
     fact_refs: tuple[str, ...] = ("a" * 64,),
 ) -> RuleDecision:
@@ -88,12 +88,27 @@ def test_binding_accepts_only_refs_attested_by_same_snapshot():
 
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=(_decision(snapshot),),
-        expected_rule_ids=("LX0609-007",),
+        expected_rule_ids=("LX0609-02-01-03",),
         snapshot=snapshot,
     )
 
     assert reduced[0].final_state is CustomerFinalState.COMPLIANT
     assert reduced[0].snapshot_hash == snapshot.snapshot_hash
+
+
+@pytest.mark.parametrize(
+    "rule_id",
+    ("LX0609-010", "LX0609-99-99-99"),
+)
+def test_binding_rejects_legacy_and_unregistered_rule_scopes(rule_id: str) -> None:
+    """四段式只允许已注册身份；旧三位编号不进入新主链。"""
+
+    with pytest.raises(ValueError, match="invalid expected decision scope"):
+        bind_and_reduce_luxian_0609_rule_decisions(
+            decisions=(),
+            expected_rule_ids=(rule_id,),
+            snapshot=_snapshot(),
+        )
 
 
 def test_binding_rejects_cross_rule_source_ref_without_poisoning_other_rule():
@@ -104,11 +119,11 @@ def test_binding_rejects_cross_rule_source_ref_without_poisoning_other_rule():
             _decision(snapshot, fact_refs=("c" * 64,)),
             _decision(
                 snapshot,
-                rule_id="LX0609-030",
+                rule_id="LX0609-04-02-02",
                 fact_refs=("c" * 64,),
             ),
         ),
-        expected_rule_ids=("LX0609-007", "LX0609-030"),
+        expected_rule_ids=("LX0609-02-01-03", "LX0609-04-02-02"),
         snapshot=snapshot,
     )
 
@@ -120,7 +135,7 @@ def test_binding_rejects_cross_rule_source_ref_without_poisoning_other_rule():
 def test_reason_dimension_mismatch_is_isolated_contract_error():
     snapshot = _snapshot()
     invalid = RuleDecision(
-        rule_id="LX0609-007",
+        rule_id="LX0609-02-01-03",
         snapshot_hash=snapshot.snapshot_hash,
         applicability=ApplicabilityState.APPLICABLE,
         evidence_state=EvidenceState.SUFFICIENT,
@@ -136,11 +151,11 @@ def test_reason_dimension_mismatch_is_isolated_contract_error():
             invalid,
             _decision(
                 snapshot,
-                rule_id="LX0609-030",
+                rule_id="LX0609-04-02-02",
                 fact_refs=("c" * 64,),
             ),
         ),
-        expected_rule_ids=("LX0609-007", "LX0609-030"),
+        expected_rule_ids=("LX0609-02-01-03", "LX0609-04-02-02"),
         snapshot=snapshot,
     )
 
@@ -162,7 +177,7 @@ def test_snapshot_or_ref_mismatch_is_isolated_technical_error(decision):
 
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=(decision(snapshot),),
-        expected_rule_ids=("LX0609-007",),
+        expected_rule_ids=("LX0609-02-01-03",),
         snapshot=snapshot,
     )
 
@@ -174,7 +189,7 @@ def test_snapshot_or_ref_mismatch_is_isolated_technical_error(decision):
 def test_complete_absent_trigger_does_not_require_a_fabricated_document_ref():
     snapshot = _snapshot()
     decision = RuleDecision(
-        rule_id="LX0609-020",
+        rule_id="LX0609-03-01-01",
         snapshot_hash=snapshot.snapshot_hash,
         applicability=ApplicabilityState.NOT_APPLICABLE,
         evidence_state=EvidenceState.SUFFICIENT,
@@ -186,7 +201,7 @@ def test_complete_absent_trigger_does_not_require_a_fabricated_document_ref():
 
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=(decision,),
-        expected_rule_ids=("LX0609-020",),
+        expected_rule_ids=("LX0609-03-01-01",),
         snapshot=snapshot,
     )
 
@@ -198,7 +213,7 @@ def test_complete_absent_trigger_does_not_require_a_fabricated_document_ref():
 def test_complete_absent_trigger_still_rejects_a_mismatched_snapshot():
     snapshot = _snapshot()
     decision = RuleDecision(
-        rule_id="LX0609-020",
+        rule_id="LX0609-03-01-01",
         snapshot_hash="b" * 64,
         applicability=ApplicabilityState.NOT_APPLICABLE,
         evidence_state=EvidenceState.SUFFICIENT,
@@ -210,7 +225,7 @@ def test_complete_absent_trigger_still_rejects_a_mismatched_snapshot():
 
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=(decision,),
-        expected_rule_ids=("LX0609-020",),
+        expected_rule_ids=("LX0609-03-01-01",),
         snapshot=snapshot,
     )
 
@@ -221,7 +236,7 @@ def test_complete_absent_trigger_still_rejects_a_mismatched_snapshot():
 def test_complete_absent_trigger_exemption_is_scoped_to_consultation_family():
     snapshot = _snapshot()
     decision = RuleDecision(
-        rule_id="LX0609-007",
+        rule_id="LX0609-02-01-03",
         snapshot_hash=snapshot.snapshot_hash,
         applicability=ApplicabilityState.NOT_APPLICABLE,
         evidence_state=EvidenceState.SUFFICIENT,
@@ -233,7 +248,7 @@ def test_complete_absent_trigger_exemption_is_scoped_to_consultation_family():
 
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=(decision,),
-        expected_rule_ids=("LX0609-007",),
+        expected_rule_ids=("LX0609-02-01-03",),
         snapshot=snapshot,
     )
 
@@ -248,7 +263,7 @@ def test_complete_absent_trigger_exemption_is_scoped_to_consultation_family():
 def test_other_not_applicable_reasons_still_require_attested_evidence(reason_code):
     snapshot = _snapshot()
     decision = RuleDecision(
-        rule_id="LX0609-020",
+        rule_id="LX0609-03-01-01",
         snapshot_hash=snapshot.snapshot_hash,
         applicability=ApplicabilityState.NOT_APPLICABLE,
         evidence_state=EvidenceState.SUFFICIENT,
@@ -260,7 +275,7 @@ def test_other_not_applicable_reasons_still_require_attested_evidence(reason_cod
 
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=(decision,),
-        expected_rule_ids=("LX0609-020",),
+        expected_rule_ids=("LX0609-03-01-01",),
         snapshot=snapshot,
     )
 
@@ -274,15 +289,15 @@ def test_missing_decision_only_marks_missing_rule_as_contract_error():
         decisions=(
             _decision(
                 snapshot,
-                rule_id="LX0609-030",
+                rule_id="LX0609-04-02-02",
                 fact_refs=("c" * 64,),
             ),
         ),
-        expected_rule_ids=("LX0609-007", "LX0609-030"),
+        expected_rule_ids=("LX0609-02-01-03", "LX0609-04-02-02"),
         snapshot=snapshot,
     )
 
-    assert [item.rule_id for item in reduced] == ["LX0609-007", "LX0609-030"]
+    assert [item.rule_id for item in reduced] == ["LX0609-02-01-03", "LX0609-04-02-02"]
     assert reduced[0].final_state is CustomerFinalState.TECHNICAL_ERROR
     assert reduced[0].reason_code == "decision_contract_violation"
     assert reduced[1].final_state is CustomerFinalState.COMPLIANT
@@ -296,11 +311,11 @@ def test_duplicate_decision_only_marks_duplicated_rule_as_contract_error():
             _decision(snapshot),
             _decision(
                 snapshot,
-                rule_id="LX0609-030",
+                rule_id="LX0609-04-02-02",
                 fact_refs=("c" * 64,),
             ),
         ),
-        expected_rule_ids=("LX0609-007", "LX0609-030"),
+        expected_rule_ids=("LX0609-02-01-03", "LX0609-04-02-02"),
         snapshot=snapshot,
     )
 
@@ -314,18 +329,18 @@ def test_extra_decision_is_excluded_without_poisoning_expected_rules():
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=(
             _decision(snapshot),
-            _decision(snapshot, rule_id="LX0609-008"),
+            _decision(snapshot, rule_id="LX0609-02-01-04"),
             _decision(
                 snapshot,
-                rule_id="LX0609-030",
+                rule_id="LX0609-04-02-02",
                 fact_refs=("c" * 64,),
             ),
         ),
-        expected_rule_ids=("LX0609-007", "LX0609-030"),
+        expected_rule_ids=("LX0609-02-01-03", "LX0609-04-02-02"),
         snapshot=snapshot,
     )
 
-    assert [item.rule_id for item in reduced] == ["LX0609-007", "LX0609-030"]
+    assert [item.rule_id for item in reduced] == ["LX0609-02-01-03", "LX0609-04-02-02"]
     assert all(item.final_state is CustomerFinalState.COMPLIANT for item in reduced)
 
 
@@ -335,16 +350,16 @@ def test_out_of_order_decisions_are_normalized_to_expected_rule_order():
         decisions=(
             _decision(
                 snapshot,
-                rule_id="LX0609-030",
+                rule_id="LX0609-04-02-02",
                 fact_refs=("c" * 64,),
             ),
             _decision(snapshot),
         ),
-        expected_rule_ids=("LX0609-007", "LX0609-030"),
+        expected_rule_ids=("LX0609-02-01-03", "LX0609-04-02-02"),
         snapshot=snapshot,
     )
 
-    assert [item.rule_id for item in reduced] == ["LX0609-007", "LX0609-030"]
+    assert [item.rule_id for item in reduced] == ["LX0609-02-01-03", "LX0609-04-02-02"]
     assert all(item.final_state is CustomerFinalState.COMPLIANT for item in reduced)
 
 
@@ -356,7 +371,7 @@ def test_binding_rejects_tuple_subclass_before_iteration():
     with pytest.raises(TypeError, match="exact tuple"):
         bind_and_reduce_luxian_0609_rule_decisions(
             decisions=TupleSubclass((_decision(snapshot),)),
-            expected_rule_ids=("LX0609-007",),
+            expected_rule_ids=("LX0609-02-01-03",),
             snapshot=snapshot,
         )
 
@@ -415,7 +430,7 @@ def test_binding_rejects_criterion_results_that_contradict_final_dimensions(
 ):
     snapshot = _snapshot()
     decision = RuleDecision(
-        rule_id="LX0609-018",
+        rule_id="LX0609-01-01-02",
         snapshot_hash=snapshot.snapshot_hash,
         applicability=ApplicabilityState.APPLICABLE,
         evidence_state=evidence_state,
@@ -434,7 +449,7 @@ def test_binding_rejects_criterion_results_that_contradict_final_dimensions(
 
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=(decision,),
-        expected_rule_ids=("LX0609-018",),
+        expected_rule_ids=("LX0609-01-01-02",),
         snapshot=snapshot,
     )
 

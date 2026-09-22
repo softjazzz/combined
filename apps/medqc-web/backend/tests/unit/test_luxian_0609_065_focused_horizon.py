@@ -1,4 +1,4 @@
-"""LX0609-065 单选入口必须在同一 Evidence Session 消费冻结终点。"""
+"""LX0609-04-05-02 单选入口必须在同一 Evidence Session 消费冻结终点。"""
 
 from datetime import datetime
 
@@ -76,7 +76,7 @@ async def test_065_single_rule_entry_executes_with_known_surgery_end_and_frozen_
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-065",),
+        selected_rule_ids=("LX0609-04-05-02",),
         institute_id=coordinate.institute_id,
         patient_id=coordinate.patient_id,
         visit_id=coordinate.visit_id,
@@ -91,14 +91,14 @@ async def test_065_single_rule_entry_executes_with_known_surgery_end_and_frozen_
     assert horizon[0]["horizon_datetime"] == "2026-07-05T12:00:00"
 
     execution = await execute_luxian_0609_native_extended_document_rules(
-        rule_ids=("LX0609-065",),
-        decision_rule_ids=("LX0609-065",),
+        rule_ids=("LX0609-04-05-02",),
+        decision_rule_ids=("LX0609-04-05-02",),
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=execution.decisions,
-        expected_rule_ids=("LX0609-065",),
+        expected_rule_ids=("LX0609-04-05-02",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )[0]

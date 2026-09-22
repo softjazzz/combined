@@ -65,7 +65,7 @@ async def test_service_facade_should_forward_running_final_bundle_options(monkey
 
     result = await service.evaluate_running_final_bundle_input(
         bundle,
-        rule_ids=["LX0609-033"],
+        rule_ids=["LX0609-11-01-01"],
         bucket_strategy="domain_family",
         quality_profile="effect_priority_v1",
         batch_output_mode="minimal",
@@ -86,7 +86,7 @@ async def test_service_facade_should_forward_running_final_bundle_options(monkey
     assert captured == {
         "host": service,
         "bundle": bundle,
-        "rule_ids": ["LX0609-033"],
+        "rule_ids": ["LX0609-11-01-01"],
         "bucket_strategy": "domain_family",
         "quality_profile": "effect_priority_v1",
         "batch_output_mode": "minimal",
@@ -300,7 +300,7 @@ async def test_runtime_forwards_explicit_frozen_evaluation_as_of_date():
     await evaluate_running_final_bundle(
         qc_service=_Service(),  # type: ignore[arg-type]
         bundle_input={"scene": "running", "visit_id": "V001"},
-        rule_ids=["LX0609-008"],
+        rule_ids=["LX0609-02-01-04"],
         rule_set_key="luxian_0609",
         evaluation_as_of_date="2026-07-21",
     )

@@ -28,7 +28,7 @@ def _zero(**overrides):
     selected = set(values["selected_rule_ids"])
     scoped = set(values["scoped_customer_rule_ids"])
     recorded = set(values["record_rule_map"].get(values["visit_ref"], ()))
-    effective = selected & scoped & recorded & {"LX0609-029", "LX0609-030", "LX0609-032"}
+    effective = selected & scoped & recorded & {"LX0609-04-01-01", "LX0609-04-02-02", "LX0609-04-03-01"}
     if effective and isinstance(values["source_query_observations"], (tuple, list)):
         observations = tuple(values["source_query_observations"])
         if not any(item.source_key == "mr_surgery" for item in observations):
@@ -55,7 +55,7 @@ def _zero(**overrides):
         documents = values["evidence_payload"].setdefault("programmatic_timeline", {}).setdefault("documents", {})
         documents.setdefault("mr_surgery", [])
     if "target_qualifications" not in overrides:
-        targets = {"LX0609-029": "presurg_summary", "LX0609-032": "surgery_safecheck_record"}
+        targets = {"LX0609-04-01-01": "presurg_summary", "LX0609-04-03-01": "surgery_safecheck_record"}
         documents = values["evidence_payload"].get("programmatic_timeline", {}).get("documents", {}) if isinstance(values["evidence_payload"], dict) else {}
         observed_status = {item.source_key: item.query_status.value for item in values["source_query_observations"]} if isinstance(values["source_query_observations"], (tuple, list)) else {}
         values["target_qualifications"] = tuple(
@@ -77,7 +77,7 @@ def _real_030_no_fact_inputs():
     sources = ("inpat_nondrug_order", "surgery_application", "surgery_record")
     observations = tuple(SourceQueryObservation.create(source_key=key, query_status="available", query_version="query-v1") for key in sources)
     outcomes = (_outcome("current_visit_surgery_order_confirmed", "inpat_nondrug_order"), _outcome("current_visit_surgery_confirmed", "surgery_application"), _outcome("current_visit_surgery_confirmed", "surgery_record"))
-    return dict(selected_rule_ids=["LX0609-030"], scoped_customer_rule_ids=["LX0609-030"], record_rule_map={"visit-orch-001": ["LX0609-030"]}, evidence_payload={"programmatic_timeline": {"documents": {key: [{"content": "safe"}] for key in sources}}}, source_query_observations=observations, fact_pairs=(), deterministic_coverage_outcomes=outcomes, redaction_terms=())
+    return dict(selected_rule_ids=["LX0609-04-02-02"], scoped_customer_rule_ids=["LX0609-04-02-02"], record_rule_map={"visit-orch-001": ["LX0609-04-02-02"]}, evidence_payload={"programmatic_timeline": {"documents": {key: [{"content": "safe"}] for key in sources}}}, source_query_observations=observations, fact_pairs=(), deterministic_coverage_outcomes=outcomes, redaction_terms=())
 
 
 def _outcome(fact_type, source_key, *, state="complete", processed=1, refs=(), reason_code="", error_code=""):
@@ -113,7 +113,7 @@ def test_zero_scope_short_circuits_before_every_downstream_input():
 
 @pytest.mark.parametrize("field", ["selected_rule_ids", "scoped_customer_rule_ids"])
 def test_zero_scope_from_scope_intersection(field):
-    values = {field: ["LX0609-030"]}
+    values = {field: ["LX0609-04-02-02"]}
     assert _zero(**values).disposition == "skipped_no_effective_rules"
 
 
@@ -124,7 +124,7 @@ def test_safe_report_constructor_identity_and_privacy():
     assert "quote" not in repr(report) + str(asdict(report)) + report.canonical_json()
     with pytest.raises(ValueError):
         ShadowExecutionReport("execution-v1", "policy-v1", "package-v1", "visit-orch-001", "completed", (), (), (), (), CREATED)
-    payload = report.to_dict(); payload["planned_rule_ids"].append("LX0609-030")
+    payload = report.to_dict(); payload["planned_rule_ids"].append("LX0609-04-02-02")
     assert report.planned_rule_ids == ()
 
 
@@ -137,18 +137,18 @@ def test_public_execution_metadata_rejects_sensitive_values(marker):
 
 def test_direct_constructor_rejects_forged_topologies():
     with pytest.raises(ValueError): ShadowExecutionReport("execution-v1", "policy-v1", "package-v1", "visit-orch-001", "completed", (), module.FULL_STAGE_ORDER, (), (), CREATED)
-    with pytest.raises(ValueError): ShadowExecutionReport("execution-v1", "policy-v1", "package-v1", "visit-orch-001", "completed", ("LX0609-030",), module.FULL_STAGE_ORDER, (("evil", "a" * 64),), (), CREATED)
+    with pytest.raises(ValueError): ShadowExecutionReport("execution-v1", "policy-v1", "package-v1", "visit-orch-001", "completed", ("LX0609-04-02-02",), module.FULL_STAGE_ORDER, (("evil", "a" * 64),), (), CREATED)
 
 
 def test_source_scope_requires_concrete_exact_observations_after_nonzero_plan():
     with pytest.raises(TypeError, match="concrete"):
-        _zero(selected_rule_ids=["LX0609-030"], scoped_customer_rule_ids=["LX0609-030"], record_rule_map={"visit-orch-001": ["LX0609-030"]})
+        _zero(selected_rule_ids=["LX0609-04-02-02"], scoped_customer_rule_ids=["LX0609-04-02-02"], record_rule_map={"visit-orch-001": ["LX0609-04-02-02"]})
 
 
 @pytest.mark.parametrize("observations", [(), (SourceQueryObservation.create(source_key="inpat_nondrug_order", query_status="available", query_version="query-v1"), SourceQueryObservation.create(source_key="surgery_application", query_status="available", query_version="query-v1"), SourceQueryObservation.create(source_key="surgery_record", query_status="available", query_version="query-v1"), SourceQueryObservation.create(source_key="extra_source", query_status="available", query_version="query-v1")), (SourceQueryObservation.create(source_key="inpat_nondrug_order", query_status="available", query_version="query-v1"), SourceQueryObservation.create(source_key="surgery_application", query_status="available", query_version="query-v1"), SourceQueryObservation.create(source_key="surgery_record", query_status="available", query_version="query-v1"), SourceQueryObservation.create(source_key="surgery_record", query_status="available", query_version="query-v1"))])
 def test_nonzero_source_scope_missing_extra_or_duplicate_rejects(observations):
     with pytest.raises(ValueError, match="source observations"):
-        _zero(selected_rule_ids=["LX0609-030"], scoped_customer_rule_ids=["LX0609-030"], record_rule_map={"visit-orch-001": ["LX0609-030"]}, evidence_payload={}, source_query_observations=observations, fact_pairs=(), deterministic_coverage_outcomes=(), redaction_terms=())
+        _zero(selected_rule_ids=["LX0609-04-02-02"], scoped_customer_rule_ids=["LX0609-04-02-02"], record_rule_map={"visit-orch-001": ["LX0609-04-02-02"]}, evidence_payload={}, source_query_observations=observations, fact_pairs=(), deterministic_coverage_outcomes=(), redaction_terms=())
 
 
 def test_nonzero_stages_run_once_in_fixed_order(monkeypatch):
@@ -158,7 +158,7 @@ def test_nonzero_stages_run_once_in_fixed_order(monkeypatch):
         def fingerprint(self): return ({"planner": "a", "manifest": "b", "bundle": "c", "coverage": "d", "gate": "e", "finding": "f", "aggregation": "0"}[self.name] * 64)
         items = ()
     class Rule:
-        rule_id = "LX0609-030"
+        rule_id = "LX0609-04-02-02"
         required_source_keys = ("inpat_nondrug_order", "surgery_application", "surgery_record")
     class Plan(Value):
         visit_ref = "visit-orch-001"
@@ -173,10 +173,10 @@ def test_nonzero_stages_run_once_in_fixed_order(monkeypatch):
     monkeypatch.setattr(module.coverage, "build_luxian_0609_fact_coverage_shadow", stage("coverage", Value("coverage")))
     monkeypatch.setattr(module.gate, "build_luxian_0609_deterministic_gate_shadow", stage("gate", Value("gate")))
     monkeypatch.setattr(module.rules, "build_luxian_0609_programmatic_findings_shadow", stage("finding", Value("finding")))
-    aggregate = Value("aggregation"); aggregate.results = (AggregatedRuleResult("LX0609-030", "trigger_absent", "not_applicable"),)
+    aggregate = Value("aggregation"); aggregate.results = (AggregatedRuleResult("LX0609-04-02-02", "trigger_absent", "not_applicable"),)
     monkeypatch.setattr(module.aggregator, "aggregate_luxian_0609_programmatic_findings_shadow", stage("aggregation", aggregate))
     observations = tuple(SourceQueryObservation.create(source_key=key, query_status=QueryStatus.AVAILABLE, query_version="query-v1") for key in Rule.required_source_keys)
-    values = dict(visit_ref="visit-orch-001", selected_rule_ids=["LX0609-030"], scoped_customer_rule_ids=["LX0609-030"], record_rule_map={"visit-orch-001": ["LX0609-030"]}, evidence_payload={}, source_query_observations=observations, fact_pairs=(), deterministic_coverage_outcomes=(), redaction_terms=(), planner_schema_version="planner-v1", rule_plan_version="slice-v1", manifest_schema_version="manifest-v1", bundle_schema_version="bundle-v1", coverage_schema_version="coverage-v1", coverage_policy_version="policy-v1", gate_schema_version="gate-v1", gate_policy_version="policy-v1", finding_schema_version="finding-v1", finding_policy_version="policy-v1", aggregation_schema_version="aggregation-v1", aggregation_policy_version="policy-v1", execution_schema_version="execution-v1", execution_policy_version="policy-v1", package_version="package-v1", planner_created_at=CREATED, manifest_created_at=CREATED, bundle_created_at=CREATED, coverage_created_at=CREATED, gate_created_at=CREATED, finding_created_at=CREATED, aggregation_created_at=CREATED, created_at=CREATED)
+    values = dict(visit_ref="visit-orch-001", selected_rule_ids=["LX0609-04-02-02"], scoped_customer_rule_ids=["LX0609-04-02-02"], record_rule_map={"visit-orch-001": ["LX0609-04-02-02"]}, evidence_payload={}, source_query_observations=observations, fact_pairs=(), deterministic_coverage_outcomes=(), redaction_terms=(), planner_schema_version="planner-v1", rule_plan_version="slice-v1", manifest_schema_version="manifest-v1", bundle_schema_version="bundle-v1", coverage_schema_version="coverage-v1", coverage_policy_version="policy-v1", gate_schema_version="gate-v1", gate_policy_version="policy-v1", finding_schema_version="finding-v1", finding_policy_version="policy-v1", aggregation_schema_version="aggregation-v1", aggregation_policy_version="policy-v1", execution_schema_version="execution-v1", execution_policy_version="policy-v1", package_version="package-v1", planner_created_at=CREATED, manifest_created_at=CREATED, bundle_created_at=CREATED, coverage_created_at=CREATED, gate_created_at=CREATED, finding_created_at=CREATED, aggregation_created_at=CREATED, created_at=CREATED)
     report = build_luxian_0609_shadow_execution(**values)
     assert calls == ["planner", "manifest", "bundle", "coverage", "gate", "finding", "aggregation"]
     assert report.disposition == "completed" and report.results[0].final_state.value == "not_applicable"
@@ -187,7 +187,7 @@ def test_real_nonzero_030_chain_returns_safe_not_applicable_result():
     observations = tuple(SourceQueryObservation.create(source_key=key, query_status="available", query_version="query-v1") for key in sources)
     payload = {"programmatic_timeline": {"documents": {key: [{"content": "safe"}] for key in sources}}}
     outcomes = (_outcome("current_visit_surgery_order_confirmed", "inpat_nondrug_order"), _outcome("current_visit_surgery_confirmed", "surgery_application"), _outcome("current_visit_surgery_confirmed", "surgery_record"))
-    report = _zero(selected_rule_ids=["LX0609-030"], scoped_customer_rule_ids=["LX0609-030"], record_rule_map={"visit-orch-001": ["LX0609-030"]}, evidence_payload=payload, source_query_observations=observations, fact_pairs=(), deterministic_coverage_outcomes=outcomes, redaction_terms=())
+    report = _zero(selected_rule_ids=["LX0609-04-02-02"], scoped_customer_rule_ids=["LX0609-04-02-02"], record_rule_map={"visit-orch-001": ["LX0609-04-02-02"]}, evidence_payload=payload, source_query_observations=observations, fact_pairs=(), deterministic_coverage_outcomes=outcomes, redaction_terms=())
     assert report.disposition == "completed"
     assert report.results[0].final_state.value == "not_applicable"
     assert report.summary_dict()["not_applicable_count"] == 1
@@ -202,13 +202,13 @@ def test_available_target_qualification_snapshot_is_bound_to_safe_target_documen
         _outcome("current_visit_surgery_confirmed", "surgery_record"),
     )
     qualification = module.gate.TargetQualification(
-        "visit-orch-001", "LX0609-032", "surgery_safecheck_record",
+        "visit-orch-001", "LX0609-04-03-01", "surgery_safecheck_record",
         "target-qualification-v1", "a" * 64, 1,
     )
     with pytest.raises(ValueError, match="target qualification"):
         _zero(
-            selected_rule_ids=["LX0609-032"], scoped_customer_rule_ids=["LX0609-032"],
-            record_rule_map={"visit-orch-001": ["LX0609-032"]}, evidence_payload=payload,
+            selected_rule_ids=["LX0609-04-03-01"], scoped_customer_rule_ids=["LX0609-04-03-01"],
+            record_rule_map={"visit-orch-001": ["LX0609-04-03-01"]}, evidence_payload=payload,
             source_query_observations=observations, fact_pairs=(),
             deterministic_coverage_outcomes=outcomes, redaction_terms=(),
             target_qualifications=(qualification,),
@@ -218,8 +218,8 @@ def test_available_target_qualification_snapshot_is_bound_to_safe_target_documen
 @pytest.mark.parametrize(
     ("rule_id", "target_source", "first_target", "second_target"),
     [
-        ("LX0609-029", "presurg_summary", {"record_content": "substantive approved pre-surgery summary A", "record_time": "2026-01-01 07:00:00"}, {"record_content": "substantive approved pre-surgery summary B", "record_time": "2026-01-01 07:00:00"}),
-        ("LX0609-032", "surgery_safecheck_record", {"record_content": "substantive safety checklist content A"}, {"record_content": "substantive safety checklist content B"}),
+        ("LX0609-04-01-01", "presurg_summary", {"record_content": "substantive approved pre-surgery summary A", "record_time": "2026-01-01 07:00:00"}, {"record_content": "substantive approved pre-surgery summary B", "record_time": "2026-01-01 07:00:00"}),
+        ("LX0609-04-03-01", "surgery_safecheck_record", {"record_content": "substantive safety checklist content A"}, {"record_content": "substantive safety checklist content B"}),
     ],
 )
 def test_stale_target_qualification_cannot_attest_same_count_changed_safe_target_material(monkeypatch, rule_id, target_source, first_target, second_target):
@@ -280,7 +280,7 @@ def test_real_nonzero_030_matched_target_present_is_compliant(monkeypatch):
     monkeypatch.setattr(module.bundle, "build_luxian_0609_fact_shadow_bundle", capture_bundle)
     monkeypatch.setattr(module.coverage, "build_luxian_0609_fact_coverage_shadow", capture_coverage)
     outcomes = (_outcome("current_visit_surgery_order_confirmed", "inpat_nondrug_order"), _outcome("current_visit_surgery_confirmed", "surgery_application"), _outcome("current_visit_surgery_confirmed", "surgery_record", refs=(pair.pair_ref,)))
-    report = _zero(selected_rule_ids=["LX0609-030"], scoped_customer_rule_ids=["LX0609-030"], record_rule_map={"visit-orch-001": ["LX0609-030"]}, evidence_payload=payload, source_query_observations=observations, fact_pairs=(pair,), deterministic_coverage_outcomes=outcomes, redaction_terms=())
+    report = _zero(selected_rule_ids=["LX0609-04-02-02"], scoped_customer_rule_ids=["LX0609-04-02-02"], record_rule_map={"visit-orch-001": ["LX0609-04-02-02"]}, evidence_payload=payload, source_query_observations=observations, fact_pairs=(pair,), deterministic_coverage_outcomes=outcomes, redaction_terms=())
     assert report.results[0].final_state.value == "compliant"
     assert (captured["fact_id"],) in captured["coverage_fact_ids"]
 
@@ -292,7 +292,7 @@ def test_real_nonzero_030_order_trigger_target_empty_is_non_compliant():
     mapping = LegacyFactV2Mapping(source_key="inpat_nondrug_order", normalized_value={"ordered": True}, trigger_scope="current_visit", current_visit_relevance="relevant", assertion="affirmed", assertion_context="current_narrative", event_status="ordered", extractor_version="policy-v1", record_time_handling="absent", mapped_record_time=None, omit_reason_code="")
     pair = FactShadowPairInput(pair_ref=hashlib.sha256(b"pair-empty").hexdigest(), legacy_fact=legacy, mapping=mapping)
     outcomes = (_outcome("current_visit_surgery_order_confirmed", "inpat_nondrug_order", refs=(pair.pair_ref,)), _outcome("current_visit_surgery_confirmed", "surgery_application"), _outcome("current_visit_surgery_confirmed", "surgery_record", processed=0))
-    report = _zero(selected_rule_ids=["LX0609-030"], scoped_customer_rule_ids=["LX0609-030"], record_rule_map={"visit-orch-001": ["LX0609-030"]}, evidence_payload=payload, source_query_observations=observations, fact_pairs=(pair,), deterministic_coverage_outcomes=outcomes, redaction_terms=())
+    report = _zero(selected_rule_ids=["LX0609-04-02-02"], scoped_customer_rule_ids=["LX0609-04-02-02"], record_rule_map={"visit-orch-001": ["LX0609-04-02-02"]}, evidence_payload=payload, source_query_observations=observations, fact_pairs=(pair,), deterministic_coverage_outcomes=outcomes, redaction_terms=())
     assert report.results[0].final_state.value == "non_compliant"
 
 
@@ -303,7 +303,7 @@ def test_real_nonzero_030_order_trigger_target_unavailable_is_data_gap():
     mapping = LegacyFactV2Mapping(source_key="inpat_nondrug_order", normalized_value={"ordered": True}, trigger_scope="current_visit", current_visit_relevance="relevant", assertion="affirmed", assertion_context="current_narrative", event_status="ordered", extractor_version="policy-v1", record_time_handling="absent", mapped_record_time=None, omit_reason_code="")
     pair = FactShadowPairInput(pair_ref=hashlib.sha256(b"pair-gap").hexdigest(), legacy_fact=legacy, mapping=mapping)
     outcomes = (_outcome("current_visit_surgery_order_confirmed", "inpat_nondrug_order", refs=(pair.pair_ref,)), _outcome("current_visit_surgery_confirmed", "surgery_application"), _outcome("current_visit_surgery_confirmed", "surgery_record", state="not_run", processed=0, reason_code="source_unavailable"))
-    report = _zero(selected_rule_ids=["LX0609-030"], scoped_customer_rule_ids=["LX0609-030"], record_rule_map={"visit-orch-001": ["LX0609-030"]}, evidence_payload=payload, source_query_observations=observations, fact_pairs=(pair,), deterministic_coverage_outcomes=outcomes, redaction_terms=())
+    report = _zero(selected_rule_ids=["LX0609-04-02-02"], scoped_customer_rule_ids=["LX0609-04-02-02"], record_rule_map={"visit-orch-001": ["LX0609-04-02-02"]}, evidence_payload=payload, source_query_observations=observations, fact_pairs=(pair,), deterministic_coverage_outcomes=outcomes, redaction_terms=())
     assert report.results[0].final_state.value == "data_gap"
 
 
@@ -314,7 +314,7 @@ def test_real_nonzero_030_order_trigger_target_error_is_technical_error():
     mapping = LegacyFactV2Mapping(source_key="inpat_nondrug_order", normalized_value={"ordered": True}, trigger_scope="current_visit", current_visit_relevance="relevant", assertion="affirmed", assertion_context="current_narrative", event_status="ordered", extractor_version="policy-v1", record_time_handling="absent", mapped_record_time=None, omit_reason_code="")
     pair = FactShadowPairInput(pair_ref=hashlib.sha256(b"pair-error").hexdigest(), legacy_fact=legacy, mapping=mapping)
     outcomes = (_outcome("current_visit_surgery_order_confirmed", "inpat_nondrug_order", refs=(pair.pair_ref,)), _outcome("current_visit_surgery_confirmed", "surgery_application"), _outcome("current_visit_surgery_confirmed", "surgery_record", state="not_run", processed=0, reason_code="source_query_error"))
-    report = _zero(selected_rule_ids=["LX0609-030"], scoped_customer_rule_ids=["LX0609-030"], record_rule_map={"visit-orch-001": ["LX0609-030"]}, evidence_payload=payload, source_query_observations=observations, fact_pairs=(pair,), deterministic_coverage_outcomes=outcomes, redaction_terms=())
+    report = _zero(selected_rule_ids=["LX0609-04-02-02"], scoped_customer_rule_ids=["LX0609-04-02-02"], record_rule_map={"visit-orch-001": ["LX0609-04-02-02"]}, evidence_payload=payload, source_query_observations=observations, fact_pairs=(pair,), deterministic_coverage_outcomes=outcomes, redaction_terms=())
     assert report.results[0].final_state.value == "technical_error"
 
 
@@ -326,7 +326,7 @@ def test_real_nonzero_030_claimed_semantic_conflict_is_evaluation_unknown():
     mapping = LegacyFactV2Mapping(source_key="surgery_record", normalized_value={"present": True}, trigger_scope="current_visit", current_visit_relevance="relevant", assertion="negated", assertion_context="current_narrative", event_status="performed", extractor_version="policy-v1", record_time_handling="absent", mapped_record_time=None, omit_reason_code="")
     pair = FactShadowPairInput(pair_ref=hashlib.sha256(b"pair-conflict").hexdigest(), legacy_fact=legacy, mapping=mapping)
     outcomes = (_outcome("current_visit_surgery_order_confirmed", "inpat_nondrug_order"), _outcome("current_visit_surgery_confirmed", "surgery_application"), _outcome("current_visit_surgery_confirmed", "surgery_record", refs=(pair.pair_ref,)))
-    report = _zero(selected_rule_ids=["LX0609-030"], scoped_customer_rule_ids=["LX0609-030"], record_rule_map={"visit-orch-001": ["LX0609-030"]}, evidence_payload=payload, source_query_observations=observations, fact_pairs=(pair,), deterministic_coverage_outcomes=outcomes, redaction_terms=())
+    report = _zero(selected_rule_ids=["LX0609-04-02-02"], scoped_customer_rule_ids=["LX0609-04-02-02"], record_rule_map={"visit-orch-001": ["LX0609-04-02-02"]}, evidence_payload=payload, source_query_observations=observations, fact_pairs=(pair,), deterministic_coverage_outcomes=outcomes, redaction_terms=())
     assert report.results[0].final_state.value == "evaluation_unknown"
 
 
@@ -338,8 +338,8 @@ def test_real_nonzero_032_is_standalone_and_compliant():
     mapping = LegacyFactV2Mapping(source_key="surgery_record", normalized_value={"present": True}, trigger_scope="current_visit", current_visit_relevance="relevant", assertion="affirmed", assertion_context="current_narrative", event_status="performed", extractor_version="policy-v1", record_time_handling="absent", mapped_record_time=None, omit_reason_code="")
     pair = FactShadowPairInput(pair_ref=hashlib.sha256(b"pair-32").hexdigest(), legacy_fact=legacy, mapping=mapping)
     outcomes = (_outcome("current_visit_surgery_confirmed", "surgery_application"), _outcome("current_visit_surgery_confirmed", "surgery_record", refs=(pair.pair_ref,)))
-    report = _zero(selected_rule_ids=["LX0609-032"], scoped_customer_rule_ids=["LX0609-032"], record_rule_map={"visit-orch-001": ["LX0609-032"]}, evidence_payload=payload, source_query_observations=observations, fact_pairs=(pair,), deterministic_coverage_outcomes=outcomes, redaction_terms=())
-    assert tuple(result.rule_id for result in report.results) == ("LX0609-032",)
+    report = _zero(selected_rule_ids=["LX0609-04-03-01"], scoped_customer_rule_ids=["LX0609-04-03-01"], record_rule_map={"visit-orch-001": ["LX0609-04-03-01"]}, evidence_payload=payload, source_query_observations=observations, fact_pairs=(pair,), deterministic_coverage_outcomes=outcomes, redaction_terms=())
+    assert tuple(result.rule_id for result in report.results) == ("LX0609-04-03-01",)
     assert report.results[0].final_state.value == "compliant"
 
 
@@ -350,8 +350,8 @@ def test_real_nonzero_029_single_scope_is_non_compliant_only():
     mapping = LegacyFactV2Mapping(source_key="inpat_nondrug_order", normalized_value={"ordered": True}, trigger_scope="current_visit", current_visit_relevance="relevant", assertion="affirmed", assertion_context="current_narrative", event_status="ordered", extractor_version="policy-v1", record_time_handling="absent", mapped_record_time=None, omit_reason_code="")
     pair = FactShadowPairInput(pair_ref=hashlib.sha256(b"pair-29").hexdigest(), legacy_fact=legacy, mapping=mapping)
     outcomes = (_outcome("current_visit_surgery_order_confirmed", "inpat_nondrug_order", refs=(pair.pair_ref,)), _outcome("current_visit_surgery_confirmed", "surgery_application"), _outcome("current_visit_surgery_confirmed", "surgery_record"))
-    report = _zero(selected_rule_ids=["LX0609-029"], scoped_customer_rule_ids=["LX0609-029"], record_rule_map={"visit-orch-001": ["LX0609-029"]}, evidence_payload=payload, source_query_observations=observations, fact_pairs=(pair,), deterministic_coverage_outcomes=outcomes, redaction_terms=())
-    assert tuple(result.rule_id for result in report.results) == ("LX0609-029",)
+    report = _zero(selected_rule_ids=["LX0609-04-01-01"], scoped_customer_rule_ids=["LX0609-04-01-01"], record_rule_map={"visit-orch-001": ["LX0609-04-01-01"]}, evidence_payload=payload, source_query_observations=observations, fact_pairs=(pair,), deterministic_coverage_outcomes=outcomes, redaction_terms=())
+    assert tuple(result.rule_id for result in report.results) == ("LX0609-04-01-01",)
     assert report.results[0].final_state.value == "non_compliant"
 
 
@@ -364,8 +364,8 @@ def test_real_multi_029_030_032_stable_order_and_counts():
     mapping = LegacyFactV2Mapping(source_key="surgery_record", normalized_value={"present": True}, trigger_scope="current_visit", current_visit_relevance="relevant", assertion="affirmed", assertion_context="current_narrative", event_status="performed", extractor_version="policy-v1", record_time_handling="absent", mapped_record_time=None, omit_reason_code="")
     pair = FactShadowPairInput(pair_ref=hashlib.sha256(b"pair-multi").hexdigest(), legacy_fact=legacy, mapping=mapping)
     outcomes = (_outcome("current_visit_surgery_order_confirmed", "inpat_nondrug_order"), _outcome("current_visit_surgery_confirmed", "surgery_application"), _outcome("current_visit_surgery_confirmed", "surgery_record", refs=(pair.pair_ref,)))
-    report = _zero(selected_rule_ids=["LX0609-029", "LX0609-030", "LX0609-032"], scoped_customer_rule_ids=["LX0609-029", "LX0609-030", "LX0609-032"], record_rule_map={"visit-orch-001": ["LX0609-029", "LX0609-030", "LX0609-032"]}, evidence_payload=payload, source_query_observations=observations, fact_pairs=(pair,), deterministic_coverage_outcomes=outcomes, redaction_terms=())
-    assert report.planned_rule_ids == ("LX0609-029", "LX0609-030", "LX0609-032")
+    report = _zero(selected_rule_ids=["LX0609-04-01-01", "LX0609-04-02-02", "LX0609-04-03-01"], scoped_customer_rule_ids=["LX0609-04-01-01", "LX0609-04-02-02", "LX0609-04-03-01"], record_rule_map={"visit-orch-001": ["LX0609-04-01-01", "LX0609-04-02-02", "LX0609-04-03-01"]}, evidence_payload=payload, source_query_observations=observations, fact_pairs=(pair,), deterministic_coverage_outcomes=outcomes, redaction_terms=())
+    assert report.planned_rule_ids == ("LX0609-04-01-01", "LX0609-04-02-02", "LX0609-04-03-01")
     assert tuple(item.rule_id for item in report.results) == report.planned_rule_ids
     assert tuple(item.final_state.value for item in report.results) == ("non_compliant", "compliant", "compliant")
     assert report.summary_dict()["non_compliant_count"] == 1 and report.summary_dict()["compliant_count"] == 2

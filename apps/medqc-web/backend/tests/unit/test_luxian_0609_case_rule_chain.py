@@ -34,21 +34,21 @@ class FakeSession:
 
 def test_report_does_not_leak_sensitive_values_and_hash_is_stable():
     report = audit_case_rule_chain(
-        institute_id="INST-SECRET", patient_id="PAT-SECRET", visit_id="VIS-SECRET", rule_id="LX0609-001",
+        institute_id="INST-SECRET", patient_id="PAT-SECRET", visit_id="VIS-SECRET", rule_id="LX0609-01-01-01",
         evidence_session=FakeSession(),
         rule_contract={"family_key": "basic_timeliness", "rule_version": "v1"},
         bundle={"bundle_schema_version": "bundle-v6", "document_hits": {"admission_record": 1}, "data_quality_flags": []},
-        envelope={"schema_version": "lx0609-record-result-envelope-v1", "items": [{"rule_id": "LX0609-001", "status": "compliant", "result_status": "compliant", "is_compliant": True, "reason_code": "ok", "evidence": []}]},
+        envelope={"schema_version": "lx0609-record-result-envelope-v1", "items": [{"rule_id": "LX0609-01-01-01", "status": "compliant", "result_status": "compliant", "is_compliant": True, "reason_code": "ok", "evidence": []}]},
         git_commit="abc",
     )
     encoded = json.dumps(report, ensure_ascii=False)
     assert "INST-SECRET" not in encoded and "PAT-SECRET" not in encoded and "VIS-SECRET" not in encoded
     assert report["case_ref"].startswith("sha256:")
     again = audit_case_rule_chain(
-        institute_id="INST-SECRET", patient_id="PAT-SECRET", visit_id="VIS-SECRET", rule_id="LX0609-001",
+        institute_id="INST-SECRET", patient_id="PAT-SECRET", visit_id="VIS-SECRET", rule_id="LX0609-01-01-01",
         evidence_session=FakeSession(), rule_contract={"family_key": "basic_timeliness", "rule_version": "v1"},
         bundle={"bundle_schema_version": "bundle-v6", "document_hits": {"admission_record": 1}, "data_quality_flags": []},
-        envelope={"schema_version": "lx0609-record-result-envelope-v1", "items": [{"rule_id": "LX0609-001", "status": "compliant", "result_status": "compliant", "is_compliant": True, "reason_code": "ok", "evidence": []}]}, git_commit="abc")
+        envelope={"schema_version": "lx0609-record-result-envelope-v1", "items": [{"rule_id": "LX0609-01-01-01", "status": "compliant", "result_status": "compliant", "is_compliant": True, "reason_code": "ok", "evidence": []}]}, git_commit="abc")
     assert report["case_ref"] == again["case_ref"]
     assert report["source"]["hash"] == again["source"]["hash"]
 
@@ -57,7 +57,7 @@ def test_source_gap_blocks_and_envelope_mismatch_is_technical_error():
     session = FakeSession()
     session.snapshot.observations = (FakeObservation(query_state="unavailable", completeness="unproven", record_count=None),)
     report = audit_case_rule_chain(
-        institute_id="i", patient_id="p", visit_id="v", rule_id="LX0609-001", evidence_session=session,
+        institute_id="i", patient_id="p", visit_id="v", rule_id="LX0609-01-01-01", evidence_session=session,
         rule_contract={"family_key": "basic_timeliness"}, bundle={"bundle_schema_version": "bundle-v6", "document_hits": {}, "data_quality_flags": []},
         envelope=None,
     )
@@ -65,7 +65,7 @@ def test_source_gap_blocks_and_envelope_mismatch_is_technical_error():
     assert report["checks"]["reason_code"] == "data_gap"
     session.snapshot.observations = (FakeObservation(),)
     report = audit_case_rule_chain(
-        institute_id="i", patient_id="p", visit_id="v", rule_id="LX0609-001", evidence_session=session,
+        institute_id="i", patient_id="p", visit_id="v", rule_id="LX0609-01-01-01", evidence_session=session,
         rule_contract={"family_key": "basic_timeliness"}, bundle={"bundle_schema_version": "bundle-v6", "document_hits": {}, "data_quality_flags": []},
         envelope={"schema_version": "wrong", "items": []},
     )
@@ -77,7 +77,7 @@ def test_missing_expected_source_observation_is_source_gap():
         institute_id="i",
         patient_id="p",
         visit_id="v",
-        rule_id="LX0609-029",
+        rule_id="LX0609-04-01-01",
         evidence_session=FakeSession(),
         rule_contract={
             "family_key": "surgery_anesthesia",
@@ -177,11 +177,11 @@ def test_derived_source_marker_does_not_block_physical_exam_sources():
         institute_id="i",
         patient_id="p",
         visit_id="v",
-        rule_id="LX0609-010",
+        rule_id="LX0609-06-01-02",
         evidence_session=session,
         rule_contract=_exam_lab_audit_contract(),
         bundle=_exam_lab_audit_bundle(),
-        envelope=_compliant_envelope("LX0609-010"),
+        envelope=_compliant_envelope("LX0609-06-01-02"),
     )
 
     assert report["checks"] == {
@@ -220,11 +220,11 @@ def test_physical_exam_source_gap_still_blocks_with_derived_marker():
         institute_id="i",
         patient_id="p",
         visit_id="v",
-        rule_id="LX0609-010",
+        rule_id="LX0609-06-01-02",
         evidence_session=session,
         rule_contract=_exam_lab_audit_contract(),
         bundle=_exam_lab_audit_bundle(),
-        envelope=_compliant_envelope("LX0609-010"),
+        envelope=_compliant_envelope("LX0609-06-01-02"),
     )
 
     assert report["checks"] == {
@@ -253,7 +253,7 @@ def test_source_and_bundle_count_mismatch_is_blocked_as_technical_error():
         institute_id="i",
         patient_id="p",
         visit_id="v",
-        rule_id="LX0609-001",
+        rule_id="LX0609-01-01-01",
         evidence_session=FakeSession(),
         rule_contract={"family_key": "basic_timeliness"},
         bundle={
@@ -270,7 +270,7 @@ def test_source_and_bundle_count_mismatch_is_blocked_as_technical_error():
             "schema_version": "lx0609-record-result-envelope-v1",
             "items": [
                 {
-                    "rule_id": "LX0609-001",
+                    "rule_id": "LX0609-01-01-01",
                     "status": "compliant",
                     "result_status": "compliant",
                     "is_compliant": True,
@@ -292,7 +292,7 @@ def test_source_and_bundle_count_mismatch_is_blocked_as_technical_error():
 
 def test_api_non_ready_is_api_gap_after_canonical_ready():
     report = audit_case_rule_chain(
-        institute_id="i", patient_id="p", visit_id="v", rule_id="LX0609-001",
+        institute_id="i", patient_id="p", visit_id="v", rule_id="LX0609-01-01-01",
         evidence_session=FakeSession(), rule_contract={"family_key": "basic_timeliness"},
         bundle={
             "bundle_schema_version": "bundle-v6",
@@ -302,7 +302,7 @@ def test_api_non_ready_is_api_gap_after_canonical_ready():
                 "source_table_coverage": {"admission_record": {"row_count": 1}}
             },
         },
-        envelope={"schema_version": "lx0609-record-result-envelope-v1", "items": [{"rule_id": "LX0609-001", "status": "compliant", "result_status": "compliant", "is_compliant": True, "reason_code": "ok", "evidence": []}]},
+        envelope={"schema_version": "lx0609-record-result-envelope-v1", "items": [{"rule_id": "LX0609-01-01-01", "status": "compliant", "result_status": "compliant", "is_compliant": True, "reason_code": "ok", "evidence": []}]},
         api_summary={"status": "pending", "ready": False},
     )
     assert report["checks"] == {"status": "blocked", "reason_code": "api_gap", "failure_stage": "api"}
@@ -312,7 +312,7 @@ def test_empty_source_observations_are_blocked_source_gap():
     session = FakeSession()
     session.snapshot.observations = ()
     report = audit_case_rule_chain(
-        institute_id="i", patient_id="p", visit_id="v", rule_id="LX0609-001",
+        institute_id="i", patient_id="p", visit_id="v", rule_id="LX0609-01-01-01",
         evidence_session=session, rule_contract={"family_key": "basic_timeliness"},
         bundle={"bundle_schema_version": "bundle-v6", "document_hits": {"admission_record": True}},
         envelope={"schema_version": "lx0609-record-result-envelope-v1", "items": []},
@@ -322,7 +322,7 @@ def test_empty_source_observations_are_blocked_source_gap():
 
 def test_expected_bundle_document_coverage_is_required():
     report = audit_case_rule_chain(
-        institute_id="i", patient_id="p", visit_id="v", rule_id="LX0609-054",
+        institute_id="i", patient_id="p", visit_id="v", rule_id="LX0609-05-01-02",
         evidence_session=FakeSession(("inpat_drug_order", "daily_course_record")),
         rule_contract={"family_key": "extended_document"},
         bundle={"bundle_schema_version": "bundle-v6", "document_hits": {"discharge_record": True}},
@@ -341,10 +341,10 @@ def test_canonical_envelope_identity_must_match_requested_job_and_record():
         "schema_version": "lx0609-record-result-envelope-v1",
         "job_id": "other-job",
         "record_id": "other-record",
-        "items": [{"rule_id": "LX0609-001", "status": "compliant", "result_status": "compliant", "is_compliant": True, "reason_code": "ok", "evidence": []}],
+        "items": [{"rule_id": "LX0609-01-01-01", "status": "compliant", "result_status": "compliant", "is_compliant": True, "reason_code": "ok", "evidence": []}],
     }
     report = audit_case_rule_chain(
-        institute_id="i", patient_id="p", visit_id="v", rule_id="LX0609-001",
+        institute_id="i", patient_id="p", visit_id="v", rule_id="LX0609-01-01-01",
         evidence_session=FakeSession(), rule_contract={"family_key": "basic_timeliness"},
         bundle={
             "bundle_schema_version": "bundle-v6",
@@ -364,10 +364,10 @@ def test_canonical_envelope_identity_must_match_requested_job_and_record():
 
 def test_cli_scope_explicitly_excludes_api_and_ui():
     report = audit_case_rule_chain(
-        institute_id="i", patient_id="p", visit_id="v", rule_id="LX0609-001",
+        institute_id="i", patient_id="p", visit_id="v", rule_id="LX0609-01-01-01",
         evidence_session=FakeSession(), rule_contract={"family_key": "basic_timeliness"},
         bundle={"bundle_schema_version": "bundle-v6", "document_hits": {"admission_record": True}},
-        envelope={"schema_version": "lx0609-record-result-envelope-v1", "items": [{"rule_id": "LX0609-001", "status": "compliant", "result_status": "compliant", "is_compliant": True, "reason_code": "ok", "evidence": []}]},
+        envelope={"schema_version": "lx0609-record-result-envelope-v1", "items": [{"rule_id": "LX0609-01-01-01", "status": "compliant", "result_status": "compliant", "is_compliant": True, "reason_code": "ok", "evidence": []}]},
     )
     assert report["verification_scope"]["api"] == "not_verified_by_cli"
     assert report["verification_scope"]["ui"] == "not_verified_by_cli"
@@ -402,7 +402,7 @@ def test_multi_domain_bundles_are_merged_for_rule_coverage():
         institute_id="i",
         patient_id="p",
         visit_id="v",
-        rule_id="LX0609-020",
+        rule_id="LX0609-03-01-01",
         evidence_session=FakeSession(("consultation_record", "daily_course_record")),
         rule_contract={
             "family_key": "consultation_quality",
@@ -414,7 +414,7 @@ def test_multi_domain_bundles_are_merged_for_rule_coverage():
             "schema_version": "lx0609-record-result-envelope-v1",
             "items": [
                 {
-                    "rule_id": "LX0609-020",
+                    "rule_id": "LX0609-03-01-01",
                     "status": "compliant",
                     "result_status": "compliant",
                     "is_compliant": True,
@@ -437,7 +437,7 @@ def test_unknown_applicable_document_blocks_with_domain_mapping_error():
         institute_id="i",
         patient_id="p",
         visit_id="v",
-        rule_id="LX0609-001",
+        rule_id="LX0609-01-01-01",
         evidence_session=FakeSession(("unknown_document",)),
         rule_contract={
             "family_key": "basic_timeliness",
@@ -502,7 +502,7 @@ def test_conflicting_duplicate_bundle_coverage_is_not_ready():
         institute_id="i",
         patient_id="p",
         visit_id="v",
-        rule_id="LX0609-020",
+        rule_id="LX0609-03-01-01",
         evidence_session=FakeSession(("consultation_record", "daily_course_record")),
         rule_contract={
             "family_key": "consultation_quality",
@@ -514,7 +514,7 @@ def test_conflicting_duplicate_bundle_coverage_is_not_ready():
             "schema_version": "lx0609-record-result-envelope-v1",
             "items": [
                 {
-                    "rule_id": "LX0609-020",
+                    "rule_id": "LX0609-03-01-01",
                     "status": "compliant",
                     "result_status": "compliant",
                     "is_compliant": True,
@@ -550,7 +550,7 @@ def test_missing_required_domain_bundle_is_not_ready():
         institute_id="i",
         patient_id="p",
         visit_id="v",
-        rule_id="LX0609-020",
+        rule_id="LX0609-03-01-01",
         evidence_session=FakeSession(("daily_course_record",)),
         rule_contract={
             "family_key": "consultation_quality",
@@ -558,7 +558,7 @@ def test_missing_required_domain_bundle_is_not_ready():
             "source_keys": ("daily_course_record",),
         },
         bundle=merged,
-        envelope=_compliant_envelope("LX0609-020"),
+        envelope=_compliant_envelope("LX0609-03-01-01"),
     )
     assert report["checks"] == {
         "status": "technical_error",

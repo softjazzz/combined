@@ -18,7 +18,7 @@ from app.services.luxian_0609.postoperative_result_mapping import (
 
 _FACTS_BY_CASE = {
     "064_timely": (
-        "LX0609-064",
+        "LX0609-04-05-01",
         "compliant",
         {
             "verification_kind": "postoperative_three_day_coverage_check",
@@ -29,7 +29,7 @@ _FACTS_BY_CASE = {
         },
     ),
     "064_overdue": (
-        "LX0609-064",
+        "LX0609-04-05-01",
         "non_compliant",
         {
             "verification_kind": "postoperative_three_day_coverage_check",
@@ -49,7 +49,7 @@ _FACTS_BY_CASE = {
         },
     ),
     "064_not_mature": (
-        "LX0609-064",
+        "LX0609-04-05-01",
         "not_applicable",
         {
             "verification_kind": "postoperative_three_day_window_not_mature",
@@ -59,7 +59,7 @@ _FACTS_BY_CASE = {
         },
     ),
     "064_horizon_missing": (
-        "LX0609-064",
+        "LX0609-04-05-01",
         "data_gap",
         {
             "verification_kind": "postoperative_three_day_window_unavailable",
@@ -67,7 +67,7 @@ _FACTS_BY_CASE = {
         },
     ),
     "065_timely": (
-        "LX0609-065",
+        "LX0609-04-05-02",
         "compliant",
         {
             "verification_kind": "postoperative_senior_round_check",
@@ -77,7 +77,7 @@ _FACTS_BY_CASE = {
         },
     ),
     "065_overdue": (
-        "LX0609-065",
+        "LX0609-04-05-02",
         "non_compliant",
         {
             "verification_kind": "postoperative_senior_round_check",
@@ -87,7 +87,7 @@ _FACTS_BY_CASE = {
         },
     ),
     "065_result_detail_missing": (
-        "LX0609-065",
+        "LX0609-04-05-02",
         "data_gap",
         {
             "verification_kind": "postoperative_surgery_event_time_check",
@@ -97,7 +97,7 @@ _FACTS_BY_CASE = {
         },
     ),
     "065_horizon_missing": (
-        "LX0609-065",
+        "LX0609-04-05-02",
         "data_gap",
         {
             "verification_kind": "postoperative_senior_round_window_unavailable",
@@ -105,7 +105,7 @@ _FACTS_BY_CASE = {
         },
     ),
     "066_timely": (
-        "LX0609-066",
+        "LX0609-04-05-03",
         "compliant",
         {
             "verification_kind": "postoperative_first_course_presence_check",
@@ -114,7 +114,7 @@ _FACTS_BY_CASE = {
         },
     ),
     "066_unhandled": (
-        "LX0609-066",
+        "LX0609-04-05-03",
         "non_compliant",
         {
             "verification_kind": "postoperative_first_course_presence_check",
@@ -156,11 +156,11 @@ def test_postoperative_rules_are_finalizer_facts_and_public_fact_ref_owners(
 @pytest.mark.parametrize(
     ("rule_id", "status", "raw_facts"),
     [
-        ("LX0609-064", "compliant", _FACTS_BY_CASE["064_overdue"][2]),
-        ("LX0609-065", "compliant", _FACTS_BY_CASE["065_overdue"][2]),
-        ("LX0609-066", "non_compliant", _FACTS_BY_CASE["066_timely"][2]),
+        ("LX0609-04-05-01", "compliant", _FACTS_BY_CASE["064_overdue"][2]),
+        ("LX0609-04-05-02", "compliant", _FACTS_BY_CASE["065_overdue"][2]),
+        ("LX0609-04-05-03", "non_compliant", _FACTS_BY_CASE["066_timely"][2]),
         (
-            "LX0609-064",
+            "LX0609-04-05-01",
             "data_gap",
             {
                 **_FACTS_BY_CASE["064_horizon_missing"][2],
@@ -199,7 +199,7 @@ def test_postoperative_absent_facts_preserve_existing_gap_or_not_applicable_stat
     status: str,
 ) -> None:
     finalized, handled = finalize_luxian_0609_executor_customer_display_facts(
-        result={"rule_id": "LX0609-064", "status": status, "reason_code": "executor_reason"},
+        result={"rule_id": "LX0609-04-05-01", "status": status, "reason_code": "executor_reason"},
         raw_facts=None,
     )
 

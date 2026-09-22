@@ -18,7 +18,7 @@ async def test_057_current_same_explicit_statement_has_source_sensitive_result(
     source, expected
 ):
     execution, decision = await _evaluate(
-        "LX0609-057",
+        "LX0609-05-01-05",
         {
             "inpat_drug_order": ({"order_id": "drug-1", "generic_name": "万古霉素"},),
             source: ({

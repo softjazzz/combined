@@ -51,11 +51,11 @@ def build_luxian_0609_033_live_source_decision(
     normalized_state = str(source_state or "").strip()
     normalized_status = str(source_status or "").strip()
     if normalized_state not in _LX0609_033_LIVE_SOURCE_STATES:
-        raise ValueError("invalid lx0609-033 live source state")
+        raise ValueError("invalid lx0609-11-01-01 live source state")
     if normalized_status not in {"available", "unavailable", "error"}:
-        raise ValueError("invalid lx0609-033 live source status")
+        raise ValueError("invalid lx0609-11-01-01 live source status")
     if not isinstance(source_row_count, int) or source_row_count < 0:
-        raise ValueError("invalid lx0609-033 live source count")
+        raise ValueError("invalid lx0609-11-01-01 live source count")
 
     extra = {
         "live_source_status": normalized_status,
@@ -65,9 +65,9 @@ def build_luxian_0609_033_live_source_decision(
     }
     if normalized_state == "consent_document_present":
         if normalized_status != "available" or source_row_count < 1:
-            raise ValueError("invalid lx0609-033 consent document source")
+            raise ValueError("invalid lx0609-11-01-01 consent document source")
         return Luxian0609GateDecision(
-            rule_id="LX0609-033",
+            rule_id="LX0609-11-01-01",
             status=TRIGGER_PRESENT,
             reason="已匹配到非空手术知情同意书文书，保留现有语义核查分派",
             source="bundle_document_guard",
@@ -75,7 +75,7 @@ def build_luxian_0609_033_live_source_decision(
         )
     if normalized_state == "zero_rows":
         return Luxian0609GateDecision(
-            rule_id="LX0609-033",
+            rule_id="LX0609-11-01-01",
             status=TRIGGER_ABSENT,
             reason="受控手术记录查询成功且未发现本次手术记录",
             source="live_source_guard",
@@ -83,7 +83,7 @@ def build_luxian_0609_033_live_source_decision(
         )
     if normalized_state == "exact_performed":
         return Luxian0609GateDecision(
-            rule_id="LX0609-033",
+            rule_id="LX0609-11-01-01",
             status=TRIGGER_DATA_GAP,
             reason="已确认本次严格已实施手术，但手术知情同意书来源完整性未获证明",
             data_gap_fields=("手术知情同意书来源完整性",),
@@ -91,7 +91,7 @@ def build_luxian_0609_033_live_source_decision(
             extra=extra,
         )
     return Luxian0609GateDecision(
-        rule_id="LX0609-033",
+        rule_id="LX0609-11-01-01",
         status=TRIGGER_DATA_GAP,
         reason="无法由受控手术记录安全确认本次严格已实施手术",
         data_gap_fields=("手术记录已实施时间",),
@@ -159,13 +159,47 @@ _FAMILY_KEYWORDS: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
 )
 
 _LUXIAN_RULE_FAMILY_BY_ID: dict[str, str] = {
-    **{f"LX0609-{index:03d}": "critical" for index in (7, 8, 9)},
-    **{f"LX0609-{index:03d}": "imaging" for index in (10, 11, 12)},
-    **{f"LX0609-{index:03d}": "culture" for index in (14, 15)},
-    **{f"LX0609-{index:03d}": "consultation" for index in (20, 21, 22, 23)},
-    **{f"LX0609-{index:03d}": "surgery" for index in (3, 24, 25, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40)},
-    **{f"LX0609-{index:03d}": "transfusion" for index in (41, 42, 43, 44, 45, 46, 47, 48, 49)},
-    **{f"LX0609-{index:03d}": "pathology_tumor" for index in (13, 19, 26, 27)},
+    "LX0609-02-01-03": "critical",
+    "LX0609-02-01-04": "critical",
+    "LX0609-02-01-05": "critical",
+    "LX0609-06-01-02": "imaging",
+    "LX0609-06-01-04": "imaging",
+    "LX0609-06-01-05": "imaging",
+    "LX0609-06-03-03": "culture",
+    "LX0609-06-03-04": "culture",
+    "LX0609-03-01-01": "consultation",
+    "LX0609-03-01-02": "consultation",
+    "LX0609-03-01-03": "consultation",
+    "LX0609-03-01-04": "consultation",
+    "LX0609-04-02-01": "surgery",
+    "LX0609-04-02-03": "surgery",
+    "LX0609-04-02-04": "surgery",
+    "LX0609-05-01-01": "surgery",
+    "LX0609-04-01-01": "surgery",
+    "LX0609-04-02-02": "surgery",
+    "LX0609-04-02-05": "surgery",
+    "LX0609-04-03-01": "surgery",
+    "LX0609-11-01-01": "surgery",
+    "LX0609-11-02-01": "surgery",
+    "LX0609-11-02-02": "surgery",
+    "LX0609-04-04-01": "surgery",
+    "LX0609-04-04-02": "surgery",
+    "LX0609-04-04-03": "surgery",
+    "LX0609-04-01-02": "surgery",
+    "LX0609-04-01-03": "surgery",
+    "LX0609-11-03-01": "transfusion",
+    "LX0609-11-03-02": "transfusion",
+    "LX0609-07-01-01": "transfusion",
+    "LX0609-07-01-02": "transfusion",
+    "LX0609-07-02-01": "transfusion",
+    "LX0609-07-02-02": "transfusion",
+    "LX0609-07-03-01": "transfusion",
+    "LX0609-07-04-01": "transfusion",
+    "LX0609-07-04-02": "transfusion",
+    "LX0609-06-02-03": "pathology_tumor",
+    "LX0609-06-02-02": "pathology_tumor",
+    "LX0609-05-02-01": "pathology_tumor",
+    "LX0609-08-01-04": "pathology_tumor",
 }
 
 _STRUCTURED_DEPENDENCY_MARKERS = (
@@ -238,7 +272,7 @@ def _norm_text(value: Any) -> str:
 def _record_payload_text(value: Any) -> str:
     """Extract patient-record text from mixed evidence payloads.
 
-    The trigger gate must not treat rule metadata such as "LX0609-045 输血记录"
+    The trigger gate must not treat rule metadata such as "LX0609-07-02-01 输血记录"
     as a patient trigger fact. Keep actual source document values, but skip
     rule/catalog keys that can contain the target defect wording.
     """
@@ -559,8 +593,8 @@ _LX0609_024_SURGERY_CONTEXT_MARKERS = (
 )
 
 _CRITICAL_ORDER_RULE_CONFIG: dict[str, tuple[str, tuple[str, ...]]] = {
-    "LX0609-008": ("病重医嘱", ("病重医嘱起止时间",)),
-    "LX0609-009": ("病危医嘱", ("病危医嘱起止时间",)),
+    "LX0609-02-01-04": ("病重医嘱", ("病重医嘱起止时间",)),
+    "LX0609-02-01-05": ("病危医嘱", ("病危医嘱起止时间",)),
 }
 
 
@@ -982,7 +1016,7 @@ def evaluate_luxian_0609_trigger_gates(
         if not rule_id:
             continue
         first_course_has_content = _payload_first_course_has_content(evidence_payload or {})
-        if rule_id == "LX0609-016" and (
+        if rule_id == "LX0609-12-01-01" and (
             first_course_has_content is False
             or (first_course_has_content is None and not _record_text_has_first_course_content(record_text))
         ):
@@ -993,7 +1027,7 @@ def evaluate_luxian_0609_trigger_gates(
                 data_gap_fields=("首次病程记录正文",),
             )
             continue
-        if rule_id == "LX0609-013":
+        if rule_id == "LX0609-06-02-03":
             has_pathology_report, matched_markers = _has_pathology_report_context(record_text)
             if not has_pathology_report:
                 decisions[rule_id] = Luxian0609GateDecision(
@@ -1018,7 +1052,7 @@ def evaluate_luxian_0609_trigger_gates(
                 matched_keywords=matched_markers,
             )
             continue
-        if rule_id == "LX0609-019":
+        if rule_id == "LX0609-06-02-02":
             has_pathology_specimen, matched_markers = _has_lx0609_019_pathology_specimen_context(record_text)
             if not has_pathology_specimen:
                 decisions[rule_id] = Luxian0609GateDecision(
@@ -1034,7 +1068,7 @@ def evaluate_luxian_0609_trigger_gates(
                 matched_keywords=matched_markers,
             )
             continue
-        if rule_id == "LX0609-028":
+        if rule_id == "LX0609-05-01-01":
             has_class_i_ii_incision, incision_markers = _has_lx0609_028_class_i_ii_incision_context(record_text)
             if not has_class_i_ii_incision:
                 decisions[rule_id] = Luxian0609GateDecision(
@@ -1069,7 +1103,7 @@ def evaluate_luxian_0609_trigger_gates(
                 matched_keywords=tuple(dict.fromkeys((*incision_markers, *antibiotic_markers)))[:8],
             )
             continue
-        if rule_id == "LX0609-024":
+        if rule_id == "LX0609-04-02-03":
             is_applicable, matched_markers = _has_lx0609_024_malignant_tumor_surgery_context(record_text)
             if not is_applicable:
                 decisions[rule_id] = Luxian0609GateDecision(
@@ -1085,7 +1119,7 @@ def evaluate_luxian_0609_trigger_gates(
                 matched_keywords=matched_markers,
             )
             continue
-        if rule_id == "LX0609-026":
+        if rule_id == "LX0609-05-02-01":
             has_chemo, matched_markers = _has_chemo_clinical_context(record_text)
             if not has_chemo:
                 decisions[rule_id] = Luxian0609GateDecision(
@@ -1101,7 +1135,7 @@ def evaluate_luxian_0609_trigger_gates(
                 matched_keywords=matched_markers,
             )
             continue
-        if rule_id == "LX0609-040":
+        if rule_id == "LX0609-04-01-03":
             has_level_4, matched_markers = _has_level_4_surgery_context(record_text)
             if not has_level_4:
                 decisions[rule_id] = Luxian0609GateDecision(
@@ -1117,7 +1151,7 @@ def evaluate_luxian_0609_trigger_gates(
                 matched_keywords=matched_markers,
             )
             continue
-        if rule_id == "LX0609-048":
+        if rule_id == "LX0609-07-04-01":
             has_intraop_transfusion, matched_markers = _has_intraoperative_transfusion_context(record_text)
             if not has_intraop_transfusion:
                 decisions[rule_id] = Luxian0609GateDecision(
@@ -1230,7 +1264,7 @@ def decision_to_result(rule: dict[str, Any], decision: Luxian0609GateDecision) -
     rule_name = str(rule.get("name") or rule.get("rule_name") or rule_id)
     if status == TRIGGER_ABSENT:
         result_status = "not_applicable"
-        findings = decision.reason if rule_id == "LX0609-028" and decision.reason else "未发现该质控点所需触发事件，本次判定为不适用。"
+        findings = decision.reason if rule_id == "LX0609-05-01-01" and decision.reason else "未发现该质控点所需触发事件，本次判定为不适用。"
         suggestion = "无需整改；如病历存在相关事件，请补充结构化文书或医嘱后重新质控。"
         confidence = 0.88
     else:
@@ -1243,7 +1277,7 @@ def decision_to_result(rule: dict[str, Any], decision: Luxian0609GateDecision) -
     if status == TRIGGER_ABSENT:
         evidence_lines = [
             f"适用性：{decision.reason}"
-            if rule_id == "LX0609-028" and decision.reason
+            if rule_id == "LX0609-05-01-01" and decision.reason
             else "适用性：未发现与本质控点直接相关的触发事实。"
         ]
     else:

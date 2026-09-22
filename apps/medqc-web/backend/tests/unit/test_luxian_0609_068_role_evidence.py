@@ -81,7 +81,7 @@ async def test_daily_approval_without_role_evidence_does_not_block_senior_condit
         ),
     )
     result, reduced = await _evaluate(
-        "LX0609-068",
+        "LX0609-08-02-02",
         {
             **_base_rows(),
             "daily_course_record": ({
@@ -100,7 +100,7 @@ async def test_daily_approval_without_role_evidence_does_not_block_senior_condit
 
     assert reduced.final_state is CustomerFinalState.DATA_GAP
     assert reduced.reason_code == "source_empty"
-    assert dict(result.customer_display_facts)["LX0609-068"]["approval_present"] is False
+    assert dict(result.customer_display_facts)["LX0609-08-02-02"]["approval_present"] is False
     assert result.llm_call_count == 1
     assert result.total_tokens == 100
     assert len(client.calls) == 1
@@ -115,7 +115,7 @@ async def test_daily_approval_with_senior_role_inside_opinion_quote_is_compliant
         quote=text,
     ))
     result, reduced = await _evaluate(
-        "LX0609-068",
+        "LX0609-08-02-02",
         {
             **_base_rows(),
             "daily_course_record": ({
@@ -129,7 +129,7 @@ async def test_daily_approval_with_senior_role_inside_opinion_quote_is_compliant
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT
     assert reduced.reason_code == "requirement_satisfied"
-    facts = dict(result.customer_display_facts)["LX0609-068"]
+    facts = dict(result.customer_display_facts)["LX0609-08-02-02"]
     assert facts["approval_path"] == "senior_approval"
     assert facts["checked_source"] == "daily_course_record"
     assert result.llm_call_count == 0
@@ -156,7 +156,7 @@ async def test_confirmed_senior_approval_phrases_use_fixed_path_and_exact_eviden
 ) -> None:
     client = _Client()
     snapshot, materials, result, reduced = await _evaluate_selected(
-        ("LX0609-068",),
+        ("LX0609-08-02-02",),
         {
             **_base_rows(),
             "senior_course_record": ({
@@ -174,7 +174,7 @@ async def test_confirmed_senior_approval_phrases_use_fixed_path_and_exact_eviden
     assert result.total_tokens == 0
     assert client.calls == []
     canonical = _canonical_extended_result(
-        rule_id="LX0609-068",
+        rule_id="LX0609-08-02-02",
         snapshot=snapshot,
         materials=materials,
         result=result,
@@ -203,7 +203,7 @@ async def test_model_approved_without_confirmed_quote_does_not_create_evidence(
 ) -> None:
     client = _Client(_item("doc_01", opinion="approved", quote=text))
     snapshot, materials, result, reduced = await _evaluate_selected(
-        ("LX0609-068",),
+        ("LX0609-08-02-02",),
         {
             **_base_rows(),
             "senior_course_record": ({
@@ -221,7 +221,7 @@ async def test_model_approved_without_confirmed_quote_does_not_create_evidence(
     assert result.total_tokens == 100
     assert len(client.calls) == 1
     canonical = _canonical_extended_result(
-        rule_id="LX0609-068",
+        rule_id="LX0609-08-02-02",
         snapshot=snapshot,
         materials=materials,
         result=result,

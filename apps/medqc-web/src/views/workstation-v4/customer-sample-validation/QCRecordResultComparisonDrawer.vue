@@ -13,13 +13,19 @@
         title="关闭病历质控结果"
         aria-hidden="true"
       >
-        <X :size="20" :stroke-width="2.35" />
+        <X
+          :size="20"
+          :stroke-width="2.35"
+        />
       </span>
     </template>
     <template #title>
       <div class="customer-record-result-title">
         <div class="customer-record-result-title__brand">
-          <span class="customer-record-result-title__icon" aria-hidden="true">
+          <span
+            class="customer-record-result-title__icon"
+            aria-hidden="true"
+          >
             <ShieldCheck :size="18" />
           </span>
           <span class="customer-record-result-title__heading">
@@ -27,12 +33,15 @@
             <strong>病历质控结果</strong>
           </span>
         </div>
-        <div class="customer-record-result-title__context" :aria-label="recordContextAriaLabel">
+        <div
+          class="customer-record-result-title__context"
+          :aria-label="recordContextAriaLabel"
+        >
           <img
             class="patient-context-avatar"
             :src="contextAvatar"
             :alt="`${focus?.patientName || '患者'}头像`"
-          />
+          >
           <span class="customer-record-result-title__context-label">当前病历</span>
           <span class="customer-record-result-title__context-details">
             <span class="customer-record-result-title__context-value">
@@ -41,14 +50,19 @@
                 :key="index"
                 class="patient-context-part"
                 :class="{ 'is-primary': index === 0 }"
-                >{{ part }}</span
-              >
+              >{{ part }}</span>
             </span>
-            <span v-if="hospitalizationTimeText" class="customer-record-result-title__context-time">
+            <span
+              v-if="hospitalizationTimeText"
+              class="customer-record-result-title__context-time"
+            >
               {{ hospitalizationTimeText }}
             </span>
           </span>
-          <span v-if="qcTimeText" class="customer-record-result-title__qc-time">
+          <span
+            v-if="qcTimeText"
+            class="customer-record-result-title__qc-time"
+          >
             {{ qcTimeText }}
           </span>
         </div>

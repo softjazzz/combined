@@ -12,7 +12,7 @@ from math import isfinite
 from typing import Any
 
 
-CRITICAL_VALUE_CUSTOMER_RULE_IDS = frozenset({"LX0609-052", "LX0609-053"})
+CRITICAL_VALUE_CUSTOMER_RULE_IDS = frozenset({"LX0609-06-04-01", "LX0609-06-04-02"})
 
 
 def is_critical_value_customer_rule(rule_id: str) -> bool:
@@ -310,9 +310,9 @@ def safe_critical_value_customer_display_facts(
     if not isinstance(raw, Mapping):
         return None
     normalized = str(rule_id or "").strip().upper()
-    if normalized == "LX0609-052":
+    if normalized == "LX0609-06-04-01":
         return _safe_052(raw)
-    if normalized == "LX0609-053":
+    if normalized == "LX0609-06-04-02":
         return _safe_053(raw)
     return None
 
@@ -336,7 +336,7 @@ def critical_value_customer_fact_status_is_valid(
     }:
         return normalized_status == "data_gap"
     outcomes = [item.get("outcome") for item in safe_facts.get("event_results", ())]
-    if str(rule_id).strip().upper() == "LX0609-053":
+    if str(rule_id).strip().upper() == "LX0609-06-04-02":
         if "association_failed" in outcomes:
             return normalized_status == "data_gap"
         return normalized_status == (

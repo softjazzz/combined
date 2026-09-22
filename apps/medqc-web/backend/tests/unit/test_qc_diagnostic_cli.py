@@ -80,7 +80,7 @@ def test_inspect_does_not_require_git_or_echo_observation(cli, documents, monkey
     assert cli.main(["inspect", "untrusted-name.zip"]) == 0
     output = capsys.readouterr()
     summary = json.loads(output.out)
-    assert summary["rule_ids"] == ["LX0609-032"]
+    assert summary["rule_ids"] == ["LX0609-04-03-01"]
     assert summary["privacy_verified"] is False
     assert documents["results.json"]["rules"][0]["findings"] not in output.out
     assert "untrusted-name" not in output.out + output.err

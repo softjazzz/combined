@@ -8,15 +8,15 @@ from typing import Any, Mapping
 
 
 BASIC_TIMELINESS_CUSTOMER_RULE_IDS = frozenset(
-    {"LX0609-001", "LX0609-002", "LX0609-004", "LX0609-005", "LX0609-006"}
+    {"LX0609-01-01-01", "LX0609-01-02-01", "LX0609-09-01-01", "LX0609-02-01-01", "LX0609-02-01-02"}
 )
 
 _TARGET_DOCUMENT_BY_RULE = {
-    "LX0609-001": "admission_record",
-    "LX0609-002": "first_course_record",
-    "LX0609-004": "rescue_record",
-    "LX0609-005": "attending_course_record",
-    "LX0609-006": "senior_course_record",
+    "LX0609-01-01-01": "admission_record",
+    "LX0609-01-02-01": "first_course_record",
+    "LX0609-09-01-01": "rescue_record",
+    "LX0609-02-01-01": "attending_course_record",
+    "LX0609-02-01-02": "senior_course_record",
 }
 
 def is_basic_timeliness_customer_rule(rule_id: str) -> bool:
@@ -129,7 +129,7 @@ def safe_basic_timeliness_customer_display_facts(
     threshold = raw.get("threshold_hours")
     source_label = raw.get("source_label")
     if (
-        normalized_rule_id == "LX0609-004"
+        normalized_rule_id == "LX0609-09-01-01"
         and failure_kind == "rescue_record_missing_after_trigger"
     ):
         trigger_order_id = raw.get("trigger_order_id")
@@ -174,7 +174,7 @@ def safe_basic_timeliness_customer_display_facts(
             "target_document": "rescue_record",
             "source_label": "抢救记录",
         }
-    if normalized_rule_id == "LX0609-004" and failure_kind in {
+    if normalized_rule_id == "LX0609-09-01-01" and failure_kind in {
         "rescue_end_time_missing",
         "document_completion_time_missing",
         "authoritative_time_conflict",
@@ -242,7 +242,7 @@ def safe_basic_timeliness_customer_display_facts(
         except (TypeError, ValueError):
             return None
         if (
-            normalized_rule_id != "LX0609-001"
+            normalized_rule_id != "LX0609-01-01-01"
             or state != "before"
             or threshold != 24
             or not isinstance(source_label, str)
@@ -292,7 +292,7 @@ def safe_basic_timeliness_customer_display_facts(
     document_content_state = raw.get("document_content_state")
     if document_content_state is not None:
         if (
-            normalized_rule_id != "LX0609-001"
+            normalized_rule_id != "LX0609-01-01-01"
             or failure_kind != "timeliness_requirement_not_met"
             or state != "missing"
             or document_content_state != "blank_or_placeholder"
@@ -312,7 +312,7 @@ def safe_basic_timeliness_customer_display_facts(
             facts["remaining_hours"] = round(
                 max(0.0, threshold - float(elapsed_hours)), 2
             )
-    if normalized_rule_id == "LX0609-004" and raw.get("rescue_events") is not None:
+    if normalized_rule_id == "LX0609-09-01-01" and raw.get("rescue_events") is not None:
         rescue_events = _controlled_rescue_events(raw.get("rescue_events"))
         if rescue_events is None:
             return None
@@ -340,7 +340,7 @@ def basic_timeliness_customer_fact_status_is_valid(
         return normalized_status == "non_compliant" and state in {"missing", "late"}
     if failure_kind == "evidence_time_conflict":
         return normalized_status == "uncertain" and state == "before"
-    if str(rule_id or "").strip().upper() != "LX0609-004":
+    if str(rule_id or "").strip().upper() != "LX0609-09-01-01":
         return False
     if failure_kind == "rescue_record_missing_after_trigger":
         return normalized_status == "data_gap"

@@ -1,4 +1,4 @@
-"""LX0609-059 影子运行适配层。
+"""LX0609-05-03-01 影子运行适配层。
 
 只把一次请求内的受控材料适配到既有事件级执行器，并返回不含原始标识、
 文书正文或模型报文的安全统计摘要。影子结果永不参与正式规则结果和计费汇总。
@@ -27,7 +27,7 @@ from .native_treatment_order_consistency import (
 
 
 LUXIAN_0609_059_SHADOW_CONTRACT_VERSION = "lx0609-059-shadow-v1"
-_RULE_ID = "LX0609-059"
+_RULE_ID = "LX0609-05-03-01"
 _EVENT_SOURCES = ("exam_master", "exam_item_report", "surgery_record")
 _ORDER_SOURCES = ("inpat_drug_order", "inpat_nondrug_order")
 _COURSE_SOURCES = ("daily_course_record", "senior_course_record")

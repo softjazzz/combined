@@ -1,4 +1,4 @@
-"""LX0609-008/009 病重病危病程时限与变化事件核对。"""
+"""LX0609-02-01-04、LX0609-02-01-05 病重病危病程时限与变化事件核对。"""
 
 from __future__ import annotations
 
@@ -188,7 +188,7 @@ def _rule_008_009_decision(
     """按医嘱开立日及病程权威记录日裁决病重/病危查房时限。"""
 
     if (
-        rule_id not in {"LX0609-008", "LX0609-009"}
+        rule_id not in {"LX0609-02-01-04", "LX0609-02-01-05"}
         or type(snapshot) is not Luxian0609EvidenceSnapshot
         or type(materials) is not Luxian0609EvidenceMaterialStore
         or materials.snapshot_hash != snapshot.snapshot_hash
@@ -307,7 +307,7 @@ def _rule_008_009_decision(
             refs=refs,
             confidence=None,
         )
-    target = "serious" if rule_id == "LX0609-008" else "critical"
+    target = "serious" if rule_id == "LX0609-02-01-04" else "critical"
     target_rows = tuple(row for row in order_rows if row.get("severity") == target)
     if any(row.get("event_kind") not in {None, "start", "end"} for row in target_rows):
         return decision(
@@ -563,7 +563,7 @@ def _rule_008_009_decision(
                     confidence=None,
                 )
             if _date_in_active_intervals(parsed_date, active_intervals) and (
-                rule_id != "LX0609-009"
+                rule_id != "LX0609-02-01-05"
                 or bool(_rule_009_substantive_text(row))
             ):
                 if document_ref:
@@ -572,7 +572,7 @@ def _rule_008_009_decision(
     timed_record_dates = {item[0] for item in timed_record_points}
     refs.update(document_ref for _record_date, document_ref in timed_record_points)
     ordered_dates = sorted(timed_record_dates)
-    if rule_id == "LX0609-008":
+    if rule_id == "LX0609-02-01-04":
         interval_candidates = []
         interval_gap_days: list[int] = []
         for start_date, end_date in active_intervals:
@@ -1173,7 +1173,7 @@ def _rule_009_semantic_prompt(
         if not any(ref.startswith("E") for ref in event_refs)
         else "E开头引用只能从允许event_ref列表中原样选择。"
     )
-    return f"""你是 LX0609-009 病危病程语义核对器。
+    return f"""你是 LX0609-02-01-05 病危病程语义核对器。
 
 Python 已确认病危期间每日病程覆盖。不要判定整条规则状态、不要重判每日频次。
 只判断每个受控外部检查/检验候选是否显示“相对既往基线发生明确改变”。“病情稳定”“继续观察”、可能/考虑/待排等不构成明确变化。
@@ -1231,8 +1231,8 @@ def _rule_009_semantic_decision(
 ) -> RuleDecision:
     """将009的三态语义结果与已通过的Python频次判断合成。"""
 
-    if base_decision.rule_id != "LX0609-009":
-        raise ValueError("009 semantic decision requires LX0609-009")
+    if base_decision.rule_id != "LX0609-02-01-05":
+        raise ValueError("009 semantic decision requires LX0609-02-01-05")
     if error_reason:
         dimensions = (
             ApplicabilityState.ERROR,
@@ -1458,7 +1458,7 @@ async def evaluate_rules_008_009_typed(
         customer_display_facts=base_display_facts,
     )
     if (
-        rule_id != "LX0609-009"
+        rule_id != "LX0609-02-01-05"
         or base_decision.applicability is not ApplicabilityState.APPLICABLE
         or base_decision.evidence_state is not EvidenceState.SUFFICIENT
         or base_decision.qc_direction is not QcDirection.SATISFIED
@@ -1638,6 +1638,6 @@ async def evaluate_rules_008_009_typed(
     daily_facts.update(change_facts)
     return Rule008009TypedExecution(
         decision=semantic_decision,
-        customer_display_facts=(("LX0609-009", daily_facts),),
+        customer_display_facts=(("LX0609-02-01-05", daily_facts),),
         **usage,
     )

@@ -67,8 +67,8 @@ def test_analytics_uses_root_job_and_three_coordinate_as_event_identity(monkeypa
             "attending_physician": "张医生",
             "finished_at": datetime(2026, 8, 1, 9),
             "items": [
-                {"rule_id": "LX0609-001", "status": "non_compliant"},
-                {"rule_id": "LX0609-002", "status": "compliant"},
+                {"rule_id": "LX0609-01-01-01", "status": "non_compliant"},
+                {"rule_id": "LX0609-01-02-01", "status": "compliant"},
             ],
         },
         {
@@ -78,8 +78,8 @@ def test_analytics_uses_root_job_and_three_coordinate_as_event_identity(monkeypa
             "attending_physician": "李医生",
             "finished_at": datetime(2026, 8, 2, 9),
             "items": [
-                {"rule_id": "LX0609-001", "status": "data_gap"},
-                {"rule_id": "LX0609-002", "status": "uncertain"},
+                {"rule_id": "LX0609-01-01-01", "status": "data_gap"},
+                {"rule_id": "LX0609-01-02-01", "status": "uncertain"},
             ],
         },
     ]
@@ -126,8 +126,8 @@ def test_analytics_uses_root_job_and_three_coordinate_as_event_identity(monkeypa
         (item["rule_id"], item["non_compliant_count"], item["data_gap_count"], item["uncertain_count"])
         for item in payload["rule_distribution"]
     ] == [
-        ("LX0609-001", 1, 1, 0),
-        ("LX0609-002", 0, 0, 1),
+        ("LX0609-01-01-01", 1, 1, 0),
+        ("LX0609-01-02-01", 0, 0, 1),
     ]
 
 
@@ -139,8 +139,8 @@ def test_analytics_keeps_invalid_envelopes_out_of_clinical_statistics(monkeypatc
         "department": "ICU",
         "finished_at": datetime(2026, 8, 1, 9),
         "items": [
-            {"rule_id": "LX0609-001", "status": "non_compliant"},
-            {"rule_id": "LX0609-001", "status": "compliant"},
+            {"rule_id": "LX0609-01-01-01", "status": "non_compliant"},
+            {"rule_id": "LX0609-01-01-01", "status": "compliant"},
         ],
     }
     payload = _service(monkeypatch, records, [duplicate_rule_event]).get_luxian_0609_analytics()
@@ -179,7 +179,7 @@ def test_analytics_keeps_missing_attending_physician_unassigned(monkeypatch):
             "identity": ("inst-a", "patient-a", "visit-a"),
             "department": "ICU",
             "finished_at": datetime(2026, 8, 1, 9),
-            "items": [{"rule_id": "LX0609-001", "status": "non_compliant"}],
+            "items": [{"rule_id": "LX0609-01-01-01", "status": "non_compliant"}],
         },
         {
             "root_job_id": "job-2",
@@ -187,7 +187,7 @@ def test_analytics_keeps_missing_attending_physician_unassigned(monkeypatch):
             "department": "ICU",
             "attending_physician": "王医生",
             "finished_at": datetime(2026, 8, 2, 9),
-            "items": [{"rule_id": "LX0609-001", "status": "data_gap"}],
+            "items": [{"rule_id": "LX0609-01-01-01", "status": "data_gap"}],
         },
     ]
 
@@ -218,7 +218,7 @@ def test_analytics_hides_completion_trend_when_only_one_real_time_bucket(monkeyp
         "identity": ("inst-a", "patient-a", "visit-a"),
         "department": "ICU",
         "finished_at": datetime(2026, 8, 1, 9),
-        "items": [{"rule_id": "LX0609-001", "status": "compliant"}],
+        "items": [{"rule_id": "LX0609-01-01-01", "status": "compliant"}],
     }
 
     payload = _service(monkeypatch, records, [event]).get_luxian_0609_analytics()
@@ -251,8 +251,8 @@ def test_luxian_analytics_filters_excluded_and_unknown_rule_ids(monkeypatch):
         "department": "ICU",
         "finished_at": datetime(2026, 8, 1, 9),
         "items": [
-            {"rule_id": "LX0609-001", "status": "non_compliant"},
-            {"rule_id": "LX0609-033", "status": "non_compliant"},
+            {"rule_id": "LX0609-01-01-01", "status": "non_compliant"},
+            {"rule_id": "LX0609-11-01-01", "status": "non_compliant"},
         ],
     }
     unknown_event = {
@@ -260,7 +260,7 @@ def test_luxian_analytics_filters_excluded_and_unknown_rule_ids(monkeypatch):
         "root_job_id": "job-2",
         "identity": ("inst-a", "patient-a", "visit-a"),
         "items": [
-            {"rule_id": "LX0609-001", "status": "non_compliant"},
+            {"rule_id": "LX0609-01-01-01", "status": "non_compliant"},
             {"rule_id": "LX0609-999", "status": "non_compliant"},
         ],
     }
@@ -271,5 +271,5 @@ def test_luxian_analytics_filters_excluded_and_unknown_rule_ids(monkeypatch):
     assert payload["kpis"]["canonical_invalid_or_missing_total"] == 1
     assert payload["status_distribution"][0]["count"] == 1
     assert [item["rule_id"] for item in payload["rule_distribution"]] == [
-        "LX0609-001"
+        "LX0609-01-01-01"
     ]

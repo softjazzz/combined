@@ -22,10 +22,10 @@ from app.services.luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY
 
 
 CONSULTATION_RULE_IDS = (
-    "LX0609-020",
-    "LX0609-021",
-    "LX0609-022",
-    "LX0609-023",
+    "LX0609-03-01-01",
+    "LX0609-03-01-02",
+    "LX0609-03-01-03",
+    "LX0609-03-01-04",
 )
 
 
@@ -170,7 +170,7 @@ def test_consultation_family_registry_is_episode_executor_and_excludes_069() -> 
     }
     plan = build_luxian_0609_package_plan_from_settings(
         inventory=inventory,
-        selected_rule_ids=(*CONSULTATION_RULE_IDS, "LX0609-069"),
+        selected_rule_ids=(*CONSULTATION_RULE_IDS, "LX0609-04-02-07"),
         settings=_formal_settings(),
     )
 
@@ -179,16 +179,16 @@ def test_consultation_family_registry_is_episode_executor_and_excludes_069() -> 
         "consultation_quality"
     }
     # 020/021/022 因会诊来源缺失暂停，本族只派发 023。
-    assert plan.native_rule_ids_for_executor("consultation_quality") == ("LX0609-023",)
+    assert plan.native_rule_ids_for_executor("consultation_quality") == ("LX0609-03-01-04",)
     assert plan.not_executed_rule_ids == (
-        "LX0609-020",
-        "LX0609-021",
-        "LX0609-022",
+        "LX0609-03-01-01",
+        "LX0609-03-01-02",
+        "LX0609-03-01-03",
     )
-    assert "LX0609-069" not in plan.native_rule_ids_for_executor(
+    assert "LX0609-04-02-07" not in plan.native_rule_ids_for_executor(
         "consultation_quality"
     )
-    assert "LX0609-069" not in episode.CONSULTATION_EPISODE_RULE_IDS
+    assert "LX0609-04-02-07" not in episode.CONSULTATION_EPISODE_RULE_IDS
     assert execution.execute_luxian_0609_native_consultation_episode_rules is (
         episode.execute_luxian_0609_native_consultation_episode_rules
     )
@@ -201,7 +201,7 @@ async def test_formal_unified_chain_delivers_paused_consultation_rules_without_l
     """正式链必须在执行器之前交付020至022的暂停结果。"""
 
     client = RecordingClient(RuntimeError("paused rules must not call the model"))
-    selected_rule_ids = ("LX0609-020", "LX0609-021", "LX0609-022")
+    selected_rule_ids = ("LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03")
     context, delivered = await _run_formal_chain(
         monkeypatch,
         selected_rule_ids=selected_rule_ids,

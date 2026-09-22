@@ -751,7 +751,7 @@ def test_record_result_envelope_keeps_delivery_facts_evidence_and_model_analysis
             "institute_id": "H1",
             "patient_id": "P1",
             "visit_id": "V1",
-            "rule_id": "LX0609-018",
+            "rule_id": "LX0609-01-01-02",
             "status": "non_compliant",
             "findings": "引擎已形成的不合规结论。",
             "criterion_results": [{"key": "chief_complaint_length", "passed": False}],
@@ -780,7 +780,7 @@ def test_record_result_envelope_keeps_delivery_facts_evidence_and_model_analysis
 
 def test_record_result_envelope_normalizes_legacy_semantic_analysis_name():
     item = CustomQCWorkspaceService._envelope_item_from_rule_result(
-        {"rule_id": "LX0609-018", "semantic_analysis": "主诉症状无法区分急性下呼吸道感染。"}
+        {"rule_id": "LX0609-01-01-02", "semantic_analysis": "主诉症状无法区分急性下呼吸道感染。"}
     )
 
     assert item["model_analysis"] == "主诉症状无法区分急性下呼吸道感染。"
@@ -789,7 +789,7 @@ def test_record_result_envelope_normalizes_legacy_semantic_analysis_name():
 def test_record_result_envelope_keeps_llm_analysis_and_actionable_suggestion():
     item = CustomQCWorkspaceService._envelope_item_from_rule_result(
         {
-            "rule_id": "LX0609-018",
+            "rule_id": "LX0609-01-01-02",
             "status": "non_compliant",
             "medical_analysis": "主诉仅写咳嗽、咳痰，不能区分慢阻肺急性加重与下呼吸道感染。",
             "model_suggestion": "补充急性加重的时间、痰色变化及感染相关症状。",
@@ -803,7 +803,7 @@ def test_record_result_envelope_keeps_llm_analysis_and_actionable_suggestion():
 def test_record_result_envelope_keeps_compliant_facts_criteria_and_evidence():
     item = CustomQCWorkspaceService._envelope_item_from_rule_result(
         {
-            "rule_id": "LX0609-001",
+            "rule_id": "LX0609-01-01-01",
             "status": "compliant",
             "detail": "入院记录在入院后 2 小时内完成。",
             "actual": "记录时间：2026-07-07 16:10",
@@ -826,7 +826,7 @@ def test_record_result_envelope_keeps_compliant_facts_criteria_and_evidence():
 def test_record_result_envelope_normalizes_text_evidence_to_empty_array():
     item = CustomQCWorkspaceService._envelope_item_from_rule_result(
         {
-            "rule_id": "LX0609-003",
+            "rule_id": "LX0609-04-02-01",
             "status": "not_applicable",
             "findings": "本次不适用。",
             "evidence": "完整适用性证据未触发本质控点。",
@@ -839,7 +839,7 @@ def test_record_result_envelope_normalizes_text_evidence_to_empty_array():
 def test_record_result_envelope_keeps_data_gap_source_and_field_facts():
     item = CustomQCWorkspaceService._envelope_item_from_rule_result(
         {
-            "rule_id": "LX0609-011",
+            "rule_id": "LX0609-06-01-04",
             "status": "data_gap",
             "reason_code": "required_source_unavailable",
             "reason": "影像报告已检出，但对应病程记录来源未返回。",
@@ -861,7 +861,7 @@ def test_record_result_envelope_keeps_data_gap_source_and_field_facts():
 def test_record_result_envelope_preserves_data_gap_customer_message():
     item = CustomQCWorkspaceService._envelope_item_from_rule_result(
         {
-            "rule_id": "LX0609-011",
+            "rule_id": "LX0609-06-01-04",
             "status": "data_gap",
             "reason_code": "required_field_missing",
             "customer_message": "缺少检查报告时间，暂时无法完成本项质控。",
@@ -879,7 +879,7 @@ def test_record_result_envelope_preserves_data_gap_customer_message():
 def test_record_result_envelope_preserves_finalized_state_fields_verbatim():
     item = CustomQCWorkspaceService._envelope_item_from_rule_result(
         {
-            "rule_id": "LX0609-029",
+            "rule_id": "LX0609-04-01-01",
             "status": "uncertain",
             "result_status": "uncertain",
             "reason_code": "customer_explanation_incomplete",
@@ -915,8 +915,8 @@ def test_record_result_envelopes_are_grouped_by_full_case_coordinate():
             "patient_id": "P1",
             "visit_id": "V-SAME",
             "record_id": "V-SAME",
-            "rule_id": "LX0609-001",
-            "rule_code": "LX0609-001",
+            "rule_id": "LX0609-01-01-01",
+            "rule_code": "LX0609-01-01-01",
             "status": "compliant",
             "result_status": "compliant",
             "display_status": "compliant",
@@ -927,8 +927,8 @@ def test_record_result_envelopes_are_grouped_by_full_case_coordinate():
             "patient_id": "P2",
             "visit_id": "V-SAME",
             "record_id": "V-SAME",
-            "rule_id": "LX0609-001",
-            "rule_code": "LX0609-001",
+            "rule_id": "LX0609-01-01-01",
+            "rule_code": "LX0609-01-01-01",
             "status": "non_compliant",
             "result_status": "non_compliant",
             "display_status": "non_compliant",

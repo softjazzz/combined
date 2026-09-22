@@ -60,16 +60,25 @@ def _load_formal_catalog() -> dict[str, dict]:
         (repository_root / "docs" / "0602" / "luxian_0609_formal_rule_catalog.json")
         .read_text(encoding="utf-8")
     )
-    return {str(item["qc_point_id"]): item for item in payload}
+    mapping = _migration_id_map()
+    return {mapping[str(item["qc_point_id"])]: item for item in payload}
+
+
+def _migration_id_map() -> dict[str, str]:
+    # 原始正式标准保留归档身份；仅测试用离线台账核对迁移后合同等价。
+    path = Path(__file__).resolve().parents[3] / "docs/plans/lx0609-four-part-rule-code-mapping-v1.csv"
+    with path.open(encoding="utf-8", newline="") as handle:
+        return {row["legacy_rule_id"]: row["rule_id"] for row in csv.DictReader(handle)}
 
 
 def _load_formal_catalog_csv_statuses() -> dict[str, set[str]]:
     repository_root = Path(__file__).resolve().parents[3]
+    mapping = _migration_id_map()
     with (
         repository_root / "docs" / "0602" / "luxian_0609_formal_rule_catalog.csv"
     ).open(encoding="utf-8", newline="") as handle:
         return {
-            str(item["qc_point_id"]): {
+            mapping[str(item["qc_point_id"])]: {
                 status.strip()
                 for status in str(item["allowed_result_statuses"]).split(";")
                 if status.strip()
@@ -79,18 +88,22 @@ def _load_formal_catalog_csv_statuses() -> dict[str, set[str]]:
 
 
 @pytest.mark.unit
-def test_luxian_0609_catalog_has_77_registered_rules_and_examples():
+def test_luxian_0609_catalog_has_79_registered_rules_and_examples():
     rules = load_luxian_0609_rules()
 
-    assert len(rules) == 77
-    assert customer_rule_count() == 77
-    assert rules[0]["rule_id"] == "LX0609-001"
-    assert rules[-1]["rule_id"] == "LX0609-077"
+    assert len(rules) == 79
+    assert customer_rule_count() == 79
+    assert rules[0]["rule_id"] == "LX0609-01-01-01"
+    assert rules[-1]["rule_id"] == _migration_id_map()["LX0609-079"]
 
     existing_rule_ids = _load_existing_rule_ids()
-    phase_extension_rule_ids = {f"LX0609-{index:03d}" for index in range(50, 78)}
+    phase_extension_rule_ids = {
+        new_id for old_id, new_id in _migration_id_map().items()
+        if int(old_id.rsplit("-", 1)[1]) >= 50
+    }
     for rule in rules:
         assert rule["rule_id"].startswith("LX0609-")
+        assert rule.get("rule_code", rule["rule_id"]) == rule["rule_id"]
         assert rule.get("positive_example")
         assert rule.get("negative_example")
         assert rule.get("mapped_rule_ids")
@@ -108,7 +121,7 @@ def test_customer_policy_projection_uses_rule_master_without_mutating_execution_
     projected = attach_luxian_0609_customer_policy(wrappers)
     master_by_id = {entry.rule_id: entry for entry in load_luxian_0609_rule_master()}
 
-    assert len(projected) == 77
+    assert len(projected) == 79
     assert all(rule.get("customer_policy") for rule in projected)
     assert "customer_policy" not in wrappers[0]
     for rule in projected:
@@ -121,7 +134,7 @@ def test_customer_policy_projection_uses_rule_master_without_mutating_execution_
 
     wrapper_by_id = {rule["rule_id"]: rule for rule in wrappers}
     projected_by_id = {rule["rule_id"]: rule for rule in projected}
-    for rule_id in ("LX0609-009", "LX0609-020", "LX0609-023", "LX0609-025", "LX0609-066", "LX0609-070"):
+    for rule_id in ("LX0609-02-01-05", "LX0609-03-01-01", "LX0609-03-01-04", "LX0609-04-02-04", "LX0609-04-05-03", "LX0609-07-01-03"):
         policy = projected_by_id[rule_id]["customer_policy"]
         master = master_by_id[rule_id]
         assert policy == {
@@ -136,17 +149,17 @@ def test_customer_policy_projection_uses_rule_master_without_mutating_execution_
             == wrapper_by_id[rule_id]["primary_execution_rule_id"]
         )
 
-    implant_summary = projected_by_id["LX0609-025"]["customer_policy"]["summary"]
+    implant_summary = projected_by_id["LX0609-04-02-04"]["customer_policy"]["summary"]
     assert all(
         field in implant_summary
         for field in ("名称", "种类", "规格或型号", "材质", "数量")
     )
     assert "条码不属于本规则必填字段" in implant_summary
     assert "真实病例金标" in implant_summary
-    assert not wrapper_by_id["LX0609-066"].get("customer_text")
-    assert projected_by_id["LX0609-066"]["customer_policy"]["summary"]
-    assert not wrapper_by_id["LX0609-070"].get("customer_text")
-    assert projected_by_id["LX0609-070"]["customer_policy"]["summary"]
+    assert not wrapper_by_id["LX0609-04-05-03"].get("customer_text")
+    assert projected_by_id["LX0609-04-05-03"]["customer_policy"]["summary"]
+    assert not wrapper_by_id["LX0609-07-01-03"].get("customer_text")
+    assert projected_by_id["LX0609-07-01-03"]["customer_policy"]["summary"]
 
 
 @pytest.mark.unit
@@ -172,7 +185,7 @@ def test_formal_catalog_allows_not_executed_only_for_phase_pending_rules():
 def test_025_and_059_catalogs_expose_the_frozen_pending_business_contracts():
     rules = {rule["rule_id"]: rule for rule in load_luxian_0609_rules()}
 
-    implant = rules["LX0609-025"]
+    implant = rules["LX0609-04-02-04"]
     assert implant["applicable_documents"] == ["surgery_record"]
     assert implant["data_dependencies"] == [
         "永久性植入物实际使用",
@@ -203,13 +216,13 @@ def test_025_and_059_catalogs_expose_the_frozen_pending_business_contracts():
             "implant_quantity",
         )
     )
-    assert "条码不参与 LX0609-025 判定" in implant_prompt
+    assert "条码不参与 LX0609-04-02-04 判定" in implant_prompt
     assert "病程记录仅用于辅助确认是否实际使用永久性植入物" in implant_prompt
     assert "不得替代正式手术记录中的五字段" in implant_prompt
     assert "植入物条形码不齐全" not in implant_prompt
     assert "手术记录或病程记录中有相应记录" not in implant_prompt
 
-    treatment_order = rules["LX0609-059"]
+    treatment_order = rules["LX0609-05-03-01"]
     expected_treatment_sources = [
         "exam_master",
         "exam_item_report",
@@ -251,7 +264,7 @@ def test_customer_policy_projection_fails_closed_when_rule_master_entry_is_missi
     incomplete_master = tuple(
         entry
         for entry in load_luxian_0609_rule_master()
-        if entry.rule_id != "LX0609-025"
+        if entry.rule_id != "LX0609-04-02-04"
     )
     monkeypatch.setattr(
         luxian_0609_rule_catalog,
@@ -263,21 +276,46 @@ def test_customer_policy_projection_fails_closed_when_rule_master_entry_is_missi
         attach_luxian_0609_customer_policy(wrappers)
 
 
+def test_catalog_uses_new_identity_without_runtime_legacy_lookup():
+    mapping = _migration_id_map()
+    for old_id, new_id in mapping.items():
+        assert luxian_0609_rule_catalog.get_luxian_0609_rule(old_id) is None
+        assert luxian_0609_rule_catalog.get_luxian_0609_rule(new_id)["rule_id"] == new_id
+
+
+@pytest.mark.parametrize("field", ["rule_id", "rule_code"])
+def test_catalog_rejects_conflicting_or_missing_identity(tmp_path, monkeypatch, field):
+    payload = json.loads(luxian_0609_rule_catalog._DATA_PATH.read_text(encoding="utf-8"))
+    if field == "rule_code":
+        payload[0][field] = "LX0609-001"
+    else:
+        payload[0].pop("rule_id")
+    path = tmp_path / "catalog.json"
+    path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setattr(luxian_0609_rule_catalog, "_DATA_PATH", path)
+    luxian_0609_rule_catalog.load_luxian_0609_rules.cache_clear()
+    try:
+        with pytest.raises(ValueError):
+            luxian_0609_rule_catalog.load_luxian_0609_rules()
+    finally:
+        luxian_0609_rule_catalog.load_luxian_0609_rules.cache_clear()
+
+
 @pytest.mark.unit
 def test_luxian_0609_customer_rule_package_resolves_scope_and_families():
     execution_rule_ids, invalid_rule_ids, gate_only_customer_rule_ids = resolve_execution_scope(
-        ["LX0609-020", "LX0609-021", "LX0609-028", "LX0609-999"],
-        allowed_rule_ids={"LX0609-020", "LX0609-021", "LX0609-028"},
+        ["LX0609-03-01-01", "LX0609-03-01-02", "LX0609-05-01-01", "LX0609-999"],
+        allowed_rule_ids={"LX0609-03-01-01", "LX0609-03-01-02", "LX0609-05-01-01"},
     )
 
-    assert execution_rule_ids == ["LX0609-020", "LX0609-021", "LX0609-028"]
+    assert execution_rule_ids == ["LX0609-03-01-01", "LX0609-03-01-02", "LX0609-05-01-01"]
     assert invalid_rule_ids == ["LX0609-999"]
     assert gate_only_customer_rule_ids == []
 
-    scopes = build_family_scopes(["LX0609-020", "LX0609-021", "LX0609-028"])
+    scopes = build_family_scopes(["LX0609-03-01-01", "LX0609-03-01-02", "LX0609-05-01-01"])
     assert scopes == [
-        {"key": "consultation_quality", "name": "会诊质量", "rule_ids": ["LX0609-020", "LX0609-021"]},
-        {"key": "surgery_anesthesia", "name": "手术麻醉", "rule_ids": ["LX0609-028"]},
+        {"key": "consultation_quality", "name": "会诊质量", "rule_ids": ["LX0609-03-01-01", "LX0609-03-01-02"]},
+        {"key": "surgery_anesthesia", "name": "手术麻醉", "rule_ids": ["LX0609-05-01-01"]},
     ]
 
 
@@ -298,19 +336,19 @@ def test_luxian_0609_rules_endpoint_returns_customer_rule_view(client):
     assert payload["total_rules"] == 72
     assert len(rules) == 72
     assert not {
-        "LX0609-033",
-        "LX0609-034",
-        "LX0609-035",
-        "LX0609-041",
-        "LX0609-042",
+        "LX0609-11-01-01",
+        "LX0609-11-02-01",
+        "LX0609-11-02-02",
+        "LX0609-11-03-01",
+        "LX0609-11-03-02",
     }.intersection(rule["rule_id"] for rule in rules)
-    assert rules[0]["rule_id"] == "LX0609-001"
+    assert rules[0]["rule_id"] == "LX0609-01-01-01"
     assert rules[0]["positive_example"]
     assert rules[0]["negative_example"]
     assert rules[0]["mapped_rule_ids"]
     assert rules[0]["primary_execution_rule_id"] == rules[0]["mapped_rule_ids"][0]
     master_by_id = {entry.rule_id: entry for entry in load_luxian_0609_rule_master()}
-    assert rules[24]["customer_policy"]["summary"] == master_by_id["LX0609-025"].policy_summary
+    assert rules[24]["customer_policy"]["summary"] == master_by_id["LX0609-04-02-04"].policy_summary
 
     grouped_resp = client.get(
         f"/api/v1/qc/sichuan/rules?rule_set_key={LUXIAN_0609_RULE_SET_KEY}&grouped=true",
@@ -324,11 +362,11 @@ def test_luxian_0609_rules_endpoint_returns_customer_rule_view(client):
         for rule in rules_for_document
     ]
     grouped_by_id = {rule["rule_id"]: rule for rule in grouped_rules}
-    assert grouped_by_id["LX0609-020"]["customer_policy"] == {
-        "source_document": master_by_id["LX0609-020"].source_document,
-        "qc_point": master_by_id["LX0609-020"].qc_point,
-        "summary": master_by_id["LX0609-020"].policy_summary,
-        "sources": list(master_by_id["LX0609-020"].policy_sources),
+    assert grouped_by_id["LX0609-03-01-01"]["customer_policy"] == {
+        "source_document": master_by_id["LX0609-03-01-01"].source_document,
+        "qc_point": master_by_id["LX0609-03-01-01"].qc_point,
+        "summary": master_by_id["LX0609-03-01-01"].policy_summary,
+        "sources": list(master_by_id["LX0609-03-01-01"].policy_sources),
     }
 
 

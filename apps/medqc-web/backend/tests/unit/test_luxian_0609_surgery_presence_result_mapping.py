@@ -18,7 +18,7 @@ from app.services.luxian_0609.surgery_presence_result_mapping import (
     ("rule_id", "raw", "expected"),
     (
         (
-            "LX0609-030",
+            "LX0609-04-02-02",
             {
                 "verification_kind": "surgery_document_present",
                 "target_document": "surgery_record",
@@ -33,7 +33,7 @@ from app.services.luxian_0609.surgery_presence_result_mapping import (
             },
         ),
         (
-            "LX0609-032",
+            "LX0609-04-03-01",
             {
                 "verification_kind": "surgery_document_present",
                 "target_document": "surgery_safecheck_record",
@@ -46,7 +46,7 @@ from app.services.luxian_0609.surgery_presence_result_mapping import (
             },
         ),
         (
-            "LX0609-030",
+            "LX0609-04-02-02",
             {
                 "failure_kind": "surgery_document_missing",
                 "target_document": "surgery_record",
@@ -61,7 +61,7 @@ from app.services.luxian_0609.surgery_presence_result_mapping import (
             },
         ),
         (
-            "LX0609-030",
+            "LX0609-04-02-02",
             {
                 "failure_kind": "surgery_document_blank",
                 "target_document": "surgery_record",
@@ -76,7 +76,7 @@ from app.services.luxian_0609.surgery_presence_result_mapping import (
             },
         ),
         (
-            "LX0609-032",
+            "LX0609-04-03-01",
             {
                 "failure_kind": "surgery_document_missing",
                 "target_document": "surgery_safecheck_record",
@@ -89,7 +89,7 @@ from app.services.luxian_0609.surgery_presence_result_mapping import (
             },
         ),
         (
-            "LX0609-032",
+            "LX0609-04-03-01",
             {
                 "failure_kind": "surgery_document_blank",
                 "target_document": "surgery_safecheck_record",
@@ -102,7 +102,7 @@ from app.services.luxian_0609.surgery_presence_result_mapping import (
             },
         ),
         (
-            "LX0609-030",
+            "LX0609-04-02-02",
             {
                 "verification_kind": "surgery_document_present",
                 "target_document": "surgery_safecheck_record",
@@ -111,7 +111,7 @@ from app.services.luxian_0609.surgery_presence_result_mapping import (
             None,
         ),
         (
-            "LX0609-030",
+            "LX0609-04-02-02",
             {
                 "verification_kind": "surgery_document_present",
                 "target_document": "surgery_record",
@@ -124,7 +124,7 @@ from app.services.luxian_0609.surgery_presence_result_mapping import (
             },
         ),
         (
-            "LX0609-032",
+            "LX0609-04-03-01",
             {
                 "failure_kind": "unexpected_failure",
                 "target_document": "surgery_safecheck_record",
@@ -133,7 +133,7 @@ from app.services.luxian_0609.surgery_presence_result_mapping import (
             None,
         ),
         (
-            "LX0609-030",
+            "LX0609-04-02-02",
             {
                 "failure_kind": "surgery_document_missing",
                 "target_document": "surgery_record",
@@ -141,7 +141,7 @@ from app.services.luxian_0609.surgery_presence_result_mapping import (
             },
             None,
         ),
-        ("LX0609-030", {"source_document_id": "PRIVATE-030"}, None),
+        ("LX0609-04-02-02", {"source_document_id": "PRIVATE-030"}, None),
     ),
 )
 def test_surgery_presence_mapping_matches_current_finalizer_contract(
@@ -169,7 +169,7 @@ def test_surgery_presence_mapping_whitelists_private_fields_without_leaking_them
     }
 
     safe = safe_surgery_presence_customer_display_facts(
-        rule_id="LX0609-030", raw=raw
+        rule_id="LX0609-04-02-02", raw=raw
     )
 
     assert safe == {
@@ -180,15 +180,15 @@ def test_surgery_presence_mapping_whitelists_private_fields_without_leaking_them
     }
     assert "PRIVATE" not in repr(safe)
     assert validate_luxian_0609_executor_customer_display_facts(
-        rule_id="LX0609-030", raw=raw
+        rule_id="LX0609-04-02-02", raw=raw
     ) == safe
 
 
 def test_surgery_presence_rule_membership_and_targets_are_frozen() -> None:
     assert SURGERY_PRESENCE_DOCUMENT_TARGETS == {
-        "LX0609-030": "surgery_record",
-        "LX0609-032": "surgery_safecheck_record",
+        "LX0609-04-02-02": "surgery_record",
+        "LX0609-04-03-01": "surgery_safecheck_record",
     }
     assert is_surgery_presence_customer_rule("lx0609-030") is True
-    assert is_surgery_presence_customer_rule("LX0609-032") is True
-    assert is_surgery_presence_customer_rule("LX0609-029") is False
+    assert is_surgery_presence_customer_rule("LX0609-04-03-01") is True
+    assert is_surgery_presence_customer_rule("LX0609-04-01-01") is False

@@ -14,9 +14,18 @@
       width="220"
     >
       <!-- Logo区域 -->
-      <div class="logo-container" :class="{ 'logo-container--collapsed': collapsed }">
-        <div class="brand-card" :class="{ 'brand-card--collapsed': collapsed }">
-          <div class="brand-mark" aria-hidden="true">
+      <div
+        class="logo-container"
+        :class="{ 'logo-container--collapsed': collapsed }"
+      >
+        <div
+          class="brand-card"
+          :class="{ 'brand-card--collapsed': collapsed }"
+        >
+          <div
+            class="brand-mark"
+            aria-hidden="true"
+          >
             <svg
               class="brand-mark-svg"
               viewBox="0 0 40 40"
@@ -46,7 +55,10 @@
               />
             </svg>
           </div>
-          <div v-if="!collapsed" class="brand-copy">
+          <div
+            v-if="!collapsed"
+            class="brand-copy"
+          >
             <span class="brand-title">病案质控系统</span>
             <span class="brand-subtitle">
               <span>质量</span>
@@ -71,7 +83,10 @@
           @open-change="handleMenuOpenChange"
         >
           <!-- 工作台 -->
-          <a-sub-menu key="workstation-sub" class="menu-item-base">
+          <a-sub-menu
+            key="workstation-sub"
+            class="menu-item-base"
+          >
             <template #icon>
               <MonitorCog class="sidebar-icon" />
             </template>
@@ -108,7 +123,10 @@
               </template>
               <span>终末病历质控</span>
             </a-menu-item>
-            <a-menu-item v-if="isDemoFeedbackAccount" key="/workstation-v5/qc-feedback-demo">
+            <a-menu-item
+              v-if="isDemoFeedbackAccount"
+              key="/workstation-v5/qc-feedback-demo"
+            >
               <template #icon>
                 <ReceiptText class="sidebar-icon" />
               </template>
@@ -129,13 +147,19 @@
               </template>
               <span>生成首页</span>
             </a-menu-item>
-            <a-menu-item key="ws-stage-frontpage-qc" @click="goStageMenu('frontpage_qc')">
+            <a-menu-item
+              key="ws-stage-frontpage-qc"
+              @click="goStageMenu('frontpage_qc')"
+            >
               <template #icon>
                 <ShieldCheck class="sidebar-icon" />
               </template>
               <span>首页质控</span>
             </a-menu-item>
-            <a-menu-item key="ws-stage-settlement-qc" @click="goStageMenu('settlement_qc')">
+            <a-menu-item
+              key="ws-stage-settlement-qc"
+              @click="goStageMenu('settlement_qc')"
+            >
               <template #icon>
                 <ReceiptText class="sidebar-icon" />
               </template>
@@ -144,7 +168,10 @@
           </a-sub-menu>
 
           <!-- 质控规则 -->
-          <a-sub-menu key="qc-rules-sub" class="menu-item-base">
+          <a-sub-menu
+            key="qc-rules-sub"
+            class="menu-item-base"
+          >
             <template #icon>
               <Shield class="sidebar-icon" />
             </template>
@@ -178,7 +205,10 @@
           </a-sub-menu>
 
           <!-- ICD 编码查询 -->
-          <a-menu-item key="/workstation-v5/icd" class="menu-item-base">
+          <a-menu-item
+            key="/workstation-v5/icd"
+            class="menu-item-base"
+          >
             <template #icon>
               <Search class="sidebar-icon" />
             </template>
@@ -186,7 +216,10 @@
           </a-menu-item>
 
           <!-- DRG/DIP 分析 -->
-          <a-sub-menu key="drg-sub" class="menu-item-base">
+          <a-sub-menu
+            key="drg-sub"
+            class="menu-item-base"
+          >
             <template #icon>
               <Network class="sidebar-icon" />
             </template>
@@ -225,7 +258,10 @@
             </a-menu-item>
           </a-sub-menu>
 
-          <a-menu-item key="/workstation-v5/rules/custom-workspace" class="menu-item-base">
+          <a-menu-item
+            key="/workstation-v5/rules/custom-workspace"
+            class="menu-item-base"
+          >
             <template #icon>
               <Bolt class="sidebar-icon" />
             </template>
@@ -233,7 +269,10 @@
           </a-menu-item>
 
           <!-- 数据上传 -->
-          <a-menu-item key="/workstation-v5/upload" class="menu-item-base">
+          <a-menu-item
+            key="/workstation-v5/upload"
+            class="menu-item-base"
+          >
             <template #icon>
               <CloudUpload class="sidebar-icon" />
             </template>
@@ -241,7 +280,10 @@
           </a-menu-item>
 
           <!-- 系统配置 -->
-          <a-menu-item key="/workstation-v5/system-config" class="menu-item-base">
+          <a-menu-item
+            key="/workstation-v5/system-config"
+            class="menu-item-base"
+          >
             <template #icon>
               <Settings class="sidebar-icon" />
             </template>
@@ -264,12 +306,21 @@
             class="trigger hover:bg-slate-100 text-slate-500 hover:text-slate-700 border-0 mr-4 rounded-lg w-9 h-9 flex items-center justify-center transition-colors"
             @click="collapsed = !collapsed"
           >
-            <MenuUnfoldOutlined v-if="collapsed" class="text-lg" />
-            <MenuFoldOutlined v-else class="text-lg" />
+            <MenuUnfoldOutlined
+              v-if="collapsed"
+              class="text-lg"
+            />
+            <MenuFoldOutlined
+              v-else
+              class="text-lg"
+            />
           </a-button>
 
           <!-- 面包屑 -->
-          <a-breadcrumb class="hidden md:flex items-center whitespace-nowrap" separator="">
+          <a-breadcrumb
+            class="hidden md:flex items-center whitespace-nowrap"
+            separator=""
+          >
             <a-breadcrumb-item>
               <router-link
                 to="/workstation-v5"
@@ -292,7 +343,10 @@
         <div class="flex items-center space-x-3 shrink-0">
           <RuntimeBuildStatus />
           <!-- 通知 -->
-          <a-popover placement="bottomRight" trigger="click">
+          <a-popover
+            placement="bottomRight"
+            trigger="click"
+          >
             <template #content>
               <div class="w-72 p-2">
                 <div class="flex justify-between items-center mb-2 px-2">
@@ -305,8 +359,12 @@
                   >
                     <div class="w-2 h-2 rounded-full bg-[#2b6cf6] mt-1.5 shrink-0" />
                     <div>
-                      <div class="text-sm text-slate-700 font-medium">系统升级通知</div>
-                      <div class="text-xs text-slate-400 mt-0.5">系统将于今晚进行维护升级...</div>
+                      <div class="text-sm text-slate-700 font-medium">
+                        系统升级通知
+                      </div>
+                      <div class="text-xs text-slate-400 mt-0.5">
+                        系统将于今晚进行维护升级...
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -343,12 +401,10 @@
               <div class="flex flex-col mr-1 hidden sm:flex shrink-0">
                 <span
                   class="text-sm font-bold text-slate-700 leading-tight group-hover:text-[#2b6cf6] transition-colors whitespace-nowrap"
-                  >{{ roleLabel }}</span
-                >
+                >{{ roleLabel }}</span>
                 <span
                   class="text-[10px] text-slate-400 font-medium tracking-wider leading-tight whitespace-nowrap"
-                  >{{ authStore.user?.email || '' }}</span
-                >
+                >{{ authStore.user?.email || '' }}</span>
               </div>
               <DownOutlined
                 class="ml-2 text-xs text-slate-400 group-hover:text-slate-600 transition-colors shrink-0"
@@ -359,17 +415,25 @@
                 class="min-w-[180px] p-2 rounded-2xl border border-slate-100 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.1)]"
               >
                 <div class="px-3 py-2 mb-1">
-                  <div class="text-xs text-slate-400">Signed in as</div>
+                  <div class="text-xs text-slate-400">
+                    Signed in as
+                  </div>
                   <div class="font-bold text-slate-700 truncate">
                     {{ authStore.user?.email || 'user@example.com' }}
                   </div>
                 </div>
                 <div class="h-px bg-slate-100 my-1" />
-                <a-menu-item key="profile" class="rounded-lg mb-1 !py-2">
+                <a-menu-item
+                  key="profile"
+                  class="rounded-lg mb-1 !py-2"
+                >
                   <UserOutlined />
                   <span class="ml-2 font-medium">个人中心</span>
                 </a-menu-item>
-                <a-menu-item key="settings" class="rounded-lg mb-1 !py-2">
+                <a-menu-item
+                  key="settings"
+                  class="rounded-lg mb-1 !py-2"
+                >
                   <SettingOutlined />
                   <span class="ml-2 font-medium">账户设置</span>
                 </a-menu-item>
@@ -394,9 +458,18 @@
         :class="{ 'workstation-overview-content': isQcOverviewRoute }"
       >
         <router-view v-slot="{ Component }">
-          <transition name="fade" mode="out-in">
-            <div :key="route.fullPath" class="workstation-route-view">
-              <component :is="Component" v-if="Component" />
+          <transition
+            name="fade"
+            mode="out-in"
+          >
+            <div
+              :key="route.fullPath"
+              class="workstation-route-view"
+            >
+              <component
+                :is="Component"
+                v-if="Component"
+              />
             </div>
           </transition>
         </router-view>

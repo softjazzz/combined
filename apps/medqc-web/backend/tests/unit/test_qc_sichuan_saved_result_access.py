@@ -17,7 +17,7 @@ def _payload() -> dict:
     return {
         "mode": "optimized_batch",
         "document_type": "course_record",
-        "rule_ids": ["LX0609-001"],
+        "rule_ids": ["LX0609-01-01-01"],
         "medical_text_length": 0,
         "stats": {},
         "performance": {},

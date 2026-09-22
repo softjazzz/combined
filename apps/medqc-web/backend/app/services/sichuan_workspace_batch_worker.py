@@ -409,7 +409,7 @@ def _guard_luxian_copy_result_for_batch(
     record: Dict[str, Any],
 ) -> Dict[str, Any]:
     normalized_rule_id = str(rule_id or eval_item.get("rule_id") or eval_item.get("rule_code") or "").strip().upper()
-    if normalized_rule_id != "LX0609-016":
+    if normalized_rule_id != "LX0609-12-01-01":
         return eval_item
     display_facts = eval_item.get("customer_display_facts")
     if (
@@ -3045,7 +3045,7 @@ async def run_sichuan_workspace_batch_job(
             except Exception as exc:
                 failure_error = str(exc)
                 failure_rule_id = str(getattr(exc, "rule_id", "") or "").strip().upper()
-                if re.fullmatch(r"LX0609-\d{3}", failure_rule_id):
+                if re.fullmatch(r"LX0609-(?!00)\d{2}-(?!00)\d{2}-(?!00)\d{2}", failure_rule_id):
                     failure_error = f"{failure_error} [{failure_rule_id}]"
                 for rule_id in result_rule_ids:
                     state = result_rule_states[rule_id]
@@ -3504,7 +3504,7 @@ async def run_sichuan_workspace_batch_job(
                 first_failure_error or "unknown",
             )
             invalid_facts_match = re.fullmatch(
-                r"invalid customer display facts(?: \[(LX0609-\d{3})\])?",
+                r"invalid customer display facts(?: \[(LX0609-(?!00)\d{2}-(?!00)\d{2}-(?!00)\d{2})\])?",
                 first_failure_error,
             )
             customer_safe_reason = "规则执行失败"

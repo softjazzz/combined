@@ -8,7 +8,7 @@ from app.services.luxian_0609.decision_reducer import reduce_luxian_0609_rule_de
 
 def test_missing_formal_surgery_trigger_does_not_deny_actual_surgery():
     decision = reduce_luxian_0609_rule_decision(RuleDecision(
-        rule_id='LX0609-032', snapshot_hash='a' * 64,
+        rule_id='LX0609-04-03-01', snapshot_hash='a' * 64,
         applicability=ApplicabilityState.NOT_APPLICABLE,
         evidence_state=EvidenceState.SUFFICIENT,
         qc_direction=QcDirection.UNKNOWN,

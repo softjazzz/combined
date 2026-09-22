@@ -11,7 +11,7 @@ from test_qc_diagnostic_execution_inputs import session_fixture, record
 
 def receipt(*, job="child", root="root", visit="V"):
     return (("I", "P", visit), json.dumps({"job_id": job, "root_job_id": root,
-        "record_ref": "rec_test", "items": [{"rule_id": "LX0609-020", "status": "data_gap"}]}))
+        "record_ref": "rec_test", "items": [{"rule_id": "LX0609-03-01-01", "status": "data_gap"}]}))
 
 
 @pytest.fixture
@@ -99,7 +99,7 @@ def test_store_receipt_is_exact_json_written_without_reprojection(enabled):
     statements = []
     db = SimpleNamespace(execute=lambda statement: statements.append(statement))
     item = {"record_id": "V", "visit_id": "V", "institute_id": "I", "patient_id": "P",
-            "rule_id": "LX0609-001", "status": "data_gap", "result_status": "data_gap",
+            "rule_id": "LX0609-01-01-01", "status": "data_gap", "result_status": "data_gap",
             "display_status": "data_gap", "is_compliant": None}
     with capture_scope(job_id="child") if enabled else nullcontext():
         receipts = CustomQCWorkspaceService()._write_record_result_envelopes(db,
@@ -139,7 +139,7 @@ def test_precommit_receipt_overflow_does_not_abort_storage(monkeypatch):
     db = SimpleNamespace(execute=lambda statement: statements.append(statement))
     service = module.CustomQCWorkspaceService()
     item = {"record_id": "V", "visit_id": "V", "institute_id": "I", "patient_id": "P",
-            "rule_id": "LX0609-001", "status": "data_gap", "result_status": "data_gap",
+            "rule_id": "LX0609-01-01-01", "status": "data_gap", "result_status": "data_gap",
             "display_status": "data_gap", "is_compliant": None}
     monkeypatch.setattr(service, "_envelope_item_from_rule_result", lambda value:
         {**value, "findings": "x" * (4 * 1024 * 1024)})

@@ -1,4 +1,4 @@
-"""LX0609-040 的正式主链行为冻结。
+"""LX0609-04-01-03 的正式主链行为冻结。
 
 040 的客户事实合同和旧直调证据适配已迁入 Finalizer；聚合器只装配结果。
 证据数组视为坐标集合，顺序不代表优先级。
@@ -38,7 +38,7 @@ from app.services.luxian_0609_result_aggregator import aggregate_luxian_0609_res
 from app.services.luxian_0609_rule_catalog import load_luxian_0609_rules
 
 
-RULE_ID = "LX0609-040"
+RULE_ID = "LX0609-04-01-03"
 _SOURCE_KEYS = (
     "mr_surgery",
     "presurg_summary",

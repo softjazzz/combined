@@ -323,30 +323,30 @@ def build_luxian_0609_evidence_read_session(
         raise ValueError("selected_rule_ids must not be empty")
     needs_evaluation_horizon = bool(
         {
-            "LX0609-001",
-            "LX0609-002",
-            "LX0609-003",
-            "LX0609-005",
-            "LX0609-006",
-            "LX0609-007",
-            "LX0609-008",
-            "LX0609-009",
-            "LX0609-011",
-            "LX0609-012",
-            "LX0609-014",
-            "LX0609-015",
-            "LX0609-020",
-            "LX0609-023",
-            "LX0609-047",
-            "LX0609-051",
-            "LX0609-052",
-            "LX0609-055",
-            "LX0609-061",
-            "LX0609-072",
-            "LX0609-064",
-            "LX0609-065",
-            "LX0609-067",
-            "LX0609-068",
+            "LX0609-01-01-01",
+            "LX0609-01-02-01",
+            "LX0609-04-02-01",
+            "LX0609-02-01-01",
+            "LX0609-02-01-02",
+            "LX0609-02-01-03",
+            "LX0609-02-01-04",
+            "LX0609-02-01-05",
+            "LX0609-06-01-04",
+            "LX0609-06-01-05",
+            "LX0609-06-03-03",
+            "LX0609-06-03-04",
+            "LX0609-03-01-01",
+            "LX0609-03-01-04",
+            "LX0609-07-03-01",
+            "LX0609-09-02-01",
+            "LX0609-06-04-01",
+            "LX0609-05-01-03",
+            "LX0609-08-01-01",
+            "LX0609-10-02-01",
+            "LX0609-04-05-01",
+            "LX0609-04-05-02",
+            "LX0609-08-02-01",
+            "LX0609-08-02-02",
         }.intersection(selected_rule_ids)
     )
     if (
@@ -591,7 +591,7 @@ def build_luxian_0609_evidence_read_session(
             snapshot_ref=snapshot_ref,
         )
         observations.append(observation)
-        if source_key == "inpat_nondrug_order" and "LX0609-029" in selected_rule_ids:
+        if source_key == "inpat_nondrug_order" and "LX0609-04-01-01" in selected_rule_ids:
             facts.extend(
                 _surgery_order_facts(
                     rows=result.rows,
@@ -646,7 +646,7 @@ def build_luxian_0609_evidence_read_session(
                 )
             )
         if source_key == "surgery_record" or (
-            source_key == "mr_surgery" and "LX0609-039" in selected_rule_ids
+            source_key == "mr_surgery" and "LX0609-04-01-02" in selected_rule_ids
         ):
             performed = any(
                 has_trusted_performed_surgery(source_key=source_key, row=row)
@@ -763,7 +763,7 @@ def build_luxian_0609_evidence_read_session(
                 admission_value,
                 field_name="admission_datetime",
             )
-            if "LX0609-007" in selected_rule_ids:
+            if "LX0609-02-01-03" in selected_rule_ids:
                 from .basic_timeliness_facts import extract_admission_anchor, AdmissionAnchorState
                 fallback_material = material_sources.get("admission_record")
                 anchor = extract_admission_anchor(

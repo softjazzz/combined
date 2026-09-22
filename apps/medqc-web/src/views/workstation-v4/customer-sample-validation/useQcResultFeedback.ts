@@ -11,6 +11,17 @@ function clean(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
+const LUXIAN_0609_RULE_ID_PATTERN = /^LX0609-\d{2}-\d{2}-\d{2}$/u
+const LUXIAN_0609_PREFIX_PATTERN = /^LX0609-/iu
+
+function normalizeFeedbackRuleId(value: unknown): string {
+  const ruleId = clean(value)
+  if (LUXIAN_0609_PREFIX_PATTERN.test(ruleId) && !LUXIAN_0609_RULE_ID_PATTERN.test(ruleId)) {
+    return ''
+  }
+  return ruleId
+}
+
 export function useQcResultFeedback(
   rootJobIdSource: MaybeRefOrGetter<string | undefined>,
   recordRefSource: MaybeRefOrGetter<string | undefined>,
@@ -61,11 +72,13 @@ export function useQcResultFeedback(
       error.value = '反馈暂时无法使用，质控结果仍可正常查看。'
       return
     }
-    feedbackByRule.value = result.data
+    feedbackByRule.value = Object.fromEntries(
+      Object.entries(result.data).filter(([ruleId]) => Boolean(normalizeFeedbackRuleId(ruleId))),
+    )
   }
 
   async function save(ruleId: string, input: SaveQcResultFeedbackInput) {
-    const normalizedRuleId = clean(ruleId)
+    const normalizedRuleId = normalizeFeedbackRuleId(ruleId)
     if (!isEnabled.value || !normalizedRuleId) {
       return { success: false, message: '当前账号暂不支持结果反馈' }
     }
@@ -79,9 +92,12 @@ export function useQcResultFeedback(
       input,
     })
     if (result.success && result.data) {
-      feedbackByRule.value = {
-        ...feedbackByRule.value,
-        [result.data.rule_id]: result.data,
+      const returnedRuleId = normalizeFeedbackRuleId(result.data.rule_id)
+      if (returnedRuleId) {
+        feedbackByRule.value = {
+          ...feedbackByRule.value,
+          [returnedRuleId]: result.data,
+        }
       }
     } else {
       error.value = '反馈暂时无法保存，质控结果仍可正常查看。'

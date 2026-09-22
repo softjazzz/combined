@@ -13,7 +13,7 @@ from typing import Any
 
 
 TUMOR_PATHOLOGY_CUSTOMER_RULE_IDS = frozenset(
-    {"LX0609-013", "LX0609-019", "LX0609-026", "LX0609-027"}
+    {"LX0609-06-02-03", "LX0609-06-02-02", "LX0609-05-02-01", "LX0609-08-01-04"}
 )
 _PATHOLOGY_SOURCES = frozenset({"pathology_exam_master", "pathology_exam_report"})
 _TARGET_SOURCES = ("surgery_record", "daily_course_record")
@@ -226,10 +226,10 @@ def safe_tumor_pathology_customer_display_facts(
     if normalized not in TUMOR_PATHOLOGY_CUSTOMER_RULE_IDS or not isinstance(raw, Mapping):
         return None
     return {
-        "LX0609-013": _safe_013,
-        "LX0609-019": _safe_019,
-        "LX0609-026": _safe_026,
-        "LX0609-027": _safe_027,
+        "LX0609-06-02-03": _safe_013,
+        "LX0609-06-02-02": _safe_019,
+        "LX0609-05-02-01": _safe_026,
+        "LX0609-08-01-04": _safe_027,
     }[normalized](raw)
 
 
@@ -246,7 +246,7 @@ def tumor_pathology_customer_fact_status_is_valid(
     if not isinstance(safe_facts, Mapping):
         return False
     normalized_rule_id = str(rule_id or "").strip().upper()
-    if normalized_rule_id == "LX0609-027" and safe_facts.get("verification_kind") == "malignant_diagnosis_applicability_uncertain":
+    if normalized_rule_id == "LX0609-08-01-04" and safe_facts.get("verification_kind") == "malignant_diagnosis_applicability_uncertain":
         # M17：该事实同时允许 `uncertain` 与 `data_gap`。
         # 027 的客户契约不允许交付 `uncertain`（catalog 027 行 allowed_result_statuses
         # = hit; not_hit; data_quality_gap; not_applicable; needs_manual_review），
@@ -254,11 +254,11 @@ def tumor_pathology_customer_fact_status_is_valid(
         # 于是执行器只能丢弃该事实（客户看不到未决线索），一旦携带就被本校验判为
         # 不自洽 → finalizer 升级为 `technical_error/model_invalid_output`。
         # 该事实是**纯展示事实**，不参与判定，故接受 `data_gap` 不放松任何判据。
-        # 作用域仅限 `LX0609-027`，`013`/`019`/`026` 不受影响。
+        # 作用域仅限 `LX0609-08-01-04`，`013`/`019`/`026` 不受影响。
         return normalized_status in {"uncertain", "data_gap"}
-    if normalized_rule_id in {"LX0609-013", "LX0609-027"}:
+    if normalized_rule_id in {"LX0609-06-02-03", "LX0609-08-01-04"}:
         if (
-            normalized_rule_id == "LX0609-013"
+            normalized_rule_id == "LX0609-06-02-03"
             and safe_facts.get("verification_kind") == "pathology_report_field_gap"
         ):
             return normalized_status == "data_gap"
@@ -268,7 +268,7 @@ def tumor_pathology_customer_fact_status_is_valid(
             and isinstance(requirement_met, bool)
             and requirement_met == (normalized_status == "compliant")
         )
-    if normalized_rule_id == "LX0609-019":
+    if normalized_rule_id == "LX0609-06-02-02":
         if safe_facts.get("verification_kind") == "pathology_report_field_gap":
             return normalized_status == "data_gap"
         if (
@@ -286,7 +286,7 @@ def tumor_pathology_customer_fact_status_is_valid(
             normalized_status == "non_compliant"
             and safe_facts.get("failure_kind") == "pathology_sampling_not_documented"
         )
-    if normalized_rule_id == "LX0609-026":
+    if normalized_rule_id == "LX0609-05-02-01":
         field_results = safe_facts.get("field_results")
         missing_fields = safe_facts.get("missing_order_fields")
         if not isinstance(field_results, Mapping) or not isinstance(

@@ -97,7 +97,7 @@ def test_resync_should_refresh_bundle_projections_while_lx0609_reads_same_cdm_ro
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-009",),
+        selected_rule_ids=("LX0609-02-01-05",),
         institute_id="H1",
         patient_id="P1",
         visit_id="V1",

@@ -1,4 +1,4 @@
-"""LX0609-020 至 023 的两阶段会诊 episode 原生执行器。
+"""LX0609-03-01-01 至 023 的两阶段会诊 episode 原生执行器。
 
 第一阶段只聚合本次住院的真实会诊 episode；第二阶段仅对高置信、
 意见明确的 episode 批量判断后续执行关联，禁止行级唯一归属推断。
@@ -53,16 +53,16 @@ logger = logging.getLogger(__name__)
 
 
 CONSULTATION_EPISODE_RULE_IDS = (
-    "LX0609-020",
-    "LX0609-021",
-    "LX0609-022",
-    "LX0609-023",
+    "LX0609-03-01-01",
+    "LX0609-03-01-02",
+    "LX0609-03-01-03",
+    "LX0609-03-01-04",
 )
 # 020/023 都依赖第二阶段的“会诊意见—后续执行”语义关联，尚未达到包级
 # 原生派发验收门槛；第一阶段客户包只允许 021/022 进入原生会诊批次。
 PACKAGE_NATIVE_CONSULTATION_RULE_IDS = (
-    "LX0609-021",
-    "LX0609-022",
+    "LX0609-03-01-02",
+    "LX0609-03-01-03",
 )
 EXECUTOR_KEY = "consultation_quality"
 _SOURCE_KEY = "consultation_record"
@@ -1430,42 +1430,42 @@ def _strong_explicit_consultation_statuses(
         # “会诊申请/会诊意见”标签。仅对每份正文都明确包含“会诊后指出/建议”
         # 及具体诊疗动作的场景短路，避免让模型把明确意见误降级为 vague。
         if (
-            "LX0609-022" in selected
+            "LX0609-03-01-03" in selected
             and _explicit_embedded_opinion_documents(documents)
         ):
             if decision_document_refs is not None:
-                decision_document_refs["LX0609-022"] = tuple(
+                decision_document_refs["LX0609-03-01-03"] = tuple(
                     _clean(item.get("ref"))
                     for item in documents
                     if _clean(item.get("ref"))
                 )
-            return {"LX0609-022": ("compliant", "requirement_satisfied")}
+            return {"LX0609-03-01-03": ("compliant", "requirement_satisfied")}
         return {}
 
     statuses: dict[str, tuple[str, str]] = {}
     request_text = _clean(request_documents[0].get("text"))
     opinion_text = _clean(opinion_documents[0].get("text"))
-    if "LX0609-021" in selected:
+    if "LX0609-03-01-02" in selected:
         if _EXPLICIT_REQUEST_VAGUE_PATTERN.fullmatch(request_text):
-            statuses["LX0609-021"] = ("non_compliant", "requirement_violated")
+            statuses["LX0609-03-01-02"] = ("non_compliant", "requirement_violated")
         elif _EXPLICIT_REQUEST_CLEAR_PATTERN.search(request_text):
-            statuses["LX0609-021"] = ("compliant", "requirement_satisfied")
-        if "LX0609-021" in statuses and decision_document_refs is not None:
-            decision_document_refs["LX0609-021"] = tuple(
+            statuses["LX0609-03-01-02"] = ("compliant", "requirement_satisfied")
+        if "LX0609-03-01-02" in statuses and decision_document_refs is not None:
+            decision_document_refs["LX0609-03-01-02"] = tuple(
                 _clean(item.get("ref")) for item in request_documents
                 if _clean(item.get("ref"))
             )
-    if "LX0609-022" in selected:
+    if "LX0609-03-01-03" in selected:
         if _EXPLICIT_OPINION_VAGUE_PATTERN.search(opinion_text):
-            statuses["LX0609-022"] = ("non_compliant", "requirement_violated")
+            statuses["LX0609-03-01-03"] = ("non_compliant", "requirement_violated")
         elif _EXPLICIT_OPINION_CLEAR_PATTERN.search(opinion_text):
-            statuses["LX0609-022"] = ("compliant", "requirement_satisfied")
-        if "LX0609-022" in statuses and decision_document_refs is not None:
-            decision_document_refs["LX0609-022"] = tuple(
+            statuses["LX0609-03-01-03"] = ("compliant", "requirement_satisfied")
+        if "LX0609-03-01-03" in statuses and decision_document_refs is not None:
+            decision_document_refs["LX0609-03-01-03"] = tuple(
                 _clean(item.get("ref")) for item in opinion_documents
                 if _clean(item.get("ref"))
             )
-    if "LX0609-020" in selected and execution_projection is not None:
+    if "LX0609-03-01-01" in selected and execution_projection is not None:
         opinion_time = _parse_observed_time(opinion_documents[0].get("time"))
 
         def _is_after_opinion(candidate: _CandidateDocument) -> bool:
@@ -1489,9 +1489,9 @@ def _strong_explicit_consultation_statuses(
             )
         )
         if explicit_execution_candidates:
-            statuses["LX0609-020"] = ("compliant", "requirement_satisfied")
+            statuses["LX0609-03-01-01"] = ("compliant", "requirement_satisfied")
             if decision_document_refs is not None:
-                decision_document_refs["LX0609-020"] = tuple(
+                decision_document_refs["LX0609-03-01-01"] = tuple(
                     dict.fromkeys((
                         *(
                             _clean(item.get("ref"))
@@ -1510,11 +1510,11 @@ def _strong_explicit_consultation_statuses(
                 execution_projection.source_complete_keys
             )
         ):
-            statuses["LX0609-020"] = ("non_compliant", "requirement_violated")
+            statuses["LX0609-03-01-01"] = ("non_compliant", "requirement_violated")
             if decision_document_refs is not None:
                 # 缺失的是会诊后病程执行痕迹；实际可证明的决定性文书只有
                 # 对应会诊意见，不能借空来源或 snapshot ref 伪造执行证据。
-                decision_document_refs["LX0609-020"] = tuple(
+                decision_document_refs["LX0609-03-01-01"] = tuple(
                     _clean(item.get("ref"))
                     for item in opinion_documents
                     if _clean(item.get("ref"))
@@ -2094,7 +2094,7 @@ def _consultation_semantic_display_facts(
 ) -> Mapping[str, Any]:
     """将021/022已裁决的episode事实投影为受控客户展示事实。"""
 
-    is_application = rule_id == "LX0609-021"
+    is_application = rule_id == "LX0609-03-01-02"
     state_field = "application_state" if is_application else "opinion_state"
     ref_field = "application_refs" if is_application else "opinion_refs"
     relevant = tuple(
@@ -2120,7 +2120,7 @@ def _consultation_semantic_display_facts(
     )
     episode_results: list[dict[str, Any]] = []
     episode_source_document_ids: list[tuple[str, tuple[str, ...]]] = []
-    if rule_id in {"LX0609-021", "LX0609-022"}:
+    if rule_id in {"LX0609-03-01-02", "LX0609-03-01-03"}:
         for episode_index, episode in enumerate(relevant, start=1):
             episode_refs = tuple(getattr(episode, ref_field)) or episode.member_refs
             episode_document_ids = tuple(
@@ -2161,7 +2161,7 @@ def _consultation_semantic_display_facts(
                     "record_time": record_time,
                     "document_title": (
                         "会诊申请单"
-                        if rule_id == "LX0609-021"
+                        if rule_id == "LX0609-03-01-02"
                         else "会诊记录单"
                     ),
                 }
@@ -2191,7 +2191,7 @@ def _consultation_semantic_display_facts(
         ),
         "source_document_ids": list(dict.fromkeys(source_document_ids))[:8],
     }
-    if rule_id in {"LX0609-021", "LX0609-022"}:
+    if rule_id in {"LX0609-03-01-02", "LX0609-03-01-03"}:
         facts["source_document_ids"] = list(dict.fromkeys(source_document_ids))[
             :100
         ]
@@ -2219,7 +2219,7 @@ def _explicit_embedded_opinion_display_facts(
         if (ref := _clean(document.get("ref")))
     )
     return _consultation_semantic_display_facts(
-        rule_id="LX0609-022",
+        rule_id="LX0609-03-01-03",
         episodes=explicit_episodes,
         documents=documents,
     )
@@ -2327,7 +2327,7 @@ def _consultation_execution_display_facts(
         episode
         for episode in episodes
         if not (
-            rule_id == "LX0609-020"
+            rule_id == "LX0609-03-01-01"
             and status == "non_compliant"
             and missing_episode_refs
         )
@@ -2355,7 +2355,7 @@ def _consultation_execution_display_facts(
         }
         for document_id in source_document_ids
     ]
-    if not (rule_id == "LX0609-020" and status == "non_compliant"):
+    if not (rule_id == "LX0609-03-01-01" and status == "non_compliant"):
         offending_refs: list[dict[str, str]] = []
         recommendations_by_ref = {
             item.recommendation.recommendation_ref: item.recommendation
@@ -2363,7 +2363,7 @@ def _consultation_execution_display_facts(
         }
         for assessment in assessment_rows:
             is_offending = (
-                rule_id == "LX0609-023"
+                rule_id == "LX0609-03-01-04"
                 and status == "non_compliant"
                 and (
                     assessment.execution_record_state == "generic_trace"
@@ -2484,7 +2484,7 @@ def _consultation_execution_display_facts(
     facts: dict[str, Any] = {
         "verification_kind": (
             "consultation_execution_quality_check"
-            if rule_id == "LX0609-023"
+            if rule_id == "LX0609-03-01-04"
             else "consultation_execution_relation_check"
         ),
         "completed_opinion_episode_count": len(
@@ -2512,12 +2512,12 @@ def _consultation_execution_display_facts(
             state == "missing" for state in effective_states
         ),
         "relation_state": (
-            relation_by_status_023 if rule_id == "LX0609-023" else relation_by_status_020
+            relation_by_status_023 if rule_id == "LX0609-03-01-04" else relation_by_status_020
         ).get(status, "association_unresolved"),
         "source_document_ids": list(dict.fromkeys(source_document_ids))[:8],
         "source_document_refs": source_document_refs,
     }
-    if rule_id in {"LX0609-020", "LX0609-023"}:
+    if rule_id in {"LX0609-03-01-01", "LX0609-03-01-04"}:
         recommendation_results: list[dict[str, Any]] = []
         recommendation_evidence: list[dict[str, Any]] = []
         for recommendation_index, item in enumerate(
@@ -2559,7 +2559,7 @@ def _consultation_execution_display_facts(
                             "source_document_id": candidate_document_id,
                         }
                     )
-            if rule_id == "LX0609-020":
+            if rule_id == "LX0609-03-01-01":
                 recommendation_results.append(
                     {
                         "episode_index": episode_indexes[item.episode_ref],
@@ -2581,7 +2581,7 @@ def _consultation_execution_display_facts(
                     "execution_refs": execution_evidence[:8],
                 }
             )
-        if rule_id == "LX0609-020":
+        if rule_id == "LX0609-03-01-01":
             facts["recommendation_results"] = recommendation_results
         facts["recommendation_evidence"] = recommendation_evidence[:96]
     return facts
@@ -3365,7 +3365,7 @@ def _parse_executions(
 
 
 def _outcome(rule_id: str, episodes: Sequence[_Episode]) -> tuple[str, str]:
-    field = "application_state" if rule_id == "LX0609-021" else "opinion_state"
+    field = "application_state" if rule_id == "LX0609-03-01-02" else "opinion_state"
     states = tuple(getattr(episode, field) for episode in episodes)
     if any(state in {"vague", "missing"} for state in states):
         return "non_compliant", "requirement_violated"
@@ -3515,15 +3515,15 @@ def _execution_outcome(
     )
     # 一条已经严格落地的缺陷足以形成不合规结论；其他建议仍待判断只会
     # 阻止“全部合规”，不能反向抹掉已确认的缺失或笼统记录。
-    if rule_id == "LX0609-020" and (
+    if rule_id == "LX0609-03-01-01" and (
         confirmed_no_course_trace_refs or confirmed_incomplete_coverage
     ):
         if course_source_incomplete:
             return "data_gap", "candidate_scope_incomplete"
         return "non_compliant", "requirement_violated"
-    if rule_id == "LX0609-020" and _every_recommendation_has_trace(assessments):
+    if rule_id == "LX0609-03-01-01" and _every_recommendation_has_trace(assessments):
         return "compliant", "requirement_satisfied"
-    if rule_id == "LX0609-023":
+    if rule_id == "LX0609-03-01-04":
         return _execution_quality_outcome(
             assessments=assessments,
             completed_recommendations=completed_recommendations,
@@ -3552,7 +3552,7 @@ def _execution_outcome(
         for item in assessments
         if item.execution_record_state == "no_trace"
     }
-    if rule_id == "LX0609-020":
+    if rule_id == "LX0609-03-01-01":
         if no_course_trace_refs:
             if course_source_incomplete:
                 return "data_gap", "candidate_scope_incomplete"
@@ -3699,7 +3699,7 @@ def _result(
         "completion_tokens": completion_tokens,
         "total_tokens": total_tokens,
     })
-    if rule_id in {"LX0609-020", "LX0609-023"} and link_diagnostics:
+    if rule_id in {"LX0609-03-01-01", "LX0609-03-01-04"} and link_diagnostics:
         result["metadata"]["consultation_link_diagnostics"] = tuple(link_diagnostics)
     return result
 
@@ -3903,11 +3903,11 @@ def _finish_explicit_statuses(
     for rule_id in selected:
         status = statuses[rule_id][0]
         facts: dict[str, Any]
-        if rule_id in {"LX0609-021", "LX0609-022"}:
+        if rule_id in {"LX0609-03-01-02", "LX0609-03-01-03"}:
             facts = {
                 "verification_kind": (
                     "consultation_application_quality_check"
-                    if rule_id == "LX0609-021"
+                    if rule_id == "LX0609-03-01-02"
                     else "consultation_opinion_quality_check"
                 ),
                 "episode_count": len(documents),
@@ -3915,7 +3915,7 @@ def _finish_explicit_statuses(
                 "semantic_state": "clear" if status == "compliant" else "mixed",
                 "checked_requirement": (
                     "说明具体临床问题、会诊理由或明确会诊目的"
-                    if rule_id == "LX0609-021"
+                    if rule_id == "LX0609-03-01-02"
                     else "给出针对当前病情的明确诊疗意见"
                 ),
                 "source_document_ids": list(source_document_ids),
@@ -3925,7 +3925,7 @@ def _finish_explicit_statuses(
                         "semantic_state": "clear" if status == "compliant" else "unknown",
                         "source_document_id": _clean(document.get("document_id")),
                         "record_time": _clean(document.get("time")),
-                        "document_title": "会诊申请单" if rule_id == "LX0609-021" else "会诊记录单",
+                        "document_title": "会诊申请单" if rule_id == "LX0609-03-01-02" else "会诊记录单",
                     }
                     for index, document in enumerate(documents, start=1)
                 ],
@@ -3935,7 +3935,7 @@ def _finish_explicit_statuses(
                 "source_document_ids": list(source_document_ids),
                 "consultation_assessment": "明确" if status == "compliant" else "不符合要求",
             }
-        if rule_id == "LX0609-020":
+        if rule_id == "LX0609-03-01-01":
             facts["execution_record_state"] = (
                 "已发现明确执行记录" if status == "compliant" else "未发现执行记录"
             )
@@ -4008,7 +4008,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
     if not all(isinstance(value, str) and value.strip() for value in (institute_id, patient_id, visit_id)):
         return _finish(selected=selected, status="technical_error", reason_code="source_query_error", evidence_snapshot=evidence_snapshot, decision_rule_ids=typed)
     stage_two_rule_ids = tuple(
-        rule_id for rule_id in selected if rule_id in {"LX0609-020", "LX0609-023"}
+        rule_id for rule_id in selected if rule_id in {"LX0609-03-01-01", "LX0609-03-01-04"}
     )
     execution_stay_window: _StayWindow | None = None
     stage_two_boundary_status: tuple[str, str] | None = None
@@ -4084,7 +4084,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
         # 住院窗口仅是020/023的关联前提。即使窗口缺失或读取异常，021/022
         # 仍须继续基于会诊申请、会诊意见本身完成独立文书内容判定。
         if stage_two_boundary_status is not None and not any(
-            rule_id in {"LX0609-021", "LX0609-022"}
+            rule_id in {"LX0609-03-01-02", "LX0609-03-01-03"}
             for rule_id in selected
         ):
             return _finish(
@@ -4095,7 +4095,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                 decision_rule_ids=typed,
             )
     explicit_execution_projection: _CandidateProjection | None = None
-    if "LX0609-020" in stage_two_rule_ids and execution_stay_window is not None:
+    if "LX0609-03-01-01" in stage_two_rule_ids and execution_stay_window is not None:
         explicit_execution_projection = _candidate_documents(
             institute_id=institute_id,
             patient_id=patient_id,
@@ -4124,7 +4124,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
         )
     explicit_022_documents = (
         _explicit_embedded_opinion_documents(documents)
-        if "LX0609-022" in selected
+        if "LX0609-03-01-03" in selected
         else ()
     )
     if llm_client is None:
@@ -4196,12 +4196,12 @@ async def execute_luxian_0609_native_consultation_episode_rules(
     statuses: dict[str, tuple[str, str]] = {
         rule_id: _outcome(rule_id, episodes)
         for rule_id in selected
-        if rule_id in {"LX0609-021", "LX0609-022"}
+        if rule_id in {"LX0609-03-01-02", "LX0609-03-01-03"}
     }
     if explicit_022_documents:
         # 022 的高置信逐份正文事实独立于同族 020/021/023。批量执行仍只调用
         # 原有语义链处理其余规则，但模型不得覆盖已经由正文确定的 022 结论。
-        statuses["LX0609-022"] = ("compliant", "requirement_satisfied")
+        statuses["LX0609-03-01-03"] = ("compliant", "requirement_satisfied")
     execution_assessments: tuple[_ExecutionAssessment, ...] | None = None
     execution_source_technical = False
     execution_source_incomplete_keys: frozenset[str] = frozenset()
@@ -4231,7 +4231,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                     statuses[rule_id] = ("technical_error", "model_invalid_output")
         if not any(rule_id in statuses for rule_id in stage_two_rule_ids):
             preliminary = _execution_outcome(
-                "LX0609-020",
+                "LX0609-03-01-01",
                 episodes=episodes,
                 completed_recommendations=completed_recommendations,
                 assessments=None,
@@ -4755,7 +4755,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
             total_tokens=total_tokens,
             link_diagnostics=link_diagnostics,
         )
-        if rule_id == "LX0609-022" and explicit_022_documents:
+        if rule_id == "LX0609-03-01-03" and explicit_022_documents:
             item["metadata"]["executor_type"] = "program"
         results.append(item)
     decisions: list[RuleDecision] = []
@@ -4802,7 +4802,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                 )
             )
     display_facts: list[tuple[str, Mapping[str, Any]]] = []
-    for rule_id in ("LX0609-021", "LX0609-022"):
+    for rule_id in ("LX0609-03-01-02", "LX0609-03-01-03"):
         if rule_id in selected and rule_id in statuses:
             display_facts.append(
                 (
@@ -4811,7 +4811,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                         _explicit_embedded_opinion_display_facts(
                             explicit_022_documents
                         )
-                        if rule_id == "LX0609-022" and explicit_022_documents
+                        if rule_id == "LX0609-03-01-03" and explicit_022_documents
                         else _consultation_semantic_display_facts(
                             rule_id=rule_id,
                             episodes=episodes,
@@ -4820,7 +4820,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                     ),
                 )
             )
-    for rule_id in ("LX0609-020", "LX0609-023"):
+    for rule_id in ("LX0609-03-01-01", "LX0609-03-01-04"):
         if rule_id not in selected or rule_id not in statuses:
             continue
         display_facts.append(

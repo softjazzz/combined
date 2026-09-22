@@ -84,7 +84,7 @@ def test_serialized_batch_result_roundtrip_keeps_rule_facts_and_one_record_bindi
                 "patient_id": "P1",
                 "visit_id": "VISIT-ONE",
                 "record_id": "VISIT-ONE",
-                "rule_id": "LX0609-025",
+                "rule_id": "LX0609-04-02-04",
                 "schema_version": "lx0609-customer-result-v2",
                 "rule_version": "2026-08-15-golden-pending",
                 "status": "non_compliant",
@@ -188,8 +188,8 @@ def test_review_service_flags_consultation_without_strong_evidence() -> None:
         _job(
             items=[
                 {
-                    "rule_id": "LX0609-020",
-                    "rule_code": "LX0609-020",
+                    "rule_id": "LX0609-03-01-01",
+                    "rule_code": "LX0609-03-01-01",
                     "rule_name": "会诊记录：有会诊记录单无请会诊执行记录",
                     "record_id": "2329756",
                     "status": "uncertain",
@@ -218,8 +218,8 @@ def test_review_service_flags_non_compliant_positive_conclusion() -> None:
             items=[
                 {
                     "schema_version": "customer-qc-result-v1",
-                    "rule_id": "LX0609-003",
-                    "rule_code": "LX0609-003",
+                    "rule_id": "LX0609-04-02-01",
+                    "rule_code": "LX0609-04-02-01",
                     "rule_name": "手术记录：术后24小时内是否完成",
                     "record_id": "2207717",
                     "status": "non_compliant",
@@ -249,8 +249,8 @@ def test_review_service_flags_data_gap_defect_badge() -> None:
         _job(
             items=[
                 {
-                    "rule_id": "LX0609-013",
-                    "rule_code": "LX0609-013",
+                    "rule_id": "LX0609-06-02-03",
+                    "rule_code": "LX0609-06-02-03",
                     "status": "data_gap",
                     "defect_level": "轻微缺陷",
                     "findings": "缺少病理报告时间。",
@@ -270,8 +270,8 @@ def test_review_service_flags_internal_terms_and_weak_evidence() -> None:
         _job(
             items=[
                 {
-                    "rule_id": "LX0609-017",
-                    "rule_code": "LX0609-017",
+                    "rule_id": "LX0609-12-01-02",
+                    "rule_code": "LX0609-12-01-02",
                     "status": "uncertain",
                     "findings": "待复核。",
                     "evidence": "证据模板：复制类 映射执行规则：CL-275 执行证据：长期",
@@ -290,8 +290,8 @@ def test_review_service_flags_transfusion_without_strong_fact() -> None:
         _job(
             items=[
                 {
-                    "rule_id": "LX0609-044",
-                    "rule_code": "LX0609-044",
+                    "rule_id": "LX0609-07-01-02",
+                    "rule_code": "LX0609-07-01-02",
                     "status": "data_gap",
                     "findings": "发现相关事件但缺少输血知情同意书。",
                     "evidence": "应包含证据要素：输血申请、输血医嘱、输血记录。",
@@ -310,8 +310,8 @@ def test_review_service_flags_chemo_without_order_or_record() -> None:
             items=[
                 {
                     "schema_version": "customer-qc-result-v1",
-                    "rule_id": "LX0609-026",
-                    "rule_code": "LX0609-026",
+                    "rule_id": "LX0609-05-02-01",
+                    "rule_code": "LX0609-05-02-01",
                     "status": "non_compliant",
                     "findings": "恶性肿瘤患者病程未记录化疗。",
                     "evidence": "病理报告：胃腺癌。",
@@ -338,8 +338,8 @@ def test_review_service_flags_mdt_without_level_4_surgery() -> None:
             items=[
                 {
                     "schema_version": "customer-qc-result-v1",
-                    "rule_id": "LX0609-040",
-                    "rule_code": "LX0609-040",
+                    "rule_id": "LX0609-04-01-03",
+                    "rule_code": "LX0609-04-01-03",
                     "status": "non_compliant",
                     "findings": "术前讨论未体现MDT讨论意见。",
                     "evidence": "手术记录：腹腔镜胆囊切除术。",
@@ -379,8 +379,8 @@ def test_llm_verifier_receives_only_sanitized_review_context() -> None:
         _job(
             items=[
                 {
-                    "rule_id": "LX0609-020",
-                    "rule_code": "LX0609-020",
+                    "rule_id": "LX0609-03-01-01",
+                    "rule_code": "LX0609-03-01-01",
                     "status": "uncertain",
                     "findings": "病程未记录会诊执行情况。",
                     "evidence": "执行证据：【日常病程记录】患者一般情况可。",
@@ -424,7 +424,7 @@ def test_customer_projector_uses_canonical_status_and_safe_fields_only() -> None
             "mr_no": "M-001",
             "patient_name": "张某某",
             "phone": "13800138000",
-            "rule_id": "LX0609-033",
+            "rule_id": "LX0609-11-01-01",
             "rule_name": "手术知情同意书",
             "customer_conclusion": "当前受控来源尚不足以形成确定结论。",
             "findings": "原始结论不得回退。",
@@ -473,7 +473,7 @@ def test_customer_projector_keeps_ai_suggestion_separate_from_confirmed_issue() 
             "is_compliant": False,
             "reason_code": "Semantic-Low-Confidence",
             "record_id": "R-002",
-            "rule_code": "LX0609-021",
+            "rule_code": "LX0609-03-01-02",
             "findings": "不得作为客户结论。",
         },
         hmac_key="unit-test-key",
@@ -490,7 +490,7 @@ def test_customer_projector_never_trusts_unprojected_customer_text() -> None:
         project_customer_safe_result_item(
             {
                 "record_id": "R-RAW-TEXT",
-                "rule_id": "LX0609-001",
+                "rule_id": "LX0609-01-01-01",
                 "status": "non_compliant",
                 "customer_conclusion": "患者张三于某日出现高热咳嗽，肺部啰音明显。",
                 "customer_suggestion": "请针对张三原始病历立即整改。",
@@ -503,7 +503,7 @@ def test_customer_projector_preserves_shared_lx004_timeliness_facts() -> None:
     projected = project_customer_safe_result_item(
         {
             "record_id": "R-004",
-            "rule_id": "LX0609-004",
+            "rule_id": "LX0609-09-01-01",
             "rule_version": "2026-07-29",
             "status": "non_compliant",
             "reason_code": "threshold_exceeded",
@@ -540,7 +540,7 @@ def test_customer_projector_rejects_lx004_facts_with_internal_document_id() -> N
         project_customer_safe_result_item(
             {
                 "record_id": "R-004-INVALID",
-                "rule_id": "LX0609-004",
+                "rule_id": "LX0609-09-01-01",
                 "rule_version": "2026-07-29",
                 "status": "non_compliant",
                 "reason_code": "threshold_exceeded",
@@ -564,7 +564,7 @@ def test_customer_projector_preserves_only_controlled_lx018_criteria() -> None:
     projected = project_customer_safe_result_item(
         {
             "record_id": "PRIVATE_RECORD",
-            "rule_id": "LX0609-018",
+            "rule_id": "LX0609-01-01-02",
             "rule_version": "2026-07-28",
             "status": "non_compliant",
             "model_analysis": "原始模型医学分析：主诉的症状、病程与第一诊断之间缺少足够的特异性对应。",
@@ -621,13 +621,13 @@ def test_old_018_result_is_logically_invalidated_without_deleting_storage() -> N
         items=[
             {
                 "record_id": "R-OLD",
-                "rule_id": "LX0609-018",
+                "rule_id": "LX0609-01-01-02",
                 "rule_version": "2026-06-09",
                 "status": "non_compliant",
             },
             {
                 "record_id": "R-NEW",
-                "rule_id": "LX0609-018",
+                "rule_id": "LX0609-01-01-02",
                 "rule_version": "2026-07-28",
                 "status": "non_compliant",
                 "criterion_results": [
@@ -656,7 +656,7 @@ def test_incomplete_historical_safe_dto_cannot_reuse_generic_confirmed_issue_tex
             {
                 "schema_version": "customer-qc-result-v1",
                 "record_id": "R-OLD",
-                "rule_id": "LX0609-025",
+                "rule_id": "LX0609-04-02-04",
                 "status": "non_compliant",
                 "conclusion": "发现该质控点对应的明确问题。",
                 "suggestion": "请按质控要求补充或修正记录。",
@@ -670,7 +670,7 @@ def test_non_compliant_result_rejects_passed_only_criteria() -> None:
         project_customer_safe_result_item(
             {
                 "record_id": "R-PASSED-ONLY",
-                "rule_id": "LX0609-018",
+                "rule_id": "LX0609-01-01-02",
                 "status": "non_compliant",
                 "criterion_results": [
                     {
@@ -690,7 +690,7 @@ def test_lx025_non_compliant_result_rejects_empty_missing_fields() -> None:
         project_customer_safe_result_item(
             {
                 "record_id": "R-025-EMPTY",
-                "rule_id": "LX0609-025",
+                "rule_id": "LX0609-04-02-04",
                 "status": "non_compliant",
                 "customer_display_facts": {
                     "missing_fields": [],
@@ -706,7 +706,7 @@ def test_duplicate_record_rule_keeps_explained_latest_candidate_only() -> None:
         items=[
             {
                 "record_id": "R-ONE",
-                "rule_id": "LX0609-025",
+                "rule_id": "LX0609-04-02-04",
                 "rule_version": "2026-08-15-golden-pending",
                 "status": "non_compliant",
                 "reason_code": "implant_information_incomplete",
@@ -721,7 +721,7 @@ def test_duplicate_record_rule_keeps_explained_latest_candidate_only() -> None:
             },
             {
                 "record_id": "R-ONE",
-                "rule_id": "LX0609-025",
+                "rule_id": "LX0609-04-02-04",
                 "rule_version": "2026-08-15-golden-pending",
                 "status": "non_compliant",
                 "reason_code": "implant_information_incomplete",
@@ -765,19 +765,19 @@ def test_old_018_result_is_also_hidden_from_grouped_rule_results() -> None:
     job = _job()
     job["rule_results"] = [
         {
-            "rule_code": "LX0609-018",
+            "rule_code": "LX0609-01-01-02",
             "rule_name": "主诉能导出第一诊断",
             "items": [
                 {
                     "record_id": "R-OLD",
-                    "rule_id": "LX0609-018",
+                    "rule_id": "LX0609-01-01-02",
                     "rule_version": "2026-06-09",
                     "status": "non_compliant",
                     "reason_code": "complaint_too_short",
                 },
                 {
                     "record_id": "R-NEW",
-                    "rule_id": "LX0609-018",
+                    "rule_id": "LX0609-01-01-02",
                     "rule_version": "2026-07-28",
                     "status": "non_compliant",
                     "criterion_results": [
@@ -809,7 +809,7 @@ def test_customer_projector_rejects_unvalidated_lx025_missing_fields() -> None:
         project_customer_safe_result_item(
             {
                 "record_id": "PRIVATE_RECORD",
-                "rule_id": "LX0609-025",
+                "rule_id": "LX0609-04-02-04",
                 "status": "non_compliant",
                 "customer_display_facts": {
                     "missing_fields": [
@@ -833,7 +833,7 @@ def test_customer_projector_keeps_only_controlled_surgery_document_gap_facts() -
     projected = project_customer_safe_result_item(
         {
             "record_id": "PRIVATE_RECORD",
-            "rule_id": "LX0609-030",
+            "rule_id": "LX0609-04-02-02",
             "status": "non_compliant",
             "customer_display_facts": {
                 "failure_kind": "surgery_document_missing",
@@ -857,7 +857,7 @@ def test_customer_projector_keeps_only_controlled_surgery_document_gap_facts() -
     ("rule_id", "status", "facts"),
     [
         (
-            "LX0609-003",
+            "LX0609-04-02-01",
             "compliant",
             {
                 "failure_kind": "surgery_record_within_threshold",
@@ -870,7 +870,7 @@ def test_customer_projector_keeps_only_controlled_surgery_document_gap_facts() -
             },
         ),
         (
-            "LX0609-035",
+            "LX0609-11-02-02",
             "non_compliant",
             {
                 "failure_kind": "anesthesia_consent_incomplete",
@@ -879,7 +879,7 @@ def test_customer_projector_keeps_only_controlled_surgery_document_gap_facts() -
             },
         ),
         (
-            "LX0609-040",
+            "LX0609-04-01-03",
             "compliant",
             {
                 "performed_surgery_confirmed": True,
@@ -914,7 +914,7 @@ def test_customer_projector_is_idempotent_for_safe_identity_and_decision() -> No
     first = project_customer_safe_result_item(
         {
             "record_id": "R-IDEMPOTENT",
-            "rule_id": "LX0609-028",
+            "rule_id": "LX0609-05-01-01",
             "result_status": "data_gap",
             "reason_code": "actual_interval_unavailable",
             "customer_conclusion": "实际用药时间证据不足。",
@@ -938,7 +938,7 @@ def test_customer_projector_persists_rule_specific_compliant_explanation() -> No
         {
             "record_id": "R-COMPLIANT",
             "schema_version": "lx0609-customer-result-v2",
-            "rule_id": "LX0609-032",
+            "rule_id": "LX0609-04-03-01",
             "status": "compliant",
             "reason_code": "requirement_satisfied",
             "findings": "符合质控要求",
@@ -962,7 +962,7 @@ def test_review_report_and_llm_payload_never_expose_record_identity_or_raw_body(
         _job(
             items=[
                 {
-                    "rule_id": "LX0609-020",
+                    "rule_id": "LX0609-03-01-01",
                     "status": "uncertain",
                     "record_id": "R-003",
                     "visit_id": "V-003",
@@ -991,7 +991,7 @@ def test_review_report_and_llm_payload_never_expose_record_identity_or_raw_body(
 def test_review_uses_same_canonical_status_and_reason_as_customer_projector() -> None:
     item = {
         "schema_version": "lx0609-customer-result-v2",
-        "rule_id": "LX0609-013",
+        "rule_id": "LX0609-06-02-03",
         "result_status": "data_gap",
         "status": "data_gap",
         "display_status": "data_gap",
@@ -1011,7 +1011,7 @@ def test_review_uses_same_canonical_status_and_reason_as_customer_projector() ->
 
 def test_review_uses_same_unique_source_rows_as_customer_projection() -> None:
     duplicated = {
-        "rule_id": "LX0609-020",
+        "rule_id": "LX0609-03-01-01",
         "status": "data_gap",
         "reason_code": "source_incomplete",
         "record_id": "R-DUPLICATED",
@@ -1036,7 +1036,7 @@ def test_review_accepts_already_projected_batch_job() -> None:
             items=[
                 {
                     "record_id": "R-PROJECTED",
-                    "rule_id": "LX0609-020",
+                    "rule_id": "LX0609-03-01-01",
                     "status": "data_gap",
                     "reason_code": "source_incomplete",
                 }
@@ -1059,7 +1059,7 @@ def test_review_provider_exception_is_reduced_to_safe_error_code() -> None:
         _job(
             items=[
                 {
-                    "rule_id": "LX0609-013",
+                    "rule_id": "LX0609-06-02-03",
                     "status": "data_gap",
                     "record_id": "R-ERROR",
                     "defect_level": "一般缺陷",

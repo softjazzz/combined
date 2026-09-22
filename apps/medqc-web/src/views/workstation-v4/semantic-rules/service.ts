@@ -61,11 +61,34 @@ function normalizeComplianceFlag(data: Record<string, any>): boolean {
   return true
 }
 
+const LUXIAN_0609_RULE_ID_PATTERN = /^LX0609-(?!00)\d{2}-(?!00)\d{2}-(?!00)\d{2}$/u
+const LUXIAN_0609_PREFIX_PATTERN = /^LX0609-/iu
+
+function normalizeRuleIdentity(value: unknown): string {
+  const text = String(value || '').trim()
+  const normalized = LUXIAN_0609_PREFIX_PATTERN.test(text) ? text.toUpperCase() : text
+  if (!normalized) return ''
+  if (LUXIAN_0609_PREFIX_PATTERN.test(normalized) && !LUXIAN_0609_RULE_ID_PATTERN.test(normalized)) {
+    return ''
+  }
+  return normalized
+}
+
 function pickCanonicalRuleId(raw: Record<string, any>): string {
   const candidates = [raw.rule_id, raw.rule_code, raw.original_id, raw.id]
     .map((item) => String(item || '').trim())
     .filter(Boolean)
-  const canonical = candidates.find((value) => /^(LX0609|SC|LXE|LX|CL)-/i.test(value))
+  if (candidates.some((value) => LUXIAN_0609_PREFIX_PATTERN.test(value))) {
+    const identityFields = [raw.rule_id, raw.rule_code]
+      .map((value) => String(value || '').trim().toUpperCase())
+      .filter(Boolean)
+    const identity = identityFields[0] || ''
+    // 不利用别名修复旧编号或互相冲突的编号，以免反馈挂到其他规则。
+    return LUXIAN_0609_RULE_ID_PATTERN.test(identity) && identityFields.every((value) => value === identity)
+      ? identity
+      : ''
+  }
+  const canonical = candidates.find((value) => /^(SC|LXE|LX|CL)-/i.test(value))
   return canonical || candidates[0] || ''
 }
 
@@ -197,8 +220,9 @@ function parseSemanticRuleTestError(
 
 export function normalizeSemanticRule(raw: Record<string, any>): SemanticRuleItem {
   const canonicalRuleId = pickCanonicalRuleId(raw)
+  const rawRuleCode = raw.rule_code ? String(raw.rule_code).trim() : ''
   const mappedRuleIds = Array.isArray(raw.mapped_rule_ids)
-    ? raw.mapped_rule_ids.map((item: unknown) => String(item)).filter(Boolean)
+    ? raw.mapped_rule_ids.map(normalizeRuleIdentity).filter(Boolean)
     : []
   const dataDependencies = Array.isArray(raw.data_dependencies)
     ? raw.data_dependencies.map((item: unknown) => String(item)).filter(Boolean)
@@ -208,7 +232,11 @@ export function normalizeSemanticRule(raw: Record<string, any>): SemanticRuleIte
     : []
   return {
     rule_id: canonicalRuleId,
-    rule_code: raw.rule_code ? String(raw.rule_code) : undefined,
+    rule_code: canonicalRuleId.startsWith('LX0609-')
+      ? canonicalRuleId
+      : rawRuleCode && !LUXIAN_0609_PREFIX_PATTERN.test(rawRuleCode)
+        ? rawRuleCode
+        : undefined,
     name: String(raw.name || raw.rule_name || '未命名规则'),
     description: String(raw.description || raw.desc || ''),
     category: String(raw.category || '未分类'),
@@ -230,9 +258,7 @@ export function normalizeSemanticRule(raw: Record<string, any>): SemanticRuleIte
     prompt_version: raw.prompt_version ? String(raw.prompt_version) : undefined,
     custom_prompt: raw.custom_prompt ? String(raw.custom_prompt) : undefined,
     mapped_rule_ids: mappedRuleIds,
-    primary_execution_rule_id: raw.primary_execution_rule_id
-      ? String(raw.primary_execution_rule_id)
-      : undefined,
+    primary_execution_rule_id: normalizeRuleIdentity(raw.primary_execution_rule_id) || undefined,
     implementation_status: raw.implementation_status
       ? String(raw.implementation_status)
       : undefined,

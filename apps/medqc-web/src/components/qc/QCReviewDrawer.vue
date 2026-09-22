@@ -17,17 +17,23 @@
             </div>
             <div class="review-summary__identity-main">
               <div class="review-summary__title-row">
-                <h2 class="review-summary__title">病历联审详情</h2>
-                <span class="review-summary__status" :class="statusClass">
-                  <span class="review-summary__status-dot" :class="statusDotClass" />
+                <h2 class="review-summary__title">
+                  病历联审详情
+                </h2>
+                <span
+                  class="review-summary__status"
+                  :class="statusClass"
+                >
+                  <span
+                    class="review-summary__status-dot"
+                    :class="statusDotClass"
+                  />
                   {{ statusText }}
                 </span>
               </div>
               <div class="review-summary__patient-row">
                 <span class="review-summary__patient-name">{{ record?.patient_name || '-' }}</span>
-                <span class="review-summary__patient-meta"
-                  >病案号：{{ record?.record_id || '-' }}</span
-                >
+                <span class="review-summary__patient-meta">病案号：{{ record?.record_id || '-' }}</span>
               </div>
               <div class="review-summary__hint">
                 目录按文书类型聚合，再按时间倒序浏览。点击右侧质控问题会联动定位左侧原文段落。
@@ -35,25 +41,35 @@
             </div>
           </div>
           <div class="review-summary__actions">
-            <div class="review-summary__actions-label">当前工作区</div>
-            <div class="review-summary__actions-value">联审阅读 / 问题定位</div>
+            <div class="review-summary__actions-label">
+              当前工作区
+            </div>
+            <div class="review-summary__actions-value">
+              联审阅读 / 问题定位
+            </div>
           </div>
         </div>
         <div class="review-metrics">
           <div class="review-metric-card">
-            <div class="review-metric-card__label">科室</div>
+            <div class="review-metric-card__label">
+              科室
+            </div>
             <div class="review-metric-card__value">
               {{ record?.department || '-' }}
             </div>
           </div>
           <div class="review-metric-card">
-            <div class="review-metric-card__label">出院日期</div>
+            <div class="review-metric-card__label">
+              出院日期
+            </div>
             <div class="review-metric-card__value">
               {{ record?.discharge_date || '-' }}
             </div>
           </div>
           <div class="review-metric-card">
-            <div class="review-metric-card__label">质控得分</div>
+            <div class="review-metric-card__label">
+              质控得分
+            </div>
             <div
               class="review-metric-card__value review-metric-card__value--mono"
               :style="{ color: getScoreColor(record?.score) }"
@@ -62,13 +78,17 @@
             </div>
           </div>
           <div class="review-metric-card">
-            <div class="review-metric-card__label">缺陷数</div>
+            <div class="review-metric-card__label">
+              缺陷数
+            </div>
             <div class="review-metric-card__value">
               {{ record?.defect_count || 0 }}
             </div>
           </div>
           <div class="review-metric-card">
-            <div class="review-metric-card__label">文书数量</div>
+            <div class="review-metric-card__label">
+              文书数量
+            </div>
             <div class="review-metric-card__value">
               {{ documentCount }}
             </div>
@@ -80,14 +100,21 @@
         <aside class="review-sidebar">
           <div class="review-panel__header review-sidebar__header">
             <div>
-              <div class="review-panel__title">文书目录</div>
-              <div class="review-panel__desc">按单据类型和时间浏览完整病历。</div>
+              <div class="review-panel__title">
+                文书目录
+              </div>
+              <div class="review-panel__desc">
+                按单据类型和时间浏览完整病历。
+              </div>
             </div>
           </div>
           <div class="review-sidebar__toolbar">
             <label class="review-sidebar__select-wrap">
               <span class="review-sidebar__select-label">单据范围</span>
-              <select v-model="sidebarDocFilter" class="review-sidebar__select">
+              <select
+                v-model="sidebarDocFilter"
+                class="review-sidebar__select"
+              >
                 <option
                   v-for="option in sidebarFilterOptions"
                   :key="option.value"
@@ -119,7 +146,11 @@
                 <span class="review-tree-node__label">病案首页(临床医生)</span>
               </button>
 
-              <div v-for="group in visibleSidebarGroups" :key="group.key" class="review-tree-group">
+              <div
+                v-for="group in visibleSidebarGroups"
+                :key="group.key"
+                class="review-tree-group"
+              >
                 <button
                   type="button"
                   class="review-tree-node"
@@ -133,10 +164,16 @@
                       : handleSidebarLeafGroupClick(group)
                   "
                 >
-                  <span v-if="isSidebarGroupExpandable(group)" class="review-tree-node__caret">
+                  <span
+                    v-if="isSidebarGroupExpandable(group)"
+                    class="review-tree-node__caret"
+                  >
                     {{ isSidebarGroupExpanded(group.key) ? '⌄' : '›' }}
                   </span>
-                  <span v-else class="review-tree-node__spacer" />
+                  <span
+                    v-else
+                    class="review-tree-node__spacer"
+                  />
                   <span class="review-tree-node__label">
                     {{ group.label }}
                   </span>
@@ -164,9 +201,16 @@
                 </div>
               </div>
             </template>
-            <div v-else class="review-empty review-empty--sidebar">
-              <div class="review-empty__title">当前分组暂无可展示文书</div>
-              <div class="review-empty__desc">请切换其他文书分组继续查看</div>
+            <div
+              v-else
+              class="review-empty review-empty--sidebar"
+            >
+              <div class="review-empty__title">
+                当前分组暂无可展示文书
+              </div>
+              <div class="review-empty__desc">
+                请切换其他文书分组继续查看
+              </div>
             </div>
           </div>
         </aside>
@@ -184,8 +228,7 @@
                 <span
                   v-if="!isOrderOverviewActive && currentDocReadableTime"
                   class="review-content__time"
-                  >记录时间：{{ currentDocReadableTime }}</span
-                >
+                >记录时间：{{ currentDocReadableTime }}</span>
               </div>
               <h3 class="review-content__title">
                 {{ isOrderOverviewActive ? orderOverviewTitle : currentDocTitle }}
@@ -201,7 +244,11 @@
               v-if="!isOrderOverviewActive && currentDocVisibleFlags.length > 0"
               class="review-content__flags"
             >
-              <span v-for="flag in currentDocVisibleFlags" :key="flag" class="review-flag">
+              <span
+                v-for="flag in currentDocVisibleFlags"
+                :key="flag"
+                class="review-flag"
+              >
                 {{ flag }}
               </span>
             </div>
@@ -210,8 +257,13 @@
           <div class="review-content__body">
             <a-spin :spinning="docLoading">
               <template v-if="isOrderOverviewActive">
-                <div v-if="activeReviewIssueSummary" class="review-alert">
-                  <div class="review-alert__title">已定位当前质控问题原文</div>
+                <div
+                  v-if="activeReviewIssueSummary"
+                  class="review-alert"
+                >
+                  <div class="review-alert__title">
+                    已定位当前质控问题原文
+                  </div>
                   <div class="review-alert__desc">
                     {{ activeReviewIssueSummary }}
                   </div>
@@ -223,31 +275,52 @@
                       <span>总医嘱</span>
                       <strong>{{ orderOverviewStats.total }}</strong>
                     </div>
-                    <div v-if="orderOverviewStats.temp > 0" class="order-overview__stat">
+                    <div
+                      v-if="orderOverviewStats.temp > 0"
+                      class="order-overview__stat"
+                    >
                       <span>临时医嘱</span>
                       <strong>{{ orderOverviewStats.temp }}</strong>
                     </div>
-                    <div v-if="orderOverviewStats.long > 0" class="order-overview__stat">
+                    <div
+                      v-if="orderOverviewStats.long > 0"
+                      class="order-overview__stat"
+                    >
                       <span>长期医嘱</span>
                       <strong>{{ orderOverviewStats.long }}</strong>
                     </div>
-                    <div v-if="orderOverviewStats.drug > 0" class="order-overview__stat">
+                    <div
+                      v-if="orderOverviewStats.drug > 0"
+                      class="order-overview__stat"
+                    >
                       <span>药品医嘱</span>
                       <strong>{{ orderOverviewStats.drug }}</strong>
                     </div>
-                    <div v-if="orderOverviewStats.exam_lab > 0" class="order-overview__stat">
+                    <div
+                      v-if="orderOverviewStats.exam_lab > 0"
+                      class="order-overview__stat"
+                    >
                       <span>检验检查</span>
                       <strong>{{ orderOverviewStats.exam_lab }}</strong>
                     </div>
-                    <div v-if="orderOverviewStats.procedure_care > 0" class="order-overview__stat">
+                    <div
+                      v-if="orderOverviewStats.procedure_care > 0"
+                      class="order-overview__stat"
+                    >
                       <span>处置护理</span>
                       <strong>{{ orderOverviewStats.procedure_care }}</strong>
                     </div>
-                    <div v-if="orderOverviewStats.discharge_admin > 0" class="order-overview__stat">
+                    <div
+                      v-if="orderOverviewStats.discharge_admin > 0"
+                      class="order-overview__stat"
+                    >
                       <span>出院行政</span>
                       <strong>{{ orderOverviewStats.discharge_admin }}</strong>
                     </div>
-                    <div v-if="orderOverviewStats.other > 0" class="order-overview__stat">
+                    <div
+                      v-if="orderOverviewStats.other > 0"
+                      class="order-overview__stat"
+                    >
                       <span>其他</span>
                       <strong>{{ orderOverviewStats.other }}</strong>
                     </div>
@@ -276,10 +349,13 @@
                       class="order-overview__search"
                       type="search"
                       placeholder="搜索医嘱内容、医生或状态"
-                    />
+                    >
                   </div>
 
-                  <div v-if="filteredOrderRows.length > 0" class="order-overview__table-scroll">
+                  <div
+                    v-if="filteredOrderRows.length > 0"
+                    class="order-overview__table-scroll"
+                  >
                     <table class="order-overview__table">
                       <thead>
                         <tr>
@@ -287,10 +363,18 @@
                           <th>医嘱类型</th>
                           <th>医嘱类别</th>
                           <th>医嘱内容</th>
-                          <th v-if="showOrderDoseUsageColumn">剂量/频次/用法</th>
-                          <th v-if="showOrderStopTimeColumn">停止时间</th>
-                          <th v-if="showOrderStatusColumn">状态</th>
-                          <th v-if="showOrderDoctorColumn">医生</th>
+                          <th v-if="showOrderDoseUsageColumn">
+                            剂量/频次/用法
+                          </th>
+                          <th v-if="showOrderStopTimeColumn">
+                            停止时间
+                          </th>
+                          <th v-if="showOrderStatusColumn">
+                            状态
+                          </th>
+                          <th v-if="showOrderDoctorColumn">
+                            医生
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
@@ -335,7 +419,10 @@
                     </table>
                   </div>
 
-                  <div v-else class="review-empty order-overview__empty">
+                  <div
+                    v-else
+                    class="review-empty order-overview__empty"
+                  >
                     <div class="review-empty__title">
                       {{ orderRows.length > 0 ? '没有匹配的医嘱' : '暂无医嘱数据' }}
                     </div>
@@ -349,8 +436,13 @@
               </template>
 
               <template v-else-if="currentDoc">
-                <div v-if="activeReviewIssueSummary" class="review-alert">
-                  <div class="review-alert__title">已定位当前质控问题原文</div>
+                <div
+                  v-if="activeReviewIssueSummary"
+                  class="review-alert"
+                >
+                  <div class="review-alert__title">
+                    已定位当前质控问题原文
+                  </div>
                   <div class="review-alert__desc">
                     {{ activeReviewIssueSummary }}
                   </div>
@@ -361,7 +453,10 @@
                   class="review-card review-card--report"
                   data-testid="qc-review-report-content"
                 >
-                  <div v-if="currentDocReportMetadata.length > 0" class="review-report-meta">
+                  <div
+                    v-if="currentDocReportMetadata.length > 0"
+                    class="review-report-meta"
+                  >
                     <div
                       v-for="item in currentDocReportMetadata"
                       :key="item.key"
@@ -372,7 +467,10 @@
                     </div>
                   </div>
 
-                  <div v-if="currentDocIsLabReport" class="review-report-table-wrap">
+                  <div
+                    v-if="currentDocIsLabReport"
+                    class="review-report-table-wrap"
+                  >
                     <table class="review-report-table">
                       <thead>
                         <tr>
@@ -402,7 +500,10 @@
                     </table>
                   </div>
 
-                  <div v-else class="review-exam-results">
+                  <div
+                    v-else
+                    class="review-exam-results"
+                  >
                     <article
                       v-for="(item, index) in currentDocReportItems"
                       :key="item.item_id || item.item_no || index"
@@ -430,8 +531,8 @@
                 <div
                   v-else-if="
                     currentDocFieldList.length > 0 ||
-                    currentDocSectionBlocks.length > 0 ||
-                    shouldShowCurrentDocPlainContent
+                      currentDocSectionBlocks.length > 0 ||
+                      shouldShowCurrentDocPlainContent
                   "
                   class="review-card review-card--structured"
                 >
@@ -482,8 +583,13 @@
                       </div>
                     </template>
 
-                    <div v-else-if="shouldShowCurrentDocPlainContent" class="review-structured-row">
-                      <div class="review-structured-row__label">记录内容</div>
+                    <div
+                      v-else-if="shouldShowCurrentDocPlainContent"
+                      class="review-structured-row"
+                    >
+                      <div class="review-structured-row__label">
+                        记录内容
+                      </div>
                       <div class="review-structured-row__content">
                         <div
                           v-for="block in currentDocPlainBlocks"
@@ -500,21 +606,31 @@
                   </div>
                 </div>
 
-                <div v-else class="review-empty">
+                <div
+                  v-else
+                  class="review-empty"
+                >
                   <FileTextOutlined class="review-empty__icon" />
                   <div class="review-empty__title">
                     {{ docLoading ? '加载中...' : '当前文书暂无可展示内容' }}
                   </div>
-                  <div class="review-empty__desc">可切换其它文书继续查看</div>
+                  <div class="review-empty__desc">
+                    可切换其它文书继续查看
+                  </div>
                 </div>
               </template>
 
-              <div v-else class="review-empty">
+              <div
+                v-else
+                class="review-empty"
+              >
                 <FileTextOutlined class="review-empty__icon" />
                 <div class="review-empty__title">
                   {{ docLoading ? '加载中...' : '暂无文书内容' }}
                 </div>
-                <div class="review-empty__desc">当前病历尚未装配可阅读文书</div>
+                <div class="review-empty__desc">
+                  当前病历尚未装配可阅读文书
+                </div>
               </div>
             </a-spin>
           </div>
@@ -523,24 +639,44 @@
         <aside class="review-issues">
           <div class="review-panel__header review-issues__header">
             <div>
-              <div class="review-panel__title">质控问题</div>
+              <div class="review-panel__title">
+                质控问题
+              </div>
               <div class="review-panel__desc">
                 共 {{ displayedIssueCount }} 项，点击问题可联动定位左侧原文。
               </div>
             </div>
-            <a-button size="small" type="text" class="review-issues__reload" @click="loadDefects">
+            <a-button
+              size="small"
+              type="text"
+              class="review-issues__reload"
+              @click="loadDefects"
+            >
               <ReloadOutlined :spin="defectLoading" />
             </a-button>
           </div>
 
           <div class="review-issues__body">
-            <a-spin :spinning="defectLoading" class="review-issues__spin">
-              <div v-if="displayedIssueCount === 0" class="review-empty review-empty--issues">
-                <div class="review-empty__title">暂无质控问题</div>
-                <div class="review-empty__desc">当前病历没有待联审的质控项</div>
+            <a-spin
+              :spinning="defectLoading"
+              class="review-issues__spin"
+            >
+              <div
+                v-if="displayedIssueCount === 0"
+                class="review-empty review-empty--issues"
+              >
+                <div class="review-empty__title">
+                  暂无质控问题
+                </div>
+                <div class="review-empty__desc">
+                  当前病历没有待联审的质控项
+                </div>
               </div>
 
-              <div v-else-if="defectList.length > 0" class="review-issue-list">
+              <div
+                v-else-if="defectList.length > 0"
+                class="review-issue-list"
+              >
                 <div
                   v-for="defect in defectList"
                   :key="defect.id"
@@ -590,7 +726,10 @@
                 </div>
               </div>
 
-              <div v-else class="review-issue-list">
+              <div
+                v-else
+                class="review-issue-list"
+              >
                 <div
                   v-for="issue in reviewItemList"
                   :key="issue.id"
@@ -638,11 +777,17 @@
                       {{ Number(issue.confidence).toFixed(2) }}
                     </span>
                   </div>
-                  <div v-if="issue.findings" class="review-issue-card__section">
+                  <div
+                    v-if="issue.findings"
+                    class="review-issue-card__section"
+                  >
                     <span class="review-issue-card__section-label">结论</span>
                     <span>{{ issue.findings }}</span>
                   </div>
-                  <div v-if="issue.evidence" class="review-issue-card__section">
+                  <div
+                    v-if="issue.evidence"
+                    class="review-issue-card__section"
+                  >
                     <span class="review-issue-card__section-label">证据</span>
                     <span>{{ issue.evidence }}</span>
                   </div>

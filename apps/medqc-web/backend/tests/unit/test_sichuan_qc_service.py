@@ -691,7 +691,7 @@ def test_apply_copy_content_semantic_fallback_should_force_non_compliant(service
 
 def test_apply_copy_content_semantic_fallback_should_handle_lx0609_017(service):
     rule_input = RuleExecutionInput(
-        rule_id="LX0609-017",
+        rule_id="LX0609-12-01-02",
         document_type="病程/查房记录",
         execution_domain="course",
         primary_medical_text="2026-07-02 上级医师查房记录正文",
@@ -729,7 +729,7 @@ def test_apply_copy_content_semantic_fallback_should_handle_lx0609_017(service):
         ],
     )
     engine_result = {
-        "rule_id": "LX0609-017",
+        "rule_id": "LX0609-12-01-02",
         "status": "uncertain",
         "is_compliant": False,
         "findings": "病程记录重复度未形成可靠自动结论，需人工复核。",

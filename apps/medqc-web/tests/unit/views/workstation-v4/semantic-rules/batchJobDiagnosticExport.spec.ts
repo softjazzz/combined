@@ -35,7 +35,7 @@ describe('质控任务诊断包', () => {
         {
           visit_id: '2608958',
           patient_name: '真实姓名',
-          rule_id: 'LX0609-011',
+          rule_id: 'LX0609-06-01-04',
           reason_code: 'model_invalid_output',
           error_phase: 'result_status',
           error: '患者真实姓名（就诊号 2608958）Authorization=Bearer secret-token',
@@ -50,7 +50,7 @@ describe('质控任务诊断包', () => {
       rules: [
         {
           rule_job_id: 'rule-job-1',
-          rule_code: 'LX0609-011',
+          rule_code: 'LX0609-06-01-04',
           rule_name: '检查记录',
           status: 'failed',
           debug: {
@@ -64,7 +64,7 @@ describe('质控任务诊断包', () => {
         {
           visit_id: '2608958',
           patient_name: '真实姓名',
-          rule_id: 'LX0609-011',
+          rule_id: 'LX0609-06-01-04',
           status: 'technical_error',
           is_compliant: null,
           llm_raw_output: '模型完整原始响应',

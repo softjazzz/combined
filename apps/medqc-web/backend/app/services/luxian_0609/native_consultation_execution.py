@@ -44,23 +44,23 @@ from .source_evidence_reader import (
 
 
 CONSULTATION_RULE_IDS = (
-    "LX0609-020",
-    "LX0609-021",
-    "LX0609-022",
-    "LX0609-023",
+    "LX0609-03-01-01",
+    "LX0609-03-01-02",
+    "LX0609-03-01-03",
+    "LX0609-03-01-04",
 )
 EXECUTOR_KEY = "consultation_quality"
 _TYPED_DECISION_RULE_IDS = frozenset(CONSULTATION_RULE_IDS)
 _TYPED_EVALUATOR_VERSION = "consultation-ruledecision-shadow-v2"
 _DECISION_SOURCE_KEYS_BY_RULE = {
-    "LX0609-020": (
+    "LX0609-03-01-01": (
         "consultation_record",
         "daily_course_record",
         "senior_course_record",
     ),
-    "LX0609-021": ("consultation_record",),
-    "LX0609-022": ("consultation_record",),
-    "LX0609-023": (
+    "LX0609-03-01-02": ("consultation_record",),
+    "LX0609-03-01-03": ("consultation_record",),
+    "LX0609-03-01-04": (
         "consultation_record",
         "daily_course_record",
         "senior_course_record",
@@ -234,7 +234,7 @@ _EXPLICIT_OPINION_DISPOSITION_RE = re.compile(
 )
 
 _REASON_STATUS = {
-    "LX0609-020": {
+    "LX0609-03-01-01": {
         "execution_specific": "compliant",
         "all_completed_opinions_have_execution": "compliant",
         "execution_missing": "non_compliant",
@@ -243,7 +243,7 @@ _REASON_STATUS = {
         "execution_source_incomplete": "data_gap",
         "semantic_low_confidence": "evaluation_unknown",
     },
-    "LX0609-021": {
+    "LX0609-03-01-02": {
         "purpose_clear": "compliant",
         "purpose_vague": "non_compliant",
         "purpose_missing": "non_compliant",
@@ -251,7 +251,7 @@ _REASON_STATUS = {
         "application_unresolved": "data_gap",
         "semantic_low_confidence": "evaluation_unknown",
     },
-    "LX0609-022": {
+    "LX0609-03-01-03": {
         "opinion_clear": "compliant",
         "opinion_vague": "non_compliant",
         "opinion_missing": "non_compliant",
@@ -259,7 +259,7 @@ _REASON_STATUS = {
         "opinion_unresolved": "data_gap",
         "semantic_low_confidence": "evaluation_unknown",
     },
-    "LX0609-023": {
+    "LX0609-03-01-04": {
         "execution_specific_summarized": "compliant",
         "execution_vague_or_copied": "non_compliant",
         "execution_record_missing": "not_applicable",
@@ -1305,7 +1305,7 @@ def _prompt(
 execution_link.quality=specific|vague
 
 只输出 JSON，不要输出原文、解释或新增字段：
-{{"results":{{"LX0609-020":{{"reason_code":"...","confidence_bucket":"high|medium|low"}},"LX0609-021":{{"reason_code":"...","confidence_bucket":"high|medium|low"}},"LX0609-022":{{"reason_code":"...","confidence_bucket":"high|medium|low"}},"LX0609-023":{{"reason_code":"...","confidence_bucket":"high|medium|low"}}}},"opinion_reviews":[{{"consultation_ref":"consultation_record-1","opinion_state":"clear|vague|missing","confidence_bucket":"high|medium|low"}}],"execution_links":[{{"consultation_ref":"consultation_record-1","execution_ref":"consultation_record-1-embedded-execution或daily_course_record-1或senior_course_record-1","quality":"specific或vague","confidence_bucket":"high|medium|low"}}]}}
+{{"results":{{"LX0609-03-01-01":{{"reason_code":"...","confidence_bucket":"high|medium|low"}},"LX0609-03-01-02":{{"reason_code":"...","confidence_bucket":"high|medium|low"}},"LX0609-03-01-03":{{"reason_code":"...","confidence_bucket":"high|medium|low"}},"LX0609-03-01-04":{{"reason_code":"...","confidence_bucket":"high|medium|low"}}}},"opinion_reviews":[{{"consultation_ref":"consultation_record-1","opinion_state":"clear|vague|missing","confidence_bucket":"high|medium|low"}}],"execution_links":[{{"consultation_ref":"consultation_record-1","execution_ref":"consultation_record-1-embedded-execution或daily_course_record-1或senior_course_record-1","quality":"specific或vague","confidence_bucket":"high|medium|low"}}]}}
 
 022逐文书意见：
 {opinion_review_context}
@@ -1317,7 +1317,7 @@ execution_link.quality=specific|vague
 def _consultation_fact_prompt(*, context: str) -> str:
     """只让模型抽取会诊事实；最终规则状态必须由 Python 合成。"""
 
-    return f"""你是会诊文书事实抽取器。你只识别文书事实和关系，禁止判断或输出LX0609-020至023的status、reason_code、合规/不合规结论。
+    return f"""你是会诊文书事实抽取器。你只识别文书事实和关系，禁止判断或输出LX0609-03-01-01至023的status、reason_code、合规/不合规结论。
 
 输入是一行一个JSON文书对象。必须逐输入ref原样返回且恰好一次，不得遗漏、重复或创造ref，不得输出原文、摘要、解释或合同外字段。
 
@@ -1392,10 +1392,10 @@ def _consultation_rule_fact_prompt(
 ) -> str:
     requested = ",".join(selected)
     fact_templates = {
-        "LX0609-020": "execution_all_present|execution_missing|no_completed_opinion|unknown",
-        "LX0609-021": "purpose_clear|purpose_vague|purpose_missing|no_application|unknown",
-        "LX0609-022": "opinion_clear|opinion_vague|opinion_missing|no_completed_opinion|unknown",
-        "LX0609-023": "execution_specific|execution_vague|execution_absent|unknown",
+        "LX0609-03-01-01": "execution_all_present|execution_missing|no_completed_opinion|unknown",
+        "LX0609-03-01-02": "purpose_clear|purpose_vague|purpose_missing|no_application|unknown",
+        "LX0609-03-01-03": "opinion_clear|opinion_vague|opinion_missing|no_completed_opinion|unknown",
+        "LX0609-03-01-04": "execution_specific|execution_vague|execution_absent|unknown",
     }
     schema = ",".join(
         f'"{rule_id}":{{"fact":"{fact_templates[rule_id]}","evidence_refs":["输入ref"],"confidence":"high|medium|low"}}'
@@ -1444,7 +1444,7 @@ def _consultation_semantic_prompt(*, context: str) -> str:
 
 
 def _consultation_execution_fact_prompt(*, context: str, structure: str) -> str:
-    return f"""你是会诊意见执行事实核对器。本次只核对LX0609-020和LX0609-023。输入包含本次就诊会诊文书及后续候选执行事件，包括病程、医嘱、检查、检验和手术记录。不要输出客户状态、解释或原文。
+    return f"""你是会诊意见执行事实核对器。本次只核对LX0609-03-01-01和LX0609-03-01-04。输入包含本次就诊会诊文书及后续候选执行事件，包括病程、医嘱、检查、检验和手术记录。不要输出客户状态、解释或原文。
 
 先内部识别已完成正式意见和实际执行记录，但不要输出episode图：
 - 020：所有已完成意见都有可唯一关联的同文书或后续执行=execution_all_present；任一完成意见没有任何执行候选=execution_missing；没有已完成意见=no_completed_opinion；存在可能相关动作但多次会诊下无法唯一归属=unknown。4份完成意见只有3份能找到执行，必须execution_missing。“遵会诊意见执行”虽空泛但证明执行存在。
@@ -1456,7 +1456,7 @@ Python已提供安全结构摘要，只表示行数和同文书执行候选，�
 - same_document_vague_candidate_refs中的每一项都必须检查是否被后续病程、医嘱、检查、检验或手术中的具体执行补足；只要有一项未被明确补足，023必须execution_vague，不能因其他执行具体而输出execution_specific。
 - 某完成意见缺少同文书执行时，若execution_candidate_refs中存在可能相关动作但多次会诊下不能唯一归属，020必须unknown；只有确认没有任何候选执行才是execution_missing。
 只输出：
-{{"facts":{{"LX0609-020":{{"fact":"execution_all_present|execution_missing|no_completed_opinion|unknown","evidence_refs":["输入ref"],"confidence":"high|medium|low"}},"LX0609-023":{{"fact":"execution_specific|execution_vague|execution_absent|unknown","evidence_refs":["输入ref"],"confidence":"high|medium|low"}}}}}}
+{{"facts":{{"LX0609-03-01-01":{{"fact":"execution_all_present|execution_missing|no_completed_opinion|unknown","evidence_refs":["输入ref"],"confidence":"high|medium|low"}},"LX0609-03-01-04":{{"fact":"execution_specific|execution_vague|execution_absent|unknown","evidence_refs":["输入ref"],"confidence":"high|medium|low"}}}}}}
 
 输入文书：
 {context}"""
@@ -1515,10 +1515,10 @@ def _result_confidence(payload: Mapping[str, Any] | None, rule_id: str) -> str:
 
 
 _SEMANTIC_EXECUTION_REASONS = {
-    "LX0609-020": frozenset(
+    "LX0609-03-01-01": frozenset(
         {"execution_specific", "execution_missing", "execution_source_incomplete"}
     ),
-    "LX0609-023": frozenset(
+    "LX0609-03-01-04": frozenset(
         {"execution_specific_summarized", "execution_vague_or_copied", "execution_record_missing", "execution_time_unresolved", "execution_source_incomplete"}
     ),
 }
@@ -1567,10 +1567,10 @@ def _derive_execution_reasons(
         if (quality := _embedded_execution_quality(content)) is not None
     }
 
-    confidence_020 = _result_confidence(payload, "LX0609-020")
-    confidence_023 = _result_confidence(payload, "LX0609-023")
-    semantic_result_020_valid = _has_valid_high_semantic_result(payload, "LX0609-020")
-    semantic_result_023_valid = _has_valid_high_semantic_result(payload, "LX0609-023")
+    confidence_020 = _result_confidence(payload, "LX0609-03-01-01")
+    confidence_023 = _result_confidence(payload, "LX0609-03-01-04")
+    semantic_result_020_valid = _has_valid_high_semantic_result(payload, "LX0609-03-01-01")
+    semantic_result_023_valid = _has_valid_high_semantic_result(payload, "LX0609-03-01-04")
     deterministic_consultation_refs = {
         embedded_by_ref[execution_ref][0]
         for execution_ref in deterministic_embedded_quality
@@ -2150,10 +2150,10 @@ async def execute_luxian_0609_native_consultation_rules(
         )
 
     semantic_rule_ids = tuple(
-        rule_id for rule_id in selected if rule_id in {"LX0609-021", "LX0609-022"}
+        rule_id for rule_id in selected if rule_id in {"LX0609-03-01-02", "LX0609-03-01-03"}
     )
     execution_rule_ids = tuple(
-        rule_id for rule_id in selected if rule_id in {"LX0609-020", "LX0609-023"}
+        rule_id for rule_id in selected if rule_id in {"LX0609-03-01-01", "LX0609-03-01-04"}
     )
     semantic_projection = _build_fact_projection(
         {
@@ -2274,7 +2274,7 @@ async def execute_luxian_0609_native_consultation_rules(
                         fact_projection.documents,
                         selected_rule_ids=rule_ids,
                     )
-                    execution_020 = execution_facts.get("LX0609-020")
+                    execution_020 = execution_facts.get("LX0609-03-01-01")
                     execution_all_coverage_unproven = bool(
                         execution_020 is not None
                         and execution_020.fact == "execution_all_present"
@@ -2340,7 +2340,7 @@ async def execute_luxian_0609_native_consultation_rules(
             continue
         for rule_id in rule_ids:
             state = states[rule_id]
-            if rule_id == "LX0609-020" and (
+            if rule_id == "LX0609-03-01-01" and (
                 execution_all_coverage_unproven
                 or execution_missing_has_unresolved_candidates
             ):
@@ -2374,7 +2374,7 @@ async def execute_luxian_0609_native_consultation_rules(
         status, reason_code = resolved.status, resolved.reason_code
         if (
             course_has_query_error
-            and rule_id in {"LX0609-020", "LX0609-023"}
+            and rule_id in {"LX0609-03-01-01", "LX0609-03-01-04"}
             and status == "data_gap"
         ):
             status, reason_code = "technical_error", "source_query_error"
@@ -2468,20 +2468,20 @@ async def execute_luxian_0609_native_consultation_rules(
         rows_by_source
     )
     programmatic_reasons: dict[str, str] = {}
-    if "LX0609-021" in selected:
+    if "LX0609-03-01-02" in selected:
         purpose_reason = _programmatic_purpose_reason(consultation_rows)
         if purpose_reason is not None:
-            programmatic_reasons["LX0609-021"] = purpose_reason
-    if "LX0609-022" in selected:
+            programmatic_reasons["LX0609-03-01-02"] = purpose_reason
+    if "LX0609-03-01-03" in selected:
         opinion_reason = _programmatic_opinion_reason(consultation_rows)
         if opinion_reason is not None:
-            programmatic_reasons["LX0609-022"] = opinion_reason
+            programmatic_reasons["LX0609-03-01-03"] = opinion_reason
     if (
-        "LX0609-023" in selected
+        "LX0609-03-01-04" in selected
         and _reconsultation_execution_by_ref(rows_by_source)
     ):
         # 完整复会诊闭环已经由严格 Python 条件唯一绑定，无需先把正文送模型。
-        programmatic_reasons["LX0609-023"] = "execution_specific_summarized"
+        programmatic_reasons["LX0609-03-01-04"] = "execution_specific_summarized"
     semantic_selected = tuple(
         rule_id
         for rule_id in selected
@@ -2527,15 +2527,15 @@ async def execute_luxian_0609_native_consultation_rules(
 
     try:
         analysis_rule_ids = list(semantic_selected)
-        if "LX0609-020" in semantic_selected and "LX0609-023" not in analysis_rule_ids:
-            analysis_rule_ids.append("LX0609-023")
+        if "LX0609-03-01-01" in semantic_selected and "LX0609-03-01-04" not in analysis_rule_ids:
+            analysis_rule_ids.append("LX0609-03-01-04")
         response = await llm_client.generate(
             _prompt(
                 selected=analysis_rule_ids,
                 context=_context(rows_by_source),
                 opinion_review_context=(
                     _opinion_review_context(consultation_rows)
-                    if "LX0609-022" in analysis_rule_ids else "未请求"
+                    if "LX0609-03-01-03" in analysis_rule_ids else "未请求"
                 ),
                 course_source_complete=course_source_complete,
             )
@@ -2605,12 +2605,12 @@ async def execute_luxian_0609_native_consultation_rules(
             reason_code = programmatic_reasons[rule_id]
             status = _REASON_STATUS[rule_id][reason_code]
             executor_type = "program"
-        elif rule_id == "LX0609-020":
+        elif rule_id == "LX0609-03-01-01":
             reason_code = reason_020
             status = _REASON_STATUS[rule_id].get(reason_code, "data_gap")
             executor_type = "llm"
             confidence_bucket = confidence_020
-        elif rule_id == "LX0609-022":
+        elif rule_id == "LX0609-03-01-03":
             reason_code = reason_022
             status = _REASON_STATUS[rule_id].get(reason_code, "data_gap")
             executor_type = "llm"
@@ -2622,7 +2622,7 @@ async def execute_luxian_0609_native_consultation_rules(
             raw = raw_results.get(rule_id)
             raw = raw if isinstance(raw, Mapping) else {}
             reason_code = str(raw.get("reason_code") or "").strip()
-            if rule_id == "LX0609-023":
+            if rule_id == "LX0609-03-01-04":
                 reason_code = reason_023
                 confidence_bucket = confidence_023
             if reason_code not in _REASON_STATUS[rule_id]:
@@ -2630,7 +2630,7 @@ async def execute_luxian_0609_native_consultation_rules(
                 status = "data_gap"
             else:
                 status = _REASON_STATUS[rule_id][reason_code]
-                if rule_id == "LX0609-021":
+                if rule_id == "LX0609-03-01-02":
                     confidence_bucket = _confidence_bucket(raw)
                     if confidence_bucket != "high":
                         reason_code = "semantic_low_confidence"

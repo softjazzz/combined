@@ -46,18 +46,18 @@ from ..luxian_0609_programmatic_rules import evaluate_luxian_0609_programmatic_r
 
 
 BASIC_TIMELINESS_RULE_IDS = (
-    "LX0609-001",
-    "LX0609-002",
-    "LX0609-004",
-    "LX0609-005",
-    "LX0609-006",
+    "LX0609-01-01-01",
+    "LX0609-01-02-01",
+    "LX0609-09-01-01",
+    "LX0609-02-01-01",
+    "LX0609-02-01-02",
 )
 EXECUTOR_KEY = "basic_timeliness"
-_FIRST_COURSE_RULE_ID = "LX0609-002"
+_FIRST_COURSE_RULE_ID = "LX0609-01-02-01"
 _ADMISSION_ANCHOR_RULE_IDS = frozenset(
-    {"LX0609-001", "LX0609-005", "LX0609-006"}
+    {"LX0609-01-01-01", "LX0609-02-01-01", "LX0609-02-01-02"}
 )
-_COURSE_SOURCE_RULE_IDS = frozenset({"LX0609-005", "LX0609-006"})
+_COURSE_SOURCE_RULE_IDS = frozenset({"LX0609-02-01-01", "LX0609-02-01-02"})
 _TRUSTED_ADMISSION_TIME_BASES = frozenset(
     {
         "cdm_inpat_registration_admission_datetime",
@@ -111,27 +111,27 @@ _MAX_SEMANTIC_ROUND_CANDIDATES = 8
 _MAX_SEMANTIC_ROUND_BODY_CHARS = 1800
 _ROUND_ROLE_SCHEMA_VERSION = "lx0609-006-round-role-v1"
 _TYPED_RULE_IDS = (
-    "LX0609-001",
-    "LX0609-002",
-    "LX0609-004",
-    "LX0609-005",
-    "LX0609-006",
+    "LX0609-01-01-01",
+    "LX0609-01-02-01",
+    "LX0609-09-01-01",
+    "LX0609-02-01-01",
+    "LX0609-02-01-02",
 )
 _TYPED_SOURCE_KEYS_BY_RULE = {
-    "LX0609-001": (
+    "LX0609-01-01-01": (
         "admission_record",
         "discharge_record",
         EVALUATION_HORIZON_SOURCE_KEY,
         "inpat_registration",
     ),
-    "LX0609-002": (
+    "LX0609-01-02-01": (
         "admission_record",
         EVALUATION_HORIZON_SOURCE_KEY,
         "first_course_record",
         "inpat_registration",
     ),
-    "LX0609-004": (CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY, "rescue_record"),
-    "LX0609-005": (
+    "LX0609-09-01-01": (CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY, "rescue_record"),
+    "LX0609-02-01-01": (
         "admission_record",
         "daily_course_record",
         "discharge_record",
@@ -139,7 +139,7 @@ _TYPED_SOURCE_KEYS_BY_RULE = {
         "inpat_registration",
         "senior_course_record",
     ),
-    "LX0609-006": (
+    "LX0609-02-01-02": (
         "admission_record",
         "daily_course_record",
         "discharge_record",
@@ -571,20 +571,20 @@ def _typed_basic_decisions(
     evaluator_version = "basic-timeliness-authoritative-v1"
 
     allowed_sources = {
-        "LX0609-001": (
+        "LX0609-01-01-01": (
             "admission_record",
             "discharge_record",
             EVALUATION_HORIZON_SOURCE_KEY,
             "inpat_registration",
         ),
-        "LX0609-002": (
+        "LX0609-01-02-01": (
             "admission_record",
             EVALUATION_HORIZON_SOURCE_KEY,
             "first_course_record",
             "inpat_registration",
         ),
-        "LX0609-004": (CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY, "rescue_record"),
-        "LX0609-005": (
+        "LX0609-09-01-01": (CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY, "rescue_record"),
+        "LX0609-02-01-01": (
             "admission_record",
             "daily_course_record",
             "discharge_record",
@@ -592,7 +592,7 @@ def _typed_basic_decisions(
             "inpat_registration",
             "senior_course_record",
         ),
-        "LX0609-006": (
+        "LX0609-02-01-02": (
             "admission_record",
             "daily_course_record",
             "discharge_record",
@@ -758,7 +758,7 @@ def _typed_basic_decisions(
         return bound
 
     admission_needed = any(
-        rule_id in {"LX0609-001", "LX0609-002", "LX0609-005", "LX0609-006"}
+        rule_id in {"LX0609-01-01-01", "LX0609-01-02-01", "LX0609-02-01-01", "LX0609-02-01-02"}
         for rule_id in rule_ids
     )
     admission_issue: tuple[str, bool] | None = None
@@ -936,7 +936,7 @@ def _typed_basic_decisions(
         if maturity_state == "not_reached":
             return (
                 not_applicable(rule_id, "evaluation_window_not_mature")
-                if rule_id == "LX0609-006"
+                if rule_id == "LX0609-02-01-02"
                 else gap(rule_id, "evaluation_window_not_mature")
             )
         if maturity_state == "conflict":
@@ -1010,7 +1010,7 @@ def _typed_basic_decisions(
 
     decisions: list[RuleDecision] = []
     for rule_id in rule_ids:
-        if rule_id == "LX0609-002":
+        if rule_id == "LX0609-01-02-01":
             anchor, _anchor_date, anchor_gap = admission_anchor(rule_id)
             if anchor_gap is not None or anchor is None:
                 decisions.append(
@@ -1156,7 +1156,7 @@ def _typed_basic_decisions(
                 decisions.append(gap(rule_id, "required_field_missing"))
             continue
 
-        if rule_id == "LX0609-004":
+        if rule_id == "LX0609-09-01-01":
             rescue_issue = source_issue(("rescue_record",))
             try:
                 rescue_rows = (
@@ -1410,7 +1410,7 @@ def _typed_basic_decisions(
                 decisions.append(gap(rule_id, "required_field_missing"))
             continue
 
-        if rule_id == "LX0609-001":
+        if rule_id == "LX0609-01-01-01":
             if admission_issue is not None:
                 reason, technical = admission_issue
                 decisions.append(gap(rule_id, reason, technical=technical))
@@ -1601,7 +1601,7 @@ def _typed_basic_decisions(
             course_events = ()
 
         def qualifies(role: CourseRoundRole) -> bool:
-            if rule_id == "LX0609-005":
+            if rule_id == "LX0609-02-01-01":
                 return role in {
                     CourseRoundRole.ATTENDING_OR_ABOVE,
                     CourseRoundRole.SENIOR,
@@ -1614,7 +1614,7 @@ def _typed_basic_decisions(
         semantic_round_unknown = False
         horizon_datetime_for_filter: datetime | None = None
         horizon_date_for_filter: date | None = None
-        if rule_id == "LX0609-006":
+        if rule_id == "LX0609-02-01-02":
             try:
                 horizon_rows_for_filter = tuple(
                     materials.rows(EVALUATION_HORIZON_SOURCE_KEY)
@@ -1659,7 +1659,7 @@ def _typed_basic_decisions(
                 if semantic_round_roles is not None
                 else classify_course_round_role(event.row, source_key=source_key)
             )
-            if rule_id == "LX0609-006":
+            if rule_id == "LX0609-02-01-02":
                 if row_id in semantic_round_body_missing:
                     ambiguous_round = True
                     continue
@@ -1677,7 +1677,7 @@ def _typed_basic_decisions(
             elif role is CourseRoundRole.AMBIGUOUS:
                 ambiguous_round = True
 
-        threshold = timedelta(hours=48 if rule_id == "LX0609-005" else 72)
+        threshold = timedelta(hours=48 if rule_id == "LX0609-02-01-01" else 72)
         qualifying_times = tuple(value for value, *_ in qualifying_events)
         if anchor is not None:
             elapsed_states = tuple(
@@ -1722,16 +1722,16 @@ def _typed_basic_decisions(
                     rule_id=rule_id,
                     target_document=(
                         "attending_course_record"
-                        if rule_id == "LX0609-005"
+                        if rule_id == "LX0609-02-01-01"
                         else "senior_course_record"
                     ),
                     source_label=(
                         "主治医师及以上首次查房记录"
-                        if rule_id == "LX0609-005"
+                        if rule_id == "LX0609-02-01-01"
                         else "副主任医师或主任医师首次查房记录"
                     ),
                     state="within",
-                    threshold_hours=48 if rule_id == "LX0609-005" else 72,
+                    threshold_hours=48 if rule_id == "LX0609-02-01-01" else 72,
                     anchor=anchor,
                     anchor_date=anchor_date,
                     observed=observed,
@@ -1742,7 +1742,7 @@ def _typed_basic_decisions(
         elif course_issue is not None:
             reason, technical = course_issue
             decisions.append(gap(rule_id, reason, technical=technical))
-        elif rule_id == "LX0609-006" and anchor is not None and (
+        elif rule_id == "LX0609-02-01-02" and anchor is not None and (
             maturity_decision := missing_target_decision(
                 rule_id,
                 anchor=anchor,
@@ -1785,16 +1785,16 @@ def _typed_basic_decisions(
                     rule_id=rule_id,
                     target_document=(
                         "attending_course_record"
-                        if rule_id == "LX0609-005"
+                        if rule_id == "LX0609-02-01-01"
                         else "senior_course_record"
                     ),
                     source_label=(
                         "主治医师及以上首次查房记录"
-                        if rule_id == "LX0609-005"
+                        if rule_id == "LX0609-02-01-01"
                         else "副主任医师或主任医师首次查房记录"
                     ),
                     state="late",
-                    threshold_hours=48 if rule_id == "LX0609-005" else 72,
+                    threshold_hours=48 if rule_id == "LX0609-02-01-01" else 72,
                     anchor=anchor,
                     anchor_date=anchor_date,
                     observed=observed,
@@ -1817,7 +1817,7 @@ def _typed_basic_decisions(
                 decisions.append(missing_decision)
                 continue
             # 005 暂保留既有空来源语义；006 已由成熟门确认到期，可交付确定缺失。
-            if rule_id == "LX0609-005":
+            if rule_id == "LX0609-02-01-01":
                 decisions.append(gap(rule_id, "source_empty"))
                 continue
             decision = conclusive(
@@ -1832,16 +1832,16 @@ def _typed_basic_decisions(
                     rule_id=rule_id,
                     target_document=(
                         "attending_course_record"
-                        if rule_id == "LX0609-005"
+                        if rule_id == "LX0609-02-01-01"
                         else "senior_course_record"
                     ),
                     source_label=(
                         "主治医师及以上首次查房记录"
-                        if rule_id == "LX0609-005"
+                        if rule_id == "LX0609-02-01-01"
                         else "副主任医师或主任医师首次查房记录"
                     ),
                     state="missing",
-                    threshold_hours=48 if rule_id == "LX0609-005" else 72,
+                    threshold_hours=48 if rule_id == "LX0609-02-01-01" else 72,
                     anchor=anchor,
                     anchor_date=anchor_date,
                 ),
@@ -2092,7 +2092,7 @@ def _with_006_semantic_failure(
                 reason_code=reason_code,
                 confidence=None,
             )
-            if decision.rule_id == "LX0609-006"
+            if decision.rule_id == "LX0609-02-01-02"
             else decision
             for decision in result.decisions
         ),
@@ -2125,7 +2125,7 @@ def execute_luxian_0609_native_basic_timeliness(
     typed_requested = {
         str(rule_id or "").strip().upper() for rule_id in decision_rule_ids
     }
-    if "LX0609-006" not in typed_requested or evidence_materials is None:
+    if "LX0609-02-01-02" not in typed_requested or evidence_materials is None:
         return _execute_luxian_0609_native_basic_timeliness(
             rule_ids=rule_ids,
             evidence_payload=evidence_payload,
@@ -2171,7 +2171,7 @@ def execute_luxian_0609_native_basic_timeliness(
         semantic_round_body_missing=body_missing,
     )
     senior_decision = next(
-        (item for item in baseline.decisions if item.rule_id == "LX0609-006"),
+        (item for item in baseline.decisions if item.rule_id == "LX0609-02-01-02"),
         None,
     )
     if (
@@ -2206,7 +2206,7 @@ def execute_luxian_0609_native_basic_timeliness(
                     reason_code="candidate_scope_incomplete",
                     confidence=None,
                 )
-                if decision.rule_id == "LX0609-006"
+                if decision.rule_id == "LX0609-02-01-02"
                 else decision
                 for decision in baseline.decisions
             ),

@@ -74,13 +74,13 @@ from .source_evidence_reader import (
 
 
 COURSE_QUALITY_RULE_IDS = (
-    "LX0609-007",
-    "LX0609-008",
-    "LX0609-009",
-    "LX0609-016",
-    "LX0609-017",
-    "LX0609-018",
-    "LX0609-077",
+    "LX0609-02-01-03",
+    "LX0609-02-01-04",
+    "LX0609-02-01-05",
+    "LX0609-12-01-01",
+    "LX0609-12-01-02",
+    "LX0609-01-01-02",
+    "LX0609-01-02-02",
 )
 EXECUTOR_KEY = "course_quality"
 
@@ -121,11 +121,11 @@ _COMPLAINT_PATTERN = re.compile(r"主诉\s*[:：]\s*[^；;。]{2,}")
 _DIAGNOSIS_PATTERN = re.compile(r"(?:第一诊断|主要诊断|初步诊断|入院诊断|首页第一诊断)\s*[:：]\s*[^；;。]{2,}")
 
 _RULE_CONTEXT_SOURCES = {
-    "LX0609-007": _RULE_007_RECORD_SOURCES,
-    "LX0609-008": _TIMELINE_SOURCES,
-    "LX0609-009": _TIMELINE_SOURCES,
-    "LX0609-016": ("admission_record", "first_course_record"),
-    "LX0609-018": ("admission_record", "diagnosis", "admission_record_diagnosis"),
+    "LX0609-02-01-03": _RULE_007_RECORD_SOURCES,
+    "LX0609-02-01-04": _TIMELINE_SOURCES,
+    "LX0609-02-01-05": _TIMELINE_SOURCES,
+    "LX0609-12-01-01": ("admission_record", "first_course_record"),
+    "LX0609-01-01-02": ("admission_record", "diagnosis", "admission_record_diagnosis"),
 }
 
 _CONTROLLED_MESSAGES = {
@@ -247,7 +247,7 @@ def _context(
     context_rows = list(
         _substantive_rows(documents, _RULE_CONTEXT_SOURCES[rule_id])
     )
-    if rule_id == "LX0609-018":
+    if rule_id == "LX0609-01-01-02":
         # trigger 读取完整 bounded diagnosis；模型上下文只投影唯一解析出的第一入院诊断。
         context_rows = [
             item for item in context_rows if item[0] not in _LX018_DIAGNOSIS_SOURCES
@@ -363,7 +363,7 @@ def _lx018_pre_model_outcome(
     length_result = _lx018_length_criterion_result(documents)
     if length_result.status is CriterionStatus.UNKNOWN:
         return _CourseSemanticOutcome(
-            rule_id="LX0609-018",
+            rule_id="LX0609-01-01-02",
             status="data_gap",
             reason_code="required_field_missing",
             executor_type="program",
@@ -374,7 +374,7 @@ def _lx018_pre_model_outcome(
         )
     if not _lx018_primary_diagnosis_available(documents):
         return _CourseSemanticOutcome(
-            rule_id="LX0609-018",
+            rule_id="LX0609-01-01-02",
             status=(
                 "non_compliant"
                 if length_result.status is CriterionStatus.FAILED
@@ -396,7 +396,7 @@ def _lx018_pre_model_outcome(
 
 def _render_copy_outcome(outcome: _CopyRuleOutcome) -> dict[str, Any]:
     item = _result(
-        "LX0609-017",
+        "LX0609-12-01-02",
         outcome.status,
         outcome.reason_code,
         executor_type=outcome.executor_type,
@@ -438,8 +438,8 @@ def _typed_course_semantic_documents(
     """只从同一 evidence session 取得 016/018 裁剪材料。"""
 
     required_sources = {
-        "LX0609-016": ("admission_record", "first_course_record"),
-        "LX0609-018": (
+        "LX0609-12-01-01": ("admission_record", "first_course_record"),
+        "LX0609-01-01-02": (
             "admission_record",
             "diagnosis",
             "admission_record_diagnosis",
@@ -509,8 +509,8 @@ def _course_semantic_decision(
     ):
         raise ValueError("typed course semantic evidence session mismatch")
     required_sources = {
-        "LX0609-016": ("admission_record", "first_course_record"),
-        "LX0609-018": (
+        "LX0609-12-01-01": ("admission_record", "first_course_record"),
+        "LX0609-01-01-02": (
             "admission_record",
             "diagnosis",
             "admission_record_diagnosis",
@@ -651,13 +651,13 @@ async def execute_luxian_0609_native_course_quality_rules(
     }
     if any(
         rule_id not in {
-            "LX0609-007",
-            "LX0609-008",
-            "LX0609-009",
-            "LX0609-016",
-            "LX0609-017",
-            "LX0609-018",
-            "LX0609-077",
+            "LX0609-02-01-03",
+            "LX0609-02-01-04",
+            "LX0609-02-01-05",
+            "LX0609-12-01-01",
+            "LX0609-12-01-02",
+            "LX0609-01-01-02",
+            "LX0609-01-02-02",
         }
         for rule_id in typed_requested
     ) or not typed_requested.issubset(set(selected)):
@@ -691,7 +691,7 @@ async def execute_luxian_0609_native_course_quality_rules(
     copy_documents = documents
     copy_source_failure = ""
     coordinates = (institute_id, patient_id, visit_id)
-    if "LX0609-017" in selected and "LX0609-017" not in projection_gap_rule_ids:
+    if "LX0609-12-01-02" in selected and "LX0609-12-01-02" not in projection_gap_rule_ids:
         if not all(str(value or "").strip() for value in coordinates):
             copy_source_failure = "course_comparison_source_unavailable"
         else:
@@ -738,7 +738,7 @@ async def execute_luxian_0609_native_course_quality_rules(
     api_time = 0.0
 
     def emit_copy(outcome: _CopyRuleOutcome) -> None:
-        if "LX0609-017" in typed_requested:
+        if "LX0609-12-01-02" in typed_requested:
             assert evidence_snapshot is not None
             assert evidence_materials is not None
             decisions.append(
@@ -750,7 +750,7 @@ async def execute_luxian_0609_native_course_quality_rules(
             )
             display_facts = _copy_customer_display_facts(outcome)
             if display_facts is not None:
-                customer_display_facts.append(("LX0609-017", display_facts))
+                customer_display_facts.append(("LX0609-12-01-02", display_facts))
         else:
             results.append(_render_copy_outcome(outcome))
 
@@ -772,7 +772,7 @@ async def execute_luxian_0609_native_course_quality_rules(
     for rule_id in selected:
         if rule_id in projection_gap_rule_ids:
             continue
-        if rule_id == "LX0609-007" and rule_id in typed_requested:
+        if rule_id == "LX0609-02-01-03" and rule_id in typed_requested:
             assert evidence_snapshot is not None
             assert evidence_materials is not None
             course_decision = _rule_007_decision(
@@ -784,9 +784,9 @@ async def execute_luxian_0609_native_course_quality_rules(
                 materials=evidence_materials,
                 decision=course_decision,
             )) is not None:
-                customer_display_facts.append(("LX0609-007", display_facts))
+                customer_display_facts.append(("LX0609-02-01-03", display_facts))
             continue
-        if rule_id in {"LX0609-008", "LX0609-009"} and rule_id in typed_requested:
+        if rule_id in {"LX0609-02-01-04", "LX0609-02-01-05"} and rule_id in typed_requested:
             assert evidence_snapshot is not None
             assert evidence_materials is not None
             severity_execution = await evaluate_rules_008_009_typed(
@@ -804,7 +804,7 @@ async def execute_luxian_0609_native_course_quality_rules(
             total_tokens += severity_execution.total_tokens
             api_time += severity_execution.api_time
             continue
-        if rule_id == "LX0609-077" and rule_id in typed_requested:
+        if rule_id == "LX0609-01-02-02" and rule_id in typed_requested:
             assert evidence_snapshot is not None
             assert evidence_materials is not None
             differential_execution = await evaluate_rule_077(
@@ -819,7 +819,7 @@ async def execute_luxian_0609_native_course_quality_rules(
             total_tokens += differential_execution.total_tokens
             api_time += differential_execution.api_time
             continue
-        if rule_id in {"LX0609-016", "LX0609-018"} and rule_id in typed_requested:
+        if rule_id in {"LX0609-12-01-01", "LX0609-01-01-02"} and rule_id in typed_requested:
             assert evidence_snapshot is not None
             assert evidence_materials is not None
             typed_documents, terminal_outcome = _typed_course_semantic_documents(
@@ -830,7 +830,7 @@ async def execute_luxian_0609_native_course_quality_rules(
             if terminal_outcome is not None:
                 emit_course_semantic(terminal_outcome)
                 continue
-            if rule_id == "LX0609-016":
+            if rule_id == "LX0609-12-01-01":
                 comparison_material_state = _rule_016_comparison_material_state(
                     typed_documents
                 )
@@ -854,7 +854,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                         )
                     )
                     continue
-            if rule_id == "LX0609-016":
+            if rule_id == "LX0609-12-01-01":
                 copy_coverage = _rule_016_copy_coverage(typed_documents)
                 if copy_coverage is not None:
                     exact_copy = copy_coverage >= _RULE_016_EXACT_MATCH
@@ -886,7 +886,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                     )
                 )
                 continue
-            if rule_id == "LX0609-018":
+            if rule_id == "LX0609-01-01-02":
                 terminal_outcome = _lx018_pre_model_outcome(typed_documents)
                 if terminal_outcome is not None:
                     emit_course_semantic(terminal_outcome)
@@ -896,7 +896,7 @@ async def execute_luxian_0609_native_course_quality_rules(
             if (
                 not context
                 or (
-                    rule_id != "LX0609-018"
+                    rule_id != "LX0609-01-01-02"
                     and (
                         wrapper is None
                         or not _clean(wrapper.get("custom_prompt"))
@@ -914,13 +914,13 @@ async def execute_luxian_0609_native_course_quality_rules(
                 continue
             length_result = (
                 _lx018_length_criterion_result(typed_documents)
-                if rule_id == "LX0609-018"
+                if rule_id == "LX0609-01-01-02"
                 else None
             )
             if llm_client is None:
                 unresolved_semantic = (
                     _lx018_unknown_semantic_result("model_transport_error")
-                    if rule_id == "LX0609-018"
+                    if rule_id == "LX0609-01-01-02"
                     else None
                 )
                 emit_course_semantic(
@@ -931,12 +931,12 @@ async def execute_luxian_0609_native_course_quality_rules(
                             if length_result is not None
                             and length_result.status is CriterionStatus.FAILED
                             else "data_gap"
-                            if rule_id == "LX0609-018"
+                            if rule_id == "LX0609-01-01-02"
                             else "data_gap"
                         ),
                         reason_code=(
                             "source_readiness_unproven"
-                            if rule_id == "LX0609-018"
+                            if rule_id == "LX0609-01-01-02"
                             else "course_llm_unavailable"
                         ),
                         executor_type="program",
@@ -953,21 +953,21 @@ async def execute_luxian_0609_native_course_quality_rules(
             try:
                 response = await llm_client.generate(
                     _lx018_prompt(context=context)
-                    if rule_id == "LX0609-018"
+                    if rule_id == "LX0609-01-01-02"
                     else _prompt(wrapper, context=context),
                     **(
                         {
                             "max_completion_tokens": 600,
                             "allow_length_retry": False,
                         }
-                        if rule_id == "LX0609-018"
+                        if rule_id == "LX0609-01-01-02"
                         else {}
                     ),
                 )
             except Exception:
                 unresolved_semantic = (
                     _lx018_unknown_semantic_result("model_transport_error")
-                    if rule_id == "LX0609-018"
+                    if rule_id == "LX0609-01-01-02"
                     else None
                 )
                 emit_course_semantic(
@@ -978,12 +978,12 @@ async def execute_luxian_0609_native_course_quality_rules(
                             if length_result is not None
                             and length_result.status is CriterionStatus.FAILED
                             else "data_gap"
-                            if rule_id == "LX0609-018"
+                            if rule_id == "LX0609-01-01-02"
                             else "technical_error"
                         ),
                         reason_code=(
                             "source_readiness_unproven"
-                            if rule_id == "LX0609-018"
+                            if rule_id == "LX0609-01-01-02"
                             else "model_transport_error"
                         ),
                         executor_type="llm",
@@ -1002,7 +1002,7 @@ async def execute_luxian_0609_native_course_quality_rules(
             total_tokens += total
             api_time += elapsed
             is_compliant = _parse_is_compliant(response)
-            if rule_id == "LX0609-018":
+            if rule_id == "LX0609-01-01-02":
                 atomic_result = _lx018_atomic_semantic_result(response)
                 if atomic_result is None:
                     unresolved_semantic = _lx018_unknown_semantic_result(
@@ -1096,7 +1096,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                 )
             )
             continue
-        if rule_id == "LX0609-017":
+        if rule_id == "LX0609-12-01-02":
             if copy_source_failure:
                 emit_copy(
                     _CopyRuleOutcome(
@@ -1127,7 +1127,7 @@ async def execute_luxian_0609_native_course_quality_rules(
             continue
 
         controlled_fact = ""
-        if rule_id == "LX0609-007":
+        if rule_id == "LX0609-02-01-03":
             outcome = evaluate_rule_007_legacy(
                 serious_state=serious_state,
                 critical_state=critical_state,
@@ -1150,7 +1150,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                 )
             )
             continue
-        elif rule_id == "LX0609-008":
+        elif rule_id == "LX0609-02-01-04":
             if serious_state == "absent":
                 results.append(
                     _result(
@@ -1182,7 +1182,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                 )
                 continue
             controlled_fact = "当前就诊存在病重医嘱"
-        elif rule_id == "LX0609-009":
+        elif rule_id == "LX0609-02-01-05":
             if critical_state == "absent":
                 results.append(
                     _result(
@@ -1214,7 +1214,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                 )
                 continue
             controlled_fact = "当前就诊存在病危医嘱"
-        elif rule_id == "LX0609-016":
+        elif rule_id == "LX0609-12-01-01":
             comparison_material_state = _rule_016_comparison_material_state(documents)
             if comparison_material_state == "absent":
                 results.append(
@@ -1261,7 +1261,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                 )
             )
             continue
-        elif rule_id == "LX0609-018":
+        elif rule_id == "LX0609-01-01-02":
             terminal_outcome = _lx018_pre_model_outcome(documents)
             if terminal_outcome is not None:
                 results.append(
@@ -1280,7 +1280,7 @@ async def execute_luxian_0609_native_course_quality_rules(
         if (
             not context
             or (
-                rule_id != "LX0609-018"
+                rule_id != "LX0609-01-01-02"
                 and (
                     wrapper is None
                     or not _clean(wrapper.get("custom_prompt"))
@@ -1298,13 +1298,13 @@ async def execute_luxian_0609_native_course_quality_rules(
             continue
         length_result = (
             _lx018_length_criterion_result(documents)
-            if rule_id == "LX0609-018"
+            if rule_id == "LX0609-01-01-02"
             else None
         )
         if llm_client is None:
             unresolved_semantic = (
                 _lx018_unknown_semantic_result("model_transport_error")
-                if rule_id == "LX0609-018"
+                if rule_id == "LX0609-01-01-02"
                 else None
             )
             results.append(
@@ -1318,7 +1318,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                     ),
                     (
                         "source_readiness_unproven"
-                        if rule_id == "LX0609-018"
+                        if rule_id == "LX0609-01-01-02"
                         else "course_llm_unavailable"
                     ),
                     executor_type="program",
@@ -1335,21 +1335,21 @@ async def execute_luxian_0609_native_course_quality_rules(
         try:
             response = await llm_client.generate(
                 _lx018_prompt(context=context)
-                if rule_id == "LX0609-018"
+                if rule_id == "LX0609-01-01-02"
                 else _prompt(wrapper, context=context),
                 **(
                     {
                         "max_completion_tokens": 600,
                         "allow_length_retry": False,
                     }
-                    if rule_id == "LX0609-018"
+                    if rule_id == "LX0609-01-01-02"
                     else {}
                 ),
             )
         except Exception:
             unresolved_semantic = (
                 _lx018_unknown_semantic_result("model_transport_error")
-                if rule_id == "LX0609-018"
+                if rule_id == "LX0609-01-01-02"
                 else None
             )
             results.append(
@@ -1360,12 +1360,12 @@ async def execute_luxian_0609_native_course_quality_rules(
                         if length_result is not None
                         and length_result.status is CriterionStatus.FAILED
                         else "data_gap"
-                        if rule_id == "LX0609-018"
+                        if rule_id == "LX0609-01-01-02"
                         else "data_gap"
                     ),
                     (
                         "source_readiness_unproven"
-                        if rule_id == "LX0609-018"
+                        if rule_id == "LX0609-01-01-02"
                         else "course_llm_failure"
                     ),
                     executor_type="llm",
@@ -1384,7 +1384,7 @@ async def execute_luxian_0609_native_course_quality_rules(
         total_tokens += total
         api_time += elapsed
         is_compliant = _parse_is_compliant(response)
-        if rule_id != "LX0609-018" and is_compliant is None:
+        if rule_id != "LX0609-01-01-02" and is_compliant is None:
             results.append(
                 _result(
                     rule_id,
@@ -1398,7 +1398,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                 )
             )
             continue
-        if rule_id == "LX0609-018":
+        if rule_id == "LX0609-01-01-02":
             atomic_result = _lx018_atomic_semantic_result(response)
             if atomic_result is None:
                 unresolved_semantic = _lx018_unknown_semantic_result(

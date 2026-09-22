@@ -48,12 +48,12 @@ from .surgery_text_fact_contract import (
 
 
 SURGERY_GATE_RULE_IDS = (
-    "LX0609-003",
-    "LX0609-024",
-    "LX0609-025",
-    "LX0609-028",
-    "LX0609-031",
-    "LX0609-033",
+    "LX0609-04-02-01",
+    "LX0609-04-02-03",
+    "LX0609-04-02-04",
+    "LX0609-05-01-01",
+    "LX0609-04-02-05",
+    "LX0609-11-01-01",
 )
 EXECUTOR_KEY = "surgery_gate"
 
@@ -67,10 +67,10 @@ _TYPED_003_EVALUATOR_VERSION = "surgery-timeliness-003-ruledecision-v1"
 _TYPED_SURGERY_GATE_EVALUATOR_VERSION = "surgery-gate-ruledecision-shadow-v2"
 _TYPED_DECISION_RULE_IDS = frozenset(SURGERY_GATE_RULE_IDS)
 _TEXT_FACT_RULE_IDS = frozenset(
-    {"LX0609-024", "LX0609-025", "LX0609-028", "LX0609-033"}
+    {"LX0609-04-02-03", "LX0609-04-02-04", "LX0609-05-01-01", "LX0609-11-01-01"}
 )
 _TYPED_TEXT_SOURCES = {
-    "LX0609-024": (
+    "LX0609-04-02-03": (
         "surgery_record", "mr_surgery", "pathology_exam_master",
         "pathology_exam_report", "admission_record_diagnosis", "diagnosis",
         "discharge_record_diagnosis", "inpat_registration.discharge_horizon",
@@ -78,19 +78,19 @@ _TYPED_TEXT_SOURCES = {
     ),
     # 025 的永久性植入事实可由正式手术记录或病程记录确认；mr_surgery 仅是
     # 操作清单，既不能补充字段事实，也不能因行数多而截断本规则的一次受控抽取。
-    "LX0609-025": ("surgery_record", "daily_course_record"),
-    "LX0609-028": (
+    "LX0609-04-02-04": ("surgery_record", "daily_course_record"),
+    "LX0609-05-01-01": (
         "surgery_record", "mr_surgery", "inpat_drug_order", "daily_course_record",
     ),
     # 033 只需要“已实施手术锚点 + 本次手术同意书”；mr_surgery 既不提供
     # 同意书角色也不提供签署事实，纳入只会挤占 2 份文书的安全上下文预算。
-    "LX0609-033": ("surgery_record", "surgery_inform_consent"),
+    "LX0609-11-01-01": ("surgery_record", "surgery_inform_consent"),
 }
 # 033 的已实施手术锚点由同一 snapshot 的严格事实确认，不必把手术记录
 # 正文再次送给模型。模型只读取本次就诊的少量手术知情同意书正文。
 _TYPED_TEXT_PROJECTION_SOURCES = {
     **_TYPED_TEXT_SOURCES,
-    "LX0609-033": ("surgery_inform_consent",),
+    "LX0609-11-01-01": ("surgery_inform_consent",),
 }
 _TYPED_SOURCE_CUSTOMER_LABELS = {
     "surgery_record": "手术记录",
@@ -121,12 +121,12 @@ _RESCUE_SURGERY_PATTERN = re.compile(r"血肿清除|去骨瓣减压|脑疝")
 _MALIGNANT_SURGERY_PATTERN = re.compile(r"恶性|癌|肿瘤|淋巴结清扫|根治术")
 
 _RULE_SOURCES = {
-    "LX0609-003": ("surgery_record", "anesthesia_record"),
-    "LX0609-024": ("surgery_record", "pathology_exam_report"),
-    "LX0609-025": ("surgery_record", "daily_course_record", "implant_usage"),
-    "LX0609-028": ("surgery_record", "inpat_drug_order", "daily_course_record"),
-    "LX0609-031": ("surgery_record", "presurg_summary", "presurg_discussion"),
-    "LX0609-033": ("surgery_record", "surgery_inform_consent", "consent_form"),
+    "LX0609-04-02-01": ("surgery_record", "anesthesia_record"),
+    "LX0609-04-02-03": ("surgery_record", "pathology_exam_report"),
+    "LX0609-04-02-04": ("surgery_record", "daily_course_record", "implant_usage"),
+    "LX0609-05-01-01": ("surgery_record", "inpat_drug_order", "daily_course_record"),
+    "LX0609-04-02-05": ("surgery_record", "presurg_summary", "presurg_discussion"),
+    "LX0609-11-01-01": ("surgery_record", "surgery_inform_consent", "consent_form"),
 }
 
 _CONTROLLED_MESSAGES = {
@@ -423,7 +423,7 @@ def _deterministic_024_outcome(
                 matching_document_refs.append(ref)
         if matching_document_refs:
             return _SurgeryTextOutcome(
-                "LX0609-024",
+                "LX0609-04-02-03",
                 "compliant",
                 "lymph_node_documentation_confirmed",
                 selected_document_refs=tuple(dict.fromkeys(matching_document_refs)),
@@ -457,7 +457,7 @@ def _deterministic_024_outcome(
         )
     )
     return _SurgeryTextOutcome(
-        "LX0609-024",
+        "LX0609-04-02-03",
         "not_applicable",
         "surgery_text_fact_absent",
         selected_document_refs=selected_document_refs,
@@ -522,7 +522,7 @@ def _prompt(wrapper: Mapping[str, Any], context: str) -> str:
         .strip()
     )
     rule_id = str(wrapper.get("rule_id") or wrapper.get("rule_code") or "").strip().upper()
-    if rule_id == "LX0609-025":
+    if rule_id == "LX0609-04-02-04":
         allowed_fields = "、".join(LX0609_025_REQUIRED_FIELDS)
         prompt += (
             "\n补充输出要求：若判定不合规，必须同时返回 missing_fields 数组；仅可使用"
@@ -931,7 +931,7 @@ def _typed_003_decision(
         selected_document_refs: tuple[str, ...] = (),
     ) -> RuleDecision:
         if display_facts is not None and customer_display_facts is not None:
-            customer_display_facts.append(("LX0609-003", display_facts))
+            customer_display_facts.append(("LX0609-04-02-01", display_facts))
         applicability, evidence_state, qc_direction = {
             "compliant": (
                 ApplicabilityState.APPLICABLE,
@@ -960,7 +960,7 @@ def _typed_003_decision(
             ),
         }[final_state]
         return RuleDecision(
-            rule_id="LX0609-003",
+            rule_id="LX0609-04-02-01",
             snapshot_hash=snapshot.snapshot_hash,
             applicability=applicability,
             evidence_state=evidence_state,
@@ -1375,7 +1375,7 @@ def _typed_conservative_surgery_gate_decision(
 ) -> RuleDecision:
     """迁移高风险手术门控，但不把旧关键词/文书存在提升为临床事实。"""
 
-    if rule_id not in _TYPED_DECISION_RULE_IDS - {"LX0609-003"}:
+    if rule_id not in _TYPED_DECISION_RULE_IDS - {"LX0609-04-02-01"}:
         raise ValueError("unsupported typed surgery gate rule")
     if materials.snapshot_hash != snapshot.snapshot_hash:
         raise ValueError("typed surgery gate requires one evidence session")
@@ -1425,7 +1425,7 @@ def _typed_conservative_surgery_gate_decision(
     # 033只检查“已有手术记录时是否缺手术知情同意书”。手术记录来源已完整
     # 查询且为空时，缺手术记录由030负责，不能把033继续推入同意书缺口。
     if (
-        rule_id == "LX0609-033"
+        rule_id == "LX0609-11-01-01"
         and surgery_observation.query_state.value == "empty"
         and surgery_observation.completeness.value == "complete"
     ):
@@ -1462,7 +1462,7 @@ def _typed_conservative_surgery_gate_decision(
             reason_code=surgery_applicability.reason_code,
         )
 
-    if rule_id == "LX0609-031":
+    if rule_id == "LX0609-04-02-05":
         selected_signature_source = ""
         selected_signature_rows: tuple[Mapping[str, Any], ...] = ()
         try:
@@ -1539,16 +1539,16 @@ def _typed_conservative_surgery_gate_decision(
     return decision(
         applicability=(
             ApplicabilityState.UNKNOWN
-            if rule_id in {"LX0609-024", "LX0609-025", "LX0609-028"}
+            if rule_id in {"LX0609-04-02-03", "LX0609-04-02-04", "LX0609-05-01-01"}
             else ApplicabilityState.APPLICABLE
         ),
         evidence_state=EvidenceState.DATA_GAP,
         qc_direction=QcDirection.UNKNOWN,
         reason_code=(
             "source_readiness_unproven"
-            if rule_id == "LX0609-033"
+            if rule_id == "LX0609-11-01-01"
             else "applicability_source_gap"
-            if rule_id in {"LX0609-024", "LX0609-025", "LX0609-028"}
+            if rule_id in {"LX0609-04-02-03", "LX0609-04-02-04", "LX0609-05-01-01"}
             else "required_field_missing"
         ),
     )
@@ -1608,7 +1608,7 @@ def _surgery_text_outcome(
             if projection.document_source_keys.get(evidence_ref)
             in (
                 _TYPED_TEXT_SOURCES[rule_id]
-                if rule_id == "LX0609-033"
+                if rule_id == "LX0609-11-01-01"
                 else _TYPED_TEXT_PROJECTION_SOURCES[rule_id]
             )
         )
@@ -1624,7 +1624,7 @@ def _surgery_text_outcome(
         else selected_projection_refs
     )
     for fact in facts:
-        if rule_id == "LX0609-024":
+        if rule_id == "LX0609-04-02-03":
             if fact.surgery_occurrence == "planned":
                 event_states.append("not_applicable")
             elif fact.surgery_occurrence != "performed":
@@ -1653,7 +1653,7 @@ def _surgery_text_outcome(
                 )
             else:
                 event_states.append("data_gap")
-        elif rule_id == "LX0609-025":
+        elif rule_id == "LX0609-04-02-04":
             # 只有文书明确“本次未植入”才可判不适用。泛耗材、拟植入、
             # 取出旧物与沉默均不能被偷换成“未植入”。
             # 025 的事实结论只能针对模型同时确认的“已实施本次手术”。手术
@@ -1723,7 +1723,7 @@ def _surgery_text_outcome(
                     event_states.append("data_gap")
                 else:
                     event_states.append("compliant")
-        elif rule_id == "LX0609-028":
+        elif rule_id == "LX0609-05-01-01":
             if fact.surgery_occurrence == "planned":
                 event_states.append("not_applicable")
             elif fact.surgery_occurrence != "performed":
@@ -1803,7 +1803,7 @@ def _surgery_text_outcome(
                             ),
                             "threshold_hours": 48,
                         }
-        elif rule_id == "LX0609-033":
+        elif rule_id == "LX0609-11-01-01":
             if (
                 fact.consent_role != "surgery_informed_consent"
                 or fact.consent_linkage != "current_surgery"
@@ -1824,7 +1824,7 @@ def _surgery_text_outcome(
 
     if not event_states:
         return _SurgeryTextOutcome(rule_id, "data_gap", "surgery_fact_scope_missing")
-    if rule_id == "LX0609-024" and "non_compliant" in event_states:
+    if rule_id == "LX0609-04-02-03" and "non_compliant" in event_states:
         return _SurgeryTextOutcome(
             rule_id,
             "non_compliant",
@@ -1856,7 +1856,7 @@ def _surgery_text_outcome(
     # 025 尚未完成真实病例金标验收，必须保守失败关闭。多手术中只要
     # 任一事件无法唯一绑定一份正式手术记录或字段事实仍未知，整体即DG；
     # 不能用另一已确认事件的缺项覆盖未知事件并交付确定问题。
-    if rule_id == "LX0609-025" and "data_gap" in event_states:
+    if rule_id == "LX0609-04-02-04" and "data_gap" in event_states:
         return _SurgeryTextOutcome(
             rule_id,
             "data_gap",
@@ -1898,12 +1898,12 @@ def _surgery_text_outcome(
                         else {}
                     ),
                 }
-                if rule_id == "LX0609-025"
+                if rule_id == "LX0609-04-02-04"
                 and state == "non_compliant"
                 and missing_implant_fields
                 else None
             )
-            if rule_id == "LX0609-025" and state == "compliant":
+            if rule_id == "LX0609-04-02-04" and state == "compliant":
                 display_facts = {
                     "verification_kind": "implant_information_complete",
                     "performed_surgery_confirmed": True,
@@ -1921,20 +1921,20 @@ def _surgery_text_outcome(
                         else {}
                     ),
                 }
-            if rule_id == "LX0609-025" and state == "not_applicable":
+            if rule_id == "LX0609-04-02-04" and state == "not_applicable":
                 display_facts = {
                     "verification_kind": "implant_not_used",
                     "performed_surgery_confirmed": True,
                     "source_label": "手术记录",
                 }
-            if rule_id == "LX0609-033" and state == "non_compliant":
+            if rule_id == "LX0609-11-01-01" and state == "non_compliant":
                 display_facts = {
                     "failure_kind": "surgery_consent_signature_missing",
                     "consent_state": "signature_missing",
                     "performed_surgery_confirmed": True,
                     "missing_signature_roles": sorted(missing_consent_signatures),
                 }
-            if rule_id == "LX0609-033" and state == "compliant":
+            if rule_id == "LX0609-11-01-01" and state == "compliant":
                 display_facts = {
                     "verification_kind": "surgery_consent_complete",
                     "performed_surgery_confirmed": True,
@@ -2105,19 +2105,19 @@ def _terminal_status(
     if performed_state != "present":
         return "data_gap", "performed_surgery_fact_unavailable"
 
-    if rule_id == "LX0609-024":
+    if rule_id == "LX0609-04-02-03":
         state = _fact_state(facts, "current_visit_malignant_surgery_confirmed")
         if state == "negative":
             return "not_applicable", "malignant_surgery_explicitly_absent"
         if state != "present":
             return "data_gap", "malignant_surgery_fact_unavailable"
-    elif rule_id == "LX0609-025":
+    elif rule_id == "LX0609-04-02-04":
         state = _fact_state(facts, "current_visit_surgical_implant_used")
         if state == "negative":
             return "not_applicable", "implant_explicitly_absent"
         if state != "present":
             return "data_gap", "implant_use_fact_unavailable"
-    elif rule_id == "LX0609-028":
+    elif rule_id == "LX0609-05-01-01":
         incision = _fact_value(facts, "current_visit_surgical_incision_class")
         if incision and incision not in {"I", "II", "Ⅰ", "Ⅱ"}:
             return "not_applicable", "incision_class_outside_scope"
@@ -2130,7 +2130,7 @@ def _terminal_status(
             != "present"
         ):
             return "data_gap", "actual_interval_unavailable"
-    elif rule_id == "LX0609-003":
+    elif rule_id == "LX0609-04-02-01":
         rows = _source_rows(documents, "surgery_record") + _source_rows(
             documents, "anesthesia_record"
         )
@@ -2159,10 +2159,10 @@ def _terminal_status(
             ):
                 return "data_gap", "surgery_time_source_error"
             return "data_gap", "surgery_time_unavailable"
-    elif rule_id == "LX0609-031":
+    elif rule_id == "LX0609-04-02-05":
         if not _has_signature(_source_rows(documents, "surgery_record")):
             return "data_gap", "surgery_signature_source_unavailable"
-    elif rule_id == "LX0609-033":
+    elif rule_id == "LX0609-11-01-01":
         readiness = _fact_state(facts, "current_visit_surgery_consent_source_readiness")
         if readiness != "present":
             return "data_gap", "surgery_consent_source_unproven"
@@ -2217,7 +2217,7 @@ async def execute_luxian_0609_native_surgery_gate_rules(
     for rule_id in selected:
         if rule_id not in typed_requested:
             continue
-        if rule_id == "LX0609-003":
+        if rule_id == "LX0609-04-02-01":
             decisions.append(
                 _typed_003_decision(
                     snapshot=evidence_snapshot,
@@ -2246,13 +2246,13 @@ async def execute_luxian_0609_native_surgery_gate_rules(
                 # 024 需要判断“本次实施手术”与恶性原发治疗的语义关联，不能
                 # 误用 029/030 的严格 +08 文本时间合同。受控 surgery_record
                 # 可用且未截断时，允许一次裁剪事实抽取；无材料仍保守收口。
-                or (rule_id == "LX0609-024" and surgery_record_available)
+                or (rule_id == "LX0609-04-02-03" and surgery_record_available)
                 # 025 的实际手术事实可由同一份受控手术记录正文抽取；若快照
                 # 因严格时间/字段缺失未形成 performed 事实，也不能提前跳过
                 # “明确未植入 / 已植入且字段缺失”的既有三分支。
-                or (rule_id == "LX0609-025" and surgery_record_available)
+                or (rule_id == "LX0609-04-02-04" and surgery_record_available)
                 or (
-                    rule_id == "LX0609-028"
+                    rule_id == "LX0609-05-01-01"
                     and performed_state == "unknown"
                     and surgery_record_available
                 )
@@ -2287,7 +2287,7 @@ async def execute_luxian_0609_native_surgery_gate_rules(
                 key: source_states[key] for key in _TYPED_TEXT_SOURCES[rule_id]
             }
             states = set(states_by_source.values())
-            if rule_id == "LX0609-024" and malignancy_resolver is not None:
+            if rule_id == "LX0609-04-02-03" and malignancy_resolver is not None:
                 visit_stage = resolve_malignancy_visit_stage(
                     horizon_state=states_by_source[
                         "inpat_registration.discharge_horizon"
@@ -2372,20 +2372,20 @@ async def execute_luxian_0609_native_surgery_gate_rules(
                     materials=evidence_materials,
                     snapshot=evidence_snapshot,
                 )
-                if rule_id == "LX0609-024"
+                if rule_id == "LX0609-04-02-03"
                 and states_by_source.get("surgery_record") == "available"
                 else None
             )
             structured_not_applicable = (
                 (
-                    rule_id == "LX0609-024"
+                    rule_id == "LX0609-04-02-03"
                     and states_by_source.get("diagnosis") == "available"
                     and _structured_nonmalignant_diagnoses(
                         rows_by_source["diagnosis"]
                     )
                 )
                 or (
-                    rule_id == "LX0609-028"
+                    rule_id == "LX0609-05-01-01"
                     and states_by_source.get("surgery_record") == "empty"
                     and states_by_source.get("mr_surgery") == "available"
                     and _structured_028_not_applicable(
@@ -2394,7 +2394,7 @@ async def execute_luxian_0609_native_surgery_gate_rules(
                     )
                 )
             )
-            if rule_id == "LX0609-025":
+            if rule_id == "LX0609-04-02-04":
                 # 025 的五项必填字段只能由正式手术记录核对。病程可辅助证明
                 # 实际使用永久植入物，但手术记录不可读时不能替代其字段。
                 surgery_state = states_by_source.get("surgery_record")
@@ -2425,7 +2425,7 @@ async def execute_luxian_0609_native_surgery_gate_rules(
                         "source_labels": source_labels,
                         "performed_surgery_confirmed": True,
                     }
-                    if rule_id == "LX0609-033"
+                    if rule_id == "LX0609-11-01-01"
                     else None,
                 )
             elif structured_not_applicable:
@@ -2434,7 +2434,7 @@ async def execute_luxian_0609_native_surgery_gate_rules(
                 )
             elif deterministic_outcome is not None:
                 pending_outcomes[rule_id] = deterministic_outcome
-            elif rule_id == "LX0609-033":
+            elif rule_id == "LX0609-11-01-01":
                 consent_state = states_by_source.get("surgery_inform_consent")
                 consent_rows = rows_by_source["surgery_inform_consent"]
                 surgery_trigger_document_refs = tuple(
@@ -2543,7 +2543,7 @@ async def execute_luxian_0609_native_surgery_gate_rules(
                     # 保留单次受控语义关联，由 Python 校验 current_surgery 引用。
                     active_rule_ids.append(rule_id)
             elif (
-                rule_id == "LX0609-028"
+                rule_id == "LX0609-05-01-01"
                 and states_by_source.get("inpat_drug_order")
                 in {"unavailable", "truncated", "missing"}
                 and not any(
@@ -2563,7 +2563,7 @@ async def execute_luxian_0609_native_surgery_gate_rules(
 
         if active_rule_ids:
             def projection_sources_for(rule_id: str) -> tuple[str, ...]:
-                if rule_id == "LX0609-025":
+                if rule_id == "LX0609-04-02-04":
                     # 手术记录是五字段唯一事实源；病程若可用，只作为实际使用
                     # 永久植入物的辅助语义证据，与手术记录一并送入一次抽取。
                     # 病程是可选辅助源，数量超出受控上限时不让它挤掉唯一必查
@@ -2805,7 +2805,7 @@ async def execute_luxian_0609_native_surgery_gate_rules(
                 )
             )
             continue
-        if rule_id == "LX0609-025" and not is_compliant:
+        if rule_id == "LX0609-04-02-04" and not is_compliant:
             missing_fields = _parse_implant_missing_fields(response)
             if not missing_fields:
                 # 未明确指出缺项时，不能把通用模型结论包装成确定的植入物缺陷。

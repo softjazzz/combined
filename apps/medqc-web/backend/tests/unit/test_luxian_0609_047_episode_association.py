@@ -48,7 +48,7 @@ def _session(
         )
 
     return build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-047",),
+        selected_rule_ids=("LX0609-07-03-01",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -62,7 +62,7 @@ def _session(
 
 async def _evaluate(*, session: Any):
     execution = await execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-047",),
+        rule_ids=("LX0609-07-03-01",),
         wrapper_rules=[],
         evidence_payload=None,
         institute_id="I",
@@ -72,11 +72,11 @@ async def _evaluate(*, session: Any):
         llm_client=None,
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
-        decision_rule_ids=("LX0609-047",),
+        decision_rule_ids=("LX0609-07-03-01",),
     )
     canonical = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=execution.decisions,
-        expected_rule_ids=("LX0609-047",),
+        expected_rule_ids=("LX0609-07-03-01",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )[0]
@@ -114,7 +114,7 @@ async def test_047_two_nonoverlapping_episodes_bind_their_own_daily_evaluations(
         "requirement_satisfied",
     )
     assert execution.llm_call_count == 0
-    refs = dict(execution.customer_display_facts)["LX0609-047"]["source_document_refs"]
+    refs = dict(execution.customer_display_facts)["LX0609-07-03-01"]["source_document_refs"]
     assert {item["source_document_id"] for item in refs} == {
         "BT-1", "BT-2", "DC-1", "DC-2",
     }
@@ -151,8 +151,8 @@ async def test_047_multi_episode_material_order_does_not_change_selected_coordin
         permuted_canonical.final_state.value,
         permuted_canonical.reason_code,
     ) == ("compliant", "requirement_satisfied")
-    original_facts = dict(original_execution.customer_display_facts)["LX0609-047"]
-    permuted_facts = dict(permuted_execution.customer_display_facts)["LX0609-047"]
+    original_facts = dict(original_execution.customer_display_facts)["LX0609-07-03-01"]
+    permuted_facts = dict(permuted_execution.customer_display_facts)["LX0609-07-03-01"]
     assert {
         key: original_facts[key]
         for key in ("transfusion_end_time", "evaluation_time", "elapsed_hours")
@@ -207,7 +207,7 @@ async def test_047_same_time_daily_tie_breaks_by_document_identity_not_input_ord
         permuted_canonical.reason_code,
     ) == ("compliant", "requirement_satisfied")
     for execution in (original_execution, permuted_execution):
-        refs = dict(execution.customer_display_facts)["LX0609-047"][
+        refs = dict(execution.customer_display_facts)["LX0609-07-03-01"][
             "source_document_refs"
         ]
         assert {item["source_document_id"] for item in refs} == {

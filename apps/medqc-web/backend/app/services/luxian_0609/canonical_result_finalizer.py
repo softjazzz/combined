@@ -95,17 +95,17 @@ _DATA_GAP_EXPLANATIONS = {
 }
 
 _RULE_DATA_GAP_EXPLANATIONS = {
-    ("LX0609-069", "source_unavailable"): {
+    ("LX0609-04-02-07", "source_unavailable"): {
         "reason_label": "机构数据源未接入",
         "missing_sources": ["会诊申请时间"],
         "missing_fields": [],
     },
-    ("LX0609-009", "candidate_scope_incomplete"): {
+    ("LX0609-02-01-05", "candidate_scope_incomplete"): {
         "reason_label": "自动核对范围超限",
         "missing_sources": [],
         "missing_fields": [],
     },
-    ("LX0609-028", "required_field_missing"): {
+    ("LX0609-05-01-01", "required_field_missing"): {
         "reason_label": "预防性抗菌药物时长字段不完整",
         "missing_sources": [],
         "missing_fields": [
@@ -115,12 +115,12 @@ _RULE_DATA_GAP_EXPLANATIONS = {
             "抗菌药物实际停用时间",
         ],
     },
-    ("LX0609-031", "association_failed"): {
+    ("LX0609-04-02-05", "association_failed"): {
         "reason_label": "手术签名信息暂无法核对",
         "missing_sources": [],
         "missing_fields": ["主刀医师签名", "手术事件与手术记录的对应关系"],
     },
-    ("LX0609-048", "transfusion_comparison_fields_unavailable"): {
+    ("LX0609-07-04-01", "transfusion_comparison_fields_unavailable"): {
         "reason_label": "术中输血比对资料不完整",
         "missing_sources": [],
         "missing_fields": [],
@@ -883,10 +883,10 @@ def finalize_luxian_0609_reduced_customer_result(
         evidence_materials=evidence_materials,
         preferred_source_fields=(
             {"surgery_record": "surgery_name"}
-            if rule_id == "LX0609-024"
+            if rule_id == "LX0609-04-02-03"
             else (
                 {"presurg_discussion": "discuss_staff"}
-                if rule_id == "LX0609-040" and safe_facts
+                if rule_id == "LX0609-04-01-03" and safe_facts
                 and safe_facts.get("mdt_assessment_basis") == "discuss_staff"
                 else None
             )
@@ -895,7 +895,7 @@ def finalize_luxian_0609_reduced_customer_result(
     if customer_evidence:
         result["customer_evidence"] = customer_evidence
     if (
-        rule_id == "LX0609-074"
+        rule_id == "LX0609-12-02-01"
         and not customer_evidence
         and str(result.get("status") or "").strip().lower() == "non_compliant"
     ):
@@ -936,17 +936,17 @@ def _complete_data_gap_explanation(result: dict[str, Any]) -> None:
     )
     existing_details = result.get("data_gap_details")
     from .surgery_gate_result_mapping import surgery_timeliness_gap_display
-    surgery_gap = surgery_timeliness_gap_display(result.get("customer_display_facts")) if rule_id == "LX0609-003" else None
+    surgery_gap = surgery_timeliness_gap_display(result.get("customer_display_facts")) if rule_id == "LX0609-04-02-01" else None
     if surgery_gap is not None:
         defaults = {**defaults, "missing_fields": surgery_gap[0]}
     from .course_quality_result_mapping import course_007_gap_display
-    course_gap = course_007_gap_display(result.get("customer_display_facts")) if rule_id == "LX0609-007" else None
+    course_gap = course_007_gap_display(result.get("customer_display_facts")) if rule_id == "LX0609-02-01-03" else None
     if course_gap is not None:
         defaults = {**defaults, "missing_sources": course_gap[0], "missing_fields": course_gap[1], "reason_label": "查房间隔核对资料不足"}
     from .tumor_pathology_result_mapping import pathology_report_gap_missing_fields
     pathology_report_gap_fields = (
         pathology_report_gap_missing_fields(result.get("customer_display_facts"))
-        if rule_id in {"LX0609-013", "LX0609-019"}
+        if rule_id in {"LX0609-06-02-03", "LX0609-06-02-02"}
         and reason_code == "required_field_missing"
         else None
     )
@@ -964,14 +964,14 @@ def _complete_data_gap_explanation(result: dict[str, Any]) -> None:
     )
     signature_gap_fields = (
         physician_signature_gap_fields(result.get("customer_display_facts"))
-        if rule_id == "LX0609-071" and reason_code == "required_field_missing"
+        if rule_id == "LX0609-10-01-01" and reason_code == "required_field_missing"
         else None
     )
     if signature_gap_fields is not None:
         defaults = {**defaults, "missing_fields": signature_gap_fields}
     transfer_association_gap = (
         transfer_event_association_gap_display(result.get("customer_display_facts"))
-        if rule_id in {"LX0609-072", "LX0609-073"}
+        if rule_id in {"LX0609-10-02-01", "LX0609-10-02-02"}
         and reason_code == "association_failed"
         else None
     )
@@ -984,7 +984,7 @@ def _complete_data_gap_explanation(result: dict[str, Any]) -> None:
         }
     consultation_time_gap = (
         consultation_business_time_gap_display(result.get("customer_display_facts"))
-        if rule_id == "LX0609-069" and reason_code == "authoritative_time_missing"
+        if rule_id == "LX0609-04-02-07" and reason_code == "authoritative_time_missing"
         else None
     )
     if consultation_time_gap is not None:

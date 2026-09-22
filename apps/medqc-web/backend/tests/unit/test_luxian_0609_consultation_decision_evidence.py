@@ -125,7 +125,7 @@ def test_023_prioritizes_late_offending_episode_before_eight_item_limit() -> Non
     )
 
     refs = select_consultation_rule_material_refs(
-        rule_id="LX0609-023",
+        rule_id="LX0609-03-01-04",
         status="non_compliant",
         reason_code="requirement_violated",
         documents=documents,

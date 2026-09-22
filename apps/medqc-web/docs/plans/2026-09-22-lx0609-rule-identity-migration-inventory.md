@@ -1,0 +1,59 @@
+# LX0609 四段式唯一身份迁移：源码盘点与验收边界
+
+日期：2026-09-22。关联任务：MEDQC-021。
+
+## 结论与当前状态
+
+可以直接把四段式编号作为唯一 `rule_id`。迁移表属于一次性工具及归档资产，不需要在运行时增加映射层。实施分为纯身份迁移、CT/MRI业务扩展两个独立闭环。
+
+当前实施分支为 `codex/lx0609-rule-identity`，工作树为 `C:/Users/Coldplay/.codex/worktrees/lx0609-rule-identity/LX888/apps/medqc-web`，固定基线为 `9a29f46b2dd395343abb187421590de3dd8e396d`。原 `codex/lx0609-rule-code-ct` 的双身份与新增 CT 草稿原样保留，不并入本次补丁。实施前核对主工作区的已跟踪后端源码无未提交改动；不能据此声称所有未跟踪过程产物已纳入基线。
+
+当前处于源码迁移与等价验证阶段，尚未验收或合并，未写入客户库或本地业务库。79条对应清单已冻结，目录直接保存新ID；历史迁移工具只在临时SQLite验证，客户快照演练仍待完成。源码表格记录的是迁移前发现的位置，不能作为当前代码仍有相同缺陷的说明。
+
+## 已确认的代码位置
+
+行号对应本轮检查的工作树，后续修改后可能移动。
+
+| 边界 | 位置 | 已确认事实与迁移要求 |
+| --- | --- | --- |
+| 权威目录 | `backend/app/services/luxian_0609_rule_master.py:218` | 按条数生成三位连续编号并比较顺序。改为四段式身份、唯一性、显式覆盖；展示排序独立。 |
+| 决策格式 | `backend/app/services/luxian_0609/decision_model.py:21` | 三位数字正则。相关 `decision_binding.py:34`、`execution_contract.py:14` 同样需要改格式约束。 |
+| 范围规划 | `backend/app/services/luxian_0609/planner.py:215` | 三位格式且末段数值限定1–49。不能只放宽正则；原支持范围应通过对应规则集合保持，不得顺带扩大。 |
+| 规则族成员 | `backend/app/services/luxian_0609/native_transfusion_execution.py:38` | 用41–49数字范围生成成员；迁移为原成员的显式新身份集合。`transfusion_result_mapping.py`、`customer_renderer.py`也有动态生成。 |
+| 模型合同 | `backend/app/services/luxian_0609/exam_lab_fact_extraction.py` 及各族抽取模块 | Prompt、响应schema、规则/事件覆盖和解析白名单需同步换身份；语义判据与材料选取保持原样。 |
+| 安全投影 | `backend/app/services/custom_qc_workspace_service.py:992`、`:1155` | 调试规则摘要使用三位正则过滤；遗漏会导致新编号在摘要中消失。 |
+| 前端选择 | `src/views/workstation-v4/customer-sample-validation/syntheticCaseBuilder.ts:143`、`useCustomerSampleValidationController.ts:1587` | 三位编号正则会拒绝新ID。选择器、请求参数、特定规则展示逻辑、反馈key与缓存需统一检查。 |
+| 判定校验值 | `backend/app/services/luxian_0609/decision_model.py:371`、`:393` | `to_safe_dict()`包含`rule_id`，指纹由其JSON生成。新身份会改变指纹；使用原算法重建并验证，不能直接保留不匹配旧指纹。 |
+| 反馈校验值 | `backend/app/services/qc_workspace/result_feedback_demo_store.py:168` | digest输入包括规则ID、状态、原因码、展示事实和证据。对应反馈须同步新ID和经验证的digest绑定。 |
+
+这些是已确认位置，不是全仓盘点完成声明。还需检查任务重试/恢复、系统配置、其他规则集对0609的引用、测试生成器、SQL脚本和构建时生成目录。原始规范编号与历史报告不应机械替换。
+
+## 已确认的存储定义
+
+以下为代码定义，schema随部署模式配置；未据此声称客户库有多少行。
+
+| 表 | 字段与关联 | 处理要求 |
+| --- | --- | --- |
+| `custom_qc_batch_jobs` | `rule_code`、`filters_json`、`items_json`、`summary_json`、`failed_records_json`、`child_summary_json`及父子任务关联 | 逐字段确定规则身份路径，只改身份值/身份索引key。不能全局替换JSON中的医疗原文、评论或原始模型响应。 |
+| `luxian_0609_record_result_envelopes` | `envelope_json`内规则身份、覆盖范围和受校验的结果 | 先验证原结果合同，再迁移业务副本，使用现有校验器验证新结果；未知旧版本、无法校验或孤立引用单独报告。 |
+| `qc_result_feedback_demo` | 唯一键`root_job_id + record_ref + rule_id + created_by`，以及`result_digest` | 保持原结果归属、反馈内容、操作者和时间。不能仅更新rule_id导致绑定失效，也不能把对旧结果的反馈绑定到后来的重跑结果。 |
+| `manual_problem_sample_pool_items` | `candidate_rule_ids_json`、`raw_payload_json`内选择规则 | 候选字段供样本选择读取；只迁移其中规则身份，原始文书、样本标识保持不变。 |
+
+需继续盘点 `qc_rules`、自定义规则草稿引用、其他反馈/草稿/归档表和文件型缓存。不得根据字段名猜测所有 `rule_code` 都是LX0609单规则编号，批量/组合规则及其他规则集必须按实际内容和合同区分。
+
+## 迁移顺序
+
+1. 保存当前草稿，将新增080/081和010业务判据调整从纯编号迁移补丁分离；先固定包含前序已验收修复的基线。
+2. 冻结001–079的一次性对应表；080/081只是未发布草稿占位，新规则无需旧编号。移除执行链对旧格式/数字区间的依赖。
+3. 编写只读盘点及dry-run，明确每个存储路径、未知ID、重复映射、孤立引用及待归档原始数据。不得无差别替换整段JSON/字符串。
+4. 在数据库副本上演练幂等迁移、回滚与前后关联核对。代码切换期间停止旧版本任务写入；未完成任务需明确排空或版本绑定策略。
+5. 验收代码、迁移副本、历史查询和新任务后形成独立提交；客户库写入需发布授权。随后恢复CT业务开发。
+
+## 等价验收
+
+- 列出保护集合与对应代码/产物时点，覆盖既有合规/不合规及数据不足/不适用、暂停规则、多事件、失败重试等边界。
+- 固定输入、固定保存的模型响应。仅在回放副本的身份路径转换旧ID，断言状态、原因码、关键事实、证据位置、调用/重试次数不变，调度配置保持不变。
+- 与ID相关的指纹或缓存键按原算法处理，建立明确前后关联；其他字段和原始冻结资料不变。证据不能因更名串到别的规则/病例。
+- 目录、任务创建、最新/历史详情、反馈、统计下钻和导出全部识别相同新ID；生产主链不导入迁移表、不保留旧ID回退。
+- 固定响应回放不能证明真实模型对新ID完全不敏感。迁移后追加同一材料和模型配置的真实调用回归，分别报告格式可用率、结论变化、调用量和耗时；不可用修改医学判据来掩盖编号回归。
+- 纯编号阶段保留010原有判定行为。把报告缺失迁到新规则属于后续业务修复，应单列预期变化，不能宣称整个两阶段状态字节等价。

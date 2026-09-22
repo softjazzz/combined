@@ -295,7 +295,7 @@ class TestRecordDocument(BaseModel):
 
 
 class TestRecordGoldenAnswer(BaseModel):
-    qc_point_id: str = Field(..., description="客户质控点 ID，如 LX0609-001")
+    qc_point_id: str = Field(..., description="客户质控点 ID，如 LX0609-01-01-01")
     expected_status: Literal[
         "non_compliant",
         "ai_suggested_non_compliant",

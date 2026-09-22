@@ -26,7 +26,7 @@ LUXIAN_0609_QC_RULE_SET_KEY = "luxian_0609_qc_v1"
 LUXIAN_0916_QC_RULE_SET_KEY = "luxian_0916_qc_v1"
 # 客户已明确排除缺失同意书/收费资料的五条规则；阶段冻结规则另由 worker 以 not_executed 投影。
 LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS: frozenset[str] = frozenset(
-    {"LX0609-033", "LX0609-034", "LX0609-035", "LX0609-041", "LX0609-042"}
+    {"LX0609-11-01-01", "LX0609-11-02-01", "LX0609-11-02-02", "LX0609-11-03-01", "LX0609-11-03-02"}
 )
 SAMPLE_PROGRAMMATIC_RULE_SET_KEY = "sample_programmatic_gate_v1"
 SAMPLE_PROGRAMMATIC_RULE_SET_NAME = "样本硬门槛程序规则包 v1"

@@ -12,16 +12,29 @@
           >
             <div class="wv4-analysis-overview__header">
               <div>
-                <div v-if="isFrontpageGenerateStage" class="wv4-analysis-overview__eyebrow">
+                <div
+                  v-if="isFrontpageGenerateStage"
+                  class="wv4-analysis-overview__eyebrow"
+                >
                   {{ overviewEyebrow }}
                 </div>
-                <h3 id="workstation-list-overview-title" class="wv4-analysis-overview__title">
-                  <span v-if="!isStageQueueMode" class="record-pool-title-icon"
-                    ><FolderHeart :size="21" aria-hidden="true"
+                <h3
+                  id="workstation-list-overview-title"
+                  class="wv4-analysis-overview__title"
+                >
+                  <span
+                    v-if="!isStageQueueMode"
+                    class="record-pool-title-icon"
+                  ><FolderHeart
+                    :size="21"
+                    aria-hidden="true"
                   /></span>
                   {{ overviewTitle }}
                 </h3>
-                <p v-if="isStageQueueMode" class="wv4-analysis-overview__subtitle">
+                <p
+                  v-if="isStageQueueMode"
+                  class="wv4-analysis-overview__subtitle"
+                >
                   {{ overviewSubtitle }}
                 </p>
                 <div
@@ -32,7 +45,10 @@
                   当前阶段：参考首页生成
                 </div>
               </div>
-              <div v-if="isFrontpageGenerateStage" class="wv4-analysis-overview__actions">
+              <div
+                v-if="isFrontpageGenerateStage"
+                class="wv4-analysis-overview__actions"
+              >
                 <a-button
                   size="small"
                   class="wv4-analysis-overview__action"
@@ -72,11 +88,15 @@
                   role="group"
                   aria-labelledby="record-pool-date-label"
                 >
-                  <span id="record-pool-date-label" class="record-pool-field-label"
-                    ><CalendarDays :size="15" aria-hidden="true" />{{
-                      formatWorkstationDateFieldLabel(dateField)
-                    }}</span
-                  >
+                  <span
+                    id="record-pool-date-label"
+                    class="record-pool-field-label"
+                  ><CalendarDays
+                    :size="15"
+                    aria-hidden="true"
+                  />{{
+                    formatWorkstationDateFieldLabel(dateField)
+                  }}</span>
                   <a-range-picker
                     :value="dateRange || undefined"
                     class="workbench-date-row__range"
@@ -128,17 +148,25 @@
                   aria-label="在院病历排序"
                   @update:value="emit('selectInpatientSort', normalizeInpatientSort($event))"
                 >
-                  <a-select-option value="default"> 默认排序 </a-select-option>
-                  <a-select-option value="longest"> 住院最久优先 </a-select-option>
-                  <a-select-option value="recent"> 最近入院优先 </a-select-option>
+                  <a-select-option value="default">
+                    默认排序
+                  </a-select-option>
+                  <a-select-option value="longest">
+                    住院最久优先
+                  </a-select-option>
+                  <a-select-option value="recent">
+                    最近入院优先
+                  </a-select-option>
                 </a-select>
                 <div class="workbench-dept-filter">
                   <span
                     v-if="!isStageQueueMode"
                     id="record-pool-dept-label"
                     class="record-pool-field-label"
-                    ><Building2 :size="15" aria-hidden="true" />科室</span
-                  >
+                  ><Building2
+                    :size="15"
+                    aria-hidden="true"
+                  />科室</span>
                   <a-select
                     :aria-labelledby="!isStageQueueMode ? 'record-pool-dept-label' : undefined"
                     :value="activeDept"
@@ -157,7 +185,10 @@
                     >
                       <span class="workbench-dept-select__option">
                         <span class="workbench-dept-select__name">{{ dept.name }}</span>
-                        <span v-if="isStageQueueMode" class="workbench-dept-select__count">{{
+                        <span
+                          v-if="isStageQueueMode"
+                          class="workbench-dept-select__count"
+                        >{{
                           dept.total
                         }}</span>
                       </span>
@@ -172,10 +203,17 @@
                   </span>
                 </div>
 
-                <div v-if="!isStageQueueMode" class="workbench-doctor-filter">
-                  <span id="record-pool-doctor-label" class="record-pool-field-label"
-                    ><Stethoscope :size="15" aria-hidden="true" />主管医师</span
-                  >
+                <div
+                  v-if="!isStageQueueMode"
+                  class="workbench-doctor-filter"
+                >
+                  <span
+                    id="record-pool-doctor-label"
+                    class="record-pool-field-label"
+                  ><Stethoscope
+                    :size="15"
+                    aria-hidden="true"
+                  />主管医师</span>
                   <a-select
                     aria-labelledby="record-pool-doctor-label"
                     :value="activeDoctor"
@@ -222,7 +260,10 @@
               </div>
             </div>
 
-            <div v-if="isFrontpageGenerateStage" class="wv4-analysis-kpis">
+            <div
+              v-if="isFrontpageGenerateStage"
+              class="wv4-analysis-kpis"
+            >
               <article
                 v-for="card in kpiCards"
                 :key="card.key"
@@ -255,9 +296,14 @@
           病历池暂未加载成功，请检查网络后重试。
         </div>
 
-        <div v-if="isFrontpageGenerateStage" class="workstation-surface-enter mb-4">
+        <div
+          v-if="isFrontpageGenerateStage"
+          class="workstation-surface-enter mb-4"
+        >
           <section class="wv4-stage-notice">
-            <div class="wv4-stage-notice__title">生成指引</div>
+            <div class="wv4-stage-notice__title">
+              生成指引
+            </div>
             <div class="wv4-stage-notice__items">
               <span>优先处理“待生成 / 生成失败”病历，降低阻塞积压。</span>
               <span>批量生成后可在详情页复核草稿内容，不写入正式首页表。</span>
@@ -301,10 +347,16 @@
                 @clear-filters="emit('clear-filters')"
                 @page-change="handleBatchPageChange"
               >
-                <template v-if="!isStageQueueMode" #toolbar-actions>
+                <template
+                  v-if="!isStageQueueMode"
+                  #toolbar-actions
+                >
                   <RecordPoolQcTaskHistory />
                 </template>
-                <template v-if="recordPoolQcTask && !isStageQueueMode" #task-status>
+                <template
+                  v-if="recordPoolQcTask && !isStageQueueMode"
+                  #task-status
+                >
                   <RecordPoolQcTaskStatusBar
                     :job="recordPoolQcTask"
                     @dismiss="emit('dismiss-qc-task')"

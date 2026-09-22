@@ -27,7 +27,7 @@ from app.services.luxian_0609.rule_contracts import (  # noqa: E402
     load_luxian_0609_rule_contracts,
 )
 from scripts.luxian_0609_v3_controlled_evidence import (  # noqa: E402
-    RULE_NUMBERS_BY_CASE,
+    RULE_IDS_BY_CASE,
     apply_controlled_evidence,
     build_gold_acceptance_contracts,  # noqa: F401
     expected_status_for_case,
@@ -101,17 +101,17 @@ _V3_ADMISSION_CONTEXT: dict[str, tuple[str, str, str]] = {
 }
 
 
-FAMILY_RULE_NUMBERS: dict[str, tuple[int, ...]] = {
-    "时限": (1, 2, 4, 5, 6),
-    "查房/病重病危": (7, 8, 9, 16, 17, 18),
-    "检查检验": (10, 11, 12, 14, 15, 52, 53),
-    "会诊": (20, 21, 22, 23, 69),
-    "手术麻醉": (3, 24, 25, *range(28, 41), 64, 65, 66, 75),
-    "输血": (*range(41, 50), 70),
-    "肿瘤病理/化疗": (13, 19, 26, 27),
-    "出院死亡": (50, 51, 60, 61, 62, 63, 67, 68),
-    "抗菌药物/医嘱": (*range(54, 60),),
-    "交接转科": (71, 72, 73, 74),
+FAMILY_RULE_IDS: dict[str, tuple[str, ...]] = {
+    "时限": ("LX0609-01-01-01", "LX0609-01-02-01", "LX0609-09-01-01", "LX0609-02-01-01", "LX0609-02-01-02"),
+    "查房/病重病危": ("LX0609-02-01-03", "LX0609-02-01-04", "LX0609-02-01-05", "LX0609-12-01-01", "LX0609-12-01-02", "LX0609-01-01-02"),
+    "检查检验": ("LX0609-06-01-02", "LX0609-06-01-04", "LX0609-06-01-05", "LX0609-06-03-03", "LX0609-06-03-04", "LX0609-06-04-01", "LX0609-06-04-02"),
+    "会诊": ("LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03", "LX0609-03-01-04", "LX0609-04-02-07"),
+    "手术麻醉": ("LX0609-04-02-01", "LX0609-04-02-03", "LX0609-04-02-04", "LX0609-05-01-01", "LX0609-04-01-01", "LX0609-04-02-02", "LX0609-04-02-05", "LX0609-04-03-01", "LX0609-11-01-01", "LX0609-11-02-01", "LX0609-11-02-02", "LX0609-04-04-01", "LX0609-04-04-02", "LX0609-04-04-03", "LX0609-04-01-02", "LX0609-04-01-03", "LX0609-04-05-01", "LX0609-04-05-02", "LX0609-04-05-03", "LX0609-10-03-01"),
+    "输血": ("LX0609-11-03-01", "LX0609-11-03-02", "LX0609-07-01-01", "LX0609-07-01-02", "LX0609-07-02-01", "LX0609-07-02-02", "LX0609-07-03-01", "LX0609-07-04-01", "LX0609-07-04-02", "LX0609-07-01-03"),
+    "肿瘤病理/化疗": ("LX0609-06-02-03", "LX0609-06-02-02", "LX0609-05-02-01", "LX0609-08-01-04"),
+    "出院死亡": ("LX0609-03-02-01", "LX0609-09-02-01", "LX0609-04-02-06", "LX0609-08-01-01", "LX0609-08-01-02", "LX0609-08-01-03", "LX0609-08-02-01", "LX0609-08-02-02"),
+    "抗菌药物/医嘱": ("LX0609-05-01-02", "LX0609-05-01-03", "LX0609-05-01-04", "LX0609-05-01-05", "LX0609-05-01-06", "LX0609-05-03-01"),
+    "交接转科": ("LX0609-10-01-01", "LX0609-10-02-01", "LX0609-10-02-02", "LX0609-12-02-01"),
 }
 
 FAMILY_QUOTAS: dict[str, int] = {
@@ -176,28 +176,20 @@ def build_master_family_rule_ids(
 ) -> dict[str, list[str]]:
     master = tuple(entries or load_luxian_0609_rule_master())
     entries_by_id = {entry.rule_id: entry for entry in master}
-    all_family_ids = tuple(
-        f"LX0609-{number:03d}"
-        for numbers in FAMILY_RULE_NUMBERS.values()
-        for number in numbers
-    )
-    if len(all_family_ids) != len(set(all_family_ids)):
-        raise ValueError("LX0609 v3 validation families contain duplicate rules")
-    frozen_rule_ids = {f"LX0609-{index:03d}" for index in range(1, 76)}
-    if set(all_family_ids) != frozen_rule_ids or not frozen_rule_ids.issubset(entries_by_id):
-        raise ValueError("LX0609 v3 validation families drifted from frozen scope 001-075")
+    all_family_ids = tuple(rule_id for rule_ids in FAMILY_RULE_IDS.values() for rule_id in rule_ids)
+    if len(all_family_ids) != 75 or len(all_family_ids) != len(set(all_family_ids)):
+        raise ValueError("LX0609 v3 validation families must contain 75 unique frozen rule IDs")
+    if not set(all_family_ids).issubset(entries_by_id):
+        raise ValueError("LX0609 v3 validation families contain a rule outside the current master")
 
     wanted_statuses = set(statuses or ())
     return {
         family: [
             rule_id
-            for number in numbers
-            if (
-                (rule_id := f"LX0609-{number:03d}")
-                and (not wanted_statuses or entries_by_id[rule_id].implementation_status in wanted_statuses)
-            )
+            for rule_id in rule_ids
+            if not wanted_statuses or entries_by_id[rule_id].implementation_status in wanted_statuses
         ]
-        for family, numbers in FAMILY_RULE_NUMBERS.items()
+        for family, rule_ids in FAMILY_RULE_IDS.items()
     }
 
 
@@ -234,8 +226,14 @@ def _assign_full_active_family_scope(cases: Sequence[Any]) -> list[Any]:
     ]
 
 
-_EXAM_LAB_RULE_IDS = tuple(
-    f"LX0609-{number:03d}" for number in (10, 11, 12, 14, 15, 52, 53)
+_EXAM_LAB_RULE_IDS = (
+    "LX0609-06-01-02",
+    "LX0609-06-01-04",
+    "LX0609-06-01-05",
+    "LX0609-06-03-03",
+    "LX0609-06-03-04",
+    "LX0609-06-04-01",
+    "LX0609-06-04-02",
 )
 _EXAM_LAB_SCENARIO_BY_INDEX = {
     9: "all_compliant",
@@ -249,24 +247,24 @@ def _exam_lab_expected_statuses(scenario: str) -> dict[str, str]:
     if scenario == "all_missing":
         return {
             **{rule_id: "non_compliant" for rule_id in _EXAM_LAB_RULE_IDS[:5]},
-            "LX0609-052": "not_applicable",
-            "LX0609-053": "not_applicable",
+            "LX0609-06-04-01": "not_applicable",
+            "LX0609-06-04-02": "not_applicable",
         }
     if scenario == "recorded_without_analysis_with_unhandled_critical":
         return {
-            "LX0609-010": "compliant",
-            "LX0609-011": "compliant",
-            "LX0609-012": "non_compliant",
-            "LX0609-014": "compliant",
-            "LX0609-015": "non_compliant",
-            "LX0609-052": "non_compliant",
-            "LX0609-053": "non_compliant",
+            "LX0609-06-01-02": "compliant",
+            "LX0609-06-01-04": "compliant",
+            "LX0609-06-01-05": "non_compliant",
+            "LX0609-06-03-03": "compliant",
+            "LX0609-06-03-04": "non_compliant",
+            "LX0609-06-04-01": "non_compliant",
+            "LX0609-06-04-02": "non_compliant",
         }
     critical_status = "compliant" if scenario == "all_compliant_with_handled_critical" else "not_applicable"
     return {
         **{rule_id: "compliant" for rule_id in _EXAM_LAB_RULE_IDS[:5]},
-        "LX0609-052": critical_status,
-        "LX0609-053": critical_status,
+        "LX0609-06-04-01": critical_status,
+        "LX0609-06-04-02": critical_status,
     }
 
 
@@ -274,15 +272,17 @@ def build_acceptance_fixture_bindings() -> list[dict[str, str]]:
     """返回与 v3 构建器实际生成内容一致的受控状态绑定。"""
 
     bindings: list[dict[str, str]] = []
-    for case_index, rule_numbers in RULE_NUMBERS_BY_CASE.items():
-        for number in rule_numbers:
-            rule_id = f"LX0609-{number:03d}"
+    for case_index, rule_ids in RULE_IDS_BY_CASE.items():
+        for rule_id in rule_ids:
             binding = {
                     "rule_id": rule_id,
                     "fixture_ref": f"0426-v3:case-{case_index:03d}",
                     "expected_status": expected_status_for_case(case_index, rule_id),
                 }
-            if number in {1, 2, 4, 5, 6} and case_index in {1, 2, 4}:
+            if rule_id in {
+                "LX0609-01-01-01", "LX0609-01-02-01", "LX0609-09-01-01",
+                "LX0609-02-01-01", "LX0609-02-01-02",
+            } and case_index in {1, 2, 4}:
                 binding["time_boundary"] = {
                     1: "before_threshold",
                     2: "after_threshold",
@@ -1205,7 +1205,10 @@ def build_validation_matrix(cases: Sequence[Any]) -> list[dict[str, Any]]:
             )
     matrix.sort(key=lambda row: (row["rule_id"], row["expected_status"], row["case_index"]))
     rule_ids = {row["rule_id"] for row in matrix}
-    if rule_ids != {f"LX0609-{index:03d}" for index in range(1, 76)}:
+    expected_rule_ids = {
+        rule_id for family_rule_ids in FAMILY_RULE_IDS.values() for rule_id in family_rule_ids
+    }
+    if rule_ids != expected_rule_ids:
         raise ValueError("v3 validation matrix must contain every rule")
     fixture_keys = {
         (row["rule_id"], row["expected_status"], row["case_index"])

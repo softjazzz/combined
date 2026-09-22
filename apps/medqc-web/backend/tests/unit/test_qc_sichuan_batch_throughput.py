@@ -68,7 +68,7 @@ async def test_formal_worker_rechecks_activation_before_qc_service_and_canonical
 ) -> None:
     workspace = _WorkspaceStub()
     workspace.job["filters"] = {
-        "rule_ids": ["LX0609-001"],
+        "rule_ids": ["LX0609-01-01-01"],
         "rule_set_key": rule_set_key,
         "validation_mode": "programmatic",
     }
@@ -159,7 +159,7 @@ async def test_worker_does_not_check_activation_for_missing_or_parent_job(
 async def test_luxian_batch_worker_rejects_customer_aggregation_without_unified_engine(monkeypatch):
     workspace = _WorkspaceStub()
     workspace.job["filters"] = {
-        "rule_ids": ["LX0609-001"],
+        "rule_ids": ["LX0609-01-01-01"],
         "rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
         "validation_mode": "programmatic",
         "date_field": "admission",
@@ -192,7 +192,7 @@ async def test_luxian_batch_worker_rejects_gate_only_customer_job_without_unifie
     workspace = _WorkspaceStub()
     workspace.job["filters"] = {
         "rule_ids": [],
-        "gate_only_customer_rule_ids": ["LX0609-033"],
+        "gate_only_customer_rule_ids": ["LX0609-11-01-01"],
         "rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
         "validation_mode": "programmatic",
         "date_field": "admission",
@@ -235,7 +235,7 @@ async def test_luxian_batch_create_rejects_customer_aggregation_without_unified_
             request=SimpleNamespace(state=SimpleNamespace()),  # type: ignore[arg-type]
             payload=qc_sichuan.SichuanWorkspaceBatchJobCreateRequest(
                 rule_set_key=qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
-                rule_ids=["LX0609-001"],
+                rule_ids=["LX0609-01-01-01"],
                 scope="final",
                 record_refs=[
                     {
@@ -269,7 +269,7 @@ async def test_luxian_batch_create_rejects_exam_lab_compatibility_without_creati
             request=SimpleNamespace(state=SimpleNamespace()),  # type: ignore[arg-type]
             payload=qc_sichuan.SichuanWorkspaceBatchJobCreateRequest(
                 rule_set_key=qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
-                rule_ids=["LX0609-010"],
+                rule_ids=["LX0609-06-01-02"],
                 scope="final",
                 record_refs=[
                     {
@@ -325,7 +325,7 @@ async def test_luxian_batch_worker_runtime_family_drift_fails_before_result_or_c
 ):
     workspace = _WorkspaceStub()
     workspace.job["filters"] = {
-        "rule_ids": ["LX0609-010"],
+        "rule_ids": ["LX0609-06-01-02"],
         "rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
         "validation_mode": "programmatic",
         "date_field": "admission",
@@ -388,7 +388,7 @@ async def test_luxian_batch_worker_rejects_persisted_legacy_rule_id_before_evalu
 def test_luxian_target_document_type_uses_catalog_document_not_final_scene_fallback():
     assert batch_worker._resolve_luxian_target_document_type(
         {
-            "rule_id": "LX0609-018",
+            "rule_id": "LX0609-01-01-02",
             "applicable_documents": ["admission_record"],
             "applicable_document_labels": ["入院记录"],
         }
@@ -396,7 +396,7 @@ def test_luxian_target_document_type_uses_catalog_document_not_final_scene_fallb
 
     assert batch_worker._resolve_luxian_target_document_type(
         {
-            "rule_id": "LX0609-010",
+            "rule_id": "LX0609-06-01-02",
             "applicable_document_labels": ["检查检验报告", "日常病程记录"],
         }
     ) == "检查检验报告、日常病程记录"
@@ -642,10 +642,10 @@ async def test_luxian_worker_preserves_first_evaluation_error_before_canonical(
     workspace = _NoCompleteWorkspace()
     workspace.job["record_ids"] = ["visit-001"]
     workspace.job["filters"] = {
-        "rule_ids": ["LX0609-012"],
-        "selected_rule_ids": ["LX0609-012"],
-        "scoped_customer_rule_ids": ["LX0609-012"],
-        "record_rule_map": {"visit-001": ["LX0609-012"]},
+        "rule_ids": ["LX0609-06-01-05"],
+        "selected_rule_ids": ["LX0609-06-01-05"],
+        "scoped_customer_rule_ids": ["LX0609-06-01-05"],
+        "record_rule_map": {"visit-001": ["LX0609-06-01-05"]},
         "rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
         "validation_mode": "programmatic",
     }
@@ -653,7 +653,7 @@ async def test_luxian_worker_preserves_first_evaluation_error_before_canonical(
 
     async def _evaluate_running_final_bundle_input(**_: Any) -> Dict[str, Any]:
         error = ValueError("invalid customer display facts")
-        error.rule_id = "LX0609-012"  # type: ignore[attr-defined]
+        error.rule_id = "LX0609-06-01-05"  # type: ignore[attr-defined]
         raise error
 
     service.evaluate_running_final_bundle_input = _evaluate_running_final_bundle_input  # type: ignore[attr-defined]
@@ -667,7 +667,7 @@ async def test_luxian_worker_preserves_first_evaluation_error_before_canonical(
     monkeypatch.setattr(
         batch_worker,
         "load_luxian_0609_rules",
-        lambda: [get_luxian_0609_rule("LX0609-012")],
+        lambda: [get_luxian_0609_rule("LX0609-06-01-05")],
     )
 
     await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
@@ -676,7 +676,7 @@ async def test_luxian_worker_preserves_first_evaluation_error_before_canonical(
     assert workspace.job["error_message"] == (
         "病历质控未形成可交付结果："
         "客户展示事实不符合交付合同（invalid customer display facts）；"
-        "质控点 LX0609-012"
+        "质控点 LX0609-06-01-05"
     )
     assert workspace.complete_calls == 0
     assert workspace.items == []
@@ -687,7 +687,7 @@ async def test_luxian_worker_preserves_first_evaluation_error_before_canonical(
     ]
     assert failure_updates
     diagnostics = failure_updates[-1]["summary_patch"]["failure_diagnostics"]
-    assert diagnostics[0]["rule_id"] == "LX0609-012"
+    assert diagnostics[0]["rule_id"] == "LX0609-06-01-05"
     assert diagnostics[0]["error"].startswith("invalid customer display facts")
 
 class _ServiceStub:
@@ -1279,7 +1279,7 @@ def test_batch_performance_profile_includes_deduplicated_luxian_input_profile():
     }
     items = [
         {
-            "rule_id": "LX0609-001",
+            "rule_id": "LX0609-01-01-01",
             "record_id": "visit-001",
             "visit_id": "visit-001",
             "status": "non_compliant",
@@ -1290,7 +1290,7 @@ def test_batch_performance_profile_includes_deduplicated_luxian_input_profile():
             },
         },
         {
-            "rule_id": "LX0609-002",
+            "rule_id": "LX0609-01-02-01",
             "record_id": "visit-001",
             "visit_id": "visit-001",
             "status": "non_compliant",
@@ -1337,11 +1337,11 @@ def test_document_evaluation_result_propagates_luxian_input_profile():
     result = service._build_document_evaluation_result(
         document_id="visit-001",
         document_type="终末病历",
-        rules=[{"rule_id": "LX0609-001", "rule_code": "LX0609-001"}],
+        rules=[{"rule_id": "LX0609-01-01-01", "rule_code": "LX0609-01-01-01"}],
         orchestrated={
             "results": [
                 {
-                    "rule_id": "LX0609-001",
+                    "rule_id": "LX0609-01-01-01",
                     "rule_name": "入院记录时限",
                     "status": "non_compliant",
                     "is_compliant": False,
@@ -1505,7 +1505,7 @@ def test_result_aggregation_should_hide_internal_evidence_phrases():
     aggregation = batch_worker._build_result_aggregation(
         [
             {
-                "rule_id": "LX0609-007",
+                "rule_id": "LX0609-02-01-03",
                 "rule_name": "查房记录：病情稳定患者3天内无查房病程记录",
                 "status": "not_applicable",
                 "evidence": (
@@ -2418,7 +2418,7 @@ async def test_create_workspace_batch_job_accepts_native_luxian_customer_ids_wit
         ),
     )
 
-    native_rule_ids = ["LX0609-029", "LX0609-030", "LX0609-032"]
+    native_rule_ids = ["LX0609-04-01-01", "LX0609-04-02-02", "LX0609-04-03-01"]
     request = SimpleNamespace(state=SimpleNamespace())
     payload = qc_sichuan.SichuanWorkspaceBatchJobCreateRequest(
         rule_set_key=qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
@@ -2517,12 +2517,12 @@ async def test_create_workspace_batch_job_full_luxian_set_uses_current_customer_
     submitted_tasks: List[Dict[str, Any]] = []
     customer_rule_ids = [f"LX0609-{index:03d}" for index in range(1, 76)]
     pending_rule_ids = [
-        "LX0609-025",
-        "LX0609-028",
-        "LX0609-049",
-        "LX0609-056",
-        "LX0609-059",
-        "LX0609-075",
+        "LX0609-04-02-04",
+        "LX0609-05-01-01",
+        "LX0609-07-04-02",
+        "LX0609-05-01-04",
+        "LX0609-05-03-01",
+        "LX0609-10-03-01",
     ]
     customer_rule_ids = [
         rule_id
@@ -2582,10 +2582,10 @@ async def test_create_workspace_batch_job_full_luxian_set_uses_current_customer_
     assert filters["customer_rule_count"] == 70
     assert filters["execution_rule_count"] == 64
     assert filters["pending_rule_count"] == 6
-    assert {"LX0609-051", "LX0609-061", "LX0609-067", "LX0609-071"}.issubset(
+    assert {"LX0609-09-02-01", "LX0609-08-01-01", "LX0609-08-02-01", "LX0609-10-01-01"}.issubset(
         filters["active_customer_rule_ids"]
     )
-    assert "LX0609-059" in filters["pending_customer_rule_ids"]
+    assert "LX0609-05-03-01" in filters["pending_customer_rule_ids"]
     assert all(
         selected == customer_rule_ids
         for selected in dict(filters["record_rule_map"]).values()
@@ -2625,14 +2625,14 @@ async def test_create_workspace_batch_job_idempotency_separates_pending_delivery
         assert response["success"] is True
         return dict(workspace.created_job["filters"])
 
-    active_filters = await _create(["LX0609-020"])
-    pending_filters = await _create(["LX0609-020", "LX0609-049"])
+    active_filters = await _create(["LX0609-03-01-01"])
+    pending_filters = await _create(["LX0609-03-01-01", "LX0609-07-04-02"])
 
-    assert active_filters["rule_ids"] == pending_filters["rule_ids"] == ["LX0609-020"]
-    assert active_filters["idempotency_payload"]["customer_rule_ids"] == ["LX0609-020"]
+    assert active_filters["rule_ids"] == pending_filters["rule_ids"] == ["LX0609-03-01-01"]
+    assert active_filters["idempotency_payload"]["customer_rule_ids"] == ["LX0609-03-01-01"]
     assert pending_filters["idempotency_payload"]["customer_rule_ids"] == [
-        "LX0609-020",
-        "LX0609-049",
+        "LX0609-03-01-01",
+        "LX0609-07-04-02",
     ]
     assert active_filters["idempotency_key"] != pending_filters["idempotency_key"]
 
@@ -2666,7 +2666,7 @@ async def test_create_luxian_batch_single_family_off_fails_before_sc_source_chec
             request=SimpleNamespace(state=SimpleNamespace()),  # type: ignore[arg-type]
             payload=qc_sichuan.SichuanWorkspaceBatchJobCreateRequest(
                 rule_set_key=qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
-                rule_ids=["LX0609-044"],
+                rule_ids=["LX0609-07-01-02"],
                 scope="all",
                 record_refs=[
                     {
@@ -2786,13 +2786,13 @@ async def test_luxian_batch_worker_uses_record_scene_and_records_loaded_fallback
     workspace = _WorkspaceStub()
     workspace.job["scope"] = "all"
     workspace.job["filters"] = {
-        "rule_ids": ["LX0609-001"],
-        "selected_rule_ids": ["LX0609-001"],
-        "scoped_customer_rule_ids": ["LX0609-001"],
+        "rule_ids": ["LX0609-01-01-01"],
+        "selected_rule_ids": ["LX0609-01-01-01"],
+        "scoped_customer_rule_ids": ["LX0609-01-01-01"],
         "record_rule_map": {
-            "visit-001": ["LX0609-001"],
-            "visit-002": ["LX0609-001"],
-            "visit-003": ["LX0609-001"],
+            "visit-001": ["LX0609-01-01-01"],
+            "visit-002": ["LX0609-01-01-01"],
+            "visit-003": ["LX0609-01-01-01"],
         },
         "rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
         "validation_mode": "programmatic",
@@ -2880,7 +2880,7 @@ async def test_luxian_batch_worker_uses_record_scene_and_records_loaded_fallback
             return {
                 "evaluation_results": [
                     {
-                        "rule_id": "LX0609-001",
+                        "rule_id": "LX0609-01-01-01",
                         "status": "compliant",
                         "is_compliant": True,
                         "reason_code": "requirement_satisfied",
@@ -3002,11 +3002,11 @@ async def test_worker_and_real_provider_keep_unresolved_record_horizons_empty(
     workspace.job["scope"] = "all"
     workspace.job["record_ids"] = [item["record_id"] for item in snapshots]
     workspace.job["filters"] = {
-        "rule_ids": ["LX0609-012"],
-        "selected_rule_ids": ["LX0609-012"],
-        "scoped_customer_rule_ids": ["LX0609-012"],
+        "rule_ids": ["LX0609-06-01-05"],
+        "selected_rule_ids": ["LX0609-06-01-05"],
+        "scoped_customer_rule_ids": ["LX0609-06-01-05"],
         "record_rule_map": {
-            item["record_id"]: ["LX0609-012"] for item in snapshots
+            item["record_id"]: ["LX0609-06-01-05"] for item in snapshots
         },
         "rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
         "validation_mode": "programmatic",
@@ -3066,7 +3066,7 @@ async def test_worker_and_real_provider_keep_unresolved_record_horizons_empty(
                 )
 
             session = build_luxian_0609_evidence_read_session(
-                selected_rule_ids=("LX0609-012",),
+                selected_rule_ids=("LX0609-06-01-05",),
                 institute_id=str(bundle["institute_id"]),
                 patient_id=str(bundle["patient_id"]),
                 visit_id=visit_id,
@@ -3103,7 +3103,7 @@ async def test_worker_and_real_provider_keep_unresolved_record_horizons_empty(
             return {
                 "evaluation_results": [
                     {
-                        "rule_id": "LX0609-012",
+                        "rule_id": "LX0609-06-01-05",
                         "status": "data_gap",
                         "is_compliant": None,
                         "reason_code": "required_field_missing",
@@ -3151,7 +3151,7 @@ async def test_luxian_batch_single_family_off_fails_before_sc_source_or_evaluati
     monkeypatch,
 ):
     workspace = _WorkspaceStub()
-    customer_rule_ids = ["LX0609-044"]
+    customer_rule_ids = ["LX0609-07-01-02"]
     workspace.job["filters"] = {
         "rule_ids": customer_rule_ids,
         "selected_rule_ids": customer_rule_ids,
@@ -3180,7 +3180,7 @@ async def test_luxian_batch_single_family_off_fails_before_sc_source_or_evaluati
             return {
                 "evaluation_results": [
                     {
-                        "rule_id": "LX0609-044",
+                        "rule_id": "LX0609-07-01-02",
                         "status": "data_gap",
                         "is_compliant": False,
                         "metadata": {"execution_source": "customer_aggregation"},
@@ -3484,17 +3484,17 @@ async def test_create_workspace_batch_job_should_not_reuse_running_job_after_rec
 async def test_luxian_runtime_shadow_metadata_is_additive_and_precedes_evaluation(monkeypatch):
     workspace = _WorkspaceStub()
     workspace.job["filters"] = {
-        "rule_ids": ["LX0609-030"],
-        "selected_rule_ids": ["LX0609-030"],
-        "scoped_customer_rule_ids": ["LX0609-030"],
-        "record_rule_map": {"visit-001": ["LX0609-030"], "visit-002": ["LX0609-030"]},
+        "rule_ids": ["LX0609-04-02-02"],
+        "selected_rule_ids": ["LX0609-04-02-02"],
+        "scoped_customer_rule_ids": ["LX0609-04-02-02"],
+        "record_rule_map": {"visit-001": ["LX0609-04-02-02"], "visit-002": ["LX0609-04-02-02"]},
         "rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
         "validation_mode": "programmatic",
         "date_field": "discharge",
     }
     service = _ServiceStub()
     sequence: List[str] = []
-    evaluation_row: Dict[str, Any] = {"rule_id": "LX0609-030", "status": "compliant", "is_compliant": True, "metadata": {"tokens_used": 17}}
+    evaluation_row: Dict[str, Any] = {"rule_id": "LX0609-04-02-02", "status": "compliant", "is_compliant": True, "metadata": {"tokens_used": 17}}
 
     async def _evaluate_running_final_bundle_input(**_: Any) -> Dict[str, Any]:
         sequence.append("evaluate")
@@ -3513,7 +3513,7 @@ async def test_luxian_runtime_shadow_metadata_is_additive_and_precedes_evaluatio
         "get_settings",
         lambda: _luxian_native_settings(LUXIAN_0609_RUNTIME_SHADOW_ENABLED=True),
     )
-    monkeypatch.setattr(batch_worker, "load_luxian_0609_rules", lambda: [{"rule_id": "LX0609-030", "rule_code": "LX0609-030", "name": "规则-030"}])
+    monkeypatch.setattr(batch_worker, "load_luxian_0609_rules", lambda: [{"rule_id": "LX0609-04-02-02", "rule_code": "LX0609-04-02-02", "name": "规则-030"}])
     original_hook = batch_worker.run_luxian_0609_runtime_shadow
 
     def _hook(**kwargs: Any) -> Dict[str, Any]:
@@ -3542,7 +3542,7 @@ async def _run_native_usage_batch(
     llm_call_count: int,
 ) -> _WorkspaceStub:
     workspace = _WorkspaceStub()
-    native_rule_ids = ["LX0609-029", "LX0609-030"]
+    native_rule_ids = ["LX0609-04-01-01", "LX0609-04-02-02"]
     workspace.job["record_ids"] = ["visit-001"]
     workspace.job["filters"] = {
         "rule_ids": native_rule_ids,
@@ -3657,7 +3657,7 @@ async def test_native_usage_distribution_preserves_odd_token_totals(
 @pytest.mark.asyncio
 async def test_native_luxian_batch_worker_uses_customer_ids_without_sc_rule_lookup(monkeypatch):
     workspace = _WorkspaceStub()
-    native_rule_ids = ["LX0609-029", "LX0609-030", "LX0609-032"]
+    native_rule_ids = ["LX0609-04-01-01", "LX0609-04-02-02", "LX0609-04-03-01"]
     workspace.job["filters"] = {
         "rule_ids": native_rule_ids,
         "selected_rule_ids": native_rule_ids,
@@ -3687,8 +3687,8 @@ async def test_native_luxian_batch_worker_uses_customer_ids_without_sc_rule_look
             "evaluation_results": [
                 {
                     "rule_id": rule_id,
-                    "status": "compliant" if rule_id != "LX0609-032" else "non_compliant",
-                    "is_compliant": rule_id != "LX0609-032",
+                    "status": "compliant" if rule_id != "LX0609-04-03-01" else "non_compliant",
+                    "is_compliant": rule_id != "LX0609-04-03-01",
                     "prompt_version": "native-should-hide",
                     "model_version": "native-should-hide",
                     "metadata": {
@@ -3804,7 +3804,7 @@ async def test_native_luxian_worker_coalesces_executor_phase_before_canonical_re
             workspace.failed_records = list(failed_records)
 
     workspace.update_batch_job_progress = _update_incremental_progress  # type: ignore[method-assign]
-    native_rule_ids = ["LX0609-029", "LX0609-030"]
+    native_rule_ids = ["LX0609-04-01-01", "LX0609-04-02-02"]
     workspace.job["record_ids"] = ["visit-001"]
     workspace.job["parent_job_id"] = "parent-job-throughput-001"
     workspace.job["filters"] = {
@@ -3937,16 +3937,16 @@ async def test_native_criterion_result_persists_canonical_contract_fields_for_si
 ) -> None:
     """018 的当前契约版本必须从原生 eval 顶层保存，而非只读 metadata。"""
 
-    rule = get_luxian_0609_rule("LX0609-018")
+    rule = get_luxian_0609_rule("LX0609-01-01-02")
     assert rule is not None
     rule_version = str(rule["rule_version"])
     workspace = _WorkspaceStub()
     workspace.job["record_ids"] = ["visit-001"]
     workspace.job["filters"] = {
-        "rule_ids": ["LX0609-018"],
-        "selected_rule_ids": ["LX0609-018"],
-        "scoped_customer_rule_ids": ["LX0609-018"],
-        "record_rule_map": {"visit-001": ["LX0609-018"]},
+        "rule_ids": ["LX0609-01-01-02"],
+        "selected_rule_ids": ["LX0609-01-01-02"],
+        "scoped_customer_rule_ids": ["LX0609-01-01-02"],
+        "record_rule_map": {"visit-001": ["LX0609-01-01-02"]},
         "rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
         "validation_mode": "programmatic",
     }
@@ -3956,7 +3956,7 @@ async def test_native_criterion_result_persists_canonical_contract_fields_for_si
         return {
             "evaluation_results": [
                 {
-                    "rule_id": "LX0609-018",
+                    "rule_id": "LX0609-01-01-02",
                     "rule_version": rule_version,
                     "status": "data_gap",
                     "result_status": "data_gap",
@@ -3993,7 +3993,7 @@ async def test_native_criterion_result_persists_canonical_contract_fields_for_si
 
     await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
 
-    persisted = next(item for item in workspace.items if item["rule_id"] == "LX0609-018")
+    persisted = next(item for item in workspace.items if item["rule_id"] == "LX0609-01-01-02")
     assert persisted["rule_version"] == rule_version
     assert persisted["rule_version"] != persisted["metadata"]["rule_version"]
     assert persisted["status"] == "data_gap"
@@ -4009,16 +4009,16 @@ async def test_native_luxian_paused_customer_rule_is_persisted_as_paused_not_mis
 ) -> None:
     """样本池策略暂停必须经 worker 投影为客户可懂结果，而不是执行异常。"""
 
-    active_rule = get_luxian_0609_rule("LX0609-020")
-    paused_rule = get_luxian_0609_rule("LX0609-049")
+    active_rule = get_luxian_0609_rule("LX0609-03-01-01")
+    paused_rule = get_luxian_0609_rule("LX0609-07-04-02")
     assert active_rule is not None and paused_rule is not None
     workspace = _WorkspaceStub()
     workspace.job["record_ids"] = ["visit-001"]
     workspace.job["filters"] = {
-        "rule_ids": ["LX0609-020"],
-        "selected_rule_ids": ["LX0609-020"],
-        "scoped_customer_rule_ids": ["LX0609-020", "LX0609-049"],
-        "paused_customer_rule_ids": ["LX0609-049"],
+        "rule_ids": ["LX0609-03-01-01"],
+        "selected_rule_ids": ["LX0609-03-01-01"],
+        "scoped_customer_rule_ids": ["LX0609-03-01-01", "LX0609-07-04-02"],
+        "paused_customer_rule_ids": ["LX0609-07-04-02"],
         "rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
         "validation_mode": "programmatic",
     }
@@ -4028,7 +4028,7 @@ async def test_native_luxian_paused_customer_rule_is_persisted_as_paused_not_mis
         return {
             "evaluation_results": [
                 {
-                    "rule_id": "LX0609-020",
+                    "rule_id": "LX0609-03-01-01",
                     "status": "compliant",
                     "result_status": "compliant",
                     "reason_code": "requirement_satisfied",
@@ -4059,7 +4059,7 @@ async def test_native_luxian_paused_customer_rule_is_persisted_as_paused_not_mis
 
     await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
 
-    paused_item = next(item for item in workspace.items if item["rule_id"] == "LX0609-049")
+    paused_item = next(item for item in workspace.items if item["rule_id"] == "LX0609-07-04-02")
     assert workspace.failed_records == []
     assert paused_item["status"] == "not_executed"
     assert paused_item["result_status"] == "not_executed"
@@ -4077,15 +4077,15 @@ async def test_native_luxian_paused_customer_rule_is_persisted_as_paused_not_mis
 async def test_native_copy_result_is_not_reinterpreted_by_legacy_batch_guard(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    rule = get_luxian_0609_rule("LX0609-016")
+    rule = get_luxian_0609_rule("LX0609-12-01-01")
     assert rule is not None
     workspace = _WorkspaceStub()
     workspace.job["record_ids"] = ["visit-001"]
     workspace.job["filters"] = {
-        "rule_ids": ["LX0609-016"],
-        "selected_rule_ids": ["LX0609-016"],
-        "scoped_customer_rule_ids": ["LX0609-016"],
-        "record_rule_map": {"visit-001": ["LX0609-016"]},
+        "rule_ids": ["LX0609-12-01-01"],
+        "selected_rule_ids": ["LX0609-12-01-01"],
+        "scoped_customer_rule_ids": ["LX0609-12-01-01"],
+        "record_rule_map": {"visit-001": ["LX0609-12-01-01"]},
         "rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
         "validation_mode": "programmatic",
     }
@@ -4095,7 +4095,7 @@ async def test_native_copy_result_is_not_reinterpreted_by_legacy_batch_guard(
         return {
             "evaluation_results": [
                 {
-                    "rule_id": "LX0609-016",
+                    "rule_id": "LX0609-12-01-01",
                     "status": "compliant",
                     "result_status": "compliant",
                     "reason_code": "requirement_satisfied",
@@ -4129,7 +4129,7 @@ async def test_native_copy_result_is_not_reinterpreted_by_legacy_batch_guard(
 
     await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
 
-    persisted = next(item for item in workspace.items if item["rule_id"] == "LX0609-016")
+    persisted = next(item for item in workspace.items if item["rule_id"] == "LX0609-12-01-01")
     assert persisted["status"] == "compliant"
     assert persisted["result_status"] == "compliant"
     assert persisted["reason_code"] == "requirement_satisfied"
@@ -4140,7 +4140,7 @@ async def test_native_copy_result_is_not_reinterpreted_by_legacy_batch_guard(
 @pytest.mark.asyncio
 async def test_luxian_batch_aggregation_off_fails_without_legacy_rollback(monkeypatch):
     workspace = _WorkspaceStub()
-    native_rule_ids = ["LX0609-029", "LX0609-030", "LX0609-032"]
+    native_rule_ids = ["LX0609-04-01-01", "LX0609-04-02-02", "LX0609-04-03-01"]
     workspace.job["filters"] = {
         "rule_ids": native_rule_ids,
         "selected_rule_ids": native_rule_ids,
@@ -4219,16 +4219,16 @@ async def test_luxian_batch_aggregation_off_fails_without_legacy_rollback(monkey
 async def test_luxian_runtime_shadow_preserves_explicit_empty_selected_scope(monkeypatch):
     workspace = _WorkspaceStub()
     workspace.job["filters"] = {
-        "rule_ids": ["LX0609-030"], "selected_rule_ids": [],
-        "scoped_customer_rule_ids": ["LX0609-030"],
-        "record_rule_map": {"visit-001": ["LX0609-030"], "visit-002": ["LX0609-030"]},
+        "rule_ids": ["LX0609-04-02-02"], "selected_rule_ids": [],
+        "scoped_customer_rule_ids": ["LX0609-04-02-02"],
+        "record_rule_map": {"visit-001": ["LX0609-04-02-02"], "visit-002": ["LX0609-04-02-02"]},
         "rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY, "validation_mode": "programmatic",
     }
     service = _ServiceStub()
     summaries: List[Dict[str, Any]] = []
 
     async def _evaluate_running_final_bundle_input(**_: Any) -> Dict[str, Any]:
-        return {"evaluation_results": [{"rule_id": "LX0609-030", "status": "compliant", "is_compliant": True, "metadata": {}}]}
+        return {"evaluation_results": [{"rule_id": "LX0609-04-02-02", "status": "compliant", "is_compliant": True, "metadata": {}}]}
 
     service.evaluate_running_final_bundle_input = _evaluate_running_final_bundle_input  # type: ignore[attr-defined]
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
@@ -4253,9 +4253,9 @@ async def test_luxian_runtime_shadow_preserves_explicit_empty_selected_scope(mon
 @pytest.mark.asyncio
 async def test_luxian_runtime_shadow_flag_off_does_not_call_hook(monkeypatch):
     workspace = _WorkspaceStub()
-    workspace.job["filters"] = {"rule_ids": ["LX0609-030"], "selected_rule_ids": ["LX0609-030"], "scoped_customer_rule_ids": ["LX0609-030"], "record_rule_map": {"visit-001": ["LX0609-030"], "visit-002": ["LX0609-030"]}, "rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY, "validation_mode": "programmatic"}
+    workspace.job["filters"] = {"rule_ids": ["LX0609-04-02-02"], "selected_rule_ids": ["LX0609-04-02-02"], "scoped_customer_rule_ids": ["LX0609-04-02-02"], "record_rule_map": {"visit-001": ["LX0609-04-02-02"], "visit-002": ["LX0609-04-02-02"]}, "rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY, "validation_mode": "programmatic"}
     service = _ServiceStub()
-    async def _evaluate_running_final_bundle_input(**_: Any) -> Dict[str, Any]: return {"evaluation_results": [{"rule_id": "LX0609-030", "status": "compliant", "is_compliant": True, "metadata": {}}]}
+    async def _evaluate_running_final_bundle_input(**_: Any) -> Dict[str, Any]: return {"evaluation_results": [{"rule_id": "LX0609-04-02-02", "status": "compliant", "is_compliant": True, "metadata": {}}]}
     service.evaluate_running_final_bundle_input = _evaluate_running_final_bundle_input  # type: ignore[attr-defined]
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
     async def _get_qc_service(): return service
@@ -4273,13 +4273,13 @@ async def test_luxian_runtime_shadow_flag_off_does_not_call_hook(monkeypatch):
 @pytest.mark.asyncio
 async def test_luxian_runtime_shadow_router_uses_provider_coordinates_and_persists_completed(monkeypatch):
     workspace = _WorkspaceStub()
-    workspace.job["filters"] = {"rule_ids": ["LX0609-030"], "selected_rule_ids": ["LX0609-030"], "scoped_customer_rule_ids": ["LX0609-030"], "record_rule_map": {"visit-001": ["LX0609-030"], "visit-002": ["LX0609-030"]}, "rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY, "validation_mode": "programmatic", "evaluation_as_of_date": "2026-07-17"}
+    workspace.job["filters"] = {"rule_ids": ["LX0609-04-02-02"], "selected_rule_ids": ["LX0609-04-02-02"], "scoped_customer_rule_ids": ["LX0609-04-02-02"], "record_rule_map": {"visit-001": ["LX0609-04-02-02"], "visit-002": ["LX0609-04-02-02"]}, "rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY, "validation_mode": "programmatic", "evaluation_as_of_date": "2026-07-17"}
     workspace.hydrate_records_with_medical_text = lambda rows: [{**row, "institute_id": "i", "patient_id": "p", "medical_text": "ignored"} for row in rows]  # type: ignore[assignment]
     service = _ServiceStub()
     service_calls: List[Dict[str, Any]] = []
     async def _evaluate_running_final_bundle_input(**kwargs: Any) -> Dict[str, Any]:
         service_calls.append(dict(kwargs))
-        return {"evaluation_results": [{"rule_id": "LX0609-030", "status": "compliant", "is_compliant": True, "metadata": {}}]}
+        return {"evaluation_results": [{"rule_id": "LX0609-04-02-02", "status": "compliant", "is_compliant": True, "metadata": {}}]}
     service.evaluate_running_final_bundle_input = _evaluate_running_final_bundle_input  # type: ignore[attr-defined]
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
     async def _get_qc_service(): return service
@@ -4289,7 +4289,7 @@ async def test_luxian_runtime_shadow_router_uses_provider_coordinates_and_persis
         "get_settings",
         lambda: _luxian_native_settings(LUXIAN_0609_RUNTIME_SHADOW_ENABLED=True),
     )
-    monkeypatch.setattr(batch_worker, "load_luxian_0609_rules", lambda: [{"rule_id": "LX0609-030", "rule_code": "LX0609-030", "name": "规则-030"}])
+    monkeypatch.setattr(batch_worker, "load_luxian_0609_rules", lambda: [{"rule_id": "LX0609-04-02-02", "rule_code": "LX0609-04-02-02", "name": "规则-030"}])
     def _reader(**kwargs: Any):
         assert kwargs["source_schema"] is None
         return [{"surgery_begin_time": "2026-01-01 08:00:00+08"}] if kwargs["source_key"] == "surgery_record" else [{}]
@@ -4374,11 +4374,11 @@ async def test_formal_customer_sample_model_failure_automatically_retries_failed
                 "visit_id": "visit-001",
             }
         ],
-        "rule_ids": ["LX0609-011", "LX0609-012"],
-        "selected_rule_ids": ["LX0609-011", "LX0609-012"],
-        "scoped_customer_rule_ids": ["LX0609-011", "LX0609-012"],
+        "rule_ids": ["LX0609-06-01-04", "LX0609-06-01-05"],
+        "selected_rule_ids": ["LX0609-06-01-04", "LX0609-06-01-05"],
+        "scoped_customer_rule_ids": ["LX0609-06-01-04", "LX0609-06-01-05"],
         "record_rule_map": {
-            "visit-001": ["LX0609-011", "LX0609-012"],
+            "visit-001": ["LX0609-06-01-04", "LX0609-06-01-05"],
         },
         "sample_pool_id": "pool-model-failure-001",
         "rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
@@ -4429,7 +4429,7 @@ async def test_formal_customer_sample_model_failure_automatically_retries_failed
             return {
                 "evaluation_results": [
                     {
-                        "rule_id": "LX0609-012",
+                        "rule_id": "LX0609-06-01-05",
                         "status": "compliant",
                         "result_status": "compliant",
                         "display_status": "compliant",
@@ -4451,10 +4451,10 @@ async def test_formal_customer_sample_model_failure_automatically_retries_failed
                 },
             }
         evaluation_results = []
-        if "LX0609-011" in active_rule_ids:
+        if "LX0609-06-01-04" in active_rule_ids:
             evaluation_results.append(
                 {
-                    "rule_id": "LX0609-011",
+                    "rule_id": "LX0609-06-01-04",
                     "status": "compliant",
                     "result_status": "compliant",
                     "display_status": "compliant",
@@ -4464,7 +4464,7 @@ async def test_formal_customer_sample_model_failure_automatically_retries_failed
             )
         evaluation_results.append(
                 {
-                    "rule_id": "LX0609-012",
+                    "rule_id": "LX0609-06-01-05",
                     "status": "technical_error",
                     "result_status": "technical_error",
                     "display_status": "technical_error",
@@ -4477,7 +4477,7 @@ async def test_formal_customer_sample_model_failure_automatically_retries_failed
                 }
         )
         requested_count = len(active_rule_ids)
-        first_success_count = 1 if "LX0609-011" in active_rule_ids else 0
+        first_success_count = 1 if "LX0609-06-01-04" in active_rule_ids else 0
         return {
             "evaluation_results": evaluation_results,
             "token_usage": {"total_tokens": 0, "prompt_tokens": 0, "completion_tokens": 0},
@@ -4505,7 +4505,7 @@ async def test_formal_customer_sample_model_failure_automatically_retries_failed
     monkeypatch.setattr(
         batch_worker,
         "load_luxian_0609_rules",
-        lambda: [get_luxian_0609_rule("LX0609-011"), get_luxian_0609_rule("LX0609-012")],
+        lambda: [get_luxian_0609_rule("LX0609-06-01-04"), get_luxian_0609_rule("LX0609-06-01-05")],
     )
 
     await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
@@ -4518,11 +4518,11 @@ async def test_formal_customer_sample_model_failure_automatically_retries_failed
         assert workspace.summary["completed_rule_count"] == 2
         assert workspace.summary["failed_rule_ids"] == []
         assert workspace.summary["retry_recovered_count"] == 1
-        assert model_calls == [("LX0609-011", "LX0609-012"), ("LX0609-012",)]
+        assert model_calls == [("LX0609-06-01-04", "LX0609-06-01-05"), ("LX0609-06-01-05",)]
         assert len(retry_calls) == 1
         assert [item["rule_id"] for item in workspace.items] == [
-            "LX0609-011",
-            "LX0609-012",
+            "LX0609-06-01-04",
+            "LX0609-06-01-05",
         ]
         assert workspace.failed_records == []
     else:
@@ -4531,8 +4531,8 @@ async def test_formal_customer_sample_model_failure_automatically_retries_failed
         assert workspace.summary["automatic_failed_rule_retry"]["status"] == "exhausted"
         assert len(model_calls) == 4
         assert len(retry_calls) == 3
-        assert [item["rule_id"] for item in workspace.items] == ["LX0609-011"]
-        assert [item["rule_id"] for item in workspace.failed_records] == ["LX0609-012"]
+        assert [item["rule_id"] for item in workspace.items] == ["LX0609-06-01-04"]
+        assert [item["rule_id"] for item in workspace.failed_records] == ["LX0609-06-01-05"]
     assert all(call["automatic"] is True for call in retry_calls)
     assert all(call["scope"]["pending_count"] == 1 for call in retry_calls)
 
@@ -4647,7 +4647,7 @@ async def _run_formal_customer_sample_batch_fixture(
 async def test_formal_customer_sample_all_model_rules_failed_has_no_items_and_failed_summary(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    rule_ids = ["LX0609-011", "LX0609-012"]
+    rule_ids = ["LX0609-06-01-04", "LX0609-06-01-05"]
     workspace = await _run_formal_customer_sample_batch_fixture(
         monkeypatch,
         rule_ids=rule_ids,
@@ -4694,7 +4694,7 @@ async def test_formal_customer_sample_all_model_rules_failed_has_no_items_and_fa
 async def test_formal_customer_sample_true_data_gap_is_completed_without_execution_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    rule_id = "LX0609-011"
+    rule_id = "LX0609-06-01-04"
     workspace = await _run_formal_customer_sample_batch_fixture(
         monkeypatch,
         rule_ids=[rule_id],
@@ -4731,16 +4731,16 @@ async def test_formal_customer_sample_true_data_gap_is_completed_without_executi
 async def test_formal_customer_sample_model_stats_sum_two_records_and_failed_record_is_not_success(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    rule_ids = ["LX0609-011", "LX0609-012"]
+    rule_ids = ["LX0609-06-01-04", "LX0609-06-01-05"]
     workspace = await _run_formal_customer_sample_batch_fixture(
         monkeypatch,
         rule_ids=rule_ids,
         record_ids=["visit-001", "visit-002"],
         eval_items_by_record={
             "visit-001": [
-                _customer_batch_eval_item("LX0609-011", "compliant"),
+                _customer_batch_eval_item("LX0609-06-01-04", "compliant"),
                 _customer_batch_eval_item(
-                    "LX0609-012",
+                    "LX0609-06-01-05",
                     "data_gap",
                     reason_code="required_field_missing",
                 ),
@@ -4817,7 +4817,7 @@ async def test_partial_failed_retry_executes_only_failed_pairs_and_merges_to_com
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     workspace = _WorkspaceStub()
-    all_rule_ids = ["LX0609-011", "LX0609-012", "LX0609-040"]
+    all_rule_ids = ["LX0609-06-01-04", "LX0609-06-01-05", "LX0609-04-01-03"]
     _configure_formal_customer_sample_batch_fixture(
         workspace,
         rule_ids=all_rule_ids,
@@ -4842,10 +4842,10 @@ async def test_partial_failed_retry_executes_only_failed_pairs_and_merges_to_com
         "schema_version": "failed-rule-retry-v1",
         "attempt": 1,
         "record_refs": refs,
-        "rule_ids": ["LX0609-012", "LX0609-040"],
+        "rule_ids": ["LX0609-06-01-05", "LX0609-04-01-03"],
         "record_rule_map": {
-            CaseRef.from_mapping(refs[0]).as_key(): ["LX0609-012"],
-            CaseRef.from_mapping(refs[1]).as_key(): ["LX0609-040"],
+            CaseRef.from_mapping(refs[0]).as_key(): ["LX0609-06-01-05"],
+            CaseRef.from_mapping(refs[1]).as_key(): ["LX0609-04-01-03"],
         },
         "pending_count": 2,
     }
@@ -4871,20 +4871,20 @@ async def test_partial_failed_retry_executes_only_failed_pairs_and_merges_to_com
         }
 
     base_items = [
-        _item("visit-001", "LX0609-011"),
-        _item("visit-001", "LX0609-040"),
-        _item("visit-002", "LX0609-011"),
-        _item("visit-002", "LX0609-012"),
+        _item("visit-001", "LX0609-06-01-04"),
+        _item("visit-001", "LX0609-04-01-03"),
+        _item("visit-002", "LX0609-06-01-04"),
+        _item("visit-002", "LX0609-06-01-05"),
     ]
     base_failures = [
-        {**_item("visit-001", "LX0609-012"), "error_phase": "result_status"},
-        {**_item("visit-002", "LX0609-040"), "error_phase": "result_status"},
+        {**_item("visit-001", "LX0609-06-01-05"), "error_phase": "result_status"},
+        {**_item("visit-002", "LX0609-04-01-03"), "error_phase": "result_status"},
     ]
     base_rule_results = [
         {
             "rule_code": rule_id,
             "rule_name": rule_id,
-            "status": "failed" if rule_id in {"LX0609-012", "LX0609-040"} else "completed",
+            "status": "failed" if rule_id in {"LX0609-06-01-05", "LX0609-04-01-03"} else "completed",
         }
         for rule_id in all_rule_ids
     ]
@@ -4947,8 +4947,8 @@ async def test_partial_failed_retry_executes_only_failed_pairs_and_merges_to_com
     )
 
     assert calls == [
-        ("visit-001", ("LX0609-012",)),
-        ("visit-002", ("LX0609-040",)),
+        ("visit-001", ("LX0609-06-01-05",)),
+        ("visit-002", ("LX0609-04-01-03",)),
     ]
     assert persisted_item_counts
     assert min(persisted_item_counts) >= len(base_items)

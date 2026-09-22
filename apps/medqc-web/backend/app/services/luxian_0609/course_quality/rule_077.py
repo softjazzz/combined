@@ -1,4 +1,4 @@
-"""LX0609-077：首次病程鉴别诊断与第一诊断关联性。"""
+"""LX0609-01-02-02：首次病程鉴别诊断与第一诊断关联性。"""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ from ..evidence_snapshot import Luxian0609EvidenceSnapshot
 from .shared import clean_text, response_json_payload
 
 
-RULE_ID = "LX0609-077"
+RULE_ID = "LX0609-01-02-02"
 SOURCE_KEYS = (
     "first_course_record",
     "first_course_record_diagnosis",
@@ -260,7 +260,7 @@ def _decision(
     criterion: CriterionResult | None = None,
 ) -> RuleDecision:
     if status not in ALLOWED_RESULT_STATUSES:
-        raise ValueError("LX0609-077 produced a status outside its rule contract")
+        raise ValueError("LX0609-01-02-02 produced a status outside its rule contract")
     if status == "data_gap" and reason_code not in _DELIVERABLE_DATA_GAP_REASONS:
         reason_code = (
             "linkage_unresolved"

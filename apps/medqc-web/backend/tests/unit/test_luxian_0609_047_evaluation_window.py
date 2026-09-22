@@ -41,7 +41,7 @@ def _session(
         )
 
     return build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-047",),
+        selected_rule_ids=("LX0609-07-03-01",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -58,7 +58,7 @@ def _session(
 
 async def _execute(session: Any):
     return await execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-047",),
+        rule_ids=("LX0609-07-03-01",),
         wrapper_rules=[],
         evidence_payload=None,
         institute_id="I",
@@ -68,14 +68,14 @@ async def _execute(session: Any):
         llm_client=None,
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
-        decision_rule_ids=("LX0609-047",),
+        decision_rule_ids=("LX0609-07-03-01",),
     )
 
 
 def _canonical_state(*, result: Any, session: Any) -> tuple[str, str]:
     canonical = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-047",),
+        expected_rule_ids=("LX0609-07-03-01",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )[0]

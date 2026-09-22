@@ -29,10 +29,10 @@ from scripts.run_luxian_0609_consultation_ordinary_validation import (
 
 
 RULE_IDS = (
-    "LX0609-020",
-    "LX0609-021",
-    "LX0609-022",
-    "LX0609-023",
+    "LX0609-03-01-01",
+    "LX0609-03-01-02",
+    "LX0609-03-01-03",
+    "LX0609-03-01-04",
 )
 SAFE_LEDGER_FIELDS = frozenset((
     "case_label",

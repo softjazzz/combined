@@ -21,7 +21,7 @@ def _ready_result():
         "is_complete": True,
         "items": [
             {
-                "rule_id": "LX0609-017",
+                "rule_id": "LX0609-12-01-02",
                 "rule_name": "不合理复制病历",
                 "source_document": "病程记录",
                 "qc_point": "两次以上病程记录高度相似",
@@ -44,7 +44,7 @@ def _ready_result():
                 "raw_response": "SECRET_RESPONSE",
             },
             {
-                "rule_id": "LX0609-001",
+                "rule_id": "LX0609-01-01-01",
                 "rule_name": "入院记录及时完成",
                 "source_document": "入院记录",
                 "qc_point": "入院后24小时内完成",
@@ -98,7 +98,7 @@ def test_filtered_workbook_contains_summary_and_rule_details_without_internal_fi
     assert summary_rows[1][0] == "患者甲"
     assert summary_rows[1][6] == "需优先复核"
     assert summary_rows[1][7] == 1
-    assert issue_rows[1][3] == "LX0609-017"
+    assert issue_rows[1][3] == "LX0609-12-01-02"
     assert len(all_rows) == 3
     flattened = "\n".join(str(value) for row in all_rows for value in row if value is not None)
     assert "术后第1日病程：患者神志清楚，切口敷料干燥" in flattened

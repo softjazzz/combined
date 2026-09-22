@@ -9,7 +9,7 @@ from types import MappingProxyType
 from typing import Any, Mapping, Sequence
 
 
-RULE_IDS = ("LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023")
+RULE_IDS = ("LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03", "LX0609-03-01-04")
 SOURCES = frozenset(
     {
         "consultation_record",
@@ -678,8 +678,8 @@ def synthesize_consultation_semantic_states(
 
     return MappingProxyType(
         {
-            "LX0609-021": resolve("purpose"),
-            "LX0609-022": resolve("opinion"),
+            "LX0609-03-01-02": resolve("purpose"),
+            "LX0609-03-01-03": resolve("opinion"),
         }
     )
 
@@ -822,7 +822,7 @@ def synthesize_consultation_execution_states(
                 )
             ),
         )
-        return MappingProxyType({"LX0609-020": state, "LX0609-023": state})
+        return MappingProxyType({"LX0609-03-01-01": state, "LX0609-03-01-04": state})
 
     all_links = tuple(link for episode in episodes for link in episode.links)
     covered = {
@@ -873,27 +873,27 @@ def synthesize_consultation_execution_states(
             else "execution_source_incomplete",
         )
     return MappingProxyType(
-        {"LX0609-020": result_020, "LX0609-023": result_023}
+        {"LX0609-03-01-01": result_020, "LX0609-03-01-04": result_023}
     )
 
 
 _SIMPLE_FACT_STATES = {
-    "LX0609-020": frozenset(
+    "LX0609-03-01-01": frozenset(
         {"execution_all_present", "execution_missing", "no_completed_opinion", "unknown"}
     ),
-    "LX0609-021": frozenset(
+    "LX0609-03-01-02": frozenset(
         {"purpose_clear", "purpose_vague", "purpose_missing", "no_application", "unknown"}
     ),
-    "LX0609-022": frozenset(
+    "LX0609-03-01-03": frozenset(
         {"opinion_clear", "opinion_vague", "opinion_missing", "no_completed_opinion", "unknown"}
     ),
-    "LX0609-023": frozenset({"execution_specific", "execution_vague", "execution_absent", "unknown"}),
+    "LX0609-03-01-04": frozenset({"execution_specific", "execution_vague", "execution_absent", "unknown"}),
 }
 _SIMPLE_FACT_REF_SOURCES = {
-    "LX0609-020": SOURCES,
-    "LX0609-021": frozenset({"consultation_record"}),
-    "LX0609-022": frozenset({"consultation_record"}),
-    "LX0609-023": SOURCES,
+    "LX0609-03-01-01": SOURCES,
+    "LX0609-03-01-02": frozenset({"consultation_record"}),
+    "LX0609-03-01-03": frozenset({"consultation_record"}),
+    "LX0609-03-01-04": SOURCES,
 }
 
 
@@ -970,7 +970,7 @@ def synthesize_consultation_rule_fact_states(
                 "evaluation_unknown", "semantic_low_confidence"
             )
             continue
-        if rule_id == "LX0609-020":
+        if rule_id == "LX0609-03-01-01":
             if item.fact == "no_completed_opinion":
                 outcomes[rule_id] = _state(
                     "not_applicable" if consultation_source_complete else "data_gap",
@@ -994,7 +994,7 @@ def synthesize_consultation_rule_fact_states(
                     if consultation_source_complete
                     else "execution_source_incomplete",
                 )
-        elif rule_id == "LX0609-021":
+        elif rule_id == "LX0609-03-01-02":
             if item.fact == "no_application":
                 outcomes[rule_id] = _state(
                     "not_applicable" if consultation_source_complete else "data_gap",
@@ -1014,7 +1014,7 @@ def synthesize_consultation_rule_fact_states(
                     if consultation_source_complete
                     else "application_unresolved",
                 )
-        elif rule_id == "LX0609-022":
+        elif rule_id == "LX0609-03-01-03":
             if item.fact == "no_completed_opinion":
                 outcomes[rule_id] = _state(
                     "not_applicable" if consultation_source_complete else "data_gap",
@@ -1099,21 +1099,21 @@ def synthesize_consultation_rule_states(
             application_facts, kind="application"
         )
         if known_defect:
-            outcomes["LX0609-021"] = _state(
+            outcomes["LX0609-03-01-02"] = _state(
                 "non_compliant", f"purpose_{value}"
             )
         elif not consultation_source_complete:
-            outcomes["LX0609-021"] = _state(
+            outcomes["LX0609-03-01-02"] = _state(
                 "data_gap", "application_unresolved"
             )
         elif value == "unknown" or uncertain_consultation:
-            outcomes["LX0609-021"] = _state(
+            outcomes["LX0609-03-01-02"] = _state(
                 "evaluation_unknown", "semantic_low_confidence"
             )
         else:
-            outcomes["LX0609-021"] = _state("compliant", "purpose_clear")
+            outcomes["LX0609-03-01-02"] = _state("compliant", "purpose_clear")
     elif opinion_facts:
-        outcomes["LX0609-021"] = _state(
+        outcomes["LX0609-03-01-02"] = _state(
             "evaluation_unknown" if consultation_source_complete else "data_gap",
             (
                 "semantic_low_confidence"
@@ -1122,7 +1122,7 @@ def synthesize_consultation_rule_states(
             ),
         )
     else:
-        outcomes["LX0609-021"] = _state(
+        outcomes["LX0609-03-01-02"] = _state(
             (
                 "evaluation_unknown"
                 if uncertain_consultation
@@ -1146,19 +1146,19 @@ def synthesize_consultation_rule_states(
     if opinion_facts:
         value, known_defect = _semantic_summary(opinion_facts, kind="opinion")
         if known_defect:
-            outcomes["LX0609-022"] = _state(
+            outcomes["LX0609-03-01-03"] = _state(
                 "non_compliant", f"opinion_{value}"
             )
         elif not consultation_source_complete:
-            outcomes["LX0609-022"] = _state("data_gap", "opinion_unresolved")
+            outcomes["LX0609-03-01-03"] = _state("data_gap", "opinion_unresolved")
         elif value == "unknown" or uncertain_consultation:
-            outcomes["LX0609-022"] = _state(
+            outcomes["LX0609-03-01-03"] = _state(
                 "evaluation_unknown", "semantic_low_confidence"
             )
         else:
-            outcomes["LX0609-022"] = _state("compliant", "opinion_clear")
+            outcomes["LX0609-03-01-03"] = _state("compliant", "opinion_clear")
     else:
-        outcomes["LX0609-022"] = _state(
+        outcomes["LX0609-03-01-03"] = _state(
             (
                 "evaluation_unknown"
                 if uncertain_consultation
@@ -1225,7 +1225,7 @@ def synthesize_consultation_rule_states(
         and link.quality in {"specific", "vague"}
     )
     if not opinion_episodes:
-        outcomes["LX0609-020"] = _state(
+        outcomes["LX0609-03-01-01"] = _state(
             (
                 "evaluation_unknown"
                 if uncertain_consultation
@@ -1246,11 +1246,11 @@ def synthesize_consultation_rule_states(
             ),
         )
     elif uncertain_consultation or uncertain_opinion:
-        outcomes["LX0609-020"] = _state(
+        outcomes["LX0609-03-01-01"] = _state(
             "evaluation_unknown", "semantic_low_confidence"
         )
     elif opinion_episodes <= covered_episodes:
-        outcomes["LX0609-020"] = _state(
+        outcomes["LX0609-03-01-01"] = _state(
             "compliant" if consultation_source_complete else "data_gap",
             (
                 "execution_specific"
@@ -1259,13 +1259,13 @@ def synthesize_consultation_rule_states(
             ),
         )
     elif uncertain_execution_material or uncertain_links:
-        outcomes["LX0609-020"] = _state(
+        outcomes["LX0609-03-01-01"] = _state(
             "evaluation_unknown", "semantic_low_confidence"
         )
     elif consultation_source_complete and course_source_complete:
-        outcomes["LX0609-020"] = _state("non_compliant", "execution_missing")
+        outcomes["LX0609-03-01-01"] = _state("non_compliant", "execution_missing")
     else:
-        outcomes["LX0609-020"] = _state(
+        outcomes["LX0609-03-01-01"] = _state(
             "evaluation_unknown", "semantic_low_confidence"
         )
 
@@ -1273,16 +1273,16 @@ def synthesize_consultation_rule_states(
     # 即使归属仍有歧义，已经明确空泛的执行记录仍可形成 023 缺陷。
     known_vague = any(link.quality == "vague" for link in relevant_links)
     if known_vague:
-        outcomes["LX0609-023"] = _state(
+        outcomes["LX0609-03-01-04"] = _state(
             "non_compliant", "execution_vague_or_copied"
         )
     elif uncertain_execution_material or uncertain_links or uncertain_opinion:
-        outcomes["LX0609-023"] = _state(
+        outcomes["LX0609-03-01-04"] = _state(
             "evaluation_unknown", "semantic_low_confidence"
         )
     elif relevant_links:
         sources_complete = consultation_source_complete and course_source_complete
-        outcomes["LX0609-023"] = _state(
+        outcomes["LX0609-03-01-04"] = _state(
             "compliant" if sources_complete else "data_gap",
             (
                 "execution_specific_summarized"
@@ -1291,11 +1291,11 @@ def synthesize_consultation_rule_states(
             ),
         )
     elif consultation_source_complete and course_source_complete:
-        outcomes["LX0609-023"] = _state(
+        outcomes["LX0609-03-01-04"] = _state(
             "not_applicable", "execution_record_missing"
         )
     else:
-        outcomes["LX0609-023"] = _state(
+        outcomes["LX0609-03-01-04"] = _state(
             "evaluation_unknown", "semantic_low_confidence"
         )
     return MappingProxyType(

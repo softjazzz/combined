@@ -9,11 +9,11 @@ from typing import Any
 
 
 POSTOPERATIVE_CUSTOMER_RULE_IDS = frozenset(
-    {"LX0609-064", "LX0609-065", "LX0609-066"}
+    {"LX0609-04-05-01", "LX0609-04-05-02", "LX0609-04-05-03"}
 )
 
 _POSTOPERATIVE_KINDS_BY_RULE = {
-    "LX0609-064": frozenset(
+    "LX0609-04-05-01": frozenset(
         {
             "postoperative_three_day_coverage_check",
             "postoperative_surgery_event_time_check",
@@ -21,14 +21,14 @@ _POSTOPERATIVE_KINDS_BY_RULE = {
             "postoperative_three_day_window_unavailable",
         }
     ),
-    "LX0609-065": frozenset(
+    "LX0609-04-05-02": frozenset(
         {
             "postoperative_senior_round_check",
             "postoperative_surgery_event_time_check",
             "postoperative_senior_round_window_unavailable",
         }
     ),
-    "LX0609-066": frozenset({"postoperative_first_course_presence_check"}),
+    "LX0609-04-05-03": frozenset({"postoperative_first_course_presence_check"}),
 }
 
 _WINDOW_UNAVAILABLE_ISSUES = frozenset(

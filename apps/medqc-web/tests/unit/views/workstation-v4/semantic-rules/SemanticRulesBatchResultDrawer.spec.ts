@@ -467,8 +467,8 @@ describe('SemanticRulesBatchResultDrawer', () => {
     props.batchJobDetail.rule_set_key = 'luxian_0609_qc_v1'
     props.batchJobDetail.items = [
       {
-        rule_id: 'LX0609-011',
-        rule_code: 'LX0609-011',
+        rule_id: 'LX0609-06-01-04',
+        rule_code: 'LX0609-06-01-04',
         record_id: 'record-safe-1',
         visit_id: 'visit-safe-1',
         status: 'compliant',
@@ -477,7 +477,7 @@ describe('SemanticRulesBatchResultDrawer', () => {
     ]
     props.batchJobDetail.failed_records = [
       {
-        rule_id: 'LX0609-012',
+        rule_id: 'LX0609-06-01-05',
         record_ref: '病例-失败-1',
         status: 'technical_error',
         reason_code: 'record_execution_failed',
@@ -497,7 +497,7 @@ describe('SemanticRulesBatchResultDrawer', () => {
     expect(wrapper.text()).toContain('部分执行失败')
     expect(wrapper.text()).toContain('已保留并可查看 1297 项有效结果')
     expect(wrapper.text()).toContain('系统将自动重试下列失败项')
-    expect(wrapper.text()).toContain('LX0609-012')
+    expect(wrapper.text()).toContain('LX0609-06-01-05')
     expect(wrapper.text()).toContain('病例-失败-1')
     expect(wrapper.text()).toContain('模型输出失败，未形成质控结论')
   })
@@ -519,7 +519,7 @@ describe('SemanticRulesBatchResultDrawer', () => {
         findings: [
           {
             id: 'review-1',
-            rule_id: 'LX0609-020',
+            rule_id: 'LX0609-03-01-01',
             record_id: 'visit-001',
             severity: 'P1',
             suggested_status: 'not_applicable',
@@ -551,10 +551,10 @@ describe('SemanticRulesBatchResultDrawer', () => {
     const props = buildProps()
     props.batchJobDetail.status = 'completed'
     props.batchJobDetail.rule_set_key = 'luxian_0609_qc_v1'
-    props.batchJobDetail.draft_ids = ['LX0609-029', 'LX0609-030', 'LX0609-032']
+    props.batchJobDetail.draft_ids = ['LX0609-04-01-01', 'LX0609-04-02-02', 'LX0609-04-03-01']
     props.batchJobDetail.filters = {
       rule_set_key: 'luxian_0609_qc_v1',
-      rule_ids: ['LX0609-029', 'LX0609-030', 'LX0609-032'],
+      rule_ids: ['LX0609-04-01-01', 'LX0609-04-02-02', 'LX0609-04-03-01'],
     }
     Object.assign(props.batchJobDetail.rule_results?.[0]?.items?.[0] || {}, {
       audit: { model_name: 'INTERNAL_NATIVE_MODEL_MARKER' },
@@ -764,8 +764,8 @@ describe('SemanticRulesBatchResultDrawer', () => {
     props.batchJobDetail.rule_set_key = 'luxian_0609_qc_v1'
     props.batchJobDetail.filters = {
       rule_set_key: 'luxian_0609_qc_v1',
-      selected_rule_ids: ['LX0609-020', 'LX0609-021'],
-      scoped_customer_rule_ids: ['LX0609-020', 'LX0609-021'],
+      selected_rule_ids: ['LX0609-03-01-01', 'LX0609-03-01-02'],
+      scoped_customer_rule_ids: ['LX0609-03-01-01', 'LX0609-03-01-02'],
       record_rule_map: { record_1: ['LX-017', 'SC-068'] },
     }
     Object.assign(props.batchJobDetail.summary || {}, {
@@ -844,7 +844,7 @@ describe('SemanticRulesBatchResultDrawer', () => {
 
     const firstItem = props.batchJobDetail.rule_results?.[0]?.items?.[0]
     Object.assign(firstItem || {}, {
-      rule_code: 'LX0609-002',
+      rule_code: 'LX0609-01-02-01',
       rule_name: '首次病程：入院后 8 小时内无首次病程记录',
       status: 'compliant',
       result_status: 'compliant',
@@ -855,7 +855,7 @@ describe('SemanticRulesBatchResultDrawer', () => {
     })
     const secondItem = props.batchJobDetail.rule_results?.[1]?.items?.[0]
     Object.assign(secondItem || {}, {
-      rule_code: 'LX0609-041',
+      rule_code: 'LX0609-11-03-01',
       rule_name: '输血知情同意书：无输血知情同意书',
       status: 'not_applicable',
       result_status: 'not_applicable',
@@ -884,7 +884,7 @@ describe('SemanticRulesBatchResultDrawer', () => {
     const props = buildProps()
     const firstItem = props.batchJobDetail.rule_results?.[0]?.items?.[0]
     Object.assign(firstItem || {}, {
-      rule_code: 'LX0609-002',
+      rule_code: 'LX0609-01-02-01',
       rule_name: '首次病程：入院后 8 小时内无首次病程记录',
       status: 'non_compliant',
       result_status: 'non_compliant',
@@ -892,7 +892,7 @@ describe('SemanticRulesBatchResultDrawer', () => {
       suggestion: '请查看原始输出后人工复核。',
       evidence:
         '来源未标注 · evidence：' +
-        '证据模板：时限类 质控点：LX0609-002 首次病程：入院后 8 小时内无首次病程记录 ' +
+        '证据模板：时限类 质控点：LX0609-01-02-01 首次病程：入院后 8 小时内无首次病程记录 ' +
         'trigger_status: unknown ' +
         '触发状态：unknown 触发说明：未识别到可安全门控的触发族，进入常规执行 ' +
         '映射执行规则：CL-081、SC-021 应包含证据要素：触发时间、截止时间、实际记录时间、超时或缺失结论、来源文书/表字段 ' +
@@ -942,12 +942,12 @@ describe('SemanticRulesBatchResultDrawer', () => {
     const props = buildProps()
     const firstItem = props.batchJobDetail.rule_results?.[0]?.items?.[0]
     Object.assign(firstItem || {}, {
-      rule_code: 'LX0609-007',
+      rule_code: 'LX0609-02-01-03',
       rule_name: '查房记录：病情稳定患者3天内无查房病程记录',
       status: 'non_compliant',
       result_status: 'non_compliant',
       evidence:
-        '证据模板：通用质控 质控点：LX0609-007 查房记录：病情稳定患者3天内无查房病程记录 ' +
+        '证据模板：通用质控 质控点：LX0609-02-01-03 查房记录：病情稳定患者3天内无查房病程记录 ' +
         '判定依据：已发现相关事件，进入规则复核。 来源线索：病危、危重 ' +
         '执行证据：【日常病程记录】今日查房,患者一般情况可,咳嗽、呼吸困难好转,无咯血、发热',
     })
@@ -970,7 +970,7 @@ describe('SemanticRulesBatchResultDrawer', () => {
     const props = buildProps()
     const firstItem = props.batchJobDetail.rule_results?.[0]?.items?.[0]
     Object.assign(firstItem || {}, {
-      rule_code: 'LX0609-002',
+      rule_code: 'LX0609-01-02-01',
       rule_name: '首次病程：入院后 8 小时内无首次病程记录',
       status: 'non_compliant',
       result_status: 'non_compliant',
@@ -1013,10 +1013,10 @@ describe('SemanticRulesBatchResultDrawer', () => {
     props.batchJobDetail.rule_set_key = 'luxian_0609_qc_v1'
     const firstItem = props.batchJobDetail.rule_results?.[0]?.items?.[0]
     Object.assign(firstItem || {}, {
-      rule_code: 'LX0609-013',
-      rule_id: 'LX0609-013',
-      qc_point_id: 'LX0609-013',
-      customer_rule_id: 'LX0609-013',
+      rule_code: 'LX0609-06-02-03',
+      rule_id: 'LX0609-06-02-03',
+      qc_point_id: 'LX0609-06-02-03',
+      customer_rule_id: 'LX0609-06-02-03',
       rule_set_key: 'luxian_0609_qc_v1',
       rule_name: '病理检查：病理检查结果在手术记录、病程中未记录',
       status: 'data_gap',
@@ -1063,8 +1063,8 @@ describe('SemanticRulesBatchResultDrawer', () => {
         items: [
           {
             rule_job_id: 'rule-job-lx',
-            rule_id: 'LX0609-016',
-            rule_code: 'LX0609-016',
+            rule_id: 'LX0609-12-01-01',
+            rule_code: 'LX0609-12-01-01',
             rule_name: '不合理复制病历：首次病程记录与入院记录完全相同',
             record_id: '2265389',
             status: 'data_gap',
@@ -1074,8 +1074,8 @@ describe('SemanticRulesBatchResultDrawer', () => {
           },
           {
             rule_job_id: 'rule-job-lx',
-            rule_id: 'LX0609-017',
-            rule_code: 'LX0609-017',
+            rule_id: 'LX0609-12-01-02',
+            rule_code: 'LX0609-12-01-02',
             rule_name: '不合理复制病历：2次以上病程记录完全相同',
             record_id: '2265389',
             status: 'uncertain',
@@ -1085,8 +1085,8 @@ describe('SemanticRulesBatchResultDrawer', () => {
           },
           {
             rule_job_id: 'rule-job-lx',
-            rule_id: 'LX0609-007',
-            rule_code: 'LX0609-007',
+            rule_id: 'LX0609-02-01-03',
+            rule_code: 'LX0609-02-01-03',
             rule_name: '查房记录：病情稳定患者3天内无查房病程记录',
             record_id: '2265389',
             status: 'non_compliant',
@@ -1107,23 +1107,23 @@ describe('SemanticRulesBatchResultDrawer', () => {
 
     const navItems = wrapper.findAll('.issue-review-nav-item')
     expect(navItems).toHaveLength(3)
-    expect(navItems[0]?.text()).toContain('LX0609-007')
+    expect(navItems[0]?.text()).toContain('LX0609-02-01-03')
     expect(navItems[0]?.text()).toContain('确定问题')
-    expect(navItems[1]?.text()).toContain('LX0609-016')
+    expect(navItems[1]?.text()).toContain('LX0609-12-01-01')
     expect(navItems[1]?.text()).toContain('数据不足')
-    expect(navItems[2]?.text()).toContain('LX0609-017')
+    expect(navItems[2]?.text()).toContain('LX0609-12-01-02')
     expect(navItems[2]?.text()).toContain('AI判断')
 
     let cards = wrapper.findAll('.issue-conclusion-card')
     expect(cards).toHaveLength(1)
-    expect(cards[0]?.text()).toContain('LX0609-007')
+    expect(cards[0]?.text()).toContain('LX0609-02-01-03')
     expect(cards[0]?.classes()).toContain('issue-conclusion-card--danger')
 
     await navItems[1]?.trigger('click')
     await wrapper.vm.$nextTick()
     cards = wrapper.findAll('.issue-conclusion-card')
     expect(cards).toHaveLength(1)
-    expect(cards[0]?.text()).toContain('LX0609-016')
+    expect(cards[0]?.text()).toContain('LX0609-12-01-01')
     expect(cards[0]?.text()).toContain('数据不足')
     expect(cards[0]?.classes()).toContain('issue-conclusion-card--warning')
 
@@ -1131,7 +1131,7 @@ describe('SemanticRulesBatchResultDrawer', () => {
     await wrapper.vm.$nextTick()
     cards = wrapper.findAll('.issue-conclusion-card')
     expect(cards).toHaveLength(1)
-    expect(cards[0]?.text()).toContain('LX0609-017')
+    expect(cards[0]?.text()).toContain('LX0609-12-01-02')
     expect(cards[0]?.text()).toContain('AI判断')
     expect(cards[0]?.text()).not.toContain('人工复核')
     expect(cards[0]?.classes()).toContain('issue-conclusion-card--warning')
@@ -1156,8 +1156,8 @@ describe('SemanticRulesBatchResultDrawer', () => {
           Object.assign(
             {
               rule_job_id: 'rule-job-lx-safe',
-              rule_id: 'LX0609-021',
-              rule_code: 'LX0609-021',
+              rule_id: 'LX0609-03-01-02',
+              rule_code: 'LX0609-03-01-02',
               rule_name: '会诊申请目的完整性',
               record_id: unsafeRecordId,
               visit_id: unsafeVisitId,
@@ -1177,8 +1177,8 @@ describe('SemanticRulesBatchResultDrawer', () => {
           Object.assign(
             {
               rule_job_id: 'rule-job-lx-safe',
-              rule_id: 'LX0609-029',
-              rule_code: 'LX0609-029',
+              rule_id: 'LX0609-04-01-01',
+              rule_code: 'LX0609-04-01-01',
               rule_name: '术前小结完整性',
               record_id: unsafeRecordId,
               visit_id: unsafeVisitId,
@@ -1198,8 +1198,8 @@ describe('SemanticRulesBatchResultDrawer', () => {
           Object.assign(
             {
               rule_job_id: 'rule-job-lx-safe',
-              rule_id: 'LX0609-033',
-              rule_code: 'LX0609-033',
+              rule_id: 'LX0609-11-01-01',
+              rule_code: 'LX0609-11-01-01',
               rule_name: '手术知情同意书完整性',
               record_id: unsafeRecordId,
               visit_id: unsafeVisitId,
@@ -1223,8 +1223,8 @@ describe('SemanticRulesBatchResultDrawer', () => {
       Object.assign(
         {
           rule_job_id: 'rule-job-lx-safe',
-          rule_id: 'LX0609-021',
-          rule_code: 'LX0609-021',
+          rule_id: 'LX0609-03-01-02',
+          rule_code: 'LX0609-03-01-02',
           rule_name: '会诊申请目的完整性',
           status: 'ai_suggested_non_compliant',
           is_compliant: false,
@@ -1265,8 +1265,8 @@ describe('SemanticRulesBatchResultDrawer', () => {
       Object.assign(
         {
           rule_job_id: 'rule-job-lx-safe',
-          rule_id: 'LX0609-029',
-          rule_code: 'LX0609-029',
+          rule_id: 'LX0609-04-01-01',
+          rule_code: 'LX0609-04-01-01',
           rule_name: '术前小结完整性',
           status: 'data_gap',
           is_compliant: false,
@@ -1286,8 +1286,8 @@ describe('SemanticRulesBatchResultDrawer', () => {
       Object.assign(
         {
           rule_job_id: 'rule-job-lx-safe',
-          rule_id: 'LX0609-033',
-          rule_code: 'LX0609-033',
+          rule_id: 'LX0609-11-01-01',
+          rule_code: 'LX0609-11-01-01',
           rule_name: '手术知情同意书完整性',
           status: 'technical_error',
           is_compliant: false,
@@ -1313,7 +1313,7 @@ describe('SemanticRulesBatchResultDrawer', () => {
           Object.assign(
             {
               id: 'review-safe-1',
-              rule_id: 'LX0609-021',
+              rule_id: 'LX0609-03-01-02',
               record_id: unsafeRecordId,
               patient_name: unsafePatientName,
               department: unsafeDepartment,
@@ -1352,7 +1352,7 @@ describe('SemanticRulesBatchResultDrawer', () => {
     expect(navItems.some((item) => item.text().includes('数据不足'))).toBe(true)
     expect(navItems.some((item) => item.text().includes('技术异常'))).toBe(true)
     expect(wrapper.text()).not.toContain('确定问题')
-    const lx021Nav = navItems.find((item) => item.text().includes('LX0609-021'))
+    const lx021Nav = navItems.find((item) => item.text().includes('LX0609-03-01-02'))
     expect(lx021Nav).toBeTruthy()
     await lx021Nav!.trigger('click')
     expect(wrapper.text()).toContain('会诊申请目的需质控员确认。')
@@ -1374,8 +1374,8 @@ describe('SemanticRulesBatchResultDrawer', () => {
     props.batchJobDetail.items = [
       {
         rule_job_id: 'rule-job-a',
-        rule_id: 'LX0609-025',
-        rule_code: 'LX0609-025',
+        rule_id: 'LX0609-04-02-04',
+        rule_code: 'LX0609-04-02-04',
         rule_name: '植入物信息完整性',
         record_ref: 'case-A',
         status: 'non_compliant',
@@ -1386,8 +1386,8 @@ describe('SemanticRulesBatchResultDrawer', () => {
       },
       {
         rule_job_id: 'rule-job-b',
-        rule_id: 'LX0609-018',
-        rule_code: 'LX0609-018',
+        rule_id: 'LX0609-01-01-02',
+        rule_code: 'LX0609-01-01-02',
         rule_name: '主诉能导出第一诊断',
         record_ref: 'case-B',
         status: 'non_compliant',
@@ -1411,28 +1411,28 @@ describe('SemanticRulesBatchResultDrawer', () => {
 
     const text = wrapper.text()
     expect(text).toContain('case-B')
-    expect(text).toContain('LX0609-018')
+    expect(text).toContain('LX0609-01-01-02')
     expect(text).toContain('case-B 的主诉长度不足')
-    expect(text).not.toContain('LX0609-025')
+    expect(text).not.toContain('LX0609-04-02-04')
     expect(text).not.toContain('case-A 的植入物信息缺失')
     expect(text).not.toContain('case-A 不应显示')
   })
 
-  it('LX0609-018 已提供受控展示事实时，应展示可读判定明细而非通用话术', () => {
+  it('LX0609-01-01-02 已提供受控展示事实时，应展示可读判定明细而非通用话术', () => {
     const props = buildProps()
     props.batchJobDetail.status = 'completed'
     props.batchJobDetail.rule_set_key = 'luxian_0609_qc_v1'
     props.batchJobDetail.rule_results = [
       {
         id: 'rule-job-lx-018',
-        rule_code: 'LX0609-018',
+        rule_code: 'LX0609-01-01-02',
         rule_name: '主诉能导出第一诊断',
         status: 'completed',
         items: [
           {
             rule_job_id: 'rule-job-lx-018',
-            rule_id: 'LX0609-018',
-            rule_code: 'LX0609-018',
+            rule_id: 'LX0609-01-01-02',
+            rule_code: 'LX0609-01-01-02',
             rule_name: '主诉能导出第一诊断',
             record_id: 'record-018',
             status: 'non_compliant',
@@ -1473,7 +1473,7 @@ describe('SemanticRulesBatchResultDrawer', () => {
     const props = buildProps()
     const firstItem = props.batchJobDetail.rule_results?.[0]?.items?.[0]
     Object.assign(firstItem || {}, {
-      rule_code: 'LX0609-016',
+      rule_code: 'LX0609-12-01-01',
       rule_name: '不合理复制病历：首次病程记录病例特点与入院记录、现病史完全相同',
       status: 'non_compliant',
       result_status: 'non_compliant',
@@ -1548,7 +1548,7 @@ describe('SemanticRulesBatchResultDrawer', () => {
     const props = buildProps()
     const firstItem = props.batchJobDetail.rule_results?.[0]?.items?.[0]
     Object.assign(firstItem || {}, {
-      rule_code: 'LX0609-017',
+      rule_code: 'LX0609-12-01-02',
       rule_name: '不合理复制病历：2次以上病程记录完全相同',
       status: 'non_compliant',
       result_status: 'non_compliant',
@@ -1672,7 +1672,7 @@ describe('SemanticRulesBatchResultDrawer', () => {
     const props = buildProps()
     const firstItem = props.batchJobDetail.rule_results?.[0]?.items?.[0]
     Object.assign(firstItem || {}, {
-      qc_point_id: 'LX0609-014',
+      qc_point_id: 'LX0609-06-03-03',
       rule_set_key: 'luxian_0609_qc_v1',
       schema_version: 'luxian_0609_evidence_chain_v1',
       result_status: 'non_compliant',
@@ -1742,9 +1742,9 @@ describe('SemanticRulesBatchResultDrawer', () => {
     const props = buildProps()
     const firstItem = props.batchJobDetail.rule_results?.[0]?.items?.[0]
     Object.assign(firstItem || {}, {
-      rule_code: 'LX0609-026',
+      rule_code: 'LX0609-05-02-01',
       rule_name: '化疗记录：病程中化学治疗记录情况与医嘱不一致',
-      qc_point_id: 'LX0609-026',
+      qc_point_id: 'LX0609-05-02-01',
       rule_set_key: 'luxian_0609_qc_v1',
       schema_version: 'luxian_0609_evidence_chain_v1',
       result_status: 'non_compliant',
@@ -1788,8 +1788,8 @@ describe('SemanticRulesBatchResultDrawer', () => {
     props.batchJobDetail.rule_set_key = 'luxian_0609_qc_v1'
     props.batchJobDetail.items = [
       {
-        rule_id: 'LX0609-044',
-        rule_code: 'LX0609-044',
+        rule_id: 'LX0609-07-01-02',
+        rule_code: 'LX0609-07-01-02',
         rule_name: '输血前评估记录',
         record_ref: 'case-A',
         status: 'compliant',
@@ -1797,8 +1797,8 @@ describe('SemanticRulesBatchResultDrawer', () => {
         is_compliant: true,
       },
       {
-        rule_id: 'LX0609-045',
-        rule_code: 'LX0609-045',
+        rule_id: 'LX0609-07-02-01',
+        rule_code: 'LX0609-07-02-01',
         rule_name: '输血病程记录',
         record_ref: 'case-A',
         status: 'compliant',
@@ -1806,8 +1806,8 @@ describe('SemanticRulesBatchResultDrawer', () => {
         is_compliant: true,
       },
       {
-        rule_id: 'LX0609-047',
-        rule_code: 'LX0609-047',
+        rule_id: 'LX0609-07-03-01',
+        rule_code: 'LX0609-07-03-01',
         rule_name: '输血后评价',
         record_ref: 'case-A',
         status: 'compliant',
@@ -1815,8 +1815,8 @@ describe('SemanticRulesBatchResultDrawer', () => {
         is_compliant: true,
       },
       {
-        rule_id: 'LX0609-044',
-        rule_code: 'LX0609-044',
+        rule_id: 'LX0609-07-01-02',
+        rule_code: 'LX0609-07-01-02',
         rule_name: '输血前评估记录',
         record_ref: 'case-B',
         status: 'data_gap',
@@ -1842,8 +1842,8 @@ describe('SemanticRulesBatchResultDrawer', () => {
     props.batchJobDetail.rule_set_key = 'luxian_0609_qc_v1'
     props.batchJobDetail.items = [
       {
-        rule_id: 'LX0609-044',
-        rule_code: 'LX0609-044',
+        rule_id: 'LX0609-07-01-02',
+        rule_code: 'LX0609-07-01-02',
         rule_name: '输血前评估记录',
         record_ref: 'case-B',
         status: 'non_compliant',
@@ -1851,8 +1851,8 @@ describe('SemanticRulesBatchResultDrawer', () => {
         is_compliant: false,
       },
       {
-        rule_id: 'LX0609-045',
-        rule_code: 'LX0609-045',
+        rule_id: 'LX0609-07-02-01',
+        rule_code: 'LX0609-07-02-01',
         rule_name: '输血病程记录',
         record_ref: 'case-B',
         status: 'data_gap',
@@ -1860,8 +1860,8 @@ describe('SemanticRulesBatchResultDrawer', () => {
         is_compliant: false,
       },
       {
-        rule_id: 'LX0609-047',
-        rule_code: 'LX0609-047',
+        rule_id: 'LX0609-07-03-01',
+        rule_code: 'LX0609-07-03-01',
         rule_name: '输血后评价',
         record_ref: 'case-B',
         status: 'uncertain',
@@ -1869,8 +1869,8 @@ describe('SemanticRulesBatchResultDrawer', () => {
         is_compliant: false,
       },
       {
-        rule_id: 'LX0609-046',
-        rule_code: 'LX0609-046',
+        rule_id: 'LX0609-07-02-02',
+        rule_code: 'LX0609-07-02-02',
         rule_name: '输血病程记录完整性',
         record_ref: 'case-B',
         status: 'non_compliant',
@@ -1889,15 +1889,15 @@ describe('SemanticRulesBatchResultDrawer', () => {
     expect(summary.text()).toContain('输血前评估：不合规')
     expect(summary.text()).toContain('输血病程：数据不足')
     expect(summary.text()).toContain('输血后评价：AI判断')
-    expect(summary.text()).not.toContain('LX0609-046')
+    expect(summary.text()).not.toContain('LX0609-07-02-02')
   })
 
   it('非LX0609任务不展示输血三项汇总', () => {
     const props = buildProps()
     props.batchJobDetail.items = [
       {
-        rule_id: 'LX0609-044',
-        rule_code: 'LX0609-044',
+        rule_id: 'LX0609-07-01-02',
+        rule_code: 'LX0609-07-01-02',
         record_ref: 'case-A',
         status: 'compliant',
         canonical_status: 'compliant',

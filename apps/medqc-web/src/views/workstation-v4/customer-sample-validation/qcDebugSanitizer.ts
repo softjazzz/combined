@@ -23,6 +23,23 @@ const IDENTIFIER_KEY_EXCLUSIONS = new Set([
   'rule_set_id',
 ])
 
+// 仅保留格式有效的四段规则编号；字段中的其他文本和嵌套内容仍须脱敏。
+const RULE_IDENTITY_KEYS = new Set([
+  'criterion_id',
+  'missing_rule_ids',
+  'conflicting_rule_ids',
+  'rule_id',
+  'rule_ids',
+  'rule_code',
+  'rule_set_id',
+  'qc_point_id',
+  'mapped_rule_ids',
+  'primary_execution_rule_id',
+  'candidate_rule_ids',
+  'selected_rule_ids',
+  'scoped_customer_rule_ids',
+])
+
 const MEDICAL_IDENTIFIER_KEYS = new Set([
   'accession_number',
   'barcode',
@@ -356,6 +373,10 @@ function sanitizeText(
 function sanitizeValue(state: SanitizationState, value: unknown, key = ''): unknown {
   const normalized = normalizedKey(key)
   if (typeof value === 'boolean' || value === null || value === undefined) return value
+  if (RULE_IDENTITY_KEYS.has(normalized)) {
+    if (typeof value === 'string' && /^LX0609-\d{2}-\d{2}-\d{2}$/u.test(value)) return value
+    if (Array.isArray(value)) return value.map((item) => sanitizeValue(state, item, key))
+  }
   if (isSecretKey(normalized)) return '[访问凭证已脱敏]'
   if (isAccountKey(normalized)) return '[账号已脱敏]'
   if (isNetworkLocationKey(normalized)) return '[网络地址已脱敏]'

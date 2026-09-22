@@ -36,8 +36,8 @@ def _course_severity_matrix(
     for case_index in range(1, 11):
         case_label = f"case-{case_index:02d}"
         for rule_id, state, reason in (
-            ("LX0609-008", state_008, reason_008),
-            ("LX0609-009", state_009, reason_009),
+            ("LX0609-02-01-04", state_008, reason_008),
+            ("LX0609-02-01-05", state_009, reason_009),
         ):
             rows.append(
                 {
@@ -240,14 +240,14 @@ async def test_unified_engine_ab_replays_same_model_response_and_counts_one_snap
                 fact_refs=("d" * 64,),
             )
             for rule_id in (
-                "LX0609-001",
-                "LX0609-002",
-                "LX0609-004",
-                "LX0609-005",
-                "LX0609-006",
-                "LX0609-007",
-                "LX0609-008",
-                "LX0609-009",
+                "LX0609-01-01-01",
+                "LX0609-01-02-01",
+                "LX0609-09-01-01",
+                "LX0609-02-01-01",
+                "LX0609-02-01-02",
+                "LX0609-02-01-03",
+                "LX0609-02-01-04",
+                "LX0609-02-01-05",
             )
         ),
     )
@@ -310,13 +310,13 @@ def test_full_regression_safe_rows_only_keep_customer_rule_states() -> None:
     safe_rows = build_safe_rule_states(
         [
             {
-                "rule_id": "LX0609-001",
+                "rule_id": "LX0609-01-01-01",
                 "status": "compliant",
                 "evidence": "不应由回归摘要输出",
             }
         ]
     )
-    assert safe_rows == [{"rule_id": "LX0609-001", "status": "compliant"}]
+    assert safe_rows == [{"rule_id": "LX0609-01-01-01", "status": "compliant"}]
 
 
 @pytest.mark.asyncio
@@ -356,9 +356,9 @@ async def test_formal_source_audit_captures_one_snapshot_and_safe_rule_sources(
     )
 
     async def generate(prompt: str):
-        if "LX0609-029" in prompt and "LX0609-032" not in prompt:
+        if "LX0609-04-01-01" in prompt and "LX0609-04-03-01" not in prompt:
             return {"usage": {"prompt_tokens": 2, "completion_tokens": 3, "total_tokens": 5}}
-        if "LX0609-029" in prompt and "LX0609-032" in prompt:
+        if "LX0609-04-01-01" in prompt and "LX0609-04-03-01" in prompt:
             return {"usage": {"prompt_tokens": 3, "completion_tokens": 4, "total_tokens": 7}}
         return {"usage": {"prompt_tokens": 1, "completion_tokens": 2, "total_tokens": 3}}
 
@@ -368,9 +368,9 @@ async def test_formal_source_audit_captures_one_snapshot_and_safe_rule_sources(
         rule_engine = SimpleNamespace(_llm_generate=generate)
 
         async def evaluate_running_final_bundle_input(self, **_kwargs):
-            await self.rule_engine._llm_generate("LX0609-040")
-            await self.adjudicator_client.generate("LX0609-029")
-            await self.adjudicator_client.generate("LX0609-029 LX0609-032")
+            await self.rule_engine._llm_generate("LX0609-04-01-03")
+            await self.adjudicator_client.generate("LX0609-04-01-01")
+            await self.adjudicator_client.generate("LX0609-04-01-01 LX0609-04-03-01")
             await self.adjudicator_client.generate("SAFE_SECRET_MARKER")
             luxian_execution.build_luxian_0609_evidence_read_session()
             luxian_execution.bind_and_reduce_luxian_0609_rule_decisions()
@@ -423,7 +423,7 @@ async def test_formal_source_audit_captures_one_snapshot_and_safe_rule_sources(
             "typed_fact_ref_count",
         )
     } == {
-        "rule_id": "LX0609-029",
+        "rule_id": "LX0609-04-01-01",
         "status": "compliant",
         "execution_source": "unknown",
         "typed_final_state": "data_gap",
@@ -452,10 +452,10 @@ async def test_formal_source_audit_captures_one_snapshot_and_safe_rule_sources(
         "token_analysis": [
             {
                 "rule_id": rule_id,
-                "llm_call_count": 1 if rule_id in {"LX0609-029", "LX0609-040"} else 0,
-                "prompt_tokens": 2 if rule_id == "LX0609-029" else (1 if rule_id == "LX0609-040" else 0),
-                "completion_tokens": 3 if rule_id == "LX0609-029" else (2 if rule_id == "LX0609-040" else 0),
-                "total_tokens": 5 if rule_id == "LX0609-029" else (3 if rule_id == "LX0609-040" else 0),
+                "llm_call_count": 1 if rule_id in {"LX0609-04-01-01", "LX0609-04-01-03"} else 0,
+                "prompt_tokens": 2 if rule_id == "LX0609-04-01-01" else (1 if rule_id == "LX0609-04-01-03" else 0),
+                "completion_tokens": 3 if rule_id == "LX0609-04-01-01" else (2 if rule_id == "LX0609-04-01-03" else 0),
+                "total_tokens": 5 if rule_id == "LX0609-04-01-01" else (3 if rule_id == "LX0609-04-01-03" else 0),
             }
             for rule_id in EXPECTED_LUXIAN_0609_RULE_IDS
         ],

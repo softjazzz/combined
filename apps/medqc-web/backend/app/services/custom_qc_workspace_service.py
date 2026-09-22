@@ -964,7 +964,7 @@ def project_customer_safe_batch_job(
         safe_summary["failed_rule_ids"] = sorted({
             _safe_text(rule_id).upper()
             for rule_id in (raw_summary.get("failed_rule_ids") or [])
-            if re.fullmatch(r"LX0609-\d{3}", _safe_text(rule_id).upper())
+            if re.fullmatch(r"LX0609-(?!00)\d{2}-(?!00)\d{2}-(?!00)\d{2}", _safe_text(rule_id).upper())
         })
     raw_automatic_retry = (
         raw_summary.get("automatic_failed_rule_retry")
@@ -1127,7 +1127,7 @@ def project_customer_safe_batch_job(
             "status": "technical_error",
             "reason_code": "record_execution_failed",
             "rule_id": _safe_text(item.get("rule_id")).upper()
-            if re.fullmatch(r"LX0609-\d{3}", _safe_text(item.get("rule_id")).upper()) else "",
+            if re.fullmatch(r"LX0609-(?!00)\d{2}-(?!00)\d{2}-(?!00)\d{2}", _safe_text(item.get("rule_id")).upper()) else "",
         }
         for item in list(job.get("failed_records") or [])
         if isinstance(item, dict)

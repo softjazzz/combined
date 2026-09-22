@@ -8,21 +8,41 @@
     <FileArchive :size="15" />
     质控诊断包
   </a-button>
-  <a-modal :open="open" title="质控诊断包" :width="800" :footer="null" @cancel="close">
+  <a-modal
+    :open="open"
+    title="质控诊断包"
+    :width="800"
+    :footer="null"
+    @cancel="close"
+  >
     <p class="diagnostic-export__notice">
       包含当前已加载结果、原因码分组、证据来源索引及机器可读数据；仅为结果摘要，不含完整病历或模型原始请求，不支持自动回放，仅供人工核查。
       摘要导出不请求新数据、不重跑质控、不自动发送。请复核脱敏后再发送。
     </p>
-    <a-alert v-if="error" type="warning" :message="error" show-icon />
+    <a-alert
+      v-if="error"
+      type="warning"
+      :message="error"
+      show-icon
+    />
     <template v-if="preview">
-      <pre class="diagnostic-export__preview" aria-label="诊断包文本预览">{{ preview }}</pre>
+      <pre
+        class="diagnostic-export__preview"
+        aria-label="诊断包文本预览"
+      >{{ preview }}</pre>
       <a-checkbox v-model:checked="confirmed">
         我已复核以上内容的脱敏情况，确认下载此预览对应的文件
       </a-checkbox>
     </template>
     <div class="diagnostic-export__actions">
-      <a-button @click="close"> 取消 </a-button>
-      <a-button type="primary" :disabled="!preview || !confirmed" @click="download">
+      <a-button @click="close">
+        取消
+      </a-button>
+      <a-button
+        type="primary"
+        :disabled="!preview || !confirmed"
+        @click="download"
+      >
         下载诊断包
       </a-button>
     </div>
@@ -39,9 +59,18 @@
       >
         重新质控并采集排障包
       </a-button>
-      <p v-if="!selection">缺少任务或病历身份信息，暂不能采集。</p>
-      <p v-if="starting || captureStatus?.state === 'running'">正在执行并采集，请稍候。</p>
-      <a-alert v-if="captureError" type="warning" :message="captureError" show-icon />
+      <p v-if="!selection">
+        缺少任务或病历身份信息，暂不能采集。
+      </p>
+      <p v-if="starting || captureStatus?.state === 'running'">
+        正在执行并采集，请稍候。
+      </p>
+      <a-alert
+        v-if="captureError"
+        type="warning"
+        :message="captureError"
+        show-icon
+      />
       <template v-if="captureStatus?.state === 'ready'">
         <p>
           {{
@@ -53,7 +82,9 @@
         <p v-if="captureStatus.missing_components?.length">
           缺失项：{{ captureStatus.missing_components.join('、') }}
         </p>
-        <p v-if="captureStatus.included?.length">包含：{{ captureStatus.included.join('、') }}</p>
+        <p v-if="captureStatus.included?.length">
+          包含：{{ captureStatus.included.join('、') }}
+        </p>
         <p v-if="captureStatus.notice">
           {{ captureStatus.notice }}
         </p>

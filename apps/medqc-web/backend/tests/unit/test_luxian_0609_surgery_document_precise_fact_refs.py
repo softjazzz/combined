@@ -61,35 +61,35 @@ def _rows_for(rule_id: str) -> dict[str, tuple[Mapping[str, Any], ...]]:
         "physician_sign": "麻醉医生",
         "physician_sign_datetime": datetime(2026, 9, 1, 7, tzinfo=timezone.utc),
     }
-    if rule_id == "LX0609-029":
+    if rule_id == "LX0609-04-01-01":
         return {
             "surgery_record": (_surgery(),),
             "presurg_summary": (
                 {"document_id": "summary-1", "record_content": "拟行腹腔镜阑尾切除术"},
             ),
         }
-    if rule_id == "LX0609-034":
+    if rule_id == "LX0609-11-02-01":
         return {"anesthesia_record": (anesthesia,), "mr_surgery": (surgery,)}
-    if rule_id == "LX0609-035":
+    if rule_id == "LX0609-11-02-02":
         return {
             "anesthesia_record": (anesthesia,),
             "mr_surgery": (surgery,),
             "consent_form": (consent,),
         }
-    if rule_id == "LX0609-036":
+    if rule_id == "LX0609-04-04-01":
         return {
             "anesthesia_record": (anesthesia,),
             "mr_surgery": (surgery,),
             "preane_surveil_record": (pre,),
         }
-    if rule_id == "LX0609-037":
+    if rule_id == "LX0609-04-04-02":
         return {
             "anesthesia_record": (anesthesia,),
             "mr_surgery": (surgery,),
             "preane_surveil_record": (pre,),
             "postane_surveil_record": (post,),
         }
-    if rule_id == "LX0609-038":
+    if rule_id == "LX0609-04-04-03":
         return {"anesthesia_record": (anesthesia,), "mr_surgery": (surgery,)}
     return {"surgery_record": (_surgery("surgery-1"), _surgery("surgery-2"))}
 
@@ -121,13 +121,13 @@ def _session(rule_id: str):
 @pytest.mark.parametrize(
     ("rule_id", "expected_materials"),
     (
-        ("LX0609-029", {("surgery_record", "surgery-1"), ("presurg_summary", "summary-1")} ),
-        ("LX0609-034", {("anesthesia_record", "anesthesia-1")} ),
-        ("LX0609-035", {("anesthesia_record", "anesthesia-1"), ("consent_form", "consent-1")} ),
-        ("LX0609-036", {("anesthesia_record", "anesthesia-1"), ("preane_surveil_record", "pre-1")} ),
-        ("LX0609-037", {("anesthesia_record", "anesthesia-1"), ("preane_surveil_record", "pre-1"), ("postane_surveil_record", "post-1")} ),
-        ("LX0609-038", {("anesthesia_record", "anesthesia-1")} ),
-        ("LX0609-039", {("surgery_record", "surgery-1"), ("surgery_record", "surgery-2")} ),
+        ("LX0609-04-01-01", {("surgery_record", "surgery-1"), ("presurg_summary", "summary-1")} ),
+        ("LX0609-11-02-01", {("anesthesia_record", "anesthesia-1")} ),
+        ("LX0609-11-02-02", {("anesthesia_record", "anesthesia-1"), ("consent_form", "consent-1")} ),
+        ("LX0609-04-04-01", {("anesthesia_record", "anesthesia-1"), ("preane_surveil_record", "pre-1")} ),
+        ("LX0609-04-04-02", {("anesthesia_record", "anesthesia-1"), ("preane_surveil_record", "pre-1"), ("postane_surveil_record", "post-1")} ),
+        ("LX0609-04-04-03", {("anesthesia_record", "anesthesia-1")} ),
+        ("LX0609-04-01-02", {("surgery_record", "surgery-1"), ("surgery_record", "surgery-2")} ),
     ),
 )
 async def test_typed_surgery_document_rules_bind_only_actual_document_refs(

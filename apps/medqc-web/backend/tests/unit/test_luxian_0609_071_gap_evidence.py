@@ -18,15 +18,15 @@ async def test_gap_binds_only_consumed_daily_documents_through_finalizer(missing
         unavailable_sources={"physician_change_event", "inpat_nondrug_order"},
     )
     native = await execute_luxian_0609_native_extended_document_rules(
-        rule_ids=("LX0609-071",), decision_rule_ids=("LX0609-071",),
+        rule_ids=("LX0609-10-01-01",), decision_rule_ids=("LX0609-10-01-01",),
         evidence_snapshot=snapshot, evidence_materials=materials,
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
-        decisions=native.decisions, expected_rule_ids=("LX0609-071",),
+        decisions=native.decisions, expected_rule_ids=("LX0609-10-01-01",),
         snapshot=snapshot, evidence_materials=materials,
     )[0]
     final = finalize_luxian_0609_reduced_customer_result(
-        decision=reduced, raw_customer_display_facts=dict(native.customer_display_facts)["LX0609-071"],
+        decision=reduced, raw_customer_display_facts=dict(native.customer_display_facts)["LX0609-10-01-01"],
         evidence_snapshot=snapshot, evidence_materials=materials,
     )
     assert final["status"] == "data_gap"

@@ -72,24 +72,24 @@ async def _run_038(*, selected_rule_ids: tuple[str, ...]):
         decision_rule_ids=selected_rule_ids,
     )
     decision = next(
-        item for item in execution.decisions if item.rule_id == "LX0609-038"
+        item for item in execution.decisions if item.rule_id == "LX0609-04-04-03"
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=(decision,),
-        expected_rule_ids=("LX0609-038",),
+        expected_rule_ids=("LX0609-04-04-03",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )[0]
-    return calls, reduced, dict(execution.customer_display_facts).get("LX0609-038")
+    return calls, reduced, dict(execution.customer_display_facts).get("LX0609-04-04-03")
 
 
 @pytest.mark.asyncio
 async def test_038_single_rule_reads_anesthesia_record_and_matches_batch_canonical_result():
     single_calls, single_reduced, single_facts = await _run_038(
-        selected_rule_ids=("LX0609-038",)
+        selected_rule_ids=("LX0609-04-04-03",)
     )
     batch_calls, batch_reduced, batch_facts = await _run_038(
-        selected_rule_ids=("LX0609-034", "LX0609-038")
+        selected_rule_ids=("LX0609-11-02-01", "LX0609-04-04-03")
     )
 
     assert "anesthesia_record" in single_calls

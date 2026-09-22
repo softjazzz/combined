@@ -22,8 +22,8 @@ transform_row = module.transform_row
 
 
 def test_classify_family_prefers_lx0609_rule_id() -> None:
-    assert classify_family(rule_ids=["LX0609-041"], text="") == "输血"
-    assert classify_family(rule_ids=["LX0609-013"], text="普通病程") == "肿瘤病理/化疗"
+    assert classify_family(rule_ids=["LX0609-11-03-01"], text="") == "输血"
+    assert classify_family(rule_ids=["LX0609-06-02-03"], text="普通病程") == "肿瘤病理/化疗"
 
 
 def test_classify_family_uses_keywords_when_rule_id_missing() -> None:
@@ -89,7 +89,7 @@ def test_transform_row_should_not_fill_empty_core_content_with_title() -> None:
     case = module.CandidateCase(
         target_index=1,
         family="时限",
-        selected_rule_ids=["LX0609-001"],
+        selected_rule_ids=["LX0609-01-01-01"],
         source_item={"matched_visit_id": "V1", "patient_name": "张三"},
         source_reason="unit",
         source_status="selected",
@@ -115,7 +115,7 @@ def test_supplemental_rows_should_add_required_family_evidence() -> None:
         module.CandidateCase(
             target_index=9,
             family="检查检验",
-            selected_rule_ids=["LX0609-012", "LX0609-014"],
+            selected_rule_ids=["LX0609-06-01-05", "LX0609-06-03-03"],
             source_item={"matched_visit_id": "V9", "department": "骨科"},
             source_reason="unit",
             source_status="selected",
@@ -127,7 +127,7 @@ def test_supplemental_rows_should_add_required_family_evidence() -> None:
         module.CandidateCase(
             target_index=23,
             family="输血",
-            selected_rule_ids=["LX0609-041"],
+            selected_rule_ids=["LX0609-11-03-01"],
             source_item={"matched_visit_id": "V23", "department": "胃肠外科"},
             source_reason="unit",
             source_status="selected",
@@ -139,7 +139,7 @@ def test_supplemental_rows_should_add_required_family_evidence() -> None:
         module.CandidateCase(
             target_index=28,
             family="肿瘤病理/化疗",
-            selected_rule_ids=["LX0609-013"],
+            selected_rule_ids=["LX0609-06-02-03"],
             source_item={"matched_visit_id": "V28", "department": "胃肠外科"},
             source_reason="unit",
             source_status="selected",
@@ -183,7 +183,7 @@ def test_build_selection_backfills_to_target_size_when_family_source_gap() -> No
             "row_no": index,
             "matched_visit_id": f"V{index}",
             "manual_issue_text": "会诊意见笼统，后续病程未记录执行情况",
-            "candidate_rule_ids": ["LX0609-020"],
+            "candidate_rule_ids": ["LX0609-03-01-01"],
             "bundle_status": "ready",
         }
         for index in range(1, 6)

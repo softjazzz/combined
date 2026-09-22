@@ -15,13 +15,13 @@ spec.loader.exec_module(builder)
 
 
 def test_classify_rule_family_should_cover_required_luxian_groups():
-    assert builder.classify_rule_family({"qc_point_id": "LX0609-001", "customer_text": "入院记录24小时"}) == "时限"
-    assert builder.classify_rule_family({"qc_point_id": "LX0609-008", "customer_text": "病重患者查房"}) == "查房/病重病危"
-    assert builder.classify_rule_family({"qc_point_id": "LX0609-012", "customer_text": "MRI阳性报告"}) == "检查检验"
-    assert builder.classify_rule_family({"qc_point_id": "LX0609-021", "customer_text": "会诊目的"}) == "会诊"
-    assert builder.classify_rule_family({"qc_point_id": "LX0609-032", "customer_text": "手术安全核查"}) == "手术麻醉"
-    assert builder.classify_rule_family({"qc_point_id": "LX0609-043", "customer_text": "输血前检查"}) == "输血"
-    assert builder.classify_rule_family({"qc_point_id": "LX0609-013", "customer_text": "病理提示胃癌"}) == "肿瘤病理/化疗"
+    assert builder.classify_rule_family({"qc_point_id": "LX0609-01-01-01", "customer_text": "入院记录24小时"}) == "时限"
+    assert builder.classify_rule_family({"qc_point_id": "LX0609-02-01-04", "customer_text": "病重患者查房"}) == "查房/病重病危"
+    assert builder.classify_rule_family({"qc_point_id": "LX0609-06-01-05", "customer_text": "MRI阳性报告"}) == "检查检验"
+    assert builder.classify_rule_family({"qc_point_id": "LX0609-03-01-02", "customer_text": "会诊目的"}) == "会诊"
+    assert builder.classify_rule_family({"qc_point_id": "LX0609-04-03-01", "customer_text": "手术安全核查"}) == "手术麻醉"
+    assert builder.classify_rule_family({"qc_point_id": "LX0609-07-01-01", "customer_text": "输血前检查"}) == "输血"
+    assert builder.classify_rule_family({"qc_point_id": "LX0609-06-02-03", "customer_text": "病理提示胃癌"}) == "肿瘤病理/化疗"
 
 
 def test_build_outputs_should_generate_annotation_and_comparison_framework(tmp_path):
@@ -42,13 +42,13 @@ def test_build_outputs_should_generate_annotation_and_comparison_framework(tmp_p
         "evidence_snippets",
     ]
     rows = [
-        ("r1", "LX0609-001", "入院记录24小时", "positive", "V001", "甲", "内科"),
-        ("r2", "LX0609-008", "病重患者查房", "positive", "V002", "乙", "ICU"),
-        ("r3", "LX0609-012", "MRI阳性报告", "positive", "V003", "丙", "骨科"),
-        ("r4", "LX0609-021", "会诊目的", "positive", "V004", "丁", "外科"),
-        ("r5", "LX0609-032", "手术安全核查", "positive", "V005", "戊", "外科"),
-        ("r6", "LX0609-043", "输血前检查", "positive", "V006", "己", "血液科"),
-        ("r7", "LX0609-013", "病理提示胃癌", "positive", "V007", "庚", "肿瘤科"),
+        ("r1", "LX0609-01-01-01", "入院记录24小时", "positive", "V001", "甲", "内科"),
+        ("r2", "LX0609-02-01-04", "病重患者查房", "positive", "V002", "乙", "ICU"),
+        ("r3", "LX0609-06-01-05", "MRI阳性报告", "positive", "V003", "丙", "骨科"),
+        ("r4", "LX0609-03-01-02", "会诊目的", "positive", "V004", "丁", "外科"),
+        ("r5", "LX0609-04-03-01", "手术安全核查", "positive", "V005", "戊", "外科"),
+        ("r6", "LX0609-07-01-01", "输血前检查", "positive", "V006", "己", "血液科"),
+        ("r7", "LX0609-06-02-03", "病理提示胃癌", "positive", "V007", "庚", "肿瘤科"),
     ]
     with source.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
@@ -136,10 +136,10 @@ def test_build_outputs_should_mark_missing_required_family_as_sample_gap(tmp_pat
         "evidence_snippets",
     ]
     rows = [
-        ("r1", "LX0609-001", "入院记录24小时", "positive", "V001", "甲", "内科"),
-        ("r2", "LX0609-008", "病重患者查房", "positive", "V002", "乙", "ICU"),
-        ("r4", "LX0609-021", "会诊目的", "positive", "V004", "丁", "外科"),
-        ("r5", "LX0609-032", "手术安全核查", "positive", "V005", "戊", "外科"),
+        ("r1", "LX0609-01-01-01", "入院记录24小时", "positive", "V001", "甲", "内科"),
+        ("r2", "LX0609-02-01-04", "病重患者查房", "positive", "V002", "乙", "ICU"),
+        ("r4", "LX0609-03-01-02", "会诊目的", "positive", "V004", "丁", "外科"),
+        ("r5", "LX0609-04-03-01", "手术安全核查", "positive", "V005", "戊", "外科"),
     ]
     with source.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
@@ -168,7 +168,7 @@ def test_build_outputs_should_mark_missing_required_family_as_sample_gap(tmp_pat
             {
                 "items": [
                     {
-                        "qc_point_id": "LX0609-012",
+                        "qc_point_id": "LX0609-06-01-05",
                         "customer_text": "MRI阳性报告",
                         "candidate_coverage_status": "no_candidates",
                         "sample_visit_ids": [],
@@ -178,7 +178,7 @@ def test_build_outputs_should_mark_missing_required_family_as_sample_gap(tmp_pat
                         "evidence_ready": 0,
                     },
                     {
-                        "qc_point_id": "LX0609-043",
+                        "qc_point_id": "LX0609-07-01-01",
                         "customer_text": "输血前检查",
                         "candidate_coverage_status": "no_candidates",
                         "sample_visit_ids": [],
@@ -188,7 +188,7 @@ def test_build_outputs_should_mark_missing_required_family_as_sample_gap(tmp_pat
                         "evidence_ready": 0,
                     },
                     {
-                        "qc_point_id": "LX0609-013",
+                        "qc_point_id": "LX0609-06-02-03",
                         "customer_text": "病理提示胃癌",
                         "candidate_coverage_status": "no_candidates",
                         "sample_visit_ids": [],
@@ -207,9 +207,9 @@ def test_build_outputs_should_mark_missing_required_family_as_sample_gap(tmp_pat
     catalog.write_text(
         json.dumps(
             [
-                {"qc_point_id": "LX0609-012", "customer_text": "MRI阳性报告", "gap": "样本池无影像阳性候选"},
-                {"qc_point_id": "LX0609-043", "customer_text": "输血前检查", "gap": "样本池无输血候选"},
-                {"qc_point_id": "LX0609-013", "customer_text": "病理提示胃癌", "gap": "样本池无病理肿瘤候选"},
+                {"qc_point_id": "LX0609-06-01-05", "customer_text": "MRI阳性报告", "gap": "样本池无影像阳性候选"},
+                {"qc_point_id": "LX0609-07-01-01", "customer_text": "输血前检查", "gap": "样本池无输血候选"},
+                {"qc_point_id": "LX0609-06-02-03", "customer_text": "病理提示胃癌", "gap": "样本池无病理肿瘤候选"},
             ],
             ensure_ascii=False,
         ),
@@ -236,7 +236,7 @@ def test_build_outputs_should_mark_missing_required_family_as_sample_gap(tmp_pat
     family_coverage = {item["rule_family"]: item for item in payload["family_coverage"]}
     assert family_coverage["检查检验"]["coverage_status"] == "sample_gap"
     assert family_coverage["检查检验"]["candidate_visit_ids"] == []
-    assert "LX0609-012" in "、".join(family_coverage["检查检验"]["pending_rules"])
+    assert "LX0609-06-01-05" in "、".join(family_coverage["检查检验"]["pending_rules"])
 
     annotation_rows = list(csv.DictReader((tmp_path / "泸县0609真实样本GoldenSet标注表.csv").open("r", encoding="utf-8")))
     gap_rows = [row for row in annotation_rows if row["candidate_status"] == "sample_gap"]

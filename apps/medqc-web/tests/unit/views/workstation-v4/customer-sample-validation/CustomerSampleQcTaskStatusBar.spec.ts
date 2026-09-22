@@ -134,7 +134,7 @@ describe('CustomerSampleQcTaskStatusBar', () => {
       task: buildJob({
         items: [
           {
-            rule_id: 'LX0609-012',
+            rule_id: 'LX0609-06-01-05',
             rule_name: 'CT/MRI阳性结果无分析',
             status: 'data_gap',
             is_compliant: null,
@@ -144,7 +144,7 @@ describe('CustomerSampleQcTaskStatusBar', () => {
       }),
     })
 
-    expect(wrapper.get('[data-testid="qc-task-live-result"]').text()).toContain('LX0609-012')
+    expect(wrapper.get('[data-testid="qc-task-live-result"]').text()).toContain('LX0609-06-01-05')
     expect(wrapper.get('[data-testid="qc-task-live-result"]').text()).toContain('数据不足')
     expect(wrapper.get('[data-testid="qc-task-live-result"]').text()).toContain(
       '缺少评价截止日期或有效出院时间。',
@@ -187,14 +187,14 @@ describe('CustomerSampleQcTaskStatusBar', () => {
         task: buildJob({
           items: [
             {
-              rule_id: 'LX0609-020',
+              rule_id: 'LX0609-03-01-01',
               rule_name: '会诊意见及执行情况',
               status: 'non_compliant',
               is_compliant: false,
               conclusion: '后续病程未记录会诊意见及执行情况。',
             },
             {
-              rule_id: 'LX0609-045',
+              rule_id: 'LX0609-07-02-01',
               rule_name: '输血记录',
               status: 'compliant',
               is_compliant: true,
@@ -208,12 +208,12 @@ describe('CustomerSampleQcTaskStatusBar', () => {
 
     expect(wrapper.classes()).toContain('is-expanded')
     expect(wrapper.text()).toContain('当前进度 50%')
-    expect(wrapper.get('[data-testid="qc-task-live-result"]').text()).toContain('LX0609-045')
+    expect(wrapper.get('[data-testid="qc-task-live-result"]').text()).toContain('LX0609-07-02-01')
     expect(wrapper.get('[data-testid="qc-task-live-result"]').text()).toContain('已找到输血记录。')
 
     await vi.advanceTimersByTimeAsync(3600)
 
-    expect(wrapper.get('[data-testid="qc-task-live-result"]').text()).toContain('LX0609-020')
+    expect(wrapper.get('[data-testid="qc-task-live-result"]').text()).toContain('LX0609-03-01-01')
     expect(wrapper.get('[data-testid="qc-task-live-result"]').text()).toContain(
       '后续病程未记录会诊意见及执行情况。',
     )

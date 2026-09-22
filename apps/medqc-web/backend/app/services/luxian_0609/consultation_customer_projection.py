@@ -17,7 +17,7 @@ from .customer_evidence_enrichment import project_selected_grouped_document_refs
 
 
 _CONSULTATION_RULE_IDS = frozenset(
-    {"LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023"}
+    {"LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03", "LX0609-03-01-04"}
 )
 _RECOMMENDATION_EVIDENCE_SOURCE_TYPES = frozenset(
     {
@@ -61,16 +61,16 @@ def _valid_record_time(value: Any) -> bool:
 
 
 def _safe_semantic_facts(*, rule_id: str, raw: Mapping[str, Any]) -> dict[str, Any] | None:
-    if rule_id not in {"LX0609-021", "LX0609-022"}:
+    if rule_id not in {"LX0609-03-01-02", "LX0609-03-01-03"}:
         return None
     expected_kind = (
         "consultation_application_quality_check"
-        if rule_id == "LX0609-021"
+        if rule_id == "LX0609-03-01-02"
         else "consultation_opinion_quality_check"
     )
     expected_requirement = (
         "说明具体临床问题、会诊理由或明确会诊目的"
-        if rule_id == "LX0609-021"
+        if rule_id == "LX0609-03-01-02"
         else "给出针对当前病情的明确诊疗意见"
     )
     expected_keys = {
@@ -134,7 +134,7 @@ def _safe_semantic_facts(*, rule_id: str, raw: Mapping[str, Any]) -> dict[str, A
         ):
             return None
         if locator_keys.issubset(item):
-            expected_title = "会诊申请单" if rule_id == "LX0609-021" else "会诊记录单"
+            expected_title = "会诊申请单" if rule_id == "LX0609-03-01-02" else "会诊记录单"
             if item.get("document_title") != expected_title or not _valid_record_time(
                 item.get("record_time")
             ):
@@ -163,11 +163,11 @@ def _safe_semantic_facts(*, rule_id: str, raw: Mapping[str, Any]) -> dict[str, A
 
 
 def _safe_execution_facts(*, rule_id: str, raw: Mapping[str, Any]) -> dict[str, Any] | None:
-    if rule_id not in {"LX0609-020", "LX0609-023"}:
+    if rule_id not in {"LX0609-03-01-01", "LX0609-03-01-04"}:
         return None
     expected_kind = (
         "consultation_execution_quality_check"
-        if rule_id == "LX0609-023"
+        if rule_id == "LX0609-03-01-04"
         else "consultation_execution_relation_check"
     )
     allowed_relation_states = (
@@ -182,7 +182,7 @@ def _safe_execution_facts(*, rule_id: str, raw: Mapping[str, Any]) -> dict[str, 
             "association_unresolved",
             "source_error",
         }
-        if rule_id == "LX0609-023"
+        if rule_id == "LX0609-03-01-04"
         else {
             "all_linked",
             "execution_missing",
@@ -205,7 +205,7 @@ def _safe_execution_facts(*, rule_id: str, raw: Mapping[str, Any]) -> dict[str, 
     has_public_shape = "source_document_ids" not in raw
     if has_public_shape:
         expected_keys.remove("source_document_ids")
-    if rule_id == "LX0609-020" and "recommendation_results" in raw:
+    if rule_id == "LX0609-03-01-01" and "recommendation_results" in raw:
         expected_keys.add("recommendation_results")
     allowed_internal_keys = {"source_document_refs", "recommendation_evidence"}
     count_keys = (
@@ -247,7 +247,7 @@ def _safe_execution_facts(*, rule_id: str, raw: Mapping[str, Any]) -> dict[str, 
             ):
                 return None
     recommendation_results: list[dict[str, Any]] | None = None
-    if rule_id == "LX0609-020" and "recommendation_results" in raw:
+    if rule_id == "LX0609-03-01-01" and "recommendation_results" in raw:
         raw_results = raw.get("recommendation_results")
         if (
             not isinstance(raw_results, list)
@@ -393,19 +393,19 @@ def _safe_legacy_assessment_facts(
     *, rule_id: str, raw: Mapping[str, Any]
 ) -> dict[str, Any] | None:
     if (
-        rule_id not in {"LX0609-020", "LX0609-021", "LX0609-022"}
+        rule_id not in {"LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03"}
         or raw.get("consultation_assessment") not in {"明确", "不符合要求"}
     ):
         return None
     expected_keys = {"source_document_ids", "consultation_assessment"}
-    if rule_id == "LX0609-020":
+    if rule_id == "LX0609-03-01-01":
         expected_keys.update({"execution_record_state", "execution_candidate_count"})
     safe_keys = expected_keys - {"source_document_ids"}
     raw_keys = set(raw)
     if raw_keys != expected_keys and raw_keys != safe_keys:
         return None
     facts: dict[str, Any] = {"consultation_assessment": raw["consultation_assessment"]}
-    if rule_id == "LX0609-020":
+    if rule_id == "LX0609-03-01-01":
         if (
             raw.get("execution_record_state") not in {"已发现明确执行记录", "未发现执行记录"}
             or type(raw.get("execution_candidate_count")) is not int
@@ -438,7 +438,7 @@ def safe_consultation_customer_display_facts(
         or _safe_execution_facts(rule_id=normalized_rule_id, raw=raw)
         or (
             _safe_legacy_023_facts(raw)
-            if normalized_rule_id == "LX0609-023"
+            if normalized_rule_id == "LX0609-03-01-04"
             else None
         )
         or _safe_legacy_assessment_facts(rule_id=normalized_rule_id, raw=raw)

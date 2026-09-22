@@ -1,4 +1,4 @@
-"""LX0609-078/079 术前文书内容完整性。
+"""LX0609-04-01-04、LX0609-04-01-05 术前文书内容完整性。
 
 029、039 负责文书存在性。本模块只在同一证据快照已取得实质正文后，
 以一次受控的原子事实抽取核对每份文书自身的字段，禁止跨文书拼接。
@@ -31,7 +31,7 @@ from .surgery_event_association import (
 
 
 RULE_FIELDS = {
-    "LX0609-078": (
+    "LX0609-04-01-04": (
         "brief_condition",
         "preop_diagnosis",
         "surgical_indication",
@@ -40,7 +40,7 @@ RULE_FIELDS = {
         "precautions",
         "surgeon_preop_visit",
     ),
-    "LX0609-079": (
+    "LX0609-04-01-05": (
         "preop_preparation",
         "surgical_indication",
         "surgical_plan",
@@ -52,7 +52,7 @@ RULE_FIELDS = {
         "recorder_signature",
     ),
 }
-RULE_SOURCES = {"LX0609-078": "presurg_summary", "LX0609-079": "presurg_discussion"}
+RULE_SOURCES = {"LX0609-04-01-04": "presurg_summary", "LX0609-04-01-05": "presurg_discussion"}
 _SUBSTANTIVE = 16
 _PLACEHOLDER = re.compile(
     r"^(?:无|暂无|空|空白|待填|未填|模板|空模板|\[\]|\{\}|-)+$", re.I
@@ -282,7 +282,7 @@ def _missing_fields_for_document(
         field
         for field in RULE_FIELDS[rule_id]
         if not (
-            rule_id == "LX0609-079"
+            rule_id == "LX0609-04-01-05"
             and field == "recorder_signature"
             and _has_structured_recorder_signature(row)
         )
@@ -305,7 +305,7 @@ def _association_state_for_rule(
     display_documents: list[Mapping[str, Any]] = []
     for document_index, (_ref, row, _text) in enumerate(records, start=1):
         values = parsed[(source, _document_id(row))]
-        if rule_id == "LX0609-079":
+        if rule_id == "LX0609-04-01-05":
             # 079 只核对每份术前讨论记录自身的九项内容，不跨文书补字段；
             # 文书归属哪台手术不改变这些内容是否完整。
             association_state, event_index = "not_required", None
@@ -342,7 +342,7 @@ def _association_state_for_rule(
         )
 
     confirmed_missing: set[str] = set()
-    if rule_id == "LX0609-078":
+    if rule_id == "LX0609-04-01-04":
         # 客户来源存在“核心小结 + 术者术前查看”两行同属一台手术的稳定模式；
         # 仅在已唯一关联的同一事件内部合并原子事实。
         for documents in grouped.values():
@@ -503,7 +503,7 @@ async def evaluate_preop_content_rules(
         )
     events, event_reason = (
         build_performed_surgery_events(materials)
-        if "LX0609-078" in active
+        if "LX0609-04-01-04" in active
         else ((), "")
     )
     # 运行病历仅以正式手术记录形成事件，不能依赖终末阶段才可能形成的
@@ -523,11 +523,11 @@ async def evaluate_preop_content_rules(
             sorted(
                 {
                     *(ref for ref, _, _ in records[rule]),
-                    *(event_refs if rule == "LX0609-078" else ()),
+                    *(event_refs if rule == "LX0609-04-01-04" else ()),
                 }
             )
         )
-        if rule == "LX0609-078" and events is None:
+        if rule == "LX0609-04-01-04" and events is None:
             decisions.append(
                 _decision(
                     snapshot,

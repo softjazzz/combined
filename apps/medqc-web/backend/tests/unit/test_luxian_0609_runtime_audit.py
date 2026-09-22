@@ -24,14 +24,14 @@ def _manifest() -> dict[str, object]:
         "git_head": "a" * 40,
         "rules": [
             {
-                "rule_id": "LX0609-001",
+                "rule_id": "LX0609-01-01-01",
                 "executor_key": "basic_timeliness",
                 "dependency_mode": "native_sync",
                 "active_path": "native",
                 "rule_version": "v1",
             },
             {
-                "rule_id": "LX0609-002",
+                "rule_id": "LX0609-01-02-01",
                 "executor_key": "basic_timeliness",
                 "dependency_mode": "native_async",
                 "active_path": "native",
@@ -46,14 +46,14 @@ def test_runtime_audit_joins_manifest_contracts_and_phase_scope() -> None:
         runtime_manifest=_manifest(),
         contracts=(
             SimpleNamespace(
-                rule_id="LX0609-001",
+                rule_id="LX0609-01-01-01",
                 contract_version="contract-v1",
                 decision_authority="program_only",
                 golden_gate_state="accepted",
                 data_dependencies=("admission_record",),
             ),
             SimpleNamespace(
-                rule_id="LX0609-002",
+                rule_id="LX0609-01-02-01",
                 contract_version="contract-v1",
                 decision_authority="program_then_optional_llm",
                 golden_gate_state="pending",
@@ -62,7 +62,7 @@ def test_runtime_audit_joins_manifest_contracts_and_phase_scope() -> None:
         ),
         phase_scope=(
             SimpleNamespace(
-                rule_id="LX0609-001",
+                rule_id="LX0609-01-01-01",
                 phase_status="phase_1_target",
                 definition_version="scope-v1",
                 active_criteria=(),
@@ -70,7 +70,7 @@ def test_runtime_audit_joins_manifest_contracts_and_phase_scope() -> None:
                 pending_reason_code="",
             ),
             SimpleNamespace(
-                rule_id="LX0609-002",
+                rule_id="LX0609-01-02-01",
                 phase_status="pending_definition",
                 definition_version="scope-v1",
                 active_criteria=(),
@@ -112,11 +112,11 @@ def test_runtime_audit_reports_unreconciled_definition_target() -> None:
                 golden_gate_state="pending",
                 data_dependencies=(),
             )
-            for rule_id in ("LX0609-001", "LX0609-002")
+            for rule_id in ("LX0609-01-01-01", "LX0609-01-02-01")
         ),
         phase_scope=(
             SimpleNamespace(
-                rule_id="LX0609-001",
+                rule_id="LX0609-01-01-01",
                 phase_status="phase_1_partial",
                 definition_version="scope-v1",
                 active_criteria=("criterion-a",),
@@ -124,7 +124,7 @@ def test_runtime_audit_reports_unreconciled_definition_target() -> None:
                 pending_reason_code="",
             ),
             SimpleNamespace(
-                rule_id="LX0609-002",
+                rule_id="LX0609-01-02-01",
                 phase_status="pending_definition",
                 definition_version="scope-v1",
                 active_criteria=(),

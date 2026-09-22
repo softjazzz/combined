@@ -11,7 +11,7 @@ from .decision_model import RuleDecision
 from .native_execution import build_luxian_0609_native_result
 
 
-_RULE_ID_PATTERN = re.compile(r"^LX0609-\d{3}$")
+_RULE_ID_PATTERN = re.compile(r"^LX0609-\d{2}-\d{2}-\d{2}$")
 _EXECUTOR_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 _MODEL_EXECUTION_STATS_KEYS = (
     "requested_rule_count",
@@ -136,7 +136,6 @@ class FamilyUsageAttribution:
         if (
             type(rule_ids) is not tuple
             or not rule_ids
-            or rule_ids != tuple(sorted(rule_ids))
             or len(rule_ids) != len(set(rule_ids))
             or any(
                 not isinstance(rule_id, str)

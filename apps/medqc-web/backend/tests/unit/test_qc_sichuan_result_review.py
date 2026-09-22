@@ -100,7 +100,7 @@ def test_luxian_0609_batch_detail_hydrates_validated_canonical_items_before_summ
     canonical_item = {
         "schema_version": "lx0609-customer-result-v2",
         "record_ref": "rec_" + "a" * 24,
-        "rule_id": "LX0609-001",
+        "rule_id": "LX0609-01-01-01",
         "rule_version": "2026-06-09",
         "status": "compliant",
         "result_status": "compliant",
@@ -111,7 +111,7 @@ def test_luxian_0609_batch_detail_hydrates_validated_canonical_items_before_summ
     raw_job = {
         "id": "job-canonical",
         "status": "completed",
-        "items": [{"rule_id": "LX0609-001", "status": "technical_error"}],
+        "items": [{"rule_id": "LX0609-01-01-01", "status": "technical_error"}],
     }
 
     hydrated = qc_sichuan._hydrate_luxian_canonical_batch_job_or_409(
@@ -129,7 +129,7 @@ def test_luxian_0609_batch_detail_hydrates_validated_canonical_items_before_summ
 
 def test_luxian_0609_batch_detail_ignores_stale_internal_rule_results_after_canonical_hydration() -> None:
     canonical_item = _canonical_item(
-        rule_id="LX0609-001",
+        rule_id="LX0609-01-01-01",
         status="compliant",
         reason_code="requirement_satisfied",
     )
@@ -153,12 +153,12 @@ def test_luxian_0609_batch_detail_ignores_stale_internal_rule_results_after_cano
     assert projected["status"] == "completed"
     assert projected["summary"]["status_counts"] == {"compliant": 1}
     assert projected["summary"]["result_count"] == 1
-    assert projected["items"][0]["rule_id"] == "LX0609-001"
+    assert projected["items"][0]["rule_id"] == "LX0609-01-01-01"
 
 
 def test_luxian_0609_partial_failed_detail_uses_available_canonical_records() -> None:
     canonical_item = _canonical_item(
-        rule_id="LX0609-001",
+        rule_id="LX0609-01-01-01",
         status="non_compliant",
         reason_code="requirement_not_satisfied",
     )
@@ -166,11 +166,11 @@ def test_luxian_0609_partial_failed_detail_uses_available_canonical_records() ->
         "id": "job-canonical",
         "status": "failed",
         "rule_set_key": "luxian_0609_qc_v1",
-        "items": [{"rule_id": "LX0609-001", "status": "technical_error"}],
-        "rule_results": [{"rule_id": "LX0609-001", "items": []}],
+        "items": [{"rule_id": "LX0609-01-01-01", "status": "technical_error"}],
+        "rule_results": [{"rule_id": "LX0609-01-01-01", "items": []}],
         "summary": {
             "execution_status": "partial_failed",
-            "rule_results": [{"rule_id": "LX0609-001", "items": []}],
+            "rule_results": [{"rule_id": "LX0609-01-01-01", "items": []}],
         },
     }
 
@@ -194,7 +194,7 @@ def test_projected_luxian_job_still_uses_safe_workspace_response() -> None:
                 {
                     "schema_version": "customer-qc-result-v1",
                     "record_ref": "rec_" + "a" * 24,
-                    "rule_id": "LX0609-001",
+                    "rule_id": "LX0609-01-01-01",
                     "status": "compliant",
                     "reason_code": "within_deadline",
                 }
@@ -221,7 +221,7 @@ def test_workspace_response_omits_historical_malformed_result_without_leaking_pr
             "items": [
                 {
                     "record_id": "private-record-id",
-                    "rule_id": "LX0609-001",
+                    "rule_id": "LX0609-01-01-01",
                     "status": "non_compliant",
                     "customer_conclusion": private_text,
                 }
@@ -269,14 +269,14 @@ def test_workspace_response_filters_excluded_rule_and_rejects_unknown_rule(
         "items": [
             {
                 "record_id": "record-1",
-                "rule_id": "LX0609-001",
+                "rule_id": "LX0609-01-01-01",
                 "status": "compliant",
                 "is_compliant": True,
                 "reason_code": "within_deadline",
             },
             {
                 "record_id": "record-1",
-                "rule_id": "LX0609-033",
+                "rule_id": "LX0609-11-01-01",
                 "status": "compliant",
                 "is_compliant": True,
                 "reason_code": "within_deadline",
@@ -286,7 +286,7 @@ def test_workspace_response_filters_excluded_rule_and_rejects_unknown_rule(
 
     response = qc_sichuan._workspace_batch_response_item(base_job, compact=compact)
     assert [item["rule_id"] for item in response["items"]] == (
-        [] if compact else ["LX0609-001"]
+        [] if compact else ["LX0609-01-01-01"]
     )
     assert response["summary"]["result_count"] == 1
 
@@ -320,7 +320,7 @@ async def test_review_luxian_workspace_batch_job_persists_report(monkeypatch: py
             "status": "completed",
             "filters": {"rule_set_key": "luxian_0609_qc_v1"},
             "items": [_canonical_item(
-                rule_id="LX0609-020",
+                rule_id="LX0609-03-01-01",
                 status="compliant",
                 reason_code="requirement_satisfied",
             )],
@@ -328,7 +328,7 @@ async def test_review_luxian_workspace_batch_job_persists_report(monkeypatch: py
         },
         canonical_items=[
             _canonical_item(
-                rule_id="LX0609-020",
+                rule_id="LX0609-03-01-01",
                 status="uncertain",
                 reason_code="semantic_low_confidence",
             )
@@ -362,7 +362,7 @@ async def test_review_luxian_workspace_batch_job_rejects_missing_canonical_envel
             "filters": {"rule_set_key": "luxian_0609_qc_v1"},
             "items": [
                 {
-                    "rule_id": "LX0609-020",
+                    "rule_id": "LX0609-03-01-01",
                     "status": "uncertain",
                     "reason_code": "semantic_low_confidence",
                 }
@@ -427,7 +427,7 @@ async def test_review_response_uses_customer_safe_projection_and_recomputes_issu
                     "record_id": "R-101",
                     "visit_id": "V-101",
                     "patient_name": "王某某",
-                    "rule_id": "LX0609-021",
+                    "rule_id": "LX0609-03-01-02",
                     "status": "ai_suggested_non_compliant",
                     "reason_code": "semantic_low_confidence",
                     "findings": "原始正文不得回传",
@@ -435,7 +435,7 @@ async def test_review_response_uses_customer_safe_projection_and_recomputes_issu
                 {
                     "record_id": "R-102",
                     "patient_name": "赵某某",
-                    "rule_id": "LX0609-033",
+                    "rule_id": "LX0609-11-01-01",
                     "status": "non_compliant",
                     "reason_code": "signature_missing",
                     "customer_conclusion": "手术知情同意书签署要素不完整。",
@@ -450,7 +450,7 @@ async def test_review_response_uses_customer_safe_projection_and_recomputes_issu
                 },
                 {
                     "record_id": "R-103",
-                    "rule_id": "LX0609-029",
+                    "rule_id": "LX0609-04-01-01",
                     "result_status": "data_gap",
                     "status": "non_compliant",
                     "is_compliant": False,
@@ -458,7 +458,7 @@ async def test_review_response_uses_customer_safe_projection_and_recomputes_issu
                 },
                 {
                     "record_id": "R-104",
-                    "rule_id": "LX0609-032",
+                    "rule_id": "LX0609-04-03-01",
                     "status": "technical_error",
                     "is_compliant": False,
                     "reason_code": "source_query_error",
@@ -481,19 +481,19 @@ async def test_review_response_uses_customer_safe_projection_and_recomputes_issu
         },
         canonical_items=[
             _canonical_item(
-                rule_id="LX0609-021",
+                rule_id="LX0609-03-01-02",
                 status="ai_suggested_non_compliant",
                 reason_code="semantic_low_confidence",
                 record_ref_suffix="a",
             ),
             _canonical_item(
-                rule_id="LX0609-029",
+                rule_id="LX0609-04-01-01",
                 status="data_gap",
                 reason_code="source_unavailable",
                 record_ref_suffix="b",
             ),
             _canonical_item(
-                rule_id="LX0609-032",
+                rule_id="LX0609-04-03-01",
                 status="technical_error",
                 reason_code="source_query_error",
                 record_ref_suffix="c",

@@ -87,7 +87,7 @@ describe('RecordPoolQcTaskStatusBar', () => {
           customer_rule_count: 75,
           processed_rule_count: 18,
           current_rule: {
-            rule_code: 'LX0609-017',
+            rule_code: 'LX0609-12-01-02',
             rule_name: '不合理复制病历',
           },
         },
@@ -108,7 +108,7 @@ describe('RecordPoolQcTaskStatusBar', () => {
     expect(wrapper.get('[role="status"]').text()).toContain('正在执行质控')
     expect(wrapper.text()).toContain('已处理 1 / 4 份病历')
     expect(wrapper.text()).toContain('当前单份规则进度 18 / 75 个质控点')
-    expect(wrapper.text()).toContain('当前：LX0609-017 不合理复制病历')
+    expect(wrapper.text()).toContain('当前：LX0609-12-01-02 不合理复制病历')
 
     wrapper.unmount()
   })

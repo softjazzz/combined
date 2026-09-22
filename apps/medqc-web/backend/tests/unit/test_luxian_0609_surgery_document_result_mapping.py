@@ -12,7 +12,7 @@ from app.services.luxian_0609.surgery_document_result_mapping import (
 
 def test_039_customer_facts_exclude_surgeon_identity() -> None:
     safe_facts = safe_surgery_document_customer_display_facts(
-        rule_id="LX0609-039",
+        rule_id="LX0609-04-01-02",
         raw={
             "failure_kind": "surgeon_not_in_preop_discussion",
             "performed_surgery_confirmed": True,
@@ -36,18 +36,18 @@ def test_039_customer_facts_exclude_surgeon_identity() -> None:
 def test_public_fact_ref_evidence_declaration_is_limited_to_frozen_rules() -> None:
     assert all(
         is_surgery_document_public_fact_ref_evidence_rule(rule_id)
-        for rule_id in ("LX0609-034", "LX0609-036", "LX0609-039")
+        for rule_id in ("LX0609-11-02-01", "LX0609-04-04-01", "LX0609-04-01-02")
     )
     assert all(
         not is_surgery_document_public_fact_ref_evidence_rule(rule_id)
-        for rule_id in ("LX0609-029", "LX0609-035", "LX0609-037", "LX0609-038")
+        for rule_id in ("LX0609-04-01-01", "LX0609-11-02-02", "LX0609-04-04-02", "LX0609-04-04-03")
     )
 
 
 def test_status_fact_contract_failure_is_isolated_as_technical_error() -> None:
     finalized, handled = finalize_luxian_0609_executor_customer_display_facts(
         result={
-            "rule_id": "LX0609-038",
+            "rule_id": "LX0609-04-04-03",
             "status": "compliant",
             "reason_code": "requirement_satisfied",
             "findings": ["不应保留"],
@@ -72,23 +72,23 @@ def test_037_missing_anesthesia_visit_is_a_deliverable_defect() -> None:
         "missing_visit_sources": ["postane_surveil_record"],
     }
     safe_facts = safe_surgery_document_customer_display_facts(
-        rule_id="LX0609-037", raw=raw_facts
+        rule_id="LX0609-04-04-02", raw=raw_facts
     )
 
     assert surgery_document_customer_fact_status_is_valid(
-        rule_id="LX0609-037",
+        rule_id="LX0609-04-04-02",
         status="non_compliant",
         safe_facts=safe_facts,
     )
     assert not surgery_document_customer_fact_status_is_valid(
-        rule_id="LX0609-037",
+        rule_id="LX0609-04-04-02",
         status="not_applicable",
         safe_facts=safe_facts,
     )
 
     finalized, handled = finalize_luxian_0609_executor_customer_display_facts(
         result={
-            "rule_id": "LX0609-037",
+            "rule_id": "LX0609-04-04-02",
             "status": "non_compliant",
             "reason_code": "required_document_missing",
         },
@@ -126,16 +126,16 @@ def test_preop_ambiguous_association_keeps_only_safe_event_coordinates() -> None
     }
     assert (
         safe_surgery_document_customer_display_facts(
-            rule_id="LX0609-078", raw=raw_facts
+            rule_id="LX0609-04-01-04", raw=raw_facts
         )
         is None
     )
 
     raw_facts["documents"][0].pop("document_id")
     safe_facts = safe_surgery_document_customer_display_facts(
-        rule_id="LX0609-078", raw=raw_facts
+        rule_id="LX0609-04-01-04", raw=raw_facts
     )
     assert safe_facts == raw_facts
     assert surgery_document_customer_fact_status_is_valid(
-        rule_id="LX0609-078", status="data_gap", safe_facts=safe_facts
+        rule_id="LX0609-04-01-04", status="data_gap", safe_facts=safe_facts
     )
