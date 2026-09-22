@@ -23,13 +23,13 @@ from app.services.luxian_0609_rule_catalog import load_luxian_0609_rules
 
 
 @pytest.mark.unit
-def test_dependency_inventory_covers_all_85_registered_rules_and_eight_families():
+def test_dependency_inventory_covers_all_83_execution_catalog_rules_and_eight_families():
     inventory = build_luxian_0609_dependency_inventory(
         rules=load_luxian_0609_rules(),
         family_definitions=RULE_FAMILY_DEFINITIONS,
     )
 
-    assert len(inventory) == 85
+    assert len(inventory) == 83
     assert tuple(item.rule_id for item in inventory) == tuple(
         str(item["rule_id"]) for item in load_luxian_0609_rules()
     )
@@ -43,7 +43,7 @@ def test_dependency_inventory_covers_all_85_registered_rules_and_eight_families(
         "tumor_pathology",
         "extended_document",
     }
-    assert sum(len(item.compatibility_rule_ids) for item in inventory) == 126
+    assert sum(len(item.compatibility_rule_ids) for item in inventory) == 124
     assert all(item.applicable_documents for item in inventory)
     assert all(item.dependency_type for item in inventory)
 
@@ -143,13 +143,13 @@ def test_dependency_inventory_exposes_current_native_and_compatibility_boundary(
         "LX0609-06-03-02",
         "LX0609-06-02-01",
     }
-    # 两条医嘱—病程一致性规则只登记目录，等待可靠执行状态与稳定医嘱关联；
-    # 阶段门控会扣留它们，不能被误当成已上线原生规则。
+    # 两条医嘱—病程一致性规则只在主目录登记，不进入依赖清单。
     assert {
         rule_id
         for rule_id, mode in modes.items()
         if mode == EXECUTION_MODE_COMPATIBILITY
-    } == {"LX0609-06-01-01", "LX0609-06-03-01"}
+    } == set()
+    assert {"LX0609-06-01-01", "LX0609-06-03-01"}.isdisjoint(modes)
 
 
 @pytest.mark.unit
@@ -452,7 +452,7 @@ def test_stage_one_consultation_flags_keep_execution_rules_on_compatibility_path
     )
 
     assert len(plan.native_sync_rule_ids) + len(plan.native_async_rule_ids) == 72
-    assert len(plan.not_executed_rule_ids) == 12
+    assert len(plan.not_executed_rule_ids) == 10
     assert plan.compatibility_rule_ids == ("LX0609-03-01-04",)
     assert plan.compatibility_execution_rule_ids == (
         "CL-248",
@@ -487,7 +487,7 @@ def test_all_enabled_native_families_leave_only_029_as_explicit_compatibility_ex
     )
 
     assert len(plan.native_sync_rule_ids) + len(plan.native_async_rule_ids) == 72
-    assert len(plan.not_executed_rule_ids) == 12
+    assert len(plan.not_executed_rule_ids) == 10
     assert plan.compatibility_rule_ids == ("LX0609-04-01-01",)
     assert plan.compatibility_execution_rule_ids == ("CL-181", "SC-081")
 

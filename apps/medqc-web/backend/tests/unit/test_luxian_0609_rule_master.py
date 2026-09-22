@@ -35,18 +35,20 @@ def test_rule_master_derives_its_scope_without_numeric_continuity() -> None:
     assert isinstance(payload["rules"], list)
     extension = dict(payload["rules"][-1])
     extension["rule_id"] = "LX0609-06-01-09"
+    current_ids = tuple(item["rule_id"] for item in payload["rules"])
     payload["rules"].append(extension)
 
     entries = compile_luxian_0609_rule_master(payload)
 
-    assert tuple(entry.rule_id for entry in entries) == (*_frozen_rule_ids(), "LX0609-06-01-09")
+    assert tuple(entry.rule_id for entry in entries) == (*current_ids, "LX0609-06-01-09")
 
 
 def test_rule_master_keeps_declared_order_instead_of_sorting_identity() -> None:
     payload = json.loads(rule_master_module._MASTER_PATH.read_text(encoding="utf-8"))
+    expected = tuple(item["rule_id"] for item in reversed(payload["rules"]))
     payload["rules"] = list(reversed(payload["rules"]))
     entries = compile_luxian_0609_rule_master(payload)
-    assert tuple(entry.rule_id for entry in entries) == tuple(reversed(_frozen_rule_ids()))
+    assert tuple(entry.rule_id for entry in entries) == expected
 
 
 @pytest.mark.unit
@@ -107,16 +109,24 @@ def test_rule_master_rejects_duplicate_malformed_or_empty_scope(
 
 
 @pytest.mark.unit
-def test_rule_master_is_the_complete_ordered_79_rule_scope():
+def test_rule_master_keeps_79_migrated_rules_and_six_handbook_registrations():
     entries = load_luxian_0609_rule_master()
 
-    assert tuple(entry.rule_id for entry in entries) == _frozen_rule_ids()
-    assert len({entry.rule_id for entry in entries}) == 79
+    assert tuple(entry.rule_id for entry in entries[:79]) == _frozen_rule_ids()
+    assert tuple(entry.rule_id for entry in entries[79:]) == (
+        "LX0609-06-01-01",
+        "LX0609-06-01-03",
+        "LX0609-06-03-01",
+        "LX0609-06-03-02",
+        "LX0609-06-02-01",
+        "LX0609-09-01-02",
+    )
+    assert len({entry.rule_id for entry in entries}) == 85
     assert get_luxian_0609_rule_master_summary() == {
-        "total": 79,
-        "active": 79,
+        "total": 85,
+        "active": 83,
         "contract_ready": 0,
-        "pending_definition": 0,
+        "pending_definition": 2,
     }
     assert LUXIAN_0609_RULE_MASTER_VERSION == "2026-09-22-identity-v1"
     assert LUXIAN_0609_RULE_DEFINITION_VERSION == "lx0609-defined-scope-2026-09-22-identity-v1"
@@ -157,16 +167,23 @@ def test_pending_rules_keep_customer_definition_gaps_visible():
         if entry.implementation_status == "pending_definition"
     )
 
-    assert pending_entries == ()
+    assert tuple(entry.rule_id for entry in pending_entries) == (
+        "LX0609-06-01-01",
+        "LX0609-06-03-01",
+    )
+    assert all(entry.definition_note for entry in pending_entries)
+    assert all(entry.pending_definition_note for entry in pending_entries)
+    assert all(entry.phase_status == "pending_definition" for entry in pending_entries)
+    assert all(entry.rule_id not in {rule["rule_id"] for rule in load_luxian_0609_rules()} for entry in pending_entries)
 
 
 @pytest.mark.unit
-def test_rule_master_requires_complete_customer_policy_metadata_for_all_79_rules():
+def test_rule_master_requires_complete_customer_policy_metadata_for_all_rules():
     entries = load_luxian_0609_rule_master()
 
-    assert len(entries) == 79
+    assert len(entries) == 85
     assert all(entry.policy_sources for entry in entries)
-    assert all("customer_confirmed" in entry.policy_sources for entry in entries)
+    assert all("customer_confirmed" in entry.policy_sources for entry in entries[:79])
     assert all(entry.policy_summary for entry in entries)
 
 

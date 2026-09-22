@@ -26,7 +26,6 @@ MAX_COMPLETION_TOKENS = 4096
 _SCHEMA_VERSION = "lx0609-rescue-content-v1"
 _SOURCES = ("rescue_record", CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY)
 _ATOM_KEYS = {"state", "start", "end", "quote"}
-_TIME_PATTERN = re.compile(r"(?<!\d)([01]?\d|2[0-3])[:：]([0-5]\d)(?::([0-5]\d))?(?!\d)")
 _LABELED_TIME = re.compile(
     r"抢救(?:开始|结束)?时间\s*[:：]\s*"
     r"(?:(\d{4})[-年](\d{1,2})[-月](\d{1,2})日?\s*)?"
@@ -200,7 +199,11 @@ def _parse(response: Mapping[str, Any], documents: tuple[_Document, ...]) -> dic
             if not valid:
                 raise ValueError("unverifiable rescue atom")
             atoms[key] = dict(atom)
-            if key == "rescue_time" and state == "present" and not _TIME_PATTERN.search(quote):
+            if (
+                key == "rescue_time"
+                and state == "present"
+                and not _LABELED_TIME.search(quote)
+            ):
                 atoms[key] = _unknown()
         # 明确标注的抢救时间由Python复核，避免模型漏读字段导致缺陷。
         if doc.python_time is not None:

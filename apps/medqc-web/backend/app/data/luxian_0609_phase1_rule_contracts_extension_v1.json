@@ -330,33 +330,11 @@
     "golden_gate_state": "pending"
   },
   {
-    "rule_id": "LX0609-06-01-01",
-    "contract_version": "v1",
-    "family_key": "exam_lab",
-    "executor_key": "compatibility",
-    "execution_mode": "compatibility",
-    "decision_authority": "program_only",
-    "max_llm_calls_per_rule": 0,
-    "source_contract_state": "typed_shadow_v1",
-    "golden_gate_state": "pending"
-  },
-  {
     "rule_id": "LX0609-06-01-03",
     "contract_version": "v1",
     "family_key": "exam_lab",
     "executor_key": "exam_lab",
     "execution_mode": "native_async",
-    "decision_authority": "program_only",
-    "max_llm_calls_per_rule": 0,
-    "source_contract_state": "typed_shadow_v1",
-    "golden_gate_state": "pending"
-  },
-  {
-    "rule_id": "LX0609-06-03-01",
-    "contract_version": "v1",
-    "family_key": "exam_lab",
-    "executor_key": "compatibility",
-    "execution_mode": "compatibility",
     "decision_authority": "program_only",
     "max_llm_calls_per_rule": 0,
     "source_contract_state": "typed_shadow_v1",

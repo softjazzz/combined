@@ -668,8 +668,9 @@
       "rule_id": "LX0609-06-01-01",
       "source_document": "CT/MRI检查记录",
       "qc_point": "医嘱与病程一致性",
-      "implementation_status": "active",
+      "implementation_status": "pending_definition",
       "pending_definition_note": "本地CDM缺少可靠执行状态和完整医嘱关联键，当前不能安全区分临床不一致与同步缺口。",
+      "definition_note": "本地CDM缺少可靠执行状态和完整医嘱关联键，当前不能安全区分临床不一致与同步缺口。",
       "phase_status": "pending_definition",
       "pending_reason_code": "exam_order_course_linkage_unavailable",
       "policy_sources": [
@@ -691,8 +692,9 @@
       "rule_id": "LX0609-06-03-01",
       "source_document": "微生物培养检查记录",
       "qc_point": "医嘱与病程一致性",
-      "implementation_status": "active",
+      "implementation_status": "pending_definition",
       "pending_definition_note": "培养主记录缺少医嘱关联键，当前不能安全形成逐事件医嘱—病程一致性结论。",
+      "definition_note": "培养主记录缺少医嘱关联键，当前不能安全形成逐事件医嘱—病程一致性结论。",
       "phase_status": "pending_definition",
       "pending_reason_code": "culture_order_course_linkage_unavailable",
       "policy_sources": [

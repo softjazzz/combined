@@ -167,6 +167,89 @@ def test_missing_or_unreadable_report_is_data_gap_not_clinical_defect(rule_id, m
     assert missing.status != "non_compliant"
 
 
+@pytest.mark.parametrize(
+    "rule_id,master,report,business_key,name_key,name,status_key,master_status,report_body",
+    [
+        (
+            CT_RULE,
+            "exam_master",
+            "exam_item_report",
+            "exam_id",
+            "exam_name",
+            "胸部CT",
+            "exam_result_status",
+            "待审核",
+            "影像所见已初步录入，待最终审核",
+        ),
+        (
+            CULTURE_RULE,
+            "labtest_master",
+            "labtest_item_report",
+            "test_id",
+            "labtest_subject",
+            "血培养",
+            "labtest_result_status",
+            "培养中",
+            "初步结果：培养中，待最终确认",
+        ),
+    ],
+)
+def test_preliminary_body_without_execution_or_release_proof_is_data_gap(
+    rule_id,
+    master,
+    report,
+    business_key,
+    name_key,
+    name,
+    status_key,
+    master_status,
+    report_body,
+):
+    result, _, _ = _evaluate(
+        rule_id,
+        rows={
+            master: ({business_key: "K1", name_key: name, status_key: master_status},),
+            report: (
+                {
+                    business_key: "K1",
+                    name_key: name,
+                    status_key: master_status,
+                    "result": report_body,
+                },
+            ),
+        },
+    )
+
+    assert result.status == "data_gap"
+    assert result.display_facts["event_results"][0]["issue_kind"] == "execution_unconfirmed"
+
+
+def test_confirmed_culture_collection_with_pending_report_body_is_not_compliant():
+    result, _, _ = _evaluate(
+        CULTURE_RULE,
+        rows={
+            "labtest_master": (
+                {
+                    "test_id": "T1",
+                    "labtest_subject": "血培养",
+                    "specimen_collection_datetime": "2026-09-01 09:00:00",
+                },
+            ),
+            "labtest_item_report": (
+                {
+                    "test_id": "T1",
+                    "labtest_subject": "血培养",
+                    "labtest_result_status": "培养中",
+                    "result": "初步结果：培养中，待最终确认",
+                },
+            ),
+        },
+    )
+
+    assert result.status == "data_gap"
+    assert result.display_facts["event_results"][0]["issue_kind"] == "report_content_unavailable"
+
+
 @pytest.mark.parametrize("state", ["unavailable", "error", "truncated"])
 def test_incomplete_report_source_is_data_gap(state):
     result, _, _ = _evaluate(

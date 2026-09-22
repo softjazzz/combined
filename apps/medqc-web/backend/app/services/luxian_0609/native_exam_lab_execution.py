@@ -69,13 +69,9 @@ EXAM_LAB_RULE_IDS = (
 # 该公开常量是既有五规则调用方的稳定范围，不能因扩展手册规则而隐式变成
 # “全族运行”。新增规则只在目录明确选中后进入内部执行集合。
 EXECUTABLE_EXAM_LAB_RULE_IDS = (
-    "LX0609-06-01-02",
+    *EXAM_LAB_RULE_IDS,
     "LX0609-06-01-03",
-    "LX0609-06-01-04",
-    "LX0609-06-01-05",
     "LX0609-06-03-02",
-    "LX0609-06-03-03",
-    "LX0609-06-03-04",
 )
 EXAM_RULE_IDS = frozenset({"LX0609-06-01-02", "LX0609-06-01-04", "LX0609-06-01-05"})
 CULTURE_RULE_IDS = frozenset({"LX0609-06-03-03", "LX0609-06-03-04"})
@@ -1699,8 +1695,14 @@ async def execute_luxian_0609_native_exam_lab_rules(
 ) -> NativeExamLabExecutionResult:
     """按客户目录顺序执行；未通过事实门控的规则不调用模型。"""
 
-    requested = {str(rule_id or "").strip().upper() for rule_id in rule_ids}
-    selected = tuple(rule_id for rule_id in EXECUTABLE_EXAM_LAB_RULE_IDS if rule_id in requested)
+    requested = tuple(dict.fromkeys(
+        str(rule_id or "").strip().upper()
+        for rule_id in rule_ids
+        if str(rule_id or "").strip()
+    ))
+    selected = tuple(
+        rule_id for rule_id in requested if rule_id in EXECUTABLE_EXAM_LAB_RULE_IDS
+    )
     normalized_decision_ids = tuple(
         str(rule_id or "").strip().upper() for rule_id in decision_rule_ids
     )

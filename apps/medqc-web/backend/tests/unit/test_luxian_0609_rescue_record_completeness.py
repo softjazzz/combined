@@ -156,6 +156,39 @@ def test_python_labeled_time_prevents_model_false_absence():
     assert _facts(result)["rescue_content_events"][0]["field_facts"]["rescue_time"]["quote"].startswith("抢救时间")
 
 
+def test_plain_record_time_cannot_be_accepted_as_rescue_time():
+    ordinary_time = "记录时间：2026-07-16 10:00。"
+    body = "\n".join(
+        ordinary_time if key == "rescue_time" else quote
+        for key, quote in SNIPPETS.items()
+    )
+    session = _session([_row(body=body)])
+    ref, row = session.materials.document_rows(
+        "rescue_record", snapshot=session.snapshot
+    )[0]
+    fields = {}
+    for key, original in SNIPPETS.items():
+        quote = ordinary_time if key == "rescue_time" else original
+        start = row["record_content"].index(quote)
+        fields[key] = {
+            "state": "present",
+            "start": start,
+            "end": start + len(quote),
+            "quote": quote,
+        }
+    payload = {
+        "schema_version": "lx0609-rescue-content-v1",
+        "documents": [{"document_ref": ref, "fields": fields}],
+    }
+
+    result = _execute(session, FakeLLM(payload))
+
+    assert _state(result) == "data_gap"
+    assert _facts(result)["unknown_fields"] == ["rescue_time"]
+    time_fact = _facts(result)["rescue_content_events"][0]["field_facts"]["rescue_time"]
+    assert time_fact == {"state": "unknown", "start": None, "end": None, "quote": None}
+
+
 def test_complete_empty_trigger_sources_are_not_applicable_without_llm():
     llm = FakeLLM()
     result = _execute(_session(), llm)

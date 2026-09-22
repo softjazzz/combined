@@ -35,6 +35,14 @@ _SUPPLY = re.compile(r"胶片|光盘|耗材|打印|刻录")
 _EXCLUDED = re.compile(r"取消|撤销|作废|未执行|未实施|计划|拟行|待执行|预约|cancelled|canceled|planned", re.I)
 _PERFORMED = frozenset({"已执行", "已完成", "完成", "已报告", "已审核", "已发布", "performed", "completed", "final", "finalized", "reported", "released"})
 _PLACEHOLDER = re.compile(r"^(?:无|暂无|无结果|待报告|待回报|培养中|未填写|未完成|待审核|未审核|[\s\-—/]+)$")
+_PENDING_REPORT_BODY = re.compile(
+    r"^(?:(?:初步结果|检查结果|报告结果)\s*[:：]?\s*)?"
+    r"(?:培养中|待(?:最终)?(?:报告|回报|审核|确认)|未(?:填写|完成|审核)|无结果)"
+    r"(?:[，,;；。\s]*(?:待(?:最终)?(?:报告|回报|审核|确认)))?[。.]?$"
+)
+_FINAL_REPORT_STATES = frozenset(
+    {"已完成", "完成", "已报告", "已审核", "已发布", "completed", "final", "finalized", "reported", "released"}
+)
 _NAME_FIELDS = ("order_name", "exam_name", "exam_item_name", "item_name", "lab_item_name", "labtest_subject", "exam_type", "lab_type", "test_type")
 _REPORT_FIELDS = ("exam_result", "exam_impression", "exam_conclusion", "impression", "conclusion", "description", "result", "record_content")
 _COURSE_FIELDS = ("case_characteristic", "diagnose_based_on", "differential_diagnosis", "treatment_plan", "record_content", "content")
@@ -68,7 +76,13 @@ def _time(value: Any) -> bool:
 
 
 def _body(row: Mapping[str, Any]) -> bool:
-    return any(value and not _PLACEHOLDER.fullmatch(value) for field in _REPORT_FIELDS if (value := clean(row.get(field))))
+    return any(
+        value
+        and not _PLACEHOLDER.fullmatch(value)
+        and not _PENDING_REPORT_BODY.fullmatch(value)
+        for field in _REPORT_FIELDS
+        if (value := clean(row.get(field)))
+    )
 
 
 def _status(row: Mapping[str, Any]) -> str:
@@ -80,6 +94,20 @@ def _performed(row: Mapping[str, Any]) -> bool:
         any(clean(row.get(field)).lower() in _PERFORMED for field in ("order_status", "exam_result_status", "labtest_result_status", "report_status"))
         or any(_time(row.get(field)) for field in ("exam_time", "exam_datetime", "performed_datetime", "specimen_collection_datetime"))
     )
+
+
+def _report_released(row: Mapping[str, Any]) -> bool:
+    return bool(
+        any(_time(row.get(field)) for field in ("report_time", "report_datetime"))
+        or any(
+            clean(row.get(field)).lower() in _FINAL_REPORT_STATES
+            for field in ("exam_result_status", "labtest_result_status", "report_status")
+        )
+    )
+
+
+def _formal_report(row: Mapping[str, Any]) -> bool:
+    return _report_released(row) and _body(row)
 
 
 @dataclass(frozen=True, repr=False)
@@ -184,11 +212,10 @@ def _build_family_events(family: str, sources: Mapping[str, SourceRows]) -> tupl
         if any(len({_names(row) for _, row in orders[oid]}) > 1 for oid in linked_ids):
             unresolved = True
         valid_reports = tuple((ref, row) for ref, row in report_rows if not _EXCLUDED.search(_status(row)))
-        formal_report = any(
-            _body(row) and any(_time(row.get(field)) for field in ("report_time", "report_datetime"))
-            for _, row in valid_reports
+        performed = (
+            any(_performed(row) for _, row in (*master_rows, *linked))
+            or any(_report_released(row) for _, row in valid_reports)
         )
-        performed = any(_performed(row) for _, row in (*master_rows, *linked)) or formal_report
         excluded = bool(linked) and all(_EXCLUDED.search(_status(row)) for _, row in linked) and not performed
         events.append(HandbookEvent(
             family, key, next((name for name in names if target_name(family, name)), "")[:200],
@@ -258,12 +285,12 @@ def evaluate_report_completeness(rule_id: str, ledger: HandbookLedger) -> Handbo
             status, issue = "not_applicable", "no_performed_event"
         elif not event.association_resolved:
             status, issue = "data_gap", "association_unresolved"
-        elif event.reports and any(_body(row) for _, row in event.reports):
+        elif not event.performed:
+            status, issue = "data_gap", "execution_unconfirmed"
+        elif event.reports and any(_formal_report(row) for _, row in event.reports):
             status, issue = "compliant", "report_present"
         elif event.reports:
             status, issue = "data_gap", "report_content_unavailable"
-        elif not event.performed:
-            status, issue = "data_gap", "execution_unconfirmed"
         else:
             # 完整 CDM 检索仍不能将同步缺口定性为临床漏报告。
             status, issue = "data_gap", "report_missing"

@@ -122,7 +122,11 @@ def build_luxian_0609_pending_definition_result(rule_id: str) -> dict[str, objec
     """由总表投影唯一生成暂停规则的正式结果。"""
 
     entry = get_luxian_0609_phase_scope(rule_id)
-    if entry is None or entry.phase_status != "pending_definition":
+    if (
+        entry is None
+        or not entry.catalog_registered
+        or entry.phase_status != "pending_definition"
+    ):
         raise ValueError("rule is not an LX0609 pending definition")
     wrapper = get_luxian_0609_rule(entry.rule_id)
     if wrapper is None:
@@ -167,7 +171,9 @@ def partition_luxian_0609_rule_scope(
         _clean(rule_id).upper() for rule_id in selected_rule_ids if _clean(rule_id)
     }
     entries = load_luxian_0609_phase_scope()
-    known_rule_ids = {entry.rule_id for entry in entries}
+    known_rule_ids = {
+        entry.rule_id for entry in entries if entry.catalog_registered
+    }
     if requested.difference(known_rule_ids):
         raise ValueError("invalid LX0609 customer rule id")
     executable = tuple(

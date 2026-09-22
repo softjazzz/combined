@@ -45,8 +45,8 @@ TUMOR_PATHOLOGY_RULE_IDS = (
     "LX0609-08-01-04",
 )
 EXECUTABLE_TUMOR_PATHOLOGY_RULE_IDS = (
-    PATHOLOGY_REPORT_COMPLETENESS_RULE_ID,
     *TUMOR_PATHOLOGY_RULE_IDS,
+    PATHOLOGY_REPORT_COMPLETENESS_RULE_ID,
 )
 EXECUTOR_KEY = "tumor_pathology"
 _TYPED_DECISION_RULE_IDS = frozenset(EXECUTABLE_TUMOR_PATHOLOGY_RULE_IDS)
@@ -1438,9 +1438,14 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
 ) -> NativeTumorPathologyExecutionResult:
     """按客户目录顺序执行；无受控适用事实时不调用模型。"""
 
-    requested = {str(rule_id or "").strip().upper() for rule_id in rule_ids}
+    requested = tuple(dict.fromkeys(
+        str(rule_id or "").strip().upper()
+        for rule_id in rule_ids
+        if str(rule_id or "").strip()
+    ))
     selected = tuple(
-        rule_id for rule_id in EXECUTABLE_TUMOR_PATHOLOGY_RULE_IDS if rule_id in requested
+        rule_id for rule_id in requested
+        if rule_id in EXECUTABLE_TUMOR_PATHOLOGY_RULE_IDS
     )
     typed_requested = {
         str(rule_id or "").strip().upper() for rule_id in decision_rule_ids

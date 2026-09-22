@@ -615,25 +615,6 @@
     "allowed_result_statuses": ["compliant", "non_compliant", "not_applicable", "data_gap"]
   },
   {
-    "rule_id": "LX0609-06-01-01",
-    "rule_code": "LX0609-06-01-01",
-    "name": "CT/MRI检查记录：医嘱与病程一致性",
-    "description": "逐事件核对CT/MRI医嘱与病程记录；当前本地CDM缺少可靠执行状态和完整医嘱关联键，暂停正式判定。",
-    "positive_example": "已执行的同次检查医嘱与病程记录内容一致。",
-    "negative_example": "经完整来源核验，已执行检查医嘱与病程记录缺失或内容不一致。",
-    "category": "CT/MRI检查记录",
-    "applicable_documents": ["inpat_nondrug_order", "exam_master", "daily_course_record"],
-    "applicable_document_labels": ["CT/MRI检查记录"],
-    "data_dependencies": ["检查执行状态", "医嘱—检查—病程逐事件关联键"],
-    "dependency_type": "结构化逐事件关联",
-    "executor_type": "pending_definition",
-    "rule_version": "2026-09-22-handbook-v1",
-    "prompt_version": "none",
-    "mapped_rule_ids": ["LX0609-06-01-01"],
-    "primary_execution_rule_id": "LX0609-06-01-01",
-    "allowed_result_statuses": ["compliant", "non_compliant", "not_applicable", "data_gap"]
-  },
-  {
     "rule_id": "LX0609-06-01-03",
     "rule_code": "LX0609-06-01-03",
     "name": "CT/MRI检查记录：报告单完整性",
@@ -667,25 +648,6 @@
       "not_applicable",
       "data_gap"
     ]
-  },
-  {
-    "rule_id": "LX0609-06-03-01",
-    "rule_code": "LX0609-06-03-01",
-    "name": "微生物培养检查记录：医嘱与病程一致性",
-    "description": "逐事件核对培养医嘱与病程记录；当前培养主记录缺少稳定医嘱关联键，暂停正式判定。",
-    "positive_example": "已执行的同次培养医嘱与病程记录内容一致。",
-    "negative_example": "经完整来源核验，已执行培养医嘱与病程记录缺失或内容不一致。",
-    "category": "微生物培养检查记录",
-    "applicable_documents": ["inpat_nondrug_order", "labtest_master", "daily_course_record"],
-    "applicable_document_labels": ["微生物培养检查记录"],
-    "data_dependencies": ["培养执行状态", "医嘱—培养—病程逐事件关联键"],
-    "dependency_type": "结构化逐事件关联",
-    "executor_type": "pending_definition",
-    "rule_version": "2026-09-22-handbook-v1",
-    "prompt_version": "none",
-    "mapped_rule_ids": ["LX0609-06-03-01"],
-    "primary_execution_rule_id": "LX0609-06-03-01",
-    "allowed_result_statuses": ["compliant", "non_compliant", "not_applicable", "data_gap"]
   },
   {
     "rule_id": "LX0609-06-03-02",

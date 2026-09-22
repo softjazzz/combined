@@ -1,6 +1,6 @@
 """LX0609 生产规则扩展的现状门禁与既有主链回归。
 
-076/077 已作为真实生产规则进入目录。本文件继续用下一顺位 078/079 验证
+078/079 已作为真实生产规则进入目录。本文件继续用下一顺位 080/081 验证
 master 声明式扩容边界，并固定既有发布规则的真实链路。
 """
 
@@ -33,7 +33,7 @@ def _write_json(path: Path, payload: object) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
 
 
-def test_production_master_loader_accepts_declarative_078_079_extension(
+def test_production_master_loader_accepts_declarative_080_081_extension(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -41,11 +41,11 @@ def test_production_master_loader_accepts_declarative_078_079_extension(
 
     payload = json.loads(rule_master_module._MASTER_PATH.read_text(encoding="utf-8"))
     assert isinstance(payload["rules"], list)
-    for rule_id in ("LX0609-04-01-04", "LX0609-04-01-05"):
+    for rule_id in ("LX0609-04-01-06", "LX0609-04-01-07"):
         copied = dict(payload["rules"][-1])
         copied["rule_id"] = rule_id
         payload["rules"].append(copied)
-    extension_path = tmp_path / "rule-master-with-078-079.json"
+    extension_path = tmp_path / "rule-master-with-080-081.json"
     _write_json(extension_path, payload)
 
     monkeypatch.setattr(rule_master_module, "_MASTER_PATH", extension_path)
@@ -56,12 +56,12 @@ def test_production_master_loader_accepts_declarative_078_079_extension(
         rule_master_module.load_luxian_0609_rule_master.cache_clear()
 
     assert tuple(entry.rule_id for entry in entries[-2:]) == (
-        "LX0609-04-01-04",
-        "LX0609-04-01-05",
+        "LX0609-04-01-06",
+        "LX0609-04-01-07",
     )
 
 
-def test_production_phase_loader_accepts_master_declared_078_079_extension(
+def test_production_phase_loader_accepts_master_declared_080_081_extension(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -71,11 +71,11 @@ def test_production_phase_loader_accepts_master_declared_078_079_extension(
         rule_master_module._MASTER_PATH.read_text(encoding="utf-8")
     )
     assert isinstance(master_payload["rules"], list)
-    for rule_id in ("LX0609-04-01-04", "LX0609-04-01-05"):
+    for rule_id in ("LX0609-04-01-06", "LX0609-04-01-07"):
         master_entry = dict(master_payload["rules"][-1])
         master_entry["rule_id"] = rule_id
         master_payload["rules"].append(master_entry)
-    master_extension_path = tmp_path / "rule-master-with-078-079.json"
+    master_extension_path = tmp_path / "rule-master-with-080-081.json"
     _write_json(master_extension_path, master_payload)
 
     monkeypatch.setattr(rule_master_module, "_MASTER_PATH", master_extension_path)
@@ -88,12 +88,12 @@ def test_production_phase_loader_accepts_master_declared_078_079_extension(
         phase_scope_module.load_luxian_0609_phase_scope.cache_clear()
 
     assert tuple(entry.rule_id for entry in entries[-2:]) == (
-        "LX0609-04-01-04",
-        "LX0609-04-01-05",
+        "LX0609-04-01-06",
+        "LX0609-04-01-07",
     )
 
 
-def test_incomplete_wrapper_catalog_fails_closed_after_master_and_phase_accept_078(
+def test_incomplete_wrapper_catalog_fails_closed_after_master_and_phase_accept_080(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -104,9 +104,9 @@ def test_incomplete_wrapper_catalog_fails_closed_after_master_and_phase_accept_0
     )
     assert isinstance(master_payload["rules"], list)
     master_payload["rules"].append(
-        {**master_payload["rules"][-1], "rule_id": "LX0609-04-01-04"}
+        {**master_payload["rules"][-1], "rule_id": "LX0609-04-01-06"}
     )
-    master_extension_path = tmp_path / "rule-master-with-078.json"
+    master_extension_path = tmp_path / "rule-master-with-080.json"
     _write_json(master_extension_path, master_payload)
 
     monkeypatch.setattr(rule_master_module, "_MASTER_PATH", master_extension_path)
@@ -117,10 +117,10 @@ def test_incomplete_wrapper_catalog_fails_closed_after_master_and_phase_accept_0
         assert tuple(
             entry.rule_id
             for entry in rule_master_module.load_luxian_0609_rule_master()
-        )[-1] == "LX0609-04-01-04"
+        )[-1] == "LX0609-04-01-06"
         assert (
             phase_scope_module.load_luxian_0609_phase_scope()[-1].rule_id
-            == "LX0609-04-01-04"
+            == "LX0609-04-01-06"
         )
         with pytest.raises(ValueError, match="execution catalog drifted"):
             rule_catalog_module.load_luxian_0609_rules()
@@ -203,6 +203,34 @@ class _ControlledSemanticClient:
         }
 
 
+class _ForbiddenLLMClient:
+    async def generate(self, *_args: object, **_kwargs: object) -> dict[str, object]:
+        raise AssertionError("空来源门控后的混合顺序测试不得调用模型")
+
+
+def _empty_production_evidence_session(
+    selected_rule_ids: tuple[str, ...],
+) -> Luxian0609EvidenceReadSession:
+    def read_rows(**kwargs: object) -> SnapshotSourceRows:
+        return SnapshotSourceRows.create(
+            source_key=str(kwargs["source_key"]),
+            rows=[],
+            truncated=False,
+            limit_rows=50,
+        )
+
+    return build_luxian_0609_evidence_read_session(
+        selected_rule_ids=selected_rule_ids,
+        institute_id="mixed-order-institute",
+        patient_id="mixed-order-patient",
+        visit_id="mixed-order-visit",
+        source_schema=None,
+        created_at="2026-09-22T12:00:00+08:00",
+        evaluation_as_of_date="2026-09-22",
+        row_reader=read_rows,
+    )
+
+
 def _production_settings() -> SimpleNamespace:
     return SimpleNamespace(
         LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=True,
@@ -222,8 +250,101 @@ def _production_settings() -> SimpleNamespace:
         LUXIAN_0609_NATIVE_EXTENDED_DOCUMENT_ENABLED=True,
         LUXIAN_0609_EVIDENCE_SNAPSHOT_SIDECAR_ENABLED=True,
         LUXIAN_0609_UNIFIED_ENGINE_ENABLED=True,
+        LUXIAN_0609_FAMILY_MAX_CONCURRENCY=40,
         LUXIAN_0609_RULE_DECISION_BASIC_TIMELINESS_ENABLED=True,
+        LUXIAN_0609_RULE_DECISION_EXAM_LAB_ENABLED=True,
+        LUXIAN_0609_RULE_DECISION_TUMOR_PATHOLOGY_ENABLED=True,
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "executor_key,selected_rule_ids",
+    (
+        (
+            "basic_timeliness",
+            ("LX0609-02-01-02", "LX0609-09-01-02"),
+        ),
+        (
+            "exam_lab",
+            ("LX0609-06-01-04", "LX0609-06-01-03"),
+        ),
+        (
+            "tumor_pathology",
+            ("LX0609-06-02-03", "LX0609-06-02-01"),
+        ),
+        (
+            "basic_timeliness",
+            (
+                "LX0609-01-01-01",
+                "LX0609-01-02-01",
+                "LX0609-09-01-01",
+                "LX0609-02-01-01",
+                "LX0609-02-01-02",
+                "LX0609-09-01-02",
+            ),
+        ),
+        (
+            "exam_lab",
+            (
+                "LX0609-06-01-02",
+                "LX0609-06-01-04",
+                "LX0609-06-01-05",
+                "LX0609-06-03-03",
+                "LX0609-06-03-04",
+                "LX0609-06-01-03",
+                "LX0609-06-03-02",
+            ),
+        ),
+        (
+            "tumor_pathology",
+            (
+                "LX0609-06-02-03",
+                "LX0609-06-02-02",
+                "LX0609-05-02-01",
+                "LX0609-08-01-04",
+                "LX0609-06-02-01",
+            ),
+        ),
+    ),
+)
+async def test_new_and_existing_rules_preserve_formal_package_order_through_engine(
+    monkeypatch: pytest.MonkeyPatch,
+    executor_key: str,
+    selected_rule_ids: tuple[str, ...],
+) -> None:
+    session = _empty_production_evidence_session(selected_rule_ids)
+
+    def build_session(**kwargs: object) -> Luxian0609EvidenceReadSession:
+        assert tuple(kwargs["selected_rule_ids"]) == selected_rule_ids
+        return session
+
+    monkeypatch.setattr(
+        execution_module,
+        "build_luxian_0609_evidence_read_session",
+        build_session,
+    )
+    executable, context = await prepare_luxian_0609_execution(
+        rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        prepared_rules=[],
+        visit_id="mixed-order-visit",
+        medical_text="",
+        evidence_payload=None,
+        llm_client=_ForbiddenLLMClient(),
+        settings=_production_settings(),
+        institute_id="mixed-order-institute",
+        patient_id="mixed-order-patient",
+        selected_customer_rule_ids=selected_rule_ids,
+        evaluation_as_of_date="2026-09-22",
+    )
+
+    assert executable == []
+    assert context.package_plan is not None
+    assert context.package_plan.native_executor_batches == (
+        (executor_key, selected_rule_ids),
+    )
+    assert tuple(item.rule_id for item in context.reduced_decisions) == selected_rule_ids
+    assert all(item.final_state.value != "technical_error" for item in context.reduced_decisions)
 
 
 async def _run_production_selection(

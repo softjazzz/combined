@@ -2185,7 +2185,7 @@ async def test_026_truncated_drug_material_is_data_gap_without_reader_or_model(
 
 
 @pytest.mark.asyncio
-async def test_pathology_source_triggers_013_019_once_each_and_keeps_customer_order():
+async def test_pathology_source_triggers_013_019_once_each_and_keeps_package_order():
     client = _Client([{"is_compliant": True}, {"is_compliant": False}])
 
     result = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
@@ -2199,7 +2199,7 @@ async def test_pathology_source_triggers_013_019_once_each_and_keeps_customer_or
         llm_client=client,
     )
 
-    assert [item["rule_id"] for item in result.results] == ["LX0609-06-02-03", "LX0609-06-02-02"]
+    assert [item["rule_id"] for item in result.results] == ["LX0609-06-02-02", "LX0609-06-02-03"]
     assert [item["status"] for item in result.results] == ["compliant", "non_compliant"]
     assert result.llm_call_count == 2
     assert result.total_tokens == 220

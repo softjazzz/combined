@@ -59,12 +59,8 @@ BASIC_TIMELINESS_RULE_IDS = (
 )
 # 保持原五规则公开调用范围稳定；新增抢救内容规则仅在目录明确选中时执行。
 EXECUTABLE_BASIC_TIMELINESS_RULE_IDS = (
-    "LX0609-01-01-01",
-    "LX0609-01-02-01",
-    "LX0609-09-01-01",
+    *BASIC_TIMELINESS_RULE_IDS,
     RESCUE_COMPLETENESS_RULE_ID,
-    "LX0609-02-01-01",
-    "LX0609-02-01-02",
 )
 EXECUTOR_KEY = "basic_timeliness"
 _FIRST_COURSE_RULE_ID = "LX0609-01-02-01"
@@ -1880,13 +1876,13 @@ def _execute_luxian_0609_native_basic_timeliness(
 ) -> NativeExecutionResult:
     """一次执行所选基础时限点；语义事实由调用方预先校验后注入。"""
 
-    requested = {
+    requested = tuple(dict.fromkeys(
         str(rule_id or "").strip().upper()
         for rule_id in rule_ids
         if str(rule_id or "").strip()
-    }
+    ))
     selected = tuple(
-        rule_id for rule_id in EXECUTABLE_BASIC_TIMELINESS_RULE_IDS if rule_id in requested
+        rule_id for rule_id in requested if rule_id in EXECUTABLE_BASIC_TIMELINESS_RULE_IDS
     )
     if not selected:
         return NativeExecutionResult((), ())
@@ -2339,7 +2335,11 @@ def execute_luxian_0609_native_basic_timeliness(
     llm_client: BasicTimelinessLLMClient | None = None,
 ) -> NativeExecutionResult | Awaitable[NativeBasicTimelinessExecutionResult]:
     """按同一证据会话装配抢救内容检查，保留既有时效及006语义调用链。"""
-    requested = tuple(str(value or "").strip().upper() for value in rule_ids)
+    requested = tuple(dict.fromkeys(
+        str(value or "").strip().upper()
+        for value in rule_ids
+        if str(value or "").strip()
+    ))
     legacy = _execute_basic_timeliness_with_semantic_rounds(
         rule_ids=tuple(value for value in requested if value != RESCUE_COMPLETENESS_RULE_ID),
         evidence_payload=evidence_payload, institute_id=institute_id,
@@ -2355,7 +2355,10 @@ def execute_luxian_0609_native_basic_timeliness(
     )
 
     def merge(old: NativeExecutionResult, new: NativeExecutionResult) -> NativeBasicTimelinessExecutionResult:
-        selected = tuple(rule_id for rule_id in EXECUTABLE_BASIC_TIMELINESS_RULE_IDS if rule_id in requested)
+        selected = tuple(
+            rule_id for rule_id in requested
+            if rule_id in EXECUTABLE_BASIC_TIMELINESS_RULE_IDS
+        )
         order = {rule_id: index for index, rule_id in enumerate(selected)}
         combined = NativeExecutionResult(
             results=tuple(sorted((*old.results, *new.results), key=lambda item: order[item["rule_id"]])),
