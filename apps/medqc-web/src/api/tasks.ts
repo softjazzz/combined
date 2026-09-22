@@ -35,6 +35,8 @@ export type TaskType = 'one_time' | 'scheduled'
 export type TaskStatus = 'draft' | 'sampling' | 'assigned' | 'in_progress' | 'completed' | 'cancelled'
 export type TaskTab = 'all' | 'created' | 'received'
 export type TaskTodo = 'assigned' | 'in_progress' | 'due_soon'
+export type TaskScene = 'running' | 'final' | 'outpatient'
+export type TaskSceneFilter = TaskScene | 'unclassified'
 export type SamplingMethod = 'all' | 'count' | 'percentage'
 export type AssignMethod = 'keep' | 'by_department' | 'by_ratio' | 'by_type'
 
@@ -49,6 +51,7 @@ export interface TaskItem {
     completed_records: number
     creator_id: string
     creator_name: string
+    scene?: TaskScene | null
     deadline?: string
     sampling_method?: SamplingMethod
     assign_method?: AssignMethod
@@ -68,6 +71,7 @@ export interface TaskListResponse {
 
 export interface TaskCreateData {
     task_name: string
+    scene: TaskScene
     task_type?: TaskType
     schedule_config?: Record<string, any>
     date_range?: { start?: string; end?: string }
@@ -118,6 +122,7 @@ export async function getTaskList(params?: {
     keyword?: string
     todo?: TaskTodo
     as_of?: string
+    scene?: TaskSceneFilter
     page?: number
     page_size?: number
 }) {
@@ -134,10 +139,13 @@ export async function getTaskList(params?: {
 }
 
 /** 获取任务统计 */
-export async function getTaskStats(params?: { tab?: TaskTab }) {
+export async function getTaskStats(params?: { tab?: TaskTab; scene?: TaskSceneFilter }) {
     const queryParams = new URLSearchParams()
     if (params?.tab) {
         queryParams.set('tab', params.tab)
+    }
+    if (params?.scene) {
+        queryParams.set('scene', params.scene)
     }
     const query = queryParams.toString()
     return request<TaskStats>({
@@ -146,9 +154,10 @@ export async function getTaskStats(params?: { tab?: TaskTab }) {
     })
 }
 
-/** 获取当前用户全部场景的任务待办统计 */
-export async function getTaskTodoStats() {
-    return request<TaskTodoStats>({ method: 'GET', url: `${BASE_URL}/todo-stats` })
+/** 获取当前用户任务待办统计，省略 scene 时覆盖全部场景 */
+export async function getTaskTodoStats(params?: { scene?: TaskSceneFilter }) {
+    const query = params?.scene ? `?scene=${encodeURIComponent(params.scene)}` : ''
+    return request<TaskTodoStats>({ method: 'GET', url: `${BASE_URL}/todo-stats${query}` })
 }
 
 /** 获取任务详情 */
@@ -166,7 +175,9 @@ export async function createTask(data: TaskCreateData) {
 }
 
 /** 更新任务 */
-export async function updateTask(taskId: string, data: Partial<TaskCreateData & { status?: TaskStatus }>) {
+export type TaskUpdateData = Omit<Partial<TaskCreateData>, 'scene'> & { status?: TaskStatus }
+
+export async function updateTask(taskId: string, data: TaskUpdateData) {
     return request<TaskItem>({
         method: 'PUT',
         url: `${BASE_URL}/${taskId}`,

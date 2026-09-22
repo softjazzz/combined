@@ -38,6 +38,18 @@
           />
         </a-form-item>
 
+        <a-form-item
+          label="质控场景"
+          required
+        >
+          <a-select
+            v-model:value="formData.scene"
+            data-testid="task-scene-select"
+            placeholder="请选择质控场景"
+            :options="sceneOptions"
+          />
+        </a-form-item>
+
         <a-form-item label="任务类型">
           <a-radio-group v-model:value="formData.task_type">
             <a-radio-button value="one_time">
@@ -256,8 +268,11 @@
         <a-descriptions-item label="任务类型">
           {{ formData.task_type === 'one_time' ? '单次任务' : '定期任务' }}
         </a-descriptions-item>
+        <a-descriptions-item label="质控场景">
+          {{ sceneLabel }}
+        </a-descriptions-item>
         <a-descriptions-item label="截止日期">
-          {{ formData.deadline || '无截止日期' }}
+          {{ formData.deadline?.format('YYYY-MM-DD') || '无截止日期' }}
         </a-descriptions-item>
         <a-descriptions-item label="病历范围">
           <template v-if="rangeMode === 'date'">
@@ -333,7 +348,8 @@ import {
   PercentageOutlined,
 } from '@ant-design/icons-vue'
 import { createTask } from '@/api/tasks'
-import type { TaskCreateData } from '@/api/tasks'
+import type { TaskCreateData, TaskItem, TaskScene } from '@/api/tasks'
+import type { Dayjs } from 'dayjs'
 
 // ============= Props & Emits =============
 const props = defineProps<{
@@ -342,7 +358,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'update:open', val: boolean): void
-  (e: 'created', task: any): void
+  (e: 'created', task: TaskItem): void
 }>()
 
 // ============= 状态 =============
@@ -354,15 +370,16 @@ const visible = computed({
 const currentStep = ref(0)
 const submitting = ref(false)
 const rangeMode = ref<'date' | 'ids'>('date')
-const dateRangeValue = ref<any>(null)
+const dateRangeValue = ref<[Dayjs, Dayjs] | null>(null)
 const recordIdsText = ref('')
 const selectedAssignees = ref<string[]>([])
 
 // 表单数据
 const formData = ref({
   task_name: '',
+  scene: null as TaskScene | null,
   task_type: 'one_time' as 'one_time' | 'scheduled',
-  deadline: null as string | null,
+  deadline: null as Dayjs | null,
   description: '',
   date_range: null as { start?: string; end?: string } | null,
   department_filter: [] as string[],
@@ -375,10 +392,16 @@ const formData = ref({
     group_by: null as string | null,
   },
   assign_method: 'keep' as 'keep' | 'by_department' | 'by_ratio',
-  assignee_config: {} as Record<string, any>,
+  assignee_config: {} as Record<string, unknown>,
 })
 
 // ============= 选项配置 =============
+const sceneOptions: Array<{ value: TaskScene; label: string }> = [
+  { value: 'running', label: '运行病历' },
+  { value: 'final', label: '终末病历' },
+  { value: 'outpatient', label: '门急诊病历' },
+]
+
 const departmentOptions = [
   { value: '内科', label: '内科' },
   { value: '外科', label: '外科' },
@@ -425,7 +448,7 @@ const parsedRecordIds = computed(() => {
 const canProceed = computed(() => {
   switch (currentStep.value) {
     case 0:
-      return formData.value.task_name.trim().length > 0
+      return formData.value.task_name.trim().length > 0 && formData.value.scene !== null
     case 1:
       return rangeMode.value === 'ids' ? parsedRecordIds.value.length > 0 : true
     case 2:
@@ -435,6 +458,10 @@ const canProceed = computed(() => {
     default:
       return true
   }
+})
+
+const sceneLabel = computed(() => {
+  return sceneOptions.find((option) => option.value === formData.value.scene)?.label || '(未选择)'
 })
 
 const samplingLabel = computed(() => {
@@ -455,6 +482,7 @@ const assignLabel = computed(() => {
 
 // ============= 方法 =============
 const nextStep = () => {
+  if (!canProceed.value) return
   if (currentStep.value < 4) currentStep.value++
 }
 
@@ -462,11 +490,9 @@ const prevStep = () => {
   if (currentStep.value > 0) currentStep.value--
 }
 
-const handleDateRangeChange = (_: any, dateStrings: [string, string]) => {
-  formData.value.date_range = {
-    start: dateStrings[0],
-    end: dateStrings[1],
-  }
+const handleDateRangeChange = (_dates: [Dayjs, Dayjs] | null, dateStrings: [string, string]) => {
+  const [start, end] = dateStrings
+  formData.value.date_range = start || end ? { start: start || undefined, end: end || undefined } : null
 }
 
 const handleClose = () => {
@@ -478,6 +504,7 @@ const resetForm = () => {
   currentStep.value = 0
   formData.value = {
     task_name: '',
+    scene: null,
     task_type: 'one_time',
     deadline: null,
     description: '',
@@ -496,16 +523,27 @@ const resetForm = () => {
 }
 
 const handleSubmit = async () => {
+  if (submitting.value) return
+  const taskName = formData.value.task_name.trim()
+  const scene = formData.value.scene
+  if (!taskName) {
+    message.warning('请输入任务名称')
+    return
+  }
+  if (!scene) {
+    message.warning('请选择质控场景')
+    return
+  }
+  if (rangeMode.value === 'ids' && parsedRecordIds.value.length === 0) {
+    message.warning('请输入至少一个病案号')
+    return
+  }
+
   submitting.value = true
   try {
-    // 处理病案号
-    if (rangeMode.value === 'ids') {
-      formData.value.record_ids = parsedRecordIds.value
-    }
-
-    // 处理分配人员
+    let assigneeConfig: Record<string, unknown> | undefined
     if (formData.value.assign_method !== 'keep' && selectedAssignees.value.length > 0) {
-      formData.value.assignee_config = {
+      assigneeConfig = {
         assignees: selectedAssignees.value.map((id) => {
           const opt = assigneeOptions.find((o) => o.value === id)
           return { user_id: id, user_name: opt?.label || id }
@@ -513,14 +551,12 @@ const handleSubmit = async () => {
       }
     }
 
-    // 处理截止日期
-    const submitData = {
-      ...formData.value,
-      deadline: formData.value.deadline
-        ? typeof formData.value.deadline === 'string'
-          ? formData.value.deadline
-          : (formData.value.deadline as any).format?.('YYYY-MM-DD')
-        : undefined,
+    const submitData: TaskCreateData = {
+      task_name: taskName,
+      scene,
+      task_type: formData.value.task_type,
+      deadline: formData.value.deadline?.format('YYYY-MM-DD'),
+      sampling_method: formData.value.sampling_method,
       sampling_config: {
         ...(formData.value.sampling_method === 'count'
           ? {
@@ -534,18 +570,33 @@ const handleSubmit = async () => {
               }
             : {}),
       },
+      assign_method: formData.value.assign_method,
+      assignee_config: assigneeConfig,
     }
 
-    const res = await createTask(submitData as TaskCreateData)
-    if (res.success) {
+    if (rangeMode.value === 'ids') {
+      submitData.record_ids = parsedRecordIds.value
+    } else {
+      const start = formData.value.date_range?.start?.trim()
+      const end = formData.value.date_range?.end?.trim()
+      if (start || end) {
+        submitData.date_range = { start: start || undefined, end: end || undefined }
+      }
+      if (formData.value.department_filter.length > 0) {
+        submitData.department_filter = [...formData.value.department_filter]
+      }
+    }
+
+    const res = await createTask(submitData)
+    if (res.success && res.data) {
       message.success(`任务「${formData.value.task_name}」创建成功`)
       emit('created', res.data)
       handleClose()
     } else {
       message.error(res.message || '创建失败')
     }
-  } catch (err: any) {
-    message.error(err?.message || '创建任务异常')
+  } catch (err: unknown) {
+    message.error(err instanceof Error ? err.message : '创建任务异常')
   } finally {
     submitting.value = false
   }

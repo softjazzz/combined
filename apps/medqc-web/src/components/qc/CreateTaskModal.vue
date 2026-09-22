@@ -24,7 +24,7 @@
 
       <!-- 日期范围 -->
       <div>
-        <label class="block text-sm font-medium text-slate-700 mb-1.5">出院日期范围</label>
+        <label class="block text-sm font-medium text-slate-700 mb-1.5">入院日期范围</label>
         <a-range-picker
           v-model:value="form.dateRange"
           class="w-full !rounded-lg"
@@ -110,21 +110,32 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, type PropType } from 'vue'
 import { message } from 'ant-design-vue'
 import {
   createQCTaskAndSample,
   getDepartmentList,
+  type CreateTaskAndSampleData,
   type CreateTaskParams,
 } from '@/api/qcAdmin'
+import type { TaskScene } from '@/api/tasks'
+import type { Dayjs } from 'dayjs'
 
-const props = defineProps<{
-  visible: boolean
-}>()
+const props = defineProps({
+  visible: { type: Boolean, required: true },
+  scene: {
+    type: String as PropType<TaskScene>,
+    required: true,
+    validator: (value: string) => ['running', 'final', 'outpatient'].includes(value),
+  },
+})
+
+const isTaskScene = (value: unknown): value is TaskScene =>
+  typeof value === 'string' && ['running', 'final', 'outpatient'].includes(value)
 
 const emit = defineEmits<{
   (e: 'update:visible', value: boolean): void
-  (e: 'created', data: { task_id: string; task_number: string }): void
+  (e: 'created', data: CreateTaskAndSampleData): void
 }>()
 
 const submitting = ref(false)
@@ -132,12 +143,12 @@ const departmentOptions = ref<Array<{ label: string; value: string }>>([])
 
 const form = reactive({
   task_name: '',
-  dateRange: null as any,
+  dateRange: null as [Dayjs, Dayjs] | null,
   department_filter: [] as string[],
   sampling_method: 'all' as 'all' | 'count' | 'percentage',
   sampling_count: 50,
   sampling_pct: 20,
-  deadline: null as any,
+  deadline: null as Dayjs | null,
 })
 
 /** 加载科室选项 */
@@ -153,16 +164,22 @@ const loadDepartments = async () => {
 
 /** 提交创建 */
 const handleSubmit = async () => {
+  if (submitting.value) return
   if (!form.task_name.trim()) {
     message.warning('请输入任务名称')
+    return
+  }
+  if (!isTaskScene(props.scene)) {
+    message.warning('请选择有效的质控场景')
     return
   }
 
   const params: CreateTaskParams = {
     task_name: form.task_name.trim(),
+    scene: props.scene,
     sampling_method: form.sampling_method,
     department_filter: form.department_filter.length > 0 ? form.department_filter : undefined,
-    deadline: form.deadline?.format?.('YYYY-MM-DDTHH:mm:ss'),
+    deadline: form.deadline?.format('YYYY-MM-DD'),
   }
 
   // 日期范围
@@ -175,7 +192,7 @@ const handleSubmit = async () => {
 
   // 抽样配置
   if (form.sampling_method === 'count') {
-    params.sampling_config = { count: form.sampling_count }
+    params.sampling_config = { total: form.sampling_count }
   } else if (form.sampling_method === 'percentage') {
     params.sampling_config = { percentage: form.sampling_pct }
   }
@@ -183,9 +200,14 @@ const handleSubmit = async () => {
   submitting.value = true
   try {
     const res = await createQCTaskAndSample(params)
-    if (res.success && res.data) {
+    if (res.success && res.data?.sampled) {
       message.success(res.message || `任务创建成功，已抽样 ${res.data.sampled_count} 条病历`)
-      emit('created', { task_id: res.data.task_id, task_number: res.data.task_number })
+      emit('created', res.data)
+      emit('update:visible', false)
+      resetForm()
+    } else if (res.data?.task_id && !res.data.sampled) {
+      message.warning(`任务已创建，抽样未完成：${res.message || '请在任务列表中继续处理'}`)
+      emit('created', res.data)
       emit('update:visible', false)
       resetForm()
     } else {

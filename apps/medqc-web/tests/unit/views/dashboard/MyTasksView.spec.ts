@@ -191,6 +191,26 @@ describe('MyTasksView 我的任务口径', () => {
     )
   })
 
+  it('首页场景待办下钻后列表与统计保持同一范围', async () => {
+    routeState.query = {
+      todo: 'assigned',
+      as_of: '2026-09-22T07:30:00+00:00',
+      scene: 'final',
+    }
+    const wrapper = await mountView()
+
+    expect(wrapper.get('[data-testid="task-todo-scope"]').text()).toContain('终末')
+    expect(mocks.getTaskList).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tab: 'received',
+        todo: 'assigned',
+        as_of: '2026-09-22T07:30:00+00:00',
+        scene: 'final',
+      }),
+    )
+    expect(mocks.getTaskStats).toHaveBeenCalledWith({ tab: 'received', scene: 'final' })
+  })
+
   it('浏览器切换待办 query 时清除旧筛选并从第一页加载新范围', async () => {
     routeState.query = { todo: 'assigned', as_of: '2026-09-22T07:30:00+00:00' }
     const wrapper = await mountView()
@@ -232,18 +252,44 @@ describe('MyTasksView 我的任务口径', () => {
     { title: '空 as_of', query: { todo: 'due_soon', as_of: '' } },
     { title: '数组 as_of', query: { todo: 'due_soon', as_of: ['2026-09-22T07:30:00+00:00'] } },
     { title: '无时区 as_of', query: { todo: 'due_soon', as_of: '2026-09-22T07:30:00' } },
+    { title: '未知 scene', query: { scene: 'ward' } },
+    { title: '空 scene', query: { scene: '' } },
+    { title: '数组 scene', query: { scene: ['running'] } },
   ])('$title 明确报链接无效且不按全部任务请求', async ({ query }) => {
     routeState.query = query
     const wrapper = await mountView()
 
-    expect(wrapper.get('[data-testid="task-todo-invalid"]').text()).toContain('待办链接无效')
+    expect(wrapper.get('[data-testid="task-todo-invalid"]').text()).toContain('任务范围链接无效')
     expect(mocks.getTaskList).not.toHaveBeenCalled()
+    if ('scene' in query) expect(mocks.getTaskStats).not.toHaveBeenCalled()
+  })
+
+  it('清除非法场景范围时保留无关 query 并恢复普通列表与统计', async () => {
+    routeState.query = { scene: 'ward', source: 'bookmark' }
+    const wrapper = await mountView()
+    mocks.getTaskList.mockClear()
+    mocks.getTaskStats.mockClear()
+
+    const clearButton = wrapper
+      .get('[data-testid="task-todo-invalid"]')
+      .findAll('button')
+      .find((button) => button.text().includes('清除无效范围'))
+    expect(clearButton).toBeDefined()
+    await clearButton!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.routerReplace).toHaveBeenCalledWith({ query: { source: 'bookmark' } })
+    expect(mocks.getTaskList).toHaveBeenCalledWith(
+      expect.objectContaining({ tab: 'received', scene: undefined, page: 1 }),
+    )
+    expect(mocks.getTaskStats).toHaveBeenCalledWith({ tab: 'received' })
   })
 
   it('清除待办范围保留无关 query 并加载普通 received 列表', async () => {
     routeState.query = {
       todo: 'assigned',
       as_of: '2026-09-22T07:30:00+00:00',
+      scene: 'running',
       source: 'bookmark',
     }
     const wrapper = await mountView()
@@ -252,10 +298,82 @@ describe('MyTasksView 我的任务口径', () => {
     await wrapper.get('[data-testid="clear-task-todo"]').trigger('click')
     await flushPromises()
 
-    expect(mocks.routerReplace).toHaveBeenCalledWith({ query: { source: 'bookmark' } })
+    expect(mocks.routerReplace).toHaveBeenCalledWith({
+      query: { scene: 'running', source: 'bookmark' },
+    })
     expect(mocks.getTaskList).toHaveBeenCalledWith(
-      expect.objectContaining({ tab: 'received', todo: undefined, as_of: undefined, page: 1 }),
+      expect.objectContaining({
+        tab: 'received',
+        todo: undefined,
+        as_of: undefined,
+        scene: 'running',
+        page: 1,
+      }),
     )
+  })
+
+  it('场景切换立即清空旧数据并以新场景刷新列表和统计', async () => {
+    mocks.getTaskList.mockResolvedValueOnce(listWith('旧任务'))
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      tasks: Array<{ task_name: string }>
+      taskStats: unknown
+      handleSceneChange: (scene?: 'running' | 'final') => Promise<void>
+    }
+    expect(vm.tasks[0]?.task_name).toBe('旧任务')
+    mocks.getTaskList.mockClear()
+    mocks.getTaskStats.mockClear()
+
+    const nextList = deferred<ReturnType<typeof listWith>>()
+    const nextStats = deferred<ReturnType<typeof statsResponse>>()
+    mocks.getTaskList.mockReturnValueOnce(nextList.promise)
+    mocks.getTaskStats.mockReturnValueOnce(nextStats.promise)
+    const changing = vm.handleSceneChange('running')
+    await changing
+
+    expect(vm.tasks).toEqual([])
+    expect(vm.taskStats).toBeNull()
+    expect(mocks.getTaskList).toHaveBeenCalledWith(expect.objectContaining({ scene: 'running' }))
+    expect(mocks.getTaskStats).toHaveBeenCalledWith({ tab: 'received', scene: 'running' })
+
+    nextList.resolve(listWith('运行任务'))
+    nextStats.resolve(statsResponse({ total: 1 }))
+    await changing
+    await flushPromises()
+    expect(vm.tasks[0]?.task_name).toBe('运行任务')
+  })
+
+  it('连续切换场景时晚到旧列表和统计都不能覆盖新范围', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      tasks: Array<{ task_name: string }>
+      taskStats: { total: number } | null
+      handleSceneChange: (scene?: 'running' | 'final') => Promise<void>
+    }
+    const runningList = deferred<ReturnType<typeof listWith>>()
+    const finalList = deferred<ReturnType<typeof listWith>>()
+    const runningStats = deferred<ReturnType<typeof statsResponse>>()
+    const finalStats = deferred<ReturnType<typeof statsResponse>>()
+    mocks.getTaskList
+      .mockReturnValueOnce(runningList.promise)
+      .mockReturnValueOnce(finalList.promise)
+    mocks.getTaskStats
+      .mockReturnValueOnce(runningStats.promise)
+      .mockReturnValueOnce(finalStats.promise)
+
+    const runningChange = vm.handleSceneChange('running')
+    await runningChange
+    const finalChange = vm.handleSceneChange('final')
+    await finalChange
+    finalList.resolve(listWith('终末任务'))
+    finalStats.resolve(statsResponse({ total: 2 }))
+    await flushPromises()
+    runningList.resolve(listWith('运行任务'))
+    runningStats.resolve(statsResponse({ total: 9 }))
+    await flushPromises()
+
+    expect(vm.tasks[0]?.task_name).toBe('终末任务')
+    expect(vm.taskStats?.total).toBe(2)
   })
 
   it('原快捷项退出旧待办范围后再按状态筛选', async () => {

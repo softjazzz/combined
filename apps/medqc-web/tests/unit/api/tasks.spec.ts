@@ -52,6 +52,26 @@ describe('任务统计 API', () => {
     })
   })
 
+  it('列表、统计和待办统计使用同一场景筛选合同', async () => {
+    await getTaskList({ tab: 'received', scene: 'unclassified' })
+    expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
+      method: 'GET',
+      url: '/api/v1/tasks?tab=received&scene=unclassified',
+    })
+
+    await getTaskStats({ tab: 'received', scene: 'running' })
+    expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
+      method: 'GET',
+      url: '/api/v1/tasks/stats?tab=received&scene=running',
+    })
+
+    await getTaskTodoStats({ scene: 'outpatient' })
+    expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
+      method: 'GET',
+      url: '/api/v1/tasks/todo-stats?scene=outpatient',
+    })
+  })
+
   it('获取个人待办统计并按服务端时点编码下钻条件', async () => {
     const todoStats = {
       as_of: '2026-09-22T07:30:00+00:00',

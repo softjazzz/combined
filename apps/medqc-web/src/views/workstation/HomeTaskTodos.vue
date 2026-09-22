@@ -1,29 +1,64 @@
 <template>
-  <section class="task-todos workstation-surface-enter" aria-labelledby="task-todos-title">
+  <section
+    class="task-todos workstation-surface-enter"
+    aria-labelledby="task-todos-title"
+  >
     <header>
       <div>
-        <span>全部场景</span>
-        <h2 id="task-todos-title">我的任务待办</h2>
+        <span>{{ activeSceneLabel }}</span>
+        <h2 id="task-todos-title">
+          我的任务待办
+        </h2>
       </div>
-      <button
-        data-testid="refresh-home-task-todos"
-        type="button"
-        :disabled="loading"
-        aria-label="刷新我的任务待办"
-        @click="void fetchTodos()"
-      >
-        <RotateCw :size="16" />刷新
-      </button>
+      <div class="task-todos__tools">
+        <label for="home-task-scene">场景</label>
+        <select
+          id="home-task-scene"
+          v-model="activeSceneValue"
+          data-testid="home-task-scene"
+          :disabled="loading"
+          @change="handleSceneChange"
+        >
+          <option
+            v-for="option in sceneOptions"
+            :key="option.value"
+            :value="option.value"
+          >
+            {{ option.label }}
+          </option>
+        </select>
+        <button
+          data-testid="refresh-home-task-todos"
+          type="button"
+          :disabled="loading"
+          aria-label="刷新我的任务待办"
+          @click="void fetchTodos()"
+        >
+          <RotateCw :size="16" />刷新
+        </button>
+      </div>
     </header>
 
-    <div v-if="error" data-testid="home-task-todos-error" class="task-todos__error" role="alert">
+    <div
+      v-if="error"
+      data-testid="home-task-todos-error"
+      class="task-todos__error"
+      role="alert"
+    >
       <span>任务待办暂不可用：{{ error }}</span>
-      <button data-testid="retry-home-task-todos" type="button" @click="void fetchTodos()">
+      <button
+        data-testid="retry-home-task-todos"
+        type="button"
+        @click="void fetchTodos()"
+      >
         重试
       </button>
     </div>
 
-    <div class="task-todos__grid" :aria-busy="loading">
+    <div
+      class="task-todos__grid"
+      :aria-busy="loading"
+    >
       <button
         v-for="item in todoItems"
         :key="item.key"
@@ -32,10 +67,17 @@
         :disabled="loading"
         @click="openTodo(item.key, item.value)"
       >
-        <component :is="item.icon" :size="19" aria-hidden="true" />
+        <component
+          :is="item.icon"
+          :size="19"
+          aria-hidden="true"
+        />
         <span>{{ item.label }}</span>
         <strong :data-testid="`todo-${item.key}-count`">{{ formatValue(item.value) }}</strong>
-        <ArrowRight :size="17" aria-hidden="true" />
+        <ArrowRight
+          :size="17"
+          aria-hidden="true"
+        />
       </button>
     </div>
   </section>
@@ -47,13 +89,26 @@ import { message } from 'ant-design-vue'
 import { ArrowRight, CirclePlay, ClipboardList, Clock3, RotateCw } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 import { getTaskTodoStats } from '@/api/tasks'
-import type { TaskTodo, TaskTodoStats } from '@/api/tasks'
+import type { TaskSceneFilter, TaskTodo, TaskTodoStats } from '@/api/tasks'
 
 const router = useRouter()
 const stats = ref<TaskTodoStats | null>(null)
 const loading = ref(true)
 const error = ref('')
+const activeSceneValue = ref<TaskSceneFilter | ''>('')
 let requestId = 0
+
+const sceneOptions: Array<{ label: string; value: TaskSceneFilter | '' }> = [
+  { label: '全部场景', value: '' },
+  { label: '运行', value: 'running' },
+  { label: '终末', value: 'final' },
+  { label: '门急诊', value: 'outpatient' },
+  { label: '未标注', value: 'unclassified' },
+]
+
+const activeSceneLabel = computed(
+  () => sceneOptions.find((option) => option.value === activeSceneValue.value)?.label || '全部场景',
+)
 
 const todoItems = computed(() => [
   {
@@ -83,10 +138,12 @@ function formatValue(value: number | null) {
 
 async function fetchTodos() {
   const currentRequestId = ++requestId
+  const scene = activeSceneValue.value || undefined
   loading.value = true
   error.value = ''
+  stats.value = null
   try {
-    const response = await getTaskTodoStats()
+    const response = await getTaskTodoStats(scene ? { scene } : undefined)
     if (currentRequestId !== requestId) return
     if (response.success && response.data) {
       stats.value = response.data
@@ -103,6 +160,10 @@ async function fetchTodos() {
   }
 }
 
+function handleSceneChange() {
+  void fetchTodos()
+}
+
 function openTodo(todo: TaskTodo, value: number | null) {
   if (loading.value || !stats.value || value === null) {
     message.warning('任务待办暂不可用，请稍后重试')
@@ -112,7 +173,9 @@ function openTodo(todo: TaskTodo, value: number | null) {
     message.info('没有待处理的事项')
     return
   }
-  void router.push({ path: '/dashboard/tasks/my', query: { todo, as_of: stats.value.as_of } })
+  const query: Record<string, string> = { todo, as_of: stats.value.as_of }
+  if (activeSceneValue.value) query.scene = activeSceneValue.value
+  void router.push({ path: '/dashboard/tasks/my', query })
 }
 
 onMounted(() => void fetchTodos())
@@ -128,8 +191,27 @@ onMounted(() => void fetchTodos())
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 16px;
   margin-bottom: 14px;
+}
+.task-todos__tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.task-todos__tools label {
+  color: rgba(29, 29, 31, 0.55);
+  font-size: 12px;
+}
+.task-todos__tools select {
+  height: 30px;
+  padding: 0 28px 0 9px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 6px;
+  background: #fff;
+  color: #1d1d1f;
+  font: inherit;
 }
 .task-todos header span {
   color: rgba(29, 29, 31, 0.55);

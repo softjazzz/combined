@@ -7,7 +7,7 @@ router code paths to minimize migration risk.
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, Date, DateTime, Float, Index, Integer, String, Text
+from sqlalchemy import Boolean, CheckConstraint, Column, Date, DateTime, Float, Index, Integer, String, Text
 
 from ..connection import Base
 
@@ -160,6 +160,7 @@ class QCTask(Base):
     task_number = Column(String(40), nullable=False, unique=True)
     task_name = Column(String(200), nullable=False)
     task_type = Column(String(20), nullable=False, comment="one_time/scheduled")
+    scene = Column(String(32), nullable=True, comment="创建场景；历史 NULL 为未标注")
     schedule_config = Column(Text, comment="JSON text")
     date_range = Column(Text, comment="JSON text")
     department_filter = Column(Text, comment="JSON text")
@@ -179,6 +180,7 @@ class QCTask(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     __table_args__ = (
+        CheckConstraint("scene IS NULL OR scene IN ('running', 'final', 'outpatient')", name="ck_qc_tasks_scene"),
         Index("ix_qc_tasks_status", "status"),
         Index("ix_qc_tasks_creator", "creator_id"),
         Index("ix_qc_tasks_created_at", "created_at"),

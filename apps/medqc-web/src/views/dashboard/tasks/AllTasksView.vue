@@ -25,7 +25,7 @@
               总任务数
             </p>
             <p class="text-3xl font-bold text-gray-800">
-              {{ taskStats.total }}
+              {{ formatStatValue(taskStats?.total ?? null) }}
             </p>
           </div>
           <div class="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center">
@@ -38,10 +38,10 @@
         <div class="flex items-center justify-between">
           <div>
             <p class="text-gray-600 text-sm mb-1">
-              待分配
+              草稿
             </p>
             <p class="text-3xl font-bold text-orange-600">
-              {{ taskStats.draft }}
+              {{ formatStatValue(taskStats?.draft ?? null) }}
             </p>
           </div>
           <div class="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
@@ -57,7 +57,7 @@
               进行中
             </p>
             <p class="text-3xl font-bold text-blue-600">
-              {{ taskStats.in_progress }}
+              {{ formatStatValue(taskStats?.in_progress ?? null) }}
             </p>
           </div>
           <div class="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
@@ -73,7 +73,7 @@
               已完成
             </p>
             <p class="text-3xl font-bold text-green-600">
-              {{ taskStats.completed }}
+              {{ formatStatValue(taskStats?.completed ?? null) }}
             </p>
           </div>
           <div class="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
@@ -86,10 +86,10 @@
         <div class="flex items-center justify-between">
           <div>
             <p class="text-gray-600 text-sm mb-1">
-              逾期任务
+              已取消
             </p>
             <p class="text-3xl font-bold text-red-600">
-              {{ taskStats.cancelled }}
+              {{ formatStatValue(taskStats?.cancelled ?? null) }}
             </p>
           </div>
           <div class="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
@@ -97,6 +97,22 @@
           </div>
         </div>
       </div>
+    </div>
+
+    <div
+      v-if="statsError"
+      data-testid="all-task-stats-error"
+      role="alert"
+      class="flex items-center justify-between gap-4 rounded-lg border border-red-100 bg-red-50 px-4 py-3 mb-8 text-sm text-red-700"
+    >
+      <span>任务统计暂不可用：{{ statsError }}</span>
+      <a-button
+        size="small"
+        :loading="statsLoading"
+        @click="fetchStats"
+      >
+        重试
+      </a-button>
     </div>
 
     <!-- 管理操作区域 -->
@@ -144,6 +160,16 @@
     <!-- 搜索和筛选区域 -->
     <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 mb-8">
       <div class="grid grid-cols-1 md:grid-cols-6 gap-4">
+        <a-select
+          data-testid="all-task-scene"
+          :value="selectedScene"
+          placeholder="全部场景"
+          allow-clear
+          class="rounded-lg"
+          :options="sceneOptions"
+          @change="handleSceneChange"
+        />
+
         <a-input
           v-model:value="searchKeyword"
           placeholder="搜索任务名称、编号"
@@ -227,6 +253,22 @@
         </div>
       </div>
 
+      <div
+        v-if="listError"
+        data-testid="all-task-list-error"
+        role="alert"
+        class="flex items-center justify-between gap-4 rounded-lg border border-red-100 bg-red-50 px-4 py-3 mb-5 text-sm text-red-700"
+      >
+        <span>任务列表暂不可用：{{ listError }}</span>
+        <a-button
+          size="small"
+          :loading="loading"
+          @click="fetchTasks"
+        >
+          重试
+        </a-button>
+      </div>
+
       <a-table
         :columns="columns"
         :data-source="tasks"
@@ -247,6 +289,9 @@
             <a-tag :color="getStatusColor((record as DashboardTaskItem).status)">
               {{ getStatusText((record as DashboardTaskItem).status) }}
             </a-tag>
+          </template>
+          <template v-if="column.key === 'scene'">
+            {{ sceneLabel((record as DashboardTaskItem).scene) }}
           </template>
           <template v-if="column.key === 'progress'">
             <a-progress
@@ -314,8 +359,8 @@ import { computed, ref, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import type { TableColumnsType, TableProps } from 'ant-design-vue'
 import type { Dayjs } from 'dayjs'
-import { getTaskList, getTaskStats, createTask, deleteTask, cancelTask } from '@/api/tasks'
-import type { TaskItem, TaskStats, TaskStatus } from '@/api/tasks'
+import { getTaskList, getTaskStats, deleteTask, cancelTask } from '@/api/tasks'
+import type { TaskItem, TaskSceneFilter, TaskStats, TaskStatus } from '@/api/tasks'
 import CreateTaskDrawer from '@/components/qc/CreateTaskDrawer.vue'
 import {
   ProjectOutlined,
@@ -340,6 +385,7 @@ import {
 const loading = ref(false)
 const searchKeyword = ref('')
 const selectedStatus = ref<TaskStatus | undefined>(undefined)
+const selectedScene = ref<TaskSceneFilter | undefined>(undefined)
 const selectedAssignee = ref<string | undefined>(undefined)
 const selectedDepartment = ref<string | undefined>(undefined)
 type DateRange = [Dayjs, Dayjs] | null
@@ -351,16 +397,14 @@ const dateRange = ref<DateRange>(null)
 const tasks = ref<DashboardTaskItem[]>([])
 const selectedRowKeys = ref<string[]>([])
 const showCreateDrawer = ref(false)
+const listError = ref('')
+let listRequestId = 0
 
 // 任务统计
-const taskStats = ref<TaskStats>({
-  total: 0,
-  by_status: {},
-  draft: 0,
-  in_progress: 0,
-  completed: 0,
-  cancelled: 0,
-})
+const taskStats = ref<TaskStats | null>(null)
+const statsLoading = ref(false)
+const statsError = ref('')
+let statsRequestId = 0
 
 // 分页配置
 const pagination = ref({
@@ -390,6 +434,13 @@ const statusOptions = [
   { value: 'cancelled', label: '已取消' },
 ]
 
+const sceneOptions: Array<{ label: string; value: TaskSceneFilter }> = [
+  { label: '运行', value: 'running' },
+  { label: '终末', value: 'final' },
+  { label: '门急诊', value: 'outpatient' },
+  { label: '未标注', value: 'unclassified' },
+]
+
 const assigneeOptions = [
   { value: 'zhang_san', label: '张三' },
   { value: 'li_si', label: '李四' },
@@ -407,6 +458,7 @@ const departmentOptions = [
 const columns: TableColumnsType<TaskItem> = [
   { title: '任务编号', dataIndex: 'task_number', key: 'taskNumber', width: 140 },
   { title: '任务名称', dataIndex: 'task_name', key: 'taskName', width: 200 },
+  { title: '场景', dataIndex: 'scene', key: 'scene', width: 90 },
   { title: '任务类型', dataIndex: 'task_type', key: 'taskType', width: 100 },
   { title: '状态', dataIndex: 'status', key: 'status', width: 100 },
   { title: '进度', dataIndex: 'progress', key: 'progress', width: 120 },
@@ -461,12 +513,27 @@ const getStatusText = (status: string) => {
   return textMap[status] || status
 }
 
+const sceneLabel = (scene?: TaskSceneFilter | null) => {
+  const labels: Record<TaskSceneFilter, string> = {
+    running: '运行',
+    final: '终末',
+    outpatient: '门急诊',
+    unclassified: '未标注',
+  }
+  return scene ? labels[scene] : '未标注'
+}
+
+const formatStatValue = (value: number | null) => {
+  if (statsLoading.value) return '加载中'
+  return value === null ? '不可用' : String(value)
+}
+
 // 事件处理函数
 const handleCreateTask = async () => {
   showCreateDrawer.value = true
 }
 
-const onTaskCreated = (task: any) => {
+const onTaskCreated = (task: TaskItem) => {
   message.success(`任务「${task?.task_name || ''}」已创建`)
   fetchTasks()
   fetchStats()
@@ -496,11 +563,27 @@ const handleSearch = () => {
 const handleReset = () => {
   searchKeyword.value = ''
   selectedStatus.value = undefined
+  selectedScene.value = undefined
   selectedAssignee.value = undefined
   selectedDepartment.value = undefined
   dateRange.value = null
   pagination.value.current = 1
-  fetchTasks()
+  void fetchTasks()
+  void fetchStats()
+}
+
+const handleSceneChange = (scene?: TaskSceneFilter) => {
+  selectedScene.value = scene
+  pagination.value.current = 1
+  listRequestId += 1
+  statsRequestId += 1
+  tasks.value = []
+  pagination.value.total = 0
+  taskStats.value = null
+  listError.value = ''
+  statsError.value = ''
+  void fetchTasks()
+  void fetchStats()
 }
 
 const handleRefresh = () => {
@@ -513,7 +596,7 @@ const handleExport = () => {
 }
 
 const handleViewDetail = (record: DashboardTaskItem) => {
-  message.info(`查看任务详情: ${record.task_name}`)
+  message.info(`查看任务详情: ${record.task_name}（${sceneLabel(record.scene)}）`)
 }
 
 const handleAssign = (record: DashboardTaskItem) => {
@@ -546,38 +629,57 @@ const handleTableChange = (pag: any) => {
 
 // 获取任务统计
 const fetchStats = async () => {
+  const requestId = ++statsRequestId
+  statsLoading.value = true
+  statsError.value = ''
+  taskStats.value = null
   try {
-    const res = await getTaskStats()
+    const res = await getTaskStats(selectedScene.value ? { scene: selectedScene.value } : undefined)
+    if (requestId !== statsRequestId) return
     if (res.success && res.data) {
-      taskStats.value = res.data as TaskStats
+      taskStats.value = res.data
+    } else {
+      statsError.value = res.message || '获取任务统计失败'
     }
-  } catch (err) {
-    console.error('获取任务统计失败:', err)
+  } catch {
+    if (requestId !== statsRequestId) return
+    statsError.value = '网络异常或服务器不可用'
+  } finally {
+    if (requestId === statsRequestId) statsLoading.value = false
   }
 }
 
 // 获取任务列表数据
 const fetchTasks = async () => {
+  const requestId = ++listRequestId
   loading.value = true
+  listError.value = ''
+  tasks.value = []
+  pagination.value.total = 0
   try {
     const res = await getTaskList({
+      scene: selectedScene.value,
       keyword: searchKeyword.value || undefined,
       status: selectedStatus.value || undefined,
       page: pagination.value.current,
       page_size: pagination.value.pageSize,
     })
 
+    if (requestId !== listRequestId) return
     if (res.success && res.data) {
-      const data = res.data as any
-      tasks.value = (data.items || []) as DashboardTaskItem[]
+      const data = res.data
+      tasks.value = data.items || []
       pagination.value.total = data.total || 0
     } else {
-      message.error(res.message || '获取任务列表失败')
+      listError.value = res.message || '获取任务列表失败'
+      message.error(listError.value)
     }
-  } catch (error) {
-    message.error('获取数据失败')
+  } catch {
+    if (requestId !== listRequestId) return
+    listError.value = '网络异常或服务器不可用'
+    message.error(listError.value)
   } finally {
-    loading.value = false
+    if (requestId === listRequestId) loading.value = false
   }
 }
 

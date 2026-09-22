@@ -4,7 +4,7 @@
 用于质控抽查任务的创建、分配、执行等操作
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from enum import Enum
@@ -28,6 +28,13 @@ class TaskStatus(str, Enum):
     IN_PROGRESS = "in_progress" # 进行中
     COMPLETED = "completed"     # 已完成
     CANCELLED = "cancelled"     # 已取消
+
+
+class TaskScene(str, Enum):
+    """任务创建时确定的病历场景。"""
+    RUNNING = "running"
+    FINAL = "final"
+    OUTPATIENT = "outpatient"
 
 
 class SamplingMethod(str, Enum):
@@ -61,6 +68,7 @@ class TaskCreateRequest(BaseModel):
     """创建任务请求"""
     task_name: str = Field(..., description="任务名称")
     task_type: TaskType = Field(TaskType.ONE_TIME, description="任务类型")
+    scene: Optional[TaskScene] = Field(None, description="任务病历场景")
     schedule_config: Optional[Dict[str, Any]] = Field(None, description="定时配置")
 
     # 病历范围
@@ -87,6 +95,13 @@ class TaskUpdateRequest(BaseModel):
     assign_method: Optional[AssignMethod] = None
     assignee_config: Optional[Dict[str, Any]] = None
     status: Optional[TaskStatus] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_scene_changes(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "scene" in data:
+            raise ValueError("任务场景创建后不可修改")
+        return data
 
 
 class TaskAssignRequest(BaseModel):
@@ -116,6 +131,7 @@ class TaskResponse(BaseModel):
     task_number: str
     task_name: str
     task_type: str
+    scene: Optional[TaskScene] = None
     status: str
     progress: int = 0
     total_records: int = 0

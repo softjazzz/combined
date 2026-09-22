@@ -9,6 +9,7 @@
 
 import { ApiService } from '@/services/apiService'
 import { extractApiErrorMessageFromError, normalizeApiSuccess } from '@/utils/api-envelope'
+import type { TaskItem, TaskScene } from './tasks'
 
 // ============= 复用已有 API =============
 // 直接从各模块 re-export，方便管理员页面统一导入
@@ -312,6 +313,7 @@ export async function getDepartmentList() {
 /** 任务创建请求体（对齐后端 TaskCreateRequest） */
 export interface CreateTaskParams {
   task_name: string
+  scene: TaskScene
   task_type?: 'one_time' | 'scheduled'
   date_range?: { start: string; end: string }
   department_filter?: string[]
@@ -319,6 +321,19 @@ export interface CreateTaskParams {
   sampling_method?: 'all' | 'count' | 'percentage'
   sampling_config?: Record<string, any>
   deadline?: string
+}
+
+export interface CreateTaskAndSampleData {
+  task_id: string
+  task_number: string
+  sampled: boolean
+  sampled_count: number
+}
+
+type CreatedTaskResponse = Pick<TaskItem, 'id' | 'task_number'>
+
+interface SampleTaskResponse {
+  sampled_count: number
 }
 
 /** 任务进度响应 */
@@ -339,9 +354,11 @@ export interface TaskProgressData {
  * 创建质控任务 + 自动触发抽样（组合操作）
  * 后端流程：POST /tasks → POST /tasks/{id}/sample
  */
-export async function createQCTaskAndSample(params: CreateTaskParams) {
+export async function createQCTaskAndSample(
+  params: CreateTaskParams,
+): Promise<{ success: boolean; data?: CreateTaskAndSampleData; message?: string }> {
   // Step 1: 创建任务
-  const createRes = await request<any>({
+  const createRes = await request<CreatedTaskResponse>({
     method: 'POST',
     url: `${TASKS_URL}`,
     data: {
@@ -352,20 +369,40 @@ export async function createQCTaskAndSample(params: CreateTaskParams) {
     },
   })
   if (!createRes.success || !createRes.data?.id) {
-    return createRes
+    return {
+      success: false,
+      message: createRes.message || '任务创建失败',
+    }
   }
 
   const taskId = createRes.data.id
+  const taskNumber = createRes.data.task_number
 
   // Step 2: 自动执行抽样
-  const sampleRes = await request<any>({ method: 'POST', url: `${TASKS_URL}/${taskId}/sample` })
+  const sampleRes = await request<SampleTaskResponse>({
+    method: 'POST',
+    url: `${TASKS_URL}/${taskId}/sample`,
+  })
+  const sampledCount = sampleRes.data?.sampled_count
 
-  // 抽样失败时返回失败，不误报成功
-  if (!sampleRes.success) {
+  // 抽样失败或返回无效计数时保留草稿标识，不误报已完成。
+  if (
+    !sampleRes.success ||
+    typeof sampledCount !== 'number' ||
+    !Number.isInteger(sampledCount) ||
+    sampledCount < 0
+  ) {
     return {
       success: false,
-      data: { task_id: taskId },
-      message: sampleRes.message || '任务已创建，但抽样执行失败',
+      data: {
+        task_id: taskId,
+        task_number: taskNumber,
+        sampled: false,
+        sampled_count: 0,
+      },
+      message: sampleRes.success
+        ? '抽样结果缺少有效数量'
+        : sampleRes.message || '抽样执行失败',
     }
   }
 
@@ -373,8 +410,9 @@ export async function createQCTaskAndSample(params: CreateTaskParams) {
     success: true,
     data: {
       task_id: taskId,
-      task_number: createRes.data.task_number,
-      sampled_count: sampleRes.data?.sampled_count || 0,
+      task_number: taskNumber,
+      sampled: true,
+      sampled_count: sampledCount,
     },
     message: sampleRes.message || createRes.message,
   }

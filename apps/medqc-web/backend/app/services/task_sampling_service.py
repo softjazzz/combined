@@ -28,6 +28,10 @@ class TaskSamplingService:
         Returns:
             抽样后的病历列表
         """
+        # 场景是任务意图，不能作为病例已满足该场景的证据。
+        if task.get("scene") is not None:
+            raise NotImplementedError("场景抽样暂不可用：尚未接通可验证的病历场景范围")
+
         # 1. 获取候选病历池
         candidates = await self._get_candidate_records(task)
 
@@ -53,26 +57,28 @@ class TaskSamplingService:
         """获取候选病历池"""
         from ..core.supabase_client import get_supabase, async_execute
 
-        # 如果指定了具体病案号，直接使用
+        sb = get_supabase()
+        if sb is None:
+            raise RuntimeError("候选病历数据源不可用")
+
+        # 指定病历必须实际存在，不能在查询失败时构造候选记录。
         record_ids = task.get("record_ids", [])
         if record_ids:
-            sb = get_supabase()
-            if sb is not None:
-                try:
-                    resp = await async_execute(
-                        sb.table('medical_records')
-                        .select('id,patient_name,department,admission_date')
-                        .in_('id', record_ids)
-                    )
-                    return list(getattr(resp, 'data', None) or [])
-                except Exception as e:
-                    logger.warning(f"从数据库获取指定病历失败: {e}")
-
-            # 回退：构造模拟记录
-            return [{"id": rid, "record_id": rid} for rid in record_ids]
+            try:
+                resp = await async_execute(
+                    sb.table('medical_records')
+                    .select('id,patient_name,department,admission_date')
+                    .in_('id', record_ids)
+                )
+                records = list(getattr(resp, 'data', None) or [])
+            except Exception as exc:
+                logger.warning("从数据库获取指定病历失败", exc_info=True)
+                raise RuntimeError("候选病历数据源不可用") from exc
+            if set(record_ids) != {record.get("id") for record in records}:
+                raise ValueError("指定病历不存在或不可访问，请核对病历范围")
+            return records
 
         # 从数据库按条件查询
-        sb = get_supabase()
         if sb is not None:
             try:
                 query = sb.table('medical_records').select(
@@ -96,12 +102,9 @@ class TaskSamplingService:
                 query = query.limit(10000)
                 resp = await async_execute(query)
                 return list(getattr(resp, 'data', None) or [])
-            except Exception as e:
-                logger.warning(f"从数据库获取候选病历失败: {e}")
-
-        # 无数据库：返回空（实际环境不应有此情况）
-        logger.warning("无法获取候选病历，数据库不可用")
-        return []
+            except Exception as exc:
+                logger.warning("从数据库获取候选病历失败", exc_info=True)
+                raise RuntimeError("候选病历数据源不可用") from exc
 
     def _sample_by_count(
         self, candidates: List[Dict], config: Dict[str, Any]

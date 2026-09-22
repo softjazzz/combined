@@ -11,15 +11,15 @@
     </div>
 
     <div
-      v-if="invalidTodoQuery"
+      v-if="invalidTaskQuery"
       data-testid="task-todo-invalid"
       role="alert"
       class="flex items-center justify-between gap-4 rounded-lg border border-red-100 bg-red-50 px-4 py-3 mb-8 text-sm text-red-700"
     >
-      <span>待办链接无效，未加载无范围任务列表。</span>
+      <span>任务范围链接无效，未加载无范围任务列表。</span>
       <a-button
         size="small"
-        @click="void clearTodoScope()"
+        @click="void clearInvalidTaskScope()"
       >
         清除无效范围
       </a-button>
@@ -29,7 +29,7 @@
       data-testid="task-todo-scope"
       class="flex items-center justify-between gap-4 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 mb-8 text-sm text-blue-800"
     >
-      <span>待办范围：{{ todoScopeLabel }} · 全部场景 · 基准 {{ formatDate(todoAsOf || '') }}</span>
+      <span>待办范围：{{ todoScopeLabel }} · {{ sceneScopeLabel }} · 基准 {{ formatDate(todoAsOf || '') }}</span>
       <a-button
         data-testid="clear-task-todo"
         size="small"
@@ -176,6 +176,15 @@
       <ProQueryBar>
         <template #filters>
           <a-select
+            :value="activeScene"
+            placeholder="全部场景"
+            allow-clear
+            class="rounded-lg min-w-32"
+            :options="sceneOptions"
+            @change="handleSceneChange"
+          />
+
+          <a-select
             v-model:value="selectedStatus"
             placeholder="选择状态"
             allow-clear
@@ -268,6 +277,9 @@
               {{ getStatusText((record as TaskItem).status) }}
             </a-tag>
           </template>
+          <template v-if="column.key === 'scene'">
+            {{ sceneLabel((record as TaskItem).scene) }}
+          </template>
           <template v-if="column.key === 'progress'">
             <a-progress
               :percent="(record as TaskItem).progress"
@@ -345,6 +357,9 @@
                 <span class="text-slate-400">创建人：</span><span class="font-medium">{{ detailTask.creator_name }}</span>
               </div>
               <div>
+                <span class="text-slate-400">场景：</span><span class="font-medium">{{ sceneLabel(detailTask.scene) }}</span>
+              </div>
+              <div>
                 <span class="text-slate-400">截止：</span><span class="font-medium">{{ detailTask.deadline || '无' }}</span>
               </div>
               <div>
@@ -414,7 +429,14 @@ import type { TableColumnsType, TablePaginationConfig } from 'ant-design-vue'
 import type { Dayjs } from 'dayjs'
 import { useRoute, useRouter } from 'vue-router'
 import { getTaskList, getTaskStats, getTaskProgress, updateTask } from '@/api/tasks'
-import type { TaskItem, TaskStats, TaskProgress, TaskStatus, TaskTodo } from '@/api/tasks'
+import type {
+  TaskItem,
+  TaskProgress,
+  TaskSceneFilter,
+  TaskStats,
+  TaskStatus,
+  TaskTodo,
+} from '@/api/tasks'
 import {
   ClockCircleOutlined,
   SyncOutlined,
@@ -442,10 +464,11 @@ type DateRange = [Dayjs, Dayjs] | null
 const dateRange = ref<DateRange>(null)
 const tasks = ref<TaskItem[]>([])
 const listError = ref('')
-const initialTodoQuery = parseTodoQuery(route.query.todo, route.query.as_of)
-const activeTodo = ref<TaskTodo | undefined>(initialTodoQuery.todo)
-const todoAsOf = ref<string | undefined>(initialTodoQuery.asOf)
-const invalidTodoQuery = ref(initialTodoQuery.invalid)
+const initialTaskQuery = parseTaskQuery(route.query.todo, route.query.as_of, route.query.scene)
+const activeTodo = ref<TaskTodo | undefined>(initialTaskQuery.todo)
+const todoAsOf = ref<string | undefined>(initialTaskQuery.asOf)
+const activeScene = ref<TaskSceneFilter | undefined>(initialTaskQuery.scene)
+const invalidTaskQuery = ref(initialTaskQuery.invalid)
 let syncingTodoRoute = false
 let listRequestId = 0
 
@@ -476,6 +499,10 @@ const todoScopeLabel = computed(() => {
   return activeTodo.value ? labels[activeTodo.value] : ''
 })
 
+const sceneScopeLabel = computed(() =>
+  activeScene.value ? sceneLabel(activeScene.value) : '全部场景',
+)
+
 // 详情抽屉
 const detailDrawerVisible = ref(false)
 const detailTask = ref<TaskItem | null>(null)
@@ -500,10 +527,18 @@ const statusOptions = [
   { value: 'cancelled', label: '已取消' },
 ]
 
+const sceneOptions: Array<{ label: string; value: TaskSceneFilter }> = [
+  { label: '运行', value: 'running' },
+  { label: '终末', value: 'final' },
+  { label: '门急诊', value: 'outpatient' },
+  { label: '未标注', value: 'unclassified' },
+]
+
 // 表格列配置
 const columns: TableColumnsType<TaskItem> = [
   { title: '任务编号', dataIndex: 'task_number', key: 'taskNumber', width: 140 },
   { title: '任务名称', dataIndex: 'task_name', key: 'taskName', width: 200 },
+  { title: '场景', dataIndex: 'scene', key: 'scene', width: 90 },
   { title: '状态', dataIndex: 'status', key: 'status', width: 100 },
   { title: '进度', dataIndex: 'progress', key: 'progress', width: 140 },
   {
@@ -549,6 +584,16 @@ const getStatusText = (status: string) => {
   return map[status] || status
 }
 
+const sceneLabel = (scene?: TaskSceneFilter | null) => {
+  const labels: Record<TaskSceneFilter, string> = {
+    running: '运行',
+    final: '终末',
+    outpatient: '门急诊',
+    unclassified: '未标注',
+  }
+  return scene ? labels[scene] : '未标注'
+}
+
 const formatDate = (dateStr: string) => {
   if (!dateStr) return '-'
   try {
@@ -576,23 +621,36 @@ function parseAsOf(value: unknown): string | undefined {
   return value
 }
 
-function parseTodoQuery(todoValue: unknown, asOfValue: unknown) {
+function parseScene(value: unknown): TaskSceneFilter | undefined {
+  return value === 'running' ||
+    value === 'final' ||
+    value === 'outpatient' ||
+    value === 'unclassified'
+    ? value
+    : undefined
+}
+
+function parseTaskQuery(todoValue: unknown, asOfValue: unknown, sceneValue: unknown) {
   const todo = parseTaskTodo(todoValue)
   const asOf = parseAsOf(asOfValue)
+  const scene = parseScene(sceneValue)
   const hasTodo = todoValue !== undefined
   const hasAsOf = asOfValue !== undefined
+  const hasScene = sceneValue !== undefined
   return {
     todo,
     asOf: todo ? asOf : undefined,
-    invalid: (hasTodo && !todo) || (hasAsOf && (!todo || !asOf)),
+    scene,
+    invalid: (hasTodo && !todo) || (hasAsOf && (!todo || !asOf)) || (hasScene && !scene),
   }
 }
 
-function syncTodoFromRoute(todoValue: unknown, asOfValue: unknown) {
-  const nextQuery = parseTodoQuery(todoValue, asOfValue)
+function syncTaskScopeFromRoute(todoValue: unknown, asOfValue: unknown, sceneValue: unknown) {
+  const nextQuery = parseTaskQuery(todoValue, asOfValue, sceneValue)
   activeTodo.value = nextQuery.todo
   todoAsOf.value = nextQuery.asOf
-  invalidTodoQuery.value = nextQuery.invalid
+  activeScene.value = nextQuery.scene
+  invalidTaskQuery.value = nextQuery.invalid
 }
 
 function clearLocalFilters() {
@@ -609,6 +667,12 @@ function queryWithoutTodo() {
   return query
 }
 
+function queryWithoutTaskScope() {
+  const query = queryWithoutTodo()
+  delete query.scene
+  return query
+}
+
 function invalidateTaskList() {
   listRequestId += 1
   tasks.value = []
@@ -617,13 +681,39 @@ function invalidateTaskList() {
   loading.value = false
 }
 
+function invalidateTaskStats() {
+  statsRequestId += 1
+  taskStats.value = null
+  statsError.value = ''
+  statsLoading.value = false
+}
+
 async function clearTodoRoute() {
   if (route.query.todo === undefined && route.query.as_of === undefined) return
   invalidateTaskList()
   syncingTodoRoute = true
-  syncTodoFromRoute(undefined, undefined)
+  syncTaskScopeFromRoute(undefined, undefined, route.query.scene)
   try {
     await router.replace({ query: queryWithoutTodo() })
+  } finally {
+    syncingTodoRoute = false
+  }
+}
+
+async function clearTaskScopeRoute() {
+  if (
+    route.query.todo === undefined &&
+    route.query.as_of === undefined &&
+    route.query.scene === undefined
+  ) {
+    return
+  }
+  invalidateTaskList()
+  invalidateTaskStats()
+  syncingTodoRoute = true
+  syncTaskScopeFromRoute(undefined, undefined, undefined)
+  try {
+    await router.replace({ query: queryWithoutTaskScope() })
   } finally {
     syncingTodoRoute = false
   }
@@ -639,10 +729,19 @@ const formatStatValue = (value: number | null, suffix = '') => {
 
 const fetchStats = async () => {
   const requestId = ++statsRequestId
+  if (invalidTaskQuery.value && route.query.scene !== undefined && !activeScene.value) {
+    taskStats.value = null
+    statsLoading.value = false
+    return
+  }
   statsLoading.value = true
   statsError.value = ''
   try {
-    const res = await getTaskStats({ tab: 'received' })
+    const res = await getTaskStats(
+      activeScene.value
+        ? { tab: 'received', scene: activeScene.value }
+        : { tab: 'received' },
+    )
     if (requestId !== statsRequestId) return
     if (res.success && res.data) {
       taskStats.value = res.data
@@ -664,7 +763,7 @@ const fetchStats = async () => {
 const fetchTasks = async () => {
   const requestId = ++listRequestId
   listError.value = ''
-  if (invalidTodoQuery.value) {
+  if (invalidTaskQuery.value) {
     tasks.value = []
     pagination.value.total = 0
     loading.value = false
@@ -676,6 +775,7 @@ const fetchTasks = async () => {
       tab: 'received',
       todo: activeTodo.value,
       as_of: activeTodo.value ? todoAsOf.value : undefined,
+      scene: activeScene.value,
       keyword: searchKeyword.value || undefined,
       status: selectedStatus.value,
       page: pagination.value.current,
@@ -750,16 +850,42 @@ const handleFilter = () => {
   fetchTasks()
 }
 
+const handleSceneChange = async (scene?: TaskSceneFilter) => {
+  invalidateTaskList()
+  invalidateTaskStats()
+  clearLocalFilters()
+  const query = { ...route.query }
+  if (scene) query.scene = scene
+  else delete query.scene
+  syncingTodoRoute = true
+  syncTaskScopeFromRoute(route.query.todo, route.query.as_of, scene)
+  try {
+    await router.replace({ query })
+  } finally {
+    syncingTodoRoute = false
+  }
+  void fetchTasks()
+  void fetchStats()
+}
+
 const clearTodoScope = async () => {
   pagination.value.current = 1
   await clearTodoRoute()
   fetchTasks()
 }
 
+const clearInvalidTaskScope = async () => {
+  clearLocalFilters()
+  await clearTaskScopeRoute()
+  void fetchTasks()
+  void fetchStats()
+}
+
 const handleResetFilter = async () => {
   clearLocalFilters()
-  await clearTodoRoute()
-  fetchTasks()
+  await clearTaskScopeRoute()
+  void fetchTasks()
+  void fetchStats()
 }
 
 const handleRefresh = () => {
@@ -812,13 +938,16 @@ const handleTableChange = (pag: TablePaginationConfig) => {
 }
 
 watch(
-  [() => route.query.todo, () => route.query.as_of],
-  ([todoValue, asOfValue]) => {
+  [() => route.query.todo, () => route.query.as_of, () => route.query.scene],
+  ([todoValue, asOfValue, sceneValue], previousValues) => {
     if (syncingTodoRoute) return
     invalidateTaskList()
-    syncTodoFromRoute(todoValue, asOfValue)
+    const sceneChanged = sceneValue !== previousValues?.[2]
+    if (sceneChanged) invalidateTaskStats()
+    syncTaskScopeFromRoute(todoValue, asOfValue, sceneValue)
     clearLocalFilters()
     void fetchTasks()
+    if (sceneChanged) void fetchStats()
   },
 )
 

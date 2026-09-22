@@ -43,6 +43,7 @@ from ..core.permissions import (
 router = APIRouter(prefix="/api/v1/tasks", tags=["tasks"])
 logger = logging.getLogger(__name__)
 SHANGHAI_TZ = timezone(timedelta(hours=8))
+TaskSceneFilter = Literal["running", "final", "outpatient", "unclassified"]
 
 
 
@@ -150,6 +151,20 @@ async def _apply_task_tab_scope(sb, query, tab: str, current_user: dict):
             return None
         return query.in_("id", assigned_task_ids)
 
+
+def _apply_task_scene_scope(query, scene: Optional[str]):
+    """按任务创建意图筛选；历史空值只属于 unclassified。"""
+    # 单元测试和内部调用可能绕过 FastAPI，此时参数仍是 Query(None)。
+    if not isinstance(scene, str):
+        scene = getattr(scene, "default", scene)
+    if scene is None:
+        return query
+    if scene == "unclassified":
+        return query.is_("scene", None)
+    if scene in {"running", "final", "outpatient"}:
+        return query.eq("scene", scene)
+    raise HTTPException(status_code=422, detail="无效的任务场景")
+
 # ============================
 # 创建任务
 # ============================
@@ -191,6 +206,8 @@ async def create_task(
         "created_at": datetime.now().isoformat(),
         "updated_at": datetime.now().isoformat(),
     }
+    if task_data.scene is not None:
+        task["scene"] = task_data.scene.value
 
     sb = get_supabase()
     if sb is None:
@@ -201,7 +218,7 @@ async def create_task(
         task = (getattr(resp, 'data', None) or [task])[0]
     except Exception as e:
         logger.error(f"创建任务失败: {e}")
-        raise HTTPException(status_code=500, detail=f"创建任务失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="创建任务失败，请稍后重试")
 
     return success_response(
         data=task,
@@ -223,6 +240,7 @@ async def list_tasks(
     ),
     status: Optional[str] = Query(None, description="任务状态"),
     keyword: Optional[str] = Query(None, description="搜索关键词"),
+    scene: Optional[TaskSceneFilter] = Query(None, description="任务病历场景"),
     todo: Optional[Literal["assigned", "in_progress", "due_soon"]] = Query(
         None, description="个人待办范围"
     ),
@@ -254,6 +272,7 @@ async def list_tasks(
                 items=[], total=0, page=page, page_size=page_size,
                 message="暂无收到的任务", trace_id=get_trace_id(request),
             )
+        query = _apply_task_scene_scope(query, scene)
 
         if status:
             query = query.eq('status', status)
@@ -287,7 +306,7 @@ async def list_tasks(
         raise
     except Exception as e:
         logger.error(f"查询任务列表失败: {e}")
-        raise HTTPException(status_code=500, detail=f"查询失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="查询任务列表失败，请稍后重试")
 
 
 # ============================
@@ -301,6 +320,7 @@ async def get_task_stats(
     tab: Literal["all", "created", "received"] = Query(
         "all", description="标签: all=全部 | created=我创建 | received=我收到"
     ),
+    scene: Optional[TaskSceneFilter] = Query(None, description="任务病历场景"),
     current_user: dict = Depends(get_current_user),
 ):
     """
@@ -315,6 +335,7 @@ async def get_task_stats(
         query = sb.table("qc_tasks").select("status", count="exact")
         query = await _apply_task_tab_scope(sb, query, tab, current_user)
         if query is not None:
+            query = _apply_task_scene_scope(query, scene)
             resp = await async_execute(query)
             rows = list(getattr(resp, "data", None) or [])
             for row in rows:
@@ -324,7 +345,7 @@ async def get_task_stats(
         raise
     except Exception as e:
         logger.error(f"获取任务统计失败: {e}")
-        raise HTTPException(status_code=500, detail=f"获取任务统计失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="获取任务统计失败，请稍后重试")
 
     total = sum(status_counts.values())
 
@@ -346,6 +367,7 @@ async def get_task_stats(
 @require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.READ)
 async def get_task_todo_stats(
     request: Request,
+    scene: Optional[TaskSceneFilter] = Query(None, description="任务病历场景"),
     current_user: dict = Depends(get_current_user),
 ):
     """获取当前用户收到任务的待办计数。"""
@@ -360,6 +382,7 @@ async def get_task_todo_stats(
         query = await _apply_task_tab_scope(sb, query, "received", current_user)
         rows = []
         if query is not None:
+            query = _apply_task_scene_scope(query, scene)
             resp = await async_execute(query)
             rows = list(getattr(resp, "data", None) or [])
         counts = _task_todo_counts(rows, as_of)
@@ -404,7 +427,7 @@ async def get_task_detail(
         task = getattr(resp, 'data', None)
     except Exception as e:
         logger.error(f"查询任务失败: {e}")
-        raise HTTPException(status_code=500, detail=f"查询任务失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="查询任务失败，请稍后重试")
 
     if task:
         try:
@@ -417,7 +440,7 @@ async def get_task_detail(
             records = list(getattr(resp, 'data', None) or [])
         except Exception as e:
             logger.error(f"查询任务记录失败: {e}")
-            raise HTTPException(status_code=500, detail=f"查询任务记录失败: {str(e)}")
+            raise HTTPException(status_code=500, detail="查询任务记录失败，请稍后重试")
 
     if task is None:
         raise HTTPException(status_code=404, detail=f"任务 {task_id} 不存在")
@@ -467,7 +490,7 @@ async def update_task(
         return success_response(data=data, message="任务更新成功", trace_id=get_trace_id(request))
     except Exception as e:
         logger.error(f"更新任务失败: {e}")
-        raise HTTPException(status_code=500, detail=f"更新失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="更新任务失败，请稍后重试")
 
 
 # ============================
@@ -497,15 +520,23 @@ async def execute_sampling(
             sb.table('qc_tasks').select('*').eq('id', task_id).single()
         )
         task = getattr(resp, 'data', None)
-    except Exception as e:
-        logger.warning(f"查询任务失败: {e}")
+    except Exception as exc:
+        logger.warning("抽样前查询任务失败", exc_info=True)
+        raise HTTPException(status_code=503, detail="任务数据源不可用，请稍后重试") from exc
 
     if task is None:
         raise HTTPException(status_code=404, detail=f"任务 {task_id} 不存在")
 
     # 执行抽样
     sampling_service = TaskSamplingService()
-    sampled_records = await sampling_service.sample(task)
+    try:
+        sampled_records = await sampling_service.sample(task)
+    except NotImplementedError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail="候选病历数据源不可用，请稍后重试") from exc
 
     # 创建任务-病历关联
     task_records = []
@@ -525,9 +556,9 @@ async def execute_sampling(
     if task_records:
         try:
             await async_execute(sb.table('qc_task_records').insert(task_records))
-        except Exception as e:
-            logger.error(f"保存任务病历关联失败: {e}")
-            raise HTTPException(status_code=500, detail=f"保存抽样结果失败: {str(e)}")
+        except Exception as exc:
+            logger.error("保存任务病历关联失败", exc_info=True)
+            raise HTTPException(status_code=503, detail="保存抽样结果失败，请稍后重试") from exc
 
     # 更新任务状态
     update_data = {
@@ -537,8 +568,9 @@ async def execute_sampling(
     }
     try:
         await async_execute(sb.table('qc_tasks').update(update_data).eq('id', task_id))
-    except Exception as e:
-        logger.warning(f"更新任务抽样状态失败（非阻塞）: {e}")
+    except Exception as exc:
+        logger.error("更新任务抽样状态失败", exc_info=True)
+        raise HTTPException(status_code=503, detail="抽样状态保存失败，请刷新任务核对结果") from exc
 
     return success_response(
         data={

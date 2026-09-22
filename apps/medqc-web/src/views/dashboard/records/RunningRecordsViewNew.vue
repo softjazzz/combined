@@ -599,6 +599,7 @@
     <!-- 新建质控任务弹窗 -->
     <CreateTaskModal
       :visible="showCreateTaskModal"
+      scene="running"
       @update:visible="showCreateTaskModal = $event"
       @created="handleTaskCreated"
     />
@@ -658,6 +659,7 @@ import {
   batchCreateRemediation,
   exportDefectsDownload,
   reAnalyzeQCTask,
+  type CreateTaskAndSampleData,
   type TaskProgressData,
 } from '@/api/qcAdmin'
 
@@ -874,8 +876,10 @@ const fetchRecords = async () => {
 // ============= 事件处理 =============
 
 /** 任务创建成功后：启动进度轮询 */
-const handleTaskCreated = (data: { task_id: string; task_number: string }) => {
-  startProgressPolling(data.task_id)
+const handleTaskCreated = (data: CreateTaskAndSampleData) => {
+  if (data.sampled) {
+    startProgressPolling(data.task_id)
+  }
 }
 
 /** 启动进度轮询（3 秒一次） */
