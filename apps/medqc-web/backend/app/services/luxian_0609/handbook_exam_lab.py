@@ -62,10 +62,18 @@ _PENDING_REPORT_STATES = frozenset(
         "in progress",
     }
 )
+_PENDING_REPORT_LABEL = re.compile(r"^初步(?:结果|报告)\s*[:：]", re.I)
 _PENDING_REPORT_DECLARATION = re.compile(
-    r"^(?:初步(?:结果|报告)\s*[:：])|培养中|待(?:最终)?(?:报告|回报|审核|确认)|未(?:完成|审核|发布)",
-    re.I,
+    r"培养中|待(?:最终)?(?:报告|回报|审核|确认)|未(?:完成|审核|发布)", re.I
 )
+_HISTORICAL_CONTEXT = re.compile(r"此前|先前|之前|既往|历史|曾经|曾为|原(?:为|处于)?")
+_RESOLVED_CONTEXT = re.compile(
+    r"已(?:解除|结束|终止|完成|审核|发布|确认)|不再|现已(?:解除|结束|完成|审核|发布|确认)"
+)
+_CURRENT_PENDING_CONTEXT = re.compile(
+    r"当前|目前|现(?:仍|待|处于|在)|仍(?:然|在)?|尚(?:未|在)?|继续"
+)
+_REPORT_CLAUSE_BOUNDARY = re.compile(r"[\r\n。；;！？!?]+")
 _NAME_FIELDS = ("order_name", "exam_name", "exam_item_name", "item_name", "lab_item_name", "labtest_subject", "exam_type", "lab_type", "test_type")
 _REPORT_FIELDS = ("exam_result", "exam_impression", "exam_conclusion", "impression", "conclusion", "description", "result", "record_content")
 _COURSE_FIELDS = ("case_characteristic", "diagnose_based_on", "differential_diagnosis", "treatment_plan", "record_content", "content")
@@ -124,11 +132,24 @@ def _report_pending(row: Mapping[str, Any]) -> bool:
         clean(row.get(field)).lower()
         for field in ("exam_result_status", "labtest_result_status", "report_status")
     )
-    return any(status in _PENDING_REPORT_STATES for status in statuses if status) or any(
-        _PENDING_REPORT_DECLARATION.search(value)
-        for field in _REPORT_FIELDS
-        if (value := clean(row.get(field)))
-    )
+    if any(status in _PENDING_REPORT_STATES for status in statuses if status):
+        return True
+    for field in _REPORT_FIELDS:
+        raw_value = str(row.get(field) or "")
+        for part in _REPORT_CLAUSE_BOUNDARY.split(raw_value):
+            clause = clean(part)
+            if not clause:
+                continue
+            if _PENDING_REPORT_LABEL.match(clause):
+                return True
+            if not _PENDING_REPORT_DECLARATION.search(clause):
+                continue
+            if _CURRENT_PENDING_CONTEXT.search(clause):
+                return True
+            if _HISTORICAL_CONTEXT.search(clause) and _RESOLVED_CONTEXT.search(clause):
+                continue
+            return True
+    return False
 
 
 def _report_released(row: Mapping[str, Any]) -> bool:

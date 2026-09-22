@@ -335,6 +335,179 @@ def test_final_report_may_reference_an_earlier_preliminary_report():
     )
 
 
+@pytest.mark.parametrize(
+    "rule_id,master,report,business_key,name_key,name,report_body",
+    [
+        (
+            CT_RULE,
+            "exam_master",
+            "exam_item_report",
+            "exam_id",
+            "exam_name",
+            "胸部CT",
+            "胸部CT检查报告\n初步报告：双肺纹理增多。",
+        ),
+        (
+            CULTURE_RULE,
+            "labtest_master",
+            "labtest_item_report",
+            "test_id",
+            "labtest_subject",
+            "血培养",
+            "微生物培养报告\n初步结果：检出革兰阴性杆菌。",
+        ),
+    ],
+)
+def test_report_title_cannot_hide_a_pending_report_label(
+    rule_id,
+    master,
+    report,
+    business_key,
+    name_key,
+    name,
+    report_body,
+):
+    result, _, _ = _evaluate(
+        rule_id,
+        rows={
+            master: ({business_key: "K1", name_key: name},),
+            report: (
+                {
+                    business_key: "K1",
+                    name_key: name,
+                    "report_time": "2026-09-01 10:00:00",
+                    "result": report_body,
+                },
+            ),
+        },
+    )
+
+    assert result.status == "data_gap"
+    assert result.display_facts["event_results"][0]["issue_kind"] == "execution_unconfirmed"
+
+
+@pytest.mark.parametrize(
+    "rule_id,master,report,business_key,name_key,name,status_key,report_body",
+    [
+        (
+            CT_RULE,
+            "exam_master",
+            "exam_item_report",
+            "exam_id",
+            "exam_name",
+            "胸部CT",
+            "exam_result_status",
+            "本报告现已审核发布。备注：此前为‘待审核’状态，现已解除。双肺纹理增多。",
+        ),
+        (
+            CULTURE_RULE,
+            "labtest_master",
+            "labtest_item_report",
+            "test_id",
+            "labtest_subject",
+            "血培养",
+            "labtest_result_status",
+            "本次为最终报告：培养5日无细菌生长。此前为‘培养中’状态，现已结束。",
+        ),
+    ],
+)
+def test_resolved_historical_pending_state_does_not_block_final_report(
+    rule_id,
+    master,
+    report,
+    business_key,
+    name_key,
+    name,
+    status_key,
+    report_body,
+):
+    result, _, _ = _evaluate(
+        rule_id,
+        rows={
+            master: (
+                {
+                    business_key: "K1",
+                    name_key: name,
+                    status_key: "已发布",
+                },
+            ),
+            report: (
+                {
+                    business_key: "K1",
+                    name_key: name,
+                    "report_time": "2026-09-01 10:00:00",
+                    "result": report_body,
+                },
+            ),
+        },
+    )
+
+    assert (result.status, result.reason_code) == (
+        "compliant",
+        "requirement_satisfied",
+    )
+
+
+@pytest.mark.parametrize(
+    "rule_id,master,report,business_key,name_key,name,status_key,current_statement",
+    [
+        (
+            CT_RULE,
+            "exam_master",
+            "exam_item_report",
+            "exam_id",
+            "exam_name",
+            "胸部CT",
+            "exam_result_status",
+            "此前待审核状态已解除但当前仍待最终确认。",
+        ),
+        (
+            CULTURE_RULE,
+            "labtest_master",
+            "labtest_item_report",
+            "test_id",
+            "labtest_subject",
+            "血培养",
+            "labtest_result_status",
+            "此前培养中状态已结束但目前仍在培养中。",
+        ),
+    ],
+)
+def test_current_pending_statement_wins_over_resolved_history(
+    rule_id,
+    master,
+    report,
+    business_key,
+    name_key,
+    name,
+    status_key,
+    current_statement,
+):
+    result, _, _ = _evaluate(
+        rule_id,
+        rows={
+            master: (
+                {
+                    business_key: "K1",
+                    name_key: name,
+                    status_key: "已发布",
+                },
+            ),
+            report: (
+                {
+                    business_key: "K1",
+                    name_key: name,
+                    "report_time": "2026-09-01 10:00:00",
+                    "result": current_statement,
+                },
+            ),
+        },
+    )
+
+    assert result.status == "data_gap"
+    assert result.display_facts["event_results"][0]["issue_kind"] == "report_content_unavailable"
+
+
 @pytest.mark.parametrize("state", ["unavailable", "error", "truncated"])
 def test_incomplete_report_source_is_data_gap(state):
     result, _, _ = _evaluate(
