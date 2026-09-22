@@ -613,5 +613,180 @@
     "mapped_rule_ids": ["LX0609-04-01-05"],
     "primary_execution_rule_id": "LX0609-04-01-05",
     "allowed_result_statuses": ["compliant", "non_compliant", "not_applicable", "data_gap"]
+  },
+  {
+    "rule_id": "LX0609-06-01-01",
+    "rule_code": "LX0609-06-01-01",
+    "name": "CT/MRI检查记录：医嘱与病程一致性",
+    "description": "逐事件核对CT/MRI医嘱与病程记录；当前本地CDM缺少可靠执行状态和完整医嘱关联键，暂停正式判定。",
+    "positive_example": "已执行的同次检查医嘱与病程记录内容一致。",
+    "negative_example": "经完整来源核验，已执行检查医嘱与病程记录缺失或内容不一致。",
+    "category": "CT/MRI检查记录",
+    "applicable_documents": ["inpat_nondrug_order", "exam_master", "daily_course_record"],
+    "applicable_document_labels": ["CT/MRI检查记录"],
+    "data_dependencies": ["检查执行状态", "医嘱—检查—病程逐事件关联键"],
+    "dependency_type": "结构化逐事件关联",
+    "executor_type": "pending_definition",
+    "rule_version": "2026-09-22-handbook-v1",
+    "prompt_version": "none",
+    "mapped_rule_ids": ["LX0609-06-01-01"],
+    "primary_execution_rule_id": "LX0609-06-01-01",
+    "allowed_result_statuses": ["compliant", "non_compliant", "not_applicable", "data_gap"]
+  },
+  {
+    "rule_id": "LX0609-06-01-03",
+    "rule_code": "LX0609-06-01-03",
+    "name": "CT/MRI检查记录：报告单完整性",
+    "description": "按实际检查事件业务键核对影像报告，不以报告明细总行数比较；缺执行证明或上游覆盖未证明时仅提示资料不足。",
+    "positive_example": "同次事件的可核验材料满足本项要求。",
+    "negative_example": "已读取的同次事件资料存在明确内容矛盾或已验证正文缺项；单纯同步或关联缺口不作为不合规。",
+    "category": "CT/MRI检查记录",
+    "applicable_documents": [
+      "exam_master",
+      "exam_item_report",
+      "inpat_nondrug_order"
+    ],
+    "applicable_document_labels": [
+      "CT/MRI检查记录"
+    ],
+    "data_dependencies": [
+      "CT/MRI检查记录原始材料",
+      "逐事件来源及覆盖情况"
+    ],
+    "dependency_type": "结构化逐事件关联",
+    "executor_type": "program",
+    "rule_version": "2026-09-22-handbook-v1",
+    "prompt_version": "none",
+    "mapped_rule_ids": [
+      "LX0609-06-01-03"
+    ],
+    "primary_execution_rule_id": "LX0609-06-01-03",
+    "allowed_result_statuses": [
+      "compliant",
+      "non_compliant",
+      "not_applicable",
+      "data_gap"
+    ]
+  },
+  {
+    "rule_id": "LX0609-06-03-01",
+    "rule_code": "LX0609-06-03-01",
+    "name": "微生物培养检查记录：医嘱与病程一致性",
+    "description": "逐事件核对培养医嘱与病程记录；当前培养主记录缺少稳定医嘱关联键，暂停正式判定。",
+    "positive_example": "已执行的同次培养医嘱与病程记录内容一致。",
+    "negative_example": "经完整来源核验，已执行培养医嘱与病程记录缺失或内容不一致。",
+    "category": "微生物培养检查记录",
+    "applicable_documents": ["inpat_nondrug_order", "labtest_master", "daily_course_record"],
+    "applicable_document_labels": ["微生物培养检查记录"],
+    "data_dependencies": ["培养执行状态", "医嘱—培养—病程逐事件关联键"],
+    "dependency_type": "结构化逐事件关联",
+    "executor_type": "pending_definition",
+    "rule_version": "2026-09-22-handbook-v1",
+    "prompt_version": "none",
+    "mapped_rule_ids": ["LX0609-06-03-01"],
+    "primary_execution_rule_id": "LX0609-06-03-01",
+    "allowed_result_statuses": ["compliant", "non_compliant", "not_applicable", "data_gap"]
+  },
+  {
+    "rule_id": "LX0609-06-03-02",
+    "rule_code": "LX0609-06-03-02",
+    "name": "微生物培养检查记录：报告单完整性",
+    "description": "按检验业务键核对已执行培养与报告，一次培养多行结果只计同一报告；关联或执行不明确为资料不足。",
+    "positive_example": "同次事件的可核验材料满足本项要求。",
+    "negative_example": "已读取的同次事件资料存在明确内容矛盾或已验证正文缺项；单纯同步或关联缺口不作为不合规。",
+    "category": "微生物培养检查记录",
+    "applicable_documents": [
+      "labtest_master",
+      "labtest_item_report",
+      "inpat_nondrug_order"
+    ],
+    "applicable_document_labels": [
+      "微生物培养检查记录"
+    ],
+    "data_dependencies": [
+      "微生物培养检查记录原始材料",
+      "逐事件来源及覆盖情况"
+    ],
+    "dependency_type": "结构化逐事件关联",
+    "executor_type": "program",
+    "rule_version": "2026-09-22-handbook-v1",
+    "prompt_version": "none",
+    "mapped_rule_ids": [
+      "LX0609-06-03-02"
+    ],
+    "primary_execution_rule_id": "LX0609-06-03-02",
+    "allowed_result_statuses": [
+      "compliant",
+      "non_compliant",
+      "not_applicable",
+      "data_gap"
+    ]
+  },
+  {
+    "rule_id": "LX0609-06-02-01",
+    "rule_code": "LX0609-06-02-01",
+    "name": "病理检查记录：报告单完整性",
+    "description": "按病理检查业务键关联报告；申请不等于已执行，本地未查到报告不直接认定源系统临床漏报告。",
+    "positive_example": "同次事件的可核验材料满足本项要求。",
+    "negative_example": "已读取的同次事件资料存在明确内容矛盾或已验证正文缺项；单纯同步或关联缺口不作为不合规。",
+    "category": "病理检查记录",
+    "applicable_documents": [
+      "pathology_exam_master",
+      "pathology_exam_report"
+    ],
+    "applicable_document_labels": [
+      "病理检查记录"
+    ],
+    "data_dependencies": [
+      "病理检查记录原始材料",
+      "逐事件来源及覆盖情况"
+    ],
+    "dependency_type": "结构化逐事件关联",
+    "executor_type": "program",
+    "rule_version": "2026-09-22-handbook-v1",
+    "prompt_version": "none",
+    "mapped_rule_ids": [
+      "LX0609-06-02-01"
+    ],
+    "primary_execution_rule_id": "LX0609-06-02-01",
+    "allowed_result_statuses": [
+      "compliant",
+      "non_compliant",
+      "not_applicable",
+      "data_gap"
+    ]
+  },
+  {
+    "rule_id": "LX0609-09-01-02",
+    "rule_code": "LX0609-09-01-02",
+    "name": "抢救记录：内容完整性",
+    "description": "逐份核对病情变化、抢救时间、措施、结果、参加医务人员姓名和专业技术职称；不拼接不同抢救记录补齐内容。",
+    "positive_example": "同次事件的可核验材料满足本项要求。",
+    "negative_example": "已读取的同次事件资料存在明确内容矛盾或已验证正文缺项；单纯同步或关联缺口不作为不合规。",
+    "category": "抢救记录",
+    "applicable_documents": [
+      "rescue_record"
+    ],
+    "applicable_document_labels": [
+      "抢救记录"
+    ],
+    "data_dependencies": [
+      "抢救记录原始材料",
+      "逐事件来源及覆盖情况"
+    ],
+    "dependency_type": "受控原子事实抽取",
+    "executor_type": "program_then_optional_llm",
+    "rule_version": "2026-09-22-handbook-v1",
+    "prompt_version": "handbook-v1",
+    "mapped_rule_ids": [
+      "LX0609-09-01-02"
+    ],
+    "primary_execution_rule_id": "LX0609-09-01-02",
+    "allowed_result_statuses": [
+      "compliant",
+      "non_compliant",
+      "not_applicable",
+      "data_gap"
+    ]
   }
 ]

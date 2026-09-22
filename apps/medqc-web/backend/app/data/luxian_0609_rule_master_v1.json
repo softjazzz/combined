@@ -663,6 +663,72 @@
       "implementation_status": "active",
       "policy_sources": ["sichuan_2023_standard", "customer_confirmed"],
       "policy_summary": "以SC-085为来源证明，仅核对已存在且有可核验结构字段与正文内容的术前讨论记录；文书存在性及术者参加由LX0609-04-01-02单独交付。"
+    },
+    {
+      "rule_id": "LX0609-06-01-01",
+      "source_document": "CT/MRI检查记录",
+      "qc_point": "医嘱与病程一致性",
+      "implementation_status": "active",
+      "pending_definition_note": "本地CDM缺少可靠执行状态和完整医嘱关联键，当前不能安全区分临床不一致与同步缺口。",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "exam_order_course_linkage_unavailable",
+      "policy_sources": [
+        "sichuan_2026_handbook"
+      ],
+      "policy_summary": "核对本次CT/MRI检查的医嘱与病程记录是否逐事件一致；计划、既往和取消检查不当成已执行。"
+    },
+    {
+      "rule_id": "LX0609-06-01-03",
+      "source_document": "CT/MRI检查记录",
+      "qc_point": "报告单完整性",
+      "implementation_status": "active",
+      "policy_sources": [
+        "sichuan_2026_handbook"
+      ],
+      "policy_summary": "按实际检查事件业务键核对影像报告，不以报告明细总行数比较；缺执行证明或上游覆盖未证明时仅提示资料不足。"
+    },
+    {
+      "rule_id": "LX0609-06-03-01",
+      "source_document": "微生物培养检查记录",
+      "qc_point": "医嘱与病程一致性",
+      "implementation_status": "active",
+      "pending_definition_note": "培养主记录缺少医嘱关联键，当前不能安全形成逐事件医嘱—病程一致性结论。",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "culture_order_course_linkage_unavailable",
+      "policy_sources": [
+        "sichuan_2026_handbook"
+      ],
+      "policy_summary": "逐事件核对细菌、真菌及病毒培养的医嘱与病程；普通病毒检测不自动等同微生物培养。"
+    },
+    {
+      "rule_id": "LX0609-06-03-02",
+      "source_document": "微生物培养检查记录",
+      "qc_point": "报告单完整性",
+      "implementation_status": "active",
+      "policy_sources": [
+        "sichuan_2026_handbook"
+      ],
+      "policy_summary": "按检验业务键核对已执行培养与报告，一次培养多行结果只计同一报告；关联或执行不明确为资料不足。"
+    },
+    {
+      "rule_id": "LX0609-06-02-01",
+      "source_document": "病理检查记录",
+      "qc_point": "报告单完整性",
+      "implementation_status": "active",
+      "policy_sources": [
+        "sichuan_2026_handbook"
+      ],
+      "policy_summary": "按病理检查业务键关联报告；申请不等于已执行，本地未查到报告不直接认定源系统临床漏报告。"
+    },
+    {
+      "rule_id": "LX0609-09-01-02",
+      "source_document": "抢救记录",
+      "qc_point": "内容完整性",
+      "implementation_status": "active",
+      "policy_sources": [
+        "sichuan_2026_handbook"
+      ],
+      "policy_summary": "逐份核对病情变化、抢救时间、措施、结果、参加医务人员姓名和专业技术职称；不拼接不同抢救记录补齐内容。"
     }
   ]
 }

@@ -302,6 +302,7 @@ _NATIVE_SOURCE_FIELDS = {
     "exam_item_report": (
         "document_id",
         "exam_id",
+        "description",
         "item_code",
         "item_name",
         "exam_name",
@@ -317,6 +318,7 @@ _NATIVE_SOURCE_FIELDS = {
     ),
     "labtest_master": (
         "test_id",
+        "order_id",
         "labtest_subject",
         "lab_type",
         "test_type",

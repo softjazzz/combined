@@ -36,6 +36,49 @@ _WITHIN_FACTS_BY_RULE = {
         "threshold_hours": 6,
         "source_label": "抢救记录",
     },
+    "LX0609-09-01-02": {
+        "target_document": "rescue_record",
+        "source_label": "抢救记录",
+        "content_state": "compliant",
+        "required_fields": [
+            "condition_change",
+            "rescue_time",
+            "rescue_measures",
+            "rescue_outcome",
+            "participant_names",
+            "participant_titles",
+        ],
+        "missing_fields": [],
+        "unknown_fields": [],
+        "rescue_content_events": [
+            {
+                "event_index": 1,
+                "document_ref": "a" * 64,
+                "source_document_id": "RESCUE-1",
+                "record_time": "2026-09-01T10:00:00+08:00",
+                "body_scope": "complete",
+                "field_facts": {
+                    field: {
+                        "state": "present",
+                        "start": 0,
+                        "end": 1,
+                        "quote": "抢",
+                    }
+                    for field in (
+                        "condition_change",
+                        "rescue_time",
+                        "rescue_measures",
+                        "rescue_outcome",
+                        "participant_names",
+                        "participant_titles",
+                    )
+                },
+                "missing_fields": [],
+                "unknown_fields": [],
+            }
+        ],
+        "failure_kind": "",
+    },
     "LX0609-02-01-01": {
         "failure_kind": "timeliness_requirement_satisfied",
         "target_document": "attending_course_record",
@@ -72,7 +115,23 @@ def test_all_basic_timeliness_rules_have_safe_compliant_fact_shape(rule_id: str)
         raw=raw_facts,
     )
 
-    assert safe_facts == raw_facts
+    if rule_id == "LX0609-09-01-02":
+        assert safe_facts is not None
+        assert safe_facts["content_state"] == "compliant"
+        assert safe_facts["missing_fields"] == []
+        assert safe_facts["unknown_fields"] == []
+        assert safe_facts["rescue_content_events"][0]["field_facts"] == {
+            field: {"state": "present"}
+            for field in raw_facts["required_fields"]
+        }
+        serialized = repr(safe_facts)
+        assert "document_ref" not in serialized
+        assert "source_document_id" not in serialized
+        assert "quote" not in serialized
+        assert "start" not in serialized
+        assert "end" not in serialized
+    else:
+        assert safe_facts == raw_facts
     assert basic_timeliness_customer_fact_status_is_valid(
         rule_id=rule_id,
         status="compliant",

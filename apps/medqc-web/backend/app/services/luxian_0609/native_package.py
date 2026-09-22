@@ -11,7 +11,7 @@ from functools import lru_cache
 from typing import Any, Iterable, Mapping, Sequence
 
 from .native_basic_timeliness import (
-    BASIC_TIMELINESS_RULE_IDS,
+    EXECUTABLE_BASIC_TIMELINESS_RULE_IDS,
     EXECUTOR_KEY as BASIC_TIMELINESS_EXECUTOR_KEY,
 )
 from .native_execution import NATIVE_RULE_IDS as NATIVE_SYNC_RULE_IDS
@@ -21,7 +21,7 @@ from .native_consultation_episode_execution import (
     PACKAGE_NATIVE_CONSULTATION_RULE_IDS,
 )
 from .native_exam_lab_execution import (
-    EXAM_LAB_RULE_IDS,
+    EXECUTABLE_EXAM_LAB_RULE_IDS,
     EXECUTOR_KEY as EXAM_LAB_EXECUTOR_KEY,
 )
 from .native_transfusion_execution import (
@@ -29,8 +29,8 @@ from .native_transfusion_execution import (
     EXECUTOR_KEY as TRANSFUSION_EXECUTOR_KEY,
 )
 from .native_tumor_pathology_execution import (
+    EXECUTABLE_TUMOR_PATHOLOGY_RULE_IDS,
     EXECUTOR_KEY as TUMOR_PATHOLOGY_EXECUTOR_KEY,
-    TUMOR_PATHOLOGY_RULE_IDS,
 )
 from .native_course_quality_execution import (
     COURSE_QUALITY_RULE_IDS,
@@ -196,7 +196,7 @@ def build_luxian_0609_dependency_inventory(
     family_index = _family_index(family_definitions)
     inventory: list[Luxian0609RuleDependency] = []
     seen: set[str] = set()
-    native_sync = {*NATIVE_SYNC_RULE_IDS, *BASIC_TIMELINESS_RULE_IDS}
+    native_sync = {*NATIVE_SYNC_RULE_IDS, *EXECUTABLE_BASIC_TIMELINESS_RULE_IDS}
     for rule in rules:
         rule_id = _normalize_rule_id(rule.get("rule_id") or rule.get("rule_code"))
         if not rule_id.startswith("LX0609-") or rule_id in seen:
@@ -213,10 +213,10 @@ def build_luxian_0609_dependency_inventory(
             execution_mode = EXECUTION_MODE_NATIVE_SYNC
             executor_key = (
                 BASIC_TIMELINESS_EXECUTOR_KEY
-                if rule_id in BASIC_TIMELINESS_RULE_IDS
+                if rule_id in EXECUTABLE_BASIC_TIMELINESS_RULE_IDS
                 else EXECUTOR_SURGERY_PRESENCE
             )
-        elif rule_id in EXAM_LAB_RULE_IDS:
+        elif rule_id in EXECUTABLE_EXAM_LAB_RULE_IDS:
             execution_mode = EXECUTION_MODE_NATIVE_ASYNC
             executor_key = EXAM_LAB_EXECUTOR_KEY
         elif rule_id in _CONSULTATION_FAMILY_RULE_IDS:
@@ -225,7 +225,7 @@ def build_luxian_0609_dependency_inventory(
         elif rule_id in TRANSFUSION_RULE_IDS:
             execution_mode = EXECUTION_MODE_NATIVE_ASYNC
             executor_key = TRANSFUSION_EXECUTOR_KEY
-        elif rule_id in TUMOR_PATHOLOGY_RULE_IDS:
+        elif rule_id in EXECUTABLE_TUMOR_PATHOLOGY_RULE_IDS:
             execution_mode = EXECUTION_MODE_NATIVE_ASYNC
             executor_key = TUMOR_PATHOLOGY_EXECUTOR_KEY
         elif rule_id in COURSE_QUALITY_RULE_IDS:

@@ -150,32 +150,36 @@ _CUSTOMER_SOURCE_LABELS = {
     "lab_attention_report": "检验危急值报告",
 }
 
+_PRIVATE_CUSTOMER_FACT_KEYS = frozenset(
+    {
+        "source_document_id",
+        "source_document_ids",
+        "source_document_refs",
+        "trigger_order_id",
+        "trigger_source",
+    }
+)
+
+
+def _contains_private_customer_fact_identifier(value: Any) -> bool:
+    if isinstance(value, Mapping):
+        return any(
+            not isinstance(key, str)
+            or key in _PRIVATE_CUSTOMER_FACT_KEYS
+            or _contains_private_customer_fact_identifier(item)
+            for key, item in value.items()
+        )
+    if isinstance(value, (list, tuple)):
+        return any(_contains_private_customer_fact_identifier(item) for item in value)
+    return False
+
+
 def validate_luxian_0609_executor_customer_display_facts(
     *, rule_id: str, raw: Any
 ) -> dict[str, Any] | None | NotImplementedType:
     """接收执行器已验证的客户事实，拒绝任何内部文书标识。"""
 
-    private_keys = frozenset(
-        {
-            "source_document_id",
-            "source_document_ids",
-            "source_document_refs",
-            "trigger_order_id",
-            "trigger_source",
-        }
-    )
-
-    def contains_private_identifier(value: Any) -> bool:
-        if isinstance(value, Mapping):
-            return any(
-                not isinstance(key, str)
-                or key in private_keys
-                or contains_private_identifier(item)
-                for key, item in value.items()
-            )
-        if isinstance(value, (list, tuple)):
-            return any(contains_private_identifier(item) for item in value)
-        return False
+    contains_private_identifier = _contains_private_customer_fact_identifier
 
     # 规则族的受控字段合同仍由其执行器侧投影器拥有；Finalizer 只提供
     # 一个统一接收边界，避免聚合层重新解释客户事实。
@@ -410,9 +414,24 @@ def validate_luxian_0609_executor_customer_display_facts(
         )
     if not is_basic_timeliness_customer_rule(rule_id):
         return NotImplemented
-    if not isinstance(raw, Mapping) or contains_private_identifier(raw):
+    normalized_rule_id = str(rule_id or "").strip().upper()
+    if (
+        not isinstance(raw, Mapping)
+        or (
+            normalized_rule_id != "LX0609-09-01-02"
+            and contains_private_identifier(raw)
+        )
+    ):
         return None
-    return safe_basic_timeliness_customer_display_facts(rule_id=rule_id, raw=raw)
+    safe_facts = safe_basic_timeliness_customer_display_facts(
+        rule_id=normalized_rule_id,
+        raw=raw,
+    )
+    return (
+        safe_facts
+        if safe_facts is not None and not contains_private_identifier(safe_facts)
+        else None
+    )
 
 
 def finalizer_owns_executor_customer_display_facts(rule_id: str) -> bool:
@@ -538,11 +557,14 @@ def finalize_luxian_0609_executor_customer_display_facts(
         str(finalized.get("rule_id") or finalized.get("rule_code") or "")
     ):
         return finalized, False
+    normalized_rule_id = str(
+        finalized.get("rule_id") or finalized.get("rule_code") or ""
+    ).strip().upper()
     safe_facts = (
         None
         if contract_failure
         else validate_luxian_0609_executor_customer_display_facts(
-            rule_id=str(finalized.get("rule_id") or finalized.get("rule_code") or ""),
+            rule_id=normalized_rule_id,
             raw=raw_facts,
         )
     )
@@ -586,6 +608,10 @@ def finalize_luxian_0609_executor_customer_display_facts(
     from .critical_value_result_mapping import (
         critical_value_customer_fact_status_is_valid,
         is_critical_value_customer_rule,
+    )
+    from .exam_lab_result_mapping import (
+        exam_lab_customer_fact_status_is_valid,
+        is_exam_lab_customer_rule,
     )
     from .tumor_pathology_result_mapping import (
         is_tumor_pathology_customer_rule,
@@ -717,6 +743,16 @@ def finalize_luxian_0609_executor_customer_display_facts(
         )
     )
     if is_critical_value_customer_rule(rule_id) and not critical_value_status_valid:
+        safe_facts = None
+    exam_lab_status_valid = (
+        is_exam_lab_customer_rule(rule_id)
+        and exam_lab_customer_fact_status_is_valid(
+            rule_id=rule_id,
+            status=str(finalized.get("status") or "").strip().lower(),
+            safe_facts=safe_facts,
+        )
+    )
+    if is_exam_lab_customer_rule(rule_id) and not exam_lab_status_valid:
         safe_facts = None
     tumor_pathology_status_valid = (
         is_tumor_pathology_customer_rule(rule_id)

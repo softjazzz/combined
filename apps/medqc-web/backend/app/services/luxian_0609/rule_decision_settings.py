@@ -25,6 +25,8 @@ RULE_DECISION_ROLLOUT_GROUPS: tuple[tuple[str | None, tuple[str, ...]], ...] = (
     ("LUXIAN_0609_RULE_DECISION_COURSE_ADMISSION_ENABLED", ("LX0609-12-01-01",)),
     ("LUXIAN_0609_RULE_DECISION_COURSE_COPY_ENABLED", ("LX0609-12-01-02",)),
     (None, ("LX0609-01-01-02",)),
+    # 新增抢救内容点沿用基础族同步/await桥接，但没有历史兼容执行路径。
+    (None, ("LX0609-09-01-02",)),
     ("LUXIAN_0609_RULE_DECISION_CONSULTATION_ENABLED", (
         "LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03", "LX0609-03-01-04",
     )),

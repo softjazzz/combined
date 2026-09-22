@@ -31,6 +31,11 @@ from .source_evidence_reader import (
     SourceEvidenceUnavailable,
     read_luxian_0609_native_source_rows,
 )
+from .pathology_report_completeness import (
+    PATHOLOGY_COMPLETENESS_SOURCES,
+    PATHOLOGY_REPORT_COMPLETENESS_RULE_ID,
+    evaluate_pathology_report_completeness,
+)
 
 
 TUMOR_PATHOLOGY_RULE_IDS = (
@@ -39,9 +44,14 @@ TUMOR_PATHOLOGY_RULE_IDS = (
     "LX0609-05-02-01",
     "LX0609-08-01-04",
 )
+EXECUTABLE_TUMOR_PATHOLOGY_RULE_IDS = (
+    PATHOLOGY_REPORT_COMPLETENESS_RULE_ID,
+    *TUMOR_PATHOLOGY_RULE_IDS,
+)
 EXECUTOR_KEY = "tumor_pathology"
-_TYPED_DECISION_RULE_IDS = frozenset(TUMOR_PATHOLOGY_RULE_IDS)
+_TYPED_DECISION_RULE_IDS = frozenset(EXECUTABLE_TUMOR_PATHOLOGY_RULE_IDS)
 _TYPED_RULE_SOURCE_KEYS = {
+    PATHOLOGY_REPORT_COMPLETENESS_RULE_ID: PATHOLOGY_COMPLETENESS_SOURCES,
     "LX0609-06-02-03": (
         "pathology_exam_master",
         "pathology_exam_report",
@@ -306,7 +316,10 @@ def _typed_decision_from_outcome(
             ApplicabilityState.UNKNOWN if source_gap else ApplicabilityState.APPLICABLE,
             EvidenceState.DATA_GAP,
             QcDirection.UNKNOWN,
-            "source_unavailable" if source_gap else "required_field_missing",
+            "target_report_missing"
+            if outcome.rule_id == PATHOLOGY_REPORT_COMPLETENESS_RULE_ID
+            and outcome.reason_code == "target_report_missing"
+            else "source_unavailable" if source_gap else "required_field_missing",
         )
     elif outcome.status == "technical_error":
         technical_reason = (
@@ -1427,7 +1440,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
 
     requested = {str(rule_id or "").strip().upper() for rule_id in rule_ids}
     selected = tuple(
-        rule_id for rule_id in TUMOR_PATHOLOGY_RULE_IDS if rule_id in requested
+        rule_id for rule_id in EXECUTABLE_TUMOR_PATHOLOGY_RULE_IDS if rule_id in requested
     )
     typed_requested = {
         str(rule_id or "").strip().upper() for rule_id in decision_rule_ids
@@ -1575,6 +1588,39 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
         source_for_rule = typed_source if typed_rule else source
         facts_for_rule = () if typed_rule else facts
         context_sources: tuple[str, ...]
+        if rule_id == PATHOLOGY_REPORT_COMPLETENESS_RULE_ID:
+            # 新完整性规则只使用同一会话材料；不依赖恶性诊断、旧 payload
+            # 或限8行的旧入口，也不能把申请记录视为已执行检查。
+            session_available = (
+                evidence_snapshot is not None
+                and evidence_materials is not None
+                and evidence_materials.snapshot_hash == evidence_snapshot.snapshot_hash
+            )
+            materials = {
+                key: typed_source(key) if session_available else SourceMaterial("unavailable")
+                for key in PATHOLOGY_COMPLETENESS_SOURCES
+            }
+            completeness = {
+                item.source_key: item.completeness.value
+                for item in evidence_snapshot.observations
+                if item.source_key in PATHOLOGY_COMPLETENESS_SOURCES
+            } if session_available else {}
+            outcome = evaluate_pathology_report_completeness(
+                master_rows=materials["pathology_exam_master"].rows,
+                report_rows=materials["pathology_exam_report"].rows,
+                source_states={key: material.state for key, material in materials.items()},
+                source_completeness=completeness,
+                document_refs=lambda key, rows: typed_document_refs((key, rows)),
+            )
+            emit_outcome(
+                rule_id,
+                outcome.status,
+                outcome.reason_code,
+                executor_type="program",
+                display_facts=outcome.display_facts,
+                fact_refs=outcome.fact_refs,
+            )
+            continue
         if rule_id in {"LX0609-06-02-03", "LX0609-06-02-02"}:
             master = source_for_rule("pathology_exam_master")
             report = source_for_rule("pathology_exam_report")

@@ -1,7 +1,6 @@
 import pytest
 
 from app.services.luxian_0609_rule_master import load_luxian_0609_rule_master
-from tests.luxian_0609_identity_test_support import published_rule_ids
 from app.services.luxian_0609_rule_catalog import load_luxian_0609_rules
 from app.services.luxian_0609.phase_scope import (
     Luxian0609PhaseScopeEntry,
@@ -15,20 +14,20 @@ from app.services.sample_validation_rule_sets import (
 )
 
 
-def test_phase_scope_freezes_all_77_customer_rules() -> None:
+def test_phase_scope_freezes_all_85_customer_rules() -> None:
     entries = load_luxian_0609_phase_scope()
 
-    assert len(entries) == 77
+    assert len(entries) == 85
     assert tuple(entry.rule_id for entry in entries) == tuple(
-        published_rule_ids(1, 77)
+        str(item["rule_id"]) for item in load_luxian_0609_rules()
     )
     assert {entry.definition_version for entry in entries} == {
         "lx0609-defined-scope-2026-09-22-identity-v1"
     }
-    assert sum(entry.phase_status == "phase_1_target" for entry in entries) == 67
+    assert sum(entry.phase_status == "phase_1_target" for entry in entries) == 73
     assert sum(entry.phase_status == "phase_1_partial" for entry in entries) == 0
-    assert sum(entry.phase_status == "pending_definition" for entry in entries) == 10
-    assert sum(entry.catalog_registered for entry in entries) == 77
+    assert sum(entry.phase_status == "pending_definition" for entry in entries) == 12
+    assert sum(entry.catalog_registered for entry in entries) == 85
 
 
 def test_phase_scope_uses_latest_confirmed_contract_and_freezes_only_unresolved_rules() -> None:
@@ -70,6 +69,8 @@ def test_phase_scope_uses_latest_confirmed_contract_and_freezes_only_unresolved_
         "LX0609-05-01-04",
         "LX0609-05-03-01",
         "LX0609-10-03-01",
+        "LX0609-06-01-01",
+        "LX0609-06-03-01",
     }
 
 
@@ -163,13 +164,13 @@ def test_consultation_family_keeps_only_023_executable() -> None:
     assert withheld == ("LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03")
 
 
-def test_customer_delivery_scope_is_72_with_62_executable_and_10_withheld() -> None:
+def test_customer_delivery_scope_is_80_with_68_executable_and_12_withheld() -> None:
     delivery = get_luxian_0609_customer_delivery_rule_ids()
     executable, withheld = get_luxian_0609_customer_execution_scope()
 
-    assert len(delivery) == 72
-    assert len(executable) == 62
-    assert len(withheld) == 10
+    assert len(delivery) == 80
+    assert len(executable) == 68
+    assert len(withheld) == 12
     assert "LX0609-04-04-01" in withheld
     assert {"LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03"}.issubset(withheld)
     assert "LX0609-03-01-04" in executable

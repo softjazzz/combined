@@ -17,7 +17,7 @@ from .evidence_snapshot import SourceCompleteness
 from .rule_contracts import load_luxian_0609_rule_contracts
 
 
-SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v33"
+SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v34"
 EXACT_VISIT_BINDING_FIELDS = ("institute_id", "patient_id", "visit_id")
 _SOURCE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]*$")
 
@@ -201,6 +201,8 @@ _REGISTRY_ENTRIES = (
     ),
     _entry("labtest_item_report", access_mode=_BOUNDED),
     _entry("labtest_master", access_mode=_BOUNDED),
+    _entry("pathology_exam_master", access_mode=_BOUNDED),
+    _entry("pathology_exam_report", access_mode=_BOUNDED),
     _entry("crisis_value_record", access_mode=_BOUNDED),
     _entry(
         "inpat_drug_order",
@@ -257,8 +259,6 @@ _INTERNAL_SOURCE_ENTRIES = (
         query_version="snapshot-provider-inpat_nondrug_order.rescue_order-v1",
     ),
     _entry("inpat_nondrug_order.unstable_order", access_mode=_CONTROLLED),
-    _entry("pathology_exam_master", access_mode=_BOUNDED),
-    _entry("pathology_exam_report", access_mode=_BOUNDED),
     _entry("admission_record_diagnosis", access_mode=_BOUNDED),
     # 063 的病案首页诊断是内部决策支持来源；客户适用文书仍由规则合同声明，
     # 不把该来源提升为第二个同名客户事实所有者。
@@ -342,6 +342,14 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "inpat_drug_order",
         "surgery_record",
         "mr_surgery",
+    ),
+    "LX0609-09-01-02": ("rescue_record", "inpat_nondrug_order.rescue_order"),
+    "LX0609-06-02-01": ("pathology_exam_master", "pathology_exam_report"),
+    "LX0609-06-01-03": (
+        "inpat_nondrug_order.exam_lab_order", "exam_master", "exam_item_report",
+    ),
+    "LX0609-06-03-02": (
+        "inpat_nondrug_order.exam_lab_order", "labtest_master", "labtest_item_report",
     ),
     "LX0609-06-01-02": (
         "inpat_nondrug_order.exam_lab_order",

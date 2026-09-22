@@ -8,13 +8,23 @@ from typing import Any, Mapping
 
 
 BASIC_TIMELINESS_CUSTOMER_RULE_IDS = frozenset(
-    {"LX0609-01-01-01", "LX0609-01-02-01", "LX0609-09-01-01", "LX0609-02-01-01", "LX0609-02-01-02"}
+    {"LX0609-01-01-01", "LX0609-01-02-01", "LX0609-09-01-01", "LX0609-09-01-02", "LX0609-02-01-01", "LX0609-02-01-02"}
 )
+
+RESCUE_CONTENT_FIELDS = {
+    "condition_change": "病情变化",
+    "rescue_time": "抢救时间",
+    "rescue_measures": "抢救措施",
+    "rescue_outcome": "抢救结果",
+    "participant_names": "参加医务人员姓名",
+    "participant_titles": "参加医务人员专业技术职称",
+}
 
 _TARGET_DOCUMENT_BY_RULE = {
     "LX0609-01-01-01": "admission_record",
     "LX0609-01-02-01": "first_course_record",
     "LX0609-09-01-01": "rescue_record",
+    "LX0609-09-01-02": "rescue_record",
     "LX0609-02-01-01": "attending_course_record",
     "LX0609-02-01-02": "senior_course_record",
 }
@@ -116,6 +126,137 @@ def _controlled_rescue_events(value: Any) -> list[dict[str, Any]] | None:
     return safe_events
 
 
+def _controlled_rescue_content_facts(raw: Mapping[str, Any]) -> dict[str, Any] | None:
+    """验证并剥离抢救内容原子事实中的文书标识、引文和字符坐标。"""
+
+    expected_keys = {
+        "target_document",
+        "source_label",
+        "content_state",
+        "required_fields",
+        "missing_fields",
+        "unknown_fields",
+        "rescue_content_events",
+        "failure_kind",
+    }
+    if set(raw) != expected_keys:
+        return None
+    state = raw.get("content_state")
+    if (
+        raw.get("target_document") != "rescue_record"
+        or raw.get("source_label") != "抢救记录"
+        or state not in {"compliant", "non_compliant", "not_applicable", "data_gap"}
+        or raw.get("required_fields") != list(RESCUE_CONTENT_FIELDS)
+    ):
+        return None
+    failure_kind = raw.get("failure_kind")
+    if failure_kind not in {
+        "",
+        "source_unavailable",
+        "source_truncated",
+        "source_readiness_unproven",
+        "evidence_session_unavailable",
+        "evidence_binding_failed",
+        "rescue_record_missing_after_trigger",
+        "applicability_source_gap",
+        "body_unavailable",
+        "candidate_limit_exceeded",
+        "model_unavailable",
+        "model_transport_error",
+        "model_invalid_output",
+    }:
+        return None
+
+    def controlled_field_list(value: Any) -> list[str] | None:
+        if not isinstance(value, list) or len(value) != len(set(value)):
+            return None
+        if any(item not in RESCUE_CONTENT_FIELDS for item in value):
+            return None
+        return [key for key in RESCUE_CONTENT_FIELDS if key in value]
+
+    missing = controlled_field_list(raw.get("missing_fields"))
+    unknown = controlled_field_list(raw.get("unknown_fields"))
+    events = raw.get("rescue_content_events")
+    if missing is None or unknown is None or not isinstance(events, list) or len(events) > 8:
+        return None
+    safe_events: list[dict[str, Any]] = []
+    observed_missing: set[str] = set()
+    observed_unknown: set[str] = set()
+    allowed_scopes = {
+        "complete",
+        "body_unavailable",
+        "body_truncated",
+        "body_scope_unproven",
+        "body_limit_exceeded",
+        "blank_or_placeholder",
+    }
+    for expected_index, event in enumerate(events, start=1):
+        if not isinstance(event, Mapping) or set(event) != {
+            "event_index",
+            "document_ref",
+            "source_document_id",
+            "record_time",
+            "body_scope",
+            "field_facts",
+            "missing_fields",
+            "unknown_fields",
+        }:
+            return None
+        if event.get("event_index") != expected_index or event.get("body_scope") not in allowed_scopes:
+            return None
+        record_time = event.get("record_time")
+        if not isinstance(record_time, str) or len(record_time) > 40 or "\n" in record_time or "\r" in record_time:
+            return None
+        event_missing = controlled_field_list(event.get("missing_fields"))
+        event_unknown = controlled_field_list(event.get("unknown_fields"))
+        fields = event.get("field_facts")
+        if event_missing is None or event_unknown is None or not isinstance(fields, Mapping) or set(fields) != set(RESCUE_CONTENT_FIELDS):
+            return None
+        safe_fields: dict[str, dict[str, str]] = {}
+        for key in RESCUE_CONTENT_FIELDS:
+            atom = fields[key]
+            if not isinstance(atom, Mapping) or set(atom) != {"state", "start", "end", "quote"}:
+                return None
+            atom_state = atom.get("state")
+            if atom_state not in {"present", "absent", "unknown"}:
+                return None
+            if (atom_state == "absent") != (key in event_missing) or (atom_state == "unknown") != (key in event_unknown):
+                return None
+            safe_fields[key] = {"state": atom_state}
+        observed_missing.update(event_missing)
+        observed_unknown.update(event_unknown)
+        safe_events.append({
+            "event_index": expected_index,
+            "record_time": record_time,
+            "body_scope": event["body_scope"],
+            "field_facts": safe_fields,
+            "missing_fields": event_missing,
+            "unknown_fields": event_unknown,
+        })
+    if missing != [key for key in RESCUE_CONTENT_FIELDS if key in observed_missing]:
+        return None
+    if unknown != [key for key in RESCUE_CONTENT_FIELDS if key in observed_unknown]:
+        return None
+    if state == "non_compliant" and not missing:
+        return None
+    if state == "compliant" and (missing or unknown or not safe_events or failure_kind):
+        return None
+    if state == "not_applicable" and (safe_events or missing or unknown or failure_kind):
+        return None
+    if state == "data_gap" and (missing or (not unknown and not failure_kind and safe_events)):
+        return None
+    return {
+        "target_document": "rescue_record",
+        "source_label": "抢救记录",
+        "content_state": state,
+        "required_fields": list(RESCUE_CONTENT_FIELDS),
+        "missing_fields": missing,
+        "unknown_fields": unknown,
+        "rescue_content_events": safe_events,
+        "failure_kind": failure_kind,
+    }
+
+
 def safe_basic_timeliness_customer_display_facts(
     *, rule_id: str, raw: Any
 ) -> dict[str, Any] | None:
@@ -123,6 +264,9 @@ def safe_basic_timeliness_customer_display_facts(
     target_document = _TARGET_DOCUMENT_BY_RULE.get(normalized_rule_id)
     if target_document is None or not isinstance(raw, Mapping):
         return None
+
+    if normalized_rule_id == "LX0609-09-01-02":
+        return _controlled_rescue_content_facts(raw)
 
     failure_kind = raw.get("failure_kind")
     state = raw.get("timeliness_state")
@@ -332,6 +476,8 @@ def basic_timeliness_customer_fact_status_is_valid(
         return True
     if not isinstance(safe_facts, Mapping):
         return False
+    if str(rule_id or "").strip().upper() == "LX0609-09-01-02":
+        return safe_facts.get("content_state") == normalized_status
     failure_kind = safe_facts.get("failure_kind")
     state = safe_facts.get("timeliness_state")
     if failure_kind == "timeliness_requirement_satisfied":
@@ -358,6 +504,7 @@ def basic_timeliness_customer_fact_status_is_valid(
 
 __all__ = [
     "BASIC_TIMELINESS_CUSTOMER_RULE_IDS",
+    "RESCUE_CONTENT_FIELDS",
     "basic_timeliness_customer_fact_status_is_valid",
     "is_basic_timeliness_customer_rule",
     "safe_basic_timeliness_customer_display_facts",

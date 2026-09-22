@@ -253,6 +253,26 @@ _RULE_MISSING_ITEM_LABELS = {
     "LX0609-04-01-05": ("术前讨论结构字段与正文/可核验内容",),
 }
 _RULE_DATA_GAP_MESSAGES = {
+    "LX0609-06-01-03": (
+        "暂无法确认 CT/MRI 检查报告是否齐全",
+        "当前存在检查主记录、报告业务键、报告正文可读性或同步完整性缺口；这不等同于临床漏报告。",
+        "请核对源系统 CT/MRI 报告、业务键及同步链路，资料完整后重新质控。",
+    ),
+    "LX0609-06-03-02": (
+        "暂无法确认微生物培养检查报告是否齐全",
+        "当前存在培养主记录、报告业务键、报告正文可读性或同步完整性缺口；这不等同于临床漏报告。",
+        "请核对源系统培养报告、业务键及同步链路，资料完整后重新质控。",
+    ),
+    "LX0609-06-02-01": (
+        "暂无法确认病理检查报告是否齐全",
+        "当前存在病理事件业务键、报告可读性或同步完整性缺口；这不等同于临床漏报告。",
+        "请核对源系统病理报告、业务键及同步链路，资料完整后重新质控。",
+    ),
+    "LX0609-09-01-02": (
+        "暂无法确认抢救记录内容是否完整",
+        "当前抢救记录正文范围、原子事实抽取或来源同步未形成可验证的完整结论。",
+        "请核对原始抢救记录及同步范围，资料完整后重新质控；不得按当前结果倒推补写内容。",
+    ),
     "LX0609-06-01-02": (
         "暂无法逐条关联 CT/MRI 医嘱、检查结果与检查前病程",
         "当前缺少可唯一关联的 CT/MRI 医嘱、检查主记录与报告，或检查前病程中的检查原因。",
@@ -685,6 +705,26 @@ def _evaluation_window_gap_message(
         )
     return None
 _RULE_NON_COMPLIANT_MESSAGES = {
+    "LX0609-06-01-03": (
+        "CT/MRI 检查报告完整性不符合要求",
+        "已按本次住院检查业务键核对检查主记录与正式报告。",
+        "请核对结果列出的检查事件及原始报告；仅在人工确认报告确实缺失后按院内流程处理。",
+    ),
+    "LX0609-06-03-02": (
+        "微生物培养检查报告完整性不符合要求",
+        "已按本次住院检验业务键核对培养主记录与正式报告。",
+        "请核对结果列出的培养事件及原始报告；仅在人工确认报告确实缺失后按院内流程处理。",
+    ),
+    "LX0609-06-02-01": (
+        "病理检查报告完整性不符合要求",
+        "已按本次住院病理业务键核对病理事件与正式报告。",
+        "请核对结果列出的病理事件及原始报告；仅在人工确认报告确实缺失后按院内流程处理。",
+    ),
+    "LX0609-09-01-02": (
+        "抢救记录内容不完整",
+        "已逐份核对抢救记录中的病情变化、时间、措施、结果及参加人员信息。",
+        "请依据实际抢救过程补充结果列出的缺项，不得补造未发生的抢救事实。",
+    ),
     "LX0609-06-01-05": (
         "CT/MRI阳性结果未在24小时内完成分析或处置记录",
         "已核对CT/MRI阳性报告及报告后24小时内的相关病程记录。",
@@ -3413,6 +3453,102 @@ def not_applicable_customer_message(*, rule_id: str, reason_code: str) -> tuple[
 # 而客户可见的文书正文按 `bundles/emr_view.py` 的诊断类型白名单不含该行。此时
 # 不提供逐条证据定位，也不补弱坐标（会给客户“看起来可核对、实际无法核对”的假象），
 # 而是在客户结论里说明为什么不提供证据定位。
+_HANDBOOK_REPORT_RULE_LABELS = {
+    "LX0609-06-01-03": "CT/MRI检查",
+    "LX0609-06-03-02": "微生物培养检查",
+    "LX0609-06-02-01": "病理检查",
+}
+_RESCUE_CONTENT_FIELD_LABELS = {
+    "condition_change": "病情变化情况",
+    "rescue_time": "抢救时间",
+    "rescue_measures": "抢救措施",
+    "rescue_outcome": "抢救结果",
+    "participant_names": "参加抢救的医务人员姓名",
+    "participant_titles": "参加抢救人员的专业技术职称",
+}
+
+
+def handbook_customer_message(
+    *,
+    rule_id: str,
+    status: str,
+    facts: Mapping[str, Any] | None,
+) -> tuple[str, str, str] | None:
+    """渲染2026手册新增规则；只使用已白名单化的裁决事实。"""
+
+    if not isinstance(facts, Mapping):
+        return None
+    normalized_rule_id = str(rule_id or "").strip().upper()
+    normalized_status = str(status or "").strip().lower()
+    label = _HANDBOOK_REPORT_RULE_LABELS.get(normalized_rule_id)
+    if label is not None:
+        event_count = facts.get("event_count")
+        if type(event_count) is not int or event_count < 0:
+            return None
+        if normalized_status == "compliant":
+            return (
+                f"已核对{event_count}次{label}，均找到可读取的对应报告。",
+                "系统已按本次住院的业务键逐次关联检查主记录与正式报告。",
+                "",
+            )
+        if normalized_status == "not_applicable":
+            return (
+                f"本次住院未发现需要核对报告完整性的{label}事件。",
+                "相关数据源已完成本次读取，未发现已实施的目标事件。",
+                "",
+            )
+        if normalized_status == "data_gap":
+            return (
+                f"当前无法完整确认{label}报告是否齐全。",
+                "已按业务键核对检查主记录与报告，但存在关联、正文可读性或同步完整性缺口；这不等同于临床漏报告。",
+                "请先核对源系统报告、业务键及同步链路，资料完整后重新质控；不得据此补写未核实的报告。",
+            )
+        return None
+
+    if normalized_rule_id != "LX0609-09-01-02":
+        return None
+    events = facts.get("rescue_content_events")
+    if not isinstance(events, list):
+        return None
+    event_count = len(events)
+    if normalized_status == "compliant":
+        return (
+            f"已逐份核对{event_count}份抢救记录，规定的六类内容均有可验证记录。",
+            "核对范围包括病情变化、抢救时间、抢救措施、抢救结果以及参加人员姓名和专业技术职称。",
+            "",
+        )
+    if normalized_status == "not_applicable":
+        return (
+            "本次住院未发现需要核对内容完整性的抢救记录或有效抢救触发。",
+            "抢救记录和抢救医嘱来源已完成本次读取。",
+            "",
+        )
+    if normalized_status == "non_compliant":
+        missing = facts.get("missing_fields")
+        if not isinstance(missing, list):
+            return None
+        labels = [
+            _RESCUE_CONTENT_FIELD_LABELS[item]
+            for item in missing
+            if item in _RESCUE_CONTENT_FIELD_LABELS
+        ]
+        if not labels:
+            return None
+        missing_text = "、".join(labels)
+        return (
+            f"抢救记录内容不完整，缺少：{missing_text}。",
+            f"已逐份核对{event_count}份抢救记录正文，以上项目在对应记录的完整正文中未找到。",
+            f"修改对象：对应抢救记录\n需要补充：{missing_text}\n推荐写法：请依据实际抢救过程补充相关时间、措施、结果及参加人员信息。\n注意事项：不得补造未发生的抢救事实。",
+        )
+    if normalized_status == "data_gap":
+        return (
+            "当前资料不足以确认抢救记录六类内容是否完整。",
+            "抢救记录正文范围、原子事实抽取或来源同步未形成可验证的完整结论；资料不足不代表记录缺项。",
+            "请先核对原始抢救记录及同步范围，资料完整后重新质控；不得按当前结果倒推补写内容。",
+        )
+    return None
+
+
 LX0609_074_NO_EVIDENCE_LOCATION_NOTE = (
     "本项依据入院记录中的结构化诊断声明作出判定；"
     "该声明当前不在客户可见的文书正文范围内，因此本项不提供逐条证据定位。"
@@ -3589,13 +3725,21 @@ def render_luxian_0609_customer_result(
             evidence = "主诉字数已核对，但诊断指向的自动判断未形成可靠结论。"
             suggestion = "请人工核对主诉提供的诊断线索是否能够支持入院第一诊断。"
 
+    handbook_message = handbook_customer_message(
+        rule_id=decision.rule_id,
+        status=decision.final_state.value,
+        facts=safe_customer_display_facts,
+    )
+    if handbook_message is not None:
+        findings, evidence, suggestion = handbook_message
+
     structured_suggestion = build_customer_remediation_suggestion(
         rule_id=decision.rule_id,
         status=decision.final_state.value,
         reason_code=decision.reason_code,
         facts=safe_customer_display_facts,
     )
-    if structured_suggestion and not (
+    if structured_suggestion and handbook_message is None and not (
         decision.final_state is CustomerFinalState.DATA_GAP
         and (
             bool(pathology_report_gap)

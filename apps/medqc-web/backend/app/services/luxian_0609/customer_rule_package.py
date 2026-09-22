@@ -26,7 +26,7 @@ RULE_FAMILY_DEFINITIONS: tuple[dict[str, Any], ...] = (
     {
         "key": "basic_timeliness",
         "name": "基础时限",
-        "rule_ids": ("LX0609-01-01-01", "LX0609-01-02-01", "LX0609-09-01-01", "LX0609-02-01-01", "LX0609-02-01-02"),
+        "rule_ids": ("LX0609-01-01-01", "LX0609-01-02-01", "LX0609-09-01-01", "LX0609-02-01-01", "LX0609-02-01-02", "LX0609-09-01-02"),
     },
     {
         "key": "course_quality",
@@ -44,7 +44,12 @@ RULE_FAMILY_DEFINITIONS: tuple[dict[str, Any], ...] = (
     {
         "key": "exam_lab",
         "name": "检查检验",
-        "rule_ids": ("LX0609-06-01-02", "LX0609-06-01-04", "LX0609-06-01-05", "LX0609-06-03-03", "LX0609-06-03-04"),
+        "rule_ids": (
+            "LX0609-06-01-02", "LX0609-06-01-04", "LX0609-06-01-05",
+            "LX0609-06-03-03", "LX0609-06-03-04",
+            "LX0609-06-01-01", "LX0609-06-03-01",
+            "LX0609-06-01-03", "LX0609-06-03-02",
+        ),
     },
     {
         "key": "consultation_quality",
@@ -93,7 +98,7 @@ RULE_FAMILY_DEFINITIONS: tuple[dict[str, Any], ...] = (
     {
         "key": "tumor_pathology",
         "name": "肿瘤病理",
-        "rule_ids": ("LX0609-06-02-03", "LX0609-06-02-02", "LX0609-05-02-01", "LX0609-08-01-04"),
+        "rule_ids": ("LX0609-06-02-03", "LX0609-06-02-02", "LX0609-05-02-01", "LX0609-08-01-04", "LX0609-06-02-01"),
     },
     {
         "key": "extended_document",

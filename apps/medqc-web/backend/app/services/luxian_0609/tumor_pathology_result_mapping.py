@@ -1,6 +1,6 @@
 """肿瘤病理规则族的客户展示事实合同。
 
-本模块只验证 013/019/026/027 执行器已裁决的展示事实，不读取文书，
+本模块只验证肿瘤病理执行器已裁决的展示事实，不读取文书，
 不推断病理、化疗或出院计划，也不生成客户证据。正式主链的证据只能由
 ``RuleDecision.fact_refs → Binding → 公共 selected-document projector`` 产生。
 """
@@ -13,12 +13,21 @@ from typing import Any
 
 
 TUMOR_PATHOLOGY_CUSTOMER_RULE_IDS = frozenset(
-    {"LX0609-06-02-03", "LX0609-06-02-02", "LX0609-05-02-01", "LX0609-08-01-04"}
+    {"LX0609-06-02-01", "LX0609-06-02-03", "LX0609-06-02-02", "LX0609-05-02-01", "LX0609-08-01-04"}
 )
 _PATHOLOGY_SOURCES = frozenset({"pathology_exam_master", "pathology_exam_report"})
 _TARGET_SOURCES = ("surgery_record", "daily_course_record")
 _LX019_TARGET_SOURCES = (*_TARGET_SOURCES, "senior_course_record")
 _DATETIME = re.compile(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}")
+_DOCUMENT_REF = re.compile(r"[a-f0-9]{64}")
+_COMPLETENESS_STATUSES = frozenset({"compliant", "non_compliant", "not_applicable", "data_gap"})
+_COMPLETENESS_EVENT_REASONS = frozenset({
+    "pathology_business_key_missing", "pathology_business_key_ambiguous",
+    "pathology_execution_conflict", "pathology_report_present",
+    "pathology_report_content_unproven", "pathology_event_not_performed",
+    "pathology_execution_unproven", "pathology_report_source_unavailable",
+    "pathology_report_linkage_unresolved", "target_report_missing",
+})
 
 
 def is_tumor_pathology_customer_rule(rule_id: str) -> bool:
@@ -49,6 +58,73 @@ def _safe_checked_sources(
             return None
         result.append({"source": source, "state": str(item["state"])})
     return result
+
+
+def _safe_report_completeness(raw: Mapping[str, Any]) -> dict[str, Any] | None:
+    """只校验执行器的逐事件合同，不重读报告或按数量决定合规。"""
+
+    counters = (
+        "event_count", "report_count", "missing_report_count",
+        "unresolved_event_count", "excluded_event_count",
+    )
+    if (
+        raw.get("verification_kind") != "pathology_report_completeness"
+        or raw.get("decision_status") not in _COMPLETENESS_STATUSES
+        or any(type(raw.get(key)) is not int or raw[key] < 0 for key in counters)
+    ):
+        return None
+    sources = raw.get("checked_sources")
+    events = raw.get("events")
+    if not isinstance(sources, list) or len(sources) != 2 or not isinstance(events, list):
+        return None
+    safe_sources: list[dict[str, str]] = []
+    for source, item in zip(("pathology_exam_master", "pathology_exam_report"), sources):
+        if (
+            not isinstance(item, Mapping)
+            or item.get("source") != source
+            or item.get("state") not in {"present", "empty", "unavailable", "error", "truncated"}
+            or item.get("completeness") not in {"complete", "unproven", "truncated"}
+        ):
+            return None
+        safe_sources.append({key: item[key] for key in ("source", "state", "completeness")})
+    safe_events: list[dict[str, Any]] = []
+    for index, item in enumerate(events, start=1):
+        if (
+            not isinstance(item, Mapping)
+            or type(item.get("event_index")) is not int or item["event_index"] != index
+            or item.get("status") not in _COMPLETENESS_STATUSES
+            or item.get("reason_code") not in _COMPLETENESS_EVENT_REASONS
+            or type(item.get("execution_confirmed")) is not bool
+            or type(item.get("report_count")) is not int or item["report_count"] not in {0, 1}
+            or not isinstance(item.get("fact_refs"), list)
+            or any(not isinstance(ref, str) or _DOCUMENT_REF.fullmatch(ref) is None for ref in item["fact_refs"])
+        ):
+            return None
+        safe_events.append({
+            key: item[key]
+            for key in (
+                "event_index",
+                "status",
+                "reason_code",
+                "execution_confirmed",
+                "report_count",
+            )
+        })
+    if (
+        raw["event_count"] != len(safe_events)
+        or raw["report_count"] != sum(item["report_count"] for item in safe_events)
+        or raw["missing_report_count"] != sum(item["reason_code"] == "target_report_missing" for item in safe_events)
+        or raw["unresolved_event_count"] != sum(item["status"] == "data_gap" for item in safe_events)
+        or raw["excluded_event_count"] != sum(item["status"] == "not_applicable" for item in safe_events)
+    ):
+        return None
+    return {
+        "verification_kind": "pathology_report_completeness",
+        "decision_status": raw["decision_status"],
+        **{key: raw[key] for key in counters},
+        "checked_sources": safe_sources,
+        "events": safe_events,
+    }
 
 
 def _safe_013(raw: Mapping[str, Any]) -> dict[str, Any] | None:
@@ -226,6 +302,7 @@ def safe_tumor_pathology_customer_display_facts(
     if normalized not in TUMOR_PATHOLOGY_CUSTOMER_RULE_IDS or not isinstance(raw, Mapping):
         return None
     return {
+        "LX0609-06-02-01": _safe_report_completeness,
         "LX0609-06-02-03": _safe_013,
         "LX0609-06-02-02": _safe_019,
         "LX0609-05-02-01": _safe_026,
@@ -246,6 +323,12 @@ def tumor_pathology_customer_fact_status_is_valid(
     if not isinstance(safe_facts, Mapping):
         return False
     normalized_rule_id = str(rule_id or "").strip().upper()
+    if normalized_rule_id == "LX0609-06-02-01":
+        return (
+            normalized_status in _COMPLETENESS_STATUSES
+            and safe_facts.get("verification_kind") == "pathology_report_completeness"
+            and normalized_status == safe_facts.get("decision_status")
+        )
     if normalized_rule_id == "LX0609-08-01-04" and safe_facts.get("verification_kind") == "malignant_diagnosis_applicability_uncertain":
         # M17：该事实同时允许 `uncertain` 与 `data_gap`。
         # 027 的客户契约不允许交付 `uncertain`（catalog 027 行 allowed_result_statuses

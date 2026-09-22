@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
+from inspect import isawaitable
 import json
 import re
 import time
@@ -35,6 +36,10 @@ from .evidence_material import (
 )
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .native_execution import NativeExecutionResult, build_luxian_0609_native_result
+from .rescue_record_completeness import (
+    RESCUE_COMPLETENESS_RULE_ID,
+    execute_rescue_record_completeness,
+)
 from .source_evidence_reader import (
     CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY,
     EVALUATION_HORIZON_SOURCE_KEY,
@@ -49,6 +54,15 @@ BASIC_TIMELINESS_RULE_IDS = (
     "LX0609-01-01-01",
     "LX0609-01-02-01",
     "LX0609-09-01-01",
+    "LX0609-02-01-01",
+    "LX0609-02-01-02",
+)
+# 保持原五规则公开调用范围稳定；新增抢救内容规则仅在目录明确选中时执行。
+EXECUTABLE_BASIC_TIMELINESS_RULE_IDS = (
+    "LX0609-01-01-01",
+    "LX0609-01-02-01",
+    "LX0609-09-01-01",
+    RESCUE_COMPLETENESS_RULE_ID,
     "LX0609-02-01-01",
     "LX0609-02-01-02",
 )
@@ -1872,7 +1886,7 @@ def _execute_luxian_0609_native_basic_timeliness(
         if str(rule_id or "").strip()
     }
     selected = tuple(
-        rule_id for rule_id in BASIC_TIMELINESS_RULE_IDS if rule_id in requested
+        rule_id for rule_id in EXECUTABLE_BASIC_TIMELINESS_RULE_IDS if rule_id in requested
     )
     if not selected:
         return NativeExecutionResult((), ())
@@ -2107,7 +2121,7 @@ def _with_006_semantic_failure(
     )
 
 
-def execute_luxian_0609_native_basic_timeliness(
+def _execute_basic_timeliness_with_semantic_rounds(
     *,
     rule_ids: Sequence[str],
     evidence_payload: dict[str, Any] | None,
@@ -2309,3 +2323,63 @@ def execute_luxian_0609_native_basic_timeliness(
         )
 
     return resolve_semantic_rounds()
+
+
+def execute_luxian_0609_native_basic_timeliness(
+    *,
+    rule_ids: Sequence[str],
+    evidence_payload: dict[str, Any] | None,
+    institute_id: str = "",
+    patient_id: str = "",
+    visit_id: str = "",
+    source_schema: str | None = None,
+    evidence_snapshot: Luxian0609EvidenceSnapshot | None = None,
+    evidence_materials: Luxian0609EvidenceMaterialStore | None = None,
+    decision_rule_ids: Sequence[str] = (),
+    llm_client: BasicTimelinessLLMClient | None = None,
+) -> NativeExecutionResult | Awaitable[NativeBasicTimelinessExecutionResult]:
+    """按同一证据会话装配抢救内容检查，保留既有时效及006语义调用链。"""
+    requested = tuple(str(value or "").strip().upper() for value in rule_ids)
+    legacy = _execute_basic_timeliness_with_semantic_rounds(
+        rule_ids=tuple(value for value in requested if value != RESCUE_COMPLETENESS_RULE_ID),
+        evidence_payload=evidence_payload, institute_id=institute_id,
+        patient_id=patient_id, visit_id=visit_id, source_schema=source_schema,
+        evidence_snapshot=evidence_snapshot, evidence_materials=evidence_materials,
+        decision_rule_ids=tuple(value for value in decision_rule_ids if str(value).strip().upper() != RESCUE_COMPLETENESS_RULE_ID),
+        llm_client=llm_client,
+    )
+    if RESCUE_COMPLETENESS_RULE_ID not in requested:
+        return legacy
+    content = execute_rescue_record_completeness(
+        snapshot=evidence_snapshot, materials=evidence_materials, llm_client=llm_client,
+    )
+
+    def merge(old: NativeExecutionResult, new: NativeExecutionResult) -> NativeBasicTimelinessExecutionResult:
+        selected = tuple(rule_id for rule_id in EXECUTABLE_BASIC_TIMELINESS_RULE_IDS if rule_id in requested)
+        order = {rule_id: index for index, rule_id in enumerate(selected)}
+        combined = NativeExecutionResult(
+            results=tuple(sorted((*old.results, *new.results), key=lambda item: order[item["rule_id"]])),
+            planned_rule_ids=selected,
+            decisions=tuple(sorted((*old.decisions, *new.decisions), key=lambda item: order[item.rule_id])),
+            customer_display_facts=tuple(sorted((*old.customer_display_facts, *new.customer_display_facts), key=lambda item: order[item[0]])),
+            execution_fingerprint=old.execution_fingerprint,
+            terminal_reason_code=old.terminal_reason_code,
+        )
+        return _with_semantic_usage(
+            combined,
+            llm_call_count=getattr(old, "llm_call_count", 0) + getattr(new, "llm_call_count", 0),
+            prompt_tokens=getattr(old, "prompt_tokens", 0) + getattr(new, "prompt_tokens", 0),
+            completion_tokens=getattr(old, "completion_tokens", 0) + getattr(new, "completion_tokens", 0),
+            total_tokens=getattr(old, "total_tokens", 0) + getattr(new, "total_tokens", 0),
+            api_time=getattr(old, "api_time", 0.0) + getattr(new, "api_time", 0.0),
+        )
+
+    if not isawaitable(legacy) and not isawaitable(content):
+        return merge(legacy, content)
+
+    async def resolve() -> NativeBasicTimelinessExecutionResult:
+        old = await legacy if isawaitable(legacy) else legacy
+        new = await content if isawaitable(content) else content
+        return merge(old, new)
+
+    return resolve()

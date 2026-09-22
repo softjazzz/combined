@@ -33,18 +33,18 @@ _CONTRACT_PATH = (
 def test_rule_contracts_cover_all_phase1_registered_rules_in_catalog_order() -> None:
     contracts = load_luxian_0609_rule_contracts()
 
-    assert len(contracts) == 79
+    assert len(contracts) == 85
     assert tuple(contract.rule_id for contract in contracts) == tuple(
         str(item["rule_id"]) for item in load_luxian_0609_rules()
     )
-    assert sum(contract.phase_status == "phase_1_target" for contract in contracts) == 69
+    assert sum(contract.phase_status == "phase_1_target" for contract in contracts) == 73
     assert sum(contract.phase_status == "phase_1_partial" for contract in contracts) == 0
-    assert sum(contract.phase_status == "pending_definition" for contract in contracts) == 10
+    assert sum(contract.phase_status == "pending_definition" for contract in contracts) == 12
     assert {contract.definition_version for contract in contracts} == {
-        "lx0609-defined-scope-2026-09-05-r3"
+        "lx0609-defined-scope-2026-09-22-identity-v1"
     }
     assert json.loads(_CONTRACT_PATH.read_text(encoding="utf-8"))["definition_version"] == (
-        "lx0609-defined-scope-2026-09-05-r3"
+        "lx0609-defined-scope-2026-09-22-identity-v1"
     )
     assert all(
         "not_executed" in contract.allowed_final_states for contract in contracts
@@ -262,6 +262,11 @@ def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() 
         "LX0609-10-02-01",
         "LX0609-10-02-02",
         "LX0609-12-02-01",
+        "LX0609-06-01-01",
+        "LX0609-06-01-03",
+        "LX0609-06-03-01",
+        "LX0609-06-03-02",
+        "LX0609-06-02-01",
     }
     assert typed_shadow == {
         "LX0609-01-01-01",
@@ -340,6 +345,12 @@ def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() 
         "LX0609-01-02-02",
         "LX0609-04-01-04",
         "LX0609-04-01-05",
+        "LX0609-06-01-01",
+        "LX0609-06-01-03",
+        "LX0609-06-03-01",
+        "LX0609-06-03-02",
+        "LX0609-06-02-01",
+        "LX0609-09-01-02",
     }
     assert typed_malignancy == {"LX0609-04-02-03", "LX0609-05-02-01", "LX0609-08-01-04"}
     assert all(contract.golden_gate_state == "pending" for contract in contracts)

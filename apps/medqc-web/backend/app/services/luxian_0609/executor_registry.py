@@ -178,6 +178,14 @@ LEGACY_RULE_MATERIAL_SOURCE_KEYS = {
         "inpat_registration",
     ),
     "LX0609-09-01-01": ("rescue_record",),
+    "LX0609-09-01-02": ("rescue_record", "inpat_nondrug_order.rescue_order"),
+    "LX0609-06-02-01": ("pathology_exam_master", "pathology_exam_report"),
+    "LX0609-06-01-03": (
+        "inpat_nondrug_order.exam_lab_order", "exam_master", "exam_item_report",
+    ),
+    "LX0609-06-03-02": (
+        "inpat_nondrug_order.exam_lab_order", "labtest_master", "labtest_item_report",
+    ),
     "LX0609-02-01-01": (
         "admission_record",
         "daily_course_record",

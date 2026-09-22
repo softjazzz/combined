@@ -19,6 +19,7 @@ from .exam_lab_fact_extraction import (
     event_for_fact,
     events_for_family,
 )
+from .handbook_exam_lab import REPORT_RULES as HANDBOOK_REPORT_RULES, safe_handbook_display_facts
 
 
 @dataclass(frozen=True)
@@ -32,8 +33,10 @@ class ExamLabOutcome:
 EXAM_LAB_CUSTOMER_RULE_IDS = frozenset(
     {
         "LX0609-06-01-02",
+        "LX0609-06-01-03",
         "LX0609-06-01-04",
         "LX0609-06-01-05",
+        "LX0609-06-03-02",
         "LX0609-06-03-03",
         "LX0609-06-03-04",
     }
@@ -93,6 +96,9 @@ def safe_exam_lab_customer_display_facts(
     normalized_rule_id = str(rule_id or "").strip().upper()
     if normalized_rule_id not in EXAM_LAB_CUSTOMER_RULE_IDS or not isinstance(raw, Mapping):
         return None
+
+    if normalized_rule_id in HANDBOOK_REPORT_RULES:
+        return safe_handbook_display_facts(normalized_rule_id, raw)
 
     if (
         normalized_rule_id == "LX0609-06-01-02"
@@ -512,6 +518,32 @@ def safe_exam_lab_customer_display_facts(
     return facts
 
 
+def exam_lab_customer_fact_status_is_valid(
+    *, rule_id: str, status: str, safe_facts: Mapping[str, Any] | None
+) -> bool:
+    """校验 2026 手册新增报告完整性事实与已裁决状态一致。"""
+
+    normalized_rule_id = str(rule_id or "").strip().upper()
+    if normalized_rule_id not in HANDBOOK_REPORT_RULES:
+        return True
+    if not isinstance(safe_facts, Mapping):
+        return False
+    items = safe_facts.get("event_results")
+    if not isinstance(items, list):
+        return False
+    event_statuses = [item.get("event_status") for item in items if isinstance(item, Mapping)]
+    if len(event_statuses) != len(items):
+        return False
+    complete = safe_facts.get("review_scope_complete") is True
+    expected = (
+        "non_compliant" if "non_compliant" in event_statuses
+        else "data_gap" if not complete or "data_gap" in event_statuses
+        else "compliant" if "compliant" in event_statuses
+        else "not_applicable"
+    )
+    return str(status or "").strip().lower() == expected
+
+
 def build_exam_lab_rule_decision(
     *,
     outcome: ExamLabOutcome,
@@ -811,6 +843,7 @@ def _clean(value: Any) -> str:
 
 __all__ = [
     "EXAM_LAB_CUSTOMER_RULE_IDS",
+    "exam_lab_customer_fact_status_is_valid",
     "ExamLabOutcome",
     "build_default_display_facts",
     "build_exam_lab_rule_decision",
