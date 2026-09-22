@@ -26,14 +26,17 @@ import { useRoute } from 'vue-router'
 import QCOverviewView from '@/views/workstation/QCOverviewView.vue'
 import WorkstationV4View from './WorkstationV4View.vue'
 import QCAgentChatDrawer from './components/QCAgentChatDrawer.vue'
+import { hasAnalyticsDrilldownQuery } from './analyticsDrilldown'
 
 const route = useRoute()
 const qcAgentOpen = ref(false)
 
 const hasLaunchQuery = computed(() => {
-  return ['record_id', 'action', 'from_stage', 'taskId', 'stage'].some((key) => {
+  const hasDirectLaunch = ['record_id', 'action', 'from_stage', 'taskId', 'stage'].some((key) => {
     return typeof route.query[key] === 'string' && String(route.query[key] || '').trim() !== ''
   })
+  // 统计下钻必须进入病历池，否则 analytics_* 范围会被首页静默丢弃。
+  return hasDirectLaunch || hasAnalyticsDrilldownQuery(route.query as Record<string, unknown>)
 })
 
 // 当前为全院质控科单一工作台：登录由路由守卫负责，首页不再叠加角色门槛。

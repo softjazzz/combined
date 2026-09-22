@@ -1238,6 +1238,48 @@
   background: #2b6cf6 !important;
 }
 
+.wv4-drilldown-context {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid rgba(43, 108, 246, 0.16);
+  border-radius: 10px;
+  background: rgba(43, 108, 246, 0.06);
+  font-size: 12px;
+  color: #1d1d1f;
+}
+
+.wv4-drilldown-context__label {
+  font-weight: 650;
+  color: #2b6cf6;
+}
+
+.wv4-drilldown-context__part {
+  padding: 2px 8px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 999px;
+  background: #ffffff;
+  color: #3c4257;
+  font-variant-numeric: tabular-nums;
+}
+
+.wv4-drilldown-context__clear {
+  padding: 2px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #2b6cf6;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.wv4-drilldown-context__clear:hover {
+  background: rgba(43, 108, 246, 0.1);
+}
+
 .medical-record-document__content {
   letter-spacing: 0.01em;
 }

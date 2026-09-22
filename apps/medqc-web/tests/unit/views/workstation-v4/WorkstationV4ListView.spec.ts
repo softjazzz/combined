@@ -511,4 +511,25 @@ describe('WorkstationV4ListView filters', () => {
     expect(wrapper.text()).toContain('待生成总量')
     expect(wrapper.text()).toContain('23')
   })
+
+  it('shows the analytics drill-down scope and lets the user exit it', async () => {
+    const wrapper = mountListView({
+      drilldownScopeParts: ['科室：ICU', '结果状态：确定问题'],
+    })
+
+    const scope = wrapper.get('[data-testid="workstation-drilldown-scope"]')
+    expect(scope.text()).toContain('统计下钻范围')
+    expect(scope.text()).toContain('科室：ICU')
+    expect(scope.text()).toContain('结果状态：确定问题')
+
+    await wrapper.get('[data-testid="workstation-clear-drilldown"]').trigger('click')
+
+    expect(wrapper.emitted('clear-drilldown')).toHaveLength(1)
+  })
+
+  it('keeps the drill-down scope out of the header when no drill-down is active', () => {
+    const wrapper = mountListView({ drilldownScopeParts: [] })
+
+    expect(wrapper.find('[data-testid="workstation-drilldown-scope"]').exists()).toBe(false)
+  })
 })

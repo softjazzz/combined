@@ -2,6 +2,7 @@ import { computed, ref } from 'vue'
 import { ApiService } from '@/services/apiService'
 import type { DeptInfo, DoctorInfo, PatientRecord, RecordPoolQcSummary } from '../types'
 import { normalizeRecord, normalizeRecordPoolQcSummary } from '../normalize'
+import { ANALYTICS_DRILLDOWN_QUERY_KEYS } from '../analyticsDrilldown'
 
 const WORKSTATION_PAGE_SIZE = 15
 const ALL_DEPARTMENTS = '全部科室'
@@ -145,16 +146,10 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
       if (inpatientSort.value !== 'default') {
         params.inpatient_sort = inpatientSort.value
       }
-      const analyticsKeys = [
-        'analytics_job_id',
-        'analytics_completed_from',
-        'analytics_completed_to',
-        'analytics_rule_id',
-        'analytics_result_status',
-        'analytics_scope',
-      ] as const
+      // 下钻上下文只有 analyticsDrilldown 一条资料链，参数名与后端查询项保持一致。
       const analyticsQuery = new URLSearchParams(window.location.search)
-      for (const key of analyticsKeys) {
+      for (const key of ANALYTICS_DRILLDOWN_QUERY_KEYS) {
+        if (key === 'source') continue
         const value = analyticsQuery.get(key)
         if (value?.trim()) {
           params[key] = value.trim()

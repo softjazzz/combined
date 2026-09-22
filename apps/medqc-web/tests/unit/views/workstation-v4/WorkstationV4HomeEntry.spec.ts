@@ -107,4 +107,29 @@ describe('WorkstationV4HomeEntry qc agent entry', () => {
     expect(wrapper.find('[data-testid="workstation-v4-view"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="qc-agent-home-entry"]').exists()).toBe(false)
   })
+
+  it('enters the record pool with the analytics drill-down scope instead of the home', () => {
+    routeState.query = {
+      source: 'analytics',
+      department: 'ICU',
+      analytics_scope: 'final',
+      analytics_result_status: 'non_compliant',
+      analytics_rule_id: 'LX0609-010',
+    }
+
+    const wrapper = mountHomeEntry()
+
+    expect(wrapper.find('[data-testid="workstation-v4-view"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="qc-overview-view"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="qc-agent-home-entry"]').exists()).toBe(false)
+  })
+
+  it('keeps the home for a plain department filter without analytics scope', () => {
+    routeState.query = { department: 'ICU', source: 'bookmark' }
+
+    const wrapper = mountHomeEntry()
+
+    expect(wrapper.find('[data-testid="qc-overview-view"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="workstation-v4-view"]').exists()).toBe(false)
+  })
 })

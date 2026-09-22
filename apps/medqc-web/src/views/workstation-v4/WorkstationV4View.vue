@@ -36,6 +36,7 @@
         :qc-summary="qcSummary"
         :record-pool-qc-task="recordPoolQcTask"
         :load-error="loadError"
+        :drilldown-scope-parts="analyticsDrilldownParts"
         @update:active-priority-group="activePriorityGroup = $event"
         @update:search-text="searchText = $event"
         @update:date-range="dateRange = $event"
@@ -55,6 +56,7 @@
         @batch-defer="handleBatchDefer"
         @batch-assign="handleBatchAssign"
         @clear-filters="handleClearFilters"
+        @clear-drilldown="handleClearDrilldown"
         @page-change="handlePageChange"
       />
     </template>
@@ -394,6 +396,12 @@ import { useWorkstationSession } from './composables/useWorkstationSession'
 import { useFrontpageDraft } from './composables/useFrontpageDraft'
 import { useQcPipeline } from './composables/useQcPipeline'
 import { usePatientRecords } from './composables/usePatientRecords'
+import {
+  ANALYTICS_DRILLDOWN_RESET_PATH,
+  describeAnalyticsDrilldown,
+  parseAnalyticsDrilldownFromQuery,
+  resolveAnalyticsDrilldownResetLocation,
+} from './analyticsDrilldown'
 import { useNotifications } from './composables/useNotifications'
 import { pasteFrontpagePresets } from './data/pasteFrontpagePresets'
 import {
@@ -498,6 +506,15 @@ const stageQueues = computed(() => {
 const currentStageFilter = computed<WorkflowStageKey | ''>(() => {
   const stage = String(route.query.stage || '').trim()
   return validStages.includes(stage as WorkflowStageKey) ? (stage as WorkflowStageKey) : ''
+})
+
+// 下钻范围只做展示与退出；过滤事实仍由 URL 参数经 usePatientRecords 下发后端。
+const analyticsDrilldownParts = computed(() => {
+  const drilldown = parseAnalyticsDrilldownFromQuery(route.query as Record<string, unknown>)
+  if (!drilldown) return []
+  const departmentPart =
+    activeDept.value && activeDept.value !== '全部科室' ? [`科室：${activeDept.value}`] : []
+  return [...departmentPart, ...describeAnalyticsDrilldown(drilldown)]
 })
 
 const stageWorklistItems = ref<WorkstationWorklistItem[]>([])
@@ -2418,7 +2435,37 @@ function handleClearFilters() {
     void fetchStageWorklist(currentStageFilter.value)
     return
   }
+  if (analyticsDrilldownParts.value.length) {
+    // 重置筛选必须同时退出下钻并清掉 URL 上的普通筛选，否则列表仍被静默限制。
+    void resetFiltersAndDrilldown()
+    return
+  }
   void fetchData(1)
+}
+
+/**
+ * 退出统计下钻：先去掉 URL 上的 analytics_* 参数，再按当前筛选重新取数。
+ * 该参数是列表下钻过滤的唯一来源，只改本地状态无法真正解除限制。
+ */
+async function clearAnalyticsDrilldown() {
+  if (!analyticsDrilldownParts.value.length) {
+    await fetchData(1)
+    return
+  }
+  await router.replace(
+    resolveAnalyticsDrilldownResetLocation(route.query as Record<string, unknown>),
+  )
+  await fetchData(1)
+}
+
+/** 重置筛选：退出下钻，并清掉 URL 上的普通筛选，回到病历池默认视图。 */
+async function resetFiltersAndDrilldown() {
+  await router.replace({ path: ANALYTICS_DRILLDOWN_RESET_PATH })
+  await fetchData(1)
+}
+
+function handleClearDrilldown() {
+  void clearAnalyticsDrilldown()
 }
 
 function handleHospFilter(value: 'all' | 'inpatient' | 'discharged') {

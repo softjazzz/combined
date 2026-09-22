@@ -31,6 +31,28 @@
                   <span class="h-1.5 w-1.5 rounded-full" />
                   当前阶段：参考首页生成
                 </div>
+                <div
+                  v-if="drilldownScopeParts && drilldownScopeParts.length"
+                  class="wv4-drilldown-context mt-2"
+                  data-testid="workstation-drilldown-scope"
+                >
+                  <span class="wv4-drilldown-context__label">统计下钻范围</span>
+                  <span
+                    v-for="part in drilldownScopeParts"
+                    :key="part"
+                    class="wv4-drilldown-context__part"
+                  >
+                    {{ part }}
+                  </span>
+                  <button
+                    type="button"
+                    class="wv4-drilldown-context__clear"
+                    data-testid="workstation-clear-drilldown"
+                    @click="emit('clear-drilldown')"
+                  >
+                    清除下钻
+                  </button>
+                </div>
               </div>
               <div v-if="isFrontpageGenerateStage" class="wv4-analysis-overview__actions">
                 <a-button
@@ -416,6 +438,8 @@ const props = defineProps<{
   qcSummary: RecordPoolQcSummary
   recordPoolQcTask?: SichuanBatchJob | null
   loadError: boolean
+  /** 来自统计分析等入口的下钻范围标签；为空表示当前不是下钻视图。 */
+  drilldownScopeParts?: string[]
 }>()
 
 const emit = defineEmits<{
@@ -438,6 +462,7 @@ const emit = defineEmits<{
   'batch-defer': [keys: string[]]
   'batch-assign': [keys: string[]]
   'clear-filters': []
+  'clear-drilldown': []
   'page-change': [page: number, pageSize?: number]
 }>()
 
