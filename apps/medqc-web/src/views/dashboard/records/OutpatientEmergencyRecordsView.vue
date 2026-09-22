@@ -3,10 +3,13 @@
     <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
       <div class="apple-metric-card">
         <div class="text-slate-500 text-xs font-medium mb-1">
-          门急诊病历总量
+          当前筛选病历
         </div>
-        <div class="apple-metric-value apple-primary">
-          {{ formatInteger(overviewStats.total_records) }}
+        <div
+          data-testid="outpatient-current-total"
+          class="apple-metric-value apple-primary"
+        >
+          {{ currentRecordTotal }}
         </div>
       </div>
       <div class="apple-metric-card">
@@ -14,7 +17,7 @@
           待处理
         </div>
         <div class="apple-metric-value apple-warning">
-          {{ formatInteger(overviewStats.pending_count) }}
+          暂不可用
         </div>
       </div>
       <div class="apple-metric-card">
@@ -22,7 +25,7 @@
           缺陷总数
         </div>
         <div class="apple-metric-value apple-danger">
-          {{ formatInteger(overviewStats.total_defects) }}
+          暂不可用
         </div>
       </div>
       <div class="apple-metric-card">
@@ -30,16 +33,16 @@
           通过率
         </div>
         <div class="apple-metric-value apple-success">
-          {{ formatRate(overviewStats.pass_rate) }}%
+          暂不可用
         </div>
       </div>
     </div>
 
     <div class="apple-workbench flex flex-col h-[calc(100vh-180px)]">
       <div
-        class="px-6 py-4 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-4"
+        class="px-6 py-4 border-b border-slate-100 flex flex-col gap-4"
       >
-        <div class="flex items-center gap-3 flex-1">
+        <div class="outpatient-toolbar-row flex items-center gap-3">
           <div class="relative">
             <a-input
               v-model:value="searchKeyword"
@@ -108,7 +111,7 @@
           </a-button>
         </div>
 
-        <div class="flex items-center gap-2">
+        <div class="outpatient-toolbar-row flex items-center gap-2">
           <a-button
             :disabled="!selectedRowKeys.length"
             class="!rounded-xl"
@@ -178,7 +181,28 @@
       </div>
 
       <div class="flex-1 overflow-hidden px-6 py-2">
+        <div
+          v-if="listError && !loading"
+          data-testid="outpatient-list-error"
+          role="alert"
+          class="h-full flex flex-col items-center justify-center gap-3 text-center text-slate-600"
+        >
+          <div class="font-medium text-slate-800">
+            门急诊病历暂时无法加载
+          </div>
+          <div class="text-sm">
+            {{ listError }}
+          </div>
+          <a-button
+            data-testid="retry-outpatient-list"
+            type="primary"
+            @click="fetchRecords"
+          >
+            重试
+          </a-button>
+        </div>
         <a-table
+          v-else
           :columns="columns"
           :data-source="records"
           :loading="loading"
@@ -262,18 +286,18 @@ import {
   batchDefectAction,
   exportDefects,
   getDefectList,
-  getAdminOverview,
   getDepartmentList,
   getRecordDetail,
   getOutpatientEmergencyRecordList,
   rejectDefect,
   urgeDefect,
-  type AdminOverviewStats,
   type AdminRecordItem,
 } from '@/api/qcAdmin'
 import OutpatientEmergencyDetailDrawer from './OutpatientEmergencyDetailDrawer.vue'
 
 const loading = ref(false)
+const listError = ref('')
+let recordListRequestSequence = 0
 const searchKeyword = ref('')
 const selectedDepartment = ref<string | undefined>(undefined)
 const selectedStatus = ref<string | undefined>(undefined)
@@ -286,15 +310,6 @@ const detailVisible = ref(false)
 const detailLoading = ref(false)
 const detailRecord = ref<AdminRecordItem | null>(null)
 const detailData = ref<Record<string, unknown> | null>(null)
-
-const overviewStats = ref<AdminOverviewStats>({
-  total_records: 0,
-  archived_count: 0,
-  pending_count: 0,
-  pass_rate: 0,
-  total_defects: 0,
-  defects_by_severity: {},
-})
 
 const pagination = ref({
   current: 1,
@@ -320,6 +335,12 @@ const selectedRecords = computed(() => {
   return records.value.filter((record) => keySet.has(String(record.id)))
 })
 
+const currentRecordTotal = computed(() => {
+  if (loading.value) return '加载中'
+  if (listError.value) return '不可用'
+  return pagination.value.total.toLocaleString()
+})
+
 const columns: TableColumnsType<AdminRecordItem> = [
   { title: '病历号', dataIndex: 'record_id', key: 'recordNumber', width: 140 },
   { title: '患者姓名', dataIndex: 'patient_name', key: 'patient_name', width: 120 },
@@ -331,14 +352,6 @@ const columns: TableColumnsType<AdminRecordItem> = [
   { title: '缺陷数', dataIndex: 'defect_count', key: 'defect_count', width: 100 },
   { title: '操作', key: 'actions', width: 120, fixed: 'right' as const },
 ]
-
-const toNumber = (value: unknown): number => {
-  const num = Number(value)
-  return Number.isFinite(num) ? num : 0
-}
-
-const formatInteger = (value: unknown): string => Math.trunc(toNumber(value)).toLocaleString()
-const formatRate = (value: unknown): string => toNumber(value).toFixed(1)
 
 const getStatusText = (status: string) => {
   const map: Record<string, string> = {
@@ -360,26 +373,6 @@ const getStatusColor = (status: string) => {
   return map[status] || 'default'
 }
 
-const loadOverview = async () => {
-  const res = await getAdminOverview({
-    department: selectedDepartment.value,
-    start_date: dateRange.value?.[0]?.format?.('YYYY-MM-DD'),
-    end_date: dateRange.value?.[1]?.format?.('YYYY-MM-DD'),
-  })
-  if (res.success && res.data) {
-    overviewStats.value = {
-      ...overviewStats.value,
-      ...res.data,
-      total_records: toNumber(res.data.total_records),
-      archived_count: toNumber(res.data.archived_count),
-      pending_count: toNumber(res.data.pending_count),
-      pass_rate: toNumber(res.data.pass_rate),
-      total_defects: toNumber(res.data.total_defects),
-      defects_by_severity: res.data.defects_by_severity || {},
-    }
-  }
-}
-
 const loadDepartments = async () => {
   const res = await getDepartmentList()
   if (res.success && res.data) {
@@ -388,7 +381,9 @@ const loadDepartments = async () => {
 }
 
 const fetchRecords = async () => {
+  const requestSequence = ++recordListRequestSequence
   loading.value = true
+  listError.value = ''
   try {
     const res = await getOutpatientEmergencyRecordList({
       keyword: searchKeyword.value || undefined,
@@ -399,17 +394,31 @@ const fetchRecords = async () => {
       page: pagination.value.current,
       page_size: pagination.value.pageSize,
     })
+    if (requestSequence !== recordListRequestSequence) {
+      return
+    }
     if (res.success && res.data) {
       records.value = res.data.items || []
       pagination.value.total = res.data.total || 0
       return
     }
     records.value = []
+    selectedRowKeys.value = []
     pagination.value.total = 0
+    listError.value = res.message || '获取门急诊病历失败，请稍后重试'
   } catch {
-    message.error('获取门急诊病历失败')
+    if (requestSequence !== recordListRequestSequence) {
+      return
+    }
+    records.value = []
+    selectedRowKeys.value = []
+    pagination.value.total = 0
+    listError.value = '获取门急诊病历失败，请稍后重试'
+    message.error(listError.value)
   } finally {
-    loading.value = false
+    if (requestSequence === recordListRequestSequence) {
+      loading.value = false
+    }
   }
 }
 
@@ -426,12 +435,10 @@ const resetFilters = () => {
   pagination.value.current = 1
   selectedRowKeys.value = []
   fetchRecords()
-  loadOverview()
 }
 
 const handleRefresh = () => {
   fetchRecords()
-  loadOverview()
 }
 
 const resolveRecordId = (record: AdminRecordItem): string => {
@@ -632,12 +639,10 @@ const handleTableChange = (pag: { current?: number; pageSize?: number }) => {
 watch([selectedDepartment, selectedStatus, dateRange], () => {
   pagination.value.current = 1
   fetchRecords()
-  loadOverview()
 })
 
 onMounted(() => {
   loadDepartments()
-  loadOverview()
   fetchRecords()
 })
 </script>
@@ -658,6 +663,15 @@ onMounted(() => {
   padding: 16px;
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.045);
   backdrop-filter: blur(18px);
+}
+
+.outpatient-toolbar-row {
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.outpatient-toolbar-row > * {
+  max-width: 100%;
 }
 
 .apple-metric-value {

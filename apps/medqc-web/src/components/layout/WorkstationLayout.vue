@@ -96,6 +96,15 @@
               </template>
               <span>统计分析</span>
             </a-menu-item>
+            <a-menu-item
+              v-if="canAccessOutpatientEmergency"
+              key="/workstation-v5/records/outpatient-emergency"
+            >
+              <template #icon>
+                <Stethoscope class="sidebar-icon" />
+              </template>
+              <span>门急诊病历</span>
+            </a-menu-item>
             <a-menu-item key="/workstation-v5/records/running">
               <template #icon>
                 <PlayCircle class="sidebar-icon" />
@@ -444,6 +453,7 @@ import {
   Settings,
   Shield,
   ShieldCheck,
+  Stethoscope,
   Workflow,
 } from 'lucide-vue-next'
 
@@ -474,6 +484,7 @@ const currentPageTitle = computed(() => {
     '/workstation-v5/data': '数据管理',
     '/workstation-v5/rules': '质控规则管理',
     '/workstation-v5/rules/custom-workspace': '自定义质控点',
+    '/workstation-v5/records/outpatient-emergency': '门急诊病历',
     '/workstation-v5/records/running': '运行病历',
     '/workstation-v5/records/final': '终末病历质控',
     '/workstation-v5/qc-feedback-demo': '质控反馈记录',
@@ -508,6 +519,9 @@ const isDemoFeedbackAccount = computed(
 )
 
 const isQcOverviewRoute = computed(() => route.path === '/workstation-v5/qc-overview')
+const canAccessOutpatientEmergency = computed(() =>
+  authStore.userRoles.some((role) => ['admin', 'qc_manager'].includes(role)),
+)
 
 // 方法
 async function navigateTo(path: string, query?: Record<string, string>) {
@@ -601,6 +615,12 @@ watch(
       return
     }
     selectedKeys.value = [base]
+    if (
+      base === '/workstation-v5/records/outpatient-emergency' &&
+      !openKeys.value.includes('workstation-sub')
+    ) {
+      openKeys.value = [...openKeys.value, 'workstation-sub']
+    }
   },
   { immediate: true },
 )

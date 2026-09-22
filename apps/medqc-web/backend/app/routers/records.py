@@ -599,22 +599,27 @@ async def get_outpatient_emergency_records(
       total, page, page_size
     }
     """
-    supabase = get_supabase()
-    settings = get_settings()
     rows: List[Dict[str, Any]] = []
 
     try:
-        if supabase:
-            try:
-                resp = await async_execute(
-                    supabase.table(settings.RECORDS_TABLE).select("*").limit(5000)
-                )
-                rows = list(getattr(resp, "data", None) or [])
-            except Exception as exc:
-                logger.warning("读取门急诊病历失败，降级内存数据: %s", exc)
-                rows = list(medical_records_db.values())
-        else:
-            rows = list(medical_records_db.values())
+        supabase = get_supabase()
+        settings = get_settings()
+        if not supabase:
+            raise HTTPException(
+                status_code=StatusCode.SERVICE_UNAVAILABLE,
+                detail="门急诊病历数据源暂不可用，请稍后重试",
+            )
+        try:
+            resp = await async_execute(
+                supabase.table(settings.RECORDS_TABLE).select("*").limit(5000)
+            )
+            rows = list(getattr(resp, "data", None) or [])
+        except Exception as exc:
+            logger.error("读取门急诊病历数据源失败: %s", exc)
+            raise HTTPException(
+                status_code=StatusCode.SERVICE_UNAVAILABLE,
+                detail="门急诊病历数据源暂不可用，请稍后重试",
+            ) from exc
 
         normalized = [_normalize_outpatient_item(r) for r in rows]
         normalized = [r for r in normalized if r.get("visit_type") in {"outpatient", "emergency"}]
@@ -658,6 +663,8 @@ async def get_outpatient_emergency_records(
             message="获取门急诊病历成功",
             trace_id=get_trace_id(request),
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=StatusCode.INTERNAL_SERVER_ERROR,
