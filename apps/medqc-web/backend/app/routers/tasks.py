@@ -26,7 +26,6 @@ from ..schemas.tasks import (
     TaskAssignRequest,
     TaskRecordUpdateRequest,
     TaskStatus,
-    TaskRecordStatus,
 )
 from ..core.supabase_client import get_supabase, async_execute
 from ..core.audit import audit_event
@@ -507,7 +506,13 @@ async def execute_sampling(
     """
     执行抽样 — 根据任务配置从病历库中抽取病历
     """
+    from anyio import to_thread
     from ..services.task_sampling_service import TaskSamplingService
+    from ..services.task_sampling_persistence import (
+        SamplingConflict,
+        SamplingTaskNotFound,
+        save_task_sample,
+    )
 
     # 获取任务信息
     sb = get_supabase()
@@ -527,58 +532,36 @@ async def execute_sampling(
     if task is None:
         raise HTTPException(status_code=404, detail=f"任务 {task_id} 不存在")
 
-    # 执行抽样
-    sampling_service = TaskSamplingService()
-    try:
-        sampled_records = await sampling_service.sample(task)
-    except NotImplementedError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail="候选病历数据源不可用，请稍后重试") from exc
+    if task.get("status") not in {TaskStatus.DRAFT.value, TaskStatus.SAMPLING.value}:
+        raise HTTPException(status_code=409, detail="当前任务状态不允许抽样")
 
-    # 创建任务-病历关联
-    task_records = []
-    for record in sampled_records:
-        tr = {
-            "id": str(uuid.uuid4()),
-            "task_id": task_id,
-            "record_id": record.get("id", record.get("record_id", "")),
-            "assignee_id": None,
-            "assignee_name": None,
-            "status": TaskRecordStatus.PENDING.value,
-            "created_at": datetime.now().isoformat(),
-        }
-        task_records.append(tr)
-
-    # 保存到数据库
-    if task_records:
+    # 已保存的抽样结果由事务层重放，不能再次查询候选或生成新随机样本。
+    sampled_records = []
+    if task.get("status") == TaskStatus.DRAFT.value:
+        sampling_service = TaskSamplingService()
         try:
-            await async_execute(sb.table('qc_task_records').insert(task_records))
-        except Exception as exc:
-            logger.error("保存任务病历关联失败", exc_info=True)
-            raise HTTPException(status_code=503, detail="保存抽样结果失败，请稍后重试") from exc
+            sampled_records = await sampling_service.sample(task)
+        except NotImplementedError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail="候选病历数据源不可用，请稍后重试") from exc
 
-    # 更新任务状态
-    update_data = {
-        "status": TaskStatus.SAMPLING.value,
-        "total_records": len(task_records),
-        "updated_at": datetime.now().isoformat(),
-    }
+    # 保存只调用一次；不能使用会在异常后重试 execute 的兼容适配器。
     try:
-        await async_execute(sb.table('qc_tasks').update(update_data).eq('id', task_id))
+        saved_sample = await to_thread.run_sync(save_task_sample, task, sampled_records)
+    except SamplingTaskNotFound as exc:
+        raise HTTPException(status_code=404, detail="任务不存在") from exc
+    except SamplingConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except Exception as exc:
-        logger.error("更新任务抽样状态失败", exc_info=True)
-        raise HTTPException(status_code=503, detail="抽样状态保存失败，请刷新任务核对结果") from exc
+        logger.error("原子保存抽样结果失败", exc_info=True)
+        raise HTTPException(status_code=503, detail="保存抽样结果失败，请刷新任务后重试") from exc
 
     return success_response(
-        data={
-            "task_id": task_id,
-            "sampled_count": len(task_records),
-            "records": task_records[:20],
-        },
-        message=f"抽样完成，共抽取 {len(task_records)} 条病历",
+        data=saved_sample,
+        message=f"抽样完成，共抽取 {saved_sample['sampled_count']} 条病历",
         trace_id=get_trace_id(request),
     )
 

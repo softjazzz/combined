@@ -1,0 +1,435 @@
+from __future__ import annotations
+
+import json
+from contextlib import contextmanager
+
+import pytest
+from sqlalchemy import Column, Integer, MetaData, String, Table, Text, create_engine, event, select
+from sqlalchemy.dialects import postgresql
+from sqlalchemy.orm import sessionmaker
+
+from app.services import task_sampling_persistence as persistence
+
+
+@pytest.fixture
+def database(monkeypatch):
+    engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
+    metadata = MetaData()
+    tasks = Table(
+        "qc_tasks",
+        metadata,
+        Column("id", String, primary_key=True),
+        Column("scene", String),
+        Column("status", String, nullable=False),
+        Column("total_records", Integer, nullable=False, default=0),
+        Column("date_range", Text),
+        Column("department_filter", Text),
+        Column("record_ids", Text),
+        Column("sampling_method", String),
+        Column("sampling_config", Text),
+        Column("updated_at", String),
+    )
+    records = Table(
+        "qc_task_records",
+        metadata,
+        Column("id", String, primary_key=True),
+        Column("task_id", String, nullable=False),
+        Column("record_id", String, nullable=False),
+        Column("assignee_id", String),
+        Column("assignee_name", String),
+        Column("status", String, nullable=False),
+        Column("defect_count", Integer, nullable=False),
+        Column("created_at", String, nullable=False),
+    )
+    metadata.create_all(engine)
+    factory = sessionmaker(bind=engine, future=True)
+    monkeypatch.setattr(persistence, "SessionLocal", factory)
+    yield engine, factory, tasks, records
+    engine.dispose()
+
+
+def task_snapshot(task_id: str = "task-1", **overrides):
+    task = {
+        "id": task_id,
+        "scene": None,
+        "status": "draft",
+        "total_records": 0,
+        "date_range": {"start": "2026-09-01", "end": "2026-09-22"},
+        "department_filter": ["内科"],
+        "record_ids": [],
+        "sampling_method": "all",
+        "sampling_config": {},
+        "updated_at": "2026-09-22T08:00:00",
+    }
+    task.update(overrides)
+    return task
+
+
+def insert_task(engine, tasks, task: dict):
+    stored = dict(task)
+    for field in ("date_range", "department_filter", "record_ids", "sampling_config"):
+        if not isinstance(stored.get(field), str):
+            stored[field] = json.dumps(stored.get(field), ensure_ascii=False)
+    with engine.begin() as connection:
+        connection.execute(tasks.insert().values(**stored))
+
+
+def read_state(engine, tasks, records, task_id="task-1"):
+    with engine.connect() as connection:
+        task = connection.execute(select(tasks).where(tasks.c.id == task_id)).mappings().first()
+        saved = connection.execute(
+            select(records).where(records.c.task_id == task_id).order_by(records.c.created_at, records.c.id)
+        ).mappings().all()
+    return dict(task) if task else None, [dict(item) for item in saved]
+
+
+@contextmanager
+def fail_statement(engine, prefix: str):
+    def before_cursor_execute(_conn, _cursor, statement, _parameters, _context, _executemany):
+        if statement.lstrip().upper().startswith(prefix):
+            raise RuntimeError(f"forced {prefix} failure")
+
+    event.listen(engine, "before_cursor_execute", before_cursor_execute)
+    try:
+        yield
+    finally:
+        event.remove(engine, "before_cursor_execute", before_cursor_execute)
+
+
+def test_successfully_saves_records_and_task_state(database):
+    engine, _factory, tasks, records = database
+    snapshot = task_snapshot()
+    insert_task(engine, tasks, snapshot)
+
+    result = persistence.save_task_sample(snapshot, [{"id": "r-1"}, {"record_id": "r-2"}])
+
+    task, saved = read_state(engine, tasks, records)
+    assert result["task_id"] == "task-1"
+    assert result["sampled_count"] == 2
+    assert {item["record_id"] for item in result["records"]} == {"r-1", "r-2"}
+    assert task["status"] == "sampling" and task["total_records"] == 2
+    assert {item["record_id"] for item in saved} == {"r-1", "r-2"}
+    assert all(
+        item["status"] == "pending"
+        and item["assignee_id"] is None
+        and item["defect_count"] == 0
+        for item in saved
+    )
+
+
+def test_zero_records_is_committed_as_replayable_sampling(database):
+    engine, _factory, tasks, records = database
+    snapshot = task_snapshot()
+    insert_task(engine, tasks, snapshot)
+
+    first = persistence.save_task_sample(snapshot, [])
+    second = persistence.save_task_sample(snapshot, [{"id": "ignored-on-replay"}])
+
+    task, saved = read_state(engine, tasks, records)
+    assert first == second == {"task_id": "task-1", "sampled_count": 0, "records": []}
+    assert task["status"] == "sampling" and task["total_records"] == 0
+    assert saved == []
+
+
+def test_response_is_limited_to_first_twenty_records(database):
+    engine, _factory, tasks, records = database
+    snapshot = task_snapshot()
+    insert_task(engine, tasks, snapshot)
+
+    result = persistence.save_task_sample(snapshot, [{"id": f"r-{index:02d}"} for index in range(25)])
+    replay = persistence.save_task_sample(snapshot, [{"id": "ignored"}])
+
+    task, saved = read_state(engine, tasks, records)
+    assert result["sampled_count"] == 25 and len(result["records"]) == 20
+    assert replay == result
+    assert task["total_records"] == len(saved) == 25
+
+
+@pytest.mark.parametrize("prefix", ["INSERT INTO QC_TASK_RECORDS", "UPDATE QC_TASKS"])
+def test_statement_failure_rolls_back_all_changes(database, prefix):
+    engine, _factory, tasks, records = database
+    snapshot = task_snapshot()
+    insert_task(engine, tasks, snapshot)
+
+    with fail_statement(engine, prefix), pytest.raises(RuntimeError, match="forced"):
+        persistence.save_task_sample(snapshot, [{"id": "r-1"}])
+
+    task, saved = read_state(engine, tasks, records)
+    assert task["status"] == "draft" and task["total_records"] == 0
+    assert saved == []
+
+
+@pytest.mark.parametrize(
+    ("trigger_name", "timing"),
+    [
+        ("ignore_record_insert", "BEFORE INSERT ON qc_task_records"),
+        ("ignore_task_update", "BEFORE UPDATE ON qc_tasks"),
+    ],
+)
+def test_zero_affected_rows_is_rejected_and_rolled_back(database, trigger_name, timing):
+    engine, _factory, tasks, records = database
+    snapshot = task_snapshot()
+    insert_task(engine, tasks, snapshot)
+    with engine.begin() as connection:
+        connection.exec_driver_sql(
+            f"CREATE TRIGGER {trigger_name} {timing} BEGIN SELECT RAISE(IGNORE); END"
+        )
+
+    with pytest.raises(RuntimeError, match="写入数量不完整|状态更新失败"):
+        persistence.save_task_sample(snapshot, [{"id": "r-1"}])
+
+    task, saved = read_state(engine, tasks, records)
+    assert task["status"] == "draft" and task["total_records"] == 0
+    assert saved == []
+
+
+def test_commit_failure_rolls_back_all_changes(database, monkeypatch):
+    engine, factory, tasks, records = database
+    snapshot = task_snapshot()
+    insert_task(engine, tasks, snapshot)
+
+    def failing_factory():
+        session = factory()
+
+        def fail_commit(_session):
+            raise RuntimeError("forced commit failure")
+
+        event.listen(session, "before_commit", fail_commit, once=True)
+        return session
+
+    monkeypatch.setattr(persistence, "SessionLocal", failing_factory)
+    with pytest.raises(RuntimeError, match="forced commit failure"):
+        persistence.save_task_sample(snapshot, [{"id": "r-1"}])
+
+    task, saved = read_state(engine, tasks, records)
+    assert task["status"] == "draft" and task["total_records"] == 0
+    assert saved == []
+
+
+def test_sampling_replay_returns_saved_ids_without_writes_or_snapshot_comparison(database):
+    engine, _factory, tasks, records = database
+    snapshot = task_snapshot(status="sampling", total_records=2)
+    insert_task(engine, tasks, snapshot)
+    existing = [
+        {
+            "id": "saved-1",
+            "task_id": "task-1",
+            "record_id": "r-1",
+            "assignee_id": None,
+            "assignee_name": None,
+            "status": "pending",
+            "defect_count": 0,
+            "created_at": "2026-09-22T08:00:00",
+        },
+        {
+            "id": "saved-2",
+            "task_id": "task-1",
+            "record_id": "r-2",
+            "assignee_id": None,
+            "assignee_name": None,
+            "status": "pending",
+            "defect_count": 0,
+            "created_at": "2026-09-22T08:00:01",
+        },
+    ]
+    with engine.begin() as connection:
+        connection.execute(records.insert(), existing)
+
+    replay = persistence.save_task_sample(
+        task_snapshot(sampling_method="percentage", sampling_config={"percentage": 99}),
+        [{"id": "must-not-be-written"}],
+    )
+
+    _task, saved = read_state(engine, tasks, records)
+    assert replay["sampled_count"] == 2
+    assert [item["id"] for item in replay["records"]] == ["saved-1", "saved-2"]
+    assert [item["id"] for item in saved] == ["saved-1", "saved-2"]
+
+
+def test_sampling_replay_rejects_count_mismatch(database):
+    engine, _factory, tasks, records = database
+    insert_task(engine, tasks, task_snapshot(status="sampling", total_records=1))
+
+    with pytest.raises(persistence.SamplingConflict, match="数量与已保存关联不一致"):
+        persistence.save_task_sample(task_snapshot(), [])
+
+    _task, saved = read_state(engine, tasks, records)
+    assert saved == []
+
+
+def test_sampling_snapshot_cannot_overwrite_task_changed_back_to_draft(database):
+    engine, _factory, tasks, records = database
+    locked_task = task_snapshot(status="draft")
+    insert_task(engine, tasks, locked_task)
+    stale_snapshot = task_snapshot(status="sampling")
+
+    with pytest.raises(persistence.SamplingConflict, match="任务状态已变化"):
+        persistence.save_task_sample(stale_snapshot, [])
+
+    task, saved = read_state(engine, tasks, records)
+    assert task["status"] == "draft" and task["total_records"] == 0
+    assert saved == []
+
+
+def test_draft_with_legacy_records_is_rejected_without_changes(database):
+    engine, _factory, tasks, records = database
+    snapshot = task_snapshot()
+    insert_task(engine, tasks, snapshot)
+    legacy = {
+        "id": "legacy",
+        "task_id": "task-1",
+        "record_id": "r-old",
+        "assignee_id": None,
+        "assignee_name": None,
+        "status": "pending",
+        "defect_count": 0,
+        "created_at": "2026-09-22T08:00:00",
+    }
+    with engine.begin() as connection:
+        connection.execute(records.insert().values(**legacy))
+
+    with pytest.raises(persistence.SamplingConflict, match="已存在抽样关联"):
+        persistence.save_task_sample(snapshot, [{"id": "r-new"}])
+
+    task, saved = read_state(engine, tasks, records)
+    assert task["status"] == "draft" and [item["id"] for item in saved] == ["legacy"]
+
+
+def test_missing_task_uses_narrow_not_found_exception(database):
+    with pytest.raises(persistence.SamplingTaskNotFound):
+        persistence.save_task_sample(task_snapshot("missing"), [])
+
+
+@pytest.mark.parametrize("status", ["assigned", "in_progress", "completed", "cancelled"])
+def test_non_draft_status_is_rejected(database, status):
+    engine, _factory, tasks, records = database
+    insert_task(engine, tasks, task_snapshot(status=status))
+
+    with pytest.raises(persistence.SamplingConflict, match="不允许执行抽样"):
+        persistence.save_task_sample(task_snapshot(status=status), [{"id": "r-1"}])
+
+    task, saved = read_state(engine, tasks, records)
+    assert task["status"] == status and saved == []
+
+
+def test_non_null_scene_is_rejected_before_writes(database):
+    engine, _factory, tasks, records = database
+    snapshot = task_snapshot(scene="running")
+    insert_task(engine, tasks, snapshot)
+
+    with pytest.raises(persistence.SamplingConflict, match="场景抽样暂不可用"):
+        persistence.save_task_sample(snapshot, [{"id": "r-1"}])
+
+    task, saved = read_state(engine, tasks, records)
+    assert task["status"] == "draft" and saved == []
+
+
+def test_non_null_scene_is_also_rejected_for_sampling_replay(database):
+    engine, _factory, tasks, records = database
+    snapshot = task_snapshot(scene="running", status="sampling", total_records=0)
+    insert_task(engine, tasks, snapshot)
+
+    with pytest.raises(persistence.SamplingConflict, match="场景抽样暂不可用"):
+        persistence.save_task_sample(snapshot, [])
+
+    task, saved = read_state(engine, tasks, records)
+    assert task["status"] == "sampling" and saved == []
+
+
+@pytest.mark.parametrize(
+    ("field", "changed_value"),
+    [
+        ("scene", "running"),
+        ("date_range", {"start": "2026-09-02", "end": "2026-09-22"}),
+        ("department_filter", ["外科"]),
+        ("record_ids", ["r-fixed"]),
+        ("sampling_method", "percentage"),
+        ("sampling_config", {"percentage": 20}),
+    ],
+)
+def test_snapshot_drift_is_rejected_for_every_authoritative_field(
+    database, field, changed_value
+):
+    engine, _factory, tasks, records = database
+    snapshot = task_snapshot()
+    insert_task(engine, tasks, snapshot)
+    snapshot[field] = changed_value
+    with pytest.raises(persistence.SamplingConflict, match=field):
+        persistence.save_task_sample(snapshot, [])
+
+    task, saved = read_state(engine, tasks, records)
+    assert task["status"] == "draft" and saved == []
+
+
+@pytest.mark.parametrize(
+    "candidate_records",
+    [[{"name": "missing"}], [{"id": "  "}], [{"id": "r-1"}, {"id": "r-1"}]],
+)
+def test_candidate_ids_must_be_nonempty_and_unique(database, candidate_records):
+    engine, _factory, tasks, records = database
+    snapshot = task_snapshot()
+    insert_task(engine, tasks, snapshot)
+
+    with pytest.raises(persistence.SamplingConflict):
+        persistence.save_task_sample(snapshot, candidate_records)
+
+    task, saved = read_state(engine, tasks, records)
+    assert task["status"] == "draft" and saved == []
+
+
+def test_legacy_task_table_without_scene_column_remains_compatible(monkeypatch):
+    engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
+    metadata = MetaData()
+    tasks = Table(
+        "qc_tasks",
+        metadata,
+        Column("id", String, primary_key=True),
+        Column("status", String, nullable=False),
+        Column("total_records", Integer, nullable=False),
+        Column("date_range", Text),
+        Column("department_filter", Text),
+        Column("record_ids", Text),
+        Column("sampling_method", String),
+        Column("sampling_config", Text),
+        Column("updated_at", String),
+    )
+    records = Table(
+        "qc_task_records",
+        metadata,
+        Column("id", String, primary_key=True),
+        Column("task_id", String, nullable=False),
+        Column("record_id", String, nullable=False),
+        Column("assignee_id", String),
+        Column("assignee_name", String),
+        Column("status", String, nullable=False),
+        Column("defect_count", Integer, nullable=False),
+        Column("created_at", String, nullable=False),
+    )
+    metadata.create_all(engine)
+    factory = sessionmaker(bind=engine, future=True)
+    monkeypatch.setattr(persistence, "SessionLocal", factory)
+    snapshot = task_snapshot()
+    stored = {key: value for key, value in snapshot.items() if key != "scene"}
+    for field in ("date_range", "department_filter", "record_ids", "sampling_config"):
+        stored[field] = json.dumps(stored[field], ensure_ascii=False)
+    with engine.begin() as connection:
+        connection.execute(tasks.insert().values(**stored))
+
+    result = persistence.save_task_sample(snapshot, [{"id": "r-1"}])
+
+    task, saved = read_state(engine, tasks, records)
+    assert result["sampled_count"] == 1
+    assert task["status"] == "sampling" and len(saved) == 1
+    engine.dispose()
+
+
+def test_lock_statement_compiles_to_postgresql_for_update():
+    sql = str(
+        persistence._lock_task_statement("task-1").compile(
+            dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}
+        )
+    )
+
+    assert "SELECT *" in sql
+    assert "FROM qc_tasks" in sql
+    assert "FOR UPDATE" in sql

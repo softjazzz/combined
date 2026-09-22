@@ -14,11 +14,14 @@ from app.services.task_sampling_service import TaskSamplingService
 
 class Database:
     def __init__(self, task=None, records=None, fail=None):
-        self.task = task
+        self.task = {"status": "draft", **task} if task is not None else None
         self.records = records or []
         self.fail = fail
         self.calls = []
         self.writes = []
+        self.save_calls = []
+        self.save_error = None
+        self.saved_result = None
 
     def table(self, name):
         return Query(self, name)
@@ -71,9 +74,24 @@ class Query:
 
 
 def wire(monkeypatch, db):
+    from app.services import task_sampling_persistence
+
     async def execute(query):
         return query.execute()
 
+    def save(task, records):
+        db.save_calls.append((task, records))
+        if db.save_error is not None:
+            raise db.save_error
+        if db.fail in {("qc_task_records", "insert"), ("qc_tasks", "update")}:
+            raise RuntimeError("internal database persistence detail")
+        return db.saved_result or {
+            "task_id": task["id"],
+            "sampled_count": len(records),
+            "records": records[:20],
+        }
+
+    monkeypatch.setattr(task_sampling_persistence, "save_task_sample", save)
     monkeypatch.setattr(supabase_client, "get_supabase", lambda: db)
     monkeypatch.setattr(supabase_client, "async_execute", execute)
     monkeypatch.setattr(tasks, "get_supabase", lambda: db)
@@ -160,6 +178,8 @@ def test_route_persistence_failure_does_not_report_success(monkeypatch, failure)
     response = wire(monkeypatch, db).post("/api/v1/tasks/task-1/sample")
     assert response.status_code == 503
     assert "internal database" not in response.text
+    assert len(db.save_calls) == 1
+    assert db.writes == []
 
 
 def test_route_successful_empty_candidates_is_distinct_from_failure(monkeypatch):
@@ -167,5 +187,46 @@ def test_route_successful_empty_candidates_is_distinct_from_failure(monkeypatch)
     response = wire(monkeypatch, db).post("/api/v1/tasks/task-1/sample")
     assert response.status_code == 200
     assert response.json()["data"]["sampled_count"] == 0
-    assert len(db.writes) == 1
-    assert db.writes[0][0] == ("qc_tasks", "update")
+    assert len(db.save_calls) == 1
+    assert db.save_calls[0][1] == []
+    assert db.writes == []
+
+
+@pytest.mark.parametrize("status", ["assigned", "in_progress", "completed", "cancelled", "unknown", None])
+def test_route_rejects_non_draft_states_before_candidate_read(monkeypatch, status):
+    db = Database(task={"id": "task-1", "status": status})
+    response = wire(monkeypatch, db).post("/api/v1/tasks/task-1/sample")
+    assert response.status_code == 409
+    assert db.calls == [("qc_tasks", "select")]
+    assert db.save_calls == []
+
+
+def test_route_sampling_retry_replays_persisted_result_without_candidates(monkeypatch):
+    db = Database(task={"id": "task-1", "status": "sampling"}, fail=("medical_records", "select"))
+    db.saved_result = {
+        "task_id": "task-1",
+        "sampled_count": 1,
+        "records": [{"id": "saved-assignment", "record_id": "first-sampled-record"}],
+    }
+    response = wire(monkeypatch, db).post("/api/v1/tasks/task-1/sample")
+    assert response.status_code == 200
+    assert response.json()["data"] == db.saved_result
+    assert db.calls == [("qc_tasks", "select")]
+    assert db.save_calls == [(db.task, [])]
+
+
+@pytest.mark.parametrize("kind,code", [("missing", 404), ("conflict", 409), ("driver", 503)])
+def test_route_maps_transaction_failure_without_retry(monkeypatch, kind, code):
+    from app.services.task_sampling_persistence import SamplingConflict, SamplingTaskNotFound
+
+    db = Database(task={"id": "task-1"}, records=[{"id": "record-1"}])
+    db.save_error = {
+        "missing": SamplingTaskNotFound("missing"),
+        "conflict": SamplingConflict("任务状态已变化"),
+        "driver": ValueError("internal driver implementation detail"),
+    }[kind]
+    response = wire(monkeypatch, db).post("/api/v1/tasks/task-1/sample")
+    assert response.status_code == code
+    assert len(db.save_calls) == 1
+    assert "internal driver" not in response.text
+    assert db.writes == []
