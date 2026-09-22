@@ -16,10 +16,13 @@
         <div class="flex items-center justify-between">
           <div>
             <p class="text-gray-600 text-sm mb-1">
-              待处理
+              未开始任务
             </p>
-            <p class="text-3xl font-bold text-orange-600">
-              {{ taskStats.draft }}
+            <p
+              data-testid="pending-task-count"
+              class="text-3xl font-bold text-orange-600"
+            >
+              {{ formatStatValue(pendingTaskCount) }}
             </p>
           </div>
           <div class="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
@@ -35,7 +38,7 @@
               进行中
             </p>
             <p class="text-3xl font-bold text-blue-600">
-              {{ taskStats.in_progress }}
+              {{ formatStatValue(taskStats?.in_progress ?? null) }}
             </p>
           </div>
           <div class="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
@@ -51,7 +54,7 @@
               已完成
             </p>
             <p class="text-3xl font-bold text-green-600">
-              {{ taskStats.completed }}
+              {{ formatStatValue(taskStats?.completed ?? null) }}
             </p>
           </div>
           <div class="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
@@ -67,7 +70,7 @@
               完成率
             </p>
             <p class="text-3xl font-bold text-purple-600">
-              {{ completionRate }}%
+              {{ formatStatValue(completionRate, '%') }}
             </p>
           </div>
           <div class="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
@@ -75,6 +78,24 @@
           </div>
         </div>
       </div>
+    </div>
+
+    <div
+      v-if="statsError"
+      data-testid="task-stats-error"
+      role="alert"
+      class="flex items-center justify-between gap-4 rounded-lg border border-red-100 bg-red-50 px-4 py-3 mb-8 text-sm text-red-700"
+    >
+      <span>任务统计暂不可用：{{ statsError }}</span>
+      <a-button
+        data-testid="retry-task-stats"
+        size="small"
+        :loading="statsLoading"
+        @click="fetchStats"
+      >
+        <ReloadOutlined />
+        重试
+      </a-button>
     </div>
 
     <!-- 快捷操作 -->
@@ -93,14 +114,16 @@
           <span class="ml-2">开始任务</span>
         </a-button>
         <a-button
+          data-testid="pending-task-action"
           size="large"
           class="rounded-lg h-16"
-          @click="handleViewByStatus('pending')"
+          @click="handleViewByStatus('assigned')"
         >
           <ClockCircleOutlined class="text-lg" />
-          <span class="ml-2">待处理任务</span>
+          <span class="ml-2">未开始任务</span>
         </a-button>
         <a-button
+          data-testid="completed-task-action"
           size="large"
           class="rounded-lg h-16"
           @click="handleViewByStatus('completed')"
@@ -173,6 +196,7 @@
           任务列表
         </h2>
         <a-button
+          data-testid="refresh-task-list"
           type="primary"
           :loading="loading"
           class="rounded-lg"
@@ -340,11 +364,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
-import type { TableColumnsType } from 'ant-design-vue'
+import type { TableColumnsType, TablePaginationConfig } from 'ant-design-vue'
 import type { Dayjs } from 'dayjs'
 import { useRouter } from 'vue-router'
-import { getTaskList, getTaskStats, getTaskDetail, getTaskProgress, updateTask } from '@/api/tasks'
-import type { TaskItem, TaskStats, TaskProgress } from '@/api/tasks'
+import { getTaskList, getTaskStats, getTaskProgress, updateTask } from '@/api/tasks'
+import type { TaskItem, TaskStats, TaskProgress, TaskStatus } from '@/api/tasks'
 import {
   ClockCircleOutlined,
   SyncOutlined,
@@ -365,24 +389,25 @@ const router = useRouter()
 
 // 响应式数据
 const loading = ref(false)
-const selectedStatus = ref<string | undefined>(undefined)
+const selectedStatus = ref<TaskStatus | undefined>(undefined)
 const searchKeyword = ref('')
 type DateRange = [Dayjs, Dayjs] | null
 const dateRange = ref<DateRange>(null)
 const tasks = ref<TaskItem[]>([])
 
 // 统计
-const taskStats = ref<TaskStats>({
-  total: 0,
-  by_status: {},
-  draft: 0,
-  in_progress: 0,
-  completed: 0,
-  cancelled: 0,
-})
+const taskStats = ref<TaskStats | null>(null)
+const statsLoading = ref(false)
+const statsError = ref('')
+let statsRequestId = 0
+
+const pendingTaskCount = computed(() =>
+  taskStats.value ? (taskStats.value.by_status.assigned ?? 0) : null,
+)
 
 // 完成率
 const completionRate = computed(() => {
+  if (!taskStats.value) return null
   const total = taskStats.value.total
   if (!total) return 0
   return Math.round((taskStats.value.completed / total) * 1000) / 10
@@ -476,16 +501,35 @@ const formatDate = (dateStr: string) => {
   }
 }
 
+const formatStatValue = (value: number | null, suffix = '') => {
+  if (statsLoading.value) return '加载中'
+  if (value === null) return '不可用'
+  return `${value}${suffix}`
+}
+
 // ====== 数据获取 ======
 
 const fetchStats = async () => {
+  const requestId = ++statsRequestId
+  statsLoading.value = true
+  statsError.value = ''
   try {
-    const res = await getTaskStats()
+    const res = await getTaskStats({ tab: 'received' })
+    if (requestId !== statsRequestId) return
     if (res.success && res.data) {
-      taskStats.value = res.data as TaskStats
+      taskStats.value = res.data
+    } else {
+      taskStats.value = null
+      statsError.value = res.message || '获取任务统计失败'
     }
-  } catch (err) {
-    console.error('获取任务统计失败:', err)
+  } catch {
+    if (requestId !== statsRequestId) return
+    taskStats.value = null
+    statsError.value = '网络异常或服务器不可用'
+  } finally {
+    if (requestId === statsRequestId) {
+      statsLoading.value = false
+    }
   }
 }
 
@@ -495,13 +539,13 @@ const fetchTasks = async () => {
     const res = await getTaskList({
       tab: 'received',
       keyword: searchKeyword.value || undefined,
-      status: selectedStatus.value as any,
+      status: selectedStatus.value,
       page: pagination.value.current,
       page_size: pagination.value.pageSize,
     })
 
     if (res.success && res.data) {
-      const data = res.data as any
+      const data = res.data
       tasks.value = data.items || []
       pagination.value.total = data.total || 0
     } else {
@@ -526,8 +570,28 @@ const handleStartTask = () => {
   }
 }
 
-const handleViewByStatus = (status: string) => {
+const handleViewByStatus = (status: TaskStatus) => {
+  if (statsLoading.value) {
+    message.warning('任务统计正在加载，请稍后重试')
+    return
+  }
+  const statusCount =
+    status === 'assigned'
+      ? pendingTaskCount.value
+      : status === 'completed' && taskStats.value
+        ? taskStats.value.completed
+        : taskStats.value?.by_status[status] ?? null
+  if (statusCount === null) {
+    message.warning('任务统计暂不可用，请重试')
+    return
+  }
+  if (statusCount === 0) {
+    message.info('没有待处理的事项')
+    return
+  }
   selectedStatus.value = status
+  searchKeyword.value = ''
+  dateRange.value = null
   handleFilter()
 }
 
@@ -591,8 +655,9 @@ const handleViewDetail = async (record: TaskItem) => {
   }
 }
 
-const handleTableChange = (pag: any) => {
-  pagination.value = { ...pagination.value, ...pag }
+const handleTableChange = (pag: TablePaginationConfig) => {
+  if (pag.current) pagination.value.current = pag.current
+  if (pag.pageSize) pagination.value.pageSize = pag.pageSize
   fetchTasks()
 }
 

@@ -16,7 +16,7 @@ import uuid
 import logging
 import random
 from datetime import datetime
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Literal
 
 from fastapi import APIRouter, Request, HTTPException, Depends, Query
 
@@ -51,6 +51,41 @@ def _generate_task_number() -> str:
     seq = random.randint(1000, 9999)
     return f"QC-{date_str}-{seq}"
 
+
+def _get_task_scope_user_id(current_user: dict) -> str:
+    """读取任务个人范围身份；真实认证字段 id 优先，兼容历史 user_id。"""
+    user_id = current_user.get("id") or current_user.get("user_id")
+    if not user_id or not str(user_id).strip():
+        raise HTTPException(status_code=401, detail="当前用户缺少有效身份")
+    return str(user_id)
+
+
+async def _apply_task_tab_scope(sb, query, tab: str, current_user: dict):
+    """让任务列表与统计复用同一 created/received 数据范围。"""
+    if tab == "all":
+        return query
+
+    if tab not in {"created", "received"}:
+        raise HTTPException(status_code=422, detail="无效的任务标签")
+
+    user_id = _get_task_scope_user_id(current_user)
+    if tab == "created":
+        return query.eq("creator_id", user_id)
+
+    if tab == "received":
+        assigned_resp = await async_execute(
+            sb.table("qc_task_records")
+            .select("task_id")
+            .eq("assignee_id", user_id)
+        )
+        assigned_task_ids = list(dict.fromkeys(
+            row.get("task_id")
+            for row in (getattr(assigned_resp, "data", None) or [])
+            if row.get("task_id")
+        ))
+        if not assigned_task_ids:
+            return None
+        return query.in_("id", assigned_task_ids)
 
 # ============================
 # 创建任务
@@ -119,7 +154,9 @@ async def create_task(
 @require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.READ)
 async def list_tasks(
     request: Request,
-    tab: str = Query("all", description="标签: all=全部 | created=我创建 | received=我收到"),
+    tab: Literal["all", "created", "received"] = Query(
+        "all", description="标签: all=全部 | created=我创建 | received=我收到"
+    ),
     status: Optional[str] = Query(None, description="任务状态"),
     keyword: Optional[str] = Query(None, description="搜索关键词"),
     page: int = Query(1, ge=1, description="页码"),
@@ -129,8 +166,6 @@ async def list_tasks(
     """
     获取任务列表（支持按标签/状态/关键词筛选）
     """
-    user_id = current_user.get("user_id", "")
-
     sb = get_supabase()
     if sb is None:
         raise HTTPException(status_code=503, detail="数据库不可用")
@@ -138,25 +173,12 @@ async def list_tasks(
     try:
         query = sb.table('qc_tasks').select('*', count='exact')
 
-        if tab == "created":
-            query = query.eq('creator_id', user_id)
-        elif tab == "received":
-            assigned_resp = await async_execute(
-                sb.table('qc_task_records')
-                .select('task_id')
-                .eq('assignee_id', user_id)
+        query = await _apply_task_tab_scope(sb, query, tab, current_user)
+        if query is None:
+            return paginated_response(
+                items=[], total=0, page=page, page_size=page_size,
+                message="暂无收到的任务", trace_id=get_trace_id(request),
             )
-            assigned_task_ids = list(set(
-                r.get('task_id') for r in (getattr(assigned_resp, 'data', None) or [])
-                if r.get('task_id')
-            ))
-            if assigned_task_ids:
-                query = query.in_('id', assigned_task_ids)
-            else:
-                return paginated_response(
-                    items=[], total=0, page=page, page_size=page_size,
-                    message="暂无收到的任务", trace_id=get_trace_id(request),
-                )
 
         if status:
             query = query.eq('status', status)
@@ -176,6 +198,8 @@ async def list_tasks(
             items=data, total=total, page=page, page_size=page_size,
             message="获取任务列表成功", trace_id=get_trace_id(request),
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"查询任务列表失败: {e}")
         raise HTTPException(status_code=500, detail=f"查询失败: {str(e)}")
@@ -189,6 +213,9 @@ async def list_tasks(
 @require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.READ)
 async def get_task_stats(
     request: Request,
+    tab: Literal["all", "created", "received"] = Query(
+        "all", description="标签: all=全部 | created=我创建 | received=我收到"
+    ),
     current_user: dict = Depends(get_current_user),
 ):
     """
@@ -200,13 +227,16 @@ async def get_task_stats(
 
     status_counts = {}
     try:
-        resp = await async_execute(
-            sb.table('qc_tasks').select('status', count='exact')
-        )
-        rows = list(getattr(resp, 'data', None) or [])
-        for r in rows:
-            st = r.get('status', 'unknown')
-            status_counts[st] = status_counts.get(st, 0) + 1
+        query = sb.table("qc_tasks").select("status", count="exact")
+        query = await _apply_task_tab_scope(sb, query, tab, current_user)
+        if query is not None:
+            resp = await async_execute(query)
+            rows = list(getattr(resp, "data", None) or [])
+            for row in rows:
+                status = row.get("status", "unknown")
+                status_counts[status] = status_counts.get(status, 0) + 1
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"获取任务统计失败: {e}")
         raise HTTPException(status_code=500, detail=f"获取任务统计失败: {str(e)}")

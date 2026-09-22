@@ -33,6 +33,7 @@ async function request<T = any>(
 
 export type TaskType = 'one_time' | 'scheduled'
 export type TaskStatus = 'draft' | 'sampling' | 'assigned' | 'in_progress' | 'completed' | 'cancelled'
+export type TaskTab = 'all' | 'created' | 'received'
 export type SamplingMethod = 'all' | 'count' | 'percentage'
 export type AssignMethod = 'keep' | 'by_department' | 'by_ratio' | 'by_type'
 
@@ -93,7 +94,7 @@ export interface TaskProgress {
 
 export interface TaskStats {
     total: number
-    by_status: Record<string, number>
+    by_status: Partial<Record<TaskStatus, number>>
     draft: number
     in_progress: number
     completed: number
@@ -104,7 +105,7 @@ export interface TaskStats {
 
 /** 获取任务列表 */
 export async function getTaskList(params?: {
-    tab?: 'all' | 'created' | 'received'
+    tab?: TaskTab
     status?: TaskStatus
     keyword?: string
     page?: number
@@ -123,8 +124,16 @@ export async function getTaskList(params?: {
 }
 
 /** 获取任务统计 */
-export async function getTaskStats() {
-    return request<TaskStats>({ method: 'GET', url: `${BASE_URL}/stats` })
+export async function getTaskStats(params?: { tab?: TaskTab }) {
+    const queryParams = new URLSearchParams()
+    if (params?.tab) {
+        queryParams.set('tab', params.tab)
+    }
+    const query = queryParams.toString()
+    return request<TaskStats>({
+        method: 'GET',
+        url: `${BASE_URL}/stats${query ? `?${query}` : ''}`,
+    })
 }
 
 /** 获取任务详情 */
