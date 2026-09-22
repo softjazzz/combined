@@ -179,7 +179,7 @@ def test_missing_or_unreadable_report_is_data_gap_not_clinical_defect(rule_id, m
             "胸部CT",
             "exam_result_status",
             "待审核",
-            "影像所见已初步录入，待最终审核",
+            "双肺纹理增多。",
         ),
         (
             CULTURE_RULE,
@@ -248,6 +248,91 @@ def test_confirmed_culture_collection_with_pending_report_body_is_not_compliant(
 
     assert result.status == "data_gap"
     assert result.display_facts["event_results"][0]["issue_kind"] == "report_content_unavailable"
+
+
+@pytest.mark.parametrize(
+    "rule_id,master,report,business_key,name_key,name,status_key,pending_status,report_body",
+    [
+        (
+            CT_RULE,
+            "exam_master",
+            "exam_item_report",
+            "exam_id",
+            "exam_name",
+            "胸部CT",
+            "exam_result_status",
+            "待审核",
+            "影像所见已初步录入，待最终审核",
+        ),
+        (
+            CULTURE_RULE,
+            "labtest_master",
+            "labtest_item_report",
+            "test_id",
+            "labtest_subject",
+            "血培养",
+            "labtest_result_status",
+            "",
+            "初步结果：检出革兰阴性杆菌，培养中，待最终确认",
+        ),
+    ],
+)
+def test_report_timestamp_cannot_override_explicit_pending_evidence(
+    rule_id,
+    master,
+    report,
+    business_key,
+    name_key,
+    name,
+    status_key,
+    pending_status,
+    report_body,
+):
+    result, _, _ = _evaluate(
+        rule_id,
+        rows={
+            master: (
+                {
+                    business_key: "K1",
+                    name_key: name,
+                    status_key: pending_status,
+                },
+            ),
+            report: (
+                {
+                    business_key: "K1",
+                    name_key: name,
+                    "report_time": "2026-09-01 10:00:00",
+                    "result": report_body,
+                },
+            ),
+        },
+    )
+
+    assert result.status == "data_gap"
+    assert result.display_facts["event_results"][0]["issue_kind"] == "execution_unconfirmed"
+
+
+def test_final_report_may_reference_an_earlier_preliminary_report():
+    result, _, _ = _evaluate(
+        CT_RULE,
+        rows={
+            "exam_master": ({"exam_id": "E1", "exam_name": "胸部CT"},),
+            "exam_item_report": (
+                {
+                    "exam_id": "E1",
+                    "exam_name": "胸部CT",
+                    "report_time": "2026-09-01 10:00:00",
+                    "description": "与初步报告相比，双肺纹理增多，结论已确认。",
+                },
+            ),
+        },
+    )
+
+    assert (result.status, result.reason_code) == (
+        "compliant",
+        "requirement_satisfied",
+    )
 
 
 @pytest.mark.parametrize("state", ["unavailable", "error", "truncated"])

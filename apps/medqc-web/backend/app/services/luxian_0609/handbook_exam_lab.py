@@ -43,6 +43,29 @@ _PENDING_REPORT_BODY = re.compile(
 _FINAL_REPORT_STATES = frozenset(
     {"已完成", "完成", "已报告", "已审核", "已发布", "completed", "final", "finalized", "reported", "released"}
 )
+_PENDING_REPORT_STATES = frozenset(
+    {
+        "待报告",
+        "待回报",
+        "待审核",
+        "待最终审核",
+        "待确认",
+        "待最终确认",
+        "未完成",
+        "未审核",
+        "培养中",
+        "初步结果",
+        "初步报告",
+        "pending",
+        "preliminary",
+        "in_progress",
+        "in progress",
+    }
+)
+_PENDING_REPORT_DECLARATION = re.compile(
+    r"^(?:初步(?:结果|报告)\s*[:：])|培养中|待(?:最终)?(?:报告|回报|审核|确认)|未(?:完成|审核|发布)",
+    re.I,
+)
 _NAME_FIELDS = ("order_name", "exam_name", "exam_item_name", "item_name", "lab_item_name", "labtest_subject", "exam_type", "lab_type", "test_type")
 _REPORT_FIELDS = ("exam_result", "exam_impression", "exam_conclusion", "impression", "conclusion", "description", "result", "record_content")
 _COURSE_FIELDS = ("case_characteristic", "diagnose_based_on", "differential_diagnosis", "treatment_plan", "record_content", "content")
@@ -96,7 +119,21 @@ def _performed(row: Mapping[str, Any]) -> bool:
     )
 
 
+def _report_pending(row: Mapping[str, Any]) -> bool:
+    statuses = (
+        clean(row.get(field)).lower()
+        for field in ("exam_result_status", "labtest_result_status", "report_status")
+    )
+    return any(status in _PENDING_REPORT_STATES for status in statuses if status) or any(
+        _PENDING_REPORT_DECLARATION.search(value)
+        for field in _REPORT_FIELDS
+        if (value := clean(row.get(field)))
+    )
+
+
 def _report_released(row: Mapping[str, Any]) -> bool:
+    if _report_pending(row):
+        return False
     return bool(
         any(_time(row.get(field)) for field in ("report_time", "report_datetime"))
         or any(
@@ -125,6 +162,7 @@ class HandbookEvent:
     orders: tuple[tuple[str, Mapping[str, Any]], ...]
     reports: tuple[tuple[str, Mapping[str, Any]], ...]
     performed: bool
+    formal_report_present: bool
     excluded: bool
     association_resolved: bool
 
@@ -212,14 +250,20 @@ def _build_family_events(family: str, sources: Mapping[str, SourceRows]) -> tupl
         if any(len({_names(row) for _, row in orders[oid]}) > 1 for oid in linked_ids):
             unresolved = True
         valid_reports = tuple((ref, row) for ref, row in report_rows if not _EXCLUDED.search(_status(row)))
+        release_blocked = any(
+            _report_pending(row) for _, row in (*master_rows, *valid_reports)
+        )
+        formal_report_present = not release_blocked and any(
+            _formal_report(row) for _, row in valid_reports
+        )
         performed = (
             any(_performed(row) for _, row in (*master_rows, *linked))
-            or any(_report_released(row) for _, row in valid_reports)
+            or formal_report_present
         )
         excluded = bool(linked) and all(_EXCLUDED.search(_status(row)) for _, row in linked) and not performed
         events.append(HandbookEvent(
             family, key, next((name for name in names if target_name(family, name)), "")[:200],
-            master_rows, linked, valid_reports, performed, excluded,
+            master_rows, linked, valid_reports, performed, formal_report_present, excluded,
             not key.startswith("missing:") and not unresolved,
         ))
     for order_id in sorted(set(orders) - used_orders):
@@ -228,7 +272,8 @@ def _build_family_events(family: str, sources: Mapping[str, SourceRows]) -> tupl
         excluded = all(_EXCLUDED.search(_status(row)) for _, row in rows) and not performed
         events.append(HandbookEvent(
             family, f"order:{order_id}", _names(rows[0][1])[:200], (), rows, (),
-            performed, excluded, not order_id.startswith("missing:") and len({_names(row) for _, row in rows}) == 1,
+            performed, False, excluded,
+            not order_id.startswith("missing:") and len({_names(row) for _, row in rows}) == 1,
         ))
     return tuple(events)
 
@@ -287,7 +332,7 @@ def evaluate_report_completeness(rule_id: str, ledger: HandbookLedger) -> Handbo
             status, issue = "data_gap", "association_unresolved"
         elif not event.performed:
             status, issue = "data_gap", "execution_unconfirmed"
-        elif event.reports and any(_formal_report(row) for _, row in event.reports):
+        elif event.reports and event.formal_report_present:
             status, issue = "compliant", "report_present"
         elif event.reports:
             status, issue = "data_gap", "report_content_unavailable"
