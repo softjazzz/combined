@@ -49,9 +49,9 @@ from tests.integration.test_luxian_0609_exam_lab_family_convergence import (
 
 
 RULE_SET_VERSION = "2026-06-09"
-RULE_IDS_041_048 = tuple(rule_id for rule_id in TRANSFUSION_RULE_IDS if rule_id != "LX0609-049")
+RULE_IDS_041_048 = tuple(rule_id for rule_id in TRANSFUSION_RULE_IDS if rule_id != "LX0609-07-04-02")
 # 041/042 在当前客户运行策略中明确排除；不能在隔离测试中改常量伪造客户入口。
-CUSTOMER_ENTRY_RULE_IDS = tuple(rule_id for rule_id in RULE_IDS_041_048 if rule_id not in {"LX0609-041", "LX0609-042"})
+CUSTOMER_ENTRY_RULE_IDS = tuple(rule_id for rule_id in RULE_IDS_041_048 if rule_id not in {"LX0609-11-03-01", "LX0609-11-03-02"})
 _RECORD_A = {"institute_id": "TX-HOSPITAL", "patient_id": "TX-PATIENT-A", "visit_id": "TX-VISIT-A"}
 _RECORD_B = {"institute_id": "TX-HOSPITAL", "patient_id": "TX-PATIENT-B", "visit_id": "TX-VISIT-B"}
 
@@ -63,6 +63,7 @@ def _formal_settings() -> SimpleNamespace:
         LUXIAN_0609_NATIVE_EXECUTION_ENABLED=True,
         LUXIAN_0609_NATIVE_TRANSFUSION_ENABLED=True,
         LUXIAN_0609_UNIFIED_ENGINE_ENABLED=True,
+        LUXIAN_0609_FAMILY_MAX_CONCURRENCY=4,
         LUXIAN_0609_RULE_DECISION_TRANSFUSION_ENABLED=True,
         LUXIAN_0609_TRIGGER_GATE_ENABLED=False,
         LUXIAN_0609_LLM_TRIGGER_GATE_ENABLED=False,
@@ -236,12 +237,12 @@ _EXPECTED_ACTIVE_OUTCOMES = {
     for rule_id in CUSTOMER_ENTRY_RULE_IDS
 }
 _EXPECTED_EVIDENCE_DOCUMENT_IDS = {
-    "LX0609-043": {"TX-BLOOD", "TX-LAB"},
-    "LX0609-044": {"TX-BLOOD", "TX-APP"},
-    "LX0609-045": {"TX-BLOOD"},
-    "LX0609-046": {"TX-BLOOD"},
-    "LX0609-047": {"TX-BLOOD", "TX-COURSE"},
-    "LX0609-048": {"TX-BLOOD", "TX-SURGERY", "TX-ANES", "TX-POST"},
+    "LX0609-07-01-01": {"TX-BLOOD", "TX-LAB"},
+    "LX0609-07-01-02": {"TX-BLOOD", "TX-APP"},
+    "LX0609-07-02-01": {"TX-BLOOD"},
+    "LX0609-07-02-02": {"TX-BLOOD"},
+    "LX0609-07-03-01": {"TX-BLOOD", "TX-COURSE"},
+    "LX0609-07-04-01": {"TX-BLOOD", "TX-SURGERY", "TX-ANES", "TX-POST"},
 }
 
 
@@ -259,7 +260,7 @@ async def test_transfusion_049_native_executor_no_trigger_is_not_applicable(
         )
 
     session = original(
-        selected_rule_ids=("LX0609-049",),
+        selected_rule_ids=("LX0609-07-04-02",),
         institute_id=_RECORD_A["institute_id"],
         patient_id=_RECORD_A["patient_id"],
         visit_id=_RECORD_A["visit_id"],
@@ -269,7 +270,7 @@ async def test_transfusion_049_native_executor_no_trigger_is_not_applicable(
         row_reader=reader,
     )
     result = await execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-049",),
+        rule_ids=("LX0609-07-04-02",),
         wrapper_rules=[],
         evidence_payload=None,
         institute_id=_RECORD_A["institute_id"],
@@ -279,7 +280,7 @@ async def test_transfusion_049_native_executor_no_trigger_is_not_applicable(
         llm_client=None,
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
-        decision_rule_ids=("LX0609-049",),
+        decision_rule_ids=("LX0609-07-04-02",),
     )
     assert result.results == ()
     assert len(result.decisions) == 1
@@ -294,7 +295,7 @@ async def test_transfusion_049_prepare_partitions_phase_without_unified_engine_d
     prepared_rule = next(
         dict(rule)
         for rule in luxian_execution.load_luxian_0609_rules()
-        if str(rule.get("rule_id") or "").strip().upper() == "LX0609-049"
+        if str(rule.get("rule_id") or "").strip().upper() == "LX0609-07-04-02"
     )
     executable_rules, context = await luxian_execution.prepare_luxian_0609_execution(
         rule_set_key=LUXIAN_0609_RULE_SET_KEY,
@@ -306,18 +307,18 @@ async def test_transfusion_049_prepare_partitions_phase_without_unified_engine_d
         settings=_formal_settings(),
         institute_id=_RECORD_A["institute_id"],
         patient_id=_RECORD_A["patient_id"],
-        selected_customer_rule_ids=("LX0609-049",),
+        selected_customer_rule_ids=("LX0609-07-04-02",),
         evaluation_as_of_date="2026-08-21",
     )
     assert context.package_plan is not None
-    assert context.package_plan.not_executed_rule_ids == ("LX0609-049",)
+    assert context.package_plan.not_executed_rule_ids == ("LX0609-07-04-02",)
     assert context.package_plan.native_executor_batches == ()
     assert context.unified_engine_used is False
     assert context.delivery_mode == "canonical_straight_through"
     assert executable_rules == []
     assert len(context.native_results) == 1
     pending = context.native_results[0]
-    assert pending["rule_id"] == "LX0609-049"
+    assert pending["rule_id"] == "LX0609-07-04-02"
     assert pending["status"] == pending["result_status"] == "not_executed"
     assert pending["schema_version"] == "lx0609-customer-result-v2"
     assert pending["rule_set_key"] == LUXIAN_0609_RULE_SET_KEY
@@ -329,7 +330,7 @@ async def test_transfusion_049_prepare_partitions_phase_without_unified_engine_d
     }
 
 
-@pytest.mark.parametrize("rule_id", ("LX0609-041", "LX0609-042"))
+@pytest.mark.parametrize("rule_id", ("LX0609-11-03-01", "LX0609-11-03-02"))
 def test_transfusion_customer_entry_rejects_policy_excluded_rules_without_engine_dispatch(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, rule_id: str
 ) -> None:
@@ -436,7 +437,7 @@ def test_transfusion_049_customer_entry_is_excluded_before_task_creation(
             "/api/v1/qc/sichuan/workspace/batch-jobs",
             json={
                 "rule_set_key": LUXIAN_0609_RULE_SET_KEY,
-                "rule_ids": ["LX0609-049"],
+                "rule_ids": ["LX0609-07-04-02"],
                 "scope": "final",
                 "record_refs": [_RECORD_A],
                 "run_mode": "serial",
@@ -539,7 +540,7 @@ def test_transfusion_asgi_entries_use_unified_engine_and_persist_same_canonical_
     }
     assert _EXPECTED_EVIDENCE_DOCUMENT_IDS[rule_id].issubset(evidence_document_ids)
     assert _envelope_customer_projection(single_envelope) == _envelope_customer_projection(batch_envelope) == _envelope_customer_projection(sample_envelope)
-    if rule_id in {"LX0609-044", "LX0609-046"}:
+    if rule_id in {"LX0609-07-01-02", "LX0609-07-02-02"}:
         assert len(client.prompts) == 4
         assert client.prompts == [client.prompts[0]] * 4
         assert client.usages == [(100, 10, 110)] * 4
@@ -547,7 +548,7 @@ def test_transfusion_asgi_entries_use_unified_engine_and_persist_same_canonical_
     else:
         assert client.prompts == []
         assert client.usages == []
-    if rule_id == "LX0609-047":
+    if rule_id == "LX0609-07-03-01":
         facts = dict(single_item.get("customer_display_facts") or {})
         assert facts["transfusion_end_time"] == "2026-08-20 18:00:00"
         assert facts["evaluation_time"] == "2026-08-20 19:00:00"

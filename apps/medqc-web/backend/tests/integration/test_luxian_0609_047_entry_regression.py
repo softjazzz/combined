@@ -1,4 +1,4 @@
-"""LX0609-047 经正式入口、worker、保存后的评价窗口冻结。
+"""LX0609-07-03-01 经正式入口、worker、保存后的评价窗口冻结。
 
 本文件不替换 worker、unified engine 或保存层。仅用正式 evidence-session 的
 ``row_reader`` seam 提供脱敏资料，并在两个生产 route 的 horizon-builder seam
@@ -50,7 +50,7 @@ from tests.integration.test_luxian_0609_transfusion_family_convergence import (
 )
 
 
-RULE_ID = "LX0609-047"
+RULE_ID = "LX0609-07-03-01"
 FROZEN_DATE = "2026-01-03"
 
 
@@ -245,7 +245,7 @@ class _NoLlmClient:
 
     async def generate(self, prompt: str) -> dict[str, Any]:
         self.call_count += 1
-        raise AssertionError(f"LX0609-047 must not call LLM: {prompt[:80]}")
+        raise AssertionError(f"LX0609-07-03-01 must not call LLM: {prompt[:80]}")
 
 
 def _scenario_rows(

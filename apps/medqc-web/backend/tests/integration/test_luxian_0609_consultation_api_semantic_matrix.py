@@ -260,11 +260,11 @@ def _get_latest(app):
 def _assert_semantic_facts(envelope: dict[str, Any], scenario: str) -> None:
     """021/022 的逐次事实以手工夹具期望冻结，不从执行结果反推期望。"""
     rule_id = envelope["rule_id"]
-    assert rule_id in {"LX0609-021", "LX0609-022"}
+    assert rule_id in {"LX0609-03-01-02", "LX0609-03-01-03"}
     if scenario == "invalid_first":
         assert not envelope.get("customer_display_facts")
         return
-    application = rule_id == "LX0609-021"
+    application = rule_id == "LX0609-03-01-02"
     semantic_state = (
         "vague" if scenario == "horizon_gap" and not application else "clear"
     )
@@ -321,17 +321,17 @@ def test_controlled_semantic_facts_survive_three_api_entries(
                 job, visit_id=business._RECORD_A["visit_id"], rule_id=rule_id
             )
             expected = ("compliant", "requirement_satisfied")
-            if scenario == "partial" and rule_id == "LX0609-020":
+            if scenario == "partial" and rule_id == "LX0609-03-01-01":
                 expected = ("non_compliant", "requirement_violated")
-            if scenario == "unknown" and rule_id in {"LX0609-020", "LX0609-023"}:
+            if scenario == "unknown" and rule_id in {"LX0609-03-01-01", "LX0609-03-01-04"}:
                 expected = ("uncertain", "semantic_low_confidence")
             if scenario == "horizon_gap":
-                if rule_id in {"LX0609-020", "LX0609-023"}:
+                if rule_id in {"LX0609-03-01-01", "LX0609-03-01-04"}:
                     expected = ("data_gap", "linkage_unresolved")
-                elif rule_id == "LX0609-022":
+                elif rule_id == "LX0609-03-01-03":
                     expected = ("non_compliant", "requirement_violated")
             if scenario == "invalid_first" or (
-                scenario == "invalid_second" and rule_id in {"LX0609-020", "LX0609-023"}
+                scenario == "invalid_second" and rule_id in {"LX0609-03-01-01", "LX0609-03-01-04"}
             ):
                 expected = ("technical_error", "model_invalid_output")
             assert (item["status"], item["reason_code"]) == expected, item
@@ -347,9 +347,9 @@ def test_controlled_semantic_facts_survive_three_api_entries(
             # 会诊族当前通过决策和客户事实交付，准则列表为空是既有合同。
             # 只冻结原样搬运，不为了宣称非空准则验收而补造条目。
             assert envelope["criterion_results"] == []
-            if rule_id in {"LX0609-021", "LX0609-022"}:
+            if rule_id in {"LX0609-03-01-02", "LX0609-03-01-03"}:
                 _assert_semantic_facts(envelope, scenario)
-            if scenario in {"normal", "partial"} and rule_id == "LX0609-020":
+            if scenario in {"normal", "partial"} and rule_id == "LX0609-03-01-01":
                 expected_documents = (
                     {"C2-CONSULT-1", "C2-COURSE-1"}
                     if scenario == "normal"
@@ -358,14 +358,14 @@ def test_controlled_semantic_facts_survive_three_api_entries(
                 assert {
                     row["source_document_id"] for row in item["customer_evidence"]
                 } == expected_documents
-            if scenario == "horizon_gap" and rule_id in {"LX0609-020", "LX0609-023"}:
+            if scenario == "horizon_gap" and rule_id in {"LX0609-03-01-01", "LX0609-03-01-04"}:
                 assert envelope["customer_display_facts"]["recommendation_count"] == 0
                 assert (
                     envelope["customer_display_facts"]["missing_execution_count"] == 0
                 )
             if scenario == "invalid_first":
                 assert not envelope.get("customer_display_facts")
-            if scenario == "invalid_second" and rule_id in {"LX0609-020", "LX0609-023"}:
+            if scenario == "invalid_second" and rule_id in {"LX0609-03-01-01", "LX0609-03-01-04"}:
                 # 首轮事实合法，二轮失败只使执行核对未知；它不同于整个事实合同非法。
                 facts = envelope["customer_display_facts"]
                 assert facts["recommendation_count"] == 1
@@ -377,12 +377,12 @@ def test_controlled_semantic_facts_survive_three_api_entries(
                     for clinical_claim in ("合规", "符合要求", "已归纳具体执行情况")
                 )
 
-                if rule_id == "LX0609-020":
+                if rule_id == "LX0609-03-01-01":
                     assert [
                         row["execution_state"]
                         for row in facts["recommendation_results"]
                     ] == ["unknown"]
-            if rule_id == "LX0609-020" and scenario in {"normal", "partial", "unknown"}:
+            if rule_id == "LX0609-03-01-01" and scenario in {"normal", "partial", "unknown"}:
                 facts = envelope["customer_display_facts"]
                 assert facts["recommendation_count"] == (
                     1 if scenario == "normal" else 2
@@ -414,7 +414,7 @@ def test_controlled_semantic_facts_survive_three_api_entries(
         for record in caplog.records
         if record.name == "app.services.sichuan_qc_service"
         and "executor_type" in record.getMessage()
-        and any(rule_id in record.getMessage() for rule_id in {"LX0609-020", "LX0609-023"})
+        and any(rule_id in record.getMessage() for rule_id in {"LX0609-03-01-01", "LX0609-03-01-04"})
     ]
     assert fallback_warnings == []
 
@@ -433,7 +433,7 @@ def test_invalid_customer_counts_are_one_rule_technical_error(
         context = kwargs["context"]
         facts = []
         for rule_id, value in context.customer_display_facts:
-            if rule_id == "LX0609-020":
+            if rule_id == "LX0609-03-01-01":
                 assert value["missing_execution_count"] == 1
                 value = {**value, "missing_execution_count": 0}
                 injections.append(rule_id)
@@ -448,7 +448,7 @@ def test_invalid_customer_counts_are_one_rule_technical_error(
     )
     job = _create_and_wait(semantic_api, "single")
     assert job["status"] == "completed", job.get("error_message")
-    assert injections == ["LX0609-020"]
+    assert injections == ["LX0609-03-01-01"]
     assert len(state["prompts"]) == 2
     assert state["legacy_calls"] == []
     for rule_id in RULES:
@@ -457,11 +457,11 @@ def test_invalid_customer_counts_are_one_rule_technical_error(
         )
         expected = (
             ("technical_error", "model_invalid_output")
-            if rule_id == "LX0609-020"
+            if rule_id == "LX0609-03-01-01"
             else ("compliant", "requirement_satisfied")
         )
         assert (item["status"], item["reason_code"]) == expected
-        if rule_id == "LX0609-020":
+        if rule_id == "LX0609-03-01-01":
             # 事实合同无效时 Finalizer 清掉旧临床结论，不能使用正常结果的非空文案助手。
             response = _get_latest(app)
             assert response.status_code == 200, response.text
@@ -484,7 +484,7 @@ def test_invalid_customer_counts_are_one_rule_technical_error(
                 record=business._RECORD_A,
                 expected_rule_ids=RULES,
             )
-            if rule_id in {"LX0609-021", "LX0609-022"}:
+            if rule_id in {"LX0609-03-01-02", "LX0609-03-01-03"}:
                 _assert_semantic_facts(envelope, "partial")
 
 

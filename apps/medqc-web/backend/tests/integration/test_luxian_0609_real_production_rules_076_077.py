@@ -93,7 +93,7 @@ def _canonical(rule_id: str, session, execution):
     assert projected["status"] == result["status"]
     assert projected["reason_code"] == result["reason_code"]
     assert projected.get("criterion_results", []) == criteria
-    if rule_id == "LX0609-076" and result["status"] in {"compliant", "non_compliant"}:
+    if rule_id == "LX0609-04-02-08" and result["status"] in {"compliant", "non_compliant"}:
         assert len(criteria) == 1
         assert criteria[0]["kind"] == "completeness"
         assert criteria[0]["source_fact"] == "death_record.death_time"
@@ -106,7 +106,7 @@ def _canonical(rule_id: str, session, execution):
 @pytest.mark.parametrize("kind", ["unknown_kind", "temporal", "completeness_unapproved"])
 def test_unapproved_criterion_kind_cannot_bypass_non_compliant_explanation(kind) -> None:
     item = {
-        "rule_id": "LX0609-076",
+        "rule_id": "LX0609-04-02-08",
         "status": "non_compliant",
         "criterion_results": [
             {
@@ -121,7 +121,7 @@ def test_unapproved_criterion_kind_cannot_bypass_non_compliant_explanation(kind)
     assert safe_criterion_results(item) == []
     with pytest.raises(ValueError):
         validated_customer_explanation(
-            item, rule_id="LX0609-076", status="non_compliant"
+            item, rule_id="LX0609-04-02-08", status="non_compliant"
         )
     with pytest.raises(ValueError):
         project_customer_safe_result_item(item, hmac_key="production-extension-test-key")
@@ -172,7 +172,7 @@ async def test_076_runs_as_a_real_native_rule_and_never_uses_record_time(
     death_row, expected
 ) -> None:
     session = _session(
-        "LX0609-076",
+        "LX0609-04-02-08",
         {
             "inpat_registration": [{"death_datetime": "2026-09-01 03:45:00"}],
             "death_record": [death_row],
@@ -180,12 +180,12 @@ async def test_076_runs_as_a_real_native_rule_and_never_uses_record_time(
         },
     )
     execution = await execute_luxian_0609_native_extended_document_rules(
-        rule_ids=("LX0609-076",),
+        rule_ids=("LX0609-04-02-08",),
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
-        decision_rule_ids=("LX0609-076",),
+        decision_rule_ids=("LX0609-04-02-08",),
     )
-    reduced, result = _canonical("LX0609-076", session, execution)
+    reduced, result = _canonical("LX0609-04-02-08", session, execution)
 
     assert reduced.final_state is expected
     assert result["status"] == expected.value
@@ -199,7 +199,7 @@ async def test_076_runs_as_a_real_native_rule_and_never_uses_record_time(
 @pytest.mark.asyncio
 async def test_076_does_not_duplicate_060_when_death_record_is_absent() -> None:
     session = _session(
-        "LX0609-076",
+        "LX0609-04-02-08",
         {
             "inpat_registration": [{"death_datetime": "2026-09-01 03:45:00"}],
             "death_record": [],
@@ -207,12 +207,12 @@ async def test_076_does_not_duplicate_060_when_death_record_is_absent() -> None:
         },
     )
     execution = await execute_luxian_0609_native_extended_document_rules(
-        rule_ids=("LX0609-076",),
+        rule_ids=("LX0609-04-02-08",),
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
-        decision_rule_ids=("LX0609-076",),
+        decision_rule_ids=("LX0609-04-02-08",),
     )
-    reduced, result = _canonical("LX0609-076", session, execution)
+    reduced, result = _canonical("LX0609-04-02-08", session, execution)
 
     assert reduced.final_state is CustomerFinalState.NOT_APPLICABLE
     assert reduced.reason_code == "eligibility_not_met"
@@ -222,7 +222,7 @@ async def test_076_does_not_duplicate_060_when_death_record_is_absent() -> None:
 @pytest.mark.asyncio
 async def test_076_source_unavailable_is_data_gap() -> None:
     session = _session(
-        "LX0609-076",
+        "LX0609-04-02-08",
         {
             "inpat_registration": [{"death_datetime": "2026-09-01 03:45:00"}],
             "discharge_record": [],
@@ -230,12 +230,12 @@ async def test_076_source_unavailable_is_data_gap() -> None:
         unavailable=frozenset({"death_record"}),
     )
     execution = await execute_luxian_0609_native_extended_document_rules(
-        rule_ids=("LX0609-076",),
+        rule_ids=("LX0609-04-02-08",),
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
-        decision_rule_ids=("LX0609-076",),
+        decision_rule_ids=("LX0609-04-02-08",),
     )
-    reduced, _result = _canonical("LX0609-076", session, execution)
+    reduced, _result = _canonical("LX0609-04-02-08", session, execution)
 
     assert reduced.final_state is CustomerFinalState.DATA_GAP
     assert reduced.reason_code == "source_unavailable"
@@ -333,19 +333,19 @@ async def test_077_can_read_first_diagnosis_from_the_bounded_first_course_body()
     rows["first_course_record_diagnosis"][0]["document_id"] = (
         "first-course-077-body-only"
     )
-    session = _session("LX0609-077", rows)
+    session = _session("LX0609-01-02-02", rows)
     client = _SemanticClient("related")
 
     execution = await execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-077",),
-        wrapper_rules=[get_luxian_0609_rule("LX0609-077")],
+        rule_ids=("LX0609-01-02-02",),
+        wrapper_rules=[get_luxian_0609_rule("LX0609-01-02-02")],
         evidence_payload=None,
         llm_client=client,
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
-        decision_rule_ids=("LX0609-077",),
+        decision_rule_ids=("LX0609-01-02-02",),
     )
-    reduced, _result = _canonical("LX0609-077", session, execution)
+    reduced, _result = _canonical("LX0609-01-02-02", session, execution)
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT
     assert len(client.prompts) == 1
@@ -364,18 +364,18 @@ async def test_077_can_read_first_diagnosis_from_the_bounded_first_course_body()
 async def test_077_runs_one_controlled_semantic_call_on_the_formal_native_family(
     semantic_state, expected
 ) -> None:
-    session = _session("LX0609-077", _077_rows())
+    session = _session("LX0609-01-02-02", _077_rows())
     client = _SemanticClient(semantic_state)
     execution = await execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-077",),
-        wrapper_rules=[get_luxian_0609_rule("LX0609-077")],
+        rule_ids=("LX0609-01-02-02",),
+        wrapper_rules=[get_luxian_0609_rule("LX0609-01-02-02")],
         evidence_payload=None,
         llm_client=client,
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
-        decision_rule_ids=("LX0609-077",),
+        decision_rule_ids=("LX0609-01-02-02",),
     )
-    reduced, result = _canonical("LX0609-077", session, execution)
+    reduced, result = _canonical("LX0609-01-02-02", session, execution)
 
     assert reduced.final_state is expected
     assert result["status"] == expected.value
@@ -404,19 +404,19 @@ async def test_077_runs_one_controlled_semantic_call_on_the_formal_native_family
 async def test_077_rejects_unbound_structured_diagnosis_without_model_call() -> None:
     rows = _077_rows()
     rows["first_course_record_diagnosis"][0]["document_id"] = "another-document"
-    session = _session("LX0609-077", rows)
+    session = _session("LX0609-01-02-02", rows)
     client = _SemanticClient("related")
 
     execution = await execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-077",),
-        wrapper_rules=[get_luxian_0609_rule("LX0609-077")],
+        rule_ids=("LX0609-01-02-02",),
+        wrapper_rules=[get_luxian_0609_rule("LX0609-01-02-02")],
         evidence_payload=None,
         llm_client=client,
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
-        decision_rule_ids=("LX0609-077",),
+        decision_rule_ids=("LX0609-01-02-02",),
     )
-    reduced, result = _canonical("LX0609-077", session, execution)
+    reduced, result = _canonical("LX0609-01-02-02", session, execution)
 
     assert reduced.final_state is CustomerFinalState.DATA_GAP
     assert reduced.reason_code == "linkage_unresolved"
@@ -432,19 +432,19 @@ async def test_077_bound_structured_diagnosis_is_authoritative_over_body_fallbac
     rows["first_course_record"][0]["record_content"] = (
         "初步诊断：正文回退诊断。鉴别诊断：消化性溃疡穿孔。"
     )
-    session = _session("LX0609-077", rows)
+    session = _session("LX0609-01-02-02", rows)
     client = _SemanticClient("related")
 
     execution = await execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-077",),
-        wrapper_rules=[get_luxian_0609_rule("LX0609-077")],
+        rule_ids=("LX0609-01-02-02",),
+        wrapper_rules=[get_luxian_0609_rule("LX0609-01-02-02")],
         evidence_payload=None,
         llm_client=client,
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
-        decision_rule_ids=("LX0609-077",),
+        decision_rule_ids=("LX0609-01-02-02",),
     )
-    reduced, _result = _canonical("LX0609-077", session, execution)
+    reduced, _result = _canonical("LX0609-01-02-02", session, execution)
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT
     assert "第一诊断：急性胆囊炎" in client.prompts[0]
@@ -461,18 +461,18 @@ async def test_077_missing_inputs_are_data_gap_without_calling_model() -> None:
             "record_content": "初步诊断：急性胆囊炎。",
         }
     ]
-    session = _session("LX0609-077", rows)
+    session = _session("LX0609-01-02-02", rows)
     client = _SemanticClient()
     execution = await execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-077",),
-        wrapper_rules=[get_luxian_0609_rule("LX0609-077")],
+        rule_ids=("LX0609-01-02-02",),
+        wrapper_rules=[get_luxian_0609_rule("LX0609-01-02-02")],
         evidence_payload=None,
         llm_client=client,
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
-        decision_rule_ids=("LX0609-077",),
+        decision_rule_ids=("LX0609-01-02-02",),
     )
-    reduced, _result = _canonical("LX0609-077", session, execution)
+    reduced, _result = _canonical("LX0609-01-02-02", session, execution)
 
     assert reduced.final_state is CustomerFinalState.DATA_GAP
     assert execution.llm_call_count == 0
@@ -481,17 +481,17 @@ async def test_077_missing_inputs_are_data_gap_without_calling_model() -> None:
 
 @pytest.mark.asyncio
 async def test_077_invalid_model_output_is_data_gap() -> None:
-    session = _session("LX0609-077", _077_rows())
+    session = _session("LX0609-01-02-02", _077_rows())
     execution = await execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-077",),
-        wrapper_rules=[get_luxian_0609_rule("LX0609-077")],
+        rule_ids=("LX0609-01-02-02",),
+        wrapper_rules=[get_luxian_0609_rule("LX0609-01-02-02")],
         evidence_payload=None,
         llm_client=_SemanticClient(invalid=True),
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
-        decision_rule_ids=("LX0609-077",),
+        decision_rule_ids=("LX0609-01-02-02",),
     )
-    reduced, result = _canonical("LX0609-077", session, execution)
+    reduced, result = _canonical("LX0609-01-02-02", session, execution)
 
     assert reduced.final_state is CustomerFinalState.DATA_GAP
     assert result["status"] == "data_gap"
@@ -501,21 +501,21 @@ async def test_077_invalid_model_output_is_data_gap() -> None:
 
 @pytest.mark.asyncio
 async def test_077_ten_stub_runs_keep_prompt_usage_and_canonical_result_identical() -> None:
-    session = _session("LX0609-077", _077_rows())
+    session = _session("LX0609-01-02-02", _077_rows())
     client = _SemanticClient("related")
     outcomes: list[tuple[object, ...]] = []
 
     for _ in range(10):
         execution = await execute_luxian_0609_native_course_quality_rules(
-            rule_ids=("LX0609-077",),
-            wrapper_rules=[get_luxian_0609_rule("LX0609-077")],
+            rule_ids=("LX0609-01-02-02",),
+            wrapper_rules=[get_luxian_0609_rule("LX0609-01-02-02")],
             evidence_payload=None,
             llm_client=client,
             evidence_snapshot=session.snapshot,
             evidence_materials=session.materials,
-            decision_rule_ids=("LX0609-077",),
+            decision_rule_ids=("LX0609-01-02-02",),
         )
-        reduced, result = _canonical("LX0609-077", session, execution)
+        reduced, result = _canonical("LX0609-01-02-02", session, execution)
         outcomes.append(
             (
                 reduced.final_state,
@@ -568,7 +568,7 @@ def _production_settings() -> SimpleNamespace:
 async def test_076_077_use_the_formal_production_plan_without_legacy_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    selected = ("LX0609-076", "LX0609-077")
+    selected = ("LX0609-04-02-08", "LX0609-01-02-02")
     rows = _077_rows()
     rows.update(
         {
@@ -631,8 +631,8 @@ async def test_076_077_use_the_formal_production_plan_without_legacy_fallback(
     assert context.unified_engine_used is True
     assert context.package_plan is not None
     assert context.package_plan.native_executor_batches == (
-        ("extended_document", ("LX0609-076",)),
-        ("course_quality", ("LX0609-077",)),
+        ("extended_document", ("LX0609-04-02-08",)),
+        ("course_quality", ("LX0609-01-02-02",)),
     )
     assert context.package_plan.compatibility_rule_ids == ()
     assert context.package_plan.compatibility_execution_rule_ids == ()

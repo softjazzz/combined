@@ -4,7 +4,7 @@
     "package_id": "00000000-0000-4000-8000-000000000001",
     "git_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "build_id": "synthetic-regression-v1",
-    "rule_ids": ["LX0609-032", "LX0609-066"],
+    "rule_ids": ["LX0609-04-03-01", "LX0609-04-05-03"],
     "replay_capability": "render_only",
     "capture_completeness": "partial",
     "missing_components": ["execution_inputs", "model_responses"],
@@ -25,7 +25,7 @@
   "inputs.json": {
     "rules": [
       {
-        "rule_id": "LX0609-032",
+        "rule_id": "LX0609-04-03-01",
         "decision": {
           "snapshot_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "applicability": "not_applicable",
@@ -39,7 +39,7 @@
         "display_facts": {}
       },
       {
-        "rule_id": "LX0609-066",
+        "rule_id": "LX0609-04-05-03",
         "decision": {
           "snapshot_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "applicability": "applicable",
@@ -61,13 +61,13 @@
   "results.json": {
     "rules": [
       {
-        "rule_id": "LX0609-032",
+        "rule_id": "LX0609-04-03-01",
         "status": "not_applicable",
         "reason_code": "trigger_absent_complete",
         "findings": "本次未发现已实施手术，不要求形成手术安全核查表"
       },
       {
-        "rule_id": "LX0609-066",
+        "rule_id": "LX0609-04-05-03",
         "status": "compliant",
         "reason_code": "requirement_satisfied",
         "findings": "已确认实施手术 1 台，找到术后首次病程记录 2 份，数量及关联关系符合要求。"

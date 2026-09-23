@@ -32,7 +32,7 @@ from app.services.luxian_0609.evidence_snapshot_provider import SnapshotSourceRo
 from app.services.luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY
 
 
-RULE_ID = "LX0609-022"
+RULE_ID = "LX0609-03-01-03"
 RULE_SET_VERSION = "2026-06-09"
 _RECORD_A = {"institute_id": "B3-HOSPITAL", "patient_id": "B3-PATIENT-A", "visit_id": "B3-VISIT-A"}
 _RECORD_B = {"institute_id": "B3-HOSPITAL", "patient_id": "B3-PATIENT-B", "visit_id": "B3-VISIT-B"}

@@ -36,6 +36,7 @@ from app.services.luxian_0609.native_package import (
 from app.services.luxian_0609.rule_decision_settings import (
     RULE_DECISION_ROLLOUT_GROUPS,
 )
+from app.services.luxian_0609_rule_catalog import load_luxian_0609_rules
 from app.services.luxian_0609_rule_master import load_luxian_0609_rule_master
 from app.services.sample_validation_rule_sets import (
     LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS,
@@ -1333,13 +1334,17 @@ def test_single_record_result_rejects_historical_non_deliverable_status_without_
     assert json.dumps(envelope, ensure_ascii=False) == original_envelope_json
 
 
-def test_single_record_result_projects_all_rule_master_metadata_in_envelope_order(monkeypatch):
-    master_entries = load_luxian_0609_rule_master()
-    customer_entries = [
-        entry
-        for entry in master_entries
-        if entry.rule_id not in LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
+def test_single_record_result_projects_catalog_rule_master_metadata_in_envelope_order(monkeypatch):
+    master_by_id = {
+        entry.rule_id: entry for entry in load_luxian_0609_rule_master()
+    }
+    customer_rule_ids = [
+        str(item.get("rule_id") or item.get("rule_code") or "").strip().upper()
+        for item in load_luxian_0609_rules()
+        if str(item.get("rule_id") or item.get("rule_code") or "").strip().upper()
+        not in LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
     ]
+    customer_entries = [master_by_id[rule_id] for rule_id in customer_rule_ids]
     rule_ids = [entry.rule_id for entry in customer_entries]
     canonical_items = [
         {
@@ -1383,7 +1388,6 @@ def test_single_record_result_projects_all_rule_master_metadata_in_envelope_orde
     assert result["state"] == "ready"
     assert result["is_complete"] is True
     assert [item["rule_id"] for item in result["items"]] == list(reversed(rule_ids))
-    master_by_id = {entry.rule_id: entry for entry in customer_entries}
     for item in result["items"]:
         master_entry = master_by_id[item["rule_id"]]
         assert item["source_document"] == master_entry.source_document

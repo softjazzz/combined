@@ -64,16 +64,16 @@ def test_runtime_manifest_binds_all_rules_to_current_safe_runtime() -> None:
     assert manifest["schema_version"] == "lx0609-runtime-manifest-v1"
     assert manifest["git_head"] == "a" * 40
     assert manifest["generated_at"] == "2026-07-23T18:00:00Z"
-    assert manifest["rule_set"]["rule_count"] == 77
+    assert manifest["rule_set"]["rule_count"] == len(expected_rule_ids)
     assert manifest["rule_set"]["rule_ids"] == expected_rule_ids
-    assert len(manifest["rules"]) == 77
-    assert len({item["rule_id"] for item in manifest["rules"]}) == 77
+    assert len(manifest["rules"]) == len(expected_rule_ids)
+    assert len({item["rule_id"] for item in manifest["rules"]}) == len(expected_rule_ids)
 
     executable_ids, withheld_ids = get_luxian_0609_customer_execution_scope()
     delivery_ids = get_luxian_0609_customer_delivery_rule_ids()
-    assert manifest["customer_delivery_count"] == 72
-    assert manifest["executable_count"] == 62
-    assert manifest["withheld_count"] == 10
+    assert manifest["customer_delivery_count"] == len(delivery_ids)
+    assert manifest["executable_count"] == len(executable_ids)
+    assert manifest["withheld_count"] == len(withheld_ids)
     assert manifest["customer_delivery_rule_ids"] == list(delivery_ids)
     assert manifest["executable_rule_ids"] == list(executable_ids)
     assert manifest["withheld_rule_ids"] == list(withheld_ids)

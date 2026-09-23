@@ -88,13 +88,22 @@ def _load_formal_catalog_csv_statuses() -> dict[str, set[str]]:
 
 
 @pytest.mark.unit
-def test_luxian_0609_catalog_has_79_registered_rules_and_examples():
+def test_luxian_0609_catalog_contains_migrated_rules_and_released_extensions():
     rules = load_luxian_0609_rules()
+    migrated_rule_ids = set(_migration_id_map().values())
+    released_extension_rule_ids = {
+        "LX0609-06-01-03",
+        "LX0609-06-02-01",
+        "LX0609-06-03-02",
+        "LX0609-09-01-02",
+    }
+    expected_rule_ids = migrated_rule_ids | released_extension_rule_ids
 
-    assert len(rules) == 79
-    assert customer_rule_count() == 79
+    assert {rule["rule_id"] for rule in rules} == expected_rule_ids
+    assert len(rules) == len(expected_rule_ids)
+    assert customer_rule_count() == len(expected_rule_ids)
     assert rules[0]["rule_id"] == "LX0609-01-01-01"
-    assert rules[-1]["rule_id"] == _migration_id_map()["LX0609-079"]
+    assert _migration_id_map()["LX0609-079"] in expected_rule_ids
 
     existing_rule_ids = _load_existing_rule_ids()
     phase_extension_rule_ids = {
@@ -112,6 +121,7 @@ def test_luxian_0609_catalog_has_79_registered_rules_and_examples():
             assert (
                 mapped_rule_id.upper() in existing_rule_ids
                 or mapped_rule_id.upper() in phase_extension_rule_ids
+                or mapped_rule_id.upper() == rule["rule_id"]
             )
 
 
@@ -121,7 +131,7 @@ def test_customer_policy_projection_uses_rule_master_without_mutating_execution_
     projected = attach_luxian_0609_customer_policy(wrappers)
     master_by_id = {entry.rule_id: entry for entry in load_luxian_0609_rule_master()}
 
-    assert len(projected) == 79
+    assert len(projected) == len(wrappers)
     assert all(rule.get("customer_policy") for rule in projected)
     assert "customer_policy" not in wrappers[0]
     for rule in projected:
@@ -332,16 +342,20 @@ def test_luxian_0609_rules_endpoint_returns_customer_rule_view(client):
     payload = _assert_success_shell(resp.json())
     rules = payload["rules"]
     assert payload["rule_set_key"] == LUXIAN_0609_RULE_SET_KEY
-    # 客户当前没有同意书来源，033/034/035/041/042 不进入客户运行范围。
-    assert payload["total_rules"] == 72
-    assert len(rules) == 72
-    assert not {
+    # 客户当前没有同意书来源，相关规则不进入客户运行范围。
+    excluded_rule_ids = {
         "LX0609-11-01-01",
         "LX0609-11-02-01",
         "LX0609-11-02-02",
         "LX0609-11-03-01",
         "LX0609-11-03-02",
-    }.intersection(rule["rule_id"] for rule in rules)
+    }
+    expected_rule_ids = {
+        rule["rule_id"] for rule in load_luxian_0609_rules()
+    } - excluded_rule_ids
+    assert payload["total_rules"] == len(expected_rule_ids)
+    assert len(rules) == len(expected_rule_ids)
+    assert {rule["rule_id"] for rule in rules} == expected_rule_ids
     assert rules[0]["rule_id"] == "LX0609-01-01-01"
     assert rules[0]["positive_example"]
     assert rules[0]["negative_example"]

@@ -49,7 +49,7 @@ from tests.integration.test_luxian_0609_consultation_api_entry_flow import (
 )
 
 
-RULE_ID = "LX0609-012"
+RULE_ID = "LX0609-06-01-05"
 RULE_SET_VERSION = "2026-06-09"
 _RECORD_A = {
     "institute_id": "EXAM-HOSPITAL",
@@ -132,12 +132,12 @@ class _DeterministicExamLabFactClient:
                                         "positive_state": (
                                             "positive"
                                             if self.rule_id
-                                            in {"LX0609-012", "LX0609-015"}
+                                            in {"LX0609-06-01-05", "LX0609-06-03-04"}
                                             else "not_relevant"
                                         ),
                                         "course_doc_positions": [
                                             1
-                                            if self.rule_id == "LX0609-010"
+                                            if self.rule_id == "LX0609-06-01-02"
                                             else 2
                                         ],
                                     }
@@ -273,10 +273,10 @@ def _fact_response() -> dict[str, object]:
                 "semantic_state": "present",
                 "positive_state": (
                     "positive"
-                    if rule_id in {"LX0609-012", "LX0609-015"}
+                    if rule_id in {"LX0609-06-01-05", "LX0609-06-03-04"}
                     else "not_relevant"
                 ),
-                "course_doc_positions": [1 if rule_id == "LX0609-010" else 2],
+                "course_doc_positions": [1 if rule_id == "LX0609-06-01-02" else 2],
             }
             for rule_id in EXAM_LAB_RULE_IDS
         ],
@@ -362,19 +362,19 @@ async def test_exam_lab_family_freezes_canonical_facts_evidence_and_prompt_usage
     ) == (100, 10, 110)
     assert delivered["executor_breakdown"] == {"llm": 1}
     assert all(item.fact_refs for item in context.reduced_decisions)
-    assert "LX0609-010" not in dict(context.customer_display_facts)
+    assert "LX0609-06-01-02" not in dict(context.customer_display_facts)
 
     expected_facts = {
         rule_id: {
             "verification_kind": "exam_lab_requirement_checked",
             "subject": (
                 "ct_mri"
-                if rule_id in {"LX0609-011", "LX0609-012"}
+                if rule_id in {"LX0609-06-01-04", "LX0609-06-01-05"}
                 else "culture_susceptibility"
             ),
             "requirement": (
                 "positive_result_analysis_within_24h"
-                if rule_id in {"LX0609-012", "LX0609-015"}
+                if rule_id in {"LX0609-06-01-05", "LX0609-06-03-04"}
                 else "result_recording_within_24h"
             ),
             "event_phase": "report",
@@ -383,7 +383,7 @@ async def test_exam_lab_family_freezes_canonical_facts_evidence_and_prompt_usage
             "requirement_met": True,
             "positive_state": (
                 "positive"
-                if rule_id in {"LX0609-012", "LX0609-015"}
+                if rule_id in {"LX0609-06-01-05", "LX0609-06-03-04"}
                 else "not_relevant"
             ),
             "report_time": "2026-07-02 12:00:00",
@@ -395,10 +395,10 @@ async def test_exam_lab_family_freezes_canonical_facts_evidence_and_prompt_usage
             "event_count": 1,
             "event_position": 1,
         }
-        for rule_id in ("LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015")
+        for rule_id in ("LX0609-06-01-04", "LX0609-06-01-05", "LX0609-06-03-03", "LX0609-06-03-04")
     }
     expected_evidence_coordinates = {
-        "LX0609-010": [
+        "LX0609-06-01-02": [
             (
                 "exam_master",
                 f"EXAM-REPORT-{_RECORD_A['visit_id']}",
@@ -406,7 +406,7 @@ async def test_exam_lab_family_freezes_canonical_facts_evidence_and_prompt_usage
                 "2026-07-02 08:00:00",
             )
         ],
-        "LX0609-011": [
+        "LX0609-06-01-04": [
             (
                 "daily_course_record",
                 f"COURSE-AFTER-{_RECORD_A['visit_id']}",
@@ -420,8 +420,8 @@ async def test_exam_lab_family_freezes_canonical_facts_evidence_and_prompt_usage
                 "2026-07-02 08:00:00",
             ),
         ],
-        "LX0609-012": [],
-        "LX0609-014": [
+        "LX0609-06-01-05": [],
+        "LX0609-06-03-03": [
             (
                 "daily_course_record",
                 f"COURSE-AFTER-{_RECORD_A['visit_id']}",
@@ -435,13 +435,13 @@ async def test_exam_lab_family_freezes_canonical_facts_evidence_and_prompt_usage
                 "2026-07-02 12:00:00",
             ),
         ],
-        "LX0609-015": [],
+        "LX0609-06-03-04": [],
     }
-    expected_evidence_coordinates["LX0609-012"] = list(
-        expected_evidence_coordinates["LX0609-011"]
+    expected_evidence_coordinates["LX0609-06-01-05"] = list(
+        expected_evidence_coordinates["LX0609-06-01-04"]
     )
-    expected_evidence_coordinates["LX0609-015"] = list(
-        expected_evidence_coordinates["LX0609-014"]
+    expected_evidence_coordinates["LX0609-06-03-04"] = list(
+        expected_evidence_coordinates["LX0609-06-03-03"]
     )
     for item in results:
         evidence_coordinates = [
@@ -458,7 +458,7 @@ async def test_exam_lab_family_freezes_canonical_facts_evidence_and_prompt_usage
         expected_coordinates = expected_evidence_coordinates[item["rule_id"]]
         assert len(evidence_coordinates) == len(expected_coordinates)
         assert set(evidence_coordinates) == set(expected_coordinates)
-        if item["rule_id"] == "LX0609-010":
+        if item["rule_id"] == "LX0609-06-01-02":
             # 冻结迁移前 Canonical 行为：010 的合规事实只存在于执行上下文，
             # 当前聚合结果不重复保存 customer_display_facts。
             assert "customer_display_facts" not in item

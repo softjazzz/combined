@@ -47,7 +47,7 @@ from tests.integration.test_luxian_0609_transfusion_family_convergence import (
 )
 
 
-RULE_IDS = ("LX0609-030", "LX0609-032")
+RULE_IDS = ("LX0609-04-02-02", "LX0609-04-03-01")
 EXECUTOR_KEY = "surgery_presence"
 
 
@@ -66,8 +66,8 @@ _SCENARIOS = (
         (),
         (),
         {
-            "LX0609-030": ("not_applicable", "trigger_absent_complete"),
-            "LX0609-032": ("not_applicable", "trigger_absent_complete"),
+            "LX0609-04-02-02": ("not_applicable", "trigger_absent_complete"),
+            "LX0609-04-03-01": ("not_applicable", "trigger_absent_complete"),
         },
     ),
     _Scenario(
@@ -75,8 +75,8 @@ _SCENARIOS = (
         ({"document_id": "SURG-1", "surgery_begin_time": "2026-08-20 08:00:00+08"},),
         ({"document_id": "CHECK-1", "record_content": "手术时间：2026-08-20 08:00:00"},),
         {
-            "LX0609-030": ("compliant", "requirement_satisfied"),
-            "LX0609-032": ("compliant", "requirement_satisfied"),
+            "LX0609-04-02-02": ("compliant", "requirement_satisfied"),
+            "LX0609-04-03-01": ("compliant", "requirement_satisfied"),
         },
     ),
     _Scenario(
@@ -84,8 +84,8 @@ _SCENARIOS = (
         ({"document_id": "SURG-1", "surgery_begin_time": "2026-08-20 08:00:00+08"},),
         (),
         {
-            "LX0609-030": ("compliant", "requirement_satisfied"),
-            "LX0609-032": ("non_compliant", "required_document_missing"),
+            "LX0609-04-02-02": ("compliant", "requirement_satisfied"),
+            "LX0609-04-03-01": ("non_compliant", "required_document_missing"),
         },
     ),
     _Scenario(
@@ -99,8 +99,8 @@ _SCENARIOS = (
             {"document_id": "CHECK-2", "record_content": "手术时间：2026-08-20 10:00:00"},
         ),
         {
-            "LX0609-030": ("compliant", "requirement_satisfied"),
-            "LX0609-032": ("compliant", "requirement_satisfied"),
+            "LX0609-04-02-02": ("compliant", "requirement_satisfied"),
+            "LX0609-04-03-01": ("compliant", "requirement_satisfied"),
         },
     ),
     _Scenario(
@@ -114,8 +114,8 @@ _SCENARIOS = (
             {"document_id": "CHECK-2", "record_content": "手术时间：2026-08-20 08:00:00"},
         ),
         {
-            "LX0609-030": ("compliant", "requirement_satisfied"),
-            "LX0609-032": ("data_gap", "association_failed"),
+            "LX0609-04-02-02": ("compliant", "requirement_satisfied"),
+            "LX0609-04-03-01": ("data_gap", "association_failed"),
         },
     ),
     _Scenario(
@@ -123,8 +123,8 @@ _SCENARIOS = (
         ({"document_id": "SURG-1", "surgery_begin_time": "2026-08-20 08:00:00+08"},),
         (),
         {
-            "LX0609-030": ("compliant", "requirement_satisfied"),
-            "LX0609-032": ("technical_error", "executor_exception"),
+            "LX0609-04-02-02": ("compliant", "requirement_satisfied"),
+            "LX0609-04-03-01": ("technical_error", "executor_exception"),
         },
         safecheck_error=True,
     ),

@@ -669,10 +669,10 @@ def _validate_candidate(candidate: Mapping[str, Any]) -> str:
     return claimed
 
 
-def _review_sort_key(row: Mapping[str, Any]) -> tuple[int, int]:
+def _review_sort_key(row: Mapping[str, Any]) -> tuple[int, str]:
     return (
         int(str(row.get("case_label") or "").removeprefix("case-")),
-        int(str(row.get("rule_id") or "").removeprefix("LX0609-")),
+        str(row.get("rule_id") or ""),
     )
 
 

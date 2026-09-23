@@ -85,7 +85,7 @@
         "selector_digest": { "$ref": "#/$defs/digest" },
         "rule_id": {
           "type": "string",
-          "pattern": "^LX0609-[0-9]{3}$"
+          "pattern": "^LX0609-[0-9]{2}-[0-9]{2}-[0-9]{2}$"
         },
         "decision_kind": {
           "enum": ["deterministic", "semantic"]

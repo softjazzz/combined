@@ -68,7 +68,7 @@ def calculate_score(row: dict[str, str]) -> tuple[int, list[str], str, str]:
         score += 10
         reasons.append("有文书清单")
 
-    if qc_point_id == "LX0609-001":
+    if qc_point_id == "LX0609-01-01-01":
         hours = extract_first_float(r"约\s*([0-9]+(?:\.[0-9]+)?)\s*小时", text)
         if case_type == "positive" and expected_hit:
             if hours is not None and hours > 24:
@@ -92,7 +92,7 @@ def calculate_score(row: dict[str, str]) -> tuple[int, list[str], str, str]:
                 reasons.append("边界原因明确: 入院时间缺失或数据不足")
             review_focus = "核对是否确实缺少可判定入院时间；若缺失，应作为 data_quality_gap 边界样本。"
 
-    elif qc_point_id == "LX0609-017":
+    elif qc_point_id == "LX0609-12-01-02":
         similarity = extract_first_float(r"相似度\s*([0-9]+(?:\.[0-9]+)?)", text)
         if case_type == "positive" and expected_hit:
             if similarity is not None and similarity >= 0.8:

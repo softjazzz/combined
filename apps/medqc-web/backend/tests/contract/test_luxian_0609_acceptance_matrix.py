@@ -18,7 +18,7 @@ def test_matrix_is_generated_from_current_runtime_contract() -> None:
 
     assert committed == generated
     assert [rule["rule_id"] for rule in committed["rules"]] == [
-        f"LX0609-{index:03d}" for index in range(1, 80)
+        rule["rule_id"] for rule in acceptance._runtime_manifest()["rules"]
     ]
 
 
@@ -26,12 +26,12 @@ def test_matrix_keeps_formal_and_temporary_tiers_separate() -> None:
     payload = _matrix()
     summary = acceptance.validate_acceptance_matrix(payload)
 
-    assert summary["rule_count"] == 79
-    assert summary["definition_tiers"] == {"formal": 71, "temporary": 8}
+    assert summary["rule_count"] == 83
+    assert summary["definition_tiers"] == {"formal": 75, "temporary": 8}
     assert summary["pending_definition_rule_count"] == 10
-    assert summary["bound_fixture_count"] == 261
+    assert summary["bound_fixture_count"] == 265
     assert summary["case_slots"]["covered"] == 241
-    assert summary["case_slots"]["missing"] == 9
+    assert summary["case_slots"]["missing"] == 21
 
 
 def test_covered_means_controlled_fixture_binding_not_inferred_case_count() -> None:
@@ -55,10 +55,10 @@ def test_covered_means_controlled_fixture_binding_not_inferred_case_count() -> N
         for _, _, refs in covered_slots
     )
     assert Counter(slot_name for _, slot_name, _ in covered_slots) == {
-        "compliant": 67,
-        "confirmed_issue": 65,
+        "compliant": 65,
+        "confirmed_issue": 63,
         "not_applicable": 40,
-        "data_insufficient": 69,
+        "data_insufficient": 73,
     }
 
 
@@ -117,11 +117,11 @@ def test_time_and_semantic_contracts_are_explicit_and_honest() -> None:
     assert covered_boundaries == {
         (rule_id, boundary_name)
         for rule_id in (
-            "LX0609-001",
-            "LX0609-002",
-            "LX0609-004",
-            "LX0609-005",
-            "LX0609-006",
+            "LX0609-01-01-01",
+            "LX0609-01-02-01",
+            "LX0609-09-01-01",
+            "LX0609-02-01-01",
+            "LX0609-02-01-02",
         )
         for boundary_name in ("before_threshold", "at_threshold", "after_threshold")
     }
@@ -132,7 +132,7 @@ def test_time_and_semantic_contracts_are_explicit_and_honest() -> None:
         for rule in semantic_rules
     )
     by_id = {rule["rule_id"]: rule for rule in payload["rules"]}
-    for rule_id in ("LX0609-025", "LX0609-059"):
+    for rule_id in ("LX0609-04-02-04", "LX0609-05-03-01"):
         assert by_id[rule_id]["definition_phase"] == "pending_definition"
         assert "not_executed" in by_id[rule_id]["semantic_contract"][
             "controlled_status_enum"
@@ -150,8 +150,8 @@ def test_time_and_semantic_contracts_are_explicit_and_honest() -> None:
         "daily_course_record",
         "senior_course_record",
     ]
-    assert by_id["LX0609-059"]["required_evidence"] == expected_treatment_sources
-    assert by_id["LX0609-059"]["semantic_contract"]["minimal_input"][
+    assert by_id["LX0609-05-03-01"]["required_evidence"] == expected_treatment_sources
+    assert by_id["LX0609-05-03-01"]["semantic_contract"]["minimal_input"][
         "documents"
     ] == expected_treatment_sources
 
@@ -160,7 +160,7 @@ def test_validator_rejects_executor_drift() -> None:
     payload = _matrix()
     payload["rules"][0]["expected_executor"] = "wrong-executor"
 
-    with pytest.raises(ValueError, match="LX0609-001 expected_executor mismatch"):
+    with pytest.raises(ValueError, match="LX0609-01-01-01 expected_executor mismatch"):
         acceptance.validate_acceptance_matrix(payload)
 
 
@@ -181,5 +181,5 @@ def test_report_states_fixture_coverage_is_not_execution_acceptance() -> None:
 
     assert "不以病例数量代替覆盖率" in report
     assert "不代表引擎执行已经通过" in report
-    assert "正式 71 条" in report
+    assert "正式 75 条" in report
     assert "临时 8 条" in report

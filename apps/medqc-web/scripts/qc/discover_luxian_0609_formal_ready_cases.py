@@ -22,7 +22,7 @@ CATALOG_PATH = ROOT / "docs" / "0602" / "luxian_0609_formal_rule_catalog.json"
 OUTPUT_JSON_PATH = ROOT / "docs" / "0602" / "luxian_0609_formal_ready_sample_candidates.json"
 OUTPUT_MD_PATH = ROOT / "docs" / "0602" / "泸县0609质控点-formal-ready样本候选.md"
 
-FORMAL_READY_QC_POINTS = {"LX0609-017", "LX0609-021", "LX0609-032"}
+FORMAL_READY_QC_POINTS = {"LX0609-12-01-02", "LX0609-03-01-02", "LX0609-04-03-01"}
 
 
 def normalize(value: Any) -> str:
@@ -415,7 +415,7 @@ def discover_lx0609_001(visit: dict[str, Any], frontpage: dict[str, Any], docs: 
     first_doc = admission_docs[0]
     if not admission_time:
         return make_candidate(
-            qc_point_id="LX0609-001",
+            qc_point_id="LX0609-01-01-01",
             case_type="boundary",
             visit=visit,
             frontpage=frontpage,
@@ -427,7 +427,7 @@ def discover_lx0609_001(visit: dict[str, Any], frontpage: dict[str, Any], docs: 
     record_time, record_time_source = resolve_document_completion_time(first_doc)
     if not record_time:
         return make_candidate(
-            qc_point_id="LX0609-001",
+            qc_point_id="LX0609-01-01-01",
             case_type="boundary",
             visit=visit,
             frontpage=frontpage,
@@ -439,7 +439,7 @@ def discover_lx0609_001(visit: dict[str, Any], frontpage: dict[str, Any], docs: 
     hours = (record_time - admission_time).total_seconds() / 3600
     if hours > 24:
         return make_candidate(
-            qc_point_id="LX0609-001",
+            qc_point_id="LX0609-01-01-01",
             case_type="positive",
             visit=visit,
             frontpage=frontpage,
@@ -450,7 +450,7 @@ def discover_lx0609_001(visit: dict[str, Any], frontpage: dict[str, Any], docs: 
         )
     if 22 <= hours <= 24:
         return make_candidate(
-            qc_point_id="LX0609-001",
+            qc_point_id="LX0609-01-01-01",
             case_type="boundary",
             visit=visit,
             frontpage=frontpage,
@@ -461,7 +461,7 @@ def discover_lx0609_001(visit: dict[str, Any], frontpage: dict[str, Any], docs: 
         )
     if 0 <= hours <= 8:
         return make_candidate(
-            qc_point_id="LX0609-001",
+            qc_point_id="LX0609-01-01-01",
             case_type="negative",
             visit=visit,
             frontpage=frontpage,
@@ -479,7 +479,7 @@ def discover_lx0609_002(visit: dict[str, Any], frontpage: dict[str, Any], docs: 
     if not admission_time:
         if course_docs:
             return make_candidate(
-                qc_point_id="LX0609-002",
+                qc_point_id="LX0609-01-02-01",
                 case_type="boundary",
                 visit=visit,
                 frontpage=frontpage,
@@ -491,7 +491,7 @@ def discover_lx0609_002(visit: dict[str, Any], frontpage: dict[str, Any], docs: 
         return None
     if not course_docs:
         return make_candidate(
-            qc_point_id="LX0609-002",
+            qc_point_id="LX0609-01-02-01",
             case_type="positive",
             visit=visit,
             frontpage=frontpage,
@@ -504,7 +504,7 @@ def discover_lx0609_002(visit: dict[str, Any], frontpage: dict[str, Any], docs: 
     record_time, record_time_source = resolve_document_completion_time(first_doc)
     if not record_time:
         return make_candidate(
-            qc_point_id="LX0609-002",
+            qc_point_id="LX0609-01-02-01",
             case_type="boundary",
             visit=visit,
             frontpage=frontpage,
@@ -516,7 +516,7 @@ def discover_lx0609_002(visit: dict[str, Any], frontpage: dict[str, Any], docs: 
     hours = (record_time - admission_time).total_seconds() / 3600
     if hours > 8:
         return make_candidate(
-            qc_point_id="LX0609-002",
+            qc_point_id="LX0609-01-02-01",
             case_type="positive",
             visit=visit,
             frontpage=frontpage,
@@ -527,7 +527,7 @@ def discover_lx0609_002(visit: dict[str, Any], frontpage: dict[str, Any], docs: 
         )
     if 7 <= hours <= 8:
         return make_candidate(
-            qc_point_id="LX0609-002",
+            qc_point_id="LX0609-01-02-01",
             case_type="boundary",
             visit=visit,
             frontpage=frontpage,
@@ -538,7 +538,7 @@ def discover_lx0609_002(visit: dict[str, Any], frontpage: dict[str, Any], docs: 
         )
     if 0 <= hours <= 4:
         return make_candidate(
-            qc_point_id="LX0609-002",
+            qc_point_id="LX0609-01-02-01",
             case_type="negative",
             visit=visit,
             frontpage=frontpage,
@@ -557,7 +557,7 @@ def discover_lx0609_016(visit: dict[str, Any], frontpage: dict[str, Any], docs: 
         return None
     if not course_docs:
         return make_candidate(
-            qc_point_id="LX0609-016",
+            qc_point_id="LX0609-12-01-01",
             case_type="boundary",
             visit=visit,
             frontpage=frontpage,
@@ -570,7 +570,7 @@ def discover_lx0609_016(visit: dict[str, Any], frontpage: dict[str, Any], docs: 
     course_text = compact_text(course_docs[0].get("content"))
     if len(admission_text) < 120 or len(course_text) < 120:
         return make_candidate(
-            qc_point_id="LX0609-016",
+            qc_point_id="LX0609-12-01-01",
             case_type="boundary",
             visit=visit,
             frontpage=frontpage,
@@ -595,7 +595,7 @@ def discover_lx0609_016(visit: dict[str, Any], frontpage: dict[str, Any], docs: 
     else:
         return None
     return make_candidate(
-        qc_point_id="LX0609-016",
+        qc_point_id="LX0609-12-01-01",
         case_type=case_type,
         visit=visit,
         frontpage=frontpage,
@@ -636,7 +636,7 @@ def discover_lx0609_017(visit: dict[str, Any], frontpage: dict[str, Any], docs: 
     else:
         return None
     return make_candidate(
-        qc_point_id="LX0609-017",
+        qc_point_id="LX0609-12-01-02",
         case_type=case_type,
         visit=visit,
         frontpage=frontpage,
@@ -693,7 +693,7 @@ def discover_lx0609_021(visit: dict[str, Any], frontpage: dict[str, Any], docs: 
     has_generic = is_generic_consultation_request(request_segment)
     if has_generic or (len(request_segment) < 24 and "会诊" in request_segment and not has_purpose):
         return make_candidate(
-            qc_point_id="LX0609-021",
+            qc_point_id="LX0609-03-01-02",
             case_type="positive",
             visit=visit,
             frontpage=frontpage,
@@ -703,7 +703,7 @@ def discover_lx0609_021(visit: dict[str, Any], frontpage: dict[str, Any], docs: 
         )
     if has_purpose:
         return make_candidate(
-            qc_point_id="LX0609-021",
+            qc_point_id="LX0609-03-01-02",
             case_type="negative",
             visit=visit,
             frontpage=frontpage,
@@ -712,7 +712,7 @@ def discover_lx0609_021(visit: dict[str, Any], frontpage: dict[str, Any], docs: 
             confidence=0.82,
         )
     return make_candidate(
-        qc_point_id="LX0609-021",
+        qc_point_id="LX0609-03-01-02",
         case_type="boundary",
         visit=visit,
         frontpage=frontpage,
@@ -729,7 +729,7 @@ def discover_lx0609_032(visit: dict[str, Any], frontpage: dict[str, Any], docs: 
         return None
     if safecheck_stats is None:
         return make_candidate(
-            qc_point_id="LX0609-032",
+            qc_point_id="LX0609-04-03-01",
             case_type="boundary",
             visit=visit,
             frontpage=frontpage,
@@ -741,7 +741,7 @@ def discover_lx0609_032(visit: dict[str, Any], frontpage: dict[str, Any], docs: 
     safecheck_count = safecheck_stats["total"]
     if safecheck_count <= 0:
         return make_candidate(
-            qc_point_id="LX0609-032",
+            qc_point_id="LX0609-04-03-01",
             case_type="positive",
             visit=visit,
             frontpage=frontpage,
@@ -757,7 +757,7 @@ def discover_lx0609_032(visit: dict[str, Any], frontpage: dict[str, Any], docs: 
         confidence = 0.74
         return [
             make_candidate(
-                qc_point_id="LX0609-032",
+                qc_point_id="LX0609-04-03-01",
                 case_type="negative",
                 visit=visit,
                 frontpage=frontpage,
@@ -767,7 +767,7 @@ def discover_lx0609_032(visit: dict[str, Any], frontpage: dict[str, Any], docs: 
                 extra={"safecheck_count": safecheck_count, **safecheck_stats},
             ),
             make_candidate(
-                qc_point_id="LX0609-032",
+                qc_point_id="LX0609-04-03-01",
                 case_type="boundary",
                 visit=visit,
                 frontpage=frontpage,
@@ -779,7 +779,7 @@ def discover_lx0609_032(visit: dict[str, Any], frontpage: dict[str, Any], docs: 
             ),
         ]
     return make_candidate(
-        qc_point_id="LX0609-032",
+        qc_point_id="LX0609-04-03-01",
         case_type="negative",
         visit=visit,
         frontpage=frontpage,
@@ -791,12 +791,12 @@ def discover_lx0609_032(visit: dict[str, Any], frontpage: dict[str, Any], docs: 
 
 
 DISCOVERERS = {
-    "LX0609-001": discover_lx0609_001,
-    "LX0609-002": discover_lx0609_002,
-    "LX0609-016": discover_lx0609_016,
-    "LX0609-017": discover_lx0609_017,
-    "LX0609-021": discover_lx0609_021,
-    "LX0609-032": discover_lx0609_032,
+    "LX0609-01-01-01": discover_lx0609_001,
+    "LX0609-01-02-01": discover_lx0609_002,
+    "LX0609-12-01-01": discover_lx0609_016,
+    "LX0609-12-01-02": discover_lx0609_017,
+    "LX0609-03-01-02": discover_lx0609_021,
+    "LX0609-04-03-01": discover_lx0609_032,
 }
 
 

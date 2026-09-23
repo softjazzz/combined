@@ -202,7 +202,7 @@ def _api_app(service: Any) -> FastAPI:
 
 
 def _create_ready_sample_pool(engine: sa.Engine, service: CustomQCSamplePoolService) -> tuple[str, str]:
-    pool = service.create_pool_with_items(name="LX0609-075 脱敏验收池", source_file="fixture.xlsx", source_sheet="Sheet1",
+    pool = service.create_pool_with_items(name="LX0609-10-03-01 脱敏验收池", source_file="fixture.xlsx", source_sheet="Sheet1",
                                           created_by="lx075-test-user", scene="final", rows=[{"row_no": 1, "patient_name": "脱敏患者", "manual_issue_text": "全规则验收"}])
     pool_id = str(pool["id"])
     with Session(engine) as session:
@@ -389,15 +389,15 @@ def test_consultation_semantic_llm_stub_is_normalized_across_three_entries(monke
     pool_id, sample_item_id = _create_ready_sample_pool(engine, sample_pool_service)
     app = _api_app(service)
     jobs: list[dict[str, Any]] = []
-    rule_ids = ["LX0609-022"]
+    rule_ids = ["LX0609-03-01-03"]
     job_ids = _entry_job_ids(app=app, workspace=workspace, pool_id=pool_id, sample_item_id=sample_item_id, workspace_rule_ids=rule_ids)
     jobs = [_wait_for_terminal_job(workspace, job_id) for job_id in job_ids]
     assert len(calls) == 4  # 单例 A + 批量 A/B + 样本池 A，每病历一条 semantic prompt。
     assert {prompt for prompt, _input, _output in calls} == {calls[0][0]}
     assert {(input_tokens, output_tokens) for _prompt, input_tokens, output_tokens in calls} == {(17, 5)}
-    single_item = _items_for_visit(jobs[0], _RECORD_A["visit_id"])["LX0609-022"]
-    batch_item = _items_for_visit(jobs[1], _RECORD_A["visit_id"])["LX0609-022"]
-    sample_item = _items_for_visit(jobs[2], _RECORD_A["visit_id"])["LX0609-022"]
+    single_item = _items_for_visit(jobs[0], _RECORD_A["visit_id"])["LX0609-03-01-03"]
+    batch_item = _items_for_visit(jobs[1], _RECORD_A["visit_id"])["LX0609-03-01-03"]
+    sample_item = _items_for_visit(jobs[2], _RECORD_A["visit_id"])["LX0609-03-01-03"]
     assert _canonical_tuple(single_item) == _canonical_tuple(batch_item) == _canonical_tuple(sample_item)
     # 调用数按病历归一：单例 A、批量 A+B、样本池 A 均为每病历一次，且每次
     # 可观察到相同 prompt 与 input/output token。当前 worker 的汇总 token
