@@ -234,45 +234,78 @@ class CaseScopeService:
                     date_params.append(as_of_date.isoformat())
                     if role == "active":
                         date_params.append(as_of_date.isoformat())
-                    if role == "active_admission":
-                        for index, exclusion_source in enumerate(
-                            plan.get("active_exclusions") or ()
+                    for index, exclusion_source in enumerate(
+                        plan.get("active_exclusions") or ()
+                    ):
+                        exclusion_table = _text(exclusion_source.get("table_name"))
+                        exclusion_columns = set(exclusion_source.get("columns") or set())
+                        exclusion_discharge_column = _text(
+                            exclusion_source.get("discharge_time_column")
+                        )
+                        exclusion_alias = f"discharged_{index}"
+                        exclusion_discharge_value = (
+                            f"({exclusion_alias}.{exclusion_discharge_column} "
+                            "AT TIME ZONE 'Asia/Shanghai')"
+                            if _text(exclusion_source.get("discharge_time_data_type")).lower()
+                            == "timestamp with time zone"
+                            else f"{exclusion_alias}.{exclusion_discharge_column}"
+                        )
+                        exclusion_type = _text(
+                            exclusion_source.get("discharge_time_data_type")
+                        ).lower()
+                        if exclusion_type in {"text", "character varying", "character"}:
+                            # ISO 日期前缀按字典序等价于日期序；不可识别的非空值保守排除在院。
+                            discharge_condition = (
+                                f"({exclusion_alias}.{exclusion_discharge_column} IS NOT NULL "
+                                "AND CASE WHEN "
+                                f"btrim({exclusion_discharge_value}) ~ "
+                                "'^[1-9][0-9]{3}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])' "
+                                f"THEN left(btrim({exclusion_discharge_value}), 10) "
+                                "<= %s::date::text ELSE TRUE END)"
+                            )
+                        else:
+                            discharge_condition = (
+                                f"({exclusion_alias}.{exclusion_discharge_column} IS NOT NULL "
+                                f"AND {exclusion_discharge_value} "
+                                "< (%s::date + INTERVAL '1 day'))"
+                            )
+                        date_params.append(as_of_date.isoformat())
+                        if (
+                            exclusion_discharge_column != "discharge_date"
+                            and "discharge_date" in exclusion_columns
+                            and exclusion_source.get("discharge_date_data_type") == "date"
                         ):
-                            exclusion_table = _text(exclusion_source.get("table_name"))
-                            exclusion_columns = set(
-                                exclusion_source.get("columns") or set()
+                            discharge_condition = (
+                                f"({discharge_condition} OR "
+                                f"{exclusion_alias}.discharge_date <= %s::date)"
                             )
-                            exclusion_discharge_column = _text(
-                                exclusion_source.get("discharge_time_column")
+                            date_params.append(as_of_date.isoformat())
+                        institute_match = ""
+                        if "institute_id" in columns and "institute_id" in exclusion_columns:
+                            institute_match = (
+                                f"AND {exclusion_alias}.institute_id::text "
+                                "= source_row.institute_id::text "
                             )
-                            exclusion_alias = f"discharged_{index}"
-                            institute_match = ""
-                            if (
-                                "institute_id" in columns
-                                and "institute_id" in exclusion_columns
-                            ):
-                                institute_match = (
-                                    f"AND {exclusion_alias}.institute_id::text "
-                                    "= source_row.institute_id::text "
-                                )
-                            elif "institute_id" in exclusion_columns:
-                                institute_match = (
-                                    f"AND {exclusion_alias}.institute_id::text = %s::text "
-                                )
-                                date_params.append(default_institute_id)
-                            where_sql += (
-                                " AND NOT EXISTS ("
-                                f"SELECT 1 FROM {schema_ident}.{exclusion_table} "
-                                f"AS {exclusion_alias} "
-                                f"WHERE {exclusion_alias}.{exclusion_discharge_column} "
-                                "IS NOT NULL "
-                                f"AND {exclusion_alias}.patient_id::text "
-                                "= source_row.patient_id::text "
-                                f"AND {exclusion_alias}.visit_id::text "
-                                "= source_row.visit_id::text "
-                                f"{institute_match}"
-                                ")"
+                        elif "institute_id" in exclusion_columns:
+                            institute_match = (
+                                f"AND {exclusion_alias}.institute_id::text = %s::text "
                             )
+                        elif "institute_id" in columns:
+                            institute_match = "AND source_row.institute_id::text = %s::text "
+                        where_sql += (
+                            " AND NOT EXISTS ("
+                            f"SELECT 1 FROM {schema_ident}.{exclusion_table} "
+                            f"AS {exclusion_alias} "
+                            f"WHERE {discharge_condition} "
+                            f"AND {exclusion_alias}.patient_id::text "
+                            "= source_row.patient_id::text "
+                            f"AND {exclusion_alias}.visit_id::text "
+                            "= source_row.visit_id::text "
+                            f"{institute_match}"
+                            ")"
+                        )
+                        if institute_match and "= %s::text" in institute_match:
+                            date_params.append(default_institute_id)
                 else:
                     if discharge_start_date is None or discharge_end_date is None:
                         raise ValueError("期间出院范围必须填写出院开始日期和结束日期")
@@ -339,6 +372,10 @@ class CaseScopeService:
             source_status = str(plan["source_status"])
             if active_candidates:
                 used_sources.append(_text(active_source.get("table_name")))
+                used_sources.extend(
+                    _text(source.get("table_name"))
+                    for source in plan.get("active_exclusions") or ()
+                )
             elif plan.get("active_fallback") is not None:
                 fallback_source = plan["active_fallback"]
                 if not plan.get("active_exclusions"):
@@ -747,6 +784,9 @@ def _resolve_source_plan(
                 "discharge_time_data_type": _text(
                     (table_column_types.get(table_name) or {}).get(discharge_column)
                 ).lower(),
+                "discharge_date_data_type": _text(
+                    (table_column_types.get(table_name) or {}).get("discharge_date")
+                ).lower(),
             }
         return None
 
@@ -791,7 +831,7 @@ def _resolve_source_plan(
             require_admission_time=False,
             require_discharge_time=True,
         )
-        if needs_active and active_fallback is not None
+        if needs_active
         else ()
     )
     discharged_sources = (
@@ -812,8 +852,12 @@ def _resolve_source_plan(
         if needs_active and active_source is None and active_fallback is None:
             raise ValueError("源库没有可识别的当前在院患者数据，请同步住院登记")
         raise ValueError("源库没有可识别的已出院患者数据，请同步出院记录或病案首页")
+    if needs_active and not active_exclusions:
+        raise ValueError("源库缺少可关联的权威出院事实，无法安全识别当前在院患者")
 
     warnings: list[str] = []
+    if needs_active and len(active_exclusions) < 2:
+        warnings.append("当前在院范围仅有部分权威出院反证来源，可能将已出院病例误判为在院。")
     if (
         needs_discharged
         and discharged_sources

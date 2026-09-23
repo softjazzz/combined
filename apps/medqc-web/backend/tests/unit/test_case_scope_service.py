@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import re
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 import pytest
 
-from app.services.case_scope_service import CaseScopeService
+from app.services.case_scope_service import CaseScopeService, _parse_datetime
 from app.services.case_identity import CaseRef
 
 
@@ -36,29 +37,68 @@ class _SourceCursor:
                     row["table_name"], {}
                 ).get(row["column_name"], "")
             return
-        for table_name, rows in self._source_rows.items():
-            if f"FROM public.{table_name}" in query:
+        for table_name in self._table_columns:
+            rows = self._source_rows.get(table_name, [])
+            if f"FROM public.{table_name} AS source_row" in query or (
+                table_name == "patient_information"
+                and f"FROM public.{table_name}" in query
+            ):
                 selected_rows = [dict(row) for row in rows]
-                if table_name == "admission_record" and "NOT EXISTS" in query:
-                    discharged_identities = {
+                excluded_tables = re.findall(
+                    r"FROM public\.(\w+) AS discharged_\d+", query
+                )
+                if excluded_tables:
+                    as_of_dates = [
+                        date.fromisoformat(value)
+                        for value in params
+                        if isinstance(value, str)
+                        and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value)
+                    ]
+                    assert as_of_dates
+                    as_of_end = datetime.combine(
+                        max(as_of_dates) + timedelta(days=1), datetime.min.time()
+                    )
+                    default_institute_id = next(
                         (
-                            str(row.get("institute_id") or ""),
-                            str(row.get("patient_id") or ""),
-                            str(row.get("visit_id") or ""),
+                            value
+                            for value in params
+                            if isinstance(value, str)
+                            and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value)
+                        ),
+                        "",
+                    )
+
+                    def has_discharge_fact(candidate: dict[str, Any]) -> bool:
+                        candidate_institute = str(
+                            candidate.get("institute_id") or default_institute_id
                         )
-                        for source_name in ("mr", "discharge_record")
-                        for row in self._source_rows.get(source_name, [])
-                        if row.get("discharge_time") is not None
-                    }
+                        for source_name in excluded_tables:
+                            for fact in self._source_rows.get(source_name, []):
+                                discharge_time = _parse_datetime(
+                                    fact.get("discharge_time")
+                                    or fact.get("discharge_datetime")
+                                    or fact.get("discharge_date")
+                                )
+                                if fact.get("discharge_time") and discharge_time is None:
+                                    discharge_time = datetime.min
+                                if discharge_time is None or discharge_time >= as_of_end:
+                                    continue
+                                if (
+                                    str(fact.get("institute_id") or default_institute_id),
+                                    str(fact.get("patient_id") or ""),
+                                    str(fact.get("visit_id") or ""),
+                                ) == (
+                                    candidate_institute,
+                                    str(candidate.get("patient_id") or ""),
+                                    str(candidate.get("visit_id") or ""),
+                                ):
+                                    return True
+                        return False
+
                     selected_rows = [
                         row
                         for row in selected_rows
-                        if (
-                            str(row.get("institute_id") or ""),
-                            str(row.get("patient_id") or ""),
-                            str(row.get("visit_id") or ""),
-                        )
-                        not in discharged_identities
+                        if not has_discharge_fact(row)
                     ]
                 self._rows = selected_rows
                 if "%s::text AS institute_id" in query:
@@ -113,6 +153,13 @@ def test_active_scope_falls_back_to_recent_admission_minus_discharge_facts():
                     "admission_time": "2026-07-21 08:00:00",
                     "current_department": "儿科",
                 },
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P-DISCHARGED-RECORD",
+                    "visit_id": "V-DISCHARGED-RECORD",
+                    "admission_time": "2026-07-22 08:00:00",
+                    "current_department": "呼吸与危重症医学科",
+                },
             ],
             "mr": [
                 {
@@ -120,9 +167,22 @@ def test_active_scope_falls_back_to_recent_admission_minus_discharge_facts():
                     "patient_id": "P-DISCHARGED",
                     "visit_id": "V-DISCHARGED",
                     "discharge_time": "2026-07-25 10:00:00",
+                },
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P-ACTIVE",
+                    "visit_id": "V-ACTIVE",
+                    "discharge_time": "2026-08-01 00:00:00",
+                },
+            ],
+            "discharge_record": [
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P-DISCHARGED-RECORD",
+                    "visit_id": "V-DISCHARGED-RECORD",
+                    "discharge_time": "2026-07-31 10:00:00",
                 }
             ],
-            "discharge_record": [],
         },
     )
     service = CaseScopeService(
@@ -186,6 +246,279 @@ def test_active_scope_fallback_requires_authoritative_discharge_facts():
         )
 
 
+def test_registration_active_excludes_only_matching_discharge_facts_by_as_of():
+    identity_columns = {"institute_id", "patient_id", "visit_id"}
+    cursor = _SourceCursor(
+        table_columns={
+            "inpat_registration": identity_columns
+            | {"admission_datetime", "discharge_datetime"},
+            "mr": identity_columns | {"discharge_datetime"},
+            "discharge_record": identity_columns | {"discharge_datetime"},
+        },
+        source_rows={
+            "inpat_registration": [
+                {
+                    "institute_id": "H1",
+                    "patient_id": patient_id,
+                    "visit_id": "SAME-VISIT",
+                    "admission_time": "2026-07-01 08:00:00",
+                    "discharge_time": None,
+                }
+                for patient_id in ("P-MR", "P-RECORD", "P-FUTURE", "P-OTHER")
+            ]
+            + [
+                {
+                    "institute_id": "H2",
+                    "patient_id": "P-OTHER",
+                    "visit_id": "SAME-VISIT",
+                    "admission_time": "2026-07-01 08:00:00",
+                    "discharge_time": None,
+                }
+            ],
+            "mr": [
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P-MR",
+                    "visit_id": "SAME-VISIT",
+                    "discharge_time": "2026-07-31 10:00:00",
+                },
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P-FUTURE",
+                    "visit_id": "SAME-VISIT",
+                    "discharge_time": "2026-08-01 00:00:00",
+                },
+            ],
+            "discharge_record": [
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P-RECORD",
+                    "visit_id": "SAME-VISIT",
+                    "discharge_time": "2026-07-30 09:00:00",
+                },
+                {
+                    "institute_id": "H2",
+                    "patient_id": "P-OTHER",
+                    "visit_id": "SAME-VISIT",
+                    "discharge_time": "2026-07-30 09:00:00",
+                },
+            ],
+        },
+    )
+    service = CaseScopeService(
+        remote_url_loader=lambda: "postgresql://source",
+        db_config_loader=lambda: {"remote_schema": "public"},
+        connection_factory=lambda *_args, **_kwargs: _SourceConnection(cursor),
+    )
+
+    result = service.resolve_hospitalization_scope(
+        scope_mode="active",
+        as_of_date=date(2026, 7, 31),
+        discharge_start_date=None,
+        discharge_end_date=None,
+        departments=(),
+    )
+
+    assert result.case_refs == (
+        CaseRef("H1", "P-FUTURE", "SAME-VISIT"),
+        CaseRef("H1", "P-OTHER", "SAME-VISIT"),
+    )
+    assert result.sources_used == ("inpat_registration", "mr", "discharge_record")
+    assert result.source_status == "ready"
+    query, params = next(
+        (query, params)
+        for query, params in cursor.queries
+        if "FROM public.inpat_registration AS source_row" in query
+    )
+    assert query.count("NOT EXISTS") == 2
+    assert query.count("< (%s::date + INTERVAL '1 day')") == 3
+    assert params == ["2026-07-31"] * 4
+
+
+def test_registration_active_requires_discharge_fact_source():
+    identity_columns = {"institute_id", "patient_id", "visit_id"}
+    cursor = _SourceCursor(
+        table_columns={
+            "inpat_registration": identity_columns
+            | {"admission_datetime", "discharge_datetime"},
+        },
+        source_rows={"inpat_registration": []},
+    )
+    service = CaseScopeService(
+        remote_url_loader=lambda: "postgresql://source",
+        db_config_loader=lambda: {"remote_schema": "public"},
+        connection_factory=lambda *_args, **_kwargs: _SourceConnection(cursor),
+    )
+
+    with pytest.raises(ValueError, match="权威出院事实"):
+        service.resolve_hospitalization_scope(
+            scope_mode="active",
+            as_of_date=date(2026, 7, 31),
+            discharge_start_date=None,
+            discharge_end_date=None,
+            departments=(),
+        )
+
+
+def test_registration_active_with_one_discharge_source_is_degraded():
+    identity_columns = {"institute_id", "patient_id", "visit_id"}
+    cursor = _SourceCursor(
+        table_columns={
+            "inpat_registration": identity_columns
+            | {"admission_datetime", "discharge_datetime"},
+            "mr": identity_columns | {"discharge_datetime"},
+        },
+        source_rows={
+            "inpat_registration": [
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P1",
+                    "visit_id": "V1",
+                    "admission_time": "2026-07-01 08:00:00",
+                    "discharge_time": None,
+                }
+            ]
+        },
+    )
+    service = CaseScopeService(
+        remote_url_loader=lambda: "postgresql://source",
+        db_config_loader=lambda: {"remote_schema": "public"},
+        connection_factory=lambda *_args, **_kwargs: _SourceConnection(cursor),
+    )
+
+    result = service.resolve_hospitalization_scope(
+        scope_mode="active",
+        as_of_date=date(2026, 7, 31),
+        discharge_start_date=None,
+        discharge_end_date=None,
+        departments=(),
+    )
+
+    assert result.case_refs == (CaseRef("H1", "P1", "V1"),)
+    assert result.sources_used == ("inpat_registration", "mr")
+    assert result.source_status == "degraded"
+    assert "仅有部分权威出院反证来源" in result.warnings[0]
+
+
+def test_registration_active_exclusion_uses_hospital_day_for_timestamptz():
+    identity_columns = {"institute_id", "patient_id", "visit_id"}
+    cursor = _SourceCursor(
+        table_columns={
+            "inpat_registration": identity_columns
+            | {"admission_datetime", "discharge_datetime"},
+            "mr": identity_columns | {"discharge_datetime"},
+            "discharge_record": identity_columns | {"discharge_datetime"},
+        },
+        table_column_types={
+            "mr": {"discharge_datetime": "timestamp with time zone"},
+        },
+        source_rows={
+            "inpat_registration": [
+                {
+                    "institute_id": "H1",
+                    "patient_id": patient_id,
+                    "visit_id": "V1",
+                    "admission_time": "2026-07-01 08:00:00",
+                    "discharge_time": None,
+                }
+                for patient_id in ("P-LOCAL-JULY", "P-LOCAL-AUGUST")
+            ],
+            "mr": [
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P-LOCAL-JULY",
+                    "visit_id": "V1",
+                    "discharge_time": "2026-07-31T15:30:00+00:00",
+                },
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P-LOCAL-AUGUST",
+                    "visit_id": "V1",
+                    "discharge_time": "2026-07-31T16:30:00+00:00",
+                },
+            ],
+        },
+    )
+    service = CaseScopeService(
+        remote_url_loader=lambda: "postgresql://source",
+        db_config_loader=lambda: {"remote_schema": "public"},
+        connection_factory=lambda *_args, **_kwargs: _SourceConnection(cursor),
+    )
+
+    result = service.resolve_hospitalization_scope(
+        scope_mode="active",
+        as_of_date=date(2026, 7, 31),
+        discharge_start_date=None,
+        discharge_end_date=None,
+        departments=(),
+    )
+
+    assert result.case_refs == (CaseRef("H1", "P-LOCAL-AUGUST", "V1"),)
+    query = next(
+        query
+        for query, _params in cursor.queries
+        if "FROM public.inpat_registration AS source_row" in query
+    )
+    assert "discharged_0.discharge_datetime AT TIME ZONE 'Asia/Shanghai'" in query
+
+
+def test_registration_active_uses_text_time_and_typed_date_discharge_facts():
+    identity_columns = {"institute_id", "patient_id", "visit_id"}
+    cursor = _SourceCursor(
+        table_columns={
+            "inpat_registration": identity_columns
+            | {"admission_datetime", "discharge_datetime"},
+            "mr": identity_columns | {"discharge_datetime"},
+            "discharge_record": identity_columns | {"discharge_time", "discharge_date"},
+        },
+        table_column_types={
+            "discharge_record": {"discharge_time": "text", "discharge_date": "date"},
+        },
+        source_rows={
+            "inpat_registration": [
+                {
+                    "institute_id": "H1", "patient_id": patient_id,
+                    "visit_id": "V1", "admission_time": "2026-07-01 08:00:00",
+                    "discharge_time": None,
+                }
+                for patient_id in ("P-TEXT", "P-DATE", "P-FUTURE", "P-BAD", "P-OTHER")
+            ],
+            "discharge_record": [
+                {"institute_id": "H1", "patient_id": "P-TEXT", "visit_id": "V1",
+                 "discharge_time": "2026-07-30 10:00:00", "discharge_date": None},
+                {"institute_id": "H1", "patient_id": "P-DATE", "visit_id": "V1",
+                 "discharge_time": None, "discharge_date": date(2026, 7, 30)},
+                {"institute_id": "H1", "patient_id": "P-FUTURE", "visit_id": "V1",
+                 "discharge_time": "2026-08-01 10:00:00", "discharge_date": None},
+                {"institute_id": "H1", "patient_id": "P-BAD", "visit_id": "V1",
+                 "discharge_time": "unknown", "discharge_date": None},
+            ],
+        },
+    )
+    service = CaseScopeService(
+        remote_url_loader=lambda: "postgresql://source",
+        db_config_loader=lambda: {"remote_schema": "public"},
+        connection_factory=lambda *_args, **_kwargs: _SourceConnection(cursor),
+    )
+
+    result = service.resolve_hospitalization_scope(
+        scope_mode="active", as_of_date=date(2026, 7, 31),
+        discharge_start_date=None, discharge_end_date=None, departments=(),
+    )
+
+    assert result.case_refs == (
+        CaseRef("H1", "P-FUTURE", "V1"),
+        CaseRef("H1", "P-OTHER", "V1"),
+    )
+    query, params = next(
+        (query, params) for query, params in cursor.queries
+        if "FROM public.inpat_registration AS source_row" in query
+    )
+    assert "btrim(discharged_1.discharge_time)" in query
+    assert "discharged_1.discharge_date <= %s::date" in query
+    assert params == ["2026-07-31"] * 5
+
+
 def test_combined_scope_returns_active_and_period_discharge_case_refs():
     identity_columns = {"institute_id", "patient_id", "visit_id"}
     cursor = _SourceCursor(
@@ -198,6 +531,7 @@ def test_combined_scope_returns_active_and_period_discharge_case_refs():
             },
             "discharge_record": identity_columns
             | {"discharge_datetime", "discharge_dept_name"},
+            "mr": identity_columns | {"discharge_datetime"},
         },
         source_rows={
             "inpat_registration": [
@@ -260,7 +594,7 @@ def test_combined_scope_returns_active_and_period_discharge_case_refs():
     )
     assert result.selected[0]["source_table"] == "inpat_registration"
     assert result.selected[1]["source_table"] == "discharge_record"
-    assert result.sources_used == ("inpat_registration", "discharge_record")
+    assert result.sources_used == ("inpat_registration", "mr", "discharge_record")
     assert result.source_status == "ready"
 
 
@@ -276,6 +610,7 @@ def test_combined_scope_normalizes_offset_aware_source_times_to_hospital_time():
             },
             "discharge_record": identity_columns
             | {"discharge_datetime", "discharge_dept_name"},
+            "mr": identity_columns | {"discharge_datetime"},
         },
         source_rows={
             "inpat_registration": [
@@ -341,6 +676,8 @@ def test_active_scope_filters_by_admission_start_date():
                 "discharge_datetime",
                 "current_dept_name",
             },
+            "mr": identity_columns | {"discharge_datetime"},
+            "discharge_record": identity_columns | {"discharge_datetime"},
         },
         source_rows={
             "inpat_registration": [
@@ -404,7 +741,9 @@ def test_active_scope_deduplicates_full_coordinates_and_filters_effective_depart
     cursor = _SourceCursor(
         table_columns={
             "inpat_registration": identity_columns
-            | {"admission_datetime", "discharge_datetime"}
+            | {"admission_datetime", "discharge_datetime"},
+            "mr": identity_columns | {"discharge_datetime"},
+            "discharge_record": identity_columns | {"discharge_datetime"},
         },
         source_rows={"inpat_registration": [first, dict(first), second]},
     )
@@ -519,6 +858,7 @@ def test_combined_scope_prefers_period_discharge_over_stale_active_candidate():
             | {"admission_datetime", "discharge_datetime", "current_dept_name"},
             "discharge_record": identity_columns
             | {"discharge_datetime", "discharge_dept_name"},
+            "mr": identity_columns | {"discharge_datetime"},
         },
         source_rows={
             "inpat_registration": [
@@ -655,6 +995,8 @@ def test_timestamptz_active_filter_uses_hospital_calendar_boundaries_in_source_s
         table_columns={
             "inpat_registration": identity_columns
             | {"admission_datetime", "discharge_datetime"},
+            "mr": identity_columns | {"discharge_datetime"},
+            "discharge_record": identity_columns | {"discharge_datetime"},
         },
         table_column_types={
             "inpat_registration": {
@@ -751,7 +1093,9 @@ def test_single_institution_source_injects_configured_identity_at_source_boundar
                 "visit_id",
                 "admission_datetime",
                 "discharge_datetime",
-            }
+            },
+            "mr": {"patient_id", "visit_id", "discharge_datetime"},
+            "discharge_record": {"patient_id", "visit_id", "discharge_datetime"},
         },
         source_rows={
             "inpat_registration": [
@@ -799,7 +1143,9 @@ def test_single_institution_source_without_configured_identity_fails_closed():
                 "visit_id",
                 "admission_datetime",
                 "discharge_datetime",
-            }
+            },
+            "mr": {"patient_id", "visit_id", "discharge_datetime"},
+            "discharge_record": {"patient_id", "visit_id", "discharge_datetime"},
         }
     )
     service = CaseScopeService(
@@ -876,6 +1222,10 @@ def test_scope_backfills_missing_patient_name_without_changing_case_identity():
                 "visit_id",
                 "admission_datetime",
                 "discharge_datetime",
+            },
+            "mr": {"institute_id", "patient_id", "visit_id", "discharge_datetime"},
+            "discharge_record": {
+                "institute_id", "patient_id", "visit_id", "discharge_datetime"
             },
             "patient_information": {
                 "institute_id",
