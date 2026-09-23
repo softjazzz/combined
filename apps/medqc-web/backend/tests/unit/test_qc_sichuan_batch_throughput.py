@@ -1071,7 +1071,8 @@ async def test_sc_task_batch_persists_compact_executor_compliant_results(monkeyp
     assert all("diagnostic_trace" not in item and "performance_profile" not in item for item in workspace.items)
     assert all(item["institute_id"] == "HOSP-001" for item in workspace.items)
     assert len(workspace.summary["rule_results"]) == 2
-    assert all(len(rule_result["items"]) == 2 for rule_result in workspace.summary["rule_results"])
+    assert all(rule_result["items"] == [] for rule_result in workspace.summary["rule_results"])
+    assert all(rule_result["compliant_records"] == 2 for rule_result in workspace.summary["rule_results"])
 
 
 @pytest.mark.asyncio
@@ -1126,6 +1127,74 @@ async def test_sc_task_batch_keeps_non_compliant_item_unchanged(monkeypatch):
     assert workspace.items[0]["status"] == "non_compliant"
     assert "metadata" in workspace.items[0]
     assert "performance_profile" in workspace.items[0]
+    assert workspace.summary["rule_results"][0]["items"] == workspace.items
+
+
+@pytest.mark.asyncio
+async def test_sc_task_retry_recompresses_merged_rule_summary(monkeypatch):
+    workspace = _WorkspaceStub()
+    refs = [
+        {"institute_id": "HOSP-001", "patient_id": f"PAT-{visit_id}", "visit_id": visit_id}
+        for visit_id in ("visit-001", "visit-002")
+    ]
+    retry_ref = refs[1]
+    base_item = {
+        **refs[0],
+        "record_id": refs[0]["visit_id"],
+        "rule_id": "SC-001",
+        "rule_code": "SC-001",
+        "status": "compliant",
+        "is_compliant": True,
+    }
+    workspace.job["filters"] = {
+        "rule_ids": ["SC-001"],
+        "rule_set_key": "sc_content_v1",
+        "task_id": "task-001",
+        "task_run_number": "1",
+        "record_refs": refs,
+        "failed_rule_retry": {
+            "schema_version": "failed-rule-retry-v1",
+            "attempt": 1,
+            "record_refs": [retry_ref],
+            "rule_ids": ["SC-001"],
+            "record_rule_map": {CaseRef.from_mapping(retry_ref).as_key(): ["SC-001"]},
+            "pending_count": 1,
+        },
+    }
+    workspace.job["items"] = [base_item]
+    workspace.job["failed_records"] = [{
+        **retry_ref,
+        "record_id": retry_ref["visit_id"],
+        "rule_id": "SC-001",
+        "rule_code": "SC-001",
+        "error_phase": "result_missing",
+    }]
+    workspace.job["summary"] = {
+        "total_records": 2,
+        "rule_count": 1,
+        "execution_rule_count": 1,
+        "rule_results": [{
+            "rule_code": "SC-001",
+            "rule_name": "规则-SC-001",
+            "status": "failed",
+            "items": [base_item],
+        }],
+    }
+    service = _ServiceStub()
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+
+    async def _get_service():
+        return service
+
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_service)
+    await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
+
+    assert workspace.job["status"] == "completed"
+    assert len(workspace.items) == 2
+    assert all(item["status"] == "compliant" for item in workspace.items)
+    assert workspace.failed_records == []
+    assert workspace.summary["rule_results"][0]["items"] == []
+    assert workspace.summary["rule_results"][0]["compliant_records"] == 2
 
 
 @pytest.mark.asyncio

@@ -6,7 +6,7 @@ import app.services.custom_qc_workspace_service as workspace_module
 from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
 import app.services.qc_workspace.record_repository as record_repository_module
 from app.services.qc_workspace.record_repository import RecordRepository
-from sqlalchemy import create_engine, text
+from sqlalchemy import Column, DateTime, Integer, MetaData, String, Table, Text, create_engine, event, text
 from sqlalchemy.orm import Session
 
 
@@ -742,6 +742,91 @@ def test_aggregate_parent_job_preserves_parent_cancellation_over_child_projectio
     assert aggregate["status"] == expected_status
     assert aggregate["progress"]["step_key"] == expected_status
     assert aggregate["cancellable"] is expected_cancellable
+
+
+@pytest.mark.parametrize("runtime_filter", [False, True])
+def test_batch_job_list_projects_metadata_without_result_payloads(monkeypatch, runtime_filter):
+    engine = create_engine("sqlite:///:memory:")
+    table = Table(
+        "custom_qc_batch_jobs",
+        MetaData(),
+        Column("id", String, primary_key=True),
+        Column("created_by", String),
+        Column("draft_id", String),
+        Column("rule_code", String),
+        Column("rule_name", String),
+        Column("scope", String),
+        Column("status", String),
+        Column("created_at", DateTime),
+        Column("parent_job_id", String),
+        Column("job_kind", String),
+        Column("record_ids_json", Text),
+        Column("child_job_ids_json", Text),
+        Column("summary_json", Text),
+        Column("items_json", Text),
+        Column("failed_records_json", Text),
+        Column("success_count", Integer),
+    )
+    table.create(engine)
+    now = datetime(2026, 9, 24, 10)
+    with engine.begin() as connection:
+        for row in [
+            {
+                "id": "parent", "created_by": "doctor", "draft_id": "d1",
+                "rule_code": "SC-1", "rule_name": "规则一", "scope": "final",
+                "status": "completed", "created_at": now, "job_kind": "parent",
+                "record_ids_json": '["V-1"]', "child_job_ids_json": '["child"]',
+                "summary_json": '{"executor_breakdown":{"program":1}}',
+                "items_json": '[{"private":"large"}]',
+                "failed_records_json": '[{"private":"large"}]',
+            },
+            {
+                "id": "child", "created_by": "doctor", "draft_id": "d1",
+                "rule_code": "SC-1", "rule_name": "规则一", "scope": "final",
+                "status": "completed", "created_at": now - timedelta(minutes=1),
+                "parent_job_id": "parent", "record_ids_json": '["V-1"]',
+                "summary_json": '{"status_breakdown":{"compliant":1}}',
+                "items_json": '[{"private":"child"}]',
+                "failed_records_json": '[{"private":"child"}]', "success_count": 1,
+            },
+            {
+                "id": "other", "created_by": "doctor", "draft_id": "d1",
+                "rule_code": "SC-1", "rule_name": "规则一", "scope": "final",
+                "status": "completed", "created_at": now - timedelta(minutes=2),
+                "record_ids_json": '["V-2"]', "items_json": "[]",
+            },
+        ]:
+            connection.execute(table.insert().values(**row))
+    statements = []
+
+    def capture_select(_connection, _cursor, statement, _parameters, _context, _executemany):
+        if statement.lstrip().upper().startswith("SELECT"):
+            statements.append(statement)
+
+    event.listen(engine, "before_cursor_execute", capture_select)
+    service = object.__new__(CustomQCWorkspaceService)
+    service._batch_job_table = table
+    monkeypatch.setattr(workspace_module, "_session", lambda: Session(engine))
+    try:
+        result = service.list_batch_jobs(
+            created_by="doctor", record_id="V-1", page_size=1,
+            executor_type="program" if runtime_filter else None,
+        )
+    finally:
+        event.remove(engine, "before_cursor_execute", capture_select)
+        engine.dispose()
+
+    assert result.total == 1
+    assert [item["id"] for item in result.items] == ["parent"]
+    assert [item["id"] for item in result.items[0]["children"]] == ["child"]
+    assert result.items[0]["children"][0]["success_count"] == 1
+    assert result.items[0]["items"] == []
+    assert statements
+    assert all(
+        "items_json" not in statement.split(" FROM ", 1)[0]
+        and "failed_records_json" not in statement.split(" FROM ", 1)[0]
+        for statement in statements
+    )
 
 
 def test_record_result_envelope_keeps_delivery_facts_evidence_and_model_analysis():

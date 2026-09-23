@@ -3527,6 +3527,15 @@ async def run_sichuan_workspace_batch_job(
                 model_execution_stats_total,
             )
 
+        if is_sc_task_job:
+            # 顶层 items 保留完整任务结果；补跑合并后的规则摘要只保留需关注项。
+            for rule_result in rule_results:
+                rule_result["items"] = [
+                    item for item in list(rule_result.get("items") or [])
+                    if str(item.get("status") or "").strip().lower()
+                    not in {"compliant", "ai_suggested_compliant"}
+                ]
+
         if (
             use_luxian_customer_results and failed_record_ids and all_failed_records
             and any(

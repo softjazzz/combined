@@ -2075,6 +2075,15 @@ class CustomQCWorkspaceService:
         self._batch_job_table = _batch_jobs_table()
         self._record_result_envelope_table = _record_result_envelopes_table()
 
+    def _batch_job_list_select(self):
+        return select(
+            *(
+                column
+                for column in self._batch_job_table.c
+                if column.name not in {"items_json", "failed_records_json"}
+            )
+        )
+
     @staticmethod
     def _aggregate_child_input_profiles(child_profiles: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
         input_profiles = [
@@ -2232,7 +2241,7 @@ class CustomQCWorkspaceService:
         if child_job_ids:
             child_rows = (
                 session.execute(
-                    select(self._batch_job_table)
+                    (self._batch_job_list_select() if not include_items else select(self._batch_job_table))
                     .where(self._batch_job_table.c.id.in_(child_job_ids))
                     .order_by(asc(self._batch_job_table.c.created_at))
                 )
@@ -2242,7 +2251,7 @@ class CustomQCWorkspaceService:
         else:
             child_rows = (
                 session.execute(
-                    select(self._batch_job_table)
+                    (self._batch_job_list_select() if not include_items else select(self._batch_job_table))
                     .where(self._batch_job_table.c.parent_job_id == parent_job.get("id"))
                     .order_by(asc(self._batch_job_table.c.created_at))
                 )
@@ -3005,7 +3014,7 @@ class CustomQCWorkspaceService:
                 )
                 rows = (
                     session.execute(
-                        select(self._batch_job_table)
+                        self._batch_job_list_select()
                         .where(where_clause)
                         .order_by(desc(self._batch_job_table.c.created_at))
                         .offset(max(page - 1, 0) * page_size)
@@ -3026,7 +3035,7 @@ class CustomQCWorkspaceService:
 
             rows = (
                 session.execute(
-                    select(self._batch_job_table)
+                    self._batch_job_list_select()
                     .where(where_clause)
                     .order_by(desc(self._batch_job_table.c.created_at))
                 )
