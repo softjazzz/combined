@@ -291,11 +291,14 @@ async def get_appeal(
         )
 
 
-@router.put("/{appeal_id}", response_model=dict)
+@router.put(
+    "/{appeal_id}",
+    response_model=dict,
+    openapi_extra=_body_openapi(AppealUpdate),
+)
 async def update_appeal(
     request: Request,
     appeal_id: str,
-    appeal: AppealUpdate,
     current_user: dict = Depends(get_current_user)
 ):
     """
@@ -310,28 +313,62 @@ async def update_appeal(
         更新后的申诉记录
     """
     trace_id = get_trace_id(request)
-    supabase = get_supabase()
-
-    if not supabase:
+    appellant_id = str(current_user.get("id") or current_user.get("user_id") or "").strip()
+    if not appellant_id:
         raise HTTPException(
-            status_code=StatusCode.SERVICE_UNAVAILABLE,
-            detail="数据库连接失败"
+            status_code=StatusCode.UNAUTHORIZED,
+            detail="缺少申诉人身份",
         )
 
     try:
+        appeal = AppealUpdate.model_validate(await request.json())
+    except (ValueError, ValidationError, TypeError) as exc:
+        raise HTTPException(
+            status_code=StatusCode.UNPROCESSABLE_ENTITY,
+            detail="申诉更新请求格式不正确",
+        ) from exc
+
+    update_data = {}
+    if appeal.reason is not None:
+        update_data["reason"] = appeal.reason
+    if appeal.evidence is not None:
+        update_data["evidence"] = appeal.evidence
+    if appeal.priority is not None:
+        update_data["priority"] = appeal.priority.value
+    if appeal.notes is not None:
+        update_data["notes"] = appeal.notes
+
+    if not update_data:
+        raise HTTPException(
+            status_code=StatusCode.BAD_REQUEST,
+            detail="没有提供要更新的数据",
+        )
+
+    try:
+        supabase = get_supabase()
+        if not supabase:
+            raise HTTPException(
+                status_code=StatusCode.SERVICE_UNAVAILABLE,
+                detail="数据库连接失败",
+            )
         # 验证申诉是否存在且属于当前用户
-        existing = supabase.table("qc_appeals").select("*").eq("id", appeal_id).execute()
+        existing = (
+            supabase.table("qc.qc_appeals")
+            .select("id,appellant_id,status")
+            .eq("id", appeal_id)
+            .execute()
+        )
 
         if not existing.data:
             raise HTTPException(
                 status_code=StatusCode.NOT_FOUND,
-                detail=f"申诉不存在: {appeal_id}"
+                detail="申诉不存在",
             )
 
         existing_appeal = existing.data[0]
 
         # 只有申诉人可以更新（且状态为 pending）
-        if existing_appeal["appellant_id"] != current_user["id"]:
+        if existing_appeal["appellant_id"] != appellant_id:
             raise HTTPException(
                 status_code=StatusCode.FORBIDDEN,
                 detail="只有申诉人可以更新申诉"
@@ -339,58 +376,49 @@ async def update_appeal(
 
         if existing_appeal["status"] != AppealStatus.PENDING.value:
             raise HTTPException(
-                status_code=StatusCode.BAD_REQUEST,
-                detail="只能更新待审核状态的申诉"
+                status_code=StatusCode.CONFLICT,
+                detail="申诉状态已变更，无法更新",
             )
 
-        # 构建更新数据
-        update_data = {}
-        if appeal.reason is not None:
-            update_data["reason"] = appeal.reason
-        if appeal.evidence is not None:
-            update_data["evidence"] = appeal.evidence
-        if appeal.priority is not None:
-            update_data["priority"] = appeal.priority.value
-        if appeal.notes is not None:
-            update_data["notes"] = appeal.notes
-
-        if not update_data:
-            raise HTTPException(
-                status_code=StatusCode.BAD_REQUEST,
-                detail="没有提供要更新的数据"
-            )
-
-        # 更新申诉
-        result = supabase.table("qc_appeals").update(update_data).eq("id", appeal_id).execute()
+        # 最终写入重复限定归属和状态，防止审核或撤回抢先提交后被旧请求覆盖。
+        result = (
+            supabase.table("qc.qc_appeals")
+            .update(update_data)
+            .eq("id", appeal_id)
+            .eq("appellant_id", appellant_id)
+            .eq("status", AppealStatus.PENDING.value)
+            .execute()
+        )
 
         if not result.data:
             raise HTTPException(
-                status_code=StatusCode.INTERNAL_SERVER_ERROR,
-                detail="更新申诉失败"
+                status_code=StatusCode.CONFLICT,
+                detail="申诉状态已变更，无法更新",
             )
 
         logger.info(
             f"Appeal updated: {appeal_id}",
-            extra={"trace_id": trace_id, "user_id": current_user["id"]}
+            extra={"trace_id": trace_id, "user_id": appellant_id}
         )
 
         return success_response(
             data=result.data[0],
             message="申诉更新成功",
-            request=request
+            trace_id=trace_id,
         )
 
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception as exc:
         logger.error(
-            f"Failed to update appeal: {str(e)}",
-            extra={"trace_id": trace_id, "appeal_id": appeal_id}
+            "appeal_update_failed error_type=%s",
+            type(exc).__name__,
+            extra={"trace_id": trace_id, "appeal_id": appeal_id},
         )
         raise HTTPException(
-            status_code=StatusCode.INTERNAL_SERVER_ERROR,
-            detail=f"更新申诉失败: {str(e)}"
-        )
+            status_code=StatusCode.SERVICE_UNAVAILABLE,
+            detail="申诉更新服务暂不可用",
+        ) from exc
 
 
 @router.post(
