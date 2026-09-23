@@ -155,7 +155,6 @@ def test_render_with_execution_domain_loads_only_the_selected_domain(monkeypatch
         load_one_document,
         raising=False,
     )
-    monkeypatch.setattr(emr_router_module, "get_supabase", lambda: None)
 
     response = _client().get(
         "/api/v1/emr/V1/render",

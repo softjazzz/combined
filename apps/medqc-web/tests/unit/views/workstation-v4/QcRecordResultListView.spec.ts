@@ -52,6 +52,20 @@ const ResultDrawerStub = defineComponent({
   },
 })
 
+const DocumentWorkbenchStub = defineComponent({
+  name: 'QCRecordCompareWorkbench',
+  props: {
+    visitId: { type: String, required: true },
+    instituteId: { type: String, required: true },
+    patientId: { type: String, required: true },
+    issues: { type: Array, required: true },
+    documentOnly: { type: Boolean, default: false },
+  },
+  setup() {
+    return () => h('div', { 'data-testid': 'document-workbench-stub' })
+  },
+})
+
 const ResultAnalysisStub = defineComponent({
   name: 'QcRecordResultAnalysisPanel',
   props: { carePhase: { type: String, required: true } },
@@ -170,6 +184,7 @@ function mountView(carePhase: 'inpatient' | 'discharged' = 'inpatient') {
     global: {
       stubs: {
         QCRecordResultComparisonDrawer: ResultDrawerStub,
+        QCRecordCompareWorkbench: DocumentWorkbenchStub,
         QcRecordResultAnalysisPanel: ResultAnalysisStub,
         QcRecordReviewPreview: true,
       },
@@ -526,7 +541,7 @@ describe('QcRecordResultListView', () => {
     })
   })
 
-  it('未质控病历显示暂无结果并留在当前页，不发起抽屉读取', async () => {
+  it('未质控病历可按三坐标打开只读文书，不发起质控结果读取', async () => {
     const wrapper = mountView()
     await flushPromises()
 
@@ -538,6 +553,27 @@ describe('QcRecordResultListView', () => {
 
     expect(wrapper.getComponent(QcRecordReviewPreview).props('row')?.resultStatus).toBe('not-run')
     expect(wrapper.getComponent(ResultDrawerStub).props('open')).toBe(false)
+    await wrapper.get('[data-testid="open-unchecked-record-documents"]').trigger('click')
+    const documents = wrapper.getComponent(DocumentWorkbenchStub)
+    expect(documents.props()).toMatchObject({
+      visitId: 'V-not-run',
+      instituteId: 'H',
+      patientId: 'P',
+      documentOnly: true,
+      issues: [],
+    })
+    expect(wrapper.getComponent(ResultDrawerStub).props('open')).toBe(false)
+  })
+
+  it('身份不完整的病历无法打开只读文书或质控结果', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="open-unchecked-record-documents"]').exists()).toBe(false)
+    await wrapper.getComponent(QcRecordReviewPreview).vm.$emit('open-full', '["H","P","missing"]')
+
+    expect(wrapper.findComponent(DocumentWorkbenchStub).exists()).toBe(false)
+    expect(wrapper.getComponent(ResultDrawerStub).props('open')).toBe(false)
+    expect(wrapper.text()).toContain('无法确认当前病历身份')
   })
 
   it('不展示任务、批量、生成、编码、结算或整改入口，已保存结果在当前页打开分组抽屉', async () => {
@@ -555,10 +591,12 @@ describe('QcRecordResultListView', () => {
       .vm.$emit('open-result', '["H","P","V-priority"]')
     expect(wrapper.getComponent(ResultDrawerStub).props('open')).toBe(false)
     expect(wrapper.getComponent(QcRecordReviewPreview).props('row')?.visitId).toBe('V-priority')
+    expect(wrapper.find('[data-testid="open-unchecked-record-documents"]').exists()).toBe(false)
     await wrapper
       .getComponent(QcRecordReviewPreview)
       .vm.$emit('open-full', '["H","P","V-priority"]')
     expect(wrapper.getComponent(ResultDrawerStub).props('open')).toBe(true)
+    expect(wrapper.findComponent(DocumentWorkbenchStub).exists()).toBe(false)
     expect(wrapper.text()).not.toContain('下一闭环接入')
   })
 

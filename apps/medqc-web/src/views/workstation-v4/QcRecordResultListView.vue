@@ -177,6 +177,19 @@
               role="status"
               >已选 {{ selectedCount }} 份</span
             >
+            <button
+              v-if="canOpenUnreviewedDocuments"
+              class="qc-record-result-list-view__document-button"
+              type="button"
+              data-testid="open-unchecked-record-documents"
+              @click="handleOpenResult(activePreviewKey)"
+            >
+              <FileText
+                :size="15"
+                aria-hidden="true"
+              />
+              查看病历文书
+            </button>
           </div>
           <QcRecordResultTable
             :care-phase="carePhase"
@@ -235,20 +248,38 @@
       presentation-mode="grouped"
       @close="closeResultDrawer"
     />
+    <Drawer
+      :open="documentDrawerOpen"
+      placement="right"
+      width="min(1380px, 100vw)"
+      title="病历文书"
+      :body-style="{ padding: 0 }"
+      @close="closeResultDrawer"
+    >
+      <QCRecordCompareWorkbench
+        v-if="documentDrawerOpen && selectedFocus"
+        :visit-id="selectedFocus.visitId"
+        :institute-id="selectedFocus.instituteId"
+        :patient-id="selectedFocus.patientId"
+        :issues="[]"
+        document-only
+      />
+    </Drawer>
   </main>
 </template>
 
 <script setup lang="ts">
-import { Pagination } from 'ant-design-vue'
+import { Drawer, Pagination } from 'ant-design-vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { ChevronDown, Download } from 'lucide-vue-next'
+import { ChevronDown, Download, FileText } from 'lucide-vue-next'
 
 import { exportFilteredLuxian0609RecordResults } from '@/services/sichuan-rule-workspace-service'
 
 import QCRecordResultComparisonDrawer, {
   type QCRecordResultFocus,
 } from './customer-sample-validation/QCRecordResultComparisonDrawer.vue'
+import QCRecordCompareWorkbench from './semantic-rules/components/QCRecordCompareWorkbench.vue'
 import QcRecordResultTable, {
   type QcRecordCarePhase,
   type QcRecordResultRow,
@@ -271,6 +302,7 @@ const exportNotice = ref('')
 const exporting = ref(false)
 const exportMenuOpen = ref(false)
 const drawerOpen = ref(false)
+const documentDrawerOpen = ref(false)
 const selectedFocus = ref<QCRecordResultFocus | null>(null)
 const selectedRecordKeys = ref<string[]>([])
 const selectedRecordRefs = ref<
@@ -349,6 +381,12 @@ const previewRefreshKey = ref(0)
 const previewRow = computed(
   () => rows.value.find((row) => row.recordKey === activePreviewKey.value) ?? null,
 )
+const canOpenUnreviewedDocuments = computed(() => {
+  const row = previewRow.value
+  return Boolean(
+    row?.resultStatus === 'not-run' && row.instituteId && row.patientId && row.visitId,
+  )
+})
 watch(
   rows,
   (next) => {
@@ -691,11 +729,6 @@ function handleOpenResult(recordKey: string) {
     detailNotice.value = '无法确认当前病历身份，已停止读取质控结果'
     return
   }
-  if (row.resultStatus === 'not-run') {
-    detailNotice.value = '这份病历暂无已保存质控结果'
-    return
-  }
-
   detailNotice.value = ''
   const labelParts = [
     record.name || '患者信息待核实',
@@ -715,7 +748,8 @@ function handleOpenResult(recordKey: string) {
     patientAge: record.age,
     label: labelParts.join(' · '),
   }
-  drawerOpen.value = true
+  if (row.resultStatus === 'not-run') documentDrawerOpen.value = true
+  else drawerOpen.value = true
 }
 
 function handleOpenAnalysisResult(record: LuxianQcAnalysisRecordItem) {
@@ -747,6 +781,7 @@ function handleOpenAnalysisResult(record: LuxianQcAnalysisRecordItem) {
 
 function closeResultDrawer() {
   drawerOpen.value = false
+  documentDrawerOpen.value = false
   selectedFocus.value = null
   detailNotice.value = ''
 }
@@ -1065,6 +1100,26 @@ function closeResultDrawer() {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.qc-record-result-list-view__document-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  margin-left: auto;
+  padding: 0 10px;
+  border: 1px solid rgba(0, 122, 255, 0.25);
+  border-radius: 8px;
+  background: #fff;
+  color: #007aff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+}
+
+.qc-record-result-list-view__document-button:hover {
+  background: #eaf2ff;
 }
 
 .qc-record-result-list-view__notice {

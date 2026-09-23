@@ -63,15 +63,22 @@
             质控结果
           </h3>
           <a-tag
-            :color="qcIssues.length > 0 ? 'red' : 'green'"
+            :color="annotationsAvailable ? (qcIssues.length > 0 ? 'red' : 'green') : 'default'"
             size="small"
           >
-            {{ qcIssues.length }} 个问题
+            {{ annotationsAvailable ? `${qcIssues.length} 个问题` : '标注不可用' }}
           </a-tag>
         </div>
 
         <div
-          v-if="qcIssues.length === 0"
+          v-if="!annotationsAvailable"
+          class="p-8 text-center text-gray-500"
+          role="status"
+        >
+          当前无法核对缺陷标注
+        </div>
+        <div
+          v-else-if="qcIssues.length === 0"
           class="p-8 text-center text-gray-400"
         >
           <CheckCircleOutlined class="text-3xl text-green-400 mb-2" />
@@ -152,6 +159,7 @@ const recordId = route.params.id as string
 // 状态
 const showQCPanel = ref(true)
 const qcIssues = ref<DefectAnnotation[]>([])
+const annotationsAvailable = ref(false)
 const activeDefectId = ref<string | null>(null)
 const emrViewerRef = ref<InstanceType<typeof EMRViewer> | null>(null)
 
@@ -173,7 +181,10 @@ const severityText = (severity: string) => {
 
 // EMR 加载完成
 const handleEMRLoaded = (data: any) => {
-  qcIssues.value = data?.defect_annotations || []
+  annotationsAvailable.value = data?.annotations_status === 'available'
+  qcIssues.value = annotationsAvailable.value && Array.isArray(data?.defect_annotations)
+    ? data.defect_annotations
+    : []
 }
 
 // 缺陷点击：从 EMRViewer 内部触发

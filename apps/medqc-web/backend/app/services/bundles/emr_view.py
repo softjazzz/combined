@@ -1021,16 +1021,13 @@ def load_bundle_documents(
     domain_bundles: dict[str, dict[str, Any]] = {}
     domain_hits: dict[str, bool] = {}
     for domain in _DOMAIN_LOAD_ORDER:
-        try:
-            payload = load_domain_bundle(
-                execution_domain=domain,
-                institute_id=institute_id,
-                patient_id=patient_id,
-                visit_id=visit_id,
-                schema=bundle_schema,
-            )
-        except Exception:
-            payload = None
+        payload = load_domain_bundle(
+            execution_domain=domain,
+            institute_id=institute_id,
+            patient_id=patient_id,
+            visit_id=visit_id,
+            schema=bundle_schema,
+        )
         domain_hits[domain] = bool(payload)
         if payload:
             domain_bundles[domain] = payload
