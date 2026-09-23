@@ -2,7 +2,7 @@
   <a-drawer
     v-model:open="visible"
     title="创建质控任务"
-    :width="720"
+    :width="'min(720px, 100vw)'"
     :body-style="{ padding: '24px' }"
     :destroy-on-close="true"
     @close="handleClose"
@@ -118,8 +118,8 @@
             <a-radio-button value="date">
               按日期范围
             </a-radio-button>
-            <a-radio-button value="ids">
-              指定病案号
+            <a-radio-button value="refs">
+              指定病历
             </a-radio-button>
           </a-radio-group>
         </a-form-item>
@@ -145,14 +145,59 @@
         </template>
 
         <template v-else>
-          <a-form-item label="病案号列表">
-            <a-textarea
-              v-model:value="recordIdsText"
-              placeholder="每行输入一个病案号，例如：&#10;MR-2026-001&#10;MR-2026-002&#10;MR-2026-003"
-              :rows="8"
-            />
-            <div class="text-xs text-gray-400 mt-1">
-              已输入 {{ parsedRecordIds.length }} 个病案号
+          <a-form-item
+            label="病历坐标"
+            required
+          >
+            <div class="hidden sm:grid grid-cols-[repeat(3,minmax(0,1fr))_36px] gap-2 text-xs text-gray-500 mb-2">
+              <span>机构 ID</span><span>患者 ID</span><span>就诊 ID</span><span />
+            </div>
+            <div
+              v-for="(recordRef, index) in recordRefs"
+              :key="index"
+              class="grid grid-cols-1 sm:grid-cols-[repeat(3,minmax(0,1fr))_36px] gap-2 mb-2"
+            >
+              <a-input
+                v-model:value="recordRef.institute_id"
+                :aria-label="`第 ${index + 1} 条机构 ID`"
+                placeholder="机构 ID"
+                :maxlength="100"
+              />
+              <a-input
+                v-model:value="recordRef.patient_id"
+                :aria-label="`第 ${index + 1} 条患者 ID`"
+                placeholder="患者 ID"
+                :maxlength="100"
+              />
+              <a-input
+                v-model:value="recordRef.visit_id"
+                :aria-label="`第 ${index + 1} 条就诊 ID`"
+                placeholder="就诊 ID"
+                :maxlength="100"
+              />
+              <a-button
+                :aria-label="`删除第 ${index + 1} 条病历`"
+                :disabled="recordRefs.length === 1"
+                title="删除病历"
+                @click="removeRecordRef(index)"
+              >
+                <DeleteOutlined />
+              </a-button>
+            </div>
+            <a-button @click="addRecordRef">
+              <PlusOutlined /> 添加病历
+            </a-button>
+            <div
+              v-if="recordRefsError"
+              class="text-xs text-red-500 mt-2"
+            >
+              {{ recordRefsError }}
+            </div>
+            <div
+              v-else
+              class="text-xs text-gray-500 mt-2"
+            >
+              已填写 {{ normalizedRecordRefs.length }} 条病历
             </div>
           </a-form-item>
         </template>
@@ -310,7 +355,7 @@
             日期范围 + {{ formData.department_filter?.length || 0 }} 个科室筛选
           </template>
           <template v-else>
-            指定 {{ parsedRecordIds.length }} 个病案号
+            指定 {{ normalizedRecordRefs.length }} 条病历
           </template>
         </a-descriptions-item>
         <a-descriptions-item label="抽样方式">
@@ -377,9 +422,11 @@ import {
   DatabaseOutlined,
   NumberOutlined,
   PercentageOutlined,
+  PlusOutlined,
+  DeleteOutlined,
 } from '@ant-design/icons-vue'
 import { createTask, getTaskRuleSets } from '@/api/tasks'
-import type { TaskCreateData, TaskItem, TaskRuleSetOption, TaskScene } from '@/api/tasks'
+import type { TaskCaseRef, TaskCreateData, TaskItem, TaskRuleSetOption, TaskScene } from '@/api/tasks'
 import type { Dayjs } from 'dayjs'
 
 // ============= Props & Emits =============
@@ -400,9 +447,10 @@ const visible = computed({
 
 const currentStep = ref(0)
 const submitting = ref(false)
-const rangeMode = ref<'date' | 'ids'>('date')
+const rangeMode = ref<'date' | 'refs'>('date')
 const dateRangeValue = ref<[Dayjs, Dayjs] | null>(null)
-const recordIdsText = ref('')
+const blankRecordRef = (): TaskCaseRef => ({ institute_id: '', patient_id: '', visit_id: '' })
+const recordRefs = ref<TaskCaseRef[]>([blankRecordRef()])
 const selectedAssignees = ref<string[]>([])
 const ruleSets = ref<TaskRuleSetOption[]>([])
 const ruleSetsLoading = ref(false)
@@ -419,7 +467,6 @@ const formData = ref({
   description: '',
   date_range: null as { start?: string; end?: string } | null,
   department_filter: [] as string[],
-  record_ids: [] as string[],
   sampling_method: 'all' as 'all' | 'count' | 'percentage',
   sampling_config: {
     total: 50,
@@ -474,11 +521,19 @@ const samplingOptions: Array<{
 ]
 
 // ============= 计算属性 =============
-const parsedRecordIds = computed(() => {
-  return recordIdsText.value
-    .split('\n')
-    .map((id) => id.trim())
-    .filter((id) => id.length > 0)
+const normalizedRecordRefs = computed(() => recordRefs.value.map((item) => ({
+  institute_id: item.institute_id.trim(),
+  patient_id: item.patient_id.trim(),
+  visit_id: item.visit_id.trim(),
+})))
+const recordRefsError = computed(() => {
+  if (!recordRefs.value.length || normalizedRecordRefs.value.every((item) =>
+    !item.institute_id && !item.patient_id && !item.visit_id)) return '请至少填写一条完整的病历坐标'
+  if (normalizedRecordRefs.value.some((item) =>
+    !item.institute_id || !item.patient_id || !item.visit_id)) return '每条病历均须填写机构 ID、患者 ID 和就诊 ID'
+  const keys = normalizedRecordRefs.value.map((item) =>
+    JSON.stringify([item.institute_id, item.patient_id, item.visit_id]))
+  return new Set(keys).size === keys.length ? '' : '存在重复的病历坐标，请合并后继续'
 })
 
 const matchingRuleSets = computed(() =>
@@ -504,7 +559,7 @@ const canProceed = computed(() => {
       return formData.value.task_name.trim().length > 0 &&
         formData.value.scene !== null && selectedRuleSetIsValid.value
     case 1:
-      return rangeMode.value === 'ids' ? parsedRecordIds.value.length > 0 : true
+      return rangeMode.value === 'refs' ? !recordRefsError.value : true
     case 2:
       return true
     case 3:
@@ -574,6 +629,11 @@ const prevStep = () => {
   if (currentStep.value > 0) currentStep.value--
 }
 
+const addRecordRef = () => recordRefs.value.push(blankRecordRef())
+const removeRecordRef = (index: number) => {
+  if (recordRefs.value.length > 1) recordRefs.value.splice(index, 1)
+}
+
 const handleDateRangeChange = (_dates: [Dayjs, Dayjs] | null, dateStrings: [string, string]) => {
   const [start, end] = dateStrings
   formData.value.date_range = start || end ? { start: start || undefined, end: end || undefined } : null
@@ -595,7 +655,6 @@ const resetForm = () => {
     description: '',
     date_range: null,
     department_filter: [],
-    record_ids: [],
     sampling_method: 'all',
     sampling_config: { total: 50, percentage: 10, by_department: false, group_by: null },
     assign_method: 'keep',
@@ -603,7 +662,7 @@ const resetForm = () => {
   }
   rangeMode.value = 'date'
   dateRangeValue.value = null
-  recordIdsText.value = ''
+  recordRefs.value = [blankRecordRef()]
   selectedAssignees.value = []
 }
 
@@ -631,8 +690,8 @@ const handleSubmit = async () => {
     message.warning('请选择与质控场景匹配的规则集')
     return
   }
-  if (rangeMode.value === 'ids' && parsedRecordIds.value.length === 0) {
-    message.warning('请输入至少一个病案号')
+  if (rangeMode.value === 'refs' && recordRefsError.value) {
+    message.warning(recordRefsError.value)
     return
   }
 
@@ -672,8 +731,8 @@ const handleSubmit = async () => {
       assignee_config: assigneeConfig,
     }
 
-    if (rangeMode.value === 'ids') {
-      submitData.record_ids = parsedRecordIds.value
+    if (rangeMode.value === 'refs') {
+      submitData.record_refs = normalizedRecordRefs.value.map((item) => ({ ...item }))
     } else {
       const start = formData.value.date_range?.start?.trim()
       const end = formData.value.date_range?.end?.trim()

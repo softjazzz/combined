@@ -26,6 +26,8 @@ vi.mock('@ant-design/icons-vue', () => {
     DatabaseOutlined: icon,
     NumberOutlined: icon,
     PercentageOutlined: icon,
+    PlusOutlined: icon,
+    DeleteOutlined: icon,
     ThunderboltOutlined: icon,
   }
 })
@@ -47,8 +49,11 @@ type DrawerVm = {
   }
   handleSubmit: () => Promise<void>
   nextStep: () => void
-  rangeMode: 'date' | 'ids'
-  recordIdsText: string
+  rangeMode: 'date' | 'refs'
+  recordRefs: Array<{ institute_id: string; patient_id: string; visit_id: string }>
+  recordRefsError: string
+  addRecordRef: () => void
+  removeRecordRef: (index: number) => void
   sceneLabel: string
   matchingRuleSets: Array<{ rule_set_key: string }>
   ruleSetsError: string
@@ -205,23 +210,54 @@ describe('CreateTaskDrawer 创建草稿边界', () => {
     expect(wrapper.emitted('update:open')).toBeUndefined()
   })
 
-  it('病案号模式为空时强制提交也会拦截，不能退化为全量范围', async () => {
+  it('指定病历为空时强制提交也会拦截，不能退化为全量范围', async () => {
     const wrapper = mountDrawer()
     const vm = vmOf(wrapper)
-    vm.formData.task_name = '空病案号任务'
+    vm.formData.task_name = '空坐标任务'
     await chooseRuleSet(vm, 'running')
-    vm.rangeMode = 'ids'
-    vm.recordIdsText = '  \n\n'
+    vm.rangeMode = 'refs'
+    vm.currentStep = 1
+    expect(vm.canProceed).toBe(false)
 
     await vm.handleSubmit()
 
     expect(mocks.createTask).not.toHaveBeenCalled()
-    expect(mocks.message.warning).toHaveBeenCalledWith('请输入至少一个病案号')
+    expect(mocks.message.warning).toHaveBeenCalledWith('请至少填写一条完整的病历坐标')
     expect(wrapper.emitted('created')).toBeUndefined()
     expect(wrapper.emitted('update:open')).toBeUndefined()
   })
 
-  it('日期与病案号模式只提交当前范围，空日期不发送空字符串', async () => {
+  it('残缺或重复三坐标均阻止下一步与强制提交', async () => {
+    const wrapper = mountDrawer()
+    const vm = vmOf(wrapper)
+    vm.formData.task_name = '坐标校验任务'
+    await chooseRuleSet(vm, 'running')
+    vm.rangeMode = 'refs'
+    vm.currentStep = 1
+    vm.recordRefs[0] = { institute_id: 'H-1', patient_id: 'P-1', visit_id: '' }
+    await nextTick()
+    expect(vm.canProceed).toBe(false)
+    await vm.handleSubmit()
+    expect(mocks.message.warning).toHaveBeenCalledWith('每条病历均须填写机构 ID、患者 ID 和就诊 ID')
+    expect(mocks.createTask).not.toHaveBeenCalled()
+
+    vm.recordRefs[0].visit_id = 'V-1'
+    vm.addRecordRef()
+    vm.recordRefs[1] = { institute_id: ' H-1 ', patient_id: 'P-1', visit_id: 'V-1 ' }
+    await nextTick()
+    expect(vm.recordRefsError).toContain('重复')
+    expect(vm.canProceed).toBe(false)
+    await vm.handleSubmit()
+    expect(mocks.createTask).not.toHaveBeenCalled()
+
+    vm.removeRecordRef(1)
+    await nextTick()
+    expect(vm.canProceed).toBe(true)
+    vm.removeRecordRef(0)
+    expect(vm.recordRefs).toHaveLength(1)
+  })
+
+  it('日期与指定病历模式只提交当前范围，三坐标经去空格规范化', async () => {
     mocks.createTask.mockResolvedValue({ success: false, message: '测试停止' })
     const wrapper = mountDrawer()
     const vm = vmOf(wrapper)
@@ -229,7 +265,7 @@ describe('CreateTaskDrawer 创建草稿边界', () => {
     await chooseRuleSet(vm, 'final')
     vm.formData.date_range = { start: '2026-09-01', end: '2026-09-30' }
     vm.formData.department_filter = ['内科']
-    vm.recordIdsText = 'MR-OLD'
+    vm.recordRefs[0] = { institute_id: 'H-OLD', patient_id: 'P-OLD', visit_id: 'V-OLD' }
 
     await vm.handleSubmit()
     expect(mocks.createTask).toHaveBeenLastCalledWith(
@@ -238,14 +274,20 @@ describe('CreateTaskDrawer 创建草稿边界', () => {
         department_filter: ['内科'],
       }),
     )
-    expect(mocks.createTask.mock.calls.at(-1)?.[0]).not.toHaveProperty('record_ids')
+    expect(mocks.createTask.mock.calls.at(-1)?.[0]).not.toHaveProperty('record_refs')
 
-    vm.rangeMode = 'ids'
-    vm.recordIdsText = 'MR-001\n\nMR-002'
+    vm.rangeMode = 'refs'
+    vm.recordRefs[0] = { institute_id: ' H-1 ', patient_id: ' P-1 ', visit_id: ' V-1 ' }
+    vm.addRecordRef()
+    vm.recordRefs[1] = { institute_id: 'H-1', patient_id: 'P-1', visit_id: 'V-2' }
     await vm.handleSubmit()
     expect(mocks.createTask).toHaveBeenLastCalledWith(
-      expect.objectContaining({ record_ids: ['MR-001', 'MR-002'] }),
+      expect.objectContaining({ record_refs: [
+        { institute_id: 'H-1', patient_id: 'P-1', visit_id: 'V-1' },
+        { institute_id: 'H-1', patient_id: 'P-1', visit_id: 'V-2' },
+      ] }),
     )
+    expect(mocks.createTask.mock.calls.at(-1)?.[0]).not.toHaveProperty('record_ids')
     expect(mocks.createTask.mock.calls.at(-1)?.[0]).not.toHaveProperty('date_range')
     expect(mocks.createTask.mock.calls.at(-1)?.[0]).not.toHaveProperty('department_filter')
 
@@ -254,7 +296,7 @@ describe('CreateTaskDrawer 创建草稿边界', () => {
     vm.formData.department_filter = []
     await vm.handleSubmit()
     expect(mocks.createTask.mock.calls.at(-1)?.[0]).not.toHaveProperty('date_range')
-    expect(mocks.createTask.mock.calls.at(-1)?.[0]).not.toHaveProperty('record_ids')
+    expect(mocks.createTask.mock.calls.at(-1)?.[0]).not.toHaveProperty('record_refs')
   })
 
   it('截止日期统一提交 YYYY-MM-DD，后端失败时保留输入且不发成功事件', async () => {

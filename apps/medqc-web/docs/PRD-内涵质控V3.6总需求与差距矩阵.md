@@ -159,7 +159,7 @@ V3.6 手册能力是目标下限，不是产品上限。路线图中的优先级
 | 我创建的任务：任务列表                   | 部分包含     | `AllTasksView.vue`、`TaskDetailDrawer.vue`、`get_task_detail` | 列表与详情病历清单已可查看；创建人专属入口、统计分析跳转及实际完成时间仍需补齐。 | P0         | 创建人可查看任务进度、病历数量、分配情况。     |
 | 新建抽查任务：单次任务                   | 部分包含     | `create_task`、`CreateTaskDrawer.vue`、`task_sampling_service.py`、`task_sampling_persistence.py` | 创建时显式规则集选择与场景匹配、门急诊三坐标候选/抽样/原子保存已通过隔离测试；规则目录暂无门急诊集，运行/终末候选仍 409。迁移 45–48 未执行，业务库门急诊正样本为 0，真实 PostgreSQL 写入/并发及执行回写未验收。 | P0         | 可创建单次抽查任务，并按范围抽样生成任务病历。 |
 | 新建抽查任务：定时任务                   | 界面雏形     | `TaskCreateRequest`、`schedule_config`              | 数据结构支持计划配置，但缺少定时调度执行、启停和监控闭环。             | P2         | 定时任务到期后自动生成抽查任务并有执行记录。   |
-| 病历范围：自定义筛选、指定病历           | 部分包含     | `TaskCreateRequest.record_ids`、`department_filter` | 指定病历和科室过滤有字段，复杂筛选条件未完全建模。                     | P1         | 可通过自定义筛选或指定病历创建任务。           |
+| 病历范围：自定义筛选、指定病历           | 部分包含     | `TaskCreateRequest.record_refs`、`CreateTaskDrawer.vue`、`department_filter` | 创建界面已改为结构化三坐标指定病历并通过隔离测试；复杂筛选条件未完全建模，真实写入和病历正样本仍待验收。 | P1         | 可通过自定义筛选或指定病历创建任务。           |
 | 病历抽样：全部、数量、比例等             | 部分包含     | `sampling_method`、`sampling_config`                | 当前抽样方式有限，未覆盖手册 10 种抽样方式。                           | P1         | 支持全部、总数、比例、科室维度等主要抽样方式。 |
 | 任务分配：原质控员、科室、比例、病历类型 | 部分包含     | `assign_method`、`assignee_config`                  | 有字段基础，缺少完整 UI 和后端分配策略实现。                           | P1         | 任务创建时可选择分配策略并生成分配结果。       |
 | 全部任务                                 | 部分包含     | `AllTasksView.vue`                                  | 列表、创建、取消部分存在，批量分配、模板、分析仍有占位提示。           | P1         | 管理员可查看全部任务并执行授权操作。           |
