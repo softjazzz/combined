@@ -14,10 +14,10 @@
       class="mb-4"
     >
       <a-descriptions-item label="申诉人">
-        {{ appeal?.appellantName || '未知' }}
+        {{ appeal?.appellantName || '-' }}
       </a-descriptions-item>
       <a-descriptions-item label="申诉类型">
-        {{ getAppealTypeLabelStr(appeal?.appealType) }}
+        {{ appeal ? getAppealTypeLabel(appeal.appealType) : '-' }}
       </a-descriptions-item>
       <a-descriptions-item label="申诉时间">
         {{ formatDate(appeal?.createdAt) }}
@@ -28,18 +28,20 @@
         </div>
       </a-descriptions-item>
       <a-descriptions-item
-        v-if="appeal?.evidenceUrls?.length"
-        label="证据文件"
+        v-if="appeal?.defectItem"
+        label="缺陷项"
+      >
+        {{ appeal.defectItem }}
+      </a-descriptions-item>
+      <a-descriptions-item
+        v-if="appeal?.evidence?.length"
+        label="证据材料"
       >
         <div
-          v-for="(url, idx) in appeal.evidenceUrls"
+          v-for="(item, idx) in appeal.evidence"
           :key="idx"
         >
-          <a
-            :href="url"
-            target="_blank"
-            class="text-blue-500"
-          >附件 {{ idx + 1 }}</a>
+          {{ item.name || item.url || `材料 ${idx + 1}` }}
         </div>
       </a-descriptions-item>
     </a-descriptions>
@@ -54,9 +56,9 @@
     >
       <a-form-item
         label="审核结果"
-        name="decision"
+        name="action"
       >
-        <a-radio-group v-model:value="formState.decision">
+        <a-radio-group v-model:value="formState.action">
           <a-radio
             value="approve"
             class="text-green-600"
@@ -74,18 +76,6 @@
             </template>
           </a-radio>
         </a-radio-group>
-        <div
-          v-if="formState.decision === 'approve'"
-          class="text-gray-400 text-xs mt-1"
-        >
-          通过后该质控问题将被标记为已解决。
-        </div>
-        <div
-          v-if="formState.decision === 'reject'"
-          class="text-gray-400 text-xs mt-1"
-        >
-          驳回后将自动创建整改任务并分配给申诉人。
-        </div>
       </a-form-item>
 
       <a-form-item
@@ -98,6 +88,16 @@
           placeholder="请输入审核意见"
         />
       </a-form-item>
+      <a-form-item
+        v-if="formState.action === 'approve' || formState.action === 'reject'"
+        label="处理决定"
+      >
+        <a-textarea
+          v-model:value="formState.resolution"
+          :rows="2"
+          placeholder="可填写处理决定"
+        />
+      </a-form-item>
     </a-form>
   </a-modal>
 </template>
@@ -106,7 +106,7 @@
 import { ref, reactive, watch } from 'vue'
 import type { FormInstance, FormProps } from 'ant-design-vue'
 import { message } from 'ant-design-vue'
-import { Appeal, getAppealTypeLabel } from '@/types/appeal'
+import { type Appeal, type AppealReviewAction, getAppealTypeLabel } from '@/types/appeal'
 import { reviewAppeal } from '@/api/appeal'
 import dayjs from 'dayjs'
 
@@ -121,17 +121,19 @@ const formRef = ref<FormInstance>()
 const submitting = ref(false)
 
 interface FormState {
-  decision: 'approve' | 'reject'
+  action: AppealReviewAction
   comment: string
+  resolution: string
 }
 
 const formState = reactive<FormState>({
-  decision: 'approve',
+  action: 'approve',
   comment: '',
+  resolution: '',
 })
 
 const rules = {
-  decision: [{ required: true, message: '请选择审核结果', trigger: 'change' }],
+  action: [{ required: true, message: '请选择审核结果', trigger: 'change' }],
   comment: [{ required: true, message: '请输入审核意见', trigger: 'blur' }],
 } satisfies FormProps['rules']
 
@@ -140,15 +142,12 @@ watch(
   () => props.visible,
   (val) => {
     if (val) {
-      formState.decision = 'approve'
+      formState.action = 'approve'
       formState.comment = ''
+      formState.resolution = ''
     }
   },
 )
-
-const getAppealTypeLabelStr = (type?: string) => {
-  return type ? getAppealTypeLabel(type as any) : '-'
-}
 
 const formatDate = (dateStr?: string) => {
   return dateStr ? dayjs(dateStr).format('YYYY-MM-DD HH:mm:ss') : '-'
@@ -162,18 +161,19 @@ const handleSubmit = async () => {
     submitting.value = true
 
     await reviewAppeal(props.appeal.id, {
-      decision: formState.decision,
-      comment: formState.comment,
+      action: formState.action,
+      comment: formState.comment.trim(),
+      resolution: formState.resolution.trim() || undefined,
     })
 
     message.success('审核完成')
     emit('success')
     handleCancel()
-  } catch (error: any) {
-    if (error?.errorFields) {
+  } catch (error) {
+    if (typeof error === 'object' && error !== null && 'errorFields' in error) {
       // 校验失败
     } else {
-      message.error(error.message || '操作失败')
+      message.error(error instanceof Error ? error.message : '操作失败')
     }
   } finally {
     submitting.value = false

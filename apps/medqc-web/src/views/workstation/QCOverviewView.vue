@@ -13,6 +13,7 @@
         </section>
 
         <HomeTaskTodos v-if="canReadTasks" />
+        <HomeAppealTodos />
 
         <section
           v-if="loadError"
@@ -391,6 +392,7 @@ import {
 import { ApiService } from '@/services/apiService'
 import { useAuthStore } from '@/stores/auth'
 import HomeTaskTodos from './HomeTaskTodos.vue'
+import HomeAppealTodos from './HomeAppealTodos.vue'
 import type {
   ClinicalQcHomeDepartmentItem,
   ClinicalQcHomePhysicianItem,

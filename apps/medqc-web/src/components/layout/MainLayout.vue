@@ -4,6 +4,8 @@
     <a-layout-sider
       v-model:collapsed="collapsed"
       collapsible
+      breakpoint="md"
+      :collapsed-width="0"
       class="sidebar-container shadow-xl relative overflow-hidden border-none bg-slate-900"
       theme="dark"
       width="260"

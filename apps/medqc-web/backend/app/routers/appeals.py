@@ -11,7 +11,7 @@
 - 申诉统计
 """
 
-from fastapi import APIRouter, Request, HTTPException, Depends
+from fastapi import APIRouter, Request, HTTPException, Depends, Query
 from typing import Optional
 import logging
 from anyio import to_thread
@@ -20,7 +20,7 @@ from pydantic import BaseModel, ValidationError
 from ..core.response import success_response, paginated_response, get_trace_id, StatusCode
 from ..core.supabase_client import get_supabase
 from ..core.security import get_current_user
-from ..core.permissions import ROLE_PERMISSIONS, PermissionAction, ResourceType, require_permission
+from ..core.permissions import ROLE_PERMISSIONS, PermissionAction, ResourceType, has_permission, require_permission
 from ..services.appeal_review_service import (
     AppealReviewConflict,
     AppealReviewNotFound,
@@ -76,17 +76,16 @@ async def create_appeal(
         创建的申诉记录
     """
     trace_id = get_trace_id(request)
-    supabase = get_supabase()
-
-    if not supabase:
-        raise HTTPException(
-            status_code=StatusCode.SERVICE_UNAVAILABLE,
-            detail="数据库连接失败"
-        )
+    appellant_id = str(current_user.get("id") or current_user.get("user_id") or "").strip()
+    if not appellant_id:
+        raise HTTPException(status_code=StatusCode.UNAUTHORIZED, detail="缺少申诉人身份")
 
     try:
+        supabase = get_supabase()
+        if not supabase:
+            raise RuntimeError("database unavailable")
         # 验证质控结果是否存在
-        qc_result = supabase.table("qc_results").select("id").eq("id", str(appeal.qc_result_id)).execute()
+        qc_result = supabase.table("qc.qc_results").select("id").eq("id", str(appeal.qc_result_id)).execute()
         if not qc_result.data:
             raise HTTPException(
                 status_code=StatusCode.NOT_FOUND,
@@ -94,7 +93,7 @@ async def create_appeal(
             )
 
         # 验证病历是否存在
-        record = supabase.table("medical_records").select("id").eq("id", str(appeal.record_id)).execute()
+        record = supabase.table("cdm.medical_records").select("id").eq("id", str(appeal.record_id)).execute()
         if not record.data:
             raise HTTPException(
                 status_code=StatusCode.NOT_FOUND,
@@ -110,14 +109,14 @@ async def create_appeal(
             "reason": appeal.reason,
             "evidence": appeal.evidence,
             "priority": appeal.priority.value,
-            "appellant_id": current_user["id"],
+            "appellant_id": appellant_id,
             "appellant_name": current_user.get("name", current_user.get("email", "Unknown")),
             "appellant_department": appeal.appellant_department,
             "notes": appeal.notes,
             "status": AppealStatus.PENDING.value,
         }
 
-        result = supabase.table("qc_appeals").insert(appeal_data).execute()
+        result = supabase.table("qc.qc_appeals").insert(appeal_data).execute()
 
         if not result.data:
             raise HTTPException(
@@ -126,27 +125,24 @@ async def create_appeal(
             )
 
         logger.info(
-            f"Appeal created: {result.data[0]['id']}",
-            extra={"trace_id": trace_id, "user_id": current_user["id"]}
+            "Appeal created",
+            extra={"trace_id": trace_id, "user_id": appellant_id}
         )
 
         return success_response(
             data=result.data[0],
             message="申诉创建成功",
-            request=request
+            trace_id=trace_id,
         )
 
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(
-            f"Failed to create appeal: {str(e)}",
-            extra={"trace_id": trace_id}
-        )
+    except Exception as exc:
+        logger.error("appeal_create_failed error_type=%s", type(exc).__name__, extra={"trace_id": trace_id})
         raise HTTPException(
-            status_code=StatusCode.INTERNAL_SERVER_ERROR,
-            detail=f"创建申诉失败: {str(e)}"
-        )
+            status_code=StatusCode.SERVICE_UNAVAILABLE,
+            detail="创建申诉服务暂不可用",
+        ) from exc
 
 
 @router.get("", response_model=dict)
@@ -157,8 +153,8 @@ async def list_appeals(
     appeal_type: Optional[str] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    page: int = 1,
-    page_size: int = 20,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
     current_user: dict = Depends(get_current_user)
 ):
     """
@@ -178,20 +174,26 @@ async def list_appeals(
         申诉列表
     """
     trace_id = get_trace_id(request)
-    supabase = get_supabase()
-
-    if not supabase:
-        raise HTTPException(
-            status_code=StatusCode.SERVICE_UNAVAILABLE,
-            detail="数据库连接失败"
-        )
+    appellant_id = str(current_user.get("id") or current_user.get("user_id") or "").strip()
+    if not appellant_id:
+        raise HTTPException(status_code=StatusCode.UNAUTHORIZED, detail="缺少用户身份")
+    can_review = has_permission(current_user, ResourceType.QC_RESULTS, PermissionAction.REVIEW)
+    if status == "reviewable" and not can_review:
+        raise HTTPException(status_code=StatusCode.FORBIDDEN, detail="没有申诉审核权限")
 
     try:
+        supabase = get_supabase()
+        if not supabase:
+            raise RuntimeError("database unavailable")
         # 构建查询
-        query = supabase.table("qc_appeals").select("*", count="exact")
+        query = supabase.table("qc.qc_appeals").select("*", count="exact")
+        if not can_review:
+            query = query.eq("appellant_id", appellant_id)
 
         # 应用过滤条件
-        if status:
+        if status == "reviewable":
+            query = query.in_("status", [AppealStatus.PENDING.value, AppealStatus.REVIEWING.value])
+        elif status:
             query = query.eq("status", status)
 
         if priority:
@@ -220,15 +222,12 @@ async def list_appeals(
             trace_id=trace_id,
         )
 
-    except Exception as e:
-        logger.error(
-            f"Failed to list appeals: {str(e)}",
-            extra={"trace_id": trace_id}
-        )
+    except Exception as exc:
+        logger.error("appeal_list_failed error_type=%s", type(exc).__name__, extra={"trace_id": trace_id})
         raise HTTPException(
-            status_code=StatusCode.INTERNAL_SERVER_ERROR,
-            detail=f"获取申诉列表失败: {str(e)}"
-        )
+            status_code=StatusCode.SERVICE_UNAVAILABLE,
+            detail="申诉列表服务暂不可用",
+        ) from exc
 
 
 @router.get("/{appeal_id}", response_model=dict)
@@ -248,47 +247,50 @@ async def get_appeal(
         申诉详情
     """
     trace_id = get_trace_id(request)
-    supabase = get_supabase()
-
-    if not supabase:
-        raise HTTPException(
-            status_code=StatusCode.SERVICE_UNAVAILABLE,
-            detail="数据库连接失败"
-        )
+    appellant_id = str(current_user.get("id") or current_user.get("user_id") or "").strip()
+    if not appellant_id:
+        raise HTTPException(status_code=StatusCode.UNAUTHORIZED, detail="缺少用户身份")
 
     try:
+        supabase = get_supabase()
+        if not supabase:
+            raise RuntimeError("database unavailable")
         # 获取申诉记录
-        appeal_result = supabase.table("qc_appeals").select("*").eq("id", appeal_id).execute()
+        query = supabase.table("qc.qc_appeals").select("*").eq("id", appeal_id)
+        if not has_permission(current_user, ResourceType.QC_RESULTS, PermissionAction.REVIEW):
+            query = query.eq("appellant_id", appellant_id)
+        appeal_result = query.execute()
 
         if not appeal_result.data:
             raise HTTPException(
                 status_code=StatusCode.NOT_FOUND,
-                detail=f"申诉不存在: {appeal_id}"
+                detail="申诉不存在"
             )
 
         appeal = appeal_result.data[0]
 
         # 获取审核历史
-        reviews_result = supabase.table("qc_appeal_reviews").select("*").eq("appeal_id", appeal_id).order("created_at", desc=False).execute()
+        reviews_result = supabase.table("qc.qc_appeal_reviews").select("*").eq("appeal_id", appeal_id).order("created_at", desc=False).execute()
 
         appeal["reviews"] = reviews_result.data or []
 
         return success_response(
             data=appeal,
-            request=request
+            trace_id=trace_id,
         )
 
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception as exc:
         logger.error(
-            f"Failed to get appeal: {str(e)}",
-            extra={"trace_id": trace_id, "appeal_id": appeal_id}
+            "appeal_detail_failed error_type=%s",
+            type(exc).__name__,
+            extra={"trace_id": trace_id, "appeal_id": appeal_id},
         )
         raise HTTPException(
-            status_code=StatusCode.INTERNAL_SERVER_ERROR,
-            detail=f"获取申诉详情失败: {str(e)}"
-        )
+            status_code=StatusCode.SERVICE_UNAVAILABLE,
+            detail="申诉详情服务暂不可用",
+        ) from exc
 
 
 @router.put(
@@ -556,17 +558,18 @@ async def get_appeal_statistics(
         统计数据
     """
     trace_id = get_trace_id(request)
-    supabase = get_supabase()
-
-    if not supabase:
-        raise HTTPException(
-            status_code=StatusCode.SERVICE_UNAVAILABLE,
-            detail="数据库连接失败"
-        )
+    appellant_id = str(current_user.get("id") or current_user.get("user_id") or "").strip()
+    if not appellant_id:
+        raise HTTPException(status_code=StatusCode.UNAUTHORIZED, detail="缺少用户身份")
+    if not has_permission(current_user, ResourceType.QC_RESULTS, PermissionAction.REVIEW):
+        raise HTTPException(status_code=StatusCode.FORBIDDEN, detail="没有申诉统计权限")
 
     try:
+        supabase = get_supabase()
+        if not supabase:
+            raise RuntimeError("database unavailable")
         # 查询统计视图
-        query = supabase.table("qc_appeals_statistics").select("*")
+        query = supabase.table("qc.qc_appeals_statistics").select("*")
         result = query.execute()
 
         # 计算总览统计
@@ -616,16 +619,13 @@ async def get_appeal_statistics(
 
         return success_response(
             data=stats,
-            request=request
+            trace_id=trace_id,
         )
 
-    except Exception as e:
-        logger.error(
-            f"Failed to get appeal statistics: {str(e)}",
-            extra={"trace_id": trace_id}
-        )
+    except Exception as exc:
+        logger.error("appeal_statistics_failed error_type=%s", type(exc).__name__, extra={"trace_id": trace_id})
         raise HTTPException(
-            status_code=StatusCode.INTERNAL_SERVER_ERROR,
-            detail=f"获取统计数据失败: {str(e)}"
-        )
+            status_code=StatusCode.SERVICE_UNAVAILABLE,
+            detail="申诉统计服务暂不可用",
+        ) from exc
 

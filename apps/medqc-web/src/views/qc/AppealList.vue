@@ -25,7 +25,7 @@
               @change="handleSearch"
             >
               <a-select-option
-                v-for="opt in APPEAL_STATUS_OPTIONS"
+                v-for="opt in statusOptions"
                 :key="opt.value"
                 :value="opt.value"
               >
@@ -66,12 +66,32 @@
           </a-form-item>
         </a-form>
 
+        <a-alert
+          v-if="listError"
+          type="error"
+          :message="listError"
+          show-icon
+          class="mb-4"
+        >
+          <template #action>
+            <a-button
+              size="small"
+              @click="fetchAppeals"
+            >
+              重试
+            </a-button>
+          </template>
+        </a-alert>
+
         <!-- 列表 -->
         <a-table
+          v-if="!listError"
           :columns="columns"
           :data-source="appeals"
           :loading="loading"
           :pagination="pagination"
+          :scroll="{ x: 1000 }"
+          :locale="{ emptyText: listError || '暂无申诉记录' }"
           row-key="id"
           @change="handleTableChange"
         >
@@ -139,38 +159,127 @@
       :appeal="currentAppeal"
       @success="refresh"
     />
+    <a-modal
+      v-model:open="showDetailModal"
+      title="申诉详情"
+      :footer="null"
+      :width="680"
+    >
+      <a-spin :spinning="detailLoading">
+        <a-alert
+          v-if="detailError"
+          type="error"
+          :message="detailError"
+          show-icon
+        />
+        <a-descriptions
+          v-else-if="detailAppeal"
+          bordered
+          :column="1"
+          size="small"
+        >
+          <a-descriptions-item label="申诉编号">
+            {{ detailAppeal.appealNumber || detailAppeal.id }}
+          </a-descriptions-item>
+          <a-descriptions-item label="状态">
+            {{ getAppealStatusInfo(detailAppeal.status).label }}
+          </a-descriptions-item>
+          <a-descriptions-item label="申诉类型">
+            {{ getAppealTypeLabel(detailAppeal.appealType) }}
+          </a-descriptions-item>
+          <a-descriptions-item label="申诉人">
+            {{ detailAppeal.appellantName || '-' }}
+          </a-descriptions-item>
+          <a-descriptions-item label="科室">
+            {{ detailAppeal.appellantDepartment || '-' }}
+          </a-descriptions-item>
+          <a-descriptions-item label="缺陷项">
+            {{ detailAppeal.defectItem || '-' }}
+          </a-descriptions-item>
+          <a-descriptions-item label="申诉理由">
+            <span class="detail-text">{{ detailAppeal.appealReason }}</span>
+          </a-descriptions-item>
+          <a-descriptions-item label="处理决定">
+            <span class="detail-text">{{ detailAppeal.resolution || '-' }}</span>
+          </a-descriptions-item>
+          <a-descriptions-item label="审核意见">
+            {{ detailAppeal.reviewResult || '-' }}
+          </a-descriptions-item>
+          <a-descriptions-item label="备注">
+            <span class="detail-text">{{ detailAppeal.notes || '-' }}</span>
+          </a-descriptions-item>
+          <a-descriptions-item label="提交时间">
+            {{ formatDate(detailAppeal.createdAt) }}
+          </a-descriptions-item>
+          <a-descriptions-item label="审核历史">
+            <div v-if="detailAppeal.reviews?.length">
+              <div
+                v-for="review in detailAppeal.reviews"
+                :key="review.id"
+                class="review-entry"
+              >
+                {{ review.reviewerName || '审核人' }} · {{ reviewActionLabel(review.action) }} · {{ formatDate(review.createdAt) }}
+                <div
+                  v-if="review.comment"
+                  class="detail-text"
+                >
+                  {{ review.comment }}
+                </div>
+              </div>
+            </div>
+            <span v-else>暂无审核记录</span>
+          </a-descriptions-item>
+        </a-descriptions>
+      </a-spin>
+    </a-modal>
   </div>
 </template>
 
 <script lang="ts" setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed, watch } from 'vue'
+import { useRoute } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 import { message } from 'ant-design-vue'
 import type { TableColumnsType } from 'ant-design-vue'
 import dayjs from 'dayjs'
 import {
   Appeal,
-  AppealStatus,
+  type AppealStatusFilter,
+  type AppealType,
+  type AppealReviewAction,
   APPEAL_STATUS_OPTIONS,
   APPEAL_TYPE_OPTIONS,
   getAppealStatusInfo,
   getAppealTypeLabel,
+  canReviewAppeal,
+  canWithdrawAppeal,
 } from '@/types/appeal'
-import { getAppeals, withdrawAppeal } from '@/api/appeal'
+import { getAppeal, getAppeals, withdrawAppeal } from '@/api/appeal'
 import AppealReviewModal from '@/components/qc/AppealReviewModal.vue'
 
-const hasAdminPermission = ref(true)
-const currentUserId = ref('doctor_001') // 模拟当前用户ID
+const authStore = useAuthStore()
+const route = useRoute()
+const hasReviewPermission = computed(() => authStore.userRoles.some((role) => role === 'admin' || role === 'qc_manager'))
+const currentUserId = computed(() => authStore.user?.id)
+const statusOptions = computed(() => hasReviewPermission.value ? APPEAL_STATUS_OPTIONS : APPEAL_STATUS_OPTIONS.filter((option) => option.value !== 'reviewable'))
 
 const loading = ref(false)
 const appeals = ref<Appeal[]>([])
 const showReviewModal = ref(false)
 const currentAppeal = ref<Appeal>()
+const detailAppeal = ref<Appeal | null>(null)
+const detailLoading = ref(false)
+let detailRequestId = 0
+const detailError = ref('')
+const listError = ref('')
+let listRequestId = 0
+const showDetailModal = ref(false)
 
-const asAppeal = (record: Record<string, any>) => record as Appeal
+const asAppeal = (record: Record<string, unknown>) => record as unknown as Appeal
 
 const filters = reactive({
-  status: undefined as AppealStatus | undefined,
-  appealType: undefined,
+  status: route.query.todo === 'review' && hasReviewPermission.value ? 'reviewable' as AppealStatusFilter : undefined as AppealStatusFilter | undefined,
+  appealType: undefined as AppealType | undefined,
 })
 
 const pagination = reactive({
@@ -194,6 +303,11 @@ onMounted(() => {
   fetchAppeals()
 })
 
+watch([() => route.query.todo, hasReviewPermission], ([todo, mayReview]) => {
+  filters.status = todo === 'review' && mayReview ? 'reviewable' : undefined
+  handleSearch()
+})
+
 const handleSearch = () => {
   pagination.current = 1
   fetchAppeals()
@@ -205,14 +319,16 @@ const resetFilters = () => {
   handleSearch()
 }
 
-const handleTableChange = (pag: any) => {
-  pagination.current = pag.current
-  pagination.pageSize = pag.pageSize
+const handleTableChange = (pag: { current?: number; pageSize?: number }) => {
+  pagination.current = pag.current ?? 1
+  pagination.pageSize = pag.pageSize ?? 20
   fetchAppeals()
 }
 
 const fetchAppeals = async () => {
+  const requestId = ++listRequestId
   loading.value = true
+  listError.value = ''
   try {
     const res = await getAppeals({
       status: filters.status,
@@ -221,12 +337,16 @@ const fetchAppeals = async () => {
       pageSize: pagination.pageSize,
     })
 
+    if (requestId !== listRequestId) return
     appeals.value = res.items
     pagination.total = res.total
   } catch (error) {
+    if (requestId !== listRequestId) return
+    appeals.value = []
+    listError.value = '加载失败，请重试'
     message.error('加载申诉列表失败')
   } finally {
-    loading.value = false
+    if (requestId === listRequestId) loading.value = false
   }
 }
 
@@ -235,11 +355,11 @@ const formatDate = (date: string | null) => {
 }
 
 const canReview = (item: Appeal) => {
-  return item.status === AppealStatus.PENDING && hasAdminPermission.value
+  return canReviewAppeal(item, authStore.userRoles)
 }
 
 const canWithdraw = (item: Appeal) => {
-  return item.status === AppealStatus.PENDING && item.appellantId === currentUserId.value
+  return canWithdrawAppeal(item, currentUserId.value)
 }
 
 const openReviewModal = (item: Appeal) => {
@@ -247,17 +367,33 @@ const openReviewModal = (item: Appeal) => {
   showReviewModal.value = true
 }
 
-const viewDetail = (item: Appeal) => {
-  message.info('查看详情: ' + item.id)
+const viewDetail = async (item: Appeal) => {
+  const requestId = ++detailRequestId
+  showDetailModal.value = true
+  detailAppeal.value = null
+  detailError.value = ''
+  detailLoading.value = true
+  try {
+    const result = await getAppeal(item.id)
+    if (requestId === detailRequestId) detailAppeal.value = result
+  } catch (error) {
+    if (requestId === detailRequestId) detailError.value = error instanceof Error ? error.message : '加载申诉详情失败'
+  } finally {
+    if (requestId === detailRequestId) detailLoading.value = false
+  }
 }
+
+const reviewActionLabel = (action: AppealReviewAction) => ({
+  approve: '通过', reject: '驳回', request_info: '要求补充信息', forward: '转交',
+})[action]
 
 const handleWithdraw = async (item: Appeal) => {
   try {
     await withdrawAppeal(item.id)
     message.success('已撤销')
     refresh()
-  } catch (e: any) {
-    message.error(e.message || '撤销失败')
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '撤回失败')
   }
 }
 
@@ -276,4 +412,6 @@ const refresh = () => {
 .ml-2 {
   margin-left: 8px;
 }
+.detail-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.review-entry + .review-entry { border-top: 1px solid rgba(0, 0, 0, 0.08); margin-top: 8px; padding-top: 8px; }
 </style>

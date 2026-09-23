@@ -220,3 +220,10 @@
 - Sol / medium 实现代理负责更新路由和反例；独立审查核对 SQL 适配器与 PostgreSQL 条件更新语义，主 Agent 只读核查真实列型、审查最终 diff 并补客户端初始化故障反例。
 - 查询与最终更新均限定 `qc.qc_appeals`；最终 UPDATE 以 id、申诉人和 `pending` 三条件作为数据库级门槛，零行返回 409。非法正文和数据库错误均脱敏，OpenAPI 请求体保留。
 - 初版红测理由不足 DTO 最短长度、落在错误的 422 前置分支，已更正后重新验证；最终相邻申诉测试 39 passed，Ruff/编译通过。真实 PostgreSQL 竞争写未授权、不宣称完成。申诉待办、并发编辑版本控制和完整前端工作流仍未交付；Goal 总范围未完成。
+
+## 16. 第十一批：临床申诉待审核读取与 V5 下钻
+
+- 主 Agent 核对 PRD、路由、模型和真实数据库只读聚合：`qc.qc_appeals` 有 5 行（`pending` 2、`accepted` 2、`rejected` 1），申诉人 ID 均非空；`qc` 与 `public` 均有同名申诉表，权威读写统一限定 `qc`。源 `cdm.medical_records` 与 `qc.qc_results` 显式限定，避免不同 `search_path` 下创建成功却读不到。创建接口原先成功写入后传错响应参数，已修复并用隔离测试覆盖。
+- Sol / medium 后端代理收紧列表、详情及统计权限；前端代理改真实 snake_case DTO、角色动作、历史 `accepted` 只读和详情/审核交互。独立审查发现列表竞态、虚假附件及证据列型兼容风险，主 Agent 补请求序号、移除未上传文件的假证据控件，并在 API 边界兼容数组与历史 JSON 文本。审核者共享池使用 `status=reviewable` 统计 `pending/reviewing`，普通用户仅能读取本人；失败不显示假零。
+- V5 首页增加仅审核者可见的临床申诉待办，并下钻 `/dashboard/qc/appeals?todo=review`。桌面和 390px 移动端用 Playwright 隔离响应验证列表、详情与布局；移动端旧 Dashboard 侧栏自动收起、表格横向滚动。该验证未连接真实后端，也未执行数据库写入。
+- 本批前端聚焦 17/17、后端申诉隔离测试 55/55 通过，type-check 与完整源代码 ESLint 无错误。全量前端单测复跑为 1183 passed / 3 failed，失败均在未改动的单病例结果与复核预览旧用例；首次全量运行另有 2 个波动失败，复跑消失。`qc.qc_appeals` 实库是 JSONB，旧 `public` 同名表是 TEXT；本批不迁移或合并旧表。真实创建/审核/撤回/并发提交、`single` 模式仅 public 的部署兼容、附件上传、人工缺陷和病历复审待办仍未验收。运行/终末场景候选继续 409，等待院方归档值域与来源完整性；迁移45–49仍待授权。Goal 保持 active。

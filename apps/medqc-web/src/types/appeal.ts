@@ -1,156 +1,144 @@
-/**
- * 申诉管理类型定义
- * Appeal Management Types
- */
-
-/**
- * 申诉类型
- */
 export enum AppealType {
-    INCORRECT_RULE = 'incorrect_rule',  // 规则判定有误
-    SPECIAL_CASE = 'special_case',      // 特殊情况
-    OTHER = 'other'                     // 其他
+  DEFECT = 'defect',
+  SCORE = 'score',
 }
 
-/**
- * 申诉状态
- */
 export enum AppealStatus {
-    PENDING = 'pending',        // 待审核
-    APPROVED = 'approved',      // 已通过
-    REJECTED = 'rejected',      // 已驳回
-    WITHDRAWN = 'withdrawn'     // 已撤销
+  PENDING = 'pending',
+  REVIEWING = 'reviewing',
+  APPROVED = 'approved',
+  ACCEPTED = 'accepted',
+  REJECTED = 'rejected',
+  WITHDRAWN = 'withdrawn',
 }
 
-/**
- * 申诉详情
- */
+export type AppealPriority = 'low' | 'medium' | 'high' | 'urgent'
+export type AppealReviewAction = 'approve' | 'reject' | 'request_info' | 'forward'
+export type AppealStatusFilter = AppealStatus | 'reviewable'
+
+export interface AppealEvidence {
+  url?: string
+  name?: string
+  [key: string]: unknown
+}
+
+export interface AppealReview {
+  id: string
+  appealId: string
+  reviewerId: string
+  reviewerName: string | null
+  action: AppealReviewAction
+  comment: string | null
+  createdAt: string
+}
+
 export interface Appeal {
-    id: string
-    qcResultId: string
-    defectId: string
-    recordId: string
-
-    // 申诉人信息
-    appellantId: string
-    appellantName: string | null
-    departmentId: string | null
-
-    // 申诉内容
-    appealReason: string
-    appealType: AppealType
-    evidenceUrls: string[]
-
-    // 审核信息
-    status: AppealStatus
-    reviewerId: string | null
-    reviewerName: string | null
-    reviewComment: string | null
-    reviewedAt: string | null
-
-    // 时间戳
-    createdAt: string
-    updatedAt: string
+  id: string
+  appealNumber: string | null
+  qcResultId: string
+  recordId: string
+  appealType: AppealType
+  defectItem: string | null
+  appealReason: string
+  evidence: AppealEvidence[]
+  status: AppealStatus
+  priority: AppealPriority
+  appellantId: string
+  appellantName: string | null
+  appellantDepartment: string | null
+  reviewerId: string | null
+  reviewerName: string | null
+  reviewResult: string | null
+  reviewedAt: string | null
+  resolution: string | null
+  resolutionDate: string | null
+  notes: string | null
+  createdAt: string
+  updatedAt: string
+  reviews?: AppealReview[]
 }
 
-/**
- * 创建申诉请求
- */
+// 保持创建表单已有的调用形状，API 层负责转换为后端字段。
 export interface AppealCreateRequest {
-    qcResultId: string
-    defectId: string
-    recordId: string
-    appealReason: string
-    appealType: AppealType
-    evidenceUrls?: string[]
+  qcResultId: string
+  defectId?: string
+  recordId: string
+  appealReason: string
+  appealType: AppealType
+  evidenceUrls?: string[]
+  priority?: AppealPriority
 }
 
-/**
- * 更新申诉请求
- */
 export interface AppealUpdateRequest {
-    appealReason?: string
-    appealType?: AppealType
-    evidenceUrls?: string[]
+  appealReason?: string
+  evidenceUrls?: string[]
+  priority?: AppealPriority
+  notes?: string
 }
 
-/**
- * 审核申诉请求
- */
 export interface AppealReviewRequest {
-    decision: 'approve' | 'reject'
-    comment: string
+  action: AppealReviewAction
+  comment?: string
+  resolution?: string
 }
 
-/**
- * 申诉列表响应
- */
 export interface AppealListResponse {
-    items: Appeal[]
-    total: number
-    page: number
-    pageSize: number
-    hasMore: boolean
+  items: Appeal[]
+  total: number
+  page: number
+  pageSize: number
+  totalPages: number
 }
 
-/**
- * 申诉筛选条件
- */
 export interface AppealFilters {
-    status?: AppealStatus
-    appealType?: AppealType
-    appellantId?: string
-    departmentId?: string
-    startDate?: string
-    endDate?: string
-    page?: number
-    pageSize?: number
+  status?: AppealStatusFilter
+  appealType?: AppealType
+  priority?: AppealPriority
+  startDate?: string
+  endDate?: string
+  page?: number
+  pageSize?: number
 }
 
-/**
- * 申诉统计
- */
 export interface AppealStats {
-    totalCount: number
-    pendingCount: number
-    approvedCount: number
-    rejectedCount: number
-    withdrawnCount: number
-    approvalRate: number
-    avgReviewTimeHours: number
+  total: number
+  pending: number
+  reviewing: number
+  approved: number
+  rejected: number
+  withdrawn: number
+  avgResolutionTimeHours: number | null
 }
 
-/**
- * 申诉类型选项
- */
 export const APPEAL_TYPE_OPTIONS = [
-    { value: AppealType.INCORRECT_RULE, label: '规则判定有误' },
-    { value: AppealType.SPECIAL_CASE, label: '特殊情况' },
-    { value: AppealType.OTHER, label: '其他' }
+  { value: AppealType.DEFECT, label: '缺陷申诉' },
+  { value: AppealType.SCORE, label: '评分申诉' },
 ]
 
-/**
- * 申诉状态选项
- */
 export const APPEAL_STATUS_OPTIONS = [
-    { value: AppealStatus.PENDING, label: '待审核', color: 'orange' },
-    { value: AppealStatus.APPROVED, label: '已通过', color: 'green' },
-    { value: AppealStatus.REJECTED, label: '已驳回', color: 'red' },
-    { value: AppealStatus.WITHDRAWN, label: '已撤销', color: 'gray' }
-]
+  { value: 'reviewable', label: '待审核', color: 'orange' },
+  { value: AppealStatus.PENDING, label: '待处理', color: 'orange' },
+  { value: AppealStatus.REVIEWING, label: '审核中', color: 'blue' },
+  { value: AppealStatus.APPROVED, label: '已通过', color: 'green' },
+  { value: AppealStatus.ACCEPTED, label: '已接受', color: 'green' },
+  { value: AppealStatus.REJECTED, label: '已驳回', color: 'red' },
+  { value: AppealStatus.WITHDRAWN, label: '已撤回', color: 'default' },
+] as const
 
-/**
- * 获取申诉类型标签
- */
 export function getAppealTypeLabel(type: AppealType): string {
-    const option = APPEAL_TYPE_OPTIONS.find(opt => opt.value === type)
-    return option?.label || type
+  return APPEAL_TYPE_OPTIONS.find((option) => option.value === type)?.label || type
 }
 
-/**
- * 获取申诉状态标签和颜色
- */
 export function getAppealStatusInfo(status: AppealStatus): { label: string; color: string } {
-    const option = APPEAL_STATUS_OPTIONS.find(opt => opt.value === status)
-    return option || { label: status, color: 'default' }
+  return APPEAL_STATUS_OPTIONS.find((option) => option.value === status) || { label: status, color: 'default' }
+}
+
+export function canReviewAppeal(appeal: Appeal, roles: readonly string[]): boolean {
+  return roles.some((role) => role === 'admin' || role === 'qc_manager') &&
+    [AppealStatus.PENDING, AppealStatus.REVIEWING].includes(appeal.status)
+}
+
+export function canWithdrawAppeal(appeal: Appeal, userId: string | undefined): boolean {
+  return !!userId && appeal.appellantId === userId &&
+    [AppealStatus.PENDING, AppealStatus.REVIEWING].includes(appeal.status)
 }
