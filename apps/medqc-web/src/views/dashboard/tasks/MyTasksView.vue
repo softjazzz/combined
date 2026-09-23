@@ -5,10 +5,17 @@
       <h1 class="text-3xl font-bold text-gray-800 mb-2">
         我的任务
       </h1>
-      <p class="text-gray-600">
-        管理和处理分配给我的质控任务
-      </p>
+      <p class="text-gray-600">{{ activeTab === 'received' ? '管理和处理分配给我的质控任务' : '查看我创建的质控任务及执行进度' }}</p>
     </div>
+
+    <a-segmented
+      data-testid="task-scope-segmented"
+      class="mb-6"
+      aria-label="任务范围"
+      :value="activeTab"
+      :options="taskTabOptions"
+      @change="handleTabChange"
+    />
 
     <div
       v-if="invalidTaskQuery"
@@ -45,7 +52,7 @@
         <div class="flex items-center justify-between">
           <div>
             <p class="text-gray-600 text-sm mb-1">
-              未开始任务
+              {{ activeTab === 'created' ? '草稿任务' : '未开始任务' }}
             </p>
             <p
               data-testid="pending-task-count"
@@ -134,6 +141,7 @@
       </h2>
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
         <a-button
+          v-if="activeTab === 'received'"
           data-testid="start-task-action"
           type="primary"
           size="large"
@@ -147,10 +155,10 @@
           data-testid="pending-task-action"
           size="large"
           class="rounded-lg h-16"
-          @click="handleViewByStatus('assigned')"
+          @click="handleViewByStatus(pendingStatus)"
         >
           <ClockCircleOutlined class="text-lg" />
-          <span class="ml-2">未开始任务</span>
+          <span class="ml-2">{{ activeTab === 'created' ? '草稿任务' : '未开始任务' }}</span>
         </a-button>
         <a-button
           data-testid="completed-task-action"
@@ -291,7 +299,7 @@
           <template v-if="column.key === 'action'">
             <div class="flex space-x-2">
               <a-button
-                v-if="(record as TaskItem).status === 'assigned'"
+                v-if="activeTab === 'received' && (record as TaskItem).status === 'assigned'"
                 type="link"
                 size="small"
                 :loading="startingTaskIds.has((record as TaskItem).id)"
@@ -302,7 +310,7 @@
                 开始
               </a-button>
               <a-button
-                v-if="(record as TaskItem).status === 'in_progress'"
+                v-if="activeTab === 'received' && (record as TaskItem).status === 'in_progress'"
                 type="link"
                 size="small"
                 @click="handleContinueWork(record as TaskItem)"
@@ -327,7 +335,7 @@
     <TaskDetailDrawer
       v-model:open="detailDrawerVisible"
       :task-id="detailTaskId"
-      tab="received"
+      :tab="activeTab"
     />
   </div>
 </template>
@@ -345,6 +353,7 @@ import type {
   TaskStats,
   TaskStatus,
   TaskTodo,
+  TaskTab,
 } from '@/api/tasks'
 import TaskDetailDrawer from '@/components/qc/TaskDetailDrawer.vue'
 import {
@@ -375,7 +384,14 @@ const dateRange = ref<DateRange>(null)
 const tasks = ref<TaskItem[]>([])
 const startingTaskIds = ref(new Set<string>())
 const listError = ref('')
-const initialTaskQuery = parseTaskQuery(route.query.todo, route.query.as_of, route.query.scene)
+type MyTaskTab = Extract<TaskTab, 'received' | 'created'>
+const initialTaskQuery = parseTaskQuery(route.query.todo, route.query.as_of, route.query.scene, route.query.tab)
+const activeTab = ref<MyTaskTab>(initialTaskQuery.tab)
+const taskTabOptions = [
+  { label: '我收到', value: 'received' },
+  { label: '我创建', value: 'created' },
+]
+const pendingStatus = computed<TaskStatus>(() => activeTab.value === 'created' ? 'draft' : 'assigned')
 const activeTodo = ref<TaskTodo | undefined>(initialTaskQuery.todo)
 const todoAsOf = ref<string | undefined>(initialTaskQuery.asOf)
 const activeScene = ref<TaskSceneFilter | undefined>(initialTaskQuery.scene)
@@ -390,7 +406,11 @@ const statsError = ref('')
 let statsRequestId = 0
 
 const pendingTaskCount = computed(() =>
-  taskStats.value ? (taskStats.value.by_status.assigned ?? 0) : null,
+  taskStats.value
+    ? activeTab.value === 'created'
+      ? (taskStats.value.by_status.draft ?? 0)
+      : (taskStats.value.by_status.assigned ?? 0)
+    : null,
 )
 
 // 完成率
@@ -540,23 +560,28 @@ function parseScene(value: unknown): TaskSceneFilter | undefined {
     : undefined
 }
 
-function parseTaskQuery(todoValue: unknown, asOfValue: unknown, sceneValue: unknown) {
+function parseTaskQuery(todoValue: unknown, asOfValue: unknown, sceneValue: unknown, tabValue: unknown) {
   const todo = parseTaskTodo(todoValue)
   const asOf = parseAsOf(asOfValue)
   const scene = parseScene(sceneValue)
+  const tab: MyTaskTab = tabValue === 'created' ? 'created' : 'received'
   const hasTodo = todoValue !== undefined
   const hasAsOf = asOfValue !== undefined
   const hasScene = sceneValue !== undefined
+  const invalidTab = tabValue !== undefined && tabValue !== 'received' && tabValue !== 'created'
   return {
+    tab,
     todo,
     asOf: todo ? asOf : undefined,
     scene,
-    invalid: (hasTodo && !todo) || (hasAsOf && (!todo || !asOf)) || (hasScene && !scene),
+    invalid: invalidTab || (hasTodo && (!todo || tab === 'created')) ||
+      (hasAsOf && (!todo || !asOf || tab === 'created')) || (hasScene && !scene),
   }
 }
 
-function syncTaskScopeFromRoute(todoValue: unknown, asOfValue: unknown, sceneValue: unknown) {
-  const nextQuery = parseTaskQuery(todoValue, asOfValue, sceneValue)
+function syncTaskScopeFromRoute(todoValue: unknown, asOfValue: unknown, sceneValue: unknown, tabValue: unknown) {
+  const nextQuery = parseTaskQuery(todoValue, asOfValue, sceneValue, tabValue)
+  activeTab.value = nextQuery.tab
   activeTodo.value = nextQuery.todo
   todoAsOf.value = nextQuery.asOf
   activeScene.value = nextQuery.scene
@@ -580,6 +605,7 @@ function queryWithoutTodo() {
 function queryWithoutTaskScope() {
   const query = queryWithoutTodo()
   delete query.scene
+  if (query.tab !== 'created' && query.tab !== 'received') delete query.tab
   return query
 }
 
@@ -602,7 +628,7 @@ async function clearTodoRoute() {
   if (route.query.todo === undefined && route.query.as_of === undefined) return
   invalidateTaskList()
   syncingTodoRoute = true
-  syncTaskScopeFromRoute(undefined, undefined, route.query.scene)
+  syncTaskScopeFromRoute(undefined, undefined, route.query.scene, route.query.tab)
   try {
     await router.replace({ query: queryWithoutTodo() })
   } finally {
@@ -614,16 +640,18 @@ async function clearTaskScopeRoute() {
   if (
     route.query.todo === undefined &&
     route.query.as_of === undefined &&
-    route.query.scene === undefined
+    route.query.scene === undefined &&
+    (route.query.tab === undefined || route.query.tab === 'created' || route.query.tab === 'received')
   ) {
     return
   }
   invalidateTaskList()
   invalidateTaskStats()
   syncingTodoRoute = true
-  syncTaskScopeFromRoute(undefined, undefined, undefined)
+  const query = queryWithoutTaskScope()
+  syncTaskScopeFromRoute(undefined, undefined, undefined, query.tab)
   try {
-    await router.replace({ query: queryWithoutTaskScope() })
+    await router.replace({ query })
   } finally {
     syncingTodoRoute = false
   }
@@ -639,7 +667,7 @@ const formatStatValue = (value: number | null, suffix = '') => {
 
 const fetchStats = async () => {
   const requestId = ++statsRequestId
-  if (invalidTaskQuery.value && route.query.scene !== undefined && !activeScene.value) {
+  if (invalidTaskQuery.value) {
     taskStats.value = null
     statsLoading.value = false
     return
@@ -649,8 +677,8 @@ const fetchStats = async () => {
   try {
     const res = await getTaskStats(
       activeScene.value
-        ? { tab: 'received', scene: activeScene.value }
-        : { tab: 'received' },
+        ? { tab: activeTab.value, scene: activeScene.value }
+        : { tab: activeTab.value },
     )
     if (requestId !== statsRequestId) return
     if (res.success && res.data) {
@@ -682,9 +710,9 @@ const fetchTasks = async () => {
   loading.value = true
   try {
     const res = await getTaskList({
-      tab: 'received',
-      todo: activeTodo.value,
-      as_of: activeTodo.value ? todoAsOf.value : undefined,
+      tab: activeTab.value,
+      todo: activeTab.value === 'received' ? activeTodo.value : undefined,
+      as_of: activeTab.value === 'received' && activeTodo.value ? todoAsOf.value : undefined,
       scene: activeScene.value,
       keyword: searchKeyword.value || undefined,
       status: selectedStatus.value,
@@ -717,6 +745,7 @@ const fetchTasks = async () => {
 // ====== 事件处理 ======
 
 const handleStartTask = () => {
+  if (activeTab.value !== 'received') return
   const pending = tasks.value.find((t) => t.status === 'assigned')
   if (pending) {
     handleStartWork(pending)
@@ -731,7 +760,7 @@ const handleViewByStatus = async (status: TaskStatus) => {
     return
   }
   const statusCount =
-    status === 'assigned'
+    status === pendingStatus.value
       ? pendingTaskCount.value
       : status === 'completed' && taskStats.value
         ? taskStats.value.completed
@@ -754,6 +783,28 @@ const handleTaskReport = () => {
   router.push('/statistics')
 }
 
+const handleTabChange = async (tab: unknown) => {
+  if (tab !== 'received' && tab !== 'created') return
+  if (tab === activeTab.value && !invalidTaskQuery.value) return
+  invalidateTaskList()
+  invalidateTaskStats()
+  detailDrawerVisible.value = false
+  detailTaskId.value = null
+  clearLocalFilters()
+  const query = queryWithoutTodo()
+  if (tab === 'created') query.tab = tab
+  else delete query.tab
+  syncingTodoRoute = true
+  syncTaskScopeFromRoute(undefined, undefined, route.query.scene, query.tab)
+  try {
+    await router.replace({ query })
+  } finally {
+    syncingTodoRoute = false
+  }
+  void fetchTasks()
+  void fetchStats()
+}
+
 const handleFilter = () => {
   pagination.value.current = 1
   fetchTasks()
@@ -767,7 +818,7 @@ const handleSceneChange = async (scene?: TaskSceneFilter) => {
   if (scene) query.scene = scene
   else delete query.scene
   syncingTodoRoute = true
-  syncTaskScopeFromRoute(route.query.todo, route.query.as_of, scene)
+  syncTaskScopeFromRoute(route.query.todo, route.query.as_of, scene, route.query.tab)
   try {
     await router.replace({ query })
   } finally {
@@ -803,7 +854,7 @@ const handleRefresh = () => {
 }
 
 const handleStartWork = async (record: TaskItem) => {
-  if (record.status !== 'assigned' || startingTaskIds.value.has(record.id)) return
+  if (activeTab.value !== 'received' || record.status !== 'assigned' || startingTaskIds.value.has(record.id)) return
   startingTaskIds.value.add(record.id)
   try {
     const res = await updateTask(record.id, { status: 'in_progress' })
@@ -822,6 +873,7 @@ const handleStartWork = async (record: TaskItem) => {
 }
 
 const handleContinueWork = (record: TaskItem) => {
+  if (activeTab.value !== 'received') return
   // 跳转到工作站（带上任务上下文）
   router.push({ path: '/workstation-v5', query: { taskId: record.id } })
 }
@@ -838,16 +890,22 @@ const handleTableChange = (pag: TablePaginationConfig) => {
 }
 
 watch(
-  [() => route.query.todo, () => route.query.as_of, () => route.query.scene],
-  ([todoValue, asOfValue, sceneValue], previousValues) => {
+  [() => route.query.todo, () => route.query.as_of, () => route.query.scene, () => route.query.tab],
+  ([todoValue, asOfValue, sceneValue, tabValue], previousValues) => {
     if (syncingTodoRoute) return
     invalidateTaskList()
-    const sceneChanged = sceneValue !== previousValues?.[2]
-    if (sceneChanged) invalidateTaskStats()
-    syncTaskScopeFromRoute(todoValue, asOfValue, sceneValue)
+    const wasInvalid = invalidTaskQuery.value
+    if (tabValue !== previousValues?.[3]) {
+      detailDrawerVisible.value = false
+      detailTaskId.value = null
+    }
+    syncTaskScopeFromRoute(todoValue, asOfValue, sceneValue, tabValue)
+    const statsScopeChanged = sceneValue !== previousValues?.[2] ||
+      tabValue !== previousValues?.[3] || wasInvalid !== invalidTaskQuery.value
+    if (statsScopeChanged) invalidateTaskStats()
     clearLocalFilters()
     void fetchTasks()
-    if (sceneChanged) void fetchStats()
+    if (statsScopeChanged && !invalidTaskQuery.value) void fetchStats()
   },
 )
 

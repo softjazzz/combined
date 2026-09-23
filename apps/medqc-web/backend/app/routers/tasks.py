@@ -59,6 +59,7 @@ from ..services.task_start_service import (
 )
 from .qc_sichuan import get_qc_service, _run_sichuan_workspace_batch_job, _sichuan_workspace_service
 from ..core.permissions import (
+    has_any_role,
     require_permission,
     require_role,
     ResourceType,
@@ -153,6 +154,8 @@ def _task_todo_counts(rows: List[dict], as_of: datetime) -> Dict[str, int]:
 async def _apply_task_tab_scope(sb, query, tab: str, current_user: dict):
     """让任务列表与统计复用同一 created/received 数据范围。"""
     if tab == "all":
+        if not has_any_role(current_user, [UserRole.ADMIN, UserRole.QC_MANAGER]):
+            raise HTTPException(status_code=403, detail="仅管理员和质控主管可查看全部任务")
         return query
 
     if tab not in {"created", "received"}:
@@ -800,6 +803,7 @@ async def re_analyze_task(
     """
     对任务内所有病历重新执行质控分析
     """
+    actor_id = _get_task_scope_user_id(current_user)
     sb = get_supabase()
     if sb is None:
         raise HTTPException(status_code=503, detail="数据库不可用")
@@ -814,6 +818,8 @@ async def re_analyze_task(
         raise HTTPException(status_code=503, detail="任务数据源不可用，请稍后重试") from exc
     if task is None:
         raise HTTPException(status_code=404, detail="任务不存在")
+    if not task.get("creator_id") or task["creator_id"] != actor_id:
+        raise HTTPException(status_code=403, detail="仅任务创建人可重新质控")
     if task.get("scene") is not None:
         raise HTTPException(status_code=409, detail="场景任务尚未接通真实批量质控，请勿使用旧重新质控入口")
 
@@ -823,9 +829,9 @@ async def re_analyze_task(
             sb.table('qc_task_records').select('record_id').eq('task_id', task_id)
         )
         records = list(getattr(resp, 'data', None) or [])
-    except Exception as e:
-        logger.error(f"查询任务病历失败: {e}")
-        raise HTTPException(status_code=500, detail=f"查询任务病历失败: {str(e)}")
+    except Exception as exc:
+        logger.warning("重新质控前查询任务病历失败", exc_info=True)
+        raise HTTPException(status_code=503, detail="任务病历数据源不可用，请稍后重试") from exc
 
     record_ids = [r.get("record_id") for r in records if r.get("record_id")]
 
@@ -836,13 +842,23 @@ async def re_analyze_task(
     from ..services.qc_service import QCService
     qc_service = QCService()
 
-    started = []
-    for rid in record_ids[:50]:
+    batch_ids = record_ids[:50]
+    results = []
+    succeeded = 0
+    for rid in batch_ids:
         try:
             await qc_service.evaluate({"record_id": rid})
-            started.append({"record_id": rid, "status": "started"})
-        except Exception as e:
-            started.append({"record_id": rid, "status": "failed", "error": str(e)})
+            results.append({"record_id": rid, "status": "started"})
+            succeeded += 1
+        except Exception as exc:
+            logger.warning("旧任务重新质控单条失败: task_id=%s, type=%s", task_id, type(exc).__name__)
+            results.append({"record_id": rid, "status": "failed", "error": "质控分析失败"})
+
+    attempted = len(batch_ids)
+    failed = attempted - succeeded
+    not_attempted = len(record_ids) - attempted
+    if succeeded == 0:
+        raise HTTPException(status_code=503, detail=f"本次尝试 {attempted} 条病历，均质控失败，请稍后重试")
 
     # 更新任务状态
     update_data = {
@@ -860,10 +876,18 @@ async def re_analyze_task(
         data={
             "task_id": task_id,
             "total": len(record_ids),
-            "started": len(started),
-            "results": started,
+            "attempted": attempted,
+            "started": succeeded,
+            "failed": failed,
+            "not_attempted": not_attempted,
+            "partial": failed > 0 or not_attempted > 0,
+            "results": results,
         },
-        message=f"已启动重新质控，共 {len(started)} 条病历",
+        message=(
+            f"重新质控部分完成：本次尝试 {attempted} 条，成功 {succeeded} 条，"
+            f"失败 {failed} 条，未尝试 {not_attempted} 条"
+            if failed or not_attempted else f"已启动重新质控，本次成功 {succeeded} 条"
+        ),
         trace_id=get_trace_id(request),
     )
 

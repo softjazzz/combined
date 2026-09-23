@@ -973,7 +973,7 @@ const handleMenuAction = async (key: string, record: any) => {
     message.loading('正在重新质控...', 1)
     const res = await reAnalyzeQCTask(taskId)
     if (res.success) {
-      message.success('重新质控已触发')
+      message.success(res.message || '重新质控已触发')
       fetchRecords()
     } else {
       message.error(res.message || '重新质控失败')

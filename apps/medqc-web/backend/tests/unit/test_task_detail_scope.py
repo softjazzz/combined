@@ -180,3 +180,38 @@ def test_query_failures_are_not_fake_empty_success(monkeypatch, table, tab):
     response = client_for(monkeypatch, database, id="u-1").get("/api/v1/tasks/shared", params={"tab": tab})
     assert response.status_code == 500
     assert "private SQL" not in response.text
+
+
+@pytest.mark.parametrize("role", ["doctor", "qc_staff"])
+@pytest.mark.parametrize("tab", [None, "all"])
+def test_non_manager_all_detail_is_forbidden_before_queries(monkeypatch, role, tab):
+    database = Database()
+    client = client_for(monkeypatch, database, id="u-1", roles=[role])
+
+    response = client.get("/api/v1/tasks/shared", params={} if tab is None else {"tab": tab})
+
+    assert response.status_code == 403
+    assert database.calls == []
+
+
+@pytest.mark.parametrize("role", ["admin", "qc_manager"])
+def test_manager_all_detail_keeps_full_record_list(monkeypatch, role):
+    database = Database()
+    client = client_for(monkeypatch, database, id="u-1", roles=[role])
+
+    response = client.get("/api/v1/tasks/shared?tab=all")
+
+    assert response.status_code == 200
+    assert [row["id"] for row in response.json()["data"]["records"]] == ["a", "b", "c"]
+
+
+@pytest.mark.parametrize("role", ["doctor", "qc_staff"])
+@pytest.mark.parametrize("tab,expected_ids", [("created", ["a", "b", "c"]), ("received", ["a", "b"])])
+def test_non_manager_personal_detail_still_works(monkeypatch, role, tab, expected_ids):
+    database = Database()
+    client = client_for(monkeypatch, database, id="u-1", roles=[role])
+
+    response = client.get("/api/v1/tasks/shared", params={"tab": tab})
+
+    assert response.status_code == 200
+    assert [row["id"] for row in response.json()["data"]["records"]] == expected_ids

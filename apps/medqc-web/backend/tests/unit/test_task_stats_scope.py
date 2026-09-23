@@ -334,3 +334,63 @@ def test_list_rejects_unknown_tab(
 
     assert response.status_code == 422
     assert database.query_count == 0
+
+
+@pytest.mark.parametrize("role", ["doctor", "qc_staff"])
+@pytest.mark.parametrize("endpoint", ["/api/v1/tasks", "/api/v1/tasks/stats"])
+@pytest.mark.parametrize("params", [{}, {"tab": "all"}])
+def test_non_manager_all_scope_is_forbidden_before_queries(
+    monkeypatch: pytest.MonkeyPatch,
+    scoped_tasks,
+    role: str,
+    endpoint: str,
+    params: dict[str, str],
+):
+    task_rows, record_rows = scoped_tasks
+    database = _Database(task_rows=task_rows, record_rows=record_rows)
+    client = _make_client(monkeypatch, database, {"id": "user-1", "roles": [role]})
+
+    response = client.get(endpoint, params=params)
+
+    assert response.status_code == 403
+    assert database.query_count_by_table == {}
+
+
+@pytest.mark.parametrize("role", ["admin", "qc_manager"])
+@pytest.mark.parametrize("endpoint", ["/api/v1/tasks", "/api/v1/tasks/stats"])
+def test_manager_all_scope_still_reads_all_tasks(
+    monkeypatch: pytest.MonkeyPatch,
+    scoped_tasks,
+    role: str,
+    endpoint: str,
+):
+    task_rows, record_rows = scoped_tasks
+    database = _Database(task_rows=task_rows, record_rows=record_rows)
+    client = _make_client(monkeypatch, database, {"id": "user-1", "roles": [role]})
+
+    response = client.get(endpoint, params={"tab": "all"})
+
+    assert response.status_code == 200
+    assert response.json()["data"]["total"] == 4
+    assert database.query_count_by_table == {"qc_tasks": 1}
+
+
+@pytest.mark.parametrize("role", ["doctor", "qc_staff"])
+@pytest.mark.parametrize("tab,expected_total", [("created", 2), ("received", 2)])
+@pytest.mark.parametrize("endpoint", ["/api/v1/tasks", "/api/v1/tasks/stats"])
+def test_non_manager_personal_scopes_remain_available(
+    monkeypatch: pytest.MonkeyPatch,
+    scoped_tasks,
+    role: str,
+    tab: str,
+    expected_total: int,
+    endpoint: str,
+):
+    task_rows, record_rows = scoped_tasks
+    database = _Database(task_rows=task_rows, record_rows=record_rows)
+    client = _make_client(monkeypatch, database, {"id": "user-1", "roles": [role]})
+
+    response = client.get(endpoint, params={"tab": tab})
+
+    assert response.status_code == 200
+    assert response.json()["data"]["total"] == expected_total

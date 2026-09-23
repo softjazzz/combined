@@ -76,6 +76,21 @@ const AButtonStub = defineComponent({
   },
 })
 
+const ASegmentedStub = defineComponent({
+  name: 'ASegmented',
+  props: { value: String, options: Array },
+  emits: ['change'],
+  setup(props, { emit }) {
+    return () => h('div', (props.options as Array<{ label: string; value: string }> || []).map((option) =>
+      h('button', {
+        'data-testid': `${option.value}-tasks-tab`,
+        'aria-pressed': props.value === option.value,
+        onClick: () => emit('change', option.value),
+      }, option.label),
+    ))
+  },
+})
+
 const TaskDetailDrawerStub = defineComponent({
   name: 'TaskDetailDrawer',
   props: {
@@ -162,6 +177,7 @@ async function mountView() {
         'a-input-search': true,
         'a-progress': true,
         'a-range-picker': true,
+        'a-segmented': ASegmentedStub,
         'a-select': true,
         'a-tag': true,
         ProQueryBar: { template: '<div><slot name="filters"/><slot name="actions"/></div>' },
@@ -601,6 +617,120 @@ describe('MyTasksView 我的任务口径', () => {
     expect(mocks.getTaskStats).toHaveBeenCalledWith({ tab: 'received' })
     expect(wrapper.get('[data-testid="pending-task-count"]').text()).toBe('3')
     expect(wrapper.get('[data-testid="pending-task-action"]').text()).toContain('未开始任务')
+  })
+
+  it('创建任务 URL 恢复列表、统计、详情同一范围，草稿卡正确下钻', async () => {
+    routeState.query = { tab: 'created', scene: 'final' }
+    mocks.getTaskList.mockResolvedValue(listWith('我创建的草稿', 'draft'))
+    mocks.getTaskStats.mockResolvedValue(statsResponse({ by_status: { draft: 2 }, draft: 2 }))
+    const wrapper = await mountView()
+
+    expect(wrapper.get('[data-testid="created-tasks-tab"]').attributes('aria-pressed')).toBe('true')
+    expect(mocks.getTaskList).toHaveBeenCalledWith(expect.objectContaining({ tab: 'created', scene: 'final', todo: undefined, as_of: undefined }))
+    expect(mocks.getTaskStats).toHaveBeenCalledWith({ tab: 'created', scene: 'final' })
+    expect(wrapper.get('[data-testid="pending-task-count"]').text()).toBe('2')
+    expect(wrapper.get('[data-testid="pending-task-action"]').text()).toContain('草稿任务')
+    expect(wrapper.find('[data-testid="start-task-action"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="task-row"]').text()).not.toContain('开始')
+
+    await wrapper.get('[data-testid="pending-task-action"]').trigger('click')
+    await flushPromises()
+    expect(mocks.getTaskList).toHaveBeenLastCalledWith(expect.objectContaining({ tab: 'created', status: 'draft', scene: 'final' }))
+    const vm = wrapper.vm as unknown as { handleViewDetail: (record: { id: string }) => void }
+    vm.handleViewDetail({ id: 'created-task' })
+    await nextTick()
+    expect(wrapper.getComponent(TaskDetailDrawerStub).props()).toMatchObject({ open: true, taskId: 'created-task', tab: 'created' })
+  })
+
+  it('模式切换清除待办基准、关闭旧详情并阻止旧列表和统计回填', async () => {
+    routeState.query = { todo: 'assigned', as_of: '2026-09-22T07:30:00+00:00', source: 'bookmark' }
+    const oldList = deferred<ReturnType<typeof listWith>>()
+    const oldStats = deferred<ReturnType<typeof statsResponse>>()
+    mocks.getTaskList.mockReturnValueOnce(oldList.promise).mockResolvedValueOnce(listWith('创建任务', 'draft'))
+    mocks.getTaskStats.mockReturnValueOnce(oldStats.promise).mockResolvedValueOnce(statsResponse({ total: 1, by_status: { draft: 1 } }))
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as { handleViewDetail: (record: { id: string }) => void; tasks: Array<{ task_name: string }>; taskStats: { total: number } | null }
+    vm.handleViewDetail({ id: 'received-task' })
+    await wrapper.get('[data-testid="created-tasks-tab"]').trigger('click')
+    await flushPromises()
+
+    expect(mocks.routerReplace).toHaveBeenCalledWith({ query: { source: 'bookmark', tab: 'created' } })
+    expect(mocks.getTaskList).toHaveBeenLastCalledWith(expect.objectContaining({ tab: 'created', todo: undefined, as_of: undefined }))
+    expect(mocks.getTaskStats).toHaveBeenLastCalledWith({ tab: 'created' })
+    expect(wrapper.getComponent(TaskDetailDrawerStub).props()).toMatchObject({ open: false, taskId: null, tab: 'created' })
+    oldList.resolve(listWith('旧受领任务'))
+    oldStats.resolve(statsResponse({ total: 99 }))
+    await flushPromises()
+    expect(vm.tasks[0]?.task_name).toBe('创建任务')
+    expect(vm.taskStats?.total).toBe(1)
+  })
+
+  it('浏览器返回 received 时刷新范围并恢复受领操作', async () => {
+    routeState.query = { tab: 'created' }
+    mocks.getTaskList.mockResolvedValue(listWith('任务', 'assigned'))
+    const wrapper = await mountView()
+    expect(wrapper.get('[data-testid="task-row"]').text()).not.toContain('开始')
+    activeRoute.current!.query = {}
+    await nextTick()
+    await flushPromises()
+    expect(mocks.getTaskList).toHaveBeenLastCalledWith(expect.objectContaining({ tab: 'received' }))
+    expect(mocks.getTaskStats).toHaveBeenLastCalledWith({ tab: 'received' })
+    expect(wrapper.get('[data-testid="task-row"]').text()).toContain('开始')
+  })
+
+  it.each([
+    { tab: 'all' },
+    { tab: '' },
+    { tab: ['created'] },
+    { tab: 'created', todo: 'assigned', as_of: '2026-09-22T07:30:00+00:00' },
+  ])('非法或冲突 tab 不请求列表统计，也不回退 all：%j', async (query) => {
+    routeState.query = query
+    const wrapper = await mountView()
+    expect(wrapper.find('[data-testid="task-todo-invalid"]').exists()).toBe(true)
+    expect(mocks.getTaskList).not.toHaveBeenCalled()
+    expect(mocks.getTaskStats).not.toHaveBeenCalled()
+  })
+
+  it('有效创建范围变成非法待办链接时清空旧统计，恢复后重新加载', async () => {
+    routeState.query = { tab: 'created' }
+    mocks.getTaskStats.mockResolvedValue(statsResponse({ total: 2, by_status: { draft: 2 } }))
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as { taskStats: { total: number } | null }
+    expect(vm.taskStats?.total).toBe(2)
+
+    activeRoute.current!.query = { tab: 'created', todo: 'assigned' }
+    await nextTick()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="task-todo-invalid"]').exists()).toBe(true)
+    expect(vm.taskStats).toBeNull()
+    expect(mocks.getTaskStats).toHaveBeenCalledTimes(1)
+
+    activeRoute.current!.query = { tab: 'created' }
+    await nextTick()
+    await flushPromises()
+    expect(mocks.getTaskStats).toHaveBeenCalledTimes(2)
+    expect(vm.taskStats?.total).toBe(2)
+  })
+
+  it('非法 tab 清理后仅恢复 received，不请求 all', async () => {
+    routeState.query = { tab: 'all', source: 'bookmark' }
+    const wrapper = await mountView()
+    await wrapper.get('[data-testid="task-todo-invalid"] button').trigger('click')
+    await flushPromises()
+    expect(mocks.routerReplace).toHaveBeenCalledWith({ query: { source: 'bookmark' } })
+    expect(mocks.getTaskList).toHaveBeenCalledWith(expect.objectContaining({ tab: 'received' }))
+    expect(mocks.getTaskStats).toHaveBeenCalledWith({ tab: 'received' })
+    expect(mocks.getTaskList).not.toHaveBeenCalledWith(expect.objectContaining({ tab: 'all' }))
+  })
+
+  it.each(['assigned', 'in_progress'])('created 模式的 %s 行不呈现受领动作', async (status) => {
+    routeState.query = { tab: 'created' }
+    mocks.getTaskList.mockResolvedValue(listWith('创建任务', status))
+    const wrapper = await mountView()
+    const row = wrapper.get('[data-testid="task-row"]')
+    expect(row.text()).not.toContain('开始')
+    expect(row.text()).not.toContain('继续')
+    expect(row.text()).toContain('详情')
   })
 
   it('查看任务详情时以 received 范围打开共享抽屉', async () => {
