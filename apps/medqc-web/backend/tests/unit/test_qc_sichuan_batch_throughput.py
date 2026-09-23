@@ -1027,6 +1027,183 @@ async def test_sc_batch_nonempty_result_has_completed_execution_status(monkeypat
 
 
 @pytest.mark.asyncio
+async def test_sc_task_batch_persists_compact_executor_compliant_results(monkeypatch):
+    workspace = _WorkspaceStub()
+    workspace.job["filters"] = {
+        "rule_ids": ["SC-001", "SC-002"],
+        "rule_set_key": "sc_content_v1",
+        "task_id": "task-001",
+        "task_run_number": "1",
+        "record_refs": [
+            {"institute_id": "HOSP-001", "patient_id": f"PAT-{visit_id}", "visit_id": visit_id}
+            for visit_id in ("visit-001", "visit-002")
+        ],
+    }
+    service = _ServiceStub(status_by_rule={"SC-002": "ai_suggested_compliant"})
+    original_evaluate = service.evaluate_document
+
+    async def _evaluate_with_reasons(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+        result = await original_evaluate(*args, **kwargs)
+        for item in result["evaluation_results"]:
+            item["reason_code"] = f"reason-{item['rule_id']}"
+            item["findings"] = f"执行器结论-{item['rule_id']}"
+            item["evidence"] = "病历原文不应复制到合规结果"
+            item["metadata"]["medical_text"] = "病历原文不应复制到合规结果"
+        return result
+
+    service.evaluate_document = _evaluate_with_reasons  # type: ignore[method-assign]
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+
+    async def _get_service():
+        return service
+
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_service)
+    await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
+
+    assert workspace.job["status"] == "completed"
+    assert len(workspace.items) == 4
+    assert workspace.failed_records == []
+    assert {item["status"] for item in workspace.items} == {"compliant", "ai_suggested_compliant"}
+    assert {item["reason_code"] for item in workspace.items} == {"reason-SC-001", "reason-SC-002"}
+    assert all(item["findings"].startswith("执行器结论-") for item in workspace.items)
+    assert all(item["executor_type"] == "program" for item in workspace.items)
+    assert all("metadata" not in item and "evidence" not in item for item in workspace.items)
+    assert all("diagnostic_trace" not in item and "performance_profile" not in item for item in workspace.items)
+    assert all(item["institute_id"] == "HOSP-001" for item in workspace.items)
+    assert len(workspace.summary["rule_results"]) == 2
+    assert all(len(rule_result["items"]) == 2 for rule_result in workspace.summary["rule_results"])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("task_run_number", [None, "0", "invalid"])
+async def test_sc_non_task_batch_keeps_compliant_results_sparse(monkeypatch, task_run_number):
+    workspace = _WorkspaceStub()
+    workspace.job["filters"] = {"rule_ids": ["SC-001"], "rule_set_key": "sc_content_v1"}
+    if task_run_number is not None:
+        workspace.job["filters"].update({
+            "task_id": "task-001",
+            "task_run_number": task_run_number,
+            "record_refs": [{
+                "institute_id": "HOSP-001", "patient_id": "PAT-visit-001", "visit_id": "visit-001",
+            }],
+        })
+    service = _ServiceStub()
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+
+    async def _get_service():
+        return service
+
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_service)
+    await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
+
+    assert workspace.job["status"] == "completed"
+    assert workspace.items == []
+    assert workspace.summary["rule_results"][0]["items"] == []
+
+
+@pytest.mark.asyncio
+async def test_sc_task_batch_keeps_non_compliant_item_unchanged(monkeypatch):
+    workspace = _WorkspaceStub()
+    workspace.job["filters"] = {
+        "rule_ids": ["SC-001"],
+        "rule_set_key": "sc_content_v1",
+        "task_id": "task-001",
+        "task_run_number": "1",
+        "record_refs": [{
+            "institute_id": "HOSP-001", "patient_id": "PAT-visit-001", "visit_id": "visit-001",
+        }],
+    }
+    service = _ServiceStub(status_by_rule={"SC-001": "non_compliant"})
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+
+    async def _get_service():
+        return service
+
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_service)
+    await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
+
+    assert len(workspace.items) == 1
+    assert workspace.items[0]["status"] == "non_compliant"
+    assert "metadata" in workspace.items[0]
+    assert "performance_profile" in workspace.items[0]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "invalid_kind",
+    ["duplicate", "duplicate_non_compliant", "duplicate_uncertain", "invalid_status", "contradictory"],
+)
+async def test_sc_task_batch_rejects_ambiguous_results(monkeypatch, invalid_kind):
+    workspace = _WorkspaceStub()
+    workspace.job["filters"] = {
+        "rule_ids": ["SC-001"],
+        "rule_set_key": "sc_content_v1",
+        "task_id": "task-001",
+        "task_run_number": "1",
+        "record_refs": [{
+            "institute_id": "HOSP-001", "patient_id": "PAT-visit-001", "visit_id": "visit-001",
+        }],
+    }
+    service = _ServiceStub(status_by_rule={
+        "SC-001": "non_compliant" if invalid_kind == "duplicate_non_compliant"
+        else "uncertain" if invalid_kind == "duplicate_uncertain" else "compliant",
+    })
+    original_evaluate = service.evaluate_document
+
+    async def _evaluate_invalid(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+        result = await original_evaluate(*args, **kwargs)
+        if invalid_kind.startswith("duplicate"):
+            result["evaluation_results"].append(dict(result["evaluation_results"][0]))
+        elif invalid_kind == "invalid_status":
+            result["evaluation_results"][0]["status"] = "unexpected"
+        else:
+            result["evaluation_results"][0]["is_compliant"] = False
+        return result
+
+    service.evaluate_document = _evaluate_invalid  # type: ignore[method-assign]
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+
+    async def _get_service():
+        return service
+
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_service)
+    await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
+
+    assert workspace.job["status"] == "failed"
+    assert workspace.items == []
+    assert len(workspace.failed_records) == 1
+    assert workspace.failed_records[0]["error_phase"] == (
+        "result_duplicate" if invalid_kind.startswith("duplicate") else "result_invalid_status"
+    )
+
+
+@pytest.mark.asyncio
+async def test_sc_non_task_batch_keeps_first_duplicate_result(monkeypatch):
+    workspace = _WorkspaceStub()
+    workspace.job["filters"] = {"rule_ids": ["SC-001"], "rule_set_key": "sc_content_v1"}
+    service = _ServiceStub(status_by_rule={"SC-001": "non_compliant"})
+    original_evaluate = service.evaluate_document
+
+    async def _evaluate_duplicate(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+        result = await original_evaluate(*args, **kwargs)
+        result["evaluation_results"].append(dict(result["evaluation_results"][0]))
+        return result
+
+    service.evaluate_document = _evaluate_duplicate  # type: ignore[method-assign]
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+
+    async def _get_service():
+        return service
+
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_service)
+    await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
+
+    assert workspace.job["status"] == "completed"
+    assert len(workspace.items) == 2
+    assert workspace.failed_records == []
+
+
+@pytest.mark.asyncio
 async def test_sc_batch_partial_evaluation_failure_retains_case_identity(monkeypatch):
     workspace = _WorkspaceStub()
     workspace.job["filters"] = {"rule_ids": ["SC-001"], "rule_set_key": "sc_content_v1"}

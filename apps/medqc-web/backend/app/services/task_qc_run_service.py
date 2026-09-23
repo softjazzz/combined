@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
+from itertools import chain
 from typing import Any, Callable
 
 from sqlalchemy import select
@@ -293,7 +294,10 @@ def get_task_qc_run_record_result(
             raise TaskQCRunConflict("任务病历缺少完整三坐标")
         case_ref = CaseRef(*identity)
         rule_set_key = task["rule_set_key"]
-        if rule_set_key not in {LUXIAN_0609_RULE_SET_KEY, LUXIAN_0916_RULE_SET_KEY}:
+        is_sc_content_rule_set = bool(
+            isinstance(rule_set_key, str) and rule_set_key.startswith("sc_content_")
+        )
+        if rule_set_key not in {LUXIAN_0609_RULE_SET_KEY, LUXIAN_0916_RULE_SET_KEY} and not is_sc_content_rule_set:
             raise TaskQCRunConflict("当前规则集尚不支持任务病历结果下钻")
         rule_set = get_sichuan_rule_set(rule_set_key)
         if rule_set is None or rule_set.scope != task["scene"]:
@@ -353,6 +357,11 @@ def get_task_qc_run_record_result(
             result=result, job=job, filters=filters, case_ref=case_ref,
             frozen_refs=frozen_refs, partial=partial,
         )
+    if is_sc_content_rule_set:
+        return _sc_content_record_result(
+            result=result, job=job, filters=filters, case_ref=case_ref,
+            frozen_refs=valid_frozen_refs, partial=partial,
+        )
 
     try:
         canonical_items = workspace._load_batch_job_canonical_items(job=job, allow_partial=partial)
@@ -396,6 +405,117 @@ def get_task_qc_run_record_result(
         return result
     result["result_state"] = "available"
     result["items"] = target_items
+    return result
+
+
+_SC_DELIVERABLE_STATUSES = frozenset({
+    "compliant", "non_compliant", "ai_suggested_compliant",
+    "ai_suggested_non_compliant", "not_applicable", "data_gap", "uncertain",
+})
+_SC_SAFE_ITEM_FIELDS = frozenset({
+    "rule_id", "rule_code", "qc_point_id", "rule_name", "status",
+    "result_status", "display_status", "is_compliant", "conclusion",
+    "findings", "suggestion", "evidence",
+})
+
+
+def _sc_content_record_result(
+    *, result: dict[str, Any], job: dict[str, Any], filters: dict[str, Any],
+    case_ref: CaseRef, frozen_refs: list[CaseRef], partial: bool,
+) -> dict[str, Any]:
+    planned_rules = filters.get("rule_ids")
+    if (
+        not isinstance(planned_rules, list) or not planned_rules
+        or any(not isinstance(rule_id, str) or not rule_id.strip() for rule_id in planned_rules)
+    ):
+        raise TaskQCRunConflict("本次质控 SC 冻结规则集合无效")
+    rule_ids = [rule_id.strip().upper() for rule_id in planned_rules]
+    if len(set(rule_ids)) != len(rule_ids):
+        raise TaskQCRunConflict("本次质控 SC 冻结规则集合重复")
+
+    items = job.get("items")
+    failures = job.get("failed_records")
+    summary = job.get("summary")
+    if (
+        not isinstance(items, list) or any(not isinstance(item, dict) for item in items)
+        or not isinstance(failures, list) or any(not isinstance(failure, dict) for failure in failures)
+        or not isinstance(summary, dict)
+        or summary.get("execution_status") != ("partial_failed" if partial else "completed")
+        or (not partial and failures)
+        or (partial and not failures)
+    ):
+        raise TaskQCRunConflict("本次质控 SC 原始结果不完整，无法安全展示")
+
+    expected_refs = {tuple(ref) for ref in frozen_refs}
+    expected_rules = set(rule_ids)
+    target_ref = tuple(case_ref)
+    cells: set[tuple[tuple[str, str, str], str]] = set()
+    target_items: list[dict[str, Any]] = []
+    target_failed = False
+    global_failed = False
+    for row, failed in chain(((row, False) for row in items), ((row, True) for row in failures)):
+        rule_id = row.get("rule_id")
+        if not isinstance(rule_id, str) or rule_id.strip().upper() not in expected_rules:
+            raise TaskQCRunConflict("本次质控 SC 结果含未冻结规则")
+        normalized_rule_id = rule_id.strip().upper()
+        raw_ref = tuple(str(row.get(key) or "").strip() for key in ("institute_id", "patient_id", "visit_id"))
+        if failed and not all(raw_ref):
+            global_failed = True
+            continue
+        if raw_ref not in expected_refs:
+            raise TaskQCRunConflict("本次质控 SC 结果含冻结范围外病历")
+        cell = (raw_ref, normalized_rule_id)
+        if cell in cells:
+            raise TaskQCRunConflict("本次质控 SC 结果含重复规则或结果失败重叠")
+        cells.add(cell)
+        if raw_ref != target_ref:
+            if not failed and str(row.get("status") or "").strip().lower() not in _SC_DELIVERABLE_STATUSES:
+                raise TaskQCRunConflict("本次质控 SC 结果含未交付状态")
+            continue
+        if failed:
+            target_failed = True
+            continue
+        status = str(row.get("status") or "").strip().lower()
+        if status not in _SC_DELIVERABLE_STATUSES:
+            target_failed = True
+            continue
+        target_items.append(row)
+
+    if global_failed:
+        result["result_state"] = "unavailable"
+        return result
+    if len(cells) != len(expected_refs) * len(expected_rules):
+        raise TaskQCRunConflict("本次质控 SC 结果缺少冻结病历规则")
+    if target_failed:
+        result["result_state"] = "unavailable"
+        return result
+    if len(target_items) != len(expected_rules):
+        raise TaskQCRunConflict("本次质控 SC 结果缺少目标病历")
+    try:
+        hmac_key = customer_safe_projection_key()
+        projected = [project_customer_safe_result_item(item, hmac_key=hmac_key) for item in target_items]
+    except (TypeError, ValueError) as exc:
+        raise TaskQCRunConflict("本次质控 SC 结果无法安全投影") from exc
+    if any(
+        safe.get("rule_id") != str(raw.get("rule_id") or "").strip().upper()
+        or safe.get("status") != str(raw.get("status") or "").strip().lower()
+        for raw, safe in zip(target_items, projected)
+    ):
+        raise TaskQCRunConflict("本次质控 SC 投影规则或状态与原始结论不一致")
+    result["result_state"] = "available"
+    result["items"] = [
+        {
+            key: (
+                [
+                    {field: row[field] for field in ("source_type", "source_ref", "field_path", "record_time")
+                     if field in row}
+                    for row in value if isinstance(row, dict)
+                ] if key == "evidence" else value
+            )
+            for key, value in item.items() if key in _SC_SAFE_ITEM_FIELDS
+        }
+        for item in projected
+    ]
     return result
 
 

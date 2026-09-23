@@ -744,6 +744,7 @@ function resultStatusLabel(status: string) {
     compliant: '符合', non_compliant: '不符合', not_applicable: '不适用',
     needs_review: '需复核', data_gap: '数据不足', data_quality_gap: '数据不足',
     ai_suggested_compliant: 'AI 建议符合', ai_suggested_non_compliant: 'AI 建议不符合',
+    uncertain: '结论待确认',
     not_executed: '未执行',
   }
   return Object.prototype.hasOwnProperty.call(labels, status) ? labels[status]! : '状态待确认'
@@ -752,7 +753,7 @@ function resultStatusLabel(status: string) {
 function resultStatusColor(status: string) {
   if (status === 'compliant') return 'success'
   if (status === 'non_compliant') return 'error'
-  if (status === 'needs_review' || status === 'data_gap' || status === 'data_quality_gap'
+  if (status === 'needs_review' || status === 'uncertain' || status === 'data_gap' || status === 'data_quality_gap'
     || status === 'ai_suggested_non_compliant' || status === 'ai_suggested_compliant') return 'warning'
   return 'default'
 }

@@ -509,19 +509,12 @@ def test_exact_record_result_rejects_missing_or_duplicate_rule(env, monkeypatch)
         _read_result(env)
 
 
-def test_exact_record_result_rejects_legacy_identity_and_non_luxian(env, monkeypatch):
+def test_exact_record_result_rejects_legacy_identity(env, monkeypatch):
     _result_setup(env, monkeypatch)
     with env.sessions.begin() as session:
         session.execute(QCTaskRecord.__table__.update().where(QCTaskRecord.id == "association-1")
                         .values(institute_id=None, patient_id=None, visit_id=None))
     with pytest.raises(service.TaskQCRunConflict, match="三坐标"):
-        _read_result(env)
-    with env.sessions.begin() as session:
-        session.execute(QCTaskRecord.__table__.update().where(QCTaskRecord.id == "association-1")
-                        .values(institute_id="hospital", patient_id="patient", visit_id="visit-1"))
-        session.execute(QCTask.__table__.update().where(QCTask.id == "task-1")
-                        .values(rule_set_key="sc_content_fast_v1"))
-    with pytest.raises(service.TaskQCRunConflict, match="规则集"):
         _read_result(env)
 
 
@@ -654,3 +647,150 @@ def test_lx0916_assigned_permission_and_nonterminal_states(env, monkeypatch):
     assert _read_result(env, actor="user-2", scope="assigned")["result_state"] == "unavailable"
     job["status"] = "failed"
     assert _read_result(env, actor="user-2", scope="assigned")["result_state"] == "unavailable"
+
+
+def _sc_item(ref, rule_id, *, status="compliant"):
+    return {
+        **ref, "record_key": "private-record-key", "rule_id": rule_id,
+        "rule_code": rule_id, "rule_name": "病历完整性", "status": status,
+        "is_compliant": status == "compliant", "reason_code": "evidence_sufficient",
+        "findings": "内部发现", "suggestion": "内部建议",
+        "evidence_items": [{"source_type": "document", "source_ref": "secret-document"}],
+        "model_analysis": "private-model-analysis", "patient_name": "患者隐私",
+        "diagnostic_trace": {"private": "diagnostic-secret"},
+        "metadata": {"private": "metadata-secret"},
+    }
+
+
+def _sc_setup(env, monkeypatch, *, run_scope="all"):
+    job, ref = _result_setup(env, monkeypatch, run_scope=run_scope)
+    with env.sessions.begin() as session:
+        session.execute(QCTask.__table__.update().where(QCTask.id == "task-1")
+                        .values(rule_set_key="sc_content_fast_v1", scene="final"))
+    job["filters"].update(rule_set_key="sc_content_fast_v1", query_scope="final",
+                          rule_ids=["SC-023", "SC-024"])
+    job["summary"] = {"execution_status": "completed"}
+    job["items"] = [_sc_item(ref, rule_id) for rule_id in job["filters"]["rule_ids"]]
+    job["failed_records"] = []
+    env.workspace._load_batch_job_canonical_items = lambda **_: pytest.fail("SC must not load Canonical")
+    return job, ref
+
+
+def test_sc_exact_result_uses_full_identity_and_safe_whitelist(env, monkeypatch):
+    job, ref = _sc_setup(env, monkeypatch)
+    other = {**ref, "patient_id": "other-patient"}
+    job["filters"]["record_refs"].append(other)
+    job["items"].extend(_sc_item(other, rule_id) for rule_id in job["filters"]["rule_ids"])
+    job["items"][0]["evidence_items"][0].update(
+        evidence_excerpt="patient 身份信息", excerpt_kind="字段级依据",
+    )
+    result = _read_result(env)
+    assert result["result_state"] == "available"
+    assert [item["rule_id"] for item in result["items"]] == ["SC-023", "SC-024"]
+    assert set(result["items"][0]) == {
+        "rule_id", "rule_code", "qc_point_id", "rule_name", "status", "result_status",
+        "display_status", "is_compliant", "conclusion", "findings", "suggestion", "evidence",
+    }
+    assert result["items"][0]["evidence"][0]["source_ref"].startswith("src_")
+    assert "evidence_excerpt" not in result["items"][0]["evidence"][0]
+    serialized = str(result)
+    for secret in ("other-patient", "patient", "hospital", "private-model-analysis",
+                   "diagnostic-secret", "metadata-secret", "secret-document", "患者隐私"):
+        assert secret not in serialized
+
+
+@pytest.mark.parametrize("tamper", [
+    "missing", "duplicate", "unplanned", "other_record_missing", "outside_record",
+    "missing_plan", "duplicate_plan", "legacy_sparse", "invalid_items",
+])
+def test_sc_exact_result_rejects_incomplete_or_ambiguous_job(env, monkeypatch, tamper):
+    job, ref = _sc_setup(env, monkeypatch)
+    if tamper == "missing":
+        job["items"].pop()
+    elif tamper == "duplicate":
+        job["items"].append(dict(job["items"][0]))
+    elif tamper == "unplanned":
+        job["items"].append(_sc_item(ref, "SC-999"))
+    elif tamper == "other_record_missing":
+        job["filters"]["record_refs"].append({**ref, "patient_id": "other-patient"})
+    elif tamper == "outside_record":
+        job["items"].append(_sc_item({**ref, "patient_id": "other-patient"}, "SC-023"))
+    elif tamper == "missing_plan":
+        job["filters"].pop("rule_ids")
+    elif tamper == "duplicate_plan":
+        job["filters"]["rule_ids"].append("SC-023")
+    elif tamper == "legacy_sparse":
+        job["items"] = [item for item in job["items"] if item["status"] != "compliant"]
+        job["summary"]["compliant_count"] = 2
+    else:
+        job["items"] = {"invalid": "items"}
+    with pytest.raises(service.TaskQCRunConflict):
+        _read_result(env)
+
+
+def test_sc_exact_result_target_failure_and_other_failure(env, monkeypatch):
+    job, ref = _sc_setup(env, monkeypatch)
+    other = {**ref, "patient_id": "other-patient"}
+    job["filters"]["record_refs"].append(other)
+    job["items"].append(_sc_item(other, "SC-023"))
+    job["status"] = "failed"
+    job["summary"] = {"execution_status": "partial_failed"}
+    job["failed_records"] = [{**other, "rule_id": "SC-024", "error_phase": "result_missing"}]
+    assert _read_result(env)["result_state"] == "available"
+    job["items"].pop(1)
+    job["failed_records"].append({**ref, "rule_id": "SC-024", "error_phase": "result_missing"})
+    assert _read_result(env)["result_state"] == "unavailable"
+
+
+def test_sc_exact_result_rejects_partial_status_without_failures(env, monkeypatch):
+    job, _ = _sc_setup(env, monkeypatch)
+    job["status"] = "failed"
+    job["summary"] = {"execution_status": "partial_failed"}
+    with pytest.raises(service.TaskQCRunConflict, match="原始结果不完整"):
+        _read_result(env)
+
+
+@pytest.mark.parametrize("field,value", [
+    ("customer_rule_id", "SC-999"),
+    ("result_status", "non_compliant"),
+])
+def test_sc_exact_result_rejects_projection_drift(env, monkeypatch, field, value):
+    job, _ = _sc_setup(env, monkeypatch)
+    job["items"][0][field] = value
+    with pytest.raises(service.TaskQCRunConflict, match="投影规则或状态"):
+        _read_result(env)
+
+
+def test_sc_exact_result_global_failure_and_undeliverable_status(env, monkeypatch):
+    job, ref = _sc_setup(env, monkeypatch)
+    job["status"] = "failed"
+    job["summary"] = {"execution_status": "partial_failed"}
+    job["failed_records"] = [{"rule_id": "SC-023", "error_phase": "rule_lookup"}]
+    assert _read_result(env)["result_state"] == "unavailable"
+    job["status"] = "completed"
+    job["summary"] = {"execution_status": "completed"}
+    job["failed_records"] = []
+    for status in ("technical_error", "not_executed"):
+        job["items"][0] = _sc_item(ref, "SC-023", status=status)
+        assert _read_result(env)["result_state"] == "unavailable"
+    for status in ("uncertain", "data_gap", "ai_suggested_compliant", "ai_suggested_non_compliant"):
+        job["items"][0] = _sc_item(ref, "SC-023", status=status)
+        result = _read_result(env)
+        assert result["result_state"] == "available"
+        assert result["items"][0]["status"] == status
+
+
+def test_sc_exact_result_preserves_permission_and_run_scope(env, monkeypatch):
+    _sc_setup(env, monkeypatch)
+    with pytest.raises(service.TaskQCRunForbidden):
+        _read_result(env, actor="user-2")
+    with pytest.raises(service.TaskQCRunForbidden):
+        _read_result(env, actor="user-1", scope="assigned")
+    _sc_setup_assigned(env, monkeypatch)
+    assert _read_result(env, actor="user-2", scope="assigned")["result_state"] == "available"
+
+
+def _sc_setup_assigned(env, monkeypatch):
+    with env.sessions.begin() as session:
+        session.execute(QCTaskQCRun.__table__.delete().where(QCTaskQCRun.task_id == "task-1"))
+    return _sc_setup(env, monkeypatch, run_scope="assigned")

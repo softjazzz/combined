@@ -1435,6 +1435,19 @@ async def run_sichuan_workspace_batch_job(
                 )
             ):
                 raise ValueError("任务质控缺少有效的 filters.record_refs 三坐标")
+        task_run_number = str(filters.get("task_run_number") or "").strip()
+        is_sc_task_job = bool(
+            is_sc_content_rule_set
+            and str(filters.get("task_id") or "").strip()
+            and task_run_number.isascii()
+            and task_run_number.isdecimal()
+            and bool(task_run_number.lstrip("0"))
+            and has_persisted_record_refs
+            and len({
+                tuple(str(ref[key]).strip() for key in ("institute_id", "patient_id", "visit_id"))
+                for ref in persisted_record_refs
+            }) == len(persisted_record_refs)
+        )
         is_sample_pool_job = bool(str(filters.get("sample_pool_id") or "").strip())
         if is_sample_pool_job and not has_persisted_record_refs:
             raise ValueError(
@@ -2554,8 +2567,11 @@ async def run_sichuan_workspace_batch_job(
                     eval_items = list(result.get("evaluation_results") or [])
 
                 eval_map: Dict[str, Dict[str, Any]] = {}
+                eval_counts: Dict[str, int] = {}
                 for eval_item in eval_items:
                     key = str(eval_item.get("rule_id") or eval_item.get("rule_code") or "").strip().upper()
+                    if key:
+                        eval_counts[key] = eval_counts.get(key, 0) + 1
                     if key and key not in eval_map:
                         eval_map[key] = dict(eval_item)
 
@@ -2689,18 +2705,36 @@ async def run_sichuan_workspace_batch_job(
                         or eval_item.get("display_status")
                         or ""
                     ).strip().lower()
+                    valid_raw_statuses = {
+                        "compliant", "non_compliant", "ai_suggested_non_compliant",
+                        "ai_suggested_compliant", "not_applicable", "data_gap",
+                        "uncertain", "not_executed", "technical_error",
+                    }
+                    duplicate_result = eval_counts.get(normalized_rule_id, 0) != 1
+                    invalid_positive_result = (
+                        raw_status in {"compliant", "ai_suggested_compliant"}
+                        or (raw_status not in valid_raw_statuses and eval_item.get("is_compliant") is True)
+                    ) and (
+                        raw_status not in valid_raw_statuses
+                        or (raw_status == "compliant" and eval_item.get("is_compliant") is not True)
+                    )
+                    if is_sc_task_job and (duplicate_result or invalid_positive_result):
+                        failed_by_rule[rule_id].append({
+                            "rule_job_id": rule_job_id,
+                            "rule_id": rule_id,
+                            "rule_code": rule_code,
+                            "rule_name": rule_name,
+                            "record_id": record_id,
+                            "record_key": record_key,
+                            "institute_id": institute_id,
+                            "patient_id": patient_id,
+                            "visit_id": visit_id,
+                            "error_phase": "result_duplicate" if duplicate_result else "result_invalid_status",
+                            "error": "规则执行返回重复结果" if duplicate_result else "规则执行返回无效或矛盾状态",
+                        })
+                        continue
                     status = raw_status
-                    if status not in {
-                        "compliant",
-                        "non_compliant",
-                        "ai_suggested_non_compliant",
-                        "ai_suggested_compliant",
-                        "not_applicable",
-                        "data_gap",
-                        "uncertain",
-                        "not_executed",
-                        "technical_error",
-                    }:
+                    if status not in valid_raw_statuses:
                         status = "compliant" if eval_item.get("is_compliant") else "non_compliant"
                     evidence_items = (
                         list(eval_item.get("evidence_items") or [])
@@ -2992,6 +3026,16 @@ async def run_sichuan_workspace_batch_job(
                         "technical_error",
                     }:
                         record_issue_items.append(issue_item)
+                    elif is_sc_task_job and issue_item["status"] in {"compliant", "ai_suggested_compliant"}:
+                        record_status_items.append({
+                            key: issue_item[key]
+                            for key in (
+                                "rule_job_id", "rule_id", "rule_code", "rule_name",
+                                "record_id", "record_key", "institute_id", "patient_id", "visit_id",
+                                "status", "is_compliant", "reason_code", "findings", "suggestion",
+                                "executor_type",
+                            )
+                        })
                     elif issue_item["status"] in {"not_applicable", "not_executed"} or (
                         use_luxian_customer_results and issue_item["status"] in {"compliant", "ai_suggested_compliant"}
                     ):
@@ -3018,7 +3062,11 @@ async def run_sichuan_workspace_batch_job(
                     )
 
                 for final_item in [*record_issue_items, *record_status_items]:
-                    _attach_result_performance_profile(final_item)
+                    if not (
+                        is_sc_task_job
+                        and final_item.get("status") in {"compliant", "ai_suggested_compliant"}
+                    ):
+                        _attach_result_performance_profile(final_item)
                     final_rule_id = str(final_item.get("rule_id") or "").strip().upper()
                     _strip_luxian_native_customer_diagnostics(
                         final_item,

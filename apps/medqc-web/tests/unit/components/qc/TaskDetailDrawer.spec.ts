@@ -744,6 +744,29 @@ describe('TaskDetailDrawer', () => {
     expect(result).not.toContain('无缺陷')
   })
 
+  it('SC 结论不确定时显示待确认而非符合', async () => {
+    mocks.getTaskDetail.mockResolvedValueOnce(detailResponse('终末任务', [record()], {
+      scene: 'final', rule_set_key: 'sc_content_v1', status: 'assigned',
+    }))
+    mocks.getTaskQcRuns.mockResolvedValueOnce({ success: true, data: [
+      { task_id: 'task-1', run_number: 1, job_id: 'job-1', run_scope: 'all', triggered_by: 'creator', created_at: '2026-09-22' },
+    ] })
+    mocks.getTaskQcRunRecordResult.mockResolvedValueOnce({ success: true, data: {
+      task_id: 'task-1', run_number: 1, task_record_id: 'association-1', job_id: 'job-1',
+      job_status: 'completed', result_state: 'available', rule_set_key: 'sc_content_v1',
+      items: [{ rule_id: 'SC-023', rule_name: '诊疗经过', status: 'uncertain', findings: '需人工核对' }],
+    } })
+    const wrapper = mountDrawer({ tab: 'created' })
+    await flushPromises()
+    await wrapper.get('[data-testid="task-record-result-association-1"]').trigger('click')
+    await flushPromises()
+
+    const result = wrapper.get('[data-testid="task-record-qc-result"]').text()
+    expect(result).toContain('结论待确认')
+    expect(result).toContain('需人工核对')
+    expect(result).not.toContain('状态待确认')
+  })
+
   it('切换运行时丢弃晚到单病例结果', async () => {
     const oldResult = deferred<{ success: boolean; data: Record<string, unknown> }>()
     mocks.getTaskDetail.mockResolvedValueOnce(detailResponse('结果任务', [record()], { scene: 'running', rule_set_key: 'lx0609' }))
