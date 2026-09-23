@@ -288,3 +288,9 @@
 - 主 Agent 核对了任务详情、分配事务、任务→workspace job、job 所有者读取和两条执行 worker：直接放开创建人守卫会执行整任务病例；仅用 `visit_id` 回退还会在三坐标缺失时串病例。现以显式 `scope=all|assigned` 分开运行合同：默认 all 保持创建人整批；assigned 在任务行锁内校验完整抽样与分配后仅取当前受领人的三坐标，以本人身份创建 job。运行关联写入不可变 `run_scope`，历史按任务、范围及触发人隔离；前端“我收到/我创建”按页面范围调用，精确 job_id 查询仍遵循 workspace 原有所有者权限，同人双身份也不混用范围。
 - 四川与 LX0916 两条 worker 对任务 job 缺失、为空或损坏的 `filters.record_refs` 均在收集病历前失败关闭；普通非任务 job 的既有回退保留。独立审查未发现可复现的 P0/P1 范围泄露，指出迁移 50 漂移预检过宽；主 Agent 已补默认值及弱约束反例。后端以空 `DATABASE_URL`、`--noconftest` 完成任务相关 315/315 隔离测试，前端 1240/1240 单测、type-check、只读 ESLint 通过。
 - 迁移 45–50 仍未执行，未启动后端应用生命周期或写真实 PostgreSQL；浏览器控制再次报 `nodeRepl.fetch request failed`，真实病例、并发和页面正向验收未做。job completed 仅代表作业状态，不自动更新任务病历处理状态/进度；单病历结果下钻、创建人查看受领人 job 的受控投影、运行/终末完整候选及抽样仍为后续缺口。Goal 保持 active。
+
+## 26. 第二十一批：归档源复核与整任务进度权限
+
+- 主 Agent 复跑 `.tmp/0910-full-audit/batch8_scene_source_readonly.py`，连接强制 `transaction_read_only=on`，只输出去标识聚合：`cdm.mr` 482 行中 291 行未出院且归档标志空；191 行已出院中 190 行标志空、1 行为“是”；状态投影 0 行，`cdm.outpat_record` 0 文书/0 就诊。另用同样只读方式核对 `alembic_version=20260915_000044`，当前 `qc.qc_task_records` 尚无三坐标列。独立复核未找到权威替代归档字段：`mr_datetime` 是提交时间，兼容表 `archived_at` 无当前 CDM 主链读写证据。单一“是”值不能证明医院已确认值域及空值语义，运行/终末抽样仍 409。门急诊虽然有三坐标候选，但现有 workspace 的范围归一化、病历采集、正文补全和规则集均偏住院，不能靠移除 409 冒充真实门急诊质控。
+- 另查任务进度接口原先仅凭通用 READ 权限即读取 `v_qc_task_progress` 整任务汇总。现先核对任务身份，仅创建人或 admin/qc_manager 可查；受领人及无归属历史任务的普通用户在视图查询前 403，任务不存在 404，来源故障脱敏 503。无应用生命周期的相邻后端测试 94/94 通过；本人受领进度尚需独立范围合同，不以整任务视图代替。
+- workspace job 的逐规则结果不能从批次 `completed/success_count` 直接换算任务病历 `status/score/defect_count`：现代任务 `record_id` 是关联 UUID，结果须按任务与三坐标归属，部分失败、重复规则失败及旧 job 晚到都需反例；0916 无评分合同。真实病例、迁移 45–50、任务状态回写和浏览器验收仍未完成，Goal 保持 active。

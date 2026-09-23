@@ -779,9 +779,25 @@ async def get_task_progress(
     current_user: dict = Depends(get_current_user),
 ):
     """获取任务执行进度"""
+    actor_id = _get_task_scope_user_id(current_user)
     sb = get_supabase()
     if sb is None:
         raise HTTPException(status_code=503, detail="数据库不可用")
+
+    try:
+        task_resp = await async_execute(
+            sb.table("qc_tasks").select("id,creator_id").eq("id", task_id).single()
+        )
+        task = getattr(task_resp, "data", None)
+    except Exception as exc:
+        logger.exception("查询任务进度前读取任务失败: task_id=%s", task_id)
+        raise HTTPException(status_code=503, detail="任务数据源不可用，请稍后重试") from exc
+    if task is None:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    if task.get("creator_id") != actor_id and not has_any_role(
+        current_user, [UserRole.ADMIN, UserRole.QC_MANAGER]
+    ):
+        raise HTTPException(status_code=403, detail="仅任务创建人或管理员可查看整任务进度")
 
     try:
         resp = await async_execute(
@@ -790,8 +806,9 @@ async def get_task_progress(
         data = getattr(resp, 'data', None)
         if data:
             return success_response(data=data, message="获取进度成功", trace_id=get_trace_id(request))
-    except Exception as e:
-        logger.warning(f"查询任务进度视图失败: {e}")
+    except Exception as exc:
+        logger.exception("查询任务进度视图失败: task_id=%s", task_id)
+        raise HTTPException(status_code=503, detail="任务进度服务不可用，请稍后重试") from exc
 
     raise HTTPException(status_code=404, detail=f"任务 {task_id} 进度不存在")
 
