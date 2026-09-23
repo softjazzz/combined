@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from app.core.security import get_current_user
 from app.routers import tasks
 from app.schemas.tasks import TaskResponse
+from app.services.qc_rule_sets import get_sichuan_rule_set
 
 
 class _Database:
@@ -72,6 +73,22 @@ def test_explicit_rule_set_is_normalized_to_catalog_key(monkeypatch):
     assert response.status_code == 200, response.text
     assert database.inserted[0]["rule_set_key"] == "sc_content_v1"
     assert response.json()["data"]["rule_set_key"] == "sc_content_v1"
+    expected_version = get_sichuan_rule_set("sc_content_v1").version
+    assert database.inserted[0]["rule_set_version"] == expected_version
+    assert response.json()["data"]["rule_set_version"] == expected_version
+
+
+def test_client_cannot_inject_rule_set_version(monkeypatch):
+    database = _Database()
+    response = _client(monkeypatch, database).post(
+        "/api/v1/tasks",
+        json={
+            "task_name": "终末任务", "scene": "final", "rule_set_key": "sc_content_v1",
+            "rule_set_version": "client-controlled",
+        },
+    )
+    assert response.status_code == 422
+    assert database.inserted == []
 
 
 def test_legacy_request_without_rule_set_is_rejected(monkeypatch):
@@ -106,3 +123,4 @@ def test_schema_response_can_read_historical_missing_rule_set_key():
     })
     assert response.scene is None
     assert response.rule_set_key is None
+    assert response.rule_set_version is None

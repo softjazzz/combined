@@ -179,6 +179,7 @@ class QCTask(Base):
     task_type = Column(String(20), nullable=False, comment="one_time/scheduled")
     scene = Column(String(32), nullable=True, comment="创建场景；历史 NULL 为未标注")
     rule_set_key = Column(String(128), nullable=True, comment="创建时选择的规则集 key；历史 NULL")
+    rule_set_version = Column(String(64), nullable=True, comment="创建时冻结的规则集版本；历史 NULL")
     schedule_config = Column(Text, comment="JSON text")
     date_range = Column(Text, comment="JSON text")
     department_filter = Column(Text, comment="JSON text")

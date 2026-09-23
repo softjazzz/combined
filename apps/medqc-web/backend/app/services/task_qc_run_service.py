@@ -76,6 +76,9 @@ def _task_and_refs(
     rule_set = get_sichuan_rule_set(rule_set_key) if rule_set_key else None
     if rule_set is None or rule_set.scope != scene:
         raise TaskQCRunConflict("任务规则集已失效或与场景不匹配")
+    frozen_version = task.get("rule_set_version")
+    if not frozen_version or frozen_version != rule_set.version:
+        raise TaskQCRunConflict("任务规则集版本缺失或已与当前目录不一致")
 
     rows = session.execute(
         select(QCTaskRecord.__table__)
@@ -164,6 +167,13 @@ def create_task_qc_run(
                 workspace=workspace,
                 task_run_context={"task_id": task_id, "run_number": str(run_number)},
             )
+            filters = prepared.create_kwargs.get("filters")
+            if (
+                not isinstance(filters, dict)
+                or filters.get("rule_set_key") != task["rule_set_key"]
+                or filters.get("rule_set_version") != task["rule_set_version"]
+            ):
+                raise TaskQCRunConflict("准备后的规则集版本与任务冻结值不一致")
             job = workspace.create_batch_job(
                 created_by=actor_id,
                 session=session,

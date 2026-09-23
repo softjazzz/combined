@@ -465,7 +465,7 @@ describe('TaskDetailDrawer', () => {
 
   it('现代任务显示规则集，按精确 job_id 读取运行结果并启动新运行', async () => {
     mocks.getTaskDetail.mockResolvedValueOnce(detailResponse('运行任务', [record()], {
-      scene: 'running', rule_set_key: 'published-running', status: 'assigned',
+      scene: 'running', rule_set_key: 'published-running', rule_set_version: '2026-06-09', status: 'assigned',
     }))
     mocks.getTaskQcRuns.mockResolvedValue({ success: true, data: [
       { task_id: 'task-1', run_number: 2, job_id: 'job-2', run_scope: 'all', triggered_by: 'creator', created_at: '2026-09-23T00:00:00Z' },
@@ -479,6 +479,7 @@ describe('TaskDetailDrawer', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('published-running')
+    expect(wrapper.text()).toContain('2026-06-09')
     expect(mocks.getSichuanWorkspaceBatchJob).toHaveBeenCalledWith('job-2')
     expect(wrapper.get('[data-testid="task-qc-job"]').text()).toContain('job-2')
     await wrapper.get('[data-testid="task-run-1"]').trigger('click')
@@ -493,9 +494,30 @@ describe('TaskDetailDrawer', () => {
     expect(mocks.createTaskQcRun).toHaveBeenCalledWith('task-1', 'all')
   })
 
+  it('历史任务缺少冻结版本时保留运行历史但禁止启动新运行', async () => {
+    mocks.getTaskDetail.mockResolvedValueOnce(detailResponse('旧任务', [record()], {
+      scene: 'running', rule_set_key: 'running-set', rule_set_version: null, status: 'assigned',
+    }))
+    mocks.getTaskQcRuns.mockResolvedValueOnce({ success: true, data: [
+      { task_id: 'task-1', run_number: 1, job_id: 'old-job', run_scope: 'all', triggered_by: 'creator', created_at: '2026-09-22' },
+    ] })
+    mocks.getSichuanWorkspaceBatchJob.mockResolvedValueOnce({ success: true, data: {
+      id: 'old-job', status: 'completed',
+    } })
+    const wrapper = mountDrawer({ tab: 'created' })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('running-set · 未冻结版本')
+    expect(mocks.getTaskQcRuns).toHaveBeenCalledWith('task-1', 'all')
+    expect(wrapper.get('[data-testid="task-qc-job"]').text()).toContain('old-job')
+    expect(wrapper.find('[data-testid="task-start-qc-run"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('任务未冻结规则集版本，无法执行质控')
+    expect(mocks.createTaskQcRun).not.toHaveBeenCalled()
+  })
+
   it('受领人仅查看并启动本人获分配子集，同一创建人切到收到视图也不能启动 all', async () => {
     mocks.getTaskDetail.mockResolvedValue(detailResponse('受领任务', [record({ assignee_id: 'creator' })], {
-      scene: 'running', rule_set_key: 'running-set', status: 'assigned', creator_id: 'creator',
+      scene: 'running', rule_set_key: 'running-set', rule_set_version: '2026-06-09', status: 'assigned', creator_id: 'creator',
     }))
     mocks.getTaskQcRuns.mockResolvedValue({ success: true, data: [
       { task_id: 'task-1', run_number: 2, job_id: 'own-job', run_scope: 'assigned', triggered_by: 'creator', created_at: '2026-09-23' },
@@ -522,7 +544,7 @@ describe('TaskDetailDrawer', () => {
   it('非创建人也可在收到视图启动本人子集，零分配与门急诊均不可启动', async () => {
     mocks.user.id = 'user-1'
     mocks.getTaskDetail.mockResolvedValueOnce(detailResponse('受领任务', [record()], {
-      scene: 'final', rule_set_key: 'final-set', status: 'assigned',
+      scene: 'final', rule_set_key: 'final-set', rule_set_version: '2026-04-24', status: 'assigned',
     }))
     const wrapper = mountDrawer({ tab: 'received' })
     await flushPromises()

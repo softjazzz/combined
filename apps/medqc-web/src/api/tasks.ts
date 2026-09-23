@@ -53,6 +53,7 @@ export interface TaskItem {
     creator_name: string
     scene?: TaskScene | null
     rule_set_key?: string | null
+    rule_set_version?: string | null
     deadline?: string
     sampling_method?: SamplingMethod
     assign_method?: AssignMethod

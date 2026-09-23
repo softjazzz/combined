@@ -174,6 +174,7 @@ class TaskResponse(BaseModel):
     task_type: str
     scene: Optional[TaskScene] = None
     rule_set_key: Optional[str] = None
+    rule_set_version: Optional[str] = None
     status: str
     progress: int = 0
     total_records: int = 0

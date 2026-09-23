@@ -243,6 +243,7 @@ async def create_task(
     }
     task["scene"] = task_data.scene.value
     task["rule_set_key"] = rule_set.key
+    task["rule_set_version"] = rule_set.version
     if task_data.record_refs:
         task["record_refs"] = [record_ref.model_dump() for record_ref in task_data.record_refs]
 

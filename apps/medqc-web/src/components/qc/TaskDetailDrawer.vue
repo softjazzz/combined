@@ -76,7 +76,7 @@
             <div v-if="detail.scene">
               <dt>规则集</dt>
               <dd class="task-detail-drawer__breakable">
-                {{ detail.rule_set_key || '未选择' }}
+                {{ detail.rule_set_key ? `${detail.rule_set_key} · ${detail.rule_set_version || '未冻结版本'}` : '未选择' }}
               </dd>
             </div>
             <div>
@@ -465,6 +465,7 @@ const selectedRecordLabel = computed(() => {
 const canStartRun = computed(() => canViewRuns.value
   && (detail.value?.scene === 'running' || detail.value?.scene === 'final')
   && !!detail.value.rule_set_key
+  && !!detail.value.rule_set_version
   && (runScope.value === 'assigned'
     ? detail.value.records.some((record) => record.assignee_id === authStore.user?.id)
     : detail.value.total_records > 0)
@@ -482,6 +483,7 @@ const canStartRun = computed(() => canViewRuns.value
 const runUnavailableReason = computed(() => {
   if (detail.value?.scene === 'outpatient') return '门急诊场景质控执行尚未接入'
   if (!detail.value?.rule_set_key) return '未选择规则集，无法执行质控'
+  if (!detail.value.rule_set_version) return '任务未冻结规则集版本，无法执行质控'
   if (runScope.value === 'assigned' && !detail.value.records.some((record) => record.assignee_id === authStore.user?.id)) return '当前任务没有分配给我的病历'
   if (!detail.value.total_records) return '请先完成病历抽样'
   if (!['sampling', 'assigned', 'in_progress', 'completed'].includes(detail.value.status)

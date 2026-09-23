@@ -16,6 +16,7 @@ from app.services import task_qc_run_service as service
 from app.services.case_identity import CaseRef
 from app.services.luxian_0916.execution_integrity import LUXIAN_0916_RULE_IDS
 from app.services.qc_workspace.canonical_result_store import keyed_ref
+from app.services.qc_rule_sets import get_sichuan_rule_set
 
 
 class _Workspace:
@@ -24,8 +25,10 @@ class _Workspace:
         self.sessions = sessions
         self.next_id = 1
         self.fail_calls: list[str] = []
+        self.created_kwargs: list[dict] = []
 
     def create_batch_job(self, *, created_by, session, **kwargs):
+        self.created_kwargs.append(kwargs)
         job_id = f"job-{self.next_id}"
         self.next_id += 1
         session.execute(self.jobs.insert().values(id=job_id, created_by=created_by, status="queued"))
@@ -69,7 +72,9 @@ def env(monkeypatch):
     with sessions.begin() as session:
         session.execute(QCTask.__table__.insert().values(
             id="task-1", task_number="TASK-1", task_name="测试", task_type="one_time",
-            scene="final", rule_set_key="sc_content_fast_v1", creator_id="user-1",
+            scene="final", rule_set_key="sc_content_fast_v1",
+            rule_set_version=get_sichuan_rule_set("sc_content_fast_v1").version,
+            creator_id="user-1",
             status="sampling", total_records=1,
         ))
         session.execute(QCTaskRecord.__table__.insert().values(
@@ -83,7 +88,12 @@ def env(monkeypatch):
 
     def prepare(payload, **kwargs):
         prepared_calls.append((payload, kwargs))
-        return SimpleNamespace(create_kwargs={"draft": {}, "filters": {}}, idempotency_key="key")
+        return SimpleNamespace(create_kwargs={
+            "draft": {}, "filters": {
+                "rule_set_key": payload.rule_set_key,
+                "rule_set_version": get_sichuan_rule_set(payload.rule_set_key).version,
+            },
+        }, idempotency_key="key")
 
     monkeypatch.setattr(service, "prepare_workspace_batch_job", prepare)
     yield SimpleNamespace(sessions=sessions, workspace=workspace, jobs=jobs, prepared_calls=prepared_calls)
@@ -110,8 +120,57 @@ def test_creates_job_and_run_then_dispatches_exact_job(env):
         {"institute_id": "hospital", "patient_id": "patient", "visit_id": "visit-1"}
     ]
     assert kwargs["task_run_context"] == {"task_id": "task-1", "run_number": "1"}
+    assert env.workspace.next_id == 2
+    assert env.workspace.created_kwargs[0]["filters"] == {
+        "rule_set_key": "sc_content_fast_v1",
+        "rule_set_version": get_sichuan_rule_set("sc_content_fast_v1").version,
+    }
     assert service.list_task_qc_runs(task_id="task-1", actor_id="user-1")[0]["job_id"] == "job-1"
     assert service.list_task_qc_runs(task_id="task-1", actor_id="user-1")[0]["run_scope"] == "all"
+
+
+@pytest.mark.parametrize("frozen_version", [None, "previous-version"])
+def test_missing_or_stale_frozen_rule_set_version_creates_no_job(env, frozen_version):
+    with env.sessions.begin() as session:
+        session.execute(
+            QCTask.__table__.update().where(QCTask.id == "task-1")
+            .values(rule_set_version=frozen_version)
+        )
+    dispatched = []
+    with pytest.raises(service.TaskQCRunConflict, match="规则集版本"):
+        _start(env, dispatch=dispatched.append)
+    assert env.prepared_calls == []
+    assert env.workspace.next_id == 1
+    assert dispatched == []
+    with env.sessions() as session:
+        assert session.execute(sa.select(sa.func.count()).select_from(QCTaskQCRun.__table__)).scalar_one() == 0
+
+
+@pytest.mark.parametrize("field,value", [
+    ("rule_set_key", "another-rule-set"),
+    ("rule_set_version", "previous-version"),
+    ("filters", None),
+])
+def test_prepared_rule_set_drift_creates_no_job(env, monkeypatch, field, value):
+    prepare = service.prepare_workspace_batch_job
+
+    def drifting_prepare(*args, **kwargs):
+        prepared = prepare(*args, **kwargs)
+        if field == "filters":
+            prepared.create_kwargs["filters"] = value
+        else:
+            prepared.create_kwargs["filters"][field] = value
+        return prepared
+
+    monkeypatch.setattr(service, "prepare_workspace_batch_job", drifting_prepare)
+    dispatched = []
+    with pytest.raises(service.TaskQCRunConflict, match="准备后的规则集版本"):
+        _start(env, dispatch=dispatched.append)
+    assert len(env.prepared_calls) == 1
+    assert env.workspace.next_id == 1
+    assert dispatched == []
+    with env.sessions() as session:
+        assert session.execute(sa.select(sa.func.count()).select_from(QCTaskQCRun.__table__)).scalar_one() == 0
 
 
 def _assign_two_people(env):
