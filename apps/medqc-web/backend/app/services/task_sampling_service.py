@@ -10,7 +10,7 @@
 import random
 import logging
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 from typing import Dict, Any, List
 
 logger = logging.getLogger(__name__)
@@ -18,6 +18,120 @@ logger = logging.getLogger(__name__)
 
 class TaskSamplingService:
     """任务抽样引擎"""
+
+    async def _get_active_running_candidates(self, task: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """仅为显式在院范围的运行任务生成可信三坐标候选。"""
+        import anyio
+
+        from .case_scope_service import CaseScopeService
+
+        date_range = task.get("date_range")
+        if date_range is None:
+            date_range = {}
+        if not isinstance(date_range, dict):
+            raise ValueError("日期范围格式无效")
+
+        def bound(value: Any) -> date | None:
+            if value is None:
+                return None
+            if isinstance(value, datetime):
+                raise ValueError("日期范围格式无效")
+            if isinstance(value, date):
+                return value
+            if isinstance(value, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+                try:
+                    return date.fromisoformat(value)
+                except ValueError:
+                    pass
+            raise ValueError("日期范围格式无效")
+
+        start, end = bound(date_range.get("start")), bound(date_range.get("end"))
+        if start and end and start > end:
+            raise ValueError("日期范围起始时间不能晚于结束时间")
+        departments = task.get("department_filter")
+        if departments is None:
+            departments = []
+        if not isinstance(departments, list) or any(
+            not isinstance(item, str) or not item.strip() for item in departments
+        ):
+            raise ValueError("科室范围格式无效")
+        departments = [item.strip() for item in departments]
+        refs = task.get("record_refs")
+        if refs is None:
+            refs = []
+        if not isinstance(refs, list):
+            raise ValueError("指定病例三坐标格式无效")
+
+        def identity(item: Any) -> tuple[str, str, str]:
+            if not isinstance(item, dict):
+                raise ValueError("指定病例三坐标格式无效")
+            coordinates = tuple(item.get(key) for key in ("institute_id", "patient_id", "visit_id"))
+            if any(not isinstance(value, str) or not value.strip() for value in coordinates):
+                raise ValueError("指定病例三坐标不完整")
+            return tuple(value.strip() for value in coordinates)
+
+        requested = [identity(ref) for ref in refs]
+        if len(requested) != len(set(requested)):
+            raise ValueError("指定病例三坐标重复")
+
+        today = datetime.now(timezone(timedelta(hours=8))).date()
+        if start and start > today:
+            raise ValueError("入院开始日期不能晚于在院截止日期")
+        if start and (today - start).days > 180:
+            raise ValueError("入院日期范围最多 180 天")
+        try:
+            result = await anyio.to_thread.run_sync(
+                lambda: CaseScopeService().resolve_hospitalization_scope(
+                    scope_mode="active",
+                    as_of_date=today,
+                    admission_start_date=start,
+                    discharge_start_date=None,
+                    discharge_end_date=None,
+                    departments=departments,
+                )
+            )
+        except Exception as exc:
+            logger.warning("运行任务在院候选查询失败: %s", type(exc).__name__)
+            raise RuntimeError("候选病历数据源不可用") from exc
+        if result.source_status != "ready":
+            raise RuntimeError("候选病历数据源未就绪")
+        try:
+            if len(result.case_refs) != len(result.selected):
+                raise ValueError("三坐标数量不一致")
+            candidates = {}
+            seen = set()
+            for case_ref, row in zip(result.case_refs, result.selected):
+                key = identity(row)
+                if key != (case_ref.institute_id, case_ref.patient_id, case_ref.visit_id):
+                    raise ValueError("三坐标不一致")
+                admission = row.get("admission_time")
+                if (
+                    key in seen
+                    or row.get("hospitalization_status") != "active"
+                    or not isinstance(admission, datetime)
+                    or admission.tzinfo is not None
+                    or admission.date() > today
+                    or (start and admission.date() < start)
+                    or (departments and row.get("department") not in departments)
+                ):
+                    raise ValueError("在院候选状态或范围无效")
+                seen.add(key)
+                if end and admission.date() > end:
+                    continue
+                candidates[key] = {
+                    "institute_id": key[0],
+                    "patient_id": key[1],
+                    "visit_id": key[2],
+                    "department": row.get("department"),
+                    "admission_date": admission.date().isoformat(),
+                }
+        except (AttributeError, TypeError, ValueError) as exc:
+            raise RuntimeError("运行任务候选病历数据无效") from exc
+        if requested and not set(requested).issubset(candidates):
+            raise ValueError("指定病历不存在或不属于在院筛选范围")
+        if not candidates:
+            raise ValueError("在院筛选范围内无候选病历")
+        return [candidates[key] for key in requested] if requested else list(candidates.values())
 
     async def _get_outpatient_candidates(self, task: Dict[str, Any]) -> List[Dict[str, Any]]:
         """从门急诊文书按机构、患者、就诊三坐标生成病例候选。"""
@@ -38,7 +152,9 @@ class TaskSamplingService:
                     pass
             raise ValueError("门急诊候选日期格式无效")
 
-        date_range = task.get("date_range") or {}
+        date_range = task.get("date_range")
+        if date_range is None:
+            date_range = {}
         if not isinstance(date_range, dict):
             raise ValueError("日期范围格式无效")
         start = parse_date(date_range["start"], range_bound=True) if date_range.get("start") is not None else None
@@ -46,12 +162,16 @@ class TaskSamplingService:
         if start and end and start > end:
             raise ValueError("日期范围起始时间不能晚于结束时间")
 
-        departments = task.get("department_filter") or []
+        departments = task.get("department_filter")
+        if departments is None:
+            departments = []
         if not isinstance(departments, list) or any(not isinstance(item, str) or not item.strip() for item in departments):
             raise ValueError("科室范围格式无效")
         department_set = {item.strip() for item in departments}
 
-        refs = task.get("record_refs") or []
+        refs = task.get("record_refs")
+        if refs is None:
+            refs = []
         if not isinstance(refs, list):
             raise ValueError("指定病例三坐标格式无效")
 
@@ -127,25 +247,16 @@ class TaskSamplingService:
         Returns:
             抽样后的病历列表
         """
-        # 场景是任务意图，候选必须由该场景的真实数据源证明。
         scene = task.get("scene")
-        if scene == "outpatient":
-            if task.get("record_ids"):
-                raise ValueError("门急诊任务不能使用旧病历 ID，请提供三坐标")
-            candidates = await self._get_outpatient_candidates(task)
-        elif scene is not None:
-            raise NotImplementedError("场景抽样暂不可用：尚未接通可验证的病历场景范围")
-        else:
-            candidates = await self._get_candidate_records(task)
-
-        # 2. 根据抽样方式执行抽样
         method = task.get("sampling_method", "all")
-        config = task.get("sampling_config") or {}
+        config = task.get("sampling_config")
+        if config is None:
+            config = {}
 
-        if scene == "outpatient":
+        if scene in {"outpatient", "running"}:
             if not isinstance(config, dict):
                 raise ValueError("抽样配置格式无效")
-            if method not in {"all", "count", "percentage"}:
+            if not isinstance(method, str) or method not in {"all", "count", "percentage"}:
                 raise ValueError("无效的抽样方式")
             if method == "count":
                 total = config.get("total", 50)
@@ -156,7 +267,21 @@ class TaskSamplingService:
                 if isinstance(percentage, bool) or not isinstance(percentage, (int, float)) or not 0 < percentage <= 100:
                     raise ValueError("抽样比例必须在 0 到 100 之间")
                 if config.get("group_by") not in (None, "department"):
-                    raise ValueError("门急诊抽样仅支持按科室分组")
+                    raise ValueError("场景抽样仅支持按科室分组")
+
+        # 场景是任务意图，候选必须由该场景的真实数据源证明。
+        if scene == "outpatient":
+            if task.get("record_ids"):
+                raise ValueError("门急诊任务不能使用旧病历 ID，请提供三坐标")
+            candidates = await self._get_outpatient_candidates(task)
+        elif scene == "running" and config.get("case_scope") == "active":
+            if task.get("record_ids"):
+                raise ValueError("运行任务不能使用旧病历 ID，请提供三坐标")
+            candidates = await self._get_active_running_candidates(task)
+        elif scene is not None:
+            raise NotImplementedError("场景抽样暂不可用：尚未接通可验证的病历场景范围")
+        else:
+            candidates = await self._get_candidate_records(task)
 
         if not candidates:
             logger.info("任务候选病历为空")

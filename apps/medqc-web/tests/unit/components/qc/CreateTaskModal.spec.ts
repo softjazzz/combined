@@ -22,10 +22,17 @@ vi.mock('@/api/tasks', () => ({ getTaskRuleSets: mocks.getTaskRuleSets }))
 
 import CreateTaskModal from '@/components/qc/CreateTaskModal.vue'
 
+const selectStub = {
+  props: ['value', 'options'],
+  emits: ['update:value'],
+  template: '<select :value="value" @change="$emit(\'update:value\', $event.target.value)"><option value="">请选择</option><option v-for="option in options" :key="option.value" :value="option.value">{{ option.label }}</option></select>',
+}
+
 type ModalVm = {
   form: {
     task_name: string
     rule_set_key: string | undefined
+    case_scope: 'active' | undefined
     dateRange: [ReturnType<typeof dayjs>, ReturnType<typeof dayjs>] | null
     department_filter: string[]
     sampling_method: 'all' | 'count' | 'percentage'
@@ -46,7 +53,7 @@ function mountModal() {
         'a-modal': { template: '<div><slot /></div>' },
         'a-input': true,
         'a-range-picker': true,
-        'a-select': true,
+        'a-select': selectStub,
         'a-alert': true,
         'a-radio-button': true,
         'a-radio-group': { template: '<div><slot /></div>' },
@@ -109,6 +116,7 @@ describe('CreateTaskModal 运行病历创建链路', () => {
     expect(wrapper.text()).toContain('入院日期范围')
     vm.form.task_name = ' 运行任务 '
     vm.form.rule_set_key = 'running-v1'
+    await wrapper.find('[data-testid="legacy-task-case-scope-select"]').setValue('active')
     vm.form.sampling_method = 'count'
     vm.form.sampling_count = 8
     vm.form.deadline = dayjs('2026-10-09T15:30:00')
@@ -120,7 +128,7 @@ describe('CreateTaskModal 运行病历创建链路', () => {
         task_name: '运行任务',
         scene: 'running',
         rule_set_key: 'running-v1',
-        sampling_config: { total: 8 },
+        sampling_config: { total: 8, case_scope: 'active' },
         deadline: '2026-10-09',
       }),
     )
@@ -137,6 +145,7 @@ describe('CreateTaskModal 运行病历创建链路', () => {
     await flushPromises()
     vm.form.task_name = '保留的任务'
     vm.form.rule_set_key = 'running-v1'
+    vm.form.case_scope = 'active'
 
     await vm.handleSubmit()
 
@@ -199,6 +208,7 @@ describe('CreateTaskModal 运行病历创建链路', () => {
     await flushPromises()
     vm.form.task_name = '只建成草稿'
     vm.form.rule_set_key = 'running-v1'
+    vm.form.case_scope = 'active'
 
     await vm.handleSubmit()
 
@@ -223,6 +233,7 @@ describe('CreateTaskModal 运行病历创建链路', () => {
     await flushPromises()
     vm.form.task_name = '防重复任务'
     vm.form.rule_set_key = 'running-v1'
+    vm.form.case_scope = 'active'
 
     const first = vm.handleSubmit()
     const second = vm.handleSubmit()
@@ -276,9 +287,11 @@ describe('CreateTaskModal 运行病历创建链路', () => {
     const vm = vmOf(wrapper)
     vm.form.task_name = '切换测试'
     vm.form.rule_set_key = 'running-v1'
+    vm.form.case_scope = 'active'
     await wrapper.setProps({ scene: 'final' })
     await flushPromises()
     expect(vm.form.rule_set_key).toBeUndefined()
+    expect(vm.form.case_scope).toBeUndefined()
     vm.form.rule_set_key = 'final-v1'
     expect(vm.canSubmit).toBe(true)
     resolveOld({ success: true, data: { items: [{ rule_set_key: 'running-v1', rule_set_name: '运行', rule_set_version: 'v1', scope: 'running' }] } })
@@ -286,5 +299,38 @@ describe('CreateTaskModal 运行病历创建链路', () => {
     expect(vm.canSubmit).toBe(true)
     await vm.handleSubmit()
     expect(mocks.createQCTaskAndSample).toHaveBeenCalledWith(expect.objectContaining({ scene: 'final', rule_set_key: 'final-v1' }))
+    expect(mocks.createQCTaskAndSample.mock.calls[0][0].sampling_config).toBeUndefined()
+
+    mocks.getTaskRuleSets.mockResolvedValueOnce({
+      success: true,
+      data: { items: [{ rule_set_key: 'outpatient-v1', rule_set_name: '门急诊', rule_set_version: 'v1', scope: 'outpatient' }] },
+    })
+    await wrapper.setProps({ scene: 'outpatient' })
+    await flushPromises()
+    vm.form.rule_set_key = 'outpatient-v1'
+    vm.form.case_scope = 'active'
+    await vm.handleSubmit()
+    expect(mocks.createQCTaskAndSample).toHaveBeenLastCalledWith(expect.objectContaining({
+      scene: 'outpatient', rule_set_key: 'outpatient-v1',
+    }))
+    expect(mocks.createQCTaskAndSample.mock.calls.at(-1)?.[0].sampling_config).toBeUndefined()
+  })
+
+  it('运行场景未通过界面选择当前在院时不可提交', async () => {
+    const wrapper = mountModal()
+    const vm = vmOf(wrapper)
+    await flushPromises()
+    vm.form.task_name = '在院任务'
+    await wrapper.find('[data-testid="legacy-task-rule-set-select"]').setValue('running-v1')
+    expect(vm.canSubmit).toBe(false)
+    await vm.handleSubmit()
+    expect(mocks.createQCTaskAndSample).not.toHaveBeenCalled()
+    await wrapper.find('[data-testid="legacy-task-case-scope-select"]').setValue('active')
+    expect(vm.canSubmit).toBe(true)
+    mocks.createQCTaskAndSample.mockResolvedValue({ success: false, message: '测试停止' })
+    await vm.handleSubmit()
+    expect(mocks.createQCTaskAndSample).toHaveBeenCalledWith(expect.objectContaining({
+      scene: 'running', sampling_config: { case_scope: 'active' },
+    }))
   })
 })

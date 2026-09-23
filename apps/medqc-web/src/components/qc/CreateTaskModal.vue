@@ -47,6 +47,23 @@
         />
       </div>
 
+      <div v-if="scene === 'running'">
+        <label class="block text-sm font-medium text-slate-700 mb-1.5">
+          运行病历范围 <span class="text-rose-500">*</span>
+        </label>
+        <a-select
+          v-model:value="form.case_scope"
+          data-testid="legacy-task-case-scope-select"
+          placeholder="请选择运行病历范围"
+          class="w-full"
+          size="large"
+          :options="[{ value: 'active', label: '当前在院' }]"
+        />
+        <div class="text-xs text-slate-500 mt-2">
+          出院未归档病历暂不可抽样。
+        </div>
+      </div>
+
       <!-- 日期范围 -->
       <div>
         <label class="block text-sm font-medium text-slate-700 mb-1.5">入院日期范围</label>
@@ -173,6 +190,7 @@ let ruleSetRequestId = 0
 const form = reactive({
   task_name: '',
   rule_set_key: undefined as string | undefined,
+  case_scope: undefined as 'active' | undefined,
   dateRange: null as [Dayjs, Dayjs] | null,
   department_filter: [] as string[],
   sampling_method: 'all' as 'all' | 'count' | 'percentage',
@@ -193,12 +211,14 @@ const selectedRuleSetIsValid = computed(() =>
   matchingRuleSets.value.some((item) => item.rule_set_key === form.rule_set_key),
 )
 const canSubmit = computed(() =>
-  !submitting.value && !!form.task_name.trim() && isTaskScene(props.scene) && selectedRuleSetIsValid.value,
+  !submitting.value && !!form.task_name.trim() && isTaskScene(props.scene) && selectedRuleSetIsValid.value &&
+  (props.scene !== 'running' || form.case_scope === 'active'),
 )
 
 watch(() => [props.visible, props.scene] as const, async ([visible]) => {
   const requestId = ++ruleSetRequestId
   form.rule_set_key = undefined
+  form.case_scope = undefined
   ruleSets.value = []
   ruleSetsError.value = ''
   if (!visible) {
@@ -252,6 +272,10 @@ const handleSubmit = async () => {
     message.warning(ruleSetsError.value || '请选择与质控场景匹配的规则集')
     return
   }
+  if (props.scene === 'running' && form.case_scope !== 'active') {
+    message.warning('请选择当前在院病历范围')
+    return
+  }
 
   const params: CreateTaskParams = {
     task_name: form.task_name.trim(),
@@ -275,6 +299,9 @@ const handleSubmit = async () => {
     params.sampling_config = { total: form.sampling_count }
   } else if (form.sampling_method === 'percentage') {
     params.sampling_config = { percentage: form.sampling_pct }
+  }
+  if (props.scene === 'running' && form.case_scope === 'active') {
+    params.sampling_config = { ...params.sampling_config, case_scope: 'active' }
   }
 
   submitting.value = true
@@ -307,6 +334,7 @@ const handleCancel = () => {
 const resetForm = () => {
   form.task_name = ''
   form.rule_set_key = undefined
+  form.case_scope = undefined
   form.dateRange = null
   form.department_filter = []
   form.sampling_method = 'all'

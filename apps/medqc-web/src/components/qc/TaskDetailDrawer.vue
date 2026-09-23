@@ -73,6 +73,12 @@
               <dt>场景</dt>
               <dd>{{ sceneLabel(detail.scene) }}</dd>
             </div>
+            <div v-if="detail.scene === 'running'">
+              <dt>运行病历范围</dt>
+              <dd data-testid="task-detail-case-scope">
+                {{ detail.sampling_config?.case_scope === 'active' ? '当前在院' : '未明确（历史任务）' }}
+              </dd>
+            </div>
             <div v-if="detail.scene">
               <dt>规则集</dt>
               <dd class="task-detail-drawer__breakable">

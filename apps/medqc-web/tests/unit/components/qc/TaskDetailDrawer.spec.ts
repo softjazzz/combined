@@ -199,6 +199,20 @@ describe('TaskDetailDrawer', () => {
     mocks.user.id = 'creator'
   })
 
+  it('只将已保存的运行 active 范围显示为当前在院，历史缺字段不作推断', async () => {
+    mocks.getTaskDetail.mockResolvedValueOnce(detailResponse('在院任务', [], {
+      scene: 'running', sampling_config: { case_scope: 'active' },
+    }))
+    const wrapper = mountDrawer()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="task-detail-case-scope"]').text()).toBe('当前在院')
+
+    mocks.getTaskDetail.mockResolvedValueOnce(detailResponse('历史任务', [], { id: 'task-2', scene: 'running' }))
+    await wrapper.setProps({ taskId: 'task-2' })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="task-detail-case-scope"]').text()).toBe('未明确（历史任务）')
+  })
+
   it('按收到范围读取真实详情，并区分真实零值与缺失值', async () => {
     mocks.getTaskDetail.mockResolvedValueOnce(
       detailResponse('任务甲', [

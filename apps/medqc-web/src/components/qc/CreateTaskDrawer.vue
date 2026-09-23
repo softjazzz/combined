@@ -113,6 +113,21 @@
     <!-- Step 2: 病历范围 -->
     <div v-show="currentStep === 1">
       <a-form layout="vertical">
+        <a-form-item
+          v-if="formData.scene === 'running'"
+          label="运行病历范围"
+          required
+        >
+          <a-select
+            v-model:value="formData.sampling_config.case_scope"
+            data-testid="task-case-scope-select"
+            placeholder="请选择运行病历范围"
+            :options="[{ value: 'active', label: '当前在院' }]"
+          />
+          <div class="text-xs text-gray-500 mt-2">
+            出院未归档病历暂不可抽样。
+          </div>
+        </a-form-item>
         <a-form-item label="选择方式">
           <a-radio-group v-model:value="rangeMode">
             <a-radio-button value="date">
@@ -339,10 +354,10 @@
         </a-descriptions-item>
         <a-descriptions-item label="病历范围">
           <template v-if="rangeMode === 'date'">
-            日期范围 + {{ formData.department_filter?.length || 0 }} 个科室筛选
+            {{ formData.scene === 'running' && formData.sampling_config.case_scope === 'active' ? '当前在院 · ' : '' }}日期范围 + {{ formData.department_filter?.length || 0 }} 个科室筛选
           </template>
           <template v-else>
-            指定 {{ normalizedRecordRefs.length }} 条病历
+            {{ formData.scene === 'running' && formData.sampling_config.case_scope === 'active' ? '当前在院 · ' : '' }}指定 {{ normalizedRecordRefs.length }} 条病历
           </template>
         </a-descriptions-item>
         <a-descriptions-item label="抽样方式">
@@ -455,6 +470,7 @@ const formData = ref({
   department_filter: [] as string[],
   sampling_method: 'all' as 'all' | 'count' | 'percentage',
   sampling_config: {
+    case_scope: undefined as 'active' | undefined,
     total: 50,
     percentage: 10,
     by_department: false,
@@ -536,7 +552,8 @@ const canProceed = computed(() => {
       return formData.value.task_name.trim().length > 0 &&
         formData.value.scene !== null && selectedRuleSetIsValid.value
     case 1:
-      return rangeMode.value === 'refs' ? !recordRefsError.value : true
+      return (formData.value.scene !== 'running' || formData.value.sampling_config.case_scope === 'active') &&
+        (rangeMode.value !== 'refs' || !recordRefsError.value)
     case 2:
       return true
     case 3:
@@ -564,6 +581,7 @@ const assignLabel = computed(() => {
 
 watch(() => formData.value.scene, () => {
   formData.value.rule_set_key = undefined
+  formData.value.sampling_config.case_scope = undefined
 })
 
 watch(() => props.open, async (open) => {
@@ -629,7 +647,7 @@ const resetForm = () => {
     date_range: null,
     department_filter: [],
     sampling_method: 'all',
-    sampling_config: { total: 50, percentage: 10, by_department: false, group_by: null },
+    sampling_config: { case_scope: undefined, total: 50, percentage: 10, by_department: false, group_by: null },
     assign_method: 'by_ratio',
   }
   rangeMode.value = 'date'
@@ -665,6 +683,10 @@ const handleSubmit = async () => {
     message.warning(recordRefsError.value)
     return
   }
+  if (scene === 'running' && formData.value.sampling_config.case_scope !== 'active') {
+    message.warning('请选择当前在院病历范围')
+    return
+  }
   if (formData.value.assign_method !== 'by_ratio') {
     message.warning('当前仅支持按比例均分，抽样后再选择质控员')
     return
@@ -680,6 +702,9 @@ const handleSubmit = async () => {
       deadline: formData.value.deadline?.format('YYYY-MM-DD'),
       sampling_method: formData.value.sampling_method,
       sampling_config: {
+        ...(scene === 'running' && formData.value.sampling_config.case_scope === 'active'
+          ? { case_scope: 'active' }
+          : {}),
         ...(formData.value.sampling_method === 'count'
           ? {
               total: formData.value.sampling_config.total,

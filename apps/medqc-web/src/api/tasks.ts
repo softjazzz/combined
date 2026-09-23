@@ -56,6 +56,7 @@ export interface TaskItem {
     rule_set_version?: string | null
     deadline?: string
     sampling_method?: SamplingMethod
+    sampling_config?: Record<string, unknown> | null
     assign_method?: AssignMethod
     date_range?: { start?: string; end?: string }
     department_filter?: string[]

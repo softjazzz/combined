@@ -35,6 +35,12 @@ vi.mock('@ant-design/icons-vue', () => {
 import CreateTaskDrawer from '@/components/qc/CreateTaskDrawer.vue'
 import type { TaskScene } from '@/api/tasks'
 
+const selectStub = {
+  props: ['value', 'options'],
+  emits: ['update:value'],
+  template: '<select :value="value" @change="$emit(\'update:value\', $event.target.value)"><option value="">请选择</option><option v-for="option in options" :key="option.value" :value="option.value">{{ option.label }}</option></select>',
+}
+
 type DrawerVm = {
   canProceed: boolean
   currentStep: number
@@ -47,6 +53,7 @@ type DrawerVm = {
     description: string
     date_range: { start?: string; end?: string } | null
     department_filter: string[]
+    sampling_config: { case_scope?: 'active' }
   }
   handleSubmit: () => Promise<void>
   nextStep: () => void
@@ -81,7 +88,7 @@ function mountDrawer() {
         'a-radio-button': true,
         'a-radio-group': { template: '<div><slot /></div>' },
         'a-range-picker': true,
-        'a-select': true,
+        'a-select': selectStub,
         'a-slider': true,
         'a-step': true,
         'a-steps': { template: '<div><slot /></div>' },
@@ -100,6 +107,7 @@ async function chooseRuleSet(vm: DrawerVm, scene: 'running' | 'final') {
   vm.formData.scene = scene
   await nextTick()
   vm.formData.rule_set_key = `${scene}-rules`
+  if (scene === 'running') vm.formData.sampling_config.case_scope = 'active'
   await nextTick()
 }
 
@@ -191,12 +199,46 @@ describe('CreateTaskDrawer 创建草稿边界', () => {
     expect(mocks.message.warning).toHaveBeenCalledWith('请选择与质控场景匹配的规则集')
 
     vm.formData.rule_set_key = 'running-rules'
+    vm.formData.sampling_config.case_scope = 'active'
     await nextTick()
     expect(vm.canProceed).toBe(true)
     vm.formData.scene = 'final'
     await nextTick()
     expect(vm.formData.rule_set_key).toBeUndefined()
+    expect(vm.formData.sampling_config.case_scope).toBeUndefined()
     expect(vm.canProceed).toBe(false)
+  })
+
+  it('运行场景须从界面显式选择当前在院，切终末后提交不带旧范围', async () => {
+    mocks.createTask.mockResolvedValue({ success: false, message: '测试停止' })
+    const wrapper = mountDrawer()
+    const vm = vmOf(wrapper)
+    await flushPromises()
+    vm.formData.task_name = '在院范围任务'
+    await wrapper.find('[data-testid="task-scene-select"]').setValue('running')
+    await nextTick()
+    await wrapper.find('[data-testid="task-rule-set-select"]').setValue('running-rules')
+    vm.currentStep = 1
+    await nextTick()
+    expect(wrapper.text()).toContain('出院未归档病历暂不可抽样')
+    expect(vm.canProceed).toBe(false)
+    await vm.handleSubmit()
+    expect(mocks.createTask).not.toHaveBeenCalled()
+
+    await wrapper.find('[data-testid="task-case-scope-select"]').setValue('active')
+    expect(vm.canProceed).toBe(true)
+    await vm.handleSubmit()
+    expect(mocks.createTask).toHaveBeenLastCalledWith(expect.objectContaining({
+      scene: 'running', sampling_config: expect.objectContaining({ case_scope: 'active' }),
+    }))
+
+    vm.currentStep = 0
+    await wrapper.find('[data-testid="task-scene-select"]').setValue('final')
+    await nextTick()
+    expect(vm.formData.sampling_config.case_scope).toBeUndefined()
+    await wrapper.find('[data-testid="task-rule-set-select"]').setValue('final-rules')
+    await vm.handleSubmit()
+    expect(mocks.createTask.mock.calls.at(-1)?.[0].sampling_config).not.toHaveProperty('case_scope')
   })
 
   it('门急诊无匹配可用规则集时明确阻止创建', async () => {
