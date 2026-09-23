@@ -66,14 +66,23 @@ def _escape(value: Any) -> str:
     return html.escape(_text(value), quote=True)
 
 
-def customer_evidence_summary(evidence_items: Sequence[Any]) -> str:
+def customer_evidence_summary(
+    evidence_items: Sequence[Any], *, facts: Mapping[str, Any] | None = None,
+) -> str:
     """将 Canonical 授权证据转换为客户可核查摘要，绝不展示内部引用键。"""
 
+    from .luxian_0609.ct_order_course_consistency import validate_ct_display_facts
+
+    ct_facts = validate_ct_display_facts(facts)
     values: list[str] = []
     seen: set[str] = set()
-    for evidence in evidence_items:
+    reference_labels: dict[int, str] = {}
+    for index, evidence in enumerate(evidence_items, 1):
         if not isinstance(evidence, Mapping):
             continue
+        if ct_facts is not None:
+            for position in evidence.get("decision_reference_positions", ()):
+                reference_labels[position] = f"证据{index}"
         source_type = _text(evidence.get("source_type")).lower()
         label = _text(evidence.get("source_label")) or _EVIDENCE_SOURCE_LABELS.get(
             source_type,
@@ -89,14 +98,28 @@ def customer_evidence_summary(evidence_items: Sequence[Any]) -> str:
         context = "、".join(part for part in (record_time, excerpt_kind) if part)
         prefix = f"{label}（{context}）" if context else label
         value = f"{prefix}：{excerpt}" if excerpt else prefix
+        if ct_facts is not None:
+            value = f"证据{index}：{value}"
         if value and value not in seen:
             seen.add(value)
             values.append(value)
+    if ct_facts is not None:
+        for order in ct_facts["order_results"]:
+            order_sources = "、".join(reference_labels.get(position, "定位缺失") for position in order["order_reference_positions"])
+            locations = "、".join(
+                f"{reference_labels.get(location['reference_position'], '定位缺失')}"
+                f"[{location['field_path']}，字符{location['start']}至{location['end']}，从0起左闭右开]"
+                for location in order["course_locations"]
+            ) or "未形成可定位病程依据"
+            values.append(
+                f"检查事件{order['event_position']}/医嘱{order['order_position']}：{_status_label(order['status'])}；"
+                f"医嘱依据：{order_sources}；病程依据：{locations}"
+            )
     return "；".join(values)
 
 
 def _evidence_text(item: Mapping[str, Any]) -> str:
-    return customer_evidence_summary(list(item.get("evidence") or []))
+    return customer_evidence_summary(list(item.get("evidence") or []), facts=item.get("customer_display_facts"))
 
 
 def _status_counts(items: Sequence[Mapping[str, Any]]) -> Counter[str]:

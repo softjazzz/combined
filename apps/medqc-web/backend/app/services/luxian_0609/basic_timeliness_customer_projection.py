@@ -147,12 +147,13 @@ def _controlled_rescue_content_facts(
     if (
         raw.get("target_document") != "rescue_record"
         or raw.get("source_label") != "抢救记录"
+        or not isinstance(state, str)
         or state not in {"compliant", "non_compliant", "not_applicable", "data_gap"}
         or raw.get("required_fields") != list(RESCUE_CONTENT_FIELDS)
     ):
         return None
     failure_kind = raw.get("failure_kind")
-    if failure_kind not in {
+    if not isinstance(failure_kind, str) or failure_kind not in {
         "",
         "source_unavailable",
         "source_truncated",
@@ -170,7 +171,11 @@ def _controlled_rescue_content_facts(
         return None
 
     def controlled_field_list(value: Any) -> list[str] | None:
-        if not isinstance(value, list) or len(value) != len(set(value)):
+        if (
+            not isinstance(value, list)
+            or any(not isinstance(item, str) for item in value)
+            or len(value) != len(set(value))
+        ):
             return None
         if any(item not in RESCUE_CONTENT_FIELDS for item in value):
             return None
@@ -209,7 +214,8 @@ def _controlled_rescue_content_facts(
         if (
             type(event.get("event_index")) is not int
             or event["event_index"] != expected_index
-            or event.get("body_scope") not in allowed_scopes
+            or not isinstance(event.get("body_scope"), str)
+            or event["body_scope"] not in allowed_scopes
         ):
             return None
         record_time = event.get("record_time")
@@ -230,7 +236,7 @@ def _controlled_rescue_content_facts(
             if not isinstance(atom, Mapping) or set(atom) != expected_atom_keys:
                 return None
             atom_state = atom.get("state")
-            if atom_state not in {"present", "absent", "unknown"}:
+            if not isinstance(atom_state, str) or atom_state not in {"present", "absent", "unknown"}:
                 return None
             if (atom_state == "absent") != (key in event_missing) or (atom_state == "unknown") != (key in event_unknown):
                 return None

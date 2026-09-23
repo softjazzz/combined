@@ -965,6 +965,18 @@ def finalize_luxian_0609_reduced_customer_result(
             )
         ),
     )
+    if rule_id == "LX0609-06-01-01" and safe_facts:
+        required_positions = {
+            position for order in safe_facts["order_results"]
+            for position in (*order["order_reference_positions"],
+                             *(location["reference_position"] for location in order["course_locations"]))
+        }
+        located_positions = {
+            position for evidence in customer_evidence
+            for position in evidence.get("decision_reference_positions", ())
+        }
+        if not required_positions.issubset(located_positions):
+            raise ValueError("CT order/course evidence binding is not publishable")
     if customer_evidence:
         result["customer_evidence"] = customer_evidence
     if (

@@ -27,6 +27,7 @@ from app.services.luxian_0609.pathology_report_completeness import (
 from app.services.luxian_0609.source_evidence_reader import SourceEvidenceQueryError, SourceEvidenceUnavailable
 from app.services.luxian_0609.tumor_pathology_result_mapping import (
     safe_tumor_pathology_customer_display_facts,
+    validate_published_pathology_report_completeness_facts,
     tumor_pathology_customer_fact_status_is_valid,
 )
 from app.services.qc_workspace.canonical_result_store import (
@@ -252,6 +253,31 @@ def test_pathology_published_facts_reject_internal_shape_and_unknown_fields():
                 {"rule_id": RULE_ID, "status": "compliant", "customer_display_facts": invalid},
                 hmac_key="unit-test-key",
             )
+
+
+@pytest.mark.parametrize(
+    ("path", "invalid"),
+    [
+        (("decision_status",), []),
+        (("checked_sources", 0, "state"), {}),
+        (("checked_sources", 1, "completeness"), []),
+        (("events", 0, "status"), []),
+        (("events", 0, "reason_code"), {}),
+    ],
+)
+def test_pathology_published_facts_reject_json_field_type_errors(path, invalid):
+    raw = deepcopy(_evaluate([_master()], [_report()]).display_facts)
+    safe = safe_tumor_pathology_customer_display_facts(rule_id=RULE_ID, raw=raw)
+    assert safe is not None and safe["events"]
+    target = safe
+    for key in path[:-1]:
+        target = target[key]
+    target[path[-1]] = invalid
+    assert validate_published_pathology_report_completeness_facts(safe) is None
+    with pytest.raises(ValueError):
+        safe_customer_display_facts(
+            {"customer_display_facts": safe}, rule_id=RULE_ID,
+        )
 
 
 def test_pathology_reduced_publication_does_not_reproject_published_facts(monkeypatch):

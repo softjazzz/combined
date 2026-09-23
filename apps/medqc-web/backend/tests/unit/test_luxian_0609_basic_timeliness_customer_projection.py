@@ -8,6 +8,7 @@ from app.services.luxian_0609.basic_timeliness_customer_projection import (
     BASIC_TIMELINESS_CUSTOMER_RULE_IDS,
     basic_timeliness_customer_fact_status_is_valid,
     safe_basic_timeliness_customer_display_facts,
+    validate_published_rescue_content_facts,
 )
 from app.services.luxian_0609.canonical_result_finalizer import (
     finalize_luxian_0609_executor_customer_display_facts,
@@ -208,6 +209,36 @@ def test_rescue_published_facts_reject_internal_shape_and_unknown_fields():
                 {"rule_id": rule_id, "status": "compliant", "customer_display_facts": invalid},
                 hmac_key="unit-test-key",
             )
+
+
+@pytest.mark.parametrize(
+    ("path", "invalid"),
+    [
+        (("content_state",), []),
+        (("failure_kind",), {}),
+        (("missing_fields",), [{}]),
+        (("unknown_fields",), [[]]),
+        (("rescue_content_events", 0, "body_scope"), {}),
+        (("rescue_content_events", 0, "missing_fields"), [{}]),
+        (("rescue_content_events", 0, "unknown_fields"), [[]]),
+        (("rescue_content_events", 0, "field_facts", "participant_titles", "state"), []),
+    ],
+)
+def test_rescue_published_facts_reject_json_field_type_errors(path, invalid):
+    raw = deepcopy(_WITHIN_FACTS_BY_RULE["LX0609-09-01-02"])
+    safe = safe_basic_timeliness_customer_display_facts(
+        rule_id="LX0609-09-01-02", raw=raw,
+    )
+    assert safe is not None and safe["rescue_content_events"]
+    target = safe
+    for key in path[:-1]:
+        target = target[key]
+    target[path[-1]] = invalid
+    assert validate_published_rescue_content_facts(safe) is None
+    with pytest.raises(ValueError):
+        safe_customer_display_facts(
+            {"customer_display_facts": safe}, rule_id="LX0609-09-01-02",
+        )
 
 
 def test_rescue_reduced_publication_does_not_reproject_published_facts(monkeypatch):

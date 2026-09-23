@@ -71,7 +71,8 @@ def _safe_report_completeness(
     )
     if (
         raw.get("verification_kind") != "pathology_report_completeness"
-        or raw.get("decision_status") not in _COMPLETENESS_STATUSES
+        or not isinstance(raw.get("decision_status"), str)
+        or raw["decision_status"] not in _COMPLETENESS_STATUSES
         or any(type(raw.get(key)) is not int or raw[key] < 0 for key in counters)
     ):
         return None
@@ -84,8 +85,10 @@ def _safe_report_completeness(
         if (
             not isinstance(item, Mapping)
             or item.get("source") != source
-            or item.get("state") not in {"present", "empty", "unavailable", "error", "truncated"}
-            or item.get("completeness") not in {"complete", "unproven", "truncated"}
+            or not isinstance(item.get("state"), str)
+            or item["state"] not in {"present", "empty", "unavailable", "error", "truncated"}
+            or not isinstance(item.get("completeness"), str)
+            or item["completeness"] not in {"complete", "unproven", "truncated"}
         ):
             return None
         safe_sources.append({key: item[key] for key in ("source", "state", "completeness")})
@@ -105,8 +108,10 @@ def _safe_report_completeness(
             return None
         if (
             type(item.get("event_index")) is not int or item["event_index"] != index
-            or item.get("status") not in _COMPLETENESS_STATUSES
-            or item.get("reason_code") not in _COMPLETENESS_EVENT_REASONS
+            or not isinstance(item.get("status"), str)
+            or item["status"] not in _COMPLETENESS_STATUSES
+            or not isinstance(item.get("reason_code"), str)
+            or item["reason_code"] not in _COMPLETENESS_EVENT_REASONS
             or type(item.get("execution_confirmed")) is not bool
             or type(item.get("report_count")) is not int or item["report_count"] not in {0, 1}
             or (current_shape == "raw" and (

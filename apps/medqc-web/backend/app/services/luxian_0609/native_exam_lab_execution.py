@@ -56,6 +56,7 @@ from .ct_order_course_consistency import (
     build_ct_fact_prompt,
     ct_fact_response_format,
     evaluate_ct_review,
+    CtEvidenceBudgetExceeded,
 )
 from .native_execution import build_luxian_0609_native_result
 from .source_evidence_reader import (
@@ -1878,6 +1879,8 @@ async def execute_luxian_0609_native_exam_lab_rules(
                 if model_failure is None:
                     try:
                         evaluation = evaluate_ct_review(review, payload)
+                    except CtEvidenceBudgetExceeded:
+                        model_failure = "ct_evidence_budget_exceeded"
                     except (TypeError, ValueError):
                         model_failure = "exam_lab_llm_invalid_output"
                 if model_failure:

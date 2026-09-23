@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+import sqlalchemy as sa
 from sqlalchemy import MetaData, create_engine
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
@@ -2162,6 +2163,139 @@ def test_pathology_published_facts_commit_and_read_without_reprojection(
             patient_id="patient-1", visit_id="visit-1",
             rule_set_key="luxian_0609_qc_v1", rule_set_version="2026-06-09",
         )
+
+
+def _published_pilot_item_for_read_boundary(rule_id: str) -> dict[str, Any]:
+    if rule_id == "LX0609-09-01-02":
+        fields = [
+            "condition_change", "rescue_time", "rescue_measures", "rescue_outcome",
+            "participant_names", "participant_titles",
+        ]
+        facts = {
+            "target_document": "rescue_record", "source_label": "抢救记录",
+            "content_state": "compliant", "required_fields": fields,
+            "missing_fields": [], "unknown_fields": [], "failure_kind": "",
+            "rescue_content_events": [{
+                "event_index": 1, "record_time": "2026-09-01T10:00:00+08:00",
+                "body_scope": "complete",
+                "field_facts": {field: {"state": "present"} for field in fields},
+                "missing_fields": [], "unknown_fields": [],
+            }],
+        }
+    else:
+        facts = {
+            "verification_kind": "pathology_report_completeness",
+            "decision_status": "compliant", "event_count": 1,
+            "report_count": 1, "missing_report_count": 0,
+            "unresolved_event_count": 0, "excluded_event_count": 0,
+            "checked_sources": [
+                {"source": source, "state": "present", "completeness": "complete"}
+                for source in ("pathology_exam_master", "pathology_exam_report")
+            ],
+            "events": [{
+                "event_index": 1, "status": "compliant",
+                "reason_code": "pathology_report_present",
+                "execution_confirmed": True, "report_count": 1,
+            }],
+        }
+    return {
+        "record_id": "visit-1", "visit_id": "visit-1",
+        "institute_id": "inst-1", "patient_id": "patient-1",
+        "schema_version": "lx0609-customer-result-v2", "rule_id": rule_id,
+        "status": "compliant", "result_status": "compliant",
+        "display_status": "compliant", "is_compliant": True,
+        "reason_code": "requirement_satisfied", "conclusion": "已发布结论",
+        "customer_display_facts": facts,
+    }
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "path", "invalid"),
+    [
+        ("LX0609-09-01-02", ("missing_fields",), [{}]),
+        ("LX0609-06-02-01", ("decision_status",), []),
+        ("LX0609-06-02-01", ("checked_sources", 0, "state"), {}),
+        ("LX0609-06-02-01", ("events", 0, "status"), []),
+    ],
+)
+def test_invalid_published_json_type_is_controlled_through_store_and_single_record_dto(
+    monkeypatch, rule_id, path, invalid,
+):
+    table = workspace_module._record_result_envelopes_table().to_metadata(
+        MetaData(), schema=None,
+    )
+    engine = create_engine("sqlite://")
+    table.metadata.create_all(engine)
+    store = CanonicalResultStore(table)
+    with Session(engine) as db_session:
+        store.replace_for_job(
+            db_session,
+            job_row={
+                "id": "job-current", "created_by": "reviewer-a",
+                "filters_json": json.dumps({
+                    "rule_set_key": "luxian_0609_qc_v1",
+                    "rule_set_version": "2026-06-09",
+                }),
+            },
+            items=[_published_pilot_item_for_read_boundary(rule_id)],
+            now=datetime(2026, 9, 1, 10, 0, 0),
+            projector=lambda raw: envelope_item_from_rule_result(raw, hmac_key="unit-test-key"),
+            projection_key="unit-test-key",
+        )
+        db_session.commit()
+        accepted = store.load_selected(
+            db_session, root_job_id="job-current",
+            institute_id="inst-1", patient_id="patient-1", visit_id="visit-1",
+            rule_set_key="luxian_0609_qc_v1", rule_set_version="2026-06-09",
+        )
+        assert accepted["items"][0]["customer_display_facts"] == (
+            _published_pilot_item_for_read_boundary(rule_id)["customer_display_facts"]
+        )
+        envelope = json.loads(
+            db_session.execute(table.select()).mappings().one()["envelope_json"]
+        )
+        target = envelope["items"][0]["customer_display_facts"]
+        for key in path[:-1]:
+            target = target[key]
+        target[path[-1]] = invalid
+        envelope_json = json.dumps(envelope, ensure_ascii=False)
+        db_session.execute(table.update().values(envelope_json=envelope_json))
+        db_session.commit()
+        with pytest.raises(ValueError, match="客户结果解释合同"):
+            store.load_selected(
+                db_session, root_job_id="job-current",
+                institute_id="inst-1", patient_id="patient-1", visit_id="visit-1",
+                rule_set_key="luxian_0609_qc_v1", rule_set_version="2026-06-09",
+            )
+    engine.dispose()
+
+    session = _ReadSession([
+        [_selected_job()], [{"envelope_json": envelope_json}],
+    ])
+    monkeypatch.setattr(workspace_module, "_session", lambda: session)
+    monkeypatch.setattr(workspace_module, "_row_to_batch_job", lambda row: dict(row))
+    monkeypatch.setattr(
+        CustomQCWorkspaceService, "_aggregate_parent_job",
+        lambda _self, _session, job: job,
+    )
+    service = object.__new__(CustomQCWorkspaceService)
+    service._record_result_envelope_table = table
+    service._batch_job_table = sa.Table(
+        "custom_qc_batch_jobs", MetaData(),
+        sa.Column("id", sa.String(36)),
+        sa.Column("status", sa.String(20)),
+        sa.Column("parent_job_id", sa.String(36)),
+        sa.Column("finished_at", sa.DateTime()),
+        sa.Column("created_at", sa.DateTime()),
+    )
+    result = service.build_latest_single_record_result_dto(
+        institute_id="inst-1", patient_id="patient-1", visit_id="visit-1",
+        expected_rule_ids=[rule_id],
+        rule_set_key="luxian_0609_qc_v1", rule_set_version="2026-06-09",
+    )
+    assert result["state"] == "technical_error"
+    assert result["reason_code"] == "canonical_result_envelope_invalid"
+    assert result["items"] == []
 
 
 def test_writer_marks_envelope_as_canonical_straight_through():

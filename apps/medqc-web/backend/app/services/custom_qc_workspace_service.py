@@ -92,6 +92,7 @@ from .qc_workspace.failed_rule_retry import (
 from .sample_validation_rule_sets import LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
 from .bundles.emr_view import load_bundle_documents
 from .case_identity import CaseRef, CaseRefInput, normalize_case_refs
+from .luxian_0609.decision_model import _MAX_FACT_REFS
 from ..database.connection import DB_SCHEMA_MODE, SessionLocal, engine
 
 
@@ -318,13 +319,13 @@ def _explicit_customer_text(item: Dict[str, Any], keys: Sequence[str], fallback:
     return fallback
 
 
-def _safe_evidence_rows(item: Dict[str, Any], *, hmac_key: str) -> List[Dict[str, str]]:
+def _safe_evidence_rows(item: Dict[str, Any], *, hmac_key: str) -> List[Dict[str, Any]]:
     candidates: List[Any] = []
     for key in ("customer_evidence", "evidence_items", "evidence_refs", "evidence"):
         value = item.get(key)
         if isinstance(value, list):
             candidates.extend(value)
-    rows: List[Dict[str, str]] = []
+    rows: List[Dict[str, Any]] = []
     seen: set[tuple[str, str]] = set()
     for candidate in candidates:
         if not isinstance(candidate, dict):
@@ -351,7 +352,15 @@ def _safe_evidence_rows(item: Dict[str, Any], *, hmac_key: str) -> List[Dict[str
         if identity in seen:
             continue
         seen.add(identity)
-        row = {"source_type": source_type, "source_ref": source_ref}
+        row: Dict[str, Any] = {"source_type": source_type, "source_ref": source_ref}
+        if "decision_reference_positions" in candidate:
+            positions = candidate["decision_reference_positions"]
+            if (not isinstance(positions, list) or not positions or len(positions) > _MAX_FACT_REFS
+                    or any(type(value) is not int or not 1 <= value <= _MAX_FACT_REFS for value in positions)
+                    or len(positions) != len(set(positions))):
+                raise ValueError(LX0609_CUSTOMER_RESULT_CONTRACT_ERROR)
+            # 执行器引用顺序已在Finalizer绑定至授权文书，此处仅搬运定位。
+            row["decision_reference_positions"] = list(positions)
         # 字段路径不是病历正文，只用于让单病历页在已授权文书内定位结构化章节。
         # 只允许普通字段名，禁止把任意模型输出或正文透传为字段路径。
         field_path = _safe_text(
@@ -1992,7 +2001,9 @@ def _customer_export_rows(
         items.append(projected)
     rows: List[List[str]] = []
     for item in items:
-        evidence_text = customer_evidence_summary(list(item.get("evidence") or []))
+        evidence_text = customer_evidence_summary(
+            list(item.get("evidence") or []), facts=item.get("customer_display_facts"),
+        )
         rows.append(
             [
                 _safe_text(item.get("record_ref")),

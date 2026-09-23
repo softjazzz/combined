@@ -276,7 +276,7 @@ def project_selected_document_evidence(
     decision: ReducedRuleDecision,
     evidence_snapshot: Any,
     evidence_materials: Any,
-) -> list[dict[str, str]] | None:
+) -> list[dict[str, Any]] | None:
     """投影已绑定的逐行引用；None 为旧合同，空列表为禁止猜测定位。
 
     只消费执行器选择，不按时间、标题或客户事实重新选择。保留已有
@@ -308,7 +308,7 @@ def project_selected_document_evidence(
         return []
 
     selected_refs = set(selected)
-    located_by_ref: dict[str, dict[str, str]] = {}
+    located_by_ref: dict[str, dict[str, Any]] = {}
     resolved: set[str] = set()
     for observation in evidence_snapshot.observations:
         source_key = observation.source_key
@@ -406,7 +406,7 @@ def project_selected_document_evidence(
             )
         if resolved == selected_refs:
             seen_coordinates: set[tuple[str, str]] = set()
-            projected: list[dict[str, str]] = []
+            projected: list[dict[str, Any]] = []
             for reference in selected:
                 coordinate = located_by_ref.get(reference)
                 if coordinate is None:
@@ -417,6 +417,15 @@ def project_selected_document_evidence(
                     continue
                 seen_coordinates.add(key)
                 projected.append(coordinate)
+            if decision.rule_id == "LX0609-06-01-01":
+                # 索引由执行器的有序引用定义；坐标仍由此处唯一投影，不重新关联医嘱。
+                for coordinate in projected:
+                    coordinate["decision_reference_positions"] = [
+                        index for index, reference in enumerate(decision.fact_refs, 1)
+                        if located_by_ref.get(reference) is not None
+                        and (located_by_ref[reference]["source_type"], located_by_ref[reference]["source_document_id"])
+                        == (coordinate["source_type"], coordinate["source_document_id"])
+                    ]
             return projected
     return []
 

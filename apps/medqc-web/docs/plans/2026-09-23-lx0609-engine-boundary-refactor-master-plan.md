@@ -229,3 +229,11 @@ python -m pytest -q --tb=short tests/unit/test_luxian_0609_basic_timeliness_cust
 
 - 最终父代理复跑：CT/目录/三入口/试点/Canonical完整读取/导出15文件共572通过（53.24秒）；`test_luxian_0609_canonical_result_finalizer.py`70通过（0.89秒）。读取合同文件单独复跑98通过。`ruff`、`git diff --check`通过；集成树`npm run lint`及`npm run type-check`通过；完整前端单测仍为1063通过、3项已基线复现的失败。编码检查在提交暂存路径上执行，不使用空暂存区的SKIP作为通过证据。
 - 验证记录：`.tmp/0910-full-audit/ct-architecture-final-tests.txt`、`architecture-finalizer-review.txt`；真实患者原文不提交。以上是代码/接口合同验证，不是A0真实保护集合或A4临床验收。
+
+### GPT PRO复审跟进（2026-09-23，基线b6ef9e09f）
+
+本轮仅补阶段A公开事实验证器的JSON类型防御及真实读取边界测试：先合法写入SQLite，再污染抢救`missing_fields`和病理状态字段，确认Store受控拒绝、单病历DTO返回既有技术失败。没有扩大到B/C/D，没有改变两条试点的医学执行器/Prompt。并行CT修复及逐医嘱定位见`2026-09-23-ct-order-course-consistency.md`，不把CT验收当作A0/A4证据。
+
+本轮相关后端检查582通过、4项已在b6ef9e09f复现的旧导出失败；前端1063通过、3项既有失败；lint/type-check通过。阶段A真实保护集、PG/浏览器/真实模型复核仍未完成。旧集成测试在假PG环境下运行过慢被停止，只有新增CT独立三入口用例作为本轮的脱库验收范围。
+
+接续更正：新增CT三入口已由主协调独立2项通过，单/批/样本与latest读取一致；仍有配置初始化外部读取依赖，不可称为完全脱库测试。精确环境差异见CT计划。该环境问题不属于试点医学判据变化。
