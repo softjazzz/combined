@@ -30,13 +30,17 @@
                 >
               </div>
               <div class="review-summary__hint">
-                目录按文书类型聚合，再按时间倒序浏览。点击右侧质控问题会联动定位左侧原文段落。
+                {{ qcAssociationVerified
+                  ? '目录按文书类型聚合，再按时间倒序浏览。点击右侧质控问题会联动定位左侧原文段落。'
+                  : '目录按文书类型聚合，可按时间浏览病历文书。' }}
               </div>
             </div>
           </div>
           <div class="review-summary__actions">
             <div class="review-summary__actions-label">当前工作区</div>
-            <div class="review-summary__actions-value">联审阅读 / 问题定位</div>
+            <div class="review-summary__actions-value">
+              {{ qcAssociationVerified ? '联审阅读 / 问题定位' : '文书阅读' }}
+            </div>
           </div>
         </div>
         <div class="review-metrics">
@@ -58,13 +62,13 @@
               class="review-metric-card__value review-metric-card__value--mono"
               :style="{ color: getScoreColor(record?.score) }"
             >
-              {{ record?.score ?? '-' }}
+              {{ qcAssociationVerified ? (record?.score ?? '-') : '-' }}
             </div>
           </div>
           <div class="review-metric-card">
             <div class="review-metric-card__label">缺陷数</div>
             <div class="review-metric-card__value">
-              {{ record?.defect_count || 0 }}
+              {{ qcAssociationVerified ? (record?.defect_count ?? 0) : '-' }}
             </div>
           </div>
           <div class="review-metric-card">
@@ -524,17 +528,21 @@
           <div class="review-panel__header review-issues__header">
             <div>
               <div class="review-panel__title">质控问题</div>
-              <div class="review-panel__desc">
+              <div v-if="qcAssociationVerified" class="review-panel__desc">
                 共 {{ displayedIssueCount }} 项，点击问题可联动定位左侧原文。
               </div>
             </div>
-            <a-button size="small" type="text" class="review-issues__reload" @click="loadDefects">
+            <a-button v-if="qcAssociationVerified" size="small" type="text" class="review-issues__reload" @click="loadDefects">
               <ReloadOutlined :spin="defectLoading" />
             </a-button>
           </div>
 
           <div class="review-issues__body">
-            <a-spin :spinning="defectLoading" class="review-issues__spin">
+            <div v-if="!qcAssociationVerified" class="review-empty review-empty--issues" role="status">
+              <div class="review-empty__title">质控关联待核实</div>
+              <div class="review-empty__desc">当前无法确认质控结果与该病历的对应关系</div>
+            </div>
+            <a-spin v-else :spinning="defectLoading" class="review-issues__spin">
               <div v-if="displayedIssueCount === 0" class="review-empty review-empty--issues">
                 <div class="review-empty__title">暂无质控问题</div>
                 <div class="review-empty__desc">当前病历没有待联审的质控项</div>
@@ -869,6 +877,8 @@ const emit = defineEmits<{
 const defectLoading = ref(false)
 const defectList = ref<DefectItem[]>([])
 const reviewItemList = ref<ReviewIssueItem[]>([])
+// 详情接口尚无可信可用的质控关联状态合同；不得用单键 record_id 展示缺陷。
+const qcAssociationVerified = ref(false)
 const selectedDefectId = ref<string | null>(null)
 const selectedReviewIssueId = ref<string | null>(null)
 const docLoading = ref(false)
@@ -2259,6 +2269,7 @@ const sanitizeHtml = (html: string): string => {
 
 // 状态样式计算
 const statusClass = computed(() => {
+  if (!qcAssociationVerified.value) return 'bg-slate-100 text-slate-500 border-slate-200'
   const s = props.record?.status
   if (s === 'completed' || s === 'passed' || s === 'approved')
     return 'bg-emerald-50 text-emerald-600 border-emerald-100'
@@ -2267,6 +2278,7 @@ const statusClass = computed(() => {
 })
 
 const statusDotClass = computed(() => {
+  if (!qcAssociationVerified.value) return 'bg-slate-400'
   const s = props.record?.status
   if (s === 'completed' || s === 'passed' || s === 'approved') return 'bg-emerald-500'
   if (s === 'failed' || s === 'rejected') return 'bg-rose-500'
@@ -2274,6 +2286,7 @@ const statusDotClass = computed(() => {
 })
 
 const statusText = computed(() => {
+  if (!qcAssociationVerified.value) return '质控关联待核实'
   const map: Record<string, string> = {
     pending: '待质控',
     urged: '已催办',
@@ -2328,7 +2341,7 @@ const getReviewStatusClass = (status: ReviewIssueItem['status']) => {
 
 // 加载缺陷列表
 const loadDefects = async () => {
-  if (!props.record?.record_id) return
+  if (!qcAssociationVerified.value || !props.record?.record_id) return
   defectLoading.value = true
   try {
     const res = await getDefectList({ record_id: props.record.record_id })
@@ -2345,26 +2358,26 @@ const loadDefects = async () => {
 // 加载病历文书详情
 const loadRecordDetail = async () => {
   if (!props.record?.record_id) return
+  const recordId = props.record.record_id
+  const requestId = ++detailRequestId
   docLoading.value = true
   try {
-    const res = await getRecordDetail(props.record.record_id)
+    const res = await getRecordDetail(recordId)
+    if (requestId !== detailRequestId || !props.visible) return
     if (res.success && res.data) {
       const detail = res.data as Record<string, unknown>
       recordDetail.value = detail
-      const inlineDefects = detail.defects
-      if (Array.isArray(inlineDefects)) {
-        defectList.value = inlineDefects as DefectItem[]
-      }
       const reviewItems = detail.review_items
       if (Array.isArray(reviewItems)) {
         reviewItemList.value = reviewItems as ReviewIssueItem[]
       }
     }
   } catch {
+    if (requestId !== detailRequestId || !props.visible) return
     recordDetail.value = null
     reviewItemList.value = []
   } finally {
-    docLoading.value = false
+    if (requestId === detailRequestId) docLoading.value = false
   }
 }
 
@@ -2404,10 +2417,18 @@ watch([activeHighlightBlockKey, currentDocAllBlocks], async ([blockKey, blocks])
   el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
 })
 
-// 打开时自动加载
+let detailRequestId = 0
+
+// 打开或切换病历时只加载文书详情，过期请求不得回填当前抽屉。
 watch(
-  () => props.visible,
-  (val) => {
+  [() => props.visible, () => props.record?.id, () => props.record?.record_id],
+  ([val]) => {
+    detailRequestId += 1
+    docLoading.value = false
+    recordDetail.value = null
+    reviewItemList.value = []
+    defectList.value = []
+    qcAssociationVerified.value = false
     if (val && props.record) {
       selectedDefectId.value = null
       selectedReviewIssueId.value = null
@@ -2420,9 +2441,6 @@ watch(
       expandedSidebarGroups.value = ['course']
       activeHighlightTarget.value = null
       highlightBlockElements.clear()
-      recordDetail.value = null
-      reviewItemList.value = []
-      loadDefects()
       loadRecordDetail()
     }
   },

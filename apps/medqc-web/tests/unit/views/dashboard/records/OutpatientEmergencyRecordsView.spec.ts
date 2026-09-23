@@ -6,6 +6,13 @@ const mocks = vi.hoisted(() => ({
   getOutpatientEmergencyRecordList: vi.fn(),
   getAdminOverview: vi.fn(),
   getDepartmentList: vi.fn(),
+  getRecordDetail: vi.fn(),
+  getDefectList: vi.fn(),
+  batchDefectAction: vi.fn(),
+  exportDefects: vi.fn(),
+  urgeDefect: vi.fn(),
+  approveDefect: vi.fn(),
+  rejectDefect: vi.fn(),
   message: {
     error: vi.fn(),
     success: vi.fn(),
@@ -14,16 +21,16 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('@/api/qcAdmin', () => ({
-  approveDefect: vi.fn(),
-  batchDefectAction: vi.fn(),
-  exportDefects: vi.fn(),
-  getDefectList: vi.fn(),
+  approveDefect: mocks.approveDefect,
+  batchDefectAction: mocks.batchDefectAction,
+  exportDefects: mocks.exportDefects,
+  getDefectList: mocks.getDefectList,
   getAdminOverview: mocks.getAdminOverview,
   getDepartmentList: mocks.getDepartmentList,
-  getRecordDetail: vi.fn(),
+  getRecordDetail: mocks.getRecordDetail,
   getOutpatientEmergencyRecordList: mocks.getOutpatientEmergencyRecordList,
-  rejectDefect: vi.fn(),
-  urgeDefect: vi.fn(),
+  rejectDefect: mocks.rejectDefect,
+  urgeDefect: mocks.urgeDefect,
 }))
 
 vi.mock('ant-design-vue', () => ({ message: mocks.message }))
@@ -39,7 +46,12 @@ const ButtonStub = defineComponent({
   inheritAttrs: false,
   emits: ['click'],
   setup(_, { attrs, emit, slots }) {
-    return () => h('button', { ...attrs, onClick: () => emit('click') }, slots.default?.())
+    return () => h('button', {
+      ...attrs,
+      onClick: () => {
+        if (!attrs.disabled) emit('click')
+      },
+    }, slots.default?.())
   },
 })
 
@@ -49,15 +61,26 @@ const TableStub = defineComponent({
     dataSource: { type: Array, default: () => [] },
     loading: Boolean,
   },
-  setup(props) {
+  setup(props, { slots }) {
     return () =>
-      h('div', {
-        'data-testid': 'outpatient-table',
-        'data-record-ids': JSON.stringify(
-          (props.dataSource as Array<{ id?: string }>).map((row) => row.id),
+      h(
+        'div',
+        {
+          'data-testid': 'outpatient-table',
+          'data-record-ids': JSON.stringify(
+            (props.dataSource as Array<{ id?: string }>).map((row) => row.id),
+          ),
+          'data-loading': String(props.loading),
+        },
+        (props.dataSource as Array<{ id?: string }>).map((record) =>
+          h('div', { 'data-testid': `record-actions-${record.id}` }, [
+            slots.bodyCell?.({ column: { key: 'status' }, record }),
+            slots.bodyCell?.({ column: { key: 'score' }, record }),
+            slots.bodyCell?.({ column: { key: 'defect_count' }, record }),
+            slots.bodyCell?.({ column: { key: 'actions' }, record }),
+          ]),
         ),
-        'data-loading': String(props.loading),
-      })
+      )
   },
 })
 
@@ -109,6 +132,7 @@ describe('OutpatientEmergencyRecordsView 列表故障语义', () => {
     vi.clearAllMocks()
     mocks.getDepartmentList.mockResolvedValue({ success: true, data: [] })
     mocks.getOutpatientEmergencyRecordList.mockResolvedValue(emptySuccess)
+    mocks.getRecordDetail.mockResolvedValue({ success: true, data: {} })
   })
 
   it('正常空结果保留空表，不显示数据源故障', async () => {
@@ -120,7 +144,7 @@ describe('OutpatientEmergencyRecordsView 列表故障语义', () => {
     expect(wrapper.get('[data-testid="outpatient-current-total"]').text()).toBe('0')
     expect(mocks.getAdminOverview).not.toHaveBeenCalled()
     expect(wrapper.text()).not.toContain('94.2')
-    expect(wrapper.text().match(/暂不可用/g)).toHaveLength(3)
+    expect(wrapper.text().match(/暂不可用/g)).toHaveLength(4)
   })
 
   it('首指标使用当前筛选列表总数，加载与失败不显示假零', async () => {
@@ -210,5 +234,113 @@ describe('OutpatientEmergencyRecordsView 列表故障语义', () => {
     expect(wrapper.get('[data-testid="outpatient-table"]').attributes('data-record-ids')).toBe(
       '["new-record"]',
     )
+  })
+
+  it('从列表打开详情失败后保留病历上下文，可重试并区分真实成功空集', async () => {
+    mocks.getOutpatientEmergencyRecordList.mockResolvedValueOnce(successWith('record-A'))
+    mocks.getRecordDetail
+      .mockResolvedValueOnce({ success: false, message: '详情服务暂不可用' })
+      .mockResolvedValueOnce({ success: true, data: { defects: [], documents: {} } })
+    const wrapper = mountView()
+    await flushPromises()
+
+    const action = wrapper.get('[data-testid="record-actions-record-A"]')
+      .findAll('button').find((button) => button.text() === '查看病历文书')!
+    await action.trigger('click')
+    await flushPromises()
+
+    const drawer = wrapper.getComponent({ name: 'OutpatientEmergencyDetailDrawer' })
+    expect(drawer.props()).toMatchObject({
+      visible: true,
+      loading: false,
+      record: expect.objectContaining({ id: 'record-A' }),
+      detailData: null,
+      error: '详情服务暂不可用',
+    })
+
+    drawer.vm.$emit('retry')
+    await flushPromises()
+    expect(mocks.getRecordDetail).toHaveBeenCalledTimes(2)
+    expect(drawer.props('error')).toBe('')
+    expect(drawer.props('detailData')).toEqual({ defects: [], documents: {} })
+  })
+
+  it('切换病历时旧响应不能覆盖当前详情，前后导航使用同一隔离语义', async () => {
+    mocks.getOutpatientEmergencyRecordList.mockResolvedValueOnce({
+      success: true,
+      data: {
+        items: [
+          { id: 'record-A', record_id: 'A', patient_name: '患者甲' },
+          { id: 'record-B', record_id: 'B', patient_name: '患者乙' },
+        ],
+        total: 2,
+      },
+    })
+    const oldRequest = deferred<{ success: boolean; data: Record<string, unknown> }>()
+    mocks.getRecordDetail
+      .mockReturnValueOnce(oldRequest.promise)
+      .mockResolvedValueOnce({ success: true, data: { defects: [{ id: 'B-defect' }] } })
+    const wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.get('[data-testid="record-actions-record-A"]').findAll('button')
+      .find((button) => button.text() === '查看病历文书')!.trigger('click')
+    const drawer = wrapper.getComponent({ name: 'OutpatientEmergencyDetailDrawer' })
+    drawer.vm.$emit('navigate-next')
+    await flushPromises()
+    expect(drawer.props('record')).toMatchObject({ id: 'record-B' })
+    expect(drawer.props('detailData')).toEqual({ defects: [{ id: 'B-defect' }] })
+
+    oldRequest.resolve({ success: true, data: { defects: [{ id: 'A-defect' }] } })
+    await flushPromises()
+    expect(drawer.props('detailData')).toEqual({ defects: [{ id: 'B-defect' }] })
+    expect(drawer.props('loading')).toBe(false)
+  })
+
+  it('关联待核实时只读详情可用，单条及批量质控操作不会查询或写入缺陷', async () => {
+    mocks.getOutpatientEmergencyRecordList.mockResolvedValueOnce({
+      success: true,
+      data: {
+        items: [{
+          id: 'primary-id', record_id: 'business-id', patient_name: '测试患者',
+          status: 'approved', score: 98, defect_count: 2,
+        }],
+        total: 1,
+      },
+    })
+    const wrapper = mountView()
+    await flushPromises()
+    const vm = wrapper.vm as unknown as { selectedRowKeys: string[] }
+    vm.selectedRowKeys = ['primary-id']
+    await nextTick()
+
+    expect(wrapper.text()).toContain('门急诊质控关联待核实')
+    expect(wrapper.text()).not.toContain('已通过')
+    expect(wrapper.get('[data-testid="record-actions-primary-id"]').text()).toContain('质控关联待核实')
+    expect(wrapper.get('[data-testid="record-actions-primary-id"]').text()).toContain('暂不可用')
+    expect(wrapper.findAll('button').filter((button) =>
+      ['批量催办', '批量通过', '导出缺陷', '催办', '通过'].includes(button.text()),
+    ).every((button) => button.attributes('disabled') !== undefined)).toBe(true)
+
+    for (const button of wrapper.findAll('button').filter((item) =>
+      ['批量催办', '批量通过', '导出缺陷', '催办', '通过'].includes(item.text()),
+    )) {
+      await button.trigger('click')
+    }
+    const drawer = wrapper.getComponent({ name: 'OutpatientEmergencyDetailDrawer' })
+    drawer.vm.$emit('urge-defect', 'untrusted-defect')
+    drawer.vm.$emit('approve-defect', 'untrusted-defect')
+    drawer.vm.$emit('reject-defect', 'untrusted-defect')
+    await flushPromises()
+    for (const operation of [
+      mocks.getDefectList, mocks.batchDefectAction, mocks.exportDefects,
+      mocks.urgeDefect, mocks.approveDefect, mocks.rejectDefect,
+    ]) expect(operation).not.toHaveBeenCalled()
+
+    await wrapper.get('[data-testid="record-actions-primary-id"]').findAll('button')
+      .find((button) => button.text() === '查看病历文书')!.trigger('click')
+    await flushPromises()
+    expect(mocks.getRecordDetail).toHaveBeenCalledWith('primary-id')
+    expect(drawer.props('visible')).toBe(true)
   })
 })

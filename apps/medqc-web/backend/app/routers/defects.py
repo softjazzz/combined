@@ -147,14 +147,15 @@ async def list_defects(
     """
     获取缺陷列表（支持多条件筛选和分页）
     """
+    if record_id is not None:
+        raise HTTPException(status_code=422, detail="record_identity_unverifiable")
+
     sb = get_supabase()
     if sb is None:
         raise HTTPException(status_code=503, detail="数据库不可用")
 
     try:
         query = sb.table('qc_defects').select('*', count='exact')
-        if record_id:
-            query = query.eq('record_id', record_id)
         if department:
             query = query.eq('department', department)
         if severity:
@@ -496,6 +497,9 @@ async def export_defects(
     """
     导出缺陷列表为 Excel 或 CSV 文件（最多 1 万条）
     """
+    if record_id is not None:
+        raise HTTPException(status_code=422, detail="record_identity_unverifiable")
+
     from ..services.defect_export_service import DefectExportService
 
     export_service = DefectExportService()
@@ -562,14 +566,15 @@ async def get_defect_stats(
     """
     获取缺陷统计数据
     """
+    if record_id is not None:
+        raise HTTPException(status_code=422, detail="record_identity_unverifiable")
+
     sb = get_supabase()
     if sb is None:
         raise HTTPException(status_code=503, detail="数据库不可用")
 
     try:
         query = sb.table('qc_defects').select('severity,category,status')
-        if record_id:
-            query = query.eq('record_id', record_id)
         if department:
             query = query.eq('department', department)
         if start_date:

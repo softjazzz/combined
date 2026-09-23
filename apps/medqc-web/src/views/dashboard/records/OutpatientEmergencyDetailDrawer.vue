@@ -41,7 +41,10 @@
       </div>
     </template>
 
-    <div class="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4">
+    <div
+      class="grid grid-cols-1 gap-4"
+      :class="detailData && !loading && !error ? 'lg:grid-cols-[1fr_320px]' : ''"
+    >
       <section class="space-y-4">
         <div class="apple-drawer-panel px-4 py-3">
           <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
@@ -84,11 +87,47 @@
         </div>
 
         <a-skeleton
-          :loading="loading"
+          v-if="loading"
           active
           :paragraph="{ rows: 6 }"
+        />
+        <div
+          v-else-if="error"
+          class="apple-drawer-panel p-4"
+          role="alert"
+          data-testid="outpatient-detail-error"
+        >
+          <p class="text-slate-800 font-medium">
+            {{ error }}
+          </p>
+          <a-button
+            type="primary"
+            class="mt-3"
+            data-testid="retry-outpatient-detail"
+            @click="emit('retry')"
+          >
+            重试
+          </a-button>
+        </div>
+        <div
+          v-else-if="qcLinkUnavailable"
+          class="apple-drawer-panel p-4"
+          role="status"
+          data-testid="outpatient-qc-link-unavailable"
+        >
+          <p class="text-slate-800 font-medium">
+            质控关联待核实
+          </p>
+          <p class="text-slate-500 text-sm mt-1">
+            当前病历文书可查看，缺陷与整改等质控记录暂不可确认。
+          </p>
+        </div>
+        <a-skeleton
+          v-else
+          :loading="false"
         >
           <a-tabs
+            v-if="detailData"
             v-model:active-key="activeTab"
             class="detail-tabs"
           >
@@ -264,25 +303,34 @@
         </a-skeleton>
       </section>
 
-      <aside class="space-y-3">
+      <aside
+        v-if="detailData && !loading && !error"
+        class="space-y-3"
+      >
         <div class="apple-drawer-panel p-3">
           <h3 class="text-sm font-semibold text-slate-800 mb-2">
-            文书预览
+            病历文书
           </h3>
-          <div class="space-y-2">
-            <div
-              v-for="item in documentPanels"
+          <div
+            v-if="rawDocumentPanels.length"
+            class="space-y-2"
+          >
+            <details
+              v-for="item in rawDocumentPanels"
               :key="item.key"
-              class="rounded-xl border border-[rgba(0,0,0,0.06)] bg-[rgba(245,245,247,0.72)] p-2.5"
+              class="rounded border border-[rgba(0,0,0,0.06)] bg-white p-2.5"
+              data-testid="outpatient-raw-document"
             >
-              <p class="text-xs text-slate-500 mb-1">
-                {{ item.label }}
-              </p>
-              <p class="text-xs leading-5 text-slate-700 line-clamp-5">
-                {{ item.preview || '暂无内容' }}
-              </p>
-            </div>
+              <summary class="cursor-pointer text-sm text-slate-800">
+                {{ item.title }}
+              </summary>
+              <pre class="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-slate-700">{{ item.content || '文书暂无正文' }}</pre>
+            </details>
           </div>
+          <a-empty
+            v-else
+            description="暂无病历文书"
+          />
         </div>
       </aside>
     </div>
@@ -298,6 +346,7 @@ interface DetailDrawerProps {
   loading?: boolean
   record: AdminRecordItem | null
   detailData: Record<string, unknown> | null
+  error?: string
   remediationEnabled?: boolean
   hasPrev?: boolean
   hasNext?: boolean
@@ -307,6 +356,7 @@ interface DetailDrawerProps {
 
 const props = withDefaults(defineProps<DetailDrawerProps>(), {
   loading: false,
+  error: '',
   remediationEnabled: false,
   hasPrev: false,
   hasNext: false,
@@ -316,6 +366,7 @@ const props = withDefaults(defineProps<DetailDrawerProps>(), {
 
 const emit = defineEmits<{
   (event: 'close'): void
+  (event: 'retry'): void
   (event: 'urge-defect', defectId: string): void
   (event: 'approve-defect', defectId: string): void
   (event: 'reject-defect', defectId: string): void
@@ -341,6 +392,9 @@ const payload = computed<Record<string, any>>(() => {
   }
   return {}
 })
+const qcLinkUnavailable = computed(
+  () => payload.value.qc_data_status === 'unavailable_identity_contract',
+)
 
 const defects = computed<any[]>(() => payload.value.defects || [])
 const remediation = computed<any[]>(() => payload.value.remediation || [])
@@ -355,7 +409,10 @@ const documents = computed<Record<string, any>>(() => {
   return {}
 })
 
-const statusText = computed(() => String(props.record?.status || 'pending'))
+const statusText = computed(() => {
+  if (props.loading || props.error || !props.detailData) return '质控状态不可用'
+  return qcLinkUnavailable.value ? '质控关联待核实' : String(props.record?.status || 'pending')
+})
 const displayRecordId = computed(() => String(props.record?.record_id || props.record?.id || '-'))
 const currentIndexDisplay = computed(() => {
   if (!props.totalCount) {
@@ -365,6 +422,7 @@ const currentIndexDisplay = computed(() => {
 })
 
 const statusColor = computed(() => {
+  if (props.loading || props.error || !props.detailData || qcLinkUnavailable.value) return 'default'
   const map: Record<string, string> = {
     pending: 'orange',
     reviewing: 'blue',
@@ -400,34 +458,16 @@ const timelineColor = (status: string | undefined) => {
   return map[String(status || '').toLowerCase()] || 'blue'
 }
 
-const textPreview = (value: unknown) =>
-  String(value || '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 200)
-
-const documentPanels = computed(() => [
-  {
-    key: 'admission',
-    label: '入院记录',
-    preview: textPreview(documents.value.admissionNote || payload.value.admissionNote),
-  },
-  {
-    key: 'progress',
-    label: '病程记录',
-    preview: textPreview(documents.value.progressNote || payload.value.progressNote),
-  },
-  {
-    key: 'surgery',
-    label: '手术记录',
-    preview: textPreview(documents.value.surgeryNote || payload.value.surgeryNote),
-  },
-  {
-    key: 'discharge',
-    label: '出院记录',
-    preview: textPreview(documents.value.dischargeNote || payload.value.dischargeNote),
-  },
-])
+const rawDocumentPanels = computed(() => {
+  const rows = documents.value.raw_documents
+  if (!Array.isArray(rows)) return []
+  return rows.filter((row): row is Record<string, unknown> => Boolean(row && typeof row === 'object'))
+    .map((row, index) => ({
+      key: String(row.id || index),
+      title: String(row.document_title || row.title || row.document_type || `文书 ${index + 1}`),
+      content: String(row.content || ''),
+    }))
+})
 </script>
 
 <style scoped>

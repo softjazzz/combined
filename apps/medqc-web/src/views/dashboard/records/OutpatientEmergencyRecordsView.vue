@@ -76,27 +76,6 @@
             </a-select-option>
           </a-select>
 
-          <a-select
-            v-model:value="selectedStatus"
-            class="w-36 custom-select"
-            placeholder="处理状态"
-            :bordered="false"
-            allow-clear
-          >
-            <a-select-option value="pending">
-              待处理
-            </a-select-option>
-            <a-select-option value="reviewing">
-              审核中
-            </a-select-option>
-            <a-select-option value="approved">
-              已通过
-            </a-select-option>
-            <a-select-option value="rejected">
-              已驳回
-            </a-select-option>
-          </a-select>
-
           <a-range-picker
             v-model:value="dateRange"
             class="apple-picker !rounded-xl"
@@ -120,16 +99,14 @@
             批量查看详情
           </a-button>
           <a-button
-            :disabled="!selectedRowKeys.length"
+            disabled
             class="!rounded-xl"
-            @click="handleBatchUrge"
           >
             批量催办
           </a-button>
           <a-button
-            :disabled="!selectedRowKeys.length"
+            disabled
             class="!rounded-xl"
-            @click="handleBatchApprove"
           >
             批量通过
           </a-button>
@@ -141,8 +118,8 @@
             批量派发整改
           </a-button>
           <a-button
+            disabled
             class="!rounded-xl"
-            @click="handleExportDefects"
           >
             导出缺陷
           </a-button>
@@ -155,6 +132,13 @@
             </a-button>
           </a-tooltip>
         </div>
+      </div>
+
+      <div
+        role="status"
+        class="px-6 py-2 text-xs text-slate-600 bg-slate-50 border-b border-slate-100"
+      >
+        门急诊质控关联待核实，状态、得分、缺陷及其审核、催办、导出暂不可用；病历文书仍可查看。
       </div>
 
       <div
@@ -223,9 +207,10 @@
               </a>
             </template>
             <template v-if="column.key === 'status'">
-              <a-tag :color="getStatusColor(record.status)">
-                {{ getStatusText(record.status) }}
-              </a-tag>
+              <span class="text-slate-500">质控关联待核实</span>
+            </template>
+            <template v-if="column.key === 'score' || column.key === 'defect_count'">
+              <span class="text-slate-500">暂不可用</span>
             </template>
             <template v-if="column.key === 'actions'">
               <div class="flex items-center gap-2">
@@ -235,13 +220,13 @@
                   class="!px-0"
                   @click="openDetail(record as AdminRecordItem)"
                 >
-                  质控详情
+                  查看病历文书
                 </a-button>
                 <a-button
                   type="link"
                   size="small"
                   class="!px-0"
-                  @click="handleRecordUrge(record as AdminRecordItem)"
+                  disabled
                 >
                   催办
                 </a-button>
@@ -249,7 +234,7 @@
                   type="link"
                   size="small"
                   class="!px-0"
-                  @click="handleRecordApprove(record as AdminRecordItem)"
+                  disabled
                 >
                   通过
                 </a-button>
@@ -265,12 +250,16 @@
       :loading="detailLoading"
       :record="detailRecord"
       :detail-data="detailData"
+      :error="detailError"
       :remediation-enabled="remediationAssignmentEnabled"
-      @close="detailVisible = false"
-      @urge-defect="handleUrgeDefect"
-      @approve-defect="handleApproveDefect"
-      @reject-defect="handleRejectDefect"
-      @assign-remediation="handleAssignRemediationForDefect"
+      :has-prev="detailIndex > 0"
+      :has-next="detailIndex >= 0 && detailIndex < records.length - 1"
+      :current-index="detailIndex + 1"
+      :total-count="records.length"
+      @close="closeDetail"
+      @retry="retryDetail"
+      @navigate-prev="navigateDetail(-1)"
+      @navigate-next="navigateDetail(1)"
     />
   </div>
 </template>
@@ -282,15 +271,9 @@ import type { TableColumnsType, TableProps } from 'ant-design-vue'
 import type { Dayjs } from 'dayjs'
 import { ReloadOutlined, SearchOutlined } from '@ant-design/icons-vue'
 import {
-  approveDefect,
-  batchDefectAction,
-  exportDefects,
-  getDefectList,
   getDepartmentList,
   getRecordDetail,
   getOutpatientEmergencyRecordList,
-  rejectDefect,
-  urgeDefect,
   type AdminRecordItem,
 } from '@/api/qcAdmin'
 import OutpatientEmergencyDetailDrawer from './OutpatientEmergencyDetailDrawer.vue'
@@ -300,7 +283,6 @@ const listError = ref('')
 let recordListRequestSequence = 0
 const searchKeyword = ref('')
 const selectedDepartment = ref<string | undefined>(undefined)
-const selectedStatus = ref<string | undefined>(undefined)
 type DateRange = [Dayjs, Dayjs] | null
 const dateRange = ref<DateRange>(null)
 const records = ref<AdminRecordItem[]>([])
@@ -310,6 +292,11 @@ const detailVisible = ref(false)
 const detailLoading = ref(false)
 const detailRecord = ref<AdminRecordItem | null>(null)
 const detailData = ref<Record<string, unknown> | null>(null)
+const detailError = ref('')
+let detailRequestSequence = 0
+const detailIndex = computed(() =>
+  records.value.findIndex((record) => record.id === detailRecord.value?.id),
+)
 
 const pagination = ref({
   current: 1,
@@ -347,31 +334,11 @@ const columns: TableColumnsType<AdminRecordItem> = [
   { title: '就诊类型', dataIndex: 'visit_type', key: 'visit_type', width: 100 },
   { title: '科室', dataIndex: 'department', key: 'department', width: 120 },
   { title: '就诊时间', dataIndex: 'visit_date', key: 'visit_date', width: 160 },
-  { title: '状态', dataIndex: 'status', key: 'status', width: 120 },
+  { title: '质控状态', key: 'status', width: 150 },
   { title: '得分', dataIndex: 'score', key: 'score', width: 100 },
   { title: '缺陷数', dataIndex: 'defect_count', key: 'defect_count', width: 100 },
-  { title: '操作', key: 'actions', width: 120, fixed: 'right' as const },
+  { title: '操作', key: 'actions', width: 220, fixed: 'right' as const },
 ]
-
-const getStatusText = (status: string) => {
-  const map: Record<string, string> = {
-    pending: '待处理',
-    reviewing: '审核中',
-    approved: '已通过',
-    rejected: '已驳回',
-  }
-  return map[status] || status || '-'
-}
-
-const getStatusColor = (status: string) => {
-  const map: Record<string, string> = {
-    pending: 'orange',
-    reviewing: 'blue',
-    approved: 'green',
-    rejected: 'red',
-  }
-  return map[status] || 'default'
-}
 
 const loadDepartments = async () => {
   const res = await getDepartmentList()
@@ -388,7 +355,6 @@ const fetchRecords = async () => {
     const res = await getOutpatientEmergencyRecordList({
       keyword: searchKeyword.value || undefined,
       department: selectedDepartment.value,
-      status: selectedStatus.value,
       start_date: dateRange.value?.[0]?.format?.('YYYY-MM-DD'),
       end_date: dateRange.value?.[1]?.format?.('YYYY-MM-DD'),
       page: pagination.value.current,
@@ -430,7 +396,6 @@ const handleSearch = () => {
 const resetFilters = () => {
   searchKeyword.value = ''
   selectedDepartment.value = undefined
-  selectedStatus.value = undefined
   dateRange.value = null
   pagination.value.current = 1
   selectedRowKeys.value = []
@@ -453,116 +418,44 @@ const openDetail = async (record: AdminRecordItem) => {
     return
   }
 
+  const requestSequence = ++detailRequestSequence
   detailRecord.value = record
   detailData.value = null
+  detailError.value = ''
   detailVisible.value = true
   detailLoading.value = true
   try {
     const res = await getRecordDetail(recordId)
-    if (res.success) {
-      detailData.value = (res.data as Record<string, unknown>) || {}
+    if (requestSequence !== detailRequestSequence) return
+    if (res.success && res.data && typeof res.data === 'object') {
+      detailData.value = res.data as Record<string, unknown>
       return
     }
-    message.warning(res.message || '加载质控详情失败')
+    detailError.value = res.message || '加载质控详情失败，请重试'
   } catch {
-    message.error('加载质控详情失败')
+    if (requestSequence === detailRequestSequence) {
+      detailError.value = '加载质控详情失败，请重试'
+    }
   } finally {
-    detailLoading.value = false
+    if (requestSequence === detailRequestSequence) detailLoading.value = false
   }
 }
 
-const queryDefectIdsForRecord = async (record: AdminRecordItem): Promise<string[]> => {
-  const recordId = String(record.record_id || '').trim()
-  if (!recordId) {
-    return []
-  }
-  const res = await getDefectList({ record_id: recordId, page: 1, page_size: 200 })
-  if (!res.success || !res.data) {
-    return []
-  }
-  return (res.data.items || []).map((item) => String(item.id || '').trim()).filter(Boolean)
+const retryDetail = () => {
+  if (detailRecord.value) void openDetail(detailRecord.value)
 }
 
-const queryDefectIdsForSelectedRecords = async (): Promise<string[]> => {
-  const all = await Promise.all(
-    selectedRecords.value.map((record) => queryDefectIdsForRecord(record)),
-  )
-  return Array.from(new Set(all.flat()))
+const closeDetail = () => {
+  detailRequestSequence += 1
+  detailVisible.value = false
+  detailLoading.value = false
+  detailData.value = null
+  detailError.value = ''
 }
 
-const handleUrgeDefect = async (defectId: string) => {
-  const res = await urgeDefect(defectId, { message: '请尽快完成门急诊病历整改' })
-  if (res.success) {
-    message.success('催办成功')
-    return
-  }
-  message.error(res.message || '催办失败')
-}
-
-const handleApproveDefect = async (defectId: string) => {
-  const res = await approveDefect(defectId, '门急诊质控审核通过')
-  if (res.success) {
-    message.success('审核通过')
-    handleRefresh()
-    return
-  }
-  message.error(res.message || '审核通过失败')
-}
-
-const handleRejectDefect = async (defectId: string) => {
-  const res = await rejectDefect(defectId, {
-    reason: '门急诊病历证据不足，需补充说明',
-    suggestion: '请补充缺陷定位证据后重新提交',
-  })
-  if (res.success) {
-    message.success('已标记审核存疑')
-    handleRefresh()
-    return
-  }
-  message.error(res.message || '操作失败')
-}
-
-const handleAssignRemediationForDefect = async (defectId: string) => {
-  void defectId
-  message.warning(remediationAssignmentHint)
-}
-
-const handleRecordUrge = async (record: AdminRecordItem) => {
-  const defectIds = await queryDefectIdsForRecord(record)
-  if (!defectIds.length) {
-    message.warning('该病历暂无可催办缺陷')
-    return
-  }
-  const res = await batchDefectAction({
-    defect_ids: defectIds,
-    action: 'urge',
-    message: '请尽快完成门急诊病历整改',
-  })
-  if (res.success) {
-    message.success(`已催办 ${defectIds.length} 条缺陷`)
-    handleRefresh()
-    return
-  }
-  message.error(res.message || '催办失败')
-}
-
-const handleRecordApprove = async (record: AdminRecordItem) => {
-  const defectIds = await queryDefectIdsForRecord(record)
-  if (!defectIds.length) {
-    message.warning('该病历暂无可审核缺陷')
-    return
-  }
-  const res = await batchDefectAction({
-    defect_ids: defectIds,
-    action: 'approve',
-    message: '门急诊病历批量审核通过',
-  })
-  if (res.success) {
-    message.success(`已通过 ${defectIds.length} 条缺陷`)
-    handleRefresh()
-    return
-  }
-  message.error(res.message || '批量通过失败')
+const navigateDetail = (offset: number) => {
+  const nextRecord = records.value[detailIndex.value + offset]
+  if (nextRecord) void openDetail(nextRecord)
 }
 
 const openFirstSelectedDetail = async () => {
@@ -572,62 +465,8 @@ const openFirstSelectedDetail = async () => {
   await openDetail(selectedRecords.value[0])
 }
 
-const handleBatchUrge = async () => {
-  const defectIds = await queryDefectIdsForSelectedRecords()
-  if (!defectIds.length) {
-    message.warning('所选病历暂无可催办缺陷')
-    return
-  }
-  const res = await batchDefectAction({
-    defect_ids: defectIds,
-    action: 'urge',
-    message: '请尽快完成门急诊病历整改',
-  })
-  if (res.success) {
-    message.success(`批量催办成功，共 ${defectIds.length} 条缺陷`)
-    selectedRowKeys.value = []
-    handleRefresh()
-    return
-  }
-  message.error(res.message || '批量催办失败')
-}
-
-const handleBatchApprove = async () => {
-  const defectIds = await queryDefectIdsForSelectedRecords()
-  if (!defectIds.length) {
-    message.warning('所选病历暂无可审核缺陷')
-    return
-  }
-  const res = await batchDefectAction({
-    defect_ids: defectIds,
-    action: 'approve',
-    message: '门急诊病历批量审核通过',
-  })
-  if (res.success) {
-    message.success(`批量通过成功，共 ${defectIds.length} 条缺陷`)
-    selectedRowKeys.value = []
-    handleRefresh()
-    return
-  }
-  message.error(res.message || '批量通过失败')
-}
-
 const handleBatchAssignRemediation = async () => {
   message.warning(remediationAssignmentHint)
-}
-
-const handleExportDefects = async () => {
-  const res = await exportDefects({
-    department: selectedDepartment.value,
-    status: selectedStatus.value,
-    start_date: dateRange.value?.[0]?.format?.('YYYY-MM-DD'),
-    end_date: dateRange.value?.[1]?.format?.('YYYY-MM-DD'),
-  })
-  if (res.success) {
-    message.success('缺陷导出成功')
-    return
-  }
-  message.error(res.message || '缺陷导出失败')
 }
 
 const handleTableChange = (pag: { current?: number; pageSize?: number }) => {
@@ -636,7 +475,7 @@ const handleTableChange = (pag: { current?: number; pageSize?: number }) => {
   fetchRecords()
 }
 
-watch([selectedDepartment, selectedStatus, dateRange], () => {
+watch([selectedDepartment, dateRange], () => {
   pagination.value.current = 1
   fetchRecords()
 })

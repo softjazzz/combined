@@ -920,11 +920,8 @@ async def get_record_qc_detail(
       exists: bool
     }
     """
-    supabase = get_supabase()
-    settings = get_settings()
-
     payload: Dict[str, Any] = {
-        "record": {"id": record_id, "record_id": record_id},
+        "record": {},
         "defects": [],
         "review_items": [],
         "review_job": None,
@@ -944,133 +941,64 @@ async def get_record_qc_detail(
         "progressNote": "",
         "surgeryNote": "",
         "documents_tree": [],
-        "exists": False,
+        "exists": True,
+        "qc_data_status": "unavailable_identity_contract",
     }
 
     try:
-        if supabase:
-            record_row = None
-            try:
-                rec_resp = await async_execute(
-                    supabase.table(settings.RECORDS_TABLE).select("*").eq("id", record_id).limit(1)
-                )
-                record_rows = list(getattr(rec_resp, "data", None) or [])
-                if record_rows:
-                    record_row = record_rows[0]
-                else:
-                    rec_resp_by_record_id = await async_execute(
-                        supabase.table(settings.RECORDS_TABLE).select("*").eq("record_id", record_id).limit(1)
-                    )
-                    by_record_id_rows = list(getattr(rec_resp_by_record_id, "data", None) or [])
-                    if by_record_id_rows:
-                        record_row = by_record_id_rows[0]
-            except Exception as exc:
-                logger.warning("查询病历基础信息失败: %s", exc)
+        supabase = get_supabase()
+        if supabase is None:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="病历详情数据源不可用")
 
-            if record_row:
-                normalized = _normalize_outpatient_item(record_row)
-                payload["record"] = {**normalized, **record_row}
-                payload["exists"] = True
-
-            defect_ids: List[str] = []
-            try:
-                defects_resp = await async_execute(
-                    supabase.table("qc_defects").select("*").eq("record_id", record_id).limit(300)
-                )
-                defects = list(getattr(defects_resp, "data", None) or [])
-                payload["defects"] = defects
-                defect_ids = [str(d.get("id")) for d in defects if d.get("id")]
-                if defects:
-                    payload["exists"] = True
-            except Exception as exc:
-                logger.warning("查询缺陷列表失败: %s", exc)
-
-            try:
-                remediation_resp = await async_execute(
-                    supabase.table("qc_remediation_tasks").select("*").eq("record_id", record_id).limit(300)
-                )
-                remediation = list(getattr(remediation_resp, "data", None) or [])
-                payload["remediation"] = remediation
-                if remediation:
-                    payload["exists"] = True
-            except Exception as exc:
-                logger.warning("查询整改任务失败: %s", exc)
-
-            try:
-                appeals_resp = await async_execute(
-                    supabase.table("qc_appeals").select("*").eq("record_id", record_id).limit(300)
-                )
-                appeals = list(getattr(appeals_resp, "data", None) or [])
-                payload["appeals"] = appeals
-                if appeals:
-                    payload["exists"] = True
-            except Exception as exc:
-                logger.warning("查询申诉记录失败: %s", exc)
-
-            if defect_ids:
-                try:
-                    history_resp = await async_execute(
-                        supabase.table("qc_defect_history").select("*").in_("defect_id", defect_ids).limit(500)
-                    )
-                    payload["operation_history"] = list(getattr(history_resp, "data", None) or [])
-                except Exception as exc:
-                    logger.warning("查询操作历史失败: %s", exc)
-
-            try:
-                docs_resp = await async_execute(
-                    supabase.table(settings.DOCUMENTS_TABLE)
-                    .select("*")
-                    .eq("record_id", record_id)
-                    .order("sort_order")
-                    .limit(200)
-                )
-                docs = list(getattr(docs_resp, "data", None) or [])
-                _apply_document_payload(payload["documents"], docs)
-                if docs:
-                    payload["exists"] = True
-            except Exception as exc:
-                logger.warning("查询文书内容失败: %s", exc)
-        else:
-            record = medical_records_db.get(record_id)
-            if record:
-                payload["record"] = {**payload["record"], **record}
-                payload["admissionNote"] = str(record.get("content") or "")
-                payload["documents"]["admissionNote"] = payload["admissionNote"]
-                payload["exists"] = True
-
-        bundle_payload = _load_bundle_payload_for_record(record_id)
-        bundle_docs = list(bundle_payload.get("documents") or [])
-        if _should_prefer_bundle_documents(payload["documents"]["raw_documents"], bundle_docs):
-            _apply_document_payload(
-                payload["documents"],
-                bundle_docs,
-                list(bundle_payload.get("documents_tree") or []),
+        settings = get_settings()
+        matching_records: Dict[str, Dict[str, Any]] = {}
+        for key in ("id", "record_id"):
+            rec_resp = await async_execute(
+                supabase.table(settings.RECORDS_TABLE).select("*").eq(key, record_id).limit(2)
             )
-            payload["exists"] = True
+            for row in list(getattr(rec_resp, "data", None) or []):
+                if not isinstance(row, dict) or not row.get("id"):
+                    raise ValueError("invalid medical record identity")
+                matching_records[str(row["id"])] = row
 
-        if not payload["defects"]:
-            review_payload = _load_review_items_from_latest_batch(record_id)
-            payload["review_items"] = list(review_payload.get("review_items") or [])
-            payload["review_job"] = review_payload.get("review_job")
-            if payload["review_items"]:
-                payload["exists"] = True
+        if not matching_records:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="病历不存在")
+        if len(matching_records) != 1:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="病历标识不唯一")
+
+        record_row = next(iter(matching_records.values()))
+        normalized = _normalize_outpatient_item(record_row)
+        payload["record"] = {**normalized, **record_row}
+        payload["record"].pop("status", None)
+        payload["record"].pop("defect_count", None)
+
+        docs_resp = await async_execute(
+            supabase.table(settings.DOCUMENTS_TABLE)
+            .select("*")
+            .eq("record_id", record_row["id"])
+            .order("sort_order")
+            .limit(200)
+        )
+        docs = list(getattr(docs_resp, "data", None) or [])
+        _apply_document_payload(payload["documents"], docs)
 
         payload["admissionNote"] = payload["documents"].get("admissionNote", "")
         payload["dischargeNote"] = payload["documents"].get("dischargeNote", "")
         payload["progressNote"] = payload["documents"].get("progressNote", "")
         payload["surgeryNote"] = payload["documents"].get("surgeryNote", "")
         payload["documents_tree"] = payload["documents"].get("documents_tree", [])
-        payload["record"]["defect_count"] = len(payload.get("defects", [])) or len(payload.get("review_items", []))
-
         return success_response(
             data=payload,
             message="获取病历质控详情成功",
             trace_id=get_trace_id(request),
         )
-    except Exception as exc:
+    except HTTPException:
+        raise
+    except Exception:
+        logger.warning("查询病历质控详情失败")
         raise HTTPException(
-            status_code=StatusCode.INTERNAL_SERVER_ERROR,
-            detail=f"获取病历质控详情失败: {exc}",
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="病历详情数据源不可用",
         )
 
 

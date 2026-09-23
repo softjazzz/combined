@@ -430,14 +430,10 @@ export async function reAnalyzeQCTask(taskId: string) {
 
 /** 获取单病历详情（文书内容，用于联审 Drawer） */
 export async function getRecordDetail(recordId: string) {
-  const detailRes = await request<any>({
+  return request<any>({
     method: 'GET',
     url: `${RECORDS_URL}/${recordId}/qc-detail`,
   })
-  if (detailRes.success) {
-    return detailRes
-  }
-  return request<any>({ method: 'GET', url: `${RECORDS_URL}/${recordId}` })
 }
 
 // ============= P1: 整改闭环 =============
