@@ -7,6 +7,7 @@ import json
 
 import pytest
 
+from app.services.custom_qc_workspace_service import project_customer_safe_result_item
 from app.services.luxian_0609 import native_tumor_pathology_execution as tumor
 from app.services.luxian_0609.decision_reducer import reduce_luxian_0609_rule_decision
 from app.services.luxian_0609.evidence_snapshot_provider import (
@@ -23,6 +24,10 @@ from app.services.luxian_0609.source_evidence_reader import SourceEvidenceQueryE
 from app.services.luxian_0609.tumor_pathology_result_mapping import (
     safe_tumor_pathology_customer_display_facts,
     tumor_pathology_customer_fact_status_is_valid,
+)
+from app.services.qc_workspace.canonical_result_store import (
+    safe_customer_display_facts,
+    validated_customer_explanation,
 )
 
 
@@ -187,6 +192,46 @@ def test_safe_projection_strips_raw_ids_and_rejects_malformed_counts_and_refs():
         malformed = deepcopy(raw)
         mutate(malformed)
         assert safe_tumor_pathology_customer_display_facts(rule_id=RULE_ID, raw=malformed) is None
+
+
+@pytest.mark.parametrize(
+    ("masters", "reports", "expected_status"),
+    [
+        ([_master()], [_report()], "compliant"),
+        ([_master(record_content="已完成病理检查。")], [], "data_gap"),
+    ],
+)
+def test_pathology_nonempty_events_survive_safe_fact_save_and_read(
+    masters, reports, expected_status
+):
+    outcome = _evaluate(masters, reports)
+    assert outcome.status == expected_status
+    safe = safe_tumor_pathology_customer_display_facts(
+        rule_id=RULE_ID, raw=outcome.display_facts
+    )
+    assert safe is not None and safe["events"]
+    assert safe_tumor_pathology_customer_display_facts(rule_id=RULE_ID, raw=safe) == safe
+    item = {"customer_display_facts": safe}
+    assert safe_customer_display_facts(item, rule_id=RULE_ID) == safe
+    assert validated_customer_explanation(
+        item, rule_id=RULE_ID, status=expected_status
+    ) == (safe, [])
+    projected = project_customer_safe_result_item(
+        {"rule_id": RULE_ID, "status": expected_status,
+         "result_status": expected_status, "display_status": expected_status,
+         "is_compliant": expected_status == "compliant",
+         "customer_display_facts": safe},
+        hmac_key="unit-test-key",
+    )
+    assert projected["customer_display_facts"] == safe
+    assert "fact_refs" not in repr(safe)
+
+    for extra in ({"fact_refs": ["invalid-ref"]}, {"patient_id": "private"}):
+        forged = deepcopy(safe)
+        forged["events"][0].update(extra)
+        assert safe_tumor_pathology_customer_display_facts(
+            rule_id=RULE_ID, raw=forged
+        ) is None
 
 
 def _session(master=(), report=(), *, truncated=None, failed=None, extra=None):

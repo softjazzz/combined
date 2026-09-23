@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from copy import deepcopy
+
 import pytest
 
 from app.services.luxian_0609.basic_timeliness_customer_projection import (
@@ -12,6 +14,11 @@ from app.services.luxian_0609.canonical_result_finalizer import (
     finalizer_owns_executor_customer_display_facts,
     finalizer_requires_public_fact_ref_evidence,
 )
+from app.services.qc_workspace.canonical_result_store import (
+    safe_customer_display_facts,
+    validated_customer_explanation,
+)
+from app.services.custom_qc_workspace_service import project_customer_safe_result_item
 
 
 _WITHIN_FACTS_BY_RULE = {
@@ -137,6 +144,47 @@ def test_all_basic_timeliness_rules_have_safe_compliant_fact_shape(rule_id: str)
         status="compliant",
         safe_facts=safe_facts,
     )
+
+
+def test_rescue_missing_participant_title_survives_safe_fact_save_and_read():
+    rule_id = "LX0609-09-01-02"
+    raw = deepcopy(_WITHIN_FACTS_BY_RULE[rule_id])
+    raw["content_state"] = "non_compliant"
+    raw["missing_fields"] = ["participant_titles"]
+    raw["rescue_content_events"][0]["missing_fields"] = ["participant_titles"]
+    raw["rescue_content_events"][0]["field_facts"]["participant_titles"] = {
+        "state": "absent", "start": None, "end": None, "quote": "",
+    }
+
+    safe = safe_basic_timeliness_customer_display_facts(rule_id=rule_id, raw=raw)
+    assert safe is not None
+    assert safe_basic_timeliness_customer_display_facts(rule_id=rule_id, raw=safe) == safe
+    item = {"customer_display_facts": safe}
+    assert safe_customer_display_facts(item, rule_id=rule_id) == safe
+    assert validated_customer_explanation(
+        item, rule_id=rule_id, status="non_compliant"
+    ) == (safe, [])
+    projected = project_customer_safe_result_item(
+        {"rule_id": rule_id, "status": "non_compliant", "result_status": "non_compliant",
+         "display_status": "non_compliant", "is_compliant": False,
+         "customer_display_facts": safe},
+        hmac_key="unit-test-key",
+    )
+    assert projected["customer_display_facts"] == safe
+    assert "document_ref" not in repr(safe)
+    assert "source_document_id" not in repr(safe)
+    assert "quote" not in repr(safe)
+
+    for extra in (
+        {"source_document_id": "RESCUE-1"},
+        {"document_ref": "a" * 64},
+    ):
+        forged = deepcopy(safe)
+        forged["rescue_content_events"][0].update(extra)
+        assert safe_basic_timeliness_customer_display_facts(rule_id=rule_id, raw=forged) is None
+    forged = deepcopy(safe)
+    forged["rescue_content_events"][0]["field_facts"]["participant_titles"]["quote"] = "伪造原文"
+    assert safe_basic_timeliness_customer_display_facts(rule_id=rule_id, raw=forged) is None
 
 
 @pytest.mark.parametrize("rule_id", sorted(BASIC_TIMELINESS_CUSTOMER_RULE_IDS))

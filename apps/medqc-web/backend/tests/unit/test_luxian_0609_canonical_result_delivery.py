@@ -9,7 +9,9 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from sqlalchemy import MetaData, create_engine
 from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm import Session
 
 import app.services.custom_qc_workspace_service as workspace_module
 from app.services.custom_qc_workspace_service import (
@@ -42,6 +44,7 @@ from app.services.sample_validation_rule_sets import (
     LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS,
 )
 from app.services.qc_workspace.canonical_result_store import (
+    CanonicalResultStore,
     canonical_envelope_items_are_consistent,
     envelope_item_from_rule_result,
     safe_customer_display_facts,
@@ -1943,6 +1946,102 @@ def test_writer_persists_finalizer_validated_customer_facts_unchanged():
     envelope = json.loads(session.statements[-1].compile().params["envelope_json"])
     assert expected_facts is not None
     assert envelope["items"][0]["customer_display_facts"] == expected_facts
+
+
+def test_rescue_non_compliant_safe_facts_survive_canonical_write_and_task_projection():
+    fields = (
+        "condition_change", "rescue_time", "rescue_measures", "rescue_outcome",
+        "participant_names", "participant_titles",
+    )
+    safe_facts = {
+        "target_document": "rescue_record",
+        "source_label": "抢救记录",
+        "content_state": "non_compliant",
+        "required_fields": list(fields),
+        "missing_fields": ["participant_titles"],
+        "unknown_fields": [],
+        "rescue_content_events": [{
+            "event_index": 1,
+            "record_time": "2026-09-01T10:00:00+08:00",
+            "body_scope": "complete",
+            "field_facts": {
+                field: {"state": "absent" if field == "participant_titles" else "present"}
+                for field in fields
+            },
+            "missing_fields": ["participant_titles"],
+            "unknown_fields": [],
+        }],
+        "failure_kind": "",
+    }
+    item = {
+        "record_id": "visit-1",
+        "visit_id": "visit-1",
+        "institute_id": "inst-1",
+        "patient_id": "patient-1",
+        "rule_id": "LX0609-09-01-02",
+        "status": "non_compliant",
+        "result_status": "non_compliant",
+        "display_status": "non_compliant",
+        "is_compliant": False,
+        "reason_code": "requirement_violated",
+        "customer_display_facts": safe_facts,
+    }
+    session = _WriteSession()
+    CustomQCWorkspaceService()._write_record_result_envelopes(
+        session,
+        job_row={
+            "id": "job-current",
+            "created_by": "reviewer-a",
+            "filters_json": json.dumps({
+                "rule_set_key": "luxian_0609_qc_v1",
+                "rule_set_version": "2026-06-09",
+            }),
+        },
+        items=[item],
+        now=datetime(2026, 9, 1, 10, 0, 0),
+    )
+    envelope = json.loads(session.statements[-1].compile().params["envelope_json"])
+    saved_item = envelope["items"][0]
+    assert saved_item["customer_display_facts"] == safe_facts
+    projected = project_customer_safe_result_item(saved_item, hmac_key="unit-test-key")
+    assert projected["customer_display_facts"] == safe_facts
+    assert projected["status"] == "non_compliant"
+
+    # 用隔离的内存库执行真实 INSERT/SELECT，覆盖任务完成后的读回路径。
+    table = workspace_module._record_result_envelopes_table().to_metadata(
+        MetaData(), schema=None
+    )
+    engine = create_engine("sqlite://")
+    table.metadata.create_all(engine)
+    store = CanonicalResultStore(table)
+    with Session(engine) as db_session:
+        store.replace_for_job(
+            db_session,
+            job_row={
+                "id": "job-current",
+                "created_by": "reviewer-a",
+                "filters_json": json.dumps({
+                    "rule_set_key": "luxian_0609_qc_v1",
+                    "rule_set_version": "2026-06-09",
+                }),
+            },
+            items=[item],
+            now=datetime(2026, 9, 1, 10, 0, 0),
+            projector=lambda raw: envelope_item_from_rule_result(raw, hmac_key="unit-test-key"),
+            projection_key="unit-test-key",
+        )
+        db_session.commit()
+        loaded = store.load_selected(
+            db_session,
+            root_job_id="job-current",
+            institute_id="inst-1",
+            patient_id="patient-1",
+            visit_id="visit-1",
+            rule_set_key="luxian_0609_qc_v1",
+            rule_set_version="2026-06-09",
+        )
+    engine.dispose()
+    assert loaded["items"][0]["customer_display_facts"] == safe_facts
 
 
 def test_writer_marks_envelope_as_canonical_straight_through():

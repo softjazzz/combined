@@ -190,18 +190,22 @@ def _controlled_rescue_content_facts(raw: Mapping[str, Any]) -> dict[str, Any] |
         "body_limit_exceeded",
         "blank_or_placeholder",
     }
+    raw_event_keys = {
+        "event_index", "document_ref", "source_document_id", "record_time",
+        "body_scope", "field_facts", "missing_fields", "unknown_fields",
+    }
+    safe_event_keys = raw_event_keys - {"document_ref", "source_document_id"}
+    event_shape: str | None = None
     for expected_index, event in enumerate(events, start=1):
-        if not isinstance(event, Mapping) or set(event) != {
-            "event_index",
-            "document_ref",
-            "source_document_id",
-            "record_time",
-            "body_scope",
-            "field_facts",
-            "missing_fields",
-            "unknown_fields",
-        }:
+        if not isinstance(event, Mapping):
             return None
+        current_shape = (
+            "raw" if set(event) == raw_event_keys else
+            "safe" if set(event) == safe_event_keys else None
+        )
+        if current_shape is None or (event_shape is not None and current_shape != event_shape):
+            return None
+        event_shape = current_shape
         if event.get("event_index") != expected_index or event.get("body_scope") not in allowed_scopes:
             return None
         record_time = event.get("record_time")
@@ -215,7 +219,11 @@ def _controlled_rescue_content_facts(raw: Mapping[str, Any]) -> dict[str, Any] |
         safe_fields: dict[str, dict[str, str]] = {}
         for key in RESCUE_CONTENT_FIELDS:
             atom = fields[key]
-            if not isinstance(atom, Mapping) or set(atom) != {"state", "start", "end", "quote"}:
+            expected_atom_keys = (
+                {"state", "start", "end", "quote"}
+                if current_shape == "raw" else {"state"}
+            )
+            if not isinstance(atom, Mapping) or set(atom) != expected_atom_keys:
                 return None
             atom_state = atom.get("state")
             if atom_state not in {"present", "absent", "unknown"}:

@@ -88,16 +88,34 @@ def _safe_report_completeness(raw: Mapping[str, Any]) -> dict[str, Any] | None:
             return None
         safe_sources.append({key: item[key] for key in ("source", "state", "completeness")})
     safe_events: list[dict[str, Any]] = []
+    safe_event_keys = {
+        "event_index", "status", "reason_code", "execution_confirmed",
+        "report_count",
+    }
+    event_shape: str | None = None
     for index, item in enumerate(events, start=1):
+        if not isinstance(item, Mapping):
+            return None
+        current_shape = (
+            "safe" if set(item) == safe_event_keys else
+            "raw" if "fact_refs" in item else None
+        )
+        if current_shape is None or (event_shape is not None and current_shape != event_shape):
+            return None
+        event_shape = current_shape
         if (
-            not isinstance(item, Mapping)
-            or type(item.get("event_index")) is not int or item["event_index"] != index
+            type(item.get("event_index")) is not int or item["event_index"] != index
             or item.get("status") not in _COMPLETENESS_STATUSES
             or item.get("reason_code") not in _COMPLETENESS_EVENT_REASONS
             or type(item.get("execution_confirmed")) is not bool
             or type(item.get("report_count")) is not int or item["report_count"] not in {0, 1}
-            or not isinstance(item.get("fact_refs"), list)
-            or any(not isinstance(ref, str) or _DOCUMENT_REF.fullmatch(ref) is None for ref in item["fact_refs"])
+            or (current_shape == "raw" and (
+                not isinstance(item.get("fact_refs"), list)
+                or any(
+                    not isinstance(ref, str) or _DOCUMENT_REF.fullmatch(ref) is None
+                    for ref in item["fact_refs"]
+                )
+            ))
         ):
             return None
         safe_events.append({
