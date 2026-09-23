@@ -287,7 +287,9 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.find('.result-detail').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('完整判定说明')
     expect(wrapper.text()).not.toContain('关键证据')
-    expect(wrapper.text()).not.toContain('处理建议')
+    expect(wrapper.text()).toContain('修改建议')
+    expect(wrapper.text()).toContain(items[0]!.suggestion)
+    expect(wrapper.findAll('[data-testid="qc-remediation-suggestion"]')).toHaveLength(1)
 
     await ruleName.trigger('click')
 
@@ -296,13 +298,18 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.find('.result-detail').exists()).toBe(true)
     expect(wrapper.text()).toContain('完整判定说明')
     expect(wrapper.text()).toContain('关键证据')
-    expect(wrapper.text()).toContain('处理建议')
+    expect(wrapper.text()).toContain('修改建议')
+    expect(wrapper.text()).toContain(items[0]!.suggestion)
+    expect(wrapper.findAll('[data-testid="qc-remediation-suggestion"]')).toHaveLength(1)
 
     await ruleName.trigger('click')
 
     expect(trigger.attributes('aria-expanded')).toBe('false')
     expect(trigger.text()).not.toContain('查看详情')
     expect(wrapper.find('.result-detail').exists()).toBe(false)
+    expect(wrapper.text()).toContain('修改建议')
+    expect(wrapper.text()).toContain(items[0]!.suggestion)
+    expect(wrapper.findAll('[data-testid="qc-remediation-suggestion"]')).toHaveLength(1)
   })
 
   it('反馈入口位于卡片底部，点击只展开详情而不提交反馈', async () => {
@@ -912,8 +919,9 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.text()).toContain('医学分析')
     expect(wrapper.text()).toContain('模型分析 / 医学判断')
     expect(wrapper.text()).toContain('当前主诉缺少可区分第一诊断的特异性线索')
-    expect(wrapper.text()).toContain('处理建议')
-    expect(wrapper.text()).toContain('点击查看')
+    expect(wrapper.text()).toContain('修改建议')
+    expect(wrapper.text()).toContain(items[0]!.suggestion)
+    expect(wrapper.text()).toContain('定位原文')
     expect(wrapper.find('[data-testid="single-record-detail-grid"]').exists()).toBe(true)
     expect(wrapper.get('[data-testid="single-record-evidence"]').classes()).toContain(
       'evidence-row',

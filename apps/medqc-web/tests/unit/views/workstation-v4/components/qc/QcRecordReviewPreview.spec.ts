@@ -126,7 +126,7 @@ describe('QcRecordReviewPreview', () => {
     expect(wrapper.text()).not.toContain('定位成功')
   })
 
-  it('全文展开复用同一说明节点，建议独立折叠且完整分段', async () => {
+  it('全文展开复用同一说明节点，四段修改建议保持原文且不受展开影响', async () => {
     const data = payload()
     data.items[0].suggestion =
       '修改对象：会诊记录 需要补充：执行结果 推荐写法：依据事实记录 注意事项：不要倒签'
@@ -134,16 +134,50 @@ describe('QcRecordReviewPreview', () => {
     const wrapper = mount(QcRecordReviewPreview, { props: { row } })
     await flushPromises()
     const summary = wrapper.get('.item-summary').element
-    expect(wrapper.get('.suggestion-details').attributes('open')).toBeUndefined()
-    expect(wrapper.get('.suggestion-details summary').text()).toBe('处理建议')
-    expect(wrapper.findAll('.suggestion-content p')).toHaveLength(4)
+    const suggestion = wrapper.get('[data-testid="qc-remediation-suggestion"]')
+    expect(suggestion.get('.qc-remediation-title').text()).toBe('修改建议')
+    const sections = suggestion.findAll('.qc-remediation-section')
+    expect(sections).toHaveLength(4)
+    expect(sections.map((section) => section.get('dt').text())).toEqual([
+      '修改对象',
+      '需要补充',
+      '推荐写法',
+      '注意事项',
+    ])
+    expect(sections.map((section) => section.get('dd').text())).toEqual([
+      '会诊记录',
+      '执行结果',
+      '依据事实记录',
+      '不要倒签',
+    ])
     await wrapper.get('.expand-button').trigger('click')
     expect(wrapper.get('.item-summary').element).toBe(summary)
     expect(wrapper.get('.item-summary').classes()).toContain('is-expanded')
     expect(wrapper.text().split('后端已保存的结论')).toHaveLength(2)
-    expect(wrapper.get('.suggestion-content').text()).toContain('不要倒签')
+    expect(wrapper.get('[data-testid="qc-remediation-suggestion"]').element).toBe(suggestion.element)
+    expect(wrapper.findAll('[data-testid="qc-remediation-suggestion"]')).toHaveLength(1)
     await wrapper.get('.expand-button').trigger('click')
     expect(wrapper.get('.item-summary').classes()).not.toContain('is-expanded')
+    expect(wrapper.findAll('.qc-remediation-section')).toHaveLength(4)
+    wrapper.unmount()
+  })
+
+  it('空建议不展示建议区，旧纯文本建议原样保留', async () => {
+    const data = payload()
+    data.items[0].suggestion = '   '
+    getLatestResult.mockResolvedValue({ success: true, data })
+    const wrapper = mount(QcRecordReviewPreview, { props: { row } })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="qc-remediation-suggestion"]').exists()).toBe(false)
+
+    data.items[0].suggestion = '请依据病历事实补充签名，不要倒签。'
+    getLatestResult.mockResolvedValue({ success: true, data })
+    await wrapper.setProps({ refreshKey: 1 })
+    await flushPromises()
+    const suggestion = wrapper.get('[data-testid="qc-remediation-suggestion"]')
+    expect(suggestion.get('.qc-remediation-title').text()).toBe('修改建议')
+    expect(suggestion.get('.qc-remediation-plain').text()).toBe('请依据病历事实补充签名，不要倒签。')
+    expect(suggestion.find('.qc-remediation-sections').exists()).toBe(false)
     wrapper.unmount()
   })
 
