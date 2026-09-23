@@ -20,9 +20,14 @@ class SamplingConflict(ValueError):
     """任务状态或抽样快照不允许保存。"""
 
 
+class SamplingForbidden(PermissionError):
+    """当前用户不是任务创建人。"""
+
+
 _TASKS = table(
     "qc_tasks",
     column("id", String),
+    column("creator_id", String),
     column("scene", String),
     column("status", String),
     column("total_records", Integer),
@@ -240,7 +245,9 @@ def _build_task_records(task_id: str, sampled_records: list[dict[str, Any]]) -> 
     return task_records
 
 
-def save_task_sample(task_snapshot: dict[str, Any], sampled_records: list[dict[str, Any]]) -> dict[str, Any]:
+def save_task_sample(
+    task_snapshot: dict[str, Any], sampled_records: list[dict[str, Any]], *, actor_id: str
+) -> dict[str, Any]:
     """锁定任务并原子保存；现代结果的 record_id 是关联 UUID，不是病历 ID。"""
     task_id = task_snapshot.get("id")
     if not isinstance(task_id, str) or not task_id.strip():
@@ -255,6 +262,10 @@ def save_task_sample(task_snapshot: dict[str, Any], sampled_records: list[dict[s
             if row is None:
                 raise SamplingTaskNotFound(f"任务 {task_id} 不存在")
             locked_task = dict(row)
+            if not actor_id or not str(actor_id).strip() or locked_task.get("creator_id") != actor_id:
+                raise SamplingForbidden("仅任务创建人可执行抽样")
+            if task_snapshot.get("creator_id") != locked_task["creator_id"]:
+                raise SamplingConflict("任务创建人已变化，请刷新后重试")
             scene = locked_task.get("scene")
             if scene not in (None, "outpatient"):
                 raise SamplingConflict("场景抽样暂不可用：尚未接通可验证的病历场景范围")

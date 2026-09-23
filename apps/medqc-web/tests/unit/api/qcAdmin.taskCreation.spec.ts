@@ -18,6 +18,7 @@ function response<T>(data: T): AxiosResponse<T> {
 const params = {
   task_name: '运行病历任务',
   scene: 'running' as const,
+  rule_set_key: 'running-v1',
   sampling_method: 'count' as const,
   sampling_config: { total: 12 },
 }
@@ -49,7 +50,7 @@ describe('createQCTaskAndSample 两阶段合同', () => {
     expect(ApiService.requestRaw).toHaveBeenNthCalledWith(1, {
       method: 'POST',
       url: '/api/v1/tasks',
-      data: expect.objectContaining({ scene: 'running', sampling_config: { total: 12 } }),
+      data: expect.objectContaining({ scene: 'running', rule_set_key: 'running-v1', sampling_config: { total: 12 } }),
     })
     expect(ApiService.requestRaw).toHaveBeenNthCalledWith(2, {
       method: 'POST',

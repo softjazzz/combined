@@ -57,7 +57,7 @@
           <a-select
             v-model:value="formData.rule_set_key"
             data-testid="task-rule-set-select"
-            placeholder="请选择已发布规则集"
+            placeholder="请选择规则集"
             :loading="ruleSetsLoading"
             :disabled="!formData.scene || ruleSetsLoading || !!ruleSetsError || !matchingRuleSets.length"
             :options="ruleSetSelectOptions"
@@ -73,7 +73,7 @@
         <a-alert
           v-else-if="formData.scene && !ruleSetsLoading && !matchingRuleSets.length"
           type="warning"
-          :message="`${sceneLabel}暂无已发布的匹配规则集，当前不能创建任务。`"
+          :message="`${sceneLabel}暂无可用的匹配规则集，当前不能创建任务。`"
           show-icon
           class="mb-4"
         />
@@ -654,7 +654,7 @@ const handleSubmit = async () => {
     return
   }
   if (!matchingRuleSets.value.length) {
-    message.warning(`${sceneLabel.value}暂无已发布的匹配规则集，当前不能创建任务`)
+    message.warning(`${sceneLabel.value}暂无可用的匹配规则集，当前不能创建任务`)
     return
   }
   if (!selectedRuleSetIsValid.value || !formData.value.rule_set_key) {

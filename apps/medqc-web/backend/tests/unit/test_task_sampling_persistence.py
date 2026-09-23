@@ -11,6 +11,10 @@ from sqlalchemy.orm import sessionmaker
 from app.services import task_sampling_persistence as persistence
 
 
+def save_sample(snapshot, records, *, actor_id="qc-user"):
+    return persistence.save_task_sample(snapshot, records, actor_id=actor_id)
+
+
 @pytest.fixture
 def database(monkeypatch):
     engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
@@ -19,6 +23,7 @@ def database(monkeypatch):
         "qc_tasks",
         metadata,
         Column("id", String, primary_key=True),
+        Column("creator_id", String),
         Column("scene", String),
         Column("status", String, nullable=False),
         Column("total_records", Integer, nullable=False, default=0),
@@ -51,6 +56,7 @@ def database(monkeypatch):
 def task_snapshot(task_id: str = "task-1", **overrides):
     task = {
         "id": task_id,
+        "creator_id": "qc-user",
         "scene": None,
         "status": "draft",
         "total_records": 0,
@@ -101,7 +107,7 @@ def test_successfully_saves_records_and_task_state(database):
     snapshot = task_snapshot()
     insert_task(engine, tasks, snapshot)
 
-    result = persistence.save_task_sample(snapshot, [{"id": "r-1"}, {"record_id": "r-2"}])
+    result = save_sample(snapshot, [{"id": "r-1"}, {"record_id": "r-2"}])
 
     task, saved = read_state(engine, tasks, records)
     assert result["task_id"] == "task-1"
@@ -117,13 +123,59 @@ def test_successfully_saves_records_and_task_state(database):
     )
 
 
+@pytest.mark.parametrize(
+    ("creator_id", "actor_id"),
+    [("another-user", "qc-user"), (None, "qc-user"), ("", "qc-user"), ("qc-user", "")],
+)
+def test_locked_owner_rejects_unauthorized_sample_without_writes(database, creator_id, actor_id):
+    engine, _factory, tasks, records = database
+    snapshot = task_snapshot(creator_id=creator_id)
+    insert_task(engine, tasks, snapshot)
+
+    with pytest.raises(persistence.SamplingForbidden, match="仅任务创建人"):
+        save_sample(snapshot, [{"id": "r-1"}], actor_id=actor_id)
+
+    task, saved = read_state(engine, tasks, records)
+    assert task["status"] == "draft" and task["total_records"] == 0
+    assert saved == []
+
+
+def test_owner_changed_after_route_snapshot_fails_inside_transaction(database):
+    engine, _factory, tasks, records = database
+    snapshot = task_snapshot()
+    insert_task(engine, tasks, snapshot)
+    with engine.begin() as connection:
+        connection.execute(tasks.update().where(tasks.c.id == "task-1").values(creator_id="another-user"))
+
+    with pytest.raises(persistence.SamplingForbidden, match="仅任务创建人"):
+        save_sample(snapshot, [{"id": "r-1"}])
+
+    task, saved = read_state(engine, tasks, records)
+    assert task["creator_id"] == "another-user" and task["status"] == "draft"
+    assert saved == []
+
+
+def test_non_creator_cannot_replay_saved_sample(database):
+    engine, _factory, tasks, records = database
+    snapshot = task_snapshot()
+    insert_task(engine, tasks, snapshot)
+    saved_result = save_sample(snapshot, [{"id": "r-1"}])
+
+    with pytest.raises(persistence.SamplingForbidden, match="仅任务创建人"):
+        save_sample(snapshot, [], actor_id="another-user")
+
+    task, saved = read_state(engine, tasks, records)
+    assert saved_result["sampled_count"] == len(saved) == 1
+    assert task["status"] == "sampling"
+
+
 def test_zero_records_is_committed_as_replayable_sampling(database):
     engine, _factory, tasks, records = database
     snapshot = task_snapshot()
     insert_task(engine, tasks, snapshot)
 
-    first = persistence.save_task_sample(snapshot, [])
-    second = persistence.save_task_sample(snapshot, [{"id": "ignored-on-replay"}])
+    first = save_sample(snapshot, [])
+    second = save_sample(snapshot, [{"id": "ignored-on-replay"}])
 
     task, saved = read_state(engine, tasks, records)
     assert first == second == {"task_id": "task-1", "sampled_count": 0, "records": []}
@@ -136,8 +188,8 @@ def test_response_is_limited_to_first_twenty_records(database):
     snapshot = task_snapshot()
     insert_task(engine, tasks, snapshot)
 
-    result = persistence.save_task_sample(snapshot, [{"id": f"r-{index:02d}"} for index in range(25)])
-    replay = persistence.save_task_sample(snapshot, [{"id": "ignored"}])
+    result = save_sample(snapshot, [{"id": f"r-{index:02d}"} for index in range(25)])
+    replay = save_sample(snapshot, [{"id": "ignored"}])
 
     task, saved = read_state(engine, tasks, records)
     assert result["sampled_count"] == 25 and len(result["records"]) == 20
@@ -152,7 +204,7 @@ def test_statement_failure_rolls_back_all_changes(database, prefix):
     insert_task(engine, tasks, snapshot)
 
     with fail_statement(engine, prefix), pytest.raises(RuntimeError, match="forced"):
-        persistence.save_task_sample(snapshot, [{"id": "r-1"}])
+        save_sample(snapshot, [{"id": "r-1"}])
 
     task, saved = read_state(engine, tasks, records)
     assert task["status"] == "draft" and task["total_records"] == 0
@@ -176,7 +228,7 @@ def test_zero_affected_rows_is_rejected_and_rolled_back(database, trigger_name, 
         )
 
     with pytest.raises(RuntimeError, match="写入数量不完整|状态更新失败"):
-        persistence.save_task_sample(snapshot, [{"id": "r-1"}])
+        save_sample(snapshot, [{"id": "r-1"}])
 
     task, saved = read_state(engine, tasks, records)
     assert task["status"] == "draft" and task["total_records"] == 0
@@ -199,7 +251,7 @@ def test_commit_failure_rolls_back_all_changes(database, monkeypatch):
 
     monkeypatch.setattr(persistence, "SessionLocal", failing_factory)
     with pytest.raises(RuntimeError, match="forced commit failure"):
-        persistence.save_task_sample(snapshot, [{"id": "r-1"}])
+        save_sample(snapshot, [{"id": "r-1"}])
 
     task, saved = read_state(engine, tasks, records)
     assert task["status"] == "draft" and task["total_records"] == 0
@@ -235,7 +287,7 @@ def test_sampling_replay_returns_saved_ids_without_writes_or_snapshot_comparison
     with engine.begin() as connection:
         connection.execute(records.insert(), existing)
 
-    replay = persistence.save_task_sample(
+    replay = save_sample(
         task_snapshot(sampling_method="percentage", sampling_config={"percentage": 99}),
         [{"id": "must-not-be-written"}],
     )
@@ -251,7 +303,7 @@ def test_sampling_replay_rejects_count_mismatch(database):
     insert_task(engine, tasks, task_snapshot(status="sampling", total_records=1))
 
     with pytest.raises(persistence.SamplingConflict, match="数量与已保存关联不一致"):
-        persistence.save_task_sample(task_snapshot(), [])
+        save_sample(task_snapshot(), [])
 
     _task, saved = read_state(engine, tasks, records)
     assert saved == []
@@ -264,7 +316,7 @@ def test_sampling_snapshot_cannot_overwrite_task_changed_back_to_draft(database)
     stale_snapshot = task_snapshot(status="sampling")
 
     with pytest.raises(persistence.SamplingConflict, match="任务状态已变化"):
-        persistence.save_task_sample(stale_snapshot, [])
+        save_sample(stale_snapshot, [])
 
     task, saved = read_state(engine, tasks, records)
     assert task["status"] == "draft" and task["total_records"] == 0
@@ -289,7 +341,7 @@ def test_draft_with_legacy_records_is_rejected_without_changes(database):
         connection.execute(records.insert().values(**legacy))
 
     with pytest.raises(persistence.SamplingConflict, match="已存在抽样关联"):
-        persistence.save_task_sample(snapshot, [{"id": "r-new"}])
+        save_sample(snapshot, [{"id": "r-new"}])
 
     task, saved = read_state(engine, tasks, records)
     assert task["status"] == "draft" and [item["id"] for item in saved] == ["legacy"]
@@ -297,7 +349,7 @@ def test_draft_with_legacy_records_is_rejected_without_changes(database):
 
 def test_missing_task_uses_narrow_not_found_exception(database):
     with pytest.raises(persistence.SamplingTaskNotFound):
-        persistence.save_task_sample(task_snapshot("missing"), [])
+        save_sample(task_snapshot("missing"), [])
 
 
 @pytest.mark.parametrize("status", ["assigned", "in_progress", "completed", "cancelled"])
@@ -306,7 +358,7 @@ def test_non_draft_status_is_rejected(database, status):
     insert_task(engine, tasks, task_snapshot(status=status))
 
     with pytest.raises(persistence.SamplingConflict, match="不允许执行抽样"):
-        persistence.save_task_sample(task_snapshot(status=status), [{"id": "r-1"}])
+        save_sample(task_snapshot(status=status), [{"id": "r-1"}])
 
     task, saved = read_state(engine, tasks, records)
     assert task["status"] == status and saved == []
@@ -318,7 +370,7 @@ def test_non_null_scene_is_rejected_before_writes(database):
     insert_task(engine, tasks, snapshot)
 
     with pytest.raises(persistence.SamplingConflict, match="场景抽样暂不可用"):
-        persistence.save_task_sample(snapshot, [{"id": "r-1"}])
+        save_sample(snapshot, [{"id": "r-1"}])
 
     task, saved = read_state(engine, tasks, records)
     assert task["status"] == "draft" and saved == []
@@ -330,7 +382,7 @@ def test_non_null_scene_is_also_rejected_for_sampling_replay(database):
     insert_task(engine, tasks, snapshot)
 
     with pytest.raises(persistence.SamplingConflict, match="场景抽样暂不可用"):
-        persistence.save_task_sample(snapshot, [])
+        save_sample(snapshot, [])
 
     task, saved = read_state(engine, tasks, records)
     assert task["status"] == "sampling" and saved == []
@@ -355,7 +407,7 @@ def test_snapshot_drift_is_rejected_for_every_authoritative_field(
     insert_task(engine, tasks, snapshot)
     snapshot[field] = changed_value
     with pytest.raises(persistence.SamplingConflict, match=field):
-        persistence.save_task_sample(snapshot, [])
+        save_sample(snapshot, [])
 
     task, saved = read_state(engine, tasks, records)
     assert task["status"] == "draft" and saved == []
@@ -371,7 +423,7 @@ def test_candidate_ids_must_be_nonempty_and_unique(database, candidate_records):
     insert_task(engine, tasks, snapshot)
 
     with pytest.raises(persistence.SamplingConflict):
-        persistence.save_task_sample(snapshot, candidate_records)
+        save_sample(snapshot, candidate_records)
 
     task, saved = read_state(engine, tasks, records)
     assert task["status"] == "draft" and saved == []
@@ -384,6 +436,7 @@ def test_legacy_task_table_without_scene_column_remains_compatible(monkeypatch):
         "qc_tasks",
         metadata,
         Column("id", String, primary_key=True),
+        Column("creator_id", String),
         Column("status", String, nullable=False),
         Column("total_records", Integer, nullable=False),
         Column("date_range", Text),
@@ -415,7 +468,7 @@ def test_legacy_task_table_without_scene_column_remains_compatible(monkeypatch):
     with engine.begin() as connection:
         connection.execute(tasks.insert().values(**stored))
 
-    result = persistence.save_task_sample(snapshot, [{"id": "r-1"}])
+    result = save_sample(snapshot, [{"id": "r-1"}])
 
     task, saved = read_state(engine, tasks, records)
     assert result["sampled_count"] == 1

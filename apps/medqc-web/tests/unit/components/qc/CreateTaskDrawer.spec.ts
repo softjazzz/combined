@@ -199,7 +199,7 @@ describe('CreateTaskDrawer 创建草稿边界', () => {
     expect(vm.canProceed).toBe(false)
   })
 
-  it('门急诊无匹配已发布规则集时明确阻止创建', async () => {
+  it('门急诊无匹配可用规则集时明确阻止创建', async () => {
     const wrapper = mountDrawer()
     const vm = vmOf(wrapper)
     vm.formData.task_name = '门急诊任务'
@@ -208,7 +208,7 @@ describe('CreateTaskDrawer 创建草稿边界', () => {
     await nextTick()
 
     expect(vm.matchingRuleSets).toHaveLength(0)
-    expect(wrapper.text()).toContain('门急诊病历暂无已发布的匹配规则集')
+    expect(wrapper.text()).toContain('门急诊病历暂无可用的匹配规则集')
     expect(vm.canProceed).toBe(false)
     await vm.handleSubmit()
     expect(mocks.createTask).not.toHaveBeenCalled()

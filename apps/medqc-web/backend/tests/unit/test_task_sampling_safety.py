@@ -14,7 +14,7 @@ from app.services.task_sampling_service import TaskSamplingService
 
 class Database:
     def __init__(self, task=None, records=None, fail=None):
-        self.task = {"status": "draft", **task} if task is not None else None
+        self.task = {"status": "draft", "creator_id": "qc-user", **task} if task is not None else None
         self.records = records or []
         self.fail = fail
         self.calls = []
@@ -79,8 +79,8 @@ def wire(monkeypatch, db):
     async def execute(query):
         return query.execute()
 
-    def save(task, records):
-        db.save_calls.append((task, records))
+    def save(task, records, *, actor_id):
+        db.save_calls.append((task, records, actor_id))
         if db.save_error is not None:
             raise db.save_error
         if db.fail in {("qc_task_records", "insert"), ("qc_tasks", "update")}:
@@ -166,6 +166,15 @@ def test_outpatient_route_saves_only_verified_case_coordinates(monkeypatch):
     assert db.writes == []
 
 
+@pytest.mark.parametrize("creator_id", ["another-user", None, ""])
+def test_route_rejects_non_creator_before_candidate_read(monkeypatch, creator_id):
+    db = Database(task={"id": "task-1", "creator_id": creator_id}, records=[{"id": "r-1"}])
+    response = wire(monkeypatch, db).post("/api/v1/tasks/task-1/sample")
+    assert response.status_code == 403
+    assert db.calls == [("qc_tasks", "select")]
+    assert db.save_calls == [] and db.writes == []
+
+
 def test_outpatient_malformed_source_is_503_not_invalid_user_input(monkeypatch):
     db = Database(
         task={"id": "task-1", "scene": "outpatient", "record_refs": []},
@@ -249,16 +258,17 @@ def test_route_sampling_retry_replays_persisted_result_without_candidates(monkey
     assert response.status_code == 200
     assert response.json()["data"] == db.saved_result
     assert db.calls == [("qc_tasks", "select")]
-    assert db.save_calls == [(db.task, [])]
+    assert db.save_calls == [(db.task, [], "qc-user")]
 
 
-@pytest.mark.parametrize("kind,code", [("missing", 404), ("conflict", 409), ("driver", 503)])
+@pytest.mark.parametrize("kind,code", [("missing", 404), ("forbidden", 403), ("conflict", 409), ("driver", 503)])
 def test_route_maps_transaction_failure_without_retry(monkeypatch, kind, code):
-    from app.services.task_sampling_persistence import SamplingConflict, SamplingTaskNotFound
+    from app.services.task_sampling_persistence import SamplingConflict, SamplingForbidden, SamplingTaskNotFound
 
     db = Database(task={"id": "task-1"}, records=[{"id": "record-1"}])
     db.save_error = {
         "missing": SamplingTaskNotFound("missing"),
+        "forbidden": SamplingForbidden("仅任务创建人可执行抽样"),
         "conflict": SamplingConflict("任务状态已变化"),
         "driver": ValueError("internal driver implementation detail"),
     }[kind]

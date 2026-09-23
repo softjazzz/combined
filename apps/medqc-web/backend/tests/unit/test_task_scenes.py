@@ -189,7 +189,7 @@ def test_create_persists_explicit_scene(
 
 
 @pytest.mark.parametrize("payload", [{"task_name": "旧客户端"}, {"task_name": "空场景", "scene": None}])
-def test_create_legacy_or_null_scene_does_not_write_scene_column(
+def test_create_legacy_or_null_scene_is_rejected(
     monkeypatch: pytest.MonkeyPatch,
     payload: dict[str, Any],
 ):
@@ -198,8 +198,9 @@ def test_create_legacy_or_null_scene_does_not_write_scene_column(
 
     response = client.post("/api/v1/tasks", json=payload)
 
-    assert response.status_code == 200, response.text
-    assert "scene" not in database.inserted[0]
+    assert response.status_code == 422
+    assert database.query_count == 0
+    assert database.inserted == []
 
 
 def test_create_rejects_unknown_scene_before_database_access(
@@ -367,7 +368,6 @@ def test_scene_query_failure_is_non_success_and_does_not_leak_details(
     ("method", "endpoint", "payload"),
     [
         ("post", "/api/v1/tasks", {"task_name": "场景任务", "scene": "running", "rule_set_key": "luxian_0609_qc_v1"}),
-        ("put", "/api/v1/tasks/task-1", {"task_name": "更新名称"}),
         ("get", "/api/v1/tasks/task-1", None),
     ],
 )

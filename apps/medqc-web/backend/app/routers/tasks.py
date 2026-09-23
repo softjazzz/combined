@@ -15,6 +15,7 @@
 import uuid
 import logging
 import random
+from functools import partial
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Optional, Dict, Any, List, Literal
 
@@ -205,13 +206,11 @@ async def create_task(
     创建质控抽查任务
     """
     creator_id = _get_task_scope_user_id(current_user)
-    rule_set = None
-    if task_data.rule_set_key is not None:
-        rule_set = get_sichuan_rule_set(task_data.rule_set_key)
-        if rule_set is None:
-            raise HTTPException(status_code=422, detail="规则集不存在或尚未发布")
-        if task_data.scene is not None and rule_set.scope != task_data.scene.value:
-            raise HTTPException(status_code=422, detail="规则集与任务场景不匹配")
+    rule_set = get_sichuan_rule_set(task_data.rule_set_key)
+    if rule_set is None:
+        raise HTTPException(status_code=422, detail="规则集不存在或不可用")
+    if rule_set.scope != task_data.scene.value:
+        raise HTTPException(status_code=422, detail="规则集与任务场景不匹配")
     task_id = str(uuid.uuid4())
     task_number = _generate_task_number()
 
@@ -238,9 +237,8 @@ async def create_task(
         "created_at": datetime.now().isoformat(),
         "updated_at": datetime.now().isoformat(),
     }
-    if task_data.scene is not None:
-        task["scene"] = task_data.scene.value
-        task["rule_set_key"] = rule_set.key
+    task["scene"] = task_data.scene.value
+    task["rule_set_key"] = rule_set.key
     if task_data.record_refs:
         task["record_refs"] = [record_ref.model_dump() for record_ref in task_data.record_refs]
 
@@ -578,6 +576,7 @@ async def execute_sampling(
     from ..services.task_sampling_service import TaskSamplingService
     from ..services.task_sampling_persistence import (
         SamplingConflict,
+        SamplingForbidden,
         SamplingTaskNotFound,
         save_task_sample,
     )
@@ -600,6 +599,10 @@ async def execute_sampling(
     if task is None:
         raise HTTPException(status_code=404, detail=f"任务 {task_id} 不存在")
 
+    actor_id = _get_task_scope_user_id(current_user)
+    if not task.get("creator_id") or task["creator_id"] != actor_id:
+        raise HTTPException(status_code=403, detail="仅任务创建人可执行抽样")
+
     if task.get("status") not in {TaskStatus.DRAFT.value, TaskStatus.SAMPLING.value}:
         raise HTTPException(status_code=409, detail="当前任务状态不允许抽样")
 
@@ -618,9 +621,13 @@ async def execute_sampling(
 
     # 保存只调用一次；不能使用会在异常后重试 execute 的兼容适配器。
     try:
-        saved_sample = await to_thread.run_sync(save_task_sample, task, sampled_records)
+        saved_sample = await to_thread.run_sync(
+            partial(save_task_sample, task, sampled_records, actor_id=actor_id)
+        )
     except SamplingTaskNotFound as exc:
         raise HTTPException(status_code=404, detail="任务不存在") from exc
+    except SamplingForbidden as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     except SamplingConflict as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except Exception as exc:

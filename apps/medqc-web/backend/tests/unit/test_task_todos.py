@@ -186,7 +186,9 @@ def test_create_task_uses_authenticated_id_before_legacy_id(
         _user("real-user", legacy_id="legacy-user"),
     )
 
-    response = client.post("/api/v1/tasks", json={"task_name": "季度抽查"})
+    response = client.post("/api/v1/tasks", json={
+        "task_name": "季度抽查", "scene": "final", "rule_set_key": "sc_content_v1"
+    })
 
     assert response.status_code == 200, response.text
     assert database.inserted[0]["creator_id"] == "real-user"
@@ -201,13 +203,17 @@ def test_create_task_supports_legacy_user_id_and_rejects_missing_identity(
         legacy_database,
         _user(None, legacy_id="legacy-user"),
     )
-    response = legacy_client.post("/api/v1/tasks", json={"task_name": "历史入口"})
+    response = legacy_client.post("/api/v1/tasks", json={
+        "task_name": "历史入口", "scene": "final", "rule_set_key": "sc_content_v1"
+    })
     assert response.status_code == 200, response.text
     assert legacy_database.inserted[0]["creator_id"] == "legacy-user"
 
     missing_database = _Database()
     missing_client = _make_client(monkeypatch, missing_database, _user(None))
-    response = missing_client.post("/api/v1/tasks", json={"task_name": "无身份"})
+    response = missing_client.post("/api/v1/tasks", json={
+        "task_name": "无身份", "scene": "final", "rule_set_key": "sc_content_v1"
+    })
     assert response.status_code == 401
     assert missing_database.inserted == []
     assert missing_database.adapter_calls == 0

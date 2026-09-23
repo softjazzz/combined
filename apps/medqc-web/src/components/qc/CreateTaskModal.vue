@@ -4,6 +4,7 @@
     title="新建质控任务"
     width="560px"
     :confirm-loading="submitting"
+    :ok-button-props="{ disabled: !canSubmit }"
     :mask-closable="false"
     @ok="handleSubmit"
     @cancel="handleCancel"
@@ -19,6 +20,30 @@
           placeholder="例如：2025年8月出院病历首页质控"
           size="large"
           class="!rounded-lg"
+        />
+      </div>
+
+      <div>
+        <label class="block text-sm font-medium text-slate-700 mb-1.5">
+          质控规则集 <span class="text-rose-500">*</span>
+        </label>
+        <a-select
+          v-model:value="form.rule_set_key"
+          data-testid="legacy-task-rule-set-select"
+          placeholder="请选择规则集"
+          class="w-full"
+          size="large"
+          :loading="ruleSetsLoading"
+          :disabled="ruleSetsLoading || !!ruleSetsError || !matchingRuleSets.length"
+          :options="ruleSetOptions"
+        />
+        <a-alert v-if="ruleSetsError" type="error" :message="ruleSetsError" show-icon class="mt-2" />
+        <a-alert
+          v-else-if="!ruleSetsLoading && !matchingRuleSets.length"
+          type="warning"
+          message="当前场景暂无可用的匹配规则集，不能创建任务。"
+          show-icon
+          class="mt-2"
         />
       </div>
 
@@ -110,7 +135,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, type PropType } from 'vue'
+import { ref, reactive, computed, watch, onMounted, type PropType } from 'vue'
 import { message } from 'ant-design-vue'
 import {
   createQCTaskAndSample,
@@ -118,7 +143,7 @@ import {
   type CreateTaskAndSampleData,
   type CreateTaskParams,
 } from '@/api/qcAdmin'
-import type { TaskScene } from '@/api/tasks'
+import { getTaskRuleSets, type TaskRuleSetOption, type TaskScene } from '@/api/tasks'
 import type { Dayjs } from 'dayjs'
 
 const props = defineProps({
@@ -140,9 +165,14 @@ const emit = defineEmits<{
 
 const submitting = ref(false)
 const departmentOptions = ref<Array<{ label: string; value: string }>>([])
+const ruleSets = ref<TaskRuleSetOption[]>([])
+const ruleSetsLoading = ref(false)
+const ruleSetsError = ref('')
+let ruleSetRequestId = 0
 
 const form = reactive({
   task_name: '',
+  rule_set_key: undefined as string | undefined,
   dateRange: null as [Dayjs, Dayjs] | null,
   department_filter: [] as string[],
   sampling_method: 'all' as 'all' | 'count' | 'percentage',
@@ -150,6 +180,51 @@ const form = reactive({
   sampling_pct: 20,
   deadline: null as Dayjs | null,
 })
+
+const matchingRuleSets = computed(() =>
+  ruleSets.value.filter((item) => item.scope === props.scene && item.rule_set_key.trim()),
+)
+const ruleSetOptions = computed(() => matchingRuleSets.value.map((item) => ({
+  value: item.rule_set_key,
+  label: `${item.rule_set_name} (${item.rule_set_version})`,
+})))
+const selectedRuleSetIsValid = computed(() =>
+  !ruleSetsLoading.value && !ruleSetsError.value &&
+  matchingRuleSets.value.some((item) => item.rule_set_key === form.rule_set_key),
+)
+const canSubmit = computed(() =>
+  !submitting.value && !!form.task_name.trim() && isTaskScene(props.scene) && selectedRuleSetIsValid.value,
+)
+
+watch(() => [props.visible, props.scene] as const, async ([visible]) => {
+  const requestId = ++ruleSetRequestId
+  form.rule_set_key = undefined
+  ruleSets.value = []
+  ruleSetsError.value = ''
+  if (!visible) {
+    ruleSetsLoading.value = false
+    return
+  }
+  ruleSetsLoading.value = true
+  try {
+    const result = await getTaskRuleSets()
+    if (requestId !== ruleSetRequestId) return
+    if (!result.success || !Array.isArray(result.data?.items)) {
+      ruleSetsError.value = result.message || '规则集目录加载失败，请稍后重试'
+      return
+    }
+    ruleSets.value = result.data.items.filter((item) =>
+      typeof item.rule_set_key === 'string' &&
+      typeof item.rule_set_name === 'string' &&
+      typeof item.rule_set_version === 'string' &&
+      typeof item.scope === 'string',
+    )
+  } catch {
+    if (requestId === ruleSetRequestId) ruleSetsError.value = '规则集目录加载失败，请稍后重试'
+  } finally {
+    if (requestId === ruleSetRequestId) ruleSetsLoading.value = false
+  }
+}, { immediate: true })
 
 /** 加载科室选项 */
 const loadDepartments = async () => {
@@ -173,10 +248,15 @@ const handleSubmit = async () => {
     message.warning('请选择有效的质控场景')
     return
   }
+  if (!selectedRuleSetIsValid.value || !form.rule_set_key) {
+    message.warning(ruleSetsError.value || '请选择与质控场景匹配的规则集')
+    return
+  }
 
   const params: CreateTaskParams = {
     task_name: form.task_name.trim(),
     scene: props.scene,
+    rule_set_key: form.rule_set_key,
     sampling_method: form.sampling_method,
     department_filter: form.department_filter.length > 0 ? form.department_filter : undefined,
     deadline: form.deadline?.format('YYYY-MM-DD'),
@@ -226,6 +306,7 @@ const handleCancel = () => {
 
 const resetForm = () => {
   form.task_name = ''
+  form.rule_set_key = undefined
   form.dateRange = null
   form.department_filter = []
   form.sampling_method = 'all'

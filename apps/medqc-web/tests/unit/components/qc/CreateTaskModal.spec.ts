@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   createQCTaskAndSample: vi.fn(),
   getDepartmentList: vi.fn(),
+  getTaskRuleSets: vi.fn(),
   message: {
     error: vi.fn(),
     success: vi.fn(),
@@ -17,12 +18,14 @@ vi.mock('@/api/qcAdmin', () => ({
   getDepartmentList: mocks.getDepartmentList,
 }))
 vi.mock('ant-design-vue', () => ({ message: mocks.message }))
+vi.mock('@/api/tasks', () => ({ getTaskRuleSets: mocks.getTaskRuleSets }))
 
 import CreateTaskModal from '@/components/qc/CreateTaskModal.vue'
 
 type ModalVm = {
   form: {
     task_name: string
+    rule_set_key: string | undefined
     dateRange: [ReturnType<typeof dayjs>, ReturnType<typeof dayjs>] | null
     department_filter: string[]
     sampling_method: 'all' | 'count' | 'percentage'
@@ -32,6 +35,7 @@ type ModalVm = {
   }
   handleSubmit: () => Promise<void>
   submitting: boolean
+  canSubmit: boolean
 }
 
 function mountModal() {
@@ -43,6 +47,7 @@ function mountModal() {
         'a-input': true,
         'a-range-picker': true,
         'a-select': true,
+        'a-alert': true,
         'a-radio-button': true,
         'a-radio-group': { template: '<div><slot /></div>' },
         'a-input-number': true,
@@ -63,6 +68,7 @@ function mountModalWithoutScene() {
         'a-input': true,
         'a-range-picker': true,
         'a-select': true,
+        'a-alert': true,
         'a-radio-button': true,
         'a-radio-group': { template: '<div><slot /></div>' },
         'a-input-number': true,
@@ -81,6 +87,10 @@ describe('CreateTaskModal 运行病历创建链路', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.getDepartmentList.mockResolvedValue({ success: true, data: [] })
+    mocks.getTaskRuleSets.mockResolvedValue({
+      success: true,
+      data: { items: [{ rule_set_key: 'running-v1', rule_set_name: '运行病历规则集', rule_set_version: 'v1', scope: 'running' }] },
+    })
   })
 
   it('提交固定场景、total 抽样数量以及 YYYY-MM-DD 截止日期', async () => {
@@ -95,8 +105,10 @@ describe('CreateTaskModal 运行病历创建链路', () => {
     })
     const wrapper = mountModal()
     const vm = vmOf(wrapper)
+    await flushPromises()
     expect(wrapper.text()).toContain('入院日期范围')
     vm.form.task_name = ' 运行任务 '
+    vm.form.rule_set_key = 'running-v1'
     vm.form.sampling_method = 'count'
     vm.form.sampling_count = 8
     vm.form.deadline = dayjs('2026-10-09T15:30:00')
@@ -107,6 +119,7 @@ describe('CreateTaskModal 运行病历创建链路', () => {
       expect.objectContaining({
         task_name: '运行任务',
         scene: 'running',
+        rule_set_key: 'running-v1',
         sampling_config: { total: 8 },
         deadline: '2026-10-09',
       }),
@@ -121,7 +134,9 @@ describe('CreateTaskModal 运行病历创建链路', () => {
     mocks.createQCTaskAndSample.mockResolvedValue({ success: false, message: '创建接口拒绝' })
     const wrapper = mountModal()
     const vm = vmOf(wrapper)
+    await flushPromises()
     vm.form.task_name = '保留的任务'
+    vm.form.rule_set_key = 'running-v1'
 
     await vm.handleSubmit()
 
@@ -144,6 +159,7 @@ describe('CreateTaskModal 运行病历创建链路', () => {
               'a-input': true,
               'a-range-picker': true,
               'a-select': true,
+              'a-alert': true,
               'a-radio-button': true,
               'a-radio-group': { template: '<div><slot /></div>' },
               'a-input-number': true,
@@ -180,7 +196,9 @@ describe('CreateTaskModal 运行病历创建链路', () => {
     })
     const wrapper = mountModal()
     const vm = vmOf(wrapper)
+    await flushPromises()
     vm.form.task_name = '只建成草稿'
+    vm.form.rule_set_key = 'running-v1'
 
     await vm.handleSubmit()
 
@@ -202,7 +220,9 @@ describe('CreateTaskModal 运行病历创建链路', () => {
     )
     const wrapper = mountModal()
     const vm = vmOf(wrapper)
+    await flushPromises()
     vm.form.task_name = '防重复任务'
+    vm.form.rule_set_key = 'running-v1'
 
     const first = vm.handleSubmit()
     const second = vm.handleSubmit()
@@ -213,5 +233,58 @@ describe('CreateTaskModal 运行病历创建链路', () => {
     await Promise.all([first, second])
     await flushPromises()
     expect(vm.submitting).toBe(false)
+  })
+
+  it('目录失败、空目录和场景不匹配时均不能创建', async () => {
+    for (const catalog of [
+      { success: false, message: '目录不可用' },
+      { success: true, data: { items: [] } },
+      { success: true, data: { items: [{ rule_set_key: 'final-v1', rule_set_name: '终末', rule_set_version: 'v1', scope: 'final' }] } },
+    ]) {
+      mocks.getTaskRuleSets.mockResolvedValueOnce(catalog)
+      const wrapper = mountModal()
+      const vm = vmOf(wrapper)
+      await flushPromises()
+      vm.form.task_name = '不能创建'
+      vm.form.rule_set_key = 'final-v1'
+      expect(vm.canSubmit).toBe(false)
+      await vm.handleSubmit()
+      expect(mocks.createQCTaskAndSample).not.toHaveBeenCalled()
+      wrapper.unmount()
+    }
+  })
+
+  it('目录可用但未显式选择规则集时不能创建', async () => {
+    const wrapper = mountModal()
+    const vm = vmOf(wrapper)
+    await flushPromises()
+    vm.form.task_name = '待选择规则集'
+    expect(vm.canSubmit).toBe(false)
+    await vm.handleSubmit()
+    expect(mocks.createQCTaskAndSample).not.toHaveBeenCalled()
+  })
+
+  it('切换场景清除旧规则集，并忽略先前请求的过期响应', async () => {
+    mocks.createQCTaskAndSample.mockResolvedValue({ success: false, message: '测试创建失败' })
+    let resolveOld!: (value: unknown) => void
+    mocks.getTaskRuleSets.mockReturnValueOnce(new Promise((resolve) => { resolveOld = resolve }))
+    mocks.getTaskRuleSets.mockResolvedValueOnce({
+      success: true,
+      data: { items: [{ rule_set_key: 'final-v1', rule_set_name: '终末', rule_set_version: 'v1', scope: 'final' }] },
+    })
+    const wrapper = mountModal()
+    const vm = vmOf(wrapper)
+    vm.form.task_name = '切换测试'
+    vm.form.rule_set_key = 'running-v1'
+    await wrapper.setProps({ scene: 'final' })
+    await flushPromises()
+    expect(vm.form.rule_set_key).toBeUndefined()
+    vm.form.rule_set_key = 'final-v1'
+    expect(vm.canSubmit).toBe(true)
+    resolveOld({ success: true, data: { items: [{ rule_set_key: 'running-v1', rule_set_name: '运行', rule_set_version: 'v1', scope: 'running' }] } })
+    await flushPromises()
+    expect(vm.canSubmit).toBe(true)
+    await vm.handleSubmit()
+    expect(mocks.createQCTaskAndSample).toHaveBeenCalledWith(expect.objectContaining({ scene: 'final', rule_set_key: 'final-v1' }))
   })
 })

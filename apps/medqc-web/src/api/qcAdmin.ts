@@ -314,6 +314,7 @@ export async function getDepartmentList() {
 export interface CreateTaskParams {
   task_name: string
   scene: TaskScene
+  rule_set_key: string
   task_type?: 'one_time' | 'scheduled'
   date_range?: { start: string; end: string }
   department_filter?: string[]

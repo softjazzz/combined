@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from app.core.security import get_current_user
 from app.routers import tasks
-from app.schemas.tasks import TaskCreateRequest
+from app.schemas.tasks import TaskResponse
 
 
 class _Database:
@@ -46,9 +46,12 @@ def _client(monkeypatch, database):
     "payload",
     [
         {"task_name": "未选规则", "scene": "final"},
+        {"task_name": "未选场景和规则"},
         {"task_name": "空规则", "scene": "final", "rule_set_key": "  "},
+        {"task_name": "空规则值", "scene": "final", "rule_set_key": None},
         {"task_name": "未知规则", "scene": "running", "rule_set_key": "unknown_v1"},
         {"task_name": "缺场景", "rule_set_key": "sc_content_v1"},
+        {"task_name": "空场景值", "scene": None, "rule_set_key": "sc_content_v1"},
         {"task_name": "门急诊误选终末", "scene": "outpatient", "rule_set_key": "sc_content_v1"},
         {"task_name": "运行误选终末", "scene": "running", "rule_set_key": "sc_content_v1"},
     ],
@@ -71,13 +74,13 @@ def test_explicit_rule_set_is_normalized_to_catalog_key(monkeypatch):
     assert response.json()["data"]["rule_set_key"] == "sc_content_v1"
 
 
-def test_legacy_request_does_not_write_new_column(monkeypatch):
+def test_legacy_request_without_rule_set_is_rejected(monkeypatch):
     database = _Database()
     response = _client(monkeypatch, database).post(
         "/api/v1/tasks", json={"task_name": "旧任务"}
     )
-    assert response.status_code == 200, response.text
-    assert "rule_set_key" not in database.inserted[0]
+    assert response.status_code == 422
+    assert database.inserted == []
 
 
 @pytest.mark.parametrize("rule_set_key", ["sc_content_v1", None])
@@ -91,5 +94,15 @@ def test_update_rejects_rule_set_change_before_database_access(monkeypatch, rule
 
 
 def test_schema_response_can_read_historical_missing_rule_set_key():
-    response = TaskCreateRequest.model_validate({"task_name": "旧任务"})
+    response = TaskResponse.model_validate({
+        "id": "legacy-1",
+        "task_number": "QC-LEGACY-1",
+        "task_name": "旧任务",
+        "task_type": "one_time",
+        "status": "draft",
+        "creator_id": "creator-1",
+        "created_at": "2026-09-22T00:00:00Z",
+        "updated_at": "2026-09-22T00:00:00Z",
+    })
+    assert response.scene is None
     assert response.rule_set_key is None

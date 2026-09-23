@@ -84,8 +84,8 @@ class TaskCreateRequest(BaseModel):
 
     task_name: str = Field(..., description="任务名称")
     task_type: TaskType = Field(TaskType.ONE_TIME, description="任务类型")
-    scene: Optional[TaskScene] = Field(None, description="任务病历场景")
-    rule_set_key: Optional[RuleSetKey] = Field(None, description="创建时显式选择的规则集 key")
+    scene: TaskScene = Field(..., description="任务病历场景")
+    rule_set_key: RuleSetKey = Field(..., description="创建时显式选择的规则集 key")
     schedule_config: Optional[Dict[str, Any]] = Field(None, description="定时配置")
 
     # 病历范围
@@ -107,16 +107,10 @@ class TaskCreateRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_creation_scope(self):
-        if self.scene is not None and self.rule_set_key is None:
-            raise ValueError("选择任务场景时必须显式选择规则集")
-        if self.scene is None and self.rule_set_key is not None:
-            raise ValueError("选择规则集时必须选择任务场景")
         if not self.record_refs:
             return self
         if self.record_ids:
             raise ValueError("record_refs 不得与旧 record_ids 混用")
-        if self.scene is None:
-            raise ValueError("指定 record_refs 时必须选择任务场景")
         identities = [
             (item.institute_id, item.patient_id, item.visit_id)
             for item in self.record_refs

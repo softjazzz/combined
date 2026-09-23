@@ -11,6 +11,10 @@ from sqlalchemy.orm import sessionmaker
 from app.services import task_sampling_persistence as persistence
 
 
+def save_sample(snapshot, records, *, actor_id="qc-user"):
+    return persistence.save_task_sample(snapshot, records, actor_id=actor_id)
+
+
 @pytest.fixture
 def database(monkeypatch):
     engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
@@ -18,6 +22,7 @@ def database(monkeypatch):
     tasks = Table(
         "qc_tasks", metadata,
         Column("id", String, primary_key=True),
+        Column("creator_id", String),
         Column("scene", String),
         Column("status", String, nullable=False),
         Column("total_records", Integer, nullable=False),
@@ -51,7 +56,7 @@ def database(monkeypatch):
 
 def snapshot(**overrides):
     value = {
-        "id": "task-1", "scene": "outpatient", "status": "draft", "total_records": 0,
+        "id": "task-1", "creator_id": "qc-user", "scene": "outpatient", "status": "draft", "total_records": 0,
         "date_range": None, "department_filter": [], "record_ids": [],
         "record_refs": [], "sampling_method": "all", "sampling_config": {},
         "updated_at": "2026-09-23T00:00:00",
@@ -99,8 +104,8 @@ def test_same_visit_in_different_hospital_and_patient_are_distinct(database):
     insert_task(engine, tasks, task)
     identities = [case(), case("h2", "p1", "v1"), case("h1", "p2", "v1")]
 
-    first = persistence.save_task_sample(task, identities)
-    replay = persistence.save_task_sample(task, [case("ignored", "ignored", "ignored")])
+    first = save_sample(task, identities)
+    replay = save_sample(task, [case("ignored", "ignored", "ignored")])
 
     stored_task, saved = state(engine, tasks, records)
     assert stored_task["status"] == "sampling" and stored_task["total_records"] == 3
@@ -119,7 +124,7 @@ def test_duplicate_or_incomplete_coordinate_rolls_back(database, selected):
     insert_task(engine, tasks, task)
 
     with pytest.raises(persistence.SamplingConflict):
-        persistence.save_task_sample(task, selected)
+        save_sample(task, selected)
 
     locked, saved = state(engine, tasks, records)
     assert locked["status"] == "draft" and saved == []
@@ -131,13 +136,13 @@ def test_explicit_refs_limit_selection_and_snapshot_is_locked(database):
     insert_task(engine, tasks, task)
 
     with pytest.raises(persistence.SamplingConflict, match="不属于"):
-        persistence.save_task_sample(task, [case("h2")])
+        save_sample(task, [case("h2")])
     with pytest.raises(persistence.SamplingConflict, match="record_refs"):
-        persistence.save_task_sample(snapshot(record_refs=[case("h2")]), [case()])
+        save_sample(snapshot(record_refs=[case("h2")]), [case()])
 
     locked, saved = state(engine, tasks, records)
     assert locked["status"] == "draft" and saved == []
-    result = persistence.save_task_sample(task, [case()])
+    result = save_sample(task, [case()])
     assert result["sampled_count"] == 1
 
 
@@ -145,13 +150,13 @@ def test_modern_replay_rejects_changed_refs_and_count(database):
     engine, tasks, records = database
     task = snapshot(record_refs=[case()])
     insert_task(engine, tasks, task)
-    persistence.save_task_sample(task, [case()])
+    save_sample(task, [case()])
     with pytest.raises(persistence.SamplingConflict, match="record_refs"):
-        persistence.save_task_sample(snapshot(record_refs=[case("h2")]), [])
+        save_sample(snapshot(record_refs=[case("h2")]), [])
     with engine.begin() as connection:
         connection.execute(tasks.update().values(total_records=2))
     with pytest.raises(persistence.SamplingConflict, match="数量与已保存关联不一致"):
-        persistence.save_task_sample(task, [])
+        save_sample(task, [])
     _locked, saved = state(engine, tasks, records)
     assert len(saved) == 1
 
@@ -167,7 +172,7 @@ def test_replay_rejects_legacy_row_even_when_count_matches(database):
         ))
 
     with pytest.raises(persistence.SamplingConflict, match="三坐标"):
-        persistence.save_task_sample(task, [])
+        save_sample(task, [])
 
 
 def test_modern_rejects_legacy_record_ids(database):
@@ -175,7 +180,7 @@ def test_modern_rejects_legacy_record_ids(database):
     task = snapshot(record_ids=["v1"])
     insert_task(engine, tasks, task)
     with pytest.raises(persistence.SamplingConflict, match="record_ids"):
-        persistence.save_task_sample(task, [case()])
+        save_sample(task, [case()])
     locked, saved = state(engine, tasks, records)
     assert locked["status"] == "draft" and saved == []
 
@@ -184,8 +189,8 @@ def test_zero_sample_saves_and_replays(database):
     engine, tasks, records = database
     task = snapshot()
     insert_task(engine, tasks, task)
-    first = persistence.save_task_sample(task, [])
-    second = persistence.save_task_sample(task, [case()])
+    first = save_sample(task, [])
+    second = save_sample(task, [case()])
     locked, saved = state(engine, tasks, records)
     assert first == second
     assert first["sampled_count"] == 0 and first["records"] == []
@@ -198,7 +203,7 @@ def test_insert_or_update_failure_rolls_back(database, prefix):
     task = snapshot()
     insert_task(engine, tasks, task)
     with fail_statement(engine, prefix), pytest.raises(RuntimeError, match="forced"):
-        persistence.save_task_sample(task, [case()])
+        save_sample(task, [case()])
     locked, saved = state(engine, tasks, records)
     assert locked["status"] == "draft" and saved == []
 
@@ -207,7 +212,7 @@ def test_missing_record_refs_column_fails_closed(monkeypatch):
     engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
     metadata = MetaData()
     tasks = Table(
-        "qc_tasks", metadata, Column("id", String, primary_key=True), Column("scene", String),
+        "qc_tasks", metadata, Column("id", String, primary_key=True), Column("creator_id", String), Column("scene", String),
         Column("status", String), Column("total_records", Integer), Column("date_range", Text),
         Column("department_filter", Text), Column("record_ids", Text), Column("sampling_method", String),
         Column("sampling_config", Text), Column("updated_at", String),
@@ -222,7 +227,7 @@ def test_missing_record_refs_column_fails_closed(monkeypatch):
             else value for key, value in stored.items()
         }))
     with pytest.raises(persistence.SamplingConflict, match="缺少三坐标配置列"):
-        persistence.save_task_sample(snapshot(), [case()])
+        save_sample(snapshot(), [case()])
     engine.dispose()
 
 
@@ -230,7 +235,7 @@ def test_missing_coordinate_columns_fail_before_write(monkeypatch):
     engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
     metadata = MetaData()
     tasks = Table(
-        "qc_tasks", metadata, Column("id", String, primary_key=True), Column("scene", String),
+        "qc_tasks", metadata, Column("id", String, primary_key=True), Column("creator_id", String), Column("scene", String),
         Column("status", String), Column("total_records", Integer), Column("date_range", Text),
         Column("department_filter", Text), Column("record_ids", Text), Column("record_refs", Text),
         Column("sampling_method", String), Column("sampling_config", Text), Column("updated_at", String),
@@ -243,7 +248,7 @@ def test_missing_coordinate_columns_fail_before_write(monkeypatch):
     monkeypatch.setattr(persistence, "SessionLocal", sessionmaker(bind=engine, future=True))
     insert_task(engine, tasks, snapshot())
     with pytest.raises(Exception, match="no such column"):
-        persistence.save_task_sample(snapshot(), [case()])
+        save_sample(snapshot(), [case()])
     locked, saved = state(engine, tasks, records)
     assert locked["status"] == "draft" and saved == []
     engine.dispose()
@@ -270,7 +275,7 @@ def test_postgresql_modern_path_uses_configured_search_path_before_lock(monkeypa
 
     monkeypatch.setattr(persistence, "SessionLocal", FakeSession)
     with pytest.raises(StopBeforeDatabase):
-        persistence.save_task_sample(snapshot(), [case()])
+        save_sample(snapshot(), [case()])
 
     assert len(statements) == 1
     assert "FOR UPDATE" in statements[0]

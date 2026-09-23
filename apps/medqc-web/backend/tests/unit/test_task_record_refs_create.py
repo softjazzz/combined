@@ -1,4 +1,4 @@
-"""新任务指定病例范围必须使用完整三坐标，旧请求保持原合同。"""
+"""指定病历范围优先使用完整三坐标；旧 record_ids 仍可随显式规则集创建。"""
 
 import json
 from types import SimpleNamespace
@@ -116,9 +116,9 @@ def test_invalid_new_case_scope_is_422_before_database_access(monkeypatch, paylo
 @pytest.mark.parametrize(
     "payload",
     [
-        {"task_name": "旧请求", "record_ids": ["legacy-1"]},
+        {"task_name": "旧请求", "scene": "final", "rule_set_key": "sc_content_v1", "record_ids": ["legacy-1"]},
         {"task_name": "空新范围", "scene": "running", "rule_set_key": "luxian_0609_qc_v1", "record_refs": []},
-        {"task_name": "默认范围"},
+        {"task_name": "默认范围", "scene": "final", "rule_set_key": "sc_content_v1"},
     ],
 )
 def test_legacy_or_empty_scope_does_not_write_new_column(monkeypatch, payload):
