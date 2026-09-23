@@ -72,7 +72,7 @@ def test_new_explicit_case_refs_are_stripped_and_persisted_in_order(monkeypatch)
 
     response = client.post(
         "/api/v1/tasks",
-        json={"task_name": "指定病例", "scene": "final", "record_refs": refs},
+        json={"task_name": "指定病例", "scene": "final", "rule_set_key": "sc_content_v1", "record_refs": refs},
     )
 
     assert response.status_code == 200, response.text
@@ -93,15 +93,15 @@ def test_postgres_adapter_serializes_record_refs_as_json_without_rewriting_ident
 @pytest.mark.parametrize(
     "payload",
     [
-        {"task_name": "混合范围", "scene": "final", "record_refs": [reference()], "record_ids": ["V-1"]},
+        {"task_name": "混合范围", "scene": "final", "rule_set_key": "sc_content_v1", "record_refs": [reference()], "record_ids": ["V-1"]},
         {"task_name": "缺场景", "record_refs": [reference()]},
-        {"task_name": "重复范围", "scene": "running", "record_refs": [reference(), reference(" H-1 ", "P-1", "V-1")]},
-        {"task_name": "缺机构", "scene": "final", "record_refs": [{"patient_id": "P-1", "visit_id": "V-1"}]},
-        {"task_name": "空患者", "scene": "final", "record_refs": [reference(patient=" \t ")]},
-        {"task_name": "多余字段", "scene": "final", "record_refs": [{**reference(), "record_id": "V-1"}]},
-        {"task_name": "顶层错拼", "scene": "final", "record_ref": [reference()]},
-        {"task_name": "非法格式", "scene": "final", "record_refs": ["H-1/P-1/V-1"]},
-        {"task_name": "过长坐标", "scene": "final", "record_refs": [reference(institute="H" * 101)]},
+        {"task_name": "重复范围", "scene": "running", "rule_set_key": "luxian_0609_qc_v1", "record_refs": [reference(), reference(" H-1 ", "P-1", "V-1")]},
+        {"task_name": "缺机构", "scene": "final", "rule_set_key": "sc_content_v1", "record_refs": [{"patient_id": "P-1", "visit_id": "V-1"}]},
+        {"task_name": "空患者", "scene": "final", "rule_set_key": "sc_content_v1", "record_refs": [reference(patient=" \t ")]},
+        {"task_name": "多余字段", "scene": "final", "rule_set_key": "sc_content_v1", "record_refs": [{**reference(), "record_id": "V-1"}]},
+        {"task_name": "顶层错拼", "scene": "final", "rule_set_key": "sc_content_v1", "record_ref": [reference()]},
+        {"task_name": "非法格式", "scene": "final", "rule_set_key": "sc_content_v1", "record_refs": ["H-1/P-1/V-1"]},
+        {"task_name": "过长坐标", "scene": "final", "rule_set_key": "sc_content_v1", "record_refs": [reference(institute="H" * 101)]},
     ],
 )
 def test_invalid_new_case_scope_is_422_before_database_access(monkeypatch, payload):
@@ -117,7 +117,7 @@ def test_invalid_new_case_scope_is_422_before_database_access(monkeypatch, paylo
     "payload",
     [
         {"task_name": "旧请求", "record_ids": ["legacy-1"]},
-        {"task_name": "空新范围", "scene": "running", "record_refs": []},
+        {"task_name": "空新范围", "scene": "running", "rule_set_key": "luxian_0609_qc_v1", "record_refs": []},
         {"task_name": "默认范围"},
     ],
 )
@@ -131,7 +131,7 @@ def test_legacy_or_empty_scope_does_not_write_new_column(monkeypatch, payload):
 
 def test_database_unavailable_is_not_fake_success(monkeypatch):
     response = client_for(monkeypatch, None).post(
-        "/api/v1/tasks", json={"task_name": "指定病例", "scene": "final", "record_refs": [reference()]}
+        "/api/v1/tasks", json={"task_name": "指定病例", "scene": "final", "rule_set_key": "sc_content_v1", "record_refs": [reference()]}
     )
     assert response.status_code == 503
 
@@ -139,7 +139,7 @@ def test_database_unavailable_is_not_fake_success(monkeypatch):
 def test_insert_failure_does_not_leak_database_details(monkeypatch):
     database = Database(fail=RuntimeError("private database connection detail"))
     response = client_for(monkeypatch, database).post(
-        "/api/v1/tasks", json={"task_name": "指定病例", "scene": "final", "record_refs": [reference()]}
+        "/api/v1/tasks", json={"task_name": "指定病例", "scene": "final", "rule_set_key": "sc_content_v1", "record_refs": [reference()]}
     )
     assert response.status_code == 500
     assert "private database" not in response.text
@@ -153,7 +153,7 @@ def test_insert_failure_does_not_log_case_coordinates(monkeypatch, caplog):
     with caplog.at_level("ERROR", logger="app.routers.tasks"):
         response = client_for(monkeypatch, database).post(
             "/api/v1/tasks",
-            json={"task_name": "指定病例", "scene": "final", "record_refs": [ref]},
+            json={"task_name": "指定病例", "scene": "final", "rule_set_key": "sc_content_v1", "record_refs": [ref]},
         )
 
     assert response.status_code == 500
@@ -165,7 +165,7 @@ def test_empty_insert_result_is_not_reported_as_success(monkeypatch):
     database = Database(empty_result=True)
     response = client_for(monkeypatch, database).post(
         "/api/v1/tasks",
-        json={"task_name": "指定病例", "scene": "final", "record_refs": [reference()]},
+        json={"task_name": "指定病例", "scene": "final", "rule_set_key": "sc_content_v1", "record_refs": [reference()]},
     )
 
     assert response.status_code == 500

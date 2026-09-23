@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AxiosHeaders, type AxiosResponse } from 'axios'
 import { ApiService } from '@/services/apiService'
-import { getTaskDetail, getTaskList, getTaskStats, getTaskTodoStats } from '@/api/tasks'
+import { getTaskDetail, getTaskList, getTaskRuleSets, getTaskStats, getTaskTodoStats } from '@/api/tasks'
 
 vi.mock('@/services/apiService', () => ({ ApiService: { requestRaw: vi.fn() } }))
 
@@ -50,6 +50,19 @@ describe('任务统计 API', () => {
       method: 'GET',
       url: '/api/v1/tasks/stats',
     })
+  })
+
+  it('通过工作区目录读取已发布规则集并保留请求失败语义', async () => {
+    const catalog = { items: [{ rule_set_key: 'running-rules', rule_set_name: '运行规则', rule_set_version: 'v1', scope: 'running' }] }
+    vi.mocked(ApiService.requestRaw).mockResolvedValueOnce(response(catalog))
+    await expect(getTaskRuleSets()).resolves.toMatchObject({ success: true, data: catalog })
+    expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
+      method: 'GET',
+      url: '/api/v1/qc/sichuan/workspace/rule-sets',
+    })
+
+    vi.mocked(ApiService.requestRaw).mockRejectedValueOnce(new Error('目录不可用'))
+    await expect(getTaskRuleSets()).resolves.toMatchObject({ success: false })
   })
 
   it('任务详情编码路径并显式传递清单范围', async () => {

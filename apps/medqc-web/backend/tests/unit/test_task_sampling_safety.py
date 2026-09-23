@@ -102,7 +102,7 @@ def wire(monkeypatch, db):
     return TestClient(app)
 
 
-@pytest.mark.parametrize("scene", ["running", "final", "outpatient", "invalid", ""])
+@pytest.mark.parametrize("scene", ["running", "final", "invalid", ""])
 @pytest.mark.asyncio
 async def test_scoped_sampling_never_uses_unscoped_source(monkeypatch, scene):
     db = Database(records=[{"id": "wrong-scene"}])
@@ -139,12 +139,49 @@ async def test_legacy_candidates_remain_compatible_and_empty_is_valid(monkeypatc
     assert await TaskSamplingService().sample({}) == []
 
 
-@pytest.mark.parametrize("scene", ["running", "final", "outpatient"])
+@pytest.mark.parametrize("scene", ["running", "final"])
 def test_scene_route_refuses_before_candidate_read_or_write(monkeypatch, scene):
     db = Database(task={"id": "task-1", "scene": scene})
     response = wire(monkeypatch, db).post("/api/v1/tasks/task-1/sample")
     assert response.status_code == 409
     assert "场景抽样暂不可用" in response.json()["detail"]
+    assert db.calls == [("qc_tasks", "select")]
+    assert db.writes == []
+
+
+def test_outpatient_route_saves_only_verified_case_coordinates(monkeypatch):
+    db = Database(
+        task={"id": "task-1", "scene": "outpatient", "record_refs": []},
+        records=[
+            {"institute_id": "H1", "patient_id": "P1", "visit_id": "V1", "visit_datetime": None, "dept_name": "内科"},
+            {"institute_id": "H1", "patient_id": "P1", "visit_id": "V1", "visit_datetime": None, "dept_name": "内科"},
+        ],
+    )
+    response = wire(monkeypatch, db).post("/api/v1/tasks/task-1/sample")
+    assert response.status_code == 200
+    assert response.json()["data"]["sampled_count"] == 1
+    assert db.calls == [("qc_tasks", "select"), ("cdm.outpat_record", "select")]
+    assert db.save_calls[0][1][0]["visit_id"] == "V1"
+    assert "id" not in db.save_calls[0][1][0]
+    assert db.writes == []
+
+
+def test_outpatient_malformed_source_is_503_not_invalid_user_input(monkeypatch):
+    db = Database(
+        task={"id": "task-1", "scene": "outpatient", "record_refs": []},
+        records=[{"institute_id": "H1", "patient_id": None, "visit_id": "V1"}],
+    )
+    response = wire(monkeypatch, db).post("/api/v1/tasks/task-1/sample")
+    assert response.status_code == 503
+    assert db.save_calls == []
+    assert db.writes == []
+
+
+@pytest.mark.parametrize("scene", ["running", "final", "outpatient"])
+def test_modern_task_never_uses_legacy_reanalyze_or_marks_it_running(monkeypatch, scene):
+    db = Database(task={"id": "task-1", "scene": scene}, records=[{"record_id": "not-a-case-id"}])
+    response = wire(monkeypatch, db).post("/api/v1/tasks/task-1/re-analyze")
+    assert response.status_code == 409
     assert db.calls == [("qc_tasks", "select")]
     assert db.writes == []
 

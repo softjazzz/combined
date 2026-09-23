@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   createTask: vi.fn(),
+  getTaskRuleSets: vi.fn(),
   message: {
     error: vi.fn(),
     success: vi.fn(),
@@ -12,7 +13,10 @@ const mocks = vi.hoisted(() => ({
   },
 }))
 
-vi.mock('@/api/tasks', () => ({ createTask: mocks.createTask }))
+vi.mock('@/api/tasks', () => ({
+  createTask: mocks.createTask,
+  getTaskRuleSets: mocks.getTaskRuleSets,
+}))
 vi.mock('ant-design-vue', () => ({ message: mocks.message }))
 vi.mock('@ant-design/icons-vue', () => {
   const icon = { template: '<span />' }
@@ -35,6 +39,7 @@ type DrawerVm = {
   formData: {
     task_name: string
     scene: TaskScene | null
+    rule_set_key?: string
     deadline: ReturnType<typeof dayjs> | null
     description: string
     date_range: { start?: string; end?: string } | null
@@ -45,6 +50,8 @@ type DrawerVm = {
   rangeMode: 'date' | 'ids'
   recordIdsText: string
   sceneLabel: string
+  matchingRuleSets: Array<{ rule_set_key: string }>
+  ruleSetsError: string
   submitting: boolean
 }
 
@@ -53,7 +60,7 @@ function mountDrawer() {
     props: { open: true },
     global: {
       stubs: {
-        'a-alert': true,
+        'a-alert': { props: ['message'], template: '<div>{{ message }}</div>' },
         'a-button': true,
         'a-checkbox': true,
         'a-date-picker': true,
@@ -82,6 +89,14 @@ function vmOf(wrapper: ReturnType<typeof mountDrawer>) {
   return wrapper.vm as unknown as DrawerVm
 }
 
+async function chooseRuleSet(vm: DrawerVm, scene: 'running' | 'final') {
+  await flushPromises()
+  vm.formData.scene = scene
+  await nextTick()
+  vm.formData.rule_set_key = `${scene}-rules`
+  await nextTick()
+}
+
 describe('CreateTaskDrawer 创建草稿边界', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -89,18 +104,25 @@ describe('CreateTaskDrawer 创建草稿边界', () => {
       success: true,
       data: { id: 'task-1', task_name: '测试任务' },
     })
+    mocks.getTaskRuleSets.mockResolvedValue({
+      success: true,
+      data: {
+        items: [
+          { rule_set_key: 'running-rules', rule_set_name: '运行规则', rule_set_version: 'v1', scope: 'running' },
+          { rule_set_key: 'final-rules', rule_set_name: '终末规则', rule_set_version: 'v2', scope: 'final' },
+        ],
+      },
+    })
   })
 
   it.each([
     ['running', '运行病历'],
     ['final', '终末病历'],
-    ['outpatient', '门急诊病历'],
-  ] as const)('明确选择 %s 后显示确认场景并随草稿提交', async (scene, label) => {
+  ] as const)('明确选择 %s 规则集后显示确认场景并随草稿提交', async (scene, label) => {
     const wrapper = mountDrawer()
     const vm = vmOf(wrapper)
     vm.formData.task_name = ' 场景任务 '
-    vm.formData.scene = scene
-    await nextTick()
+    await chooseRuleSet(vm, scene)
 
     expect(vm.canProceed).toBe(true)
     expect(vm.sceneLabel).toBe(label)
@@ -109,10 +131,62 @@ describe('CreateTaskDrawer 创建草稿边界', () => {
     await vm.handleSubmit()
 
     expect(mocks.createTask).toHaveBeenCalledWith(
-      expect.objectContaining({ task_name: '场景任务', scene }),
+      expect.objectContaining({ task_name: '场景任务', scene, rule_set_key: `${scene}-rules` }),
     )
     expect(mocks.createTask.mock.calls[0][0]).not.toHaveProperty('description')
     expect(wrapper.emitted('created')).toHaveLength(1)
+  })
+
+  it('未人工选择规则集不可继续，切换场景清除原选择', async () => {
+    const wrapper = mountDrawer()
+    const vm = vmOf(wrapper)
+    vm.formData.task_name = '规则集任务'
+    await flushPromises()
+    vm.formData.scene = 'running'
+    await nextTick()
+    expect(vm.canProceed).toBe(false)
+    await vm.handleSubmit()
+    expect(mocks.message.warning).toHaveBeenCalledWith('请选择与质控场景匹配的规则集')
+
+    vm.formData.rule_set_key = 'running-rules'
+    await nextTick()
+    expect(vm.canProceed).toBe(true)
+    vm.formData.scene = 'final'
+    await nextTick()
+    expect(vm.formData.rule_set_key).toBeUndefined()
+    expect(vm.canProceed).toBe(false)
+  })
+
+  it('门急诊无匹配已发布规则集时明确阻止创建', async () => {
+    const wrapper = mountDrawer()
+    const vm = vmOf(wrapper)
+    vm.formData.task_name = '门急诊任务'
+    await flushPromises()
+    vm.formData.scene = 'outpatient'
+    await nextTick()
+
+    expect(vm.matchingRuleSets).toHaveLength(0)
+    expect(wrapper.text()).toContain('门急诊病历暂无已发布的匹配规则集')
+    expect(vm.canProceed).toBe(false)
+    await vm.handleSubmit()
+    expect(mocks.createTask).not.toHaveBeenCalled()
+  })
+
+  it('目录加载失败不能视为空目录或提交任务', async () => {
+    mocks.getTaskRuleSets.mockResolvedValue({ success: false, message: '目录不可用' })
+    const wrapper = mountDrawer()
+    const vm = vmOf(wrapper)
+    vm.formData.task_name = '失败任务'
+    await flushPromises()
+    vm.formData.scene = 'running'
+    await nextTick()
+
+    expect(vm.ruleSetsError).toBe('目录不可用')
+    expect(wrapper.text()).toContain('目录不可用')
+    expect(vm.canProceed).toBe(false)
+    await vm.handleSubmit()
+    expect(mocks.createTask).not.toHaveBeenCalled()
+    expect(mocks.message.error).toHaveBeenCalledWith('目录不可用')
   })
 
   it('未选择场景时步骤不可继续，强制提交也会拦截', async () => {
@@ -135,7 +209,7 @@ describe('CreateTaskDrawer 创建草稿边界', () => {
     const wrapper = mountDrawer()
     const vm = vmOf(wrapper)
     vm.formData.task_name = '空病案号任务'
-    vm.formData.scene = 'running'
+    await chooseRuleSet(vm, 'running')
     vm.rangeMode = 'ids'
     vm.recordIdsText = '  \n\n'
 
@@ -152,7 +226,7 @@ describe('CreateTaskDrawer 创建草稿边界', () => {
     const wrapper = mountDrawer()
     const vm = vmOf(wrapper)
     vm.formData.task_name = '范围任务'
-    vm.formData.scene = 'final'
+    await chooseRuleSet(vm, 'final')
     vm.formData.date_range = { start: '2026-09-01', end: '2026-09-30' }
     vm.formData.department_filter = ['内科']
     vm.recordIdsText = 'MR-OLD'
@@ -188,7 +262,7 @@ describe('CreateTaskDrawer 创建草稿边界', () => {
     const wrapper = mountDrawer()
     const vm = vmOf(wrapper)
     vm.formData.task_name = '保留输入任务'
-    vm.formData.scene = 'outpatient'
+    await chooseRuleSet(vm, 'final')
     vm.formData.description = '仅留在表单中的备注'
     vm.formData.deadline = dayjs('2026-10-08T16:45:30')
 
@@ -199,7 +273,7 @@ describe('CreateTaskDrawer 创建草稿边界', () => {
     )
     expect(mocks.createTask.mock.calls[0][0]).not.toHaveProperty('description')
     expect(vm.formData.task_name).toBe('保留输入任务')
-    expect(vm.formData.scene).toBe('outpatient')
+    expect(vm.formData.scene).toBe('final')
     expect(vm.formData.deadline?.format('YYYY-MM-DD')).toBe('2026-10-08')
     expect(wrapper.emitted('created')).toBeUndefined()
     expect(wrapper.emitted('update:open')).toBeUndefined()
@@ -211,7 +285,7 @@ describe('CreateTaskDrawer 创建草稿边界', () => {
     const wrapper = mountDrawer()
     const vm = vmOf(wrapper)
     vm.formData.task_name = '缺失返回任务'
-    vm.formData.scene = 'final'
+    await chooseRuleSet(vm, 'final')
 
     await vm.handleSubmit()
 
@@ -232,7 +306,7 @@ describe('CreateTaskDrawer 创建草稿边界', () => {
     const wrapper = mountDrawer()
     const vm = vmOf(wrapper)
     vm.formData.task_name = '防重复任务'
-    vm.formData.scene = 'running'
+    await chooseRuleSet(vm, 'running')
 
     const firstSubmit = vm.handleSubmit()
     const secondSubmit = vm.handleSubmit()

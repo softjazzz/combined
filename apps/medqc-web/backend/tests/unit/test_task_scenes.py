@@ -163,21 +163,29 @@ def _task(
     }
 
 
-@pytest.mark.parametrize("scene", ["running", "final", "outpatient"])
+@pytest.mark.parametrize(
+    ("scene", "rule_set_key"),
+    [
+        ("running", "luxian_0609_qc_v1"),
+        ("final", "sc_content_v1"),
+    ],
+)
 def test_create_persists_explicit_scene(
     monkeypatch: pytest.MonkeyPatch,
     scene: str,
+    rule_set_key: str,
 ):
     database = _Database()
     client = _make_client(monkeypatch, database)
 
     response = client.post(
         "/api/v1/tasks",
-        json={"task_name": "场景任务", "scene": scene},
+        json={"task_name": "场景任务", "scene": scene, "rule_set_key": rule_set_key},
     )
 
     assert response.status_code == 200, response.text
     assert database.inserted[0]["scene"] == scene
+    assert database.inserted[0]["rule_set_key"] == rule_set_key
 
 
 @pytest.mark.parametrize("payload", [{"task_name": "旧客户端"}, {"task_name": "空场景", "scene": None}])
@@ -358,7 +366,7 @@ def test_scene_query_failure_is_non_success_and_does_not_leak_details(
 @pytest.mark.parametrize(
     ("method", "endpoint", "payload"),
     [
-        ("post", "/api/v1/tasks", {"task_name": "场景任务", "scene": "running"}),
+        ("post", "/api/v1/tasks", {"task_name": "场景任务", "scene": "running", "rule_set_key": "luxian_0609_qc_v1"}),
         ("put", "/api/v1/tasks/task-1", {"task_name": "更新名称"}),
         ("get", "/api/v1/tasks/task-1", None),
     ],

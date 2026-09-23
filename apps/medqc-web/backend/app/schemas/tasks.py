@@ -64,6 +64,7 @@ class TaskRecordStatus(str, Enum):
 # ============================================================================
 
 NonEmptyCaseCoordinate = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+RuleSetKey = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)]
 
 
 class TaskCaseRef(BaseModel):
@@ -84,6 +85,7 @@ class TaskCreateRequest(BaseModel):
     task_name: str = Field(..., description="任务名称")
     task_type: TaskType = Field(TaskType.ONE_TIME, description="任务类型")
     scene: Optional[TaskScene] = Field(None, description="任务病历场景")
+    rule_set_key: Optional[RuleSetKey] = Field(None, description="创建时显式选择的规则集 key")
     schedule_config: Optional[Dict[str, Any]] = Field(None, description="定时配置")
 
     # 病历范围
@@ -104,7 +106,11 @@ class TaskCreateRequest(BaseModel):
     deadline: Optional[str] = Field(None, description="截止日期 (ISO 8601)")
 
     @model_validator(mode="after")
-    def validate_record_refs(self):
+    def validate_creation_scope(self):
+        if self.scene is not None and self.rule_set_key is None:
+            raise ValueError("选择任务场景时必须显式选择规则集")
+        if self.scene is None and self.rule_set_key is not None:
+            raise ValueError("选择规则集时必须选择任务场景")
         if not self.record_refs:
             return self
         if self.record_ids:
@@ -130,9 +136,9 @@ class TaskUpdateRequest(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def reject_scene_changes(cls, data: Any) -> Any:
-        if isinstance(data, dict) and "scene" in data:
-            raise ValueError("任务场景创建后不可修改")
+    def reject_creation_scope_changes(cls, data: Any) -> Any:
+        if isinstance(data, dict) and ("scene" in data or "rule_set_key" in data):
+            raise ValueError("任务场景和规则集创建后不可修改")
         return data
 
 
@@ -164,6 +170,7 @@ class TaskResponse(BaseModel):
     task_name: str
     task_type: str
     scene: Optional[TaskScene] = None
+    rule_set_key: Optional[str] = None
     status: str
     progress: int = 0
     total_records: int = 0

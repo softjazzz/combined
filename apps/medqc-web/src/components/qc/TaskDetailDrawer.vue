@@ -119,7 +119,7 @@
               v-model:value="keyword"
               data-testid="task-detail-keyword"
               allow-clear
-              placeholder="搜索病历号或质控员"
+              placeholder="搜索机构、患者、就诊、病历号或质控员"
             />
             <a-select
               v-model:value="recordStatus"
@@ -137,14 +137,31 @@
             :columns="recordColumns"
             :data-source="filteredRecords"
             :pagination="recordPagination"
-            :scroll="{ x: 760 }"
+            :scroll="{ x: 860 }"
             row-key="id"
             size="small"
             @change="handleTableChange"
           >
             <template #bodyCell="{ column, record }">
-              <template v-if="column.key === 'recordId'">
-                <span class="task-detail-drawer__record-id">{{ record.record_id || '未记录' }}</span>
+              <template v-if="column.key === 'caseIdentity'">
+                <div
+                  v-if="hasCaseIdentity(record)"
+                  class="task-detail-drawer__case-identity"
+                >
+                  <div><span>机构</span><strong>{{ record.institute_id }}</strong></div>
+                  <div><span>患者</span><strong>{{ record.patient_id }}</strong></div>
+                  <div><span>就诊</span><strong>{{ record.visit_id }}</strong></div>
+                </div>
+                <span
+                  v-else
+                  class="task-detail-drawer__missing-identity"
+                >未记录病例坐标</span>
+                <div
+                  v-if="canDisplayLegacyRecordId(record)"
+                  class="task-detail-drawer__legacy-id"
+                >
+                  历史病历号：<span class="task-detail-drawer__record-id">{{ record.record_id || '未记录' }}</span>
+                </div>
               </template>
               <template v-else-if="column.key === 'assignee'">
                 {{ assigneeLabel(record) }}
@@ -224,7 +241,7 @@ const recordStatusOptions = [
 ]
 
 const recordColumns: TableColumnsType<TaskRecordItem> = [
-  { title: '病历号', dataIndex: 'record_id', key: 'recordId', width: 190 },
+  { title: '病例身份', key: 'caseIdentity', width: 290 },
   { title: '质控员', dataIndex: 'assignee_name', key: 'assignee', width: 150 },
   { title: '处理状态', dataIndex: 'status', key: 'status', width: 110 },
   { title: '评分', dataIndex: 'score', key: 'score', width: 90 },
@@ -238,7 +255,11 @@ const filteredRecords = computed(() => {
   return detail.value.records.filter((record) => {
     if (recordStatus.value && record.status !== recordStatus.value) return false
     if (!normalizedKeyword) return true
-    return [record.record_id, record.assignee_name, record.assignee_id]
+    const coordinates = hasCaseIdentity(record)
+      ? [record.institute_id, record.patient_id, record.visit_id]
+      : []
+    const legacyIds = canDisplayLegacyRecordId(record) ? [record.record_id] : []
+    return [record.assignee_name, record.assignee_id, ...coordinates, ...legacyIds]
       .some((value) => String(value || '').toLocaleLowerCase().includes(normalizedKeyword))
   })
 })
@@ -380,6 +401,16 @@ function assigneeLabel(record: {
   return '未分配'
 }
 
+function hasCaseIdentity(record: Pick<TaskRecordItem, 'institute_id' | 'patient_id' | 'visit_id'>) {
+  return [record.institute_id, record.patient_id, record.visit_id]
+    .every((value) => typeof value === 'string' && value.trim().length > 0)
+}
+
+function canDisplayLegacyRecordId(record: Pick<TaskRecordItem, 'institute_id' | 'patient_id' | 'visit_id'>) {
+  return detail.value?.scene == null
+    && [record.institute_id, record.patient_id, record.visit_id].every((value) => value == null)
+}
+
 watch([() => props.open, () => props.taskId, () => props.tab], ([open, taskId]) => {
   if (!open || !String(taskId || '').trim()) {
     clearDetail()
@@ -497,7 +528,8 @@ watch([keyword, recordStatus], () => {
 }
 
 .task-detail-drawer__breakable,
-.task-detail-drawer__record-id {
+.task-detail-drawer__record-id,
+.task-detail-drawer__case-identity strong {
   overflow-wrap: anywhere;
   word-break: break-word;
 }
@@ -511,8 +543,36 @@ watch([keyword, recordStatus], () => {
 
 .task-detail-drawer__record-id {
   display: inline-block;
-  max-width: 180px;
   color: #1d1d1f;
+}
+
+.task-detail-drawer__case-identity {
+  display: grid;
+  gap: 2px;
+}
+
+.task-detail-drawer__case-identity div {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 6px;
+  min-width: 0;
+}
+
+.task-detail-drawer__case-identity span,
+.task-detail-drawer__legacy-id,
+.task-detail-drawer__missing-identity {
+  color: rgba(29, 29, 31, 0.6);
+}
+
+.task-detail-drawer__case-identity strong {
+  min-width: 0;
+  font-weight: 500;
+}
+
+.task-detail-drawer__legacy-id {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 18px;
 }
 
 @media (max-width: 640px) {

@@ -30,6 +30,7 @@ from ..core.supabase_client import get_supabase, async_execute
 from ..core.audit import audit_event
 from ..core.response import success_response, paginated_response, get_trace_id
 from ..core.security import get_current_user
+from ..services.qc_rule_sets import get_sichuan_rule_set
 from ..core.permissions import (
     require_permission,
     require_role,
@@ -178,6 +179,13 @@ async def create_task(
     创建质控抽查任务
     """
     creator_id = _get_task_scope_user_id(current_user)
+    rule_set = None
+    if task_data.rule_set_key is not None:
+        rule_set = get_sichuan_rule_set(task_data.rule_set_key)
+        if rule_set is None:
+            raise HTTPException(status_code=422, detail="规则集不存在或尚未发布")
+        if task_data.scene is not None and rule_set.scope != task_data.scene.value:
+            raise HTTPException(status_code=422, detail="规则集与任务场景不匹配")
     task_id = str(uuid.uuid4())
     task_number = _generate_task_number()
 
@@ -206,6 +214,7 @@ async def create_task(
     }
     if task_data.scene is not None:
         task["scene"] = task_data.scene.value
+        task["rule_set_key"] = rule_set.key
     if task_data.record_refs:
         task["record_refs"] = [record_ref.model_dump() for record_ref in task_data.record_refs]
 
@@ -751,6 +760,19 @@ async def re_analyze_task(
     sb = get_supabase()
     if sb is None:
         raise HTTPException(status_code=503, detail="数据库不可用")
+
+    try:
+        task_response = await async_execute(
+            sb.table('qc_tasks').select('*').eq('id', task_id).single()
+        )
+        task = getattr(task_response, 'data', None)
+    except Exception as exc:
+        logger.warning("重新质控前查询任务失败", exc_info=True)
+        raise HTTPException(status_code=503, detail="任务数据源不可用，请稍后重试") from exc
+    if task is None:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    if task.get("scene") is not None:
+        raise HTTPException(status_code=409, detail="场景任务尚未接通真实批量质控，请勿使用旧重新质控入口")
 
     records = []
     try:

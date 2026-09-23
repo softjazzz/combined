@@ -110,7 +110,7 @@ function detailResponse(
       completed_records: 2,
       creator_id: 'creator',
       creator_name: '质控员',
-      scene: 'final',
+      scene: null,
       created_at: '2026-09-22T00:00:00Z',
       updated_at: '2026-09-22T00:00:00Z',
       records,
@@ -302,6 +302,56 @@ describe('TaskDetailDrawer', () => {
     vm.recordStatus = 'pending'
     await flushPromises()
     expect(vm.filteredRecords.map((item) => item.id)).toEqual(['association-a'])
+  })
+
+  it('完整三坐标可展示和分别检索，旧行与残缺坐标不伪装成病例身份', async () => {
+    const longVisitId = `VISIT-${'长编号'.repeat(40)}`
+    mocks.getTaskDetail.mockResolvedValueOnce(
+      detailResponse('病例身份任务', [
+        record({ id: 'complete', record_id: 'legacy-1', institute_id: 'HOSP-1', patient_id: 'PAT-1', visit_id: longVisitId }),
+        record({ id: 'legacy', record_id: 'legacy-2', institute_id: null, patient_id: null, visit_id: null }),
+        record({ id: 'partial', record_id: 'legacy-3', institute_id: 'HOSP-3', patient_id: '   ', visit_id: 'VISIT-3' }),
+      ], { scene: 'outpatient' }),
+    )
+    const wrapper = mountDrawer()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('HOSP-1')
+    expect(wrapper.text()).toContain('PAT-1')
+    expect(wrapper.text()).toContain(longVisitId)
+    expect(wrapper.text()).not.toContain('历史病历号：legacy-1')
+    expect(wrapper.text()).not.toContain('历史病历号：legacy-2')
+    expect(wrapper.text()).not.toContain('历史病历号：legacy-3')
+    expect(wrapper.findAll('.task-detail-drawer__missing-identity')).toHaveLength(2)
+    expect(wrapper.text()).not.toContain('HOSP-3')
+    expect(wrapper.text()).not.toContain('VISIT-3')
+
+    const vm = wrapper.vm as unknown as { keyword: string; filteredRecords: Array<{ id: string }> }
+    for (const query of ['HOSP-1', 'PAT-1', longVisitId]) {
+      vm.keyword = query
+      await flushPromises()
+      expect(vm.filteredRecords.map((item) => item.id)).toEqual(['complete'])
+    }
+    vm.keyword = 'HOSP-3'
+    await flushPromises()
+    expect(vm.filteredRecords).toHaveLength(0)
+    vm.keyword = 'legacy-2'
+    await flushPromises()
+    expect(vm.filteredRecords).toHaveLength(0)
+    vm.keyword = 'legacy-1'
+    await flushPromises()
+    expect(vm.filteredRecords).toHaveLength(0)
+  })
+
+  it('只有历史任务的旧病历号可展示和检索', async () => {
+    mocks.getTaskDetail.mockResolvedValueOnce(detailResponse('历史任务', [record({ record_id: 'old-record' })]))
+    const wrapper = mountDrawer()
+    await flushPromises()
+    expect(wrapper.text()).toContain('历史病历号：old-record')
+    const vm = wrapper.vm as unknown as { keyword: string; filteredRecords: Array<{ id: string }> }
+    vm.keyword = 'old-record'
+    await flushPromises()
+    expect(vm.filteredRecords).toHaveLength(1)
   })
 
   it('真实表格分页可进入第二页，界面筛选后回到首个结果页', async () => {

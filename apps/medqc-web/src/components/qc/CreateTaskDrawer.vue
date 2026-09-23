@@ -50,6 +50,34 @@
           />
         </a-form-item>
 
+        <a-form-item
+          label="质控规则集"
+          required
+        >
+          <a-select
+            v-model:value="formData.rule_set_key"
+            data-testid="task-rule-set-select"
+            placeholder="请选择已发布规则集"
+            :loading="ruleSetsLoading"
+            :disabled="!formData.scene || ruleSetsLoading || !!ruleSetsError || !matchingRuleSets.length"
+            :options="ruleSetSelectOptions"
+          />
+        </a-form-item>
+        <a-alert
+          v-if="ruleSetsError"
+          type="error"
+          :message="ruleSetsError"
+          show-icon
+          class="mb-4"
+        />
+        <a-alert
+          v-else-if="formData.scene && !ruleSetsLoading && !matchingRuleSets.length"
+          type="warning"
+          :message="`${sceneLabel}暂无已发布的匹配规则集，当前不能创建任务。`"
+          show-icon
+          class="mb-4"
+        />
+
         <a-form-item label="任务类型">
           <a-radio-group v-model:value="formData.task_type">
             <a-radio-button value="one_time">
@@ -271,6 +299,9 @@
         <a-descriptions-item label="质控场景">
           {{ sceneLabel }}
         </a-descriptions-item>
+        <a-descriptions-item label="质控规则集">
+          {{ selectedRuleSetLabel }}
+        </a-descriptions-item>
         <a-descriptions-item label="截止日期">
           {{ formData.deadline?.format('YYYY-MM-DD') || '无截止日期' }}
         </a-descriptions-item>
@@ -347,8 +378,8 @@ import {
   NumberOutlined,
   PercentageOutlined,
 } from '@ant-design/icons-vue'
-import { createTask } from '@/api/tasks'
-import type { TaskCreateData, TaskItem, TaskScene } from '@/api/tasks'
+import { createTask, getTaskRuleSets } from '@/api/tasks'
+import type { TaskCreateData, TaskItem, TaskRuleSetOption, TaskScene } from '@/api/tasks'
 import type { Dayjs } from 'dayjs'
 
 // ============= Props & Emits =============
@@ -373,11 +404,16 @@ const rangeMode = ref<'date' | 'ids'>('date')
 const dateRangeValue = ref<[Dayjs, Dayjs] | null>(null)
 const recordIdsText = ref('')
 const selectedAssignees = ref<string[]>([])
+const ruleSets = ref<TaskRuleSetOption[]>([])
+const ruleSetsLoading = ref(false)
+const ruleSetsError = ref('')
+let ruleSetRequestId = 0
 
 // 表单数据
 const formData = ref({
   task_name: '',
   scene: null as TaskScene | null,
+  rule_set_key: undefined as string | undefined,
   task_type: 'one_time' as 'one_time' | 'scheduled',
   deadline: null as Dayjs | null,
   description: '',
@@ -445,10 +481,28 @@ const parsedRecordIds = computed(() => {
     .filter((id) => id.length > 0)
 })
 
+const matchingRuleSets = computed(() =>
+  ruleSets.value.filter((item) => item.scope === formData.value.scene && item.rule_set_key.trim()),
+)
+const ruleSetSelectOptions = computed(() =>
+  matchingRuleSets.value.map((item) => ({
+    value: item.rule_set_key,
+    label: `${item.rule_set_name} (${item.rule_set_version})`,
+  })),
+)
+const selectedRuleSetLabel = computed(() =>
+  ruleSetSelectOptions.value.find((item) => item.value === formData.value.rule_set_key)?.label || '(未选择)',
+)
+const selectedRuleSetIsValid = computed(() =>
+  !ruleSetsLoading.value && !ruleSetsError.value &&
+  matchingRuleSets.value.some((item) => item.rule_set_key === formData.value.rule_set_key),
+)
+
 const canProceed = computed(() => {
   switch (currentStep.value) {
     case 0:
-      return formData.value.task_name.trim().length > 0 && formData.value.scene !== null
+      return formData.value.task_name.trim().length > 0 &&
+        formData.value.scene !== null && selectedRuleSetIsValid.value
     case 1:
       return rangeMode.value === 'ids' ? parsedRecordIds.value.length > 0 : true
     case 2:
@@ -480,6 +534,36 @@ const assignLabel = computed(() => {
   return method
 })
 
+watch(() => formData.value.scene, () => {
+  formData.value.rule_set_key = undefined
+})
+
+watch(() => props.open, async (open) => {
+  const requestId = ++ruleSetRequestId
+  if (!open) return
+  ruleSetsLoading.value = true
+  ruleSetsError.value = ''
+  ruleSets.value = []
+  try {
+    const result = await getTaskRuleSets()
+    if (requestId !== ruleSetRequestId) return
+    if (!result.success || !Array.isArray(result.data?.items)) {
+      ruleSetsError.value = result.message || '规则集目录加载失败，请稍后重试'
+      return
+    }
+    ruleSets.value = result.data.items.filter((item) =>
+      typeof item.rule_set_key === 'string' &&
+      typeof item.rule_set_name === 'string' &&
+      typeof item.rule_set_version === 'string' &&
+      typeof item.scope === 'string',
+    )
+  } catch {
+    if (requestId === ruleSetRequestId) ruleSetsError.value = '规则集目录加载失败，请稍后重试'
+  } finally {
+    if (requestId === ruleSetRequestId) ruleSetsLoading.value = false
+  }
+}, { immediate: true })
+
 // ============= 方法 =============
 const nextStep = () => {
   if (!canProceed.value) return
@@ -505,6 +589,7 @@ const resetForm = () => {
   formData.value = {
     task_name: '',
     scene: null,
+    rule_set_key: undefined,
     task_type: 'one_time',
     deadline: null,
     description: '',
@@ -534,6 +619,18 @@ const handleSubmit = async () => {
     message.warning('请选择质控场景')
     return
   }
+  if (ruleSetsError.value || ruleSetsLoading.value) {
+    message.error(ruleSetsError.value || '规则集目录正在加载，请稍后重试')
+    return
+  }
+  if (!matchingRuleSets.value.length) {
+    message.warning(`${sceneLabel.value}暂无已发布的匹配规则集，当前不能创建任务`)
+    return
+  }
+  if (!selectedRuleSetIsValid.value || !formData.value.rule_set_key) {
+    message.warning('请选择与质控场景匹配的规则集')
+    return
+  }
   if (rangeMode.value === 'ids' && parsedRecordIds.value.length === 0) {
     message.warning('请输入至少一个病案号')
     return
@@ -554,6 +651,7 @@ const handleSubmit = async () => {
     const submitData: TaskCreateData = {
       task_name: taskName,
       scene,
+      rule_set_key: formData.value.rule_set_key,
       task_type: formData.value.task_type,
       deadline: formData.value.deadline?.format('YYYY-MM-DD'),
       sampling_method: formData.value.sampling_method,

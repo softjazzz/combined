@@ -73,6 +73,9 @@ export interface TaskRecordItem {
     id: string
     task_id: string
     record_id: string | null
+    institute_id?: string | null
+    patient_id?: string | null
+    visit_id?: string | null
     assignee_id?: string | null
     assignee_name?: string | null
     status: string | null
@@ -90,16 +93,31 @@ export interface TaskDetail extends TaskItem {
 export interface TaskCreateData {
     task_name: string
     scene: TaskScene
+    rule_set_key: string
     task_type?: TaskType
     schedule_config?: Record<string, any>
     date_range?: { start?: string; end?: string }
     department_filter?: string[]
     record_ids?: string[]
+    record_refs?: TaskCaseRef[]
     sampling_method?: SamplingMethod
     sampling_config?: Record<string, any>
     assign_method?: AssignMethod
     assignee_config?: Record<string, any>
     deadline?: string
+}
+
+export interface TaskRuleSetOption {
+    rule_set_key: string
+    rule_set_name: string
+    rule_set_version: string
+    scope: string
+}
+
+export interface TaskCaseRef {
+    institute_id: string
+    patient_id: string
+    visit_id: string
 }
 
 export interface TaskProgress {
@@ -196,8 +214,16 @@ export async function createTask(data: TaskCreateData) {
     })
 }
 
+/** 获取工作区已发布规则集；请求失败与空目录由调用方分别处理 */
+export async function getTaskRuleSets() {
+    return request<{ items: TaskRuleSetOption[] }>({
+        method: 'GET',
+        url: '/api/v1/qc/sichuan/workspace/rule-sets',
+    })
+}
+
 /** 更新任务 */
-export type TaskUpdateData = Omit<Partial<TaskCreateData>, 'scene'> & { status?: TaskStatus }
+export type TaskUpdateData = Omit<Partial<TaskCreateData>, 'scene' | 'rule_set_key'> & { status?: TaskStatus }
 
 export async function updateTask(taskId: string, data: TaskUpdateData) {
     return request<TaskItem>({
