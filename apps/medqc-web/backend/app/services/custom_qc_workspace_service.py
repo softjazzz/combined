@@ -3182,15 +3182,32 @@ class CustomQCWorkspaceService:
                 }
 
             selected_job = selection.job
-            envelope = self._load_record_result_envelope_items(
-                session,
-                root_job_id=_safe_text(selected_job.get("id")),
-                institute_id=normalized_institute_id,
-                patient_id=normalized_patient_id,
-                visit_id=normalized_visit_id,
-                rule_set_key=normalized_rule_set_key,
-                rule_set_version=normalized_rule_set_version,
-            )
+            try:
+                envelope = self._load_record_result_envelope_items(
+                    session,
+                    root_job_id=_safe_text(selected_job.get("id")),
+                    institute_id=normalized_institute_id,
+                    patient_id=normalized_patient_id,
+                    visit_id=normalized_visit_id,
+                    rule_set_key=normalized_rule_set_key,
+                    rule_set_version=normalized_rule_set_version,
+                )
+            except ValueError as exc:
+                # 已发布合同损坏沿用既有结构化失败，不变成未找到，也不吞其他错误。
+                if str(exc) != LX0609_CUSTOMER_RESULT_CONTRACT_ERROR:
+                    raise
+                return {
+                    "schema_version": "lx0609-single-record-result-v1",
+                    "state": "technical_error",
+                    "reason_code": "canonical_result_envelope_invalid",
+                    "data_origin": "canonical_result_envelope",
+                    "record_ref": "",
+                    "job_id": _safe_text(selected_job.get("id")),
+                    "items": [],
+                    "expected_rule_count": len(expected_rule_ids_for_count),
+                    "result_rule_count": 0,
+                    "is_complete": False,
+                }
             if not envelope:
                 return {
                     "schema_version": "lx0609-single-record-result-v1",

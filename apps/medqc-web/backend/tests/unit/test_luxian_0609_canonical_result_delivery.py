@@ -1360,6 +1360,32 @@ def test_single_record_result_projects_catalog_rule_master_metadata_in_envelope_
         }
         for entry in reversed(customer_entries)
     ]
+    # 该用例检查全目录展示顺序，也必须提供两条试点发布后必需的事实。
+    rescue_fields = ["condition_change", "rescue_time", "rescue_measures", "rescue_outcome",
+                     "participant_names", "participant_titles"]
+    for item in canonical_items:
+        if item["rule_id"] == "LX0609-09-01-02":
+            item["customer_display_facts"] = {
+                "target_document": "rescue_record", "source_label": "抢救记录",
+                "content_state": "compliant", "required_fields": rescue_fields,
+                "missing_fields": [], "unknown_fields": [], "failure_kind": "",
+                "rescue_content_events": [{
+                    "event_index": 1, "record_time": "2026-09-01T10:00:00+08:00",
+                    "body_scope": "complete",
+                    "field_facts": {field: {"state": "present"} for field in rescue_fields},
+                    "missing_fields": [], "unknown_fields": [],
+                }],
+            }
+        elif item["rule_id"] == "LX0609-06-02-01":
+            item["customer_display_facts"] = {
+                "verification_kind": "pathology_report_completeness", "decision_status": "compliant",
+                "event_count": 1, "report_count": 1, "missing_report_count": 0,
+                "unresolved_event_count": 0, "excluded_event_count": 0,
+                "checked_sources": [{"source": source, "state": "present", "completeness": "complete"}
+                                    for source in ("pathology_exam_master", "pathology_exam_report")],
+                "events": [{"event_index": 1, "status": "compliant", "reason_code": "pathology_report_present",
+                            "execution_confirmed": True, "report_count": 1}],
+            }
     envelope = {
         "schema_version": "lx0609-record-result-envelope-v1",
         "delivery_mode": "canonical_straight_through",
@@ -1521,7 +1547,13 @@ def test_single_record_result_rejects_invalid_rule_identity_before_metadata_proj
     assert result["items"] == []
 
 
-def test_single_record_result_rejects_malformed_item_mixed_with_valid_item(monkeypatch):
+@pytest.mark.parametrize("malformed_item", [
+    "malformed",
+    {"rule_id": "LX0609-09-01-02", "status": "compliant", "result_status": "compliant", "is_compliant": True},
+    {"rule_id": "LX0609-06-02-01", "status": "compliant", "result_status": "compliant", "is_compliant": True,
+     "customer_display_facts": {"raw_text": "invalid private fields"}},
+])
+def test_single_record_result_rejects_malformed_item_mixed_with_valid_item(monkeypatch, malformed_item):
     envelope = {
         "schema_version": "lx0609-record-result-envelope-v1",
         "delivery_mode": "canonical_straight_through",
@@ -1533,7 +1565,7 @@ def test_single_record_result_rejects_malformed_item_mixed_with_valid_item(monke
                 "result_status": "compliant",
                 "is_compliant": True,
             },
-            "malformed",
+            malformed_item,
         ],
     }
     session = _ReadSession(
