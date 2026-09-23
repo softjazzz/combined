@@ -4,9 +4,8 @@
 用于质控抽查任务的创建、分配、执行等操作
 """
 
-from pydantic import BaseModel, Field, model_validator
-from typing import Optional, List, Dict, Any
-from datetime import datetime
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from typing import Annotated, Optional, List, Dict, Any
 from enum import Enum
 
 
@@ -64,8 +63,24 @@ class TaskRecordStatus(str, Enum):
 # Request Models
 # ============================================================================
 
+NonEmptyCaseCoordinate = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+
+
+class TaskCaseRef(BaseModel):
+    """任务指定病历的完整工作台身份。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    institute_id: NonEmptyCaseCoordinate
+    patient_id: NonEmptyCaseCoordinate
+    visit_id: NonEmptyCaseCoordinate
+
+
 class TaskCreateRequest(BaseModel):
     """创建任务请求"""
+
+    model_config = ConfigDict(extra="forbid")
+
     task_name: str = Field(..., description="任务名称")
     task_type: TaskType = Field(TaskType.ONE_TIME, description="任务类型")
     scene: Optional[TaskScene] = Field(None, description="任务病历场景")
@@ -75,6 +90,7 @@ class TaskCreateRequest(BaseModel):
     date_range: Optional[Dict[str, str]] = Field(None, description="日期范围 { start, end }")
     department_filter: Optional[List[str]] = Field(default_factory=list, description="科室筛选")
     record_ids: Optional[List[str]] = Field(default_factory=list, description="指定病历ID")
+    record_refs: List[TaskCaseRef] = Field(default_factory=list, description="指定病历三坐标")
 
     # 抽样规则
     sampling_method: SamplingMethod = Field(SamplingMethod.ALL, description="抽样方式")
@@ -86,6 +102,22 @@ class TaskCreateRequest(BaseModel):
 
     # 其他
     deadline: Optional[str] = Field(None, description="截止日期 (ISO 8601)")
+
+    @model_validator(mode="after")
+    def validate_record_refs(self):
+        if not self.record_refs:
+            return self
+        if self.record_ids:
+            raise ValueError("record_refs 不得与旧 record_ids 混用")
+        if self.scene is None:
+            raise ValueError("指定 record_refs 时必须选择任务场景")
+        identities = [
+            (item.institute_id, item.patient_id, item.visit_id)
+            for item in self.record_refs
+        ]
+        if len(identities) != len(set(identities)):
+            raise ValueError("record_refs 不得包含重复病例三坐标")
+        return self
 
 
 class TaskUpdateRequest(BaseModel):
@@ -147,6 +179,7 @@ class TaskResponse(BaseModel):
     assign_method: Optional[str] = None
     date_range: Optional[Dict[str, str]] = None
     department_filter: Optional[List[str]] = None
+    record_refs: Optional[List[TaskCaseRef]] = None
 
 
 class TaskProgressResponse(BaseModel):

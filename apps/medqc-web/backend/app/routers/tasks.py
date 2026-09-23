@@ -24,7 +24,6 @@ from ..schemas.tasks import (
     TaskCreateRequest,
     TaskUpdateRequest,
     TaskAssignRequest,
-    TaskRecordUpdateRequest,
     TaskStatus,
 )
 from ..core.supabase_client import get_supabase, async_execute
@@ -207,6 +206,8 @@ async def create_task(
     }
     if task_data.scene is not None:
         task["scene"] = task_data.scene.value
+    if task_data.record_refs:
+        task["record_refs"] = [record_ref.model_dump() for record_ref in task_data.record_refs]
 
     sb = get_supabase()
     if sb is None:
@@ -214,9 +215,17 @@ async def create_task(
 
     try:
         resp = await async_execute(sb.table('qc_tasks').insert(task))
-        task = (getattr(resp, 'data', None) or [task])[0]
+        rows = getattr(resp, 'data', None)
+        if (
+            not isinstance(rows, list)
+            or len(rows) != 1
+            or not isinstance(rows[0], dict)
+            or rows[0].get("id") != task["id"]
+        ):
+            raise RuntimeError("task_insert_returned_no_rows")
+        task = rows[0]
     except Exception as e:
-        logger.error(f"创建任务失败: {e}")
+        logger.error("创建任务失败: %s", type(e).__name__)
         raise HTTPException(status_code=500, detail="创建任务失败，请稍后重试")
 
     return success_response(
@@ -765,7 +774,7 @@ async def re_analyze_task(
     started = []
     for rid in record_ids[:50]:
         try:
-            result = await qc_service.evaluate({"record_id": rid})
+            await qc_service.evaluate({"record_id": rid})
             started.append({"record_id": rid, "status": "started"})
         except Exception as e:
             started.append({"record_id": rid, "status": "failed", "error": str(e)})

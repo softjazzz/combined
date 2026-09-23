@@ -186,3 +186,12 @@
 - 主 Agent 只读核实实际库 revision44、qc 35 行与 public 0 行的索引和可空性漂移，现存旧标识无空值/重复。Sol / medium 实现代理负责 revision46/ORM/测试，独立审查发现 3 项 P2 后修正，主 Agent 复核关键 diff、SQL 表达式和 111 条相关 pytest。
 - 新列 `institute_id/patient_id/visit_id` 可空，旧行不回填；CHECK 要求历史全 NULL 或新行三坐标完整，分模式部分唯一替换旧全局唯一。错误的同名约束、非法旧标识、重复身份和有现代数据的降级均失败关闭；实际 qc 的物理 nullable 不改动。
 - 只读 PostgreSQL 已验证 ASCII 空白判定，`alembic heads` 指向 revision46；**业务库仍停在 revision44**。真实 DDL、升级/降级与并发写验收须获授权后进行。下一批还必须为主表增加 `record_refs` 配置合同，再接场景候选、抽样保存、详情与真实批量质控。Goal 保持 active。
+
+## 12. 第七批：任务主表指定病例范围合同
+
+详见 [第七批实施与验收记录](2026-09-23-task-record-refs-config.md)。本批增加主表 `record_refs` 结构迁移和显式三坐标创建 API，不执行迁移或真实写入。
+
+- 主 Agent 只读核查实际库 revision44、qc/public 旧 `record_ids` 分别为 JSONB/Text、两表均无 `record_refs`；适配器序列化参数可在只读 PostgreSQL 解析为 JSONB 数组。旧字段不修改、不回填。
+- Sol / medium 实现代理负责 revision47、ORM 和隔离迁移测试；主 Agent 负责创建 DTO、路由、反例和合同文档；两个独立审查轴找出日志泄露、空结果假成功、顶层错拼、列约束漂移及降级并发竞态，主 Agent 逐项修复复核。
+- 显式病例范围必须为完整且唯一的三坐标，并带任务场景；旧 `record_ids` 不与其混用。未知顶层字段、空结果、错误列型/约束均失败关闭；降级先锁目标表再预检非空配置。相邻 Python 测试 163 passed。
+- **迁移45–47仍未执行，业务库 revision44；真实 PostgreSQL DDL/写入和并发验收待授权。** 场景候选、抽样关联保存、详情和 workspace 真实执行尚未接通，门急诊无正样本。不得将本批写成三场景任务已交付；Goal 保持 active。

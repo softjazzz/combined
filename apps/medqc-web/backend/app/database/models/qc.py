@@ -7,7 +7,21 @@ router code paths to minimize migration risk.
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, CheckConstraint, Column, Date, DateTime, Float, Index, Integer, String, Text, text
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Column,
+    Date,
+    DateTime,
+    Float,
+    Index,
+    Integer,
+    JSON,
+    String,
+    Text,
+    text,
+)
+from sqlalchemy.dialects.postgresql import JSONB
 
 from ..connection import Base
 
@@ -165,6 +179,11 @@ class QCTask(Base):
     date_range = Column(Text, comment="JSON text")
     department_filter = Column(Text, comment="JSON text")
     record_ids = Column(Text, comment="JSON text")
+    record_refs = Column(
+        JSON().with_variant(JSONB(), "postgresql"),
+        nullable=True,
+        comment="显式病例三坐标数组；历史任务为 NULL",
+    )
     sampling_method = Column(String(20), comment="all/count/percentage")
     sampling_config = Column(Text, comment="JSON text")
     assign_method = Column(String(30), comment="keep/by_department/by_ratio/by_type")
