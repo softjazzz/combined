@@ -1002,6 +1002,95 @@ async def test_workspace_batch_should_call_evaluate_once_per_record(monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_sc_batch_nonempty_result_has_completed_execution_status(monkeypatch):
+    workspace = _WorkspaceStub()
+    workspace.job["filters"] = {"rule_ids": ["SC-001"], "rule_set_key": "sc_content_v1"}
+    workspace.job["record_ids"] = ["visit-001"]
+    service = _ServiceStub(status_by_rule={"SC-001": "non_compliant"})
+
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+
+    async def _get_service():
+        return service
+
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_service)
+    await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
+
+    assert workspace.job["status"] == "completed"
+    assert len(workspace.items) == 1
+    assert workspace.items[0]["status"] == "non_compliant"
+    assert workspace.items[0]["is_compliant"] is False
+    assert workspace.summary["execution_status"] == "completed"
+    assert workspace.summary["completed_rule_count"] == 1
+    assert workspace.summary["success_count"] == 1
+    assert workspace.summary["failed_record_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_sc_batch_partial_evaluation_failure_retains_case_identity(monkeypatch):
+    workspace = _WorkspaceStub()
+    workspace.job["filters"] = {"rule_ids": ["SC-001"], "rule_set_key": "sc_content_v1"}
+    service = _ServiceStub(status_by_rule={"SC-001": "non_compliant"})
+
+    async def _evaluate_document(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+        if kwargs.get("document_id") == "visit-002":
+            raise RuntimeError("病例评估失败")
+        return await _ServiceStub.evaluate_document(service, *args, **kwargs)
+
+    service.evaluate_document = _evaluate_document  # type: ignore[method-assign]
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+
+    async def _get_service():
+        return service
+
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_service)
+    await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
+
+    assert workspace.job["status"] == "failed"
+    assert len(workspace.items) == 1
+    assert len(workspace.failed_records) == 1
+    assert workspace.summary["execution_status"] == "partial_failed"
+    assert workspace.summary["completed_rule_count"] == len(workspace.items)
+    assert workspace.summary["failed_rule_count"] == len(workspace.failed_records)
+    assert workspace.summary["success_count"] == 1
+    assert workspace.summary["failed_record_count"] == 1
+    assert {
+        key: workspace.failed_records[0][key]
+        for key in ("institute_id", "patient_id", "visit_id")
+    } == {
+        "institute_id": "HOSP-001",
+        "patient_id": "PAT-visit-002",
+        "visit_id": "visit-002",
+    }
+
+
+@pytest.mark.asyncio
+async def test_sc_batch_global_rule_lookup_failure_is_failed(monkeypatch):
+    workspace = _WorkspaceStub()
+    workspace.job["filters"] = {"rule_ids": ["SC-001"], "rule_set_key": "sc_content_v1"}
+    service = _ServiceStub()
+    service.get_rule_by_id = lambda _rule_id: None  # type: ignore[method-assign]
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+
+    async def _get_service():
+        return service
+
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_service)
+    await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
+
+    assert workspace.job["status"] == "failed"
+    assert workspace.items == []
+    assert workspace.failed_records
+    assert all(failure["error_phase"] == "rule_lookup" for failure in workspace.failed_records)
+    assert workspace.summary["execution_status"] == "failed"
+    assert workspace.summary["completed_rule_count"] == 0
+    assert workspace.summary["failed_rule_count"] == len(workspace.failed_records)
+    assert workspace.summary["success_count"] == 0
+    assert workspace.summary["compliant_records"] == 0
+    assert workspace.summary["failed_record_count"] == 2
+
+
+@pytest.mark.asyncio
 async def test_workspace_batch_does_not_count_legacy_executor_key_as_native(monkeypatch):
     """只有正式 unified native 结果才进入 native 观测桶。"""
 

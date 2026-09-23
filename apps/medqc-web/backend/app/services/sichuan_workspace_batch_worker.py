@@ -59,6 +59,7 @@ from .qc_input_adapters import evaluate_running_final_bundle
 from .qc_input_adapters.running_final_bundle_runtime import load_running_final_bundle
 from .qc_result_adjudicator import adjudicate_postprocessed_qc_results
 from .qc_result_postprocessor import postprocess_qc_result, summarize_postprocessed_results
+from .qc_rule_sets import get_sichuan_rule_set
 from .product_activation import get_product_activation_service
 from .sample_programmatic_evidence import build_programmatic_evidence_payload
 from .sample_validation_rule_sets import (
@@ -1310,6 +1311,10 @@ async def run_sichuan_workspace_batch_job(
         ):
             raise ValueError("批量任务缺少 rule_ids")
         rule_set_key = str(filters.get("rule_set_key") or "").strip()
+        is_sc_content_rule_set = bool(
+            rule_set_key.startswith("sc_content_")
+            and get_sichuan_rule_set(rule_set_key)
+        )
         rule_set_name = str(filters.get("rule_set_name") or "").strip()
         rule_set_version = str(filters.get("rule_set_version") or "").strip()
         _assert_luxian_0609_formal_customer_rule_ids(
@@ -1546,6 +1551,8 @@ async def run_sichuan_workspace_batch_job(
                         "error": f"未找到规则: {rule_id}",
                     }
                 )
+                if is_sc_content_rule_set:
+                    all_failed_records.extend(state["failed_records"])
             else:
                 valid_rule_ids.append(rule_id)
             rule_states[rule_id] = state
@@ -3073,7 +3080,10 @@ async def run_sichuan_workspace_batch_job(
                             "rule_code": str(state["rule_code"]),
                             "rule_name": str(state["rule_name"]),
                             "record_id": record_id,
-                            "visit_id": str(record.get("visit_id") or ""),
+                            "record_key": record_key,
+                            "institute_id": institute_id,
+                            "patient_id": patient_id,
+                            "visit_id": visit_id,
                             "patient_name": str(record.get("patient_name") or ""),
                             "department": str(record.get("department") or ""),
                             "error_phase": "evaluate_document",
@@ -3676,7 +3686,16 @@ async def run_sichuan_workspace_batch_job(
             },
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
-        if use_luxian_customer_results:
+        if is_sc_content_rule_set and any(
+            failure.get("error_phase") == "rule_lookup"
+            for failure in all_failed_records
+        ):
+            summary.update({
+                "success_count": 0,
+                "failed_record_count": total_records,
+                "compliant_records": 0,
+            })
+        if use_luxian_customer_results or is_sc_content_rule_set:
             summary.update({
                 "execution_status": (
                     "partial_failed" if all_items else "failed"

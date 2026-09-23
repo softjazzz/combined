@@ -16,6 +16,14 @@ from app.services.qc_workspace.partial_record_delivery import select_complete_re
 
 @pytest.fixture
 def storage(monkeypatch):
+    service_engine = sa.create_engine("sqlite://")
+
+    @sa.event.listens_for(service_engine, "connect")
+    def _attach_qc_schema(dbapi_connection, _connection_record):
+        dbapi_connection.execute("ATTACH DATABASE ':memory:' AS qc")
+
+    monkeypatch.setattr(workspace, "engine", service_engine)
+    monkeypatch.setattr(workspace, "_sync_batch_job_parent_columns", lambda **_: None)
     service = workspace.CustomQCWorkspaceService()
     metadata = sa.MetaData()
     table = service._batch_job_table.to_metadata(metadata, schema=None)
@@ -42,6 +50,7 @@ def storage(monkeypatch):
     monkeypatch.setattr(service, "_write_record_result_envelopes", no_canonical)
     yield service, engine, table
     engine.dispose()
+    service_engine.dispose()
 
 
 def _payload():
@@ -362,8 +371,105 @@ def test_non_luxian_partial_job_does_not_write_luxian_envelopes(storage, monkeyp
     )
 
 
+@pytest.mark.parametrize(
+    ("items", "failures", "execution_status", "expected_status"),
+    [
+        ([{"rule_id": "SC-001", "status": "non_compliant", "is_compliant": False}], [], "completed", "completed"),
+        ([{"rule_id": "SC-001", "status": "non_compliant", "is_compliant": False}],
+         [{"rule_id": "SC-001", "error_phase": "evaluate_document", "visit_id": "test-v"}],
+         "partial_failed", "failed"),
+        ([], [{"rule_id": "SC-001", "error_phase": "rule_lookup"}], "failed", "failed"),
+    ],
+    ids=["nonempty-success", "partial-failure", "global-rule-lookup-failure"],
+)
+def test_sc_job_persists_raw_results_without_canonical(
+    storage, items, failures, execution_status, expected_status,
+):
+    service, engine, table = storage
+    with engine.begin() as connection:
+        connection.execute(
+            table.update().where(table.c.id == "partial-job").values(
+                filters_json=json.dumps({"rule_set_key": "sc_content_v1", "rule_ids": ["SC-001"]})
+            )
+        )
+
+    service.complete_batch_job(
+        job_id="partial-job",
+        summary={
+            "total_records": 1,
+            "success_count": 0 if failures else 1,
+            "failed_count": len(failures),
+            "execution_status": execution_status,
+            "completed_rule_count": len(items),
+            "failed_rule_count": len(failures),
+        },
+        items=items,
+        failed_records=failures,
+    )
+
+    with engine.connect() as connection:
+        row = connection.execute(
+            sa.select(table.c.status, table.c.items_json, table.c.failed_records_json, table.c.summary_json)
+        ).one()
+    assert row.status == expected_status
+    assert json.loads(row.items_json) == items
+    assert json.loads(row.failed_records_json) == failures
+    assert json.loads(row.summary_json)["execution_status"] == execution_status
+
+
+@pytest.mark.parametrize("rule_set_key", ["custom_rule_set", "", "sc_content_unknown_v1"])
+def test_custom_job_keeps_existing_canonical_write_path(storage, monkeypatch, rule_set_key):
+    service, engine, table = storage
+    with engine.begin() as connection:
+        connection.execute(
+            table.update().where(table.c.id == "partial-job").values(
+                filters_json=json.dumps({"rule_set_key": rule_set_key})
+            )
+        )
+    captured = []
+    monkeypatch.setattr(
+        service, "_write_record_result_envelopes",
+        lambda *_args, **kwargs: captured.append(kwargs) or (),
+    )
+
+    service.complete_batch_job(
+        job_id="partial-job",
+        summary={"total_records": 1, "success_count": 1},
+        items=[{"rule_id": "CUSTOM-001", "status": "non_compliant"}],
+        failed_records=[],
+    )
+
+    assert len(captured) == 1
+    assert captured[0]["items"][0]["rule_id"] == "CUSTOM-001"
+
+
+@pytest.mark.parametrize("rule_set_key", ["custom_rule_set", "", "sc_content_unknown_v1"])
+def test_custom_job_keeps_existing_failed_item_validation(storage, rule_set_key):
+    service, engine, table = storage
+    with engine.begin() as connection:
+        connection.execute(
+            table.update().where(table.c.id == "partial-job").values(
+                filters_json=json.dumps({"rule_set_key": rule_set_key})
+            )
+        )
+
+    with pytest.raises(ValueError, match="病例身份"):
+        service.complete_batch_job(
+            job_id="partial-job",
+            summary={
+                "total_records": 1,
+                "execution_status": "partial_failed",
+                "completed_rule_count": 1,
+                "failed_rule_count": 1,
+            },
+            items=[{"rule_id": "CUSTOM-001", "status": "non_compliant"}],
+            failed_records=[{"rule_id": "CUSTOM-002", "error_phase": "rule_lookup"}],
+        )
+
+
 def test_partial_envelope_writer_narrows_record_contract_without_mutating_job(monkeypatch):
-    service = workspace.CustomQCWorkspaceService()
+    service = object.__new__(workspace.CustomQCWorkspaceService)
+    service._record_result_envelope_table = object()
     record_a = {"institute_id": "test-i", "patient_id": "test-pa", "visit_id": "test-va"}
     record_b = {"institute_id": "test-i", "patient_id": "test-pb", "visit_id": "test-vb"}
     job_row = {

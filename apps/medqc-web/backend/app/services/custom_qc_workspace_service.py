@@ -89,6 +89,7 @@ from .qc_workspace.failed_rule_retry import (
     FAILED_RULE_RETRY_FILTER_KEY,
     build_failed_rule_retry_scope,
 )
+from .qc_rule_sets import get_sichuan_rule_set
 from .sample_validation_rule_sets import LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
 from .bundles.emr_view import load_bundle_documents
 from .case_identity import CaseRef, CaseRefInput, normalize_case_refs
@@ -4428,6 +4429,10 @@ class CustomQCWorkspaceService:
             filters = _safe_json_loads(row.get("filters_json"), {})
             filters = filters if isinstance(filters, dict) else {}
             rule_set_key = _safe_text(filters.get("rule_set_key"))
+            is_sc_content_rule_set = bool(
+                rule_set_key.startswith("sc_content_")
+                and get_sichuan_rule_set(rule_set_key)
+            )
             if rule_set_key == LUXIAN_0916_RULE_SET_KEY:
                 configured_rule_ids = filters.get("rule_ids")
                 expected_rule_ids = (
@@ -4448,6 +4453,15 @@ class CustomQCWorkspaceService:
                     expected_rule_ids=expected_rule_ids,
                     expected_record_refs=expected_record_refs,
                 )
+            elif execution_failed and is_sc_content_rule_set:
+                if (
+                    not failed_records
+                    or any(not isinstance(failure, dict) for failure in failed_records)
+                    or summary.get("execution_status") != ("partial_failed" if items else "failed")
+                    or summary.get("completed_rule_count") != len(items)
+                    or summary.get("failed_rule_count") != len(failed_records)
+                ):
+                    raise ValueError("执行失败任务状态或计数与原始结果不一致")
             elif execution_failed:
                 validate_failed_task_items(summary, items, failed_records)
             merged_summary = {
@@ -4490,7 +4504,11 @@ class CustomQCWorkspaceService:
                 self.refresh_parent_batch_job(parent_job_id=parent_job_id)
                 return
             envelope_items: Sequence[Dict[str, Any]] = (
-                items if persist_record_envelopes and not execution_failed else ()
+                items
+                if persist_record_envelopes
+                and not is_sc_content_rule_set
+                and not execution_failed
+                else ()
             )
             envelope_record_refs: Optional[Sequence[CaseRef]] = None
             if execution_failed:
