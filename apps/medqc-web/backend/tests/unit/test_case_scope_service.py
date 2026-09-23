@@ -74,12 +74,23 @@ class _SourceCursor:
                         )
                         for source_name in excluded_tables:
                             for fact in self._source_rows.get(source_name, []):
+                                raw_text_time = fact.get("discharge_time")
+                                text_type = self._table_column_types.get(source_name, {}).get(
+                                    "discharge_time"
+                                ) == "text"
                                 discharge_time = _parse_datetime(
-                                    fact.get("discharge_time")
+                                    raw_text_time
                                     or fact.get("discharge_datetime")
                                     or fact.get("discharge_date")
                                 )
-                                if fact.get("discharge_time") and discharge_time is None:
+                                local_text_format = re.fullmatch(
+                                    r"[1-9][0-9]{3}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])"
+                                    r"([ T]([01][0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?)?",
+                                    str(raw_text_time),
+                                )
+                                if raw_text_time and text_type and not local_text_format:
+                                    discharge_time = datetime.min
+                                elif raw_text_time and discharge_time is None:
                                     discharge_time = datetime.min
                                 if discharge_time is None or discharge_time >= as_of_end:
                                     continue
@@ -100,6 +111,11 @@ class _SourceCursor:
                         for row in selected_rows
                         if not has_discharge_fact(row)
                     ]
+                    if ") AND source_row.institute_id::text = %s::text" in query:
+                        selected_rows = [
+                            row for row in selected_rows
+                            if row.get("institute_id") == default_institute_id
+                        ]
                 self._rows = selected_rows
                 if "%s::text AS institute_id" in query:
                     for row in self._rows:
@@ -481,7 +497,7 @@ def test_registration_active_uses_text_time_and_typed_date_discharge_facts():
                     "visit_id": "V1", "admission_time": "2026-07-01 08:00:00",
                     "discharge_time": None,
                 }
-                for patient_id in ("P-TEXT", "P-DATE", "P-FUTURE", "P-BAD", "P-OTHER")
+                for patient_id in ("P-TEXT", "P-DATE", "P-FUTURE", "P-BAD", "P-OFFSET", "P-OTHER")
             ],
             "discharge_record": [
                 {"institute_id": "H1", "patient_id": "P-TEXT", "visit_id": "V1",
@@ -492,6 +508,8 @@ def test_registration_active_uses_text_time_and_typed_date_discharge_facts():
                  "discharge_time": "2026-08-01 10:00:00", "discharge_date": None},
                 {"institute_id": "H1", "patient_id": "P-BAD", "visit_id": "V1",
                  "discharge_time": "unknown", "discharge_date": None},
+                {"institute_id": "H1", "patient_id": "P-OFFSET", "visit_id": "V1",
+                 "discharge_time": "2026-08-01T00:30:00+00:00", "discharge_date": None},
             ],
         },
     )
@@ -515,8 +533,120 @@ def test_registration_active_uses_text_time_and_typed_date_discharge_facts():
         if "FROM public.inpat_registration AS source_row" in query
     )
     assert "btrim(discharged_1.discharge_time)" in query
+    assert "[ T]([01][0-9]|2[0-3])" in query
+    assert "?)?$'" in query
     assert "discharged_1.discharge_date <= %s::date" in query
     assert params == ["2026-07-31"] * 5
+
+
+def test_registration_does_not_assert_other_institutions_active_without_scoped_discharge_facts():
+    identity_columns = {"patient_id", "visit_id"}
+    cursor = _SourceCursor(
+        table_columns={
+            "inpat_registration": identity_columns
+            | {"institute_id", "admission_datetime", "discharge_datetime"},
+            "mr": identity_columns | {"discharge_datetime"},
+            "discharge_record": identity_columns | {"discharge_date"},
+        },
+        source_rows={
+            "inpat_registration": [
+                {"institute_id": "H1", "patient_id": "P-ACTIVE", "visit_id": "V1",
+                 "admission_time": "2026-07-01 08:00:00", "discharge_time": None},
+                {"institute_id": "H1", "patient_id": "P-DISCH", "visit_id": "V1",
+                 "admission_time": "2026-07-01 08:00:00", "discharge_time": None},
+                {"institute_id": "H2", "patient_id": "P-UNKNOWN", "visit_id": "V1",
+                 "admission_time": "2026-07-01 08:00:00", "discharge_time": None},
+            ],
+            "mr": [
+                {"patient_id": "P-DISCH", "visit_id": "V1",
+                 "discharge_time": "2026-07-30 12:00:00"},
+            ],
+        },
+    )
+    service = CaseScopeService(
+        remote_url_loader=lambda: "postgresql://source",
+        db_config_loader=lambda: {
+            "remote_schema": "public", "default_institute_id": "H1",
+        },
+        connection_factory=lambda *_args, **_kwargs: _SourceConnection(cursor),
+    )
+
+    result = service.resolve_hospitalization_scope(
+        scope_mode="active", as_of_date=date(2026, 7, 31),
+        discharge_start_date=None, discharge_end_date=None, departments=(),
+    )
+
+    assert result.case_refs == (CaseRef("H1", "P-ACTIVE", "V1"),)
+    assert result.source_status == "degraded"
+    assert any("缺少机构号" in warning for warning in result.warnings)
+    query, params = next(
+        (query, params) for query, params in cursor.queries
+        if "FROM public.inpat_registration AS source_row" in query
+    )
+    assert ") AND source_row.institute_id::text = %s::text" in query
+    assert params[-1] == "H1"
+
+
+@pytest.mark.parametrize("has_fallback", [False, True])
+def test_registration_with_text_time_cannot_be_active_primary_source(has_fallback):
+    identity_columns = {"institute_id", "patient_id", "visit_id"}
+    table_columns = {
+        "inpat_registration": identity_columns
+        | {"admission_datetime", "discharge_time"},
+        "mr": identity_columns | {"discharge_datetime"},
+        "discharge_record": identity_columns | {"discharge_date"},
+    }
+    table_column_types = {
+        "inpat_registration": {
+            "admission_datetime": "timestamp without time zone",
+            "discharge_time": "text",
+        },
+    }
+    source_rows = {
+        "inpat_registration": [
+            {"institute_id": "H1", "patient_id": "P1", "visit_id": "V1",
+             "admission_time": "2026-07-01 08:00:00", "discharge_time": None},
+        ],
+    }
+    if has_fallback:
+        table_columns["admission_record"] = identity_columns | {"admission_datetime"}
+        table_column_types["admission_record"] = {
+            "admission_datetime": "timestamp without time zone",
+        }
+        source_rows["admission_record"] = [
+            {"institute_id": "H1", "patient_id": "P1", "visit_id": "V1",
+             "admission_time": "2026-07-01 08:00:00"},
+        ]
+    cursor = _SourceCursor(
+        table_columns=table_columns,
+        table_column_types=table_column_types,
+        source_rows=source_rows,
+    )
+    service = CaseScopeService(
+        remote_url_loader=lambda: "postgresql://source",
+        db_config_loader=lambda: {"remote_schema": "public"},
+        connection_factory=lambda *_args, **_kwargs: _SourceConnection(cursor),
+    )
+
+    if not has_fallback:
+        with pytest.raises(ValueError, match="当前在院患者数据"):
+            service.resolve_hospitalization_scope(
+                scope_mode="active", as_of_date=date(2026, 7, 31),
+                discharge_start_date=None, discharge_end_date=None, departments=(),
+            )
+        return
+
+    result = service.resolve_hospitalization_scope(
+        scope_mode="active", as_of_date=date(2026, 7, 31),
+        discharge_start_date=None, discharge_end_date=None, departments=(),
+    )
+    assert result.case_refs == (CaseRef("H1", "P1", "V1"),)
+    assert result.source_status == "degraded"
+    assert result.sources_used == ("admission_record", "mr", "discharge_record")
+    assert all(
+        "FROM public.inpat_registration AS source_row" not in query
+        for query, _params in cursor.queries
+    )
 
 
 def test_combined_scope_returns_active_and_period_discharge_case_refs():

@@ -259,7 +259,8 @@ class CaseScopeService:
                                 f"({exclusion_alias}.{exclusion_discharge_column} IS NOT NULL "
                                 "AND CASE WHEN "
                                 f"btrim({exclusion_discharge_value}) ~ "
-                                "'^[1-9][0-9]{3}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])' "
+                                "'^[1-9][0-9]{3}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])"
+                                "([ T]([01][0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?)?$' "
                                 f"THEN left(btrim({exclusion_discharge_value}), 10) "
                                 "<= %s::date::text ELSE TRUE END)"
                             )
@@ -306,6 +307,12 @@ class CaseScopeService:
                         )
                         if institute_match and "= %s::text" in institute_match:
                             date_params.append(default_institute_id)
+                    if "institute_id" in columns and not any(
+                        "institute_id" in set(source.get("columns") or set())
+                        for source in plan.get("active_exclusions") or ()
+                    ):
+                        where_sql += " AND source_row.institute_id::text = %s::text"
+                        date_params.append(default_institute_id)
                 else:
                     if discharge_start_date is None or discharge_end_date is None:
                         raise ValueError("期间出院范围必须填写出院开始日期和结束日期")
@@ -825,6 +832,14 @@ def _resolve_source_plan(
         if needs_active
         else None
     )
+    text_types = {"text", "character varying", "character"}
+    if active_source is not None and (
+        active_source["admission_time_data_type"] in text_types
+        or active_source["discharge_time_data_type"] in text_types
+    ):
+        active_source = None
+    if active_fallback is not None and active_fallback["admission_time_data_type"] in text_types:
+        active_fallback = None
     active_exclusions = (
         choose_sources(
             ("mr", "discharge_record"),
@@ -858,6 +873,13 @@ def _resolve_source_plan(
     warnings: list[str] = []
     if needs_active and len(active_exclusions) < 2:
         warnings.append("当前在院范围仅有部分权威出院反证来源，可能将已出院病例误判为在院。")
+    if needs_active and any(
+        "institute_id" not in source["columns"] for source in active_exclusions
+    ) and any(
+        source is not None and "institute_id" in source["columns"]
+        for source in (active_source, active_fallback)
+    ):
+        warnings.append("部分出院反证来源缺少机构号，非默认机构仅可依据完整三坐标来源判断。")
     if (
         needs_discharged
         and discharged_sources
