@@ -5,6 +5,11 @@
       v-model:open="showCreateDrawer"
       @created="onTaskCreated"
     />
+    <TaskDetailDrawer
+      v-model:open="detailDrawerVisible"
+      :task-id="detailTaskId"
+      tab="all"
+    />
 
     <!-- 页面标题 -->
     <div class="mb-8">
@@ -362,6 +367,7 @@ import type { Dayjs } from 'dayjs'
 import { getTaskList, getTaskStats, deleteTask, cancelTask } from '@/api/tasks'
 import type { TaskItem, TaskSceneFilter, TaskStats, TaskStatus } from '@/api/tasks'
 import CreateTaskDrawer from '@/components/qc/CreateTaskDrawer.vue'
+import TaskDetailDrawer from '@/components/qc/TaskDetailDrawer.vue'
 import {
   ProjectOutlined,
   ClockCircleOutlined,
@@ -397,6 +403,8 @@ const dateRange = ref<DateRange>(null)
 const tasks = ref<DashboardTaskItem[]>([])
 const selectedRowKeys = ref<string[]>([])
 const showCreateDrawer = ref(false)
+const detailDrawerVisible = ref(false)
+const detailTaskId = ref<string | null>(null)
 const listError = ref('')
 let listRequestId = 0
 
@@ -596,7 +604,8 @@ const handleExport = () => {
 }
 
 const handleViewDetail = (record: DashboardTaskItem) => {
-  message.info(`查看任务详情: ${record.task_name}（${sceneLabel(record.scene)}）`)
+  detailTaskId.value = record.id
+  detailDrawerVisible.value = true
 }
 
 const handleAssign = (record: DashboardTaskItem) => {

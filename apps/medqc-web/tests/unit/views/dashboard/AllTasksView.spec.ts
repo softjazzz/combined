@@ -55,6 +55,17 @@ const AButtonStub = defineComponent({
   },
 })
 
+const TaskDetailDrawerStub = defineComponent({
+  name: 'TaskDetailDrawer',
+  props: {
+    open: Boolean,
+    taskId: String,
+    tab: String,
+  },
+  emits: ['update:open'],
+  template: '<div data-testid="task-detail-drawer-stub" />',
+})
+
 const listResponse = {
   success: true,
   data: { items: [], total: 0, page: 1, page_size: 10, total_pages: 0 },
@@ -124,6 +135,7 @@ async function mountView() {
         'a-table': true,
         'a-tag': true,
         CreateTaskDrawer: true,
+        TaskDetailDrawer: TaskDetailDrawerStub,
       },
     },
   })
@@ -223,16 +235,22 @@ describe('AllTasksView 场景口径', () => {
     expect(wrapper.find('[data-testid="all-task-stats-error"]').exists()).toBe(false)
   })
 
-  it('历史 NULL 场景在列表和详情语义中显示为未标注', async () => {
+  it('历史 NULL 场景在列表显示为未标注，详情以 all 范围打开共享抽屉', async () => {
     mocks.getTaskList.mockResolvedValueOnce(listWith('历史任务', null))
     const wrapper = await mountView()
     const vm = wrapper.vm as unknown as {
       sceneLabel: (scene?: string | null) => string
-      handleViewDetail: (record: { task_name: string; scene: null }) => void
+      handleViewDetail: (record: { id: string; task_name: string; scene: null }) => void
     }
 
     expect(vm.sceneLabel(null)).toBe('未标注')
-    vm.handleViewDetail({ task_name: '历史任务', scene: null })
-    expect(mocks.message.info).toHaveBeenCalledWith('查看任务详情: 历史任务（未标注）')
+    vm.handleViewDetail({ id: 'task/with long id', task_name: '历史任务', scene: null })
+    await nextTick()
+
+    expect(wrapper.getComponent(TaskDetailDrawerStub).props()).toMatchObject({
+      open: true,
+      taskId: 'task/with long id',
+      tab: 'all',
+    })
   })
 })

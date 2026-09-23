@@ -407,11 +407,15 @@ async def get_task_todo_stats(
 async def get_task_detail(
     request: Request,
     task_id: str,
+    tab: Literal["all", "created", "received"] = Query(
+        "all", description="详情范围: all=全部 | created=我创建 | received=我收到"
+    ),
     current_user: dict = Depends(get_current_user),
 ):
     """
     获取任务详情 + 包含的病历列表
     """
+    scope_user_id = _get_task_scope_user_id(current_user) if tab != "all" else None
     sb = get_supabase()
     if sb is None:
         raise HTTPException(status_code=503, detail="数据库不可用")
@@ -420,29 +424,37 @@ async def get_task_detail(
     records = []
 
     try:
-        resp = await async_execute(
-            sb.table('qc_tasks').select('*').eq('id', task_id).single()
-        )
-        task = getattr(resp, 'data', None)
+        query = sb.table('qc_tasks').select('*').eq('id', task_id)
+        query = await _apply_task_tab_scope(sb, query, tab, current_user)
+        if query is not None:
+            resp = await async_execute(query.single())
+            task = getattr(resp, 'data', None)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"查询任务失败: {e}")
         raise HTTPException(status_code=500, detail="查询任务失败，请稍后重试")
 
     if task:
         try:
-            resp = await async_execute(
+            query = (
                 sb.table('qc_task_records')
                 .select('*')
                 .eq('task_id', task_id)
                 .order('created_at')
+                .order('id')
             )
+            if tab == "received":
+                query = query.eq('assignee_id', scope_user_id)
+            resp = await async_execute(query)
             records = list(getattr(resp, 'data', None) or [])
         except Exception as e:
             logger.error(f"查询任务记录失败: {e}")
             raise HTTPException(status_code=500, detail="查询任务记录失败，请稍后重试")
 
-    if task is None:
-        raise HTTPException(status_code=404, detail=f"任务 {task_id} 不存在")
+    # 分配在两次读取之间可能被撤销，不能把空的个人关联当作仍有任务范围。
+    if task is None or (tab == "received" and not records):
+        raise HTTPException(status_code=404, detail="任务不存在或不在当前范围")
 
     task["records"] = records
 

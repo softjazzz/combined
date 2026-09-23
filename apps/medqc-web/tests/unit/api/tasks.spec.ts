@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AxiosHeaders, type AxiosResponse } from 'axios'
 import { ApiService } from '@/services/apiService'
-import { getTaskList, getTaskStats, getTaskTodoStats } from '@/api/tasks'
+import { getTaskDetail, getTaskList, getTaskStats, getTaskTodoStats } from '@/api/tasks'
 
 vi.mock('@/services/apiService', () => ({ ApiService: { requestRaw: vi.fn() } }))
 
@@ -49,6 +49,21 @@ describe('任务统计 API', () => {
     expect(ApiService.requestRaw).toHaveBeenCalledWith({
       method: 'GET',
       url: '/api/v1/tasks/stats',
+    })
+  })
+
+  it('任务详情编码路径并显式传递清单范围', async () => {
+    await getTaskDetail('task/含空格', { tab: 'received' })
+
+    expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
+      method: 'GET',
+      url: '/api/v1/tasks/task%2F%E5%90%AB%E7%A9%BA%E6%A0%BC?tab=received',
+    })
+
+    await getTaskDetail('legacy-task')
+    expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
+      method: 'GET',
+      url: '/api/v1/tasks/legacy-task',
     })
   })
 

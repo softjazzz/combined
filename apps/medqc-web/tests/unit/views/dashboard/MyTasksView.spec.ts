@@ -5,8 +5,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   getTaskList: vi.fn(),
   getTaskStats: vi.fn(),
-  getTaskDetail: vi.fn(),
-  getTaskProgress: vi.fn(),
   updateTask: vi.fn(),
   routerPush: vi.fn(),
   routerReplace: vi.fn(),
@@ -28,8 +26,6 @@ const activeRoute = vi.hoisted(() => ({
 vi.mock('@/api/tasks', () => ({
   getTaskList: mocks.getTaskList,
   getTaskStats: mocks.getTaskStats,
-  getTaskDetail: mocks.getTaskDetail,
-  getTaskProgress: mocks.getTaskProgress,
   updateTask: mocks.updateTask,
 }))
 
@@ -78,6 +74,17 @@ const AButtonStub = defineComponent({
   setup(_, { attrs, emit, slots }) {
     return () => h('button', { ...attrs, onClick: () => emit('click') }, slots.default?.())
   },
+})
+
+const TaskDetailDrawerStub = defineComponent({
+  name: 'TaskDetailDrawer',
+  props: {
+    open: Boolean,
+    taskId: String,
+    tab: String,
+  },
+  emits: ['update:open'],
+  template: '<div data-testid="task-detail-drawer-stub" />',
 })
 
 const listResponse = {
@@ -141,7 +148,6 @@ async function mountView() {
     global: {
       stubs: {
         'a-button': AButtonStub,
-        'a-drawer': true,
         'a-input-search': true,
         'a-progress': true,
         'a-range-picker': true,
@@ -150,6 +156,7 @@ async function mountView() {
         ProQueryBar: { template: '<div><slot name="filters"/><slot name="actions"/></div>' },
         ProStandardTable: true,
         ProTableToolbar: { template: '<div><slot/></div>' },
+        TaskDetailDrawer: TaskDetailDrawerStub,
       },
     },
   })
@@ -511,6 +518,22 @@ describe('MyTasksView 我的任务口径', () => {
     expect(mocks.getTaskStats).toHaveBeenCalledWith({ tab: 'received' })
     expect(wrapper.get('[data-testid="pending-task-count"]').text()).toBe('3')
     expect(wrapper.get('[data-testid="pending-task-action"]').text()).toContain('未开始任务')
+  })
+
+  it('查看任务详情时以 received 范围打开共享抽屉', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      handleViewDetail: (record: { id: string }) => void
+    }
+
+    vm.handleViewDetail({ id: 'task/with long id' })
+    await nextTick()
+
+    expect(wrapper.getComponent(TaskDetailDrawerStub).props()).toMatchObject({
+      open: true,
+      taskId: 'task/with long id',
+      tab: 'received',
+    })
   })
 
   it.each([

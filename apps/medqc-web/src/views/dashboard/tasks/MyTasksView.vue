@@ -324,101 +324,11 @@
       </ProStandardTable>
     </div>
 
-    <!-- 任务详情抽屉 -->
-    <a-drawer
+    <TaskDetailDrawer
       v-model:open="detailDrawerVisible"
-      :title="detailTask?.task_name || '任务详情'"
-      :width="560"
-      :header-style="{ borderBottom: '1px solid #e2e8f0' }"
-      :body-style="{ padding: '20px' }"
-    >
-      <template v-if="detailTask">
-        <div class="space-y-4">
-          <!-- 基本信息 -->
-          <div class="bg-slate-50 rounded-lg p-4 border border-slate-100">
-            <h4 class="text-sm font-bold text-slate-500 mb-3">
-              基本信息
-            </h4>
-            <div class="grid grid-cols-2 gap-3 text-sm">
-              <div>
-                <span class="text-slate-400">编号：</span><span class="font-medium">{{ detailTask.task_number }}</span>
-              </div>
-              <div>
-                <span class="text-slate-400">类型：</span><span class="font-medium">{{
-                  detailTask.task_type === 'one_time' ? '一次性' : '定时'
-                }}</span>
-              </div>
-              <div>
-                <span class="text-slate-400">状态：</span><a-tag :color="getStatusColor(detailTask.status)">
-                  {{ getStatusText(detailTask.status) }}
-                </a-tag>
-              </div>
-              <div>
-                <span class="text-slate-400">创建人：</span><span class="font-medium">{{ detailTask.creator_name }}</span>
-              </div>
-              <div>
-                <span class="text-slate-400">场景：</span><span class="font-medium">{{ sceneLabel(detailTask.scene) }}</span>
-              </div>
-              <div>
-                <span class="text-slate-400">截止：</span><span class="font-medium">{{ detailTask.deadline || '无' }}</span>
-              </div>
-              <div>
-                <span class="text-slate-400">创建时间：</span><span class="font-medium">{{ formatDate(detailTask.created_at) }}</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- 进度信息 -->
-          <div
-            v-if="detailProgress"
-            class="bg-blue-50 rounded-lg p-4 border border-blue-100"
-          >
-            <h4 class="text-sm font-bold text-blue-700 mb-3">
-              进度详情
-            </h4>
-            <a-progress
-              :percent="detailProgress.progress_pct"
-              :status="detailProgress.progress_pct >= 100 ? 'success' : 'active'"
-              class="mb-3"
-            />
-            <div class="grid grid-cols-3 gap-3 text-sm text-center">
-              <div class="bg-white rounded-lg p-2 border border-blue-100">
-                <div class="text-lg font-bold text-slate-700">
-                  {{ detailProgress.pending_count }}
-                </div>
-                <div class="text-xs text-slate-400">
-                  待处理
-                </div>
-              </div>
-              <div class="bg-white rounded-lg p-2 border border-blue-100">
-                <div class="text-lg font-bold text-blue-600">
-                  {{ detailProgress.working_count }}
-                </div>
-                <div class="text-xs text-slate-400">
-                  进行中
-                </div>
-              </div>
-              <div class="bg-white rounded-lg p-2 border border-blue-100">
-                <div class="text-lg font-bold text-green-600">
-                  {{ detailProgress.done_count }}
-                </div>
-                <div class="text-xs text-slate-400">
-                  已完成
-                </div>
-              </div>
-            </div>
-            <div class="mt-3 grid grid-cols-2 gap-2 text-sm">
-              <div>
-                <span class="text-slate-400">平均分：</span><span class="font-bold">{{ detailProgress.avg_score ?? '-' }}</span>
-              </div>
-              <div>
-                <span class="text-slate-400">总缺陷：</span><span class="font-bold text-red-500">{{ detailProgress.total_defects }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </template>
-    </a-drawer>
+      :task-id="detailTaskId"
+      tab="received"
+    />
   </div>
 </template>
 
@@ -428,15 +338,15 @@ import { message } from 'ant-design-vue'
 import type { TableColumnsType, TablePaginationConfig } from 'ant-design-vue'
 import type { Dayjs } from 'dayjs'
 import { useRoute, useRouter } from 'vue-router'
-import { getTaskList, getTaskStats, getTaskProgress, updateTask } from '@/api/tasks'
+import { getTaskList, getTaskStats, updateTask } from '@/api/tasks'
 import type {
   TaskItem,
-  TaskProgress,
   TaskSceneFilter,
   TaskStats,
   TaskStatus,
   TaskTodo,
 } from '@/api/tasks'
+import TaskDetailDrawer from '@/components/qc/TaskDetailDrawer.vue'
 import {
   ClockCircleOutlined,
   SyncOutlined,
@@ -505,8 +415,7 @@ const sceneScopeLabel = computed(() =>
 
 // 详情抽屉
 const detailDrawerVisible = ref(false)
-const detailTask = ref<TaskItem | null>(null)
-const detailProgress = ref<TaskProgress | null>(null)
+const detailTaskId = ref<string | null>(null)
 
 // 分页配置
 const pagination = ref({
@@ -915,20 +824,9 @@ const handleContinueWork = (record: TaskItem) => {
   router.push({ path: '/workstation-v5', query: { taskId: record.id } })
 }
 
-const handleViewDetail = async (record: TaskItem) => {
-  detailTask.value = record
-  detailProgress.value = null
+const handleViewDetail = (record: TaskItem) => {
+  detailTaskId.value = record.id
   detailDrawerVisible.value = true
-
-  // 异步加载进度详情
-  try {
-    const res = await getTaskProgress(record.id)
-    if (res.success && res.data) {
-      detailProgress.value = res.data as TaskProgress
-    }
-  } catch (e) {
-    console.error('获取进度失败:', e)
-  }
 }
 
 const handleTableChange = (pag: TablePaginationConfig) => {

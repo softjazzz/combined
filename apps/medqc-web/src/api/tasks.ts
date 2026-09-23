@@ -69,6 +69,24 @@ export interface TaskListResponse {
     total_pages: number
 }
 
+export interface TaskRecordItem {
+    id: string
+    task_id: string
+    record_id: string | null
+    assignee_id?: string | null
+    assignee_name?: string | null
+    status: string | null
+    score?: number | null
+    defect_count?: number | null
+    created_at?: string | null
+    completed_at?: string | null
+    error_message?: string | null
+}
+
+export interface TaskDetail extends TaskItem {
+    records: TaskRecordItem[]
+}
+
 export interface TaskCreateData {
     task_name: string
     scene: TaskScene
@@ -160,9 +178,13 @@ export async function getTaskTodoStats(params?: { scene?: TaskSceneFilter }) {
     return request<TaskTodoStats>({ method: 'GET', url: `${BASE_URL}/todo-stats${query}` })
 }
 
-/** 获取任务详情 */
-export async function getTaskDetail(taskId: string) {
-    return request<TaskItem & { records?: any[] }>({ method: 'GET', url: `${BASE_URL}/${taskId}` })
+/** 获取任务详情；received 仅返回当前用户获分配的病历清单 */
+export async function getTaskDetail(taskId: string, params?: { tab?: TaskTab }) {
+    const query = params?.tab ? `?tab=${encodeURIComponent(params.tab)}` : ''
+    return request<TaskDetail>({
+        method: 'GET',
+        url: `${BASE_URL}/${encodeURIComponent(taskId)}${query}`,
+    })
 }
 
 /** 创建任务 */
