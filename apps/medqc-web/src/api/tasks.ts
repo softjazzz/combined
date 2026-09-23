@@ -131,15 +131,18 @@ export interface TaskQcSafeResultItem {
     display_status?: string
     is_compliant?: boolean | null
     conclusion?: string
+    findings?: string
     suggestion?: string
-    evidence?: Array<{
-        source_type: string
-        source_ref: string
-        field_path?: string
-        evidence_excerpt?: string
-        excerpt_kind?: string
-        record_time?: string
-    }>
+    evidence?: string[] | TaskQcSafeEvidenceRef[]
+}
+
+export interface TaskQcSafeEvidenceRef {
+    source_type: string
+    source_ref: string
+    field_path?: string
+    evidence_excerpt?: string
+    excerpt_kind?: string
+    record_time?: string
 }
 
 export interface TaskCreateData {

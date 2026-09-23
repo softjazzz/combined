@@ -14,6 +14,12 @@ from ..database.models.qc import QCTask, QCTaskQCRun, QCTaskRecord
 from .case_identity import CaseRef
 from .custom_qc_workspace_service import project_customer_safe_result_item
 from .luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY
+from .luxian_0916.execution_integrity import (
+    LUXIAN_0916_RULE_IDS,
+    LUXIAN_0916_RULE_SET_KEY,
+    validate_luxian_0916_task_delivery,
+)
+from .luxian_0916.rule_catalog import get_luxian_0916_rule_definition
 from .qc_rule_sets import get_sichuan_rule_set
 from .qc_workspace.canonical_result_store import customer_safe_projection_key, keyed_ref
 from .sichuan_workspace_batch_prepare import (
@@ -235,7 +241,7 @@ def get_task_qc_run_record_result(
     *, task_id: str, run_number: int, task_record_id: str, actor_id: str,
     workspace_factory: Callable[[], Any], run_scope: str = "all",
 ) -> dict[str, Any]:
-    """只读取指定运行的 Canonical 结果，不改写任务病历状态。"""
+    """只读取指定运行的权威结果，不改写任务病历状态。"""
     if SessionLocal is None:
         raise RuntimeError("数据库会话不可用")
     if not actor_id or len(actor_id) > 64:
@@ -276,8 +282,12 @@ def get_task_qc_run_record_result(
         if any(not part or len(part) > 100 for part in identity) or record["record_id"] != record["id"]:
             raise TaskQCRunConflict("任务病历缺少完整三坐标")
         case_ref = CaseRef(*identity)
-        if task["rule_set_key"] != LUXIAN_0609_RULE_SET_KEY:
+        rule_set_key = task["rule_set_key"]
+        if rule_set_key not in {LUXIAN_0609_RULE_SET_KEY, LUXIAN_0916_RULE_SET_KEY}:
             raise TaskQCRunConflict("当前规则集尚不支持任务病历结果下钻")
+        rule_set = get_sichuan_rule_set(rule_set_key)
+        if rule_set is None or rule_set.scope != task["scene"]:
+            raise TaskQCRunConflict("任务规则集已失效或与场景不匹配")
         job_id = str(run["job_id"] or "").strip()
         job_owner = str(run["triggered_by"] or "").strip()
         if not job_id or not job_owner:
@@ -298,7 +308,7 @@ def get_task_qc_run_record_result(
         or str(job.get("created_by") or "") != job_owner
         or str(filters.get("task_id") or "") != task_id
         or str(filters.get("task_run_number") or "") != str(run_number)
-        or str(filters.get("rule_set_key") or "") != LUXIAN_0609_RULE_SET_KEY
+        or str(filters.get("rule_set_key") or "") != rule_set_key
         or str(filters.get("query_scope") or "") != str(task["scene"] or "")
         or not valid_frozen_refs
         or len(valid_frozen_refs) != len(frozen_refs)
@@ -314,7 +324,7 @@ def get_task_qc_run_record_result(
     result = {
         "task_id": task_id, "run_number": run_number, "task_record_id": task_record_id,
         "job_id": job_id, "job_status": str(job.get("status") or ""),
-        "result_state": "pending", "rule_set_key": LUXIAN_0609_RULE_SET_KEY,
+        "result_state": "pending", "rule_set_key": rule_set_key,
         "items": [],
     }
     status = result["job_status"]
@@ -327,6 +337,12 @@ def get_task_qc_run_record_result(
         return result
     if status != "completed" and not partial:
         raise TaskQCRunConflict("质控 job 状态未知")
+
+    if rule_set_key == LUXIAN_0916_RULE_SET_KEY:
+        return _luxian_0916_record_result(
+            result=result, job=job, filters=filters, case_ref=case_ref,
+            frozen_refs=frozen_refs, partial=partial,
+        )
 
     try:
         canonical_items = workspace._load_batch_job_canonical_items(job=job, allow_partial=partial)
@@ -370,4 +386,71 @@ def get_task_qc_run_record_result(
         return result
     result["result_state"] = "available"
     result["items"] = target_items
+    return result
+
+
+def _luxian_0916_record_result(
+    *, result: dict[str, Any], job: dict[str, Any], filters: dict[str, Any],
+    case_ref: CaseRef, frozen_refs: list[dict[str, Any]], partial: bool,
+) -> dict[str, Any]:
+    planned_rules = filters.get("rule_ids")
+    if (
+        not isinstance(planned_rules, list)
+        or len(planned_rules) != len(LUXIAN_0916_RULE_IDS)
+        or any(not isinstance(rule_id, str) for rule_id in planned_rules)
+        or set(planned_rules) != set(LUXIAN_0916_RULE_IDS)
+    ):
+        raise TaskQCRunConflict("本次质控冻结规则与 LX0916 目录不一致")
+    items = job.get("items")
+    failures = job.get("failed_records")
+    summary = job.get("summary")
+    if (
+        not isinstance(items, list) or any(not isinstance(item, dict) for item in items)
+        or not isinstance(failures, list)
+        or any(not isinstance(failure, dict) for failure in failures)
+        or not isinstance(summary, dict)
+        or summary.get("execution_status") != ("partial_failed" if partial else "completed")
+    ):
+        raise TaskQCRunConflict("本次质控 LX0916 结果不完整，无法安全展示")
+    try:
+        validate_luxian_0916_task_delivery(
+            summary=summary, items=items, failures=failures,
+            expected_rule_ids=LUXIAN_0916_RULE_IDS,
+            expected_record_refs=frozen_refs,
+        )
+    except (TypeError, ValueError) as exc:
+        raise TaskQCRunConflict("本次质控 LX0916 结果不完整，无法安全展示") from exc
+
+    identity = tuple(case_ref)
+    if any(
+        tuple(str(failure.get(key) or "").strip() for key in ("institute_id", "patient_id", "visit_id")) == identity
+        for failure in failures
+    ):
+        result["result_state"] = "unavailable"
+        return result
+    target_items = [
+        item for item in items
+        if tuple(str(item.get(key) or "").strip() for key in ("institute_id", "patient_id", "visit_id")) == identity
+    ]
+    if len(target_items) != len(LUXIAN_0916_RULE_IDS):
+        raise TaskQCRunConflict("本次质控 LX0916 结果缺少目标病历")
+    if any(
+        item.get("rule_id") not in LUXIAN_0916_RULE_IDS
+        or not isinstance(item.get("evidence"), list)
+        for item in target_items
+    ):
+        raise TaskQCRunConflict("本次质控 LX0916 结果不符合展示合同")
+    result["result_state"] = "available"
+    result["items"] = [
+        {
+            "rule_id": item["rule_id"],
+            "rule_name": get_luxian_0916_rule_definition(item["rule_id"]).name,
+            "status": item["status"],
+            "reason_code": item["reason_code"],
+            "findings": item["findings"],
+            "evidence": list(item.get("evidence") or []),
+            "suggestion": item.get("suggestion") or "",
+        }
+        for item in target_items
+    ]
     return result

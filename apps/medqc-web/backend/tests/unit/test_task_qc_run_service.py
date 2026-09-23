@@ -14,6 +14,7 @@ from sqlalchemy.pool import StaticPool
 from app.database.models.qc import QCTask, QCTaskQCRun, QCTaskRecord
 from app.services import task_qc_run_service as service
 from app.services.case_identity import CaseRef
+from app.services.luxian_0916.execution_integrity import LUXIAN_0916_RULE_IDS
 from app.services.qc_workspace.canonical_result_store import keyed_ref
 
 
@@ -305,7 +306,7 @@ def _result_setup(env, monkeypatch, *, status="completed", run_scope="all", part
     with env.sessions.begin() as session:
         session.execute(
             QCTask.__table__.update().where(QCTask.id == "task-1").values(
-                rule_set_key="luxian_0609_qc_v1", scene="final",
+                rule_set_key="luxian_0609_qc_v1", scene="running",
             )
         )
         session.execute(
@@ -323,7 +324,7 @@ def _result_setup(env, monkeypatch, *, status="completed", run_scope="all", part
         "summary": {"execution_status": "partial_failed"} if partial else {},
         "filters": {
             "task_id": "task-1", "task_run_number": "1",
-            "rule_set_key": "luxian_0609_qc_v1", "query_scope": "final",
+            "rule_set_key": "luxian_0609_qc_v1", "query_scope": "running",
             "record_refs": [ref], "rule_ids": ["LX0609-001"],
         },
     }
@@ -463,3 +464,134 @@ def test_exact_record_result_rejects_legacy_identity_and_non_luxian(env, monkeyp
                         .values(rule_set_key="sc_content_fast_v1"))
     with pytest.raises(service.TaskQCRunConflict, match="规则集"):
         _read_result(env)
+
+
+def test_exact_record_result_rejects_rule_set_scene_mismatch(env, monkeypatch):
+    _result_setup(env, monkeypatch)
+    with env.sessions.begin() as session:
+        session.execute(QCTask.__table__.update().where(QCTask.id == "task-1").values(scene="final"))
+    with pytest.raises(service.TaskQCRunConflict, match="场景不匹配"):
+        _read_result(env)
+
+
+def _lx0916_item(ref, rule_id):
+    return {
+        **ref, "rule_id": rule_id, "rule_code": rule_id,
+        "status": "compliant", "reason_code": "evidence_sufficient",
+        "findings": "符合要求", "evidence": ["已核对文书"], "suggestion": "",
+        "document_anchors": [{"document_id": "private-anchor"}],
+        "diagnostics": {"private": "diagnostic-secret"},
+        "decision_facts": {"internal": "private-fact"},
+        "patient_name": "患者隐私", "record_key": "private-key",
+    }
+
+
+def _lx0916_summary(*, records=1, item_count=32, failure_count=0, failed_records=0):
+    return {
+        "execution_status": "partial_failed" if failure_count and item_count else "completed",
+        "rule_count": 32, "total_records": records,
+        "success_count": records - failed_records, "failed_count": failed_records,
+        "failed_record_count": failed_records,
+        "completed_rule_count": item_count, "failed_rule_count": failure_count,
+    }
+
+
+def _lx0916_setup(env, monkeypatch, *, run_scope="all"):
+    job, ref = _result_setup(env, monkeypatch, run_scope=run_scope)
+    with env.sessions.begin() as session:
+        session.execute(QCTask.__table__.update().where(QCTask.id == "task-1")
+                        .values(rule_set_key="luxian_0916_qc_v1"))
+    job["filters"]["rule_set_key"] = "luxian_0916_qc_v1"
+    job["filters"]["rule_ids"] = list(LUXIAN_0916_RULE_IDS)
+    job["summary"] = _lx0916_summary()
+    job["items"] = [_lx0916_item(ref, rule_id) for rule_id in LUXIAN_0916_RULE_IDS]
+    job["failed_records"] = []
+    env.workspace._load_batch_job_canonical_items = lambda **_: pytest.fail("LX0916 must not load Canonical")
+    return job, ref
+
+
+def test_lx0916_exact_result_projects_validated_whitelist_and_full_identity(env, monkeypatch):
+    job, ref = _lx0916_setup(env, monkeypatch)
+    other = {**ref, "patient_id": "other-patient"}
+    job["filters"]["record_refs"].append(other)
+    job["items"].extend(_lx0916_item(other, rule_id) for rule_id in LUXIAN_0916_RULE_IDS)
+    job["summary"] = _lx0916_summary(records=2, item_count=64)
+    result = _read_result(env)
+    assert result["result_state"] == "available"
+    assert result["rule_set_key"] == "luxian_0916_qc_v1"
+    assert len(result["items"]) == 32
+    assert result["items"][0]["rule_name"]
+    assert set(result["items"][0]) == {
+        "rule_id", "rule_name", "status", "reason_code", "findings", "evidence", "suggestion",
+    }
+    serialized = str(result)
+    assert "diagnostic-secret" not in serialized
+    assert "private-anchor" not in serialized
+    assert "患者隐私" not in serialized
+    assert "other-patient" not in serialized
+    assert "hospital" not in serialized
+
+
+def test_lx0916_target_failure_is_unavailable_even_when_other_rules_succeed(env, monkeypatch):
+    job, ref = _lx0916_setup(env, monkeypatch)
+    job["status"] = "failed"
+    job["items"].pop()
+    job["failed_records"] = [{**ref, "rule_id": LUXIAN_0916_RULE_IDS[-1], "error_phase": "rule_execution"}]
+    job["summary"] = _lx0916_summary(item_count=31, failure_count=1, failed_records=1)
+    result = _read_result(env)
+    assert result["result_state"] == "unavailable"
+    assert result["items"] == []
+
+
+@pytest.mark.parametrize("tamper", [
+    "other_record_missing", "duplicate", "missing", "unplanned", "overlap", "summary",
+    "rule_plan", "invalid_items", "invalid_failures",
+    "invalid_rule_type", "noncanonical_rule_id", "invalid_evidence_shape",
+])
+def test_lx0916_rejects_corrupted_whole_job(env, monkeypatch, tamper):
+    job, ref = _lx0916_setup(env, monkeypatch)
+    if tamper == "other_record_missing":
+        other = {**ref, "patient_id": "other-patient"}
+        job["filters"]["record_refs"].append(other)
+        job["items"].extend(_lx0916_item(other, rule_id) for rule_id in LUXIAN_0916_RULE_IDS[:-1])
+        job["summary"] = _lx0916_summary(records=2, item_count=63)
+    elif tamper == "duplicate":
+        job["items"].append(dict(job["items"][0]))
+    elif tamper == "missing":
+        job["items"].pop()
+    elif tamper == "unplanned":
+        job["items"].append(_lx0916_item(ref, "LX0916-999"))
+    elif tamper == "overlap":
+        job["status"] = "failed"
+        job["failed_records"] = [{**ref, "rule_id": LUXIAN_0916_RULE_IDS[0], "error_phase": "rule_execution"}]
+        job["summary"] = _lx0916_summary(item_count=32, failure_count=1, failed_records=1)
+    elif tamper == "summary":
+        job["summary"]["completed_rule_count"] = 31
+    elif tamper == "rule_plan":
+        job["filters"]["rule_ids"] = list(LUXIAN_0916_RULE_IDS[:-1]) + [LUXIAN_0916_RULE_IDS[0]]
+    elif tamper == "invalid_rule_type":
+        job["filters"]["rule_ids"][0] = {"rule_id": LUXIAN_0916_RULE_IDS[0]}
+    elif tamper == "noncanonical_rule_id":
+        job["items"][0]["rule_id"] = LUXIAN_0916_RULE_IDS[0].lower()
+    elif tamper == "invalid_evidence_shape":
+        job["items"][0]["evidence"] = None
+    elif tamper == "invalid_items":
+        job["items"] = {"not": "a list"}
+    else:
+        job["failed_records"] = ["not a dict"]
+    with pytest.raises(service.TaskQCRunConflict):
+        _read_result(env)
+
+
+def test_lx0916_assigned_permission_and_nonterminal_states(env, monkeypatch):
+    job, _ = _lx0916_setup(env, monkeypatch, run_scope="assigned")
+    with pytest.raises(service.TaskQCRunForbidden):
+        _read_result(env, actor="user-1", scope="assigned")
+    assert _read_result(env, actor="user-2", scope="assigned")["result_state"] == "available"
+    job["status"] = "running"
+    job.pop("items")
+    assert _read_result(env, actor="user-2", scope="assigned")["result_state"] == "pending"
+    job["status"] = "canceled"
+    assert _read_result(env, actor="user-2", scope="assigned")["result_state"] == "unavailable"
+    job["status"] = "failed"
+    assert _read_result(env, actor="user-2", scope="assigned")["result_state"] == "unavailable"

@@ -664,9 +664,67 @@ describe('TaskDetailDrawer', () => {
     expect(wrapper.text()).toContain('未记录')
   })
 
+  it('展示 LX0916 客户结果的发现与字符串证据，不展示诊断字段或重复结论', async () => {
+    mocks.getTaskDetail.mockResolvedValueOnce(detailResponse('结果任务', [record()], {
+      scene: 'running', rule_set_key: 'luxian_0916_qc_v1', status: 'assigned',
+    }))
+    mocks.getTaskQcRuns.mockResolvedValueOnce({ success: true, data: [
+      { task_id: 'task-1', run_number: 1, job_id: 'job-1', run_scope: 'assigned', triggered_by: 'creator', created_at: '2026-09-22' },
+    ] })
+    mocks.getTaskQcRunRecordResult.mockResolvedValueOnce({ success: true, data: {
+      task_id: 'task-1', run_number: 1, task_record_id: 'association-1', job_id: 'job-1',
+      job_status: 'failed', result_state: 'available', rule_set_key: 'luxian_0916_qc_v1',
+      items: [
+        { rule_id: 'LX0916-001', rule_name: '入院记录完整性', status: 'data_quality_gap',
+          findings: '签名时间缺失', conclusion: '不得重复展示的旧结论',
+          evidence: ['入院记录：签名时间未提供'], suggestion: '核对原始文书',
+          technical_reason: 'internal-diagnostic-secret' },
+        { rule_id: 'LX0916-002', rule_name: '手术记录', status: 'not_executed',
+          findings: '本次未执行', evidence: [] },
+      ],
+    } })
+    const wrapper = mountDrawer({ tab: 'received' })
+    await flushPromises()
+    await wrapper.get('[data-testid="task-record-result-association-1"]').trigger('click')
+    await flushPromises()
+
+    const result = wrapper.get('[data-testid="task-record-qc-result"]').text()
+    expect(result).toContain('签名时间缺失')
+    expect(result).toContain('入院记录：签名时间未提供')
+    expect(result).toContain('核对原始文书')
+    expect(result).toContain('数据不足')
+    expect(result).toContain('未执行')
+    expect(result).toContain('批作业部分失败，该病历结果完整')
+    expect(result).not.toContain('不得重复展示的旧结论')
+    expect(result).not.toContain('internal-diagnostic-secret')
+  })
+
+  it('LX0916 结果不可用时不展示诊断内容或推断无缺陷', async () => {
+    mocks.getTaskDetail.mockResolvedValueOnce(detailResponse('结果任务', [record()], {
+      scene: 'running', rule_set_key: 'luxian_0916_qc_v1', status: 'assigned',
+    }))
+    mocks.getTaskQcRuns.mockResolvedValueOnce({ success: true, data: [
+      { task_id: 'task-1', run_number: 1, job_id: 'job-1', run_scope: 'assigned', triggered_by: 'creator', created_at: '2026-09-22' },
+    ] })
+    mocks.getTaskQcRunRecordResult.mockResolvedValueOnce({ success: true, data: {
+      task_id: 'task-1', run_number: 1, task_record_id: 'association-1', job_id: 'job-1',
+      job_status: 'failed', result_state: 'unavailable', rule_set_key: 'luxian_0916_qc_v1',
+      items: [], technical_reason: 'internal-failure-secret',
+    } })
+    const wrapper = mountDrawer({ tab: 'received' })
+    await flushPromises()
+    await wrapper.get('[data-testid="task-record-result-association-1"]').trigger('click')
+    await flushPromises()
+
+    const result = wrapper.get('[data-testid="task-record-qc-result"]').text()
+    expect(result).toContain('结果不可用')
+    expect(result).not.toContain('internal-failure-secret')
+    expect(result).not.toContain('无缺陷')
+  })
+
   it('切换运行时丢弃晚到单病例结果', async () => {
     const oldResult = deferred<{ success: boolean; data: Record<string, unknown> }>()
-    mocks.getTaskDetail.mockResolvedValueOnce(detailResponse('结果任务', [record()], { scene: 'final', rule_set_key: 'lx0609' }))
+    mocks.getTaskDetail.mockResolvedValueOnce(detailResponse('结果任务', [record()], { scene: 'running', rule_set_key: 'lx0609' }))
     mocks.getTaskQcRuns.mockResolvedValueOnce({ success: true, data: [
       { task_id: 'task-1', run_number: 2, job_id: 'job-2', run_scope: 'all', triggered_by: 'creator', created_at: '2026-09-23' },
       { task_id: 'task-1', run_number: 1, job_id: 'job-1', run_scope: 'all', triggered_by: 'creator', created_at: '2026-09-22' },

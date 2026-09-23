@@ -363,7 +363,7 @@
             <p v-if="recordResultLoading" class="task-detail-drawer__muted">正在读取本次病例结果…</p>
             <p v-else-if="recordResultError" class="task-detail-drawer__run-error" role="alert">{{ recordResultError }}</p>
             <template v-else-if="recordResult">
-              <p class="task-detail-drawer__result-context">规则集：{{ recordResult.rule_set_key || '未记录' }} · {{ jobStatusLabel(recordResult.job_status) }}</p>
+              <p class="task-detail-drawer__result-context">规则集：{{ recordResult.rule_set_key || '未记录' }} · {{ recordResult.job_status === 'failed' && recordResult.result_state === 'available' ? '批作业部分失败，该病历结果完整' : jobStatusLabel(recordResult.job_status) }}</p>
               <p v-if="recordResult.result_state === 'pending'" class="task-detail-drawer__muted">本次质控尚未形成该病历结果，请稍后重试。</p>
               <p v-else-if="recordResult.result_state === 'unavailable' || !recordResult.items.length" class="task-detail-drawer__run-error">本次质控结果不可用，不能据此判断是否存在缺陷。</p>
               <div v-else class="task-detail-drawer__result-list">
@@ -372,7 +372,7 @@
                     <strong>{{ item.rule_name || item.rule_code || item.qc_point_id || '质控规则' }}</strong>
                     <a-tag :color="resultStatusColor(item.result_status || item.display_status || item.status)">{{ resultStatusLabel(item.result_status || item.display_status || item.status) }}</a-tag>
                   </div>
-                  <p v-if="item.conclusion"><b>结论</b>{{ item.conclusion }}</p>
+                  <p v-if="item.findings || item.conclusion"><b>{{ item.findings ? '发现' : '结论' }}</b>{{ item.findings || item.conclusion }}</p>
                   <p v-if="item.suggestion"><b>建议</b>{{ item.suggestion }}</p>
                   <p v-if="item.evidence?.length"><b>证据</b>{{ item.evidence.map(evidenceLabel).join('；') }}</p>
                 </div>
@@ -756,6 +756,7 @@ function resultStatusColor(status: string) {
 }
 
 function evidenceLabel(evidence: NonNullable<TaskQcSafeResultItem['evidence']>[number]) {
+  if (typeof evidence === 'string') return evidence
   if (evidence.evidence_excerpt) {
     return `${evidence.excerpt_kind || evidence.source_type}：${evidence.evidence_excerpt}`
   }
