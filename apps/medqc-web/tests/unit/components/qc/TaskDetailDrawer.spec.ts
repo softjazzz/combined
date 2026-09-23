@@ -3,7 +3,13 @@ import { defineComponent, h } from 'vue'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Select as ASelect, Table as ATable } from 'ant-design-vue'
 
-const mocks = vi.hoisted(() => ({ getTaskDetail: vi.fn() }))
+const mocks = vi.hoisted(() => ({
+  getTaskDetail: vi.fn(),
+  getTaskQcRuns: vi.fn(),
+  createTaskQcRun: vi.fn(),
+  getSichuanWorkspaceBatchJob: vi.fn(),
+  user: { id: 'creator' },
+}))
 
 beforeAll(() => {
   const getComputedStyle = window.getComputedStyle.bind(window)
@@ -23,7 +29,15 @@ beforeAll(() => {
   })
 })
 
-vi.mock('@/api/tasks', () => ({ getTaskDetail: mocks.getTaskDetail }))
+vi.mock('@/api/tasks', () => ({
+  getTaskDetail: mocks.getTaskDetail,
+  getTaskQcRuns: mocks.getTaskQcRuns,
+  createTaskQcRun: mocks.createTaskQcRun,
+}))
+vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ user: mocks.user }) }))
+vi.mock('@/services/sichuan-rule-workspace-service', () => ({
+  getSichuanWorkspaceBatchJob: mocks.getSichuanWorkspaceBatchJob,
+}))
 
 import TaskDetailDrawer from '@/components/qc/TaskDetailDrawer.vue'
 
@@ -166,7 +180,12 @@ function mountDrawer(
 describe('TaskDetailDrawer', () => {
   beforeEach(() => {
     mocks.getTaskDetail.mockReset()
+    mocks.getTaskQcRuns.mockReset()
+    mocks.createTaskQcRun.mockReset()
+    mocks.getSichuanWorkspaceBatchJob.mockReset()
     mocks.getTaskDetail.mockResolvedValue(detailResponse('任务甲', [record()]))
+    mocks.getTaskQcRuns.mockResolvedValue({ success: true, data: [] })
+    mocks.getSichuanWorkspaceBatchJob.mockResolvedValue({ success: true, data: { id: 'job-1', status: 'completed', summary: { total_records: 1, success_count: 1, failed_count: 0, issue_records: 0 } } })
   })
 
   it('按收到范围读取真实详情，并区分真实零值与缺失值', async () => {
@@ -431,5 +450,68 @@ describe('TaskDetailDrawer', () => {
 
     expect(wrapper.get('[data-testid="task-detail-error"]').text()).toContain('身份校验失败')
     expect(wrapper.text()).not.toContain('串线任务')
+  })
+
+  it('现代任务显示规则集，按精确 job_id 读取运行结果并启动新运行', async () => {
+    mocks.getTaskDetail.mockResolvedValueOnce(detailResponse('运行任务', [record()], {
+      scene: 'running', rule_set_key: 'published-running', status: 'assigned',
+    }))
+    mocks.getTaskQcRuns.mockResolvedValue({ success: true, data: [
+      { task_id: 'task-1', run_number: 2, job_id: 'job-2', triggered_by: 'creator', created_at: '2026-09-23T00:00:00Z' },
+      { task_id: 'task-1', run_number: 1, job_id: 'job-1', triggered_by: 'creator', created_at: '2026-09-22T00:00:00Z' },
+    ] })
+    mocks.getSichuanWorkspaceBatchJob.mockImplementation(async (jobId: string) => ({
+      success: true, data: { id: jobId, status: 'completed', summary: { total_records: 8, success_count: 7, failed_count: 1, issue_records: 2 } },
+    }))
+    mocks.createTaskQcRun.mockResolvedValue({ success: true, data: { task_id: 'task-1', run_number: 3, job_id: 'job-3', status: 'queued' } })
+    const wrapper = mountDrawer({ tab: 'all' })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('published-running')
+    expect(mocks.getSichuanWorkspaceBatchJob).toHaveBeenCalledWith('job-2')
+    expect(wrapper.get('[data-testid="task-qc-job"]').text()).toContain('job-2')
+    await wrapper.get('[data-testid="task-run-1"]').trigger('click')
+    await flushPromises()
+    expect(mocks.getSichuanWorkspaceBatchJob).toHaveBeenLastCalledWith('job-1')
+    expect(wrapper.get('[data-testid="task-qc-job"]').text()).toContain('job-1')
+    await wrapper.get('[data-testid="task-run-2"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="task-start-qc-run"]').trigger('click')
+    await flushPromises()
+    expect(mocks.createTaskQcRun).toHaveBeenCalledWith('task-1')
+  })
+
+  it('非创建人和门急诊任务没有启动命令，历史任务不读取运行接口', async () => {
+    mocks.getTaskDetail.mockResolvedValueOnce(detailResponse('门急诊', [], {
+      scene: 'outpatient', rule_set_key: 'outpatient-set', creator_id: 'another',
+    }))
+    const wrapper = mountDrawer({ tab: 'all' })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="task-start-qc-run"]').exists()).toBe(false)
+    expect(mocks.getTaskQcRuns).not.toHaveBeenCalled()
+    await wrapper.setProps({ taskId: 'task-2' })
+    mocks.getTaskDetail.mockResolvedValueOnce(detailResponse('历史', [], { id: 'task-2' }))
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('质控运行')
+  })
+
+  it('运行历史失败不展示旧作业，切换任务后晚到的作业响应不能串线', async () => {
+    const oldJob = deferred<{ success: boolean; data: { id: string; status: string } }>()
+    mocks.getTaskDetail.mockResolvedValueOnce(detailResponse('旧任务', [], { scene: 'running', rule_set_key: 'set-1' }))
+    mocks.getTaskQcRuns.mockResolvedValueOnce({ success: true, data: [
+      { task_id: 'task-1', run_number: 1, job_id: 'old-job', triggered_by: 'creator', created_at: '2026-09-22' },
+    ] }).mockResolvedValueOnce({ success: false, message: '无权限读取运行历史' })
+    mocks.getSichuanWorkspaceBatchJob.mockReturnValueOnce(oldJob.promise)
+    const wrapper = mountDrawer()
+    await flushPromises()
+    expect(mocks.getSichuanWorkspaceBatchJob).toHaveBeenCalledWith('old-job')
+    mocks.getTaskDetail.mockResolvedValueOnce(detailResponse('新任务', [], { id: 'task-2', scene: 'final', rule_set_key: 'set-2' }))
+    await wrapper.setProps({ taskId: 'task-2' })
+    await flushPromises()
+    oldJob.resolve({ success: true, data: { id: 'old-job', status: 'completed' } })
+    await flushPromises()
+    expect(wrapper.text()).toContain('无权限读取运行历史')
+    expect(wrapper.text()).not.toContain('old-job')
+    expect(wrapper.find('[data-testid="task-start-qc-run"]').exists()).toBe(false)
   })
 })

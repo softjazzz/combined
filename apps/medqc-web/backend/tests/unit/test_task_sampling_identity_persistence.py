@@ -249,7 +249,7 @@ def test_missing_coordinate_columns_fail_before_write(monkeypatch):
     engine.dispose()
 
 
-def test_postgresql_modern_path_pins_qc_before_lock(monkeypatch):
+def test_postgresql_modern_path_uses_configured_search_path_before_lock(monkeypatch):
     statements = []
 
     class StopBeforeDatabase(Exception):
@@ -263,8 +263,7 @@ def test_postgresql_modern_path_pins_qc_before_lock(monkeypatch):
 
         def execute(self, statement):
             statements.append(str(statement))
-            if len(statements) == 2:
-                raise StopBeforeDatabase()
+            raise StopBeforeDatabase()
 
         def close(self):
             pass
@@ -273,5 +272,5 @@ def test_postgresql_modern_path_pins_qc_before_lock(monkeypatch):
     with pytest.raises(StopBeforeDatabase):
         persistence.save_task_sample(snapshot(), [case()])
 
-    assert statements[0] == "SET LOCAL search_path TO qc"
-    assert "FOR UPDATE" in statements[1]
+    assert len(statements) == 1
+    assert "FOR UPDATE" in statements[0]

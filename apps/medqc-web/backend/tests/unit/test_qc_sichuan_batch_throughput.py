@@ -3375,6 +3375,39 @@ async def test_create_workspace_batch_job_should_reuse_active_idempotent_job(mon
     assert [call["status"] for call in workspace.list_calls] == ["queued", "running"]
 
 
+def test_prepare_workspace_batch_job_isolates_task_runs_without_creating_job():
+    workspace = _IdempotentWorkspaceStub()
+    payload = qc_sichuan.SichuanWorkspaceBatchJobCreateRequest(
+        rule_ids=["SC-001"],
+        scope="final",
+        record_ids=["visit-001"],
+    )
+    ordinary = qc_sichuan.prepare_workspace_batch_job(
+        payload,
+        qc_service=_ServiceStub(),  # type: ignore[arg-type]
+        workspace=workspace,  # type: ignore[arg-type]
+    )
+    first_run = qc_sichuan.prepare_workspace_batch_job(
+        payload,
+        qc_service=_ServiceStub(),  # type: ignore[arg-type]
+        workspace=workspace,  # type: ignore[arg-type]
+        task_run_context={"task_id": "task-001", "run_number": "1"},
+    )
+    second_run = qc_sichuan.prepare_workspace_batch_job(
+        payload,
+        qc_service=_ServiceStub(),  # type: ignore[arg-type]
+        workspace=workspace,  # type: ignore[arg-type]
+        task_run_context={"task_id": "task-001", "run_number": "2"},
+    )
+
+    assert len({ordinary.idempotency_key, first_run.idempotency_key, second_run.idempotency_key}) == 3
+    assert "task_id" not in ordinary.create_kwargs["filters"]
+    assert first_run.create_kwargs["filters"]["task_id"] == "task-001"
+    assert first_run.create_kwargs["filters"]["task_run_number"] == "1"
+    assert second_run.create_kwargs["filters"]["task_run_number"] == "2"
+    assert workspace.create_called is False
+
+
 @pytest.mark.asyncio
 async def test_create_workspace_batch_job_should_not_reuse_running_job_after_record_becomes_final(
     monkeypatch,

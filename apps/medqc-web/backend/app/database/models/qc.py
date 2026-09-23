@@ -14,11 +14,14 @@ from sqlalchemy import (
     Date,
     DateTime,
     Float,
+    ForeignKeyConstraint,
     Index,
     Integer,
     JSON,
+    PrimaryKeyConstraint,
     String,
     Text,
+    UniqueConstraint,
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -266,6 +269,25 @@ class QCTaskRecord(Base):
                 "institute_id IS NOT NULL AND patient_id IS NOT NULL AND visit_id IS NOT NULL"
             ),
         ),
+    )
+
+
+class QCTaskQCRun(Base):
+    """任务与 workspace 批量质控 job 的运行历史关联。"""
+
+    __tablename__ = "task_qc_runs"
+
+    task_id = Column(String(36), primary_key=True)
+    run_number = Column(Integer, primary_key=True)
+    job_id = Column(String(36), nullable=False)
+    triggered_by = Column(String(64), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        PrimaryKeyConstraint("task_id", "run_number", name="pk_task_qc_runs"),
+        ForeignKeyConstraint(["task_id"], ["qc_tasks.id"], name="fk_task_qc_runs_task"),
+        UniqueConstraint("job_id", name="uq_task_qc_runs_job"),
+        CheckConstraint("run_number > 0", name="ck_task_qc_runs_positive_number"),
     )
 
 

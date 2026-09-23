@@ -2,7 +2,7 @@
 
 ## 真实证据
 
-- 当前任务场景抽样在 `TaskSamplingService.sample` 与 `save_task_sample` 都固定拒绝；旧候选仅查 `medical_records.id`，保存仅写 `record_id`，不能代表三坐标病例。
+- 本阶段开始前，任务场景抽样在 `TaskSamplingService.sample` 与 `save_task_sample` 都固定拒绝；旧候选仅查 `medical_records.id`，保存仅写 `record_id`，不能代表三坐标病例。现已接通门急诊三坐标抽样；运行/终末仍拒绝。
 - 只读业务库仍为 revision 44；迁移 45–48 尚未执行，`cdm.outpat_record` 为 0 行。门急诊真实正样本缺失，因此代码与隔离测试完成也不能宣称真实三场景交付。
 - `cdm.outpat_record` 是文书级表，同一 `(institute_id, patient_id, visit_id)` 可有多份文书；候选必须按三坐标去重。`visit_datetime`/`dept_name` 是本阶段日期/科室筛选依据。当前没有可靠的门/急子类值域，不额外区分。
 - 迁移 46 的现代关联以三坐标唯一，但仍要求非空 `record_id`。现代路径写入关联 UUID 作为兼容占位，前端不把它展示为病历号；不得把 JSON 复合键或 `visit_id` 冒充旧病历 ID。
@@ -26,4 +26,4 @@
 
 ## 状态
 
-代码与隔离测试已完成；实际业务库 revision 44，尚未进行 DDL 或业务写入。门急诊无规则集、无正样本；运行/终末缺归档值域合同；真实 workspace job/结果回写未接通。这一批不能标为业务验收完成。
+门急诊候选、抽样、三坐标保存代码与隔离测试已完成；实际业务库 revision 44，尚未进行 DDL 或业务写入。门急诊无规则集、无正样本；运行/终末缺归档值域合同。后续已新增任务到 workspace job 的 1:N 原子关联、创建人运行历史和按精确 job_id 读取结果，但正常创建流程仍无法抽出运行/终末病历，且迁移 49 未执行；不能标为业务验收完成。

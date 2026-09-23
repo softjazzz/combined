@@ -2742,8 +2742,10 @@ class CustomQCWorkspaceService:
         child_summary: Optional[Dict[str, Any]] = None,
         family_key: Optional[str] = None,
         family_name: Optional[str] = None,
+        session: Optional[Session] = None,
     ) -> Dict[str, Any]:
-        session = _session()
+        owns_session = session is None
+        active_session = _session() if owns_session else session
         try:
             now = _now_utc()
             job_id = str(uuid.uuid4())
@@ -2824,11 +2826,14 @@ class CustomQCWorkspaceService:
                 "family_key": _safe_text(family_key) or None,
                 "family_name": _safe_text(family_name) or None,
             }
-            session.execute(self._batch_job_table.insert().values(**row_payload))
-            session.commit()
+            active_session.execute(self._batch_job_table.insert().values(**row_payload))
+            if not owns_session:
+                return _row_to_batch_job(row_payload)
+            active_session.commit()
             return self.get_batch_job(job_id=job_id, created_by=created_by) or _row_to_batch_job(row_payload)
         finally:
-            session.close()
+            if owns_session:
+                active_session.close()
 
     def update_parent_child_jobs(
         self,

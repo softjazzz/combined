@@ -73,6 +73,12 @@
               <dt>场景</dt>
               <dd>{{ sceneLabel(detail.scene) }}</dd>
             </div>
+            <div v-if="detail.scene">
+              <dt>规则集</dt>
+              <dd class="task-detail-drawer__breakable">
+                {{ detail.rule_set_key || '未选择' }}
+              </dd>
+            </div>
             <div>
               <dt>创建人</dt>
               <dd>{{ detail.creator_name || '未记录' }}</dd>
@@ -98,6 +104,145 @@
               <dd>{{ formatPercent(detail.progress) }}</dd>
             </div>
           </dl>
+        </section>
+
+        <section
+          v-if="isModernTask"
+          class="task-detail-drawer__runs"
+          aria-labelledby="task-detail-runs-title"
+        >
+          <div class="task-detail-drawer__section-heading">
+            <div>
+              <span>按运行批次查看</span>
+              <h3 id="task-detail-runs-title">
+                质控运行
+              </h3>
+            </div>
+            <a-button
+              v-if="canStartRun"
+              data-testid="task-start-qc-run"
+              type="primary"
+              :loading="startingRun"
+              @click="void startRun()"
+            >
+              <Play
+                :size="15"
+                aria-hidden="true"
+              />
+              {{ runs.length ? '重新质控' : '启动质控' }}
+            </a-button>
+          </div>
+          <template v-if="isCreator">
+            <p
+              v-if="runsLoading"
+              class="task-detail-drawer__muted"
+            >
+              正在读取运行历史…
+            </p>
+            <div
+              v-else-if="runsError"
+              class="task-detail-drawer__run-error"
+              role="alert"
+            >
+              {{ runsError }}
+              <a-button
+                size="small"
+                @click="void loadRuns()"
+              >
+                重试
+              </a-button>
+            </div>
+            <p
+              v-else-if="!runs.length"
+              class="task-detail-drawer__muted"
+            >
+              暂无质控运行
+            </p>
+            <div
+              v-else
+              class="task-detail-drawer__run-list"
+            >
+              <div
+                v-for="run in runs"
+                :key="run.job_id"
+                class="task-detail-drawer__run-row"
+              >
+                <div>
+                  <strong>第 {{ run.run_number }} 次运行</strong>
+                  <span>{{ formatDate(run.created_at) }}</span>
+                </div>
+                <a-button
+                  size="small"
+                  :data-testid="`task-run-${run.run_number}`"
+                  @click="void selectRun(run.job_id)"
+                >
+                  查看结果
+                </a-button>
+              </div>
+            </div>
+            <div
+              v-if="selectedJobId"
+              class="task-detail-drawer__job"
+              data-testid="task-qc-job"
+            >
+              <div class="task-detail-drawer__job-heading">
+                <strong>运行结果</strong>
+                <a-button
+                  size="small"
+                  :loading="jobLoading"
+                  @click="void loadJob(selectedJobId)"
+                >
+                  <RotateCw
+                    :size="14"
+                    aria-hidden="true"
+                  />刷新
+                </a-button>
+              </div>
+              <p
+                v-if="jobLoading"
+                class="task-detail-drawer__muted"
+              >
+                正在读取作业状态…
+              </p>
+              <p
+                v-else-if="jobError"
+                class="task-detail-drawer__run-error"
+                role="alert"
+              >
+                {{ jobError }}
+              </p>
+              <template v-else-if="selectedJob">
+                <a-tag :color="jobStatusColor(selectedJob.status)">
+                  {{ jobStatusLabel(selectedJob.status) }}
+                </a-tag>
+                <span class="task-detail-drawer__job-id">作业 {{ selectedJob.id }}</span>
+                <dl class="task-detail-drawer__job-metrics">
+                  <div><dt>病历</dt><dd>{{ formatNumber(selectedJob.summary?.total_records ?? selectedJob.total_records) }}</dd></div>
+                  <div><dt>成功</dt><dd>{{ formatNumber(selectedJob.summary?.success_count ?? selectedJob.success_count) }}</dd></div>
+                  <div><dt>失败</dt><dd>{{ formatNumber(selectedJob.summary?.failed_count ?? selectedJob.failed_count) }}</dd></div>
+                  <div><dt>有问题</dt><dd>{{ formatNumber(selectedJob.summary?.issue_records ?? selectedJob.issue_records) }}</dd></div>
+                </dl>
+                <p
+                  v-if="selectedJob.error_message"
+                  class="task-detail-drawer__run-error"
+                >
+                  {{ selectedJob.error_message }}
+                </p>
+              </template>
+            </div>
+          </template>
+          <p
+            v-else
+            class="task-detail-drawer__muted"
+          >
+            运行历史仅创建人可查看
+          </p>
+          <p
+            v-if="!canStartRun && isCreator && !runsLoading && !runsError"
+            class="task-detail-drawer__muted"
+          >
+            {{ runUnavailableReason }}
+          </p>
         </section>
 
         <section
@@ -197,10 +342,14 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import type { TableColumnsType, TablePaginationConfig } from 'ant-design-vue'
-import { RotateCw } from 'lucide-vue-next'
-import { getTaskDetail } from '@/api/tasks'
+import { Play, RotateCw } from 'lucide-vue-next'
+import { useAuthStore } from '@/stores/auth'
+import { getSichuanWorkspaceBatchJob } from '@/services/sichuan-rule-workspace-service'
+import type { SichuanBatchJob } from '@/views/workstation-v4/semantic-rules/types'
+import { createTaskQcRun, getTaskDetail, getTaskQcRuns } from '@/api/tasks'
 import type {
   TaskDetail,
+  TaskQcRun,
   TaskRecordItem,
   TaskScene,
   TaskStatus,
@@ -218,6 +367,15 @@ const emit = defineEmits<{
 }>()
 
 const detail = ref<TaskDetail | null>(null)
+const authStore = useAuthStore()
+const runs = ref<TaskQcRun[]>([])
+const runsLoading = ref(false)
+const runsError = ref('')
+const startingRun = ref(false)
+const selectedJobId = ref('')
+const selectedJob = ref<SichuanBatchJob | null>(null)
+const jobLoading = ref(false)
+const jobError = ref('')
 const loading = ref(false)
 const error = ref('')
 const keyword = ref('')
@@ -225,6 +383,8 @@ const recordStatus = ref<string | undefined>()
 const page = ref(1)
 const pageSize = ref(10)
 let requestSequence = 0
+let runSequence = 0
+let jobSequence = 0
 
 const drawerWidth = 'min(820px, 100vw)'
 const drawerTitle = computed(() => detail.value?.task_name || '任务详情')
@@ -232,6 +392,29 @@ const scopeLabel = computed(() => (props.tab === 'received' ? '我的病历' : '
 const emptyDescription = computed(() =>
   props.tab === 'received' ? '当前任务没有分配给我的病历' : '当前任务暂无病历',
 )
+const isModernTask = computed(() => !!detail.value?.scene)
+const isCreator = computed(() => !!authStore.user?.id && authStore.user.id === detail.value?.creator_id)
+const canStartRun = computed(() => isCreator.value
+  && (detail.value?.scene === 'running' || detail.value?.scene === 'final')
+  && !!detail.value.rule_set_key
+  && detail.value.total_records > 0
+  && detail.value.status !== 'cancelled'
+  && !runsLoading.value
+  && !runsError.value
+  && !startingRun.value
+  && !jobLoading.value
+  && (!runs.value.length || selectedJobId.value === runs.value[0]?.job_id)
+  && (!runs.value.length || !!selectedJob.value)
+  && selectedJob.value?.status !== 'queued'
+  && selectedJob.value?.status !== 'running')
+const runUnavailableReason = computed(() => {
+  if (detail.value?.scene === 'outpatient') return '门急诊场景质控执行尚未接入'
+  if (!detail.value?.rule_set_key) return '未选择规则集，无法执行质控'
+  if (!detail.value.total_records) return '请先完成病历抽样'
+  if (detail.value.status === 'cancelled') return '已取消任务不能执行质控'
+  if (selectedJob.value?.status === 'queued' || selectedJob.value?.status === 'running') return '当前质控运行中'
+  return ''
+})
 
 const recordStatusOptions = [
   { label: '未处理', value: 'pending' },
@@ -280,7 +463,17 @@ function resetFilters() {
 
 function clearDetail() {
   requestSequence += 1
+  runSequence += 1
+  jobSequence += 1
   detail.value = null
+  runs.value = []
+  runsLoading.value = false
+  runsError.value = ''
+  startingRun.value = false
+  selectedJobId.value = ''
+  selectedJob.value = null
+  jobLoading.value = false
+  jobError.value = ''
   loading.value = false
   error.value = ''
   resetFilters()
@@ -295,7 +488,14 @@ async function loadDetail() {
 
   const tab = props.tab
   const currentSequence = ++requestSequence
+  runSequence += 1
+  jobSequence += 1
   detail.value = null
+  runs.value = []
+  selectedJobId.value = ''
+  selectedJob.value = null
+  runsError.value = ''
+  jobError.value = ''
   error.value = ''
   loading.value = true
   resetFilters()
@@ -310,6 +510,9 @@ async function loadDetail() {
       && Array.isArray(response.data.records)
     ) {
       detail.value = response.data
+      if (response.data.scene && authStore.user?.id === response.data.creator_id) {
+        void loadRuns()
+      }
     } else {
       error.value = response.success && response.data?.id !== taskId
         ? '任务详情身份校验失败，请重试'
@@ -321,6 +524,84 @@ async function loadDetail() {
   } finally {
     if (currentSequence === requestSequence) loading.value = false
   }
+}
+
+async function loadRuns() {
+  const taskId = detail.value?.id
+  if (!taskId || !isCreator.value) return
+  const sequence = ++runSequence
+  runsLoading.value = true
+  runsError.value = ''
+  try {
+    const response = await getTaskQcRuns(taskId)
+    if (sequence !== runSequence || detail.value?.id !== taskId || !props.open) return
+    if (!response.success || !Array.isArray(response.data)) {
+      runsError.value = response.message || '获取运行历史失败'
+      return
+    }
+    runs.value = response.data.filter((run) => run.task_id === taskId && !!run.job_id)
+      .sort((a, b) => b.run_number - a.run_number)
+    if (runs.value.length) void selectRun(runs.value[0]!.job_id)
+  } catch {
+    if (sequence === runSequence && detail.value?.id === taskId) runsError.value = '网络异常或服务器不可用'
+  } finally {
+    if (sequence === runSequence) runsLoading.value = false
+  }
+}
+
+async function selectRun(jobId: string) {
+  if (!runs.value.some((run) => run.job_id === jobId)) return
+  selectedJobId.value = jobId
+  await loadJob(jobId)
+}
+
+async function loadJob(jobId: string) {
+  const taskId = detail.value?.id
+  if (!taskId || selectedJobId.value !== jobId) return
+  const sequence = ++jobSequence
+  selectedJob.value = null
+  jobError.value = ''
+  jobLoading.value = true
+  try {
+    const response = await getSichuanWorkspaceBatchJob(jobId)
+    if (sequence !== jobSequence || detail.value?.id !== taskId || selectedJobId.value !== jobId || !props.open) return
+    if (response.success && response.data?.id === jobId) selectedJob.value = response.data
+    else jobError.value = response.message || '获取运行结果失败'
+  } catch {
+    if (sequence === jobSequence && detail.value?.id === taskId) jobError.value = '网络异常或服务器不可用'
+  } finally {
+    if (sequence === jobSequence) jobLoading.value = false
+  }
+}
+
+async function startRun() {
+  const taskId = detail.value?.id
+  if (!taskId || !canStartRun.value) return
+  startingRun.value = true
+  try {
+    const response = await createTaskQcRun(taskId)
+    if (!props.open || detail.value?.id !== taskId) return
+    if (!response.success || !response.data?.job_id || response.data.task_id !== taskId) {
+      runsError.value = response.message || '启动质控失败'
+      return
+    }
+    await loadRuns()
+  } catch {
+    if (detail.value?.id === taskId) runsError.value = '网络异常或服务器不可用'
+  } finally {
+    if (detail.value?.id === taskId) startingRun.value = false
+  }
+}
+
+function jobStatusLabel(status: SichuanBatchJob['status']) {
+  return { queued: '排队中', running: '运行中', completed: '已完成', failed: '失败', canceled: '已取消' }[status] || '未知'
+}
+
+function jobStatusColor(status: SichuanBatchJob['status']) {
+  if (status === 'completed') return 'success'
+  if (status === 'failed') return 'error'
+  if (status === 'running') return 'processing'
+  return 'default'
 }
 
 function handleClose() {
@@ -462,6 +743,7 @@ watch([keyword, recordStatus], () => {
 }
 
 .task-detail-drawer__summary,
+.task-detail-drawer__runs,
 .task-detail-drawer__records {
   padding: 20px;
   background: #fff;
@@ -474,6 +756,54 @@ watch([keyword, recordStatus], () => {
 .task-detail-drawer__records {
   margin-top: 10px;
 }
+.task-detail-drawer__runs {
+  margin-top: 10px;
+}
+.task-detail-drawer__run-list {
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+.task-detail-drawer__run-row,
+.task-detail-drawer__job-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.task-detail-drawer__run-row {
+  min-height: 56px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+.task-detail-drawer__run-row div {
+  display: grid;
+  gap: 2px;
+}
+.task-detail-drawer__run-row span,
+.task-detail-drawer__muted,
+.task-detail-drawer__job-id {
+  color: rgba(29, 29, 31, 0.6);
+  font-size: 13px;
+}
+.task-detail-drawer__job {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+.task-detail-drawer__job-heading {
+  margin-bottom: 10px;
+}
+.task-detail-drawer__job-id {
+  margin-left: 8px;
+  overflow-wrap: anywhere;
+}
+.task-detail-drawer__job-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 12px 0 0;
+}
+.task-detail-drawer__job-metrics dt { color: rgba(29, 29, 31, 0.6); font-size: 13px; }
+.task-detail-drawer__job-metrics dd { margin: 2px 0 0; font-weight: 600; }
+.task-detail-drawer__run-error { color: #b42318; }
 
 .task-detail-drawer__section-heading {
   display: flex;
@@ -577,11 +907,15 @@ watch([keyword, recordStatus], () => {
 
 @media (max-width: 640px) {
   .task-detail-drawer__summary,
+  .task-detail-drawer__runs,
   .task-detail-drawer__records {
     padding: 16px;
   }
 
   .task-detail-drawer__metadata {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .task-detail-drawer__job-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 

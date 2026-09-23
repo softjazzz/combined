@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AxiosHeaders, type AxiosResponse } from 'axios'
 import { ApiService } from '@/services/apiService'
-import { getTaskDetail, getTaskList, getTaskRuleSets, getTaskStats, getTaskTodoStats } from '@/api/tasks'
+import { createTaskQcRun, getTaskDetail, getTaskList, getTaskQcRuns, getTaskRuleSets, getTaskStats, getTaskTodoStats } from '@/api/tasks'
 
 vi.mock('@/services/apiService', () => ({ ApiService: { requestRaw: vi.fn() } }))
 
@@ -77,6 +77,17 @@ describe('任务统计 API', () => {
     expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
       method: 'GET',
       url: '/api/v1/tasks/legacy-task',
+    })
+  })
+
+  it('运行历史与新运行使用任务专属端点且编码任务 ID', async () => {
+    await getTaskQcRuns('task/1')
+    expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
+      method: 'GET', url: '/api/v1/tasks/task%2F1/qc-runs',
+    })
+    await createTaskQcRun('task/1')
+    expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
+      method: 'POST', url: '/api/v1/tasks/task%2F1/qc-runs',
     })
   })
 

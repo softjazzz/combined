@@ -19,6 +19,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from typing import Optional, Dict, Any, List, Literal
 
 from fastapi import APIRouter, Request, HTTPException, Depends, Query
+from starlette.concurrency import run_in_threadpool
 
 from ..schemas.tasks import (
     TaskCreateRequest,
@@ -31,6 +32,18 @@ from ..core.audit import audit_event
 from ..core.response import success_response, paginated_response, get_trace_id
 from ..core.security import get_current_user
 from ..services.qc_rule_sets import get_sichuan_rule_set
+from ..services.detached_task_runner import submit_detached_task
+from ..services.product_activation import require_product_activation
+from ..services.sichuan_qc_service import SichuanQCService
+from ..services.task_qc_run_service import (
+    TaskQCRunConflict,
+    TaskQCRunDispatchError,
+    TaskQCRunForbidden,
+    TaskQCRunNotFound,
+    create_task_qc_run,
+    list_task_qc_runs,
+)
+from .qc_sichuan import get_qc_service, _run_sichuan_workspace_batch_job, _sichuan_workspace_service
 from ..core.permissions import (
     require_permission,
     require_role,
@@ -717,6 +730,65 @@ async def assign_task(
 # ============================
 # 进度查看
 # ============================
+
+@router.post("/{task_id}/qc-runs")
+@require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.ANALYZE)
+async def start_task_qc_run(
+    request: Request,
+    task_id: str,
+    current_user: dict = Depends(require_product_activation),
+    qc_service: SichuanQCService = Depends(get_qc_service),
+):
+    actor_id = _get_task_scope_user_id(current_user)
+
+    def dispatch(job_id: str) -> None:
+        submit_detached_task("sichuan_workspace_batch_job", _run_sichuan_workspace_batch_job, job_id)
+
+    try:
+        result = await run_in_threadpool(
+            create_task_qc_run,
+            task_id=task_id,
+            actor_id=actor_id,
+            current_user=current_user,
+            workspace_factory=_sichuan_workspace_service,
+            qc_service=qc_service,
+            dispatch=dispatch,
+        )
+    except TaskQCRunNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except TaskQCRunForbidden as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except TaskQCRunConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except TaskQCRunDispatchError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("启动任务质控失败: task_id=%s", task_id)
+        raise HTTPException(status_code=503, detail="任务质控服务不可用，请稍后重试") from exc
+    return success_response(data=result, message="已启动任务质控", trace_id=get_trace_id(request))
+
+
+@router.get("/{task_id}/qc-runs")
+@require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.READ)
+async def get_task_qc_runs(
+    request: Request,
+    task_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    actor_id = _get_task_scope_user_id(current_user)
+    try:
+        runs = await run_in_threadpool(list_task_qc_runs, task_id=task_id, actor_id=actor_id)
+    except TaskQCRunNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except TaskQCRunForbidden as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("查询任务质控运行历史失败: task_id=%s", task_id)
+        raise HTTPException(status_code=503, detail="任务运行历史不可用，请稍后重试") from exc
+    return success_response(data=runs, message="获取任务质控运行历史成功", trace_id=get_trace_id(request))
+
 
 @router.get("/{task_id}/progress")
 @require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.READ)

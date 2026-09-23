@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy import DateTime, Integer, String, column, func, insert, literal_column, select, table, text, update
+from sqlalchemy import DateTime, Integer, String, column, func, insert, literal_column, select, table, update
 
 from ..database.connection import SessionLocal
 
@@ -251,8 +251,6 @@ def save_task_sample(task_snapshot: dict[str, Any], sampled_records: list[dict[s
     session = SessionLocal()
     try:
         with session.begin():
-            if task_snapshot.get("scene") == "outpatient" and session.bind.dialect.name == "postgresql":
-                session.execute(text("SET LOCAL search_path TO qc"))
             row = session.execute(_lock_task_statement(task_id)).mappings().first()
             if row is None:
                 raise SamplingTaskNotFound(f"任务 {task_id} 不存在")

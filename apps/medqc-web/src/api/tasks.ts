@@ -52,6 +52,7 @@ export interface TaskItem {
     creator_id: string
     creator_name: string
     scene?: TaskScene | null
+    rule_set_key?: string | null
     deadline?: string
     sampling_method?: SamplingMethod
     assign_method?: AssignMethod
@@ -88,6 +89,21 @@ export interface TaskRecordItem {
 
 export interface TaskDetail extends TaskItem {
     records: TaskRecordItem[]
+}
+
+export interface TaskQcRun {
+    task_id: string
+    run_number: number
+    job_id: string
+    triggered_by: string
+    created_at: string
+}
+
+export interface TaskQcRunCreated {
+    task_id: string
+    run_number: number
+    job_id: string
+    status: 'queued'
 }
 
 export interface TaskCreateData {
@@ -202,6 +218,21 @@ export async function getTaskDetail(taskId: string, params?: { tab?: TaskTab }) 
     return request<TaskDetail>({
         method: 'GET',
         url: `${BASE_URL}/${encodeURIComponent(taskId)}${query}`,
+    })
+}
+
+/** 任务运行历史仅对创建人开放，结果以对应 workspace 作业为准。 */
+export async function getTaskQcRuns(taskId: string) {
+    return request<TaskQcRun[]>({
+        method: 'GET',
+        url: `${BASE_URL}/${encodeURIComponent(taskId)}/qc-runs`,
+    })
+}
+
+export async function createTaskQcRun(taskId: string) {
+    return request<TaskQcRunCreated>({
+        method: 'POST',
+        url: `${BASE_URL}/${encodeURIComponent(taskId)}/qc-runs`,
     })
 }
 
