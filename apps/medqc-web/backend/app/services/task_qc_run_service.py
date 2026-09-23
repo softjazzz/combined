@@ -262,7 +262,7 @@ def get_task_qc_run_record_result(
 
     with SessionLocal() as session:
         task = session.execute(
-            select(QCTask.id, QCTask.creator_id, QCTask.rule_set_key, QCTask.scene)
+            select(QCTask.id, QCTask.creator_id, QCTask.rule_set_key, QCTask.rule_set_version, QCTask.scene)
             .where(QCTask.id == task_id)
         ).mappings().first()
         if task is None:
@@ -302,6 +302,7 @@ def get_task_qc_run_record_result(
         rule_set = get_sichuan_rule_set(rule_set_key)
         if rule_set is None or rule_set.scope != task["scene"]:
             raise TaskQCRunConflict("任务规则集已失效或与场景不匹配")
+        frozen_version = task["rule_set_version"]
         job_id = str(run["job_id"] or "").strip()
         job_owner = str(run["triggered_by"] or "").strip()
         if not job_id or not job_owner:
@@ -323,6 +324,9 @@ def get_task_qc_run_record_result(
         or str(filters.get("task_id") or "") != task_id
         or str(filters.get("task_run_number") or "") != str(run_number)
         or str(filters.get("rule_set_key") or "") != rule_set_key
+        or (frozen_version is not None and (
+            not frozen_version or filters.get("rule_set_version") != frozen_version
+        ))
         or str(filters.get("query_scope") or "") != str(task["scene"] or "")
         or not valid_frozen_refs
         or len(valid_frozen_refs) != len(frozen_refs)

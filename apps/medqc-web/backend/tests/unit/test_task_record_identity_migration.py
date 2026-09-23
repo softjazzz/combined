@@ -30,9 +30,14 @@ class FakeBind:
     def __init__(self, states):
         self.states = states
         self.queries = []
+        self.locks = []
 
     def execute(self, statement):
         sql = str(statement)
+        if sql.startswith("LOCK TABLE "):
+            schema = next(name for name in self.states if f'"{name}".' in sql)
+            self.locks.append((schema, sql))
+            return ScalarResult(None)
         self.queries.append(sql)
         schema = next(name for name in self.states if f'"{name}".' in sql)
         if "institute_id IS NOT NULL OR" in sql:
@@ -356,6 +361,48 @@ def test_downgrade_validates_all_schemas_before_any_ddl(monkeypatch):
 
     assert calls == []
     assert all(name in public["columns"] for name in migration.IDENTITY_COLUMNS)
+
+
+def test_downgrade_locks_both_schemas_before_any_identity_precheck(monkeypatch):
+    migration = load_migration()
+    states = {
+        "qc": table_state(identity=True, old_unique=None),
+        "public": table_state(identity=True, old_unique=None, populated=1),
+    }
+    bind, calls = install_fakes(monkeypatch, migration, states)
+    original_execute = bind.execute
+
+    def execute_after_all_locks(statement):
+        if not str(statement).startswith("LOCK TABLE "):
+            assert [schema for schema, _ in bind.locks] == ["qc", "public"]
+        return original_execute(statement)
+
+    monkeypatch.setattr(bind, "execute", execute_after_all_locks)
+
+    with pytest.raises(RuntimeError, match="避免删除历史病例身份"):
+        migration.downgrade()
+
+    assert bind.locks == [
+        ("qc", 'LOCK TABLE "qc"."qc_task_records" IN ACCESS EXCLUSIVE MODE'),
+        ("public", 'LOCK TABLE "public"."qc_task_records" IN ACCESS EXCLUSIVE MODE'),
+    ]
+    assert calls == []
+    assert all(name in states["qc"]["columns"] for name in migration.IDENTITY_COLUMNS)
+
+
+def test_downgrade_locks_only_existing_table_before_precheck(monkeypatch):
+    migration = load_migration()
+    states = {
+        "qc": table_state(exists=False, old_unique=None),
+        "public": table_state(identity=True, old_unique=None, populated=1),
+    }
+    bind, calls = install_fakes(monkeypatch, migration, states)
+
+    with pytest.raises(RuntimeError, match="避免删除历史病例身份"):
+        migration.downgrade()
+
+    assert [schema for schema, _ in bind.locks] == ["public"]
+    assert calls == []
 
 
 @pytest.mark.parametrize("state_key", ["invalid", "duplicate_legacy"])

@@ -288,6 +288,11 @@ def _downgrade_schema(bind, schema: str) -> None:
 
 def downgrade() -> None:
     bind = op.get_bind()
-    targets = [schema for schema in reversed(SCHEMAS) if _validate_downgrade_schema(bind, schema)]
-    for schema in targets:
+    inspector = sa.inspect(bind)
+    existing = [schema for schema in SCHEMAS if inspector.has_table(TABLE, schema=schema)]
+    # 锁覆盖预检至删列的整个迁移事务，避免并发写入在预检后丢失三坐标。
+    for schema in existing:
+        bind.execute(sa.text(f'LOCK TABLE "{schema}"."{TABLE}" IN ACCESS EXCLUSIVE MODE'))
+    targets = [schema for schema in existing if _validate_downgrade_schema(bind, schema)]
+    for schema in reversed(targets):
         _downgrade_schema(bind, schema)

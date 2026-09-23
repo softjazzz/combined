@@ -365,7 +365,9 @@ def _result_setup(env, monkeypatch, *, status="completed", run_scope="all", part
     with env.sessions.begin() as session:
         session.execute(
             QCTask.__table__.update().where(QCTask.id == "task-1").values(
-                rule_set_key="luxian_0609_qc_v1", scene="running",
+                rule_set_key="luxian_0609_qc_v1",
+                rule_set_version=get_sichuan_rule_set("luxian_0609_qc_v1").version,
+                scene="running",
             )
         )
         session.execute(
@@ -383,7 +385,9 @@ def _result_setup(env, monkeypatch, *, status="completed", run_scope="all", part
         "summary": {"execution_status": "partial_failed"} if partial else {},
         "filters": {
             "task_id": "task-1", "task_run_number": "1",
-            "rule_set_key": "luxian_0609_qc_v1", "query_scope": "running",
+            "rule_set_key": "luxian_0609_qc_v1",
+            "rule_set_version": get_sichuan_rule_set("luxian_0609_qc_v1").version,
+            "query_scope": "running",
             "record_refs": [ref], "rule_ids": ["LX0609-001"],
         },
     }
@@ -424,6 +428,40 @@ def test_exact_record_result_projects_only_matching_three_coordinate(env, monkey
     assert [item["record_ref"] for item in result["items"]] == [target_ref]
     assert "filters" not in result and "failed_records" not in result
     assert "patient_id" not in result["items"][0]
+
+
+@pytest.mark.parametrize("job_version", [None, "previous-version"])
+def test_exact_record_result_rejects_missing_or_drifted_job_version(env, monkeypatch, job_version):
+    job, _ = _result_setup(env, monkeypatch)
+    if job_version is None:
+        job["filters"].pop("rule_set_version")
+    else:
+        job["filters"]["rule_set_version"] = job_version
+    with pytest.raises(service.TaskQCRunConflict, match="冻结质控范围"):
+        _read_result(env)
+
+
+def test_exact_record_result_preserves_legacy_task_without_frozen_version(env, monkeypatch):
+    job, _ = _result_setup(env, monkeypatch)
+    with env.sessions.begin() as session:
+        session.execute(
+            QCTask.__table__.update().where(QCTask.id == "task-1")
+            .values(rule_set_version=None)
+        )
+    job["filters"].pop("rule_set_version")
+    assert _read_result(env)["result_state"] == "available"
+
+
+def test_exact_record_result_rejects_blank_frozen_version(env, monkeypatch):
+    job, _ = _result_setup(env, monkeypatch)
+    with env.sessions.begin() as session:
+        session.execute(
+            QCTask.__table__.update().where(QCTask.id == "task-1")
+            .values(rule_set_version="")
+        )
+    job["filters"]["rule_set_version"] = ""
+    with pytest.raises(service.TaskQCRunConflict, match="冻结质控范围"):
+        _read_result(env)
 
 
 def test_exact_record_result_rejects_cross_run_and_job_mismatch(env, monkeypatch):
@@ -552,8 +590,10 @@ def _lx0916_setup(env, monkeypatch, *, run_scope="all"):
     job, ref = _result_setup(env, monkeypatch, run_scope=run_scope)
     with env.sessions.begin() as session:
         session.execute(QCTask.__table__.update().where(QCTask.id == "task-1")
-                        .values(rule_set_key="luxian_0916_qc_v1"))
+                        .values(rule_set_key="luxian_0916_qc_v1",
+                                rule_set_version=get_sichuan_rule_set("luxian_0916_qc_v1").version))
     job["filters"]["rule_set_key"] = "luxian_0916_qc_v1"
+    job["filters"]["rule_set_version"] = get_sichuan_rule_set("luxian_0916_qc_v1").version
     job["filters"]["rule_ids"] = list(LUXIAN_0916_RULE_IDS)
     job["summary"] = _lx0916_summary()
     job["items"] = [_lx0916_item(ref, rule_id) for rule_id in LUXIAN_0916_RULE_IDS]
@@ -666,8 +706,11 @@ def _sc_setup(env, monkeypatch, *, run_scope="all"):
     job, ref = _result_setup(env, monkeypatch, run_scope=run_scope)
     with env.sessions.begin() as session:
         session.execute(QCTask.__table__.update().where(QCTask.id == "task-1")
-                        .values(rule_set_key="sc_content_fast_v1", scene="final"))
+                        .values(rule_set_key="sc_content_fast_v1",
+                                rule_set_version=get_sichuan_rule_set("sc_content_fast_v1").version,
+                                scene="final"))
     job["filters"].update(rule_set_key="sc_content_fast_v1", query_scope="final",
+                          rule_set_version=get_sichuan_rule_set("sc_content_fast_v1").version,
                           rule_ids=["SC-023", "SC-024"])
     job["summary"] = {"execution_status": "completed"}
     job["items"] = [_sc_item(ref, rule_id) for rule_id in job["filters"]["rule_ids"]]

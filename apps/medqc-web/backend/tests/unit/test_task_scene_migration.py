@@ -5,6 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import sqlalchemy as sa
 
 
 def load_migration():
@@ -15,16 +16,32 @@ def load_migration():
     return module
 
 
-def mock_operations(monkeypatch, migration, schemas, *, existing=False):
+def mock_operations(
+    monkeypatch, migration, schemas, *, existing=False, scene_values=None,
+    column=None, check=None, column_present=None, check_present=None,
+):
     calls = []
+    scene_values = scene_values or {}
+    scene_column = column if column is not None else {
+        "name": "scene", "type": sa.String(32), "nullable": True, "default": None,
+    }
+    scene_check = check if check is not None else {
+        "name": migration.CONSTRAINT, "sqltext": migration.SCENE_CHECK,
+    }
+    has_column = existing if column_present is None else column_present
+    has_check = existing if check_present is None else check_present
     inspector = SimpleNamespace(
         has_table=lambda table, schema: schema in schemas,
-        get_columns=lambda table, schema: [{"name": "id"}] + ([{"name": "scene"}] if existing else []),
-        get_check_constraints=lambda table, schema: [{"name": migration.CONSTRAINT}] if existing else [],
+        get_columns=lambda table, schema: [{"name": "id"}] + ([scene_column] if has_column else []),
+        get_check_constraints=lambda table, schema: [scene_check] if has_check else [],
     )
+    bind = SimpleNamespace(execute=lambda statement: (
+        calls.append(("execute", str(statement), {})) or
+        SimpleNamespace(scalar_one=lambda: scene_values.get("public" if '"public"' in str(statement) else "qc", 0))
+    ))
     monkeypatch.setattr(migration.sa, "inspect", lambda bind: inspector)
-    monkeypatch.setattr(migration.op, "get_bind", lambda: None)
-    for name in ("add_column", "create_check_constraint", "drop_constraint", "drop_column", "execute"):
+    monkeypatch.setattr(migration.op, "get_bind", lambda: bind)
+    for name in ("add_column", "create_check_constraint", "drop_constraint", "drop_column"):
         monkeypatch.setattr(migration.op, name, lambda *args, _name=name, **kwargs: calls.append((_name, args, kwargs)))
     return calls
 
@@ -60,9 +77,64 @@ def test_downgrade_only_removes_scene_contract(monkeypatch):
     migration = load_migration()
     calls = mock_operations(monkeypatch, migration, ("qc", "public"), existing=True)
     migration.downgrade()
-    assert [call[0] for call in calls] == ["drop_constraint", "drop_column"] * 2
-    assert [call[2]["schema"] for call in calls] == ["public", "public", "qc", "qc"]
+    assert [call[0] for call in calls] == ["execute"] * 4 + ["drop_constraint", "drop_column"] * 2
+    assert [call[1] for call in calls[:4]] == [
+        'LOCK TABLE "qc"."qc_tasks" IN ACCESS EXCLUSIVE MODE',
+        'LOCK TABLE "public"."qc_tasks" IN ACCESS EXCLUSIVE MODE',
+        'SELECT count(*) FROM "qc"."qc_tasks" WHERE scene IS NOT NULL',
+        'SELECT count(*) FROM "public"."qc_tasks" WHERE scene IS NOT NULL',
+    ]
+    assert [call[2]["schema"] for call in calls[4:]] == ["public", "public", "qc", "qc"]
     assert all(call[1][0] == "qc_tasks" and call[1][1] == "scene" for call in calls if call[0] == "drop_column")
+
+
+@pytest.mark.parametrize("scene_values", [{"qc": 1}, {"public": 1}])
+def test_downgrade_rejects_populated_scene_before_any_drop(monkeypatch, scene_values):
+    migration = load_migration()
+    calls = mock_operations(monkeypatch, migration, ("qc", "public"), existing=True, scene_values=scene_values)
+    with pytest.raises(RuntimeError, match="非 NULL scene"):
+        migration.downgrade()
+    assert [call[0] for call in calls] == ["execute"] * 4
+
+
+@pytest.mark.parametrize("column,check", [
+    ({"name": "scene", "type": sa.String(64), "nullable": True, "default": None}, None),
+    ({"name": "scene", "type": sa.String(32), "nullable": False, "default": None}, None),
+    (None, {"name": "ck_qc_tasks_scene", "sqltext": "scene IN ('running', 'final')"}),
+])
+def test_upgrade_rejects_existing_drift_before_any_change(monkeypatch, column, check):
+    migration = load_migration()
+    calls = mock_operations(monkeypatch, migration, ("qc", "public"), existing=True, column=column, check=check)
+    with pytest.raises(RuntimeError, match="合同不符"):
+        migration.upgrade()
+    assert calls == []
+
+
+@pytest.mark.parametrize("column_present,check_present", [(True, False), (False, True)])
+def test_upgrade_rejects_partial_contract_before_any_change(monkeypatch, column_present, check_present):
+    migration = load_migration()
+    calls = mock_operations(
+        monkeypatch, migration, ("qc", "public"),
+        column_present=column_present, check_present=check_present,
+    )
+    with pytest.raises(RuntimeError, match="合同不完整"):
+        migration.upgrade()
+    assert calls == []
+
+
+def test_upgrade_accepts_postgres_reflected_check(monkeypatch):
+    migration = load_migration()
+    reflected = (
+        "((scene IS NULL) OR ((scene)::text = ANY ((ARRAY["
+        "'running'::character varying, 'final'::character varying, "
+        "'outpatient'::character varying])::text[])))"
+    )
+    calls = mock_operations(
+        monkeypatch, migration, ("qc", "public"), existing=True,
+        check={"name": migration.CONSTRAINT, "sqltext": reflected},
+    )
+    migration.upgrade()
+    assert calls == []
 
 
 def test_orm_keeps_scene_nullable_with_same_check():
