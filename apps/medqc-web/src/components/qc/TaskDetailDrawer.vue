@@ -132,7 +132,7 @@
               {{ runs.length ? '重新质控' : '启动质控' }}
             </a-button>
           </div>
-          <template v-if="isCreator">
+          <template v-if="canViewRuns">
             <p
               v-if="runsLoading"
               class="task-detail-drawer__muted"
@@ -235,10 +235,10 @@
             v-else
             class="task-detail-drawer__muted"
           >
-            运行历史仅创建人可查看
+            当前范围没有可查看的运行历史
           </p>
           <p
-            v-if="!canStartRun && isCreator && !runsLoading && !runsError"
+            v-if="!canStartRun && canViewRuns && !runsLoading && !runsError && runUnavailableReason"
             class="task-detail-drawer__muted"
           >
             {{ runUnavailableReason }}
@@ -350,6 +350,7 @@ import { createTaskQcRun, getTaskDetail, getTaskQcRuns } from '@/api/tasks'
 import type {
   TaskDetail,
   TaskQcRun,
+  TaskQcRunScope,
   TaskRecordItem,
   TaskScene,
   TaskStatus,
@@ -394,11 +395,21 @@ const emptyDescription = computed(() =>
 )
 const isModernTask = computed(() => !!detail.value?.scene)
 const isCreator = computed(() => !!authStore.user?.id && authStore.user.id === detail.value?.creator_id)
-const canStartRun = computed(() => isCreator.value
+const runScope = computed<TaskQcRunScope | null>(() => {
+  if (props.tab === 'received') return authStore.user?.id ? 'assigned' : null
+  if ((props.tab === 'created' || props.tab === 'all') && isCreator.value) return 'all'
+  return null
+})
+const canViewRuns = computed(() => isModernTask.value && !!runScope.value)
+const canStartRun = computed(() => canViewRuns.value
   && (detail.value?.scene === 'running' || detail.value?.scene === 'final')
   && !!detail.value.rule_set_key
-  && detail.value.total_records > 0
-  && detail.value.status !== 'cancelled'
+  && (runScope.value === 'assigned'
+    ? detail.value.records.some((record) => record.assignee_id === authStore.user?.id)
+    : detail.value.total_records > 0)
+  && (runScope.value === 'assigned'
+    ? ['assigned', 'in_progress', 'completed'].includes(detail.value.status)
+    : ['sampling', 'assigned', 'in_progress', 'completed'].includes(detail.value.status))
   && !runsLoading.value
   && !runsError.value
   && !startingRun.value
@@ -410,8 +421,10 @@ const canStartRun = computed(() => isCreator.value
 const runUnavailableReason = computed(() => {
   if (detail.value?.scene === 'outpatient') return '门急诊场景质控执行尚未接入'
   if (!detail.value?.rule_set_key) return '未选择规则集，无法执行质控'
+  if (runScope.value === 'assigned' && !detail.value.records.some((record) => record.assignee_id === authStore.user?.id)) return '当前任务没有分配给我的病历'
   if (!detail.value.total_records) return '请先完成病历抽样'
-  if (detail.value.status === 'cancelled') return '已取消任务不能执行质控'
+  if (!['sampling', 'assigned', 'in_progress', 'completed'].includes(detail.value.status)
+    || (runScope.value === 'assigned' && detail.value.status === 'sampling')) return '当前任务状态不可执行质控'
   if (selectedJob.value?.status === 'queued' || selectedJob.value?.status === 'running') return '当前质控运行中'
   return ''
 })
@@ -492,8 +505,11 @@ async function loadDetail() {
   jobSequence += 1
   detail.value = null
   runs.value = []
+  runsLoading.value = false
   selectedJobId.value = ''
   selectedJob.value = null
+  jobLoading.value = false
+  startingRun.value = false
   runsError.value = ''
   jobError.value = ''
   error.value = ''
@@ -510,7 +526,7 @@ async function loadDetail() {
       && Array.isArray(response.data.records)
     ) {
       detail.value = response.data
-      if (response.data.scene && authStore.user?.id === response.data.creator_id) {
+      if (response.data.scene && runScope.value) {
         void loadRuns()
       }
     } else {
@@ -528,24 +544,32 @@ async function loadDetail() {
 
 async function loadRuns() {
   const taskId = detail.value?.id
-  if (!taskId || !isCreator.value) return
+  const scope = runScope.value
+  if (!taskId || !scope) return
+  const detailSequence = requestSequence
   const sequence = ++runSequence
+  jobSequence += 1
+  runs.value = []
+  selectedJobId.value = ''
+  selectedJob.value = null
+  jobLoading.value = false
+  jobError.value = ''
   runsLoading.value = true
   runsError.value = ''
   try {
-    const response = await getTaskQcRuns(taskId)
-    if (sequence !== runSequence || detail.value?.id !== taskId || !props.open) return
+    const response = await getTaskQcRuns(taskId, scope)
+    if (sequence !== runSequence || detailSequence !== requestSequence || detail.value?.id !== taskId || runScope.value !== scope || !props.open) return
     if (!response.success || !Array.isArray(response.data)) {
       runsError.value = response.message || '获取运行历史失败'
       return
     }
-    runs.value = response.data.filter((run) => run.task_id === taskId && !!run.job_id)
+    runs.value = response.data.filter((run) => run.task_id === taskId && run.run_scope === scope && !!run.job_id)
       .sort((a, b) => b.run_number - a.run_number)
     if (runs.value.length) void selectRun(runs.value[0]!.job_id)
   } catch {
-    if (sequence === runSequence && detail.value?.id === taskId) runsError.value = '网络异常或服务器不可用'
+    if (sequence === runSequence && detailSequence === requestSequence && detail.value?.id === taskId && runScope.value === scope) runsError.value = '网络异常或服务器不可用'
   } finally {
-    if (sequence === runSequence) runsLoading.value = false
+    if (sequence === runSequence && detailSequence === requestSequence) runsLoading.value = false
   }
 }
 
@@ -558,43 +582,47 @@ async function selectRun(jobId: string) {
 async function loadJob(jobId: string) {
   const taskId = detail.value?.id
   if (!taskId || selectedJobId.value !== jobId) return
+  const scope = runScope.value
+  const detailSequence = requestSequence
   const sequence = ++jobSequence
   selectedJob.value = null
   jobError.value = ''
   jobLoading.value = true
   try {
     const response = await getSichuanWorkspaceBatchJob(jobId)
-    if (sequence !== jobSequence || detail.value?.id !== taskId || selectedJobId.value !== jobId || !props.open) return
+    if (sequence !== jobSequence || detailSequence !== requestSequence || detail.value?.id !== taskId || runScope.value !== scope || selectedJobId.value !== jobId || !props.open) return
     if (response.success && response.data?.id === jobId) selectedJob.value = response.data
     else jobError.value = response.message || '获取运行结果失败'
   } catch {
-    if (sequence === jobSequence && detail.value?.id === taskId) jobError.value = '网络异常或服务器不可用'
+    if (sequence === jobSequence && detailSequence === requestSequence && detail.value?.id === taskId && runScope.value === scope) jobError.value = '网络异常或服务器不可用'
   } finally {
-    if (sequence === jobSequence) jobLoading.value = false
+    if (sequence === jobSequence && detailSequence === requestSequence) jobLoading.value = false
   }
 }
 
 async function startRun() {
   const taskId = detail.value?.id
-  if (!taskId || !canStartRun.value) return
+  const scope = runScope.value
+  if (!taskId || !scope || !canStartRun.value) return
+  const detailSequence = requestSequence
   startingRun.value = true
   try {
-    const response = await createTaskQcRun(taskId)
-    if (!props.open || detail.value?.id !== taskId) return
-    if (!response.success || !response.data?.job_id || response.data.task_id !== taskId) {
+    const response = await createTaskQcRun(taskId, scope)
+    if (!props.open || detailSequence !== requestSequence || detail.value?.id !== taskId || runScope.value !== scope) return
+    if (!response.success || !response.data?.job_id || response.data.task_id !== taskId || response.data.run_scope !== scope) {
       runsError.value = response.message || '启动质控失败'
       return
     }
     await loadRuns()
   } catch {
-    if (detail.value?.id === taskId) runsError.value = '网络异常或服务器不可用'
+    if (detailSequence === requestSequence && detail.value?.id === taskId && runScope.value === scope) runsError.value = '网络异常或服务器不可用'
   } finally {
-    if (detail.value?.id === taskId) startingRun.value = false
+    if (detailSequence === requestSequence && detail.value?.id === taskId && runScope.value === scope) startingRun.value = false
   }
 }
 
 function jobStatusLabel(status: SichuanBatchJob['status']) {
-  return { queued: '排队中', running: '运行中', completed: '已完成', failed: '失败', canceled: '已取消' }[status] || '未知'
+  return { queued: '作业排队中', running: '作业运行中', completed: '作业已完成', failed: '作业失败', canceled: '作业已取消' }[status] || '作业状态未知'
 }
 
 function jobStatusColor(status: SichuanBatchJob['status']) {

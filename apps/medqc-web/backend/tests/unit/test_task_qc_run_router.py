@@ -33,6 +33,7 @@ def test_start_returns_exact_workspace_job_id(monkeypatch):
     assert response.json()["data"]["job_id"] == "job-2"
     assert calls[0]["actor_id"] == "user-1"
     assert calls[0]["task_id"] == "task-1"
+    assert calls[0]["run_scope"] == "all"
     assert callable(calls[0]["dispatch"])
 
 
@@ -48,4 +49,22 @@ def test_run_history_path_is_not_task_detail_and_is_creator_scoped(monkeypatch):
 
     assert response.status_code == 200
     assert response.json()["data"][0]["job_id"] == "job-1"
-    assert calls == [{"task_id": "task-1", "actor_id": "user-1"}]
+    assert calls == [{"task_id": "task-1", "actor_id": "user-1", "run_scope": "all"}]
+
+
+def test_assigned_scope_is_forwarded_and_invalid_scope_is_422(monkeypatch):
+    creates = []
+    lists = []
+    monkeypatch.setattr(tasks, "create_task_qc_run", lambda **kwargs: creates.append(kwargs) or {
+        "task_id": "task-1", "run_number": 1, "job_id": "job-1",
+        "run_scope": "assigned", "status": "queued",
+    })
+    monkeypatch.setattr(tasks, "list_task_qc_runs", lambda **kwargs: lists.append(kwargs) or [])
+    client = _client(monkeypatch)
+    assert client.post("/api/v1/tasks/task-1/qc-runs?scope=assigned").json()["data"]["run_scope"] == "assigned"
+    assert client.get("/api/v1/tasks/task-1/qc-runs?scope=assigned").status_code == 200
+    assert creates[0]["run_scope"] == "assigned"
+    assert lists == [{"task_id": "task-1", "actor_id": "user-1", "run_scope": "assigned"}]
+    assert client.post("/api/v1/tasks/task-1/qc-runs?scope=other").status_code == 422
+    assert client.get("/api/v1/tasks/task-1/qc-runs?scope=other").status_code == 422
+    assert len(creates) == len(lists) == 1

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Mapping
 from contextlib import nullcontext
 from datetime import datetime, timezone
 import logging
@@ -1413,6 +1414,22 @@ async def run_sichuan_workspace_batch_job(
         has_persisted_record_refs = isinstance(persisted_record_refs, list) and bool(
             persisted_record_refs
         )
+        if str(filters.get("task_id") or "").strip():
+            task_refs = filters.get("record_refs")
+            if not (
+                isinstance(task_refs, list)
+                and task_refs
+                and has_persisted_record_refs
+                and all(
+                    isinstance(ref, Mapping)
+                    and all(
+                        str(ref.get(key) or "").strip()
+                        for key in ("institute_id", "patient_id", "visit_id")
+                    )
+                    for ref in [*task_refs, *persisted_record_refs]
+                )
+            ):
+                raise ValueError("任务质控缺少有效的 filters.record_refs 三坐标")
         is_sample_pool_job = bool(str(filters.get("sample_pool_id") or "").strip())
         if is_sample_pool_job and not has_persisted_record_refs:
             raise ValueError(

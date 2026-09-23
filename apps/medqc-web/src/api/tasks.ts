@@ -96,13 +96,17 @@ export interface TaskQcRun {
     run_number: number
     job_id: string
     triggered_by: string
+    run_scope: TaskQcRunScope
     created_at: string
 }
+
+export type TaskQcRunScope = 'all' | 'assigned'
 
 export interface TaskQcRunCreated {
     task_id: string
     run_number: number
     job_id: string
+    run_scope: TaskQcRunScope
     status: 'queued'
 }
 
@@ -227,18 +231,18 @@ export async function getTaskDetail(taskId: string, params?: { tab?: TaskTab }) 
     })
 }
 
-/** 任务运行历史仅对创建人开放，结果以对应 workspace 作业为准。 */
-export async function getTaskQcRuns(taskId: string) {
+/** all 为创建人整批，assigned 为当前用户受领子集。 */
+export async function getTaskQcRuns(taskId: string, scope?: TaskQcRunScope) {
     return request<TaskQcRun[]>({
         method: 'GET',
-        url: `${BASE_URL}/${encodeURIComponent(taskId)}/qc-runs`,
+        url: `${BASE_URL}/${encodeURIComponent(taskId)}/qc-runs${scope ? `?scope=${scope}` : ''}`,
     })
 }
 
-export async function createTaskQcRun(taskId: string) {
+export async function createTaskQcRun(taskId: string, scope?: TaskQcRunScope) {
     return request<TaskQcRunCreated>({
         method: 'POST',
-        url: `${BASE_URL}/${encodeURIComponent(taskId)}/qc-runs`,
+        url: `${BASE_URL}/${encodeURIComponent(taskId)}/qc-runs${scope ? `?scope=${scope}` : ''}`,
     })
 }
 

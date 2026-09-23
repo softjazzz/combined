@@ -710,6 +710,7 @@ async def assign_task(
 async def start_task_qc_run(
     request: Request,
     task_id: str,
+    scope: Literal["all", "assigned"] = Query("all"),
     current_user: dict = Depends(require_product_activation),
     qc_service: SichuanQCService = Depends(get_qc_service),
 ):
@@ -727,6 +728,7 @@ async def start_task_qc_run(
             workspace_factory=_sichuan_workspace_service,
             qc_service=qc_service,
             dispatch=dispatch,
+            run_scope=scope,
         )
     except TaskQCRunNotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -749,15 +751,20 @@ async def start_task_qc_run(
 async def get_task_qc_runs(
     request: Request,
     task_id: str,
+    scope: Literal["all", "assigned"] = Query("all"),
     current_user: dict = Depends(get_current_user),
 ):
     actor_id = _get_task_scope_user_id(current_user)
     try:
-        runs = await run_in_threadpool(list_task_qc_runs, task_id=task_id, actor_id=actor_id)
+        runs = await run_in_threadpool(
+            list_task_qc_runs, task_id=task_id, actor_id=actor_id, run_scope=scope,
+        )
     except TaskQCRunNotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except TaskQCRunForbidden as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except TaskQCRunConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except Exception as exc:
         logger.exception("查询任务质控运行历史失败: task_id=%s", task_id)
         raise HTTPException(status_code=503, detail="任务运行历史不可用，请稍后重试") from exc

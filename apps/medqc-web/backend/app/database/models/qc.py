@@ -281,6 +281,7 @@ class QCTaskQCRun(Base):
     run_number = Column(Integer, primary_key=True)
     job_id = Column(String(36), nullable=False)
     triggered_by = Column(String(64), nullable=False)
+    run_scope = Column(String(16), nullable=False, server_default=text("'all'"))
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     __table_args__ = (
@@ -288,6 +289,7 @@ class QCTaskQCRun(Base):
         ForeignKeyConstraint(["task_id"], ["qc_tasks.id"], name="fk_task_qc_runs_task"),
         UniqueConstraint("job_id", name="uq_task_qc_runs_job"),
         CheckConstraint("run_number > 0", name="ck_task_qc_runs_positive_number"),
+        CheckConstraint("run_scope IN ('all', 'assigned')", name="ck_task_qc_runs_scope"),
     )
 
 

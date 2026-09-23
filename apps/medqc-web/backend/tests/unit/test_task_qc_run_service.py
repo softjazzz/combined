@@ -87,11 +87,11 @@ def env(monkeypatch):
     engine.dispose()
 
 
-def _start(env, *, actor_id="user-1", dispatch=None):
+def _start(env, *, actor_id="user-1", dispatch=None, run_scope="all"):
     return service.create_task_qc_run(
         task_id="task-1", actor_id=actor_id, current_user={"id": actor_id},
         workspace_factory=lambda: env.workspace,
-        qc_service=object(), dispatch=dispatch or (lambda _: None),
+        qc_service=object(), dispatch=dispatch or (lambda _: None), run_scope=run_scope,
     )
 
 
@@ -99,7 +99,8 @@ def test_creates_job_and_run_then_dispatches_exact_job(env):
     dispatched = []
     result = _start(env, dispatch=dispatched.append)
 
-    assert result == {"task_id": "task-1", "run_number": 1, "job_id": "job-1", "status": "queued"}
+    assert result == {"task_id": "task-1", "run_number": 1, "job_id": "job-1",
+                      "run_scope": "all", "status": "queued"}
     assert dispatched == ["job-1"]
     payload, kwargs = env.prepared_calls[0]
     assert payload.record_refs == [
@@ -107,6 +108,102 @@ def test_creates_job_and_run_then_dispatches_exact_job(env):
     ]
     assert kwargs["task_run_context"] == {"task_id": "task-1", "run_number": "1"}
     assert service.list_task_qc_runs(task_id="task-1", actor_id="user-1")[0]["job_id"] == "job-1"
+    assert service.list_task_qc_runs(task_id="task-1", actor_id="user-1")[0]["run_scope"] == "all"
+
+
+def _assign_two_people(env):
+    with env.sessions.begin() as session:
+        session.execute(QCTask.__table__.update().where(QCTask.id == "task-1").values(
+            status="assigned", total_records=2,
+        ))
+        session.execute(QCTaskRecord.__table__.update().where(
+            QCTaskRecord.id == "association-1"
+        ).values(assignee_id="user-a"))
+        session.execute(QCTaskRecord.__table__.insert().values(
+            id="association-2", task_id="task-1", record_id="association-2",
+            institute_id="hospital", patient_id="patient-b", visit_id="visit-1",
+            assignee_id="user-b", status="pending", defect_count=0,
+        ))
+
+
+def test_assigned_run_uses_only_actors_three_coordinates_and_isolates_history(env):
+    _assign_two_people(env)
+    result = _start(env, actor_id="user-a", run_scope="assigned")
+    assert result["run_scope"] == "assigned"
+    assert env.prepared_calls[0][0].record_refs == [
+        {"institute_id": "hospital", "patient_id": "patient", "visit_id": "visit-1"}
+    ]
+    assert env.workspace.get_batch_job(job_id="job-1", created_by="user-a") is not None
+    assert service.list_task_qc_runs(task_id="task-1", actor_id="user-a", run_scope="assigned")[0]["job_id"] == "job-1"
+    assert service.list_task_qc_runs(task_id="task-1", actor_id="user-b", run_scope="assigned") == []
+    assert service.list_task_qc_runs(task_id="task-1", actor_id="user-1") == []
+    with pytest.raises(service.TaskQCRunForbidden):
+        service.list_task_qc_runs(task_id="task-1", actor_id="user-a")
+    with env.sessions.begin() as session:
+        session.execute(env.jobs.update().where(env.jobs.c.id == "job-1").values(status="completed"))
+    second = _start(env, actor_id="user-b", run_scope="assigned")
+    assert second["run_number"] == 2
+    assert env.prepared_calls[1][0].record_refs == [
+        {"institute_id": "hospital", "patient_id": "patient-b", "visit_id": "visit-1"}
+    ]
+    assert [run["job_id"] for run in service.list_task_qc_runs(
+        task_id="task-1", actor_id="user-a", run_scope="assigned",
+    )] == ["job-1"]
+
+
+def test_unassigned_actor_cannot_create_or_read_assigned_runs(env):
+    _assign_two_people(env)
+    with pytest.raises(service.TaskQCRunForbidden):
+        _start(env, actor_id="user-c", run_scope="assigned")
+    with pytest.raises(service.TaskQCRunForbidden):
+        service.list_task_qc_runs(task_id="task-1", actor_id="user-c", run_scope="assigned")
+    assert env.workspace.next_id == 1
+
+
+def test_past_assignee_can_only_read_own_assigned_history(env):
+    _assign_two_people(env)
+    _start(env, actor_id="user-a", run_scope="assigned")
+    with env.sessions.begin() as session:
+        session.execute(QCTaskRecord.__table__.update().where(
+            QCTaskRecord.id == "association-1"
+        ).values(assignee_id="user-b"))
+    assert [run["job_id"] for run in service.list_task_qc_runs(
+        task_id="task-1", actor_id="user-a", run_scope="assigned",
+    )] == ["job-1"]
+    assert service.list_task_qc_runs(task_id="task-1", actor_id="user-b", run_scope="assigned") == []
+
+
+def test_assigned_requires_complete_task_contract_before_job(env):
+    _assign_two_people(env)
+    with env.sessions.begin() as session:
+        session.execute(QCTask.__table__.update().where(QCTask.id == "task-1").values(total_records=3))
+    with pytest.raises(service.TaskQCRunConflict, match="数量不一致"):
+        _start(env, actor_id="user-a", run_scope="assigned")
+    assert not env.prepared_calls
+    with env.sessions.begin() as session:
+        session.execute(QCTask.__table__.update().where(QCTask.id == "task-1").values(total_records=2))
+        session.execute(QCTaskRecord.__table__.update().where(
+            QCTaskRecord.id == "association-2"
+        ).values(record_id="wrong"))
+    with pytest.raises(service.TaskQCRunConflict, match="身份"):
+        _start(env, actor_id="user-a", run_scope="assigned")
+    with env.sessions.begin() as session:
+        session.execute(QCTaskRecord.__table__.update().where(
+            QCTaskRecord.id == "association-2"
+        ).values(record_id="association-2", assignee_id=None))
+    with pytest.raises(service.TaskQCRunConflict, match="尚未完成分配"):
+        _start(env, actor_id="user-a", run_scope="assigned")
+    assert env.workspace.next_id == 1
+
+
+def test_assigned_cannot_run_before_assignment_but_creator_all_is_unchanged(env):
+    with env.sessions.begin() as session:
+        session.execute(QCTaskRecord.__table__.update().where(
+            QCTaskRecord.id == "association-1"
+        ).values(assignee_id="user-a"))
+    with pytest.raises(service.TaskQCRunConflict, match="未完成抽样"):
+        _start(env, actor_id="user-a", run_scope="assigned")
+    assert _start(env)["run_scope"] == "all"
 
 
 def test_active_run_blocks_rerun_and_terminal_run_creates_new_job(env):

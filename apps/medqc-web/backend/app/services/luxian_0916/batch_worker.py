@@ -538,6 +538,18 @@ def _collect_records(
 ) -> list[dict[str, Any]]:
     persisted_refs = filters.get("record_refs")
     has_persisted_refs = isinstance(persisted_refs, list) and bool(persisted_refs)
+    if str(filters.get("task_id") or "").strip() and not (
+        has_persisted_refs
+        and all(
+            isinstance(ref, Mapping)
+            and all(
+                str(ref.get(key) or "").strip()
+                for key in ("institute_id", "patient_id", "visit_id")
+            )
+            for ref in persisted_refs
+        )
+    ):
+        raise ValueError("任务质控缺少有效的 filters.record_refs 三坐标")
     if str(filters.get("sample_pool_id") or "").strip() and not has_persisted_refs:
         raise ValueError("样本池任务缺少 filters.record_refs")
     return workspace.collect_records(

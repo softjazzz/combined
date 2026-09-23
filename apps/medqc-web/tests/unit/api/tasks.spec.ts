@@ -89,6 +89,14 @@ describe('任务统计 API', () => {
     expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
       method: 'POST', url: '/api/v1/tasks/task%2F1/qc-runs',
     })
+    await getTaskQcRuns('task/1', 'assigned')
+    expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
+      method: 'GET', url: '/api/v1/tasks/task%2F1/qc-runs?scope=assigned',
+    })
+    await createTaskQcRun('task/1', 'all')
+    expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
+      method: 'POST', url: '/api/v1/tasks/task%2F1/qc-runs?scope=all',
+    })
   })
 
   it('列表、统计和待办统计使用同一场景筛选合同', async () => {
