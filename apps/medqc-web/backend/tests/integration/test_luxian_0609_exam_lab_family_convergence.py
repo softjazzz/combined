@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.database.models.cdm import (
     AdmissionRecord,
     DischargeRecord,
+    InpatRegistration,
     MedicalRecordFrontpage,
 )
 from app.services import custom_qc_workspace_service as workspace_module
@@ -38,7 +39,10 @@ from app.services.custom_qc_sample_pool_service import CustomQCSamplePoolService
 from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
 from app.services.luxian_0609 import execution as luxian_execution
 from app.services.luxian_0609.evidence_snapshot_provider import SnapshotSourceRows
-from app.services.luxian_0609.native_exam_lab_execution import EXAM_LAB_RULE_IDS
+from app.services.luxian_0609.native_exam_lab_execution import (
+    EXAM_LAB_RULE_IDS,
+    EXECUTABLE_EXAM_LAB_RULE_IDS,
+)
 from app.services.luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY
 from tests.integration.test_luxian_0609_consultation_api_entry_flow import (
     _api_app,
@@ -46,6 +50,20 @@ from tests.integration.test_luxian_0609_consultation_api_entry_flow import (
     _install_sample_pool_sqlite,
     _read_saved_envelope,
     _wait_for_terminal_job,
+)
+
+
+_ASGI_EXPECTED_OUTCOMES = {
+    rule_id: ("compliant", "requirement_satisfied")
+    for rule_id in EXAM_LAB_RULE_IDS
+}
+_ASGI_EXPECTED_OUTCOMES.update(
+    {
+        # 入口测试的脱敏 fixture 有已执行检查但没有正式影像报告。
+        "LX0609-06-01-03": ("data_gap", "target_report_missing"),
+        # 微生物 fixture 缺少可唯一关联主记录与报告的业务键。
+        "LX0609-06-03-02": ("data_gap", "association_failed"),
+    }
 )
 
 
@@ -72,6 +90,7 @@ def _formal_settings() -> SimpleNamespace:
         LUXIAN_0609_NATIVE_EXECUTION_ENABLED=True,
         LUXIAN_0609_NATIVE_EXAM_LAB_ENABLED=True,
         LUXIAN_0609_UNIFIED_ENGINE_ENABLED=True,
+        LUXIAN_0609_FAMILY_MAX_CONCURRENCY=4,
         LUXIAN_0609_RULE_DECISION_EXAM_LAB_ENABLED=True,
         LUXIAN_0609_TRIGGER_GATE_ENABLED=False,
         LUXIAN_0609_LLM_TRIGGER_GATE_ENABLED=False,
@@ -541,7 +560,12 @@ def _install_isolated_sqlite(
         workspace_module, "_sync_batch_job_parent_columns", lambda **_kwargs: None
     )
 
-    for model in (MedicalRecordFrontpage, AdmissionRecord, DischargeRecord):
+    for model in (
+        MedicalRecordFrontpage,
+        AdmissionRecord,
+        DischargeRecord,
+        InpatRegistration,
+    ):
         model.__table__.create(bind=engine, checkfirst=True)
     with Session(engine) as session:
         for ref in (_RECORD_A, _RECORD_B):
@@ -908,7 +932,7 @@ async def test_exam_lab_formal_worker_is_consistent_across_three_business_entrie
 
 
 @pytest.mark.integration
-@pytest.mark.parametrize("rule_id", EXAM_LAB_RULE_IDS)
+@pytest.mark.parametrize("rule_id", EXECUTABLE_EXAM_LAB_RULE_IDS)
 def test_exam_lab_asgi_entries_create_same_selection_and_dispatch_formal_worker(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, rule_id: str
 ) -> None:
@@ -1101,10 +1125,9 @@ def test_exam_lab_asgi_entries_create_same_selection_and_dispatch_formal_worker(
         )
 
     for item in (single_item, pool_item, sample_item):
-        assert (item["status"], item["reason_code"]) == (
-            "compliant",
-            "requirement_satisfied",
-        )
+        assert (item["status"], item["reason_code"]) == _ASGI_EXPECTED_OUTCOMES[
+            rule_id
+        ]
         assert (item.get("metadata") or {}).get("executor_key") == "exam_lab"
         assert not item.get("llm_fallback")
         assert not item.get("pack_fallback")
