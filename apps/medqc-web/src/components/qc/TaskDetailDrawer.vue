@@ -325,14 +325,61 @@
               <template v-else-if="column.key === 'completedAt'">
                 {{ formatDate(record.completed_at) }}
               </template>
+              <template v-else-if="column.key === 'result'">
+                <a-button
+                  v-if="selectedRun && canViewRuns"
+                  size="small"
+                  :data-testid="`task-record-result-${record.id}`"
+                  @click="void loadRecordResult(record.id)"
+                >
+                  <Eye :size="14" aria-hidden="true" />
+                  查看本次结果
+                </a-button>
+                <span v-else class="task-detail-drawer__muted">未选择运行</span>
+              </template>
             </template>
           </a-table>
 
           <a-empty
-            v-else
+            v-if="!filteredRecords.length"
             data-testid="task-detail-record-empty"
             :description="detail.records.length ? '没有符合筛选条件的病历' : emptyDescription"
           />
+
+          <div
+            v-if="selectedTaskRecordId"
+            class="task-detail-drawer__record-result"
+            data-testid="task-record-qc-result"
+          >
+            <div class="task-detail-drawer__job-heading">
+              <div>
+                <strong>本次质控结果</strong>
+                <span class="task-detail-drawer__result-context">第 {{ selectedRun?.run_number }} 次运行 · {{ selectedRecordLabel }}</span>
+              </div>
+              <a-button size="small" aria-label="关闭本次质控结果" @click="clearRecordResult()">
+                <X :size="14" aria-hidden="true" />
+              </a-button>
+            </div>
+            <p v-if="recordResultLoading" class="task-detail-drawer__muted">正在读取本次病例结果…</p>
+            <p v-else-if="recordResultError" class="task-detail-drawer__run-error" role="alert">{{ recordResultError }}</p>
+            <template v-else-if="recordResult">
+              <p class="task-detail-drawer__result-context">规则集：{{ recordResult.rule_set_key || '未记录' }} · {{ jobStatusLabel(recordResult.job_status) }}</p>
+              <p v-if="recordResult.result_state === 'pending'" class="task-detail-drawer__muted">本次质控尚未形成该病历结果，请稍后重试。</p>
+              <p v-else-if="recordResult.result_state === 'unavailable' || !recordResult.items.length" class="task-detail-drawer__run-error">本次质控结果不可用，不能据此判断是否存在缺陷。</p>
+              <div v-else class="task-detail-drawer__result-list">
+                <div v-for="(item, index) in recordResult.items" :key="`${item.rule_id || item.rule_code || index}-${index}`" class="task-detail-drawer__result-row">
+                  <div class="task-detail-drawer__result-title">
+                    <strong>{{ item.rule_name || item.rule_code || item.qc_point_id || '质控规则' }}</strong>
+                    <a-tag :color="resultStatusColor(item.result_status || item.display_status || item.status)">{{ resultStatusLabel(item.result_status || item.display_status || item.status) }}</a-tag>
+                  </div>
+                  <p v-if="item.conclusion"><b>结论</b>{{ item.conclusion }}</p>
+                  <p v-if="item.suggestion"><b>建议</b>{{ item.suggestion }}</p>
+                  <p v-if="item.evidence?.length"><b>证据</b>{{ item.evidence.map(evidenceLabel).join('；') }}</p>
+                </div>
+              </div>
+            </template>
+          </div>
+
         </section>
       </template>
     </div>
@@ -342,15 +389,17 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import type { TableColumnsType, TablePaginationConfig } from 'ant-design-vue'
-import { Play, RotateCw } from 'lucide-vue-next'
+import { Eye, Play, RotateCw, X } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import { getSichuanWorkspaceBatchJob } from '@/services/sichuan-rule-workspace-service'
 import type { SichuanBatchJob } from '@/views/workstation-v4/semantic-rules/types'
-import { createTaskQcRun, getTaskDetail, getTaskQcRuns } from '@/api/tasks'
+import { createTaskQcRun, getTaskDetail, getTaskQcRunRecordResult, getTaskQcRuns } from '@/api/tasks'
 import type {
   TaskDetail,
   TaskQcRun,
+  TaskQcRunRecordResult,
   TaskQcRunScope,
+  TaskQcSafeResultItem,
   TaskRecordItem,
   TaskScene,
   TaskStatus,
@@ -377,6 +426,10 @@ const selectedJobId = ref('')
 const selectedJob = ref<SichuanBatchJob | null>(null)
 const jobLoading = ref(false)
 const jobError = ref('')
+const selectedTaskRecordId = ref('')
+const recordResult = ref<TaskQcRunRecordResult | null>(null)
+const recordResultLoading = ref(false)
+const recordResultError = ref('')
 const loading = ref(false)
 const error = ref('')
 const keyword = ref('')
@@ -386,6 +439,7 @@ const pageSize = ref(10)
 let requestSequence = 0
 let runSequence = 0
 let jobSequence = 0
+let recordResultSequence = 0
 
 const drawerWidth = 'min(820px, 100vw)'
 const drawerTitle = computed(() => detail.value?.task_name || '任务详情')
@@ -401,6 +455,13 @@ const runScope = computed<TaskQcRunScope | null>(() => {
   return null
 })
 const canViewRuns = computed(() => isModernTask.value && !!runScope.value)
+const selectedRun = computed(() => runs.value.find((run) => run.job_id === selectedJobId.value) || null)
+const selectedRecordLabel = computed(() => {
+  const record = detail.value?.records.find((item) => item.id === selectedTaskRecordId.value)
+  return record && hasCaseIdentity(record)
+    ? `机构 ${record.institute_id} / 患者 ${record.patient_id} / 就诊 ${record.visit_id}`
+    : '当前病历'
+})
 const canStartRun = computed(() => canViewRuns.value
   && (detail.value?.scene === 'running' || detail.value?.scene === 'final')
   && !!detail.value.rule_set_key
@@ -443,6 +504,7 @@ const recordColumns: TableColumnsType<TaskRecordItem> = [
   { title: '评分', dataIndex: 'score', key: 'score', width: 90 },
   { title: '缺陷数', dataIndex: 'defect_count', key: 'defects', width: 90 },
   { title: '完成时间', dataIndex: 'completed_at', key: 'completedAt', width: 160 },
+  { title: '本次结果', key: 'result', width: 145 },
 ]
 
 const filteredRecords = computed(() => {
@@ -478,6 +540,7 @@ function clearDetail() {
   requestSequence += 1
   runSequence += 1
   jobSequence += 1
+  clearRecordResult()
   detail.value = null
   runs.value = []
   runsLoading.value = false
@@ -503,6 +566,7 @@ async function loadDetail() {
   const currentSequence = ++requestSequence
   runSequence += 1
   jobSequence += 1
+  clearRecordResult()
   detail.value = null
   runs.value = []
   runsLoading.value = false
@@ -549,6 +613,7 @@ async function loadRuns() {
   const detailSequence = requestSequence
   const sequence = ++runSequence
   jobSequence += 1
+  clearRecordResult()
   runs.value = []
   selectedJobId.value = ''
   selectedJob.value = null
@@ -575,8 +640,50 @@ async function loadRuns() {
 
 async function selectRun(jobId: string) {
   if (!runs.value.some((run) => run.job_id === jobId)) return
+  clearRecordResult()
   selectedJobId.value = jobId
   await loadJob(jobId)
+}
+
+function clearRecordResult() {
+  recordResultSequence += 1
+  selectedTaskRecordId.value = ''
+  recordResult.value = null
+  recordResultLoading.value = false
+  recordResultError.value = ''
+}
+
+async function loadRecordResult(taskRecordId: string) {
+  const taskId = detail.value?.id
+  const run = selectedRun.value
+  const scope = runScope.value
+  if (!taskId || !run || !scope || !detail.value?.records.some((record) => record.id === taskRecordId)) return
+  const detailSequence = requestSequence
+  const sequence = ++recordResultSequence
+  selectedTaskRecordId.value = taskRecordId
+  recordResult.value = null
+  recordResultError.value = ''
+  recordResultLoading.value = true
+  try {
+    const response = await getTaskQcRunRecordResult(taskId, run.run_number, taskRecordId, scope)
+    if (sequence !== recordResultSequence || detailSequence !== requestSequence || !props.open
+      || detail.value?.id !== taskId || selectedRun.value?.job_id !== run.job_id
+      || runScope.value !== scope || selectedTaskRecordId.value !== taskRecordId) return
+    const result = response.data
+    if (!response.success || !result) {
+      recordResultError.value = response.message || '本次质控结果暂不可用'
+    } else if (result.task_id !== taskId || result.run_number !== run.run_number
+      || result.task_record_id !== taskRecordId || result.job_id !== run.job_id
+      || !Array.isArray(result.items)) {
+      recordResultError.value = '本次质控结果身份校验失败，请重试'
+    } else {
+      recordResult.value = result
+    }
+  } catch {
+    if (sequence === recordResultSequence && detailSequence === requestSequence) recordResultError.value = '网络异常或服务器不可用'
+  } finally {
+    if (sequence === recordResultSequence && detailSequence === requestSequence) recordResultLoading.value = false
+  }
 }
 
 async function loadJob(jobId: string) {
@@ -621,8 +728,38 @@ async function startRun() {
   }
 }
 
-function jobStatusLabel(status: SichuanBatchJob['status']) {
-  return { queued: '作业排队中', running: '作业运行中', completed: '作业已完成', failed: '作业失败', canceled: '作业已取消' }[status] || '作业状态未知'
+function jobStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    queued: '作业排队中', pending: '作业待执行', running: '作业运行中',
+    processing: '作业处理中', completed: '作业已完成', failed: '作业失败',
+    canceled: '作业已取消', cancelled: '作业已取消',
+  }
+  return labels[status] || '作业状态未知'
+}
+
+function resultStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    compliant: '符合', non_compliant: '不符合', not_applicable: '不适用',
+    needs_review: '需复核', data_gap: '数据不足', data_quality_gap: '数据不足',
+    ai_suggested_compliant: 'AI 建议符合', ai_suggested_non_compliant: 'AI 建议不符合',
+    not_executed: '未执行',
+  }
+  return Object.prototype.hasOwnProperty.call(labels, status) ? labels[status]! : '状态待确认'
+}
+
+function resultStatusColor(status: string) {
+  if (status === 'compliant') return 'success'
+  if (status === 'non_compliant') return 'error'
+  if (status === 'needs_review' || status === 'data_gap' || status === 'data_quality_gap'
+    || status === 'ai_suggested_non_compliant' || status === 'ai_suggested_compliant') return 'warning'
+  return 'default'
+}
+
+function evidenceLabel(evidence: NonNullable<TaskQcSafeResultItem['evidence']>[number]) {
+  if (evidence.evidence_excerpt) {
+    return `${evidence.excerpt_kind || evidence.source_type}：${evidence.evidence_excerpt}`
+  }
+  return `${evidence.source_type}：${evidence.source_ref}`
 }
 
 function jobStatusColor(status: SichuanBatchJob['status']) {
@@ -832,6 +969,38 @@ watch([keyword, recordStatus], () => {
 .task-detail-drawer__job-metrics dt { color: rgba(29, 29, 31, 0.6); font-size: 13px; }
 .task-detail-drawer__job-metrics dd { margin: 2px 0 0; font-weight: 600; }
 .task-detail-drawer__run-error { color: #b42318; }
+.task-detail-drawer__record-result {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+.task-detail-drawer__result-context {
+  display: block;
+  margin: 3px 0 12px;
+  color: rgba(29, 29, 31, 0.6);
+  font-size: 13px;
+}
+.task-detail-drawer__result-list { border-top: 1px solid rgba(0, 0, 0, 0.08); }
+.task-detail-drawer__result-row {
+  padding: 13px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+.task-detail-drawer__result-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.task-detail-drawer__result-row p {
+  margin: 8px 0 0;
+  line-height: 22px;
+  overflow-wrap: anywhere;
+}
+.task-detail-drawer__result-row p b {
+  margin-right: 10px;
+  color: rgba(29, 29, 31, 0.6);
+  font-weight: 400;
+}
 
 .task-detail-drawer__section-heading {
   display: flex;

@@ -6,6 +6,7 @@ import { Select as ASelect, Table as ATable } from 'ant-design-vue'
 const mocks = vi.hoisted(() => ({
   getTaskDetail: vi.fn(),
   getTaskQcRuns: vi.fn(),
+  getTaskQcRunRecordResult: vi.fn(),
   createTaskQcRun: vi.fn(),
   getSichuanWorkspaceBatchJob: vi.fn(),
   user: { id: 'creator' },
@@ -32,6 +33,7 @@ beforeAll(() => {
 vi.mock('@/api/tasks', () => ({
   getTaskDetail: mocks.getTaskDetail,
   getTaskQcRuns: mocks.getTaskQcRuns,
+  getTaskQcRunRecordResult: mocks.getTaskQcRunRecordResult,
   createTaskQcRun: mocks.createTaskQcRun,
 }))
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ user: mocks.user }) }))
@@ -181,11 +183,19 @@ describe('TaskDetailDrawer', () => {
   beforeEach(() => {
     mocks.getTaskDetail.mockReset()
     mocks.getTaskQcRuns.mockReset()
+    mocks.getTaskQcRunRecordResult.mockReset()
     mocks.createTaskQcRun.mockReset()
     mocks.getSichuanWorkspaceBatchJob.mockReset()
     mocks.getTaskDetail.mockResolvedValue(detailResponse('任务甲', [record()]))
     mocks.getTaskQcRuns.mockResolvedValue({ success: true, data: [] })
     mocks.getSichuanWorkspaceBatchJob.mockResolvedValue({ success: true, data: { id: 'job-1', status: 'completed', summary: { total_records: 1, success_count: 1, failed_count: 0, issue_records: 0 } } })
+    mocks.getTaskQcRunRecordResult.mockResolvedValue({ success: true, data: {
+      task_id: 'task-1', run_number: 1, task_record_id: 'association-1', job_id: 'job-1',
+      job_status: 'completed', result_state: 'available', rule_set_key: 'lx0609',
+      items: [{ rule_code: 'LX0609-001', rule_name: '入院记录时效', status: 'non_compliant',
+        is_compliant: false, conclusion: '记录超时', suggestion: '补充说明',
+        evidence: [{ source_type: '文书', source_ref: 'ref-1', excerpt_kind: '时间证据', evidence_excerpt: '签署时间晚于入院时间' }] }],
+    } })
     mocks.user.id = 'creator'
   })
 
@@ -628,5 +638,100 @@ describe('TaskDetailDrawer', () => {
     expect(wrapper.text()).toContain('无权限读取运行历史')
     expect(wrapper.text()).not.toContain('old-job')
     expect(wrapper.find('[data-testid="task-start-qc-run"]').exists()).toBe(false)
+  })
+
+  it('按所选运行和关联行查询本次结果，不改任务处理状态与分数', async () => {
+    mocks.getTaskDetail.mockResolvedValueOnce(detailResponse('结果任务', [record({ institute_id: 'H1', patient_id: 'P1', visit_id: 'V1', score: null, defect_count: null })], {
+      scene: 'running', rule_set_key: 'lx0609', status: 'assigned',
+    }))
+    mocks.getTaskQcRuns.mockResolvedValueOnce({ success: true, data: [
+      { task_id: 'task-1', run_number: 1, job_id: 'job-1', run_scope: 'all', triggered_by: 'creator', created_at: '2026-09-22' },
+    ] })
+    const wrapper = mountDrawer({ tab: 'created' })
+    await flushPromises()
+    await wrapper.get('[data-testid="task-record-result-association-1"]').trigger('click')
+    await flushPromises()
+
+    expect(mocks.getTaskQcRunRecordResult).toHaveBeenCalledWith('task-1', 1, 'association-1', 'all')
+    expect(wrapper.get('[data-testid="task-record-qc-result"]').text()).toContain('记录超时')
+    expect(wrapper.get('[data-testid="task-record-qc-result"]').text()).toContain('机构 H1 / 患者 P1 / 就诊 V1')
+    expect(wrapper.get('[data-testid="task-record-qc-result"]').text()).toContain('补充说明')
+    expect(wrapper.get('[data-testid="task-record-qc-result"]').text()).toContain('签署时间晚于入院时间')
+    expect(wrapper.find('[data-testid="task-detail-record-empty"]').exists()).toBe(false)
+    const vm = wrapper.vm as unknown as { detail: { records: Array<{ status: string; score: number | null; defect_count: number | null }> } }
+    expect(vm.detail.records[0]).toMatchObject({ status: 'pending', score: null, defect_count: null })
+    expect(wrapper.text()).toContain('未处理')
+    expect(wrapper.text()).toContain('未记录')
+  })
+
+  it('切换运行时丢弃晚到单病例结果', async () => {
+    const oldResult = deferred<{ success: boolean; data: Record<string, unknown> }>()
+    mocks.getTaskDetail.mockResolvedValueOnce(detailResponse('结果任务', [record()], { scene: 'final', rule_set_key: 'lx0609' }))
+    mocks.getTaskQcRuns.mockResolvedValueOnce({ success: true, data: [
+      { task_id: 'task-1', run_number: 2, job_id: 'job-2', run_scope: 'all', triggered_by: 'creator', created_at: '2026-09-23' },
+      { task_id: 'task-1', run_number: 1, job_id: 'job-1', run_scope: 'all', triggered_by: 'creator', created_at: '2026-09-22' },
+    ] })
+    mocks.getTaskQcRunRecordResult.mockReturnValueOnce(oldResult.promise)
+    const wrapper = mountDrawer({ tab: 'created' })
+    await flushPromises()
+    await wrapper.get('[data-testid="task-record-result-association-1"]').trigger('click')
+    await wrapper.get('[data-testid="task-run-1"]').trigger('click')
+    await flushPromises()
+    oldResult.resolve({ success: true, data: {
+      task_id: 'task-1', run_number: 2, task_record_id: 'association-1', job_id: 'job-2',
+      result_state: 'available', rule_set_key: 'lx0609', items: [{ rule_name: '旧结果' }],
+    } })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="task-record-qc-result"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('旧结果')
+  })
+
+  it.each(['无权限读取', '结果尚未就绪', '服务暂不可用'])('单病例接口错误%s原样可见', async (message) => {
+    mocks.getTaskDetail.mockResolvedValueOnce(detailResponse('结果任务', [record()], { scene: 'running', rule_set_key: 'lx0609' }))
+    mocks.getTaskQcRuns.mockResolvedValueOnce({ success: true, data: [
+      { task_id: 'task-1', run_number: 1, job_id: 'job-1', run_scope: 'assigned', triggered_by: 'creator', created_at: '2026-09-22' },
+    ] })
+    mocks.getTaskQcRunRecordResult.mockResolvedValueOnce({ success: false, message })
+    const wrapper = mountDrawer({ tab: 'received' })
+    await flushPromises()
+    await wrapper.get('[data-testid="task-record-result-association-1"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="task-record-qc-result"]').text()).toContain(message)
+    expect(wrapper.text()).not.toContain('无缺陷')
+  })
+
+  it('防御空 available，不能解释为无缺陷', async () => {
+    mocks.getTaskDetail.mockResolvedValueOnce(detailResponse('结果任务', [record()], { scene: 'running', rule_set_key: 'lx0609' }))
+    mocks.getTaskQcRuns.mockResolvedValueOnce({ success: true, data: [
+      { task_id: 'task-1', run_number: 1, job_id: 'job-1', run_scope: 'assigned', triggered_by: 'creator', created_at: '2026-09-22' },
+    ] })
+    mocks.getTaskQcRunRecordResult.mockResolvedValueOnce({ success: true, data: {
+      task_id: 'task-1', run_number: 1, task_record_id: 'association-1', job_id: 'job-1',
+      job_status: 'completed', result_state: 'available', rule_set_key: 'lx0609', items: [],
+    } })
+    const wrapper = mountDrawer({ tab: 'received' })
+    await flushPromises()
+    await wrapper.get('[data-testid="task-record-result-association-1"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="task-record-qc-result"]').text()).toContain('结果不可用')
+  })
+
+  it.each([
+    ['pending', '尚未形成该病历结果'],
+    ['unavailable', '结果不可用'],
+  ])('%s 状态不推断为无缺陷', async (resultState, expected) => {
+    mocks.getTaskDetail.mockResolvedValueOnce(detailResponse('结果任务', [record()], { scene: 'running', rule_set_key: 'lx0609' }))
+    mocks.getTaskQcRuns.mockResolvedValueOnce({ success: true, data: [
+      { task_id: 'task-1', run_number: 1, job_id: 'job-1', run_scope: 'assigned', triggered_by: 'creator', created_at: '2026-09-22' },
+    ] })
+    mocks.getTaskQcRunRecordResult.mockResolvedValueOnce({ success: true, data: {
+      task_id: 'task-1', run_number: 1, task_record_id: 'association-1', job_id: 'job-1',
+      job_status: 'running', result_state: resultState, rule_set_key: 'lx0609', items: [],
+    } })
+    const wrapper = mountDrawer({ tab: 'received' })
+    await flushPromises()
+    await wrapper.get('[data-testid="task-record-result-association-1"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="task-record-qc-result"]').text()).toContain(expected)
   })
 })

@@ -42,6 +42,7 @@ from ..services.task_qc_run_service import (
     TaskQCRunForbidden,
     TaskQCRunNotFound,
     create_task_qc_run,
+    get_task_qc_run_record_result,
     list_task_qc_runs,
 )
 from ..services.task_assignment_service import (
@@ -769,6 +770,36 @@ async def get_task_qc_runs(
         logger.exception("查询任务质控运行历史失败: task_id=%s", task_id)
         raise HTTPException(status_code=503, detail="任务运行历史不可用，请稍后重试") from exc
     return success_response(data=runs, message="获取任务质控运行历史成功", trace_id=get_trace_id(request))
+
+
+@router.get("/{task_id}/qc-runs/{run_number}/records/{task_record_id}")
+@require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.READ)
+async def get_task_qc_run_record(
+    request: Request,
+    task_id: str,
+    run_number: int,
+    task_record_id: str,
+    scope: Literal["all", "assigned"] = Query("all"),
+    current_user: dict = Depends(get_current_user),
+):
+    actor_id = _get_task_scope_user_id(current_user)
+    try:
+        result = await run_in_threadpool(
+            get_task_qc_run_record_result,
+            task_id=task_id, run_number=run_number, task_record_id=task_record_id,
+            actor_id=actor_id, workspace_factory=_sichuan_workspace_service,
+            run_scope=scope,
+        )
+    except TaskQCRunNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except TaskQCRunForbidden as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except TaskQCRunConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("查询任务病历质控结果失败: task_id=%s", task_id)
+        raise HTTPException(status_code=503, detail="任务病历结果暂不可用，请稍后重试") from exc
+    return success_response(data=result, message="获取任务病历质控结果成功", trace_id=get_trace_id(request))
 
 
 @router.get("/{task_id}/progress")

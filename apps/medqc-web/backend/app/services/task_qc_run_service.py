@@ -11,7 +11,11 @@ from sqlalchemy.orm import Session
 
 from ..database.connection import SessionLocal
 from ..database.models.qc import QCTask, QCTaskQCRun, QCTaskRecord
+from .case_identity import CaseRef
+from .custom_qc_workspace_service import project_customer_safe_result_item
+from .luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY
 from .qc_rule_sets import get_sichuan_rule_set
+from .qc_workspace.canonical_result_store import customer_safe_projection_key, keyed_ref
 from .sichuan_workspace_batch_prepare import (
     SichuanWorkspaceBatchJobCreateRequest,
     prepare_workspace_batch_job,
@@ -225,3 +229,145 @@ def list_task_qc_runs(*, task_id: str, actor_id: str, run_scope: str = "all") ->
             statement = statement.where(QCTaskQCRun.triggered_by == actor_id)
         rows = session.execute(statement).mappings().all()
         return [dict(row) for row in rows]
+
+
+def get_task_qc_run_record_result(
+    *, task_id: str, run_number: int, task_record_id: str, actor_id: str,
+    workspace_factory: Callable[[], Any], run_scope: str = "all",
+) -> dict[str, Any]:
+    """只读取指定运行的 Canonical 结果，不改写任务病历状态。"""
+    if SessionLocal is None:
+        raise RuntimeError("数据库会话不可用")
+    if not actor_id or len(actor_id) > 64:
+        raise TaskQCRunForbidden("当前用户缺少有效身份")
+    if run_scope not in {"all", "assigned"} or run_number <= 0:
+        raise TaskQCRunConflict("运行范围或序号无效")
+
+    with SessionLocal() as session:
+        task = session.execute(
+            select(QCTask.id, QCTask.creator_id, QCTask.rule_set_key, QCTask.scene)
+            .where(QCTask.id == task_id)
+        ).mappings().first()
+        if task is None:
+            raise TaskQCRunNotFound("任务不存在")
+        record = session.execute(
+            select(QCTaskRecord.__table__).where(
+                QCTaskRecord.id == task_record_id, QCTaskRecord.task_id == task_id,
+            )
+        ).mappings().first()
+        if record is None:
+            raise TaskQCRunNotFound("任务病历不存在")
+        run = session.execute(
+            select(QCTaskQCRun.__table__).where(
+                QCTaskQCRun.task_id == task_id,
+                QCTaskQCRun.run_number == run_number,
+            )
+        ).mappings().first()
+        if run is None:
+            raise TaskQCRunNotFound("任务运行不存在")
+        if run["run_scope"] != run_scope:
+            raise TaskQCRunForbidden("当前范围不可查看此运行")
+        if run_scope == "all":
+            if task["creator_id"] != actor_id or run["triggered_by"] != actor_id:
+                raise TaskQCRunForbidden("仅任务创建人可查看整批质控结果")
+        elif run["triggered_by"] != actor_id or record["assignee_id"] != actor_id:
+            raise TaskQCRunForbidden("仅运行人可查看当前受领的病历结果")
+        identity = tuple(str(record.get(key) or "").strip() for key in ("institute_id", "patient_id", "visit_id"))
+        if any(not part or len(part) > 100 for part in identity) or record["record_id"] != record["id"]:
+            raise TaskQCRunConflict("任务病历缺少完整三坐标")
+        case_ref = CaseRef(*identity)
+        if task["rule_set_key"] != LUXIAN_0609_RULE_SET_KEY:
+            raise TaskQCRunConflict("当前规则集尚不支持任务病历结果下钻")
+        job_id = str(run["job_id"] or "").strip()
+        job_owner = str(run["triggered_by"] or "").strip()
+        if not job_id or not job_owner:
+            raise TaskQCRunConflict("任务运行缺少有效质控 job")
+
+    workspace = workspace_factory()
+    job = workspace.get_batch_job(job_id=job_id, created_by=job_owner)
+    if job is None:
+        raise TaskQCRunConflict("本次质控 job 不可读取")
+    filters = job.get("filters") if isinstance(job.get("filters"), dict) else {}
+    frozen_refs = filters.get("record_refs")
+    valid_frozen_refs = (
+        [CaseRef.from_mapping(ref) for ref in frozen_refs if isinstance(ref, dict)]
+        if isinstance(frozen_refs, list) else []
+    )
+    if (
+        str(job.get("id") or "") != job_id
+        or str(job.get("created_by") or "") != job_owner
+        or str(filters.get("task_id") or "") != task_id
+        or str(filters.get("task_run_number") or "") != str(run_number)
+        or str(filters.get("rule_set_key") or "") != LUXIAN_0609_RULE_SET_KEY
+        or str(filters.get("query_scope") or "") != str(task["scene"] or "")
+        or not valid_frozen_refs
+        or len(valid_frozen_refs) != len(frozen_refs)
+        or len(set(valid_frozen_refs)) != len(valid_frozen_refs)
+        or any(
+            not all(str(ref.get(key) or "").strip() for key in ("institute_id", "patient_id", "visit_id"))
+            for ref in frozen_refs
+        )
+        or case_ref not in valid_frozen_refs
+    ):
+        raise TaskQCRunConflict("任务运行与冻结质控范围不一致")
+
+    result = {
+        "task_id": task_id, "run_number": run_number, "task_record_id": task_record_id,
+        "job_id": job_id, "job_status": str(job.get("status") or ""),
+        "result_state": "pending", "rule_set_key": LUXIAN_0609_RULE_SET_KEY,
+        "items": [],
+    }
+    status = result["job_status"]
+    summary = job.get("summary") if isinstance(job.get("summary"), dict) else {}
+    partial = status == "failed" and summary.get("execution_status") == "partial_failed"
+    if status in {"queued", "pending", "running", "processing"}:
+        return result
+    if status in {"canceled", "cancelled"} or (status == "failed" and not partial):
+        result["result_state"] = "unavailable"
+        return result
+    if status != "completed" and not partial:
+        raise TaskQCRunConflict("质控 job 状态未知")
+
+    try:
+        canonical_items = workspace._load_batch_job_canonical_items(job=job, allow_partial=partial)
+        hmac_key = customer_safe_projection_key()
+        target_ref = keyed_ref("rec", case_ref.as_key(), hmac_key=hmac_key)
+        raw_target_items = [
+            item for item in canonical_items
+            if isinstance(item, dict) and item.get("record_ref") == target_ref
+        ]
+        if raw_target_items:
+            scoped_rule_ids = filters.get("scoped_customer_rule_ids") or filters.get("rule_ids") or []
+            expected_rule_ids = {
+                str(rule_id).strip().upper()
+                for key_group in (
+                    scoped_rule_ids,
+                    filters.get("gate_only_customer_rule_ids") or [],
+                    filters.get("paused_customer_rule_ids") or [],
+                )
+                if isinstance(key_group, list)
+                for rule_id in key_group
+                if str(rule_id).strip()
+            }
+            delivered_rule_ids = [
+                str(item.get("rule_id") or item.get("rule_code") or "").strip().upper()
+                for item in raw_target_items
+            ]
+            if (
+                not expected_rule_ids
+                or any(not rule_id for rule_id in delivered_rule_ids)
+                or len(set(delivered_rule_ids)) != len(delivered_rule_ids)
+                or set(delivered_rule_ids) != expected_rule_ids
+            ):
+                raise ValueError("Canonical Envelope 规则集合不完整")
+        target_items = [project_customer_safe_result_item(item, hmac_key=hmac_key) for item in raw_target_items]
+    except ValueError as exc:
+        raise TaskQCRunConflict("本次质控 Canonical 结果不完整，无法安全展示") from exc
+    if not target_items:
+        if not partial:
+            raise TaskQCRunConflict("本次质控 Canonical 结果缺少目标病历")
+        result["result_state"] = "unavailable"
+        return result
+    result["result_state"] = "available"
+    result["items"] = target_items
+    return result

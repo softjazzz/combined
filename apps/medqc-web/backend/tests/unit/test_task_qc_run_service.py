@@ -13,6 +13,8 @@ from sqlalchemy.pool import StaticPool
 
 from app.database.models.qc import QCTask, QCTaskQCRun, QCTaskRecord
 from app.services import task_qc_run_service as service
+from app.services.case_identity import CaseRef
+from app.services.qc_workspace.canonical_result_store import keyed_ref
 
 
 class _Workspace:
@@ -296,3 +298,168 @@ def test_split_postgresql_uses_configured_search_path_for_task_lock(monkeypatch)
 
     assert len(statements) == 1
     assert "FOR UPDATE" in statements[0]
+
+
+def _result_setup(env, monkeypatch, *, status="completed", run_scope="all", partial=False):
+    ref = {"institute_id": "hospital", "patient_id": "patient", "visit_id": "visit-1"}
+    with env.sessions.begin() as session:
+        session.execute(
+            QCTask.__table__.update().where(QCTask.id == "task-1").values(
+                rule_set_key="luxian_0609_qc_v1", scene="final",
+            )
+        )
+        session.execute(
+            QCTaskRecord.__table__.update().where(QCTaskRecord.id == "association-1")
+            .values(assignee_id="user-2")
+        )
+        session.execute(QCTaskQCRun.__table__.insert().values(
+            task_id="task-1", run_number=1, job_id="job-1",
+            triggered_by="user-1" if run_scope == "all" else "user-2",
+            run_scope=run_scope,
+        ))
+    owner = "user-1" if run_scope == "all" else "user-2"
+    job = {
+        "id": "job-1", "created_by": owner, "status": status,
+        "summary": {"execution_status": "partial_failed"} if partial else {},
+        "filters": {
+            "task_id": "task-1", "task_run_number": "1",
+            "rule_set_key": "luxian_0609_qc_v1", "query_scope": "final",
+            "record_refs": [ref], "rule_ids": ["LX0609-001"],
+        },
+    }
+    monkeypatch.setattr(env.workspace, "get_batch_job", lambda *, job_id, created_by: (
+        job if job_id == job["id"] and created_by == job["created_by"] else None
+    ))
+    monkeypatch.setattr(service, "customer_safe_projection_key", lambda: "test-key")
+    env.workspace._load_batch_job_canonical_items = lambda *, job, allow_partial=False: [
+        {
+            "record_ref": keyed_ref("rec", CaseRef.from_mapping(ref).as_key(), hmac_key="test-key"),
+            "rule_id": "LX0609-001", "status": "compliant",
+        }
+    ]
+    return job, ref
+
+
+def _read_result(env, *, actor="user-1", scope="all", record_id="association-1", run_number=1):
+    return service.get_task_qc_run_record_result(
+        task_id="task-1", run_number=run_number, task_record_id=record_id,
+        actor_id=actor, workspace_factory=lambda: env.workspace, run_scope=scope,
+    )
+
+
+def test_exact_record_result_projects_only_matching_three_coordinate(env, monkeypatch):
+    job, ref = _result_setup(env, monkeypatch)
+    other_ref = {**ref, "patient_id": "other-patient"}
+    job["filters"]["record_refs"].append(other_ref)
+    job["filters"]["rule_ids"] = ["LX0609-002"]
+    target_ref = keyed_ref("rec", CaseRef.from_mapping(ref).as_key(), hmac_key="test-key")
+    other_hash = keyed_ref("rec", CaseRef.from_mapping(other_ref).as_key(), hmac_key="test-key")
+    env.workspace._load_batch_job_canonical_items = lambda *, job, allow_partial=False: [
+        {"record_ref": other_hash, "rule_id": "LX0609-001", "status": "non_compliant"},
+        {"record_ref": target_ref, "rule_id": "LX0609-002", "status": "compliant"},
+    ]
+    result = _read_result(env)
+    assert result["result_state"] == "available"
+    assert result["job_id"] == "job-1"
+    assert [item["record_ref"] for item in result["items"]] == [target_ref]
+    assert "filters" not in result and "failed_records" not in result
+    assert "patient_id" not in result["items"][0]
+
+
+def test_exact_record_result_rejects_cross_run_and_job_mismatch(env, monkeypatch):
+    job, _ = _result_setup(env, monkeypatch)
+    with pytest.raises(service.TaskQCRunNotFound):
+        _read_result(env, run_number=2)
+    job["filters"]["task_run_number"] = "2"
+    with pytest.raises(service.TaskQCRunConflict, match="冻结质控范围"):
+        _read_result(env)
+    job["filters"]["task_run_number"] = "1"
+    job["id"] = "other-job"
+    with pytest.raises(service.TaskQCRunConflict, match="job 不可读取"):
+        _read_result(env)
+
+
+def test_exact_record_result_rejects_invalid_frozen_refs(env, monkeypatch):
+    job, ref = _result_setup(env, monkeypatch)
+    job["filters"]["record_refs"] = [ref, dict(ref)]
+    with pytest.raises(service.TaskQCRunConflict, match="冻结质控范围"):
+        _read_result(env)
+    job["filters"]["record_refs"] = [ref, {"institute_id": "hospital", "patient_id": "patient"}]
+    with pytest.raises(service.TaskQCRunConflict, match="冻结质控范围"):
+        _read_result(env)
+
+
+def test_exact_record_result_enforces_creator_or_current_assignee(env, monkeypatch):
+    _result_setup(env, monkeypatch)
+    with pytest.raises(service.TaskQCRunForbidden):
+        _read_result(env, actor="user-2")
+    with pytest.raises(service.TaskQCRunForbidden):
+        _read_result(env, actor="user-1", scope="assigned")
+    job, _ = _result_setup_assigned(env, monkeypatch)
+    assert _read_result(env, actor="user-2", scope="assigned")["result_state"] == "available"
+    with env.sessions.begin() as session:
+        session.execute(QCTaskRecord.__table__.update().where(QCTaskRecord.id == "association-1")
+                        .values(assignee_id="user-3"))
+    with pytest.raises(service.TaskQCRunForbidden):
+        _read_result(env, actor="user-2", scope="assigned")
+
+
+def _result_setup_assigned(env, monkeypatch):
+    with env.sessions.begin() as session:
+        session.execute(QCTaskQCRun.__table__.delete().where(QCTaskQCRun.task_id == "task-1"))
+    return _result_setup(env, monkeypatch, run_scope="assigned")
+
+
+@pytest.mark.parametrize("status,partial,expected", [
+    ("queued", False, "pending"),
+    ("running", False, "pending"),
+    ("failed", False, "unavailable"),
+    ("canceled", False, "unavailable"),
+])
+def test_exact_record_result_noncanonical_states(env, monkeypatch, status, partial, expected):
+    _result_setup(env, monkeypatch, status=status, partial=partial)
+    env.workspace._load_batch_job_canonical_items = lambda **_: pytest.fail("must not load canonical")
+    result = _read_result(env)
+    assert result["result_state"] == expected
+    assert result["items"] == []
+
+
+def test_exact_record_result_requires_canonical_and_handles_partial(env, monkeypatch):
+    job, ref = _result_setup(env, monkeypatch)
+    env.workspace._load_batch_job_canonical_items = lambda **_: (_ for _ in ()).throw(ValueError("missing"))
+    with pytest.raises(service.TaskQCRunConflict, match="Canonical"):
+        _read_result(env)
+    env.workspace._load_batch_job_canonical_items = lambda **_: []
+    with pytest.raises(service.TaskQCRunConflict, match="缺少目标病历"):
+        _read_result(env)
+    job["status"] = "failed"
+    job["summary"] = {"execution_status": "partial_failed"}
+    assert _read_result(env)["result_state"] == "unavailable"
+
+
+def test_exact_record_result_rejects_missing_or_duplicate_rule(env, monkeypatch):
+    job, ref = _result_setup(env, monkeypatch)
+    job["filters"]["rule_ids"] = ["LX0609-001", "LX0609-002"]
+    with pytest.raises(service.TaskQCRunConflict, match="Canonical"):
+        _read_result(env)
+    job["filters"]["rule_ids"] = ["LX0609-001"]
+    item = env.workspace._load_batch_job_canonical_items(job=job)[0]
+    env.workspace._load_batch_job_canonical_items = lambda **_: [item, dict(item)]
+    with pytest.raises(service.TaskQCRunConflict, match="Canonical"):
+        _read_result(env)
+
+
+def test_exact_record_result_rejects_legacy_identity_and_non_luxian(env, monkeypatch):
+    _result_setup(env, monkeypatch)
+    with env.sessions.begin() as session:
+        session.execute(QCTaskRecord.__table__.update().where(QCTaskRecord.id == "association-1")
+                        .values(institute_id=None, patient_id=None, visit_id=None))
+    with pytest.raises(service.TaskQCRunConflict, match="三坐标"):
+        _read_result(env)
+    with env.sessions.begin() as session:
+        session.execute(QCTaskRecord.__table__.update().where(QCTaskRecord.id == "association-1")
+                        .values(institute_id="hospital", patient_id="patient", visit_id="visit-1"))
+        session.execute(QCTask.__table__.update().where(QCTask.id == "task-1")
+                        .values(rule_set_key="sc_content_fast_v1"))
+    with pytest.raises(service.TaskQCRunConflict, match="规则集"):
+        _read_result(env)

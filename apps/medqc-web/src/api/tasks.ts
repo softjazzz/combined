@@ -110,6 +110,38 @@ export interface TaskQcRunCreated {
     status: 'queued'
 }
 
+export interface TaskQcRunRecordResult {
+    task_id: string
+    run_number: number
+    task_record_id: string
+    job_id: string
+    job_status: string
+    result_state: 'pending' | 'available' | 'unavailable'
+    rule_set_key: string
+    items: TaskQcSafeResultItem[]
+}
+
+export interface TaskQcSafeResultItem {
+    rule_id?: string
+    rule_code?: string
+    qc_point_id?: string
+    rule_name?: string
+    status: string
+    result_status?: string
+    display_status?: string
+    is_compliant?: boolean | null
+    conclusion?: string
+    suggestion?: string
+    evidence?: Array<{
+        source_type: string
+        source_ref: string
+        field_path?: string
+        evidence_excerpt?: string
+        excerpt_kind?: string
+        record_time?: string
+    }>
+}
+
 export interface TaskCreateData {
     task_name: string
     scene: TaskScene
@@ -243,6 +275,19 @@ export async function createTaskQcRun(taskId: string, scope?: TaskQcRunScope) {
     return request<TaskQcRunCreated>({
         method: 'POST',
         url: `${BASE_URL}/${encodeURIComponent(taskId)}/qc-runs${scope ? `?scope=${scope}` : ''}`,
+    })
+}
+
+/** 按指定运行批次和任务病历关联读取客户安全结果，不查询最新批次。 */
+export async function getTaskQcRunRecordResult(
+    taskId: string,
+    runNumber: number,
+    taskRecordId: string,
+    scope: TaskQcRunScope,
+) {
+    return request<TaskQcRunRecordResult>({
+        method: 'GET',
+        url: `${BASE_URL}/${encodeURIComponent(taskId)}/qc-runs/${encodeURIComponent(String(runNumber))}/records/${encodeURIComponent(taskRecordId)}?scope=${scope}`,
     })
 }
 

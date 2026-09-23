@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from app.core.security import get_current_user
 from app.routers import tasks
 from app.services.product_activation import require_product_activation
+from app.services.task_qc_run_service import TaskQCRunConflict, TaskQCRunForbidden
 
 
 def _client(monkeypatch):
@@ -68,3 +69,38 @@ def test_assigned_scope_is_forwarded_and_invalid_scope_is_422(monkeypatch):
     assert client.post("/api/v1/tasks/task-1/qc-runs?scope=other").status_code == 422
     assert client.get("/api/v1/tasks/task-1/qc-runs?scope=other").status_code == 422
     assert len(creates) == len(lists) == 1
+
+
+def test_exact_record_result_route_forwards_identity_and_scope(monkeypatch):
+    calls = []
+    monkeypatch.setattr(tasks, "get_task_qc_run_record_result", lambda **kwargs: calls.append(kwargs) or {
+        "task_id": "task-1", "run_number": 3, "task_record_id": "association-1",
+        "job_id": "job-3", "job_status": "completed", "result_state": "available",
+        "rule_set_key": "luxian_0609_qc_v1", "items": [{"rule_id": "LX0609-001"}],
+    })
+    response = _client(monkeypatch).get(
+        "/api/v1/tasks/task-1/qc-runs/3/records/association-1?scope=assigned"
+    )
+    assert response.status_code == 200
+    assert response.json()["data"]["items"] == [{"rule_id": "LX0609-001"}]
+    assert calls[0]["actor_id"] == "user-1"
+    assert calls[0]["run_scope"] == "assigned"
+    assert calls[0]["task_record_id"] == "association-1"
+    assert _client(monkeypatch).get(
+        "/api/v1/tasks/task-1/qc-runs/3/records/association-1?scope=other"
+    ).status_code == 422
+
+
+def test_exact_record_result_route_rejects_conflict_and_forbidden(monkeypatch):
+    def forbidden(**_):
+        raise TaskQCRunForbidden("forbidden")
+
+    monkeypatch.setattr(tasks, "get_task_qc_run_record_result", forbidden)
+    path = "/api/v1/tasks/task-1/qc-runs/1/records/association-1"
+    assert _client(monkeypatch).get(path).status_code == 403
+
+    def conflict(**_):
+        raise TaskQCRunConflict("incomplete")
+
+    monkeypatch.setattr(tasks, "get_task_qc_run_record_result", conflict)
+    assert _client(monkeypatch).get(path).status_code == 409
