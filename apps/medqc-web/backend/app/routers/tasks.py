@@ -50,6 +50,12 @@ from ..services.task_assignment_service import (
     assign_task_records,
     list_qc_assignee_options,
 )
+from ..services.task_start_service import (
+    TaskStartConflict,
+    TaskStartForbidden,
+    TaskStartNotFound,
+    start_assigned_task,
+)
 from .qc_sichuan import get_qc_service, _run_sichuan_workspace_batch_job, _sichuan_workspace_service
 from ..core.permissions import (
     require_permission,
@@ -522,38 +528,36 @@ async def get_task_detail(
 # ============================
 
 @router.put("/{task_id}")
-@require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.UPDATE)
+@require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.READ)
 async def update_task(
     request: Request,
     task_id: str,
     update_data: TaskUpdateRequest,
     current_user: dict = Depends(get_current_user),
 ):
-    """更新任务基本信息"""
-    update_fields = {k: v for k, v in update_data.model_dump().items() if v is not None}
-    if not update_fields:
-        raise HTTPException(status_code=400, detail="没有需要更新的字段")
-
-    update_fields["updated_at"] = datetime.now().isoformat()
-
-    # 枚举转字符串
-    for key in ["assign_method", "status"]:
-        if key in update_fields and hasattr(update_fields[key], 'value'):
-            update_fields[key] = update_fields[key].value
-
-    sb = get_supabase()
-    if sb is None:
-        raise HTTPException(status_code=503, detail="数据库不可用")
-
+    """仅允许已受领该任务的用户开始任务。"""
+    actor_id = _get_task_scope_user_id(current_user)
     try:
-        resp = await async_execute(
-            sb.table('qc_tasks').update(update_fields).eq('id', task_id)
-        )
-        data = (getattr(resp, 'data', None) or [{}])[0]
-        return success_response(data=data, message="任务更新成功", trace_id=get_trace_id(request))
-    except Exception as e:
-        logger.error(f"更新任务失败: {e}")
-        raise HTTPException(status_code=500, detail="更新任务失败，请稍后重试")
+        data = await run_in_threadpool(start_assigned_task, task_id=task_id, actor_id=actor_id)
+    except TaskStartNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except TaskStartForbidden as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except TaskStartConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("开始任务失败 task_id=%s", task_id)
+        raise HTTPException(status_code=503, detail="数据库不可用，请稍后重试") from exc
+
+    audit_event(
+        request,
+        action="tasks.start",
+        resource="qc_task",
+        outcome="success",
+        details={"task_id": task_id, "idempotent": data.get("idempotent", False)},
+        current_user=current_user,
+    )
+    return success_response(data=data, message="任务已开始", trace_id=get_trace_id(request))
 
 
 # ============================

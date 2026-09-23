@@ -5,7 +5,7 @@
 """
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
-from typing import Annotated, Optional, List, Dict, Any
+from typing import Annotated, Optional, List, Dict, Any, Literal
 from enum import Enum
 
 
@@ -127,21 +127,11 @@ class TaskCreateRequest(BaseModel):
 
 
 class TaskUpdateRequest(BaseModel):
-    """更新任务请求"""
-    task_name: Optional[str] = Field(None, description="任务名称")
-    deadline: Optional[str] = Field(None, description="截止日期")
-    assign_method: Optional[AssignMethod] = None
-    assignee_config: Optional[Dict[str, Any]] = None
-    status: Optional[TaskStatus] = None
+    """受领人开始任务；其他变更必须走各自的专用入口。"""
 
-    @model_validator(mode="before")
-    @classmethod
-    def reject_creation_scope_changes(cls, data: Any) -> Any:
-        if isinstance(data, dict) and ("scene" in data or "rule_set_key" in data):
-            raise ValueError("任务场景和规则集创建后不可修改")
-        if isinstance(data, dict) and data.get("status") == TaskStatus.ASSIGNED.value:
-            raise ValueError("已分配状态只能通过分配接口设置")
-        return data
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["in_progress"]
 
 
 class TaskAssignee(BaseModel):

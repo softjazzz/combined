@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AxiosHeaders, type AxiosResponse } from 'axios'
 import { ApiService } from '@/services/apiService'
-import { assignTask, createTaskQcRun, getTaskAssigneeOptions, getTaskDetail, getTaskList, getTaskQcRuns, getTaskRuleSets, getTaskStats, getTaskTodoStats } from '@/api/tasks'
+import { assignTask, createTaskQcRun, getTaskAssigneeOptions, getTaskDetail, getTaskList, getTaskQcRuns, getTaskRuleSets, getTaskStats, getTaskTodoStats, updateTask } from '@/api/tasks'
 
 vi.mock('@/services/apiService', () => ({ ApiService: { requestRaw: vi.fn() } }))
 
@@ -123,6 +123,13 @@ describe('任务统计 API', () => {
     expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
       method: 'POST', url: '/api/v1/tasks/task%2F1/assign',
       data: { method: 'by_ratio', assignees: options },
+    })
+  })
+
+  it('开始受领任务沿用 PUT 状态接口', async () => {
+    await updateTask('task-1', { status: 'in_progress' })
+    expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
+      method: 'PUT', url: '/api/v1/tasks/task-1', data: { status: 'in_progress' },
     })
   })
 

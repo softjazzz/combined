@@ -259,11 +259,18 @@ export async function getTaskRuleSets() {
     })
 }
 
-/** 更新任务 */
-export type TaskUpdateData = Omit<Partial<TaskCreateData>, 'scene' | 'rule_set_key'> & { status?: TaskStatus }
+/** 开始已受领任务 */
+export type TaskUpdateData = { status: 'in_progress' }
+
+export interface TaskStartResult {
+    id: string
+    status: 'in_progress'
+    updated_at?: string | null
+    idempotent?: boolean
+}
 
 export async function updateTask(taskId: string, data: TaskUpdateData) {
-    return request<TaskItem>({
+    return request<TaskStartResult>({
         method: 'PUT',
         url: `${BASE_URL}/${taskId}`,
         data,

@@ -87,12 +87,23 @@ const TaskDetailDrawerStub = defineComponent({
   template: '<div data-testid="task-detail-drawer-stub" />',
 })
 
+const ProStandardTableStub = defineComponent({
+  name: 'ProStandardTable',
+  props: { dataSource: Array },
+  emits: ['change'],
+  setup(props, { slots }) {
+    return () => h('div', (props.dataSource || []).map((record) =>
+      h('div', { 'data-testid': 'task-row' }, slots.bodyCell?.({ column: { key: 'action' }, record })),
+    ))
+  },
+})
+
 const listResponse = {
   success: true,
   data: { items: [], total: 0, page: 1, page_size: 10, total_pages: 0 },
 }
 
-function listWith(taskName: string) {
+function listWith(taskName: string, status = 'assigned') {
   return {
     success: true,
     data: {
@@ -102,7 +113,7 @@ function listWith(taskName: string) {
           task_number: taskName,
           task_name: taskName,
           task_type: 'one_time',
-          status: 'assigned',
+          status,
           progress: 0,
           total_records: 1,
           completed_records: 0,
@@ -154,7 +165,7 @@ async function mountView() {
         'a-select': true,
         'a-tag': true,
         ProQueryBar: { template: '<div><slot name="filters"/><slot name="actions"/></div>' },
-        ProStandardTable: true,
+        ProStandardTable: ProStandardTableStub,
         ProTableToolbar: { template: '<div><slot/></div>' },
         TaskDetailDrawer: TaskDetailDrawerStub,
       },
@@ -171,6 +182,78 @@ describe('MyTasksView 我的任务口径', () => {
     activeRoute.current = null
     mocks.getTaskList.mockResolvedValue(listResponse)
     mocks.getTaskStats.mockResolvedValue(statsResponse())
+  })
+
+  it('草稿不显示开始入口，快捷开始也不会提交草稿', async () => {
+    mocks.getTaskList.mockResolvedValue(listWith('草稿任务', 'draft'))
+    const wrapper = await mountView()
+
+    expect(wrapper.get('[data-testid="task-row"]').text()).not.toContain('开始')
+    await wrapper.get('[data-testid="start-task-action"]').trigger('click')
+
+    expect(mocks.updateTask).not.toHaveBeenCalled()
+    expect(mocks.message.info).toHaveBeenCalledWith('暂无待处理任务')
+  })
+
+  it('已分配任务只提交一次，成功后刷新列表和统计', async () => {
+    mocks.getTaskList.mockResolvedValue(listWith('已分配任务'))
+    const request = deferred<{ success: boolean; data: { id: string; status: string } }>()
+    mocks.updateTask.mockReturnValue(request.promise)
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as { handleStartWork: (record: unknown) => Promise<void>; tasks: unknown[] }
+    const first = vm.handleStartWork(vm.tasks[0])
+    await nextTick()
+    expect(wrapper.get('[data-testid="task-row"]').text()).toContain('开始')
+    expect(wrapper.get('[data-testid="task-row"] button').attributes('disabled')).toBeDefined()
+    await vm.handleStartWork(vm.tasks[0])
+
+    expect(mocks.updateTask).toHaveBeenCalledTimes(1)
+    expect(mocks.updateTask).toHaveBeenCalledWith('已分配任务', { status: 'in_progress' })
+    mocks.getTaskList.mockClear()
+    mocks.getTaskStats.mockClear()
+    request.resolve({ success: true, data: { id: '已分配任务', status: 'in_progress' } })
+    await first
+
+    expect(mocks.getTaskList).toHaveBeenCalledTimes(1)
+    expect(mocks.getTaskStats).toHaveBeenCalledTimes(1)
+    expect(mocks.message.success).toHaveBeenCalledWith('任务「已分配任务」已开始')
+  })
+
+  it('开始结果未知时不自动重试并刷新服务端状态供核对', async () => {
+    mocks.getTaskList.mockResolvedValue(listWith('待核对任务'))
+    mocks.updateTask.mockResolvedValue({ success: false, message: '网络超时' })
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as { handleStartWork: (record: unknown) => Promise<void>; tasks: unknown[] }
+    mocks.getTaskList.mockClear()
+    mocks.getTaskStats.mockClear()
+
+    await vm.handleStartWork(vm.tasks[0])
+
+    expect(mocks.updateTask).toHaveBeenCalledTimes(1)
+    expect(mocks.getTaskList).toHaveBeenCalledTimes(1)
+    expect(mocks.getTaskStats).toHaveBeenCalledTimes(1)
+    expect(mocks.message.error).toHaveBeenCalledWith('网络超时，请核对刷新后的任务状态')
+  })
+
+  it.each([
+    ['空体', undefined],
+    ['错状态', { id: '待核对任务', status: 'assigned' }],
+    ['错任务', { id: '其他任务', status: 'in_progress' }],
+  ])('2xx %s 不宣称已开始，只刷新服务端状态', async (_label, data) => {
+    mocks.getTaskList.mockResolvedValue(listWith('待核对任务'))
+    mocks.updateTask.mockResolvedValue({ success: true, data })
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as { handleStartWork: (record: unknown) => Promise<void>; tasks: unknown[] }
+    mocks.getTaskList.mockClear()
+    mocks.getTaskStats.mockClear()
+
+    await vm.handleStartWork(vm.tasks[0])
+
+    expect(mocks.message.success).not.toHaveBeenCalled()
+    expect(mocks.message.error).toHaveBeenCalledWith('操作结果未确认，请核对刷新后的任务状态')
+    expect(mocks.getTaskList).toHaveBeenCalledTimes(1)
+    expect(mocks.getTaskStats).toHaveBeenCalledTimes(1)
+    expect(mocks.updateTask).toHaveBeenCalledTimes(1)
   })
 
   it('从首页待办查询恢复范围并在分页请求中保留同一 as_of', async () => {

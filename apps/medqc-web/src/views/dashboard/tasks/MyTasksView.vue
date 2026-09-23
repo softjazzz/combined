@@ -134,6 +134,7 @@
       </h2>
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
         <a-button
+          data-testid="start-task-action"
           type="primary"
           size="large"
           class="rounded-lg h-16"
@@ -290,12 +291,11 @@
           <template v-if="column.key === 'action'">
             <div class="flex space-x-2">
               <a-button
-                v-if="
-                  (record as TaskItem).status === 'draft' ||
-                    (record as TaskItem).status === 'assigned'
-                "
+                v-if="(record as TaskItem).status === 'assigned'"
                 type="link"
                 size="small"
+                :loading="startingTaskIds.has((record as TaskItem).id)"
+                :disabled="startingTaskIds.has((record as TaskItem).id)"
                 @click="handleStartWork(record as TaskItem)"
               >
                 <PlayCircleOutlined />
@@ -373,6 +373,7 @@ const searchKeyword = ref('')
 type DateRange = [Dayjs, Dayjs] | null
 const dateRange = ref<DateRange>(null)
 const tasks = ref<TaskItem[]>([])
+const startingTaskIds = ref(new Set<string>())
 const listError = ref('')
 const initialTaskQuery = parseTaskQuery(route.query.todo, route.query.as_of, route.query.scene)
 const activeTodo = ref<TaskTodo | undefined>(initialTaskQuery.todo)
@@ -716,8 +717,7 @@ const fetchTasks = async () => {
 // ====== 事件处理 ======
 
 const handleStartTask = () => {
-  // 跳转到第一个待处理任务
-  const pending = tasks.value.find((t) => t.status === 'draft' || t.status === 'assigned')
+  const pending = tasks.value.find((t) => t.status === 'assigned')
   if (pending) {
     handleStartWork(pending)
   } else {
@@ -803,19 +803,21 @@ const handleRefresh = () => {
 }
 
 const handleStartWork = async (record: TaskItem) => {
+  if (record.status !== 'assigned' || startingTaskIds.value.has(record.id)) return
+  startingTaskIds.value.add(record.id)
   try {
-    if (record.status === 'draft' || record.status === 'assigned') {
-      const res = await updateTask(record.id, { status: 'in_progress' })
-      if (res.success) {
-        message.success(`任务「${record.task_name}」已开始`)
-        fetchTasks()
-        fetchStats()
-      } else {
-        message.error(res.message || '操作失败')
-      }
+    const res = await updateTask(record.id, { status: 'in_progress' })
+    if (res.success && res.data?.id === record.id && res.data.status === 'in_progress') {
+      message.success(`任务「${record.task_name}」已开始`)
+    } else {
+      const reason = res.success ? '操作结果未确认' : res.message || '操作结果未确认'
+      message.error(`${reason}，请核对刷新后的任务状态`)
     }
-  } catch (e) {
-    message.error('操作失败')
+  } catch {
+    message.error('操作结果未确认，请核对刷新后的任务状态')
+  } finally {
+    await Promise.all([fetchTasks(), fetchStats()])
+    startingTaskIds.value.delete(record.id)
   }
 }
 
