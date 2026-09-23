@@ -5,7 +5,7 @@ This module intentionally keeps table and field names close to the existing
 router code paths to minimize migration risk.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import (
     Boolean,
@@ -288,13 +288,18 @@ class QCAppeal(Base):
     reviewer_id = Column(String(36))
     reviewer_name = Column(String(100))
     review_result = Column(Text)
-    review_date = Column(DateTime)
+    review_date = Column(DateTime(timezone=True))
     resolution = Column(Text)
-    resolution_date = Column(DateTime)
+    resolution_date = Column(DateTime(timezone=True))
     notes = Column(Text)
     status = Column(String(20), default="pending", nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
 
     __table_args__ = (
         Index("ix_qc_appeals_status", "status"),
@@ -317,8 +322,10 @@ class QCAppealReview(Base):
     reviewer_role = Column(String(50))
     action = Column(String(30), nullable=False)
     comment = Column(Text)
-    metadata_json = Column("metadata", Text, comment="JSON text")
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    metadata_json = Column(
+        "metadata", JSON().with_variant(JSONB(), "postgresql"), comment="审核元数据"
+    )
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     __table_args__ = (
         Index("ix_qc_appeal_reviews_appeal", "appeal_id"),

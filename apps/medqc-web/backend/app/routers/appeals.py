@@ -13,29 +13,46 @@
 
 from fastapi import APIRouter, Request, HTTPException, Depends
 from typing import Optional
-from datetime import datetime
 import logging
+from anyio import to_thread
+from pydantic import BaseModel, ValidationError
 
-from ..core.response import success_response, paginated_response, get_trace_id, ErrorCode, StatusCode
+from ..core.response import success_response, paginated_response, get_trace_id, StatusCode
 from ..core.supabase_client import get_supabase
 from ..core.security import get_current_user
+from ..core.permissions import ROLE_PERMISSIONS, PermissionAction, ResourceType, require_permission
+from ..services.appeal_review_service import (
+    AppealReviewConflict,
+    AppealReviewNotFound,
+    AppealWithdrawForbidden,
+    review_appeal_atomically,
+    withdraw_appeal_atomically,
+)
 from ..schemas.appeals import (
     AppealCreate,
     AppealUpdate,
     AppealWithdraw,
     AppealReviewCreate,
-    AppealResponse,
-    AppealDetailResponse,
-    AppealListQuery,
-    AppealStatistics,
     AppealStatus,
-    AppealPriority,
-    AppealType,
-    ReviewAction,
 )
 
 router = APIRouter(prefix="/api/v1/appeals", tags=["appeals"])
 logger = logging.getLogger(__name__)
+
+
+def _body_openapi(model: type[BaseModel]) -> dict:
+    schema = model.model_json_schema()
+    definitions = schema.pop("$defs", {})
+    for property_schema in schema.get("properties", {}).values():
+        reference = property_schema.pop("$ref", None)
+        if reference:
+            property_schema.update(definitions[reference.rsplit("/", 1)[-1]])
+    return {
+        "requestBody": {
+            "required": True,
+            "content": {"application/json": {"schema": schema}},
+        }
+    }
 
 
 # ============================
@@ -376,107 +393,56 @@ async def update_appeal(
         )
 
 
-@router.post("/{appeal_id}/withdraw", response_model=dict)
+@router.post(
+    "/{appeal_id}/withdraw",
+    response_model=dict,
+    openapi_extra=_body_openapi(AppealWithdraw),
+)
 async def withdraw_appeal(
     request: Request,
     appeal_id: str,
-    withdraw: AppealWithdraw,
     current_user: dict = Depends(get_current_user)
 ):
-    """
-    撤回申诉
-
-    Args:
-        appeal_id: 申诉ID
-        withdraw: 撤回信息
-        current_user: 当前用户
-
-    Returns:
-        撤回后的申诉记录
-    """
-    trace_id = get_trace_id(request)
-    supabase = get_supabase()
-
-    if not supabase:
-        raise HTTPException(
-            status_code=StatusCode.SERVICE_UNAVAILABLE,
-            detail="数据库连接失败"
-        )
-
+    """仅允许申诉人在未终结时撤回。"""
+    appellant_id = str(current_user.get("id") or current_user.get("user_id") or "").strip()
+    if not appellant_id:
+        raise HTTPException(status_code=401, detail="缺少申诉人身份")
     try:
-        # 验证申诉是否存在且属于当前用户
-        existing = supabase.table("qc_appeals").select("*").eq("id", appeal_id).execute()
-
-        if not existing.data:
-            raise HTTPException(
-                status_code=StatusCode.NOT_FOUND,
-                detail=f"申诉不存在: {appeal_id}"
+        withdraw = AppealWithdraw.model_validate(await request.json())
+    except (ValueError, ValidationError, TypeError) as exc:
+        raise HTTPException(status_code=422, detail="撤回请求格式不正确") from exc
+    try:
+        result = await to_thread.run_sync(
+            lambda: withdraw_appeal_atomically(
+                appeal_id, appellant_id=appellant_id, reason=withdraw.reason
             )
-
-        existing_appeal = existing.data[0]
-
-        # 只有申诉人可以撤回
-        if existing_appeal["appellant_id"] != current_user["id"]:
-            raise HTTPException(
-                status_code=StatusCode.FORBIDDEN,
-                detail="只有申诉人可以撤回申诉"
-            )
-
-        # 只能撤回待审核或审核中的申诉
-        if existing_appeal["status"] not in [AppealStatus.PENDING.value, AppealStatus.REVIEWING.value]:
-            raise HTTPException(
-                status_code=StatusCode.BAD_REQUEST,
-                detail="只能撤回待审核或审核中的申诉"
-            )
-
-        # 更新状态为已撤回
-        update_data = {
-            "status": AppealStatus.WITHDRAWN.value,
-            "resolution": withdraw.reason or "申诉人主动撤回",
-            "resolution_date": datetime.utcnow().isoformat()
-        }
-
-        result = supabase.table("qc_appeals").update(update_data).eq("id", appeal_id).execute()
-
-        if not result.data:
-            raise HTTPException(
-                status_code=StatusCode.INTERNAL_SERVER_ERROR,
-                detail="撤回申诉失败"
-            )
-
-        logger.info(
-            f"Appeal withdrawn: {appeal_id}",
-            extra={"trace_id": trace_id, "user_id": current_user["id"]}
         )
+    except AppealReviewNotFound as exc:
+        raise HTTPException(status_code=404, detail="申诉不存在") from exc
+    except AppealWithdrawForbidden as exc:
+        raise HTTPException(status_code=403, detail="只有申诉人可以撤回申诉") from exc
+    except AppealReviewConflict as exc:
+        raise HTTPException(status_code=409, detail="申诉当前状态不允许撤回") from exc
+    except Exception as exc:
+        logger.error("撤回申诉失败: %s", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="撤回申诉失败，请稍后重试") from exc
 
-        return success_response(
-            data=result.data[0],
-            message="申诉已撤回",
-            request=request
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(
-            f"Failed to withdraw appeal: {str(e)}",
-            extra={"trace_id": trace_id, "appeal_id": appeal_id}
-        )
-        raise HTTPException(
-            status_code=StatusCode.INTERNAL_SERVER_ERROR,
-            detail=f"撤回申诉失败: {str(e)}"
-        )
+    return success_response(data=result, message="申诉已撤回", trace_id=get_trace_id(request))
 
 
 # ============================
 # 审核管理
 # ============================
 
-@router.post("/{appeal_id}/review", response_model=dict)
+@router.post(
+    "/{appeal_id}/review",
+    response_model=dict,
+    openapi_extra=_body_openapi(AppealReviewCreate),
+)
+@require_permission(ResourceType.QC_RESULTS, PermissionAction.REVIEW)
 async def review_appeal(
     request: Request,
     appeal_id: str,
-    review: AppealReviewCreate,
     current_user: dict = Depends(get_current_user)
 ):
     """
@@ -484,105 +450,59 @@ async def review_appeal(
 
     Args:
         appeal_id: 申诉ID
-        review: 审核信息
+        request: 审核请求
         current_user: 当前用户
 
     Returns:
         审核后的申诉记录
     """
-    trace_id = get_trace_id(request)
-    supabase = get_supabase()
-
-    if not supabase:
-        raise HTTPException(
-            status_code=StatusCode.SERVICE_UNAVAILABLE,
-            detail="数据库连接失败"
-        )
+    reviewer_id = str(current_user.get("id") or current_user.get("user_id") or "").strip()
+    if not reviewer_id:
+        raise HTTPException(status_code=401, detail="缺少审核人身份")
 
     try:
-        # 验证申诉是否存在
-        existing = supabase.table("qc_appeals").select("*").eq("id", appeal_id).execute()
+        review = AppealReviewCreate.model_validate(await request.json())
+    except (ValueError, ValidationError, TypeError) as exc:
+        raise HTTPException(status_code=422, detail="审核请求格式不正确") from exc
 
-        if not existing.data:
-            raise HTTPException(
-                status_code=StatusCode.NOT_FOUND,
-                detail=f"申诉不存在: {appeal_id}"
+    reviewer_name = str(
+        current_user.get("display_name")
+        or current_user.get("name")
+        or current_user.get("email")
+        or "审核员"
+    )
+    reviewer_role = next(
+        (
+            role
+            for role in current_user.get("roles") or []
+            if PermissionAction.REVIEW
+            in ROLE_PERMISSIONS.get(role, {}).get(ResourceType.QC_RESULTS, [])
+        ),
+        None,
+    )
+    if reviewer_role is None:
+        raise HTTPException(status_code=403, detail="没有申诉审核权限")
+    try:
+        result = await to_thread.run_sync(
+            lambda: review_appeal_atomically(
+                appeal_id,
+                action=review.action,
+                comment=review.comment,
+                resolution=review.resolution,
+                reviewer_id=reviewer_id,
+                reviewer_name=reviewer_name,
+                reviewer_role=reviewer_role,
             )
-
-        existing_appeal = existing.data[0]
-
-        # 验证状态
-        if existing_appeal["status"] == AppealStatus.WITHDRAWN.value:
-            raise HTTPException(
-                status_code=StatusCode.BAD_REQUEST,
-                detail="无法审核已撤回的申诉"
-            )
-
-        # 创建审核记录
-        review_data = {
-            "appeal_id": appeal_id,
-            "reviewer_id": current_user["id"],
-            "reviewer_name": current_user.get("name", current_user.get("email", "Unknown")),
-            "reviewer_role": current_user.get("role", "reviewer"),
-            "action": review.action.value,
-            "comment": review.comment,
-            "metadata": {}
-        }
-
-        review_result = supabase.table("qc_appeal_reviews").insert(review_data).execute()
-
-        # 更新申诉状态
-        update_data = {
-            "reviewer_id": current_user["id"],
-            "reviewer_name": current_user.get("name", current_user.get("email", "Unknown")),
-            "review_date": datetime.utcnow().isoformat()
-        }
-
-        if review.action == ReviewAction.APPROVE:
-            update_data["status"] = AppealStatus.APPROVED.value
-            update_data["resolution"] = review.resolution or "申诉已批准"
-            update_data["resolution_date"] = datetime.utcnow().isoformat()
-        elif review.action == ReviewAction.REJECT:
-            update_data["status"] = AppealStatus.REJECTED.value
-            update_data["resolution"] = review.resolution or "申诉已拒绝"
-            update_data["resolution_date"] = datetime.utcnow().isoformat()
-        elif review.action == ReviewAction.REQUEST_INFO:
-            update_data["status"] = AppealStatus.REVIEWING.value
-        else:
-            update_data["status"] = AppealStatus.REVIEWING.value
-
-        update_data["review_result"] = review.comment
-
-        appeal_result = supabase.table("qc_appeals").update(update_data).eq("id", appeal_id).execute()
-
-        if not appeal_result.data:
-            raise HTTPException(
-                status_code=StatusCode.INTERNAL_SERVER_ERROR,
-                detail="更新申诉状态失败"
-            )
-
-        logger.info(
-            f"Appeal reviewed: {appeal_id}, action: {review.action.value}",
-            extra={"trace_id": trace_id, "reviewer_id": current_user["id"]}
         )
+    except AppealReviewNotFound as exc:
+        raise HTTPException(status_code=404, detail="申诉不存在") from exc
+    except AppealReviewConflict as exc:
+        raise HTTPException(status_code=409, detail="申诉当前状态不允许审核") from exc
+    except Exception as exc:
+        logger.error("审核申诉失败: %s", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="审核申诉失败，请稍后重试") from exc
 
-        return success_response(
-            data=appeal_result.data[0],
-            message="审核成功",
-            request=request
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(
-            f"Failed to review appeal: {str(e)}",
-            extra={"trace_id": trace_id, "appeal_id": appeal_id}
-        )
-        raise HTTPException(
-            status_code=StatusCode.INTERNAL_SERVER_ERROR,
-            detail=f"审核申诉失败: {str(e)}"
-        )
+    return success_response(data=result, message="审核成功", trace_id=get_trace_id(request))
 
 
 # ============================
