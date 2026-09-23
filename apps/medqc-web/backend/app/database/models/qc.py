@@ -7,7 +7,7 @@ router code paths to minimize migration risk.
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, CheckConstraint, Column, Date, DateTime, Float, Index, Integer, String, Text
+from sqlalchemy import Boolean, CheckConstraint, Column, Date, DateTime, Float, Index, Integer, String, Text, text
 
 from ..connection import Base
 
@@ -195,6 +195,9 @@ class QCTaskRecord(Base):
     id = Column(String(36), primary_key=True)
     task_id = Column(String(36), nullable=False)
     record_id = Column(String(100), nullable=False)
+    institute_id = Column(String(100), nullable=True)
+    patient_id = Column(String(100), nullable=True)
+    visit_id = Column(String(100), nullable=True)
     assignee_id = Column(String(36))
     assignee_name = Column(String(100))
     status = Column(String(20), default="pending", nullable=False)
@@ -204,11 +207,45 @@ class QCTaskRecord(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     __table_args__ = (
+        CheckConstraint(
+            "task_id IS NOT NULL AND trim(task_id, ' \t\n\r\f\v') <> '' "
+            "AND record_id IS NOT NULL AND trim(record_id, ' \t\n\r\f\v') <> ''",
+            name="ck_qc_task_records_base_identity_nonblank",
+        ),
+        CheckConstraint(
+            "(institute_id IS NULL AND patient_id IS NULL AND visit_id IS NULL) OR "
+            "(institute_id IS NOT NULL AND patient_id IS NOT NULL AND visit_id IS NOT NULL "
+            "AND trim(institute_id, ' \t\n\r\f\v') <> '' "
+            "AND trim(patient_id, ' \t\n\r\f\v') <> '' "
+            "AND trim(visit_id, ' \t\n\r\f\v') <> '')",
+            name="ck_qc_task_records_case_identity_complete",
+        ),
         Index("ix_qc_task_records_task", "task_id"),
         Index("ix_qc_task_records_record", "record_id"),
         Index("ix_qc_task_records_assignee", "assignee_id"),
         Index("ix_qc_task_records_status", "status"),
-        Index("uq_qc_task_record_unique", "task_id", "record_id", unique=True),
+        Index(
+            "uq_qc_task_records_legacy_record",
+            "task_id",
+            "record_id",
+            unique=True,
+            postgresql_where=text("institute_id IS NULL AND patient_id IS NULL AND visit_id IS NULL"),
+            sqlite_where=text("institute_id IS NULL AND patient_id IS NULL AND visit_id IS NULL"),
+        ),
+        Index(
+            "uq_qc_task_records_case_identity",
+            "task_id",
+            "institute_id",
+            "patient_id",
+            "visit_id",
+            unique=True,
+            postgresql_where=text(
+                "institute_id IS NOT NULL AND patient_id IS NOT NULL AND visit_id IS NOT NULL"
+            ),
+            sqlite_where=text(
+                "institute_id IS NOT NULL AND patient_id IS NOT NULL AND visit_id IS NOT NULL"
+            ),
+        ),
     )
 
 
