@@ -123,7 +123,7 @@ describe('WorkstationLayout 门急诊入口', () => {
       expect(wrapper.text()).not.toContain('门急诊病历')
       expect(wrapper.text()).toContain('病历池')
       expect(wrapper.text()).toContain('运行病历质控')
-      expect(wrapper.text()).toContain('终末病历质控')
+      expect(wrapper.text()).toContain('已出院病历质控')
     },
   )
 

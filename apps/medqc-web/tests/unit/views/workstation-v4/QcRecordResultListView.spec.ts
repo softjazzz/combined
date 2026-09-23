@@ -230,7 +230,7 @@ describe('QcRecordResultListView', () => {
 
   it.each([
     ['inpatient', '运行病历质控', '固定范围：在院', 'admission', '在院病历 · 质控结果'],
-    ['discharged', '终末病历质控', '固定范围：已出院', 'discharge', '已出院病历 · 质控结果'],
+    ['discharged', '已出院病历质控结果', '固定范围：已出院', 'discharge', '已出院病历 · 质控结果'],
   ] as const)(
     '固定 %s 服务端范围、保留主标题且不展示范围说明',
     async (carePhase, title, scope, dateField, removedEyebrow) => {
@@ -238,6 +238,10 @@ describe('QcRecordResultListView', () => {
       await flushPromises()
 
       expect(wrapper.text()).toContain(title)
+      if (carePhase === 'discharged') {
+        expect(wrapper.get('.qc-record-result-list-view__header').text()).not.toContain('终末')
+        expect(wrapper.text()).toContain('此列表未核验归档状态，暂不可发起终末质控')
+      }
       if (carePhase === 'inpatient') {
         expect(wrapper.get('.review-workbench-scope').text()).toBe('在院')
         expect(wrapper.get('.review-workbench-scope').attributes('title')).toBe(scope)
@@ -396,7 +400,7 @@ describe('QcRecordResultListView', () => {
     })
   })
 
-  it('按当前服务端筛选导出完整终末病历Excel，不使用当前页行拼接', async () => {
+  it('按当前服务端筛选导出已出院病历Excel，不使用当前页行拼接', async () => {
     const wrapper = mountView('discharged')
     await flushPromises()
     const inputs = wrapper.findAll('input')
@@ -418,7 +422,7 @@ describe('QcRecordResultListView', () => {
       end_date: '2026-08-10',
       keyword: '患者甲',
     })
-    expect(mocks.downloadBlob).toHaveBeenCalledWith(expect.any(Blob), '终末病历质控-当前筛选.xlsx')
+    expect(mocks.downloadBlob).toHaveBeenCalledWith(expect.any(Blob), '已出院病历质控-当前筛选.xlsx')
   })
 
   it('未勾选病历时只禁用导出所选，仍可导出当前筛选结果', async () => {
@@ -453,7 +457,7 @@ describe('QcRecordResultListView', () => {
         },
       ],
     })
-    expect(mocks.downloadBlob).toHaveBeenCalledWith(expect.any(Blob), '终末病历质控-所选1份.xlsx')
+    expect(mocks.downloadBlob).toHaveBeenCalledWith(expect.any(Blob), '已出院病历质控-所选1份.xlsx')
   })
 
   it('相同 visitId 的两份病历按 recordKey 定位，并向抽屉传入所选行的完整三坐标', async () => {

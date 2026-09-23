@@ -321,7 +321,7 @@ const startDate = ref('')
 const endDate = ref('')
 
 const isInpatient = computed(() => props.carePhase === 'inpatient')
-const pageTitle = computed(() => (isInpatient.value ? '运行病历质控' : '终末病历质控'))
+const pageTitle = computed(() => (isInpatient.value ? '运行病历质控' : '已出院病历质控结果'))
 const scopeLabel = computed(() => (isInpatient.value ? '固定范围：在院' : '固定范围：已出院'))
 
 const {
@@ -640,7 +640,7 @@ async function exportSelectedRecords() {
     }
     downloadBlob(
       response.data,
-      `${isInpatient.value ? '运行病历质控' : '终末病历质控'}-所选${recordRefs.length}份.xlsx`,
+      `${isInpatient.value ? '运行病历质控' : '已出院病历质控'}-所选${recordRefs.length}份.xlsx`,
     )
     exportNotice.value = `已开始下载所选 ${recordRefs.length} 份病历的质控结果`
   } catch {
@@ -674,7 +674,7 @@ async function exportCurrentFilter() {
     }
     downloadBlob(
       response.data,
-      `${isInpatient.value ? '运行病历质控' : '终末病历质控'}-当前筛选.xlsx`,
+      `${isInpatient.value ? '运行病历质控' : '已出院病历质控'}-当前筛选.xlsx`,
     )
     exportNotice.value = '当前筛选质控结果已开始下载'
   } catch {

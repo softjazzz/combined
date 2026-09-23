@@ -35,6 +35,7 @@ describe('运行与终末质控结果清单路由', () => {
     expect(finalLoader).toBeTypeOf('function')
     expect(running?.props?.default).toEqual({ carePhase: 'inpatient' })
     expect(final?.props?.default).toEqual({ carePhase: 'discharged' })
+    expect(final?.meta?.title).toBe('已出院病历质控结果')
 
     const [runningModule, finalModule] = await Promise.all([
       loadRouteComponent(runningLoader),

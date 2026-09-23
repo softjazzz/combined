@@ -15,6 +15,7 @@
           <span class="batch-shell-label">任务数量</span>
         </div>
         <a-button
+          v-if="allowLaunch"
           type="primary"
           class="batch-primary-btn"
           @click="emit('openBatchLaunch')"
@@ -139,7 +140,7 @@
               停止
             </a-button>
             <a-button
-              v-else-if="['failed', 'completed', 'canceled'].includes(record.status)"
+              v-else-if="allowRetry && ['failed', 'completed', 'canceled'].includes(record.status)"
               size="small"
               :loading="retryingBatchJobId === record.id"
               @click="emit('retryBatchJob', record.id)"
@@ -168,7 +169,7 @@ import {
   getBatchJobStatusText,
 } from '@/views/rules/utils/customQcWorkspacePresentation'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   loading: boolean
   batchJobs: SichuanBatchJob[]
   total: number
@@ -185,7 +186,12 @@ const props = defineProps<{
   cancellingBatchJobId: string
   retryingBatchJobId: string
   formatDateTime: (value?: string | Date | null) => string
-}>()
+  allowLaunch?: boolean
+  allowRetry?: boolean
+}>(), {
+  allowLaunch: true,
+  allowRetry: true,
+})
 
 const emit = defineEmits<{
   openBatchLaunch: []

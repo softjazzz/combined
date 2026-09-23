@@ -4,7 +4,7 @@
       class="qc-run-selected-control__trigger"
       type="button"
       data-testid="run-selected-qc-trigger"
-      :disabled="isBusy || normalizedRecordRefs.length === 0"
+      :disabled="!canRunSelectedQc || isBusy || normalizedRecordRefs.length === 0"
       @click="startSelectedQc"
     >
       <Play
@@ -19,6 +19,9 @@
         {{ selectedCount }}
       </span>
     </button>
+    <span v-if="!canRunSelectedQc" class="qc-run-selected-control__scope-note">
+      此列表未核验归档状态，暂不可发起终末质控。
+    </span>
 
     <Teleport
       v-if="statusTarget"
@@ -134,6 +137,7 @@ let disposed = false
 const scene = computed<'running' | 'final'>(() =>
   props.carePhase === 'inpatient' ? 'running' : 'final',
 )
+const canRunSelectedQc = computed(() => props.carePhase === 'inpatient')
 const isBusy = computed(() => state.value === 'creating' || state.value === 'running')
 const normalizedRecordRefs = computed(() => normalizeRecordRefs(props.recordRefs))
 const statusTarget = computed(() => String(props.statusTarget || '').trim())
@@ -256,7 +260,7 @@ async function pollJob(jobId: string) {
 }
 
 async function startSelectedQc() {
-  if (isBusy.value || normalizedRecordRefs.value.length === 0) return
+  if (!canRunSelectedQc.value || isBusy.value || normalizedRecordRefs.value.length === 0) return
   frozenRecordRefs.value = normalizedRecordRefs.value.map((item) => ({ ...item }))
   taskJob.value = null
   state.value = 'creating'
@@ -387,6 +391,12 @@ button {
   font-size: 11px;
   line-height: 18px;
   font-weight: 750;
+}
+
+.qc-run-selected-control__scope-note {
+  color: rgba(29, 29, 31, 0.6);
+  font-size: 12px;
+  line-height: 18px;
 }
 
 .is-spinning {

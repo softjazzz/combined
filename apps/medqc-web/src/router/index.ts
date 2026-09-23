@@ -108,7 +108,7 @@ const routes: RouteRecordRaw[] = [
         name: 'FinalRecords',
         component: () => import('@/views/dashboard/records/FinalRecordsView.vue'),
         meta: {
-          title: '终末病历',
+          title: '已出院病历',
           icon: 'CheckCircleOutlined',
           permission: ['admin', 'qc_manager'],
         },
@@ -1011,7 +1011,7 @@ const routes: RouteRecordRaw[] = [
         name: 'WorkstationV4FinalRecords',
         component: () => import('@/views/workstation-v4/QcRecordResultListView.vue'),
         props: { carePhase: 'discharged' },
-        meta: { title: '终末病历质控', permission: ['admin', 'qc_manager'] },
+        meta: { title: '已出院病历质控结果', permission: ['admin', 'qc_manager'] },
       },
       {
         path: 'qc-feedback-demo',

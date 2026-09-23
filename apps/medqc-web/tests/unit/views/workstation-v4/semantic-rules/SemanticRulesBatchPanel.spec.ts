@@ -142,4 +142,42 @@ describe('SemanticRulesBatchPanel', () => {
     expect(wrapper.emitted('retryBatchJob')?.[0]).toEqual(['job-completed'])
     expect(wrapper.emitted('retryBatchJob')?.[1]).toEqual(['job-partial'])
   })
+
+  it('只读入口隐藏发起与重试，但保留查看和停止', async () => {
+    const wrapper = mount(SemanticRulesBatchPanel, {
+      props: {
+        loading: false,
+        batchJobs: [createJob('running', 'job-running'), createJob('completed', 'job-done')],
+        total: 2,
+        pagination: { current: 1, pageSize: 5, total: 2 },
+        query: { keyword: '', status: undefined, scope: 'final' },
+        statusOptions: [],
+        scopeOptions: [{ label: '终末病历', value: 'final' }],
+        cancellingBatchJobId: '',
+        retryingBatchJobId: '',
+        formatDateTime: (value?: string | Date | null) => String(value || '-'),
+        allowLaunch: false,
+        allowRetry: false,
+      },
+      global: {
+        stubs: {
+          ProStandardTable: ProStandardTableStub,
+          SearchOutlined: { template: '<span />' },
+          'a-button': { emits: ['click'], template: '<button @click="$emit(\'click\')"><slot /></button>' },
+          'a-input': { template: '<input />' },
+          'a-select': { template: '<select />' },
+          'a-tag': { template: '<span><slot /></span>' },
+        },
+      },
+    })
+
+    const buttons = wrapper.findAll('button')
+    expect(buttons.map((button) => button.text())).toEqual(['查看', '停止', '查看'])
+    await buttons[0]?.trigger('click')
+    await buttons[1]?.trigger('click')
+    expect(wrapper.emitted('openBatchJobDrawer')?.[0]?.[0]).toMatchObject({ id: 'job-running' })
+    expect(wrapper.emitted('cancelBatchJob')?.[0]).toEqual(['job-running'])
+    expect(wrapper.emitted('openBatchLaunch')).toBeUndefined()
+    expect(wrapper.emitted('retryBatchJob')).toBeUndefined()
+  })
 })

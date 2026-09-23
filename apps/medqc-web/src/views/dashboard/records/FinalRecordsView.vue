@@ -5,13 +5,13 @@
       <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <div class="text-[11px] font-semibold tracking-normal text-slate-500">
-            终末队列
+            已出院队列
           </div>
           <h1 class="mt-1 text-[28px] font-bold leading-8 tracking-normal text-slate-900">
-            终末病历质控
+            已出院病历（归档未核验）
           </h1>
           <p class="mt-1 text-sm font-medium text-slate-500">
-            聚合已出院病历、归档状态与终末质控任务，快速定位待处理记录。
+            当前列表仅按出院状态筛选；归档口径未确认，暂不发起终末批量质控。
           </p>
         </div>
         <div class="flex items-center gap-2">
@@ -25,6 +25,8 @@
           <a-button
             type="primary"
             class="apple-primary-button !h-9 !rounded-lg"
+            disabled
+            title="归档口径未确认，暂不可发起终末批量质控"
             @click="openBatchLaunchModal"
           >
             <FileSearchOutlined />
@@ -34,6 +36,9 @@
       </div>
 
       <div class="mt-5 grid grid-cols-1 gap-3 md:grid-cols-4">
+        <div class="col-span-full text-xs text-slate-500">
+          以下为全场景概览，不代表当前已出院列表。
+        </div>
         <div class="queue-kpi-card">
           <div class="queue-kpi-icon queue-kpi-icon-primary">
             <FileTextOutlined />
@@ -46,7 +51,7 @@
               {{ formatInteger(overviewStats.total_records) }}
             </div>
             <div class="queue-kpi-desc">
-              当前筛选范围
+              全场景筛选范围
             </div>
           </div>
         </div>
@@ -60,10 +65,10 @@
               已归档
             </div>
             <div class="queue-kpi-value">
-              {{ formatInteger(overviewStats.archived_count) }}
+              未核验
             </div>
             <div class="queue-kpi-desc">
-              已完成质控闭环
+              归档字段暂无权威口径
             </div>
           </div>
         </div>
@@ -77,10 +82,10 @@
               待处理
             </div>
             <div class="queue-kpi-value">
-              {{ formatInteger(overviewStats.pending_count) }}
+              暂无口径
             </div>
             <div class="queue-kpi-desc">
-              等待人工复核
+              待处理范围未定义
             </div>
           </div>
         </div>
@@ -97,7 +102,7 @@
               {{ formatRate(overviewStats.pass_rate) }}%
             </div>
             <div class="queue-kpi-desc">
-              终末质控结果
+              全场景质控结果
             </div>
           </div>
         </div>
@@ -178,6 +183,8 @@
           <ProTableToolbar>
             <a-button
               class="!h-9 !rounded-lg !border-slate-200 text-slate-600 hover:text-[#2b6cf6]"
+              disabled
+              title="归档口径未确认，暂不可按终末范围试跑自定义质控"
               @click="openCustomQCExperience()"
             >
               自定义质控点
@@ -186,6 +193,8 @@
             <a-button
               type="primary"
               class="apple-primary-button !flex !h-9 items-center gap-1 !rounded-lg"
+              disabled
+              title="归档口径未确认，暂不可发起终末批量质控"
               @click="openBatchLaunchModal"
             >
               <FileSearchOutlined /> 发起批量质控
@@ -203,6 +212,8 @@
 
             <a-button
               class="!flex !h-9 items-center gap-1 !rounded-lg !border-slate-200 text-slate-600 hover:text-[#2b6cf6]"
+              disabled
+              title="此导出为全场景缺陷数据，不能作为本列表导出"
               @click="handleExport"
             >
               <DownloadOutlined /> 导出
@@ -232,7 +243,7 @@
         <a-result
           v-if="recordListError"
           status="warning"
-          title="终末病历加载失败"
+          title="已出院病历加载失败"
           :sub-title="recordListError"
           class="mt-6"
         >
@@ -382,7 +393,8 @@
                 <a-button
                   size="small"
                   class="!h-7 !rounded-full !border-amber-200/90 !text-amber-700 !px-2.5 !text-xs"
-                  :disabled="!getRecordIdForJump(record)"
+                  disabled
+                  title="归档口径未确认，暂不可按终末范围试跑自定义质控"
                   @click="openCustomQCExperience(record)"
                 >
                   自定义质控
@@ -400,9 +412,10 @@
                     <EyeOutlined />
                   </button>
                 </a-tooltip>
-                <a-tooltip title="质控报告">
+                <a-tooltip title="当前无法按病例匹配报告，请在下方历史任务列表查看">
                   <button
-                    class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-[rgba(43,108,246,0.08)] hover:text-[#2b6cf6] transition-all"
+                    class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-300 cursor-not-allowed"
+                    disabled
                     @click="handleQCReport(record as AdminRecordItem)"
                   >
                     <FileSearchOutlined />
@@ -438,6 +451,8 @@
           <div class="flex items-center gap-2">
             <button
               class="apple-primary-action flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition-colors"
+              disabled
+              title="归档口径未确认，暂不可发起终末批量质控"
               @click="openBatchLaunchModal"
             >
               <FileSearchOutlined /> 发起批量质控
@@ -460,9 +475,17 @@
     >
       <a-collapse-panel
         key="final-batch-jobs"
-        header="终末病历批量任务"
+        header="历史终末批量任务（仅可查看或停止）"
       >
+        <a-alert
+          class="mb-3"
+          type="warning"
+          show-icon
+          message="归档口径未确认，已暂停从此页发起或重试终末批量任务"
+        />
         <SemanticRulesBatchPanel
+          :allow-launch="false"
+          :allow-retry="false"
           :loading="batchJobLoading"
           :batch-jobs="batchJobs"
           :total="batchJobPagination.total"
@@ -484,7 +507,7 @@
           @table-change="handleFinalBatchJobTableChange"
           @open-batch-job-drawer="openBatchJobDrawer"
           @cancel-batch-job="executeCancelBatchJob"
-          @retry-batch-job="executeRetryBatchJob"
+          @retry-batch-job="retryFinalBatchJob"
           @update-query="updateBatchJobQuery"
         />
       </a-collapse-panel>
@@ -672,7 +695,6 @@ import {
   getFinalRecordList,
   getAdminOverview,
   getDepartmentList,
-  exportDefects,
   type AdminRecordItem,
   type AdminOverviewStats,
 } from '@/api/qcAdmin'
@@ -691,7 +713,6 @@ import SemanticRulesBatchResultDrawer from '@/views/workstation-v4/semantic-rule
 import { useSichuanBatchJobs } from '@/views/workstation-v4/semantic-rules/composables/useSichuanBatchJobs'
 import type {
   SemanticRuleItem,
-  SichuanBatchJob,
   SichuanRuleSetOption,
 } from '@/views/workstation-v4/semantic-rules/types'
 import {
@@ -777,6 +798,8 @@ const drawerRecord = ref<AdminRecordItem | null>(null)
 const recordListError = ref('')
 
 const archiveFeatureEnabled = false
+const finalBatchLaunchEnabled = false
+const finalBatchBlockedReason = '归档口径未确认，当前仅支持查看或停止历史终末批量任务'
 
 const batchTaskPanelOpenKeys = ref<string[]>(['final-batch-jobs'])
 const batchResultDrawerOpen = ref(false)
@@ -811,7 +834,6 @@ const {
   fetchBatchJobDetail,
   fetchBatchJobDebugSnapshot,
   executeCancelBatchJob,
-  executeRetryBatchJob,
   exportBatchJobReport,
   prependBatchJob,
 } = useSichuanBatchJobs()
@@ -1320,6 +1342,10 @@ const closeBatchJobDrawer = () => {
   stopBatchJobPolling()
 }
 
+const retryFinalBatchJob = (_jobId: string) => {
+  message.warning(finalBatchBlockedReason)
+}
+
 const handleExportBatchReport = async (format: 'xlsx' | 'csv' = 'xlsx') => {
   await exportBatchJobReport(format)
 }
@@ -1392,6 +1418,10 @@ const syncRuleSelectionByMode = () => {
 }
 
 const openBatchLaunchModal = async () => {
+  if (!finalBatchLaunchEnabled) {
+    message.warning(finalBatchBlockedReason)
+    return
+  }
   launchModalOpen.value = true
   launchOnlySelectedRecords.value = selectedRecordIds.value.length > 0
   launchRuleMode.value = 'content_full_v1'
@@ -1400,6 +1430,10 @@ const openBatchLaunchModal = async () => {
 }
 
 const confirmBatchLaunch = async () => {
+  if (!finalBatchLaunchEnabled) {
+    message.warning(finalBatchBlockedReason)
+    return
+  }
   const preset = launchPresetOptionMap.value.get(launchRuleMode.value)
   const effectiveRuleIds = preset
     ? getRuleSetIdsByKey(preset.ruleSetKey)
@@ -1506,17 +1540,7 @@ const handleBatchArchive = () => {
 }
 
 const handleExport = async () => {
-  message.loading('正在导出...', 1)
-  const res = await exportDefects({
-    department: selectedDepartment.value,
-    start_date: dateRange.value?.[0]?.format?.('YYYY-MM-DD'),
-    end_date: dateRange.value?.[1]?.format?.('YYYY-MM-DD'),
-  })
-  if (res.success) {
-    message.success('导出成功')
-  } else {
-    message.error(res.message || '导出失败')
-  }
+  message.warning('当前仅有全场景缺陷导出接口，不能作为已出院病历导出')
 }
 
 const handleView = (record: AdminRecordItem) => {
@@ -1564,6 +1588,10 @@ const jumpToWorkstation = (record: any, action: WorkstationLaunchAction) => {
 }
 
 const openCustomQCExperience = (record?: any) => {
+  if (!finalBatchLaunchEnabled) {
+    message.warning('归档口径未确认，暂不可按终末范围试跑自定义质控')
+    return
+  }
   const selectedRecords = record
     ? [getRecordIdForJump(record)]
     : records.value
@@ -1583,23 +1611,8 @@ const openCustomQCExperience = (record?: any) => {
   router.push({ path: '/workstation-v5/custom-qc-experience', query })
 }
 
-const handleQCReport = (record: AdminRecordItem) => {
-  const matchedJob = batchJobs.value.find((job) => {
-    const issues =
-      job.items ||
-      job.rule_results?.flatMap((ruleResult) => ruleResult.items || []) ||
-      ([] as Array<{ record_id?: string }>)
-    return issues.some((item) => String(item.record_id || '').trim() === record.record_id)
-  })
-  if (matchedJob?.id) {
-    void openBatchJobDrawer(matchedJob)
-    return
-  }
-  if (batchJobs.value.length > 0) {
-    void openBatchJobDrawer(batchJobs.value[0] as SichuanBatchJob)
-    return
-  }
-  message.warning('暂无可查看的终末病历批量质控任务，请先发起批量质控')
+const handleQCReport = (_record: AdminRecordItem) => {
+  message.warning('当前无法按病例匹配报告，请在下方历史任务列表查看')
 }
 
 const handleArchive = (record: AdminRecordItem) => {

@@ -115,7 +115,7 @@
               <template #icon>
                 <CircleCheck class="sidebar-icon" />
               </template>
-              <span>终末病历质控</span>
+              <span>已出院病历质控</span>
             </a-menu-item>
             <a-menu-item v-if="isDemoFeedbackAccount" key="/workstation-v5/qc-feedback-demo">
               <template #icon>
@@ -486,7 +486,7 @@ const currentPageTitle = computed(() => {
     '/workstation-v5/rules/custom-workspace': '自定义质控点',
     '/workstation-v5/records/outpatient-emergency': '门急诊病历',
     '/workstation-v5/records/running': '运行病历',
-    '/workstation-v5/records/final': '终末病历质控',
+    '/workstation-v5/records/final': '已出院病历质控',
     '/workstation-v5/qc-feedback-demo': '质控反馈记录',
     '/workstation-v5/customer-sample-validation': '客户样本验证',
     '/workstation-v5/system-config': '系统配置',

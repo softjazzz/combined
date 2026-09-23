@@ -37,7 +37,22 @@ describe('QcRunSelectedControl', () => {
     expect(wrapper.text()).toContain('质控所选')
   })
 
-  it('只用勾选病历三坐标创建本地质控任务，不触发资料同步', async () => {
+  it('已出院列表即使有完整三坐标也不能创建未核验归档的终末任务', async () => {
+    const wrapper = mount(QcRunSelectedControl, {
+      props: { carePhase: 'discharged', recordRefs },
+    })
+
+    const trigger = wrapper.get('[data-testid="run-selected-qc-trigger"]')
+    expect(trigger.attributes('disabled')).toBe('')
+    expect(wrapper.text()).toContain('此列表未核验归档状态，暂不可发起终末质控')
+    await trigger.trigger('click')
+    await flushPromises()
+
+    expect(mocks.createJob).not.toHaveBeenCalled()
+    expect(mocks.getJob).not.toHaveBeenCalled()
+  })
+
+  it('只用在院勾选病历三坐标创建本地质控任务，不触发资料同步', async () => {
     mocks.createJob.mockResolvedValue({
       success: true,
       data: { id: 'job-1', status: 'queued' },
@@ -47,7 +62,7 @@ describe('QcRunSelectedControl', () => {
       data: { id: 'job-1', status: 'completed' },
     })
     const wrapper = mount(QcRunSelectedControl, {
-      props: { carePhase: 'discharged', recordRefs },
+      props: { carePhase: 'inpatient', recordRefs },
     })
 
     await wrapper.get('[data-testid="run-selected-qc-trigger"]').trigger('click')
@@ -56,8 +71,8 @@ describe('QcRunSelectedControl', () => {
 
     expect(mocks.createJob).toHaveBeenCalledWith({
       rule_set_key: 'luxian_0609_qc_v1',
-      scope: 'final',
-      date_field: 'discharge',
+      scope: 'running',
+      date_field: 'admission',
       record_refs: recordRefs,
     })
     expect(mocks.getJob).toHaveBeenCalledWith('job-1')

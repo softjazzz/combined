@@ -95,7 +95,7 @@
               <template #icon>
                 <CheckCircleOutlined />
               </template>
-              <span>终末病历</span>
+              <span>已出院病历</span>
             </a-menu-item>
           </a-sub-menu>
 
@@ -497,7 +497,7 @@ const breadcrumbItems = computed(() => {
         if (pathSegments[2] === 'running') {
           items.push({ title: '运行病历', path: null })
         } else if (pathSegments[2] === 'final') {
-          items.push({ title: '终末病历', path: null })
+          items.push({ title: '已出院病历', path: null })
         } else if (pathSegments.length > 2) {
           items.push({ title: '病案详情', path: null })
         }
