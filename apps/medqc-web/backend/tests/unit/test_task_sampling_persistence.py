@@ -364,9 +364,9 @@ def test_non_draft_status_is_rejected(database, status):
     assert task["status"] == status and saved == []
 
 
-def test_non_null_scene_is_rejected_before_writes(database):
+def test_unknown_scene_is_rejected_before_writes(database):
     engine, _factory, tasks, records = database
-    snapshot = task_snapshot(scene="running")
+    snapshot = task_snapshot(scene="unknown")
     insert_task(engine, tasks, snapshot)
 
     with pytest.raises(persistence.SamplingConflict, match="场景抽样暂不可用"):
@@ -376,9 +376,9 @@ def test_non_null_scene_is_rejected_before_writes(database):
     assert task["status"] == "draft" and saved == []
 
 
-def test_non_null_scene_is_also_rejected_for_sampling_replay(database):
+def test_unknown_scene_is_also_rejected_for_sampling_replay(database):
     engine, _factory, tasks, records = database
-    snapshot = task_snapshot(scene="running", status="sampling", total_records=0)
+    snapshot = task_snapshot(scene="unknown", status="sampling", total_records=0)
     insert_task(engine, tasks, snapshot)
 
     with pytest.raises(persistence.SamplingConflict, match="场景抽样暂不可用"):
@@ -486,3 +486,170 @@ def test_lock_statement_compiles_to_postgresql_for_update():
     assert "SELECT *" in sql
     assert "FROM qc_tasks" in sql
     assert "FOR UPDATE" in sql
+
+
+@pytest.fixture
+def modern_database(monkeypatch):
+    engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
+    metadata = MetaData()
+    tasks = Table(
+        "qc_tasks", metadata,
+        Column("id", String, primary_key=True),
+        Column("creator_id", String), Column("scene", String),
+        Column("status", String), Column("total_records", Integer),
+        Column("date_range", Text), Column("department_filter", Text),
+        Column("record_ids", Text), Column("record_refs", Text),
+        Column("sampling_method", String), Column("sampling_config", Text),
+        Column("updated_at", String),
+    )
+    records = Table(
+        "qc_task_records", metadata,
+        Column("id", String, primary_key=True), Column("task_id", String),
+        Column("record_id", String), Column("institute_id", String),
+        Column("patient_id", String), Column("visit_id", String),
+        Column("assignee_id", String), Column("assignee_name", String),
+        Column("status", String), Column("defect_count", Integer),
+        Column("created_at", String),
+    )
+    metadata.create_all(engine)
+    monkeypatch.setattr(persistence, "SessionLocal", sessionmaker(bind=engine, future=True))
+    yield engine, tasks, records
+    engine.dispose()
+
+
+def modern_snapshot(scene: str, **overrides):
+    value = task_snapshot(
+        scene=scene, date_range=None, department_filter=[], record_refs=[],
+    )
+    value.update(overrides)
+    return value
+
+
+def modern_case(institute="hospital-1", patient="patient-1", visit="visit-1"):
+    return {"institute_id": institute, "patient_id": patient, "visit_id": visit}
+
+
+def insert_modern_task(engine, tasks, snapshot):
+    stored = dict(snapshot)
+    for field in ("date_range", "department_filter", "record_ids", "record_refs", "sampling_config"):
+        stored[field] = json.dumps(stored[field], ensure_ascii=False)
+    with engine.begin() as connection:
+        connection.execute(tasks.insert().values(**stored))
+
+
+@pytest.mark.parametrize("scene", ["running", "final"])
+def test_clinical_scene_saves_coordinates_and_replays(modern_database, scene):
+    engine, tasks, records = modern_database
+    snapshot = modern_snapshot(scene)
+    insert_modern_task(engine, tasks, snapshot)
+    selected = [modern_case(), modern_case("hospital-2")]
+
+    first = save_sample(snapshot, selected)
+    replay = save_sample(snapshot, [modern_case("ignored")])
+
+    task, saved = read_state(engine, tasks, records)
+    assert first == replay
+    assert first["sampled_count"] == task["total_records"] == 2
+    assert first["record_id_semantics"] == "association_id_not_medical_record_id"
+    assert task["status"] == "sampling"
+    assert [(row["institute_id"], row["patient_id"], row["visit_id"]) for row in saved] == [
+        ("hospital-1", "patient-1", "visit-1"),
+        ("hospital-2", "patient-1", "visit-1"),
+    ]
+    assert all(row["id"] == row["record_id"] and row["status"] == "pending" for row in saved)
+
+
+@pytest.mark.parametrize("scene", ["running", "final"])
+@pytest.mark.parametrize(
+    "selected",
+    [[modern_case(), modern_case()], [modern_case(visit=" ")], [{"visit_id": "visit-1"}]],
+)
+def test_clinical_scene_rejects_duplicate_or_missing_coordinates(modern_database, scene, selected):
+    engine, tasks, records = modern_database
+    snapshot = modern_snapshot(scene)
+    insert_modern_task(engine, tasks, snapshot)
+
+    with pytest.raises(persistence.SamplingConflict, match="三坐标"):
+        save_sample(snapshot, selected)
+
+    task, saved = read_state(engine, tasks, records)
+    assert task["status"] == "draft" and saved == []
+
+
+@pytest.mark.parametrize("scene", ["running", "final"])
+def test_clinical_scene_rejects_out_of_scope_refs_and_snapshot_drift(modern_database, scene):
+    engine, tasks, records = modern_database
+    snapshot = modern_snapshot(scene, record_refs=[modern_case()])
+    insert_modern_task(engine, tasks, snapshot)
+
+    with pytest.raises(persistence.SamplingConflict, match="不属于"):
+        save_sample(snapshot, [modern_case("hospital-2")])
+    with pytest.raises(persistence.SamplingConflict, match="record_refs"):
+        save_sample(modern_snapshot(scene, record_refs=[modern_case("hospital-2")]), [modern_case()])
+
+    task, saved = read_state(engine, tasks, records)
+    assert task["status"] == "draft" and saved == []
+
+
+@pytest.mark.parametrize("scene", ["running", "final"])
+def test_clinical_scene_rejects_legacy_record_ids(modern_database, scene):
+    engine, tasks, records = modern_database
+    snapshot = modern_snapshot(scene, record_ids=["legacy-record"])
+    insert_modern_task(engine, tasks, snapshot)
+
+    with pytest.raises(persistence.SamplingConflict, match="record_ids"):
+        save_sample(snapshot, [modern_case()])
+
+    task, saved = read_state(engine, tasks, records)
+    assert task["status"] == "draft" and saved == []
+
+
+@pytest.mark.parametrize("scene", ["running", "final"])
+def test_clinical_scene_creator_and_replay_snapshot_contract(modern_database, scene):
+    engine, tasks, records = modern_database
+    snapshot = modern_snapshot(scene, record_refs=[modern_case()])
+    insert_modern_task(engine, tasks, snapshot)
+
+    with pytest.raises(persistence.SamplingForbidden, match="仅任务创建人"):
+        save_sample(snapshot, [modern_case()], actor_id="another-user")
+    task, saved = read_state(engine, tasks, records)
+    assert task["status"] == "draft" and saved == []
+
+    save_sample(snapshot, [modern_case()])
+    with pytest.raises(persistence.SamplingConflict, match="record_refs"):
+        save_sample(modern_snapshot(scene, record_refs=[modern_case("hospital-2")]), [])
+    with pytest.raises(persistence.SamplingForbidden, match="仅任务创建人"):
+        save_sample(snapshot, [], actor_id="another-user")
+    task, saved = read_state(engine, tasks, records)
+    assert task["status"] == "sampling" and len(saved) == 1
+
+
+@pytest.mark.parametrize("scene", ["running", "final"])
+def test_clinical_scene_missing_coordinate_columns_fail_before_write(monkeypatch, scene):
+    engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
+    metadata = MetaData()
+    tasks = Table(
+        "qc_tasks", metadata,
+        Column("id", String, primary_key=True), Column("creator_id", String),
+        Column("scene", String), Column("status", String), Column("total_records", Integer),
+        Column("date_range", Text), Column("department_filter", Text),
+        Column("record_ids", Text), Column("record_refs", Text),
+        Column("sampling_method", String), Column("sampling_config", Text),
+        Column("updated_at", String),
+    )
+    records = Table(
+        "qc_task_records", metadata,
+        Column("id", String, primary_key=True), Column("task_id", String),
+        Column("record_id", String), Column("created_at", String),
+    )
+    metadata.create_all(engine)
+    monkeypatch.setattr(persistence, "SessionLocal", sessionmaker(bind=engine, future=True))
+    snapshot = modern_snapshot(scene)
+    insert_modern_task(engine, tasks, snapshot)
+
+    with pytest.raises(Exception, match="no such column"):
+        save_sample(snapshot, [modern_case()])
+
+    task, saved = read_state(engine, tasks, records)
+    assert task["status"] == "draft" and saved == []
+    engine.dispose()

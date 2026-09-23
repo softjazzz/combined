@@ -63,6 +63,7 @@ _SNAPSHOT_FIELDS = (
 )
 _JSON_FIELDS = {"date_range", "department_filter", "record_ids", "record_refs", "sampling_config"}
 _CASE_COORDINATES = ("institute_id", "patient_id", "visit_id")
+_MODERN_SCENES = frozenset({"outpatient", "running", "final"})
 _MODERN_RESPONSE = {"record_id_semantics": "association_id_not_medical_record_id"}
 
 
@@ -267,9 +268,9 @@ def save_task_sample(
             if task_snapshot.get("creator_id") != locked_task["creator_id"]:
                 raise SamplingConflict("任务创建人已变化，请刷新后重试")
             scene = locked_task.get("scene")
-            if scene not in (None, "outpatient"):
+            if scene is not None and scene not in _MODERN_SCENES:
                 raise SamplingConflict("场景抽样暂不可用：尚未接通可验证的病历场景范围")
-            modern = scene == "outpatient"
+            modern = scene in _MODERN_SCENES
             if modern:
                 _ensure_snapshot_unchanged(task_snapshot, locked_task, modern=True)
                 if _normalize_snapshot_value("record_ids", locked_task.get("record_ids")):
