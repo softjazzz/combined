@@ -14,6 +14,11 @@ from app.services.luxian_0609.canonical_result_finalizer import (
     finalizer_owns_executor_customer_display_facts,
     finalizer_requires_public_fact_ref_evidence,
 )
+import app.services.luxian_0609.canonical_result_finalizer as finalizer_module
+from app.services.luxian_0609.decision_model import (
+    ApplicabilityState, EvidenceState, QcDirection, RuleDecision,
+)
+from app.services.luxian_0609.decision_reducer import reduce_luxian_0609_rule_decision
 from app.services.qc_workspace.canonical_result_store import (
     safe_customer_display_facts,
     validated_customer_explanation,
@@ -158,7 +163,7 @@ def test_rescue_missing_participant_title_survives_safe_fact_save_and_read():
 
     safe = safe_basic_timeliness_customer_display_facts(rule_id=rule_id, raw=raw)
     assert safe is not None
-    assert safe_basic_timeliness_customer_display_facts(rule_id=rule_id, raw=safe) == safe
+    assert safe_basic_timeliness_customer_display_facts(rule_id=rule_id, raw=safe) is None
     item = {"customer_display_facts": safe}
     assert safe_customer_display_facts(item, rule_id=rule_id) == safe
     assert validated_customer_explanation(
@@ -185,6 +190,57 @@ def test_rescue_missing_participant_title_survives_safe_fact_save_and_read():
     forged = deepcopy(safe)
     forged["rescue_content_events"][0]["field_facts"]["participant_titles"]["quote"] = "伪造原文"
     assert safe_basic_timeliness_customer_display_facts(rule_id=rule_id, raw=forged) is None
+
+
+def test_rescue_published_facts_reject_internal_shape_and_unknown_fields():
+    rule_id = "LX0609-09-01-02"
+    raw = deepcopy(_WITHIN_FACTS_BY_RULE[rule_id])
+    safe = safe_basic_timeliness_customer_display_facts(rule_id=rule_id, raw=raw)
+    assert safe is not None
+    assert safe_customer_display_facts({"customer_display_facts": safe}, rule_id=rule_id) == safe
+    missing_required = deepcopy(safe)
+    missing_required.pop("content_state")
+    for invalid in (raw, {**safe, "unexpected": "private"}, missing_required):
+        with pytest.raises(ValueError):
+            safe_customer_display_facts({"customer_display_facts": invalid}, rule_id=rule_id)
+        with pytest.raises(ValueError):
+            project_customer_safe_result_item(
+                {"rule_id": rule_id, "status": "compliant", "customer_display_facts": invalid},
+                hmac_key="unit-test-key",
+            )
+
+
+def test_rescue_reduced_publication_does_not_reproject_published_facts(monkeypatch):
+    raw = deepcopy(_WITHIN_FACTS_BY_RULE["LX0609-09-01-02"])
+    decision = reduce_luxian_0609_rule_decision(RuleDecision(
+        rule_id="LX0609-09-01-02", snapshot_hash="a" * 64,
+        applicability=ApplicabilityState.APPLICABLE,
+        evidence_state=EvidenceState.SUFFICIENT,
+        qc_direction=QcDirection.SATISFIED,
+        reason_code="requirement_satisfied", fact_refs=("b" * 64,),
+        evaluator_version="test-v1", confidence=1.0,
+    ))
+
+    original = finalizer_module.validate_luxian_0609_executor_customer_display_facts
+    calls = []
+    def tracked_internal_projection(**kwargs):
+        calls.append(kwargs["raw"])
+        return original(**kwargs)
+    monkeypatch.setattr(
+        finalizer_module, "validate_luxian_0609_executor_customer_display_facts",
+        tracked_internal_projection,
+    )
+    result = finalizer_module.finalize_luxian_0609_reduced_customer_result(
+        decision=decision, raw_customer_display_facts=raw,
+        evidence_snapshot=None, evidence_materials=None,
+    )
+    assert result["status"] == "compliant"
+    assert result["customer_display_facts"] == (
+        safe_basic_timeliness_customer_display_facts(
+            rule_id="LX0609-09-01-02", raw=raw,
+        )
+    )
+    assert calls == [raw]
 
 
 @pytest.mark.parametrize("rule_id", sorted(BASIC_TIMELINESS_CUSTOMER_RULE_IDS))

@@ -13,16 +13,16 @@
 | 项目 | 当前事实 |
 | --- | --- |
 | 滚动任务 | `MEDQC-022`，见 [PROJECT_ROLLING_TODO.md](PROJECT_ROLLING_TODO.md) |
-| 状态 | 待处理：主计划已形成，架构实施尚未开始 |
-| 当前阶段 | A：两条规则的发布与读取合同 |
-| 下一项动作 | A0：冻结保护集合、现有结果和各读取路径，补足固定事实/响应的回放基线 |
+| 状态 | 实施中：用户已授权阶段A；A1接口经主协调审核，A2/A3试点实现待最终验证 |
+| 当前阶段 | A：两条规则的发布与读取合同；A4独立复核尚未完成 |
+| 下一项动作 | 完成A2/A3聚焦验证与提交；补齐A0真实病例/保护台账后由主协调独立复核A4 |
 | 生产代码基线 | `7cbadaf39f2eca7a6bb56f8895eb30a54b699568` |
 | 基线分支 | `codex/lx0609-rule-id-integration`，GitHub `softjazzz/combined` |
-| 当前文档所在应用目录 | `C:/Users/Coldplay/.codex/worktrees/lx0609-rule-id-integration/LX888/apps/medqc-web` |
+| 当前实施应用目录 | `C:/Users/Coldplay/.codex/worktrees/lx0609-published-results/LX888/apps/medqc-web`，分支 `codex/lx0609-published-results`，起点 `a832ebdb2b5d4c4c74dccc060f9ab3b2a5970dde` |
 | 工作区注意 | `D:/LLM/LX888` 主工作区不是上述集成分支，且有其他任务改动；不得在未核对 HEAD 时直接按此计划改主工作区 |
 | 首批规则 | 抢救内容完整性 `LX0609-09-01-02`；病理报告完整性 `LX0609-06-02-01` |
-| 尚未完成 | A0–A4 全部；GPT PRO 对最新修复的独立复审；真实病例与固定响应基线；浏览器、反馈、导出完整验收 |
-| 本轮授权范围 | 整理主计划和滚动记录。本文不是“全部阶段已获准立即实施”的声明 |
+| 尚未完成 | A0真实病例/固定响应及全保护台账；A2/A3最终检查；A4独立复核；浏览器、真实PG/模型验收 |
+| 本轮授权范围 | 用户已授权实施阶段A两条试点，不自动开展B/C/D |
 
 路径以应用根目录为基准。换机器或 worktree 后先核对分支、SHA、未提交改动，再解析下文相对路径。实施应从上述基线或明确包含它的新基线建立隔离工作树；不得只按分支名字判断版本。
 
@@ -95,7 +95,7 @@
 
 ### A0：冻结可比较基线
 
-**状态：待处理。**
+**状态：进行中。** 当前worktree无`.codegraph/`，以`a832ebd`起步。已冻结两条规则的代码级固定事实测试、当前状态/原因/公开事实及SQLite读写入口；原始病例与固定模型响应未随worktree提供，完整79条已验收记录和台账确定性结论尚未逐条取得，不能声称零回退闭环。现有`docs/0602/泸县0609质控点-golden-cases.json`仍是空病例模板；`docs/acceptance/lx0609-golden/shadow45-review-v1.csv`与`review20-v1.csv`无已签收状态，不能误算作保护集合。可用保护集合暂为本计划六组入口的已提交固定事实/响应断言，基线`a832ebd`（2026-09-23 15:01+08:00），涵盖抢救、病理、Canonical、反馈和导出；医学零回退仍待真实材料补证。
 
 **读取范围：** 两条规则的执行器、事实投影、Finalizer、Canonical Store、任务投影、反馈和导出调用方。先定位再修改，CodeGraph存在时优先使用。
 
@@ -111,7 +111,7 @@
 
 ### A1：冻结发布合同与职责
 
-**状态：待处理，依赖A0。**
+**状态：接口已由主协调审核，试点执行中；A0真实材料缺口保留。**
 
 **主要文件：** `backend/app/services/luxian_0609/canonical_result_finalizer.py`、`backend/app/services/qc_workspace/canonical_result_store.py`；事实合同复用`basic_timeliness_customer_projection.py`、`tumor_pathology_result_mapping.py`。
 
@@ -125,7 +125,7 @@
 
 ### A2：迁移两条规则的一次发布
 
-**状态：待处理，依赖A1。**
+**状态：试点代码和失败优先测试已完成；聚焦验证通过，待提交与A4复核。**
 
 **候选修改文件：** 上述两条事实投影、Finalizer，以及经A1证实必须调整的装配调用方。医学判定实现只读；具体路径以A0核验为准。
 
@@ -142,7 +142,7 @@
 
 ### A3：保存、读取、反馈和导出一致
 
-**状态：待处理，依赖A2。**
+**状态：隔离SQLite保存/读取已验证；读取边界、反馈和导出聚焦测试通过，完整业务入口仍待A4复核。**
 
 **候选修改文件：** `backend/app/services/qc_workspace/canonical_result_store.py`、`backend/app/services/custom_qc_workspace_service.py`；反馈、导出和API文件由A0调用链列明，禁止预先批量修改前端。
 
@@ -214,5 +214,7 @@ python -m pytest -q --tb=short tests/unit/test_luxian_0609_basic_timeliness_cust
 | 2026-09-23 | 对照GPT PRO架构建议与`7cbadaf39`源码 | 确认发布阶段职责交叉、公共合同规则特例、prepare职责混合；共享事实并发风险保留待验证 |
 | 2026-09-23 | 抢救/病理双形态投影P1修复 | 已提交并推送`7cbadaf39`，属于前置故障修复；不算本计划阶段A完成 |
 | 2026-09-23 | 建立主计划与MEDQC-022 | 文档完成；架构实施未开始，下一项A0 |
+| 2026-09-23 | 用户授权阶段A并在`a832ebd`隔离worktree实施 | A1接口获主协调审核；两规则公开形态严格校验与一次发布改动已进入聚焦测试。真实病例原始响应、79条保护台账、真实PG/浏览器/模型仍未验证；A4不可标记完成。 |
+| 2026-09-23 | MEDQC-022 A2/A3聚焦验证 | 试点事实/Canonical SQLite/Store无规则号分支70项、Finalizer共享旧路径70项、抢救完整性/读取边界/反馈/导出97项通过；`ruff`与`git diff --check`通过。`npm run lint/type-check`因隔离worktree未安装`node_modules`无法执行；已有主工作区工具不能替代本树依赖。整份Canonical测试在伪PG DSN上有连接失败，未在原始`a832ebd`树复现，不能归为已证明的既有失败。真实PG、浏览器、真实模型和完整保护台账仍缺。 |
 
 后续每条进度必须记录：任务编号、变更SHA、验证命令与结果、真实输入覆盖、未验证事项、下一步。发现假设错误时追加更正，不删除原证据。

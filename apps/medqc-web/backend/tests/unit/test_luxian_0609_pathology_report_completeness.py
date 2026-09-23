@@ -10,6 +10,10 @@ import pytest
 from app.services.custom_qc_workspace_service import project_customer_safe_result_item
 from app.services.luxian_0609 import native_tumor_pathology_execution as tumor
 from app.services.luxian_0609.decision_reducer import reduce_luxian_0609_rule_decision
+from app.services.luxian_0609.decision_model import (
+    ApplicabilityState, EvidenceState, QcDirection, RuleDecision,
+)
+import app.services.luxian_0609.canonical_result_finalizer as finalizer_module
 from app.services.luxian_0609.evidence_snapshot_provider import (
     SnapshotSourceRows,
     build_luxian_0609_evidence_read_session,
@@ -210,7 +214,7 @@ def test_pathology_nonempty_events_survive_safe_fact_save_and_read(
         rule_id=RULE_ID, raw=outcome.display_facts
     )
     assert safe is not None and safe["events"]
-    assert safe_tumor_pathology_customer_display_facts(rule_id=RULE_ID, raw=safe) == safe
+    assert safe_tumor_pathology_customer_display_facts(rule_id=RULE_ID, raw=safe) is None
     item = {"customer_display_facts": safe}
     assert safe_customer_display_facts(item, rule_id=RULE_ID) == safe
     assert validated_customer_explanation(
@@ -232,6 +236,53 @@ def test_pathology_nonempty_events_survive_safe_fact_save_and_read(
         assert safe_tumor_pathology_customer_display_facts(
             rule_id=RULE_ID, raw=forged
         ) is None
+
+
+def test_pathology_published_facts_reject_internal_shape_and_unknown_fields():
+    raw = deepcopy(_evaluate([_master()], [_report()]).display_facts)
+    safe = safe_tumor_pathology_customer_display_facts(rule_id=RULE_ID, raw=raw)
+    assert safe is not None
+    missing_required = deepcopy(safe)
+    missing_required.pop("event_count")
+    for invalid in (raw, {**safe, "unexpected": "private"}, missing_required):
+        with pytest.raises(ValueError):
+            safe_customer_display_facts({"customer_display_facts": invalid}, rule_id=RULE_ID)
+        with pytest.raises(ValueError):
+            project_customer_safe_result_item(
+                {"rule_id": RULE_ID, "status": "compliant", "customer_display_facts": invalid},
+                hmac_key="unit-test-key",
+            )
+
+
+def test_pathology_reduced_publication_does_not_reproject_published_facts(monkeypatch):
+    outcome = _evaluate([_master()], [_report()])
+    decision = reduce_luxian_0609_rule_decision(RuleDecision(
+        rule_id=RULE_ID, snapshot_hash="a" * 64,
+        applicability=ApplicabilityState.APPLICABLE,
+        evidence_state=EvidenceState.SUFFICIENT,
+        qc_direction=QcDirection.SATISFIED,
+        reason_code="requirement_satisfied", fact_refs=outcome.fact_refs,
+        evaluator_version="test-v1", confidence=1.0,
+    ))
+
+    original = finalizer_module.validate_luxian_0609_executor_customer_display_facts
+    calls = []
+    def tracked_internal_projection(**kwargs):
+        calls.append(kwargs["raw"])
+        return original(**kwargs)
+    monkeypatch.setattr(
+        finalizer_module, "validate_luxian_0609_executor_customer_display_facts",
+        tracked_internal_projection,
+    )
+    result = finalizer_module.finalize_luxian_0609_reduced_customer_result(
+        decision=decision, raw_customer_display_facts=outcome.display_facts,
+        evidence_snapshot=None, evidence_materials=None,
+    )
+    assert result["status"] == "compliant"
+    assert result["customer_display_facts"] == safe_tumor_pathology_customer_display_facts(
+        rule_id=RULE_ID, raw=outcome.display_facts,
+    )
+    assert calls == [outcome.display_facts]
 
 
 def _session(master=(), report=(), *, truncated=None, failed=None, extra=None):

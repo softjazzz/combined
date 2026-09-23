@@ -434,6 +434,37 @@ def validate_luxian_0609_executor_customer_display_facts(
     )
 
 
+def validate_luxian_0609_published_customer_display_facts(
+    *, rule_id: str, raw: Any,
+) -> dict[str, Any] | None | NotImplementedType:
+    """校验已发布的公开事实；两条试点不再进入执行器内部事实投影。"""
+
+    normalized_rule_id = str(rule_id or "").strip().upper()
+    if normalized_rule_id == "LX0609-09-01-02":
+        from .basic_timeliness_customer_projection import (
+            validate_published_rescue_content_facts,
+        )
+
+        validated = validate_published_rescue_content_facts(raw)
+        if validated is None:
+            raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
+        return validated
+    if normalized_rule_id == "LX0609-06-02-01":
+        from .tumor_pathology_result_mapping import (
+            validate_published_pathology_report_completeness_facts,
+        )
+
+        validated = validate_published_pathology_report_completeness_facts(raw)
+        if validated is None:
+            raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
+        return validated
+    if raw is None or not isinstance(raw, dict):
+        return None
+    return validate_luxian_0609_executor_customer_display_facts(
+        rule_id=normalized_rule_id, raw=raw,
+    )
+
+
 def finalizer_owns_executor_customer_display_facts(rule_id: str) -> bool:
     """返回由 Finalizer 负责 fail-closed 收敛的执行器事实合同。
 
@@ -544,6 +575,7 @@ def finalize_luxian_0609_executor_customer_display_facts(
     raw_facts: Any,
     contract_failure: bool = False,
     preserve_legacy_exception: bool = False,
+    _validated_facts: dict[str, Any] | None | NotImplementedType = NotImplemented,
 ) -> tuple[dict[str, Any], bool]:
     """在单规则边界收敛执行器客户事实合同失败。
 
@@ -561,11 +593,10 @@ def finalize_luxian_0609_executor_customer_display_facts(
         finalized.get("rule_id") or finalized.get("rule_code") or ""
     ).strip().upper()
     safe_facts = (
-        None
-        if contract_failure
-        else validate_luxian_0609_executor_customer_display_facts(
-            rule_id=normalized_rule_id,
-            raw=raw_facts,
+        None if contract_failure else
+        _validated_facts if _validated_facts is not NotImplemented else
+        validate_luxian_0609_executor_customer_display_facts(
+            rule_id=normalized_rule_id, raw=raw_facts,
         )
     )
     if safe_facts is NotImplemented:
@@ -895,6 +926,12 @@ def finalize_luxian_0609_reduced_customer_result(
             result=result,
             raw_facts=raw_customer_display_facts,
             preserve_legacy_exception=True,
+            _validated_facts=(
+                safe_facts
+                if rule_id in {"LX0609-09-01-02", "LX0609-06-02-01"}
+                and raw_customer_display_facts is not None
+                else NotImplemented
+            ),
         )
         if handled and "customer_display_facts" not in result:
             return finalize_luxian_0609_canonical_result(result)

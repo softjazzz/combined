@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from ...core.settings import get_settings
 from ..case_identity import CaseRef
 from ..luxian_0609.canonical_result_finalizer import (
-    validate_luxian_0609_executor_customer_display_facts,
+    validate_luxian_0609_published_customer_display_facts,
 )
 from ..luxian_0609_result_schema import (
     CANONICAL_RESULT_DELIVERY_MODE,
@@ -273,9 +273,7 @@ def safe_customer_display_facts(
     """仅透传 Finalizer 已验证的客户展示事实。"""
 
     raw = item.get("customer_display_facts")
-    if not isinstance(raw, dict):
-        return {}
-    shared = validate_luxian_0609_executor_customer_display_facts(
+    shared = validate_luxian_0609_published_customer_display_facts(
         rule_id=rule_id,
         raw=raw,
     )
@@ -704,6 +702,11 @@ class CanonicalResultStore:
             or not isinstance(envelope.get("items"), list)
         ):
             return {}
+        for item in envelope["items"]:
+            if not isinstance(item, dict):
+                raise ValueError(LX0609_CUSTOMER_RESULT_CONTRACT_ERROR)
+            rule_id = _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
+            safe_customer_display_facts(item, rule_id=rule_id)
         return envelope
 
     def load_root_job_items(

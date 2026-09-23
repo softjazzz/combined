@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -1986,27 +1987,6 @@ def test_rescue_non_compliant_safe_facts_survive_canonical_write_and_task_projec
         "reason_code": "requirement_violated",
         "customer_display_facts": safe_facts,
     }
-    session = _WriteSession()
-    CustomQCWorkspaceService()._write_record_result_envelopes(
-        session,
-        job_row={
-            "id": "job-current",
-            "created_by": "reviewer-a",
-            "filters_json": json.dumps({
-                "rule_set_key": "luxian_0609_qc_v1",
-                "rule_set_version": "2026-06-09",
-            }),
-        },
-        items=[item],
-        now=datetime(2026, 9, 1, 10, 0, 0),
-    )
-    envelope = json.loads(session.statements[-1].compile().params["envelope_json"])
-    saved_item = envelope["items"][0]
-    assert saved_item["customer_display_facts"] == safe_facts
-    projected = project_customer_safe_result_item(saved_item, hmac_key="unit-test-key")
-    assert projected["customer_display_facts"] == safe_facts
-    assert projected["status"] == "non_compliant"
-
     # 用隔离的内存库执行真实 INSERT/SELECT，覆盖任务完成后的读回路径。
     table = workspace_module._record_result_envelopes_table().to_metadata(
         MetaData(), schema=None
@@ -2042,6 +2022,114 @@ def test_rescue_non_compliant_safe_facts_survive_canonical_write_and_task_projec
         )
     engine.dispose()
     assert loaded["items"][0]["customer_display_facts"] == safe_facts
+    projected = project_customer_safe_result_item(
+        loaded["items"][0], hmac_key="unit-test-key",
+    )
+    assert projected["customer_display_facts"] == safe_facts
+    assert projected["status"] == "non_compliant"
+    invalid_item = deepcopy(item)
+    invalid_item["customer_display_facts"]["rescue_content_events"][0]["field_facts"][
+        "participant_titles"
+    ]["quote"] = "内部引文"
+    rejected_session = _WriteSession()
+    with pytest.raises(ValueError):
+        store.replace_for_job(
+            rejected_session,
+            job_row={
+                "id": "job-invalid", "created_by": "reviewer-a",
+                "filters_json": json.dumps({
+                    "rule_set_key": "luxian_0609_qc_v1",
+                    "rule_set_version": "2026-06-09",
+                }),
+            },
+            items=[invalid_item], now=datetime(2026, 9, 1, 10, 0, 0),
+            projector=lambda raw: envelope_item_from_rule_result(raw, hmac_key="unit-test-key"),
+            projection_key="unit-test-key",
+        )
+    assert rejected_session.statements == []
+
+
+@pytest.mark.parametrize(
+    ("status", "event_reason", "report_count", "missing_count", "reason_code"),
+    [
+        ("compliant", "pathology_report_present", 1, 0, "pathology_reports_complete"),
+        ("data_gap", "target_report_missing", 0, 1, "target_report_missing"),
+    ],
+)
+def test_pathology_published_facts_commit_and_read_without_reprojection(
+    status, event_reason, report_count, missing_count, reason_code,
+):
+    facts = {
+        "verification_kind": "pathology_report_completeness",
+        "decision_status": status,
+        "event_count": 1,
+        "report_count": report_count,
+        "missing_report_count": missing_count,
+        "unresolved_event_count": int(status == "data_gap"),
+        "excluded_event_count": 0,
+        "checked_sources": [
+            {"source": source, "state": "present", "completeness": "complete"}
+            for source in ("pathology_exam_master", "pathology_exam_report")
+        ],
+        "events": [{
+            "event_index": 1, "status": status, "reason_code": event_reason,
+            "execution_confirmed": True, "report_count": report_count,
+        }],
+    }
+    item = {
+        "record_id": "visit-1", "visit_id": "visit-1",
+        "institute_id": "inst-1", "patient_id": "patient-1",
+        "schema_version": "lx0609-customer-result-v2",
+        "rule_id": "LX0609-06-02-01", "status": status,
+        "result_status": status, "display_status": status,
+        "is_compliant": True if status == "compliant" else None,
+        "reason_code": reason_code, "customer_display_facts": facts,
+        "conclusion": "已发布结论",
+    }
+    table = workspace_module._record_result_envelopes_table().to_metadata(
+        MetaData(), schema=None,
+    )
+    engine = create_engine("sqlite://")
+    table.metadata.create_all(engine)
+    store = CanonicalResultStore(table)
+    with Session(engine) as db_session:
+        store.replace_for_job(
+            db_session,
+            job_row={
+                "id": "job-pathology", "created_by": "reviewer-a",
+                "filters_json": json.dumps({
+                    "rule_set_key": "luxian_0609_qc_v1",
+                    "rule_set_version": "2026-06-09",
+                }),
+            },
+            items=[item], now=datetime(2026, 9, 1, 10, 0, 0),
+            projector=lambda raw: envelope_item_from_rule_result(raw, hmac_key="unit-test-key"),
+            projection_key="unit-test-key",
+        )
+        db_session.commit()
+        loaded = store.load_selected(
+            db_session, root_job_id="job-pathology",
+            institute_id="inst-1", patient_id="patient-1", visit_id="visit-1",
+            rule_set_key="luxian_0609_qc_v1", rule_set_version="2026-06-09",
+        )
+    engine.dispose()
+    saved = loaded["items"][0]
+    assert saved["customer_display_facts"] == facts
+    assert saved["status"] == status
+    assert saved["reason_code"] == reason_code
+    assert saved["conclusion"] == "已发布结论"
+    projected = project_customer_safe_result_item(saved, hmac_key="unit-test-key")
+    assert projected["customer_display_facts"] == facts
+    assert projected["conclusion"] == "已发布结论"
+    corrupted = deepcopy(loaded)
+    corrupted["items"][0]["customer_display_facts"]["events"][0]["fact_refs"] = ["a" * 64]
+    with pytest.raises(ValueError):
+        store.load_selected(
+            _ReadSession([[{"envelope_json": json.dumps(corrupted)}]]),
+            root_job_id="job-pathology", institute_id="inst-1",
+            patient_id="patient-1", visit_id="visit-1",
+            rule_set_key="luxian_0609_qc_v1", rule_set_version="2026-06-09",
+        )
 
 
 def test_writer_marks_envelope_as_canonical_straight_through():

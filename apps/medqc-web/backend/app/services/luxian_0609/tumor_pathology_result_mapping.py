@@ -60,7 +60,9 @@ def _safe_checked_sources(
     return result
 
 
-def _safe_report_completeness(raw: Mapping[str, Any]) -> dict[str, Any] | None:
+def _safe_report_completeness(
+    raw: Mapping[str, Any], *, published: bool = False,
+) -> dict[str, Any] | None:
     """只校验执行器的逐事件合同，不重读报告或按数量决定合规。"""
 
     counters = (
@@ -92,7 +94,6 @@ def _safe_report_completeness(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         "event_index", "status", "reason_code", "execution_confirmed",
         "report_count",
     }
-    event_shape: str | None = None
     for index, item in enumerate(events, start=1):
         if not isinstance(item, Mapping):
             return None
@@ -100,9 +101,8 @@ def _safe_report_completeness(raw: Mapping[str, Any]) -> dict[str, Any] | None:
             "safe" if set(item) == safe_event_keys else
             "raw" if "fact_refs" in item else None
         )
-        if current_shape is None or (event_shape is not None and current_shape != event_shape):
+        if current_shape != ("safe" if published else "raw"):
             return None
-        event_shape = current_shape
         if (
             type(item.get("event_index")) is not int or item["event_index"] != index
             or item.get("status") not in _COMPLETENESS_STATUSES
@@ -143,6 +143,17 @@ def _safe_report_completeness(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         "checked_sources": safe_sources,
         "events": safe_events,
     }
+
+
+def validate_published_pathology_report_completeness_facts(
+    raw: Any,
+) -> dict[str, Any] | None:
+    """公开结果只能包含报告完整性的受控字段。"""
+
+    if not isinstance(raw, Mapping):
+        return None
+    validated = _safe_report_completeness(raw, published=True)
+    return validated if validated is not None and dict(raw) == validated else None
 
 
 def _safe_013(raw: Mapping[str, Any]) -> dict[str, Any] | None:

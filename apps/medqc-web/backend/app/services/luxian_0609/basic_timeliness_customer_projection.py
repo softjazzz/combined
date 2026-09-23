@@ -126,8 +126,10 @@ def _controlled_rescue_events(value: Any) -> list[dict[str, Any]] | None:
     return safe_events
 
 
-def _controlled_rescue_content_facts(raw: Mapping[str, Any]) -> dict[str, Any] | None:
-    """验证并剥离抢救内容原子事实中的文书标识、引文和字符坐标。"""
+def _controlled_rescue_content_facts(
+    raw: Mapping[str, Any], *, published: bool = False,
+) -> dict[str, Any] | None:
+    """发布前剥离内部坐标；公开入口只接受已经发布的精确结构。"""
 
     expected_keys = {
         "target_document",
@@ -195,7 +197,6 @@ def _controlled_rescue_content_facts(raw: Mapping[str, Any]) -> dict[str, Any] |
         "body_scope", "field_facts", "missing_fields", "unknown_fields",
     }
     safe_event_keys = raw_event_keys - {"document_ref", "source_document_id"}
-    event_shape: str | None = None
     for expected_index, event in enumerate(events, start=1):
         if not isinstance(event, Mapping):
             return None
@@ -203,10 +204,13 @@ def _controlled_rescue_content_facts(raw: Mapping[str, Any]) -> dict[str, Any] |
             "raw" if set(event) == raw_event_keys else
             "safe" if set(event) == safe_event_keys else None
         )
-        if current_shape is None or (event_shape is not None and current_shape != event_shape):
+        if current_shape != ("safe" if published else "raw"):
             return None
-        event_shape = current_shape
-        if event.get("event_index") != expected_index or event.get("body_scope") not in allowed_scopes:
+        if (
+            type(event.get("event_index")) is not int
+            or event["event_index"] != expected_index
+            or event.get("body_scope") not in allowed_scopes
+        ):
             return None
         record_time = event.get("record_time")
         if not isinstance(record_time, str) or len(record_time) > 40 or "\n" in record_time or "\r" in record_time:
@@ -263,6 +267,15 @@ def _controlled_rescue_content_facts(raw: Mapping[str, Any]) -> dict[str, Any] |
         "rescue_content_events": safe_events,
         "failure_kind": failure_kind,
     }
+
+
+def validate_published_rescue_content_facts(raw: Any) -> dict[str, Any] | None:
+    """只校验已发布事实，不接受文书引用、引文或未知字段。"""
+
+    if not isinstance(raw, Mapping):
+        return None
+    validated = _controlled_rescue_content_facts(raw, published=True)
+    return validated if validated is not None and dict(raw) == validated else None
 
 
 def safe_basic_timeliness_customer_display_facts(
