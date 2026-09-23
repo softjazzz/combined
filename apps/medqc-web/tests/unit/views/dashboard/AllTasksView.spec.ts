@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   getTaskStats: vi.fn(),
   deleteTask: vi.fn(),
   cancelTask: vi.fn(),
+  assignTask: vi.fn(),
+  getTaskAssigneeOptions: vi.fn(),
   message: {
     error: vi.fn(),
     info: vi.fn(),
@@ -14,12 +16,17 @@ const mocks = vi.hoisted(() => ({
     warning: vi.fn(),
   },
 }))
+const authState = vi.hoisted(() => ({ user: { id: 'creator' } as { id: string } | null }))
+
+vi.mock('@/stores/auth', () => ({ useAuthStore: () => authState }))
 
 vi.mock('@/api/tasks', () => ({
   getTaskList: mocks.getTaskList,
   getTaskStats: mocks.getTaskStats,
   deleteTask: mocks.deleteTask,
   cancelTask: mocks.cancelTask,
+  assignTask: mocks.assignTask,
+  getTaskAssigneeOptions: mocks.getTaskAssigneeOptions,
 }))
 vi.mock('ant-design-vue', () => ({ message: mocks.message }))
 vi.mock('@ant-design/icons-vue', () => {
@@ -66,12 +73,46 @@ const TaskDetailDrawerStub = defineComponent({
   template: '<div data-testid="task-detail-drawer-stub" />',
 })
 
+const ATableStub = defineComponent({
+  name: 'ATable',
+  props: { dataSource: { type: Array, default: () => [] }, columns: { type: Array, default: () => [] } },
+  setup(props, { slots }) {
+    return () => h('div', props.dataSource.map((record) => h('div', { 'data-testid': 'task-row' },
+      slots.bodyCell?.({ column: { key: 'action' }, record }))))
+  },
+})
+
+const AModalStub = defineComponent({
+  name: 'AModal',
+  props: { open: Boolean, okButtonProps: Object },
+  emits: ['ok', 'cancel'],
+  setup(props, { slots, emit }) {
+    return () => props.open ? h('div', { 'data-testid': 'assign-dialog' }, [
+      slots.default?.(),
+      h('button', { 'data-testid': 'assign-confirm', disabled: (props.okButtonProps as { disabled?: boolean })?.disabled, onClick: () => emit('ok') }, '确认分配'),
+      h('button', { 'data-testid': 'assign-cancel', onClick: () => emit('cancel') }, '取消'),
+    ]) : null
+  },
+})
+
+const ASelectStub = defineComponent({
+  name: 'ASelect',
+  props: { mode: String, options: { type: Array, default: () => [] } },
+  emits: ['update:value'],
+  setup(props, { emit }) {
+    return () => props.mode === 'multiple' ? h('button', {
+      'data-testid': 'select-first-assignee',
+      onClick: () => emit('update:value', [(props.options[0] as { value: string }).value]),
+    }, '选择质控员') : null
+  },
+})
+
 const listResponse = {
   success: true,
   data: { items: [], total: 0, page: 1, page_size: 10, total_pages: 0 },
 }
 
-function listWith(taskName: string, scene: 'running' | 'final' | null = null) {
+function listWith(taskName: string, scene: 'running' | 'final' | null = null, status = 'draft') {
   return {
     success: true,
     data: {
@@ -81,12 +122,13 @@ function listWith(taskName: string, scene: 'running' | 'final' | null = null) {
           task_number: taskName,
           task_name: taskName,
           task_type: 'one_time',
-          status: 'draft',
+          status,
           progress: 0,
           total_records: 0,
           completed_records: 0,
           creator_id: 'creator',
           creator_name: '创建人',
+          assign_method: 'by_ratio',
           scene,
           created_at: '2026-09-22T00:00:00Z',
           updated_at: '2026-09-22T00:00:00Z',
@@ -129,10 +171,11 @@ async function mountView() {
         'a-avatar': true,
         'a-button': AButtonStub,
         'a-input': true,
+        'a-modal': AModalStub,
         'a-progress': true,
         'a-range-picker': true,
-        'a-select': true,
-        'a-table': true,
+        'a-select': ASelectStub,
+        'a-table': ATableStub,
         'a-tag': true,
         CreateTaskDrawer: true,
         TaskDetailDrawer: TaskDetailDrawerStub,
@@ -148,6 +191,9 @@ describe('AllTasksView 场景口径', () => {
     vi.clearAllMocks()
     mocks.getTaskList.mockResolvedValue(listResponse)
     mocks.getTaskStats.mockResolvedValue(statsResponse())
+    mocks.getTaskAssigneeOptions.mockResolvedValue({ success: true, data: [] })
+    mocks.assignTask.mockResolvedValue({ success: true, data: { total_assigned: 1 } })
+    authState.user = { id: 'creator' }
   })
 
   it('默认列表与统计覆盖全部场景，切换后使用同一场景范围', async () => {
@@ -252,5 +298,149 @@ describe('AllTasksView 场景口径', () => {
       taskId: 'task/with long id',
       tab: 'all',
     })
+  })
+
+  it('单条抽样中任务从表格打开分配；空目录禁用确认，失败可重试', async () => {
+    mocks.getTaskList.mockResolvedValueOnce(listWith('抽样任务', 'running', 'sampling'))
+    mocks.getTaskAssigneeOptions.mockResolvedValueOnce({ success: false, message: '目录故障' })
+      .mockResolvedValueOnce({ success: true, data: [] })
+    const wrapper = await mountView()
+    await wrapper.get('[data-testid="task-row"] button:nth-child(2)').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="assign-error"]').text()).toContain('目录故障')
+    await wrapper.get('[data-testid="assign-error"] button').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="assign-empty"]').text()).toContain('暂无可分配的质控员')
+    expect(wrapper.get('[data-testid="assign-confirm"]').attributes('disabled')).toBeDefined()
+    expect(mocks.assignTask).not.toHaveBeenCalled()
+  })
+
+  it('仅创建人、比例分配、抽样中且身份已就绪时显示入口', async () => {
+    mocks.getTaskList.mockResolvedValueOnce(listWith('抽样任务', 'running', 'sampling'))
+    authState.user = null
+    let wrapper = await mountView()
+    expect(wrapper.get('[data-testid="task-row"]').text()).not.toContain('分配')
+    wrapper.unmount()
+
+    authState.user = { id: 'other' }
+    mocks.getTaskList.mockResolvedValueOnce(listWith('抽样任务', 'running', 'sampling'))
+    wrapper = await mountView()
+    expect(wrapper.get('[data-testid="task-row"]').text()).not.toContain('分配')
+    wrapper.unmount()
+
+    authState.user = { id: 'creator' }
+    const wrongMethod = listWith('抽样任务', 'running', 'sampling')
+    wrongMethod.data.items[0].assign_method = 'keep'
+    mocks.getTaskList.mockResolvedValueOnce(wrongMethod)
+    wrapper = await mountView()
+    expect(wrapper.get('[data-testid="task-row"]').text()).not.toContain('分配')
+    wrapper.unmount()
+  })
+
+  it('切换/关闭弹窗时忽略旧目录响应', async () => {
+    mocks.getTaskList.mockResolvedValueOnce(listWith('抽样任务', 'running', 'sampling'))
+    const old = deferred<{ success: boolean; data: Array<{ user_id: string; user_name: string }> }>()
+    mocks.getTaskAssigneeOptions.mockReturnValueOnce(old.promise)
+      .mockResolvedValueOnce({ success: true, data: [] })
+    const wrapper = await mountView()
+    await wrapper.get('[data-testid="task-row"] button:nth-child(2)').trigger('click')
+    await wrapper.get('[data-testid="assign-cancel"]').trigger('click')
+    await wrapper.get('[data-testid="task-row"] button:nth-child(2)').trigger('click')
+    await flushPromises()
+    old.resolve({ success: true, data: [{ user_id: 'stale', user_name: '旧人员' }] })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="assign-empty"]').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('旧人员')
+  })
+
+  it('确认只发送真实候选；双击不重复写，成功后重读列表统计和已开详情', async () => {
+    mocks.getTaskList.mockResolvedValueOnce(listWith('抽样任务', 'running', 'sampling'))
+    mocks.getTaskAssigneeOptions.mockResolvedValueOnce({ success: true, data: [{ user_id: 'qc-1', user_name: '质控员甲', department: '质控科' }] })
+    const pending = deferred<{ success: boolean; data: { total_assigned: number } }>()
+    mocks.assignTask.mockReturnValueOnce(pending.promise)
+    const wrapper = await mountView()
+    await wrapper.get('[data-testid="task-row"] button:nth-child(2)').trigger('click')
+    await flushPromises()
+    const vm = wrapper.vm as unknown as { handleViewDetail: (record: { id: string }) => void }
+    await wrapper.get('[data-testid="assign-candidates"]').trigger('click')
+    vm.handleViewDetail({ id: '抽样任务' })
+    await nextTick()
+    const initialDrawer = wrapper.getComponent(TaskDetailDrawerStub).element
+    await wrapper.get('[data-testid="assign-confirm"]').trigger('click')
+    await wrapper.get('[data-testid="assign-confirm"]').trigger('click')
+    expect(mocks.assignTask).toHaveBeenCalledTimes(1)
+    expect(mocks.assignTask).toHaveBeenCalledWith('抽样任务', {
+      method: 'by_ratio', assignees: [{ user_id: 'qc-1', user_name: '质控员甲', department: '质控科' }],
+    })
+    pending.resolve({ success: true, data: { total_assigned: 1 } })
+    await flushPromises()
+    expect(mocks.getTaskList).toHaveBeenCalledTimes(2)
+    expect(mocks.getTaskStats).toHaveBeenCalledTimes(2)
+    expect(wrapper.find('[data-testid="assign-dialog"]').exists()).toBe(false)
+    expect(wrapper.getComponent(TaskDetailDrawerStub).element).not.toBe(initialDrawer)
+  })
+
+  it('409/503 和未知结果均不乐观关闭，也不自动重试写入', async () => {
+    mocks.getTaskList.mockResolvedValue(listWith('抽样任务', 'running', 'sampling'))
+    mocks.getTaskAssigneeOptions.mockResolvedValue({ success: true, data: [{ user_id: 'qc-1', user_name: '质控员甲' }] })
+    mocks.assignTask.mockResolvedValueOnce({ success: false, message: '任务已变化（409）' })
+      .mockResolvedValueOnce({ success: false, message: '服务不可用（503）' })
+      .mockRejectedValueOnce(new Error('timeout'))
+    const wrapper = await mountView()
+    await wrapper.get('[data-testid="task-row"] button:nth-child(2)').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="assign-candidates"]').trigger('click')
+    await nextTick()
+    await wrapper.get('[data-testid="assign-confirm"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="assign-submit-error"]').text()).toContain('409')
+    expect(wrapper.get('[data-testid="assign-confirm"]').attributes('disabled')).toBeDefined()
+    await wrapper.get('[data-testid="assign-confirm"]').trigger('click')
+    expect(mocks.assignTask).toHaveBeenCalledTimes(1)
+    expect(mocks.getTaskList).toHaveBeenCalledTimes(1)
+    expect(mocks.getTaskStats).toHaveBeenCalledTimes(1)
+    await wrapper.get('[data-testid="assign-cancel"]').trigger('click')
+    await flushPromises()
+    expect(mocks.getTaskList).toHaveBeenCalledTimes(2)
+    expect(mocks.getTaskStats).toHaveBeenCalledTimes(2)
+
+    await wrapper.get('[data-testid="task-row"] button:nth-child(2)').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="assign-candidates"]').trigger('click')
+    await wrapper.get('[data-testid="assign-confirm"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="assign-submit-error"]').text()).toContain('503')
+    await wrapper.get('[data-testid="assign-cancel"]').trigger('click')
+    await flushPromises()
+
+    await wrapper.get('[data-testid="task-row"] button:nth-child(2)').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="assign-candidates"]').trigger('click')
+    await wrapper.get('[data-testid="assign-confirm"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="assign-submit-error"]').text()).toContain('结果未知')
+    expect(wrapper.get('[data-testid="assign-confirm"]').attributes('disabled')).toBeDefined()
+    expect(mocks.assignTask).toHaveBeenCalledTimes(3)
+  })
+
+  it('失败后关闭需等列表刷新成功才允许重新打开', async () => {
+    mocks.getTaskList.mockResolvedValueOnce(listWith('抽样任务', 'running', 'sampling'))
+    mocks.getTaskAssigneeOptions.mockResolvedValue({ success: true, data: [{ user_id: 'qc-1', user_name: '质控员甲' }] })
+    mocks.assignTask.mockResolvedValueOnce({ success: false, message: '任务已变化' })
+    const wrapper = await mountView()
+    await wrapper.get('[data-testid="task-row"] button:nth-child(2)').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="assign-candidates"]').trigger('click')
+    await wrapper.get('[data-testid="assign-confirm"]').trigger('click')
+    await flushPromises()
+    const pending = deferred<ReturnType<typeof listWith>>()
+    mocks.getTaskList.mockReturnValueOnce(pending.promise)
+    await wrapper.get('[data-testid="assign-cancel"]').trigger('click')
+    await nextTick()
+    expect(wrapper.find('[data-testid="task-row"]').exists()).toBe(false)
+    expect(mocks.getTaskAssigneeOptions).toHaveBeenCalledTimes(1)
+    pending.resolve(listWith('抽样任务', 'running', 'sampling'))
+    await flushPromises()
+    expect(wrapper.get('[data-testid="task-row"]').text()).toContain('分配')
   })
 })

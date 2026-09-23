@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AxiosHeaders, type AxiosResponse } from 'axios'
 import { ApiService } from '@/services/apiService'
-import { createTaskQcRun, getTaskDetail, getTaskList, getTaskQcRuns, getTaskRuleSets, getTaskStats, getTaskTodoStats } from '@/api/tasks'
+import { assignTask, createTaskQcRun, getTaskAssigneeOptions, getTaskDetail, getTaskList, getTaskQcRuns, getTaskRuleSets, getTaskStats, getTaskTodoStats } from '@/api/tasks'
 
 vi.mock('@/services/apiService', () => ({ ApiService: { requestRaw: vi.fn() } }))
 
@@ -108,6 +108,21 @@ describe('任务统计 API', () => {
     expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
       method: 'GET',
       url: '/api/v1/tasks/todo-stats?scene=outpatient',
+    })
+  })
+
+  it('从真实目录读取候选并以编码任务路径提交比例分配', async () => {
+    const options = [{ user_id: 'qc-1', user_name: '质控员甲', department: '质控科' }]
+    vi.mocked(ApiService.requestRaw).mockResolvedValueOnce(response(options))
+    await expect(getTaskAssigneeOptions()).resolves.toMatchObject({ success: true, data: options })
+    expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
+      method: 'GET', url: '/api/v1/tasks/assignee-options',
+    })
+
+    await assignTask('task/1', { method: 'by_ratio', assignees: options })
+    expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
+      method: 'POST', url: '/api/v1/tasks/task%2F1/assign',
+      data: { method: 'by_ratio', assignees: options },
     })
   })
 

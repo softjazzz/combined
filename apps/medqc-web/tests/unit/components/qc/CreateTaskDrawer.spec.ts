@@ -42,6 +42,7 @@ type DrawerVm = {
     task_name: string
     scene: TaskScene | null
     rule_set_key?: string
+    assign_method: 'keep' | 'by_department' | 'by_ratio'
     deadline: ReturnType<typeof dayjs> | null
     description: string
     date_range: { start?: string; end?: string } | null
@@ -76,7 +77,7 @@ function mountDrawer() {
         'a-form-item': { template: '<div><slot /></div>' },
         'a-input': true,
         'a-input-number': true,
-        'a-radio': true,
+        'a-radio': { template: '<label><slot /></label>' },
         'a-radio-button': true,
         'a-radio-group': { template: '<div><slot /></div>' },
         'a-range-picker': true,
@@ -136,10 +137,46 @@ describe('CreateTaskDrawer 创建草稿边界', () => {
     await vm.handleSubmit()
 
     expect(mocks.createTask).toHaveBeenCalledWith(
-      expect.objectContaining({ task_name: '场景任务', scene, rule_set_key: `${scene}-rules` }),
+      expect.objectContaining({ task_name: '场景任务', scene, rule_set_key: `${scene}-rules`, assign_method: 'by_ratio' }),
     )
     expect(mocks.createTask.mock.calls[0][0]).not.toHaveProperty('description')
+    expect(mocks.createTask.mock.calls[0][0]).not.toHaveProperty('assignee_config')
     expect(wrapper.emitted('created')).toHaveLength(1)
+  })
+
+  it('创建时只选择分配策略，不展示或提交虚构质控员', async () => {
+    mocks.createTask.mockResolvedValue({ success: false, message: '测试停止' })
+    const wrapper = mountDrawer()
+    const vm = vmOf(wrapper)
+    vm.formData.task_name = '分配策略任务'
+    await chooseRuleSet(vm, 'running')
+    vm.currentStep = 3
+    await nextTick()
+
+    expect(vm.formData.assign_method).toBe('by_ratio')
+    expect(vm.canProceed).toBe(true)
+    expect(wrapper.text()).toContain('抽样后分配质控员')
+    expect(wrapper.text()).toContain('按科室分配（暂不可用）')
+    expect(wrapper.text()).not.toContain('王质控')
+
+    await vm.handleSubmit()
+    expect(mocks.createTask).toHaveBeenCalledWith(expect.objectContaining({ assign_method: 'by_ratio' }))
+    expect(mocks.createTask.mock.calls[0][0]).not.toHaveProperty('assignee_config')
+  })
+
+  it.each(['keep', 'by_department'] as const)('旧分配策略 %s 即使被强制设置也不可创建', async (method) => {
+    const wrapper = mountDrawer()
+    const vm = vmOf(wrapper)
+    vm.formData.task_name = '无效分配任务'
+    await chooseRuleSet(vm, 'running')
+    vm.currentStep = 3
+    vm.formData.assign_method = method
+    await nextTick()
+
+    expect(vm.canProceed).toBe(false)
+    await vm.handleSubmit()
+    expect(mocks.createTask).not.toHaveBeenCalled()
+    expect(mocks.message.warning).toHaveBeenCalledWith('当前仅支持按比例均分，抽样后再选择质控员')
   })
 
   it('未人工选择规则集不可继续，切换场景清除原选择', async () => {

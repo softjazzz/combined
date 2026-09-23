@@ -6,10 +6,75 @@
       @created="onTaskCreated"
     />
     <TaskDetailDrawer
+      :key="detailRefreshKey"
       v-model:open="detailDrawerVisible"
       :task-id="detailTaskId"
       tab="all"
     />
+    <a-modal
+      :open="assignDialogVisible"
+      title="分配质控任务"
+      :confirm-loading="assignSubmitting"
+      :ok-button-props="{ disabled: assignLoading || !!assignError || assignRecoveryRequired || !selectedAssigneeIds.length || !assigneeCandidates.length }"
+      :cancel-button-props="{ disabled: assignSubmitting }"
+      :mask-closable="!assignSubmitting"
+      :closable="!assignSubmitting"
+      ok-text="确认分配"
+      @ok="submitAssignment"
+      @cancel="closeAssignDialog"
+    >
+      <p class="mb-4 text-sm text-gray-600">
+        {{ assigningTask?.task_name }}
+      </p>
+      <div
+        v-if="assignLoading"
+        data-testid="assign-loading"
+      >
+        正在读取质控员目录…
+      </div>
+      <div
+        v-else-if="assignError"
+        data-testid="assign-error"
+        role="alert"
+        class="text-red-700"
+      >
+        {{ assignError }}
+        <a-button
+          size="small"
+          :disabled="assignSubmitting"
+          @click="loadAssigneeOptions"
+        >
+          重试
+        </a-button>
+      </div>
+      <div
+        v-else-if="!assigneeCandidates.length"
+        data-testid="assign-empty"
+        role="status"
+        class="text-gray-600"
+      >
+        暂无可分配的质控员
+      </div>
+      <div v-else>
+        <label class="mb-2 block text-sm text-gray-700">质控员</label>
+        <a-select
+          v-model:value="selectedAssigneeIds"
+          data-testid="assign-candidates"
+          mode="multiple"
+          class="w-full"
+          placeholder="选择质控员"
+          :options="assigneeCandidates.map((person) => ({ value: person.user_id, label: person.department ? `${person.user_name} · ${person.department}` : person.user_name }))"
+        />
+      </div>
+      <div
+        v-if="assignSubmitError"
+        data-testid="assign-submit-error"
+        role="alert"
+        class="mt-3 text-sm text-red-700"
+      >
+        {{ assignSubmitError }}
+      </div>
+    </a-modal>
 
     <!-- 页面标题 -->
     <div class="mb-8">
@@ -138,10 +203,11 @@
         <a-button
           size="large"
           class="rounded-lg h-16"
-          @click="handleBatchAssign"
+          disabled
+          title="批量分配暂不可用"
         >
           <TeamOutlined class="text-lg" />
-          <span class="ml-2">批量分配</span>
+          <span class="ml-2">批量分配（暂不可用）</span>
         </a-button>
         <a-button
           size="large"
@@ -190,13 +256,6 @@
           placeholder="选择状态"
           class="rounded-lg"
           :options="statusOptions"
-        />
-
-        <a-select
-          v-model:value="selectedAssignee"
-          placeholder="选择负责人"
-          class="rounded-lg"
-          :options="assigneeOptions"
         />
 
         <a-select
@@ -279,7 +338,6 @@
         :data-source="tasks"
         :loading="loading"
         :pagination="pagination"
-        :row-selection="rowSelection"
         row-key="id"
         class="rounded-lg"
         @change="handleTableChange"
@@ -326,7 +384,7 @@
                 详情
               </a-button>
               <a-button
-                v-if="!(record as DashboardTaskItem).assignee"
+                v-if="canAssign(record as DashboardTaskItem)"
                 type="link"
                 size="small"
                 @click="handleAssign(record as DashboardTaskItem)"
@@ -360,14 +418,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted } from 'vue'
+import { ref, onMounted, nextTick } from 'vue'
 import { message } from 'ant-design-vue'
-import type { TableColumnsType, TableProps } from 'ant-design-vue'
+import type { TableColumnsType } from 'ant-design-vue'
 import type { Dayjs } from 'dayjs'
-import { getTaskList, getTaskStats, deleteTask, cancelTask } from '@/api/tasks'
-import type { TaskItem, TaskSceneFilter, TaskStats, TaskStatus } from '@/api/tasks'
+import { getTaskList, getTaskStats, deleteTask, assignTask, getTaskAssigneeOptions } from '@/api/tasks'
+import type { TaskAssigneeOption, TaskItem, TaskSceneFilter, TaskStats, TaskStatus } from '@/api/tasks'
 import CreateTaskDrawer from '@/components/qc/CreateTaskDrawer.vue'
 import TaskDetailDrawer from '@/components/qc/TaskDetailDrawer.vue'
+import { useAuthStore } from '@/stores/auth'
 import {
   ProjectOutlined,
   ClockCircleOutlined,
@@ -392,7 +451,6 @@ const loading = ref(false)
 const searchKeyword = ref('')
 const selectedStatus = ref<TaskStatus | undefined>(undefined)
 const selectedScene = ref<TaskSceneFilter | undefined>(undefined)
-const selectedAssignee = ref<string | undefined>(undefined)
 const selectedDepartment = ref<string | undefined>(undefined)
 type DateRange = [Dayjs, Dayjs] | null
 type DashboardTaskItem = TaskItem & {
@@ -401,10 +459,21 @@ type DashboardTaskItem = TaskItem & {
 }
 const dateRange = ref<DateRange>(null)
 const tasks = ref<DashboardTaskItem[]>([])
-const selectedRowKeys = ref<string[]>([])
 const showCreateDrawer = ref(false)
 const detailDrawerVisible = ref(false)
 const detailTaskId = ref<string | null>(null)
+const authStore = useAuthStore()
+const detailRefreshKey = ref(0)
+const assignDialogVisible = ref(false)
+const assigningTask = ref<DashboardTaskItem | null>(null)
+const assignLoading = ref(false)
+const assignError = ref('')
+const assignSubmitError = ref('')
+const assignSubmitting = ref(false)
+const assignRecoveryRequired = ref(false)
+const assigneeCandidates = ref<TaskAssigneeOption[]>([])
+const selectedAssigneeIds = ref<string[]>([])
+let assignRequestId = 0
 const listError = ref('')
 let listRequestId = 0
 
@@ -424,14 +493,6 @@ const pagination = ref({
   showTotal: (total: number) => `共 ${total} 条任务`,
 })
 
-// 行选择配置
-const rowSelection = computed<TableProps['rowSelection']>(() => ({
-  selectedRowKeys: selectedRowKeys.value,
-  onChange: (keys: Array<string | number>) => {
-    selectedRowKeys.value = keys.map((key) => String(key))
-  },
-}))
-
 // 选项配置
 const statusOptions = [
   { value: 'draft', label: '草稿' },
@@ -447,12 +508,6 @@ const sceneOptions: Array<{ label: string; value: TaskSceneFilter }> = [
   { label: '终末', value: 'final' },
   { label: '门急诊', value: 'outpatient' },
   { label: '未标注', value: 'unclassified' },
-]
-
-const assigneeOptions = [
-  { value: 'zhang_san', label: '张三' },
-  { value: 'li_si', label: '李四' },
-  { value: 'wang_wu', label: '王五' },
 ]
 
 const departmentOptions = [
@@ -547,14 +602,6 @@ const onTaskCreated = (task: TaskItem) => {
   fetchStats()
 }
 
-const handleBatchAssign = () => {
-  if (selectedRowKeys.value.length === 0) {
-    message.warning('请选择要分配的任务')
-    return
-  }
-  message.info(`批量分配 ${selectedRowKeys.value.length} 个任务`)
-}
-
 const handleTaskTemplate = () => {
   message.info('管理任务模板')
 }
@@ -572,7 +619,6 @@ const handleReset = () => {
   searchKeyword.value = ''
   selectedStatus.value = undefined
   selectedScene.value = undefined
-  selectedAssignee.value = undefined
   selectedDepartment.value = undefined
   dateRange.value = null
   pagination.value.current = 1
@@ -608,8 +654,98 @@ const handleViewDetail = (record: DashboardTaskItem) => {
   detailDrawerVisible.value = true
 }
 
+const canAssign = (record: DashboardTaskItem) => !!authStore.user?.id
+  && record.creator_id === authStore.user.id
+  && record.assign_method === 'by_ratio'
+  && record.status === 'sampling'
+  && !assignRecoveryRequired.value
+
 const handleAssign = (record: DashboardTaskItem) => {
-  message.info(`分配任务: ${record.task_name}`)
+  if (!canAssign(record) || assignSubmitting.value) return
+  assignRequestId += 1
+  assigningTask.value = record
+  assignDialogVisible.value = true
+  selectedAssigneeIds.value = []
+  assigneeCandidates.value = []
+  assignSubmitError.value = ''
+  void loadAssigneeOptions()
+}
+
+const closeAssignDialog = () => {
+  if (assignSubmitting.value) return
+  assignRequestId += 1
+  assignDialogVisible.value = false
+  assigningTask.value = null
+  assigneeCandidates.value = []
+  selectedAssigneeIds.value = []
+  assignError.value = ''
+  assignSubmitError.value = ''
+  assignLoading.value = false
+  if (assignRecoveryRequired.value) {
+    void fetchTasks()
+    void fetchStats()
+  }
+}
+
+const loadAssigneeOptions = async () => {
+  if (!assignDialogVisible.value) return
+  const requestId = ++assignRequestId
+  assignLoading.value = true
+  assignError.value = ''
+  assigneeCandidates.value = []
+  selectedAssigneeIds.value = []
+  try {
+    const result = await getTaskAssigneeOptions()
+    if (requestId !== assignRequestId || !assignDialogVisible.value) return
+    if (!result.success || !Array.isArray(result.data)) {
+      assignError.value = result.message || '质控员目录暂不可用'
+      return
+    }
+    assigneeCandidates.value = result.data
+  } catch {
+    if (requestId !== assignRequestId || !assignDialogVisible.value) return
+    assignError.value = '质控员目录暂不可用'
+  } finally {
+    if (requestId === assignRequestId) assignLoading.value = false
+  }
+}
+
+const submitAssignment = async () => {
+  if (assignSubmitting.value || assignLoading.value || assignError.value || assignRecoveryRequired.value || !assigningTask.value) return
+  if (!canAssign(assigningTask.value)) return
+  const selected = assigneeCandidates.value.filter((person) => selectedAssigneeIds.value.includes(person.user_id))
+  if (!selected.length) return
+  const taskId = assigningTask.value.id
+  assignSubmitting.value = true
+  assignSubmitError.value = ''
+  try {
+    const result = await assignTask(taskId, {
+      method: 'by_ratio',
+      assignees: selected.map((person) => ({
+        user_id: person.user_id,
+        user_name: person.user_name,
+        ...(person.department ? { department: person.department } : {}),
+      })),
+    })
+    if (!result.success || typeof result.data?.total_assigned !== 'number') {
+      assignRecoveryRequired.value = true
+      assignSubmitError.value = `分配未确认，请核对任务状态后再操作。${result.message || ''}`
+      return
+    }
+    assignSubmitting.value = false
+    closeAssignDialog()
+    message.success(result.message || '任务已分配')
+    await Promise.all([fetchTasks(), fetchStats()])
+    if (detailDrawerVisible.value && detailTaskId.value === taskId) {
+      detailRefreshKey.value += 1
+      await nextTick()
+    }
+  } catch {
+    assignRecoveryRequired.value = true
+    assignSubmitError.value = '分配结果未知，请刷新任务列表核对后再操作。'
+  } finally {
+    assignSubmitting.value = false
+  }
 }
 
 const handleEdit = (record: DashboardTaskItem) => {
@@ -679,6 +815,7 @@ const fetchTasks = async () => {
       const data = res.data
       tasks.value = data.items || []
       pagination.value.total = data.total || 0
+      if (!assignDialogVisible.value) assignRecoveryRequired.value = false
     } else {
       listError.value = res.message || '获取任务列表失败'
       message.error(listError.value)

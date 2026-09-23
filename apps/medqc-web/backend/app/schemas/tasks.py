@@ -139,16 +139,35 @@ class TaskUpdateRequest(BaseModel):
     def reject_creation_scope_changes(cls, data: Any) -> Any:
         if isinstance(data, dict) and ("scene" in data or "rule_set_key" in data):
             raise ValueError("任务场景和规则集创建后不可修改")
+        if isinstance(data, dict) and data.get("status") == TaskStatus.ASSIGNED.value:
+            raise ValueError("已分配状态只能通过分配接口设置")
         return data
+
+
+class TaskAssignee(BaseModel):
+    """任务分配人员。"""
+
+    model_config = ConfigDict(extra="forbid")
+    user_id: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=36)]
+    user_name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+    department: Optional[str] = None
 
 
 class TaskAssignRequest(BaseModel):
     """分配任务请求"""
-    assignees: List[Dict[str, str]] = Field(
+    assignees: List[TaskAssignee] = Field(
         ...,
+        min_length=1,
         description="分配列表 [{ user_id, user_name, department? }]"
     )
     method: AssignMethod = Field(AssignMethod.BY_RATIO, description="分配方式")
+
+    @model_validator(mode="after")
+    def unique_assignees(self) -> "TaskAssignRequest":
+        ids = [assignee.user_id for assignee in self.assignees]
+        if len(ids) != len(set(ids)):
+            raise ValueError("分配人员 user_id 不可重复")
+        return self
 
 
 class TaskRecordUpdateRequest(BaseModel):

@@ -292,34 +292,21 @@
       <a-form layout="vertical">
         <a-form-item label="分配方式">
           <a-radio-group v-model:value="formData.assign_method">
-            <a-radio value="keep">
-              保持原有分配
-            </a-radio>
-            <a-radio value="by_department">
-              按科室分配
-            </a-radio>
             <a-radio value="by_ratio">
               按比例均分
+            </a-radio>
+            <a-radio value="keep" disabled>
+              保持原有分配（暂不可用）
+            </a-radio>
+            <a-radio value="by_department" disabled>
+              按科室分配（暂不可用）
             </a-radio>
           </a-radio-group>
         </a-form-item>
 
-        <template v-if="formData.assign_method !== 'keep'">
-          <a-form-item label="质控员列表">
-            <a-select
-              v-model:value="selectedAssignees"
-              mode="multiple"
-              placeholder="选择或搜索质控员"
-              style="width: 100%"
-              :options="assigneeOptions"
-            />
-          </a-form-item>
-        </template>
-
         <a-alert
-          v-if="formData.assign_method === 'keep'"
-          message="保持原有分配"
-          description="任务将保持现有的科室-质控员分配关系，不做额外调整。"
+          message="抽样后分配质控员"
+          description="创建任务时只保存分配策略。执行抽样后，在单任务分配中从真实质控员目录选择人员。"
           type="info"
           show-icon
           class="mt-4"
@@ -451,7 +438,6 @@ const rangeMode = ref<'date' | 'refs'>('date')
 const dateRangeValue = ref<[Dayjs, Dayjs] | null>(null)
 const blankRecordRef = (): TaskCaseRef => ({ institute_id: '', patient_id: '', visit_id: '' })
 const recordRefs = ref<TaskCaseRef[]>([blankRecordRef()])
-const selectedAssignees = ref<string[]>([])
 const ruleSets = ref<TaskRuleSetOption[]>([])
 const ruleSetsLoading = ref(false)
 const ruleSetsError = ref('')
@@ -474,8 +460,7 @@ const formData = ref({
     by_department: false,
     group_by: null as string | null,
   },
-  assign_method: 'keep' as 'keep' | 'by_department' | 'by_ratio',
-  assignee_config: {} as Record<string, unknown>,
+  assign_method: 'by_ratio' as 'keep' | 'by_department' | 'by_ratio',
 })
 
 // ============= 选项配置 =============
@@ -499,14 +484,6 @@ const departmentOptions = [
   { value: '泌尿外科', label: '泌尿外科' },
   { value: '急诊科', label: '急诊科' },
   { value: 'ICU', label: 'ICU' },
-]
-
-const assigneeOptions = [
-  { value: 'qc_user_1', label: '王质控' },
-  { value: 'qc_user_2', label: '张质控' },
-  { value: 'qc_user_3', label: '李质控' },
-  { value: 'qc_user_4', label: '赵质控' },
-  { value: 'qc_user_5', label: '陈质控' },
 ]
 
 const samplingOptions: Array<{
@@ -563,7 +540,7 @@ const canProceed = computed(() => {
     case 2:
       return true
     case 3:
-      return true
+      return formData.value.assign_method === 'by_ratio'
     default:
       return true
   }
@@ -582,11 +559,7 @@ const samplingLabel = computed(() => {
 })
 
 const assignLabel = computed(() => {
-  const method = formData.value.assign_method
-  if (method === 'keep') return '保持原有分配'
-  if (method === 'by_department') return '按科室分配'
-  if (method === 'by_ratio') return `按比例均分给 ${selectedAssignees.value.length} 名质控员`
-  return method
+  return formData.value.assign_method === 'by_ratio' ? '按比例均分（抽样后选人）' : '暂不可用'
 })
 
 watch(() => formData.value.scene, () => {
@@ -657,13 +630,11 @@ const resetForm = () => {
     department_filter: [],
     sampling_method: 'all',
     sampling_config: { total: 50, percentage: 10, by_department: false, group_by: null },
-    assign_method: 'keep',
-    assignee_config: {},
+    assign_method: 'by_ratio',
   }
   rangeMode.value = 'date'
   dateRangeValue.value = null
   recordRefs.value = [blankRecordRef()]
-  selectedAssignees.value = []
 }
 
 const handleSubmit = async () => {
@@ -694,19 +665,13 @@ const handleSubmit = async () => {
     message.warning(recordRefsError.value)
     return
   }
+  if (formData.value.assign_method !== 'by_ratio') {
+    message.warning('当前仅支持按比例均分，抽样后再选择质控员')
+    return
+  }
 
   submitting.value = true
   try {
-    let assigneeConfig: Record<string, unknown> | undefined
-    if (formData.value.assign_method !== 'keep' && selectedAssignees.value.length > 0) {
-      assigneeConfig = {
-        assignees: selectedAssignees.value.map((id) => {
-          const opt = assigneeOptions.find((o) => o.value === id)
-          return { user_id: id, user_name: opt?.label || id }
-        }),
-      }
-    }
-
     const submitData: TaskCreateData = {
       task_name: taskName,
       scene,
@@ -728,7 +693,6 @@ const handleSubmit = async () => {
             : {}),
       },
       assign_method: formData.value.assign_method,
-      assignee_config: assigneeConfig,
     }
 
     if (rangeMode.value === 'refs') {

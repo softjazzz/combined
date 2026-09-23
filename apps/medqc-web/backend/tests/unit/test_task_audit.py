@@ -1,6 +1,19 @@
 from __future__ import annotations
 
+import pytest
+from fastapi.testclient import TestClient
+
 from app.core.access_control import enforce_default_auth
+
+
+@pytest.fixture
+def client(app):
+    # 本文件只测路由合同，不启动会在真实数据库重建视图的 lifespan。
+    test_client = TestClient(app)
+    try:
+        yield test_client
+    finally:
+        test_client.close()
 
 
 class _DummyResp:
@@ -45,22 +58,15 @@ def test_assign_task_emits_audit_event(client, monkeypatch):
     client.app.dependency_overrides[enforce_default_auth] = _noop_auth_gate
     headers = _admin_headers(client)
     audit_calls: list[dict] = []
-    call_index = {"value": 0}
-
-    async def _fake_async_execute(_query):
-        idx = call_index["value"]
-        call_index["value"] += 1
-        if idx == 0:
-            return _DummyResp(
-                data=[
-                    {"id": "tr-1", "task_id": "task-1", "status": "pending"},
-                    {"id": "tr-2", "task_id": "task-1", "status": "pending"},
-                ]
-            )
-        return _DummyResp(data=[{"ok": True}])
-
-    monkeypatch.setattr("app.routers.tasks.get_supabase", lambda: _FakeSupabase())
-    monkeypatch.setattr("app.routers.tasks.async_execute", _fake_async_execute)
+    monkeypatch.setattr(
+        "app.routers.tasks.assign_task_records",
+        lambda **_kwargs: {
+            "task_id": "task-1", "total_assigned": 2,
+            "assignment_summary": {"QC One": 2},
+            "assignment_details": [{"user_id": "qc-1", "user_name": "QC One", "count": 2}],
+            "idempotent": False,
+        },
+    )
     monkeypatch.setattr(
         "app.routers.tasks.audit_event",
         lambda _request, **kwargs: audit_calls.append(kwargs),
@@ -85,6 +91,45 @@ def test_assign_task_emits_audit_event(client, monkeypatch):
         and call.get("details", {}).get("total_assigned") == 2
         for call in audit_calls
     )
+    client.app.dependency_overrides.clear()
+
+
+def test_assignee_options_empty_and_db_failure(client, monkeypatch):
+    async def _noop_auth_gate():
+        return None
+
+    client.app.dependency_overrides[enforce_default_auth] = _noop_auth_gate
+    headers = _admin_headers(client)
+    monkeypatch.setattr("app.routers.tasks.list_qc_assignee_options", lambda: [])
+    response = client.get("/api/v1/tasks/assignee-options", headers=headers)
+    assert response.status_code == 200
+    assert response.json()["data"] == []
+
+    def _fail():
+        raise RuntimeError("private database detail")
+
+    monkeypatch.setattr("app.routers.tasks.list_qc_assignee_options", _fail)
+    response = client.get("/api/v1/tasks/assignee-options", headers=headers)
+    assert response.status_code == 503
+    assert "private database detail" not in response.text
+    client.app.dependency_overrides.clear()
+
+
+def test_update_cannot_set_assigned_directly(client, monkeypatch):
+    async def _noop_auth_gate():
+        return None
+
+    client.app.dependency_overrides[enforce_default_auth] = _noop_auth_gate
+    headers = _admin_headers(client)
+
+    def _unexpected_db_call():
+        raise AssertionError("validation must reject before database access")
+
+    monkeypatch.setattr("app.routers.tasks.get_supabase", _unexpected_db_call)
+    response = client.put(
+        "/api/v1/tasks/task-1", json={"status": "assigned"}, headers=headers
+    )
+    assert response.status_code == 422
     client.app.dependency_overrides.clear()
 
 

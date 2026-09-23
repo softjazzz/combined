@@ -43,6 +43,13 @@ from ..services.task_qc_run_service import (
     create_task_qc_run,
     list_task_qc_runs,
 )
+from ..services.task_assignment_service import (
+    AssignmentConflict,
+    AssignmentForbidden,
+    AssignmentNotFound,
+    assign_task_records,
+    list_qc_assignee_options,
+)
 from .qc_sichuan import get_qc_service, _run_sichuan_workspace_batch_job, _sichuan_workspace_service
 from ..core.permissions import (
     require_permission,
@@ -433,6 +440,20 @@ async def get_task_todo_stats(
 # 任务详情
 # ============================
 
+@router.get("/assignee-options")
+@require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.UPDATE)
+async def get_assignee_options(
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    try:
+        options = await run_in_threadpool(list_qc_assignee_options)
+    except Exception as exc:
+        logger.exception("读取质控员候选目录失败")
+        raise HTTPException(status_code=503, detail="质控员目录暂不可用") from exc
+    return success_response(data=options, trace_id=get_trace_id(request))
+
+
 @router.get("/{task_id}")
 @require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.READ)
 async def get_task_detail(
@@ -624,105 +645,44 @@ async def assign_task(
     """
     分配任务 — 将抽样好的病历分配给质控员
     """
-    sb = get_supabase()
-    if sb is None:
-        raise HTTPException(status_code=503, detail="数据库不可用")
-
-    # 获取任务下所有待分配病历
-    records = []
+    actor_id = _get_task_scope_user_id(current_user)
     try:
-        resp = await async_execute(
-            sb.table('qc_task_records')
-            .select('*')
-            .eq('task_id', task_id)
-            .eq('status', 'pending')
+        result = await run_in_threadpool(
+            assign_task_records,
+            task_id=task_id,
+            actor_id=actor_id,
+            assignees=[person.model_dump(exclude_none=True) for person in assign_data.assignees],
+            method=assign_data.method.value,
         )
-        records = list(getattr(resp, 'data', None) or [])
-    except Exception as e:
-        logger.error(f"查询待分配病历失败: {e}")
-        raise HTTPException(status_code=500, detail=f"查询待分配病历失败: {str(e)}")
-
-    if not records:
-        raise HTTPException(status_code=400, detail="没有待分配的病历，请先执行抽样")
-
-    # 按比例分配
-    assignees = assign_data.assignees
-    if not assignees:
-        raise HTTPException(status_code=400, detail="请提供分配人员列表")
-
-    batch_size = len(records) // len(assignees)
-    remainder = len(records) % len(assignees)
-
-    idx = 0
-    updates = []
-    for i, assignee in enumerate(assignees):
-        count = batch_size + (1 if i < remainder else 0)
-        for j in range(count):
-            if idx < len(records):
-                records[idx]["assignee_id"] = assignee.get("user_id", "")
-                records[idx]["assignee_name"] = assignee.get("user_name", "")
-                updates.append({
-                    "id": records[idx]["id"],
-                    "assignee_id": assignee.get("user_id", ""),
-                    "assignee_name": assignee.get("user_name", ""),
-                })
-                idx += 1
-
-    # 更新数据库
-    fail_count = 0
-    for update in updates:
-        try:
-            await async_execute(
-                sb.table('qc_task_records')
-                .update({"assignee_id": update["assignee_id"], "assignee_name": update["assignee_name"]})
-                .eq('id', update["id"])
-            )
-        except Exception as e:
-            fail_count += 1
-            logger.warning(f"分配记录 {update['id']} 更新失败: {e}")
-    if fail_count:
-        logger.error(f"分配任务时 {fail_count}/{len(updates)} 条记录更新失败")
-
-    # 更新任务状态为已分配
-    status_update = {
-        "status": TaskStatus.ASSIGNED.value,
-        "updated_at": datetime.now().isoformat(),
-    }
-    try:
-        await async_execute(sb.table('qc_tasks').update(status_update).eq('id', task_id))
-    except Exception as e:
-        logger.warning(f"更新任务分配状态失败（非阻塞）: {e}")
-
-    # 汇总分配结果
-    assignment_summary = {}
-    for assignee in assignees:
-        name = assignee.get("user_name", "")
-        count = sum(1 for u in updates if u["assignee_id"] == assignee.get("user_id"))
-        assignment_summary[name] = count
+    except AssignmentNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except AssignmentForbidden as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except AssignmentConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("任务分配事务失败: task_id=%s", task_id)
+        raise HTTPException(status_code=503, detail="任务分配暂不可用") from exc
 
     audit_event(
         request,
         action="tasks.assignment.update",
         resource="/api/v1/tasks/{task_id}/assign",
-        outcome="success" if fail_count == 0 else "partial",
+        outcome="success",
         current_user=current_user,
         details={
             "task_id": task_id,
-            "pending_records": len(records),
-            "total_assigned": len(updates),
-            "assignees_count": len(assignees),
-            "failed_updates": fail_count,
-            "assignment_summary": assignment_summary,
+            "total_assigned": result["total_assigned"],
+            "assignees_count": len(assign_data.assignees),
+            "idempotent": result["idempotent"],
+            "assignment_summary": result["assignment_summary"],
+            "assignment_details": result["assignment_details"],
         },
     )
 
     return success_response(
-        data={
-            "task_id": task_id,
-            "total_assigned": len(updates),
-            "assignment_summary": assignment_summary,
-        },
-        message=f"分配完成，共分配 {len(updates)} 条病历给 {len(assignees)} 名质控员",
+        data=result,
+        message=f"分配完成，共分配 {result['total_assigned']} 条病历给 {len(assign_data.assignees)} 名质控员",
         trace_id=get_trace_id(request),
     )
 

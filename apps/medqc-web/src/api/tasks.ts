@@ -130,6 +130,12 @@ export interface TaskRuleSetOption {
     scope: string
 }
 
+export interface TaskAssigneeOption {
+    user_id: string
+    user_name: string
+    department?: string | null
+}
+
 export interface TaskCaseRef {
     institute_id: string
     patient_id: string
@@ -274,11 +280,16 @@ export async function assignTask(taskId: string, data: {
     assignees: Array<{ user_id: string; user_name: string; department?: string }>
     method?: AssignMethod
 }) {
-    return request({
+    return request<{ total_assigned: number }>({
         method: 'POST',
-        url: `${BASE_URL}/${taskId}/assign`,
+        url: `${BASE_URL}/${encodeURIComponent(taskId)}/assign`,
         data,
     })
+}
+
+/** 可分配质控员目录；空目录与请求失败由页面分别呈现。 */
+export async function getTaskAssigneeOptions() {
+    return request<TaskAssigneeOption[]>({ method: 'GET', url: `${BASE_URL}/assignee-options` })
 }
 
 /** 获取任务进度 */
