@@ -615,6 +615,45 @@
     "allowed_result_statuses": ["compliant", "non_compliant", "not_applicable", "data_gap"]
   },
   {
+    "rule_id": "LX0609-06-01-01",
+    "rule_code": "LX0609-06-01-01",
+    "name": "CT/MRI检查记录：医嘱与病程一致性",
+    "description": "逐事件核对已执行CT/MRI医嘱与病程描述；上游覆盖未证明时，未找到医嘱或病程仅提示资料不足。",
+    "positive_example": "同次事件的可核验材料满足本项要求。",
+    "negative_example": "已读取的同次事件资料存在明确内容矛盾或已验证正文缺项；单纯同步或关联缺口不作为不合规。",
+    "category": "CT/MRI检查记录",
+    "applicable_documents": [
+      "exam_master",
+      "exam_item_report",
+      "inpat_nondrug_order",
+      "first_course_record",
+      "daily_course_record",
+      "senior_course_record",
+      "rescue_record"
+    ],
+    "applicable_document_labels": [
+      "CT/MRI检查记录"
+    ],
+    "data_dependencies": [
+      "CT/MRI检查记录原始材料",
+      "逐事件来源及覆盖情况"
+    ],
+    "dependency_type": "结构化事件关联与正文语义提取",
+    "executor_type": "llm",
+    "rule_version": "2026-09-23-ct-consistency-v1",
+    "prompt_version": "ct-order-course-facts-v2",
+    "mapped_rule_ids": [
+      "LX0609-06-01-01"
+    ],
+    "primary_execution_rule_id": "LX0609-06-01-01",
+    "allowed_result_statuses": [
+      "compliant",
+      "non_compliant",
+      "not_applicable",
+      "data_gap"
+    ]
+  },
+  {
     "rule_id": "LX0609-06-01-03",
     "rule_code": "LX0609-06-01-03",
     "name": "CT/MRI检查记录：报告单完整性",

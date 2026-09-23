@@ -33,14 +33,14 @@ _CONTRACT_PATH = (
 def test_rule_contracts_cover_all_phase1_registered_rules_in_catalog_order() -> None:
     contracts = load_luxian_0609_rule_contracts()
 
-    assert len(contracts) == 83
+    assert len(contracts) == 84
     assert tuple(contract.rule_id for contract in contracts) == tuple(
         str(item["rule_id"]) for item in load_luxian_0609_rules()
     )
-    assert sum(contract.phase_status == "phase_1_target" for contract in contracts) == 73
+    assert sum(contract.phase_status == "phase_1_target" for contract in contracts) == 74
     assert sum(contract.phase_status == "phase_1_partial" for contract in contracts) == 0
     assert sum(contract.phase_status == "pending_definition" for contract in contracts) == 10
-    assert {"LX0609-06-01-01", "LX0609-06-03-01"}.isdisjoint(
+    assert {"LX0609-06-03-01"}.isdisjoint(
         contract.rule_id for contract in contracts
     )
     assert {contract.definition_version for contract in contracts} == {
@@ -270,6 +270,7 @@ def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() 
         "LX0609-06-02-01",
     }
     assert typed_shadow == {
+        "LX0609-06-01-01",
         "LX0609-01-01-01",
         "LX0609-01-02-01",
         "LX0609-04-02-01",

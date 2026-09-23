@@ -2,6 +2,12 @@
 
 from __future__ import annotations
 
+from .ct_order_course_consistency import (
+    RULE_ID as CT_CONSISTENCY_RULE,
+    validate_ct_display_facts,
+    ct_display_status_matches,
+)
+
 from dataclasses import dataclass
 import re
 from typing import Any, Collection, Mapping, Sequence
@@ -32,6 +38,7 @@ class ExamLabOutcome:
 
 EXAM_LAB_CUSTOMER_RULE_IDS = frozenset(
     {
+        CT_CONSISTENCY_RULE,
         "LX0609-06-01-02",
         "LX0609-06-01-03",
         "LX0609-06-01-04",
@@ -94,6 +101,8 @@ def safe_exam_lab_customer_display_facts(
     """
 
     normalized_rule_id = str(rule_id or "").strip().upper()
+    if normalized_rule_id == CT_CONSISTENCY_RULE:
+        return validate_ct_display_facts(raw)
     if normalized_rule_id not in EXAM_LAB_CUSTOMER_RULE_IDS or not isinstance(raw, Mapping):
         return None
 
@@ -524,6 +533,8 @@ def exam_lab_customer_fact_status_is_valid(
     """校验 2026 手册新增报告完整性事实与已裁决状态一致。"""
 
     normalized_rule_id = str(rule_id or "").strip().upper()
+    if normalized_rule_id == CT_CONSISTENCY_RULE:
+        return ct_display_status_matches(status, safe_facts)
     if normalized_rule_id not in HANDBOOK_REPORT_RULES:
         return True
     if not isinstance(safe_facts, Mapping):

@@ -23,10 +23,10 @@ def test_phase_scope_freezes_all_85_customer_rules() -> None:
     assert {entry.definition_version for entry in entries} == {
         "lx0609-defined-scope-2026-09-22-identity-v1"
     }
-    assert sum(entry.phase_status == "phase_1_target" for entry in entries) == 73
+    assert sum(entry.phase_status == "phase_1_target" for entry in entries) == 74
     assert sum(entry.phase_status == "phase_1_partial" for entry in entries) == 0
-    assert sum(entry.phase_status == "pending_definition" for entry in entries) == 12
-    assert sum(entry.catalog_registered for entry in entries) == 83
+    assert sum(entry.phase_status == "pending_definition" for entry in entries) == 11
+    assert sum(entry.catalog_registered for entry in entries) == 84
 
 
 def test_phase_scope_uses_latest_confirmed_contract_and_freezes_only_unresolved_rules() -> None:
@@ -68,7 +68,6 @@ def test_phase_scope_uses_latest_confirmed_contract_and_freezes_only_unresolved_
         "LX0609-05-01-04",
         "LX0609-05-03-01",
         "LX0609-10-03-01",
-        "LX0609-06-01-01",
         "LX0609-06-03-01",
     }
 
@@ -167,15 +166,16 @@ def test_customer_delivery_excludes_registration_only_handbook_rules() -> None:
     delivery = get_luxian_0609_customer_delivery_rule_ids()
     executable, withheld = get_luxian_0609_customer_execution_scope()
 
-    assert len(delivery) == 78
-    assert len(executable) == 68
+    assert len(delivery) == 79
+    assert len(executable) == 69
     assert len(withheld) == 10
     assert "LX0609-04-04-01" in withheld
     assert {"LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03"}.issubset(withheld)
     assert "LX0609-03-01-04" in executable
-    assert {"LX0609-06-01-01", "LX0609-06-03-01"}.isdisjoint(delivery)
+    assert "LX0609-06-03-01" not in delivery
+    assert "LX0609-06-01-01" in executable
     with pytest.raises(ValueError, match="invalid LX0609 customer rule id"):
-        partition_luxian_0609_rule_scope(("LX0609-06-01-01",))
+        partition_luxian_0609_rule_scope(("LX0609-06-03-01",))
     with pytest.raises(ValueError, match="not an LX0609 pending definition"):
         build_luxian_0609_pending_definition_result("LX0609-06-01-01")
     result = build_luxian_0609_pending_definition_result("LX0609-04-04-01")

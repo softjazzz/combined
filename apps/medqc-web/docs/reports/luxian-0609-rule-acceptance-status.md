@@ -5,9 +5,9 @@
 
 ## 当前结论
 
-- 规则总数：83（正式 75，临时 8）
-- 已绑定受控 fixture：265 个规则状态引用
-- 语义规则：30 条
+- 规则总数：84（正式 76，临时 8）
+- 已绑定受控 fixture：270 个规则状态引用
+- 语义规则：31 条
 - 当前定义合同仍为 Pending：10 条
 - 当前只统计真实生成的 Golden 状态；未绑定槽位继续显示待补，不能据此宣称全部规则已经完整验收。
 
@@ -15,7 +15,7 @@
 
 | 覆盖状态 | 数量 |
 | --- | ---: |
-| 已覆盖 | 241 |
+| 已覆盖 | 245 |
 | 待补案例 | 21 |
 | 定义待确认 | 38 |
 | 无需覆盖 | 32 |
@@ -28,7 +28,7 @@
 | 待补案例 | 54 |
 | 定义待确认 | 3 |
 
-## 正式 75 条
+## 正式 76 条
 
 | 规则与质控点 | 当前受控 fixture | 合规槽 | 问题槽 | 不适用槽 | 数据不足槽 | 定义阶段 |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -103,6 +103,7 @@
 | LX0609-01-02-02 首次病程记录：鉴别诊断未与初步诊断中第一诊断相关联 | native-integration:tests/integration/test_luxian_0609_real_production_rules_076_077.py::test_077_runs_one_controlled_semantic_call_on_the_formal_native_family | 已覆盖 | 已覆盖 | 无需覆盖 | 已覆盖 | 定义明确 |
 | LX0609-04-01-04 术前小结：术前小结内容不完整 | contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-04-01-04] | 待补案例 | 待补案例 | 无需覆盖 | 已覆盖 | 定义明确 |
 | LX0609-04-01-05 术前讨论记录：术前讨论记录内容不完整 | contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-04-01-05] | 待补案例 | 待补案例 | 无需覆盖 | 已覆盖 | 定义明确 |
+| LX0609-06-01-01 CT/MRI检查记录：医嘱与病程一致性 | native-unit:tests/unit/test_luxian_0609_ct_order_course_consistency.py::test_complete_positive_facts_keep_same_event_refs_and_publish_without_text | 已覆盖 | 已覆盖 | 已覆盖 | 已覆盖 | 定义明确 |
 | LX0609-06-01-03 CT/MRI检查记录：报告单完整性 | contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-06-01-03] | 待补案例 | 待补案例 | 无需覆盖 | 已覆盖 | 定义明确 |
 | LX0609-06-03-02 微生物培养检查记录：报告单完整性 | contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-06-03-02] | 待补案例 | 待补案例 | 无需覆盖 | 已覆盖 | 定义明确 |
 | LX0609-06-02-01 病理检查记录：报告单完整性 | contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-06-02-01] | 待补案例 | 待补案例 | 无需覆盖 | 已覆盖 | 定义明确 |

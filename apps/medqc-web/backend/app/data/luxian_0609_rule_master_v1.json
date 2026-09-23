@@ -668,15 +668,11 @@
       "rule_id": "LX0609-06-01-01",
       "source_document": "CT/MRI检查记录",
       "qc_point": "医嘱与病程一致性",
-      "implementation_status": "pending_definition",
-      "pending_definition_note": "本地CDM缺少可靠执行状态和完整医嘱关联键，当前不能安全区分临床不一致与同步缺口。",
-      "definition_note": "本地CDM缺少可靠执行状态和完整医嘱关联键，当前不能安全区分临床不一致与同步缺口。",
-      "phase_status": "pending_definition",
-      "pending_reason_code": "exam_order_course_linkage_unavailable",
+      "implementation_status": "active",
       "policy_sources": [
         "sichuan_2026_handbook"
       ],
-      "policy_summary": "核对本次CT/MRI检查的医嘱与病程记录是否逐事件一致；计划、既往和取消检查不当成已执行。"
+      "policy_summary": "按实际检查事件核对医嘱与病程。正式报告可证明执行；缺材料或归属不明为资料不足，只有同一事件的明确矛盾为不合规；不另设24小时窗口。"
     },
     {
       "rule_id": "LX0609-06-01-03",

@@ -345,6 +345,10 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     ),
     "LX0609-09-01-02": ("rescue_record", "inpat_nondrug_order.rescue_order"),
     "LX0609-06-02-01": ("pathology_exam_master", "pathology_exam_report"),
+    "LX0609-06-01-01": (
+        "inpat_nondrug_order.exam_lab_order", "exam_master", "exam_item_report",
+        "first_course_record", "daily_course_record", "senior_course_record", "rescue_record",
+    ),
     "LX0609-06-01-03": (
         "inpat_nondrug_order.exam_lab_order", "exam_master", "exam_item_report",
     ),

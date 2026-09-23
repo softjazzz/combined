@@ -48,6 +48,15 @@ from .handbook_exam_lab import (
     build_handbook_ledger,
     evaluate_report_completeness,
 )
+from .ct_order_course_consistency import (
+    RULE_ID as CT_CONSISTENCY_RULE,
+    REPORT_RULE_ID as CT_REPORT_RULE,
+    COURSE_SOURCES as CT_COURSE_SOURCES,
+    build_ct_review_input,
+    build_ct_fact_prompt,
+    ct_fact_response_format,
+    evaluate_ct_review,
+)
 from .native_execution import build_luxian_0609_native_result
 from .source_evidence_reader import (
     CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY,
@@ -70,12 +79,13 @@ EXAM_LAB_RULE_IDS = (
 # “全族运行”。新增规则只在目录明确选中后进入内部执行集合。
 EXECUTABLE_EXAM_LAB_RULE_IDS = (
     *EXAM_LAB_RULE_IDS,
+    CT_CONSISTENCY_RULE,
     "LX0609-06-01-03",
     "LX0609-06-03-02",
 )
 EXAM_RULE_IDS = frozenset({"LX0609-06-01-02", "LX0609-06-01-04", "LX0609-06-01-05"})
 CULTURE_RULE_IDS = frozenset({"LX0609-06-03-03", "LX0609-06-03-04"})
-_EXECUTABLE_EXAM_RULE_IDS = frozenset({*EXAM_RULE_IDS, "LX0609-06-01-03"})
+_EXECUTABLE_EXAM_RULE_IDS = frozenset({*EXAM_RULE_IDS, CT_CONSISTENCY_RULE, "LX0609-06-01-03"})
 EXECUTOR_KEY = "exam_lab"
 _TYPED_DECISION_RULE_IDS = frozenset(EXECUTABLE_EXAM_LAB_RULE_IDS)
 _TYPED_EVALUATOR_VERSION = "exam-lab-ruledecision-shadow-v2"
@@ -175,6 +185,7 @@ _TYPED_TRIGGER_SOURCES = {
     "culture": ("labtest_master", "labtest_item_report"),
 }
 _TYPED_RULE_SOURCE_KEYS = {
+    CT_CONSISTENCY_RULE: (_ORDER_SOURCE_KEY, *_TYPED_TRIGGER_SOURCES["exam"], *CT_COURSE_SOURCES),
     # 010 按省手册核对已执行检查的医嘱、病程和报告完整性。
     "LX0609-06-01-02": (*_TYPED_TRIGGER_SOURCES["exam"], _ORDER_SOURCE_KEY, *_COURSE_SOURCE_KEYS),
     # 2026 手册报告完整性只消费同一证据会话的结构化事件，不进入旧语义抽取。
@@ -299,6 +310,13 @@ class _StrictJsonSchemaExamLabClient(Protocol):
         *,
         response_format: Mapping[str, Any],
         enable_thinking: bool | None = None,
+    ) -> dict[str, Any]: ...
+
+
+class _SinglePassCtClient(Protocol):
+    async def generate(
+        self, prompt: str, *, allow_length_retry: bool,
+        response_format: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]: ...
 
 
@@ -1801,9 +1819,13 @@ async def execute_luxian_0609_native_exam_lab_rules(
             for rule_id in selected
             if rule_id in typed_requested and rule_id in HANDBOOK_REPORT_RULES
         )
-        if handbook_report_ids:
+        ledger_rule_ids = tuple(dict.fromkeys((
+            *handbook_report_ids,
+            *((CT_REPORT_RULE,) if CT_CONSISTENCY_RULE in typed_requested else ()),
+        )))
+        if ledger_rule_ids:
             handbook_ledger = build_handbook_ledger(
-                rule_ids=handbook_report_ids,
+                rule_ids=ledger_rule_ids,
                 snapshot=evidence_snapshot,
                 materials=evidence_materials,
             )
@@ -1817,6 +1839,54 @@ async def execute_luxian_0609_native_exam_lab_rules(
                     display_facts=evaluation.display_facts,
                 )
                 typed_processed.add(rule_id)
+            if CT_CONSISTENCY_RULE in typed_requested:
+                review = build_ct_review_input(
+                    ledger=handbook_ledger, snapshot=evidence_snapshot,
+                    materials=evidence_materials,
+                )
+                payload = None
+                model_failure = None
+                if review.needs_model:
+                    model_rule_count += 1
+                    if llm_client is None:
+                        model_failure = "exam_lab_llm_failure"
+                    else:
+                        llm_call_count += 1
+                        try:
+                            if _supports_strict_json_schema(llm_client):
+                                response = await cast(_SinglePassCtClient, llm_client).generate(
+                                    build_ct_fact_prompt(review),
+                                    response_format=ct_fact_response_format(review),
+                                    allow_length_retry=False,
+                                )
+                            else:
+                                response = await cast(_SinglePassCtClient, llm_client).generate(
+                                    build_ct_fact_prompt(review), allow_length_retry=False,
+                                )
+                            used_prompt, used_completion, used_total, used_time = _usage(response)
+                            prompt_tokens += used_prompt
+                            completion_tokens += used_completion
+                            total_tokens += used_total
+                            api_time += used_time
+                        except Exception:  # noqa: BLE001
+                            model_failure = "exam_lab_llm_failure"
+                        if model_failure is None:
+                            try:
+                                payload = json.loads(_response_text(response))
+                            except (TypeError, ValueError):
+                                model_failure = "exam_lab_llm_invalid_output"
+                if model_failure is None:
+                    try:
+                        evaluation = evaluate_ct_review(review, payload)
+                    except (TypeError, ValueError):
+                        model_failure = "exam_lab_llm_invalid_output"
+                if model_failure:
+                    emit_typed(CT_CONSISTENCY_RULE, "technical_error", model_failure)
+                else:
+                    first_success_count += int(review.needs_model)
+                    emit_typed(CT_CONSISTENCY_RULE, evaluation.status, evaluation.reason_code,
+                               evaluation.refs, display_facts=evaluation.display_facts)
+                typed_processed.add(CT_CONSISTENCY_RULE)
         for rule_id in selected:
             if rule_id not in typed_requested or rule_id in typed_processed:
                 continue

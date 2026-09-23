@@ -4,7 +4,7 @@
   "rule_master_version": "2026-09-22-identity-v1",
   "generated_from": {
     "runtime_manifest_schema": "lx0609-runtime-manifest-v1",
-    "runtime_contract_hash": "bac2f23a97f3d333e59084cc653f4b43bf5489fd5e9059f00aa69b5b33671dfc",
+    "runtime_contract_hash": "0bfab9fac4ea4c96de628bb14a90f8448013f41d815c38dbaa7117cfc84dd49b",
     "synthetic_fixture_set": "0426-derived-v3"
   },
   "coverage_semantics": {
@@ -4741,6 +4741,88 @@
           ],
           "facts": [
             "术前讨论结构字段与正文/可核验内容"
+          ]
+        },
+        "controlled_status_enum": [
+          "compliant",
+          "non_compliant",
+          "not_applicable",
+          "data_gap",
+          "technical_error",
+          "evaluation_unknown",
+          "not_executed"
+        ],
+        "max_llm_calls_per_rule": 1
+      }
+    },
+    {
+      "rule_id": "LX0609-06-01-01",
+      "title": "CT/MRI检查记录：医嘱与病程一致性",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
+      "family_key": "exam_lab",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": [
+            "native-unit:tests/unit/test_luxian_0609_ct_order_course_consistency.py::test_complete_positive_facts_keep_same_event_refs_and_publish_without_text"
+          ],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "covered",
+          "fixture_refs": [
+            "native-unit:tests/unit/test_luxian_0609_ct_order_course_consistency.py::test_conflict_cannot_force_association_to_another_exam"
+          ],
+          "expected_status": "non_compliant"
+        },
+        "not_applicable": {
+          "coverage": "covered",
+          "fixture_refs": [
+            "native-unit:tests/unit/test_luxian_0609_ct_order_course_consistency.py::test_empty_sources_and_course_only_trigger_have_different_results"
+          ],
+          "expected_status": "not_applicable"
+        },
+        "data_insufficient": {
+          "coverage": "covered",
+          "fixture_refs": [
+            "native-unit:tests/unit/test_luxian_0609_ct_order_course_consistency.py::test_no_clinical_defect_from_missing_or_uncertain_material",
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-06-01-01]"
+          ],
+          "expected_status": "data_gap"
+        }
+      },
+      "required_facts": [
+        "CT/MRI检查记录原始材料",
+        "逐事件来源及覆盖情况"
+      ],
+      "required_evidence": [
+        "exam_master",
+        "exam_item_report",
+        "inpat_nondrug_order",
+        "first_course_record",
+        "daily_course_record",
+        "senior_course_record",
+        "rescue_record"
+      ],
+      "expected_executor": "exam_lab",
+      "decision_authority": "program_then_optional_llm",
+      "max_llm_calls_per_rule": 1,
+      "semantic_contract": {
+        "minimal_input": {
+          "documents": [
+            "exam_master",
+            "exam_item_report",
+            "inpat_nondrug_order",
+            "first_course_record",
+            "daily_course_record",
+            "senior_course_record",
+            "rescue_record"
+          ],
+          "facts": [
+            "CT/MRI检查记录原始材料",
+            "逐事件来源及覆盖情况"
           ]
         },
         "controlled_status_enum": [

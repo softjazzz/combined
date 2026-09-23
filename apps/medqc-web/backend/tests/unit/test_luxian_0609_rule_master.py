@@ -124,9 +124,9 @@ def test_rule_master_keeps_79_migrated_rules_and_six_handbook_registrations():
     assert len({entry.rule_id for entry in entries}) == 85
     assert get_luxian_0609_rule_master_summary() == {
         "total": 85,
-        "active": 83,
+        "active": 84,
         "contract_ready": 0,
-        "pending_definition": 2,
+        "pending_definition": 1,
     }
     assert LUXIAN_0609_RULE_MASTER_VERSION == "2026-09-22-identity-v1"
     assert LUXIAN_0609_RULE_DEFINITION_VERSION == "lx0609-defined-scope-2026-09-22-identity-v1"
@@ -168,7 +168,6 @@ def test_pending_rules_keep_customer_definition_gaps_visible():
     )
 
     assert tuple(entry.rule_id for entry in pending_entries) == (
-        "LX0609-06-01-01",
         "LX0609-06-03-01",
     )
     assert all(entry.definition_note for entry in pending_entries)

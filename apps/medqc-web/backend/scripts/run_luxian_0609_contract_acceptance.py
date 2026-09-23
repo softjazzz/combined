@@ -76,6 +76,10 @@ _APPLICABILITY_TERMS = (
 # v3 病例用于跨文书端到端场景；互斥状态由现有 Native 单规则用例提供受控夹具。
 # 这里仅登记真实断言最终状态的测试节点，不以“存在测试文件”推断覆盖。
 _NATIVE_FIXTURE_SPECS = (
+    ("LX0609-06-01-01", "compliant", "test_luxian_0609_ct_order_course_consistency.py", "test_complete_positive_facts_keep_same_event_refs_and_publish_without_text"),
+    ("LX0609-06-01-01", "non_compliant", "test_luxian_0609_ct_order_course_consistency.py", "test_conflict_cannot_force_association_to_another_exam"),
+    ("LX0609-06-01-01", "not_applicable", "test_luxian_0609_ct_order_course_consistency.py", "test_empty_sources_and_course_only_trigger_have_different_results"),
+    ("LX0609-06-01-01", "data_gap", "test_luxian_0609_ct_order_course_consistency.py", "test_no_clinical_defect_from_missing_or_uncertain_material"),
     ("LX0609-04-02-01", "non_compliant", "test_luxian_0609_native_surgery_gate_execution.py", "test_typed_003_preserves_time_and_source_boundaries"),
     ("LX0609-02-01-03", "non_compliant", "test_luxian_0609_native_course_quality_execution.py", "test_course_007_typed_truth_table_is_python_only_and_fail_closed"),
     ("LX0609-02-01-04", "non_compliant", "test_luxian_0609_native_course_quality_execution.py", "test_course_008_009_typed_natural_day_truth_table_requires_009_semantic_client"),

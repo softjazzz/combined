@@ -253,6 +253,11 @@ _RULE_MISSING_ITEM_LABELS = {
     "LX0609-04-01-05": ("术前讨论结构字段与正文/可核验内容",),
 }
 _RULE_DATA_GAP_MESSAGES = {
+    "LX0609-06-01-01": (
+        "暂无法完整核对CT/MRI医嘱与病程的一致性",
+        "当前存在检查执行、医嘱关联、病程正文或同步覆盖缺口，未找到材料不等同于医生漏记。",
+        "请先核对源系统医嘱、检查报告和对应病程，补齐同步资料后重新核对。",
+    ),
     "LX0609-06-01-03": (
         "暂无法确认 CT/MRI 检查报告是否齐全",
         "当前存在检查主记录、报告业务键、报告正文可读性或同步完整性缺口；这不等同于临床漏报告。",
@@ -705,6 +710,11 @@ def _evaluation_window_gap_message(
         )
     return None
 _RULE_NON_COMPLIANT_MESSAGES = {
+    "LX0609-06-01-01": (
+        "CT/MRI医嘱与同一检查的病程描述存在明确矛盾",
+        "已核对原始检查标识及病程记载，相关材料指向同一次检查。",
+        "请核对原医嘱、报告及本次病程，按实际检查情况更正不一致内容，保留修改痕迹。",
+    ),
     "LX0609-06-01-03": (
         "CT/MRI 检查报告完整性不符合要求",
         "已按本次住院检查业务键核对检查主记录与正式报告。",
@@ -3480,6 +3490,26 @@ def handbook_customer_message(
         return None
     normalized_rule_id = str(rule_id or "").strip().upper()
     normalized_status = str(status or "").strip().lower()
+    if normalized_rule_id == "LX0609-06-01-01":
+        count = facts.get("event_count")
+        if type(count) is not int or facts.get("verification_kind") != "ct_order_course_review":
+            return None
+        if normalized_status == "compliant":
+            return (
+                f"已逐次核对{count}个CT/MRI检查事件，已执行事件的医嘱与对应病程描述一致。",
+                "检查执行由本次事件材料确认，病程对应关系来自正文语义提取；Python校验引用并形成判定。",
+                "",
+            )
+        if normalized_status == "not_applicable":
+            return (
+                "当前材料中未发现需要核对的已执行CT/MRI检查事件。",
+                "已读取相关医嘱、检查及病程资料，计划或已取消检查不作为已执行检查。",
+                "",
+            )
+        if normalized_status == "data_gap":
+            return _RULE_DATA_GAP_MESSAGES[normalized_rule_id]
+        if normalized_status == "non_compliant":
+            return _RULE_NON_COMPLIANT_MESSAGES[normalized_rule_id]
     label = _HANDBOOK_REPORT_RULE_LABELS.get(normalized_rule_id)
     if label is not None:
         event_count = facts.get("event_count")

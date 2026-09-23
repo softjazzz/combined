@@ -59,6 +59,8 @@ _ASGI_EXPECTED_OUTCOMES = {
 }
 _ASGI_EXPECTED_OUTCOMES.update(
     {
+        # CT一致性fixture没有本次事件的可用医嘱关联。
+        "LX0609-06-01-01": ("data_gap", "required_field_missing"),
         # 入口测试的脱敏 fixture 有已执行检查但没有正式影像报告。
         "LX0609-06-01-03": ("data_gap", "target_report_missing"),
         # 微生物 fixture 缺少可唯一关联主记录与报告的业务键。
