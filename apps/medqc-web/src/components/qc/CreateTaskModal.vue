@@ -162,6 +162,7 @@ import {
 } from '@/api/qcAdmin'
 import { getTaskRuleSets, type TaskRuleSetOption, type TaskScene } from '@/api/tasks'
 import type { Dayjs } from 'dayjs'
+import dayjs from 'dayjs'
 
 const props = defineProps({
   visible: { type: Boolean, required: true },
@@ -258,6 +259,20 @@ const loadDepartments = async () => {
 }
 
 /** 提交创建 */
+const activeDateRangeError = (range: [Dayjs, Dayjs] | null): string => {
+  if (!range) return ''
+  const start = range[0]?.format('YYYY-MM-DD')
+  const end = range[1]?.format('YYYY-MM-DD')
+  const validDate = (value: string | undefined): value is string => !!value && /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+    dayjs(value).isValid() && dayjs(value).format('YYYY-MM-DD') === value
+  if (!validDate(start) || !validDate(end)) return '入院日期范围格式无效，请选择有效日期'
+  const today = dayjs(new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10))
+  if (dayjs(start).isAfter(today, 'day')) return '入院开始日期不能晚于在院截止日期'
+  if (dayjs(start).isBefore(today.subtract(180, 'day'), 'day')) return '入院日期范围最多 180 天'
+  if (dayjs(start).isAfter(dayjs(end), 'day')) return '日期范围起始时间不能晚于结束时间'
+  return ''
+}
+
 const handleSubmit = async () => {
   if (submitting.value) return
   if (!form.task_name.trim()) {
@@ -275,6 +290,13 @@ const handleSubmit = async () => {
   if (props.scene === 'running' && form.case_scope !== 'active') {
     message.warning('请选择当前在院病历范围')
     return
+  }
+  if (props.scene === 'running') {
+    const rangeError = activeDateRangeError(form.dateRange)
+    if (rangeError) {
+      message.warning(rangeError)
+      return
+    }
   }
 
   const params: CreateTaskParams = {

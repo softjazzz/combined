@@ -430,6 +430,7 @@ import {
 import { createTask, getTaskRuleSets } from '@/api/tasks'
 import type { TaskCaseRef, TaskCreateData, TaskItem, TaskRuleSetOption, TaskScene } from '@/api/tasks'
 import type { Dayjs } from 'dayjs'
+import dayjs from 'dayjs'
 
 // ============= Props & Emits =============
 const props = defineProps<{
@@ -630,6 +631,20 @@ const handleDateRangeChange = (_dates: [Dayjs, Dayjs] | null, dateStrings: [stri
   formData.value.date_range = start || end ? { start: start || undefined, end: end || undefined } : null
 }
 
+const activeDateRangeError = (range: { start?: string; end?: string } | null): string => {
+  if (!range) return ''
+  const start = range.start?.trim()
+  const end = range.end?.trim()
+  const validDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+    dayjs(value).isValid() && dayjs(value).format('YYYY-MM-DD') === value
+  if ((start && !validDate(start)) || (end && !validDate(end))) return '入院日期范围格式无效，请选择有效日期'
+  const today = dayjs(new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10))
+  if (start && dayjs(start).isAfter(today, 'day')) return '入院开始日期不能晚于在院截止日期'
+  if (start && dayjs(start).isBefore(today.subtract(180, 'day'), 'day')) return '入院日期范围最多 180 天'
+  if (start && end && dayjs(start).isAfter(dayjs(end), 'day')) return '日期范围起始时间不能晚于结束时间'
+  return ''
+}
+
 const handleClose = () => {
   visible.value = false
   resetForm()
@@ -686,6 +701,13 @@ const handleSubmit = async () => {
   if (scene === 'running' && formData.value.sampling_config.case_scope !== 'active') {
     message.warning('请选择当前在院病历范围')
     return
+  }
+  if (scene === 'running' && rangeMode.value === 'date') {
+    const rangeError = activeDateRangeError(formData.value.date_range)
+    if (rangeError) {
+      message.warning(rangeError)
+      return
+    }
   }
   if (formData.value.assign_method !== 'by_ratio') {
     message.warning('当前仅支持按比例均分，抽样后再选择质控员')

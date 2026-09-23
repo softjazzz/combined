@@ -378,6 +378,56 @@ describe('CreateTaskDrawer 创建草稿边界', () => {
     expect(mocks.createTask.mock.calls.at(-1)?.[0]).not.toHaveProperty('record_refs')
   })
 
+  it('当前在院入院起日允许恰好 180 天和今天，超界日期不创建草稿', async () => {
+    mocks.createTask.mockResolvedValue({ success: false, message: '测试停止' })
+    const wrapper = mountDrawer()
+    const vm = vmOf(wrapper)
+    vm.formData.task_name = '在院日期任务'
+    await chooseRuleSet(vm, 'running')
+    const today = dayjs(new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10))
+    const earliest = today.subtract(180, 'day').format('YYYY-MM-DD')
+
+    vm.formData.date_range = { start: earliest, end: today.format('YYYY-MM-DD') }
+    await vm.handleSubmit()
+    expect(mocks.createTask).toHaveBeenCalledTimes(1)
+    vm.formData.date_range = { start: today.format('YYYY-MM-DD') }
+    await vm.handleSubmit()
+    expect(mocks.createTask).toHaveBeenCalledTimes(2)
+
+    vm.formData.date_range = { start: today.subtract(181, 'day').format('YYYY-MM-DD') }
+    await vm.handleSubmit()
+    expect(mocks.message.warning).toHaveBeenLastCalledWith('入院日期范围最多 180 天')
+    vm.formData.date_range = { start: today.add(1, 'day').format('YYYY-MM-DD') }
+    await vm.handleSubmit()
+    expect(mocks.message.warning).toHaveBeenLastCalledWith('入院开始日期不能晚于在院截止日期')
+    expect(mocks.createTask).toHaveBeenCalledTimes(2)
+  })
+
+  it('当前在院拒绝逆序及无效日期，切换终末场景后沿用原有日期提交行为', async () => {
+    mocks.createTask.mockResolvedValue({ success: false, message: '测试停止' })
+    const wrapper = mountDrawer()
+    const vm = vmOf(wrapper)
+    vm.formData.task_name = '日期错误任务'
+    await chooseRuleSet(vm, 'running')
+    const today = dayjs(new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10))
+    vm.formData.date_range = { start: today.format('YYYY-MM-DD'), end: today.subtract(1, 'day').format('YYYY-MM-DD') }
+    await vm.handleSubmit()
+    expect(mocks.message.warning).toHaveBeenLastCalledWith('日期范围起始时间不能晚于结束时间')
+    vm.formData.date_range = { start: '2026-02-30', end: today.format('YYYY-MM-DD') }
+    await vm.handleSubmit()
+    expect(mocks.message.warning).toHaveBeenLastCalledWith('入院日期范围格式无效，请选择有效日期')
+    expect(mocks.createTask).not.toHaveBeenCalled()
+
+    vm.formData.scene = 'final'
+    await nextTick()
+    vm.formData.rule_set_key = 'final-rules'
+    vm.formData.date_range = { start: '2026-02-30', end: today.format('YYYY-MM-DD') }
+    await vm.handleSubmit()
+    expect(mocks.createTask).toHaveBeenCalledWith(expect.objectContaining({
+      scene: 'final', date_range: { start: '2026-02-30', end: today.format('YYYY-MM-DD') },
+    }))
+  })
+
   it('截止日期统一提交 YYYY-MM-DD，后端失败时保留输入且不发成功事件', async () => {
     mocks.createTask.mockResolvedValue({ success: false, message: '后端拒绝创建' })
     const wrapper = mountDrawer()

@@ -138,6 +138,63 @@ describe('CreateTaskModal 运行病历创建链路', () => {
     expect(wrapper.emitted('update:visible')).toEqual([[false]])
   })
 
+  it('当前在院日期范围允许 180 天边界与今天，拒绝更早或未来的起日', async () => {
+    mocks.createQCTaskAndSample.mockResolvedValue({ success: false, message: '测试停止' })
+    const wrapper = mountModal()
+    const vm = vmOf(wrapper)
+    await flushPromises()
+    vm.form.task_name = '在院日期任务'
+    vm.form.rule_set_key = 'running-v1'
+    vm.form.case_scope = 'active'
+    const today = dayjs(new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10))
+
+    vm.form.dateRange = [today.subtract(180, 'day'), today]
+    await vm.handleSubmit()
+    expect(mocks.createQCTaskAndSample).toHaveBeenCalledTimes(1)
+    vm.form.dateRange = [today, today]
+    await vm.handleSubmit()
+    expect(mocks.createQCTaskAndSample).toHaveBeenCalledTimes(2)
+
+    vm.form.dateRange = [today.subtract(181, 'day'), today]
+    await vm.handleSubmit()
+    expect(mocks.message.warning).toHaveBeenLastCalledWith('入院日期范围最多 180 天')
+    vm.form.dateRange = [today.add(1, 'day'), today.add(1, 'day')]
+    await vm.handleSubmit()
+    expect(mocks.message.warning).toHaveBeenLastCalledWith('入院开始日期不能晚于在院截止日期')
+    expect(mocks.createQCTaskAndSample).toHaveBeenCalledTimes(2)
+  })
+
+  it('当前在院拒绝逆序及无效日期，切换终末后不应用在院限制', async () => {
+    mocks.createQCTaskAndSample.mockResolvedValue({ success: false, message: '测试停止' })
+    mocks.getTaskRuleSets.mockResolvedValue({ success: true, data: { items: [
+      { rule_set_key: 'running-v1', rule_set_name: '运行', rule_set_version: 'v1', scope: 'running' },
+      { rule_set_key: 'final-v1', rule_set_name: '终末', rule_set_version: 'v1', scope: 'final' },
+    ] } })
+    const wrapper = mountModal()
+    const vm = vmOf(wrapper)
+    await flushPromises()
+    vm.form.task_name = '日期错误任务'
+    vm.form.rule_set_key = 'running-v1'
+    vm.form.case_scope = 'active'
+    const today = dayjs(new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10))
+    vm.form.dateRange = [today, today.subtract(1, 'day')]
+    await vm.handleSubmit()
+    expect(mocks.message.warning).toHaveBeenLastCalledWith('日期范围起始时间不能晚于结束时间')
+    vm.form.dateRange = [dayjs('not-a-date'), today]
+    await vm.handleSubmit()
+    expect(mocks.message.warning).toHaveBeenLastCalledWith('入院日期范围格式无效，请选择有效日期')
+    expect(mocks.createQCTaskAndSample).not.toHaveBeenCalled()
+
+    await wrapper.setProps({ scene: 'final' })
+    await flushPromises()
+    vm.form.rule_set_key = 'final-v1'
+    vm.form.dateRange = [dayjs('2026-02-20'), dayjs('2026-03-20')]
+    await vm.handleSubmit()
+    expect(mocks.createQCTaskAndSample).toHaveBeenCalledWith(expect.objectContaining({
+      scene: 'final', date_range: { start: '2026-02-20', end: '2026-03-20' },
+    }))
+  })
+
   it('创建失败时保留输入，不关闭也不发 created', async () => {
     mocks.createQCTaskAndSample.mockResolvedValue({ success: false, message: '创建接口拒绝' })
     const wrapper = mountModal()

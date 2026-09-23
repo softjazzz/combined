@@ -58,6 +58,7 @@ from ..services.task_start_service import (
     TaskStartNotFound,
     start_assigned_task,
 )
+from ..services.task_sampling_service import validate_active_running_date_range
 from .qc_sichuan import get_qc_service, _run_sichuan_workspace_batch_job, _sichuan_workspace_service
 from ..core.permissions import (
     has_any_role,
@@ -215,6 +216,11 @@ async def create_task(
         raise HTTPException(status_code=422, detail="规则集不存在或不可用")
     if rule_set.scope != task_data.scene.value:
         raise HTTPException(status_code=422, detail="规则集与任务场景不匹配")
+    if task_data.scene.value == "running" and (task_data.sampling_config or {}).get("case_scope") == "active":
+        try:
+            validate_active_running_date_range(task_data.date_range)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
     task_id = str(uuid.uuid4())
     task_number = _generate_task_number()
 

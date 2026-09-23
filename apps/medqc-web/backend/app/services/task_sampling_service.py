@@ -16,6 +16,38 @@ from typing import Dict, Any, List
 logger = logging.getLogger(__name__)
 
 
+def validate_active_running_date_range(date_range: Any) -> tuple[date | None, date | None, date]:
+    """校验显式在院任务的入院日期窗；创建与抽样共用。"""
+    if date_range is None:
+        date_range = {}
+    if not isinstance(date_range, dict):
+        raise ValueError("日期范围格式无效")
+
+    def bound(value: Any) -> date | None:
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            raise ValueError("日期范围格式无效")
+        if isinstance(value, date):
+            return value
+        if isinstance(value, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+            try:
+                return date.fromisoformat(value)
+            except ValueError:
+                pass
+        raise ValueError("日期范围格式无效")
+
+    start, end = bound(date_range.get("start")), bound(date_range.get("end"))
+    if start and end and start > end:
+        raise ValueError("日期范围起始时间不能晚于结束时间")
+    today = datetime.now(timezone(timedelta(hours=8))).date()
+    if start and start > today:
+        raise ValueError("入院开始日期不能晚于在院截止日期")
+    if start and (today - start).days > 180:
+        raise ValueError("入院日期范围最多 180 天")
+    return start, end, today
+
+
 class TaskSamplingService:
     """任务抽样引擎"""
 
@@ -25,29 +57,7 @@ class TaskSamplingService:
 
         from .case_scope_service import CaseScopeService
 
-        date_range = task.get("date_range")
-        if date_range is None:
-            date_range = {}
-        if not isinstance(date_range, dict):
-            raise ValueError("日期范围格式无效")
-
-        def bound(value: Any) -> date | None:
-            if value is None:
-                return None
-            if isinstance(value, datetime):
-                raise ValueError("日期范围格式无效")
-            if isinstance(value, date):
-                return value
-            if isinstance(value, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
-                try:
-                    return date.fromisoformat(value)
-                except ValueError:
-                    pass
-            raise ValueError("日期范围格式无效")
-
-        start, end = bound(date_range.get("start")), bound(date_range.get("end"))
-        if start and end and start > end:
-            raise ValueError("日期范围起始时间不能晚于结束时间")
+        start, end, today = validate_active_running_date_range(task.get("date_range"))
         departments = task.get("department_filter")
         if departments is None:
             departments = []
@@ -74,11 +84,6 @@ class TaskSamplingService:
         if len(requested) != len(set(requested)):
             raise ValueError("指定病例三坐标重复")
 
-        today = datetime.now(timezone(timedelta(hours=8))).date()
-        if start and start > today:
-            raise ValueError("入院开始日期不能晚于在院截止日期")
-        if start and (today - start).days > 180:
-            raise ValueError("入院日期范围最多 180 天")
         try:
             result = await anyio.to_thread.run_sync(
                 lambda: CaseScopeService().resolve_hospitalization_scope(
