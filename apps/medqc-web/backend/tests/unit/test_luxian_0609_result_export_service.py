@@ -137,3 +137,58 @@ def test_selected_workbook_uses_selected_scope_description_without_technical_fil
     rows = list(workbook["导出说明"].iter_rows(values_only=True))
     assert ("导出口径", "已勾选病历的最新 Canonical 质控结果") in rows
     assert all(row[0] != "筛选-export_mode" for row in rows)
+
+
+def test_long_evidence_is_lossless_in_both_workbook_entrypoints():
+    from app.services.qc_workspace.export_service import render_customer_safe_workbook
+    from app.services.luxian_0609_result_export_service import customer_evidence_summary
+    from app.services.luxian_0609.ct_order_course_consistency import validate_ct_display_facts
+    facts = {"verification_kind": "ct_order_course_review", "subject": "ct_mri",
+        "requirement": "order_course_consistency", "review_scope_complete": True,
+        "event_count": 32, "event_results": [], "order_results": []}
+    evidence = []
+    for i in range(32):
+        facts["event_results"].append({"event_position": i+1, "event_status": "compliant",
+                                       "issue_kind": "order_course_consistent"})
+        facts["order_results"].append({"event_position": i+1, "order_position": 1,
+            "status": "compliant", "issue_kind": "order_course_consistent",
+            "order_reference_positions": [4*i+1], "course_locations": [{
+                "reference_position": 4*i+4, "field_path": "record_content", "start": 0,
+                "end": 300, "clause_id": f"C{i+1}", "offset_unit": "unicode_codepoint"}]})
+        for k, source in enumerate(("inpat_nondrug_order", "exam_master", "exam_item_report", "daily_course_record"), 1):
+            evidence.append({"source_type": source, "evidence_excerpt": "核"*299 + "🩺",
+                "decision_reference_positions": [4*i+k]})
+    assert validate_ct_display_facts(facts) == facts
+    text = customer_evidence_summary(evidence, facts=facts)
+    assert len(text) > 32767
+    summary = {"operation_ref": "test", "result_count": 1, "issue_records": 0, "status_counts": {"compliant": 1}}
+    batch = load_workbook(render_customer_safe_workbook(
+        items=[{"is_confirmed_issue": False}], rows=[["rec", "LX0609-06-01-01", "CT", "合规", "", "", "", text]], summary=summary))
+    result = _ready_result()
+    result["items"] = [{"rule_id": "LX0609-06-01-01", "status": "compliant",
+                         "evidence": evidence, "customer_display_facts": facts}]
+    filtered = load_workbook(export_filtered_record_results_workbook(
+        records=[_record()], results={("H-1", "P-1", "V-1"): result}, filters={}))
+    for book, sheet, column in ((batch, "全部明细", 8), (filtered, "全部规则结果", 11)):
+        assert "完整内容见长文本" in book[sheet].cell(2, column).value
+        parts = [row[4] for row in book["长文本"].iter_rows(min_row=2, values_only=True)
+                 if row[0] == sheet and row[1] == 2 and row[2] == column]
+        assert "".join(parts) == text
+        for i in range(32):
+            assert f"检查事件{i+1}/医嘱1" in "".join(parts)
+        assert all(len(part.encode("utf-16-le"))//2 <= 32767 for part in parts)
+
+
+def test_overflow_split_does_not_create_formula_and_preserves_non_bmp():
+    from openpyxl import Workbook
+    from app.services.qc_workspace.export_service import append_complete_workbook_row
+    book = Workbook()
+    text = "🩺"*16000 + "=1+1" + "核"*18000
+    append_complete_workbook_row(book.active, [text])
+    output = BytesIO()
+    book.save(output)
+    output.seek(0)
+    reloaded = load_workbook(output, data_only=False)
+    cells = [row[4] for row in reloaded["长文本"].iter_rows(min_row=2)]
+    assert "".join(cell.value for cell in cells) == text
+    assert all(cell.data_type == "s" for cell in cells)

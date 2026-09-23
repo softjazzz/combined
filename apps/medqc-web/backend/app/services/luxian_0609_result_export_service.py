@@ -9,6 +9,8 @@ from typing import Any, Mapping, Sequence
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 
+from .qc_workspace.export_service import append_complete_workbook_row
+
 
 _STATUS_LABELS = {
     "non_compliant": "确定问题",
@@ -338,9 +340,9 @@ def export_filtered_record_results_workbook(
                 _excel_text(_evidence_text(item)),
                 _excel_text(item.get("suggestion")),
             ]
-            details.append(row)
+            append_complete_workbook_row(details, row)
             if _text(item.get("status")).lower() in _ATTENTION_STATUSES:
-                issues.append(row)
+                append_complete_workbook_row(issues, row)
 
     _style_workbook(workbook)
     workbook.save(output)

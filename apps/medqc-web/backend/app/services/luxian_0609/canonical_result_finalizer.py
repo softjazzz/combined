@@ -458,6 +458,13 @@ def validate_luxian_0609_published_customer_display_facts(
         if validated is None:
             raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
         return validated
+    if normalized_rule_id == "LX0609-06-01-01":
+        from .ct_order_course_consistency import validate_ct_display_facts
+
+        validated = validate_ct_display_facts(raw)
+        if validated is None:
+            raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
+        return validated
     if raw is None or not isinstance(raw, dict):
         return None
     return validate_luxian_0609_executor_customer_display_facts(
@@ -976,7 +983,12 @@ def finalize_luxian_0609_reduced_customer_result(
             for position in evidence.get("decision_reference_positions", ())
         }
         if not required_positions.issubset(located_positions):
-            raise ValueError("CT order/course evidence binding is not publishable")
+            # 已知的单规则发布合同失败，复用既有清除临床结论的失败路径。
+            # 不放行失去定位的事实，也不让该异常逃出整个病例的聚合。
+            result, _ = finalize_luxian_0609_executor_customer_display_facts(
+                result=result, raw_facts=None, contract_failure=True,
+            )
+            return finalize_luxian_0609_canonical_result(result)
     if customer_evidence:
         result["customer_evidence"] = customer_evidence
     if (

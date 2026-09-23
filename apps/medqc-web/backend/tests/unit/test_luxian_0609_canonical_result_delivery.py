@@ -1387,6 +1387,10 @@ def test_single_record_result_projects_catalog_rule_master_metadata_in_envelope_
                 "events": [{"event_index": 1, "status": "compliant", "reason_code": "pathology_report_present",
                             "execution_confirmed": True, "report_count": 1}],
             }
+    for item in canonical_items:
+        if item["rule_id"] == "LX0609-06-01-01":
+            item["customer_display_facts"] = _published_pilot_item_for_read_boundary(
+                item["rule_id"])["customer_display_facts"]
     envelope = {
         "schema_version": "lx0609-record-result-envelope-v1",
         "delivery_mode": "canonical_straight_through",
@@ -2166,7 +2170,19 @@ def test_pathology_published_facts_commit_and_read_without_reprojection(
 
 
 def _published_pilot_item_for_read_boundary(rule_id: str) -> dict[str, Any]:
-    if rule_id == "LX0609-09-01-02":
+    if rule_id == "LX0609-06-01-01":
+        facts = {
+            "verification_kind": "ct_order_course_review", "subject": "ct_mri",
+            "requirement": "order_course_consistency", "review_scope_complete": True,
+            "event_count": 1, "event_results": [{"event_position": 1,
+                "event_status": "compliant", "issue_kind": "order_course_consistent"}],
+            "order_results": [{"event_position": 1, "order_position": 1,
+                "status": "compliant", "issue_kind": "order_course_consistent",
+                "order_reference_positions": [1], "course_locations": [{
+                    "reference_position": 2, "field_path": "record_content",
+                    "start": 0, "end": 10, "clause_id": "C1", "offset_unit": "unicode_codepoint"}]}],
+        }
+    elif rule_id == "LX0609-09-01-02":
         fields = [
             "condition_change", "rescue_time", "rescue_measures", "rescue_outcome",
             "participant_names", "participant_titles",
@@ -2212,6 +2228,9 @@ def _published_pilot_item_for_read_boundary(rule_id: str) -> dict[str, Any]:
 @pytest.mark.parametrize(
     ("rule_id", "path", "invalid"),
     [
+        ("LX0609-06-01-01", ("order_results",), "DELETE"),
+        ("LX0609-06-01-01", ("order_results", 0, "course_locations"), []),
+        ("LX0609-06-01-01", ("order_results", 0, "course_locations", 0, "start"), -1),
         ("LX0609-09-01-02", ("missing_fields",), [{}]),
         ("LX0609-06-02-01", ("decision_status",), []),
         ("LX0609-06-02-01", ("checked_sources", 0, "state"), {}),
@@ -2257,7 +2276,10 @@ def test_invalid_published_json_type_is_controlled_through_store_and_single_reco
         target = envelope["items"][0]["customer_display_facts"]
         for key in path[:-1]:
             target = target[key]
-        target[path[-1]] = invalid
+        if invalid == "DELETE":
+            del target[path[-1]]
+        else:
+            target[path[-1]] = invalid
         envelope_json = json.dumps(envelope, ensure_ascii=False)
         db_session.execute(table.update().values(envelope_json=envelope_json))
         db_session.commit()

@@ -284,7 +284,9 @@ def _unique_temporal_anchor(
         return True
     name = _normalized_name(_event_orders(event)[order_position - 1].get("order_name"))
     candidates = [candidate for candidate in review.events if not candidate.excluded
-                  and any(_normalized_name(order.get("order_name")) == name
+                  and any(_normalized_name(order.get("order_name"))
+                          and any(_normalized_name(order.get("order_name")) in _normalized_name(clause.text)
+                                  for clause in clauses)
                           for order in _event_orders(candidate))]
     if len(candidates) <= 1:
         return True
@@ -311,17 +313,28 @@ def _unique_temporal_anchor(
     if any(candidate is not event and
            (not event_days(candidate) or target in event_days(candidate)) for candidate in candidates):
         return False
+    # 仅接受日期直接修饰检查名称/执行动词的受控表达；记录、复述等动作
+    # 不能借日期集合命中建立归属。复杂表达保留关联缺口，不按最近日期猜测。
+    date_pattern = r"\d{4}[-年/]\d{1,2}[-月/]\d{1,2}日?"
+    anchor_pattern = rf"(?:{date_pattern})(?:(?:和|及|、)(?:{date_pattern}))*|今日|今天|昨日|昨天"
     for clause in clauses:
-        explicit = {day(f"{year}-{int(month):02d}-{int(date):02d}")
-                    for year, month, date in re.findall(r"(\d{4})[-年/](\d{1,2})[-月/](\d{1,2})日?", clause.text)}
-        if target in explicit:
-            return True
-        written = day(clause.record_time)
-        if written is not None and (
-            (re.search(r"今日|今天", clause.text) and written == target)
-            or (re.search(r"昨日|昨天", clause.text) and written - timedelta(days=1) == target)
-        ):
-            return True
+        text = unicodedata.normalize("NFKC", clause.text).casefold()
+        for match in re.finditer(anchor_pattern, text):
+            tail = text[match.end():]
+            if not re.match(r"\s*(?:(?:分别|均|已|完成|行|进行|复查)\s*)*" + re.escape(name), tail):
+                continue
+            anchor = match.group()
+            explicit = {day(f"{year}-{int(month):02d}-{int(date):02d}")
+                        for year, month, date in re.findall(
+                            r"(\d{4})[-年/](\d{1,2})[-月/](\d{1,2})日?", anchor)}
+            if target in explicit:
+                return True
+            written = day(clause.record_time)
+            if written is not None and (
+                (anchor in {"今日", "今天"} and written == target)
+                or (anchor in {"昨日", "昨天"} and written - timedelta(days=1) == target)
+            ):
+                return True
     return False
 
 

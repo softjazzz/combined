@@ -511,3 +511,108 @@ def test_public_order_binding_contract_rejects_invalid_types_and_missing_provena
     facts = deepcopy(evaluate_ct_review(_review(), _payload()).display_facts)
     mutation(facts)
     assert validate_ct_display_facts(facts) is None
+
+
+@pytest.mark.parametrize("text,names,expected", [
+    ("2026-09-03记录，复述2026-09-01胸部CT结果。", ("胸部CT", "胸部CT"), "data_gap"),
+    ("2026-09-01胸部CT平扫完成。", ("胸部CT", "胸部CT平扫"), "data_gap"),
+    ("2026-09-01完成胸部CT，2026-09-03完成胸部CT。", ("胸部CT", "胸部CT"), "compliant"),
+    ("2026-09-03记录今日复述昨日胸部CT结果。", ("胸部CT", "胸部CT"), "data_gap"),
+])
+def test_r1_exam_date_must_bind_exam_not_document_action(text, names, expected):
+    events = tuple(replace(_event(f"E{i}"),
+        rows=((f"m{i}", {"exam_time": date}),),
+        orders=((f"o{i}", {"order_id": f"O{i}", "order_name": names[i-1]}),))
+        for i, date in ((1, "2026-09-01"), (2, "2026-09-03")))
+    review = CtReviewInput(events, (1, 2), (CourseClause("C1", "d", text,
+        record_time="2026-09-03", field_path="record_content", end=len(text)),), {}, True)
+    payload = _payload()
+    payload["events"].append({**payload["events"][0], "event_position": 2})
+    assert evaluate_ct_review(review, payload).status == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode,expected", [("normal", "compliant"), ("one_duplicate", "technical_error"),
+    ("all_duplicates", "compliant"), ("missing", "technical_error")])
+async def test_r2_binding_failure_is_scoped_to_ct_during_real_aggregation(mode, expected):
+    from app.services.luxian_0609_result_aggregator import aggregate_luxian_0609_results
+    from app.services.luxian_0609.decision_reducer import reduce_luxian_0609_rule_decision
+    rows = _rows()
+    rows["daily_course_record"][0]["record_content"] = "ORDER-001左膝CT已完成。"
+    if "duplicate" in mode:
+        rows["daily_course_record"].append(dict(rows["daily_course_record"][0]))
+    snapshot, material = _session(rows)
+    payload = _payload(clauses=["C1", "C2"] if mode == "all_duplicates" else ["C1"])
+    result = await native.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=(RULE_ID, REPORT_RULE_ID), decision_rule_ids=(RULE_ID, REPORT_RULE_ID),
+        wrapper_rules=(), evidence_payload=None, llm_client=_Client(payload),
+        evidence_snapshot=snapshot, evidence_materials=material)
+    rules = [decision.rule_id for decision in result.decisions]
+    published = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": rule} for rule in rules], execution_results=[],
+        reduced_decisions=tuple(reduce_luxian_0609_rule_decision(d) for d in result.decisions),
+        customer_display_facts=result.customer_display_facts,
+        audit_context={"evidence_snapshot": snapshot, "evidence_materials": None if mode == "missing" else material})
+    by_rule = {item["rule_id"]: item for item in published}
+    assert by_rule[RULE_ID]["status"] == expected
+    assert by_rule[REPORT_RULE_ID]["status"] == "compliant"
+    if expected == "technical_error":
+        assert "customer_display_facts" not in by_rule[RULE_ID]
+        assert not by_rule[RULE_ID].get("customer_evidence")
+        assert by_rule[RULE_ID]["is_compliant"] is None
+
+    # 技术失败不冒充可交付医学结果；正常旧规则仍通过原交付状态合同。
+    from app.services.qc_workspace.canonical_result_store import canonical_envelope_items_are_consistent
+    assert canonical_envelope_items_are_consistent([by_rule[REPORT_RULE_ID]])
+    assert canonical_envelope_items_are_consistent(published) is (expected == "compliant")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("body,second_name,expected", [
+    ("2026-09-03记录，复述2026-09-01胸部CT结果。", "胸部CT", "data_gap"),
+    ("2026-09-01胸部CT平扫完成。", "胸部CT平扫", "data_gap"),
+    ("2026-09-01完成胸部CT，2026-09-03完成胸部CT。", "胸部CT", "compliant"),
+])
+async def test_r1_repeated_exam_through_native_and_publication(body, second_name, expected):
+    from app.services.luxian_0609.canonical_result_finalizer import finalize_luxian_0609_reduced_customer_result
+    from app.services.luxian_0609.decision_reducer import reduce_luxian_0609_rule_decision
+    rows = {ORDER_SOURCE: [], "exam_master": [], "exam_item_report": [],
+        "daily_course_record": [{"document_id": "D", "record_time": "2026-09-03", "record_content": body}]}
+    for i, date, name in ((1, "2026-09-01", "胸部CT"), (2, "2026-09-03", second_name)):
+        rows[ORDER_SOURCE].append({"order_id": f"O{i}", "order_name": name, "order_status": "新开"})
+        rows["exam_master"].append({"exam_id": f"E{i}", "order_id": f"O{i}", "exam_time": date})
+        rows["exam_item_report"].append({"exam_id": f"E{i}", "description": "炎症", "report_time": date})
+    snapshot, material = _session(rows)
+    # 固定同一错误响应分给两次检查；并非重新询问模型来掩盖接收边界。
+    clauses = [clause.clause_id for clause in _project(rows).clauses]
+    payload = _payload(clauses=clauses)
+    payload["events"].append({**payload["events"][0], "event_position": 2})
+    client = _Client(payload)
+    native_result = await native.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=(RULE_ID,), decision_rule_ids=(RULE_ID,), wrapper_rules=(), evidence_payload=None,
+        llm_client=client, evidence_snapshot=snapshot, evidence_materials=material)
+    published = finalize_luxian_0609_reduced_customer_result(
+        decision=reduce_luxian_0609_rule_decision(native_result.decisions[0]),
+        raw_customer_display_facts=dict(native_result.customer_display_facts)[RULE_ID],
+        evidence_snapshot=snapshot, evidence_materials=material)
+    assert published["status"] == expected
+    assert client.calls == native_result.llm_call_count == 1
+    assert len(published["customer_display_facts"]["order_results"]) == 2
+
+
+@pytest.mark.parametrize("written,expected_first", [
+    ("2026-09-01T17:00:00+00:00", "compliant"),
+    ("2026-09-01T01:00:00+00:00", "data_gap"),
+])
+def test_r1_yesterday_uses_beijing_document_day(written, expected_first):
+    events = tuple(replace(_event(f"E{i}"), rows=((f"m{i}", {"exam_time": date}),),
+        orders=((f"o{i}", {"order_id": f"O{i}", "order_name": "胸部CT"}),))
+        for i, date in ((1, "2026-09-01T09:00:00+08:00"), (2, "2026-09-03T09:00:00+08:00")))
+    text = "昨日已完成胸部CT。"
+    review = CtReviewInput(events, (1, 2), (CourseClause("C1", "d", text,
+        record_time=written, field_path="record_content", end=len(text)),), {}, True)
+    payload = _payload()
+    payload["events"].append({**payload["events"][0], "event_position": 2})
+    result = evaluate_ct_review(review, payload)
+    assert result.display_facts["order_results"][0]["status"] == expected_first
+    assert result.display_facts["order_results"][1]["status"] == "data_gap"
