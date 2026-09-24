@@ -929,14 +929,7 @@ def test_single_record_result_from_incomplete_task_is_ready_when_envelope_exists
         "schema_version": "lx0609-record-result-envelope-v1",
         "delivery_mode": "canonical_straight_through",
         "record_ref": "rec_1234567890abcdef12345678",
-        "items": [
-            {
-                "rule_id": "LX0609-01-01-01",
-                "status": "compliant",
-                "result_status": "compliant",
-                "is_compliant": True,
-            }
-        ],
+        "items": [_published_pilot_item_for_read_boundary("LX0609-01-01-01")],
     }
     session = _ReadSession(
         [
@@ -1356,48 +1349,18 @@ def test_single_record_result_projects_catalog_rule_master_metadata_in_envelope_
         if str(item.get("rule_id") or item.get("rule_code") or "").strip().upper()
         not in LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
     ]
-    customer_entries = [master_by_id[rule_id] for rule_id in customer_rule_ids]
-    rule_ids = [entry.rule_id for entry in customer_entries]
-    canonical_items = [
-        {
-            "rule_id": entry.rule_id,
-            "status": "compliant",
-            "result_status": "compliant",
-            "is_compliant": True,
-            "reason_code": "requirement_satisfied",
-        }
-        for entry in reversed(customer_entries)
+    assert all(master_by_id[rule_id].source_document and master_by_id[rule_id].qc_point
+               for rule_id in customer_rule_ids)
+    # 跨族验证正式读取顺序；不能为全目录伪造同一条“合规且无事实”的结果。
+    rule_ids = [
+        "LX0609-01-01-01", "LX0609-09-01-01", "LX0609-09-01-02",
+        "LX0609-06-01-01", "LX0609-06-02-01",
     ]
-    # 该用例检查全目录展示顺序，也必须提供两条试点发布后必需的事实。
-    rescue_fields = ["condition_change", "rescue_time", "rescue_measures", "rescue_outcome",
-                     "participant_names", "participant_titles"]
-    for item in canonical_items:
-        if item["rule_id"] == "LX0609-09-01-02":
-            item["customer_display_facts"] = {
-                "target_document": "rescue_record", "source_label": "抢救记录",
-                "content_state": "compliant", "required_fields": rescue_fields,
-                "missing_fields": [], "unknown_fields": [], "failure_kind": "",
-                "rescue_content_events": [{
-                    "event_index": 1, "record_time": "2026-09-01T10:00:00+08:00",
-                    "body_scope": "complete",
-                    "field_facts": {field: {"state": "present"} for field in rescue_fields},
-                    "missing_fields": [], "unknown_fields": [],
-                }],
-            }
-        elif item["rule_id"] == "LX0609-06-02-01":
-            item["customer_display_facts"] = {
-                "verification_kind": "pathology_report_completeness", "decision_status": "compliant",
-                "event_count": 1, "report_count": 1, "missing_report_count": 0,
-                "unresolved_event_count": 0, "excluded_event_count": 0,
-                "checked_sources": [{"source": source, "state": "present", "completeness": "complete"}
-                                    for source in ("pathology_exam_master", "pathology_exam_report")],
-                "events": [{"event_index": 1, "status": "compliant", "reason_code": "pathology_report_present",
-                            "execution_confirmed": True, "report_count": 1}],
-            }
-    for item in canonical_items:
-        if item["rule_id"] == "LX0609-06-01-01":
-            item["customer_display_facts"] = _published_pilot_item_for_read_boundary(
-                item["rule_id"])["customer_display_facts"]
+    assert set(rule_ids).issubset(customer_rule_ids)
+    canonical_items = [
+        _published_pilot_item_for_read_boundary(rule_id)
+        for rule_id in reversed(rule_ids)
+    ]
     envelope = {
         "schema_version": "lx0609-record-result-envelope-v1",
         "delivery_mode": "canonical_straight_through",
@@ -1810,26 +1773,29 @@ def test_exact_batch_html_rejects_historical_status_inconsistency_without_legacy
         ("compliant", True),
         ("non_compliant", False),
         ("data_gap", None),
-        ("not_applicable", None),
-        ("not_executed", None),
-        ("ai_suggested_compliant", None),
-        ("ai_suggested_non_compliant", None),
     ],
 )
-def test_writer_accepts_frozen_canonical_status_semantics(status, is_compliant):
+def test_writer_accepts_rule_001_published_status_semantics(status, is_compliant):
     session = _WriteSession()
     item = {
-        "record_id": "visit-1",
-        "visit_id": "visit-1",
-        "institute_id": "inst-1",
-        "patient_id": "patient-1",
-        "rule_id": "LX0609-01-01-01",
+        **_published_pilot_item_for_read_boundary("LX0609-01-01-01"),
         "status": status,
         "result_status": status,
         "display_status": status,
         "is_compliant": is_compliant,
     }
     if status == "non_compliant":
+        item["reason_code"] = "deadline_exceeded"
+        item["customer_display_facts"] = safe_basic_timeliness_customer_display_facts(
+            rule_id="LX0609-01-01-01",
+            raw={
+                "failure_kind": "timeliness_requirement_not_met",
+                "target_document": "admission_record", "source_label": "入院记录",
+                "timeliness_state": "late", "threshold_hours": 24,
+                "elapsed_hours": 26,
+            },
+        )
+        assert item["customer_display_facts"] is not None
         item["criterion_results"] = [
             {
                 "criterion_id": "requirement_check",
@@ -1838,6 +1804,9 @@ def test_writer_accepts_frozen_canonical_status_semantics(status, is_compliant):
                 "reason_code": "requirement_violated",
             }
         ]
+    elif status == "data_gap":
+        item["reason_code"] = "source_unavailable"
+        item.pop("customer_display_facts")
 
     CustomQCWorkspaceService()._write_record_result_envelopes(
         session,
@@ -1856,6 +1825,29 @@ def test_writer_accepts_frozen_canonical_status_semantics(status, is_compliant):
     )
 
     assert len(session.statements) == 2
+
+
+@pytest.mark.parametrize(
+    "status", ["not_applicable", "not_executed", "ai_suggested_compliant", "ai_suggested_non_compliant"],
+)
+def test_writer_rejects_rule_001_unsupported_status_without_reinterpreting_facts(status):
+    session = _WriteSession()
+    item = _published_pilot_item_for_read_boundary("LX0609-01-01-01")
+    item.update(status=status, result_status=status, display_status=status, is_compliant=None)
+
+    with pytest.raises(ValueError, match="LX0609 客户结果解释合同不完整"):
+        CustomQCWorkspaceService()._write_record_result_envelopes(
+            session,
+            job_row={
+                "id": "job-current", "created_by": "reviewer-a",
+                "filters_json": json.dumps({
+                    "rule_set_key": "luxian_0609_qc_v1", "rule_set_version": "2026-06-09",
+                }),
+            },
+            items=[item],
+            now=datetime(2026, 8, 15, 10, 0, 0),
+        )
+    assert session.statements == []
 
 
 def test_original_rescue_timeliness_store_rejects_changed_published_overdue_hours():
@@ -2731,20 +2723,10 @@ def test_writer_marks_envelope_as_canonical_straight_through():
                 }
             ),
         },
-        items=[
-            {
-                "record_id": "visit-1",
-                "visit_id": "visit-1",
-                "institute_id": "inst-1",
-                "patient_id": "patient-1",
-                "rule_id": "LX0609-01-01-01",
-                "status": "compliant",
-                "result_status": "compliant",
-                "reason_code": "requirement_satisfied",
-                "is_compliant": True,
-                "conclusion": "引擎结论原文",
-            }
-        ],
+        items=[{
+            **_published_pilot_item_for_read_boundary("LX0609-01-01-01"),
+            "conclusion": "引擎结论原文",
+        }],
         now=datetime(2026, 7, 30, 10, 0, 0),
     )
 
@@ -2762,10 +2744,7 @@ def test_writer_uses_facade_envelope_item_projector(monkeypatch):
     session = _WriteSession()
     service = CustomQCWorkspaceService()
     projected_item = {
-        "rule_id": "LX0609-01-01-01",
-        "status": "compliant",
-        "result_status": "compliant",
-        "is_compliant": True,
+        **_published_pilot_item_for_read_boundary("LX0609-01-01-01"),
         "projected_by_facade": True,
     }
     monkeypatch.setattr(
@@ -2786,18 +2765,7 @@ def test_writer_uses_facade_envelope_item_projector(monkeypatch):
                 }
             ),
         },
-        items=[
-            {
-                "record_id": "visit-1",
-                "visit_id": "visit-1",
-                "institute_id": "inst-1",
-                "patient_id": "patient-1",
-                "rule_id": "LX0609-01-01-01",
-                "status": "compliant",
-                "result_status": "compliant",
-                "is_compliant": True,
-            }
-        ],
+        items=[_published_pilot_item_for_read_boundary("LX0609-01-01-01")],
         now=datetime(2026, 8, 15, 10, 0, 0),
     )
 
@@ -3115,24 +3083,12 @@ def test_writer_validates_all_records_before_mutating_any_envelope():
                 ),
             },
             items=[
+                _published_pilot_item_for_read_boundary("LX0609-01-01-01"),
                 {
-                    "record_id": "visit-1",
-                    "visit_id": "visit-1",
-                    "institute_id": "inst-1",
-                    "patient_id": "patient-1",
-                    "rule_id": "LX0609-01-01-01",
-                    "status": "compliant",
-                    "result_status": "compliant",
-                    "is_compliant": True,
-                },
-                {
+                    **_published_pilot_item_for_read_boundary("LX0609-01-01-01"),
                     "record_id": "visit-2",
                     "visit_id": "visit-2",
-                    "institute_id": "inst-1",
                     "patient_id": "patient-2",
-                    "rule_id": "LX0609-01-01-01",
-                    "status": "compliant",
-                    "result_status": "compliant",
                     "is_compliant": False,
                 },
             ],

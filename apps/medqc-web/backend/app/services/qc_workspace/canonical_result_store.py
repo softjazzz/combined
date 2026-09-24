@@ -276,10 +276,13 @@ def safe_customer_display_facts(
     """仅透传 Finalizer 已验证的客户展示事实。"""
 
     raw = item.get("customer_display_facts")
+    has_result_status = any(
+        _safe_text(item.get(key)) for key in ("status", "result_status", "display_status")
+    ) or item.get("is_compliant") is not None
     shared = validate_luxian_0609_published_customer_display_facts(
         rule_id=rule_id,
         raw=raw,
-        status=canonical_customer_status(item),
+        status=canonical_customer_status(item) if has_result_status else "",
         reason_code=_safe_text(item.get("reason_code")),
     )
     return dict(shared) if isinstance(shared, dict) else {}
