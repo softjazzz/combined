@@ -1692,6 +1692,13 @@ class SichuanQCService:
         model_execution_stats = orchestrated.get("model_execution_stats")
         if isinstance(model_execution_stats, dict) and model_execution_stats:
             result["model_execution_stats"] = dict(model_execution_stats)
+        usage_observation_complete = orchestrated.get("luxian_0609_usage_observation_complete")
+        if isinstance(usage_observation_complete, bool):
+            result["luxian_0609_usage_observation_complete"] = usage_observation_complete
+            unknown_keys = orchestrated.get("luxian_0609_usage_unknown_executor_keys")
+            result["luxian_0609_usage_unknown_executor_keys"] = list(
+                unknown_keys if isinstance(unknown_keys, (list, tuple)) else []
+            )
         return result
 
     async def _evaluate_rules_with_engine(

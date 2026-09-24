@@ -744,6 +744,63 @@ def test_aggregate_parent_job_preserves_parent_cancellation_over_child_projectio
     assert aggregate["cancellable"] is expected_cancellable
 
 
+def test_parent_usage_observation_uses_all_child_attempts(monkeypatch):
+    class _Rows:
+        def mappings(self):
+            return self
+
+        def all(self):
+            return [
+                {
+                    "id": "child-1", "status": "completed",
+                    "summary": {
+                        "luxian_0609_usage_observation_complete": True,
+                        "luxian_0609_usage_unknown_executor_keys": [],
+                    },
+                },
+                {
+                    "id": "child-2", "status": "completed",
+                    "summary": {
+                        "luxian_0609_usage_observation_complete": False,
+                        "luxian_0609_usage_unknown_executor_keys": ["exam_lab"],
+                    },
+                },
+            ]
+
+    class _Session:
+        def execute(self, _statement):
+            return _Rows()
+
+    service = CustomQCWorkspaceService()
+    monkeypatch.setattr(workspace_module, "_row_to_batch_job", lambda row, include_items=True: row)
+    aggregate = service._aggregate_parent_job(
+        _Session(),
+        {"id": "parent-1", "job_kind": "parent", "status": "running", "summary": {}},
+    )
+
+    assert aggregate["summary"]["luxian_0609_usage_observation_complete"] is False
+    assert aggregate["summary"]["luxian_0609_usage_unknown_executor_keys"] == ["exam_lab"]
+
+
+def test_public_usage_observation_only_exposes_executor_keys():
+    projected = workspace_module.project_customer_safe_batch_job(
+        {
+            "id": "job-1",
+            "status": "completed",
+            "summary": {
+                "luxian_0609_usage_observation_complete": False,
+                "luxian_0609_usage_unknown_executor_keys": [
+                    "exam_lab", "patient=secret", "exam_lab",
+                ],
+            },
+        },
+        hmac_key="test-secret",
+        _validate_luxian=False,
+    )
+    assert projected["summary"]["luxian_0609_usage_observation_complete"] is False
+    assert projected["summary"]["luxian_0609_usage_unknown_executor_keys"] == ["exam_lab"]
+
+
 def test_record_result_envelope_keeps_delivery_facts_evidence_and_model_analysis():
     item = CustomQCWorkspaceService._envelope_item_from_rule_result(
         {

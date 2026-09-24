@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 
 import pytest
 
@@ -12,6 +13,25 @@ from app.services.luxian_0609.evidence_snapshot_provider import (
     build_luxian_0609_evidence_read_session,
 )
 from tests.unit.test_luxian_0609_task_plan_freeze_probe import _NoModel, _settings
+
+
+def test_document_result_keeps_usage_observation_diagnostic_outside_clinical_results() -> None:
+    from app.services.sichuan_qc_service import SichuanQCService
+
+    service = object.__new__(SichuanQCService)
+    service.client = SimpleNamespace(model="synthetic")
+    result = service._build_document_evaluation_result(
+        document_id="V", document_type="运行病历", rules=[],
+        orchestrated={
+            "results": [],
+            "luxian_0609_usage_observation_complete": False,
+            "luxian_0609_usage_unknown_executor_keys": ["surgery_presence"],
+        },
+    )
+
+    assert result["luxian_0609_usage_observation_complete"] is False
+    assert result["luxian_0609_usage_unknown_executor_keys"] == ["surgery_presence"]
+    assert result["evaluation_results"] == []
 
 
 @pytest.mark.parametrize(

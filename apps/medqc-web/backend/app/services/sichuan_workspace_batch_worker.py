@@ -1550,6 +1550,8 @@ async def run_sichuan_workspace_batch_job(
         total_context_tokens_estimate = 0
         total_refined_rule_count = 0
         model_execution_stats_total: Optional[Dict[str, int]] = None
+        usage_observation_complete: Optional[bool] = None
+        usage_unknown_executor_keys: set[str] = set()
         refine_summary_total: Dict[str, Any] = {
             "enabled": enable_selective_refine,
             "candidate_count": 0,
@@ -1811,6 +1813,9 @@ async def run_sichuan_workspace_batch_job(
             )
             if model_execution_summary is not None:
                 patch["model_execution_stats"] = model_execution_summary
+            if use_luxian_customer_results and isinstance(usage_observation_complete, bool):
+                patch["luxian_0609_usage_observation_complete"] = usage_observation_complete
+                patch["luxian_0609_usage_unknown_executor_keys"] = sorted(usage_unknown_executor_keys)
             return patch
 
         def _item_is_confirmed_defect(item: Dict[str, Any]) -> bool:
@@ -2180,10 +2185,26 @@ async def run_sichuan_workspace_batch_job(
                 record_luxian_0609_input_profile: Dict[str, Any] = {}
                 record_luxian_0609_shadow_evaluations: Dict[str, Any] = {}
                 record_model_execution_stats: Optional[Dict[str, int]] = None
+                record_usage_observation_complete: Optional[bool] = None
+                record_usage_unknown_executor_keys: set[str] = set()
                 bundle_scene = ""
                 bundle_payload: Optional[Dict[str, Any]] = None
                 attempted_bundle_scenes: List[str] = []
                 runtime_shadow_summary: Optional[Dict[str, Any]] = None
+
+                def _capture_usage_observation(payload: Dict[str, Any]) -> None:
+                    nonlocal record_usage_observation_complete
+                    observed = payload.get("luxian_0609_usage_observation_complete")
+                    if isinstance(observed, bool):
+                        record_usage_observation_complete = (
+                            observed if record_usage_observation_complete is None
+                            else record_usage_observation_complete and observed
+                        )
+                    unknown_keys = payload.get("luxian_0609_usage_unknown_executor_keys")
+                    if isinstance(unknown_keys, (list, tuple)):
+                        record_usage_unknown_executor_keys.update(
+                            key for key in unknown_keys if isinstance(key, str) and key
+                        )
 
                 async def _evaluate_rule_level_visit_bundle() -> bool:
                     nonlocal eval_items
@@ -2218,6 +2239,7 @@ async def run_sichuan_workspace_batch_job(
                             bundle_schema="public",
                             cancellation_check=_is_cancelled,
                         )
+                        _capture_usage_observation(single_result)
                         per_rule_items = list(
                             single_result.get("evaluation_results")
                             or single_result.get("parsed_evaluation_results")
@@ -2263,6 +2285,7 @@ async def run_sichuan_workspace_batch_job(
                     return True
 
                 if use_luxian_customer_results and not active_rule_ids:
+                    record_usage_observation_complete = True
                     used_bundle_path = True
                     bundle_fallback_reason = "仅包含适用性门控质控点，无需调用底层执行规则"
                     eval_items = []
@@ -2435,6 +2458,7 @@ async def run_sichuan_workspace_batch_job(
                     record_refine_summary = dict(result.get("refine_summary") or {})
                     record_luxian_0609_input_profile = dict(result.get("luxian_0609_input_profile") or {})
                     record_model_execution_stats = _extract_luxian_model_execution_stats(result)
+                    _capture_usage_observation(result)
                     record_luxian_0609_shadow_evaluations = dict(
                         result.get("luxian_0609_shadow_evaluations") or {}
                     )
@@ -2532,7 +2556,10 @@ async def run_sichuan_workspace_batch_job(
                             single_result.get("luxian_0609_input_profile") or {}
                         )
                         record_model_execution_stats = _extract_luxian_model_execution_stats(single_result)
+                        _capture_usage_observation(single_result)
                     except Exception as bundle_exc:
+                        if use_luxian_customer_results:
+                            record_usage_observation_complete = False
                         if prefer_rule_level_visit_eval and len(active_rule_ids) == 1:
                             try:
                                 used_bundle_path = await _evaluate_rule_level_visit_bundle()
@@ -2600,6 +2627,7 @@ async def run_sichuan_workspace_batch_job(
                     record_refine_summary = dict(result.get("refine_summary") or {})
                     record_luxian_0609_input_profile = dict(result.get("luxian_0609_input_profile") or {})
                     record_model_execution_stats = _extract_luxian_model_execution_stats(result)
+                    _capture_usage_observation(result)
                     record_luxian_0609_shadow_evaluations = dict(
                         result.get("luxian_0609_shadow_evaluations") or {}
                     )
@@ -3115,6 +3143,8 @@ async def run_sichuan_workspace_batch_job(
                     "refine_summary": record_refine_summary,
                     "luxian_0609_shadow_evaluations": record_luxian_0609_shadow_evaluations,
                     "model_execution_stats": record_model_execution_stats,
+                    "luxian_0609_usage_observation_complete": record_usage_observation_complete,
+                    "luxian_0609_usage_unknown_executor_keys": sorted(record_usage_unknown_executor_keys),
                 }
             except QCJobCancelled:
                 raise
@@ -3166,6 +3196,10 @@ async def run_sichuan_workspace_batch_job(
                     "refine_summary": {},
                     "luxian_0609_shadow_evaluations": {},
                     "model_execution_stats": None,
+                    "luxian_0609_usage_observation_complete": (
+                        False if use_luxian_customer_results else None
+                    ),
+                    "luxian_0609_usage_unknown_executor_keys": sorted(record_usage_unknown_executor_keys),
                 }
 
         async def _evaluate_single_record(record: Dict[str, Any]) -> Dict[str, Any]:
@@ -3211,6 +3245,7 @@ async def run_sichuan_workspace_batch_job(
             nonlocal total_context_tokens_estimate
             nonlocal total_refined_rule_count
             nonlocal model_execution_stats_total
+            nonlocal usage_observation_complete
 
             completed_records_state["count"] = max(
                 int(completed_records_state["count"]), processed_records_count
@@ -3242,6 +3277,17 @@ async def run_sichuan_workspace_batch_job(
                     record_result.get("model_execution_stats")
                 ),
             )
+            record_observed = record_result.get("luxian_0609_usage_observation_complete")
+            if isinstance(record_observed, bool):
+                usage_observation_complete = (
+                    record_observed if usage_observation_complete is None
+                    else usage_observation_complete and record_observed
+                )
+            record_unknown_keys = record_result.get("luxian_0609_usage_unknown_executor_keys")
+            if isinstance(record_unknown_keys, (list, tuple)):
+                usage_unknown_executor_keys.update(
+                    key for key in record_unknown_keys if isinstance(key, str) and key
+                )
 
             record_first_result_latency = float(record_result.get("first_result_latency") or 0.0)
             if record_first_result_latency > 0 and first_result_latency is None:
@@ -3531,6 +3577,17 @@ async def run_sichuan_workspace_batch_job(
                 ),
                 model_execution_stats_total,
             )
+            base_observed = retry_base_summary.get("luxian_0609_usage_observation_complete")
+            if isinstance(base_observed, bool):
+                usage_observation_complete = (
+                    base_observed if usage_observation_complete is None
+                    else usage_observation_complete and base_observed
+                )
+            base_unknown_keys = retry_base_summary.get("luxian_0609_usage_unknown_executor_keys")
+            if isinstance(base_unknown_keys, (list, tuple)):
+                usage_unknown_executor_keys.update(
+                    key for key in base_unknown_keys if isinstance(key, str) and key
+                )
 
         if (
             use_luxian_customer_results and failed_record_ids and all_failed_records
@@ -3756,6 +3813,11 @@ async def run_sichuan_workspace_batch_job(
         model_execution_summary = _build_luxian_model_execution_summary(model_execution_stats_total)
         if model_execution_summary is not None:
             summary["model_execution_stats"] = model_execution_summary
+        if use_luxian_customer_results:
+            if usage_observation_complete is None:
+                usage_observation_complete = total_records == 0
+            summary["luxian_0609_usage_observation_complete"] = usage_observation_complete
+            summary["luxian_0609_usage_unknown_executor_keys"] = sorted(usage_unknown_executor_keys)
         automatic_retry_plan = build_failed_rule_auto_retry_plan(
             summary=summary,
             failures=all_failed_records,

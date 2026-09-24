@@ -55,11 +55,13 @@ def _clear_catalog_caches() -> None:
     source_registry.load_luxian_0609_source_registry.cache_clear()
 
 
+@pytest.mark.parametrize("usage_unknown", [False, True], ids=("observed", "unknown"))
 @pytest.mark.asyncio
 async def test_test_only_native_rule_crosses_formal_catalog_admission_engine_and_canonical_store(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     request: pytest.FixtureRequest,
+    usage_unknown: bool,
 ) -> None:
     master = json.loads(master_module._MASTER_PATH.read_text(encoding="utf-8"))
     base_wrappers = json.loads(catalog_module._DATA_PATH.read_text(encoding="utf-8"))
@@ -241,6 +243,24 @@ async def test_test_only_native_rule_crosses_formal_catalog_admission_engine_and
         async def service_provider() -> SichuanQCService:
             return service
 
+        emitted_usage: list[tuple[object, object]] = []
+        original_build_result = service._build_document_evaluation_result
+
+        def capture_build_result(**kwargs: object) -> dict:
+            if usage_unknown:
+                kwargs["orchestrated"]["luxian_0609_usage_observation_complete"] = False
+                kwargs["orchestrated"]["luxian_0609_usage_unknown_executor_keys"] = [
+                    "surgery_presence"
+                ]
+            result = original_build_result(**kwargs)
+            emitted_usage.append((
+                kwargs["orchestrated"].get("luxian_0609_usage_observation_complete"),
+                result.get("luxian_0609_usage_observation_complete"),
+            ))
+            return result
+
+        monkeypatch.setattr(service, "_build_document_evaluation_result", capture_build_result)
+
         # 路由接纳的冻结任务经正式 Worker 与 Workspace 完成事务写入隔离 SQLite。
         persisted_engine = create_engine(
             "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool,
@@ -276,6 +296,19 @@ async def test_test_only_native_rule_crosses_formal_catalog_admission_engine_and
         )
         persisted_job = persisted_workspace.get_batch_job_for_processing(job_id=admitted_job_id)
         assert persisted_job["status"] == "completed"
+        expected_observed = not usage_unknown
+        expected_unknown_keys = ["surgery_presence"] if usage_unknown else []
+        assert emitted_usage == [(expected_observed, expected_observed)]
+        assert persisted_job["summary"].get("luxian_0609_usage_observation_complete") is expected_observed, {
+            key: value for key, value in persisted_job["summary"].items()
+            if "usage" in key or "execution" in key
+        }
+        assert persisted_job["summary"]["luxian_0609_usage_unknown_executor_keys"] == expected_unknown_keys
+        safe_job = workspace_module.project_customer_safe_batch_job(
+            persisted_job, hmac_key=workspace_module.customer_safe_projection_key(),
+        )
+        assert safe_job["summary"]["luxian_0609_usage_observation_complete"] is expected_observed
+        assert safe_job["summary"]["luxian_0609_usage_unknown_executor_keys"] == expected_unknown_keys
         with Session(persisted_engine) as db:
             persisted_results = CanonicalResultStore(envelope_table).load_selected(
                 db, root_job_id=admitted_job_id, institute_id="I", patient_id="P", visit_id="V",

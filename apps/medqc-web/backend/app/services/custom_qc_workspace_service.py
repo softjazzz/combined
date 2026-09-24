@@ -1044,6 +1044,16 @@ def project_customer_safe_batch_job(
     model_counts = _normalize_luxian_model_execution_stats(raw_summary.get("model_execution_stats"))
     if model_counts is not None:
         safe_summary["model_execution_stats"] = _build_luxian_model_execution_summary(model_counts)
+    usage_observed = raw_summary.get("luxian_0609_usage_observation_complete")
+    if isinstance(usage_observed, bool):
+        safe_summary["luxian_0609_usage_observation_complete"] = usage_observed
+        raw_unknown_keys = raw_summary.get("luxian_0609_usage_unknown_executor_keys")
+        safe_summary["luxian_0609_usage_unknown_executor_keys"] = sorted({
+            key for raw_key in (
+                raw_unknown_keys if isinstance(raw_unknown_keys, (list, tuple)) else []
+            )
+            if (key := _safe_text(raw_key)) and re.fullmatch(r"[a-z][a-z0-9_]{0,63}", key)
+        })[:30]
     raw_profile = (
         raw_summary.get("performance_profile")
         if isinstance(raw_summary.get("performance_profile"), dict)
@@ -2368,6 +2378,21 @@ class CustomQCWorkspaceService:
         if parent_performance_profile:
             parent_summary["performance_profile"] = parent_performance_profile
         child_summaries = [child.get("summary") or {} for child in child_jobs]
+        child_usage_states = [
+            summary.get("luxian_0609_usage_observation_complete")
+            for summary in child_summaries
+        ]
+        if any(isinstance(state, bool) for state in child_usage_states):
+            parent_summary["luxian_0609_usage_observation_complete"] = (
+                len(child_usage_states) == len(child_jobs)
+                and all(state is True for state in child_usage_states)
+            )
+            parent_summary["luxian_0609_usage_unknown_executor_keys"] = sorted({
+                key for summary in child_summaries
+                for unknown_keys in [summary.get("luxian_0609_usage_unknown_executor_keys")]
+                if isinstance(unknown_keys, (list, tuple))
+                for key in unknown_keys if isinstance(key, str) and key
+            })
         if any("execution_status" in summary for summary in child_summaries):
             completed_rules = sum(_to_int(summary.get("completed_rule_count")) for summary in child_summaries)
             failed_rules = sum(_to_int(summary.get("failed_rule_count")) for summary in child_summaries)
