@@ -19,6 +19,7 @@ from ..services.fast_screen_qc import EXECUTION_STRATEGY_FAST_SCREEN, EXECUTION_
 from ..routers.qc_sichuan import (
     _build_workspace_record_scene_snapshot,
     _run_sichuan_workspace_batch_job,
+    get_qc_service,
 )
 from ..services.custom_qc_sample_pool_service import (
     CustomQCSamplePoolService,
@@ -43,7 +44,9 @@ from ..services.luxian_0609.evaluation_horizon import (
 )
 from ..services.luxian_0609.rule_decision_settings import (
     LX0609_TASK_SETTINGS_FILTER_KEY,
+    LX0609_TASK_RUNTIME_FILTER_KEY,
     capture_luxian_0609_task_settings,
+    capture_luxian_0609_task_runtime,
     resolve_mainline_rule_decision_settings,
 )
 from ..services.sample_validation_rule_sets import (
@@ -1369,6 +1372,12 @@ async def run_sample_pool_intrinsic_validation(
         if rule_set_key == LUXIAN_0609_QC_RULE_SET_KEY
         else None
     )
+    task_runtime_snapshot = None
+    if rule_set_key == LUXIAN_0609_QC_RULE_SET_KEY:
+        try:
+            task_runtime_snapshot = capture_luxian_0609_task_runtime(await get_qc_service())
+        except ValueError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
     pseudo_draft = resolve_sample_validation_pseudo_draft(
         validation_mode=validation_mode,
         pool_name=str(pool.get("name") or ""),
@@ -1378,6 +1387,7 @@ async def run_sample_pool_intrinsic_validation(
     )
     job_filters = {
         **({LX0609_TASK_SETTINGS_FILTER_KEY: task_settings_snapshot} if task_settings_snapshot is not None else {}),
+        **({LX0609_TASK_RUNTIME_FILTER_KEY: task_runtime_snapshot} if task_runtime_snapshot is not None else {}),
         "rule_ids": rule_ids,
         "rule_set_key": rule_set_key,
         "rule_set_name": rule_set_name,
@@ -1478,6 +1488,7 @@ async def run_sample_pool_intrinsic_validation(
         effective_scope=effective_scope,
         execution_options={
             **({LX0609_TASK_SETTINGS_FILTER_KEY: task_settings_snapshot} if task_settings_snapshot is not None else {}),
+            **({LX0609_TASK_RUNTIME_FILTER_KEY: task_runtime_snapshot} if task_runtime_snapshot is not None else {}),
             "model_code": payload.model_code,
             "temperature": payload.temperature,
             "top_p": payload.top_p,

@@ -75,7 +75,9 @@ from ..services.luxian_0609.surgery_procedure_catalog import (
 from ..services.luxian_0609.rule_decision_settings import (
     assert_luxian_0609_customer_native_delivery_ready,
     capture_luxian_0609_task_settings,
+    capture_luxian_0609_task_runtime,
     LX0609_TASK_SETTINGS_FILTER_KEY,
+    LX0609_TASK_RUNTIME_FILTER_KEY,
     resolve_mainline_rule_decision_settings,
 )
 from ..services.luxian_0609.native_package import (
@@ -1952,6 +1954,7 @@ async def create_workspace_batch_job(
             detail="LX0609质控任务不接受 record_ids，请改用 record_refs",
         )
     task_settings_snapshot = None
+    task_runtime_snapshot = None
     if is_direct_native_selection:
         effective_settings = resolve_mainline_rule_decision_settings(get_settings())
         try:
@@ -1969,6 +1972,7 @@ async def create_workspace_batch_job(
                 context="workspace_batch_create",
             )
             task_settings_snapshot = capture_luxian_0609_task_settings(effective_settings)
+            task_runtime_snapshot = capture_luxian_0609_task_runtime(qc_service)
         except ValueError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
     compatibility_rule_ids = (
@@ -2051,6 +2055,7 @@ async def create_workspace_batch_job(
     )
     idempotency_payload = {
         **({LX0609_TASK_SETTINGS_FILTER_KEY: task_settings_snapshot} if task_settings_snapshot is not None else {}),
+        **({LX0609_TASK_RUNTIME_FILTER_KEY: task_runtime_snapshot} if task_runtime_snapshot is not None else {}),
         **({"diagnostic_capture": True} if payload.diagnostic_capture else {}),
         "scope": normalized_scope,
         "query_scope": normalized_scope,
@@ -2155,6 +2160,7 @@ async def create_workspace_batch_job(
             "paused_customer_rule_ids": list(pending_customer_rule_ids),
             "rule_set_key": rule_set_key,
             **({LX0609_TASK_SETTINGS_FILTER_KEY: task_settings_snapshot} if task_settings_snapshot is not None else {}),
+            **({LX0609_TASK_RUNTIME_FILTER_KEY: task_runtime_snapshot} if task_runtime_snapshot is not None else {}),
             "rule_set_name": rule_set_name,
             "rule_set_version": rule_set_version,
             "execution_strategy": execution_strategy,

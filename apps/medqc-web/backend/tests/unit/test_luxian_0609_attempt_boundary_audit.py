@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import json
 from datetime import datetime
-from types import SimpleNamespace
 from fastapi import HTTPException
 
 import pytest
@@ -17,7 +16,9 @@ from app.routers import qc_sichuan
 from app.core.settings import Settings
 from app.services.luxian_0609.rule_decision_settings import (
     LX0609_TASK_SETTINGS_FILTER_KEY,
+    LX0609_TASK_RUNTIME_FILTER_KEY,
     capture_luxian_0609_task_settings,
+    capture_luxian_0609_task_runtime,
     resolve_mainline_rule_decision_settings,
 )
 from app.services import custom_qc_workspace_service as workspace_module
@@ -99,6 +100,7 @@ def test_same_id_retry_preserves_original_luxian_settings_snapshot(storage):
     original = capture_luxian_0609_task_settings(
         resolve_mainline_rule_decision_settings(Settings(_env_file=None, JWT_SECRET="synthetic-retry"))
     )
+    accepted_runtime = capture_luxian_0609_task_runtime(_ServiceStub())
     with engine.begin() as connection:
         connection.execute(
             table.update().where(table.c.id == "attempt-job").values(
@@ -106,6 +108,7 @@ def test_same_id_retry_preserves_original_luxian_settings_snapshot(storage):
                     "rule_set_key": "luxian_0609_qc_v1",
                     "rule_ids": ["LX0609-01-01-01"],
                     LX0609_TASK_SETTINGS_FILTER_KEY: original,
+                    LX0609_TASK_RUNTIME_FILTER_KEY: accepted_runtime,
                 })
             )
         )
@@ -114,6 +117,7 @@ def test_same_id_retry_preserves_original_luxian_settings_snapshot(storage):
     retried = service.retry_batch_job(job_id="attempt-job", created_by="tester")
     assert retried is not None and retried["status"] == "queued"
     assert retried["filters"][LX0609_TASK_SETTINGS_FILTER_KEY] == original
+    assert retried["filters"][LX0609_TASK_RUNTIME_FILTER_KEY] == accepted_runtime
 
 
 def test_running_job_can_be_claimed_by_two_workers(storage):
@@ -633,7 +637,7 @@ async def test_formal_0609_worker_result_after_bundle_await_cannot_publish(stora
     entered = asyncio.Event()
     release = asyncio.Event()
     qc_service = _ServiceStub()
-    qc_service.client = SimpleNamespace(max_parallel_records=1)
+    qc_service.client.max_parallel_records = 1
 
     async def evaluate_running_final_bundle_input(**_kwargs):
         entered.set()
@@ -674,6 +678,7 @@ async def test_formal_0609_worker_result_after_bundle_await_cannot_publish(stora
     workspace.job["filters"][LX0609_TASK_SETTINGS_FILTER_KEY] = capture_luxian_0609_task_settings(
         resolve_mainline_rule_decision_settings(batch_worker.get_settings())
     )
+    workspace.job["filters"][LX0609_TASK_RUNTIME_FILTER_KEY] = capture_luxian_0609_task_runtime(qc_service)
     with engine.begin() as connection:
         connection.execute(table.update().where(table.c.id == "attempt-job").values(
             filters_json=json.dumps(workspace.job["filters"]),

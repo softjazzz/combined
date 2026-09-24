@@ -19,7 +19,7 @@ from tests.unit.test_luxian_0609_task_plan_freeze_probe import _NoModel, _settin
 from tests.unit.test_qc_sample_pools_router import (
     _SamplePoolServiceStub, _WorkspaceServiceStub,
 )
-from tests.unit.test_qc_sichuan_batch_throughput import _ServiceStub, _WorkspaceStub
+from tests.unit.test_qc_sichuan_batch_throughput import _WorkspaceStub
 
 
 RULE_IDS = ("LX0609-01-01-01", "LX0609-09-01-01")
@@ -47,6 +47,23 @@ async def test_three_real_entry_routes_keep_original_001_004_task_inputs(monkeyp
     settings = _settings(basic_timeliness=True)
     monkeypatch.setattr(qc_sichuan, "get_settings", lambda: settings)
     monkeypatch.setattr(qc_sample_pools, "get_settings", lambda: settings)
+    service = object.__new__(SichuanQCService)
+    model_identity = dict(
+        provider_code="alibaba", model="fixed-no-model",
+        api_endpoint="https://example.invalid/llm", temperature=0.2,
+        top_p=0.9, max_tokens=16384, enable_thinking=False,
+        thinking_budget=None, reasoning_effort="",
+        allow_mock_when_unconfigured=False,
+    )
+    service.client = SimpleNamespace(**model_identity, max_parallel_records=1)
+    service.adjudicator_client = _NoModel()
+    for key, value in model_identity.items():
+        setattr(service.adjudicator_client, key, value)
+
+    async def accepted_service():
+        return service
+
+    monkeypatch.setattr(qc_sample_pools, "get_qc_service", accepted_service)
     submitted: list[tuple[str, str]] = []
     monkeypatch.setattr(
         qc_sichuan, "submit_detached_task",
@@ -80,7 +97,7 @@ async def test_three_real_entry_routes_keep_original_001_004_task_inputs(monkeyp
                 rule_set_key="luxian_0609_qc_v1", scope="running",
                 date_field="admission", rule_ids=list(RULE_IDS), record_refs=refs,
             ),
-            qc_service=_ServiceStub(), current_user={"id": "tester"},
+            qc_service=service, current_user={"id": "tester"},
         )
         assert response["success"] is True
         created[label] = dict(workspace.created_job or {})
@@ -162,10 +179,6 @@ async def test_three_real_entry_routes_keep_original_001_004_task_inputs(monkeyp
         def enforce(self):
             return None
 
-    service = object.__new__(SichuanQCService)
-    service.client = SimpleNamespace(model="fixed-no-model", max_parallel_records=1)
-    service.adjudicator_client = _NoModel()
-
     async def provide_service():
         return service
 
@@ -240,7 +253,9 @@ async def test_three_real_entry_routes_keep_original_001_004_task_inputs(monkeyp
         assert all(trace["settings_id"] == id(settings) for trace in prepare_trace[label])
 
     reference = prepare_trace["single"][0]
+    accepted_runtime = created["single"]["filters"]["lx0609_task_runtime"]
     for label in ("single", "pool_batch", "customer_sample"):
+        assert created[label]["filters"]["lx0609_task_runtime"] == accepted_runtime
         assert created[label]["filters"]["rule_set_version"] == "2026-06-09"
         assert created[label]["filters"]["task_frozen_date"] == "2026-09-24"
         assert prepare_trace[label][0] == reference, (

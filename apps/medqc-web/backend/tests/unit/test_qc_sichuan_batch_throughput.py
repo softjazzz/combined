@@ -692,6 +692,15 @@ async def test_luxian_worker_preserves_first_evaluation_error_before_canonical(
 
 class _ServiceStub:
     def __init__(self, status_by_rule: Optional[Dict[str, str]] = None) -> None:
+        model_config = dict(
+            provider_code="alibaba", model="synthetic-model",
+            api_endpoint="https://example.invalid/llm", temperature=0.2,
+            top_p=0.9, max_tokens=16384, enable_thinking=False,
+            thinking_budget=None, reasoning_effort="",
+            allow_mock_when_unconfigured=False,
+        )
+        self.client = SimpleNamespace(**model_config)
+        self.adjudicator_client = SimpleNamespace(**model_config)
         self.evaluate_calls = 0
         self.evaluate_document_args: List[Dict[str, Any]] = []
         self.evaluate_rule_for_visit_calls = 0
@@ -1052,7 +1061,7 @@ async def test_workspace_parallel_batch_default_and_explicit_record_limits(
 
     service = _ServiceStub()
     if system_limit is not None:
-        service.client = SimpleNamespace(max_parallel_records=system_limit)
+        service.client.max_parallel_records = system_limit
     concurrency = {"active": 0, "peak": 0}
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
 
@@ -2456,6 +2465,8 @@ async def test_create_workspace_batch_job_accepts_native_luxian_customer_ids_wit
     assert filters["validation_mode"] == "programmatic"
     assert len(filters["lx0609_task_settings"]["flags"]) == 32
     assert filters["idempotency_payload"]["lx0609_task_settings"] == filters["lx0609_task_settings"]
+    assert filters["idempotency_payload"]["lx0609_task_runtime"] == filters["lx0609_task_runtime"]
+    assert filters["lx0609_task_runtime"]["first_pass"]["model"] == "synthetic-model"
     assert filters["customer_rule_count"] == filters["execution_rule_count"] == 3
     task_frozen_date = filters["task_frozen_date"]
     assert date.fromisoformat(task_frozen_date).isoformat() == task_frozen_date

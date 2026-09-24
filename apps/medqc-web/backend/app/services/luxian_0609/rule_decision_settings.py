@@ -2,13 +2,22 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Any, Mapping
+from uuid import uuid4
 
 from .phase_scope import partition_luxian_0609_rule_scope
+from ..qc_diagnostics.runtime_build import load_runtime_build
 
 
 LX0609_TASK_SETTINGS_FILTER_KEY = "lx0609_task_settings"
+LX0609_TASK_RUNTIME_FILTER_KEY = "lx0609_task_runtime"
 _LX0609_TASK_SETTINGS_VERSION = 1
+_LX0609_TASK_RUNTIME_VERSION = 1
+_UNVERSIONED_PROCESS_ID = uuid4().hex
+# 旧进程即使安装目录被覆盖，也不能把磁盘上的新构建号冒认为自身代码身份。
+_PROCESS_RUNTIME_BUILD = load_runtime_build()
 # 只包含会改变正式执行路径和客户证据组织的有效布尔值；资源预算、影子开关与凭据不入任务。
 _LX0609_TASK_MEDICAL_FLAGS = (
     "MAINLINE_RULE_DECISION_ENABLED", "CUSTOMER_AGGREGATION_ENABLED", "UNIFIED_ENGINE_ENABLED",
@@ -65,6 +74,68 @@ def assert_luxian_0609_task_settings_match(
     changed = [name for name in _LX0609_TASK_FLAG_NAMES if frozen["flags"][name] != current["flags"][name]]
     if changed:
         raise ValueError(f"LX0609任务执行配置已变化，请重新发起任务：{', '.join(changed)}")
+
+
+def _luxian_0609_model_identity(client: Any) -> dict[str, Any]:
+    """只冻结影响推理的有效客户端配置；凭据与端点原文不入任务。"""
+
+    if client is None:
+        raise ValueError("LX0609任务模型配置不可用")
+    provider = str(getattr(client, "provider_code", "") or "").strip().lower()
+    model = str(getattr(client, "model", "") or "").strip()
+    if not provider or not model:
+        raise ValueError("LX0609任务模型配置不可用")
+    endpoint = str(getattr(client, "api_endpoint", "") or "").strip()
+    return {
+        "provider": provider,
+        "model": model,
+        "endpoint_sha256": hashlib.sha256(endpoint.encode("utf-8")).hexdigest(),
+        "temperature": getattr(client, "temperature", None),
+        "top_p": getattr(client, "top_p", None),
+        "max_tokens": getattr(client, "max_tokens", None),
+        "enable_thinking": getattr(client, "enable_thinking", None),
+        "thinking_budget": getattr(client, "thinking_budget", None),
+        "reasoning_effort": str(getattr(client, "reasoning_effort", "") or "").strip(),
+        "allow_mock_when_unconfigured": getattr(client, "allow_mock_when_unconfigured", None),
+    }
+
+
+def capture_luxian_0609_task_runtime(qc_service: Any) -> dict[str, Any]:
+    """记录任务接纳时实际服务的模型及代码版本，不重新加载模型配置。"""
+
+    build = _PROCESS_RUNTIME_BUILD
+    implementation = (
+        {"kind": "release", "build_id": build["build_id"], "git_commit": build["git_commit"]}
+        if build.get("available") is True
+        else {"kind": "process", "id": _UNVERSIONED_PROCESS_ID}
+    )
+    snapshot = {
+        "schema_version": _LX0609_TASK_RUNTIME_VERSION,
+        "implementation": implementation,
+        "first_pass": _luxian_0609_model_identity(getattr(qc_service, "client", None)),
+        "adjudicator": _luxian_0609_model_identity(getattr(qc_service, "adjudicator_client", None)),
+    }
+    try:
+        json.dumps(snapshot, ensure_ascii=False, sort_keys=True, allow_nan=False)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("LX0609任务模型配置不可序列化") from exc
+    return snapshot
+
+
+def assert_luxian_0609_task_runtime_match(frozen: Any, qc_service: Any) -> None:
+    """模型、推理参数或部署版本变化时，在读取病例前拒绝旧任务。"""
+
+    if type(frozen) is not dict or set(frozen) != {
+        "schema_version", "implementation", "first_pass", "adjudicator"
+    } or type(frozen.get("schema_version")) is not int or frozen["schema_version"] != _LX0609_TASK_RUNTIME_VERSION:
+        raise ValueError("LX0609任务运行身份快照缺失或非法，请重新发起任务")
+    try:
+        serialized = json.dumps(frozen, ensure_ascii=False, sort_keys=True, allow_nan=False)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("LX0609任务运行身份快照缺失或非法，请重新发起任务") from exc
+    current = capture_luxian_0609_task_runtime(qc_service)
+    if serialized != json.dumps(current, ensure_ascii=False, sort_keys=True, allow_nan=False):
+        raise ValueError("LX0609任务模型或实现版本已变化，请重新发起任务")
 
 
 RULE_DECISION_ROLLOUT_GROUPS: tuple[tuple[str | None, tuple[str, ...]], ...] = (

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -24,6 +23,16 @@ from tests.unit.test_qc_sichuan_batch_throughput import _WorkspaceStub
 
 class _NoModel:
     family_max_concurrency = 1
+    provider_code = "alibaba"
+    model = "probe-only"
+    api_endpoint = "https://example.invalid/llm"
+    temperature = 0.2
+    top_p = 0.9
+    max_tokens = 16384
+    enable_thinking = False
+    thinking_budget = None
+    reasoning_effort = ""
+    allow_mock_when_unconfigured = False
 
     async def generate(self, *_args: Any, **_kwargs: Any) -> dict[str, Any]:
         raise AssertionError("只读探针禁止模型调用")
@@ -73,7 +82,7 @@ def _settings(*, trigger_gate: bool, native_transfusion: bool = True) -> Setting
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("change", ["same", "capacity", "gate", "native"])
+@pytest.mark.parametrize("change", ["same", "capacity", "gate", "native", "model"])
 async def test_two_real_family_children_enforce_accepted_settings(monkeypatch, change):
     class _FrozenDatetime(datetime):
         @classmethod
@@ -93,6 +102,15 @@ async def test_two_real_family_children_enforce_accepted_settings(monkeypatch, c
     async def no_config_database(**_kwargs):
         return {"custom_parameters": {}}
     monkeypatch.setattr(qc_sample_pools.LLMConfigLoader, "load_config", no_config_database)
+    qc_service = object.__new__(SichuanQCService)
+    qc_service.client = _NoModel()
+    qc_service.client.max_parallel_records = 1
+    qc_service.adjudicator_client = _NoModel()
+
+    async def accepted_service():
+        return qc_service
+
+    monkeypatch.setattr(qc_sample_pools, "get_qc_service", accepted_service)
     submitted = []
     monkeypatch.setattr(qc_sample_pools, "submit_detached_task", lambda *args: submitted.append(args))
 
@@ -112,7 +130,10 @@ async def test_two_real_family_children_enforce_accepted_settings(monkeypatch, c
     parent, *children = planning_workspace.create_batch_job_calls
     assert len(children) == len(submitted) == 2
     assert all(child["parent_job_id"] == parent["id"] for child in children)
-    frozen_keys = ("rule_set_version", "task_frozen_date", "record_evaluation_snapshot", "record_scene_snapshot")
+    frozen_keys = (
+        "rule_set_version", "task_frozen_date", "record_evaluation_snapshot",
+        "record_scene_snapshot", "lx0609_task_runtime",
+    )
     assert all(child["filters"]["rule_set_key"] == "luxian_0609_qc_v1" for child in children)
     assert all(child["filters"][key] == parent["filters"][key] for child in children for key in frozen_keys)
 
@@ -162,16 +183,14 @@ async def test_two_real_family_children_enforce_accepted_settings(monkeypatch, c
     })
     monkeypatch.setattr(programmatic_evidence, "_fetch_source_table_fallback_items", lambda *_a, **_k: ([], {}))
     monkeypatch.setattr(programmatic_evidence, "_fetch_detail_service_fallback_items", lambda *_a, **_k: [])
-    qc_service = object.__new__(SichuanQCService)
-    qc_service.client = SimpleNamespace(model="probe-only", max_parallel_records=1)
-    qc_service.adjudicator_client = _NoModel()
-
     async def service_provider():
         return qc_service
 
     outputs = []
     for index, child in enumerate(children):
         active_settings = first_settings if index == 0 else second_settings
+        if index == 1 and change == "model":
+            qc_service.client.model = "changed-model"
         workspace = _FamilyWorkspace()
         workspace.job = {
             **workspace.job, **child,
@@ -207,4 +226,5 @@ async def test_two_real_family_children_enforce_accepted_settings(monkeypatch, c
     else:
         assert outputs[1]["status"] == "failed"
         assert not outputs[1]["items"]
-        assert "执行配置已变化" in str(outputs[1]["error"])
+        expected_error = "模型或实现版本已变化" if change == "model" else "执行配置已变化"
+        assert expected_error in str(outputs[1]["error"])
