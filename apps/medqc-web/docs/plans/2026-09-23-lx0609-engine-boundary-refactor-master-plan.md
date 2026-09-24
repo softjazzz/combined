@@ -8,6 +8,12 @@
 
 **Tech Stack：** Python、FastAPI、SQLAlchemy/PostgreSQL、pytest；复用现有 EvidenceSnapshot、RuleDecision、Reducer、Finalizer、Canonical Store；前端保持 Vue/TypeScript 既有交付结构。
 
+### 2026-09-24 两项P1主协调复核与集成
+
+- P1-A01：子提交 `b2c1c3b89` 集成为 `c35f700c1`。主协调亲读新增 `basic_timeliness_allows_absent_published_facts` 的状态/原因/规则限定、Finalizer入口以及Store传递已保存状态和原因码的路径。实际原生004无触发会产生 `not_applicable/trigger_absent_complete` 且无独立facts；修复前主协调实际导入公开入口调用 `004/raw=None` 复现ValueError。子测试在基线从native→Binding→Aggregator→CanonicalResultStore写读4例红；修复后001/002/004/005/006共10种合法无facts形态写读通过，损坏的确定性结果仍拒绝。集成树主协调独立跑公开边界/基础投影/Finalizer共173项通过。
+- P1-D01：子提交 `340e9eda8` 集成为 `597261ed8`。主协调亲读父刷新原先仅 `id + status!=canceled` 的写条件、父子重试轮换attempt的现有事务路径；修复将父 `status + filters_json + summary_json` 放进同一UPDATE CAS，子任务单独重试在同事务轮换父attempt，未命中不写Envelope。实际Service+SQLite交错测试在基线父/子重试后均能被旧刷新标成完成并进入旧写入入口，修复后父/子重试及新父已领取、双刷新乱序、正常完成/取消24项集成树独立复跑通过；正式批量入口相邻3项通过。
+- 这些证据是项目真实代码及隔离SQLite下的技术验收，不是客户PostgreSQL双连接锁竞争、真实模型或临床保护集签收。`test_luxian_0609_native_basic_timeliness.py`宽组在隔离伪PG地址第95项出现证据读取回退连接失败，未标全绿。A/B/C/D完整阶段仍按上方退出条件继续，不因两项P1修复而宣告引擎整改完成。
+
 ## 2026-09-24 GPT PRO阶段复审：当前优先级
 
 审核固定SHA `80576bf4b78d0f2a0942b4807b7d760385e38774`；结论两项P1、无确认P0/独立P2。报告采用转录函数及替身进行隔离验证，不是完整工程导入。以下两项先用本仓库实际调用链复现，再最小修复，不因报告措辞跳过主协调验收。
@@ -75,7 +81,7 @@
 | 滚动任务 | `MEDQC-022`，见 [PROJECT_ROLLING_TODO.md](PROJECT_ROLLING_TODO.md) |
 | 状态 | 用户要求重新收敛：按上方最新目标执行，四阶段仍未整体关闭；已验证修复保留 |
 | 当前阶段 | A正式公开链路验收收口；B/D已实现局部待阶段验收，C待正式扩展闭环 |
-| 下一项动作 | 优先复现并修复GPT PRO P1-A01合法无facts拒绝、P1-D01父刷新越代次；其后有限收口A正式链路，再按B/C/D退出条件验收 |
+| 下一项动作 | P1-A01/P1-D01已在集成树代码级修复并通过隔离SQLite回归；下一步有限收口A正式读取/页面链路与旧投影调用，再按B/C/D退出条件验收，PG竞争和保护集单列待验证 |
 | 生产代码基线 | 本轮原始规则重构前基线 `775c17ede53930a685324e523f818b53da441698`；旧轮基线保留在历史记录 |
 | 基线分支 | `codex/lx0609-rule-id-integration`，GitHub `softjazzz/combined` |
 | 当前实施应用目录 | `C:/Users/Coldplay/.codex/worktrees/lx0609-rule-id-integration/LX888/apps/medqc-web`；Sol 6 medium 子代理提交 `cdaa65077` 已摘取为 `a163a910c`；CT 独立提交为 `762776545` |
