@@ -51,6 +51,9 @@ from app.services.qc_workspace.canonical_result_store import (
     envelope_item_from_rule_result,
     safe_customer_display_facts,
 )
+from app.services.qc_workspace import result_feedback_demo_store as feedback_module
+from app.services.qc_workspace.result_feedback_demo_store import ResultFeedbackDemoStore
+from app.schemas.qc_sichuan import QcResultFeedbackRequest
 from app.services.luxian_0609.canonical_result_finalizer import (
     validate_luxian_0609_executor_customer_display_facts,
 )
@@ -2223,6 +2226,111 @@ def _published_pilot_item_for_read_boundary(rule_id: str) -> dict[str, Any]:
         "reason_code": "requirement_satisfied", "conclusion": "已发布结论",
         "customer_display_facts": facts,
     }
+
+
+def test_two_published_pilots_keep_identity_through_sqlite_feedback_and_exports(monkeypatch):
+    """发布后的同一 Envelope 是反馈与三个导出格式的结果来源。"""
+    import csv
+    from io import StringIO
+
+    from openpyxl import load_workbook
+
+    rule_ids = ("LX0609-09-01-02", "LX0609-06-02-01")
+    canonical_table = workspace_module._record_result_envelopes_table().to_metadata(
+        MetaData(), schema=None,
+    )
+    feedback_table = feedback_module._feedback_table().to_metadata(
+        MetaData(), schema=None,
+    )
+    engine = create_engine("sqlite://")
+    canonical_table.metadata.create_all(engine)
+    feedback_table.metadata.create_all(engine)
+    store = CanonicalResultStore(canonical_table)
+    items = [_published_pilot_item_for_read_boundary(rule_id) for rule_id in rule_ids]
+    for item in items:
+        item["conclusion"] = f"{item['rule_id']} 已核对"
+        item["suggestion"] = f"{item['rule_id']} 无需补充"
+    with Session(engine) as session:
+        store.replace_for_job(
+            session,
+            job_row={
+                "id": "job-pilots", "created_by": "admin-001",
+                "filters_json": json.dumps({
+                    "rule_set_key": "luxian_0609_qc_v1",
+                    "rule_set_version": "2026-06-09",
+                    "scoped_customer_rule_ids": list(rule_ids),
+                }),
+            },
+            items=items,
+            now=datetime(2026, 9, 1, 10, 0, 0),
+            projector=lambda raw: envelope_item_from_rule_result(raw, hmac_key="unit-test-key"),
+            projection_key="unit-test-key",
+        )
+        session.commit()
+        loaded = store.load_selected(
+            session, root_job_id="job-pilots", institute_id="inst-1",
+            patient_id="patient-1", visit_id="visit-1",
+            rule_set_key="luxian_0609_qc_v1", rule_set_version="2026-06-09",
+        )
+    saved_items = loaded["items"]
+    assert [item["rule_id"] for item in saved_items] == list(rule_ids)
+    assert all(item["status"] == "compliant" for item in saved_items)
+    assert all(item["customer_display_facts"] for item in saved_items)
+    assert all(item["conclusion"].endswith("已核对") for item in saved_items)
+    assert all(item["suggestion"].endswith("无需补充") for item in saved_items)
+
+    feedback = ResultFeedbackDemoStore.__new__(ResultFeedbackDemoStore)
+    feedback._canonical_table = canonical_table
+    feedback._feedback_table = feedback_table
+    monkeypatch.setattr(feedback_module, "_session", lambda: Session(engine))
+    for item in saved_items:
+        response = feedback.save(
+            root_job_id="job-pilots", record_ref=loaded["record_ref"],
+            rule_id=item["rule_id"], created_by="admin-001",
+            payload=QcResultFeedbackRequest.model_validate({
+                "root_job_id": "job-pilots", "record_ref": loaded["record_ref"],
+                "feedback_type": "note", "comment": "人工核对完成。",
+            }),
+        )
+        assert response["rule_id"] == item["rule_id"]
+        assert response["original_status"] == item["status"]
+        assert response["result_digest"] == feedback_module._result_digest(item)
+    by_rule = feedback.list_for_record(
+        root_job_id="job-pilots", record_ref=loaded["record_ref"],
+        created_by="admin-001",
+    )
+    assert set(by_rule) == set(rule_ids)
+
+    job = {
+        "id": "job-pilots", "filters": {"rule_set_key": "luxian_0609_qc_v1"},
+        "items": saved_items,
+    }
+    projected = workspace_module.flatten_customer_safe_result_items(
+        job, hmac_key="unit-test-key",
+    )
+    assert [item["customer_display_facts"] for item in projected] == [
+        item["customer_display_facts"] for item in saved_items
+    ]
+    _, export_rows, _ = workspace_module._customer_export_rows(
+        job, hmac_key="unit-test-key",
+    )
+    assert [row[1] for row in export_rows] == list(rule_ids)
+    assert all(row[3] == "合规" and row[5].endswith("已核对") for row in export_rows)
+    csv_text = workspace_module._export_customer_safe_csv(
+        job, hmac_key="unit-test-key",
+    ).getvalue()
+    csv_rows = list(csv.reader(StringIO(csv_text)))
+    assert all(any(row[1:7] == expected[1:7] for row in csv_rows) for expected in export_rows)
+    workbook = load_workbook(workspace_module._export_customer_safe_workbook(
+        job, hmac_key="unit-test-key",
+    ))
+    xlsx_rows = list(workbook["全部明细"].values)
+    assert all(any(tuple(row[:7]) == tuple(expected[:7]) for row in xlsx_rows) for expected in export_rows)
+    html_text = workspace_module._export_customer_safe_html(
+        job, hmac_key="unit-test-key", canonical_items=saved_items,
+    )
+    assert all(rule_id in html_text for rule_id in rule_ids)
+    engine.dispose()
 
 
 @pytest.mark.parametrize(
