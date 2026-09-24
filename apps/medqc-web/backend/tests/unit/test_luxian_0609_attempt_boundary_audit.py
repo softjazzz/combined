@@ -270,31 +270,104 @@ def test_preclaim_failure_uses_original_queued_snapshot(storage):
 
 def test_parent_retry_rotates_each_child_queued_snapshot(storage):
     service, engine, table = storage
+    first_filters = {
+        "rule_set_key": "luxian_0609_qc_v1", "rule_ids": ["LX0609-01-01-01"],
+        "family_key": "admission", "department": "内科",
+    }
+    second_filters = {
+        "rule_set_key": "luxian_0609_qc_v1", "rule_ids": ["LX0609-06-01-01"],
+        "family_key": "ct", "department": "外科",
+    }
+    with engine.begin() as connection:
+        connection.execute(table.update().where(table.c.id == "attempt-job").values(
+            filters_json=json.dumps(first_filters),
+        ))
     original = service.get_batch_job_for_processing(job_id="attempt-job")
     assert original is not None
-    old_child_filters = original["_claim_filters_json"]
+    old_first_filters = original["_claim_filters_json"]
+    old_second_filters = json.dumps(second_filters)
     with engine.begin() as connection:
         connection.execute(table.update().where(table.c.id == "attempt-job").values(
             status="canceled", parent_job_id="parent-job",
         ))
         connection.execute(table.insert().values(
+            id="second-child", draft_id="sichuan-rule-library", created_by="tester",
+            status="canceled", parent_job_id="parent-job", family_key="ct",
+            rule_code="LX0609", rule_name="影像子任务", scope="final", total_records=1,
+            created_at=datetime(2026, 9, 24), updated_at=datetime(2026, 9, 24),
+            filters_json=old_second_filters,
+        ))
+        connection.execute(table.insert().values(
             id="parent-job", draft_id="sichuan-rule-library", created_by="tester",
-            status="canceled", job_kind="parent", child_job_ids_json='["attempt-job"]',
+            status="canceled", job_kind="parent",
+            child_job_ids_json='["attempt-job", "second-child"]',
+            rule_code="LX0609", rule_name="父任务", scope="final", total_records=1,
+            created_at=datetime(2026, 9, 24), updated_at=datetime(2026, 9, 24),
+            filters_json=json.dumps({
+                "rule_set_key": "luxian_0609_qc_v1",
+                "rule_ids": ["LX0609-01-01-01", "LX0609-06-01-01"],
+            }),
+        ))
+    assert service.retry_batch_job(job_id="parent-job", created_by="tester") is not None
+    first = service.get_batch_job_for_processing(job_id="attempt-job")
+    second = service.get_batch_job_for_processing(job_id="second-child")
+    assert first is not None and second is not None
+    assert first["status"] == second["status"] == "queued"
+    new_first = json.loads(first["_claim_filters_json"])
+    new_second = json.loads(second["_claim_filters_json"])
+    assert new_first.pop(workspace_module.LX0609_ATTEMPT_FILTER_KEY) != new_second.pop(
+        workspace_module.LX0609_ATTEMPT_FILTER_KEY
+    )
+    assert new_first == first_filters
+    assert new_second == second_filters
+    service.fail_batch_job(
+        job_id="attempt-job", error_message="old-activation", queued_only=True,
+        expected_queued_filters_json=old_first_filters,
+    )
+    service.fail_batch_job(
+        job_id="second-child", error_message="old-activation", queued_only=True,
+        expected_queued_filters_json=old_second_filters,
+    )
+    with engine.connect() as connection:
+        assert connection.execute(sa.select(table.c.status).where(
+            table.c.id.in_(["attempt-job", "second-child"])
+        ).order_by(table.c.id)).scalars().all() == ["queued", "queued"]
+
+
+def test_parent_retry_rejects_running_child_without_partial_reset(storage):
+    service, engine, table = storage
+    first_original = service.get_batch_job_for_processing(job_id="attempt-job")
+    assert first_original is not None
+    with engine.begin() as connection:
+        connection.execute(table.update().where(table.c.id == "attempt-job").values(
+            status="canceled", parent_job_id="parent-job",
+        ))
+        connection.execute(table.insert().values(
+            id="running-child", draft_id="sichuan-rule-library", created_by="tester",
+            status="running", parent_job_id="parent-job", family_key="ct",
+            rule_code="LX0609", rule_name="执行中子任务", scope="final", total_records=1,
+            created_at=datetime(2026, 9, 24), updated_at=datetime(2026, 9, 24),
+            filters_json=json.dumps({"rule_set_key": "luxian_0609_qc_v1", "rule_ids": ["LX0609-06-01-01"]}),
+        ))
+        connection.execute(table.insert().values(
+            id="parent-job", draft_id="sichuan-rule-library", created_by="tester",
+            status="canceled", job_kind="parent",
+            child_job_ids_json='["attempt-job", "running-child"]',
             rule_code="LX0609", rule_name="父任务", scope="final", total_records=1,
             created_at=datetime(2026, 9, 24), updated_at=datetime(2026, 9, 24),
             filters_json=json.dumps({"rule_set_key": "luxian_0609_qc_v1", "rule_ids": ["LX0609-01-01-01"]}),
         ))
-    assert service.retry_batch_job(job_id="parent-job", created_by="tester") is not None
-    child = service.get_batch_job_for_processing(job_id="attempt-job")
-    assert child is not None and child["status"] == "queued"
-    assert child["_claim_filters_json"] != old_child_filters
-    assert child["filters"]["rule_ids"] == ["LX0609-01-01-01"]
-    service.fail_batch_job(
-        job_id="attempt-job", error_message="old-activation", queued_only=True,
-        expected_queued_filters_json=old_child_filters,
-    )
+    assert service.retry_batch_job(job_id="parent-job", created_by="tester") is None
     with engine.connect() as connection:
-        assert connection.execute(sa.select(table.c.status).where(table.c.id == "attempt-job")).scalar_one() == "queued"
+        rows = connection.execute(sa.select(
+            table.c.id, table.c.status, table.c.filters_json
+        ).where(table.c.id.in_(["parent-job", "attempt-job", "running-child"]))).mappings().all()
+    by_id = {row["id"]: row for row in rows}
+    assert by_id["parent-job"]["status"] == "canceled"
+    assert by_id["attempt-job"]["status"] == "canceled"
+    assert by_id["attempt-job"]["filters_json"] == first_original["_claim_filters_json"]
+    assert by_id["running-child"]["status"] == "running"
+    assert json.loads(by_id["running-child"]["filters_json"])["rule_ids"] == ["LX0609-06-01-01"]
 
 
 def test_nonformal_task_keeps_existing_claim_and_retry_semantics(storage):
@@ -356,21 +429,12 @@ async def test_old_worker_result_after_qc_await_cannot_publish_to_new_attempt(st
         assert connection.execute(sa.select(table.c.items_json)).scalar_one() is None
 
 
-def test_only_current_attempt_commits_canonical_write_in_same_transaction(storage, monkeypatch):
+def test_only_current_attempt_commits_real_canonical_envelope(storage):
     service, engine, table = storage
-    probe = sa.Table(
-        "canonical_probe", sa.MetaData(),
-        sa.Column("job_id", sa.String, primary_key=True),
-    )
-    probe.create(engine)
-    calls = []
-
-    def write_envelopes(session, *, job_row, items, now, expected_record_refs=None):
-        calls.append(job_row["id"])
-        session.execute(probe.insert().values(job_id=job_row["id"]))
-        return ()
-
-    monkeypatch.setattr(service, "_write_record_result_envelopes", write_envelopes)
+    metadata = sa.MetaData()
+    envelopes = service._record_result_envelope_table.to_metadata(metadata, schema=None)
+    metadata.create_all(engine)
+    service._record_result_envelope_table = envelopes
     old = service.mark_batch_job_running(job_id="attempt-job")
     assert isinstance(old, str)
     service.cancel_batch_job(job_id="attempt-job", created_by="tester")
@@ -380,15 +444,30 @@ def test_only_current_attempt_commits_canonical_write_in_same_transaction(storag
     payload = dict(
         job_id="attempt-job",
         summary={"execution_status": "completed", "total_records": 1},
-        items=[{"rule_id": "LX0609-01-01-01"}], failed_records=[],
+        items=[{
+            "institute_id": "inst-1", "patient_id": "patient-1", "visit_id": "visit-1",
+            "rule_id": "LX0609-01-01-01", "status": "compliant",
+            "result_status": "compliant", "display_status": "compliant",
+            "is_compliant": True, "reason_code": "record_complete",
+        }], failed_records=[],
     )
     assert service.complete_batch_job(**payload, attempt_filters_json=old) is False
-    assert calls == []
+    with engine.connect() as connection:
+        assert connection.execute(sa.select(sa.func.count()).select_from(envelopes)).scalar_one() == 0
     assert service.complete_batch_job(**payload, attempt_filters_json=new) is True
-    assert calls == ["attempt-job"]
     assert _status(engine, table) == "completed"
     with engine.connect() as connection:
-        assert connection.execute(sa.select(probe.c.job_id)).all() == [("attempt-job",)]
+        assert connection.execute(sa.select(sa.func.count()).select_from(envelopes)).scalar_one() == 1
+    session = workspace_module._session()
+    try:
+        loaded = service._load_record_result_envelope_items(
+            session, root_job_id="attempt-job", institute_id="inst-1",
+            patient_id="patient-1", visit_id="visit-1",
+            rule_set_key="luxian_0609_qc_v1", rule_set_version=workspace_module.RULE_SET_VERSION,
+        )
+    finally:
+        session.close()
+    assert loaded["items"][0]["rule_id"] == "LX0609-01-01-01"
 
 
 @pytest.mark.asyncio
