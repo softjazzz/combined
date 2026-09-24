@@ -186,6 +186,7 @@ def validate_luxian_0609_executor_customer_display_facts(
     from .basic_timeliness_customer_projection import (
         is_basic_timeliness_customer_rule,
         safe_basic_timeliness_customer_display_facts,
+        validate_published_basic_timeliness_facts,
     )
     from .antimicrobial_result_mapping import (
         is_antimicrobial_customer_rule,
@@ -423,9 +424,12 @@ def validate_luxian_0609_executor_customer_display_facts(
         )
     ):
         return None
-    safe_facts = safe_basic_timeliness_customer_display_facts(
-        rule_id=normalized_rule_id,
-        raw=raw,
+    # 原始004的原生执行器已在 add_customer_fact 完成内部事实投影。
+    # 此处只接收已发布形态，避免再次舍入或补写字段。
+    safe_facts = (
+        validate_published_basic_timeliness_facts(rule_id=normalized_rule_id, raw=raw)
+        if normalized_rule_id == "LX0609-09-01-01"
+        else safe_basic_timeliness_customer_display_facts(rule_id=normalized_rule_id, raw=raw)
     )
     return (
         safe_facts

@@ -108,3 +108,28 @@ def test_legal_absence_does_not_allow_polluted_facts_or_contextless_read():
         )
     with pytest.raises(ValueError, match="解释合同不完整"):
         validate_luxian_0609_published_customer_display_facts(rule_id=RULE_004, raw=None)
+
+
+
+def test_004_native_to_finalizer_projects_once(monkeypatch):
+    import app.services.luxian_0609.native_basic_timeliness as native
+    import app.services.luxian_0609.basic_timeliness_customer_projection as projection
+    original = projection.safe_basic_timeliness_customer_display_facts
+    calls = []
+    def counted(*, rule_id, raw):
+        calls.append(rule_id)
+        return original(rule_id=rule_id, raw=raw)
+    monkeypatch.setattr(native, "safe_basic_timeliness_customer_display_facts", counted)
+    monkeypatch.setattr(projection, "safe_basic_timeliness_customer_display_facts", counted)
+    session = _typed_basic_session({"rescue_record": [
+        {"document_id": "rescue-synthetic-1", "record_time": "2026-06-01 11:00:00",
+         "record_content": "抢救结束时间：2026年06月01日 09:00。"},
+    ]}, selected_rule_ids=(RULE_004,))
+    execution, reduced = _reduce_typed_basic(session, (RULE_004,))
+    canonical = aggregate_luxian_0609_results(
+        wrapper_rules=_rules(RULE_004), execution_results=[], reduced_decisions=reduced,
+        customer_display_facts=execution.customer_display_facts, format_evidence=False,
+    )[0]
+    assert (canonical["status"], canonical["reason_code"]) == ("compliant", "requirement_within_threshold")
+    assert canonical["customer_display_facts"] == dict(execution.customer_display_facts)[RULE_004]
+    assert calls == [RULE_004]

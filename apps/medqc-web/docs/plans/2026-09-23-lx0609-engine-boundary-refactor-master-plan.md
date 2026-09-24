@@ -14,6 +14,12 @@
 - P1-D01：子提交 `340e9eda8` 集成为 `597261ed8`。主协调亲读父刷新原先仅 `id + status!=canceled` 的写条件、父子重试轮换attempt的现有事务路径；修复将父 `status + filters_json + summary_json` 放进同一UPDATE CAS，子任务单独重试在同事务轮换父attempt，未命中不写Envelope。实际Service+SQLite交错测试在基线父/子重试后均能被旧刷新标成完成并进入旧写入入口，修复后父/子重试及新父已领取、双刷新乱序、正常完成/取消24项集成树独立复跑通过；正式批量入口相邻3项通过。
 - 这些证据是项目真实代码及隔离SQLite下的技术验收，不是客户PostgreSQL双连接锁竞争、真实模型或临床保护集签收。`test_luxian_0609_native_basic_timeliness.py`宽组在隔离伪PG地址第95项出现证据读取回退连接失败，未标全绿。A/B/C/D完整阶段仍按上方退出条件继续，不因两项P1修复而宣告引擎整改完成。
 
+### 2026-09-24 阶段A原始004首次重复投影闭环
+
+集成基线 `a6a952ca4`。主协调亲读 `native_basic_timeliness.add_customer_fact` 与 `canonical_result_finalizer.validate_luxian_0609_executor_customer_display_facts`：原始004的native已调用内部 `safe_basic_timeliness_customer_display_facts` 形成公开事实；Finalizer再次调用同一函数。基于真实native→Binding→Aggregator固定合成抢救输入，聚焦测试在基线确认投影函数调用2次（红），状态 `compliant/requirement_within_threshold` 与公开事实已记录。
+
+只将原始004 Finalizer接收动作换成现有 `validate_published_basic_timeliness_facts` 只读校验，原生首次投影与公开读取合同不变。相同固定输入现在投影调用1次，状态/原因/客户公开事实等于执行器初次输出；合成结果无真实模型调用。集成树基础公开/Finalizer174项、原始004相邻17项通过；Ruff通过。未改变001/002/005/006或新抢救内容的医学逻辑，不以一个规则的闭环称A阶段完成；下一步仍是正式任务详情、latest、反馈、导出及页面对同一Canonical产物的一致性验证。
+
 ## 2026-09-24 新长程目标接续
 
 用户明确要求重新设置goal完成剩余工作；已在本任务创建新的 active goal，以上次集成提交 `29fb46569` 为已完成基线。P1-A01、P1-D01已完成代码级修复，不重新列作待开发项。新目标原文明确A/B/C/D四阶段的剩余退出条件，保持原始医学判据、Prompt、模型、门控、40槽位、结果语义及独立新规则范围约束。
