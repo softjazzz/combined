@@ -953,7 +953,10 @@ def finalize_luxian_0609_reduced_customer_result(
             preserve_legacy_exception=True,
             _validated_facts=(
                 safe_facts
-                if rule_id in {"LX0609-09-01-02", "LX0609-06-02-01"}
+                if rule_id in {
+                    "LX0609-01-01-01", "LX0609-09-01-01",
+                    "LX0609-09-01-02", "LX0609-06-02-01",
+                }
                 and raw_customer_display_facts is not None
                 else NotImplemented
             ),

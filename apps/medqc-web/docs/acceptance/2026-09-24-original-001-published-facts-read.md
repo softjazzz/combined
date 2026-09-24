@@ -4,7 +4,7 @@
 
 ## 复现与修复
 
-修复前 `canonical_result_finalizer.validate_luxian_0609_published_customer_display_facts` 对 001 回落执行器投影。固定已发布事实为 `timeliness_requirement_satisfied / within / threshold_hours=24 / elapsed_hours=1.0 / remaining_hours=999.0` 时，`safe_customer_display_facts` 将 999 静默改为 23。聚焦红测已复现 `DID NOT RAISE`。现在 001 走专属**公开校验**：合法事实逐字段原样返回；不一致的衍生数值、内部标识、未知键、异常容器、布尔/非有限/负数数值受控拒绝，保留生产投影的两步四舍五入容差。入院时间早于文书时间的冲突分支、空白文书、缺失、迟到、日期锚点和正常分支均有固定输入校验。新公开校验不调用内部投影，也不修改持久化事实。
+修复前 `canonical_result_finalizer.validate_luxian_0609_published_customer_display_facts` 对 001 回落执行器投影。固定已发布事实为 `timeliness_requirement_satisfied / within / threshold_hours=24 / elapsed_hours=1.0 / remaining_hours=999.0` 时，`safe_customer_display_facts` 将 999 静默改为 23。聚焦红测已复现 `DID NOT RAISE`。现在 001 走专属**公开校验**：合法事实逐字段原样返回；不一致的衍生数值、内部标识、未知键、异常容器、布尔/非有限/负数数值受控拒绝，保留生产投影的两步四舍五入容差。文书时间早于入院时间的冲突分支、空白文书、缺失、迟到、日期锚点和正常分支均有固定输入校验。新公开校验不调用内部投影，也不修改持久化事实。
 
 ## 验证与边界
 
