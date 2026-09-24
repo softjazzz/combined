@@ -17,6 +17,8 @@
 
 阶段 A 随后补齐同一技术产物的跨运行时回读：`backend/tests/unit/test_luxian_0609_canonical_result_delivery.py` 整份 115/115 通过，其中四个交付用例 4/4 通过；原始004用例从隔离 SQLite 保存 Canonical Envelope，经过正式 `latest-result` 与任务详情 HTTP 路由，确认规则号、状态、原因、结论、建议及公开事实一致。显式设置 `MEDQC_LX0609_BROWSER_FIXTURE_OUT=../.tmp/0910-full-audit/lx0609-browser-backend-fixture.json` 时，只在交付断言全部通过后输出此测试的合成 HTTP 响应；V5 前端独立运行后，设置 `MEDQC_LX0609_BROWSER_FIXTURE_IN` 指向该文件并运行 `node scripts/acceptance/lx0609-browser-readback-technical.mjs`，实际 Chrome 显示相同的004状态、结论及建议，三坐标请求完整。浏览器侧仍通过拦截 API 装入后端测试产物，未运行完整后端联机服务；该证据增强了 Canonical→HTTP→页面的技术一致性，但不等于客户 PG、真实病例或完整临床保护集验收，阶段 A 尚未关闭。
 
+随后在集成 `137feefd1` 上重跑原始002/004/005/006/007既有固定 Source Reader 材料，共75份完整输出与各自整改前文件全字典相等，快照、决策、事实、发布结果及调用/Token均零差异。004包含疑似测试身份，006保留一条无模型客户端技术失败；这批材料没有独立临床金标准，A0/A4仍未验收。分布、基线来源和限制见[五条规则当前版本回放](../acceptance/2026-09-25-original-engine-five-rule-replay.md)。
+
 ### 2026-09-25 长程目标重置执行卡（当前有效）
 
 继续使用现有 active goal；它已经覆盖原始 LX0609 引擎 A/B/C/D 的全部退出条件，不能把未完成目标标成完成后再创建同义目标。固定集成工作树 `codex/lx0609-rule-id-integration`，以已提交的 `b2568df71` 为本轮起点。只收敛原始规则的职责边界，不混入新增 CT/抢救/病理、0916 或源库同步；医学判据、Prompt、模型、门控、40 槽位和交付结果语义保持不变。

@@ -37,6 +37,8 @@
 
 ## 当前焦点
 
+2026-09-25 MEDQC-022 固定输入保护补证：集成 `137feefd1` 复用已冻结 Source Reader 材料回放原始002/004/005/006/007，共75份完整技术输出与对应整改前私有文件全字典相等；状态、原因、事实、证据、调用/Token无差异。004来源含疑似测试身份，006有一条既存无模型客户端失败，且均缺独立临床答案；A0/A4及客户 PG 仍未验收。详见[当前版本五规则回放](../acceptance/2026-09-25-original-engine-five-rule-replay.md)。
+
 2026-09-25 MEDQC-022 goal 接续：沿用 active 的 A/B/C/D 原始 LX0609 引擎目标，当前集成基线 `b1f023d85`。本树 B/C/D 四份正式扩展/任务身份/重启/代次测试 49/49 通过；实际 Chrome 在独立 V5 前端以合成 API 载荷确认运行病历结果预览显示已保存形状的结论和建议，且 latest 只读一次、三坐标完整。可重跑脚本为 `scripts/acceptance/lx0609-browser-readback-technical.mjs`。此结果不包含真实 API、客户 PostgreSQL 或临床病例，四阶段仍为局部验证；下一步优先完成 A 的正式 Envelope→真实页面及临床保护集，再验 B/D 的客户 PG 多进程/中断恢复，C 仅审查真实仍在调用的旧适配。
 
 2026-09-25 MEDQC-022 阶段 A 技术链补证：隔离 SQLite 的 Canonical Envelope 经正式 `latest-result` 与任务详情 HTTP 测试获得一致的原始004结果；同一合成 HTTP 产物交给独立工作树 V5 页面，在实际 Chrome 中显示相同结论和建议，三坐标请求完整。四个交付用例通过。浏览器接口仍由本测试产物拦截提供，未连完整后端服务；真实病例保护集、客户 PG 和部署验收未完成，阶段 A 仍为局部验证。产物生成开关和浏览器命令见[主计划最新执行卡](2026-09-23-lx0609-engine-boundary-refactor-master-plan.md)。
