@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+from copy import deepcopy
 from dataclasses import dataclass, field
 import json
 import math
@@ -52,6 +54,16 @@ class MalignancyUsage:
     completion_tokens: int = 0
     total_tokens: int = 0
     api_time: float = 0.0
+
+
+@dataclass
+class _ResolutionSlot:
+    sources: tuple[MalignancySource, ...]
+    task: asyncio.Task[tuple[MalignancyResolution, MalignancyUsage]] | None = None
+    resolution: MalignancyResolution | None = None
+    usage: MalignancyUsage = field(default_factory=MalignancyUsage)
+    claimed: bool = False
+    waiters: int = 0
 
 
 @dataclass(frozen=True)
@@ -311,24 +323,66 @@ def _prompt(items: Sequence[_DiagnosisItem]) -> str:
 
 
 class MalignancyFactResolver:
-    """单个质控请求内共享；相同病例最多执行一次语义分类。"""
+    """同一质控请求内仅共享来源范围完全相同的恶性事实。"""
 
     def __init__(self, llm_client: MalignancyLLMClient | None) -> None:
         self._llm_client = llm_client
-        self._resolution: MalignancyResolution | None = None
-        self._usage = MalignancyUsage()
-        self._usage_claimed = False
+        self._slots: list[_ResolutionSlot] = []
+
+    @staticmethod
+    def _source_snapshot(
+        sources: Sequence[MalignancySource],
+    ) -> tuple[MalignancySource, ...]:
+        return tuple(
+            MalignancySource(
+                source.source_key,
+                "available" if source.state in {"available", "present"} else source.state,
+                tuple(deepcopy(dict(row)) for row in source.rows),
+                source.required_for_absence,
+            )
+            for source in sources
+        )
 
     async def resolve(
         self, sources: Sequence[MalignancySource]
     ) -> MalignancyResolution:
-        if self._resolution is not None:
-            return self._resolution
+        frozen_sources = self._source_snapshot(sources)
+        slot = next((item for item in self._slots if item.sources == frozen_sources), None)
+        if slot is None:
+            slot = _ResolutionSlot(frozen_sources)
+            self._slots.append(slot)
+            # 判定证据可带原始行，不能让下游修改证据时改变槽位的来源身份。
+            slot.task = asyncio.create_task(self._evaluate(self._source_snapshot(frozen_sources)))
+        if slot.resolution is not None:
+            return slot.resolution
+        assert slot.task is not None
+        slot.waiters += 1
+        try:
+            resolution, usage = await asyncio.shield(slot.task)
+            slot.resolution = resolution
+            slot.usage = usage
+            return resolution
+        except asyncio.CancelledError:
+            if slot.task.done() and not slot.task.cancelled():
+                # 已返回的提供方用量属于本次请求，即使最后一个等待者取消也要保留。
+                try:
+                    slot.resolution, slot.usage = slot.task.result()
+                except Exception:
+                    pass
+            elif slot.waiters == 1:
+                self._slots.remove(slot)
+                slot.task.cancel()
+                await asyncio.gather(slot.task, return_exceptions=True)
+            raise
+        finally:
+            slot.waiters -= 1
+
+    async def _evaluate(
+        self, sources: tuple[MalignancySource, ...]
+    ) -> tuple[MalignancyResolution, MalignancyUsage]:
+        empty_usage = MalignancyUsage()
         if not sources or any(source.state == "error" for source in sources):
-            self._resolution = MalignancyResolution(
-                "technical_error", "malignancy_source_query_error"
-            )
-            return self._resolution
+            return MalignancyResolution("technical_error", "malignancy_source_query_error"), empty_usage
         required_source_incomplete = any(
             source.required_for_absence
             and source.state in {"unavailable", "truncated", "missing"}
@@ -355,60 +409,59 @@ class MalignancyFactResolver:
                 else:
                     items.append(item)
         if not items and required_source_incomplete:
-            self._resolution = MalignancyResolution(
-                "unknown", "malignancy_source_unavailable"
-            )
-            return self._resolution
+            return MalignancyResolution("unknown", "malignancy_source_unavailable"), empty_usage
         if unreadable_row or not items:
-            self._resolution = MalignancyResolution(
-                "unknown", "malignancy_diagnosis_content_missing"
-            )
-            return self._resolution
+            return MalignancyResolution("unknown", "malignancy_diagnosis_content_missing"), empty_usage
         if any(_MALIGNANT_CODE.fullmatch(item.code) for item in items):
-            self._resolution = MalignancyResolution(
-                "confirmed", "malignancy_confirmed_by_code"
-            )
-            return self._resolution
+            return MalignancyResolution("confirmed", "malignancy_confirmed_by_code"), empty_usage
         if all(
             item.code
             and not _UNCERTAIN_NEOPLASM_CODE.match(item.code)
             and not item.name
             for item in items
         ):
-            self._resolution = (
+            resolution = (
                 MalignancyResolution("unknown", "malignancy_source_unavailable")
                 if required_source_incomplete
                 else MalignancyResolution(
                     "absent", "malignancy_absent_by_complete_codes"
                 )
             )
-            return self._resolution
+            return resolution, empty_usage
         if self._llm_client is None:
-            self._resolution = MalignancyResolution(
-                "technical_error", "malignancy_llm_unavailable"
-            )
-            return self._resolution
+            return MalignancyResolution("technical_error", "malignancy_llm_unavailable"), empty_usage
+        usage = empty_usage
         try:
             response = await self._llm_client.generate(
                 _prompt(items),
                 max_completion_tokens=MAX_COMPLETION_TOKENS,
                 allow_length_retry=False,
             )
-            self._usage = _strict_usage(response)
+            usage = _strict_usage(response)
             parsed = _parse_resolution(response, items=items)
-            self._resolution = (
+            resolution = (
                 MalignancyResolution("unknown", "malignancy_source_unavailable")
                 if parsed.state == "absent" and required_source_incomplete
                 else parsed
             )
         except Exception:
-            self._resolution = MalignancyResolution(
-                "technical_error", "malignancy_llm_invalid"
-            )
-        return self._resolution
+            resolution = MalignancyResolution("technical_error", "malignancy_llm_invalid")
+        return resolution, usage
 
-    def claim_usage(self) -> MalignancyUsage:
-        if self._usage_claimed:
+    def claim_usage(
+        self, resolution: MalignancyResolution | None = None
+    ) -> MalignancyUsage:
+        if resolution is None:
+            if len(self._slots) != 1 or self._slots[0].resolution is None:
+                raise ValueError("malignancy usage requires a resolved source")
+            slot = self._slots[0]
+        else:
+            slot = next(
+                (item for item in self._slots if item.resolution is resolution), None
+            )
+            if slot is None:
+                raise ValueError("malignancy resolution does not belong to this request")
+        if slot.claimed:
             return MalignancyUsage()
-        self._usage_claimed = True
-        return self._usage
+        slot.claimed = True
+        return slot.usage

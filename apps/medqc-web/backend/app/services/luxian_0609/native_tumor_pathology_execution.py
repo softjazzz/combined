@@ -1743,7 +1743,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                 malignancy = await shared_malignancy.resolve(
                     _malignancy_sources(source_for_rule, visit_stage=stage)
                 )
-                usage = shared_malignancy.claim_usage()
+                usage = shared_malignancy.claim_usage(malignancy)
                 llm_call_count += usage.llm_call_count
                 prompt_tokens += usage.prompt_tokens
                 completion_tokens += usage.completion_tokens
@@ -1852,7 +1852,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                 malignancy = await shared_malignancy.resolve(
                     _malignancy_sources(source_for_rule, visit_stage=stage)
                 )
-                usage = shared_malignancy.claim_usage()
+                usage = shared_malignancy.claim_usage(malignancy)
                 llm_call_count += usage.llm_call_count
                 prompt_tokens += usage.prompt_tokens
                 completion_tokens += usage.completion_tokens

@@ -2338,7 +2338,7 @@ async def execute_luxian_0609_native_surgery_gate_rules(
                         pathology_rows=rows_by_source["pathology_exam_report"],
                     )
                 )
-                malignancy_usage = malignancy_resolver.claim_usage()
+                malignancy_usage = malignancy_resolver.claim_usage(malignancy)
                 llm_call_count += malignancy_usage.llm_call_count
                 prompt_tokens += malignancy_usage.prompt_tokens
                 completion_tokens += malignancy_usage.completion_tokens

@@ -24,13 +24,12 @@ class _BarrierClient:
     def __init__(self, *, invalid: bool = False) -> None:
         self.calls = 0
         self.invalid = invalid
-        self.both_started = asyncio.Event()
+        self.started = asyncio.Event()
         self.release = asyncio.Event()
 
     async def generate(self, prompt: str, **kwargs):
         self.calls += 1
-        if self.calls >= 2:
-            self.both_started.set()
+        self.started.set()
         await self.release.wait()
         return {
             "choices": [{"message": {"content": "invalid" if self.invalid else json.dumps({
@@ -45,9 +44,12 @@ class _SourceSpy(MalignancyFactResolver):
     def __init__(self, client):
         super().__init__(client)
         self.sources = []
+        self.both_resolving = asyncio.Event()
 
     async def resolve(self, sources):
         self.sources.append(tuple(sources))
+        if len(self.sources) >= 2:
+            self.both_resolving.set()
         return await super().resolve(sources)
 
 
@@ -106,7 +108,8 @@ async def test_original_surgery_and_tumor_families_concurrently_resolve_same_sou
     resolver = _SourceSpy(client)
     task = asyncio.create_task(_families(session, client, resolver))
     try:
-        await asyncio.wait_for(client.both_started.wait(), timeout=3)
+        await asyncio.wait_for(resolver.both_resolving.wait(), timeout=3)
+        await asyncio.wait_for(client.started.wait(), timeout=3)
     finally:
         client.release.set()
     surgery_result, tumor_result = await asyncio.wait_for(task, timeout=3)
@@ -118,21 +121,22 @@ async def test_original_surgery_and_tumor_families_concurrently_resolve_same_sou
     assert {sources[0].state for sources in resolver.sources} == {"available", "present"}
     assert surgery_result.llm_call_count + tumor_result.llm_call_count == 1
     assert surgery_result.total_tokens + tumor_result.total_tokens == 15
-    assert client.calls == 2
+    assert client.calls == 1
 
 
 @pytest.mark.asyncio
-async def test_shared_malignancy_invalid_response_counts_only_one_of_two_calls():
+async def test_shared_malignancy_invalid_response_is_shared_and_counted_once():
     session = _session()
     client = _BarrierClient(invalid=True)
     resolver = _SourceSpy(client)
     task = asyncio.create_task(_families(session, client, resolver))
     try:
-        await asyncio.wait_for(client.both_started.wait(), timeout=3)
+        await asyncio.wait_for(resolver.both_resolving.wait(), timeout=3)
+        await asyncio.wait_for(client.started.wait(), timeout=3)
     finally:
         client.release.set()
     surgery_result, tumor_result = await asyncio.wait_for(task, timeout=3)
-    assert client.calls == 2
+    assert client.calls == 1
     assert surgery_result.llm_call_count + tumor_result.llm_call_count == 1
     assert surgery_result.total_tokens + tumor_result.total_tokens == 15
     reasons = [result.decisions[0].reason_code for result in (surgery_result, tumor_result)]
@@ -140,14 +144,15 @@ async def test_shared_malignancy_invalid_response_counts_only_one_of_two_calls()
 
 
 @pytest.mark.asyncio
-async def test_shared_malignancy_cancelled_before_response_has_no_claimed_usage():
+async def test_shared_malignancy_all_waiters_cancel_underlying_request():
     session = _session()
     client = _BarrierClient()
     resolver = _SourceSpy(client)
     task = asyncio.create_task(_families(session, client, resolver))
-    await asyncio.wait_for(client.both_started.wait(), timeout=3)
+    await asyncio.wait_for(resolver.both_resolving.wait(), timeout=3)
+    await asyncio.wait_for(client.started.wait(), timeout=3)
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
-    assert client.calls == 2
-    assert resolver.claim_usage().llm_call_count == 0
+    assert client.calls == 1
+    assert resolver._slots == []
