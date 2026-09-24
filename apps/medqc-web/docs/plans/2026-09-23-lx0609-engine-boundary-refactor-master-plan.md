@@ -1,5 +1,11 @@
 # LX0609 质控引擎职责收敛主计划
 
+### 2026-09-25 阶段 C 正式 Worker 与事务保存链补证
+
+测试专用 `LX0609-99-99-01` 已从临时总表/目录/合同经正式任务路由接纳，沿正式 `run_sichuan_workspace_batch_job` 领取冻结任务，调用生产 `prepare`、现有执行器注册表与 Binding/Aggregator，交由真实 `CustomQCWorkspaceService.complete_batch_job` 在隔离 SQLite 的同一事务写入任务状态和 Canonical Envelope，再按同一任务/病例/规则集坐标读回并生成公开 DTO。测试内替换的只有合成病历来源、模型执行器和外部激活；规则目录、任务计划、Worker、结果聚合与保存代码均走正式入口。规则 ID 在这些边界无新增分支，结果为 `compliant/requirement_satisfied`。此项取代此前“Worker 未运行、保存由测试手动衔接”的弱证据，但不包含真实模型、客户 PostgreSQL、安装包、浏览器或临床判据验收。
+
+阶段 C 仍需按所有者表检查旧适配是否真被替代，不能因为测试规则全链通过就删除仍在正式执行的 `build_luxian_0609_legacy_executor_registry`；A/B/D 的退出条件也不因本测试改变。
+
 ### 2026-09-25 Goal 接续：阶段 C 新同步规则的正式 Decision 路由
 
 沿用现有 active goal，退出条件仍为下文 A/B/C/D，不把局部修复误记为阶段完成。测试专用 `LX0609-99-99-01` 在前次组件链已能经正式目录和任务路由接纳；本次继续追到生产 `prepare_luxian_0609_execution`，发现新 `native_sync` 规则没有旧 rollout 开关时未进入 Typed Decision 范围，而新 `native_async` 可以进入。此前手动调用 Engine/Binding 的测试绕过了这一步。

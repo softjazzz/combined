@@ -9,19 +9,19 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from sqlalchemy import MetaData, create_engine
-from sqlalchemy.orm import Session
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool
 
 import app.services.custom_qc_workspace_service as workspace_module
 import app.services.luxian_0609_rule_catalog as catalog_module
 import app.services.luxian_0609_rule_master as master_module
+from app.services import sample_programmatic_evidence as programmatic_evidence
+from app.services import sichuan_workspace_batch_worker as worker
 from app.routers import qc_sichuan
 from app.services.luxian_0609 import customer_rule_package, native_package, phase_scope
 from app.services.luxian_0609 import execution as execution_module, rule_contracts, source_registry
 from app.services.luxian_0609.decision_model import ApplicabilityState, EvidenceState, QcDirection, RuleDecision
-from app.services.luxian_0609.decision_binding import bind_and_reduce_luxian_0609_rule_decisions
-from app.services.luxian_0609.engine import FamilyExecutionSuccess, Luxian0609ExecutionEngine
-from app.services.luxian_0609.executor_registry import ExecutorRegistration, Luxian0609ExecutorRegistry
 from app.services.luxian_0609.evidence_snapshot_provider import (
     SnapshotSourceRows,
     build_luxian_0609_evidence_read_session,
@@ -31,14 +31,9 @@ from app.services.luxian_0609.native_package import (
     build_luxian_0609_package_plan,
 )
 from app.services.luxian_0609.rule_decision_settings import resolve_typed_decision_rule_ids
-from app.services.luxian_0609_result_aggregator import aggregate_luxian_0609_results
-from app.services.qc_workspace.canonical_result_store import (
-    CanonicalResultStore,
-    envelope_item_from_rule_result,
-)
+from app.services.qc_workspace.canonical_result_store import CanonicalResultStore
 from app.services.sichuan_workspace_batch_worker import _assert_luxian_0609_formal_customer_rule_ids
 from app.services.sichuan_qc_service import SichuanQCService
-from tests.unit.test_luxian_0609_rule_extension_boundary import _NativeExtensionExecutor
 from tests.unit.test_luxian_0609_task_plan_freeze_probe import _NoModel, _settings
 from tests.unit.test_qc_sichuan_batch_throughput import _WorkspaceStub
 
@@ -64,6 +59,7 @@ def _clear_catalog_caches() -> None:
 async def test_test_only_native_rule_crosses_formal_catalog_admission_engine_and_canonical_store(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    request: pytest.FixtureRequest,
 ) -> None:
     master = json.loads(master_module._MASTER_PATH.read_text(encoding="utf-8"))
     base_wrappers = json.loads(catalog_module._DATA_PATH.read_text(encoding="utf-8"))
@@ -228,60 +224,73 @@ async def test_test_only_native_rule_crosses_formal_catalog_admission_engine_and
         assert dispatched == [selected]
         assert [item.rule_id for item in execution_context.reduced_decisions] == [TEST_RULE_ID]
 
-        engine = Luxian0609ExecutionEngine(registry=Luxian0609ExecutorRegistry((
-            ExecutorRegistration(executor_key="surgery_presence", executor=_NativeExtensionExecutor()),
-        )))
-        report = await engine.execute(
-            executor_batches=plan.native_executor_batches,
-            snapshot=session.snapshot,
-            contracts=(contracts[-1],),
-            default_deadline_seconds=1.0,
-            max_concurrency=1,
+        class _Activation:
+            def enforce(self) -> None:
+                return None
+
+        monkeypatch.setattr(worker, "get_product_activation_service", lambda: _Activation())
+        monkeypatch.setattr(worker, "get_settings", lambda: _settings(basic_timeliness=True))
+        monkeypatch.setattr(worker, "load_running_final_bundle", lambda **kwargs: {
+            "scene": "running", "visit_id": kwargs["visit_id"], "institute_id": "I",
+            "patient_id": "P", "source_schema": "cdm", "medical_text": "合成资料",
+            "structured_context": {}, "document_hits": {}, "text_available": True,
+        })
+        monkeypatch.setattr(programmatic_evidence, "_fetch_source_table_fallback_items", lambda *_a, **_k: ([], {}))
+        monkeypatch.setattr(programmatic_evidence, "_fetch_detail_service_fallback_items", lambda *_a, **_k: [])
+
+        async def service_provider() -> SichuanQCService:
+            return service
+
+        # 路由接纳的冻结任务经正式 Worker 与 Workspace 完成事务写入隔离 SQLite。
+        persisted_engine = create_engine(
+            "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool,
         )
-        assert isinstance(report.outcomes[0], FamilyExecutionSuccess)
-        reduced = bind_and_reduce_luxian_0609_rule_decisions(
-            decisions=report.outcomes[0].envelope.decisions,
-            expected_rule_ids=selected,
-            snapshot=session.snapshot,
+        request.addfinalizer(workspace_module._batch_jobs_table.cache_clear)
+        request.addfinalizer(workspace_module._record_result_envelopes_table.cache_clear)
+        request.addfinalizer(persisted_engine.dispose)
+        monkeypatch.setattr(workspace_module, "engine", persisted_engine)
+        monkeypatch.setattr(workspace_module, "_draft_schema", lambda: None)
+        monkeypatch.setattr(workspace_module, "_sync_batch_job_parent_columns", lambda **_: None)
+        workspace_module._batch_jobs_table.cache_clear()
+        workspace_module._record_result_envelopes_table.cache_clear()
+        batch_table = workspace_module._batch_jobs_table()
+        envelope_table = workspace_module._record_result_envelopes_table()
+        envelope_table.metadata.create_all(persisted_engine)
+        persisted_workspace = object.__new__(workspace_module.CustomQCWorkspaceService)
+        persisted_workspace._batch_job_table = batch_table
+        persisted_workspace._record_result_envelope_table = envelope_table
+        monkeypatch.setattr(workspace_module, "_session", sessionmaker(bind=persisted_engine))
+        monkeypatch.setattr(persisted_workspace, "collect_records", workspace.collect_records)
+        monkeypatch.setattr(persisted_workspace, "hydrate_records_with_medical_text", workspace.hydrate_records_with_medical_text)
+        with persisted_engine.begin() as connection:
+            connection.execute(batch_table.insert().values(
+                id=admitted_job_id, draft_id="test-only-rule", created_by="tester",
+                rule_code=TEST_RULE_ID, rule_name="测试专用入院文书核查",
+                scene="running", scope="running", status="queued",
+                filters_json=json.dumps(admitted_filters, ensure_ascii=False),
+                record_ids_json='["V"]', total_records=1,
+                created_at=datetime(2026, 9, 24, 12), updated_at=datetime(2026, 9, 24, 12),
+            ))
+        await worker.run_sichuan_workspace_batch_job(
+            admitted_job_id, workspace=persisted_workspace, qc_service_provider=service_provider,
         )
-        results = aggregate_luxian_0609_results(
-            wrapper_rules=[wrappers[-1]], execution_results=[], reduced_decisions=reduced,
-            customer_display_facts=(), format_evidence=False,
-            audit_context={"evidence_snapshot": session.snapshot, "evidence_materials": session.materials},
-        )
-        assert [(item["rule_id"], item["status"]) for item in results] == [
+        persisted_job = persisted_workspace.get_batch_job_for_processing(job_id=admitted_job_id)
+        assert persisted_job["status"] == "completed"
+        with Session(persisted_engine) as db:
+            persisted_results = CanonicalResultStore(envelope_table).load_selected(
+                db, root_job_id=admitted_job_id, institute_id="I", patient_id="P", visit_id="V",
+                rule_set_key=admitted_filters["rule_set_key"],
+                rule_set_version=admitted_filters["rule_set_version"],
+            )
+        assert [(item["rule_id"], item["status"]) for item in persisted_results["items"]] == [
             (TEST_RULE_ID, "compliant"),
         ]
-
-        table = workspace_module._record_result_envelopes_table().to_metadata(MetaData(), schema=None)
-        db_engine = create_engine("sqlite://")
-        table.metadata.create_all(db_engine)
-        store = CanonicalResultStore(table)
-        filters = {
-            "rule_set_key": admitted_filters["rule_set_key"],
-            "rule_set_version": admitted_filters["rule_set_version"],
-        }
-        try:
-            with Session(db_engine) as db:
-                store.replace_for_job(
-                    db,
-                    job_row={"id": admitted_job_id, "created_by": "tester", "filters_json": json.dumps(filters)},
-                    items=[{**results[0], "institute_id": "I", "patient_id": "P", "visit_id": "V", "record_id": "V"}],
-                    now=datetime(2026, 9, 24, 12),
-                    projector=lambda raw: envelope_item_from_rule_result(raw, hmac_key="test-only-key"),
-                    projection_key="test-only-key",
-                )
-                db.commit()
-                loaded = store.load_selected(
-                    db, root_job_id=admitted_job_id, institute_id="I", patient_id="P", visit_id="V", **filters,
-                )
-            item = loaded["items"][0]
-            assert (item["rule_id"], item["status"], item["reason_code"]) == (
-                TEST_RULE_ID, "compliant", "requirement_satisfied",
-            )
-            dto = workspace_module.project_customer_safe_result_item(item, hmac_key="test-only-key")
-            assert (dto["rule_id"], dto["status"]) == (TEST_RULE_ID, "compliant")
-        finally:
-            db_engine.dispose()
+        item = persisted_results["items"][0]
+        assert item["reason_code"] == "requirement_satisfied"
+        dto = workspace_module.project_customer_safe_result_item(
+            item, hmac_key=workspace_module.customer_safe_projection_key(),
+        )
+        assert (dto["rule_id"], dto["status"]) == (TEST_RULE_ID, "compliant")
+        assert dispatched == [selected, selected]
     finally:
         _clear_catalog_caches()

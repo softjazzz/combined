@@ -1,5 +1,11 @@
 # 原始 LX0609 阶段 C 启动前只读盘点
 
+## 2026-09-25 正式 Worker→Workspace→Canonical 纵向验证
+
+沿用仅存在于 pytest 临时目录的 `LX0609-99-99-01`，本次把前面的手动组件衔接升级为正式任务执行路径：路由接纳并冻结规则范围，真实 `run_sichuan_workspace_batch_job` 从隔离 SQLite 任务表 CAS 领取任务、核对冻结运行身份并执行生产 `prepare`，经现有注册表接收测试执行器的固定 Decision。真实 `CustomQCWorkspaceService.complete_batch_job` 把任务完成状态和该病例的 Canonical Envelope 置于一个事务中保存；测试随后用相同任务/病例/规则集坐标读回 `compliant/requirement_satisfied`，并投影公开 DTO。测试只替换外部病例读取、产品激活和模型执行器；未修改目录/Worker/保存代码的医学逻辑，也未访问患者资料或客户库。该证据替代下文旧版“未运行 Worker、保存由测试手动衔接”的限制，但仍不是 PostgreSQL 多进程、真实模型、浏览器或临床验收。
+
+验证：纵向测试单项通过、Ruff 通过。与扩展边界、Worker 冻结计划合跑的 22 项通过；另一份旧持久化合同测试在隔离 `DATABASE_URL=127.0.0.1:1` 下其构造函数仍尝试建 PostgreSQL 草稿表，12 项连接失败，不能计为本次代码回归或绿灯。阶段 C 的属性所有者、旧适配替代与部署证据仍需按主计划审计，阶段不关闭。
+
 ## 2026-09-25 生产 prepare 路由补证
 
 前一条组件链测试手动把 Decision 交给 Binding，未经过 `prepare_luxian_0609_execution` 的 Typed 范围解析。沿正式路径复核发现，新 Native 异步规则没有旧 rollout 开关时被纳入，但同条件的同步规则被遗漏。测试先在原实现复现解析器不接受同步范围；最小改动是把已冻结计划的 `native_sync_rule_ids` 传给解析器，与异步范围合并，仅作用于无旧 rollout 开关的规则。临时目录中的测试规则在生产 `prepare` 中通过现有注册表调用合成执行器，`decision_rule_ids` 含本规则且 Decision 进入归约；既有调用组另测。该测试仍以替身快照和执行器隔离数据库/模型，未运行正式 Worker 的后台领取与保存，也不证明临床判定。阶段 C 保持未关闭。

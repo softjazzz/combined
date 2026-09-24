@@ -486,6 +486,8 @@
 
 ### MEDQC-022：LX0609 质控引擎职责收敛
 
+2026-09-25 阶段 C 正式 Worker 纵向补证：临时测试规则现经正式目录、任务路由、后台 Worker、生产 `prepare`/注册表、真实 Workspace 完成事务、隔离 SQLite Canonical Envelope 和公开 DTO 读回；不再靠测试手动连接执行和保存组件。合成来源与执行器不证明临床判定，客户 PostgreSQL/浏览器及旧适配替代审计仍缺，C 保持进行中。A/B/D 保持既定退出标准。
+
 2026-09-25 接续：现有 A/B/C/D goal 保持 active。阶段 C 复现并修复新 `native_sync` 测试规则在生产 `prepare` 的 Typed Decision 路由缺口；临时目录规则经正式任务接纳、生产 `prepare`/注册表的固定 Decision 和隔离 Canonical 组件链验证。正式 Worker 自动领取/保存、客户 PostgreSQL、浏览器及临床保护集尚未覆盖，C 不关闭；A/B/D 仍按主计划退出。未触碰新 CT/抢救/病理及 0916。
 
 2026-09-25 阶段 C 组件链补证：测试专用新规则在临时目录中经过业务总表、执行目录、合同编译、正式四川任务路由接纳、生产 Engine/Binding/Aggregator、SQLite Canonical 保存和公开 DTO 读回；54 项邻近测试通过。任务路由使用内存替身且执行/保存由测试衔接，正式后台 Worker、客户 PG、页面与临床结果未验收。下一步审计 Worker 注册表及任务持久化链，不把本次组件链当作 C 整体关闭；见[阶段 C 审计](../acceptance/2026-09-24-original-engine-phase-c-audit.md)。
