@@ -158,38 +158,8 @@
                   </div>
                 </div>
                 <div class="issue-actions">
-                  <!-- 缺陷操作按钮组 -->
-                  <a-dropdown
-                    v-if="issue.id"
-                    :trigger="['click']"
-                  >
-                    <a-button
-                      type="link"
-                      size="small"
-                      class="action-more-btn"
-                    >
-                      操作 <DownOutlined />
-                    </a-button>
-                    <template #overlay>
-                      <a-menu @click="({ key }: any) => handleDefectAction(key, issue)">
-                        <a-menu-item key="urge">
-                          <SendOutlined /> 催办
-                        </a-menu-item>
-                        <a-menu-item key="mark_remediated">
-                          <EditOutlined /> 标记已整改
-                        </a-menu-item>
-                        <a-menu-divider />
-                        <a-menu-item key="approve">
-                          <CheckOutlined style="color: #52c41a" /> 审核通过
-                        </a-menu-item>
-                        <a-menu-item key="reject">
-                          <CloseCircleOutlined style="color: #ff4d4f" /> 审核存疑
-                        </a-menu-item>
-                      </a-menu>
-                    </template>
-                  </a-dropdown>
                   <a-button
-                    v-else-if="issue.actionLabel"
+                    v-if="issue.actionLabel"
                     type="link"
                     size="small"
                     @click="$emit('action', issue)"
@@ -222,29 +192,19 @@
           <span class="footer-stat">
             共 <strong>{{ totalIssueCount }}</strong> 个问题
           </span>
-          <div class="footer-actions">
-            <a-button
-              type="link"
-              size="small"
-              :loading="exporting"
-              @click="handleExportDefects"
-            >
-              <DownloadOutlined /> 导出
-            </a-button>
-            <span class="footer-detail">
-              <span
-                v-if="severityCount('error') > 0"
-                class="stat-error"
-              >{{ severityCount('error') }} 严重</span>
-              <span
-                v-if="severityCount('warning') > 0"
-                class="stat-warning"
-              >{{ severityCount('warning') }} 警告</span>
-              <span
-                v-if="severityCount('info') > 0"
-                class="stat-info"
-              >{{ severityCount('info') }} 提示</span>
-            </span>
+          <div class="footer-detail">
+            <span
+              v-if="severityCount('error') > 0"
+              class="stat-error"
+            >{{ severityCount('error') }} 严重</span>
+            <span
+              v-if="severityCount('warning') > 0"
+              class="stat-warning"
+            >{{ severityCount('warning') }} 警告</span>
+            <span
+              v-if="severityCount('info') > 0"
+              class="stat-info"
+            >{{ severityCount('info') }} 提示</span>
           </div>
         </div>
       </div>
@@ -254,7 +214,6 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, reactive } from 'vue'
-import { message, Modal } from 'ant-design-vue'
 import {
   BellOutlined,
   AlertOutlined,
@@ -265,20 +224,7 @@ import {
   FileTextOutlined,
   CodeOutlined,
   DollarOutlined,
-  DownOutlined,
-  SendOutlined,
-  EditOutlined,
-  CheckOutlined,
-  CloseCircleOutlined,
-  DownloadOutlined,
 } from '@ant-design/icons-vue'
-import {
-  urgeDefect,
-  markDefectRemediated,
-  approveDefect,
-  rejectDefect,
-  exportDefects,
-} from '@/api/defects'
 
 // ==================== Types ====================
 interface QCIssue {
@@ -433,76 +379,6 @@ const dismissIssue = (issue: QCIssue) => {
 const refreshQC = () => {
   emit('refresh')
   generateMockIssues()
-}
-
-// ==================== 缺陷操作 ====================
-const exporting = ref(false)
-
-const handleDefectAction = async (action: string, issue: QCIssue) => {
-  const defectId = issue.id
-  try {
-    switch (action) {
-      case 'urge': {
-        const res = await urgeDefect(defectId, { message: `请尽快处理：${issue.description}` })
-        if (res.success) message.success('催办成功')
-        else message.error(res.message || '催办失败')
-        break
-      }
-      case 'mark_remediated': {
-        const res = await markDefectRemediated(defectId, { remediation_note: '已整改' })
-        if (res.success) {
-          message.success('已标记为整改')
-          issue.dismissed = true
-        } else {
-          message.error(res.message || '标记失败')
-        }
-        break
-      }
-      case 'approve': {
-        const res = await approveDefect(defectId, '审核通过')
-        if (res.success) {
-          message.success('审核通过')
-          issue.dismissed = true
-        } else {
-          message.error(res.message || '审核失败')
-        }
-        break
-      }
-      case 'reject': {
-        Modal.confirm({
-          title: '审核存疑',
-          content: `确认将缺陷“${issue.description.slice(0, 30)}...”标记为存疑？`,
-          okText: '确认',
-          cancelText: '取消',
-          okType: 'danger',
-          async onOk() {
-            const res = await rejectDefect(defectId, { reason: '审核存疑，需进一步确认' })
-            if (res.success) message.success('已标记为存疑')
-            else message.error(res.message || '操作失败')
-          },
-        })
-        break
-      }
-    }
-  } catch (err: any) {
-    message.error(err?.message || '操作失败')
-  }
-}
-
-const handleExportDefects = async () => {
-  exporting.value = true
-  try {
-    const res = await exportDefects({ format: 'xlsx' })
-    if (res.success) {
-      message.success('导出成功')
-    } else {
-      message.info('导出功能开发中')
-    }
-  } catch (err) {
-    message.error('导出失败')
-  } finally {
-    exporting.value = false
-  }
 }
 
 // ==================== 拖拽 ====================
@@ -1010,15 +886,6 @@ watch(
 .footer-detail {
   display: flex;
   gap: 8px;
-}
-.footer-actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-.action-more-btn {
-  font-size: 12px !important;
-  padding: 0 4px !important;
 }
 .stat-error {
   color: #ef4444;

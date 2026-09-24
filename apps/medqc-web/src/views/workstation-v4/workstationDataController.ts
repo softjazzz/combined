@@ -51,17 +51,26 @@ export function snapshotEndpoint(
 }
 
 export function mapWorklistStatus(item: WorkstationWorklistItem): PatientRecord['status'] {
+  if (item.identityStatus) return 'pending'
   if (item.activeDefectCount > 0) return 'has_defects'
   if (item.latestQcResultId) return 'completed'
   return 'pending'
 }
 
+export function worklistRecordKey(
+  item: Pick<WorkstationWorklistItem, 'instituteId' | 'patientId' | 'visitId'>,
+): string {
+  return `worklist:${JSON.stringify([item.instituteId || '', item.patientId || '', item.visitId])}`
+}
+
 export function mapWorklistItemToRecord(item: WorkstationWorklistItem): PatientRecord {
   return {
     id: item.visitId,
+    recordKey: worklistRecordKey(item),
     visitId: item.visitId,
     instituteId: item.instituteId,
     patientId: item.patientId,
+    identityStatus: item.identityStatus,
     bedNo: '',
     name: item.patientName,
     sex: item.patientSex || '',

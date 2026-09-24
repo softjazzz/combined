@@ -149,6 +149,17 @@
                 >
                   样例
                 </span>
+                <span
+                  v-if="record.identityStatus"
+                  class="batch-table-panel__tag batch-table-panel__tag--warning"
+                  :title="
+                    record.identityStatus === 'ambiguous'
+                      ? '病历身份不唯一，暂不可操作'
+                      : '历史质控归属未核实'
+                  "
+                >
+                  {{ record.identityStatus === 'ambiguous' ? '身份歧义' : '归属未核实' }}
+                </span>
               </span>
             </span>
           </div>
@@ -215,10 +226,14 @@
             type="default"
             size="small"
             class="batch-table-panel__detail-button"
+            :disabled="record.identityStatus === 'ambiguous'"
             :aria-label="
               recordPoolMode ? `查看${record.patientName || ''}病历详情` : rowActionLabel
             "
-            @click="emit('open-record', record.recordKey || record.id)"
+            @click="
+              record.identityStatus !== 'ambiguous' &&
+              emit('open-record', record.recordKey || record.id)
+            "
           >
             <Eye v-if="recordPoolMode" :size="14" aria-hidden="true" />
             {{ recordPoolMode ? '查看' : rowActionLabel }}
@@ -243,6 +258,7 @@ import patientIconWoman from '@/assets/avatar-icons/patient-icon-woman.png'
 export interface WorkbenchRow {
   id: string
   recordKey?: string
+  identityStatus?: 'ambiguous' | 'unverified'
   patientName: string
   patientSex?: string
   patientAge?: number
@@ -301,10 +317,17 @@ const rowSelection = computed(() => {
   if (!showSelection.value) return undefined
   return {
     selectedRowKeys: props.selectedRowKeys,
+    getCheckboxProps: (record: WorkbenchRow) => ({
+      disabled: Boolean(record.identityStatus),
+    }),
     onChange: (keys: (string | number)[]) =>
       emit(
         'update:selectedRowKeys',
-        keys.map((k) => String(k)),
+        keys
+          .map((k) => String(k))
+          .filter((key) =>
+            props.rows.some((row) => (row.recordKey || row.id) === key && !row.identityStatus),
+          ),
       ),
   }
 })

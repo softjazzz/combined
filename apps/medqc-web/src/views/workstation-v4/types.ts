@@ -7,6 +7,7 @@ export interface PatientRecord {
   visitId?: string
   instituteId?: string
   patientId?: string
+  identityStatus?: 'ambiguous' | 'unverified'
   bedNo: string
   name: string
   sex: string
@@ -281,6 +282,7 @@ export interface WorkstationWorklistItem {
   visitId: string
   patientId?: string
   instituteId?: string
+  identityStatus?: 'ambiguous' | 'unverified'
   patientName: string
   patientSex?: string
   patientAge?: number

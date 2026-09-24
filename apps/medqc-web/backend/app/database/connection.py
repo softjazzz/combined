@@ -84,7 +84,7 @@ SessionLocal = (
 
 
 def init_db():
-    """Initialize DB objects: create tables, sync missing columns, create views."""
+    """Initialize legacy schema objects; split schema is managed by Alembic."""
     if engine is None:
         raise RuntimeError("DATABASE_URL is not configured; cannot initialize database.")
 
@@ -95,13 +95,13 @@ def init_db():
 
     if DB_SCHEMA_MODE == "split":
         logger.info(
-            "[init_db] DB_SCHEMA_MODE=split, skip create_all/schema-sync; managed by Alembic."
+            "[init_db] DB_SCHEMA_MODE=split, skip schema and view DDL; managed by Alembic."
         )
+        view_ok, view_fail = [], []
     else:
         Base.metadata.create_all(bind=engine)
         _sync_missing_columns()
-
-    view_ok, view_fail = _create_views()
+        view_ok, view_fail = _create_views()
 
     logger.info("[OK] CDM database initialized (PostgreSQL): %s", _mask_dsn(DATABASE_URL))
     if view_ok:

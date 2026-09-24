@@ -183,6 +183,10 @@ def _table(table_name: str, *schemas: str) -> Table:
     return _table_candidates(table_name, tuple(schemas))
 
 
+class WorklistIdentityAmbiguousError(ValueError):
+    """同一就诊号对应多个病历身份，单键关联无法安全归属。"""
+
+
 class WorkstationAggregationService:
     def __init__(self, session_factory: Any | None = None) -> None:
         self._session_factory = session_factory or SessionLocal
@@ -1221,15 +1225,26 @@ class WorkstationAggregationService:
         session: Session = self._session_factory()
         try:
             base_rows = self._load_base_rows(session, workflow_type=workflow_type, department=None, keyword=None, visit_id=visit_id)
-            queue_state = self._load_queue_state_map(workflow_type=workflow_type, visit_ids=[visit_id]).get(visit_id)
-            status_code, status_source, _ = self._resolve_queue_state(workflow_type=workflow_type, queue_state=queue_state)
+            if workflow_type == "settlement" and base_rows:
+                identity_rows = self._load_base_rows(
+                    session, workflow_type="frontpage", department=None, keyword=None, visit_id=visit_id
+                )
+            else:
+                identity_rows = base_rows
+            identities = {
+                (row["institute_id"], row["patient_id"], row["visit_id"])
+                for row in identity_rows
+            }
+            if len(identities) > 1:
+                raise WorklistIdentityAmbiguousError(f"就诊号 {visit_id} 对应多个病历身份，需核实三坐标")
             if not base_rows:
                 return {
                     "visit_id": visit_id,
                     "workflow_type": workflow_type,
                     "workflow_label": WORKFLOW_LABELS[workflow_type],
-                    "queue_status": status_code,
-                    "queue_status_source": status_source,
+                    "identity_status": "unverified",
+                    "queue_status": "unknown",
+                    "queue_status_source": "identity_unverified",
                     "latest_qc_result": None,
                     "active_defects": [],
                     "latest_notification": None,
@@ -1237,32 +1252,24 @@ class WorkstationAggregationService:
                 }
 
             base = base_rows[0]
-            history = self._load_result_history(session, workflow_type, visit_id, limit=5)
-            active_defects = self._load_active_defects(session, workflow_type, [visit_id]).get(visit_id, [])
-            latest_notification = self._load_latest_notifications(
-                session,
-                workflow_type,
-                [visit_id],
-                recipient_id=recipient_id,
-            ).get(visit_id)
-
             return {
                 "visit_id": visit_id,
-            "patient_id": base["patient_id"],
-            "institute_id": base["institute_id"],
-            "patient_name": base["patient_name"],
-            "patient_age": base.get("patient_age"),
-            "patient_sex": base.get("patient_sex"),
-            "patient_gender": base.get("patient_sex"),
-            "department": base["department"],
+                "patient_id": base["patient_id"],
+                "institute_id": base["institute_id"],
+                "patient_name": base["patient_name"],
+                "patient_age": base.get("patient_age"),
+                "patient_sex": base.get("patient_sex"),
+                "patient_gender": base.get("patient_sex"),
+                "department": base["department"],
                 "workflow_type": workflow_type,
                 "workflow_label": WORKFLOW_LABELS[workflow_type],
-                "queue_status": status_code,
-                "queue_status_source": status_source,
-                "latest_qc_result": history[0] if history else None,
-                "active_defects": active_defects,
-                "latest_notification": latest_notification,
-                "recent_results": history,
+                "identity_status": "unverified",
+                "queue_status": "unknown",
+                "queue_status_source": "identity_unverified",
+                "latest_qc_result": None,
+                "active_defects": [],
+                "latest_notification": None,
+                "recent_results": [],
             }
         finally:
             session.close()
@@ -1287,34 +1294,29 @@ class WorkstationAggregationService:
         if not base_rows:
             return []
 
-        normalized_visit_ids = [row["visit_id"] for row in base_rows]
-        result_map = self._load_latest_results(session, workflow_type, normalized_visit_ids)
-        defects_map = self._load_active_defects(session, workflow_type, normalized_visit_ids)
-        notifications_map = self._load_latest_notifications(
-            session,
-            workflow_type,
-            normalized_visit_ids,
-            recipient_id=recipient_id,
-        )
-        queue_state_map = self._load_queue_state_map(workflow_type=workflow_type, visit_ids=normalized_visit_ids)
-
+        identity_rows = base_rows
+        if department or keyword or workflow_type == "settlement":
+            identity_rows = self._load_base_rows(
+                session,
+                workflow_type="frontpage",
+                department=None,
+                keyword=None,
+                visit_ids={row["visit_id"] for row in base_rows},
+            )
+        identities_by_visit: Dict[str, set[tuple[str, str, str]]] = {}
+        for row in identity_rows:
+            visit_id = _safe_text(row["visit_id"])
+            identities_by_visit.setdefault(visit_id, set()).add(
+                (_safe_text(row["institute_id"]), _safe_text(row["patient_id"]), visit_id)
+            )
+        ambiguous_visit_ids = {
+            visit_id for visit_id, identities in identities_by_visit.items() if len(identities) > 1
+        }
         items: List[Dict[str, Any]] = []
         for row in base_rows:
             visit_id = row["visit_id"]
-            latest_result = result_map.get(visit_id)
-            active_defects = defects_map.get(visit_id, [])
-            latest_notification = notifications_map.get(visit_id)
-            queue_state = queue_state_map.get(visit_id)
-            status_code, status_source, status_updated_at = self._resolve_queue_state(
-                workflow_type=workflow_type,
-                queue_state=queue_state,
-            )
-            latest_qc_time = latest_result.get("analysis_date") or latest_result.get("created_at") if latest_result else None
-            notification_updated_at = None
-            notification_status = "none"
-            if latest_notification:
-                notification_updated_at = latest_notification.get("created_at")
-                notification_status = "read" if latest_notification.get("is_read") else "unread"
+            identity_ambiguous = visit_id in ambiguous_visit_ids
+            status_source = "identity_ambiguous" if identity_ambiguous else "identity_unverified"
 
             launch = WORKFLOW_TO_LAUNCH.get(workflow_type, {})
             items.append(
@@ -1331,21 +1333,22 @@ class WorkstationAggregationService:
                     "admission_date": row.get("admission_date"),
                     "discharge_date": row.get("discharge_date"),
                     "workflow_type": workflow_type,
-                    "queue_status": status_code,
+                    "identity_status": "ambiguous" if identity_ambiguous else "unverified",
+                    "queue_status": "unknown",
                     "queue_status_source": status_source,
-                    "latest_qc_result_id": latest_result.get("id") if latest_result else None,
-                    "latest_qc_score": latest_result.get("overall_score") if latest_result else None,
-                    "latest_qc_grade": latest_result.get("grade") if latest_result else None,
-                    "latest_qc_time": latest_qc_time,
-                    "active_defect_count": len(active_defects),
-                    "top_severity": self._top_severity(active_defects),
-                    "risk_reason": self._build_risk_reason(active_defects),
-                    "notification_status": notification_status,
-                    "notification_updated_at": notification_updated_at,
-                    "latest_notification_id": latest_notification.get("id") if latest_notification else None,
-                    "queue_updated_at": status_updated_at,
-                    "launch_action": launch.get("launch_action"),
-                    "launch_stage": launch.get("launch_stage"),
+                    "latest_qc_result_id": None,
+                    "latest_qc_score": None,
+                    "latest_qc_grade": None,
+                    "latest_qc_time": None,
+                    "active_defect_count": 0,
+                    "top_severity": "info",
+                    "risk_reason": "身份待核实" if identity_ambiguous else "历史质控归属未核实",
+                    "notification_status": "none",
+                    "notification_updated_at": None,
+                    "latest_notification_id": None,
+                    "queue_updated_at": None,
+                    "launch_action": None if identity_ambiguous else launch.get("launch_action"),
+                    "launch_stage": None if identity_ambiguous else launch.get("launch_stage"),
                 }
             )
         return items
@@ -1376,7 +1379,6 @@ class WorkstationAggregationService:
             recipient_id=recipient_id,
         )
         grouped: Dict[str, Dict[str, Any]] = {}
-        context_visit_map: Dict[str, set[str]] = {name: set() for name in HOME_WORKFLOWS}
         for row in rows:
             notif_type = _safe_text(row.get("type")).lower()
             if notif_type.endswith(BATCH_SUMMARY_SUFFIX):
@@ -1388,39 +1390,40 @@ class WorkstationAggregationService:
                 continue
             if workflow_type and current_workflow != workflow_type:
                 continue
-            item_department = self._extract_department_from_notification(row)
+            item_department = "未分科室"
             if department and item_department != department:
                 continue
             item_severity = _safe_text(row.get("severity") or row.get("level"), "info").lower()
             if severity and severity != "all" and item_severity != severity:
                 continue
 
-            key = f"{current_workflow}|{visit_id}|{item_severity}|{item_department}"
+            key = f"{current_workflow}|{item_severity}|{item_department}"
             current = grouped.get(key)
             created_at = _safe_text(row.get("created_at"))
             if current is None:
                 current = {
                     "id": key,
-                    "record_id": _safe_text(row.get("record_id")) or f"{current_workflow}::{visit_id}",
-                    "visit_id": visit_id,
+                    "record_id": "",
+                    "visit_id": "",
                     "patient_id": "",
                     "patient_name": "",
-                    "department": item_department or "未分科室",
+                    "department": "未分科室",
                     "workflow_type": current_workflow,
                     "severity": item_severity,
-                    "title": _safe_text(row.get("title"), "病案问题集中点"),
-                    "summary": _safe_text(row.get("content") or row.get("message"), "暂无描述"),
+                    "title": "历史通知归属待核实",
+                    "summary": "仅显示匿名汇总，暂不可按病历处理",
                     "occurrence_count": 0,
                     "unread_count": 0,
                     "active_defect_count": 0,
                     "latest_qc_score": None,
                     "latest_qc_grade": None,
-                    "queue_status": "pending",
-                    "queue_status_source": "backfill",
+                    "queue_status": "unknown",
+                    "queue_status_source": "identity_unverified",
+                    "identity_status": "unverified",
                     "latest_created_at": created_at,
-                    "latest_notification_id": _safe_text(row.get("id")),
-                    "launch_action": workflow_context.get("launch_action"),
-                    "launch_stage": workflow_context.get("launch_stage"),
+                    "latest_notification_id": None,
+                    "launch_action": None,
+                    "launch_stage": None,
                 }
                 grouped[key] = current
             current["occurrence_count"] += 1
@@ -1430,45 +1433,8 @@ class WorkstationAggregationService:
             next_time = _to_datetime(created_at)
             if next_time and (current_time is None or next_time > current_time):
                 current["latest_created_at"] = created_at
-                current["latest_notification_id"] = _safe_text(row.get("id"))
-                content_text = _safe_text(row.get("content") or row.get("message"))
-                if content_text:
-                    current["summary"] = content_text
-            context_visit_map[current_workflow].add(visit_id)
-
-        context_map: Dict[str, Dict[str, Dict[str, Any]]] = {}
-        for workflow_name, visit_set in context_visit_map.items():
-            if not visit_set:
-                context_map[workflow_name] = {}
-                continue
-            items = self._build_worklist_items(
-                session,
-                workflow_type=workflow_name,
-                keyword=keyword,
-                recipient_id=recipient_id,
-                visit_ids=sorted(visit_set),
-            )
-            context_map[workflow_name] = {
-                _safe_text(item.get("visit_id")): item
-                for item in items
-            }
-
         result: List[Dict[str, Any]] = []
         for item in grouped.values():
-            context = context_map.get(_safe_text(item.get("workflow_type")), {}).get(_safe_text(item.get("visit_id")))
-            if context:
-                item["patient_id"] = context.get("patient_id")
-                item["patient_name"] = context.get("patient_name")
-                item["patient_age"] = context.get("patient_age")
-                item["patient_sex"] = context.get("patient_sex")
-                item["patient_gender"] = context.get("patient_gender")
-                item["department"] = context.get("department") or item["department"]
-                item["active_defect_count"] = int(context.get("active_defect_count") or 0)
-                item["latest_qc_score"] = context.get("latest_qc_score")
-                item["latest_qc_grade"] = context.get("latest_qc_grade")
-                item["queue_status"] = context.get("queue_status") or item["queue_status"]
-                item["queue_status_source"] = context.get("queue_status_source") or item["queue_status_source"]
-                item["record_id"] = context.get("record_id") or item["record_id"]
             result.append(item)
 
         result.sort(
@@ -1510,6 +1476,7 @@ class WorkstationAggregationService:
             queue_status = _safe_text(item.get("queue_status"), "pending")
             has_unread = _safe_text(item.get("notification_status")) == "unread"
             has_defects = int(item.get("active_defect_count") or 0) > 0
+            needs_identity_review = _safe_text(item.get("identity_status")) in {"ambiguous", "unverified"}
             is_queue_attention = queue_status in {"failed", "running"}
             is_pending_entry = (
                 queue_status == "pending"
@@ -1524,6 +1491,7 @@ class WorkstationAggregationService:
                 or is_pending_entry
                 or has_defects
                 or has_unread
+                or needs_identity_review
             )
             if not has_attention:
                 continue
@@ -1537,17 +1505,19 @@ class WorkstationAggregationService:
             workflow_name = _safe_text(item.get("workflow_type"))
             todo_items.append(
                 {
-                    "id": f"todo::{workflow_name}::{item.get('visit_id')}",
+                    "id": f"todo::{workflow_name}::{item.get('institute_id')}::{item.get('patient_id')}::{item.get('visit_id')}",
                     "todo_type": workflow_name,
                     "record_id": item.get("record_id"),
                     "visit_id": item.get("visit_id"),
                     "patient_id": item.get("patient_id"),
+                    "institute_id": item.get("institute_id"),
                     "patient_name": item.get("patient_name"),
                     "patient_age": item.get("patient_age"),
                     "patient_sex": item.get("patient_sex"),
                     "patient_gender": item.get("patient_gender"),
                     "department": item.get("department"),
                     "workflow_type": workflow_name,
+                    "identity_status": item.get("identity_status"),
                     "task_status": task_status,
                     "priority": self._resolve_todo_priority(item),
                     "due_at": due_at,
@@ -1565,7 +1535,7 @@ class WorkstationAggregationService:
 
         deduped_todos: Dict[str, Dict[str, Any]] = {}
         for item in todo_items:
-            dedupe_key = f"{_safe_text(item.get('workflow_type'))}::{_safe_text(item.get('visit_id'))}"
+            dedupe_key = item["id"]
             current = deduped_todos.get(dedupe_key)
             if current is None or self._should_replace_todo_item(item, current):
                 deduped_todos[dedupe_key] = item
@@ -1864,10 +1834,11 @@ class WorkstationAggregationService:
         stmt = stmt.order_by(desc(mr.c.discharge_datetime), desc(mr.c.admission_datetime))
         rows = session.execute(stmt).mappings().all()
 
-        deduped: Dict[str, Dict[str, Any]] = {}
+        deduped: Dict[tuple[str, str, str], Dict[str, Any]] = {}
         for row in rows:
             data = _serialize_row(dict(row))
-            deduped.setdefault(str(data["visit_id"]), data)
+            identity = tuple(_safe_text(data[key]) for key in ("institute_id", "patient_id", "visit_id"))
+            deduped.setdefault(identity, data)
         return list(deduped.values())
 
     def _load_latest_results(self, session: Session, workflow_type: str, visit_ids: Iterable[str]) -> Dict[str, Dict[str, Any]]:

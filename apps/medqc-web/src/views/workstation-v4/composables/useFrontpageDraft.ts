@@ -88,6 +88,21 @@ export function useFrontpageDraft(
   const generateStartTime = ref(0)
   const extractionSettings = ref<FrontpageExtractionSettings | null>(null)
   const defaultPreviewTab = ref<'fields' | 'preview'>('preview')
+  const selectedIdentity = computed(() => {
+    const record = selectedRecord.value
+    return JSON.stringify([
+      selectedId.value,
+      record?.recordKey,
+      record?.instituteId,
+      record?.patientId,
+      record?.visitId || record?.id,
+    ])
+  })
+  let operationVersion = 0
+
+  function isCurrentOperation(identity: string, version: number) {
+    return selectedIdentity.value === identity && operationVersion === version
+  }
 
   async function ensureExtractionSettingsLoaded() {
     if (extractionSettings.value) return extractionSettings.value
@@ -274,6 +289,7 @@ export function useFrontpageDraft(
   }
 
   function setDraftEmpty() {
+    operationVersion += 1
     frontpageDraft.value = null
     frontpageReportResult.value = null
     frontpageModule.value = ''
@@ -329,7 +345,8 @@ export function useFrontpageDraft(
     response: Response,
     options: {
       onModule?: (moduleName: string) => void
-    } = {},
+      isCurrent: () => boolean
+    },
   ) {
     if (!response.ok) {
       const errorText = await response.text().catch(() => '')
@@ -342,7 +359,15 @@ export function useFrontpageDraft(
 
     let buffer = ''
     while (true) {
+      if (!options.isCurrent()) {
+        await reader.cancel().catch(() => undefined)
+        return
+      }
       const { done, value } = await reader.read()
+      if (!options.isCurrent()) {
+        await reader.cancel().catch(() => undefined)
+        return
+      }
       if (done) break
 
       buffer += decoder.decode(value, { stream: true })
@@ -350,6 +375,10 @@ export function useFrontpageDraft(
       buffer = lines.pop() || ''
 
       for (const line of lines) {
+        if (!options.isCurrent()) {
+          await reader.cancel().catch(() => undefined)
+          return
+        }
         if (!line.startsWith('data: ')) continue
         try {
           const payload = JSON.parse(line.slice(6))
@@ -375,6 +404,8 @@ export function useFrontpageDraft(
   }
 
   async function loadSavedFrontpageDraft(visitId: string | null) {
+    const identity = selectedIdentity.value
+    const version = ++operationVersion
     const normalizedVisitId = String(visitId || '').trim()
     if (!normalizedVisitId) {
       setDraftEmpty()
@@ -384,6 +415,7 @@ export function useFrontpageDraft(
       const { data } = await apiClient.get(
         `/api/medical-records/ai-frontpage-draft/${normalizedVisitId}`,
       )
+      if (!isCurrentOperation(identity, version)) return
       const draft = data?.draft || data?.data?.draft || null
       if (!draft) {
         setDraftEmpty()
@@ -396,6 +428,7 @@ export function useFrontpageDraft(
       completedModules.value = rebuildCompletedModulesFromDraft(draft)
       onDraftChanged?.()
     } catch (err: any) {
+      if (!isCurrentOperation(identity, version)) return
       if (err?.response?.status !== 404) {
         console.error('读取 AI 首页草稿失败:', err)
       }
@@ -405,10 +438,14 @@ export function useFrontpageDraft(
 
   async function generateFrontpage() {
     if (!selectedRecord.value) return
+    const identity = selectedIdentity.value
+    const version = ++operationVersion
+    const visitId = selectedId.value
 
     // 如果已有草稿，说明是“重新生成”，需强制走 LLM
     const isRegenerate = !!frontpageDraft.value
     const settings = await ensureExtractionSettingsLoaded()
+    if (!isCurrentOperation(identity, version)) return
     const allowForceRegenerate = settings?.allow_force_llm_regenerate !== false
     const effectiveForceLlm = isRegenerate && allowForceRegenerate
 
@@ -427,6 +464,7 @@ export function useFrontpageDraft(
     const seenModules = new Set<string>()
 
     const tryReleaseForPreview = () => {
+      if (!isCurrentOperation(identity, version)) return
       if (releasedForPreview || !frontpageDraft.value) return
       const hasDiagnoses = seenModules.has('diagnoses')
       const hasProcedures = seenModules.has('procedures')
@@ -443,18 +481,20 @@ export function useFrontpageDraft(
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          visit_id: selectedId.value,
+          visit_id: visitId,
           medical_text: '',
           force_llm: effectiveForceLlm,
         }),
       })
 
       await readFrontpageStream(response, {
+        isCurrent: () => isCurrentOperation(identity, version),
         onModule: (moduleName) => {
           seenModules.add(moduleName)
           tryReleaseForPreview()
         },
       })
+      if (!isCurrentOperation(identity, version)) return
 
       if (frontpageDraft.value) {
         message.success('首页生成完成')
@@ -462,12 +502,15 @@ export function useFrontpageDraft(
         message.warning('未能生成首页数据')
       }
     } catch (err: any) {
+      if (!isCurrentOperation(identity, version)) return
       console.error('首页生成失败:', err)
       message.error('首页生成失败: ' + (err.message || '未知错误'))
     } finally {
-      frontpageGenerating.value = false
-      frontpagePostProcessing.value = false
-      frontpageModule.value = ''
+      if (isCurrentOperation(identity, version)) {
+        frontpageGenerating.value = false
+        frontpagePostProcessing.value = false
+        frontpageModule.value = ''
+      }
     }
   }
 
@@ -483,6 +526,8 @@ export function useFrontpageDraft(
       message.warning('请先粘贴病历原文')
       return false
     }
+    const identity = selectedIdentity.value
+    const version = ++operationVersion
 
     frontpageGenerating.value = true
     frontpagePostProcessing.value = true
@@ -496,6 +541,7 @@ export function useFrontpageDraft(
     const seenModules = new Set<string>()
 
     const tryReleaseForPreview = () => {
+      if (!isCurrentOperation(identity, version)) return
       if (releasedForPreview || !frontpageDraft.value) return
       const hasDiagnoses = seenModules.has('diagnoses')
       const hasProcedures = seenModules.has('procedures')
@@ -521,11 +567,13 @@ export function useFrontpageDraft(
       })
 
       await readFrontpageStream(response, {
+        isCurrent: () => isCurrentOperation(identity, version),
         onModule: (moduleName) => {
           seenModules.add(moduleName)
           tryReleaseForPreview()
         },
       })
+      if (!isCurrentOperation(identity, version)) return false
 
       if (!frontpageDraft.value) {
         throw new Error('未能生成首页数据')
@@ -548,6 +596,7 @@ export function useFrontpageDraft(
       }
       return true
     } catch (err: any) {
+      if (!isCurrentOperation(identity, version)) return false
       console.error('粘贴病历生成首页失败:', err)
       const detail =
         err?.response?.data?.error?.message ||
@@ -557,9 +606,11 @@ export function useFrontpageDraft(
       message.error(`首页生成失败: ${detail}`)
       return false
     } finally {
-      frontpageGenerating.value = false
-      frontpagePostProcessing.value = false
-      frontpageModule.value = ''
+      if (isCurrentOperation(identity, version)) {
+        frontpageGenerating.value = false
+        frontpagePostProcessing.value = false
+        frontpageModule.value = ''
+      }
     }
   }
 
@@ -777,12 +828,12 @@ export function useFrontpageDraft(
   }
 
   watch(
-    selectedId,
-    (visitId) => {
-      if (frontpageGenerating.value) return
-      void loadSavedFrontpageDraft(visitId)
+    selectedIdentity,
+    () => {
+      setDraftEmpty()
+      void loadSavedFrontpageDraft(selectedRecord.value?.visitId || selectedId.value)
     },
-    { immediate: true },
+    { immediate: true, flush: 'sync' },
   )
 
   return {

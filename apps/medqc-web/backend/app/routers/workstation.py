@@ -12,7 +12,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from ..core.pagination import HEAVY_MAX_PAGE_SIZE, page_param, page_size_param
 from ..core.response import get_trace_id, success_response
 from ..core.security import get_current_user
-from ..services.workstation.worklist_service import default_workstation_aggregation_service
+from ..services.workstation.worklist_service import (
+    WorklistIdentityAmbiguousError,
+    default_workstation_aggregation_service,
+)
 from ..services.workstation.luxian_0609_result_analysis_service import (
     default_luxian_0609_result_analysis_service,
 )
@@ -28,6 +31,8 @@ def _current_user_id(current_user: dict | None) -> Optional[str]:
 
 
 def _raise_workstation_http_error(exc: Exception) -> None:
+    if isinstance(exc, WorklistIdentityAmbiguousError):
+        raise HTTPException(status_code=409, detail="case_identity_ambiguous")
     if isinstance(exc, ValueError):
         raise HTTPException(status_code=422, detail=str(exc))
     if isinstance(exc, HTTPException):

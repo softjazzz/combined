@@ -153,6 +153,10 @@ export function normalizeRecord(raw: unknown): PatientRecord {
     visitId,
     instituteId: pickString(source, ['instituteId', 'institute_id', 'hospital_code']) || undefined,
     patientId: pickString(source, ['patientId', 'patient_id']) || undefined,
+    identityStatus: (() => {
+      const status = pickString(source, ['identityStatus', 'identity_status'])
+      return status === 'ambiguous' || status === 'unverified' ? status : undefined
+    })(),
     bedNo: pickString(source, ['bedNo', 'bed_no', 'bed_number']),
     name: pickString(source, ['name', 'patient_name', 'patientName']) || '未知患者',
     sex: pickString(source, ['sex', 'gender']) || '未知',
@@ -340,6 +344,10 @@ export function normalizeWorklistItem(raw: unknown): WorkstationWorklistItem {
     visitId,
     patientId: pickString(source, ['patientId', 'patient_id']) || undefined,
     instituteId: pickString(source, ['instituteId', 'institute_id']) || undefined,
+    identityStatus: (() => {
+      const status = pickString(source, ['identityStatus', 'identity_status'])
+      return status === 'ambiguous' || status === 'unverified' ? status : undefined
+    })(),
     patientName: pickString(source, ['patientName', 'patient_name', 'name']) || '未知患者',
     patientSex: pickString(source, ['patientSex', 'patient_sex', 'sex', 'gender']) || undefined,
     patientAge: asNumber(source.patientAge ?? source.patient_age ?? source.age ?? source.age_years),

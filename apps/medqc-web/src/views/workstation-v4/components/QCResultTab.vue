@@ -209,34 +209,6 @@
                     </svg>
                     文书依据
                   </button>
-                  <a-dropdown
-                    v-if="issue.id"
-                    :trigger="['click']"
-                  >
-                    <button
-                      type="button"
-                      class="qc-issue__ghost-btn"
-                    >
-                      操作 <DownOutlined />
-                    </button>
-                    <template #overlay>
-                      <a-menu @click="({ key }: any) => handleDefectAction(key, issue)">
-                        <a-menu-item key="urge">
-                          <SendOutlined /> 催办
-                        </a-menu-item>
-                        <a-menu-item key="mark_remediated">
-                          <EditOutlined /> 标记已整改
-                        </a-menu-item>
-                        <a-menu-divider />
-                        <a-menu-item key="approve">
-                          <CheckOutlined style="color: #52c41a" /> 审核通过
-                        </a-menu-item>
-                        <a-menu-item key="reject">
-                          <CloseCircleOutlined style="color: #ff4d4f" /> 审核存疑
-                        </a-menu-item>
-                      </a-menu>
-                    </template>
-                  </a-dropdown>
                 </div>
                 <button
                   type="button"
@@ -287,14 +259,6 @@
         >
           <ReloadOutlined /> 刷新
         </a-button>
-        <a-button
-          type="link"
-          size="small"
-          :loading="exporting"
-          @click="handleExportDefects"
-        >
-          <DownloadOutlined /> 导出
-        </a-button>
       </div>
     </footer>
   </div>
@@ -302,29 +266,16 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { message, Modal } from 'ant-design-vue'
+import { message } from 'ant-design-vue'
 import {
   CheckCircleOutlined,
   FileTextOutlined,
   CodeOutlined,
   DollarOutlined,
-  DownOutlined,
-  SendOutlined,
-  EditOutlined,
-  CheckOutlined,
-  CloseCircleOutlined,
-  DownloadOutlined,
   ReloadOutlined,
   ThunderboltOutlined,
 } from '@ant-design/icons-vue'
 import { apiClient } from '@/services/apiService'
-import {
-  urgeDefect,
-  markDefectRemediated,
-  approveDefect,
-  rejectDefect,
-  exportDefects,
-} from '@/api/defects'
 import type { WorkstationSnapshotState } from '../types'
 
 interface QCIssue {
@@ -369,7 +320,6 @@ const emit = defineEmits<{
 const internalTab = ref<'form' | 'coding' | 'cost'>('form')
 const currentTab = computed(() => props.activeTab || internalTab.value)
 const issues = ref<QCIssue[]>([])
-const exporting = ref(false)
 const codingQCLoading = ref(false)
 const formQCLoading = ref(false)
 const costQCLoading = ref(false)
@@ -617,74 +567,6 @@ function getCodingIssueGroup(issue: Record<string, any>, source: 'rule' | 'llm')
   }
 
   return '编码质控'
-}
-
-async function handleDefectAction(action: string, issue: QCIssue) {
-  try {
-    switch (action) {
-      case 'urge': {
-        const res = await urgeDefect(issue.id, { message: `请尽快处理：${issue.description}` })
-        if (res.success) message.success('催办成功')
-        else message.error(res.message || '催办失败')
-        break
-      }
-      case 'mark_remediated': {
-        const res = await markDefectRemediated(issue.id, { remediation_note: '已整改' })
-        if (res.success) {
-          issue.dismissed = true
-          emit('issues-change', issues.value.slice())
-          message.success('已标记为整改')
-        } else {
-          message.error(res.message || '标记失败')
-        }
-        break
-      }
-      case 'approve': {
-        const res = await approveDefect(issue.id, '审核通过')
-        if (res.success) {
-          issue.dismissed = true
-          emit('issues-change', issues.value.slice())
-          message.success('审核通过')
-        } else {
-          message.error(res.message || '审核失败')
-        }
-        break
-      }
-      case 'reject': {
-        Modal.confirm({
-          title: '审核存疑',
-          content: `确认将缺陷“${issue.description.slice(0, 30)}...”标记为存疑？`,
-          okText: '确认',
-          cancelText: '取消',
-          okType: 'danger',
-          async onOk() {
-            const res = await rejectDefect(issue.id, { reason: '审核存疑，需进一步确认' })
-            if (res.success) message.success('已标记为存疑')
-            else message.error(res.message || '操作失败')
-          },
-        })
-        break
-      }
-    }
-  } catch (err: any) {
-    message.error(err?.message || '操作失败')
-  }
-}
-
-async function handleExportDefects() {
-  exporting.value = true
-  try {
-    const res = await exportDefects({ format: 'xlsx' })
-    if (res.success) {
-      message.success('导出成功')
-    } else {
-      message.info('导出功能开发中')
-    }
-  } catch {
-    message.error('导出失败')
-  } finally {
-    exporting.value = false
-  }
 }
 
 async function fetchCodingQCFromBackend() {

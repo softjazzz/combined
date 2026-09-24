@@ -41,7 +41,7 @@
         @update:search-text="searchText = $event"
         @update:date-range="dateRange = $event"
         @update:date-field="dateField = $event"
-        @update:selected-row-keys="selectedWorkbenchKeys = $event"
+        @update:selected-row-keys="handleWorkbenchSelectionChange"
         @priority-open="handlePriorityOpen"
         @priority-defer="handlePriorityDefer"
         @select-dept="selectDept"
@@ -113,6 +113,7 @@
           </template>
           <template #frontpage>
             <FrontpageWorkspace
+              v-if="!selectedRecord?.identityStatus"
               :frontpage-generating="frontpageGenerating"
               :frontpage-post-processing="frontpagePostProcessing"
               :draft="frontpageDraft"
@@ -139,9 +140,13 @@
                 }
               "
             />
+            <div v-else class="px-6 py-5 text-sm text-amber-800" role="alert">
+              历史质控归属未核实，当前仅开放病历查看。
+            </div>
           </template>
           <template #settlement>
             <SettlementWorkspace
+              v-if="!selectedRecord?.identityStatus"
               :settlement-loading="settlementLoading"
               :settlement-data="settlementData"
               :settlement-qc-loading="settlementQcLoading"
@@ -156,10 +161,14 @@
                   : undefined
               "
             />
+            <div v-else class="px-6 py-5 text-sm text-amber-800" role="alert">
+              历史质控归属未核实，当前仅开放病历查看。
+            </div>
           </template>
         </WorkstationV4DetailView>
 
         <WorkstationV4AssistView
+          v-if="!selectedRecord?.identityStatus"
           ref="assistViewRef"
           :visible="assistPanelVisible"
           :assist-tab="assistTab"
@@ -374,6 +383,7 @@ import type { BatchRuntimeStatus } from './workstationQueueStatusController'
 import {
   buildSnapshotState,
   mapWorklistItemToRecord,
+  worklistRecordKey,
   normalizeStageDepartments,
   snapshotEndpoint,
   stageWorklistEndpoint,
@@ -605,6 +615,11 @@ async function refreshActiveWorklist() {
 }
 
 async function refreshSelectedSnapshots() {
+  if (selectedRecord.value?.identityStatus) {
+    qcSnapshotState.value = {}
+    return
+  }
+  const selectedKey = selectedRecordKey.value
   const visitId = selectedRecord.value?.visitId || selectedId.value
   if (!visitId) {
     qcSnapshotState.value = {}
@@ -617,6 +632,7 @@ async function refreshSelectedSnapshots() {
   ]
 
   const nextState: Partial<Record<SnapshotTabKey, WorkstationSnapshotState>> = {}
+  let nextSettlementReport: typeof settlementQcReport.value = null
   await Promise.all(
     workflows.map(async ([tabKey, workflow]) => {
       try {
@@ -624,14 +640,17 @@ async function refreshSelectedSnapshots() {
         const payload = data?.data || data
         nextState[tabKey] = buildSnapshotState(payload, tabKey, workflow, workflowLabelMap)
         if (tabKey === 'cost' && payload?.latest_qc_result?.raw_output) {
-          settlementQcReport.value = payload.latest_qc_result.raw_output as any
+          nextSettlementReport = payload.latest_qc_result.raw_output as any
         }
       } catch (error) {
         console.warn(`加载 ${workflow} snapshot 失败:`, error)
       }
     }),
   )
-  qcSnapshotState.value = nextState
+  if (selectedRecordKey.value === selectedKey && !selectedRecord.value?.identityStatus) {
+    qcSnapshotState.value = nextState
+    if (nextSettlementReport) settlementQcReport.value = nextSettlementReport
+  }
 }
 
 const stageStatusText = computed(() => {
@@ -732,6 +751,11 @@ function hasSettlementOfficialRecord(record: PatientRecord): boolean {
 }
 
 async function handleStageRecordAction(record: PatientRecord) {
+  if (record.identityStatus === 'ambiguous') return
+  if (record.identityStatus === 'unverified') {
+    openRecord(record)
+    return
+  }
   const action = stageMeta.value.action
   if (action === 'open_record') {
     openRecord(record)
@@ -772,6 +796,15 @@ async function handleStageRecordAction(record: PatientRecord) {
 
 const activePriorityGroup = ref('all')
 const selectedWorkbenchKeys = ref<string[]>([])
+
+function handleWorkbenchSelectionChange(keys: string[]) {
+  const readOnlyKeys = new Set(
+    stageListRecords.value
+      .filter((record) => Boolean(record.identityStatus))
+      .map((record) => record.recordKey),
+  )
+  selectedWorkbenchKeys.value = keys.filter((key) => !readOnlyKeys.has(key))
+}
 
 function priorityScore(record: PatientRecord) {
   let score = 0
@@ -907,7 +940,9 @@ function setSingleBatchRuntimeStatus(
 const workbenchRows = computed<WorkbenchRow[]>(() => {
   if (isAggregatedStageMode.value) {
     return stageWorklistItems.value.map((item) => ({
-      id: item.visitId,
+      id: worklistRecordKey(item),
+      recordKey: worklistRecordKey(item),
+      identityStatus: item.identityStatus,
       patientName: item.patientName,
       patientSex: item.patientSex,
       patientAge: item.patientAge,
@@ -917,10 +952,15 @@ const workbenchRows = computed<WorkbenchRow[]>(() => {
         stage: currentStageFilter.value,
         visitId: item.visitId,
         fallback: item.queueStatus || 'pending',
-        runtimeStatusMap: batchRuntimeStatusMap.value,
+        runtimeStatusMap: item.identityStatus ? {} : batchRuntimeStatusMap.value,
         workflowType: item.workflowType,
       }),
-      riskReason: item.riskReason || '',
+      riskReason:
+        item.identityStatus === 'ambiguous'
+          ? '病历身份不唯一，暂不可操作'
+          : item.identityStatus === 'unverified'
+            ? '历史质控归属未核实'
+            : item.riskReason || '',
       admissionDate: item.admissionDate || '-',
       dischargeDate: item.dischargeDate || '-',
       updatedAt:
@@ -1022,6 +1062,7 @@ const contentQCCount = ref(0)
 const assistViewRef = ref<InstanceType<typeof WorkstationV4AssistView> | null>(null)
 
 function handleAssistTabRefresh(tabKey: string) {
+  if (selectedRecord.value?.identityStatus) return
   if (tabKey === 'form' || tabKey === 'cost') {
     assistViewRef.value?.runFormQC()
   } else if (tabKey === 'coding') {
@@ -1202,19 +1243,24 @@ const pasteFrontpageSceneOptions = [
 ]
 
 async function loadFrontpageSheet(patientId: string, visitId: string) {
+  const recordKey = selectedRecordKey.value
+  const isCurrent = () =>
+    selectedRecordKey.value === recordKey &&
+    selectedRecord.value?.patientId === patientId &&
+    selectedRecord.value?.visitId === visitId
   frontpageSheetLoading.value = true
   try {
     const { data } = await apiClient.get(
       `/api/medical-records/frontpage-sheet/${patientId}/${visitId}`,
     )
-    frontpageSheetData.value = data ?? null
+    if (isCurrent()) frontpageSheetData.value = data ?? null
   } catch (e: any) {
     if (e?.response?.status !== 404) {
       console.error('加载病案首页数据失败:', e)
     }
-    frontpageSheetData.value = null
+    if (isCurrent()) frontpageSheetData.value = null
   } finally {
-    frontpageSheetLoading.value = false
+    if (isCurrent()) frontpageSheetLoading.value = false
   }
 }
 const settlementQcFailed = computed(() => settlementQcReport.value?.summary?.failed || 0)
@@ -1223,17 +1269,23 @@ const settlementQcFailed = computed(() => settlementQcReport.value?.summary?.fai
 // AI 鐢熸垚棣栭〉锛氬湪闄㈡偅鑰呬篃鍏佽鐢熸垚鍙傝€冭崏绋匡紝宸叉湁棣栭〉鏁版嵁鏃跺脊纭妗?
 const isDischarged = computed(() => !!selectedRecord.value?.dischargeDate)
 const hasExistingFrontpage = computed(() => !!frontpageSheetData.value)
-const canGenerateFrontpage = computed(() =>
-  canGenerateFrontpageDraft(selectedRecord.value, documentsList.value, combinedMedicalText.value),
+const canGenerateFrontpage = computed(
+  () =>
+    !selectedRecord.value?.identityStatus &&
+    canGenerateFrontpageDraft(selectedRecord.value, documentsList.value, combinedMedicalText.value),
 )
 const frontpageDisabledReason = computed(() =>
-  getFrontpageDraftDisabledReason(
-    selectedRecord.value,
-    documentsList.value,
-    combinedMedicalText.value,
-  ),
+  selectedRecord.value?.identityStatus
+    ? '病历身份及历史质控归属未核实，仅可查看'
+    : getFrontpageDraftDisabledReason(
+        selectedRecord.value,
+        documentsList.value,
+        combinedMedicalText.value,
+      ),
 )
 function handleGenerateFrontpage() {
+  if (selectedRecord.value?.identityStatus) return
+  const recordKey = selectedRecordKey.value
   if (hasExistingFrontpage.value) {
     Modal.confirm({
       title: '该患者已有病案首页数据',
@@ -1241,6 +1293,7 @@ function handleGenerateFrontpage() {
       okText: '重新生成',
       cancelText: '取消',
       onOk: () => {
+        if (selectedRecordKey.value !== recordKey || selectedRecord.value?.identityStatus) return
         detailMainTab.value = 'frontpage'
         generateFrontpage()
       },
@@ -1252,6 +1305,7 @@ function handleGenerateFrontpage() {
 }
 
 function openPasteFrontpageModal() {
+  if (selectedRecord.value?.identityStatus) return
   detailMainTab.value = 'frontpage'
   pasteFrontpageModalVisible.value = true
 }
@@ -1271,15 +1325,25 @@ function handlePasteFrontpageCancel() {
 }
 
 async function handleGenerateFrontpageFromText() {
+  if (selectedRecord.value?.identityStatus) {
+    pasteFrontpageModalVisible.value = false
+    return
+  }
   if (!pastedMedicalText.value.trim()) {
     message.warning('请先粘贴病历原文')
     return
   }
 
+  const recordKey = selectedRecordKey.value
   detailMainTab.value = 'frontpage'
   let previewReleased = false
   const releasePreview = () => {
-    if (previewReleased) return
+    if (
+      previewReleased ||
+      selectedRecordKey.value !== recordKey ||
+      selectedRecord.value?.identityStatus
+    )
+      return
     previewReleased = true
     frontpageTab.value = defaultPreviewTab.value
     pasteFrontpageModalVisible.value = false
@@ -1294,15 +1358,18 @@ async function handleGenerateFrontpageFromText() {
     },
   )
   if (!generated) return
-
-  releasePreview()
+  if (selectedRecordKey.value === recordKey && !selectedRecord.value?.identityStatus) {
+    releasePreview()
+  }
 }
 // 缁撶畻娓呭崟鐢熸垚锛氫粎瀵瑰凡鍑洪櫌涓旀棤缁撶畻鏁版嵁鐨勭梾鍘嗗彲鐢?
 const hasExistingSettlement = computed(
   () => !!settlementData.value && settlementData.value?.data_source !== 'generated_from_frontpage',
 )
-const canGenerateSettlement = computed(() =>
-  canGenerateSettlementDraft(selectedRecord.value, hasExistingSettlement.value),
+const canGenerateSettlement = computed(
+  () =>
+    !selectedRecord.value?.identityStatus &&
+    canGenerateSettlementDraft(selectedRecord.value, hasExistingSettlement.value),
 )
 
 const costColumns = [
@@ -1354,23 +1421,39 @@ const settlementInsurFields = computed(() => {
 })
 
 const settlementDataVisitKey = ref('')
+let settlementLoadSequence = 0
 
 async function loadSettlement(patientId: string, visitId: string) {
+  if (
+    selectedRecord.value?.identityStatus ||
+    selectedRecord.value?.patientId !== patientId ||
+    selectedRecord.value?.visitId !== visitId
+  )
+    return
+  const requestSequence = ++settlementLoadSequence
+  const recordKey = selectedRecordKey.value
+  const isCurrent = () =>
+    settlementLoadSequence === requestSequence &&
+    selectedRecordKey.value === recordKey &&
+    !selectedRecord.value?.identityStatus
   settlementLoading.value = true
   settlementData.value = null
   settlementQcReport.value = null
   settlementDataVisitKey.value = ''
   try {
     const { data } = await apiClient.get(`/api/medical-records/settlement/${patientId}/${visitId}`)
+    if (!isCurrent()) return
     settlementData.value = data
     settlementDataVisitKey.value = `${patientId}::${visitId}`
   } catch (err: any) {
+    if (!isCurrent()) return
     if (err?.response?.status === 404) {
       // Fallback: 浠庨椤垫娊鍙栫粨鏋滀笌 CDM SQL 鐢熸垚鑽夌
       try {
         const { data: draft } = await apiClient.post(
           `/api/medical-records/settlement/${patientId}/${visitId}/generate`,
         )
+        if (!isCurrent()) return
         settlementData.value = draft
         settlementDataVisitKey.value = `${patientId}::${visitId}`
       } catch (genErr: any) {
@@ -1382,19 +1465,25 @@ async function loadSettlement(patientId: string, visitId: string) {
       console.error('加载结算清单失败:', err)
     }
   } finally {
-    settlementLoading.value = false
+    if (settlementLoadSequence === requestSequence) settlementLoading.value = false
   }
 }
 
 async function generateSettlementDraft() {
+  if (selectedRecord.value?.identityStatus) return
   if (!selectedRecord.value?.patientId || !selectedRecord.value?.visitId) return
+  const recordKey = selectedRecordKey.value
+  const patientId = selectedRecord.value.patientId
+  const visitId = selectedRecord.value.visitId
   settlementLoading.value = true
   settlementQcReport.value = null
   try {
     const { data } = await apiClient.post(
-      `/api/medical-records/settlement/${selectedRecord.value.patientId}/${selectedRecord.value.visitId}/generate`,
+      `/api/medical-records/settlement/${patientId}/${visitId}/generate`,
     )
+    if (selectedRecordKey.value !== recordKey || selectedRecord.value?.identityStatus) return
     settlementData.value = data ?? null
+    settlementDataVisitKey.value = settlementData.value ? `${patientId}::${visitId}` : ''
     if (settlementData.value) {
       message.success('结算草稿已生成')
     }
@@ -1402,20 +1491,24 @@ async function generateSettlementDraft() {
     message.warning('当前病历暂无可生成的结算清单数据')
     console.warn('生成结算草稿失败:', err)
   } finally {
-    settlementLoading.value = false
+    if (selectedRecordKey.value === recordKey) settlementLoading.value = false
   }
 }
 
 async function runSettlementQc() {
-  if (!selectedRecord.value) return
+  if (!selectedRecord.value || selectedRecord.value.identityStatus) return
+  const recordKey = selectedRecordKey.value
+  const patientId = selectedRecord.value.patientId
+  const visitId = selectedRecord.value.visitId
   settlementQcLoading.value = true
   try {
     // 鏍规嵁鏁版嵁鏉ユ簮閫夋嫨瀵瑰簲鐨?QC 绔偣
     const isGenerated = settlementData.value?.data_source === 'generated_from_frontpage'
     const qcUrl = isGenerated
-      ? `/api/medical-records/settlement/${selectedRecord.value.patientId}/${selectedRecord.value.visitId}/generate/qc`
-      : `/api/medical-records/settlement/${selectedRecord.value.patientId}/${selectedRecord.value.visitId}/qc`
+      ? `/api/medical-records/settlement/${patientId}/${visitId}/generate/qc`
+      : `/api/medical-records/settlement/${patientId}/${visitId}/qc`
     const { data } = await apiClient.post(qcUrl)
+    if (selectedRecordKey.value !== recordKey || selectedRecord.value?.identityStatus) return
     settlementQcReport.value = data
     await fetchAssistNotifications()
     await refreshActiveWorklist()
@@ -1434,7 +1527,7 @@ async function runSettlementQc() {
     message.error('结算清单质控执行失败')
     console.error(err)
   } finally {
-    settlementQcLoading.value = false
+    if (selectedRecordKey.value === recordKey) settlementQcLoading.value = false
   }
 }
 
@@ -2136,9 +2229,11 @@ useWorkstationRouteEffects({
     await Promise.resolve(handleGenerateFrontpage())
   },
   runCodingQc: () => {
+    if (selectedRecord.value?.identityStatus) return
     assistViewRef.value?.runCodingQC()
   },
   runFormQc: () => {
+    if (selectedRecord.value?.identityStatus) return
     assistViewRef.value?.runFormQC()
   },
   isDischarged: isDischarged.value,
@@ -2178,6 +2273,13 @@ watch(selectedRecordKey, (newKey) => {
   fullDocumentsRequest = null
   expandedConcatSectionIndexes.value = new Set()
   settlementQcReport.value = null
+  settlementQcLoading.value = false
+  settlementData.value = null
+  settlementDataVisitKey.value = ''
+  settlementLoading.value = false
+  frontpageSheetData.value = null
+  frontpageSheetLoading.value = false
+  pasteFrontpageModalVisible.value = false
   detailMainTab.value = pendingDetailMainTab.value || 'records'
   pendingDetailMainTab.value = null
   emrRenderState.value = newKey ? 'loading' : 'idle'
@@ -2273,6 +2375,7 @@ const icdApplyLabel = computed(() => {
 })
 
 function openRecord(record: PatientRecord) {
+  if (record.identityStatus === 'ambiguous') return
   selectedStageRecord.value = record
   selectedRecordKey.value = record.recordKey || record.id
   openSessionRecord(record.visitId || record.id)
@@ -2282,7 +2385,7 @@ function openRecord(record: PatientRecord) {
 
 function handlePriorityOpen(recordId: string) {
   const record = findRecordById(listRecords.value, recordId)
-  if (!record) return
+  if (!record || record.identityStatus === 'ambiguous') return
   handleStageRecordAction(record)
 }
 
@@ -2292,7 +2395,7 @@ function handlePriorityDefer(recordId: string) {
 
 async function ensureSettlementLoadedForSelectedRecord() {
   const record = selectedRecord.value
-  if (!record?.patientId || !record?.visitId) return
+  if (!record?.patientId || !record?.visitId || record.identityStatus) return
   if (settlementLoading.value) return
   if (
     settlementData.value &&
@@ -2304,7 +2407,11 @@ async function ensureSettlementLoadedForSelectedRecord() {
 
 function handleRowOpen(recordId: string) {
   const record = findRecordById(listRecords.value, recordId)
-  if (!record) return
+  if (!record || record.identityStatus === 'ambiguous') return
+  if (record.identityStatus === 'unverified') {
+    openRecord(record)
+    return
+  }
   openRecordForStage({
     stage: currentStageFilter.value,
     record,
@@ -2341,6 +2448,11 @@ function findBatchRecordByKey(recordKey: string): PatientRecord | null {
 }
 
 async function handleBatchExtract(keys: string[]) {
+  keys = keys.filter((key) => {
+    const record = findBatchRecordByKey(key)
+    return Boolean(record && !record.identityStatus)
+  })
+  if (keys.length === 0) return
   if (!isStageQueueMode.value) {
     await runRecordPoolQc({
       keys,
