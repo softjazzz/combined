@@ -967,6 +967,7 @@ def _typed_basic_decisions(
             safe_facts = safe_basic_timeliness_customer_display_facts(
                 rule_id=rule_id,
                 raw=facts,
+                formal_publication=True,
             )
             if safe_facts is not None:
                 customer_display_facts.append((rule_id, safe_facts))

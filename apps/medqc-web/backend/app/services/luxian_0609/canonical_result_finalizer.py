@@ -424,11 +424,12 @@ def validate_luxian_0609_executor_customer_display_facts(
         )
     ):
         return None
-    # 原始004的原生执行器已在 add_customer_fact 完成内部事实投影。
-    # 此处只接收已发布形态，避免再次舍入或补写字段。
+    # 基础时限原生执行器已在 add_customer_fact 完成事实投影；Finalizer只
+    # 校验已发布形态，避免二次舍入或删改临界时长。新增抢救内容规则保留
+    # 其独立原子事实投影合同。
     safe_facts = (
         validate_published_basic_timeliness_facts(rule_id=normalized_rule_id, raw=raw)
-        if normalized_rule_id == "LX0609-09-01-01"
+        if normalized_rule_id != "LX0609-09-01-02"
         else safe_basic_timeliness_customer_display_facts(rule_id=normalized_rule_id, raw=raw)
     )
     return (

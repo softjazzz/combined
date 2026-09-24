@@ -116,9 +116,12 @@ def test_004_native_to_finalizer_projects_once(monkeypatch):
     import app.services.luxian_0609.basic_timeliness_customer_projection as projection
     original = projection.safe_basic_timeliness_customer_display_facts
     calls = []
-    def counted(*, rule_id, raw):
+    def counted(*, rule_id, raw, formal_publication=False):
         calls.append(rule_id)
-        return original(rule_id=rule_id, raw=raw)
+        return original(
+            rule_id=rule_id, raw=raw,
+            formal_publication=formal_publication,
+        )
     monkeypatch.setattr(native, "safe_basic_timeliness_customer_display_facts", counted)
     monkeypatch.setattr(projection, "safe_basic_timeliness_customer_display_facts", counted)
     session = _typed_basic_session({"rescue_record": [

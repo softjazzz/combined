@@ -27,6 +27,7 @@ from app.services.qc_workspace.canonical_result_store import (
     validated_customer_explanation,
 )
 from app.services.custom_qc_workspace_service import project_customer_safe_result_item
+from app.services.luxian_0609_result_aggregator import aggregate_luxian_0609_results
 
 
 _WITHIN_FACTS_BY_RULE = {
@@ -473,6 +474,121 @@ def test_lx001_published_rounding_accepts_previous_two_step_projection():
     assert validate_luxian_0609_published_customer_display_facts(
         rule_id="LX0609-01-01-01", raw=published,
     ) == published
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "target", "threshold", "elapsed", "expected_elapsed", "derived_key", "expected_derived"),
+    [
+        ("LX0609-01-01-01", "admission_record", 24, 0.055, 0.06, "remaining_hours", 23.94),
+        ("LX0609-01-02-01", "first_course_record", 8, 0.005, 0.01, "remaining_hours", 7.99),
+        ("LX0609-02-01-01", "attending_course_record", 48, 5.995, 6.0, "remaining_hours", 42.0),
+        ("LX0609-02-01-02", "senior_course_record", 72, 72.005, 72.0, None, None),
+    ],
+)
+def test_original_timeliness_finalizer_keeps_existing_final_numbers_without_reprojection(
+    monkeypatch, rule_id, target, threshold, elapsed, expected_elapsed, derived_key, expected_derived,
+):
+    """原生执行器只投影一次；最终交付数值与旧双投影结果保持一致。"""
+
+    late = elapsed > threshold
+    raw = {
+        "failure_kind": "timeliness_requirement_not_met" if late else "timeliness_requirement_satisfied",
+        "target_document": target,
+        "source_label": "测试记录",
+        "timeliness_state": "late" if late else "within",
+        "threshold_hours": threshold,
+        "elapsed_hours": elapsed,
+    }
+    published = projection_module.safe_basic_timeliness_customer_display_facts(
+        rule_id=rule_id, raw=raw, formal_publication=True,
+    )
+    assert published is not None
+
+    def forbidden_projection(*args, **kwargs):
+        raise AssertionError("已发布事实不得在 Finalizer 再次投影")
+
+    monkeypatch.setattr(
+        projection_module, "safe_basic_timeliness_customer_display_facts",
+        forbidden_projection,
+    )
+    decision = reduce_luxian_0609_rule_decision(RuleDecision(
+        rule_id=rule_id, snapshot_hash="a" * 64,
+        applicability=ApplicabilityState.APPLICABLE,
+        evidence_state=EvidenceState.SUFFICIENT,
+        qc_direction=QcDirection.DEFECT if late else QcDirection.SATISFIED,
+        reason_code="threshold_exceeded" if late else "requirement_satisfied",
+        fact_refs=("b" * 64,), evaluator_version="test-v1", confidence=1.0,
+    ))
+    result = finalizer_module.finalize_luxian_0609_reduced_customer_result(
+        decision=decision, raw_customer_display_facts=published,
+        evidence_snapshot=None, evidence_materials=None,
+    )
+    facts = result["customer_display_facts"]
+    assert result["status"] == ("non_compliant" if late else "compliant")
+    assert facts["elapsed_hours"] == expected_elapsed
+    if derived_key is None:
+        assert "overdue_hours" not in facts
+    else:
+        assert facts[derived_key] == expected_derived
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "target", "threshold"),
+    [
+        ("LX0609-01-01-01", "admission_record", 24),
+        ("LX0609-01-02-01", "first_course_record", 8),
+        ("LX0609-02-01-01", "attending_course_record", 48),
+        ("LX0609-02-01-02", "senior_course_record", 72),
+    ],
+)
+def test_original_timeliness_single_formal_projection_matches_previous_delivery(
+    rule_id, target, threshold,
+):
+    """固定临界输入，对照旧执行器加 Finalizer 的两次投影交付值。"""
+
+    for elapsed in (0.005, 0.055, 5.995, 6.001, 6.005, 6.995,
+                    threshold - 0.005, threshold, threshold + 0.005):
+        late = elapsed > threshold
+        raw = {
+            "failure_kind": "timeliness_requirement_not_met" if late else "timeliness_requirement_satisfied",
+            "target_document": target,
+            "source_label": "测试记录",
+            "timeliness_state": "late" if late else "within",
+            "threshold_hours": threshold,
+            "elapsed_hours": elapsed,
+        }
+        legacy_first = safe_basic_timeliness_customer_display_facts(
+            rule_id=rule_id, raw=raw,
+        )
+        assert legacy_first is not None
+        legacy_final = safe_basic_timeliness_customer_display_facts(
+            rule_id=rule_id, raw=legacy_first,
+        )
+        formal = safe_basic_timeliness_customer_display_facts(
+            rule_id=rule_id, raw=raw, formal_publication=True,
+        )
+        assert formal == legacy_final
+
+
+def test_original_timeliness_legacy_entry_still_rejects_private_fact_identifier():
+    with pytest.raises(ValueError, match="invalid customer display facts"):
+        aggregate_luxian_0609_results(
+            wrapper_rules=[{"rule_id": "LX0609-01-01-01", "name": "入院记录时限"}],
+            execution_results=[{
+                "rule_id": "LX0609-01-01-01", "status": "non_compliant",
+                "metadata": {
+                    "execution_source": "lx0609_native",
+                    "customer_display_facts": {
+                        "failure_kind": "timeliness_requirement_not_met",
+                        "target_document": "admission_record",
+                        "source_label": "入院记录",
+                        "timeliness_state": "late", "threshold_hours": 24,
+                        "elapsed_hours": 25,
+                        "source_document_id": "private-document-id",
+                    },
+                },
+            }],
+        )
 
 
 @pytest.mark.parametrize(

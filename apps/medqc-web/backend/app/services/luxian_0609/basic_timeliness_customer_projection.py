@@ -7,8 +7,13 @@ from math import isfinite
 from typing import Any, Mapping
 
 
-BASIC_TIMELINESS_CUSTOMER_RULE_IDS = frozenset(
-    {"LX0609-01-01-01", "LX0609-01-02-01", "LX0609-09-01-01", "LX0609-09-01-02", "LX0609-02-01-01", "LX0609-02-01-02"}
+ORIGINAL_BASIC_TIMELINESS_CUSTOMER_RULE_IDS = frozenset({
+    "LX0609-01-01-01", "LX0609-01-02-01",
+    "LX0609-02-01-01", "LX0609-02-01-02",
+})
+BASIC_TIMELINESS_CUSTOMER_RULE_IDS = (
+    ORIGINAL_BASIC_TIMELINESS_CUSTOMER_RULE_IDS
+    | frozenset({"LX0609-09-01-01", "LX0609-09-01-02"})
 )
 
 RESCUE_CONTENT_FIELDS = {
@@ -285,7 +290,7 @@ def validate_published_rescue_content_facts(raw: Any) -> dict[str, Any] | None:
 
 
 def safe_basic_timeliness_customer_display_facts(
-    *, rule_id: str, raw: Any
+    *, rule_id: str, raw: Any, formal_publication: bool = False,
 ) -> dict[str, Any] | None:
     normalized_rule_id = str(rule_id or "").strip().upper()
     target_document = _TARGET_DOCUMENT_BY_RULE.get(normalized_rule_id)
@@ -476,12 +481,21 @@ def safe_basic_timeliness_customer_display_facts(
             facts[key] = value.strip()
     elapsed_hours = raw.get("elapsed_hours")
     if isinstance(elapsed_hours, (int, float)) and elapsed_hours >= 0:
-        facts["elapsed_hours"] = round(float(elapsed_hours), 2)
-        if state == "late" and float(elapsed_hours) > threshold:
-            facts["overdue_hours"] = round(float(elapsed_hours) - threshold, 2)
+        rounded_elapsed = round(float(elapsed_hours), 2)
+        facts["elapsed_hours"] = rounded_elapsed
+        # 正式001/002/005/006此前在执行器与Finalizer各投影一次；交付的
+        # 派生数值实际基于已舍入的间隔。仅正式发布时一次算出旧交付值；旧
+        # 兼容入口保留原单次投影口径，004也保持原始间隔计算口径。
+        derived_elapsed = (
+            rounded_elapsed
+            if formal_publication and normalized_rule_id != "LX0609-09-01-01"
+            else float(elapsed_hours)
+        )
+        if state == "late" and derived_elapsed > threshold:
+            facts["overdue_hours"] = round(derived_elapsed - threshold, 2)
         elif state == "within":
             facts["remaining_hours"] = round(
-                max(0.0, threshold - float(elapsed_hours)), 2
+                max(0.0, threshold - derived_elapsed), 2
             )
     if normalized_rule_id == "LX0609-09-01-01" and raw.get("rescue_events") is not None:
         rescue_events = _controlled_rescue_events(raw.get("rescue_events"))
