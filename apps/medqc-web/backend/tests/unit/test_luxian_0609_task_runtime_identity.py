@@ -7,8 +7,15 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.services.luxian_0609 import rule_decision_settings as identity
+from app.core.settings import get_settings
 from app.services import sichuan_workspace_batch_worker as worker
+from app.services.luxian_0609 import rule_decision_settings as identity
+from app.services.luxian_0609.rule_decision_settings import (
+    LX0609_TASK_RUNTIME_FILTER_KEY,
+    LX0609_TASK_SETTINGS_FILTER_KEY,
+    capture_luxian_0609_task_settings,
+    resolve_mainline_rule_decision_settings,
+)
 from app.services.sichuan_qc_service import SichuanQCService
 from tests.unit.test_qc_sichuan_batch_throughput import _WorkspaceStub
 
@@ -205,3 +212,70 @@ async def test_isolated_client_usage_remains_in_process_statistics(monkeypatch):
     assert shared.client.stats()["total_calls"] == 2
     assert shared.client.stats()["error_calls"] == 1
     assert shared.client.stats()["total_tokens"] == 12
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("same_release", [True, False])
+async def test_formal_worker_checks_release_identity_before_record_read(
+    monkeypatch, same_release,
+):
+    original_release = {
+        "available": True,
+        "build_id": "medqc-web-customer-20260925-100000",
+        "git_commit": "a" * 40,
+    }
+    monkeypatch.setattr(identity, "_PROCESS_RUNTIME_BUILD", original_release)
+    config = {
+        "provider_code": "alibaba", "api_endpoint": "https://example.invalid/llm",
+        "api_key": "test-secret", "model": "model-a", "source": "test",
+    }
+    accepted = SichuanQCService(config)
+    workspace = _WorkspaceStub()
+    workspace.job["filters"] = {
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_ids": ["LX0609-01-01-01"],
+        LX0609_TASK_SETTINGS_FILTER_KEY: capture_luxian_0609_task_settings(
+            resolve_mainline_rule_decision_settings(get_settings())
+        ),
+        LX0609_TASK_RUNTIME_FILTER_KEY: identity.capture_luxian_0609_task_runtime(accepted),
+    }
+    resumed_release = dict(original_release)
+    if not same_release:
+        resumed_release["build_id"] = "medqc-web-customer-20260925-110000"
+    monkeypatch.setattr(identity, "_PROCESS_RUNTIME_BUILD", resumed_release)
+    resumed = SichuanQCService(config)
+    errors: list[str] = []
+
+    class Activation:
+        def enforce(self):
+            return None
+
+    def fail_batch_job(**kwargs):
+        errors.append(kwargs["error_message"])
+        workspace.job["status"] = "failed"
+
+    def stop_after_runtime_gate(*_args, **_kwargs):
+        raise RuntimeError("passed-runtime-gate")
+
+    monkeypatch.setattr(worker, "get_product_activation_service", lambda: Activation())
+    monkeypatch.setattr(workspace, "fail_batch_job", fail_batch_job)
+    monkeypatch.setattr(
+        worker, "assert_luxian_0609_customer_native_delivery_ready",
+        stop_after_runtime_gate,
+    )
+    monkeypatch.setattr(
+        workspace, "collect_records",
+        lambda **_kwargs: pytest.fail("运行身份检查前不得读取病例"),
+    )
+
+    async def provide():
+        return resumed
+
+    await worker.run_sichuan_workspace_batch_job(
+        workspace.job["id"], workspace=workspace, qc_service_provider=provide,
+    )
+    assert len(errors) == 1
+    if same_release:
+        assert errors == ["passed-runtime-gate"]
+    else:
+        assert "模型或实现版本已变化" in errors[0]

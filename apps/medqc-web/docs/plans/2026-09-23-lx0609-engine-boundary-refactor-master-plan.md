@@ -4,6 +4,20 @@
 
 用户要求重新设置长程 goal 完成剩余任务。当前已有同范围的 active goal，继续使用它，不将未完成的 A/B/C/D 假标完成后重复创建。本轮接续前集成 HEAD 为 `e33a834df`；此前 A/B 修复及其验证仍保留，不从旧基线重复开发。
 
+2026-09-25 再次接续：用户要求重新设置 goal。当前 active goal 的目标已经覆盖 A/B/C/D 全部剩余退出项，继续沿用，不因本次接续把任何阶段提前标为完成。本轮从集成提交 `69fa84d3f` 开始。阶段 B 新增正式 Worker 的构建身份门禁测试：冻结任务快照后模拟相同或不同构建号；相同构建能通过身份门禁，不同构建在 `collect_records` 前失败。连同任务快照邻近测试共 24 项通过，Ruff 通过。此测试只模拟重启后身份，未实际启动另一进程、读取 PostgreSQL 持久化任务或验收客户机部署，B 仍未关闭。
+
+阶段 C 的只读属性归属盘点（不是扩展链验收）：
+
+| 属性 | 当前声明/权威位置 | 派生及正式使用 | 尚需核对的重复/旧链 |
+| --- | --- | --- | --- |
+| 规则身份、启用和阶段 | `luxian_0609_rule_master_v1.json` 经 `luxian_0609_rule_master.py` 加载 | `luxian_0609_rule_catalog.py` 按启用清单投影执行目录；`phase_scope.py` 投影阶段和暂停原因 | 总表与执行目录需保持同一身份，编译时校验漂移 |
+| 客户规则名称、文书、数据依赖、子项 | `luxian_0609_rules_v1.json` 及一期扩展，由 `luxian_0609_rule_catalog.py` 加载 | `native_package.build_luxian_0609_dependency_inventory`、`rule_contracts.compile_luxian_0609_rule_contracts` 使用 | 包装器仍要求 `mapped_rule_ids`，应仅在证明正式路径替代后删除对应兼容依赖 |
+| 规则族与执行器 | `customer_rule_package.RULE_FAMILY_DEFINITIONS` 声明族；`native_package` 的规则集合选择执行器和模式 | `rule_contracts` 对覆盖层中的 `family_key/executor_key/execution_mode` 做漂移校验；正式包计划交给 `execution.py` 的 registry | `build_luxian_0609_legacy_executor_registry` 仍在正式 `prepare_luxian_0609_execution` 调用，不能因名称为 legacy 就删除 |
+| 决策权限、模型预算、结果版本 | `luxian_0609_rule_contracts_v1.json` 及一期扩展 | `rule_contracts` 编译为不可变合同，校验目录顺序和版本 | `Luxian0609RuleContract.__post_init__` 仍按两个具体规则号决定调用预算，需以正式扩展测试判断是否构成新增规则阻断，不在本轮改医学模型调用 |
+| 医学结论与客户文案 | 各规则执行器形成判定，`customer_renderer.py` 排版，`canonical_result_finalizer.py` 校验 | Aggregator/Canonical Envelope 保存；API/页面读取公开结果 | 尚须完成测试专用规则的目录→任务入口→执行→保存→读取链，确认公共层无需新规则分支 |
+
+以上是按源码入口核对的现状，并非宣称已消除所有重复所有者；C 的退出测试和旧适配删除依据仍待完成。
+
 本轮 A 有限审计先核对原始检查检验规则 012（`LX0609-06-01-05`）：其 native 逐事件投影已按 `event_position` 排序；固定双事件乱序输入经执行器事实接收后，再经公开读取入口得到完全相同的客户事实，未发现读回改写。对应事件顺序合同 9 项聚焦测试通过。此结论仅覆盖该固定分支，不能据此声称检查检验族全部结果、其他规则或正式 HTTP/页面链路均已验收；不为这个无回归证据的分支新增校验器。下一步从现有 Canonical 结果选另一条实际有变换风险的原始分支，核对正式详情/latest/反馈/导出共享同一产物的证据，再决定是否需要生产改动。
 
 本轮 B 确认并修复运行中热重载风险：正式 Worker 原先在任务开始时校验模型快照，之后却持续使用路由缓存的 `SichuanQCService`；`reload_config_for_service` 会原地修改同一一审客户端。因此一次接纳并开始的任务可能在后续病例使用新模型或新参数。现在仅对正式 LX0609 Worker，在任务配置/运行身份校验之前从当前服务创建独立的一审、二审客户端和服务实例；之后的全局服务重载不改变在途实例。固定配置测试确认快照相同、对象独立、原服务改动后任务配置不变；真实 Worker 入口探针在读取病例前确认发生隔离。隔离客户端的本地用量同步计入原服务的进程统计；固定成功12 Token与失败一次的试验确认任务及进程调用数、成功/失败和 Token 一致。任务身份/计划/三入口/代次与LLM客户端相邻111项通过。未改医学判据、Prompt、门控和全局 HTTP 槽位策略。固定配置下连续创建30个隔离服务约7.4秒（约0.25秒/子任务，仅本机合成测量），需在真实任务中核对额外启动开销。此证据不覆盖客户真实运行中的重载、跨进程恢复或完整性能，因此 B 仍未整体关闭。较宽的旧 `test_qc_sichuan_batch_throughput.py` 组 38 项失败；抽查的两个失败在本次隔离分支之后触发任务设置快照缺失，并因夹具不支持 `fail_batch_job(queued_only=...)` 再失败。不能据此把该宽组算作绿色，也不能未经逐项归因称 38 项全部与本次修改无关。前端类型检查及lint通过；全量前端单测1065通过、1项客户样本池切换断言失败，与本轮前端无改动分开记录。Ruff 对本次修改涉及的旧 `sichuan_qc_service.py` 仍报告 7 项未用导入/旧 f-string/未用变量，需单列，不能声称该文件全绿。
