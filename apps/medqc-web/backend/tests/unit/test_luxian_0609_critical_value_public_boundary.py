@@ -72,6 +72,31 @@ def test_052_unmatured_window_time_and_date_published_shapes(key, value):
     assert validate_luxian_0609_published_customer_display_facts(rule_id=RULE_052, raw=published) == published
 
 
+@pytest.mark.parametrize("report,deadline,key,evaluation,valid", [
+    ("2026-06-01 08:00:00", "2026-06-01 14:00:00", "evaluation_time", "2026-06-01 13:59:59", True),
+    ("2026-06-01 08:00:00", "2026-06-01 14:00:00", "evaluation_time", "2026-06-01 14:00:00", False),
+    ("2026-06-01 08:00:00", "2026-06-01 14:00:00", "evaluation_time", "2026-06-01 15:00:00", False),
+    ("2026-06-01 08:00:00", "2026-06-01 15:00:00", "evaluation_time", "2026-06-01 12:00:00", False),
+    ("2026-06-01 08:00:00+08:00", "2026-06-01 06:00:00+00:00", "evaluation_time", "2026-06-01 05:00:00+00:00", True),
+    ("2026-06-01 08:00:00+08:00", "2026-06-01 14:00:00", "evaluation_time", "2026-06-01 12:00:00+08:00", False),
+    ("2026-06-01 08:00:00", "not-a-time", "evaluation_time", "2026-06-01 12:00:00", False),
+    ("2026-06-01 08:00:00", "2026-06-01 14:00:00", "evaluation_date", "2026-06-01", True),
+    ("2026-06-01 08:00:00", "2026-06-01 14:00:00", "evaluation_date", "2026-06-02", False),
+    ("2026-06-01 08:00:00", "2026-06-01 14:00:00", "evaluation_date", "20260601", False),
+])
+def test_052_window_public_consistency_matches_existing_publisher(report, deadline, key, evaluation, valid):
+    raw = _facts(rule_id=RULE_052, outcome="window_not_mature")
+    raw["event_results"][0]["report_time"] = report
+    raw.update(evaluation_window_mature=False, deadline_times=[deadline], **{key: evaluation})
+    published = critical_mapping.safe_critical_value_customer_display_facts(rule_id=RULE_052, raw=raw)
+    assert (published is not None) is valid
+    if valid:
+        assert validate_luxian_0609_published_customer_display_facts(rule_id=RULE_052, raw=published) == published
+    else:
+        with pytest.raises(ValueError, match="解释合同不完整"):
+            validate_luxian_0609_published_customer_display_facts(rule_id=RULE_052, raw=raw)
+
+
 @pytest.mark.parametrize("rule_id", [RULE_052, RULE_053])
 def test_absent_facts_keep_existing_none_semantics(rule_id):
     assert validate_luxian_0609_published_customer_display_facts(rule_id=rule_id, raw=None) is None

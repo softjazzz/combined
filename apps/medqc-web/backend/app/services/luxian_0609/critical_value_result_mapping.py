@@ -342,6 +342,24 @@ def _published_iso(value: Any, *, date_only: bool = False) -> bool:
     return not date_only or (len(value) == 10 and parsed.strftime("%Y-%m-%d") == value)
 
 
+def _published_window_consistent(raw: dict[str, Any], *, date_only: bool) -> bool:
+    """保留旧发布合同的截止关系，只验证自洽，不改变已发布值。"""
+    try:
+        deadlines = tuple(datetime.fromisoformat(value.replace("Z", "+00:00"))
+                          for value in raw["deadline_times"])
+        reports = tuple(datetime.fromisoformat(event["report_time"].replace("Z", "+00:00"))
+                        for event in raw["event_results"])
+        if date_only:
+            evaluation_date = datetime.fromisoformat(f"{raw['evaluation_date']}T00:00:00").date()
+            return all(deadline - report == timedelta(hours=6) and evaluation_date <= deadline.date()
+                       for report, deadline in zip(reports, deadlines))
+        evaluation_time = datetime.fromisoformat(str(raw["evaluation_time"]).replace("Z", "+00:00"))
+        return all(deadline - report == timedelta(hours=6) and evaluation_time < deadline
+                   for report, deadline in zip(reports, deadlines))
+    except (TypeError, ValueError):
+        return False
+
+
 def _published_events(value: Any, *, timing_rule: bool) -> bool:
     if type(value) is not list or not 0 < len(value) <= 100:
         return False
@@ -410,8 +428,10 @@ def _published_052(raw: dict[str, Any]) -> bool:
             or not all(_published_iso(value) for value in deadlines)
             or any(event["outcome"] != "window_not_mature" for event in raw["event_results"])):
         return False
-    return (_published_iso(raw["evaluation_time"]) if "evaluation_time" in extra
-            else _published_iso(raw["evaluation_date"], date_only=True))
+    date_only = "evaluation_date" in extra
+    evaluation = raw["evaluation_date"] if date_only else raw["evaluation_time"]
+    return (_published_iso(evaluation, date_only=date_only)
+            and _published_window_consistent(raw, date_only=date_only))
 
 
 def _published_053(raw: dict[str, Any]) -> bool:
