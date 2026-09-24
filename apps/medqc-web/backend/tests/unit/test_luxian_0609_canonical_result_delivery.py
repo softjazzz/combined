@@ -14,6 +14,7 @@ import sqlalchemy as sa
 from sqlalchemy import MetaData, create_engine
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
+from sqlalchemy.pool import StaticPool
 
 import app.services.custom_qc_workspace_service as workspace_module
 from app.services.custom_qc_workspace_service import (
@@ -2369,7 +2370,12 @@ def test_published_rules_keep_identity_through_sqlite_dto_feedback_and_exports(
     feedback_table = feedback_module._feedback_table().to_metadata(
         MetaData(), schema=None,
     )
-    engine = create_engine("sqlite://")
+    # TestClient 的线程池需要看到同一份隔离内存库。
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
     canonical_table.metadata.create_all(engine)
     feedback_table.metadata.create_all(engine)
     store = CanonicalResultStore(canonical_table)
@@ -2472,6 +2478,56 @@ def test_published_rules_keep_identity_through_sqlite_dto_feedback_and_exports(
                 "customer_display_facts",
             )}
             for item in latest["items"]
+        ]
+
+        # 批量详情走正式 HTTP 路由和真实 SQLite Envelope 读取；任务表中的
+        # 旧 items 只用于验证不会越过 Canonical 成为另一份交付结果。
+        detail_job = {
+            "id": "job-pilots",
+            "draft_id": "sichuan-rule-library",
+            "created_by": "admin-001",
+            "status": "completed",
+            "total_records": 1,
+            "filters": {
+                "rule_set_key": "luxian_0609_qc_v1",
+                "rule_set_version": "2026-06-09",
+                "record_refs": [{
+                    "institute_id": "inst-1",
+                    "patient_id": "patient-1",
+                    "visit_id": "visit-1",
+                }],
+            },
+            "items": [{"rule_id": "LX0609-99-99-99", "status": "non_compliant"}],
+        }
+        service.get_batch_job = lambda *, job_id, created_by: (
+            detail_job if job_id == "job-pilots" and created_by == "admin-001" else None
+        )
+        service._load_batch_job_canonical_items = lambda *, job, allow_partial=False: (
+            store.load_root_job_items(
+                job=job,
+                session_factory=lambda: Session(engine),
+                allow_partial=allow_partial,
+            )
+        )
+        with TestClient(app) as client:
+            detail_response = client.get(
+                "/api/v1/qc/sichuan/workspace/batch-jobs/job-pilots"
+            )
+        assert detail_response.status_code == 200
+        detail_items = detail_response.json()["data"]["items"]
+        assert [item["rule_id"] for item in detail_items] == ["LX0609-09-01-01"]
+        assert [
+            {key: item[key] for key in (
+                "rule_id", "status", "reason_code", "conclusion", "suggestion",
+                "customer_display_facts",
+            )}
+            for item in detail_items
+        ] == [
+            {key: item[key] for key in (
+                "rule_id", "status", "reason_code", "conclusion", "suggestion",
+                "customer_display_facts",
+            )}
+            for item in http_result["items"]
         ]
 
     feedback = ResultFeedbackDemoStore.__new__(ResultFeedbackDemoStore)
