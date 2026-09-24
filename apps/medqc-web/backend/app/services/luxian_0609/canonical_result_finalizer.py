@@ -435,16 +435,23 @@ def validate_luxian_0609_executor_customer_display_facts(
 
 
 def validate_luxian_0609_published_customer_display_facts(
-    *, rule_id: str, raw: Any,
+    *, rule_id: str, raw: Any, status: str = "", reason_code: str = "",
 ) -> dict[str, Any] | None | NotImplementedType:
     """校验已发布的公开事实；已隔离规则不再进入执行器内部事实投影。"""
 
     normalized_rule_id = str(rule_id or "").strip().upper()
     from .basic_timeliness_customer_projection import (
+        basic_timeliness_allows_absent_published_facts,
         is_basic_timeliness_customer_rule,
         validate_published_basic_timeliness_facts,
     )
     if is_basic_timeliness_customer_rule(normalized_rule_id):
+        if raw is None or raw == {}:
+            if basic_timeliness_allows_absent_published_facts(
+                rule_id=normalized_rule_id, status=status, reason_code=reason_code,
+            ):
+                return None
+            raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
         validated = validate_published_basic_timeliness_facts(
             rule_id=normalized_rule_id, raw=raw,
         )

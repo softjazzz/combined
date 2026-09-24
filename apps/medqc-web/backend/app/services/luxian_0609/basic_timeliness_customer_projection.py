@@ -816,6 +816,33 @@ def validate_published_basic_timeliness_facts(
     return None
 
 
+def basic_timeliness_allows_absent_published_facts(
+    *, rule_id: str, status: str, reason_code: str,
+) -> bool:
+    """仅接受原生执行器可不发布独立事实的已裁决分支。"""
+
+    if not is_basic_timeliness_customer_rule(rule_id):
+        return False
+    normalized_rule_id = str(rule_id or "").strip().upper()
+    if normalized_rule_id == "LX0609-09-01-02":
+        # 抢救内容完整性由独立原生入口始终发布内容事实。
+        return False
+    outcome = (str(status or "").strip().lower(), str(reason_code or "").strip().lower())
+    if outcome == ("not_applicable", "trigger_absent_complete"):
+        return normalized_rule_id == "LX0609-09-01-01"
+    if outcome == ("not_applicable", "evaluation_window_not_mature"):
+        return normalized_rule_id == "LX0609-02-01-02"
+    if outcome == ("data_gap", "source_empty"):
+        return normalized_rule_id == "LX0609-02-01-01"
+    return outcome in {
+        ("data_gap", "evaluation_window_not_mature"),
+        ("data_gap", "source_unavailable"),
+        ("data_gap", "source_truncated"),
+        ("data_gap", "required_field_missing"),
+        ("data_gap", "authoritative_time_missing"),
+    }
+
+
 def basic_timeliness_customer_fact_status_is_valid(
     *, rule_id: str, status: str, safe_facts: Mapping[str, Any] | None
 ) -> bool:
@@ -858,6 +885,7 @@ __all__ = [
     "BASIC_TIMELINESS_CUSTOMER_RULE_IDS",
     "RESCUE_CONTENT_FIELDS",
     "basic_timeliness_customer_fact_status_is_valid",
+    "basic_timeliness_allows_absent_published_facts",
     "is_basic_timeliness_customer_rule",
     "safe_basic_timeliness_customer_display_facts",
     "validate_published_basic_timeliness_facts",

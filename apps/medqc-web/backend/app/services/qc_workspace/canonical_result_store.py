@@ -277,6 +277,8 @@ def safe_customer_display_facts(
     shared = validate_luxian_0609_published_customer_display_facts(
         rule_id=rule_id,
         raw=raw,
+        status=canonical_customer_status(item),
+        reason_code=_safe_text(item.get("reason_code")),
     )
     return dict(shared) if isinstance(shared, dict) else {}
 
