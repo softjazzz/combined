@@ -331,16 +331,23 @@ def test_store_projects_only_finalizer_validated_customer_facts(
                 "patient_id": "PRIVATE-025",
             },
         ),
-        ("LX0609-999", {"failure_kind": "unknown"}),
     ],
 )
-def test_store_rejects_unvalidated_or_unknown_customer_facts(
+def test_store_rejects_invalid_known_rule_customer_facts(
     rule_id: str,
     raw: dict[str, Any],
 ) -> None:
+    with pytest.raises(ValueError, match="客户结果解释合同"):
+        safe_customer_display_facts(
+            {"customer_display_facts": raw},
+            rule_id=rule_id,
+        )
+
+
+def test_store_does_not_project_unknown_rule_customer_facts() -> None:
     assert safe_customer_display_facts(
-        {"customer_display_facts": raw},
-        rule_id=rule_id,
+        {"customer_display_facts": {"failure_kind": "unknown"}},
+        rule_id="LX0609-999",
     ) == {}
 
 
@@ -2295,6 +2302,14 @@ def _published_pilot_item_for_read_boundary(rule_id: str) -> dict[str, Any]:
                     "reference_position": 2, "field_path": "record_content",
                     "start": 0, "end": 10, "clause_id": "C1", "offset_unit": "unicode_codepoint"}]}],
         }
+    elif rule_id == "LX0609-06-01-05":
+        facts = {
+            "verification_kind": "exam_lab_requirement_checked",
+            "subject": "ct_mri",
+            "requirement": "positive_result_analysis_within_24h",
+            "event_phase": "report",
+            "checked_sources": ["exam_lab_report", "course_record"],
+        }
     elif rule_id == "LX0609-09-01-02":
         fields = [
             "condition_change", "rescue_time", "rescue_measures", "rescue_outcome",
@@ -2605,6 +2620,7 @@ def test_published_rules_keep_identity_through_sqlite_dto_feedback_and_exports(
         ("LX0609-06-01-01", ("order_results",), "DELETE"),
         ("LX0609-06-01-01", ("order_results", 0, "course_locations"), []),
         ("LX0609-06-01-01", ("order_results", 0, "course_locations", 0, "start"), -1),
+        ("LX0609-06-01-05", ("checked_sources", 0), "corrupted_source"),
         ("LX0609-09-01-02", ("missing_fields",), [{}]),
         ("LX0609-06-02-01", ("decision_status",), []),
         ("LX0609-06-02-01", ("checked_sources", 0, "state"), {}),

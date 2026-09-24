@@ -559,6 +559,9 @@ def validate_luxian_0609_published_customer_display_facts(
     validated = validate_luxian_0609_executor_customer_display_facts(
         rule_id=normalized_rule_id, raw=raw,
     )
+    if validated is None:
+        # 非空的已发布事实未通过其规则族合同，不能在读取时静默丢成空事实。
+        raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
     from .antimicrobial_result_mapping import (
         antimicrobial_customer_fact_status_is_valid,
         is_antimicrobial_customer_rule,
