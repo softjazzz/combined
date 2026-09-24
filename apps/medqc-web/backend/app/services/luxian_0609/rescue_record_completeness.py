@@ -31,6 +31,12 @@ _LABELED_TIME = re.compile(
     r"(?:(\d{4})[-年](\d{1,2})[-月](\d{1,2})日?\s*)?"
     r"([01]?\d|2[0-3])[:：]([0-5]\d)(?::([0-5]\d))?(?!\d)"
 )
+_CLOCK_TIME = re.compile(r"(?<!\d)([01]?\d|2[0-3])[:：]([0-5]\d)(?::([0-5]\d))?(?!\d)")
+_DATE_BEFORE_TIME = re.compile(r"(\d{4})[.\-/年](\d{1,2})[.\-/月](\d{1,2})日?\s*$")
+_ACTUAL_ACTION = re.compile(r"予以|给予|实施|进行|开始|抢救|复苏|胸外按压")
+_OTHER_TIME_ROLE = re.compile(r"记录时间|签字时间|签名时间|提交时间|完成时间|补记时间|入院时间|"
+                              r"既往|曾于|计划|拟于|预计|准备|将于")
+_CLAUSE_END = re.compile(r"[。；;\n]")
 _TEMPLATE_LABELS = re.compile(
     r"抢救记录|病情变化|抢救开始时间|抢救结束时间|抢救时间|抢救措施|抢救结果|"
     r"参加医务人员|专业技术职称|参加人员|姓名|职称|记录时间|提交时间|完成时间|正文"
@@ -93,6 +99,51 @@ def _python_time(body: str) -> Mapping[str, Any] | None:
                 continue
         return {"state": "present", "start": match.start(), "end": match.end(), "quote": match.group()}
     return None
+
+
+def _narrated_rescue_time(body: str, time_atom: Mapping[str, Any], measures_atom: Mapping[str, Any]) -> bool:
+    """无标签时间必须与同一实际处置语句相连，不能只凭文书标题或任意时分。"""
+    if measures_atom["state"] != "present":
+        return False
+    start, end = time_atom["start"], time_atom["end"]
+    measure_start, measure_end = measures_atom["start"], measures_atom["end"]
+    if measure_start < end or measure_start - end > 40:
+        return False
+    quote = time_atom["quote"]
+    clocks = list(_CLOCK_TIME.finditer(quote))
+    if len(clocks) != 1:
+        return False
+    clock = clocks[0]
+    date = _DATE_BEFORE_TIME.search(quote[:clock.start()])
+    if date is not None:
+        try:
+            datetime(int(date[1]), int(date[2]), int(date[3]), int(clock[1]), int(clock[2]), int(clock[3] or 0))
+        except ValueError:
+            return False
+    preceding = body[max(0, start - 32):start]
+    preceding = _CLAUSE_END.split(preceding)[-1]
+    action_context = body[start:measure_end]
+    if _OTHER_TIME_ROLE.search(preceding + action_context):
+        return False
+    if _CLAUSE_END.search(body[end:measure_start]):
+        return False
+    return bool(_ACTUAL_ACTION.search(body[start + clock.end():measure_start]))
+
+
+def _located_present(atom: Mapping[str, Any], body: str) -> dict[str, Any] | None:
+    start, end, quote = (atom[key] for key in ("start", "end", "quote"))
+    if type(start) is not int or type(end) is not int or not isinstance(quote, str):
+        return None
+    if not 0 <= start < end <= len(body):
+        return None
+    if not 0 < len(quote) <= 160 or not quote.strip():
+        return None
+    if body[start:end] == quote:
+        return dict(atom)
+    found = body.find(quote)
+    if found < 0 or body.find(quote, found + 1) >= 0:
+        return None
+    return {**atom, "start": found, "end": found + len(quote)}
 
 
 def _source_issue(snapshot: Luxian0609EvidenceSnapshot, source: str) -> str:
@@ -191,20 +242,19 @@ def _parse(response: Mapping[str, Any], documents: tuple[_Document, ...]) -> dic
             elif state == "absent":
                 valid = type(start) is int and start == 0 and type(end) is int and end == len(doc.body) and quote is None
             elif state == "present":
-                valid = (type(start) is int and type(end) is int and 0 <= start < end <= len(doc.body)
-                         and isinstance(quote, str) and 0 < len(quote) <= 160 and quote.strip()
-                         and doc.body[start:end] == quote)
+                located = _located_present(atom, doc.body)
+                valid = located is not None
             else:
                 valid = False
             if not valid:
                 raise ValueError("unverifiable rescue atom")
-            atoms[key] = dict(atom)
-            if (
-                key == "rescue_time"
-                and state == "present"
-                and not _LABELED_TIME.search(quote)
+            atoms[key] = located if state == "present" else dict(atom)
+        if atoms["rescue_time"]["state"] == "present":
+            time_atom = atoms["rescue_time"]
+            if _python_time(time_atom["quote"]) is None and not _narrated_rescue_time(
+                doc.body, time_atom, atoms["rescue_measures"]
             ):
-                atoms[key] = _unknown()
+                atoms["rescue_time"] = _unknown()
         # 明确标注的抢救时间由Python复核，避免模型漏读字段导致缺陷。
         if doc.python_time is not None:
             atoms["rescue_time"] = dict(doc.python_time)
