@@ -23,7 +23,7 @@
 | 滚动任务 | `MEDQC-022`，见 [PROJECT_ROLLING_TODO.md](PROJECT_ROLLING_TODO.md) |
 | 状态 | 原试点范围已纠正；已验证公共修复保留，原始0609规则等价整改重新建立保护基线 |
 | 当前阶段 | A：以原始0609规则重新确认一次发布与一致读取边界；不得使用新增规则失败作门槛 |
-| 下一项动作 | 原始004公开校验修复已进入独立审查；完成兼容性与原生回归后提交，再验证任务/latest/反馈/导出一致性 |
+| 下一项动作 | 原始004代码修复及跨路径技术测试已验收合入；补真实固定材料data_gap前后等价回放，并完成阶段B入口冻结职责只读审计 |
 | 生产代码基线 | 本轮原始规则重构前基线 `775c17ede53930a685324e523f818b53da441698`；旧轮基线保留在历史记录 |
 | 基线分支 | `codex/lx0609-rule-id-integration`，GitHub `softjazzz/combined` |
 | 当前实施应用目录 | `C:/Users/Coldplay/.codex/worktrees/lx0609-rule-id-integration/LX888/apps/medqc-web`；Sol 6 medium 子代理提交 `cdaa65077` 已摘取为 `a163a910c`；CT 独立提交为 `762776545` |
@@ -288,3 +288,9 @@ python -m pytest -q --tb=short tests/unit/test_luxian_0609_basic_timeliness_cust
 - 主协调进一步复现临界值的非法派生数值：elapsed=6.0、late时将overdue_hours改为-0.01或0.005均被接受；已退回收紧非负及两位小数合法域，尚未接受该提交。舍入误差容差不等同篡改检测。
 - 新增抢救支线追加25b6d651，主协调独立73项专属测试通过；尚待固定响应独立回放与限制记录，未混入引擎提交。
 - 阶段B只读预查：native_package.build_luxian_0609_package_plan本身已使用传入inventory/开关构造计划，不能凭prepare较长就重复建设计划器。execution.prepare_luxian_0609_execution仍在同一函数装配计划、证据会话和执行结果；需先追踪settings与规则版本在真实任务入口的冻结责任，再确定是否有必要迁移完整职责。当前尚无配置漂移的复现实验，不宣称已经发生错误。阶段B生产改动未启动。
+
+### 2026-09-24 原始004代码闭环合入
+
+- 子提交6d863d734、26436ca7d分别合入为5b7b18216、0c0ce16ae。主协调已独立审查公开校验、JSON类型、临界舍入和负值/多余精度拒绝。生产变更限族公开合同与Finalizer原始004分派，医学执行器及模型请求未改。
+- 子树独立275项原始时限/冻结/Finalizer测试通过（排除1项PG依赖），另11项SQLite交付/非法事实/DTO/反馈/导出通过。集成后相同11项再次通过；投影62、抢救内容73、Finalizer70项在集成宽组中通过。宽组Canonical随后出现失败并被停止，不能记全绿；单独重跑writer_marks_envelope_as_canonical_straight_through确认在伪PG DSN连接初始化失败。未运行客户PG写测试。
+- 原始R01材料无可识别抢救结束时间，不造数据：下一项用它验证data_gap路径基线与当前逐字段等价，不能声称正常时效临床验收。阶段A全目标和B/C/D尚未完成。
