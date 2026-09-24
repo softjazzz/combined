@@ -556,9 +556,22 @@ def validate_luxian_0609_published_customer_display_facts(
         return validated
     if raw is None or not isinstance(raw, dict):
         return None
-    return validate_luxian_0609_executor_customer_display_facts(
+    validated = validate_luxian_0609_executor_customer_display_facts(
         rule_id=normalized_rule_id, raw=raw,
     )
+    from .antimicrobial_result_mapping import (
+        antimicrobial_customer_fact_status_is_valid,
+        is_antimicrobial_customer_rule,
+    )
+    if (
+        status
+        and is_antimicrobial_customer_rule(normalized_rule_id)
+        and not antimicrobial_customer_fact_status_is_valid(
+            rule_id=normalized_rule_id, status=status, safe_facts=validated,
+        )
+    ):
+        raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
+    return validated
 
 
 def finalizer_owns_executor_customer_display_facts(rule_id: str) -> bool:

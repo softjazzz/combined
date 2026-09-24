@@ -17,6 +17,7 @@ from app.services.luxian_0609.canonical_result_finalizer import (
 )
 from app.services.qc_workspace.canonical_result_store import (
     envelope_item_from_rule_result,
+    safe_customer_display_facts,
 )
 
 
@@ -220,6 +221,31 @@ def test_antimicrobial_mapping_freezes_reachable_safe_fact_shapes(
         status=status,
         safe_facts=safe_facts,
     )
+
+
+def test_published_antimicrobial_facts_reject_status_contradiction() -> None:
+    rule_id, _, facts = _FACTS_BY_CASE["054_compliant"]
+    with pytest.raises(ValueError, match="解释合同不完整"):
+        safe_customer_display_facts(
+            {
+                "rule_id": rule_id,
+                "status": "non_compliant",
+                "reason_code": "documentation_missing",
+                "customer_display_facts": facts,
+            },
+            rule_id=rule_id,
+        )
+
+
+@pytest.mark.parametrize("_case", _FACTS_BY_CASE.values(), ids=_FACTS_BY_CASE)
+def test_published_antimicrobial_facts_preserve_valid_statuses(
+    _case: tuple[str, str, dict[str, object]],
+) -> None:
+    rule_id, status, facts = _case
+    assert safe_customer_display_facts(
+        {"rule_id": rule_id, "status": status, "customer_display_facts": facts},
+        rule_id=rule_id,
+    ) == facts
 
 
 def _055_facts(*events: dict[str, object]) -> dict[str, object]:
