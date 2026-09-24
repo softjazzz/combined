@@ -26,6 +26,6 @@
 
 ## 测试与后续门槛
 
-运行 `test_luxian_0609_rule_contracts.py` 与 `test_luxian_0609_rule_extension_boundary.py`：前者 15/15 通过；后者 1/2 通过。失败的 `test_two_test_only_rule_contracts_cross_existing_extension_boundary` 使用旧三位测试 ID `LX0609-990/991`，在 `decision_model.py:279` 与 `execution_contract.py:249` 的现行四段式校验处拒绝；未到客户发布。它是编号迁移后的旧测试资料问题，不能据此推断真实四段式规则失败，亦不属于本审计授权的生产改动。应由编号迁移维护任务更新该测试资料，然后再次跑其执行器边界断言。
+初次运行 `test_luxian_0609_rule_contracts.py` 与 `test_luxian_0609_rule_extension_boundary.py`：前者 15/15 通过；后者 1/2 通过。失败的 `test_two_test_only_rule_contracts_cross_existing_extension_boundary` 使用旧三位测试 ID `LX0609-990/991`，在 `decision_model.py:279` 与 `execution_contract.py:249` 的现行四段式校验处拒绝；未到客户发布。随后仅把该测试文件的两个测试专用常量改为目录中不存在的 `LX0609-99-99-01/02`，原断言不变，扩展边界两项测试 2/2 通过。它们覆盖测试内注册的 Engine、决策绑定/归约、聚合与证据坐标，不经过任务 API、正式目录编译或发布存储；不能据此声称新增真实规则无需改公共层或已完成临床验收。
 
 若后续找到确切的逐规则状态违约，再用同一输入与已保存模型响应比较状态、原因码、关键事实、证据坐标、调用次数/Token、执行器顺序和耗时。目前没有足以启动 012 生产改动的证据；这不缩小阶段 C 对其他重复属性的继续盘点。阶段 C 不触及新增 CT/抢救内容规则，也不以合成测试替代客户病例验收。

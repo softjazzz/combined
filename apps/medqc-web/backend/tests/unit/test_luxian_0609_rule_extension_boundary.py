@@ -38,8 +38,8 @@ from app.services.luxian_0609_result_aggregator import (
 )
 
 
-_NATIVE_RULE_ID = "LX0609-990"
-_SEMANTIC_RULE_ID = "LX0609-991"
+_NATIVE_RULE_ID = "LX0609-99-99-01"
+_SEMANTIC_RULE_ID = "LX0609-99-99-02"
 _SOURCE_KEY = "admission_record"
 _SEMANTIC_PROMPT = (
     "判断受控事实中的症状与诊断是否具有明确医学指向关系；"
