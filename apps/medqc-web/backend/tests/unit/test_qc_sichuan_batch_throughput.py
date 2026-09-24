@@ -4818,6 +4818,13 @@ async def test_formal_customer_sample_model_stats_sum_two_records_and_failed_rec
 async def test_partial_failed_retry_executes_only_failed_pairs_and_merges_to_completed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from app.core.settings import Settings
+    from app.services.luxian_0609.rule_decision_settings import (
+        LX0609_TASK_SETTINGS_FILTER_KEY,
+        capture_luxian_0609_task_settings,
+        resolve_mainline_rule_decision_settings,
+    )
+
     workspace = _WorkspaceStub()
     all_rule_ids = ["LX0609-06-01-04", "LX0609-06-01-05", "LX0609-04-01-03"]
     _configure_formal_customer_sample_batch_fixture(
@@ -4852,6 +4859,11 @@ async def test_partial_failed_retry_executes_only_failed_pairs_and_merges_to_com
         "pending_count": 2,
     }
     workspace.job["filters"]["failed_rule_retry"] = retry_scope
+    # 模拟正式接纳时已保存的配置；重试保留它，不绕过 Worker 配置门禁。
+    task_settings = Settings(_env_file=None, JWT_SECRET="retry-probe-only", **vars(_luxian_native_settings()))
+    workspace.job["filters"][LX0609_TASK_SETTINGS_FILTER_KEY] = capture_luxian_0609_task_settings(
+        resolve_mainline_rule_decision_settings(task_settings)
+    )
 
     def _item(visit_id: str, rule_id: str, status: str = "compliant") -> Dict[str, Any]:
         ref = next(ref for ref in refs if ref["visit_id"] == visit_id)
@@ -4932,7 +4944,7 @@ async def test_partial_failed_retry_executes_only_failed_pairs_and_merges_to_com
         }
 
     service.evaluate_running_final_bundle_input = _evaluate_running_final_bundle_input  # type: ignore[attr-defined]
-    monkeypatch.setattr(batch_worker, "get_settings", _luxian_native_settings)
+    monkeypatch.setattr(batch_worker, "get_settings", lambda: task_settings)
     monkeypatch.setattr(
         batch_worker,
         "load_luxian_0609_rules",
