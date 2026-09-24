@@ -637,10 +637,10 @@ def validate_published_rescue_timeliness_facts(raw: Any) -> dict[str, Any] | Non
     return facts
 
 
-def _validate_published_admission_or_first_course_timeliness_facts(
+def _validate_published_basic_timeliness_facts(
     raw: Any, *, target_document: str, threshold_hours: int,
 ) -> dict[str, Any] | None:
-    """001/002 共用纯技术时限字段校验，保留执行器已经发布的数值。"""
+    """原始001/002/005/006共用纯技术时限字段校验，保留已发布数值。"""
 
     if not isinstance(raw, Mapping):
         return None
@@ -766,7 +766,7 @@ def _validate_published_admission_or_first_course_timeliness_facts(
 def validate_published_admission_timeliness_facts(raw: Any) -> dict[str, Any] | None:
     """原始001公开读取只校验已发布事实。"""
 
-    return _validate_published_admission_or_first_course_timeliness_facts(
+    return _validate_published_basic_timeliness_facts(
         raw, target_document="admission_record", threshold_hours=24,
     )
 
@@ -774,8 +774,24 @@ def validate_published_admission_timeliness_facts(raw: Any) -> dict[str, Any] | 
 def validate_published_first_course_timeliness_facts(raw: Any) -> dict[str, Any] | None:
     """原始002公开读取只校验已发布事实。"""
 
-    return _validate_published_admission_or_first_course_timeliness_facts(
+    return _validate_published_basic_timeliness_facts(
         raw, target_document="first_course_record", threshold_hours=8,
+    )
+
+
+def validate_published_attending_round_timeliness_facts(raw: Any) -> dict[str, Any] | None:
+    """原始005公开读取只校验已发布事实。"""
+
+    return _validate_published_basic_timeliness_facts(
+        raw, target_document="attending_course_record", threshold_hours=48,
+    )
+
+
+def validate_published_senior_round_timeliness_facts(raw: Any) -> dict[str, Any] | None:
+    """原始006公开读取只校验已发布事实。"""
+
+    return _validate_published_basic_timeliness_facts(
+        raw, target_document="senior_course_record", threshold_hours=72,
     )
 
 
@@ -824,6 +840,8 @@ __all__ = [
     "is_basic_timeliness_customer_rule",
     "safe_basic_timeliness_customer_display_facts",
     "validate_published_admission_timeliness_facts",
+    "validate_published_attending_round_timeliness_facts",
     "validate_published_first_course_timeliness_facts",
     "validate_published_rescue_timeliness_facts",
+    "validate_published_senior_round_timeliness_facts",
 ]
