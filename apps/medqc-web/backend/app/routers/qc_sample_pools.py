@@ -1378,6 +1378,25 @@ async def run_sample_pool_intrinsic_validation(
             task_runtime_snapshot = capture_luxian_0609_task_runtime(await get_qc_service())
         except ValueError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
+        first_pass = task_runtime_snapshot["first_pass"]
+        requested_model_options = {
+            "model_code": (payload.model_code or "").strip() if payload.model_code is not None else None,
+            "temperature": payload.temperature,
+            "top_p": payload.top_p,
+            "max_tokens": payload.max_tokens,
+        }
+        for requested_key, effective_key in (
+            ("model_code", "model"),
+            ("temperature", "temperature"),
+            ("top_p", "top_p"),
+            ("max_tokens", "max_tokens"),
+        ):
+            requested_value = requested_model_options[requested_key]
+            if requested_value is not None and requested_value != first_pass[effective_key]:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"LX0609任务不支持覆盖当前模型配置：{requested_key}；请在系统设置中调整后重新发起",
+                )
     pseudo_draft = resolve_sample_validation_pseudo_draft(
         validation_mode=validation_mode,
         pool_name=str(pool.get("name") or ""),

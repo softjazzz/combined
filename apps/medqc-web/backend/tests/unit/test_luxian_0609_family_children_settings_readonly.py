@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 import pytest
+from fastapi import HTTPException
 
 from app.core.settings import Settings
 from app.routers import qc_sample_pools
@@ -82,7 +83,10 @@ def _settings(*, trigger_gate: bool, native_transfusion: bool = True) -> Setting
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("change", ["same", "capacity", "gate", "native", "model"])
+@pytest.mark.parametrize("change", [
+    "same", "capacity", "gate", "native", "model", "matching_override",
+    "override_model", "override_temperature", "override_top_p", "override_max_tokens",
+])
 async def test_two_real_family_children_enforce_accepted_settings(monkeypatch, change):
     class _FrozenDatetime(datetime):
         @classmethod
@@ -116,15 +120,35 @@ async def test_two_real_family_children_enforce_accepted_settings(monkeypatch, c
 
     first_settings = _settings(trigger_gate=False)
     monkeypatch.setattr(qc_sample_pools, "get_settings", lambda: first_settings)
+    override = {
+        "matching_override": {
+            "model_code": "probe-only", "temperature": 0.2,
+            "top_p": 0.9, "max_tokens": 16384,
+        },
+        "override_model": {"model_code": "other-model"},
+        "override_temperature": {"temperature": 0.7},
+        "override_top_p": {"top_p": 0.5},
+        "override_max_tokens": {"max_tokens": 4096},
+    }.get(change, {})
+    payload = qc_sample_pools.SamplePoolRunRequest(
+        record_refs=[_run_record_ref()], sample_item_ids=["item-1"],
+        rule_set_key="luxian_0609_qc_v1",
+        selected_rule_ids=["LX0609-01-01-01", "LX0609-07-01-01"],
+        group_by_luxian_family=True,
+        **override,
+    )
+    if change.startswith("override_"):
+        with pytest.raises(HTTPException) as error:
+            await qc_sample_pools.run_sample_pool_intrinsic_validation(
+                request=_build_request(), pool_id="pool-1",
+                payload=payload, current_user={"id": "tester"},
+            )
+        assert error.value.status_code == 422
+        assert not planning_workspace.create_batch_job_calls
+        return
     response = await qc_sample_pools.run_sample_pool_intrinsic_validation(
         request=_build_request(), pool_id="pool-1",
-        payload=qc_sample_pools.SamplePoolRunRequest(
-            record_refs=[_run_record_ref()], sample_item_ids=["item-1"],
-            rule_set_key="luxian_0609_qc_v1",
-            selected_rule_ids=["LX0609-01-01-01", "LX0609-07-01-01"],
-            group_by_luxian_family=True,
-        ),
-        current_user={"id": "tester"},
+        payload=payload, current_user={"id": "tester"},
     )
     assert response["data"]["job_kind"] == "parent"
     parent, *children = planning_workspace.create_batch_job_calls
@@ -208,7 +232,7 @@ async def test_two_real_family_children_enforce_accepted_settings(monkeypatch, c
         })
 
     assert settings_reads == [first_settings, second_settings]
-    accepted = change in {"same", "capacity"}
+    accepted = change in {"same", "capacity", "matching_override"}
     expected_prepared = [first_settings, second_settings] if accepted else [first_settings]
     assert [call["settings"] for call in prepare_calls] == expected_prepared
     assert [call["selected_rule_ids"] for call in prepare_calls] == [
