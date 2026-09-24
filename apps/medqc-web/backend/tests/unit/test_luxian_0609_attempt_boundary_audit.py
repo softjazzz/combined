@@ -567,6 +567,15 @@ async def test_formal_0609_worker_result_after_bundle_await_cannot_publish(stora
     async def provider():
         return qc_service
 
+    # 正式接纳配置随任务持久化；否则新门禁会在进入等待点前拒绝旧夹具。
+    workspace.job["filters"][LX0609_TASK_SETTINGS_FILTER_KEY] = capture_luxian_0609_task_settings(
+        resolve_mainline_rule_decision_settings(batch_worker.get_settings())
+    )
+    with engine.begin() as connection:
+        connection.execute(table.update().where(table.c.id == "attempt-job").values(
+            filters_json=json.dumps(workspace.job["filters"]),
+        ))
+
     old_worker = asyncio.create_task(batch_worker.run_sichuan_workspace_batch_job(
         "attempt-job", workspace=workspace, qc_service_provider=provider,
     ))

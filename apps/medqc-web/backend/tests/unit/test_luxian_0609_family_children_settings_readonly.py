@@ -1,4 +1,4 @@
-"""客户样本规则族子任务跨启动时读取配置的只读探针。"""
+"""客户样本规则族子任务：固定接纳配置，拒绝跨启动漂移。"""
 
 from __future__ import annotations
 
@@ -73,8 +73,8 @@ def _settings(*, trigger_gate: bool, native_transfusion: bool = True) -> Setting
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("native_transfusion", [True, False], ids=["different-gate", "native-family-disabled"])
-async def test_two_real_family_children_read_settings_at_separate_start_times(monkeypatch, native_transfusion):
+@pytest.mark.parametrize("change", ["same", "capacity", "gate", "native"])
+async def test_two_real_family_children_enforce_accepted_settings(monkeypatch, change):
     class _FrozenDatetime(datetime):
         @classmethod
         def now(cls, tz=None):
@@ -96,6 +96,8 @@ async def test_two_real_family_children_read_settings_at_separate_start_times(mo
     submitted = []
     monkeypatch.setattr(qc_sample_pools, "submit_detached_task", lambda *args: submitted.append(args))
 
+    first_settings = _settings(trigger_gate=False)
+    monkeypatch.setattr(qc_sample_pools, "get_settings", lambda: first_settings)
     response = await qc_sample_pools.run_sample_pool_intrinsic_validation(
         request=_build_request(), pool_id="pool-1",
         payload=qc_sample_pools.SamplePoolRunRequest(
@@ -114,8 +116,9 @@ async def test_two_real_family_children_read_settings_at_separate_start_times(mo
     assert all(child["filters"]["rule_set_key"] == "luxian_0609_qc_v1" for child in children)
     assert all(child["filters"][key] == parent["filters"][key] for child in children for key in frozen_keys)
 
-    first_settings = _settings(trigger_gate=False)
-    second_settings = _settings(trigger_gate=True, native_transfusion=native_transfusion)
+    second_settings = _settings(trigger_gate=change == "gate", native_transfusion=change != "native")
+    if change == "capacity":
+        second_settings = second_settings.model_copy(update={"LUXIAN_0609_FAMILY_MAX_CONCURRENCY": 2})
     active_settings = first_settings
     settings_reads = []
     prepare_calls = []
@@ -186,7 +189,8 @@ async def test_two_real_family_children_read_settings_at_separate_start_times(mo
         })
 
     assert settings_reads == [first_settings, second_settings]
-    expected_prepared = [first_settings, second_settings] if native_transfusion else [first_settings]
+    accepted = change in {"same", "capacity"}
+    expected_prepared = [first_settings, second_settings] if accepted else [first_settings]
     assert [call["settings"] for call in prepare_calls] == expected_prepared
     assert [call["selected_rule_ids"] for call in prepare_calls] == [
         tuple(child["filters"]["rule_ids"]) for child in children[:len(expected_prepared)]
@@ -194,13 +198,13 @@ async def test_two_real_family_children_read_settings_at_separate_start_times(mo
     assert all(call["as_of"] == parent["filters"]["task_frozen_date"] for call in prepare_calls)
     assert all(call["horizon"] == parent["filters"]["record_evaluation_snapshot"][0] for call in prepare_calls)
     assert first_settings.LUXIAN_0609_TRIGGER_GATE_ENABLED is False
-    assert second_settings.LUXIAN_0609_TRIGGER_GATE_ENABLED is True
+    assert second_settings.LUXIAN_0609_TRIGGER_GATE_ENABLED is (change == "gate")
     assert outputs[0]["status"] == "completed"
     assert outputs[0]["items"] == [("LX0609-01-01-01", "data_gap", "authoritative_time_missing")]
-    if native_transfusion:
+    if accepted:
         assert outputs[1]["status"] == "completed"
         assert outputs[1]["items"] == [("LX0609-07-01-01", "not_applicable", "trigger_absent_complete")]
     else:
         assert outputs[1]["status"] == "failed"
         assert not outputs[1]["items"]
-        assert "Native" in str(outputs[1]["error"])
+        assert "执行配置已变化" in str(outputs[1]["error"])

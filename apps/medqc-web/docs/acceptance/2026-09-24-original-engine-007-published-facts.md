@@ -17,3 +17,7 @@
 ## 验证与限制
 
 `test_luxian_0609_original_007_public_boundary.py`、`test_luxian_0609_course_quality_freeze.py`、`test_luxian_0609_native_course_quality_execution.py`、`test_luxian_0609_original_005_006_public_boundary.py` 共 292 项通过。改动文件 `ruff check` 与 `compileall` 通过。未运行真实病例正常/超时临床验收、前端和完整批量任务；本修复不改变临床结论。
+
+## 主协调集成验收（b2b04753b）
+
+独立运行007公开合同、病程冻结、病程原生执行和Canonical Finalizer四个文件，共326项通过。13份固定来源在修复前3317287a5与修复后b2b04753b完整输出逐值相等（11不适用、2资料缺口，LLM调用0）；私有脚本与产物留在 `.tmp/0910-full-audit/`，不提交患者内容。该组不支持正常/超时真实病例准确率声明。72小时1秒既存内部发布失败继续单独登记，本次没有将它修成合规或隐藏失败。
