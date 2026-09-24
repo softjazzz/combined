@@ -53,8 +53,8 @@ def boundary(monkeypatch):
     with sessions.begin() as session:
         session.execute(QCTask.__table__.insert().values(
             id="task-1", task_number="TASK-1", task_name="测试", task_type="one_time",
-            scene="final", rule_set_key="sc_content_fast_v1",
-            rule_set_version=get_sichuan_rule_set("sc_content_fast_v1").version,
+            scene="running", rule_set_key="luxian_0609_qc_v1",
+            rule_set_version=get_sichuan_rule_set("luxian_0609_qc_v1").version,
             creator_id="creator", status="sampling", total_records=1,
         ))
         session.execute(QCTaskRecord.__table__.insert().values(
@@ -101,7 +101,7 @@ def test_remote_candidate_without_local_workspace_record_creates_nothing(boundar
     {**REF, "visit_id": "other-visit"},
 ])
 def test_local_workspace_identity_drift_creates_nothing(boundary, drift):
-    boundary.workspace.records = [{**drift, "record_id": drift["visit_id"], "scope": "final"}]
+    boundary.workspace.records = [{**drift, "record_id": drift["visit_id"], "scope": "running"}]
     with pytest.raises(HTTPException) as exc:
         _start(boundary)
     assert exc.value.status_code == 422
@@ -110,7 +110,7 @@ def test_local_workspace_identity_drift_creates_nothing(boundary, drift):
 
 
 def test_valid_local_workspace_record_commits_job_and_association(boundary):
-    boundary.workspace.records = [{**REF, "record_id": REF["visit_id"], "scope": "final"}]
+    boundary.workspace.records = [{**REF, "record_id": REF["visit_id"], "scope": "running"}]
     result = _start(boundary)
     assert result["job_id"] == "job-1"
     assert boundary.dispatched == ["job-1"]

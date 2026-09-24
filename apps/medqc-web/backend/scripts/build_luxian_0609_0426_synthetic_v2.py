@@ -6,17 +6,18 @@ import hashlib
 import json
 import re
 import sys
-import uuid
 from collections import Counter, defaultdict
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Iterable, Sequence
 
 import sqlalchemy as sa
-from sqlalchemy import MetaData, Table, and_, delete, select, update
+from sqlalchemy import MetaData, Table, delete, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -38,6 +39,14 @@ from app.services.bundles.assembly import (  # noqa: E402
     refresh_scene_bundles_for_rows,
 )
 from app.services.document_assembly import assemble_document  # noqa: E402
+from app.services.case_identity import CaseRef  # noqa: E402
+from app.services.bundles.publication import (  # noqa: E402
+    assert_complete_bundle_refresh,
+    invalidate_bundle_variants,
+    new_bundle_staging_token,
+    publish_bundle_variants,
+)
+from app.services.task_record_sync_job_service import _GLOBAL_LOCK_KEY  # noqa: E402
 
 
 SOURCE_POOL_NAME = "0426"
@@ -1215,6 +1224,48 @@ def delete_target_visit_rows(session: Session, metadata: MetaData, cases: Sequen
     return deleted_tables
 
 
+@contextmanager
+def _bundle_write_lock():
+    if engine.dialect.name != "postgresql":
+        yield
+        return
+    with engine.connect() as conn:
+        conn.execute(text("SELECT pg_advisory_lock(:key)"), {"key": _GLOBAL_LOCK_KEY})
+        try:
+            yield
+        finally:
+            conn.rollback()
+            conn.execute(text("SELECT pg_advisory_unlock(:key)"), {"key": _GLOBAL_LOCK_KEY})
+            conn.commit()
+
+
+def _refresh_and_publish(refs: Sequence[CaseRef], session_factory: Any) -> None:
+    bundle_rows = [ref.as_dict() for ref in refs]
+    staging_token = new_bundle_staging_token()
+    source_schema = _default_source_schema()
+    scenes = {
+        scene: refresh_scene_bundles_for_rows(
+            scene=scene, rows=bundle_rows, policy_version=staging_token,
+            source_schema=source_schema, continue_on_error=False,
+        )
+        for scene in ("running", "final")
+    }
+    domains = {
+        domain: refresh_domain_bundles_for_rows(
+            rows=bundle_rows, policy_version=staging_token, source_schema=source_schema,
+            domains=(domain,), continue_on_error=False,
+        )
+        for domain in ("admission", "course", "surgery", "consult_discussion", "terminal", "index_coding_settlement")
+    }
+    assert_complete_bundle_refresh(
+        SimpleNamespace(bundle_refresh={"scenes": scenes, "domains": domains}), len(refs),
+    )
+    publish_bundle_variants(
+        refs, staging_token=staging_token, published_policy_version=BUNDLE_POLICY_VERSION,
+        session_factory=session_factory,
+    )
+
+
 def write_pool_and_items(
     *,
     source_pool: dict[str, Any],
@@ -1223,13 +1274,29 @@ def write_pool_and_items(
     supplemental_rows: Sequence[dict[str, Any]],
     replace_items: bool,
 ) -> dict[str, Any]:
+    with _bundle_write_lock():
+        return _write_pool_and_items_locked(
+            source_pool=source_pool, cases=cases, rows_by_table=rows_by_table,
+            supplemental_rows=supplemental_rows, replace_items=replace_items,
+        )
+
+
+def _write_pool_and_items_locked(
+    *,
+    source_pool: dict[str, Any],
+    cases: Sequence[CandidateCase],
+    rows_by_table: dict[str, list[dict[str, Any]]],
+    supplemental_rows: Sequence[dict[str, Any]],
+    replace_items: bool,
+) -> dict[str, Any]:
+    refs = [CaseRef(TARGET_INSTITUTE_ID, case.target_patient_id, case.target_visit_id) for case in cases]
+    session_factory = sessionmaker(bind=engine)
+    invalidate_bundle_variants(refs, session_factory=session_factory)
     pool_table = _sample_pools_table()
     item_table = _sample_pool_items_table()
     metadata = MetaData()
     inserted_tables: dict[str, int] = {}
     deleted_tables: dict[str, int] = {}
-    bundle_status_by_item: dict[str, str] = {}
-    bundle_errors: dict[str, str] = {}
     supplemental_by_visit: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for item in supplemental_rows:
         supplemental_by_visit[_text(item.get("target_visit_id"))].append(dict(item))
@@ -1374,49 +1441,16 @@ def write_pool_and_items(
         CustomQCSamplePoolService()._update_pool_counters(session, TARGET_POOL_ID)
         session.commit()
 
-    service = CustomQCSamplePoolService()
-    for case in cases:
-        bundle_rows = [
-            {
-                "institute_id": TARGET_INSTITUTE_ID,
-                "patient_id": case.target_patient_id,
-                "visit_id": case.target_visit_id,
-            }
-        ]
-        item_id = f"{TARGET_ITEM_PREFIX}-{case.target_index:03d}"
-        bundle_status = "pending"
-        try:
-            refresh_scene_bundles_for_rows(
-                scene="running",
-                rows=bundle_rows,
-                policy_version=BUNDLE_POLICY_VERSION,
-            )
-            refresh_scene_bundles_for_rows(
-                scene="final",
-                rows=bundle_rows,
-                policy_version=BUNDLE_POLICY_VERSION,
-            )
-            refresh_domain_bundles_for_rows(
-                rows=bundle_rows,
-                policy_version=BUNDLE_POLICY_VERSION,
-            )
-            bundle_status = service._wait_running_bundle_ready(
-                institute_id=TARGET_INSTITUTE_ID,
-                patient_id=case.target_patient_id,
-                visit_id=case.target_visit_id,
-                attempts=3,
-                sleep_seconds=0.3,
-            )
-        except Exception as exc:
-            bundle_errors[item_id] = _text(str(exc))
-        bundle_status_by_item[item_id] = bundle_status
+    _refresh_and_publish(refs, session_factory)
 
+    service = CustomQCSamplePoolService()
     with Session(engine) as session:
-        for item_id, bundle_status in bundle_status_by_item.items():
+        for case in cases:
+            item_id = f"{TARGET_ITEM_PREFIX}-{case.target_index:03d}"
             session.execute(
                 update(item_table)
                 .where(item_table.c.id == item_id)
-                .values(bundle_status=bundle_status, updated_at=datetime.now())
+                .values(bundle_status="ready", updated_at=datetime.now())
             )
         service._update_pool_counters(session, TARGET_POOL_ID)
         session.commit()
@@ -1426,8 +1460,8 @@ def write_pool_and_items(
         "item_count": len(cases),
         "inserted_tables": inserted_tables,
         "deleted_tables": deleted_tables,
-        "bundle_status_counts": dict(Counter(bundle_status_by_item.values())),
-        "bundle_errors": bundle_errors,
+        "bundle_status_counts": {"ready": len(cases)},
+        "bundle_errors": {},
     }
 
 

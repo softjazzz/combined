@@ -8,11 +8,13 @@ import re
 import time
 import uuid
 from collections.abc import Callable
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from functools import lru_cache
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 import psycopg2
 import psycopg2.extras
@@ -35,11 +37,10 @@ from .bundles.assembly import (
     TASK_SYNC_INVALIDATED_POLICY_VERSION,
     _scene_bundle_has_usable_content,
     refresh_all_bundle_variants_for_rows,
-    refresh_domain_bundles_for_rows,
-    refresh_scene_bundles_for_rows,
 )
 from .bundles.contracts import BUNDLE_SCHEMA_VERSION_CURRENT
 from .bundles.publication import (
+    BUNDLE_TABLES,
     assert_complete_bundle_refresh,
     invalidate_bundle_variants,
     new_bundle_staging_token,
@@ -4153,6 +4154,88 @@ class CustomQCSamplePoolService:
             return {"application_id": f"{visit_id}-BLOOD-APP-{index:03d}"}
         return {}
 
+    @staticmethod
+    @contextmanager
+    def _customer_test_bundle_write_lock():
+        if engine is None or engine.dialect.name != "postgresql":
+            yield
+            return
+        from .task_record_sync_job_service import _GLOBAL_LOCK_KEY
+
+        with engine.connect() as conn:
+            conn.execute(sa.text("SELECT pg_advisory_lock(:key)"), {"key": _GLOBAL_LOCK_KEY})
+            try:
+                yield
+            finally:
+                conn.rollback()
+                conn.execute(sa.text("SELECT pg_advisory_unlock(:key)"), {"key": _GLOBAL_LOCK_KEY})
+
+    def _customer_test_bundle_complete(self, ref: CaseRef) -> bool:
+        if engine is None:
+            return False
+        try:
+            with engine.connect() as conn:
+                for table_name in BUNDLE_TABLES:
+                    row = conn.execute(
+                        sa.text(f"""
+                            SELECT bundle_schema_version, policy_version
+                            FROM public.{table_name}
+                            WHERE institute_id=:institute_id AND patient_id=:patient_id
+                              AND visit_id=:visit_id
+                        """),
+                        ref.as_dict(),
+                    ).mappings().first()
+                    if not row or row["bundle_schema_version"] != BUNDLE_SCHEMA_VERSION_CURRENT \
+                            or row["policy_version"] != "customer_test_record_builder":
+                        return False
+            return self._check_running_bundle_status(
+                institute_id=ref.institute_id,
+                patient_id=ref.patient_id,
+                visit_id=ref.visit_id,
+            ) == "ready"
+        except Exception:
+            return False
+
+    @staticmethod
+    def _customer_test_staged_running_usable(ref: CaseRef, staging_token: str) -> bool:
+        if engine is None:
+            return False
+        with engine.connect() as conn:
+            row = conn.execute(
+                sa.text("""
+                    SELECT bundle_schema_version, policy_version, text_available, medical_text,
+                           structured_context, document_hits
+                    FROM public.running_record_bundle
+                    WHERE institute_id=:institute_id AND patient_id=:patient_id AND visit_id=:visit_id
+                """),
+                ref.as_dict(),
+            ).mappings().first()
+        if not row or row["bundle_schema_version"] != BUNDLE_SCHEMA_VERSION_CURRENT \
+                or row["policy_version"] != staging_token:
+            return False
+        bundle = dict(row)
+        bundle["structured_context"] = _safe_json_loads(bundle.get("structured_context"), {})
+        bundle["document_hits"] = _safe_json_loads(bundle.get("document_hits"), {})
+        return _scene_bundle_has_usable_content(bundle)
+
+    @staticmethod
+    def _publish_customer_test_bundle(ref: CaseRef, *, invalidate: bool = True) -> None:
+        staging_token = new_bundle_staging_token()
+        rows = [ref.as_dict()]
+        if invalidate:
+            invalidate_bundle_variants([ref], session_factory=SessionLocal)
+        refreshed = refresh_all_bundle_variants_for_rows(
+            rows=rows, policy_version=staging_token, continue_on_error=False,
+        )
+        assert_complete_bundle_refresh(SimpleNamespace(bundle_refresh=refreshed), 1)
+        if not CustomQCSamplePoolService._customer_test_staged_running_usable(ref, staging_token):
+            raise RuntimeError("客户测试病历 running Bundle 内容不可用")
+        publish_bundle_variants(
+            [ref], staging_token=staging_token,
+            published_policy_version="customer_test_record_builder",
+            session_factory=SessionLocal,
+        )
+
     def create_customer_test_record(
         self,
         *,
@@ -4329,7 +4412,15 @@ class CustomQCSamplePoolService:
 
         inserted_summary: Dict[str, int] = {}
         metadata = MetaData()
-        session = _session()
+        ref = CaseRef(CUSTOMER_TEST_INSTITUTE_ID, patient_id, visit_id)
+        lock_stack = ExitStack()
+        try:
+            lock_stack.enter_context(self._customer_test_bundle_write_lock())
+            invalidate_bundle_variants([ref], session_factory=SessionLocal)
+            session = _session()
+        except Exception:
+            lock_stack.close()
+            raise
         try:
             existing_pool = session.execute(
                 select(self._pool_table.c.id).where(self._pool_table.c.id == CUSTOMER_TEST_POOL_ID)
@@ -4457,6 +4548,9 @@ class CustomQCSamplePoolService:
             session.execute(statement)
             self._update_pool_counters(session, CUSTOMER_TEST_POOL_ID)
             session.commit()
+        except Exception:
+            lock_stack.close()
+            raise
         finally:
             session.close()
 
@@ -4479,24 +4573,15 @@ class CustomQCSamplePoolService:
                 mirror_delay_base_minutes=30,
                 sync_interval_minutes=30,
             )
-            refresh_scene_bundles_for_rows(
-                scene="running",
-                rows=bundle_rows,
-                policy_version="customer_test_record_builder",
-            )
-            refresh_scene_bundles_for_rows(
-                scene="final",
-                rows=bundle_rows,
-                policy_version="customer_test_record_builder",
-            )
-            refresh_domain_bundles_for_rows(
-                rows=bundle_rows,
-                policy_version="customer_test_record_builder",
-            )
+            self._publish_customer_test_bundle(ref, invalidate=False)
         except Exception as exc:
             bundle_error = _safe_text(str(exc))
 
-        session = _session()
+        try:
+            session = _session()
+        except Exception:
+            lock_stack.close()
+            raise
         try:
             bundle_status = "pending"
             if not bundle_error:
@@ -4507,22 +4592,8 @@ class CustomQCSamplePoolService:
                     attempts=5,
                     sleep_seconds=0.4,
                 )
-                if bundle_status != "ready":
-                    try:
-                        refresh_scene_bundles_for_rows(
-                            scene="running",
-                            rows=bundle_rows,
-                            policy_version="customer_test_record_builder",
-                        )
-                        bundle_status = self._wait_running_bundle_ready(
-                            institute_id=CUSTOMER_TEST_INSTITUTE_ID,
-                            patient_id=patient_id,
-                            visit_id=visit_id,
-                            attempts=3,
-                            sleep_seconds=0.4,
-                        )
-                    except Exception:
-                        bundle_status = "pending"
+                if bundle_status != "ready" or not self._customer_test_bundle_complete(ref):
+                    bundle_status = "pending"
             session.execute(
                 update(self._item_table)
                 .where(self._item_table.c.id == item_id)
@@ -4532,6 +4603,7 @@ class CustomQCSamplePoolService:
             session.commit()
         finally:
             session.close()
+            lock_stack.close()
 
         return {
             "pool": self.get_pool(pool_id=CUSTOMER_TEST_POOL_ID),
@@ -5140,40 +5212,33 @@ class CustomQCSamplePoolService:
             if _safe_text(row_dict.get("pool_id")) != CUSTOMER_TEST_POOL_ID:
                 healed_rows.append(row_dict)
                 continue
-            if _safe_text(row_dict.get("bundle_status")) == "ready":
-                healed_rows.append(row_dict)
-                continue
 
             institute_id = _safe_text(row_dict.get("matched_institute_id"))
             patient_id = _safe_text(row_dict.get("matched_patient_id"))
             visit_id = _safe_text(row_dict.get("matched_visit_id"))
-            if not institute_id or not patient_id or not visit_id:
+            if institute_id != CUSTOMER_TEST_INSTITUTE_ID or not patient_id \
+                    or not visit_id.startswith(CUSTOMER_TEST_VISIT_PREFIX):
                 healed_rows.append(row_dict)
                 continue
 
-            bundle_status = self._wait_running_bundle_ready(
-                institute_id=institute_id,
-                patient_id=patient_id,
-                visit_id=visit_id,
-                attempts=3,
-                sleep_seconds=0.25,
-            )
-            if bundle_status != "ready":
-                try:
-                    refresh_scene_bundles_for_rows(
-                        rows=[{"institute_id": institute_id, "patient_id": patient_id, "visit_id": visit_id}],
-                        scene="running",
-                        allow_frontpage_only=False,
-                    )
+            ref = CaseRef(institute_id, patient_id, visit_id)
+            try:
+                with self._customer_test_bundle_write_lock():
+                    complete = self._customer_test_bundle_complete(ref)
+                    if not complete:
+                        self._publish_customer_test_bundle(ref)
+                        complete = self._customer_test_bundle_complete(ref)
                     bundle_status = self._wait_running_bundle_ready(
                         institute_id=institute_id,
                         patient_id=patient_id,
                         visit_id=visit_id,
-                        attempts=2,
-                        sleep_seconds=0.25,
+                        attempts=1,
+                        sleep_seconds=0,
                     )
-                except Exception:
-                    bundle_status = "pending"
+                    if not complete or bundle_status != "ready":
+                        bundle_status = "pending"
+            except Exception:
+                bundle_status = "pending"
 
             if bundle_status != _safe_text(row_dict.get("bundle_status")):
                 session.execute(

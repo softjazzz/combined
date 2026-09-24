@@ -31,7 +31,7 @@ from .qc_workspace.record_repository import RecordRepository
 logger = logging.getLogger(__name__)
 TABLE_GROUP = "sample_full_domain"
 CONTRACT_VERSION = "task-record-sync-v1"
-MAX_RECORDS = 100
+SYNC_BATCH_SIZE = 500
 INVALIDATED_POLICY_VERSION = publication.INVALIDATED_POLICY_VERSION
 _BUNDLE_TABLES = publication.BUNDLE_TABLES
 
@@ -80,8 +80,8 @@ def load_task_refs_in_session(
         expected = int(task["total_records"])
     except (TypeError, ValueError) as exc:
         raise TaskRecordSyncConflict("任务抽样数量无效") from exc
-    if expected <= 0 or expected != len(rows) or expected > MAX_RECORDS:
-        raise TaskRecordSyncConflict(f"任务抽样数量不一致或超过单次 {MAX_RECORDS} 条上限")
+    if expected <= 0 or expected != len(rows):
+        raise TaskRecordSyncConflict("任务抽样数量不一致")
     refs: list[tuple[str, CaseRef]] = []
     seen: set[CaseRef] = set()
     for row in rows:
@@ -116,17 +116,20 @@ def normalize_bundle_timestamp(value: Any) -> str:
 def _ready_refs(scene: str, refs: list[CaseRef]) -> dict[CaseRef, dict[str, str]]:
     if SessionLocal is None:
         raise RuntimeError("数据库会话不可用")
-    records = RecordRepository(session_factory=SessionLocal).collect_records(
-        scope=scene,
-        department=None,
-        doctor=None,
-        date_field="admission",
-        start_date=None,
-        end_date=None,
-        keyword=None,
-        record_refs=refs,
-    )
-    anchors = {CaseRef.from_mapping(row) for row in records}
+    repository = RecordRepository(session_factory=SessionLocal)
+    anchors: set[CaseRef] = set()
+    for start in range(0, len(refs), SYNC_BATCH_SIZE):
+        records = repository.collect_records(
+            scope=scene,
+            department=None,
+            doctor=None,
+            date_field="admission",
+            start_date=None,
+            end_date=None,
+            keyword=None,
+            record_refs=refs[start:start + SYNC_BATCH_SIZE],
+        )
+        anchors.update(CaseRef.from_mapping(row) for row in records)
     ready: dict[CaseRef, dict[str, str]] = {}
     for ref in refs:
         if ref not in anchors:
@@ -177,7 +180,7 @@ def sync_task_records(
     expected_records: list[dict[str, str]] | None = None,
     expected_scene: str | None = None,
 ) -> dict[str, Any]:
-    """Synchronize a bounded saved set; source failures stay retryable and visible."""
+    """Synchronize the saved set in bounded IO batches under one publication fence."""
     scene, records = _load_task_refs(task_id, actor_id, is_admin)
     if expected_scene is not None and scene != expected_scene:
         raise TaskRecordSyncConflict("任务场景已变化，请重新发起同步")
@@ -197,31 +200,50 @@ def sync_task_records(
         logger.warning("task_record_bundle_invalidation_failed task_id=%s error_type=%s", task_id, type(exc).__name__)
         raise RuntimeError("病历 Bundle 失效保护失败，未启动源端同步") from exc
     staging_token = new_bundle_staging_token()
+    visible_refs: set[CaseRef] = set()
+    unavailable: set[str] = set()
     try:
-        result = sync_factory().sync_case_set(
-            case_refs=refs,
-            table_names=table_names,
-            policy_version=CONTRACT_VERSION,
-            bundle_policy_version=staging_token,
-            sync_scene=scene,
-            case_scene_by_ref={ref: scene for ref in refs},
-        )
+        syncer = sync_factory()
     except Exception as exc:
         logger.warning("task_record_sync_failed task_id=%s error_type=%s", task_id, type(exc).__name__)
         raise RuntimeError("病历资料同步失败，可重试；已同步的部分资料会在重试时复核") from exc
+    for start in range(0, len(refs), SYNC_BATCH_SIZE):
+        batch = refs[start:start + SYNC_BATCH_SIZE]
+        batch_set = set(batch)
+        try:
+            result = syncer.sync_case_set(
+                case_refs=batch,
+                table_names=table_names,
+                policy_version=CONTRACT_VERSION,
+                bundle_policy_version=staging_token,
+                sync_scene=scene,
+                case_scene_by_ref={ref: scene for ref in batch},
+            )
+            batch_visible = tuple(result.visible_case_refs)
+            if len(batch_visible) != len(set(batch_visible)) or not set(batch_visible).issubset(batch_set):
+                raise RuntimeError("源端返回了重复或任务范围外的病例三坐标")
+            table_results = tuple(result.synced_tables)
+            synced_by_name = {str(item.get("table_name") or ""): item for item in table_results}
+            if len(table_results) != len(synced_by_name) or set(synced_by_name) - set(table_names):
+                raise RuntimeError("源端返回了重复或范围外的资料表结果")
+            unavailable.update(
+                name for name in table_names
+                if synced_by_name.get(name, {}).get("sync_status") != "synced"
+            )
+        except Exception as exc:
+            logger.warning("task_record_sync_failed task_id=%s error_type=%s", task_id, type(exc).__name__)
+            raise RuntimeError("病历资料同步失败，可重试；已同步的部分资料会在重试时复核") from exc
+        if not unavailable:
+            try:
+                _assert_complete_bundle_refresh(result, len(batch_visible))
+            except Exception as exc:
+                logger.warning("task_record_bundle_publish_failed task_id=%s error_type=%s", task_id, type(exc).__name__)
+                raise RuntimeError("病历 Bundle 发布失败，请重试") from exc
+        visible_refs.update(batch_visible)
 
-    synced_by_name = {str(item.get("table_name") or ""): item for item in result.synced_tables}
-    unavailable = [
-        name for name in table_names
-        if synced_by_name.get(name, {}).get("sync_status") != "synced"
-    ]
-    visible_refs = set(result.visible_case_refs)
-    if not visible_refs.issubset(refs):
-        raise RuntimeError("源端返回了任务范围外的病例三坐标")
     if not unavailable:
         try:
-            _assert_complete_bundle_refresh(result, len(visible_refs))
-            _publish_refreshed_bundles(list(visible_refs), staging_token)
+            _publish_refreshed_bundles([ref for ref in refs if ref in visible_refs], staging_token)
         except Exception as exc:
             logger.warning("task_record_bundle_publish_failed task_id=%s error_type=%s", task_id, type(exc).__name__)
             raise RuntimeError("病历 Bundle 发布失败，请重试") from exc

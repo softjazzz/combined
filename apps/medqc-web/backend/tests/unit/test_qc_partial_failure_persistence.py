@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 import sqlalchemy as sa
+from fastapi import HTTPException
 from sqlalchemy.orm import sessionmaker
 
 from app.services import custom_qc_workspace_service as workspace
@@ -564,7 +565,7 @@ def test_retry_partial_failure_preserves_valid_items_and_queues_only_failed_rule
 
 
 @pytest.mark.asyncio
-async def test_retry_route_returns_customer_safe_partial_result(storage, monkeypatch):
+async def test_retry_route_rejects_unverified_final_without_requeue(storage, monkeypatch):
     service, _, _ = storage
     summary, items, failures = _payload()
     service.complete_batch_job(
@@ -576,16 +577,13 @@ async def test_retry_route_returns_customer_safe_partial_result(storage, monkeyp
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: service)
     monkeypatch.setattr(qc_sichuan, "submit_detached_task", lambda *args, **kwargs: None)
 
-    response = await qc_sichuan.retry_workspace_batch_job(
-        request=SimpleNamespace(state=SimpleNamespace()),
-        job_id="partial-job",
-        current_user={"id": "tester"},
-    )
+    with pytest.raises(HTTPException) as exc:
+        await qc_sichuan.retry_workspace_batch_job(
+            request=SimpleNamespace(state=SimpleNamespace()),
+            job_id="partial-job",
+            current_user={"id": "tester"},
+        )
 
-    payload = response["data"]
-    assert payload["summary"]["execution_status"] == "partial_failed"
-    assert payload["items"][0]["rule_id"] == "LX0609-011"
-    assert payload["failed_records"][0]["rule_id"] == "LX0609-012"
-    serialized = json.dumps(payload, ensure_ascii=False)
-    assert "test-p" not in serialized
-    assert "test-v" not in serialized
+    assert exc.value.status_code == 422
+    assert "final_archive_unverified" in exc.value.detail
+    assert service.get_batch_job(job_id="partial-job", created_by="tester")["status"] == "failed"

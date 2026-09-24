@@ -8,17 +8,26 @@
       <h2 id="appeal-todos-title">
         缺陷审核待办
       </h2>
-      <button
-        type="button"
-        :disabled="loading"
-        aria-label="刷新临床申诉待办"
-        @click="void fetchTodos()"
-      >
-        <RotateCw
-          :size="16"
-          aria-hidden="true"
-        />刷新
-      </button>
+      <div class="appeal-todos__tools">
+        <button
+          type="button"
+          data-testid="all-appeals"
+          @click="void router.push('/dashboard/qc/appeals')"
+        >
+          查看全部申诉
+        </button>
+        <button
+          type="button"
+          :disabled="loading"
+          aria-label="刷新临床申诉待办"
+          @click="void fetchTodos()"
+        >
+          <RotateCw
+            :size="16"
+            aria-hidden="true"
+          />刷新
+        </button>
+      </div>
     </header>
     <p
       v-if="error"
@@ -46,6 +55,14 @@
         aria-hidden="true"
       />
     </button>
+    <p
+      v-if="!loading && count === 0"
+      class="appeal-todos__empty"
+      data-testid="appeal-todos-empty"
+      role="status"
+    >
+      没有待处理事项
+    </p>
   </section>
 </template>
 
@@ -124,6 +141,11 @@ watch(
   gap: 12px;
   margin-bottom: 14px;
 }
+.appeal-todos__tools {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
 .appeal-todos h2 {
   margin: 0;
   font-size: 17px;
@@ -166,5 +188,10 @@ watch(
 .appeal-todos button:disabled {
   cursor: wait;
   opacity: 0.6;
+}
+.appeal-todos__empty {
+  margin: 12px 0 0;
+  color: rgba(29, 29, 31, 0.6);
+  font-size: 14px;
 }
 </style>

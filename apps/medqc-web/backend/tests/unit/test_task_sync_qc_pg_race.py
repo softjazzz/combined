@@ -106,7 +106,7 @@ def test_qc_worker_holds_read_lock_through_batch_execution(pg_engine, monkeypatc
     class FakeWorkspace:
         def get_batch_job_for_processing(self, *, job_id):
             assert job_id == "synthetic-qc-job"
-            return {"status": "running", "filters": {}}
+            return {"status": "running", "scope": "running", "filters": {}}
 
     entered = asyncio.Event()
     finish = asyncio.Event()

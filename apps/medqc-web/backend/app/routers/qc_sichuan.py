@@ -563,6 +563,17 @@ def _is_workspace_batch_job(job: Optional[Dict[str, Any]]) -> bool:
     return is_workspace_batch_draft_id(job.get("draft_id"))
 
 
+_FINAL_ARCHIVE_UNVERIFIED = (
+    "final_archive_unverified: 归档状态未核验，终末或包含终末的混合范围暂不能执行质控任务"
+)
+
+
+def _requires_archive_verification(scope: Any, filters: Any = None) -> bool:
+    normalized_scope = str(scope or "").strip().lower()
+    query_scope = str((filters or {}).get("query_scope") or "").strip().lower() if isinstance(filters, dict) else ""
+    return normalized_scope != "running" or query_scope not in {"", "running"}
+
+
 def _compact_workspace_summary(summary: Dict[str, Any], rule_results: List[Dict[str, Any]]) -> Dict[str, Any]:
     compact_summary = dict(summary)
     issue_summaries: List[Dict[str, Any]] = []
@@ -1884,6 +1895,15 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
         if not job or job.get("status") in {"completed", "failed", "canceled", "cancelled"}:
             return
         filters = job.get("filters") if isinstance(job, dict) and isinstance(job.get("filters"), dict) else {}
+        if _requires_archive_verification(job.get("scope"), filters):
+            logger.warning(
+                "qc_batch_archive_guard_failed job_id=%s reason_code=final_archive_unverified",
+                job_id,
+            )
+            await run_in_threadpool(
+                workspace.fail_batch_job, job_id=job_id, error_message=_FINAL_ARCHIVE_UNVERIFIED,
+            )
+            return
         try:
             await run_in_threadpool(_validate_task_job_after_cdm_lock, job_id, filters)
         except Exception as exc:
@@ -1949,6 +1969,18 @@ async def create_workspace_batch_job(
         workspace_provider=workspace_provider,
         settings_provider=get_settings,
     )
+    prepared_scope = prepared.create_kwargs.get("scope")
+    prepared_filters = prepared.create_kwargs.get("filters")
+    if _requires_archive_verification(prepared_scope, prepared_filters):
+        audit_event(
+            request,
+            action="qc.workspace_batch.create",
+            resource="/api/v1/qc/sichuan/workspace/batch-jobs",
+            outcome="rejected",
+            details={"reason_code": "final_archive_unverified", "scope": prepared_scope},
+            current_user=current_user,
+        )
+        raise HTTPException(status_code=422, detail=_FINAL_ARCHIVE_UNVERIFIED)
     workspace = workspace_provider()
     created_by = _current_user_id(current_user)
     for active_status in ("queued", "running"):
@@ -2537,9 +2569,21 @@ async def retry_workspace_batch_job(
     current_user: Dict[str, Any] = Depends(require_product_activation),
 ):
     workspace = _sichuan_workspace_service()
-    job = workspace.retry_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
+    created_by = _current_user_id(current_user)
+    job = workspace.get_batch_job(job_id=job_id, created_by=created_by)
     if not _is_workspace_batch_job(job):
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
+    if _requires_archive_verification(job.get("scope"), job.get("filters")):
+        audit_event(
+            request,
+            action="qc.workspace_batch.retry",
+            resource="/api/v1/qc/sichuan/workspace/batch-jobs/{job_id}/retry",
+            outcome="rejected",
+            details={"reason_code": "final_archive_unverified", "scope": job.get("scope")},
+            current_user=current_user,
+        )
+        raise HTTPException(status_code=422, detail=_FINAL_ARCHIVE_UNVERIFIED)
+    job = workspace.retry_batch_job(job_id=job_id, created_by=created_by)
     if str(job.get("job_kind") or "").strip().lower() == "parent":
         child_jobs = list(job.get("child_jobs") or job.get("children") or [])
         if not child_jobs:

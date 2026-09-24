@@ -9,7 +9,6 @@ from fastapi import BackgroundTasks, HTTPException
 from app.routers import qc_sample_pools, qc_sichuan
 from app.services import sichuan_workspace_batch_worker as batch_worker
 from app.services.case_identity import CaseRef
-from app.services.qc_rule_sets import get_sichuan_rule_set
 from app.services import sample_validation_rule_sets
 from app.services.sample_validation_rule_sets import SAMPLE_PROGRAMMATIC_RULE_IDS, SAMPLE_VALIDATION_DRAFTS
 from app.services.luxian_0609.phase_scope import load_luxian_0609_phase_scope, partition_luxian_0609_rule_scope
@@ -1311,19 +1310,25 @@ async def test_sample_pool_worker_reads_persisted_record_refs_instead_of_legacy_
 
 
 @pytest.mark.asyncio
-async def test_workspace_worker_dispatches_exact_luxian_0916_key_without_calling_legacy_worker(
+async def test_workspace_worker_rejects_luxian_0916_without_archive_proof_before_dispatch(
     monkeypatch,
 ):
     from app.services.luxian_0916 import batch_worker as luxian_0916_batch_worker
     from app.services.qc_diagnostics import support_store
 
     class _DispatchWorkspace:
+        def __init__(self):
+            self.failed_calls = []
+
         def get_batch_job_for_processing(self, *, job_id: str):
             assert job_id == "job-0916"
             return {"filters": {"rule_set_key": "luxian_0916_qc_v1"}}
 
         def get_batch_job(self, *, job_id: str, created_by: str):
             raise AssertionError("worker dispatch must use the owner-free processing lookup")
+
+        def fail_batch_job(self, *, job_id: str, error_message: str):
+            self.failed_calls.append((job_id, error_message))
 
     independent_calls = []
     legacy_calls = []
@@ -1348,12 +1353,10 @@ async def test_workspace_worker_dispatches_exact_luxian_0916_key_without_calling
     await qc_sichuan._run_sichuan_workspace_batch_job("job-0916")
 
     assert legacy_calls == []
-    assert independent_calls == [
-        (
-            "job-0916",
-            {"workspace": workspace, "max_record_concurrency": 40},
-        )
-    ]
+    assert independent_calls == []
+    assert len(workspace.failed_calls) == 1
+    assert workspace.failed_calls[0][0] == "job-0916"
+    assert "final_archive_unverified" in workspace.failed_calls[0][1]
 
 
 @pytest.mark.asyncio
@@ -1510,7 +1513,7 @@ async def test_match_sample_pool_should_match_against_source_database(monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_run_sample_pool_intrinsic_validation_should_fallback_to_all_scope_when_running_scope_empty(monkeypatch):
+async def test_run_sample_pool_rejects_all_scope_after_running_fallback_without_creating_job(monkeypatch):
     sample_service = _SamplePoolServiceStub()
     workspace_service = _WorkspaceServiceStub()
     workspace_service.records_by_scope["running"] = []
@@ -1532,12 +1535,13 @@ async def test_run_sample_pool_intrinsic_validation_should_fallback_to_all_scope
     )
     current_user = {"id": "tester"}
 
-    response = await qc_sample_pools.run_sample_pool_intrinsic_validation(
-        request=request,
-        pool_id="pool-1",
-        payload=payload,
-        current_user=current_user,
-    )
+    with pytest.raises(HTTPException) as exc_info:
+        await qc_sample_pools.run_sample_pool_intrinsic_validation(
+            request=request,
+            pool_id="pool-1",
+            payload=payload,
+            current_user=current_user,
+        )
 
     assert workspace_service.collect_records_calls == [
         {
@@ -1563,11 +1567,43 @@ async def test_run_sample_pool_intrinsic_validation_should_fallback_to_all_scope
             ],
         },
     ]
-    created = workspace_service.create_batch_job_calls[0]
-    assert created["scope"] == "all"
-    assert created["filters"]["effective_scope"] == "all"
-    assert response["success"] is True
-    assert response["data"]["record_count"] == 2
+    assert exc_info.value.status_code == 422
+    assert "final_archive_unverified" in exc_info.value.detail
+    assert workspace_service.create_batch_job_calls == []
+    assert sample_service.updated_pool_job is None
+    assert qc_sample_pools._submitted_tasks_for_test == []
+
+
+@pytest.mark.asyncio
+async def test_run_sample_pool_rejects_explicit_final_scene_without_creating_job(monkeypatch):
+    sample_service = _SamplePoolServiceStub()
+    original_get_pool = sample_service.get_pool
+    sample_service.get_pool = lambda *, pool_id: {
+        **original_get_pool(pool_id=pool_id),
+        "scene": "final",
+    }
+    workspace_service = _WorkspaceServiceStub()
+    monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_service)
+    monkeypatch.setattr(qc_sample_pools, "_workspace_service", lambda: workspace_service)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await qc_sample_pools.run_sample_pool_intrinsic_validation(
+            request=_build_request(),
+            pool_id="pool-1",
+            payload=qc_sample_pools.SamplePoolRunRequest(
+                record_refs=[_run_record_ref(), _run_record_ref("I001", "P002", "V002")],
+                sample_item_ids=["item-1", "item-2"],
+                validation_mode="sc",
+            ),
+            current_user={"id": "tester"},
+        )
+
+    assert exc_info.value.status_code == 422
+    assert "final_archive_unverified" in exc_info.value.detail
+    assert [call["scope"] for call in workspace_service.collect_records_calls] == ["final"]
+    assert workspace_service.create_batch_job_calls == []
+    assert sample_service.updated_pool_job is None
+    assert qc_sample_pools._submitted_tasks_for_test == []
 
 
 @pytest.mark.asyncio
@@ -1717,8 +1753,8 @@ async def test_run_sample_pool_intrinsic_validation_should_use_luxian_0609_rule_
             "LX0609-075",
         }
     ]
-    assert len(luxian_rule_set.rule_ids) == 72
-    assert luxian_rule_set.rule_ids[-1] == "LX0609-077"
+    assert len(luxian_rule_set.rule_ids) == 74
+    assert luxian_rule_set.rule_ids[-1] == "LX0609-079"
     assert sample_service.get_runnable_items_calls[0]["validation_mode"] == "customer"
     assert created["draft_ids"] == expected_task_rule_ids
     assert created["filters"]["validation_mode"] == "customer"
@@ -1726,7 +1762,7 @@ async def test_run_sample_pool_intrinsic_validation_should_use_luxian_0609_rule_
     assert created["filters"]["rule_set_name"] == "泸县0609质控点验证 v1"
     assert created["filters"]["rule_set_version"] == luxian_rule_set.version
     assert created["filters"]["rule_count"] == len(expected_task_rule_ids)
-    assert created["filters"]["customer_rule_count"] == 72
+    assert created["filters"]["customer_rule_count"] == len(luxian_rule_set.rule_ids)
     assert created["filters"]["execution_rule_count"] == len(expected_task_rule_ids)
     assert created["filters"]["paused_customer_rule_ids"] == [
         "LX0609-020",
@@ -1748,7 +1784,7 @@ async def test_run_sample_pool_intrinsic_validation_should_use_luxian_0609_rule_
     assert response["data"]["validation_mode"] == "customer"
     assert response["data"]["rule_set_key"] == "luxian_0609_qc_v1"
     assert response["data"]["rule_count"] == len(expected_task_rule_ids)
-    assert response["data"]["customer_rule_count"] == 72
+    assert response["data"]["customer_rule_count"] == len(luxian_rule_set.rule_ids)
     assert response["data"]["execution_rule_count"] == len(expected_task_rule_ids)
     assert response["data"]["selected_rule_ids"] == []
     assert response["data"]["scoped_customer_rule_ids"] == []
@@ -1766,8 +1802,8 @@ def test_luxian_0609_default_rule_set_must_follow_phase_scope_and_preserve_pendi
     assert excluded_ids == frozenset(
         {"LX0609-033", "LX0609-034", "LX0609-035", "LX0609-041", "LX0609-042"}
     )
-    assert len(rule_set.rule_ids) == 72
-    assert len(executable_ids) == 67
+    assert len(rule_set.rule_ids) == 74
+    assert len(executable_ids) == 69
     assert set(excluded_ids).isdisjoint(set(rule_set.rule_ids))
     assert pending_ids == (
         "LX0609-020",
@@ -1861,9 +1897,9 @@ async def test_run_sample_pool_should_skip_paused_customer_rules_but_keep_catalo
     }
     created = workspace_service.create_batch_job_calls[0]
     assert paused.isdisjoint(created["filters"]["rule_ids"])
-    assert created["filters"]["rule_count"] == 62
-    assert response["data"]["rule_count"] == 62
-    assert len(sample_validation_rule_sets.get_luxian_0609_sample_validation_rule_set().rule_ids) == 72
+    assert created["filters"]["rule_count"] == 64
+    assert response["data"]["rule_count"] == 64
+    assert len(sample_validation_rule_sets.get_luxian_0609_sample_validation_rule_set().rule_ids) == 74
 
 
 @pytest.mark.asyncio
@@ -2533,6 +2569,8 @@ async def test_grouped_full_luxian_run_assigns_paused_rules_to_family_delivery_s
         "LX0609-038",
         "LX0609-039",
         "LX0609-040",
+        "LX0609-078",
+        "LX0609-079",
     ]
     assert surgery["scoped_customer_rule_ids"] == [
         "LX0609-003",
@@ -2548,6 +2586,8 @@ async def test_grouped_full_luxian_run_assigns_paused_rules_to_family_delivery_s
         "LX0609-038",
         "LX0609-039",
         "LX0609-040",
+        "LX0609-078",
+        "LX0609-079",
     ]
     assert surgery["paused_customer_rule_ids"] == [
         "LX0609-025",
@@ -2580,8 +2620,6 @@ async def test_grouped_full_luxian_run_assigns_paused_rules_to_family_delivery_s
         for child in child_calls
         for rule_id in child["filters"]["rule_ids"]
     }
-    assert len(all_delivery_rule_ids) == 72
-    assert len(all_execution_rule_ids) == 62
     assert all_delivery_rule_ids == set(
         sample_validation_rule_sets.get_luxian_0609_sample_validation_rule_set().rule_ids
     )
@@ -2652,7 +2690,7 @@ async def test_run_sample_pool_intrinsic_validation_should_use_fixed_programmati
 
 
 @pytest.mark.asyncio
-async def test_run_sample_pool_intrinsic_validation_should_use_formal_fast_screen_full_rule_pack(monkeypatch):
+async def test_run_sample_pool_intrinsic_validation_rejects_formal_fast_screen_full_without_archive_proof(monkeypatch):
     sample_service = _SamplePoolServiceStub()
     workspace_service = _WorkspaceServiceStub()
 
@@ -2660,21 +2698,20 @@ async def test_run_sample_pool_intrinsic_validation_should_use_formal_fast_scree
     monkeypatch.setattr(qc_sample_pools, "_workspace_service", lambda: workspace_service)
     monkeypatch.setattr(qc_sample_pools, "_run_sichuan_workspace_batch_job", lambda job_id: None)
 
-    response = await qc_sample_pools.run_sample_pool_intrinsic_validation(
-        request=_build_request(),
-        pool_id="pool-1",
-        payload=qc_sample_pools.SamplePoolRunRequest(
-            record_refs=[_run_record_ref(), _run_record_ref("I001", "P002", "V002")],
-            sample_item_ids=["item-1", "item-2"],
-            max_parallel_records=2,
-            validation_mode="formal_fast_screen_full",
-            rule_set_key="sc_content_full_v1",
-        ),
-        current_user={"id": "tester"},
-    )
+    with pytest.raises(HTTPException) as exc_info:
+        await qc_sample_pools.run_sample_pool_intrinsic_validation(
+            request=_build_request(),
+            pool_id="pool-1",
+            payload=qc_sample_pools.SamplePoolRunRequest(
+                record_refs=[_run_record_ref(), _run_record_ref("I001", "P002", "V002")],
+                sample_item_ids=["item-1", "item-2"],
+                max_parallel_records=2,
+                validation_mode="formal_fast_screen_full",
+                rule_set_key="sc_content_full_v1",
+            ),
+            current_user={"id": "tester"},
+        )
 
-    formal_rule_set = get_sichuan_rule_set("sc_content_full_v1")
-    created = workspace_service.create_batch_job_calls[0]
     assert sample_service.get_runnable_items_calls[0]["validation_mode"] == "formal_fast_screen_full"
     assert workspace_service.collect_records_calls == [
         {
@@ -2689,22 +2726,11 @@ async def test_run_sample_pool_intrinsic_validation_should_use_formal_fast_scree
             ],
         }
     ]
-    assert created["draft"]["id"] == "sample-formal-fast-screen-full"
-    assert created["draft"]["scene"] == "final"
-    assert created["scope"] == "final"
-    assert created["filters"]["validation_mode"] == "formal_fast_screen_full"
-    assert created["filters"]["source"] == "manual_sample_formal_fast_screen_full"
-    assert created["filters"]["rule_set_key"] == "sc_content_full_v1"
-    assert created["filters"]["rule_set_name"] == formal_rule_set.name
-    assert created["filters"]["rule_set_version"] == formal_rule_set.version
-    assert created["filters"]["execution_strategy"] == "fast_screen"
-    assert created["filters"]["bucket_strategy"] == "fixed_packs"
-    assert created["filters"]["quality_profile"] == "throughput_v1"
-    assert "record_rule_map" not in created["filters"]
-    assert created["draft_ids"] == list(formal_rule_set.rule_ids)
-    assert response["data"]["validation_mode"] == "formal_fast_screen_full"
-    assert response["data"]["rule_set_key"] == "sc_content_full_v1"
-    assert response["data"]["rule_count"] == len(formal_rule_set.rule_ids) == 84
+    assert exc_info.value.status_code == 422
+    assert "final_archive_unverified" in exc_info.value.detail
+    assert workspace_service.create_batch_job_calls == []
+    assert sample_service.updated_pool_job is None
+    assert qc_sample_pools._submitted_tasks_for_test == []
 
 
 @pytest.mark.asyncio

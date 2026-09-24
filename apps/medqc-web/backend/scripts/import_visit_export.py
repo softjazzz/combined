@@ -4,14 +4,46 @@ import argparse
 import ast
 import csv
 import json
+from contextlib import contextmanager
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import sqlalchemy as sa
 from sqlalchemy import inspect, text
+from sqlalchemy.orm import sessionmaker
 
 from app.database.connection import DATABASE_URL
+from app.services.case_identity import CaseRef
 from app.services.bundles import refresh_domain_bundles_for_rows, refresh_scene_bundles_for_rows
+from app.services.bundles.publication import (
+    assert_complete_bundle_refresh,
+    invalidate_bundle_variants,
+    new_bundle_staging_token,
+    publish_bundle_variants,
+)
+from app.services.task_record_sync_job_service import _GLOBAL_LOCK_KEY
+
+
+_DOMAINS = (
+    "admission", "course", "surgery", "consult_discussion", "terminal",
+    "index_coding_settlement",
+)
+
+
+@contextmanager
+def _bundle_write_lock(engine: sa.Engine):
+    if engine.dialect.name != "postgresql":
+        yield
+        return
+    with engine.connect() as conn:
+        conn.execute(text("SELECT pg_advisory_lock(:key)"), {"key": _GLOBAL_LOCK_KEY})
+        try:
+            yield
+        finally:
+            conn.rollback()
+            conn.execute(text("SELECT pg_advisory_unlock(:key)"), {"key": _GLOBAL_LOCK_KEY})
+            conn.commit()
 
 
 def _quote_ident(value: str) -> str:
@@ -224,6 +256,28 @@ def import_visit_export(
     csv_files = sorted(export_dir.glob("*.csv"))
     if not csv_files:
         raise FileNotFoundError(f"未在目录中发现 CSV 文件: {export_dir}")
+    with _bundle_write_lock(engine):
+        return _import_visit_export_locked(
+            engine=engine,
+            inspector=inspector,
+            csv_files=csv_files,
+            export_dir=export_dir,
+            create_missing_tables=create_missing_tables,
+            rebuild_bundles=rebuild_bundles,
+            default_schema=default_schema,
+        )
+
+
+def _import_visit_export_locked(
+    *,
+    engine: sa.Engine,
+    inspector: Any,
+    csv_files: list[Path],
+    export_dir: Path,
+    create_missing_tables: bool,
+    rebuild_bundles: bool,
+    default_schema: str,
+) -> dict[str, Any]:
 
     imported_tables: list[dict[str, Any]] = []
     missing_created: list[str] = []
@@ -231,21 +285,33 @@ def import_visit_export(
     all_visit_ids: list[str] = []
     refresh_keys: list[dict[str, str]] = []
     refresh_seen: set[tuple[str, str, str]] = set()
+    parsed_files = []
+    for path in csv_files:
+        schema, table = _resolve_csv_target(path, default_schema=default_schema)
+        columns, rows = _read_csv_rows(path)
+        parsed_files.append((schema, table, columns, rows))
+        for row in rows:
+            if not all(str(row.get(name) or "").strip() for name in ("institute_id", "patient_id", "visit_id")):
+                raise RuntimeError(f"{path.name} 缺少完整病例三坐标，未开始导入")
+        for key in _collect_refresh_keys(rows):
+            dedupe_key = (key["institute_id"], key["patient_id"], key["visit_id"])
+            if dedupe_key not in refresh_seen:
+                refresh_seen.add(dedupe_key)
+                refresh_keys.append(key)
+
+    if not refresh_keys:
+        raise RuntimeError("未解析出 institute_id/patient_id/visit_id，未开始导入")
+    refs = [CaseRef.from_mapping(key) for key in refresh_keys]
+    session_factory = sessionmaker(bind=engine)
+    invalidate_bundle_variants(refs, session_factory=session_factory)
+    staging_token = new_bundle_staging_token()
 
     with engine.begin() as conn:
-        for path in csv_files:
-            schema, table = _resolve_csv_target(path, default_schema=default_schema)
-            columns, rows = _read_csv_rows(path)
+        for schema, table, columns, rows in parsed_files:
             visit_ids = _visit_ids(rows)
             for visit_id in visit_ids:
                 if visit_id not in all_visit_ids:
                     all_visit_ids.append(visit_id)
-            for key in _collect_refresh_keys(rows):
-                dedupe_key = (key["institute_id"], key["patient_id"], key["visit_id"])
-                if dedupe_key in refresh_seen:
-                    continue
-                refresh_seen.add(dedupe_key)
-                refresh_keys.append(key)
 
             exists = inspector.has_table(table, schema=schema)
             created_now = False
@@ -304,28 +370,53 @@ def import_visit_export(
 
     bundle_results = []
     if rebuild_bundles:
-        if not refresh_keys:
-            raise RuntimeError("导入完成，但未解析出 institute_id/patient_id/visit_id，无法重建 bundle")
         running_stats = refresh_scene_bundles_for_rows(
             scene="running",
             rows=refresh_keys,
+            policy_version=staging_token,
             source_schema="cdm",
             bundle_schema="public",
             trigger_source="visit_export_import",
+            continue_on_error=False,
         )
         final_stats = refresh_scene_bundles_for_rows(
             scene="final",
             rows=refresh_keys,
+            policy_version=staging_token,
             source_schema="cdm",
             bundle_schema="public",
             trigger_source="visit_export_import",
+            continue_on_error=False,
         )
-        domain_stats = refresh_domain_bundles_for_rows(
-            rows=refresh_keys,
-            source_schema="cdm",
-            bundle_schema="public",
-            trigger_source="visit_export_import",
+        domain_stats = {
+            domain: refresh_domain_bundles_for_rows(
+                rows=refresh_keys,
+                policy_version=staging_token,
+                source_schema="cdm",
+                bundle_schema="public",
+                trigger_source="visit_export_import",
+                continue_on_error=False,
+                domains=(domain,),
+            )
+            for domain in _DOMAINS
+        }
+        assert_complete_bundle_refresh(
+            SimpleNamespace(bundle_refresh={
+                "scenes": {"running": running_stats, "final": final_stats},
+                "domains": domain_stats,
+            }),
+            len(refs),
         )
+        publish_bundle_variants(
+            refs,
+            staging_token=staging_token,
+            published_policy_version="",
+            session_factory=session_factory,
+        )
+        domain_totals = {
+            name: sum(stats.get(name, 0) for stats in domain_stats.values())
+            for name in ("processed", "updated", "failed", "skipped")
+        }
         for key in refresh_keys:
             bundle_results.append(
                 {
@@ -334,7 +425,7 @@ def import_visit_export(
                     "institute_id": key["institute_id"],
                     "running_refresh": running_stats,
                     "final_refresh": final_stats,
-                    "domain_refresh": domain_stats,
+                    "domain_refresh": domain_totals,
                 }
             )
 

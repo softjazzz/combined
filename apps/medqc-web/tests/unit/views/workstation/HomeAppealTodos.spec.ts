@@ -52,6 +52,9 @@ describe('HomeAppealTodos', () => {
 
     expect(mocks.messageInfo).toHaveBeenCalledWith('没有待审核的临床申诉')
     expect(mocks.routerPush).not.toHaveBeenCalled()
+    expect(wrapper.get('[data-testid="appeal-todos-empty"]').text()).toBe('没有待处理事项')
+    await wrapper.get('[data-testid="all-appeals"]').trigger('click')
+    expect(mocks.routerPush).toHaveBeenCalledWith('/dashboard/qc/appeals')
   })
 
   it('请求失败显示不可用，重试后恢复', async () => {
@@ -61,6 +64,7 @@ describe('HomeAppealTodos', () => {
 
     expect(wrapper.get('[data-testid="appeal-review-count"]').text()).toBe('不可用')
     expect(wrapper.get('[data-testid="appeal-todos-error"]').text()).not.toContain('private')
+    expect(wrapper.find('[data-testid="appeal-todos-empty"]').exists()).toBe(false)
     expect(wrapper.get('[data-testid="appeal-review-todo"]').element).toHaveProperty('disabled', true)
 
     await wrapper.get('[aria-label="刷新临床申诉待办"]').trigger('click')

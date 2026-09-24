@@ -12,6 +12,13 @@
       />
     </div>
 
+    <p v-if="allEmpty" class="board-status" role="status" data-testid="todo-board-empty">
+      没有待处理事项
+    </p>
+    <p v-else-if="noData" class="board-status" role="alert" data-testid="todo-board-unavailable">
+      待办数据暂不可用
+    </p>
+
     <div class="board-grid">
       <!-- 任务维度 -->
       <div class="dimension-card task-card">
@@ -22,25 +29,25 @@
         <div class="card-body">
           <div
             class="stat-item clickable"
-            @click="navigate('/dashboard/tasks/my', { status: 'in_progress' })"
+            @click="openTodo(todoData.task_stats?.in_progress, '/dashboard/tasks/my', { status: 'in_progress' })"
           >
-            <span class="stat-number text-blue-600">{{ todoData.task_stats?.in_progress || 0 }}</span>
+            <span class="stat-number text-blue-600">{{ formatCount(todoData.task_stats?.in_progress) }}</span>
             <span class="stat-label">进行中</span>
           </div>
           <div class="stat-divider" />
           <div
             class="stat-item clickable"
-            @click="navigate('/dashboard/tasks/my', { status: 'not_started' })"
+            @click="openTodo(todoData.task_stats?.not_started, '/dashboard/tasks/my', { status: 'not_started' })"
           >
-            <span class="stat-number text-orange-500">{{ todoData.task_stats?.not_started || 0 }}</span>
+            <span class="stat-number text-orange-500">{{ formatCount(todoData.task_stats?.not_started) }}</span>
             <span class="stat-label">未开始</span>
           </div>
           <div class="stat-divider" />
           <div
             class="stat-item clickable"
-            @click="navigate('/dashboard/tasks/my', { countdown: true })"
+            @click="openTodo(todoData.task_stats?.countdown, '/dashboard/tasks/my', { countdown: 'true' })"
           >
-            <span class="stat-number text-red-500">{{ todoData.task_stats?.countdown || 0 }}</span>
+            <span class="stat-number text-red-500">{{ formatCount(todoData.task_stats?.countdown) }}</span>
             <span class="stat-label">即将超时</span>
           </div>
         </div>
@@ -55,17 +62,17 @@
         <div class="card-body">
           <div
             class="stat-item clickable"
-            @click="navigate('/dashboard/qc/appeals')"
+            @click="openTodo(todoData.defect_stats?.clinical_appeals, '/dashboard/qc/appeals')"
           >
-            <span class="stat-number text-purple-600">{{ todoData.defect_stats?.clinical_appeals || 0 }}</span>
+            <span class="stat-number text-purple-600">{{ formatCount(todoData.defect_stats?.clinical_appeals) }}</span>
             <span class="stat-label">临床申诉</span>
           </div>
           <div class="stat-divider" />
           <div
             class="stat-item clickable"
-            @click="navigate('/dashboard/records/final', { status: 'pending_review' })"
+            @click="openTodo(todoData.defect_stats?.pending_review, '/dashboard/records/final', { status: 'pending_review' })"
           >
-            <span class="stat-number text-orange-500">{{ todoData.defect_stats?.pending_review || 0 }}</span>
+            <span class="stat-number text-orange-500">{{ formatCount(todoData.defect_stats?.pending_review) }}</span>
             <span class="stat-label">待审核</span>
           </div>
         </div>
@@ -80,17 +87,17 @@
         <div class="card-body">
           <div
             class="stat-item clickable"
-            @click="navigate('/dashboard/records/final', { status: 'pending' })"
+            @click="openTodo(todoData.record_stats?.pending_review, '/dashboard/records/final', { status: 'pending' })"
           >
-            <span class="stat-number text-blue-600">{{ todoData.record_stats?.pending_review || 0 }}</span>
+            <span class="stat-number text-blue-600">{{ formatCount(todoData.record_stats?.pending_review) }}</span>
             <span class="stat-label">待审核</span>
           </div>
           <div class="stat-divider" />
           <div
             class="stat-item clickable"
-            @click="navigate('/dashboard/records/final', { status: 'recheck' })"
+            @click="openTodo(todoData.record_stats?.pending_recheck, '/dashboard/records/final', { status: 'recheck' })"
           >
-            <span class="stat-number text-cyan-600">{{ todoData.record_stats?.pending_recheck || 0 }}</span>
+            <span class="stat-number text-cyan-600">{{ formatCount(todoData.record_stats?.pending_recheck) }}</span>
             <span class="stat-label">待复审</span>
           </div>
         </div>
@@ -100,8 +107,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
+import { message } from 'ant-design-vue'
 import { useRouter } from 'vue-router'
+import type { TodoStats } from '@/api/dashboard'
 import {
   ThunderboltOutlined,
   ProjectOutlined,
@@ -110,15 +119,39 @@ import {
 } from '@ant-design/icons-vue'
 
 const props = defineProps<{
-  todoData: Record<string, any>
+  todoData: Partial<TodoStats>
 }>()
 
 const router = useRouter()
 const activeScene = ref('全部')
 const sceneOptions = ['全部', '终末', '运行', '门急诊']
 
-const navigate = (path: string, query?: Record<string, any>) => {
-  router.push({ path, query: query as any })
+const counts = computed(() => [
+  props.todoData.task_stats?.in_progress,
+  props.todoData.task_stats?.not_started,
+  props.todoData.task_stats?.countdown,
+  props.todoData.defect_stats?.clinical_appeals,
+  props.todoData.defect_stats?.pending_review,
+  props.todoData.record_stats?.pending_review,
+  props.todoData.record_stats?.pending_recheck,
+])
+const noData = computed(() => counts.value.every((value) => !Number.isFinite(value)))
+const allEmpty = computed(() => counts.value.every((value) => value === 0))
+
+function formatCount(value: number | undefined) {
+  return Number.isFinite(value) ? value : '不可用'
+}
+
+function openTodo(value: number | undefined, path: string, query?: Record<string, string>) {
+  if (!Number.isFinite(value)) {
+    message.warning('待办数据暂不可用，请稍后重试')
+    return
+  }
+  if (value === 0) {
+    message.info('没有待处理事项')
+    return
+  }
+  void router.push({ path, query })
 }
 </script>
 
@@ -146,6 +179,11 @@ const navigate = (path: string, query?: Record<string, any>) => {
   margin: 0;
 }
 .title-icon { color: #2b6cf6; }
+.board-status {
+  margin: 0 0 12px;
+  color: rgba(29, 29, 31, 0.6);
+  font-size: 14px;
+}
 
 .board-grid {
   display: grid;

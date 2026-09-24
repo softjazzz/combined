@@ -13,15 +13,16 @@ import json
 import re
 import sys
 from collections import defaultdict
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 from typing import Any, Iterable, Mapping
 
-from sqlalchemy import MetaData, Table, and_, delete, select, update
+from sqlalchemy import MetaData, Table, and_, delete, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -31,10 +32,19 @@ if str(BACKEND_DIR) not in sys.path:
 
 from app.database import engine  # noqa: E402
 from app.services.bundles.assembly import (  # noqa: E402
+    _default_source_schema,
     refresh_domain_bundles_for_rows,
     refresh_scene_bundles_for_rows,
 )
 from app.services.custom_qc_sample_pool_service import CustomQCSamplePoolService  # noqa: E402
+from app.services.case_identity import CaseRef  # noqa: E402
+from app.services.bundles.publication import (  # noqa: E402
+    assert_complete_bundle_refresh,
+    invalidate_bundle_variants,
+    new_bundle_staging_token,
+    publish_bundle_variants,
+)
+from app.services.task_record_sync_job_service import _GLOBAL_LOCK_KEY  # noqa: E402
 
 
 RECIPE_VERSION = "lx0609-0728-controlled-supplement-v3"
@@ -1174,11 +1184,62 @@ def _pool_item_values(case: SourceCase, now: datetime, source_tables: list[str],
     }
 
 
+@contextmanager
+def _bundle_write_lock():
+    if engine.dialect.name != "postgresql":
+        yield
+        return
+    with engine.connect() as conn:
+        conn.execute(text("SELECT pg_advisory_lock(:key)"), {"key": _GLOBAL_LOCK_KEY})
+        try:
+            yield
+        finally:
+            conn.rollback()
+            conn.execute(text("SELECT pg_advisory_unlock(:key)"), {"key": _GLOBAL_LOCK_KEY})
+            conn.commit()
+
+
+def _refresh_and_publish(refs: list[CaseRef], session_factory: Any) -> dict[str, Any]:
+    coordinates = [ref.as_dict() for ref in refs]
+    staging_token = new_bundle_staging_token()
+    source_schema = _default_source_schema()
+    scenes = {
+        scene: refresh_scene_bundles_for_rows(
+            scene=scene, rows=coordinates, policy_version=staging_token,
+            source_schema=source_schema, continue_on_error=False,
+        )
+        for scene in ("running", "final")
+    }
+    domains = {
+        domain: refresh_domain_bundles_for_rows(
+            rows=coordinates, policy_version=staging_token, source_schema=source_schema,
+            domains=(domain,), continue_on_error=False,
+        )
+        for domain in ("admission", "course", "surgery", "consult_discussion", "terminal", "index_coding_settlement")
+    }
+    assert_complete_bundle_refresh(
+        SimpleNamespace(bundle_refresh={"scenes": scenes, "domains": domains}), len(refs),
+    )
+    publish_bundle_variants(
+        refs, staging_token=staging_token, published_policy_version=RECIPE_VERSION,
+        session_factory=session_factory,
+    )
+    return {"scenes": scenes, "domains": domains}
+
+
 def write_rows(rows_by_table: dict[str, list[dict[str, Any]]], audit: dict[str, Any]) -> dict[str, Any]:
+    with _bundle_write_lock():
+        return _write_rows_locked(rows_by_table, audit)
+
+
+def _write_rows_locked(rows_by_table: dict[str, list[dict[str, Any]]], audit: dict[str, Any]) -> dict[str, Any]:
     _validate_before_write(rows_by_table)
     service = CustomQCSamplePoolService()
     if service.get_pool(pool_id=POOL_ID) is None:
         raise ValueError(f"目标样本池不存在: {POOL_ID}")
+    refs = [CaseRef(TARGET_INSTITUTE_ID, case.target_patient_id, case.target_visit_id) for case in CASES]
+    session_factory = sessionmaker(bind=engine)
+    invalidate_bundle_variants(refs, session_factory=session_factory)
     metadata = MetaData()
     inserted: dict[str, int] = {}
     now = datetime.now()
@@ -1200,18 +1261,11 @@ def write_rows(rows_by_table: dict[str, list[dict[str, Any]]], audit: dict[str, 
         service._update_pool_counters(session, POOL_ID)
         session.commit()
 
-    bundle_status: dict[str, Any] = {}
-    for case in CASES:
-        coordinate = [{"institute_id": TARGET_INSTITUTE_ID, "patient_id": case.target_patient_id, "visit_id": case.target_visit_id}]
-        running = refresh_scene_bundles_for_rows(scene="running", rows=coordinate, policy_version=RECIPE_VERSION, source_schema="cdm")
-        final = refresh_scene_bundles_for_rows(scene="final", rows=coordinate, policy_version=RECIPE_VERSION, source_schema="cdm")
-        domain = refresh_domain_bundles_for_rows(rows=coordinate, policy_version=RECIPE_VERSION, source_schema="cdm")
-        bundle_status[case.target_item_id] = {"running": running, "final": final, "domain": domain}
+    bundle_status = _refresh_and_publish(refs, session_factory)
 
     with Session(engine) as session:
         for case in CASES:
-            ready = all(not status.get("failed") for status in bundle_status[case.target_item_id].values())
-            session.execute(update(service._item_table).where(service._item_table.c.id == case.target_item_id).values(bundle_status="ready" if ready else "failed", updated_at=datetime.now()))
+            session.execute(update(service._item_table).where(service._item_table.c.id == case.target_item_id).values(bundle_status="ready", updated_at=datetime.now()))
         service._update_pool_counters(session, POOL_ID)
         session.commit()
     return {"inserted": inserted, "bundle_status": bundle_status}

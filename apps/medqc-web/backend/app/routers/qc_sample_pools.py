@@ -1384,6 +1384,11 @@ async def run_sample_pool_intrinsic_validation(
         raise HTTPException(status_code=422, detail="样本池匹配病历未同步到当前 PG，无法执行")
     if set(selected_record_refs) != set(record_refs):
         raise HTTPException(status_code=422, detail="样本病历三坐标未完整命中当前病历池，请刷新后重试")
+    if effective_scope in {"final", "all"}:
+        raise HTTPException(
+            status_code=422,
+            detail="final_archive_unverified: 归档状态未核验，终末或包含终末的混合范围暂不能执行质控任务",
+        )
     record_refs = selected_record_refs
     if selected_execution_rule_ids:
         record_rule_map = {

@@ -154,6 +154,17 @@ def _active_remote_task(task: dict[str, Any]) -> bool:
     return task.get("scene") == "running" and config is not None and config.get("case_scope") == "active"
 
 
+def _requires_archive_verification(task_scene: Any, prepared_kwargs: Any) -> bool:
+    if not isinstance(prepared_kwargs, dict):
+        return True
+    scope = str(prepared_kwargs.get("scope") or task_scene or "").strip().lower()
+    filters = prepared_kwargs.get("filters")
+    query_scope = str(filters.get("query_scope") or "").strip().lower() if isinstance(filters, dict) else ""
+    return str(task_scene or "").strip().lower() != "running" or scope != "running" or query_scope not in {
+        "", "running",
+    }
+
+
 def _assert_active_sync_receipt(
     session: Session, task: dict[str, Any], refs: list[dict[str, str]], run_scope: str, actor_id: str,
 ) -> None:
@@ -308,6 +319,10 @@ def create_task_qc_run(
                 or filters.get("rule_set_version") != task["rule_set_version"]
             ):
                 raise TaskQCRunConflict("准备后的规则集版本与任务冻结值不一致")
+            if _requires_archive_verification(task["scene"], prepared.create_kwargs):
+                raise TaskQCRunConflict(
+                    "final_archive_unverified: 归档状态未核验，终末或包含终末的混合范围暂不能执行质控任务"
+                )
             job = workspace.create_batch_job(
                 created_by=actor_id,
                 session=session,

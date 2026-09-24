@@ -11,6 +11,13 @@
         </h2>
       </div>
       <div class="task-todos__tools">
+        <button
+          type="button"
+          data-testid="all-my-tasks"
+          @click="void router.push('/dashboard/tasks/my')"
+        >
+          查看全部任务
+        </button>
         <label for="home-task-scene">场景</label>
         <select
           id="home-task-scene"
@@ -80,6 +87,14 @@
         />
       </button>
     </div>
+    <p
+      v-if="!loading && !error && allEmpty"
+      class="task-todos__empty"
+      data-testid="home-task-todos-empty"
+      role="status"
+    >
+      没有待处理事项
+    </p>
   </section>
 </template>
 
@@ -108,6 +123,12 @@ const sceneOptions: Array<{ label: string; value: TaskSceneFilter | '' }> = [
 
 const activeSceneLabel = computed(
   () => sceneOptions.find((option) => option.value === activeSceneValue.value)?.label || '全部场景',
+)
+const allEmpty = computed(
+  () => stats.value !== null
+    && stats.value.due_soon === 0
+    && stats.value.in_progress === 0
+    && stats.value.assigned === 0,
 )
 
 const todoItems = computed(() => [
@@ -279,5 +300,10 @@ onMounted(() => void fetchTodos())
   background: #fff1f0;
   color: #b42318;
   font-size: 13px;
+}
+.task-todos__empty {
+  margin: 12px 0 0;
+  color: rgba(29, 29, 31, 0.6);
+  font-size: 14px;
 }
 </style>

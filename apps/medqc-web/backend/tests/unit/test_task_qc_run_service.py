@@ -72,8 +72,8 @@ def env(monkeypatch):
     with sessions.begin() as session:
         session.execute(QCTask.__table__.insert().values(
             id="task-1", task_number="TASK-1", task_name="测试", task_type="one_time",
-            scene="final", rule_set_key="sc_content_fast_v1",
-            rule_set_version=get_sichuan_rule_set("sc_content_fast_v1").version,
+            scene="running", rule_set_key="luxian_0609_qc_v1",
+            rule_set_version=get_sichuan_rule_set("luxian_0609_qc_v1").version,
             creator_id="user-1",
             status="sampling", total_records=1,
         ))
@@ -122,8 +122,8 @@ def test_creates_job_and_run_then_dispatches_exact_job(env):
     assert kwargs["task_run_context"] == {"task_id": "task-1", "run_number": "1"}
     assert env.workspace.next_id == 2
     assert env.workspace.created_kwargs[0]["filters"] == {
-        "rule_set_key": "sc_content_fast_v1",
-        "rule_set_version": get_sichuan_rule_set("sc_content_fast_v1").version,
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": get_sichuan_rule_set("luxian_0609_qc_v1").version,
     }
     assert service.list_task_qc_runs(task_id="task-1", actor_id="user-1")[0]["job_id"] == "job-1"
     assert service.list_task_qc_runs(task_id="task-1", actor_id="user-1")[0]["run_scope"] == "all"
@@ -293,7 +293,7 @@ def test_outpatient_or_missing_sample_fails_closed_before_workspace(env):
     with pytest.raises(service.TaskQCRunConflict, match="门急诊"):
         _start(env)
     with env.sessions.begin() as session:
-        session.execute(QCTask.__table__.update().where(QCTask.id == "task-1").values(scene="final", total_records=2))
+        session.execute(QCTask.__table__.update().where(QCTask.id == "task-1").values(scene="running", total_records=2))
     with pytest.raises(service.TaskQCRunConflict, match="数量不一致"):
         _start(env)
     assert env.workspace.next_id == 1

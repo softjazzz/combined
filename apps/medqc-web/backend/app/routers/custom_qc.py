@@ -233,6 +233,15 @@ def _normalize_run_mode(value: Optional[str]) -> str:
     return "serial"
 
 
+_FINAL_ARCHIVE_UNVERIFIED = (
+    "final_archive_unverified: 归档状态未核验，终末或包含终末的混合范围暂不能执行质控任务"
+)
+
+
+def _requires_archive_verification(scope: Any) -> bool:
+    return str(scope or "").strip().lower() != "running"
+
+
 async def _run_workspace_batch_job(job_id: str) -> None:
     workspace = get_workspace_service()
     job = workspace.get_batch_job_for_processing(job_id=job_id)
@@ -240,6 +249,10 @@ async def _run_workspace_batch_job(job_id: str) -> None:
         return
 
     try:
+        if str(job.get("status") or "").strip().lower() == "queued" and _requires_archive_verification(
+            job.get("scope")
+        ):
+            raise ValueError(_FINAL_ARCHIVE_UNVERIFIED)
         if not workspace.mark_batch_job_running(job_id=job_id):
             return
         current_job = workspace.get_batch_job_for_processing(job_id=job_id) or job
@@ -1142,6 +1155,8 @@ async def create_workspace_batch_job(
     current_user: Dict[str, Any] = Depends(require_product_activation),
     workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
 ):
+    if _requires_archive_verification(payload.scope):
+        raise HTTPException(status_code=422, detail=_FINAL_ARCHIVE_UNVERIFIED)
     created_by = _current_user_id(current_user)
     if payload.record_ids:
         raise HTTPException(
@@ -1346,7 +1361,13 @@ async def retry_workspace_batch_job(
     current_user: Dict[str, Any] = Depends(require_product_activation),
     workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
 ):
-    job = workspace.retry_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
+    created_by = _current_user_id(current_user)
+    existing_job = workspace.get_batch_job(job_id=job_id, created_by=created_by)
+    if not existing_job:
+        raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
+    if _requires_archive_verification(existing_job.get("scope")):
+        raise HTTPException(status_code=422, detail=_FINAL_ARCHIVE_UNVERIFIED)
+    job = workspace.retry_batch_job(job_id=job_id, created_by=created_by)
     if not job:
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
     background_tasks.add_task(_run_workspace_batch_job, job_id)

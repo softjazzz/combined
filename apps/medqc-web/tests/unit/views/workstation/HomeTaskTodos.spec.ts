@@ -120,6 +120,16 @@ describe('HomeTaskTodos', () => {
     expect(mocks.routerPush).not.toHaveBeenCalled()
   })
 
+  it('全部为零时页内明确空状态，仍能查看全部任务', async () => {
+    mocks.getTaskTodoStats.mockResolvedValue(success({ assigned: 0, in_progress: 0, due_soon: 0 }))
+    const wrapper = mount(HomeTaskTodos)
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="home-task-todos-empty"]').text()).toBe('没有待处理事项')
+    await wrapper.get('[data-testid="all-my-tasks"]').trigger('click')
+    expect(mocks.routerPush).toHaveBeenCalledWith('/dashboard/tasks/my')
+  })
+
   it('失败显示不可用且重试可恢复，不伪装成零值', async () => {
     mocks.getTaskTodoStats.mockResolvedValueOnce({ success: false, message: '服务暂不可用' })
     const wrapper = mount(HomeTaskTodos)
@@ -127,6 +137,7 @@ describe('HomeTaskTodos', () => {
 
     expect(wrapper.get('[data-testid="home-task-todos-error"]').text()).toContain('服务暂不可用')
     expect(wrapper.get('[data-testid="todo-assigned-count"]').text()).toBe('不可用')
+    expect(wrapper.find('[data-testid="home-task-todos-empty"]').exists()).toBe(false)
 
     mocks.getTaskTodoStats.mockResolvedValueOnce(success({ assigned: 4 }))
     await wrapper.get('[data-testid="retry-home-task-todos"]').trigger('click')

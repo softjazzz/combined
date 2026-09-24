@@ -17,10 +17,11 @@ from app.services.case_identity import CaseRef
 from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
 from app.services.sichuan_qc_service import SichuanQCService
 from app.services.llm_observability import current_llm_observation_context
-from app.services.qc_rule_sets import SC_CONTENT_V1_RULE_IDS
+from app.services.qc_rule_sets import SC_CONTENT_V1_RULE_IDS, get_sichuan_rule_set
 from app.services.qc_workspace.failed_rule_retry import build_failed_rule_retry_scope
 from app.services.luxian_0609_rule_catalog import get_luxian_0609_rule
 from app.services.luxian_0609 import runtime_shadow_input_provider
+from app.services.luxian_0609.phase_scope import partition_luxian_0609_rule_scope
 from app.services.sample_validation_rule_sets import LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
 from app.services.luxian_0609.evidence_snapshot_provider import (
     SnapshotSourceRows,
@@ -407,10 +408,10 @@ class _WorkspaceStub:
         self.job: Dict[str, Any] = {
             "id": "job-throughput-001",
             "status": "queued",
-            "scope": "final",
+            "scope": "running",
             "filters": {
                 "rule_ids": ["SC-001", "SC-002", "SC-003"],
-                "date_field": "discharge",
+                "date_field": "admission",
             },
             "record_ids": ["visit-001", "visit-002"],
         }
@@ -2042,7 +2043,7 @@ async def test_workspace_batch_final_should_prefer_bundle_path(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_workspace_batch_all_should_use_final_bundle_when_record_scope_is_final(monkeypatch):
+async def test_workspace_batch_all_rejects_unverified_final_record_before_bundle(monkeypatch):
     workspace = _WorkspaceStub()
     workspace.job["scope"] = "all"
     service = _ServiceStub(
@@ -2141,13 +2142,14 @@ async def test_workspace_batch_all_should_use_final_bundle_when_record_scope_is_
 
     await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
 
-    assert workspace.summary is not None
+    assert workspace.job["status"] == "failed"
+    assert "final_archive_unverified" in workspace.job["error_message"]
     assert service.evaluate_calls == 0
-    assert service.evaluate_rule_for_visit_calls == 6
+    assert service.evaluate_rule_for_visit_calls == 0
 
 
 @pytest.mark.asyncio
-async def test_sample_pool_single_rule_records_should_prefer_rule_level_visit_eval(monkeypatch):
+async def test_sample_pool_mixed_scope_rejects_unverified_final_before_eval(monkeypatch):
     workspace = _WorkspaceStub()
     workspace.job["scope"] = "all"
     workspace.job["filters"] = {
@@ -2220,16 +2222,16 @@ async def test_sample_pool_single_rule_records_should_prefer_rule_level_visit_ev
 
     await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
 
-    assert workspace.summary is not None
-    assert service.evaluate_rule_for_visit_calls == 2
-    assert len(workspace.items) == 2
-    assert {str(item.get("rule_id")) for item in workspace.items} == {"SC-039", "SC-069"}
-    assert int(workspace.summary.get("issue_records") or 0) == 2
+    assert workspace.job["status"] == "failed"
+    assert "final_archive_unverified" in workspace.job["error_message"]
+    assert service.evaluate_rule_for_visit_calls == 0
+    assert workspace.items == []
 
 
 @pytest.mark.asyncio
-async def test_workspace_batch_final_fast_screen_should_use_fast_screen_path(monkeypatch):
+async def test_workspace_batch_final_rejects_before_fast_screen(monkeypatch):
     workspace = _WorkspaceStub()
+    workspace.job["scope"] = "final"
     workspace.job["filters"] = {
         "rule_ids": ["SC-023", "SC-024"],
         "rule_set_key": "sc_content_fast_v1",
@@ -2325,12 +2327,10 @@ async def test_workspace_batch_final_fast_screen_should_use_fast_screen_path(mon
 
     await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
 
-    assert len(fast_screen_calls) == 2
-    assert all("pack_concurrency" not in call for call in fast_screen_calls)
+    assert fast_screen_calls == []
     assert service.evaluate_calls == 0
-    assert workspace.summary is not None
-    assert workspace.summary.get("execution_strategy") == "fast_screen"
-    assert int((workspace.summary.get("pack_metrics") or {}).get("total_packs") or 0) == 2
+    assert workspace.job["status"] == "failed"
+    assert "final_archive_unverified" in workspace.job["error_message"]
 
 
 @pytest.mark.asyncio
@@ -2446,13 +2446,12 @@ async def test_workspace_batch_customer_final_fast_screen_should_bypass_sc_fixed
 
 
 @pytest.mark.asyncio
-async def test_create_workspace_batch_job_should_resolve_content_rule_set(monkeypatch):
+async def test_prepare_workspace_batch_job_should_resolve_content_rule_set(monkeypatch):
     workspace = _WorkspaceStub()
     service = _ServiceStub()
 
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
 
-    request = SimpleNamespace(state=SimpleNamespace())
     payload = qc_sichuan.SichuanWorkspaceBatchJobCreateRequest(
         rule_set_key="sc_content_v1",
         rule_ids=["SC-999"],
@@ -2461,16 +2460,14 @@ async def test_create_workspace_batch_job_should_resolve_content_rule_set(monkey
         record_ids=["visit-001"],
     )
 
-    response = await qc_sichuan.create_workspace_batch_job(
-        request=request,  # type: ignore[arg-type]
+    prepared = qc_sichuan.prepare_workspace_batch_job(
         payload=payload,
         qc_service=service,  # type: ignore[arg-type]
-        current_user={"id": "tester"},
+        workspace=workspace,
     )
 
-    assert response["success"] is True
-    assert workspace.created_job is not None
-    filters = dict(workspace.created_job.get("filters") or {})
+    assert workspace.created_job is None
+    filters = dict(prepared.create_kwargs.get("filters") or {})
     assert filters["rule_set_key"] == "sc_content_v1"
     assert filters["rule_set_name"] == "内涵质控首批 v1"
     assert filters["quality_profile"] == "effect_priority_v1"
@@ -2480,8 +2477,8 @@ async def test_create_workspace_batch_job_should_resolve_content_rule_set(monkey
     assert filters["max_refine_candidates"] == 3
     assert filters["run_mode"] == "parallel"
     assert filters["rule_ids"] == list(SC_CONTENT_V1_RULE_IDS)
-    assert workspace.created_job["run_mode"] == "parallel"
-    assert response["data"]["draft_ids"] == list(SC_CONTENT_V1_RULE_IDS)
+    assert prepared.create_kwargs["run_mode"] == "parallel"
+    assert prepared.response_fields["draft_ids"] == list(SC_CONTENT_V1_RULE_IDS)
 
 
 @pytest.mark.asyncio
@@ -2705,7 +2702,7 @@ async def test_create_workspace_batch_job_accepts_reordered_complete_explicit_re
     ]
     workspace = _WorkspaceStub()
     workspace.collect_records = lambda **_: [  # type: ignore[method-assign]
-        {**record_ref, "scope": "final"} for record_ref in reversed(requested_refs)
+        {**record_ref, "scope": "running"} for record_ref in reversed(requested_refs)
     ]
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
     monkeypatch.setattr(qc_sichuan, "get_settings", _luxian_native_settings)
@@ -2715,7 +2712,7 @@ async def test_create_workspace_batch_job_accepts_reordered_complete_explicit_re
         request=SimpleNamespace(state=SimpleNamespace()),  # type: ignore[arg-type]
         payload=qc_sichuan.SichuanWorkspaceBatchJobCreateRequest(
             rule_set_key=qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
-            scope="all",
+            scope="running",
             record_refs=requested_refs,
         ),
         qc_service=_ServiceStub(),  # type: ignore[arg-type]
@@ -2727,7 +2724,7 @@ async def test_create_workspace_batch_job_accepts_reordered_complete_explicit_re
 
 
 @pytest.mark.asyncio
-async def test_create_workspace_batch_job_accepts_native_luxian_customer_ids_without_legacy_mapping(
+async def test_prepare_workspace_batch_job_keeps_native_customer_ids_without_legacy_mapping(
     monkeypatch,
 ):
     workspace = _WorkspaceStub()
@@ -2764,7 +2761,6 @@ async def test_create_workspace_batch_job_accepts_native_luxian_customer_ids_wit
     )
 
     native_rule_ids = ["LX0609-029", "LX0609-030", "LX0609-032"]
-    request = SimpleNamespace(state=SimpleNamespace())
     payload = qc_sichuan.SichuanWorkspaceBatchJobCreateRequest(
         rule_set_key=qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
         rule_ids=native_rule_ids,
@@ -2784,17 +2780,15 @@ async def test_create_workspace_batch_job_accepts_native_luxian_customer_ids_wit
         ],
     )
 
-    response = await qc_sichuan.create_workspace_batch_job(
-        request=request,  # type: ignore[arg-type]
+    prepared = qc_sichuan.prepare_workspace_batch_job(
         payload=payload,
         qc_service=service,  # type: ignore[arg-type]
-        current_user={"id": "tester"},
+        workspace=workspace,
     )
 
-    assert response["success"] is True
-    assert workspace.created_job is not None
-    filters = dict(workspace.created_job.get("filters") or {})
-    assert workspace.created_job["scope"] == "all"
+    assert workspace.created_job is None
+    filters = dict(prepared.create_kwargs.get("filters") or {})
+    assert prepared.create_kwargs["scope"] == "all"
     assert filters["rule_ids"] == native_rule_ids
     assert filters["selected_rule_ids"] == native_rule_ids
     assert filters["scoped_customer_rule_ids"] == native_rule_ids
@@ -2843,14 +2837,14 @@ async def test_create_workspace_batch_job_accepts_native_luxian_customer_ids_wit
         CaseRef("HOSP-001", "PAT-visit-001", "visit-001").as_key(): native_rule_ids,
         CaseRef("HOSP-001", "PAT-visit-002", "visit-002").as_key(): native_rule_ids,
     }
-    assert workspace.created_job["draft_ids"] == native_rule_ids
-    assert response["data"]["draft_ids"] == native_rule_ids
-    serialized = json.dumps(workspace.created_job, ensure_ascii=False, sort_keys=True)
+    assert prepared.create_kwargs["draft_ids"] == native_rule_ids
+    assert prepared.response_fields["draft_ids"] == native_rule_ids
+    serialized = json.dumps(prepared.create_kwargs, ensure_ascii=False, sort_keys=True)
     assert all(
         legacy_rule_id not in serialized
         for legacy_rule_id in ("CL-181", "SC-081", "LX-025", "SC-095", "SC-102", "LXE-33")
     )
-    assert len(submitted_tasks) == 1
+    assert submitted_tasks == []
 
 
 @pytest.mark.asyncio
@@ -2860,23 +2854,15 @@ async def test_create_workspace_batch_job_full_luxian_set_uses_current_customer_
     workspace = _WorkspaceStub()
     service = _ServiceStub()
     submitted_tasks: List[Dict[str, Any]] = []
-    customer_rule_ids = [f"LX0609-{index:03d}" for index in range(1, 76)]
-    pending_rule_ids = [
-        "LX0609-025",
-        "LX0609-028",
-        "LX0609-049",
-        "LX0609-056",
-        "LX0609-059",
-        "LX0609-075",
-    ]
+    customer_rule_ids = list(get_sichuan_rule_set(qc_sichuan.LUXIAN_0609_RULE_SET_KEY).rule_ids)
     customer_rule_ids = [
         rule_id
         for rule_id in customer_rule_ids
         if rule_id not in LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
     ]
-    executable_rule_ids = [
-        rule_id for rule_id in customer_rule_ids if rule_id not in pending_rule_ids
-    ]
+    active_rule_ids, pending_rule_ids = partition_luxian_0609_rule_scope(customer_rule_ids)
+    executable_rule_ids = list(active_rule_ids)
+    pending_rule_ids = list(pending_rule_ids)
 
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
     monkeypatch.setattr(
@@ -2896,7 +2882,7 @@ async def test_create_workspace_batch_job_full_luxian_set_uses_current_customer_
         request=SimpleNamespace(state=SimpleNamespace()),  # type: ignore[arg-type]
         payload=qc_sichuan.SichuanWorkspaceBatchJobCreateRequest(
             rule_set_key=qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
-            scope="all",
+            scope="running",
             date_field="admission",
             record_refs=[
                 {
@@ -2924,9 +2910,9 @@ async def test_create_workspace_batch_job_full_luxian_set_uses_current_customer_
     assert filters["active_customer_rule_ids"] == executable_rule_ids
     assert filters["pending_customer_rule_ids"] == pending_rule_ids
     assert filters["idempotency_payload"]["customer_rule_ids"] == customer_rule_ids
-    assert filters["customer_rule_count"] == 70
-    assert filters["execution_rule_count"] == 64
-    assert filters["pending_rule_count"] == 6
+    assert filters["customer_rule_count"] == len(customer_rule_ids)
+    assert filters["execution_rule_count"] == len(executable_rule_ids)
+    assert filters["pending_rule_count"] == len(pending_rule_ids)
     assert {"LX0609-051", "LX0609-061", "LX0609-067", "LX0609-071"}.issubset(
         filters["active_customer_rule_ids"]
     )
@@ -2954,7 +2940,7 @@ async def test_create_workspace_batch_job_idempotency_separates_pending_delivery
             payload=qc_sichuan.SichuanWorkspaceBatchJobCreateRequest(
                 rule_set_key=qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
                 rule_ids=selected_rule_ids,
-                scope="all",
+                scope="running",
                 date_field="admission",
                 record_refs=[
                     {
@@ -2970,14 +2956,14 @@ async def test_create_workspace_batch_job_idempotency_separates_pending_delivery
         assert response["success"] is True
         return dict(workspace.created_job["filters"])
 
-    active_filters = await _create(["LX0609-020"])
-    pending_filters = await _create(["LX0609-020", "LX0609-049"])
+    active_filters = await _create(["LX0609-001"])
+    pending_filters = await _create(["LX0609-001", "LX0609-020"])
 
-    assert active_filters["rule_ids"] == pending_filters["rule_ids"] == ["LX0609-020"]
-    assert active_filters["idempotency_payload"]["customer_rule_ids"] == ["LX0609-020"]
+    assert active_filters["rule_ids"] == pending_filters["rule_ids"] == ["LX0609-001"]
+    assert active_filters["idempotency_payload"]["customer_rule_ids"] == ["LX0609-001"]
     assert pending_filters["idempotency_payload"]["customer_rule_ids"] == [
+        "LX0609-001",
         "LX0609-020",
-        "LX0609-049",
     ]
     assert active_filters["idempotency_key"] != pending_filters["idempotency_key"]
 
@@ -3038,6 +3024,7 @@ async def test_full_luxian_batch_worker_uses_unified_customer_package_entry(
     validation_mode: str,
 ):
     workspace = _WorkspaceStub()
+    workspace.job["scope"] = "final"
     customer_rule_ids = [
         f"LX0609-{index:03d}"
         for index in range(1, 50)
@@ -3110,7 +3097,11 @@ async def test_full_luxian_batch_worker_uses_unified_customer_package_entry(
         _luxian_native_settings,
     )
 
-    await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
+    await batch_worker.run_sichuan_workspace_batch_job(
+        "job-throughput-001",
+        workspace=workspace,
+        qc_service_provider=qc_sichuan.get_qc_service,
+    )
 
     assert workspace.job["status"] == "completed"
     assert len(captured) == 2
@@ -3244,7 +3235,11 @@ async def test_luxian_batch_worker_uses_record_scene_and_records_loaded_fallback
 
     monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_service)
 
-    await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
+    await batch_worker.run_sichuan_workspace_batch_job(
+        "job-throughput-001",
+        workspace=workspace,
+        qc_service_provider=qc_sichuan.get_qc_service,
+    )
 
     assert load_calls == [
         {"visit_id": "visit-001", "scene": "final", "schema": "public"},
@@ -3471,7 +3466,11 @@ async def test_worker_and_real_provider_keep_unresolved_record_horizons_empty(
 
     monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_service)
 
-    await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
+    await batch_worker.run_sichuan_workspace_batch_job(
+        "job-throughput-001",
+        workspace=workspace,
+        qc_service_provider=qc_sichuan.get_qc_service,
+    )
 
     expected_reasons = [
         "authoritative_time_missing",
@@ -3559,13 +3558,12 @@ async def test_luxian_batch_single_family_off_fails_before_sc_source_or_evaluati
 
 
 @pytest.mark.asyncio
-async def test_create_workspace_batch_job_should_resolve_fast_screen_rule_set(monkeypatch):
+async def test_prepare_workspace_batch_job_should_resolve_fast_screen_rule_set(monkeypatch):
     workspace = _WorkspaceStub()
     service = _ServiceStub()
 
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
 
-    request = SimpleNamespace(state=SimpleNamespace())
     payload = qc_sichuan.SichuanWorkspaceBatchJobCreateRequest(
         rule_set_key="sc_content_fast_v1",
         scope="final",
@@ -3573,16 +3571,14 @@ async def test_create_workspace_batch_job_should_resolve_fast_screen_rule_set(mo
         record_ids=["visit-001"],
     )
 
-    response = await qc_sichuan.create_workspace_batch_job(
-        request=request,  # type: ignore[arg-type]
+    prepared = qc_sichuan.prepare_workspace_batch_job(
         payload=payload,
         qc_service=service,  # type: ignore[arg-type]
-        current_user={"id": "tester"},
+        workspace=workspace,
     )
 
-    assert response["success"] is True
-    assert workspace.created_job is not None
-    filters = dict(workspace.created_job.get("filters") or {})
+    assert workspace.created_job is None
+    filters = dict(prepared.create_kwargs.get("filters") or {})
     assert filters["rule_set_key"] == "sc_content_fast_v1"
     assert filters["execution_strategy"] == "fast_screen"
     assert filters["quality_profile"] == "throughput_v1"
@@ -3591,18 +3587,17 @@ async def test_create_workspace_batch_job_should_resolve_fast_screen_rule_set(mo
     assert filters["enable_selective_refine"] is False
     assert filters["max_refine_candidates"] == 0
     assert filters["run_mode"] == "parallel"
-    assert workspace.created_job["run_mode"] == "parallel"
-    assert response["data"]["execution_strategy"] == "fast_screen"
+    assert prepared.create_kwargs["run_mode"] == "parallel"
+    assert prepared.response_fields["execution_strategy"] == "fast_screen"
 
 
 @pytest.mark.asyncio
-async def test_create_workspace_batch_job_should_resolve_full_intrinsic_fast_screen_rule_set(monkeypatch):
+async def test_prepare_workspace_batch_job_should_resolve_full_intrinsic_fast_screen_rule_set(monkeypatch):
     workspace = _WorkspaceStub()
     service = _ServiceStub()
 
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
 
-    request = SimpleNamespace(state=SimpleNamespace())
     payload = qc_sichuan.SichuanWorkspaceBatchJobCreateRequest(
         rule_set_key="sc_content_full_v1",
         scope="final",
@@ -3610,16 +3605,14 @@ async def test_create_workspace_batch_job_should_resolve_full_intrinsic_fast_scr
         record_ids=["visit-001"],
     )
 
-    response = await qc_sichuan.create_workspace_batch_job(
-        request=request,  # type: ignore[arg-type]
+    prepared = qc_sichuan.prepare_workspace_batch_job(
         payload=payload,
         qc_service=service,  # type: ignore[arg-type]
-        current_user={"id": "tester"},
+        workspace=workspace,
     )
 
-    assert response["success"] is True
-    assert workspace.created_job is not None
-    filters = dict(workspace.created_job.get("filters") or {})
+    assert workspace.created_job is None
+    filters = dict(prepared.create_kwargs.get("filters") or {})
     assert filters["rule_set_key"] == "sc_content_full_v1"
     assert filters["execution_strategy"] == "fast_screen"
     assert filters["quality_profile"] == "throughput_v1"
@@ -3629,12 +3622,12 @@ async def test_create_workspace_batch_job_should_resolve_full_intrinsic_fast_scr
     assert filters["max_refine_candidates"] == 0
     assert filters["run_mode"] == "parallel"
     assert len(filters["rule_ids"]) == 84
-    assert workspace.created_job["run_mode"] == "parallel"
-    assert response["data"]["execution_strategy"] == "fast_screen"
+    assert prepared.create_kwargs["run_mode"] == "parallel"
+    assert prepared.response_fields["execution_strategy"] == "fast_screen"
 
 
 @pytest.mark.asyncio
-async def test_create_workspace_batch_job_should_reuse_active_idempotent_job(monkeypatch):
+async def test_create_workspace_batch_job_rejects_final_even_with_active_idempotent_job(monkeypatch):
     workspace = _IdempotentWorkspaceStub()
     service = _ServiceStub()
     submitted_tasks: List[Dict[str, Any]] = []
@@ -3704,20 +3697,19 @@ async def test_create_workspace_batch_job_should_reuse_active_idempotent_job(mon
         "idempotency_payload": idempotency_payload,
     }
 
-    response = await qc_sichuan.create_workspace_batch_job(
-        request=request,  # type: ignore[arg-type]
-        payload=payload,
-        qc_service=service,  # type: ignore[arg-type]
-        current_user={"id": "tester"},
-    )
+    with pytest.raises(HTTPException) as exc:
+        await qc_sichuan.create_workspace_batch_job(
+            request=request,  # type: ignore[arg-type]
+            payload=payload,
+            qc_service=service,  # type: ignore[arg-type]
+            current_user={"id": "tester"},
+        )
 
-    assert response["success"] is True
-    assert response["message"] == "已复用运行中的四川规则批量任务"
-    assert response["data"]["id"] == "job-idempotent-active"
-    assert response["data"]["idempotency_reused"] is True
+    assert exc.value.status_code == 422
+    assert "final_archive_unverified" in exc.value.detail
     assert workspace.create_called is False
     assert submitted_tasks == []
-    assert [call["status"] for call in workspace.list_calls] == ["queued", "running"]
+    assert workspace.list_calls == []
 
 
 def test_prepare_workspace_batch_job_isolates_task_runs_without_creating_job():
@@ -3754,7 +3746,7 @@ def test_prepare_workspace_batch_job_isolates_task_runs_without_creating_job():
 
 
 @pytest.mark.asyncio
-async def test_create_workspace_batch_job_should_not_reuse_running_job_after_record_becomes_final(
+async def test_create_workspace_batch_job_rejects_mixed_scope_after_record_becomes_final(
     monkeypatch,
 ):
     class _StatusChangedWorkspaceStub(_IdempotentWorkspaceStub):
@@ -3824,38 +3816,24 @@ async def test_create_workspace_batch_job_should_not_reuse_running_job_after_rec
         "idempotency_payload": active_payload,
     }
 
-    response = await qc_sichuan.create_workspace_batch_job(
-        request=SimpleNamespace(state=SimpleNamespace()),  # type: ignore[arg-type]
-        payload=qc_sichuan.SichuanWorkspaceBatchJobCreateRequest(
-            rule_ids=["SC-001"],
-            scope="all",
-            date_field="admission",
-            record_ids=["visit-001"],
-            run_mode="parallel",
-        ),
-        qc_service=service,  # type: ignore[arg-type]
-        current_user={"id": "tester"},
-    )
+    with pytest.raises(HTTPException) as exc:
+        await qc_sichuan.create_workspace_batch_job(
+            request=SimpleNamespace(state=SimpleNamespace()),  # type: ignore[arg-type]
+            payload=qc_sichuan.SichuanWorkspaceBatchJobCreateRequest(
+                rule_ids=["SC-001"],
+                scope="all",
+                date_field="admission",
+                record_ids=["visit-001"],
+                run_mode="parallel",
+            ),
+            qc_service=service,  # type: ignore[arg-type]
+            current_user={"id": "tester"},
+        )
 
-    assert response["success"] is True
-    assert response["data"].get("idempotency_reused") is not True
-    assert workspace.create_called is True
-    assert workspace.created_job is not None
-    assert workspace.created_job["filters"]["record_scene_snapshot"] == [
-        {
-            "record_id": "visit-001",
-            "institute_id": "HOSP-001",
-            "patient_id": "PAT-visit-001",
-            "visit_id": "visit-001",
-            "record_key": CaseRef(
-                "HOSP-001", "PAT-visit-001", "visit-001"
-            ).as_key(),
-            "record_scene": "final",
-            "resolved_scene": "final",
-            "discharge_snapshot": "2026-08-03 09:30:00",
-        }
-    ]
-    assert len(submitted_tasks) == 1
+    assert exc.value.status_code == 422
+    assert "final_archive_unverified" in exc.value.detail
+    assert workspace.create_called is False
+    assert submitted_tasks == []
 
 
 @pytest.mark.asyncio

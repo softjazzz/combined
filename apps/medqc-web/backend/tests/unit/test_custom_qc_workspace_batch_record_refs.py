@@ -69,6 +69,7 @@ async def test_batch_job_route_uses_two_distinct_record_refs_for_same_visit() ->
     background_tasks = BackgroundTasks()
     payload = custom_qc.WorkspaceBatchJobCreateRequest(
         draft_id="draft-1",
+        scope="running",
         record_refs=RECORD_REFS,
     )
 
@@ -82,7 +83,7 @@ async def test_batch_job_route_uses_two_distinct_record_refs_for_same_visit() ->
 
     assert workspace.collect_calls == [
         {
-            "scope": "final",
+            "scope": "running",
             "department": None,
             "doctor": None,
             "date_field": "discharge",
@@ -108,6 +109,7 @@ async def test_batch_job_route_freezes_filter_only_matches_as_record_refs() -> N
         request=_request(),
         payload=custom_qc.WorkspaceBatchJobCreateRequest(
             draft_id="draft-1",
+            scope="running",
             department="重症医学科",
             keyword="待复核",
         ),
@@ -131,6 +133,7 @@ async def test_batch_job_route_rejects_legacy_ids_and_partial_ref_matches() -> N
             request=_request(),
             payload=custom_qc.WorkspaceBatchJobCreateRequest(
                 draft_id="draft-1",
+                scope="running",
                 record_ids=["VISIT-1"],
             ),
             background_tasks=BackgroundTasks(),
@@ -148,6 +151,7 @@ async def test_batch_job_route_rejects_legacy_ids_and_partial_ref_matches() -> N
             request=_request(),
             payload=custom_qc.WorkspaceBatchJobCreateRequest(
                 draft_id="draft-1",
+                scope="running",
                 record_refs=RECORD_REFS,
             ),
             background_tasks=BackgroundTasks(),
@@ -200,7 +204,7 @@ async def test_batch_job_worker_prefers_record_refs_and_only_falls_back_for_hist
             "draft_id": "draft-1",
             "draft_ids": ["draft-1"],
             "created_by": "qc-user",
-            "scope": "final",
+            "scope": "running",
             "filters": filters,
             "record_ids": ["VISIT-1"],
         }
