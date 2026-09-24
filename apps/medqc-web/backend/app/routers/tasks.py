@@ -59,6 +59,12 @@ from ..services.task_start_service import (
     start_assigned_task,
     start_assigned_task_record,
 )
+from ..services.task_cancel_service import (
+    TaskCancelConflict,
+    TaskCancelForbidden,
+    TaskCancelNotFound,
+    cancel_task as cancel_task_transaction,
+)
 from ..services.task_sampling_service import (
     validate_active_running_date_range,
     validate_scoped_sampling_config,
@@ -1053,26 +1059,30 @@ async def delete_task(
 
 
 @router.post("/{task_id}/cancel")
-@require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.UPDATE)
+@require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.READ)
 async def cancel_task(
     request: Request,
     task_id: str,
     current_user: dict = Depends(get_current_user),
 ):
-    """取消任务"""
-    update_data = {
-        "status": TaskStatus.CANCELLED.value,
-        "updated_at": datetime.now().isoformat(),
-    }
-
-    sb = get_supabase()
-    if sb is None:
-        raise HTTPException(status_code=503, detail="数据库不可用")
-
+    """取消尚未开始且没有质控运行记录的任务。"""
+    actor_id = _get_task_scope_user_id(current_user)
     try:
-        await async_execute(sb.table('qc_tasks').update(update_data).eq('id', task_id))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"取消失败: {str(e)}")
+        result = await run_in_threadpool(
+            cancel_task_transaction,
+            task_id=task_id,
+            actor_id=actor_id,
+            is_manager=has_any_role(current_user, [UserRole.ADMIN, UserRole.QC_MANAGER]),
+        )
+    except TaskCancelNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except TaskCancelForbidden as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except TaskCancelConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("取消任务失败: task_id=%s", task_id)
+        raise HTTPException(status_code=503, detail="任务取消服务不可用，请稍后重试") from exc
 
     audit_event(
         request,
@@ -1080,11 +1090,15 @@ async def cancel_task(
         resource="/api/v1/tasks/{task_id}/cancel",
         outcome="success",
         current_user=current_user,
-        details={"task_id": task_id, "status": TaskStatus.CANCELLED.value},
+        details={
+            "task_id": task_id,
+            "status": TaskStatus.CANCELLED.value,
+            "idempotent": result["idempotent"],
+        },
     )
 
     return success_response(
-        data={"task_id": task_id, "status": TaskStatus.CANCELLED.value},
+        data=result,
         message="任务已取消",
         trace_id=get_trace_id(request),
     )
