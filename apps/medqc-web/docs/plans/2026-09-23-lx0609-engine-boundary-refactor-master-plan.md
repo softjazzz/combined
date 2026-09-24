@@ -294,3 +294,10 @@ python -m pytest -q --tb=short tests/unit/test_luxian_0609_basic_timeliness_cust
 - 子提交6d863d734、26436ca7d分别合入为5b7b18216、0c0ce16ae。主协调已独立审查公开校验、JSON类型、临界舍入和负值/多余精度拒绝。生产变更限族公开合同与Finalizer原始004分派，医学执行器及模型请求未改。
 - 子树独立275项原始时限/冻结/Finalizer测试通过（排除1项PG依赖），另11项SQLite交付/非法事实/DTO/反馈/导出通过。集成后相同11项再次通过；投影62、抢救内容73、Finalizer70项在集成宽组中通过。宽组Canonical随后出现失败并被停止，不能记全绿；单独重跑writer_marks_envelope_as_canonical_straight_through确认在伪PG DSN连接初始化失败。未运行客户PG写测试。
 - 原始R01材料无可识别抢救结束时间，不造数据：下一项用它验证data_gap路径基线与当前逐字段等价，不能声称正常时效临床验收。阶段A全目标和B/C/D尚未完成。
+
+### 2026-09-24 主协调真实回放及后续风险证伪
+
+- 已接收原始004回放记录e3ed73c39并合入4688e0854。主协调审阅私有脚本，在集成树重跑原始R01固定来源，结果与基线JSON全字段相同：data_gap/rescue_end_time_missing、证据和事实相同、零LLM；不是正常时效临床验收。npm lint和type-check退出0。
+- 阶段B只读报告已复核关键Worker/service/settings代码并合入4fb1d37bc。现委派仅内存证伪测试：任务和逐病例配置分别变化时，验证是否失败关闭或改变执行；不先改生产。
+- 阶段D预查得到resolver级反例：同一MalignancyFactResolver并发两次resolve同一固定来源，合法模型替身各返回10+5=15token，实际2次/30token，而claim_usage仅1次/15token。此内存实验无DB和真实模型调用，证实解析器在途共享与计量问题；尚未证明线上两个规则族真实并发触发、实际费用或延迟。已委派两族正式调用链测试，生产修复须待调用链及源范围证据。
+- 原始004技术闭环已合入；阶段A保护集/正常真实病例及整体B/C/D仍未完成，不因局部绿色标记全部完成。
