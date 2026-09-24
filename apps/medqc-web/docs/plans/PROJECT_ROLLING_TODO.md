@@ -486,6 +486,8 @@
 
 ### MEDQC-022：LX0609 质控引擎职责收敛
 
+2026-09-25 目标重置执行卡：沿用现有 active A/B/C/D goal，已提交基线 `b2568df71`；四阶段均为局部验证，退出条件与剩余证据见[主计划顶部执行卡](2026-09-23-lx0609-engine-boundary-refactor-master-plan.md)。阶段 C 测试专用规则已通过正式 Worker 与隔离 SQLite 保存/读取链，旧适配所有者尚待审计。阶段 D 本轮区分族失败/取消后的“零调用观测值”和“用量未知”，准备阶段异常不再标记观测完整；合成回归通过，但标记尚未进入正式批量任务持久化摘要，客户 PG 并发/部署恢复及 A 的真实页面与临床保护集仍待验收。新增质控点和 0916 继续独立处理。
+
 2026-09-25 阶段 C 正式 Worker 纵向补证：临时测试规则现经正式目录、任务路由、后台 Worker、生产 `prepare`/注册表、真实 Workspace 完成事务、隔离 SQLite Canonical Envelope 和公开 DTO 读回；不再靠测试手动连接执行和保存组件。合成来源与执行器不证明临床判定，客户 PostgreSQL/浏览器及旧适配替代审计仍缺，C 保持进行中。A/B/D 保持既定退出标准。
 
 2026-09-25 接续：现有 A/B/C/D goal 保持 active。阶段 C 复现并修复新 `native_sync` 测试规则在生产 `prepare` 的 Typed Decision 路由缺口；临时目录规则经正式任务接纳、生产 `prepare`/注册表的固定 Decision 和隔离 Canonical 组件链验证。正式 Worker 自动领取/保存、客户 PostgreSQL、浏览器及临床保护集尚未覆盖，C 不关闭；A/B/D 仍按主计划退出。未触碰新 CT/抢救/病理及 0916。

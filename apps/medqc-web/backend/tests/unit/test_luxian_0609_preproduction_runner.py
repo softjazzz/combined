@@ -13,6 +13,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.services.luxian_0609 import preproduction_runner
+from app.services import sample_programmatic_evidence as programmatic_evidence
 from app.services.luxian_0609.execution_contract import FamilyUsageAttribution
 
 
@@ -58,6 +59,64 @@ class _FakeContext:
         ),
     )
     evidence_snapshot_rule_refs: tuple[tuple[str, str], ...] = ()
+    native_usage_unknown_executor_keys: tuple[str, ...] = ()
+
+
+@pytest.mark.parametrize("unknown_keys", [(), ("safe_test_family",)])
+@pytest.mark.asyncio
+async def test_preproduction_keeps_results_but_marks_unobservable_family_usage(
+    monkeypatch, unknown_keys,
+):
+    selected = _all_rule_ids()
+    context = _FakeContext(native_usage_unknown_executor_keys=unknown_keys)
+
+    async def _fake_prepare(**_kwargs):
+        return [], context
+
+    def _fake_aggregate(*, orchestrated, **_kwargs):
+        orchestrated.update({
+            "results": [
+                {"rule_id": rule_id, "rule_code": rule_id, "status": "compliant"}
+                for rule_id in selected
+            ],
+            "total_prompt_tokens": context.native_prompt_tokens,
+            "total_completion_tokens": context.native_completion_tokens,
+            "total_tokens": context.native_total_tokens,
+            "total_api_time": context.native_api_time,
+        })
+        return orchestrated
+
+    monkeypatch.setattr(preproduction_runner, "prepare_luxian_0609_execution", _fake_prepare)
+    monkeypatch.setattr(preproduction_runner, "aggregate_luxian_0609_orchestrated_results", _fake_aggregate)
+    monkeypatch.setattr(programmatic_evidence, "_fetch_source_table_fallback_items", lambda *_a, **_k: ([], {}))
+    monkeypatch.setattr(programmatic_evidence, "_fetch_detail_service_fallback_items", lambda *_a, **_k: [])
+    result = await preproduction_runner.run_luxian_0609_preproduction(
+        bundle=_bundle(), selected_customer_rule_ids=selected,
+        evaluation_as_of_date="2026-07-17", llm_client=object(),
+        base_settings=SimpleNamespace(), model_name="safe-model",
+    )
+
+    assert result["metrics"]["usage_complete"] is True
+    assert result["metrics"]["usage_observation_complete"] is (not bool(unknown_keys))
+    assert result["metrics"]["usage_unknown_executor_keys"] == list(unknown_keys)
+    assert result["metrics"]["technical_error_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_preproduction_prepare_failure_never_claims_complete_observation(monkeypatch):
+    async def _fail_prepare(**_kwargs):
+        raise RuntimeError("execution failed before returning usage")
+
+    monkeypatch.setattr(preproduction_runner, "prepare_luxian_0609_execution", _fail_prepare)
+    result = await preproduction_runner.run_luxian_0609_preproduction(
+        bundle=_bundle(), selected_customer_rule_ids=_all_rule_ids(),
+        evaluation_as_of_date="2026-07-17", llm_client=object(),
+        base_settings=SimpleNamespace(), model_name="safe-model",
+    )
+
+    assert result["metrics"]["usage_complete"] is False
+    assert result["metrics"]["usage_observation_complete"] is False
+    assert result["metrics"]["usage_error_reason"] == "prepare_execution_failed"
 
 
 @pytest.mark.asyncio
@@ -109,6 +168,7 @@ async def test_preproduction_runner_fails_closed_on_context_orchestrated_usage_m
         base_settings=SimpleNamespace(),
         model_name="safe-model",
     )
+    assert result["metrics"]["usage_observation_complete"] is False
 
     assert result["metrics"]["technical_error_count"] == 49
     assert result["metrics"]["llm_call_count"] == 2
