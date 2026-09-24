@@ -58,6 +58,7 @@ from .luxian_0609.shadow_audit_summary import (
     merge_luxian_0609_shadow_summaries,
 )
 from .qc_cancellation import QCJobCancelled, raise_if_cancelled
+from .qc_llm_client_runtime import SichuanQCLLMClient
 from .qc_input_adapters import evaluate_running_final_bundle
 from .qc_input_adapters.running_final_bundle_runtime import load_running_final_bundle
 from .qc_result_adjudicator import adjudicate_postprocessed_qc_results
@@ -1344,6 +1345,12 @@ async def run_sichuan_workspace_batch_job(
         )
         settings = resolve_mainline_rule_decision_settings(get_settings())
         if rule_set_key == LUXIAN_0609_RULE_SET_KEY:
+            # 正式服务由路由共享并允许热重载。领取后复制客户端，保证本任务运行期间
+            # 一审、二审模型及推理参数不会被另一个请求原地改写。测试替身仍由注入方负责。
+            if isinstance(qc_service, SichuanQCService) and isinstance(
+                getattr(qc_service, "client", None), SichuanQCLLMClient
+            ):
+                qc_service = qc_service.isolated_luxian_0609_runtime()
             assert_luxian_0609_task_settings_match(
                 filters.get(LX0609_TASK_SETTINGS_FILTER_KEY), settings,
             )

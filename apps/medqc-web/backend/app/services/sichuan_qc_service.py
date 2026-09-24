@@ -408,6 +408,46 @@ class SichuanQCService:
             max_content_length=self.max_content_length,
         )
 
+    @staticmethod
+    def _client_runtime_config(client: SichuanQCLLMClient) -> Dict[str, Any]:
+        """从当前客户端复制运行参数；凭据只留在进程内，不进入任务快照。"""
+
+        return {
+            "provider_code": client.provider_code,
+            "api_endpoint": client.api_endpoint,
+            "api_key": client.api_key,
+            "model": client.model,
+            "timeout_seconds": client.timeout_seconds,
+            "allow_mock_when_unconfigured": client.allow_mock_when_unconfigured,
+            "source": client.config_source,
+            "model_role": client.model_role,
+            "adjudicator_model_source": client.adjudicator_model_source,
+            "custom_parameters": {
+                "temperature": client.temperature,
+                "top_p": client.top_p,
+                "max_tokens": client.max_tokens,
+                "enable_thinking": client.enable_thinking,
+                "thinking_budget": client.thinking_budget,
+                "reasoning_effort": client.reasoning_effort,
+                "execution_concurrency": {
+                    "max_parallel_records": client.max_parallel_records,
+                    "family_max_concurrency": client.family_max_concurrency,
+                    "http_max_concurrency": client.http_max_concurrency,
+                },
+            },
+        }
+
+    def isolated_luxian_0609_runtime(self) -> "SichuanQCService":
+        """为已领取的原始0609任务保留独立客户端，避免全局热重载串改在途模型。"""
+
+        runtime = SichuanQCService(self._client_runtime_config(self.client))
+        runtime.adjudicator_client = SichuanQCLLMClient(
+            self._client_runtime_config(self.adjudicator_client)
+        )
+        runtime.client._stats_parent = self.client
+        runtime.adjudicator_client._stats_parent = self.adjudicator_client
+        return runtime
+
     def _ensure_rule_execution_meta(self, rule: Dict[str, Any]) -> Dict[str, Any]:
         normalized = dict(rule or {})
         rule_id = str(normalized.get("rule_id") or "").strip().upper()
