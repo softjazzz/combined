@@ -9,7 +9,7 @@ D3（合并）+ D4（互斥）+ D5（主诊断）+ D6（一致性）：LLM 语�
 import re
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 from dataclasses import dataclass, field, asdict
 
 logger = logging.getLogger(__name__)
@@ -47,6 +47,7 @@ class CodingQCReport:
     rule_issues: List[CodingIssue] = field(default_factory=list)
     llm_issues: List[CodingIssue] = field(default_factory=list)
     llm_raw_output: str = ""
+    semantic_completed: bool = False
     overall_assessment: str = "通过"  # 通过 / 需修改 / 严重问题
 
     def to_dict(self) -> dict:
@@ -124,9 +125,8 @@ def _get_icd_lookup():
     try:
         from .local_icd_service import lookup_diagnosis_code, lookup_procedure_code
         return lookup_diagnosis_code, lookup_procedure_code
-    except ImportError:
-        logger.warning("无法导入 local_icd_service，编码存在性验证将跳过")
-        return None, None
+    except ImportError as exc:
+        raise RuntimeError("本地 ICD 编码查询服务不可用") from exc
 
 
 def check_diagnosis_existence(code: str, name: str = "") -> Optional[CodingIssue]:
@@ -138,9 +138,11 @@ def check_diagnosis_existence(code: str, name: str = "") -> Optional[CodingIssue
       2. 病历用上级码，库里有更精确子码 → 通过，但给 info 级推荐建议
       3. 编码库中完全找不到 → warning，按名称反查给出建议
     """
-    lookup_diag, _ = _get_icd_lookup()
-    if not lookup_diag or not code:
+    if not code:
         return None
+    lookup_diag, _ = _get_icd_lookup()
+    if not lookup_diag:
+        raise RuntimeError("本地诊断编码查询服务不可用")
 
     code = code.strip()
 
@@ -148,34 +150,35 @@ def check_diagnosis_existence(code: str, name: str = "") -> Optional[CodingIssue
         from .local_icd_service import _get_icd_data
         clinical_data, insurance_data, _, _ = _get_icd_data()
         source = clinical_data if clinical_data else insurance_data
-        if source:
-            # 先查精确匹配
-            for item in source:
-                if item['code'] == code:
-                    return None  # 精确命中，无需任何提示
+        if not source:
+            raise RuntimeError("本地诊断编码库为空")
+        # 先查精确匹配
+        for item in source:
+            if item['code'] == code:
+                return None  # 精确命中，无需任何提示
 
-            # 再查上级码匹配（库中有以 code 为前缀的更精确子码）
-            specific_candidates = [
-                item for item in source
-                if item['code'].startswith(code) and item['code'] != code
-            ]
-            if specific_candidates:
-                # 按编码长度升序，取最短（即最直接的子码）
-                specific_candidates.sort(key=lambda x: len(x['code']))
-                best = specific_candidates[0]
-                return CodingIssue(
-                    dimension="existence",
-                    severity="info",
-                    code=code,
-                    description=(
-                        f"编码 '{code}' 为上级类目码，编码库中存在更精确的子码 "
-                        f"'{best['code']}'（{best['name']}）"
-                    ),
-                    suggestion=f"建议使用更精确的编码 {best['code']}（{best['name']}），以提升编码质量",
-                    source="rule",
-                )
-    except Exception:
-        pass
+        # 再查上级码匹配（库中有以 code 为前缀的更精确子码）
+        specific_candidates = [
+            item for item in source
+            if item['code'].startswith(code) and item['code'] != code
+        ]
+        if specific_candidates:
+            # 按编码长度升序，取最短（即最直接的子码）
+            specific_candidates.sort(key=lambda x: len(x['code']))
+            best = specific_candidates[0]
+            return CodingIssue(
+                dimension="existence",
+                severity="info",
+                code=code,
+                description=(
+                    f"编码 '{code}' 为上级类目码，编码库中存在更精确的子码 "
+                    f"'{best['code']}'（{best['name']}）"
+                ),
+                suggestion=f"建议使用更精确的编码 {best['code']}（{best['name']}），以提升编码质量",
+                source="rule",
+            )
+    except Exception as exc:
+        raise RuntimeError("本地诊断编码库查验失败") from exc
 
     # 编码库中完全找不到该编码 → 按名称反查给出建议
     if name:
@@ -199,16 +202,23 @@ def check_diagnosis_existence(code: str, name: str = "") -> Optional[CodingIssue
                 source="rule",
             )
 
-    return None
-
-
+    return CodingIssue(
+        dimension="existence",
+        severity="info",
+        code=code,
+        description=f"编码 '{code}' 未在本地编码库中找到，请人工核实",
+        suggestion="请核实该编码是否正确",
+        source="rule",
+    )
 
 
 def check_procedure_existence(code: str, name: str = "") -> Optional[CodingIssue]:
     """验证手术编码是否在本地编码库中存在（编码优先正查）。"""
-    _, lookup_proc = _get_icd_lookup()
-    if not lookup_proc or not code:
+    if not code:
         return None
+    _, lookup_proc = _get_icd_lookup()
+    if not lookup_proc:
+        raise RuntimeError("本地手术编码查询服务不可用")
 
     code = code.strip()
 
@@ -216,14 +226,15 @@ def check_procedure_existence(code: str, name: str = "") -> Optional[CodingIssue
     try:
         from .local_icd_service import _get_icd_data
         _, _, icd9_data, _ = _get_icd_data()
-        if icd9_data:
-            for item in icd9_data:
-                lib_code = item['code']
-                # 精确匹配 或 库码是病历码的扩展（病历用上级码兜底）
-                if lib_code == code or lib_code.startswith(code):
-                    return None  # 编码存在，直接通过
-    except Exception:
-        pass
+        if not icd9_data:
+            raise RuntimeError("本地手术编码库为空")
+        for item in icd9_data:
+            lib_code = item['code']
+            # 精确匹配 或 库码是病历码的扩展（病历用上级码兜底）
+            if lib_code == code or lib_code.startswith(code):
+                return None  # 编码存在，直接通过
+    except Exception as exc:
+        raise RuntimeError("本地手术编码库查验失败") from exc
 
     # 2. 编码不存在 → 名称反查
     if name:
@@ -238,7 +249,14 @@ def check_procedure_existence(code: str, name: str = "") -> Optional[CodingIssue
                 source="rule",
             )
 
-    return None
+    return CodingIssue(
+        dimension="existence",
+        severity="info",
+        code=code,
+        description=f"手术编码 '{code}' 未在本地编码库中找到，请人工核实",
+        suggestion="请核实该编码是否正确",
+        source="rule",
+    )
 
 
 def _diag_code(diag: dict) -> str:
@@ -401,8 +419,8 @@ def _build_llm_user_prompt(frontpage: dict) -> str:
     if diagnoses:
         lines.append("【诊断编码】")
         for i, diag in enumerate(diagnoses):
-            code = diag.get("code") or diag.get("icd_code") or ""
-            name = diag.get("name") or diag.get("diagnosis_name") or ""
+            code = _diag_code(diag)
+            name = _diag_name(diag)
             prefix = "主诊断" if i == 0 else f"次诊断{i}"
             lines.append(f"  {prefix}：{code} {name}")
         lines.append("")
@@ -412,8 +430,8 @@ def _build_llm_user_prompt(frontpage: dict) -> str:
     if surgeries:
         lines.append("【手术操作编码】")
         for i, surg in enumerate(surgeries):
-            code = surg.get("code") or surg.get("operation_code") or ""
-            name = surg.get("name") or surg.get("operation_name") or ""
+            code = _surgery_code(surg)
+            name = _surgery_name(surg)
             prefix = "主手术" if i == 0 else f"其他手术{i}"
             lines.append(f"  {prefix}：{code} {name}")
         lines.append("")
@@ -504,9 +522,9 @@ class CodingQCEngine:
 
         # 诊断编码格式
         for diag in (frontpage.get("diagnoses") or []):
-            code = diag.get("code") or diag.get("icd_code") or ""
-            name = diag.get("name") or diag.get("diagnosis_name") or ""
-            if name and not str(code).strip():
+            code = _diag_code(diag)
+            name = _diag_name(diag)
+            if name and not code:
                 issues.append(
                     CodingIssue(
                         dimension="format",
@@ -525,9 +543,9 @@ class CodingQCEngine:
 
         # 手术编码格式
         for surg in (frontpage.get("surgeries") or []):
-            code = surg.get("code") or surg.get("operation_code") or ""
-            name = surg.get("name") or surg.get("operation_name") or ""
-            if name and not str(code).strip():
+            code = _surgery_code(surg)
+            name = _surgery_name(surg)
+            if name and not code:
                 issues.append(
                     CodingIssue(
                         dimension="format",
@@ -551,17 +569,17 @@ class CodingQCEngine:
         issues = []
 
         for diag in (frontpage.get("diagnoses") or []):
-            code = diag.get("code") or diag.get("icd_code") or ""
-            name = diag.get("name") or diag.get("diagnosis_name") or ""
-            if code and name:
+            code = _diag_code(diag)
+            name = _diag_name(diag)
+            if code:
                 issue = check_diagnosis_existence(code, name)
                 if issue:
                     issues.append(issue)
 
         for surg in (frontpage.get("surgeries") or []):
-            code = surg.get("code") or surg.get("operation_code") or ""
-            name = surg.get("name") or surg.get("operation_name") or ""
-            if code and name:
+            code = _surgery_code(surg)
+            name = _surgery_name(surg)
+            if code:
                 issue = check_procedure_existence(code, name)
                 if issue:
                     issues.append(issue)
@@ -685,21 +703,21 @@ class CodingQCEngine:
 
         return issues
 
-    async def check_semantic(self, frontpage: dict) -> tuple:
+    async def check_semantic(self, frontpage: dict) -> tuple[List[CodingIssue], str, bool]:
         """
         D3-D6：LLM 语义审查。
 
         Returns:
-            (issues: List[CodingIssue], raw_output: str)
+            (issues: List[CodingIssue], raw_output: str, completed: bool)
         """
         if not self.llm_client:
             logger.info("LLM 客户端未配置，跳过语义审查")
-            return [], ""
+            return [], "", False
 
         # 检查是否有足够的编码数据值得做语义审查
         diagnoses = frontpage.get("diagnoses") or []
         if not diagnoses:
-            return [], ""
+            return [], "", False
 
         user_prompt = _build_llm_user_prompt(frontpage)
         full_prompt = f"{CODING_QC_SYSTEM_PROMPT}\n\n{user_prompt}"
@@ -707,11 +725,23 @@ class CodingQCEngine:
         try:
             result = await self.llm_client.generate(full_prompt)
             content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+            parsed = _parse_json_from_text(content)
+            if not isinstance(parsed, dict) or not isinstance(parsed.get("issues"), list):
+                return [], content, False
+            if any(
+                not isinstance(item, dict)
+                or item.get("dimension") not in {"merge", "exclusion", "primary", "consistency", "additional"}
+                or item.get("severity") not in {"error", "warning", "info"}
+                or not isinstance(item.get("description"), str)
+                or not item["description"].strip()
+                for item in parsed["issues"]
+            ):
+                return [], content, False
             issues = _parse_llm_issues(content)
-            return issues, content
+            return issues, content, True
         except Exception as e:
             logger.error(f"LLM 语义审查失败: {e}")
-            return [], f"LLM 调用失败: {e}"
+            return [], f"LLM 调用失败: {e}", False
 
     async def run_all(self, frontpage: dict) -> CodingQCReport:
         """
@@ -725,6 +755,18 @@ class CodingQCEngine:
         """
         report = CodingQCReport()
 
+        diagnoses = frontpage.get("diagnoses") or []
+        surgeries = frontpage.get("surgeries") or []
+        if not isinstance(diagnoses, list) or not isinstance(surgeries, list):
+            raise ValueError("诊断和手术数据必须是列表")
+        if any(not isinstance(item, dict) for item in diagnoses + surgeries):
+            raise ValueError("诊断和手术条目必须是对象")
+        semantic_input_complete = all(
+            _diag_code(item) and _diag_name(item) for item in diagnoses
+        ) and all(
+            _surgery_code(item) and _surgery_name(item) for item in surgeries
+        )
+
         # --- 规则层 ---
         format_issues = self.check_format(frontpage)
         existence_issues = self.check_existence(frontpage)
@@ -732,9 +774,10 @@ class CodingQCEngine:
         report.rule_issues = format_issues + existence_issues + bidding_issues
 
         # --- LLM 层 ---
-        llm_issues, raw_output = await self.check_semantic(frontpage)
+        llm_issues, raw_output, semantic_completed = await self.check_semantic(frontpage)
         report.llm_issues = llm_issues
         report.llm_raw_output = raw_output
+        report.semantic_completed = semantic_completed and semantic_input_complete
 
         # --- 汇总 ---
         all_issues = report.rule_issues + report.llm_issues

@@ -237,6 +237,36 @@ class QCPersistenceService:
         expected_id, _ = self._defect_identity(record_id, row)
         return str(row["id"]) == expected_id
 
+    def _executed_defect_scope(
+        self, metadata: Dict[str, Any]
+    ) -> Optional[Tuple[str, set[str]]]:
+        if "executed_defect_scope" not in metadata:
+            return None
+        scope = metadata["executed_defect_scope"]
+        if scope == {"kind": "all"}:
+            return "all", set()
+        if (
+            not isinstance(scope, dict)
+            or set(scope) != {"kind", "values"}
+            or scope["kind"] not in ("rule_codes", "categories")
+            or not isinstance(scope["values"], list)
+            or any(
+                not isinstance(value, str) or not value.strip()
+                for value in scope["values"]
+            )
+        ):
+            raise ValueError("Invalid executed_defect_scope")
+        return scope["kind"], set(scope["values"])
+
+    def _matches_defect_scope(
+        self, defect: Dict[str, Any], scope: Tuple[str, set[str]]
+    ) -> bool:
+        kind, values = scope
+        if kind == "all":
+            return True
+        field = "rule_code" if kind == "rule_codes" else "category"
+        return defect.get(field) in values
+
     def _insert_defect_history(
         self,
         session: Session,
@@ -275,16 +305,28 @@ class QCPersistenceService:
         table = _table("qc", "qc_defects")
         record_id = result["record_id"]
         department = _safe_text(result["metadata"].get("department") or "")
+        executed_scope = self._executed_defect_scope(result["metadata"])
         issues = [issue for issue in result["issues"] if isinstance(issue, dict)]
+        if executed_scope is not None and any(
+            not self._matches_defect_scope(issue, executed_scope) for issue in issues
+        ):
+            raise ValueError("QC issue is outside executed_defect_scope")
         existing_rows = session.execute(
             table.select().where(table.c.record_id == record_id)
         ).mappings().all()
         existing_by_id = {str(row["id"]): dict(row) for row in existing_rows}
+        open_existing_ids = {
+            str(row["id"])
+            for row in existing_rows
+            if str(row.get("status") or "").lower() != "completed"
+        }
         active_existing_ids = {
             str(row["id"])
             for row in existing_rows
             if str(row.get("status") or "").lower() != "completed"
             and self._is_auto_owned_defect(record_id, row)
+            and executed_scope is not None
+            and self._matches_defect_scope(row, executed_scope)
         }
 
         def restrict_to_observed_owner(stmt: Update, row: Dict[str, Any]) -> Update:
@@ -304,6 +346,7 @@ class QCPersistenceService:
         created = 0
         updated = 0
         resolved = 0
+        resolved_ids: set[str] = set()
         touched_ids: set[str] = set()
         defect_ids: List[str] = []
 
@@ -395,6 +438,7 @@ class QCPersistenceService:
             if resolve_result.rowcount != 1:
                 raise RuntimeError(f"Defect {defect_id} changed during automatic QC")
             resolved += 1
+            resolved_ids.add(defect_id)
             self._insert_defect_history(
                 session,
                 defect_id=defect_id,
@@ -410,6 +454,7 @@ class QCPersistenceService:
             "resolved": resolved,
             "defect_ids": defect_ids,
             "active_count": len(touched_ids),
+            "remaining_active_count": len((open_existing_ids - resolved_ids) | touched_ids),
         }
 
     def _workflow_label(self, workflow_type: str) -> str:
@@ -437,12 +482,13 @@ class QCPersistenceService:
         notification_id = _stable_uuid("qc_notification", workflow_type, result.get("visit_id") or record_id, recipient_id)
         existing = session.execute(table.select().where(table.c.id == notification_id).limit(1)).mappings().first()
 
-        has_issues = result["defect_count"] > 0
-        if has_issues:
-            title = f"{workflow_label}发现问题"
+        remaining_active = defect_summary["remaining_active_count"]
+        current_issues = len(defect_summary["defect_ids"])
+        if remaining_active:
+            title = f"{workflow_label}发现问题" if current_issues else f"{workflow_label}仍有待处理问题"
             content = (
                 f"病历 {result.get('visit_id') or record_id} {workflow_label}完成，"
-                f"当前有 {defect_summary['active_count']} 条待处理问题。"
+                f"本次发现 {current_issues} 条问题，当前有 {remaining_active} 条未关闭缺陷。"
             )
             severity = "warning"
             is_read = False
@@ -450,8 +496,8 @@ class QCPersistenceService:
         else:
             if not existing:
                 return {"id": None, "created": False, "updated": False}
-            title = f"{workflow_label}最近一次复核已通过"
-            content = f"病历 {result.get('visit_id') or record_id} 最近一次{workflow_label}未发现问题。"
+            title = f"{workflow_label}本次执行范围未发现问题"
+            content = f"病历 {result.get('visit_id') or record_id} 本次执行范围未发现问题，当前无未关闭缺陷。"
             severity = "info"
             is_read = True
             read_at = _now_utc()

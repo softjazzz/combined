@@ -134,7 +134,18 @@ def _parse_datetime(s: Any) -> Optional[datetime]:
 
 def _get_diagnoses(fp: dict) -> list:
     """获取诊断列表。"""
-    return fp.get("diagnoses") or []
+    diagnoses = fp.get("diagnoses") or []
+    if isinstance(diagnoses, dict):
+        if "discharge_main_diagnosis_text" in diagnoses or "discharge_main_icd" in diagnoses:
+            return [{
+                "diagnosis_name": diagnoses.get("discharge_main_diagnosis_text"),
+                "diagnosis_code": diagnoses.get("discharge_main_icd"),
+                "diagnosis_type": "主诊断",
+            }]
+        raise ValueError("诊断数据必须是列表或旧版主诊断对象")
+    if not isinstance(diagnoses, list):
+        raise ValueError("诊断数据必须是列表")
+    return diagnoses
 
 
 def _get_primary_diagnosis(fp: dict) -> Optional[dict]:
@@ -1108,9 +1119,9 @@ class FrontpageFormalQC:
         for rule in rules_to_run:
             try:
                 passed = rule.validate(frontpage)
-            except Exception as e:
-                logger.warning(f"规则 {rule.rule_id} 执行异常: {e}")
-                passed = True  # 异常时默认通过（宽容策略）
+            except Exception:
+                logger.exception("规则 %s 执行异常", rule.rule_id)
+                raise
 
             msg = "" if passed else rule.message(frontpage)
             results.append(QCResult(

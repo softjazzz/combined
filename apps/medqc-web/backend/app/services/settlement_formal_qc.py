@@ -12,7 +12,7 @@
 """
 import re
 import logging
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, List, Optional
 from datetime import datetime
 from dataclasses import dataclass, field
 
@@ -966,8 +966,8 @@ class SettlementFormalQCEngine:
             try:
                 passed = rule.validate(settlement)
             except Exception as e:
-                logger.warning(f"规则 {rule.rule_id} 执行异常: {e}")
-                passed = True  # 异常时不误报
+                logger.exception("规则 %s 执行异常", rule.rule_id)
+                raise RuntimeError(f"结算清单规则 {rule.rule_id} 执行失败") from e
 
             msg = "" if passed else rule.message(settlement)
             result = SettlementQCResult(

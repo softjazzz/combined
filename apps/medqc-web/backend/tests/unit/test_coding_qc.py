@@ -5,15 +5,15 @@
 以及 D3-D6 LLM 层的 JSON 解析逻辑。
 """
 import pytest
-import asyncio
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, patch
 
 from app.services.coding_qc_service import (
     CodingQCEngine,
-    CodingIssue,
     CodingQCReport,
     check_icd10_format,
     check_icd9cm3_format,
+    check_diagnosis_existence,
+    check_procedure_existence,
     _parse_json_from_text,
     _build_llm_user_prompt,
     _parse_llm_issues,
@@ -162,6 +162,97 @@ class TestCodingQCEngineFormat:
         assert issues[0].severity == "error"
 
 
+class TestCodingExistenceAvailability:
+    @pytest.mark.parametrize("check,code,data", [
+        (check_diagnosis_existence, "I21.001", ([{"code": "I21.001", "name": "心梗"}], [], [], {})),
+        (check_procedure_existence, "36.0701", ([], [], [{"code": "36.0701", "name": "支架"}], {})),
+    ])
+    def test_nameless_known_code_is_checked(self, check, code, data):
+        with patch("app.services.local_icd_service._get_icd_data", return_value=data):
+            assert check(code) is None
+
+    @pytest.mark.parametrize("check,code,data", [
+        (check_diagnosis_existence, "J99.999", ([{"code": "I21.001", "name": "心梗"}], [], [], {})),
+        (check_procedure_existence, "99.999", ([], [], [{"code": "36.0701", "name": "支架"}], {})),
+    ])
+    def test_nameless_unknown_code_returns_issue_without_invented_name(self, check, code, data):
+        with patch("app.services.local_icd_service._get_icd_data", return_value=data):
+            issue = check(code)
+        assert issue is not None
+        assert issue.dimension == "existence"
+        assert issue.code == code
+        assert code in issue.description
+        assert "请人工核实" in issue.description
+
+    def test_no_code_does_not_need_icd_library(self):
+        with patch.dict("sys.modules", {"app.services.local_icd_service": None}):
+            assert check_diagnosis_existence("") is None
+            assert check_procedure_existence("") is None
+
+    @pytest.mark.parametrize("check,code", [
+        (check_diagnosis_existence, "I21.001"),
+        (check_procedure_existence, "36.0701"),
+    ])
+    def test_import_failure_fails_closed(self, check, code):
+        with patch.dict("sys.modules", {"app.services.local_icd_service": None}):
+            with pytest.raises(RuntimeError, match="查询服务不可用"):
+                check(code, "测试")
+
+    @pytest.mark.parametrize("check,code", [
+        (check_diagnosis_existence, "I21.001"),
+        (check_procedure_existence, "36.0701"),
+    ])
+    def test_empty_icd_data_fails_closed(self, check, code):
+        with patch("app.services.local_icd_service._get_icd_data", return_value=([], [], [], {})):
+            with pytest.raises(RuntimeError, match="编码库查验失败"):
+                check(code, "测试")
+
+    @pytest.mark.parametrize("check,code", [
+        (check_diagnosis_existence, "I21.001"),
+        (check_procedure_existence, "36.0701"),
+    ])
+    def test_icd_load_error_fails_closed(self, check, code):
+        with patch("app.services.local_icd_service._get_icd_data", side_effect=OSError("数据不可读")):
+            with pytest.raises(RuntimeError, match="编码库查验失败"):
+                check(code, "测试")
+
+    @pytest.mark.asyncio
+    async def test_run_all_does_not_return_report_without_icd_data(self):
+        with patch("app.services.local_icd_service._get_icd_data", return_value=([], [], [], {})):
+            with pytest.raises(RuntimeError, match="诊断编码库查验失败"):
+                await CodingQCEngine(llm_client=None).run_all({
+                    "diagnoses": [{"code": "I21.001", "name": "心梗"}]
+                })
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("frontpage,expected", [
+        ({"diagnoses": [{"code": "I21.001"}]}, "诊断编码库查验失败"),
+        ({"surgeries": [{"code": "36.0701"}]}, "手术编码库查验失败"),
+    ])
+    async def test_nameless_code_does_not_skip_failed_icd_lookup(self, frontpage, expected):
+        with patch("app.services.local_icd_service._get_icd_data", return_value=([], [], [], {})):
+            with pytest.raises(RuntimeError, match=expected):
+                await CodingQCEngine(llm_client=None).run_all(frontpage)
+
+    @pytest.mark.asyncio
+    async def test_run_all_checks_nameless_codes_and_supported_aliases(self):
+        data = (
+            [{"code": "I21.001", "name": "心梗"}],
+            [],
+            [{"code": "36.0701", "name": "支架"}],
+            {},
+        )
+        with patch("app.services.local_icd_service._get_icd_data", return_value=data):
+            report = await CodingQCEngine(llm_client=None).run_all({
+                "diagnoses": [{"diagnosis_code": "J99.999"}],
+                "surgeries": [{"procedure_code": "99.999"}],
+            })
+        assert {(issue.dimension, issue.code) for issue in report.rule_issues} == {
+            ("existence", "J99.999"),
+            ("existence", "99.999"),
+        }
+
+
 # ============================================================
 # LLM 输出解析测试
 # ============================================================
@@ -239,6 +330,14 @@ class TestPromptBuilder:
         prompt = _build_llm_user_prompt({"sex": "女"})
         assert "女" in prompt
 
+    def test_supported_code_aliases_enter_semantic_prompt(self):
+        prompt = _build_llm_user_prompt({
+            "diagnoses": [{"diagnosis_code": "I21.001", "diagnosis_name": "心梗"}],
+            "surgeries": [{"procedure_code": "36.0701", "procedure_name": "支架植入"}],
+        })
+        assert "I21.001 心梗" in prompt
+        assert "36.0701 支架植入" in prompt
+
 
 # ============================================================
 # run_all 集成测试（Mock LLM）
@@ -262,6 +361,7 @@ class TestCodingQCEngineRunAll:
         assert report.total_issues >= 1
         assert report.errors >= 1
         assert report.overall_assessment == "严重问题"
+        assert report.semantic_completed is False
 
     @pytest.mark.asyncio
     async def test_run_all_with_mock_llm(self):
@@ -286,6 +386,88 @@ class TestCodingQCEngineRunAll:
         assert report.total_issues >= 1
         assert len(report.llm_issues) == 1
         assert report.llm_issues[0].source == "llm"
+        assert report.semantic_completed is True
+
+    @pytest.mark.asyncio
+    async def test_empty_semantic_issues_still_completed(self):
+        mock_llm = AsyncMock()
+        mock_llm.generate.return_value = {
+            "choices": [{"message": {"content": '{"issues": []}'}}]
+        }
+        report = await CodingQCEngine(llm_client=mock_llm).run_all(
+            {"diagnoses": [{"code": "I21.001", "name": "心梗"}]}
+        )
+        assert report.llm_issues == []
+        assert report.semantic_completed is True
+        assert "semantic_completed" not in report.to_dict()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("frontpage", [
+        {"diagnoses": [{}]},
+        {"diagnoses": [{"code": "I21.001"}]},
+        {"diagnoses": [{"name": "心梗"}]},
+        {"diagnoses": [{"code": "I21.001", "name": "心梗"}], "surgeries": [{}]},
+        {"diagnoses": [{"code": "I21.001", "name": "心梗"}], "surgeries": [{"code": "36.0701"}]},
+        {"diagnoses": [{"code": "I21.001", "name": "心梗"}], "surgeries": [{"name": "支架植入"}]},
+    ])
+    async def test_incomplete_coding_item_cannot_complete_semantic_scope(self, frontpage):
+        mock_llm = AsyncMock()
+        mock_llm.generate.return_value = {
+            "choices": [{"message": {"content": '{"issues": []}'}}]
+        }
+        report = await CodingQCEngine(llm_client=mock_llm).run_all(frontpage)
+        assert report.semantic_completed is False
+        assert report.llm_issues == []
+        if any(item.get("name") and not item.get("code") for item in frontpage["diagnoses"]):
+            assert any(issue.dimension == "format" for issue in report.rule_issues)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("frontpage", [
+        {"diagnoses": [None]},
+        {"diagnoses": ["I21.001"]},
+        {"diagnoses": [{"code": "I21.001", "name": "心梗"}], "surgeries": [None]},
+    ])
+    async def test_non_object_coding_item_aborts_run(self, frontpage):
+        mock_llm = AsyncMock()
+        with pytest.raises(ValueError, match="条目必须是对象"):
+            await CodingQCEngine(llm_client=mock_llm).run_all(frontpage)
+        mock_llm.generate.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("content", [
+        "", "not json", "{}", '{"issues": null}', '{"issues": {}}',
+        '{"issues": [{}]}', '{"issues": [1]}',
+        '{"issues": [{"dimension": "merge", "severity": "warning", "description": "问题"}, null]}',
+        '{"issues": [{"dimension": "garbage", "severity": "warning", "description": "问题"}]}',
+        '{"issues": [{"dimension": "merge", "severity": "garbage", "description": "问题"}]}',
+    ])
+    async def test_invalid_semantic_output_not_completed(self, content):
+        mock_llm = AsyncMock()
+        mock_llm.generate.return_value = {
+            "choices": [{"message": {"content": content}}]
+        }
+        report = await CodingQCEngine(llm_client=mock_llm).run_all(
+            {"diagnoses": [{"code": "I21.001", "name": "心梗"}]}
+        )
+        assert report.llm_issues == []
+        assert report.semantic_completed is False
+
+    @pytest.mark.asyncio
+    async def test_semantic_call_failure_not_completed(self):
+        mock_llm = AsyncMock()
+        mock_llm.generate.side_effect = RuntimeError("LLM unavailable")
+        report = await CodingQCEngine(llm_client=mock_llm).run_all(
+            {"diagnoses": [{"code": "I21.001", "name": "心梗"}]}
+        )
+        assert report.llm_issues == []
+        assert report.semantic_completed is False
+
+    @pytest.mark.asyncio
+    async def test_no_diagnosis_skips_semantic(self):
+        mock_llm = AsyncMock()
+        report = await CodingQCEngine(llm_client=mock_llm).run_all({})
+        mock_llm.generate.assert_not_awaited()
+        assert report.semantic_completed is False
 
     @pytest.mark.asyncio
     async def test_run_all_empty_frontpage(self):

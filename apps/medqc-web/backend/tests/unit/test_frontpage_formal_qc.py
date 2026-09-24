@@ -8,7 +8,6 @@ import pytest
 from app.services.frontpage_formal_qc import (
     FrontpageFormalQC,
     QCRule,
-    QCResult,
     QCReport,
     Severity,
     Category,
@@ -75,6 +74,41 @@ class TestEngineBasics:
         assert hasattr(report, "passed")
         assert hasattr(report, "failed")
         assert hasattr(report, "results")
+
+    def test_rule_exception_does_not_become_passed_result(self):
+        engine = FrontpageFormalQC()
+
+        def fail_rule(_frontpage):
+            raise RuntimeError("rule unavailable")
+
+        engine.rules = [QCRule(
+            rule_id="FQ-EXCEPTION",
+            field_name="patient_name",
+            rule_name="测试异常规则",
+            description="测试异常不得伪装通过",
+            severity=Severity.ERROR,
+            category=Category.REQUIRED,
+            validate=fail_rule,
+            message=lambda _frontpage: "缺少患者姓名",
+        )]
+
+        with pytest.raises(RuntimeError, match="rule unavailable"):
+            engine.validate(_make_frontpage())
+
+    def test_legacy_main_diagnosis_object_executes_rules(self):
+        engine = FrontpageFormalQC()
+        report = engine.validate({
+            "patient_name": "张三",
+            "diagnoses": {
+                "discharge_main_diagnosis_text": "肺炎",
+                "discharge_main_icd": "J18.9",
+            },
+        })
+        assert report.total_rules == len(engine.rules)
+
+    def test_unknown_diagnosis_object_does_not_pass_silently(self):
+        with pytest.raises(ValueError, match="诊断数据必须是列表"):
+            FrontpageFormalQC().validate({"diagnoses": {"unknown": "value"}})
 
     def test_valid_frontpage_passes_all(self):
         """一份合法首页应该通过绝大多数规则（至少通过必填类规则）。"""

@@ -121,6 +121,10 @@ def _build_formal_qc_persistence_result(
         "trigger_source": "workstation_v4",
         "categories": payload.get("categories") or [],
         "severities": payload.get("severities") or [],
+        "executed_defect_scope": {
+            "kind": "rule_codes",
+            "values": [result.rule_id for result in report.results],
+        },
     }
     return {
         "record_id": f"frontpage::{visit_id or patient_id or uuid.uuid4().hex[:8]}",
@@ -142,7 +146,9 @@ def _build_formal_qc_persistence_result(
     }
 
 
-def _build_coding_qc_persistence_result(payload: Dict[str, Any], report: Dict[str, Any]) -> Dict[str, Any]:
+def _build_coding_qc_persistence_result(
+    payload: Dict[str, Any], report: Dict[str, Any], semantic_completed: bool = False
+) -> Dict[str, Any]:
     patient_id = str(payload.get("patient_id") or "")
     visit_id = str(payload.get("visit_id") or "")
     frontpage = payload.get("frontpage") if isinstance(payload.get("frontpage"), dict) else {}
@@ -160,6 +166,16 @@ def _build_coding_qc_persistence_result(payload: Dict[str, Any], report: Dict[st
         if isinstance(item, dict)
     )
     overall_score = max(0.0, 100.0 - min(total_issues, 20) * 5.0)
+    metadata = {
+        "workflow_type": "coding",
+        "patient_id": patient_id,
+        "visit_id": visit_id,
+        "department": "",
+        "data_source": "coding_qc",
+        "trigger_source": "workstation_v4",
+    }
+    if semantic_completed:
+        metadata["executed_defect_scope"] = {"kind": "all"}
     return {
         "record_id": f"coding::{visit_id or patient_id or uuid.uuid4().hex[:8]}",
         "workflow_type": "coding",
@@ -169,14 +185,7 @@ def _build_coding_qc_persistence_result(payload: Dict[str, Any], report: Dict[st
         "overall_grade": _grade_from_score(overall_score),
         "defect_count": len(issues),
         "issues": issues,
-        "metadata": {
-            "workflow_type": "coding",
-            "patient_id": patient_id,
-            "visit_id": visit_id,
-            "department": "",
-            "data_source": "coding_qc",
-            "trigger_source": "workstation_v4",
-        },
+        "metadata": metadata,
         "analysis_engine": "coding-qc",
         "analysis_date": datetime.utcnow().isoformat() + "Z",
     }
@@ -957,7 +966,9 @@ async def check_coding_qc(
             else:
                 report = await engine.run_all(frontpage)
         report_dict = report.to_dict()
-        persistence_result = _build_coding_qc_persistence_result(payload, report_dict)
+        persistence_result = _build_coding_qc_persistence_result(
+            payload, report_dict, semantic_completed=report.semantic_completed
+        )
         persistence = await default_qc_persistence_service.persist_analysis(
             persistence_result,
             actor=current_user,
