@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AxiosHeaders, type AxiosResponse } from 'axios'
 import { ApiService } from '@/services/apiService'
-import { assignTask, createTaskQcRun, getTaskAssigneeOptions, getTaskDetail, getTaskList, getTaskQcRuns, getTaskRuleSets, getTaskStats, getTaskTodoStats, updateTask } from '@/api/tasks'
+import { assignTask, createTaskQcRun, getTaskAssigneeOptions, getTaskDetail, getTaskList, getTaskQcRuns, getTaskRuleSets, getTaskStats, getTaskTodoStats, startTaskRecord, updateTask } from '@/api/tasks'
 
 vi.mock('@/services/apiService', () => ({ ApiService: { requestRaw: vi.fn() } }))
 
@@ -96,6 +96,15 @@ describe('任务统计 API', () => {
     await createTaskQcRun('task/1', 'all')
     expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
       method: 'POST', url: '/api/v1/tasks/task%2F1/qc-runs?scope=all',
+    })
+  })
+
+  it('单病历开始处理编码任务和关联 ID，并保留服务端确认字段', async () => {
+    const started = { task_id: 'task/1', task_record_id: 'record/甲', status: 'in_progress', idempotent: true }
+    vi.mocked(ApiService.requestRaw).mockResolvedValueOnce(response(started))
+    await expect(startTaskRecord('task/1', 'record/甲')).resolves.toMatchObject({ success: true, data: started })
+    expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
+      method: 'POST', url: '/api/v1/tasks/task%2F1/records/record%2F%E7%94%B2/start',
     })
   })
 

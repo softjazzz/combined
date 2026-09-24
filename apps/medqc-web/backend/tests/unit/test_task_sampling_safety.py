@@ -2,6 +2,7 @@
 
 from types import SimpleNamespace
 from datetime import date, datetime, timedelta, timezone
+import random
 
 import pytest
 from fastapi import FastAPI
@@ -132,6 +133,43 @@ def active_row(hospital, patient, visit, admitted="2026-09-01", department="内�
         "admission_time": datetime.fromisoformat(admitted),
         "department": department,
     }
+
+
+def test_stratified_count_reallocates_unfilled_department_quota():
+    candidates = [{"id": "a", "department": "甲"}] + [
+        {"id": f"b-{index}", "department": "乙"} for index in range(4)
+    ]
+    sampled = TaskSamplingService()._sample_by_count(candidates, {"total": 4, "by_department": True})
+    assert len(sampled) == 4
+    assert len({record["id"] for record in sampled}) == 4
+    assert {record["id"] for record in sampled} <= {record["id"] for record in candidates}
+    assert sum(record["department"] == "甲" for record in sampled) == 1
+
+
+def test_stratified_count_does_not_always_take_first_departments(monkeypatch):
+    fixed_random = random.Random(20260924)
+    monkeypatch.setattr("app.services.task_sampling_service.random.sample", fixed_random.sample)
+    candidates = [{"id": str(index), "department": str(index)} for index in range(8)]
+    selected = [
+        tuple(record["department"] for record in TaskSamplingService()._sample_by_count(
+            candidates, {"total": 2, "by_department": True}
+        ))
+        for _ in range(30)
+    ]
+    assert all(len(set(group)) == 2 for group in selected)
+    assert len(set(selected)) > 1
+    assert any("0" not in group for group in selected)
+
+
+@pytest.mark.asyncio
+async def test_scene_count_rejects_non_boolean_by_department_before_source_read(monkeypatch):
+    calls = active_source(monkeypatch, [active_row("H1", "P1", "V1")])
+    with pytest.raises(ValueError, match="按科室抽样参数必须为布尔值"):
+        await TaskSamplingService().sample({
+            "scene": "running", "sampling_method": "count",
+            "sampling_config": {"case_scope": "active", "total": 1, "by_department": "false"},
+        })
+    assert calls == []
 
 
 @pytest.mark.asyncio

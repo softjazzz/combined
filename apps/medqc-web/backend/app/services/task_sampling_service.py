@@ -267,6 +267,8 @@ class TaskSamplingService:
                 total = config.get("total", 50)
                 if isinstance(total, bool) or not isinstance(total, int) or total <= 0:
                     raise ValueError("抽样数量必须为正整数")
+                if not isinstance(config.get("by_department", False), bool):
+                    raise ValueError("按科室抽样参数必须为布尔值")
             if method == "percentage":
                 percentage = config.get("percentage", 10)
                 if isinstance(percentage, bool) or not isinstance(percentage, (int, float)) or not 0 < percentage <= 100:
@@ -405,13 +407,24 @@ class TaskSamplingService:
         if not groups:
             return []
 
-        per_group = max(1, total // len(groups))
-        remainder = total % len(groups)
+        target = min(total, len(candidates))
+        counts = {group: 0 for group in groups}
+        remaining = target
+        while remaining:
+            eligible = [group for group, records in groups.items() if counts[group] < len(records)]
+            quotient, remainder = divmod(remaining, len(eligible))
+            if quotient:
+                for group in eligible:
+                    added = min(quotient, len(groups[group]) - counts[group])
+                    counts[group] += added
+                    remaining -= added
+            if remainder and remaining:
+                eligible = [group for group in eligible if counts[group] < len(groups[group])]
+                for group in random.sample(eligible, min(remainder, len(eligible))):
+                    counts[group] += 1
+                    remaining -= 1
 
         sampled = []
-        for i, (group_name, group_records) in enumerate(groups.items()):
-            count = per_group + (1 if i < remainder else 0)
-            count = min(count, len(group_records))
-            sampled.extend(random.sample(group_records, count))
-
-        return sampled[:total]
+        for group, records in groups.items():
+            sampled.extend(random.sample(records, counts[group]))
+        return sampled

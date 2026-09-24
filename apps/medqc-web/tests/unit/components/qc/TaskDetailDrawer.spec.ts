@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   getTaskQcRuns: vi.fn(),
   getTaskQcRunRecordResult: vi.fn(),
   createTaskQcRun: vi.fn(),
+  startTaskRecord: vi.fn(),
   getSichuanWorkspaceBatchJob: vi.fn(),
   user: { id: 'creator' },
 }))
@@ -35,6 +36,7 @@ vi.mock('@/api/tasks', () => ({
   getTaskQcRuns: mocks.getTaskQcRuns,
   getTaskQcRunRecordResult: mocks.getTaskQcRunRecordResult,
   createTaskQcRun: mocks.createTaskQcRun,
+  startTaskRecord: mocks.startTaskRecord,
 }))
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ user: mocks.user }) }))
 vi.mock('@/services/sichuan-rule-workspace-service', () => ({
@@ -152,6 +154,10 @@ function record(overrides: Record<string, unknown> = {}) {
   }
 }
 
+function modernRecord(overrides: Record<string, unknown> = {}) {
+  return record({ institute_id: 'H1', patient_id: 'P1', visit_id: 'V1', assignee_id: 'creator', ...overrides })
+}
+
 function mountDrawer(
   props: { open?: boolean; taskId?: string | null; tab?: 'all' | 'created' | 'received' } = {},
   options: { realTable?: boolean } = {},
@@ -168,7 +174,7 @@ function mountDrawer(
         'a-button': ButtonStub,
         'a-drawer': DrawerStub,
         'a-empty': { template: '<div data-testid="empty"><slot />{{ $attrs.description }}</div>' },
-        'a-input': options.realTable ? InputStub : true,
+        'a-input': InputStub,
         'a-select': options.realTable ? false : true,
         'a-skeleton': true,
         'a-table': options.realTable ? false : TableStub,
@@ -185,6 +191,7 @@ describe('TaskDetailDrawer', () => {
     mocks.getTaskQcRuns.mockReset()
     mocks.getTaskQcRunRecordResult.mockReset()
     mocks.createTaskQcRun.mockReset()
+    mocks.startTaskRecord.mockReset()
     mocks.getSichuanWorkspaceBatchJob.mockReset()
     mocks.getTaskDetail.mockResolvedValue(detailResponse('任务甲', [record()]))
     mocks.getTaskQcRuns.mockResolvedValue({ success: true, data: [] })
@@ -850,5 +857,129 @@ describe('TaskDetailDrawer', () => {
     await wrapper.get('[data-testid="task-record-result-association-1"]').trigger('click')
     await flushPromises()
     expect(wrapper.get('[data-testid="task-record-qc-result"]').text()).toContain(expected)
+  })
+
+  it('仅已受领且有三坐标的 pending 病历显示开始处理，不把完成的质控作业当成人工完成', async () => {
+    mocks.getTaskDetail.mockResolvedValueOnce(detailResponse('现代任务', [modernRecord()], { scene: 'running' }))
+    const wrapper = mountDrawer({ tab: 'received' })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="task-record-start-association-1"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('未处理')
+    expect(mocks.startTaskRecord).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['全部页', 'all' as const, modernRecord(), { scene: 'running' }],
+    ['创建页', 'created' as const, modernRecord(), { scene: 'running' }],
+    ['他人病历', 'received' as const, modernRecord({ assignee_id: 'other' }), { scene: 'running' }],
+    ['已处理中', 'received' as const, modernRecord({ status: 'in_progress' }), { scene: 'running' }],
+    ['任务未开始', 'received' as const, modernRecord(), { scene: 'running', status: 'assigned' }],
+    ['旧任务', 'received' as const, modernRecord(), {}],
+    ['缺病例坐标', 'received' as const, modernRecord({ visit_id: null }), { scene: 'running' }],
+    ['关联任务不符', 'received' as const, modernRecord({ task_id: 'other' }), { scene: 'running' }],
+  ])('%s 不允许单病历开始处理', async (_reason, tab, item, taskOverrides) => {
+    mocks.getTaskDetail.mockResolvedValueOnce(detailResponse('受限任务', [item], taskOverrides))
+    const wrapper = mountDrawer({ tab })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="task-record-start-association-1"]').exists()).toBe(false)
+  })
+
+  it('成功后只读复查身份和状态，保留当前筛选与运行批次', async () => {
+    mocks.getTaskDetail.mockResolvedValueOnce(detailResponse('现代任务', [modernRecord()], { scene: 'running' }))
+      .mockResolvedValueOnce(detailResponse('现代任务', [modernRecord({ status: 'in_progress' })], { scene: 'running' }))
+    mocks.getTaskQcRuns.mockResolvedValueOnce({ success: true, data: [
+      { task_id: 'task-1', run_number: 1, job_id: 'job-1', run_scope: 'assigned', triggered_by: 'creator', created_at: '2026-09-22' },
+    ] })
+    mocks.startTaskRecord.mockResolvedValueOnce({ success: true, data: {
+      task_id: 'task-1', task_record_id: 'association-1', status: 'in_progress',
+    } })
+    const wrapper = mountDrawer({ tab: 'received' })
+    await flushPromises()
+    await wrapper.get('[data-testid="task-detail-keyword"]').setValue('H1')
+    await wrapper.get('[data-testid="task-record-start-association-1"]').trigger('click')
+    await flushPromises()
+    expect(mocks.startTaskRecord).toHaveBeenCalledOnce()
+    expect(mocks.getTaskDetail).toHaveBeenLastCalledWith('task-1', { tab: 'received' })
+    expect(wrapper.text()).toContain('处理中')
+    expect(wrapper.find('[data-testid="task-record-start-association-1"]').exists()).toBe(false)
+    expect((wrapper.get('[data-testid="task-detail-keyword"]').element as HTMLInputElement).value).toBe('H1')
+    expect(wrapper.find('[data-testid="task-run-1"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="task-qc-job"]').exists()).toBe(true)
+  })
+
+  it('请求未完成时阻止重复点击，服务失败保留可信详情并允许重试', async () => {
+    mocks.getTaskDetail.mockResolvedValueOnce(detailResponse('现代任务', [modernRecord()], { scene: 'running' }))
+      .mockResolvedValueOnce(detailResponse('现代任务', [modernRecord()], { scene: 'running' }))
+    const pending = deferred<{ success: boolean; message: string }>()
+    mocks.startTaskRecord.mockReturnValueOnce(pending.promise)
+    const wrapper = mountDrawer({ tab: 'received' })
+    await flushPromises()
+    await wrapper.get('[data-testid="task-record-start-association-1"]').trigger('click')
+    await wrapper.get('[data-testid="task-record-start-association-1"]').trigger('click')
+    expect(mocks.startTaskRecord).toHaveBeenCalledTimes(1)
+    pending.resolve({ success: false, message: '无权开始' })
+    await flushPromises()
+    expect(wrapper.text()).toContain('无权开始')
+    expect(wrapper.text()).toContain('病历尚未开始，可重试')
+    expect(wrapper.text()).toContain('现代任务')
+    expect(wrapper.find('[data-testid="task-record-start-association-1"]').exists()).toBe(true)
+  })
+
+  it('提交已生效但响应丢失时只读复查，不重复开始处理', async () => {
+    mocks.getTaskDetail.mockResolvedValueOnce(detailResponse('现代任务', [modernRecord()], { scene: 'running' }))
+      .mockResolvedValueOnce(detailResponse('现代任务', [modernRecord({ status: 'in_progress' })], { scene: 'running' }))
+    mocks.startTaskRecord.mockResolvedValueOnce({ success: false, message: '请求超时' })
+    const wrapper = mountDrawer({ tab: 'received' })
+    await flushPromises()
+    await wrapper.get('[data-testid="task-record-start-association-1"]').trigger('click')
+    await flushPromises()
+    expect(mocks.startTaskRecord).toHaveBeenCalledTimes(1)
+    expect(mocks.getTaskDetail).toHaveBeenCalledTimes(2)
+    expect(wrapper.text()).toContain('处理中')
+    expect(wrapper.find('[data-testid="task-record-start-association-1"]').exists()).toBe(false)
+  })
+
+  it('响应身份错配不伪造成功；复查确认仍未处理后才允许重试', async () => {
+    mocks.getTaskDetail.mockResolvedValueOnce(detailResponse('现代任务', [modernRecord()], { scene: 'running' }))
+      .mockResolvedValueOnce(detailResponse('现代任务', [modernRecord()], { scene: 'running' }))
+      .mockResolvedValueOnce(detailResponse('现代任务', [modernRecord({ status: 'in_progress' })], { scene: 'running' }))
+    mocks.startTaskRecord.mockResolvedValueOnce({ success: true, data: {
+      task_id: 'other-task', task_record_id: 'association-1', status: 'in_progress',
+    } }).mockResolvedValueOnce({ success: true, data: {
+      task_id: 'task-1', task_record_id: 'association-1', status: 'in_progress',
+    } })
+    const wrapper = mountDrawer({ tab: 'received' })
+    await flushPromises()
+    await wrapper.get('[data-testid="task-record-start-association-1"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('响应身份或状态校验失败')
+    expect(wrapper.find('[data-testid="task-record-start-association-1"]').exists()).toBe(false)
+    await wrapper.get('[data-testid="task-record-verify-association-1"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('病历尚未开始，可重试')
+    expect(mocks.startTaskRecord).toHaveBeenCalledTimes(1)
+    await wrapper.get('[data-testid="task-record-start-association-1"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('处理中')
+    expect(wrapper.find('[data-testid="task-record-verify-association-1"]').exists()).toBe(false)
+    expect(mocks.startTaskRecord).toHaveBeenCalledTimes(2)
+  })
+
+  it('切换任务后忽略旧启动响应和旧复查，不污染新任务', async () => {
+    mocks.getTaskDetail.mockResolvedValueOnce(detailResponse('旧任务', [modernRecord()], { scene: 'running' }))
+      .mockResolvedValueOnce(detailResponse('新任务', [modernRecord({ id: 'association-2', task_id: 'task-2' })], { id: 'task-2', scene: 'running' }))
+    const pending = deferred<{ success: boolean; data: { task_id: string; task_record_id: string; status: string } }>()
+    mocks.startTaskRecord.mockReturnValueOnce(pending.promise)
+    const wrapper = mountDrawer({ tab: 'received' })
+    await flushPromises()
+    await wrapper.get('[data-testid="task-record-start-association-1"]').trigger('click')
+    await wrapper.setProps({ taskId: 'task-2' })
+    await flushPromises()
+    pending.resolve({ success: true, data: { task_id: 'task-1', task_record_id: 'association-1', status: 'in_progress' } })
+    await flushPromises()
+    expect(wrapper.text()).toContain('新任务')
+    expect(wrapper.text()).not.toContain('旧任务')
+    expect(wrapper.find('[data-testid="task-record-start-association-2"]').exists()).toBe(true)
+    expect(mocks.getTaskDetail).toHaveBeenCalledTimes(2)
   })
 })

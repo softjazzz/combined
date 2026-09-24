@@ -6,9 +6,11 @@ from importlib import import_module
 from types import SimpleNamespace
 
 import pytest
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException
+from fastapi.testclient import TestClient
 from pydantic import ValidationError
 from sqlalchemy import DateTime, MetaData, String, Table, Column, create_engine, event, select
+from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 from starlette.requests import Request
@@ -31,8 +33,10 @@ def task_db(monkeypatch):
     )
     records = Table(
         "qc_task_records", metadata,
+        Column("id", String, primary_key=True),
         Column("task_id", String, nullable=False),
         Column("assignee_id", String),
+        Column("status", String, nullable=False),
     )
     metadata.create_all(engine)
     factory = sessionmaker(bind=engine)
@@ -42,18 +46,118 @@ def task_db(monkeypatch):
         with factory.begin() as session:
             session.execute(tasks.insert().values(id="task-1", status=status))
             if assignee is not None:
-                session.execute(records.insert().values(task_id="task-1", assignee_id=assignee))
+                session.execute(records.insert().values(id="record-1", task_id="task-1", assignee_id=assignee, status="pending"))
 
     def current():
         with factory() as session:
             return session.execute(select(tasks.c.status)).scalar_one()
 
-    yield SimpleNamespace(engine=engine, tasks=tasks, factory=factory, seed=seed, current=current)
+    yield SimpleNamespace(engine=engine, tasks=tasks, records=records, factory=factory, seed=seed, current=current)
     engine.dispose()
 
 
 def start(actor="qc-1"):
     return service.start_assigned_task(task_id="task-1", actor_id=actor)
+
+
+def start_record(actor="qc-1", record_id="record-1"):
+    return service.start_assigned_task_record(
+        task_id="task-1", task_record_id=record_id, actor_id=actor
+    )
+
+
+def record_state(task_db):
+    with task_db.factory() as session:
+        return session.execute(select(task_db.records.c.status)).scalar_one()
+
+
+def test_assignee_starts_record_and_replay_is_idempotent(task_db):
+    task_db.seed(status="in_progress")
+    first = start_record()
+    assert first == {"task_id": "task-1", "task_record_id": "record-1", "status": "in_progress", "idempotent": False}
+    assert record_state(task_db) == "in_progress"
+    replay = start_record()
+    assert replay["idempotent"] is True
+    assert task_db.current() == "in_progress"
+
+
+def test_record_start_is_scoped_to_task_and_assignee(task_db):
+    task_db.seed(status="in_progress")
+    with pytest.raises(service.TaskStartForbidden):
+        start_record(actor="stranger")
+    with pytest.raises(service.TaskStartNotFound):
+        start_record(record_id="missing")
+    with pytest.raises(service.TaskStartNotFound):
+        service.start_assigned_task_record(task_id="missing", task_record_id="record-1", actor_id="qc-1")
+    assert record_state(task_db) == "pending"
+
+
+@pytest.mark.parametrize("actor_id", ["", "   ", "a" * 65])
+def test_record_start_rejects_invalid_actor_before_database_access(task_db, actor_id):
+    task_db.seed(status="in_progress", assignee=actor_id)
+    with pytest.raises(service.TaskStartForbidden):
+        start_record(actor=actor_id)
+    assert record_state(task_db) == "pending"
+
+
+@pytest.mark.parametrize("task_status", ["draft", "assigned", "cancelled", "completed"])
+def test_record_start_rejects_task_not_in_progress(task_db, task_status):
+    task_db.seed(status=task_status)
+    with pytest.raises(service.TaskStartConflict):
+        start_record()
+    assert record_state(task_db) == "pending"
+
+
+@pytest.mark.parametrize("record_status", ["completed", "skipped"])
+def test_record_start_rejects_other_record_states(task_db, record_status):
+    task_db.seed(status="in_progress")
+    with task_db.factory.begin() as session:
+        session.execute(task_db.records.update().values(status=record_status))
+    with pytest.raises(service.TaskStartConflict):
+        start_record()
+    assert record_state(task_db) == record_status
+
+
+def test_record_start_zero_row_cas_cannot_report_success(task_db, monkeypatch):
+    task_db.seed(status="in_progress")
+
+    class ZeroRowSession(Session):
+        def execute(self, statement, *args, **kwargs):
+            if statement.is_update:
+                return SimpleNamespace(rowcount=0)
+            return super().execute(statement, *args, **kwargs)
+
+    monkeypatch.setattr(service, "SessionLocal", sessionmaker(bind=task_db.engine, class_=ZeroRowSession))
+    with pytest.raises(service.TaskStartConflict):
+        start_record()
+    assert record_state(task_db) == "pending"
+
+
+def test_record_start_database_error_rolls_back(task_db):
+    task_db.seed(status="in_progress")
+
+    def fail_after_update(conn, cursor, statement, parameters, context, executemany):
+        if statement.lstrip().upper().startswith("UPDATE") and "qc_task_records" in statement:
+            raise RuntimeError("private database detail")
+
+    event.listen(task_db.engine, "after_cursor_execute", fail_after_update)
+    try:
+        with pytest.raises(RuntimeError, match="private database detail"):
+            start_record()
+    finally:
+        event.remove(task_db.engine, "after_cursor_execute", fail_after_update)
+    assert record_state(task_db) == "pending"
+
+
+def test_record_start_statement_compiles_for_sqlite_and_postgres():
+    statement = service._record_start_update("task-1", "record-1", "qc-1")
+    for dialect in (sqlite.dialect(), postgresql.dialect()):
+        sql = str(statement.compile(dialect=dialect))
+        assert "qc_task_records" in sql
+        assert "EXISTS" in sql
+        assert "qc_tasks" in sql
+    lock_sql = str(service._task_start_lock("task-1").compile(dialect=postgresql.dialect()))
+    assert "FOR UPDATE" in lock_sql
 
 
 def test_assignee_starts_and_replay_is_idempotent(task_db):
@@ -221,4 +325,98 @@ def test_route_uses_read_permission_and_audits_success_without_lifespan(monkeypa
     with pytest.raises(HTTPException) as raised:
         asyncio.run(task_router.update_task(**kwargs))
     assert raised.value.status_code == 403
+    assert len(called) == 1
+
+
+@pytest.mark.parametrize("error, status", [
+    (service.TaskStartNotFound("missing"), 404),
+    (service.TaskStartForbidden("other user"), 403),
+    (service.TaskStartConflict("wrong state"), 409),
+    (RuntimeError("private database detail"), 503),
+])
+def test_record_start_route_maps_errors_without_lifespan(monkeypatch, error, status):
+    task_router = import_module("app.routers.tasks")
+
+    async def empty_body():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def fail(*args, **kwargs):
+        raise error
+
+    monkeypatch.setattr(task_router, "run_in_threadpool", fail)
+    audit_calls = []
+    monkeypatch.setattr(task_router, "audit_event", lambda *args, **kwargs: audit_calls.append(kwargs))
+    request = Request({"type": "http", "method": "POST", "path": "/api/v1/tasks/task-1/records/record-1/start", "headers": []}, receive=empty_body)
+    with pytest.raises(HTTPException) as raised:
+        asyncio.run(task_router.start_task_record(
+            request=request, task_id="task-1", task_record_id="record-1",
+            body=None, current_user={"id": "qc-1", "roles": ["qc_staff"]},
+        ))
+    assert raised.value.status_code == status
+    assert "private database detail" not in str(raised.value.detail)
+    assert audit_calls == []
+
+
+def test_record_start_route_uses_read_permission_rejects_body_and_audits(monkeypatch):
+    task_router = import_module("app.routers.tasks")
+
+    async def empty_body():
+        return {"type": "http.request", "body": b"", "more_body": False}
+    called = []
+
+    async def succeed(func, **kwargs):
+        called.append(kwargs)
+        return {"task_id": "task-1", "task_record_id": "record-1", "status": "in_progress", "idempotent": False}
+
+    audit_calls = []
+    monkeypatch.setattr(task_router, "run_in_threadpool", succeed)
+    monkeypatch.setattr(task_router, "audit_event", lambda *args, **kwargs: audit_calls.append(kwargs))
+    request = Request({"type": "http", "method": "POST", "path": "/api/v1/tasks/task-1/records/record-1/start", "headers": []}, receive=empty_body)
+    kwargs = {
+        "request": request, "task_id": "task-1", "task_record_id": "record-1",
+        "body": None, "current_user": {"id": "qc-1", "roles": ["qc_staff"]},
+    }
+    response = asyncio.run(task_router.start_task_record(**kwargs))
+    assert response["data"] == {"task_id": "task-1", "task_record_id": "record-1", "status": "in_progress", "idempotent": False}
+    assert called == [{"task_id": "task-1", "task_record_id": "record-1", "actor_id": "qc-1"}]
+    assert audit_calls[0]["action"] == "tasks.records.start"
+    assert audit_calls[0]["details"]["task_record_id"] == "record-1"
+
+    kwargs["body"] = {"status": "completed"}
+    with pytest.raises(HTTPException) as raised:
+        asyncio.run(task_router.start_task_record(**kwargs))
+    assert raised.value.status_code == 422
+    assert len(called) == 1
+
+    kwargs["body"] = None
+    kwargs["current_user"] = {"id": "qc-1", "roles": ["unknown"]}
+    with pytest.raises(HTTPException) as raised:
+        asyncio.run(task_router.start_task_record(**kwargs))
+    assert raised.value.status_code == 403
+    assert len(called) == 1
+
+
+def test_record_start_http_rejects_status_body_without_lifespan(monkeypatch):
+    task_router = import_module("app.routers.tasks")
+    app = FastAPI()
+    app.include_router(task_router.router)
+    app.dependency_overrides[task_router.get_current_user] = lambda: {
+        "id": "qc-1", "roles": ["qc_staff"]
+    }
+    called = []
+
+    async def succeed(func, **kwargs):
+        called.append(kwargs)
+        return {"task_id": "task-1", "task_record_id": "record-1", "status": "in_progress", "idempotent": False}
+
+    monkeypatch.setattr(task_router, "run_in_threadpool", succeed)
+    monkeypatch.setattr(task_router, "audit_event", lambda *args, **kwargs: None)
+    client = TestClient(app)
+    path = "/api/v1/tasks/task-1/records/record-1/start"
+    assert client.post(path, json={"status": "completed"}).status_code == 422
+    assert client.post(path, content="null", headers={"content-type": "application/json"}).status_code == 422
+    assert called == []
+    response = client.post(path)
+    assert response.status_code == 200
+    assert response.json()["data"]["status"] == "in_progress"
     assert len(called) == 1

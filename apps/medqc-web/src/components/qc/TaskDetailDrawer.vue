@@ -127,6 +127,7 @@
             <a-button
               v-if="canStartRun"
               data-testid="task-start-qc-run"
+              class="task-detail-drawer__run-start"
               type="primary"
               :loading="startingRun"
               @click="void startRun()"
@@ -288,7 +289,7 @@
             :columns="recordColumns"
             :data-source="filteredRecords"
             :pagination="recordPagination"
-            :scroll="{ x: 860 }"
+            :scroll="{ x: tab === 'received' ? 1180 : 1045 }"
             row-key="id"
             size="small"
             @change="handleTableChange"
@@ -342,6 +343,26 @@
                   查看本次结果
                 </a-button>
                 <span v-else class="task-detail-drawer__muted">未选择运行</span>
+              </template>
+              <template v-else-if="column.key === 'action'">
+                <a-button
+                  v-if="canStartRecord(record)"
+                  size="small"
+                  :data-testid="`task-record-start-${record.id}`"
+                  :loading="startingRecordId === record.id"
+                  :disabled="!!verifyingRecordId || (!!startingRecordId && startingRecordId !== record.id)"
+                  @click="void startRecord(record)"
+                >开始处理</a-button>
+                <div v-if="recordActionTargetId === record.id && recordActionError" class="task-detail-drawer__run-error" role="alert">
+                  {{ recordActionError }}
+                  <a-button
+                    v-if="verifyingRecordId === record.id"
+                    size="small"
+                    :loading="startingRecordId === record.id"
+                    :data-testid="`task-record-verify-${record.id}`"
+                    @click="void verifyRecordStart(record.id)"
+                  >重新查询</a-button>
+                </div>
               </template>
             </template>
           </a-table>
@@ -399,7 +420,7 @@ import { Eye, Play, RotateCw, X } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import { getSichuanWorkspaceBatchJob } from '@/services/sichuan-rule-workspace-service'
 import type { SichuanBatchJob } from '@/views/workstation-v4/semantic-rules/types'
-import { createTaskQcRun, getTaskDetail, getTaskQcRunRecordResult, getTaskQcRuns } from '@/api/tasks'
+import { createTaskQcRun, getTaskDetail, getTaskQcRunRecordResult, getTaskQcRuns, startTaskRecord } from '@/api/tasks'
 import type {
   TaskDetail,
   TaskQcRun,
@@ -436,6 +457,11 @@ const selectedTaskRecordId = ref('')
 const recordResult = ref<TaskQcRunRecordResult | null>(null)
 const recordResultLoading = ref(false)
 const recordResultError = ref('')
+const startingRecordId = ref('')
+const verifyingRecordId = ref('')
+const recordStartAcknowledged = ref(false)
+const recordActionTargetId = ref('')
+const recordActionError = ref('')
 const loading = ref(false)
 const error = ref('')
 const keyword = ref('')
@@ -446,6 +472,7 @@ let requestSequence = 0
 let runSequence = 0
 let jobSequence = 0
 let recordResultSequence = 0
+let recordActionSequence = 0
 
 const drawerWidth = 'min(820px, 100vw)'
 const drawerTitle = computed(() => detail.value?.task_name || '任务详情')
@@ -505,7 +532,7 @@ const recordStatusOptions = [
   { label: '已跳过', value: 'skipped' },
 ]
 
-const recordColumns: TableColumnsType<TaskRecordItem> = [
+const recordColumns = computed<TableColumnsType<TaskRecordItem>>(() => [
   { title: '病例身份', key: 'caseIdentity', width: 290 },
   { title: '质控员', dataIndex: 'assignee_name', key: 'assignee', width: 150 },
   { title: '处理状态', dataIndex: 'status', key: 'status', width: 110 },
@@ -513,7 +540,116 @@ const recordColumns: TableColumnsType<TaskRecordItem> = [
   { title: '缺陷数', dataIndex: 'defect_count', key: 'defects', width: 90 },
   { title: '完成时间', dataIndex: 'completed_at', key: 'completedAt', width: 160 },
   { title: '本次结果', key: 'result', width: 145 },
-]
+  ...(props.tab === 'received' ? [{ title: '处理', key: 'action', width: 130 }] : []),
+])
+
+function isTaskRecordItem(record: unknown): record is TaskRecordItem {
+  if (!record || typeof record !== 'object') return false
+  const item = record as Partial<TaskRecordItem>
+  return typeof item.id === 'string' && typeof item.task_id === 'string'
+    && (typeof item.record_id === 'string' || item.record_id === null)
+    && (typeof item.status === 'string' || item.status === null)
+}
+
+function canStartRecord(record: unknown): record is TaskRecordItem {
+  return isTaskRecordItem(record) && props.open && props.tab === 'received' && !!detail.value?.scene
+    && detail.value.status === 'in_progress' && record.status === 'pending'
+    && record.task_id === detail.value.id && hasCaseIdentity(record)
+    && !!authStore.user?.id && record.assignee_id === authStore.user.id
+    && !verifyingRecordId.value
+}
+
+function recordActionIsCurrent(taskId: string, taskRecordId: string, userId: string, sequence: number) {
+  return sequence === recordActionSequence && props.open && props.tab === 'received'
+    && String(props.taskId || '').trim() === taskId && detail.value?.id === taskId
+    && authStore.user?.id === userId
+    && detail.value.records.some((record) => record.id === taskRecordId && record.task_id === taskId && record.assignee_id === userId)
+}
+
+function clearRecordAction() {
+  recordActionSequence += 1
+  startingRecordId.value = ''
+  verifyingRecordId.value = ''
+  recordStartAcknowledged.value = false
+  recordActionTargetId.value = ''
+  recordActionError.value = ''
+}
+
+async function verifyRecordStart(taskRecordId: string) {
+  const taskId = detail.value?.id
+  const userId = authStore.user?.id
+  if (!taskId || !userId || verifyingRecordId.value !== taskRecordId || startingRecordId.value) return
+  const sequence = recordActionSequence
+  startingRecordId.value = taskRecordId
+  const previousError = recordActionError.value
+  recordActionError.value = ''
+  try {
+    const response = await getTaskDetail(taskId, { tab: 'received' })
+    if (!recordActionIsCurrent(taskId, taskRecordId, userId, sequence)) return
+    const refreshed = response.data
+    const updated = refreshed?.records?.find((record) => record.id === taskRecordId)
+    if (response.success && refreshed?.id === taskId && Array.isArray(refreshed.records)
+      && updated?.task_id === taskId && updated.assignee_id === userId
+      && hasCaseIdentity(updated) && refreshed.status === 'in_progress'
+      && updated.status === 'pending' && !recordStartAcknowledged.value) {
+      detail.value = refreshed
+      verifyingRecordId.value = ''
+      recordActionError.value = `${previousError ? `${previousError}；` : ''}病历尚未开始，可重试`
+      return
+    }
+    if (!response.success || refreshed?.id !== taskId || !Array.isArray(refreshed.records)
+      || !updated || updated.task_id !== taskId || updated.assignee_id !== userId
+      || !hasCaseIdentity(updated) || refreshed.status !== 'in_progress' || updated.status !== 'in_progress') {
+      recordActionError.value = response.success
+        ? '尚未确认该病历处于处理中，请重新查询'
+        : response.message || '读取病历处理状态失败，请重新查询'
+      return
+    }
+    detail.value = refreshed
+    verifyingRecordId.value = ''
+    recordActionTargetId.value = ''
+  } catch {
+    if (recordActionIsCurrent(taskId, taskRecordId, userId, sequence)) recordActionError.value = '网络异常，请重新查询处理状态'
+  } finally {
+    if (recordActionIsCurrent(taskId, taskRecordId, userId, sequence)) startingRecordId.value = ''
+  }
+}
+
+async function startRecord(record: unknown) {
+  const taskId = detail.value?.id
+  const userId = authStore.user?.id
+  if (!taskId || !userId || !canStartRecord(record) || startingRecordId.value) return
+  const taskRecordId = record.id
+  const sequence = ++recordActionSequence
+  startingRecordId.value = taskRecordId
+  recordActionTargetId.value = taskRecordId
+  recordStartAcknowledged.value = false
+  recordActionError.value = ''
+  try {
+    const response = await startTaskRecord(taskId, taskRecordId)
+    if (!recordActionIsCurrent(taskId, taskRecordId, userId, sequence)) return
+    if (!response.success) {
+      verifyingRecordId.value = taskRecordId
+      recordActionError.value = response.message || '开始处理结果未知，请重新查询'
+    } else {
+      verifyingRecordId.value = taskRecordId
+      if (response.data?.task_id !== taskId || response.data.task_record_id !== taskRecordId
+        || response.data.status !== 'in_progress') {
+        recordActionError.value = '响应身份或状态校验失败，请重新查询'
+        return
+      }
+      recordStartAcknowledged.value = true
+    }
+  } catch {
+    if (recordActionIsCurrent(taskId, taskRecordId, userId, sequence)) {
+      verifyingRecordId.value = taskRecordId
+      recordActionError.value = '网络异常，请重新查询处理状态'
+    }
+  } finally {
+    if (recordActionIsCurrent(taskId, taskRecordId, userId, sequence)) startingRecordId.value = ''
+  }
+  await verifyRecordStart(taskRecordId)
+}
 
 const filteredRecords = computed(() => {
   if (!detail.value) return []
@@ -545,6 +681,7 @@ function resetFilters() {
 }
 
 function clearDetail() {
+  clearRecordAction()
   requestSequence += 1
   runSequence += 1
   jobSequence += 1
@@ -571,6 +708,7 @@ async function loadDetail() {
   }
 
   const tab = props.tab
+  clearRecordAction()
   const currentSequence = ++requestSequence
   runSequence += 1
   jobSequence += 1
@@ -1032,6 +1170,16 @@ watch([keyword, recordStatus], () => {
   line-height: 22px;
   font-weight: 600;
   letter-spacing: 0;
+}
+
+.task-detail-drawer__run-start {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 112px;
+  white-space: nowrap;
 }
 
 .task-detail-drawer__records-heading strong {

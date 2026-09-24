@@ -89,6 +89,13 @@ export interface TaskRecordItem {
     error_message?: string | null
 }
 
+export interface TaskRecordStartResult {
+    task_id: string
+    task_record_id: string
+    status: 'in_progress'
+    idempotent?: boolean
+}
+
 export interface TaskDetail extends TaskItem {
     records: TaskRecordItem[]
 }
@@ -265,6 +272,14 @@ export async function getTaskDetail(taskId: string, params?: { tab?: TaskTab }) 
     return request<TaskDetail>({
         method: 'GET',
         url: `${BASE_URL}/${encodeURIComponent(taskId)}${query}`,
+    })
+}
+
+/** 当前受领人开始处理单份任务病历，任务运行批次状态不受此接口影响。 */
+export async function startTaskRecord(taskId: string, taskRecordId: string) {
+    return request<TaskRecordStartResult>({
+        method: 'POST',
+        url: `${BASE_URL}/${encodeURIComponent(taskId)}/records/${encodeURIComponent(taskRecordId)}/start`,
     })
 }
 

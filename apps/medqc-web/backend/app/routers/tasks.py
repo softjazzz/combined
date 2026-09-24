@@ -19,7 +19,7 @@ from functools import partial
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Optional, Dict, Any, List, Literal
 
-from fastapi import APIRouter, Request, HTTPException, Depends, Query
+from fastapi import APIRouter, Request, HTTPException, Depends, Query, Body
 from starlette.concurrency import run_in_threadpool
 
 from ..schemas.tasks import (
@@ -57,6 +57,7 @@ from ..services.task_start_service import (
     TaskStartForbidden,
     TaskStartNotFound,
     start_assigned_task,
+    start_assigned_task_record,
 )
 from ..services.task_sampling_service import validate_active_running_date_range
 from .qc_sichuan import get_qc_service, _run_sichuan_workspace_batch_job, _sichuan_workspace_service
@@ -567,6 +568,51 @@ async def update_task(
         current_user=current_user,
     )
     return success_response(data=data, message="任务已开始", trace_id=get_trace_id(request))
+
+
+@router.post("/{task_id}/records/{task_record_id}/start")
+@require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.READ)
+async def start_task_record(
+    request: Request,
+    task_id: str,
+    task_record_id: str,
+    body: Optional[dict] = Body(None),
+    current_user: dict = Depends(get_current_user),
+):
+    """受领人开始任务中的单份病历，状态由服务端决定。"""
+    if body is not None or await request.body():
+        raise HTTPException(status_code=422, detail="此操作不接受请求体")
+    actor_id = _get_task_scope_user_id(current_user)
+    try:
+        data = await run_in_threadpool(
+            start_assigned_task_record,
+            task_id=task_id,
+            task_record_id=task_record_id,
+            actor_id=actor_id,
+        )
+    except TaskStartNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except TaskStartForbidden as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except TaskStartConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("开始任务病历失败 task_id=%s task_record_id=%s", task_id, task_record_id)
+        raise HTTPException(status_code=503, detail="数据库不可用，请稍后重试") from exc
+
+    audit_event(
+        request,
+        action="tasks.records.start",
+        resource="qc_task_record",
+        outcome="success",
+        details={
+            "task_id": task_id,
+            "task_record_id": task_record_id,
+            "idempotent": data["idempotent"],
+        },
+        current_user=current_user,
+    )
+    return success_response(data=data, message="病历已开始", trace_id=get_trace_id(request))
 
 
 # ============================
