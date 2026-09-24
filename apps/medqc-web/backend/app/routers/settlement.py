@@ -9,7 +9,10 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Depends
 
-from ..services.settlement_service import get_settlement_service
+from ..services.settlement_service import (
+    SettlementIdentityAmbiguousError,
+    get_settlement_service,
+)
 from ..core.security import get_current_user, require_roles
 from ..core.pagination import page_param, page_size_param
 from ..services.qc_persistence_service import default_qc_persistence_service
@@ -145,7 +148,10 @@ async def get_settlement_detail(
 ):
     """获取单条结算清单完整详情（含诊断、手术、费用明细）"""
     svc = get_settlement_service()
-    result = svc.get_settlement_detail(patient_id, visit_id, institute_id)
+    try:
+        result = svc.get_settlement_detail(patient_id, visit_id, institute_id)
+    except SettlementIdentityAmbiguousError as exc:
+        raise HTTPException(status_code=409, detail="结算清单身份不唯一，请指定机构号") from exc
     if not result:
         raise HTTPException(status_code=404, detail="结算清单未找到")
     return result
@@ -160,23 +166,33 @@ async def run_settlement_qc(
 ):
     """对单条结算清单执行形式质控（136条规则）"""
     user_id = _current_user_id(current_user)
+    svc = get_settlement_service()
+    try:
+        resolved_institute_id = svc.resolve_settlement_institute_id(
+            patient_id, visit_id, institute_id
+        )
+    except SettlementIdentityAmbiguousError as exc:
+        raise HTTPException(status_code=409, detail="结算清单身份不唯一，请指定机构号") from exc
+    if resolved_institute_id is None:
+        raise HTTPException(status_code=404, detail="结算清单未找到，无法执行质控")
+
     run_id = default_workflow_queue_state_service.start_run(
         workflow_type="settlement_qc",
         visit_id=visit_id,
         patient_id=patient_id,
-        institute_id=institute_id,
+        institute_id=resolved_institute_id,
         user_id=user_id,
     )
     try:
-        svc = get_settlement_service()
-        result = svc.run_qc(patient_id, visit_id, institute_id)
+        result = svc.run_qc(patient_id, visit_id, resolved_institute_id)
         if not result:
             raise HTTPException(status_code=404, detail="结算清单未找到，无法执行质控")
+        settlement = result.get("settlement") or {}
         persistence = await default_qc_persistence_service.persist_analysis(
             _build_settlement_persistence_result(
                 patient_id=patient_id,
                 visit_id=visit_id,
-                settlement=result.get("settlement") or {},
+                settlement=settlement,
                 summary=result.get("summary") or {},
                 results=result.get("results") or [],
                 source="settlement_qc",

@@ -11,11 +11,12 @@ from __future__ import annotations
 import asyncio
 import json
 import uuid
+from dataclasses import dataclass
 from datetime import datetime
 from functools import lru_cache
 from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import MetaData, Table, and_, or_
+from sqlalchemy import MetaData, Table, and_, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.dml import Update
@@ -79,6 +80,42 @@ def _normalize_issue(issue: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+_VERIFIED_SOURCES = frozenset({
+    "frontpage_formal_qc", "coding_qc", "settlement_qc", "settlement_generate_qc"
+})
+_SOURCE_WORKFLOWS = {
+    "frontpage_formal_qc": "frontpage",
+    "coding_qc": "coding",
+    "settlement_qc": "settlement",
+    "settlement_generate_qc": "settlement",
+}
+
+
+@dataclass(frozen=True)
+class VerifiedQCIdentity:
+    institute_id: str
+    patient_id: str
+    visit_id: str
+    source_key: str
+
+    def __post_init__(self) -> None:
+        for name in ("institute_id", "patient_id", "visit_id", "source_key"):
+            value = getattr(self, name)
+            if not isinstance(value, str) or not value.strip() or value != value.strip():
+                raise ValueError(f"verified QC {name} must be a nonblank canonical string")
+        if self.source_key not in _VERIFIED_SOURCES:
+            raise ValueError(f"unsupported verified QC source: {self.source_key}")
+
+    def columns(self) -> Dict[str, Any]:
+        return {
+            "identity_version": 1,
+            "source_key": self.source_key,
+            "institute_id": self.institute_id,
+            "patient_id": self.patient_id,
+            "visit_id": self.visit_id,
+        }
+
+
 @lru_cache(maxsize=8)
 def _table(schema: str, table_name: str) -> Table:
     if engine is None:
@@ -95,33 +132,85 @@ class QCPersistenceService:
         if self._session_factory is None:
             raise RuntimeError("DATABASE_URL is not configured; persistence unavailable")
 
+    def _require_verified_identity(
+        self, session: Session, result: Dict[str, Any], identity: VerifiedQCIdentity
+    ) -> None:
+        if not isinstance(identity, VerifiedQCIdentity):
+            raise TypeError("verified_identity must be VerifiedQCIdentity")
+        metadata = result.get("metadata")
+        if not isinstance(metadata, dict):
+            raise ValueError("verified QC requires result metadata")
+        for name in ("institute_id", "patient_id", "visit_id"):
+            expected = getattr(identity, name)
+            if metadata.get(name) != expected or (name in result and result[name] != expected):
+                raise ValueError(f"verified QC {name} conflicts with result")
+        if metadata.get("data_source") != identity.source_key:
+            raise ValueError("verified QC source conflicts with result metadata")
+        for source_field in ("source_key", "data_source"):
+            if source_field in result and result[source_field] != identity.source_key:
+                raise ValueError("verified QC source conflicts with result")
+        if "source_key" in metadata and metadata["source_key"] != identity.source_key:
+            raise ValueError("verified QC source conflicts with result metadata")
+        expected_workflow = _SOURCE_WORKFLOWS[identity.source_key]
+        workflows = (result.get("workflow_type"), metadata.get("workflow_type"))
+        if all(workflow is None for workflow in workflows):
+            raise ValueError("verified QC requires explicit workflow type")
+        for workflow in workflows:
+            if workflow is not None and workflow != expected_workflow:
+                raise ValueError("verified QC source conflicts with workflow type")
+        required = set(identity.columns())
+        for name in ("qc_results", "qc_defects", "notifications"):
+            missing = required - set(_table("qc", name).c.keys())
+            if missing:
+                raise RuntimeError(f"qc.{name} missing verified identity columns: {sorted(missing)}")
+        mr = _table("cdm", "mr")
+        if not {"institute_id", "patient_id", "visit_id"} <= set(mr.c.keys()):
+            raise RuntimeError("cdm.mr missing case identity columns")
+        count = session.execute(
+            select(func.count()).select_from(mr).where(
+                mr.c.institute_id == identity.institute_id,
+                mr.c.patient_id == identity.patient_id,
+                mr.c.visit_id == identity.visit_id,
+            )
+        ).scalar_one()
+        if count != 1:
+            raise ValueError("verified QC case identity must match exactly one cdm.mr row")
+
+    def _owner_clause(self, table: Table, identity: VerifiedQCIdentity) -> Any:
+        return and_(*(table.c[name] == value for name, value in identity.columns().items()))
+
     async def persist_analysis(
         self,
         result: Dict[str, Any],
         *,
         actor: Optional[Dict[str, Any]] = None,
+        verified_identity: Optional[VerifiedQCIdentity] = None,
     ) -> Dict[str, Any]:
-        return await asyncio.to_thread(self._persist_analysis_sync, result, actor)
+        return await asyncio.to_thread(self._persist_analysis_sync, result, actor, verified_identity)
 
     def _persist_analysis_sync(
         self,
         result: Dict[str, Any],
         actor: Optional[Dict[str, Any]] = None,
+        verified_identity: Optional[VerifiedQCIdentity] = None,
     ) -> Dict[str, Any]:
         normalized = self._normalize_result(result)
         session: Session = self._session_factory()
         try:
+            if verified_identity is not None:
+                self._require_verified_identity(session, result, verified_identity)
             actor_id = str((actor or {}).get("id") or (actor or {}).get("user_id") or "")
             actor_name = str((actor or {}).get("display_name") or (actor or {}).get("username") or actor_id or "system")
 
-            qc_result_row = self._persist_qc_result(session, normalized, actor_id)
-            defect_summary = self._persist_qc_defects(session, normalized, qc_result_row["id"], actor_id, actor_name)
+            qc_result_row = self._persist_qc_result(session, normalized, actor_id, verified_identity)
+            defect_summary = self._persist_qc_defects(session, normalized, qc_result_row["id"], actor_id, actor_name, verified_identity)
             notification_summary = self._persist_notification(
                 session,
                 normalized,
                 qc_result_row,
                 defect_summary,
                 actor_id=actor_id,
+                verified_identity=verified_identity,
             )
             session.commit()
             return {
@@ -187,6 +276,7 @@ class QCPersistenceService:
         session: Session,
         result: Dict[str, Any],
         actor_id: str,
+        verified_identity: Optional[VerifiedQCIdentity] = None,
     ) -> Dict[str, Any]:
         table = _table("qc", "qc_results")
         requested_id = _safe_text(result.get("id"))
@@ -212,6 +302,8 @@ class QCPersistenceService:
             "created_at": _now_utc(),
             "updated_at": _now_utc(),
         }
+        if verified_identity is not None:
+            payload.update(verified_identity.columns())
         stmt = pg_insert(table).values({
             key: _value_for_column(table.c[key], value)
             for key, value in payload.items()
@@ -228,6 +320,17 @@ class QCPersistenceService:
             issue.get("category") or "general",
         ]
         return _stable_uuid(*identity), "|".join(str(part) for part in identity)
+
+    def _verified_defect_identity(
+        self, identity: VerifiedQCIdentity, issue: Dict[str, Any]
+    ) -> Tuple[str, str]:
+        parts = (
+            "qc_defect_v1", identity.source_key, identity.institute_id,
+            identity.patient_id, identity.visit_id,
+            issue.get("rule_code") or issue.get("rule_name") or "unknown_rule",
+            issue.get("location") or "病历正文", issue.get("category") or "general",
+        )
+        return _stable_uuid(*parts), "|".join(str(part) for part in parts)
 
     def _is_auto_owned_defect(self, record_id: str, row: Dict[str, Any]) -> bool:
         origin = row.get("origin")
@@ -301,6 +404,7 @@ class QCPersistenceService:
         result_id: str,
         actor_id: str,
         actor_name: str,
+        verified_identity: Optional[VerifiedQCIdentity] = None,
     ) -> Dict[str, Any]:
         table = _table("qc", "qc_defects")
         record_id = result["record_id"]
@@ -311,9 +415,13 @@ class QCPersistenceService:
             not self._matches_defect_scope(issue, executed_scope) for issue in issues
         ):
             raise ValueError("QC issue is outside executed_defect_scope")
-        existing_rows = session.execute(
-            table.select().where(table.c.record_id == record_id)
-        ).mappings().all()
+        if verified_identity is not None:
+            existing_filter = self._owner_clause(table, verified_identity)
+        else:
+            existing_filter = table.c.record_id == record_id
+            if "identity_version" in table.c:
+                existing_filter = and_(existing_filter, table.c.identity_version.is_(None))
+        existing_rows = session.execute(table.select().where(existing_filter)).mappings().all()
         existing_by_id = {str(row["id"]): dict(row) for row in existing_rows}
         open_existing_ids = {
             str(row["id"])
@@ -324,12 +432,20 @@ class QCPersistenceService:
             str(row["id"])
             for row in existing_rows
             if str(row.get("status") or "").lower() != "completed"
-            and self._is_auto_owned_defect(record_id, row)
+            and (
+                row.get("origin") == "auto"
+                if verified_identity is not None
+                else self._is_auto_owned_defect(record_id, row)
+            )
             and executed_scope is not None
             and self._matches_defect_scope(row, executed_scope)
         }
 
         def restrict_to_observed_owner(stmt: Update, row: Dict[str, Any]) -> Update:
+            if verified_identity is not None:
+                return stmt.where(self._owner_clause(table, verified_identity), table.c.origin == "auto")
+            if "identity_version" in table.c:
+                stmt = stmt.where(table.c.identity_version.is_(None))
             previous_origin = row.get("origin")
             if "origin" in table.c:
                 stmt = stmt.where(
@@ -351,7 +467,10 @@ class QCPersistenceService:
         defect_ids: List[str] = []
 
         for issue in issues:
-            defect_id, identity_key = self._defect_identity(record_id, issue)
+            defect_id, identity_key = (
+                self._verified_defect_identity(verified_identity, issue)
+                if verified_identity is not None else self._defect_identity(record_id, issue)
+            )
             if defect_id in touched_ids:
                 continue
             touched_ids.add(defect_id)
@@ -374,9 +493,15 @@ class QCPersistenceService:
                 "status": "pending",
                 "updated_at": _now_utc(),
             }
+            if verified_identity is not None:
+                payload.update(verified_identity.columns())
             existing = existing_by_id.get(defect_id)
             if existing:
-                if not self._is_auto_owned_defect(record_id, existing):
+                if not (
+                    existing.get("origin") == "auto"
+                    if verified_identity is not None
+                    else self._is_auto_owned_defect(record_id, existing)
+                ):
                     raise RuntimeError(f"Defect {defect_id} is not owned by automatic QC")
                 update_stmt = restrict_to_observed_owner(
                     table.update().where(table.c.id == defect_id), existing
@@ -473,14 +598,28 @@ class QCPersistenceService:
         defect_summary: Dict[str, Any],
         *,
         actor_id: str,
+        verified_identity: Optional[VerifiedQCIdentity] = None,
     ) -> Dict[str, Any]:
         table = _table("qc", "notifications")
         workflow_type = result["workflow_type"]
         workflow_label = self._workflow_label(workflow_type)
         record_id = result["record_id"]
         recipient_id = actor_id or "system"
-        notification_id = _stable_uuid("qc_notification", workflow_type, result.get("visit_id") or record_id, recipient_id)
+        notification_id = (
+            _stable_uuid(
+                "qc_notification_v1", verified_identity.source_key,
+                verified_identity.institute_id, verified_identity.patient_id,
+                verified_identity.visit_id, recipient_id,
+            )
+            if verified_identity is not None
+            else _stable_uuid("qc_notification", workflow_type, result.get("visit_id") or record_id, recipient_id)
+        )
         existing = session.execute(table.select().where(table.c.id == notification_id).limit(1)).mappings().first()
+        if existing and verified_identity is not None:
+            if any(existing.get(name) != value for name, value in verified_identity.columns().items()):
+                raise RuntimeError(f"Notification {notification_id} changed verified owner")
+            if existing.get("recipient_id") != recipient_id:
+                raise RuntimeError(f"Notification {notification_id} changed recipient")
 
         remaining_active = defect_summary["remaining_active_count"]
         current_issues = len(defect_summary["defect_ids"])
@@ -517,17 +656,25 @@ class QCPersistenceService:
             "read_at": read_at,
             "created_at": existing.get("created_at") if existing else _now_utc(),
         }
+        if verified_identity is not None:
+            payload.update(verified_identity.columns())
 
         if existing:
-            session.execute(
-                table.update()
-                .where(table.c.id == notification_id)
-                .values({
+            update_stmt = table.update().where(table.c.id == notification_id)
+            if verified_identity is not None:
+                update_stmt = update_stmt.where(
+                    self._owner_clause(table, verified_identity),
+                    table.c.recipient_id == recipient_id,
+                )
+            update_result = session.execute(
+                update_stmt.values({
                     key: _value_for_column(table.c[key], value)
                     for key, value in payload.items()
                     if key in table.c and key != "id"
                 })
             )
+            if verified_identity is not None and update_result.rowcount != 1:
+                raise RuntimeError(f"Notification {notification_id} changed during automatic QC")
             return {"id": notification_id, "created": False, "updated": True}
 
         stmt = pg_insert(table).values({

@@ -19,6 +19,7 @@ from sqlalchemy import (
     Integer,
     JSON,
     PrimaryKeyConstraint,
+    SmallInteger,
     String,
     Text,
     UniqueConstraint,
@@ -77,6 +78,11 @@ class QCResultBiz(Base):
 
     id = Column(String(36), primary_key=True)
     record_id = Column(String(100), nullable=False)
+    identity_version = Column(SmallInteger, nullable=True)
+    source_key = Column(String(64), nullable=True)
+    institute_id = Column(Text, nullable=True)
+    patient_id = Column(Text, nullable=True)
+    visit_id = Column(Text, nullable=True)
     rule_set = Column(String(100))
     overall_score = Column(Float, comment="Used by dashboard router")
     grade = Column(String(10))
@@ -103,6 +109,11 @@ class QCDefect(Base):
     id = Column(String(36), primary_key=True)
     result_id = Column(String(36))
     record_id = Column(String(100), nullable=False)
+    identity_version = Column(SmallInteger, nullable=True)
+    source_key = Column(String(64), nullable=True)
+    institute_id = Column(Text, nullable=True)
+    patient_id = Column(Text, nullable=True)
+    visit_id = Column(Text, nullable=True)
     department = Column(String(100))
     rule_code = Column(String(100))
     rule_name = Column(String(200))
@@ -577,6 +588,11 @@ class Notification(Base):
     title = Column(String(200), nullable=False)
     content = Column(Text)
     record_id = Column(String(100))
+    identity_version = Column(SmallInteger, nullable=True)
+    source_key = Column(String(64), nullable=True)
+    institute_id = Column(Text, nullable=True)
+    patient_id = Column(Text, nullable=True)
+    visit_id = Column(Text, nullable=True)
     severity = Column(String(20))
     sender_id = Column(String(36))
     recipient_id = Column(String(36))

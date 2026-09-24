@@ -8,11 +8,11 @@
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 from datetime import datetime
 
 from sqlalchemy.orm import Session
-from sqlalchemy import func, tuple_
+from sqlalchemy import tuple_
 
 from ..database.connection import engine
 from ..database.models.cdm import (
@@ -26,6 +26,10 @@ from ..database.models.cdm import (
 from .settlement_formal_qc import SettlementFormalQCEngine, SettlementQCReport
 
 logger = logging.getLogger(__name__)
+
+
+class SettlementIdentityAmbiguousError(ValueError):
+    """同一患者就诊号对应多个机构，不能推断结算清单身份。"""
 
 
 def _to_str(val: Any) -> Optional[str]:
@@ -144,6 +148,25 @@ class SettlementService:
 
     # ==================== 详情查询 ====================
 
+    def resolve_settlement_institute_id(
+        self,
+        patient_id: str,
+        visit_id: str,
+        institute_id: Optional[str] = None,
+    ) -> Optional[str]:
+        """按主表解析唯一机构；未提供机构时拒绝跨机构歧义。"""
+        with Session(engine) as session:
+            q = session.query(MedicalInsuranceSettlement.institute_id).filter(
+                MedicalInsuranceSettlement.patient_id == patient_id,
+                MedicalInsuranceSettlement.visit_id == visit_id,
+            )
+            if institute_id is not None:
+                q = q.filter(MedicalInsuranceSettlement.institute_id == institute_id)
+            candidates = q.limit(2).all()
+            if institute_id is None and len(candidates) > 1:
+                raise SettlementIdentityAmbiguousError("结算清单机构身份不唯一")
+            return candidates[0][0] if candidates else None
+
     def get_settlement_detail(
         self,
         patient_id: str,
@@ -167,9 +190,14 @@ class SettlementService:
                 MedicalInsuranceSettlement.patient_id == patient_id,
                 MedicalInsuranceSettlement.visit_id == visit_id,
             )
-            if institute_id:
+            if institute_id is not None:
                 q = q.filter(MedicalInsuranceSettlement.institute_id == institute_id)
-            settlement = q.first()
+                settlement = q.first()
+            else:
+                candidates = q.limit(2).all()
+                if len(candidates) > 1:
+                    raise SettlementIdentityAmbiguousError("结算清单机构身份不唯一")
+                settlement = candidates[0] if candidates else None
 
             if not settlement:
                 return None

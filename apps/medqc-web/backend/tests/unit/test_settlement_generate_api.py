@@ -9,8 +9,7 @@ settlement /generate 和 /generate/qc 端点测试
 """
 
 import pytest
-from unittest.mock import patch, MagicMock
-from app.routers.settlement import _generate_draft
+from unittest.mock import AsyncMock, patch
 
 
 class TestGenerateDraft:
@@ -63,7 +62,14 @@ class TestGenerateQcEndpoint:
             "data_source": "generated_from_frontpage",
             "patient_name": "张三",
         }
-        result = await run_generated_settlement_qc("p001", "v001")
+        with (
+            patch("app.routers.settlement.default_workflow_queue_state_service.start_run", return_value="run-1"),
+            patch("app.routers.settlement.default_workflow_queue_state_service.finish_success"),
+            patch("app.routers.settlement.default_qc_persistence_service.persist_analysis", new_callable=AsyncMock),
+        ):
+            result = await run_generated_settlement_qc(
+                "p001", "v001", current_user={"id": "test-user"}
+            )
         mock_gen.assert_called_once_with("p001", "v001")
 
         # 验证 summary 结构与旧接口一致
@@ -86,7 +92,14 @@ class TestGenerateQcEndpoint:
         from app.routers.settlement import run_generated_settlement_qc
 
         mock_gen.return_value = {"is_draft": True, "data_source": "generated_from_frontpage"}
-        result = await run_generated_settlement_qc("p001", "v001")
+        with (
+            patch("app.routers.settlement.default_workflow_queue_state_service.start_run", return_value="run-1"),
+            patch("app.routers.settlement.default_workflow_queue_state_service.finish_success"),
+            patch("app.routers.settlement.default_qc_persistence_service.persist_analysis", new_callable=AsyncMock),
+        ):
+            result = await run_generated_settlement_qc(
+                "p001", "v001", current_user={"id": "test-user"}
+            )
         assert "results" in result
         assert isinstance(result["results"], list)
         assert len(result["results"]) > 0
