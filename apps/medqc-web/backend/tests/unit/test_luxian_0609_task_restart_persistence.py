@@ -15,6 +15,7 @@ import pytest
 _PROBE = r"""
 import asyncio
 import json
+import os
 import sys
 
 import sqlalchemy as sa
@@ -36,11 +37,14 @@ workspace = storage.CustomQCWorkspaceService()
 identity._PROCESS_RUNTIME_BUILD = {
     'available': True,
     'build_id': build_id,
-    'git_commit': 'a' * 40,
+    'git_commit': os.environ.get('LX0609_PROBE_GIT_COMMIT', 'a' * 40),
 }
 config = {
-    'provider_code': 'alibaba', 'api_endpoint': 'https://example.invalid/llm',
-    'api_key': 'synthetic-test-secret', 'model': 'model-a', 'source': 'test',
+    'provider_code': 'alibaba',
+    'api_endpoint': os.environ.get('LX0609_PROBE_API_ENDPOINT', 'https://example.invalid/llm'),
+    'api_key': 'synthetic-test-secret',
+    'model': os.environ.get('LX0609_PROBE_MODEL', 'model-a'),
+    'source': 'test',
 }
 
 if mode == 'create':
@@ -130,14 +134,22 @@ else:
 """
 
 
-def _run_probe(*args: str) -> dict[str, object]:
+def _run_probe(
+    *args: str, runtime_overrides: dict[str, str] | None = None,
+) -> dict[str, object]:
     environment = os.environ.copy()
+    for key in (
+        "LX0609_PROBE_GIT_COMMIT", "LX0609_PROBE_MODEL", "LX0609_PROBE_API_ENDPOINT",
+    ):
+        environment.pop(key, None)
     environment.update({
         "DATABASE_URL": "postgresql://test:test@127.0.0.1:1/test",
         "JWT_SECRET": "isolated-test-secret-not-for-production-0609",
         "DB_SCHEMA_MODE": "single",
         "PYTHONIOENCODING": "utf-8",
+        "LUXIAN_0609_NATIVE_BASIC_TIMELINESS_ENABLED": "true",
     })
+    environment.update(runtime_overrides or {})
     completed = subprocess.run(
         [sys.executable, "-c", _PROBE, *args],
         cwd=Path(__file__).resolve().parents[2],
@@ -188,6 +200,37 @@ def test_queued_formal_task_is_resubmitted_after_process_restart(tmp_path, same_
     else:
         assert "模型或实现版本已变化" in str(recovered["error_message"])
     assert _run_probe("recover", database_path, next_build, str(created["job_id"]))["resumed_count"] == 0
+
+
+@pytest.mark.parametrize("resume_mode", ["run", "recover"])
+@pytest.mark.parametrize(
+    ("runtime_overrides", "expected_error"),
+    [
+        ({"LX0609_PROBE_GIT_COMMIT": "b" * 40}, "模型或实现版本已变化"),
+        ({"LX0609_PROBE_MODEL": "model-b"}, "模型或实现版本已变化"),
+        ({"LX0609_PROBE_API_ENDPOINT": "https://changed.example.invalid/llm"}, "模型或实现版本已变化"),
+        ({"LUXIAN_0609_NATIVE_BASIC_TIMELINESS_ENABLED": "false"}, "执行配置已变化"),
+    ],
+    ids=["commit-drift", "model-drift", "endpoint-drift", "rule-setting-drift"],
+)
+def test_persisted_task_rejects_runtime_drift_before_record_read(
+    tmp_path, resume_mode: str, runtime_overrides: dict[str, str], expected_error: str,
+):
+    """同一构建号也必须检查持久化模型身份；恢复不能偷换模型。"""
+
+    database_path = str(tmp_path / "runtime-drift-jobs.sqlite")
+    build_id = "medqc-web-customer-20260925-100000"
+    created = _run_probe("create", database_path, build_id)
+    resumed = _run_probe(
+        resume_mode, database_path, build_id, str(created["job_id"]),
+        runtime_overrides=runtime_overrides,
+    )
+
+    assert resumed["status"] == "failed"
+    assert isinstance(resumed["attempt_id"], str) and resumed["attempt_id"]
+    assert expected_error in str(resumed["error_message"])
+    if resume_mode == "recover":
+        assert resumed["resumed_count"] == 1
 
 
 def test_restarted_worker_renews_persisted_attempt_during_wait(tmp_path):

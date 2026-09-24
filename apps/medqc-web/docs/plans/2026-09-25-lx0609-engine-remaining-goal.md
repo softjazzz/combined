@@ -51,3 +51,5 @@ B 三入口固定输入补证：将旧集成夹具更新为四段式规则身份
 有限公开链复核（基线 `d0c0f97a6`）：`CanonicalResultStore.replace_for_job` 在写入前核对规则集合、状态和公开解释；`load_selected` 核对保存的 Envelope、发布文案签章与公开事实；`project_customer_safe_result_item` 对当前 LX0609 结果使用已保存结论/建议，旧内部形状才进入受控回退；批量 CSV/XLSX/HTML 均从 `load_root_job_items` 取同一 Canonical 行，再走 `_canonical_customer_export_rows`。这四处当前代码路径没有复现新的医学事实重判，保留原样，不再按规则族机械增加校验器。它仍是静态链路核对，下一项必须用正式服务端、真实页面的同一保存结果证实，尤其不能把此前的 Chrome API 拦截测试写成联机验收。
 
 随后完成[原始004真实 HTTP→V5 技术回读](../acceptance/2026-09-25-original-engine-live-http-v5.md)：隔离 SQLite 保存合成 Canonical，测试 FastAPI 服务挂载正式 `qc_sichuan` 读取路由，Vite 代理和实际 Chrome 均不拦截 API；latest/详情逐字段一致，页面原样显示状态、结论和建议。该测试补了真实网络桥接，但后端仍是合成测试服务，不是完整生产应用或客户 PG/临床验收。A 保持局部验证；下一项转入 B 的跨启动/配置漂移、D 的持久化竞争证据，不重复建设另一套结果 API。
+
+B 跨进程冻结身份补证见[隔离 SQLite 漂移验收](../acceptance/2026-09-25-original-engine-cross-process-drift.md)：同构建号下提交 SHA、首轮模型、端点或有效规则设置变化时，新进程直接领取与启动扫描重投均在取病历前受控失败；整份重启测试 15/15 通过。现有实现未复现新缺陷，不修改生产代码。下一步只验证仍缺的实际执行完成后跨启动、PG 多进程和安装包恢复，不能用“门禁前中止”的测试替代这些退出条件。
