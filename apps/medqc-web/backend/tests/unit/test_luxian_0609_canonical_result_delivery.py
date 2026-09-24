@@ -2443,7 +2443,7 @@ def test_published_rules_keep_identity_through_sqlite_dto_feedback_and_exports(
         item["customer_display_facts"] for item in saved_items
     ]
 
-    if rule_ids == ("LX0609-09-01-01",):
+    if rule_ids != ("LX0609-09-01-02", "LX0609-06-02-01"):
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
         from app.core.security import get_current_user
@@ -2515,7 +2515,7 @@ def test_published_rules_keep_identity_through_sqlite_dto_feedback_and_exports(
             )
         assert detail_response.status_code == 200
         detail_items = detail_response.json()["data"]["items"]
-        assert [item["rule_id"] for item in detail_items] == ["LX0609-09-01-01"]
+        assert [item["rule_id"] for item in detail_items] == list(rule_ids)
         assert [
             {key: item[key] for key in (
                 "rule_id", "status", "reason_code", "conclusion", "suggestion",
