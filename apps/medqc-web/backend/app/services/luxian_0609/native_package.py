@@ -109,8 +109,10 @@ class Luxian0609RuleDependency:
             raise ValueError("invalid LX0609 customer rule id")
         if self.execution_mode not in _VALID_EXECUTION_MODES:
             raise ValueError("invalid LX0609 execution mode")
-        if not self.family_key or not self.executor_key or not self.compatibility_rule_ids:
+        if not self.family_key or not self.executor_key:
             raise ValueError("incomplete LX0609 rule dependency")
+        if self.execution_mode == EXECUTION_MODE_COMPATIBILITY and not self.compatibility_rule_ids:
+            raise ValueError("LX0609 rule is missing compatibility dependency")
 
 
 @dataclass(frozen=True)
@@ -204,8 +206,6 @@ def build_luxian_0609_dependency_inventory(
         if rule_id not in family_index:
             raise ValueError("LX0609 rule is missing family dependency")
         compatibility_rule_ids = _ordered_unique(rule.get("mapped_rule_ids") or ())
-        if not compatibility_rule_ids:
-            raise ValueError("LX0609 rule is missing compatibility dependency")
         family_key, family_name = family_index[rule_id]
         execution_mode = EXECUTION_MODE_COMPATIBILITY
         executor_key = EXECUTOR_COMPATIBILITY

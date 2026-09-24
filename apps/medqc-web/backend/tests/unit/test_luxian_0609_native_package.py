@@ -23,6 +23,36 @@ from app.services.luxian_0609_rule_catalog import load_luxian_0609_rules
 
 
 @pytest.mark.unit
+def test_native_rule_does_not_require_a_legacy_rule_mapping():
+    rule_id = "LX0609-01-01-01"
+    wrapper = next(
+        item for item in load_luxian_0609_rules() if item["rule_id"] == rule_id
+    )
+    inventory = build_luxian_0609_dependency_inventory(
+        rules=[{**wrapper, "mapped_rule_ids": []}],
+        family_definitions=[
+            {"key": "basic_timeliness", "name": "基础时限", "rule_ids": (rule_id,)}
+        ],
+    )
+
+    assert inventory[0].execution_mode == EXECUTION_MODE_NATIVE_SYNC
+    assert inventory[0].compatibility_rule_ids == ()
+
+
+@pytest.mark.unit
+def test_compatibility_rule_still_requires_a_legacy_rule_mapping():
+    rule_id = "LX0609-99-99-01"
+    wrapper = load_luxian_0609_rules()[0]
+    with pytest.raises(ValueError, match="missing compatibility dependency"):
+        build_luxian_0609_dependency_inventory(
+            rules=[{**wrapper, "rule_id": rule_id, "mapped_rule_ids": []}],
+            family_definitions=[
+                {"key": "extension_test", "name": "测试扩展", "rule_ids": (rule_id,)}
+            ],
+        )
+
+
+@pytest.mark.unit
 def test_dependency_inventory_covers_all_84_execution_catalog_rules_and_eight_families():
     inventory = build_luxian_0609_dependency_inventory(
         rules=load_luxian_0609_rules(),
