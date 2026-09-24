@@ -494,6 +494,15 @@ def validate_luxian_0609_published_customer_display_facts(
         if not valid:
             raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
         return validated
+    from .continuity_result_mapping import (
+        is_continuity_customer_rule,
+        validate_published_continuity_facts,
+    )
+    if is_continuity_customer_rule(normalized_rule_id):
+        valid, validated = validate_published_continuity_facts(rule_id=normalized_rule_id, raw=raw)
+        if not valid:
+            raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
+        return validated
     if raw is None or not isinstance(raw, dict):
         return None
     return validate_luxian_0609_executor_customer_display_facts(
@@ -520,10 +529,10 @@ def finalizer_owns_executor_customer_display_facts(rule_id: str) -> bool:
     from .death_document_result_mapping import is_death_document_customer_rule
     from .discharge_result_mapping import is_discharge_customer_rule
     from .critical_value_result_mapping import is_critical_value_customer_rule
+    from .continuity_result_mapping import is_continuity_customer_rule
     from .basic_timeliness_customer_projection import is_basic_timeliness_customer_rule
     from .antimicrobial_result_mapping import is_antimicrobial_customer_rule
     from .postoperative_result_mapping import is_postoperative_customer_rule
-    from .continuity_result_mapping import is_continuity_customer_rule
     from .surgery_presence_result_mapping import is_surgery_presence_customer_rule
 
     return (
@@ -923,6 +932,7 @@ def finalize_luxian_0609_reduced_customer_result(
     from .course_quality_result_mapping import is_course_quality_customer_rule
     from .consultation_customer_projection import is_consultation_customer_rule
     from .critical_value_result_mapping import is_critical_value_customer_rule
+    from .continuity_result_mapping import is_continuity_customer_rule
 
     if not isinstance(decision, ReducedRuleDecision):
         raise TypeError("decision must be a ReducedRuleDecision")
@@ -972,6 +982,7 @@ def finalize_luxian_0609_reduced_customer_result(
                     or is_course_quality_customer_rule(rule_id)
                     or is_consultation_customer_rule(rule_id)
                     or is_critical_value_customer_rule(rule_id)
+                    or is_continuity_customer_rule(rule_id)
                     or rule_id == "LX0609-06-02-01")
                 and raw_customer_display_facts is not None
                 else NotImplemented
