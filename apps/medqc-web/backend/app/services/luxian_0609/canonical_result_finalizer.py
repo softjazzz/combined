@@ -354,10 +354,15 @@ def validate_luxian_0609_executor_customer_display_facts(
             else None
         )
     if is_consultation_customer_rule(rule_id):
-        safe_facts = safe_consultation_customer_display_facts(
-            rule_id=rule_id,
-            raw=raw,
-        )
+        from .consultation_customer_projection import validate_published_consultation_facts
+
+        # 原生会诊执行器已经投影一次；已发布形态只校验，旧内部形态才投影。
+        safe_facts = validate_published_consultation_facts(rule_id=rule_id, raw=raw)
+        if safe_facts is None:
+            safe_facts = safe_consultation_customer_display_facts(
+                rule_id=rule_id,
+                raw=raw,
+            )
         return (
             safe_facts
             if safe_facts is not None and not contains_private_identifier(safe_facts)

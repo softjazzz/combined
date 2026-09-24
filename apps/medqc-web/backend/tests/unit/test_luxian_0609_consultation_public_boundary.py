@@ -207,11 +207,28 @@ def test_023_initial_finalizer_projection_is_called_once(monkeypatch):
     assert calls == [RULE_023]
     assert result["status"] == "not_applicable"
     assert result["reason_code"] == "trigger_absent_complete"
-    assert result["customer_display_facts"] == original(rule_id=RULE_023, raw=raw)
+    published = original(rule_id=RULE_023, raw=raw)
+    assert result["customer_display_facts"] == published
+    published_result = finalize_luxian_0609_reduced_customer_result(
+        decision=decision, raw_customer_display_facts=published,
+        evidence_snapshot=None, evidence_materials=None,
+    )
+    assert calls == [RULE_023]  # 已发布输入只校验，不再调用内部投影。
+    for key in ("status", "reason_code", "customer_display_facts", "conclusion", "suggestion"):
+        assert published_result.get(key) == result.get(key)
 
 
 @pytest.mark.asyncio
-async def test_023_fixed_native_binding_aggregate_keeps_decision_evidence_and_usage():
+async def test_023_fixed_native_binding_aggregate_keeps_decision_evidence_and_usage(monkeypatch):
+    original = consultation_projection.safe_consultation_customer_display_facts
+    projection_calls = []
+
+    def counted(*, rule_id, raw):
+        projection_calls.append(rule_id)
+        return original(rule_id=rule_id, raw=raw)
+
+    monkeypatch.setattr(consultation_projection, "safe_consultation_customer_display_facts", counted)
+    monkeypatch.setattr(episode, "safe_consultation_customer_display_facts", counted)
     consultation_rows = _rows("申请与明确会诊意见", day=2)
     consultation_rows[0]["document_id"] = "CONSULT-OPINION-1"
     course_rows = _rows("已具体落实会诊意见", day=3)
@@ -230,6 +247,7 @@ async def test_023_fixed_native_binding_aggregate_keeps_decision_evidence_and_us
         institute_id="I", patient_id="P", visit_id="V", source_schema=None,
         llm_client=client, evidence_snapshot=session.snapshot, evidence_materials=session.materials,
     )
+    assert projection_calls == [RULE_023]
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=native.decisions, expected_rule_ids=(RULE_023,),
         snapshot=session.snapshot, evidence_materials=session.materials,
@@ -239,6 +257,7 @@ async def test_023_fixed_native_binding_aggregate_keeps_decision_evidence_and_us
         reduced_decisions=reduced, customer_display_facts=native.customer_display_facts,
         audit_context={"evidence_snapshot": session.snapshot, "evidence_materials": session.materials},
     )[0]
+    assert projection_calls == [RULE_023]
     assert native.llm_call_count == 2 and native.total_tokens == 32
     assert (reduced[0].final_state.value, reduced[0].reason_code) == ("compliant", "requirement_satisfied")
     assert (canonical["status"], canonical["reason_code"]) == ("compliant", "requirement_satisfied")
