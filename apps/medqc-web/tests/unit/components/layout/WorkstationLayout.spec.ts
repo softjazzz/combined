@@ -1,4 +1,4 @@
-import { defineComponent, h, nextTick } from 'vue'
+import { defineComponent, h, nextTick, reactive } from 'vue'
 import { shallowMount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -12,7 +12,7 @@ const routeState = vi.hoisted(() => ({
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push: routerPush }),
-  useRoute: () => routeState,
+  useRoute: () => reactiveRoute,
 }))
 
 vi.mock('@/stores/auth', () => ({
@@ -24,6 +24,18 @@ vi.mock('@/stores/auth', () => ({
 }))
 
 import WorkstationLayout from '@/components/layout/WorkstationLayout.vue'
+
+const reactiveRoute = reactive(routeState)
+let mobileMatches = false
+let mediaChange: ((event: MediaQueryListEvent) => void) | undefined
+
+const SiderStub = defineComponent({
+  name: 'SiderStub',
+  props: { collapsed: { type: Boolean, default: false } },
+  setup(props, { slots }) {
+    return () => h('aside', { 'data-collapsed': String(props.collapsed) }, slots.default?.())
+  },
+})
 
 const PassThroughStub = defineComponent({
   setup(_, { slots }) {
@@ -70,7 +82,7 @@ function mountLayout() {
     global: {
       stubs: {
         'a-layout': PassThroughStub,
-        'a-layout-sider': PassThroughStub,
+        'a-layout-sider': SiderStub,
         'a-layout-header': PassThroughStub,
         'a-layout-content': PassThroughStub,
         'a-menu': MenuStub,
@@ -95,6 +107,18 @@ function mountLayout() {
 describe('WorkstationLayout 门急诊入口', () => {
   beforeEach(() => {
     routerPush.mockReset()
+    mobileMatches = false
+    mediaChange = undefined
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: vi.fn(() => ({
+        matches: mobileMatches,
+        addEventListener: (_event: string, listener: (event: MediaQueryListEvent) => void) => {
+          mediaChange = listener
+        },
+        removeEventListener: vi.fn(),
+      })),
+    })
     authState.userRoles = ['admin']
     routeState.path = '/workstation-v5'
     routeState.fullPath = '/workstation-v5'
@@ -136,5 +160,72 @@ describe('WorkstationLayout 门急诊入口', () => {
     expect(menu.props('selectedKeys')).toEqual(['/workstation-v5/records/outpatient-emergency'])
     expect(menu.props('openKeys')).toContain('workstation-sub')
     expect(wrapper.text()).toContain('门急诊病历')
+  })
+})
+
+describe('WorkstationLayout 窄屏导航', () => {
+  beforeEach(() => {
+    routerPush.mockReset()
+    authState.userRoles = ['admin']
+    routeState.path = '/workstation-v5/records/running'
+    routeState.fullPath = routeState.path
+    routeState.query = {}
+    mobileMatches = true
+    mediaChange = undefined
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: vi.fn(() => ({
+        matches: mobileMatches,
+        addEventListener: (_event: string, listener: (event: MediaQueryListEvent) => void) => {
+          mediaChange = listener
+        },
+        removeEventListener: vi.fn(),
+      })),
+    })
+  })
+
+  it('窄屏初态收起覆盖侧栏，仍显示菜单触发器', async () => {
+    const wrapper = mountLayout()
+    expect(wrapper.classes()).not.toContain('workstation-layout--mobile-menu-open')
+    expect(wrapper.findComponent(SiderStub).props('collapsed')).toBe(false)
+    expect(wrapper.find('.mobile-menu-trigger').attributes('aria-label')).toBe('打开导航菜单')
+    expect(wrapper.find('.mobile-menu-backdrop').exists()).toBe(false)
+
+    await wrapper.find('.mobile-menu-trigger').trigger('click')
+    expect(wrapper.classes()).toContain('workstation-layout--mobile-menu-open')
+    expect(wrapper.find('.mobile-menu-trigger').attributes('aria-label')).toBe('关闭导航菜单')
+    await wrapper.find('.mobile-menu-backdrop').trigger('click')
+    expect(wrapper.classes()).not.toContain('workstation-layout--mobile-menu-open')
+  })
+
+  it('概览页没有 header 时可打开菜单，导航后自动收起', async () => {
+    routeState.path = '/workstation-v5/qc-overview'
+    routeState.fullPath = routeState.path
+    const wrapper = mountLayout()
+    expect(wrapper.find('.header').exists()).toBe(false)
+    await wrapper.find('.mobile-menu-trigger').trigger('click')
+    wrapper.findComponent(MenuStub).vm.$emit('click', { key: '/workstation-v5/records/running' })
+    await nextTick()
+    expect(routerPush).toHaveBeenCalledWith('/workstation-v5/records/running')
+    expect(wrapper.classes()).not.toContain('workstation-layout--mobile-menu-open')
+
+    await wrapper.find('.mobile-menu-trigger').trigger('click')
+    reactiveRoute.path = '/workstation-v5/records/running'
+    reactiveRoute.fullPath = reactiveRoute.path
+    await nextTick()
+    expect(wrapper.classes()).not.toContain('workstation-layout--mobile-menu-open')
+  })
+
+  it('回到桌面宽度后维持原有侧栏和折叠行为', async () => {
+    const wrapper = mountLayout()
+    await wrapper.find('.mobile-menu-trigger').trigger('click')
+    mobileMatches = false
+    mediaChange?.({ matches: false } as MediaQueryListEvent)
+    await nextTick()
+    expect(wrapper.find('.mobile-menu-trigger').exists()).toBe(false)
+    expect(wrapper.classes()).not.toContain('workstation-layout--mobile-menu-open')
+    expect(wrapper.findComponent(SiderStub).props('collapsed')).toBe(false)
+    await wrapper.find('.desktop-menu-trigger').trigger('click')
+    expect(wrapper.findComponent(SiderStub).props('collapsed')).toBe(true)
   })
 })

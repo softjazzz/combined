@@ -3,11 +3,20 @@
     class="workstation-layout workstation-layout--apple min-h-screen"
     :class="{
       'workstation-layout--overview': isQcOverviewRoute,
+      'workstation-layout--mobile-menu-open': isNarrowScreen && mobileMenuOpen,
     }"
   >
+    <button
+      v-if="isNarrowScreen && mobileMenuOpen"
+      type="button"
+      class="mobile-menu-backdrop"
+      aria-label="关闭导航菜单"
+      @click="mobileMenuOpen = false"
+    />
     <!-- 侧边栏 -->
     <a-layout-sider
-      v-model:collapsed="collapsed"
+      :collapsed="isNarrowScreen ? false : collapsed"
+      @update:collapsed="handleSiderCollapse"
       collapsible
       class="sidebar-container relative overflow-hidden border-none"
       theme="light"
@@ -260,6 +269,18 @@
       </div>
     </a-layout-sider>
 
+    <a-button
+      v-if="isNarrowScreen"
+      type="text"
+      class="mobile-menu-trigger"
+      :aria-label="mobileMenuOpen ? '关闭导航菜单' : '打开导航菜单'"
+      :aria-expanded="mobileMenuOpen"
+      @click="mobileMenuOpen = !mobileMenuOpen"
+    >
+      <MenuFoldOutlined v-if="mobileMenuOpen" />
+      <MenuUnfoldOutlined v-else />
+    </a-button>
+
     <!-- 主内容区域 -->
     <a-layout>
       <!-- 顶部导航栏 -->
@@ -270,7 +291,7 @@
         <div class="flex items-center">
           <a-button
             type="text"
-            class="trigger hover:bg-slate-100 text-slate-500 hover:text-slate-700 border-0 mr-4 rounded-lg w-9 h-9 flex items-center justify-center transition-colors"
+            class="trigger desktop-menu-trigger hover:bg-slate-100 text-slate-500 hover:text-slate-700 border-0 mr-4 rounded-lg w-9 h-9 flex items-center justify-center transition-colors"
             @click="collapsed = !collapsed"
           >
             <MenuUnfoldOutlined v-if="collapsed" class="text-lg" />
@@ -415,7 +436,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import RuntimeBuildStatus from '@/components/layout/RuntimeBuildStatus.vue'
 import { useRouter, useRoute } from 'vue-router'
 import type { MenuInfo } from 'ant-design-vue/es/menu/src/interface'
@@ -463,8 +484,29 @@ const authStore = useAuthStore()
 
 // 响应式数据
 const collapsed = ref(false)
+const mobileMediaQuery = '(max-width: 767px)'
+const isNarrowScreen = ref(
+  typeof window !== 'undefined' &&
+    (window.matchMedia?.(mobileMediaQuery).matches ?? window.innerWidth <= 767),
+)
+const mobileMenuOpen = ref(false)
 const selectedKeys = ref<string[]>([])
 const openKeys = ref<string[]>([])
+
+let mediaQueryList: MediaQueryList | undefined
+function syncNarrowScreen(event: MediaQueryListEvent) {
+  isNarrowScreen.value = event.matches
+  mobileMenuOpen.value = false
+}
+onMounted(() => {
+  mediaQueryList = window.matchMedia?.(mobileMediaQuery)
+  mediaQueryList?.addEventListener('change', syncNarrowScreen)
+})
+onBeforeUnmount(() => mediaQueryList?.removeEventListener('change', syncNarrowScreen))
+
+function handleSiderCollapse(value: boolean) {
+  if (!isNarrowScreen.value) collapsed.value = value
+}
 
 // 当前页面标题
 const currentPageTitle = computed(() => {
@@ -543,6 +585,7 @@ async function navigateTo(path: string, query?: Record<string, string>) {
 }
 
 const handleMenuSelect = async ({ key }: MenuInfo) => {
+  mobileMenuOpen.value = false
   const keyStr = String(key)
   if (keyStr.startsWith('ws-stage-')) return
   if (keyStr.includes('?')) {
@@ -579,6 +622,7 @@ const handleLogout = async () => {
 watch(
   () => route.fullPath,
   () => {
+    mobileMenuOpen.value = false
     const base = route.path === '/workstation-v5/qc-overview' ? '/workstation-v5' : route.path
     const tab = String(route.query.tab || '').trim()
     if (
@@ -1388,5 +1432,89 @@ watch(
 .workstation-layout--apple :deep(.qc-home-shell),
 .workstation-layout--apple :deep(.running-qc-refined) {
   background: var(--medqc-workspace-canvas) !important;
+}
+
+.mobile-menu-trigger,
+.mobile-menu-backdrop {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .workstation-layout--apple {
+    min-width: 0;
+  }
+
+  .workstation-layout--apple > :deep(.ant-layout) {
+    min-width: 0;
+    width: 100%;
+    flex: 1 1 100%;
+  }
+
+  .workstation-layout--apple .sidebar-container,
+  .workstation-layout--overview :deep(.ant-layout-sider) {
+    position: fixed !important;
+    z-index: 1001;
+    top: 0;
+    left: 0;
+    width: 220px !important;
+    min-width: 220px !important;
+    max-width: 220px !important;
+    height: 100dvh;
+    margin: 0 !important;
+    border-radius: 0;
+    transform: translateX(-100%);
+    transition: transform 220ms ease;
+  }
+
+  .workstation-layout--mobile-menu-open .sidebar-container {
+    transform: translateX(0);
+  }
+
+  .workstation-layout--apple .sidebar-container :deep(.ant-layout-sider-trigger) {
+    display: none;
+  }
+
+  .workstation-layout--apple .sidebar-container :deep(.ant-layout-sider-children) {
+    padding-bottom: 0;
+  }
+
+  .workstation-layout--apple .desktop-menu-trigger {
+    display: none;
+  }
+
+  .workstation-layout--apple .header {
+    padding-left: 54px !important;
+    padding-right: 8px !important;
+  }
+
+  .mobile-menu-trigger {
+    position: fixed;
+    z-index: 1002;
+    top: 7px;
+    left: 8px;
+    display: flex;
+    width: 40px;
+    height: 40px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.92);
+    color: #1d1d1f;
+    box-shadow: 0 2px 8px rgba(39, 62, 94, 0.12);
+  }
+
+  .workstation-layout--mobile-menu-open .mobile-menu-trigger {
+    left: 228px;
+  }
+
+  .mobile-menu-backdrop {
+    position: fixed;
+    z-index: 1000;
+    inset: 0;
+    display: block;
+    width: 100%;
+    border: 0;
+    background: rgba(29, 29, 31, 0.3);
+  }
 }
 </style>

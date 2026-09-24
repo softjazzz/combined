@@ -1,4 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils'
+import { Pagination } from 'ant-design-vue'
 import { defineComponent, h } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -166,6 +167,7 @@ function response() {
         },
       ],
       departments: [{ name: '重症医学科', total: 6 }],
+      doctors: [{ name: '全部主管医师', total: 6 }, { name: '张医师', total: 3 }],
       total: 6,
       page: 1,
       qc_summary: {
@@ -270,7 +272,7 @@ describe('QcRecordResultListView', () => {
     expect(wrapper.classes()).toContain('running-qc-refined')
     expect(
       wrapper.findAll('.qc-record-result-list-view__field-label').map((label) => label.text()),
-    ).toEqual(['关键词', '科室', '入院日期'])
+    ).toEqual(['关键词', '科室', '主管医师', '入院日期'])
     expect(
       wrapper
         .find('.qc-record-result-list-view__filters .qc-record-result-list-view__export-trigger')
@@ -288,7 +290,7 @@ describe('QcRecordResultListView', () => {
     expect(finalView.find('.qc-record-result-list-view__list-heading').exists()).toBe(true)
     expect(
       finalView.findAll('.qc-record-result-list-view__field-label').map((label) => label.text()),
-    ).toEqual(['关键词', '科室', '出院日期'])
+    ).toEqual(['关键词', '科室', '主管医师', '出院日期'])
     expect(finalView.getComponent(QcRecordReviewPreview).props('carePhase')).toBe('discharged')
     expect(finalView.findAllComponents(QcRunSelectedControl)).toHaveLength(1)
   })
@@ -378,7 +380,7 @@ describe('QcRecordResultListView', () => {
     )
   })
 
-  it('关键词、科室和日期过滤重置为第一页并只使用服务端请求', async () => {
+  it('关键词、科室、主管医师和日期过滤重置为第一页并只使用服务端请求', async () => {
     const wrapper = mountView('discharged')
     await flushPromises()
     const inputs = wrapper.findAll('input')
@@ -386,6 +388,7 @@ describe('QcRecordResultListView', () => {
     await inputs[1].setValue('2026-08-01')
     await inputs[2].setValue('2026-08-10')
     await wrapper.find('select').setValue('重症医学科')
+    await wrapper.get('select[aria-label="主管医师筛选"]').setValue('张医师')
     await flushPromises()
 
     expect(mocks.getRaw).toHaveBeenLastCalledWith('/api/medical-records/workstation', {
@@ -393,11 +396,65 @@ describe('QcRecordResultListView', () => {
       page_size: 15,
       date_field: 'discharge',
       dept: '重症医学科',
+      doctor: '张医师',
       keyword: '患者甲',
       start_date: '2026-08-01',
       end_date: '2026-08-10',
       hospital_status: 'discharged',
     })
+  })
+
+  it('主管医师选项来自服务端，切换与全部重置均重新请求而不本地过滤', async () => {
+    const payload = response()
+    payload.data.total = 30
+    mocks.getRaw.mockResolvedValue(payload)
+    const wrapper = mountView('inpatient')
+    await flushPromises()
+    const doctorSelect = wrapper.get('select[aria-label="主管医师筛选"]')
+    expect(doctorSelect.findAll('option').map((option) => option.text())).toEqual([
+      '全部主管医师',
+      '张医师',
+    ])
+
+    wrapper.getComponent(Pagination).vm.$emit('change', 2, 15)
+    await flushPromises()
+    expect(mocks.getRaw).toHaveBeenLastCalledWith('/api/medical-records/workstation', {
+      page: 2,
+      page_size: 15,
+      date_field: 'admission',
+      hospital_status: 'inpatient',
+    })
+
+    await doctorSelect.setValue('张医师')
+    await flushPromises()
+    expect(mocks.getRaw).toHaveBeenLastCalledWith('/api/medical-records/workstation', {
+      page: 1,
+      page_size: 15,
+      date_field: 'admission',
+      doctor: '张医师',
+      hospital_status: 'inpatient',
+    })
+    expect(wrapper.findAll('tbody tr[data-record-key]')).toHaveLength(5)
+
+    await doctorSelect.setValue('全部主管医师')
+    await flushPromises()
+    expect(mocks.getRaw).toHaveBeenLastCalledWith('/api/medical-records/workstation', {
+      page: 1,
+      page_size: 15,
+      date_field: 'admission',
+      hospital_status: 'inpatient',
+    })
+  })
+
+  it('服务端未提供医生列表时不从当前页病历伪造医生选项', async () => {
+    const payload = response()
+    payload.data.doctors = []
+    mocks.getRaw.mockResolvedValue(payload)
+    const wrapper = mountView('inpatient')
+    await flushPromises()
+    expect(
+      wrapper.get('select[aria-label="主管医师筛选"]').findAll('option').map((option) => option.text()),
+    ).toEqual(['全部主管医师'])
   })
 
   it('按当前服务端筛选导出已出院病历Excel，不使用当前页行拼接', async () => {
@@ -408,6 +465,7 @@ describe('QcRecordResultListView', () => {
     await inputs[1].setValue('2026-08-01')
     await inputs[2].setValue('2026-08-10')
     await wrapper.find('select').setValue('重症医学科')
+    await wrapper.get('select[aria-label="主管医师筛选"]').setValue('张医师')
     await flushPromises()
 
     await wrapper.get('[data-testid="qc-result-export-trigger"]').trigger('click')
@@ -417,6 +475,7 @@ describe('QcRecordResultListView', () => {
     expect(mocks.exportFilteredLuxian0609RecordResults).toHaveBeenCalledWith({
       scope: 'final',
       department: '重症医学科',
+      doctor: '张医师',
       date_field: 'discharge',
       start_date: '2026-08-01',
       end_date: '2026-08-10',

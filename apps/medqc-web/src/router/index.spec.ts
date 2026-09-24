@@ -61,4 +61,17 @@ describe('旧 Dashboard 首页路由', () => {
     },
     15_000,
   )
+
+  it('旧运行病历入口保留 query 和 hash，并只进入 V5 病历池', async () => {
+    const legacyRoute = router.getRoutes().find((route) => route.name === 'RunningRecords')
+
+    expect(legacyRoute?.redirect).toBeTypeOf('function')
+    expect(legacyRoute?.components).toBeUndefined()
+
+    await router.push('/dashboard/records/running?source=legacy&stage=review#record-list')
+
+    expect(router.currentRoute.value.fullPath).toBe(
+      '/workstation-v5/records/running?source=legacy&stage=review#record-list',
+    )
+  })
 })

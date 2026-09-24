@@ -592,8 +592,11 @@ class RecordRepository:
             )
         if department:
             query = query.filter(dept_expr == department)
-        if doctor:
-            query = query.filter(MedicalRecordFrontpage.attending_physician_sign == doctor)
+        normalized_doctor = _safe_text(doctor)
+        if normalized_doctor:
+            query = query.filter(
+                func.trim(MedicalRecordFrontpage.attending_physician_sign) == normalized_doctor
+            )
         if keyword:
             kw = f"%{keyword.strip()}%"
             query = query.filter(

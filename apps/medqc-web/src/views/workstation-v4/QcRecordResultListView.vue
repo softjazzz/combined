@@ -79,6 +79,15 @@
               </option>
             </select>
           </label>
+          <label class="qc-record-result-list-view__filter-field">
+            <span class="qc-record-result-list-view__field-label">主管医师</span>
+            <select v-model="activeDoctor" aria-label="主管医师筛选" @change="applyFilters">
+              <option value="全部主管医师">全部主管医师</option>
+              <option v-for="doctor in doctorOptions" :key="doctor" :value="doctor">
+                {{ doctor }}
+              </option>
+            </select>
+          </label>
           <div
             class="qc-record-result-list-view__date-field"
             role="group"
@@ -151,7 +160,7 @@
                 @click="runFilteredExport"
               >
                 <strong>导出当前筛选结果</strong>
-                <span>按当前科室、日期和关键词导出</span>
+                <span>按当前科室、主管医师、日期和关键词导出</span>
               </button>
             </div>
           </div>
@@ -333,6 +342,7 @@ const {
   dateField,
   dateRange,
   departments,
+  doctors,
   fetchData,
   handlePageChange,
   loadError,
@@ -346,6 +356,9 @@ const {
 
 const departmentOptions = computed(() =>
   departments.value.map((item) => item.name).filter((name) => name && name !== '全部科室'),
+)
+const doctorOptions = computed(() =>
+  doctors.value.map((item) => item.name).filter((name) => name && name !== '全部主管医师'),
 )
 
 type QcRecordMetricKey = 'records' | 'completed' | 'priority' | 'dataGap'
@@ -1181,6 +1194,22 @@ function closeResultDrawer() {
 
 <style scoped>
 @import './styles/running-qc-refined.css';
+
+.running-qc-refined .qc-record-result-list-view__filters {
+  grid-template-columns: minmax(140px, 1fr) minmax(125px, 150px) minmax(125px, 160px) minmax(280px, 330px) auto;
+}
+
+@media (max-width: 1100px) {
+  .running-qc-refined .qc-record-result-list-view__filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .running-qc-refined .qc-record-result-list-view__filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 
 .qc-record-result-list-view__filter-field,
 .qc-record-result-list-view__date-field,

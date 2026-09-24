@@ -491,6 +491,17 @@ const singleResult = ref<CustomQcSingleTestResult | null>(null)
 const batchResult = ref<CustomQcBatchTestResult | null>(null)
 const publishedRuleId = ref('')
 const publishedRuleCode = ref('')
+const testedDraftSnapshot = ref('')
+let evidenceVersion = 0
+
+function clearTestEvidence() {
+  evidenceVersion += 1
+  testedDraftSnapshot.value = ''
+  singleResult.value = null
+  batchResult.value = null
+  publishedRuleId.value = ''
+  publishedRuleCode.value = ''
+}
 const generationMode = ref<'llm' | 'fallback_template'>('fallback_template')
 const promptSummary = ref('')
 const generatedCheckPoints = ref<string[]>([])
@@ -569,13 +580,19 @@ const canGeneratePrompt = computed(
 )
 const canRunTest = computed(
   () =>
+    scene.value !== 'final' &&
     selectedRecordKeys.value.length > 0 &&
     draftRule.name.trim() &&
     draftRule.description.trim() &&
     draftRule.prompt_template.trim(),
 )
 const canPublish = computed(() =>
-  Boolean((singleResult.value || batchResult.value) && draftRule.prompt_template.trim()),
+  Boolean(
+    scene.value !== 'final' &&
+      (singleResult.value || batchResult.value) &&
+      testedDraftSnapshot.value &&
+      testedDraftSnapshot.value === JSON.stringify(buildDraftRulePayload()),
+  ),
 )
 const prefillText = computed(() => {
   const parts: string[] = []
@@ -639,6 +656,10 @@ async function fetchRecords() {
     pagination.total = response.data.total || 0
     applyPrefillSelection()
   } catch (error: any) {
+    records.value = []
+    selectedRecordKeys.value = []
+    pagination.total = 0
+    clearTestEvidence()
     message.error(error?.message || '获取病历列表失败')
   } finally {
     recordsLoading.value = false
@@ -737,6 +758,10 @@ function buildDraftRulePayload(): CustomQcDraftRule {
   }
 }
 
+function isCurrentTestContext(version: number, draftSnapshot: string): boolean {
+  return version === evidenceVersion && draftSnapshot === JSON.stringify(buildDraftRulePayload())
+}
+
 function composeMedicalText(detail: any): string {
   const documents = detail?.documents || {}
   const rawDocuments = Array.isArray(documents.raw_documents) ? documents.raw_documents : []
@@ -827,12 +852,14 @@ async function persistBatchResult(result: CustomQcBatchTestResult) {
 async function runSelectedTest() {
   if (!canRunTest.value) return
   testing.value = true
-  singleResult.value = null
-  batchResult.value = null
+  clearTestEvidence()
+  const currentEvidenceVersion = evidenceVersion
+  const rulePayload = buildDraftRulePayload()
+  const draftSnapshot = JSON.stringify(rulePayload)
   try {
     const recordsPayload = await fetchSelectedRecordPayloads([...selectedRecordKeys.value])
+    if (!isCurrentTestContext(currentEvidenceVersion, draftSnapshot)) return
     if (!recordsPayload.length) throw new Error('未获取到可测试的病历正文')
-    const rulePayload = buildDraftRulePayload()
 
     if (recordsPayload.length === 1) {
       const response = await testCustomQcSingle({
@@ -840,9 +867,12 @@ async function runSelectedTest() {
         records: recordsPayload,
         ...advancedParams,
       })
+      if (!isCurrentTestContext(currentEvidenceVersion, draftSnapshot)) return
       if (!response.success || !response.data) throw new Error(response.message || '单病历测试失败')
-      singleResult.value = response.data
       await persistSingleResult(response.data)
+      if (!isCurrentTestContext(currentEvidenceVersion, draftSnapshot)) return
+      singleResult.value = response.data
+      testedDraftSnapshot.value = draftSnapshot
       message.success('单病历测试完成')
       return
     }
@@ -852,9 +882,12 @@ async function runSelectedTest() {
       records: recordsPayload,
       ...advancedParams,
     })
+    if (!isCurrentTestContext(currentEvidenceVersion, draftSnapshot)) return
     if (!response.success || !response.data) throw new Error(response.message || '批量测试失败')
-    batchResult.value = response.data
     await persistBatchResult(response.data)
+    if (!isCurrentTestContext(currentEvidenceVersion, draftSnapshot)) return
+    batchResult.value = response.data
+    testedDraftSnapshot.value = draftSnapshot
     message.success('批量测试完成')
   } catch (error: any) {
     message.error(error?.message || '测试失败')
@@ -881,9 +914,12 @@ async function generateNextLxeRuleCode() {
 }
 
 async function handlePublish() {
+  if (!canPublish.value) return
+  const currentEvidenceVersion = evidenceVersion
   publishing.value = true
   try {
     const nextCode = await generateNextLxeRuleCode()
+    if (currentEvidenceVersion !== evidenceVersion || !canPublish.value) return
     const checkLogic = JSON.parse(
       JSON.stringify({
         ...buildCheckLogic(),
@@ -905,6 +941,7 @@ async function handlePublish() {
       version: '1.0',
     }
     const created = await RulesService.createRule(payload)
+    if (currentEvidenceVersion !== evidenceVersion || !canPublish.value) return
     publishedRuleId.value = created.id
     publishedRuleCode.value = created.rule_code || nextCode
     message.success(`规则 ${publishedRuleCode.value} 已发布到规则库`)
@@ -928,6 +965,10 @@ function goBack() {
 watch(
   () => scene.value,
   () => {
+    records.value = []
+    selectedRecordKeys.value = []
+    pagination.total = 0
+    clearTestEvidence()
     draftRule.scene = scene.value
     if (!draftRule.name && !draftRule.description && !draftRule.prompt_template) {
       draftRule.document_type = scene.value === 'final' ? '出院记录' : '病程记录'

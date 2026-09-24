@@ -150,7 +150,7 @@ export interface AssignRemediationData {
 
 // ============= 管理员端新增 API =============
 
-/** 获取管理员端运行病历列表（聚合 task_records + 缺陷统计） */
+/** 旧管理员入口的病历列表；运行/终末试跑尚无可信单病历资料链。 */
 export async function getAdminRecordList(params?: {
   scene?: 'running' | 'final' | 'outpatient_emergency'
   task_id?: string
@@ -162,6 +162,13 @@ export async function getAdminRecordList(params?: {
   page?: number
   page_size?: number
 }) {
+  if (params?.scene !== 'outpatient_emergency') {
+    return {
+      success: false,
+      data: undefined,
+      message: '此旧试跑入口无法确认运行/终末病历的单病历资料链，请前往病历质控列表查看',
+    }
+  }
   const queryParams = new URLSearchParams()
   if (params) {
     Object.entries(params).forEach(([key, value]) => {
@@ -170,9 +177,7 @@ export async function getAdminRecordList(params?: {
       }
     })
   }
-  const targetBaseUrl =
-    params?.scene === 'outpatient_emergency' ? `${RECORDS_URL}/outpatient-emergency` : TASKS_URL
-  const url = `${targetBaseUrl}${queryParams.toString() ? '?' + queryParams.toString() : ''}`
+  const url = `${RECORDS_URL}/outpatient-emergency${queryParams.toString() ? '?' + queryParams.toString() : ''}`
   return request<{ items: AdminRecordItem[]; total: number; page: number; page_size: number }>({
     method: 'GET',
     url,

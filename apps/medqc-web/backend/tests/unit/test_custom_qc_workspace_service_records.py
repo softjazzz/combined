@@ -126,6 +126,31 @@ def test_explicit_anchor_keeps_frontpage_admission_time_priority(explicit_anchor
     assert rows[0]["admission_datetime"] == "2026-07-03 11:00:00"
 
 
+@pytest.mark.parametrize("doctor", ["张医师", " 张医师 "])
+def test_records_query_doctor_filter_trims_source_and_requested_name(
+    explicit_anchor_database, doctor,
+):
+    with Session(explicit_anchor_database) as session:
+        session.add_all([
+            record_repository_module.MedicalRecordFrontpage(
+                institute_id="I", patient_id="P1", visit_id="MATCH",
+                attending_physician_sign=" 张医师 ",
+            ),
+            record_repository_module.MedicalRecordFrontpage(
+                institute_id="I", patient_id="P2", visit_id="OTHER",
+                attending_physician_sign="李医师",
+            ),
+        ])
+        session.commit()
+
+        rows = RecordRepository(session_factory=lambda: session)._build_records_query(
+            session, scope="all", department=None, doctor=doctor,
+            date_field="admission", start_date=None, end_date=None, keyword=None,
+        ).all()
+
+    assert [row[0].visit_id for row in rows] == ["MATCH"]
+
+
 def test_serialize_record_row_should_include_programmatic_execution_keys():
     repository = RecordRepository(session_factory=lambda: None)
     row = SimpleNamespace(

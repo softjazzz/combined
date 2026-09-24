@@ -767,6 +767,13 @@ const loadOverview = async () => {
 }
 
 /** 加载病历列表 */
+const clearRecords = () => {
+  records.value = []
+  pagination.current = 1
+  pagination.total = 0
+  selectedRowKeys.value = []
+}
+
 const fetchRecords = async () => {
   loading.value = true
   try {
@@ -795,78 +802,12 @@ const fetchRecords = async () => {
         records.value = res.data.items || []
         pagination.total = res.data.total || 0
       } else {
-        // API 未就绪时使用本地降级数据兜底
-        records.value = [
-          {
-            id: '1',
-            record_id: 'C2024001',
-            registrationNo: 'R2024001',
-            patient_name: '张三',
-            patientAge: 45,
-            patientGender: '男',
-            doctorName: '李医生',
-            department: '心内科',
-            auditStatus: 'pending',
-            score: 85,
-            isUrgent: true,
-          },
-          {
-            id: '2',
-            record_id: 'C2024002',
-            registrationNo: 'R2024002',
-            patient_name: '李四',
-            patientAge: 32,
-            patientGender: '女',
-            doctorName: '王医生',
-            department: '消化内科',
-            auditStatus: 'reviewing',
-            score: 92,
-            isUrgent: false,
-          },
-          {
-            id: '3',
-            record_id: 'C2024003',
-            registrationNo: 'R2024003',
-            patient_name: '王五',
-            patientAge: 67,
-            patientGender: '男',
-            doctorName: '赵医生',
-            department: '呼吸内科',
-            auditStatus: 'approved',
-            score: 98,
-            isUrgent: false,
-          },
-          {
-            id: '4',
-            record_id: 'C2024004',
-            registrationNo: 'R2024004',
-            patient_name: '赵六',
-            patientAge: 28,
-            patientGender: '女',
-            doctorName: '钱医生',
-            department: '妇产科',
-            auditStatus: 'rejected',
-            score: 55,
-            isUrgent: false,
-          },
-          {
-            id: '5',
-            record_id: 'C2024005',
-            registrationNo: 'R2024005',
-            patient_name: '孙七',
-            patientAge: 55,
-            patientGender: '男',
-            doctorName: '孙医生',
-            department: '骨科',
-            auditStatus: 'pending',
-            score: 78,
-            isUrgent: false,
-          },
-        ] as any[]
-        pagination.total = 5
+        clearRecords()
+        message.error('获取病历列表失败')
       }
     }
   } catch (error) {
+    if (currentView.value !== 'defects') clearRecords()
     message.error('获取数据失败')
   } finally {
     loading.value = false

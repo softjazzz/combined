@@ -96,7 +96,11 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'records/running',
         name: 'RunningRecords',
-        component: () => import('@/views/dashboard/records/RunningRecordsViewNew.vue'),
+        redirect: (to) => ({
+          path: '/workstation-v5/records/running',
+          query: to.query,
+          hash: to.hash,
+        }),
         meta: {
           title: '运行病历',
           icon: 'PlayCircleOutlined',
