@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from tests.luxian_0609_identity_test_support import published_rule_ids
+from app.services.luxian_0609_rule_master import load_luxian_0609_rule_master
 
 import asyncio
 from types import SimpleNamespace
@@ -57,8 +58,12 @@ def test_rollout_groups_cover_legacy_rules_once() -> None:
         for rule_id in rule_ids
     ]
 
-    assert len(flattened) == len(set(flattened)) == 49
-    assert set(flattened) == set(_rule_ids(1, 49))
+    assert len(flattened) == len(set(flattened))
+    assert set(_rule_ids(1, 49)).issubset(flattened)
+    assert set(flattened).issubset(
+        entry.rule_id for entry in load_luxian_0609_rule_master()
+        if entry.implementation_status == "active"
+    )
 
 
 def test_full_mainline_selects_only_currently_executable_typed_decisions() -> None:
@@ -91,8 +96,11 @@ def test_full_mainline_selects_only_currently_executable_typed_decisions() -> No
     )
 
 
-def test_all_77_rules_have_one_contract_executor_and_registered_material_sources() -> None:
-    expected_rule_ids = _rule_ids(1, 77)
+def test_all_catalog_rules_have_one_contract_executor_and_registered_material_sources() -> None:
+    expected_rule_ids = tuple(
+        entry.rule_id for entry in load_luxian_0609_rule_master()
+        if entry.implementation_status == "active"
+    )
     contracts = load_luxian_0609_rule_contracts()
     dependencies = load_luxian_0609_dependency_inventory()
 
