@@ -30,7 +30,31 @@ class _NoModel:
 
 
 class _FamilyWorkspace(_WorkspaceStub):
-    def update_batch_job_progress(self, **kwargs):
+    def mark_batch_job_running(self, *, job_id):
+        assert self.job["status"] == "queued"
+        assert super().mark_batch_job_running(job_id=job_id)
+        self.attempt_token = "probe-attempt:" + job_id
+        return self.attempt_token
+
+    def is_batch_job_canceled_or_missing(self, *, job_id, attempt_filters_json):
+        return (
+            job_id != self.job["id"]
+            or attempt_filters_json != self.attempt_token
+            or self.job["status"] != "running"
+        )
+
+    def fail_batch_job(self, *, job_id, error_message, attempt_filters_json):
+        assert attempt_filters_json == self.attempt_token
+        assert self.job["status"] == "running"
+        return super().fail_batch_job(job_id=job_id, error_message=error_message)
+
+    def complete_batch_job(self, *, attempt_filters_json, **kwargs):
+        assert attempt_filters_json == self.attempt_token
+        super().complete_batch_job(**kwargs)
+        return True
+
+    def update_batch_job_progress(self, *, attempt_filters_json, **kwargs):
+        assert attempt_filters_json == self.attempt_token
         kwargs.pop("items", None)
         kwargs.pop("failed_records", None)
         return super().update_batch_job_progress(**kwargs)
