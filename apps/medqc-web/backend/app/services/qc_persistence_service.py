@@ -15,9 +15,10 @@ from datetime import datetime
 from functools import lru_cache
 from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import MetaData, Table, and_
+from sqlalchemy import MetaData, Table, and_, or_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.dml import Update
 
 from ..database.connection import SessionLocal, engine
 
@@ -228,6 +229,14 @@ class QCPersistenceService:
         ]
         return _stable_uuid(*identity), "|".join(str(part) for part in identity)
 
+    def _is_auto_owned_defect(self, record_id: str, row: Dict[str, Any]) -> bool:
+        origin = row.get("origin")
+        if origin is not None:
+            return origin == "auto"
+        # Historical rows have no provenance. Only the old writer's deterministic ID proves ownership.
+        expected_id, _ = self._defect_identity(record_id, row)
+        return str(row["id"]) == expected_id
+
     def _insert_defect_history(
         self,
         session: Session,
@@ -275,7 +284,22 @@ class QCPersistenceService:
             str(row["id"])
             for row in existing_rows
             if str(row.get("status") or "").lower() != "completed"
+            and self._is_auto_owned_defect(record_id, row)
         }
+
+        def restrict_to_observed_owner(stmt: Update, row: Dict[str, Any]) -> Update:
+            previous_origin = row.get("origin")
+            if "origin" in table.c:
+                stmt = stmt.where(
+                    table.c.origin.is_(None)
+                    if previous_origin is None else table.c.origin == previous_origin
+                )
+            if previous_origin is None:
+                for name in ("record_id", "rule_code", "rule_name", "location", "category"):
+                    value = row.get(name)
+                    column = table.c[name]
+                    stmt = stmt.where(column.is_(None) if value is None else column == value)
+            return stmt
 
         created = 0
         updated = 0
@@ -285,6 +309,8 @@ class QCPersistenceService:
 
         for issue in issues:
             defect_id, identity_key = self._defect_identity(record_id, issue)
+            if defect_id in touched_ids:
+                continue
             touched_ids.add(defect_id)
             defect_ids.append(defect_id)
             payload = {
@@ -301,20 +327,26 @@ class QCPersistenceService:
                 "location": issue["location"],
                 "evidence": issue.get("evidence"),
                 "suggestion": issue["suggestion"],
+                "origin": "auto",
                 "status": "pending",
                 "updated_at": _now_utc(),
             }
             existing = existing_by_id.get(defect_id)
             if existing:
-                session.execute(
-                    table.update()
-                    .where(table.c.id == defect_id)
-                    .values({
+                if not self._is_auto_owned_defect(record_id, existing):
+                    raise RuntimeError(f"Defect {defect_id} is not owned by automatic QC")
+                update_stmt = restrict_to_observed_owner(
+                    table.update().where(table.c.id == defect_id), existing
+                )
+                update_result = session.execute(
+                    update_stmt.values({
                         key: _value_for_column(table.c[key], value)
                         for key, value in payload.items()
                         if key in table.c and key != "id"
                     })
                 )
+                if update_result.rowcount != 1:
+                    raise RuntimeError(f"Defect {defect_id} changed ownership during automatic QC")
                 updated += 1
                 self._insert_defect_history(
                     session,
@@ -332,7 +364,9 @@ class QCPersistenceService:
                 for key, value in payload.items()
                 if key in table.c
             }).on_conflict_do_nothing(index_elements=["id"])
-            session.execute(stmt)
+            insert_result = session.execute(stmt)
+            if insert_result.rowcount != 1:
+                raise RuntimeError(f"Defect {defect_id} was concurrently created")
             created += 1
             self._insert_defect_history(
                 session,
@@ -344,14 +378,22 @@ class QCPersistenceService:
             )
 
         for defect_id in sorted(active_existing_ids - touched_ids):
-            session.execute(
-                table.update()
-                .where(and_(table.c.id == defect_id, table.c.status != "completed"))
-                .values({
+            existing = existing_by_id[defect_id]
+            resolve_stmt = table.update().where(
+                and_(
+                    table.c.id == defect_id,
+                    or_(table.c.status.is_(None), table.c.status != "completed"),
+                )
+            )
+            resolve_stmt = restrict_to_observed_owner(resolve_stmt, existing)
+            resolve_result = session.execute(
+                resolve_stmt.values({
                     "status": "completed",
                     "updated_at": _now_utc(),
                 })
             )
+            if resolve_result.rowcount != 1:
+                raise RuntimeError(f"Defect {defect_id} changed during automatic QC")
             resolved += 1
             self._insert_defect_history(
                 session,

@@ -114,6 +114,7 @@ class QCDefect(Base):
     evidence = Column(Text)
     suggestion = Column(Text)
     status = Column(String(20), default="pending", nullable=False)
+    origin = Column(String(16), nullable=True)
 
     urged_at = Column(DateTime)
     urged_by = Column(String(36))
@@ -138,6 +139,7 @@ class QCDefect(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     __table_args__ = (
+        CheckConstraint("origin IN ('auto', 'manual')", name="ck_qc_defects_origin"),
         Index("ix_qc_defects_result", "result_id"),
         Index("ix_qc_defects_record", "record_id"),
         Index("ix_qc_defects_status", "status"),
