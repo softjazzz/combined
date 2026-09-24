@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 from datetime import datetime
+from types import SimpleNamespace
 from fastapi import HTTPException
 
 import pytest
@@ -13,6 +14,7 @@ from sqlalchemy.orm import sessionmaker
 from starlette.requests import Request
 
 from app.routers import qc_sichuan
+from app.core.settings import Settings
 from app.services import custom_qc_workspace_service as workspace_module
 from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
 from app.services import sichuan_workspace_batch_worker as batch_worker
@@ -265,6 +267,47 @@ def test_preclaim_failure_uses_original_queued_snapshot(storage):
     assert _status(engine, table) == "queued"
 
 
+def test_parent_retry_rotates_each_child_queued_snapshot(storage):
+    service, engine, table = storage
+    original = service.get_batch_job_for_processing(job_id="attempt-job")
+    assert original is not None
+    old_child_filters = original["_claim_filters_json"]
+    with engine.begin() as connection:
+        connection.execute(table.update().where(table.c.id == "attempt-job").values(
+            status="canceled", parent_job_id="parent-job",
+        ))
+        connection.execute(table.insert().values(
+            id="parent-job", draft_id="sichuan-rule-library", created_by="tester",
+            status="canceled", job_kind="parent", child_job_ids_json='["attempt-job"]',
+            rule_code="LX0609", rule_name="父任务", scope="final", total_records=1,
+            created_at=datetime(2026, 9, 24), updated_at=datetime(2026, 9, 24),
+            filters_json=json.dumps({"rule_set_key": "luxian_0609_qc_v1", "rule_ids": ["LX0609-01-01-01"]}),
+        ))
+    assert service.retry_batch_job(job_id="parent-job", created_by="tester") is not None
+    child = service.get_batch_job_for_processing(job_id="attempt-job")
+    assert child is not None and child["status"] == "queued"
+    assert child["_claim_filters_json"] != old_child_filters
+    assert child["filters"]["rule_ids"] == ["LX0609-01-01-01"]
+    service.fail_batch_job(
+        job_id="attempt-job", error_message="old-activation", queued_only=True,
+        expected_queued_filters_json=old_child_filters,
+    )
+    with engine.connect() as connection:
+        assert connection.execute(sa.select(table.c.status).where(table.c.id == "attempt-job")).scalar_one() == "queued"
+
+
+def test_nonformal_task_keeps_existing_claim_and_retry_semantics(storage):
+    service, engine, table = storage
+    with engine.begin() as connection:
+        connection.execute(table.update().where(table.c.id == "attempt-job").values(
+            filters_json=json.dumps({"rule_set_key": "other_set", "rule_ids": ["SC-001"]}),
+        ))
+    assert service.mark_batch_job_running(job_id="attempt-job") is True
+    assert service.mark_batch_job_running(job_id="attempt-job") is True
+    assert service.retry_batch_job(job_id="attempt-job", created_by="tester") is not None
+    assert _status(engine, table) == "queued"
+
+
 @pytest.mark.asyncio
 async def test_old_worker_result_after_qc_await_cannot_publish_to_new_attempt(storage, monkeypatch):
     service, engine, table = storage
@@ -345,3 +388,76 @@ def test_only_current_attempt_commits_canonical_write_in_same_transaction(storag
     assert _status(engine, table) == "completed"
     with engine.connect() as connection:
         assert connection.execute(sa.select(probe.c.job_id)).all() == [("attempt-job",)]
+
+
+@pytest.mark.asyncio
+async def test_formal_0609_worker_result_after_bundle_await_cannot_publish(storage, monkeypatch):
+    service, engine, table = storage
+    workspace = _WorkspaceStub()
+    workspace.job["id"] = "attempt-job"
+    workspace.job["record_ids"] = ["visit-001"]
+    rule_id = "LX0609-01-01-01"
+    workspace.job["filters"] = {
+        "rule_ids": [rule_id], "selected_rule_ids": [rule_id],
+        "scoped_customer_rule_ids": [rule_id],
+        "record_rule_map": {"visit-001": [rule_id]},
+        "rule_set_key": "luxian_0609_qc_v1", "rule_set_version": "2026-06-09",
+        "validation_mode": "programmatic",
+    }
+    workspace.mark_batch_job_running = service.mark_batch_job_running
+    workspace.is_batch_job_canceled_or_missing = service.is_batch_job_canceled_or_missing
+    workspace.update_batch_job_progress = service.update_batch_job_progress
+    workspace.complete_batch_job = service.complete_batch_job
+    workspace.fail_batch_job = service.fail_batch_job
+    entered = asyncio.Event()
+    release = asyncio.Event()
+    qc_service = _ServiceStub()
+    qc_service.client = SimpleNamespace(max_parallel_records=1)
+
+    async def evaluate_running_final_bundle_input(**_kwargs):
+        entered.set()
+        await release.wait()
+        return {"evaluation_results": [{
+            "rule_id": rule_id, "status": "data_gap", "reason_code": "authoritative_time_missing",
+            "is_compliant": False, "metadata": {},
+        }]}
+
+    qc_service.evaluate_running_final_bundle_input = evaluate_running_final_bundle_input
+
+    class Activation:
+        def enforce(self):
+            return None
+
+    monkeypatch.setattr(batch_worker, "get_product_activation_service", lambda: Activation())
+    monkeypatch.setattr(batch_worker, "get_settings", lambda: Settings(
+        _env_file=None, JWT_SECRET="attempt-test",
+        LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=True,
+        LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED=True,
+        LUXIAN_0609_UNIFIED_ENGINE_ENABLED=True,
+        LUXIAN_0609_NATIVE_BASIC_TIMELINESS_ENABLED=True,
+        LUXIAN_0609_TRIGGER_GATE_ENABLED=False,
+    ))
+    monkeypatch.setattr(batch_worker, "load_running_final_bundle", lambda **kwargs: {
+        "scene": "final", "visit_id": kwargs.get("visit_id", "visit-001"),
+        "institute_id": "HOSP-001", "patient_id": "PAT-synthetic", "medical_text": "合成资料",
+        "structured_context": {}, "document_hits": {}, "text_available": True,
+    })
+    monkeypatch.setattr(batch_worker, "build_programmatic_evidence_payload", lambda **_kwargs: {
+        "primary_document_text": "合成资料", "document_hits": {}, "text_available": True,
+    })
+
+    async def provider():
+        return qc_service
+
+    old_worker = asyncio.create_task(batch_worker.run_sichuan_workspace_batch_job(
+        "attempt-job", workspace=workspace, qc_service_provider=provider,
+    ))
+    await asyncio.wait_for(entered.wait(), timeout=5)
+    service.cancel_batch_job(job_id="attempt-job", created_by="tester")
+    assert service.retry_batch_job(job_id="attempt-job", created_by="tester") is not None
+    assert isinstance(service.mark_batch_job_running(job_id="attempt-job"), str)
+    release.set()
+    await asyncio.wait_for(old_worker, timeout=5)
+    assert _status(engine, table) == "running"
+    with engine.connect() as connection:
+        assert connection.execute(sa.select(table.c.items_json)).scalar_one() is None

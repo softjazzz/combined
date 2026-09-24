@@ -4289,22 +4289,35 @@ class CustomQCWorkspaceService:
                 child_where = self._batch_job_table.c.parent_job_id == job_id
                 if child_ids:
                     child_where = or_(child_where, self._batch_job_table.c.id.in_(child_ids))
-                session.execute(
-                    update(self._batch_job_table)
-                    .where(
-                        and_(
-                            child_where,
-                            self._batch_job_table.c.created_by == created_by,
+                child_scope = and_(child_where, self._batch_job_table.c.created_by == created_by)
+                child_reset = {key: value for key, value in reset_values.items() if key != "filters_json"}
+                if formal_0609:
+                    child_rows = session.execute(
+                        select(self._batch_job_table).where(child_scope)
+                    ).mappings().all()
+                    for child_row in child_rows:
+                        if child_row["status"] not in {"canceled", "completed", "failed"}:
+                            session.rollback()
+                            return None
+                        child_filters = _safe_json_loads(child_row.get("filters_json"), {})
+                        child_filters = dict(child_filters) if isinstance(child_filters, dict) else {}
+                        child_filters[LX0609_ATTEMPT_FILTER_KEY] = uuid.uuid4().hex
+                        child_update = session.execute(
+                            update(self._batch_job_table)
+                            .where(and_(
+                                self._batch_job_table.c.id == child_row["id"],
+                                self._batch_job_table.c.status == child_row["status"],
+                                self._batch_job_table.c.filters_json == child_row["filters_json"],
+                            ))
+                            .values(**child_reset, filters_json=_safe_json_dumps(child_filters))
                         )
+                        if getattr(child_update, "rowcount", 0) != 1:
+                            session.rollback()
+                            return None
+                else:
+                    session.execute(
+                        update(self._batch_job_table).where(child_scope).values(**child_reset)
                     )
-                    .values(
-                        **{
-                            key: value
-                            for key, value in reset_values.items()
-                            if key != "filters_json"
-                        }
-                    )
-                )
             session.commit()
             self.refresh_parent_batch_job(parent_job_id=parent_job_id)
             return self.get_batch_job(job_id=job_id, created_by=created_by)
