@@ -122,6 +122,32 @@ def _executor_result(rule_id: str, status: str) -> dict[str, str]:
 
 
 @pytest.mark.parametrize("rule_id", sorted(BASIC_TIMELINESS_CUSTOMER_RULE_IDS))
+def test_basic_family_published_read_baseline(rule_id: str):
+    safe = safe_basic_timeliness_customer_display_facts(
+        rule_id=rule_id, raw=deepcopy(_WITHIN_FACTS_BY_RULE[rule_id]),
+    )
+    assert safe is not None
+    assert validate_luxian_0609_published_customer_display_facts(
+        rule_id=f" {rule_id.lower()} ", raw=safe,
+    ) == safe
+    with pytest.raises(ValueError, match="解释合同不完整"):
+        validate_luxian_0609_published_customer_display_facts(
+            rule_id=rule_id, raw={**safe, "unexpected_field": "invalid"},
+        )
+    with pytest.raises(ValueError, match="解释合同不完整"):
+        validate_luxian_0609_published_customer_display_facts(rule_id=rule_id, raw=None)
+
+
+def test_unknown_rule_is_not_claimed_by_basic_family():
+    assert validate_luxian_0609_published_customer_display_facts(
+        rule_id="LX0609-99-99-99", raw=None,
+    ) is None
+    assert validate_luxian_0609_published_customer_display_facts(
+        rule_id="LX0609-99-99-99", raw={},
+    ) is NotImplemented
+
+
+@pytest.mark.parametrize("rule_id", sorted(BASIC_TIMELINESS_CUSTOMER_RULE_IDS))
 def test_all_basic_timeliness_rules_have_safe_compliant_fact_shape(rule_id: str):
     raw_facts = _WITHIN_FACTS_BY_RULE[rule_id]
 

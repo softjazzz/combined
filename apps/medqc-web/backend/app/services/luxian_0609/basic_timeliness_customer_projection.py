@@ -795,6 +795,27 @@ def validate_published_senior_round_timeliness_facts(raw: Any) -> dict[str, Any]
     )
 
 
+def validate_published_basic_timeliness_facts(
+    *, rule_id: str, raw: Any,
+) -> dict[str, Any] | None:
+    """由基础时限族选择已发布事实合同；未知规则不归本族处理。"""
+
+    normalized_rule_id = str(rule_id or "").strip().upper()
+    if normalized_rule_id == "LX0609-01-01-01":
+        return validate_published_admission_timeliness_facts(raw)
+    if normalized_rule_id == "LX0609-01-02-01":
+        return validate_published_first_course_timeliness_facts(raw)
+    if normalized_rule_id == "LX0609-02-01-01":
+        return validate_published_attending_round_timeliness_facts(raw)
+    if normalized_rule_id == "LX0609-02-01-02":
+        return validate_published_senior_round_timeliness_facts(raw)
+    if normalized_rule_id == "LX0609-09-01-01":
+        return validate_published_rescue_timeliness_facts(raw)
+    if normalized_rule_id == "LX0609-09-01-02":
+        return validate_published_rescue_content_facts(raw)
+    return None
+
+
 def basic_timeliness_customer_fact_status_is_valid(
     *, rule_id: str, status: str, safe_facts: Mapping[str, Any] | None
 ) -> bool:
@@ -839,6 +860,7 @@ __all__ = [
     "basic_timeliness_customer_fact_status_is_valid",
     "is_basic_timeliness_customer_rule",
     "safe_basic_timeliness_customer_display_facts",
+    "validate_published_basic_timeliness_facts",
     "validate_published_admission_timeliness_facts",
     "validate_published_attending_round_timeliness_facts",
     "validate_published_first_course_timeliness_facts",
