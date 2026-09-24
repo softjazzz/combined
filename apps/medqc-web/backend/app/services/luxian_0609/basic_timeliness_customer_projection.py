@@ -616,6 +616,8 @@ def validate_published_rescue_timeliness_facts(raw: Any) -> dict[str, Any] | Non
             # 允许最多 0.01 小时的双重舍入差，不改写已经发布的数值。
             if key in facts and (
                 not finite_number(facts[key])
+                or facts[key] < 0
+                or facts[key] != round(float(facts[key]), 2)
                 or abs(float(facts[key]) - expected_derived[key]) > 0.010000001
             ):
                 return None

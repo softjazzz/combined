@@ -531,6 +531,29 @@ def test_lx004_malformed_published_facts_fail_closed_without_type_error(
         )
 
 
+@pytest.mark.parametrize("invalid_overdue", [-0.01, 0.005])
+def test_lx004_rounding_tolerance_does_not_accept_invalid_published_precision(
+    invalid_overdue: float,
+):
+    published = projection_module.safe_basic_timeliness_customer_display_facts(
+        rule_id="LX0609-09-01-01",
+        raw={
+            "failure_kind": "timeliness_requirement_not_met",
+            "target_document": "rescue_record",
+            "source_label": "抢救记录",
+            "timeliness_state": "late",
+            "threshold_hours": 6,
+            "elapsed_hours": 6.001,
+        },
+    )
+    assert published is not None and published["overdue_hours"] == 0.0
+    changed = {**published, "overdue_hours": invalid_overdue}
+    with pytest.raises(ValueError, match="解释合同不完整"):
+        safe_customer_display_facts(
+            {"customer_display_facts": changed}, rule_id="LX0609-09-01-01",
+        )
+
+
 def test_lx001_uncertain_conflict_fact_shape_is_accepted():
     raw_facts = {
         "failure_kind": "evidence_time_conflict",

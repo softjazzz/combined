@@ -2260,7 +2260,18 @@ def test_pathology_published_facts_commit_and_read_without_reprojection(
 
 
 def _published_pilot_item_for_read_boundary(rule_id: str) -> dict[str, Any]:
-    if rule_id == "LX0609-06-01-01":
+    if rule_id == "LX0609-09-01-01":
+        facts = safe_basic_timeliness_customer_display_facts(
+            rule_id=rule_id,
+            raw={
+                "failure_kind": "timeliness_requirement_satisfied",
+                "target_document": "rescue_record", "source_label": "抢救记录",
+                "timeliness_state": "within", "threshold_hours": 6,
+                "elapsed_hours": 5,
+            },
+        )
+        assert facts is not None
+    elif rule_id == "LX0609-06-01-01":
         facts = {
             "verification_kind": "ct_order_course_review", "subject": "ct_mri",
             "requirement": "order_course_consistency", "review_scope_complete": True,
@@ -2315,14 +2326,23 @@ def _published_pilot_item_for_read_boundary(rule_id: str) -> dict[str, Any]:
     }
 
 
-def test_two_published_pilots_keep_identity_through_sqlite_feedback_and_exports(monkeypatch):
+@pytest.mark.parametrize(
+    "rule_ids",
+    [
+        ("LX0609-09-01-02", "LX0609-06-02-01"),
+        ("LX0609-09-01-01",),
+    ],
+    ids=["new_pilots", "original_004"],
+)
+def test_published_rules_keep_identity_through_sqlite_dto_feedback_and_exports(
+    monkeypatch, rule_ids,
+):
     """发布后的同一 Envelope 是反馈与三个导出格式的结果来源。"""
     import csv
     from io import StringIO
 
     from openpyxl import load_workbook
 
-    rule_ids = ("LX0609-09-01-02", "LX0609-06-02-01")
     canonical_table = workspace_module._record_result_envelopes_table().to_metadata(
         MetaData(), schema=None,
     )
@@ -2365,6 +2385,37 @@ def test_two_published_pilots_keep_identity_through_sqlite_feedback_and_exports(
     assert all(item["customer_display_facts"] for item in saved_items)
     assert all(item["conclusion"].endswith("已核对") for item in saved_items)
     assert all(item["suggestion"].endswith("无需补充") for item in saved_items)
+
+    # latest-result 真实服务入口读取同一隔离SQLite产生的 Envelope 内容。
+    latest_session = _ReadSession([
+        [_selected_job()], [{"envelope_json": json.dumps(loaded, ensure_ascii=False)}],
+    ])
+    monkeypatch.setattr(workspace_module, "_session", lambda: latest_session)
+    monkeypatch.setattr(workspace_module, "_row_to_batch_job", lambda row: dict(row))
+    monkeypatch.setattr(
+        CustomQCWorkspaceService, "_aggregate_parent_job",
+        lambda _self, _session, job: job,
+    )
+    service = object.__new__(CustomQCWorkspaceService)
+    service._record_result_envelope_table = canonical_table
+    service._batch_job_table = sa.Table(
+        "custom_qc_batch_jobs", MetaData(),
+        sa.Column("id", sa.String(36)),
+        sa.Column("status", sa.String(20)),
+        sa.Column("parent_job_id", sa.String(36)),
+        sa.Column("finished_at", sa.DateTime()),
+        sa.Column("created_at", sa.DateTime()),
+    )
+    latest = service.build_latest_single_record_result_dto(
+        institute_id="inst-1", patient_id="patient-1", visit_id="visit-1",
+        expected_rule_ids=list(rule_ids),
+        rule_set_key="luxian_0609_qc_v1", rule_set_version="2026-06-09",
+    )
+    assert latest["state"] == "ready"
+    assert [item["rule_id"] for item in latest["items"]] == list(rule_ids)
+    assert [item["customer_display_facts"] for item in latest["items"]] == [
+        item["customer_display_facts"] for item in saved_items
+    ]
 
     feedback = ResultFeedbackDemoStore.__new__(ResultFeedbackDemoStore)
     feedback._canonical_table = canonical_table
@@ -2417,12 +2468,14 @@ def test_two_published_pilots_keep_identity_through_sqlite_feedback_and_exports(
         job, hmac_key="unit-test-key", canonical_items=saved_items,
     )
     assert all(rule_id in html_text for rule_id in rule_ids)
+    assert all(item["conclusion"] in html_text for item in saved_items)
     engine.dispose()
 
 
 @pytest.mark.parametrize(
     ("rule_id", "path", "invalid"),
     [
+        ("LX0609-09-01-01", ("remaining_hours",), 999),
         ("LX0609-06-01-01", ("order_results",), "DELETE"),
         ("LX0609-06-01-01", ("order_results", 0, "course_locations"), []),
         ("LX0609-06-01-01", ("order_results", 0, "course_locations", 0, "start"), -1),
