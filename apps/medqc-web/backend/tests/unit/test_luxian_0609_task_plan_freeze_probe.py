@@ -195,6 +195,9 @@ async def test_standalone_bundle_reads_settings_once_and_rejects_invalid_task_se
         return disabled
 
     monkeypatch.setattr(service_module, "get_settings", _read_settings)
+    # bundle 适配在设置门禁前会装配证据；隔离其外部来源读取，不替换设置/门禁。
+    monkeypatch.setattr(programmatic_evidence, "_fetch_source_table_fallback_items", lambda *_a, **_k: ([], {}))
+    monkeypatch.setattr(programmatic_evidence, "_fetch_detail_service_fallback_items", lambda *_a, **_k: [])
     with pytest.raises(ValueError, match="LX0609正式Native主链未就绪"):
         await service.evaluate_running_final_bundle_input(
             bundle=bundle, rule_set_key="luxian_0609_qc_v1", rule_ids=list(RULE_IDS),
@@ -227,6 +230,8 @@ async def test_non_luxian_bundle_ignores_task_settings(
         raise RuntimeError("passed settings boundary")
 
     monkeypatch.setattr(service_module, "get_settings", _read_settings)
+    monkeypatch.setattr(programmatic_evidence, "_fetch_source_table_fallback_items", lambda *_a, **_k: ([], {}))
+    monkeypatch.setattr(programmatic_evidence, "_fetch_detail_service_fallback_items", lambda *_a, **_k: [])
     monkeypatch.setattr(service, "_resolve_rules_for_document", _stop_after_settings)
     with pytest.raises(RuntimeError, match="passed settings boundary"):
         await service.evaluate_running_final_bundle_input(

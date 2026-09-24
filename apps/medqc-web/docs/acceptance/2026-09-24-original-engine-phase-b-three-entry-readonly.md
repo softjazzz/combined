@@ -37,3 +37,9 @@ $env:JWT_SECRET='unit-test-secret-only'; $env:DATABASE_URL=''; python -m pytest 
 后续在同一三入口探针加入第二组固定来源行：住院登记入院时间 2026-09-20 08:00，入院记录 ADM-1 完成于当日 09:00；抢救记录 RS-1 写明抢救结束于 2026-09-21 10:00，记录完成于 11:00。来源均为合成行，读取会话继续调用真实快照构造，未连接 PG 或模型。空来源组仍保留，避免只验证正常记录。
 
 三个入口共同的首份病例都发布：001 `compliant/requirement_within_threshold`，耗时 1 小时、剩余 23 小时、证据定位到 `admission_record/ADM-1`；004 同为 `compliant/requirement_within_threshold`，耗时 1 小时、剩余 5 小时、证据定位到 `rescue_record/RS-1`。探针逐字段比较三入口的状态、原因码、客户可见事实、证据和子结论，并断言上述具体时间与文书坐标。它证明相同来源行经过三个路由后确实进入对应规则及发布结果，而不只是空源时恰好同为缺口或不适用；仍不能替代真实病历的临床金标准。
+
+## 任务设置探针的外部取数隔离
+
+同组 `test_luxian_0609_task_plan_freeze_probe.py` 有两项直接调用 bundle 门面，只核对设置读取/正式门禁和非 0609 参数隔离。bundle 输入适配先于这些断言装配证据；原测试未隔离来源表与详情服务回退，数据库不可连接时会在设置边界之前抛连接异常。现仅将这两个外部读取函数固定为空结果，保留真实 bundle 适配、设置读取、门禁及后续被测路径，不改生产行为和预期断言。
+
+使用 `DATABASE_URL=postgresql://test:test@127.0.0.1:1/test`（端口 1 不可连接）与合成 JWT，带 `--confcutdir=tests/unit` 运行上述三入口探针及任务设置探针，结果为 6 passed、3 warnings、退出码 0。该运行证明这些聚焦用例无需真实 PG 连接；不是实际来源读取或数据库集成验收。
