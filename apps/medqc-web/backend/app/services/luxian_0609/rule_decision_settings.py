@@ -203,12 +203,14 @@ def resolve_typed_decision_rule_ids(
     unified_engine_enabled: bool,
     always_typed_rule_ids: tuple[str, ...],
     native_async_rule_ids: tuple[str, ...],
+    native_sync_rule_ids: tuple[str, ...] = (),
 ) -> tuple[str, ...]:
     """从唯一发布组解析Typed Decision范围，并保持客户规则目录顺序。"""
 
     executable_rule_ids, _ = partition_luxian_0609_rule_scope(selected_rule_ids)
     always_typed = frozenset(always_typed_rule_ids)
     native_async = frozenset(native_async_rule_ids)
+    native_rule_ids = native_async | frozenset(native_sync_rule_ids)
     enabled_rollout: set[str] = set()
     if unified_engine_enabled:
         for flag_name, rule_ids in RULE_DECISION_ROLLOUT_GROUPS:
@@ -232,7 +234,7 @@ def resolve_typed_decision_rule_ids(
                 # 包计划且没有历史开关的新规则，直接采用其 RuleDecision 合同；
                 # 否则每新增规则都必须再次修改这个公共发布列表。
                 or (
-                    rule_id in native_async
+                    rule_id in native_rule_ids
                     and rule_id not in _RULE_DECISION_FLAG_BY_RULE_ID
                 )
             )

@@ -285,6 +285,7 @@ async def prepare_luxian_0609_execution(
         unified_engine_enabled=unified_engine_enabled,
         always_typed_rule_ids=tuple(EXTENDED_DOCUMENT_RULE_IDS),
         native_async_rule_ids=package_plan.native_async_rule_ids,
+        native_sync_rule_ids=package_plan.native_sync_rule_ids,
     )
     if (
         package_plan.executable_rule_ids

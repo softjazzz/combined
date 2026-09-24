@@ -1,5 +1,13 @@
 # LX0609 质控引擎职责收敛主计划
 
+### 2026-09-25 Goal 接续：阶段 C 新同步规则的正式 Decision 路由
+
+沿用现有 active goal，退出条件仍为下文 A/B/C/D，不把局部修复误记为阶段完成。测试专用 `LX0609-99-99-01` 在前次组件链已能经正式目录和任务路由接纳；本次继续追到生产 `prepare_luxian_0609_execution`，发现新 `native_sync` 规则没有旧 rollout 开关时未进入 Typed Decision 范围，而新 `native_async` 可以进入。此前手动调用 Engine/Binding 的测试绕过了这一步。
+
+已将正式计划中的同步规则 ID 传给现有解析器，只对没有历史 rollout 开关的新 Native 规则按现行 Typed 合同处理；既有规则的开关和会诊派发约束不变。测试使用临时目录、合成快照和固定 Decision，实际调用生产 `prepare` 与注册表，断言执行器收到规则 ID 且结果进入 `reduced_decisions`，再沿原有 Canonical 组件链读回。无真实模型调用，也未改变医学判据、Prompt、并发或结果映射。正式后台 Worker 领取和保存、客户 PostgreSQL、浏览器、临床保护集仍未验收；下一步从 Worker 的冻结计划、执行保存与读取链继续检查 C，其余 A/B/D 保持原退出门槛。
+
+本轮聚焦后端 20 项通过；相邻执行路由宽组另有 2 项旧固定 49/77 规则总数断言失败，本次按原样排除，需单独清理。Ruff、前端编码/静态检查及全量单测见本轮提交记录；这些技术检查不替代正式 Worker 和临床结果验收。
+
 ### 2026-09-25 阶段 C 目录至交付组件链补证
 
 测试专用 `LX0609-99-99-01` 仅写入 pytest 临时业务总表、包装器和合同，规则族/Native ID 集也仅在测试中注册。现有 loader/编译器通过，正式四川批量任务路由接纳并冻结单规则范围；生产 Engine 通过测试执行器形成 Decision，再由 Binding、Aggregator、隔离 SQLite Canonical Store 保存和公开 DTO 读回。无旧映射，保存与 DTO 无新增规则分支。新测试及扩展/目录邻近 54 项通过，Ruff 通过；未运行真实后台 Worker、客户 PostgreSQL、模型或页面。下一步沿正式 Worker 检查注册表和保存路径是否仍有测试规则之外的固定 ID 阻断，并据此决定 C 的剩余修复；不得将本测试记作完整生产/临床验收。见[阶段 C 审计](../acceptance/2026-09-24-original-engine-phase-c-audit.md)。

@@ -486,6 +486,8 @@
 
 ### MEDQC-022：LX0609 质控引擎职责收敛
 
+2026-09-25 接续：现有 A/B/C/D goal 保持 active。阶段 C 复现并修复新 `native_sync` 测试规则在生产 `prepare` 的 Typed Decision 路由缺口；临时目录规则经正式任务接纳、生产 `prepare`/注册表的固定 Decision 和隔离 Canonical 组件链验证。正式 Worker 自动领取/保存、客户 PostgreSQL、浏览器及临床保护集尚未覆盖，C 不关闭；A/B/D 仍按主计划退出。未触碰新 CT/抢救/病理及 0916。
+
 2026-09-25 阶段 C 组件链补证：测试专用新规则在临时目录中经过业务总表、执行目录、合同编译、正式四川任务路由接纳、生产 Engine/Binding/Aggregator、SQLite Canonical 保存和公开 DTO 读回；54 项邻近测试通过。任务路由使用内存替身且执行/保存由测试衔接，正式后台 Worker、客户 PG、页面与临床结果未验收。下一步审计 Worker 注册表及任务持久化链，不把本次组件链当作 C 整体关闭；见[阶段 C 审计](../acceptance/2026-09-24-original-engine-phase-c-audit.md)。
 
 2026-09-25 Goal 续行：继续使用现有 active 的 A/B/C/D 目标。阶段 C 已复现并移除 Native 规则被迫声明旧 `mapped_rule_ids` 的阻断，兼容执行模式仍须声明旧映射；59 项目录/合同/扩展邻近测试及 Ruff 通过。现有84条规则的执行身份和医学结果未改。C 的正式测试规则总表→任务接纳→执行→Canonical 读回尚未闭环；A/B/D 的既有退出缺口不因这项局部修复关闭。详见[主计划](2026-09-23-lx0609-engine-boundary-refactor-master-plan.md)顶部执行卡。

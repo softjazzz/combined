@@ -17,7 +17,8 @@ import app.services.luxian_0609_rule_catalog as catalog_module
 import app.services.luxian_0609_rule_master as master_module
 from app.routers import qc_sichuan
 from app.services.luxian_0609 import customer_rule_package, native_package, phase_scope
-from app.services.luxian_0609 import rule_contracts, source_registry
+from app.services.luxian_0609 import execution as execution_module, rule_contracts, source_registry
+from app.services.luxian_0609.decision_model import ApplicabilityState, EvidenceState, QcDirection, RuleDecision
 from app.services.luxian_0609.decision_binding import bind_and_reduce_luxian_0609_rule_decisions
 from app.services.luxian_0609.engine import FamilyExecutionSuccess, Luxian0609ExecutionEngine
 from app.services.luxian_0609.executor_registry import ExecutorRegistration, Luxian0609ExecutorRegistry
@@ -29,6 +30,7 @@ from app.services.luxian_0609.native_package import (
     assert_luxian_0609_formal_package_plan_native_only,
     build_luxian_0609_package_plan,
 )
+from app.services.luxian_0609.rule_decision_settings import resolve_typed_decision_rule_ids
 from app.services.luxian_0609_result_aggregator import aggregate_luxian_0609_results
 from app.services.qc_workspace.canonical_result_store import (
     CanonicalResultStore,
@@ -129,6 +131,14 @@ async def test_test_only_native_rule_crosses_formal_catalog_admission_engine_and
         )
         assert_luxian_0609_formal_package_plan_native_only(plan, context="workspace_batch_create")
         assert plan.native_executor_batches == (("surgery_presence", (TEST_RULE_ID,)),)
+        assert resolve_typed_decision_rule_ids(
+            selected_rule_ids=plan.executable_rule_ids,
+            settings=_settings(basic_timeliness=True),
+            unified_engine_enabled=True,
+            always_typed_rule_ids=(),
+            native_async_rule_ids=plan.native_async_rule_ids,
+            native_sync_rule_ids=plan.native_sync_rule_ids,
+        ) == (TEST_RULE_ID,)
 
         # 正式任务路由调用相同的目录接纳与 Native 计划，不提交后台任务。
         current_rule_set = qc_sichuan.get_sichuan_rule_set("luxian_0609_qc_v1")
@@ -187,6 +197,37 @@ async def test_test_only_native_rule_crosses_formal_catalog_admission_engine_and
             evaluation_as_of_date="2026-09-24",
             row_reader=read_rows,
         )
+        source_ref = session.snapshot.observations[0].snapshot_ref.removeprefix("sha256:")
+        decision = RuleDecision(
+            rule_id=TEST_RULE_ID,
+            snapshot_hash=session.snapshot.snapshot_hash,
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.SUFFICIENT,
+            qc_direction=QcDirection.SATISFIED,
+            reason_code="requirement_satisfied",
+            fact_refs=(source_ref,),
+            evaluator_version="extension-native-test-v1",
+            confidence=1.0,
+        )
+        dispatched: list[tuple[str, ...]] = []
+
+        def execute_test_native(**kwargs: object) -> SimpleNamespace:
+            dispatched.append(tuple(kwargs["decision_rule_ids"]))
+            return SimpleNamespace(
+                results=(), planned_rule_ids=(TEST_RULE_ID,), decisions=(decision,),
+            )
+
+        monkeypatch.setattr(execution_module, "build_luxian_0609_evidence_read_session", lambda **_: session)
+        monkeypatch.setattr(execution_module, "execute_luxian_0609_native_rules", execute_test_native)
+        _prepared, execution_context = await execution_module.prepare_luxian_0609_execution(
+            rule_set_key="luxian_0609_qc_v1", prepared_rules=[], visit_id="V",
+            medical_text="", evidence_payload={}, llm_client=_NoModel(),
+            settings=_settings(basic_timeliness=True), institute_id="I", patient_id="P",
+            selected_customer_rule_ids=selected, prepared_package_plan=plan,
+        )
+        assert dispatched == [selected]
+        assert [item.rule_id for item in execution_context.reduced_decisions] == [TEST_RULE_ID]
+
         engine = Luxian0609ExecutionEngine(registry=Luxian0609ExecutorRegistry((
             ExecutorRegistration(executor_key="surgery_presence", executor=_NativeExtensionExecutor()),
         )))

@@ -1,5 +1,11 @@
 # 原始 LX0609 阶段 C 启动前只读盘点
 
+## 2026-09-25 生产 prepare 路由补证
+
+前一条组件链测试手动把 Decision 交给 Binding，未经过 `prepare_luxian_0609_execution` 的 Typed 范围解析。沿正式路径复核发现，新 Native 异步规则没有旧 rollout 开关时被纳入，但同条件的同步规则被遗漏。测试先在原实现复现解析器不接受同步范围；最小改动是把已冻结计划的 `native_sync_rule_ids` 传给解析器，与异步范围合并，仅作用于无旧 rollout 开关的规则。临时目录中的测试规则在生产 `prepare` 中通过现有注册表调用合成执行器，`decision_rule_ids` 含本规则且 Decision 进入归约；既有调用组另测。该测试仍以替身快照和执行器隔离数据库/模型，未运行正式 Worker 的后台领取与保存，也不证明临床判定。阶段 C 保持未关闭。
+
+本轮后端聚焦 20 项通过；`test_luxian_0609_execution_routing.py` 宽组另 2 项把目录规则总数写死为 49/77，在现有目录中为 50/84，未改动该测试，列为独立测试债。前端 lint、type-check 和全量单测 1066 项通过；Ruff 通过。
+
 ## 2026-09-25 测试专用规则纵向补证
 
 集成提交 `0d9639914` 已移除 Native 规则对旧 `mapped_rule_ids` 的强制依赖，兼容模式仍要求该映射。本轮另以 `LX0609-99-99-01` 建立仅存在于 pytest 临时 JSON 中的规则，不改产品目录：主表、执行包装器、规则族和合同覆盖层经现有 loader/编译器一致校验；正式四川任务路由接纳该规则并生成冻结规则范围；生产 Engine 使用测试专用原生执行器形成受控 Decision，随后经 Binding、Aggregator、SQLite Canonical 保存与公开 DTO 读取。规则没有旧映射，保存、API DTO 与前端未新增规则分支。对应测试见 `backend/tests/unit/test_luxian_0609_formal_extension_chain.py`，同扩展/目录邻近共 54 项通过，Ruff 通过。
