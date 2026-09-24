@@ -1701,6 +1701,20 @@ async def run_sichuan_workspace_batch_job(
             ]
             if normalized_rule_ids:
                 record_rule_map[normalized_record_id] = normalized_rule_ids
+        if rule_set_key == LUXIAN_0609_RULE_SET_KEY and record_rule_map_raw:
+            for record in hydrated_records:
+                record_id = str(record.get("record_id") or record.get("visit_id") or "").strip()
+                visit_id = str(record.get("visit_id") or record_id).strip()
+                record_ref = CaseRef(
+                    str(record.get("institute_id") or "").strip(),
+                    str(record.get("patient_id") or "").strip(),
+                    visit_id,
+                )
+                record_key = record_ref.as_key() if all(record_ref) else record_id
+                if not any(
+                    key in record_rule_map for key in (record_key, visit_id, record_id)
+                ):
+                    raise ValueError("LX0609任务逐病例规则范围不完整，拒绝回退为整批规则")
         prefer_rule_level_visit_eval = (
             validation_mode == "sc"
             and (

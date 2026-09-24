@@ -215,6 +215,62 @@ async def test_worker_bundle_prepare_plan_and_as_of_freeze_probe(
 
 
 @pytest.mark.asyncio
+async def test_incomplete_record_rule_map_rejects_before_bundle_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """已接纳逐病例范围不能因缺少一份映射而回退成整批规则。"""
+
+    workspace = _WorkspaceStub()
+    settings = _settings(basic_timeliness=True)
+    service = object.__new__(SichuanQCService)
+    service.client = _NoModel()
+    service.adjudicator_client = _NoModel()
+    workspace.job["filters"] = {
+        "rule_ids": list(RULE_IDS),
+        "selected_rule_ids": list(RULE_IDS),
+        "scoped_customer_rule_ids": list(RULE_IDS),
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "record_rule_map": {"visit-001": [RULE_IDS[0]]},
+        LX0609_TASK_SETTINGS_FILTER_KEY: capture_luxian_0609_task_settings(
+            resolve_mainline_rule_decision_settings(settings)
+        ),
+        LX0609_TASK_RUNTIME_FILTER_KEY: capture_luxian_0609_task_runtime(service),
+    }
+    bundle_calls: list[str] = []
+
+    class _Activation:
+        def enforce(self) -> None:
+            return None
+
+    def forbidden_bundle(**kwargs: Any) -> Any:
+        bundle_calls.append(str(kwargs.get("visit_id") or ""))
+        raise RuntimeError("不应读取病例材料")
+
+    async def provide_service() -> SichuanQCService:
+        return service
+
+    monkeypatch.setattr(worker, "get_product_activation_service", lambda: _Activation())
+    monkeypatch.setattr(worker, "get_settings", lambda: settings)
+    monkeypatch.setattr(worker, "load_running_final_bundle", forbidden_bundle)
+    monkeypatch.setattr(
+        workspace,
+        "fail_batch_job",
+        lambda **kwargs: workspace.job.update(
+            status="failed", error_message=kwargs["error_message"]
+        ),
+    )
+
+    await worker.run_sichuan_workspace_batch_job(
+        workspace.job["id"], workspace=workspace, qc_service_provider=provide_service,
+    )
+
+    assert workspace.job["status"] == "failed"
+    assert "逐病例规则范围不完整" in workspace.job["error_message"]
+    assert bundle_calls == []
+
+
+@pytest.mark.asyncio
 async def test_standalone_bundle_reads_settings_once_and_rejects_invalid_task_settings(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
