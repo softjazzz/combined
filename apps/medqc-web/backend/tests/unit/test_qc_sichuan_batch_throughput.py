@@ -4832,7 +4832,9 @@ async def test_partial_failed_retry_executes_only_failed_pairs_and_merges_to_com
     from app.core.settings import Settings
     from app.services.luxian_0609.rule_decision_settings import (
         LX0609_TASK_SETTINGS_FILTER_KEY,
+        LX0609_TASK_RUNTIME_FILTER_KEY,
         capture_luxian_0609_task_settings,
+        capture_luxian_0609_task_runtime,
         resolve_mainline_rule_decision_settings,
     )
 
@@ -4933,6 +4935,8 @@ async def test_partial_failed_retry_executes_only_failed_pairs_and_merges_to_com
                     "recovered_rule_count": 0,
                     "failed_rule_count": 1,
                 },
+                "luxian_0609_usage_observation_complete": False,
+                "luxian_0609_usage_unknown_executor_keys": ["exam_lab"],
             },
             "total_records": 2,
         }
@@ -4940,6 +4944,9 @@ async def test_partial_failed_retry_executes_only_failed_pairs_and_merges_to_com
     workspace.items = list(base_items)
     workspace.failed_records = list(base_failures)
     service = _ServiceStub()
+    workspace.job["filters"][LX0609_TASK_RUNTIME_FILTER_KEY] = capture_luxian_0609_task_runtime(
+        service
+    )
     calls: list[tuple[str, tuple[str, ...]]] = []
 
     async def _evaluate_running_final_bundle_input(**kwargs: Any) -> Dict[str, Any]:
@@ -4952,6 +4959,8 @@ async def test_partial_failed_retry_executes_only_failed_pairs_and_merges_to_com
                 for rule_id in active_rule_ids
             ],
             "token_usage": {"total_tokens": 0, "prompt_tokens": 0, "completion_tokens": 0},
+            "luxian_0609_usage_observation_complete": True,
+            "luxian_0609_usage_unknown_executor_keys": [],
         }
 
     service.evaluate_running_final_bundle_input = _evaluate_running_final_bundle_input  # type: ignore[attr-defined]
@@ -4986,3 +4995,5 @@ async def test_partial_failed_retry_executes_only_failed_pairs_and_merges_to_com
     assert workspace.summary["retry_recovered_count"] == 2
     assert workspace.summary["retry_remaining_count"] == 0
     assert workspace.summary["model_execution_stats"]["requested_rule_count"] == 2
+    assert workspace.summary["luxian_0609_usage_observation_complete"] is False
+    assert workspace.summary["luxian_0609_usage_unknown_executor_keys"] == ["exam_lab"]
