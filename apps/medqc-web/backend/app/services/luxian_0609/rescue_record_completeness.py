@@ -34,6 +34,7 @@ _LABELED_TIME = re.compile(
 _CLOCK_TIME = re.compile(r"(?<!\d)([01]?\d|2[0-3])[:：]([0-5]\d)(?::([0-5]\d))?(?!\d)")
 _DATE_BEFORE_TIME = re.compile(r"(\d{4})[.\-/年](\d{1,2})[.\-/月](\d{1,2})日?\s*$")
 _ACTUAL_ACTION = re.compile(r"予以|给予|实施|进行|开始|抢救|复苏|胸外按压")
+_NON_ASSERTED_ACTION = re.compile(r"未|不|没有|若|如果|假如|倘若|一旦|如需|待")
 _OTHER_TIME_ROLE = re.compile(r"记录时间|签字时间|签名时间|提交时间|完成时间|补记时间|入院时间|"
                               r"既往|曾于|计划|拟于|预计|准备|将于")
 _CLAUSE_END = re.compile(r"[。；;\n]")
@@ -102,7 +103,7 @@ def _python_time(body: str) -> Mapping[str, Any] | None:
 
 
 def _narrated_rescue_time(body: str, time_atom: Mapping[str, Any], measures_atom: Mapping[str, Any]) -> bool:
-    """无标签时间必须与同一实际处置语句相连，不能只凭文书标题或任意时分。"""
+    """保守校验无标签时间与措施引文的局部肯定关系；复杂语义仍依赖原子提取。"""
     if measures_atom["state"] != "present":
         return False
     start, end = time_atom["start"], time_atom["end"]
@@ -127,7 +128,12 @@ def _narrated_rescue_time(body: str, time_atom: Mapping[str, Any], measures_atom
         return False
     if _CLAUSE_END.search(body[end:measure_start]):
         return False
-    return bool(_ACTUAL_ACTION.search(body[start + clock.end():measure_start]))
+    action = _ACTUAL_ACTION.search(body[start + clock.end():measure_start])
+    if action is None:
+        return False
+    # 局部否定或条件语气只能排除，未命中并不证明医学事实已发生。
+    clause_start = max(body.rfind(mark, 0, start) for mark in "。；;\n") + 1
+    return _NON_ASSERTED_ACTION.search(body[clause_start:measure_end]) is None
 
 
 def _located_present(atom: Mapping[str, Any], body: str) -> dict[str, Any] | None:

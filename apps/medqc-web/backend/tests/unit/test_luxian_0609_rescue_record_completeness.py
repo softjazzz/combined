@@ -412,11 +412,12 @@ def test_quote_from_another_bound_document_cannot_be_relocated_across_documents(
         _parse(payload, (document, other))
 
 
-def _time_case(time_text: str, *, before: str = "", after: str = "", measures: str = "抢救措施：吸氧。"):
+def _time_case(time_text: str, *, before: str = "", inline_before: str = "",
+               after: str = "", measures: str = "抢救措施：吸氧。"):
     snippets = dict(SNIPPETS)
     snippets["rescue_time"] = time_text
     snippets["rescue_measures"] = measures
-    body = before + "\n" + time_text + after + measures + "\n" + "\n".join(
+    body = before + "\n" + inline_before + time_text + after + measures + "\n" + "\n".join(
         value for key, value in snippets.items() if key not in {"rescue_time", "rescue_measures"}
     )
     session = _session([_row(body=body)])
@@ -477,3 +478,30 @@ def test_second_rescue_time_can_be_selected_when_it_precedes_its_measures():
     assert _state(result) == "compliant"
     time_fact = _facts(result)["rescue_content_events"][0]["field_facts"]["rescue_time"]
     assert time_fact["quote"] == "于10:00予以"
+
+
+@pytest.mark.parametrize("inline_before,between,expected", [
+    ("", "予以", "compliant"),
+    ("立即", "给予", "compliant"),
+    ("", "未予以", "data_gap"),
+    ("", "并未实施", "data_gap"),
+    ("", "没有给予", "data_gap"),
+    ("若", "给予", "data_gap"),
+    ("如果", "实施", "data_gap"),
+    ("若病情持续恶化并且经多方评估确认需要采取措施时再", "给予", "data_gap"),
+    ("拟", "予以", "data_gap"),
+])
+def test_narrated_time_requires_asserted_action_in_full_parse(inline_before, between, expected):
+    session, payload = _time_case(
+        "于10:30", inline_before=inline_before, after=between, measures="胸外按压。",
+    )
+    ref, row = session.materials.document_rows("rescue_record", snapshot=session.snapshot)[0]
+    body = row["record_content"]
+    parsed = _parse({"content": payload}, (
+        _Document(ref, "R1", "", body, "complete", None),
+    ))
+    time_state = parsed[ref]["rescue_time"]["state"]
+    result = _execute(session, FakeLLM(payload))
+    assert time_state == ("present" if expected == "compliant" else "unknown")
+    assert _state(result) == expected
+    assert _facts(result)["failure_kind"] == ""
