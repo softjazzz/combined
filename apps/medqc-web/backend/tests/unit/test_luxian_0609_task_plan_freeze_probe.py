@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -16,7 +15,9 @@ from app.services.luxian_0609 import execution as execution_module
 from app.services.luxian_0609 import native_package
 from app.services.luxian_0609.rule_decision_settings import (
     LX0609_TASK_SETTINGS_FILTER_KEY,
+    LX0609_TASK_RUNTIME_FILTER_KEY,
     capture_luxian_0609_task_settings,
+    capture_luxian_0609_task_runtime,
     resolve_mainline_rule_decision_settings,
 )
 from app.services.luxian_0609.evidence_snapshot_provider import SnapshotSourceRows
@@ -30,6 +31,17 @@ AS_OF = "2026-07-20"
 
 class _NoModel:
     family_max_concurrency = 1
+    max_parallel_records = 1
+    provider_code = "alibaba"
+    model = "probe-only"
+    api_endpoint = "https://example.invalid/llm"
+    temperature = 0.2
+    top_p = 0.9
+    max_tokens = 16384
+    enable_thinking = False
+    thinking_budget = None
+    reasoning_effort = ""
+    allow_mock_when_unconfigured = False
 
     async def generate(self, *_args: Any, **_kwargs: Any) -> dict[str, Any]:
         raise AssertionError("计划探针禁止真实或替身模型调用")
@@ -136,8 +148,9 @@ async def test_worker_bundle_prepare_plan_and_as_of_freeze_probe(
         )
 
     service = object.__new__(SichuanQCService)
-    service.client = SimpleNamespace(model="probe-only", max_parallel_records=1)
+    service.client = _NoModel()
     service.adjudicator_client = _NoModel()
+    workspace.job["filters"][LX0609_TASK_RUNTIME_FILTER_KEY] = capture_luxian_0609_task_runtime(service)
 
     class _Activation:
         def enforce(self) -> None:
