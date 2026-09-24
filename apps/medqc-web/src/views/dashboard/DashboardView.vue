@@ -4,6 +4,8 @@ import { useRouter, useRoute } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { getTodoStats, getPerformanceRanking } from '@/api/dashboard'
 import type { TodoStats, PerformanceData, DashboardScene } from '@/api/dashboard'
+import { getTaskTodoStats } from '@/api/tasks'
+import { getAppeals } from '@/api/appeal'
 import type { WorkstationLaunchAction, WorkflowStageKey } from '@/types/workflow'
 import { getAccessToken } from '@/utils/auth-token'
 import QCTrendChart from '@/components/charts/QCTrendChart.vue'
@@ -12,7 +14,6 @@ import PerformanceBoard from '@/components/dashboard/PerformanceBoard.vue'
 import {
   ReloadOutlined,
   PlusOutlined,
-  ArrowUpOutlined,
   FileTextOutlined,
   ClockCircleOutlined,
   ThunderboltOutlined,
@@ -43,15 +44,13 @@ const currentScene = computed<DashboardScene>(() => {
   return 'all'
 })
 
-// 统计数据（初始为 0，由 API 填充）
+// 无可靠来源的指标用 null，不把其他业务口径的数量借来展示。
 const stats = ref({
-  totalRecords: 0,
-  pendingRecords: 0,
-  analyzingRecords: 0,
-  completedRecords: 0,
-  averageScore: 0,
-  passRate: 0,
-  todayUploads: 0,
+  totalRecords: null as number | null,
+  pendingRecords: null as number | null,
+  averageScore: null as number | null,
+  passRate: null as number | null,
+  todayUploads: null as number | null,
   weeklyTrend: '--',
 })
 
@@ -109,7 +108,13 @@ const workflowCards = ref<WorkflowEntryCard[]>([
 const performanceData = ref<PerformanceData | null>(null)
 
 // TodoBoard 原始数据
-const todoStatsRaw = ref<Record<string, any>>({})
+const emptyTodoStats = (): TodoStats => ({
+  task_stats: { countdown: null, in_progress: null, not_started: null },
+  defect_stats: { clinical_appeals: null, pending_review: null, urged: null },
+  record_stats: { pending_review: null, pending_recheck: null, total: null },
+})
+const todoStatsRaw = ref<TodoStats>(emptyTodoStats())
+let dashboardRequestId = 0
 
 // 最新活动数据
 const recentActivities = ref([
@@ -293,42 +298,59 @@ const handlePeriodChange = async (period: string) => {
   }
 }
 
+function availableNumber(value: number | null | undefined): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function formatStat(value: number | null): string {
+  return value === null ? '暂无数据' : String(value)
+}
+
 // 从 API 获取 Dashboard 数据
 const fetchDashboardData = async () => {
-  try {
-    // 并行请求待办统计和排名
-    const [todoRes, perfRes] = await Promise.all([
-      getTodoStats(currentScene.value),
-      getPerformanceRanking('this_week', currentScene.value),
-    ])
+  const requestId = ++dashboardRequestId
+  const scene = currentScene.value
+  const [overviewResult, taskResult, appealResult, rankingResult] = await Promise.allSettled([
+    getTodoStats(scene),
+    getTaskTodoStats(),
+    getAppeals({ status: 'reviewable', page: 1, pageSize: 1 }),
+    getPerformanceRanking('this_week', scene),
+  ])
+  if (requestId !== dashboardRequestId) return
 
-    if (todoRes.success && todoRes.data) {
-      const data = todoRes.data
-      const overview = data.overview || ({} as any)
-      stats.value = {
-        totalRecords: data.record_stats?.total || overview.total_records || 0,
-        pendingRecords: data.record_stats?.pending_review || overview.total_defects || 0,
-        analyzingRecords: data.task_stats?.in_progress || 0,
-        completedRecords:
-          (data.record_stats?.total || 0) - (data.record_stats?.pending_review || 0),
-        averageScore: overview.avg_score || 0,
-        passRate: overview.pass_rate || 0,
-        todayUploads: data.task_stats?.not_started || 0,
-        weeklyTrend: '--',
-      }
-
-      // 保存原始数据给 TodoBoard
-      todoStatsRaw.value = data
-    }
-
-    if (perfRes.success && perfRes.data) {
-      performanceData.value = perfRes.data
-    }
-
-    await fetchWorkflowCards()
-  } catch (err) {
-    console.error('获取 Dashboard 数据失败:', err)
+  const overview = overviewResult.status === 'fulfilled' && overviewResult.value.success
+    ? overviewResult.value.data?.overview
+    : undefined
+  stats.value = {
+    totalRecords: availableNumber(overview?.total_records),
+    pendingRecords: null,
+    averageScore: availableNumber(overview?.avg_score),
+    passRate: availableNumber(overview?.pass_rate),
+    todayUploads: null,
+    weeklyTrend: '--',
   }
+
+  const nextTodo = emptyTodoStats()
+  const task = taskResult.status === 'fulfilled' && taskResult.value.success
+    ? taskResult.value.data
+    : undefined
+  if (task && [task.in_progress, task.assigned, task.due_soon].every((count) => Number.isInteger(count) && count >= 0) && task.as_of) {
+    nextTodo.task_stats = {
+      in_progress: task.in_progress,
+      not_started: task.assigned,
+      countdown: task.due_soon,
+      as_of: task.as_of,
+    }
+  }
+  if (appealResult.status === 'fulfilled' && Number.isInteger(appealResult.value.total) && appealResult.value.total >= 0) {
+    nextTodo.defect_stats.clinical_appeals = appealResult.value.total
+  }
+  todoStatsRaw.value = nextTodo
+
+  performanceData.value = rankingResult.status === 'fulfilled' && rankingResult.value.success
+    ? rankingResult.value.data ?? null
+    : null
+  await fetchWorkflowCards()
 }
 
 const fetchWorkflowCards = async () => {
@@ -435,9 +457,7 @@ watch(
               工作台
             </h1>
             <p class="mt-1 text-sm font-medium text-slate-500">
-              汇总待办队列、今日风险和快捷入口，优先处理需要人工复核的病案。
-              <span class="font-bold text-blue-600">{{ stats.pendingRecords }}</span>
-              份待处理。
+              汇总待办队列与快捷入口，优先处理需要人工复核的病案。
             </p>
           </div>
 
@@ -527,11 +547,6 @@ watch(
             >
               <TrophyOutlined class="text-xl" />
             </div>
-            <span
-              class="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg flex items-center gap-1 border border-emerald-100"
-            >
-              <ArrowUpOutlined /> 3.2%
-            </span>
           </div>
           <div class="relative z-10">
             <div class="text-slate-500 text-sm font-medium mb-1">
@@ -539,15 +554,9 @@ watch(
             </div>
             <div class="flex items-baseline gap-1.5">
               <span class="text-3xl font-bold text-slate-800 tracking-tight">{{
-                stats.averageScore
+                formatStat(stats.averageScore)
               }}</span>
-              <span class="text-sm text-slate-400 font-medium">分</span>
-            </div>
-            <div class="w-full h-1.5 bg-slate-100 rounded-full mt-3 overflow-hidden">
-              <div
-                class="h-full bg-blue-600 rounded-full"
-                style="width: 87.5%"
-              />
+              <span v-if="stats.averageScore !== null" class="text-sm text-slate-400 font-medium">分</span>
             </div>
           </div>
         </div>
@@ -562,11 +571,6 @@ watch(
             >
               <CheckCircleOutlined class="text-xl" />
             </div>
-            <span
-              class="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg flex items-center gap-1 border border-emerald-100"
-            >
-              <ArrowUpOutlined /> 1.5%
-            </span>
           </div>
           <div class="relative z-10">
             <div class="text-slate-500 text-sm font-medium mb-1">
@@ -574,15 +578,9 @@ watch(
             </div>
             <div class="flex items-baseline gap-1.5">
               <span class="text-3xl font-bold text-slate-800 tracking-tight">{{
-                stats.passRate
+                formatStat(stats.passRate)
               }}</span>
-              <span class="text-sm text-slate-400 font-medium">%</span>
-            </div>
-            <div class="w-full h-1.5 bg-slate-100 rounded-full mt-3 overflow-hidden">
-              <div
-                class="h-full bg-blue-600 rounded-full"
-                style="width: 94.2%"
-              />
+              <span v-if="stats.passRate !== null" class="text-sm text-slate-400 font-medium">%</span>
             </div>
           </div>
         </div>
@@ -601,11 +599,7 @@ watch(
               <span class="text-sm font-medium text-slate-500">总病案数</span>
             </div>
             <div class="text-2xl font-bold text-slate-800 mb-1">
-              {{ stats.totalRecords }}
-            </div>
-            <div class="text-xs text-emerald-600 flex items-center gap-1">
-              <span class="bg-emerald-50 px-1.5 py-0.5 rounded text-emerald-600 font-medium">+12.5%</span>
-              <span class="text-slate-400">较上周</span>
+              {{ formatStat(stats.totalRecords) }}
             </div>
           </div>
 
@@ -619,11 +613,7 @@ watch(
               <span class="text-sm font-medium text-slate-500">待分析</span>
             </div>
             <div class="text-2xl font-bold text-slate-800 mb-1">
-              {{ stats.pendingRecords }}
-            </div>
-            <div class="text-xs text-orange-600 flex items-center gap-1">
-              <span class="bg-orange-50 px-1.5 py-0.5 rounded text-orange-600 font-medium">需关注</span>
-              <span class="text-slate-400">处理积压</span>
+              {{ formatStat(stats.pendingRecords) }}
             </div>
           </div>
 
@@ -637,11 +627,7 @@ watch(
               <span class="text-sm font-medium text-slate-500">今日新增</span>
             </div>
             <div class="text-2xl font-bold text-slate-800 mb-1">
-              {{ stats.todayUploads }}
-            </div>
-            <div class="text-xs text-cyan-600 flex items-center gap-1">
-              <span class="bg-cyan-50 px-1.5 py-0.5 rounded text-cyan-600 font-medium">Live</span>
-              <span class="text-slate-400">实时同步</span>
+              {{ formatStat(stats.todayUploads) }}
             </div>
           </div>
         </div>

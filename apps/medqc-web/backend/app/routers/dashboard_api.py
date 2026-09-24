@@ -11,14 +11,13 @@ import asyncio
 import logging
 import os
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any, List, Literal
+from typing import Dict, Any, Literal
 
 from fastapi import APIRouter, Request, Depends, Query, HTTPException
 
 from ..core.supabase_client import get_supabase, async_execute
 from ..core.response import success_response, get_trace_id
 from ..core.security import get_current_user
-from ..core.permissions import require_permission, ResourceType, PermissionAction
 
 router = APIRouter(prefix="/api/v1/dashboard", tags=["dashboard"])
 logger = logging.getLogger(__name__)
@@ -190,11 +189,10 @@ async def _collect_db_stats(sb, scene: DashboardScene) -> Dict[str, Any]:
             allowed_record_ids = {
                 _record_identity(r) for r in filtered_records if _record_identity(r)
             }
-            if allowed_record_ids:
-                appeals = [
-                    a for a in appeals
-                    if _record_identity(a) in allowed_record_ids
-                ]
+            appeals = [
+                a for a in appeals
+                if _record_identity(a) in allowed_record_ids
+            ]
         appeal_status = {}
         for a in appeals:
             st = a.get('status', 'unknown')
@@ -219,11 +217,10 @@ async def _collect_db_stats(sb, scene: DashboardScene) -> Dict[str, Any]:
             allowed_record_ids = {
                 _record_identity(r) for r in filtered_records if _record_identity(r)
             }
-            if allowed_record_ids:
-                tasks = [
-                    t for t in tasks
-                    if _record_identity(t) in allowed_record_ids
-                ]
+            tasks = [
+                t for t in tasks
+                if _record_identity(t) in allowed_record_ids
+            ]
         task_status = {}
         for t in tasks:
             st = t.get('status', 'unknown')
@@ -275,9 +272,9 @@ async def get_todo_stats(
 
     返回结构:
     {
-      "task_stats": { "countdown": 5, "in_progress": 12, "not_started": 8 },
-      "defect_stats": { "clinical_appeals": 3, "pending_review": 15, "urged": 2 },
-      "record_stats": { "pending_review": 23, "pending_recheck": 7, "total": 1247 },
+      "task_stats": { "countdown": null, "in_progress": null, "not_started": null },
+      "defect_stats": { "clinical_appeals": null, "pending_review": null, "urged": null },
+      "record_stats": { "pending_review": null, "pending_recheck": null, "total": 1247 },
       "scene_breakdown": { ... },
       "overview": { "total_records": ..., "avg_score": ..., "pass_rate": ... }
     }
@@ -294,30 +291,22 @@ async def get_todo_stats(
         # 从数据库统计构建待办视图
         records = db_stats.get('records', {})
         qc = db_stats.get('qc', {})
-        appeals = db_stats.get('appeals', {})
         remediation = db_stats.get('remediation', {})
-
-        record_status = records.get('by_status', {})
-        appeal_status = appeals.get('by_status', {})
-        remediation_status = remediation.get('by_status', {})
 
         todo_data = {
             "task_stats": {
-                "countdown": remediation_status.get('pending', 0) + remediation_status.get('overdue', 0),
-                "in_progress": remediation_status.get('in_progress', 0),
-                # 口径冲突说明：
-                # 当前 not_started 仍由病历状态 pending 近似，不是“已分配给当前用户且未开始的任务”。
-                # 待任务明细聚合层统一后改为任务事实口径。
-                "not_started": record_status.get('pending', 0),
+                "countdown": None,
+                "in_progress": None,
+                "not_started": None,
             },
             "defect_stats": {
-                "clinical_appeals": appeal_status.get('pending', 0) + appeal_status.get('reviewing', 0),
-                "pending_review": remediation_status.get('submitted', 0),
-                "urged": remediation_status.get('pending', 0),
+                "clinical_appeals": None,
+                "pending_review": None,
+                "urged": None,
             },
             "record_stats": {
-                "pending_review": record_status.get('pending_review', 0),
-                "pending_recheck": record_status.get('pending_recheck', 0),
+                "pending_review": None,
+                "pending_recheck": None,
                 "total": records.get('total', 0),
             },
             "overview": {

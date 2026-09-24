@@ -94,6 +94,9 @@ router = APIRouter(prefix="/api/v1/tasks", tags=["tasks"])
 logger = logging.getLogger(__name__)
 SHANGHAI_TZ = timezone(timedelta(hours=8))
 TaskSceneFilter = Literal["running", "final", "outpatient", "unclassified"]
+_TODO_READ_PAGE_SIZE = 500
+_TODO_TASK_ID_CHUNK_SIZE = 200
+_TODO_MAX_ASSIGNMENTS = 50000
 
 
 
@@ -172,6 +175,78 @@ def _task_todo_counts(rows: List[dict], as_of: datetime) -> Dict[str, int]:
         "in_progress": sum(row.get("status") == "in_progress" for row in rows),
         "due_soon": sum(_task_matches_todo(row, "due_soon", as_of) for row in rows),
     }
+
+
+async def _received_task_ids(sb, current_user: dict) -> List[str]:
+    """完整读取受领关系；超出本接口可处理规模时显式失败。"""
+    user_id = _get_task_scope_user_id(current_user)
+    ids: Dict[str, None] = {}
+    offset = 0
+    expected_count = None
+    while True:
+        resp = await async_execute(
+            sb.table("qc_task_records")
+            .select("task_id", count="exact")
+            .eq("assignee_id", user_id)
+            .order("id")
+            .range(offset, offset + _TODO_READ_PAGE_SIZE - 1)
+        )
+        page = list(getattr(resp, "data", None) or [])
+        count = getattr(resp, "count", None)
+        if not isinstance(count, int) or count < offset + len(page):
+            raise HTTPException(status_code=503, detail="任务受领关系总数不可验证")
+        if expected_count is not None and count != expected_count:
+            raise HTTPException(status_code=503, detail="任务受领关系读取期间发生变化，请重试")
+        expected_count = count
+        if not page and offset < count:
+            raise HTTPException(status_code=503, detail="任务受领关系读取不完整，请稍后重试")
+        offset += len(page)
+        if count > _TODO_MAX_ASSIGNMENTS:
+            raise HTTPException(status_code=503, detail="任务受领关系超出待办查询上限")
+        for row in page:
+            if row.get("task_id"):
+                ids[row["task_id"]] = None
+        if offset >= count:
+            break
+    return list(ids)
+
+
+async def _received_todo_rows(
+    sb, current_user: dict, scene: Optional[str], *,
+    columns: str, status: Optional[str] = None, keyword: Optional[str] = None,
+) -> List[dict]:
+    task_ids = await _received_task_ids(sb, current_user)
+    rows: List[dict] = []
+    for start in range(0, len(task_ids), _TODO_TASK_ID_CHUNK_SIZE):
+        chunk = task_ids[start:start + _TODO_TASK_ID_CHUNK_SIZE]
+        offset = 0
+        expected_count = None
+        while True:
+            query = sb.table("qc_tasks").select(columns, count="exact").in_("id", chunk)
+            query = _apply_task_scene_scope(query, scene)
+            if status:
+                query = query.eq("status", status)
+            if keyword:
+                query = query.or_(
+                    f"task_name.ilike.%{keyword}%,task_number.ilike.%{keyword}%"
+                )
+            resp = await async_execute(
+                query.order("id").range(offset, offset + _TODO_TASK_ID_CHUNK_SIZE - 1)
+            )
+            page = list(getattr(resp, "data", None) or [])
+            count = getattr(resp, "count", None)
+            if not isinstance(count, int) or count > len(chunk) or count < offset + len(page):
+                raise HTTPException(status_code=503, detail="任务待办总数不可验证")
+            if expected_count is not None and count != expected_count:
+                raise HTTPException(status_code=503, detail="任务待办读取期间发生变化，请重试")
+            expected_count = count
+            if not page and offset < count:
+                raise HTTPException(status_code=503, detail="任务待办读取不完整，请稍后重试")
+            rows.extend(page)
+            offset += len(page)
+            if offset >= count:
+                break
+    return rows
 
 
 async def _apply_task_tab_scope(sb, query, tab: str, current_user: dict):
@@ -348,40 +423,39 @@ async def list_tasks(
 
     try:
         if todo:
-            query = sb.table('qc_tasks').select('*')
-        else:
-            query = sb.table('qc_tasks').select('*', count='exact')
-
-        query = await _apply_task_tab_scope(sb, query, tab, current_user)
-        if query is None:
-            return paginated_response(
-                items=[], total=0, page=page, page_size=page_size,
-                message="暂无收到的任务", trace_id=get_trace_id(request),
+            data = await _received_todo_rows(
+                sb, current_user, scene, columns="*", status=status, keyword=keyword,
             )
-        query = _apply_task_scene_scope(query, scene)
-
-        if status:
-            query = query.eq('status', status)
-        if keyword:
-            query = query.or_(
-                f"task_name.ilike.%{keyword}%,task_number.ilike.%{keyword}%"
+            data = [row for row in data if _task_matches_todo(row, todo, todo_as_of)]
+            data.sort(
+                key=lambda row: (str(row.get("created_at") or ""), str(row.get("id") or "")),
+                reverse=True,
             )
-
-        query = query.order('created_at', desc=True)
-        offset = (page - 1) * page_size
-        if not todo:
-            query = query.range(offset, offset + page_size - 1)
-
-        resp = await async_execute(query)
-        data = list(getattr(resp, 'data', None) or [])
-        if todo:
-            data = [
-                row for row in data
-                if _task_matches_todo(row, todo, todo_as_of)
-            ]
+            offset = (page - 1) * page_size
             total = len(data)
             data = data[offset:offset + page_size]
         else:
+            query = sb.table('qc_tasks').select('*', count='exact')
+            query = await _apply_task_tab_scope(sb, query, tab, current_user)
+            if query is None:
+                return paginated_response(
+                    items=[], total=0, page=page, page_size=page_size,
+                    message="暂无收到的任务", trace_id=get_trace_id(request),
+                )
+            query = _apply_task_scene_scope(query, scene)
+
+            if status:
+                query = query.eq('status', status)
+            if keyword:
+                query = query.or_(
+                    f"task_name.ilike.%{keyword}%,task_number.ilike.%{keyword}%"
+                )
+
+            query = query.order('created_at', desc=True)
+            offset = (page - 1) * page_size
+            query = query.range(offset, offset + page_size - 1)
+            resp = await async_execute(query)
+            data = list(getattr(resp, 'data', None) or [])
             total = getattr(resp, 'count', None) or len(data)
 
         return paginated_response(
@@ -464,13 +538,9 @@ async def get_task_todo_stats(
         raise HTTPException(status_code=503, detail="数据库不可用")
 
     try:
-        query = sb.table("qc_tasks").select("id,status,deadline")
-        query = await _apply_task_tab_scope(sb, query, "received", current_user)
-        rows = []
-        if query is not None:
-            query = _apply_task_scene_scope(query, scene)
-            resp = await async_execute(query)
-            rows = list(getattr(resp, "data", None) or [])
+        rows = await _received_todo_rows(
+            sb, current_user, scene, columns="id,status,deadline"
+        )
         counts = _task_todo_counts(rows, as_of)
     except HTTPException:
         raise

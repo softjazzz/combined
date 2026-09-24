@@ -315,7 +315,7 @@ def test_due_soon_list_filters_before_pagination_and_matches_stats(
         "naive-shanghai",
         "date-only",
     ]
-    assert database.count_requests == 0
+    assert database.count_requests > 0
 
 
 @pytest.mark.parametrize(

@@ -57,7 +57,18 @@ async def test_todo_stats_real_zero_counts_are_not_treated_as_failure(monkeypatc
 
     assert result["success"] is True
     assert result["data"]["record_stats"]["total"] == 0
-    assert result["data"]["task_stats"] == {"countdown": 0, "in_progress": 0, "not_started": 0}
+    assert result["data"]["task_stats"] == {
+        "countdown": None,
+        "in_progress": None,
+        "not_started": None,
+    }
+    assert result["data"]["defect_stats"] == {
+        "clinical_appeals": None,
+        "pending_review": None,
+        "urged": None,
+    }
+    assert result["data"]["record_stats"]["pending_review"] is None
+    assert result["data"]["record_stats"]["pending_recheck"] is None
     assert result["data"]["overview"]["pass_rate"] == 0
 
 

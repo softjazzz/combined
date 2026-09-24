@@ -36,19 +36,20 @@ async function request<T = any>(
 
 export interface TodoStats {
   task_stats: {
-    countdown: number
-    in_progress: number
-    not_started: number
+    countdown: number | null
+    in_progress: number | null
+    not_started: number | null
+    as_of?: string
   }
   defect_stats: {
-    clinical_appeals: number
-    pending_review: number
-    urged: number
+    clinical_appeals: number | null
+    pending_review: number | null
+    urged: number | null
   }
   record_stats: {
-    pending_review: number
-    pending_recheck: number
-    total: number
+    pending_review: number | null
+    pending_recheck: number | null
+    total: number | null
   }
   overview?: {
     total_records: number

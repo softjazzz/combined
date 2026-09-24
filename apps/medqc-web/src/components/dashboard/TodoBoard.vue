@@ -5,15 +5,11 @@
         <ThunderboltOutlined class="title-icon" />
         我的待办
       </h3>
-      <a-segmented
-        v-model:value="activeScene"
-        :options="sceneOptions"
-        size="small"
-      />
+      <span class="scene-label">全场景待办</span>
     </div>
 
     <p v-if="allEmpty" class="board-status" role="status" data-testid="todo-board-empty">
-      没有待处理事项
+      已接入待办：没有待处理事项
     </p>
     <p v-else-if="noData" class="board-status" role="alert" data-testid="todo-board-unavailable">
       待办数据暂不可用
@@ -28,24 +24,27 @@
         </div>
         <div class="card-body">
           <div
-            class="stat-item clickable"
-            @click="openTodo(todoData.task_stats?.in_progress, '/dashboard/tasks/my', { status: 'in_progress' })"
+            class="stat-item"
+            :class="{ clickable: canOpenTask(todoData.task_stats?.in_progress) }"
+            @click="openTaskTodo(todoData.task_stats?.in_progress, 'in_progress')"
           >
             <span class="stat-number text-blue-600">{{ formatCount(todoData.task_stats?.in_progress) }}</span>
             <span class="stat-label">进行中</span>
           </div>
           <div class="stat-divider" />
           <div
-            class="stat-item clickable"
-            @click="openTodo(todoData.task_stats?.not_started, '/dashboard/tasks/my', { status: 'not_started' })"
+            class="stat-item"
+            :class="{ clickable: canOpenTask(todoData.task_stats?.not_started) }"
+            @click="openTaskTodo(todoData.task_stats?.not_started, 'assigned')"
           >
             <span class="stat-number text-orange-500">{{ formatCount(todoData.task_stats?.not_started) }}</span>
             <span class="stat-label">未开始</span>
           </div>
           <div class="stat-divider" />
           <div
-            class="stat-item clickable"
-            @click="openTodo(todoData.task_stats?.countdown, '/dashboard/tasks/my', { countdown: 'true' })"
+            class="stat-item"
+            :class="{ clickable: canOpenTask(todoData.task_stats?.countdown) }"
+            @click="openTaskTodo(todoData.task_stats?.countdown, 'due_soon')"
           >
             <span class="stat-number text-red-500">{{ formatCount(todoData.task_stats?.countdown) }}</span>
             <span class="stat-label">即将超时</span>
@@ -61,19 +60,20 @@
         </div>
         <div class="card-body">
           <div
-            class="stat-item clickable"
-            @click="openTodo(todoData.defect_stats?.clinical_appeals, '/dashboard/qc/appeals')"
+            class="stat-item"
+            :class="{ clickable: canOpen(todoData.defect_stats?.clinical_appeals) }"
+            @click="openTodo(todoData.defect_stats?.clinical_appeals, '/dashboard/qc/appeals', { todo: 'review' })"
           >
             <span class="stat-number text-purple-600">{{ formatCount(todoData.defect_stats?.clinical_appeals) }}</span>
             <span class="stat-label">临床申诉</span>
           </div>
           <div class="stat-divider" />
           <div
-            class="stat-item clickable"
-            @click="openTodo(todoData.defect_stats?.pending_review, '/dashboard/records/final', { status: 'pending_review' })"
+            class="stat-item"
+            @click="openUnavailable(todoData.defect_stats?.pending_review)"
           >
             <span class="stat-number text-orange-500">{{ formatCount(todoData.defect_stats?.pending_review) }}</span>
-            <span class="stat-label">待审核</span>
+            <span class="stat-label">人工缺陷待审核</span>
           </div>
         </div>
       </div>
@@ -86,16 +86,16 @@
         </div>
         <div class="card-body">
           <div
-            class="stat-item clickable"
-            @click="openTodo(todoData.record_stats?.pending_review, '/dashboard/records/final', { status: 'pending' })"
+            class="stat-item"
+            @click="openUnavailable(todoData.record_stats?.pending_review)"
           >
             <span class="stat-number text-blue-600">{{ formatCount(todoData.record_stats?.pending_review) }}</span>
             <span class="stat-label">待审核</span>
           </div>
           <div class="stat-divider" />
           <div
-            class="stat-item clickable"
-            @click="openTodo(todoData.record_stats?.pending_recheck, '/dashboard/records/final', { status: 'recheck' })"
+            class="stat-item"
+            @click="openUnavailable(todoData.record_stats?.pending_recheck)"
           >
             <span class="stat-number text-cyan-600">{{ formatCount(todoData.record_stats?.pending_recheck) }}</span>
             <span class="stat-label">待复审</span>
@@ -107,10 +107,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { message } from 'ant-design-vue'
 import { useRouter } from 'vue-router'
-import type { TodoStats } from '@/api/dashboard'
 import {
   ThunderboltOutlined,
   ProjectOutlined,
@@ -118,31 +117,59 @@ import {
   FileTextOutlined,
 } from '@ant-design/icons-vue'
 
-const props = defineProps<{
-  todoData: Partial<TodoStats>
-}>()
+type Count = number | null | undefined
+type TodoBoardData = {
+  task_stats?: { in_progress?: Count; not_started?: Count; countdown?: Count; as_of?: string | null }
+  defect_stats?: { clinical_appeals?: Count; pending_review?: Count }
+  record_stats?: { pending_review?: Count; pending_recheck?: Count }
+}
+
+const props = defineProps<{ todoData: TodoBoardData }>()
 
 const router = useRouter()
-const activeScene = ref('全部')
-const sceneOptions = ['全部', '终末', '运行', '门急诊']
-
-const counts = computed(() => [
+const deliveredCounts = computed(() => [
   props.todoData.task_stats?.in_progress,
   props.todoData.task_stats?.not_started,
   props.todoData.task_stats?.countdown,
   props.todoData.defect_stats?.clinical_appeals,
-  props.todoData.defect_stats?.pending_review,
-  props.todoData.record_stats?.pending_review,
-  props.todoData.record_stats?.pending_recheck,
 ])
-const noData = computed(() => counts.value.every((value) => !Number.isFinite(value)))
-const allEmpty = computed(() => counts.value.every((value) => value === 0))
+const noData = computed(() => deliveredCounts.value.every((value) => !Number.isFinite(value)))
+const allEmpty = computed(() => deliveredCounts.value.every((value) => value === 0))
 
-function formatCount(value: number | undefined) {
+function formatCount(value: Count) {
   return Number.isFinite(value) ? value : '不可用'
 }
 
-function openTodo(value: number | undefined, path: string, query?: Record<string, string>) {
+function canOpen(value: Count) {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+}
+
+function canOpenTask(value: Count) {
+  return canOpen(value) && Boolean(props.todoData.task_stats?.as_of)
+}
+
+function openTaskTodo(value: Count, todo: 'in_progress' | 'assigned' | 'due_soon') {
+  if (value === 0) {
+    message.info('没有待处理事项')
+    return
+  }
+  const asOf = props.todoData.task_stats?.as_of
+  if (!asOf) {
+    message.warning('任务待办快照暂不可用，请稍后重试')
+    return
+  }
+  openTodo(value, '/dashboard/tasks/my', { todo, as_of: asOf })
+}
+
+function openUnavailable(value: Count) {
+  if (value === 0) {
+    message.info('没有待处理事项')
+    return
+  }
+  message.warning('待办数据暂不可用，请稍后重试')
+}
+
+function openTodo(value: Count, path: string, query?: Record<string, string>) {
   if (!Number.isFinite(value)) {
     message.warning('待办数据暂不可用，请稍后重试')
     return
@@ -168,6 +195,10 @@ function openTodo(value: number | undefined, path: string, query?: Record<string
   align-items: center;
   justify-content: space-between;
   margin-bottom: 16px;
+}
+.scene-label {
+  color: rgba(29, 29, 31, 0.6);
+  font-size: 13px;
 }
 .board-title {
   font-size: 16px;
