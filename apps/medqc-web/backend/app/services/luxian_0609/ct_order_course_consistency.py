@@ -313,15 +313,48 @@ def _unique_temporal_anchor(
     if any(candidate is not event and
            (not event_days(candidate) or target in event_days(candidate)) for candidate in candidates):
         return False
-    # 仅接受日期直接修饰检查名称/执行动词的受控表达；记录、复述等动作
-    # 不能借日期集合命中建立归属。复杂表达保留关联缺口，不按最近日期猜测。
+    # 日期只是候选坐标。必须能在同一动作片段内确认实际实施；模型把计划、
+    # 报告发布或结果补录分配给检查事件时，不能用相邻日期建立合规归属。
     date_pattern = r"\d{4}[-年/]\d{1,2}[-月/]\d{1,2}日?"
     anchor_pattern = rf"(?:{date_pattern})(?:(?:和|及|、)(?:{date_pattern}))*|今日|今天|昨日|昨天"
+    performed_before_name = r"已完成|完成|已行|行|进行了|进行|已复查|已检查"
+    performed_after_name = (
+        r"(?:已|已经)?(?:完成|检查完成|扫描完成|复查完成)|"
+        r"(?:已|已经)(?:执行|实施|检查)"
+    )
+    pending_or_recalled = re.compile(
+        r"拟|计划|预定|预约|预计|安排|方案|决定|若|如果|假如|尚未|尚待|"
+        r"未行|未做|未执行|未实施|未完成|没有完成|待查|待行|"
+        r"建议|考虑|回顾|既往|复述|转录|补录|报告审核|报告发布"
+    )
+    document_action = re.compile(r"报告|结果|影像|读片|阅片|审核|发布|录入|补录|转录")
     for clause in clauses:
         text = unicodedata.normalize("NFKC", clause.text).casefold()
         for match in re.finditer(anchor_pattern, text):
+            # 新日期也不能解除前文的计划/假设限定；仅新句重置限定作用域。
+            before_date = re.split(r"[。；;！？\n]", text[:match.start()])[-1]
+            if pending_or_recalled.search(before_date):
+                continue
             tail = text[match.end():]
-            if not re.match(r"\s*(?:(?:分别|均|已|完成|行|进行|复查)\s*)*" + re.escape(name), tail):
+            action = re.match(
+                r"\s*(?:(?:分别|均)\s*)?(?P<before>(?:" + performed_before_name
+                + r")?)\s*" + re.escape(name), tail,
+            )
+            if action is None:
+                continue
+            after_name = re.split(r"[，,。；;！？\n]", tail[action.end():], maxsplit=1)[0].strip()
+            if document_action.search(after_name) or pending_or_recalled.search(after_name):
+                continue
+            postfix = re.match(performed_after_name, after_name) if not action.group("before") else None
+            if not action.group("before") and postfix is None:
+                continue
+            continuation = after_name[postfix.end():] if postfix else after_name
+            # 只接纳检查动作及受控的后续观察；“完成率统计”“完成设备维护”
+            # 不是患者检查已实施的证据，不能因谓词前缀相同而通过。
+            if continuation and not (
+                continuation in {"检查", "检查完成"}
+                or re.match(r"^(?:后|示|提示|见|发现|显示|并|且)", continuation)
+            ):
                 continue
             anchor = match.group()
             explicit = {day(f"{year}-{int(month):02d}-{int(date):02d}")

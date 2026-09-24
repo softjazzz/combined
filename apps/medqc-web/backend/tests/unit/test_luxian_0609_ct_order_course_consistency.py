@@ -518,6 +518,30 @@ def test_public_order_binding_contract_rejects_invalid_types_and_missing_provena
     ("2026-09-01胸部CT平扫完成。", ("胸部CT", "胸部CT平扫"), "data_gap"),
     ("2026-09-01完成胸部CT，2026-09-03完成胸部CT。", ("胸部CT", "胸部CT"), "compliant"),
     ("2026-09-03记录今日复述昨日胸部CT结果。", ("胸部CT", "胸部CT"), "data_gap"),
+    ("2026-09-01完成胸部CT，拟于2026-09-03复查胸部CT。", ("胸部CT", "胸部CT"), "data_gap"),
+    ("2026-09-01完成胸部CT，2026-09-03胸部CT报告审核发布。", ("胸部CT", "胸部CT"), "data_gap"),
+    ("2026-09-01完成胸部CT，2026-09-03胸部CT结果补录。", ("胸部CT", "胸部CT"), "data_gap"),
+    ("2026-09-01完成胸部CT，2026-09-03胸部CT尚在计划中。", ("胸部CT", "胸部CT"), "data_gap"),
+    ("2026-09-01完成胸部CT，若2026-09-03完成胸部CT则调整治疗。", ("胸部CT", "胸部CT"), "data_gap"),
+    ("2026-09-01完成胸部CT，2026-09-03胸部CT未完成。", ("胸部CT", "胸部CT"), "data_gap"),
+    ("2026-09-01完成胸部CT，计划复查，2026-09-03完成胸部CT。", ("胸部CT", "胸部CT"), "data_gap"),
+    ("2026-09-01完成胸部CT，2026-09-03完成胸部CT报告审核。", ("胸部CT", "胸部CT"), "data_gap"),
+    ("2026-09-01完成胸部CT，2026-09-03胸部CT检查报告已完成。", ("胸部CT", "胸部CT"), "data_gap"),
+    ("2026-09-01完成胸部CT，2026-09-03胸部CT检查安排。", ("胸部CT", "胸部CT"), "data_gap"),
+    ("2026-09-01完成胸部CT，2026-09-03胸部CT执行方案。", ("胸部CT", "胸部CT"), "data_gap"),
+    ("2026-09-01完成胸部CT，2026-09-03完成胸部CT的安排。", ("胸部CT", "胸部CT"), "data_gap"),
+    ("计划2026-09-01完成胸部CT，2026-09-03完成胸部CT。", ("胸部CT", "胸部CT"), "data_gap"),
+    ("若2026-09-01完成胸部CT，则2026-09-03完成胸部CT。", ("胸部CT", "胸部CT"), "data_gap"),
+    ("2026-09-01完成胸部CT，2026-09-03胸部CT完成报告签署。", ("胸部CT", "胸部CT"), "data_gap"),
+    ("2026-09-01完成胸部CT，2026-09-03胸部CT已完成结果录入。", ("胸部CT", "胸部CT"), "data_gap"),
+    ("2026-09-01完成胸部CT，2026-09-03完成胸部CT设备维护。", ("胸部CT", "胸部CT"), "data_gap"),
+    ("2026-09-01完成胸部CT，2026-09-03胸部CT完成率统计。", ("胸部CT", "胸部CT"), "data_gap"),
+    ("2026-09-01完成胸部CT，2026-09-03完成胸部CT但未执行。", ("胸部CT", "胸部CT"), "data_gap"),
+    ("2026-09-01完成胸部CT，2026-09-03胸部CT已完成。", ("胸部CT", "胸部CT"), "compliant"),
+    ("2026-09-01完成胸部CT，2026-09-03行胸部CT检查。", ("胸部CT", "胸部CT"), "compliant"),
+    ("2026-09-01完成胸部CT，2026-09-03已复查胸部CT。", ("胸部CT", "胸部CT"), "compliant"),
+    ("2026-09-01完成胸部CT，2026-09-03已行胸部CT，报告待发布。", ("胸部CT", "胸部CT"), "compliant"),
+    ("2026-09-01完成胸部CT，2026-09-03胸部CT检查完成，拟继续复查。", ("胸部CT", "胸部CT"), "compliant"),
 ])
 def test_r1_exam_date_must_bind_exam_not_document_action(text, names, expected):
     events = tuple(replace(_event(f"E{i}"),
@@ -572,6 +596,16 @@ async def test_r2_binding_failure_is_scoped_to_ct_during_real_aggregation(mode, 
     ("2026-09-03记录，复述2026-09-01胸部CT结果。", "胸部CT", "data_gap"),
     ("2026-09-01胸部CT平扫完成。", "胸部CT平扫", "data_gap"),
     ("2026-09-01完成胸部CT，2026-09-03完成胸部CT。", "胸部CT", "compliant"),
+    ("2026-09-01完成胸部CT，拟于2026-09-03复查胸部CT。", "胸部CT", "data_gap"),
+    ("2026-09-01完成胸部CT，2026-09-03胸部CT报告审核发布。", "胸部CT", "data_gap"),
+    ("2026-09-01完成胸部CT，2026-09-03胸部CT结果补录。", "胸部CT", "data_gap"),
+    ("2026-09-01完成胸部CT，计划复查，2026-09-03完成胸部CT。", "胸部CT", "data_gap"),
+    ("2026-09-01完成胸部CT，2026-09-03完成胸部CT报告审核。", "胸部CT", "data_gap"),
+    ("计划2026-09-01完成胸部CT，2026-09-03完成胸部CT。", "胸部CT", "data_gap"),
+    ("若2026-09-01完成胸部CT，则2026-09-03完成胸部CT。", "胸部CT", "data_gap"),
+    ("2026-09-01完成胸部CT，2026-09-03胸部CT完成报告签署。", "胸部CT", "data_gap"),
+    ("2026-09-01完成胸部CT，2026-09-03胸部CT已完成。", "胸部CT", "compliant"),
+    ("2026-09-01完成胸部CT，2026-09-03已行胸部CT，报告待发布。", "胸部CT", "compliant"),
 ])
 async def test_r1_repeated_exam_through_native_and_publication(body, second_name, expected):
     from app.services.luxian_0609.canonical_result_finalizer import finalize_luxian_0609_reduced_customer_result
@@ -598,6 +632,13 @@ async def test_r1_repeated_exam_through_native_and_publication(body, second_name
     assert published["status"] == expected
     assert client.calls == native_result.llm_call_count == 1
     assert len(published["customer_display_facts"]["order_results"]) == 2
+    statuses = [item["status"] for item in published["customer_display_facts"]["order_results"]]
+    assert statuses[1] == expected
+    if body.startswith("2026-09-01完成胸部CT"):
+        assert statuses[0] == "compliant"
+    assert published["customer_display_facts"]["order_results"][1]["issue_kind"] == (
+        "order_course_consistent" if expected == "compliant" else "association_unresolved"
+    )
 
 
 @pytest.mark.parametrize("written,expected_first", [
