@@ -23,8 +23,8 @@
 | 滚动任务 | `MEDQC-022`，见 [PROJECT_ROLLING_TODO.md](PROJECT_ROLLING_TODO.md) |
 | 状态 | 原试点范围已纠正；已验证公共修复保留，原始0609规则等价整改重新建立保护基线 |
 | 当前阶段 | A：以原始0609规则重新确认一次发布与一致读取边界；不得使用新增规则失败作门槛 |
-| 下一项动作 | Sol 6 medium在独立原始引擎worktree确认1–2条原始规则及重复解释反例，主协调审查最小变更后实施 |
-| 生产代码基线 | `7cbadaf39f2eca7a6bb56f8895eb30a54b699568` |
+| 下一项动作 | 原始004公开校验修复已进入独立审查；完成兼容性与原生回归后提交，再验证任务/latest/反馈/导出一致性 |
+| 生产代码基线 | 本轮原始规则重构前基线 `775c17ede53930a685324e523f818b53da441698`；旧轮基线保留在历史记录 |
 | 基线分支 | `codex/lx0609-rule-id-integration`，GitHub `softjazzz/combined` |
 | 当前实施应用目录 | `C:/Users/Coldplay/.codex/worktrees/lx0609-rule-id-integration/LX888/apps/medqc-web`；Sol 6 medium 子代理提交 `cdaa65077` 已摘取为 `a163a910c`；CT 独立提交为 `762776545` |
 | 工作区注意 | `D:/LLM/LX888` 主工作区不是上述集成分支，且有其他任务改动；不得在未核对 HEAD 时直接按此计划改主工作区 |
@@ -99,7 +99,7 @@
 
 `validate_internal_facts / publish_customer_result / validate_published_result` 仅表示职责，不预先强制增加三层函数或三个新文件。A1须给出真实调用点与删除清单，才能确定具体接口。
 
-## 6. 阶段A：抢救与病理的完整交付链
+## 6. 阶段A门槛及历史试点记录（旧抢救内容/病理对象不再执行）
 
 ### A0：冻结可比较基线
 
@@ -273,3 +273,11 @@ python -m pytest -q --tb=short tests/unit/test_luxian_0609_basic_timeliness_cust
 ### 双线派工位置（2026-09-24）
 
 共同起点775c17ede。原始引擎工作树：`C:/Users/Coldplay/.codex/worktrees/lx0609-original-engine-20260924/LX888/apps/medqc-web`，分支`codex/lx0609-original-engine-20260924`，代理engine_phase_a_acceptance。新增规则工作树：`C:/Users/Coldplay/.codex/worktrees/lx0609-new-rule-fixes-20260924/LX888/apps/medqc-web`，分支`codex/lx0609-new-rule-fixes-20260924`，代理new_rescue_rule_fix。两代理分别拥有公共引擎边界与新增抢救专属执行器；均不得直接推送/合并，由主协调独立验收后集成。旧Goal不再描述现行任务，不自动恢复。
+
+### 2026-09-24 长程目标接续与主协调独立审查
+
+- 用户已明确授权主协调创建持续goal，负责中断恢复、成果接收、独立验收与后续阶段推进，不以派工为完成。
+- 原始004（LX0609-09-01-01）读取重复计算反例由主协调在独立树亲自复跑，helper与SQLite完整写读两条红测试均因未拒绝损坏公开事实而失败。生产读取不能继续调用内部投影后静默改写；已授权现有族模块公开合同校验并原样返回。
+- 子代理曾遇路由502和随后中断，已按实际状态恢复。修改仍待主协调验收，重点检查舍入兼容、公开JSON非法类型和各正常发布分支。
+- 独立新规则提交edc8f4b暂未合入：主协调复现其新增时间关联helper会接受否定及条件处置句，已退回补完整判定链复现和最小修复。该问题不阻塞原始引擎整改。
+- 后续阶段B/C/D仍以原计划门槛为依据；原始规则阶段A代码及跨路径等价证据未完成前不得宣称全部整改完成。
