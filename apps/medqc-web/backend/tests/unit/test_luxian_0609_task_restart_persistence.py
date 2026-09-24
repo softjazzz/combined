@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 import sys
+import asyncio
 from pathlib import Path
 
 import pytest
@@ -79,7 +80,22 @@ else:
 
     workspace.collect_records = block_record_read
 
+    renew_count = 0
+    if mode == 'heartbeat':
+        worker.LX0609_LEASE_HEARTBEAT_SECONDS = 0.01
+        original_renew = workspace.renew_luxian_0609_batch_job_lease
+
+        def counted_renew(**kwargs):
+            global renew_count
+            renewed = original_renew(**kwargs)
+            renew_count += int(renewed)
+            return renewed
+
+        workspace.renew_luxian_0609_batch_job_lease = counted_renew
+
     async def provide():
+        if mode == 'heartbeat':
+            await asyncio.sleep(0.08)
         return SichuanQCService(config)
 
     resumed_count = None
@@ -109,6 +125,7 @@ else:
         'error_message': job['error_message'],
         'attempt_id': persisted_filters.get(storage.LX0609_ATTEMPT_FILTER_KEY),
         'resumed_count': resumed_count,
+        'renew_count': renew_count,
     }, ensure_ascii=False))
 """
 
@@ -173,6 +190,16 @@ def test_queued_formal_task_is_resubmitted_after_process_restart(tmp_path, same_
     assert _run_probe("recover", database_path, next_build, str(created["job_id"]))["resumed_count"] == 0
 
 
+def test_restarted_worker_renews_persisted_attempt_during_wait(tmp_path):
+    database_path = str(tmp_path / "heartbeat-jobs.sqlite")
+    build_id = "medqc-web-customer-20260925-100000"
+    created = _run_probe("create", database_path, build_id)
+    observed = _run_probe("heartbeat", database_path, build_id, str(created["job_id"]))
+    assert observed["status"] == "failed"
+    assert observed["error_message"] == "passed-runtime-gate"
+    assert observed["renew_count"] >= 1
+
+
 @pytest.mark.asyncio
 async def test_application_startup_invokes_queued_luxian_recovery(monkeypatch):
     from app import main as main_module
@@ -199,6 +226,10 @@ async def test_application_startup_invokes_queued_luxian_recovery(monkeypatch):
     monkeypatch.setattr(LLMConfigLoader, "load_config", load_config)
     monkeypatch.setattr(main_module.qc_sichuan_router, "start_rule_source_monitor", lambda: None)
     monkeypatch.setattr(
+        main_module.qc_sichuan_router, "start_luxian_0609_task_recovery_monitor",
+        lambda: calls.append("monitor"),
+    )
+    monkeypatch.setattr(
         main_module.qc_sichuan_router, "resume_queued_luxian_0609_workspace_jobs",
         lambda: calls.append("recover"),
     )
@@ -206,4 +237,28 @@ async def test_application_startup_invokes_queued_luxian_recovery(monkeypatch):
     app = main_module.create_app()
     startup = next(callback for callback in app.router.on_startup if callback.__name__ == "startup_event")
     await startup()
-    assert calls == ["recover"]
+    assert calls == ["recover", "monitor"]
+
+
+@pytest.mark.asyncio
+async def test_recovery_monitor_checks_expired_attempts(monkeypatch):
+    from app.routers import qc_sichuan as route
+
+    calls = []
+
+    class Workspace:
+        def fail_stale_luxian_0609_running_jobs(self, *, stale_before):
+            calls.append(stale_before)
+            return ()
+
+    monkeypatch.setattr(route, "_sichuan_workspace_service", Workspace)
+    monkeypatch.setattr(route, "_LX0609_RECOVERY_SCAN_SECONDS", 0.01)
+    route.start_luxian_0609_task_recovery_monitor()
+    try:
+        for _ in range(50):
+            if calls:
+                break
+            await asyncio.sleep(0.01)
+        assert calls
+    finally:
+        await route.stop_luxian_0609_task_recovery_monitor()

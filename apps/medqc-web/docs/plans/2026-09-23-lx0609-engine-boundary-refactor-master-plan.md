@@ -8,6 +8,8 @@
 
 本轮后端聚焦 `test_luxian_0609_attempt_boundary_audit.py`、`test_luxian_0609_task_restart_persistence.py`、`test_luxian_0609_task_runtime_identity.py` 共 40 项通过；启动邻近的运行版本、生产保护、数据源策略共 16 项通过。改动文件 Ruff 在忽略 `main.py` 原有 E402 导入布局后通过；前端 lint、type-check 通过，全量单测 1065 通过、1 项既有客户样本池切换断言失败（`CustomerSampleValidationView.spec.ts:2651`）。编码检查须在本轮文件暂存后执行，空暂存区的 SKIP 不计作通过。下一个最小问题是：运行中任务被进程中断后，如何识别失效 owner 并在不重复提交结果的前提下恢复或受控失败；在此之前不把 `running` 任务直接重投。
 
+**运行中任务续约闭环（本轮）：** 新领取的0609执行代次在现有任务行内标记续约协议，Worker 每30秒独立于模型事件循环续约 `updated_at`；应用每30秒检查超过3分钟未续约的标记任务，以 `status + filters_json + updated_at` 条件更新为技术失败。旧执行代次随后不能写进度或 Canonical 结果；分族子任务失败后刷新父任务。没有续约标记的升级前 `running` 任务无法判断原进程是否仍在执行，因此不自动改变。选择现有任务服务持有事务与状态的模块，而非新增第二套任务状态机；该旧文件已超过2000行，本次只补任务行续约及带条件的失败事务，不迁入医学判定。聚焦后端与启动邻近测试62项通过，含独立进程Worker实际续约、超时失败、旧代次迟到提交拒绝、父任务刷新及无协议旧任务保留；Ruff、前端lint/type-check通过。前端全量单测1065通过、1项既有样本池断言失败。SQLite/独立进程技术测试不等于客户 PostgreSQL 同时竞争、真实安装包中断或临床结果验收；B/D仍按退出条件继续。
+
 阶段 A 新增原始会诊 023 的首次投影收敛：固定 native→Binding→Aggregator 输入先复现 `safe_consultation_customer_display_facts` 被调用两次；现在严格识别已发布 JSON 并只校验，旧内部形态仍经原投影剥离内部文书 ID。全链投影计数变为一次，固定响应仍为 2 次 LLM 调用、32 Token，最终状态/原因/事实/证据不变；同一 ReducedDecision 分别接收内部与已发布事实，结果的状态、原因、公开事实和文案一致。会诊公开边界/Finalizer/证据相邻 103 项及上一轮正式交付链 4 组通过，Ruff 通过。扩大到旧 `test_luxian_0609_native_consultation_episode_execution.py` 时有 31 项失败，集中在暂停 020–022 和旧调用/重试断言；该执行文件与调用路径未被本次生产改动修改，但尚未逐项完成基线归因，不能称该宽组全绿。A 仍缺真实页面、客户 PG 和完整保护集。
 
 | 顺序 | 剩余交付 | 退出证据与目前界限 |

@@ -5,6 +5,7 @@ from contextlib import nullcontext
 from datetime import datetime, timezone
 import logging
 import re
+import threading
 import time
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 import uuid
@@ -13,7 +14,11 @@ from fastapi import HTTPException
 
 from ..core.settings import get_settings
 from .case_identity import CaseRef
-from .custom_qc_workspace_service import CustomQCWorkspaceService, LX0609_ATTEMPT_FILTER_KEY
+from .custom_qc_workspace_service import (
+    CustomQCWorkspaceService,
+    LX0609_ATTEMPT_FILTER_KEY,
+    LX0609_LEASE_FILTER_KEY,
+)
 from .customer_rule_sets import CUSTOMER_LUXIAN_RULE_SET_KEY
 from .effect_priority_qc import (
     DEFAULT_MAX_REFINE_CANDIDATES,
@@ -1241,6 +1246,25 @@ def _result_diagnostic_trace(
     return _sanitize_trace_value(trace, removed_keys)
 
 
+LX0609_LEASE_HEARTBEAT_SECONDS = 30
+
+
+def _renew_luxian_0609_lease_until_stopped(
+    *, workspace: CustomQCWorkspaceService, job_id: str,
+    attempt_filters_json: str, stopped: threading.Event,
+) -> None:
+    """独立于模型请求事件循环续约；失去当前代次后停止心跳。"""
+
+    while not stopped.wait(LX0609_LEASE_HEARTBEAT_SECONDS):
+        try:
+            if not workspace.renew_luxian_0609_batch_job_lease(
+                job_id=job_id, attempt_filters_json=attempt_filters_json,
+            ):
+                return
+        except Exception:
+            logger.exception("LX0609 任务续约失败: job_id=%s", job_id)
+
+
 @diagnostic_job_lifecycle
 async def run_sichuan_workspace_batch_job(
     job_id: str,
@@ -1261,6 +1285,7 @@ async def run_sichuan_workspace_batch_job(
     claim_filters_json = job.get("_claim_filters_json")
     attempt_filters_json: str | None = None
     attempt_kwargs: dict[str, str] = {}
+    lease_stop: threading.Event | None = None
     try:
         # HTTP 门禁之外在所有实际质控 Worker 入口统一验签，阻止旧队列或内部调用绕过授权。
         # 不存在的任务及父任务已在上方返回，不触发授权检查。
@@ -1271,6 +1296,19 @@ async def run_sichuan_workspace_batch_job(
         if isinstance(claim, str):
             attempt_filters_json = claim
             attempt_kwargs = {"attempt_filters_json": claim}
+            if callable(getattr(workspace, "renew_luxian_0609_batch_job_lease", None)):
+                lease_stop = threading.Event()
+                threading.Thread(
+                    target=_renew_luxian_0609_lease_until_stopped,
+                    kwargs={
+                        "workspace": workspace,
+                        "job_id": job_id,
+                        "attempt_filters_json": claim,
+                        "stopped": lease_stop,
+                    },
+                    name="lx0609-task-lease",
+                    daemon=True,
+                ).start()
         qc_service = await qc_service_provider()
         if attempt_filters_json is not None and workspace.is_batch_job_canceled_or_missing(
             job_id=job_id, **attempt_kwargs
@@ -1279,6 +1317,7 @@ async def run_sichuan_workspace_batch_job(
         current = workspace.get_batch_job_for_processing(job_id=job_id) or job
         filters = dict(current.get("filters") or {})
         filters.pop(LX0609_ATTEMPT_FILTER_KEY, None)
+        filters.pop(LX0609_LEASE_FILTER_KEY, None)
         failed_rule_retry_scope = (
             dict(filters.get(FAILED_RULE_RETRY_FILTER_KEY) or {})
             if isinstance(filters.get(FAILED_RULE_RETRY_FILTER_KEY), dict)
@@ -3852,3 +3891,6 @@ async def run_sichuan_workspace_batch_job(
                 } if formal_0609_job else {}
             ),
         )
+    finally:
+        if lease_stop is not None:
+            lease_stop.set()

@@ -384,6 +384,7 @@ def create_app() -> FastAPI:
 
             # 只重投尚未领取的 LX0609 叶任务；Worker 再校验冻结模型/构建身份。
             qc_sichuan_router.resume_queued_luxian_0609_workspace_jobs()
+            qc_sichuan_router.start_luxian_0609_task_recovery_monitor()
 
             # 生产可启用 SC 规则来源持续巡检（巡检接口等价 /rules/source）
             qc_sichuan_router.start_rule_source_monitor()
@@ -397,6 +398,7 @@ def create_app() -> FastAPI:
     async def shutdown_event():
         """应用关闭时清理后台任务。"""
         try:
+            await qc_sichuan_router.stop_luxian_0609_task_recovery_monitor()
             await qc_sichuan_router.stop_rule_source_monitor()
         except Exception:
             logger.warning("停止 SC 规则来源巡检任务失败", exc_info=True)

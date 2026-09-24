@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import datetime
+import threading
+from datetime import datetime, timedelta
 from fastapi import HTTPException
 
 import pytest
@@ -97,6 +98,122 @@ def test_restart_scan_selects_only_queued_luxian_leaves(storage):
     assert service.list_queued_luxian_0609_batch_job_ids() == (
         "attempt-job", "another-leaf",
     )
+
+
+def test_stale_leased_attempt_fails_and_cannot_submit_late_result(storage):
+    service, engine, table = storage
+    attempt = service.mark_batch_job_running(job_id="attempt-job")
+    assert isinstance(attempt, str)
+    assert json.loads(attempt)["_lx0609_lease_v1"] == 1
+
+    with engine.begin() as connection:
+        connection.execute(
+            table.update().where(table.c.id == "attempt-job").values(
+                updated_at=datetime.utcnow() - timedelta(hours=1),
+            )
+        )
+
+    assert service.fail_stale_luxian_0609_running_jobs(
+        stale_before=datetime.utcnow() - timedelta(minutes=5),
+    ) == ("attempt-job",)
+    assert _status(engine, table) == "failed"
+    assert _stale_failed_completion(service, attempt) is False
+
+
+def test_lease_renewal_prevents_stale_failure_and_legacy_attempt_is_not_reclaimed(storage):
+    service, engine, table = storage
+    attempt = service.mark_batch_job_running(job_id="attempt-job")
+    assert isinstance(attempt, str)
+    with engine.begin() as connection:
+        connection.execute(
+            table.update().where(table.c.id == "attempt-job").values(
+                updated_at=datetime.utcnow() - timedelta(hours=1),
+            )
+        )
+
+    assert service.renew_luxian_0609_batch_job_lease(
+        job_id="attempt-job", attempt_filters_json=attempt,
+    ) is True
+    assert service.fail_stale_luxian_0609_running_jobs(
+        stale_before=datetime.utcnow() - timedelta(minutes=5),
+    ) == ()
+    assert _status(engine, table) == "running"
+
+    # 旧进程没有续约协议，不能仅凭更新时间推断它已死亡。
+    legacy_filters = json.loads(attempt)
+    legacy_filters.pop("_lx0609_lease_v1")
+    with engine.begin() as connection:
+        connection.execute(
+            table.update().where(table.c.id == "attempt-job").values(
+                filters_json=json.dumps(legacy_filters),
+                updated_at=datetime.utcnow() - timedelta(days=1),
+            )
+        )
+    assert service.fail_stale_luxian_0609_running_jobs(
+        stale_before=datetime.utcnow() - timedelta(minutes=5),
+    ) == ()
+    assert _status(engine, table) == "running"
+
+
+def test_lease_heartbeat_stops_when_attempt_is_no_longer_current(monkeypatch):
+    observed = threading.Event()
+    stopped = threading.Event()
+    calls = []
+
+    class Workspace:
+        def renew_luxian_0609_batch_job_lease(self, *, job_id, attempt_filters_json):
+            calls.append((job_id, attempt_filters_json))
+            observed.set()
+            return False
+
+    monkeypatch.setattr(batch_worker, "LX0609_LEASE_HEARTBEAT_SECONDS", 0.01)
+    thread = threading.Thread(
+        target=batch_worker._renew_luxian_0609_lease_until_stopped,
+        kwargs={
+            "workspace": Workspace(), "job_id": "attempt-job",
+            "attempt_filters_json": "frozen-attempt", "stopped": stopped,
+        },
+    )
+    thread.start()
+    try:
+        assert observed.wait(timeout=1)
+        thread.join(timeout=1)
+        assert not thread.is_alive()
+        assert calls == [("attempt-job", "frozen-attempt")]
+    finally:
+        stopped.set()
+
+
+def test_expired_child_lease_refreshes_parent_without_publishing_result(storage):
+    service, engine, table = storage
+    with engine.begin() as connection:
+        connection.execute(table.insert().values(
+            id="lease-parent", draft_id="sichuan-rule-library", created_by="tester",
+            status="running", job_kind="parent", rule_code="LX0609",
+            rule_name="父任务", scope="final", total_records=1,
+            child_job_ids_json='["attempt-job"]',
+            created_at=datetime(2026, 9, 24), updated_at=datetime(2026, 9, 24),
+            filters_json=json.dumps({"rule_set_key": "luxian_0609_qc_v1"}),
+        ))
+        connection.execute(
+            table.update().where(table.c.id == "attempt-job").values(
+                job_kind="child", parent_job_id="lease-parent",
+            )
+        )
+    attempt = service.mark_batch_job_running(job_id="attempt-job")
+    assert isinstance(attempt, str)
+    with engine.begin() as connection:
+        connection.execute(
+            table.update().where(table.c.id == "attempt-job").values(
+                updated_at=datetime.utcnow() - timedelta(hours=1),
+            )
+        )
+    assert service.fail_stale_luxian_0609_running_jobs(
+        stale_before=datetime.utcnow() - timedelta(minutes=5),
+    ) == ("attempt-job",)
+    with engine.connect() as connection:
+        rows = connection.execute(sa.select(table.c.id, table.c.status)).all()
+    assert dict(rows) == {"attempt-job": "failed", "lease-parent": "failed"}
 
 
 def test_cancelled_terminal_rejects_late_completion_until_same_job_is_retried(storage):

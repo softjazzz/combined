@@ -11,7 +11,7 @@ from pydantic import BaseModel, ValidationError
 from fastapi import APIRouter, Body, HTTPException, Query, Request, Depends
 from fastapi.responses import Response, StreamingResponse
 from starlette.concurrency import run_in_threadpool
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from ..core.response import success_response, error_response, get_trace_id, ErrorCode, StatusCode
 from ..core.audit import audit_event
@@ -1868,6 +1868,42 @@ def resume_queued_luxian_0609_workspace_jobs() -> int:
     if job_ids:
         logger.info("重新投递 %d 个尚未领取的 LX0609 批量质控任务", len(job_ids))
     return len(job_ids)
+
+
+_LX0609_RECOVERY_MONITOR: asyncio.Task[None] | None = None
+_LX0609_RECOVERY_SCAN_SECONDS = 30
+_LX0609_LEASE_STALE_AFTER = timedelta(minutes=3)
+
+
+async def _monitor_luxian_0609_stale_attempts() -> None:
+    while True:
+        await asyncio.sleep(_LX0609_RECOVERY_SCAN_SECONDS)
+        try:
+            expired = await asyncio.to_thread(
+                _sichuan_workspace_service().fail_stale_luxian_0609_running_jobs,
+                stale_before=datetime.utcnow() - _LX0609_LEASE_STALE_AFTER,
+            )
+            if expired:
+                logger.warning("已停止 %d 个续约过期的 LX0609 执行尝试", len(expired))
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("LX0609 任务续约巡检失败")
+
+
+def start_luxian_0609_task_recovery_monitor() -> None:
+    global _LX0609_RECOVERY_MONITOR
+    if _LX0609_RECOVERY_MONITOR is None or _LX0609_RECOVERY_MONITOR.done():
+        _LX0609_RECOVERY_MONITOR = asyncio.create_task(_monitor_luxian_0609_stale_attempts())
+
+
+async def stop_luxian_0609_task_recovery_monitor() -> None:
+    global _LX0609_RECOVERY_MONITOR
+    task = _LX0609_RECOVERY_MONITOR
+    _LX0609_RECOVERY_MONITOR = None
+    if task is not None:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
 
 
 @router.post("/workspace/batch-jobs")

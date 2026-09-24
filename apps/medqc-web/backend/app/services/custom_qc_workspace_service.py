@@ -106,6 +106,7 @@ DEFAULT_DEFECT_LEVEL = "一般缺陷"
 DEFAULT_BATCH_JOB_PAGE_SIZE = 10
 LX0609_CUSTOMER_RESULT_CONTRACT_ERROR = _LX0609_CUSTOMER_RESULT_CONTRACT_ERROR
 LX0609_ATTEMPT_FILTER_KEY = "_lx0609_attempt_id"
+LX0609_LEASE_FILTER_KEY = "_lx0609_lease_v1"
 
 
 def _batch_job_write_scope(
@@ -1567,6 +1568,7 @@ def _row_to_batch_job(row: Dict[str, Any], *, include_items: bool = True) -> Dic
     child_summary = _safe_json_loads(row.get("child_summary_json"), {})
     filters_dict = dict(filters) if isinstance(filters, dict) else {}
     filters_dict.pop(LX0609_ATTEMPT_FILTER_KEY, None)
+    filters_dict.pop(LX0609_LEASE_FILTER_KEY, None)
     summary_dict = summary if isinstance(summary, dict) else None
     draft_ids = _normalize_string_list(filters_dict.get("draft_ids"))
     if not draft_ids:
@@ -4439,7 +4441,11 @@ class CustomQCWorkspaceService:
             now = _now_utc()
             original_filters_json = row.get("filters_json")
             next_filters_json = (
-                _safe_json_dumps({**current_filters, LX0609_ATTEMPT_FILTER_KEY: uuid.uuid4().hex})
+                _safe_json_dumps({
+                    **current_filters,
+                    LX0609_ATTEMPT_FILTER_KEY: uuid.uuid4().hex,
+                    LX0609_LEASE_FILTER_KEY: 1,
+                })
                 if formal_0609 else original_filters_json
             )
             running_update = session.execute(
@@ -4476,6 +4482,102 @@ class CustomQCWorkspaceService:
             return next_filters_json if formal_0609 else True
         finally:
             session.close()
+
+    def renew_luxian_0609_batch_job_lease(
+        self, *, job_id: str, attempt_filters_json: str,
+    ) -> bool:
+        """只续当前0609执行代次；不读写可能很大的病例结果及进度摘要。"""
+
+        filters = _safe_json_loads(attempt_filters_json, {})
+        if not isinstance(filters, dict) or type(filters.get(LX0609_LEASE_FILTER_KEY)) is not int:
+            return False
+        if filters.get(LX0609_LEASE_FILTER_KEY) != 1:
+            return False
+        session = _session()
+        try:
+            renewed = session.execute(
+                update(self._batch_job_table)
+                .where(_batch_job_write_scope(
+                    self._batch_job_table,
+                    job_id=job_id,
+                    attempt_filters_json=attempt_filters_json,
+                ))
+                .values(updated_at=_now_utc())
+            )
+            if getattr(renewed, "rowcount", 0) != 1:
+                session.rollback()
+                return False
+            session.commit()
+            return True
+        finally:
+            session.close()
+
+    def fail_stale_luxian_0609_running_jobs(self, *, stale_before: datetime) -> tuple[str, ...]:
+        """仅将续约协议内、超过期限的执行尝试受控失败；不重跑医学判断。"""
+
+        session = _session()
+        failed_ids: list[str] = []
+        affected_parents: set[str] = set()
+        try:
+            rows = session.execute(
+                select(
+                    self._batch_job_table.c.id,
+                    self._batch_job_table.c.job_kind,
+                    self._batch_job_table.c.parent_job_id,
+                    self._batch_job_table.c.filters_json,
+                    self._batch_job_table.c.summary_json,
+                    self._batch_job_table.c.updated_at,
+                ).where(and_(
+                    self._batch_job_table.c.status == "running",
+                    self._batch_job_table.c.updated_at < stale_before,
+                ))
+            ).mappings().all()
+            for row in rows:
+                filters = _safe_json_loads(row.get("filters_json"), {})
+                if not isinstance(filters, dict) or (
+                    filters.get("rule_set_key") != LUXIAN_0609_RULE_SET_KEY
+                    or _safe_text(row.get("job_kind")).lower() == "parent"
+                    or type(filters.get(LX0609_LEASE_FILTER_KEY)) is not int
+                    or filters.get(LX0609_LEASE_FILTER_KEY) != 1
+                ):
+                    continue
+                summary = _safe_json_loads(row.get("summary_json"), {})
+                summary = dict(summary) if isinstance(summary, dict) else {}
+                progress = summary.get("progress")
+                progress = dict(progress) if isinstance(progress, dict) else {}
+                now = _now_utc()
+                expired = session.execute(
+                    update(self._batch_job_table)
+                    .where(and_(
+                        self._batch_job_table.c.id == row["id"],
+                        self._batch_job_table.c.status == "running",
+                        self._batch_job_table.c.filters_json == row["filters_json"],
+                        self._batch_job_table.c.updated_at == row["updated_at"],
+                        self._batch_job_table.c.updated_at < stale_before,
+                    ))
+                    .values(
+                        status="failed",
+                        error_message="执行尝试续约已过期，结果写入已停止；请重试任务",
+                        finished_at=now,
+                        updated_at=now,
+                        summary_json=_safe_json_dumps({
+                            **summary,
+                            "progress": {**progress, "step_key": "failed"},
+                            "updated_at": now.isoformat(),
+                        }),
+                    )
+                )
+                if getattr(expired, "rowcount", 0) == 1:
+                    failed_ids.append(str(row["id"]))
+                    parent_id = _safe_text(row.get("parent_job_id"))
+                    if parent_id:
+                        affected_parents.add(parent_id)
+            session.commit()
+        finally:
+            session.close()
+        for parent_id in affected_parents:
+            self.refresh_parent_batch_job(parent_job_id=parent_id)
+        return tuple(failed_ids)
 
     def update_batch_job_progress(
         self,
