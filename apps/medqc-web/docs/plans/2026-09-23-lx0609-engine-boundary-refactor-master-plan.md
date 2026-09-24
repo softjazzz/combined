@@ -309,3 +309,9 @@ python -m pytest -q --tb=short tests/unit/test_luxian_0609_basic_timeliness_cust
 - 阶段D审计基线提交3c46f096b，主协调亲读resolve/claim_usage和两个族的调用，独立3项复现通过：等价诊断来源并发实际2次请求、总归因1次；无效响应维持两族现有原因码；取消时提供方成本未知。完整Engine调度当前只有静态证据，不能声称完整任务回放已完成。
 - 已授权D局部修复：请求内完整来源范围相等才共享在途请求，available/present仅作同资料别名归一；不同来源独立结果及用量；单等待者/全部取消和技术失败独立验证。仅涉及resolver、必要的两族用量调用与专属测试，不改Prompt、医学分支、40槽位。审计测试保留在审计分支作为修复前基线，修复后改为正确行为断言再集成。
 - 阶段C尚未启动实施；规则属性单一所有者和完整保护集仍需证据，不以当前局部配置修复替代阶段B全部退出条件。
+
+### 2026-09-24 阶段B局部修复合入与D正式引擎复现
+
+- B任务内配置读取修复已摘取为bc17c8435/e3c012512。主协调审查最终参数差异后，在集成树独立运行配置探针4项及running/final门面9项，共13 passed。仅正式LX0609 Worker传新参数，未传配置的独立调用保持原kwargs形状。子树另有两项旧三位规则ID测试失败，未当作通过；不据此宣称全部B条件完成。
+- D主协调自建固定合成来源/响应脚本，经正式prepare→生产registry→Engine→Decision Binding/Reducer，对比e3c012512与D在改树：actual calls 2→1；Prompt及参数相同，完整reduced decisions、customer display facts、usage归因逐字段一致；两个原始规则均产生结果。脚本与对比产物留.tmp/0910-full-audit/shared-fact-engine-*-private，不含真实客户病例，未访问数据库/真实模型。此证据扩展到正式引擎，不等于任务持久化与真实病例验收。
+- D来源范围/取消/费用认领修复仍在验收；C只读盘点正在由主协调校正执行状态全集与客户允许状态集合的层级区别。不得把集合差异直接说成已发生错误交付，也不得将012业务状态收敛搬到Finalizer。
