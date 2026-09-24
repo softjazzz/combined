@@ -397,6 +397,109 @@ def test_parent_retry_rejects_running_child_without_partial_reset(storage):
     assert json.loads(by_id["running-child"]["filters_json"])["rule_ids"] == ["LX0609-06-01-01"]
 
 
+@pytest.mark.parametrize("retry_target", ["parent-job", "attempt-job"])
+@pytest.mark.parametrize("claim_new_parent", [False, True])
+def test_parent_refresh_rejects_stale_aggregate_after_retry(
+    storage, monkeypatch, retry_target, claim_new_parent,
+):
+    service, engine, table = storage
+    with engine.begin() as connection:
+        connection.execute(table.update().where(table.c.id == "attempt-job").values(
+            status="completed", parent_job_id="parent-job",
+            summary_json=json.dumps({"progress": {"step_key": "completed"}}),
+        ))
+        connection.execute(table.insert().values(
+            id="parent-job", draft_id="sichuan-rule-library", created_by="tester",
+            status="completed", job_kind="parent", child_job_ids_json='["attempt-job"]',
+            rule_code="LX0609", rule_name="父任务", scope="final", total_records=1,
+            created_at=datetime(2026, 9, 24), updated_at=datetime(2026, 9, 24),
+            filters_json=json.dumps({"rule_set_key": "luxian_0609_qc_v1", "rule_ids": ["LX0609-01-01-01"]}),
+            summary_json=json.dumps({"progress": {"step_key": "completed"}}),
+        ))
+    original = service._aggregate_parent_job
+    interleaved = False
+    writes = []
+
+    def aggregate_then_retry(session, parent_job, *, include_items=True):
+        nonlocal interleaved
+        aggregate = original(session, parent_job, include_items=include_items)
+        if not interleaved:
+            interleaved = True
+            assert service.retry_batch_job(job_id=retry_target, created_by="tester") is not None
+            if claim_new_parent:
+                assert isinstance(service.mark_batch_job_running(job_id="parent-job"), str)
+        return aggregate
+
+    monkeypatch.setattr(service, "_aggregate_parent_job", aggregate_then_retry)
+    monkeypatch.setattr(service, "_write_record_result_envelopes", lambda *args, **kwargs: writes.append(kwargs))
+    service.refresh_parent_batch_job(parent_job_id="parent-job")
+    with engine.connect() as connection:
+        rows = connection.execute(sa.select(table.c.id, table.c.status).where(
+            table.c.id.in_(["parent-job", "attempt-job"])
+        )).all()
+    assert {row.id: row.status for row in rows} == {
+        "parent-job": "running" if claim_new_parent else "queued", "attempt-job": "queued",
+    }
+    assert writes == []
+
+
+def test_two_parent_refreshes_cannot_apply_old_child_snapshot_last(storage, monkeypatch):
+    service, engine, table = storage
+    with engine.begin() as connection:
+        connection.execute(table.update().where(table.c.id == "attempt-job").values(parent_job_id="parent-job"))
+        connection.execute(table.insert().values(
+            id="parent-job", draft_id="sichuan-rule-library", created_by="tester",
+            status="queued", job_kind="parent", child_job_ids_json='["attempt-job"]',
+            rule_code="LX0609", rule_name="父任务", scope="final", total_records=1,
+            created_at=datetime(2026, 9, 24), updated_at=datetime(2026, 9, 24),
+            filters_json=json.dumps({"rule_set_key": "luxian_0609_qc_v1", "rule_ids": ["LX0609-01-01-01"]}),
+            summary_json=json.dumps({"progress": {"step_key": "queued"}}),
+        ))
+    original = service._aggregate_parent_job
+    interleaved = False
+
+    def aggregate_then_newer_refresh(session, parent_job, *, include_items=True):
+        nonlocal interleaved
+        aggregate = original(session, parent_job, include_items=include_items)
+        if not interleaved:
+            interleaved = True
+            assert isinstance(service.mark_batch_job_running(job_id="attempt-job"), str)
+            service.refresh_parent_batch_job(parent_job_id="parent-job")
+        return aggregate
+
+    monkeypatch.setattr(service, "_aggregate_parent_job", aggregate_then_newer_refresh)
+    service.refresh_parent_batch_job(parent_job_id="parent-job")
+    with engine.connect() as connection:
+        row = connection.execute(sa.select(table.c.status, table.c.summary_json).where(
+            table.c.id == "parent-job"
+        )).one()
+    assert row.status == "running"
+    assert json.loads(row.summary_json)["progress"]["step_key"] == "running"
+
+
+@pytest.mark.parametrize("parent_status,expected_writes", [("queued", 1), ("canceled", 0)])
+def test_parent_refresh_keeps_normal_completion_and_cancellation(storage, monkeypatch, parent_status, expected_writes):
+    service, engine, table = storage
+    with engine.begin() as connection:
+        connection.execute(table.update().where(table.c.id == "attempt-job").values(
+            status="completed", parent_job_id="parent-job",
+        ))
+        connection.execute(table.insert().values(
+            id="parent-job", draft_id="sichuan-rule-library", created_by="tester",
+            status=parent_status, job_kind="parent", child_job_ids_json='["attempt-job"]',
+            rule_code="LX0609", rule_name="父任务", scope="final", total_records=1,
+            created_at=datetime(2026, 9, 24), updated_at=datetime(2026, 9, 24),
+            filters_json=json.dumps({"rule_set_key": "luxian_0609_qc_v1", "rule_ids": ["LX0609-01-01-01"]}),
+        ))
+    writes = []
+    monkeypatch.setattr(service, "_write_record_result_envelopes", lambda *args, **kwargs: writes.append(kwargs))
+    service.refresh_parent_batch_job(parent_job_id="parent-job")
+    with engine.connect() as connection:
+        status = connection.execute(sa.select(table.c.status).where(table.c.id == "parent-job")).scalar_one()
+    assert status == ("canceled" if parent_status == "canceled" else "completed")
+    assert len(writes) == expected_writes
+
+
 def test_nonformal_task_keeps_existing_claim_and_retry_semantics(storage):
     service, engine, table = storage
     with engine.begin() as connection:

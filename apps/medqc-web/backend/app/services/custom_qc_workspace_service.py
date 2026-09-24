@@ -2412,14 +2412,19 @@ class CustomQCWorkspaceService:
             }
             if status in {"completed", "failed", "canceled"}:
                 values["finished_at"] = now
+            parent_conditions = [
+                self._batch_job_table.c.id == normalized_parent_id,
+                self._batch_job_table.c.status != "canceled",
+            ]
+            if (parent_job.get("filters") or {}).get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY:
+                parent_conditions.extend((
+                    self._batch_job_table.c.status == row["status"],
+                    self._batch_job_table.c.filters_json == row["filters_json"],
+                    self._batch_job_table.c.summary_json == row["summary_json"],
+                ))
             parent_update = session.execute(
                 update(self._batch_job_table)
-                .where(
-                    and_(
-                        self._batch_job_table.c.id == normalized_parent_id,
-                        self._batch_job_table.c.status != "canceled",
-                    )
-                )
+                .where(and_(*parent_conditions))
                 .values(**values)
             )
             # 与子任务完成相同，父任务取消与最后一个子任务收尾可能竞争。
@@ -4280,6 +4285,31 @@ class CustomQCWorkspaceService:
             if formal_0609 and getattr(retry_update, "rowcount", 0) != 1:
                 session.rollback()
                 return None
+            # 子任务单独重试也会废弃父聚合的旧读取快照；与父刷新争用同一父行。
+            if formal_0609 and parent_job_id:
+                parent_row = session.execute(
+                    select(self._batch_job_table).where(
+                        and_(self._batch_job_table.c.id == parent_job_id,
+                             self._batch_job_table.c.created_by == created_by)
+                    )
+                ).mappings().first()
+                if parent_row:
+                    parent_filters = _safe_json_loads(parent_row.get("filters_json"), {})
+                    if isinstance(parent_filters, dict) and parent_filters.get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY:
+                        parent_filters = dict(parent_filters)
+                        parent_filters[LX0609_ATTEMPT_FILTER_KEY] = uuid.uuid4().hex
+                        invalidated = session.execute(
+                            update(self._batch_job_table)
+                            .where(and_(
+                                self._batch_job_table.c.id == parent_job_id,
+                                self._batch_job_table.c.status == parent_row["status"],
+                                self._batch_job_table.c.filters_json == parent_row["filters_json"],
+                            ))
+                            .values(filters_json=_safe_json_dumps(parent_filters), updated_at=now)
+                        )
+                        if getattr(invalidated, "rowcount", 0) != 1:
+                            session.rollback()
+                            return None
             if str(current.get("job_kind") or "").strip().lower() == "parent":
                 child_ids = [
                     str(item or "").strip()
