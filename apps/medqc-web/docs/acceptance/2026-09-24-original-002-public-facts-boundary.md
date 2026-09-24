@@ -20,6 +20,8 @@
 $env:JWT_SECRET='unit-test-secret-only'; $env:DATABASE_URL='postgresql://test:test@127.0.0.1:1/test'; python -m pytest tests/unit/test_luxian_0609_original_002_public_boundary.py tests/unit/test_luxian_0609_basic_timeliness_customer_projection.py tests/unit/test_luxian_0609_basic_timeliness_architecture_freeze.py --confcutdir=tests/unit -q --disable-warnings --tb=line
 ```
 
-这些是固定技术回放，不证明临床判据正确，也不替代真实病例保护集。主协调已另行冻结 13 个本机 PG 来源形态候选用于跨代码根比对；本提交不引用其患者原文，也不将候选当作独立临床金标准。
+主协调在集成树 `93ad3ef75` 独立复核关键diff，并复跑本组与错误入口/代次/通用批量引用共139项通过。另用生产Source Reader只读冻结13个既有数字身份候选的入院、首次病程、登记来源；对比修复前 `ea09cc193` 与修复后，完整snapshot hash、reduced decisions、执行器事实、发布结果、调用/Token全部相等：1合规、2不合规、10入院时间资料缺口，零模型调用。原文、三坐标和脚本仅保存在 `.tmp/0910-full-audit/original-002-*-private`，未提交。数字身份与本机PG记录不能独立证明客户来源真实性，查询完整也不证明上游同步完整。
+
+这些是固定技术回放，不证明临床判据正确，也不替代独立签收的真实病例保护集。
 
 提交前 Ruff、暂存区 UTF-8/LF 与 `git diff --cached --check` 通过。该独立 worktree 无 `node_modules`，`npm run lint` 因找不到 `eslint` 退出 1；前端 lint/type-check/unit 未在此树执行。本次没有前端改动，此环境缺口不冒充测试通过。

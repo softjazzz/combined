@@ -69,8 +69,10 @@ async def test_generic_retry_rejects_formal_job_without_mutation_or_enqueue(stor
 
 
 @pytest.mark.asyncio
-async def test_generic_worker_refuses_formal_job_before_claim(storage):
+@pytest.mark.parametrize("status", ["queued", "running", "canceled"])
+async def test_generic_worker_refuses_formal_job_before_claim(storage, status):
     _, engine, table = storage
+    _set_job(engine, table, status=status)
     before = dict(_row(engine, table))
     await custom_qc._run_workspace_batch_job("owner-job")
     assert dict(_row(engine, table)) == before
@@ -79,7 +81,7 @@ async def test_generic_worker_refuses_formal_job_before_claim(storage):
 @pytest.mark.asyncio
 async def test_missing_sichuan_identity_is_rejected_as_metadata_gap(storage):
     service, engine, table = storage
-    _set_job(engine, table, filters_json="{}", status="canceled")
+    _set_job(engine, table, filters_json="{}", status="queued")
     before = dict(_row(engine, table))
     background = BackgroundTasks()
     with pytest.raises(HTTPException) as rejected:
