@@ -101,6 +101,28 @@ DEFAULT_COMPLEXITY = "中复杂度"
 DEFAULT_DEFECT_LEVEL = "一般缺陷"
 DEFAULT_BATCH_JOB_PAGE_SIZE = 10
 LX0609_CUSTOMER_RESULT_CONTRACT_ERROR = _LX0609_CUSTOMER_RESULT_CONTRACT_ERROR
+LX0609_ATTEMPT_FILTER_KEY = "_lx0609_attempt_id"
+
+
+def _batch_job_write_scope(
+    table: Table, *, job_id: str, attempt_filters_json: str | None,
+    observed_filters_json: str | None = None, queued_only: bool = False,
+) -> Any:
+    if attempt_filters_json is None:
+        observed = _safe_json_loads(observed_filters_json, {})
+        if isinstance(observed, dict) and LX0609_ATTEMPT_FILTER_KEY in observed and not queued_only:
+            return sa.false()
+        formal_0609 = isinstance(observed, dict) and observed.get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY
+        return and_(
+            table.c.id == job_id,
+            table.c.status == "queued" if queued_only else table.c.status != "canceled",
+            table.c.filters_json == observed_filters_json if formal_0609 else sa.true(),
+        )
+    return and_(
+        table.c.id == job_id,
+        table.c.status == "running",
+        table.c.filters_json == attempt_filters_json,
+    )
 
 SEVERITY_TO_DEFECT_LEVEL = {
     "critical": "严重缺陷",
@@ -1539,7 +1561,8 @@ def _row_to_batch_job(row: Dict[str, Any], *, include_items: bool = True) -> Dic
     failed_records = _safe_json_loads(row.get("failed_records_json"), []) if include_items else []
     child_job_ids = _safe_json_loads(row.get("child_job_ids_json"), [])
     child_summary = _safe_json_loads(row.get("child_summary_json"), {})
-    filters_dict = filters if isinstance(filters, dict) else {}
+    filters_dict = dict(filters) if isinstance(filters, dict) else {}
+    filters_dict.pop(LX0609_ATTEMPT_FILTER_KEY, None)
     summary_dict = summary if isinstance(summary, dict) else None
     draft_ids = _normalize_string_list(filters_dict.get("draft_ids"))
     if not draft_ids:
@@ -2929,7 +2952,8 @@ class CustomQCWorkspaceService:
             ).mappings().first()
             if not row:
                 return None
-            return self._aggregate_parent_job(session, _row_to_batch_job(dict(row)))
+            job = self._aggregate_parent_job(session, _row_to_batch_job(dict(row)))
+            return {**job, "_claim_filters_json": row.get("filters_json")}
         finally:
             session.close()
 
@@ -4143,6 +4167,7 @@ class CustomQCWorkspaceService:
         job_id: str,
         created_by: str,
         automatic: bool = False,
+        expected_attempt_filters_json: str | None = None,
     ) -> Optional[Dict[str, Any]]:
         session = _session()
         try:
@@ -4154,6 +4179,13 @@ class CustomQCWorkspaceService:
             if not row:
                 return None
             current = _row_to_batch_job(dict(row))
+            formal_0609 = (current.get("filters") or {}).get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY
+            original_filters_json = row.get("filters_json")
+            if formal_0609 and (
+                current.get("status") not in {"canceled", "completed", "failed"}
+                or (automatic and original_filters_json != expected_attempt_filters_json)
+            ):
+                return None
             parent_job_id = _safe_text(current.get("parent_job_id"))
             rule_count = int(current.get("rule_count") or 1)
             total_records = int(current.get("total_records") or 0)
@@ -4162,6 +4194,9 @@ class CustomQCWorkspaceService:
             if retry_scope_result is not None:
                 retry_scope, normalized_failures = retry_scope_result
                 current_filters = dict(current.get("filters") or {})
+                current_filters.pop(LX0609_ATTEMPT_FILTER_KEY, None)
+                if formal_0609:
+                    current_filters[LX0609_ATTEMPT_FILTER_KEY] = uuid.uuid4().hex
                 current_filters[FAILED_RULE_RETRY_FILTER_KEY] = retry_scope
                 current_summary = dict(current.get("summary") or {})
                 retry_rule_count = len(retry_scope["rule_ids"])
@@ -4194,6 +4229,9 @@ class CustomQCWorkspaceService:
                 )
             else:
                 current_filters = dict(current.get("filters") or {})
+                current_filters.pop(LX0609_ATTEMPT_FILTER_KEY, None)
+                if formal_0609:
+                    current_filters[LX0609_ATTEMPT_FILTER_KEY] = uuid.uuid4().hex
                 current_filters.pop(FAILED_RULE_RETRY_FILTER_KEY, None)
                 reset_values = dict(
                     status="queued",
@@ -4224,13 +4262,24 @@ class CustomQCWorkspaceService:
                     total_tokens=0,
                     total_processing_time=0.0,
                 )
-            session.execute(
+            retry_update = session.execute(
                 update(self._batch_job_table)
                 .where(
-                    and_(self._batch_job_table.c.id == job_id, self._batch_job_table.c.created_by == created_by)
+                    and_(
+                        self._batch_job_table.c.id == job_id,
+                        self._batch_job_table.c.created_by == created_by,
+                        self._batch_job_table.c.status == current.get("status"),
+                        self._batch_job_table.c.filters_json == original_filters_json,
+                    ) if formal_0609 else and_(
+                        self._batch_job_table.c.id == job_id,
+                        self._batch_job_table.c.created_by == created_by,
+                    )
                 )
                 .values(**reset_values)
             )
+            if formal_0609 and getattr(retry_update, "rowcount", 0) != 1:
+                session.rollback()
+                return None
             if str(current.get("job_kind") or "").strip().lower() == "parent":
                 child_ids = [
                     str(item or "").strip()
@@ -4281,7 +4330,7 @@ class CustomQCWorkspaceService:
         finally:
             session.close()
 
-    def mark_batch_job_running(self, *, job_id: str) -> bool:
+    def mark_batch_job_running(self, *, job_id: str) -> bool | str:
         session = _session()
         try:
             row = session.execute(
@@ -4290,7 +4339,11 @@ class CustomQCWorkspaceService:
             if not row:
                 return False
             current = _row_to_batch_job(dict(row))
+            current_filters = current.get("filters") or {}
+            formal_0609 = current_filters.get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY
             if current.get("status") in {"canceled", "completed", "failed"}:
+                return False
+            if formal_0609 and current.get("status") != "queued":
                 return False
             current_summary = _safe_json_loads(row.get("summary_json"), {})
             if not isinstance(current_summary, dict):
@@ -4299,12 +4352,24 @@ class CustomQCWorkspaceService:
             if not isinstance(progress_value, dict):
                 progress_value = {}
             now = _now_utc()
-            session.execute(
+            original_filters_json = row.get("filters_json")
+            next_filters_json = (
+                _safe_json_dumps({**current_filters, LX0609_ATTEMPT_FILTER_KEY: uuid.uuid4().hex})
+                if formal_0609 else original_filters_json
+            )
+            running_update = session.execute(
                 update(self._batch_job_table)
-                .where(self._batch_job_table.c.id == job_id)
+                .where(
+                    and_(
+                        self._batch_job_table.c.id == job_id,
+                        self._batch_job_table.c.status == "queued",
+                        self._batch_job_table.c.filters_json == original_filters_json,
+                    ) if formal_0609 else self._batch_job_table.c.id == job_id
+                )
                 .values(
                     status="running",
                     started_at=now,
+                    **({"filters_json": next_filters_json} if formal_0609 else {}),
                     updated_at=now,
                     error_message=None,
                     summary_json=_safe_json_dumps(
@@ -4319,8 +4384,11 @@ class CustomQCWorkspaceService:
                     ),
                 )
             )
+            if formal_0609 and getattr(running_update, "rowcount", 0) != 1:
+                session.rollback()
+                return False
             session.commit()
-            return True
+            return next_filters_json if formal_0609 else True
         finally:
             session.close()
 
@@ -4337,6 +4405,7 @@ class CustomQCWorkspaceService:
         progress_patch: Optional[Dict[str, Any]] = None,
         items: Optional[List[Dict[str, Any]]] = None,
         failed_records: Optional[List[Dict[str, Any]]] = None,
+        attempt_filters_json: str | None = None,
     ) -> Optional[Dict[str, Any]]:
         session = _session()
         try:
@@ -4345,6 +4414,7 @@ class CustomQCWorkspaceService:
                     self._batch_job_table.c.id,
                     self._batch_job_table.c.status,
                     self._batch_job_table.c.summary_json,
+                    self._batch_job_table.c.filters_json,
                 ).where(self._batch_job_table.c.id == job_id)
             ).mappings().first()
             if not row:
@@ -4399,11 +4469,20 @@ class CustomQCWorkspaceService:
             if failed_records is not None:
                 values["failed_records_json"] = _safe_json_dumps(failed_records)
 
-            session.execute(
+            progress_update = session.execute(
                 update(self._batch_job_table)
-                .where(and_(self._batch_job_table.c.id == job_id, self._batch_job_table.c.status != "canceled"))
+                .where(_batch_job_write_scope(
+                    self._batch_job_table, job_id=job_id, attempt_filters_json=attempt_filters_json,
+                    observed_filters_json=row.get("filters_json"),
+                ))
                 .values(**values)
             )
+            if getattr(progress_update, "rowcount", 0) != 1 and (
+                attempt_filters_json is not None
+                or LX0609_ATTEMPT_FILTER_KEY in _safe_json_loads(row.get("filters_json"), {})
+            ):
+                session.rollback()
+                return None
             session.commit()
             # 进度写入是高频热路径。调用方只关心写入是否成功，不应在每次
             # commit 后重新读取并反序列化可能达到几十 MB 的完整任务结果。
@@ -4415,17 +4494,24 @@ class CustomQCWorkspaceService:
         finally:
             session.close()
 
-    def is_batch_job_canceled_or_missing(self, *, job_id: str) -> bool:
+    def is_batch_job_canceled_or_missing(self, *, job_id: str, attempt_filters_json: str | None = None) -> bool:
         """取消轮询只读取状态列，避免反序列化完整批量结果。"""
 
         session = _session()
         try:
-            status = session.execute(
-                select(self._batch_job_table.c.status).where(
+            if attempt_filters_json is None:
+                status = session.execute(
+                    select(self._batch_job_table.c.status).where(self._batch_job_table.c.id == job_id)
+                ).scalar_one_or_none()
+                return status is None or _safe_text(status) == "canceled"
+            row = session.execute(
+                select(self._batch_job_table.c.status, self._batch_job_table.c.filters_json).where(
                     self._batch_job_table.c.id == job_id
                 )
-            ).scalar_one_or_none()
-            return status is None or _safe_text(status) == "canceled"
+            ).mappings().first()
+            if row is None:
+                return True
+            return _safe_text(row["status"]) != "running" or row["filters_json"] != attempt_filters_json
         finally:
             session.close()
 
@@ -4437,7 +4523,8 @@ class CustomQCWorkspaceService:
         items: List[Dict[str, Any]],
         failed_records: List[Dict[str, Any]],
         persist_record_envelopes: bool = True,
-    ) -> None:
+        attempt_filters_json: str | None = None,
+    ) -> bool | None:
         session = _session()
         try:
             row = session.execute(
@@ -4489,7 +4576,10 @@ class CustomQCWorkspaceService:
             }
             completion_update = session.execute(
                 update(self._batch_job_table)
-                .where(and_(self._batch_job_table.c.id == job_id, self._batch_job_table.c.status != "canceled"))
+                .where(_batch_job_write_scope(
+                    self._batch_job_table, job_id=job_id, attempt_filters_json=attempt_filters_json,
+                    observed_filters_json=row.get("filters_json"),
+                ))
                 .values(
                     status="failed" if execution_failed else "completed",
                     summary_json=_safe_json_dumps(merged_summary),
@@ -4510,8 +4600,9 @@ class CustomQCWorkspaceService:
             # 不能让迟到的执行结果继续写入 Canonical Envelope。
             if getattr(completion_update, "rowcount", 0) != 1:
                 session.rollback()
-                self.refresh_parent_batch_job(parent_job_id=parent_job_id)
-                return
+                if attempt_filters_json is None and rule_set_key != LUXIAN_0609_RULE_SET_KEY:
+                    self.refresh_parent_batch_job(parent_job_id=parent_job_id)
+                return False if attempt_filters_json is not None else None
             envelope_items: Sequence[Dict[str, Any]] = (
                 items if persist_record_envelopes and not execution_failed else ()
             )
@@ -4544,6 +4635,7 @@ class CustomQCWorkspaceService:
             if getattr(completion_update, "rowcount", None) == 1:
                 capture_committed_results(diagnostic_receipts)
             self.refresh_parent_batch_job(parent_job_id=parent_job_id)
+            return True if attempt_filters_json is not None else None
         except Exception:
             session.rollback()
             raise
@@ -4607,7 +4699,11 @@ class CustomQCWorkspaceService:
             rule_set_version=rule_set_version,
         )
 
-    def fail_batch_job(self, *, job_id: str, error_message: str) -> None:
+    def fail_batch_job(
+        self, *, job_id: str, error_message: str,
+        attempt_filters_json: str | None = None, queued_only: bool = False,
+        expected_queued_filters_json: str | None = None,
+    ) -> None:
         session = _session()
         try:
             row = session.execute(
@@ -4615,14 +4711,26 @@ class CustomQCWorkspaceService:
             ).mappings().first()
             if not row:
                 return
+            if queued_only and expected_queued_filters_json is None and (
+                (_safe_json_loads(row.get("filters_json"), {}) or {}).get("rule_set_key")
+                == LUXIAN_0609_RULE_SET_KEY
+            ):
+                return
+            if queued_only and expected_queued_filters_json is not None and (
+                row.get("filters_json") != expected_queued_filters_json
+            ):
+                return
             parent_job_id = _safe_text(row.get("parent_job_id"))
             current_summary = _safe_json_loads(row.get("summary_json"), {})
             if not isinstance(current_summary, dict):
                 current_summary = {}
             now = _now_utc()
-            session.execute(
+            failure_update = session.execute(
                 update(self._batch_job_table)
-                .where(and_(self._batch_job_table.c.id == job_id, self._batch_job_table.c.status != "canceled"))
+                .where(_batch_job_write_scope(
+                    self._batch_job_table, job_id=job_id, attempt_filters_json=attempt_filters_json,
+                    observed_filters_json=row.get("filters_json"), queued_only=queued_only,
+                ))
                 .values(
                     status="failed",
                     summary_json=_safe_json_dumps(
@@ -4644,6 +4752,14 @@ class CustomQCWorkspaceService:
                     updated_at=now,
                 )
             )
+            if getattr(failure_update, "rowcount", 0) != 1:
+                session.rollback()
+                if attempt_filters_json is None and (
+                    (_safe_json_loads(row.get("filters_json"), {}) or {}).get("rule_set_key")
+                    != LUXIAN_0609_RULE_SET_KEY
+                ):
+                    self.refresh_parent_batch_job(parent_job_id=parent_job_id)
+                return
             session.commit()
             self.refresh_parent_batch_job(parent_job_id=parent_job_id)
         finally:

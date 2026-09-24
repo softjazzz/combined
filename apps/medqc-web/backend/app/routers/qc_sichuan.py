@@ -2771,6 +2771,11 @@ async def retry_workspace_batch_job(
     workspace = _sichuan_workspace_service()
     job = workspace.retry_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
     if not _is_workspace_batch_job(job):
+        existing = workspace.get_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
+        if _is_workspace_batch_job(existing) and (
+            (existing.get("filters") or {}).get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY
+        ):
+            raise HTTPException(status_code=409, detail="任务已在排队或执行中，不能重复入队")
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
     if str(job.get("job_kind") or "").strip().lower() == "parent":
         child_jobs = list(job.get("child_jobs") or job.get("children") or [])

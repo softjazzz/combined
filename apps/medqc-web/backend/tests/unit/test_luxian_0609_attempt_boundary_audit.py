@@ -1,10 +1,11 @@
-"""原始 0609 执行尝试边界审计基线；记录现有可达时序，不作为修复后期望。"""
+"""原始 0609 同 ID 重试的执行尝试隔离回归。"""
 
 from __future__ import annotations
 
 import asyncio
 import json
 from datetime import datetime
+from fastapi import HTTPException
 
 import pytest
 import sqlalchemy as sa
@@ -14,7 +15,9 @@ from starlette.requests import Request
 from app.routers import qc_sichuan
 from app.services import custom_qc_workspace_service as workspace_module
 from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
+from app.services import sichuan_workspace_batch_worker as batch_worker
 from app.services.detached_task_runner import submit_detached_task
+from tests.unit.test_qc_sichuan_batch_throughput import _ServiceStub, _WorkspaceStub
 
 
 @pytest.fixture
@@ -32,7 +35,7 @@ def storage(monkeypatch):
     with engine.begin() as connection:
         connection.execute(table.insert().values(
             id="attempt-job", draft_id="sichuan-rule-library", created_by="tester",
-            status="running", rule_code="LX0609", rule_name="隔离审计", scope="final",
+            status="queued", rule_code="LX0609", rule_name="隔离审计", scope="final",
             total_records=1, created_at=datetime(2026, 9, 24),
             updated_at=datetime(2026, 9, 24),
             filters_json=json.dumps({
@@ -44,9 +47,10 @@ def storage(monkeypatch):
     engine.dispose()
 
 
-def _stale_failed_completion(service: CustomQCWorkspaceService) -> None:
-    service.complete_batch_job(
+def _stale_failed_completion(service: CustomQCWorkspaceService, attempt: str) -> bool | None:
+    return service.complete_batch_job(
         job_id="attempt-job",
+        attempt_filters_json=attempt,
         summary={
             "execution_status": "failed", "total_records": 1,
             "completed_rule_count": 0, "failed_rule_count": 1,
@@ -66,24 +70,26 @@ def _status(engine, table) -> str:
 
 def test_cancelled_terminal_rejects_late_completion_until_same_job_is_retried(storage):
     service, engine, table = storage
+    old_attempt = service.mark_batch_job_running(job_id="attempt-job")
+    assert isinstance(old_attempt, str)
     canceled = service.cancel_batch_job(job_id="attempt-job", created_by="tester")
     assert canceled is not None and canceled["status"] == "canceled"
-    _stale_failed_completion(service)
+    assert _stale_failed_completion(service, old_attempt) is False
     assert _status(engine, table) == "canceled"
 
     retried = service.retry_batch_job(job_id="attempt-job", created_by="tester")
     assert retried is not None and retried["id"] == "attempt-job"
     assert retried["status"] == "queued"
-    assert service.mark_batch_job_running(job_id="attempt-job") is True
-    _stale_failed_completion(service)
-    # 审计现状：旧尝试的返回在重试将同一 id 改回 running 后可更新新尝试。
-    assert _status(engine, table) == "failed"
+    new_attempt = service.mark_batch_job_running(job_id="attempt-job")
+    assert isinstance(new_attempt, str) and new_attempt != old_attempt
+    assert _stale_failed_completion(service, old_attempt) is False
+    assert _status(engine, table) == "running"
 
 
 def test_running_job_can_be_claimed_by_two_workers(storage):
     service, engine, table = storage
-    assert service.mark_batch_job_running(job_id="attempt-job") is True
-    assert service.mark_batch_job_running(job_id="attempt-job") is True
+    assert isinstance(service.mark_batch_job_running(job_id="attempt-job"), str)
+    assert service.mark_batch_job_running(job_id="attempt-job") is False
     assert _status(engine, table) == "running"
 
 
@@ -102,11 +108,12 @@ async def test_public_retry_route_resubmits_same_job_id(storage, monkeypatch):
     await qc_sichuan.retry_workspace_batch_job(
         request, "attempt-job", current_user={"id": "tester"}
     )
-    await qc_sichuan.retry_workspace_batch_job(
-        request, "attempt-job", current_user={"id": "tester"}
-    )
+    with pytest.raises(HTTPException) as rejected:
+        await qc_sichuan.retry_workspace_batch_job(
+            request, "attempt-job", current_user={"id": "tester"}
+        )
+    assert rejected.value.status_code == 409
     assert submitted == [
-        ("sichuan_workspace_batch_job_retry", "attempt-job"),
         ("sichuan_workspace_batch_job_retry", "attempt-job"),
     ]
 
@@ -120,3 +127,221 @@ def test_detached_runner_has_no_job_id_deduplication():
     second = submit_detached_task("audit", work, "same-job")
     assert first is not second
     assert first.result(timeout=3) == second.result(timeout=3) == "same-job"
+
+
+def test_stale_progress_failure_retry_and_poll_do_not_take_new_attempt(storage, monkeypatch):
+    service, engine, table = storage
+    frozen = datetime(2026, 9, 24, 12, 0, 0)
+    monkeypatch.setattr(workspace_module, "_now_utc", lambda: frozen)
+    old = service.mark_batch_job_running(job_id="attempt-job")
+    assert isinstance(old, str)
+    service.cancel_batch_job(job_id="attempt-job", created_by="tester")
+    assert service.retry_batch_job(job_id="attempt-job", created_by="tester") is not None
+    new = service.mark_batch_job_running(job_id="attempt-job")
+    assert isinstance(new, str) and new != old
+    with engine.connect() as connection:
+        started_at = connection.execute(sa.select(table.c.started_at)).scalar_one()
+    assert started_at == frozen
+    assert service.is_batch_job_canceled_or_missing(job_id="attempt-job", attempt_filters_json=old)
+    assert not service.is_batch_job_canceled_or_missing(job_id="attempt-job", attempt_filters_json=new)
+    assert service.update_batch_job_progress(
+        job_id="attempt-job", attempt_filters_json=old, step_key="run", rule_index=1,
+        rule_count=1, processed_records=1, total_records=1,
+        summary_patch={"stale": True},
+    ) is None
+    service.fail_batch_job(job_id="attempt-job", error_message="stale", attempt_filters_json=old)
+    assert service.retry_batch_job(
+        job_id="attempt-job", created_by="tester", automatic=True,
+        expected_attempt_filters_json=old,
+    ) is None
+    assert _status(engine, table) == "running"
+    with engine.connect() as connection:
+        row = connection.execute(sa.select(table.c.summary_json, table.c.error_message)).one()
+    assert "stale" not in (row.summary_json or "")
+    assert row.error_message is None
+
+
+@pytest.mark.asyncio
+async def test_old_worker_exits_after_provider_wait_when_new_attempt_started(storage, monkeypatch):
+    service, engine, _ = storage
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def provider():
+        entered.set()
+        await release.wait()
+        return object()
+
+    class Activation:
+        def enforce(self):
+            return None
+
+    monkeypatch.setattr(batch_worker, "get_product_activation_service", lambda: Activation())
+    old_worker = asyncio.create_task(batch_worker.run_sichuan_workspace_batch_job(
+        "attempt-job", workspace=service, qc_service_provider=provider,
+    ))
+    await asyncio.wait_for(entered.wait(), timeout=3)
+    service.cancel_batch_job(job_id="attempt-job", created_by="tester")
+    assert service.retry_batch_job(job_id="attempt-job", created_by="tester") is not None
+    assert isinstance(service.mark_batch_job_running(job_id="attempt-job"), str)
+    release.set()
+    await asyncio.wait_for(old_worker, timeout=3)
+    assert _status(engine, service._batch_job_table) == "running"
+
+
+def test_current_attempt_can_complete_and_retry_once(storage):
+    service, engine, _ = storage
+    attempt = service.mark_batch_job_running(job_id="attempt-job")
+    assert isinstance(attempt, str)
+    assert service.update_batch_job_progress(
+        job_id="attempt-job", attempt_filters_json=attempt, step_key="run", rule_index=0,
+        rule_count=1, processed_records=0, total_records=1,
+    ) is not None
+    assert service.complete_batch_job(
+        job_id="attempt-job", attempt_filters_json=attempt,
+        summary={"execution_status": "completed", "total_records": 1},
+        items=[], failed_records=[], persist_record_envelopes=False,
+    ) is True
+    assert _status(engine, service._batch_job_table) == "completed"
+    assert service.retry_batch_job(
+        job_id="attempt-job", created_by="tester", automatic=True,
+        expected_attempt_filters_json=attempt,
+    ) is not None
+    assert service.retry_batch_job(
+        job_id="attempt-job", created_by="tester", automatic=True,
+        expected_attempt_filters_json=attempt,
+    ) is None
+    assert _status(engine, service._batch_job_table) == "queued"
+
+
+def test_missing_attempt_cannot_write_claimed_formal_job_and_token_is_private(storage):
+    service, engine, table = storage
+    attempt = service.mark_batch_job_running(job_id="attempt-job")
+    assert isinstance(attempt, str)
+    assert workspace_module.LX0609_ATTEMPT_FILTER_KEY not in (
+        service.get_batch_job_for_processing(job_id="attempt-job") or {}
+    ).get("filters", {})
+    assert service.update_batch_job_progress(
+        job_id="attempt-job", step_key="run", rule_index=0,
+        rule_count=1, processed_records=1, total_records=1,
+    ) is None
+    service.fail_batch_job(job_id="attempt-job", error_message="without-token")
+    assert service.complete_batch_job(
+        job_id="attempt-job", summary={"execution_status": "completed", "total_records": 1},
+        items=[], failed_records=[], persist_record_envelopes=False,
+    ) is None
+    assert _status(engine, table) == "running"
+    with engine.connect() as connection:
+        assert connection.execute(sa.select(table.c.error_message)).scalar_one() is None
+
+
+def test_preclaim_failure_cannot_fail_other_workers_running_attempt(storage):
+    service, engine, table = storage
+    assert isinstance(service.mark_batch_job_running(job_id="attempt-job"), str)
+    service.fail_batch_job(job_id="attempt-job", error_message="activation", queued_only=True)
+    assert _status(engine, table) == "running"
+    service.cancel_batch_job(job_id="attempt-job", created_by="tester")
+    assert service.retry_batch_job(job_id="attempt-job", created_by="tester") is not None
+    queued = service.get_batch_job_for_processing(job_id="attempt-job")
+    assert queued is not None
+    service.fail_batch_job(
+        job_id="attempt-job", error_message="activation", queued_only=True,
+        expected_queued_filters_json=queued["_claim_filters_json"],
+    )
+    assert _status(engine, table) == "failed"
+
+
+def test_preclaim_failure_uses_original_queued_snapshot(storage):
+    service, engine, table = storage
+    first = service.get_batch_job_for_processing(job_id="attempt-job")
+    assert first is not None
+    original = first["_claim_filters_json"]
+    service.cancel_batch_job(job_id="attempt-job", created_by="tester")
+    assert service.retry_batch_job(job_id="attempt-job", created_by="tester") is not None
+    service.fail_batch_job(
+        job_id="attempt-job", error_message="late-activation", queued_only=True,
+        expected_queued_filters_json=original,
+    )
+    assert _status(engine, table) == "queued"
+
+
+@pytest.mark.asyncio
+async def test_old_worker_result_after_qc_await_cannot_publish_to_new_attempt(storage, monkeypatch):
+    service, engine, table = storage
+    workspace = _WorkspaceStub()
+    workspace.job["id"] = "attempt-job"
+    workspace.job["record_ids"] = ["visit-001"]
+    # 仅隔离 Worker 写入边界：模型业务输入用简单桩，真实领取与持久化仍为 LX0609 行。
+    workspace.mark_batch_job_running = service.mark_batch_job_running
+    workspace.is_batch_job_canceled_or_missing = service.is_batch_job_canceled_or_missing
+    workspace.update_batch_job_progress = service.update_batch_job_progress
+    workspace.complete_batch_job = service.complete_batch_job
+    workspace.fail_batch_job = service.fail_batch_job
+    entered = asyncio.Event()
+    release = asyncio.Event()
+    qc_service = _ServiceStub()
+    original_evaluate = qc_service.evaluate_document
+
+    async def evaluate_document(*args, **kwargs):
+        entered.set()
+        await release.wait()
+        return await original_evaluate(*args, **kwargs)
+
+    qc_service.evaluate_document = evaluate_document
+
+    class Activation:
+        def enforce(self):
+            return None
+
+    monkeypatch.setattr(batch_worker, "get_product_activation_service", lambda: Activation())
+
+    async def provider():
+        return qc_service
+
+    old_worker = asyncio.create_task(batch_worker.run_sichuan_workspace_batch_job(
+        "attempt-job", workspace=workspace, qc_service_provider=provider,
+    ))
+    await asyncio.wait_for(entered.wait(), timeout=3)
+    service.cancel_batch_job(job_id="attempt-job", created_by="tester")
+    assert service.retry_batch_job(job_id="attempt-job", created_by="tester") is not None
+    assert isinstance(service.mark_batch_job_running(job_id="attempt-job"), str)
+    release.set()
+    await asyncio.wait_for(old_worker, timeout=3)
+    assert _status(engine, table) == "running"
+    with engine.connect() as connection:
+        assert connection.execute(sa.select(table.c.items_json)).scalar_one() is None
+
+
+def test_only_current_attempt_commits_canonical_write_in_same_transaction(storage, monkeypatch):
+    service, engine, table = storage
+    probe = sa.Table(
+        "canonical_probe", sa.MetaData(),
+        sa.Column("job_id", sa.String, primary_key=True),
+    )
+    probe.create(engine)
+    calls = []
+
+    def write_envelopes(session, *, job_row, items, now, expected_record_refs=None):
+        calls.append(job_row["id"])
+        session.execute(probe.insert().values(job_id=job_row["id"]))
+        return ()
+
+    monkeypatch.setattr(service, "_write_record_result_envelopes", write_envelopes)
+    old = service.mark_batch_job_running(job_id="attempt-job")
+    assert isinstance(old, str)
+    service.cancel_batch_job(job_id="attempt-job", created_by="tester")
+    assert service.retry_batch_job(job_id="attempt-job", created_by="tester") is not None
+    new = service.mark_batch_job_running(job_id="attempt-job")
+    assert isinstance(new, str)
+    payload = dict(
+        job_id="attempt-job",
+        summary={"execution_status": "completed", "total_records": 1},
+        items=[{"rule_id": "LX0609-01-01-01"}], failed_records=[],
+    )
+    assert service.complete_batch_job(**payload, attempt_filters_json=old) is False
+    assert calls == []
+    assert service.complete_batch_job(**payload, attempt_filters_json=new) is True
+    assert calls == ["attempt-job"]
+    assert _status(engine, table) == "completed"
+    with engine.connect() as connection:
+        assert connection.execute(sa.select(probe.c.job_id)).all() == [("attempt-job",)]

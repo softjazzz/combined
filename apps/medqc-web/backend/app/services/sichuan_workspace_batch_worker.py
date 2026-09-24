@@ -13,7 +13,7 @@ from fastapi import HTTPException
 
 from ..core.settings import get_settings
 from .case_identity import CaseRef
-from .custom_qc_workspace_service import CustomQCWorkspaceService
+from .custom_qc_workspace_service import CustomQCWorkspaceService, LX0609_ATTEMPT_FILTER_KEY
 from .customer_rule_sets import CUSTOMER_LUXIAN_RULE_SET_KEY
 from .effect_priority_qc import (
     DEFAULT_MAX_REFINE_CANDIDATES,
@@ -1252,15 +1252,28 @@ async def run_sichuan_workspace_batch_job(
         logger.info("跳过泸县0609父任务执行，仅执行其规则族子任务: job_id=%s", job_id)
         return
 
+    formal_0609_job = (job.get("filters") or {}).get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY
+    claim_filters_json = job.get("_claim_filters_json")
+    attempt_filters_json: str | None = None
+    attempt_kwargs: dict[str, str] = {}
     try:
         # HTTP 门禁之外在所有实际质控 Worker 入口统一验签，阻止旧队列或内部调用绕过授权。
         # 不存在的任务及父任务已在上方返回，不触发授权检查。
         get_product_activation_service().enforce()
-        if not workspace.mark_batch_job_running(job_id=job_id):
+        claim = workspace.mark_batch_job_running(job_id=job_id)
+        if not claim:
             return
+        if isinstance(claim, str):
+            attempt_filters_json = claim
+            attempt_kwargs = {"attempt_filters_json": claim}
         qc_service = await qc_service_provider()
+        if attempt_filters_json is not None and workspace.is_batch_job_canceled_or_missing(
+            job_id=job_id, **attempt_kwargs
+        ):
+            return
         current = workspace.get_batch_job_for_processing(job_id=job_id) or job
         filters = dict(current.get("filters") or {})
+        filters.pop(LX0609_ATTEMPT_FILTER_KEY, None)
         failed_rule_retry_scope = (
             dict(filters.get(FAILED_RULE_RETRY_FILTER_KEY) or {})
             if isinstance(filters.get(FAILED_RULE_RETRY_FILTER_KEY), dict)
@@ -1431,6 +1444,7 @@ async def run_sichuan_workspace_batch_job(
         )
         workspace.update_batch_job_progress(
             job_id=job_id,
+            **attempt_kwargs,
             step_key="prepare",
             rule_index=0,
             rule_count=max(1, len(rule_ids)),
@@ -1675,7 +1689,7 @@ async def run_sichuan_workspace_batch_job(
                 None,
             )
             if callable(lightweight_check):
-                return bool(lightweight_check(job_id=job_id))
+                return bool(lightweight_check(job_id=job_id, **attempt_kwargs))
             latest = workspace.get_batch_job_for_processing(job_id=job_id)
             if not latest:
                 return True
@@ -2028,6 +2042,7 @@ async def run_sichuan_workspace_batch_job(
                         trace_state["terminal_state_persisted"] = True
                         workspace.update_batch_job_progress(
                             job_id=job_id,
+                            **attempt_kwargs,
                             step_key="run",
                             rule_index=int(trace_state["completed_rule_count"]),
                             rule_count=int(trace_state["total_rule_count"]),
@@ -3273,6 +3288,7 @@ async def run_sichuan_workspace_batch_job(
 
             workspace.update_batch_job_progress(
                 job_id=job_id,
+                **attempt_kwargs,
                 step_key="run",
                 rule_index=len(output_rule_ids) if output_rule_ids else 0,
                 rule_count=total_rules,
@@ -3313,6 +3329,7 @@ async def run_sichuan_workspace_batch_job(
 
         workspace.update_batch_job_progress(
             job_id=job_id,
+            **attempt_kwargs,
             step_key="run",
             rule_index=0,
             rule_count=total_rules,
@@ -3331,6 +3348,7 @@ async def run_sichuan_workspace_batch_job(
                     processed_count = int(completed_records_state["count"])
                     workspace.update_batch_job_progress(
                         job_id=job_id,
+                        **attempt_kwargs,
                         step_key="run",
                         rule_index=0,
                         rule_count=total_rules,
@@ -3376,6 +3394,7 @@ async def run_sichuan_workspace_batch_job(
                 processed_count = int(completed_records_state["count"])
                 workspace.update_batch_job_progress(
                     job_id=job_id,
+                    **attempt_kwargs,
                     step_key="run",
                     rule_index=0,
                     rule_count=total_rules,
@@ -3492,6 +3511,7 @@ async def run_sichuan_workspace_batch_job(
                     break
             workspace.update_batch_job_progress(
                 job_id=job_id,
+                **attempt_kwargs,
                 step_key="failed",
                 rule_index=len(output_rule_ids),
                 rule_count=total_rules,
@@ -3738,6 +3758,7 @@ async def run_sichuan_workspace_batch_job(
         }
         workspace.update_batch_job_progress(
             job_id=job_id,
+            **attempt_kwargs,
             step_key="aggregate",
             rule_index=len(output_rule_ids),
             rule_count=total_rules,
@@ -3752,12 +3773,15 @@ async def run_sichuan_workspace_batch_job(
             progress_patch=_record_runtime_progress(total_records),
         )
         with diagnostic_capture.result_scope() if diagnostic_capture else nullcontext():
-            workspace.complete_batch_job(
+            completed = workspace.complete_batch_job(
                 job_id=job_id,
+                **attempt_kwargs,
                 summary=summary,
                 items=all_items,
                 failed_records=all_failed_records,
             )
+        if attempt_filters_json is not None and completed is not True:
+            return
         if automatic_retry_plan.get("should_retry") is True:
             created_by = str(current.get("created_by") or "").strip()
             retry_method = getattr(workspace, "retry_batch_job", None)
@@ -3773,6 +3797,7 @@ async def run_sichuan_workspace_batch_job(
                 job_id=job_id,
                 created_by=created_by,
                 automatic=True,
+                **({"expected_attempt_filters_json": attempt_filters_json} if attempt_filters_json is not None else {}),
             )
             if not retried_job or str(retried_job.get("status") or "") != "queued":
                 logger.error("部分失败任务自动补跑入队失败: job_id=%s", job_id)
@@ -3800,4 +3825,13 @@ async def run_sichuan_workspace_batch_job(
         logger.info("四川规则批量任务 %s 已取消，后台执行已停止", job_id)
     except Exception as exc:
         logger.exception("四川规则批量任务执行失败: %s", exc)
-        workspace.fail_batch_job(job_id=job_id, error_message=str(exc))
+        workspace.fail_batch_job(
+            job_id=job_id, error_message=str(exc),
+            **(
+                attempt_kwargs if attempt_filters_json is not None
+                else {
+                    "queued_only": True,
+                    "expected_queued_filters_json": claim_filters_json,
+                } if formal_0609_job else {}
+            ),
+        )
