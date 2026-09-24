@@ -17,6 +17,11 @@ from ..case_identity import CaseRef
 from ..luxian_0609.canonical_result_finalizer import (
     validate_luxian_0609_published_customer_display_facts,
 )
+from ..luxian_0609.customer_text_publication import (
+    CUSTOMER_TEXT_SEAL_KEY,
+    LX0609_CUSTOMER_RESULT_CONTRACT_ERROR,
+    assert_published_customer_text_unchanged,
+)
 from ..luxian_0609.rule_contracts import CRITERION_KINDS
 from ..luxian_0609_result_schema import (
     CANONICAL_RESULT_DELIVERY_MODE,
@@ -31,9 +36,6 @@ from ..luxian_0609_rule_catalog import (
 
 
 RECORD_RESULT_ENVELOPE_SCHEMA = "lx0609-record-result-envelope-v1"
-LX0609_CUSTOMER_RESULT_CONTRACT_ERROR = (
-    "LX0609 客户结果解释合同不完整，拒绝交付确定问题"
-)
 _LX018_DIAGNOSTIC_DIMENSIONS = {
     "anatomic_site",
     "laterality",
@@ -375,6 +377,9 @@ def envelope_item_from_rule_result(
 ) -> Dict[str, Any]:
     """截取 RuleDecision 交付所需字段，避免 Envelope 变成任务调试日志。"""
 
+    if CUSTOMER_TEXT_SEAL_KEY in item:
+        assert_published_customer_text_unchanged(item)
+
     allowed_keys = {
         "schema_version", "record_id", "institute_id", "patient_id", "visit_id",
         "mr_no", "record_ref", "customer_rule_id", "qc_point_id", "rule_id",
@@ -382,6 +387,7 @@ def envelope_item_from_rule_result(
         "display_status", "is_compliant", "reason_code", "reason", "reason_detail",
         "reason_details", "conclusion", "findings", "detail", "actual", "standard",
         "suggestion", "customer_conclusion", "customer_suggestion", "customer_message",
+        CUSTOMER_TEXT_SEAL_KEY,
         "customer_display_facts", "criterion_results", "decision_facts",
         "customer_evidence", "evidence_items", "evidence_refs", "evidence",
         "model_analysis", "medical_analysis", "semantic_analysis", "llm_analysis",
@@ -708,6 +714,8 @@ class CanonicalResultStore:
         for item in envelope["items"]:
             if not isinstance(item, dict):
                 raise ValueError(LX0609_CUSTOMER_RESULT_CONTRACT_ERROR)
+            if CUSTOMER_TEXT_SEAL_KEY in item:
+                assert_published_customer_text_unchanged(item)
             rule_id = _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
             safe_customer_display_facts(item, rule_id=rule_id)
         return envelope
@@ -785,6 +793,8 @@ class CanonicalResultStore:
             if not canonical_envelope_items_are_consistent(envelope["items"]):
                 raise ValueError("canonical_result_envelope_invalid")
             for raw_item in envelope["items"]:
+                if CUSTOMER_TEXT_SEAL_KEY in raw_item:
+                    assert_published_customer_text_unchanged(raw_item)
                 # Envelope 已通过 schema、delivery_mode 和逐项状态合同校验；
                 # 旧候选包的条目级 schema 标记曾在批任务落盘时被遗漏。读取时
                 # 只继承已验证的 Envelope 合同，不重新解释任何业务状态。

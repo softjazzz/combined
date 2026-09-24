@@ -9,6 +9,17 @@ import pytest
 from openpyxl import load_workbook
 
 import app.services.custom_qc_workspace_service as workspace_module
+from app.services.luxian_0609.decision_model import (
+    ApplicabilityState, EvidenceState, QcDirection, RuleDecision,
+)
+from app.services.luxian_0609.decision_reducer import reduce_luxian_0609_rule_decision
+from app.services.luxian_0609_result_aggregator import aggregate_luxian_0609_results
+from app.services.luxian_0609_result_schema import CANONICAL_RESULT_DELIVERY_MODE
+from app.services.qc_workspace.canonical_result_store import (
+    CanonicalResultStore,
+    RECORD_RESULT_ENVELOPE_SCHEMA,
+    envelope_item_from_rule_result,
+)
 from app.services.luxian_0609.consultation_customer_projection import (
     safe_consultation_customer_display_facts,
 )
@@ -38,6 +49,144 @@ def _failed_criterion() -> list[dict[str, str]]:
             "reason_code": "requirement_violated",
         }
     ]
+
+
+@pytest.mark.parametrize("data_gap", [False, True], ids=["compliant", "data_gap"])
+def test_canonical_export_keeps_original_004_renderer_suggestion(data_gap: bool) -> None:
+    """导出应保留发布器的建议；本例不依赖患者原文或模型调用。"""
+
+    rule_id = "LX0609-09-01-01"
+    reduced = reduce_luxian_0609_rule_decision(RuleDecision(
+        rule_id=rule_id,
+        snapshot_hash="a" * 64,
+        applicability=ApplicabilityState.APPLICABLE,
+        evidence_state=EvidenceState.DATA_GAP if data_gap else EvidenceState.SUFFICIENT,
+        qc_direction=QcDirection.UNKNOWN if data_gap else QcDirection.SATISFIED,
+        reason_code="rescue_end_time_missing" if data_gap else "requirement_satisfied",
+        fact_refs=("b" * 64,),
+        evaluator_version="export-publication-test-v1",
+        confidence=0.9,
+    ))
+    facts = {
+        "failure_kind": (
+            "rescue_end_time_missing" if data_gap else "timeliness_requirement_satisfied"
+        ),
+        "target_document": "rescue_record",
+        "source_label": "抢救记录",
+        **(
+            {
+                "timeliness_state": "missing_time",
+                "threshold_hours": 6,
+                "observed_time": "2026-09-01T05:00:00+08:00",
+            }
+            if data_gap else {"timeliness_state": "within", "threshold_hours": 6}
+        ),
+    }
+    published = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": rule_id, "name": "抢救记录时效"}],
+        execution_results=[],
+        reduced_decisions=(reduced,),
+        customer_display_facts=((rule_id, facts),),
+        delivery_mode=CANONICAL_RESULT_DELIVERY_MODE,
+    )[0]
+    assert published["status"] == ("data_gap" if data_gap else "compliant"), (
+        published["status"], published.get("reason_code"), published.get("findings")
+    )
+    assert envelope_item_from_rule_result(published)["customer_text_seal"] == (
+        published["customer_text_seal"]
+    )
+    stored_item = envelope_item_from_rule_result(published)
+    envelope = {
+        "schema_version": RECORD_RESULT_ENVELOPE_SCHEMA,
+        "delivery_mode": CANONICAL_RESULT_DELIVERY_MODE,
+        "items": [stored_item],
+    }
+    result_store = CanonicalResultStore(
+        workspace_module._record_result_envelopes_table()
+    )
+    load_kwargs = {
+        "root_job_id": "job-original-004-text",
+        "institute_id": "inst-1",
+        "patient_id": "patient-1",
+        "visit_id": "visit-1",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+    }
+    loaded = result_store.load_selected(
+        _ReadSession([{"envelope_json": json.dumps(envelope)}]), **load_kwargs,
+    )
+    assert loaded["items"][0]["suggestion"] == published["suggestion"]
+    corrupted_envelope = deepcopy(envelope)
+    corrupted_envelope["items"][0]["suggestion"] = "伪造的整改建议"
+    with pytest.raises(ValueError, match="客户结果解释合同不完整"):
+        result_store.load_selected(
+            _ReadSession([{"envelope_json": json.dumps(corrupted_envelope)}]),
+            **load_kwargs,
+        )
+    job = {
+        "id": "job-original-004-text",
+        "filters": {"rule_set_key": "luxian_0609_qc_v1"},
+        "items": [{
+            **published,
+            "record_id": "visit-1",
+            "institute_id": "inst-1",
+            "patient_id": "patient-1",
+            "visit_id": "visit-1",
+        }],
+    }
+    projected = workspace_module.project_customer_safe_result_item(
+        job["items"][0], hmac_key="unit-test-key",
+    )
+    _items, rows, _summary = workspace_module._customer_export_rows(
+        job, hmac_key="unit-test-key", include_luxian_canonical_remediation=True,
+    )
+    assert rows[0][5] == projected["conclusion"]
+    assert rows[0][6] == projected["suggestion"]
+    if data_gap:
+        assert "补充本次抢救的权威结束时间" in rows[0][6]
+
+    corrupted = deepcopy(job)
+    corrupted["items"][0]["suggestion"] = "伪造的整改建议"
+    with pytest.raises(ValueError, match="客户结果解释合同不完整"):
+        workspace_module._customer_export_rows(
+            corrupted,
+            hmac_key="unit-test-key",
+            include_luxian_canonical_remediation=True,
+        )
+
+    corrupted_rule = deepcopy(job)
+    corrupted_rule["items"][0]["customer_rule_id"] = "LX0609-99-99-99"
+    with pytest.raises(ValueError, match="客户结果解释合同不完整"):
+        workspace_module._customer_export_rows(
+            corrupted_rule,
+            hmac_key="unit-test-key",
+            include_luxian_canonical_remediation=True,
+        )
+
+    # 另一个 canonical_results 入口未经过统一 Renderer，不能把其自由文本
+    # 自动认证为已发布建议；导出继续使用受控回退。
+    untrusted = {key: value for key, value in published.items() if key != "customer_text_seal"}
+    untrusted["suggestion"] = "PRIVATE_UNVERIFIED_SUGGESTION"
+    untrusted_result = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": rule_id, "name": "抢救记录时效"}],
+        execution_results=[],
+        canonical_results=(untrusted,),
+        delivery_mode=CANONICAL_RESULT_DELIVERY_MODE,
+    )[0]
+    assert "customer_text_seal" not in untrusted_result
+    untrusted_job = {**job, "items": [{
+        **untrusted_result,
+        "record_id": "visit-1",
+        "institute_id": "inst-1",
+        "patient_id": "patient-1",
+        "visit_id": "visit-1",
+    }]}
+    _items, untrusted_rows, _summary = workspace_module._customer_export_rows(
+        untrusted_job,
+        hmac_key="unit-test-key",
+        include_luxian_canonical_remediation=True,
+    )
+    assert "PRIVATE_UNVERIFIED_SUGGESTION" not in untrusted_rows[0][6]
 
 
 class _Rows:

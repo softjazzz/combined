@@ -38,6 +38,10 @@ from .luxian_0609.customer_renderer import (
     exam_lab_data_gap_customer_message,
 )
 from .luxian_0609.customer_remediation import build_customer_remediation_suggestion
+from .luxian_0609.customer_text_publication import (
+    CUSTOMER_TEXT_SEAL_KEY,
+    assert_published_customer_text_unchanged,
+)
 from .luxian_0609.record_result_read_model import (
     _generation_key,
     _rule_set_value,
@@ -1989,16 +1993,18 @@ def _customer_export_rows(
     source_items = iter_unique_customer_result_source_items(job, hmac_key=hmac_key)
     items: List[Dict[str, Any]] = []
     for source_item in source_items:
+        if CUSTOMER_TEXT_SEAL_KEY in source_item:
+            assert_published_customer_text_unchanged(source_item)
         projected = project_customer_safe_result_item(source_item, hmac_key=hmac_key)
         if (
             include_luxian_canonical_remediation
             and _safe_text(source_item.get("schema_version"))
             == LUXIAN_0609_CUSTOMER_SCHEMA_VERSION
             and _safe_text(projected.get("rule_id")).startswith("LX0609-")
+            and CUSTOMER_TEXT_SEAL_KEY not in source_item
         ):
-            # HTML 只读取已落 Canonical 的 LX0609 Renderer 结果，并且只用
-            # 再次通过客户投影白名单的状态、原因码和事实生成整改建议。
-            # 不直接信任或导出 Canonical 中保存的自由文本。
+            # 旧任务没有正式发布证明，沿用仅依赖受控事实的安全回退。
+            # 新任务的发布文案通过完整性校验后直接使用，不在读取层重生成。
             safe_facts = projected.get("customer_display_facts")
             canonical_suggestion = build_customer_remediation_suggestion(
                 rule_id=_safe_text(projected.get("rule_id")),
