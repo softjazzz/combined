@@ -426,6 +426,172 @@ def _safe_017(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     return {"failure_kind": kind, "copy_similarity": round(float(similarity), 4), "copy_similarity_threshold": round(float(threshold), 4), "copy_document_sources": list(sources), "copy_document_record_times": list(times), **({"copy_match_pairs": safe_pairs} if pairs is not None else {})}
 
 
+def _published_number(value: Any, places: int) -> bool:
+    if type(value) not in {int, float}:
+        return False
+    try:
+        return isfinite(value) and 0 <= value <= 1 and value == round(value, places)
+    except (OverflowError, ValueError):
+        return False
+
+
+def _published_dates(value: Any, *, maximum: int = 64) -> bool:
+    return type(value) is list and len(value) <= maximum and all(_date(item) for item in value)
+
+
+def _published_009_event(item: Any) -> bool:
+    keys = {"event_ref", "change_category", "event_time", "corresponding_course_ref",
+            "corresponding_course_time", "deadline_time", "threshold_hours", "timely"}
+    if type(item) is not dict or set(item) != keys:
+        return False
+    event_ref, course_ref = item["event_ref"], item["corresponding_course_ref"]
+    return (type(event_ref) is str and bool(event_ref.strip()) and len(event_ref) <= 256
+            and type(course_ref) is str and len(course_ref) <= 256
+            and type(item["change_category"]) is str
+            and item["change_category"] in {"subjective", "objective", "exam_lab", "complication", "special_state"}
+            and _time(item["event_time"]) and _time(item["deadline_time"])
+            and (_time(item["corresponding_course_time"])
+                 if course_ref else item["corresponding_course_time"] == "")
+            and type(item["threshold_hours"]) is int and item["threshold_hours"] == 24
+            and type(item["timely"]) is bool)
+
+
+def _published_008(raw: dict[str, Any]) -> bool:
+    kind = raw.get("failure_kind")
+    base = {"failure_kind", "severity", "threshold_days", "anchor_date", "horizon_date"}
+    if (type(kind) is not str or kind not in {"severity_course_gap_exceeded", "severity_course_interval_satisfied"}
+            or raw.get("severity") != "serious" or type(raw.get("threshold_days")) is not int
+            or raw["threshold_days"] != 2 or not _date(raw.get("anchor_date"))
+            or not _date(raw.get("horizon_date"))):
+        return False
+    if kind == "severity_course_gap_exceeded":
+        gap = {"gap_start_date", "gap_end_date", "gap_days"}
+        if set(raw) not in (base | gap, base | gap | {"recorded_dates"}):
+            return False
+        return (_date(raw["gap_start_date"]) and _date(raw["gap_end_date"])
+                and type(raw["gap_days"]) is int and raw["gap_days"] > 2
+                and ("recorded_dates" not in raw or _published_dates(raw["recorded_dates"])))
+    return (set(raw) == base | {"maximum_gap_days", "recorded_dates"}
+            and type(raw["maximum_gap_days"]) is int and 0 <= raw["maximum_gap_days"] <= 2
+            and _published_dates(raw["recorded_dates"]))
+
+
+def _published_009(raw: dict[str, Any]) -> bool:
+    kind = raw.get("failure_kind")
+    if type(kind) is not str:
+        return False
+    if kind.startswith("critical_change_") and (
+        type(raw.get("threshold_hours")) is not int or raw["threshold_hours"] != 24
+    ):
+        return False
+    if kind == "critical_change_time_unavailable":
+        return set(raw) == {"failure_kind", "threshold_hours"}
+    if kind == "critical_change_course_association_failed":
+        return (set(raw) == {"failure_kind", "event_ref", "corresponding_course_ref", "threshold_hours"}
+                and all(type(raw[key]) is str and raw[key].strip() for key in ("event_ref", "corresponding_course_ref")))
+    if kind == "critical_change_window_not_mature":
+        return (set(raw) == {"failure_kind", "event_ref", "event_time", "deadline_time", "threshold_hours"}
+                and type(raw["event_ref"]) is str and bool(raw["event_ref"].strip())
+                and _time(raw["event_time"]) and _time(raw["deadline_time"]))
+    if kind in {"critical_change_course_timely", "critical_change_course_not_timely"}:
+        base = {"failure_kind", "change_events", "threshold_hours"}
+        if set(raw) != (base if kind == "critical_change_course_timely" else base | {"unmet_events"}):
+            return False
+        events = raw["change_events"]
+        if type(events) is not list or not 0 < len(events) <= 20 or not all(_published_009_event(item) for item in events):
+            return False
+        if kind == "critical_change_course_timely":
+            return all(item["timely"] for item in events)
+        unmet = raw["unmet_events"]
+        return (type(unmet) is list and bool(unmet)
+                and all(_published_009_event(item) and item["timely"] is False and item in events for item in unmet))
+    base = {"failure_kind", "severity", "evaluated_scope", "pending_scope", "required_dates", "covered_dates", "missing_count"}
+    if (kind not in {"critical_daily_record_coverage_satisfied", "critical_daily_record_missing"}
+            or raw.get("severity") != "critical" or raw.get("evaluated_scope") != "critical_daily_course_coverage"
+            or raw.get("pending_scope") != ["condition_change_course_documentation"]
+            or not _published_dates(raw.get("required_dates")) or not _published_dates(raw.get("covered_dates"))
+            or not set(raw["covered_dates"]).issubset(raw["required_dates"])):
+        return False
+    if kind == "critical_daily_record_coverage_satisfied":
+        return (set(raw) == base | {"anchor_date", "horizon_date"}
+                and bool(raw["required_dates"]) and raw["required_dates"] == raw["covered_dates"]
+                and type(raw["missing_count"]) is int and raw["missing_count"] == 0
+                and _date(raw["anchor_date"]) and _date(raw["horizon_date"]))
+    optional = {"anchor_date", "horizon_date"}
+    required = base | {"missing_dates", "missing_first_date", "missing_last_date"}
+    missing = raw.get("missing_dates")
+    return (required <= set(raw) <= required | optional
+            and _published_dates(missing, maximum=7) and bool(missing)
+            and type(raw["missing_count"]) is int and raw["missing_count"] >= len(missing)
+            and _date(raw["missing_first_date"]) and _date(raw["missing_last_date"])
+            and all(_date(raw[key]) for key in optional & set(raw)))
+
+
+def _published_016(raw: dict[str, Any]) -> bool:
+    kind, relation, similarity = raw.get("failure_kind"), raw.get("copy_relation"), raw.get("copy_similarity")
+    return (set(raw) == {"failure_kind", "copy_similarity", "copy_relation", "compared_sections"}
+            and type(kind) is str and kind in {"admission_first_course_copy_detected", "admission_first_course_not_identical"}
+            and _published_number(similarity, 4)
+            and type(relation) is str and relation in {"completely_identical", "not_completely_identical"}
+            and (relation == "completely_identical") == (similarity == 1)
+            and (kind == "admission_first_course_copy_detected") == (relation == "completely_identical")
+            and type(raw["compared_sections"]) is list
+            and raw["compared_sections"] == ["入院记录现病史", "首次病程记录病例特点"])
+
+
+def _published_017_pair(pair: Any) -> bool:
+    return (type(pair) is dict and set(pair) == {"source_types", "record_times", "similarity"}
+            and type(pair["source_types"]) is list and len(pair["source_types"]) == 2
+            and all(type(item) is str and item in _COURSE_SOURCES for item in pair["source_types"])
+            and type(pair["record_times"]) is list and len(pair["record_times"]) == 2
+            and all(_strict_copy_time(item) for item in pair["record_times"])
+            and _published_number(pair["similarity"], 4) and pair["similarity"] >= .7)
+
+
+def _published_017(raw: dict[str, Any]) -> bool:
+    base = {"failure_kind", "copy_similarity", "copy_similarity_threshold", "copy_document_sources", "copy_document_record_times"}
+    kind = raw.get("failure_kind")
+    if (set(raw) not in (base, base | {"copy_match_pairs"}) or type(kind) is not str
+            or kind not in {_017_THRESHOLD_EXCEEDED_KIND, _017_WITHIN_THRESHOLD_KIND, *_017_HIGH_SIMILARITY_PASS_KINDS}
+            or not _published_number(raw["copy_similarity"], 4)
+            or not _published_number(raw["copy_similarity_threshold"], 4)
+            or raw["copy_similarity_threshold"] != .7
+            or type(raw["copy_document_sources"]) is not list or len(raw["copy_document_sources"]) != 2
+            or any(type(item) is not str or item not in _COURSE_SOURCES for item in raw["copy_document_sources"])
+            or type(raw["copy_document_record_times"]) is not list or len(raw["copy_document_record_times"]) != 2
+            or not all(_strict_copy_time(item) for item in raw["copy_document_record_times"])):
+        return False
+    similarity = raw["copy_similarity"]
+    if (kind == _017_WITHIN_THRESHOLD_KIND) != (similarity < .7):
+        return False
+    if "copy_match_pairs" in raw:
+        pairs = raw["copy_match_pairs"]
+        if (type(pairs) is not list or len(pairs) > 4 or not all(_published_017_pair(pair) for pair in pairs)):
+            return False
+        if pairs and (pairs[0]["source_types"] != raw["copy_document_sources"]
+                      or pairs[0]["record_times"] != raw["copy_document_record_times"]
+                      or pairs[0]["similarity"] != similarity):
+            return False
+    return True
+
+
+def validate_published_course_quality_facts(*, rule_id: str, raw: Any) -> dict[str, Any] | None:
+    """逐形态校验已发布 JSON；合法值原样返回，不调用内部投影。"""
+    normalized = str(rule_id or "").strip().upper()
+    if normalized == "LX0609-01-01-02" and raw is None:
+        return None
+    if type(raw) is not dict or any(type(key) is not str for key in raw):
+        return None
+    if normalized == "LX0609-02-01-03":
+        return validate_published_course_007_facts(raw)
+    if normalized == "LX0609-01-01-02":
+        return {} if not raw else None
+    validators = {"LX0609-02-01-04": _published_008, "LX0609-02-01-05": _published_009,
+                  "LX0609-12-01-01": _published_016, "LX0609-12-01-02": _published_017}
+    validator = validators.get(normalized)
+    return dict(raw) if validator is not None and validator(raw) else None
+
+
 def safe_course_quality_customer_display_facts(*, rule_id: str, raw: Any) -> dict[str, Any] | None:
     """白名单化客户事实，拒绝 ID、正文、指纹等执行器内部信息。"""
     normalized = str(rule_id or "").strip().upper()
@@ -480,4 +646,5 @@ def course_quality_customer_fact_status_is_valid(*, rule_id: str, status: str, r
 __all__ = [
     "COURSE_QUALITY_CUSTOMER_RULE_IDS", "course_quality_customer_fact_status_is_valid",
     "is_course_quality_customer_rule", "safe_course_quality_customer_display_facts",
+    "validate_published_course_quality_facts", "validate_published_course_007_facts",
 ]

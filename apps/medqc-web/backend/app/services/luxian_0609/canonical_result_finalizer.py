@@ -467,10 +467,15 @@ def validate_luxian_0609_published_customer_display_facts(
         if validated is None:
             raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
         return validated
-    if normalized_rule_id == "LX0609-02-01-03":
-        from .course_quality_result_mapping import validate_published_course_007_facts
+    from .course_quality_result_mapping import (
+        is_course_quality_customer_rule,
+        validate_published_course_quality_facts,
+    )
+    if is_course_quality_customer_rule(normalized_rule_id):
+        if normalized_rule_id == "LX0609-01-01-02" and raw is None:
+            return None
 
-        validated = validate_published_course_007_facts(raw)
+        validated = validate_published_course_quality_facts(rule_id=normalized_rule_id, raw=raw)
         if validated is None:
             raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
         return validated
