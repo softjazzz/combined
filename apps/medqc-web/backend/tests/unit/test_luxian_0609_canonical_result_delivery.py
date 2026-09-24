@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 from copy import deepcopy
 from datetime import datetime
@@ -2521,6 +2522,8 @@ def test_published_rules_keep_identity_through_sqlite_dto_feedback_and_exports(
             )}
             for item in http_result["items"]
         ]
+        latest_http_body = response.json()
+        detail_http_body = detail_response.json()
 
     feedback = ResultFeedbackDemoStore.__new__(ResultFeedbackDemoStore)
     feedback._canonical_table = canonical_table
@@ -2575,6 +2578,20 @@ def test_published_rules_keep_identity_through_sqlite_dto_feedback_and_exports(
     assert all(rule_id in html_text for rule_id in rule_ids)
     assert all(item["conclusion"] in html_text for item in saved_items)
     engine.dispose()
+
+    # 所有交付断言通过后，才为实际浏览器写出本测试的合成 HTTP 产物。
+    browser_fixture_path = os.getenv("MEDQC_LX0609_BROWSER_FIXTURE_OUT")
+    if browser_fixture_path and rule_ids == ("LX0609-09-01-01",):
+        output_path = Path(browser_fixture_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(
+            json.dumps({
+                "fixture_kind": "synthetic_sqlite_http",
+                "latest": latest_http_body,
+                "detail": detail_http_body,
+            }, ensure_ascii=False),
+            encoding="utf-8",
+        )
 
 
 @pytest.mark.parametrize(
