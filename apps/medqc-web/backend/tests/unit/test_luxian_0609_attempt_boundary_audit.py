@@ -26,6 +26,7 @@ from tests.unit.test_qc_sichuan_batch_throughput import _ServiceStub, _Workspace
 def storage(monkeypatch):
     engine = sa.create_engine("sqlite://")
     monkeypatch.setattr(workspace_module, "engine", engine)
+    monkeypatch.setattr(workspace_module, "_draft_schema", lambda: None)
     monkeypatch.setattr(workspace_module, "_sync_batch_job_parent_columns", lambda **_: None)
     service = CustomQCWorkspaceService()
     metadata = sa.MetaData()
