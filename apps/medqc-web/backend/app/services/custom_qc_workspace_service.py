@@ -2006,9 +2006,10 @@ def _customer_export_rows(
                 reason_code=_safe_text(projected.get("reason_code")),
                 facts=safe_facts if isinstance(safe_facts, Mapping) else None,
             )
-            if canonical_suggestion:
-                projected["suggestion"] = canonical_suggestion
-                projected["customer_suggestion"] = canonical_suggestion
+            # 没有受控建议时也必须清空保存的自由文本。否则已暂停规则或
+            # 尚无整改模板的规则会把上游 suggestion 原样带入 HTML。
+            projected["suggestion"] = canonical_suggestion
+            projected["customer_suggestion"] = canonical_suggestion
             if _safe_text(projected.get("status")) == "data_gap":
                 gap_message = exam_lab_data_gap_customer_message(
                     rule_id=_safe_text(projected.get("rule_id")),

@@ -8,6 +8,9 @@ import pytest
 from openpyxl import load_workbook
 
 import app.services.custom_qc_workspace_service as workspace_module
+from app.services.luxian_0609.consultation_customer_projection import (
+    safe_consultation_customer_display_facts,
+)
 from app.services.custom_qc_workspace_service import (
     CustomQCWorkspaceService,
     customer_safe_projection_key,
@@ -161,6 +164,15 @@ def test_export_batch_job_html_reads_only_this_jobs_canonical_envelopes(monkeypa
             "suggestion": "PRIVATE_FREE_SUGGESTION 不得直接导出",
         }],
     }
+    # Envelope 保存的是 Finalizer 已发布的公开形态；原始 source_document_id
+    # 只能作为执行器输入，不能伪装成已落库的 Canonical 客户事实。
+    consultation_item = envelope["items"][0]
+    public_facts = safe_consultation_customer_display_facts(
+        rule_id=consultation_item["rule_id"],
+        raw=consultation_item["customer_display_facts"],
+    )
+    assert public_facts is not None
+    consultation_item["customer_display_facts"] = public_facts
     session = _ReadSession([{
         "job_id": "job-canonical-child",
         "root_job_id": "job-canonical-only",
@@ -205,9 +217,10 @@ def test_export_batch_job_html_reads_only_this_jobs_canonical_envelopes(monkeypa
     assert "原因码" not in html
     assert "病历引用" not in html
     assert "rec_0123456789abcdef01234567" not in html
-    assert "2026-07-20 02:00:00《会诊记录单》（第2次）" in html
-    assert "第2次）意见补充明确诊疗判断" in html
-    assert "推荐写法：请按“病情判断—具体措施—执行时点或条件" in html
+    # 旧式测试数据不具备正式 Renderer 生成的结论；导出不能借内部文书 ID
+    # 重建定位，也不能保留未经过公开合同的自由文本建议。
+    assert "CONSULT-1" not in html
+    assert "CONSULT-2" not in html
     assert "PRIVATE_PATIENT_NAME" not in html
     assert "任意上游建议不得直接导出" not in html
     assert "CT/MRI 报告缺少权威报告时间" in html
