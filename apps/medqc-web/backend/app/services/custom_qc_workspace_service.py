@@ -2074,21 +2074,32 @@ def _export_customer_safe_csv(job: Dict[str, Any], *, hmac_key: str) -> StringIO
     return render_customer_safe_csv(rows=rows, summary=summary)
 
 
+def _canonical_customer_export_rows(
+    job: Dict[str, Any],
+    *,
+    hmac_key: str,
+    canonical_items: Sequence[Dict[str, Any]],
+) -> tuple[List[Dict[str, Any]], List[List[str]], Dict[str, Any]]:
+    canonical_job = {
+        "id": job.get("id"),
+        "filters": {"rule_set_key": LUXIAN_0609_RULE_SET_KEY},
+        "items": list(canonical_items),
+    }
+    return _customer_export_rows(
+        canonical_job,
+        hmac_key=hmac_key,
+        include_luxian_canonical_remediation=True,
+    )
+
+
 def _export_customer_safe_html(
     job: Dict[str, Any],
     *,
     hmac_key: str,
     canonical_items: Sequence[Dict[str, Any]],
 ) -> str:
-    canonical_job = {
-        "id": job.get("id"),
-        "filters": {"rule_set_key": LUXIAN_0609_RULE_SET_KEY},
-        "items": list(canonical_items),
-    }
-    items, rows, summary = _customer_export_rows(
-        canonical_job,
-        hmac_key=hmac_key,
-        include_luxian_canonical_remediation=True,
+    items, rows, summary = _canonical_customer_export_rows(
+        job, hmac_key=hmac_key, canonical_items=canonical_items,
     )
     return render_customer_safe_html(items=items, rows=rows, summary=summary)
 
@@ -4811,10 +4822,12 @@ class CustomQCWorkspaceService:
 
     def export_batch_job_workbook(self, *, job: Dict[str, Any]) -> BytesIO:
         if _is_luxian_0609_export_job(job):
-            return _export_customer_safe_workbook(
+            items, rows, summary = _canonical_customer_export_rows(
                 job,
                 hmac_key=customer_safe_projection_key(),
+                canonical_items=self._load_batch_job_export_items(job=job),
             )
+            return render_customer_safe_workbook(items=items, rows=rows, summary=summary)
         return self._export_batch_job_workbook_legacy(job=job)
 
     def _export_batch_job_workbook_legacy(self, *, job: Dict[str, Any]) -> BytesIO:
@@ -5016,10 +5029,12 @@ class CustomQCWorkspaceService:
 
     def export_batch_job_csv(self, *, job: Dict[str, Any]) -> StringIO:
         if _is_luxian_0609_export_job(job):
-            return _export_customer_safe_csv(
+            _items, rows, summary = _canonical_customer_export_rows(
                 job,
                 hmac_key=customer_safe_projection_key(),
+                canonical_items=self._load_batch_job_export_items(job=job),
             )
+            return render_customer_safe_csv(rows=rows, summary=summary)
         return self._export_batch_job_csv_legacy(job=job)
 
     def _export_batch_job_csv_legacy(self, *, job: Dict[str, Any]) -> StringIO:
@@ -5106,12 +5121,20 @@ class CustomQCWorkspaceService:
             allow_partial=allow_partial,
         )
 
+    def _load_batch_job_export_items(self, *, job: Dict[str, Any]) -> List[Dict[str, Any]]:
+        summary = job.get("summary") if isinstance(job.get("summary"), dict) else {}
+        allow_partial = (
+            _safe_text(job.get("status")) == "failed"
+            and _safe_text(summary.get("execution_status")) == "partial_failed"
+        )
+        return self._load_batch_job_canonical_items(job=job, allow_partial=allow_partial)
+
     def export_batch_job_html(self, *, job: Dict[str, Any]) -> str:
         if _is_luxian_0609_export_job(job):
             return _export_customer_safe_html(
                 job,
                 hmac_key=customer_safe_projection_key(),
-                canonical_items=self._load_batch_job_canonical_items(job=job),
+                canonical_items=self._load_batch_job_export_items(job=job),
             )
         return self._export_batch_job_html_legacy(job=job)
 

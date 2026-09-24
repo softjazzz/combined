@@ -1,5 +1,6 @@
 import csv
 import json
+from copy import deepcopy
 from io import BytesIO, StringIO
 from typing import Any
 
@@ -21,7 +22,7 @@ from app.services.custom_qc_workspace_service import (
 
 def _service() -> CustomQCWorkspaceService:
     service = object.__new__(CustomQCWorkspaceService)
-    service._load_batch_job_canonical_items = lambda *, job: flatten_customer_safe_result_items(
+    service._load_batch_job_canonical_items = lambda *, job, allow_partial=False: flatten_customer_safe_result_items(
         job,
         hmac_key=customer_safe_projection_key(),
     )
@@ -207,6 +208,15 @@ def test_export_batch_job_html_reads_only_this_jobs_canonical_envelopes(monkeypa
     }
 
     html = service.export_batch_job_html(job=job)
+    csv_text = service.export_batch_job_csv(job=job).getvalue()
+    workbook = load_workbook(service.export_batch_job_workbook(job=job), read_only=True)
+    workbook_text = "\n".join(
+        str(value)
+        for sheet in workbook.worksheets
+        for row in sheet.iter_rows(values_only=True)
+        for value in row
+        if value is not None
+    )
 
     assert "LX0609-03-01-03" in html
     assert "LX0609-999" not in html
@@ -228,28 +238,70 @@ def test_export_batch_job_html_reads_only_this_jobs_canonical_envelopes(monkeypa
     assert "PRIVATE_FREE_TEXT" not in html
     assert "PRIVATE_FREE_SUGGESTION" not in html
     assert html.count("data-record-group") == 1
+    for exported in (csv_text, workbook_text):
+        assert "LX0609-03-01-03" in exported
+        assert "LX0609-06-01-04" in exported
+        assert "LX0609-999" not in exported
+        assert "legacy-record-must-not-render" not in exported
+        assert "PRIVATE_PATIENT_NAME" not in exported
+        assert "PRIVATE_FREE_SUGGESTION" not in exported
+
+    partial_job = {
+        **job,
+        "status": "failed",
+        "success_count": 1,
+        "summary": {"execution_status": "partial_failed"},
+    }
+    assert "LX0609-03-01-03" in service.export_batch_job_html(job=partial_job)
+    assert "LX0609-03-01-03" in service.export_batch_job_csv(job=partial_job).getvalue()
+    partial_workbook = load_workbook(service.export_batch_job_workbook(job=partial_job), read_only=True)
+    assert any(
+        value == "LX0609-03-01-03"
+        for sheet in partial_workbook.worksheets
+        for row in sheet.iter_rows(values_only=True)
+        for value in row
+    )
+
+    damaged = deepcopy(envelope)
+    damaged["items"][0]["customer_display_facts"]["source_document_ids"] = ["CONSULT-1"]
+    session.rows[0]["envelope_json"] = json.dumps(damaged, ensure_ascii=False)
+    for export in (
+        service.export_batch_job_html,
+        service.export_batch_job_csv,
+        service.export_batch_job_workbook,
+    ):
+        with pytest.raises(ValueError, match="解释合同不完整"):
+            export(job=job)
 
 
 def test_batch_html_rejects_incomplete_frozen_record_scope():
     service = object.__new__(CustomQCWorkspaceService)
-
+    job = {
+        "id": "job-incomplete-scope",
+        "created_by": "owner-1",
+        "status": "completed",
+        "total_records": 2,
+        "filters": {
+            "rule_set_key": "luxian_0609_qc_v1",
+            "rule_set_version": "2026-06-09",
+            "record_refs": [],
+        },
+        "items": [{"rule_id": "LX0609-01-01-01", "status": "compliant"}],
+    }
     with pytest.raises(ValueError, match="冻结病历范围"):
         service._load_batch_job_canonical_items(
-            job={
-                "id": "job-incomplete-scope",
-                "created_by": "owner-1",
-                "status": "completed",
-                "total_records": 2,
-                "filters": {
-                    "rule_set_key": "luxian_0609_qc_v1",
-                    "rule_set_version": "2026-06-09",
-                    "record_refs": [],
-                },
-            },
+            job=job,
             session_factory=lambda: (_ for _ in ()).throw(
                 AssertionError("冻结范围无效时不得查询Envelope")
             ),
         )
+    for export in (
+        service.export_batch_job_html,
+        service.export_batch_job_csv,
+        service.export_batch_job_workbook,
+    ):
+        with pytest.raises(ValueError, match="冻结病历范围"):
+            export(job=job)
 
 
 def test_export_batch_job_html_groups_records_and_sanitizes_internal_fields():
