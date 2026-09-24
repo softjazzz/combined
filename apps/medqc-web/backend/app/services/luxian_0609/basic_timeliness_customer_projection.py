@@ -637,8 +637,10 @@ def validate_published_rescue_timeliness_facts(raw: Any) -> dict[str, Any] | Non
     return facts
 
 
-def validate_published_admission_timeliness_facts(raw: Any) -> dict[str, Any] | None:
-    """原始001公开读取只验证已发布字段，不再调用内部安全投影。"""
+def _validate_published_admission_or_first_course_timeliness_facts(
+    raw: Any, *, target_document: str, threshold_hours: int,
+) -> dict[str, Any] | None:
+    """001/002 共用纯技术时限字段校验，保留执行器已经发布的数值。"""
 
     if not isinstance(raw, Mapping):
         return None
@@ -662,9 +664,9 @@ def validate_published_admission_timeliness_facts(raw: Any) -> dict[str, Any] | 
         or not set(facts) <= allowed
         or not isinstance(kind, str)
         or not isinstance(state, str)
-        or facts.get("target_document") != "admission_record"
+        or facts.get("target_document") != target_document
         or type(facts.get("threshold_hours")) is not int
-        or facts["threshold_hours"] != 24
+        or facts["threshold_hours"] != threshold_hours
         or not isinstance(label, str)
         or not label.strip()
         or label != label.strip()
@@ -673,7 +675,9 @@ def validate_published_admission_timeliness_facts(raw: Any) -> dict[str, Any] | 
 
     if kind == "evidence_time_conflict":
         if (
-            state != "before"
+            target_document != "admission_record"
+            or threshold_hours != 24
+            or state != "before"
             or set(facts) != required | {
                 "anchor_time", "observed_time", "time_conflict_seconds",
             }
@@ -701,7 +705,8 @@ def validate_published_admission_timeliness_facts(raw: Any) -> dict[str, Any] | 
     ) or "time_conflict_seconds" in facts:
         return None
     if "document_content_state" in facts and (
-        kind != "timeliness_requirement_not_met"
+        target_document != "admission_record"
+        or kind != "timeliness_requirement_not_met"
         or state != "missing"
         or facts["document_content_state"] != "blank_or_placeholder"
     ):
@@ -736,13 +741,15 @@ def validate_published_admission_timeliness_facts(raw: Any) -> dict[str, Any] | 
     ):
         return None
     expected_derived: dict[str, float] = {}
-    if elapsed is not None and state == "late" and elapsed > 24:
-        expected_derived["overdue_hours"] = round(float(elapsed) - 24, 2)
-    elif elapsed is not None and state == "late" and elapsed == 24:
+    if elapsed is not None and state == "late" and elapsed > threshold_hours:
+        expected_derived["overdue_hours"] = round(float(elapsed) - threshold_hours, 2)
+    elif elapsed is not None and state == "late" and elapsed == threshold_hours:
         if "overdue_hours" in facts:
             expected_derived["overdue_hours"] = 0.0
     elif elapsed is not None and state == "within":
-        expected_derived["remaining_hours"] = round(max(0.0, 24 - float(elapsed)), 2)
+        expected_derived["remaining_hours"] = round(
+            max(0.0, threshold_hours - float(elapsed)), 2,
+        )
     for key in ("overdue_hours", "remaining_hours"):
         if (key in facts) != (key in expected_derived):
             return None
@@ -754,6 +761,22 @@ def validate_published_admission_timeliness_facts(raw: Any) -> dict[str, Any] | 
         ):
             return None
     return facts
+
+
+def validate_published_admission_timeliness_facts(raw: Any) -> dict[str, Any] | None:
+    """原始001公开读取只校验已发布事实。"""
+
+    return _validate_published_admission_or_first_course_timeliness_facts(
+        raw, target_document="admission_record", threshold_hours=24,
+    )
+
+
+def validate_published_first_course_timeliness_facts(raw: Any) -> dict[str, Any] | None:
+    """原始002公开读取只校验已发布事实。"""
+
+    return _validate_published_admission_or_first_course_timeliness_facts(
+        raw, target_document="first_course_record", threshold_hours=8,
+    )
 
 
 def basic_timeliness_customer_fact_status_is_valid(
@@ -801,5 +824,6 @@ __all__ = [
     "is_basic_timeliness_customer_rule",
     "safe_basic_timeliness_customer_display_facts",
     "validate_published_admission_timeliness_facts",
+    "validate_published_first_course_timeliness_facts",
     "validate_published_rescue_timeliness_facts",
 ]
