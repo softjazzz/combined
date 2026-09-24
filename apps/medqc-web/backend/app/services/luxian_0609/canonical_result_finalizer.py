@@ -476,6 +476,15 @@ def validate_luxian_0609_published_customer_display_facts(
         if not valid:
             raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
         return validated
+    from .consultation_customer_projection import (
+        is_consultation_customer_rule,
+        validate_published_consultation_facts,
+    )
+    if is_consultation_customer_rule(normalized_rule_id):
+        validated = validate_published_consultation_facts(rule_id=normalized_rule_id, raw=raw)
+        if validated is None:
+            raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
+        return validated
     if raw is None or not isinstance(raw, dict):
         return None
     return validate_luxian_0609_executor_customer_display_facts(
@@ -903,6 +912,7 @@ def finalize_luxian_0609_reduced_customer_result(
     from .decision_reducer import ReducedRuleDecision
     from .basic_timeliness_customer_projection import is_basic_timeliness_customer_rule
     from .course_quality_result_mapping import is_course_quality_customer_rule
+    from .consultation_customer_projection import is_consultation_customer_rule
 
     if not isinstance(decision, ReducedRuleDecision):
         raise TypeError("decision must be a ReducedRuleDecision")
@@ -950,6 +960,7 @@ def finalize_luxian_0609_reduced_customer_result(
                 safe_facts
                 if (is_basic_timeliness_customer_rule(rule_id)
                     or is_course_quality_customer_rule(rule_id)
+                    or is_consultation_customer_rule(rule_id)
                     or rule_id == "LX0609-06-02-01")
                 and raw_customer_display_facts is not None
                 else NotImplemented

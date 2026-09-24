@@ -443,3 +443,138 @@ def safe_consultation_customer_display_facts(
         )
         or _safe_legacy_assessment_facts(rule_id=normalized_rule_id, raw=raw)
     )
+
+
+def _published_semantic_facts(rule_id: str, raw: dict[str, Any]) -> bool:
+    if rule_id not in {"LX0609-03-01-02", "LX0609-03-01-03"}:
+        return False
+    expected_kind = ("consultation_application_quality_check" if rule_id == "LX0609-03-01-02"
+                     else "consultation_opinion_quality_check")
+    requirement = ("说明具体临床问题、会诊理由或明确会诊目的" if rule_id == "LX0609-03-01-02"
+                   else "给出针对当前病情的明确诊疗意见")
+    base = {"verification_kind", "episode_count", "document_count", "semantic_state", "checked_requirement"}
+    if (set(raw) not in (base, base | {"episode_results"})
+            or raw["verification_kind"] != expected_kind or raw["checked_requirement"] != requirement
+            or type(raw["semantic_state"]) is not str
+            or raw["semantic_state"] not in {"clear", "vague", "missing", "absent", "unknown", "mixed"}
+            or type(raw["episode_count"]) is not int or not 0 <= raw["episode_count"] <= 100
+            or type(raw["document_count"]) is not int or not 0 <= raw["document_count"] <= 100):
+        return False
+    if "episode_results" not in raw:
+        return True  # 早期发布形态没有逐次明细。
+    results = raw["episode_results"]
+    if type(results) is not list or len(results) != raw["episode_count"]:
+        return False
+    states: list[str] = []
+    title = "会诊申请单" if rule_id == "LX0609-03-01-02" else "会诊记录单"
+    for index, item in enumerate(results, start=1):
+        base_item = {"episode_index", "semantic_state"}
+        locator = {"record_time", "document_title"}
+        if (type(item) is not dict or set(item) not in (base_item, base_item | locator)
+                or type(item["episode_index"]) is not int or item["episode_index"] != index
+                or type(item["semantic_state"]) is not str
+                or item["semantic_state"] not in {"clear", "vague", "missing", "unknown"}):
+            return False
+        if locator <= set(item) and (item["document_title"] != title or not _valid_record_time(item["record_time"])):
+            return False
+        states.append(item["semantic_state"])
+    state_set = set(states)
+    derived = "absent" if not state_set else next(iter(state_set)) if len(state_set) == 1 else "mixed"
+    return raw["semantic_state"] == derived
+
+
+def _published_recommendation_results(raw: dict[str, Any]) -> bool:
+    results = raw["recommendation_results"]
+    if type(results) is not list or len(results) != raw["recommendation_count"] or len(results) > 96:
+        return False
+    expected = {"episode_index", "recommendation_index", "action_type", "execution_state"}
+    for index, item in enumerate(results, start=1):
+        if (type(item) is not dict or set(item) != expected
+                or type(item["episode_index"]) is not int
+                or not 1 <= item["episode_index"] <= raw["completed_opinion_episode_count"]
+                or type(item["recommendation_index"]) is not int or item["recommendation_index"] != index
+                or type(item["action_type"]) is not str
+                or item["action_type"] not in {"medication", "test", "procedure", "transfer", "monitoring", "other"}
+                or type(item["execution_state"]) is not str
+                or item["execution_state"] not in {"specific", "generic", "missing", "unknown"}):
+            return False
+    return all(raw[f"{state}_execution_count"] == sum(item["execution_state"] == state for item in results)
+               for state in ("specific", "generic", "missing"))
+
+
+def _published_recommendation_evidence(raw: dict[str, Any]) -> bool:
+    evidence = raw["recommendation_evidence"]
+    if type(evidence) is not list or len(evidence) != raw["recommendation_count"] or len(evidence) > 96:
+        return False
+    expected = {"episode_index", "recommendation_index", "execution_state", "opinion_evidence", "execution_evidence"}
+    for index, item in enumerate(evidence, start=1):
+        if (type(item) is not dict or set(item) != expected
+                or type(item["episode_index"]) is not int
+                or not 1 <= item["episode_index"] <= raw["completed_opinion_episode_count"]
+                or type(item["recommendation_index"]) is not int or item["recommendation_index"] != index
+                or type(item["execution_state"]) is not str
+                or item["execution_state"] not in {"specific", "generic", "missing", "unknown"}):
+            return False
+        if ("recommendation_results" in raw
+                and item["execution_state"] != raw["recommendation_results"][index - 1]["execution_state"]):
+            return False
+        for key in ("opinion_evidence", "execution_evidence"):
+            projected = project_selected_grouped_document_refs(
+                raw_refs=item[key], public=True,
+                allowed_source_types=_RECOMMENDATION_EVIDENCE_SOURCE_TYPES,
+            )
+            if projected is None or projected != item[key]:
+                return False
+    return all(raw[f"{state}_execution_count"] == sum(item["execution_state"] == state for item in evidence)
+               for state in ("specific", "generic", "missing"))
+
+
+def _published_execution_facts(rule_id: str, raw: dict[str, Any]) -> bool:
+    if rule_id not in {"LX0609-03-01-01", "LX0609-03-01-04"}:
+        return False
+    is_023 = rule_id == "LX0609-03-01-04"
+    base = {"verification_kind", "completed_opinion_episode_count", "recommendation_count",
+            "specific_execution_count", "generic_execution_count", "missing_execution_count", "relation_state"}
+    optional = {"recommendation_evidence"} if is_023 else {"recommendation_evidence", "recommendation_results"}
+    kind = "consultation_execution_quality_check" if is_023 else "consultation_execution_relation_check"
+    states = ({"specific_execution", "execution_missing_or_generic", "not_triggered",
+               "generic_or_copied_execution", "execution_record_absent", "source_incomplete",
+               "association_unresolved", "source_error"} if is_023 else
+              {"all_linked", "execution_missing", "not_triggered", "source_incomplete",
+               "association_unresolved", "source_error"})
+    if (not base <= set(raw) <= base | optional or raw["verification_kind"] != kind
+            or type(raw["relation_state"]) is not str or raw["relation_state"] not in states
+            or any(type(raw[key]) is not int or not 0 <= raw[key] <= 100 for key in (
+                "completed_opinion_episode_count", "recommendation_count", "specific_execution_count",
+                "generic_execution_count", "missing_execution_count"))):
+        return False
+    return (("recommendation_results" not in raw or _published_recommendation_results(raw))
+            and ("recommendation_evidence" not in raw or _published_recommendation_evidence(raw)))
+
+
+def validate_published_consultation_facts(*, rule_id: str, raw: Any) -> dict[str, Any] | None:
+    """仅验已发布公开 JSON，合法事实逐值返回，不重跑内部事实投影。"""
+    normalized = str(rule_id or "").strip().upper()
+    if not is_consultation_customer_rule(normalized) or type(raw) is not dict or any(type(key) is not str for key in raw):
+        return None
+    if _published_semantic_facts(normalized, raw) or _published_execution_facts(normalized, raw):
+        return dict(raw)
+    if normalized == "LX0609-03-01-04":
+        if (set(raw) == {"failure_kind", "observed_expression", "missing_details"}
+                and raw["failure_kind"] == "consultation_execution_too_generic"
+                and raw["observed_expression"] == "仅笼统记录已按会诊意见执行"
+                and type(raw["missing_details"]) is list
+                and raw["missing_details"] == ["具体执行措施", "执行结果或后续安排"]):
+            return dict(raw)
+    if normalized in {"LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03"}:
+        expected = ({"consultation_assessment", "execution_record_state", "execution_candidate_count"}
+                    if normalized == "LX0609-03-01-01" else {"consultation_assessment"})
+        if set(raw) == expected and type(raw["consultation_assessment"]) is str and raw["consultation_assessment"] in {"明确", "不符合要求"}:
+            if normalized != "LX0609-03-01-01" or (
+                type(raw["execution_record_state"]) is str
+                and raw["execution_record_state"] in {"已发现明确执行记录", "未发现执行记录"}
+                and type(raw["execution_candidate_count"]) is int
+                and 0 <= raw["execution_candidate_count"] <= 100
+            ):
+                return dict(raw)
+    return None
