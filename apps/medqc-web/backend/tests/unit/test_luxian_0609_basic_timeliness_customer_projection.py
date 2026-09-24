@@ -14,8 +14,10 @@ from app.services.luxian_0609.canonical_result_finalizer import (
     finalize_luxian_0609_executor_customer_display_facts,
     finalizer_owns_executor_customer_display_facts,
     finalizer_requires_public_fact_ref_evidence,
+    validate_luxian_0609_published_customer_display_facts,
 )
 import app.services.luxian_0609.canonical_result_finalizer as finalizer_module
+import app.services.luxian_0609.basic_timeliness_customer_projection as projection_module
 from app.services.luxian_0609.decision_model import (
     ApplicabilityState, EvidenceState, QcDirection, RuleDecision,
 )
@@ -300,6 +302,233 @@ def test_lx004_data_gap_fact_shape_is_accepted_without_reinterpreting_rescue_log
         status="data_gap",
         safe_facts=safe_facts,
     )
+
+
+def test_lx004_published_late_facts_are_read_without_recalculation():
+    raw = {
+        "failure_kind": "timeliness_requirement_not_met",
+        "target_document": "rescue_record",
+        "source_label": "抢救记录",
+        "timeliness_state": "late",
+        "threshold_hours": 6,
+        "elapsed_hours": 7,
+    }
+    published = safe_basic_timeliness_customer_display_facts(
+        rule_id="LX0609-09-01-01", raw=raw,
+    )
+    assert published is not None
+    assert validate_luxian_0609_published_customer_display_facts(
+        rule_id="LX0609-09-01-01", raw=published,
+    ) == published
+
+    corrupted = {**published, "overdue_hours": 999}
+    with pytest.raises(ValueError, match="解释合同不完整"):
+        safe_customer_display_facts(
+            {"customer_display_facts": corrupted},
+            rule_id="LX0609-09-01-01",
+        )
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        {
+            "failure_kind": "timeliness_requirement_satisfied",
+            "target_document": "rescue_record",
+            "source_label": "抢救记录",
+            "timeliness_state": "within",
+            "threshold_hours": 6,
+            "elapsed_hours": 5,
+        },
+        {
+            "failure_kind": "timeliness_requirement_not_met",
+            "target_document": "rescue_record",
+            "source_label": "抢救记录",
+            "timeliness_state": "late",
+            "threshold_hours": 6,
+            "elapsed_hours": 7,
+            "rescue_events": [
+                {
+                    "event_index": 1,
+                    "event_state": "within",
+                    "rescue_end_time": "2026-09-01T00:00:00+08:00",
+                    "document_completion_time": "2026-09-01T05:00:00+08:00",
+                    "elapsed_hours": 5,
+                },
+                {
+                    "event_index": 2,
+                    "event_state": "late",
+                    "rescue_end_time": "2026-09-02T00:00:00+08:00",
+                    "document_completion_time": "2026-09-02T07:00:00+08:00",
+                    "elapsed_hours": 7,
+                },
+            ],
+        },
+        {
+            "failure_kind": "timeliness_requirement_not_met",
+            "target_document": "rescue_record",
+            "source_label": "抢救记录",
+            "timeliness_state": "missing",
+            "threshold_hours": 6,
+        },
+        {
+            "failure_kind": "rescue_end_time_missing",
+            "target_document": "rescue_record",
+            "source_label": "抢救记录",
+            "timeliness_state": "missing_time",
+            "threshold_hours": 6,
+            "observed_time": "2026-09-01T05:00:00+08:00",
+        },
+        {
+            "failure_kind": "document_completion_time_missing",
+            "target_document": "rescue_record",
+            "source_label": "抢救记录",
+            "timeliness_state": "missing_time",
+            "threshold_hours": 6,
+            "anchor_time": "2026-09-01T00:00:00+08:00",
+        },
+        {
+            "failure_kind": "authoritative_time_conflict",
+            "target_document": "rescue_record",
+            "source_label": "抢救记录",
+            "timeliness_state": "conflict",
+            "threshold_hours": 6,
+            "anchor_time": "2026-09-01T07:00:00+08:00",
+            "observed_time": "2026-09-01T05:00:00+08:00",
+        },
+        {
+            "failure_kind": "rescue_record_missing_after_trigger",
+            "target_document": "rescue_record",
+            "source_label": "抢救记录",
+        },
+    ],
+)
+def test_lx004_published_fact_branches_are_read_without_internal_projection(
+    raw: dict[str, object], monkeypatch: pytest.MonkeyPatch,
+):
+    published = projection_module.safe_basic_timeliness_customer_display_facts(
+        rule_id="LX0609-09-01-01", raw=raw,
+    )
+    assert published is not None
+
+    def forbidden_projection(*args: object, **kwargs: object) -> None:
+        raise AssertionError("读取公开事实时不应调用内部发布投影")
+
+    monkeypatch.setattr(
+        projection_module, "safe_basic_timeliness_customer_display_facts",
+        forbidden_projection,
+    )
+    monkeypatch.setattr(
+        finalizer_module, "validate_luxian_0609_executor_customer_display_facts",
+        forbidden_projection,
+    )
+    assert safe_customer_display_facts(
+        {"customer_display_facts": published}, rule_id="LX0609-09-01-01",
+    ) == published
+
+
+@pytest.mark.parametrize(
+    "changed",
+    [
+        {"remaining_hours": 999},
+        {"elapsed_hours": 5, "remaining_hours": 0},
+        {"trigger_source": "inpat_nondrug_order.rescue_order"},
+        {"source_document_id": "private-id"},
+    ],
+)
+def test_lx004_published_facts_reject_added_or_inconsistent_fields(
+    changed: dict[str, object],
+):
+    published = deepcopy(_WITHIN_FACTS_BY_RULE["LX0609-09-01-01"])
+    published.update(changed)
+    with pytest.raises(ValueError, match="解释合同不完整"):
+        safe_customer_display_facts(
+            {"customer_display_facts": published}, rule_id="LX0609-09-01-01",
+        )
+
+
+def test_lx004_published_multi_event_rejects_private_id_and_changed_elapsed():
+    raw = {
+        "failure_kind": "timeliness_requirement_not_met",
+        "target_document": "rescue_record",
+        "source_label": "抢救记录",
+        "timeliness_state": "late",
+        "threshold_hours": 6,
+        "elapsed_hours": 7,
+        "rescue_events": [
+            {
+                "event_index": index,
+                "event_state": "late",
+                "rescue_end_time": f"2026-09-0{index}T00:00:00+08:00",
+                "document_completion_time": f"2026-09-0{index}T07:00:00+08:00",
+                "elapsed_hours": 7,
+            }
+            for index in (1, 2)
+        ],
+    }
+    published = projection_module.safe_basic_timeliness_customer_display_facts(
+        rule_id="LX0609-09-01-01", raw=raw,
+    )
+    assert published is not None
+    for changed_key, changed_value in (
+        ("source_document_id", "private-id"),
+        ("elapsed_hours", 999),
+    ):
+        corrupted = deepcopy(published)
+        corrupted["rescue_events"][0][changed_key] = changed_value
+        with pytest.raises(ValueError, match="解释合同不完整"):
+            safe_customer_display_facts(
+                {"customer_display_facts": corrupted}, rule_id="LX0609-09-01-01",
+            )
+
+
+@pytest.mark.parametrize("elapsed", [0.005, 0.055, 5.995, 6.001, 6.005, 6.995, 7.005])
+@pytest.mark.parametrize(
+    ("kind", "state"),
+    [
+        ("timeliness_requirement_satisfied", "within"),
+        ("timeliness_requirement_not_met", "late"),
+    ],
+)
+def test_lx004_published_rounding_keeps_existing_two_step_values(
+    elapsed: float, kind: str, state: str,
+):
+    published = projection_module.safe_basic_timeliness_customer_display_facts(
+        rule_id="LX0609-09-01-01",
+        raw={
+            "failure_kind": kind,
+            "target_document": "rescue_record",
+            "source_label": "抢救记录",
+            "timeliness_state": state,
+            "threshold_hours": 6,
+            "elapsed_hours": elapsed,
+        },
+    )
+    assert published is not None
+    assert safe_customer_display_facts(
+        {"customer_display_facts": published}, rule_id="LX0609-09-01-01",
+    ) == published
+
+
+@pytest.mark.parametrize(
+    "changed",
+    [
+        {"failure_kind": []},
+        {"timeliness_state": []},
+        {"threshold_hours": True},
+        {"elapsed_hours": 10 ** 400},
+        {"rescue_events": [{"event_index": 1, "event_state": []}]},
+    ],
+)
+def test_lx004_malformed_published_facts_fail_closed_without_type_error(
+    changed: dict[str, object],
+):
+    published = deepcopy(_WITHIN_FACTS_BY_RULE["LX0609-09-01-01"])
+    published.update(changed)
+    with pytest.raises(ValueError, match="解释合同不完整"):
+        safe_customer_display_facts(
+            {"customer_display_facts": published}, rule_id="LX0609-09-01-01",
+        )
 
 
 def test_lx001_uncertain_conflict_fact_shape_is_accepted():

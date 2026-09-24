@@ -57,6 +57,9 @@ from app.schemas.qc_sichuan import QcResultFeedbackRequest
 from app.services.luxian_0609.canonical_result_finalizer import (
     validate_luxian_0609_executor_customer_display_facts,
 )
+from app.services.luxian_0609.basic_timeliness_customer_projection import (
+    safe_basic_timeliness_customer_display_facts,
+)
 
 
 class _Rows:
@@ -1852,6 +1855,90 @@ def test_writer_accepts_frozen_canonical_status_semantics(status, is_compliant):
     )
 
     assert len(session.statements) == 2
+
+
+def test_original_rescue_timeliness_store_rejects_changed_published_overdue_hours():
+    rule_id = "LX0609-09-01-01"
+    published = safe_basic_timeliness_customer_display_facts(
+        rule_id=rule_id,
+        raw={
+            "failure_kind": "timeliness_requirement_not_met",
+            "target_document": "rescue_record",
+            "source_label": "抢救记录",
+            "timeliness_state": "late",
+            "threshold_hours": 6,
+            "elapsed_hours": 7,
+        },
+    )
+    assert published is not None
+    item = {
+        "record_id": "visit-1",
+        "visit_id": "visit-1",
+        "institute_id": "inst-1",
+        "patient_id": "patient-1",
+        "rule_id": rule_id,
+        "status": "non_compliant",
+        "result_status": "non_compliant",
+        "display_status": "non_compliant",
+        "is_compliant": False,
+        "reason_code": "requirement_violated",
+        "customer_display_facts": published,
+    }
+    table = workspace_module._record_result_envelopes_table().to_metadata(
+        MetaData(), schema=None,
+    )
+    engine = create_engine("sqlite://")
+    table.metadata.create_all(engine)
+    store = CanonicalResultStore(table)
+    try:
+        with Session(engine) as db_session:
+            store.replace_for_job(
+                db_session,
+                job_row={
+                    "id": "job-current",
+                    "created_by": "reviewer-a",
+                    "filters_json": json.dumps({
+                        "rule_set_key": "luxian_0609_qc_v1",
+                        "rule_set_version": "2026-06-09",
+                    }),
+                },
+                items=[item],
+                now=datetime(2026, 9, 24, 10, 0, 0),
+                projector=lambda raw: envelope_item_from_rule_result(
+                    raw, hmac_key="unit-test-key",
+                ),
+                projection_key="unit-test-key",
+            )
+            db_session.commit()
+            expected = {
+                "root_job_id": "job-current",
+                "institute_id": "inst-1",
+                "patient_id": "patient-1",
+                "visit_id": "visit-1",
+                "rule_set_key": "luxian_0609_qc_v1",
+                "rule_set_version": "2026-06-09",
+            }
+            loaded = store.load_selected(db_session, **expected)
+            assert loaded["items"][0]["customer_display_facts"] == published
+            assert loaded["items"][0]["status"] == "non_compliant"
+            assert loaded["items"][0]["reason_code"] == "requirement_violated"
+            projected = project_customer_safe_result_item(
+                loaded["items"][0], hmac_key="unit-test-key",
+            )
+            assert projected["customer_display_facts"] == published
+            assert projected["status"] == "non_compliant"
+            assert projected["reason_code"] == "requirement_violated"
+            assert projected.get("customer_evidence", []) == loaded["items"][0].get("customer_evidence", [])
+            changed = deepcopy(loaded)
+            changed["items"][0]["customer_display_facts"]["overdue_hours"] = 999
+            db_session.execute(
+                sa.update(table).values(envelope_json=json.dumps(changed)),
+            )
+            db_session.commit()
+            with pytest.raises(ValueError, match="解释合同不完整"):
+                store.load_selected(db_session, **expected)
+    finally:
+        engine.dispose()
 
 
 @pytest.mark.parametrize("status", ["uncertain", "technical_error"])
