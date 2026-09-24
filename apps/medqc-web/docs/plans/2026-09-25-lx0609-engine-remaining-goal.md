@@ -49,3 +49,5 @@ B 三入口固定输入补证：将旧集成夹具更新为四段式规则身份
 原 goal 已处于 active，不能并列新建；本卡将接续基线更新至 `d0c0f97a6`，保留 A/B/C/D 原退出合同。阶段 C 的代码级所有者及扩展链已有证据；A/B/D 仍为局部验证。先补正式服务端到 V5 页面**未拦截 API**的同结果读回，再核对三入口任务的恢复/配置漂移；PG 多进程竞争、真实安装包和独立临床判读需要对应环境与材料，单列外部验收，不用合成证据顶替。
 
 有限公开链复核（基线 `d0c0f97a6`）：`CanonicalResultStore.replace_for_job` 在写入前核对规则集合、状态和公开解释；`load_selected` 核对保存的 Envelope、发布文案签章与公开事实；`project_customer_safe_result_item` 对当前 LX0609 结果使用已保存结论/建议，旧内部形状才进入受控回退；批量 CSV/XLSX/HTML 均从 `load_root_job_items` 取同一 Canonical 行，再走 `_canonical_customer_export_rows`。这四处当前代码路径没有复现新的医学事实重判，保留原样，不再按规则族机械增加校验器。它仍是静态链路核对，下一项必须用正式服务端、真实页面的同一保存结果证实，尤其不能把此前的 Chrome API 拦截测试写成联机验收。
+
+随后完成[原始004真实 HTTP→V5 技术回读](../acceptance/2026-09-25-original-engine-live-http-v5.md)：隔离 SQLite 保存合成 Canonical，测试 FastAPI 服务挂载正式 `qc_sichuan` 读取路由，Vite 代理和实际 Chrome 均不拦截 API；latest/详情逐字段一致，页面原样显示状态、结论和建议。该测试补了真实网络桥接，但后端仍是合成测试服务，不是完整生产应用或客户 PG/临床验收。A 保持局部验证；下一项转入 B 的跨启动/配置漂移、D 的持久化竞争证据，不重复建设另一套结果 API。
