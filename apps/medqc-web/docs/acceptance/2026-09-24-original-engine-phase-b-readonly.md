@@ -59,3 +59,13 @@ raise SystemExit(pytest.main([
 ```
 
 最终运行 2/2 通过，`--confcutdir=tests/unit` 避免全局 `conftest` 初始化持久化依赖；`DATABASE_URL` 为空，测试中所有数据库与模型 I/O 边界均被替换。本次仅增加测试与报告，未改生产代码。
+
+## 后续最小生产修复（本树独立提交）
+
+上述只读结论保留为修复前基线。经独立审查后，只收敛已复现的两次 Settings 所有权：Worker 在任务开始解析 `resolve_mainline_rule_decision_settings(get_settings())` 后，仅正式 LX0609 bundle 调用把该对象显式传入 `SichuanQCService.evaluate_running_final_bundle_input`；门面透传给 running/final bundle 服务。服务对显式传入的正式任务直接使用这一对象，继续执行既有 `assert_luxian_0609_customer_native_delivery_ready` 与正式 native 计划门禁，并把同一对象交给 `prepare`。独立调用未传参数、以及非 LX0609 调用，仍走原 `get_settings` 路径。逐病例规则选择、版本标签、评价时点、医学判据、Prompt、并发值与计划构造位置均未改；三个大文件只加入口参数和单处配置选择，因为已证问题恰在这些入口的重读边界，不做结构拆分。
+
+同一探针扩展为两份合成病历，均选原始 001/004，Worker 初次配置启用 basic timeliness，服务的受控 `get_settings` 在后续可返回相同或关闭此族的另一对象。两种路径均 `completed`，服务读配置 0 次，`prepare` 对两份病例都收到 Worker 的同一 settings 对象、同一规则集合、原任务逐病例 horizon 和 `2026-07-20` 时点。每份病例原始 001 为 `data_gap / authoritative_time_missing`，004 为 `not_applicable / trigger_absent_complete`；两路径完全相同。计划仍共构造 7 次：Worker 任务级一次，逐病例 Worker 展示、bundle 服务、`prepare` 各一次。独立正式入口不传参数时读取配置一次；显式传入非法非主链配置不读取环境但仍被门禁拒绝；非 LX0609 即使收到可选参数也仍读取自己的配置一次。生产文件中未找到对 `settings` 对象的赋值或 `setattr` 写入。
+
+本修复仅消除**单个已接纳任务内** Worker 与服务重复读取环境导致的失败关闭路径，不能冻结部署后规则代码、跨子任务启动的配置，也不能据合成病例断言真实临床准确率或阶段 A 验收完成。测试 4/4 通过且全部数据库/模型 I/O 被替换，复跑命令仍为上节命令。该文件名沿用只读审计名；本节仅记录审计后获授权的独立最小修复，历史基线数字不得当作修复后表现。
+
+收尾回归发现既有服务门面测试精确比较参数：未显式传入任务配置时，若转发 `task_settings=None` 会改变旧调用形状。现仅在非空时透传；Worker 也仅对正式 LX0609 bundle 传该参数。修复后，任务配置探针、服务门面和冻结评价时点入口共 17/17 通过；原生主链配置相关用例 3/3、Worker 的非 LX0609 bundle 和时点/正式入口相关用例 5/5 通过。另有 `test_full_luxian_batch_worker_uses_unified_customer_package_entry[programmatic]` 与 `[customer]` 两个旧测试仍使用三位 `LX0609-001` 等编号，在 Worker 第 1314 行的既有四段式编号门禁失败，未到本次第 2316 行配置透传；它们不计入通过。Python 编译检查通过。Ruff 对本次新增代码未报错；`sichuan_qc_service.py` 全文件的 7 处旧告警在修改前的 `HEAD` 文件中已复现。前端 `npm run lint`、`npm run type-check` 因本工作树未安装 `eslint`、`vue-tsc` 而无法启动，未作为通过项。

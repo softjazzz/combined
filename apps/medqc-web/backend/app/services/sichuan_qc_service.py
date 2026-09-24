@@ -9,7 +9,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 
 from app.constants.doc_types import DOC_TYPE_CN_TO_EN, DOC_TYPE_FULL_MAP
-from ..core.settings import get_settings
+from ..core.settings import Settings, get_settings
 from ..core.http import safe_post_json
 from ..core.supabase_client import get_supabase
 from ..database.connection import SessionLocal
@@ -79,6 +79,7 @@ from .luxian_0609.execution import (
 from .luxian_0609.shadow_audit_summary import project_luxian_0609_shadow_summaries
 from .luxian_0609 import source_evidence_reader
 from .luxian_0609.rule_decision_settings import (
+    ReadOnlySettingsOverlay,
     assert_luxian_0609_customer_native_delivery_ready,  # noqa: F401 - 编排模块动态解引用
     resolve_mainline_rule_decision_settings,  # noqa: F401 - 编排模块动态解引用
 )
@@ -4529,6 +4530,7 @@ class SichuanQCService:
         evaluation_as_of_date: str | None = None,
         evaluation_horizon_policy: str | None = None,
         evaluation_horizon_unavailable_reason: str | None = None,
+        task_settings: Settings | ReadOnlySettingsOverlay | None = None,
         cancellation_check: Optional[Callable[[], bool]] = None,
         execution_trace_sink: Optional[Callable[[Dict[str, Any]], None]] = None,
     ) -> Dict[str, Any]:
@@ -4551,6 +4553,7 @@ class SichuanQCService:
             evaluation_horizon_unavailable_reason=evaluation_horizon_unavailable_reason,
             cancellation_check=cancellation_check,
             execution_trace_sink=execution_trace_sink,
+            **({"task_settings": task_settings} if task_settings is not None else {}),
         )
 
     async def evaluate_rule_for_visit(

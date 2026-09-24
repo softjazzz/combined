@@ -2313,6 +2313,11 @@ async def run_sichuan_workspace_batch_job(
                             refine_confidence_threshold=refine_confidence_threshold,
                             max_refine_candidates=max_refine_candidates,
                             rule_set_key=rule_set_key,
+                            **(
+                                {"task_settings": settings}
+                                if rule_set_key == LUXIAN_0609_RULE_SET_KEY
+                                else {}
+                            ),
                             evaluation_as_of_date=evaluation_as_of_date or None,
                             evaluation_horizon_policy=evaluation_horizon_policy,
                             evaluation_horizon_unavailable_reason=(
