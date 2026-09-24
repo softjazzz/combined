@@ -2580,6 +2580,34 @@ def test_invalid_published_json_type_is_controlled_through_store_and_single_reco
     assert result["reason_code"] == "canonical_result_envelope_invalid"
     assert result["items"] == []
 
+    if rule_id in {"LX0609-01-01-01", "LX0609-09-01-01"}:
+        # 复用实际SQLite中损坏的字节，补验真实HTTP路由的错误DTO搬运。
+        # 任务选择SQL与认证仍是替身，不能称为部署或权限完整验收。
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from app.core.security import get_current_user
+        from app.routers import qc_sichuan
+
+        app = FastAPI()
+        app.include_router(qc_sichuan.router)
+        app.dependency_overrides[get_current_user] = lambda: {
+            "id": "admin-001", "roles": ["admin"],
+        }
+        monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: service)
+        monkeypatch.setattr(workspace_module, "_session", lambda: _ReadSession([
+            [_selected_job()], [{"envelope_json": envelope_json}],
+        ]))
+        with TestClient(app) as client:
+            response = client.get(
+                "/api/v1/qc/sichuan/workspace/records/visit-1/latest-result",
+                params={"institute_id": "inst-1", "patient_id": "patient-1"},
+            )
+        assert response.status_code == 200
+        body = response.json()["data"]
+        assert body["state"] == "technical_error"
+        assert body["reason_code"] == "canonical_result_envelope_invalid"
+        assert body["items"] == []
+
 
 def test_writer_marks_envelope_as_canonical_straight_through():
     session = _WriteSession()
