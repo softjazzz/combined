@@ -8,6 +8,19 @@
 
 **Tech Stack：** Python、FastAPI、SQLAlchemy/PostgreSQL、pytest；复用现有 EvidenceSnapshot、RuleDecision、Reducer、Finalizer、Canonical Store；前端保持 Vue/TypeScript 既有交付结构。
 
+## 2026-09-24 GPT PRO阶段复审：当前优先级
+
+审核固定SHA `80576bf4b78d0f2a0942b4807b7d760385e38774`；结论两项P1、无确认P0/独立P2。报告采用转录函数及替身进行隔离验证，不是完整工程导入。以下两项先用本仓库实际调用链复现，再最小修复，不因报告措辞跳过主协调验收。
+
+| 阻断 | 已核对证据 | 派工与验收要求 |
+| --- | --- | --- |
+| P1-A01 合法无独立facts被拒绝 | 主协调亲读原始004无触发/来源缺口直接返回decision而无facts分支；实际import Finalizer对004/None抛ValueError | course_public_family在独立review-a01树负责基础事实/Finalizer/必要Store上下文及专属测试；从真实native发布结果到SQLite写读复现，合法不适用/资料不足通过，损坏确定性结果仍拒绝，不全空值放行 |
+| P1-D01 父刷新越过执行代次 | 主协调亲读父刷新仅id+非取消条件，重试确实轮换父子filters中的attempt；尚待本工程真实SQL交错复现 | shared_fact_audit_resume在独立review-d01树负责现有任务事务owner；父重试、子单独重试、两次刷新、新代次领取四种交错；条件失效后零Envelope写入，不只写前重查 |
+
+两代理base均80576bf4b，分别拥有Finalizer/Store与任务服务，无共享生产文件。其余十族审计派工已被替换，不继续机械增加公开校验器。先关闭这两个阻断，再执行下节A/B/C/D路线。
+
+评审另外指出：native_basic_timeliness.add_customer_fact在进入Finalizer前已做投影，因此先前“首次投影一次”的计数只覆盖Finalizer内部，不代表native→发布全链。已将其纠正为阶段A待收口项，未确认本次产生新的医学误判，不夸大为第三个P1。跨部署冻结、正式目录/接纳扩展链及PG恢复仍是未完成或证据缺口；不重新打开已证明有效的共享事实或叶任务代次修复。
+
 ## 2026-09-24 再收敛：当前长程目标与执行合同（优先于历史接续）
 
 用户明确要求“把实施重新收敛到原计划，重新制定goal目标”。本节是现有 active goal 所引用主计划的最新执行依据。保留已验证提交，不将旧目标假标完成，也不以更小的局部目标替代整体架构退出条件。
@@ -62,7 +75,7 @@
 | 滚动任务 | `MEDQC-022`，见 [PROJECT_ROLLING_TODO.md](PROJECT_ROLLING_TODO.md) |
 | 状态 | 用户要求重新收敛：按上方最新目标执行，四阶段仍未整体关闭；已验证修复保留 |
 | 当前阶段 | A正式公开链路验收收口；B/D已实现局部待阶段验收，C待正式扩展闭环 |
-| 下一项动作 | 按最新目标完成剩余公开链路只读盘点与原始规则正式读取/页面验证；不按17族机械迁移。之后按原阶段门槛验收B/C/D |
+| 下一项动作 | 优先复现并修复GPT PRO P1-A01合法无facts拒绝、P1-D01父刷新越代次；其后有限收口A正式链路，再按B/C/D退出条件验收 |
 | 生产代码基线 | 本轮原始规则重构前基线 `775c17ede53930a685324e523f818b53da441698`；旧轮基线保留在历史记录 |
 | 基线分支 | `codex/lx0609-rule-id-integration`，GitHub `softjazzz/combined` |
 | 当前实施应用目录 | `C:/Users/Coldplay/.codex/worktrees/lx0609-rule-id-integration/LX888/apps/medqc-web`；Sol 6 medium 子代理提交 `cdaa65077` 已摘取为 `a163a910c`；CT 独立提交为 `762776545` |
