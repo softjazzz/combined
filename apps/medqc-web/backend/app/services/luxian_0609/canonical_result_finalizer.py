@@ -467,6 +467,13 @@ def validate_luxian_0609_published_customer_display_facts(
         if validated is None:
             raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
         return validated
+    if normalized_rule_id == "LX0609-02-01-03":
+        from .course_quality_result_mapping import validate_published_course_007_facts
+
+        validated = validate_published_course_007_facts(raw)
+        if validated is None:
+            raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
+        return validated
     if raw is None or not isinstance(raw, dict):
         return None
     return validate_luxian_0609_executor_customer_display_facts(
@@ -938,7 +945,7 @@ def finalize_luxian_0609_reduced_customer_result(
             preserve_legacy_exception=True,
             _validated_facts=(
                 safe_facts
-                if (is_basic_timeliness_customer_rule(rule_id) or rule_id == "LX0609-06-02-01")
+                if (is_basic_timeliness_customer_rule(rule_id) or rule_id in {"LX0609-06-02-01", "LX0609-02-01-03"})
                 and raw_customer_display_facts is not None
                 else NotImplemented
             ),

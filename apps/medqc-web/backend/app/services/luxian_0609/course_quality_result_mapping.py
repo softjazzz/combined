@@ -181,6 +181,112 @@ def _safe_007(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     return facts
 
 
+def validate_published_course_007_facts(raw: Any) -> dict[str, Any] | None:
+    """只校验 007 已发布 JSON 事实，不重新投影或舍入。"""
+
+    if not isinstance(raw, dict) or any(type(key) is not str for key in raw):
+        return None
+    kind = raw.get("failure_kind")
+    if type(kind) is not str:
+        return None
+    keys = set(raw)
+    if kind == "unstable_patient_order_present":
+        return dict(raw) if keys == {"failure_kind", "stable_course_rule_applicable"} and raw["stable_course_rule_applicable"] is False else None
+    if kind == "course_interval_source_gap":
+        base = {"failure_kind", "gap_source", "gap_kind"}
+        counts = {"record_count", "missing_time_count"}
+        source, gap = raw.get("gap_source"), raw.get("gap_kind")
+        if (type(source) is not str or source not in {"inpat_registration", "evaluation_context.horizon", "daily_course_record", "senior_course_record"}
+                or type(gap) is not str or gap not in {"empty", "ambiguous", "time_missing", "unavailable", "truncated"}
+                or (keys != base and keys != base | counts)):
+            return None
+        if keys == base | counts and (
+            source not in _COURSE_SOURCES or gap != "time_missing"
+            or type(raw["record_count"]) is not int or type(raw["missing_time_count"]) is not int
+            or not 0 < raw["missing_time_count"] <= raw["record_count"]
+        ):
+            return None
+        return dict(raw)
+    if kind == "course_interval_capacity_exceeded":
+        expected = {"failure_kind", "admission_time", "horizon_lower_bound_time", "horizon_precision",
+                    "known_record_count", "missing_time_count", "minimum_required_records", "threshold_hours"}
+        known, missing, required = (raw.get(key) for key in (
+            "known_record_count", "missing_time_count", "minimum_required_records"))
+        if (keys != expected or not _strict_copy_time(raw.get("admission_time"))
+                or not _strict_copy_time(raw.get("horizon_lower_bound_time"))
+                or raw["admission_time"] >= raw["horizon_lower_bound_time"]
+                or type(raw.get("horizon_precision")) is not str
+                or raw["horizon_precision"] not in {"datetime", "date"}
+                or (raw["horizon_precision"] == "date" and not raw["horizon_lower_bound_time"].endswith("00:00:00"))
+                or not all(type(value) is int for value in (known, missing, required))
+                or known < 0 or not 0 < missing < required
+                or type(raw.get("threshold_hours")) is not int or raw["threshold_hours"] != 72):
+            return None
+        return dict(raw)
+
+    if kind not in {"course_record_interval_over_72h", "course_record_interval_within_72h"}:
+        return None
+    base = {"failure_kind", "interval_start_source", "interval_end_source", "interval_start_time",
+            "threshold_hours", "recorded_dates"}
+    dated = base | {"interval_end_date", "interval_end_precision"}
+    timed = base | {"interval_end_time", "interval_hours"}
+    enhanced = {"interval_start_position", "interval_end_position", "record_count",
+                "interval_seconds", "overdue_seconds"}
+    if keys not in (dated, dated | (enhanced - {"interval_seconds", "overdue_seconds"}), timed, timed | enhanced):
+        return None
+    start_source, end_source = raw.get("interval_start_source"), raw.get("interval_end_source")
+    dates = raw.get("recorded_dates")
+    if (type(start_source) is not str or start_source not in _COURSE_SOURCES | {"inpat_registration", "admission_record"}
+            or type(end_source) is not str or end_source not in _COURSE_SOURCES | {"evaluation_context.horizon"}
+            or not _time(raw.get("interval_start_time"))
+            or type(raw.get("threshold_hours")) is not int or raw["threshold_hours"] != 72
+            or not isinstance(dates, list) or len(dates) > 64
+            or not all(_date(item) for item in dates)):
+        return None
+    date_only = "interval_end_date" in keys
+    if date_only:
+        if (kind != "course_record_interval_over_72h" or end_source != "evaluation_context.horizon"
+                or raw.get("interval_end_precision") != "date" or not _date(raw.get("interval_end_date"))):
+            return None
+        try:
+            if datetime.strptime(raw["interval_end_date"], "%Y-%m-%d").date() <= (
+                datetime.strptime(raw["interval_start_time"], "%Y-%m-%d %H:%M:%S") + timedelta(hours=72)
+            ).date():
+                return None
+        except ValueError:
+            return None
+    else:
+        hours = raw.get("interval_hours")
+        try:
+            finite_hours = type(hours) in {int, float} and isfinite(float(hours))
+        except (OverflowError, ValueError):
+            finite_hours = False
+        if (not _time(raw.get("interval_end_time")) or not finite_hours
+                or hours < 0 or hours != round(float(hours), 2)
+                or (kind == "course_record_interval_within_72h" and hours > 72)):
+            return None
+    if keys - (dated if date_only else timed):
+        start, end, count = (raw.get(key) for key in (
+            "interval_start_position", "interval_end_position", "record_count"))
+        if (not all(type(value) is int for value in (start, end, count))
+                or not 0 <= start < end <= count + 1 or end != start + 1
+                or count != len(dates) or (date_only and end != count + 1)):
+            return None
+        if not date_only:
+            seconds, overdue = raw.get("interval_seconds"), raw.get("overdue_seconds")
+            if type(seconds) is not int or type(overdue) is not int:
+                return None
+            try:
+                actual = round((datetime.strptime(raw["interval_end_time"], "%Y-%m-%d %H:%M:%S")
+                                - datetime.strptime(raw["interval_start_time"], "%Y-%m-%d %H:%M:%S")).total_seconds())
+            except ValueError:
+                return None
+            if (actual <= 0 or seconds != actual or overdue != max(0, actual - 72 * 3600)
+                    or round(actual / 3600, 2) != raw["interval_hours"]):
+                return None
+    return dict(raw)
+
+
 def _safe_008(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     kind = raw.get("failure_kind")
     dates = {key: raw.get(key) for key in ("anchor_date", "horizon_date")}
