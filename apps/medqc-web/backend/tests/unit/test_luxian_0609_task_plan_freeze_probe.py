@@ -49,8 +49,10 @@ def _settings(*, basic_timeliness: bool) -> Settings:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("service_basic_timeliness", [True, False], ids=["same-settings", "changed-settings"])
+@pytest.mark.parametrize("record_subset", [False, True], ids=["full-scope", "per-record-subset"])
+@pytest.mark.parametrize("reuse_plan", [False, True], ids=["rebuild-baseline", "reuse-plan"])
 async def test_worker_bundle_prepare_plan_and_as_of_freeze_probe(
-    monkeypatch: pytest.MonkeyPatch, service_basic_timeliness: bool,
+    monkeypatch: pytest.MonkeyPatch, service_basic_timeliness: bool, record_subset: bool, reuse_plan: bool,
 ) -> None:
     workspace = _WorkspaceStub()
     workspace.job["scope"] = "final"
@@ -71,6 +73,9 @@ async def test_worker_bundle_prepare_plan_and_as_of_freeze_probe(
         "validation_mode": "programmatic",
         "record_evaluation_snapshot": [_horizon(record_id) for record_id in workspace.job["record_ids"]],
     }
+    if record_subset:
+        workspace.job["filters"]["record_rule_map"]["visit-002"] = [RULE_IDS[1]]
+    per_record_ids = workspace.job["filters"]["record_rule_map"]
     worker_settings = _settings(basic_timeliness=True)
     frozen_settings = worker_settings.model_copy(update={"LUXIAN_0609_FAMILY_MAX_CONCURRENCY": 2})
     workspace.job["filters"][LX0609_TASK_SETTINGS_FILTER_KEY] = capture_luxian_0609_task_settings(
@@ -108,7 +113,11 @@ async def test_worker_bundle_prepare_plan_and_as_of_freeze_probe(
             "as_of": kwargs["evaluation_as_of_date"],
             "horizon": dict(kwargs["evaluation_horizon_snapshot"] or {}),
             "settings": kwargs["settings"],
+            "plan": kwargs.get("prepared_package_plan"),
         })
+        if not reuse_plan:
+            # 同一输入走原先重新规划分支，作结果与任务状态的技术对照。
+            kwargs.pop("prepared_package_plan", None)
         return await original_prepare(**kwargs)
 
     original_evidence = execution_module.build_luxian_0609_evidence_read_session
@@ -159,13 +168,18 @@ async def test_worker_bundle_prepare_plan_and_as_of_freeze_probe(
     )
 
     assert settings_reads == ["worker"]
-    assert [stage for stage, *_ in plan_calls] == [
-        "worker", "worker", "bundle", "prepare", "worker", "bundle", "prepare",
+    per_record_stages = ["worker", "bundle"] if reuse_plan else ["worker", "bundle", "prepare"]
+    assert [stage for stage, *_ in plan_calls] == ["worker", *per_record_stages, *per_record_stages]
+    assert [selected for _, selected, _, _ in plan_calls] == [
+        RULE_IDS, *[tuple(per_record_ids[record_id])
+                    for record_id in workspace.job["record_ids"] for _ in per_record_stages],
     ]
-    assert all(selected == RULE_IDS for _, selected, _, _ in plan_calls)
     assert plan_calls[0][2] == RULE_IDS
     assert plan_calls[0][3] == ()
-    assert workspace.job["status"] == "completed"
+    # 子集探针在原先重新规划和复用路径均为部分失败；本项保留既有状态。
+    assert workspace.job["status"] == ("failed" if record_subset else "completed")
+    if record_subset:
+        assert [(item["rule_id"], item["error_phase"]) for item in workspace.failed_records] == [(RULE_IDS[0], "result_missing")]
     assert [
         (item["record_id"], item["rule_id"], item["status"], item["reason_code"])
         for item in workspace.items
@@ -176,13 +190,15 @@ async def test_worker_bundle_prepare_plan_and_as_of_freeze_probe(
             (RULE_IDS[0], "data_gap", "authoritative_time_missing"),
             (RULE_IDS[1], "not_applicable", "trigger_absent_complete"),
         )
+        if rule_id in per_record_ids[record_id]
     ]
     assert len(prepare_calls) == len(source_reads) == 2
     for index, record_id in enumerate(workspace.job["record_ids"]):
-        assert prepare_calls[index]["rule_ids"] == source_reads[index]["rule_ids"] == RULE_IDS
+        assert prepare_calls[index]["rule_ids"] == source_reads[index]["rule_ids"] == tuple(per_record_ids[record_id])
         assert prepare_calls[index]["as_of"] == source_reads[index]["as_of"] == AS_OF
         assert prepare_calls[index]["horizon"] == source_reads[index]["horizon"] == _horizon(record_id)
         assert prepare_calls[index]["settings"] is worker_settings
+        assert prepare_calls[index]["plan"].selected_rule_ids == tuple(per_record_ids[record_id])
 
 
 @pytest.mark.asyncio
@@ -248,3 +264,27 @@ async def test_non_luxian_bundle_ignores_task_settings(
             task_settings=_settings(basic_timeliness=False),
         )
     assert settings_reads == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("bad_plan", ["wrong-scope", "wrong-type"])
+async def test_prepared_plan_rejects_other_record_scope_before_source_read(monkeypatch, bad_plan):
+    settings = resolve_mainline_rule_decision_settings(_settings(basic_timeliness=True))
+    inventory = native_package.load_luxian_0609_dependency_inventory()
+    plan = native_package.build_luxian_0609_package_plan_from_settings(
+        inventory=inventory, selected_rule_ids=RULE_IDS, settings=settings,
+    )
+
+    def forbidden(**_kwargs):
+        raise AssertionError("错范围计划不得进入来源读取或重新规划")
+
+    monkeypatch.setattr(execution_module, "build_luxian_0609_evidence_read_session", forbidden)
+    monkeypatch.setattr(execution_module, "build_luxian_0609_package_plan_from_settings", forbidden)
+    with pytest.raises(ValueError, match="预备计划与当前病例规则范围不一致"):
+        await execution_module.prepare_luxian_0609_execution(
+            rule_set_key="luxian_0609_qc_v1", prepared_rules=[],
+            visit_id="synthetic", medical_text="", evidence_payload={}, llm_client=_NoModel(),
+            settings=settings, selected_customer_rule_ids=[RULE_IDS[1]],
+            prepared_package_plan=plan if bad_plan == "wrong-scope" else {},
+            institute_id="HOSP-001", patient_id="PAT-synthetic",
+        )

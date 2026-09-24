@@ -44,6 +44,9 @@ async def test_three_real_entry_routes_keep_original_001_004_task_inputs(monkeyp
 
     monkeypatch.setattr(qc_sichuan, "datetime", _FrozenDatetime)
     monkeypatch.setattr(qc_sample_pools, "datetime", _FrozenDatetime)
+    settings = _settings(basic_timeliness=True)
+    monkeypatch.setattr(qc_sichuan, "get_settings", lambda: settings)
+    monkeypatch.setattr(qc_sample_pools, "get_settings", lambda: settings)
     submitted: list[tuple[str, str]] = []
     monkeypatch.setattr(
         qc_sichuan, "submit_detached_task",
@@ -113,7 +116,6 @@ async def test_three_real_entry_routes_keep_original_001_004_task_inputs(monkeyp
     assert created["customer_sample"]["filters"]["rule_ids"] == list(RULE_IDS)
     assert len(submitted) == 3
 
-    settings = _settings(basic_timeliness=True)
     rows_by_source = {} if source_mode == "empty" else {
         "inpat_registration": [{"admission_datetime": "2026-09-20 08:00:00"}],
         "admission_record": [{

@@ -214,6 +214,7 @@ async def prepare_luxian_0609_execution(
     evaluation_horizon_snapshot: Mapping[str, Any] | None = None,
     evaluation_horizon_unavailable_reason: str | None = None,
     selected_customer_rule_ids: Iterable[str] | None = None,
+    prepared_package_plan: Luxian0609PackagePlan | None = None,
     trace_sink: Callable[[dict[str, Any]], None] | None = None,
 ) -> tuple[list[dict[str, Any]], Luxian0609ExecutionContext]:
     """Prepare LX0609 customer package execution without changing caller behavior."""
@@ -251,11 +252,20 @@ async def prepare_luxian_0609_execution(
             prepared_rule_ids=prepared_rule_ids,
         )
     )
-    package_plan = build_luxian_0609_package_plan_from_settings(
-        inventory=dependency_inventory,
-        selected_rule_ids=requested_customer_rule_ids,
-        settings=settings,
-    )
+    if prepared_package_plan is None:
+        package_plan = build_luxian_0609_package_plan_from_settings(
+            inventory=dependency_inventory,
+            selected_rule_ids=requested_customer_rule_ids,
+            settings=settings,
+        )
+    else:
+        # 仅接纳本次调用方已校验的不可变计划，不能套用任务全量或其他病例范围。
+        requested_ids = {str(value or "").strip().upper() for value in requested_customer_rule_ids}
+        requested_ids.discard("")
+        if (not isinstance(prepared_package_plan, Luxian0609PackagePlan)
+                or set(prepared_package_plan.selected_rule_ids) != requested_ids):
+            raise ValueError("LX0609预备计划与当前病例规则范围不一致")
+        package_plan = prepared_package_plan
     evidence_snapshot: Luxian0609EvidenceSnapshot | None = None
     evidence_materials: Luxian0609EvidenceMaterialStore | None = None
     evidence_snapshot_rule_refs: tuple[tuple[str, str], ...] = ()

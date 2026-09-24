@@ -15,6 +15,7 @@ from ..effect_priority_qc import (
 )
 from ..luxian_0609 import LUXIAN_0609_RULE_SET_KEY
 from ..luxian_0609.rule_decision_settings import ReadOnlySettingsOverlay
+from ..luxian_0609.native_package import Luxian0609PackagePlan
 
 
 def _resolve_facade_module(host: Any) -> Any:
@@ -92,6 +93,7 @@ async def evaluate_running_final_bundle_input(
             settings,
             context="evaluate_running_final_bundle_input",
         )
+    package_plan: Luxian0609PackagePlan | None = None
     selected_customer_rule_ids: tuple[str, ...] | None = None
     if normalized_rule_set_key == LUXIAN_0609_RULE_SET_KEY and resolved_rule_ids:
         normalized_requested_ids = tuple(
@@ -201,6 +203,7 @@ async def evaluate_running_final_bundle_input(
                 evaluation_horizon_unavailable_reason
             ),
             selected_customer_rule_ids=selected_customer_rule_ids,
+            **({"prepared_package_plan": package_plan} if package_plan is not None else {}),
             trace_sink=execution_trace_sink,
         )
 
