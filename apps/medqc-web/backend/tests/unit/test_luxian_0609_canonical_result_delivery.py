@@ -2260,13 +2260,20 @@ def test_pathology_published_facts_commit_and_read_without_reprojection(
 
 
 def _published_pilot_item_for_read_boundary(rule_id: str) -> dict[str, Any]:
-    if rule_id == "LX0609-01-01-01":
+    original_timeliness = {
+        "LX0609-01-01-01": ("admission_record", "入院记录", 24),
+        "LX0609-01-02-01": ("first_course_record", "首次病程记录", 8),
+        "LX0609-02-01-01": ("attending_course_record", "主治医师及以上首次查房记录", 48),
+        "LX0609-02-01-02": ("senior_course_record", "副主任医师或主任医师首次查房记录", 72),
+    }
+    if rule_id in original_timeliness:
+        target, label, threshold = original_timeliness[rule_id]
         facts = safe_basic_timeliness_customer_display_facts(
             rule_id=rule_id,
             raw={
                 "failure_kind": "timeliness_requirement_satisfied",
-                "target_document": "admission_record", "source_label": "入院记录",
-                "timeliness_state": "within", "threshold_hours": 24,
+                "target_document": target, "source_label": label,
+                "timeliness_state": "within", "threshold_hours": threshold,
                 "elapsed_hours": 1.0,
             },
         )
@@ -2343,8 +2350,9 @@ def _published_pilot_item_for_read_boundary(rule_id: str) -> dict[str, Any]:
         ("LX0609-09-01-02", "LX0609-06-02-01"),
         ("LX0609-09-01-01",),
         ("LX0609-01-01-01",),
+        ("LX0609-01-02-01", "LX0609-02-01-01", "LX0609-02-01-02"),
     ],
-    ids=["new_pilots", "original_004", "original_001"],
+    ids=["new_pilots", "original_004", "original_001", "original_002_005_006"],
 )
 def test_published_rules_keep_identity_through_sqlite_dto_feedback_and_exports(
     monkeypatch, rule_ids,
@@ -2488,6 +2496,9 @@ def test_published_rules_keep_identity_through_sqlite_dto_feedback_and_exports(
     ("rule_id", "path", "invalid"),
     [
         ("LX0609-01-01-01", ("remaining_hours",), 999),
+        ("LX0609-01-02-01", ("remaining_hours",), 999),
+        ("LX0609-02-01-01", ("remaining_hours",), 999),
+        ("LX0609-02-01-02", ("remaining_hours",), 999),
         ("LX0609-09-01-01", ("remaining_hours",), 999),
         ("LX0609-06-01-01", ("order_results",), "DELETE"),
         ("LX0609-06-01-01", ("order_results", 0, "course_locations"), []),
@@ -2580,7 +2591,10 @@ def test_invalid_published_json_type_is_controlled_through_store_and_single_reco
     assert result["reason_code"] == "canonical_result_envelope_invalid"
     assert result["items"] == []
 
-    if rule_id in {"LX0609-01-01-01", "LX0609-09-01-01"}:
+    if rule_id in {
+        "LX0609-01-01-01", "LX0609-01-02-01", "LX0609-09-01-01",
+        "LX0609-02-01-01", "LX0609-02-01-02",
+    }:
         # 复用实际SQLite中损坏的字节，补验真实HTTP路由的错误DTO搬运。
         # 任务选择SQL与认证仍是替身，不能称为部署或权限完整验收。
         from fastapi import FastAPI
