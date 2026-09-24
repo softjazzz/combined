@@ -134,14 +134,24 @@ def test_nested_events_and_non_json_numbers_fail_closed():
     assert published is not None
     damaged = deepcopy(published)
     damaged["event_results"][0]["source_document_id"] = "INTERNAL"
+    boolean_sequence = deepcopy(published)
+    boolean_sequence["event_results"][0]["sequence"] = True
     for changed in (
         damaged,
+        boolean_sequence,
         {**published, "threshold_hours": True},
         {**published, "actual_interval_hours": [float("nan")]},
         {**published, "actual_interval_hours": (6.0,)},
     ):
         with pytest.raises(ValueError, match="解释合同不完整"):
             validate_luxian_0609_published_customer_display_facts(rule_id=rule_id, raw=changed)
+
+    handoff_rule, handoff_raw = RAW_SHAPES[3]
+    handoff = mapping.safe_continuity_customer_display_facts(rule_id=handoff_rule, raw=handoff_raw)
+    assert handoff is not None
+    handoff["events"][0]["event_position"] = True
+    with pytest.raises(ValueError, match="解释合同不完整"):
+        validate_luxian_0609_published_customer_display_facts(rule_id=handoff_rule, raw=handoff)
 
 
 @pytest.mark.asyncio

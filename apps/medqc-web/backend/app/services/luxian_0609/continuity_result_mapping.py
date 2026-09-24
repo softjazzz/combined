@@ -164,10 +164,18 @@ def validate_published_continuity_facts(
         for key in _ALLOWED_KEYS[kind]:
             value = raw[key]
             if key == "event_results" and kind == "consultation_timeliness_check":
-                if type(value) is not list or not _valid_consultation_events(value):
+                if (
+                    type(value) is not list
+                    or any(type(event) is not dict or type(event.get("sequence")) is not int for event in value)
+                    or not _valid_consultation_events(value)
+                ):
                     return False, None
             elif key == "events" and kind == "physician_handoff_multi_event_check":
-                if type(value) is not list or not _valid_handoff_events(raw):
+                if (
+                    type(value) is not list
+                    or any(type(event) is not dict or type(event.get("event_position")) is not int for event in value)
+                    or not _valid_handoff_events(raw)
+                ):
                     return False, None
             elif (
                 (key in _PUBLISHED_INTEGER_FIELDS and type(value) is not int)
