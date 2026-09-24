@@ -1451,20 +1451,36 @@ def _sync_batch_job_parent_columns(*, schema: Optional[str]) -> None:
         "family_key": "VARCHAR(64)",
         "family_name": "VARCHAR(64)",
     }
+    index_name = "idx_custom_qc_batch_jobs_parent_job_id"
+    inspector = sa.inspect(engine)
+    existing_columns = {
+        column["name"]
+        for column in inspector.get_columns("custom_qc_batch_jobs", schema=schema)
+    }
+    existing_indexes = {
+        index["name"]
+        for index in inspector.get_indexes("custom_qc_batch_jobs", schema=schema)
+    }
+    missing_columns = [name for name in column_sql if name not in existing_columns]
+    needs_index = index_name not in existing_indexes
+    if not missing_columns and not needs_index:
+        return
+
     with engine.begin() as conn:
-        for column_name, column_type in column_sql.items():
+        for column_name in missing_columns:
             conn.execute(
                 text(
                     f"ALTER TABLE {table_prefix}custom_qc_batch_jobs "
-                    f"ADD COLUMN IF NOT EXISTS {column_name} {column_type}"
+                    f"ADD COLUMN IF NOT EXISTS {column_name} {column_sql[column_name]}"
                 )
             )
-        conn.execute(
-            text(
-                f"CREATE INDEX IF NOT EXISTS idx_custom_qc_batch_jobs_parent_job_id "
-                f"ON {table_prefix}custom_qc_batch_jobs(parent_job_id)"
+        if needs_index:
+            conn.execute(
+                text(
+                    f"CREATE INDEX IF NOT EXISTS {index_name} "
+                    f"ON {table_prefix}custom_qc_batch_jobs(parent_job_id)"
+                )
             )
-        )
 
 
 @lru_cache(maxsize=8)
