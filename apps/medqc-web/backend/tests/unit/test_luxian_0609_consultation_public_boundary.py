@@ -107,6 +107,19 @@ def test_023_public_nested_internal_refs_are_rejected(bad_key):
         validate_luxian_0609_published_customer_display_facts(rule_id=RULE_023, raw=damaged)
 
 
+@pytest.mark.parametrize("raw", [None, {}])
+def test_023_absent_consultation_keeps_empty_public_facts(raw):
+    assert validate_luxian_0609_published_customer_display_facts(
+        rule_id=RULE_023, raw=raw,
+        status="not_applicable", reason_code="trigger_absent_complete",
+    ) is None
+    with pytest.raises(ValueError, match="解释合同不完整"):
+        validate_luxian_0609_published_customer_display_facts(
+            rule_id=RULE_023, raw=raw,
+            status="non_compliant", reason_code="requirement_violated",
+        )
+
+
 def test_023_public_ref_value_and_unknown_field_are_rejected():
     internal = {"verification_kind": "consultation_execution_quality_check", **EXECUTION_BASE,
                 "relation_state": "specific_execution", "recommendation_evidence": [EVIDENCE]}

@@ -19,8 +19,11 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session, sessionmaker
 
+from tests.luxian_0609_identity_test_support import published_rule_ids
+
+from app.core.settings import Settings
 from app.core.security import get_current_user
-from app.database.models.cdm import AdmissionRecord, DischargeRecord, MedicalRecordFrontpage
+from app.database.models.cdm import AdmissionRecord, DischargeRecord, InpatRegistration, MedicalRecordFrontpage
 from app.routers import qc_sample_pools, qc_sichuan
 from app.services import custom_qc_sample_pool_service as sample_pool_module
 from app.services import custom_qc_workspace_service as workspace_module
@@ -74,10 +77,11 @@ class _ActivationStub:
         return None
 
 
-def _settings() -> SimpleNamespace:
+def _settings() -> Settings:
     """打开正式统一引擎和全部已实现原生包，禁止 shadow。"""
 
-    return SimpleNamespace(
+    return Settings(
+        _env_file=None, JWT_SECRET="lx075-isolated-test-secret",
         LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED=True,
         LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=True,
         LUXIAN_0609_NATIVE_EXECUTION_ENABLED=True,
@@ -116,7 +120,7 @@ def _install_workspace_sqlite(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
     workspace_module._drafts_table.cache_clear()
     workspace_module._batch_jobs_table.cache_clear()
     workspace_module._record_result_envelopes_table.cache_clear()
-    for model in (MedicalRecordFrontpage, AdmissionRecord, DischargeRecord):
+    for model in (MedicalRecordFrontpage, AdmissionRecord, DischargeRecord, InpatRegistration):
         model.__table__.create(bind=engine, checkfirst=True)
     with Session(engine) as session:
         for ref in (_RECORD_A, _RECORD_B):
@@ -174,7 +178,7 @@ def _install_evidence_fixture(monkeypatch: pytest.MonkeyPatch, *, consultation_r
         if consultation_row and source_key == "consultation_record":
             rows = [{"institute_id": _RECORD_A["institute_id"], "patient_id": str(kwargs["patient_id"]), "visit_id": visit_id,
                      "document_id": f"DOC-{visit_id}", "document_title": "会诊记录单", "record_time": "2026-07-02 09:30:00",
-                     "record_content": "因发热伴肝功能异常申请感染科会诊。会诊医师意见：考虑感染，建议继续保肝治疗。"}]
+                     "record_content": "因发热伴肝功能异常申请感染科会诊。会诊医师意见：考虑感染，建议复查血常规。"}]
         return SnapshotSourceRows.create(source_key=source_key, rows=rows, truncated=False, limit_rows=50)
 
     def build_fixture_session(**kwargs: Any) -> Any:
@@ -287,6 +291,7 @@ def _wire_production_entry(monkeypatch: pytest.MonkeyPatch, workspace: CustomQCW
     monkeypatch.setattr(batch_worker, "get_settings", lambda: settings)
     monkeypatch.setattr(sichuan_qc_service, "get_settings", lambda: settings)
     monkeypatch.setattr(qc_sichuan, "get_settings", lambda: settings)
+    monkeypatch.setattr(qc_sample_pools, "get_settings", lambda: settings)
     monkeypatch.setattr(batch_worker, "get_product_activation_service", lambda: _ActivationStub())
     monkeypatch.setattr(sichuan_qc_service, "build_adjudicator_runtime_config", lambda config: dict(config or {}))
     monkeypatch.setattr(batch_worker, "load_running_final_bundle", lambda *, institute_id, patient_id, visit_id, **_kwargs: _bundle(institute_id=str(institute_id), patient_id=str(patient_id), visit_id=str(visit_id)))
@@ -298,6 +303,7 @@ def _wire_production_entry(monkeypatch: pytest.MonkeyPatch, workspace: CustomQCW
     async def provide_service() -> Any:
         return service
     monkeypatch.setattr(qc_sichuan, "get_qc_service", provide_service)
+    monkeypatch.setattr(qc_sample_pools, "get_qc_service", provide_service)
 
 
 @pytest.mark.integration
@@ -316,7 +322,7 @@ def test_requested_75_empty_materials_deliver_70_equivalently_across_three_entri
     master = load_luxian_0609_rule_master()
     phase_scope = load_luxian_0609_phase_scope()
     contracts = load_luxian_0609_rule_contracts()
-    expected_ids = tuple(f"LX0609-{number:03d}" for number in range(1, 76))
+    expected_ids = published_rule_ids(1, 75)
     # 总表当前还包含 076--077；本验收的批准范围固定为 001--075，不能因
     # 总表扩展而误把后续点纳入本轮。但三份生产权威资料均须保有这个连续前缀。
     assert tuple(item.rule_id for item in master[:75]) == expected_ids
@@ -340,7 +346,11 @@ def test_requested_75_empty_materials_deliver_70_equivalently_across_three_entri
     assert set(customer_delivery_ids).union(excluded_ids) == set(expected_ids)
     envelope_by_job: dict[str, dict[str, dict[str, Any]]] = {}
 
-    def capture_envelope(job_id: str, _job: dict[str, Any], requested_ids: tuple[str, ...]) -> None:
+    def capture_envelope(job_id: str, job: dict[str, Any], requested_ids: tuple[str, ...]) -> None:
+        assert job["status"] == "completed", (
+            job.get("error_message"),
+            list(job.get("failed_records") or [])[:5],
+        )
         envelope_by_job[job_id] = _read_canonical(app, job_id, _RECORD_A, customer_delivery_ids)
 
     job_ids = _entry_job_ids(app=app, workspace=workspace, pool_id=pool_id, sample_item_id=sample_item_id, workspace_rule_ids=list(expected_ids), sample_rule_ids=list(customer_delivery_ids), on_terminal=capture_envelope)
@@ -372,7 +382,7 @@ def test_requested_75_empty_materials_deliver_70_equivalently_across_three_entri
 
 @pytest.mark.integration
 def test_consultation_semantic_llm_stub_is_normalized_across_three_entries(monkeypatch: pytest.MonkeyPatch, _isolated_database) -> None:
-    """有会诊资料时，022 的稳定 LLM semantic 调用、prompt、token 和结论按病历一致。"""
+    """现行023有明确会诊建议时，三入口的事实抽取和交付一致。"""
     engine, workspace = _isolated_database
     sample_pool_service = _install_sample_pool_sqlite(monkeypatch, engine)
     _install_evidence_fixture(monkeypatch, consultation_row=True)
@@ -383,22 +393,40 @@ def test_consultation_semantic_llm_stub_is_normalized_across_three_entries(monke
 
     async def stable_generate(_self: Any, prompt: str, **_kwargs: Any) -> dict[str, Any]:
         calls.append((prompt, 17, 5))
-        assert "会诊申请与意见事实核对器" in prompt
-        return {"choices": [{"message": {"content": json.dumps({"documents": [["consultation_record-1", ["application", "opinion"], "specific", "clear", "high"]]}, ensure_ascii=False)}}], "usage": {"prompt_tokens": 17, "completion_tokens": 5, "total_tokens": 22}, "_api_time": 0.01}
+        assert "episodes:[" in prompt
+        documents = json.loads(prompt.rsplit("输入：", 1)[1])["consultation_documents"]
+        assert len(documents) == 1
+        ref = documents[0]["ref"]
+        return {
+            "content": {"episodes": [{
+                "episode_ref": ref, "member_refs": [ref], "application_refs": [ref],
+                "opinion_refs": [ref], "application_state": "clear", "opinion_state": "clear",
+                "confidence": "high", "recommendations": [{
+                    "recommendation_ref": f"{ref}#r1", "opinion_ref": ref,
+                    "source_quote": "建议复查血常规", "normalized_action": "复查血常规",
+                    "action_type": "test",
+                }],
+            }], "non_target_refs": [], "unresolved_refs": []},
+            "usage": {"prompt_tokens": 17, "completion_tokens": 5, "total_tokens": 22},
+            "_api_time": 0.01,
+        }
     monkeypatch.setattr(sichuan_qc_service.SichuanQCLLMClient, "generate", stable_generate)
     pool_id, sample_item_id = _create_ready_sample_pool(engine, sample_pool_service)
     app = _api_app(service)
     jobs: list[dict[str, Any]] = []
-    rule_ids = ["LX0609-03-01-03"]
+    rule_ids = ["LX0609-03-01-04"]
     job_ids = _entry_job_ids(app=app, workspace=workspace, pool_id=pool_id, sample_item_id=sample_item_id, workspace_rule_ids=rule_ids)
     jobs = [_wait_for_terminal_job(workspace, job_id) for job_id in job_ids]
-    assert len(calls) == 4  # 单例 A + 批量 A/B + 样本池 A，每病历一条 semantic prompt。
+    assert [job["status"] for job in jobs] == ["completed"] * 3
+    assert [
+        _items_for_visit(job, _RECORD_A["visit_id"])["LX0609-03-01-04"]["status"]
+        for job in jobs
+    ] == ["non_compliant"] * 3
+    assert len(calls) == 2  # 固定三入口输入下的实际调用数，防止重复抽取增加。
     assert {prompt for prompt, _input, _output in calls} == {calls[0][0]}
     assert {(input_tokens, output_tokens) for _prompt, input_tokens, output_tokens in calls} == {(17, 5)}
-    single_item = _items_for_visit(jobs[0], _RECORD_A["visit_id"])["LX0609-03-01-03"]
-    batch_item = _items_for_visit(jobs[1], _RECORD_A["visit_id"])["LX0609-03-01-03"]
-    sample_item = _items_for_visit(jobs[2], _RECORD_A["visit_id"])["LX0609-03-01-03"]
+    single_item = _items_for_visit(jobs[0], _RECORD_A["visit_id"])["LX0609-03-01-04"]
+    batch_item = _items_for_visit(jobs[1], _RECORD_A["visit_id"])["LX0609-03-01-04"]
+    sample_item = _items_for_visit(jobs[2], _RECORD_A["visit_id"])["LX0609-03-01-04"]
     assert _canonical_tuple(single_item) == _canonical_tuple(batch_item) == _canonical_tuple(sample_item)
-    # 调用数按病历归一：单例 A、批量 A+B、样本池 A 均为每病历一次，且每次
-    # 可观察到相同 prompt 与 input/output token。当前 worker 的汇总 token
-    # 另由本文件的验收文档记录为已知持久化阻碍，不能伪造为 stub 值。
+    # 状态、事实和证据在三入口逐项相同；调用次数与 Token 另按上面的固定桩核对。

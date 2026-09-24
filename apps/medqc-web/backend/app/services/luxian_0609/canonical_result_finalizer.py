@@ -501,7 +501,9 @@ def validate_luxian_0609_published_customer_display_facts(
         validate_published_course_quality_facts,
     )
     if is_course_quality_customer_rule(normalized_rule_id):
-        valid, validated = validate_published_course_quality_facts(rule_id=normalized_rule_id, raw=raw)
+        valid, validated = validate_published_course_quality_facts(
+            rule_id=normalized_rule_id, raw=raw, status=status, reason_code=reason_code,
+        )
         if not valid:
             raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
         return validated
@@ -510,6 +512,13 @@ def validate_luxian_0609_published_customer_display_facts(
         validate_published_consultation_facts,
     )
     if is_consultation_customer_rule(normalized_rule_id):
+        if (
+            normalized_rule_id == "LX0609-03-01-04"
+            and (raw is None or raw == {})
+            and status == "not_applicable"
+            and reason_code == "trigger_absent_complete"
+        ):
+            return None
         validated = validate_published_consultation_facts(rule_id=normalized_rule_id, raw=raw)
         if validated is None:
             raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")

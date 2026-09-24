@@ -89,6 +89,30 @@ def test_018_absent_facts_keep_none_semantics():
         validate_luxian_0609_published_customer_display_facts(rule_id="LX0609-01-01-02", raw={"unexpected": 1})
 
 
+@pytest.mark.parametrize("rule_id", [
+    "LX0609-02-01-04", "LX0609-02-01-05", "LX0609-12-01-01", "LX0609-12-01-02",
+])
+@pytest.mark.parametrize("raw", [None, {}])
+def test_course_absent_trigger_has_no_published_facts(rule_id, raw):
+    assert validate_luxian_0609_published_customer_display_facts(
+        rule_id=rule_id, raw=raw,
+        status="not_applicable", reason_code="trigger_absent_complete",
+    ) is None
+    with pytest.raises(ValueError, match="解释合同不完整"):
+        validate_luxian_0609_published_customer_display_facts(
+            rule_id=rule_id, raw=raw,
+            status="non_compliant", reason_code="threshold_exceeded",
+        )
+
+
+@pytest.mark.parametrize("raw", [None, {}])
+def test_copy_rule_without_eligible_documents_has_no_published_facts(raw):
+    assert validate_luxian_0609_published_customer_display_facts(
+        rule_id="LX0609-12-01-02", raw=raw,
+        status="not_applicable", reason_code="eligibility_not_met",
+    ) is None
+
+
 @pytest.mark.parametrize("count", [65, 180])
 @pytest.mark.parametrize("kind", ["critical_daily_record_coverage_satisfied", "critical_daily_record_missing"])
 def test_009_published_daily_dates_keep_the_original_unbounded_contract(count, kind):

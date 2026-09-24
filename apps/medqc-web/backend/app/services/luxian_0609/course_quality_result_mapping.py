@@ -577,10 +577,26 @@ def _published_017(raw: dict[str, Any]) -> bool:
     return True
 
 
-def validate_published_course_quality_facts(*, rule_id: str, raw: Any) -> tuple[bool, dict[str, Any] | None]:
-    """返回合同是否有效及原值；018 可合法地没有独立 facts。"""
+def validate_published_course_quality_facts(
+    *, rule_id: str, raw: Any, status: str = "", reason_code: str = "",
+) -> tuple[bool, dict[str, Any] | None]:
+    """返回合同是否有效及原值；仅明确的无触发终态可缺少独立 facts。"""
     normalized = str(rule_id or "").strip().upper()
     if normalized == "LX0609-01-01-02" and raw is None:
+        return True, None
+    if (
+        normalized in {
+            "LX0609-02-01-04", "LX0609-02-01-05",
+            "LX0609-12-01-01", "LX0609-12-01-02",
+        }
+        and (raw is None or raw == {})
+        and status == "not_applicable"
+        and (
+            reason_code == "trigger_absent_complete"
+            or (normalized == "LX0609-12-01-02" and reason_code == "eligibility_not_met")
+        )
+    ):
+        # 无触发事件时无需构造病程区间或复制比对事实；确定问题仍必须带事实。
         return True, None
     if type(raw) is not dict or any(type(key) is not str for key in raw):
         return False, None
