@@ -2260,7 +2260,18 @@ def test_pathology_published_facts_commit_and_read_without_reprojection(
 
 
 def _published_pilot_item_for_read_boundary(rule_id: str) -> dict[str, Any]:
-    if rule_id == "LX0609-09-01-01":
+    if rule_id == "LX0609-01-01-01":
+        facts = safe_basic_timeliness_customer_display_facts(
+            rule_id=rule_id,
+            raw={
+                "failure_kind": "timeliness_requirement_satisfied",
+                "target_document": "admission_record", "source_label": "入院记录",
+                "timeliness_state": "within", "threshold_hours": 24,
+                "elapsed_hours": 1.0,
+            },
+        )
+        assert facts is not None
+    elif rule_id == "LX0609-09-01-01":
         facts = safe_basic_timeliness_customer_display_facts(
             rule_id=rule_id,
             raw={
@@ -2331,8 +2342,9 @@ def _published_pilot_item_for_read_boundary(rule_id: str) -> dict[str, Any]:
     [
         ("LX0609-09-01-02", "LX0609-06-02-01"),
         ("LX0609-09-01-01",),
+        ("LX0609-01-01-01",),
     ],
-    ids=["new_pilots", "original_004"],
+    ids=["new_pilots", "original_004", "original_001"],
 )
 def test_published_rules_keep_identity_through_sqlite_dto_feedback_and_exports(
     monkeypatch, rule_ids,
@@ -2475,6 +2487,7 @@ def test_published_rules_keep_identity_through_sqlite_dto_feedback_and_exports(
 @pytest.mark.parametrize(
     ("rule_id", "path", "invalid"),
     [
+        ("LX0609-01-01-01", ("remaining_hours",), 999),
         ("LX0609-09-01-01", ("remaining_hours",), 999),
         ("LX0609-06-01-01", ("order_results",), "DELETE"),
         ("LX0609-06-01-01", ("order_results", 0, "course_locations"), []),

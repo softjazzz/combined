@@ -329,6 +329,126 @@ def test_lx004_published_late_facts_are_read_without_recalculation():
         )
 
 
+def test_lx001_published_facts_are_read_without_recalculation():
+    raw = {
+        "failure_kind": "timeliness_requirement_satisfied",
+        "target_document": "admission_record", "source_label": "入院记录",
+        "timeliness_state": "within", "threshold_hours": 24,
+        "elapsed_hours": 1.0,
+    }
+    published = safe_basic_timeliness_customer_display_facts(
+        rule_id="LX0609-01-01-01", raw=raw,
+    )
+    assert published is not None
+    assert validate_luxian_0609_published_customer_display_facts(
+        rule_id="LX0609-01-01-01", raw=published,
+    ) == published
+
+    corrupted = {**published, "remaining_hours": 999.0}
+    with pytest.raises(ValueError, match="解释合同不完整"):
+        safe_customer_display_facts(
+            {"customer_display_facts": corrupted}, rule_id="LX0609-01-01-01",
+        )
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        {
+            "failure_kind": "timeliness_requirement_not_met",
+            "target_document": "admission_record", "source_label": "入院记录",
+            "timeliness_state": "missing", "threshold_hours": 24,
+            "document_content_state": "blank_or_placeholder",
+        },
+        {
+            "failure_kind": "timeliness_requirement_not_met",
+            "target_document": "admission_record", "source_label": "入院记录",
+            "timeliness_state": "late", "threshold_hours": 24,
+            "anchor_time": "2026-06-01 09:00:00",
+            "observed_time": "2026-06-02 10:00:00", "elapsed_hours": 25.0,
+        },
+        {
+            "failure_kind": "timeliness_requirement_satisfied",
+            "target_document": "admission_record", "source_label": "入院记录",
+            "timeliness_state": "within", "threshold_hours": 24,
+            "anchor_date": "2026-06-01", "observed_time": "2026-06-01 10:00:00",
+        },
+        {
+            "failure_kind": "evidence_time_conflict",
+            "target_document": "admission_record", "source_label": "入院记录",
+            "timeliness_state": "before", "threshold_hours": 24,
+            "anchor_time": "2026-06-01 09:00:00",
+            "observed_time": "2026-06-01 08:00:00",
+            "time_conflict_seconds": 3600,
+        },
+    ],
+    ids=["blank", "late", "date_anchor", "conflict"],
+)
+def test_lx001_published_fact_branches_keep_exact_projected_values(raw):
+    published = safe_basic_timeliness_customer_display_facts(
+        rule_id="LX0609-01-01-01", raw=raw,
+    )
+    assert published is not None
+    assert validate_luxian_0609_published_customer_display_facts(
+        rule_id="LX0609-01-01-01", raw=published,
+    ) == published
+
+
+@pytest.mark.parametrize(
+    ("field", "invalid"),
+    [
+        ("threshold_hours", True), ("elapsed_hours", True),
+        ("elapsed_hours", float("nan")), ("elapsed_hours", -1),
+        ("remaining_hours", float("inf")), ("remaining_hours", -1),
+        ("remaining_hours", []), ("source_label", {}),
+        ("anchor_time", []), ("failure_kind", []),
+        ("timeliness_state", {}),
+    ],
+)
+def test_lx001_invalid_published_field_types_fail_closed(field, invalid):
+    published = safe_basic_timeliness_customer_display_facts(
+        rule_id="LX0609-01-01-01",
+        raw={
+            "failure_kind": "timeliness_requirement_satisfied",
+            "target_document": "admission_record", "source_label": "入院记录",
+            "timeliness_state": "within", "threshold_hours": 24,
+            "elapsed_hours": 1.0, "anchor_time": "2026-06-01 09:00:00",
+        },
+    )
+    assert published is not None
+    forged = {**published, field: invalid}
+    with pytest.raises(ValueError, match="解释合同不完整"):
+        safe_customer_display_facts(
+            {"customer_display_facts": forged}, rule_id="LX0609-01-01-01",
+        )
+
+    with pytest.raises(ValueError, match="解释合同不完整"):
+        safe_customer_display_facts(
+            {"customer_display_facts": {**published, 1: "unexpected"}},
+            rule_id="LX0609-01-01-01",
+        )
+
+
+def test_lx001_published_rounding_accepts_previous_two_step_projection():
+    # 内部投影从未舍入间隔计算剩余时间，再分别保留两位小数。
+    raw = {
+        "failure_kind": "timeliness_requirement_satisfied",
+        "target_document": "admission_record", "source_label": "入院记录",
+        "timeliness_state": "within", "threshold_hours": 24,
+        "elapsed_hours": 1.004, "anchor_time": "2026-06-01 09:00:00",
+        "observed_time": "2026-06-01 10:00:14",
+    }
+    published = safe_basic_timeliness_customer_display_facts(
+        rule_id="LX0609-01-01-01", raw=raw,
+    )
+    assert published is not None
+    assert published["elapsed_hours"] == 1.0
+    assert published["remaining_hours"] == 23.0
+    assert validate_luxian_0609_published_customer_display_facts(
+        rule_id="LX0609-01-01-01", raw=published,
+    ) == published
+
+
 @pytest.mark.parametrize(
     "raw",
     [

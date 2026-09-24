@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from math import isfinite
 from typing import Any, Mapping
 
@@ -637,6 +637,125 @@ def validate_published_rescue_timeliness_facts(raw: Any) -> dict[str, Any] | Non
     return facts
 
 
+def validate_published_admission_timeliness_facts(raw: Any) -> dict[str, Any] | None:
+    """原始001公开读取只验证已发布字段，不再调用内部安全投影。"""
+
+    if not isinstance(raw, Mapping):
+        return None
+    facts = dict(raw)
+    if any(not isinstance(key, str) for key in facts):
+        return None
+    required = {
+        "failure_kind", "target_document", "source_label",
+        "timeliness_state", "threshold_hours",
+    }
+    allowed = required | {
+        "anchor_time", "anchor_date", "observed_time", "elapsed_hours",
+        "overdue_hours", "remaining_hours", "document_content_state",
+        "time_conflict_seconds",
+    }
+    kind = facts.get("failure_kind")
+    state = facts.get("timeliness_state")
+    label = facts.get("source_label")
+    if (
+        not required <= set(facts)
+        or not set(facts) <= allowed
+        or not isinstance(kind, str)
+        or not isinstance(state, str)
+        or facts.get("target_document") != "admission_record"
+        or type(facts.get("threshold_hours")) is not int
+        or facts["threshold_hours"] != 24
+        or not isinstance(label, str)
+        or not label.strip()
+        or label != label.strip()
+    ):
+        return None
+
+    if kind == "evidence_time_conflict":
+        if (
+            state != "before"
+            or set(facts) != required | {
+                "anchor_time", "observed_time", "time_conflict_seconds",
+            }
+            or type(facts.get("time_conflict_seconds")) is not int
+            or facts["time_conflict_seconds"] <= 0
+        ):
+            return None
+        anchor = _controlled_datetime(facts["anchor_time"])
+        observed = _controlled_datetime(facts["observed_time"])
+        if anchor is None or observed is None:
+            return None
+        try:
+            return facts if round((anchor - observed).total_seconds()) == facts[
+                "time_conflict_seconds"
+            ] else None
+        except TypeError:
+            return None
+
+    if kind not in {
+        "timeliness_requirement_not_met", "timeliness_requirement_satisfied",
+    } or (
+        state not in {"missing", "late"}
+        if kind == "timeliness_requirement_not_met"
+        else state != "within"
+    ) or "time_conflict_seconds" in facts:
+        return None
+    if "document_content_state" in facts and (
+        kind != "timeliness_requirement_not_met"
+        or state != "missing"
+        or facts["document_content_state"] != "blank_or_placeholder"
+    ):
+        return None
+    for key in ("anchor_time", "observed_time"):
+        if key in facts and _controlled_datetime(facts[key]) is None:
+            return None
+    if "anchor_date" in facts:
+        value = facts["anchor_date"]
+        if not isinstance(value, str) or len(value) != 10:
+            return None
+        try:
+            date.fromisoformat(value)
+        except ValueError:
+            return None
+    if "anchor_time" in facts and "anchor_date" in facts:
+        return None
+
+    def finite_number(value: Any) -> bool:
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            return False
+        try:
+            return isfinite(float(value))
+        except (OverflowError, ValueError):
+            return False
+
+    elapsed = facts.get("elapsed_hours")
+    if "elapsed_hours" in facts and (
+        not finite_number(elapsed)
+        or elapsed < 0
+        or elapsed != round(float(elapsed), 2)
+    ):
+        return None
+    expected_derived: dict[str, float] = {}
+    if elapsed is not None and state == "late" and elapsed > 24:
+        expected_derived["overdue_hours"] = round(float(elapsed) - 24, 2)
+    elif elapsed is not None and state == "late" and elapsed == 24:
+        if "overdue_hours" in facts:
+            expected_derived["overdue_hours"] = 0.0
+    elif elapsed is not None and state == "within":
+        expected_derived["remaining_hours"] = round(max(0.0, 24 - float(elapsed)), 2)
+    for key in ("overdue_hours", "remaining_hours"):
+        if (key in facts) != (key in expected_derived):
+            return None
+        if key in facts and (
+            not finite_number(facts[key])
+            or facts[key] < 0
+            or facts[key] != round(float(facts[key]), 2)
+            or abs(float(facts[key]) - expected_derived[key]) > 0.010000001
+        ):
+            return None
+    return facts
+
+
 def basic_timeliness_customer_fact_status_is_valid(
     *, rule_id: str, status: str, safe_facts: Mapping[str, Any] | None
 ) -> bool:
@@ -681,5 +800,6 @@ __all__ = [
     "basic_timeliness_customer_fact_status_is_valid",
     "is_basic_timeliness_customer_rule",
     "safe_basic_timeliness_customer_display_facts",
+    "validate_published_admission_timeliness_facts",
     "validate_published_rescue_timeliness_facts",
 ]

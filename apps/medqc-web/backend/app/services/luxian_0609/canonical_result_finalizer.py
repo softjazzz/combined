@@ -437,9 +437,18 @@ def validate_luxian_0609_executor_customer_display_facts(
 def validate_luxian_0609_published_customer_display_facts(
     *, rule_id: str, raw: Any,
 ) -> dict[str, Any] | None | NotImplementedType:
-    """校验已发布的公开事实；两条试点不再进入执行器内部事实投影。"""
+    """校验已发布的公开事实；已隔离规则不再进入执行器内部事实投影。"""
 
     normalized_rule_id = str(rule_id or "").strip().upper()
+    if normalized_rule_id == "LX0609-01-01-01":
+        from .basic_timeliness_customer_projection import (
+            validate_published_admission_timeliness_facts,
+        )
+
+        validated = validate_published_admission_timeliness_facts(raw)
+        if validated is None:
+            raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
+        return validated
     if normalized_rule_id == "LX0609-09-01-01":
         from .basic_timeliness_customer_projection import (
             validate_published_rescue_timeliness_facts,
