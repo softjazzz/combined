@@ -4,6 +4,7 @@
  * 提供任务的创建、查询、抽样、分配、进度查看等功能
  */
 
+import { isAxiosError } from 'axios'
 import { ApiService } from '@/services/apiService'
 import { extractApiErrorMessageFromError, normalizeApiSuccess } from '@/utils/api-envelope'
 
@@ -12,7 +13,7 @@ const BASE_URL = '/api/v1/tasks'
 /** 通用请求封装 */
 async function request<T = any>(
     config: Parameters<typeof ApiService.requestRaw>[0]
-): Promise<{ success: boolean; data?: T; message?: string }> {
+): Promise<{ success: boolean; data?: T; message?: string; status?: number }> {
     try {
         const response = await ApiService.requestRaw<T>(config)
         const normalized = normalizeApiSuccess<T>(response.data)
@@ -20,11 +21,13 @@ async function request<T = any>(
             success: normalized.success,
             data: normalized.data,
             message: normalized.message,
+            ...(response.status === 404 ? { status: 404 } : {}),
         }
     } catch (error) {
         return {
             success: false,
             message: extractApiErrorMessageFromError(error, '网络异常或服务器不可用'),
+            status: isAxiosError(error) ? error.response?.status : undefined,
         }
     }
 }
@@ -94,6 +97,26 @@ export interface TaskRecordStartResult {
     task_record_id: string
     status: 'in_progress'
     idempotent?: boolean
+}
+
+export interface TaskRecordSyncStarted {
+    job_id: string
+    status: 'queued' | 'running'
+    reused: boolean
+}
+
+export interface TaskRecordSyncResult {
+    job_id: string
+    status: 'queued' | 'running' | 'completed' | 'failed'
+    total: number
+    ready_count: number
+    failed_count: number
+    contract_version: 'task-record-sync-v1'
+    records: Array<{
+        task_record_id: string
+        status: 'ready' | 'failed'
+        reason_code?: string | null
+    }>
 }
 
 export interface TaskDetail extends TaskItem {
@@ -280,6 +303,29 @@ export async function startTaskRecord(taskId: string, taskRecordId: string) {
     return request<TaskRecordStartResult>({
         method: 'POST',
         url: `${BASE_URL}/${encodeURIComponent(taskId)}/records/${encodeURIComponent(taskRecordId)}/start`,
+    })
+}
+
+/** 创建人显式将任务病例同步到本地工作区；不会自动启动质控。 */
+export async function syncTaskRecords(taskId: string) {
+    return request<TaskRecordSyncStarted>({
+        method: 'POST',
+        url: `${BASE_URL}/${encodeURIComponent(taskId)}/sync-records`,
+    })
+}
+
+export async function getTaskRecordSyncJob(taskId: string, jobId: string) {
+    return request<TaskRecordSyncResult>({
+        method: 'GET',
+        url: `${BASE_URL}/${encodeURIComponent(taskId)}/sync-records/${encodeURIComponent(jobId)}`,
+    })
+}
+
+export async function getLatestTaskRecordSyncJob(taskId: string) {
+    return request<TaskRecordSyncResult>({
+        method: 'GET',
+        url: `${BASE_URL}/${encodeURIComponent(taskId)}/sync-records/latest`,
+        validateStatus: (status) => status >= 200 && status < 300 || status === 404,
     })
 }
 

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { AxiosHeaders, type AxiosResponse } from 'axios'
+import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios'
 import { ApiService } from '@/services/apiService'
-import { assignTask, createTaskQcRun, getTaskAssigneeOptions, getTaskDetail, getTaskList, getTaskQcRuns, getTaskRuleSets, getTaskStats, getTaskTodoStats, startTaskRecord, updateTask } from '@/api/tasks'
+import { assignTask, createTaskQcRun, getLatestTaskRecordSyncJob, getTaskAssigneeOptions, getTaskDetail, getTaskList, getTaskQcRuns, getTaskRecordSyncJob, getTaskRuleSets, getTaskStats, getTaskTodoStats, startTaskRecord, syncTaskRecords, updateTask } from '@/api/tasks'
 
 vi.mock('@/services/apiService', () => ({ ApiService: { requestRaw: vi.fn() } }))
 
@@ -106,6 +106,32 @@ describe('任务统计 API', () => {
     expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
       method: 'POST', url: '/api/v1/tasks/task%2F1/records/record%2F%E7%94%B2/start',
     })
+  })
+
+  it('显式同步任务病历只调用本地任务端点且不附带请求体', async () => {
+    await syncTaskRecords('task/1')
+    expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
+      method: 'POST', url: '/api/v1/tasks/task%2F1/sync-records',
+    })
+    await getTaskRecordSyncJob('task/1', 'job/甲')
+    expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
+      method: 'GET', url: '/api/v1/tasks/task%2F1/sync-records/job%2F%E7%94%B2',
+    })
+    await getLatestTaskRecordSyncJob('task/1')
+    expect(ApiService.requestRaw).toHaveBeenLastCalledWith(expect.objectContaining({
+      method: 'GET', url: '/api/v1/tasks/task%2F1/sync-records/latest',
+    }))
+  })
+
+  it('latest 404 保留 HTTP 状态，供首次同步区分无作业与网络故障', async () => {
+    const notFound = { ...response({ detail: '同步作业不存在' }), status: 404 }
+    vi.mocked(ApiService.requestRaw).mockRejectedValueOnce(new AxiosError('Not Found', 'ERR_BAD_RESPONSE', undefined, undefined, notFound))
+    await expect(getLatestTaskRecordSyncJob('task-1')).resolves.toMatchObject({ success: false, status: 404 })
+    vi.mocked(ApiService.requestRaw).mockResolvedValueOnce({ ...notFound, data: { detail: '同步作业不存在' } })
+    await expect(getLatestTaskRecordSyncJob('task-1')).resolves.toMatchObject({ status: 404 })
+    expect(ApiService.requestRaw).toHaveBeenLastCalledWith(expect.objectContaining({
+      validateStatus: expect.any(Function),
+    }))
   })
 
   it('列表、统计和待办统计使用同一场景筛选合同', async () => {

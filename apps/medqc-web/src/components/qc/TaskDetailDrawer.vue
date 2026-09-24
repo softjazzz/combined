@@ -124,20 +124,29 @@
                 质控运行
               </h3>
             </div>
-            <a-button
-              v-if="canStartRun"
-              data-testid="task-start-qc-run"
-              class="task-detail-drawer__run-start"
-              type="primary"
-              :loading="startingRun"
-              @click="void startRun()"
-            >
-              <Play
-                :size="15"
-                aria-hidden="true"
+            <div class="task-detail-drawer__run-actions">
+              <TaskRecordSyncControl
+                v-if="canOfferSync"
+                :task="detail"
+                :open="open"
+                :disabled="startingRun"
+                @busy="syncingRecords = $event"
               />
-              {{ runs.length ? '重新质控' : '启动质控' }}
-            </a-button>
+              <a-button
+                v-if="canStartRun"
+                data-testid="task-start-qc-run"
+                class="task-detail-drawer__run-start"
+                type="primary"
+                :loading="startingRun"
+                @click="void startRun()"
+              >
+                <Play
+                  :size="15"
+                  aria-hidden="true"
+                />
+                {{ runs.length ? '重新质控' : '启动质控' }}
+              </a-button>
+            </div>
           </div>
           <template v-if="canViewRuns">
             <p
@@ -421,6 +430,7 @@ import { useAuthStore } from '@/stores/auth'
 import { getSichuanWorkspaceBatchJob } from '@/services/sichuan-rule-workspace-service'
 import type { SichuanBatchJob } from '@/views/workstation-v4/semantic-rules/types'
 import { createTaskQcRun, getTaskDetail, getTaskQcRunRecordResult, getTaskQcRuns, startTaskRecord } from '@/api/tasks'
+import TaskRecordSyncControl from './TaskRecordSyncControl.vue'
 import type {
   TaskDetail,
   TaskQcRun,
@@ -449,6 +459,7 @@ const runs = ref<TaskQcRun[]>([])
 const runsLoading = ref(false)
 const runsError = ref('')
 const startingRun = ref(false)
+const syncingRecords = ref(false)
 const selectedJobId = ref('')
 const selectedJob = ref<SichuanBatchJob | null>(null)
 const jobLoading = ref(false)
@@ -482,12 +493,16 @@ const emptyDescription = computed(() =>
 )
 const isModernTask = computed(() => !!detail.value?.scene)
 const isCreator = computed(() => !!authStore.user?.id && authStore.user.id === detail.value?.creator_id)
+const isAdmin = computed(() => !!authStore.user?.id && authStore.userRoles.includes('admin'))
 const runScope = computed<TaskQcRunScope | null>(() => {
   if (props.tab === 'received') return authStore.user?.id ? 'assigned' : null
   if ((props.tab === 'created' || props.tab === 'all') && isCreator.value) return 'all'
   return null
 })
 const canViewRuns = computed(() => isModernTask.value && !!runScope.value)
+const canOfferSync = computed(() => (isCreator.value || isAdmin.value)
+  && (props.tab === 'created' || props.tab === 'all')
+  && (detail.value?.scene === 'running' || detail.value?.scene === 'final'))
 const selectedRun = computed(() => runs.value.find((run) => run.job_id === selectedJobId.value) || null)
 const selectedRecordLabel = computed(() => {
   const record = detail.value?.records.find((item) => item.id === selectedTaskRecordId.value)
@@ -508,6 +523,7 @@ const canStartRun = computed(() => canViewRuns.value
   && !runsLoading.value
   && !runsError.value
   && !startingRun.value
+  && !syncingRecords.value
   && !jobLoading.value
   && (!runs.value.length || selectedJobId.value === runs.value[0]?.job_id)
   && (!runs.value.length || !!selectedJob.value)
@@ -682,6 +698,7 @@ function resetFilters() {
 
 function clearDetail() {
   clearRecordAction()
+  syncingRecords.value = false
   requestSequence += 1
   runSequence += 1
   jobSequence += 1
@@ -709,6 +726,7 @@ async function loadDetail() {
 
   const tab = props.tab
   clearRecordAction()
+  syncingRecords.value = false
   const currentSequence = ++requestSequence
   runSequence += 1
   jobSequence += 1
@@ -1016,6 +1034,7 @@ watch([() => props.open, () => props.taskId, () => props.tab], ([open, taskId]) 
 watch([keyword, recordStatus], () => {
   page.value = 1
 })
+
 </script>
 
 <style scoped>
@@ -1081,6 +1100,17 @@ watch([keyword, recordStatus], () => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+.task-detail-drawer__run-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.task-detail-drawer__run-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 .task-detail-drawer__run-row {
   min-height: 56px;

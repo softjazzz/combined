@@ -9,8 +9,12 @@ const mocks = vi.hoisted(() => ({
   getTaskQcRunRecordResult: vi.fn(),
   createTaskQcRun: vi.fn(),
   startTaskRecord: vi.fn(),
+  syncTaskRecords: vi.fn(),
+  getTaskRecordSyncJob: vi.fn(),
+  getLatestTaskRecordSyncJob: vi.fn(),
   getSichuanWorkspaceBatchJob: vi.fn(),
   user: { id: 'creator' },
+  roles: [] as string[],
 }))
 
 beforeAll(() => {
@@ -37,8 +41,11 @@ vi.mock('@/api/tasks', () => ({
   getTaskQcRunRecordResult: mocks.getTaskQcRunRecordResult,
   createTaskQcRun: mocks.createTaskQcRun,
   startTaskRecord: mocks.startTaskRecord,
+  syncTaskRecords: mocks.syncTaskRecords,
+  getTaskRecordSyncJob: mocks.getTaskRecordSyncJob,
+  getLatestTaskRecordSyncJob: mocks.getLatestTaskRecordSyncJob,
 }))
-vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ user: mocks.user }) }))
+vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ user: mocks.user, userRoles: mocks.roles }) }))
 vi.mock('@/services/sichuan-rule-workspace-service', () => ({
   getSichuanWorkspaceBatchJob: mocks.getSichuanWorkspaceBatchJob,
 }))
@@ -158,6 +165,11 @@ function modernRecord(overrides: Record<string, unknown> = {}) {
   return record({ institute_id: 'H1', patient_id: 'P1', visit_id: 'V1', assignee_id: 'creator', ...overrides })
 }
 
+function syncJob(jobId = 'sync-1', overrides: Record<string, unknown> = {}) {
+  return { job_id: jobId, status: 'completed', total: 1, ready_count: 1, failed_count: 0,
+    contract_version: 'task-record-sync-v1', records: [{ task_record_id: 'association-1', status: 'ready' }], ...overrides }
+}
+
 function mountDrawer(
   props: { open?: boolean; taskId?: string | null; tab?: 'all' | 'created' | 'received' } = {},
   options: { realTable?: boolean } = {},
@@ -192,9 +204,13 @@ describe('TaskDetailDrawer', () => {
     mocks.getTaskQcRunRecordResult.mockReset()
     mocks.createTaskQcRun.mockReset()
     mocks.startTaskRecord.mockReset()
+    mocks.syncTaskRecords.mockReset()
+    mocks.getTaskRecordSyncJob.mockReset()
+    mocks.getLatestTaskRecordSyncJob.mockReset()
     mocks.getSichuanWorkspaceBatchJob.mockReset()
     mocks.getTaskDetail.mockResolvedValue(detailResponse('任务甲', [record()]))
     mocks.getTaskQcRuns.mockResolvedValue({ success: true, data: [] })
+    mocks.getLatestTaskRecordSyncJob.mockResolvedValue({ success: false, status: 404 })
     mocks.getSichuanWorkspaceBatchJob.mockResolvedValue({ success: true, data: { id: 'job-1', status: 'completed', summary: { total_records: 1, success_count: 1, failed_count: 0, issue_records: 0 } } })
     mocks.getTaskQcRunRecordResult.mockResolvedValue({ success: true, data: {
       task_id: 'task-1', run_number: 1, task_record_id: 'association-1', job_id: 'job-1',
@@ -204,6 +220,7 @@ describe('TaskDetailDrawer', () => {
         evidence: [{ source_type: '文书', source_ref: 'ref-1', excerpt_kind: '时间证据', evidence_excerpt: '签署时间晚于入院时间' }] }],
     } })
     mocks.user.id = 'creator'
+    mocks.roles.length = 0
   })
 
   it('只将已保存的运行 active 范围显示为当前在院，历史缺字段不作推断', async () => {
@@ -866,6 +883,268 @@ describe('TaskDetailDrawer', () => {
     expect(wrapper.find('[data-testid="task-record-start-association-1"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('未处理')
     expect(mocks.startTaskRecord).not.toHaveBeenCalled()
+  })
+
+  it('同步病历只向创建人开放，历史缺坐标任务禁用', async () => {
+    mocks.getTaskDetail.mockResolvedValue(detailResponse('任务', [modernRecord({ visit_id: null })], { scene: 'running', total_records: 1 }))
+    const creator = mountDrawer({ tab: 'created' })
+    await flushPromises()
+    expect(creator.get('[data-testid="task-sync-records"]').attributes('disabled')).toBeDefined()
+    expect(creator.get('[data-testid="task-sync-unavailable"]').text()).toContain('未记录病例坐标')
+    await creator.get('[data-testid="task-sync-records"]').trigger('click')
+    expect(mocks.syncTaskRecords).not.toHaveBeenCalled()
+    creator.unmount()
+
+    mocks.user.id = 'other'
+    const other = mountDrawer({ tab: 'all' })
+    await flushPromises()
+    expect(other.find('[data-testid="task-sync-records"]').exists()).toBe(false)
+  })
+
+  it('管理员可在全部页同步非本人任务，质控主管不能借管理员入口', async () => {
+    mocks.getTaskDetail.mockResolvedValue(detailResponse('他人任务', [modernRecord()], {
+      creator_id: 'other', scene: 'running', total_records: 1,
+    }))
+    mocks.user.id = 'admin-user'
+    mocks.roles.push('admin')
+    const admin = mountDrawer({ tab: 'all' })
+    await flushPromises()
+    expect(admin.get('[data-testid="task-sync-records"]').attributes('disabled')).toBeUndefined()
+    admin.unmount()
+
+    mocks.roles.length = 0
+    mocks.roles.push('qc_manager')
+    const manager = mountDrawer({ tab: 'all' })
+    await flushPromises()
+    expect(manager.find('[data-testid="task-sync-records"]').exists()).toBe(false)
+    manager.unmount()
+  })
+
+  it('同步成功后展示就绪计数，仍由用户手动启动质控', async () => {
+    mocks.getTaskDetail.mockResolvedValue(detailResponse('任务', [modernRecord()], {
+      scene: 'running', rule_set_key: 'lx0609', rule_set_version: 'v1', status: 'assigned', total_records: 1,
+    }))
+    mocks.syncTaskRecords.mockResolvedValue({ success: true, data: { job_id: 'sync-1', status: 'queued', reused: false } })
+    mocks.getTaskRecordSyncJob.mockResolvedValue({ success: true, data: syncJob() })
+    const wrapper = mountDrawer({ tab: 'created' })
+    await flushPromises()
+    await wrapper.get('[data-testid="task-sync-records"]').trigger('click')
+    await flushPromises()
+    expect(mocks.syncTaskRecords).toHaveBeenCalledWith('task-1')
+    expect(mocks.getTaskRecordSyncJob).toHaveBeenCalledWith('task-1', 'sync-1')
+    expect(wrapper.get('[data-testid="task-sync-result"]').text()).toContain('已就绪 1 / 1 份；失败 0 份')
+    expect(mocks.createTaskQcRun).not.toHaveBeenCalled()
+  })
+
+  it('部分失败可显式重试，不展示服务端病历原文', async () => {
+    mocks.getTaskDetail.mockResolvedValue(detailResponse('任务', [modernRecord(), modernRecord({ id: 'association-2' })], {
+      scene: 'running', total_records: 2,
+    }))
+    mocks.syncTaskRecords.mockResolvedValueOnce({ success: true, data: { job_id: 'sync-1', status: 'queued', reused: false } })
+      .mockResolvedValueOnce({ success: true, data: { job_id: 'sync-2', status: 'queued', reused: false } })
+    mocks.getTaskRecordSyncJob.mockResolvedValueOnce({ success: true, data: syncJob('sync-1', {
+      status: 'failed', total: 2, ready_count: 1, failed_count: 1,
+      records: [{ task_record_id: 'association-1', status: 'ready' },
+        { task_record_id: 'association-2', status: 'failed', reason_code: 'workspace_not_ready', message: '患者原文不应展示' }],
+    }) }).mockResolvedValueOnce({ success: true, data: syncJob('sync-2', {
+      total: 2, ready_count: 2,
+      records: [{ task_record_id: 'association-1', status: 'ready' }, { task_record_id: 'association-2', status: 'ready' }],
+    }) })
+    const wrapper = mountDrawer({ tab: 'created' })
+    await flushPromises()
+    await wrapper.get('[data-testid="task-sync-records"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="task-sync-result"]').text()).toContain('失败 1 份，可重试同步')
+    expect(wrapper.get('[data-testid="task-sync-result"]').text()).toContain('第 2 份：本地病历资料尚未就绪')
+    expect(wrapper.text()).not.toContain('患者原文不应展示')
+    await wrapper.get('[data-testid="task-sync-records"]').trigger('click')
+    await flushPromises()
+    expect(mocks.syncTaskRecords).toHaveBeenCalledTimes(2)
+    expect(mocks.getTaskRecordSyncJob).toHaveBeenLastCalledWith('task-1', 'sync-2')
+    expect(wrapper.get('[data-testid="task-sync-result"]').text()).toContain('失败 0 份')
+  })
+
+  it('作业提交中和轮询中重复点击不再 POST', async () => {
+    const pending = deferred<{ success: boolean; data: { job_id: string; status: string; reused: boolean } }>()
+    mocks.getTaskDetail.mockResolvedValue(detailResponse('任务', [modernRecord()], {
+      scene: 'running', total_records: 1,
+    }))
+    mocks.syncTaskRecords.mockReturnValue(pending.promise)
+    mocks.getTaskRecordSyncJob.mockResolvedValue({ success: true, data: syncJob('sync-1', {
+      status: 'running', ready_count: 0, records: [],
+    }) })
+    const wrapper = mountDrawer({ tab: 'created' })
+    await flushPromises()
+    await wrapper.get('[data-testid="task-sync-records"]').trigger('click')
+    await wrapper.get('[data-testid="task-sync-records"]').trigger('click')
+    expect(mocks.syncTaskRecords).toHaveBeenCalledTimes(1)
+    pending.resolve({ success: true, data: { job_id: 'sync-1', status: 'queued', reused: false } })
+    await flushPromises()
+    await wrapper.get('[data-testid="task-sync-records"]').trigger('click')
+    expect(mocks.syncTaskRecords).toHaveBeenCalledTimes(1)
+    expect(wrapper.text()).toContain('正在同步任务病历')
+    wrapper.unmount()
+  })
+
+  it('关闭后晚到的提交响应不会继续查询或复活状态', async () => {
+    const pending = deferred<{ success: boolean; data: { job_id: string; status: string; reused: boolean } }>()
+    mocks.getTaskDetail.mockResolvedValue(detailResponse('任务', [modernRecord()], {
+      scene: 'running', total_records: 1,
+    }))
+    mocks.syncTaskRecords.mockReturnValue(pending.promise)
+    const wrapper = mountDrawer({ tab: 'created' })
+    await flushPromises()
+    await wrapper.get('[data-testid="task-sync-records"]').trigger('click')
+    await wrapper.setProps({ open: false })
+    pending.resolve({ success: true, data: { job_id: 'sync-1', status: 'queued', reused: false } })
+    await flushPromises()
+    expect(mocks.getTaskRecordSyncJob).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="task-sync-result"]').exists()).toBe(false)
+  })
+
+  it('重新打开从 latest 恢复既有作业，不再提交新作业', async () => {
+    mocks.getTaskDetail.mockResolvedValue(detailResponse('任务', [modernRecord()], {
+      scene: 'running', total_records: 1,
+    }))
+    mocks.getLatestTaskRecordSyncJob.mockResolvedValue({ success: true, data: syncJob('existing-job') })
+    const wrapper = mountDrawer({ tab: 'created' })
+    await flushPromises()
+    expect(mocks.getLatestTaskRecordSyncJob).toHaveBeenCalledWith('task-1')
+    expect(wrapper.get('[data-testid="task-sync-result"]').text()).toContain('已就绪 1 / 1 份')
+    expect(mocks.syncTaskRecords).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('POST 超时后只查询 latest，确认当前 job 后轮询同一 job', async () => {
+    mocks.getTaskDetail.mockResolvedValue(detailResponse('任务', [modernRecord()], {
+      scene: 'running', total_records: 1,
+    }))
+    mocks.getLatestTaskRecordSyncJob.mockResolvedValueOnce({ success: false, status: 404 })
+      .mockResolvedValueOnce({ success: true, data: syncJob('recovered-job', {
+        status: 'running', ready_count: 0, records: [],
+      }) })
+    mocks.syncTaskRecords.mockResolvedValue({ success: false, message: '请求超时' })
+    mocks.getTaskRecordSyncJob.mockResolvedValue({ success: true, data: syncJob('recovered-job') })
+    const wrapper = mountDrawer({ tab: 'created' })
+    await flushPromises()
+    await wrapper.get('[data-testid="task-sync-records"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="task-sync-error"]').text()).toContain('状态未知')
+    await wrapper.get('[data-testid="task-sync-verify"]').trigger('click')
+    await flushPromises()
+    expect(mocks.syncTaskRecords).toHaveBeenCalledTimes(1)
+    expect(wrapper.text()).toContain('正在同步任务病历')
+    await new Promise((resolve) => setTimeout(resolve, 1550))
+    await flushPromises()
+    expect(mocks.getTaskRecordSyncJob).toHaveBeenCalledWith('task-1', 'recovered-job')
+    expect(wrapper.get('[data-testid="task-sync-result"]').text()).toContain('已就绪 1 / 1 份')
+    wrapper.unmount()
+  })
+
+  it('POST 状态未知后重查 latest 为 404，可再次显式提交', async () => {
+    mocks.getTaskDetail.mockResolvedValue(detailResponse('任务', [modernRecord()], {
+      scene: 'running', total_records: 1,
+    }))
+    mocks.getLatestTaskRecordSyncJob.mockResolvedValue({ success: false, status: 404 })
+    mocks.syncTaskRecords.mockResolvedValueOnce({ success: false, message: '请求超时' })
+      .mockResolvedValueOnce({ success: true, data: { job_id: 'new-job', status: 'queued', reused: false } })
+    mocks.getTaskRecordSyncJob.mockResolvedValue({ success: true, data: syncJob('new-job') })
+    const wrapper = mountDrawer({ tab: 'created' })
+    await flushPromises()
+    await wrapper.get('[data-testid="task-sync-records"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="task-sync-records"]').attributes('disabled')).toBeDefined()
+    await wrapper.get('[data-testid="task-sync-verify"]').trigger('click')
+    await flushPromises()
+    expect(mocks.syncTaskRecords).toHaveBeenCalledTimes(1)
+    expect(wrapper.get('[data-testid="task-sync-records"]').attributes('disabled')).toBeUndefined()
+    await wrapper.get('[data-testid="task-sync-records"]').trigger('click')
+    await flushPromises()
+    expect(mocks.syncTaskRecords).toHaveBeenCalledTimes(2)
+    expect(mocks.getTaskRecordSyncJob).toHaveBeenCalledWith('task-1', 'new-job')
+    wrapper.unmount()
+  })
+
+  it.each([
+    [403, '没有同步任务病历的权限'],
+    [409, '当前任务状态冲突'],
+    [422, '任务病例不满足同步条件'],
+    [429, '同步队列繁忙'],
+  ])('POST 明确拒绝 %s 时显示白名单文案，不进入未知态或查询', async (status, label) => {
+    mocks.getTaskDetail.mockResolvedValue(detailResponse('任务', [modernRecord()], {
+      scene: 'running', total_records: 1,
+    }))
+    mocks.syncTaskRecords.mockResolvedValue({ success: false, status, message: '患者原文不应展示' })
+    const wrapper = mountDrawer({ tab: 'created' })
+    await flushPromises()
+    await wrapper.get('[data-testid="task-sync-records"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="task-sync-error"]').text()).toContain(label)
+    expect(wrapper.text()).not.toContain('患者原文不应展示')
+    expect(wrapper.find('[data-testid="task-sync-verify"]').exists()).toBe(false)
+    expect(mocks.getLatestTaskRecordSyncJob).toHaveBeenCalledTimes(1)
+    expect(mocks.getTaskRecordSyncJob).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('按 job_id 查询失败时只能重查同 job，不能误发新 POST', async () => {
+    mocks.getTaskDetail.mockResolvedValue(detailResponse('任务', [modernRecord()], {
+      scene: 'running', total_records: 1,
+    }))
+    mocks.syncTaskRecords.mockResolvedValue({ success: true, data: { job_id: 'sync-1', status: 'queued', reused: false } })
+    mocks.getTaskRecordSyncJob.mockResolvedValueOnce({ success: false, message: '请求超时' })
+      .mockResolvedValueOnce({ success: true, data: syncJob('sync-1') })
+    const wrapper = mountDrawer({ tab: 'created' })
+    await flushPromises()
+    await wrapper.get('[data-testid="task-sync-records"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="task-sync-records"]').attributes('disabled')).toBeDefined()
+    await wrapper.get('[data-testid="task-sync-records"]').trigger('click')
+    expect(mocks.syncTaskRecords).toHaveBeenCalledTimes(1)
+    await wrapper.get('[data-testid="task-sync-verify"]').trigger('click')
+    await flushPromises()
+    expect(mocks.getTaskRecordSyncJob).toHaveBeenCalledTimes(2)
+    expect(wrapper.get('[data-testid="task-sync-result"]').text()).toContain('已就绪 1 / 1 份')
+    wrapper.unmount()
+  })
+
+  it('派发失败没有逐份结果时仍可显示失败并显式创建新 job', async () => {
+    mocks.getTaskDetail.mockResolvedValue(detailResponse('任务', [modernRecord()], {
+      scene: 'running', total_records: 1,
+    }))
+    mocks.getLatestTaskRecordSyncJob.mockResolvedValue({ success: true, data: syncJob('dispatch-failed', {
+      status: 'failed', ready_count: 0, failed_count: 1, records: [],
+    }) })
+    mocks.syncTaskRecords.mockResolvedValue({ success: true, data: { job_id: 'new-job', status: 'queued', reused: false } })
+    mocks.getTaskRecordSyncJob.mockResolvedValue({ success: true, data: syncJob('new-job') })
+    const wrapper = mountDrawer({ tab: 'created' })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="task-sync-result"]').text()).toContain('失败 1 份')
+    await wrapper.get('[data-testid="task-sync-records"]').trigger('click')
+    await flushPromises()
+    expect(mocks.syncTaskRecords).toHaveBeenCalledOnce()
+    expect(mocks.getTaskRecordSyncJob).toHaveBeenCalledWith('task-1', 'new-job')
+    wrapper.unmount()
+  })
+
+  it('按 job_id 读取到另一作业时拒绝展示，仍只允许查询原 job', async () => {
+    mocks.getTaskDetail.mockResolvedValue(detailResponse('任务', [modernRecord()], {
+      scene: 'running', total_records: 1,
+    }))
+    mocks.syncTaskRecords.mockResolvedValue({ success: true, data: { job_id: 'sync-1', status: 'queued', reused: false } })
+    mocks.getTaskRecordSyncJob.mockResolvedValueOnce({ success: true, data: syncJob('foreign-job') })
+      .mockResolvedValueOnce({ success: true, data: syncJob('sync-1') })
+    const wrapper = mountDrawer({ tab: 'created' })
+    await flushPromises()
+    await wrapper.get('[data-testid="task-sync-records"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="task-sync-error"]').text()).toContain('校验失败')
+    expect(wrapper.find('[data-testid="task-sync-result"]').exists()).toBe(false)
+    await wrapper.get('[data-testid="task-sync-verify"]').trigger('click')
+    await flushPromises()
+    expect(mocks.getTaskRecordSyncJob).toHaveBeenLastCalledWith('task-1', 'sync-1')
+    expect(mocks.syncTaskRecords).toHaveBeenCalledOnce()
+    wrapper.unmount()
   })
 
   it.each([

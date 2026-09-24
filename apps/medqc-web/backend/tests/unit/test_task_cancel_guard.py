@@ -196,10 +196,25 @@ def test_route_maps_errors_without_leaking_database_details(monkeypatch, error, 
     monkeypatch.setattr(tasks, "audit_event", lambda *args, **kwargs: audit.append(kwargs))
     request = Request({"type": "http", "method": "POST", "path": "/api/v1/tasks/task-1/cancel", "headers": []})
     with pytest.raises(HTTPException) as raised:
-        asyncio.run(tasks.cancel_task(request=request, task_id="task-1", current_user={"id": "owner", "roles": ["qc_staff"]}))
+        asyncio.run(tasks.cancel_task(request=request, task_id="task-1", current_user={"id": "owner", "roles": ["qc_manager"]}))
     assert raised.value.status_code == status
     assert "private database detail" not in str(raised.value.detail)
     assert audit == []
+
+
+def test_route_rejects_qc_staff_before_cancel_service(monkeypatch):
+    tasks = import_module("app.routers.tasks")
+
+    async def unexpected(*_args, **_kwargs):
+        pytest.fail("质控员不应进入取消服务")
+
+    monkeypatch.setattr(tasks, "run_in_threadpool", unexpected)
+    request = Request({"type": "http", "method": "POST", "path": "/api/v1/tasks/task-1/cancel", "headers": []})
+    with pytest.raises(HTTPException) as raised:
+        asyncio.run(tasks.cancel_task(
+            request=request, task_id="task-1", current_user={"id": "staff", "roles": ["qc_staff"]}
+        ))
+    assert raised.value.status_code == 403
 
 
 def test_route_passes_manager_flag_and_audits_success(monkeypatch):

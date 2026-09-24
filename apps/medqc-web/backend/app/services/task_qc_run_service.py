@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime, timezone
 from itertools import chain
 from typing import Any, Callable
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from ..database.connection import SessionLocal
 from ..database.models.qc import QCTask, QCTaskQCRun, QCTaskRecord
+from .bundles.assembly import _load_scene_bundle, _scene_bundle_has_usable_content
+from .bundles.contracts import BUNDLE_SCHEMA_VERSION_CURRENT
 from .case_identity import CaseRef
 from .custom_qc_workspace_service import project_customer_safe_result_item
 from .luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY
@@ -27,6 +30,7 @@ from .sichuan_workspace_batch_prepare import (
     SichuanWorkspaceBatchJobCreateRequest,
     prepare_workspace_batch_job,
 )
+from .task_record_sync_service import CONTRACT_VERSION, normalize_bundle_timestamp
 
 
 logger = logging.getLogger(__name__)
@@ -133,6 +137,133 @@ def _next_run_number(session: Session, task_id: str, workspace: Any) -> int:
     return int(previous["run_number"]) + 1
 
 
+def _json_object(value: Any) -> dict[str, Any] | None:
+    if isinstance(value, dict):
+        return value
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = json.loads(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def _active_remote_task(task: dict[str, Any]) -> bool:
+    config = _json_object(task.get("sampling_config"))
+    return task.get("scene") == "running" and config is not None and config.get("case_scope") == "active"
+
+
+def _assert_active_sync_receipt(
+    session: Session, task: dict[str, Any], refs: list[dict[str, str]], run_scope: str, actor_id: str,
+) -> None:
+    """Under the task row lock, admit only an exact completed hydration snapshot."""
+    task_id = str(task["id"])
+    active = session.execute(text("""
+        SELECT id FROM qc.qc_async_jobs
+        WHERE job_type = 'task_record_sync' AND business_type = 'qc_task'
+          AND business_id = :task_id AND status IN ('accepted', 'queued', 'running', 'retry_waiting')
+        LIMIT 1
+    """), {"task_id": task_id}).first()
+    if active is not None:
+        raise TaskQCRunConflict("任务病历资料同步尚未完成，请稍后再运行")
+    row = session.execute(text("""
+        SELECT status, payload, result_summary FROM qc.qc_async_jobs
+        WHERE job_type = 'task_record_sync' AND business_type = 'qc_task'
+          AND business_id = :task_id
+        ORDER BY created_at DESC, id DESC LIMIT 1
+    """), {"task_id": task_id}).mappings().first()
+    if row is None or row["status"] != "succeeded":
+        raise TaskQCRunConflict("任务病历缺少成功的资料同步收据")
+    payload = _json_object(row["payload"])
+    summary = _json_object(row["result_summary"])
+    if not payload or not summary:
+        raise TaskQCRunConflict("任务病历资料同步收据无效")
+    if any(
+        value.get("contract_version") != CONTRACT_VERSION
+        or value.get("task_id") != task_id
+        or value.get("scene") != "running"
+        for value in (payload, summary)
+    ):
+        raise TaskQCRunConflict("任务病历资料同步收据合同不一致")
+
+    rows = session.execute(
+        select(QCTaskRecord.__table__).where(QCTaskRecord.task_id == task_id)
+    ).mappings().all()
+    task_records = {
+        str(record["id"]): tuple(str(record[key]) for key in ("institute_id", "patient_id", "visit_id"))
+        for record in rows
+    }
+    frozen = payload.get("records")
+    receipts = summary.get("records")
+    if not isinstance(frozen, list) or not isinstance(receipts, list):
+        raise TaskQCRunConflict("任务病历资料同步收据缺少病例明细")
+    frozen_by_id: dict[str, tuple[str, str, str]] = {}
+    for item in frozen:
+        if not isinstance(item, dict):
+            raise TaskQCRunConflict("任务病历资料同步收据身份无效")
+        record_id = item.get("task_record_id")
+        identity = tuple(item.get(key) for key in ("institute_id", "patient_id", "visit_id"))
+        if not isinstance(record_id, str) or not record_id or record_id in frozen_by_id or any(
+            not isinstance(part, str) or not part for part in identity
+        ):
+            raise TaskQCRunConflict("任务病历资料同步收据身份无效")
+        frozen_by_id[record_id] = identity
+    if frozen_by_id != task_records or len(frozen) != len(rows):
+        raise TaskQCRunConflict("任务病历资料同步收据与当前抽样不一致")
+    if any(type(summary.get(key)) is not int for key in ("total", "ready_count", "failed_count")) or (
+        summary["total"] != len(rows) or summary["ready_count"] != len(rows) or summary["failed_count"] != 0
+    ):
+        raise TaskQCRunConflict("任务病历资料同步收据未覆盖全部病例")
+    receipt_by_id: dict[str, dict[str, Any]] = {}
+    for item in receipts:
+        if not isinstance(item, dict) or item.get("status") != "ready":
+            raise TaskQCRunConflict("任务病历资料同步收据未覆盖全部病例")
+        record_id = item.get("task_record_id")
+        if not isinstance(record_id, str) or record_id not in frozen_by_id or record_id in receipt_by_id:
+            raise TaskQCRunConflict("任务病历资料同步收据身份无效")
+        receipt_by_id[record_id] = item
+    if len(receipt_by_id) != len(rows):
+        raise TaskQCRunConflict("任务病历资料同步收据未覆盖全部病例")
+
+    run_identities = {tuple(ref[key] for key in ("institute_id", "patient_id", "visit_id")) for ref in refs}
+    if run_scope == "assigned":
+        selected = {record_id for record_id, identity in task_records.items() if identity in run_identities}
+        if len(selected) != len(refs) or any(
+            row["assignee_id"] != actor_id for row in rows if row["id"] in selected
+        ):
+            raise TaskQCRunConflict("任务运行范围与同步收据不一致")
+    else:
+        selected = set(task_records)
+    for record_id in selected:
+        identity = task_records[record_id]
+        receipt = receipt_by_id[record_id]
+        try:
+            bundle = _load_scene_bundle(
+                scene="running", institute_id=identity[0], patient_id=identity[1],
+                visit_id=identity[2], schema="public",
+            )
+            usable = _scene_bundle_has_usable_content(bundle)
+        except Exception as exc:
+            logger.warning("task_run_bundle_check_failed task_id=%s error_type=%s", task_id, type(exc).__name__)
+            raise TaskQCRunConflict("任务病历 Bundle 就绪检查失败，请重新同步") from exc
+        if not bundle or not usable:
+            raise TaskQCRunConflict("任务病历 Bundle 尚不可执行")
+        try:
+            bundle_updated_at = normalize_bundle_timestamp(bundle.get("bundle_updated_at"))
+        except (TypeError, ValueError):
+            raise TaskQCRunConflict("任务病历 Bundle 更新时间无效，请重新同步") from None
+        if (
+            receipt.get("bundle_schema_version") != BUNDLE_SCHEMA_VERSION_CURRENT
+            or bundle.get("bundle_schema_version") != receipt.get("bundle_schema_version")
+            or receipt.get("policy_version") != CONTRACT_VERSION
+            or bundle.get("policy_version") != receipt.get("policy_version")
+            or not receipt.get("bundle_updated_at")
+            or bundle_updated_at != receipt.get("bundle_updated_at")
+        ):
+            raise TaskQCRunConflict("任务病历 Bundle 已变化，请重新同步")
+
+
 def create_task_qc_run(
     *,
     task_id: str,
@@ -154,6 +285,8 @@ def create_task_qc_run(
     with SessionLocal() as session:
         with session.begin():
             task, refs = _task_and_refs(session, task_id, actor_id, run_scope)
+            if _active_remote_task(task):
+                _assert_active_sync_receipt(session, task, refs, run_scope, actor_id)
             workspace = workspace_factory()
             run_number = _next_run_number(session, task_id, workspace)
             payload = SichuanWorkspaceBatchJobCreateRequest(

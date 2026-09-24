@@ -5,11 +5,9 @@
 
 from functools import wraps
 from typing import List, Callable, Optional, Dict, Any
-from fastapi import HTTPException, status, Depends, Request
+from fastapi import HTTPException, status, Request
 from datetime import datetime
 import logging
-
-from .security import get_current_user
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +18,7 @@ logger = logging.getLogger(__name__)
 class ResourceType:
     """资源类型"""
     MEDICAL_RECORDS = "medical_records"
+    QC_TASKS = "qc_tasks"
     QC_RESULTS = "qc_results"
     QC_RULES = "qc_rules"
     USERS = "users"
@@ -51,6 +50,13 @@ class UserRole:
 ROLE_PERMISSIONS: Dict[str, Dict[str, List[str]]] = {
     UserRole.ADMIN: {
         # 管理员拥有所有权限
+        ResourceType.QC_TASKS: [
+            PermissionAction.CREATE,
+            PermissionAction.READ,
+            PermissionAction.UPDATE,
+            PermissionAction.DELETE,
+            PermissionAction.ANALYZE,
+        ],
         ResourceType.MEDICAL_RECORDS: [
             PermissionAction.CREATE,
             PermissionAction.READ,
@@ -94,6 +100,13 @@ ROLE_PERMISSIONS: Dict[str, Dict[str, List[str]]] = {
     
     UserRole.QC_MANAGER: {
         # 质控管理员权限
+        ResourceType.QC_TASKS: [
+            PermissionAction.CREATE,
+            PermissionAction.READ,
+            PermissionAction.UPDATE,
+            PermissionAction.DELETE,
+            PermissionAction.ANALYZE,
+        ],
         ResourceType.MEDICAL_RECORDS: [
             PermissionAction.READ,
             PermissionAction.ANALYZE,
@@ -127,6 +140,10 @@ ROLE_PERMISSIONS: Dict[str, Dict[str, List[str]]] = {
     
     UserRole.QC_STAFF: {
         # 质控专员权限
+        ResourceType.QC_TASKS: [
+            PermissionAction.READ,
+            PermissionAction.ANALYZE,
+        ],
         ResourceType.MEDICAL_RECORDS: [
             PermissionAction.READ,
             PermissionAction.ANALYZE,
@@ -146,6 +163,9 @@ ROLE_PERMISSIONS: Dict[str, Dict[str, List[str]]] = {
     
     UserRole.DOCTOR: {
         # 医生权限
+        ResourceType.QC_TASKS: [
+            PermissionAction.READ,
+        ],
         ResourceType.MEDICAL_RECORDS: [
             PermissionAction.CREATE,
             PermissionAction.READ,

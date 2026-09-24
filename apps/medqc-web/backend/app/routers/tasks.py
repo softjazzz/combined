@@ -45,6 +45,18 @@ from ..services.task_qc_run_service import (
     get_task_qc_run_record_result,
     list_task_qc_runs,
 )
+from ..services.task_record_sync_service import (
+    TaskRecordSyncConflict,
+    TaskRecordSyncForbidden,
+    TaskRecordSyncNotFound,
+)
+from ..services.task_record_sync_job_service import (
+    TaskRecordSyncRateLimited,
+    TaskRecordSyncUnavailable,
+    enqueue_task_record_sync,
+    get_latest_task_record_sync_job,
+    get_task_record_sync_job,
+)
 from ..services.task_assignment_service import (
     AssignmentConflict,
     AssignmentForbidden,
@@ -73,7 +85,6 @@ from .qc_sichuan import get_qc_service, _run_sichuan_workspace_batch_job, _sichu
 from ..core.permissions import (
     has_any_role,
     require_permission,
-    require_role,
     ResourceType,
     PermissionAction,
     UserRole,
@@ -211,7 +222,7 @@ def _apply_task_scene_scope(query, scene: Optional[str]):
 # ============================
 
 @router.post("")
-@require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.CREATE)
+@require_permission(ResourceType.QC_TASKS, PermissionAction.CREATE)
 async def create_task(
     request: Request,
     task_data: TaskCreateRequest,
@@ -306,7 +317,7 @@ async def create_task(
 # ============================
 
 @router.get("")
-@require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.READ)
+@require_permission(ResourceType.QC_TASKS, PermissionAction.READ)
 async def list_tasks(
     request: Request,
     tab: Literal["all", "created", "received"] = Query(
@@ -388,7 +399,7 @@ async def list_tasks(
 # ============================
 
 @router.get("/stats")
-@require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.READ)
+@require_permission(ResourceType.QC_TASKS, PermissionAction.READ)
 async def get_task_stats(
     request: Request,
     tab: Literal["all", "created", "received"] = Query(
@@ -438,7 +449,7 @@ async def get_task_stats(
 
 
 @router.get("/todo-stats")
-@require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.READ)
+@require_permission(ResourceType.QC_TASKS, PermissionAction.READ)
 async def get_task_todo_stats(
     request: Request,
     scene: Optional[TaskSceneFilter] = Query(None, description="任务病历场景"),
@@ -478,7 +489,7 @@ async def get_task_todo_stats(
 # ============================
 
 @router.get("/assignee-options")
-@require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.UPDATE)
+@require_permission(ResourceType.QC_TASKS, PermissionAction.UPDATE)
 async def get_assignee_options(
     request: Request,
     current_user: dict = Depends(get_current_user),
@@ -492,7 +503,7 @@ async def get_assignee_options(
 
 
 @router.get("/{task_id}")
-@require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.READ)
+@require_permission(ResourceType.QC_TASKS, PermissionAction.READ)
 async def get_task_detail(
     request: Request,
     task_id: str,
@@ -559,7 +570,7 @@ async def get_task_detail(
 # ============================
 
 @router.put("/{task_id}")
-@require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.READ)
+@require_permission(ResourceType.QC_TASKS, PermissionAction.ANALYZE)
 async def update_task(
     request: Request,
     task_id: str,
@@ -592,7 +603,7 @@ async def update_task(
 
 
 @router.post("/{task_id}/records/{task_record_id}/start")
-@require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.READ)
+@require_permission(ResourceType.QC_TASKS, PermissionAction.ANALYZE)
 async def start_task_record(
     request: Request,
     task_id: str,
@@ -641,7 +652,7 @@ async def start_task_record(
 # ============================
 
 @router.post("/{task_id}/sample")
-@require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.UPDATE)
+@require_permission(ResourceType.QC_TASKS, PermissionAction.UPDATE)
 async def execute_sampling(
     request: Request,
     task_id: str,
@@ -723,8 +734,96 @@ async def execute_sampling(
 # 分配任务
 # ============================
 
+@router.post("/{task_id}/sync-records")
+@require_permission(ResourceType.QC_TASKS, PermissionAction.UPDATE)
+async def sync_saved_task_records(
+    request: Request,
+    task_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """显式同步已保存的三坐标病历，不启动质控。"""
+    if await request.body():
+        raise HTTPException(status_code=422, detail="此操作不接受请求体")
+    actor_id = _get_task_scope_user_id(current_user)
+    try:
+        result = await run_in_threadpool(
+            enqueue_task_record_sync,
+            task_id=task_id,
+            actor_id=actor_id,
+            is_admin=has_any_role(current_user, [UserRole.ADMIN]),
+        )
+    except TaskRecordSyncNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except TaskRecordSyncForbidden as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except TaskRecordSyncConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except TaskRecordSyncRateLimited as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+    except TaskRecordSyncUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("任务病历同步入队失败 task_id=%s", task_id)
+        raise HTTPException(status_code=503, detail="病历资料同步入队失败，请稍后重试") from exc
+    audit_event(
+        request,
+        action="tasks.records.sync",
+        resource="qc_task",
+        outcome="success",
+        details={
+            "task_id": task_id,
+            "job_id": result["job_id"],
+            "reused": result["reused"],
+        },
+        current_user=current_user,
+    )
+    return success_response(data=result, message="病历资料同步已受理", trace_id=get_trace_id(request))
+
+
+@router.get("/{task_id}/sync-records/latest")
+@require_permission(ResourceType.QC_TASKS, PermissionAction.READ)
+async def latest_saved_task_record_sync(
+    request: Request, task_id: str, current_user: dict = Depends(get_current_user),
+):
+    actor_id = _get_task_scope_user_id(current_user)
+    try:
+        result = await run_in_threadpool(
+            get_latest_task_record_sync_job, task_id=task_id, actor_id=actor_id,
+            is_admin=has_any_role(current_user, [UserRole.ADMIN]),
+        )
+    except TaskRecordSyncNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except TaskRecordSyncForbidden as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("读取任务病历同步作业失败 task_id=%s", task_id)
+        raise HTTPException(status_code=503, detail="同步作业状态暂不可用") from exc
+    return success_response(data=result, trace_id=get_trace_id(request))
+
+
+@router.get("/{task_id}/sync-records/{job_id}")
+@require_permission(ResourceType.QC_TASKS, PermissionAction.READ)
+async def get_saved_task_record_sync(
+    request: Request, task_id: str, job_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    actor_id = _get_task_scope_user_id(current_user)
+    try:
+        result = await run_in_threadpool(
+            get_task_record_sync_job, task_id=task_id, job_id=job_id, actor_id=actor_id,
+            is_admin=has_any_role(current_user, [UserRole.ADMIN]),
+        )
+    except TaskRecordSyncNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except TaskRecordSyncForbidden as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("读取任务病历同步作业失败 task_id=%s job_id=%s", task_id, job_id)
+        raise HTTPException(status_code=503, detail="同步作业状态暂不可用") from exc
+    return success_response(data=result, trace_id=get_trace_id(request))
+
 @router.post("/{task_id}/assign")
-@require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.UPDATE)
+@require_permission(ResourceType.QC_TASKS, PermissionAction.UPDATE)
 async def assign_task(
     request: Request,
     task_id: str,
@@ -781,7 +880,7 @@ async def assign_task(
 # ============================
 
 @router.post("/{task_id}/qc-runs")
-@require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.ANALYZE)
+@require_permission(ResourceType.QC_TASKS, PermissionAction.ANALYZE)
 async def start_task_qc_run(
     request: Request,
     task_id: str,
@@ -822,7 +921,7 @@ async def start_task_qc_run(
 
 
 @router.get("/{task_id}/qc-runs")
-@require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.READ)
+@require_permission(ResourceType.QC_TASKS, PermissionAction.READ)
 async def get_task_qc_runs(
     request: Request,
     task_id: str,
@@ -847,7 +946,7 @@ async def get_task_qc_runs(
 
 
 @router.get("/{task_id}/qc-runs/{run_number}/records/{task_record_id}")
-@require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.READ)
+@require_permission(ResourceType.QC_TASKS, PermissionAction.READ)
 async def get_task_qc_run_record(
     request: Request,
     task_id: str,
@@ -877,7 +976,7 @@ async def get_task_qc_run_record(
 
 
 @router.get("/{task_id}/progress")
-@require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.READ)
+@require_permission(ResourceType.QC_TASKS, PermissionAction.READ)
 async def get_task_progress(
     request: Request,
     task_id: str,
@@ -923,7 +1022,7 @@ async def get_task_progress(
 # ============================
 
 @router.post("/{task_id}/re-analyze")
-@require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.ANALYZE)
+@require_permission(ResourceType.QC_TASKS, PermissionAction.ANALYZE)
 async def re_analyze_task(
     request: Request,
     task_id: str,
@@ -1026,7 +1125,7 @@ async def re_analyze_task(
 # ============================
 
 @router.delete("/{task_id}")
-@require_role([UserRole.ADMIN, UserRole.QC_MANAGER])
+@require_permission(ResourceType.QC_TASKS, PermissionAction.DELETE)
 async def delete_task(
     request: Request,
     task_id: str,
@@ -1059,7 +1158,7 @@ async def delete_task(
 
 
 @router.post("/{task_id}/cancel")
-@require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.READ)
+@require_permission(ResourceType.QC_TASKS, PermissionAction.UPDATE)
 async def cancel_task(
     request: Request,
     task_id: str,
