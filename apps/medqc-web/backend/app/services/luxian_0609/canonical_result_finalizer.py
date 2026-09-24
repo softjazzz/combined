@@ -444,6 +444,13 @@ def validate_luxian_0609_published_customer_display_facts(
     """校验已发布的公开事实；已隔离规则不再进入执行器内部事实投影。"""
 
     normalized_rule_id = str(rule_id or "").strip().upper()
+    if raw is None or raw == {}:
+        if status == "not_executed" and reason_code == "policy_definition_pending":
+            from .phase_scope import get_luxian_0609_phase_scope
+
+            scope = get_luxian_0609_phase_scope(normalized_rule_id)
+            if scope is not None and scope.phase_status == "pending_definition":
+                return None
     from .basic_timeliness_customer_projection import (
         basic_timeliness_allows_absent_published_facts,
         is_basic_timeliness_customer_rule,

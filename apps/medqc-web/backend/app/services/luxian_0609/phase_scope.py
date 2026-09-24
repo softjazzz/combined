@@ -24,6 +24,10 @@ from ..luxian_0609_rule_catalog import (
     LUXIAN_0609_RULE_SET_KEY,
     get_luxian_0609_rule,
 )
+from .customer_text_publication import (
+    CUSTOMER_TEXT_SEAL_KEY,
+    seal_published_customer_text,
+)
 
 
 def _clean(value: object) -> str:
@@ -135,7 +139,7 @@ def build_luxian_0609_pending_definition_result(rule_id: str) -> dict[str, objec
         entry.pending_reason_code,
         _DEFAULT_PENDING_DEFINITION_MESSAGES,
     )
-    return {
+    result = {
         "rule_id": entry.rule_id,
         "rule_code": entry.rule_id,
         "qc_point_id": entry.rule_id,
@@ -145,6 +149,7 @@ def build_luxian_0609_pending_definition_result(rule_id: str) -> dict[str, objec
         "rule_set_version": RULE_SET_VERSION,
         "schema_version": CUSTOMER_SCHEMA_VERSION,
         "status": "not_executed",
+        "reason_code": "policy_definition_pending",
         "result_status": "not_executed",
         "display_status": "not_executed",
         "is_compliant": None,
@@ -160,6 +165,9 @@ def build_luxian_0609_pending_definition_result(rule_id: str) -> dict[str, objec
             "pending_reason_code": entry.pending_reason_code,
         },
     }
+    # 暂停文案由本函数的受控原因码模板生成，发布后不允许导出层重写。
+    result[CUSTOMER_TEXT_SEAL_KEY] = seal_published_customer_text(result)
+    return result
 
 
 def partition_luxian_0609_rule_scope(
