@@ -23,3 +23,7 @@
 新专属测试及既有两个 mapping 测试共 79 项通过；原生 extended-document 的死亡/出院/出院前相关 47 项通过；改动文件 Ruff、`compileall` 与 `git diff --check` 通过。测试使用合成日期和固定输入，不使用客户数据库或真实模型。这证明模块入口与原生既有测试分别成立，**不代表生产读链已经接线**。
 
 Finalizer 集成责任留给主协调：在 `validate_luxian_0609_published_customer_display_facts` 为上述规则号分别调用对应 `validate_published_*_facts`；`None` 转已有“解释合同不完整”受控错误；首次发布保持原 `safe_*` 路径，并在发布后 `finalize_luxian_0609_executor_customer_display_facts` 复用已校验的事实。接线后须重跑专属测试、两族 mapping、原生 extended-document 聚焦组，以及隔离 Canonical Store 的正常与污染读回。
+
+## 主协调集成验收
+
+连续诊疗族1a501a736/0001c5fed、死亡/出院模块9f0d05bf7已接收；主协调完成死亡/出院Finalizer正式接线与首次投影复用。集成公开边界组168项、相邻原生执行163项通过；追加首次投影计数后正式SQLite读链组16项通过（与168组重叠，不合并计数）。七条死亡/出院合法事实保存读回相同，内部投影替换成抛错函数后仍可读取；注入内部文书ID拒绝。连续诊疗固定原生输入/证据/零调用断言及两个缺口SQLite读链在168组中通过。现有17族模块中7族已完成代码边界验收，余10族先核实实际缺陷，不机械重写。医学判据、Prompt、40槽位未改；真实临床保护集、PG恢复及页面仍未完成。
