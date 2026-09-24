@@ -498,6 +498,8 @@
 
 2026-09-25 阶段 C 旧适配审计：目录84条规则均为 Native 模式，正式 Engine 仍通过 `build_luxian_0609_legacy_executor_registry` 调用11个现有族函数；它是仍在使用的信封适配边界，当前没有已替代实现可删。保留理由与扩展链证据见[阶段 C 审计](../acceptance/2026-09-24-original-engine-phase-c-audit.md)，不另建平行框架，不把新规则计入原始医学验收。
 
+2026-09-25 阶段 B 再验：任务运行身份、冻结设置、排队跨进程恢复与逐病例计划/时点四份聚焦测试合计43项通过；客户PG多进程争锁、安装包中断和三入口临床保护集仍待验收。B继续局部验证。
+
 2026-09-25 阶段 C 正式 Worker 纵向补证：临时测试规则现经正式目录、任务路由、后台 Worker、生产 `prepare`/注册表、真实 Workspace 完成事务、隔离 SQLite Canonical Envelope 和公开 DTO 读回；不再靠测试手动连接执行和保存组件。合成来源与执行器不证明临床判定，客户 PostgreSQL/浏览器及旧适配替代审计仍缺，C 保持进行中。A/B/D 保持既定退出标准。
 
 2026-09-25 接续：现有 A/B/C/D goal 保持 active。阶段 C 复现并修复新 `native_sync` 测试规则在生产 `prepare` 的 Typed Decision 路由缺口；临时目录规则经正式任务接纳、生产 `prepare`/注册表的固定 Decision 和隔离 Canonical 组件链验证。正式 Worker 自动领取/保存、客户 PostgreSQL、浏览器及临床保护集尚未覆盖，C 不关闭；A/B/D 仍按主计划退出。未触碰新 CT/抢救/病理及 0916。
