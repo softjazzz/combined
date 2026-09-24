@@ -541,13 +541,16 @@ def project_customer_safe_result_item(
         else _keyed_ref("rec", record_material, hmac_key=hmac_key)
     )
     is_luxian = rule_id.startswith("LX0609-")
-    is_current_luxian_canonical = (
+    # 客户安全 DTO 可能再次进入列表投影/导出；二次投影仍须校验状态与公开事实。
+    is_current_luxian_result = (
         is_luxian
-        and _safe_text(raw.get("schema_version")) == LUXIAN_0609_CUSTOMER_SCHEMA_VERSION
+        and _safe_text(raw.get("schema_version")) in {
+            LUXIAN_0609_CUSTOMER_SCHEMA_VERSION, _CUSTOMER_RESULT_SCHEMA,
+        }
         and bool(_safe_text(raw.get("status")))
         and bool(_safe_text(raw.get("result_status")))
     )
-    if is_current_luxian_canonical:
+    if is_current_luxian_result:
         status = _safe_text(raw.get("status")).lower()
         result_status = _safe_text(raw.get("result_status")).lower()
         display_status = _safe_text(raw.get("display_status")).lower()
@@ -573,7 +576,7 @@ def project_customer_safe_result_item(
     # 当前 Canonical 文案由执行器/Renderer 已生成。读取层只做敏感裁剪，
     # 不得按规则、事实或 status 再次生成结论。
     reuse_saved_customer_text = (
-        is_current_luxian_canonical
+        is_current_luxian_result
         or _safe_text(raw.get("schema_version")) == _CUSTOMER_RESULT_SCHEMA
     )
     conclusion = _explicit_customer_text(
@@ -590,7 +593,7 @@ def project_customer_safe_result_item(
     )
     if (
         is_luxian
-        and not is_current_luxian_canonical
+        and not is_current_luxian_result
         and _safe_text(raw.get("schema_version")) != _CUSTOMER_RESULT_SCHEMA
     ):
         # 兼容测试/复核中的旧内部投影形状；正式 LX0609 批详情在进入此函数前
@@ -632,11 +635,11 @@ def project_customer_safe_result_item(
         "qc_point_id": rule_id,
         "rule_name": rule_name,
         "status": status,
-        "result_status": result_status if is_current_luxian_canonical else status,
+        "result_status": result_status if is_current_luxian_result else status,
         "display_status": (
-            display_status or status if is_current_luxian_canonical else status
+            display_status or status if is_current_luxian_result else status
         ),
-        "is_compliant": raw.get("is_compliant") if is_current_luxian_canonical else (
+        "is_compliant": raw.get("is_compliant") if is_current_luxian_result else (
             True if status == "compliant" else False if status == "non_compliant" else None
         ),
         "is_confirmed_issue": status == "non_compliant",
@@ -716,13 +719,16 @@ def iter_unique_customer_result_source_items(
             continue
         if not _is_current_rule_contract_result(item):
             continue
-        is_current_luxian_canonical = (
+        # 已投影的客户 DTO 是安全读模型，重入时不应误判成旧内部结果。
+        is_current_luxian_result = (
             _safe_text(item.get("rule_id") or item.get("rule_code")).startswith("LX0609-")
-            and _safe_text(item.get("schema_version")) == LUXIAN_0609_CUSTOMER_SCHEMA_VERSION
+            and _safe_text(item.get("schema_version")) in {
+                LUXIAN_0609_CUSTOMER_SCHEMA_VERSION, _CUSTOMER_RESULT_SCHEMA,
+            }
             and bool(_safe_text(item.get("status")))
             and bool(_safe_text(item.get("result_status")))
         )
-        if validate_luxian and not is_current_luxian_canonical:
+        if validate_luxian and not is_current_luxian_result:
             # 旧批任务项没有 Canonical 交付合同。读取 API 明确隔离为既有
             # technical_error，绝不在此重算状态或客户结论，也不让单条旧项
             # 中断整个任务详情。

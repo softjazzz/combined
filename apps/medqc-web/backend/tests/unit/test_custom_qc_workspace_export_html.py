@@ -14,7 +14,10 @@ from app.services.luxian_0609.decision_model import (
 )
 from app.services.luxian_0609.decision_reducer import reduce_luxian_0609_rule_decision
 from app.services.luxian_0609_result_aggregator import aggregate_luxian_0609_results
-from app.services.luxian_0609_result_schema import CANONICAL_RESULT_DELIVERY_MODE
+from app.services.luxian_0609_result_schema import (
+    CANONICAL_RESULT_DELIVERY_MODE,
+    CUSTOMER_SCHEMA_VERSION,
+)
 from app.services.qc_workspace.canonical_result_store import (
     CanonicalResultStore,
     RECORD_RESULT_ENVELOPE_SCHEMA,
@@ -49,6 +52,46 @@ def _failed_criterion() -> list[dict[str, str]]:
             "reason_code": "requirement_violated",
         }
     ]
+
+
+def _published_timeliness_item(
+    rule_id: str, *, status: str = "compliant",
+) -> dict[str, Any]:
+    """为导出测试提供符合当前发布合同的基础时限结果。"""
+
+    assert rule_id in {"LX0609-01-01-01", "LX0609-01-02-01"}
+    assert status in {"compliant", "non_compliant", "data_gap"}
+    item: dict[str, Any] = {
+        "schema_version": CUSTOMER_SCHEMA_VERSION,
+        "rule_id": rule_id,
+        "status": status,
+        "result_status": status,
+        "display_status": status,
+        "is_compliant": (
+            True if status == "compliant" else False if status == "non_compliant" else None
+        ),
+        "reason_code": (
+            "source_unavailable" if status == "data_gap" else
+            "deadline_exceeded" if status == "non_compliant" else "within_deadline"
+        ),
+    }
+    if status != "data_gap":
+        is_admission = rule_id == "LX0609-01-01-01"
+        threshold = 24 if is_admission else 8
+        elapsed = threshold + 2 if status == "non_compliant" else threshold - 2
+        item["customer_display_facts"] = {
+            "failure_kind": (
+                "timeliness_requirement_not_met" if status == "non_compliant"
+                else "timeliness_requirement_satisfied"
+            ),
+            "target_document": "admission_record" if is_admission else "first_course_record",
+            "source_label": "入院记录" if is_admission else "首次病程记录",
+            "timeliness_state": "late" if status == "non_compliant" else "within",
+            "threshold_hours": threshold,
+            "elapsed_hours": elapsed,
+            ("overdue_hours" if status == "non_compliant" else "remaining_hours"): 2,
+        }
+    return item
 
 
 @pytest.mark.parametrize("data_gap", [False, True], ids=["compliant", "data_gap"])
@@ -492,6 +535,7 @@ def test_export_batch_job_html_groups_records_and_sanitizes_internal_fields():
         },
         "items": [
             {
+                **_published_timeliness_item("LX0609-01-01-01", status="non_compliant"),
                 "record_id": "V001",
                 "patient_name": "张某某",
                 "department": "神经内科",
@@ -509,13 +553,14 @@ def test_export_batch_job_html_groups_records_and_sanitizes_internal_fields():
                 "prompt": "should-not-export",
             },
             {
+                **_published_timeliness_item("LX0609-01-02-01", status="data_gap"),
                 "record_id": "V002",
                 "patient_name": "李某某",
                 "department": "普外科",
                 "rule_code": "LX0609-01-02-01",
                 "rule_name": "首次病程：入院后8小时内无首次病程记录",
                 "status": "data_gap",
-                "is_compliant": False,
+                "is_compliant": None,
                 "findings": "缺少首次病程记录时间，无法自动判定。",
                 "missing_sources": ["首次病程记录时间"],
             },
@@ -571,6 +616,7 @@ def test_export_batch_job_html_flattens_parent_child_jobs():
                 "id": "child-1",
                 "items": [
                     {
+                        **_published_timeliness_item("LX0609-01-01-01", status="non_compliant"),
                         "record_id": "V001",
                         "patient_name": "张某某",
                         "department": "神经内科",
@@ -586,13 +632,14 @@ def test_export_batch_job_html_flattens_parent_child_jobs():
                 "id": "child-2",
                 "items": [
                     {
+                        **_published_timeliness_item("LX0609-01-02-01"),
                         "record_id": "V001",
                         "patient_name": "张某某",
                         "department": "神经内科",
-                        "rule_code": "LX0609-03-01-01",
-                        "rule_name": "会诊记录：会诊记录单无请会诊执行记录",
+                        "rule_code": "LX0609-01-02-01",
+                        "rule_name": "首次病程：入院后8小时内完成",
                         "status": "compliant",
-                        "findings": "会诊执行记录完整。",
+                        "findings": "首次病程记录完整。",
                     }
                 ],
             },
@@ -609,9 +656,9 @@ def test_export_batch_job_html_flattens_parent_child_jobs():
     assert "V001" not in html
     assert "张某某" not in html
     assert "LX0609-01-01-01" in html
-    assert "LX0609-03-01-01" in html
+    assert "LX0609-01-02-01" in html
     assert "入院记录超时" not in html
-    assert "会诊执行记录完整" not in html
+    assert "首次病程记录完整" not in html
 
 
 def test_export_batch_job_html_safely_reports_empty_result_set():
@@ -643,6 +690,7 @@ def test_html_csv_xlsx_share_customer_safe_rows_and_confirmed_issue_semantics():
         "summary": {"issue_records": 3, "filters_raw": {"visit_id": "V-RAW"}},
         "items": [
             {
+                **_published_timeliness_item("LX0609-01-01-01", status="non_compliant"),
                 "record_id": "R-A",
                 "visit_id": "V-A",
                 "patient_name": "甲患者",
@@ -653,11 +701,10 @@ def test_html_csv_xlsx_share_customer_safe_rows_and_confirmed_issue_semantics():
                 "customer_conclusion": "记录完成时间超过规定时限。",
             },
             {
+                **_published_timeliness_item("LX0609-01-02-01", status="data_gap"),
                 "record_id": "R-A",
                 "patient_name": "甲患者",
-                "rule_id": "LX0609-03-01-02",
-                "status": "ai_suggested_non_compliant",
-                "reason_code": "semantic_low_confidence",
+                "rule_id": "LX0609-01-02-01",
             },
             {
                 "record_id": "R-B",
@@ -683,13 +730,13 @@ def test_html_csv_xlsx_share_customer_safe_rows_and_confirmed_issue_semantics():
     all_rows = list(workbook["全部明细"].iter_rows(values_only=True))
     assert [row[1] for row in all_rows[1:]] == [
         "LX0609-01-01-01",
-        "LX0609-03-01-02",
+        "LX0609-01-02-01",
     ]
     csv_rows = list(csv.reader(StringIO(csv_text)))
     detail_start = csv_rows.index(["全部明细"])
     assert [row[1] for row in csv_rows[detail_start + 2 :]] == [
         "LX0609-01-01-01",
-        "LX0609-03-01-02",
+        "LX0609-01-02-01",
     ]
     expected_status_reasons = [
         (item["status"], item["reason_code"])
@@ -725,7 +772,7 @@ def test_html_csv_xlsx_share_customer_safe_rows_and_confirmed_issue_semantics():
     assert [row[0] for row in csv_rows[detail_start + 2 :]] == [
         item["record_ref"] for item in projected_job["items"]
     ]
-    for rule_id in ("LX0609-01-01-01", "LX0609-03-01-02"):
+    for rule_id in ("LX0609-01-01-01", "LX0609-01-02-01"):
         assert html.find(rule_id) >= 0
         assert csv_text.find(rule_id) >= 0
     assert "LX0609-11-01-01" not in html
@@ -767,6 +814,7 @@ def test_customer_safe_batch_projection_is_idempotent_and_remains_safe_export():
         },
         "items": [
             {
+                **_published_timeliness_item("LX0609-01-01-01", status="non_compliant"),
                 "record_id": "R-IDEMPOTENT",
                 "rule_id": "LX0609-01-01-01",
                 "status": "non_compliant",
@@ -790,6 +838,18 @@ def test_customer_safe_batch_projection_is_idempotent_and_remains_safe_export():
     assert second["items"] == first["items"]
     assert "病历引用" not in service.export_batch_job_html(job=second)
     assert "R-IDEMPOTENT" not in service.export_batch_job_html(job=second)
+
+    corrupted_status = deepcopy(first)
+    corrupted_status["items"][0]["result_status"] = "compliant"
+    with pytest.raises(ValueError, match="LX0609 客户结果解释合同不完整"):
+        project_customer_safe_batch_job(
+            corrupted_status, hmac_key=customer_safe_projection_key(),
+        )
+
+    missing_facts = deepcopy(first)
+    missing_facts["items"][0].pop("customer_display_facts")
+    with pytest.raises(ValueError, match="LX0609 客户结果解释合同不完整"):
+        service.export_batch_job_html(job=missing_facts)
 
 
 def test_non_luxian_export_keeps_legacy_business_columns() -> None:
@@ -837,6 +897,10 @@ def _lx0609_export_job(*items: dict[str, Any]) -> dict[str, Any]:
 
 def _lx0609_compliant_item(rule_id: str) -> dict[str, Any]:
     return {
+        **(
+            _published_timeliness_item(rule_id)
+            if rule_id == "LX0609-01-01-01" else {}
+        ),
         "record_id": "record-1",
         "rule_id": rule_id,
         "status": "compliant",
