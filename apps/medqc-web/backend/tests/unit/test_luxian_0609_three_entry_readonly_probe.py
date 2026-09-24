@@ -27,8 +27,9 @@ FIRST_REF = {"institute_id": "I001", "patient_id": "P001", "visit_id": "V001"}
 SECOND_REF = {"institute_id": "I001", "patient_id": "P002", "visit_id": "V002"}
 
 
+@pytest.mark.parametrize("source_mode", ("empty", "documented"))
 @pytest.mark.asyncio
-async def test_three_real_entry_routes_keep_original_001_004_task_inputs(monkeypatch):
+async def test_three_real_entry_routes_keep_original_001_004_task_inputs(monkeypatch, source_mode):
     class _FrozenDatetime(datetime):
         @classmethod
         def now(cls, tz=None):
@@ -113,6 +114,17 @@ async def test_three_real_entry_routes_keep_original_001_004_task_inputs(monkeyp
     assert len(submitted) == 3
 
     settings = _settings(basic_timeliness=True)
+    rows_by_source = {} if source_mode == "empty" else {
+        "inpat_registration": [{"admission_datetime": "2026-09-20 08:00:00"}],
+        "admission_record": [{
+            "document_id": "ADM-1", "document_title": "入院记录",
+            "record_time": "2026-09-20 09:00:00", "chief_complaint": "合成腹痛",
+        }],
+        "rescue_record": [{
+            "document_id": "RS-1", "record_time": "2026-09-21 11:00:00",
+            "record_content": "抢救结束时间：2026-09-21 10:00:00。",
+        }],
+    }
     prepare_trace: dict[str, list[dict[str, Any]]] = {}
     evidence_trace: dict[str, list[dict[str, Any]]] = {}
     settings_reads: list[str] = []
@@ -138,7 +150,8 @@ async def test_three_real_entry_routes_keep_original_001_004_task_inputs(monkeyp
         return original_evidence(
             **kwargs,
             row_reader=lambda **query: SnapshotSourceRows.create(
-                source_key=query["source_key"], rows=[], truncated=False,
+                source_key=query["source_key"],
+                rows=rows_by_source.get(query["source_key"], []), truncated=False,
                 limit_rows=50,
             ),
         )
@@ -173,6 +186,7 @@ async def test_three_real_entry_routes_keep_original_001_004_task_inputs(monkeyp
     monkeypatch.setattr(programmatic_evidence, "_fetch_detail_service_fallback_items", lambda *_a, **_k: [])
 
     outcomes: dict[str, list[tuple[str, str, str]]] = {}
+    published: dict[str, list[dict[str, Any]]] = {}
     for label, job in created.items():
         current_label = label
         prepare_trace[label] = []
@@ -211,6 +225,15 @@ async def test_three_real_entry_routes_keep_original_001_004_task_inputs(monkeyp
             (item["rule_id"], item["status"], item["reason_code"])
             for item in workspace.items if item["record_id"] == "V001"
         ]
+        published[label] = [
+            {
+                "rule_id": item["rule_id"],
+                "customer_display_facts": item.get("customer_display_facts"),
+                "customer_evidence": item.get("customer_evidence"),
+                "criterion_results": item.get("criterion_results"),
+            }
+            for item in workspace.items if item["record_id"] == "V001"
+        ]
         assert len(prepare_trace[label]) == len(evidence_trace[label]) == len(job["record_ids"])
         assert all(trace["settings_id"] == id(settings) for trace in prepare_trace[label])
 
@@ -226,12 +249,31 @@ async def test_three_real_entry_routes_keep_original_001_004_task_inputs(monkeyp
             key: reference[key] for key in ("rule_ids", "as_of", "horizon")
         }
         assert outcomes[label] == outcomes["single"]
+        assert published[label] == published["single"]
     assert reference["rule_ids"] == RULE_IDS
     assert reference["as_of"] == "2026-09-24"
-    assert outcomes["single"] == [
-        (RULE_IDS[0], "data_gap", "authoritative_time_missing"),
-        (RULE_IDS[1], "not_applicable", "trigger_absent_complete"),
-    ]
+    if source_mode == "empty":
+        assert outcomes["single"] == [
+            (RULE_IDS[0], "data_gap", "authoritative_time_missing"),
+            (RULE_IDS[1], "not_applicable", "trigger_absent_complete"),
+        ]
+    else:
+        assert outcomes["single"] == [
+            (RULE_IDS[0], "compliant", "requirement_within_threshold"),
+            (RULE_IDS[1], "compliant", "requirement_within_threshold"),
+        ]
+        for index, (source, document_id, observed, remaining) in enumerate((
+            ("admission_record", "ADM-1", "2026-09-20 09:00:00", 23.0),
+            ("rescue_record", "RS-1", "2026-09-21 11:00:00", 5.0),
+        )):
+            facts = published["single"][index]["customer_display_facts"]
+            evidence = published["single"][index]["customer_evidence"]
+            assert facts["observed_time"] == observed
+            assert facts["elapsed_hours"] == 1.0
+            assert facts["remaining_hours"] == remaining
+            assert [(item["source_type"], item["source_document_id"]) for item in evidence] == [
+                (source, document_id),
+            ]
     assert len(settings_reads) == 3
 
 

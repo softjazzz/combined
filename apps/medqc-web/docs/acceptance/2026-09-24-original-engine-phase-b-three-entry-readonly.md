@@ -30,4 +30,10 @@
 $env:JWT_SECRET='unit-test-secret-only'; $env:DATABASE_URL=''; python -m pytest tests/unit/test_luxian_0609_three_entry_readonly_probe.py tests/unit/test_luxian_0609_task_plan_freeze_probe.py --confcutdir=tests/unit -q --disable-warnings --tb=short
 ```
 
-本次运行 5 passed、3 warnings，退出码 0。警告不影响上述固定传参与状态断言；该结论不代替客户样本或临床保护集验收。
+初次提交时运行 5 passed、3 warnings，退出码 0；加入下述非空来源回放后运行 6 passed、3 warnings，退出码 0。警告不影响上述固定传参与状态断言；该结论不代替客户样本或临床保护集验收。
+
+## 非空来源补充回放
+
+后续在同一三入口探针加入第二组固定来源行：住院登记入院时间 2026-09-20 08:00，入院记录 ADM-1 完成于当日 09:00；抢救记录 RS-1 写明抢救结束于 2026-09-21 10:00，记录完成于 11:00。来源均为合成行，读取会话继续调用真实快照构造，未连接 PG 或模型。空来源组仍保留，避免只验证正常记录。
+
+三个入口共同的首份病例都发布：001 `compliant/requirement_within_threshold`，耗时 1 小时、剩余 23 小时、证据定位到 `admission_record/ADM-1`；004 同为 `compliant/requirement_within_threshold`，耗时 1 小时、剩余 5 小时、证据定位到 `rescue_record/RS-1`。探针逐字段比较三入口的状态、原因码、客户可见事实、证据和子结论，并断言上述具体时间与文书坐标。它证明相同来源行经过三个路由后确实进入对应规则及发布结果，而不只是空源时恰好同为缺口或不适用；仍不能替代真实病历的临床金标准。
