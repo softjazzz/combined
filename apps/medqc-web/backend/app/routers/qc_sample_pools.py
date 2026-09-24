@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from ..core.response import get_trace_id, success_response
+from ..core.settings import get_settings
 from ..core.security import get_current_user, require_roles
 from ..services.product_activation import require_product_activation
 from ..services.fast_screen_qc import EXECUTION_STRATEGY_FAST_SCREEN, EXECUTION_STRATEGY_STANDARD, get_fast_screen_full_rule_ids
@@ -39,6 +40,11 @@ from ..services.luxian_0609 import (
 )
 from ..services.luxian_0609.evaluation_horizon import (
     build_record_evaluation_horizon_snapshot,
+)
+from ..services.luxian_0609.rule_decision_settings import (
+    LX0609_TASK_SETTINGS_FILTER_KEY,
+    capture_luxian_0609_task_settings,
+    resolve_mainline_rule_decision_settings,
 )
 from ..services.sample_validation_rule_sets import (
     FORMAL_FAST_SCREEN_FULL_MODE,
@@ -1356,6 +1362,13 @@ async def run_sample_pool_intrinsic_validation(
         else []
     )
 
+    task_settings_snapshot = (
+        capture_luxian_0609_task_settings(
+            resolve_mainline_rule_decision_settings(get_settings())
+        )
+        if rule_set_key == LUXIAN_0609_QC_RULE_SET_KEY
+        else None
+    )
     pseudo_draft = resolve_sample_validation_pseudo_draft(
         validation_mode=validation_mode,
         pool_name=str(pool.get("name") or ""),
@@ -1364,6 +1377,7 @@ async def run_sample_pool_intrinsic_validation(
         rule_set_name=rule_set_name,
     )
     job_filters = {
+        **({LX0609_TASK_SETTINGS_FILTER_KEY: task_settings_snapshot} if task_settings_snapshot is not None else {}),
         "rule_ids": rule_ids,
         "rule_set_key": rule_set_key,
         "rule_set_name": rule_set_name,
@@ -1463,6 +1477,7 @@ async def run_sample_pool_intrinsic_validation(
         group_by_luxian_family=bool(payload.group_by_luxian_family),
         effective_scope=effective_scope,
         execution_options={
+            **({LX0609_TASK_SETTINGS_FILTER_KEY: task_settings_snapshot} if task_settings_snapshot is not None else {}),
             "model_code": payload.model_code,
             "temperature": payload.temperature,
             "top_p": payload.top_p,

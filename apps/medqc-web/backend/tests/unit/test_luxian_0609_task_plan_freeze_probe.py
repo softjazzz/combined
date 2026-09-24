@@ -14,6 +14,11 @@ from app.services import sichuan_workspace_batch_worker as worker
 from app.services import sample_programmatic_evidence as programmatic_evidence
 from app.services.luxian_0609 import execution as execution_module
 from app.services.luxian_0609 import native_package
+from app.services.luxian_0609.rule_decision_settings import (
+    LX0609_TASK_SETTINGS_FILTER_KEY,
+    capture_luxian_0609_task_settings,
+    resolve_mainline_rule_decision_settings,
+)
 from app.services.luxian_0609.evidence_snapshot_provider import SnapshotSourceRows
 from app.services.sichuan_qc_service import SichuanQCService
 from tests.unit.test_qc_sichuan_batch_throughput import _WorkspaceStub
@@ -67,6 +72,10 @@ async def test_worker_bundle_prepare_plan_and_as_of_freeze_probe(
         "record_evaluation_snapshot": [_horizon(record_id) for record_id in workspace.job["record_ids"]],
     }
     worker_settings = _settings(basic_timeliness=True)
+    frozen_settings = worker_settings.model_copy(update={"LUXIAN_0609_FAMILY_MAX_CONCURRENCY": 2})
+    workspace.job["filters"][LX0609_TASK_SETTINGS_FILTER_KEY] = capture_luxian_0609_task_settings(
+        resolve_mainline_rule_decision_settings(frozen_settings)
+    )
     per_record_settings = _settings(basic_timeliness=service_basic_timeliness)
     settings_reads: list[str] = []
     plan_calls: list[tuple[str, tuple[str, ...], tuple[str, ...], tuple[str, ...]]] = []

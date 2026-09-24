@@ -7,6 +7,66 @@ from typing import Any, Mapping
 from .phase_scope import partition_luxian_0609_rule_scope
 
 
+LX0609_TASK_SETTINGS_FILTER_KEY = "lx0609_task_settings"
+_LX0609_TASK_SETTINGS_VERSION = 1
+# 只包含会改变正式执行路径和客户证据组织的有效布尔值；资源预算、影子开关与凭据不入任务。
+_LX0609_TASK_MEDICAL_FLAGS = (
+    "MAINLINE_RULE_DECISION_ENABLED", "CUSTOMER_AGGREGATION_ENABLED", "UNIFIED_ENGINE_ENABLED",
+    "NATIVE_EXECUTION_ENABLED", "NATIVE_MDT_040_ENABLED", "NATIVE_EXTENDED_DOCUMENT_ENABLED",
+    "NATIVE_BASIC_TIMELINESS_ENABLED", "NATIVE_CONSULTATION_ENABLED",
+    "CONSULTATION_EXECUTION_LINK_ENABLED", "NATIVE_EXAM_LAB_ENABLED",
+    "NATIVE_TRANSFUSION_ENABLED", "NATIVE_TUMOR_PATHOLOGY_ENABLED",
+    "NATIVE_COURSE_QUALITY_ENABLED", "NATIVE_SURGERY_GATE_ENABLED",
+    "NATIVE_SURGERY_DOCUMENT_ENABLED",
+    "RULE_DECISION_007_ENABLED", "RULE_DECISION_COURSE_SEVERITY_ENABLED",
+    "RULE_DECISION_BASIC_TIMELINESS_ENABLED", "RULE_DECISION_TRANSFUSION_ENABLED",
+    "RULE_DECISION_CONSULTATION_ENABLED", "RULE_DECISION_COURSE_COPY_ENABLED",
+    "RULE_DECISION_COURSE_ADMISSION_ENABLED", "RULE_DECISION_TUMOR_PATHOLOGY_ENABLED",
+    "RULE_DECISION_MDT_040_ENABLED", "RULE_DECISION_SURGERY_TIMELINESS_ENABLED",
+    "RULE_DECISION_SURGERY_GATE_REMAINING_ENABLED", "RULE_DECISION_EXAM_LAB_ENABLED",
+    "RULE_DECISION_SURGERY_DOCUMENT_ENABLED", "TRIGGER_GATE_ENABLED",
+    "LLM_TRIGGER_GATE_ENABLED", "EVIDENCE_SNAPSHOT_SIDECAR_ENABLED",
+)
+_LX0609_TASK_DELIVERY_FLAGS = ("EVIDENCE_FORMATTER_ENABLED",)
+_LX0609_TASK_FLAG_NAMES = tuple(
+    f"LUXIAN_0609_{suffix}"
+    for suffix in (*_LX0609_TASK_MEDICAL_FLAGS, *_LX0609_TASK_DELIVERY_FLAGS)
+)
+
+
+def capture_luxian_0609_task_settings(effective_settings: Any) -> dict[str, Any]:
+    """创建任务时记录已解析的有效执行路径，而非环境原始配置。"""
+
+    values: dict[str, bool] = {}
+    for name in _LX0609_TASK_FLAG_NAMES:
+        value = getattr(effective_settings, name)
+        if type(value) is not bool:
+            raise ValueError(f"LX0609任务配置非法：{name}不是布尔值")
+        values[name] = value
+    return {"schema_version": _LX0609_TASK_SETTINGS_VERSION, "flags": values}
+
+
+def assert_luxian_0609_task_settings_match(
+    frozen: Any, effective_settings: Any,
+) -> None:
+    """旧任务、损坏快照或运行时配置漂移均在医学计划前失败关闭。"""
+
+    if (
+        not isinstance(frozen, dict)
+        or type(frozen.get("schema_version")) is not int
+        or frozen["schema_version"] != _LX0609_TASK_SETTINGS_VERSION
+        or set(frozen) != {"schema_version", "flags"}
+        or not isinstance(frozen.get("flags"), dict)
+        or set(frozen["flags"]) != set(_LX0609_TASK_FLAG_NAMES)
+        or any(type(value) is not bool for value in frozen["flags"].values())
+    ):
+        raise ValueError("LX0609任务执行配置快照缺失或非法，请重新发起任务")
+    current = capture_luxian_0609_task_settings(effective_settings)
+    changed = [name for name in _LX0609_TASK_FLAG_NAMES if frozen["flags"][name] != current["flags"][name]]
+    if changed:
+        raise ValueError(f"LX0609任务执行配置已变化，请重新发起任务：{', '.join(changed)}")
+
+
 RULE_DECISION_ROLLOUT_GROUPS: tuple[tuple[str | None, tuple[str, ...]], ...] = (
     ("LUXIAN_0609_RULE_DECISION_BASIC_TIMELINESS_ENABLED", (
         "LX0609-01-01-01", "LX0609-01-02-01", "LX0609-09-01-01", "LX0609-02-01-01", "LX0609-02-01-02",

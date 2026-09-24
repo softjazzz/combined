@@ -46,6 +46,8 @@ from .luxian_0609.native_package import (
     assert_luxian_0609_formal_package_plan_native_only,
 )
 from .luxian_0609.rule_decision_settings import (
+    LX0609_TASK_SETTINGS_FILTER_KEY,
+    assert_luxian_0609_task_settings_match,
     assert_luxian_0609_customer_native_delivery_ready,
     resolve_mainline_rule_decision_settings,
 )
@@ -1340,6 +1342,9 @@ async def run_sichuan_workspace_batch_job(
         )
         settings = resolve_mainline_rule_decision_settings(get_settings())
         if rule_set_key == LUXIAN_0609_RULE_SET_KEY:
+            assert_luxian_0609_task_settings_match(
+                filters.get(LX0609_TASK_SETTINGS_FILTER_KEY), settings,
+            )
             assert_luxian_0609_customer_native_delivery_ready(
                 settings,
                 context=f"workspace_batch_job:{job_id}",

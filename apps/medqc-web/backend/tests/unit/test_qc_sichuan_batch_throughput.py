@@ -2454,6 +2454,8 @@ async def test_create_workspace_batch_job_accepts_native_luxian_customer_ids_wit
     assert filters["selected_rule_ids"] == native_rule_ids
     assert filters["scoped_customer_rule_ids"] == native_rule_ids
     assert filters["validation_mode"] == "programmatic"
+    assert len(filters["lx0609_task_settings"]["flags"]) == 32
+    assert filters["idempotency_payload"]["lx0609_task_settings"] == filters["lx0609_task_settings"]
     assert filters["customer_rule_count"] == filters["execution_rule_count"] == 3
     task_frozen_date = filters["task_frozen_date"]
     assert date.fromisoformat(task_frozen_date).isoformat() == task_frozen_date

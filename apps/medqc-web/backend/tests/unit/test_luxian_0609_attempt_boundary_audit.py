@@ -15,6 +15,11 @@ from starlette.requests import Request
 
 from app.routers import qc_sichuan
 from app.core.settings import Settings
+from app.services.luxian_0609.rule_decision_settings import (
+    LX0609_TASK_SETTINGS_FILTER_KEY,
+    capture_luxian_0609_task_settings,
+    resolve_mainline_rule_decision_settings,
+)
 from app.services import custom_qc_workspace_service as workspace_module
 from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
 from app.services import sichuan_workspace_batch_worker as batch_worker
@@ -87,6 +92,28 @@ def test_cancelled_terminal_rejects_late_completion_until_same_job_is_retried(st
     assert isinstance(new_attempt, str) and new_attempt != old_attempt
     assert _stale_failed_completion(service, old_attempt) is False
     assert _status(engine, table) == "running"
+
+
+def test_same_id_retry_preserves_original_luxian_settings_snapshot(storage):
+    service, engine, table = storage
+    original = capture_luxian_0609_task_settings(
+        resolve_mainline_rule_decision_settings(Settings(_env_file=None, JWT_SECRET="synthetic-retry"))
+    )
+    with engine.begin() as connection:
+        connection.execute(
+            table.update().where(table.c.id == "attempt-job").values(
+                filters_json=json.dumps({
+                    "rule_set_key": "luxian_0609_qc_v1",
+                    "rule_ids": ["LX0609-01-01-01"],
+                    LX0609_TASK_SETTINGS_FILTER_KEY: original,
+                })
+            )
+        )
+    canceled = service.cancel_batch_job(job_id="attempt-job", created_by="tester")
+    assert canceled is not None and canceled["status"] == "canceled"
+    retried = service.retry_batch_job(job_id="attempt-job", created_by="tester")
+    assert retried is not None and retried["status"] == "queued"
+    assert retried["filters"][LX0609_TASK_SETTINGS_FILTER_KEY] == original
 
 
 def test_running_job_can_be_claimed_by_two_workers(storage):

@@ -2003,6 +2003,7 @@ async def test_run_sample_pool_should_return_safe_execution_identity(monkeypatch
     assert len(data["execution_scope_hash"]) == 64
     assert created["filters"]["operation_ref"] == data["operation_ref"]
     assert created["filters"]["execution_scope_hash"] == data["execution_scope_hash"]
+    assert len(created["filters"]["lx0609_task_settings"]["flags"]) == 32
     serialized = repr(data)
     assert "V001" not in data["operation_ref"]
     assert "item-1" not in data["operation_ref"]
@@ -2058,6 +2059,19 @@ async def test_run_sample_pool_should_reuse_recent_identical_operation(monkeypat
     assert second["data"]["operation_ref"] == first["data"]["operation_ref"]
     assert second["data"]["execution_scope_hash"] == first["data"]["execution_scope_hash"]
     assert second["data"]["deduplicated"] is True
+
+    base_settings = qc_sample_pools.get_settings()
+    current_gate = first_job["filters"]["lx0609_task_settings"]["flags"]["LUXIAN_0609_TRIGGER_GATE_ENABLED"]
+    monkeypatch.setattr(
+        qc_sample_pools, "get_settings",
+        lambda: base_settings.model_copy(update={"LUXIAN_0609_TRIGGER_GATE_ENABLED": not current_gate}),
+    )
+    third = await qc_sample_pools.run_sample_pool_intrinsic_validation(
+        request=_build_request(), pool_id="pool-1", payload=payload,
+        current_user={"id": "tester"},
+    )
+    assert len(workspace_service.create_batch_job_calls) == 2
+    assert third["data"]["execution_scope_hash"] != first["data"]["execution_scope_hash"]
 
 
 @pytest.mark.asyncio
@@ -2459,6 +2473,11 @@ async def test_run_sample_pool_intrinsic_validation_should_create_luxian_parent_
     assert parent_call["job_kind"] == "parent"
     assert parent_call["parent_job_id"] is None
     assert parent_call["filters"]["group_by_luxian_family"] is True
+    assert len(parent_call["filters"]["lx0609_task_settings"]["flags"]) == 32
+    assert all(
+        call["filters"]["lx0609_task_settings"] == parent_call["filters"]["lx0609_task_settings"]
+        for call in child_calls
+    )
     assert parent_call["filters"]["scoped_customer_rule_ids"] == [
         "LX0609-01-01-01",
         "LX0609-03-01-04",
