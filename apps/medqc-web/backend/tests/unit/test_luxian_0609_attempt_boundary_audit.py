@@ -448,7 +448,15 @@ def test_only_current_attempt_commits_real_canonical_envelope(storage):
             "institute_id": "inst-1", "patient_id": "patient-1", "visit_id": "visit-1",
             "rule_id": "LX0609-01-01-01", "status": "compliant",
             "result_status": "compliant", "display_status": "compliant",
-            "is_compliant": True, "reason_code": "record_complete",
+            "is_compliant": True, "reason_code": "requirement_within_threshold",
+            "customer_display_facts": {
+                "failure_kind": "timeliness_requirement_satisfied",
+                "target_document": "admission_record", "source_label": "入院记录",
+                "timeliness_state": "within", "threshold_hours": 24,
+                "anchor_time": "2026-09-20 08:00:00",
+                "observed_time": "2026-09-20 09:00:00",
+                "elapsed_hours": 1.0, "remaining_hours": 23.0,
+            },
         }], failed_records=[],
     )
     assert service.complete_batch_job(**payload, attempt_filters_json=old) is False
@@ -468,6 +476,9 @@ def test_only_current_attempt_commits_real_canonical_envelope(storage):
     finally:
         session.close()
     assert loaded["items"][0]["rule_id"] == "LX0609-01-01-01"
+    assert loaded["items"][0]["status"] == "compliant"
+    assert loaded["items"][0]["reason_code"] == "requirement_within_threshold"
+    assert loaded["items"][0]["customer_display_facts"] == payload["items"][0]["customer_display_facts"]
 
 
 @pytest.mark.asyncio
