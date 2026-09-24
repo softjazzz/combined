@@ -82,15 +82,33 @@ else:
     async def provide():
         return SichuanQCService(config)
 
-    asyncio.run(worker.run_sichuan_workspace_batch_job(
-        job_id, workspace=workspace, qc_service_provider=provide,
-    ))
+    resumed_count = None
+    if mode == 'recover':
+        from app.routers import qc_sichuan as route
+
+        async def run_recovered(recovered_job_id):
+            await worker.run_sichuan_workspace_batch_job(
+                recovered_job_id, workspace=workspace, qc_service_provider=provide,
+            )
+
+        def submit_synchronously(_name, func, *args, **kwargs):
+            asyncio.run(func(*args, **kwargs))
+
+        route._sichuan_workspace_service = lambda: workspace
+        route._run_sichuan_workspace_batch_job = run_recovered
+        route.submit_detached_task = submit_synchronously
+        resumed_count = route.resume_queued_luxian_0609_workspace_jobs()
+    else:
+        asyncio.run(worker.run_sichuan_workspace_batch_job(
+            job_id, workspace=workspace, qc_service_provider=provide,
+        ))
     job = workspace.get_batch_job_for_processing(job_id=job_id)
     persisted_filters = json.loads(job['_claim_filters_json'])
     print(json.dumps({
         'status': job['status'],
         'error_message': job['error_message'],
         'attempt_id': persisted_filters.get(storage.LX0609_ATTEMPT_FILTER_KEY),
+        'resumed_count': resumed_count,
     }, ensure_ascii=False))
 """
 
@@ -133,3 +151,59 @@ def test_persisted_formal_task_is_checked_by_a_new_worker_process(tmp_path, same
         assert resumed["error_message"] == "passed-runtime-gate"
     else:
         assert "模型或实现版本已变化" in str(resumed["error_message"])
+
+
+@pytest.mark.parametrize("same_release", [True, False])
+def test_queued_formal_task_is_resubmitted_after_process_restart(tmp_path, same_release):
+    """重启扫描应重投已保存队列，同版或异版均经正式 Worker 门禁。"""
+
+    database_path = str(tmp_path / "queued-jobs.sqlite")
+    first_build = "medqc-web-customer-20260925-100000"
+    next_build = first_build if same_release else "medqc-web-customer-20260925-110000"
+    created = _run_probe("create", database_path, first_build)
+    recovered = _run_probe("recover", database_path, next_build, str(created["job_id"]))
+
+    assert recovered["resumed_count"] == 1
+    assert recovered["status"] == "failed"
+    assert isinstance(recovered["attempt_id"], str) and recovered["attempt_id"]
+    if same_release:
+        assert recovered["error_message"] == "passed-runtime-gate"
+    else:
+        assert "模型或实现版本已变化" in str(recovered["error_message"])
+    assert _run_probe("recover", database_path, next_build, str(created["job_id"]))["resumed_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_application_startup_invokes_queued_luxian_recovery(monkeypatch):
+    from app import main as main_module
+    from app import database
+    from app.database import repository
+    from app.storage import memory
+    from app.services import smart_upload_async_service
+    from app.services.drg import batch_task_service
+    from app.services import local_icd_service
+    from app.services.llm_config_loader import LLMConfigLoader
+
+    calls = []
+
+    async def load_config(**_kwargs):
+        return None
+
+    monkeypatch.setattr(main_module.runtime_build_router, "initialize_runtime_build", lambda _app: None)
+    monkeypatch.setattr(memory, "assert_no_default_demo_users_in_production", lambda _env: None)
+    monkeypatch.setattr(repository, "validate_data_source", lambda: None)
+    monkeypatch.setattr(database, "init_db", lambda: None)
+    monkeypatch.setattr(smart_upload_async_service, "get_smart_upload_async_service", lambda: None)
+    monkeypatch.setattr(batch_task_service, "get_batch_task_manager", lambda: None)
+    monkeypatch.setattr(local_icd_service, "_get_icd_data", lambda: None)
+    monkeypatch.setattr(LLMConfigLoader, "load_config", load_config)
+    monkeypatch.setattr(main_module.qc_sichuan_router, "start_rule_source_monitor", lambda: None)
+    monkeypatch.setattr(
+        main_module.qc_sichuan_router, "resume_queued_luxian_0609_workspace_jobs",
+        lambda: calls.append("recover"),
+    )
+
+    app = main_module.create_app()
+    startup = next(callback for callback in app.router.on_startup if callback.__name__ == "startup_event")
+    await startup()
+    assert calls == ["recover"]

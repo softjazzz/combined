@@ -1855,6 +1855,21 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             finalize(job_id)
 
 
+def resume_queued_luxian_0609_workspace_jobs() -> int:
+    """应用重启时重投持久化队列；多进程重复投递由正式 Worker 的领取 CAS 拦截。"""
+
+    job_ids = _sichuan_workspace_service().list_queued_luxian_0609_batch_job_ids()
+    for job_id in job_ids:
+        submit_detached_task(
+            "sichuan_workspace_batch_job_startup_resume",
+            _run_sichuan_workspace_batch_job,
+            job_id,
+        )
+    if job_ids:
+        logger.info("重新投递 %d 个尚未领取的 LX0609 批量质控任务", len(job_ids))
+    return len(job_ids)
+
+
 @router.post("/workspace/batch-jobs")
 async def create_workspace_batch_job(
     request: Request,

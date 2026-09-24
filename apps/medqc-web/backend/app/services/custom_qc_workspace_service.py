@@ -2980,6 +2980,30 @@ class CustomQCWorkspaceService:
         finally:
             session.close()
 
+    def list_queued_luxian_0609_batch_job_ids(self) -> tuple[str, ...]:
+        """重启后只恢复尚未领取的正式 LX0609 叶任务；领取仍由 Worker CAS 完成。"""
+
+        session = _session()
+        try:
+            rows = session.execute(
+                select(
+                    self._batch_job_table.c.id,
+                    self._batch_job_table.c.job_kind,
+                    self._batch_job_table.c.filters_json,
+                )
+                .where(self._batch_job_table.c.status == "queued")
+                .order_by(asc(self._batch_job_table.c.created_at))
+            ).mappings().all()
+            return tuple(
+                str(row["id"])
+                for row in rows
+                if _safe_text(row.get("job_kind")).lower() != "parent"
+                and isinstance((filters := _safe_json_loads(row.get("filters_json"), {})), dict)
+                and filters.get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY
+            )
+        finally:
+            session.close()
+
     def list_batch_jobs(
         self,
         *,

@@ -77,6 +77,28 @@ def _status(engine, table) -> str:
         return connection.execute(sa.select(table.c.status)).scalar_one()
 
 
+def test_restart_scan_selects_only_queued_luxian_leaves(storage):
+    service, engine, table = storage
+    rows = [
+        ("paused-parent", "queued", "parent", "luxian_0609_qc_v1"),
+        ("other-ruleset", "queued", "leaf", "luxian_0916_qc_v1"),
+        ("already-running", "running", "leaf", "luxian_0609_qc_v1"),
+        ("another-leaf", "queued", "leaf", "luxian_0609_qc_v1"),
+    ]
+    with engine.begin() as connection:
+        for job_id, status, job_kind, rule_set_key in rows:
+            connection.execute(table.insert().values(
+                id=job_id, draft_id="synthetic-draft", created_by="tester",
+                status=status, job_kind=job_kind, rule_code="LX0609",
+                rule_name="重启扫描测试", scope="final", total_records=1,
+                created_at=datetime(2026, 9, 25), updated_at=datetime(2026, 9, 25),
+                filters_json=json.dumps({"rule_set_key": rule_set_key}),
+            ))
+    assert service.list_queued_luxian_0609_batch_job_ids() == (
+        "attempt-job", "another-leaf",
+    )
+
+
 def test_cancelled_terminal_rejects_late_completion_until_same_job_is_retried(storage):
     service, engine, table = storage
     old_attempt = service.mark_batch_job_running(job_id="attempt-job")
