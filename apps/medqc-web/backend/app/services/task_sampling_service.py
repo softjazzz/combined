@@ -48,6 +48,28 @@ def validate_active_running_date_range(date_range: Any) -> tuple[date | None, da
     return start, end, today
 
 
+def validate_scoped_sampling_config(scene: Any, method: Any, config: Any) -> None:
+    """校验新场景抽样参数，创建与实际抽样使用同一合同。"""
+    if scene not in {"outpatient", "running"}:
+        return
+    if not isinstance(config, dict):
+        raise ValueError("抽样配置格式无效")
+    if not isinstance(method, str) or method not in {"all", "count", "percentage"}:
+        raise ValueError("无效的抽样方式")
+    if method == "count":
+        total = config.get("total", 50)
+        if isinstance(total, bool) or not isinstance(total, int) or total <= 0:
+            raise ValueError("抽样数量必须为正整数")
+        if not isinstance(config.get("by_department", False), bool):
+            raise ValueError("按科室抽样参数必须为布尔值")
+    if method == "percentage":
+        percentage = config.get("percentage", 10)
+        if isinstance(percentage, bool) or not isinstance(percentage, (int, float)) or not 0 < percentage <= 100:
+            raise ValueError("抽样比例必须在 0 到 100 之间")
+        if config.get("group_by") not in (None, "department"):
+            raise ValueError("场景抽样仅支持按科室分组")
+
+
 class TaskSamplingService:
     """任务抽样引擎"""
 
@@ -258,23 +280,7 @@ class TaskSamplingService:
         if config is None:
             config = {}
 
-        if scene in {"outpatient", "running"}:
-            if not isinstance(config, dict):
-                raise ValueError("抽样配置格式无效")
-            if not isinstance(method, str) or method not in {"all", "count", "percentage"}:
-                raise ValueError("无效的抽样方式")
-            if method == "count":
-                total = config.get("total", 50)
-                if isinstance(total, bool) or not isinstance(total, int) or total <= 0:
-                    raise ValueError("抽样数量必须为正整数")
-                if not isinstance(config.get("by_department", False), bool):
-                    raise ValueError("按科室抽样参数必须为布尔值")
-            if method == "percentage":
-                percentage = config.get("percentage", 10)
-                if isinstance(percentage, bool) or not isinstance(percentage, (int, float)) or not 0 < percentage <= 100:
-                    raise ValueError("抽样比例必须在 0 到 100 之间")
-                if config.get("group_by") not in (None, "department"):
-                    raise ValueError("场景抽样仅支持按科室分组")
+        validate_scoped_sampling_config(scene, method, config)
 
         # 场景是任务意图，候选必须由该场景的真实数据源证明。
         if scene == "outpatient":

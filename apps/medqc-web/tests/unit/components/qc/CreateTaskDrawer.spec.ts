@@ -53,7 +53,8 @@ type DrawerVm = {
     description: string
     date_range: { start?: string; end?: string } | null
     department_filter: string[]
-    sampling_config: { case_scope?: 'active' }
+    sampling_method: 'all' | 'count' | 'percentage'
+    sampling_config: { case_scope?: 'active'; group_by: string | null | undefined }
   }
   handleSubmit: () => Promise<void>
   nextStep: () => void
@@ -185,6 +186,55 @@ describe('CreateTaskDrawer 创建草稿边界', () => {
     await vm.handleSubmit()
     expect(mocks.createTask).not.toHaveBeenCalled()
     expect(mocks.message.warning).toHaveBeenCalledWith('当前仅支持按比例均分，抽样后再选择质控员')
+  })
+
+  it('比例抽样只提供科室分组；旧医生分组值不可继续或强制提交', async () => {
+    const wrapper = mountDrawer()
+    const vm = vmOf(wrapper)
+    vm.formData.task_name = '分组校验任务'
+    await chooseRuleSet(vm, 'running')
+    vm.formData.sampling_method = 'percentage'
+    vm.currentStep = 2
+    await nextTick()
+
+    expect(wrapper.text()).toContain('按科室')
+    expect(wrapper.text()).not.toContain('按主治医生')
+    expect(wrapper.findAll('option').map((option) => option.attributes('value'))).not.toContain('doctor_name')
+
+    vm.formData.sampling_config.group_by = 'doctor_name'
+    await nextTick()
+    expect(vm.canProceed).toBe(false)
+    vm.nextStep()
+    expect(vm.currentStep).toBe(2)
+    await vm.handleSubmit()
+    expect(mocks.createTask).not.toHaveBeenCalled()
+    expect(mocks.message.warning).toHaveBeenLastCalledWith('当前仅支持按科室分组或不分组抽样')
+  })
+
+  it('比例抽样允许科室或不分组；切换抽样方式不提交遗留医生分组', async () => {
+    mocks.createTask.mockResolvedValue({ success: false, message: '测试停止' })
+    const wrapper = mountDrawer()
+    const vm = vmOf(wrapper)
+    vm.formData.task_name = '合法分组任务'
+    await chooseRuleSet(vm, 'running')
+    vm.formData.sampling_method = 'percentage'
+    vm.currentStep = 2
+
+    for (const groupBy of ['department', null, undefined] as const) {
+      vm.formData.sampling_config.group_by = groupBy
+      await nextTick()
+      expect(vm.canProceed).toBe(true)
+      await vm.handleSubmit()
+      expect(mocks.createTask.mock.calls.at(-1)?.[0].sampling_config.group_by).toBe(groupBy)
+    }
+
+    vm.formData.sampling_config.group_by = 'doctor_name'
+    vm.formData.sampling_method = 'count'
+    await vm.handleSubmit()
+    expect(mocks.createTask.mock.calls.at(-1)?.[0].sampling_config).not.toHaveProperty('group_by')
+    vm.formData.sampling_method = 'all'
+    await vm.handleSubmit()
+    expect(mocks.createTask.mock.calls.at(-1)?.[0].sampling_config).not.toHaveProperty('group_by')
   })
 
   it('未人工选择规则集不可继续，切换场景清除原选择', async () => {

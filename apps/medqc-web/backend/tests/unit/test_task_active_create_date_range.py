@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from app.core.security import get_current_user
 from app.routers import tasks
 from app.services.case_scope_service import CaseScopeService
+from app.services.task_sampling_service import validate_scoped_sampling_config
 
 
 class _Database:
@@ -109,3 +110,85 @@ def test_other_scope_create_preserves_existing_date_behavior(monkeypatch, scene,
     )
     assert response.status_code == 200, response.text
     assert len(database.inserted) == 1
+
+
+@pytest.mark.parametrize(
+    ("method", "config"),
+    [
+        ("count", {"case_scope": "active", "total": 0}),
+        ("count", {"case_scope": "active", "total": "2"}),
+        ("count", {"case_scope": "active", "total": True}),
+        ("count", {"case_scope": "active", "by_department": "false"}),
+        ("percentage", {"case_scope": "active", "percentage": 0}),
+        ("percentage", {"case_scope": "active", "percentage": 101}),
+        ("percentage", {"case_scope": "active", "percentage": "10"}),
+        ("percentage", {"case_scope": "active", "group_by": "doctor_name"}),
+    ],
+)
+def test_active_running_create_rejects_unsampleable_config_before_insert(monkeypatch, method, config):
+    database = _Database()
+    payload = _payload()
+    payload.update(sampling_method=method, sampling_config=config)
+    response = _client(monkeypatch, database).post("/api/v1/tasks", json=payload)
+    assert response.status_code == 422, response.text
+    assert database.inserted == []
+
+
+@pytest.mark.parametrize(
+    ("method", "config"),
+    [
+        ("count", {"case_scope": "active", "total": 2, "by_department": True}),
+        ("percentage", {"case_scope": "active", "percentage": 10, "group_by": "department"}),
+    ],
+)
+def test_active_running_create_keeps_valid_sampling_config(monkeypatch, method, config):
+    database = _Database()
+    payload = _payload()
+    payload.update(sampling_method=method, sampling_config=config)
+    response = _client(monkeypatch, database).post("/api/v1/tasks", json=payload)
+    assert response.status_code == 200, response.text
+    assert database.inserted[0]["sampling_config"] == config
+
+
+@pytest.mark.parametrize(
+    ("method", "config"),
+    [
+        ("count", {"total": -1}),
+        ("count", {"by_department": "true"}),
+        ("percentage", {"percentage": 101}),
+        ("percentage", {"group_by": "doctor_name"}),
+    ],
+)
+def test_outpatient_sampling_config_uses_same_contract(method, config):
+    with pytest.raises(ValueError):
+        validate_scoped_sampling_config("outpatient", method, config)
+
+
+@pytest.mark.parametrize(
+    ("method", "config"),
+    [
+        ("count", {"total": 0}),
+        ("percentage", {"percentage": 25, "group_by": "doctor_name"}),
+    ],
+)
+def test_outpatient_create_rejects_invalid_sampling_before_insert(monkeypatch, method, config):
+    database = _Database()
+    monkeypatch.setattr(
+        tasks,
+        "get_sichuan_rule_set",
+        lambda key: SimpleNamespace(key=key, scope="outpatient", version="synthetic-v1"),
+    )
+    payload = _payload(scene="outpatient")
+    payload.update(rule_set_key="synthetic-outpatient", sampling_method=method, sampling_config=config)
+    response = _client(monkeypatch, database).post("/api/v1/tasks", json=payload)
+    assert response.status_code == 422, response.text
+    assert database.inserted == []
+
+
+def test_legacy_running_creation_does_not_apply_active_sampling_validation(monkeypatch):
+    database = _Database()
+    payload = _payload(active=False)
+    payload.update(sampling_method="percentage", sampling_config={"group_by": "doctor_name"})
+    response = _client(monkeypatch, database).post("/api/v1/tasks", json=payload)
+    assert response.status_code == 200, response.text
+    assert database.inserted[0]["sampling_config"] == {"group_by": "doctor_name"}

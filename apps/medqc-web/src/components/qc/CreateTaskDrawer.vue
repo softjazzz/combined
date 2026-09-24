@@ -293,7 +293,6 @@
               style="width: 100%"
               :options="[
                 { value: 'department', label: '按科室' },
-                { value: 'doctor_name', label: '按主治医生' },
               ]"
               allow-clear
             />
@@ -546,6 +545,10 @@ const selectedRuleSetIsValid = computed(() =>
   !ruleSetsLoading.value && !ruleSetsError.value &&
   matchingRuleSets.value.some((item) => item.rule_set_key === formData.value.rule_set_key),
 )
+const validSamplingGroup = computed(() => {
+  const groupBy = formData.value.sampling_config.group_by
+  return groupBy === null || groupBy === undefined || groupBy === 'department'
+})
 
 const canProceed = computed(() => {
   switch (currentStep.value) {
@@ -556,7 +559,7 @@ const canProceed = computed(() => {
       return (formData.value.scene !== 'running' || formData.value.sampling_config.case_scope === 'active') &&
         (rangeMode.value !== 'refs' || !recordRefsError.value)
     case 2:
-      return true
+      return formData.value.sampling_method !== 'percentage' || validSamplingGroup.value
     case 3:
       return formData.value.assign_method === 'by_ratio'
     default:
@@ -708,6 +711,10 @@ const handleSubmit = async () => {
       message.warning(rangeError)
       return
     }
+  }
+  if (formData.value.sampling_method === 'percentage' && !validSamplingGroup.value) {
+    message.warning('当前仅支持按科室分组或不分组抽样')
+    return
   }
   if (formData.value.assign_method !== 'by_ratio') {
     message.warning('当前仅支持按比例均分，抽样后再选择质控员')
