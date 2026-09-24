@@ -2437,6 +2437,43 @@ def test_published_rules_keep_identity_through_sqlite_dto_feedback_and_exports(
         item["customer_display_facts"] for item in saved_items
     ]
 
+    if rule_ids == ("LX0609-09-01-01",):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from app.core.security import get_current_user
+        from app.routers import qc_sichuan
+
+        app = FastAPI()
+        app.include_router(qc_sichuan.router)
+        app.dependency_overrides[get_current_user] = lambda: {
+            "id": "admin-001", "roles": ["admin"],
+        }
+        monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: service)
+        monkeypatch.setattr(workspace_module, "_session", lambda: _ReadSession([
+            [_selected_job()], [{"envelope_json": json.dumps(loaded, ensure_ascii=False)}],
+        ]))
+        with TestClient(app) as client:
+            response = client.get(
+                "/api/v1/qc/sichuan/workspace/records/visit-1/latest-result",
+                params={"institute_id": "inst-1", "patient_id": "patient-1"},
+            )
+        assert response.status_code == 200
+        http_result = response.json()["data"]
+        assert http_result["state"] == "ready"
+        assert [
+            {key: item[key] for key in (
+                "rule_id", "status", "reason_code", "conclusion", "suggestion",
+                "customer_display_facts",
+            )}
+            for item in http_result["items"]
+        ] == [
+            {key: item[key] for key in (
+                "rule_id", "status", "reason_code", "conclusion", "suggestion",
+                "customer_display_facts",
+            )}
+            for item in latest["items"]
+        ]
+
     feedback = ResultFeedbackDemoStore.__new__(ResultFeedbackDemoStore)
     feedback._canonical_table = canonical_table
     feedback._feedback_table = feedback_table
