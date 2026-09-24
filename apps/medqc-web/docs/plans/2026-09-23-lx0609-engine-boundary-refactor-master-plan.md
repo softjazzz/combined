@@ -328,3 +328,9 @@ python -m pytest -q --tb=short tests/unit/test_luxian_0609_basic_timeliness_cust
 - 病程族公开读取收口由 `/root/course_public_family`（GPT-6 Sol medium）实施，隔离目录 `C:/Users/Coldplay/.codex/worktrees/lx0609-basic-public-owner-20260924/LX888`，分支 `codex/lx0609-course-public-family-20260924`。只负责既有族映射模块、Finalizer、集中测试和独立验收报告。原始008/009/016/017/018一批处理，复用007；禁止修改医学执行器。父代理已复现016读取相似度0.123456被改为0.1235，以及008额外键被静默删除。验收方向为合法公开事实原样保留、非法受控拒绝，不继续内部投影。
 - 父代理同时核实计划职责：`native_package.build_luxian_0609_package_plan`已是显式输入纯计算；两病例探针确认计划构造7次，分别为Worker接纳1次，以及每病例Worker进度旁路、bundle正式范围检查、prepare执行各1次。次数多本身不能证明医学错误或耗时根因；当前冻结Settings下7次选择一致。后续若复用计划，必须覆盖病例规则子集及失败重试子集，不能把任务总计划直接传给所有病例。暂未修改该链，避免为减少次数新增全局缓存或转发层。
 - 本批已提交的父验收为40项配置/执行代次与创建入口检查；Lint、Ruff、暂存编码检查通过。全量前端测试的既有3项失败仍按历史记录保留，没有本轮全绿声明。
+
+### 当前接续卡：集成至 8d8b65266
+
+原始危急值052/053公开读取边界经主协调退回、修正、独立验收后合入；原生专属41项通过。现按17个已有族模块固定检查范围，4已验收、连续诊疗/死亡/出院3族在交付，10族待证据核实。详细状态与全部阶段剩余条件见 `../acceptance/2026-09-24-original-engine-requirements-evidence.md` 顶部，本卡优先于前面的历史派工位置。
+
+当前两个工作代理分别为 course_public_family（连续诊疗，拥有Finalizer）和 shared_fact_audit_resume（死亡/出院模块，不改Finalizer）。主协调在后者交付后负责正式接线与隔离保存读回验证；不重复建设注册框架，不修改医学判据。后续以完整族交付、一次集中验收推进，不把每个规则拆成独立重复流程。
