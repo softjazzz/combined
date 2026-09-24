@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import pytest
+import sqlalchemy as sa
+from sqlalchemy.orm import sessionmaker
 
 from app.core.settings import Settings
+from app.services import custom_qc_workspace_service as storage
 from app.services import sichuan_qc_service as service_module
 from app.services import sichuan_workspace_batch_worker as worker
 from app.services import sample_programmatic_evidence as programmatic_evidence
@@ -267,6 +271,72 @@ async def test_incomplete_record_rule_map_rejects_before_bundle_read(
 
     assert workspace.job["status"] == "failed"
     assert "逐病例规则范围不完整" in workspace.job["error_message"]
+    assert bundle_calls == []
+
+
+@pytest.mark.asyncio
+async def test_incomplete_record_rule_map_fails_persisted_task_without_results(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    """正式任务表领取和失败落库不得扩大执行，也不得写部分结果。"""
+
+    database = sa.create_engine(f"sqlite:///{tmp_path / 'task-scope.sqlite'}")
+    monkeypatch.setattr(storage, "engine", database)
+    monkeypatch.setattr(storage, "_draft_schema", lambda: None)
+    monkeypatch.setattr(storage, "_sync_batch_job_parent_columns", lambda **_kwargs: None)
+    monkeypatch.setattr(storage, "_session", sessionmaker(bind=database))
+    workspace = storage.CustomQCWorkspaceService()
+    settings = _settings(basic_timeliness=True)
+    service = object.__new__(SichuanQCService)
+    service.client = _NoModel()
+    service.adjudicator_client = _NoModel()
+    filters = {
+        "rule_ids": list(RULE_IDS),
+        "selected_rule_ids": list(RULE_IDS),
+        "scoped_customer_rule_ids": list(RULE_IDS),
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "record_rule_map": {"visit-001": [RULE_IDS[0]]},
+        LX0609_TASK_SETTINGS_FILTER_KEY: capture_luxian_0609_task_settings(
+            resolve_mainline_rule_decision_settings(settings)
+        ),
+        LX0609_TASK_RUNTIME_FILTER_KEY: capture_luxian_0609_task_runtime(service),
+    }
+    job = workspace.create_batch_job(
+        draft={"id": "synthetic-draft", "rule_code": RULE_IDS[0],
+               "name": "合成规则", "scene": "final"},
+        created_by="synthetic-tester", scope="final", filters=filters,
+        record_ids=["visit-001", "visit-002"], total_records=2,
+    )
+
+    class _Activation:
+        def enforce(self) -> None:
+            return None
+
+    monkeypatch.setattr(worker, "get_product_activation_service", lambda: _Activation())
+    monkeypatch.setattr(worker, "get_settings", lambda: settings)
+    monkeypatch.setattr(workspace, "collect_records", lambda **_kwargs: [
+        {"record_id": visit_id, "visit_id": visit_id, "institute_id": "HOSP-001",
+         "patient_id": f"PAT-{visit_id}", "scope": "final"}
+        for visit_id in ("visit-001", "visit-002")
+    ])
+    monkeypatch.setattr(workspace, "hydrate_records_with_medical_text", lambda records: records)
+    bundle_calls: list[str] = []
+    monkeypatch.setattr(worker, "load_running_final_bundle", lambda **kwargs: bundle_calls.append(
+        str(kwargs.get("visit_id") or "")
+    ))
+
+    async def provide_service() -> SichuanQCService:
+        return service
+
+    await worker.run_sichuan_workspace_batch_job(
+        job["id"], workspace=workspace, qc_service_provider=provide_service,
+    )
+
+    persisted = workspace.get_batch_job_for_processing(job_id=job["id"])
+    assert persisted["status"] == "failed"
+    assert "逐病例规则范围不完整" in persisted["error_message"]
+    assert persisted["items"] == []
     assert bundle_calls == []
 
 
