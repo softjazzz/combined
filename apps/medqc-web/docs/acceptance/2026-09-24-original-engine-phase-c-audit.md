@@ -9,16 +9,16 @@
 | 客户规则、文书、判据 | `luxian_0609_rules_v1.json` → `native_package.py:189–265` | 临床目录是输入；依赖清单从目录及规则族定义生成。 |
 | `family_key`、`executor_key`、`execution_mode` | `customer_rule_package.py:25` 的规则族清单及各 native 执行器 ID 集 → `native_package.py:209–245`；`rule_contracts.py:324–329` 比对覆盖层；`executor_registry.py:672–680` 比对回调键；`engine.py:220–246` 检查批次归属 | JSON 的重复字段目前承担漂移哨兵职责，编译器会拒绝不一致。未复现双重权威导致的成功误派发；不应另建注册框架。 |
 | 执行结果完整性 | `execution_contract.py:362–424` 检查所选规则恰好一次、无越界或错序；失败转技术 envelope；`engine.py:330` 调用 | 是执行层协议，和单规则客户允许状态不同。 |
-| 规则状态 | `rule_contracts.py:28–36,190` 强制所有规则共用七种执行状态；原始 001–049 的客户允许结果见 `docs/0602/luxian_0609_formal_rule_catalog.csv` 的逐行 `allowed_result_statuses`；具体 `hit/not_hit` 等到运行时状态的映射见 `luxian_0609_result_schema.py` | 当前 `allowed_final_states` 实际是执行状态全集，不是逐规则交付允许集合。不能用它证明客户状态合法。 |
+| 规则状态 | `rule_contracts.py:28–36,190` 强制所有规则共用七种执行状态；原始 001–049 的客户允许结果见 `docs/0602/luxian_0609_formal_rule_catalog.csv` 的逐行 `allowed_result_statuses`；具体 `hit/not_hit` 等到运行时状态的映射见 `luxian_0609_result_schema.py:42–49` | 两者属于执行状态与客户目录状态两个层级。当前 `allowed_final_states` 是共享执行词表，不能单独证明逐规则客户允许状态。 |
 | 模型调用预算 | 覆盖层 JSON 每规则声明；`rule_contracts.py:191–200` 另以两个四段式 ID 强制预算为 2，其余语义规则为 1；对应断言又在 `test_luxian_0609_rule_contracts.py:357–365` | 编译期重复约束，仓库内未发现运行时读取该字段做限流或计量。不能将字段误称为已执行的调用上限。 |
 
-## 已发生的合同错位：原始 012
+## 两层状态词表与原始 012 的职责表达
 
-原始 012 当前 ID 为 `LX0609-06-01-05`。正式客户目录第 13 行允许 `hit; not_hit; data_quality_gap; not_applicable; needs_manual_review`；合同编译后的 `allowed_final_states` 却是七项共享执行词表，含 `evaluation_unknown`、`technical_error`、`not_executed`。受控加载目录与合同可重现这一差异，未读取病历。`native_exam_lab_execution.py:94–124` 明确因此在执行器内设置 012 专用四状态集合，并把 `evaluation_unknown` 收敛为 `data_gap`。这证明单规则客户状态职责曾不得不下沉到执行器；但已有收敛与测试，**本审计未发现 012 当前会把该状态错误交付客户**。`technical_error` 是执行失败语义，也不能直接按目录的临床结果词表判断。
+原始 012 当前 ID 为 `LX0609-06-01-05`。正式客户目录第 13 行允许 `hit; not_hit; data_quality_gap; not_applicable; needs_manual_review`；合同编译后的 `allowed_final_states` 是七项共享执行词表，含 `evaluation_unknown`、`technical_error`、`not_executed`。受控加载仅证实这两个**不同层级**的词表，不能由七项与五项不同推出真实交付缺陷。`native_exam_lab_execution.py:94–124` 的专用状态集合及 `evaluation_unknown → data_gap` 是现有实现证据；它包含原始 012 的业务判断，应继续由执行器拥有。`canonical_result_finalizer.py:834–878` 在事实合同损坏时转为 `technical_error`，这是技术失败处理，不能改写成某种临床状态以凑客户目录集合。本审计未发现 012 当前错误交付。
 
-阶段 C 可选的第一个小闭环：只针对原始 012，在既有合同编译器中明确区分“执行状态全集”与“客户允许结果集合”，以正式目录逐行状态为输入，在既有状态映射边界做交叉校验；待固定输入的 012 合规、不合规、资料缺口、语义未知、技术失败结果及原因码完全等价后，再考虑移除执行器内的专用允许集合。不要先删除其收敛行为，也不要把所有规则一齐重写。对未在 001–049 目录中的扩展规则，必须先找到各自扩展证明，不能套用该目录。
+现有 `test_luxian_0609_rule_catalog.py:177–192` 已核对原始目录 CSV 与 JSON 的逐规则允许状态，并核对阶段暂停状态。后续阶段 C 若发现确切的客户状态违约，应先定位目录允许集合及发布校验的现有 owner；仅在既有编译或发布校验处补合法性检查，不重判状态、不把 012 的语义收敛搬到通用映射或 Finalizer，也不新增第二份逐规则状态目录。固定输入需覆盖 012 合规、不合规、资料缺口、语义未知和技术失败，证实状态、原因码及证据保持原样。扩展规则各找自身证明，不套用 001–049 的目录。
 
-只读复现（在 `backend` 目录，令 `JWT_SECRET` 为隔离测试值、`DATABASE_URL=''`）：加载 `load_luxian_0609_rule_contracts()` 中的 `LX0609-06-01-05`，与 CSV 中 `LX0609-012` 的 `allowed_result_statuses` 并列打印；得到上述七状态与五状态差异。该比较只证明合同含义错位，不等于临床结果回放。
+只读核对（在 `backend` 目录，令 `JWT_SECRET` 为隔离测试值、`DATABASE_URL=''`）：加载 `load_luxian_0609_rule_contracts()` 中的 `LX0609-06-01-05`，与 CSV 中 `LX0609-012` 的 `allowed_result_statuses` 并列打印，得到七项执行状态和五项客户目录状态。该输出只用于辨认层级，不能当作生产错误复现。
 
 ## 未证实为生产缺陷的重复属性
 
@@ -28,4 +28,4 @@
 
 运行 `test_luxian_0609_rule_contracts.py` 与 `test_luxian_0609_rule_extension_boundary.py`：前者 15/15 通过；后者 1/2 通过。失败的 `test_two_test_only_rule_contracts_cross_existing_extension_boundary` 使用旧三位测试 ID `LX0609-990/991`，在 `decision_model.py:279` 与 `execution_contract.py:249` 的现行四段式校验处拒绝；未到客户发布。它是编号迁移后的旧测试资料问题，不能据此推断真实四段式规则失败，亦不属于本审计授权的生产改动。应由编号迁移维护任务更新该测试资料，然后再次跑其执行器边界断言。
 
-若进入 012 小闭环，固定同一输入与已保存模型响应，逐项比较状态、原因码、关键事实、证据坐标、调用次数/Token、执行器顺序和耗时。先保持旧执行器收敛作为基线，验证新编译校验再移除重复路径。阶段 C 不触及新增 CT/抢救内容规则，也不以合成测试替代客户病例验收。
+若后续找到确切的逐规则状态违约，再用同一输入与已保存模型响应比较状态、原因码、关键事实、证据坐标、调用次数/Token、执行器顺序和耗时。目前没有足以启动 012 生产改动的证据；这不缩小阶段 C 对其他重复属性的继续盘点。阶段 C 不触及新增 CT/抢救内容规则，也不以合成测试替代客户病例验收。
