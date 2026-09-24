@@ -39,7 +39,7 @@ _SOURCE_CONTRACT_STATES = frozenset(
     {"legacy_projection_v1", "typed_shadow_v1", "typed_malignancy_gate_v1"}
 )
 _GOLDEN_GATE_STATES = frozenset({"pending", "accepted"})
-_CRITERION_KINDS = frozenset(
+CRITERION_KINDS = frozenset(
     {
         "presence",
         "timeliness",
@@ -87,7 +87,7 @@ class RuleCriterionContract:
             or any(ord(char) < 32 for char in self.label)
         ):
             raise ValueError("invalid LX0609 criterion label")
-        if self.kind not in _CRITERION_KINDS:
+        if self.kind not in CRITERION_KINDS:
             raise ValueError("invalid LX0609 criterion kind")
         if self.kind == "text_length":
             if (

@@ -1,6 +1,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
+import csv
+import json
+from app.services.qc_workspace.export_service import CUSTOMER_EXPORT_HEADERS
+from app.services.qc_workspace.canonical_result_store import safe_criterion_results
+from sqlalchemy import MetaData, create_engine
+from sqlalchemy.orm import Session
+
+import app.services.custom_qc_workspace_service as workspace_module
+import app.services.luxian_0609_rule_catalog as catalog_module
+from app.services.qc_workspace.canonical_result_store import (
+    CanonicalResultStore, envelope_item_from_rule_result,
+)
 from typing import Any
 
 import pytest
@@ -11,6 +24,8 @@ from app.services.luxian_0609.decision_binding import (
 )
 from app.services.luxian_0609.decision_model import (
     ApplicabilityState,
+    CriterionResult,
+    CriterionStatus,
     EvidenceState,
     QcDirection,
     RuleDecision,
@@ -32,6 +47,7 @@ from app.services.luxian_0609.executor_registry import (
 from app.services.luxian_0609.rule_contracts import (
     ALLOWED_FINAL_STATES,
     Luxian0609RuleContract,
+    RuleCriterionContract,
 )
 from app.services.luxian_0609_result_aggregator import (
     aggregate_luxian_0609_results,
@@ -48,8 +64,19 @@ _SEMANTIC_PROMPT = (
 
 
 def _contract(
-    *, rule_id: str, executor_key: str, semantic: bool
+    *, rule_id: str, executor_key: str, semantic: bool, criterion_kind: str = "semantic_relation"
 ) -> Luxian0609RuleContract:
+    shape = {
+        "semantic_relation": {"left_fact": "symptom", "right_fact": "diagnosis"},
+        "consistency": {"left_fact": "symptom", "right_fact": "diagnosis", "operator": "eq"},
+        "presence": {"source_fact": "document", "operator": "present", "unit": "boolean"},
+        "timeliness": {"source_fact": "interval", "operator": "lte", "unit": "hour"},
+        "coverage": {"source_fact": "recorded_days", "operator": "covers", "unit": "day"},
+        "completeness": {"source_fact": "fields", "operator": "complete", "unit": "boolean"},
+        "text_length": {"source_fact": "text", "operator": "lte", "unit": "character", "expected": 20},
+    }[criterion_kind]
+    criteria = (RuleCriterionContract(criterion_id="controlled_check", label="测试受控核查",
+                kind=criterion_kind, failure_reason_code="requirement_violated", **shape),) if semantic else ()
     return Luxian0609RuleContract(
         rule_id=rule_id,
         contract_version="extension-boundary-test-v1",
@@ -71,6 +98,7 @@ def _contract(
         prompt_version="extension-boundary-test-v1",
         phase_status="phase_1_target",
         definition_version="extension-boundary-test-v1",
+        criteria=criteria,
     )
 
 
@@ -175,6 +203,8 @@ class _SemanticExtensionExecutor:
             ),
             fact_refs=(_source_ref(context),),
             evaluator_version="extension-semantic-test-v1",
+            criterion_results=(CriterionResult(criterion_id="controlled_check", status=CriterionStatus.FAILED,
+                               reason_code="requirement_violated", fact_refs=(_source_ref(context),)),),
             confidence=1.0,
         )
         return FamilyExecutionEnvelope(
@@ -187,6 +217,13 @@ class _SemanticExtensionExecutor:
             total_tokens=output["prompt_tokens"] + output["completion_tokens"],
             api_time=0.01,
         )
+
+
+def test_unknown_criterion_kind_is_not_deliverable():
+    assert safe_criterion_results({"criterion_results": [{
+        "criterion_id": "controlled_check", "kind": "unknown_kind",
+        "status": "failed", "reason_code": "requirement_violated",
+    }]}) == []
 
 
 def test_rule_decision_format_allows_future_ids_but_rejects_zero():
@@ -206,8 +243,9 @@ def test_rule_decision_format_allows_future_ids_but_rejects_zero():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("criterion_kind", ["text_length", "semantic_relation", "completeness", "presence", "timeliness", "coverage", "consistency"])
 async def test_two_test_only_rule_contracts_cross_existing_extension_boundary(
-    monkeypatch,
+    monkeypatch, criterion_kind,
 ):
     session = _session()
     semantic_stub = _ControlledSemanticStub()
@@ -220,7 +258,7 @@ async def test_two_test_only_rule_contracts_cross_existing_extension_boundary(
         _contract(
             rule_id=_SEMANTIC_RULE_ID,
             executor_key="extension_semantic_test",
-            semantic=True,
+            semantic=True, criterion_kind=criterion_kind,
         ),
     )
     registry = Luxian0609ExecutorRegistry(
@@ -290,6 +328,12 @@ async def test_two_test_only_rule_contracts_cross_existing_extension_boundary(
         "load_luxian_0609_rule_contracts",
         lambda: contracts,
     )
+    existing_catalog = catalog_module.load_luxian_0609_rules()
+    monkeypatch.setattr(catalog_module, "load_luxian_0609_rules", lambda: [
+        *existing_catalog, *[{"rule_id": rule_id, "name": name, "rule_version": "extension-boundary-test-v1"}
+                            for rule_id, name in rule_names.items()],
+    ])
+    monkeypatch.setattr(workspace_module, "load_luxian_0609_rules", catalog_module.load_luxian_0609_rules)
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=decisions,
         expected_rule_ids=(_NATIVE_RULE_ID, _SEMANTIC_RULE_ID),
@@ -329,3 +373,56 @@ async def test_two_test_only_rule_contracts_cross_existing_extension_boundary(
         [(_SOURCE_KEY, "ADM-EXT-1", "chief_complaint", "2026-09-04 08:30:00")],
         [(_SOURCE_KEY, "ADM-EXT-1", "chief_complaint", "2026-09-04 08:30:00")],
     ]
+
+
+    # 延长真实交付链：新规则只在测试目录/执行器声明，不为保存或DTO增加规则分支。
+    table = workspace_module._record_result_envelopes_table().to_metadata(MetaData(), schema=None)
+    engine = create_engine("sqlite://")
+    table.metadata.create_all(engine)
+    store = CanonicalResultStore(table)
+    source_items = [{**item, "institute_id": "I", "patient_id": "P", "visit_id": "V", "record_id": "V"}
+                    for item in results]
+    filters = {"rule_set_key": "luxian_0609_qc_v1", "rule_set_version": "extension-boundary-test-v1"}
+    try:
+        with Session(engine) as db:
+            store.replace_for_job(
+                db, job_row={"id": "EXT-JOB", "created_by": "reviewer", "filters_json": json.dumps(filters)},
+                items=source_items, now=datetime(2026, 9, 24, 12),
+                projector=lambda raw: envelope_item_from_rule_result(raw, hmac_key="extension-test-key"),
+                projection_key="extension-test-key",
+            )
+            db.commit()
+            loaded = store.load_selected(
+                db, root_job_id="EXT-JOB", institute_id="I", patient_id="P", visit_id="V", **filters,
+            )
+        public_items = loaded["items"]
+        assert [(item["rule_id"], item["status"], item["reason_code"]) for item in public_items] == [
+            (item["rule_id"], item["status"], item["reason_code"]) for item in results
+        ]
+        assert public_items[1]["criterion_results"] == results[1]["criterion_results"]
+        for item in public_items:
+            dto = workspace_module.project_customer_safe_result_item(item, hmac_key="extension-test-key")
+            assert dto["rule_id"] == item["rule_id"]
+            assert dto["status"] == item["status"]
+            assert dto["reason_code"] == item["reason_code"]
+            assert len(dto["evidence"]) == 1
+            assert dto["evidence"][0]["source_type"] == _SOURCE_KEY
+            assert dto["evidence"][0]["field_path"] == "chief_complaint"
+            # 公开 DTO 省略空字符串字段，已发布的非空判定内容不得丢失。
+            expected_criteria = [
+                {key: value for key, value in criterion.items() if value != ""}
+                for criterion in item.get("criterion_results", [])
+            ]
+            assert dto.get("criterion_results", []) == expected_criteria
+        exported = workspace_module._export_customer_safe_csv(
+            {"id": "EXT-JOB", "filters": filters, "items": public_items}, hmac_key="extension-test-key",
+        )
+        csv_rows = list(csv.reader(exported.getvalue().lstrip("\ufeff").splitlines()))
+        header_index = csv_rows.index(CUSTOMER_EXPORT_HEADERS)
+        rows = [dict(zip(CUSTOMER_EXPORT_HEADERS, row)) for row in csv_rows[header_index + 1:]]
+        assert [row["质控点编码"] for row in rows] == [_NATIVE_RULE_ID, _SEMANTIC_RULE_ID]
+        assert [row["原因码"] for row in rows] == ["requirement_satisfied", "requirement_violated"]
+        assert [row["判定结果"] for row in rows] == ["合规", "不合规"]
+        assert semantic_stub.calls == [_SEMANTIC_PROMPT]
+    finally:
+        engine.dispose()

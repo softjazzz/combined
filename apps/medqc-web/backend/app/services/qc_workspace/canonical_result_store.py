@@ -17,6 +17,7 @@ from ..case_identity import CaseRef
 from ..luxian_0609.canonical_result_finalizer import (
     validate_luxian_0609_published_customer_display_facts,
 )
+from ..luxian_0609.rule_contracts import CRITERION_KINDS
 from ..luxian_0609_result_schema import (
     CANONICAL_RESULT_DELIVERY_MODE,
     CANONICAL_RESULT_STATUSES,
@@ -296,7 +297,7 @@ def safe_criterion_results(item: Dict[str, Any]) -> List[Dict[str, Any]]:
         reason_code = _safe_text(raw.get("reason_code"))
         if (
             not re.fullmatch(r"[a-z][a-z0-9_]{1,63}", criterion_id)
-            or kind not in {"text_length", "semantic_relation", "completeness"}
+            or kind not in CRITERION_KINDS
             or status not in {"passed", "failed", "unknown"}
             or not re.fullmatch(r"[a-z][a-z0-9_]{1,63}", reason_code)
         ):
