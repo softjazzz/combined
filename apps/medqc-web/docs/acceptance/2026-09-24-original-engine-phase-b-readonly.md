@@ -34,3 +34,28 @@
 现成测试入口可复用：`tests/unit/test_luxian_0609_native_package.py` 的纯计划与 pending/compatibility 边界；`tests/unit/test_luxian_0609_mainline_services.py:2352` 的正式开关及 as-of 传递、`2446` 的单次内部快照；`tests/unit/test_qc_sichuan_batch_throughput.py:323` 的 Worker 运行期家族漂移失败关闭、`2969` 的逐病例时点缺口，以及 `2691/3658/3789` 的原生批量入口；`tests/unit/test_qc_sample_pools_router.py:1934/2396/2431` 的客户样本规则范围和子任务。上述用例不等于本任务提出的“双次 settings 返回不同对象”证伪试验。
 
 阶段 B 目前无需为纯计划构造新增框架；先运行上述最小试验取得是否漂移、是否失败关闭、调用量与耗时证据，再决定有无必要收敛配置/计划的所有权。
+
+## 后续最小证伪结果（本树独立测试）
+
+新测试 `backend/tests/unit/test_luxian_0609_task_plan_freeze_probe.py` 使用与上文集成树哈希相同的 Worker、bundle 服务和 `execution.py` 生产文件，真实调用 `run_sichuan_workspace_batch_job → SichuanQCService.evaluate_running_final_bundle_input → prepare_luxian_0609_execution`。任务仅有一份合成病历，选择原始 `LX0609-01-01-01` 与原始 004 `LX0609-09-01-01`，逐病例评价时点固定为 `2026-07-20`。Settings 使用两个真实 `Settings` 实例；测试只控制 Worker 和服务两处 `get_settings` 返回顺序并记录读取次数。计划探针调用原生产构造函数再记录返回值，不替代计划。Evidence Session 仍由原构造函数创建，源表 reader、bundle 加载与证据组装的源表/详情回退 I/O 返回空合成材料；模型客户端一旦调用即抛异常。Workspace 是既有测试中的内存替身。
+
+| 配置路径 | 计划构造调用 | 选中规则/评价时点 | 任务结果 |
+| --- | --- | --- | --- |
+| Worker 与逐病例服务均启用 basic timeliness | Worker 任务级、Worker 展示侧、bundle 服务、`prepare`，共 4 次 | 四次计划同选原始 001/004；`prepare` 与 Evidence Session 均收到 `2026-07-20` 和同一逐病例 horizon | `completed`；无模型调用 |
+| Worker 启用、服务关闭该家族 | Worker 两次、bundle 服务一次，共 3 次；未进入 `prepare` | 前两次为原生 001/004；服务级计划把两条归入兼容范围，正式门禁拒绝 | `failed`，无 Evidence Session 读取、无客户 items；未观察到“改变成功结果后继续交付” |
+
+因此已证实**当前这一种家族开关漂移路径失败关闭**；不能推论所有开关组合、跨进程部署或多病例并发都如此，也不能据此把阶段 A 医学验收标为完成。四次纯计划构造是可重复的调用量事实；未测 CPU 耗时或客户病历准确率，不将其称为性能缺陷。第一轮搭建探针时发现证据组装会主动回退到源表：曾对故意不可连接的本机 `127.0.0.1:1` 测试地址发起连接并失败，没有接触客户库或写入；随后明确替换此 I/O。最终可复跑命令从 `backend` 目录运行：
+
+```powershell
+@'
+import os, pytest
+os.environ['JWT_SECRET'] = 'plan-probe-only'
+os.environ['DATABASE_URL'] = ''
+raise SystemExit(pytest.main([
+    'tests/unit/test_luxian_0609_task_plan_freeze_probe.py',
+    '--confcutdir=tests/unit', '-q', '--disable-warnings', '--tb=short',
+]))
+'@ | python -X utf8 -
+```
+
+最终运行 2/2 通过，`--confcutdir=tests/unit` 避免全局 `conftest` 初始化持久化依赖；`DATABASE_URL` 为空，测试中所有数据库与模型 I/O 边界均被替换。本次仅增加测试与报告，未改生产代码。
