@@ -28,6 +28,7 @@ from .factory import (
 from .refresh_manager import mark_bundle_refresh_success, record_bundle_refresh_failure
 
 logger = logging.getLogger(__name__)
+TASK_SYNC_INVALIDATED_POLICY_VERSION = "task-record-sync-invalidated-v1"
 
 _IDENTIFIER_ALLOWED = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_")
 _TEXT_COLUMNS_PRIORITY: tuple[str, ...] = (
@@ -2568,14 +2569,17 @@ def load_or_assemble_scene_bundle(
         raise ValueError(f"Unsupported scene bundle table: {scene}")
     ensure_scene_bundle_tables(schema=bundle_schema)
 
+    existing = _load_scene_bundle(
+        scene=scene,
+        institute_id=institute_id,
+        patient_id=patient_id,
+        visit_id=visit_id,
+        schema=bundle_schema,
+    )
+    if existing and existing.get("policy_version") == TASK_SYNC_INVALIDATED_POLICY_VERSION:
+        raise RuntimeError("任务病历资料同步尚未完成，Bundle 不可读取或刷新")
+
     if not force_refresh:
-        existing = _load_scene_bundle(
-            scene=scene,
-            institute_id=institute_id,
-            patient_id=patient_id,
-            visit_id=visit_id,
-            schema=bundle_schema,
-        )
         if (
             existing
             and str(existing.get("bundle_schema_version") or "") == BUNDLE_SCHEMA_VERSION_CURRENT
@@ -2596,6 +2600,8 @@ def load_or_assemble_scene_bundle(
                 prefer_usable_content=True,
                 limit=5,
             )
+            if usable_existing and usable_existing.get("policy_version") == TASK_SYNC_INVALIDATED_POLICY_VERSION:
+                raise RuntimeError("任务病历资料同步尚未完成，Bundle 不可读取或刷新")
             if usable_existing and _scene_bundle_has_usable_content(usable_existing):
                 return usable_existing
 

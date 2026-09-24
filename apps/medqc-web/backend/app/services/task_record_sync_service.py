@@ -6,11 +6,15 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Callable
 
-from sqlalchemy import select
+from sqlalchemy import inspect, select, text
 
 from ..database.connection import SessionLocal
 from ..database.models.qc import QCTask, QCTaskRecord
-from .bundles.assembly import _load_scene_bundle, _scene_bundle_has_usable_content
+from .bundles.assembly import (
+    TASK_SYNC_INVALIDATED_POLICY_VERSION as INVALIDATED_POLICY_VERSION,
+    _load_scene_bundle,
+    _scene_bundle_has_usable_content,
+)
 from .bundles.contracts import BUNDLE_SCHEMA_VERSION_CURRENT
 from .case_identity import CaseRef
 from .case_set_sync_service import CaseSetSyncService
@@ -22,6 +26,10 @@ logger = logging.getLogger(__name__)
 TABLE_GROUP = "sample_full_domain"
 CONTRACT_VERSION = "task-record-sync-v1"
 MAX_RECORDS = 100
+_BUNDLE_TABLE_BY_SCENE = {
+    "running": "running_record_bundle",
+    "final": "final_record_bundle",
+}
 
 
 class TaskRecordSyncNotFound(LookupError):
@@ -140,6 +148,36 @@ def _ready_refs(scene: str, refs: list[CaseRef]) -> dict[CaseRef, dict[str, str]
     return ready
 
 
+def _invalidate_existing_bundles(scene: str, refs: list[CaseRef]) -> None:
+    """在任何独立提交的 CDM 写入前，持久关闭旧 Bundle 的执行资格。"""
+    if SessionLocal is None:
+        raise RuntimeError("数据库会话不可用")
+    table_name = _BUNDLE_TABLE_BY_SCENE[scene]
+    with SessionLocal.begin() as session:
+        bind = session.get_bind()
+        # 轻量 SQLite 测试可省略 Bundle 表；PostgreSQL 缺表必须失败关闭。
+        if bind.dialect.name == "sqlite" and not inspect(bind).has_table(table_name, schema="public"):
+            return
+        session.execute(
+            text(f"""
+                UPDATE public.{table_name}
+                SET policy_version = :invalidated_policy_version
+                WHERE institute_id = :institute_id
+                  AND patient_id = :patient_id
+                  AND visit_id = :visit_id
+            """),
+            [
+                {
+                    "invalidated_policy_version": INVALIDATED_POLICY_VERSION,
+                    "institute_id": ref.institute_id,
+                    "patient_id": ref.patient_id,
+                    "visit_id": ref.visit_id,
+                }
+                for ref in refs
+            ],
+        )
+
+
 def sync_task_records(
     *,
     task_id: str,
@@ -164,6 +202,11 @@ def sync_task_records(
             raise TaskRecordSyncConflict("任务抽样三坐标已变化，请重新发起同步")
     table_names = _table_names()
     refs = [ref for _, ref in records]
+    try:
+        _invalidate_existing_bundles(scene, refs)
+    except Exception as exc:
+        logger.warning("task_record_bundle_invalidation_failed task_id=%s error_type=%s", task_id, type(exc).__name__)
+        raise RuntimeError("病历 Bundle 失效保护失败，未启动源端同步") from exc
     try:
         result = sync_factory().sync_case_set(
             case_refs=refs,

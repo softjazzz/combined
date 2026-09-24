@@ -3260,10 +3260,26 @@ def run_sync(
         同步结果
     """
     lock_conn = None
+    coordination_lock_key = None
+    coordination_lock_acquired = False
     lock_acquired = False
+    sync_state_started = False
     try:
-        if engine is not None:
+        is_postgres = engine is not None and getattr(
+            getattr(engine, "dialect", None), "name", "postgresql"
+        ) == "postgresql"
+        if is_postgres:
+            from .task_record_sync_job_service import _GLOBAL_LOCK_KEY as coordination_lock_key
+
             lock_conn = engine.connect()
+            coordination_lock_acquired = bool(
+                lock_conn.execute(
+                    text("SELECT pg_try_advisory_lock(:lock_key)"),
+                    {"lock_key": coordination_lock_key},
+                ).scalar()
+            )
+            if not coordination_lock_acquired:
+                return {"success": False, "error": "同步正在进行中，请稍后再试"}
             lock_acquired = bool(
                 lock_conn.execute(
                     text("SELECT pg_try_advisory_lock(:lock_key)"),
@@ -3276,6 +3292,7 @@ def run_sync(
             return {"success": False, "error": "同步正在进行中，请稍后再试"}
 
         _sync_state.is_running = True
+        sync_state_started = True
         _sync_state.logs = []
         _upsert_sync_job_state(_sync_state)
         _emit_sync_progress(
@@ -3842,19 +3859,37 @@ def run_sync(
             ]
         return result_payload
     finally:
-        _sync_state.is_running = False
-        try:
-            _upsert_sync_job_state(_sync_state)
-        except Exception as exc:
-            logger.exception("同步结束写入 sync_job_state 失败: %s", exc)
-        finally:
-            if lock_conn is not None and lock_acquired:
+        if sync_state_started:
+            _sync_state.is_running = False
+            try:
+                _upsert_sync_job_state(_sync_state)
+            except Exception as exc:
+                logger.exception("同步结束写入 sync_job_state 失败: %s", exc)
+        if lock_conn is not None:
+            lock_release_failed = False
+            for acquired, key in (
+                (lock_acquired, _SYNC_LOCK_KEY),
+                (coordination_lock_acquired, coordination_lock_key),
+            ):
+                if not acquired or lock_release_failed:
+                    continue
                 try:
-                    lock_conn.execute(text("SELECT pg_advisory_unlock(:lock_key)"), {"lock_key": _SYNC_LOCK_KEY})
+                    # 会话锁不随事务回滚释放，但失败事务会阻止解锁 SQL。
+                    lock_conn.rollback()
+                    unlocked = lock_conn.execute(
+                        text("SELECT pg_advisory_unlock(:lock_key)"), {"lock_key": key}
+                    ).scalar()
+                    if not unlocked:
+                        raise RuntimeError(f"同步锁 {key} 未被当前连接持有")
                 except Exception as exc:
-                    logger.warning("释放同步锁失败: %s", exc)
-            if lock_conn is not None:
+                    lock_release_failed = True
+                    logger.warning("释放同步锁失败，丢弃数据库连接: %s", exc)
+            if lock_release_failed:
                 try:
-                    lock_conn.close()
-                except Exception:
-                    pass
+                    lock_conn.invalidate()
+                except Exception as exc:
+                    logger.exception("丢弃持锁数据库连接失败: %s", exc)
+            try:
+                lock_conn.close()
+            except Exception:
+                pass

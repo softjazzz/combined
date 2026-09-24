@@ -1,5 +1,6 @@
 from typing import List, Dict, Any, Literal, Optional, Sequence
 import asyncio
+from contextlib import asynccontextmanager
 import uuid
 import json
 import logging
@@ -11,6 +12,8 @@ from fastapi import APIRouter, Body, HTTPException, Query, Request, Depends
 from fastapi.responses import Response, StreamingResponse
 from starlette.concurrency import run_in_threadpool
 from datetime import datetime, timezone
+from sqlalchemy import create_engine, inspect as sa_inspect, select, text
+from sqlalchemy.pool import NullPool
 
 from ..core.response import success_response, error_response, get_trace_id, ErrorCode, StatusCode
 from ..core.audit import audit_event
@@ -36,6 +39,8 @@ from ..services.sc_rule_launch_tier import (
 )
 from ..core.supabase_client import get_supabase
 from ..core.settings import get_settings
+from ..database.connection import DB_SCHEMA_MODE, SessionLocal
+from ..database.models.qc import QCTaskQCRun
 from ..core.security import require_admin, require_roles, get_current_user
 from ..services.product_activation import require_product_activation
 from ..services.custom_qc_workspace_service import (
@@ -1415,16 +1420,17 @@ async def evaluate_bundle(
             rule_ids=req.rule_ids,
             block_batch=False,
         )
-        result = await evaluate_running_final_bundle(
-            qc_service=qc_service,
-            scene=req.scene,
-            institute_id=req.institute_id,
-            patient_id=req.patient_id,
-            visit_id=req.visit_id,
-            bundle_input=req.bundle_input,
-            rule_ids=list(req.rule_ids or []),
-            schema=str(req.schema or "public").strip() or "public",
-        )
+        async with _cdm_bundle_read_guard():
+            result = await evaluate_running_final_bundle(
+                qc_service=qc_service,
+                scene=req.scene,
+                institute_id=req.institute_id,
+                patient_id=req.patient_id,
+                visit_id=req.visit_id,
+                bundle_input=req.bundle_input,
+                rule_ids=list(req.rule_ids or []),
+                schema=str(req.schema or "public").strip() or "public",
+            )
         return success_response(
             data=result,
             message="bundle 质控评估完成",
@@ -1455,15 +1461,16 @@ async def evaluate_rule_for_visit(
             rule_ids=[req.rule_id],
             block_batch=False,
         )
-        result = await qc_service.evaluate_rule_for_visit(
-            rule_id=req.rule_id,
-            institute_id=req.institute_id,
-            patient_id=req.patient_id,
-            visit_id=req.visit_id,
-            source_schema=req.source_schema,
-            bundle_schema=str(req.bundle_schema or "public").strip() or "public",
-            force_refresh_bundle=bool(req.force_refresh_bundle),
-        )
+        async with _cdm_bundle_read_guard():
+            result = await qc_service.evaluate_rule_for_visit(
+                rule_id=req.rule_id,
+                institute_id=req.institute_id,
+                patient_id=req.patient_id,
+                visit_id=req.visit_id,
+                source_schema=req.source_schema,
+                bundle_schema=str(req.bundle_schema or "public").strip() or "public",
+                force_refresh_bundle=bool(req.force_refresh_bundle),
+            )
         return success_response(
             data=result,
             message="规则级 visit 质控评估完成",
@@ -1695,6 +1702,138 @@ _SHARED_SAMPLE_JOB_SOURCES = frozenset(
 )
 
 
+def _acquire_cdm_read_lock():
+    """用独立连接持有 session 锁，避免占用应用的数据库连接池。"""
+    if SessionLocal is None:
+        return None
+    bind = SessionLocal.kw.get("bind")
+    if bind is None or bind.dialect.name != "postgresql":
+        return None
+    from ..services.task_record_sync_job_service import _GLOBAL_LOCK_KEY
+
+    lock_engine = create_engine(bind.url, poolclass=NullPool, connect_args={"connect_timeout": 5})
+    connection = None
+    try:
+        connection = lock_engine.connect()
+        connection.execute(text("SET lock_timeout = '30s'"))
+        connection.execute(text("SELECT pg_advisory_lock_shared(:key)"), {"key": _GLOBAL_LOCK_KEY})
+        connection.commit()
+        return lock_engine, connection
+    except BaseException:
+        if connection is not None:
+            connection.close()
+        lock_engine.dispose()
+        raise
+
+
+def _release_cdm_read_lock(lock) -> None:
+    if lock is None:
+        return
+    lock_engine, connection = lock
+    from ..services.task_record_sync_job_service import _GLOBAL_LOCK_KEY
+
+    try:
+        connection.execute(text("SELECT pg_advisory_unlock_shared(:key)"), {"key": _GLOBAL_LOCK_KEY})
+        connection.commit()
+    finally:
+        connection.close()
+        lock_engine.dispose()
+    # 旧库可能尚无异步任务表；唤醒失败不得覆盖已完成的读取或原异常。
+    if SessionLocal is not None:
+        try:
+            from ..services.task_record_sync_job_service import _schedule_next
+
+            _schedule_next(SessionLocal)
+        except Exception as exc:
+            logger.warning("qc_cdm_sync_wakeup_failed error_type=%s", type(exc).__name__)
+
+
+async def _await_cdm_read_lock_release(lock) -> None:
+    release = asyncio.create_task(run_in_threadpool(_release_cdm_read_lock, lock))
+    cancelled = False
+    while not release.done():
+        try:
+            await asyncio.shield(release)
+        except asyncio.CancelledError:
+            cancelled = True
+    release.result()
+    if cancelled:
+        raise asyncio.CancelledError
+
+
+async def _await_cdm_read_lock_acquire():
+    acquire = asyncio.create_task(run_in_threadpool(_acquire_cdm_read_lock))
+    cancelled = False
+    while not acquire.done():
+        try:
+            await asyncio.shield(acquire)
+        except asyncio.CancelledError:
+            cancelled = True
+    lock = acquire.result()
+    if cancelled:
+        await _await_cdm_read_lock_release(lock)
+        raise asyncio.CancelledError
+    return lock
+
+
+@asynccontextmanager
+async def _cdm_bundle_read_guard():
+    try:
+        lock = await _await_cdm_read_lock_acquire()
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="质控数据同步中，请稍后重试") from exc
+    try:
+        yield
+    finally:
+        if lock is not None:
+            await _await_cdm_read_lock_release(lock)
+
+
+def _validate_task_job_after_cdm_lock(job_id: str, filters: dict[str, Any]) -> None:
+    task_id = str(filters.get("task_id") or "").strip()
+    run_number = str(filters.get("task_run_number") or "").strip()
+    if SessionLocal is None:
+        if task_id or run_number:
+            raise RuntimeError("任务运行数据库不可用")
+        return
+    with SessionLocal() as session:
+        # 迁移前的非任务 job 仍可运行；有任务标识却无关联则必须拒绝。
+        has_run_table = sa_inspect(session.connection()).has_table(
+            "task_qc_runs", schema="qc" if DB_SCHEMA_MODE == "split" else None
+        )
+        if not has_run_table:
+            if task_id or run_number:
+                raise RuntimeError("任务运行关联不可用")
+            return
+        association = session.execute(
+            select(QCTaskQCRun.__table__).where(QCTaskQCRun.job_id == job_id)
+        ).mappings().first()
+        if association is None:
+            if task_id or run_number:
+                raise RuntimeError("任务运行关联缺失")
+            return
+        if task_id != association["task_id"] or run_number != str(association["run_number"]):
+            raise RuntimeError("任务运行快照与关联不一致")
+        from ..services.task_qc_run_service import (
+            _active_remote_task, _assert_active_sync_receipt, _task_and_refs,
+        )
+
+        task, refs = _task_and_refs(
+            session, task_id, association["triggered_by"], association["run_scope"]
+        )
+        frozen_refs = filters.get("record_refs")
+        if not isinstance(frozen_refs, list) or len(frozen_refs) != len(refs):
+            raise RuntimeError("任务运行病例快照不一致")
+        keys = ("institute_id", "patient_id", "visit_id")
+        frozen = {tuple(item.get(key) for key in keys) for item in frozen_refs if isinstance(item, dict)}
+        if len(frozen) != len(refs) or frozen != {tuple(ref[key] for key in keys) for ref in refs}:
+            raise RuntimeError("任务运行病例快照不一致")
+        if _active_remote_task(task):
+            _assert_active_sync_receipt(session, task, refs, association["run_scope"], association["triggered_by"])
+
+
 def _resolve_shared_sample_pool_latest_job(
     *,
     workspace: CustomQCWorkspaceService,
@@ -1724,15 +1863,37 @@ def _resolve_shared_sample_pool_latest_job(
 async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
     from ..services.qc_diagnostics.support_store import capture_for_job, finalize
     workspace = _sichuan_workspace_service()
-    capture = capture_for_job(workspace, job_id)
+    lock = None
+    capture = None
     try:
+        try:
+            lock = await _await_cdm_read_lock_acquire()
+        except Exception as exc:
+            logger.warning("qc_cdm_read_lock_failed job_id=%s error_type=%s", job_id, type(exc).__name__)
+            await run_in_threadpool(
+                workspace.fail_batch_job, job_id=job_id,
+                error_message="病历资料读取窗口不可用，请稍后重试",
+            )
+            return
         get_batch_job_for_processing = getattr(workspace, "get_batch_job_for_processing", None)
         job = (
-            get_batch_job_for_processing(job_id=job_id)
+            await run_in_threadpool(get_batch_job_for_processing, job_id=job_id)
             if callable(get_batch_job_for_processing)
             else {}
         )
+        if not job or job.get("status") in {"completed", "failed", "canceled", "cancelled"}:
+            return
         filters = job.get("filters") if isinstance(job, dict) and isinstance(job.get("filters"), dict) else {}
+        try:
+            await run_in_threadpool(_validate_task_job_after_cdm_lock, job_id, filters)
+        except Exception as exc:
+            logger.warning("qc_task_receipt_recheck_failed job_id=%s error_type=%s", job_id, type(exc).__name__)
+            await run_in_threadpool(
+                workspace.fail_batch_job, job_id=job_id,
+                error_message="任务病历同步收据已失效，请重新同步后运行",
+            )
+            return
+        capture = await run_in_threadpool(capture_for_job, workspace, job_id)
         if str(filters.get("rule_set_key") or "").strip() == LUXIAN_0916_QC_RULE_SET_KEY:
             from ..services.luxian_0916.batch_worker import run_luxian_0916_batch_job
 
@@ -1750,8 +1911,15 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 diagnostic_capture=capture,
             )
     finally:
-        if capture is not None:
-            finalize(job_id)
+        try:
+            if capture is not None:
+                await run_in_threadpool(finalize, job_id)
+        finally:
+            if lock is not None:
+                try:
+                    await _await_cdm_read_lock_release(lock)
+                except Exception:
+                    logger.exception("qc_cdm_read_lock_release_failed job_id=%s", job_id)
 
 
 @router.post("/workspace/batch-jobs")

@@ -1,18 +1,23 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import uuid
+from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Annotated, Any, Dict, Literal, Optional
+from typing import Annotated, Any, Dict, Iterator, Literal, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from sqlalchemy import create_engine, text
+from sqlalchemy.pool import NullPool
 
 from ..core.response import get_trace_id, success_response
 from ..core.security import get_current_user, require_roles
+from ..database.connection import SessionLocal
 from ..services.product_activation import require_product_activation
 from ..services.fast_screen_qc import EXECUTION_STRATEGY_FAST_SCREEN, EXECUTION_STRATEGY_STANDARD, get_fast_screen_full_rule_ids
 from ..routers.qc_sichuan import (
@@ -336,6 +341,41 @@ class TestRecordCreateRequest(BaseModel):
     source: Optional[TestRecordSourceMeta] = Field(default=None, description="派生测试病历来源记录")
 
 
+@contextmanager
+def _sample_sync_write_lock() -> Iterator[bool]:
+    """用独立 PG 连接串行化共享 CDM/Bundle 写入，不占应用连接池。"""
+    bind = SessionLocal.kw.get("bind") if SessionLocal is not None else None
+    if bind is None or bind.dialect.name != "postgresql":
+        yield True
+        return
+    from ..services.task_record_sync_job_service import _GLOBAL_LOCK_KEY
+
+    lock_engine = create_engine(bind.url, poolclass=NullPool, connect_args={"connect_timeout": 5})
+    try:
+        with lock_engine.connect() as connection:
+            acquired = bool(connection.execute(
+                text("SELECT pg_try_advisory_lock(:key)"), {"key": _GLOBAL_LOCK_KEY},
+            ).scalar_one())
+            connection.commit()
+            try:
+                yield acquired
+            finally:
+                if acquired:
+                    try:
+                        connection.execute(
+                            text("SELECT pg_advisory_unlock(:key)"), {"key": _GLOBAL_LOCK_KEY},
+                        )
+                        connection.commit()
+                    except Exception:
+                        logging.getLogger(__name__).exception("样本池同步写锁释放失败，强制失效连接")
+                        try:
+                            connection.invalidate()
+                        except Exception:
+                            logging.getLogger(__name__).exception("样本池同步写锁连接失效失败")
+    finally:
+        lock_engine.dispose()
+
+
 def _run_sample_pool_sync_job(job_id: str) -> None:
     service = _service()
     job = service.get_sync_job(job_id=job_id)
@@ -346,6 +386,26 @@ def _run_sample_pool_sync_job(job_id: str) -> None:
     if not pool_id:
         service.fail_sync_job(job_id=job_id, error_message="同步任务缺少样本池标识")
         return
+
+    terminal_persisted = False
+    try:
+        with _sample_sync_write_lock() as acquired:
+            if not acquired:
+                service.fail_sync_job(job_id=job_id, error_message="病历资料同步资源忙，请稍后重新发起")
+                terminal_persisted = True
+                return
+            _run_sample_pool_sync_job_locked(service, job_id, payload, pool_id)
+            terminal_persisted = True
+    except Exception as exc:
+        if terminal_persisted:
+            logging.getLogger(__name__).exception("样本池同步终态已持久化，但写锁清理失败")
+        else:
+            service.fail_sync_job(job_id=job_id, error_message=f"病历资料同步执行或锁获取失败：{type(exc).__name__}")
+
+
+def _run_sample_pool_sync_job_locked(
+    service: CustomQCSamplePoolService, job_id: str, payload: Dict[str, Any], pool_id: str,
+) -> None:
 
     service.mark_sync_job_running(job_id=job_id)
 

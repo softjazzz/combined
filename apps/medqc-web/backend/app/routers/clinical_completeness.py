@@ -5,6 +5,7 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from starlette.concurrency import run_in_threadpool
 
 from ..core.response import get_trace_id, success_response
 from ..core.security import get_current_user
@@ -51,12 +52,18 @@ async def get_clinical_completeness(
         raise HTTPException(status_code=400, detail="visit_id 不能为空")
 
     try:
-        bundle = _load_clinical_bundle(
-            visit_id=visit_id,
-            patient_id=patient_id,
-            institute_id=institute_id,
-            force_refresh=force_refresh,
-        )
+        from .qc_sichuan import _cdm_bundle_read_guard
+
+        async with _cdm_bundle_read_guard():
+            bundle = await run_in_threadpool(
+                _load_clinical_bundle,
+                visit_id=visit_id,
+                patient_id=patient_id,
+                institute_id=institute_id,
+                force_refresh=force_refresh,
+            )
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.warning("加载临床完整性 bundle 失败 visit_id=%s error=%s", visit_id, exc)
         raise HTTPException(status_code=503, detail=f"病历文书 bundle 暂不可用：{exc}") from exc

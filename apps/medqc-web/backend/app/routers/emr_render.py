@@ -187,6 +187,8 @@ async def get_record_documents(
     ),
 ):
     """获取病历文书列表（BundleOnly）。"""
+    from .qc_sichuan import _cdm_bundle_read_guard
+
     if source_view == "current":
         if view != "full":
             raise HTTPException(status_code=422, detail="当前病历查看需使用完整文书视图")
@@ -197,13 +199,14 @@ async def get_record_documents(
         }
         if not all(identity.values()):
             raise HTTPException(status_code=422, detail="缺少完整住院身份，无法读取当前病历")
-        try:
-            payload = await run_in_threadpool(load_current_documents, **identity)
-        except Exception as exc:
-            logger.warning("当前文书更新失败: error_type=%s", type(exc).__name__)
-            raise HTTPException(status_code=503, detail="文书更新失败，请稍后重试；本次未展示旧文书。") from exc
-        payload = _project_customer_safe_source_refs(payload)
-        return success_response(data=payload, message="已读取当前病历文书", trace_id=get_trace_id(request))
+        async with _cdm_bundle_read_guard():
+            try:
+                payload = await run_in_threadpool(load_current_documents, **identity)
+            except Exception as exc:
+                logger.warning("当前文书更新失败: error_type=%s", type(exc).__name__)
+                raise HTTPException(status_code=503, detail="文书更新失败，请稍后重试；本次未展示旧文书。") from exc
+            payload = _project_customer_safe_source_refs(payload)
+            return success_response(data=payload, message="已读取当前病历文书", trace_id=get_trace_id(request))
     if not (str(institute_id or "").strip() and str(patient_id or "").strip() and _resolve_bundle_visit_id(record_id, visit_id)):
         raise HTTPException(status_code=422, detail="缺少完整住院身份，无法读取已保存文书")
     loader = _load_document_summaries_from_bundle if view == "summary" else _load_documents_from_bundle
@@ -215,16 +218,17 @@ async def get_record_documents(
     }
     if view == "summary":
         loader_kwargs["execution_domain"] = execution_domain
-    payload = await run_in_threadpool(
-        loader,
-        **loader_kwargs,
-    )
-    documents = list(payload.get("documents") or [])
-    return success_response(
-        data=payload,
-        message=f"获取到 {len(documents)} 份文书",
-        trace_id=get_trace_id(request),
-    )
+    async with _cdm_bundle_read_guard():
+        payload = await run_in_threadpool(
+            loader,
+            **loader_kwargs,
+        )
+        documents = list(payload.get("documents") or [])
+        return success_response(
+            data=payload,
+            message=f"获取到 {len(documents)} 份文书",
+            trace_id=get_trace_id(request),
+        )
 
 
 @router.get("/{record_id}/render")
@@ -241,39 +245,42 @@ async def render_document(
     """获取文书内容 + 结构化渲染块 + 缺陷标注（BundleOnly）。"""
     if not (str(institute_id or "").strip() and str(patient_id or "").strip() and _resolve_bundle_visit_id(record_id, visit_id)):
         raise HTTPException(status_code=422, detail="缺少完整住院身份，无法读取已保存文书")
-    if execution_domain:
-        try:
-            selected = await run_in_threadpool(
-                _load_document_from_bundle,
+    from .qc_sichuan import _cdm_bundle_read_guard
+
+    async with _cdm_bundle_read_guard():
+        if execution_domain:
+            try:
+                selected = await run_in_threadpool(
+                    _load_document_from_bundle,
+                    record_id=record_id,
+                    institute_id=institute_id,
+                    patient_id=patient_id,
+                    visit_id=visit_id,
+                    execution_domain=execution_domain,
+                    doc_type=str(doc_type or "").strip(),
+                    doc_id=str(doc_id or "").strip(),
+                )
+            except Exception as exc:
+                logger.warning("加载 bundle 文书失败: error_type=%s", type(exc).__name__)
+                raise HTTPException(status_code=503, detail="已保存文书暂不可用，请稍后重试。") from exc
+            documents_payload = {
+                "documents_tree": build_documents_tree([selected] if selected else []),
+                "empty_reason": "" if selected else "document_not_found",
+            }
+        else:
+            documents_payload = await run_in_threadpool(
+                _load_documents_from_bundle,
                 record_id=record_id,
                 institute_id=institute_id,
                 patient_id=patient_id,
                 visit_id=visit_id,
-                execution_domain=execution_domain,
+            )
+            documents = list(documents_payload.get("documents") or [])
+            selected = pick_document(
+                documents=documents,
                 doc_type=str(doc_type or "").strip(),
                 doc_id=str(doc_id or "").strip(),
             )
-        except Exception as exc:
-            logger.warning("加载 bundle 文书失败: error_type=%s", type(exc).__name__)
-            raise HTTPException(status_code=503, detail="已保存文书暂不可用，请稍后重试。") from exc
-        documents_payload = {
-            "documents_tree": build_documents_tree([selected] if selected else []),
-            "empty_reason": "" if selected else "document_not_found",
-        }
-    else:
-        documents_payload = await run_in_threadpool(
-            _load_documents_from_bundle,
-            record_id=record_id,
-            institute_id=institute_id,
-            patient_id=patient_id,
-            visit_id=visit_id,
-        )
-        documents = list(documents_payload.get("documents") or [])
-        selected = pick_document(
-            documents=documents,
-            doc_type=str(doc_type or "").strip(),
-            doc_id=str(doc_id or "").strip(),
-        )
     view_payload = build_render_view(selected)
 
     content = str(view_payload.get("content") or "")

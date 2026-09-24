@@ -1026,8 +1026,14 @@ async def test_sc_batch_nonempty_result_has_completed_execution_status(monkeypat
     assert workspace.summary["failed_record_count"] == 0
 
 
+def _skip_task_receipt_recheck_for_projection_test(monkeypatch):
+    # 这些内存任务只验证结果投影，不验证持久化任务归属或同步收据。
+    monkeypatch.setattr(qc_sichuan, "_validate_task_job_after_cdm_lock", lambda *_: None)
+
+
 @pytest.mark.asyncio
 async def test_sc_task_batch_persists_compact_executor_compliant_results(monkeypatch):
+    _skip_task_receipt_recheck_for_projection_test(monkeypatch)
     workspace = _WorkspaceStub()
     workspace.job["filters"] = {
         "rule_ids": ["SC-001", "SC-002"],
@@ -1081,6 +1087,7 @@ async def test_sc_non_task_batch_keeps_compliant_results_sparse(monkeypatch, tas
     workspace = _WorkspaceStub()
     workspace.job["filters"] = {"rule_ids": ["SC-001"], "rule_set_key": "sc_content_v1"}
     if task_run_number is not None:
+        _skip_task_receipt_recheck_for_projection_test(monkeypatch)
         workspace.job["filters"].update({
             "task_id": "task-001",
             "task_run_number": task_run_number,
@@ -1104,6 +1111,7 @@ async def test_sc_non_task_batch_keeps_compliant_results_sparse(monkeypatch, tas
 
 @pytest.mark.asyncio
 async def test_sc_task_batch_keeps_non_compliant_item_unchanged(monkeypatch):
+    _skip_task_receipt_recheck_for_projection_test(monkeypatch)
     workspace = _WorkspaceStub()
     workspace.job["filters"] = {
         "rule_ids": ["SC-001"],
@@ -1132,6 +1140,7 @@ async def test_sc_task_batch_keeps_non_compliant_item_unchanged(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_sc_task_retry_recompresses_merged_rule_summary(monkeypatch):
+    _skip_task_receipt_recheck_for_projection_test(monkeypatch)
     workspace = _WorkspaceStub()
     refs = [
         {"institute_id": "HOSP-001", "patient_id": f"PAT-{visit_id}", "visit_id": visit_id}
@@ -1203,6 +1212,7 @@ async def test_sc_task_retry_recompresses_merged_rule_summary(monkeypatch):
     ["duplicate", "duplicate_non_compliant", "duplicate_uncertain", "invalid_status", "contradictory"],
 )
 async def test_sc_task_batch_rejects_ambiguous_results(monkeypatch, invalid_kind):
+    _skip_task_receipt_recheck_for_projection_test(monkeypatch)
     workspace = _WorkspaceStub()
     workspace.job["filters"] = {
         "rule_ids": ["SC-001"],
