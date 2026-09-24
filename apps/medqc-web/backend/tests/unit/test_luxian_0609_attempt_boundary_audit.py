@@ -234,6 +234,28 @@ def test_cancelled_terminal_rejects_late_completion_until_same_job_is_retried(st
     assert _status(engine, table) == "running"
 
 
+def test_cancel_running_luxian_attempt_marks_cost_observation_unknown(storage):
+    service, engine, table = storage
+    attempt = service.mark_batch_job_running(job_id="attempt-job")
+    assert isinstance(attempt, str)
+    with engine.begin() as connection:
+        connection.execute(
+            table.update().where(table.c.id == "attempt-job").values(
+                summary_json=json.dumps({
+                    "luxian_0609_usage_observation_complete": True,
+                    "luxian_0609_usage_unknown_executor_keys": [],
+                }),
+            )
+        )
+
+    canceled = service.cancel_batch_job(job_id="attempt-job", created_by="tester")
+
+    assert canceled is not None and canceled["status"] == "canceled"
+    assert canceled["summary"]["luxian_0609_usage_observation_complete"] is False
+    assert canceled["summary"]["luxian_0609_usage_unknown_executor_keys"] == []
+    assert _stale_failed_completion(service, attempt) is False
+
+
 def test_same_id_retry_preserves_original_luxian_settings_snapshot(storage):
     service, engine, table = storage
     original = capture_luxian_0609_task_settings(

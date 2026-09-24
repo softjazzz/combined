@@ -782,6 +782,37 @@ def test_parent_usage_observation_uses_all_child_attempts(monkeypatch):
     assert aggregate["summary"]["luxian_0609_usage_unknown_executor_keys"] == ["exam_lab"]
 
 
+def test_parent_canceled_child_cannot_leave_cost_observation_complete(monkeypatch):
+    class _Rows:
+        def mappings(self):
+            return self
+
+        def all(self):
+            return [
+                {"id": "child-1", "status": "completed", "summary": {
+                    "luxian_0609_usage_observation_complete": True,
+                }},
+                {"id": "child-2", "status": "canceled", "summary": {
+                    "luxian_0609_usage_observation_complete": True,
+                }},
+            ]
+
+    class _Session:
+        def execute(self, _statement):
+            return _Rows()
+
+    service = CustomQCWorkspaceService()
+    monkeypatch.setattr(workspace_module, "_row_to_batch_job", lambda row, include_items=True: row)
+    aggregate = service._aggregate_parent_job(
+        _Session(),
+        {
+            "id": "parent-1", "job_kind": "parent", "status": "canceled",
+            "filters": {"rule_set_key": "luxian_0609_qc_v1"}, "summary": {},
+        },
+    )
+    assert aggregate["summary"]["luxian_0609_usage_observation_complete"] is False
+
+
 def test_public_usage_observation_only_exposes_executor_keys():
     projected = workspace_module.project_customer_safe_batch_job(
         {

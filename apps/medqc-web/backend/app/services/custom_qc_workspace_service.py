@@ -2382,10 +2382,16 @@ class CustomQCWorkspaceService:
             summary.get("luxian_0609_usage_observation_complete")
             for summary in child_summaries
         ]
-        if any(isinstance(state, bool) for state in child_usage_states):
+        formal_luxian_parent = (
+            (parent_job.get("filters") or {}).get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY
+        )
+        if any(isinstance(state, bool) for state in child_usage_states) or (
+            formal_luxian_parent and canceled
+        ):
             parent_summary["luxian_0609_usage_observation_complete"] = (
                 len(child_usage_states) == len(child_jobs)
                 and all(state is True for state in child_usage_states)
+                and canceled == 0
             )
             parent_summary["luxian_0609_usage_unknown_executor_keys"] = sorted({
                 key for summary in child_summaries
@@ -4170,6 +4176,10 @@ class CustomQCWorkspaceService:
                 if isinstance(current_summary.get("progress"), dict)
                 else {}
             )
+            running_luxian_attempt = (
+                current.get("status") == "running"
+                and (current.get("filters") or {}).get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY
+            )
             cancellation_update = session.execute(
                 update(self._batch_job_table)
                 .where(
@@ -4184,6 +4194,8 @@ class CustomQCWorkspaceService:
                     summary_json=_safe_json_dumps(
                         {
                             **current_summary,
+                            **({"luxian_0609_usage_observation_complete": False}
+                               if running_luxian_attempt else {}),
                             "progress": {
                                 **cancelled_progress,
                                 "step_key": "canceled",
