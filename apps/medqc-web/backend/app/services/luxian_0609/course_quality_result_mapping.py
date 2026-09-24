@@ -435,8 +435,9 @@ def _published_number(value: Any, places: int) -> bool:
         return False
 
 
-def _published_dates(value: Any, *, maximum: int = 64) -> bool:
-    return type(value) is list and len(value) <= maximum and all(_date(item) for item in value)
+def _published_dates(value: Any, *, maximum: int | None = 64) -> bool:
+    return (type(value) is list and (maximum is None or len(value) <= maximum)
+            and all(_date(item) for item in value))
 
 
 def _published_009_event(item: Any) -> bool:
@@ -509,7 +510,8 @@ def _published_009(raw: dict[str, Any]) -> bool:
     if (kind not in {"critical_daily_record_coverage_satisfied", "critical_daily_record_missing"}
             or raw.get("severity") != "critical" or raw.get("evaluated_scope") != "critical_daily_course_coverage"
             or raw.get("pending_scope") != ["condition_change_course_documentation"]
-            or not _published_dates(raw.get("required_dates")) or not _published_dates(raw.get("covered_dates"))
+            or not _published_dates(raw.get("required_dates"), maximum=None)
+            or not _published_dates(raw.get("covered_dates"), maximum=None)
             or not set(raw["covered_dates"]).issubset(raw["required_dates"])):
         return False
     if kind == "critical_daily_record_coverage_satisfied":
@@ -575,21 +577,22 @@ def _published_017(raw: dict[str, Any]) -> bool:
     return True
 
 
-def validate_published_course_quality_facts(*, rule_id: str, raw: Any) -> dict[str, Any] | None:
-    """逐形态校验已发布 JSON；合法值原样返回，不调用内部投影。"""
+def validate_published_course_quality_facts(*, rule_id: str, raw: Any) -> tuple[bool, dict[str, Any] | None]:
+    """返回合同是否有效及原值；018 可合法地没有独立 facts。"""
     normalized = str(rule_id or "").strip().upper()
     if normalized == "LX0609-01-01-02" and raw is None:
-        return None
+        return True, None
     if type(raw) is not dict or any(type(key) is not str for key in raw):
-        return None
+        return False, None
     if normalized == "LX0609-02-01-03":
-        return validate_published_course_007_facts(raw)
+        validated = validate_published_course_007_facts(raw)
+        return validated is not None, validated
     if normalized == "LX0609-01-01-02":
-        return {} if not raw else None
+        return (True, {}) if not raw else (False, None)
     validators = {"LX0609-02-01-04": _published_008, "LX0609-02-01-05": _published_009,
                   "LX0609-12-01-01": _published_016, "LX0609-12-01-02": _published_017}
     validator = validators.get(normalized)
-    return dict(raw) if validator is not None and validator(raw) else None
+    return (True, dict(raw)) if validator is not None and validator(raw) else (False, None)
 
 
 def safe_course_quality_customer_display_facts(*, rule_id: str, raw: Any) -> dict[str, Any] | None:

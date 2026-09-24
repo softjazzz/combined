@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 
 import pytest
@@ -12,6 +12,7 @@ from sqlalchemy import MetaData, create_engine
 from sqlalchemy.orm import Session
 
 import app.services.custom_qc_workspace_service as workspace_module
+import app.services.luxian_0609.course_quality_result_mapping as course_mapping
 
 from app.services.luxian_0609.canonical_result_finalizer import (
     validate_luxian_0609_published_customer_display_facts,
@@ -22,6 +23,7 @@ from app.services.luxian_0609.course_quality_result_mapping import (
 from app.services.qc_workspace.canonical_result_store import (
     CanonicalResultStore, envelope_item_from_rule_result,
 )
+from tests.unit.test_luxian_0609_course_quality_freeze import _run_chain
 
 
 EVENT = {"event_ref": "E1", "change_category": "exam_lab", "event_time": "2026-01-02 08:00:00",
@@ -85,6 +87,71 @@ def test_018_absent_facts_keep_none_semantics():
     assert validate_luxian_0609_published_customer_display_facts(rule_id="LX0609-01-01-02", raw=None) is None
     with pytest.raises(ValueError, match="解释合同不完整"):
         validate_luxian_0609_published_customer_display_facts(rule_id="LX0609-01-01-02", raw={"unexpected": 1})
+
+
+@pytest.mark.parametrize("count", [65, 180])
+@pytest.mark.parametrize("kind", ["critical_daily_record_coverage_satisfied", "critical_daily_record_missing"])
+def test_009_published_daily_dates_keep_the_original_unbounded_contract(count, kind):
+    dates = [(datetime(2026, 1, 1) + timedelta(days=index)).strftime("%Y-%m-%d") for index in range(count)]
+    raw = {"failure_kind": kind, "severity": "critical", "evaluated_scope": "critical_daily_course_coverage",
+           "pending_scope": ["condition_change_course_documentation"],
+           "required_dates": dates, "covered_dates": dates if kind.endswith("satisfied") else dates[:-1]}
+    if kind.endswith("satisfied"):
+        raw.update(anchor_date=dates[0], horizon_date=dates[-1], missing_count=0)
+    else:
+        raw.update(missing_dates=[dates[-1]], missing_count=1,
+                   missing_first_date=dates[-1], missing_last_date=dates[-1])
+    published = safe_course_quality_customer_display_facts(rule_id="LX0609-02-01-05", raw=raw)
+    assert published is not None and len(published["required_dates"]) == count
+    assert validate_luxian_0609_published_customer_display_facts(
+        rule_id="LX0609-02-01-05", raw=published,
+    ) == published
+
+
+@pytest.mark.asyncio
+async def test_016_native_binding_aggregate_projects_internal_facts_once(monkeypatch):
+    original = course_mapping.safe_course_quality_customer_display_facts
+    calls = []
+
+    def counted(*, rule_id, raw):
+        calls.append(rule_id)
+        return original(rule_id=rule_id, raw=raw)
+
+    monkeypatch.setattr(course_mapping, "safe_course_quality_customer_display_facts", counted)
+    rule_id = "LX0609-12-01-01"
+    rows = {
+        "admission_record": ({"document_id": "admission-16", "record_content": "",
+                              "history_of_present_illness": "病例特点完全一致。"},),
+        "first_course_record": ({"document_id": "first-course-16", "record_content": "",
+                                 "case_characteristic": "病例特点完全一致。"},),
+    }
+    _, execution, reduced, result = await _run_chain(rule_id, rows)
+    assert calls == [rule_id]
+    assert execution.llm_call_count == execution.total_tokens == 0
+    assert (reduced.final_state.value, reduced.reason_code) == ("non_compliant", "requirement_violated")
+    assert (result["status"], result["reason_code"]) == ("non_compliant", "requirement_violated")
+    assert result["customer_display_facts"]["copy_similarity"] == 1.0
+
+
+def test_008_still_limits_recorded_dates_to_64():
+    raw = {"failure_kind": "severity_course_interval_satisfied", "severity": "serious",
+           "threshold_days": 2, "anchor_date": "2026-01-01", "horizon_date": "2026-01-02",
+           "maximum_gap_days": 1, "recorded_dates": ["2026-01-02"] * 65}
+    assert safe_course_quality_customer_display_facts(rule_id="LX0609-02-01-04", raw=raw) is None
+    with pytest.raises(ValueError, match="解释合同不完整"):
+        validate_luxian_0609_published_customer_display_facts(rule_id="LX0609-02-01-04", raw=raw)
+
+
+def test_009_still_limits_missing_dates_to_7():
+    dates = [(datetime(2026, 1, 1) + timedelta(days=index)).strftime("%Y-%m-%d") for index in range(8)]
+    raw = {"failure_kind": "critical_daily_record_missing", "severity": "critical",
+           "evaluated_scope": "critical_daily_course_coverage",
+           "pending_scope": ["condition_change_course_documentation"],
+           "required_dates": dates, "covered_dates": [], "missing_dates": dates, "missing_count": 8,
+           "missing_first_date": dates[0], "missing_last_date": dates[-1]}
+    assert safe_course_quality_customer_display_facts(rule_id="LX0609-02-01-05", raw=raw) is None
+    with pytest.raises(ValueError, match="解释合同不完整"):
+        validate_luxian_0609_published_customer_display_facts(rule_id="LX0609-02-01-05", raw=raw)
 
 
 @pytest.mark.parametrize("rule_id,raw,change", [
