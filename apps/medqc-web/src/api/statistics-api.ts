@@ -4,9 +4,9 @@ import { extractApiErrorMessageFromError, normalizeApiSuccess } from '@/utils/ap
 
 export interface StatisticsOverview {
   totalRecords: number
-  pendingRecords: number
-  analyzingRecords: number
-  completedRecords: number
+  pendingRecords: number | null
+  analyzingRecords: number | null
+  completedRecords: number | null
   averageScore: number
   passRate: number
   todayUploads: number
@@ -133,12 +133,8 @@ export async function getStatisticsOverview(): Promise<StatisticsOverview> {
 
   const totalRecords =
     summary?.kpis?.total_records ?? dashboard?.total_records ?? todo?.record_stats?.total ?? 0
-  const pendingRecords =
-    todo?.task_stats?.not_started ??
-    todo?.record_stats?.pending_review ??
-    summary?.kpis?.pending ??
-    0
-  const analyzingRecords = todo?.task_stats?.in_progress ?? todo?.record_stats?.pending_recheck ?? 0
+  const pendingRecords = todo?.task_stats?.not_started ?? todo?.record_stats?.pending_review ?? null
+  const analyzingRecords = todo?.task_stats?.in_progress ?? todo?.record_stats?.pending_recheck ?? null
 
   const averageScore = toNumber(summary?.kpis?.avg_qc_score ?? dashboard?.avg_score ?? 0)
 
@@ -146,7 +142,10 @@ export async function getStatisticsOverview(): Promise<StatisticsOverview> {
     totalRecords,
     pendingRecords,
     analyzingRecords,
-    completedRecords: Math.max(totalRecords - pendingRecords - analyzingRecords, 0),
+    completedRecords:
+      pendingRecords === null || analyzingRecords === null
+        ? null
+        : Math.max(totalRecords - pendingRecords - analyzingRecords, 0),
     averageScore: Number(averageScore.toFixed(1)),
     passRate: normalizePercentage(summary?.kpis?.pass_rate ?? dashboard?.pass_rate ?? 0),
     // 当前后端还没有“今日上传量/周环比”的真实统计，先显式置 0，避免继续展示假趋势。

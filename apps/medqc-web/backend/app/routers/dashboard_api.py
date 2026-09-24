@@ -13,7 +13,7 @@ import os
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List, Literal
 
-from fastapi import APIRouter, Request, Depends, Query
+from fastapi import APIRouter, Request, Depends, Query, HTTPException
 
 from ..core.supabase_client import get_supabase, async_execute
 from ..core.response import success_response, get_trace_id
@@ -205,6 +205,7 @@ async def _collect_db_stats(sb, scene: DashboardScene) -> Dict[str, Any]:
         }
     except Exception:
         stats['appeals'] = {'total': 0, 'by_status': {}}
+        stats['_todo_sources_failed'] = True
 
     # 4. 整改任务统计
     try:
@@ -233,6 +234,7 @@ async def _collect_db_stats(sb, scene: DashboardScene) -> Dict[str, Any]:
         }
     except Exception:
         stats['remediation'] = {'total': 0, 'by_status': {}}
+        stats['_todo_sources_failed'] = True
 
     return stats
 
@@ -251,7 +253,7 @@ async def _get_db_stats_by_scene(scene: DashboardScene = "all", user_id: str = N
     try:
         return await asyncio.wait_for(_collect_db_stats(sb, scene), timeout=_DB_STATS_TIMEOUT_SECONDS)
     except asyncio.TimeoutError:
-        logger.warning("Dashboard DB stats timed out after %.1fs; using fallback data", _DB_STATS_TIMEOUT_SECONDS)
+        logger.warning("Dashboard DB stats timed out after %.1fs", _DB_STATS_TIMEOUT_SECONDS)
         return None
     except Exception as e:
         logger.error(f"获取数据库统计失败: {e}")
@@ -285,7 +287,10 @@ async def get_todo_stats(
     # 尝试从数据库获取
     db_stats = await _get_db_stats_by_scene(scene=scene, user_id=user_id)
 
-    if db_stats:
+    if db_stats is None or db_stats.get('_todo_sources_failed'):
+        raise HTTPException(status_code=503, detail="待办统计暂不可用，请稍后重试")
+
+    if db_stats is not None:
         # 从数据库统计构建待办视图
         records = db_stats.get('records', {})
         qc = db_stats.get('qc', {})
@@ -335,38 +340,6 @@ async def get_todo_stats(
             "department_breakdown": records.get('by_department', {}),
             "scene": scene,
         }
-    else:
-        # 回退：从内存数据构建
-        mem_stats = await _aggregate_from_memory()
-        total = mem_stats['total_records']
-        defects = mem_stats['total_defects']
-
-        todo_data = {
-            "task_stats": {
-                "countdown": max(1, total // 10),
-                "in_progress": max(1, total // 5),
-                "not_started": max(1, total // 8),
-            },
-            "defect_stats": {
-                "clinical_appeals": mem_stats['severity_counts'].get('critical', 0),
-                "pending_review": defects,
-                "urged": mem_stats['severity_counts'].get('error', 0),
-            },
-            "record_stats": {
-                "pending_review": max(1, total // 4),
-                "pending_recheck": max(1, total // 10),
-                "total": total,
-            },
-            "overview": {
-                "total_records": total,
-                "avg_score": 87.5,
-                "pass_rate": 94.2,
-                "total_defects": defects,
-            },
-            "department_breakdown": {},
-            "scene": scene,
-        }
-
     return success_response(
         data=todo_data,
         message="获取待办统计成功",

@@ -340,9 +340,9 @@ const departmentChartType = ref<'recordCount' | 'averageScore' | 'passRate'>('re
 // 统计数据
 const overview = ref<StatisticsOverview>({
   totalRecords: 0,
-  pendingRecords: 0,
-  analyzingRecords: 0,
-  completedRecords: 0,
+  pendingRecords: null,
+  analyzingRecords: null,
+  completedRecords: null,
   averageScore: 0,
   passRate: 0,
   todayUploads: 0,
@@ -384,13 +384,13 @@ const overviewCards = computed<DashboardCard[]>(() => [
   },
   {
     title: '待分析',
-    value: overview.value.pendingRecords,
+    value: overview.value.pendingRecords ?? '--',
     icon: 'ClockCircleOutlined',
     color: '#faad14'
   },
   {
     title: '分析中',
-    value: overview.value.analyzingRecords,
+    value: overview.value.analyzingRecords ?? '--',
     icon: 'SyncOutlined',
     color: '#13c2c2'
   },
@@ -494,9 +494,9 @@ const loadData = async () => {
     failedModules.push('概览')
     overview.value = {
       totalRecords: 0,
-      pendingRecords: 0,
-      analyzingRecords: 0,
-      completedRecords: 0,
+      pendingRecords: null,
+      analyzingRecords: null,
+      completedRecords: null,
       averageScore: 0,
       passRate: 0,
       todayUploads: 0,

@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 
 # 假设主应用在 app.main
 from app.main import app
+from app.routers import dashboard_api
 
 from app.core.security import get_current_user
 
@@ -22,8 +23,17 @@ def setup_module():
 def auth_headers():
     return {}
 
-def test_dashboard_stats(auth_headers):
+def test_dashboard_stats(auth_headers, monkeypatch):
     # P1 Dashboard 待办统计
+    async def empty_stats(*_args, **_kwargs):
+        return {
+            "records": {"total": 0, "by_status": {}, "by_department": {}},
+            "qc": {"total": 0, "avg_score": 0, "by_grade": {}},
+            "appeals": {"total": 0, "by_status": {}},
+            "remediation": {"total": 0, "by_status": {}},
+        }
+
+    monkeypatch.setattr(dashboard_api, "_get_db_stats_by_scene", empty_stats)
     response = client.get("/api/v1/dashboard/todo-stats", headers=auth_headers)
     assert response.status_code == 200
     data = response.json()
