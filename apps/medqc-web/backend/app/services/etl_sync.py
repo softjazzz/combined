@@ -23,7 +23,7 @@ from psycopg2.extensions import make_dsn
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
-from ..database.connection import DB_SCHEMA_MODE, engine
+from ..database.connection import DB_SCHEMA_MODE, SessionLocal, engine
 from .visit_index_service import ingest_sync_rows
 from .sync_policy import load_sync_policy
 from .config_registry import get_config, set_config
@@ -3645,14 +3645,46 @@ def run_sync(
                 progress_payload["bundle_progress"] = dict(bundle_progress)
             _emit_sync_progress(progress_callback, progress_payload)
 
+        from .bundles.publication import (
+            assert_complete_bundle_refresh,
+            invalidate_bundle_variants,
+            new_bundle_staging_token,
+            publish_bundle_variants,
+        )
+
+        bundle_staging_token = new_bundle_staging_token()
+        bundle_published = False
         try:
+            # 逐表写入各自提交；先持久封锁本轮全部病例的旧 Bundle。
+            invalidate_bundle_variants(case_refs, session_factory=SessionLocal)
             sync_result = _create_case_set_sync_service().sync_case_set(
                 case_refs=case_refs,
                 table_names=target_table_names,
                 policy_version=str(policy_version or ""),
+                bundle_policy_version=bundle_staging_token,
                 sync_scene=resolved_scene,
                 progress_callback=_forward_case_set_progress,
             )
+            synced_tables = tuple(sync_result.synced_tables)
+            all_source_tables_synced = bool(synced_tables) and all(
+                item.get("sync_status") == "synced" for item in synced_tables
+            )
+            if (
+                not sync_result.missing_primary_case_refs
+                and all_source_tables_synced
+                and set(sync_result.visible_case_refs) == eligible_case_refs
+            ):
+                assert_complete_bundle_refresh(
+                    sync_result,
+                    visible_count=len(case_refs),
+                )
+                publish_bundle_variants(
+                    case_refs,
+                    staging_token=bundle_staging_token,
+                    published_policy_version=str(policy_version or ""),
+                    session_factory=SessionLocal,
+                )
+                bundle_published = True
         except Exception as exc:
             logger.warning(
                 "case_set_sync_failed error_type=%s",
@@ -3730,7 +3762,11 @@ def run_sync(
 
         total_rows_pulled = int(sync_result.total_rows_pulled)
         total_rows_upserted = int(sync_result.total_rows_upserted)
-        final_success = not missing_primary_case_refs and not unavailable_detail_tables
+        final_success = (
+            bundle_published
+            and not missing_primary_case_refs
+            and not unavailable_detail_tables
+        )
         final_status = (
             "success"
             if final_success

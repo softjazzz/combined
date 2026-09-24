@@ -39,6 +39,12 @@ from .bundles.assembly import (
     refresh_scene_bundles_for_rows,
 )
 from .bundles.contracts import BUNDLE_SCHEMA_VERSION_CURRENT
+from .bundles.publication import (
+    assert_complete_bundle_refresh,
+    invalidate_bundle_variants,
+    new_bundle_staging_token,
+    publish_bundle_variants,
+)
 from .case_identity import (
     CaseRef,
     coerce_case_ref,
@@ -6564,24 +6570,35 @@ class CustomQCSamplePoolService:
         if not sync_scenes or not sync_scenes.issubset({"running", "final"}):
             raise ValueError("样本病例预期场景无效")
         batch_sync_scene = next(iter(sync_scenes)) if len(sync_scenes) == 1 else "both"
-        sync_result = CaseSetSyncService(
-            table_catalog_loader=list_sync_tables,
-            row_fetcher=fetch_remote_rows_by_case_refs,
-            row_upserter=upsert_to_local,
-            bundle_refresher=refresh_all_bundle_variants_for_rows,
-            visit_index_ingester=ingest_sync_rows,
-            remote_url_loader=get_remote_db_url,
-            db_config_loader=load_db_config,
-            detail_table_workers=max(1, detail_table_workers),
-            upsert_batch_size=sync_settings.SAMPLE_SYNC_UPSERT_BATCH_SIZE,
-        ).sync_case_set(
-            case_refs=requested_visit_keys,
-            table_names=sync_plan["table_names"],
-            policy_version="sample_pool_incremental_sync",
-            sync_scene=batch_sync_scene,
-            case_scene_by_ref=case_scene_by_ref,
-            progress_callback=_forward_case_sync_progress,
-        )
+        published_policy_version = "sample_pool_incremental_sync"
+        staging_token = new_bundle_staging_token()
+        try:
+            invalidate_bundle_variants(requested_visit_keys, session_factory=SessionLocal)
+        except Exception as exc:
+            raise RuntimeError("样本病历 Bundle 失效保护失败，未启动源端同步") from exc
+        try:
+            sync_result = CaseSetSyncService(
+                table_catalog_loader=list_sync_tables,
+                row_fetcher=fetch_remote_rows_by_case_refs,
+                row_upserter=upsert_to_local,
+                bundle_refresher=refresh_all_bundle_variants_for_rows,
+                visit_index_ingester=ingest_sync_rows,
+                remote_url_loader=get_remote_db_url,
+                db_config_loader=load_db_config,
+                detail_table_workers=max(1, detail_table_workers),
+                upsert_batch_size=sync_settings.SAMPLE_SYNC_UPSERT_BATCH_SIZE,
+            ).sync_case_set(
+                case_refs=requested_visit_keys,
+                table_names=sync_plan["table_names"],
+                policy_version=published_policy_version,
+                bundle_policy_version=staging_token,
+                sync_scene=batch_sync_scene,
+                case_scene_by_ref=case_scene_by_ref,
+                progress_callback=_forward_case_sync_progress,
+            )
+        except Exception:
+            self._mark_sync_items_bundle_pending(pool_id=pool_id, item_ids=sync_item_ids)
+            raise
         source_rows_by_table = {
             table_name: list(rows)
             for table_name, rows in sync_result.source_rows_by_table.items()
@@ -6614,6 +6631,7 @@ class CustomQCSamplePoolService:
         ]
 
         if not primary_visible:
+            self._mark_sync_items_bundle_pending(pool_id=pool_id, item_ids=sync_item_ids)
             primary_table_results = [
                 item
                 for item in synced_tables
@@ -6680,6 +6698,32 @@ class CustomQCSamplePoolService:
                 "primary_match": None,
                 "post_match": None,
             }
+
+        synced_by_name = {
+            _safe_text(item.get("table_name")): item
+            for item in synced_tables
+        }
+        visible_refs = set(sync_result.visible_case_refs)
+        try:
+            if (
+                not visible_refs
+                or not visible_refs.issubset(requested_visit_keys)
+                or any(
+                    _safe_text(synced_by_name.get(name, {}).get("sync_status")) != "synced"
+                    for name in sync_plan["table_names"]
+                )
+            ):
+                raise RuntimeError("样本病历源端资料集不完整")
+            assert_complete_bundle_refresh(sync_result, len(visible_refs))
+            publish_bundle_variants(
+                list(visible_refs),
+                staging_token=staging_token,
+                published_policy_version=published_policy_version,
+                session_factory=SessionLocal,
+            )
+        except Exception:
+            self._mark_sync_items_bundle_pending(pool_id=pool_id, item_ids=sync_item_ids)
+            raise
 
         current_hospitalization_states = _collect_current_hospitalization_states(
             source_rows_by_table

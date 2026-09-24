@@ -11,6 +11,8 @@ from sqlalchemy.pool import StaticPool
 
 from app.database.models.qc import QCTask, QCTaskRecord
 from app.services import task_record_sync_service as service
+from app.services.bundles import publication
+from app.services.case_identity import CaseRef
 
 
 @pytest.fixture
@@ -351,3 +353,39 @@ def test_missing_bundle_rows_are_fenced_before_source_write(workspace):
                 SELECT policy_version FROM public.{table}
                 WHERE institute_id='hospital' AND patient_id='same' AND visit_id='visit-2'
             """)).scalar_one() == service.INVALIDATED_POLICY_VERSION
+
+
+def test_large_publication_uses_bounded_set_queries_and_allows_empty_policy(workspace):
+    refs = [CaseRef("hospital", "synthetic", f"visit-{index:03d}") for index in range(205)]
+    publication.invalidate_bundle_variants(refs, session_factory=workspace)
+    token = publication.new_bundle_staging_token()
+    with workspace.begin() as session:
+        for table in publication.BUNDLE_TABLES:
+            session.execute(sa.text(f"""
+                UPDATE public.{table} SET policy_version=:token
+                WHERE institute_id='hospital' AND patient_id='synthetic'
+            """), {"token": token})
+
+    statements = []
+
+    def count_statements(_conn, _cursor, statement, _params, _context, _many):
+        if "public." in statement:
+            statements.append(statement)
+
+    sa.event.listen(workspace.kw["bind"], "before_cursor_execute", count_statements)
+    try:
+        publication.publish_bundle_variants(
+            refs, staging_token=token, published_policy_version="", session_factory=workspace,
+        )
+    finally:
+        sa.event.remove(workspace.kw["bind"], "before_cursor_execute", count_statements)
+
+    checks = [sql for sql in statements if "SELECT COUNT(*) FROM public." in sql]
+    updates = [sql for sql in statements if "UPDATE public." in sql]
+    assert len(checks) == len(updates) == len(publication.BUNDLE_TABLES) * 2
+    with workspace() as session:
+        for table in publication.BUNDLE_TABLES:
+            assert session.execute(sa.text(f"""
+                SELECT COUNT(*) FROM public.{table}
+                WHERE institute_id='hospital' AND patient_id='synthetic' AND policy_version=''
+            """)).scalar_one() == len(refs)

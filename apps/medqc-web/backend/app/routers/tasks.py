@@ -274,6 +274,7 @@ async def create_task(
         "progress": 0,
         "total_records": 0,
         "completed_records": 0,
+        "attempt_count": 0,
         "creator_id": creator_id,
         "creator_name": current_user.get("display_name", ""),
         "deadline": task_data.deadline,

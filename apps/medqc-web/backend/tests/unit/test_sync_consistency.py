@@ -21,6 +21,7 @@ from app.database.models.cdm import (
     SurgeryRecord,
 )
 from app.services import etl_sync, mongo_sync, sync_run_history
+from app.services.bundles import publication
 from app.services.case_identity import CaseRef
 from app.services.case_scope_service import HospitalizationScopeResult
 from app.services.case_set_sync_service import CaseSetSyncResult
@@ -246,6 +247,38 @@ def test_run_sync_rejects_when_advisory_lock_not_acquired(monkeypatch):
     assert "同步正在进行中" in result["error"]
 
 
+def _complete_etl_refresh_stats(count: int) -> dict:
+    return {
+        "scenes": {
+            name: {"processed": count, "updated": count, "failed": 0}
+            for name in ("running", "final")
+        },
+        "domains": {
+            name: {"processed": count, "updated": count, "failed": 0}
+            for name in (
+                "admission", "course", "surgery", "consult_discussion",
+                "terminal", "index_coding_settlement",
+            )
+        },
+    }
+
+
+def _mock_etl_bundle_publication(monkeypatch, calls: list | None = None):
+    recorded = calls if calls is not None else []
+    monkeypatch.setattr(publication, "new_bundle_staging_token", lambda: "task-record-sync-invalidated-v1:" + "a" * 32)
+    monkeypatch.setattr(
+        publication,
+        "invalidate_bundle_variants",
+        lambda refs, **_kwargs: recorded.append(("invalidate", tuple(refs))),
+    )
+    monkeypatch.setattr(
+        publication,
+        "publish_bundle_variants",
+        lambda refs, **_kwargs: recorded.append(("publish", tuple(refs))),
+    )
+    return recorded
+
+
 def test_run_sync_running_delegates_once_to_public_case_services(monkeypatch):
     progress_events: list[dict] = []
     scope_calls: list[dict] = []
@@ -348,7 +381,7 @@ def test_run_sync_running_delegates_once_to_public_case_services(monkeypatch):
                 source_rows_by_table={},
                 total_rows_pulled=3,
                 total_rows_upserted=3,
-                bundle_refresh={"scenes": {}, "domains": {}},
+                bundle_refresh=_complete_etl_refresh_stats(2),
             )
 
     target_tables = [
@@ -356,6 +389,7 @@ def test_run_sync_running_delegates_once_to_public_case_services(monkeypatch):
         for name in ("mr", "admission_record", "discharge_record", "daily_course_record")
     ]
     monkeypatch.setattr(etl_sync, "engine", _FakeEngine())
+    _mock_etl_bundle_publication(monkeypatch)
     monkeypatch.setattr(etl_sync, "_upsert_sync_job_state", lambda _state: None)
     monkeypatch.setattr(etl_sync, "get_remote_db_url", lambda: "postgresql://source")
     monkeypatch.setattr(
@@ -440,6 +474,7 @@ def test_run_sync_running_delegates_once_to_public_case_services(monkeypatch):
         item["name"] for item in target_tables
     )
     assert sync_calls[0]["sync_scene"] == "running"
+    assert sync_calls[0]["bundle_policy_version"].startswith("task-record-sync-invalidated-v1:")
     bundle_progress = next(
         event for event in progress_events if event.get("stage") == "bundle_refresh"
     )
@@ -481,6 +516,9 @@ def _install_public_run_sync_fakes(
                 return _ScalarResult(True)
             raise AssertionError(f"unexpected SQL: {sql}")
 
+        def rollback(self):
+            calls["lock"].append("rollback")
+
         def close(self):
             calls["lock"].append("close")
 
@@ -513,6 +551,7 @@ def _install_public_run_sync_fakes(
         raise AssertionError("旧二坐标/逐表同步入口不得再被 run_sync 调用")
 
     monkeypatch.setattr(etl_sync, "engine", _FakeEngine())
+    _mock_etl_bundle_publication(monkeypatch)
     monkeypatch.setattr(etl_sync, "_upsert_sync_job_state", _capture_state)
     monkeypatch.setattr(etl_sync, "get_remote_db_url", lambda: "postgresql://source")
     monkeypatch.setattr(
@@ -609,7 +648,7 @@ def _successful_case_set_result(
         total_rows_upserted=sum(
             int(item.get("rows_upserted") or 0) for item in tables
         ),
-        bundle_refresh={"scenes": {}, "domains": {}},
+        bundle_refresh=_complete_etl_refresh_stats(len(visible)),
     )
 
 

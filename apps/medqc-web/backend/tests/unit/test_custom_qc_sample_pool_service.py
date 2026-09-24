@@ -19,6 +19,27 @@ import threading
 from types import SimpleNamespace
 
 
+@pytest.fixture(autouse=True)
+def _mock_bundle_publication_storage(monkeypatch):
+    # 本文件验证样本服务编排；持久事务由 publication 的独立测试覆盖。
+    monkeypatch.setattr(sample_pool_module, "invalidate_bundle_variants", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(sample_pool_module, "publish_bundle_variants", lambda *_args, **_kwargs: None)
+
+
+def _complete_bundle_counts(row_count):
+    counts = {"processed": row_count, "updated": row_count, "failed": 0, "skipped": 0}
+    return {
+        "scenes": {name: dict(counts) for name in ("running", "final")},
+        "domains": {
+            name: dict(counts)
+            for name in (
+                "admission", "course", "surgery", "consult_discussion",
+                "terminal", "index_coding_settlement",
+            )
+        },
+    }
+
+
 class _FakeMappingsResult:
     def __init__(self, rows):
         self._rows = rows
@@ -1957,7 +1978,7 @@ def test_sync_pool_records_aggregates_rows_and_refreshes_running_and_final_bundl
             "ambiguous": 0,
             "unmatched": 0,
             "visit_keys": [("P001", "V001")],
-            "case_refs": [("", "P001", "V001")],
+            "case_refs": [("LOCAL-HOSPITAL", "P001", "V001")],
             "case_scene_by_ref": {
                 CaseRef("LOCAL-HOSPITAL", "P001", "V001"): "running"
             },
@@ -2060,11 +2081,7 @@ def test_sync_pool_records_aggregates_rows_and_refreshes_running_and_final_bundl
             "processed": len(kwargs["rows"]),
             "skipped": 0,
             "material_reads": 4,
-            "scenes": {
-                "running": {"processed": 1, "updated": 1, "failed": 0, "skipped": 0},
-                "final": {"processed": 1, "updated": 1, "failed": 0, "skipped": 0},
-            },
-            "domains": {},
+            **_complete_bundle_counts(len(kwargs["rows"])),
         }
 
     monkeypatch.setattr(
@@ -2094,7 +2111,7 @@ def test_sync_pool_records_aggregates_rows_and_refreshes_running_and_final_bundl
     assert len(ingest_calls) == 1
     assert len(refresh_calls) == 1
     assert refresh_calls[0]["scenes"] == ("running", "final")
-    assert refresh_calls[0]["policy_version"] == "sample_pool_incremental_sync"
+    assert refresh_calls[0]["policy_version"].startswith("task-record-sync-invalidated-v1:")
     assert result["bundle_refresh"]["material_reads"] == 4
     assert max_active_detail_reads >= 2
     assert progress_events[0]["step_key"] == "resolving"
@@ -2367,6 +2384,12 @@ def test_sync_pool_records_skips_optional_source_table_unavailable(monkeypatch):
 
 def test_sync_pool_records_should_fail_on_optional_table_runtime_error(monkeypatch):
     service = object.__new__(CustomQCSamplePoolService)
+    pending_calls = []
+    monkeypatch.setattr(
+        service,
+        "_mark_sync_items_bundle_pending",
+        lambda **kwargs: pending_calls.append(dict(kwargs)),
+    )
 
     monkeypatch.setattr(
         service,
@@ -2441,6 +2464,7 @@ def test_sync_pool_records_should_fail_on_optional_table_runtime_error(monkeypat
             include_in_batch_1=True,
             table_groups=["sample_full_domain"],
         )
+    assert pending_calls == [{"pool_id": "pool-1", "item_ids": ["item-1"]}]
 
 
 def _run_two_stage_primary_sync(
@@ -2609,11 +2633,7 @@ def _run_two_stage_primary_sync(
             "processed": len(kwargs["rows"]),
             "skipped": 0,
             "material_reads": 8,
-            "scenes": {
-                "running": {"processed": 1, "updated": 1, "failed": 0, "skipped": 0},
-                "final": {"processed": 1, "updated": 1, "failed": 0, "skipped": 0},
-            },
-            "domains": {},
+            **_complete_bundle_counts(len(kwargs["rows"])),
         }
 
     monkeypatch.setattr(
@@ -2755,7 +2775,7 @@ def test_sync_pool_records_refreshes_changed_visit_once_and_reports_material_rea
         {"institute_id": "H1", "patient_id": "P001", "visit_id": "V001"}
     ]
     assert refresh_call["scenes"] == ("running", "final")
-    assert refresh_call["policy_version"] == "sample_pool_incremental_sync"
+    assert refresh_call["policy_version"].startswith("task-record-sync-invalidated-v1:")
     assert result["bundle_refresh"]["material_reads"] == 8
 
 
@@ -3274,7 +3294,7 @@ def test_transition_visit_fetches_full_while_other_visit_keeps_watermark(
     assert "watermark_column" not in detail_fetches[0]
 
 
-def test_sync_pool_records_degrades_missing_primary_relation_to_admission_record(
+def test_sync_pool_records_rejects_missing_primary_relation_even_with_admission_fallback(
     monkeypatch,
 ):
     primary_row = {
@@ -3282,23 +3302,21 @@ def test_sync_pool_records_degrades_missing_primary_relation_to_admission_record
         "patient_id": "P001",
         "visit_id": "V001",
     }
-    result, operations, match_calls, _progress_events = _run_two_stage_primary_sync(
-        monkeypatch,
-        {
-            "mr": RuntimeError('relation "public.mr" does not exist'),
-            "inpat_registration": [],
-            "admission_record": [primary_row],
-        },
-    )
+    capture = {}
+    with pytest.raises(RuntimeError, match="源端资料集不完整"):
+        _run_two_stage_primary_sync(
+            monkeypatch,
+            {
+                "mr": RuntimeError('relation "public.mr" does not exist'),
+                "inpat_registration": [],
+                "admission_record": [primary_row],
+            },
+            capture=capture,
+        )
 
-    assert result["primary_visible"] is True
-    assert result["skipped_optional_tables"][0]["table_name"] == "mr"
-    assert result["skipped_optional_tables"][0]["sync_status"] == "source_table_unavailable"
-    assert result["sync_ready"] is True
-    assert result["sync_block_reason"] == ""
-    assert len(match_calls) == 1
-    assert operations.index("fetch:daily_course_record") < operations.index("bundle:all")
-    assert operations.index("bundle:all") < operations.index("match")
+    assert capture["match_calls"] == []
+    assert capture["pending_calls"] == [{"pool_id": "pool-1", "item_ids": ["item-1"]}]
+    assert capture["operations"].index("fetch:daily_course_record") < capture["operations"].index("bundle:all")
 
 
 def test_sync_pool_records_stops_before_details_when_all_primary_records_unavailable(
@@ -3319,10 +3337,8 @@ def test_sync_pool_records_stops_before_details_when_all_primary_records_unavail
 
     assert capture["match_calls"] == []
     assert "fetch:daily_course_record" not in capture["operations"]
-    assert not any(
-        operation.startswith("bundle:")
-        for operation in capture["operations"]
-    )
+    assert "bundle:pending" in capture["operations"]
+    assert "bundle:all" not in capture["operations"]
 
 
 def test_sync_pool_records_returns_missing_primary_when_sources_are_available_but_empty(
@@ -3341,7 +3357,8 @@ def test_sync_pool_records_returns_missing_primary_when_sources_are_available_bu
     assert result["record_progress"]["missing_primary_record"] == 1
     assert match_calls == []
     assert "fetch:daily_course_record" not in operations
-    assert not any(operation.startswith("bundle:") for operation in operations)
+    assert "bundle:pending" in operations
+    assert "bundle:all" not in operations
     assert progress_events[-1]["step_key"] == "primary_unavailable"
 
 

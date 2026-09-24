@@ -3,20 +3,25 @@
 from __future__ import annotations
 
 import logging
-import uuid
 from datetime import datetime, timezone
-from typing import Any, Callable, Mapping
+from typing import Any, Callable
 
-from sqlalchemy import inspect, select, text
+from sqlalchemy import select
 
 from ..database.connection import SessionLocal
 from ..database.models.qc import QCTask, QCTaskRecord
 from .bundles.assembly import (
-    TASK_SYNC_INVALIDATED_POLICY_VERSION as INVALIDATED_POLICY_VERSION,
     _load_scene_bundle,
     _scene_bundle_has_usable_content,
 )
 from .bundles.contracts import BUNDLE_SCHEMA_VERSION_CURRENT
+from .bundles import publication
+from .bundles.publication import (
+    assert_complete_bundle_refresh,
+    invalidate_bundle_variants,
+    new_bundle_staging_token,
+    publish_bundle_variants,
+)
 from .case_identity import CaseRef
 from .case_set_sync_service import CaseSetSyncService
 from .etl_sync import SYNC_TABLE_GROUPS, list_sync_table_groups
@@ -27,26 +32,8 @@ logger = logging.getLogger(__name__)
 TABLE_GROUP = "sample_full_domain"
 CONTRACT_VERSION = "task-record-sync-v1"
 MAX_RECORDS = 100
-_BUNDLE_TABLES = (
-    "running_record_bundle",
-    "final_record_bundle",
-    "admission_domain_bundle",
-    "course_domain_bundle",
-    "surgery_domain_bundle",
-    "consult_discussion_domain_bundle",
-    "terminal_domain_bundle",
-    "index_coding_settlement_domain_bundle",
-)
-_BUNDLE_VARIANTS = {
-    "running_record_bundle": ("scene", "running"),
-    "final_record_bundle": ("scene", "final"),
-    "admission_domain_bundle": ("execution_domain", "admission"),
-    "course_domain_bundle": ("execution_domain", "course"),
-    "surgery_domain_bundle": ("execution_domain", "surgery"),
-    "consult_discussion_domain_bundle": ("execution_domain", "consult_discussion"),
-    "terminal_domain_bundle": ("execution_domain", "terminal"),
-    "index_coding_settlement_domain_bundle": ("execution_domain", "index_coding_settlement"),
-}
+INVALIDATED_POLICY_VERSION = publication.INVALIDATED_POLICY_VERSION
+_BUNDLE_TABLES = publication.BUNDLE_TABLES
 
 
 class TaskRecordSyncNotFound(LookupError):
@@ -165,140 +152,19 @@ def _ready_refs(scene: str, refs: list[CaseRef]) -> dict[CaseRef, dict[str, str]
     return ready
 
 
-def _bundle_tables_in_session(session: Any) -> tuple[str, ...]:
-    bind = session.get_bind()
-    inspector = inspect(bind)
-    available = tuple(
-        table_name for table_name in _BUNDLE_TABLES
-        if inspector.has_table(table_name, schema="public")
-    )
-    # 无 Bundle schema 的轻量 SQLite 单测沿用原有纯合同测试；部分建表不可跳过。
-    if bind.dialect.name == "sqlite" and not available:
-        return ()
-    if len(available) != len(_BUNDLE_TABLES):
-        missing = set(_BUNDLE_TABLES) - set(available)
-        raise RuntimeError(f"缺少任务 Bundle 表: {', '.join(sorted(missing))}")
-    return _BUNDLE_TABLES
-
-
-def _bundle_params(ref: CaseRef) -> dict[str, str]:
-    return {
-        "institute_id": ref.institute_id,
-        "patient_id": ref.patient_id,
-        "visit_id": ref.visit_id,
-    }
-
-
 def _invalidate_existing_bundles(scene: str, refs: list[CaseRef]) -> None:
-    """在任何独立提交的 CDM 写入前，为目标病例持久建立失效栅栏。"""
-    if SessionLocal is None:
-        raise RuntimeError("数据库会话不可用")
-    with SessionLocal.begin() as session:
-        for table_name in _bundle_tables_in_session(session):
-            variant_column, variant_value = _BUNDLE_VARIANTS[table_name]
-            session.execute(
-                text(f"""
-                    INSERT INTO public.{table_name} (
-                        institute_id, patient_id, visit_id, {variant_column},
-                        bundle_schema_version, policy_version
-                    ) VALUES (
-                        :institute_id, :patient_id, :visit_id, :variant_value,
-                        :bundle_schema_version, :invalidated_policy_version
-                    ) ON CONFLICT (institute_id, patient_id, visit_id) DO NOTHING
-                """),
-                [
-                    {**_bundle_params(ref), "variant_value": variant_value,
-                     "bundle_schema_version": BUNDLE_SCHEMA_VERSION_CURRENT,
-                     "invalidated_policy_version": INVALIDATED_POLICY_VERSION}
-                    for ref in refs
-                ],
-            )
-            session.execute(
-                text(f"""
-                    UPDATE public.{table_name}
-                    SET policy_version = :invalidated_policy_version
-                    WHERE institute_id = :institute_id
-                      AND patient_id = :patient_id
-                      AND visit_id = :visit_id
-                """),
-                [
-                    {**_bundle_params(ref), "invalidated_policy_version": INVALIDATED_POLICY_VERSION}
-                    for ref in refs
-                ],
-            )
+    invalidate_bundle_variants(refs, session_factory=SessionLocal)
 
 
 def _publish_refreshed_bundles(refs: list[CaseRef], staging_token: str) -> None:
-    """八类 Bundle 验证齐备后，同一事务发布可执行版本。"""
-    if not refs:
-        return
-    if SessionLocal is None:
-        raise RuntimeError("数据库会话不可用")
-    with SessionLocal.begin() as session:
-        tables = _bundle_tables_in_session(session)
-        if not tables:
-            return
-        for table_name in tables:
-            for ref in refs:
-                row = session.execute(text(f"""
-                    SELECT policy_version, bundle_schema_version
-                    FROM public.{table_name}
-                    WHERE institute_id = :institute_id
-                      AND patient_id = :patient_id
-                      AND visit_id = :visit_id
-                """), _bundle_params(ref)).mappings().first()
-                if (
-                    row is None
-                    or row["policy_version"] != staging_token
-                    or row["bundle_schema_version"] != BUNDLE_SCHEMA_VERSION_CURRENT
-                ):
-                    raise RuntimeError("任务 Bundle 刷新不完整")
-        for table_name in tables:
-            updated = session.execute(
-                text(f"""
-                    UPDATE public.{table_name}
-                    SET policy_version = :contract_version
-                    WHERE institute_id = :institute_id
-                      AND patient_id = :patient_id
-                      AND visit_id = :visit_id
-                      AND policy_version = :staging_token
-                """),
-                [
-                    {**_bundle_params(ref), "contract_version": CONTRACT_VERSION,
-                     "staging_token": staging_token}
-                    for ref in refs
-                ],
-            )
-            if updated.rowcount != len(refs):
-                raise RuntimeError("任务 Bundle 发布数量不一致")
+    publish_bundle_variants(
+        refs, staging_token=staging_token,
+        published_policy_version=CONTRACT_VERSION, session_factory=SessionLocal,
+    )
 
 
 def _assert_complete_bundle_refresh(result: Any, visible_count: int) -> None:
-    if not visible_count:
-        return
-    refresh = getattr(result, "bundle_refresh", None)
-    if not isinstance(refresh, Mapping):
-        raise RuntimeError("任务 Bundle 刷新结果缺失")
-    variants = {
-        "scenes": ("running", "final"),
-        "domains": tuple(
-            name.removesuffix("_domain_bundle")
-            for name in _BUNDLE_TABLES[2:]
-        ),
-    }
-    for group, names in variants.items():
-        counts_by_name = refresh.get(group)
-        if not isinstance(counts_by_name, Mapping):
-            raise RuntimeError("任务 Bundle 刷新结果缺失")
-        for name in names:
-            counts = counts_by_name.get(name)
-            if (
-                not isinstance(counts, Mapping)
-                or counts.get("updated") != visible_count
-                or counts.get("processed") != visible_count
-                or counts.get("failed") != 0
-            ):
-                raise RuntimeError("任务 Bundle 刷新不完整")
+    assert_complete_bundle_refresh(result, visible_count)
 
 
 def sync_task_records(
@@ -330,7 +196,7 @@ def sync_task_records(
     except Exception as exc:
         logger.warning("task_record_bundle_invalidation_failed task_id=%s error_type=%s", task_id, type(exc).__name__)
         raise RuntimeError("病历 Bundle 失效保护失败，未启动源端同步") from exc
-    staging_token = f"{INVALIDATED_POLICY_VERSION}:{uuid.uuid4().hex}"
+    staging_token = new_bundle_staging_token()
     try:
         result = sync_factory().sync_case_set(
             case_refs=refs,
