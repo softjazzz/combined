@@ -21,3 +21,7 @@
 `.tmp/0910-full-audit/original-004-local-replay-private.py` 支持 `--code-root`、`--output`。固定输入为同目录 `original-004-production-source-20260924-private.json`，两份完整输出为 `original-004-local-baseline-private.json` 与 `original-004-local-current-private.json`。患者身份、文书原文只留私有产物。
 
 下一步先核实13个候选的导入来源，独立检查结束时间与文书完成时间证据；无可靠来源则继续保持技术回归分级，不补造业务金标。发布单次投影改动合入后应复用本快照再次比较。
+
+## 单次发布修复后的主协调复核
+
+`c1a8c2ba2` 已将原始001/004首次投影结果复用于同次发布；主协调亲审生产5行diff及新旧聚合分支比较测试，独立100项聚焦测试通过。随后在集成树复用上述23个冻结输入生成 `original-004-local-single-publication-private.json`，与 `775c17ede` 的完整输出字典严格相等，0模型调用。来源分级限制仍保持，不因第二次回放通过而升级为临床签收。

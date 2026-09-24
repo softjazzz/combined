@@ -23,7 +23,7 @@
 | 滚动任务 | `MEDQC-022`，见 [PROJECT_ROLLING_TODO.md](PROJECT_ROLLING_TODO.md) |
 | 状态 | 原试点范围已纠正；已验证公共修复保留，原始0609规则等价整改重新建立保护基线 |
 | 当前阶段 | A：以原始0609规则重新确认一次发布与一致读取边界；不得使用新增规则失败作门槛 |
-| 下一项动作 | C扩展协议测试已修复并通过；原始001公开读取与D执行尝试隔离正在两个工作树推进。主协调已复现原始时效族同次发布重复投影，待001读取闭环后独立收敛，详见2026-09-24-original-timeliness-single-publication-audit.md；完整阶段仍未退出 |
+| 下一项动作 | 原始001公开读取和001/004单次发布已合入89fb22674、c1a8c2ba2，独立100项通过、23个本机来源技术回放全输出等价（含测试身份，不是全真实临床验收）。继续B三入口固定输入审计；D执行尝试隔离补无身份写入及真正质控await后的竞态验证。完整阶段仍未退出 |
 | 生产代码基线 | 本轮原始规则重构前基线 `775c17ede53930a685324e523f818b53da441698`；旧轮基线保留在历史记录 |
 | 基线分支 | `codex/lx0609-rule-id-integration`，GitHub `softjazzz/combined` |
 | 当前实施应用目录 | `C:/Users/Coldplay/.codex/worktrees/lx0609-rule-id-integration/LX888/apps/medqc-web`；Sol 6 medium 子代理提交 `cdaa65077` 已摘取为 `a163a910c`；CT 独立提交为 `762776545` |
