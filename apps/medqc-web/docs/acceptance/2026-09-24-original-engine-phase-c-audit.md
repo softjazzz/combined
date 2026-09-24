@@ -1,5 +1,11 @@
 # 原始 LX0609 阶段 C 启动前只读盘点
 
+## 2026-09-25 旧适配保留审计
+
+在当前集成树 `aec9ecfb2` 只读核对：`load_luxian_0609_dependency_inventory()` 返回84条目录规则，执行模式为 `native_sync` 8条、`native_async` 76条，没有 `compatibility` 模式。这个全目录计数含独立新规则，只用于确认适配调用形态，不能把新规则计入原始引擎医学验收。正式 `execution.py` 仍在 Native Engine 调用前把11个现有规则族函数包装成 `LegacyNativeExecutorFunctions`，并在 `build_luxian_0609_legacy_executor_registry` 注册相同11个回调；`executor_registry.py` 末端用规则合同执行器键集合拒绝漂移。该适配器是现有规则族函数与统一执行信封之间的在用边界，不是已被替换的旧执行结果通道。当前没有可删除的替代实现；直接移除会切断正式 Native 执行，另建一层只是增加链路。保留它并记录 owner，比按文件名强制删除更符合阶段 C 约束。
+
+阶段 C 的测试专用规则已走过正式 Worker、现有注册表、SQLite Canonical 保存与公开 DTO，证明扩展路径；上述只读审计补充了旧适配保留理由。未覆盖客户 PostgreSQL、浏览器或全原始规则临床保护集，阶段仍按主计划保持局部验证。
+
 ## 2026-09-25 正式 Worker→Workspace→Canonical 纵向验证
 
 沿用仅存在于 pytest 临时目录的 `LX0609-99-99-01`，本次把前面的手动组件衔接升级为正式任务执行路径：路由接纳并冻结规则范围，真实 `run_sichuan_workspace_batch_job` 从隔离 SQLite 任务表 CAS 领取任务、核对冻结运行身份并执行生产 `prepare`，经现有注册表接收测试执行器的固定 Decision。真实 `CustomQCWorkspaceService.complete_batch_job` 把任务完成状态和该病例的 Canonical Envelope 置于一个事务中保存；测试随后用相同任务/病例/规则集坐标读回 `compliant/requirement_satisfied`，并投影公开 DTO。测试只替换外部病例读取、产品激活和模型执行器；未修改目录/Worker/保存代码的医学逻辑，也未访问患者资料或客户库。该证据替代下文旧版“未运行 Worker、保存由测试手动衔接”的限制，但仍不是 PostgreSQL 多进程、真实模型、浏览器或临床验收。
