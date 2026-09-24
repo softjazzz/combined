@@ -57,9 +57,24 @@ def _sync_stub(*, visible=None, unavailable=False, raises=False):
                     )}
                     for name in kwargs["table_names"]
                 ),
+                bundle_refresh=_complete_refresh_stats(
+                    len(visible if visible is not None else kwargs["case_refs"])
+                ),
             )
 
     return Stub, calls
+
+
+def _complete_refresh_stats(count):
+    def counts():
+        return {"updated": count, "processed": count, "failed": 0}
+    return {
+        "scenes": {name: counts() for name in ("running", "final")},
+        "domains": {
+            name.removesuffix("_domain_bundle"): counts()
+            for name in service._BUNDLE_TABLES[2:]
+        },
+    }
 
 
 def test_sync_exact_saved_refs_and_partial_readiness(sessions):

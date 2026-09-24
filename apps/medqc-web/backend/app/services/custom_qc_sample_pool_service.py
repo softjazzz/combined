@@ -32,10 +32,13 @@ from ..database.models.cdm import (
 )
 from ..core.settings import get_settings
 from .bundles.assembly import (
+    TASK_SYNC_INVALIDATED_POLICY_VERSION,
+    _scene_bundle_has_usable_content,
     refresh_all_bundle_variants_for_rows,
     refresh_domain_bundles_for_rows,
     refresh_scene_bundles_for_rows,
 )
+from .bundles.contracts import BUNDLE_SCHEMA_VERSION_CURRENT
 from .case_identity import (
     CaseRef,
     coerce_case_ref,
@@ -63,6 +66,13 @@ CUSTOMER_TEST_POOL_ID = "customer-created-test-records-v1"
 CUSTOMER_TEST_POOL_NAME = "客户自建测试病历"
 CUSTOMER_TEST_INSTITUTE_ID = "CUSTOMER_TEST"
 CUSTOMER_TEST_VISIT_PREFIX = "CUSTOMER_TEST_"
+
+CaseKey = tuple[str, str, str]
+
+
+def _matched_case_key(item: Dict[str, Any]) -> Optional[CaseKey]:
+    key = tuple(_safe_text(item.get(f"matched_{field}")) for field in ("institute_id", "patient_id", "visit_id"))
+    return key if all(key) else None
 
 
 class SampleSyncJobConflictError(RuntimeError):
@@ -3340,69 +3350,84 @@ class CustomQCSamplePoolService:
             "updated_at": row.get("updated_at"),
         }
 
-    def _load_bundle_source_table_map(self, *, visit_ids: Sequence[str]) -> Dict[str, set[str]]:
-        normalized_ids = [str(item).strip() for item in visit_ids if str(item).strip()]
-        if not normalized_ids or engine is None:
+    def _load_bundle_source_table_map(self, *, case_keys: Sequence[CaseKey]) -> Dict[CaseKey, set[str]]:
+        normalized_keys = sorted({key for key in case_keys if len(key) == 3 and all(key)})
+        if not normalized_keys or engine is None:
             return {}
         sql = (
             sa.text(
                 """
-                SELECT visit_id::text AS visit_id,
+                SELECT institute_id::text AS institute_id, patient_id::text AS patient_id,
+                       visit_id::text AS visit_id, policy_version,
                        COALESCE(doc.value ->> 'source_table', doc.value ->> 'document_type', '') AS source_table
                 FROM public.running_record_bundle
                 CROSS JOIN LATERAL jsonb_array_elements(
                     COALESCE((structured_context::jsonb -> 'document_inventory'), '[]'::jsonb)
                 ) AS doc(value)
-                WHERE visit_id IN :visit_ids
+                WHERE (institute_id, patient_id, visit_id) IN :case_keys
+                  AND COALESCE(policy_version, '') NOT LIKE :invalidated_pattern
 
                 UNION ALL
 
-                SELECT visit_id::text AS visit_id,
+                SELECT institute_id::text AS institute_id, patient_id::text AS patient_id,
+                       visit_id::text AS visit_id, policy_version,
                        COALESCE(doc.value ->> 'source_table', doc.value ->> 'document_type', '') AS source_table
                 FROM public.final_record_bundle
                 CROSS JOIN LATERAL jsonb_array_elements(
                     COALESCE((structured_context::jsonb -> 'document_inventory'), '[]'::jsonb)
                 ) AS doc(value)
-                WHERE visit_id IN :visit_ids
+                WHERE (institute_id, patient_id, visit_id) IN :case_keys
+                  AND COALESCE(policy_version, '') NOT LIKE :invalidated_pattern
                 """
             )
-            .bindparams(sa.bindparam("visit_ids", expanding=True))
+            .bindparams(sa.bindparam(
+                "case_keys", expanding=True,
+                type_=sa.TupleType(sa.String(), sa.String(), sa.String()),
+            ))
         )
-        source_table_map: Dict[str, set[str]] = {}
+        source_table_map: Dict[CaseKey, set[str]] = {}
         try:
             with engine.connect() as conn:
-                rows = conn.execute(sql, {"visit_ids": normalized_ids}).mappings().all()
+                rows = conn.execute(sql, {
+                    "case_keys": normalized_keys,
+                    "invalidated_pattern": f"{TASK_SYNC_INVALIDATED_POLICY_VERSION}%",
+                }).mappings().all()
         except Exception:
             return {}
         for row in rows:
-            visit_id = _safe_text(row.get("visit_id"))
-            source_table = _safe_text(row.get("source_table")).lower()
-            if not visit_id or not source_table:
+            if _safe_text(row.get("policy_version")).startswith(TASK_SYNC_INVALIDATED_POLICY_VERSION):
                 continue
-            source_table_map.setdefault(visit_id, set()).add(source_table)
+            case_key = (
+                _safe_text(row.get("institute_id")),
+                _safe_text(row.get("patient_id")),
+                _safe_text(row.get("visit_id")),
+            )
+            source_table = _safe_text(row.get("source_table")).lower()
+            if not all(case_key) or not source_table:
+                continue
+            source_table_map.setdefault(case_key, set()).add(source_table)
         return source_table_map
 
     def _apply_dynamic_candidate_rule_ids(
         self,
         *,
         items: Sequence[Dict[str, Any]],
-        source_table_map: Optional[Dict[str, set[str]]] = None,
+        source_table_map: Optional[Dict[CaseKey, set[str]]] = None,
     ) -> List[Dict[str, Any]]:
         item_list = [dict(item) for item in items]
-        visit_ids = [
-            str(item.get("matched_visit_id") or "").strip()
-            for item in item_list
-            if str(item.get("matched_visit_id") or "").strip()
-        ]
-        effective_source_table_map = source_table_map or self._load_bundle_source_table_map(visit_ids=visit_ids)
+        case_keys = [key for item in item_list if (key := _matched_case_key(item))]
+        effective_source_table_map = (
+            source_table_map if source_table_map is not None
+            else self._load_bundle_source_table_map(case_keys=case_keys)
+        )
         if not effective_source_table_map:
             return item_list
         for item in item_list:
-            visit_id = str(item.get("matched_visit_id") or "").strip()
-            if not visit_id:
+            case_key = _matched_case_key(item)
+            if not case_key:
                 continue
             dynamic_rule_ids = _derive_dynamic_candidate_rule_ids_from_source_tables(
-                sorted(effective_source_table_map.get(visit_id, set()))
+                sorted(effective_source_table_map.get(case_key, set()))
             )
             if not dynamic_rule_ids:
                 continue
@@ -4684,16 +4709,13 @@ class CustomQCSamplePoolService:
             items = [self._row_to_item(row) for row in healed_rows]
             items = self._apply_dynamic_candidate_rule_ids(items=items)
             source_table_map = self._load_bundle_source_table_map(
-                visit_ids=[
-                    str(item.get("matched_visit_id") or "").strip()
-                    for item in items
-                    if str(item.get("matched_visit_id") or "").strip()
-                ]
+                case_keys=[key for item in items if (key := _matched_case_key(item))]
             )
 
-            grouped: Dict[str, Dict[str, Any]] = {}
+            grouped: Dict[CaseKey | str, Dict[str, Any]] = {}
             for item in items:
-                group_key = item["matched_visit_id"] or f"id:{item['visit_id'] or item['mr_no'] or item['id']}"
+                case_key = _matched_case_key(item)
+                group_key = case_key if case_key else f"id:{item['id']}"
                 current = grouped.get(group_key)
                 hospitalization_state = _trusted_item_hospitalization_state(item) or {}
                 raw_payload = item.get("raw_payload")
@@ -4702,7 +4724,7 @@ class CustomQCSamplePoolService:
                 admission_time = _safe_text((raw_payload or {}).get("admission_time"))
                 if current is None:
                     current = {
-                        "id": group_key,
+                        "id": case_key[2] if case_key else group_key,
                         "matched_institute_id": item["matched_institute_id"],
                         "matched_patient_id": item["matched_patient_id"],
                         "matched_visit_id": item["matched_visit_id"],
@@ -4765,37 +4787,31 @@ class CustomQCSamplePoolService:
                 for rule_id in item.get("candidate_rule_ids") or []:
                     if rule_id not in current["candidate_rule_ids"]:
                         current["candidate_rule_ids"].append(rule_id)
-                visit_id = str(item.get("matched_visit_id") or "").strip()
-                if visit_id:
+                if case_key:
                     for label in _derive_document_scope_labels_from_source_tables(
-                        sorted(source_table_map.get(visit_id, set()))
+                        sorted(source_table_map.get(case_key, set()))
                     ):
                         if label not in current["document_scope_labels"]:
                             current["document_scope_labels"].append(label)
 
-            matched_visit_ids = [
-                str(item.get("matched_visit_id") or "").strip()
-                for item in grouped.values()
-                if str(item.get("matched_visit_id") or "").strip()
-            ]
-            matched_patient_ids = [
-                str(item.get("matched_patient_id") or "").strip()
-                for item in grouped.values()
-                if str(item.get("matched_patient_id") or "").strip()
-            ]
-            record_display_map = self._load_record_display_map(session=session, visit_ids=matched_visit_ids)
+            case_keys = [key for item in grouped.values() if (key := _matched_case_key(item))]
+            visit_counts: Dict[str, int] = {}
+            for _, _, visit_id in case_keys:
+                visit_counts[visit_id] = visit_counts.get(visit_id, 0) + 1
+            record_display_map = self._load_record_display_map(session=session, case_keys=case_keys)
             patient_display_map = self._load_patient_display_map(
                 session=session,
-                patient_ids=matched_patient_ids,
+                case_keys=case_keys,
             )
             for row in grouped.values():
-                visit_id = str(row.get("matched_visit_id") or "").strip()
-                patient_id = str(row.get("matched_patient_id") or "").strip()
+                case_key = _matched_case_key(row)
+                if case_key and visit_counts[case_key[2]] > 1:
+                    row["id"] = f"case:{json.dumps(case_key, ensure_ascii=False)}"
                 display = {
-                    **(patient_display_map.get(patient_id) or {}),
+                    **(patient_display_map.get(case_key) or {}),
                     **{
                         key: value
-                        for key, value in (record_display_map.get(visit_id) or {}).items()
+                        for key, value in (record_display_map.get(case_key) or {}).items()
                         if _safe_text(value)
                     },
                 }
@@ -4890,13 +4906,15 @@ class CustomQCSamplePoolService:
         finally:
             session.close()
 
-    def _load_record_display_map(self, *, session: Session, visit_ids: Sequence[str]) -> Dict[str, Dict[str, str]]:
-        normalized_ids = [str(item).strip() for item in visit_ids if str(item).strip()]
-        if not normalized_ids:
+    def _load_record_display_map(self, *, session: Session, case_keys: Sequence[CaseKey]) -> Dict[CaseKey, Dict[str, str]]:
+        normalized_keys = sorted({key for key in case_keys if len(key) == 3 and all(key)})
+        if not normalized_keys:
             return {}
         rows = session.execute(
             sa.union_all(
                 select(
+                    MedicalRecordFrontpage.institute_id.label("institute_id"),
+                    MedicalRecordFrontpage.patient_id.label("patient_id"),
                     MedicalRecordFrontpage.visit_id.label("visit_id"),
                     sa.literal(0).label("source_priority"),
                     MedicalRecordFrontpage.name.label("patient_name"),
@@ -4911,8 +4929,11 @@ class CustomQCSamplePoolService:
                         MedicalRecordFrontpage.inpat_no,
                     ).label("mr_no"),
                     MedicalRecordFrontpage.admission_dept_name.label("department"),
-                ).where(MedicalRecordFrontpage.visit_id.in_(normalized_ids)),
+                ).where(sa.tuple_(MedicalRecordFrontpage.institute_id, MedicalRecordFrontpage.patient_id,
+                                  MedicalRecordFrontpage.visit_id).in_(normalized_keys)),
                 select(
+                    InpatRegistration.institute_id.label("institute_id"),
+                    InpatRegistration.patient_id.label("patient_id"),
                     InpatRegistration.visit_id.label("visit_id"),
                     sa.literal(1).label("source_priority"),
                     InpatRegistration.name.label("patient_name"),
@@ -4927,8 +4948,11 @@ class CustomQCSamplePoolService:
                         InpatRegistration.inpat_no,
                     ).label("mr_no"),
                     InpatRegistration.admission_dept_name.label("department"),
-                ).where(InpatRegistration.visit_id.in_(normalized_ids)),
+                ).where(sa.tuple_(InpatRegistration.institute_id, InpatRegistration.patient_id,
+                                  InpatRegistration.visit_id).in_(normalized_keys)),
                 select(
+                    AdmissionRecord.institute_id.label("institute_id"),
+                    AdmissionRecord.patient_id.label("patient_id"),
                     AdmissionRecord.visit_id.label("visit_id"),
                     sa.literal(2).label("source_priority"),
                     AdmissionRecord.name.label("patient_name"),
@@ -4943,16 +4967,17 @@ class CustomQCSamplePoolService:
                         AdmissionRecord.inpat_no,
                     ).label("mr_no"),
                     AdmissionRecord.dept_name.label("department"),
-                ).where(AdmissionRecord.visit_id.in_(normalized_ids)),
+                ).where(sa.tuple_(AdmissionRecord.institute_id, AdmissionRecord.patient_id,
+                                  AdmissionRecord.visit_id).in_(normalized_keys)),
             )
         ).mappings().all()
-        display_map: Dict[str, Dict[str, str]] = {}
+        display_map: Dict[CaseKey, Dict[str, str]] = {}
         for row in sorted(rows, key=lambda item: int(item.get("source_priority") or 0)):
-            visit_id = _safe_text(row.get("visit_id"))
-            if not visit_id:
+            case_key = tuple(_safe_text(row.get(field)) for field in ("institute_id", "patient_id", "visit_id"))
+            if not all(case_key):
                 continue
             display = display_map.setdefault(
-                visit_id,
+                case_key,
                 {
                     "patient_name": "",
                     "patient_sex": "",
@@ -4970,20 +4995,22 @@ class CustomQCSamplePoolService:
         self,
         *,
         session: Session,
-        patient_ids: Sequence[str],
-    ) -> Dict[str, Dict[str, str]]:
-        normalized_ids = [str(item).strip() for item in patient_ids if str(item).strip()]
-        if not normalized_ids:
+        case_keys: Sequence[CaseKey],
+    ) -> Dict[CaseKey, Dict[str, str]]:
+        normalized_keys = sorted({key for key in case_keys if len(key) == 3 and all(key)})
+        if not normalized_keys:
             return {}
+        patient_keys = sorted({key[:2] for key in normalized_keys})
         rows = session.execute(
             select(
+                PatientInformation.institute_id,
                 PatientInformation.patient_id,
                 PatientInformation.name.label("patient_name"),
                 PatientInformation.sex.label("patient_sex"),
-            ).where(PatientInformation.patient_id.in_(normalized_ids))
+            ).where(sa.tuple_(PatientInformation.institute_id, PatientInformation.patient_id).in_(patient_keys))
         ).mappings().all()
-        return {
-            _safe_text(row.get("patient_id")): {
+        patient_map = {
+            (_safe_text(row.get("institute_id")), _safe_text(row.get("patient_id"))): {
                 "patient_name": _safe_text(row.get("patient_name")),
                 "patient_sex": _safe_text(row.get("patient_sex")),
                 "patient_age": "",
@@ -4991,19 +5018,22 @@ class CustomQCSamplePoolService:
                 "department": "",
             }
             for row in rows
-            if _safe_text(row.get("patient_id"))
+            if _safe_text(row.get("institute_id")) and _safe_text(row.get("patient_id"))
         }
+        return {key: patient_map[key[:2]] for key in normalized_keys if key[:2] in patient_map}
 
     def _check_running_bundle_status(self, *, institute_id: str, patient_id: str, visit_id: str) -> str:
-        if engine is None:
+        if engine is None or not all((institute_id, patient_id, visit_id)):
             return "pending"
         sql = sa.text(
             """
-            SELECT 1
+            SELECT bundle_schema_version, policy_version, text_available, medical_text,
+                   structured_context, document_hits
             FROM public.running_record_bundle
             WHERE institute_id = :institute_id
               AND patient_id = :patient_id
               AND visit_id = :visit_id
+            ORDER BY bundle_updated_at DESC
             LIMIT 1
             """
         )
@@ -5016,8 +5046,18 @@ class CustomQCSamplePoolService:
                         "patient_id": patient_id,
                         "visit_id": visit_id,
                     },
-                ).first()
-            return "ready" if row else "missing"
+                ).mappings().first()
+            if not row:
+                return "missing"
+            policy = _safe_text(row.get("policy_version"))
+            if policy.startswith(TASK_SYNC_INVALIDATED_POLICY_VERSION):
+                return "missing"
+            if _safe_text(row.get("bundle_schema_version")) != BUNDLE_SCHEMA_VERSION_CURRENT:
+                return "missing"
+            bundle = dict(row)
+            bundle["structured_context"] = _safe_json_loads(bundle.get("structured_context"), {})
+            bundle["document_hits"] = _safe_json_loads(bundle.get("document_hits"), {})
+            return "ready" if _scene_bundle_has_usable_content(bundle) else "missing"
         except Exception:
             return "pending"
 

@@ -30,6 +30,14 @@ from .refresh_manager import mark_bundle_refresh_success, record_bundle_refresh_
 logger = logging.getLogger(__name__)
 TASK_SYNC_INVALIDATED_POLICY_VERSION = "task-record-sync-invalidated-v1"
 
+
+def _is_task_sync_invalidated_policy_version(value: Any) -> bool:
+    version = str(value or "")
+    if version == TASK_SYNC_INVALIDATED_POLICY_VERSION:
+        return True
+    prefix = f"{TASK_SYNC_INVALIDATED_POLICY_VERSION}:"
+    return version.startswith(prefix) and re.fullmatch(r"[0-9a-f]{32}", version[len(prefix) :]) is not None
+
 _IDENTIFIER_ALLOWED = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_")
 _TEXT_COLUMNS_PRIORITY: tuple[str, ...] = (
     "follow_up_visit_content",
@@ -2576,7 +2584,7 @@ def load_or_assemble_scene_bundle(
         visit_id=visit_id,
         schema=bundle_schema,
     )
-    if existing and existing.get("policy_version") == TASK_SYNC_INVALIDATED_POLICY_VERSION:
+    if existing and _is_task_sync_invalidated_policy_version(existing.get("policy_version")):
         raise RuntimeError("任务病历资料同步尚未完成，Bundle 不可读取或刷新")
 
     if not force_refresh:
@@ -2600,7 +2608,7 @@ def load_or_assemble_scene_bundle(
                 prefer_usable_content=True,
                 limit=5,
             )
-            if usable_existing and usable_existing.get("policy_version") == TASK_SYNC_INVALIDATED_POLICY_VERSION:
+            if usable_existing and _is_task_sync_invalidated_policy_version(usable_existing.get("policy_version")):
                 raise RuntimeError("任务病历资料同步尚未完成，Bundle 不可读取或刷新")
             if usable_existing and _scene_bundle_has_usable_content(usable_existing):
                 return usable_existing
@@ -2809,6 +2817,7 @@ def load_domain_bundle(
     if not row:
         return None
     payload = dict(row)
+    _reject_invalidated_domain_bundle(payload)
     for field_name in ("document_hits", "data_quality_flags", "timeline_facts", "source_documents", "structured_context"):
         value = payload.get(field_name)
         if isinstance(value, str):
@@ -2817,6 +2826,11 @@ def load_domain_bundle(
             except Exception:
                 payload[field_name] = {} if field_name in {"document_hits", "structured_context"} else []
     return payload
+
+
+def _reject_invalidated_domain_bundle(bundle: dict[str, Any]) -> None:
+    if _is_task_sync_invalidated_policy_version(bundle.get("policy_version")):
+        raise RuntimeError("任务病历资料同步尚未完成，领域 Bundle 不可读取或刷新")
 
 
 def load_domain_bundle_document_index(
@@ -2835,7 +2849,7 @@ def load_domain_bundle_document_index(
         raise ValueError(f"Unsupported execution domain: {execution_domain}")
     sql = text(
         f"""
-        SELECT institute_id, patient_id, visit_id, execution_domain,
+        SELECT institute_id, patient_id, visit_id, execution_domain, policy_version,
                bundle_schema_version, bundle_updated_at,
                COALESCE(
                  (
@@ -2886,6 +2900,7 @@ def load_domain_bundle_document_index(
     if not row:
         return None
     payload = dict(row)
+    _reject_invalidated_domain_bundle(payload)
     for field_name in ("source_documents", "structured_context"):
         value = payload.get(field_name)
         if isinstance(value, str):
@@ -2925,7 +2940,7 @@ def load_domain_bundle_for_emr_render(
             fallback_doc_index = int(fallback_suffix)
     sql = text(
         f"""
-        SELECT institute_id, patient_id, visit_id, execution_domain,
+        SELECT institute_id, patient_id, visit_id, execution_domain, policy_version,
                bundle_schema_version, bundle_updated_at,
                COALESCE(
                  (
@@ -2978,6 +2993,7 @@ def load_domain_bundle_for_emr_render(
     if not row:
         return None
     payload = dict(row)
+    _reject_invalidated_domain_bundle(payload)
     value = payload.get("source_documents")
     if isinstance(value, str):
         try:
@@ -3281,14 +3297,14 @@ def load_or_assemble_domain_bundle(
     force_refresh: bool = False,
 ) -> dict[str, Any]:
     ensure_domain_bundle_tables(schema=bundle_schema)
+    existing = load_domain_bundle(
+        execution_domain=execution_domain,
+        institute_id=institute_id,
+        patient_id=patient_id,
+        visit_id=visit_id,
+        schema=bundle_schema,
+    )
     if not force_refresh:
-        existing = load_domain_bundle(
-            execution_domain=execution_domain,
-            institute_id=institute_id,
-            patient_id=patient_id,
-            visit_id=visit_id,
-            schema=bundle_schema,
-        )
         if existing and str(existing.get("bundle_schema_version") or "") == BUNDLE_SCHEMA_VERSION_CURRENT:
             return existing
 

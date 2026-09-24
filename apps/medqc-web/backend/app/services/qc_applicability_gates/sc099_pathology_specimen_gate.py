@@ -37,8 +37,20 @@ def _metadata(result: dict[str, Any]) -> dict[str, Any]:
     return dict(value) if isinstance(value, dict) else {}
 
 
-def _rule_visit_id(result: dict[str, Any]) -> str:
-    return _safe_text(result.get("visit_id") or result.get("record_id") or result.get("visitId"))
+def _bundle_identity(
+    result: dict[str, Any], context: dict[str, Any] | None
+) -> dict[str, str]:
+    identity: dict[str, str] = {}
+    for key in ("institute_id", "patient_id", "visit_id"):
+        result_value = _safe_text(result.get(key))
+        context_value = _safe_text(context.get(key)) if isinstance(context, dict) else ""
+        if result_value and context_value and result_value != context_value:
+            return {}
+        value = result_value or context_value
+        if not value:
+            return {}
+        identity[key] = value
+    return identity
 
 
 def _parse_jsonish(value: Any) -> dict[str, Any]:
@@ -217,7 +229,7 @@ def _collect_context_sources(
                 add_text(table, _source_text_from_doc(doc))
 
     if not any(source_counts.get(table) for table in SOURCE_TABLES):
-        db_context = _load_persisted_bundle_context(_rule_visit_id(result))
+        db_context = _load_persisted_bundle_context(_bundle_identity(result, context))
         if db_context:
             context_keys.append("persisted_bundle")
             for table, count in _normalize_source_counts(db_context.get("source_table_counts")).items():
@@ -235,11 +247,12 @@ def _collect_context_sources(
     }
 
 
-def _load_persisted_bundle_context(visit_id: str) -> dict[str, Any]:
-    if not visit_id:
+def _load_persisted_bundle_context(identity: dict[str, str]) -> dict[str, Any]:
+    if not all(identity.get(key) for key in ("institute_id", "patient_id", "visit_id")):
         return {}
     try:
         from app.database.connection import engine
+        from app.services.bundles.assembly import _is_task_sync_invalidated_policy_version
     except Exception:
         return {}
     if engine is None:
@@ -251,15 +264,15 @@ def _load_persisted_bundle_context(visit_id: str) -> dict[str, Any]:
     queries = (
         (
             "public.final_record_bundle",
-            "SELECT structured_context, medical_text FROM public.final_record_bundle WHERE visit_id = :visit_id LIMIT 1",
+            "SELECT structured_context, medical_text, policy_version FROM public.final_record_bundle WHERE institute_id = :institute_id AND patient_id = :patient_id AND visit_id = :visit_id LIMIT 1",
         ),
         (
             "public.course_domain_bundle",
-            "SELECT structured_context FROM public.course_domain_bundle WHERE visit_id = :visit_id LIMIT 1",
+            "SELECT structured_context, policy_version FROM public.course_domain_bundle WHERE institute_id = :institute_id AND patient_id = :patient_id AND visit_id = :visit_id LIMIT 1",
         ),
         (
             "public.surgery_domain_bundle",
-            "SELECT structured_context FROM public.surgery_domain_bundle WHERE visit_id = :visit_id LIMIT 1",
+            "SELECT structured_context, policy_version FROM public.surgery_domain_bundle WHERE institute_id = :institute_id AND patient_id = :patient_id AND visit_id = :visit_id LIMIT 1",
         ),
     )
 
@@ -267,11 +280,13 @@ def _load_persisted_bundle_context(visit_id: str) -> dict[str, Any]:
         with engine.connect() as conn:
             for _table_name, sql in queries:
                 try:
-                    row = conn.execute(text(sql), {"visit_id": visit_id}).mappings().first()
+                    row = conn.execute(text(sql), identity).mappings().first()
                 except Exception:
                     continue
                 if not row:
                     continue
+                if _is_task_sync_invalidated_policy_version(row.get("policy_version")):
+                    return {}
                 structured = _parse_jsonish(row.get("structured_context"))
                 for doc in _extract_inventory_docs(structured):
                     table = _source_table_from_doc(doc)

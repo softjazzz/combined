@@ -8,6 +8,7 @@ from typing import Any
 from sqlalchemy import text
 
 from ...database.connection import engine
+from ..bundles.assembly import _is_task_sync_invalidated_policy_version
 
 
 _SCENE_TABLES = {
@@ -93,6 +94,8 @@ def read_luxian_0609_preproduction_bundle(
         raise LookupError("preproduction bundle not found")
 
     payload = dict(row)
+    if _is_task_sync_invalidated_policy_version(payload.get("policy_version")):
+        raise RuntimeError("任务病历资料同步尚未完成，准生产 Bundle 不可读取")
     for field_name, default in _JSON_DEFAULTS.items():
         payload[field_name] = _parse_json_field(
             payload.get(field_name),

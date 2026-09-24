@@ -53,6 +53,34 @@ def test_running_case_without_mr_no_is_visible_from_inpat_registration():
     assert fetched_case_refs["daily_course_record"] == (case_ref,)
 
 
+def test_task_bundle_staging_does_not_change_visit_index_policy():
+    case_ref = CaseRef("H1", "P1", "V1")
+    index_versions: list[str | None] = []
+    bundle_versions: list[str] = []
+    service = CaseSetSyncService(
+        table_catalog_loader=lambda: [
+            {"name": "mr", "key_fields": ["institute_id", "patient_id", "visit_id"]},
+        ],
+        row_fetcher=lambda **_: [case_ref.as_dict()],
+        row_upserter=lambda **kwargs: len(kwargs["records"]),
+        bundle_refresher=lambda **kwargs: (
+            bundle_versions.append(kwargs["policy_version"]) or {"scenes": {}, "domains": {}}
+        ),
+        visit_index_ingester=lambda **kwargs: index_versions.append(kwargs["policy_version"]),
+        remote_url_loader=lambda: "postgresql://source",
+        db_config_loader=lambda: {"remote_schema": "public"},
+    )
+
+    service.sync_case_set(
+        case_refs=(case_ref,), table_names=("mr",),
+        policy_version="task-record-sync-v1", sync_scene="running",
+        bundle_policy_version="task-record-sync-invalidated-v1:run-token",
+    )
+
+    assert index_versions == ["task-record-sync-v1"]
+    assert bundle_versions == ["task-record-sync-invalidated-v1:run-token"]
+
+
 def test_case_set_sync_only_continues_cases_with_visible_primary_record():
     visible = CaseRef("HOSPITAL-A", "PATIENT-A", "VISIT-1")
     missing = CaseRef("HOSPITAL-B", "PATIENT-B", "VISIT-1")

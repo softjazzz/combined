@@ -22,11 +22,13 @@ def workspace(monkeypatch):
         conn.exec_driver_sql("ATTACH DATABASE ':memory:' AS public")
         conn.exec_driver_sql("ATTACH DATABASE ':memory:' AS cdm")
         conn.exec_driver_sql("CREATE TABLE cdm.first_table_write (id INTEGER PRIMARY KEY)")
-        for table in ("running_record_bundle", "final_record_bundle"):
+        for table in service._BUNDLE_TABLES:
             conn.exec_driver_sql(f"""
                 CREATE TABLE public.{table} (
                     institute_id TEXT, patient_id TEXT, visit_id TEXT,
-                    policy_version TEXT, medical_text TEXT,
+                    scene TEXT, execution_domain TEXT,
+                    policy_version TEXT, bundle_schema_version TEXT,
+                    bundle_updated_at TIMESTAMP, medical_text TEXT,
                     PRIMARY KEY (institute_id, patient_id, visit_id)
                 )
             """)
@@ -44,14 +46,18 @@ def workspace(monkeypatch):
             {"id": "assoc-2", "task_id": "task-1", "record_id": "assoc-2",
              "institute_id": "hospital", "patient_id": "same", "visit_id": "visit-2"},
         ])
-        for table in ("running_record_bundle", "final_record_bundle"):
+        for table in service._BUNDLE_TABLES:
             session.execute(sa.text(f"""
-                INSERT INTO public.{table} VALUES
-                    ('hospital', 'same', 'visit-1', :version, '原文1'),
-                    ('hospital', 'same', 'visit-2', :version, '原文2'),
-                    ('other-hospital', 'same', 'visit-1', :version, '其他医院'),
-                    ('hospital', 'same', 'other-visit', :version, '其他就诊')
-            """), {"version": service.CONTRACT_VERSION})
+                INSERT INTO public.{table}
+                    (institute_id, patient_id, visit_id, policy_version,
+                     bundle_schema_version, bundle_updated_at, medical_text)
+                VALUES
+                    ('hospital', 'same', 'visit-1', :version, :schema, CURRENT_TIMESTAMP, '原文1'),
+                    ('hospital', 'same', 'visit-2', :version, :schema, CURRENT_TIMESTAMP, '原文2'),
+                    ('other-hospital', 'same', 'visit-1', :version, :schema, CURRENT_TIMESTAMP, '其他医院'),
+                    ('hospital', 'same', 'other-visit', :version, :schema, CURRENT_TIMESTAMP, '其他就诊')
+            """), {"version": service.CONTRACT_VERSION,
+                    "schema": service.BUNDLE_SCHEMA_VERSION_CURRENT})
     monkeypatch.setattr(service, "SessionLocal", factory)
     yield factory
     engine.dispose()
@@ -64,6 +70,31 @@ def _versions(factory, scene="running"):
             FROM public.{scene}_record_bundle
             ORDER BY institute_id, patient_id, visit_id
         """)).all()
+
+
+def _stage_all(factory, token, *, skip_table=None, skip_visit=None):
+    with factory.begin() as session:
+        for table in service._BUNDLE_TABLES:
+            for visit_id in ("visit-1", "visit-2"):
+                if table == skip_table and visit_id == skip_visit:
+                    continue
+                session.execute(sa.text(f"""
+                    UPDATE public.{table} SET policy_version=:token
+                    WHERE institute_id='hospital' AND patient_id='same' AND visit_id=:visit_id
+                """), {"token": token, "visit_id": visit_id})
+
+
+def _complete_refresh_stats(count=2):
+    def counts():
+        return {"updated": count, "processed": count, "failed": 0}
+
+    return {
+        "scenes": {name: counts() for name in ("running", "final")},
+        "domains": {
+            name.removesuffix("_domain_bundle"): counts()
+            for name in service._BUNDLE_TABLES[2:]
+        },
+    }
 
 
 def test_failure_after_first_local_write_keeps_only_exact_scene_refs_invalid(workspace):
@@ -95,7 +126,14 @@ def test_failure_after_first_local_write_keeps_only_exact_scene_refs_invalid(wor
             ("hospital", "same", "other-visit"): (service.CONTRACT_VERSION, "其他就诊"),
             ("other-hospital", "same", "visit-1"): (service.CONTRACT_VERSION, "其他医院"),
         }
-        assert {row[3] for row in _versions(workspace, "final")} == {service.CONTRACT_VERSION}
+        for table in service._BUNDLE_TABLES[1:]:
+            with workspace() as session:
+                versions = session.execute(sa.text(f"""
+                    SELECT policy_version FROM public.{table}
+                    WHERE institute_id='hospital' AND patient_id='same'
+                      AND visit_id IN ('visit-1', 'visit-2')
+                """)).scalars().all()
+            assert versions == [service.INVALIDATED_POLICY_VERSION] * 2
     assert len(calls) == 2
     with workspace() as session:
         assert session.execute(sa.text("SELECT COUNT(*) FROM cdm.first_table_write")).scalar_one() == 2
@@ -110,13 +148,15 @@ def test_successful_refresh_restores_contract_policy(workspace):
                     WHERE institute_id='hospital' AND patient_id='same' AND visit_id='visit-1'
                 """)).scalar_one()
                 assert before == service.INVALIDATED_POLICY_VERSION
-                session.execute(sa.text("""
-                    UPDATE public.running_record_bundle SET policy_version=:version
-                    WHERE institute_id='hospital' AND patient_id='same'
-                      AND visit_id IN ('visit-1', 'visit-2')
-                """), {"version": service.CONTRACT_VERSION})
+                for table in service._BUNDLE_TABLES:
+                    session.execute(sa.text(f"""
+                        UPDATE public.{table} SET policy_version=:version
+                        WHERE institute_id='hospital' AND patient_id='same'
+                          AND visit_id IN ('visit-1', 'visit-2')
+                    """), {"version": kwargs["bundle_policy_version"]})
             return SimpleNamespace(
                 visible_case_refs=tuple(kwargs["case_refs"]),
+                bundle_refresh=_complete_refresh_stats(),
                 synced_tables=tuple(
                     {"table_name": name, "sync_status": "synced"}
                     for name in kwargs["table_names"]
@@ -129,6 +169,11 @@ def test_successful_refresh_restores_contract_policy(workspace):
     )
     assert result["ready_count"] == 2
     assert {row[3] for row in _versions(workspace)} == {service.CONTRACT_VERSION}
+    with workspace() as session:
+        for table in service._BUNDLE_TABLES:
+            assert set(session.execute(sa.text(f"""
+                SELECT policy_version FROM public.{table}
+            """)).scalars()) == {service.CONTRACT_VERSION}
 
 
 def test_invalidation_transaction_failure_never_calls_source(workspace):
@@ -151,7 +196,7 @@ def test_invalidation_transaction_failure_never_calls_source(workspace):
     assert {row[3] for row in _versions(workspace)} == {service.CONTRACT_VERSION}
 
 
-def test_final_scene_only_invalidates_existing_final_bundles(workspace):
+def test_final_scene_invalidates_all_existing_variants(workspace):
     with workspace.begin() as session:
         session.execute(sa.text("UPDATE qc_tasks SET scene='final' WHERE id='task-1'"))
         session.execute(sa.text("""
@@ -171,5 +216,138 @@ def test_final_scene_only_invalidates_existing_final_bundles(workspace):
         (row[0], row[1], row[2]): row[3] for row in _versions(workspace, "final")
     }
     assert final_rows[("hospital", "same", "visit-1")] == service.INVALIDATED_POLICY_VERSION
-    assert ("hospital", "same", "visit-2") not in final_rows
-    assert {row[3] for row in _versions(workspace, "running")} == {service.CONTRACT_VERSION}
+    assert final_rows[("hospital", "same", "visit-2")] == service.INVALIDATED_POLICY_VERSION
+    assert {
+        row[3] for row in _versions(workspace, "running")
+        if row[0] == "hospital" and row[1] == "same" and row[2] in {"visit-1", "visit-2"}
+    } == {service.INVALIDATED_POLICY_VERSION}
+
+
+def test_unrefreshed_old_variant_cannot_be_published(workspace):
+    class PartialRefresh:
+        def sync_case_set(self, **kwargs):
+            _stage_all(
+                workspace, kwargs["bundle_policy_version"],
+                skip_table="terminal_domain_bundle", skip_visit="visit-2",
+            )
+            return SimpleNamespace(
+                visible_case_refs=tuple(kwargs["case_refs"]),
+                bundle_refresh=_complete_refresh_stats(),
+                synced_tables=tuple(
+                    {"table_name": name, "sync_status": "synced"}
+                    for name in kwargs["table_names"]
+                ),
+            )
+
+    with pytest.raises(RuntimeError, match="发布失败"):
+        service.sync_task_records(
+            task_id="task-1", actor_id="owner", sync_factory=PartialRefresh,
+            readiness_checker=lambda *_: pytest.fail("未完整发布不能 ready"),
+        )
+    with workspace() as session:
+        for table in service._BUNDLE_TABLES:
+            versions = set(session.execute(sa.text(f"""
+                SELECT policy_version FROM public.{table}
+                WHERE institute_id='hospital' AND patient_id='same'
+                  AND visit_id IN ('visit-1', 'visit-2')
+            """)).scalars())
+            assert service.CONTRACT_VERSION not in versions
+
+
+def test_incomplete_refresh_count_blocks_publish_even_if_rows_are_staged(workspace):
+    class IncompleteRefresh:
+        def sync_case_set(self, **kwargs):
+            _stage_all(workspace, kwargs["bundle_policy_version"])
+            stats = _complete_refresh_stats()
+            stats["domains"]["course"]["updated"] = 1
+            return SimpleNamespace(
+                visible_case_refs=tuple(kwargs["case_refs"]),
+                bundle_refresh=stats,
+                synced_tables=tuple(
+                    {"table_name": name, "sync_status": "synced"}
+                    for name in kwargs["table_names"]
+                ),
+            )
+
+    with pytest.raises(RuntimeError, match="发布失败"):
+        service.sync_task_records(
+            task_id="task-1", actor_id="owner", sync_factory=IncompleteRefresh,
+            readiness_checker=lambda *_: pytest.fail("刷新计数不完整不能 ready"),
+        )
+    with workspace() as session:
+        for table in service._BUNDLE_TABLES:
+            versions = set(session.execute(sa.text(f"""
+                SELECT policy_version FROM public.{table}
+                WHERE institute_id='hospital' AND patient_id='same'
+                  AND visit_id IN ('visit-1', 'visit-2')
+            """)).scalars())
+            assert len(versions) == 1
+            assert next(iter(versions)).startswith(service.INVALIDATED_POLICY_VERSION + ":")
+
+
+def test_last_variant_publish_failure_rolls_back_all_versions(workspace):
+    with workspace.begin() as session:
+        session.execute(sa.text("""
+            CREATE TRIGGER public.reject_last_publish
+            BEFORE UPDATE ON index_coding_settlement_domain_bundle
+            WHEN NEW.policy_version = 'task-record-sync-v1'
+            BEGIN SELECT RAISE(ABORT, 'publish rejected'); END
+        """))
+
+    class CompleteRefresh:
+        def sync_case_set(self, **kwargs):
+            _stage_all(workspace, kwargs["bundle_policy_version"])
+            return SimpleNamespace(
+                visible_case_refs=tuple(kwargs["case_refs"]),
+                bundle_refresh=_complete_refresh_stats(),
+                synced_tables=tuple(
+                    {"table_name": name, "sync_status": "synced"}
+                    for name in kwargs["table_names"]
+                ),
+            )
+
+    with pytest.raises(RuntimeError, match="发布失败"):
+        service.sync_task_records(
+            task_id="task-1", actor_id="owner", sync_factory=CompleteRefresh,
+            readiness_checker=lambda *_: pytest.fail("事务失败不能 ready"),
+        )
+    with workspace() as session:
+        for table in service._BUNDLE_TABLES:
+            versions = set(session.execute(sa.text(f"""
+                SELECT policy_version FROM public.{table}
+                WHERE institute_id='hospital' AND patient_id='same'
+                  AND visit_id IN ('visit-1', 'visit-2')
+            """)).scalars())
+            assert len(versions) == 1
+            assert next(iter(versions)).startswith(service.INVALIDATED_POLICY_VERSION + ":")
+
+
+def test_missing_bundle_rows_are_fenced_before_source_write(workspace):
+    with workspace.begin() as session:
+        for table in service._BUNDLE_TABLES:
+            session.execute(sa.text(f"""
+                DELETE FROM public.{table}
+                WHERE institute_id='hospital' AND patient_id='same' AND visit_id='visit-2'
+            """))
+
+    class InterruptedSync:
+        def sync_case_set(self, **kwargs):
+            with workspace() as session:
+                for table in service._BUNDLE_TABLES:
+                    row = session.execute(sa.text(f"""
+                        SELECT policy_version FROM public.{table}
+                        WHERE institute_id='hospital' AND patient_id='same' AND visit_id='visit-2'
+                    """)).scalar_one()
+                    assert row == service.INVALIDATED_POLICY_VERSION
+            raise TimeoutError("首张 CDM 表之前中断")
+
+    with pytest.raises(RuntimeError, match="可重试"):
+        service.sync_task_records(
+            task_id="task-1", actor_id="owner", sync_factory=InterruptedSync,
+        )
+    with workspace() as session:
+        for table in service._BUNDLE_TABLES:
+            assert session.execute(sa.text(f"""
+                SELECT policy_version FROM public.{table}
+                WHERE institute_id='hospital' AND patient_id='same' AND visit_id='visit-2'
+            """)).scalar_one() == service.INVALIDATED_POLICY_VERSION

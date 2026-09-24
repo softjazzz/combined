@@ -233,10 +233,11 @@ def test_committed_bundle_invalidation_rejects_old_policy_receipt(pg_engine, mon
     marker = uuid.uuid4().hex
     identity = {"institute_id": "SYNTH_PG_RACE", "patient_id": f"SYNTH_{marker}",
                 "visit_id": f"SYNTH_{marker}"}
-    cleanup_sql = text("""
-        DELETE FROM public.running_record_bundle
-        WHERE institute_id=:institute_id AND patient_id=:patient_id AND visit_id=:visit_id
-    """)
+    cleanup_tables = (
+        "running_record_bundle", "final_record_bundle", "admission_domain_bundle",
+        "course_domain_bundle", "surgery_domain_bundle", "consult_discussion_domain_bundle",
+        "terminal_domain_bundle", "index_coding_settlement_domain_bundle",
+    )
     try:
         with pg_engine.begin() as conn:
             conn.execute(text("""
@@ -265,4 +266,8 @@ def test_committed_bundle_invalidation_rejects_old_policy_receipt(pg_engine, mon
         assert after["bundle_updated_at"] == old_receipt_time
     finally:
         with pg_engine.begin() as conn:
-            conn.execute(cleanup_sql, identity)
+            for table in cleanup_tables:
+                conn.execute(text(f"""
+                    DELETE FROM public.{table}
+                    WHERE institute_id=:institute_id AND patient_id=:patient_id AND visit_id=:visit_id
+                """), identity)

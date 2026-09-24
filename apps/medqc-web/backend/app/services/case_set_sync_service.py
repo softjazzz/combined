@@ -128,6 +128,7 @@ class CaseSetSyncService:
         table_names: Sequence[str],
         policy_version: str,
         sync_scene: str,
+        bundle_policy_version: str | None = None,
         case_scene_by_ref: Mapping[CaseRef, str] | None = None,
         progress_callback: Callable[[dict[str, Any]], None] | None = None,
     ) -> CaseSetSyncResult:
@@ -478,7 +479,7 @@ class CaseSetSyncService:
         _forward_bundle_progress({"completed": 0})
         bundle_refresh = self.refresh_case_set_bundles(
             case_refs=visible_case_refs,
-            policy_version=policy_version,
+            policy_version=(policy_version if bundle_policy_version is None else bundle_policy_version),
             progress_callback=_forward_bundle_progress,
         )
         _forward_bundle_progress({"completed": bundle_progress_total})

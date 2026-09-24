@@ -3934,7 +3934,7 @@ def test_list_pool_records_should_backfill_patient_name_and_department_from_matc
         service,
         "_load_record_display_map",
         lambda **kwargs: {
-            "V001": {
+            ("H1", "P001", "V001"): {
                 "patient_name": "张三",
                 "patient_sex": "女",
                 "patient_age": "67",
@@ -3960,6 +3960,8 @@ def test_record_display_map_should_fallback_to_running_registration_when_frontpa
     session = _FakeSession(
         [
             {
+                "institute_id": "H1",
+                "patient_id": "P1",
                 "visit_id": "RUNNING-001",
                 "source_priority": 0,
                 "patient_name": "",
@@ -3969,6 +3971,8 @@ def test_record_display_map_should_fallback_to_running_registration_when_frontpa
                 "department": "",
             },
             {
+                "institute_id": "H1",
+                "patient_id": "P1",
                 "visit_id": "RUNNING-001",
                 "source_priority": 1,
                 "patient_name": "在院患者",
@@ -3978,6 +3982,8 @@ def test_record_display_map_should_fallback_to_running_registration_when_frontpa
                 "department": "呼吸与危重症医学科",
             },
             {
+                "institute_id": "H1",
+                "patient_id": "P1",
                 "visit_id": "RUNNING-001",
                 "source_priority": 2,
                 "patient_name": "入院记录患者",
@@ -3987,6 +3993,8 @@ def test_record_display_map_should_fallback_to_running_registration_when_frontpa
                 "department": "普通内科",
             },
             {
+                "institute_id": "H1",
+                "patient_id": "P2",
                 "visit_id": "RUNNING-002",
                 "source_priority": 2,
                 "patient_name": "仅入院记录患者",
@@ -4000,17 +4008,17 @@ def test_record_display_map_should_fallback_to_running_registration_when_frontpa
 
     display_map = service._load_record_display_map(
         session=session,
-        visit_ids=["RUNNING-001", "RUNNING-002"],
+        case_keys=[("H1", "P1", "RUNNING-001"), ("H1", "P2", "RUNNING-002")],
     )
 
-    assert display_map["RUNNING-001"] == {
+    assert display_map[("H1", "P1", "RUNNING-001")] == {
         "patient_name": "在院患者",
         "patient_sex": "女",
         "patient_age": "68",
         "mr_no": "ZY-RUNNING-001",
         "department": "呼吸与危重症医学科",
     }
-    assert display_map["RUNNING-002"] == {
+    assert display_map[("H1", "P2", "RUNNING-002")] == {
         "patient_name": "仅入院记录患者",
         "patient_sex": "男",
         "patient_age": "57",
@@ -4140,6 +4148,8 @@ def test_apply_dynamic_candidate_rule_ids_should_replace_default_rules_for_blank
     items = [
         {
             "id": "item-1",
+            "matched_institute_id": "H1",
+            "matched_patient_id": "P001",
             "matched_visit_id": "V001",
             "coverage_type": "llm_intrinsic",
             "manual_issue_text": "",
@@ -4150,7 +4160,7 @@ def test_apply_dynamic_candidate_rule_ids_should_replace_default_rules_for_blank
         service,
         "_load_bundle_source_table_map",
         lambda **kwargs: {
-            "V001": {"discharge_record", "surgery_record", "anesthesia_record"},
+            ("H1", "P001", "V001"): {"discharge_record", "surgery_record", "anesthesia_record"},
         },
     )
 
@@ -4191,7 +4201,7 @@ def test_get_runnable_items_should_enrich_candidate_rules_from_bundle(monkeypatc
         service,
         "_load_bundle_source_table_map",
         lambda **kwargs: {
-            "V001": {"surgery_record", "anesthesia_record", "postsurg_firstcourse_record"},
+            ("H1", "P001", "V001"): {"surgery_record", "anesthesia_record", "postsurg_firstcourse_record"},
         },
     )
 
@@ -4395,7 +4405,7 @@ def test_get_runnable_items_sc_should_whitelist_consultation_execution_primary_r
     monkeypatch.setattr(
         service,
         "_load_bundle_source_table_map",
-        lambda **kwargs: {"V001": {"consultation_record", "daily_course_record", "senior_course_record"}},
+        lambda **kwargs: {("H1", "P001", "V001"): {"consultation_record", "daily_course_record", "senior_course_record"}},
     )
 
     runnable = service.get_runnable_items(pool_id="pool-1", validation_mode="sc")
@@ -4432,7 +4442,7 @@ def test_get_runnable_items_sc_should_whitelist_senior_round_content_primary_rul
     monkeypatch.setattr(
         service,
         "_load_bundle_source_table_map",
-        lambda **kwargs: {"V002": {"senior_course_record", "admission_record", "discharge_record"}},
+        lambda **kwargs: {("H1", "P002", "V002"): {"senior_course_record", "admission_record", "discharge_record"}},
     )
 
     runnable = service.get_runnable_items(pool_id="pool-1", validation_mode="sc")
@@ -4469,7 +4479,7 @@ def test_get_runnable_items_sc_should_whitelist_daily_course_analysis_primary_ru
     monkeypatch.setattr(
         service,
         "_load_bundle_source_table_map",
-        lambda **kwargs: {"V003": {"daily_course_record", "lab_attention_report", "consultation_record"}},
+        lambda **kwargs: {("H1", "P003", "V003"): {"daily_course_record", "lab_attention_report", "consultation_record"}},
     )
 
     runnable = service.get_runnable_items(pool_id="pool-1", validation_mode="sc")
@@ -4506,7 +4516,7 @@ def test_get_runnable_items_sc_should_narrow_sc026_for_first_course_reasoning(mo
     monkeypatch.setattr(
         service,
         "_load_bundle_source_table_map",
-        lambda **kwargs: {"V006": {"first_course_record", "admission_record"}},
+        lambda **kwargs: {("H1", "P006", "V006"): {"first_course_record", "admission_record"}},
     )
 
     runnable = service.get_runnable_items(pool_id="pool-1", validation_mode="sc")
@@ -4543,7 +4553,7 @@ def test_get_runnable_items_sc_should_narrow_sc008_for_admission_consistency(mon
     monkeypatch.setattr(
         service,
         "_load_bundle_source_table_map",
-        lambda **kwargs: {"V007": {"admission_record"}},
+        lambda **kwargs: {("H1", "P007", "V007"): {"admission_record"}},
     )
 
     runnable = service.get_runnable_items(pool_id="pool-1", validation_mode="sc")
@@ -4582,7 +4592,7 @@ def test_get_runnable_items_sc_should_attach_admission_recommended_rule_ids(monk
     monkeypatch.setattr(
         service,
         "_load_bundle_source_table_map",
-        lambda **kwargs: {"V009": {"admission_record"}},
+        lambda **kwargs: {("H1", "P009", "V009"): {"admission_record"}},
     )
 
     runnable = service.get_runnable_items(pool_id="pool-1", validation_mode="sc")
@@ -4621,7 +4631,7 @@ def test_get_runnable_items_sc_should_narrow_sc033_for_daily_course_analysis(mon
     monkeypatch.setattr(
         service,
         "_load_bundle_source_table_map",
-        lambda **kwargs: {"V008": {"daily_course_record", "lab_attention_report"}},
+        lambda **kwargs: {("H1", "P008", "V008"): {"daily_course_record", "lab_attention_report"}},
     )
 
     runnable = service.get_runnable_items(pool_id="pool-1", validation_mode="sc")
@@ -4658,7 +4668,7 @@ def test_get_runnable_items_sc_should_whitelist_consultation_record_quality_prim
     monkeypatch.setattr(
         service,
         "_load_bundle_source_table_map",
-        lambda **kwargs: {"V004": {"consultation_record", "daily_course_record"}},
+        lambda **kwargs: {("H1", "P004", "V004"): {"consultation_record", "daily_course_record"}},
     )
 
     runnable = service.get_runnable_items(pool_id="pool-1", validation_mode="sc")
@@ -4695,7 +4705,7 @@ def test_get_runnable_items_sc_should_whitelist_critical_value_management_primar
     monkeypatch.setattr(
         service,
         "_load_bundle_source_table_map",
-        lambda **kwargs: {"V005": {"daily_course_record"}},
+        lambda **kwargs: {("H1", "P005", "V005"): {"daily_course_record"}},
     )
 
     runnable = service.get_runnable_items(pool_id="pool-1", validation_mode="sc")
@@ -4732,7 +4742,7 @@ def test_get_runnable_items_sc_should_whitelist_progress_order_consistency_prima
     monkeypatch.setattr(
         service,
         "_load_bundle_source_table_map",
-        lambda **kwargs: {"V006": {"presurg_summary", "presurg_discussion", "daily_course_record"}},
+        lambda **kwargs: {("H1", "P006", "V006"): {"presurg_summary", "presurg_discussion", "daily_course_record"}},
     )
 
     runnable = service.get_runnable_items(pool_id="pool-1", validation_mode="sc")
@@ -4769,7 +4779,7 @@ def test_get_runnable_items_sc_should_whitelist_operation_record_quality_primary
     monkeypatch.setattr(
         service,
         "_load_bundle_source_table_map",
-        lambda **kwargs: {"1888334": {"surgery_record", "presurg_summary", "presurg_discussion"}},
+        lambda **kwargs: {("H1", "P009", "1888334"): {"surgery_record", "presurg_summary", "presurg_discussion"}},
     )
 
     runnable = service.get_runnable_items(pool_id="pool-1", validation_mode="sc")
@@ -4806,7 +4816,7 @@ def test_get_runnable_items_sc_should_whitelist_operation_preop_mdt_primary_rule
     monkeypatch.setattr(
         service,
         "_load_bundle_source_table_map",
-        lambda **kwargs: {"287562": {"presurg_discussion", "consultation_record"}},
+        lambda **kwargs: {("H1", "P011", "287562"): {"presurg_discussion", "consultation_record"}},
     )
 
     runnable = service.get_runnable_items(pool_id="pool-1", validation_mode="sc")
@@ -4843,7 +4853,7 @@ def test_get_runnable_items_sc_should_whitelist_operation_preop_conclusion_prima
     monkeypatch.setattr(
         service,
         "_load_bundle_source_table_map",
-        lambda **kwargs: {"371285": {"presurg_discussion", "presurg_summary"}},
+        lambda **kwargs: {("H1", "P012", "371285"): {"presurg_discussion", "presurg_summary"}},
     )
 
     runnable = service.get_runnable_items(pool_id="pool-1", validation_mode="sc")
