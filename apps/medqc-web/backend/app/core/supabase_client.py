@@ -103,7 +103,7 @@ class _Response:
 class _Query:
     """
     模拟 Supabase PostgREST 的链式查询构建器。
-    支持的方法: select, eq, in_, is_, neq, gte, lte, gt, lt, like, ilike,
+    支持的方法: select, eq, in_, is_, neq, neq_or_null, gte, lte, gt, lt, like, ilike,
                 or_, order, limit, range, single, insert, update, delete
     """
 
@@ -152,6 +152,10 @@ class _Query:
 
     def neq(self, column: str, value: Any) -> _Query:
         self._filters.append((column, "!=", value))
+        return self
+
+    def neq_or_null(self, column: str, value: Any) -> _Query:
+        self._filters.append((column, "NEQ_OR_NULL", value))
         return self
 
     def gt(self, column: str, value: Any) -> _Query:
@@ -245,6 +249,10 @@ class _Query:
                     clauses.append(f'"{col}" IS {"TRUE" if val else "FALSE"}')
                 else:
                     clauses.append(f'"{col}" IS NULL')
+            elif op == "NEQ_OR_NULL":
+                quoted_col = _quote_qualified_identifier(col)
+                clauses.append(f"({quoted_col} IS NULL OR {quoted_col} != :{pname})")
+                params[pname] = val
             else:
                 clauses.append(f'"{col}" {op} :{pname}')
                 params[pname] = val

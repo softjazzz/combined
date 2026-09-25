@@ -7,6 +7,8 @@
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 from typing import Annotated, Optional, List, Dict, Any, Literal
 from enum import Enum
+from uuid import UUID
+from datetime import datetime
 
 
 # ============================================================================
@@ -168,6 +170,39 @@ class TaskRecordCompleteRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     run_number: int = Field(..., strict=True, gt=0, description="assigned 质控运行序号")
+
+
+class TaskManualDefectCreateRequest(BaseModel):
+    """受领质控员基于已核实的本次任务运行补录缺陷。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    defect_id: UUID
+    run_number: int = Field(..., strict=True, gt=0)
+    rule_name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+    description: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4000)]
+    severity: Literal["info", "warning", "error", "critical"]
+    suggestion: Optional[Annotated[str, StringConstraints(strip_whitespace=True, max_length=2000)]] = None
+    evidence: Optional[Annotated[str, StringConstraints(strip_whitespace=True, max_length=2000)]] = None
+
+
+class TaskManualDefectResponse(BaseModel):
+    """人工缺陷自身状态；不代表病历审核或整改状态。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    task_id: str
+    task_record_id: str
+    run_number: int
+    rule_name: str
+    description: str
+    severity: Literal["info", "warning", "error", "critical"]
+    suggestion: Optional[str] = None
+    evidence: Optional[str] = None
+    manual_review_status: Literal["pending", "approved", "rejected"]
+    created_at: datetime
+    idempotent: Optional[bool] = None
 
 
 # ============================================================================

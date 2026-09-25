@@ -163,6 +163,40 @@ export interface TaskQcRunRecordResult {
     items: TaskQcSafeResultItem[]
 }
 
+export type TaskManualDefectSeverity = 'info' | 'warning' | 'error' | 'critical'
+
+export interface TaskManualDefectCreate {
+    defect_id: string
+    run_number: number
+    rule_name: string
+    description: string
+    severity: TaskManualDefectSeverity
+    suggestion?: string | null
+    evidence?: string | null
+}
+
+export interface TaskManualDefect {
+    id: string
+    task_id: string
+    task_record_id: string
+    run_number: number
+    rule_name: string
+    description: string
+    severity: TaskManualDefectSeverity
+    suggestion: string | null
+    evidence: string | null
+    manual_review_status: 'pending' | 'approved' | 'rejected'
+    created_at: string
+    idempotent?: boolean
+}
+
+export interface TaskManualDefectList {
+    items: TaskManualDefect[]
+    total: number
+    limit: number
+    offset: number
+}
+
 export interface TaskQcSafeResultItem {
     rule_id?: string
     rule_code?: string
@@ -322,6 +356,23 @@ export async function completeTaskRecord(taskId: string, taskRecordId: string, r
         method: 'POST',
         url: `${BASE_URL}/${encodeURIComponent(taskId)}/records/${encodeURIComponent(taskRecordId)}/complete`,
         data: { run_number: runNumber },
+    })
+}
+
+/** 受领任务病历的人工缺陷；defect_id 由客户端生成，供不确定响应安全重试。 */
+export async function createTaskManualDefect(taskId: string, taskRecordId: string, data: TaskManualDefectCreate) {
+    return request<TaskManualDefect>({
+        method: 'POST',
+        url: `${BASE_URL}/${encodeURIComponent(taskId)}/records/${encodeURIComponent(taskRecordId)}/manual-defects`,
+        data,
+    })
+}
+
+export async function getTaskManualDefects(taskId: string, taskRecordId: string, limit = 50, offset = 0) {
+    return request<TaskManualDefectList>({
+        method: 'GET',
+        url: `${BASE_URL}/${encodeURIComponent(taskId)}/records/${encodeURIComponent(taskRecordId)}/manual-defects`,
+        params: { limit, offset },
     })
 }
 

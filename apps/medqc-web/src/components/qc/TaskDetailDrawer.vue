@@ -423,6 +423,16 @@
                   <p v-if="item.evidence?.length"><b>证据</b>{{ item.evidence.map(evidenceLabel).join('；') }}</p>
                 </div>
               </div>
+              <TaskManualDefectPanel
+                v-if="canViewManualDefects"
+                :key="`${detail.id}:${selectedTaskRecordId}:${selectedRun?.run_number}:${authStore.user?.id}`"
+                :task-id="detail.id"
+                :task-record-id="selectedTaskRecordId"
+                :run-number="selectedRun!.run_number"
+                :job-id="selectedRun!.job_id"
+                :user-id="authStore.user!.id"
+                :eligible="canCompleteRecord"
+              />
               <div v-if="canCompleteRecord || completionNeedsVerification" class="task-detail-drawer__run-actions">
                 <a-button
                   v-if="completionNeedsVerification"
@@ -465,6 +475,7 @@ import type { SichuanBatchJob } from '@/views/workstation-v4/semantic-rules/type
 import { completeTaskRecord, createTaskQcRun, getTaskDetail, getTaskQcRunRecordResult, getTaskQcRuns, startTaskRecord } from '@/api/tasks'
 import TaskRecordSyncControl from './TaskRecordSyncControl.vue'
 import TaskRecordDocumentDrawer from './TaskRecordDocumentDrawer.vue'
+import TaskManualDefectPanel from './TaskManualDefectPanel.vue'
 import type {
   TaskDetail,
   TaskQcRun,
@@ -566,6 +577,19 @@ const canCompleteRecord = computed(() => {
     && result.run_number === run.run_number && result.job_id === run.job_id
     && result.result_state === 'available' && result.items.length > 0
     && !completionNeedsVerification.value
+})
+const canViewManualDefects = computed(() => {
+  const task = detail.value
+  const run = selectedRun.value
+  const result = recordResult.value
+  const record = task?.records.find((item) => item.id === selectedTaskRecordId.value)
+  return props.open && props.tab === 'received' && runScope.value === 'assigned'
+    && !!authStore.user?.id && !!task && !!run && !!result && !!record
+    && run.run_scope === 'assigned' && record.task_id === task.id
+    && record.assignee_id === authStore.user.id && hasCaseIdentity(record)
+    && result.task_id === task.id && result.task_record_id === record.id
+    && result.run_number === run.run_number && result.job_id === run.job_id
+    && result.result_state === 'available' && result.items.length > 0
 })
 const canStartRun = computed(() => canViewRuns.value
   && (detail.value?.scene === 'running' || detail.value?.scene === 'final')

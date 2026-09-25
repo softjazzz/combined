@@ -126,6 +126,8 @@ class QCDefect(Base):
     suggestion = Column(Text)
     status = Column(String(20), default="pending", nullable=False)
     origin = Column(String(16), nullable=True)
+    manual_review_status = Column(String(20), nullable=True)
+    manual_created_by = Column(String(36), nullable=True)
 
     urged_at = Column(DateTime)
     urged_by = Column(String(36))
@@ -151,6 +153,12 @@ class QCDefect(Base):
 
     __table_args__ = (
         CheckConstraint("origin IN ('auto', 'manual')", name="ck_qc_defects_origin"),
+        CheckConstraint(
+            "manual_review_status IS NULL OR "
+            "(origin IS NOT NULL AND origin = 'manual' "
+            "AND manual_review_status IN ('pending', 'approved', 'rejected'))",
+            name="ck_qc_defects_manual_review_status",
+        ),
         Index("ix_qc_defects_result", "result_id"),
         Index("ix_qc_defects_record", "record_id"),
         Index("ix_qc_defects_status", "status"),

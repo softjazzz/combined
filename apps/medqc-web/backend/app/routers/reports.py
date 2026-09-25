@@ -228,7 +228,10 @@ def _resolve_trend_bucket(period: str, analyzed_at: datetime) -> datetime:
 async def _fetch_top_categories(sb) -> List[Dict[str, Any]]:
     try:
         defect_rows = await async_execute(
-            sb.table("qc_defects").select("category").limit(REPORT_SCAN_LIMIT)
+            sb.table("qc_defects")
+            .select("category")
+            .neq_or_null("source_key", "task_assigned_qc")
+            .limit(REPORT_SCAN_LIMIT)
         )
     except Exception as exc:
         logger.warning(f"[reports] 查询 qc_defects 失败: {exc}")

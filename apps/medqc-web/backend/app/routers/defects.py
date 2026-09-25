@@ -55,17 +55,19 @@ async def _get_defect(defect_id: str) -> Dict[str, Any]:
 
     try:
         resp = await async_execute(
-            sb.table('qc_defects').select('*').eq('id', defect_id).single()
+            sb.table('qc_defects').select('*').eq('id', defect_id)
+            .neq_or_null('source_key', 'task_assigned_qc').limit(1)
         )
-        data = getattr(resp, 'data', None)
+        rows = getattr(resp, 'data', None) or []
+        data = rows[0] if rows else None
         if not data:
-            raise HTTPException(status_code=404, detail=f"缺陷 {defect_id} 不存在")
+            raise HTTPException(status_code=404, detail="缺陷不存在")
         return data
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"获取缺陷失败: {e}")
-        raise HTTPException(status_code=500, detail=f"获取缺陷失败: {str(e)}")
+        logger.error("获取缺陷失败: %s", e)
+        raise HTTPException(status_code=500, detail="获取缺陷失败")
 
 
 async def _update_defect_status(defect_id: str, status: str, extra_fields: Dict = None) -> Dict:
@@ -83,13 +85,17 @@ async def _update_defect_status(defect_id: str, status: str, extra_fields: Dict 
         try:
             resp = await async_execute(
                 sb.table('qc_defects').update(update_data).eq('id', defect_id)
+                .neq_or_null('source_key', 'task_assigned_qc')
             )
             db_data = getattr(resp, 'data', None)
             if db_data:
                 return db_data[0]
+            raise HTTPException(status_code=404, detail="缺陷不存在")
+        except HTTPException:
+            raise
         except Exception as e:
-            logger.error(f"更新缺陷状态失败: {e}")
-            raise HTTPException(status_code=500, detail=f"更新缺陷状态失败: {str(e)}")
+            logger.error("更新缺陷状态失败: %s", e)
+            raise HTTPException(status_code=500, detail="更新缺陷状态失败")
 
     raise HTTPException(status_code=503, detail="数据库不可用")
 
@@ -155,7 +161,9 @@ async def list_defects(
         raise HTTPException(status_code=503, detail="数据库不可用")
 
     try:
-        query = sb.table('qc_defects').select('*', count='exact')
+        query = sb.table('qc_defects').select('*', count='exact').neq_or_null(
+            'source_key', 'task_assigned_qc'
+        )
         if department:
             query = query.eq('department', department)
         if severity:
@@ -574,7 +582,9 @@ async def get_defect_stats(
         raise HTTPException(status_code=503, detail="数据库不可用")
 
     try:
-        query = sb.table('qc_defects').select('severity,category,status')
+        query = sb.table('qc_defects').select('severity,category,status').neq_or_null(
+            'source_key', 'task_assigned_qc'
+        )
         if department:
             query = query.eq('department', department)
         if start_date:

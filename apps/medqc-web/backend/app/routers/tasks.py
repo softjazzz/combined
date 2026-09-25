@@ -27,6 +27,8 @@ from ..schemas.tasks import (
     TaskUpdateRequest,
     TaskAssignRequest,
     TaskRecordCompleteRequest,
+    TaskManualDefectCreateRequest,
+    TaskManualDefectResponse,
     AssignMethod,
     TaskStatus,
 )
@@ -79,6 +81,14 @@ from ..services.task_record_completion_service import (
     TaskRecordCompletionNotFound,
     TaskRecordCompletionUnavailable,
     complete_assigned_task_record,
+)
+from ..services.task_manual_defect_service import (
+    TaskManualDefectConflict,
+    TaskManualDefectForbidden,
+    TaskManualDefectNotFound,
+    TaskManualDefectUnavailable,
+    create_task_manual_defect,
+    list_task_manual_defects,
 )
 from ..services.task_cancel_service import (
     TaskCancelConflict,
@@ -780,6 +790,117 @@ async def complete_task_record(
         current_user=current_user,
     )
     return success_response(data=data, message="病历已完成", trace_id=get_trace_id(request))
+
+
+@router.post("/{task_id}/records/{task_record_id}/manual-defects")
+@require_permission(ResourceType.QC_RESULTS, PermissionAction.CREATE)
+async def create_task_record_manual_defect(
+    request: Request,
+    task_id: str,
+    task_record_id: str,
+    body: TaskManualDefectCreateRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """仅受领人可为已核实的本次任务质控结果补录缺陷。"""
+    actor_id = _get_task_scope_user_id(current_user)
+    try:
+        data = await run_in_threadpool(
+            create_task_manual_defect,
+            task_id=task_id,
+            task_record_id=task_record_id,
+            actor_id=actor_id,
+            defect_id=str(body.defect_id),
+            run_number=body.run_number,
+            rule_name=body.rule_name,
+            description=body.description,
+            severity=body.severity,
+            suggestion=body.suggestion,
+            evidence=body.evidence,
+            workspace_factory=_sichuan_workspace_service,
+        )
+        result = TaskManualDefectResponse.model_validate(data).model_dump(mode="json")
+    except TaskManualDefectNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except TaskManualDefectForbidden as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except TaskManualDefectConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except TaskManualDefectUnavailable as exc:
+        raise HTTPException(status_code=503, detail="人工缺陷服务暂不可用，请稍后重试") from exc
+    except Exception as exc:
+        logger.exception("新增任务人工缺陷失败 task_id=%s task_record_id=%s", task_id, task_record_id)
+        raise HTTPException(status_code=503, detail="人工缺陷服务暂不可用，请稍后重试") from exc
+
+    audit_event(
+        request,
+        action="tasks.records.manual_defects.create",
+        resource="qc_defect",
+        outcome="success",
+        details={
+            "task_id": task_id,
+            "task_record_id": task_record_id,
+            "defect_id": result["id"],
+            "run_number": body.run_number,
+            "idempotent": result.get("idempotent", False),
+        },
+        current_user=current_user,
+    )
+    return success_response(data=result, message="人工缺陷已保存", trace_id=get_trace_id(request))
+
+
+@router.get("/{task_id}/records/{task_record_id}/manual-defects")
+@require_permission(ResourceType.QC_TASKS, PermissionAction.READ)
+async def get_task_record_manual_defects(
+    request: Request,
+    task_id: str,
+    task_record_id: str,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=50),
+    current_user: dict = Depends(get_current_user),
+):
+    """只读取当前受领任务病历的人工缺陷。"""
+    actor_id = _get_task_scope_user_id(current_user)
+    try:
+        data = await run_in_threadpool(
+            list_task_manual_defects,
+            task_id=task_id,
+            task_record_id=task_record_id,
+            actor_id=actor_id,
+            limit=limit,
+            offset=offset,
+        )
+        result = {
+            "items": [
+                TaskManualDefectResponse.model_validate(item).model_dump(
+                    mode="json", exclude={"idempotent"}
+                )
+                for item in data["items"]
+            ],
+            "total": data["total"],
+            "limit": data["limit"],
+            "offset": data["offset"],
+        }
+    except TaskManualDefectNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except TaskManualDefectForbidden as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except TaskManualDefectConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except TaskManualDefectUnavailable as exc:
+        raise HTTPException(status_code=503, detail="人工缺陷服务暂不可用，请稍后重试") from exc
+    except Exception as exc:
+        logger.exception("读取任务人工缺陷失败 task_id=%s task_record_id=%s", task_id, task_record_id)
+        raise HTTPException(status_code=503, detail="人工缺陷服务暂不可用，请稍后重试") from exc
+
+    audit_event(
+        request,
+        action="tasks.records.manual_defects.read",
+        resource="qc_defect",
+        outcome="success",
+        details={"task_id": task_id, "task_record_id": task_record_id},
+        current_user=current_user,
+    )
+    return success_response(data=result, trace_id=get_trace_id(request))
 
 
 # ============================

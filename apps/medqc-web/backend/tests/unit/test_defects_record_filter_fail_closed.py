@@ -62,6 +62,10 @@ def test_global_defect_list_keeps_filters_and_pagination(monkeypatch):
             self.calls.append(("or", value))
             return self
 
+        def neq_or_null(self, column, value):
+            self.calls.append(("neq_or_null", column, value))
+            return self
+
         def order(self, column, desc=False):
             self.calls.append(("order", column, desc))
             return self
@@ -114,6 +118,7 @@ def test_global_defect_list_keeps_filters_and_pagination(monkeypatch):
     assert database.tables == ["qc_defects"]
     assert database.query.calls == [
         ("select", "*", "exact"),
+        ("neq_or_null", "source_key", "task_assigned_qc"),
         ("eq", "department", "内科"),
         ("eq", "severity", "high"),
         ("eq", "category", "documentation"),
@@ -145,6 +150,10 @@ def test_global_defect_stats_keeps_filters(monkeypatch):
 
         def lte(self, column, value):
             self.calls.append(("lte", column, value))
+            return self
+
+        def neq_or_null(self, column, value):
+            self.calls.append(("neq_or_null", column, value))
             return self
 
     query = Query()
@@ -179,6 +188,7 @@ def test_global_defect_stats_keeps_filters(monkeypatch):
     }
     assert query.calls == [
         ("select", "severity,category,status"),
+        ("neq_or_null", "source_key", "task_assigned_qc"),
         ("eq", "department", "内科"),
         ("gte", "created_at", "2026-09-01"),
         ("lte", "created_at", "2026-09-23"),
