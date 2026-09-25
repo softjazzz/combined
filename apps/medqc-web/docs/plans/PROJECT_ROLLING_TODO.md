@@ -37,6 +37,8 @@
 
 ## 当前焦点
 
+2026-09-25 MEDQC-022 D 续约过期用量补证：运行中任务的续约过期失败事务曾继续展示旧进度的完整观测标记；隔离 SQLite 红灯确认后仅将该标记改为未知，保留已计 Token 和旧代次拒绝。执行代次整份 33/33 通过。[同一成本观测报告](../acceptance/2026-09-25-original-engine-failure-cost-observation.md)。客户 PostgreSQL 和真实模型成本仍待验。
+
 2026-09-25 MEDQC-022 B 完整跨启动补证：第一进程正式保存原始 001 冻结任务，第二进程直接执行或经启动扫描重投，均完成任务并从隔离 SQLite Canonical 读回同一 `data_gap`；整份重启测试 17/17 通过。病例和来源为合成替身，模型调用被禁止。客户 PostgreSQL 双进程、安装包中断及独立临床答案仍待验，B 继续局部验证。[报告](../acceptance/2026-09-25-original-engine-cross-process-completion.md)。
 
 2026-09-25 MEDQC-022 goal 再接续：已有 active 的 A/B/C/D 目标继续沿用，当前基线和下一步以[执行卡](2026-09-25-lx0609-engine-remaining-goal.md)为准。D 复现运行中异常失败保留旧进度 `usage_observation_complete=true`，最小修复为正式失败事务标记观测未知，保留已记录 Token；SQLite 红绿及相邻 36 项通过，排队失败、其他规则集不受影响。[证据](../acceptance/2026-09-25-original-engine-failure-cost-observation.md)。客户部署、PostgreSQL 多进程竞争和临床保护集仍未验收。

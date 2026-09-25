@@ -110,6 +110,11 @@ def test_stale_leased_attempt_fails_and_cannot_submit_late_result(storage):
         connection.execute(
             table.update().where(table.c.id == "attempt-job").values(
                 updated_at=datetime.utcnow() - timedelta(hours=1),
+                summary_json=json.dumps({
+                    "luxian_0609_usage_observation_complete": True,
+                    "luxian_0609_usage_unknown_executor_keys": [],
+                    "total_tokens": 12,
+                }),
             )
         )
 
@@ -117,6 +122,10 @@ def test_stale_leased_attempt_fails_and_cannot_submit_late_result(storage):
         stale_before=datetime.utcnow() - timedelta(minutes=5),
     ) == ("attempt-job",)
     assert _status(engine, table) == "failed"
+    failed = service.get_batch_job_for_processing(job_id="attempt-job")
+    assert failed is not None
+    assert failed["summary"]["luxian_0609_usage_observation_complete"] is False
+    assert failed["summary"]["total_tokens"] == 12
     assert _stale_failed_completion(service, attempt) is False
 
 

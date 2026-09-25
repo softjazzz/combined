@@ -4605,6 +4605,7 @@ class CustomQCWorkspaceService:
                         updated_at=now,
                         summary_json=_safe_json_dumps({
                             **summary,
+                            "luxian_0609_usage_observation_complete": False,
                             "progress": {**progress, "step_key": "failed"},
                             "updated_at": now.isoformat(),
                         }),

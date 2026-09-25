@@ -6,7 +6,7 @@
 
 阶段 B 另用两个独立 Python 进程和一份隔离 SQLite 任务表证实：同构建号下提交 SHA、模型名、端点及有效规则设置漂移，直接接管和启动扫描均在病例读取前受控失败；整份重启测试 15/15 通过。该探针在门禁后主动停止，不证明医学执行结束或客户 PG/安装包恢复。[证据及限制](../acceptance/2026-09-25-original-engine-cross-process-drift.md)；B 仍为局部验证。
 
-本次 goal 接续以[剩余目标执行卡](2026-09-25-lx0609-engine-remaining-goal.md)为准，不另建同义目标。D 阶段复现正式运行任务异常失败会沿用前一进度的“用量已完整观测”标记；仅在 LX0609 运行中失败事务将该标记置为未知，已记录 Token 与其他规则集不变。隔离 SQLite 红绿验证见[异常失败成本观测验收](../acceptance/2026-09-25-original-engine-failure-cost-observation.md)。A/B/C/D 均不因这个局部修复自动关闭，客户 PG、安装包和独立临床判读仍各自待验。
+本次 goal 接续以[剩余目标执行卡](2026-09-25-lx0609-engine-remaining-goal.md)为准，不另建同义目标。D 阶段复现正式运行任务异常失败或续约过期会沿用前一进度的“用量已完整观测”标记；仅在 LX0609 对应运行中失败事务将该标记置为未知，已记录 Token 与其他规则集不变。隔离 SQLite 红绿验证见[异常失败成本观测验收](../acceptance/2026-09-25-original-engine-failure-cost-observation.md)。A/B/C/D 均不因这个局部修复自动关闭，客户 PG、安装包和独立临床判读仍各自待验。
 
 B 阶段现增加了[独立进程完整执行补证](../acceptance/2026-09-25-original-engine-cross-process-completion.md)：新进程不仅通过身份门禁，还从正式任务表领取原始 001、完成合成病例的正式 Worker 路径，事务保存并从 Canonical 读回相同结果；直接运行及启动扫描两条路径均通过。此证据使用隔离 SQLite 和合成来源，不代表客户 PostgreSQL 并发争用或安装包恢复，B 仍局部验证。
 
