@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -42,18 +43,33 @@ def test_customer_artifact_gate_rejects_legacy_public_api(tmp_path, address, blo
         assert "Forbidden public API domain" in result.stderr
 
 
-@pytest.mark.parametrize("build_exit,has_dist", [(17, True), (0, False), (0, True)])
-def test_customer_build_failure_cannot_package_stale_dist(tmp_path, build_exit, has_dist):
+@pytest.mark.parametrize(
+    "build_exit,has_dist,build_identity",
+    [(17, True, "current"), (0, False, "current"), (0, True, "current"), (0, True, "stale")],
+)
+def test_customer_build_failure_cannot_package_stale_dist(
+    tmp_path, build_exit, has_dist, build_identity
+):
     """运行实际构建门禁片段；失败即使有旧产物也不得进入复制阶段。"""
     if has_dist:
         (tmp_path / "dist").mkdir()
         (tmp_path / "dist" / "index.html").write_text("old-build", encoding="utf-8")
+        (tmp_path / "dist" / "build-info.json").write_text(
+            json.dumps(
+                {
+                    "build_id": "test-build" if build_identity == "current" else "old-build",
+                    "git_commit": "a" * 40,
+                }
+            ),
+            encoding="utf-8",
+        )
     source = PACKAGE_SCRIPT.read_text(encoding="utf-8")
     build_gate = source.split("if (-not $SkipBuild) {", 1)[1].split(
         'Write-Step "Prepare release directory', 1
     )[0]
     command = (
         "$ErrorActionPreference='Stop'; $SkipBuild=$false; "
+        "$releaseName='test-build'; $verifiedSourceCommit='" + "a" * 40 + "'; "
         "$projectRoot=$env:MEDQC_BUILD_TEST_ROOT; "
         "function Write-Step {} "
         f"function npx {{ $global:LASTEXITCODE={build_exit} }} "
@@ -64,7 +80,7 @@ def test_customer_build_failure_cannot_package_stale_dist(tmp_path, build_exit, 
         ["powershell", "-NoProfile", "-NonInteractive", "-Command", command],
         capture_output=True, text=True, env=environment,
     )
-    if build_exit or not has_dist:
+    if build_exit or not has_dist or build_identity == "stale":
         assert result.returncode != 0
         assert "READY_TO_COPY" not in result.stdout
     else:

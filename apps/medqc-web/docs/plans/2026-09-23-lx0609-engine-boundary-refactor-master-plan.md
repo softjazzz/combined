@@ -14,7 +14,7 @@
 
 2026-09-25 阶段 B/D 再补隔离 PostgreSQL 的正式 Worker 纵向用例：新进程从 PG 冻结任务表领取原始 001，以合成空来源执行并在同一事务边界保存/读回一条 Canonical `data_gap`；与三轮双进程争领、旧代次拒绝合跑 4/4。细节及限制见[隔离 PG 验收](../acceptance/2026-09-25-original-engine-isolated-pg-attempts.md)。真实客户部署、临床来源和模型费用仍未验收。
 
-2026-09-25 再补[解压包跨进程恢复演练](../acceptance/2026-09-25-original-engine-package-restart.md)：以 `71f347e3a` 干净源码重新打包、解压，确认前后端构建身份一致，包内后端原始 001 排队任务可跨进程完成并读回 Canonical；已领取任务进程退出、续约过期后受控失败且费用观测标记未知。属于本机 SQLite/合成病例技术验证；客户机启动、PG、模型及临床保护集仍未验收。发布脚本另有 Windows PowerShell 5.1 解析故障，已单独记录。
+2026-09-25 再补[解压包跨进程恢复演练](../acceptance/2026-09-25-original-engine-package-restart.md)：以 `71f347e3a` 干净源码重新打包、解压，确认前后端构建身份一致，包内后端原始 001 排队任务可跨进程完成并读回 Canonical；已领取任务进程退出、续约过期后受控失败且费用观测标记未知。属于本机 SQLite/合成病例技术验证；客户机启动、PG、模型及临床保护集仍未验收。其后已修复发布脚本的 Windows PowerShell 5.1 解析问题及指南中的无效 `-SkipBuild` 命令；仅完成解析/门禁验证，未用 5.1 完整打包。
 
 2026-09-25 最新接续：原始004合成 Canonical 现已通过隔离 SQLite→测试 FastAPI 挂载的正式质控路由→Vite 代理→实际 V5 页面，浏览器未拦截 API；latest 与任务详情同一结果，页面状态、结论、建议一致。可复现脚本和边界见[真实 HTTP 技术回读](../acceptance/2026-09-25-original-engine-live-http-v5.md)。认证与病历列表仍使用合成桩，未运行完整生产后端或客户 PostgreSQL，A/B/C/D 整体 goal 保持 active。
 
