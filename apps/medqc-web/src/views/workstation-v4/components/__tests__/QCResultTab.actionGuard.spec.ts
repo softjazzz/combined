@@ -1,4 +1,4 @@
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import QCResultTab from '../QCResultTab.vue'
@@ -255,13 +255,17 @@ describe('QCResultTab 结算质控失败不得渲染绿色通过', () => {
 
   it('runAllQC 中控费 409 失败时三个页签都不显示绿色通过', async () => {
     getMock.mockRejectedValue({ response: { status: 404 } })
-    postMock.mockImplementation((url: string) =>
-      String(url).includes('/settlement/')
-        ? Promise.reject({
-            response: { status: 409, data: { detail: '结算清单身份不唯一，请指定机构号' } },
-          })
-        : Promise.resolve({ data: { data: {} } }),
-    )
+    postMock.mockImplementation((url: string) => {
+      const target = String(url)
+      if (target.includes('/settlement/')) {
+        return Promise.reject({
+          response: { status: 409, data: { detail: '结算清单身份不唯一，请指定机构号' } },
+        })
+      }
+      return target.includes('formal-qc/validate')
+        ? Promise.resolve({ data: { data: { results: [], persistence: {}, passed: 5, total_rules: 5 } } })
+        : Promise.resolve({ data: { data: { rule_issues: [], llm_issues: [] } } })
+    })
     const wrapper = mountAllQc()
 
     await runAllQC(wrapper)
@@ -273,5 +277,201 @@ describe('QCResultTab 结算质控失败不得渲染绿色通过', () => {
       expect(wrapper.text()).toContain('开始分析')
       expect(wrapper.text()).not.toContain('未发现质控问题')
     }
+  })
+})
+
+const FORM_QC_URL = '/api/v1/qc/formal-qc/validate'
+const CODING_QC_URL = '/api/v1/qc/coding-qc/check'
+
+function mountFormQc() {
+  return mount(QCResultTab, {
+    props: {
+      activeTab: 'form',
+      patientId: 'patient-1',
+      visitId: 'visit-1',
+      frontpage: { sex: '男' },
+    },
+    global: {
+      stubs: {
+        'a-button': ButtonStub,
+        'a-spin': true,
+        CheckCircleOutlined: iconStub,
+      },
+    },
+  })
+}
+
+function mountCodingQc() {
+  return mount(QCResultTab, {
+    props: {
+      activeTab: 'coding',
+      patientId: 'patient-1',
+      visitId: 'visit-1',
+    },
+    global: {
+      stubs: {
+        'a-button': ButtonStub,
+        'a-spin': true,
+        CheckCircleOutlined: iconStub,
+      },
+    },
+  })
+}
+
+async function runFormQC(wrapper: ReturnType<typeof mountFormQc>) {
+  await (wrapper.vm as unknown as { runFormQC: () => Promise<void> }).runFormQC()
+}
+
+async function runCodingQC(wrapper: ReturnType<typeof mountCodingQc>) {
+  await (wrapper.vm as unknown as { runCodingQC: () => Promise<void> }).runCodingQC()
+}
+
+const FORM_SUCCESS = { data: { data: { results: [], persistence: {}, passed: 5, total_rules: 5 } } }
+const CODING_SUCCESS = { data: { data: { rule_issues: [], llm_issues: [] } } }
+
+describe('QCResultTab 首页/编码单独执行失败不得渲染绿色通过', () => {
+  beforeEach(() => {
+    postMock.mockReset()
+    getMock.mockReset()
+    successMock.mockReset()
+    errorMock.mockReset()
+    getMock.mockRejectedValue({ response: { status: 404 } })
+  })
+
+  it.each([409, 503])('首页质控 HTTP %s 失败后回到未分析态，不显示“未发现质控问题”', async (status) => {
+    postMock.mockRejectedValue({ response: { status, data: { detail: '首页质控执行失败' } } })
+    const wrapper = mountFormQc()
+
+    await runFormQC(wrapper)
+
+    expect(postMock).toHaveBeenCalledTimes(1)
+    expect(postMock.mock.calls[0][0]).toBe(FORM_QC_URL)
+    expect(wrapper.text()).not.toContain('未发现质控问题')
+    expect(wrapper.text()).toContain('开始分析')
+    expect(successMock).not.toHaveBeenCalled()
+    expect(errorMock).toHaveBeenCalledWith('首页质控执行失败')
+  })
+
+  it.each([409, 503])('编码质控 HTTP %s 失败后回到未分析态，不显示“未发现质控问题”', async (status) => {
+    postMock.mockRejectedValue({ response: { status, data: { detail: '编码质控病例身份无法唯一确定' } } })
+    const wrapper = mountCodingQc()
+
+    await runCodingQC(wrapper)
+
+    expect(postMock).toHaveBeenCalledTimes(1)
+    expect(postMock.mock.calls[0][0]).toBe(CODING_QC_URL)
+    expect(wrapper.text()).not.toContain('未发现质控问题')
+    expect(wrapper.text()).toContain('开始分析')
+    expect(successMock).not.toHaveBeenCalled()
+    expect(errorMock).toHaveBeenCalledWith('编码质控执行失败')
+  })
+
+  it('接口 200 但缺少统一数据体时首页质控失败关闭', async () => {
+    postMock.mockResolvedValue({ data: { success: true } })
+    const wrapper = mountFormQc()
+
+    await runFormQC(wrapper)
+
+    expect(wrapper.text()).not.toContain('未发现质控问题')
+    expect(successMock).not.toHaveBeenCalled()
+    expect(errorMock).toHaveBeenCalledWith('首页质控执行失败')
+  })
+
+  it.each([
+    ['缺少 results 数组', { total_rules: 5, passed: 5 }],
+    ['results 类型不是数组', { results: { 0: 'x' } }],
+  ])('首页质控 200 但 %s 时失败关闭', async (_case, body) => {
+    postMock.mockResolvedValue({ data: { data: body } })
+    const wrapper = mountFormQc()
+
+    await runFormQC(wrapper)
+
+    expect(wrapper.text()).not.toContain('未发现质控问题')
+    expect(wrapper.text()).toContain('开始分析')
+    expect(successMock).not.toHaveBeenCalled()
+    expect(errorMock).toHaveBeenCalledWith('首页质控执行失败')
+  })
+
+  it('接口 200 但缺少统一数据体时编码质控失败关闭', async () => {
+    postMock.mockResolvedValue({ data: { success: true } })
+    const wrapper = mountCodingQc()
+
+    await runCodingQC(wrapper)
+
+    expect(wrapper.text()).not.toContain('未发现质控问题')
+    expect(successMock).not.toHaveBeenCalled()
+    expect(errorMock).toHaveBeenCalledWith('编码质控执行失败')
+  })
+
+  it.each([
+    ['缺少 rule_issues/llm_issues 数组', { total_issues: 0 }],
+    ['缺少 llm_issues 数组', { rule_issues: [] }],
+    ['rule_issues 类型不是数组', { rule_issues: 'oops', llm_issues: [] }],
+  ])('编码质控 200 但 %s 时失败关闭', async (_case, body) => {
+    postMock.mockResolvedValue({ data: { data: body } })
+    const wrapper = mountCodingQc()
+
+    await runCodingQC(wrapper)
+
+    expect(wrapper.text()).not.toContain('未发现质控问题')
+    expect(wrapper.text()).toContain('开始分析')
+    expect(successMock).not.toHaveBeenCalled()
+    expect(errorMock).toHaveBeenCalledWith('编码质控执行失败')
+  })
+
+  it('失败后回到未分析态，可重试并显示“未发现质控问题”', async () => {
+    postMock
+      .mockRejectedValueOnce({ response: { status: 503, data: { detail: '首页质控执行失败' } } })
+      .mockResolvedValueOnce(FORM_SUCCESS)
+    const wrapper = mountFormQc()
+
+    await runFormQC(wrapper)
+    expect(wrapper.text()).toContain('开始分析')
+
+    await (wrapper.vm as unknown as { startCurrentTab: () => void }).startCurrentTab()
+    await flushPromises()
+
+    expect(postMock).toHaveBeenCalledTimes(2)
+    expect(wrapper.text()).toContain('未发现质控问题')
+    expect(successMock).toHaveBeenCalled()
+  })
+
+  it('编码质控超时后规则层降级成功，仍标记为已分析', async () => {
+    postMock
+      .mockRejectedValueOnce({ code: 'ECONNABORTED' })
+      .mockResolvedValueOnce(CODING_SUCCESS)
+    const wrapper = mountCodingQc()
+
+    await runCodingQC(wrapper)
+
+    expect(postMock).toHaveBeenCalledTimes(2)
+    expect(postMock.mock.calls[1][1]).toMatchObject({ skip_llm: true })
+    expect(wrapper.text()).toContain('未发现质控问题')
+    expect(successMock).toHaveBeenCalled()
+    expect(errorMock).not.toHaveBeenCalled()
+  })
+
+  it('编码质控超时且降级重试也失败时不得显示绿色通过', async () => {
+    postMock
+      .mockRejectedValueOnce({ code: 'ECONNABORTED' })
+      .mockRejectedValueOnce({ response: { status: 503, data: { detail: '编码质控数据读取失败' } } })
+    const wrapper = mountCodingQc()
+
+    await runCodingQC(wrapper)
+
+    expect(postMock).toHaveBeenCalledTimes(2)
+    expect(wrapper.text()).not.toContain('未发现质控问题')
+    expect(wrapper.text()).toContain('开始分析')
+    expect(successMock).not.toHaveBeenCalled()
+    expect(errorMock).toHaveBeenCalledWith('编码质控执行失败')
+  })
+
+  it('首页质控成功且无问题时仍显示“未发现质控问题”', async () => {
+    postMock.mockResolvedValue(FORM_SUCCESS)
+    const wrapper = mountFormQc()
+
+    await runFormQC(wrapper)
+
+    expect(wrapper.text()).toContain('未发现质控问题')
   })
 })

@@ -574,7 +574,10 @@ async function fetchCodingQCFromBackend() {
   const useVisitIdMode = !!props.visitId
   const fp = props.frontpage
 
-  if (!useVisitIdMode && !fp) return { issues: [], persistence: null }
+  if (!useVisitIdMode && !fp) {
+    // 缺少就诊号与首页数据时无任何可用输入，必须失败关闭，不能返回空结果被当成通过。
+    throw new Error('编码质控缺少就诊号与首页数据')
+  }
 
   let payload: any
   if (useVisitIdMode) {
@@ -622,7 +625,11 @@ async function fetchCodingQCFromBackend() {
   const executeRequest = async (requestPayload: Record<string, any>, timeout = 30000) => {
     const resp = await apiClient.post('/api/v1/qc/coding-qc/check', requestPayload, { timeout })
     const data = resp.data?.data
-    if (!data) return { issues: [], persistence: null, degraded: false }
+    // 统一信封缺失或 rule_issues/llm_issues 非数组都属后端异常，必须失败关闭，不能伪装成“未发现问题”。
+    if (!data) throw new Error('编码质控响应缺少数据体')
+    if (!Array.isArray(data.rule_issues) || !Array.isArray(data.llm_issues)) {
+      throw new Error('编码质控响应 issues 字段异常')
+    }
 
     const codingIssues: QCIssue[] = []
     let idx = 0
@@ -683,11 +690,11 @@ async function fetchCodingQCFromBackend() {
         return degradedResult
       } catch (retryErr) {
         console.error('后端编码质控降级调用失败', retryErr)
-        return { issues: [], persistence: null, degraded: false }
+        throw retryErr
       }
     }
     console.error('后端编码质控调用失败', err)
-    return { issues: [], persistence: null, degraded: false }
+    throw err
   }
 }
 
@@ -699,7 +706,9 @@ async function fetchFrontpageQCFromBackend(frontpage: Record<string, any>) {
   }
   const resp = await apiClient.post('/api/v1/qc/formal-qc/validate', payload, { timeout: 30000 })
   const data = resp.data?.data
-  if (!data) return { issues: [], persistence: null, passed: 0, total: 0 }
+  // 统一信封缺失或 results 非数组都属后端异常，必须失败关闭，不能伪装成“未发现问题”。
+  if (!data) throw new Error('首页质控响应缺少数据体')
+  if (!Array.isArray(data.results)) throw new Error('首页质控响应 results 字段异常')
 
   const issues: QCIssue[] = (data.results || []).map((item: any, index: number) => ({
     id: `form-${index + 1}`,
@@ -799,6 +808,7 @@ async function runFormQC() {
   if (!fpData) return
 
   formQCLoading.value = true
+  let succeeded = false
   try {
     const result = await fetchFrontpageQCFromBackend(fpData)
     const kept = issues.value.filter((i) => i.category !== 'form')
@@ -807,17 +817,20 @@ async function runFormQC() {
     emit('issues-change', kept.slice())
     message.success(buildPersistenceMessage('form', result.persistence))
     notifyPersistence('form', result.persistence)
+    succeeded = true
   } catch (err) {
     console.error('首页质控引擎异常', err)
     message.error('首页质控执行失败')
   } finally {
     formQCLoading.value = false
-    formAnalyzed.value = true
+    // 仅成功才算已分析；409/503 等失败必须回到未分析态，否则会渲染绿色“未发现质控问题”假通过。
+    formAnalyzed.value = succeeded
   }
 }
 
 async function runCodingQC() {
   codingQCLoading.value = true
+  let succeeded = false
   try {
     const kept = issues.value.filter((i) => i.category !== 'coding')
     const result = await fetchCodingQCFromBackend()
@@ -826,12 +839,13 @@ async function runCodingQC() {
     emit('issues-change', kept.slice())
     message.success(buildPersistenceMessage('coding', result.persistence))
     notifyPersistence('coding', result.persistence)
+    succeeded = true
   } catch (err) {
     console.error('编码质控异常', err)
     message.error('编码质控执行失败')
   } finally {
     codingQCLoading.value = false
-    codingAnalyzed.value = true
+    codingAnalyzed.value = succeeded
   }
 }
 
@@ -852,7 +866,6 @@ async function runCostQC() {
     message.error(describeSettlementQcError(err, '控费监测执行失败'))
   } finally {
     costQCLoading.value = false
-    // 仅成功才算已分析；409/503 等失败必须回到未分析态，否则会渲染绿色“未发现质控问题”假通过。
     costAnalyzed.value = succeeded
   }
 }
