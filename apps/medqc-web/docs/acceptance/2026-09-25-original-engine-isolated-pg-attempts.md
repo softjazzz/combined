@@ -24,3 +24,9 @@ py -3.10 -m pytest tests/integration/test_luxian_0609_isolated_postgres_attempts
 ## 2026-09-25 公开读取与导出补证
 
 在上述正式 Worker 用例中，继续用同一条 PG Canonical Envelope 读取单病历 latest DTO，并从任务导出 CSV、XLSX、HTML。测试逐项比较原始 001 的 `data_gap` 状态、`authoritative_time_missing` 原因码、结论、建议和证据；CSV/XLSX 的全部明细相同，HTML 保留客户可见结论与建议且不展示内部原因码。问题明细为空，因为资料不足不是确定问题。病历引用在 Envelope 顶层和项目中由同一住院三坐标生成。隔离 PG 文件 **4/4 通过**；另有 SQLite 公开读取/反馈相邻测试 **132/132 通过**。本例证据为空，只能证明各出口没有捏造证据；非空证据仍须用独立病例验证。
+
+## 2026-09-25 取消与进度的强制交错
+
+新增 `backend/tests/integration/test_luxian_0609_isolated_postgres_cancel_race.py`，仍只允许显式连接本机隔离 `127.0.0.1:15432`。Worker 在独立事务持有目标行并写入新 Token/进度，取消线程已进入 PostgreSQL 锁等待后才提交 Worker；测试分别覆盖父任务、活跃子任务和 `queued→running`。现行取消读行锁保留已提交的 Token/进度，并把运行中取消标记为成本观测不完整；迟到进度、旧代次和父任务刷新不能覆盖取消终态。
+
+同一固定交错中临时把 `Select.with_for_update` 改为空操作，等价重现修复前这两处无锁 SELECT：父/子任务的新进度被旧摘要覆盖，`queued→running` 漏标成本未知。这是 SQL 等价证伪，没有切换到旧提交执行。子代理与主协调分别在各自新建的 PostgreSQL 18 临时集群运行，新文件 **7/7**、连同既有隔离 PG 文件共 **11/11** 通过；无专用环境变量时新文件全部跳过。仍未观测真实模型提供方在取消瞬间的最终费用，也未验证客户机的 PostgreSQL 部署。

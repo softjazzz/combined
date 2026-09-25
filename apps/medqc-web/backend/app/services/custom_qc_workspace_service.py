@@ -4933,6 +4933,19 @@ class CustomQCWorkspaceService:
                 if attempt_filters_json is None and rule_set_key != LUXIAN_0609_RULE_SET_KEY:
                     self.refresh_parent_batch_job(parent_job_id=parent_job_id)
                 return False if attempt_filters_json is not None else None
+            # 原始 0609 叶子根任务没有父任务刷新兜底：本次尝试的正式结果必须整体替换
+            # 该 root 的旧 Canonical，否则上一代已交付、本次未交付（含本次零交付）的病历
+            # 仍会被读取为当前交付。父任务 root 的整体替换由 refresh_parent_batch_job
+            # 负责，子任务保持逐病例写入，其它规则集不变；即使调用方本次不写
+            # Canonical（persist_record_envelopes=False）也不得留下上一代正式结果。
+            if rule_set_key == LUXIAN_0609_RULE_SET_KEY and not parent_job_id:
+                session.execute(
+                    self._record_result_envelope_table.delete().where(and_(
+                        self._record_result_envelope_table.c.root_job_id == job_id,
+                        self._record_result_envelope_table.c.created_by == row.get("created_by"),
+                        self._record_result_envelope_table.c.rule_set_key == LUXIAN_0609_RULE_SET_KEY,
+                    ))
+                )
             envelope_items: Sequence[Dict[str, Any]] = (
                 items if persist_record_envelopes and not execution_failed else ()
             )
