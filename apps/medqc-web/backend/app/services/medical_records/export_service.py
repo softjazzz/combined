@@ -6,9 +6,9 @@ import logging
 from contextlib import contextmanager
 from typing import Any, Callable
 
-from sqlalchemy import MetaData, func, select, text
+from sqlalchemy import MetaData, Table, func, select, text
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from ...database.connection import Base, engine
 from ...database.models.cdm import MedicalRecordFrontpage, Diagnosis, MrSurgery, MrCost
@@ -43,6 +43,37 @@ def _source_session(session_factory: Callable[[], Any]) -> Any:
     except SQLAlchemyError as exc:
         logger.warning("病案首页取数失败: %s", type(exc).__name__)
         raise MedicalRecordsSourceUnavailableError("病案首页取数失败，请稍后重试") from exc
+
+
+# 病案首页身份与三张明细表的权威 schema。
+# 连接 search_path 以 public 打头（见 core/supabase_client），public 同名影子表会被优先命中；
+# 首页四表必须显式限定 cdm，只有这一条主链。
+CDM_SCHEMA = "cdm"
+
+_cdm_tables: dict[str, Table] = {}
+_cdm_sources: dict[str, Any] = {}
+
+
+def _cdm_table(model: Any) -> Table:
+    """``model`` 在 ``CDM_SCHEMA`` 下的等价表；列定义与 ORM 完全一致，按表名缓存。"""
+
+    table_name = model.__table__.name
+    table = _cdm_tables.get(table_name)
+    if table is None:
+        table = model.__table__.to_metadata(MetaData(), schema=CDM_SCHEMA)
+        _cdm_tables[table_name] = table
+    return table
+
+
+def _frontpage_source(model: Any) -> Any:
+    """首页四表的 ORM 取数源：始终钉到 ``cdm.<table>``，不回落裸表名。"""
+
+    table_name = model.__table__.name
+    source = _cdm_sources.get(table_name)
+    if source is None:
+        source = aliased(model, _cdm_table(model), adapt_on_names=True)
+        _cdm_sources[table_name] = source
+    return source
 
 
 def get_schema(metadata: MetaData | None = None) -> dict[str, Any]:
@@ -189,22 +220,23 @@ def _resolve_frontpage_row(
 ) -> Any:
     """在病案首页上锁定唯一三坐标。
 
+    - 首页表始终显式读 ``cdm.mr``，不经连接 search_path 猜测 public 同名影子表。
     - 显式机构：按 ``institute_id + patient_id + visit_id`` 精确匹配，只接受唯一一行。
     - 省略机构：仅在 patient+visit 唯一时可读；命中多行（含跨机构同号）按定位不唯一拒绝，
       不使用 ``.first()`` 猜首行。
-    - 首页表名由现有连接的 search_path 解析（ORM 未显式限定 schema），未解析到唯一机构坐标的行一律拒绝。
+    - 未解析到唯一机构坐标的行一律拒绝。
     """
 
     filters: dict[str, Any] = {"patient_id": patient_id, "visit_id": visit_id}
     if institute_id:
         filters["institute_id"] = institute_id
-    rows = session.query(MedicalRecordFrontpage).filter_by(**filters).all()
+    rows = session.query(_frontpage_source(MedicalRecordFrontpage)).filter_by(**filters).all()
     if not rows:
         raise MedicalRecordsNotFoundError("未找到病案首页数据")
     if len(rows) > 1:
         raise MedicalRecordsConflictError("病案首页定位不唯一，请指定机构号后重试")
     row = rows[0]
-    if not str(getattr(row, "institute_id", "") or "").strip():
+    if not str(_row_value(row, "institute_id") or "").strip():
         raise MedicalRecordsConflictError("病案首页缺少机构坐标，无法安全读取")
     return row
 
@@ -240,11 +272,11 @@ def get_frontpage_sheet(
 ) -> dict[str, Any]:
     """按 ``institute_id + patient_id + visit_id`` 三坐标读取病案首页。
 
-    - 首页身份只认现有连接 search_path 解析到的病案首页表（ORM 未显式限定 schema）上的唯一三坐标；
+    - 首页身份只认权威表 ``cdm.mr``（显式限定 schema，不经连接 search_path 解析）上的唯一三坐标；
       机构可显式给出，也可在 patient+visit 唯一时推断。
     - 省略机构而命中多机构/多行时按定位不唯一拒绝，不用 ``.first()`` 猜首行；显式空机构直接拒绝。
-    - 关联的诊断/手术/费用与原生的 ``mr_diagnosis`` / ``discharge_record_diagnosis`` 兜底
-      一律钉在解析出的同一机构上（原生语句显式限定 ``cdm.``），禁止跨机构混读。
+    - 关联的诊断/手术/费用同样显式限定 ``cdm``，与原生的 ``mr_diagnosis`` / ``discharge_record_diagnosis``
+      兜底（原生语句显式限定 ``cdm.``）一并钉在解析出的同一机构上，禁止跨机构混读。
     """
 
     session_factory = session_factory or _session_factory
@@ -272,9 +304,10 @@ def get_frontpage_sheet(
         if not str(basic.get("institute_county_desc") or "").strip():
             basic["institute_county_desc"] = DEFAULT_HOSPITAL_NAME
 
-        diag_rows = session.query(Diagnosis).filter_by(
-            **coordinates
-        ).order_by(Diagnosis.diagnosis_type, Diagnosis.diagnosis_no).all()
+        diag_source = _frontpage_source(Diagnosis)
+        diag_rows = session.query(diag_source).filter_by(**coordinates).order_by(
+            diag_source.diagnosis_type, diag_source.diagnosis_no
+        ).all()
         diagnoses = []
         main_diag_seen = False
         for diag in diag_rows:
@@ -365,9 +398,8 @@ def get_frontpage_sheet(
                 row["source_table"] = "mr_diagnosis"
                 pathology_info = _build_pathology_info(row)
 
-        surg_rows = session.query(MrSurgery).filter_by(
-            **coordinates
-        ).all()
+        surg_source = _frontpage_source(MrSurgery)
+        surg_rows = session.query(surg_source).filter_by(**coordinates).all()
         surgeries = []
         for surg in surg_rows:
             surgeries.append({
@@ -385,7 +417,8 @@ def get_frontpage_sheet(
                 "main_surgery_sign": surg.main_surgery_sign,
             })
 
-        cost_rows = session.query(MrCost).filter_by(**coordinates).all()
+        cost_source = _frontpage_source(MrCost)
+        cost_rows = session.query(cost_source).filter_by(**coordinates).all()
         if len(cost_rows) > 1:
             raise MedicalRecordsConflictError("病案首页费用记录不唯一，无法安全读取")
         cost_row = cost_rows[0] if cost_rows else None

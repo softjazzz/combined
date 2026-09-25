@@ -363,6 +363,11 @@ const codingAnalyzed = ref(false)
 const costAnalyzed = ref(false)
 /** 当前就诊是否已成功读到服务端正式首页；草稿存在不代表可以执行正式首页质控。 */
 const officialFrontpageAvailable = ref(false)
+/**
+ * 跨病例 / 跨机构迟到响应代次：三坐标身份变化即递增，先发出的请求回来后不得写入结果，
+ * 否则旧病例的迟到结果会覆盖新病例的 issues 与“已分析”态，造成串号或假通过。
+ */
+let requestEpoch = 0
 
 const qcTabs = [
   {
@@ -751,12 +756,18 @@ async function fetchCodingQCFromBackend() {
   }
 }
 
-async function fetchFrontpageQCFromBackend(frontpage: Record<string, any>) {
-  const payload = {
+/**
+ * 正式首页质控新合同：只上送三坐标，由服务端按 patient_id/visit_id 自行重读正式首页；
+ * GET 拿到的正文不再作为判定输入，避免客户端草稿或陈旧正文被当成正式首页。
+ * 机构号有则传、无则省略，绝不编造机构。
+ */
+async function fetchFrontpageQCFromBackend() {
+  const payload: Record<string, string> = {
     patient_id: props.patientId || '',
     visit_id: props.visitId || '',
-    frontpage,
   }
+  const instituteId = typeof props.instituteId === 'string' ? props.instituteId.trim() : ''
+  if (instituteId) payload.institute_id = instituteId
   const resp = await apiClient.post('/api/v1/qc/formal-qc/validate', payload, { timeout: 30000 })
   const data = resp.data?.data
   if (!data) throw new Error('首页质控响应缺少数据体')
@@ -840,10 +851,13 @@ async function loadFormalFrontpage(): Promise<FormalFrontpageLoad> {
   if (!props.patientId || !props.visitId) {
     return { frontpage: null, error: '缺少患者或就诊标识，无法读取正式首页' }
   }
+  const epoch = requestEpoch
   try {
     const resp = await apiClient.get(
       buildFormalFrontpageSheetUrl(props.patientId, props.visitId, props.instituteId),
     )
+    // 迟到的旧病例响应不得改写当前就诊的门槛状态，交由调用方按代次作废。
+    if (epoch !== requestEpoch) return { frontpage: null, error: null }
     const frontpage = resp.data ?? null
     officialFrontpageAvailable.value = Boolean(frontpage)
     if (frontpage) return { frontpage, error: null }
@@ -869,7 +883,10 @@ function dropCategoryIssues(category: 'form' | 'coding' | 'cost') {
 }
 
 async function runFormQC() {
+  const epoch = requestEpoch
   const loaded = await loadFormalFrontpage()
+  // 身份已换代：本次是旧病例的迟到响应，不得写入结果或状态。
+  if (epoch !== requestEpoch) return
   if (!loaded.frontpage) {
     // 正式首页不可得：失败关闭，绝不用草稿或空首页执行并落库正式首页质控。
     dropCategoryIssues('form')
@@ -881,7 +898,8 @@ async function runFormQC() {
   formQCLoading.value = true
   let succeeded = false
   try {
-    const result = await fetchFrontpageQCFromBackend(loaded.frontpage)
+    const result = await fetchFrontpageQCFromBackend()
+    if (epoch !== requestEpoch) return
     const kept = issues.value.filter((i) => i.category !== 'form')
     kept.push(...result.issues)
     issues.value = kept
@@ -890,22 +908,27 @@ async function runFormQC() {
     notifyPersistence('form', result.persistence)
     succeeded = true
   } catch (err) {
+    if (epoch !== requestEpoch) return
     console.error('首页质控引擎异常', err)
     // 本次没有产生首页结果：清掉上一次的 form 旧结果，避免被当成本次结论。
     dropCategoryIssues('form')
     message.error('首页质控执行失败')
   } finally {
-    formQCLoading.value = false
-    // 仅成功才算已分析，否则会渲染成绿色的未发现质控问题假通过。
-    formAnalyzed.value = succeeded
+    if (epoch === requestEpoch) {
+      formQCLoading.value = false
+      // 仅成功才算已分析，否则会渲染成绿色的未发现质控问题假通过。
+      formAnalyzed.value = succeeded
+    }
   }
 }
 
 async function runCodingQC() {
+  const epoch = requestEpoch
   codingQCLoading.value = true
   let succeeded = false
   try {
     const result = await fetchCodingQCFromBackend()
+    if (epoch !== requestEpoch) return
     if (result.failed) {
       // 编码引擎调用失败：本次没有编码结果，清掉旧结果并失败关闭，不能显示成未发现问题。
       dropCategoryIssues('coding')
@@ -920,20 +943,25 @@ async function runCodingQC() {
     notifyPersistence('coding', result.persistence)
     succeeded = true
   } catch (err) {
+    if (epoch !== requestEpoch) return
     console.error('编码质控异常', err)
     dropCategoryIssues('coding')
     message.error('编码质控执行失败')
   } finally {
-    codingQCLoading.value = false
-    codingAnalyzed.value = succeeded
+    if (epoch === requestEpoch) {
+      codingQCLoading.value = false
+      codingAnalyzed.value = succeeded
+    }
   }
 }
 
 async function runCostQC() {
+  const epoch = requestEpoch
   costQCLoading.value = true
   let succeeded = false
   try {
     const result = await fetchCostQCFromBackend()
+    if (epoch !== requestEpoch) return
     if (result.failed) {
       // 结算质控没有真正执行：清掉旧结果并失败关闭，不能显示成未发现问题。
       dropCategoryIssues('cost')
@@ -948,27 +976,34 @@ async function runCostQC() {
     notifyPersistence('cost', result.persistence)
     succeeded = true
   } catch (err) {
+    if (epoch !== requestEpoch) return
     console.error('控费监测异常', err)
     dropCategoryIssues('cost')
     message.error('控费监测执行失败')
   } finally {
-    costQCLoading.value = false
-    costAnalyzed.value = succeeded
+    if (epoch === requestEpoch) {
+      costQCLoading.value = false
+      costAnalyzed.value = succeeded
+    }
   }
 }
 
 async function runAllQC() {
+  const epoch = requestEpoch
   formQCLoading.value = true
   codingQCLoading.value = true
   costQCLoading.value = true
   let succeeded = false
   try {
     const loaded = await loadFormalFrontpage()
+    if (epoch !== requestEpoch) return
     const [formResult, codingResult, costResult] = await Promise.all([
-      loaded.frontpage ? fetchFrontpageQCFromBackend(loaded.frontpage) : Promise.resolve(null),
+      // 正式首页仍先走 GET 门槛：读不到就跳过首页段，绝不退回草稿当正式首页质控。
+      loaded.frontpage ? fetchFrontpageQCFromBackend() : Promise.resolve(null),
       fetchCodingQCFromBackend(),
       fetchCostQCFromBackend(),
     ])
+    if (epoch !== requestEpoch) return
     const newIssues: QCIssue[] = [
       ...(formResult?.issues || []),
       ...codingResult.issues,
@@ -991,20 +1026,23 @@ async function runAllQC() {
     if (formResult) message.success('全部质控执行完成，结果已保存')
     succeeded = true
   } catch (error) {
+    if (epoch !== requestEpoch) return
     console.error('质控引擎执行异常', error)
     issues.value = []
     emit('issues-change', [])
     formAnalyzed.value = false
     message.error('全部质控执行失败')
   } finally {
-    formQCLoading.value = false
-    codingQCLoading.value = false
-    costQCLoading.value = false
-    if (!succeeded) {
-      // 整体失败时本次没有任何可用结果：三段都必须回到未分析态，不能假通过。
-      formAnalyzed.value = false
-      codingAnalyzed.value = false
-      costAnalyzed.value = false
+    if (epoch === requestEpoch) {
+      formQCLoading.value = false
+      codingQCLoading.value = false
+      costQCLoading.value = false
+      if (!succeeded) {
+        // 整体失败时本次没有任何可用结果：三段都必须回到未分析态，不能假通过。
+        formAnalyzed.value = false
+        codingAnalyzed.value = false
+        costAnalyzed.value = false
+      }
     }
   }
 }
@@ -1034,12 +1072,17 @@ watch(
 )
 
 watch(
-  () => props.visitId,
+  () => [props.patientId, props.visitId, props.instituteId],
   () => {
+    // 三坐标身份变化即换代次：在途请求的迟到响应不得再写入结果或渲染“已分析”。
+    requestEpoch += 1
     officialFrontpageAvailable.value = false
     formAnalyzed.value = false
     codingAnalyzed.value = false
     costAnalyzed.value = false
+    formQCLoading.value = false
+    codingQCLoading.value = false
+    costQCLoading.value = false
     issues.value = []
     emit('issues-change', [])
   },

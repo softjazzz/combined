@@ -2,9 +2,11 @@
 
 from typing import Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
 from ..core.pagination import page_param, page_size_param
+from ..core.permissions import PermissionAction, ResourceType, require_permission
+from ..core.security import require_roles
 from ..services.medical_records.export_service import (
     get_frontpage_sheet,
     get_schema,
@@ -36,6 +38,7 @@ async def get_table_data_api(
 
 
 @router.get("/frontpage-sheet/{patient_id}/{visit_id}")
+@require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.READ)
 async def get_frontpage_sheet_api(
     patient_id: str,
     visit_id: str,
@@ -43,6 +46,7 @@ async def get_frontpage_sheet_api(
         None,
         description="机构号；缺省时仅在 patient+visit 唯一时可读，命中多机构按定位不唯一拒绝",
     ),
+    current_user: dict = Depends(require_roles("admin", "qc_manager")),
 ):
     try:
         return get_frontpage_sheet(patient_id, visit_id, institute_id=institute_id)

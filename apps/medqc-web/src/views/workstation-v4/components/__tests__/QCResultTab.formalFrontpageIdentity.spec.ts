@@ -145,18 +145,113 @@ describe('QCResultTab 正式首页身份与失败关闭', () => {
     expect(wrapper.text()).not.toContain('未发现质控问题')
   })
 
-  it('正式首页读取成功后才执行 formal-qc 并允许标记已分析', async () => {
+  it('正式首页读取成功后才执行 formal-qc，POST 只提交三坐标且不带 frontpage', async () => {
     getMock.mockResolvedValue({ data: OFFICIAL_SHEET })
     postMock.mockResolvedValue(FORM_SUCCESS)
     const wrapper = mountFormQc('hospital-1')
 
     await runFormQC(wrapper)
 
-    expect(postMock.mock.calls[0][1]).toMatchObject({
+    const body = postMock.mock.calls[0][1] as Record<string, unknown>
+    expect(body).toEqual({
       patient_id: 'patient-1',
       visit_id: 'visit-1',
-      frontpage: OFFICIAL_SHEET,
+      institute_id: 'hospital-1',
     })
+    expect(body).not.toHaveProperty('frontpage')
+    expect(wrapper.text()).toContain('未发现质控问题')
+  })
+
+  it('机构号缺失时 POST 省略 institute_id，不编造机构', async () => {
+    getMock.mockResolvedValue({ data: OFFICIAL_SHEET })
+    postMock.mockResolvedValue(FORM_SUCCESS)
+    const wrapper = mountFormQc('   ')
+
+    await runFormQC(wrapper)
+
+    const body = postMock.mock.calls[0][1] as Record<string, unknown>
+    expect(body).toEqual({ patient_id: 'patient-1', visit_id: 'visit-1' })
+    expect(body).not.toHaveProperty('institute_id')
+    expect(body).not.toHaveProperty('frontpage')
+  })
+
+  it('formal-qc 返回 200 但缺少统一数据体时失败关闭，不渲染绿色通过', async () => {
+    getMock.mockResolvedValue({ data: OFFICIAL_SHEET })
+    postMock.mockResolvedValue({ data: { success: true } })
+    const wrapper = mountFormQc('hospital-1')
+
+    await runFormQC(wrapper)
+
+    expect(successMock).not.toHaveBeenCalled()
+    expect(errorMock).toHaveBeenCalledWith('首页质控执行失败')
+    expect(wrapper.text()).not.toContain('未发现质控问题')
+    expect(wrapper.text()).toContain('开始分析')
+  })
+
+  it('跨病例迟到响应不得覆盖新病例的 issues 与“已分析”态', async () => {
+    getMock.mockResolvedValue({ data: OFFICIAL_SHEET })
+    let resolveStale: (value: unknown) => void = () => {}
+    const staleResponse = new Promise((resolve) => {
+      resolveStale = resolve
+    })
+    postMock.mockImplementationOnce(() => staleResponse)
+    const wrapper = mountFormQc('hospital-1')
+
+    const pending = runFormQC(wrapper)
+    await flushPromises()
+
+    // 病例切换：旧请求仍在途，代次已递增。
+    await wrapper.setProps({ patientId: 'patient-2', visitId: 'visit-2' })
+
+    resolveStale({
+      data: {
+        data: {
+          results: [{ severity: 'error', message: '旧病例迟到问题', field_name: 'sex' }],
+          persistence: {},
+          passed: 0,
+          total_rules: 1,
+        },
+      },
+    })
+    await pending
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('旧病例迟到问题')
+    expect(wrapper.text()).not.toContain('未发现质控问题')
+    expect(wrapper.text()).toContain('开始分析')
+    expect(successMock).not.toHaveBeenCalled()
+  })
+
+  it('跨机构迟到响应不得覆盖新机构的“已分析”态', async () => {
+    getMock.mockResolvedValue({ data: OFFICIAL_SHEET })
+    let resolveStale: (value: unknown) => void = () => {}
+    const staleResponse = new Promise((resolve) => {
+      resolveStale = resolve
+    })
+    postMock.mockImplementationOnce(() => staleResponse)
+    const wrapper = mountFormQc('hospital-1')
+
+    const pending = runFormQC(wrapper)
+    await flushPromises()
+
+    await wrapper.setProps({ instituteId: 'hospital-2' })
+
+    resolveStale(FORM_SUCCESS)
+    await pending
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('未发现质控问题')
+    expect(wrapper.text()).toContain('开始分析')
+    expect(successMock).not.toHaveBeenCalled()
+  })
+
+  it('正式首页读取成功后才执行 formal-qc 并允许标记已分析（对照组）', async () => {
+    getMock.mockResolvedValue({ data: OFFICIAL_SHEET })
+    postMock.mockResolvedValue(FORM_SUCCESS)
+    const wrapper = mountFormQc('hospital-1')
+
+    await runFormQC(wrapper)
+
     expect(wrapper.text()).toContain('未发现质控问题')
   })
 

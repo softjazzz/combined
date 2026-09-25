@@ -2,22 +2,20 @@
 
 合同（主协调 Agent 给定）：
 
-- ``get_frontpage_sheet(patient_id, visit_id, institute_id=None)`` 在首页表上只认唯一三坐标
-  ``institute_id + patient_id + visit_id``（首页表本身由连接的 search_path 解析，见下）；
+- ``get_frontpage_sheet(patient_id, visit_id, institute_id=None)`` 在 ``cdm.mr`` 上只认唯一三坐标
+  ``institute_id + patient_id + visit_id``；
 - 首页缺失 → 404；省略机构而 patient+visit 命中多机构/多行 → 409，绝不 ``.first()`` 猜首个；
 - 显式机构只返回该机构首页（缺失即 404，不回退到别家）；显式空机构 → 400；
 - Diagnosis / MrSurgery / MrCost 与原生 ``cdm.mr_diagnosis`` / ``cdm.discharge_record_diagnosis``
   兜底一律钉在解析出的同一三坐标上，禁止跨机构同号混读；
-- 原生兜底读取失败：诊断事实来源按“取数不可用”收口（503），补充来源（病理）不影响首页核心事实；
+- 原生兜底读取失败：包括病理在内的来源均按“取数不可用”收口（503）；
 - API ``institute_id`` 查询参数可选，错误固定脱敏（不回显患者/就诊/机构标识、SQL 或连接细节）。
 
 本文件证明什么、不证明什么：
 
-- 证明：ORM 取数路径的三坐标过滤 —— 内存 SQLite（main 表）上真实执行被测代码，覆盖跨机构同号
+- 证明：ORM 取数路径在 SQLite 附加的 ``cdm`` schema 上执行三坐标过滤，覆盖跨机构同号
   的显式隔离、省略机构 409、缺失 404 / 空机构 400；
-- 不证明：首页表落在哪个 schema。ORM ``__tablename__`` 不带 schema，实现只依赖连接
-  ``search_path``，所以 SQLite 用例只能说明“按三坐标过滤正确”，不能说明“只认 cdm.mr”，
-  也不能替代对 ``DB_SEARCH_PATH`` 的核查；
+- 独立 schema 反例还需验证同名 ``main`` 毒行不会被读取；本文件不替代真实 PostgreSQL 验收；
 - 显式 ``cdm.`` 限定只在原生 SQL 兜底上被断言（语句文本 + 绑定参数，未在 SQLite 执行）。
 
 不连业务库的做法：
@@ -40,6 +38,7 @@ import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -59,6 +58,7 @@ from app.database.models.cdm import (  # noqa: E402
 )
 from app.routers import medical_records_export as export_router  # noqa: E402
 from app.routers.medical_records_common import raise_medical_records_http_error  # noqa: E402
+from app.core.security import get_current_user  # noqa: E402
 from app.services.medical_records import export_service  # noqa: E402
 from app.services.medical_records.errors import MedicalRecordsNotFoundError  # noqa: E402
 
@@ -167,9 +167,8 @@ def _seed_rows() -> list[Any]:
 def sheet_db(monkeypatch: pytest.MonkeyPatch) -> Any:
     """把实现的默认会话钳到内存 SQLite（真实执行 SQL），并返回已注入的 engine。
 
-    边界：表建在 SQLite 的 main 库；ORM ``__tablename__`` 不带 schema，用例只证明三坐标过滤，
-    不证明 schema 归属（那由连接的 search_path 决定）。这里仅建空的 cdm.mr_diagnosis
-    供病理兜底查询；Postgres 专属的诊断排序语法由录制式 Session 检查参数合同。
+    四张 ORM 表建在附加的 ``cdm`` 库，与服务端取数合同一致；另建空的 cdm.mr_diagnosis
+    供病理兜底查询。Postgres 专属的诊断排序语法由录制式 Session 检查参数合同。
     任一实际兜底来源读取失败必须返回 503，不能把未知事实当空值。
     """
 
@@ -178,15 +177,17 @@ def sheet_db(monkeypatch: pytest.MonkeyPatch) -> Any:
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    Base.metadata.create_all(engine, tables=list(_SHEET_TABLES))
     with engine.begin() as connection:
         connection.exec_driver_sql("ATTACH DATABASE ':memory:' AS cdm")
+    cdm_engine = engine.execution_options(schema_translate_map={None: "cdm"})
+    Base.metadata.create_all(cdm_engine, tables=list(_SHEET_TABLES))
+    with engine.begin() as connection:
         connection.exec_driver_sql(
             "CREATE TABLE cdm.mr_diagnosis ("
             "institute_id TEXT, patient_id TEXT, visit_id TEXT, "
             "is_deleted TEXT, diagnosis_type TEXT, diagnosis_code TEXT, diagnosis_id TEXT)"
         )
-    session_local = sessionmaker(bind=engine)
+    session_local = sessionmaker(bind=cdm_engine)
     with session_local() as session:
         session.add_all(_seed_rows())
         session.commit()
@@ -204,6 +205,9 @@ def api_client() -> Any:
 
     app = FastAPI()
     app.include_router(export_router.router)
+    app.dependency_overrides[get_current_user] = lambda: {
+        "id": "test-admin", "email": "test-admin@example.invalid", "roles": ["admin"]
+    }
     with TestClient(app) as client:
         yield client
 
@@ -378,6 +382,20 @@ def test_api_institute_id_is_optional_and_conflict_is_desensitized(
     assert UNKNOWN not in missing.text
 
 
+def test_api_rejects_qc_staff_until_institute_authorization_exists(
+    api_client: Any, sheet_db: Any
+) -> None:
+    api_client.app.dependency_overrides[get_current_user] = lambda: {
+        "id": "test-staff", "email": "test-staff@example.invalid", "roles": ["qc_staff"]
+    }
+
+    response = api_client.get(
+        f"/frontpage-sheet/{PATIENT_MULTI}/{VISIT_MULTI}?institute_id={INST_A}"
+    )
+    assert response.status_code == 403
+    assert all(token not in response.text for token in (PATIENT_MULTI, VISIT_MULTI, INST_A))
+
+
 # ---------------------------------------------------------------------------
 # 原生兜底：三坐标参数化
 # ---------------------------------------------------------------------------
@@ -438,7 +456,8 @@ class _RecordingSession:
         return False
 
     def query(self, model: Any = None, *_args: Any, **_kwargs: Any) -> _Rows:
-        return _Rows([self._frontpage] if model is MedicalRecordFrontpage else [])
+        mapped_class = sa_inspect(model).mapper.class_ if model is not None else None
+        return _Rows([self._frontpage] if mapped_class is MedicalRecordFrontpage else [])
 
     def execute(self, statement: Any, params: Any = None) -> _Rows:
         self.native_statements.append((str(statement), dict(params or {})))

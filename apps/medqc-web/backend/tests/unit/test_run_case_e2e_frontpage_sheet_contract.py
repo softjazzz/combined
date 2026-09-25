@@ -1,10 +1,12 @@
-"""E2E 脚本「正式首页」读取合同 — 注入测试（不连库、不发真实请求、不写库）。
+"""E2E 脚本「正式首页」读取/质控合同 — 注入测试（不连库、不发真实请求、不写库）。
 
-覆盖两份脚本调用 ``GET /api/medical-records/frontpage-sheet`` 的方式：
+覆盖两份脚本的正式首页合同：
 
-- 有可信病例机构号时按三坐标追加 URL 编码的 ``institute_id``，缺失时不编造机构；
-- patient_id / visit_id 路径段逐段编码，避免 ``/``、``?``、``#`` 截断路由；
-- 401/403/404/409/503 等失败按阻断错误收口，不用 LLM 草稿顶替「正式首页」统计通过。
+- ``GET /api/medical-records/frontpage-sheet`` 只作读取门槛：有可信机构号时按三坐标追加 URL
+  编码的 ``institute_id``，缺失时不编造机构；patient_id / visit_id 路径段逐段编码，避免
+  ``/``、``?``、``#`` 截断路由；401/403/404/409/503 或空 200 按阻断错误收口。
+- ``POST /api/v1/qc/formal-qc/validate`` 只提交 ``patient_id``/``visit_id``（有可信机构号时附
+  ``institute_id``），由服务端自行重读正式首页后质控；不得把 GET 拿到的首页正文当判定载荷回传。
 
 运行：``cd backend; python -m pytest tests/unit/test_run_case_e2e_frontpage_sheet_contract.py``
 """
@@ -103,6 +105,9 @@ def _run_case_e2e_main(
     use_real_pg_snapshot: bool = False,
     pg_rows: dict[Any, list[Any]] | None = None,
     extra_argv: tuple[str, ...] = (),
+    formal_qc_status: int = 200,
+    formal_qc_data: Any = None,
+    formal_qc_posts: list[Any] | None = None,
 ) -> tuple[int, dict[str, Any], list[tuple[str, str]], list[Any]]:
     calls: list[tuple[str, str]] = []
     pg_calls: list[Any] = []
@@ -124,6 +129,23 @@ def _run_case_e2e_main(
                 # 故意带患者标识：用来证明它不会进入报告
                 return False, sheet_status, 1.0, {"detail": _LEAK_MARKER}, _LEAK_MARKER
             return True, sheet_status, 1.0, sheet_payload, ""
+        if path == "/api/v1/qc/formal-qc/validate":
+            # 只记录判定载荷（POST body），用来证明首页 POST 只交三坐标
+            if formal_qc_posts is not None:
+                formal_qc_posts.append(json_data)
+            if formal_qc_status >= 400:
+                return False, formal_qc_status, 1.0, {"detail": _LEAK_MARKER}, _LEAK_MARKER
+            data = formal_qc_data
+            if data is None:
+                data = {
+                    "total_rules": 10,
+                    "passed": 9,
+                    "failed": 1,
+                    "pass_rate": 90.0,
+                    "results": [{"rule_id": "R1"}],
+                    "persistence": {"qc_result_id": "q1"},
+                }
+            return True, 200, 1.0, {"success": True, "data": data, "trace_id": "t"}, ""
         return True, 200, 1.0, {}, ""
 
     monkeypatch.setattr(run_case_e2e.ApiClient, "request", fake_request)
@@ -219,6 +241,7 @@ def test_case_e2e_success_sends_institute_id_and_runs_formal_qc(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     payload = {"basic": {"name": "测试患者"}, "diagnoses": [], "surgeries": [], "cost": {}}
+    posts: list[Any] = []
 
     _exit_code, report, calls, _pg_calls = _run_case_e2e_main(
         monkeypatch,
@@ -226,25 +249,112 @@ def test_case_e2e_success_sends_institute_id_and_runs_formal_qc(
         sheet_status=200,
         sheet_payload=payload,
         extra_argv=("--institute-id", "SCPH"),
+        formal_qc_posts=posts,
     )
 
     assert ("GET", "/api/medical-records/frontpage-sheet/P1/V1?institute_id=SCPH") in calls
     assert any("formal-qc/validate" in path for _, path in calls)
     assert not any("正式首页读取失败" in item for item in report["final_status"]["errors"])
     assert report["case_meta"]["institute_id"] == "SCPH"
+    assert posts == [{"patient_id": "P1", "visit_id": "V1", "institute_id": "SCPH"}]
 
 
 def test_case_e2e_without_institute_id_keeps_backend_compat_path(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     payload = {"basic": {"name": "测试患者"}, "diagnoses": [], "surgeries": [], "cost": {}}
+    posts: list[Any] = []
 
     _exit_code, report, calls, _pg_calls = _run_case_e2e_main(
-        monkeypatch, tmp_path, sheet_status=200, sheet_payload=payload
+        monkeypatch,
+        tmp_path,
+        sheet_status=200,
+        sheet_payload=payload,
+        formal_qc_posts=posts,
     )
 
     assert ("GET", "/api/medical-records/frontpage-sheet/P1/V1") in calls
     assert report["case_meta"]["institute_id"] == ""
+    assert posts == [{"patient_id": "P1", "visit_id": "V1"}], "机构号缺失时不得编造 institute_id"
+
+
+def test_case_e2e_formal_qc_post_body_is_identity_only(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """POST 判定载荷只能有三坐标，不得回传 GET 拿到的首页正文。"""
+
+    marker = "首页正文明文-不得回传"
+    sheet_payload = {
+        "basic": {"name": marker, "institute_marker": marker},
+        "diagnoses": [{"diagnosis_name": marker}],
+        "surgeries": [],
+        "cost": {"total_cost": marker},
+    }
+    posts: list[Any] = []
+
+    _run_case_e2e_main(
+        monkeypatch,
+        tmp_path,
+        sheet_status=200,
+        sheet_payload=sheet_payload,
+        extra_argv=("--institute-id", "SCPH"),
+        formal_qc_posts=posts,
+    )
+
+    assert len(posts) == 1, "首页质控必须只提交一次三坐标 POST"
+    body = posts[0]
+    assert body == {"patient_id": "P1", "visit_id": "V1", "institute_id": "SCPH"}
+    assert "frontpage" not in body
+    assert "frontpage" not in json.dumps(body, ensure_ascii=False).lower()
+    assert marker not in json.dumps(body, ensure_ascii=False), "GET 正文不得进入判定载荷"
+
+
+@pytest.mark.parametrize("status_code", [401, 403, 404, 409, 503])
+def test_case_e2e_formal_qc_post_failure_is_blocking(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, status_code: int
+) -> None:
+    """读取门槛通过后，服务端重读质控 4xx/5xx 仍必须阻断，不得当作“无问题”。"""
+
+    sheet_payload = {"basic": {"name": "测试患者"}, "diagnoses": [], "surgeries": [], "cost": {}}
+
+    exit_code, report, calls, _pg_calls = _run_case_e2e_main(
+        monkeypatch,
+        tmp_path,
+        sheet_status=200,
+        sheet_payload=sheet_payload,
+        extra_argv=("--institute-id", "SCPH"),
+        formal_qc_status=status_code,
+    )
+
+    assert ("GET", "/api/medical-records/frontpage-sheet/P1/V1?institute_id=SCPH") in calls
+    assert any("formal-qc/validate" in path for _, path in calls)
+    assert report["final_status"]["level"] == "fail"
+    assert report["final_status"]["passed"] is False
+    assert exit_code == 1
+    assert any("首页形式质控未产出可判定结果" in item for item in report["final_status"]["errors"])
+    assert report["frontpage_qc_summary"]["available"] is False
+    assert _LEAK_MARKER not in json.dumps(report, ensure_ascii=False), "阻断错误不得回显服务端 detail"
+
+
+def test_case_e2e_formal_qc_empty_200_body_is_not_a_pass(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """服务端重读后 200 但数据体为空：不得产出可当“通过”的质控摘要。"""
+
+    sheet_payload = {"basic": {"name": "测试患者"}, "diagnoses": [], "surgeries": [], "cost": {}}
+
+    exit_code, report, _calls, _pg_calls = _run_case_e2e_main(
+        monkeypatch,
+        tmp_path,
+        sheet_status=200,
+        sheet_payload=sheet_payload,
+        formal_qc_data={},
+    )
+
+    assert report["final_status"]["level"] == "fail"
+    assert exit_code == 1
+    assert report["frontpage_qc_summary"]["available"] is False
+    assert any("首页形式质控未产出可判定结果" in item for item in report["final_status"]["errors"])
 
 
 # ---------------------------------------------------------------------------
@@ -579,9 +689,9 @@ def _run_v4_persistence(
     institute_id: str = "SCPH",
     patient_id: str = "P1",
     visit_id: str = "V1",
-) -> tuple[dict[str, Any], dict[str, list[str]]]:
+) -> tuple[dict[str, Any], dict[str, list[Any]]]:
     monkeypatch.setattr(v4_e2e, "SessionLocal", lambda: _SeededSession({}))
-    captured: dict[str, list[str]] = {"gets": [], "posts": []}
+    captured: dict[str, list[Any]] = {"gets": [], "posts": [], "post_bodies": []}
 
     def fake_get(url: str, **_kwargs: Any) -> _FakeResponse:
         captured["gets"].append(url)
@@ -594,6 +704,7 @@ def _run_v4_persistence(
 
     def fake_post(url: str, **_kwargs: Any) -> _FakeResponse:
         captured["posts"].append(url)
+        captured["post_bodies"].append((url, _kwargs.get("json")))
         return _FakeResponse(200, {"data": {"persistence": {"qc_result_id": "q1"}}})
 
     monkeypatch.setattr(v4_e2e.requests, "get", fake_get)
@@ -671,6 +782,48 @@ def test_v4_without_institute_id_omits_query(monkeypatch: pytest.MonkeyPatch) ->
     assert "?" not in sheet_url
     assert sheet_url.endswith("/api/medical-records/frontpage-sheet/P1/V1")
     assert result["details"]["frontpage_sheet_request"]["institute_id_applied"] is False
+
+    form_post = next(
+        body for url, body in captured["post_bodies"] if "formal-qc/validate" in url
+    )
+    assert form_post == {"patient_id": "P1", "visit_id": "V1"}, "机构号缺失时不得编造 institute_id"
+
+
+def test_v4_formal_qc_post_body_is_identity_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    """正式首页质控 POST 只提交三坐标，GET 拿到的首页正文不得作为判定载荷回传。"""
+
+    marker = "首页正文明文-不得回传"
+    frontpage_payload = {
+        "basic": {"name": marker},
+        "diagnoses": [{"diagnosis_name": marker}],
+        "cost": {"total_cost": marker},
+    }
+
+    _result, captured = _run_v4_persistence(
+        monkeypatch,
+        frontpage_status=200,
+        frontpage_payload=frontpage_payload,
+        institute_id="SCPH",
+    )
+
+    form_posts = [
+        body for url, body in captured["post_bodies"] if "formal-qc/validate" in url
+    ]
+    assert form_posts == [{"patient_id": "P1", "visit_id": "V1", "institute_id": "SCPH"}]
+    body = form_posts[0]
+    assert "frontpage" not in body
+    assert marker not in json.dumps(body, ensure_ascii=False), "GET 正文不得进入判定载荷"
+
+
+def test_v4_frontpage_gate_failure_never_posts_formal_qc(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """读取门槛 409（跨机构归属不唯一）时不得提交首页质控，也不得回传 GET 正文。"""
+
+    _result, captured = _run_v4_persistence(monkeypatch, frontpage_status=409)
+
+    assert not any("formal-qc/validate" in url for url in captured["posts"])
+    assert not any("formal-qc/validate" in url for url, _body in captured["post_bodies"])
 
 
 # ---------------------------------------------------------------------------

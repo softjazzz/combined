@@ -94,7 +94,7 @@ describe('requestFrontpageQc 正式首页质控', () => {
     mocks.post.mockReset()
   })
 
-  it('成功路径：带机构号读取正式首页后再提交正式质控', async () => {
+  it('成功路径：GET 只作门槛，POST 只上送三坐标且不含 frontpage 正文', async () => {
     mocks.get.mockResolvedValue({ data: { basic_info: { patient_name: '甲' } } })
     mocks.post.mockResolvedValue({
       data: {
@@ -115,7 +115,37 @@ describe('requestFrontpageQc 正式首页质控', () => {
     expect(mocks.post).toHaveBeenCalledWith('/api/v1/qc/formal-qc/validate', {
       patient_id: 'patient-1',
       visit_id: 'visit-1',
-      frontpage: { basic_info: { patient_name: '甲' } },
+      institute_id: 'hospital-1',
+    })
+    // 服务端自行重读正式首页：GET 拿到的正文绝不能作为 POST 判定输入。
+    const postBody = mocks.post.mock.calls[0][1] as Record<string, unknown>
+    expect('frontpage' in postBody).toBe(false)
+  })
+
+  it('无机构号时 POST 省略 institute_id，不编造机构', async () => {
+    mocks.get.mockResolvedValue({ data: { basic_info: {} } })
+    mocks.post.mockResolvedValue({ data: { data: { results: [], persistence: null } } })
+
+    await requestFrontpageQc(buildRecord({ instituteId: undefined }))
+
+    expect(mocks.get).toHaveBeenCalledWith(
+      '/api/medical-records/frontpage-sheet/patient-1/visit-1',
+    )
+    const postBody = mocks.post.mock.calls[0][1] as Record<string, unknown>
+    expect(postBody).toEqual({ patient_id: 'patient-1', visit_id: 'visit-1' })
+    expect('institute_id' in postBody).toBe(false)
+  })
+
+  it('机构号含空白时先去空格再上送', async () => {
+    mocks.get.mockResolvedValue({ data: { basic_info: {} } })
+    mocks.post.mockResolvedValue({ data: { data: { results: [], persistence: null } } })
+
+    await requestFrontpageQc(buildRecord({ instituteId: '  hospital-9  ' }))
+
+    expect(mocks.post).toHaveBeenCalledWith('/api/v1/qc/formal-qc/validate', {
+      patient_id: 'patient-1',
+      visit_id: 'visit-1',
+      institute_id: 'hospital-9',
     })
   })
 
@@ -164,5 +194,23 @@ describe('requestFrontpageQc 正式首页质控', () => {
       '未找到正式首页数据，无法执行首页质控',
     )
     expect(mocks.post).not.toHaveBeenCalled()
+  })
+
+  it('200 但统一信封缺失：失败关闭，不报成零问题通过', async () => {
+    mocks.get.mockResolvedValue({ data: { basic_info: {} } })
+    mocks.post.mockResolvedValue({ data: {} })
+
+    await expect(requestFrontpageQc(buildRecord())).rejects.toThrow(
+      '首页质控响应异常，无法确认质控结果',
+    )
+  })
+
+  it('200 但 results 非数组：失败关闭，不报成零问题通过', async () => {
+    mocks.get.mockResolvedValue({ data: { basic_info: {} } })
+    mocks.post.mockResolvedValue({ data: { data: { results: null } } })
+
+    await expect(requestFrontpageQc(buildRecord())).rejects.toThrow(
+      '首页质控响应异常，无法确认质控结果',
+    )
   })
 })

@@ -105,7 +105,9 @@ export async function requestFrontpageQc(record: PatientRecord) {
   if (!record.patientId) {
     throw new Error('缺少 patient_id，无法执行首页质控')
   }
-  let frontpage: Record<string, any> | null = null
+  // GET 只作只读门槛：先确认该病例确有正式首页。读不到（404/409/503）一律失败关闭，
+  // 绝不把 LLM 草稿或空首页当成可质控对象；正文不再作为 POST 判定输入。
+  let officialSheet: Record<string, any> | null = null
   try {
     const { data } = await apiClient.get(
       buildFormalFrontpageSheetUrl(
@@ -114,24 +116,31 @@ export async function requestFrontpageQc(record: PatientRecord) {
         record.instituteId,
       ),
     )
-    frontpage = data ?? null
+    officialSheet = data ?? null
   } catch (error) {
     // 409/503 等正式源读取失败必须原样失败，不能退化成“无正式首页”再对草稿执行正式质控。
     throw new Error(describeFormalFrontpageSheetError(error, '读取正式首页数据失败'))
   }
-  if (!frontpage) {
+  if (!officialSheet) {
     throw new Error('未找到正式首页数据，无法执行首页质控')
   }
-  const { data } = await apiClient.post('/api/v1/qc/formal-qc/validate', {
+  // 正式质控新合同：只传三坐标，服务端自行重读正式首页；机构号有则传、无则省略，不编造机构。
+  const postBody: Record<string, string> = {
     patient_id: record.patientId,
     visit_id: record.visitId || record.id,
-    frontpage,
-  })
+  }
+  const instituteId = typeof record.instituteId === 'string' ? record.instituteId.trim() : ''
+  if (instituteId) postBody.institute_id = instituteId
+  const { data } = await apiClient.post('/api/v1/qc/formal-qc/validate', postBody)
   if (data?.success === false) {
     throw new Error(String(data?.error || data?.message || '首页质控执行失败'))
   }
-  const payload = data?.data || {}
-  const failedResults = Array.isArray(payload?.results) ? payload.results : []
+  const payload = data?.data
+  // 畸形 200（缺统一信封或 results 非数组）必须失败关闭，不能报成“零问题通过”。
+  if (!payload || !Array.isArray(payload.results)) {
+    throw new Error('首页质控响应异常，无法确认质控结果')
+  }
+  const failedResults = payload.results
   const highRiskCount = failedResults.filter(
     (item: any) => String(item?.severity || '').toLowerCase() === 'error',
   ).length

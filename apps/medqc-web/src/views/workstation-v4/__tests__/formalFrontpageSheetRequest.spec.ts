@@ -89,7 +89,7 @@ describe('requestFrontpageQc 正式首页读取', () => {
     postMock.mockReset()
   })
 
-  it('有可信选中行机构号时携带编码后的 institute_id 查询参数', async () => {
+  it('机构号非空时 GET 消歧，POST 只提交三坐标：含 institute_id、不含 frontpage', async () => {
     getMock.mockResolvedValue({ data: { basic_info: {} } })
     postMock.mockResolvedValue({
       data: { success: true, data: { results: [], failed: 0, persistence: { id: 'p-1' } } },
@@ -101,16 +101,22 @@ describe('requestFrontpageQc 正式首页读取', () => {
     expect(url.pathname).toBe(SHEET_PATH)
     expect(url.searchParams.get('institute_id')).toBe('机构 A/1&x=2')
     expect(postMock.mock.calls[0][0]).toBe('/api/v1/qc/formal-qc/validate')
-    expect(postMock.mock.calls[0][1]).toMatchObject({ patient_id: 'P-1', visit_id: 'V-1' })
+    const body = postMock.mock.calls[0][1] as Record<string, unknown>
+    expect(body).toEqual({ patient_id: 'P-1', visit_id: 'V-1', institute_id: '机构 A/1&x=2' })
+    expect(body).not.toHaveProperty('frontpage')
   })
 
-  it('机构号缺失时保持旧的无机构调用兼容', async () => {
+  it('机构号缺失时 GET 无机构参数，POST 省略 institute_id 且不含 frontpage', async () => {
     getMock.mockResolvedValue({ data: { basic_info: {} } })
     postMock.mockResolvedValue({ data: { success: true, data: { results: [], failed: 0 } } })
 
     await requestFrontpageQc(record({ instituteId: undefined }))
 
     expect(getMock).toHaveBeenCalledWith(SHEET_PATH)
+    const body = postMock.mock.calls[0][1] as Record<string, unknown>
+    expect(body).toEqual({ patient_id: 'P-1', visit_id: 'V-1' })
+    expect(body).not.toHaveProperty('frontpage')
+    expect(body).not.toHaveProperty('institute_id')
   })
 
   it('409 归属歧义时原样失败，不再提交正式质控', async () => {
@@ -134,5 +140,29 @@ describe('requestFrontpageQc 正式首页读取', () => {
 
     await expect(requestFrontpageQc(record())).rejects.toThrow('未找到正式首页数据，无法执行首页质控')
     expect(postMock).not.toHaveBeenCalled()
+  })
+
+  it('POST 失败（503）时失败关闭，不产出可当作“已分析”的空结果', async () => {
+    getMock.mockResolvedValue({ data: { basic_info: {} } })
+    postMock.mockRejectedValue({
+      response: { status: 503, data: { detail: '首页质控或结果保存失败，请稍后重试' } },
+    })
+
+    await expect(requestFrontpageQc(record())).rejects.toBeDefined()
+  })
+
+  it('POST 返回 200 但缺少统一数据体时按失败关闭，不返回零问题结果', async () => {
+    getMock.mockResolvedValue({ data: { basic_info: {} } })
+    // 服务端自行重新读取首页后异常：success=true 却没有 data 数据体。
+    postMock.mockResolvedValue({ data: { success: true } })
+
+    await expect(requestFrontpageQc(record())).rejects.toThrow('首页质控响应缺少统一数据体')
+  })
+
+  it('POST 返回 200 但 results 非数组时按失败关闭', async () => {
+    getMock.mockResolvedValue({ data: { basic_info: {} } })
+    postMock.mockResolvedValue({ data: { success: true, data: { results: { 0: 'x' } } } })
+
+    await expect(requestFrontpageQc(record())).rejects.toThrow('首页质控响应缺少统一数据体')
   })
 })

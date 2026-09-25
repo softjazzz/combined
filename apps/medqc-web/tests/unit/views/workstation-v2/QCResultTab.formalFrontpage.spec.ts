@@ -89,7 +89,7 @@ describe('QCResultTab 首页质控只认正式首页', () => {
     mocks.warning.mockReset()
   })
 
-  it('读取到正式首页时带机构号请求，并把正式首页（而非草稿）提交正式质控', async () => {
+  it('GET 只作门槛，POST 只上送三坐标且不含 frontpage 正文', async () => {
     mocks.get.mockResolvedValue({ data: FORMAL })
     mocks.post.mockResolvedValue({
       data: { data: { results: [], passed: 12, total_rules: 12, persistence: null } },
@@ -104,9 +104,64 @@ describe('QCResultTab 首页质控只认正式首页', () => {
     expect(mocks.post).toHaveBeenCalledWith('/api/v1/qc/formal-qc/validate', {
       patient_id: 'patient-1',
       visit_id: 'visit-1',
-      frontpage: FORMAL,
+      institute_id: 'hospital-1',
     }, { timeout: 30000 })
+    // 服务端自行重读正式首页：GET 拿到的正文（更不是草稿）不能进 POST 判定输入。
+    const postBody = mocks.post.mock.calls[0][1] as Record<string, unknown>
+    expect('frontpage' in postBody).toBe(false)
     expect(mocks.error).not.toHaveBeenCalled()
+  })
+
+  it('无机构号时 POST 省略 institute_id，不编造机构', async () => {
+    mocks.get.mockResolvedValue({ data: FORMAL })
+    mocks.post.mockResolvedValue({ data: { data: { results: [], persistence: null } } })
+
+    const wrapper = mountTab({ instituteId: null })
+    await runFormQC(wrapper)
+
+    expect(mocks.get).toHaveBeenCalledWith('/api/medical-records/frontpage-sheet/patient-1/visit-1')
+    expect(mocks.post.mock.calls[0][1]).toEqual({
+      patient_id: 'patient-1',
+      visit_id: 'visit-1',
+    })
+  })
+
+  it('切换病例后，旧病例迟到的正式质控响应不得覆盖新病例结果', async () => {
+    let releaseOld: ((value: unknown) => void) | undefined
+    mocks.get.mockResolvedValue({ data: FORMAL })
+    mocks.post.mockImplementation((url: string) => {
+      if (String(url).includes('formal-qc/validate')) {
+        return new Promise((resolve) => {
+          releaseOld = resolve
+        })
+      }
+      return Promise.resolve({ data: { data: { results: [], persistence: null } } })
+    })
+
+    const wrapper = mountTab()
+    const inFlight = (wrapper.vm as unknown as { runFormQC: () => Promise<void> }).runFormQC()
+    await flushPromises()
+
+    // 正式质控仍挂起时切到另一病例：代次递增，旧响应回来必须作废。
+    await wrapper.setProps({ visitId: 'visit-2' })
+    await flushPromises()
+
+    releaseOld?.({
+      data: {
+        data: {
+          results: [{ severity: 'error', message: '旧病例的问题' }],
+          persistence: null,
+        },
+      },
+    })
+    await inFlight
+    await flushPromises()
+
+    expect(mocks.success).not.toHaveBeenCalled()
+    const emissions = wrapper.emitted('issues-change') as unknown[][]
+    const lastPayload = (emissions.at(-1)?.[0] || []) as Array<{ category: string }>
+    expect(lastPayload.some((issue) => issue.category === 'form')).toBe(false)
+    expectNotAnalyzed(wrapper)
   })
 
   it('409 归属不唯一：不提交正式质控，提示后端原因', async () => {

@@ -427,6 +427,28 @@ def _run_optional_baseline_checks(run_build: bool, run_verify_schema: bool) -> L
     return checks
 
 
+def build_frontpage_identity_payload(
+    patient_id: str,
+    visit_id: str,
+    institute_id: Optional[str] = None,
+) -> Dict[str, str]:
+    """正式首页质控 POST 新合同：只提交三坐标。
+
+    服务端按 ``patient_id``/``visit_id``（有可信机构号时附 ``institute_id``）自行重读正式
+    首页后质控；脚本不得把 GET 拿到的首页正文回传当判定载荷。机构号缺失时不编造，交由服务端
+    按唯一候选兼容或返回 409。
+    """
+
+    payload: Dict[str, str] = {
+        "patient_id": str(patient_id),
+        "visit_id": str(visit_id),
+    }
+    institute_key = str(institute_id).strip() if institute_id is not None else ""
+    if institute_key:
+        payload["institute_id"] = institute_key
+    return payload
+
+
 def _run_persistence_checks(
     base_url: str,
     timeout: int,
@@ -513,8 +535,8 @@ def _run_persistence_checks(
         "settlement": settlement_before,
     }
 
-    # 正式首页读取：有可信机构号时按三坐标带上 institute_id（URL 编码消歧），
-    # 401/403/404/409/503 等失败即“正式首页不可用”——只记阻断错误并跳过首页质控，
+    # 正式首页只读门槛：有可信机构号时按三坐标带上 institute_id（URL 编码消歧），
+    # 401/403/404/409/503 或空响应即“正式首页不可用”——只记阻断错误并跳过首页质控，
     # 绝不用 LLM 草稿 payload 顶替“正式首页”再统计持久化通过。
     institute_key = str(institute_id).strip() if institute_id is not None else ""
     sheet_query = f"?institute_id={quote(institute_key, safe='')}" if institute_key else ""
@@ -544,14 +566,14 @@ def _run_persistence_checks(
             blocking_errors.append("正式首页响应为空或非对象，无法执行首页质控持久化验收")
         else:
             frontpage_source_ok = True
+            # POST 新合同：只提交三坐标，服务端自行重读正式首页后质控；
+            # GET 正文只作只读门槛，绝不回传当质控判定载荷。
             frontpage_qc_resp = requests.post(
                 f"{base_url.rstrip('/')}/api/v1/qc/formal-qc/validate",
                 headers=headers,
-                json={
-                    "patient_id": patient_id,
-                    "visit_id": visit_id_discharged,
-                    "frontpage": frontpage_sheet_payload,
-                },
+                json=build_frontpage_identity_payload(
+                    patient_id, visit_id_discharged, institute_key
+                ),
                 timeout=timeout,
             )
             frontpage_qc_payload = frontpage_qc_resp.json() if frontpage_qc_resp.content else {}

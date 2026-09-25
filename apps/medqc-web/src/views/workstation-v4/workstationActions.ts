@@ -106,7 +106,9 @@ export async function requestFrontpageQc(record: PatientRecord) {
   if (!record.patientId) {
     throw new Error('缺少 patient_id，无法执行首页质控')
   }
-  let frontpage: Record<string, any> | null = null
+  // GET 仅作只读门槛：确认存在唯一正式首页。409/503 必须原样失败，
+  // 不能退化成“无正式首页”再去质控草稿或空首页。
+  let frontpageAvailable = false
   try {
     const { data } = await apiClient.get(
       buildFormalFrontpageSheetUrl(
@@ -115,30 +117,37 @@ export async function requestFrontpageQc(record: PatientRecord) {
         record.instituteId,
       ),
     )
-    frontpage = data ?? null
+    frontpageAvailable = Boolean(data)
   } catch (error) {
-    // 409/503 等读取失败必须原样失败，不能退化成“无正式首页”再去质控草稿或空首页。
     throw new Error(describeFormalFrontpageSheetError(error, '读取正式首页数据失败'))
   }
-  if (!frontpage) {
+  if (!frontpageAvailable) {
     throw new Error('未找到正式首页数据，无法执行首页质控')
   }
-  const { data } = await apiClient.post('/api/v1/qc/formal-qc/validate', {
+  // POST 新合同：只提交三坐标，服务端自行重新读取首页；
+  // 不再把 GET 拿到的 frontpage 正文当作判定输入，机构号有则不编造、无则省略。
+  const payload: Record<string, string> = {
     patient_id: record.patientId,
     visit_id: record.visitId || record.id,
-    frontpage,
-  })
+  }
+  const instituteId = typeof record.instituteId === 'string' ? record.instituteId.trim() : ''
+  if (instituteId) payload.institute_id = instituteId
+  const { data } = await apiClient.post('/api/v1/qc/formal-qc/validate', payload)
   if (data?.success === false) {
     throw new Error(String(data?.error || data?.message || '首页质控执行失败'))
   }
-  const payload = data?.data || {}
-  const failedResults = Array.isArray(payload?.results) ? payload.results : []
+  // 统一信封缺失或 results 非数组都属服务端异常：必须失败关闭，不能返回零问题结果被当成“已质控”。
+  const resultPayload = data?.data
+  if (!resultPayload || !Array.isArray(resultPayload.results)) {
+    throw new Error('首页质控响应缺少统一数据体')
+  }
+  const failedResults = resultPayload.results
   const highRiskCount = failedResults.filter(
     (item: any) => String(item?.severity || '').toLowerCase() === 'error',
   ).length
   return {
-    persistence: payload?.persistence || data?.persistence || null,
-    totalIssues: Number(payload?.failed || failedResults.length || 0),
+    persistence: resultPayload.persistence || data?.persistence || null,
+    totalIssues: Number(resultPayload.failed || failedResults.length || 0),
     highRiskCount,
   }
 }

@@ -333,6 +333,11 @@ const codingAnalyzed = ref(false)
 const costAnalyzed = ref(false)
 /** 当前就诊是否已成功读到服务端正式首页；草稿存在不代表可以执行正式首页质控。 */
 const officialFrontpageAvailable = ref(false)
+/**
+ * 跨病例 / 跨机构迟到响应代次：身份变化即递增，先发出的请求回来后不得写入结果，
+ * 否则旧病例的迟到结果会覆盖新病例的 issues 和“已分析”态，造成串号或假通过。
+ */
+let requestEpoch = 0
 
 const qcTabs = [
   {
@@ -704,12 +709,18 @@ async function fetchCodingQCFromBackend() {
   }
 }
 
-async function fetchFrontpageQCFromBackend(frontpage: Record<string, any>) {
-  const payload = {
+/**
+ * POST 新合同：只提交三坐标（patient_id / visit_id / 可选真实 institute_id），
+ * 服务端自行重新读取首页。不得把 GET 或草稿的 frontpage 正文当作判定输入，
+ * 机构号有则传、无则省略，绝不编造机构。
+ */
+async function fetchFrontpageQCFromBackend() {
+  const payload: Record<string, string> = {
     patient_id: props.patientId || '',
     visit_id: props.visitId || '',
-    frontpage,
   }
+  const instituteId = typeof props.instituteId === 'string' ? props.instituteId.trim() : ''
+  if (instituteId) payload.institute_id = instituteId
   const resp = await apiClient.post('/api/v1/qc/formal-qc/validate', payload, { timeout: 30000 })
   const data = resp.data?.data
   // 统一信封缺失或 results 非数组都属后端异常，必须失败关闭，不能伪装成“未发现问题”。
@@ -798,12 +809,15 @@ async function loadFrontpageData(): Promise<Record<string, any> | null> {
     officialFrontpageAvailable.value = false
     return null
   }
+  const epoch = requestEpoch
   // 先降级再请求：同一就诊先前读到正式首页、后续 GET 失败（409/503）时，
   // 不能保留上一次成功留下的“正式首页可用”，否则自动刷新会继续重跑并弹错。
   officialFrontpageAvailable.value = false
   const resp = await apiClient.get(
     buildFormalFrontpageSheetUrl(props.patientId, props.visitId, props.instituteId),
   )
+  // 迟到响应不得改写当前就诊的门槛状态：返回 null 交给调用方按失效处理。
+  if (epoch !== requestEpoch) return null
   officialFrontpageAvailable.value = Boolean(resp.data)
   return resp.data ?? null
 }
@@ -827,17 +841,20 @@ function dropFormIssues() {
 }
 
 async function runFormQC() {
+  const epoch = requestEpoch
   formQCLoading.value = true
   let succeeded = false
   try {
     const fpData = await loadFrontpageData()
+    if (epoch !== requestEpoch) return
     if (!fpData) {
       // 没有正式首页就没有可质控对象：失败关闭，不能拿 AI 草稿或空首页顶替。
       dropFormIssues()
       message.error('未找到正式首页数据，无法执行首页质控')
       return
     }
-    const result = await fetchFrontpageQCFromBackend(fpData)
+    const result = await fetchFrontpageQCFromBackend()
+    if (epoch !== requestEpoch) return
     const kept = issues.value.filter((i) => i.category !== 'form')
     kept.push(...result.issues)
     issues.value = kept
@@ -846,22 +863,27 @@ async function runFormQC() {
     notifyPersistence('form', result.persistence)
     succeeded = true
   } catch (err) {
+    if (epoch !== requestEpoch) return
     console.error('首页质控引擎异常', err)
     dropFormIssues()
     message.error(describeFrontpageQcError(err))
   } finally {
-    formQCLoading.value = false
-    // 仅成功才算已分析；404/409/503 等失败必须回到未分析态，否则会渲染绿色“未发现质控问题”假通过。
-    formAnalyzed.value = succeeded
+    if (epoch === requestEpoch) {
+      formQCLoading.value = false
+      // 仅成功才算已分析；404/409/503 等失败必须回到未分析态，否则会渲染绿色“未发现质控问题”假通过。
+      formAnalyzed.value = succeeded
+    }
   }
 }
 
 async function runCodingQC() {
+  const epoch = requestEpoch
   codingQCLoading.value = true
   let succeeded = false
   try {
     const kept = issues.value.filter((i) => i.category !== 'coding')
     const result = await fetchCodingQCFromBackend()
+    if (epoch !== requestEpoch) return
     kept.push(...result.issues)
     issues.value = kept
     emit('issues-change', kept.slice())
@@ -869,20 +891,25 @@ async function runCodingQC() {
     notifyPersistence('coding', result.persistence)
     succeeded = true
   } catch (err) {
+    if (epoch !== requestEpoch) return
     console.error('编码质控异常', err)
     message.error('编码质控执行失败')
   } finally {
-    codingQCLoading.value = false
-    codingAnalyzed.value = succeeded
+    if (epoch === requestEpoch) {
+      codingQCLoading.value = false
+      codingAnalyzed.value = succeeded
+    }
   }
 }
 
 async function runCostQC() {
+  const epoch = requestEpoch
   costQCLoading.value = true
   let succeeded = false
   try {
     const kept = issues.value.filter((i) => i.category !== 'cost')
     const result = await fetchCostQCFromBackend()
+    if (epoch !== requestEpoch) return
     kept.push(...result.issues)
     issues.value = kept
     emit('issues-change', kept.slice())
@@ -890,15 +917,19 @@ async function runCostQC() {
     notifyPersistence('cost', result.persistence)
     succeeded = true
   } catch (err) {
+    if (epoch !== requestEpoch) return
     console.error('控费监测异常', err)
     message.error(describeSettlementQcError(err, '控费监测执行失败'))
   } finally {
-    costQCLoading.value = false
-    costAnalyzed.value = succeeded
+    if (epoch === requestEpoch) {
+      costQCLoading.value = false
+      costAnalyzed.value = succeeded
+    }
   }
 }
 
 async function runAllQC() {
+  const epoch = requestEpoch
   formQCLoading.value = true
   codingQCLoading.value = true
   costQCLoading.value = true
@@ -908,6 +939,7 @@ async function runAllQC() {
     try {
       fpData = await loadFrontpageData()
     } catch (error) {
+      if (epoch !== requestEpoch) return
       // 首页读取失败必须按首页口径提示，不能被结算口径吞掉。
       console.error('首页质控引擎异常', error)
       issues.value = []
@@ -915,6 +947,7 @@ async function runAllQC() {
       message.error(describeFrontpageQcError(error))
       return
     }
+    if (epoch !== requestEpoch) return
     if (!fpData) {
       issues.value = []
       emit('issues-change', [])
@@ -923,10 +956,11 @@ async function runAllQC() {
       return
     }
     const [formResult, codingResult, costResult] = await Promise.all([
-      fetchFrontpageQCFromBackend(fpData),
+      fetchFrontpageQCFromBackend(),
       fetchCodingQCFromBackend(),
       fetchCostQCFromBackend(),
     ])
+    if (epoch !== requestEpoch) return
     const newIssues: QCIssue[] = [
       ...formResult.issues,
       ...codingResult.issues,
@@ -940,18 +974,21 @@ async function runAllQC() {
     message.success('全部质控执行完成，结果已保存')
     succeeded = true
   } catch (error) {
+    if (epoch !== requestEpoch) return
     console.error('质控引擎执行异常', error)
     issues.value = []
     emit('issues-change', [])
     message.error(describeSettlementQcError(error, '全部质控执行失败'))
   } finally {
-    formQCLoading.value = false
-    codingQCLoading.value = false
-    costQCLoading.value = false
-    // 用整体成功标志统一收口：任一环节失败（含结算 409）都不得标记已分析。
-    formAnalyzed.value = succeeded
-    codingAnalyzed.value = succeeded
-    costAnalyzed.value = succeeded
+    if (epoch === requestEpoch) {
+      formQCLoading.value = false
+      codingQCLoading.value = false
+      costQCLoading.value = false
+      // 用整体成功标志统一收口：任一环节失败（含结算 409）都不得标记已分析。
+      formAnalyzed.value = succeeded
+      codingAnalyzed.value = succeeded
+      costAnalyzed.value = succeeded
+    }
   }
 }
 
@@ -980,12 +1017,17 @@ watch(
 )
 
 watch(
-  () => props.visitId,
+  () => [props.patientId, props.visitId, props.instituteId],
   () => {
+    // 身份变化即换代次：在途请求的迟到响应不得再写入结果或渲染“已分析”。
+    requestEpoch += 1
     officialFrontpageAvailable.value = false
     formAnalyzed.value = false
     codingAnalyzed.value = false
     costAnalyzed.value = false
+    formQCLoading.value = false
+    codingQCLoading.value = false
+    costQCLoading.value = false
     issues.value = []
     emit('issues-change', [])
   },

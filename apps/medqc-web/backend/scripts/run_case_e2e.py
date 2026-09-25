@@ -105,6 +105,25 @@ def build_frontpage_sheet_path(
     return f"{path}?institute_id={quote(institute_key, safe='')}"
 
 
+# 正式首页质控 POST 新合同：只提交三坐标，不再把 GET 拿到的首页正文当作质控判定载荷。
+# 服务端按 patient_id/visit_id（有可信机构号时附 institute_id）自行重读正式首页后执行质控，
+# 因此脚本侧的失败关闭只能落在“读取门槛 + 服务端重读结果”上。institute_id 缺失时不编造，
+# 交由服务端按唯一候选兼容或返回 409；patient_id/visit_id 原样提交，参数化查询由服务端负责。
+def build_frontpage_identity_payload(
+    patient_id: str,
+    visit_id: str,
+    institute_id: Optional[str] = None,
+) -> Dict[str, str]:
+    payload: Dict[str, str] = {
+        "patient_id": str(patient_id),
+        "visit_id": str(visit_id),
+    }
+    institute_key = str(institute_id).strip() if institute_id is not None else ""
+    if institute_key:
+        payload["institute_id"] = institute_key
+    return payload
+
+
 # 正式首页失败原因只按状态码归类：不把服务端 detail/异常文本写进报告，
 # 避免患者/就诊/机构标识、SQL 或连接细节随报告外泄。
 _FRONTPAGE_SHEET_STATUS_REASON = {
@@ -508,28 +527,6 @@ def _build_mapping_checks(
     return checks, summary
 
 
-def _build_frontpage_qc_payload(render_data: Dict[str, Any]) -> Dict[str, Any]:
-    basic = render_data.get("basic") or {}
-    diagnoses = render_data.get("diagnoses") or []
-    surgeries = render_data.get("surgeries") or []
-    cost = render_data.get("cost") or {}
-    return {
-        "patient_name": basic.get("name"),
-        "sex": basic.get("sex"),
-        "age": basic.get("age_year"),
-        "id_card": basic.get("id_card_no"),
-        "admission_datetime": basic.get("admission_datetime"),
-        "discharge_datetime": basic.get("discharge_datetime"),
-        "admission_dept": basic.get("admission_dept_name"),
-        "discharge_dept": basic.get("discharge_dept_name"),
-        "discharge_method": basic.get("leaving_hospital_way"),
-        "diagnoses": diagnoses,
-        "surgeries": surgeries,
-        "total_cost": cost.get("total_cost"),
-        "self_pay": cost.get("self_pay"),
-    }
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description="运行 Mongo->PG->首页/医保质控 全链路单病例验收")
     parser.add_argument("--base-url", default="http://localhost:8001", help="后端 API 地址")
@@ -546,7 +543,7 @@ def main() -> int:
     parser.add_argument(
         "--institute-id",
         default="",
-        help="可信病例机构号；非空时按三坐标追加 institute_id 读取正式首页（缺失则不编造机构）",
+        help="可信病例机构号；非空时按三坐标追加 institute_id 读取/核实正式首页（缺失则不编造机构）",
     )
     parser.add_argument("--output-dir", default="reports/e2e", help="输出目录（相对 backend 根目录）")
     args = parser.parse_args()
@@ -645,7 +642,8 @@ def main() -> int:
     else:
         warnings.append("首次获取同步历史失败，跳过轮询")
 
-    # 5) 系统首页数据（正式三坐标读；有可信机构号时追加 institute_id 消歧）
+    # 5) 正式首页只读门槛：确认 patient+visit（有可信机构号时三坐标）存在唯一正式首页。
+    # GET 正文仅用于“是否存在”门槛与 Mongo/PG/Render 跨源对照，不作为首页质控判定载荷。
     sheet_path = build_frontpage_sheet_path(args.patient_id, args.visit_id, args.institute_id)
     ok_sheet, sheet_payload = run_step("frontpage_sheet", "GET", sheet_path, redact_error=True)
     sheet_step = steps[-1]
@@ -663,29 +661,39 @@ def main() -> int:
         else:
             errors.append("正式首页响应为空或非对象，无法作为正式首页验收输入")
 
-    # 6) 首页形式质控
+    # 6) 首页形式质控（POST 新合同）
+    # 只提交三坐标，由服务端自行重读正式首页后质控；GET 正文只作读取门槛与跨源对照，
+    # 绝不回传当质控判定载荷。服务端 4xx/5xx 或空数据体一律阻断，不得当作“无问题”通过。
     frontpage_qc_summary: Dict[str, Any] = {"available": False}
-    if frontpage_sheet_data:
-        qc_payload = _build_frontpage_qc_payload(frontpage_sheet_data)
+    frontpage_qc_ok = False
+    if frontpage_sheet_ok:
+        qc_identity = build_frontpage_identity_payload(
+            args.patient_id, args.visit_id, args.institute_id
+        )
         ok_fp_qc, fp_qc_resp = run_step(
             "frontpage_formal_qc",
             "POST",
             "/api/v1/qc/formal-qc/validate",
-            json_data={"frontpage": qc_payload},
+            json_data=qc_identity,
+            redact_error=True,
         )
-        if ok_fp_qc:
-            fp_data = _unwrap_data(fp_qc_resp) if isinstance(fp_qc_resp, dict) else {}
-            if isinstance(fp_data, dict):
-                frontpage_qc_summary = {
-                    "available": True,
-                    "total_rules": fp_data.get("total_rules"),
-                    "passed": fp_data.get("passed"),
-                    "failed": fp_data.get("failed"),
-                    "pass_rate": fp_data.get("pass_rate"),
-                    "failed_items": len(fp_data.get("results") or []),
-                }
+        qc_step = steps[-1]
+        fp_data = _unwrap_data(fp_qc_resp) if isinstance(fp_qc_resp, dict) else {}
+        if ok_fp_qc and isinstance(fp_data, dict) and fp_data:
+            frontpage_qc_ok = True
+            frontpage_qc_summary = {
+                "available": True,
+                "total_rules": fp_data.get("total_rules"),
+                "passed": fp_data.get("passed"),
+                "failed": fp_data.get("failed"),
+                "pass_rate": fp_data.get("pass_rate"),
+                "failed_items": len(fp_data.get("results") or []),
+            }
         else:
-            warnings.append("首页形式质控调用失败")
+            errors.append(
+                "首页形式质控未产出可判定结果"
+                f"（frontpage_formal_qc HTTP {qc_step.status_code}）"
+            )
     else:
         warnings.append("系统首页无数据，跳过首页形式质控")
 
@@ -757,10 +765,14 @@ def main() -> int:
     synced_records = _extract_trigger_synced(trigger_result) if ok_trigger else 0
     total_elapsed = round((time.perf_counter() - started_at) * 1000, 2)
 
-    hard_fail = any(not s.ok for s in steps if s.name in {"test_connections", "sync_preflight", "sync_trigger"})
-    if not frontpage_sheet_ok or pg_identity_error or not pg_snapshot.get("mr"):
-        # 正式首页不可用（含 401/403/404/409/503）或 PG 首页身份不唯一/缺失时整体判失败，
-        # 禁止草稿顶替、禁止猜首行、禁止把空快照算通过
+    hard_fail = any(
+        not s.ok
+        for s in steps
+        if s.name in {"test_connections", "sync_preflight", "sync_trigger", "frontpage_formal_qc"}
+    )
+    if not frontpage_sheet_ok or not frontpage_qc_ok or pg_identity_error or not pg_snapshot.get("mr"):
+        # 正式首页不可用（含 401/403/404/409/503）、服务端重读质控未产出可判定结果，
+        # 或 PG 首页身份不唯一/缺失时整体判失败：禁止草稿顶替、禁止猜首行、禁止把空快照算通过。
         hard_fail = True
     final_passed = (not hard_fail) and mapping_summary.get("critical_all_passed", False)
     final_level = "pass" if final_passed else "warn"

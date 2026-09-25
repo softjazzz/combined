@@ -6,12 +6,13 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional
 
 from fastapi import APIRouter, HTTPException, status, Query, Request, Depends
+from starlette.concurrency import run_in_threadpool
 
 from ..schemas.qc import QCResult, QCRule
 from ..services.qc_service import QCService
 from ..core.supabase_client import get_supabase, async_execute
 from ..core.response import success_response, paginated_response, get_trace_id, ErrorCode, StatusCode
-from ..core.security import get_current_user
+from ..core.security import get_current_user, require_roles
 from ..core.permissions import (
     require_permission,
     require_role,
@@ -30,6 +31,14 @@ from ..services.sc_rule_launch_tier import (
     load_sc_intrinsic_launch_tier_map,
     resolve_sc_intrinsic_launch_tier,
 )
+from ..services.medical_records.errors import (
+    MedicalRecordsConflictError,
+    MedicalRecordsNotFoundError,
+    MedicalRecordsSourceUnavailableError,
+    MedicalRecordsStorageError,
+    MedicalRecordsValidationError,
+)
+from ..services.medical_records.export_service import get_frontpage_sheet
 
 router = APIRouter(prefix="/api/v1/qc", tags=["qc"])
 service = QCService()
@@ -82,24 +91,21 @@ def _coding_issue_to_persistence_issue(issue: Dict[str, Any], fallback_category:
 
 
 def _build_formal_qc_persistence_result(
-    frontpage: Dict[str, Any],
+    sheet: Dict[str, Any],
     report: Any,
     payload: Dict[str, Any],
+    identity: VerifiedQCIdentity,
 ) -> Dict[str, Any]:
-    patient_id = (
-        str(payload.get("patient_id") or "")
-        or _extract_frontpage_value(frontpage, ("basic_info", "patient_id"), ("basic", "patient_id"), "patient_id")
-    )
-    visit_id = (
-        str(payload.get("visit_id") or "")
-        or _extract_frontpage_value(frontpage, ("hospitalization", "visit_id"), "visit_id", "case_id")
-    )
+    """把首页形式质控报告装配成现代落库载荷。
+
+    三坐标只取服务端核实的身份（``VerifiedQCIdentity``），不再从请求体或客户端
+    正文推断；结果顶层坐标与 metadata 必须与身份逐项一致，否则持久化层会拒绝现代写入。
+    机构名等科室事实取自服务端读到的首页 ``basic``，客户端 ``frontpage`` 正文不参与装配。
+    """
     department = _extract_frontpage_value(
-        frontpage,
-        ("hospitalization", "admission_dept"),
-        ("hospitalization", "discharge_dept"),
-        ("admission", "dept_name"),
-        "department",
+        sheet,
+        ("basic", "admission_dept_name"),
+        ("basic", "discharge_dept_name"),
     )
     score = round(report.passed / report.total_rules * 100, 1) if report.total_rules else 0.0
     issues = [
@@ -118,10 +124,11 @@ def _build_formal_qc_persistence_result(
     ]
     metadata = {
         "workflow_type": "frontpage",
-        "patient_id": patient_id,
-        "visit_id": visit_id,
+        "patient_id": identity.patient_id,
+        "visit_id": identity.visit_id,
+        "institute_id": identity.institute_id,
         "department": department,
-        "data_source": "frontpage_formal_qc",
+        "data_source": identity.source_key,
         "trigger_source": "workstation_v4",
         "categories": payload.get("categories") or [],
         "severities": payload.get("severities") or [],
@@ -131,10 +138,10 @@ def _build_formal_qc_persistence_result(
         },
     }
     return {
-        "record_id": f"frontpage::{visit_id or patient_id or uuid.uuid4().hex[:8]}",
+        "record_id": f"frontpage::{identity.visit_id}",
         "workflow_type": "frontpage",
-        "patient_id": patient_id,
-        "visit_id": visit_id,
+        "patient_id": identity.patient_id,
+        "visit_id": identity.visit_id,
         "overall_score": score,
         "overall_grade": _grade_from_score(score),
         "defect_count": len(issues),
@@ -682,63 +689,280 @@ from ..services.frontpage_formal_qc import FrontpageFormalQC, Category as FQCate
 
 _formal_qc_engine = FrontpageFormalQC()
 
+# 首页形式质控是现代质控结果来源之一（见 docs/plans/2026-09-24-v36-qc-case-identity-source-design.md）。
+_FORMAL_QC_SOURCE_KEY = "frontpage_formal_qc"
+_FORMAL_QC_WORKFLOW_TYPE = "frontpage_qc"
+# 本批临时限定：尚无用户-机构绑定，服务端按请求机构读取任意机构病例只能收窄到两个管理角色。
+# 与现代病例快照读取同边界；POST 不因 GET 已受限而放宽自身权限。
+_FORMAL_QC_VALIDATE_ROLES = ("admin", "qc_manager")
+_FORMAL_QC_INVALID_IDENTITY_DETAIL = "首页质控身份参数不合法，请核对机构号后重试"
+_FORMAL_QC_NOT_FOUND_DETAIL = "未找到该就诊的病案首页，无法执行首页质控"
+_FORMAL_QC_AMBIGUOUS_DETAIL = "病案首页身份无法唯一确定，请核对机构号后重试"
+_FORMAL_QC_SOURCE_UNAVAILABLE_DETAIL = "病案首页数据读取失败，请稍后重试"
+_FORMAL_QC_FAILURE_DETAIL = "首页质控执行或结果保存失败，请稍后重试"
+# 零规则不得以“通过”收尾：用户筛选致空按 422 明确告知，引擎未产出规则按 503 失败关闭。
+_FORMAL_QC_EMPTY_SCOPE_DETAIL = "所选筛选条件未匹配任何首页质控规则，未产生质控结果"
+_FORMAL_QC_PARTIAL_SCOPE_DETAIL = "正式首页质控需执行全部规则，局部筛选不能保存为病例结果"
+# 队列失败态只记录固定文案，不回显模型/数据库异常文本。
+_FORMAL_QC_QUEUE_FAILURE_MESSAGE = "frontpage_formal_qc_failed"
+
+
+class FormalQcIdentityError(RuntimeError):
+    """服务端读到的首页三坐标缺失或与请求坐标冲突。"""
+
+
+def _require_runnable_formal_report(report: Any, *, scope_filtered: bool) -> None:
+    """零规则或非预期报告结构不得继续落库，避免把“未执行任何规则”报告成通过。
+
+    - 报告结构不符合 ``total_rules/passed/failed/results`` 语义：固定 503；
+    - 用户筛选致零规则：固定 422（这是调用方参数问题，不是通过）；
+    - 引擎在未筛选时零规则：固定 503 失败关闭。
+    """
+
+    counts = [getattr(report, name, None) for name in ("total_rules", "passed", "failed")]
+    results = getattr(report, "results", None)
+    if any(not isinstance(value, int) for value in counts) or not isinstance(results, list):
+        logger.error("首页形式质控报告结构异常")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=_FORMAL_QC_FAILURE_DETAIL,
+        )
+    if counts[0] > 0:
+        return
+    if scope_filtered:
+        # 用户筛选致零规则是调用方参数问题，明确 422，不当作通过。
+        raise HTTPException(
+            status_code=422,
+            detail=_FORMAL_QC_EMPTY_SCOPE_DETAIL,
+        )
+    logger.error("首页形式质控未产出任何规则")
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail=_FORMAL_QC_FAILURE_DETAIL,
+    )
+
+
+def _verified_formal_qc_identity(
+    sheet: Any,
+    *,
+    patient_id: str,
+    visit_id: str,
+    institute_id: Optional[str],
+) -> VerifiedQCIdentity:
+    """在服务端读到的首页 ``basic`` 上核实三坐标。
+
+    - 请求里的 patient/visit（以及显式机构）只用于核对，不构成身份来源；
+    - ``basic`` 三坐标任一缺失说明该行无法安全归属；
+    - 与请求坐标不一致说明读到的不只是被请求的那一份首页，一律拒绝而不是按客户端坐标改写。
+    """
+
+    basic = sheet.get("basic") if isinstance(sheet, dict) else None
+    if not isinstance(basic, dict):
+        raise FormalQcIdentityError("frontpage sheet missing basic section")
+    resolved = {
+        name: str(basic.get(name) or "").strip()
+        for name in ("institute_id", "patient_id", "visit_id")
+    }
+    if not all(resolved.values()):
+        raise FormalQcIdentityError("frontpage sheet case identity is incomplete")
+    for name, requested in (
+        ("patient_id", patient_id),
+        ("visit_id", visit_id),
+        ("institute_id", institute_id),
+    ):
+        expected = str(requested or "").strip()
+        if expected and resolved[name] != expected:
+            raise FormalQcIdentityError(f"frontpage sheet {name} conflicts with request")
+    try:
+        return VerifiedQCIdentity(
+            resolved["institute_id"],
+            resolved["patient_id"],
+            resolved["visit_id"],
+            _FORMAL_QC_SOURCE_KEY,
+        )
+    except ValueError as exc:
+        raise FormalQcIdentityError("frontpage sheet case identity is not usable") from exc
+
+
+async def _read_verified_frontpage_sheet(
+    *,
+    patient_id: str,
+    visit_id: str,
+    institute_id: Optional[str],
+) -> tuple[Dict[str, Any], VerifiedQCIdentity]:
+    """服务端直接读取病案首页并把三坐标钉在 ``basic`` 上。
+
+    不经过 HTTP，也不采信请求体正文；域错误按固定脱敏文案映射到
+    400（显式空机构）/ 404（病例缺失）/ 409（身份歧义或漂移）/ 503（取数不可用）。
+    """
+
+    try:
+        sheet = await run_in_threadpool(
+            get_frontpage_sheet,
+            patient_id,
+            visit_id,
+            institute_id=institute_id,
+        )
+    except MedicalRecordsValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_FORMAL_QC_INVALID_IDENTITY_DETAIL,
+        ) from exc
+    except MedicalRecordsNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_FORMAL_QC_NOT_FOUND_DETAIL,
+        ) from exc
+    except MedicalRecordsConflictError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=_FORMAL_QC_AMBIGUOUS_DETAIL,
+        ) from exc
+    except (MedicalRecordsSourceUnavailableError, MedicalRecordsStorageError) as exc:
+        logger.warning("首页形式质控取数失败: %s", type(exc).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=_FORMAL_QC_SOURCE_UNAVAILABLE_DETAIL,
+        ) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        # 不回显 str(exc)：底层异常可能带连接串或患者标识。
+        logger.warning("首页形式质控取数异常: %s", type(exc).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=_FORMAL_QC_SOURCE_UNAVAILABLE_DETAIL,
+        ) from exc
+
+    if not isinstance(sheet, dict) or not sheet:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_FORMAL_QC_NOT_FOUND_DETAIL,
+        )
+    try:
+        identity = _verified_formal_qc_identity(
+            sheet,
+            patient_id=patient_id,
+            visit_id=visit_id,
+            institute_id=institute_id,
+        )
+    except FormalQcIdentityError as exc:
+        logger.warning("首页形式质控身份核对失败: %s", type(exc).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=_FORMAL_QC_AMBIGUOUS_DETAIL,
+        ) from exc
+    return sheet, identity
+
 
 @router.post("/formal-qc/validate")
+@require_permission(ResourceType.QC_RESULTS, PermissionAction.CREATE)
 async def validate_frontpage_formal(
     request: Request,
     payload: Dict[str, Any],
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_roles(*_FORMAL_QC_VALIDATE_ROLES)),
 ):
     """
     对病案首页执行形式质控校验。
 
     POST body:
     {
-        "frontpage": { ... 首页数据字典 ... },
-        "categories": ["required", "format"],  // 可选，按类别过滤
-        "severities": ["error"]                // 可选，按严重度过滤
+        "patient_id": "...", "visit_id": "...",   // 必需：服务端据此读取正式首页
+        "institute_id": "...",                    // 可选：省略时仅在 patient+visit 唯一时推断
+        "frontpage": { ... }                       // 兼容接收，但不参与取数与判定
     }
+
+    服务端以 ``get_frontpage_sheet(patient_id, visit_id, institute_id?)`` 读取正式首页，
+    并以读到的 ``basic`` 三坐标作为唯一权威身份执行 FrontpageFormalQC；客户端正文不再被信任。
+    队列 start/finish 与结果落库共用该核实身份及 ``source_key=frontpage_formal_qc``。
+    失败语义（固定脱敏文案）：身份参数不合法 400、病例缺失 404、身份歧义/漂移 409、取数或落库不可用 503；
+    正式落库不接受局部规则筛选（422）；引擎零规则或报告结构异常返回 503。
+    任一步失败都不写结果、不进队列成功态。结果已落库后队列收尾失败不改变“已保存”事实。
     """
-    frontpage = payload.get("frontpage") or payload
-    categories = None
-    severities = None
+    patient_id = str(payload.get("patient_id") or "").strip()
+    visit_id = str(payload.get("visit_id") or "").strip()
+    raw_institute_id = payload.get("institute_id")
+    if raw_institute_id is not None and not str(raw_institute_id).strip():
+        # 显式空机构不猜：机构坐标必须来自请求或唯一推断。
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_FORMAL_QC_INVALID_IDENTITY_DETAIL,
+        )
+    institute_id = str(raw_institute_id).strip() if raw_institute_id is not None else None
+    if not patient_id or not visit_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_FORMAL_QC_INVALID_IDENTITY_DETAIL,
+        )
+    raw_categories = payload.get("categories", [])
+    raw_severities = payload.get("severities", [])
+    if not all(
+        isinstance(value, list) and all(isinstance(item, str) for item in value)
+        for value in (raw_categories, raw_severities)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_FORMAL_QC_INVALID_IDENTITY_DETAIL,
+        )
+    try:
+        categories = [FQCategory(c) for c in raw_categories] or None
+        severities = [FQSeverity(s) for s in raw_severities] or None
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_FORMAL_QC_INVALID_IDENTITY_DETAIL,
+        ) from exc
+    if categories or severities:
+        raise HTTPException(status_code=422, detail=_FORMAL_QC_PARTIAL_SCOPE_DETAIL)
+
     user_id = _current_user_id(current_user)
     run_id: Optional[str] = None
+    persisted = False
 
-    if "categories" in payload and payload["categories"]:
-        categories = [FQCategory(c) for c in payload["categories"]]
-    if "severities" in payload and payload["severities"]:
-        severities = [FQSeverity(s) for s in payload["severities"]]
-
-    visit_id_for_state = str(
-        payload.get("visit_id")
-        or (frontpage.get("hospitalization") or {}).get("visit_id")
-        or frontpage.get("visit_id")
-        or ""
-    ).strip()
+    # 取数与身份核实先于任何队列/落库动作：身份不成立时不产生任何副作用。
+    sheet, identity = await _read_verified_frontpage_sheet(
+        patient_id=patient_id,
+        visit_id=visit_id,
+        institute_id=institute_id,
+    )
 
     try:
-        if visit_id_for_state:
-            run_id = default_workflow_queue_state_service.start_run(
-                workflow_type="frontpage_qc",
-                visit_id=visit_id_for_state,
-                user_id=user_id,
-            )
+        # 队列以现代身份启动：source_key + 三坐标，不再用请求体 visit 落 legacy。
+        run_id = default_workflow_queue_state_service.start_run(
+            workflow_type=_FORMAL_QC_WORKFLOW_TYPE,
+            visit_id=identity.visit_id,
+            patient_id=identity.patient_id,
+            institute_id=identity.institute_id,
+            source_key=_FORMAL_QC_SOURCE_KEY,
+            user_id=user_id,
+        )
 
-        report = _formal_qc_engine.validate(frontpage, categories=categories, severities=severities)
-        persistence_result = _build_formal_qc_persistence_result(frontpage, report, payload)
+        report = _formal_qc_engine.validate(sheet, categories=categories, severities=severities)
+        # 零规则报告不是“通过”：筛选致空 422、引擎零规则 503，一律不落现代结果。
+        _require_runnable_formal_report(
+            report, scope_filtered=bool(categories or severities)
+        )
+        persistence_result = _build_formal_qc_persistence_result(sheet, report, payload, identity)
         persistence = await default_qc_persistence_service.persist_analysis(
             persistence_result,
             actor=current_user,
+            verified_identity=identity,
         )
+        persisted = True
 
-        if run_id and visit_id_for_state:
+        try:
             default_workflow_queue_state_service.finish_success(
-                workflow_type="frontpage_qc",
-                visit_id=visit_id_for_state,
+                workflow_type=_FORMAL_QC_WORKFLOW_TYPE,
+                visit_id=identity.visit_id,
                 run_id=run_id,
+                source_key=_FORMAL_QC_SOURCE_KEY,
+                patient_id=identity.patient_id,
+                institute_id=identity.institute_id,
                 user_id=user_id,
             )
+        except Exception:
+            # 结果已落库：队列收尾失败只记日志，不能把已保存的质控谎报成未保存。
+            logger.warning("首页形式质控队列成功收尾失败（结果已保存）")
 
         return success_response(
             data={
@@ -764,16 +988,29 @@ async def validate_frontpage_formal(
             message=f"形式质控完成：{report.passed}/{report.total_rules} 通过",
             trace_id=get_trace_id(request),
         )
-    except Exception:
-        if run_id and visit_id_for_state:
-            default_workflow_queue_state_service.finish_failed(
-                workflow_type="frontpage_qc",
-                visit_id=visit_id_for_state,
-                run_id=run_id,
-                error_message="formal_qc_validate_failed",
-                user_id=user_id,
-            )
-        raise
+    except Exception as exc:
+        if run_id and not persisted:
+            try:
+                default_workflow_queue_state_service.finish_failed(
+                    workflow_type=_FORMAL_QC_WORKFLOW_TYPE,
+                    visit_id=identity.visit_id,
+                    run_id=run_id,
+                    source_key=_FORMAL_QC_SOURCE_KEY,
+                    patient_id=identity.patient_id,
+                    institute_id=identity.institute_id,
+                    error_message=_FORMAL_QC_QUEUE_FAILURE_MESSAGE,
+                    user_id=user_id,
+                )
+            except Exception:
+                logger.warning("首页形式质控队列失败收尾异常")
+        if isinstance(exc, HTTPException):
+            raise
+        # 缺迁移列、取数不可用等底层异常一律回固定文案，不把连接串或患者标识带出接口。
+        logger.error("首页形式质控执行失败: %s", type(exc).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=_FORMAL_QC_FAILURE_DETAIL,
+        ) from exc
 
 
 @router.get("/formal-qc/stats")

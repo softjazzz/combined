@@ -1,6 +1,7 @@
 from unittest.mock import AsyncMock
 
 import pytest
+from fastapi import HTTPException
 
 from app.routers import qc
 from app.routers.qc import (
@@ -8,6 +9,7 @@ from app.routers.qc import (
     _build_formal_qc_persistence_result,
 )
 from app.services.frontpage_formal_qc import Category, QCReport, QCResult, Severity
+from app.services.qc_persistence_service import VerifiedQCIdentity
 
 
 def test_formal_scope_contains_passed_and_failed_rules_not_requested_filters():
@@ -21,9 +23,10 @@ def test_formal_scope_contains_passed_and_failed_rules_not_requested_filters():
         ],
     )
     result = _build_formal_qc_persistence_result(
-        {"patient_id": "p1", "visit_id": "v1"},
+        {"basic": {"institute_id": "i1", "patient_id": "p1", "visit_id": "v1"}},
         report,
         {"categories": ["required"], "severities": ["error"]},
+        VerifiedQCIdentity("i1", "p1", "v1", "frontpage_formal_qc"),
     )
 
     assert result["metadata"]["executed_defect_scope"] == {
@@ -68,17 +71,27 @@ async def test_formal_rule_exception_marks_run_failed_without_persisting(monkeyp
             raise RuntimeError("rule unavailable")
 
     persistence = AsyncMock()
+
+    async def read_verified_sheet(**_kwargs):
+        return (
+            {"basic": {"institute_id": "i1", "patient_id": "p1", "visit_id": "v1"}},
+            VerifiedQCIdentity("i1", "p1", "v1", "frontpage_formal_qc"),
+        )
+
+    monkeypatch.setattr(qc, "_read_verified_frontpage_sheet", read_verified_sheet)
     monkeypatch.setattr(qc, "default_workflow_queue_state_service", QueueState())
     monkeypatch.setattr(qc, "_formal_qc_engine", FailingEngine())
     monkeypatch.setattr(qc, "default_qc_persistence_service", persistence)
 
-    with pytest.raises(RuntimeError, match="rule unavailable"):
+    with pytest.raises(HTTPException) as exc_info:
         await qc.validate_frontpage_formal(
             request=None,
-            payload={"frontpage": {"patient_name": "张三"}, "visit_id": "v1"},
-            current_user={"id": "reviewer-1"},
+            payload={"patient_id": "p1", "visit_id": "v1"},
+            current_user={"id": "reviewer-1", "roles": ["qc_manager"]},
         )
 
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.detail == qc._FORMAL_QC_FAILURE_DETAIL
     assert [event[0] for event in events] == ["start", "failed"]
-    assert events[1][1]["error_message"] == "formal_qc_validate_failed"
+    assert events[1][1]["error_message"] == qc._FORMAL_QC_QUEUE_FAILURE_MESSAGE
     persistence.persist_analysis.assert_not_awaited()
