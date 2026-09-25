@@ -92,8 +92,6 @@ _SIGNATURE_FIELDS: tuple[tuple[str, str], ...] = (
     ("QC_physician_sign", "qc_physician"),
     ("QC_nurse_sign", "qc_nurse"),
     ("coder_sign", "coder"),
-    ("archive_sign", "archiver"),
-    ("print_sign", "printer"),
 )
 
 _PARTICIPANT_FIELDS: tuple[tuple[str, str, str | None], ...] = (
