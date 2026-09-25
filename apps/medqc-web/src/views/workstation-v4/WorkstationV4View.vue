@@ -62,8 +62,9 @@
     </template>
     <!-- ====== 详情模式（全屏） ====== -->
     <template v-else-if="viewMode === 'detail'">
-      <div class="relative z-10 flex-1 flex min-w-0 h-full">
+      <div class="relative z-10 flex-1 flex min-w-0 min-h-0 h-full flex-col lg:flex-row">
         <WorkstationV4DetailView
+          class="min-h-0 min-w-0 flex-1"
           :selected-record="selectedRecord"
           :current-record-index="currentRecordIndex"
           :filtered-records-length="filteredRecords.length"
@@ -113,7 +114,7 @@
           </template>
           <template #frontpage>
             <FrontpageWorkspace
-              v-if="!selectedRecord?.identityStatus"
+              v-if="legacyWriteWorkspacesEnabled"
               :frontpage-generating="frontpageGenerating"
               :frontpage-post-processing="frontpagePostProcessing"
               :draft="frontpageDraft"
@@ -146,7 +147,7 @@
           </template>
           <template #settlement>
             <SettlementWorkspace
-              v-if="!selectedRecord?.identityStatus"
+              v-if="legacyWriteWorkspacesEnabled"
               :settlement-loading="settlementLoading"
               :settlement-data="settlementData"
               :settlement-qc-loading="settlementQcLoading"
@@ -167,8 +168,35 @@
           </template>
         </WorkstationV4DetailView>
 
+        <aside
+          v-if="modernCaseQcContext"
+          class="flex min-h-0 w-full shrink-0 flex-col overflow-hidden border-t border-slate-200/70 bg-slate-50/60 max-h-[52%] lg:h-full lg:max-h-none lg:w-[380px] lg:border-l lg:border-t-0"
+          data-testid="modern-case-qc-panel"
+        >
+          <div
+            v-if="modernCaseQcContext.workflowType === 'settlement'"
+            class="border-b border-slate-200/70 bg-white px-4 py-2.5"
+            data-testid="modern-case-qc-source-switch"
+          >
+            <a-segmented
+              v-model:value="modernSettlementSourceKey"
+              :options="modernSettlementSourceOptions"
+            />
+          </div>
+          <div class="min-h-0 flex-1 overflow-y-auto">
+            <ModernCaseQcReadOnlyPanel
+              :key="modernCaseQcRequestKey"
+              :snapshot="modernCaseQcSnapshot"
+              :loading="modernCaseQcLoading"
+              :error="modernCaseQcError"
+              :source-key="modernCaseQcContext.sourceKey"
+              @retry="handleModernCaseQcRetry"
+            />
+          </div>
+        </aside>
+
         <WorkstationV4AssistView
-          v-if="!selectedRecord?.identityStatus"
+          v-if="legacyWriteWorkspacesEnabled"
           ref="assistViewRef"
           :visible="assistPanelVisible"
           :assist-tab="assistTab"
@@ -345,6 +373,8 @@
 import { defineAsyncComponent, ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { apiClient } from '@/services/apiService'
+import { getModernCaseQcSnapshot } from '@/api/modernCaseQcResult'
+import type { ModernCaseQcSnapshot } from '@/api/modernCaseQcResult'
 import { message, Modal } from 'ant-design-vue'
 import {
   WarningOutlined,
@@ -363,6 +393,7 @@ import RecordDetailWorkspace from './components/RecordDetailWorkspace.vue'
 import FrontpageWorkspace from './components/FrontpageWorkspace.vue'
 import FrontpageWorkspacePanel from './components/FrontpageWorkspacePanel.vue'
 import SettlementWorkspace from './components/SettlementWorkspace.vue'
+import ModernCaseQcReadOnlyPanel from './components/ModernCaseQcReadOnlyPanel.vue'
 import { useWorkstationRouteEffects } from './workstationRouteEffects'
 import {
   runBatchExtract,
@@ -420,6 +451,20 @@ import {
   getFrontpageDraftDisabledReason,
 } from './frontpageAvailability'
 import { normalizeWorklistItem } from './normalize'
+import {
+  MODERN_SETTLEMENT_SOURCE_OPTIONS,
+  allowsLegacyWriteWorkspace,
+  buildModernCaseQcRequestKey,
+  isModernCaseQcResponseStale,
+  resolveModernCaseQcErrorMessage,
+  resolveModernCaseQcReadTarget,
+  resolveSelectedRecord,
+} from './modernCaseQcReadController'
+import type {
+  ModernCaseQcReadTarget,
+  ModernCaseQcSettlementSource,
+  ModernCaseQcWorklistRow,
+} from './modernCaseQcReadController'
 import {
   parseDocSortTime,
   resolveDocDisplayTitle,
@@ -651,6 +696,91 @@ async function refreshSelectedSnapshots() {
     qcSnapshotState.value = nextState
     if (nextSettlementReport) settlementQcReport.value = nextSettlementReport
   }
+}
+
+// ===== 现代（三坐标 + 来源）质控只读快照接线 =====
+// 仅对「工作清单中身份唯一但未核实」的 CDM 病历发起只读读取；普通旧列表与歧义行一律不触发。
+// 结算有两条独立来源，必须由用户显式切换，不做互相回退。
+const modernSettlementSourceKey = ref<ModernCaseQcSettlementSource>('settlement_qc')
+const modernSettlementSourceOptions = MODERN_SETTLEMENT_SOURCE_OPTIONS
+
+const modernCaseQcWorklistRow = computed<ModernCaseQcWorklistRow | null>(() => {
+  const key = selectedRecordKey.value
+  if (!key) return null
+  return stageWorklistItems.value.find((candidate) => worklistRecordKey(candidate) === key) ?? null
+})
+
+const modernCaseQcContext = computed<ModernCaseQcReadTarget | null>(() =>
+  resolveModernCaseQcReadTarget({
+    isDetailMode: viewMode.value === 'detail',
+    isWorklistMode: isAggregatedStageMode.value,
+    stageSelectedKey: selectedRecordKey.value,
+    stageRecord: selectedStageRecord.value,
+    worklistRow: modernCaseQcWorklistRow.value,
+    settlementSourceKey: modernSettlementSourceKey.value,
+  }),
+)
+
+// 请求键必须包含来源，来源切换等同于换一个病例读取。
+const modernCaseQcRequestKey = computed(() => buildModernCaseQcRequestKey(modernCaseQcContext.value))
+
+const modernCaseQcSnapshot = ref<ModernCaseQcSnapshot | null>(null)
+const modernCaseQcLoading = ref(false)
+const modernCaseQcError = ref('')
+let modernCaseQcRequestToken = 0
+
+async function loadModernCaseQcSnapshot() {
+  const target = modernCaseQcContext.value
+  const token = ++modernCaseQcRequestToken
+  if (!target) {
+    modernCaseQcSnapshot.value = null
+    modernCaseQcError.value = ''
+    modernCaseQcLoading.value = false
+    return
+  }
+  const requestedKey = modernCaseQcRequestKey.value
+  modernCaseQcSnapshot.value = null
+  modernCaseQcError.value = ''
+  modernCaseQcLoading.value = true
+  try {
+    const snapshot = await getModernCaseQcSnapshot({
+      institute_id: target.instituteId,
+      patient_id: target.patientId,
+      visit_id: target.visitId,
+      source_key: target.sourceKey,
+    })
+    // 迟到响应：请求令牌与当前请求键都未变化时才落地，绝不覆盖当前选中行。
+    if (
+      isModernCaseQcResponseStale({
+        token,
+        currentToken: modernCaseQcRequestToken,
+        requestedKey,
+        currentKey: modernCaseQcRequestKey.value,
+      })
+    ) {
+      return
+    }
+    modernCaseQcSnapshot.value = snapshot
+  } catch (error) {
+    if (
+      isModernCaseQcResponseStale({
+        token,
+        currentToken: modernCaseQcRequestToken,
+        requestedKey,
+        currentKey: modernCaseQcRequestKey.value,
+      })
+    ) {
+      return
+    }
+    modernCaseQcSnapshot.value = null
+    modernCaseQcError.value = resolveModernCaseQcErrorMessage(error)
+  } finally {
+    if (token === modernCaseQcRequestToken) modernCaseQcLoading.value = false
+  }
+}
+
+function handleModernCaseQcRetry() {
+  void loadModernCaseQcSnapshot()
 }
 
 const stageStatusText = computed(() => {
@@ -2099,16 +2229,28 @@ const combinedMedicalText = computed(() =>
     .join('\n\n'),
 )
 
+// 工作清单模式下，本次选中的工作清单行优先于旧列表同键记录；
+// 否则同键阴影会让 identityStatus 丢失，从而误放开旧 Assist/首页/结算写入口。
 const selectedRecord = computed(() => {
-  const selectedKey = selectedRecordKey.value || selectedId.value
-  if (!selectedKey) return null
-  return (
-    allRecords.value.find((record) => (record.recordKey || record.id) === selectedKey) ||
-    ((selectedStageRecord.value?.recordKey || selectedStageRecord.value?.id) === selectedKey
-      ? selectedStageRecord.value
-      : null)
-  )
+  const stageSelectedKey = selectedRecordKey.value
+  const fallbackSelectedKey = selectedId.value
+  // validStages 声明在本文件后段，且本 computed 在 setup 期就会被 useFrontpageDraft 读取；
+  // 没有选中键时先返回，避免提前求值 isAggregatedStageMode 命中 TDZ。
+  if (!stageSelectedKey && !fallbackSelectedKey) return null
+  return resolveSelectedRecord({
+    isWorklistMode: isAggregatedStageMode.value,
+    stageSelectedKey,
+    fallbackSelectedKey,
+    stageRecord: selectedStageRecord.value,
+    allRecords: allRecords.value,
+  })
 })
+
+// 旧 Assist / 病案首页 / 结算工作区只对「已选中且身份已核实」的病历开放；
+// 失败关闭返回 null 时必须一并关闭，不能靠 `!selectedRecord?.identityStatus` 判空。
+const legacyWriteWorkspacesEnabled = computed(() =>
+  allowsLegacyWriteWorkspace(selectedRecord.value),
+)
 
 const {
   assistIssues,
@@ -2328,6 +2470,16 @@ watch(concatSections, (sections) => {
     expandedConcatSectionIndexes.value = new Set([0])
   }
 })
+
+// 同步清空上一例结果，避免切换选中行时短暂显示上一条病例的现代结果。
+// 必须放在 validStages 之后注册：watch 创建时会立即求值一次数据源。
+watch(
+  modernCaseQcRequestKey,
+  () => {
+    void loadModernCaseQcSnapshot()
+  },
+  { flush: 'sync' },
+)
 
 // ========== 璁＄畻 ==========
 

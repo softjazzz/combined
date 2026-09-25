@@ -8,10 +8,20 @@ from typing import Literal, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from starlette.concurrency import run_in_threadpool
 
 from ..core.pagination import HEAVY_MAX_PAGE_SIZE, page_param, page_size_param
+from ..core.permissions import PermissionAction, ResourceType, require_permission
 from ..core.response import get_trace_id, success_response
-from ..core.security import get_current_user
+from ..core.security import get_current_user, require_roles
+from ..services.modern_case_qc_result_service import (
+    CaseIdentityAmbiguous,
+    CaseNotFound,
+    SchemaUnavailable,
+    SourceUnavailable,
+    default_modern_case_qc_result_service,
+)
+from ..services.qc_persistence_service import VerifiedQCIdentity
 from ..services.workstation.worklist_service import (
     WorklistIdentityAmbiguousError,
     default_workstation_aggregation_service,
@@ -22,6 +32,10 @@ from ..services.workstation.luxian_0609_result_analysis_service import (
 
 router = APIRouter(prefix="/api/v1/workstation", tags=["workstation"])
 logger = logging.getLogger(__name__)
+
+# 全院任意机构病例读取，暂时收窄到两个管理角色；机构对象级授权尚未完成。
+# 该常量只是本批临时限制，不改变已落地的 QC_RESULTS:READ 资源门。
+_MODERN_CASE_SNAPSHOT_ROLES = ("admin", "qc_manager")
 
 
 def _current_user_id(current_user: dict | None) -> Optional[str]:
@@ -333,3 +347,56 @@ async def get_settlement_snapshot(
         return success_response(data=data, trace_id=get_trace_id(request))
     except Exception as exc:
         _raise_workstation_http_error(exc)
+
+
+@router.get("/case-qc/snapshot")
+@require_permission(ResourceType.QC_RESULTS, PermissionAction.READ)
+async def get_modern_case_qc_snapshot(
+    request: Request,
+    institute_id: str = Query(..., description="机构标识"),
+    patient_id: str = Query(..., description="患者标识"),
+    visit_id: str = Query(..., description="就诊标识"),
+    source_key: Literal[
+        "frontpage_formal_qc",
+        "coding_qc",
+        "settlement_qc",
+        "settlement_generate_qc",
+    ] = Query(..., description="现代质控结果来源"),
+    current_user: dict = Depends(require_roles(*_MODERN_CASE_SNAPSHOT_ROLES)),
+):
+    """按三坐标身份读取现代落库的质控快照。
+
+    只接受完整的 institute/patient/visit + source_key 身份，不做 record_id 兼容回退；
+    所有失败细节回传固定文案，避免把底层连接串或病例原文带出接口。
+
+    调用方按三坐标自填机构，因此本批临时限定 admin/qc_manager 两角色
+    （``QC_RESULTS:READ`` 资源门同时保留），机构对象级授权仍待后续补足。
+    服务读取是同步 SQLAlchemy，必须放到线程池执行，避免阻塞事件循环。
+    """
+
+    try:
+        identity = VerifiedQCIdentity(institute_id, patient_id, visit_id, source_key)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="病例身份参数不合法") from exc
+
+    try:
+        snapshot = await run_in_threadpool(
+            default_modern_case_qc_result_service.get_snapshot,
+            identity,
+            recipient_id=_current_user_id(current_user),
+        )
+    except HTTPException:
+        raise
+    except CaseNotFound as exc:
+        raise HTTPException(status_code=404, detail="质控结果不存在") from exc
+    except CaseIdentityAmbiguous as exc:
+        raise HTTPException(status_code=409, detail="病例身份不唯一，无法读取质控结果") from exc
+    except (SchemaUnavailable, SourceUnavailable) as exc:
+        logger.warning("现代质控快照来源不可用: %s", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="质控结果暂时不可用") from exc
+    except Exception as exc:
+        # 不复用会回显 str(exc) 的 _raise_workstation_http_error：该接口的异常可能带有连接串。
+        logger.error("现代质控快照读取失败: %s", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="质控结果暂时不可用") from exc
+
+    return success_response(data=snapshot, trace_id=get_trace_id(request))
