@@ -952,13 +952,14 @@ def _resolve_coding_qc_identity(
     在编码质控唯一权威表 ``cdm.mr`` 上确立被分析数据的三坐标。
 
     - 权威来源只有 cdm.mr，与落库侧的“唯一 cdm.mr 行”合同一致；诊断/手术/费用表不参与定身份。
+    - 显式限定 ``cdm.mr`` 并参数化，不经 search_path 解析，避免把 public.mr 当成权威表。
     - 显式机构：按机构精确匹配，只在候选为空时判定缺失。
     - 未给机构：只允许唯一候选推断；多个机构同时命中时报歧义，不猜机构。
     - 同一三坐标出现重复行、或候选三坐标不完整（缺机构/缺患者）时一律拒绝，不降级猜测。
     """
+    from sqlalchemy import text
     from sqlalchemy.orm import Session
     from ..database.connection import engine as db_engine
-    from ..database.models.cdm import MedicalRecordFrontpage
 
     visit_key = str(visit_id or "").strip()
     if not visit_key:
@@ -966,17 +967,20 @@ def _resolve_coding_qc_identity(
     patient_key = str(patient_id or "").strip()
     institute_key = str(institute_id or "").strip()
 
+    sql = "SELECT institute_id, patient_id FROM cdm.mr WHERE visit_id = :visit_id"
+    params: Dict[str, Any] = {"visit_id": visit_key}
+    if patient_key:
+        sql += " AND patient_id = :patient_id"
+        params["patient_id"] = patient_key
+    if institute_key:
+        sql += " AND institute_id = :institute_id"
+        params["institute_id"] = institute_key
+    # LIMIT 2 保留“同三坐标重复行也算歧义”的判定，不需要 DISTINCT。
+    sql += " LIMIT 2"
+
     try:
         with Session(db_engine) as session:
-            query = session.query(
-                MedicalRecordFrontpage.institute_id,
-                MedicalRecordFrontpage.patient_id,
-            ).filter(MedicalRecordFrontpage.visit_id == visit_key)
-            if patient_key:
-                query = query.filter(MedicalRecordFrontpage.patient_id == patient_key)
-            if institute_key:
-                query = query.filter(MedicalRecordFrontpage.institute_id == institute_key)
-            rows = query.limit(2).all()
+            rows = session.execute(text(sql), params).all()
     except Exception as exc:
         # 不把底层 DSN/驱动细节暴露给调用方与队列状态。
         logger.warning("编码质控三坐标解析失败: 编码来源读取异常")
@@ -1181,14 +1185,12 @@ def _load_frontpage_from_pg(
 
     只接受调用方已解析的唯一三坐标（见 ``_resolve_coding_qc_identity``），本函数不再二次定身份。
     首页、诊断（含 mr_diagnosis 兜底）、手术、费用一律按同一三坐标读取，避免跨机构混读；
+    所有编码来源表都显式限定 ``cdm`` 并参数化，不经 search_path 解析，避免读到 public 同名表；
     数据库读取失败按“取数不可用”抛出，绝不返回 None 让调用方按“通过”收尾。
     """
     from sqlalchemy import text
     from sqlalchemy.orm import Session
     from ..database.connection import engine as db_engine
-    from ..database.models.cdm import (
-        MedicalRecordFrontpage, Diagnosis, MrCost, MrSurgery
-    )
 
     coordinates = {
         "institute_id": identity.institute_id,
@@ -1199,14 +1201,34 @@ def _load_frontpage_from_pg(
     try:
         with Session(db_engine) as session:
             # 查询首页基本信息
-            fp = session.query(MedicalRecordFrontpage).filter_by(**coordinates).first()
+            fp = session.execute(
+                text(
+                    "SELECT * FROM cdm.mr "
+                    "WHERE institute_id = :institute_id "
+                    "AND patient_id = :patient_id "
+                    "AND visit_id = :visit_id "
+                    "LIMIT 1"
+                ),
+                coordinates,
+            ).mappings().first()
 
             # 查询诊断列表
-            diag_rows = session.query(Diagnosis).filter_by(**coordinates).all()
+            diag_rows = [
+                dict(row)
+                for row in session.execute(
+                    text(
+                        "SELECT * FROM cdm.diagnosis "
+                        "WHERE institute_id = :institute_id "
+                        "AND patient_id = :patient_id "
+                        "AND visit_id = :visit_id"
+                    ),
+                    coordinates,
+                ).mappings().all()
+            ]
 
             if not diag_rows:
                 mr_diag_sql = (
-                    "SELECT * FROM mr_diagnosis "
+                    "SELECT * FROM cdm.mr_diagnosis "
                     "WHERE institute_id = :institute_id "
                     "AND patient_id = :patient_id "
                     "AND visit_id = :visit_id "
@@ -1219,10 +1241,30 @@ def _load_frontpage_from_pg(
                 ]
 
             # 查询手术列表
-            surg_rows = session.query(MrSurgery).filter_by(**coordinates).all()
+            surg_rows = [
+                dict(row)
+                for row in session.execute(
+                    text(
+                        "SELECT * FROM cdm.mr_surgery "
+                        "WHERE institute_id = :institute_id "
+                        "AND patient_id = :patient_id "
+                        "AND visit_id = :visit_id"
+                    ),
+                    coordinates,
+                ).mappings().all()
+            ]
 
             # 查询费用信息，供病理诊断费一致性规则使用
-            cost = session.query(MrCost).filter_by(**coordinates).first()
+            cost = session.execute(
+                text(
+                    "SELECT * FROM cdm.mr_cost "
+                    "WHERE institute_id = :institute_id "
+                    "AND patient_id = :patient_id "
+                    "AND visit_id = :visit_id "
+                    "LIMIT 1"
+                ),
+                coordinates,
+            ).mappings().first()
 
             if not fp and not diag_rows and not surg_rows:
                 return None
@@ -1325,22 +1367,26 @@ def _load_frontpage_from_pg(
                 return text in {"1", "是", "y", "yes", "true", "t", "main", "主"}
 
             surgeries = []
-            main_surgeries = [s for s in surg_rows if _is_main_surgery_flag(s.main_surgery_sign)]
-            other_surgeries = [s for s in surg_rows if not _is_main_surgery_flag(s.main_surgery_sign)]
+            main_surgeries = [
+                s for s in surg_rows if _is_main_surgery_flag(_row_value(s, "main_surgery_sign"))
+            ]
+            other_surgeries = [
+                s for s in surg_rows if not _is_main_surgery_flag(_row_value(s, "main_surgery_sign"))
+            ]
             for s in main_surgeries + other_surgeries:
                 surgeries.append({
-                    "code": s.surgery_code or "",
-                    "name": s.surgery_name or "",
+                    "code": _row_value(s, "surgery_code") or "",
+                    "name": _row_value(s, "surgery_name") or "",
                 })
 
             return {
-                "sex": fp.sex if fp else "",
-                "age": fp.age_year if fp else "",
+                "sex": _row_value(fp, "sex") if fp else "",
+                "age": _row_value(fp, "age_year") if fp else "",
                 "diagnoses": diagnoses,
                 "surgeries": surgeries,
                 "fees": {
                     "pathology_diagnostic_fee": (
-                        cost.pathological_diagnostic_fee if cost else ""
+                        _row_value(cost, "pathological_diagnostic_fee") if cost else ""
                     ),
                 },
                 "clinical_summary": "",

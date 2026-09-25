@@ -10,8 +10,11 @@
 - 数据库读取/落库异常脱敏，且不返回 None 让上层按“通过”收尾
 - 无可评估编码数据不得报告“通过”
 - 手工 frontpage 模式保持旧语义：无已验证身份、不推进队列
+- 解析与全部编码取数显式限定 ``cdm`` schema：``public`` 同名影子行不得被认领或混读
 
-不连接任何真实数据库：使用内存 SQLite 伪 CDM 表，并显式替换取数入口的 engine。
+不连接任何真实数据库：使用内存 SQLite，并 ``ATTACH`` 出 ``public``/``cdm`` 两个 schema
+（``public`` 先挂载，复现 ``DB_SEARCH_PATH`` 允许 public 排在 cdm 前的同名表布局），
+再显式替换取数入口的 engine。
 
 运行方式（不加载根 conftest，避免连库）::
 
@@ -26,12 +29,11 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import pytest
 from fastapi import HTTPException
-from sqlalchemy import create_engine, text
+from sqlalchemy import MetaData, create_engine, event, text
 from starlette.requests import Request
 
 import app.database.connection as connection
 import app.routers.qc as qc_module
-from app.database.connection import Base
 from app.database.models.cdm import (
     Diagnosis,
     MedicalRecordFrontpage,
@@ -51,47 +53,81 @@ INSTITUTE_A = "INST-A"
 INSTITUTE_B = "INST-B"
 
 
-def _create_cdm_schema(engine) -> None:
-    Base.metadata.create_all(
-        engine,
-        tables=[
-            MedicalRecordFrontpage.__table__,
-            Diagnosis.__table__,
-            MrSurgery.__table__,
-            MrCost.__table__,
-        ],
-    )
-    # mr_diagnosis 无 ORM 模型，按 CDM 视图字段最小化建表，供兜底查询使用。
+SCHEMA_CDM = "cdm"
+SCHEMA_PUBLIC = "public"
+# 先挂 public 再挂 cdm：SQLite 未限定表名按附加顺序解析，public 同名表优先命中，
+# 与 ``DB_SEARCH_PATH`` 把 public 排在 cdm 之前的布局同构。
+_ATTACH_ORDER = (SCHEMA_PUBLIC, SCHEMA_CDM)
+_CODING_SOURCE_TABLES = (
+    MedicalRecordFrontpage.__table__,
+    Diagnosis.__table__,
+    MrSurgery.__table__,
+    MrCost.__table__,
+)
+# mr_diagnosis 无 ORM 模型，按 CDM 视图字段最小化建表，供兜底查询使用。
+_MR_DIAGNOSIS_DDL = (
+    "CREATE TABLE {schema}.mr_diagnosis ("
+    "institute_id VARCHAR(100), patient_id VARCHAR(100), visit_id VARCHAR(100), "
+    "diagnosis_id VARCHAR(100), diagnosis_code VARCHAR(100), "
+    "diagnosis_name VARCHAR(100), diagnosis_type VARCHAR(100), "
+    "diagnosis_no VARCHAR(100), diagnosis_main VARCHAR(100), "
+    "admission_condition VARCHAR(100), is_deleted VARCHAR(10))"
+)
+
+
+def _attach_schemas(engine) -> None:
+    """为连接附加独立的 public/cdm 内存库，复现同名表跨 schema 的真实布局。"""
+
+    @event.listens_for(engine, "connect")
+    def _attach(dbapi_connection, _connection_record):
+        cursor = dbapi_connection.cursor()
+        try:
+            for schema_name in _ATTACH_ORDER:
+                cursor.execute(f"ATTACH DATABASE ':memory:' AS {schema_name}")
+        finally:
+            cursor.close()
+
+
+def _create_schema_tables(engine, schema_name: str) -> None:
+    """在指定 attached schema 内按 ORM 字段建同名表（含 mr_diagnosis）。"""
+    metadata = MetaData()
+    for table in _CODING_SOURCE_TABLES:
+        copied = table.to_metadata(metadata, schema=schema_name)
+        # 索引不参与取数语义，且 SQLite 的 CREATE INDEX 不接受 schema 限定表名。
+        copied.indexes.clear()
+    metadata.create_all(engine)
     with engine.begin() as conn:
-        conn.execute(
-            text(
-                "CREATE TABLE mr_diagnosis ("
-                "institute_id VARCHAR(100), patient_id VARCHAR(100), visit_id VARCHAR(100), "
-                "diagnosis_id VARCHAR(100), diagnosis_code VARCHAR(100), "
-                "diagnosis_name VARCHAR(100), diagnosis_type VARCHAR(100), "
-                "diagnosis_no VARCHAR(100), diagnosis_main VARCHAR(100), "
-                "admission_condition VARCHAR(100), is_deleted VARCHAR(10))"
-            )
-        )
+        conn.execute(text(_MR_DIAGNOSIS_DDL.format(schema=schema_name)))
 
 
 @pytest.fixture()
 def cdm_db(monkeypatch):
-    """内存 SQLite 伪 CDM；只替换取数入口使用的 engine。"""
+    """内存 SQLite 伪 CDM（attached schema）；只替换取数入口使用的 engine。
+
+    ``cdm`` 是唯一权威库；``public`` 建同名空表作为影子守卫：任何未限定 schema 的
+    解析/取数都会命中 public 而读不到权威行（旧实现即在此发生身份/取数漂移）。
+    """
     engine = create_engine("sqlite://")
-    _create_cdm_schema(engine)
+    _attach_schemas(engine)
+    _create_schema_tables(engine, SCHEMA_CDM)
+    _create_schema_tables(engine, SCHEMA_PUBLIC)
     monkeypatch.setattr(connection, "engine", engine)
     return engine
 
 
 def _insert(engine, table: str, rows: List[Dict[str, Any]]) -> None:
+    """写入伪数据；未带 schema 前缀的表名默认落在权威库 ``cdm``。
+
+    需要构造 ``public`` 影子行时必须显式写 ``public.<table>``。
+    """
     if not rows:
         return
+    target = table if "." in table else f"{SCHEMA_CDM}.{table}"
     columns = ", ".join(rows[0])
     placeholders = ", ".join(f":{name}" for name in rows[0])
     with engine.begin() as conn:
         conn.execute(
-            text(f"INSERT INTO {table} ({columns}) VALUES ({placeholders})"),
+            text(f"INSERT INTO {target} ({columns}) VALUES ({placeholders})"),
             rows,
         )
 
@@ -249,10 +285,10 @@ class TestCodingQcIdentityResolution:
     def test_duplicate_same_coordinates_are_rejected(self, cdm_db):
         """同三坐标重复行必须拒绝，不能默认取第一行。"""
         with cdm_db.begin() as conn:
-            conn.execute(text("DROP TABLE mr"))
+            conn.execute(text("DROP TABLE cdm.mr"))
             conn.execute(
                 text(
-                    "CREATE TABLE mr (institute_id VARCHAR(100), patient_id VARCHAR(100), "
+                    "CREATE TABLE cdm.mr (institute_id VARCHAR(100), patient_id VARCHAR(100), "
                     "visit_id VARCHAR(100), sex VARCHAR(10), age_year VARCHAR(20))"
                 )
             )
@@ -690,3 +726,112 @@ class TestCheckCodingQcIdentityBranch:
         assert endpoint_env.queue.started == []
         assert endpoint_env.queue.succeeded == []
         assert endpoint_env.queue.failed == []
+
+
+class TestSchemaAuthorityNotSearchPath:
+    """显式 cdm schema：public 同名影子行不得被认领、混读或写入身份。"""
+
+    def test_public_shadow_rows_do_not_grant_identity(self, cdm_db, endpoint_env):
+        """只有 public.mr/诊断行时不得定身份：解析为空、端点 404 且不写队列。"""
+        _insert(cdm_db, "public.mr", [_mr_row(INSTITUTE_A)])
+        _insert(cdm_db, "public.diagnosis", [_diag_row(INSTITUTE_A, "I10", "高血压", "D-A1")])
+
+        assert _resolve(PATIENT, VISIT, INSTITUTE_A) is None
+
+        with pytest.raises(HTTPException) as excinfo:
+            _call_endpoint(_visit_payload(institute_id=INSTITUTE_A))
+
+        assert excinfo.value.status_code == 404
+        assert endpoint_env.queue.started == []
+        assert endpoint_env.queue.failed == []
+        assert endpoint_env.persistence.calls == []
+
+    def test_public_shadow_rows_do_not_mix_into_frontpage(self, cdm_db):
+        """cdm 与 public 同名表并存时，只按同一三坐标读 cdm 的首页/诊断/手术/费用。"""
+        _insert(cdm_db, "cdm.mr", [_mr_row(INSTITUTE_A, sex="男")])
+        _insert(cdm_db, "cdm.diagnosis", [_diag_row(INSTITUTE_A, "I10", "高血压", "D-A1")])
+        _insert(
+            cdm_db,
+            "cdm.mr_surgery",
+            [
+                {
+                    "institute_id": INSTITUTE_A,
+                    "patient_id": PATIENT,
+                    "visit_id": VISIT,
+                    "surgery_id": "S-A1",
+                    "surgery_code": "47.0",
+                    "surgery_name": "阑尾切除术",
+                    "main_surgery_sign": "1",
+                }
+            ],
+        )
+        _insert(cdm_db, "cdm.mr_cost", [_cost_row(INSTITUTE_A, "100")])
+
+        # public 影子行：同 patient/visit，但机构与取数内容都不同
+        _insert(cdm_db, "public.mr", [_mr_row(INSTITUTE_B, sex="女")])
+        _insert(cdm_db, "public.diagnosis", [_diag_row(INSTITUTE_B, "J18.9", "肺炎", "D-B1")])
+        _insert(
+            cdm_db,
+            "public.mr_surgery",
+            [
+                {
+                    "institute_id": INSTITUTE_B,
+                    "patient_id": PATIENT,
+                    "visit_id": VISIT,
+                    "surgery_id": "S-B1",
+                    "surgery_code": "51.23",
+                    "surgery_name": "腹腔镜胆囊切除术",
+                    "main_surgery_sign": "1",
+                }
+            ],
+        )
+        _insert(cdm_db, "public.mr_cost", [_cost_row(INSTITUTE_B, "200")])
+
+        frontpage = _load(PATIENT, VISIT, INSTITUTE_A)
+
+        assert frontpage is not None
+        assert frontpage["sex"] == "男"
+        assert [d["code"] for d in frontpage["diagnoses"]] == ["I10"]
+        assert [s["code"] for s in frontpage["surgeries"]] == ["47.0"]
+        assert frontpage["fees"]["pathology_diagnostic_fee"] == "100"
+        # public 影子行不构成可核验身份
+        assert _load(PATIENT, VISIT, INSTITUTE_B) is None
+
+    def test_diagnosis_fallback_reads_cdm_not_public(self, cdm_db):
+        """diagnosis 为空走 mr_diagnosis 兜底时，也只读 cdm.mr_diagnosis。"""
+        _insert(cdm_db, "cdm.mr", [_mr_row(INSTITUTE_A)])
+        _insert(
+            cdm_db,
+            "cdm.mr_diagnosis",
+            [_mr_diagnosis_row(INSTITUTE_A, "I10", "高血压", "D-A1")],
+        )
+        _insert(cdm_db, "public.mr", [_mr_row(INSTITUTE_B)])
+        _insert(
+            cdm_db,
+            "public.mr_diagnosis",
+            [_mr_diagnosis_row(INSTITUTE_B, "J18.9", "肺炎", "D-B1")],
+        )
+
+        frontpage = _load(PATIENT, VISIT, INSTITUTE_A)
+
+        assert frontpage is not None
+        assert [d["code"] for d in frontpage["diagnoses"]] == ["I10"]
+
+    def test_endpoint_identity_and_queue_use_cdm_not_public_shadow(self, cdm_db, endpoint_env):
+        """public 同名表存在同 visit 的多机构行时，端点仍按 cdm 身份取数并收尾队列。"""
+        _insert(cdm_db, "cdm.mr", [_mr_row(INSTITUTE_A)])
+        _insert(cdm_db, "cdm.diagnosis", [_diag_row(INSTITUTE_A, "I10", "高血压", "D-A1")])
+        # 未限定 schema 的读取会在这里命中两个候选（旧实现据此报 409）
+        _insert(cdm_db, "public.mr", [_mr_row(INSTITUTE_B), _mr_row("INST-PUBLIC-2")])
+        _insert(cdm_db, "public.diagnosis", [_diag_row(INSTITUTE_B, "J18.9", "肺炎", "D-B1")])
+
+        response = _call_endpoint(_visit_payload())
+
+        assert response["success"] is True
+        expected = ("coding_qc", INSTITUTE_A, PATIENT, VISIT)
+        assert _modern_identity(endpoint_env.queue.started[0]) == expected
+        assert _modern_identity(endpoint_env.queue.succeeded[0]) == expected
+        assert endpoint_env.queue.failed == []
+        assert endpoint_env.persistence.calls[0]["verified_identity"] == VerifiedQCIdentity(
+            INSTITUTE_A, PATIENT, VISIT, "coding_qc"
+        )
