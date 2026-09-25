@@ -26,6 +26,10 @@ from app.services import custom_qc_workspace_service as workspace_module
 from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
 from app.services import sichuan_workspace_batch_worker as batch_worker
 from app.services.detached_task_runner import submit_detached_task
+from app.services.luxian_0609.basic_timeliness_customer_projection import (
+    safe_basic_timeliness_customer_display_facts,
+)
+from app.services.qc_workspace.canonical_result_store import CanonicalResultStore
 from tests.unit.test_qc_sichuan_batch_throughput import _ServiceStub, _WorkspaceStub
 
 
@@ -39,8 +43,11 @@ def storage(monkeypatch):
     metadata = sa.MetaData()
     table = service._batch_job_table.to_metadata(metadata, schema=None)
     metadata.create_all(engine)
+    envelope_table = service._record_result_envelope_table.to_metadata(sa.MetaData(), schema=None)
+    envelope_table.create(bind=engine)
     factory = sessionmaker(bind=engine)
     service._batch_job_table = table
+    service._record_result_envelope_table = envelope_table
     monkeypatch.setattr(workspace_module, "_session", factory)
     with engine.begin() as connection:
         connection.execute(table.insert().values(
@@ -631,6 +638,36 @@ def test_parent_retry_rejects_running_child_without_partial_reset(storage):
     assert json.loads(by_id["running-child"]["filters_json"])["rule_ids"] == ["LX0609-06-01-01"]
 
 
+def test_parent_cancel_marks_running_child_usage_observation_incomplete(storage):
+    service, engine, table = storage
+    with engine.begin() as connection:
+        connection.execute(table.update().where(table.c.id == "attempt-job").values(
+            status="running", parent_job_id="parent-job",
+            summary_json=json.dumps({
+                "luxian_0609_usage_observation_complete": True,
+                "total_tokens": 12,
+            }),
+        ))
+        connection.execute(table.insert().values(
+            id="parent-job", draft_id="sichuan-rule-library", created_by="tester",
+            status="running", job_kind="parent", child_job_ids_json='["attempt-job"]',
+            rule_code="LX0609", rule_name="父任务", scope="final", total_records=1,
+            created_at=datetime(2026, 9, 24), updated_at=datetime(2026, 9, 24),
+            filters_json=json.dumps({"rule_set_key": "luxian_0609_qc_v1"}),
+        ))
+
+    service.cancel_batch_job(job_id="parent-job", created_by="tester")
+
+    with engine.connect() as connection:
+        row = connection.execute(sa.select(table.c.status, table.c.summary_json).where(
+            table.c.id == "attempt-job"
+        )).one()
+    assert row.status == "canceled"
+    child_summary = json.loads(row.summary_json)
+    assert child_summary["luxian_0609_usage_observation_complete"] is False
+    assert child_summary["total_tokens"] == 12
+
+
 @pytest.mark.parametrize("retry_target", ["parent-job", "attempt-job"])
 @pytest.mark.parametrize("claim_new_parent", [False, True])
 def test_parent_refresh_rejects_stale_aggregate_after_retry(
@@ -732,6 +769,66 @@ def test_parent_refresh_keeps_normal_completion_and_cancellation(storage, monkey
         status = connection.execute(sa.select(table.c.status).where(table.c.id == "parent-job")).scalar_one()
     assert status == ("canceled" if parent_status == "canceled" else "completed")
     assert len(writes) == expected_writes
+
+
+def test_completed_parent_publishes_one_envelope_after_child_validation(storage):
+    service, engine, table = storage
+    envelope_table = service._record_result_envelope_table
+    facts = safe_basic_timeliness_customer_display_facts(
+        rule_id="LX0609-01-01-01",
+        raw={
+            "failure_kind": "timeliness_requirement_satisfied",
+            "target_document": "admission_record", "source_label": "入院记录",
+            "timeliness_state": "within", "threshold_hours": 24, "elapsed_hours": 1.0,
+        },
+    )
+    assert facts is not None
+    item = {
+        "record_id": "V", "visit_id": "V", "institute_id": "I", "patient_id": "P",
+        "schema_version": "lx0609-customer-result-v2", "rule_id": "LX0609-01-01-01",
+        "status": "compliant", "result_status": "compliant",
+        "display_status": "compliant", "is_compliant": True,
+        "reason_code": "requirement_satisfied", "conclusion": "已核对",
+        "customer_display_facts": facts,
+    }
+    with engine.begin() as connection:
+        connection.execute(table.update().where(table.c.id == "attempt-job").values(
+            status="running", parent_job_id="parent-job",
+        ))
+        connection.execute(table.insert().values(
+            id="parent-job", draft_id="sichuan-rule-library", created_by="tester",
+            status="queued", job_kind="parent", child_job_ids_json='["attempt-job"]',
+            rule_code="LX0609", rule_name="父任务", scope="final", total_records=1,
+            created_at=datetime(2026, 9, 24), updated_at=datetime(2026, 9, 24),
+            filters_json=json.dumps({
+                "rule_set_key": "luxian_0609_qc_v1", "rule_set_version": "2026-06-09",
+                "rule_ids": ["LX0609-01-01-01"],
+                "record_refs": [{"institute_id": "I", "patient_id": "P", "visit_id": "V"}],
+            }),
+        ))
+
+    service.complete_batch_job(
+        job_id="attempt-job",
+        summary={"total_records": 1, "success_count": 1},
+        items=[item], failed_records=[],
+    )
+    service.refresh_parent_batch_job(parent_job_id="parent-job")
+
+    with engine.connect() as connection:
+        rows = connection.execute(sa.select(envelope_table).where(
+            envelope_table.c.root_job_id == "parent-job"
+        )).mappings().all()
+        parent_status = connection.execute(sa.select(table.c.status).where(
+            table.c.id == "parent-job"
+        )).scalar_one()
+        envelope = CanonicalResultStore(envelope_table).load_selected(
+            connection, root_job_id="parent-job", institute_id="I", patient_id="P",
+            visit_id="V", rule_set_key="luxian_0609_qc_v1", rule_set_version="2026-06-09",
+        )
+    assert parent_status == "completed"
+    assert len(rows) == 1
+    assert rows[0]["job_id"] == "parent-job"
+    assert [published["rule_id"] for published in envelope["items"]] == ["LX0609-01-01-01"]
 
 
 def test_nonformal_task_keeps_existing_claim_and_retry_semantics(storage):

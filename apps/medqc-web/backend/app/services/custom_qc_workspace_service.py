@@ -1610,7 +1610,11 @@ def _row_to_batch_job(row: Dict[str, Any], *, include_items: bool = True) -> Dic
                 normalized_items.append(
                     {
                         **raw_item,
-                        "rule_code": _safe_text(raw_item.get("rule_code")) or _safe_text(row.get("rule_code")),
+                        "rule_code": _safe_text(raw_item.get("rule_code")) or (
+                            _safe_text(raw_item.get("rule_id"))
+                            if filters_dict.get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY
+                            else _safe_text(row.get("rule_code"))
+                        ),
                         "rule_name": _safe_text(raw_item.get("rule_name")) or _safe_text(row.get("rule_name")),
                     }
                 )
@@ -2498,6 +2502,16 @@ class CustomQCWorkspaceService:
                     for item in list(child.get("items") or [])
                     if isinstance(item, dict)
                 ]
+                if (parent_job.get("filters") or {}).get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY:
+                    # 子任务写入时已完成合同校验。父任务发布汇总前，在同一事务中
+                    # 清除该 root 的子结果，保证正式读取只命中一份汇总 Envelope。
+                    session.execute(
+                        self._record_result_envelope_table.delete().where(and_(
+                            self._record_result_envelope_table.c.root_job_id == normalized_parent_id,
+                            self._record_result_envelope_table.c.created_by == row["created_by"],
+                            self._record_result_envelope_table.c.rule_set_key == LUXIAN_0609_RULE_SET_KEY,
+                        ))
+                    )
                 self._write_record_result_envelopes(
                     session,
                     job_row=dict(row),
@@ -4232,22 +4246,46 @@ class CustomQCWorkspaceService:
                 child_where = self._batch_job_table.c.parent_job_id == job_id
                 if child_ids:
                     child_where = or_(child_where, self._batch_job_table.c.id.in_(child_ids))
-                session.execute(
-                    update(self._batch_job_table)
-                    .where(
-                        and_(
-                            child_where,
-                            self._batch_job_table.c.created_by == created_by,
-                            self._batch_job_table.c.status.in_(["queued", "running"]),
-                        )
-                    )
-                    .values(
-                        status="canceled",
-                        error_message="parent_cancelled: 总任务已取消",
-                        finished_at=now,
-                        updated_at=now,
-                    )
+                active_child_scope = and_(
+                    child_where,
+                    self._batch_job_table.c.created_by == created_by,
+                    self._batch_job_table.c.status.in_(["queued", "running"]),
                 )
+                child_cancel_values = {
+                    "status": "canceled",
+                    "error_message": "parent_cancelled: 总任务已取消",
+                    "finished_at": now,
+                    "updated_at": now,
+                }
+                if (current.get("filters") or {}).get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY:
+                    child_rows = session.execute(
+                        select(self._batch_job_table).where(active_child_scope)
+                    ).mappings().all()
+                    for child_row in child_rows:
+                        child_summary = _safe_json_loads(child_row.get("summary_json"), {})
+                        if not isinstance(child_summary, dict):
+                            child_summary = {}
+                        session.execute(
+                            update(self._batch_job_table)
+                            .where(and_(
+                                self._batch_job_table.c.id == child_row["id"],
+                                self._batch_job_table.c.created_by == created_by,
+                                self._batch_job_table.c.status.in_(["queued", "running"]),
+                            ))
+                            .values(
+                                **child_cancel_values,
+                                summary_json=_safe_json_dumps({
+                                    **child_summary,
+                                    "luxian_0609_usage_observation_complete": False,
+                                }),
+                            )
+                        )
+                else:
+                    session.execute(
+                        update(self._batch_job_table)
+                        .where(active_child_scope)
+                        .values(**child_cancel_values)
+                    )
             session.commit()
             return self.get_batch_job(job_id=job_id, created_by=created_by)
         finally:
