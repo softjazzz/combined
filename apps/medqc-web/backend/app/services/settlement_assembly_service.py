@@ -159,6 +159,10 @@ SETTLEMENT_DEFAULTS = {
 }
 
 
+class SettlementAssemblyUnavailableError(ValueError):
+    """指定机构后无法按“机构 + 患者 + 就诊”读取权威数据，拒绝组装草稿。"""
+
+
 class SettlementAssemblyService:
     """从 FrontPageDraft + CDM SQL 组装结算清单草稿。"""
 
@@ -763,7 +767,8 @@ class SettlementAssemblyService:
 
     def generate(self, patient_id: str, visit_id: str,
                  frontpage_draft: Optional[dict] = None,
-                 db: Optional[Session] = None) -> dict:
+                 db: Optional[Session] = None,
+                 institute_id: Optional[str] = None) -> dict:
         """
         生成结算清单草稿。
 
@@ -772,66 +777,137 @@ class SettlementAssemblyService:
             visit_id: 就诊号
             frontpage_draft: LLM 抽取的 FrontPageDraft dict（可选，None 时从 DB 回退）
             db: SQLAlchemy session（可选，用于 SQL 补充查询）
+            institute_id: 机构号（可选）。提供时按“机构 + 患者 + 就诊”三坐标读取
+                CDM 数据，并把 institute_id 写入结果；此时病案首页缺失、查询异常或
+                缺少数据库会话都会抛错失败关闭，不再静默产出空草稿；同时不接受
+                未带三坐标合同的 frontpage_draft（目前没有该合同）。显式传入空白
+                机构同样报错，只有完全不传（None）才保持旧口径。
 
         Returns:
             settlement_dict: 结算清单扁平数据字典
+
+        Raises:
+            SettlementAssemblyUnavailableError: 指定 institute_id 时无法按机构读取权威数据。
         """
+        scoped_institute_id = None
+        if institute_id is not None:
+            scoped_institute_id = str(institute_id).strip()
+            if not scoped_institute_id:
+                raise SettlementAssemblyUnavailableError(
+                    "institute_id 为空白值，无法按机构隔离读取，"
+                    "拒绝组装结算清单草稿"
+                )
+        if scoped_institute_id and frontpage_draft:
+            raise SettlementAssemblyUnavailableError(
+                "现代路径不接受未校验三坐标的 frontpage_draft，"
+                f"拒绝组装结算清单草稿（institute_id={scoped_institute_id}）"
+            )
+        if scoped_institute_id and db is None:
+            raise SettlementAssemblyUnavailableError(
+                f"指定 institute_id={scoped_institute_id} 但缺少数据库会话，"
+                "无法校验病案首页记录，拒绝组装结算清单草稿"
+            )
+
         draft = frontpage_draft or {}
         sql_data = {}
 
         # B 类 SQL 补充
         if db:
-            sql_data = self._load_sql_data(db, patient_id, visit_id)
+            sql_data = self._load_sql_data(
+                db, patient_id, visit_id, scoped_institute_id
+            )
 
         # 如果没有 frontpage_draft，尝试从 mr 表回退基础信息
         if not frontpage_draft and sql_data.get("mr"):
             draft = self._mr_to_pseudo_draft(sql_data["mr"])
 
         result = self._assemble_from_sources(draft, sql_data)
+        if scoped_institute_id:
+            result["institute_id"] = scoped_institute_id
         result["patient_id"] = patient_id
         result["visit_id"] = visit_id
 
         return result
 
-    def _load_sql_data(self, db: Session, patient_id: str, visit_id: str) -> dict:
-        """从 CDM 已同步表加载 B 类数据。"""
+    def _load_sql_data(self, db: Session, patient_id: str, visit_id: str,
+                       institute_id: Optional[str] = None) -> dict:
+        """
+        从 CDM 已同步表加载 B 类数据。
+
+        提供 institute_id 时，四张表统一按“机构 + 患者 + 就诊”过滤并显式限定
+        cdm schema；病案首页（cdm.mr）缺失或任一查询失败都抛错失败关闭。
+        不提供 institute_id 时保持旧口径：只按患者 + 就诊过滤，查询异常仅告警。
+        """
         from sqlalchemy import text
 
-        sql_data = {}
+        scoped_institute_id = None
+        if institute_id is not None:
+            scoped_institute_id = str(institute_id).strip()
+            if not scoped_institute_id:
+                raise SettlementAssemblyUnavailableError(
+                    "institute_id 为空白值，无法按机构隔离读取，"
+                    "拒绝组装结算清单草稿"
+                )
+        scoped = scoped_institute_id is not None
+
+        if scoped:
+            table_prefix = "cdm."
+            scope_where = (
+                "institute_id = :iid AND patient_id = :pid AND visit_id = :vid"
+            )
+        else:
+            table_prefix = ""
+            scope_where = "patient_id = :pid AND visit_id = :vid"
+
+        params: Dict[str, Any] = {"pid": patient_id, "vid": visit_id}
+        if scoped:
+            params["iid"] = scoped_institute_id
+
+        sql_data: Dict[str, Any] = {}
         try:
             # mr 表
             row = db.execute(text(
-                "SELECT * FROM mr WHERE patient_id = :pid AND visit_id = :vid LIMIT 1"
-            ), {"pid": patient_id, "vid": visit_id}).mappings().first()
+                f"SELECT * FROM {table_prefix}mr WHERE {scope_where} LIMIT 1"
+            ), params).mappings().first()
             if row:
                 sql_data["mr"] = dict(row)
 
             # mr_surgery 主手术
             row = db.execute(text(
-                "SELECT * FROM mr_surgery WHERE patient_id = :pid AND visit_id = :vid "
+                f"SELECT * FROM {table_prefix}mr_surgery WHERE {scope_where} "
                 "AND main_surgery_sign = '1' LIMIT 1"
-            ), {"pid": patient_id, "vid": visit_id}).mappings().first()
+            ), params).mappings().first()
             if row:
                 sql_data["mr_surgery"] = dict(row)
 
             # 医保结算清单，同步库只读补充
             row = db.execute(text(
-                "SELECT * FROM medical_insurance_settlement "
-                "WHERE patient_id = :pid AND visit_id = :vid LIMIT 1"
-            ), {"pid": patient_id, "vid": visit_id}).mappings().first()
+                f"SELECT * FROM {table_prefix}medical_insurance_settlement "
+                f"WHERE {scope_where} LIMIT 1"
+            ), params).mappings().first()
             if row:
                 sql_data["medical_insurance_settlement"] = dict(row)
 
             # 重症监护明细
             rows = db.execute(text(
-                "SELECT * FROM mr_icu WHERE patient_id = :pid AND visit_id = :vid "
+                f"SELECT * FROM {table_prefix}mr_icu WHERE {scope_where} "
                 "ORDER BY icu_start_datetime"
-            ), {"pid": patient_id, "vid": visit_id}).mappings().all()
+            ), params).mappings().all()
             if rows:
                 sql_data["mr_icu"] = [dict(row) for row in rows]
 
         except Exception as e:
+            if scoped:
+                raise SettlementAssemblyUnavailableError(
+                    f"按机构读取 CDM 数据失败（institute_id={scoped_institute_id}）"
+                ) from e
             logger.warning(f"加载 SQL 补充数据失败: {e}")
+
+        if scoped and not sql_data.get("mr"):
+            raise SettlementAssemblyUnavailableError(
+                "未找到该机构下的病案首页记录"
+                f"（institute_id={scoped_institute_id}），拒绝组装结算清单草稿"
+            )
 
         return sql_data
 

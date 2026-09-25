@@ -720,14 +720,30 @@ async function fetchFrontpageQCFromBackend(frontpage: Record<string, any>) {
   }
 }
 
+/** 仅在机构号 prop 真实非空时携带编码后的 institute_id，空值不编造机构。 */
+function buildSettlementQcQuery(): string {
+  const instituteId = typeof props.instituteId === 'string' ? props.instituteId.trim() : ''
+  if (!instituteId) return ''
+  return `?${new URLSearchParams({ institute_id: instituteId }).toString()}`
+}
+
+/** 409 表示结算清单身份不唯一，须原样提示用户；不得降级为“无病例”成功。 */
+function describeSettlementQcError(error: unknown, fallback: string): string {
+  const status = (error as { response?: { status?: number } })?.response?.status
+  if (status !== 409) return fallback
+  const detail = (error as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+  return typeof detail === 'string' && detail.trim() ? detail.trim() : '结算清单身份不唯一，请指定机构号'
+}
+
 async function fetchCostQCFromBackend() {
   if (!props.visitId || !props.patientId) {
     return { issues: [], persistence: null, passed: 0, total: 0 }
   }
 
+  const settlementQuery = buildSettlementQcQuery()
   const urls = [
-    `/api/medical-records/settlement/${props.patientId}/${props.visitId}/qc`,
-    `/api/medical-records/settlement/${props.patientId}/${props.visitId}/generate/qc`,
+    `/api/medical-records/settlement/${props.patientId}/${props.visitId}/qc${settlementQuery}`,
+    `/api/medical-records/settlement/${props.patientId}/${props.visitId}/generate/qc${settlementQuery}`,
   ]
 
   let lastError: unknown = null
@@ -755,6 +771,7 @@ async function fetchCostQCFromBackend() {
       }
     } catch (err: any) {
       lastError = err
+      // 仅 404（无病例）才回退到 /generate/qc；409 等身份歧义必须就地失败，不得降级。
       if (err?.response?.status !== 404) break
     }
   }
@@ -820,6 +837,7 @@ async function runCodingQC() {
 
 async function runCostQC() {
   costQCLoading.value = true
+  let succeeded = false
   try {
     const kept = issues.value.filter((i) => i.category !== 'cost')
     const result = await fetchCostQCFromBackend()
@@ -828,12 +846,14 @@ async function runCostQC() {
     emit('issues-change', kept.slice())
     message.success(buildPersistenceMessage('cost', result.persistence))
     notifyPersistence('cost', result.persistence)
+    succeeded = true
   } catch (err) {
     console.error('控费监测异常', err)
-    message.error('控费监测执行失败')
+    message.error(describeSettlementQcError(err, '控费监测执行失败'))
   } finally {
     costQCLoading.value = false
-    costAnalyzed.value = true
+    // 仅成功才算已分析；409/503 等失败必须回到未分析态，否则会渲染绿色“未发现质控问题”假通过。
+    costAnalyzed.value = succeeded
   }
 }
 
@@ -841,6 +861,7 @@ async function runAllQC() {
   formQCLoading.value = true
   codingQCLoading.value = true
   costQCLoading.value = true
+  let succeeded = false
   try {
     const fpData = await loadFrontpageData()
     if (!fpData) {
@@ -864,18 +885,20 @@ async function runAllQC() {
     notifyPersistence('coding', codingResult.persistence)
     notifyPersistence('cost', costResult.persistence)
     message.success('全部质控执行完成，结果已保存')
+    succeeded = true
   } catch (error) {
     console.error('质控引擎执行异常', error)
     issues.value = []
     emit('issues-change', [])
-    message.error('全部质控执行失败')
+    message.error(describeSettlementQcError(error, '全部质控执行失败'))
   } finally {
     formQCLoading.value = false
     codingQCLoading.value = false
     costQCLoading.value = false
-    formAnalyzed.value = true
-    codingAnalyzed.value = true
-    costAnalyzed.value = true
+    // 用整体成功标志统一收口：任一环节失败（含结算 409）都不得标记已分析。
+    formAnalyzed.value = succeeded
+    codingAnalyzed.value = succeeded
+    costAnalyzed.value = succeeded
   }
 }
 

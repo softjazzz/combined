@@ -52,6 +52,7 @@ async def test_both_qc_endpoints_omit_close_scope_even_with_complete_reports(mon
     await route.run_settlement_qc("p1", "v1", None, {"id": "user-1"})
     first = persisted.await_args_list[0].args[0]
     assert "executed_defect_scope" not in first["metadata"]
+    assert first["metadata"]["institute_id"] == "hospital-1"
     saved_start = queue.start_run.call_args_list[0].kwargs
     assert saved_start["source_key"] == "settlement_qc"
     assert (saved_start["institute_id"], saved_start["patient_id"], saved_start["visit_id"]) == (
@@ -61,7 +62,18 @@ async def test_both_qc_endpoints_omit_close_scope_even_with_complete_reports(mon
     )
     assert queue.finish_success.call_args_list[0].kwargs["source_key"] == "settlement_qc"
 
-    monkeypatch.setattr(route, "_generate_draft", lambda _patient_id, _visit_id: {})
+    # 现代草稿路径：身份由 cdm.mr 解析（此处替身），草稿必须自带同一三坐标。
+    monkeypatch.setattr(
+        route,
+        "_resolve_settlement_generate_identity",
+        lambda *_a, **_k: route.SettlementGenerateIdentity("hospital-1", "p2", "v1"),
+    )
+    monkeypatch.setattr(route, "_generate_draft", lambda *_a, **_k: {
+        "institute_id": "hospital-1",
+        "patient_id": "p2",
+        "visit_id": "v1",
+        "is_draft": True,
+    })
     from app.services import settlement_formal_qc
 
     engine = MagicMock()
@@ -82,14 +94,21 @@ async def test_both_qc_endpoints_omit_close_scope_even_with_complete_reports(mon
     )
     monkeypatch.setattr(settlement_formal_qc, "SettlementFormalQCEngine", lambda: engine)
 
-    await route.run_generated_settlement_qc("p2", "v1", {"id": "user-1"})
+    await route.run_generated_settlement_qc(
+        patient_id="p2", visit_id="v1", current_user={"id": "user-1"}
+    )
     second = persisted.await_args_list[1].args[0]
     assert "executed_defect_scope" not in second["metadata"]
     assert first["record_id"] == second["record_id"] == "settlement::v1"
     assert first["patient_id"] != second["patient_id"]
-    # 草稿生成路径由独立任务处理，这里保持 legacy 队列身份不受影响
+    # 起草路径走现代身份：source_key + 三坐标与解析身份一致
     generated_start = queue.start_run.call_args_list[1].kwargs
-    assert generated_start.get("source_key") is None
+    assert generated_start["source_key"] == "settlement_generate_qc"
+    assert (
+        generated_start["institute_id"],
+        generated_start["patient_id"],
+        generated_start["visit_id"],
+    ) == ("hospital-1", "p2", "v1")
 
 
 def test_rule_execution_error_aborts_report():
@@ -118,13 +137,23 @@ def test_rule_execution_error_aborts_report():
 @pytest.mark.asyncio
 async def test_generated_qc_rule_error_skips_persistence_and_marks_failed(monkeypatch):
     from app.services import settlement_formal_qc
+    from fastapi import HTTPException
 
     persisted = AsyncMock()
     monkeypatch.setattr(route.default_qc_persistence_service, "persist_analysis", persisted)
     queue = MagicMock()
     queue.start_run.return_value = "run-1"
     monkeypatch.setattr(route, "default_workflow_queue_state_service", queue)
-    monkeypatch.setattr(route, "_generate_draft", lambda _patient_id, _visit_id: {})
+    monkeypatch.setattr(
+        route,
+        "_resolve_settlement_generate_identity",
+        lambda *_a, **_k: route.SettlementGenerateIdentity("hospital-1", "p1", "v1"),
+    )
+    monkeypatch.setattr(route, "_generate_draft", lambda *_a, **_k: {
+        "institute_id": "hospital-1",
+        "patient_id": "p1",
+        "visit_id": "v1",
+    })
 
     def broken_validate(_settlement):
         raise ValueError("synthetic rule failure")
@@ -147,8 +176,14 @@ async def test_generated_qc_rule_error_skips_persistence_and_marks_failed(monkey
         return engine
 
     monkeypatch.setattr(settlement_formal_qc, "SettlementFormalQCEngine", broken_engine)
-    with pytest.raises(RuntimeError, match="broken"):
-        await route.run_generated_settlement_qc("p1", "v1", {"id": "user-1"})
+    # 规则执行异常必须转成脱敏 503，不得把底层报错文案透给调用方
+    with pytest.raises(HTTPException) as excinfo:
+        await route.run_generated_settlement_qc(
+            patient_id="p1", visit_id="v1", current_user={"id": "user-1"}
+        )
+    assert excinfo.value.status_code == 503
+    assert "broken" not in str(excinfo.value.detail)
     persisted.assert_not_awaited()
     queue.finish_failed.assert_called_once()
+    assert "broken" not in str(queue.finish_failed.call_args)
     queue.finish_success.assert_not_called()

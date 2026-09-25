@@ -328,3 +328,21 @@ class TestDemoSettlementCompleteness:
         assert out["out_of_pocket_advance"] == "500.00"
         assert out["cash_payment_amount"] == "200.00"
         assert out["icu_records"][0]["icu_type"] == "EICU"
+
+
+class TestInstituteScopedGenerate:
+    """机构三坐标隔离：显式机构才走 scoped 取数，空白机构必须失败关闭。"""
+
+    def test_blank_institute_id_fails_closed(self, svc):
+        from app.services.settlement_assembly_service import (
+            SettlementAssemblyUnavailableError,
+        )
+
+        with pytest.raises(SettlementAssemblyUnavailableError):
+            svc.generate(patient_id="p001", visit_id="v001", institute_id="   ")
+
+    def test_institute_id_none_keeps_legacy_behaviour(self, svc):
+        out = svc.generate(patient_id="p001", visit_id="v001")
+        assert out["is_draft"] is True
+        assert out["data_source"] == "generated_from_frontpage"
+        assert "institute_id" not in out

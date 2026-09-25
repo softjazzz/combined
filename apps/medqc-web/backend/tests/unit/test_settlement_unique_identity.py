@@ -330,3 +330,32 @@ async def test_qc_queue_start_failure_is_sanitized_before_analysis(monkeypatch):
     svc.run_qc.assert_not_called()
     persistence.assert_not_awaited()
     queue.finish_failed.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_qc_finish_success_failure_keeps_saved_result(monkeypatch):
+    """结果已落库、队列收尾抛错：/qc 仍返回保存成功结果，不写 finish_failed。"""
+    svc = MagicMock()
+    svc.resolve_settlement_institute_id.return_value = "hospital-b"
+    svc.run_qc.return_value = {
+        "summary": {"total": 1, "passed": 1, "failed": 0, "pass_rate": "100%"},
+        "results": [{"rule_id": "A", "rule_name": "A", "passed": True, "message": ""}],
+        "settlement": {
+            "institute_id": "hospital-b",
+            "patient_id": "patient",
+            "visit_id": "visit",
+        },
+    }
+    queue = MagicMock()
+    queue.start_run.return_value = "run-id"
+    queue.finish_success.side_effect = RuntimeError("queue epilogue down")
+    persistence = AsyncMock(return_value={"success": True})
+    monkeypatch.setattr(route, "get_settlement_service", lambda: svc)
+    monkeypatch.setattr(route, "default_workflow_queue_state_service", queue)
+    monkeypatch.setattr(route.default_qc_persistence_service, "persist_analysis", persistence)
+
+    result = await route.run_settlement_qc("patient", "visit", None, {"id": "tester"})
+
+    persistence.assert_awaited_once()
+    assert result["persistence"] == {"success": True}
+    queue.finish_failed.assert_not_called()
