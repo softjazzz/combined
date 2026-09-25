@@ -117,11 +117,30 @@ export interface AdminRecordItem {
 export interface FinalRecordListQuery {
   keyword?: string
   department?: string
-  status?: 'passed' | 'failed' | 'pending' | string
+  status?: 'unverified'
   start_date?: string
   end_date?: string
   page?: number
   page_size?: number
+}
+
+/** 旧终末列表过渡项：三坐标可信，旧单键质控归属和结果尚未核实。 */
+export interface FinalRecordItem {
+  id: string
+  task_id: string
+  record_id: string
+  institute_id: string
+  patient_id: string
+  visit_id: string
+  visit_type: string
+  patient_name: string
+  department: string
+  discharge_date: string | null
+  identity_status: 'unverified'
+  status: 'unverified'
+  score: null
+  defect_count: null
+  created_at: string
 }
 
 /** 管理员统计概览（KPI 卡片） */
@@ -195,7 +214,7 @@ export async function getFinalRecordList(params?: FinalRecordListQuery) {
     })
   }
   const url = `${RECORDS_URL}/final${queryParams.toString() ? '?' + queryParams.toString() : ''}`
-  return request<{ items: AdminRecordItem[]; total: number; page: number; page_size: number }>({
+  return request<{ items: FinalRecordItem[]; total: number; page: number; page_size: number }>({
     method: 'GET',
     url,
   })

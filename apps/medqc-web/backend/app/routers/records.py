@@ -16,7 +16,6 @@ from ..storage.memory import medical_records_db
 from ..core.settings import get_settings
 from ..database.connection import DB_SCHEMA_MODE, SessionLocal, engine
 from ..database.models.cdm import AdmissionRecord, DischargeRecord, MedicalRecordFrontpage
-from ..database.models.qc import QCDefect, QCResultBiz
 from ..services.bundles.emr_view import build_documents_tree, load_bundle_documents
 from ..services.sample_validation_rule_sets import WORKSPACE_BATCH_DRAFT_IDS
 from ..core.permissions import (
@@ -449,9 +448,11 @@ def _normalize_final_status(status_value: Optional[str]) -> Optional[str]:
         return "failed"
     if raw == "pending":
         return "pending"
+    if raw == "unverified":
+        return "unverified"
     raise HTTPException(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        detail="status 仅支持 passed|failed|pending",
+        detail="status 仅支持 passed|failed|pending|unverified",
     )
 
 
@@ -693,7 +694,7 @@ async def get_final_records(
     request: Request,
     keyword: Optional[str] = Query(None, description="关键字（病历号/住院号/姓名）"),
     department: Optional[str] = Query(None, description="科室"),
-    qc_status: Optional[str] = Query(None, alias="status", description="状态 passed|failed|pending"),
+    qc_status: Optional[str] = Query(None, alias="status", description="状态 passed|failed|pending|unverified"),
     start_date: Optional[str] = Query(None, description="出院日期开始 YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="出院日期结束 YYYY-MM-DD"),
     page: int = Query(1, ge=1, description="页码"),
@@ -703,8 +704,7 @@ async def get_final_records(
     """
     终末病历分页列表（已出院病历）。
 
-    返回契约对齐 AdminRecordItem：
-    id/task_id/record_id/patient_name/department/discharge_date/status/score/defect_count/created_at
+    旧质控结果缺少可核实的三坐标，仅返回 CDM 病历及未核实状态。
     """
     normalized_status = _normalize_final_status(qc_status)
     start_dt = _parse_iso_date_or_422(start_date, "start_date")
@@ -737,48 +737,12 @@ async def get_final_records(
             DischargeRecord.update_time,
             AdmissionRecord.update_time,
         )
-        latest_qc_time_subquery = (
-            session.query(
-                QCResultBiz.record_id.label("record_id"),
-                func.max(QCResultBiz.created_at).label("latest_created_at"),
-            )
-            .group_by(QCResultBiz.record_id)
-            .subquery()
-        )
-        latest_qc_score_subquery = (
-            session.query(
-                QCResultBiz.record_id.label("record_id"),
-                QCResultBiz.overall_score.label("overall_score"),
-            )
-            .join(
-                latest_qc_time_subquery,
-                and_(
-                    QCResultBiz.record_id == latest_qc_time_subquery.c.record_id,
-                    QCResultBiz.created_at == latest_qc_time_subquery.c.latest_created_at,
-                ),
-            )
-            .subquery()
-        )
-        defect_count_query = session.query(
-            QCDefect.record_id.label("record_id"),
-            func.count(QCDefect.id).label("defect_count"),
-        )
-        # 旧库尚无 source_key，也不可能存在依赖该列的任务人工缺陷。
-        defect_columns = session.execute(text('SELECT * FROM "qc_defects" LIMIT 0')).keys()
-        if "source_key" in defect_columns:
-            defect_count_query = defect_count_query.filter(
-                or_(QCDefect.source_key.is_(None), QCDefect.source_key != "task_assigned_qc")
-            )
-        defect_count_subquery = defect_count_query.group_by(QCDefect.record_id).subquery()
-
         query = (
             session.query(
                 MedicalRecordFrontpage,
                 discharge_dt_expr.label("effective_discharge_datetime"),
                 admission_dt_expr.label("effective_admission_datetime"),
                 created_at_expr.label("effective_created_at"),
-                latest_qc_score_subquery.c.overall_score.label("overall_score"),
-                func.coalesce(defect_count_subquery.c.defect_count, 0).label("defect_count"),
             )
             .outerjoin(
                 DischargeRecord,
@@ -795,14 +759,6 @@ async def get_final_records(
                     AdmissionRecord.patient_id == MedicalRecordFrontpage.patient_id,
                     AdmissionRecord.visit_id == MedicalRecordFrontpage.visit_id,
                 ),
-            )
-            .outerjoin(
-                latest_qc_score_subquery,
-                latest_qc_score_subquery.c.record_id == MedicalRecordFrontpage.visit_id,
-            )
-            .outerjoin(
-                defect_count_subquery,
-                defect_count_subquery.c.record_id == MedicalRecordFrontpage.visit_id,
             )
             .filter(discharge_dt_expr.is_not(None))
         )
@@ -823,28 +779,17 @@ async def get_final_records(
             query = query.filter(func.date(discharge_dt_expr) >= start_dt)
         if end_dt:
             query = query.filter(func.date(discharge_dt_expr) <= end_dt)
-        if normalized_status == "pending":
-            query = query.filter(
-                and_(
-                    latest_qc_score_subquery.c.overall_score.is_(None),
-                    func.coalesce(defect_count_subquery.c.defect_count, 0) == 0,
-                )
-            )
-        elif normalized_status == "passed":
-            query = query.filter(
-                and_(
-                    latest_qc_score_subquery.c.overall_score.is_not(None),
-                    func.coalesce(defect_count_subquery.c.defect_count, 0) == 0,
-                )
-            )
-        elif normalized_status == "failed":
-            query = query.filter(func.coalesce(defect_count_subquery.c.defect_count, 0) > 0)
+        if normalized_status in {"pending", "passed", "failed"}:
+            query = query.filter(False)
 
         total = int(query.count() or 0)
         rows = (
             query.order_by(
                 desc(discharge_dt_expr),
                 desc(created_at_expr),
+                MedicalRecordFrontpage.institute_id,
+                MedicalRecordFrontpage.patient_id,
+                MedicalRecordFrontpage.visit_id,
             )
             .offset((page - 1) * page_size)
             .limit(page_size)
@@ -856,21 +801,19 @@ async def get_final_records(
             effective_discharge_datetime,
             _effective_admission_datetime,
             effective_created_at,
-            overall_score,
-            defect_count,
         ) in rows:
-            score = _to_float(overall_score)
-            final_defect_count = _to_int(defect_count, 0)
-            final_status = "pending"
-            if final_defect_count > 0:
-                final_status = "failed"
-            elif score is not None:
-                final_status = "passed"
             items.append(
                 {
-                    "id": str(row.visit_id or ""),
+                    "id": json.dumps(
+                        [row.institute_id, row.patient_id, row.visit_id],
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    ),
                     "task_id": "",
                     "record_id": str(row.visit_id or ""),
+                    "institute_id": str(row.institute_id or ""),
+                    "patient_id": str(row.patient_id or ""),
+                    "visit_id": str(row.visit_id or ""),
                     "visit_type": str(row.visit_type or ""),
                     "patient_name": str(row.name or ""),
                     "department": str(
@@ -879,9 +822,10 @@ async def get_final_records(
                         or ""
                     ),
                     "discharge_date": _normalize_date_only(effective_discharge_datetime),
-                    "status": final_status,
-                    "score": score,
-                    "defect_count": final_defect_count,
+                    "identity_status": "unverified",
+                    "status": "unverified",
+                    "score": None,
+                    "defect_count": None,
                     "created_at": str(
                         effective_created_at
                         or effective_discharge_datetime

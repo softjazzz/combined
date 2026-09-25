@@ -271,8 +271,9 @@
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'recordNumber'">
               <div
-                class="font-mono font-semibold text-slate-700 text-sm group-hover:text-[#2b6cf6] transition-colors cursor-pointer"
-                @click="handleView(record as AdminRecordItem)"
+                class="font-mono font-semibold text-slate-700 text-sm cursor-not-allowed"
+                title="详情接口尚未按三坐标定位，暂不可查看病历详情"
+                @click="handleView(record as FinalRecordItem)"
               >
                 {{ record.record_id }}
               </div>
@@ -281,7 +282,7 @@
             <template v-if="column.key === 'patientInfo'">
               <div class="flex items-center gap-2">
                 <img
-                  :src="patientAvatarSrc(record as AdminRecordItem)"
+                  :src="patientAvatarSrc(record as FinalRecordItem)"
                   alt=""
                   class="record-patient-avatar"
                 >
@@ -290,7 +291,7 @@
                     {{ record.patient_name || '-' }}
                   </div>
                   <div class="mt-0.5 truncate text-xs font-medium text-slate-400">
-                    {{ getPatientMeta(record as AdminRecordItem) }}
+                    {{ getPatientMeta(record as FinalRecordItem) }}
                   </div>
                 </div>
               </div>
@@ -298,54 +299,25 @@
 
             <template v-if="column.key === 'qcStatus'">
               <span
-                class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border"
-                :class="{
-                  'bg-emerald-50 text-emerald-600 border-emerald-100':
-                    record.status === 'completed' || record.status === 'passed',
-                  'bg-rose-50 text-rose-600 border-rose-100': record.status === 'failed',
-                  'bg-amber-50 text-amber-600 border-amber-100': record.status === 'pending',
-                }"
+                class="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600"
               >
                 <span
-                  class="w-1.5 h-1.5 rounded-full"
-                  :class="{
-                    'bg-emerald-500': record.status === 'completed' || record.status === 'passed',
-                    'bg-rose-500': record.status === 'failed',
-                    'bg-amber-500': record.status === 'pending',
-                  }"
+                  class="h-1.5 w-1.5 rounded-full bg-slate-400"
                 />
-                {{ getQCStatusText(record.status) }}
+                质控归属待核实
               </span>
             </template>
 
             <template v-if="column.key === 'defectCount'">
               <span
-                class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border"
-                :class="{
-                  'bg-slate-100 text-slate-600 border-slate-200': record.defect_count === 0,
-                  'bg-amber-50 text-amber-600 border-amber-100':
-                    record.defect_count > 0 && record.defect_count <= 3,
-                  'bg-rose-50 text-rose-600 border-rose-100': record.defect_count > 3,
-                }"
+                class="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-500"
               >
-                {{ record.defect_count || 0 }}
+                —
               </span>
             </template>
 
             <template v-if="column.key === 'qcScore'">
-              <div class="flex items-center gap-2">
-                <span class="font-mono font-semibold text-slate-700">{{
-                  record.score || '-'
-                }}</span>
-                <a-progress
-                  v-if="record.score"
-                  :percent="record.score"
-                  :show-info="false"
-                  :stroke-color="getScoreColor(record.score)"
-                  size="small"
-                  class="w-16"
-                />
-              </div>
+              <span class="text-slate-500">—</span>
             </template>
 
             <template v-if="column.key === 'stageActions'">
@@ -353,7 +325,8 @@
                 <a-button
                   size="small"
                   class="!h-7 !rounded-full !border-slate-200/90 !px-2.5 !text-xs"
-                  :disabled="!getRecordIdForJump(record)"
+                  disabled
+                  title="尚未建立三坐标跳转合同，暂不可进入工作台"
                   @click="jumpToWorkstation(record, 'open_record')"
                 >
                   进入工作台
@@ -361,7 +334,8 @@
                 <a-button
                   size="small"
                   class="!h-7 !rounded-full !border-[rgba(43,108,246,0.2)] !text-[#2b6cf6] !px-2.5 !text-xs"
-                  :disabled="!getRecordIdForJump(record)"
+                  disabled
+                  title="尚未建立三坐标跳转合同，暂不可生成首页"
                   @click="jumpToWorkstation(record, 'generate_frontpage')"
                 >
                   生成首页
@@ -369,7 +343,8 @@
                 <a-button
                   size="small"
                   class="!h-7 !rounded-full !border-violet-200/90 !text-violet-700 !px-2.5 !text-xs"
-                  :disabled="!getRecordIdForJump(record)"
+                  disabled
+                  title="尚未建立三坐标跳转合同，暂不可发起编码质控"
                   @click="jumpToWorkstation(record, 'qc_coding')"
                 >
                   编码质控
@@ -377,7 +352,8 @@
                 <a-button
                   size="small"
                   class="!h-7 !rounded-full !border-emerald-200/90 !text-emerald-700 !px-2.5 !text-xs"
-                  :disabled="!getRecordIdForJump(record)"
+                  disabled
+                  title="尚未建立三坐标跳转合同，暂不可发起首页质控"
                   @click="jumpToWorkstation(record, 'qc_frontpage')"
                 >
                   首页质控
@@ -385,7 +361,8 @@
                 <a-button
                   size="small"
                   class="!h-7 !rounded-full !border-violet-200/90 !text-violet-700 !px-2.5 !text-xs"
-                  :disabled="!getRecordIdForJump(record)"
+                  disabled
+                  title="尚未建立三坐标跳转合同，暂不可发起结算质控"
                   @click="jumpToWorkstation(record, 'qc_settlement')"
                 >
                   结算质控
@@ -404,10 +381,11 @@
 
             <template v-if="column.key === 'action'">
               <div class="flex items-center gap-1">
-                <a-tooltip title="查看详情">
+                <a-tooltip title="详情接口尚未按三坐标定位，暂不可查看病历详情">
                   <button
-                    class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100 hover:text-[#2b6cf6] transition-all"
-                    @click="handleView(record as AdminRecordItem)"
+                    class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-300 cursor-not-allowed"
+                    disabled
+                    @click="handleView(record as FinalRecordItem)"
                   >
                     <EyeOutlined />
                   </button>
@@ -416,21 +394,9 @@
                   <button
                     class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-300 cursor-not-allowed"
                     disabled
-                    @click="handleQCReport(record as AdminRecordItem)"
+                    @click="handleQCReport(record as FinalRecordItem)"
                   >
                     <FileSearchOutlined />
-                  </button>
-                </a-tooltip>
-                <a-tooltip
-                  v-if="record.status === 'pending'"
-                  title="归档能力待后端路由接入"
-                >
-                  <button
-                    class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-300 transition-all cursor-not-allowed"
-                    :disabled="!archiveFeatureEnabled"
-                    @click="handleArchive(record as AdminRecordItem)"
-                  >
-                    <FolderOutlined />
                   </button>
                 </a-tooltip>
               </div>
@@ -659,15 +625,6 @@
       :get-batch-job-status-text="getBatchJobStatusText"
       :format-date-time="formatDateTime"
     />
-
-    <!-- 联审详情抽屉 -->
-    <QCReviewDrawer
-      :visible="drawerVisible"
-      :record="drawerRecord"
-      @update:visible="drawerVisible = $event"
-      @close="drawerVisible = false"
-      @refresh="fetchRecords"
-    />
   </div>
 </template>
 
@@ -677,7 +634,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import type { TableColumnsType, TableProps } from 'ant-design-vue'
 import type { Dayjs } from 'dayjs'
-import type { WorkstationLaunchAction, WorkflowStageKey } from '@/types/workflow'
+import type { WorkstationLaunchAction } from '@/types/workflow'
 import {
   SearchOutlined,
   ReloadOutlined,
@@ -695,10 +652,9 @@ import {
   getFinalRecordList,
   getAdminOverview,
   getDepartmentList,
-  type AdminRecordItem,
+  type FinalRecordItem,
   type AdminOverviewStats,
 } from '@/api/qcAdmin'
-import QCReviewDrawer from '@/components/qc/QCReviewDrawer.vue'
 import ProQueryBar from '@/components/pro/ProQueryBar.vue'
 import ProTableToolbar from '@/components/pro/ProTableToolbar.vue'
 import ProStandardTable from '@/components/pro/ProStandardTable.vue'
@@ -788,13 +744,11 @@ const router = useRouter()
 const loading = ref(false)
 const searchKeyword = ref('')
 const selectedDepartment = ref<string | undefined>(undefined)
-const selectedQCStatus = ref<string | undefined>(undefined)
+const selectedQCStatus = ref<'unverified' | undefined>(undefined)
 type DateRange = [Dayjs, Dayjs] | null
 const dateRange = ref<DateRange>(null)
-const records = ref<AdminRecordItem[]>([])
+const records = ref<FinalRecordItem[]>([])
 const selectedRowKeys = ref<string[]>([])
-const drawerVisible = ref(false)
-const drawerRecord = ref<AdminRecordItem | null>(null)
 const recordListError = ref('')
 
 const archiveFeatureEnabled = false
@@ -1103,13 +1057,11 @@ const departmentOptions = ref<Array<{ value: string; label: string }>>([])
 
 // 质控状态选项
 const qcStatusOptions = [
-  { value: 'passed', label: '通过' },
-  { value: 'failed', label: '未通过' },
-  { value: 'pending', label: '待质控' },
+  { value: 'unverified', label: '质控归属待核实' },
 ]
 
 // 表格列配置 — 增加缺陷数列
-const columns: TableColumnsType<AdminRecordItem> = [
+const columns: TableColumnsType<FinalRecordItem> = [
   {
     title: '病历号',
     dataIndex: 'record_id',
@@ -1144,14 +1096,12 @@ const columns: TableColumnsType<AdminRecordItem> = [
     dataIndex: 'defect_count',
     key: 'defectCount',
     width: 100,
-    sorter: true,
   },
   {
     title: '质控得分',
     dataIndex: 'score',
     key: 'qcScore',
     width: 150,
-    sorter: true,
   },
   {
     title: '阶段动作',
@@ -1165,23 +1115,6 @@ const columns: TableColumnsType<AdminRecordItem> = [
     fixed: 'right' as const,
   },
 ]
-
-const getQCStatusText = (status: string) => {
-  const textMap: Record<string, string> = {
-    passed: '通过',
-    completed: '通过',
-    failed: '未通过',
-    pending: '待质控',
-  }
-  return textMap[status] || status
-}
-
-const getScoreColor = (score: number) => {
-  if (score >= 90) return '#10b981' // emerald-500
-  if (score >= 80) return '#2b6cf6'
-  if (score >= 60) return '#f59e0b' // amber-500
-  return '#f43f5e' // rose-500
-}
 
 const toNumber = (value: unknown): number => {
   const num = Number(value)
@@ -1203,7 +1136,7 @@ const isFemale = (value: unknown): boolean => {
   return ['女', 'female', 'f', '2'].includes(raw)
 }
 
-const patientAvatarSrc = (record: AdminRecordItem): string => {
+const patientAvatarSrc = (record: FinalRecordItem): string => {
   const source = record as unknown as Record<string, unknown>
   const age = Number(source.patient_age ?? source.patientAge ?? source.age ?? 0)
   const female = isFemale(
@@ -1214,7 +1147,7 @@ const patientAvatarSrc = (record: AdminRecordItem): string => {
   return female ? avatarWoman : avatarMan
 }
 
-const getPatientMeta = (record: AdminRecordItem): string => {
+const getPatientMeta = (record: FinalRecordItem): string => {
   const source = record as unknown as Record<string, unknown>
   const sex = String(
     source.patient_sex ?? source.patient_gender ?? source.patientGender ?? '',
@@ -1543,48 +1476,16 @@ const handleExport = async () => {
   message.warning('当前仅有全场景缺陷导出接口，不能作为已出院病历导出')
 }
 
-const handleView = (record: AdminRecordItem) => {
-  drawerRecord.value = record
-  drawerVisible.value = true
+const handleView = (_record: FinalRecordItem) => {
+  message.warning('详情接口尚未按三坐标定位，暂不可从此列表查看病历详情')
 }
 
 const getRecordIdForJump = (record: any): string => {
   return String(record?.record_id || record?.visit_id || record?.visitId || record?.id || '').trim()
 }
 
-const resolveStageByAction = (action: WorkstationLaunchAction): WorkflowStageKey => {
-  if (action === 'generate_frontpage') return 'frontpage_generate'
-  if (action === 'qc_coding') return 'coding_qc'
-  if (action === 'qc_frontpage') return 'frontpage_qc'
-  if (action === 'qc_settlement') return 'settlement_qc'
-  const stageFromQuery = String(route.query.stage || '').trim()
-  if (
-    stageFromQuery === 'frontpage_generate' ||
-    stageFromQuery === 'coding_qc' ||
-    stageFromQuery === 'frontpage_qc' ||
-    stageFromQuery === 'settlement_qc'
-  ) {
-    return stageFromQuery
-  }
-  return 'settlement_qc'
-}
-
-const jumpToWorkstation = (record: any, action: WorkstationLaunchAction) => {
-  const recordId = getRecordIdForJump(record)
-  if (!recordId) {
-    message.warning('当前记录缺少病历标识，无法联动工作台')
-    return
-  }
-  const taskId = String(record?.task_id || '').trim()
-  const fromStage = resolveStageByAction(action)
-  const query: Record<string, string> = {
-    record_id: recordId,
-    action,
-    source: 'dashboard',
-    from_stage: fromStage,
-  }
-  if (taskId) query.task_id = taskId
-  router.push({ path: '/workstation-v5', query })
+const jumpToWorkstation = (_record: any, _action: WorkstationLaunchAction) => {
+  message.warning('尚未建立三坐标跳转合同，暂不可从此列表进入工作台')
 }
 
 const openCustomQCExperience = (record?: any) => {
@@ -1611,12 +1512,8 @@ const openCustomQCExperience = (record?: any) => {
   router.push({ path: '/workstation-v5/custom-qc-experience', query })
 }
 
-const handleQCReport = (_record: AdminRecordItem) => {
+const handleQCReport = (_record: FinalRecordItem) => {
   message.warning('当前无法按病例匹配报告，请在下方历史任务列表查看')
-}
-
-const handleArchive = (record: AdminRecordItem) => {
-  message.warning(`归档接口未接入，当前无法归档病历 ${record.record_id}`)
 }
 
 const handleTableChange = (pag: any) => {
@@ -1627,29 +1524,14 @@ const handleTableChange = (pag: any) => {
 
 const stageHint = computed(() => {
   const stage = String(route.query.stage || '').trim()
-  if (stage === 'frontpage_generate') return '当前队列：待生成首页（结算视图）'
-  if (stage === 'coding_qc') return '当前队列：待编码质控（结算视图）'
-  if (stage === 'frontpage_qc') return '当前队列：待首页质控（结算视图）'
-  if (stage === 'settlement_qc') return '当前队列：待结算清单质控'
+  if (['frontpage_generate', 'coding_qc', 'frontpage_qc', 'settlement_qc'].includes(stage)) {
+    return '当前仅展示已出院病历，尚无法按质控阶段归类'
+  }
   return ''
 })
 
 const applyStagePreset = (stage: string) => {
-  if (stage === 'frontpage_generate') {
-    selectedQCStatus.value = 'pending'
-    return
-  }
-  if (stage === 'coding_qc') {
-    selectedQCStatus.value = 'pending'
-    return
-  }
-  if (stage === 'frontpage_qc') {
-    selectedQCStatus.value = 'failed'
-    return
-  }
-  if (stage === 'settlement_qc') {
-    selectedQCStatus.value = 'pending'
-  }
+  if (stage) selectedQCStatus.value = 'unverified'
 }
 
 // 筛选条件变化时自动刷新

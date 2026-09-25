@@ -61,10 +61,14 @@ def _frontpage(institute, patient, visit=_VISIT):
     )
 
 
-def _get_items(client, **params):
+def _get_data(client, **params):
     response = client.get("/api/v1/records/final", params=params)
     assert response.status_code == 200, response.text
-    return response.json()["data"]["items"]
+    return response.json()["data"]
+
+
+def _get_items(client, **params):
+    return _get_data(client, **params)["items"]
 
 
 def test_task_manual_uuid_collision_does_not_change_either_hospitals_final_status(monkeypatch):
@@ -90,13 +94,14 @@ def test_task_manual_uuid_collision_does_not_change_either_hospitals_final_statu
     rows = _get_items(client)
     assert len(rows) == 2
     assert {row["patient_name"] for row in rows} == {"patient-hospital-a", "patient-hospital-b"}
-    assert {(row["status"], row["defect_count"]) for row in rows} == {("pending", 0)}
+    assert {(row["status"], row["defect_count"]) for row in rows} == {("unverified", None)}
     assert _get_items(client, status="failed") == []
-    assert len(_get_items(client, status="pending")) == 2
+    assert _get_items(client, status="pending") == []
+    assert len(_get_items(client, status="unverified")) == 2
 
 
 @pytest.mark.parametrize("source_key", [None, "legacy_qc", "workspace_batch"])
-def test_existing_sources_still_count_as_before(monkeypatch, source_key):
+def test_visit_only_sources_remain_unattributed(monkeypatch, source_key):
     _engine, factory = _database(monkeypatch)
     with factory.begin() as session:
         session.add(_frontpage("hospital-a", "patient-a"))
@@ -112,9 +117,10 @@ def test_existing_sources_still_count_as_before(monkeypatch, source_key):
     client = _client()
     rows = _get_items(client)
     assert len(rows) == 1
-    assert rows[0]["status"] == "failed"
-    assert rows[0]["defect_count"] == 1
-    assert len(_get_items(client, status="failed")) == 1
+    assert rows[0]["status"] == "unverified"
+    assert rows[0]["defect_count"] is None
+    assert _get_items(client, status="failed") == []
+    assert len(_get_items(client, status="unverified")) == 1
 
 
 def test_rev44_table_without_source_key_keeps_legacy_list_readable(monkeypatch):
@@ -129,11 +135,11 @@ def test_rev44_table_without_source_key_keeps_legacy_list_readable(monkeypatch):
 
     rows = _get_items(_client())
     assert len(rows) == 1
-    assert rows[0]["status"] == "failed"
-    assert rows[0]["defect_count"] == 1
+    assert rows[0]["status"] == "unverified"
+    assert rows[0]["defect_count"] is None
 
 
-def test_probe_database_error_is_not_treated_as_missing_column(monkeypatch):
+def test_legacy_qc_probe_failure_does_not_break_cdm_list(monkeypatch):
     engine, factory = _database(monkeypatch)
     with factory.begin() as session:
         session.add(_frontpage("hospital-a", "patient-a"))
@@ -143,7 +149,23 @@ def test_probe_database_error_is_not_treated_as_missing_column(monkeypatch):
         if 'SELECT * FROM "qc_defects" LIMIT 0' in statement:
             raise RuntimeError("private database connection details")
 
-    response = _client().get("/api/v1/records/final")
-    assert response.status_code == 503
-    assert "private" not in response.text
-    assert "items" not in response.text
+    data = _get_data(_client())
+    assert data["total"] == 1
+    assert data["items"][0]["status"] == "unverified"
+    assert data["items"][0]["score"] is None
+    assert data["items"][0]["defect_count"] is None
+
+
+def test_legacy_qc_table_failures_do_not_break_cdm_list(monkeypatch):
+    engine, factory = _database(monkeypatch)
+    with factory.begin() as session:
+        session.add(_frontpage("hospital-a", "patient-a"))
+
+    @event.listens_for(engine, "before_cursor_execute")
+    def fail_legacy_qc(_connection, _cursor, statement, _parameters, _context, _many):
+        if "qc_defects" in statement or "qc_results" in statement:
+            raise RuntimeError("private legacy QC database details")
+
+    data = _get_data(_client())
+    assert data["total"] == 1
+    assert data["items"][0]["status"] == "unverified"

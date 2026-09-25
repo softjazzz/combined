@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { getAdminRecordList } from '@/api/qcAdmin'
+import { getAdminRecordList, getFinalRecordList } from '@/api/qcAdmin'
 import { ApiService } from '@/services/apiService'
 
 describe('getAdminRecordList', () => {
@@ -32,6 +32,21 @@ describe('getAdminRecordList', () => {
     expect(request).toHaveBeenCalledWith({
       method: 'GET',
       url: '/api/v1/records/outpatient-emergency?scene=outpatient_emergency&page=1',
+    })
+  })
+
+  it('终末未核实筛选准确序列化到专用列表接口', async () => {
+    const request = vi.spyOn(ApiService, 'requestRaw').mockResolvedValueOnce({
+      data: { success: true, data: { items: [], total: 0, page: 1, page_size: 10 } },
+    } as never)
+
+    const response = await getFinalRecordList({ status: 'unverified', page: 2 })
+
+    expect(response.success).toBe(true)
+    expect(request).toHaveBeenCalledOnce()
+    expect(request).toHaveBeenCalledWith({
+      method: 'GET',
+      url: '/api/v1/records/final?status=unverified&page=2',
     })
   })
 })

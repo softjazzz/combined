@@ -1,4 +1,4 @@
-"""终末列表的数据源或质控聚合不可用时必须显式失败。"""
+"""终末列表的 CDM 数据源不可用时必须脱敏失败。"""
 
 from types import SimpleNamespace
 
@@ -20,7 +20,7 @@ def _client():
     return TestClient(app)
 
 
-@pytest.mark.parametrize("qc_status", [None, "pending", "passed", "failed"])
+@pytest.mark.parametrize("qc_status", [None, "unverified", "pending", "passed", "failed"])
 def test_final_list_rejects_missing_database_without_memory_rows(monkeypatch, qc_status):
     monkeypatch.setattr(records, "SessionLocal", None)
     monkeypatch.setitem(
@@ -41,8 +41,8 @@ def test_final_list_rejects_missing_database_without_memory_rows(monkeypatch, qc
 
 
 @pytest.mark.parametrize("failure_point", ["factory", "enter", "query", "http"])
-@pytest.mark.parametrize("qc_status", [None, "pending", "passed", "failed"])
-def test_final_list_rejects_session_and_aggregate_failures(monkeypatch, failure_point, qc_status):
+@pytest.mark.parametrize("qc_status", [None, "unverified", "pending", "passed", "failed"])
+def test_final_list_rejects_session_and_cdm_query_failures(monkeypatch, failure_point, qc_status):
     class BrokenSession:
         def __enter__(self):
             if failure_point == "enter":
@@ -54,8 +54,8 @@ def test_final_list_rejects_session_and_aggregate_failures(monkeypatch, failure_
 
         def query(self, *_args):
             if failure_point == "http":
-                raise HTTPException(status_code=500, detail="private aggregate SQL and patient details")
-            raise RuntimeError("private aggregate SQL and patient details")
+                raise HTTPException(status_code=500, detail="private CDM SQL and patient details")
+            raise RuntimeError("private CDM SQL and patient details")
 
     def session_factory():
         if failure_point == "factory":
@@ -71,8 +71,8 @@ def test_final_list_rejects_session_and_aggregate_failures(monkeypatch, failure_
     assert "items" not in response.text
 
 
-@pytest.mark.parametrize("qc_status", [None, "pending", "passed", "failed"])
-def test_final_list_rejects_aggregate_failure_even_if_fallback_query_works(monkeypatch, qc_status):
+@pytest.mark.parametrize("qc_status", [None, "unverified", "pending", "passed", "failed"])
+def test_final_list_rejects_cdm_count_failure_even_if_followup_query_works(monkeypatch, qc_status):
     class FallbackQuery:
         def __getattr__(self, _name):
             return lambda *_args, **_kwargs: self
@@ -103,7 +103,7 @@ def test_final_list_rejects_aggregate_failure_even_if_fallback_query_works(monke
         def query(self, *_args):
             self.query_count += 1
             if self.query_count == 1:
-                raise RuntimeError("private aggregate SQL")
+                raise RuntimeError("private CDM SQL")
             return FallbackQuery()
 
         def rollback(self):
