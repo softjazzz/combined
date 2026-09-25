@@ -839,6 +839,37 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.get('[data-testid="single-record-evidence"]').text()).not.toContain('来源文书')
   })
 
+  it('将已发布抢救证据显示为抢救记录', async () => {
+    const wrapper = mount(SingleRecordQcResultPanel, {
+      props: {
+        items: [
+          {
+            rule_id: 'LX0609-09-01-01',
+            rule_name: '抢救记录时限',
+            status: 'compliant',
+            conclusion: '抢救记录已按时完成。',
+            evidence: [
+              {
+                source_ref: 'src_aaaaaaaaaaaaaaaaaaaaaaaa',
+                source_type: 'rescue_record',
+                record_time: '2026-09-01 10:00:00',
+                evidence_excerpt: '合成记录：抢救结束后五小时完成记录',
+                excerpt_kind: '文书级依据',
+              },
+            ],
+          },
+        ],
+      },
+    })
+
+    await wrapper.get('[data-testid="single-record-result-tab-all"]').trigger('click')
+    await wrapper.get('[data-testid="single-record-result-toggle"]').trigger('click')
+
+    const evidence = wrapper.get('[data-testid="single-record-evidence"]')
+    expect(evidence.text()).toContain('抢救记录')
+    expect(evidence.text()).not.toContain('来源文书')
+  })
+
   it('占位结果单独计为未执行，不把质控点总数冒充执行完成数', () => {
     const wrapper = mount(SingleRecordQcResultPanel, {
       props: {
