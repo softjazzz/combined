@@ -749,6 +749,24 @@ describe('MyTasksView 我的任务口径', () => {
     })
   })
 
+  it('继续进行中任务时打开该任务受领详情，不跳入全院病历池', async () => {
+    mocks.getTaskList.mockResolvedValue(listWith('任务-A', 'in_progress'))
+    const wrapper = await mountView()
+    const continueButton = wrapper.get('[data-testid="task-row"]').findAll('button')
+      .find((button) => button.text().includes('继续'))
+
+    expect(continueButton).toBeDefined()
+    await continueButton!.trigger('click')
+    await nextTick()
+
+    expect(wrapper.getComponent(TaskDetailDrawerStub).props()).toMatchObject({
+      open: true,
+      taskId: '任务-A',
+      tab: 'received',
+    })
+    expect(mocks.routerPush).not.toHaveBeenCalled()
+  })
+
   it.each([
     ['未开始任务', 'pending-task-action'],
     ['已完成任务', 'completed-task-action'],

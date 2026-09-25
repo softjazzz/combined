@@ -874,8 +874,8 @@ const handleStartWork = async (record: TaskItem) => {
 
 const handleContinueWork = (record: TaskItem) => {
   if (activeTab.value !== 'received') return
-  // 跳转到工作站（带上任务上下文）
-  router.push({ path: '/workstation-v5', query: { taskId: record.id } })
+  // 任务详情按受领人展示分配病历；全院病历池不会消费 taskId 范围。
+  handleViewDetail(record)
 }
 
 const handleViewDetail = (record: TaskItem) => {
