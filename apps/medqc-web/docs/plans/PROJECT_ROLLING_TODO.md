@@ -6,6 +6,8 @@
 >
 > 维护原则：只记录已确认事实或明确标注的待验证假设；含患者原文的材料不得写入本文档。
 
+2026-09-25 MEDQC-022 B 三入口现行验证：正式单病历、病历池、客户样本 API→Worker→隔离 SQLite→Canonical latest-result 两项集成测试 2/2 通过；原始 001–075 空资料的 70 条客户交付及固定会诊 023 模型桩结果逐项一致。病历池测试为串行，真实模型、默认并发、客户 PG 与临床保护集仍待验。[证据](../acceptance/2026-09-24-original-engine-requirements-evidence.md)。
+
 2026-09-25 MEDQC-022 B/D：当前提交 `2d1d3730d` 已从干净源码经 Windows PowerShell 5.1 完整打包并从 ZIP 解压，前后端构建身份一致；包内原始 001 合成任务跨进程恢复、Canonical 回读成功，异版恢复受控拒绝。客户机启动脚本/PG 与真实模型费用未验；A0/A4 临床保护集仍为零签收。工程代码可交接评审，不再重复本机旧版打包演练。[证据](../acceptance/2026-09-25-original-engine-package-restart.md)。
 
 2026-09-25 MEDQC-022 B：失败规则自动重试的旧测试遗漏接纳快照参数，曾误报 `retry_batch_job` 返回空值。正式 Worker 已传该参数；更新测试验证旧快照拒绝、当前快照重试及有效项保留，整份 14/14 通过。生产代码未改，安装包跨启动恢复仍待验。[证据](../acceptance/2026-09-24-original-engine-requirements-evidence.md)。
