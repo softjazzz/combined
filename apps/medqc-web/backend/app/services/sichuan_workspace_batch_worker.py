@@ -13,7 +13,7 @@ import uuid
 from fastapi import HTTPException
 
 from ..core.settings import get_settings
-from .case_identity import CaseRef
+from .case_identity import CaseRef, case_refs_from_records, normalize_case_refs
 from .custom_qc_workspace_service import (
     CustomQCWorkspaceService,
     LX0609_ATTEMPT_FILTER_KEY,
@@ -1498,6 +1498,11 @@ async def run_sichuan_workspace_batch_job(
             record_ids=None if has_persisted_record_refs else current.get("record_ids") or None,
             record_refs=persisted_record_refs if has_persisted_record_refs else None,
         )
+        if rule_set_key == LUXIAN_0609_RULE_SET_KEY and has_persisted_record_refs:
+            accepted_refs = set(normalize_case_refs(persisted_record_refs))
+            collected_refs = set(case_refs_from_records(records)) if records else set()
+            if collected_refs != accepted_refs:
+                raise ValueError("已接纳病例范围与当前重取结果不一致，拒绝执行部分病历")
         workspace.update_batch_job_progress(
             job_id=job_id,
             **attempt_kwargs,
