@@ -71,13 +71,17 @@ function render(component: typeof V2View | typeof V4View) {
   return shallowMount(component, { global: { stubs } })
 }
 
-async function completeRunningTest(view: GuardView) {
+async function attemptRunningTest(view: GuardView) {
   view.selectedRecordKeys = ['old-1']
   view.draftRule.name = '病程记录完整性质控'
   view.draftRule.description = '核对每日病程记录是否包含完整处理意见'
   view.draftRule.prompt_template = '核对处理意见'
   await view.runSelectedTest()
-  expect(view.canPublish).toBe(true)
+  expect(view.canPublish).toBe(false)
+  expect(state.getRecordDetail).not.toHaveBeenCalled()
+  expect(state.testCustomQcSingle).not.toHaveBeenCalled()
+  expect(state.testCustomQcBatch).not.toHaveBeenCalled()
+  expect(state.saveCustomQcTestResult).not.toHaveBeenCalled()
 }
 
 describe.each([
@@ -116,7 +120,7 @@ describe.each([
     const view = wrapper.vm as unknown as GuardView
     expect(view.records).toHaveLength(1)
 
-    await completeRunningTest(view)
+    await attemptRunningTest(view)
     if (reason === '业务失败') {
       state.getAdminRecordList.mockResolvedValueOnce({ success: false, message: '旧入口不可用' })
     } else {
@@ -156,7 +160,7 @@ describe.each([
     const wrapper = render(component)
     await flushPromises()
     const view = wrapper.vm as unknown as GuardView
-    await completeRunningTest(view)
+    await attemptRunningTest(view)
 
     state.routeQuery.scene = 'final'
     await nextTick()
@@ -169,33 +173,26 @@ describe.each([
     wrapper.unmount()
   })
 
-  it('发布规则号查询尚未返回时切场景，不继续创建规则', async () => {
+  it('来源未核实时切场景也不查询规则号或创建规则', async () => {
     const wrapper = render(component)
     await flushPromises()
     const view = wrapper.vm as unknown as GuardView
-    await completeRunningTest(view)
-
-    let resolveRules: (rules: unknown[]) => void = () => {}
-    state.getAllRules.mockImplementationOnce(
-      () => new Promise<unknown[]>((resolve) => { resolveRules = resolve }),
-    )
-    const publishing = view.handlePublish()
-    expect(state.getAllRules).toHaveBeenCalledOnce()
+    await attemptRunningTest(view)
+    await view.handlePublish()
+    expect(state.getAllRules).not.toHaveBeenCalled()
 
     state.routeQuery.scene = 'final'
     await nextTick()
-    resolveRules([])
-    await publishing
 
     expect(state.createRule).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 
-  it('完成试跑后修改草稿，旧结果不可发布', async () => {
+  it('来源未核实时修改草稿，仍不可发布', async () => {
     const wrapper = render(component)
     await flushPromises()
     const view = wrapper.vm as unknown as GuardView
-    await completeRunningTest(view)
+    await attemptRunningTest(view)
 
     view.draftRule.description = '改为核对不同的临床事实'
     await nextTick()
@@ -205,11 +202,11 @@ describe.each([
     wrapper.unmount()
   })
 
-  it('完成试跑后修改检查逻辑参数，旧结果不可发布', async () => {
+  it('来源未核实时修改检查逻辑参数，仍不可发布', async () => {
     const wrapper = render(component)
     await flushPromises()
     const view = wrapper.vm as unknown as GuardView
-    await completeRunningTest(view)
+    await attemptRunningTest(view)
 
     view.advancedParams.temperature = 0.7
     await nextTick()
@@ -219,7 +216,7 @@ describe.each([
     wrapper.unmount()
   })
 
-  it('试跑未返回时修改草稿，不保存旧草稿结果', async () => {
+  it('来源未核实时直接调用试跑，不发起请求或保存结果', async () => {
     const wrapper = render(component)
     await flushPromises()
     const view = wrapper.vm as unknown as GuardView
@@ -228,46 +225,27 @@ describe.each([
     view.draftRule.description = '核对每日病程记录是否包含完整处理意见'
     view.draftRule.prompt_template = '核对处理意见'
 
-    let resolveTest: (response: unknown) => void = () => {}
-    state.testCustomQcSingle.mockImplementationOnce(
-      () => new Promise((resolve) => { resolveTest = resolve }),
-    )
-    const testing = view.runSelectedTest()
+    await view.runSelectedTest()
     await flushPromises()
-    expect(state.testCustomQcSingle).toHaveBeenCalledOnce()
+    expect(state.getRecordDetail).not.toHaveBeenCalled()
+    expect(state.testCustomQcSingle).not.toHaveBeenCalled()
     view.draftRule.prompt_template = '改为核对其他条件'
     await nextTick()
-    resolveTest({
-      success: true,
-      data: {
-        rule: { name: '病程记录完整性质控', document_type: '病程记录' },
-        record: { record_id: 'old-1' },
-        result: { is_compliant: true },
-      },
-    })
-    await testing
 
     expect(state.saveCustomQcTestResult).not.toHaveBeenCalled()
     expect(view.singleResult).toBeNull()
     wrapper.unmount()
   })
 
-  it('发布规则号查询期间修改草稿，不创建规则', async () => {
+  it('来源未核实时修改草稿也不查询规则号或创建规则', async () => {
     const wrapper = render(component)
     await flushPromises()
     const view = wrapper.vm as unknown as GuardView
-    await completeRunningTest(view)
-
-    let resolveRules: (rules: unknown[]) => void = () => {}
-    state.getAllRules.mockImplementationOnce(
-      () => new Promise<unknown[]>((resolve) => { resolveRules = resolve }),
-    )
-    const publishing = view.handlePublish()
-    expect(state.getAllRules).toHaveBeenCalledOnce()
+    await attemptRunningTest(view)
+    await view.handlePublish()
+    expect(state.getAllRules).not.toHaveBeenCalled()
     view.draftRule.name = '修改后的规则'
     await nextTick()
-    resolveRules([])
-    await publishing
 
     expect(state.createRule).not.toHaveBeenCalled()
     wrapper.unmount()

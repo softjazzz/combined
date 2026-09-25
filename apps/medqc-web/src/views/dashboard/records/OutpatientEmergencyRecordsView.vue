@@ -407,8 +407,7 @@ const handleRefresh = () => {
 }
 
 const resolveRecordId = (record: AdminRecordItem): string => {
-  const candidate = record.id || record.record_id
-  return String(candidate || '').trim()
+  return String(record.id || '').trim()
 }
 
 const openDetail = async (record: AdminRecordItem) => {
@@ -425,7 +424,7 @@ const openDetail = async (record: AdminRecordItem) => {
   detailVisible.value = true
   detailLoading.value = true
   try {
-    const res = await getRecordDetail(recordId)
+    const res = await getRecordDetail(recordId, 'legacy_medical_records')
     if (requestSequence !== detailRequestSequence) return
     if (res.success && res.data && typeof res.data === 'object') {
       detailData.value = res.data as Record<string, unknown>

@@ -340,7 +340,27 @@ describe('OutpatientEmergencyRecordsView 列表故障语义', () => {
     await wrapper.get('[data-testid="record-actions-primary-id"]').findAll('button')
       .find((button) => button.text() === '查看病历文书')!.trigger('click')
     await flushPromises()
-    expect(mocks.getRecordDetail).toHaveBeenCalledWith('primary-id')
+    expect(mocks.getRecordDetail).toHaveBeenCalledWith('primary-id', 'legacy_medical_records')
     expect(drawer.props('visible')).toBe(true)
+  })
+
+  it('缺少旧病历表主键时不回退使用就诊号打开详情', async () => {
+    mocks.getOutpatientEmergencyRecordList.mockResolvedValueOnce({
+      success: true,
+      data: {
+        items: [{ record_id: 'shared-visit', patient_name: '测试患者' }],
+        total: 1,
+      },
+    })
+    const wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.get('[data-testid="record-actions-undefined"]').findAll('button')
+      .find((button) => button.text() === '查看病历文书')!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.getRecordDetail).not.toHaveBeenCalled()
+    expect(mocks.message.warning).toHaveBeenCalled()
+    expect(wrapper.getComponent({ name: 'OutpatientEmergencyDetailDrawer' }).props('visible')).toBe(false)
   })
 })

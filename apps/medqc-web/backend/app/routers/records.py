@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, date
 import json
-from typing import Any, Dict, Optional, List
+from typing import Any, Dict, Optional, List, Literal
 import logging
 from contextlib import contextmanager
 
@@ -851,9 +851,10 @@ async def get_record_qc_detail(
     request: Request,
     record_id: str,
     current_user: dict = Depends(get_current_user),
+    source: Literal["legacy_medical_records"] = Query(...),
 ):
     """
-    病历详情聚合接口（最小壳层）。
+    病历详情聚合接口（最小壳层）。source 必须为 legacy_medical_records，路径 id 为该表主键。
 
     返回契约:
     {
@@ -867,6 +868,15 @@ async def get_record_qc_detail(
       exists: bool
     }
     """
+    if (
+        source != "legacy_medical_records"
+        or not isinstance(record_id, str)
+        or not record_id.strip()
+        or record_id != record_id.strip()
+        or any(ord(char) < 32 for char in record_id)
+    ):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="病历来源或标识无效")
+
     payload: Dict[str, Any] = {
         "record": {},
         "defects": [],
@@ -898,26 +908,34 @@ async def get_record_qc_detail(
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="病历详情数据源不可用")
 
         settings = get_settings()
-        matching_records: Dict[str, Dict[str, Any]] = {}
-        for key in ("id", "record_id"):
-            rec_resp = await async_execute(
-                supabase.table(settings.RECORDS_TABLE).select("*").eq(key, record_id).limit(2)
-            )
-            for row in list(getattr(rec_resp, "data", None) or []):
-                if not isinstance(row, dict) or not row.get("id"):
-                    raise ValueError("invalid medical record identity")
-                matching_records[str(row["id"])] = row
-
+        if settings.RECORDS_TABLE != "medical_records":
+            raise ValueError("unexpected medical record table")
+        rec_resp = await async_execute(
+            supabase.table(settings.RECORDS_TABLE).select("*").eq("id", record_id).limit(2)
+        )
+        matching_records = list(getattr(rec_resp, "data", None) or [])
         if not matching_records:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="病历不存在")
         if len(matching_records) != 1:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="病历标识不唯一")
 
-        record_row = next(iter(matching_records.values()))
+        record_row = matching_records[0]
+        if not isinstance(record_row, dict) or str(record_row.get("id", "")) != record_id:
+            raise ValueError("invalid medical record identity")
         normalized = _normalize_outpatient_item(record_row)
-        payload["record"] = {**normalized, **record_row}
-        payload["record"].pop("status", None)
-        payload["record"].pop("defect_count", None)
+        payload["record"] = {
+            key: normalized[key]
+            for key in (
+                "id",
+                "record_id",
+                "patient_name",
+                "department",
+                "doctor_name",
+                "visit_type",
+                "visit_date",
+            )
+        }
+        payload["record"]["source"] = "legacy_medical_records"
 
         docs_resp = await async_execute(
             supabase.table(settings.DOCUMENTS_TABLE)

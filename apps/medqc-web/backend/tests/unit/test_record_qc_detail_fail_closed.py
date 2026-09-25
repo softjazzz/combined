@@ -69,14 +69,16 @@ def setup(monkeypatch, client):
 
 async def detail(record_id="external-1"):
     request = Request({"type": "http", "headers": []})
-    return await records.get_record_qc_detail.__wrapped__(request, record_id, {"id": "test"})
+    return await records.get_record_qc_detail.__wrapped__(
+        request, record_id, {"id": "test"}, "legacy_medical_records"
+    )
 
 
 @pytest.mark.asyncio
-async def test_document_lookup_uses_resolved_primary_key_and_never_reads_single_key_qc(monkeypatch):
+async def test_document_lookup_uses_primary_key_and_never_reads_single_key_qc(monkeypatch):
     client = Client(
-        rows={"id": [], "record_id": [{"id": "primary-1", "record_id": "external-1", "defect_count": 7}]},
-        documents=[{"id": "doc-1", "record_id": "primary-1", "document_type": "入院记录", "content": "正文"}],
+        rows={"id": [{"id": "external-1", "record_id": "clinical-1", "defect_count": 7}]},
+        documents=[{"id": "doc-1", "record_id": "external-1", "document_type": "入院记录", "content": "正文"}],
     )
     setup(monkeypatch, client)
     queries = []
@@ -96,18 +98,19 @@ async def test_document_lookup_uses_resolved_primary_key_and_never_reads_single_
     assert result["data"]["documents"]["raw_documents"][0]["id"] == "doc-1"
     assert queries == [
         ("medical_records", "id", "external-1"),
-        ("medical_records", "record_id", "external-1"),
-        ("medical_documents", "record_id", "primary-1"),
+        ("medical_documents", "record_id", "external-1"),
     ]
-    assert client.calls == ["medical_records", "medical_records", "medical_documents"]
+    assert client.calls == ["medical_records", "medical_documents"]
 
 
 @pytest.mark.asyncio
 async def test_ambiguous_identity_returns_409_without_document_or_qc_read(monkeypatch):
     client = Client(
         rows={
-            "id": [{"id": "external-1", "record_id": "other"}],
-            "record_id": [{"id": "primary-2", "record_id": "external-1"}],
+            "id": [
+                {"id": "external-1", "record_id": "clinical-1"},
+                {"id": "external-1", "record_id": "clinical-1"},
+            ],
         }
     )
     setup(monkeypatch, client)
@@ -116,11 +119,11 @@ async def test_ambiguous_identity_returns_409_without_document_or_qc_read(monkey
         await detail()
 
     assert exc.value.status_code == 409
-    assert client.calls == ["medical_records", "medical_records"]
+    assert client.calls == ["medical_records"]
 
 
 @pytest.mark.asyncio
-async def test_duplicate_clinical_record_number_is_ambiguous(monkeypatch):
+async def test_clinical_record_number_is_not_primary_key(monkeypatch):
     client = Client(
         rows={
             "id": [],
@@ -135,8 +138,8 @@ async def test_duplicate_clinical_record_number_is_ambiguous(monkeypatch):
     with pytest.raises(HTTPException) as exc:
         await detail()
 
-    assert exc.value.status_code == 409
-    assert client.calls == ["medical_records", "medical_records"]
+    assert exc.value.status_code == 404
+    assert client.calls == ["medical_records"]
 
 
 @pytest.mark.asyncio
@@ -148,7 +151,7 @@ async def test_missing_record_returns_404(monkeypatch):
         await detail()
 
     assert exc.value.status_code == 404
-    assert client.calls == ["medical_records", "medical_records"]
+    assert client.calls == ["medical_records"]
 
 
 @pytest.mark.asyncio

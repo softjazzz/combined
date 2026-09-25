@@ -20,14 +20,6 @@ const SlotStub = defineComponent({
   },
 })
 
-function deferred<T>() {
-  let resolve!: (value: T) => void
-  const promise = new Promise<T>((promiseResolve) => {
-    resolve = promiseResolve
-  })
-  return { promise, resolve }
-}
-
 function mountDrawer() {
   return mount(QCReviewDrawer, {
     props: {
@@ -67,6 +59,7 @@ describe('QCReviewDrawer 质控关联隔离', () => {
     await wrapper.setProps({ visible: true })
     await flushPromises()
 
+    expect(mocks.getRecordDetail).not.toHaveBeenCalled()
     expect(mocks.getDefectList).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('质控关联待核实')
     expect(wrapper.text()).not.toContain('暂无质控问题')
@@ -84,39 +77,21 @@ describe('QCReviewDrawer 质控关联隔离', () => {
     await wrapper.setProps({ visible: true })
     await flushPromises()
 
+    expect(mocks.getRecordDetail).not.toHaveBeenCalled()
     expect(mocks.getDefectList).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('质控关联待核实')
     expect(wrapper.text()).not.toContain('暂无质控问题')
     wrapper.unmount()
   })
 
-  it('切换病历后丢弃旧详情响应', async () => {
-    const first = deferred<unknown>()
-    mocks.getRecordDetail
-      .mockReturnValueOnce(first.promise)
-      .mockResolvedValueOnce({
-        success: true,
-        data: { qc_data_status: 'unavailable_identity_contract', documents: { raw_documents: [] } },
-      })
+  it('切换未核实病历也不请求旧详情', async () => {
     const wrapper = mountDrawer()
     await wrapper.setProps({ visible: true })
     await wrapper.setProps({ record: { id: 'record-pk-2', record_id: 'record-business-id-2' } })
     await flushPromises()
 
-    first.resolve({
-      success: true,
-      data: {
-        qc_data_status: 'unavailable_identity_contract',
-        documents: {
-          raw_documents: [{ doc_type: 'admission_record', document_title: '旧病历文书', content: '旧内容' }],
-        },
-      },
-    })
-    await flushPromises()
-
-    expect(mocks.getRecordDetail).toHaveBeenNthCalledWith(2, 'record-business-id-2')
+    expect(mocks.getRecordDetail).not.toHaveBeenCalled()
     expect(mocks.getDefectList).not.toHaveBeenCalled()
-    expect(wrapper.text()).not.toContain('旧病历文书')
     expect(wrapper.text()).toContain('质控关联待核实')
     wrapper.unmount()
   })

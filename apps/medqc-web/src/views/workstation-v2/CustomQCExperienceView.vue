@@ -267,6 +267,7 @@
                   class="!rounded-xl"
                   :loading="testing"
                   :disabled="!canRunTest"
+                  title="病历来源尚未核实，暂不可试跑"
                   @click="runSelectedTest"
                 >
                   {{ selectedRecordKeys.length > 1 ? '批量测试' : '测试连接并运行' }}
@@ -290,20 +291,17 @@
                   </div>
                 </template>
                 <template v-if="column.key === 'status'">
-                  <a-tag
-                    :color="
-                      record.status === 'completed' || record.status === 'passed'
-                        ? 'success'
-                        : 'processing'
-                    "
-                  >
-                    {{ record.status || '-' }}
-                  </a-tag>
+                  <span class="text-slate-500">质控关联待核实</span>
+                </template>
+                <template v-if="column.key === 'defect_count'">
+                  <span class="text-slate-500">-</span>
                 </template>
                 <template v-if="column.key === 'action'">
                   <a-button
                     size="small"
                     class="!rounded-lg"
+                    disabled
+                    title="病历来源尚未核实，暂不可试跑"
                     @click="runDirectSingle(record)"
                   >
                     单条测试
@@ -453,7 +451,6 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   getAdminRecordList,
   getDepartmentList,
-  getRecordDetail,
   type AdminRecordItem,
 } from '@/api/qcAdmin'
 import { RulesService } from '@/services/rules-service'
@@ -578,22 +575,8 @@ const canGeneratePrompt = computed(
     draftRule.description.trim().length >= 12 &&
     draftRule.document_type.trim().length > 0,
 )
-const canRunTest = computed(
-  () =>
-    scene.value !== 'final' &&
-    selectedRecordKeys.value.length > 0 &&
-    draftRule.name.trim() &&
-    draftRule.description.trim() &&
-    draftRule.prompt_template.trim(),
-)
-const canPublish = computed(() =>
-  Boolean(
-    scene.value !== 'final' &&
-      (singleResult.value || batchResult.value) &&
-      testedDraftSnapshot.value &&
-      testedDraftSnapshot.value === JSON.stringify(buildDraftRulePayload()),
-  ),
-)
+const canRunTest = computed(() => false)
+const canPublish = computed(() => false)
 const prefillText = computed(() => {
   const parts: string[] = []
   if (typeof route.query.department === 'string' && route.query.department)
@@ -649,9 +632,7 @@ async function fetchRecords() {
       patient_name: item.patient_name,
       department: item.department,
       discharge_date: item.discharge_date,
-      status: item.status,
-      score: item.score,
-      defect_count: item.defect_count,
+      status: 'unverified',
     }))
     pagination.total = response.data.total || 0
     applyPrefillSelection()
@@ -762,48 +743,8 @@ function isCurrentTestContext(version: number, draftSnapshot: string): boolean {
   return version === evidenceVersion && draftSnapshot === JSON.stringify(buildDraftRulePayload())
 }
 
-function composeMedicalText(detail: any): string {
-  const documents = detail?.documents || {}
-  const rawDocuments = Array.isArray(documents.raw_documents) ? documents.raw_documents : []
-  const pieces: string[] = []
-  const pushBlock = (title: string, content?: string) => {
-    const normalized = String(content || '').trim()
-    if (!normalized) return
-    pieces.push(`【${title}】\n${normalized}`)
-  }
-  pushBlock('入院记录', documents.admissionNote || detail?.admissionNote)
-  pushBlock('病程记录', documents.progressNote || detail?.progressNote)
-  pushBlock('手术记录', documents.surgeryNote || detail?.surgeryNote)
-  pushBlock('出院记录', documents.dischargeNote || detail?.dischargeNote)
-  rawDocuments.forEach((doc: any) => {
-    const title = String(doc?.title || doc?.document_type || '文书').trim()
-    const content = String(doc?.content || '').trim()
-    if (content) {
-      const block = `【${title}】\n${content}`
-      if (!pieces.includes(block)) pieces.push(block)
-    }
-  })
-  if (pieces.length === 0 && detail?.record?.content)
-    pushBlock('病历内容', String(detail.record.content))
-  return pieces.join('\n\n')
-}
-
-async function fetchSelectedRecordPayloads(recordIds: string[]): Promise<CustomQcRecordPayload[]> {
-  const payloads = await Promise.all(
-    recordIds.map(async (recordId) => {
-      const baseRecord = records.value.find((item) => item.record_id === recordId)
-      const response = await getRecordDetail(recordId)
-      if (!response.success || !response.data) throw new Error(`获取病历 ${recordId} 详情失败`)
-      return {
-        record_id: recordId,
-        visit_id: baseRecord?.visit_id,
-        patient_name: baseRecord?.patient_name,
-        department: baseRecord?.department,
-        medical_text: composeMedicalText(response.data),
-      }
-    }),
-  )
-  return payloads.filter((item) => item.medical_text.trim())
+async function fetchSelectedRecordPayloads(_recordIds: string[]): Promise<CustomQcRecordPayload[]> {
+  throw new Error('病历来源尚未核实，暂不可试跑')
 }
 
 async function persistSingleResult(result: CustomQcSingleTestResult) {

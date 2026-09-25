@@ -20,11 +20,11 @@ describe('getRecordDetail 质控详情合同', () => {
     vi.clearAllMocks()
   })
 
-  it('成功时仅请求质控详情', async () => {
+  it('显式旧病历来源才请求质控详情，并编码旧表主键', async () => {
     const detail = { record_id: 'record-1', defects: [{ id: 'defect-1' }] }
     vi.mocked(ApiService.requestRaw).mockResolvedValueOnce(response({ success: true, data: detail }))
 
-    await expect(getRecordDetail('record-1')).resolves.toEqual({
+    await expect(getRecordDetail('record/1', 'legacy_medical_records')).resolves.toEqual({
       success: true,
       data: detail,
       message: undefined,
@@ -32,8 +32,20 @@ describe('getRecordDetail 质控详情合同', () => {
     expect(ApiService.requestRaw).toHaveBeenCalledTimes(1)
     expect(ApiService.requestRaw).toHaveBeenCalledWith({
       method: 'GET',
-      url: '/api/v1/records/record-1/qc-detail',
+      url: '/api/v1/records/record%2F1/qc-detail',
+      params: { source: 'legacy_medical_records' },
     })
+  })
+
+  it('类型边界拒绝不明或 CDM 来源', () => {
+    const rejectUnverifiedSource = () => {
+      // @ts-expect-error 旧详情必须显式声明旧病历来源
+      void getRecordDetail('same-visit')
+      // @ts-expect-error CDM 就诊号不能作为旧病历主键查询
+      void getRecordDetail('same-visit', 'cdm')
+    }
+    void rejectUnverifiedSource
+    expect(ApiService.requestRaw).not.toHaveBeenCalled()
   })
 
   it('服务返回失败信封时原样传递失败，不降级到内存单记录', async () => {
@@ -41,7 +53,7 @@ describe('getRecordDetail 质控详情合同', () => {
       response({ success: false, message: '质控详情暂不可用' }),
     )
 
-    await expect(getRecordDetail('record-1')).resolves.toEqual({
+    await expect(getRecordDetail('record-1', 'legacy_medical_records')).resolves.toEqual({
       success: false,
       data: undefined,
       message: '质控详情暂不可用',
@@ -50,6 +62,7 @@ describe('getRecordDetail 质控详情合同', () => {
     expect(ApiService.requestRaw).toHaveBeenCalledWith({
       method: 'GET',
       url: '/api/v1/records/record-1/qc-detail',
+      params: { source: 'legacy_medical_records' },
     })
   })
 
@@ -58,7 +71,7 @@ describe('getRecordDetail 质控详情合同', () => {
       response: { status: 503, data: { detail: '质控详情数据源不可用' } },
     })
 
-    await expect(getRecordDetail('record-1')).resolves.toEqual({
+    await expect(getRecordDetail('record-1', 'legacy_medical_records')).resolves.toEqual({
       success: false,
       message: '质控详情数据源不可用',
     })
@@ -66,6 +79,7 @@ describe('getRecordDetail 质控详情合同', () => {
     expect(ApiService.requestRaw).toHaveBeenCalledWith({
       method: 'GET',
       url: '/api/v1/records/record-1/qc-detail',
+      params: { source: 'legacy_medical_records' },
     })
   })
 })

@@ -453,11 +453,12 @@ export async function reAnalyzeQCTask(taskId: string) {
   return request<any>({ method: 'POST', url: `${TASKS_URL}/${taskId}/re-analyze` })
 }
 
-/** 获取单病历详情（文书内容，用于联审 Drawer） */
-export async function getRecordDetail(recordId: string) {
+/** 仅按旧病历表主键读取文书；调用方必须证明 ID 来自旧病历列表。 */
+export async function getRecordDetail(recordId: string, source: 'legacy_medical_records') {
   return request<any>({
     method: 'GET',
-    url: `${RECORDS_URL}/${recordId}/qc-detail`,
+    url: `${RECORDS_URL}/${encodeURIComponent(recordId)}/qc-detail`,
+    params: { source },
   })
 }
 

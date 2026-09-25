@@ -518,7 +518,7 @@
                 <div class="review-empty__title">
                   {{ docLoading ? '加载中...' : '暂无文书内容' }}
                 </div>
-                <div class="review-empty__desc">当前病历尚未装配可阅读文书</div>
+                <div class="review-empty__desc">病历来源尚未核实，暂无法加载文书</div>
               </div>
             </a-spin>
           </div>
@@ -674,7 +674,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
 import { ReloadOutlined, FileTextOutlined } from '@ant-design/icons-vue'
-import { getDefectList, getRecordDetail, type DefectItem } from '@/api/qcAdmin'
+import { getDefectList, type DefectItem } from '@/api/qcAdmin'
 import { resolveMedicalFieldLabel } from '@/utils/medicalFieldLabels'
 import QCReviewActionBar from './QCReviewActionBar.vue'
 import { buildMedicalReportMetadataRows } from '@/utils/medicalReportDisplay'
@@ -2355,32 +2355,6 @@ const loadDefects = async () => {
   }
 }
 
-// 加载病历文书详情
-const loadRecordDetail = async () => {
-  if (!props.record?.record_id) return
-  const recordId = props.record.record_id
-  const requestId = ++detailRequestId
-  docLoading.value = true
-  try {
-    const res = await getRecordDetail(recordId)
-    if (requestId !== detailRequestId || !props.visible) return
-    if (res.success && res.data) {
-      const detail = res.data as Record<string, unknown>
-      recordDetail.value = detail
-      const reviewItems = detail.review_items
-      if (Array.isArray(reviewItems)) {
-        reviewItemList.value = reviewItems as ReviewIssueItem[]
-      }
-    }
-  } catch {
-    if (requestId !== detailRequestId || !props.visible) return
-    recordDetail.value = null
-    reviewItemList.value = []
-  } finally {
-    if (requestId === detailRequestId) docLoading.value = false
-  }
-}
-
 // 操作完成后刷新
 const handleActionDone = () => {
   loadDefects()
@@ -2417,13 +2391,10 @@ watch([activeHighlightBlockKey, currentDocAllBlocks], async ([blockKey, blocks])
   el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
 })
 
-let detailRequestId = 0
-
-// 打开或切换病历时只加载文书详情，过期请求不得回填当前抽屉。
+// 打开或切换病历时清空旧详情；来源未核实前不按单键读取文书。
 watch(
   [() => props.visible, () => props.record?.id, () => props.record?.record_id],
   ([val]) => {
-    detailRequestId += 1
     docLoading.value = false
     recordDetail.value = null
     reviewItemList.value = []
@@ -2441,7 +2412,6 @@ watch(
       expandedSidebarGroups.value = ['course']
       activeHighlightTarget.value = null
       highlightBlockElements.clear()
-      loadRecordDetail()
     }
   },
 )
