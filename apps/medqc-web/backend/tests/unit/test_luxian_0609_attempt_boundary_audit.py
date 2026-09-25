@@ -256,6 +256,66 @@ def test_cancel_running_luxian_attempt_marks_cost_observation_unknown(storage):
     assert _stale_failed_completion(service, attempt) is False
 
 
+def test_unexpected_running_failure_does_not_keep_previous_cost_observation_complete(storage):
+    service, engine, table = storage
+    attempt = service.mark_batch_job_running(job_id="attempt-job")
+    assert isinstance(attempt, str)
+    with engine.begin() as connection:
+        connection.execute(
+            table.update().where(table.c.id == "attempt-job").values(
+                summary_json=json.dumps({
+                    "luxian_0609_usage_observation_complete": True,
+                    "luxian_0609_usage_unknown_executor_keys": [],
+                    "total_tokens": 12,
+                }),
+            )
+        )
+
+    service.fail_batch_job(
+        job_id="attempt-job", error_message="synthetic outer worker failure",
+        attempt_filters_json=attempt,
+    )
+
+    failed = service.get_batch_job_for_processing(job_id="attempt-job")
+    assert failed is not None and failed["status"] == "failed"
+    assert failed["summary"]["luxian_0609_usage_observation_complete"] is False
+    assert failed["summary"]["luxian_0609_usage_unknown_executor_keys"] == []
+    assert failed["summary"]["total_tokens"] == 12
+    safe = workspace_module.project_customer_safe_batch_job(
+        failed, hmac_key=workspace_module.customer_safe_projection_key(),
+    )
+    assert safe["summary"]["luxian_0609_usage_observation_complete"] is False
+
+
+def test_queued_luxian_failure_does_not_claim_a_model_cost_observation(storage):
+    service, _engine, _table = storage
+    queued = service.get_batch_job_for_processing(job_id="attempt-job")
+    assert queued is not None and queued["status"] == "queued"
+    service.fail_batch_job(
+        job_id="attempt-job", error_message="synthetic admission failure",
+        queued_only=True, expected_queued_filters_json=queued["_claim_filters_json"],
+    )
+    failed = service.get_batch_job_for_processing(job_id="attempt-job")
+    assert failed is not None and failed["status"] == "failed"
+    assert "luxian_0609_usage_observation_complete" not in failed["summary"]
+
+
+def test_nonformal_running_failure_keeps_its_existing_summary(storage):
+    service, engine, table = storage
+    with engine.begin() as connection:
+        connection.execute(
+            table.update().where(table.c.id == "attempt-job").values(
+                filters_json=json.dumps({"rule_set_key": "other_ruleset"}),
+                summary_json=json.dumps({"luxian_0609_usage_observation_complete": True}),
+            )
+        )
+    assert service.mark_batch_job_running(job_id="attempt-job") is True
+    service.fail_batch_job(job_id="attempt-job", error_message="synthetic other task failure")
+    failed = service.get_batch_job_for_processing(job_id="attempt-job")
+    assert failed is not None and failed["status"] == "failed"
+    assert failed["summary"]["luxian_0609_usage_observation_complete"] is True
+
+
 def test_same_id_retry_preserves_original_luxian_settings_snapshot(storage):
     service, engine, table = storage
     original = capture_luxian_0609_task_settings(

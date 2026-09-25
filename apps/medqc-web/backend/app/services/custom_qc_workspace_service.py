@@ -4954,6 +4954,11 @@ class CustomQCWorkspaceService:
             current_summary = _safe_json_loads(row.get("summary_json"), {})
             if not isinstance(current_summary, dict):
                 current_summary = {}
+            failed_running_luxian_attempt = (
+                row.get("status") == "running"
+                and (_safe_json_loads(row.get("filters_json"), {}) or {}).get("rule_set_key")
+                == LUXIAN_0609_RULE_SET_KEY
+            )
             now = _now_utc()
             failure_update = session.execute(
                 update(self._batch_job_table)
@@ -4966,6 +4971,8 @@ class CustomQCWorkspaceService:
                     summary_json=_safe_json_dumps(
                         {
                             **current_summary,
+                            **({"luxian_0609_usage_observation_complete": False}
+                               if failed_running_luxian_attempt else {}),
                             "progress": {
                                 **(
                                     current_summary.get("progress")

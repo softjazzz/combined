@@ -37,6 +37,8 @@
 
 ## 当前焦点
 
+2026-09-25 MEDQC-022 goal 再接续：已有 active 的 A/B/C/D 目标继续沿用，当前基线和下一步以[执行卡](2026-09-25-lx0609-engine-remaining-goal.md)为准。D 复现运行中异常失败保留旧进度 `usage_observation_complete=true`，最小修复为正式失败事务标记观测未知，保留已记录 Token；SQLite 红绿及相邻 36 项通过，排队失败、其他规则集不受影响。[证据](../acceptance/2026-09-25-original-engine-failure-cost-observation.md)。下一步核对真实跨启动完整执行及 PostgreSQL 多进程争用；客户部署和临床保护集仍未验收。
+
 2026-09-25 MEDQC-022 B 跨进程漂移补证：隔离 SQLite 的正式任务接纳快照在新的 Python 进程中经历提交 SHA、模型名、端点或有效规则设置变化；直接 Worker 接管与启动扫描均在取病历前受控拒绝，整份重启测试 15/15 通过。没有修改生产门禁；测试在门禁后主动停止，PG 多进程竞争、真实安装包恢复与医学执行完成仍待验。[证据](../acceptance/2026-09-25-original-engine-cross-process-drift.md)。
 
 2026-09-25 MEDQC-022 A 联机技术补证：隔离 SQLite 保存原始004合成 Canonical，由挂载正式质控路由的测试 FastAPI 服务提供 latest/任务详情，再经 Vite 代理由实际 Chrome V5 页面读取；浏览器不拦截 API，页面状态、结论、建议与两接口逐项一致。服务使用合成认证和病历列表，非完整生产启动；客户 PG、真实病例和独立临床答案仍待验。证据与复现命令见[联机技术回读](../acceptance/2026-09-25-original-engine-live-http-v5.md)，goal 继续 active。
