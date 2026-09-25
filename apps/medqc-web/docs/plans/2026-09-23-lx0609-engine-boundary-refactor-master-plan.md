@@ -2,6 +2,8 @@
 
 > 当前执行入口：[2026-09-25 剩余目标执行卡](2026-09-25-lx0609-engine-remaining-goal.md)。以下历次接续与技术证据保留；执行顺序和已提交基线以该卡为准，A/B/C/D 退出合同仍以本文“2026-09-24 再收敛”一节为准。
 
+2026-09-25 再补[解压包跨进程恢复演练](../acceptance/2026-09-25-original-engine-package-restart.md)：以 `71f347e3a` 干净源码重新打包、解压，确认前后端构建身份一致，包内后端原始 001 排队任务可跨进程完成并读回 Canonical；已领取任务进程退出、续约过期后受控失败且费用观测标记未知。属于本机 SQLite/合成病例技术验证；客户机启动、PG、模型及临床保护集仍未验收。发布脚本另有 Windows PowerShell 5.1 解析故障，已单独记录。
+
 2026-09-25 最新接续：原始004合成 Canonical 现已通过隔离 SQLite→测试 FastAPI 挂载的正式质控路由→Vite 代理→实际 V5 页面，浏览器未拦截 API；latest 与任务详情同一结果，页面状态、结论、建议一致。可复现脚本和边界见[真实 HTTP 技术回读](../acceptance/2026-09-25-original-engine-live-http-v5.md)。认证与病历列表仍使用合成桩，未运行完整生产后端或客户 PostgreSQL，A/B/C/D 整体 goal 保持 active。
 
 阶段 B 另用两个独立 Python 进程和一份隔离 SQLite 任务表证实：同构建号下提交 SHA、模型名、端点及有效规则设置漂移，直接接管和启动扫描均在病例读取前受控失败；整份重启测试 15/15 通过。该探针在门禁后主动停止，不证明医学执行结束或客户 PG/安装包恢复。[证据及限制](../acceptance/2026-09-25-original-engine-cross-process-drift.md)；B 仍为局部验证。
