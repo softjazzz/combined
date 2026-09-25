@@ -15,3 +15,7 @@
 来源与基线分级保持原有记录：002 对照见[原始002公开事实边界](2026-09-24-original-002-public-facts-boundary.md)，004 对照 `775c17ede` 见[原始004本机来源回放](2026-09-24-original-004-local-source-equivalence.md)，005/006 对照见[查房时限公开事实边界](2026-09-24-original-005-006-public-facts-boundary.md)，007 对照见[病程007公开事实边界](2026-09-24-original-engine-007-published-facts.md)。004 的 23 个本机事件中有 10 个疑似测试身份，另 13 个仅具客户来源形态，尚未逐条证明来源真实性；002、005、006、007 的固定材料也没有独立临床金标准。不能把本次全等当作完整原始规则保护集或医学准确率验收。
 
 私有输入、整改前输出、当前输出及无原文比较脚本均留在 `.tmp/0910-full-audit/`，不提交患者身份或文书正文。下一步需独立确认已签收的 `compliant/non_compliant` 保护集合，并覆盖模型调用、004 正常/超时和多事件的真实业务复核；若客户来源和业务答案无法取得，应保留 A0/A4 未验收状态。
+
+## 2026-09-25 最新集成提交复跑
+
+在提交 `3ccb02862` 上重新运行同五份 `original-00?-local-replay-private.py`，输出仅写入 `.tmp/0910-full-audit/original-00?-local-head-3ccb02862-private.json`。与本报告上次保存的当前技术产物按别名及 `snapshot_hash/reduced/executor_facts/published/llm_calls/tokens` 对照：002、004、005、006、007 分别 13、23、13、13、13 例，合计 **75/75 全字典相等**，各字段差异均为 0。脚本使用冻结的 Source Reader 行，不连接源库或模型；因此只证明最新保存/并发改动未改变这批固定技术输出，仍不能替代独立临床答案或模型调用分支验收。
