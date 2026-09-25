@@ -436,6 +436,37 @@ def test_store_rejects_duplicate_or_mismatched_rule_version_envelopes(monkeypatc
         )
 
 
+def test_store_rejects_tampered_current_canonical_publication(monkeypatch):
+    import json
+
+    from app.services.luxian_0609.customer_text_publication import (
+        CUSTOMER_TEXT_SEAL_KEY,
+        seal_published_customer_text,
+    )
+
+    row = _canonical_row()
+    envelope = json.loads(row["envelope_json"])
+    item = envelope["items"][0]
+    item["conclusion"] = "原始结论"
+    item["suggestion"] = "原始建议"
+    item[CUSTOMER_TEXT_SEAL_KEY] = seal_published_customer_text(item)
+    item["conclusion"] = "被篡改的结论"
+    row["envelope_json"] = json.dumps(envelope, ensure_ascii=False)
+    session = _CanonicalReadSession([row])
+    monkeypatch.setattr(store_module, "engine", object())
+    monkeypatch.setattr(store_module, "_session", lambda: session)
+    store_module._feedback_table.cache_clear()
+
+    with pytest.raises(ResultFeedbackDemoConflict):
+        ResultFeedbackDemoStore().save(
+            root_job_id="root-1",
+            record_ref="rec_0123456789abcdef01234567",
+            rule_id="LX0609-01-01-01",
+            created_by="admin-001",
+            payload=_payload(),
+        )
+
+
 def test_store_rejects_envelope_owned_by_another_account(monkeypatch):
     session = _CanonicalReadSession([_canonical_row() | {"created_by": "other-user"}])
     monkeypatch.setattr(store_module, "engine", object())

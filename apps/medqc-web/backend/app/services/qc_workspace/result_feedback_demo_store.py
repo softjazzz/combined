@@ -21,7 +21,12 @@ from sqlalchemy.orm import Session
 
 from ...database.connection import DB_SCHEMA_MODE, SessionLocal, engine
 from ...schemas.qc_sichuan import QcResultFeedbackRequest
+from ..luxian_0609.customer_text_publication import (
+    CUSTOMER_TEXT_SEAL_KEY,
+    assert_published_customer_text_unchanged,
+)
 from ..custom_qc_workspace_service import _record_result_envelopes_table
+from .canonical_result_store import safe_customer_display_facts
 
 
 class ResultFeedbackDemoStoreUnavailable(RuntimeError):
@@ -241,6 +246,15 @@ class ResultFeedbackDemoStore:
         items = envelope.get("items")
         if not isinstance(items, list):
             raise ResultFeedbackDemoConflict("质控结果无法唯一确认")
+        try:
+            for item in items:
+                if not isinstance(item, dict):
+                    raise ValueError("质控结果项目格式错误")
+                if CUSTOMER_TEXT_SEAL_KEY in item:
+                    assert_published_customer_text_unchanged(item)
+                    safe_customer_display_facts(item, rule_id=_rule_id(item))
+        except ValueError as exc:
+            raise ResultFeedbackDemoConflict("质控结果无法唯一确认") from exc
         matches = [item for item in items if isinstance(item, dict) and _rule_id(item) == rule_id]
         if len(matches) > 1:
             raise ResultFeedbackDemoConflict("质控结果无法唯一确认")
