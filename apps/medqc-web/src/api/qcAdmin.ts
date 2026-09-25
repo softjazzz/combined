@@ -370,7 +370,7 @@ export async function createQCTaskAndSample(
     data: {
       task_type: params.task_type || 'one_time',
       sampling_method: params.sampling_method || 'all',
-      assign_method: 'keep',
+      assign_method: 'by_ratio',
       ...params,
     },
   })

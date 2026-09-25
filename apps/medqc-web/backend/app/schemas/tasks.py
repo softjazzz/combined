@@ -99,7 +99,7 @@ class TaskCreateRequest(BaseModel):
     sampling_config: Optional[Dict[str, Any]] = Field(default_factory=dict, description="抽样配置")
 
     # 任务分配
-    assign_method: AssignMethod = Field(AssignMethod.KEEP, description="分配方式")
+    assign_method: AssignMethod = Field(AssignMethod.BY_RATIO, description="分配方式")
     assignee_config: Optional[Dict[str, Any]] = Field(default_factory=dict, description="分配配置")
 
     # 其他

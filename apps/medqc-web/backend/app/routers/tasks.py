@@ -27,6 +27,7 @@ from ..schemas.tasks import (
     TaskUpdateRequest,
     TaskAssignRequest,
     TaskRecordCompleteRequest,
+    AssignMethod,
     TaskStatus,
 )
 from ..core.supabase_client import get_supabase, async_execute
@@ -325,6 +326,8 @@ async def create_task(
         raise HTTPException(status_code=422, detail="规则集不存在或不可用")
     if rule_set.scope != task_data.scene.value:
         raise HTTPException(status_code=422, detail="规则集与任务场景不匹配")
+    if task_data.assign_method != AssignMethod.BY_RATIO:
+        raise HTTPException(status_code=422, detail="新建任务仅支持按比例分配")
     if task_data.scene.value == "outpatient" or (
         task_data.scene.value == "running"
         and (task_data.sampling_config or {}).get("case_scope") == "active"

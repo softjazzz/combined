@@ -50,7 +50,7 @@ describe('createQCTaskAndSample 两阶段合同', () => {
     expect(ApiService.requestRaw).toHaveBeenNthCalledWith(1, {
       method: 'POST',
       url: '/api/v1/tasks',
-      data: expect.objectContaining({ scene: 'running', rule_set_key: 'running-v1', sampling_config: { total: 12 } }),
+      data: expect.objectContaining({ scene: 'running', rule_set_key: 'running-v1', sampling_config: { total: 12 }, assign_method: 'by_ratio' }),
     })
     expect(ApiService.requestRaw).toHaveBeenNthCalledWith(2, {
       method: 'POST',
