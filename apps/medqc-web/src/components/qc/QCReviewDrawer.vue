@@ -662,14 +662,20 @@
               class="review-issues__spin"
             >
               <div
+                v-if="reviewResultUnavailable && displayedIssueCount > 0"
+                class="review-empty__desc"
+              >
+                0609 质控结果暂不可用，请查看质控任务详情
+              </div>
+              <div
                 v-if="displayedIssueCount === 0"
                 class="review-empty review-empty--issues"
               >
                 <div class="review-empty__title">
-                  暂无质控问题
+                  {{ reviewEmptyTitle }}
                 </div>
                 <div class="review-empty__desc">
-                  当前病历没有待联审的质控项
+                  {{ reviewEmptyDescription }}
                 </div>
               </div>
 
@@ -843,7 +849,7 @@ interface ReviewIssueItem {
   patient_name?: string
   rule_code?: string
   rule_name: string
-  status: 'non_compliant' | 'uncertain' | 'compliant' | 'not_applicable'
+  status: string
   document_type?: string
   rule_family?: string
   defect_level?: string
@@ -1014,6 +1020,28 @@ const emit = defineEmits<{
 const defectLoading = ref(false)
 const defectList = ref<DefectItem[]>([])
 const reviewItemList = ref<ReviewIssueItem[]>([])
+const reviewResultState = ref('')
+const reviewResultUnavailable = computed(() =>
+  ['technical_error', 'identity_ambiguous', 'identity_conflict', 'unavailable'].includes(reviewResultState.value),
+)
+const reviewEmptyTitles: Record<string, string> = {
+  technical_error: '质控结果暂不可用',
+  identity_unresolved: '无法确认质控结果',
+  identity_ambiguous: '无法确认质控结果',
+  identity_conflict: '无法确认质控结果',
+  unavailable: '质控结果暂不可用',
+  not_found: '暂无质控结果',
+}
+const reviewEmptyDescriptions: Record<string, string> = {
+  technical_error: '当前结果未通过安全读取，请查看质控任务详情',
+  identity_unresolved: '当前结果未通过安全读取，请查看质控任务详情',
+  identity_ambiguous: '当前结果未通过安全读取，请查看质控任务详情',
+  identity_conflict: '当前结果未通过安全读取，请查看质控任务详情',
+  unavailable: '当前结果未通过安全读取，请查看质控任务详情',
+  not_found: '当前病历尚无可查看的质控结果',
+}
+const reviewEmptyTitle = computed(() => reviewEmptyTitles[reviewResultState.value] || '暂无质控问题')
+const reviewEmptyDescription = computed(() => reviewEmptyDescriptions[reviewResultState.value] || '当前病历没有待联审的质控项')
 const selectedDefectId = ref<string | null>(null)
 const selectedReviewIssueId = ref<string | null>(null)
 const docLoading = ref(false)
@@ -2452,21 +2480,35 @@ const getDefectStatusText = (status: string) => {
 }
 
 const getReviewStatusText = (status: ReviewIssueItem['status']) => {
-  const map: Record<ReviewIssueItem['status'], string> = {
+  const map: Record<string, string> = {
     non_compliant: '不合规',
     uncertain: '待复核',
     compliant: '合规',
     not_applicable: '不适用',
+    data_gap: '数据不足',
+    not_executed: '未执行',
+    ai_suggested_non_compliant: 'AI判断：疑似问题',
+    ai_suggested_compliant: 'AI判断：未见问题',
+    needs_manual_review: '待人工复核',
+    evaluation_unknown: '待确认',
+    technical_error: '技术异常',
   }
   return map[status] || status
 }
 
 const getReviewStatusClass = (status: ReviewIssueItem['status']) => {
-  const map: Record<ReviewIssueItem['status'], string> = {
+  const map: Record<string, string> = {
     non_compliant: 'bg-rose-50 text-rose-600 border-rose-100',
     uncertain: 'bg-amber-50 text-amber-600 border-amber-100',
     compliant: 'bg-emerald-50 text-emerald-600 border-emerald-100',
     not_applicable: 'bg-slate-100 text-slate-500 border-slate-200',
+    data_gap: 'bg-amber-50 text-amber-700 border-amber-100',
+    not_executed: 'bg-slate-100 text-slate-500 border-slate-200',
+    ai_suggested_non_compliant: 'bg-amber-50 text-amber-700 border-amber-100',
+    ai_suggested_compliant: 'bg-sky-50 text-sky-700 border-sky-100',
+    needs_manual_review: 'bg-amber-50 text-amber-700 border-amber-100',
+    evaluation_unknown: 'bg-amber-50 text-amber-700 border-amber-100',
+    technical_error: 'bg-rose-50 text-rose-600 border-rose-100',
   }
   return map[status] || map.uncertain
 }
@@ -2504,10 +2546,12 @@ const loadRecordDetail = async () => {
       if (Array.isArray(reviewItems)) {
         reviewItemList.value = reviewItems as ReviewIssueItem[]
       }
+      reviewResultState.value = safeText(detail.review_result_state)
     }
   } catch {
     recordDetail.value = null
     reviewItemList.value = []
+    reviewResultState.value = 'technical_error'
   } finally {
     docLoading.value = false
   }
@@ -2567,6 +2611,7 @@ watch(
       highlightBlockElements.clear()
       recordDetail.value = null
       reviewItemList.value = []
+      reviewResultState.value = ''
       loadDefects()
       loadRecordDetail()
     }
