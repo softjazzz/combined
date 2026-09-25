@@ -6,7 +6,7 @@
 >
 > 维护原则：只记录已确认事实或明确标注的待验证假设；含患者原文的材料不得写入本文档。
 
-2026-09-25 MEDQC-022 交付审计：固定当前提交并汇总 A/B/C/D 的工程证据、正式与兼容路径、旧适配保留理由及未验收范围。[交接页](../acceptance/2026-09-25-original-engine-current-handoff.md)。下一阻断是独立临床保护集签收及客户环境同构建联机验收；不把额外合成测试当成这两项的替代。
+2026-09-25 MEDQC-022 交付审计：固定当前提交并汇总 A/B/C/D 的工程证据、正式与兼容路径、旧适配保留理由及未验收范围。[交接页](../acceptance/2026-09-25-original-engine-current-handoff.md)及[客户环境取证步骤](../acceptance/2026-09-25-original-engine-customer-acceptance-protocol.md)已备齐。下一阻断是独立临床保护集签收及客户环境同构建联机验收；取证步骤不等于实际通过，不把额外合成测试当成这两项的替代。
 
 2026-09-25 MEDQC-022 B 三入口现行验证：正式单病历、病历池、客户样本 API→Worker→隔离 SQLite→Canonical latest-result 集成测试 6/6 通过；原始 001–075 空资料的 70 条客户交付及固定会诊 023 模型桩结果逐项一致。病历池串行、显式并发、默认并发均覆盖；仅两份合成病例，真实模型、40 槽满载、客户 PG 与临床保护集仍待验。[证据](../acceptance/2026-09-24-original-engine-requirements-evidence.md)。
 

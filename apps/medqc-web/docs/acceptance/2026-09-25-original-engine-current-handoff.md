@@ -1,6 +1,6 @@
 # 原始 LX0609 引擎整改：当前交付审计
 
-固定集成提交：`db5ff481e11beb88422a2db8620c6804065d6bae`。从本机打包时的 `2d1d3730d` 到本提交，`backend/app`、`src` 和 `scripts` 没有生产文件差异；后续提交只补测试与验收记录。本文件按[主计划的“再收敛”退出条件](../plans/2026-09-23-lx0609-engine-boundary-refactor-master-plan.md)划分证据，不将新 CT、抢救内容、病理、0916 或源库同步计入原始引擎整改。
+生产代码基线：`2d1d3730d`。其后至 `2deba5af7`，`backend/app`、`src` 和 `scripts` 没有生产文件差异；后续提交只补测试与验收记录。本文件按[主计划的“再收敛”退出条件](../plans/2026-09-23-lx0609-engine-boundary-refactor-master-plan.md)划分证据，不将新 CT、抢救内容、病理、0916 或源库同步计入原始引擎整改。
 
 | 阶段 | 现行工程证据 | 尚不能签收的范围 |
 | --- | --- | --- |
@@ -12,3 +12,5 @@
 旧路径处理：正式执行在 `luxian_0609/execution.py` 显式传入 Canonical 交付模式，`luxian_0609_result_aggregator.py` 仅在显式 `legacy_compatible` 模式调用 `adapt_luxian_0609_legacy_customer_result`；原始正式结果不再从病历详情的批量 `items_json` 回退。`build_luxian_0609_legacy_executor_registry` 虽名为 legacy，仍为 11 个现役规则族函数提供正式 Engine 回调，没有已实现的替代链，因此保留；按名称直接删除会切断执行。没有为此新增注册框架。
 
 当前结论：**工程代码可交只读审查，整体 goal 尚未达到退出条件。** 下一步需要独立临床复核并签收原始保护集，覆盖明确合规/不合规、资料不足、多事件及模型调用分支；还需要授权操作员在客户环境核对相同构建的前后端、PostgreSQL 和一份正式任务从结果到页面/导出的同源交付。客户数据库写入不由本任务执行，患者原文也不写入此文档。实际模型取消费用若无法从提供方获取，应保留“观测未知”而非伪造零值。
+
+客户操作员与临床复核人的具体取证步骤见[客户环境验收取证步骤](2026-09-25-original-engine-customer-acceptance-protocol.md)。该步骤本身不是验收结果；未收到实际记录前，A/B/D 和整体目标仍保持未关闭。

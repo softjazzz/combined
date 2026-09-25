@@ -2,6 +2,8 @@
 
 > 当前执行入口：[2026-09-25 剩余目标执行卡](2026-09-25-lx0609-engine-remaining-goal.md)。以下历次接续与技术证据保留；执行顺序和已提交基线以该卡为准，A/B/C/D 退出合同仍以本文“2026-09-24 再收敛”一节为准。
 
+外部验收所需的客户机版本核对、同源读取、恢复/费用及独立临床签收已整理为[取证步骤](../acceptance/2026-09-25-original-engine-customer-acceptance-protocol.md)；它不替代实际客户环境和临床证据。
+
 当前固定提交的 A/B/C/D 工程证据、旧路径移除/保留理由和外部验收缺口已集中在[原始引擎交付审计](../acceptance/2026-09-25-original-engine-current-handoff.md)。工程代码可交只读审查；独立临床保护集和客户环境尚未签收，整体目标保持 active。
 
 2026-09-25 B 在集成基线 `0c7d199fd` 上扩展三入口正式链路测试，6/6 通过：单病历、病历池、客户样本经 API→Worker→隔离 SQLite→Canonical latest 回读，原始 001–075 空资料的 70 条客户交付及固定会诊 023 模型桩结果跨入口一致。病历池串行、显式并发、默认并发均覆盖；仅两份合成病例，40 槽满载、客户 PG、真实模型和临床保护集不因此关闭。[证据与限制](../acceptance/2026-09-24-original-engine-requirements-evidence.md)。
