@@ -1,6 +1,6 @@
 # 原始 LX0609 引擎整改：要求与证据对照
 
-2026-09-25 当前集成提交 `996f0ab9f` 复跑 `tests/integration/test_luxian_0609_all_rules_three_entry_acceptance.py`，**2/2 通过**。测试实际经过单病历、病历池和客户样本三条正式 API 创建与 Worker 路径，并在隔离 SQLite 保存、通过 latest-result 回读 Canonical。空资料输入下，请求原始 001–075、客户交付 70 条，三入口状态、原因、客户事实、criterion 和证据坐标相同；固定会诊 023 模型桩响应下，三入口结果也相同。测试把资料读取、认证和模型传输替换为合成夹具，病历池请求 `run_mode=serial`；不能证明默认并发、客户 PostgreSQL、真实模型或临床正确性。A0/A4 保护台账仍未签收：候选 81 条均 `pending`，shadow45 900 条无签收字段值，review20 尚无病例行。
+2026-09-25 在集成基线 `0c7d199fd` 上扩展并复跑 `tests/integration/test_luxian_0609_all_rules_three_entry_acceptance.py`，**6/6 通过**。测试实际经过单病历、病历池和客户样本三条正式 API 创建与 Worker 路径，并在隔离 SQLite 保存、通过 latest-result 回读 Canonical；病历池分别使用串行、显式并发和省略 `run_mode` 的默认并发。空资料输入下，请求原始 001–075、客户交付 70 条，三入口状态、原因、客户事实、criterion 和证据坐标相同；固定会诊 023 模型桩响应下，三入口结果也相同。测试把资料读取、认证和模型传输替换为合成夹具，批量仅两份合成病例；不能证明 40 槽满载、客户 PostgreSQL、真实模型或临床正确性。A0/A4 保护台账仍未签收：候选 81 条均 `pending`，shadow45 900 条无签收字段值，review20 尚无病例行。
 
 2026-09-25 B 失败规则重试测试更正：前述 `retry_batch_job` 返回空值的单测失败，经核对正式 Worker 调用链并非生产缺陷。正式 0609 自动重试必须带接纳时的原始 `filters_json` 作为执行代次条件；Worker 在 `sichuan_workspace_batch_worker.py` 传入该值，旧测试遗漏。现在测试先证实旧快照受控拒绝，再携当前快照验证仅失败规则重新排队、已有效项保留；整份失败持久化测试 14/14 通过。只修改测试，无生产语义变化；本项不替代客户安装包和真实任务恢复验收。
 

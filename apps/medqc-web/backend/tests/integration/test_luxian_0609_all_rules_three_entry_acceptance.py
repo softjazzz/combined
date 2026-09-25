@@ -228,11 +228,14 @@ def _wait_for_terminal_job(workspace: CustomQCWorkspaceService, job_id: str) -> 
     raise AssertionError(f"detached worker did not finish: {job_id}, last={last_job}")
 
 
-def _entry_job_ids(*, app: FastAPI, workspace: CustomQCWorkspaceService, pool_id: str, sample_item_id: str, workspace_rule_ids: list[str], sample_rule_ids: list[str] | None = None, on_terminal: Callable[[str, dict[str, Any], tuple[str, ...]], None] | None = None) -> tuple[str, str, str]:
+def _entry_job_ids(*, app: FastAPI, workspace: CustomQCWorkspaceService, pool_id: str, sample_item_id: str, workspace_rule_ids: list[str], sample_rule_ids: list[str] | None = None, workspace_run_mode: str | None = "serial", on_terminal: Callable[[str, dict[str, Any], tuple[str, ...]], None] | None = None) -> tuple[str, str, str]:
     sample_rule_ids = sample_rule_ids or workspace_rule_ids
     def workspace_job(record_refs: list[dict[str, str]]) -> str:
+        payload = {"rule_set_key": LUXIAN_0609_RULE_SET_KEY, "rule_ids": workspace_rule_ids, "scope": "final", "record_refs": record_refs}
+        if workspace_run_mode is not None:
+            payload["run_mode"] = workspace_run_mode
         with TestClient(app) as client:
-            response = client.post("/api/v1/qc/sichuan/workspace/batch-jobs", json={"rule_set_key": LUXIAN_0609_RULE_SET_KEY, "rule_ids": workspace_rule_ids, "scope": "final", "record_refs": record_refs, "run_mode": "serial"})
+            response = client.post("/api/v1/qc/sichuan/workspace/batch-jobs", json=payload)
         assert response.status_code == 200, response.text
         return str(response.json()["data"]["id"])
     single = workspace_job([_RECORD_A])
@@ -307,7 +310,8 @@ def _wire_production_entry(monkeypatch: pytest.MonkeyPatch, workspace: CustomQCW
 
 
 @pytest.mark.integration
-def test_requested_75_empty_materials_deliver_70_equivalently_across_three_entries(monkeypatch: pytest.MonkeyPatch, _isolated_database) -> None:
+@pytest.mark.parametrize("workspace_run_mode", ["serial", "parallel", None], ids=["serial", "parallel", "default-parallel"])
+def test_requested_75_empty_materials_deliver_70_equivalently_across_three_entries(monkeypatch: pytest.MonkeyPatch, _isolated_database, workspace_run_mode: str | None) -> None:
     """空资料真实三入口：请求75，客户持久化交付70，phase gate 与执行器可追溯。"""
     engine, workspace = _isolated_database
     sample_pool_service = _install_sample_pool_sqlite(monkeypatch, engine)
@@ -353,7 +357,7 @@ def test_requested_75_empty_materials_deliver_70_equivalently_across_three_entri
         )
         envelope_by_job[job_id] = _read_canonical(app, job_id, _RECORD_A, customer_delivery_ids)
 
-    job_ids = _entry_job_ids(app=app, workspace=workspace, pool_id=pool_id, sample_item_id=sample_item_id, workspace_rule_ids=list(expected_ids), sample_rule_ids=list(customer_delivery_ids), on_terminal=capture_envelope)
+    job_ids = _entry_job_ids(app=app, workspace=workspace, pool_id=pool_id, sample_item_id=sample_item_id, workspace_rule_ids=list(expected_ids), sample_rule_ids=list(customer_delivery_ids), workspace_run_mode=workspace_run_mode, on_terminal=capture_envelope)
     jobs = [_wait_for_terminal_job(workspace, job_id) for job_id in job_ids]
     projections: list[dict[str, tuple[Any, ...]]] = []
     expected_by_entry = (customer_delivery_ids, customer_delivery_ids, customer_delivery_ids)
@@ -381,7 +385,8 @@ def test_requested_75_empty_materials_deliver_70_equivalently_across_three_entri
 
 
 @pytest.mark.integration
-def test_consultation_semantic_llm_stub_is_normalized_across_three_entries(monkeypatch: pytest.MonkeyPatch, _isolated_database) -> None:
+@pytest.mark.parametrize("workspace_run_mode", ["serial", "parallel", None], ids=["serial", "parallel", "default-parallel"])
+def test_consultation_semantic_llm_stub_is_normalized_across_three_entries(monkeypatch: pytest.MonkeyPatch, _isolated_database, workspace_run_mode: str | None) -> None:
     """现行023有明确会诊建议时，三入口的事实抽取和交付一致。"""
     engine, workspace = _isolated_database
     sample_pool_service = _install_sample_pool_sqlite(monkeypatch, engine)
@@ -415,7 +420,7 @@ def test_consultation_semantic_llm_stub_is_normalized_across_three_entries(monke
     app = _api_app(service)
     jobs: list[dict[str, Any]] = []
     rule_ids = ["LX0609-03-01-04"]
-    job_ids = _entry_job_ids(app=app, workspace=workspace, pool_id=pool_id, sample_item_id=sample_item_id, workspace_rule_ids=rule_ids)
+    job_ids = _entry_job_ids(app=app, workspace=workspace, pool_id=pool_id, sample_item_id=sample_item_id, workspace_rule_ids=rule_ids, workspace_run_mode=workspace_run_mode)
     jobs = [_wait_for_terminal_job(workspace, job_id) for job_id in job_ids]
     assert [job["status"] for job in jobs] == ["completed"] * 3
     assert [
