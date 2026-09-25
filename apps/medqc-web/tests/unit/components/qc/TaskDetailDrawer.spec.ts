@@ -1333,8 +1333,10 @@ describe('TaskDetailDrawer', () => {
     await flushPromises()
     expect(mocks.completeTaskRecord).toHaveBeenCalledWith('task-1', 'association-1', 2)
     expect(wrapper.text()).toContain('处理中')
+    expect(wrapper.emitted('task-updated')).toBeUndefined()
     refreshed.resolve(detailResponse('待完成任务', [modernRecord({ status: 'completed', score: null, defect_count: null })], { scene: 'running' }))
     await flushPromises()
+    expect(wrapper.emitted('task-updated')).toEqual([['task-1']])
     expect(wrapper.text()).toContain('已完成')
     expect(wrapper.text()).toContain('未记录')
     expect(wrapper.find('[data-testid="task-record-complete"]').exists()).toBe(false)
@@ -1353,15 +1355,121 @@ describe('TaskDetailDrawer', () => {
     await flushPromises()
     await wrapper.get('[data-testid="task-record-complete"]').trigger('click')
     await flushPromises()
+    expect(wrapper.emitted('task-updated')).toBeUndefined()
     expect(wrapper.find('[data-testid="task-record-complete"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="task-record-complete-verify"]').exists()).toBe(true)
     await wrapper.get('[data-testid="task-record-complete-verify"]').trigger('click')
     await flushPromises()
+    expect(wrapper.emitted('task-updated')).toBeUndefined()
     expect(wrapper.text()).toContain('病历尚未完成，可重试')
     await wrapper.get('[data-testid="task-record-complete"]').trigger('click')
     await flushPromises()
     expect(mocks.completeTaskRecord).toHaveBeenCalledTimes(2)
     expect(wrapper.text()).toContain('已完成')
+    expect(wrapper.emitted('task-updated')).toEqual([['task-1']])
+  })
+
+  it.each([
+    ['读取失败', { success: false, message: 'read failed' }],
+    ['缺病历清单', detailResponse('待完成任务', [modernRecord({ status: 'completed' })], { records: null })],
+    ['错任务', detailResponse('待完成任务', [modernRecord({ status: 'completed' })], { id: 'other-task' })],
+    ['错关联任务', detailResponse('待完成任务', [modernRecord({ status: 'completed', task_id: 'other-task' })])],
+    ['错受领人', detailResponse('待完成任务', [modernRecord({ status: 'completed', assignee_id: 'other-user' })])],
+    ['缺病例坐标', detailResponse('待完成任务', [modernRecord({ status: 'completed', visit_id: null })])],
+    ['仍处理中', detailResponse('待完成任务', [modernRecord({ status: 'in_progress' })])],
+  ])('POST 成功但 GET %s 时不通知父列表', async (_reason, response) => {
+    prepareCompletion()
+    mocks.completeTaskRecord.mockResolvedValueOnce({ success: true, data: {
+      task_id: 'task-1', task_record_id: 'association-1', run_number: 2, status: 'completed',
+    } })
+    mocks.getTaskDetail.mockResolvedValueOnce(response)
+    const wrapper = mountDrawer()
+    await flushPromises()
+    await wrapper.get('[data-testid="task-record-result-association-1"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="task-record-complete"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.emitted('task-updated')).toBeUndefined()
+  })
+
+  it('GET 完成复查尚未返回时切换任务，不通知新任务列表', async () => {
+    prepareCompletion()
+    const refreshed = deferred<ReturnType<typeof detailResponse>>()
+    mocks.completeTaskRecord.mockResolvedValueOnce({ success: true, data: {
+      task_id: 'task-1', task_record_id: 'association-1', run_number: 2, status: 'completed',
+    } })
+    mocks.getTaskDetail.mockReturnValueOnce(refreshed.promise)
+      .mockResolvedValueOnce(detailResponse('新任务', [modernRecord({ id: 'association-2', task_id: 'task-2' })], { id: 'task-2', scene: 'running' }))
+    const wrapper = mountDrawer()
+    await flushPromises()
+    await wrapper.get('[data-testid="task-record-result-association-1"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="task-record-complete"]').trigger('click')
+    await flushPromises()
+    await wrapper.setProps({ taskId: 'task-2' })
+    await flushPromises()
+    refreshed.resolve(detailResponse('旧任务', [modernRecord({ status: 'completed' })]))
+    await flushPromises()
+    expect(wrapper.text()).toContain('新任务')
+    expect(wrapper.emitted('task-updated')).toBeUndefined()
+  })
+
+  it('GET 完成复查尚未返回时切换运行，不通知旧批次完成', async () => {
+    prepareCompletion()
+    mocks.getTaskQcRuns.mockReset().mockResolvedValueOnce({ success: true, data: [
+      { task_id: 'task-1', run_number: 2, job_id: 'job-2', run_scope: 'assigned', triggered_by: 'creator', created_at: '2026-09-23' },
+      { task_id: 'task-1', run_number: 1, job_id: 'job-1', run_scope: 'assigned', triggered_by: 'creator', created_at: '2026-09-22' },
+    ] })
+    const refreshed = deferred<ReturnType<typeof detailResponse>>()
+    mocks.completeTaskRecord.mockResolvedValueOnce({ success: true, data: {
+      task_id: 'task-1', task_record_id: 'association-1', run_number: 2, status: 'completed',
+    } })
+    mocks.getTaskDetail.mockReturnValueOnce(refreshed.promise)
+    const wrapper = mountDrawer()
+    await flushPromises()
+    await wrapper.get('[data-testid="task-record-result-association-1"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="task-record-complete"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="task-run-1"]').trigger('click')
+    refreshed.resolve(detailResponse('旧批次', [modernRecord({ status: 'completed' })]))
+    await flushPromises()
+    expect(wrapper.emitted('task-updated')).toBeUndefined()
+  })
+
+  it('GET 完成复查尚未返回时切换登录人，不通知原受领人完成', async () => {
+    prepareCompletion()
+    const refreshed = deferred<ReturnType<typeof detailResponse>>()
+    mocks.completeTaskRecord.mockResolvedValueOnce({ success: true, data: {
+      task_id: 'task-1', task_record_id: 'association-1', run_number: 2, status: 'completed',
+    } })
+    mocks.getTaskDetail.mockReturnValueOnce(refreshed.promise)
+    const wrapper = mountDrawer()
+    await flushPromises()
+    await wrapper.get('[data-testid="task-record-result-association-1"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="task-record-complete"]').trigger('click')
+    await flushPromises()
+    mocks.user.id = 'other-user'
+    refreshed.resolve(detailResponse('原受领人任务', [modernRecord({ status: 'completed' })]))
+    await flushPromises()
+    expect(wrapper.emitted('task-updated')).toBeUndefined()
+  })
+
+  it('GET 完成复查网络异常时不通知父列表，只保留重新查询入口', async () => {
+    prepareCompletion()
+    mocks.completeTaskRecord.mockResolvedValueOnce({ success: true, data: {
+      task_id: 'task-1', task_record_id: 'association-1', run_number: 2, status: 'completed',
+    } })
+    mocks.getTaskDetail.mockRejectedValueOnce(new Error('network error'))
+    const wrapper = mountDrawer()
+    await flushPromises()
+    await wrapper.get('[data-testid="task-record-result-association-1"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="task-record-complete"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.emitted('task-updated')).toBeUndefined()
+    expect(wrapper.find('[data-testid="task-record-complete-verify"]').exists()).toBe(true)
   })
 
   it.each([['pending', []], ['unavailable', []], ['available', []]])('结果 %s 无有效条目时没有完成命令', async (state, items) => {
@@ -1390,6 +1498,7 @@ describe('TaskDetailDrawer', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('新任务')
     expect(mocks.getTaskDetail).toHaveBeenCalledTimes(2)
+    expect(wrapper.emitted('task-updated')).toBeUndefined()
   })
 
   it('切换运行后丢弃旧完成响应，不读取旧批次的完成状态', async () => {
@@ -1411,6 +1520,7 @@ describe('TaskDetailDrawer', () => {
     await flushPromises()
     expect(mocks.getTaskDetail).toHaveBeenCalledTimes(1)
     expect(wrapper.find('[data-testid="task-record-qc-result"]').exists()).toBe(false)
+    expect(wrapper.emitted('task-updated')).toBeUndefined()
   })
 
   it('切换登录身份后丢弃旧受领人的完成响应', async () => {
@@ -1426,5 +1536,6 @@ describe('TaskDetailDrawer', () => {
     pending.resolve({ success: true, data: { task_id: 'task-1', task_record_id: 'association-1', run_number: 2, status: 'completed' } })
     await flushPromises()
     expect(mocks.getTaskDetail).toHaveBeenCalledTimes(1)
+    expect(wrapper.emitted('task-updated')).toBeUndefined()
   })
 })

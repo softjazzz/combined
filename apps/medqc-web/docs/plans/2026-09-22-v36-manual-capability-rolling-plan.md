@@ -553,3 +553,9 @@
 - 主 Agent 重新核对创建请求、两个前端创建传输链和原子分配服务：`TaskCreateRequest` 原默认 `keep`，路由原样保存；真正的 `assign_task_records` 仅实现 `by_ratio`，因此省略分配方式或显式提交其他枚举会得到无法按当前合同分配的草稿。活跃 `CreateTaskDrawer` 已显式使用按比例，但旧 `createQCTaskAndSample` 仍显式发送 `keep`。两条原因已用代码路径确认，不归咎于未经证实的数据库分页上限。
 - Sol 6 medium 分工修改后端创建默认和写入前校验、独立 FastAPI 反例、前端旧组合 API 传输；主 Agent 复核 diff 并独立复跑。新任务缺省及显式 `by_ratio` 可创建；`keep/by_department/by_type` 与非法值均 422、任务 insert 0 次。旧组合 API 现在也传 `by_ratio`；活跃创建抽屉无需修改。后端创建/场景/分配相邻测试 61/61、前端 API/两个创建组件 38/38、Ruff、改动文件只读 ESLint 和类型检查通过。
 - 业务库只读核查仍为 revision44，尚无 `scene` 列；现有 `qc.qc_tasks` 的历史 `auto/manual/keep` 行不改写，也不据此推断新合同已在真实库部署。科室、原质控员和病历类型分配缺权威候选事实或服务实现，仍保留未交付；迁移 45–55、真实 PostgreSQL 新任务及浏览器业务正向均未验收。Goal 保持 active，PRD 严格覆盖状态不提升。
+
+## 66. 第六十批：任务病历完成后的父列表与统计同步
+
+- 主 Agent 核对 `TaskDetailDrawer.verifyRecordCompletion`、`MyTasksView` 的列表/统计请求及当前路由：抽屉在完成 POST 后会 GET 核实并更新自身，但没有向父页通知；最后一条任务病历完成时外层仍可能显示旧进行中行与计数。三路 Sol 6 medium 分别负责抽屉事件、父页接线和独立反例。新增 typed `task-updated(taskId)` 仅在 GET 确认同任务/关联/受领人、完整三坐标及 `completed` 且页面身份/序列仍匹配后发出；同抽屉重复确认去重，关闭后清理。POST 成功或超时本身均不触发。
+- 父页仅在当前收到任务抽屉仍打开且任务 ID 匹配时并发重取当前筛选的列表与统计，不乐观更改任务行，沿用原有 requestId 防旧响应覆盖。独立反例覆盖 GET 错任务/关联/受领人/坐标、失败或仍处理中、切换任务/运行/登录人、关闭抽屉和创建页迟到事件；最后一条完成后原待办退出，todo/as_of/scene/关键词/状态/页码保持。主 Agent 复跑前端两组 138/138 通过。
+- 仅修复前端状态同步；后端未运行、业务库 revision44 且迁移55未执行，未做真实 PostgreSQL 完成动作或登录后浏览器正向。任务级审核、评分与缺陷数可信来源、门急诊/终末候选及其他 V3.6 项仍未交付。Goal 保持 active，严格覆盖状态不提升。

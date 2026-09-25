@@ -98,7 +98,7 @@ const TaskDetailDrawerStub = defineComponent({
     taskId: String,
     tab: String,
   },
-  emits: ['update:open'],
+  emits: ['update:open', 'task-updated'],
   template: '<div data-testid="task-detail-drawer-stub" />',
 })
 
@@ -617,6 +617,85 @@ describe('MyTasksView 我的任务口径', () => {
     expect(mocks.getTaskStats).toHaveBeenCalledWith({ tab: 'received' })
     expect(wrapper.get('[data-testid="pending-task-count"]').text()).toBe('3')
     expect(wrapper.get('[data-testid="pending-task-action"]').text()).toContain('未开始任务')
+  })
+
+  it('抽屉确认本人最后一条病历完成后，原范围刷新列表和统计而不乐观保留旧待办', async () => {
+    routeState.query = { todo: 'in_progress', as_of: '2026-09-22T07:30:00+00:00', scene: 'final' }
+    mocks.getTaskList.mockResolvedValueOnce(listWith('task-1', 'in_progress')).mockResolvedValueOnce(listResponse)
+    mocks.getTaskStats.mockResolvedValueOnce(statsResponse({ in_progress: 1, completed: 4 }))
+      .mockResolvedValueOnce(statsResponse({ in_progress: 0, completed: 5 }))
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      handleViewDetail: (record: { id: string }) => void
+      tasks: Array<{ id: string }>
+      pagination: { current: number; total: number }
+      selectedStatus: string
+      searchKeyword: string
+      taskStats: { completed: number } | null
+    }
+    vm.pagination.current = 3
+    vm.selectedStatus = 'in_progress'
+    vm.searchKeyword = '病案'
+    vm.handleViewDetail({ id: 'task-1' })
+    await nextTick()
+    expect(vm.tasks).toHaveLength(1)
+
+    wrapper.getComponent(TaskDetailDrawerStub).vm.$emit('task-updated', 'task-1')
+    await flushPromises()
+
+    expect(mocks.getTaskList).toHaveBeenLastCalledWith(expect.objectContaining({
+      tab: 'received', todo: 'in_progress', as_of: '2026-09-22T07:30:00+00:00',
+      scene: 'final', status: 'in_progress', keyword: '病案', page: 3,
+    }))
+    expect(mocks.getTaskStats).toHaveBeenLastCalledWith({ tab: 'received', scene: 'final' })
+    expect(vm.tasks).toEqual([])
+    expect(vm.pagination.current).toBe(3)
+    expect(vm.pagination.total).toBe(0)
+    expect(vm.taskStats?.completed).toBe(5)
+    expect(wrapper.getComponent(TaskDetailDrawerStub).props()).toMatchObject({ open: true, taskId: 'task-1', tab: 'received' })
+    expect(activeRoute.current?.query).toMatchObject({ todo: 'in_progress', scene: 'final' })
+  })
+
+  it('关闭抽屉或切换任务的迟到完成事件不刷新列表统计', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as { handleViewDetail: (record: { id: string }) => void }
+    const drawer = wrapper.getComponent(TaskDetailDrawerStub)
+    mocks.getTaskList.mockClear()
+    mocks.getTaskStats.mockClear()
+
+    drawer.vm.$emit('task-updated', 'task-1')
+    await flushPromises()
+    expect(mocks.getTaskList).not.toHaveBeenCalled()
+    expect(mocks.getTaskStats).not.toHaveBeenCalled()
+
+    vm.handleViewDetail({ id: 'task-2' })
+    await nextTick()
+    drawer.vm.$emit('task-updated', 'task-1')
+    await flushPromises()
+    expect(mocks.getTaskList).not.toHaveBeenCalled()
+    expect(mocks.getTaskStats).not.toHaveBeenCalled()
+
+    drawer.vm.$emit('update:open', false)
+    await nextTick()
+    drawer.vm.$emit('task-updated', 'task-2')
+    await flushPromises()
+    expect(mocks.getTaskList).not.toHaveBeenCalled()
+    expect(mocks.getTaskStats).not.toHaveBeenCalled()
+  })
+
+  it('创建页即使打开同 id 任务详情，也忽略受领页迟到的完成事件', async () => {
+    routeState.query = { tab: 'created' }
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as { handleViewDetail: (record: { id: string }) => void }
+    vm.handleViewDetail({ id: 'task-1' })
+    await nextTick()
+    mocks.getTaskList.mockClear()
+    mocks.getTaskStats.mockClear()
+
+    wrapper.getComponent(TaskDetailDrawerStub).vm.$emit('task-updated', 'task-1')
+    await flushPromises()
+    expect(mocks.getTaskList).not.toHaveBeenCalled()
+    expect(mocks.getTaskStats).not.toHaveBeenCalled()
   })
 
   it('创建任务 URL 恢复列表、统计、详情同一范围，草稿卡正确下钻', async () => {

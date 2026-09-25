@@ -485,6 +485,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:open': [value: boolean]
+  'task-updated': [taskId: string]
 }>()
 
 const detail = ref<TaskDetail | null>(null)
@@ -524,6 +525,7 @@ let jobSequence = 0
 let recordResultSequence = 0
 let completionSequence = 0
 let recordActionSequence = 0
+const notifiedCompletions = new Set<string>()
 
 const drawerWidth = 'min(820px, 100vw)'
 const drawerTitle = computed(() => detail.value?.task_name || '任务详情')
@@ -768,6 +770,7 @@ function resetFilters() {
 }
 
 function clearDetail() {
+  notifiedCompletions.clear()
   recordDocumentsOpen.value = false
   recordDocumentsRecord.value = null
   clearRecordAction()
@@ -929,7 +932,15 @@ async function verifyRecordCompletion() {
     }
     detail.value = refreshed
     completionNeedsVerification.value = false
-    if (record.status !== 'completed') completionError.value = '病历尚未完成，可重试'
+    if (record.status !== 'completed') {
+      completionError.value = '病历尚未完成，可重试'
+      return
+    }
+    const completionKey = JSON.stringify([taskId, taskRecordId, userId])
+    if (!notifiedCompletions.has(completionKey)) {
+      notifiedCompletions.add(completionKey)
+      emit('task-updated', taskId)
+    }
   } catch {
     if (completionIsCurrent(taskId, taskRecordId, userId, run.run_number, run.job_id, sequence, detailSequence)) {
       completionNeedsVerification.value = true

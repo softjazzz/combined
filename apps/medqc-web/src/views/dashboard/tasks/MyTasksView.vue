@@ -336,6 +336,7 @@
       v-model:open="detailDrawerVisible"
       :task-id="detailTaskId"
       :tab="activeTab"
+      @task-updated="handleTaskUpdated"
     />
   </div>
 </template>
@@ -881,6 +882,11 @@ const handleContinueWork = (record: TaskItem) => {
 const handleViewDetail = (record: TaskItem) => {
   detailTaskId.value = record.id
   detailDrawerVisible.value = true
+}
+
+const handleTaskUpdated = (taskId: string) => {
+  if (activeTab.value !== 'received' || !detailDrawerVisible.value || detailTaskId.value !== taskId) return
+  void Promise.all([fetchTasks(), fetchStats()])
 }
 
 const handleTableChange = (pag: TablePaginationConfig) => {
