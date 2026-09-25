@@ -901,6 +901,7 @@ def test_parent_exports_only_complete_cases_across_children(storage, second_chil
             status="running", job_kind="parent",
             child_job_ids_json='["attempt-job", "second-child"]',
             rule_code="LX0609", rule_name="父任务", scope="final", total_records=2,
+            record_ids_json=json.dumps(["V-A", "V-B"]),
             created_at=datetime(2026, 9, 24), updated_at=datetime(2026, 9, 24),
             filters_json=filters([first_rule, second_rule]),
         ))
@@ -923,6 +924,7 @@ def test_parent_exports_only_complete_cases_across_children(storage, second_chil
         items=second_items,
         failed_records=failed_records,
     )
+    service.refresh_parent_batch_job(parent_job_id="parent-job")
     service.refresh_parent_batch_job(parent_job_id="parent-job")
     parent = service.get_batch_job(job_id="parent-job", created_by="tester")
     expected_parent_status = "completed" if second_child_outcome == "completed" else "failed"
@@ -948,6 +950,33 @@ def test_parent_exports_only_complete_cases_across_children(storage, second_chil
         {first_rule, second_rule} if expected_success_count else set()
     )
     assert len({row["record_ref"] for row in exported_items}) == expected_success_count
+    for record, should_deliver in (
+        (record_a, second_child_outcome == "completed"),
+        (record_b, second_child_outcome != "failed"),
+    ):
+        latest = service.build_latest_single_record_result_dto(
+            **record, expected_rule_ids=[first_rule, second_rule],
+        )
+        if should_deliver:
+            assert latest["state"] == "ready"
+            assert latest["is_complete"] is True
+            assert {item["rule_id"] for item in latest["items"]} == {first_rule, second_rule}
+            assert latest["job_id"] == "parent-job"
+            exported_by_rule = {
+                item["rule_id"]: item
+                for item in exported_items
+                if item["record_ref"] == latest["record_ref"]
+            }
+            for latest_item in latest["items"]:
+                exported = exported_by_rule[latest_item["rule_id"]]
+                for field in (
+                    "status", "reason_code", "conclusion", "suggestion",
+                    "customer_display_facts", "evidence",
+                ):
+                    assert latest_item.get(field) == exported.get(field)
+        else:
+            assert latest["state"] != "ready"
+            assert latest["items"] == []
     with engine.connect() as connection:
         envelopes = connection.execute(sa.select(service._record_result_envelope_table).where(
             service._record_result_envelope_table.c.root_job_id == "parent-job"

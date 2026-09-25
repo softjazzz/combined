@@ -707,3 +707,5 @@ MEDQC-022 最新接续（2026-09-25）：阶段 A 的病历详情原始 `items_j
 MEDQC-022 A3 补证（2026-09-25）：同一隔离 SQLite Canonical 产物经正式 HTTP 的 `latest-result`、批量详情和病历详情 `qc-detail` 逐项核对原始 001、004、002/005/006，交付文件 116/116 通过；认证、身份查询和病历材料仍为合成替身，证据为空。复核队列 81 条和影子台账 900 条当前签收数均为 0；A0/A4、客户 PG 和完整联机页面仍待验，目标不关闭。[证据对照](../acceptance/2026-09-24-original-engine-requirements-evidence.md)。
 
 2026-09-25 MEDQC-022 B/D：正式 0609 Worker 在取材料前核对接纳病例三坐标与重取结果，避免任务范围悄然缩小；父任务取消同步将子任务成本观测标为不完整；父任务完成时同事务替换子任务 Canonical，使每病例只交付一份汇总结果。隔离 SQLite 父子读回与四文件 179/179 聚焦测试通过。客户 PG/安装包恢复、真实模型费用和独立临床保护集仍未验收，A/B/D 不关闭。[证据](../acceptance/2026-09-24-original-engine-requirements-evidence.md)。
+
+2026-09-25 MEDQC-022 A/B/D：父任务两病例、两子任务的固定样例新增 latest 与批量导出对照；夹具补齐正式任务的 `record_ids_json` 后，完成、部分失败和失败三种结局及重复刷新均通过 3/3。只有完整病例能从 latest 读到父任务 Canonical，未完成病例不返回 ready。此为 SQLite 技术补证；当前隔离 PostgreSQL 15432 未启动，未把本轮结果写成 PG 或客户部署验收。
