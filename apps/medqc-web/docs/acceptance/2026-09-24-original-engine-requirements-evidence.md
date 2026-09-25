@@ -1,5 +1,9 @@
 # 原始 LX0609 引擎整改：要求与证据对照
 
+2026-09-25 当前提交补充 A3 交付链证据：在既有隔离 SQLite 保存/读取参数化用例中，将正式 `GET /api/v1/records/{record_id}/qc-detail` 接到同一份已保存 Canonical Envelope。对原始 001、004、002/005/006 三组固定合成结果，正式 `latest-result`、批量详情、病历详情的规则号和已发布结论逐项相同；病历详情的建议与 latest 相同，部分结果按 latest 的 `is_complete` 显示 `incomplete`，原始任务项没有进入详情。随后反馈、CSV/XLSX/HTML 仍使用该测试已保存的 Envelope；整份交付文件 116/116 通过。病历详情的身份查询、认证及无关病历材料在该测试中是合成替身，证据文本均为空；这不证明完整生产服务、非空证据、客户 PG 或临床判读。
+
+同次只读核对临床复核实物：`luxian_0609_golden_review_queue.csv` 81 行已签收 0，`shadow45-review-v1.csv` 900 行已签收 0，`review20-v1.csv` 仅表头。只统计复核状态，不输出患者信息；A0/A4 仍缺独立业务答案，不得用本次技术结果替代。
+
 2026-09-25 A0 临床保护集实物复核：`docs/0602/luxian_0609_golden_review_queue.csv` 81 行、合并队列 178 行的 `review_status` 均为 `pending`；自动候选队列 97 行同样均为 `pending`，P0 复核表 61 行状态为空。`docs/acceptance/lx0609-golden/shadow45-review-v1.csv` 900 行的审核人、审核修订和审核状态均为空，`review20-v1.csv` 只有表头。以上统计只读取状态字段，未输出患者资料。**这些文件不能证明计划要求的原始已签收保护集合，也不能把程序生成的 `expected_state` 当独立临床答案。** 若签收台账另存于别处，须以其实际文件及版本重做保护集合审计；当前 A0/A4 仍未完成。
 
 2026-09-25 抗菌药物公开读取边界：固定原始 054（`LX0609-05-01-02`）安全事实 `reason_documented=true`、无未匹配药物，首次发布只允许 `compliant`；在当前基线，公开 `safe_customer_display_facts` 却接受把状态改为 `non_compliant` 的同一事实，红测试复现。公开回退路径现复用 Finalizer 已有的 `antimicrobial_customer_fact_status_is_valid`，拒绝该矛盾组合；现有抗菌药物固定合法状态事实仍原样返回。抗菌药物、Canonical 交付及 HTML 导出三组 195/195 通过，Ruff 通过。这是受控合成事实的代码级证据，没有改变医学执行器、Prompt、模型、门控或40槽位；真实临床保护集、客户 PostgreSQL 和浏览器仍待验收，A/B/C/D 均未整体关闭。

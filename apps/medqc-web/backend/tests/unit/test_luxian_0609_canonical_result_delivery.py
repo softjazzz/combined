@@ -2541,6 +2541,57 @@ def test_published_rules_keep_identity_through_sqlite_dto_feedback_and_exports(
         latest_http_body = response.json()
         detail_http_body = detail_response.json()
 
+        # 病历详情抽屉也应从同一份已保存 Envelope 读取；不把任务原始项
+        # 或其他数据源重新解释成 0609 结果。
+        from app.routers import records
+
+        record_app = FastAPI()
+        record_app.include_router(records.router)
+        record_app.dependency_overrides[get_current_user] = lambda: {
+            "id": "admin-001", "roles": ["admin"],
+        }
+        monkeypatch.setattr(records, "get_supabase", lambda: None)
+        monkeypatch.setattr(
+            records, "medical_records_db", SimpleNamespace(get=lambda _record_id: None),
+        )
+        monkeypatch.setattr(records, "_load_bundle_payload_for_record", lambda _record_id: {})
+        monkeypatch.setattr(
+            records, "_luxian_0609_envelope_identities",
+            lambda _record_id, **_kwargs: {("inst-1", "patient-1", "visit-1")},
+        )
+        monkeypatch.setattr(
+            records,
+            "_resolve_visit_identity",
+            lambda _record_id: {
+                "institute_id": "inst-1", "patient_id": "patient-1", "visit_id": "visit-1",
+            },
+        )
+        monkeypatch.setattr(workspace_module, "CustomQCWorkspaceService", lambda: service)
+        monkeypatch.setattr(workspace_module, "_session", lambda: _ReadSession([
+            [_selected_job()], [{"envelope_json": json.dumps(loaded, ensure_ascii=False)}],
+        ]))
+        with TestClient(record_app) as client:
+            review_response = client.get("/api/v1/records/visit-1/qc-detail")
+        assert review_response.status_code == 200
+        review_result = review_response.json()["data"]
+        assert review_result["review_result_state"] == (
+            "ready" if http_result["is_complete"] else "incomplete"
+        )
+        assert [item["rule_code"] for item in review_result["review_items"]] == list(rule_ids)
+        assert [item["status"] for item in review_result["review_items"]] == [
+            item["status"] for item in http_result["items"]
+        ]
+        assert [item["findings"] for item in review_result["review_items"]] == [
+            item["conclusion"] for item in http_result["items"]
+        ]
+        assert [item["suggestion"] for item in review_result["review_items"]] == [
+            item["suggestion"] for item in http_result["items"]
+        ]
+        assert all(
+            item["source"] == "canonical_result_envelope"
+            for item in review_result["review_items"]
+        )
+
     feedback = ResultFeedbackDemoStore.__new__(ResultFeedbackDemoStore)
     feedback._canonical_table = canonical_table
     feedback._feedback_table = feedback_table

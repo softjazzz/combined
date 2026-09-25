@@ -1,5 +1,7 @@
 # 原始 LX0609 引擎整改：剩余目标执行卡
 
+最新 A3 证据：同一隔离 SQLite Canonical 产物现经正式 HTTP `latest-result`、批量详情及病历详情 `qc-detail` 三路核对，原始 001、004、002/005/006 的规则号、结论和建议保持一致；交付测试文件 116/116 通过。认证、详情身份查询和病历材料使用合成替身，证据为空，不能写作完整生产联机或客户 PG 验收。A0/A4 临床候选复核仍为 0 签收，阶段 A 与整体目标继续未完成；见[要求与证据对照](../acceptance/2026-09-24-original-engine-requirements-evidence.md)。
+
 更新：2026-09-25。工作树：`codex/lx0609-rule-id-integration`；本轮接续基线：`84e271f02`。本卡是[主计划](2026-09-23-lx0609-engine-boundary-refactor-master-plan.md)的当前执行入口，不改变其中的 A/B/C/D 退出合同。现有长程 goal 保持 active；不得把局部技术通过写成整体完成。
 
 阶段 A 最新反例：`GET /api/v1/records/{record_id}/qc-detail` 在无旧 `qc_defects` 时仍直接交付批量任务 `items_json` 中的 LX0609 原始项，并把 `data_gap` 等状态改为 `uncertain`；这条客户可见路径绕过 Canonical 发布签章。限定修复为抽屉从现有单病历 Canonical 服务读取 0609、旧批量读取过滤所有 `LX0609-` 项、非 0609 legacy 保持原样；身份缺失/冲突或结果损坏时不给原始回退，页面显示受控不可用状态。`records.py` 新增代码超过 200 行的原因是该路由本就拥有病历身份、文书与 `review_items` 装配；新建不足 250 行的转发模块会形成第二层结果 owner。没有新增医学判定或通用框架。合成红灯已证明篡改文本可进入抽屉，修后相邻路由/权限聚焦 34 项通过；客户 PG、真实浏览器、非空证据和独立临床保护集仍须验收，A 保持局部验证。
