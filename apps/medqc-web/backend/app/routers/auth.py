@@ -115,6 +115,9 @@ async def login(request: Request, login_data: LoginRequest):
 
 @router.post("/register")
 async def register(request: Request, user_data: UserCreate):
+    # 公开注册不能授予质控或系统管理角色；提权必须走受信任的管理流程。
+    if user_data.role not in (None, "doctor"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="公开注册不允许指定该角色")
     try:
         new_user = create_user(
             email=str(user_data.email),
@@ -123,7 +126,7 @@ async def register(request: Request, user_data: UserCreate):
             department=user_data.department,
             phone=user_data.phone,
             bio=user_data.bio,
-            role=user_data.role or "doctor",
+            role="doctor",
             password_hash=get_password_hash(user_data.password),
         )
     except ValueError as exc:

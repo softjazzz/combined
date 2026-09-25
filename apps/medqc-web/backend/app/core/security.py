@@ -61,6 +61,9 @@ def resolve_user_by_subject(subject: str | None) -> Optional[dict]:
 
 def resolve_current_user_from_token(token: str) -> dict:
     payload = _decode_token(token)
+    # 兼容历史无 type 的访问令牌，但刷新/重置令牌不得用作 Bearer 访问资源。
+    if payload.get("type") not in (None, "access"):
+        raise _credentials_exception()
     token_subject: str = payload.get("sub")
     if token_subject is None:
         raise _credentials_exception()
