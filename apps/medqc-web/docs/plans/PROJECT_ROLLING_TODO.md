@@ -524,6 +524,8 @@
 
 ### MEDQC-022：LX0609 质控引擎职责收敛
 
+2026-09-25 B/D 纵向补证：独立 Python 进程现可在本机隔离 PostgreSQL 18 上执行正式原始 001 Worker，任务与 Canonical 均保存/读回一条 `data_gap`，三轮双进程争领和旧代次拒绝继续通过，合计 4/4；没有读取真实病历或调用模型。客户 PG/启动脚本、临床保护集和实际模型费用仍待验，goal 保持 active。[验收记录](../acceptance/2026-09-25-original-engine-isolated-pg-attempts.md)。
+
 2026-09-25 本机发布包技术补证：以提交 `71f347e3a` 的干净检出重编译并生成 ZIP，前后端构建身份一致；解压包内后端的原始 001 排队任务跨进程完成并读回 Canonical，运行中任务在进程退出、模拟租约到期后受控失败且成本观测改为未知。隔离 PostgreSQL 双进程争领另有三轮通过。客户机真实启动、客户 PG、模型与临床保护集仍未验收，A/B/C/D goal 保持 active。打包脚本在 Windows PowerShell 5.1 下解析失败、指南仍建议已被拒绝的 `-SkipBuild`，作为发布流程问题待单独修正；本次 PowerShell 7 成功不代表旧命令可用。详见[解压包演练](../acceptance/2026-09-25-original-engine-package-restart.md)。
 
 2026-09-25 最新接续：现有 active goal 已覆盖 A/B/C/D，按[主计划最新执行卡](2026-09-23-lx0609-engine-boundary-refactor-master-plan.md)推进，不另建同义目标。基线 `7fd17b7d7` 之后，阶段 A 又以固定事实复现抗菌药物 054 公开读取接受“合规事实配不合规状态”的缺口；公开入口复用首次发布已有的状态/事实谓词，合法结果不变，抗菌药物、Canonical 和 HTML 相邻 195 项通过。A 的真实页面、客户 PG 和临床保护集仍未签收；B 的客户部署恢复/PG 争锁、C 的原始规则交付边界、D 的真实模型用量和并发归因仍按原退出条件验证。新增规则与 0916 不纳入本目标。
