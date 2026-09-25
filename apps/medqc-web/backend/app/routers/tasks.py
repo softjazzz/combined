@@ -26,6 +26,7 @@ from ..schemas.tasks import (
     TaskCreateRequest,
     TaskUpdateRequest,
     TaskAssignRequest,
+    TaskRecordCompleteRequest,
     TaskStatus,
 )
 from ..core.supabase_client import get_supabase, async_execute
@@ -71,11 +72,23 @@ from ..services.task_start_service import (
     start_assigned_task,
     start_assigned_task_record,
 )
+from ..services.task_record_completion_service import (
+    TaskRecordCompletionConflict,
+    TaskRecordCompletionForbidden,
+    TaskRecordCompletionNotFound,
+    TaskRecordCompletionUnavailable,
+    complete_assigned_task_record,
+)
 from ..services.task_cancel_service import (
     TaskCancelConflict,
     TaskCancelForbidden,
     TaskCancelNotFound,
     cancel_task as cancel_task_transaction,
+)
+from ..services.task_delete_service import (
+    TaskDeleteConflict,
+    TaskDeleteNotFound,
+    delete_empty_draft_task,
 )
 from ..services.task_sampling_service import (
     validate_active_running_date_range,
@@ -718,6 +731,54 @@ async def start_task_record(
     return success_response(data=data, message="病历已开始", trace_id=get_trace_id(request))
 
 
+@router.post("/{task_id}/records/{task_record_id}/complete")
+@require_permission(ResourceType.QC_TASKS, PermissionAction.ANALYZE)
+async def complete_task_record(
+    request: Request,
+    task_id: str,
+    task_record_id: str,
+    body: TaskRecordCompleteRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """质控员显式完成病历；执行完成和病历审核均不能代替此操作。"""
+    actor_id = _get_task_scope_user_id(current_user)
+    try:
+        data = await run_in_threadpool(
+            complete_assigned_task_record,
+            task_id=task_id,
+            task_record_id=task_record_id,
+            actor_id=actor_id,
+            run_number=body.run_number,
+            workspace_factory=_sichuan_workspace_service,
+        )
+    except TaskRecordCompletionNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except TaskRecordCompletionForbidden as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except TaskRecordCompletionConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except TaskRecordCompletionUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("完成任务病历失败 task_id=%s task_record_id=%s", task_id, task_record_id)
+        raise HTTPException(status_code=503, detail="任务病历完成暂不可用，请稍后重试") from exc
+
+    audit_event(
+        request,
+        action="tasks.records.complete",
+        resource="qc_task_record",
+        outcome="success",
+        details={
+            "task_id": task_id,
+            "task_record_id": task_record_id,
+            "run_number": body.run_number,
+            "idempotent": data["idempotent"],
+        },
+        current_user=current_user,
+    )
+    return success_response(data=data, message="病历已完成", trace_id=get_trace_id(request))
+
+
 # ============================
 # 执行抽样
 # ============================
@@ -1202,15 +1263,16 @@ async def delete_task(
     task_id: str,
     current_user: dict = Depends(get_current_user),
 ):
-    """删除任务（仅限管理员和质控主管）"""
-    sb = get_supabase()
-    if sb is None:
-        raise HTTPException(status_code=503, detail="数据库不可用")
-
+    """仅管理员和质控主管可删除无关联的草稿任务。"""
     try:
-        await async_execute(sb.table('qc_tasks').delete().eq('id', task_id))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"删除失败: {str(e)}")
+        await run_in_threadpool(delete_empty_draft_task, task_id=task_id)
+    except TaskDeleteNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except TaskDeleteConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("删除任务失败: task_id=%s", task_id)
+        raise HTTPException(status_code=503, detail="任务删除服务不可用，请稍后重试") from exc
 
     audit_event(
         request,

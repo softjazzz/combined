@@ -99,6 +99,16 @@ export interface TaskRecordStartResult {
     idempotent?: boolean
 }
 
+export interface TaskRecordCompleteResult {
+    task_id: string
+    task_record_id: string
+    status: 'completed'
+    run_number: number
+    idempotent: boolean
+    score: number | null
+    defect_count: number | null
+}
+
 export interface TaskRecordSyncStarted {
     job_id: string
     status: 'queued' | 'running'
@@ -303,6 +313,15 @@ export async function startTaskRecord(taskId: string, taskRecordId: string) {
     return request<TaskRecordStartResult>({
         method: 'POST',
         url: `${BASE_URL}/${encodeURIComponent(taskId)}/records/${encodeURIComponent(taskRecordId)}/start`,
+    })
+}
+
+/** 受领质控员显式完成病历处理；必须指定已核实的运行批次。 */
+export async function completeTaskRecord(taskId: string, taskRecordId: string, runNumber: number) {
+    return request<TaskRecordCompleteResult>({
+        method: 'POST',
+        url: `${BASE_URL}/${encodeURIComponent(taskId)}/records/${encodeURIComponent(taskRecordId)}/complete`,
+        data: { run_number: runNumber },
     })
 }
 

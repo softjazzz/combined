@@ -239,11 +239,16 @@ class QCTaskRecord(Base):
     assignee_name = Column(String(100))
     status = Column(String(20), default="pending", nullable=False)
     score = Column(Float)
-    defect_count = Column(Integer, default=0, nullable=False)
+    defect_count = Column(Integer, nullable=True)
+    completed_run_number = Column(Integer, nullable=True)
     completed_at = Column(DateTime)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     __table_args__ = (
+        CheckConstraint(
+            "completed_run_number > 0",
+            name="ck_qc_task_records_completed_run_number_positive",
+        ),
         CheckConstraint(
             "task_id IS NOT NULL AND trim(task_id, ' \t\n\r\f\v') <> '' "
             "AND record_id IS NOT NULL AND trim(record_id, ' \t\n\r\f\v') <> ''",

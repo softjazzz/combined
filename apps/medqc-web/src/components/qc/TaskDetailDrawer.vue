@@ -423,6 +423,23 @@
                   <p v-if="item.evidence?.length"><b>证据</b>{{ item.evidence.map(evidenceLabel).join('；') }}</p>
                 </div>
               </div>
+              <div v-if="canCompleteRecord || completionNeedsVerification" class="task-detail-drawer__run-actions">
+                <a-button
+                  v-if="completionNeedsVerification"
+                  data-testid="task-record-complete-verify"
+                  :loading="completingRecord"
+                  @click="void verifyRecordCompletion()"
+                >重新查询完成状态</a-button>
+                <a-button
+                  v-else
+                  type="primary"
+                  data-testid="task-record-complete"
+                  :loading="completingRecord"
+                  :disabled="completingRecord"
+                  @click="void completeRecord()"
+                ><Check :size="14" aria-hidden="true" />完成处理</a-button>
+              </div>
+              <p v-if="completionError" class="task-detail-drawer__run-error" role="alert">{{ completionError }}</p>
             </template>
           </div>
 
@@ -441,11 +458,11 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import type { TableColumnsType, TablePaginationConfig } from 'ant-design-vue'
-import { Eye, Play, RotateCw, X } from 'lucide-vue-next'
+import { Check, Eye, Play, RotateCw, X } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import { getSichuanWorkspaceBatchJob } from '@/services/sichuan-rule-workspace-service'
 import type { SichuanBatchJob } from '@/views/workstation-v4/semantic-rules/types'
-import { createTaskQcRun, getTaskDetail, getTaskQcRunRecordResult, getTaskQcRuns, startTaskRecord } from '@/api/tasks'
+import { completeTaskRecord, createTaskQcRun, getTaskDetail, getTaskQcRunRecordResult, getTaskQcRuns, startTaskRecord } from '@/api/tasks'
 import TaskRecordSyncControl from './TaskRecordSyncControl.vue'
 import TaskRecordDocumentDrawer from './TaskRecordDocumentDrawer.vue'
 import type {
@@ -485,6 +502,9 @@ const selectedTaskRecordId = ref('')
 const recordResult = ref<TaskQcRunRecordResult | null>(null)
 const recordResultLoading = ref(false)
 const recordResultError = ref('')
+const completingRecord = ref(false)
+const completionNeedsVerification = ref(false)
+const completionError = ref('')
 const startingRecordId = ref('')
 const verifyingRecordId = ref('')
 const recordStartAcknowledged = ref(false)
@@ -502,6 +522,7 @@ let requestSequence = 0
 let runSequence = 0
 let jobSequence = 0
 let recordResultSequence = 0
+let completionSequence = 0
 let recordActionSequence = 0
 
 const drawerWidth = 'min(820px, 100vw)'
@@ -528,6 +549,21 @@ const selectedRecordLabel = computed(() => {
   return record && hasCaseIdentity(record)
     ? `机构 ${record.institute_id} / 患者 ${record.patient_id} / 就诊 ${record.visit_id}`
     : '当前病历'
+})
+const canCompleteRecord = computed(() => {
+  const task = detail.value
+  const run = selectedRun.value
+  const result = recordResult.value
+  const record = task?.records.find((item) => item.id === selectedTaskRecordId.value)
+  return props.open && props.tab === 'received' && task?.status === 'in_progress'
+    && runScope.value === 'assigned' && run?.run_scope === 'assigned'
+    && Number.isInteger(run.run_number) && run.run_number > 0
+    && record?.status === 'in_progress' && record.task_id === task.id
+    && record.assignee_id === authStore.user?.id && hasCaseIdentity(record)
+    && result?.task_id === task.id && result.task_record_id === record.id
+    && result.run_number === run.run_number && result.job_id === run.job_id
+    && result.result_state === 'available' && result.items.length > 0
+    && !completionNeedsVerification.value
 })
 const canStartRun = computed(() => canViewRuns.value
   && (detail.value?.scene === 'running' || detail.value?.scene === 'final')
@@ -850,10 +886,88 @@ async function selectRun(jobId: string) {
 
 function clearRecordResult() {
   recordResultSequence += 1
+  completionSequence += 1
+  completingRecord.value = false
+  completionNeedsVerification.value = false
+  completionError.value = ''
   selectedTaskRecordId.value = ''
   recordResult.value = null
   recordResultLoading.value = false
   recordResultError.value = ''
+}
+
+function completionIsCurrent(taskId: string, taskRecordId: string, userId: string, runNumber: number, jobId: string, sequence: number, detailSequence: number) {
+  return sequence === completionSequence && detailSequence === requestSequence
+    && props.open && props.tab === 'received' && props.taskId === taskId
+    && detail.value?.id === taskId && authStore.user?.id === userId
+    && selectedTaskRecordId.value === taskRecordId
+    && selectedRun.value?.run_number === runNumber && selectedRun.value.job_id === jobId
+    && runScope.value === 'assigned'
+}
+
+async function verifyRecordCompletion() {
+  const taskId = detail.value?.id
+  const taskRecordId = selectedTaskRecordId.value
+  const userId = authStore.user?.id
+  const run = selectedRun.value
+  if (!taskId || !taskRecordId || !userId || !run || completingRecord.value
+    || (!completionNeedsVerification.value && !canCompleteRecord.value)) return
+  const sequence = completionSequence
+  const detailSequence = requestSequence
+  completingRecord.value = true
+  completionError.value = ''
+  try {
+    const response = await getTaskDetail(taskId, { tab: 'received' })
+    if (!completionIsCurrent(taskId, taskRecordId, userId, run.run_number, run.job_id, sequence, detailSequence)) return
+    const refreshed = response.data
+    const record = refreshed?.records?.find((item) => item.id === taskRecordId)
+    if (!response.success || refreshed?.id !== taskId || !Array.isArray(refreshed.records)
+      || record?.task_id !== taskId || record.assignee_id !== userId || !hasCaseIdentity(record)) {
+      completionNeedsVerification.value = true
+      completionError.value = '无法确认病历完成状态，请重新查询'
+      return
+    }
+    detail.value = refreshed
+    completionNeedsVerification.value = false
+    if (record.status !== 'completed') completionError.value = '病历尚未完成，可重试'
+  } catch {
+    if (completionIsCurrent(taskId, taskRecordId, userId, run.run_number, run.job_id, sequence, detailSequence)) {
+      completionNeedsVerification.value = true
+      completionError.value = '网络异常，请重新查询完成状态'
+    }
+  } finally {
+    if (completionIsCurrent(taskId, taskRecordId, userId, run.run_number, run.job_id, sequence, detailSequence)) completingRecord.value = false
+  }
+}
+
+async function completeRecord() {
+  if (!canCompleteRecord.value || completingRecord.value) return
+  const taskId = detail.value!.id
+  const taskRecordId = selectedTaskRecordId.value
+  const userId = authStore.user!.id
+  const run = selectedRun.value!
+  const sequence = ++completionSequence
+  const detailSequence = requestSequence
+  completingRecord.value = true
+  completionError.value = ''
+  try {
+    const response = await completeTaskRecord(taskId, taskRecordId, run.run_number)
+    if (!completionIsCurrent(taskId, taskRecordId, userId, run.run_number, run.job_id, sequence, detailSequence)) return
+    if (!response.success || response.data?.task_id !== taskId
+      || response.data.task_record_id !== taskRecordId || response.data.run_number !== run.run_number
+      || response.data.status !== 'completed') {
+      completionError.value = response.message || '完成响应未确认，正在重新查询'
+    }
+  } catch {
+    if (!completionIsCurrent(taskId, taskRecordId, userId, run.run_number, run.job_id, sequence, detailSequence)) return
+    completionError.value = '网络异常，正在重新查询'
+  } finally {
+    if (completionIsCurrent(taskId, taskRecordId, userId, run.run_number, run.job_id, sequence, detailSequence)) completingRecord.value = false
+  }
+  if (completionIsCurrent(taskId, taskRecordId, userId, run.run_number, run.job_id, sequence, detailSequence)) {
+    completionNeedsVerification.value = true
+    await verifyRecordCompletion()
+  }
 }
 
 async function loadRecordResult(taskRecordId: string) {

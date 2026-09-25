@@ -16,7 +16,11 @@ SELECT
     SUM(CASE WHEN r.status = 'in_progress' THEN 1 ELSE 0 END) AS working_count,
     SUM(CASE WHEN r.status = 'completed' THEN 1 ELSE 0 END) AS done_count,
     AVG(r.score) AS avg_score,
-    SUM(COALESCE(r.defect_count, 0)) AS total_defects
+    CASE
+        WHEN COUNT(r.id) FILTER (WHERE r.status = 'completed') = 0 THEN NULL
+        WHEN COUNT(r.id) FILTER (WHERE r.status = 'completed' AND r.defect_count IS NULL) > 0 THEN NULL
+        ELSE SUM(r.defect_count) FILTER (WHERE r.status = 'completed')
+    END AS total_defects
 FROM qc_tasks t
 LEFT JOIN qc_task_records r ON r.task_id = t.id
 GROUP BY t.id, t.task_name;

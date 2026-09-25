@@ -162,6 +162,14 @@ class TaskRecordUpdateRequest(BaseModel):
     defect_count: Optional[int] = Field(None, description="缺陷数量")
 
 
+class TaskRecordCompleteRequest(BaseModel):
+    """受领质控员显式提交本次已核实的任务病历结果。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    run_number: int = Field(..., strict=True, gt=0, description="assigned 质控运行序号")
+
+
 # ============================================================================
 # Response Models
 # ============================================================================

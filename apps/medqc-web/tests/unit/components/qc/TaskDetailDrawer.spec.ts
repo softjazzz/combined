@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   getTaskQcRunRecordResult: vi.fn(),
   createTaskQcRun: vi.fn(),
   startTaskRecord: vi.fn(),
+  completeTaskRecord: vi.fn(),
   syncTaskRecords: vi.fn(),
   getTaskRecordSyncJob: vi.fn(),
   getLatestTaskRecordSyncJob: vi.fn(),
@@ -41,6 +42,7 @@ vi.mock('@/api/tasks', () => ({
   getTaskQcRunRecordResult: mocks.getTaskQcRunRecordResult,
   createTaskQcRun: mocks.createTaskQcRun,
   startTaskRecord: mocks.startTaskRecord,
+  completeTaskRecord: mocks.completeTaskRecord,
   syncTaskRecords: mocks.syncTaskRecords,
   getTaskRecordSyncJob: mocks.getTaskRecordSyncJob,
   getLatestTaskRecordSyncJob: mocks.getLatestTaskRecordSyncJob,
@@ -213,6 +215,7 @@ describe('TaskDetailDrawer', () => {
     mocks.getTaskQcRunRecordResult.mockReset()
     mocks.createTaskQcRun.mockReset()
     mocks.startTaskRecord.mockReset()
+    mocks.completeTaskRecord.mockReset()
     mocks.syncTaskRecords.mockReset()
     mocks.getTaskRecordSyncJob.mockReset()
     mocks.getLatestTaskRecordSyncJob.mockReset()
@@ -1300,5 +1303,128 @@ describe('TaskDetailDrawer', () => {
     expect(wrapper.text()).not.toContain('旧任务')
     expect(wrapper.find('[data-testid="task-record-start-association-2"]').exists()).toBe(true)
     expect(mocks.getTaskDetail).toHaveBeenCalledTimes(2)
+  })
+
+  function prepareCompletion(resultState = 'available', items: Array<Record<string, unknown>> = [{ rule_name: '检查项', status: 'compliant' }]) {
+    mocks.getTaskDetail.mockResolvedValueOnce(detailResponse('待完成任务', [modernRecord({ status: 'in_progress' })], { scene: 'running' }))
+    mocks.getTaskQcRuns.mockResolvedValueOnce({ success: true, data: [
+      { task_id: 'task-1', run_number: 2, job_id: 'job-2', run_scope: 'assigned', triggered_by: 'creator', created_at: '2026-09-22' },
+    ] })
+    mocks.getTaskQcRunRecordResult.mockResolvedValueOnce({ success: true, data: {
+      task_id: 'task-1', run_number: 2, task_record_id: 'association-1', job_id: 'job-2',
+      job_status: 'completed', result_state: resultState, rule_set_key: 'lx0609', items,
+    } })
+  }
+
+  it('本人所选 assigned 运行有可用结果时显式完成，并以 GET 确认而非 POST 乐观更新', async () => {
+    prepareCompletion()
+    const refreshed = deferred<ReturnType<typeof detailResponse>>()
+    mocks.completeTaskRecord.mockResolvedValueOnce({ success: true, data: {
+      task_id: 'task-1', task_record_id: 'association-1', run_number: 2,
+      status: 'completed', idempotent: false, score: null, defect_count: null,
+    } })
+    mocks.getTaskDetail.mockReturnValueOnce(refreshed.promise)
+    const wrapper = mountDrawer()
+    await flushPromises()
+    expect(mocks.completeTaskRecord).not.toHaveBeenCalled()
+    await wrapper.get('[data-testid="task-record-result-association-1"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="task-record-complete"]').trigger('click')
+    await flushPromises()
+    expect(mocks.completeTaskRecord).toHaveBeenCalledWith('task-1', 'association-1', 2)
+    expect(wrapper.text()).toContain('处理中')
+    refreshed.resolve(detailResponse('待完成任务', [modernRecord({ status: 'completed', score: null, defect_count: null })], { scene: 'running' }))
+    await flushPromises()
+    expect(wrapper.text()).toContain('已完成')
+    expect(wrapper.text()).toContain('未记录')
+    expect(wrapper.find('[data-testid="task-record-complete"]').exists()).toBe(false)
+  })
+
+  it('POST 网络失败后 GET 确认未完成则可重试；复查失败只能重新查询', async () => {
+    prepareCompletion()
+    mocks.completeTaskRecord.mockRejectedValueOnce(new Error('timeout'))
+      .mockResolvedValueOnce({ success: true, data: { task_id: 'task-1', task_record_id: 'association-1', run_number: 2, status: 'completed' } })
+    mocks.getTaskDetail.mockResolvedValueOnce({ success: false, message: 'read failed' })
+      .mockResolvedValueOnce(detailResponse('待完成任务', [modernRecord({ status: 'in_progress' })], { scene: 'running' }))
+      .mockResolvedValueOnce(detailResponse('待完成任务', [modernRecord({ status: 'completed' })], { scene: 'running' }))
+    const wrapper = mountDrawer()
+    await flushPromises()
+    await wrapper.get('[data-testid="task-record-result-association-1"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="task-record-complete"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="task-record-complete"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="task-record-complete-verify"]').exists()).toBe(true)
+    await wrapper.get('[data-testid="task-record-complete-verify"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('病历尚未完成，可重试')
+    await wrapper.get('[data-testid="task-record-complete"]').trigger('click')
+    await flushPromises()
+    expect(mocks.completeTaskRecord).toHaveBeenCalledTimes(2)
+    expect(wrapper.text()).toContain('已完成')
+  })
+
+  it.each([['pending', []], ['unavailable', []], ['available', []]])('结果 %s 无有效条目时没有完成命令', async (state, items) => {
+    prepareCompletion(state, items)
+    const wrapper = mountDrawer()
+    await flushPromises()
+    await wrapper.get('[data-testid="task-record-result-association-1"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="task-record-complete"]').exists()).toBe(false)
+    expect(mocks.completeTaskRecord).not.toHaveBeenCalled()
+  })
+
+  it('切换任务后丢弃迟到的完成响应，不对新任务复查', async () => {
+    prepareCompletion()
+    const pending = deferred<{ success: boolean; data: Record<string, unknown> }>()
+    mocks.completeTaskRecord.mockReturnValueOnce(pending.promise)
+    mocks.getTaskDetail.mockResolvedValueOnce(detailResponse('新任务', [modernRecord({ id: 'association-2', task_id: 'task-2' })], { id: 'task-2', scene: 'running' }))
+    const wrapper = mountDrawer()
+    await flushPromises()
+    await wrapper.get('[data-testid="task-record-result-association-1"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="task-record-complete"]').trigger('click')
+    await wrapper.setProps({ taskId: 'task-2' })
+    await flushPromises()
+    pending.resolve({ success: true, data: { task_id: 'task-1', task_record_id: 'association-1', run_number: 2, status: 'completed' } })
+    await flushPromises()
+    expect(wrapper.text()).toContain('新任务')
+    expect(mocks.getTaskDetail).toHaveBeenCalledTimes(2)
+  })
+
+  it('切换运行后丢弃旧完成响应，不读取旧批次的完成状态', async () => {
+    prepareCompletion()
+    mocks.getTaskQcRuns.mockReset().mockResolvedValueOnce({ success: true, data: [
+      { task_id: 'task-1', run_number: 2, job_id: 'job-2', run_scope: 'assigned', triggered_by: 'creator', created_at: '2026-09-23' },
+      { task_id: 'task-1', run_number: 1, job_id: 'job-1', run_scope: 'assigned', triggered_by: 'creator', created_at: '2026-09-22' },
+    ] })
+    const pending = deferred<{ success: boolean; data: Record<string, unknown> }>()
+    mocks.completeTaskRecord.mockReturnValueOnce(pending.promise)
+    const wrapper = mountDrawer()
+    await flushPromises()
+    await wrapper.get('[data-testid="task-record-result-association-1"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="task-record-complete"]').trigger('click')
+    await wrapper.get('[data-testid="task-run-1"]').trigger('click')
+    await flushPromises()
+    pending.resolve({ success: true, data: { task_id: 'task-1', task_record_id: 'association-1', run_number: 2, status: 'completed' } })
+    await flushPromises()
+    expect(mocks.getTaskDetail).toHaveBeenCalledTimes(1)
+    expect(wrapper.find('[data-testid="task-record-qc-result"]').exists()).toBe(false)
+  })
+
+  it('切换登录身份后丢弃旧受领人的完成响应', async () => {
+    prepareCompletion()
+    const pending = deferred<{ success: boolean; data: Record<string, unknown> }>()
+    mocks.completeTaskRecord.mockReturnValueOnce(pending.promise)
+    const wrapper = mountDrawer()
+    await flushPromises()
+    await wrapper.get('[data-testid="task-record-result-association-1"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="task-record-complete"]').trigger('click')
+    mocks.user.id = 'other-user'
+    pending.resolve({ success: true, data: { task_id: 'task-1', task_record_id: 'association-1', run_number: 2, status: 'completed' } })
+    await flushPromises()
+    expect(mocks.getTaskDetail).toHaveBeenCalledTimes(1)
   })
 })

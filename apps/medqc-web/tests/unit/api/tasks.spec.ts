@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios'
 import { ApiService } from '@/services/apiService'
-import { assignTask, createTaskQcRun, getLatestTaskRecordSyncJob, getTaskAssigneeOptions, getTaskDetail, getTaskList, getTaskQcRuns, getTaskRecordSyncJob, getTaskRuleSets, getTaskStats, getTaskTodoStats, startTaskRecord, syncTaskRecords, updateTask } from '@/api/tasks'
+import { assignTask, completeTaskRecord, createTaskQcRun, getLatestTaskRecordSyncJob, getTaskAssigneeOptions, getTaskDetail, getTaskList, getTaskQcRuns, getTaskRecordSyncJob, getTaskRuleSets, getTaskStats, getTaskTodoStats, startTaskRecord, syncTaskRecords, updateTask } from '@/api/tasks'
 
 vi.mock('@/services/apiService', () => ({ ApiService: { requestRaw: vi.fn() } }))
 
@@ -105,6 +105,17 @@ describe('任务统计 API', () => {
     await expect(startTaskRecord('task/1', 'record/甲')).resolves.toMatchObject({ success: true, data: started })
     expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
       method: 'POST', url: '/api/v1/tasks/task%2F1/records/record%2F%E7%94%B2/start',
+    })
+  })
+
+  it('单病历显式完成只提交所选运行编号并编码任务与关联 ID', async () => {
+    const completed = { task_id: 'task/1', task_record_id: 'record/甲', status: 'completed', run_number: 2,
+      idempotent: false, score: null, defect_count: null }
+    vi.mocked(ApiService.requestRaw).mockResolvedValueOnce(response(completed))
+    await expect(completeTaskRecord('task/1', 'record/甲', 2)).resolves.toMatchObject({ success: true, data: completed })
+    expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
+      method: 'POST', url: '/api/v1/tasks/task%2F1/records/record%2F%E7%94%B2/complete',
+      data: { run_number: 2 },
     })
   })
 
