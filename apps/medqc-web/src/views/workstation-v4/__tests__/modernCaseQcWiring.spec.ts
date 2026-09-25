@@ -1,10 +1,17 @@
 import { describe, expect, it } from 'vitest'
 
 import { ModernCaseQcSnapshotError } from '@/api/modernCaseQcResult'
+import type { ModernCaseQcSnapshot } from '@/api/modernCaseQcResult'
 import {
   allowsLegacyWriteWorkspace,
+  buildModernCaseQcDefectPageRequest,
   buildModernCaseQcRequestKey,
+  hasModernCaseQcDefectPageEnvelopes,
+  isModernCaseQcDefectPageResponseStale,
   isModernCaseQcResponseStale,
+  latestModernCaseQcResultIdOf,
+  mergeModernCaseQcDefectPage,
+  readModernCaseQcDefectPageEnvelope,
   resolveModernCaseQcErrorMessage,
   resolveModernCaseQcReadTarget,
   resolveSelectedRecord,
@@ -405,5 +412,209 @@ describe('现代只读快照接线：失败语义脱敏', () => {
     expect(
       resolveModernCaseQcErrorMessage(new ModernCaseQcSnapshotError('malformed_payload', '字段缺失')),
     ).toBe('质控结果读取失败')
+  })
+})
+
+function buildEnvelopeSnapshot(
+  overrides: Partial<ModernCaseQcSnapshot> = {},
+): ModernCaseQcSnapshot {
+  return {
+    identity_status: 'verified',
+    source_key: 'frontpage_formal_qc',
+    institute_id: 'LX001',
+    patient_id: 'P-1',
+    visit_id: 'V-1',
+    latest_qc_result: { id: 'result-1' },
+    recent_results: [],
+    active_defects: [],
+    current_result_defects: [],
+    latest_notification: null,
+    active_defects_has_more: false,
+    current_result_defects_has_more: false,
+    active_defects_next_offset: null,
+    current_result_defects_next_offset: null,
+    ...overrides,
+  }
+}
+
+describe('现代只读快照接线：缺陷分组分页（纯决策）', () => {
+  it('信封与 API 同口径：has_more=false 必须严格配 next_offset=null', () => {
+    expect(readModernCaseQcDefectPageEnvelope(buildEnvelopeSnapshot(), 'active')).toEqual({
+      ok: true,
+      hasMore: false,
+      nextOffset: null,
+    })
+
+    // 缺字段（undefined）不是 null，不得被当成「已加载完」。
+    const missingOffset = buildEnvelopeSnapshot()
+    delete (missingOffset as unknown as Record<string, unknown>).active_defects_next_offset
+    expect(readModernCaseQcDefectPageEnvelope(missingOffset, 'active').ok).toBe(false)
+
+    const missingHasMore = buildEnvelopeSnapshot()
+    delete (missingHasMore as unknown as Record<string, unknown>).current_result_defects_has_more
+    expect(readModernCaseQcDefectPageEnvelope(missingHasMore, 'current').ok).toBe(false)
+
+    expect(
+      readModernCaseQcDefectPageEnvelope(
+        buildEnvelopeSnapshot({ active_defects_next_offset: 20 }),
+        'active',
+      ).ok,
+    ).toBe(false)
+    expect(
+      readModernCaseQcDefectPageEnvelope(
+        buildEnvelopeSnapshot({ active_defects_has_more: 'true' as unknown as boolean }),
+        'active',
+      ).ok,
+    ).toBe(false)
+  })
+
+  it('has_more=true 只接受安全非负整数游标', () => {
+    expect(
+      readModernCaseQcDefectPageEnvelope(
+        buildEnvelopeSnapshot({ active_defects_has_more: true, active_defects_next_offset: 20 }),
+        'active',
+      ),
+    ).toEqual({ ok: true, hasMore: true, nextOffset: 20 })
+
+    for (const invalid of [null, -1, 1.5, Number.POSITIVE_INFINITY] as const) {
+      expect(
+        readModernCaseQcDefectPageEnvelope(
+          buildEnvelopeSnapshot({
+            active_defects_has_more: true,
+            active_defects_next_offset: invalid as unknown as number,
+          }),
+          'active',
+        ).ok,
+      ).toBe(false)
+    }
+  })
+
+  it('两组信封必须同时成立，缺一即视为响应不完整', () => {
+    expect(hasModernCaseQcDefectPageEnvelopes(buildEnvelopeSnapshot())).toBe(true)
+
+    const oneGroupOnly = buildEnvelopeSnapshot()
+    delete (oneGroupOnly as unknown as Record<string, unknown>).current_result_defects_next_offset
+    expect(hasModernCaseQcDefectPageEnvelopes(oneGroupOnly)).toBe(false)
+  })
+
+  it('分页请求只带目标组 offset，另一组不参与覆盖', () => {
+    expect(buildModernCaseQcDefectPageRequest({ group: 'active', offset: 20, limit: 20 })).toEqual({
+      active_defects_offset: 20,
+      defects_limit: 20,
+    })
+
+    const currentRequest = buildModernCaseQcDefectPageRequest({
+      group: 'current',
+      offset: 40,
+      limit: 20,
+    })
+    expect(currentRequest).toEqual({ current_result_defects_offset: 40, defects_limit: 20 })
+    expect('active_defects_offset' in currentRequest).toBe(false)
+  })
+
+  it('拼接只改写目标组数组与该组信封，另一组已加载页与游标保持原样', () => {
+    const current = buildEnvelopeSnapshot({
+      active_defects: [{ id: 'd-1' }],
+      active_defects_has_more: true,
+      active_defects_next_offset: 20,
+      current_result_defects: [{ id: 'r-1' }, { id: 'r-2' }],
+      current_result_defects_has_more: true,
+      current_result_defects_next_offset: 20,
+    })
+    // 未请求的一组按默认第 1 页返回：不得用它覆盖已加载的后续页。
+    const incoming = buildEnvelopeSnapshot({
+      active_defects: [{ id: 'd-2' }],
+      active_defects_has_more: false,
+      active_defects_next_offset: null,
+      current_result_defects: [{ id: 'r-1' }],
+      current_result_defects_has_more: true,
+      current_result_defects_next_offset: 20,
+    })
+
+    const merged = mergeModernCaseQcDefectPage({ group: 'active', current, incoming })
+    expect(merged?.active_defects.map((defect) => defect.id)).toEqual(['d-1', 'd-2'])
+    expect(merged?.active_defects_has_more).toBe(false)
+    expect(merged?.active_defects_next_offset).toBeNull()
+    expect(merged?.current_result_defects.map((defect) => defect.id)).toEqual(['r-1', 'r-2'])
+    expect(merged?.current_result_defects_has_more).toBe(true)
+    expect(merged?.current_result_defects_next_offset).toBe(20)
+
+    // 反向：拼接「本次结果缺陷」时不得改写活跃缺陷组。
+    const mergedCurrent = mergeModernCaseQcDefectPage({
+      group: 'current',
+      current,
+      incoming: buildEnvelopeSnapshot({
+        active_defects: [{ id: 'd-9' }],
+        active_defects_has_more: true,
+        active_defects_next_offset: 20,
+        current_result_defects: [{ id: 'r-3' }],
+        current_result_defects_has_more: false,
+        current_result_defects_next_offset: null,
+      }),
+    })
+    expect(mergedCurrent?.current_result_defects.map((defect) => defect.id)).toEqual([
+      'r-1',
+      'r-2',
+      'r-3',
+    ])
+    expect(mergedCurrent?.current_result_defects_has_more).toBe(false)
+    expect(mergedCurrent?.current_result_defects_next_offset).toBeNull()
+    expect(mergedCurrent?.active_defects.map((defect) => defect.id)).toEqual(['d-1'])
+    expect(mergedCurrent?.active_defects_next_offset).toBe(20)
+  })
+
+  it('拼接按 id 稳定去重：并发插入导致同一缺陷落到两页时不重复渲染', () => {
+    const merged = mergeModernCaseQcDefectPage({
+      group: 'active',
+      current: buildEnvelopeSnapshot({ active_defects: [{ id: 'd-1' }, { id: 'd-2' }] }),
+      incoming: buildEnvelopeSnapshot({
+        active_defects: [{ id: 'd-2' }, { id: 'd-3' }],
+        active_defects_has_more: false,
+        active_defects_next_offset: null,
+      }),
+    })
+    expect(merged?.active_defects.map((defect) => defect.id)).toEqual(['d-1', 'd-2', 'd-3'])
+
+    // 无 id 的条目无法判等，一律保留。
+    const withoutIds = mergeModernCaseQcDefectPage({
+      group: 'active',
+      current: buildEnvelopeSnapshot({ active_defects: [{ rule_name: '示例规则' }] }),
+      incoming: buildEnvelopeSnapshot({ active_defects: [{ rule_name: '示例规则' }] }),
+    })
+    expect(withoutIds?.active_defects).toHaveLength(2)
+  })
+
+  it('响应信封不成立时不拼接，交由调用方按该组加载失败处理', () => {
+    const current = buildEnvelopeSnapshot({ active_defects: [{ id: 'd-1' }] })
+    const broken = buildEnvelopeSnapshot({
+      active_defects_has_more: true,
+      active_defects_next_offset: null,
+    })
+    expect(mergeModernCaseQcDefectPage({ group: 'active', current, incoming: broken })).toBeNull()
+  })
+
+  it('迟到判定：令牌、请求键或期间已换结果都丢弃，同请求不误判', () => {
+    const base = {
+      token: 1,
+      currentToken: 1,
+      requestedKey: 'k',
+      currentKey: 'k',
+      requestedResultId: 'result-1',
+      loadedResultId: 'result-1',
+    }
+    expect(isModernCaseQcDefectPageResponseStale(base)).toBe(false)
+    expect(isModernCaseQcDefectPageResponseStale({ ...base, currentToken: 2 })).toBe(true)
+    expect(isModernCaseQcDefectPageResponseStale({ ...base, currentKey: 'k2' })).toBe(true)
+    // 期间已有新结果落地：旧 offset 的分页响应必须丢弃，不能再落地或拼接。
+    expect(isModernCaseQcDefectPageResponseStale({ ...base, loadedResultId: 'result-2' })).toBe(true)
+  })
+
+  it('最新结果标识取 id/result_id，缺失为空串', () => {
+    expect(latestModernCaseQcResultIdOf(buildEnvelopeSnapshot())).toBe('result-1')
+    expect(
+      latestModernCaseQcResultIdOf(buildEnvelopeSnapshot({ latest_qc_result: { result_id: 'r-9' } })),
+    ).toBe('r-9')
+    expect(latestModernCaseQcResultIdOf(buildEnvelopeSnapshot({ latest_qc_result: null }))).toBe('')
+    expect(latestModernCaseQcResultIdOf(null)).toBe('')
   })
 })

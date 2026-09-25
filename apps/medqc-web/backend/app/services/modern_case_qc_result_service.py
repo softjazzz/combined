@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from functools import lru_cache
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import MetaData, Table, desc, func, nullslast, or_, select
 from sqlalchemy.orm import Session
@@ -73,6 +73,10 @@ COMPLETED_STATUS = "completed"
 # 最新 1 条 + 最近最多 5 条，两组互不重叠。
 LATEST_RESULT_LIMIT = 1
 RECENT_RESULT_LIMIT = 5
+# 缺陷分页：单组默认 20 条、上限 50 条；SQL 多取 1 条只用于判定是否还有下一页。
+DEFAULT_DEFECTS_LIMIT = 20
+MIN_DEFECTS_LIMIT = 1
+MAX_DEFECTS_LIMIT = 50
 
 
 class ModernCaseQCResultError(RuntimeError):
@@ -140,10 +144,21 @@ class ModernCaseQCResultService:
         self._session_factory = session_factory or SessionLocal
 
     def get_snapshot(
-        self, identity: VerifiedQCIdentity, recipient_id: Optional[str] = None
+        self,
+        identity: VerifiedQCIdentity,
+        recipient_id: Optional[str] = None,
+        *,
+        active_defects_offset: int = 0,
+        current_result_defects_offset: int = 0,
+        defects_limit: int = DEFAULT_DEFECTS_LIMIT,
     ) -> Dict[str, Any]:
         if not isinstance(identity, VerifiedQCIdentity):
             raise TypeError("identity must be VerifiedQCIdentity")
+        # 分页参数在触碰数据库前校验：非法参数不得退回成来源不可用。
+        if active_defects_offset < 0 or current_result_defects_offset < 0:
+            raise ValueError("defects offset must be a non-negative integer")
+        if not MIN_DEFECTS_LIMIT <= defects_limit <= MAX_DEFECTS_LIMIT:
+            raise ValueError("defects_limit must be between 1 and 50")
         if self._session_factory is None:
             raise SourceUnavailable("modern case QC source is unavailable")
         try:
@@ -151,7 +166,14 @@ class ModernCaseQCResultService:
         except Exception:
             raise SourceUnavailable("modern case QC source is unavailable") from None
         try:
-            return self._build_snapshot(session, identity, recipient_id)
+            return self._build_snapshot(
+                session,
+                identity,
+                recipient_id,
+                active_defects_offset=active_defects_offset,
+                current_result_defects_offset=current_result_defects_offset,
+                defects_limit=defects_limit,
+            )
         except ModernCaseQCResultError:
             raise
         except Exception:
@@ -163,7 +185,14 @@ class ModernCaseQCResultService:
                 pass
 
     def _build_snapshot(
-        self, session: Session, identity: VerifiedQCIdentity, recipient_id: Optional[str]
+        self,
+        session: Session,
+        identity: VerifiedQCIdentity,
+        recipient_id: Optional[str],
+        *,
+        active_defects_offset: int = 0,
+        current_result_defects_offset: int = 0,
+        defects_limit: int = DEFAULT_DEFECTS_LIMIT,
     ) -> Dict[str, Any]:
         self._require_exact_case(session, identity)
         tables = self._require_modern_tables()
@@ -177,18 +206,43 @@ class ModernCaseQCResultService:
             "recent_results": [],
             "active_defects": [],
             "current_result_defects": [],
+            "active_defects_has_more": False,
+            "current_result_defects_has_more": False,
+            "active_defects_next_offset": None,
+            "current_result_defects_next_offset": None,
             "latest_notification": None,
         }
         results = self._load_results(session, tables["qc_results"], identity)
         if not results:
-            # 无现代结果：不回退历史行、不猜测通过，缺陷与通知一律为空。
+            # 无现代结果：不回退历史行、不猜测通过，缺陷与通知一律为空，分页游标不作数。
             return snapshot
         latest_id = _safe_text(results[0]["id"]).strip()
         snapshot["latest_qc_result"] = results[0]
         snapshot["recent_results"] = results[1:]
-        snapshot["active_defects"] = self._load_defects(session, tables["qc_defects"], identity)
-        snapshot["current_result_defects"] = self._load_defects(
-            session, tables["qc_defects"], identity, result_id=latest_id
+        active_defects, active_has_more = self._load_defects(
+            session,
+            tables["qc_defects"],
+            identity,
+            offset=active_defects_offset,
+            limit=defects_limit,
+        )
+        snapshot["active_defects"] = active_defects
+        snapshot["active_defects_has_more"] = active_has_more
+        snapshot["active_defects_next_offset"] = (
+            active_defects_offset + len(active_defects) if active_has_more else None
+        )
+        current_defects, current_has_more = self._load_defects(
+            session,
+            tables["qc_defects"],
+            identity,
+            result_id=latest_id,
+            offset=current_result_defects_offset,
+            limit=defects_limit,
+        )
+        snapshot["current_result_defects"] = current_defects
+        snapshot["current_result_defects_has_more"] = current_has_more
+        snapshot["current_result_defects_next_offset"] = (
+            current_result_defects_offset + len(current_defects) if current_has_more else None
         )
         recipient = _safe_text(recipient_id).strip()
         if recipient:
@@ -258,7 +312,9 @@ class ModernCaseQCResultService:
         identity: VerifiedQCIdentity,
         *,
         result_id: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
+        offset: int = 0,
+        limit: int = DEFAULT_DEFECTS_LIMIT,
+    ) -> Tuple[List[Dict[str, Any]], bool]:
         conditions = self._owner_clause(table, identity)
         if result_id is None:
             # 未关闭缺陷与已关闭缺陷分开呈现；历史 NULL 状态按未关闭处理。
@@ -273,8 +329,12 @@ class ModernCaseQCResultService:
                 nullslast(desc(table.c.created_at)),
                 desc(table.c.id),
             )
+            .offset(offset)
+            .limit(limit + 1)
         )
-        return [_serialize_row(dict(row)) for row in session.execute(stmt).mappings().all()]
+        rows = [_serialize_row(dict(row)) for row in session.execute(stmt).mappings().all()]
+        # 多取的第 limit+1 条只用来判定 has_more，不对外返回。
+        return rows[:limit], len(rows) > limit
 
     def _load_notification(
         self,

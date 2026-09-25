@@ -20,6 +20,22 @@ export const MODERN_CASE_QC_SOURCE_KEYS: readonly ModernCaseQcSourceKey[] = [
 
 const MODERN_CASE_QC_SNAPSHOT_URL = '/api/v1/workstation/case-qc/snapshot'
 
+/** 未显式传 page 时使用的分页默认值：offset 0 / limit 20。 */
+export const MODERN_CASE_QC_DEFAULT_OFFSET = 0
+export const MODERN_CASE_QC_DEFAULT_DEFECTS_LIMIT = 20
+export const MODERN_CASE_QC_MAX_DEFECTS_LIMIT = 50
+
+/**
+ * 缺陷分组分页入参。
+ * 两个 offset 互相独立（活跃缺陷与本次结果缺陷是两组不同的集合），limit 对两组同时生效。
+ * 未传 page 时按默认值 0/0/20 发起请求，分页信封字段同样必须回传。
+ */
+export interface ModernCaseQcSnapshotPage {
+  active_defects_offset?: number
+  current_result_defects_offset?: number
+  defects_limit?: number
+}
+
 /** 请求四维：机构、患者、就诊三坐标 + 来源标识。 */
 export interface ModernCaseQcIdentity {
   institute_id: string
@@ -70,10 +86,16 @@ export interface ModernCaseQcSnapshot {
   active_defects: ModernCaseQcDefect[]
   current_result_defects: ModernCaseQcDefect[]
   latest_notification: ModernCaseQcNotification | null
+  /** 分页信封：两组缺陷各自声明是否还有下一页，以及下一页游标（无下一页为 null）。 */
+  active_defects_has_more: boolean
+  current_result_defects_has_more: boolean
+  active_defects_next_offset: number | null
+  current_result_defects_next_offset: number | null
 }
 
 export type ModernCaseQcSnapshotErrorCode =
   | 'invalid_identity'
+  | 'invalid_page'
   | 'unsupported_source_key'
   | 'unexpected_status'
   | 'malformed_envelope'
@@ -149,10 +171,141 @@ function normalizeSourceKey(value: unknown): ModernCaseQcSourceKey {
   return normalized
 }
 
+/** 归一化后的分页入参：两组 offset 各自独立，limit 对两组同时生效。 */
+interface ModernCaseQcPageRequest {
+  active_defects_offset: number
+  current_result_defects_offset: number
+  defects_limit: number
+}
+
+/** offset 必须是非负安全整数，避免超过 JS 安全整数后被静默截断。 */
+function normalizeOffset(value: unknown, field: string): number {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
+    throw new ModernCaseQcSnapshotError('invalid_page', `${field} 必须是非负安全整数`, {
+      details: { field },
+    })
+  }
+  return value
+}
+
+/** 分页入参本地校验：非法值一律拒绝且不发起请求，缺省回落到 offset 0 / limit 20。 */
+function normalizePage(page: unknown): ModernCaseQcPageRequest {
+  if (page === undefined) {
+    return {
+      active_defects_offset: MODERN_CASE_QC_DEFAULT_OFFSET,
+      current_result_defects_offset: MODERN_CASE_QC_DEFAULT_OFFSET,
+      defects_limit: MODERN_CASE_QC_DEFAULT_DEFECTS_LIMIT,
+    }
+  }
+  if (!isPlainObject(page)) {
+    throw new ModernCaseQcSnapshotError('invalid_page', 'page 必须是对象', {
+      details: { field: 'page' },
+    })
+  }
+
+  let defectsLimit = MODERN_CASE_QC_DEFAULT_DEFECTS_LIMIT
+  if (page.defects_limit !== undefined) {
+    if (
+      typeof page.defects_limit !== 'number' ||
+      !Number.isSafeInteger(page.defects_limit) ||
+      page.defects_limit < 1 ||
+      page.defects_limit > MODERN_CASE_QC_MAX_DEFECTS_LIMIT
+    ) {
+      throw new ModernCaseQcSnapshotError(
+        'invalid_page',
+        `defects_limit 必须是 1 到 ${MODERN_CASE_QC_MAX_DEFECTS_LIMIT} 之间的整数`,
+        { details: { field: 'defects_limit' } },
+      )
+    }
+    defectsLimit = page.defects_limit
+  }
+
+  return {
+    active_defects_offset:
+      page.active_defects_offset === undefined
+        ? MODERN_CASE_QC_DEFAULT_OFFSET
+        : normalizeOffset(page.active_defects_offset, 'active_defects_offset'),
+    current_result_defects_offset:
+      page.current_result_defects_offset === undefined
+        ? MODERN_CASE_QC_DEFAULT_OFFSET
+        : normalizeOffset(page.current_result_defects_offset, 'current_result_defects_offset'),
+    defects_limit: defectsLimit,
+  }
+}
+
+/**
+ * 单组缺陷的分页信封校验：两个字段必填，且必须与本页内容自洽。
+ * has_more=false 必须配 next_offset=null；has_more=true 必须本页非空，
+ * 且 next_offset 严格等于本次请求 offset + 本页条数。
+ */
+function requireDefectGroupEnvelope(
+  data: Record<string, unknown>,
+  prefix: 'active_defects' | 'current_result_defects',
+  requestOffset: number,
+  pageSize: number,
+): { has_more: boolean; next_offset: number | null } {
+  const hasMoreField = `${prefix}_has_more`
+  const nextOffsetField = `${prefix}_next_offset`
+  for (const field of [hasMoreField, nextOffsetField]) {
+    if (!(field in data)) {
+      throw new ModernCaseQcSnapshotError('malformed_payload', `缺少字段 ${field}`, {
+        details: { field },
+      })
+    }
+  }
+
+  const hasMore = data[hasMoreField]
+  if (typeof hasMore !== 'boolean') {
+    throw new ModernCaseQcSnapshotError('malformed_payload', `${hasMoreField} 必须是布尔值`, {
+      details: { field: hasMoreField },
+    })
+  }
+
+  const nextOffset = data[nextOffsetField]
+  if (!hasMore) {
+    if (nextOffset !== null) {
+      throw new ModernCaseQcSnapshotError(
+        'malformed_payload',
+        `${hasMoreField} 为 false 时 ${nextOffsetField} 必须为 null`,
+        { details: { field: nextOffsetField } },
+      )
+    }
+    return { has_more: false, next_offset: null }
+  }
+  if (typeof nextOffset !== 'number' || !Number.isSafeInteger(nextOffset) || nextOffset < 0) {
+    throw new ModernCaseQcSnapshotError(
+      'malformed_payload',
+      `${nextOffsetField} 必须是安全非负整数`,
+      { details: { field: nextOffsetField } },
+    )
+  }
+  if (pageSize === 0) {
+    throw new ModernCaseQcSnapshotError('malformed_payload', `${hasMoreField} 为 true 但本页为空`, {
+      details: { field: hasMoreField, offset: requestOffset },
+    })
+  }
+  if (nextOffset !== requestOffset + pageSize) {
+    throw new ModernCaseQcSnapshotError(
+      'malformed_payload',
+      `${nextOffsetField} 必须等于请求 offset 与本页条数之和`,
+      {
+        details: {
+          field: nextOffsetField,
+          offset: requestOffset,
+          page_size: pageSize,
+          received: nextOffset,
+        },
+      },
+    )
+  }
+  return { has_more: true, next_offset: nextOffset }
+}
+
 /** 数组字段必须是数组且元素为对象，缺失或畸形一律失败关闭，不补空数组。 */
 function requireObjectArray(
   data: Record<string, unknown>,
   field: string,
+  maxLength?: number,
 ): Array<Record<string, unknown>> {
   const value = data[field]
   if (!Array.isArray(value)) {
@@ -165,6 +318,13 @@ function requireObjectArray(
       'malformed_payload',
       `字段 ${field} 的元素必须是对象`,
       { details: { field } },
+    )
+  }
+  if (maxLength !== undefined && value.length > maxLength) {
+    throw new ModernCaseQcSnapshotError(
+      'malformed_payload',
+      `字段 ${field} 返回 ${value.length} 条，超过请求上限 ${maxLength}`,
+      { details: { field, received: value.length, limit: maxLength } },
     )
   }
   return value as Array<Record<string, unknown>>
@@ -217,6 +377,7 @@ function assertRequestedIdentity(
 function validateSnapshotPayload(
   payload: unknown,
   request: ModernCaseQcIdentity,
+  page: ModernCaseQcPageRequest,
 ): ModernCaseQcSnapshot {
   if (!isPlainObject(payload)) {
     throw new ModernCaseQcSnapshotError('malformed_envelope', '响应不是统一信封对象')
@@ -244,11 +405,29 @@ function validateSnapshotPayload(
 
   const latestQcResult = requireObjectOrNull<ModernCaseQcResultRecord>(data, 'latest_qc_result')
   const recentResults = requireObjectArray(data, 'recent_results')
-  const activeDefects = requireObjectArray(data, 'active_defects')
-  const currentResultDefects = requireObjectArray(data, 'current_result_defects')
+  // 单组返回条数不得超过本次请求的 limit。
+  const activeDefects = requireObjectArray(data, 'active_defects', page.defects_limit)
+  const currentResultDefects = requireObjectArray(
+    data,
+    'current_result_defects',
+    page.defects_limit,
+  )
   const latestNotification = requireObjectOrNull<ModernCaseQcNotification>(
     data,
     'latest_notification',
+  )
+
+  const activeEnvelope = requireDefectGroupEnvelope(
+    data,
+    'active_defects',
+    page.active_defects_offset,
+    activeDefects.length,
+  )
+  const currentEnvelope = requireDefectGroupEnvelope(
+    data,
+    'current_result_defects',
+    page.current_result_defects_offset,
+    currentResultDefects.length,
   )
 
   return {
@@ -262,6 +441,10 @@ function validateSnapshotPayload(
     active_defects: activeDefects as ModernCaseQcDefect[],
     current_result_defects: currentResultDefects as ModernCaseQcDefect[],
     latest_notification: latestNotification,
+    active_defects_has_more: activeEnvelope.has_more,
+    current_result_defects_has_more: currentEnvelope.has_more,
+    active_defects_next_offset: activeEnvelope.next_offset,
+    current_result_defects_next_offset: currentEnvelope.next_offset,
   }
 }
 
@@ -272,6 +455,7 @@ function validateSnapshotPayload(
  */
 export async function getModernCaseQcSnapshot(
   identity: ModernCaseQcIdentity,
+  page?: ModernCaseQcSnapshotPage,
 ): Promise<ModernCaseQcSnapshot> {
   const request: ModernCaseQcIdentity = {
     institute_id: normalizeIdentityValue(identity?.institute_id, 'institute_id'),
@@ -279,6 +463,8 @@ export async function getModernCaseQcSnapshot(
     visit_id: normalizeIdentityValue(identity?.visit_id, 'visit_id'),
     source_key: normalizeSourceKey(identity?.source_key),
   }
+  // 分页入参先本地校验：非法值不发请求。
+  const requestedPage = normalizePage(page)
 
   const response = await ApiService.requestRaw<unknown>({
     method: 'GET',
@@ -288,6 +474,9 @@ export async function getModernCaseQcSnapshot(
       patient_id: request.patient_id,
       visit_id: request.visit_id,
       source_key: request.source_key,
+      active_defects_offset: requestedPage.active_defects_offset,
+      current_result_defects_offset: requestedPage.current_result_defects_offset,
+      defects_limit: requestedPage.defects_limit,
     },
   })
 
@@ -299,5 +488,5 @@ export async function getModernCaseQcSnapshot(
     )
   }
 
-  return validateSnapshotPayload(response.data, request)
+  return validateSnapshotPayload(response.data, request, requestedPage)
 }

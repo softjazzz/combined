@@ -1,4 +1,9 @@
-import type { ModernCaseQcSourceKey } from '@/api/modernCaseQcResult'
+import type {
+  ModernCaseQcDefect,
+  ModernCaseQcSnapshot,
+  ModernCaseQcSnapshotPage,
+  ModernCaseQcSourceKey,
+} from '@/api/modernCaseQcResult'
 
 /**
  * 现代（三坐标 + 来源）质控只读读取的纯决策层。
@@ -196,4 +201,158 @@ export function resolveModernCaseQcErrorMessage(error: unknown): string {
   if (status === 422) return '病例身份参数不合法'
   if (status === 502 || status === 503 || status === 504) return '质控结果暂时不可用'
   return '质控结果读取失败'
+}
+
+// ===== 缺陷分组分页（纯决策：不持有状态、不发请求） =====
+
+/** 两组缺陷的分组键，与只读面板 `emit('load-more', group)` 的取值一致。 */
+export type ModernCaseQcDefectGroup = 'active' | 'current'
+
+export const MODERN_CASE_QC_DEFECT_GROUPS: readonly ModernCaseQcDefectGroup[] = [
+  'active',
+  'current',
+]
+
+/** 某组分页信封的判定结果；ok:false 代表合同不成立，调用方必须失败关闭。 */
+export type ModernCaseQcDefectPageEnvelope =
+  | { ok: true; hasMore: boolean; nextOffset: number | null }
+  | { ok: false }
+
+function defectGroupFieldPrefix(group: ModernCaseQcDefectGroup): string {
+  return group === 'active' ? 'active_defects' : 'current_result_defects'
+}
+
+/**
+ * 解析某组缺陷的分页信封。
+ * 与 API 客户端同一口径：两个字段必填，has_more=false 必须严格配 next_offset=null，
+ * has_more=true 必须配安全非负整数游标；其余情况（含缺字段）一律 ok:false，
+ * 绝不把「没有元数据」当成「已加载完」。
+ */
+export function readModernCaseQcDefectPageEnvelope(
+  snapshot: ModernCaseQcSnapshot,
+  group: ModernCaseQcDefectGroup,
+): ModernCaseQcDefectPageEnvelope {
+  const envelope = snapshot as unknown as Record<string, unknown>
+  const prefix = defectGroupFieldPrefix(group)
+  const hasMore = envelope[`${prefix}_has_more`]
+  const nextOffset = envelope[`${prefix}_next_offset`]
+  if (typeof hasMore !== 'boolean') return { ok: false }
+  if (!hasMore) {
+    // 严格 null：undefined（缺字段）同样视为合同不成立，不允许绕过失败关闭。
+    if (nextOffset !== null) return { ok: false }
+    return { ok: true, hasMore: false, nextOffset: null }
+  }
+  if (typeof nextOffset !== 'number' || !Number.isSafeInteger(nextOffset) || nextOffset < 0) {
+    return { ok: false }
+  }
+  return { ok: true, hasMore: true, nextOffset }
+}
+
+/** 两组信封任一不成立即视为响应不完整：界面按失败关闭处理，不落地截断快照。 */
+export function hasModernCaseQcDefectPageEnvelopes(snapshot: ModernCaseQcSnapshot): boolean {
+  return MODERN_CASE_QC_DEFECT_GROUPS.every(
+    (group) => readModernCaseQcDefectPageEnvelope(snapshot, group).ok,
+  )
+}
+
+/**
+ * 分页请求只带目标组的 offset：另一组按默认第 1 页返回，
+ * 不会被用来覆盖该组已加载的后续页。
+ */
+export function buildModernCaseQcDefectPageRequest(params: {
+  group: ModernCaseQcDefectGroup
+  offset: number
+  limit: number
+}): ModernCaseQcSnapshotPage {
+  return params.group === 'active'
+    ? { active_defects_offset: params.offset, defects_limit: params.limit }
+    : { current_result_defects_offset: params.offset, defects_limit: params.limit }
+}
+
+/** 已落地快照的最新结果标识：结果变化时两组分页都不得再拼接旧页。 */
+export function latestModernCaseQcResultIdOf(snapshot: ModernCaseQcSnapshot | null): string {
+  const record = snapshot?.latest_qc_result
+  if (!record) return ''
+  const raw = record.id ?? record.result_id
+  return typeof raw === 'string' ? raw.trim() : ''
+}
+
+/**
+ * 迟到分页响应判定：请求令牌/请求键变化，或期间已有别的结果落地，都必须丢弃。
+ * 结果变化时不能用该响应直接替换快照——它带的是旧 offset，会跳过新结果的第一页。
+ */
+export function isModernCaseQcDefectPageResponseStale(params: {
+  token: number
+  currentToken: number
+  requestedKey: string
+  currentKey: string
+  requestedResultId: string
+  loadedResultId: string
+}): boolean {
+  if (params.requestedResultId !== params.loadedResultId) return true
+  return isModernCaseQcResponseStale(params)
+}
+
+function modernCaseQcDefectIdentityOf(defect: ModernCaseQcDefect): string {
+  const raw = defect?.id
+  return typeof raw === 'string' ? raw.trim() : ''
+}
+
+/**
+ * 稳定去重拼接：保持已有顺序，后到的重复 id 丢弃。
+ * 并发写入导致同一缺陷落到两页时不会重复渲染、不会撞 key；无 id 的条目无法判等，一律保留。
+ */
+export function mergeModernCaseQcDefectItems(
+  existing: readonly ModernCaseQcDefect[],
+  incoming: readonly ModernCaseQcDefect[],
+): ModernCaseQcDefect[] {
+  const seen = new Set<string>()
+  const merged: ModernCaseQcDefect[] = []
+  for (const defect of existing) {
+    const id = modernCaseQcDefectIdentityOf(defect)
+    if (id !== '') seen.add(id)
+    merged.push(defect)
+  }
+  for (const defect of incoming) {
+    const id = modernCaseQcDefectIdentityOf(defect)
+    if (id !== '') {
+      if (seen.has(id)) continue
+      seen.add(id)
+    }
+    merged.push(defect)
+  }
+  return merged
+}
+
+/**
+ * 拼接某组缺陷的下一页：只改写该组数组与该组信封，另一组已加载页保持原样。
+ * 返回 null 表示该响应信封不成立，调用方按「加载更多失败」处理，不拼接也不宣称已加载完。
+ */
+export function mergeModernCaseQcDefectPage(params: {
+  group: ModernCaseQcDefectGroup
+  current: ModernCaseQcSnapshot
+  incoming: ModernCaseQcSnapshot
+}): ModernCaseQcSnapshot | null {
+  const envelope = readModernCaseQcDefectPageEnvelope(params.incoming, params.group)
+  if (!envelope.ok) return null
+  if (params.group === 'active') {
+    return {
+      ...params.current,
+      active_defects: mergeModernCaseQcDefectItems(
+        params.current.active_defects,
+        params.incoming.active_defects,
+      ),
+      active_defects_has_more: envelope.hasMore,
+      active_defects_next_offset: envelope.nextOffset,
+    }
+  }
+  return {
+    ...params.current,
+    current_result_defects: mergeModernCaseQcDefectItems(
+      params.current.current_result_defects,
+      params.incoming.current_result_defects,
+    ),
+    current_result_defects_has_more: envelope.hasMore,
+    current_result_defects_next_offset: envelope.nextOffset,
+  }
 }

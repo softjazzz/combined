@@ -133,7 +133,10 @@
           <h4 class="case-qc-panel__section-title">
             当前活跃缺陷
           </h4>
-          <span class="case-qc-panel__count">{{ activeDefects.length }} 项</span>
+          <span
+            class="case-qc-panel__count"
+            data-role="active-defects-count"
+          >已加载 {{ activeDefects.length }} 项</span>
         </div>
         <p class="case-qc-panel__section-desc">
           该病例尚未关闭的缺陷，可能来自更早的质控结果。
@@ -185,11 +188,43 @@
           </li>
         </ul>
         <p
-          v-else
+          v-else-if="!activeDefectsHasMore"
           class="case-qc-panel__empty"
         >
           暂无未关闭缺陷
         </p>
+        <div
+          v-if="activeDefectsHasMore"
+          class="case-qc-panel__more"
+        >
+          <button
+            v-if="!activeDefectsLoadingMore"
+            type="button"
+            class="case-qc-panel__more-btn"
+            data-role="load-more-active"
+            @click="emit('load-more', 'active')"
+          >
+            <ChevronDown class="case-qc-panel__more-icon" />
+            {{ activeDefectsLoadMoreError ? '重新加载' : '加载更多' }}
+          </button>
+          <p
+            v-else
+            class="case-qc-panel__more-status"
+            data-role="load-more-active-loading"
+            role="status"
+          >
+            <LoaderCircle class="case-qc-panel__more-icon case-qc-panel__more-icon--spin" />
+            正在加载更多…
+          </p>
+          <p
+            v-if="activeDefectsLoadMoreError"
+            class="case-qc-panel__more-error"
+            data-role="load-more-active-error"
+            role="alert"
+          >
+            加载更多失败：{{ activeDefectsLoadMoreError }}
+          </p>
+        </div>
       </section>
 
       <section
@@ -200,7 +235,10 @@
           <h4 class="case-qc-panel__section-title">
             本次结果缺陷
           </h4>
-          <span class="case-qc-panel__count">{{ currentResultDefects.length }} 项</span>
+          <span
+            class="case-qc-panel__count"
+            data-role="current-result-defects-count"
+          >已加载 {{ currentResultDefects.length }} 项</span>
         </div>
         <p class="case-qc-panel__section-desc">
           仅归属最新质控结果的缺陷，可能包含已关闭项。
@@ -252,11 +290,43 @@
           </li>
         </ul>
         <p
-          v-else
+          v-else-if="!currentResultDefectsHasMore"
           class="case-qc-panel__empty"
         >
           本次结果未记录缺陷
         </p>
+        <div
+          v-if="currentResultDefectsHasMore"
+          class="case-qc-panel__more"
+        >
+          <button
+            v-if="!currentResultDefectsLoadingMore"
+            type="button"
+            class="case-qc-panel__more-btn"
+            data-role="load-more-current"
+            @click="emit('load-more', 'current')"
+          >
+            <ChevronDown class="case-qc-panel__more-icon" />
+            {{ currentResultDefectsLoadMoreError ? '重新加载' : '加载更多' }}
+          </button>
+          <p
+            v-else
+            class="case-qc-panel__more-status"
+            data-role="load-more-current-loading"
+            role="status"
+          >
+            <LoaderCircle class="case-qc-panel__more-icon case-qc-panel__more-icon--spin" />
+            正在加载更多…
+          </p>
+          <p
+            v-if="currentResultDefectsLoadMoreError"
+            class="case-qc-panel__more-error"
+            data-role="load-more-current-error"
+            role="alert"
+          >
+            加载更多失败：{{ currentResultDefectsLoadMoreError }}
+          </p>
+        </div>
       </section>
 
       <section
@@ -334,7 +404,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { ClipboardX, LoaderCircle, RotateCw, TriangleAlert } from 'lucide-vue-next'
+import { ChevronDown, ClipboardX, LoaderCircle, RotateCw, TriangleAlert } from 'lucide-vue-next'
 
 import type {
   ModernCaseQcDefect,
@@ -344,15 +414,31 @@ import type {
   ModernCaseQcSourceKey,
 } from '@/api/modernCaseQcResult'
 
-const props = defineProps<{
-  snapshot: ModernCaseQcSnapshot | null
-  loading: boolean
-  error: string | null
-  sourceKey: ModernCaseQcSourceKey
-}>()
+type ModernCaseQcDefectGroup = 'active' | 'current'
+
+const props = withDefaults(
+  defineProps<{
+    snapshot: ModernCaseQcSnapshot | null
+    loading: boolean
+    error: string | null
+    sourceKey: ModernCaseQcSourceKey
+    /** 「是否还有下一页」由快照分页信封派生，不在此复制，避免接线遗漏时伪装已加载完。 */
+    activeDefectsLoadingMore?: boolean
+    activeDefectsLoadMoreError?: string | null
+    currentResultDefectsLoadingMore?: boolean
+    currentResultDefectsLoadMoreError?: string | null
+  }>(),
+  {
+    activeDefectsLoadingMore: false,
+    activeDefectsLoadMoreError: null,
+    currentResultDefectsLoadingMore: false,
+    currentResultDefectsLoadMoreError: null,
+  },
+)
 
 const emit = defineEmits<{
   (e: 'retry'): void
+  (e: 'load-more', group: ModernCaseQcDefectGroup): void
 }>()
 
 const SOURCE_LABELS: Record<ModernCaseQcSourceKey, string> = {
@@ -363,7 +449,7 @@ const SOURCE_LABELS: Record<ModernCaseQcSourceKey, string> = {
 }
 
 const sourceLabel = computed(() => SOURCE_LABELS[props.sourceKey] ?? '未知来源')
-const errorMessage = computed(() => (typeof props.error === 'string' ? props.error.trim() : ''))
+const errorMessage = computed(() => normalizeMessage(props.error))
 const hasSnapshot = computed(() => props.snapshot !== null)
 const latestResult = computed<ModernCaseQcResultRecord | null>(
   () => props.snapshot?.latest_qc_result ?? null,
@@ -379,6 +465,20 @@ const recentResults = computed<ModernCaseQcResultRecord[]>(
 const latestNotification = computed<ModernCaseQcNotification | null>(
   () => props.snapshot?.latest_notification ?? null,
 )
+const activeDefectsHasMore = computed(() => props.snapshot?.active_defects_has_more === true)
+const activeDefectsLoadingMore = computed(() => props.activeDefectsLoadingMore === true)
+const activeDefectsLoadMoreError = computed(() =>
+  normalizeMessage(props.activeDefectsLoadMoreError),
+)
+const currentResultDefectsHasMore = computed(
+  () => props.snapshot?.current_result_defects_has_more === true,
+)
+const currentResultDefectsLoadingMore = computed(
+  () => props.currentResultDefectsLoadingMore === true,
+)
+const currentResultDefectsLoadMoreError = computed(() =>
+  normalizeMessage(props.currentResultDefectsLoadMoreError),
+)
 const resultId = computed(() => {
   const record = latestResult.value
   if (!record) {
@@ -386,6 +486,11 @@ const resultId = computed(() => {
   }
   return text(record.id ?? record.result_id) || '—'
 })
+
+/** 提示文案统一去空白：非字符串一律按空文案处理，不渲染空提示块。 */
+function normalizeMessage(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
 
 /** 只做搬运：非字符串或空值一律按安全空值处理，不解释字段含义。 */
 function text(value: unknown): string {
@@ -789,6 +894,65 @@ function recordKey(record: ModernCaseQcResultRecord, index: number): string {
 .case-qc-panel__empty {
   margin: 8px 0 0;
   color: rgba(29, 29, 31, 0.38);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.case-qc-panel__more {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.case-qc-panel__more-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 12px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1d1d1f;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  cursor: pointer;
+  transition:
+    border-color 250ms cubic-bezier(0.25, 0.1, 0.25, 1),
+    color 250ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.case-qc-panel__more-btn:hover {
+  border-color: rgba(0, 122, 255, 0.32);
+  color: #007aff;
+}
+
+.case-qc-panel__more-icon {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.1;
+}
+
+.case-qc-panel__more-icon--spin {
+  color: #007aff;
+  animation: case-qc-spin 0.9s linear infinite;
+}
+
+.case-qc-panel__more-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: rgba(29, 29, 31, 0.6);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.case-qc-panel__more-error {
+  margin: 0;
+  color: #b91c1c;
   font-size: 13px;
   line-height: 20px;
 }

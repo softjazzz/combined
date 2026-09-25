@@ -2,7 +2,11 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 
 import ModernCaseQcReadOnlyPanel from '../ModernCaseQcReadOnlyPanel.vue'
-import type { ModernCaseQcSnapshot, ModernCaseQcSourceKey } from '@/api/modernCaseQcResult'
+import type {
+  ModernCaseQcDefect,
+  ModernCaseQcSnapshot,
+  ModernCaseQcSourceKey,
+} from '@/api/modernCaseQcResult'
 
 const SOURCE: ModernCaseQcSourceKey = 'frontpage_formal_qc'
 
@@ -57,6 +61,11 @@ function buildSnapshot(overrides: Partial<ModernCaseQcSnapshot> = {}): ModernCas
         status: 'completed',
       },
     ],
+    // 分页元数据：与后端信封一致，夹具必须补齐，避免把「没给元数据」当成「已加载完」。
+    active_defects_has_more: false,
+    active_defects_next_offset: null,
+    current_result_defects_has_more: false,
+    current_result_defects_next_offset: null,
     latest_notification: {
       id: 'notice-1',
       type: 'defect_assigned',
@@ -77,6 +86,10 @@ function mountPanel(
     loading: boolean
     error: string | null
     sourceKey: ModernCaseQcSourceKey
+    activeDefectsLoadingMore: boolean
+    activeDefectsLoadMoreError: string | null
+    currentResultDefectsLoadingMore: boolean
+    currentResultDefectsLoadMoreError: string | null
   }> = {},
 ) {
   return mount(ModernCaseQcReadOnlyPanel, {
@@ -88,6 +101,18 @@ function mountPanel(
       ...props,
     },
   })
+}
+
+/** 合成缺陷：只用于计数与分页按钮，不含真实患者信息。 */
+function buildDefects(prefix: string, count: number, startAt = 1): ModernCaseQcDefect[] {
+  return Array.from({ length: count }, (_, index) => ({
+    id: `${prefix}-${startAt + index}`,
+    rule_code: `LX0609-${startAt + index}`,
+    rule_name: `${prefix}-item-${startAt + index}`,
+    description: `${prefix}-item-${startAt + index}`,
+    severity: 'major',
+    status: 'open',
+  }))
 }
 
 describe('ModernCaseQcReadOnlyPanel', () => {
@@ -213,5 +238,118 @@ describe('ModernCaseQcReadOnlyPanel', () => {
     for (const forbidden of ['运行质控', '编辑', '保存', '提交', '删除', '标记已整改', '导出']) {
       expect(wrapper.text()).not.toContain(forbidden)
     }
+  })
+})
+
+describe('ModernCaseQcReadOnlyPanel 缺陷分页反例（元数据派生）', () => {
+  it('已加载计数不得冒充总数：两组都写「已加载 N 项」', () => {
+    const wrapper = mountPanel({
+      snapshot: buildSnapshot({
+        active_defects: buildDefects('active', 20),
+        current_result_defects: buildDefects('current', 2),
+        active_defects_has_more: true,
+        active_defects_next_offset: 20,
+      }),
+    })
+
+    const activeCount = wrapper.get('[data-role="active-defects-count"]')
+    expect(activeCount.text()).toContain('已加载 20 项')
+    // 「20 项」是总数口径，分页后只代表已加载条数，必须显式区分。
+    expect(activeCount.text().trim()).not.toBe('20 项')
+
+    const currentCount = wrapper.get('[data-role="current-result-defects-count"]')
+    expect(currentCount.text()).toContain('已加载 2 项')
+    expect(currentCount.text().trim()).not.toBe('2 项')
+  })
+
+  it('只有 has_more 的组渲染加载更多，且点击按组发出 load-more', async () => {
+    const wrapper = mountPanel({
+      snapshot: buildSnapshot({
+        active_defects: buildDefects('active', 20),
+        current_result_defects: buildDefects('current', 1),
+        active_defects_has_more: true,
+        active_defects_next_offset: 20,
+      }),
+    })
+
+    expect(wrapper.find('[data-role="load-more-active"]').exists()).toBe(true)
+    expect(wrapper.find('[data-role="load-more-current"]').exists()).toBe(false)
+
+    await wrapper.get('[data-role="load-more-active"]').trigger('click')
+    expect(wrapper.emitted('load-more')).toEqual([['active']])
+  })
+
+  it('当前结果缺陷组可独立加载更多，不触碰活跃缺陷组', async () => {
+    const wrapper = mountPanel({
+      snapshot: buildSnapshot({
+        active_defects: buildDefects('active', 1),
+        current_result_defects: buildDefects('current', 20),
+        current_result_defects_has_more: true,
+        current_result_defects_next_offset: 20,
+      }),
+    })
+
+    expect(wrapper.find('[data-role="load-more-active"]').exists()).toBe(false)
+    await wrapper.get('[data-role="load-more-current"]').trigger('click')
+    expect(wrapper.emitted('load-more')).toEqual([['current']])
+  })
+
+  it('空数组但仍有更多时不得显示「无缺陷」空态', () => {
+    const wrapper = mountPanel({
+      snapshot: buildSnapshot({
+        active_defects: [],
+        current_result_defects: [],
+        active_defects_has_more: true,
+        active_defects_next_offset: 0,
+        current_result_defects_has_more: true,
+        current_result_defects_next_offset: 0,
+      }),
+    })
+
+    // length===0 只说明「还没加载到」，不能等同「无缺陷」。
+    expect(wrapper.get('[data-section="active-defects"]').text()).not.toContain('暂无未关闭缺陷')
+    expect(wrapper.get('[data-section="current-result-defects"]').text()).not.toContain(
+      '本次结果未记录缺陷',
+    )
+    expect(wrapper.find('[data-role="load-more-active"]').exists()).toBe(true)
+    expect(wrapper.find('[data-role="load-more-current"]').exists()).toBe(true)
+  })
+
+  it('加载更多失败保留已加载条目并提示重试，绝不回退成「无缺陷」空态', () => {
+    const wrapper = mountPanel({
+      snapshot: buildSnapshot({
+        active_defects: buildDefects('active', 20),
+        current_result_defects: buildDefects('current', 1),
+        active_defects_has_more: true,
+        active_defects_next_offset: 20,
+      }),
+      activeDefectsLoadMoreError: '加载更多失败，请重试',
+    })
+
+    const activeSection = wrapper.get('[data-section="active-defects"]')
+    expect(activeSection.text()).not.toContain('暂无未关闭缺陷')
+    expect(activeSection.text()).toContain('已加载 20 项')
+    expect(activeSection.text()).toContain('active-item-20')
+
+    expect(wrapper.get('[data-role="load-more-active-error"]').text()).toContain('加载更多失败')
+    expect(wrapper.get('[data-role="load-more-active"]').text()).toContain('重新加载')
+    // 另一组没有失败，不应串台显示错误。
+    expect(wrapper.find('[data-role="load-more-current-error"]').exists()).toBe(false)
+  })
+
+  it('加载更多进行中显示加载态，且不误判为空缺陷', () => {
+    const wrapper = mountPanel({
+      snapshot: buildSnapshot({
+        active_defects: buildDefects('active', 20),
+        current_result_defects: buildDefects('current', 1),
+        active_defects_has_more: true,
+        active_defects_next_offset: 20,
+      }),
+      activeDefectsLoadingMore: true,
+    })
+
+    expect(wrapper.find('[data-role="load-more-active-loading"]').exists()).toBe(true)
+    expect(wrapper.get('[data-section="active-defects"]').text()).not.toContain('暂无未关闭缺陷')
+    expect(wrapper.get('[data-role="active-defects-count"]').text()).toContain('已加载 20 项')
   })
 })

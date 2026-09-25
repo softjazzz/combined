@@ -362,12 +362,16 @@ async def get_modern_case_qc_snapshot(
         "settlement_qc",
         "settlement_generate_qc",
     ] = Query(..., description="现代质控结果来源"),
+    active_defects_offset: int = Query(0, ge=0, description="未关闭缺陷分页偏移"),
+    current_result_defects_offset: int = Query(0, ge=0, description="本次结果缺陷分页偏移"),
+    defects_limit: int = Query(20, ge=1, le=50, description="缺陷分页条数上限"),
     current_user: dict = Depends(require_roles(*_MODERN_CASE_SNAPSHOT_ROLES)),
 ):
     """按三坐标身份读取现代落库的质控快照。
 
     只接受完整的 institute/patient/visit + source_key 身份，不做 record_id 兼容回退；
     所有失败细节回传固定文案，避免把底层连接串或病例原文带出接口。
+    两组缺陷各自分页：返回至多 ``defects_limit`` 条并给出 ``has_more``/``next_offset``。
 
     调用方按三坐标自填机构，因此本批临时限定 admin/qc_manager 两角色
     （``QC_RESULTS:READ`` 资源门同时保留），机构对象级授权仍待后续补足。
@@ -384,6 +388,9 @@ async def get_modern_case_qc_snapshot(
             default_modern_case_qc_result_service.get_snapshot,
             identity,
             recipient_id=_current_user_id(current_user),
+            active_defects_offset=active_defects_offset,
+            current_result_defects_offset=current_result_defects_offset,
+            defects_limit=defects_limit,
         )
     except HTTPException:
         raise

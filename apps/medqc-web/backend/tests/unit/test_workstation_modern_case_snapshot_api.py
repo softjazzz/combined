@@ -202,7 +202,7 @@ def test_resource_gate_survives_role_narrowing(monkeypatch):
 # ------------------------------------------------------------------ 成功与调用契约
 
 
-def test_snapshot_passes_verified_identity_and_recipient_id_only(monkeypatch):
+def test_snapshot_passes_verified_identity_and_explicit_call_kwargs(monkeypatch):
     service = RecordingSnapshotService(result={"summary": {"total": 3}})
     install_service(monkeypatch, service)
 
@@ -229,7 +229,13 @@ def test_snapshot_passes_verified_identity_and_recipient_id_only(monkeypatch):
         "visit_id": "visit-1",
     }
     # 现代主链只按三坐标 + source_key 取数，绝不接受 record_id 旧坐标。
-    assert call["kwargs"] == {"recipient_id": "qc-reader-9"}
+    # 分页参数总是显式下发，缺省即 0/0/20。
+    assert call["kwargs"] == {
+        "recipient_id": "qc-reader-9",
+        "active_defects_offset": 0,
+        "current_result_defects_offset": 0,
+        "defects_limit": 20,
+    }
 
 
 def test_legacy_record_id_query_is_ignored(monkeypatch):
@@ -359,7 +365,180 @@ def test_service_collects_recipient_id_from_current_user(monkeypatch):
     response = client_for(user).get(SNAPSHOT_PATH, params=VALID_PARAMS)
 
     assert response.status_code == 200, response.text
-    assert service.calls[0]["kwargs"] == {"recipient_id": "legacy-id-7"}
+    assert service.calls[0]["kwargs"] == {
+        "recipient_id": "legacy-id-7",
+        "active_defects_offset": 0,
+        "current_result_defects_offset": 0,
+        "defects_limit": 20,
+    }
+
+
+# ------------------------------------------------------------------ 缺陷分页
+
+
+PAGINATION_KEYS = ("active_defects_offset", "current_result_defects_offset", "defects_limit")
+
+
+def test_pagination_query_params_are_forwarded_verbatim(monkeypatch):
+    service = RecordingSnapshotService(result={"active_defects": []})
+    install_service(monkeypatch, service)
+
+    response = client_for(user_with(["qc_manager"], user_id="qc-reader-4")).get(
+        SNAPSHOT_PATH,
+        params={
+            **VALID_PARAMS,
+            "active_defects_offset": 7,
+            "current_result_defects_offset": 3,
+            "defects_limit": 40,
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert len(service.calls) == 1
+    assert service.calls[0]["kwargs"] == {
+        "recipient_id": "qc-reader-4",
+        "active_defects_offset": 7,
+        "current_result_defects_offset": 3,
+        "defects_limit": 40,
+    }
+    # 分页参数不得挤进身份四维。
+    identity = service.calls[0]["args"][0]
+    assert identity.columns() == {
+        "identity_version": 1,
+        "source_key": "coding_qc",
+        "institute_id": "inst-1",
+        "patient_id": "patient-1",
+        "visit_id": "visit-1",
+    }
+
+
+def test_pagination_defaults_are_zero_zero_twenty_when_omitted(monkeypatch):
+    service = RecordingSnapshotService()
+    install_service(monkeypatch, service)
+
+    response = client_for(user_with(["admin"])).get(SNAPSHOT_PATH, params=VALID_PARAMS)
+
+    assert response.status_code == 200, response.text
+    kwargs = service.calls[0]["kwargs"]
+    assert kwargs["active_defects_offset"] == 0
+    assert kwargs["current_result_defects_offset"] == 0
+    assert kwargs["defects_limit"] == 20
+
+
+@pytest.mark.parametrize("defects_limit", [0, 51, -1, 60])
+def test_out_of_range_pagination_limit_is_422_without_service_call(monkeypatch, defects_limit):
+    service = RecordingSnapshotService()
+    install_service(monkeypatch, service)
+
+    response = client_for(user_with(["qc_manager"])).get(
+        SNAPSHOT_PATH, params={**VALID_PARAMS, "defects_limit": defects_limit}
+    )
+
+    assert response.status_code == 422, response.text
+    assert service.calls == []
+
+
+@pytest.mark.parametrize("offset_key", ["active_defects_offset", "current_result_defects_offset"])
+@pytest.mark.parametrize("offset", [-1, -20])
+def test_negative_pagination_offset_is_422_without_service_call(monkeypatch, offset_key, offset):
+    service = RecordingSnapshotService()
+    install_service(monkeypatch, service)
+
+    response = client_for(user_with(["qc_manager"])).get(
+        SNAPSHOT_PATH, params={**VALID_PARAMS, offset_key: offset}
+    )
+
+    assert response.status_code == 422, response.text
+    assert service.calls == []
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("defects_limit", "abc"),
+        ("defects_limit", "10.5"),
+        ("active_defects_offset", "seven"),
+        ("current_result_defects_offset", ""),
+    ],
+)
+def test_non_integer_pagination_query_is_422_without_service_call(monkeypatch, key, value):
+    service = RecordingSnapshotService()
+    install_service(monkeypatch, service)
+
+    response = client_for(user_with(["qc_manager"])).get(
+        SNAPSHOT_PATH, params={**VALID_PARAMS, key: value}
+    )
+
+    assert response.status_code == 422, response.text
+    assert service.calls == []
+
+
+@pytest.mark.parametrize("defects_limit", [1, 20, 50])
+@pytest.mark.parametrize("offset", [0, 1, 1000])
+def test_pagination_boundaries_are_inclusive(monkeypatch, defects_limit, offset):
+    service = RecordingSnapshotService()
+    install_service(monkeypatch, service)
+
+    response = client_for(user_with(["qc_manager"])).get(
+        SNAPSHOT_PATH,
+        params={
+            **VALID_PARAMS,
+            "defects_limit": defects_limit,
+            "active_defects_offset": offset,
+            "current_result_defects_offset": offset,
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    kwargs = service.calls[0]["kwargs"]
+    assert kwargs["defects_limit"] == defects_limit
+    assert kwargs["active_defects_offset"] == offset
+    assert kwargs["current_result_defects_offset"] == offset
+
+
+def test_invalid_pagination_query_does_not_echo_patient_text(monkeypatch):
+    service = RecordingSnapshotService()
+    install_service(monkeypatch, service)
+    params = {**VALID_PARAMS, "patient_id": PRIVATE_PATIENT, "defects_limit": 999}
+
+    response = client_for(user_with(["qc_manager"])).get(SNAPSHOT_PATH, params=params)
+
+    assert response.status_code == 422, response.text
+    assert service.calls == []
+    assert PRIVATE_PATIENT not in response.text
+    assert PRIVATE_DSN not in response.text
+
+
+def test_permission_denial_precedes_pagination_validation(monkeypatch):
+    service = RecordingSnapshotService()
+    install_service(monkeypatch, service)
+
+    response = client_for(user_with(["qc_staff"])).get(
+        SNAPSHOT_PATH, params={**VALID_PARAMS, "defects_limit": 999}
+    )
+
+    assert response.status_code == 403, response.text
+    assert service.calls == []
+
+
+def test_openapi_declares_pagination_defaults_and_bounds():
+    app = FastAPI()
+    app.include_router(workstation.router)
+    operation = app.openapi()["paths"][SNAPSHOT_PATH]["get"]
+    parameters = {param["name"]: param for param in operation["parameters"]}
+
+    assert set(PAGINATION_KEYS) <= set(parameters)
+    for key in PAGINATION_KEYS:
+        assert not parameters[key].get("required"), f"{key} 不应是必填"
+
+    active = parameters["active_defects_offset"]["schema"]
+    current = parameters["current_result_defects_offset"]["schema"]
+    limit = parameters["defects_limit"]["schema"]
+    assert active.get("default") == 0 and active.get("minimum") == 0
+    assert current.get("default") == 0 and current.get("minimum") == 0
+    assert limit.get("default") == 20
+    assert limit.get("minimum") == 1
+    assert limit.get("maximum") == 50
 
 
 # ------------------------------------------------------------ 并发与线程池

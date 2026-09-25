@@ -236,6 +236,28 @@ def _selects(statements, table_name):
     return [stmt for stmt in statements if f"FROM qc.{table_name}" in stmt]
 
 
+def _defect_calls(store):
+    """只取 qc_defects 的 SELECT 及其绑定参数（参数按 SQL 出现顺序展开）。"""
+
+    captured = []
+    for statement, parameters in store.calls:
+        if "FROM qc.qc_defects" not in statement:
+            continue
+        raw = tuple(parameters.values()) if isinstance(parameters, dict) else tuple(parameters)
+        captured.append((statement, raw))
+    return captured
+
+
+def _page(snapshot, name):
+    """读取一组缺陷的分页视图：合同为数组 + 同级 has_more/next_offset。"""
+
+    items = snapshot[name]
+    assert isinstance(items, list), f"{name} 必须是数组"
+    assert f"{name}_has_more" in snapshot, f"缺少 {name}_has_more"
+    assert f"{name}_next_offset" in snapshot, f"缺少 {name}_next_offset"
+    return items, snapshot[f"{name}_has_more"], snapshot[f"{name}_next_offset"]
+
+
 def test_snapshot_keys_and_identity_echo(store):
     _case(store)
     _result(store, "r1", date=datetime(2026, 9, 1), created=datetime(2026, 9, 1))
@@ -250,6 +272,10 @@ def test_snapshot_keys_and_identity_echo(store):
         "recent_results",
         "active_defects",
         "current_result_defects",
+        "active_defects_has_more",
+        "active_defects_next_offset",
+        "current_result_defects_has_more",
+        "current_result_defects_next_offset",
         "latest_notification",
     }
     assert snapshot["identity_status"] == "verified"
@@ -562,6 +588,345 @@ def test_projection_excludes_internal_and_patient_text_columns(store):
     # 接收人隔离只能出现在通知查询，绝不能串到结果/缺陷查询（曾出现错位）。
     assert all("recipient_id" not in sql for sql in _selects(store.statements, "qc_results"))
     assert all("recipient_id" not in sql for sql in defect_sqls)
+
+
+# ---- 缺陷分页（数组 + 同级 has_more/next_offset）----
+
+
+def test_default_page_returns_twenty_with_cursor_and_exactly_fourteen_keys(store):
+    _case(store)
+    _result(store, "r1", date=datetime(2026, 9, 1), created=datetime(2026, 9, 1))
+    for index in range(25):
+        _defect(store, f"d{index:02d}", result_id="r1")
+
+    snapshot = store.service.get_snapshot(IDENTITY, None)
+
+    assert set(snapshot) == {
+        "identity_status",
+        "source_key",
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "latest_qc_result",
+        "recent_results",
+        "active_defects",
+        "current_result_defects",
+        "active_defects_has_more",
+        "active_defects_next_offset",
+        "current_result_defects_has_more",
+        "current_result_defects_next_offset",
+        "latest_notification",
+    }
+    for name in ("active_defects", "current_result_defects"):
+        items, has_more, next_offset = _page(snapshot, name)
+        assert len(items) == 20
+        assert has_more is True
+        assert next_offset == 20
+
+
+def test_sixty_defects_never_exceed_fifty_cap_and_second_page_closes(store):
+    _case(store)
+    _result(store, "r1", date=datetime(2026, 9, 1), created=datetime(2026, 9, 1))
+    for index in range(60):
+        _defect(store, f"d{index:02d}", result_id="r1")
+
+    first = store.service.get_snapshot(IDENTITY, None, defects_limit=50)
+    for name in ("active_defects", "current_result_defects"):
+        items, has_more, next_offset = _page(first, name)
+        assert len(items) == 50
+        assert has_more is True
+        assert next_offset == 50
+
+    second = store.service.get_snapshot(
+        IDENTITY,
+        None,
+        defects_limit=50,
+        active_defects_offset=50,
+        current_result_defects_offset=50,
+    )
+    for name in ("active_defects", "current_result_defects"):
+        items, has_more, next_offset = _page(second, name)
+        assert len(items) == 10
+        assert has_more is False
+        assert next_offset is None
+
+    first_ids = {row["id"] for row in first["active_defects"]}
+    second_ids = {row["id"] for row in second["active_defects"]}
+    assert not first_ids & second_ids
+    assert len(first_ids | second_ids) == 60
+
+
+def test_two_groups_page_with_independent_offsets(store):
+    _case(store)
+    _result(store, "r-old", date=datetime(2026, 9, 1), created=datetime(2026, 9, 1))
+    _result(store, "r-new", date=datetime(2026, 9, 5), created=datetime(2026, 9, 5))
+    for index in range(3):
+        _defect(
+            store,
+            f"old-{index}",
+            result_id="r-old",
+            updated_at=datetime(2026, 9, 1, index),
+        )
+    for index in range(6):
+        _defect(
+            store,
+            f"new-{index}",
+            result_id="r-new",
+            updated_at=datetime(2026, 9, 5, index),
+        )
+
+    snapshot = store.service.get_snapshot(
+        IDENTITY,
+        None,
+        active_defects_offset=2,
+        current_result_defects_offset=5,
+        defects_limit=2,
+    )
+
+    # 未关闭组：共 9 条，offset=2/limit=2 取第 3、4 条（按 updated_at 递减）。
+    active, active_more, active_next = _page(snapshot, "active_defects")
+    assert [row["id"] for row in active] == ["new-3", "new-2"]
+    assert active_more is True
+    assert active_next == 4
+
+    # 本次结果组：只含 r-new 的 6 条，offset=5/limit=2 只剩 1 条。
+    current, current_more, current_next = _page(snapshot, "current_result_defects")
+    assert [row["id"] for row in current] == ["new-0"]
+    assert current_more is False
+    assert current_next is None
+    assert "old-0" not in {row["id"] for row in current}
+
+
+def test_next_offset_equals_offset_plus_returned_and_is_null_when_exhausted(store):
+    _case(store)
+    _result(store, "r1", date=datetime(2026, 9, 1), created=datetime(2026, 9, 1))
+    for index in range(10):
+        _defect(
+            store,
+            f"d{index:02d}",
+            result_id="r1",
+            updated_at=datetime(2026, 9, 1, index),
+        )
+
+    middle = store.service.get_snapshot(IDENTITY, None, active_defects_offset=4, defects_limit=3)
+    items, has_more, next_offset = _page(middle, "active_defects")
+    assert len(items) == 3
+    assert has_more is True
+    assert next_offset == 7  # 下一页起始 offset，而非本页末条索引
+
+    last = store.service.get_snapshot(IDENTITY, None, active_defects_offset=7, defects_limit=3)
+    items, has_more, next_offset = _page(last, "active_defects")
+    assert len(items) == 3
+    assert has_more is False
+    assert next_offset is None
+
+
+def test_offset_beyond_total_returns_empty_page_without_cursor(store):
+    _case(store)
+    _result(store, "r1", date=datetime(2026, 9, 1), created=datetime(2026, 9, 1))
+    _defect(store, "d1", result_id="r1")
+
+    snapshot = store.service.get_snapshot(
+        IDENTITY, None, active_defects_offset=999, current_result_defects_offset=999
+    )
+
+    for name in ("active_defects", "current_result_defects"):
+        items, has_more, next_offset = _page(snapshot, name)
+        assert items == []
+        assert has_more is False
+        assert next_offset is None
+
+
+def test_defect_sql_uses_offset_and_limit_plus_one_per_group(store):
+    _case(store)
+    _result(store, "r1", date=datetime(2026, 9, 1), created=datetime(2026, 9, 1))
+    for index in range(8):
+        _defect(store, f"d{index:02d}", result_id="r1")
+
+    store.service.get_snapshot(
+        IDENTITY,
+        None,
+        active_defects_offset=5,
+        current_result_defects_offset=2,
+        defects_limit=10,
+    )
+
+    queries = _defect_calls(store)
+    assert len(queries) == 2
+    for statement, _ in queries:
+        assert "LIMIT" in statement and "OFFSET" in statement
+    # 第一条为未关闭组、第二条为本次结果组；多取 1 条只用于判定 has_more。
+    assert queries[0][1][-2:] == (11, 5)
+    assert queries[1][1][-2:] == (11, 2)
+
+
+def test_pages_are_ordered_and_do_not_overlap(store):
+    _case(store)
+    _result(store, "r1", date=datetime(2026, 9, 1), created=datetime(2026, 9, 1))
+    expected = []
+    for index in range(7):
+        _defect(
+            store,
+            f"d{index}",
+            result_id="r1",
+            updated_at=datetime(2026, 9, 1, index),
+        )
+        expected.append(f"d{index}")
+    expected.reverse()  # updated_at 递减
+
+    collected: list[str] = []
+    offset = 0
+    while True:
+        page = store.service.get_snapshot(
+            IDENTITY, None, active_defects_offset=offset, defects_limit=3
+        )
+        items, has_more, next_offset = _page(page, "active_defects")
+        collected.extend(row["id"] for row in items)
+        if not has_more:
+            break
+        offset = next_offset
+
+    assert collected == expected
+    assert len(set(collected)) == len(collected)
+
+
+def test_group_ownership_and_status_are_never_crossed_under_pagination(store):
+    _case(store)
+    _result(store, "r-old", date=datetime(2026, 9, 1), created=datetime(2026, 9, 1))
+    _result(store, "r-new", date=datetime(2026, 9, 5), created=datetime(2026, 9, 5))
+    _defect(store, "d-old-active", result_id="r-old", status="pending")
+    _defect(store, "d-new-active", result_id="r-new", status="pending")
+    _defect(store, "d-new-done", result_id="r-new", status="completed")
+
+    snapshot = store.service.get_snapshot(IDENTITY, None, defects_limit=50)
+
+    active, _, _ = _page(snapshot, "active_defects")
+    current, _, _ = _page(snapshot, "current_result_defects")
+    assert {row["id"] for row in active} == {"d-old-active", "d-new-active"}
+    assert {row["id"] for row in current} == {"d-new-active", "d-new-done"}
+    assert snapshot["latest_qc_result"]["id"] == "r-new"
+
+
+def test_same_visit_across_institute_patient_and_source_is_not_paged_in(store):
+    _case(store)
+    _result(store, "r1", date=datetime(2026, 9, 1), created=datetime(2026, 9, 1))
+    _defect(store, "d-own", result_id="r1")
+    for name, identity in (
+        (
+            "d-other-institute",
+            VerifiedQCIdentity("LX002", "patient-a", "visit-1", "settlement_qc"),
+        ),
+        (
+            "d-other-patient",
+            VerifiedQCIdentity("LX001", "patient-b", "visit-1", "settlement_qc"),
+        ),
+        (
+            "d-other-source",
+            VerifiedQCIdentity("LX001", "patient-a", "visit-1", "settlement_generate_qc"),
+        ),
+    ):
+        _defect(store, name, result_id="r1", identity=identity)
+
+    snapshot = store.service.get_snapshot(IDENTITY, None, defects_limit=50)
+
+    for name in ("active_defects", "current_result_defects"):
+        items, has_more, next_offset = _page(snapshot, name)
+        assert [row["id"] for row in items] == ["d-own"]
+        assert has_more is False
+        assert next_offset is None
+
+
+def test_empty_modern_result_pages_are_empty_with_keys_and_no_defect_query(store):
+    _case(store)
+    store.insert(
+        "qc_results",
+        id="legacy",
+        record_id="settlement::visit-1",
+        identity_version=None,
+        analysis_date=datetime(2026, 9, 9),
+    )
+    store.insert(
+        "qc_defects",
+        id="d-legacy",
+        record_id="settlement::visit-1",
+        identity_version=None,
+        status="pending",
+    )
+
+    snapshot = store.service.get_snapshot(IDENTITY, "u1")
+
+    assert snapshot["latest_qc_result"] is None
+    for name in ("active_defects", "current_result_defects"):
+        items, has_more, next_offset = _page(snapshot, name)
+        assert items == []
+        assert has_more is False
+        assert next_offset is None
+    # 无现代结果时不查询缺陷表，也不借用历史行充当分页数据。
+    assert _selects(store.statements, "qc_defects") == []
+
+
+def test_paged_defect_sql_still_hides_patient_text_and_internal_columns(store):
+    _case(store)
+    _result(store, "r1", date=datetime(2026, 9, 1), created=datetime(2026, 9, 1))
+    _defect(store, "d1", result_id="r1")
+
+    snapshot = store.service.get_snapshot(IDENTITY, None, defects_limit=1)
+
+    items, _, _ = _page(snapshot, "active_defects")
+    assert set(items[0]) == {
+        "id",
+        "rule_code",
+        "rule_name",
+        "description",
+        "severity",
+        "category",
+        "location",
+        "suggestion",
+        "status",
+        "created_at",
+        "updated_at",
+    }
+    queries = _defect_calls(store)
+    assert len(queries) == 2
+    current_sql = [sql for sql, _ in queries if "result_id" in _where_clause(sql)][0]
+    for statement, _ in queries:
+        for column in ("evidence", "origin", "department", "deduct_score", "record_id"):
+            assert column not in _projection(statement)
+    assert "result_id" not in _projection(current_sql)
+
+
+def test_invalid_pagination_arguments_fail_before_touching_the_source():
+    calls: list[str] = []
+
+    def _boom():
+        calls.append("session")
+        raise AssertionError("不应在参数校验前创建会话")
+
+    service = modern.ModernCaseQCResultService(session_factory=_boom)
+
+    for kwargs in (
+        {"active_defects_offset": -1},
+        {"current_result_defects_offset": -1},
+        {"defects_limit": 0},
+        {"defects_limit": 51},
+    ):
+        with pytest.raises(ValueError):
+            service.get_snapshot(IDENTITY, None, **kwargs)
+    assert calls == []
+
+
+def test_invalid_pagination_arguments_emit_no_sql_on_a_live_store(store):
+    _case(store)
+    _result(store, "r1", date=datetime(2026, 9, 1), created=datetime(2026, 9, 1))
+    _defect(store, "d1", result_id="r1")
+    store.statements.clear()
+    store.calls.clear()
+
+    with pytest.raises(ValueError):
+        store.service.get_snapshot(IDENTITY, None, defects_limit=51)
+
+    assert store.calls == []
+    assert _selects(store.statements, "qc_defects") == []
 
 
 # ---- schema 与来源失败语义（假 Session，不连库）----

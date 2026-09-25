@@ -190,7 +190,12 @@
               :loading="modernCaseQcLoading"
               :error="modernCaseQcError"
               :source-key="modernCaseQcContext.sourceKey"
+              :active-defects-loading-more="modernCaseQcDefectPages.active.loadingMore"
+              :active-defects-load-more-error="modernCaseQcDefectPages.active.loadMoreError"
+              :current-result-defects-loading-more="modernCaseQcDefectPages.current.loadingMore"
+              :current-result-defects-load-more-error="modernCaseQcDefectPages.current.loadMoreError"
               @retry="handleModernCaseQcRetry"
+              @load-more="handleModernCaseQcLoadMore"
             />
           </div>
         </aside>
@@ -370,11 +375,15 @@
 </template>
 
 <script setup lang="ts">
-import { defineAsyncComponent, ref, computed, onMounted, watch, nextTick } from 'vue'
+import { defineAsyncComponent, ref, reactive, computed, onMounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { apiClient } from '@/services/apiService'
-import { getModernCaseQcSnapshot } from '@/api/modernCaseQcResult'
-import type { ModernCaseQcSnapshot } from '@/api/modernCaseQcResult'
+import {
+  MODERN_CASE_QC_DEFAULT_DEFECTS_LIMIT,
+  ModernCaseQcSnapshotError,
+  getModernCaseQcSnapshot,
+} from '@/api/modernCaseQcResult'
+import type { ModernCaseQcIdentity, ModernCaseQcSnapshot } from '@/api/modernCaseQcResult'
 import { message, Modal } from 'ant-design-vue'
 import {
   WarningOutlined,
@@ -452,15 +461,23 @@ import {
 } from './frontpageAvailability'
 import { normalizeWorklistItem } from './normalize'
 import {
+  MODERN_CASE_QC_DEFECT_GROUPS,
   MODERN_SETTLEMENT_SOURCE_OPTIONS,
   allowsLegacyWriteWorkspace,
   buildModernCaseQcRequestKey,
+  buildModernCaseQcDefectPageRequest,
+  hasModernCaseQcDefectPageEnvelopes,
+  isModernCaseQcDefectPageResponseStale,
   isModernCaseQcResponseStale,
+  latestModernCaseQcResultIdOf,
+  mergeModernCaseQcDefectPage,
+  readModernCaseQcDefectPageEnvelope,
   resolveModernCaseQcErrorMessage,
   resolveModernCaseQcReadTarget,
   resolveSelectedRecord,
 } from './modernCaseQcReadController'
 import type {
+  ModernCaseQcDefectGroup,
   ModernCaseQcReadTarget,
   ModernCaseQcSettlementSource,
   ModernCaseQcWorklistRow,
@@ -729,9 +746,65 @@ const modernCaseQcLoading = ref(false)
 const modernCaseQcError = ref('')
 let modernCaseQcRequestToken = 0
 
+// --- 两组缺陷各自分页 ---
+// 是否还有下一页、游标、拼接与迟到判定都由 modernCaseQcReadController 的纯函数决定；
+// 这里只保留该组的「加载中/加载失败」状态与分页请求令牌。
+interface ModernCaseQcDefectPageState {
+  loadingMore: boolean
+  loadMoreError: string
+}
+
+function createModernCaseQcDefectPageState(): ModernCaseQcDefectPageState {
+  return { loadingMore: false, loadMoreError: '' }
+}
+
+const modernCaseQcDefectPages = reactive<
+  Record<ModernCaseQcDefectGroup, ModernCaseQcDefectPageState>
+>({
+  active: createModernCaseQcDefectPageState(),
+  current: createModernCaseQcDefectPageState(),
+})
+
+/** 分组分页请求令牌：换病例或重置分页后，迟到分页响应必须丢弃。 */
+const modernCaseQcDefectPageTokens: Record<ModernCaseQcDefectGroup, number> = {
+  active: 0,
+  current: 0,
+}
+
+const modernCaseQcLoadedResultId = ref('')
+
+function modernCaseQcIdentityOf(target: ModernCaseQcReadTarget): ModernCaseQcIdentity {
+  return {
+    institute_id: target.instituteId,
+    patient_id: target.patientId,
+    visit_id: target.visitId,
+    source_key: target.sourceKey,
+  }
+}
+
+function resetModernCaseQcDefectPages(): void {
+  modernCaseQcLoadedResultId.value = ''
+  for (const group of MODERN_CASE_QC_DEFECT_GROUPS) {
+    Object.assign(modernCaseQcDefectPages[group], createModernCaseQcDefectPageState())
+    modernCaseQcDefectPageTokens[group] += 1
+  }
+}
+
+/** 落地整页快照：初始读取或重试（发现新结果时同样走整页重取）。 */
+function applyModernCaseQcSnapshotPage(snapshot: ModernCaseQcSnapshot): void {
+  modernCaseQcSnapshot.value = snapshot
+  modernCaseQcLoadedResultId.value = latestModernCaseQcResultIdOf(snapshot)
+  for (const group of MODERN_CASE_QC_DEFECT_GROUPS) {
+    modernCaseQcDefectPages[group].loadingMore = false
+    modernCaseQcDefectPages[group].loadMoreError = ''
+  }
+}
+
 async function loadModernCaseQcSnapshot() {
   const target = modernCaseQcContext.value
   const token = ++modernCaseQcRequestToken
+  // 初次读取即重置两组分页：旧分页响应在途时也必须被作废。
+  resetModernCaseQcDefectPages()
   if (!target) {
     modernCaseQcSnapshot.value = null
     modernCaseQcError.value = ''
@@ -743,12 +816,7 @@ async function loadModernCaseQcSnapshot() {
   modernCaseQcError.value = ''
   modernCaseQcLoading.value = true
   try {
-    const snapshot = await getModernCaseQcSnapshot({
-      institute_id: target.instituteId,
-      patient_id: target.patientId,
-      visit_id: target.visitId,
-      source_key: target.sourceKey,
-    })
+    const snapshot = await getModernCaseQcSnapshot(modernCaseQcIdentityOf(target))
     // 迟到响应：请求令牌与当前请求键都未变化时才落地，绝不覆盖当前选中行。
     if (
       isModernCaseQcResponseStale({
@@ -760,7 +828,11 @@ async function loadModernCaseQcSnapshot() {
     ) {
       return
     }
-    modernCaseQcSnapshot.value = snapshot
+    // 分页信封缺失即失败关闭，绝不把截断内容当成完整结果展示。
+    if (!hasModernCaseQcDefectPageEnvelopes(snapshot)) {
+      throw new ModernCaseQcSnapshotError('malformed_payload', '快照缺少可用的缺陷分页信封')
+    }
+    applyModernCaseQcSnapshotPage(snapshot)
   } catch (error) {
     if (
       isModernCaseQcResponseStale({
@@ -781,6 +853,94 @@ async function loadModernCaseQcSnapshot() {
 
 function handleModernCaseQcRetry() {
   void loadModernCaseQcSnapshot()
+}
+
+/**
+ * 加载某组缺陷的下一页。
+ * 游标只取该组信封的 next_offset；响应只拼接本组，另一组已加载页不会被第 1 页覆盖。
+ * 失败时保留已加载条目并给出该组错误，绝不显示为空缺陷。
+ */
+async function loadMoreModernCaseQcDefects(group: ModernCaseQcDefectGroup) {
+  const target = modernCaseQcContext.value
+  const page = modernCaseQcDefectPages[group]
+  const loaded = modernCaseQcSnapshot.value
+  if (!target || !loaded || page.loadingMore) return
+  const envelope = readModernCaseQcDefectPageEnvelope(loaded, group)
+  if (!envelope.ok || envelope.nextOffset === null) return
+  const requestedKey = modernCaseQcRequestKey.value
+  const requestedResultId = modernCaseQcLoadedResultId.value
+  const token = (modernCaseQcDefectPageTokens[group] += 1)
+  const limit = MODERN_CASE_QC_DEFAULT_DEFECTS_LIMIT
+  const requestPage = buildModernCaseQcDefectPageRequest({
+    group,
+    offset: envelope.nextOffset,
+    limit,
+  })
+  page.loadingMore = true
+  page.loadMoreError = ''
+  try {
+    const snapshot = await getModernCaseQcSnapshot(modernCaseQcIdentityOf(target), requestPage)
+    // 已换病例/换来源，或该组分页已被重置：丢弃迟到的分页响应。
+    if (
+      isModernCaseQcDefectPageResponseStale({
+        token,
+        currentToken: modernCaseQcDefectPageTokens[group],
+        requestedKey,
+        currentKey: modernCaseQcRequestKey.value,
+        requestedResultId,
+        loadedResultId: modernCaseQcLoadedResultId.value,
+      })
+    ) {
+      return
+    }
+    // 最新结果已变化：本响应用的是旧 offset，直接替换会跳过新结果的第一页，
+    // 因此不拼接、不替换，改按默认 offset 0 整页重取（同时作废两组分页令牌）。
+    if (latestModernCaseQcResultIdOf(snapshot) !== requestedResultId) {
+      void loadModernCaseQcSnapshot()
+      return
+    }
+    appendModernCaseQcDefectPage(group, snapshot)
+  } catch (error) {
+    if (
+      isModernCaseQcDefectPageResponseStale({
+        token,
+        currentToken: modernCaseQcDefectPageTokens[group],
+        requestedKey,
+        currentKey: modernCaseQcRequestKey.value,
+        requestedResultId,
+        loadedResultId: modernCaseQcLoadedResultId.value,
+      })
+    ) {
+      return
+    }
+    page.loadMoreError = resolveModernCaseQcErrorMessage(error)
+  } finally {
+    if (token === modernCaseQcDefectPageTokens[group]) page.loadingMore = false
+  }
+}
+
+function handleModernCaseQcLoadMore(group: ModernCaseQcDefectGroup) {
+  void loadMoreModernCaseQcDefects(group)
+}
+
+/** 只拼接本组缺陷与该组信封（按 id 稳定去重）；另一组已加载页保持不变。 */
+function appendModernCaseQcDefectPage(
+  group: ModernCaseQcDefectGroup,
+  snapshot: ModernCaseQcSnapshot,
+): void {
+  const current = modernCaseQcSnapshot.value
+  if (!current) return
+  const page = modernCaseQcDefectPages[group]
+  const merged = mergeModernCaseQcDefectPage({ group, current, incoming: snapshot })
+  if (!merged) {
+    // 信封不可用：不拼接、也不宣称已加载完，按该组加载失败处理并保留重试入口。
+    page.loadMoreError = resolveModernCaseQcErrorMessage(
+      new ModernCaseQcSnapshotError('malformed_payload', '分页信封缺失'),
+    )
+    return
+  }
+  modernCaseQcSnapshot.value = merged
+  page.loadMoreError = ''
 }
 
 const stageStatusText = computed(() => {
