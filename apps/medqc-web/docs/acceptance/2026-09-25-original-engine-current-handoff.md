@@ -4,7 +4,7 @@
 
 | 阶段 | 现行工程证据 | 尚不能签收的范围 |
 | --- | --- | --- |
-| A 一次发布与一致读取 | 正式 Aggregator 的 Canonical 模式不调用旧结果适配；任务详情、latest、反馈、病历详情和三格式导出已有同一保存结果的隔离 SQLite/PG、HTTP 与合成页面链测试；非法已发布事实及签章被受控拒绝。[交付证据](2026-09-24-original-engine-requirements-evidence.md)。原始 002/004/005/006/007 冻结来源回放 75/75 与各自基线全字典相等。[回放](2026-09-25-original-engine-five-rule-replay.md)。 | 75 例未覆盖模型调用分支及全部原始规则，也没有独立临床答案；浏览器证据用后端测试产物拦截 API，不是客户联机。保护候选 81 条均 pending，影子 900 条未签收，review20 无病例行。 |
+| A 一次发布与一致读取 | 正式 Aggregator 的 Canonical 模式不调用旧结果适配；任务详情、latest、反馈、病历详情和三格式导出已有同一保存结果的隔离 SQLite/PG、HTTP 与合成页面链测试；非法已发布事实及签章被受控拒绝。[交付证据](2026-09-24-original-engine-requirements-evidence.md)。原始 002/004/005/006/007 冻结来源回放 75/75 与各自基线全字典相等；现行 023 合成模型分支也有两提交固定响应对照。[五规则回放](2026-09-25-original-engine-five-rule-replay.md)、[023 回放](2026-09-25-original-engine-023-fixed-model-replay.md)。 | 75 例没有模型调用；023 只覆盖一条合成正常分支及公开事实投影。仍无全部原始规则或独立临床答案；浏览器证据用后端测试产物拦截 API，不是客户联机。保护候选 81 条均 pending，影子 900 条未签收，review20 无病例行。 |
 | B 接纳计划与恢复 | 单病历、病历池、客户样本正式 API→Worker→Canonical 回读的串行、显式并发、默认并发集成测试 6/6；固定空资料和会诊模型桩结果跨入口一致。[三入口证据](2026-09-24-original-engine-requirements-evidence.md)。当前生产代码从干净源码用 PowerShell 5.1 打包并解压，包内排队任务跨进程恢复成功，异版在病例读取前受控拒绝。[发布包证据](2026-09-25-original-engine-package-restart.md)。 | 集成测试仅两份合成病例；客户启动脚本、客户 PostgreSQL 配置及真实模型任务未验。 |
 | C 身份与执行协议 | 正式目录/编译器漂移拒绝、测试专用四段式规则经正式 Worker/保存/读取链通过；属性 owner 表已固定。[阶段 C 审计](2026-09-24-original-engine-phase-c-audit.md)。 | 工程合同已验收；不把它当作医学或客户部署签收。 |
 | D 共享事实与有效代次 | 固定输入下同源模型请求 2→1，归约/发布结果不变；隔离 PostgreSQL 双进程争领、取消进度与 Token 保留、旧代次拒写及正式 Worker 提交共 11/11。[PG 事务证据](2026-09-25-original-engine-isolated-pg-attempts.md)。 | 取消后模型未返回时，提供方实际费用不可由本系统凭空确定；客户部署中的模型中断与 PG 配置未验。 |

@@ -2,6 +2,8 @@
 
 > 当前执行入口：[2026-09-25 剩余目标执行卡](2026-09-25-lx0609-engine-remaining-goal.md)。以下历次接续与技术证据保留；执行顺序和已提交基线以该卡为准，A/B/C/D 退出合同仍以本文“2026-09-24 再收敛”一节为准。
 
+原始 023 的固定模型响应已在整改基线与当前提交之间补做[离线 Prompt/结果等价回放](../acceptance/2026-09-25-original-engine-023-fixed-model-replay.md)；只覆盖一条合成分支，不代替独立临床保护集。
+
 外部验收所需的客户机版本核对、同源读取、恢复/费用及独立临床签收已整理为[取证步骤](../acceptance/2026-09-25-original-engine-customer-acceptance-protocol.md)；它不替代实际客户环境和临床证据。
 
 当前固定提交的 A/B/C/D 工程证据、旧路径移除/保留理由和外部验收缺口已集中在[原始引擎交付审计](../acceptance/2026-09-25-original-engine-current-handoff.md)。工程代码可交只读审查；独立临床保护集和客户环境尚未签收，整体目标保持 active。
