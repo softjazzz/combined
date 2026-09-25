@@ -222,8 +222,20 @@ def test_two_postgres_processes_claim_once_and_only_current_attempt_publishes(
         assert running is not None and running["status"] == "running"
         assert running["_claim_filters_json"] == old_attempt
 
+        progress = service.update_batch_job_progress(
+            job_id=job_id, step_key="run", rule_index=1, rule_count=1,
+            processed_records=0, total_records=1,
+            summary_patch={
+                "total_tokens": 12,
+                "luxian_0609_usage_observation_complete": True,
+            },
+            attempt_filters_json=old_attempt,
+        )
+        assert progress is not None and progress["summary"]["total_tokens"] == 12
         canceled = service.cancel_batch_job(job_id=job_id, created_by="synthetic-tester")
         assert canceled is not None and canceled["status"] == "canceled"
+        assert canceled["summary"]["total_tokens"] == 12
+        assert canceled["summary"]["luxian_0609_usage_observation_complete"] is False
         retried = service.retry_batch_job(job_id=job_id, created_by="synthetic-tester")
         assert retried is not None and retried["status"] == "queued"
         new_attempt = service.mark_batch_job_running(job_id=job_id)
