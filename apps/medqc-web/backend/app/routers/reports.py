@@ -233,9 +233,9 @@ async def _fetch_top_categories(sb) -> List[Dict[str, Any]]:
             .exclude_task_manual_source()
             .limit(REPORT_SCAN_LIMIT)
         )
-    except Exception as exc:
-        logger.warning(f"[reports] 查询 qc_defects 失败: {exc}")
-        return []
+    except Exception:
+        logger.warning("[reports] 查询 qc_defects 失败")
+        raise HTTPException(status_code=503, detail="数据库不可用") from None
 
     counts: Dict[str, int] = defaultdict(int)
     for row in defect_rows.data or []:

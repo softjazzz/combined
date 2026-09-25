@@ -194,10 +194,12 @@ class TestReportsAPI:
         mock_view_response.data = []
         mock_rules_response = MagicMock()
         mock_rules_response.data = []
+        mock_defects_response = MagicMock()
+        mock_defects_response.data = []
 
         with patch("app.routers.reports.get_supabase", return_value=mock_supabase):
             with patch("app.routers.reports.async_execute") as mock_execute:
-                mock_execute.side_effect = [mock_view_response, mock_rules_response]
+                mock_execute.side_effect = [mock_view_response, mock_rules_response, mock_defects_response]
                 with patch("app.routers.reports.SichuanQCService") as mock_service:
                     mock_service.return_value.stats.return_value = {
                         "success_rate": 0.0,

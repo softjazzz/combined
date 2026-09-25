@@ -3,6 +3,7 @@
 from types import SimpleNamespace
 
 import pytest
+from fastapi import HTTPException
 
 from app.routers import reports
 
@@ -68,10 +69,14 @@ async def test_top_categories_excludes_task_manual_defects_before_scan_limit(mon
 
 
 @pytest.mark.asyncio
-async def test_top_categories_query_failure_keeps_empty_result(monkeypatch):
+async def test_top_categories_query_failure_raises_redacted_503(monkeypatch):
     async def fail(_query):
         raise RuntimeError("database unavailable")
 
     monkeypatch.setattr(reports, "async_execute", fail)
 
-    assert await reports._fetch_top_categories(_Database([])) == []
+    with pytest.raises(HTTPException) as error:
+        await reports._fetch_top_categories(_Database([]))
+
+    assert error.value.status_code == 503
+    assert error.value.detail == "数据库不可用"

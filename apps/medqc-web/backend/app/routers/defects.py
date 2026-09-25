@@ -195,9 +195,9 @@ async def list_defects(
             message=f"获取缺陷列表成功",
             trace_id=get_trace_id(request),
         )
-    except Exception as e:
-        logger.error(f"查询缺陷列表失败: {e}")
-        raise HTTPException(status_code=500, detail=f"查询失败: {str(e)}")
+    except Exception:
+        logger.error("查询缺陷列表失败")
+        raise HTTPException(status_code=503, detail="数据库不可用") from None
 
 
 # ============================
@@ -590,9 +590,9 @@ async def get_defect_stats(
 
         resp = await async_execute(query)
         all_defects = list(getattr(resp, 'data', None) or [])
-    except Exception as e:
-        logger.error(f"查询缺陷统计失败: {e}")
-        raise HTTPException(status_code=500, detail=f"查询失败: {str(e)}")
+    except Exception:
+        logger.error("查询缺陷统计失败")
+        raise HTTPException(status_code=503, detail="数据库不可用") from None
 
     # 按严重程度统计
     severity_stats = {}
