@@ -37,6 +37,8 @@
 
 ## 当前焦点
 
+2026-09-25 MEDQC-022 A 公开边界补证：反馈入口曾接受已篡改签章的 LX0609 结论，现对带签章的当前结果复用发布校验；Canonical 保存时顶层与规则项病历引用统一为住院三坐标安全引用。反馈/Canonical 相邻 132/132、隔离 PG 4/4 通过。PG 正式 Worker 的同一结果已逐项核对 latest、CSV、XLSX、HTML；合成资料不足例的证据为空，不代表非空证据、客户部署或临床签收。详情见[执行卡](2026-09-25-lx0609-engine-remaining-goal.md)和[隔离 PG 验收](../acceptance/2026-09-25-original-engine-isolated-pg-attempts.md)。
+
 2026-09-25 MEDQC-022 B/D 隔离 PG 实测：独立 PostgreSQL 18 临时集群监听 15432，双 Python 进程同步争领同一 LX0609 任务三轮均唯一领取；取消重试后旧代次零 Canonical 写入，新代次只写一行并可读回。测试未设置专用地址会跳过，误指向现有 5432 在连接前拒绝。[证据](../acceptance/2026-09-25-original-engine-isolated-pg-attempts.md)。客户安装包恢复、真实模型费用及临床保护集仍待验，B/D 不据此关闭。
 
 2026-09-25 MEDQC-022 D 续约过期用量补证：运行中任务的续约过期失败事务曾继续展示旧进度的完整观测标记；隔离 SQLite 红灯确认后仅将该标记改为未知，保留已计 Token 和旧代次拒绝。执行代次整份 33/33 通过。[同一成本观测报告](../acceptance/2026-09-25-original-engine-failure-cost-observation.md)。客户 PostgreSQL 和真实模型成本仍待验。

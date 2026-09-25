@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import csv
+import io
 import json
 import os
+import re
 import subprocess
 import sys
 import time
 import uuid
 from datetime import datetime
+from html import unescape as html_unescape
 from pathlib import Path
 
 import pytest
@@ -294,6 +298,7 @@ def test_new_process_executes_original_rule_and_commits_canonical_on_postgres(
     from app.core.settings import get_settings
     from app.services.case_identity import CaseRef
     from app.services.luxian_0609 import rule_decision_settings as identity
+    from app.services.qc_workspace.export_service import CUSTOMER_EXPORT_HEADERS
     from app.services.sichuan_qc_service import SichuanQCService
 
     database_url = _isolated_database_url()
@@ -383,6 +388,99 @@ def test_new_process_executes_original_rule_and_commits_canonical_on_postgres(
                 sa.select(sa.func.count()).select_from(service._record_result_envelope_table)
             ).scalar_one()
         assert count == 1
+
+        latest = service.build_latest_single_record_result_dto(
+            institute_id="HOSP-001", patient_id="PAT-001",
+            visit_id="synthetic-visit",
+            expected_rule_ids=["LX0609-01-01-01"],
+        )
+        # 出口一：单病历结果页的唯一读取入口（Canonical Envelope 直读）。
+        assert latest["state"] == "ready"
+        assert latest["schema_version"] == "lx0609-single-record-result-v1"
+        assert latest["data_origin"] == "canonical_result_envelope"
+        assert latest["reason_code"] == ""
+        assert latest["is_complete"] is True
+        assert latest["expected_rule_count"] == latest["result_rule_count"] == 1
+        assert latest["missing_rule_ids"] == []
+        assert latest["conflicting_rule_ids"] == []
+        assert re.fullmatch(r"rec_[0-9a-f]{24}", latest["record_ref"])
+        assert len(latest["items"]) == 1
+        latest_item = latest["items"][0]
+        assert latest_item["rule_id"] == "LX0609-01-01-01"
+        assert latest_item["record_ref"] == latest["record_ref"]
+        # 冻结状态合同：status/result_status/display_status 同源，且 data_gap 不臆造合规性。
+        assert {
+            latest_item["status"], latest_item["result_status"], latest_item["display_status"],
+        } == {"data_gap"}
+        assert latest_item["is_compliant"] is None
+        assert latest_item["reason_code"] == "authoritative_time_missing"
+        assert latest_item["conclusion"] == latest_item["findings"] != ""
+        assert latest_item["suggestion"] != ""
+        assert latest_item["evidence"] == []
+
+        saved_job = service.get_batch_job_for_processing(job_id=str(job["id"]))
+        assert saved_job is not None and saved_job["status"] == "completed"
+
+        # 出口二/三：CSV 与 XLSX 必须逐列同源，且与单病历出口的状态/原因码/结论/建议一致。
+        csv_rows = list(csv.reader(io.StringIO(
+            service.export_batch_job_csv(job=saved_job).getvalue()
+        )))
+        assert csv_rows[0] == ["管理摘要"]
+        assert csv_rows[1][0] == "任务引用"
+        assert csv_rows[2] == ["结果总数", "1"]
+        assert csv_rows[3] == ["确定问题病历数", "0"]
+        detail_index = csv_rows.index(["全部明细"])
+        assert csv_rows[detail_index + 1] == CUSTOMER_EXPORT_HEADERS
+        csv_data_rows = [row for row in csv_rows[detail_index + 2:] if row]
+        assert len(csv_data_rows) == 1
+        csv_item = dict(zip(CUSTOMER_EXPORT_HEADERS, csv_data_rows[0]))
+        assert csv_item["病历引用"] == latest["record_ref"]
+        assert csv_item["质控点编码"] == latest_item["rule_id"]
+        assert csv_item["质控点名称"] == latest_item["rule_name"]
+        assert csv_item["判定结果"] == "数据不足"
+        assert csv_item["原因码"] == latest_item["reason_code"]
+        assert csv_item["质控结论"] == latest_item["conclusion"]
+        assert csv_item["处理建议"] == latest_item["suggestion"]
+        assert csv_item["证据引用"] == ""
+
+        from openpyxl import load_workbook
+        workbook = load_workbook(service.export_batch_job_workbook(job=saved_job))
+        assert workbook.sheetnames == ["管理摘要", "问题明细", "全部明细"]
+        summary_cells = [list(row) for row in workbook["管理摘要"].iter_rows(values_only=True)]
+        assert summary_cells[:4] == [
+            ["报告项", "内容"],
+            ["任务引用", csv_rows[1][1]],
+            ["结果总数", 1],
+            ["确定问题病历数", 0],
+        ]
+        assert summary_cells[4] == ["状态-data_gap", 1]
+        # data_gap 不是确定问题，问题明细必须只有一个表头，不得由导出层臆造缺陷。
+        assert [list(row) for row in workbook["问题明细"].iter_rows(values_only=True)] == [
+            CUSTOMER_EXPORT_HEADERS,
+        ]
+        all_detail_rows = [list(row) for row in workbook["全部明细"].iter_rows(values_only=True)]
+        assert all_detail_rows[0] == CUSTOMER_EXPORT_HEADERS
+        assert len(all_detail_rows) == 2
+        assert ["" if value is None else str(value) for value in all_detail_rows[1]] == csv_data_rows[0]
+
+        # 出口四：HTML 客户报告不展示内部原因码，其余列与 CSV/XLSX 同源。
+        html_text = service.export_batch_job_html(job=saved_job)
+        assert 'class="status-pill status-data-gap">数据不足 1<' in html_text
+        result_row = re.search(r"<tr data-result-row[^>]*>(.*?)</tr>", html_text, re.S)
+        assert result_row is not None
+        html_cells = [
+            html_unescape(re.sub(r"<[^>]+>", "", cell)).strip()
+            for cell in re.findall(r"<td[^>]*>(.*?)</td>", result_row.group(1), re.S)
+        ]
+        assert html_cells == [
+            csv_item["质控点编码"],
+            csv_item["质控点名称"],
+            csv_item["判定结果"],
+            csv_item["质控结论"],
+            csv_item["处理建议"],
+            csv_item["证据引用"],
+        ]
+        assert latest_item["reason_code"] not in html_text
     finally:
         with database.begin() as connection:
             connection.execute(sa.text(f"DROP SCHEMA {schema} CASCADE"))

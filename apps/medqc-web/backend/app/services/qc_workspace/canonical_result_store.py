@@ -606,24 +606,31 @@ class CanonicalResultStore:
         prepared_envelopes: List[tuple[CaseRef, Dict[str, Any]]] = []
         for record_ref, record_items in grouped.items():
             record_id = record_ref.visit_id
+            envelope_record_ref = keyed_ref(
+                "rec",
+                record_ref.as_key(),
+                hmac_key=(
+                    projection_key
+                    if projection_key is not None
+                    else customer_safe_projection_key()
+                ),
+            )
+            projected_items = []
+            for item in record_items:
+                projected_item = dict(projector(item))
+                # 病历引用由 Envelope 的三坐标身份统一生成，不能由规则项只按 visit_id 另算。
+                projected_item["record_ref"] = envelope_record_ref
+                projected_items.append(projected_item)
             envelope = {
                 "schema_version": RECORD_RESULT_ENVELOPE_SCHEMA,
                 "delivery_mode": CANONICAL_RESULT_DELIVERY_MODE,
                 "record_id": record_id,
-                "record_ref": keyed_ref(
-                    "rec",
-                    record_ref.as_key(),
-                    hmac_key=(
-                        projection_key
-                        if projection_key is not None
-                        else customer_safe_projection_key()
-                    ),
-                ),
+                "record_ref": envelope_record_ref,
                 "job_id": job_id,
                 "root_job_id": root_job_id,
                 "rule_set_key": rule_set_key,
                 "rule_set_version": rule_set_version,
-                "items": [projector(item) for item in record_items],
+                "items": projected_items,
             }
             prepared_envelopes.append((record_ref, envelope))
 

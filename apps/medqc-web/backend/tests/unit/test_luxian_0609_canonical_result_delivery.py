@@ -2415,6 +2415,7 @@ def test_published_rules_keep_identity_through_sqlite_dto_feedback_and_exports(
         )
     saved_items = loaded["items"]
     assert [item["rule_id"] for item in saved_items] == list(rule_ids)
+    assert all(item["record_ref"] == loaded["record_ref"] for item in saved_items)
     assert all(item["status"] == "compliant" for item in saved_items)
     assert all(item["customer_display_facts"] for item in saved_items)
     assert all(item["conclusion"].endswith("已核对") for item in saved_items)
@@ -2804,7 +2805,8 @@ def test_writer_uses_facade_envelope_item_projector(monkeypatch):
 
     insert_params = session.statements[-1].compile().params
     envelope = json.loads(insert_params["envelope_json"])
-    assert envelope["items"] == [projected_item]
+    assert envelope["items"] == [{**projected_item, "record_ref": envelope["record_ref"]}]
+    assert "record_ref" not in projected_item
 
 
 def test_pending_rule_conclusion_remains_customer_text_through_canonical_delivery(
