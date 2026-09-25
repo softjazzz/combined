@@ -2395,6 +2395,33 @@ class CustomQCWorkspaceService:
         formal_luxian_parent = (
             (parent_job.get("filters") or {}).get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY
         )
+        if formal_luxian_parent and aggregate_status in {"completed", "failed"}:
+            if include_items:
+                filters = parent_job.get("filters") or {}
+                scoped_rule_ids = list(filters.get("scoped_customer_rule_ids") or [])
+                expected_rule_ids = [
+                    *(scoped_rule_ids or list(filters.get("rule_ids") or [])),
+                    *list(filters.get("gate_only_customer_rule_ids") or []),
+                    *list(filters.get("paused_customer_rule_ids") or []),
+                ]
+                _, complete_refs = select_complete_record_items(
+                    items=[
+                        item for child in child_jobs for item in list(child.get("items") or [])
+                    ],
+                    failures=[
+                        failure for child in child_jobs
+                        for failure in list(child.get("failed_records") or [])
+                    ],
+                    expected_rule_ids=expected_rule_ids,
+                )
+                success_count = len(complete_refs)
+                failed_count = max(
+                    0, int(parent_job.get("total_records") or 0) - success_count
+                )
+            else:
+                # 列表不加载结果项；使用父任务终态事务保存的病历计数。
+                success_count = int(parent_job.get("success_count") or 0)
+                failed_count = int(parent_job.get("failed_count") or 0)
         if any(isinstance(state, bool) for state in child_usage_states) or (
             formal_luxian_parent and canceled
         ):
@@ -2460,6 +2487,37 @@ class CustomQCWorkspaceService:
             aggregate = self._aggregate_parent_job(session, parent_job, include_items=True)
             status = _safe_text(aggregate.get("status"), "queued")
             now = _now_utc()
+            formal_luxian_parent = (
+                (parent_job.get("filters") or {}).get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY
+            )
+            canonical_items = [
+                item
+                for child in list(aggregate.get("children") or [])
+                if isinstance(child, dict)
+                for item in list(child.get("items") or [])
+                if isinstance(item, dict)
+            ] if status in {"completed", "failed"} else []
+            partial_items: tuple[dict[str, Any], ...] = ()
+            partial_refs: tuple[CaseRef, ...] = ()
+            if formal_luxian_parent and status == "failed":
+                filters = parent_job.get("filters") or {}
+                scoped_rule_ids = list(filters.get("scoped_customer_rule_ids") or [])
+                expected_rule_ids = [
+                    *(scoped_rule_ids or list(filters.get("rule_ids") or [])),
+                    *list(filters.get("gate_only_customer_rule_ids") or []),
+                    *list(filters.get("paused_customer_rule_ids") or []),
+                ]
+                failures = [
+                    failure
+                    for child in list(aggregate.get("children") or [])
+                    if isinstance(child, dict)
+                    for failure in list(child.get("failed_records") or [])
+                ]
+                partial_items, partial_refs = select_complete_record_items(
+                    items=canonical_items,
+                    failures=failures,
+                    expected_rule_ids=expected_rule_ids,
+                )
             values: Dict[str, Any] = {
                 "status": status,
                 "summary_json": _safe_json_dumps(aggregate.get("summary") or {}),
@@ -2477,7 +2535,7 @@ class CustomQCWorkspaceService:
                 self._batch_job_table.c.id == normalized_parent_id,
                 self._batch_job_table.c.status != "canceled",
             ]
-            if (parent_job.get("filters") or {}).get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY:
+            if formal_luxian_parent:
                 parent_conditions.extend((
                     self._batch_job_table.c.status == row["status"],
                     self._batch_job_table.c.filters_json == row["filters_json"],
@@ -2494,29 +2552,30 @@ class CustomQCWorkspaceService:
             if getattr(parent_update, "rowcount", 0) != 1:
                 session.rollback()
                 return
+            if formal_luxian_parent and status in {"completed", "failed"}:
+                # 子任务写入时已完成合同校验；父任务终态只交付完整病历。
+                # 删除与父任务发布在同一事务内，避免同一 root 下重复病例。
+                session.execute(
+                    self._record_result_envelope_table.delete().where(and_(
+                        self._record_result_envelope_table.c.root_job_id == normalized_parent_id,
+                        self._record_result_envelope_table.c.created_by == row["created_by"],
+                        self._record_result_envelope_table.c.rule_set_key == LUXIAN_0609_RULE_SET_KEY,
+                    ))
+                )
             if status == "completed":
-                canonical_items = [
-                    item
-                    for child in list(aggregate.get("children") or [])
-                    if isinstance(child, dict)
-                    for item in list(child.get("items") or [])
-                    if isinstance(item, dict)
-                ]
-                if (parent_job.get("filters") or {}).get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY:
-                    # 子任务写入时已完成合同校验。父任务发布汇总前，在同一事务中
-                    # 清除该 root 的子结果，保证正式读取只命中一份汇总 Envelope。
-                    session.execute(
-                        self._record_result_envelope_table.delete().where(and_(
-                            self._record_result_envelope_table.c.root_job_id == normalized_parent_id,
-                            self._record_result_envelope_table.c.created_by == row["created_by"],
-                            self._record_result_envelope_table.c.rule_set_key == LUXIAN_0609_RULE_SET_KEY,
-                        ))
-                    )
                 self._write_record_result_envelopes(
                     session,
                     job_row=dict(row),
                     items=canonical_items,
                     now=now,
+                )
+            elif formal_luxian_parent and status == "failed" and partial_items:
+                self._write_record_result_envelopes(
+                    session,
+                    job_row=dict(row),
+                    items=partial_items,
+                    now=now,
+                    expected_record_refs=partial_refs,
                 )
             session.commit()
         finally:

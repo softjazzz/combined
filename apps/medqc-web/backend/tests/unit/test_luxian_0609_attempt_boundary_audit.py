@@ -831,6 +831,136 @@ def test_completed_parent_publishes_one_envelope_after_child_validation(storage)
     assert [published["rule_id"] for published in envelope["items"]] == ["LX0609-01-01-01"]
 
 
+@pytest.mark.parametrize("second_child_outcome", ["completed", "partial_failed", "failed"])
+def test_parent_exports_only_complete_cases_across_children(storage, second_child_outcome):
+    service, engine, table = storage
+    record_a = {"institute_id": "I", "patient_id": "P-A", "visit_id": "V-A"}
+    record_b = {"institute_id": "I", "patient_id": "P-B", "visit_id": "V-B"}
+    first_rule = "LX0609-01-01-01"
+    second_rule = "LX0609-01-02-01"
+
+    def filters(rule_ids):
+        return json.dumps({
+            "rule_set_key": "luxian_0609_qc_v1",
+            "rule_set_version": "2026-06-09",
+            "rule_ids": rule_ids,
+            "record_refs": [record_a, record_b],
+        })
+
+    def item(record, rule_id, target_document, source_label, threshold):
+        facts = safe_basic_timeliness_customer_display_facts(
+            rule_id=rule_id,
+            raw={
+                "failure_kind": "timeliness_requirement_satisfied",
+                "target_document": target_document,
+                "source_label": source_label,
+                "timeliness_state": "within",
+                "threshold_hours": threshold,
+                "elapsed_hours": 1.0,
+            },
+        )
+        assert facts is not None
+        return {
+            **record,
+            "record_id": record["visit_id"],
+            "schema_version": "lx0609-customer-result-v2",
+            "rule_id": rule_id,
+            "status": "compliant",
+            "result_status": "compliant",
+            "display_status": "compliant",
+            "is_compliant": True,
+            "reason_code": "requirement_satisfied",
+            "conclusion": "已核对",
+            "customer_display_facts": facts,
+        }
+
+    first_items = [item(record, first_rule, "admission_record", "入院记录", 24) for record in (record_a, record_b)]
+    second_items = [item(record_b, second_rule, "first_course_record", "首次病程记录", 8)]
+    if second_child_outcome == "completed":
+        second_items.insert(0, item(record_a, second_rule, "first_course_record", "首次病程记录", 8))
+    failed_records = [] if second_child_outcome == "completed" else [{
+        **record, "rule_id": second_rule,
+        "reason_code": "model_invalid_output", "error_phase": "result_status",
+    } for record in ([record_a] if second_child_outcome == "partial_failed" else [record_a, record_b])]
+    if second_child_outcome == "failed":
+        second_items.clear()
+    with engine.begin() as connection:
+        connection.execute(table.update().where(table.c.id == "attempt-job").values(
+            status="running", parent_job_id="parent-job", total_records=2,
+            filters_json=filters([first_rule]),
+        ))
+        connection.execute(table.insert().values(
+            id="second-child", draft_id="sichuan-rule-library", created_by="tester",
+            status="running", job_kind="child", parent_job_id="parent-job",
+            rule_code="LX0609", rule_name="第二子任务", scope="final", total_records=2,
+            created_at=datetime(2026, 9, 24), updated_at=datetime(2026, 9, 24),
+            filters_json=filters([second_rule]),
+        ))
+        connection.execute(table.insert().values(
+            id="parent-job", draft_id="sichuan-rule-library", created_by="tester",
+            status="running", job_kind="parent",
+            child_job_ids_json='["attempt-job", "second-child"]',
+            rule_code="LX0609", rule_name="父任务", scope="final", total_records=2,
+            created_at=datetime(2026, 9, 24), updated_at=datetime(2026, 9, 24),
+            filters_json=filters([first_rule, second_rule]),
+        ))
+
+    service.complete_batch_job(
+        job_id="attempt-job",
+        summary={"total_records": 2, "success_count": 2, "completed_rule_count": 2},
+        items=first_items, failed_records=[],
+    )
+    service.complete_batch_job(
+        job_id="second-child",
+        summary={
+            "total_records": 2,
+            "success_count": len(second_items),
+            "failed_count": len(failed_records),
+            "execution_status": second_child_outcome,
+            "completed_rule_count": len(second_items),
+            "failed_rule_count": len(failed_records),
+        },
+        items=second_items,
+        failed_records=failed_records,
+    )
+    service.refresh_parent_batch_job(parent_job_id="parent-job")
+    parent = service.get_batch_job(job_id="parent-job", created_by="tester")
+    expected_parent_status = "completed" if second_child_outcome == "completed" else "failed"
+    assert parent is not None and parent["status"] == expected_parent_status
+    assert parent["summary"]["execution_status"] == (
+        "completed" if second_child_outcome == "completed" else "partial_failed"
+    )
+    exported_items = service._load_batch_job_export_items(job=parent)
+    expected_success_count = len(second_items)
+    assert parent["success_count"] == expected_success_count
+    hydrated = qc_sichuan._hydrate_luxian_canonical_batch_job_or_409(
+        workspace=service, job=parent,
+    )
+    safe_job = workspace_module.project_customer_safe_batch_job(
+        hydrated, hmac_key="synthetic-parent-test-key",
+    )
+    assert safe_job["summary"]["success_count"] == expected_success_count
+    assert len(safe_job["items"]) == len(exported_items)
+    listed = service.list_batch_jobs(created_by="tester", status=expected_parent_status)
+    listed_parent = next(job for job in listed.items if job["id"] == "parent-job")
+    assert listed_parent["success_count"] == expected_success_count
+    assert {row["rule_id"] for row in exported_items} == (
+        {first_rule, second_rule} if expected_success_count else set()
+    )
+    assert len({row["record_ref"] for row in exported_items}) == expected_success_count
+    with engine.connect() as connection:
+        envelopes = connection.execute(sa.select(service._record_result_envelope_table).where(
+            service._record_result_envelope_table.c.root_job_id == "parent-job"
+        )).mappings().all()
+    assert [(row["patient_id"], row["job_id"]) for row in envelopes] == (
+        [("P-A", "parent-job"), ("P-B", "parent-job")]
+        if second_child_outcome == "completed"
+        else [("P-B", "parent-job")]
+        if second_child_outcome == "partial_failed"
+        else []
+    )
+
+
 def test_nonformal_task_keeps_existing_claim_and_retry_semantics(storage):
     service, engine, table = storage
     with engine.begin() as connection:
