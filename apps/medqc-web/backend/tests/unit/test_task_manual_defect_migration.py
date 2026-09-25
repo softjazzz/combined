@@ -21,9 +21,15 @@ def migration():
 def state(module, *, deployed=False):
     data = {}
     for schema in module.SCHEMAS:
+        # 与业务库 revision44 实测一致：qc 为 TEXT 可空默认 'open'，public 为 VARCHAR(20) 非空无默认
+        status = (
+            {"type": sa.Text(), "nullable": True, "default": "'open'::text"}
+            if schema == "qc"
+            else {"type": sa.String(20), "nullable": False, "default": None}
+        )
         columns = {
             "origin": {"type": sa.String(16), "nullable": True, "default": None},
-            "status": {"type": sa.String(20), "nullable": False, "default": None},
+            "status": status,
         }
         checks = {"ck_qc_defects_origin": "origin IN ('auto', 'manual')"}
         if deployed:
@@ -121,12 +127,22 @@ def test_review_check_keeps_legacy_unknown_but_rejects_invalid_combinations():
 @pytest.mark.parametrize("drift", [
     "missing_table", "missing_origin", "bad_origin", "half_fields",
     "bad_review_type", "bad_check", "schema_mismatch",
+    "qc_status_not_text", "qc_status_default", "public_status_nullable", "public_status_text",
 ])
 def test_upgrade_rejects_drift_before_ddl(monkeypatch, drift):
     module = migration()
     data = state(module)
     selected = data["public"]
-    if drift == "missing_table":
+    qc_status = data["qc"]["columns"]["status"]
+    if drift == "qc_status_not_text":
+        qc_status.update(type=sa.String(20), nullable=False, default=None)
+    elif drift == "qc_status_default":
+        qc_status["default"] = "'pending'::text"
+    elif drift == "public_status_nullable":
+        selected["columns"]["status"]["nullable"] = True
+    elif drift == "public_status_text":
+        selected["columns"]["status"]["type"] = sa.Text()
+    elif drift == "missing_table":
         selected["exists"] = False
     elif drift == "missing_origin":
         del selected["columns"]["origin"]

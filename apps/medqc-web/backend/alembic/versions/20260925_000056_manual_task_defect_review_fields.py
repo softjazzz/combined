@@ -46,6 +46,27 @@ def _column_matches(column: dict | None, length: int) -> bool:
     )
 
 
+def _status_matches(schema: str, column: dict | None) -> bool:
+    """按 revision44 实测基线分别匹配：qc 为 TEXT 可空默认 'open'，public 为 VARCHAR(20) 非空无默认。"""
+    if not column:
+        return False
+    column_type = column.get("type")
+    if schema == "qc":
+        default = re.sub(r"[\s()]", "", str(column.get("default") or "").lower())
+        return (
+            isinstance(column_type, sa.Text)
+            and column.get("nullable") is True
+            and default in {"'open'", "'open'::text"}
+        )
+    return (
+        isinstance(column_type, sa.String)
+        and not isinstance(column_type, sa.Text)
+        and column_type.length == 20
+        and column.get("nullable") is False
+        and column.get("default") is None
+    )
+
+
 def _state(inspector: sa.Inspector) -> tuple[list[str], list[str]]:
     complete: list[str] = []
     pending: list[str] = []
@@ -64,9 +85,7 @@ def _state(inspector: sa.Inspector) -> tuple[list[str], list[str]]:
             or len(origin_checks) != 1
             or origin_checks[0].get("name") != "ck_qc_defects_origin"
             or _normalized_check(origin_checks[0].get("sqltext")) != "originin'auto','manual'"
-            or not isinstance(columns.get("status", {}).get("type"), sa.String)
-            or columns["status"]["type"].length != 20
-            or columns["status"].get("nullable") is not False
+            or not _status_matches(schema, columns.get("status"))
         ):
             raise RuntimeError(f"{schema}.{TABLE} 来源或状态基线合同漂移")
         new_checks = [
