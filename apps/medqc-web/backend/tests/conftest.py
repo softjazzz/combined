@@ -4,18 +4,29 @@ Pytest 配置和共享 fixtures
 该文件定义了所有测试共享的 fixtures 和配置
 """
 
-import pytest
-from fastapi.testclient import TestClient
-from unittest.mock import Mock, MagicMock
-from typing import Generator, Dict, Any
+import os
 import uuid
 from datetime import datetime
+from typing import Generator
+from unittest.mock import MagicMock
+
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy.engine import make_url
+
+# 单元测试默认拒连；不得从 backend/.env 隐式继承业务库连接。
+_TEST_REFUSE_DSN = "postgresql://invalid:invalid@127.0.0.1:1/nonexistent"
+_explicit_database_url = os.environ.get("DATABASE_URL", "").strip()
+if not _explicit_database_url:
+    os.environ["DATABASE_URL"] = _TEST_REFUSE_DSN
+elif make_url(_explicit_database_url).database == "medqc":
+    raise RuntimeError("拒绝在业务库 medqc 上运行后端测试")
 
 # 导入应用
-from app.main import create_app
-from app.core.rate_limit import reset_rate_limit_store_for_testing
-from app.core.upload_security import clear_virus_scan_hook_for_testing
-from app.services.sync_idempotency import reset_sync_idempotency_memory_for_testing
+from app.main import create_app  # noqa: E402 - 先隔离数据库再导入应用
+from app.core.rate_limit import reset_rate_limit_store_for_testing  # noqa: E402
+from app.core.upload_security import clear_virus_scan_hook_for_testing  # noqa: E402
+from app.services.sync_idempotency import reset_sync_idempotency_memory_for_testing  # noqa: E402
 
 # 导入语义规则 fixtures
 pytest_plugins = ["tests.fixtures.semantic_rules_fixtures"]
