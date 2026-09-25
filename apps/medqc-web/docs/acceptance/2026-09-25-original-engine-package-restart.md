@@ -1,6 +1,12 @@
 # 原始 LX0609：解压包跨进程恢复技术演练
 
-## 固定版本与隔离范围
+## 当前提交补验（2026-09-25）
+
+从干净检出 `2d1d3730dfd3e533577ffaf58a5d82fe6de0dddd` 使用 Windows PowerShell 5.1 完整运行 `scripts/package-customer-release.ps1 -SkipBundledActivation`。源码门禁通过，前端重新构建并生成 ZIP；解压包前后端构建号均为 `medqc-web-customer-20260925-183936`，提交号一致。包内不存在集成工作树未跟踪的 `luxian_0609_opinion_freeze` 目录。
+
+以解压包 `backend` 为工作目录和 `PYTHONPATH`，确认实际加载的任务服务模块位于包内。独立进程创建原始 `LX0609-01-01-01` 的合成排队任务，另一进程经正式启动扫描恢复、执行并读回一条 Canonical `data_gap`，观测 Token 为 0；另一个任务切换构建号后恢复，在读取病例前因版本漂移受控失败。这补齐了最新提交与 PowerShell 5.1 的本机打包/恢复证据。测试使用隔离 SQLite、合成空来源且禁止模型调用；客户机启动脚本、客户 PostgreSQL、真实模型费用及临床保护集仍未验收。
+
+## 历史演练：提交 `71f347e3a` 的固定版本与隔离范围
 
 - 源码提交：`71f347e3a27ee5052417746388bca4c2200e2186`。从该提交新建干净的临时检出，不复制集成工作树中未跟踪的业务数据。
 - 用 `scripts/package-customer-release.ps1`、PowerShell 7、`-SkipBundledActivation` 在本机临时目录构建；发布源码门禁通过。生成构建号 `medqc-web-customer-20260925-082620`，ZIP 解压后的 `frontend/dist/build-info.json` 与 `backend/app/data/runtime_build.json` 均记录同一构建号及上述 SHA。
