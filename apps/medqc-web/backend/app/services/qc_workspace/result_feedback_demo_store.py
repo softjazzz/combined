@@ -223,6 +223,24 @@ class ResultFeedbackDemoStore:
         self._canonical_table = canonical_table
 
     @staticmethod
+    def _validated_items(envelope: Mapping[str, Any]) -> list[dict[str, Any]]:
+        """现行签章结果沿反馈读写共用校验；旧无签章结果保留既有兼容读取。"""
+
+        items = envelope.get("items")
+        if not isinstance(items, list):
+            raise ResultFeedbackDemoConflict("质控结果无法唯一确认")
+        try:
+            for item in items:
+                if not isinstance(item, dict):
+                    raise ValueError("质控结果项目格式错误")
+                if CUSTOMER_TEXT_SEAL_KEY in item:
+                    assert_published_customer_text_unchanged(item)
+                    safe_customer_display_facts(item, rule_id=_rule_id(item))
+        except ValueError as exc:
+            raise ResultFeedbackDemoConflict("质控结果无法唯一确认") from exc
+        return items
+
+    @staticmethod
     def _canonical_item_from_row(
         row: Mapping[str, Any],
         *,
@@ -243,18 +261,7 @@ class ResultFeedbackDemoStore:
             or not _safe_text(envelope.get("rule_set_version"))
         ):
             return None
-        items = envelope.get("items")
-        if not isinstance(items, list):
-            raise ResultFeedbackDemoConflict("质控结果无法唯一确认")
-        try:
-            for item in items:
-                if not isinstance(item, dict):
-                    raise ValueError("质控结果项目格式错误")
-                if CUSTOMER_TEXT_SEAL_KEY in item:
-                    assert_published_customer_text_unchanged(item)
-                    safe_customer_display_facts(item, rule_id=_rule_id(item))
-        except ValueError as exc:
-            raise ResultFeedbackDemoConflict("质控结果无法唯一确认") from exc
+        items = ResultFeedbackDemoStore._validated_items(envelope)
         matches = [item for item in items if isinstance(item, dict) and _rule_id(item) == rule_id]
         if len(matches) > 1:
             raise ResultFeedbackDemoConflict("质控结果无法唯一确认")
@@ -339,6 +346,7 @@ class ResultFeedbackDemoStore:
                 _safe_text(envelope.get("root_job_id")) == root_job_id
                 and _safe_text(envelope.get("record_ref")) == record_ref
             ):
+                self._validated_items(envelope)
                 rule_set_key = _safe_text(envelope.get("rule_set_key"))
                 rule_set_version = _safe_text(envelope.get("rule_set_version"))
                 if not rule_set_key or not rule_set_version:
@@ -444,6 +452,10 @@ class ResultFeedbackDemoStore:
             raise ResultFeedbackDemoStoreUnavailable("反馈功能暂不可用") from exc
 
         contexts: dict[tuple[str, str], dict[str, Any]] = {}
+        feedback_keys = {
+            (_safe_text(row.get("root_job_id")), _safe_text(row.get("record_ref")))
+            for row in feedback_rows
+        }
         for row in canonical_rows:
             try:
                 envelope = json.loads(_safe_text(row.get("envelope_json")))
@@ -456,15 +468,16 @@ class ResultFeedbackDemoStore:
             if root_job_id not in root_job_ids or not _SAFE_RECORD_REF.fullmatch(record_ref):
                 continue
             key = (root_job_id, record_ref)
+            if key not in feedback_keys:
+                continue
+            items = self._validated_items(envelope)
             identity = {
                 "institute_id": _safe_text(row.get("institute_id")),
                 "patient_id": _safe_text(row.get("patient_id")),
                 "visit_id": _safe_text(row.get("visit_id") or row.get("record_id")),
             }
             rule_names: dict[str, str] = {}
-            for item in list(envelope.get("items") or []):
-                if not isinstance(item, Mapping):
-                    continue
+            for item in items:
                 rule_id = _rule_id(item)
                 rule_name = _safe_text(
                     item.get("rule_name")

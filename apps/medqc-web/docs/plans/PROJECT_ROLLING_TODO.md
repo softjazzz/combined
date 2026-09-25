@@ -37,6 +37,8 @@
 
 ## 当前焦点
 
+2026-09-25 MEDQC-022 A 反馈读取补证：当前带签章的 Canonical 结论被篡改后，提交反馈已会拒绝，但按病历读取及全部反馈仍可绕过。现三个反馈入口复用同一发布校验；固定反例红绿、反馈/Canonical 相邻 **133/133** 通过。旧无签章历史结果未迁移；独立临床保护集与客户部署仍待验，A 不标完成。[执行卡](2026-09-25-lx0609-engine-remaining-goal.md)。
+
 2026-09-25 MEDQC-022 A 公开边界补证：反馈入口曾接受已篡改签章的 LX0609 结论，现对带签章的当前结果复用发布校验；Canonical 保存时顶层与规则项病历引用统一为住院三坐标安全引用。反馈/Canonical 相邻 132/132、隔离 PG 4/4 通过。PG 正式 Worker 的同一结果已逐项核对 latest、CSV、XLSX、HTML；合成资料不足例的证据为空，不代表非空证据、客户部署或临床签收。详情见[执行卡](2026-09-25-lx0609-engine-remaining-goal.md)和[隔离 PG 验收](../acceptance/2026-09-25-original-engine-isolated-pg-attempts.md)。
 
 2026-09-25 MEDQC-022 B/D 隔离 PG 实测：独立 PostgreSQL 18 临时集群监听 15432，双 Python 进程同步争领同一 LX0609 任务三轮均唯一领取；取消重试后旧代次零 Canonical 写入，新代次只写一行并可读回。测试未设置专用地址会跳过，误指向现有 5432 在连接前拒绝。[证据](../acceptance/2026-09-25-original-engine-isolated-pg-attempts.md)。客户安装包恢复、真实模型费用及临床保护集仍待验，B/D 不据此关闭。
