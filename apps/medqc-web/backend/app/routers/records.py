@@ -387,11 +387,13 @@ def _should_prefer_bundle_documents(existing_docs: List[Dict[str, Any]], bundle_
 def _load_review_items_from_latest_batch(record_id: str) -> Dict[str, Any]:
     if engine is None:
         return {"review_items": [], "review_job": None}
+    from ..services.luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY
+
     schema = _workspace_schema()
     draft_id_list = ", ".join(f"'{draft_id}'" for draft_id in sorted(WORKSPACE_BATCH_DRAFT_IDS))
     sql = text(
         f"""
-        SELECT id, created_at, items_json
+        SELECT id, created_at, filters_json, items_json
         FROM {schema}.custom_qc_batch_jobs
         WHERE draft_id IN ({draft_id_list})
           AND status = 'completed'
@@ -403,6 +405,10 @@ def _load_review_items_from_latest_batch(record_id: str) -> Dict[str, Any]:
     with engine.connect() as conn:
         rows = conn.execute(sql).mappings().all()
     for row in rows:
+        filters = _safe_json_loads(row.get("filters_json"), {})
+        if isinstance(filters, dict) and str(filters.get("rule_set_key") or "").strip() == LUXIAN_0609_RULE_SET_KEY:
+            # 以任务冻结的规则集身份阻断整批原始项；单项缺编号时仍不可绕过。
+            continue
         items = _safe_json_loads(row.get("items_json"), [])
         if not isinstance(items, list):
             continue
@@ -439,8 +445,10 @@ def _is_luxian_0609_result_item(item: Any) -> bool:
 
     if not isinstance(item, dict):
         return False
-    rule_id = str(item.get("rule_id") or item.get("rule_code") or "").strip().upper()
-    return rule_id.startswith(LUXIAN_0609_RULE_ID_PREFIX)
+    return any(
+        str(item.get(field) or "").strip().upper().startswith(LUXIAN_0609_RULE_ID_PREFIX)
+        for field in ("rule_id", "rule_code")
+    )
 
 
 def _controlled_review_state(value: Any) -> str:
@@ -449,7 +457,7 @@ def _controlled_review_state(value: Any) -> str:
     state = str(value or "").strip().lower()
     if not state:
         return LUXIAN_0609_NO_RESULT_STATE
-    return state if state in {"ready", "not_found", "technical_error", "identity_unresolved", "identity_ambiguous", "identity_conflict"} else "technical_error"
+    return state if state in {"ready", "incomplete", "not_found", "technical_error", "identity_unresolved", "identity_ambiguous", "identity_conflict"} else "technical_error"
 
 
 def _luxian_0609_envelope_identities(
@@ -617,7 +625,7 @@ def _load_luxian_0609_review_items_from_canonical(record_id: str) -> Dict[str, A
     return {
         "review_items": review_items,
         "review_job": {"id": job_id, "created_at": "", "source": "canonical_result_envelope"},
-        "state": "ready",
+        "state": "incomplete" if result.get("is_complete") is False else "ready",
     }
 
 
@@ -1352,7 +1360,7 @@ async def get_record_qc_detail(
             if canonical_items:
                 payload["review_items"] = canonical_items
                 payload["review_job"] = canonical_payload.get("review_job")
-                payload["review_result_state"] = "ready"
+                payload["review_result_state"] = canonical_state
             else:
                 review_payload = _load_review_items_from_latest_batch(record_id)
                 payload["review_items"] = list(review_payload.get("review_items") or [])

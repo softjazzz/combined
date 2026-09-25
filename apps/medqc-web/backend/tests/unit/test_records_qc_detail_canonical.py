@@ -203,6 +203,55 @@ def test_raw_luxian_0609_items_json_is_never_returned(
     assert MALICIOUS_TEXT not in json.dumps(payload, ensure_ascii=False)
 
 
+def test_formal_luxian_job_does_not_expose_raw_item_without_rule_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """任务身份明确为 0609 时，单项编号丢失也不能退化成 legacy 交付。"""
+
+    raw_item = _raw_0609_item()
+    raw_item.pop("rule_code")
+    _install_engine(
+        monkeypatch,
+        [
+            {
+                "id": "job-raw-0609",
+                "created_at": "2026-09-01T00:00:00",
+                "filters_json": json.dumps({"rule_set_key": RULE_SET_KEY}),
+                "items_json": json.dumps([raw_item], ensure_ascii=False),
+            }
+        ],
+    )
+
+    payload = records._load_review_items_from_latest_batch("visit-1")
+
+    assert payload["review_items"] == []
+    assert MALICIOUS_TEXT not in json.dumps(payload, ensure_ascii=False)
+
+
+def test_conflicting_raw_rule_fields_cannot_mask_luxian_identity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """旧任务单项的两个编号冲突时，任一编号属于 0609 都不能交付原文。"""
+
+    _install_engine(
+        monkeypatch,
+        [
+            {
+                "id": "job-raw-mixed",
+                "created_at": "2026-09-01T00:00:00",
+                "items_json": json.dumps(
+                    [_raw_0609_item(rule_id="SC-020")], ensure_ascii=False
+                ),
+            }
+        ],
+    )
+
+    payload = records._load_review_items_from_latest_batch("visit-1")
+
+    assert payload["review_items"] == []
+    assert MALICIOUS_TEXT not in json.dumps(payload, ensure_ascii=False)
+
+
 def test_mixed_items_json_only_filters_luxian_0609_items(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -550,6 +599,31 @@ def test_endpoint_prefers_canonical_and_sets_ready_state(
     assert len(review_items) == 1
     assert review_items[0]["source"] == "canonical_result_envelope"
     assert review_items[0]["findings"] == "已发布结论：报告出具后 24 小时内病程未记录"
+
+
+def test_endpoint_marks_partial_canonical_result_without_discarding_items(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Canonical 允许交付部分项，但抽屉不能把缺规则的结果称为完整就绪。"""
+
+    _prepare_endpoint(monkeypatch, raw_rows=_raw_rows([_raw_0609_item()]))
+    _patch_identity(monkeypatch)
+    _patch_canonical_result(
+        monkeypatch,
+        {
+            "state": "ready",
+            "is_complete": False,
+            "missing_rule_ids": ["LX0609-06-01-03"],
+            "job_id": "job-partial",
+            "items": [_published_canonical_item()],
+        },
+    )
+
+    response = asyncio.run(_call_qc_detail("visit-1"))
+
+    assert response["data"]["review_result_state"] == "incomplete"
+    assert len(response["data"]["review_items"]) == 1
+    assert MALICIOUS_TEXT not in json.dumps(response, ensure_ascii=False)
 
 
 @pytest.mark.parametrize("mode", ["not_found", "raises"])

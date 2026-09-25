@@ -662,6 +662,12 @@
               class="review-issues__spin"
             >
               <div
+                v-if="reviewResultIncomplete && displayedIssueCount > 0"
+                class="review-empty__desc"
+              >
+                当前仅展示已生成的 0609 结果，仍有规则缺失或冲突，请查看质控任务详情
+              </div>
+              <div
                 v-if="reviewResultUnavailable && displayedIssueCount > 0"
                 class="review-empty__desc"
               >
@@ -1021,10 +1027,12 @@ const defectLoading = ref(false)
 const defectList = ref<DefectItem[]>([])
 const reviewItemList = ref<ReviewIssueItem[]>([])
 const reviewResultState = ref('')
+const reviewResultIncomplete = computed(() => reviewResultState.value === 'incomplete')
 const reviewResultUnavailable = computed(() =>
   ['technical_error', 'identity_ambiguous', 'identity_conflict', 'unavailable'].includes(reviewResultState.value),
 )
 const reviewEmptyTitles: Record<string, string> = {
+  incomplete: '质控结果不完整',
   technical_error: '质控结果暂不可用',
   identity_unresolved: '无法确认质控结果',
   identity_ambiguous: '无法确认质控结果',
@@ -1033,6 +1041,7 @@ const reviewEmptyTitles: Record<string, string> = {
   not_found: '暂无质控结果',
 }
 const reviewEmptyDescriptions: Record<string, string> = {
+  incomplete: '当前任务存在未完成或冲突规则，请查看质控任务详情',
   technical_error: '当前结果未通过安全读取，请查看质控任务详情',
   identity_unresolved: '当前结果未通过安全读取，请查看质控任务详情',
   identity_ambiguous: '当前结果未通过安全读取，请查看质控任务详情',
