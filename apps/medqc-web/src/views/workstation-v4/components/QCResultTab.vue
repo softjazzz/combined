@@ -277,6 +277,10 @@ import {
 } from '@ant-design/icons-vue'
 import { apiClient } from '@/services/apiService'
 import type { WorkstationSnapshotState } from '../types'
+import {
+  buildFormalFrontpageSheetUrl,
+  describeFormalFrontpageSheetError,
+} from '../workstationActions'
 
 interface QCIssue {
   id: string
@@ -327,6 +331,8 @@ const costQCLoading = ref(false)
 const formAnalyzed = ref(false)
 const codingAnalyzed = ref(false)
 const costAnalyzed = ref(false)
+/** 当前就诊是否已成功读到服务端正式首页；草稿存在不代表可以执行正式首页质控。 */
+const officialFrontpageAvailable = ref(false)
 
 const qcTabs = [
   {
@@ -788,28 +794,49 @@ async function fetchCostQCFromBackend() {
 }
 
 async function loadFrontpageData(): Promise<Record<string, any> | null> {
-  if (props.visitId && props.patientId) {
-    try {
-      const resp = await apiClient.get(
-        `/api/medical-records/frontpage-sheet/${props.patientId}/${props.visitId}`,
-      )
-      if (resp.data) return resp.data
-    } catch (err: any) {
-      if (err?.response?.status !== 404) {
-        console.warn('从 PG 读取首页数据失败，回退到 LLM 草稿:', err)
-      }
-    }
+  if (!props.visitId || !props.patientId) {
+    officialFrontpageAvailable.value = false
+    return null
   }
-  return props.frontpage || null
+  // 先降级再请求：同一就诊先前读到正式首页、后续 GET 失败（409/503）时，
+  // 不能保留上一次成功留下的“正式首页可用”，否则自动刷新会继续重跑并弹错。
+  officialFrontpageAvailable.value = false
+  const resp = await apiClient.get(
+    buildFormalFrontpageSheetUrl(props.patientId, props.visitId, props.instituteId),
+  )
+  officialFrontpageAvailable.value = Boolean(resp.data)
+  return resp.data ?? null
+}
+
+/** 首页质控对象缺失（404）与读取失败（409/503）语义不同，必须分别提示，不能都降级成“未发现问题”。 */
+function describeFrontpageQcError(error: unknown): string {
+  const status = (error as { response?: { status?: number } })?.response?.status
+  if (status === 404) return '未找到正式首页数据，无法执行首页质控'
+  return describeFormalFrontpageSheetError(error, '首页质控执行失败')
+}
+
+/**
+ * 首页质控失败时本次结果不存在：必须清掉上一次的 form 结果并同步给上游，
+ * 否则概览计数、页签徽标和 Assist 面板会把旧结果当成本次结论；coding/cost 结果与本次失败无关，保持不动。
+ */
+function dropFormIssues() {
+  const kept = issues.value.filter((issue) => issue.category !== 'form')
+  if (kept.length === issues.value.length) return
+  issues.value = kept
+  emit('issues-change', kept.slice())
 }
 
 async function runFormQC() {
-  const fpData = await loadFrontpageData()
-  if (!fpData) return
-
   formQCLoading.value = true
   let succeeded = false
   try {
+    const fpData = await loadFrontpageData()
+    if (!fpData) {
+      // 没有正式首页就没有可质控对象：失败关闭，不能拿 AI 草稿或空首页顶替。
+      dropFormIssues()
+      message.error('未找到正式首页数据，无法执行首页质控')
+      return
+    }
     const result = await fetchFrontpageQCFromBackend(fpData)
     const kept = issues.value.filter((i) => i.category !== 'form')
     kept.push(...result.issues)
@@ -820,10 +847,11 @@ async function runFormQC() {
     succeeded = true
   } catch (err) {
     console.error('首页质控引擎异常', err)
-    message.error('首页质控执行失败')
+    dropFormIssues()
+    message.error(describeFrontpageQcError(err))
   } finally {
     formQCLoading.value = false
-    // 仅成功才算已分析；409/503 等失败必须回到未分析态，否则会渲染绿色“未发现质控问题”假通过。
+    // 仅成功才算已分析；404/409/503 等失败必须回到未分析态，否则会渲染绿色“未发现质控问题”假通过。
     formAnalyzed.value = succeeded
   }
 }
@@ -876,10 +904,22 @@ async function runAllQC() {
   costQCLoading.value = true
   let succeeded = false
   try {
-    const fpData = await loadFrontpageData()
+    let fpData: Record<string, any> | null = null
+    try {
+      fpData = await loadFrontpageData()
+    } catch (error) {
+      // 首页读取失败必须按首页口径提示，不能被结算口径吞掉。
+      console.error('首页质控引擎异常', error)
+      issues.value = []
+      emit('issues-change', [])
+      message.error(describeFrontpageQcError(error))
+      return
+    }
     if (!fpData) {
       issues.value = []
       emit('issues-change', [])
+      // 首页质控必须基于正式首页；读不到就整体失败关闭，不能算作“执行完成”。
+      message.error('未找到正式首页数据，无法执行首页质控')
       return
     }
     const [formResult, codingResult, costResult] = await Promise.all([
@@ -942,6 +982,7 @@ watch(
 watch(
   () => props.visitId,
   () => {
+    officialFrontpageAvailable.value = false
     formAnalyzed.value = false
     codingAnalyzed.value = false
     costAnalyzed.value = false
@@ -962,7 +1003,9 @@ watch(
 watch(
   () => props.refreshSeed,
   () => {
-    if (props.frontpage) runAllQC()
+    // 自动刷新只对已读到正式首页的就诊生效：缺少正式首页时首页质控必须失败关闭，
+    // 不该在草稿编辑/生成时反复弹出失败提示。
+    if (props.frontpage && officialFrontpageAvailable.value) runAllQC()
   },
 )
 </script>

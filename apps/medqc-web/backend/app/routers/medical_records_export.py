@@ -1,5 +1,7 @@
 """病案数据 - 导出子域。"""
 
+from typing import Optional
+
 from fastapi import APIRouter, Query
 
 from ..core.pagination import page_param, page_size_param
@@ -34,8 +36,15 @@ async def get_table_data_api(
 
 
 @router.get("/frontpage-sheet/{patient_id}/{visit_id}")
-async def get_frontpage_sheet_api(patient_id: str, visit_id: str):
+async def get_frontpage_sheet_api(
+    patient_id: str,
+    visit_id: str,
+    institute_id: Optional[str] = Query(
+        None,
+        description="机构号；缺省时仅在 patient+visit 唯一时可读，命中多机构按定位不唯一拒绝",
+    ),
+):
     try:
-        return get_frontpage_sheet(patient_id, visit_id)
+        return get_frontpage_sheet(patient_id, visit_id, institute_id=institute_id)
     except Exception as exc:
         raise_medical_records_http_error(exc)

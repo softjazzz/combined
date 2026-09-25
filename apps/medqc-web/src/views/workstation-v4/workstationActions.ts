@@ -2,6 +2,50 @@ import ApiService, { apiClient } from '@/services/apiService'
 
 import type { PatientRecord } from './types'
 
+/**
+ * 正式病案首页 GET 的路径段必须逐段编码：patient_id / visit_id 来自服务端选中行，
+ * 但仍是外部字符串，直接拼接会被 `/`、`?`、`#` 等字符截断成另一条路由。
+ */
+export function buildFormalFrontpageSheetPath(patientId: string, visitId: string): string {
+  return `/api/medical-records/frontpage-sheet/${encodeURIComponent(patientId)}/${encodeURIComponent(visitId)}`
+}
+
+/**
+ * institute_id 只用于消歧：仅当调用方已有可信选中行 / props 的机构号时才追加，空值不编造机构。
+ * 省略时由后端按唯一候选兼容，身份歧义由后端返回 409，调用方不得把它降级成空首页或客户端草稿。
+ */
+export function buildFormalFrontpageSheetUrl(
+  patientId: string,
+  visitId: string,
+  instituteId?: string | null,
+): string {
+  const path = buildFormalFrontpageSheetPath(patientId, visitId)
+  const normalized = typeof instituteId === 'string' ? instituteId.trim() : ''
+  if (!normalized) return path
+  return `${path}?${new URLSearchParams({ institute_id: normalized }).toString()}`
+}
+
+/**
+ * 409 表示正式首页归属不唯一、503 表示首页服务暂不可用：两者都必须原样提示用户，
+ * 不得被转换成“没有正式首页”，否则客户端草稿或空首页会被当成可质控对象。
+ */
+export function describeFormalFrontpageSheetError(
+  error: unknown,
+  fallback = '正式首页读取失败',
+): string {
+  const response = (error as { response?: { status?: number; data?: { detail?: unknown } } })
+    ?.response
+  const detail = response?.data?.detail
+  const hasDetail = typeof detail === 'string' && detail.trim() !== ''
+  if (response?.status === 409) {
+    return hasDetail ? String(detail).trim() : '正式首页归属不唯一，请指定机构号后重试'
+  }
+  if (response?.status === 503) {
+    return hasDetail ? String(detail).trim() : '正式首页服务暂不可用，请稍后重试'
+  }
+  return fallback
+}
+
 export async function requestFrontpageDraft(visitId: string) {
   const { data } = await apiClient.post(
     '/api/v1/frontpage/auto-generate-draft',
@@ -62,9 +106,20 @@ export async function requestFrontpageQc(record: PatientRecord) {
   if (!record.patientId) {
     throw new Error('缺少 patient_id，无法执行首页质控')
   }
-  const { data: frontpage } = await apiClient.get(
-    `/api/medical-records/frontpage-sheet/${record.patientId}/${record.visitId || record.id}`,
-  )
+  let frontpage: Record<string, any> | null = null
+  try {
+    const { data } = await apiClient.get(
+      buildFormalFrontpageSheetUrl(
+        record.patientId,
+        record.visitId || record.id,
+        record.instituteId,
+      ),
+    )
+    frontpage = data ?? null
+  } catch (error) {
+    // 409/503 等读取失败必须原样失败，不能退化成“无正式首页”再去质控草稿或空首页。
+    throw new Error(describeFormalFrontpageSheetError(error, '读取正式首页数据失败'))
+  }
   if (!frontpage) {
     throw new Error('未找到正式首页数据，无法执行首页质控')
   }

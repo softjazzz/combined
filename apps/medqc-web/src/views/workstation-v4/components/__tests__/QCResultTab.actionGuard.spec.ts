@@ -254,7 +254,8 @@ describe('QCResultTab 结算质控失败不得渲染绿色通过', () => {
   })
 
   it('runAllQC 中控费 409 失败时三个页签都不显示绿色通过', async () => {
-    getMock.mockRejectedValue({ response: { status: 404 } })
+    // 正式首页存在，失败点必须落在控费 409 上（首页读取失败已是另一条独立用例）。
+    getMock.mockResolvedValue({ data: { basic_info: {} } })
     postMock.mockImplementation((url: string) => {
       const target = String(url)
       if (target.includes('/settlement/')) {
@@ -335,7 +336,8 @@ describe('QCResultTab 首页/编码单独执行失败不得渲染绿色通过', 
     getMock.mockReset()
     successMock.mockReset()
     errorMock.mockReset()
-    getMock.mockRejectedValue({ response: { status: 404 } })
+    // 正式首页 GET 成功：本组用例验证的是 formal-qc/validate 之后的失败关闭语义。
+    getMock.mockResolvedValue({ data: { basic_info: {} } })
   })
 
   it.each([409, 503])('首页质控 HTTP %s 失败后回到未分析态，不显示“未发现质控问题”', async (status) => {

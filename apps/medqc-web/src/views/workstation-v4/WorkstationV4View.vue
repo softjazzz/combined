@@ -113,6 +113,14 @@
             />
           </template>
           <template #frontpage>
+            <div
+              v-if="legacyWriteWorkspacesEnabled && frontpageSheetError"
+              class="px-6 pt-4 text-sm text-amber-800"
+              role="alert"
+              data-testid="frontpage-sheet-error"
+            >
+              {{ frontpageSheetError }}
+            </div>
             <FrontpageWorkspace
               v-if="legacyWriteWorkspacesEnabled"
               :frontpage-generating="frontpageGenerating"
@@ -409,6 +417,10 @@ import {
   runRecordPoolFilterQc,
   runRecordPoolQc,
 } from './workstationBatchController'
+import {
+  buildFormalFrontpageSheetUrl,
+  describeFormalFrontpageSheetError,
+} from './workstationActions'
 import {
   createDetailNavigation,
   findRecordById,
@@ -1522,6 +1534,8 @@ const settlementQcLoading = ref(false)
 // ========== 鐥呮棣栭〉瀹樻柟鏍煎紡鏁版嵁 ==========
 const frontpageSheetData = ref<any>(null)
 const frontpageSheetLoading = ref(false)
+// 正式首页读取失败（409 归属不唯一 / 503 服务不可用）留痕：读不到不等于没有，不能用草稿顶替。
+const frontpageSheetError = ref('')
 const pasteFrontpageModalVisible = ref(false)
 const pastedMedicalText = ref('')
 const pasteFrontpageScene = ref<FrontpageReportScene>('combined')
@@ -1534,21 +1548,36 @@ const pasteFrontpageSceneOptions = [
 
 async function loadFrontpageSheet(patientId: string, visitId: string) {
   const recordKey = selectedRecordKey.value
+  // 机构号只取当前选中行，且仅用于消歧；未选中行或空值时不追加查询参数。
+  const instituteId = selectedRecord.value?.instituteId
   const isCurrent = () =>
     selectedRecordKey.value === recordKey &&
     selectedRecord.value?.patientId === patientId &&
-    selectedRecord.value?.visitId === visitId
+    selectedRecord.value?.visitId === visitId &&
+    // 旧列表的选中键只含 record id，机构更正后同一行仍是同键：必须同时比较发起时的机构号，
+    // 否则旧机构的正式首页响应会落到新机构的病历上（这批数据是机构隔离的）。
+    selectedRecord.value?.instituteId === instituteId
   frontpageSheetLoading.value = true
   try {
     const { data } = await apiClient.get(
-      `/api/medical-records/frontpage-sheet/${patientId}/${visitId}`,
+      buildFormalFrontpageSheetUrl(patientId, visitId, instituteId),
     )
-    if (isCurrent()) frontpageSheetData.value = data ?? null
+    if (isCurrent()) {
+      frontpageSheetData.value = data ?? null
+      frontpageSheetError.value = ''
+    }
   } catch (e: any) {
     if (e?.response?.status !== 404) {
       console.error('加载病案首页数据失败:', e)
     }
-    if (isCurrent()) frontpageSheetData.value = null
+    if (isCurrent()) {
+      frontpageSheetData.value = null
+      // 404 表示确实没有正式首页，仍允许生成草稿；409/503 等读取失败必须留痕并阻断草稿生成。
+      frontpageSheetError.value =
+        e?.response?.status === 404
+          ? ''
+          : describeFormalFrontpageSheetError(e, '病案首页读取失败，请稍后重试')
+    }
   } finally {
     if (isCurrent()) frontpageSheetLoading.value = false
   }
@@ -1561,20 +1590,22 @@ const isDischarged = computed(() => !!selectedRecord.value?.dischargeDate)
 const hasExistingFrontpage = computed(() => !!frontpageSheetData.value)
 const canGenerateFrontpage = computed(
   () =>
+    !frontpageSheetError.value &&
     !selectedRecord.value?.identityStatus &&
     canGenerateFrontpageDraft(selectedRecord.value, documentsList.value, combinedMedicalText.value),
 )
-const frontpageDisabledReason = computed(() =>
-  selectedRecord.value?.identityStatus
-    ? '病历身份及历史质控归属未核实，仅可查看'
-    : getFrontpageDraftDisabledReason(
-        selectedRecord.value,
-        documentsList.value,
-        combinedMedicalText.value,
-      ),
-)
+const frontpageDisabledReason = computed(() => {
+  // 正式首页读取失败优先提示：读不到就不允许生成草稿，避免用草稿顶替正式首页。
+  if (frontpageSheetError.value) return frontpageSheetError.value
+  if (selectedRecord.value?.identityStatus) return '病历身份及历史质控归属未核实，仅可查看'
+  return getFrontpageDraftDisabledReason(
+    selectedRecord.value,
+    documentsList.value,
+    combinedMedicalText.value,
+  )
+})
 function handleGenerateFrontpage() {
-  if (selectedRecord.value?.identityStatus) return
+  if (selectedRecord.value?.identityStatus || frontpageSheetError.value) return
   const recordKey = selectedRecordKey.value
   if (hasExistingFrontpage.value) {
     Modal.confirm({
@@ -1595,7 +1626,7 @@ function handleGenerateFrontpage() {
 }
 
 function openPasteFrontpageModal() {
-  if (selectedRecord.value?.identityStatus) return
+  if (selectedRecord.value?.identityStatus || frontpageSheetError.value) return
   detailMainTab.value = 'frontpage'
   pasteFrontpageModalVisible.value = true
 }
@@ -2581,6 +2612,7 @@ watch(selectedRecordKey, (newKey) => {
   settlementLoading.value = false
   frontpageSheetData.value = null
   frontpageSheetLoading.value = false
+  frontpageSheetError.value = ''
   pasteFrontpageModalVisible.value = false
   detailMainTab.value = pendingDetailMainTab.value || 'records'
   pendingDetailMainTab.value = null

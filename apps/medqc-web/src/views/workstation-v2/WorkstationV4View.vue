@@ -81,6 +81,14 @@
             />
           </template>
           <template #frontpage>
+            <div
+              v-if="frontpageSheetError"
+              class="px-3 pt-4 text-sm text-amber-800 lg:px-4"
+              role="alert"
+              data-testid="frontpage-sheet-error"
+            >
+              {{ frontpageSheetError }}
+            </div>
             <FrontpageWorkspace
               :frontpage-generating="frontpageGenerating"
               :frontpage-post-processing="frontpagePostProcessing"
@@ -240,6 +248,10 @@ import WorkstationV4RulesView from './components/WorkstationV4RulesView.vue'
 import RecordDetailWorkspace from './components/RecordDetailWorkspace.vue'
 import FrontpageWorkspace from './components/FrontpageWorkspace.vue'
 import SettlementWorkspace from './components/SettlementWorkspace.vue'
+import {
+  buildFormalFrontpageSheetUrl,
+  describeFormalFrontpageSheetError,
+} from './workstationActions'
 import { useWorkstationRouteEffects } from './workstationRouteEffects'
 import { runBatchExtract } from './workstationBatchController'
 import {
@@ -965,21 +977,43 @@ const settlementQcLoading = ref(false)
 // ========== 鐥呮棣栭〉瀹樻柟鏍煎紡鏁版嵁 ==========
 const frontpageSheetData = ref<any>(null)
 const frontpageSheetLoading = ref(false)
+// 正式首页读取失败（409 归属不唯一 / 503 服务不可用）留痕：读不到不等于没有，不能用草稿顶替。
+const frontpageSheetError = ref('')
 
 async function loadFrontpageSheet(patientId: string, visitId: string) {
+  // 竞态约束沿用当前选中行：响应回来时选中行已换人就直接丢弃，避免旧响应覆盖新选中行。
+  const recordKey = selectedId.value
+  // 机构号只取当前选中行的可信值，且仅用于消歧；空值不追加参数，归属是否唯一由后端判定。
+  const instituteId = selectedRecord.value?.instituteId
+  // 同一行在调用处可能用 visit_id 或记录 id 指代，因此身份判定锚定选中行 key 与 patient_id；
+  // 列表刷新后同一 id 可能改指另一机构的同 patient/visit，机构也必须与发起时一致才算同一行。
+  const isCurrent = () =>
+    selectedId.value === recordKey &&
+    selectedRecord.value?.patientId === patientId &&
+    (selectedRecord.value?.instituteId || '') === (instituteId || '')
   frontpageSheetLoading.value = true
   try {
     const { data } = await apiClient.get(
-      `/api/medical-records/frontpage-sheet/${patientId}/${visitId}`,
+      buildFormalFrontpageSheetUrl(patientId, visitId, instituteId),
     )
-    frontpageSheetData.value = data ?? null
+    if (isCurrent()) {
+      frontpageSheetData.value = data ?? null
+      frontpageSheetError.value = ''
+    }
   } catch (e: any) {
     if (e?.response?.status !== 404) {
       console.error('加载病案首页数据失败:', e)
     }
-    frontpageSheetData.value = null
+    if (isCurrent()) {
+      frontpageSheetData.value = null
+      // 404 表示确无正式首页，仍允许生成草稿；409/503 等读取失败必须留痕并阻断草稿生成。
+      frontpageSheetError.value =
+        e?.response?.status === 404
+          ? ''
+          : describeFormalFrontpageSheetError(e, '病案首页读取失败，请稍后重试')
+    }
   } finally {
-    frontpageSheetLoading.value = false
+    if (isCurrent()) frontpageSheetLoading.value = false
   }
 }
 const settlementQcFailed = computed(() => settlementQcReport.value?.summary?.failed || 0)
@@ -988,12 +1022,15 @@ const settlementQcFailed = computed(() => settlementQcReport.value?.summary?.fai
 // AI 鐢熸垚棣栭〉锛氫粎瑕佹眰宸插嚭闄紝宸叉湁棣栭〉鏁版嵁鏃跺脊纭妗嗚鐩?
 const isDischarged = computed(() => !!selectedRecord.value?.dischargeDate)
 const hasExistingFrontpage = computed(() => !!frontpageSheetData.value)
-const canGenerateFrontpage = computed(() => isDischarged.value)
+const canGenerateFrontpage = computed(() => isDischarged.value && !frontpageSheetError.value)
 const frontpageDisabledReason = computed(() => {
+  // 正式首页读取失败优先提示：读不到就不允许生成草稿，避免用草稿顶替正式首页。
+  if (frontpageSheetError.value) return frontpageSheetError.value
   if (!isDischarged.value) return '在院患者暂不支持生成首页'
   return ''
 })
 function handleGenerateFrontpage() {
+  if (frontpageSheetError.value) return
   if (hasExistingFrontpage.value) {
     Modal.confirm({
       title: '该患者已有病案首页数据',
@@ -1374,6 +1411,10 @@ watch(selectedId, (newId) => {
   activeDocType.value = ''
   expandedConcatSectionIndexes.value = new Set()
   settlementQcReport.value = null
+  // 选中行已换人：旧行首页请求即使仍挂起，也不能再占用 loading/data，否则会遗留旧 spinner。
+  frontpageSheetLoading.value = false
+  frontpageSheetData.value = null
+  frontpageSheetError.value = ''
   detailMainTab.value = pendingDetailMainTab.value || 'records'
   pendingDetailMainTab.value = null
   emrRenderState.value = newId ? 'loading' : 'idle'

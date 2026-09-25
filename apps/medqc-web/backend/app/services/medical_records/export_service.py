@@ -2,21 +2,47 @@
 
 from __future__ import annotations
 
+import logging
+from contextlib import contextmanager
 from typing import Any, Callable
 
 from sqlalchemy import MetaData, func, select, text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from ...database.connection import Base, engine
 from ...database.models.cdm import MedicalRecordFrontpage, Diagnosis, MrSurgery, MrCost
-from .errors import MedicalRecordsNotFoundError
+from .errors import (
+    MedicalRecordsConflictError,
+    MedicalRecordsNotFoundError,
+    MedicalRecordsSourceUnavailableError,
+    MedicalRecordsValidationError,
+)
 
 
 DEFAULT_HOSPITAL_NAME = "泸县人民医院"
 
+logger = logging.getLogger(__name__)
+
 
 def _session_factory() -> Session:
     return Session(engine)
+
+
+@contextmanager
+def _source_session(session_factory: Callable[[], Any]) -> Any:
+    """打开取数会话；数据库连接/读取异常按“取数不可用”收口。
+
+    只转换 ``SQLAlchemyError``（连接失败、语句失败等），域错误（404/409/400/取数不可用）
+    原样穿透，且不把 SQL、连接细节或患者标识带进对外文案。
+    """
+
+    try:
+        with session_factory() as session:
+            yield session
+    except SQLAlchemyError as exc:
+        logger.warning("病案首页取数失败: %s", type(exc).__name__)
+        raise MedicalRecordsSourceUnavailableError("病案首页取数失败，请稍后重试") from exc
 
 
 def get_schema(metadata: MetaData | None = None) -> dict[str, Any]:
@@ -154,19 +180,91 @@ def _build_pathology_info(row: Any | None) -> dict[str, Any]:
     }
 
 
+def _resolve_frontpage_row(
+    session: Any,
+    *,
+    patient_id: str,
+    visit_id: str,
+    institute_id: str | None,
+) -> Any:
+    """在病案首页上锁定唯一三坐标。
+
+    - 显式机构：按 ``institute_id + patient_id + visit_id`` 精确匹配，只接受唯一一行。
+    - 省略机构：仅在 patient+visit 唯一时可读；命中多行（含跨机构同号）按定位不唯一拒绝，
+      不使用 ``.first()`` 猜首行。
+    - 首页表名由现有连接的 search_path 解析（ORM 未显式限定 schema），未解析到唯一机构坐标的行一律拒绝。
+    """
+
+    filters: dict[str, Any] = {"patient_id": patient_id, "visit_id": visit_id}
+    if institute_id:
+        filters["institute_id"] = institute_id
+    rows = session.query(MedicalRecordFrontpage).filter_by(**filters).all()
+    if not rows:
+        raise MedicalRecordsNotFoundError("未找到病案首页数据")
+    if len(rows) > 1:
+        raise MedicalRecordsConflictError("病案首页定位不唯一，请指定机构号后重试")
+    row = rows[0]
+    if not str(getattr(row, "institute_id", "") or "").strip():
+        raise MedicalRecordsConflictError("病案首页缺少机构坐标，无法安全读取")
+    return row
+
+
+def _query_institute_scoped_source(
+    session: Any,
+    statement: Any,
+    coordinates: dict[str, Any],
+    *,
+    source: str,
+) -> Any:
+    """执行机构限定的原生兜底查询，读取失败时停止本次首页取数。
+
+    兜底语句显式限定 ``cdm.`` 且三坐标之一必有 ``institute_id``（已按库核实两张兜底表结构），
+    因此不存在“机构未限定却读到数据”的路径；来源不可读时不能把未知事实当成空值。
+    对外不回显 SQL、连接细节或患者标识。
+    """
+
+    try:
+        return session.execute(statement, coordinates)
+    except SQLAlchemyError as exc:
+        logger.warning("病案首页兜底来源读取失败: %s", source)
+        raise MedicalRecordsSourceUnavailableError(
+            "病案首页兜底来源读取失败，请稍后重试"
+        ) from exc
+
+
 def get_frontpage_sheet(
     patient_id: str,
     visit_id: str,
+    institute_id: str | None = None,
     session_factory: Callable[[], Any] | None = None,
 ) -> dict[str, Any]:
-    session_factory = session_factory or _session_factory
+    """按 ``institute_id + patient_id + visit_id`` 三坐标读取病案首页。
 
-    with session_factory() as session:
-        fp = session.query(MedicalRecordFrontpage).filter_by(
-            patient_id=patient_id, visit_id=visit_id
-        ).first()
-        if not fp:
-            raise MedicalRecordsNotFoundError("未找到病案首页数据")
+    - 首页身份只认现有连接 search_path 解析到的病案首页表（ORM 未显式限定 schema）上的唯一三坐标；
+      机构可显式给出，也可在 patient+visit 唯一时推断。
+    - 省略机构而命中多机构/多行时按定位不唯一拒绝，不用 ``.first()`` 猜首行；显式空机构直接拒绝。
+    - 关联的诊断/手术/费用与原生的 ``mr_diagnosis`` / ``discharge_record_diagnosis`` 兜底
+      一律钉在解析出的同一机构上（原生语句显式限定 ``cdm.``），禁止跨机构混读。
+    """
+
+    session_factory = session_factory or _session_factory
+    if institute_id is not None and not str(institute_id).strip():
+        raise MedicalRecordsValidationError("institute_id 不能为空")
+    institute_key = str(institute_id).strip() if institute_id is not None else ""
+
+    with _source_session(session_factory) as session:
+        fp = _resolve_frontpage_row(
+            session,
+            patient_id=patient_id,
+            visit_id=visit_id,
+            institute_id=institute_key or None,
+        )
+        resolved_institute_id = str(getattr(fp, "institute_id", "") or "").strip()
+        coordinates = {
+            "institute_id": resolved_institute_id,
+            "patient_id": patient_id,
+            "visit_id": visit_id,
+        }
 
         basic = {}
         for col in MedicalRecordFrontpage.__table__.columns:
@@ -175,7 +273,7 @@ def get_frontpage_sheet(
             basic["institute_county_desc"] = DEFAULT_HOSPITAL_NAME
 
         diag_rows = session.query(Diagnosis).filter_by(
-            patient_id=patient_id, visit_id=visit_id
+            **coordinates
         ).order_by(Diagnosis.diagnosis_type, Diagnosis.diagnosis_no).all()
         diagnoses = []
         main_diag_seen = False
@@ -185,10 +283,12 @@ def get_frontpage_sheet(
                 diagnoses.append(item)
 
         if not diagnoses:
-            mr_diag_rows = session.execute(
+            mr_diag_result = _query_institute_scoped_source(
+                session,
                 text(
-                    "SELECT * FROM mr_diagnosis "
-                    "WHERE patient_id = :patient_id AND visit_id = :visit_id "
+                    "SELECT * FROM cdm.mr_diagnosis "
+                    "WHERE institute_id = :institute_id "
+                    "AND patient_id = :patient_id AND visit_id = :visit_id "
                     "AND diagnosis_type LIKE '%出院诊断%' "
                     "ORDER BY CASE WHEN diagnosis_main = '是' THEN 0 ELSE 1 END, "
                     "CASE "
@@ -196,8 +296,10 @@ def get_frontpage_sheet(
                     "THEN regexp_replace(COALESCE(diagnosis_no, ''), '^.*\\|\\|', '')::int "
                     "ELSE 999 END, diagnosis_id"
                 ),
-                {"patient_id": patient_id, "visit_id": visit_id},
-            ).mappings().all()
+                coordinates,
+                source="mr_diagnosis",
+            )
+            mr_diag_rows = mr_diag_result.mappings().all()
             main_diag_seen = False
             for row in mr_diag_rows:
                 item, main_diag_seen = _build_sheet_diagnosis_item(dict(row), main_diag_seen=main_diag_seen)
@@ -206,10 +308,12 @@ def get_frontpage_sheet(
                     diagnoses.append(item)
 
         if not diagnoses:
-            record_diag_rows = session.execute(
+            record_diag_result = _query_institute_scoped_source(
+                session,
                 text(
-                    "SELECT * FROM discharge_record_diagnosis "
-                    "WHERE patient_id = :patient_id AND visit_id = :visit_id "
+                    "SELECT * FROM cdm.discharge_record_diagnosis "
+                    "WHERE institute_id = :institute_id "
+                    "AND patient_id = :patient_id AND visit_id = :visit_id "
                     "AND diagnosis_type LIKE '%出院诊断%' "
                     "AND COALESCE(is_deleted, '0') <> '1' "
                     "ORDER BY CASE WHEN diagnosis_main = '是' THEN 0 ELSE 1 END, "
@@ -218,8 +322,10 @@ def get_frontpage_sheet(
                     "THEN regexp_replace(COALESCE(diagnosis_no, ''), '^.*\\|\\|', '')::int "
                     "ELSE 999 END, diagnosis_id"
                 ),
-                {"patient_id": patient_id, "visit_id": visit_id},
-            ).mappings().all()
+                coordinates,
+                source="discharge_record_diagnosis",
+            )
+            record_diag_rows = record_diag_result.mappings().all()
             main_diag_seen = False
             for row in record_diag_rows:
                 item, main_diag_seen = _build_sheet_diagnosis_item(dict(row), main_diag_seen=main_diag_seen)
@@ -239,24 +345,28 @@ def get_frontpage_sheet(
         if pathology_row:
             pathology_info = _build_pathology_info(pathology_row)
         else:
-            mr_pathology_row = session.execute(
+            mr_pathology_result = _query_institute_scoped_source(
+                session,
                 text(
-                    "SELECT * FROM mr_diagnosis "
-                    "WHERE patient_id = :patient_id AND visit_id = :visit_id "
+                    "SELECT * FROM cdm.mr_diagnosis "
+                    "WHERE institute_id = :institute_id "
+                    "AND patient_id = :patient_id AND visit_id = :visit_id "
                     "AND COALESCE(is_deleted, '0') <> '1' "
                     "AND (diagnosis_type LIKE '%病理%' OR diagnosis_code LIKE 'M%') "
                     "ORDER BY CASE WHEN diagnosis_type LIKE '%病理%' THEN 0 ELSE 1 END, diagnosis_id "
                     "LIMIT 1"
                 ),
-                {"patient_id": patient_id, "visit_id": visit_id},
-            ).mappings().first()
+                coordinates,
+                source="mr_diagnosis",
+            )
+            mr_pathology_row = mr_pathology_result.mappings().first()
             if mr_pathology_row:
                 row = dict(mr_pathology_row)
                 row["source_table"] = "mr_diagnosis"
                 pathology_info = _build_pathology_info(row)
 
         surg_rows = session.query(MrSurgery).filter_by(
-            patient_id=patient_id, visit_id=visit_id
+            **coordinates
         ).all()
         surgeries = []
         for surg in surg_rows:
@@ -275,9 +385,10 @@ def get_frontpage_sheet(
                 "main_surgery_sign": surg.main_surgery_sign,
             })
 
-        cost_row = session.query(MrCost).filter_by(
-            patient_id=patient_id, visit_id=visit_id
-        ).first()
+        cost_rows = session.query(MrCost).filter_by(**coordinates).all()
+        if len(cost_rows) > 1:
+            raise MedicalRecordsConflictError("病案首页费用记录不唯一，无法安全读取")
+        cost_row = cost_rows[0] if cost_rows else None
         cost_data = None
         if cost_row:
             cost_data = {}

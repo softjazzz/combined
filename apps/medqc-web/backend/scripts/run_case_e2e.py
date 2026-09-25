@@ -24,6 +24,7 @@ from dataclasses import dataclass, asdict
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import quote
 
 import requests
 
@@ -83,6 +84,48 @@ def _unwrap_data(payload: Any) -> Any:
     if isinstance(payload, dict) and "data" in payload and ("success" in payload or "trace_id" in payload):
         return payload.get("data")
     return payload
+
+
+# 正式病案首页三坐标读：patient_id/visit_id 来自病例夹具，但仍是外部字符串，逐段编码避免
+# `/`、`?`、`#` 把路径截断成另一条路由；institute_id 只在调用方已有可信机构号时追加，且
+# 必须 URL 编码——机构号可能含 `&`/`#`/空格等字符，直接拼接会破坏查询串或注入额外参数。
+# 机构号缺失时不编造，交由后端按唯一候选兼容或返回 409。
+def build_frontpage_sheet_path(
+    patient_id: str,
+    visit_id: str,
+    institute_id: Optional[str] = None,
+) -> str:
+    path = (
+        "/api/medical-records/frontpage-sheet/"
+        f"{quote(str(patient_id), safe='')}/{quote(str(visit_id), safe='')}"
+    )
+    institute_key = str(institute_id).strip() if institute_id is not None else ""
+    if not institute_key:
+        return path
+    return f"{path}?institute_id={quote(institute_key, safe='')}"
+
+
+# 正式首页失败原因只按状态码归类：不把服务端 detail/异常文本写进报告，
+# 避免患者/就诊/机构标识、SQL 或连接细节随报告外泄。
+_FRONTPAGE_SHEET_STATUS_REASON = {
+    400: "请求参数不合法",
+    401: "鉴权失败",
+    403: "无权限",
+    404: "正式首页缺失",
+    409: "正式首页归属不唯一",
+    503: "首页取数服务不可用",
+}
+
+
+def frontpage_sheet_failure_reason(status_code: int) -> str:
+    reason = _FRONTPAGE_SHEET_STATUS_REASON.get(int(status_code))
+    if reason:
+        return reason
+    if 400 <= int(status_code) < 500:
+        return "正式首页请求被拒绝"
+    if int(status_code) >= 500:
+        return "正式首页服务异常"
+    return "正式首页读取失败"
 
 
 @dataclass
@@ -215,21 +258,82 @@ def _poll_sync_run(api: ApiClient, tier: str, timeout_s: int, interval_s: float)
     return None, f"超时未获取同步运行结果（>{timeout_s}s）"
 
 
-def _load_pg_snapshot(patient_id: str, visit_id: str) -> Dict[str, Any]:
+def _resolve_pg_institute_key(
+    session: Any,
+    patient_id: str,
+    visit_id: str,
+    institute_id: Optional[str] = None,
+) -> Tuple[str, str]:
+    """确定 PG 首页快照要钉住的机构号（三坐标身份）。
+
+    - 显式机构号：直接采用，随后所有读取都按 ``institute_id+patient_id+visit_id`` 精确匹配；
+    - 缺机构号：仅当 patient_id+visit_id 的首页候选同属一家机构时采用该机构；
+      命中多机构必须拒绝猜首行（跨机构同号会拿到别家行）；
+    - 无候选：返回空机构号，由调用方把“无匹配”收口为失败，绝不当作成功。
+
+    返回 ``(机构号, 问题描述)``；问题描述为空表示身份可用。
+    """
+
+    from app.database.models.cdm import MedicalRecordFrontpage
+
+    institute_key = str(institute_id).strip() if institute_id is not None else ""
+    if institute_key:
+        return institute_key, ""
+
+    rows = session.query(MedicalRecordFrontpage).filter_by(
+        patient_id=patient_id, visit_id=visit_id
+    ).all()
+    institutes = {str(getattr(row, "institute_id", "") or "").strip() for row in rows}
+    institutes.discard("")
+    if len(institutes) > 1:
+        return "", f"缺少机构号且首页候选跨 {len(institutes)} 家机构，拒绝猜首行"
+    if len(institutes) == 1:
+        return next(iter(institutes)), ""
+    return "", ""
+
+
+def _load_pg_snapshot(
+    patient_id: str,
+    visit_id: str,
+    institute_id: Optional[str] = None,
+) -> Dict[str, Any]:
     from app.database.connection import SessionLocal
     from app.database.models.cdm import MedicalRecordFrontpage, Diagnosis, MrSurgery, MrCost
 
     with SessionLocal() as session:
-        mr = session.query(MedicalRecordFrontpage).filter_by(patient_id=patient_id, visit_id=visit_id).first()
-        diagnosis = session.query(Diagnosis).filter_by(patient_id=patient_id, visit_id=visit_id).all()
-        surgery = session.query(MrSurgery).filter_by(patient_id=patient_id, visit_id=visit_id).all()
-        cost = session.query(MrCost).filter_by(patient_id=patient_id, visit_id=visit_id).first()
+        scope_institute, identity_error = _resolve_pg_institute_key(
+            session, patient_id, visit_id, institute_id
+        )
+        mr, diagnosis, surgery, cost = None, [], [], None
+        if scope_institute:
+            def _scoped(model: Any) -> Any:
+                query = session.query(model).filter_by(patient_id=patient_id, visit_id=visit_id)
+                query = query.filter_by(institute_id=scope_institute)
+                return query
+
+            mr_rows = _scoped(MedicalRecordFrontpage).all()
+            if len(mr_rows) > 1:
+                identity_error = f"首页三坐标命中 {len(mr_rows)} 行，无法确定唯一归属"
+                mr_rows = []
+            mr = mr_rows[0] if mr_rows else None
+            diagnosis = _scoped(Diagnosis).all()
+            surgery = _scoped(MrSurgery).all()
+            cost_rows = _scoped(MrCost).all()
+            if len(cost_rows) > 1:
+                identity_error = identity_error or f"费用行命中 {len(cost_rows)} 条，无法确定唯一归属"
+            cost = cost_rows[0] if len(cost_rows) == 1 else None
+        if identity_error or not scope_institute:
+            # 无机构归属 / 身份不唯一时，诊断/手术/费用一律不读：失败报告同样不得混入
+            # 别家患者或机构的同号事实，阻断错误由调用方保留。
+            mr, diagnosis, surgery, cost = None, [], [], None
 
     return {
         "mr": _jsonify(_to_plain_dict(mr)) if mr else None,
         "diagnosis": _jsonify([_to_plain_dict(x) for x in diagnosis]),
         "mr_surgery": _jsonify([_to_plain_dict(x) for x in surgery]),
         "mr_cost": _jsonify(_to_plain_dict(cost)) if cost else None,
+        "institute_id": scope_institute,
+        "identity_error": identity_error,
     }
 
 
@@ -439,6 +543,11 @@ def main() -> int:
     parser.add_argument("--api-token", default=os.getenv("DEMO_API_TOKEN", ""), help="可选 Bearer Token")
     parser.add_argument("--api-email", default=os.getenv("DEMO_API_EMAIL", ""), help="可选登录邮箱")
     parser.add_argument("--api-password", default=os.getenv("DEMO_API_PASSWORD", ""), help="可选登录密码")
+    parser.add_argument(
+        "--institute-id",
+        default="",
+        help="可信病例机构号；非空时按三坐标追加 institute_id 读取正式首页（缺失则不编造机构）",
+    )
     parser.add_argument("--output-dir", default="reports/e2e", help="输出目录（相对 backend 根目录）")
     args = parser.parse_args()
 
@@ -460,7 +569,14 @@ def main() -> int:
         print(f"[ERROR] API 鉴权初始化失败: {exc}", file=sys.stderr)
         return 2
 
-    def run_step(name: str, method: str, path: str, **req_kwargs: Any) -> Tuple[bool, Any]:
+    def run_step(
+        name: str,
+        method: str,
+        path: str,
+        *,
+        redact_error: bool = False,
+        **req_kwargs: Any,
+    ) -> Tuple[bool, Any]:
         ok, status, elapsed, payload, err = api.request(method, path, **req_kwargs)
         steps.append(
             StepResult(
@@ -470,7 +586,8 @@ def main() -> int:
                 ok=ok,
                 status_code=status,
                 elapsed_ms=round(elapsed, 2),
-                error=err,
+                # 正式首页步骤只留状态码：服务端 detail/异常文本可能带患者/机构标识或连接细节
+                error="" if (ok or not redact_error) else f"HTTP {status}（错误明细已按状态码脱敏）",
             )
         )
         return ok, payload
@@ -528,12 +645,23 @@ def main() -> int:
     else:
         warnings.append("首次获取同步历史失败，跳过轮询")
 
-    # 5) 系统首页数据
-    sheet_path = f"/api/medical-records/frontpage-sheet/{args.patient_id}/{args.visit_id}"
-    ok_sheet, sheet_payload = run_step("frontpage_sheet", "GET", sheet_path)
-    frontpage_sheet_data = sheet_payload if ok_sheet and isinstance(sheet_payload, dict) else None
-    if not ok_sheet:
-        warnings.append("系统首页数据未返回（可能为空或未同步）")
+    # 5) 系统首页数据（正式三坐标读；有可信机构号时追加 institute_id 消歧）
+    sheet_path = build_frontpage_sheet_path(args.patient_id, args.visit_id, args.institute_id)
+    ok_sheet, sheet_payload = run_step("frontpage_sheet", "GET", sheet_path, redact_error=True)
+    sheet_step = steps[-1]
+    frontpage_sheet_data = sheet_payload if (ok_sheet and isinstance(sheet_payload, dict)) else None
+    # HTTP 200 但正文为空（`{}`）同样不是可评估的正式首页，必须按失败收口。
+    frontpage_sheet_ok = bool(frontpage_sheet_data)
+    if not frontpage_sheet_ok:
+        # 401/403/404/409/503 等失败即“正式首页不可用”：按阻断错误收口，
+        # 不得用草稿/空模板顶替正式首页后继续统计通过。
+        if not ok_sheet:
+            errors.append(
+                f"正式首页读取失败（frontpage_sheet HTTP {sheet_step.status_code}）："
+                f"{frontpage_sheet_failure_reason(sheet_step.status_code)}"
+            )
+        else:
+            errors.append("正式首页响应为空或非对象，无法作为正式首页验收输入")
 
     # 6) 首页形式质控
     frontpage_qc_summary: Dict[str, Any] = {"available": False}
@@ -617,13 +745,23 @@ def main() -> int:
 
     # 采集源/库快照并核对字段映射
     mongo_snapshot = _load_mongo_snapshot(args.patient_id, args.visit_id)
-    pg_snapshot = _load_pg_snapshot(args.patient_id, args.visit_id)
+    pg_snapshot = _load_pg_snapshot(args.patient_id, args.visit_id, args.institute_id)
+    pg_identity_error = str(pg_snapshot.get("identity_error") or "").strip()
+    if pg_identity_error:
+        errors.append(f"PG 首页身份不唯一：{pg_identity_error}")
+    if not pg_snapshot.get("mr"):
+        # 快照无匹配行不得当作成功：对照基线缺失时整条链路不可判通过
+        errors.append("PG 首页缺失：按三坐标未匹配到病案首页行，关联事实不读取")
     mapping_checks, mapping_summary = _build_mapping_checks(mongo_snapshot, pg_snapshot, frontpage_sheet_data)
 
     synced_records = _extract_trigger_synced(trigger_result) if ok_trigger else 0
     total_elapsed = round((time.perf_counter() - started_at) * 1000, 2)
 
     hard_fail = any(not s.ok for s in steps if s.name in {"test_connections", "sync_preflight", "sync_trigger"})
+    if not frontpage_sheet_ok or pg_identity_error or not pg_snapshot.get("mr"):
+        # 正式首页不可用（含 401/403/404/409/503）或 PG 首页身份不唯一/缺失时整体判失败，
+        # 禁止草稿顶替、禁止猜首行、禁止把空快照算通过
+        hard_fail = True
     final_passed = (not hard_fail) and mapping_summary.get("critical_all_passed", False)
     final_level = "pass" if final_passed else "warn"
     if hard_fail:
@@ -633,6 +771,7 @@ def main() -> int:
         "case_meta": {
             "patient_id": args.patient_id,
             "visit_id": args.visit_id,
+            "institute_id": args.institute_id,
             "tier": args.tier,
             "base_url": args.base_url,
             "started_at": run_started_iso,
@@ -660,6 +799,8 @@ def main() -> int:
                 "diagnosis_count": len(pg_snapshot.get("diagnosis") or []),
                 "surgery_count": len(pg_snapshot.get("mr_surgery") or []),
                 "cost_found": bool((pg_snapshot.get("mr_cost") or {})),
+                "institute_id": pg_snapshot.get("institute_id", ""),
+                "identity_error": pg_identity_error,
             },
         },
         "frontpage_mapping_checks": mapping_checks,

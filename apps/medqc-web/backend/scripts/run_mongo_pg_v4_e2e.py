@@ -17,7 +17,8 @@ import uuid
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import quote
 
 import requests
 from sqlalchemy.exc import ProgrammingError
@@ -432,6 +433,7 @@ def _run_persistence_checks(
     access_token: str,
     patient_id: str,
     visit_id_discharged: str,
+    institute_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     headers = {"Authorization": f"Bearer {access_token}"}
     details: Dict[str, Any] = {
@@ -511,33 +513,51 @@ def _run_persistence_checks(
         "settlement": settlement_before,
     }
 
+    # 正式首页读取：有可信机构号时按三坐标带上 institute_id（URL 编码消歧），
+    # 401/403/404/409/503 等失败即“正式首页不可用”——只记阻断错误并跳过首页质控，
+    # 绝不用 LLM 草稿 payload 顶替“正式首页”再统计持久化通过。
+    institute_key = str(institute_id).strip() if institute_id is not None else ""
+    sheet_query = f"?institute_id={quote(institute_key, safe='')}" if institute_key else ""
+    frontpage_sheet_url = (
+        f"{base_url.rstrip('/')}/api/medical-records/frontpage-sheet/"
+        f"{quote(str(patient_id), safe='')}/{quote(str(visit_id_discharged), safe='')}{sheet_query}"
+    )
+    frontpage_source_ok = False
+    details["frontpage_sheet_request"] = {"institute_id_applied": bool(sheet_query)}
     try:
         frontpage_sheet_resp = requests.get(
-            f"{base_url.rstrip('/')}/api/medical-records/frontpage-sheet/{patient_id}/{visit_id_discharged}",
+            frontpage_sheet_url,
             headers=headers,
             timeout=timeout,
         )
+        details["frontpage_sheet_request"]["status_code"] = frontpage_sheet_resp.status_code
         try:
             frontpage_sheet_payload = frontpage_sheet_resp.json()
         except Exception:
             frontpage_sheet_payload = {}
         if frontpage_sheet_resp.status_code >= 400:
-            warnings.append(f"frontpage-sheet 读取失败，首页持久化验收回退到 draft payload: HTTP {frontpage_sheet_resp.status_code}")
-            frontpage_sheet_payload = draft_frontpage
-        frontpage_qc_resp = requests.post(
-            f"{base_url.rstrip('/')}/api/v1/qc/formal-qc/validate",
-            headers=headers,
-            json={
-                "patient_id": patient_id,
-                "visit_id": visit_id_discharged,
-                "frontpage": frontpage_sheet_payload,
-            },
-            timeout=timeout,
-        )
-        frontpage_qc_payload = frontpage_qc_resp.json() if frontpage_qc_resp.content else {}
-        details["frontpage_persistence_response"] = frontpage_qc_payload
-        if frontpage_qc_resp.status_code >= 400:
-            blocking_errors.append(f"frontpage persistence 调用失败: HTTP {frontpage_qc_resp.status_code}")
+            blocking_errors.append(
+                f"正式首页读取失败（frontpage-sheet HTTP {frontpage_sheet_resp.status_code}）："
+                "不得以草稿顶替正式首页执行首页质控持久化验收"
+            )
+        elif not isinstance(frontpage_sheet_payload, dict) or not frontpage_sheet_payload:
+            blocking_errors.append("正式首页响应为空或非对象，无法执行首页质控持久化验收")
+        else:
+            frontpage_source_ok = True
+            frontpage_qc_resp = requests.post(
+                f"{base_url.rstrip('/')}/api/v1/qc/formal-qc/validate",
+                headers=headers,
+                json={
+                    "patient_id": patient_id,
+                    "visit_id": visit_id_discharged,
+                    "frontpage": frontpage_sheet_payload,
+                },
+                timeout=timeout,
+            )
+            frontpage_qc_payload = frontpage_qc_resp.json() if frontpage_qc_resp.content else {}
+            details["frontpage_persistence_response"] = frontpage_qc_payload
+            if frontpage_qc_resp.status_code >= 400:
+                blocking_errors.append(f"frontpage persistence 调用失败: HTTP {frontpage_qc_resp.status_code}")
     except Exception as exc:
         blocking_errors.append(f"frontpage persistence 调用失败: {exc}")
 
@@ -606,12 +626,13 @@ def _run_persistence_checks(
         if isinstance(details.get("settlement_persistence_response"), dict)
         else {}
     ) or {}
-    _assert_workflow(
-        workflow_key="frontpage persistence",
-        response_payload=frontpage_payload,
-        before=frontpage_before,
-        after=frontpage_after,
-    )
+    if frontpage_source_ok:
+        _assert_workflow(
+            workflow_key="frontpage persistence",
+            response_payload=frontpage_payload,
+            before=frontpage_before,
+            after=frontpage_after,
+        )
     _assert_workflow(
         workflow_key="coding persistence",
         response_payload=coding_payload,
@@ -634,34 +655,84 @@ def _run_persistence_checks(
     }
 
 
+def _resolve_pg_institute_key(
+    session: Any,
+    patient_id: str,
+    visit_id: str,
+    institute_id: Optional[str] = None,
+) -> Tuple[str, str]:
+    """确定 PG 首页断言要钉住的机构号（三坐标身份）。
+
+    - 显式机构号：直接采用，随后按 ``institute_id+patient_id+visit_id`` 精确读取；
+    - 缺机构号：仅当 patient_id+visit_id 的首页候选同属一家机构时采用该机构；
+      命中多机构必须拒绝猜首行（跨机构同号会拿到别家行）；
+    - 无候选：返回空机构号，由调用方把“无匹配”收口为阻断错误。
+
+    返回 ``(机构号, 问题描述)``；问题描述为空表示身份可用。
+    """
+
+    institute_key = str(institute_id).strip() if institute_id is not None else ""
+    if institute_key:
+        return institute_key, ""
+
+    rows = session.query(MedicalRecordFrontpage).filter_by(
+        patient_id=patient_id, visit_id=visit_id
+    ).all()
+    institutes = {str(getattr(row, "institute_id", "") or "").strip() for row in rows}
+    institutes.discard("")
+    if len(institutes) > 1:
+        return "", f"缺少机构号且首页候选跨 {len(institutes)} 家机构，拒绝猜首行"
+    if len(institutes) == 1:
+        return next(iter(institutes)), ""
+    return "", ""
+
+
 def _query_pg_assertions(
     patient_id: str,
     visit_id_discharged: str,
     visit_id_inpatient: str,
     automation_started_at: datetime,
+    institute_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     recent_from = automation_started_at.replace(microsecond=0)
     with SessionLocal() as session:
-        discharged_mr = session.query(MedicalRecordFrontpage).filter_by(
-            patient_id=patient_id,
-            visit_id=visit_id_discharged,
-        ).first()
-        inpatient_mr = session.query(MedicalRecordFrontpage).filter_by(
-            patient_id=patient_id,
-            visit_id=visit_id_inpatient,
-        ).first()
-        discharged_diag_count = session.query(Diagnosis).filter_by(
-            patient_id=patient_id,
-            visit_id=visit_id_discharged,
-        ).count()
-        discharged_surgery_count = session.query(MrSurgery).filter_by(
-            patient_id=patient_id,
-            visit_id=visit_id_discharged,
-        ).count()
-        discharged_cost = session.query(MrCost).filter_by(
-            patient_id=patient_id,
-            visit_id=visit_id_discharged,
-        ).first()
+        scope_institute, identity_error = _resolve_pg_institute_key(
+            session, patient_id, visit_id_discharged, institute_id
+        )
+
+        if identity_error:
+            # 身份不唯一：首页/费用不读，避免把别家行当本病例证据
+            discharged_mr, inpatient_mr, discharged_cost = None, None, None
+            discharged_diag_count, discharged_surgery_count = 0, 0
+        else:
+            def _scoped(model: Any, visit_id: str) -> Any:
+                query = session.query(model).filter_by(patient_id=patient_id, visit_id=visit_id)
+                if scope_institute:
+                    query = query.filter_by(institute_id=scope_institute)
+                return query
+
+            discharged_mr_rows = _scoped(MedicalRecordFrontpage, visit_id_discharged).all()
+            if len(discharged_mr_rows) > 1:
+                identity_error = (
+                    f"已出院首页三坐标命中 {len(discharged_mr_rows)} 行，无法确定唯一归属"
+                )
+                discharged_mr_rows = []
+            discharged_mr = discharged_mr_rows[0] if discharged_mr_rows else None
+            inpatient_mr_rows = _scoped(MedicalRecordFrontpage, visit_id_inpatient).all()
+            if len(inpatient_mr_rows) > 1:
+                identity_error = identity_error or (
+                    f"在院首页三坐标命中 {len(inpatient_mr_rows)} 行，无法确定唯一归属"
+                )
+                inpatient_mr_rows = []
+            inpatient_mr = inpatient_mr_rows[0] if inpatient_mr_rows else None
+            discharged_diag_count = _scoped(Diagnosis, visit_id_discharged).count()
+            discharged_surgery_count = _scoped(MrSurgery, visit_id_discharged).count()
+            discharged_cost_rows = _scoped(MrCost, visit_id_discharged).all()
+            if len(discharged_cost_rows) > 1:
+                identity_error = identity_error or (
+                    f"已出院费用行命中 {len(discharged_cost_rows)} 条，无法确定唯一归属"
+                )
+            discharged_cost = discharged_cost_rows[0] if len(discharged_cost_rows) == 1 else None
         settlement_main = session.query(MedicalInsuranceSettlement).filter_by(
             patient_id=patient_id,
             visit_id=visit_id_discharged,
@@ -722,6 +793,9 @@ def _query_pg_assertions(
     blocking_errors: List[str] = []
     warnings: List[str] = []
     observations: List[str] = []
+    if identity_error:
+        # 跨机构同号不得猜首行：身份不唯一时整条断言不可用，按阻断错误收口
+        blocking_errors.append(f"PG 首页身份不唯一：{identity_error}")
     if not discharged_mr:
         blocking_errors.append("PG 未落到已出院病例 mr 主表")
     if discharged_diag_count <= 0:
@@ -752,6 +826,8 @@ def _query_pg_assertions(
             "discharged_cost_found": bool(discharged_cost),
             "settlement_main_found": bool(settlement_main),
             "settlement_cost_count": settlement_cost_count,
+            "identity_institute_id": scope_institute,
+            "identity_error": identity_error,
         },
         "sync_status": sync_summary,
         "watermarks": watermark_summary,
@@ -910,6 +986,11 @@ def main() -> int:
     parser.add_argument("--api-password", default=os.getenv("DEMO_API_PASSWORD", ""), help="登录密码")
     parser.add_argument("--tier", default="all", choices=["tier1", "tier2", "tier3", "all"], help="同步层级")
     parser.add_argument("--timeout", type=int, default=20, help="HTTP 超时（秒）")
+    parser.add_argument(
+        "--institute-id",
+        default="",
+        help="可信病例机构号；非空时按三坐标追加 institute_id 读取正式首页（缺失则不编造机构）",
+    )
     parser.add_argument("--output-dir", default="reports/mongo_pg_v4", help="总控报告目录（相对 backend 根目录）")
     parser.add_argument("--skip-build", action="store_true", help="跳过 npm run build")
     parser.add_argument("--skip-verify-schema", action="store_true", help="跳过 npm run verify-schema")
@@ -1008,6 +1089,8 @@ def main() -> int:
         ]
         if args.api_token:
             e2e_command.extend(["--api-token", args.api_token])
+        if args.institute_id:
+            e2e_command.extend(["--institute-id", args.institute_id])
         if not args.no_generate_qc:
             e2e_command.append("--with-generate-qc")
         e2e_result = _run_command("run_case_e2e", e2e_command, BACKEND_ROOT)
@@ -1040,6 +1123,7 @@ def main() -> int:
                 access_token=access_token,
                 patient_id=args.patient_id,
                 visit_id_discharged=args.visit_id_discharged,
+                institute_id=args.institute_id,
             )
             blocking_errors.extend(persistence_checks["blocking_errors"])
             warnings.extend(persistence_checks["warnings"])
@@ -1058,6 +1142,7 @@ def main() -> int:
         visit_id_discharged=args.visit_id_discharged,
         visit_id_inpatient=args.visit_id_inpatient,
         automation_started_at=started_at,
+        institute_id=args.institute_id,
     )
     blocking_errors.extend(pg_assertions["blocking_errors"])
     warnings.extend(pg_assertions["warnings"])
@@ -1102,6 +1187,7 @@ def main() -> int:
             "visit_id_discharged": args.visit_id_discharged,
             "visit_id_inpatient": args.visit_id_inpatient,
             "tier": args.tier,
+            "institute_id": args.institute_id,
         },
         "preflight": {check.name: asdict(check) for check in preflight_checks},
         "commands": [asdict(result) for result in command_results],

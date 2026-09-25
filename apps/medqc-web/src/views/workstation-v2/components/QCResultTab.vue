@@ -306,6 +306,10 @@ import {
   exportDefects,
 } from '@/api/defects'
 import type { WorkstationSnapshotState } from '../types'
+import {
+  buildFormalFrontpageSheetUrl,
+  describeFormalFrontpageSheetError,
+} from '../workstationActions'
 
 interface QCIssue {
   id: string
@@ -328,6 +332,7 @@ const props = defineProps<{
   activeTab?: 'form' | 'coding' | 'cost'
   visitId?: string | null
   patientId?: string | null
+  instituteId?: string | null
   snapshotState?: Partial<Record<'form' | 'coding' | 'cost', WorkstationSnapshotState>>
 }>()
 
@@ -356,6 +361,8 @@ const costQCLoading = ref(false)
 const formAnalyzed = ref(false)
 const codingAnalyzed = ref(false)
 const costAnalyzed = ref(false)
+/** 当前就诊是否已成功读到服务端正式首页；草稿存在不代表可以执行正式首页质控。 */
+const officialFrontpageAvailable = ref(false)
 
 const qcTabs = [
   {
@@ -624,7 +631,7 @@ async function fetchCodingQCFromBackend() {
   const useVisitIdMode = !!props.visitId
   const fp = props.frontpage
 
-  if (!useVisitIdMode && !fp) return { issues: [], persistence: null }
+  if (!useVisitIdMode && !fp) return { issues: [], persistence: null, degraded: false, failed: true }
 
   let payload: any
   if (useVisitIdMode) {
@@ -671,7 +678,10 @@ async function fetchCodingQCFromBackend() {
   const executeRequest = async (requestPayload: Record<string, any>, timeout = 30000) => {
     const resp = await apiClient.post('/api/v1/qc/coding-qc/check', requestPayload, { timeout })
     const data = resp.data?.data
-    if (!data) return { issues: [], persistence: null, degraded: false }
+    if (!data) throw new Error('编码质控响应缺少数据体')
+    if (!Array.isArray(data.rule_issues) || !Array.isArray(data.llm_issues)) {
+      throw new Error('编码质控响应 issues 字段异常')
+    }
 
     const codingIssues: QCIssue[] = []
     let idx = 0
@@ -713,6 +723,7 @@ async function fetchCodingQCFromBackend() {
       issues: codingIssues,
       persistence: data.persistence || null,
       degraded: Boolean(requestPayload.skip_llm),
+      failed: false,
     }
   }
 
@@ -731,11 +742,12 @@ async function fetchCodingQCFromBackend() {
         return degradedResult
       } catch (retryErr) {
         console.error('后端编码质控降级调用失败', retryErr)
-        return { issues: [], persistence: null, degraded: false }
+        return { issues: [], persistence: null, degraded: false, failed: true }
       }
     }
     console.error('后端编码质控调用失败', err)
-    return { issues: [], persistence: null, degraded: false }
+    // 非超时失败不得伪装成无问题：交给调用方按失败处理，不标记已分析。
+    return { issues: [], persistence: null, degraded: false, failed: true }
   }
 }
 
@@ -747,7 +759,8 @@ async function fetchFrontpageQCFromBackend(frontpage: Record<string, any>) {
   }
   const resp = await apiClient.post('/api/v1/qc/formal-qc/validate', payload, { timeout: 30000 })
   const data = resp.data?.data
-  if (!data) return { issues: [], persistence: null, passed: 0, total: 0 }
+  if (!data) throw new Error('首页质控响应缺少数据体')
+  if (!Array.isArray(data.results)) throw new Error('首页质控响应 results 字段异常')
 
   const issues: QCIssue[] = (data.results || []).map((item: any, index: number) => ({
     id: `form-${index + 1}`,
@@ -770,7 +783,8 @@ async function fetchFrontpageQCFromBackend(frontpage: Record<string, any>) {
 
 async function fetchCostQCFromBackend() {
   if (!props.visitId || !props.patientId) {
-    return { issues: [], persistence: null, passed: 0, total: 0 }
+    // 缺少就诊标识时根本没执行结算质控，不能返回一个可被当成“已分析”的空结果。
+    return { issues: [], persistence: null, passed: 0, total: 0, failed: true }
   }
 
   const urls = [
@@ -800,6 +814,7 @@ async function fetchCostQCFromBackend() {
         persistence: data.persistence || null,
         passed: Number(data.summary?.passed || 0),
         total: Number(data.summary?.total || 0),
+        failed: false,
       }
     } catch (err: any) {
       lastError = err
@@ -809,79 +824,136 @@ async function fetchCostQCFromBackend() {
   throw lastError
 }
 
-async function loadFrontpageData(): Promise<Record<string, any> | null> {
-  if (props.visitId && props.patientId) {
-    try {
-      const resp = await apiClient.get(
-        `/api/medical-records/frontpage-sheet/${props.patientId}/${props.visitId}`,
-      )
-      if (resp.data) return resp.data
-    } catch (err: any) {
-      if (err?.response?.status !== 404) {
-        console.warn('从 PG 读取首页数据失败，回退到 LLM 草稿:', err)
-      }
+interface FormalFrontpageLoad {
+  frontpage: Record<string, any> | null
+  error: string | null
+}
+
+/**
+ * 只读正式首页：读取失败（含 404/409/503）一律失败关闭，不退回 `props.frontpage` 草稿。
+ * 正式质控随后会把结果落成 `frontpage_formal_qc`，用草稿顶替等于把草稿声明成正式首页。
+ */
+async function loadFormalFrontpage(): Promise<FormalFrontpageLoad> {
+  // 先降级再请求：同一就诊先前读到正式首页、后续 GET 失败（404/409/503）时，
+  // 不能保留上一次成功留下的可用标记，否则 refreshSeed 自动刷新会反复重跑并弹告警。
+  officialFrontpageAvailable.value = false
+  if (!props.patientId || !props.visitId) {
+    return { frontpage: null, error: '缺少患者或就诊标识，无法读取正式首页' }
+  }
+  try {
+    const resp = await apiClient.get(
+      buildFormalFrontpageSheetUrl(props.patientId, props.visitId, props.instituteId),
+    )
+    const frontpage = resp.data ?? null
+    officialFrontpageAvailable.value = Boolean(frontpage)
+    if (frontpage) return { frontpage, error: null }
+    return { frontpage: null, error: '未找到正式首页数据，无法执行首页质控' }
+  } catch (err) {
+    // 正式源读取失败必须失败关闭：不得回退到 LLM 草稿，否则草稿会被落成 frontpage_formal_qc。
+    return {
+      frontpage: null,
+      error: describeFormalFrontpageSheetError(err, '读取正式首页数据失败'),
     }
   }
-  return props.frontpage || null
+}
+
+/**
+ * 某个质控分段失败时本次没有该分段结果：必须清掉上一次的旧结果并同步给上游，
+ * 否则概览计数、页签徽标与面板会把旧结果当成本次结论。其它分段结果与本次失败无关，保持不动。
+ */
+function dropCategoryIssues(category: 'form' | 'coding' | 'cost') {
+  const kept = issues.value.filter((issue) => issue.category !== category)
+  if (kept.length === issues.value.length) return
+  issues.value = kept
+  emit('issues-change', kept.slice())
 }
 
 async function runFormQC() {
-  const fpData = await loadFrontpageData()
-  if (!fpData) return
+  const loaded = await loadFormalFrontpage()
+  if (!loaded.frontpage) {
+    // 正式首页不可得：失败关闭，绝不用草稿或空首页执行并落库正式首页质控。
+    dropCategoryIssues('form')
+    formAnalyzed.value = false
+    message.error(loaded.error || '读取正式首页数据失败')
+    return
+  }
 
   formQCLoading.value = true
+  let succeeded = false
   try {
-    const result = await fetchFrontpageQCFromBackend(fpData)
+    const result = await fetchFrontpageQCFromBackend(loaded.frontpage)
     const kept = issues.value.filter((i) => i.category !== 'form')
     kept.push(...result.issues)
     issues.value = kept
     emit('issues-change', kept.slice())
     message.success(buildPersistenceMessage('form', result.persistence))
     notifyPersistence('form', result.persistence)
+    succeeded = true
   } catch (err) {
     console.error('首页质控引擎异常', err)
+    // 本次没有产生首页结果：清掉上一次的 form 旧结果，避免被当成本次结论。
+    dropCategoryIssues('form')
     message.error('首页质控执行失败')
   } finally {
     formQCLoading.value = false
-    formAnalyzed.value = true
+    // 仅成功才算已分析，否则会渲染成绿色的未发现质控问题假通过。
+    formAnalyzed.value = succeeded
   }
 }
 
 async function runCodingQC() {
   codingQCLoading.value = true
+  let succeeded = false
   try {
-    const kept = issues.value.filter((i) => i.category !== 'coding')
     const result = await fetchCodingQCFromBackend()
+    if (result.failed) {
+      // 编码引擎调用失败：本次没有编码结果，清掉旧结果并失败关闭，不能显示成未发现问题。
+      dropCategoryIssues('coding')
+      message.error('编码质控执行失败')
+      return
+    }
+    const kept = issues.value.filter((i) => i.category !== 'coding')
     kept.push(...result.issues)
     issues.value = kept
     emit('issues-change', kept.slice())
     message.success(buildPersistenceMessage('coding', result.persistence))
     notifyPersistence('coding', result.persistence)
+    succeeded = true
   } catch (err) {
     console.error('编码质控异常', err)
+    dropCategoryIssues('coding')
     message.error('编码质控执行失败')
   } finally {
     codingQCLoading.value = false
-    codingAnalyzed.value = true
+    codingAnalyzed.value = succeeded
   }
 }
 
 async function runCostQC() {
   costQCLoading.value = true
+  let succeeded = false
   try {
-    const kept = issues.value.filter((i) => i.category !== 'cost')
     const result = await fetchCostQCFromBackend()
+    if (result.failed) {
+      // 结算质控没有真正执行：清掉旧结果并失败关闭，不能显示成未发现问题。
+      dropCategoryIssues('cost')
+      message.error('控费监测执行失败')
+      return
+    }
+    const kept = issues.value.filter((i) => i.category !== 'cost')
     kept.push(...result.issues)
     issues.value = kept
     emit('issues-change', kept.slice())
     message.success(buildPersistenceMessage('cost', result.persistence))
     notifyPersistence('cost', result.persistence)
+    succeeded = true
   } catch (err) {
     console.error('控费监测异常', err)
+    dropCategoryIssues('cost')
     message.error('控费监测执行失败')
   } finally {
     costQCLoading.value = false
-    costAnalyzed.value = true
+    costAnalyzed.value = succeeded
   }
 }
 
@@ -889,41 +961,51 @@ async function runAllQC() {
   formQCLoading.value = true
   codingQCLoading.value = true
   costQCLoading.value = true
+  let succeeded = false
   try {
-    const fpData = await loadFrontpageData()
-    if (!fpData) {
-      issues.value = []
-      emit('issues-change', [])
-      return
-    }
+    const loaded = await loadFormalFrontpage()
     const [formResult, codingResult, costResult] = await Promise.all([
-      fetchFrontpageQCFromBackend(fpData),
+      loaded.frontpage ? fetchFrontpageQCFromBackend(loaded.frontpage) : Promise.resolve(null),
       fetchCodingQCFromBackend(),
       fetchCostQCFromBackend(),
     ])
     const newIssues: QCIssue[] = [
-      ...formResult.issues,
+      ...(formResult?.issues || []),
       ...codingResult.issues,
       ...costResult.issues,
     ]
     issues.value = newIssues
     emit('issues-change', newIssues.slice())
-    notifyPersistence('form', formResult.persistence)
-    notifyPersistence('coding', codingResult.persistence)
-    notifyPersistence('cost', costResult.persistence)
-    message.success('全部质控执行完成，结果已保存')
+    // 每段按各自是否产出结果标记：失败的编码段不能被记成已分析，否则会渲染成假通过。
+    formAnalyzed.value = Boolean(formResult)
+    codingAnalyzed.value = !codingResult.failed
+    costAnalyzed.value = !costResult.failed
+    if (formResult) {
+      notifyPersistence('form', formResult.persistence)
+    } else {
+      message.warning(loaded.error || '读取正式首页数据失败')
+    }
+    // 只有真正执行过的分段才向上游声明已完成，失败的段落不能写入快照。
+    if (!codingResult.failed) notifyPersistence('coding', codingResult.persistence)
+    if (!costResult.failed) notifyPersistence('cost', costResult.persistence)
+    if (formResult) message.success('全部质控执行完成，结果已保存')
+    succeeded = true
   } catch (error) {
     console.error('质控引擎执行异常', error)
     issues.value = []
     emit('issues-change', [])
+    formAnalyzed.value = false
     message.error('全部质控执行失败')
   } finally {
     formQCLoading.value = false
     codingQCLoading.value = false
     costQCLoading.value = false
-    formAnalyzed.value = true
-    codingAnalyzed.value = true
-    costAnalyzed.value = true
+    if (!succeeded) {
+      // 整体失败时本次没有任何可用结果：三段都必须回到未分析态，不能假通过。
+      formAnalyzed.value = false
+      codingAnalyzed.value = false
+      costAnalyzed.value = false
+    }
   }
 }
 
@@ -954,6 +1036,7 @@ watch(
 watch(
   () => props.visitId,
   () => {
+    officialFrontpageAvailable.value = false
     formAnalyzed.value = false
     codingAnalyzed.value = false
     costAnalyzed.value = false
@@ -974,7 +1057,8 @@ watch(
 watch(
   () => props.refreshSeed,
   () => {
-    if (props.frontpage) runAllQC()
+    // 自动刷新只对已读到正式首页的就诊生效：正式源读取失败时不再反复重跑并弹告警。
+    if (props.frontpage && officialFrontpageAvailable.value) runAllQC()
   },
 )
 </script>
