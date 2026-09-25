@@ -45,6 +45,7 @@ export async function requestCodingQc(record: PatientRecord) {
   const { data } = await apiClient.post('/api/v1/qc/coding-qc/check', {
     visit_id: record.visitId || record.id,
     patient_id: record.patientId,
+    institute_id: record.instituteId || null,
   })
   if (data?.success === false) {
     throw new Error(String(data?.error || data?.message || '编码质控执行失败'))

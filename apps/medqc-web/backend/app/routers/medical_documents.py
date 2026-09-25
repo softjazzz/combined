@@ -10,6 +10,7 @@ from ..core.response import success_response, get_trace_id, ErrorCode, StatusCod
 from ..services.records_ingest_service import get_classification_mapping
 from ..services.qc_service import QCService
 from ..core.security import get_current_user
+from ..core.permissions import require_permission, ResourceType, PermissionAction
 from ..core.settings import get_settings
 
 logger = logging.getLogger(__name__)
@@ -535,7 +536,10 @@ async def analyze_medical_document(request: Request, document_id: str, current_u
 
 
 @router.get("/medical-documents/{document_id}/qc-results")
-async def get_document_qc_results(request: Request, document_id: str):
+@require_permission(ResourceType.QC_RESULTS, PermissionAction.READ)
+async def get_document_qc_results(
+    request: Request, document_id: str, current_user: dict = Depends(get_current_user)
+):
     """获取文书质控结果，从 PG qc_results 表读取"""
     sb = get_supabase()
     if sb is None:
@@ -547,6 +551,6 @@ async def get_document_qc_results(request: Request, document_id: str):
         data = list(getattr(resp, 'data', None) or [])
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"查询质控结果失败: {str(e)}")
-    if not data:
+    if not data or data[0].get("identity_version") is not None:
         raise HTTPException(status_code=404, detail="质控结果不存在")
     return success_response(data=data[0], trace_id=get_trace_id(request))

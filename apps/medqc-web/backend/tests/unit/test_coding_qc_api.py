@@ -21,14 +21,27 @@ class TestCodingQCAPI:
     """编码质控 API 端点集成测试。"""
 
     @pytest.fixture(autouse=True)
-    def setup(self):
-        """初始化 TestClient + Mock 引擎。"""
+    def setup(self, monkeypatch):
+        """初始化 TestClient；队列与结果写入仅在内存中模拟。"""
         from app.main import app
-        from app.core.security import create_access_token
+        from app.core import access_control
+        from app.routers import qc as qc_router
 
-        token = create_access_token({"sub": "admin@medqc.com"})
+        queue = MagicMock()
+        queue.start_run.return_value = "coding-test-run"
+        monkeypatch.setattr(qc_router, "default_workflow_queue_state_service", queue)
+        monkeypatch.setattr(
+            qc_router.default_qc_persistence_service,
+            "persist_analysis",
+            AsyncMock(return_value={"qc_result_id": "coding-test-result"}),
+        )
+
+        user = {
+            "id": "coding-test-user", "email": "admin@medqc.com", "roles": ["admin"]
+        }
+        monkeypatch.setattr(access_control, "resolve_current_user_from_token", lambda _: user)
         self.client = TestClient(app)
-        self.client.headers.update({"Authorization": f"Bearer {token}"})
+        self.client.headers.update({"Authorization": "Bearer coding-test-token"})
         self.base_url = "/api/v1/qc/coding-qc/check"
 
     # -- 基本功能测试 --
@@ -59,6 +72,7 @@ class TestCodingQCAPI:
         """编码质控复用核心客户端时，应带业务场景和三坐标哈希上下文。"""
         from app.services.coding_qc_service import CodingQCEngine
         from app.services.llm_observability import current_llm_observation_context
+        from app.routers import qc as qc_router
 
         captured = {}
         frontpage = {
@@ -72,6 +86,12 @@ class TestCodingQCAPI:
                 return await CodingQCEngine(llm_client=None).run_all(received_frontpage)
 
         with (
+            patch(
+                "app.routers.qc._resolve_coding_qc_identity",
+                return_value=qc_router.CodingQcIdentity(
+                    "hospital-observe", "patient-observe", "visit-observe"
+                ),
+            ),
             patch("app.routers.qc._load_frontpage_from_pg", return_value=frontpage),
             patch("app.routers.qc._get_coding_qc_engine", return_value=_CapturingEngine()),
         ):

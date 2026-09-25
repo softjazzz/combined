@@ -1,6 +1,7 @@
 import uuid
 import json
 import re
+from dataclasses import dataclass
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 
@@ -19,7 +20,10 @@ from ..core.permissions import (
     PermissionAction,
     UserRole,
 )
-from ..services.qc_persistence_service import default_qc_persistence_service
+from ..services.qc_persistence_service import (
+    VerifiedQCIdentity,
+    default_qc_persistence_service,
+)
 from ..services.workflow_queue_state_service import default_workflow_queue_state_service
 from ..services.llm_observability import llm_observation_context
 from ..services.sc_rule_launch_tier import (
@@ -147,13 +151,22 @@ def _build_formal_qc_persistence_result(
 
 
 def _build_coding_qc_persistence_result(
-    payload: Dict[str, Any], report: Dict[str, Any], semantic_completed: bool = False
+    payload: Dict[str, Any],
+    report: Dict[str, Any],
+    semantic_completed: bool = False,
+    identity: Optional["CodingQcIdentity"] = None,
 ) -> Dict[str, Any]:
-    patient_id = str(payload.get("patient_id") or "")
-    visit_id = str(payload.get("visit_id") or "")
-    frontpage = payload.get("frontpage") if isinstance(payload.get("frontpage"), dict) else {}
-    if not patient_id:
-        patient_id = _extract_frontpage_value(frontpage, ("basic_info", "patient_id"), "patient_id")
+    if identity is not None:
+        # 现代身份：结果与 metadata 一律回填服务端解析出的三坐标，与 verified_identity 一致。
+        patient_id = identity.patient_id
+        visit_id = identity.visit_id
+    else:
+        # 旧手工 frontpage 模式：沿用请求体坐标，且不构成已验证身份。
+        patient_id = str(payload.get("patient_id") or "")
+        visit_id = str(payload.get("visit_id") or "")
+        frontpage = payload.get("frontpage") if isinstance(payload.get("frontpage"), dict) else {}
+        if not patient_id:
+            patient_id = _extract_frontpage_value(frontpage, ("basic_info", "patient_id"), "patient_id")
     total_issues = int(report.get("total_issues") or 0)
     issues = [
         _coding_issue_to_persistence_issue(item, "coding_rule")
@@ -174,6 +187,8 @@ def _build_coding_qc_persistence_result(
         "data_source": "coding_qc",
         "trigger_source": "workstation_v4",
     }
+    if identity is not None:
+        metadata["institute_id"] = identity.institute_id
     if semantic_completed:
         metadata["executed_defect_scope"] = {"kind": "all"}
     return {
@@ -384,7 +399,8 @@ async def get_result(record_id: str, current_user: dict = Depends(get_current_us
         data = list(getattr(resp, 'data', None) or [])
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"查询质控结果失败: {str(e)}")
-    if not data:
+    if not data or data[0].get("identity_version") is not None:
+        # 现代结果按三坐标身份落库，旧单坐标端点不得认领，避免跨身份读取。
         raise HTTPException(
             status_code=StatusCode.NOT_FOUND,
             detail="质控结果不存在"
@@ -620,7 +636,8 @@ async def delete_rule(request: Request, rule_id: str, current_user: dict = Depen
 
 
 @router.get("/history")
-async def get_history(request: Request):
+@require_permission(ResourceType.QC_RESULTS, PermissionAction.READ)
+async def get_history(request: Request, current_user: dict = Depends(get_current_user)):
     """获取质控历史，从 PG qc_results 表读取"""
     sb = get_supabase()
     if sb is None:
@@ -629,9 +646,11 @@ async def get_history(request: Request):
         resp = await async_execute(
             sb.table('qc_results').select('*').order('created_at', desc=True).limit(100)
         )
-        items = list(getattr(resp, 'data', None) or [])
+        rows = list(getattr(resp, 'data', None) or [])
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"查询历史失败: {str(e)}")
+    # 旧历史端点不返回现代三坐标结果；旧表无 identity_version 列时按旧行保留。
+    items = [row for row in rows if row.get("identity_version") is None]
     return success_response(
         data={
             "items": items,
@@ -896,7 +915,91 @@ def _get_coding_qc_engine() -> CodingQCEngine:
     return _coding_qc_engine
 
 
+class CodingQcIdentityAmbiguousError(RuntimeError):
+    """同一就诊在三坐标上存在多个候选，无法确定唯一病例身份。"""
+
+
+class CodingQcSourceUnavailableError(RuntimeError):
+    """编码质控取数依赖的数据库不可用或读取失败。"""
+
+
+@dataclass(frozen=True)
+class CodingQcIdentity:
+    """编码质控被分析数据的唯一三坐标。"""
+
+    institute_id: str
+    patient_id: str
+    visit_id: str
+
+
+def _has_evaluable_coding_data(frontpage: Dict[str, Any]) -> bool:
+    """是否存在可供规则层判定的诊断/手术编码数据。"""
+    diagnoses = frontpage.get("diagnoses")
+    surgeries = frontpage.get("surgeries")
+    if isinstance(diagnoses, list) and diagnoses:
+        return True
+    if isinstance(surgeries, list) and surgeries:
+        return True
+    return False
+
+
+def _resolve_coding_qc_identity(
+    patient_id: Optional[str],
+    visit_id: str,
+    institute_id: Optional[str] = None,
+) -> Optional[CodingQcIdentity]:
+    """
+    在编码质控唯一权威表 ``cdm.mr`` 上确立被分析数据的三坐标。
+
+    - 权威来源只有 cdm.mr，与落库侧的“唯一 cdm.mr 行”合同一致；诊断/手术/费用表不参与定身份。
+    - 显式机构：按机构精确匹配，只在候选为空时判定缺失。
+    - 未给机构：只允许唯一候选推断；多个机构同时命中时报歧义，不猜机构。
+    - 同一三坐标出现重复行、或候选三坐标不完整（缺机构/缺患者）时一律拒绝，不降级猜测。
+    """
+    from sqlalchemy.orm import Session
+    from ..database.connection import engine as db_engine
+    from ..database.models.cdm import MedicalRecordFrontpage
+
+    visit_key = str(visit_id or "").strip()
+    if not visit_key:
+        return None
+    patient_key = str(patient_id or "").strip()
+    institute_key = str(institute_id or "").strip()
+
+    try:
+        with Session(db_engine) as session:
+            query = session.query(
+                MedicalRecordFrontpage.institute_id,
+                MedicalRecordFrontpage.patient_id,
+            ).filter(MedicalRecordFrontpage.visit_id == visit_key)
+            if patient_key:
+                query = query.filter(MedicalRecordFrontpage.patient_id == patient_key)
+            if institute_key:
+                query = query.filter(MedicalRecordFrontpage.institute_id == institute_key)
+            rows = query.limit(2).all()
+    except Exception as exc:
+        # 不把底层 DSN/驱动细节暴露给调用方与队列状态。
+        logger.warning("编码质控三坐标解析失败: 编码来源读取异常")
+        raise CodingQcSourceUnavailableError("编码质控数据读取失败") from exc
+
+    candidates = [
+        (str(row[0] or "").strip(), str(row[1] or "").strip())
+        for row in rows
+    ]
+    if not candidates:
+        return None
+    if len(candidates) > 1:
+        # 同 visit 命中不同病例（或同三坐标重复行）时拒绝，交由调用方要求显式机构。
+        raise CodingQcIdentityAmbiguousError("编码质控病例身份不唯一")
+    resolved_institute_id, resolved_patient_id = candidates[0]
+    if not resolved_institute_id or not resolved_patient_id:
+        # 三坐标缺一不可：空机构/空患者无法构成可核验身份，禁止当作可写入身份。
+        raise CodingQcIdentityAmbiguousError("编码质控病例身份不完整")
+    return CodingQcIdentity(resolved_institute_id, resolved_patient_id, visit_key)
+
+
 @router.post("/coding-qc/check")
+@require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.ANALYZE)
 async def check_coding_qc(
     request: Request,
     payload: Dict[str, Any],
@@ -910,53 +1013,92 @@ async def check_coding_qc(
        {"visit_id": "xxx", "patient_id": "xxx"}
     2. frontpage 模式（兼容旧版）：前端手动传入首页数据
        {"frontpage": { ... 首页数据字典 ... }}
+
+    visit_id 模式下取数、队列状态、结果写入与模型观测共用同一个服务端解析身份
+    （唯一权威表 cdm.mr）；客户端坐标不作为身份依据。
     """
     visit_id = payload.get("visit_id")
     patient_id = payload.get("patient_id")
     skip_llm = payload.get("skip_llm", False)
     user_id = _current_user_id(current_user)
     run_id: Optional[str] = None
-
-    visit_id_for_state = str(visit_id or "").strip()
-    if visit_id_for_state:
-        run_id = default_workflow_queue_state_service.start_run(
-            workflow_type="coding_qc",
-            visit_id=visit_id_for_state,
-            patient_id=str(patient_id or "") or None,
-            user_id=user_id,
-        )
+    identity: Optional[CodingQcIdentity] = None
 
     try:
         if visit_id:
-            # === 从 PG 直接读取诊断和手术数据 ===
-            frontpage = _load_frontpage_from_pg(patient_id, visit_id)
+            # === 1) 服务端以 cdm.mr 为唯一权威确立三坐标 ===
+            try:
+                identity = _resolve_coding_qc_identity(
+                    patient_id, visit_id, payload.get("institute_id")
+                )
+            except CodingQcIdentityAmbiguousError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="编码质控病例身份无法唯一确定，请核对机构号后重试",
+                ) from exc
+            except CodingQcSourceUnavailableError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="编码质控数据读取失败，请稍后重试",
+                ) from exc
+            if identity is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="未找到该就诊的编码数据，无法执行编码质控",
+                )
+
+            # === 2) 队列以现代身份启动：source_key + 三坐标，不再用请求体 visit ===
+            run_id = default_workflow_queue_state_service.start_run(
+                workflow_type="coding_qc",
+                visit_id=identity.visit_id,
+                patient_id=identity.patient_id,
+                institute_id=identity.institute_id,
+                source_key="coding_qc",
+                user_id=user_id,
+            )
+
+            # === 3) 取数与后续判定一律使用同一解析身份 ===
+            try:
+                frontpage = _load_frontpage_from_pg(identity)
+            except CodingQcSourceUnavailableError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="编码质控数据读取失败，请稍后重试",
+                ) from exc
             if not frontpage:
-                if run_id and visit_id_for_state:
-                    default_workflow_queue_state_service.finish_success(
-                        workflow_type="coding_qc",
-                        visit_id=visit_id_for_state,
-                        run_id=run_id,
-                        user_id=user_id,
-                    )
-                return success_response(
-                    data={"total_issues": 0, "errors": 0, "warnings": 0, "infos": 0,
-                          "rule_issues": [], "llm_issues": [], "overall_assessment": "通过"},
-                    message="编码质控完成：该患者无诊断/手术编码数据",
-                    trace_id=get_trace_id(request),
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="未找到该就诊的编码数据，无法执行编码质控",
+                )
+            if not _has_evaluable_coding_data(frontpage):
+                # 没有可判定的编码事实时，不允许以“通过”结束。
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="该就诊无可评估的诊断/手术编码数据，无法执行编码质控",
                 )
         else:
-            # === 兼容旧版：从请求体读取 ===
+            # === 兼容旧版：从请求体读取（客户端自带数据不构成已验证身份） ===
             frontpage = payload.get("frontpage") or payload
 
         engine = _get_coding_qc_engine()
 
+        # 观测上下文记录的是服务端解析身份；旧手工模式无已验证身份，才退回请求体坐标。
+        observation_identity = (
+            identity
+            if identity is not None
+            else CodingQcIdentity(
+                str(payload.get("institute_id") or ""),
+                str(patient_id or ""),
+                str(visit_id or ""),
+            )
+        )
         with llm_observation_context(
             business_scene="coding_qc",
             root_job_id=run_id or get_trace_id(request),
             record_identity=(
-                str(payload.get("institute_id") or ""),
-                str(patient_id or ""),
-                str(visit_id or ""),
+                observation_identity.institute_id,
+                observation_identity.patient_id,
+                observation_identity.visit_id,
             ),
             executor_key="coding_qc_engine",
         ):
@@ -967,18 +1109,34 @@ async def check_coding_qc(
                 report = await engine.run_all(frontpage)
         report_dict = report.to_dict()
         persistence_result = _build_coding_qc_persistence_result(
-            payload, report_dict, semantic_completed=report.semantic_completed
+            payload,
+            report_dict,
+            semantic_completed=report.semantic_completed,
+            identity=identity,
         )
         persistence = await default_qc_persistence_service.persist_analysis(
             persistence_result,
             actor=current_user,
+            verified_identity=(
+                VerifiedQCIdentity(
+                    identity.institute_id,
+                    identity.patient_id,
+                    identity.visit_id,
+                    "coding_qc",
+                )
+                if identity is not None
+                else None
+            ),
         )
 
-        if run_id and visit_id_for_state:
+        if run_id and identity is not None:
             default_workflow_queue_state_service.finish_success(
                 workflow_type="coding_qc",
-                visit_id=visit_id_for_state,
+                visit_id=identity.visit_id,
                 run_id=run_id,
+                source_key="coding_qc",
+                patient_id=identity.patient_id,
+                institute_id=identity.institute_id,
                 user_id=user_id,
             )
 
@@ -991,19 +1149,40 @@ async def check_coding_qc(
             trace_id=get_trace_id(request),
         )
     except Exception as exc:
-        if run_id and visit_id_for_state:
+        public_error = (
+            exc
+            if isinstance(exc, HTTPException)
+            else HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="编码质控执行或结果保存失败，请稍后重试",
+            )
+        )
+        if run_id and identity is not None:
             default_workflow_queue_state_service.finish_failed(
                 workflow_type="coding_qc",
-                visit_id=visit_id_for_state,
+                visit_id=identity.visit_id,
                 run_id=run_id,
-                error_message=str(exc),
+                source_key="coding_qc",
+                patient_id=identity.patient_id,
+                institute_id=identity.institute_id,
+                error_message=str(public_error.detail),
                 user_id=user_id,
             )
-        raise
+        if isinstance(exc, HTTPException):
+            raise
+        raise public_error from exc
 
 
-def _load_frontpage_from_pg(patient_id: Optional[str], visit_id: str) -> Optional[Dict[str, Any]]:
-    """从 PG 数据库直接读取诊断和手术编码数据，组装为质控引擎所需的 frontpage 格式。"""
+def _load_frontpage_from_pg(
+    identity: CodingQcIdentity,
+) -> Optional[Dict[str, Any]]:
+    """
+    从 PG 数据库直接读取诊断和手术编码数据，组装为质控引擎所需的 frontpage 格式。
+
+    只接受调用方已解析的唯一三坐标（见 ``_resolve_coding_qc_identity``），本函数不再二次定身份。
+    首页、诊断（含 mr_diagnosis 兜底）、手术、费用一律按同一三坐标读取，避免跨机构混读；
+    数据库读取失败按“取数不可用”抛出，绝不返回 None 让调用方按“通过”收尾。
+    """
     from sqlalchemy import text
     from sqlalchemy.orm import Session
     from ..database.connection import engine as db_engine
@@ -1011,47 +1190,39 @@ def _load_frontpage_from_pg(patient_id: Optional[str], visit_id: str) -> Optiona
         MedicalRecordFrontpage, Diagnosis, MrCost, MrSurgery
     )
 
+    coordinates = {
+        "institute_id": identity.institute_id,
+        "patient_id": identity.patient_id,
+        "visit_id": identity.visit_id,
+    }
+
     try:
         with Session(db_engine) as session:
             # 查询首页基本信息
-            fp_query = session.query(MedicalRecordFrontpage).filter_by(visit_id=visit_id)
-            if patient_id:
-                fp_query = fp_query.filter_by(patient_id=patient_id)
-            fp = fp_query.first()
+            fp = session.query(MedicalRecordFrontpage).filter_by(**coordinates).first()
 
             # 查询诊断列表
-            diag_query = session.query(Diagnosis).filter_by(visit_id=visit_id)
-            if patient_id:
-                diag_query = diag_query.filter_by(patient_id=patient_id)
-            diag_rows = diag_query.all()
+            diag_rows = session.query(Diagnosis).filter_by(**coordinates).all()
 
             if not diag_rows:
                 mr_diag_sql = (
                     "SELECT * FROM mr_diagnosis "
-                    "WHERE visit_id = :visit_id "
+                    "WHERE institute_id = :institute_id "
+                    "AND patient_id = :patient_id "
+                    "AND visit_id = :visit_id "
                     "AND COALESCE(is_deleted, '0') <> '1' "
+                    "ORDER BY diagnosis_id"
                 )
-                mr_diag_params: Dict[str, Any] = {"visit_id": visit_id}
-                if patient_id:
-                    mr_diag_sql += "AND patient_id = :patient_id "
-                    mr_diag_params["patient_id"] = patient_id
-                mr_diag_sql += "ORDER BY diagnosis_id"
                 diag_rows = [
                     dict(row)
-                    for row in session.execute(text(mr_diag_sql), mr_diag_params).mappings().all()
+                    for row in session.execute(text(mr_diag_sql), coordinates).mappings().all()
                 ]
 
             # 查询手术列表
-            surg_query = session.query(MrSurgery).filter_by(visit_id=visit_id)
-            if patient_id:
-                surg_query = surg_query.filter_by(patient_id=patient_id)
-            surg_rows = surg_query.all()
+            surg_rows = session.query(MrSurgery).filter_by(**coordinates).all()
 
             # 查询费用信息，供病理诊断费一致性规则使用
-            cost_query = session.query(MrCost).filter_by(visit_id=visit_id)
-            if patient_id:
-                cost_query = cost_query.filter_by(patient_id=patient_id)
-            cost = cost_query.first()
+            cost = session.query(MrCost).filter_by(**coordinates).first()
 
             if not fp and not diag_rows and not surg_rows:
                 return None
@@ -1175,6 +1346,7 @@ def _load_frontpage_from_pg(patient_id: Optional[str], visit_id: str) -> Optiona
                 "clinical_summary": "",
             }
 
-    except Exception as e:
-        logger.warning(f"从 PG 读取编码质控数据失败: {e}")
-        return None
+    except Exception as exc:
+        # 取数失败按不可用上报（调用方转 503），不返回 None 让上层误判为“通过”。
+        logger.warning("从 PG 读取编码质控数据失败: 编码来源读取异常")
+        raise CodingQcSourceUnavailableError("编码质控数据读取失败") from exc

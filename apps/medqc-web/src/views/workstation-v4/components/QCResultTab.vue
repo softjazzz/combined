@@ -299,6 +299,7 @@ const props = defineProps<{
   activeTab?: 'form' | 'coding' | 'cost'
   visitId?: string | null
   patientId?: string | null
+  instituteId?: string | null
   snapshotState?: Partial<Record<'form' | 'coding' | 'cost', WorkstationSnapshotState>>
 }>()
 
@@ -580,6 +581,7 @@ async function fetchCodingQCFromBackend() {
     payload = {
       visit_id: props.visitId,
       patient_id: props.patientId || '',
+      institute_id: props.instituteId || null,
     }
   } else {
     const diagnoses = fp!.diagnoses || {}

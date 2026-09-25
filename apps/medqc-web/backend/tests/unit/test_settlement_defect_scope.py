@@ -41,16 +41,25 @@ async def test_both_qc_endpoints_omit_close_scope_even_with_complete_reports(mon
     queue.start_run.return_value = "run-1"
     monkeypatch.setattr(route, "default_workflow_queue_state_service", queue)
     service = MagicMock()
+    service.resolve_settlement_institute_id.return_value = "hospital-1"
     service.run_qc.return_value = {
         "summary": {"total": 1, "passed": 0, "failed": 1, "pass_rate": "0%"},
         "results": [_result("A", False)],
-        "settlement": {},
+        "settlement": {"institute_id": "hospital-1", "patient_id": "p1", "visit_id": "v1"},
     }
     monkeypatch.setattr(route, "get_settlement_service", lambda: service)
 
     await route.run_settlement_qc("p1", "v1", None, {"id": "user-1"})
     first = persisted.await_args_list[0].args[0]
     assert "executed_defect_scope" not in first["metadata"]
+    saved_start = queue.start_run.call_args_list[0].kwargs
+    assert saved_start["source_key"] == "settlement_qc"
+    assert (saved_start["institute_id"], saved_start["patient_id"], saved_start["visit_id"]) == (
+        "hospital-1",
+        "p1",
+        "v1",
+    )
+    assert queue.finish_success.call_args_list[0].kwargs["source_key"] == "settlement_qc"
 
     monkeypatch.setattr(route, "_generate_draft", lambda _patient_id, _visit_id: {})
     from app.services import settlement_formal_qc
@@ -78,6 +87,9 @@ async def test_both_qc_endpoints_omit_close_scope_even_with_complete_reports(mon
     assert "executed_defect_scope" not in second["metadata"]
     assert first["record_id"] == second["record_id"] == "settlement::v1"
     assert first["patient_id"] != second["patient_id"]
+    # 草稿生成路径由独立任务处理，这里保持 legacy 队列身份不受影响
+    generated_start = queue.start_run.call_args_list[1].kwargs
+    assert generated_start.get("source_key") is None
 
 
 def test_rule_execution_error_aborts_report():

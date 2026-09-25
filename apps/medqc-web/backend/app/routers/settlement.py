@@ -15,7 +15,10 @@ from ..services.settlement_service import (
 )
 from ..core.security import get_current_user, require_roles
 from ..core.pagination import page_param, page_size_param
-from ..services.qc_persistence_service import default_qc_persistence_service
+from ..services.qc_persistence_service import (
+    VerifiedQCIdentity,
+    default_qc_persistence_service,
+)
 from ..services.workflow_queue_state_service import default_workflow_queue_state_service
 
 def _current_user_id(current_user: Optional[Dict[str, Any]]) -> Optional[str]:
@@ -50,6 +53,7 @@ def _build_settlement_persistence_result(
     summary: Dict[str, Any],
     results: List[Dict[str, Any]],
     source: str,
+    institute_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     issues = [
         {
@@ -88,6 +92,7 @@ def _build_settlement_persistence_result(
         "issues": issues,
         "metadata": {
             "workflow_type": "settlement",
+            **({"institute_id": institute_id} if institute_id is not None else {}),
             "patient_id": patient_id,
             "visit_id": visit_id,
             "department": department,
@@ -176,18 +181,33 @@ async def run_settlement_qc(
     if resolved_institute_id is None:
         raise HTTPException(status_code=404, detail="结算清单未找到，无法执行质控")
 
-    run_id = default_workflow_queue_state_service.start_run(
-        workflow_type="settlement_qc",
-        visit_id=visit_id,
-        patient_id=patient_id,
-        institute_id=resolved_institute_id,
-        user_id=user_id,
-    )
+    try:
+        run_id = default_workflow_queue_state_service.start_run(
+            workflow_type="settlement_qc",
+            visit_id=visit_id,
+            patient_id=patient_id,
+            institute_id=resolved_institute_id,
+            source_key="settlement_qc",
+            user_id=user_id,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503, detail="结算清单质控任务启动失败，请稍后重试"
+        ) from exc
     try:
         result = svc.run_qc(patient_id, visit_id, resolved_institute_id)
         if not result:
             raise HTTPException(status_code=404, detail="结算清单未找到，无法执行质控")
-        settlement = result.get("settlement") or {}
+        settlement = result.get("settlement")
+        if not isinstance(settlement, dict) or any(
+            settlement.get(field) != expected
+            for field, expected in (
+                ("institute_id", resolved_institute_id),
+                ("patient_id", patient_id),
+                ("visit_id", visit_id),
+            )
+        ):
+            raise HTTPException(status_code=409, detail="结算清单病例身份与请求不一致")
         persistence = await default_qc_persistence_service.persist_analysis(
             _build_settlement_persistence_result(
                 patient_id=patient_id,
@@ -196,26 +216,42 @@ async def run_settlement_qc(
                 summary=result.get("summary") or {},
                 results=result.get("results") or [],
                 source="settlement_qc",
+                institute_id=resolved_institute_id,
             ),
             actor=current_user,
+            verified_identity=VerifiedQCIdentity(
+                resolved_institute_id, patient_id, visit_id, "settlement_qc"
+            ),
         )
         default_workflow_queue_state_service.finish_success(
             workflow_type="settlement_qc",
             visit_id=visit_id,
             run_id=run_id,
+            source_key="settlement_qc",
+            patient_id=patient_id,
+            institute_id=resolved_institute_id,
             user_id=user_id,
         )
         result["persistence"] = persistence
         return result
     except Exception as exc:
+        public_error = exc if isinstance(exc, HTTPException) else HTTPException(
+            status_code=503,
+            detail="结算清单质控或结果保存失败，请稍后重试",
+        )
         default_workflow_queue_state_service.finish_failed(
             workflow_type="settlement_qc",
             visit_id=visit_id,
             run_id=run_id,
-            error_message=str(exc),
+            source_key="settlement_qc",
+            patient_id=patient_id,
+            institute_id=resolved_institute_id,
+            error_message=str(public_error.detail),
             user_id=user_id,
         )
-        raise
+        if isinstance(exc, HTTPException):
+            raise
+        raise public_error from exc
 
 
 # ============================================================

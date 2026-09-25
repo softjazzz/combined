@@ -32,6 +32,17 @@ WORKFLOW_RESULT_PREFIX = {
     "settlement_qc": "settlement",
 }
 
+# 迁移 20260924_000054 后 workflow_queue_state 的唯一性拆成新旧两段部分索引：
+# - legacy: identity_version IS NULL 时按 (workflow_type, visit_id) 唯一
+# - modern: identity_version = 1 时按完整身份 (workflow_type, source_key, institute_id, patient_id, visit_id) 唯一
+LEGACY_IDENTITY_PREDICATE = "identity_version IS NULL"
+MODERN_IDENTITY_PREDICATE = "identity_version = 1"
+MODERN_IDENTITY_VERSION = 1
+MODERN_IDENTITY_COLUMNS = ("workflow_type", "source_key", "institute_id", "patient_id", "visit_id")
+MODERN_IDENTITY_MISSING_TEMPLATE = (
+    "modern queue identity requires source_key plus complete case coordinates; missing: {missing}"
+)
+
 
 @lru_cache(maxsize=32)
 def _table_candidates(table_name: str, schemas: tuple[str, ...]) -> Table:
@@ -65,6 +76,88 @@ def _runtime_actor(user_id: Optional[str]) -> str:
     return f"runtime:{uid}" if uid else "runtime:anonymous"
 
 
+def _table_has_modern_identity(queue_state: Table) -> bool:
+    """迁移 54 是否已把现代身份列部署到当前表上。"""
+
+    columns = queue_state.c
+    return "identity_version" in columns and "source_key" in columns
+
+
+def _resolve_modern_identity(
+    *,
+    source_key: Optional[str],
+    institute_id: Optional[str],
+    patient_id: Optional[str],
+    visit_id: str,
+) -> Optional[tuple[str, str, str, str]]:
+    """判定本次写入走现代身份还是 legacy。
+
+    仅未提供 source_key 时返回 None，表示调用方仍是 legacy 语义。
+    一旦提供 source_key，三坐标必须齐备；不完整的“现代身份”直接报错，绝不静默回退 legacy 写法。
+    """
+
+    if source_key is None:
+        return None
+    key = _safe_text(source_key).strip()
+    if not key:
+        raise ValueError("modern queue identity requires a nonblank source_key")
+    missing = [
+        name
+        for name, value in (
+            ("institute_id", institute_id),
+            ("patient_id", patient_id),
+            ("visit_id", visit_id),
+        )
+        if not _safe_text(value).strip()
+    ]
+    if missing:
+        raise ValueError(MODERN_IDENTITY_MISSING_TEMPLATE.format(missing=", ".join(missing)))
+    return key, _safe_text(institute_id).strip(), _safe_text(patient_id).strip(), _safe_text(visit_id).strip()
+
+
+def _legacy_conflict_kwargs(queue_state: Table) -> Dict[str, Any]:
+    """legacy 写入的 ON CONFLICT 目标：迁移后必须落在 legacy 部分唯一索引上。"""
+
+    if not _table_has_modern_identity(queue_state):
+        # 迁移 54 尚未部署：仅存在旧的全局唯一索引，不能引用 identity_version 谓词。
+        return {"index_elements": [queue_state.c.workflow_type, queue_state.c.visit_id]}
+    return {
+        "index_elements": [queue_state.c.workflow_type, queue_state.c.visit_id],
+        "index_where": sa.text(LEGACY_IDENTITY_PREDICATE),
+    }
+
+
+def _modern_conflict_kwargs(queue_state: Table) -> Dict[str, Any]:
+    if not _table_has_modern_identity(queue_state):
+        raise RuntimeError(
+            "workflow_queue_state 缺少现代身份列；请先部署迁移 20260924_000054 再写入现代队列身份"
+        )
+    return {
+        "index_elements": [
+            queue_state.c.workflow_type,
+            queue_state.c.source_key,
+            queue_state.c.institute_id,
+            queue_state.c.patient_id,
+            queue_state.c.visit_id,
+        ],
+        "index_where": sa.text(MODERN_IDENTITY_PREDICATE),
+    }
+
+
+def _select_state_rows(rows: Iterable[Any]) -> Dict[str, Dict[str, Any]]:
+    """单键读取只返回 legacy 状态；现代行须由完整身份接口读取。"""
+
+    legacy: Dict[str, Dict[str, Any]] = {}
+    for row in rows:
+        data = dict(row)
+        visit_id = _safe_text(data.get("visit_id"))
+        if not visit_id:
+            continue
+        if data.get("identity_version") is None:
+            legacy.setdefault(visit_id, data)
+    return legacy
+
+
 class WorkflowQueueStateService:
     def __init__(self, session_factory: Any | None = None) -> None:
         self._session_factory = session_factory or SessionLocal
@@ -78,12 +171,19 @@ class WorkflowQueueStateService:
         visit_id: str,
         patient_id: Optional[str] = None,
         institute_id: Optional[str] = None,
+        source_key: Optional[str] = None,
         user_id: Optional[str] = None,
     ) -> str:
         self._validate_workflow(workflow_type)
         visit_key = _safe_text(visit_id).strip()
         if not visit_key:
             raise ValueError("visit_id is required")
+        identity = _resolve_modern_identity(
+            source_key=source_key,
+            institute_id=institute_id,
+            patient_id=patient_id,
+            visit_id=visit_key,
+        )
 
         run_id = str(uuid.uuid4())
         now = datetime.utcnow()
@@ -107,8 +207,16 @@ class WorkflowQueueStateService:
                 updated_at=now,
                 updated_by=actor,
             )
+            if identity is not None:
+                # 现代身份：写入完整三坐标 + source_key，并落到现代部分唯一索引
+                insert_stmt = insert_stmt.values(
+                    identity_version=MODERN_IDENTITY_VERSION,
+                    source_key=identity[0],
+                    institute_id=identity[1],
+                    patient_id=identity[2],
+                    visit_id=identity[3],
+                )
             upsert_stmt = insert_stmt.on_conflict_do_update(
-                index_elements=[queue_state.c.workflow_type, queue_state.c.visit_id],
                 set_={
                     "patient_id": func.coalesce(insert_stmt.excluded.patient_id, queue_state.c.patient_id),
                     "institute_id": func.coalesce(insert_stmt.excluded.institute_id, queue_state.c.institute_id),
@@ -121,6 +229,11 @@ class WorkflowQueueStateService:
                     "updated_at": now,
                     "updated_by": actor,
                 },
+                **(
+                    _modern_conflict_kwargs(queue_state)
+                    if identity is not None
+                    else _legacy_conflict_kwargs(queue_state)
+                ),
             )
             session.execute(upsert_stmt)
             session.commit()
@@ -134,6 +247,9 @@ class WorkflowQueueStateService:
         workflow_type: str,
         visit_id: str,
         run_id: str,
+        source_key: Optional[str] = None,
+        patient_id: Optional[str] = None,
+        institute_id: Optional[str] = None,
         user_id: Optional[str] = None,
     ) -> bool:
         return self._finish(
@@ -142,6 +258,9 @@ class WorkflowQueueStateService:
             run_id=run_id,
             success=True,
             error_message=None,
+            source_key=source_key,
+            patient_id=patient_id,
+            institute_id=institute_id,
             user_id=user_id,
         )
 
@@ -152,6 +271,9 @@ class WorkflowQueueStateService:
         visit_id: str,
         run_id: str,
         error_message: str,
+        source_key: Optional[str] = None,
+        patient_id: Optional[str] = None,
+        institute_id: Optional[str] = None,
         user_id: Optional[str] = None,
     ) -> bool:
         return self._finish(
@@ -160,6 +282,9 @@ class WorkflowQueueStateService:
             run_id=run_id,
             success=False,
             error_message=error_message,
+            source_key=source_key,
+            patient_id=patient_id,
+            institute_id=institute_id,
             user_id=user_id,
         )
 
@@ -172,11 +297,20 @@ class WorkflowQueueStateService:
         success: bool,
         error_message: Optional[str],
         user_id: Optional[str],
+        source_key: Optional[str] = None,
+        patient_id: Optional[str] = None,
+        institute_id: Optional[str] = None,
     ) -> bool:
         self._validate_workflow(workflow_type)
         visit_key = _safe_text(visit_id).strip()
         if not visit_key:
             return False
+        identity = _resolve_modern_identity(
+            source_key=source_key,
+            institute_id=institute_id,
+            patient_id=patient_id,
+            visit_id=visit_key,
+        )
         now = datetime.utcnow()
         actor = _runtime_actor(user_id)
 
@@ -194,26 +328,36 @@ class WorkflowQueueStateService:
             if success:
                 values["last_success_at"] = now
 
-            stmt = (
-                update(queue_state)
-                .where(
-                    and_(
-                        queue_state.c.workflow_type == workflow_type,
-                        queue_state.c.visit_id == visit_key,
-                        queue_state.c.run_id == run_id,
+            conditions = [
+                queue_state.c.workflow_type == workflow_type,
+                queue_state.c.visit_id == (identity[3] if identity is not None else visit_key),
+                queue_state.c.run_id == run_id,
+            ]
+            if identity is not None:
+                if not _table_has_modern_identity(queue_state):
+                    raise RuntimeError(
+                        "workflow_queue_state 缺少现代身份列；无法按现代身份完成 CAS 收尾"
                     )
+                conditions.extend(
+                    [
+                        queue_state.c.source_key == identity[0],
+                        queue_state.c.institute_id == identity[1],
+                        queue_state.c.patient_id == identity[2],
+                    ]
                 )
-                .values(**values)
-            )
+            elif _table_has_modern_identity(queue_state):
+                conditions.append(queue_state.c.identity_version.is_(None))
+            stmt = update(queue_state).where(and_(*conditions)).values(**values)
             result = session.execute(stmt)
             session.commit()
             updated = bool(result.rowcount and result.rowcount > 0)
             if not updated:
                 logger.warning(
-                    "workflow_queue_state CAS rejected finish update: workflow=%s visit_id=%s run_id=%s",
+                    "workflow_queue_state CAS rejected finish update: workflow=%s visit_id=%s run_id=%s source_key=%s",
                     workflow_type,
                     visit_key,
                     run_id,
+                    identity[0] if identity is not None else None,
                 )
             return updated
         finally:
@@ -268,7 +412,6 @@ class WorkflowQueueStateService:
                     updated_by="system_backfill",
                 )
                 upsert = stmt.on_conflict_do_update(
-                    index_elements=[queue_state.c.workflow_type, queue_state.c.visit_id],
                     set_={
                         "patient_id": func.coalesce(stmt.excluded.patient_id, queue_state.c.patient_id),
                         "institute_id": func.coalesce(stmt.excluded.institute_id, queue_state.c.institute_id),
@@ -279,6 +422,7 @@ class WorkflowQueueStateService:
                         "last_success_at": stmt.excluded.last_success_at,
                         "last_finished_at": stmt.excluded.last_finished_at,
                     },
+                    **_legacy_conflict_kwargs(queue_state),
                 )
                 session.execute(upsert)
 
@@ -331,12 +475,7 @@ class WorkflowQueueStateService:
                 .order_by(desc(queue_state.c.updated_at))
             )
             rows = session.execute(stmt).mappings().all()
-            result: Dict[str, Dict[str, Any]] = {}
-            for row in rows:
-                visit_id = _safe_text(row.get("visit_id"))
-                if visit_id and visit_id not in result:
-                    result[visit_id] = dict(row)
-            return result
+            return _select_state_rows(rows)
         except Exception:
             logger.exception("load workflow queue state map failed: workflow_type=%s", workflow_type)
             return {}
