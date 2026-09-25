@@ -1,4 +1,4 @@
-"""结算清单来源身份未闭合前不发布缺陷自动关闭范围。"""
+"""结算清单现代两路径按本次实际执行 rule_ids 发布自动缺陷关闭范围。"""
 
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -12,29 +12,39 @@ def _result(rule_id: str, passed: bool) -> dict:
     return {"rule_id": rule_id, "rule_name": rule_id, "passed": passed}
 
 
-def _build(summary: dict, results: list[dict]) -> dict:
+def _build(
+    summary: dict,
+    results: list,
+    *,
+    source: str = "settlement_qc",
+    institute_id: str | None = None,
+) -> dict:
     return route._build_settlement_persistence_result(
         patient_id="p1",
         visit_id="v1",
-        settlement={},
+        settlement={"institute_id": institute_id} if institute_id else {},
         summary=summary,
         results=results,
-        source="settlement_qc",
+        source=source,
+        institute_id=institute_id,
     )
 
 
-def test_full_report_does_not_publish_close_scope():
+def test_full_report_publishes_executed_rule_scope():
     payload = _build(
         {"total": 2, "passed": 1, "failed": 1, "pass_rate": "50%"},
         [_result("A", True), _result("B", False)],
     )
     assert payload["record_id"] == "settlement::v1"
-    assert "executed_defect_scope" not in payload["metadata"]
+    assert payload["metadata"]["executed_defect_scope"] == {
+        "kind": "rule_codes",
+        "values": ["A", "B"],
+    }
     assert [issue["rule_code"] for issue in payload["issues"]] == ["B"]
 
 
 @pytest.mark.asyncio
-async def test_both_qc_endpoints_omit_close_scope_even_with_complete_reports(monkeypatch):
+async def test_both_qc_endpoints_publish_scope_and_keep_three_coordinates(monkeypatch):
     persisted = AsyncMock(return_value={"success": True})
     monkeypatch.setattr(route.default_qc_persistence_service, "persist_analysis", persisted)
     queue = MagicMock()
@@ -50,9 +60,20 @@ async def test_both_qc_endpoints_omit_close_scope_even_with_complete_reports(mon
     monkeypatch.setattr(route, "get_settlement_service", lambda: service)
 
     await route.run_settlement_qc("p1", "v1", None, {"id": "user-1"})
-    first = persisted.await_args_list[0].args[0]
-    assert "executed_defect_scope" not in first["metadata"]
+    first_call = persisted.await_args_list[0]
+    first = first_call.args[0]
+    assert first["metadata"]["executed_defect_scope"] == {
+        "kind": "rule_codes",
+        "values": ["A"],
+    }
     assert first["metadata"]["institute_id"] == "hospital-1"
+    first_identity = first_call.kwargs["verified_identity"]
+    assert (
+        first_identity.institute_id,
+        first_identity.patient_id,
+        first_identity.visit_id,
+        first_identity.source_key,
+    ) == ("hospital-1", "p1", "v1", "settlement_qc")
     saved_start = queue.start_run.call_args_list[0].kwargs
     assert saved_start["source_key"] == "settlement_qc"
     assert (saved_start["institute_id"], saved_start["patient_id"], saved_start["visit_id"]) == (
@@ -98,7 +119,10 @@ async def test_both_qc_endpoints_omit_close_scope_even_with_complete_reports(mon
         patient_id="p2", visit_id="v1", current_user={"id": "user-1"}
     )
     second = persisted.await_args_list[1].args[0]
-    assert "executed_defect_scope" not in second["metadata"]
+    assert second["metadata"]["executed_defect_scope"] == {
+        "kind": "rule_codes",
+        "values": ["B"],
+    }
     assert first["record_id"] == second["record_id"] == "settlement::v1"
     assert first["patient_id"] != second["patient_id"]
     # 起草路径走现代身份：source_key + 三坐标与解析身份一致

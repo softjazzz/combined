@@ -50,6 +50,33 @@ def _grade_from_score(score: float) -> str:
     return "D"
 
 
+def _settlement_executed_defect_scope(
+    results: List[Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    """本次实际执行的结算清单规则代码范围（稳序去重）。
+
+    只描述本次真正执行到的规则，供质检落库关闭本来源本病例下已消失的旧自动缺陷；
+    规则代码只认非空的、已 trim 的字符串。只要有一个条目缺少可信规则代码
+    （缺失/空值/空白/数值/对象/未 trim），整份结果返回 None：执行范围不完整时
+    不得声称已执行范围，也不得按部分规则越界关闭旧自动缺陷。
+    """
+    values: List[str] = []
+    seen: set = set()
+    for item in results:
+        if not isinstance(item, dict):
+            return None
+        rule_code = item.get("rule_id")
+        if not isinstance(rule_code, str) or not rule_code or rule_code != rule_code.strip():
+            return None
+        if rule_code in seen:
+            continue
+        seen.add(rule_code)
+        values.append(rule_code)
+    if not values:
+        return None
+    return {"kind": "rule_codes", "values": values}
+
+
 def _build_settlement_persistence_result(
     *,
     patient_id: str,
@@ -60,6 +87,7 @@ def _build_settlement_persistence_result(
     source: str,
     institute_id: Optional[str] = None,
 ) -> Dict[str, Any]:
+    executed_scope = _settlement_executed_defect_scope(results)
     issues = [
         {
             "rule_code": str(item.get("rule_id") or "settlement_rule"),
@@ -103,6 +131,11 @@ def _build_settlement_persistence_result(
             "department": department,
             "data_source": source,
             "trigger_source": "workstation_v4",
+            **(
+                {"executed_defect_scope": executed_scope}
+                if executed_scope is not None
+                else {}
+            ),
         },
         "analysis_engine": "settlement-formal-qc",
         "analysis_date": datetime.utcnow().isoformat() + "Z",

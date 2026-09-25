@@ -48,6 +48,12 @@ class PreparedWorkspaceBatchJob:
     idempotency_key: str
 
 
+_SUPPORTED_WORKSPACE_SCOPES = frozenset({"all", "running", "final"})
+_UNSUPPORTED_WORKSPACE_SCOPE_DETAIL = (
+    "质控范围仅支持 all/running/final；门诊/急诊范围暂不支持质控任务"
+)
+
+
 class SichuanWorkspaceBatchJobCreateRequest(BaseModel):
     diagnostic_capture: bool = False
     rule_ids: Optional[List[str]] = None
@@ -114,9 +120,18 @@ def _build_workspace_record_scene_snapshot(
 
 
 def _normalize_scope(scope: Optional[str]) -> str:
-    value = str(scope or "").strip().lower()
-    if value not in {"all", "running", "final"}:
+    """把质控范围收敛为受控枚举。
+
+    内部未传范围时沿用历史默认 all；显式空值、门诊/急诊或未知范围一律失败。
+    静默回退为 all/final 会让请求先按住院范围 collect_records 取数，
+    外层归档守卫只是随后才 422，取数副作用已经发生。
+    """
+
+    if scope is None:
         return "all"
+    value = str(scope).strip().lower()
+    if value not in _SUPPORTED_WORKSPACE_SCOPES:
+        raise HTTPException(status_code=422, detail=_UNSUPPORTED_WORKSPACE_SCOPE_DETAIL)
     return value
 
 
@@ -137,6 +152,10 @@ def prepare_workspace_batch_job(
     settings_provider: Callable[[], Any] = get_settings,
     task_run_context: Mapping[str, str] | None = None,
 ) -> PreparedWorkspaceBatchJob:
+    # 显式声明的范围必须先受控校验：规则集默认范围允许覆盖 payload 范围，
+    # 但不得把显式 outpatient/未知范围掩盖成可执行的住院取数范围。
+    _normalize_scope(payload.scope)
+
     requested_rule_set = get_sichuan_rule_set(payload.rule_set_key)
     if payload.diagnostic_capture:
         if not set((current_user or {}).get("roles", [])).intersection({"admin", "super_admin"}):
