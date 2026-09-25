@@ -46,6 +46,7 @@ _EVIDENCE_SOURCE_LABELS = {
     "labtest_item_report": "检验报告",
     "mr_surgery": "手术记录",
     "postsurg_firstcourse_record": "术后首次病程记录",
+    "rescue_record": "抢救记录",
     "senior_course_record": "上级医师查房记录",
 }
 

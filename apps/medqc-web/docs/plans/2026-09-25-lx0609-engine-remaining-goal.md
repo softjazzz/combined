@@ -1,6 +1,8 @@
 # 原始 LX0609 引擎整改：剩余目标执行卡
 
-最新 A3 证据：同一隔离 SQLite Canonical 产物现经正式 HTTP `latest-result`、批量详情及病历详情 `qc-detail` 三路核对，原始 001、004、002/005/006 的规则号、结论和建议保持一致；交付测试文件 116/116 通过。认证、详情身份查询和病历材料使用合成替身，证据为空，不能写作完整生产联机或客户 PG 验收。A0/A4 临床候选复核仍为 0 签收，阶段 A 与整体目标继续未完成；见[要求与证据对照](../acceptance/2026-09-24-original-engine-requirements-evidence.md)。
+最新 A3 非空证据证据：原始 004 合成抢救记录的安全来源引用与摘录已沿同一已保存 Canonical 结果贯通正式 `latest-result`、批量详情、病历详情和三格式导出；修复批量安全投影省略自由来源名称后缺少 `rescue_record` 可读名称的问题。交付文件 116/116、Ruff 通过。仍缺客户 PG/浏览器真实联机、源文书授权和临床签收；A/B/D 不关闭，C 仅工程合同验收。
+
+前一轮 A3 证据：同一隔离 SQLite Canonical 产物经正式 HTTP `latest-result`、批量详情及病历详情 `qc-detail` 三路核对，原始 001、004、002/005/006 的规则号、结论和建议保持一致；交付测试文件 116/116 通过。认证、详情身份查询和病历材料使用合成替身，当时证据为空，不能写作完整生产联机或客户 PG 验收。A0/A4 临床候选复核仍为 0 签收，阶段 A 与整体目标继续未完成；见[要求与证据对照](../acceptance/2026-09-24-original-engine-requirements-evidence.md)。
 
 更新：2026-09-25。工作树：`codex/lx0609-rule-id-integration`；本轮接续基线：`84e271f02`。本卡是[主计划](2026-09-23-lx0609-engine-boundary-refactor-master-plan.md)的当前执行入口，不改变其中的 A/B/C/D 退出合同。现有长程 goal 保持 active；不得把局部技术通过写成整体完成。
 

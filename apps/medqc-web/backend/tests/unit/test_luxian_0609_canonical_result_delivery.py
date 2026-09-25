@@ -2391,6 +2391,15 @@ def test_published_rules_keep_identity_through_sqlite_dto_feedback_and_exports(
     for item in items:
         item["conclusion"] = f"{item['rule_id']} 已核对"
         item["suggestion"] = f"{item['rule_id']} 无需补充"
+        if item["rule_id"] == "LX0609-09-01-01":
+            item["evidence"] = [{
+                "source_document_id": "synthetic-rescue-document-1",
+                "source_type": "rescue_record",
+                "source_label": "抢救记录",
+                "record_time": "2026-09-01 10:00:00",
+                "evidence_excerpt": "合成记录：抢救结束后五小时完成记录",
+                "excerpt_kind": "文书级依据",
+            }]
     with Session(engine) as session:
         store.replace_for_job(
             session,
@@ -2420,6 +2429,10 @@ def test_published_rules_keep_identity_through_sqlite_dto_feedback_and_exports(
     assert all(item["customer_display_facts"] for item in saved_items)
     assert all(item["conclusion"].endswith("已核对") for item in saved_items)
     assert all(item["suggestion"].endswith("无需补充") for item in saved_items)
+    if rule_ids == ("LX0609-09-01-01",):
+        assert len(saved_items[0]["evidence"]) == 1
+        assert saved_items[0]["evidence"][0]["source_ref"].startswith("src_")
+        assert "synthetic-rescue-document-1" not in json.dumps(saved_items)
 
     # latest-result 真实服务入口读取同一隔离SQLite产生的 Envelope 内容。
     latest_session = _ReadSession([
@@ -2451,6 +2464,9 @@ def test_published_rules_keep_identity_through_sqlite_dto_feedback_and_exports(
     assert [item["customer_display_facts"] for item in latest["items"]] == [
         item["customer_display_facts"] for item in saved_items
     ]
+    assert [item["evidence"] for item in latest["items"]] == [
+        item["evidence"] for item in saved_items
+    ]
 
     if rule_ids != ("LX0609-09-01-02", "LX0609-06-02-01"):
         from fastapi import FastAPI
@@ -2478,13 +2494,13 @@ def test_published_rules_keep_identity_through_sqlite_dto_feedback_and_exports(
         assert [
             {key: item[key] for key in (
                 "rule_id", "status", "reason_code", "conclusion", "suggestion",
-                "customer_display_facts",
+                "customer_display_facts", "evidence",
             )}
             for item in http_result["items"]
         ] == [
             {key: item[key] for key in (
                 "rule_id", "status", "reason_code", "conclusion", "suggestion",
-                "customer_display_facts",
+                "customer_display_facts", "evidence",
             )}
             for item in latest["items"]
         ]
@@ -2536,6 +2552,19 @@ def test_published_rules_keep_identity_through_sqlite_dto_feedback_and_exports(
                 "rule_id", "status", "reason_code", "conclusion", "suggestion",
                 "customer_display_facts",
             )}
+            for item in http_result["items"]
+        ]
+        assert [
+            [{key: evidence[key] for key in (
+                "source_type", "source_ref", "record_time",
+                "evidence_excerpt", "excerpt_kind",
+            )} for evidence in item["evidence"]]
+            for item in detail_items
+        ] == [
+            [{key: evidence[key] for key in (
+                "source_type", "source_ref", "record_time",
+                "evidence_excerpt", "excerpt_kind",
+            )} for evidence in item["evidence"]]
             for item in http_result["items"]
         ]
         latest_http_body = response.json()
@@ -2591,6 +2620,16 @@ def test_published_rules_keep_identity_through_sqlite_dto_feedback_and_exports(
             item["source"] == "canonical_result_envelope"
             for item in review_result["review_items"]
         )
+        if rule_ids == ("LX0609-09-01-01",):
+            from app.services.luxian_0609_result_export_service import customer_evidence_summary
+
+            assert review_result["review_items"][0]["evidence"] == (
+                "抢救记录（2026-09-01 10:00:00、文书级依据）："
+                "合成记录：抢救结束后五小时完成记录"
+            )
+            assert customer_evidence_summary(detail_items[0]["evidence"]) == (
+                review_result["review_items"][0]["evidence"]
+            )
 
     feedback = ResultFeedbackDemoStore.__new__(ResultFeedbackDemoStore)
     feedback._canonical_table = canonical_table
@@ -2629,21 +2668,30 @@ def test_published_rules_keep_identity_through_sqlite_dto_feedback_and_exports(
     )
     assert [row[1] for row in export_rows] == list(rule_ids)
     assert all(row[3] == "合规" and row[5].endswith("已核对") for row in export_rows)
+    if rule_ids == ("LX0609-09-01-01",):
+        assert export_rows[0][7] == review_result["review_items"][0]["evidence"]
     csv_text = workspace_module._export_customer_safe_csv(
         job, hmac_key="unit-test-key",
     ).getvalue()
     csv_rows = list(csv.reader(StringIO(csv_text)))
     assert all(any(row[1:7] == expected[1:7] for row in csv_rows) for expected in export_rows)
+    if rule_ids == ("LX0609-09-01-01",):
+        assert any(len(row) > 7 and row[7] == export_rows[0][7] for row in csv_rows)
     workbook = load_workbook(workspace_module._export_customer_safe_workbook(
         job, hmac_key="unit-test-key",
     ))
     xlsx_rows = list(workbook["全部明细"].values)
     assert all(any(tuple(row[:7]) == tuple(expected[:7]) for row in xlsx_rows) for expected in export_rows)
+    if rule_ids == ("LX0609-09-01-01",):
+        assert any(len(row) > 7 and row[7] == export_rows[0][7] for row in xlsx_rows)
     html_text = workspace_module._export_customer_safe_html(
         job, hmac_key="unit-test-key", canonical_items=saved_items,
     )
     assert all(rule_id in html_text for rule_id in rule_ids)
     assert all(item["conclusion"] in html_text for item in saved_items)
+    if rule_ids == ("LX0609-09-01-01",):
+        assert export_rows[0][7] in html_text
+        assert "synthetic-rescue-document-1" not in html_text
     engine.dispose()
 
     # 所有交付断言通过后，才为实际浏览器写出本测试的合成 HTTP 产物。
