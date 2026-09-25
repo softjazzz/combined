@@ -7,7 +7,11 @@ from fastapi import APIRouter, Depends, Request, Query, HTTPException
 from starlette.concurrency import run_in_threadpool
 
 from ..core.response import success_response, get_trace_id
-from ..core.security import require_roles
+from ..core.security import get_current_user
+from ..services.task_document_access import (
+    TaskDocumentAccessDenied,
+    require_assigned_task_document,
+)
 from ..services.bundles.emr_view import (
     build_documents_tree,
     load_bundle_document,
@@ -19,14 +23,51 @@ from ..services.bundles.emr_view import (
 from ..services.bundles.current_view import load_current_documents
 from ..services.qc_workspace.canonical_result_store import customer_safe_projection_key, keyed_ref
 
+logger = logging.getLogger(__name__)
+_PRIVILEGED_ROLES = {"admin", "qc_manager", "sync_admin", "super_admin"}
+
+
+async def _authorize_emr_read(
+    record_id: str,
+    institute_id: Optional[str] = Query(None),
+    patient_id: Optional[str] = Query(None),
+    visit_id: Optional[str] = Query(None),
+    source_view: str = Query("saved"),
+    task_id: Optional[str] = Query(None),
+    task_record_id: Optional[str] = Query(None),
+    current_user: dict = Depends(get_current_user),
+) -> None:
+    roles = {str(role) for role in current_user.get("roles", [])}
+    if roles & _PRIVILEGED_ROLES:
+        return
+    if "qc_staff" not in roles or source_view != "saved":
+        raise HTTPException(status_code=403, detail="无权读取该病历文书")
+    identity = (institute_id, patient_id, visit_id)
+    if not task_id or not task_record_id or any(not value for value in identity) or record_id != visit_id:
+        raise HTTPException(status_code=403, detail="无权读取该病历文书")
+    actor_id = current_user.get("id") or current_user.get("user_id")
+    try:
+        await run_in_threadpool(
+            require_assigned_task_document,
+            task_id=task_id,
+            task_record_id=task_record_id,
+            actor_id=actor_id,
+            institute_id=institute_id,
+            patient_id=patient_id,
+            visit_id=visit_id,
+        )
+    except TaskDocumentAccessDenied as exc:
+        raise HTTPException(status_code=403, detail="无权读取该病历文书") from exc
+    except Exception as exc:
+        logger.warning("任务文书授权校验失败: error_type=%s", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="文书授权暂不可用，请稍后重试") from exc
+
+
 router = APIRouter(
     prefix="/api/v1/emr",
     tags=["emr"],
-    dependencies=[
-        Depends(require_roles("admin", "qc_manager", "sync_admin", "super_admin"))
-    ],
+    dependencies=[Depends(_authorize_emr_read)],
 )
-logger = logging.getLogger(__name__)
 
 
 def _resolve_bundle_visit_id(record_id: str, visit_id: Optional[str]) -> str:

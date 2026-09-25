@@ -109,6 +109,14 @@ const TableStub = defineComponent({
   },
 })
 
+const TaskRecordDocumentDrawerStub = defineComponent({
+  name: 'TaskRecordDocumentDrawer',
+  props: { open: Boolean, taskId: String, record: Object },
+  setup(props) {
+    return () => props.open ? h('div', { 'data-testid': 'task-document-drawer' }) : null
+  },
+})
+
 function deferred<T>() {
   let resolve!: (value: T) => void
   const promise = new Promise<T>((promiseResolve) => {
@@ -191,6 +199,7 @@ function mountDrawer(
         'a-skeleton': true,
         'a-table': options.realTable ? false : TableStub,
         'a-tag': { template: '<span><slot /></span>' },
+        TaskRecordDocumentDrawer: TaskRecordDocumentDrawerStub,
         RotateCw: true,
       },
     },
@@ -221,6 +230,27 @@ describe('TaskDetailDrawer', () => {
     } })
     mocks.user.id = 'creator'
     mocks.roles.length = 0
+  })
+
+  it('仅本人受领的现代住院病历提供文书入口，切换任务关闭文书', async () => {
+    mocks.getTaskDetail.mockResolvedValueOnce(detailResponse('住院任务', [
+      modernRecord({ record_id: 'association-1' }),
+      modernRecord({ id: 'association-2', record_id: 'association-2', assignee_id: 'other' }),
+    ], { scene: 'running' }))
+    const wrapper = mountDrawer()
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="task-record-documents-association-1"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="task-record-documents-association-2"]').exists()).toBe(false)
+    await wrapper.get('[data-testid="task-record-documents-association-1"]').trigger('click')
+    expect(wrapper.getComponent(TaskRecordDocumentDrawerStub).props()).toMatchObject({
+      open: true, taskId: 'task-1', record: expect.objectContaining({ id: 'association-1' }),
+    })
+
+    mocks.getTaskDetail.mockResolvedValueOnce(detailResponse('另一任务', [], { id: 'task-2', scene: 'running' }))
+    await wrapper.setProps({ taskId: 'task-2' })
+    await flushPromises()
+    expect(wrapper.getComponent(TaskRecordDocumentDrawerStub).props('open')).toBe(false)
   })
 
   it('只将已保存的运行 active 范围显示为当前在院，历史缺字段不作推断', async () => {

@@ -492,6 +492,8 @@ type EditableDocumentRequestParams = {
   institute_id?: string
   patient_id?: string
   visit_id?: string
+  task_id?: string
+  task_record_id?: string
   job_id?: string
   record_ref?: string
   view?: 'full' | 'summary'

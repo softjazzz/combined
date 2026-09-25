@@ -298,7 +298,7 @@
             :columns="recordColumns"
             :data-source="filteredRecords"
             :pagination="recordPagination"
-            :scroll="{ x: tab === 'received' ? 1180 : 1045 }"
+            :scroll="{ x: tab === 'received' ? 1260 : 1160 }"
             row-key="id"
             size="small"
             @change="handleTableChange"
@@ -354,6 +354,16 @@
                 <span v-else class="task-detail-drawer__muted">未选择运行</span>
               </template>
               <template v-else-if="column.key === 'action'">
+                <a-button
+                  v-if="canViewDocuments(record)"
+                  type="text"
+                  size="small"
+                  :data-testid="`task-record-documents-${record.id}`"
+                  @click="openRecordDocuments(record)"
+                >
+                  <Eye :size="14" aria-hidden="true" />
+                  查看文书
+                </a-button>
                 <a-button
                   v-if="canStartRecord(record)"
                   size="small"
@@ -420,6 +430,12 @@
       </template>
     </div>
   </a-drawer>
+  <TaskRecordDocumentDrawer
+    :open="recordDocumentsOpen"
+    :task-id="detail?.id || ''"
+    :record="recordDocumentsRecord"
+    @update:open="recordDocumentsOpen = $event"
+  />
 </template>
 
 <script setup lang="ts">
@@ -431,6 +447,7 @@ import { getSichuanWorkspaceBatchJob } from '@/services/sichuan-rule-workspace-s
 import type { SichuanBatchJob } from '@/views/workstation-v4/semantic-rules/types'
 import { createTaskQcRun, getTaskDetail, getTaskQcRunRecordResult, getTaskQcRuns, startTaskRecord } from '@/api/tasks'
 import TaskRecordSyncControl from './TaskRecordSyncControl.vue'
+import TaskRecordDocumentDrawer from './TaskRecordDocumentDrawer.vue'
 import type {
   TaskDetail,
   TaskQcRun,
@@ -473,6 +490,8 @@ const verifyingRecordId = ref('')
 const recordStartAcknowledged = ref(false)
 const recordActionTargetId = ref('')
 const recordActionError = ref('')
+const recordDocumentsOpen = ref(false)
+const recordDocumentsRecord = ref<TaskRecordItem | null>(null)
 const loading = ref(false)
 const error = ref('')
 const keyword = ref('')
@@ -556,7 +575,7 @@ const recordColumns = computed<TableColumnsType<TaskRecordItem>>(() => [
   { title: '缺陷数', dataIndex: 'defect_count', key: 'defects', width: 90 },
   { title: '完成时间', dataIndex: 'completed_at', key: 'completedAt', width: 160 },
   { title: '本次结果', key: 'result', width: 145 },
-  ...(props.tab === 'received' ? [{ title: '处理', key: 'action', width: 130 }] : []),
+  { title: '操作', key: 'action', width: props.tab === 'received' ? 230 : 125 },
 ])
 
 function isTaskRecordItem(record: unknown): record is TaskRecordItem {
@@ -573,6 +592,22 @@ function canStartRecord(record: unknown): record is TaskRecordItem {
     && record.task_id === detail.value.id && hasCaseIdentity(record)
     && !!authStore.user?.id && record.assignee_id === authStore.user.id
     && !verifyingRecordId.value
+}
+
+function canViewDocuments(record: unknown): record is TaskRecordItem {
+  if (!isTaskRecordItem(record) || !props.open || !detail.value
+    || !['running', 'final'].includes(detail.value.scene || '')
+    || record.task_id !== detail.value.id || record.record_id !== record.id
+    || !hasCaseIdentity(record)) return false
+  const privileged = authStore.userRoles.some((role) =>
+    ['admin', 'qc_manager', 'sync_admin', 'super_admin'].includes(role))
+  return privileged || (props.tab === 'received' && record.assignee_id === authStore.user?.id)
+}
+
+function openRecordDocuments(record: unknown) {
+  if (!canViewDocuments(record)) return
+  recordDocumentsRecord.value = record
+  recordDocumentsOpen.value = true
 }
 
 function recordActionIsCurrent(taskId: string, taskRecordId: string, userId: string, sequence: number) {
@@ -697,6 +732,8 @@ function resetFilters() {
 }
 
 function clearDetail() {
+  recordDocumentsOpen.value = false
+  recordDocumentsRecord.value = null
   clearRecordAction()
   syncingRecords.value = false
   requestSequence += 1
@@ -724,6 +761,8 @@ async function loadDetail() {
     return
   }
 
+  recordDocumentsOpen.value = false
+  recordDocumentsRecord.value = null
   const tab = props.tab
   clearRecordAction()
   syncingRecords.value = false
