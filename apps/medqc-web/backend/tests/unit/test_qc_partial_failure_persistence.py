@@ -423,10 +423,21 @@ def test_retry_partial_failure_preserves_valid_items_and_queues_only_failed_rule
         failed_records=failures,
     )
 
+    with engine.connect() as connection:
+        accepted_filters_json = connection.execute(
+            sa.select(table.c.filters_json).where(table.c.id == "partial-job")
+        ).scalar_one()
+    assert service.retry_batch_job(
+        job_id="partial-job",
+        created_by="tester",
+        automatic=True,
+        expected_attempt_filters_json='{"stale_attempt":true}',
+    ) is None
     retried = service.retry_batch_job(
         job_id="partial-job",
         created_by="tester",
         automatic=True,
+        expected_attempt_filters_json=accepted_filters_json,
     )
 
     assert retried is not None
