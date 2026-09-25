@@ -64,9 +64,7 @@ class DefectExportService:
         if sb is None:
             raise RuntimeError("数据库不可用")
 
-        query = sb.table('qc_defects').select('*').neq_or_null(
-            'source_key', 'task_assigned_qc'
-        )
+        query = sb.table('qc_defects').select('*').exclude_task_manual_source()
         for key, value in filters.items():
             if key == "start_date":
                 query = query.gte('created_at', value)

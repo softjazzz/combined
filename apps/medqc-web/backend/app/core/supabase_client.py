@@ -103,7 +103,8 @@ class _Response:
 class _Query:
     """
     模拟 Supabase PostgREST 的链式查询构建器。
-    支持的方法: select, eq, in_, is_, neq, neq_or_null, gte, lte, gt, lt, like, ilike,
+    支持的方法: select, eq, in_, is_, neq, neq_or_null, exclude_task_manual_source,
+                gte, lte, gt, lt, like, ilike,
                 or_, order, limit, range, single, insert, update, delete
     """
 
@@ -156,6 +157,13 @@ class _Query:
 
     def neq_or_null(self, column: str, value: Any) -> _Query:
         self._filters.append((column, "NEQ_OR_NULL", value))
+        return self
+
+    def exclude_task_manual_source(self) -> _Query:
+        """旧库缺 source_key 时兼容全院 qc_defects 查询。"""
+        if self._table != "qc_defects":
+            raise ValueError("task_manual_source_filter_requires_qc_defects")
+        self._filters.append(("source_key", "NEQ_OR_NULL_IF_PRESENT", "task_assigned_qc"))
         return self
 
     def gt(self, column: str, value: Any) -> _Query:
@@ -224,13 +232,27 @@ class _Query:
 
     # ---------- 构建 SQL ----------
 
-    def _build_where(self) -> Tuple[str, Dict[str, Any]]:
+    def _effective_filters(self, session) -> List[Tuple[str, str, Any]]:
+        optional = [item for item in self._filters if item[1] == "NEQ_OR_NULL_IF_PRESENT"]
+        if not optional:
+            return self._filters
+
+        # LIMIT 0 解析当前连接的实际表（含 PostgreSQL search_path），不会读取行。
+        table = _quote_qualified_identifier(self._table)
+        columns = set(session.execute(text(f"SELECT * FROM {table} LIMIT 0")).keys())
+        return [
+            (col, "NEQ_OR_NULL", val) if op == "NEQ_OR_NULL_IF_PRESENT" else (col, op, val)
+            for col, op, val in self._filters
+            if op != "NEQ_OR_NULL_IF_PRESENT" or col in columns
+        ]
+
+    def _build_where(self, filters: Optional[List[Tuple[str, str, Any]]] = None) -> Tuple[str, Dict[str, Any]]:
         """构建 WHERE 子句和参数"""
         clauses = []
         params: Dict[str, Any] = {}
         param_idx = 0
 
-        for col, op, val in self._filters:
+        for col, op, val in self._filters if filters is None else filters:
             pname = f"p{param_idx}"
             param_idx += 1
 
@@ -288,8 +310,8 @@ class _Query:
         where = " AND ".join(clauses) if clauses else ""
         return where, params
 
-    def _build_select_sql(self) -> Tuple[str, Dict[str, Any]]:
-        where, params = self._build_where()
+    def _build_select_sql(self, filters: Optional[List[Tuple[str, str, Any]]] = None) -> Tuple[str, Dict[str, Any]]:
+        where, params = self._build_where(filters)
 
         # 列选择（简化：忽略关系查询，只取字段名）
         if self._columns == "*":
@@ -323,8 +345,8 @@ class _Query:
 
         return sql, params
 
-    def _build_count_sql(self) -> Tuple[str, Dict[str, Any]]:
-        where, params = self._build_where()
+    def _build_count_sql(self, filters: Optional[List[Tuple[str, str, Any]]] = None) -> Tuple[str, Dict[str, Any]]:
+        where, params = self._build_where(filters)
         sql = f"SELECT COUNT(*) FROM {_quote_qualified_identifier(self._table)}"
         if where:
             sql += f" WHERE {where}"
@@ -363,13 +385,14 @@ class _Query:
         return await to_thread.run_sync(self.execute)
 
     def _exec_select(self, session) -> _Response:
-        sql, params = self._build_select_sql()
+        filters = self._effective_filters(session)
+        sql, params = self._build_select_sql(filters)
         result = session.execute(text(sql), params)
         rows = [dict(row._mapping) for row in result]
 
         count = None
         if self._count_mode:
-            count_sql, count_params = self._build_count_sql()
+            count_sql, count_params = self._build_count_sql(filters)
             count_result = session.execute(text(count_sql), count_params)
             count = count_result.scalar()
 
@@ -420,7 +443,7 @@ class _Query:
         if not self._payload:
             return _Response(data=[])
 
-        where, params = self._build_where()
+        where, params = self._build_where(self._effective_filters(session))
         set_parts = []
         for key, val in self._payload.items():
             pname = f"set_{key}"
@@ -443,7 +466,7 @@ class _Query:
         return _Response(data=rows)
 
     def _exec_delete(self, session) -> _Response:
-        where, params = self._build_where()
+        where, params = self._build_where(self._effective_filters(session))
         sql = f"DELETE FROM {_quote_qualified_identifier(self._table)}"
         if where:
             sql += f" WHERE {where}"

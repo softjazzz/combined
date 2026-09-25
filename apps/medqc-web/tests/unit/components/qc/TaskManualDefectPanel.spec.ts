@@ -219,6 +219,35 @@ describe('TaskManualDefectPanel', () => {
     expect(mixed.get('[role="alert"]').text()).toContain('身份校验')
   })
 
+  it('加载更多在途时刷新，迟到分页不得锁死后续加载或混入旧数据', async () => {
+    const stalePage = deferred<ReturnType<typeof page>>()
+    api.list.mockReset()
+      .mockResolvedValueOnce(page([defect('old-first', { rule_name: '旧首页' })], 3))
+      .mockReturnValueOnce(stalePage.promise)
+      .mockResolvedValueOnce(page([defect('fresh-first', { rule_name: '新首页' })], 2))
+      .mockResolvedValueOnce(page([defect('fresh-second', { rule_name: '新次页' })], 2))
+    const wrapper = mountPanel()
+    await flushPromises()
+
+    const more = () => wrapper.findAll('button').find((button) => button.text().includes('加载更多'))!
+    await more().trigger('click')
+    expect(api.list).toHaveBeenNthCalledWith(2, 'task-a', 'association-a', 50, 1)
+    await wrapper.get('[data-testid="manual-defect-refresh"]').trigger('click')
+    await flushPromises()
+    stalePage.resolve(page([defect('old-second', { rule_name: '旧次页' })], 3))
+    await flushPromises()
+
+    await more().trigger('click')
+    await flushPromises()
+    expect(api.list).toHaveBeenCalledTimes(4)
+    expect(api.list).toHaveBeenNthCalledWith(4, 'task-a', 'association-a', 50, 1)
+    expect(wrapper.findAll('[data-testid="manual-defect-item"] strong').map((item) => item.text()))
+      .toEqual(['新首页', '新次页'])
+    expect(wrapper.findAll('button').some((button) => button.text().includes('加载更多'))).toBe(false)
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
   it('同任务病历可读取上一轮人工缺陷，但不能据此确认当前轮次提交', async () => {
     api.list.mockResolvedValueOnce(page([defect('old', { run_number: 1 })]))
     const wrapper = mountPanel()

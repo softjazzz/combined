@@ -230,7 +230,7 @@ async def _fetch_top_categories(sb) -> List[Dict[str, Any]]:
         defect_rows = await async_execute(
             sb.table("qc_defects")
             .select("category")
-            .neq_or_null("source_key", "task_assigned_qc")
+            .exclude_task_manual_source()
             .limit(REPORT_SCAN_LIMIT)
         )
     except Exception as exc:

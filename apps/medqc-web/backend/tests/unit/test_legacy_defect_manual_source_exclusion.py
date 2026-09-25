@@ -5,9 +5,13 @@ import asyncio
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from app.core import supabase_client
 from app.core.security import get_current_user
+from app.core.supabase_client import _PgClient
 from app.routers import defects
 from app.services import defect_export_service
 
@@ -48,8 +52,8 @@ class MemoryQuery:
         self.filters.append(("eq", column, value))
         return self
 
-    def neq_or_null(self, column, value):
-        self.filters.append(("neq_or_null", column, value))
+    def exclude_task_manual_source(self):
+        self.filters.append(("exclude_task_manual_source", "source_key", "task_assigned_qc"))
         self.db.exclusions += 1
         return self
 
@@ -198,3 +202,42 @@ def test_legacy_single_record_action_still_updates_old_row(monkeypatch):
     assert database.rows[1]["status"] == "urged"
     assert database.updates == ["old-other"]
     assert [row["defect_id"] for row in database.history] == ["old-other"]
+
+
+@pytest.mark.parametrize("has_source", [False, True], ids=["rev44", "new_schema"])
+def test_real_adapter_legacy_list_keeps_old_rows_and_excludes_manual_source(monkeypatch, has_source):
+    engine = create_engine(
+        "sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False}
+    )
+    try:
+        with engine.begin() as connection:
+            extra_column = ", source_key TEXT" if has_source else ""
+            connection.execute(text(
+                f"CREATE TABLE qc_defects (id TEXT PRIMARY KEY, created_at TEXT{extra_column})"
+            ))
+            if has_source:
+                connection.execute(
+                    text("INSERT INTO qc_defects (id, created_at, source_key) VALUES (:id, :created_at, :source_key)"),
+                    [
+                        {"id": "old", "created_at": "2026-09-01", "source_key": None},
+                        {"id": "manual", "created_at": "2026-09-02", "source_key": "task_assigned_qc"},
+                    ],
+                )
+            else:
+                connection.execute(text(
+                    "INSERT INTO qc_defects (id, created_at) VALUES ('old', '2026-09-01')"
+                ))
+
+        monkeypatch.setattr(defects, "get_supabase", lambda: _PgClient(sessionmaker(bind=engine)))
+        app = FastAPI()
+        app.include_router(defects.router)
+        app.dependency_overrides[get_current_user] = lambda: {
+            "id": "admin-1", "user_id": "admin-1", "roles": ["admin"],
+        }
+        response = TestClient(app).get("/api/v1/qc/defects")
+
+        assert response.status_code == 200, response.text
+        assert [row["id"] for row in response.json()["data"]["items"]] == ["old"]
+        assert response.json()["data"]["total"] == 1
+    finally:
+        engine.dispose()

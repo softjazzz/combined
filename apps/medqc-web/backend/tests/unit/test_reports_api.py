@@ -157,7 +157,7 @@ class TestReportsAPI:
         class _FakeQuery:
             def __init__(self):
                 self.limit_calls = []
-                self.neq_or_null_calls = []
+                self.exclude_task_manual_source_calls = 0
 
             def select(self, *args, **kwargs):
                 return self
@@ -165,8 +165,8 @@ class TestReportsAPI:
             def eq(self, *args, **kwargs):
                 return self
 
-            def neq_or_null(self, column, value):
-                self.neq_or_null_calls.append((column, value))
+            def exclude_task_manual_source(self):
+                self.exclude_task_manual_source_calls += 1
                 return self
 
             def limit(self, value):
@@ -209,7 +209,7 @@ class TestReportsAPI:
         assert response.status_code == 200
         assert mock_supabase.table_calls == ["qc_statistics_view", "qc_rules", "qc_defects"]
         assert mock_supabase.query.limit_calls == [1000, 1000, 1000]
-        assert mock_supabase.query.neq_or_null_calls == [("source_key", "task_assigned_qc")]
+        assert mock_supabase.query.exclude_task_manual_source_calls == 1
 
 
 

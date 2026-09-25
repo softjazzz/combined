@@ -1318,7 +1318,6 @@ class WorkstationAggregationService:
             identity_ambiguous = visit_id in ambiguous_visit_ids
             status_source = "identity_ambiguous" if identity_ambiguous else "identity_unverified"
 
-            launch = WORKFLOW_TO_LAUNCH.get(workflow_type, {})
             items.append(
                 {
                     "visit_id": visit_id,
@@ -1347,8 +1346,8 @@ class WorkstationAggregationService:
                     "notification_updated_at": None,
                     "latest_notification_id": None,
                     "queue_updated_at": None,
-                    "launch_action": None if identity_ambiguous else launch.get("launch_action"),
-                    "launch_stage": None if identity_ambiguous else launch.get("launch_stage"),
+                    "launch_action": None,
+                    "launch_stage": None,
                 }
             )
         return items

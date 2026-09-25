@@ -237,6 +237,7 @@ async function refresh() {
   const key = contextKey.value
   const token = ++sequence
   loading.value = true
+  loadingMore.value = false
   listError.value = ''
   try {
     const page = await readPage(key, token, 0)
@@ -251,7 +252,7 @@ async function refresh() {
 }
 
 async function loadMore() {
-  if (submitting.value || loadingMore.value || items.value.length >= total.value) return
+  if (submitting.value || loading.value || loadingMore.value || items.value.length >= total.value) return
   const key = contextKey.value
   const token = ++sequence
   loadingMore.value = true

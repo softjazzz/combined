@@ -759,14 +759,17 @@ async def get_final_records(
             )
             .subquery()
         )
-        defect_count_subquery = (
-            session.query(
-                QCDefect.record_id.label("record_id"),
-                func.count(QCDefect.id).label("defect_count"),
-            )
-            .group_by(QCDefect.record_id)
-            .subquery()
+        defect_count_query = session.query(
+            QCDefect.record_id.label("record_id"),
+            func.count(QCDefect.id).label("defect_count"),
         )
+        # 旧库尚无 source_key，也不可能存在依赖该列的任务人工缺陷。
+        defect_columns = session.execute(text('SELECT * FROM "qc_defects" LIMIT 0')).keys()
+        if "source_key" in defect_columns:
+            defect_count_query = defect_count_query.filter(
+                or_(QCDefect.source_key.is_(None), QCDefect.source_key != "task_assigned_qc")
+            )
+        defect_count_subquery = defect_count_query.group_by(QCDefect.record_id).subquery()
 
         query = (
             session.query(

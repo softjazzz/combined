@@ -16,9 +16,9 @@ class _DefectQuery:
         self.calls.append(("select", columns))
         return self
 
-    def neq_or_null(self, column, value):
-        self.calls.append(("neq_or_null", column, value))
-        self.rows = [row for row in self.rows if row.get(column) is None or row[column] != value]
+    def exclude_task_manual_source(self):
+        self.calls.append(("exclude_task_manual_source",))
+        self.rows = [row for row in self.rows if row.get("source_key") != "task_assigned_qc"]
         return self
 
     def limit(self, value):
@@ -62,7 +62,7 @@ async def test_top_categories_excludes_task_manual_defects_before_scan_limit(mon
     ]
     assert database.query.calls == [
         ("select", "category"),
-        ("neq_or_null", "source_key", "task_assigned_qc"),
+        ("exclude_task_manual_source",),
         ("limit", 3),
     ]
 

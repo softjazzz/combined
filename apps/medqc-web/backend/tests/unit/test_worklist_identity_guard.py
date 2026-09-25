@@ -97,11 +97,29 @@ def test_ambiguous_worklist_keeps_patients_without_cross_association(monkeypatch
         assert item["latest_notification_id"] is None
         assert item["notification_status"] == "none"
         assert item["launch_action"] is None
+        assert item["launch_stage"] is None
     assert items[2]["identity_status"] == "unverified"
     assert items[2]["latest_qc_result_id"] is None
     assert items[2]["queue_status"] == "unknown"
     assert items[2]["queue_status_source"] == "identity_unverified"
-    assert items[2]["launch_action"] == "qc_frontpage"
+    assert items[2]["launch_action"] is None
+    assert items[2]["launch_stage"] is None
+
+
+def test_unique_unverified_worklist_and_home_todo_cannot_launch(monkeypatch):
+    service = WorkstationAggregationService(session_factory=lambda: None)
+    monkeypatch.setattr(service, "_load_base_rows", lambda *_args, **_kwargs: [_row("H-A", "P-A")])
+
+    items = service._build_worklist_items(_Session(), workflow_type="frontpage")
+    todos = service._build_home_todos(
+        _Session(), department=None, workflow_type="frontpage", keyword=None, recipient_id=None, limit=10,
+    )
+
+    assert len(items) == len(todos) == 1
+    for item in [items[0], todos[0]]:
+        assert item["identity_status"] == "unverified"
+        assert item["launch_action"] is None
+        assert item["launch_stage"] is None
 
 
 def test_filtered_worklist_still_detects_hidden_same_visit_identity(monkeypatch):
@@ -119,6 +137,7 @@ def test_filtered_worklist_still_detects_hidden_same_visit_identity(monkeypatch)
     assert len(items) == 1
     assert items[0]["identity_status"] == "ambiguous"
     assert items[0]["launch_action"] is None
+    assert items[0]["launch_stage"] is None
     assert len(calls) == 2
 
 
@@ -142,6 +161,7 @@ def test_settlement_join_does_not_hide_other_medical_record_identity(monkeypatch
     assert len(items) == 1
     assert items[0]["identity_status"] == "ambiguous"
     assert items[0]["launch_action"] is None
+    assert items[0]["launch_stage"] is None
 
 
 def test_ambiguous_snapshot_fails_before_loading_single_key_associations(monkeypatch):
@@ -230,3 +250,4 @@ def test_home_todos_keep_two_identities_instead_of_deduping_visit(monkeypatch):
     assert {item["patient_id"] for item in todos} == {"P-A", "P-B"}
     assert all(item["identity_status"] == "ambiguous" for item in todos)
     assert all(item["launch_action"] is None for item in todos)
+    assert all(item["launch_stage"] is None for item in todos)
