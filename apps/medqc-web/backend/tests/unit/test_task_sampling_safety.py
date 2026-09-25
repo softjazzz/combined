@@ -35,8 +35,16 @@ class Query:
         self.db, self.table = db, table
         self.operation = "select"
         self.payload = None
+        self.page = None
 
-    def select(self, *_args):
+    def select(self, *_args, **_kwargs):
+        return self
+
+    def order(self, *_args):
+        return self
+
+    def range(self, start, end):
+        self.page = (start, end)
         return self
 
     def eq(self, *_args):
@@ -73,7 +81,13 @@ class Query:
         if self.operation != "select":
             self.db.writes.append((key, self.payload))
             return SimpleNamespace(data=[])
-        return SimpleNamespace(data=self.db.task if self.table == "qc_tasks" else self.db.records)
+        if self.table == "qc_tasks":
+            return SimpleNamespace(data=self.db.task)
+        rows = self.db.records
+        if self.page is not None:
+            start, end = self.page
+            rows = rows[start:end + 1]
+        return SimpleNamespace(data=rows, count=len(self.db.records))
 
 
 def wire(monkeypatch, db):
@@ -399,8 +413,8 @@ def test_outpatient_route_saves_only_verified_case_coordinates(monkeypatch):
     db = Database(
         task={"id": "task-1", "scene": "outpatient", "record_refs": []},
         records=[
-            {"institute_id": "H1", "patient_id": "P1", "visit_id": "V1", "visit_datetime": None, "dept_name": "内科"},
-            {"institute_id": "H1", "patient_id": "P1", "visit_id": "V1", "visit_datetime": None, "dept_name": "内科"},
+            {"institute_id": "H1", "patient_id": "P1", "visit_id": "V1", "document_id": "D1", "visit_datetime": None, "dept_name": "内科"},
+            {"institute_id": "H1", "patient_id": "P1", "visit_id": "V1", "document_id": "D2", "visit_datetime": None, "dept_name": "内科"},
         ],
     )
     response = wire(monkeypatch, db).post("/api/v1/tasks/task-1/sample")

@@ -14,6 +14,9 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Dict, Any, List
 
 logger = logging.getLogger(__name__)
+HOSPITAL_TZ = timezone(timedelta(hours=8))
+_OUTPATIENT_PAGE_SIZE = 500
+_OUTPATIENT_MAX_DOCUMENTS = 50000
 
 
 def validate_active_running_date_range(date_range: Any) -> tuple[date | None, date | None, date]:
@@ -40,7 +43,7 @@ def validate_active_running_date_range(date_range: Any) -> tuple[date | None, da
     start, end = bound(date_range.get("start")), bound(date_range.get("end"))
     if start and end and start > end:
         raise ValueError("日期范围起始时间不能晚于结束时间")
-    today = datetime.now(timezone(timedelta(hours=8))).date()
+    today = datetime.now(HOSPITAL_TZ).date()
     if start and start > today:
         raise ValueError("入院开始日期不能晚于在院截止日期")
     if start and (today - start).days > 180:
@@ -166,7 +169,9 @@ class TaskSamplingService:
 
         def parse_date(value: Any, *, range_bound: bool = False) -> date:
             if isinstance(value, datetime):
-                return value.date()
+                if range_bound:
+                    raise ValueError("日期范围格式无效")
+                return value.astimezone(HOSPITAL_TZ).date() if value.tzinfo else value.date()
             if isinstance(value, date):
                 return value
             if isinstance(value, str):
@@ -174,7 +179,8 @@ class TaskSamplingService:
                     if re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
                         return date.fromisoformat(value)
                     if not range_bound:
-                        return datetime.fromisoformat(value.replace("Z", "+00:00")).date()
+                        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+                        return parsed.astimezone(HOSPITAL_TZ).date() if parsed.tzinfo else parsed.date()
                 except ValueError:
                     pass
             raise ValueError("门急诊候选日期格式无效")
@@ -217,15 +223,42 @@ class TaskSamplingService:
         sb = get_supabase()
         if sb is None:
             raise RuntimeError("候选病历数据源不可用")
+        documents = []
+        offset = 0
+        expected_count = None
+        seen_documents = set()
         try:
-            response = await async_execute(
-                sb.table("cdm.outpat_record").select(
-                    "institute_id,patient_id,visit_id,visit_datetime,dept_name"
+            while True:
+                query = sb.table("cdm.outpat_record").select(
+                    "institute_id,patient_id,visit_id,document_id,visit_datetime,dept_name",
+                    count="exact",
                 )
-            )
-            documents = getattr(response, "data", None)
-            if documents is None or not isinstance(documents, list):
-                raise RuntimeError("候选病历数据源返回无效")
+                for column_name in ("institute_id", "patient_id", "visit_id", "document_id"):
+                    query = query.order(column_name)
+                response = await async_execute(query.range(offset, offset + _OUTPATIENT_PAGE_SIZE - 1))
+                page = getattr(response, "data", None)
+                count = getattr(response, "count", None)
+                if (not isinstance(page, list) or not isinstance(count, int) or isinstance(count, bool)
+                    or count < offset + len(page) or len(page) > _OUTPATIENT_PAGE_SIZE):
+                    raise RuntimeError("候选病历数据源返回无效")
+                if expected_count is not None and count != expected_count:
+                    raise RuntimeError("候选病历数据源读取期间发生变化")
+                expected_count = count
+                if count > _OUTPATIENT_MAX_DOCUMENTS or (not page and offset < count):
+                    raise RuntimeError("候选病历数据源读取不完整")
+                for document in page:
+                    if not isinstance(document, dict):
+                        raise RuntimeError("候选病历数据源返回无效")
+                    document_id = document.get("document_id")
+                    document_key = (*identity(document), document_id)
+                    if (not isinstance(document_id, str) or not document_id.strip()
+                        or document_key in seen_documents):
+                        raise RuntimeError("候选病历文书身份无效")
+                    seen_documents.add(document_key)
+                documents.extend(page)
+                offset += len(page)
+                if offset >= count:
+                    break
         except Exception as exc:
             logger.warning("门急诊候选查询失败: %s", type(exc).__name__)
             raise RuntimeError("候选病历数据源不可用") from exc
