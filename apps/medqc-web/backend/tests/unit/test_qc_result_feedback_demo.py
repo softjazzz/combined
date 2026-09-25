@@ -370,6 +370,32 @@ def _canonical_row(*, root_job_id="root-1", record_ref="rec_0123456789abcdef0123
     }
 
 
+@pytest.mark.parametrize(
+    ("field", "invalid_value"),
+    [
+        ("schema_version", "unknown-envelope-v1"),
+        ("delivery_mode", "legacy_items_json"),
+    ],
+)
+def test_feedback_rejects_explicitly_invalid_canonical_envelope_metadata(
+    field: str, invalid_value: str,
+) -> None:
+    import json
+
+    row = _canonical_row()
+    envelope = json.loads(row["envelope_json"])
+    envelope[field] = invalid_value
+    row["envelope_json"] = json.dumps(envelope, ensure_ascii=False)
+
+    with pytest.raises(ResultFeedbackDemoConflict):
+        ResultFeedbackDemoStore._canonical_item_from_row(
+            row,
+            root_job_id="root-1",
+            record_ref="rec_0123456789abcdef01234567",
+            rule_id="LX0609-01-01-01",
+        )
+
+
 def _feedback_row():
     return {
         "id": "feedback-1",

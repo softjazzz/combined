@@ -26,7 +26,11 @@ from ..luxian_0609.customer_text_publication import (
     assert_published_customer_text_unchanged,
 )
 from ..custom_qc_workspace_service import _record_result_envelopes_table
-from .canonical_result_store import safe_customer_display_facts
+from .canonical_result_store import (
+    CANONICAL_RESULT_DELIVERY_MODE,
+    RECORD_RESULT_ENVELOPE_SCHEMA,
+    safe_customer_display_facts,
+)
 
 
 class ResultFeedbackDemoStoreUnavailable(RuntimeError):
@@ -226,6 +230,12 @@ class ResultFeedbackDemoStore:
     def _validated_items(envelope: Mapping[str, Any]) -> list[dict[str, Any]]:
         """现行签章结果沿反馈读写共用校验；旧无签章结果保留既有兼容读取。"""
 
+        if "schema_version" in envelope or "delivery_mode" in envelope:
+            if (
+                envelope.get("schema_version") != RECORD_RESULT_ENVELOPE_SCHEMA
+                or envelope.get("delivery_mode") != CANONICAL_RESULT_DELIVERY_MODE
+            ):
+                raise ResultFeedbackDemoConflict("质控结果无法唯一确认")
         items = envelope.get("items")
         if not isinstance(items, list):
             raise ResultFeedbackDemoConflict("质控结果无法唯一确认")

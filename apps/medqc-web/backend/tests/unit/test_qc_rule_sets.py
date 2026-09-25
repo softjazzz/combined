@@ -1094,6 +1094,87 @@ async def test_evaluate_rule_for_visit_sc146_should_include_surgery_bundle_suppo
     assert any("术前小结" in str(item.get("document_title") or "") for item in supporting)
 
 
+@pytest.mark.asyncio
+async def test_evaluate_rule_for_visit_should_passthrough_luxian_usage_observation(monkeypatch):
+    """规则级回退路径必须把引擎的成本观测完整性透传给 Worker。
+
+    完整 bundle 路径已在 ``sichuan_qc_service._evaluate_rules_with_engine`` 透传两键，
+    Worker 从 ``evaluate_rule_for_visit`` 的返回体读取这两键
+    （``sichuan_workspace_batch_worker._capture_usage_observation``）。
+    """
+
+    service = SichuanQCService()
+    orchestrated_payload: dict = {}
+
+    def _fake_load_bundle(*, execution_domain: str, **_: object) -> dict:
+        return {
+            "execution_domain": execution_domain,
+            "timeline_facts": [],
+            "document_hits": {"daily_course_record": True},
+            "data_quality_flags": [],
+            "source_documents": [
+                {
+                    "document_type": "daily_course_record",
+                    "source_table": "daily_course_record",
+                    "document_id": "daily-001",
+                    "document_title": "日常病程记录",
+                    "display_time": "2026-03-09 09:00:00",
+                    "content": "今日病程记录：患者病情平稳。",
+                }
+            ],
+        }
+
+    async def _fake_orchestrated(**kwargs):
+        return {
+            "results": [
+                {
+                    "rule_id": "SC-023",
+                    "rule_name": "日常病程记录应记录病情变化",
+                    "status": "compliant",
+                    "is_compliant": True,
+                    "findings": "",
+                    "evidence": "",
+                    "suggestion": "",
+                    "confidence": 0.7,
+                    "metadata": {"tokens_used": 0, "api_time": 0.0},
+                }
+            ],
+            "executor_breakdown": {"llm": 1},
+            **orchestrated_payload,
+        }
+
+    monkeypatch.setattr(sichuan_qc_service_module, "load_or_assemble_domain_bundle", _fake_load_bundle)
+    monkeypatch.setattr(service, "_evaluate_rules_orchestrated", _fake_orchestrated)
+
+    orchestrated_payload.update(
+        {
+            "luxian_0609_usage_observation_complete": False,
+            "luxian_0609_usage_unknown_executor_keys": ["exam_lab", "course_quality"],
+        }
+    )
+    result = await service.evaluate_rule_for_visit(
+        rule_id="SC-023",
+        institute_id="HOSP-001",
+        patient_id="PAT-001",
+        visit_id="VISIT-001",
+    )
+
+    assert result["luxian_0609_usage_observation_complete"] is False
+    assert result["luxian_0609_usage_unknown_executor_keys"] == ["exam_lab", "course_quality"]
+
+    # 引擎未给出观测完整性时不得伪造两键，与完整 bundle 路径的合同保持一致。
+    orchestrated_payload.clear()
+    result_without_flag = await service.evaluate_rule_for_visit(
+        rule_id="SC-023",
+        institute_id="HOSP-001",
+        patient_id="PAT-001",
+        visit_id="VISIT-001",
+    )
+
+    assert "luxian_0609_usage_observation_complete" not in result_without_flag
+    assert "luxian_0609_usage_unknown_executor_keys" not in result_without_flag
+
+
 def test_rule_set_list_should_expose_new_launch_rule_sets():
     items = list_sichuan_rule_sets()
     keys = {item["rule_set_key"] for item in items}

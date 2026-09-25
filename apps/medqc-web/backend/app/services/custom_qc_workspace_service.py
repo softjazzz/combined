@@ -4239,7 +4239,7 @@ class CustomQCWorkspaceService:
             row = session.execute(
                 select(self._batch_job_table).where(
                     and_(self._batch_job_table.c.id == job_id, self._batch_job_table.c.created_by == created_by)
-                )
+                ).with_for_update()
             ).mappings().first()
             if not row:
                 return None
@@ -4318,7 +4318,7 @@ class CustomQCWorkspaceService:
                 }
                 if (current.get("filters") or {}).get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY:
                     child_rows = session.execute(
-                        select(self._batch_job_table).where(active_child_scope)
+                        select(self._batch_job_table).where(active_child_scope).with_for_update()
                     ).mappings().all()
                     for child_row in child_rows:
                         child_summary = _safe_json_loads(child_row.get("summary_json"), {})
@@ -4515,6 +4515,8 @@ class CustomQCWorkspaceService:
                             return None
                         child_filters = _safe_json_loads(child_row.get("filters_json"), {})
                         child_filters = dict(child_filters) if isinstance(child_filters, dict) else {}
+                        # 父任务已清空子任务基准结果，本轮必须按原计划全量执行。
+                        child_filters.pop(FAILED_RULE_RETRY_FILTER_KEY, None)
                         child_filters[LX0609_ATTEMPT_FILTER_KEY] = uuid.uuid4().hex
                         child_update = session.execute(
                             update(self._batch_job_table)

@@ -539,8 +539,14 @@ def test_preclaim_failure_uses_original_queued_snapshot(storage):
 def test_parent_retry_rotates_each_child_queued_snapshot(storage):
     service, engine, table = storage
     first_filters = {
-        "rule_set_key": "luxian_0609_qc_v1", "rule_ids": ["LX0609-01-01-01"],
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_ids": ["LX0609-01-01-01", "LX0609-01-01-02"],
         "family_key": "admission", "department": "内科",
+    }
+    stale_retry_scope = {
+        "schema_version": "failed-rule-retry-v1",
+        "rule_ids": ["LX0609-01-01-01"],
+        "attempt": 1,
     }
     second_filters = {
         "rule_set_key": "luxian_0609_qc_v1", "rule_ids": ["LX0609-06-01-01"],
@@ -548,7 +554,7 @@ def test_parent_retry_rotates_each_child_queued_snapshot(storage):
     }
     with engine.begin() as connection:
         connection.execute(table.update().where(table.c.id == "attempt-job").values(
-            filters_json=json.dumps(first_filters),
+            filters_json=json.dumps({**first_filters, "failed_rule_retry": stale_retry_scope}),
         ))
     original = service.get_batch_job_for_processing(job_id="attempt-job")
     assert original is not None
@@ -588,6 +594,8 @@ def test_parent_retry_rotates_each_child_queued_snapshot(storage):
     )
     assert new_first == first_filters
     assert new_second == second_filters
+    assert first["items"] == []
+    assert first["failed_records"] == []
     service.fail_batch_job(
         job_id="attempt-job", error_message="old-activation", queued_only=True,
         expected_queued_filters_json=old_first_filters,
