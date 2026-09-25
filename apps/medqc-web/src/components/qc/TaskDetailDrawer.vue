@@ -333,10 +333,10 @@
                 </a-tag>
               </template>
               <template v-else-if="column.key === 'score'">
-                {{ formatNumber(record.score) }}
+                {{ record.status === 'completed' ? formatNumber(record.score) : '待评估' }}
               </template>
               <template v-else-if="column.key === 'defects'">
-                {{ formatNumber(record.defect_count) }}
+                {{ record.status === 'completed' ? formatNumber(record.defect_count) : '待评估' }}
               </template>
               <template v-else-if="column.key === 'completedAt'">
                 {{ formatDate(record.completed_at) }}

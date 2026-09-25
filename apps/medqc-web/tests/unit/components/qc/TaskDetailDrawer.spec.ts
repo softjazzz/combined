@@ -270,8 +270,8 @@ describe('TaskDetailDrawer', () => {
   it('按收到范围读取真实详情，并区分真实零值与缺失值', async () => {
     mocks.getTaskDetail.mockResolvedValueOnce(
       detailResponse('任务甲', [
-        record({ score: 0, defect_count: 0 }),
-        record({ id: 'association-2', record_id: 'record-2', score: null, defect_count: null }),
+        record({ status: 'completed', score: 0, defect_count: 0 }),
+        record({ id: 'association-2', record_id: 'record-2', status: 'completed', score: null, defect_count: null }),
       ]),
     )
     const wrapper = mountDrawer()
@@ -285,6 +285,16 @@ describe('TaskDetailDrawer', () => {
     expect(wrapper.text()).toContain('0')
     expect(wrapper.text()).toContain('未记录')
     expect(wrapper.get('[data-testid="task-detail-record-count"]').text()).toBe('2 份')
+  })
+
+  it('未完成病历不将抽样占位零值展示为评分或缺陷结论', async () => {
+    mocks.getTaskDetail.mockResolvedValueOnce(detailResponse('待处理任务', [
+      record({ score: 0, defect_count: 0 }),
+    ]))
+    const wrapper = mountDrawer()
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="task-detail-record-table"]').text().match(/待评估/g)).toHaveLength(2)
   })
 
   it('真实空清单显示收到范围空态', async () => {
