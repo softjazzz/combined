@@ -2,6 +2,8 @@
 
 > 当前执行入口：[2026-09-25 剩余目标执行卡](2026-09-25-lx0609-engine-remaining-goal.md)。以下历次接续与技术证据保留；执行顺序和已提交基线以该卡为准，A/B/C/D 退出合同仍以本文“2026-09-24 再收敛”一节为准。
 
+2026-09-25 当前审计：阶段 C 的工程关闭依据已按现行提交复验，目录/漂移/正式测试规则全链相关 26/26 通过，11 族仍在生产调用的适配保留；[C 审计](../acceptance/2026-09-24-original-engine-phase-c-audit.md)明确工程合同已验收。A0 临床保护集候选表无签收记录，不能因此关闭 A 或整体 goal；[证据对照](../acceptance/2026-09-24-original-engine-requirements-evidence.md)列出逐表计数。
+
 2026-09-25 阶段 B/D 再补隔离 PostgreSQL 的正式 Worker 纵向用例：新进程从 PG 冻结任务表领取原始 001，以合成空来源执行并在同一事务边界保存/读回一条 Canonical `data_gap`；与三轮双进程争领、旧代次拒绝合跑 4/4。细节及限制见[隔离 PG 验收](../acceptance/2026-09-25-original-engine-isolated-pg-attempts.md)。真实客户部署、临床来源和模型费用仍未验收。
 
 2026-09-25 再补[解压包跨进程恢复演练](../acceptance/2026-09-25-original-engine-package-restart.md)：以 `71f347e3a` 干净源码重新打包、解压，确认前后端构建身份一致，包内后端原始 001 排队任务可跨进程完成并读回 Canonical；已领取任务进程退出、续约过期后受控失败且费用观测标记未知。属于本机 SQLite/合成病例技术验证；客户机启动、PG、模型及临床保护集仍未验收。发布脚本另有 Windows PowerShell 5.1 解析故障，已单独记录。

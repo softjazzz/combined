@@ -524,6 +524,8 @@
 
 ### MEDQC-022：LX0609 质控引擎职责收敛
 
+2026-09-25 阶段 C 工程合同复验：正式目录 84 条均走 Native，旧适配仍包装生产在用 11 族；目录/合同拒绝漂移和测试专用新规则经正式任务/Worker/保存/读回的 26 项测试通过。C 的工程关闭依据已具备，不再为删除在用适配造新层。A0 保护集实物核对：黄金候选 81/178 行、自动候选 97 行全部待复核，P0 表 61 行未填状态，shadow45 的 900 行无审核人/状态，review20 无数据；缺独立临床签收，A及整体goal仍 active。见[C 审计](../acceptance/2026-09-24-original-engine-phase-c-audit.md)和[要求证据对照](../acceptance/2026-09-24-original-engine-requirements-evidence.md)。
+
 2026-09-25 B/D 纵向补证：独立 Python 进程现可在本机隔离 PostgreSQL 18 上执行正式原始 001 Worker，任务与 Canonical 均保存/读回一条 `data_gap`，三轮双进程争领和旧代次拒绝继续通过，合计 4/4；没有读取真实病历或调用模型。客户 PG/启动脚本、临床保护集和实际模型费用仍待验，goal 保持 active。[验收记录](../acceptance/2026-09-25-original-engine-isolated-pg-attempts.md)。
 
 2026-09-25 本机发布包技术补证：以提交 `71f347e3a` 的干净检出重编译并生成 ZIP，前后端构建身份一致；解压包内后端的原始 001 排队任务跨进程完成并读回 Canonical，运行中任务在进程退出、模拟租约到期后受控失败且成本观测改为未知。隔离 PostgreSQL 双进程争领另有三轮通过。客户机真实启动、客户 PG、模型与临床保护集仍未验收，A/B/C/D goal 保持 active。打包脚本在 Windows PowerShell 5.1 下解析失败、指南仍建议已被拒绝的 `-SkipBuild`，作为发布流程问题待单独修正；本次 PowerShell 7 成功不代表旧命令可用。详见[解压包演练](../acceptance/2026-09-25-original-engine-package-restart.md)。

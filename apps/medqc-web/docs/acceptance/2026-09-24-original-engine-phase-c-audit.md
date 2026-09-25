@@ -1,5 +1,11 @@
 # 原始 LX0609 阶段 C 启动前只读盘点
 
+## 2026-09-25 当前工程合同复验
+
+在提交 `de9c0ce65` 上重新加载正式依赖目录：84 条规则，`native_sync` 8 条、`native_async` 76 条，兼容执行模式 0 条；计数包含新增规则，仅用于验证协议，不计作原始规则医学验收。旧 `build_luxian_0609_legacy_executor_registry` 仍由生产 `execution.py` 调用并包装 11 个现役族函数，因此不存在可直接删除的已替代适配。目录/合同漂移拒绝、临时四段式规则进入正式任务路由、Worker、执行、隔离 SQLite Canonical 与公开 DTO 的三份聚焦测试 **26/26 通过**；测试规则未加入产品目录，保存/API/前端无此规则特例。
+
+按主计划“再收敛”表中 C 的**工程关闭依据**，属性所有者、拒绝漂移、正式扩展链与旧适配保留理由已具备，可将 C 记为“工程合同已验收”。这不代表原始规则的独立临床保护集或客户部署通过；整体 A/B/C/D goal 继续 active。若后续公共边界改动破坏这三份测试，C 须重新打开。
+
 ## 2026-09-25 旧适配保留审计
 
 在当前集成树 `aec9ecfb2` 只读核对：`load_luxian_0609_dependency_inventory()` 返回84条目录规则，执行模式为 `native_sync` 8条、`native_async` 76条，没有 `compatibility` 模式。这个全目录计数含独立新规则，只用于确认适配调用形态，不能把新规则计入原始引擎医学验收。正式 `execution.py` 仍在 Native Engine 调用前把11个现有规则族函数包装成 `LegacyNativeExecutorFunctions`，并在 `build_luxian_0609_legacy_executor_registry` 注册相同11个回调；`executor_registry.py` 末端用规则合同执行器键集合拒绝漂移。该适配器是现有规则族函数与统一执行信封之间的在用边界，不是已被替换的旧执行结果通道。当前没有可删除的替代实现；直接移除会切断正式 Native 执行，另建一层只是增加链路。保留它并记录 owner，比按文件名强制删除更符合阶段 C 约束。
