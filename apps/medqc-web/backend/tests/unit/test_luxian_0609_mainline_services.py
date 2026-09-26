@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from app.core.settings import Settings
 from app.routers.qc_sichuan import _build_record_status_counts
 from app.services.luxian_0609_result_aggregator import (
     aggregate_luxian_0609_results,
@@ -403,6 +404,11 @@ async def _async_value(value):
     return value
 
 
+_PRODUCTION_FAMILY_MAX_CONCURRENCY = Settings.model_fields[
+    "LUXIAN_0609_FAMILY_MAX_CONCURRENCY"
+].default
+
+
 def _all_native_settings(**overrides):
     values = {
         "LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED": True,
@@ -426,6 +432,8 @@ def _all_native_settings(**overrides):
         "LUXIAN_0609_RULE_DECISION_BASIC_TIMELINESS_ENABLED": False,
         "LUXIAN_0609_RULE_DECISION_COURSE_SEVERITY_ENABLED": False,
         "LUXIAN_0609_RULE_DECISION_TRANSFUSION_ENABLED": False,
+        # 统一引擎族并发上限是生产 Settings 必备字段；取模型默认值，避免替身与合同漂移。
+        "LUXIAN_0609_FAMILY_MAX_CONCURRENCY": _PRODUCTION_FAMILY_MAX_CONCURRENCY,
     }
     values.update(overrides)
     return SimpleNamespace(**values)
@@ -1587,21 +1595,10 @@ async def test_transfusion_rule_decision_flag_off_preserves_raw_result_contract(
 async def test_consultation_episode_typed_decisions_replace_raw_results(
     monkeypatch,
 ) -> None:
-    selected = ("LX0609-03-01-02", "LX0609-03-01-03")
-    package_plan = Luxian0609PackagePlan(
-        selected_rule_ids=selected,
-        native_sync_rule_ids=(),
-        native_async_rule_ids=selected,
-        compatibility_rule_ids=(),
-        compatibility_execution_rule_ids=(),
-        bypassed_execution_rule_ids=(),
-        native_executor_batches=(("consultation_quality", selected),),
-    )
-    monkeypatch.setattr(
-        luxian_execution,
-        "build_luxian_0609_package_plan_from_settings",
-        lambda **_kwargs: package_plan,
-    )
+    # 03-01-02/03 因上游会诊申请单来源缺失暂停，只有 023（03-01-04）仍启用。
+    # 使用生产包计划，验证暂停规则不派发，启用规则的 typed 决策替代旧结果。
+    paused = ("LX0609-03-01-02", "LX0609-03-01-03")
+    selected = (*paused, "LX0609-03-01-04")
 
     def read(**kwargs):
         return SnapshotSourceRows.create(
@@ -1649,6 +1646,8 @@ async def test_consultation_episode_typed_decisions_replace_raw_results(
         settings=_all_native_settings(
             LUXIAN_0609_UNIFIED_ENGINE_ENABLED=True,
             LUXIAN_0609_RULE_DECISION_CONSULTATION_ENABLED=True,
+            # 与生产默认一致：023 经会诊执行链接入原生执行。
+            LUXIAN_0609_CONSULTATION_EXECUTION_LINK_ENABLED=True,
         ),
         institute_id="private-institute",
         patient_id="private-patient",
@@ -1656,10 +1655,28 @@ async def test_consultation_episode_typed_decisions_replace_raw_results(
     )
 
     assert executable == []
-    assert context.native_results == []
-    assert [item.rule_id for item in context.reduced_decisions] == list(selected)
+    # 暂停项只由阶段门控生成 not_executed，不经执行器、不产生判定。
+    assert [
+        (
+            item["rule_id"],
+            item["status"],
+            item["reason_code"],
+            item["metadata"]["execution_source"],
+            item["metadata"]["pending_reason_code"],
+        )
+        for item in context.native_results
+    ] == [
+        (
+            rule_id,
+            "not_executed",
+            "policy_definition_pending",
+            "lx0609_phase_gate",
+            "consultation_source_document_unavailable_customer_scope",
+        )
+        for rule_id in paused
+    ]
+    assert [item.rule_id for item in context.reduced_decisions] == ["LX0609-03-01-04"]
     assert [item.final_state.value for item in context.reduced_decisions] == [
-        "not_applicable",
         "not_applicable",
     ]
     # 完整来源确认不存在会诊事件时没有可定位文书，不能再以来源级引用冒充
@@ -1744,10 +1761,12 @@ async def test_consultation_invalid_model_output_survives_prepare_binding_and_ag
     )
 
     assert executable == []
-    assert [(item.final_state.value, item.reason_code) for item in context.reduced_decisions] == [
-        ("technical_error", "model_invalid_output"),
-        ("technical_error", "model_invalid_output"),
-    ]
+    # 03-01-01 因上游会诊申请单来源缺失而暂停，不得进入执行决策；
+    # 仍启用的 023（03-01-04）照常调用一次模型，非法输出按技术失败处理。
+    assert [
+        (item.rule_id, item.final_state.value, item.reason_code)
+        for item in context.reduced_decisions
+    ] == [("LX0609-03-01-04", "technical_error", "model_invalid_output")]
     assert len(client.prompts) == 1
     assert context.native_llm_call_count == 1
     orchestrated = luxian_execution.aggregate_luxian_0609_orchestrated_results(
@@ -1757,12 +1776,18 @@ async def test_consultation_invalid_model_output_survives_prepare_binding_and_ag
         model_name="test-model",
         evidence_payload={},
     )
-    assert [(item["status"], item["reason_code"]) for item in orchestrated["results"]] == [
-        ("technical_error", "model_invalid_output"),
-        ("technical_error", "model_invalid_output"),
-    ]
+    paused, consultation_023 = orchestrated["results"]
+    assert (paused["rule_id"], paused["status"], paused["reason_code"]) == (
+        "LX0609-03-01-01", "not_executed", "policy_definition_pending",
+    )
+    assert paused["metadata"]["pending_reason_code"] == (
+        "consultation_source_document_unavailable_customer_scope"
+    )
+    assert (
+        consultation_023["rule_id"], consultation_023["status"], consultation_023["reason_code"],
+    ) == ("LX0609-03-01-04", "technical_error", "model_invalid_output")
     assert all("data_gap_details" not in item for item in orchestrated["results"])
-    assert all(item["criterion_results"] == [] for item in orchestrated["results"])
+    assert consultation_023["criterion_results"] == []
 
 
 @pytest.mark.asyncio
@@ -1796,11 +1821,16 @@ async def test_executor_contract_stub_projection_keeps_invalid_display_facts_tec
         lambda **_kwargs: session,
     )
 
+    dispatched_rule_ids: list[tuple[str, ...]] = []
+
     async def invalid_display_facts(**kwargs):
         snapshot = kwargs["evidence_snapshot"]
+        # 与真实执行器一致：只对引擎实际派发的规则产出决策。
+        planned = tuple(kwargs["rule_ids"])
+        dispatched_rule_ids.append(planned)
         return NativeConsultationEpisodeExecutionResult(
             results=(),
-            planned_rule_ids=selected,
+            planned_rule_ids=planned,
             decisions=tuple(
                 RuleDecision(
                     rule_id=rule_id,
@@ -1812,11 +1842,11 @@ async def test_executor_contract_stub_projection_keeps_invalid_display_facts_tec
                     fact_refs=(),
                     evaluator_version="test-consultation-stub-v1",
                 )
-                for rule_id in selected
+                for rule_id in planned
             ),
             customer_display_facts=tuple(
                 (rule_id, {"invalid_model_contract": True})
-                for rule_id in selected
+                for rule_id in planned
             ),
         )
 
@@ -1850,9 +1880,14 @@ async def test_executor_contract_stub_projection_keeps_invalid_display_facts_tec
         model_name="test-model",
         evidence_payload=None,
     )
-    assert [(item["status"], item["reason_code"]) for item in orchestrated["results"]] == [
-        ("technical_error", "model_invalid_output"),
-        ("technical_error", "model_invalid_output"),
+    # 暂停的 03-01-01 不派发给执行器；023 的非法展示事实仍按技术失败处理。
+    assert dispatched_rule_ids == [("LX0609-03-01-04",)]
+    assert [
+        (item["rule_id"], item["status"], item["reason_code"])
+        for item in orchestrated["results"]
+    ] == [
+        ("LX0609-03-01-01", "not_executed", "policy_definition_pending"),
+        ("LX0609-03-01-04", "technical_error", "model_invalid_output"),
     ]
     assert all("data_gap_details" not in item for item in orchestrated["results"])
     # 客户事实合同非法属于技术失败；不得保留可能由非法事实导出的临床
@@ -2785,6 +2820,7 @@ async def test_native_029_triple_flags_bypass_legacy_raw_rules_at_service_entry(
     ]
     legacy_raw_ids = ["CL-181", "SC-081", "LX-025", "SC-095", "SC-102", "LXE-33"]
     settings = SimpleNamespace(
+        LUXIAN_0609_FAMILY_MAX_CONCURRENCY=_PRODUCTION_FAMILY_MAX_CONCURRENCY,
         LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=True,
         LUXIAN_0609_TRIGGER_GATE_ENABLED=False,
         LUXIAN_0609_LLM_TRIGGER_GATE_ENABLED=False,
@@ -3760,29 +3796,43 @@ async def test_remaining_native_families_bypass_all_legacy_rules_and_keep_custom
         use_execution_cache=False,
     )
 
+    # 暂停规则（含来源缺失而暂停的麻醉访视 04-04-01）不得进入任何执行批次。
+    paused = {"LX0609-04-02-04", "LX0609-05-01-01", "LX0609-04-04-01"}
+    assert paused.isdisjoint(rule_id for _key, batch in calls for rule_id in batch)
     assert dispatched == []
     assert calls == [
         ("course_quality", ("LX0609-02-01-03", "LX0609-02-01-04", "LX0609-02-01-05", "LX0609-12-01-01", "LX0609-12-01-02", "LX0609-01-01-02")),
         ("surgery_gate", ("LX0609-04-02-01", "LX0609-04-02-03", "LX0609-04-02-05", "LX0609-11-01-01")),
-        ("surgery_document", ("LX0609-11-02-01", "LX0609-11-02-02", "LX0609-04-04-01", "LX0609-04-04-02", "LX0609-04-04-03", "LX0609-04-01-02")),
+        ("surgery_document", ("LX0609-11-02-01", "LX0609-11-02-02", "LX0609-04-04-02", "LX0609-04-04-03", "LX0609-04-01-02")),
     ]
     assert [item["rule_id"] for item in result["evaluation_results"]] == selected
     assert [
         item["status"] for item in result["evaluation_results"]
-        if item["rule_id"] in {"LX0609-04-02-04", "LX0609-05-01-01"}
-    ] == ["not_executed"] * 2
+        if item["rule_id"] in paused
+    ] == ["not_executed"] * 3
+    anesthesia = next(
+        item for item in result["evaluation_results"] if item["rule_id"] == "LX0609-04-04-01"
+    )
+    assert anesthesia["metadata"]["pending_reason_code"] == (
+        "anesthesia_visit_sources_unavailable_customer_scope"
+    )
     assert [
         item["status"] for item in result["evaluation_results"]
-        if item["rule_id"] not in {"LX0609-04-02-04", "LX0609-05-01-01"}
-    ] == ["data_gap"] * 16
+        if item["rule_id"] not in paused
+    ] == ["data_gap"] * 15
     assert result["token_usage"]["total_tokens"] == 0
     legacy_ids = {
         raw_id
         for rule_id, values in mappings.items()
-        if rule_id not in {"LX0609-04-02-04", "LX0609-05-01-01"}
+        if rule_id not in paused
         for raw_id in values
     }
-    assert all(raw_id not in repr(result["evaluation_results"]) for raw_id in legacy_ids)
+    # 暂停项按现有合同在 metadata 中保留映射追溯；04-04-01 与启用的 04-04-02
+    # 共用 LX-020，因此旧结果隔离只对实际执行的规则断言。
+    active_results = [
+        item for item in result["evaluation_results"] if item["rule_id"] not in paused
+    ]
+    assert all(raw_id not in repr(active_results) for raw_id in legacy_ids)
 
 
 @pytest.mark.asyncio

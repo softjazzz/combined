@@ -8,6 +8,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.core.settings import Settings
 from app.routers import luxian_0609_preproduction
 from app.services.luxian_0609 import evidence_snapshot_provider, execution
 from app.services.luxian_0609 import preproduction_bundle_reader
@@ -28,7 +29,13 @@ def _build_client(*, enabled: bool) -> TestClient:
     app.include_router(luxian_0609_preproduction.router)
     app.dependency_overrides[
         luxian_0609_preproduction._settings_dependency
-    ] = lambda: SimpleNamespace(LUXIAN_0609_PREPRODUCTION_API_ENABLED=enabled)
+    ] = lambda: SimpleNamespace(
+        LUXIAN_0609_PREPRODUCTION_API_ENABLED=enabled,
+        # 预生产 Overlay 把未覆盖字段转发给基础配置；统一引擎必读族并发上限。
+        LUXIAN_0609_FAMILY_MAX_CONCURRENCY=Settings.model_fields[
+            "LUXIAN_0609_FAMILY_MAX_CONCURRENCY"
+        ].default,
+    )
     client = TestClient(app)
     client.headers.update({"Authorization": "Bearer safe-test-token"})
     return client
