@@ -33,6 +33,7 @@ from .routers import qc_llm_configs as qc_llm_configs_router
 from .routers import semantic_rules as semantic_rules_router
 from .routers import tasks as tasks_router
 from .routers import record_reviews as record_reviews_router
+from .routers import record_operations as record_operations_router
 from .routers import manual_defect_reviews as manual_defect_reviews_router
 from .routers import classification as classification_router
 from .routers import llm_configs as llm_configs_router
@@ -268,6 +269,7 @@ def create_app() -> FastAPI:
     app.include_router(semantic_rules_router.router)
     app.include_router(tasks_router.router)
     app.include_router(record_reviews_router.router)
+    app.include_router(record_operations_router.router)
     app.include_router(manual_defect_reviews_router.router)
     app.include_router(classification_router.router)
     app.include_router(llm_configs_router.router)

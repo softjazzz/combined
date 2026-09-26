@@ -126,6 +126,22 @@ const CaseManualDefectPanelStub = defineComponent({
   },
 })
 
+let operationTimelineProps: Record<string, unknown> | null = null
+
+const CaseOperationTimelineStub = defineComponent({
+  name: 'CaseOperationTimeline',
+  props: {
+    instituteId: { type: String, required: true },
+    patientId: { type: String, required: true },
+    visitId: { type: String, required: true },
+  },
+  emits: ['forbidden'],
+  setup(props) {
+    operationTimelineProps = props as unknown as Record<string, unknown>
+    return () => h('div', { 'data-testid': 'case-operations-stub' })
+  },
+})
+
 function mountDrawer(
   presentationMode?: 'flat' | 'grouped',
   extraProps: Record<string, unknown> = {},
@@ -167,6 +183,7 @@ function mountDrawer(
         QCRecordCompareWorkbench: QCRecordCompareWorkbenchStub,
         CaseRecordReviewPanel: CaseRecordReviewPanelStub,
         CaseManualDefectPanel: CaseManualDefectPanelStub,
+        CaseOperationTimeline: CaseOperationTimelineStub,
       },
     },
   })
@@ -185,6 +202,7 @@ describe('QCRecordResultComparisonDrawer', () => {
     workbenchProps = null
     reviewPanelProps = null
     manualDefectPanelProps = null
+    operationTimelineProps = null
     authState.roles = []
     authState.calls = 0
   })
@@ -531,5 +549,47 @@ describe('QCRecordResultComparisonDrawer', () => {
     const wrapper = mountDrawer('grouped', recordReview ? { recordReview: true } : {})
     await flushPromises()
     expect(wrapper.find('[data-testid="case-manual-defects-stub"]').exists()).toBe(false)
+  })
+
+  it('操作记录位于人工缺陷之后，同条件挂载并按三坐标传入；403 只隐藏自身', async () => {
+    authState.roles = ['admin']
+    getLatestLuxian0609RecordResult.mockResolvedValue({ success: true, data: readyResult })
+    const wrapper = mountDrawer('grouped', { recordReview: true })
+    await flushPromises()
+    const html = wrapper.html()
+    expect(html.indexOf('case-operations-stub')).toBeGreaterThan(html.indexOf('case-manual-defects-stub'))
+    expect(operationTimelineProps).toMatchObject({ instituteId: 'H1', patientId: 'P001', visitId: 'V001' })
+
+    // 审核面板与人工缺陷 403 不影响操作记录；操作记录 403 只隐藏自身。
+    wrapper.getComponent(CaseManualDefectPanelStub).vm.$emit('forbidden')
+    wrapper.getComponent(CaseRecordReviewPanelStub).vm.$emit('forbidden')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="case-operations-stub"]').exists()).toBe(true)
+    wrapper.getComponent(CaseOperationTimelineStub).vm.$emit('forbidden')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="case-operations-stub"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('权限')
+  })
+
+  it.each([
+    [['qc_staff'], true],
+    [['admin'], false],
+  ])('角色 %j 或未开启审核(%s)时不挂载操作记录', async (roles, recordReview) => {
+    authState.roles = roles
+    getLatestLuxian0609RecordResult.mockResolvedValue({ success: true, data: readyResult })
+    const wrapper = mountDrawer('grouped', recordReview ? { recordReview: true } : {})
+    await flushPromises()
+    expect(wrapper.find('[data-testid="case-operations-stub"]').exists()).toBe(false)
+  })
+
+  it('结果未就绪时不挂载操作记录', async () => {
+    authState.roles = ['admin']
+    getLatestLuxian0609RecordResult.mockResolvedValue({
+      success: true,
+      data: { ...readyResult, state: 'technical_error' },
+    })
+    const wrapper = mountDrawer('grouped', { recordReview: true })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="case-operations-stub"]').exists()).toBe(false)
   })
 })

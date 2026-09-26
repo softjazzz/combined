@@ -127,6 +127,15 @@
           :visit-id="focus.visitId"
           @forbidden="manualDefectForbidden = true"
         />
+        <!-- 操作记录时间线：只装配各 owner 的事件，只读；与人工缺陷同一挂载条件。 -->
+        <CaseOperationTimeline
+          v-if="showOperations"
+          :key="`case-operations:${focus.instituteId}:${focus.patientId}:${focus.visitId}`"
+          :institute-id="focus.instituteId"
+          :patient-id="focus.patientId"
+          :visit-id="focus.visitId"
+          @forbidden="operationsForbidden = true"
+        />
       </div>
       <QCRecordCompareWorkbench
         v-if="latestResult && focus.visitId"
@@ -159,6 +168,7 @@ import { ShieldCheck, X } from 'lucide-vue-next'
 import QcDiagnosticExport from '@/components/qc/QcDiagnosticExport.vue'
 import CaseRecordReviewPanel from '@/components/qc/CaseRecordReviewPanel.vue'
 import CaseManualDefectPanel from '@/components/qc/CaseManualDefectPanel.vue'
+import CaseOperationTimeline from '@/components/qc/CaseOperationTimeline.vue'
 import type { RecordReviewDecision } from '@/api/recordReviews'
 import { useAuthStore } from '@/stores/auth'
 import {
@@ -239,6 +249,7 @@ const navigationPositionText = computed(() => {
 
 const reviewForbidden = ref(false)
 const manualDefectForbidden = ref(false)
+const operationsForbidden = ref(false)
 /** 未开启审核的调用方（如客户样本验证）不访问登录态。 */
 const reviewAuth = computed(() => {
   if (!props.recordReview) return null
@@ -253,7 +264,10 @@ const showRecordReview = computed(() => !!reviewAuth.value?.allowed && !reviewFo
 const showManualDefects = computed(
   () => !!reviewAuth.value?.allowed && !manualDefectForbidden.value,
 )
-const showReviewSection = computed(() => showRecordReview.value || showManualDefects.value)
+const showOperations = computed(() => !!reviewAuth.value?.allowed && !operationsForbidden.value)
+const showReviewSection = computed(
+  () => showRecordReview.value || showManualDefects.value || showOperations.value,
+)
 
 function handleReviewSubmitted(decision: RecordReviewDecision) {
   const focus = props.focus
@@ -366,6 +380,7 @@ async function loadLatestResult() {
   latestResult.value = null
   reviewForbidden.value = false
   manualDefectForbidden.value = false
+  operationsForbidden.value = false
   qcTimeText.value = ''
   authorizedRecordRef.value = ''
   loadError.value = ''
