@@ -47,6 +47,8 @@ def test_paths_are_mounted_with_full_prefix():
         ("/api/v1/tasks/{task_id}/records/{task_record_id}/review", "GET"),
         ("/api/v1/tasks/{task_id}/records/{task_record_id}/review", "POST"),
         ("/api/v1/record-reviews/todo", "GET"),
+        ("/api/v1/record-reviews/case", "GET"),
+        ("/api/v1/record-reviews/case", "POST"),
     }
 
 
@@ -184,3 +186,110 @@ def test_count_helper_binds_workspace(monkeypatch):
     monkeypatch.setattr(service, "count_my_record_review_todos", fake)
     assert record_reviews.count_my_record_review_todos("qc-1", scene="running") == {"initial": 1, "recheck": 2}
     assert calls == [("qc-1", "running", record_reviews._sichuan_workspace_service)]
+
+
+# ---------------------------------------------------------------------------
+# workspace 上下文：GET/POST /api/v1/record-reviews/case（QC_RESULTS.REVIEW）
+# ---------------------------------------------------------------------------
+
+CASE_PATH = "/api/v1/record-reviews/case"
+CASE_QUERY = {"institute_id": "H", "patient_id": "P1", "visit_id": "V1"}
+
+
+def case_body(**changes):
+    data = {**CASE_QUERY, "job_id": "job-1", "envelope_id": "env-a1", "decision": "approved",
+            "request_id": REQUEST_ID}
+    data.update(changes)
+    return data
+
+
+def case_saved():
+    return {**saved(), "review_context": "workspace", "task_id": None, "task_record_id": None,
+            "run_number": None}
+
+
+def test_case_routes_do_not_shadow_todo(monkeypatch):
+    monkeypatch.setattr(service, "list_my_record_review_todos", lambda **kwargs: {"items": [], "total": 0})
+    monkeypatch.setattr(service, "get_case_review", lambda **kwargs: {"state": "pending_review"})
+    http, _ = client(monkeypatch, roles=("qc_manager",))
+    assert http.get(TODO).json()["data"]["total"] == 0
+    assert http.get(CASE_PATH, params=CASE_QUERY).json()["data"]["state"] == "pending_review"
+
+
+@pytest.mark.parametrize("roles", [("qc_staff",), ("doctor",)])
+def test_case_requires_review_permission(monkeypatch, roles):
+    calls = []
+    monkeypatch.setattr(service, "get_case_review", lambda **kwargs: calls.append(kwargs))
+    monkeypatch.setattr(service, "submit_case_review", lambda **kwargs: calls.append(kwargs))
+    http, audits = client(monkeypatch, roles=roles)
+    assert http.get(CASE_PATH, params=CASE_QUERY).status_code == 403
+    assert http.post(CASE_PATH, json=case_body()).status_code == 403
+    assert calls == [] and audits == []
+
+
+@pytest.mark.parametrize("roles", [("qc_manager",), ("admin",)])
+def test_case_get_passes_identity_actor_and_workspace(monkeypatch, roles):
+    calls = []
+
+    def fake(**kwargs):
+        calls.append(kwargs)
+        return {"state": "pending_review", "result": {"job_id": "job-1", "envelope_id": "env-a1"}}
+
+    monkeypatch.setattr(service, "get_case_review", fake)
+    http, _ = client(monkeypatch, roles=roles)
+    assert http.get(CASE_PATH, params={"institute_id": "H", "patient_id": "P1"}).status_code == 422
+    response = http.get(CASE_PATH, params=CASE_QUERY)
+    assert response.status_code == 200
+    assert calls == [{**CASE_QUERY, "actor_id": "qc-1",
+                      "workspace_factory": record_reviews._sichuan_workspace_service}]
+
+
+def test_case_post_dto_and_audit(monkeypatch):
+    calls = []
+
+    def fake(**kwargs):
+        calls.append(kwargs)
+        return case_saved()
+
+    monkeypatch.setattr(service, "submit_case_review", fake)
+    http, audits = client(monkeypatch, roles=("qc_manager",))
+    for invalid in (
+        {}, case_body(decision="rejected"), case_body(decision="doubtful"),
+        case_body(decision="doubtful", reason=" "), case_body(request_id="bad"), case_body(job_id=" "),
+        case_body(envelope_id="e" * 37), case_body(visit_id=""), case_body(stage="recheck"),
+        case_body(task_id="task-1"),
+    ):
+        assert http.post(CASE_PATH, json=invalid).status_code == 422
+    assert calls == []
+    response = http.post(CASE_PATH, json=case_body(decision="doubtful", reason=" 原因 ", visit_id=" V1 "))
+    assert response.status_code == 200
+    assert calls[0] == {
+        **CASE_QUERY, "job_id": "job-1", "envelope_id": "env-a1", "decision": "doubtful", "reason": "原因",
+        "request_id": REQUEST_ID, "actor_id": "qc-1",
+        "workspace_factory": record_reviews._sichuan_workspace_service,
+    }
+    assert audits[0]["action"] == "record_reviews.case.submit"
+    assert "P1" not in str(audits) and "V1" not in str(audits)
+
+
+@pytest.mark.parametrize("error,status", [
+    (service.RecordReviewInvalid("病历三坐标无效"), 422),
+    (service.RecordReviewConflict("result_changed", "已更新"), 409),
+    (service.RecordReviewConflict("already_decided", "已决定"), 409),
+    (service.RecordReviewConflict("result_unavailable", "不可用"), 409),
+    (OperationalError("SELECT secret FROM qc_record_reviews", {}, Exception("x")), 503),
+    (RuntimeError("workspace SELECT leak"), 503),
+])
+def test_case_error_mapping(monkeypatch, error, status):
+    def fake(**kwargs):
+        raise error
+
+    monkeypatch.setattr(service, "get_case_review", fake)
+    monkeypatch.setattr(service, "submit_case_review", fake)
+    http, audits = client(monkeypatch, roles=("qc_manager",))
+    for response in (http.get(CASE_PATH, params=CASE_QUERY), http.post(CASE_PATH, json=case_body())):
+        assert response.status_code == status
+        assert "SELECT" not in response.text and "secret" not in response.text
+        if status == 409:
+            assert response.json()["detail"]["code"] == error.code
+    assert audits == []

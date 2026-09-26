@@ -52,7 +52,8 @@ def pg_engine():
     try:
         with engine.connect() as conn:
             assert conn.execute(text("SELECT current_database()")).scalar_one() == TARGET_DB
-            assert conn.execute(text("SELECT version_num FROM public.alembic_version")).scalar_one() == TARGET_REVISION
+            # 版本号格式固定为 YYYYMMDD_NNNNNN，按字符串比较即可要求“不低于所需迁移”。
+            assert conn.execute(text("SELECT version_num FROM public.alembic_version")).scalar_one() >= TARGET_REVISION
             assert conn.execute(text("SELECT current_schema()")).scalar_one() == "qc"
         yield engine
     finally:

@@ -274,22 +274,32 @@ def test_check_constraints_enforce_contract_in_sqlite():
 
 
 def test_model_matches_migration_contract():
+    """模型为迁移 57 + 58 的叠加：58 新增 review_context、放开任务三字段可空、追加两条 CHECK。"""
     from app.database.models.qc import QCRecordReview
 
     module = migration()
+    path = Path(__file__).resolve().parents[2] / "alembic/versions/20260926_000058_record_review_context.py"
+    spec = importlib.util.spec_from_file_location("record_review_context_migration_for_57", path)
+    context = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(context)
     table = QCRecordReview.__table__
     assert table.name == module.TABLE
-    assert set(table.c.keys()) == set(module.COLUMNS)
+    assert set(table.c.keys()) == set(module.COLUMNS) | {context.CONTEXT_COLUMN}
     for name, (kind, length, nullable) in module.COLUMNS.items():
         column = table.c[name]
-        assert isinstance(column.type, kind) and column.nullable is nullable
+        expected_nullable = True if name in context.TASK_FIELDS else nullable
+        assert isinstance(column.type, kind) and column.nullable is expected_nullable
         if length is not None:
             assert column.type.length == length
+    assert module.CHECKS == context.BASE_CHECKS  # 58 未改写 57 的 CHECK 原文
     checks = {
         item.name: module.normalized_check(str(item.sqltext))
         for item in table.constraints if isinstance(item, sa.CheckConstraint)
     }
-    assert checks == {name: module.normalized_check(sql) for name, sql in module.CHECKS.items()}
+    assert checks == {
+        name: module.normalized_check(sql)
+        for name, sql in {**module.CHECKS, **context.CONTEXT_CHECKS}.items()
+    }
     uniques = {
         item.name: [column.name for column in item.columns]
         for item in table.constraints if isinstance(item, sa.UniqueConstraint)
@@ -300,3 +310,21 @@ def test_model_matches_migration_contract():
     }
     indexes = {item.name: [column.name for column in item.columns] for item in table.indexes}
     assert indexes == {module.CASE_INDEX_NAME: module.CASE_INDEX_COLUMNS}
+
+
+@pytest.mark.parametrize("module_name", [
+    "20260926_000057_record_reviews",
+    "20260926_000058_record_review_context",
+])
+def test_normalized_check_accepts_postgres_reflected_trim_form(module_name):
+    """PostgreSQL 把 btrim(col, ' ') 反射为 TRIM(BOTH ' ' FROM col)；两种写法须归一一致。"""
+    import importlib.util
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[2] / "alembic" / "versions" / f"{module_name}.py"
+    spec = importlib.util.spec_from_file_location(f"reflect_{module_name}", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    declared = "decision <> 'doubtful' OR (reason IS NOT NULL AND btrim(reason, ' \t\n') <> '')"
+    reflected = "((decision)::text <> 'doubtful'::text) OR ((reason IS NOT NULL) AND (TRIM(BOTH ' \t\n' FROM reason) <> ''::text))"
+    assert module.normalized_check(declared) == module.normalized_check(reflected)

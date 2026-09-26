@@ -255,7 +255,9 @@
       :open="drawerOpen"
       :focus="selectedFocus"
       presentation-mode="grouped"
+      record-review
       @close="closeResultDrawer"
+      @review-submitted="refreshAfterRecordReview"
     />
     <Drawer
       :open="documentDrawerOpen"
@@ -292,6 +294,7 @@ import QCRecordCompareWorkbench from './semantic-rules/components/QCRecordCompar
 import QcRecordResultTable, {
   type QcRecordCarePhase,
   type QcRecordResultRow,
+  type QcRecordReviewState,
 } from './components/qc/QcRecordResultTable.vue'
 import QcRecordResultAnalysisPanel from './components/qc/QcRecordResultAnalysisPanel.vue'
 import QcRecordReviewPreview from './components/qc/QcRecordReviewPreview.vue'
@@ -458,7 +461,14 @@ function toResultRow(record: PatientRecord): QcRecordResultRow {
     sourceLabel:
       record.sourceState && record.sourceState.status !== 'unknown' ? '资料同步待核实' : undefined,
     ...result,
+    reviewState: resolveReviewState(record.latestQcSummary),
   }
+}
+
+/** 审核状态只对已质控（ready）病历展示；服务端给 null 时显示为未知，不推断。 */
+function resolveReviewState(summary?: RecordLatestQcSummary): QcRecordReviewState | undefined {
+  if (summary?.status !== 'ready') return undefined
+  return summary.reviewState ?? 'unknown'
 }
 
 function resolveResultPresentation(
@@ -600,6 +610,11 @@ function clearSelection() {
 
 function refreshAfterSelectedQc() {
   clearSelection()
+  refreshData()
+}
+
+/** 抽屉内审核决定经服务端复核后，重新拉取当前页以更新该行审核状态（不做本地推断）。 */
+function refreshAfterRecordReview() {
   refreshData()
 }
 

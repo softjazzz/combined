@@ -597,3 +597,10 @@
 - 验证：隔离库 `medqc_v36_validation_20260924` 升级至 revision57 并回读双 schema 列、约束与索引；PG 合成反例 13/13（初审、存疑→复审、Envelope 替换 409、5 轮并发各 1 次成功、幂等、非受领人、待办计数与列表一致、人工缺陷并发与历史回滚），合成行残留 0。后端审核与首页相关单测通过；前端全量 Vitest 173 文件、`vue-tsc`、只读全量 ESLint 通过。
 - 未交付与阻塞：运行/终末/门急诊列表的病历级通过/存疑尚未接入同一 owner（下一批）；存疑后的医生通知缺医生—用户映射（外部阻塞）；业务库仍 revision44；未做登录后浏览器验收。PRD 覆盖状态不提升。
 
+## 73. 第六十七批：运行/终末列表的病历级通过/存疑接入同一 owner
+
+- 运行/终末列表与结果抽屉都经 `select_latest_authoritative_record_result_job` 选最新结果；单病历 DTO 与列表摘要在 ready 时只增量返回 `root_job_id`、`envelope_id` 作审核锚点，选择行为不变，列表客户可见摘要白名单不含这两个 id。迁移 58 给 `qc_record_reviews` 加 `review_context`（task/workspace），任务字段在 workspace 行必须为空；同一结果对象跨上下文仍只允许一个决定。
+- 新增 `GET/POST /api/v1/record-reviews/case`（REVIEW 权限）：以单病历最新 ready 结果为审核对象，advisory lock 内重读结果，job/Envelope 变化即 409；阶段、幂等、原因、脱敏 503 与任务上下文复用同一组函数。列表对本页 ready 病例批量挂 `review_state`，批量失败只降级为“审核状态未知”，不阻断列表。前端把任务审核面板拆为共享 composable + 展示块（原 13 条测试不改全过），新增病例审核面板挂到结果抽屉（仅 admin/qc_manager，403 隐藏，结果 job 不一致不展示），列表行显示审核标签，提交后刷新当前页。
+- 验证：迁移 58 首次在隔离库执行被预检拒绝——PostgreSQL 将 `btrim(col, ' ')` 反射为 `TRIM(BOTH ' ' FROM col)`，57/58 的规范化函数只认前者，57 的幂等分支存在同一隐患；两处修正并以真实反射文本补单测后，隔离库升级至 revision58 并回读双 schema。PG 合成反例 13/13；后端审核与列表相关测试 309/309；前端 vue-tsc、只读全量 ESLint 通过，全量 Vitest 175 文件中 174 通过，`src/router/index.spec.ts` 单条 4.1 秒在全量负载下超时，单独运行通过，与本批无关。
+- 未交付：门急诊结果身份未核实仍不开放审核；存疑医生通知仍为外部阻塞；业务库 revision44，未做浏览器验收；PRD 覆盖状态不提升。
+

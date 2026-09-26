@@ -96,3 +96,50 @@
 - 迁移 57 在隔离库按序执行，并回读双 schema 的列、约束和唯一索引。
 - 使用 PG 合成数据验证：初审通过；初审存疑后重质控，出现待复审，复审通过；Envelope 被重写后返回 409；并发重复提交只成功 1 次；非受领人被拒；人工缺陷审核的 CAS、禁止自审、驳回必须填写原因。
 - 待办计数和下钻列表使用同一谓词，数量一致。
+
+## 6. P0-2：运行/终末列表的病历级通过/存疑（同一 owner）
+
+### 6.1 证据
+
+- V5 运行/终末列表（`QcRecordResultListView`）由 `medical_records/query_service.py` 的 `_load_latest_luxian_0609_qc_summaries` 装配摘要，摘要无 job 标识。
+- 抽屉读取 `get_latest_luxian_0609_record_result` → `build_latest_single_record_result_dto`，已返回 `job_id`。
+- 两者都经 `select_latest_authoritative_record_result_job` 选择最新结果。
+- 列表页当前没有通过/存疑按钮。
+
+### 6.2 存储（迁移 58）
+
+`qc_record_reviews` 增加 `review_context`：VARCHAR(16)，非空，服务端默认 `'task'`，取值为 `task` 或 `workspace`。
+
+- `task_id`/`task_record_id`/`run_number` 改为可空，并加 CHECK：
+  - `task` 行：三者都非空；
+  - `workspace` 行：三者都为空。
+- 已有行回填为 `task`。
+- 升级和降级都按 schema 精确预检。
+- 降级时若存在 `workspace` 行，拒绝降级。
+
+同一个结果对象仍只能有一个决定，不区分上下文，唯一约束不变。
+
+### 6.3 读取器增量
+
+以下都只加字段，不改变选择行为：
+
+- 单病历 DTO 和列表摘要在 `state/status == ready` 时，增加 `root_job_id` 与 `envelope_id`（即所选 Envelope 行的 id）。
+- 这两个 id 只用于审核锚定，前端不展示。
+
+### 6.4 接口（需要 `QC_RESULTS.REVIEW`）
+
+- `GET /api/v1/record-reviews/case?institute_id&patient_id&visit_id`
+  - 以单病历 DTO 的最新 ready 结果为当前结果对象；
+  - 返回 `state`/`stage`/`current`/`history`/`result{job_id,envelope_id}`/`can_submit`；
+  - 没有 ready 结果时 `state=unavailable`。
+- `POST /api/v1/record-reviews/case`
+  - 请求体：`{institute_id, patient_id, visit_id, job_id, envelope_id, decision, reason?, request_id}`。
+  - 事务内先加同一把 advisory lock，再重新读取单病历 DTO：若 `job_id` 或 `envelope_id` 与请求不一致，返回 409 `result_changed`；然后插入 `review_context='workspace'` 的决定。
+  - 阶段推导、幂等、已决定、原因必填、脱敏 503 的语义与第 2 节完全相同，复用同一组函数。
+
+### 6.5 列表审核状态
+
+- 审核服务提供批量函数 `batch_review_states(results)`，入参为三坐标、job、envelope 和规则集，返回每个病例的 `pending_review|pending_recheck|approved|doubtful`。
+- `query_service` 在已有摘要上原样挂 `review_state`，不重新判断。
+- 前端列表显示审核状态标签；有审核权限时，结果抽屉提供通过/存疑。
+- 门急诊的结果身份仍未核实，本批不开放。

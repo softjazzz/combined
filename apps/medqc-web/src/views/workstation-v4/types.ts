@@ -46,12 +46,17 @@ export interface RecordSourceState {
   reasonCode: string | null
 }
 
+/** 病历审核状态（服务端推导）；null 表示未知（读取失败降级或未返回）。 */
+export type RecordLatestReviewState = 'pending_review' | 'pending_recheck' | 'approved' | 'doubtful'
+
 export interface RecordLatestQcSummary {
   status: 'ready' | 'not_run' | 'technical_error'
   completedAt?: string | null
   totalRuleCount?: number
   statusCounts?: Record<string, number>
   reasonCode?: string | null
+  /** 仅 ready 摘要携带；null 为未知。 */
+  reviewState?: RecordLatestReviewState | null
 }
 
 export interface RecordPoolQcSummary {

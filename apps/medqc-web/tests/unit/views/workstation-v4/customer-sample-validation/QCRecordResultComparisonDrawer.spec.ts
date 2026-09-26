@@ -22,6 +22,21 @@ vi.mock('@/services/sichuan-rule-workspace-service', () => ({
   getSichuanWorkspaceBatchJob,
 }))
 
+const authState = vi.hoisted(() => ({
+  roles: [] as string[],
+  calls: 0,
+}))
+
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: () => {
+    authState.calls += 1
+    return {
+      user: { id: 'reviewer-1' },
+      hasRole: (role: string) => authState.roles.includes(role),
+    }
+  },
+}))
+
 vi.mock('@/views/workstation-v4/customer-sample-validation/batchExport', () => ({
   downloadBlob,
   normalizeBatchExportBlob: vi.fn(async (blob: Blob) => blob),
@@ -77,7 +92,28 @@ function deferred<T>() {
   return { promise, resolve }
 }
 
-function mountDrawer(presentationMode?: 'flat' | 'grouped') {
+let reviewPanelProps: Record<string, unknown> | null = null
+
+const CaseRecordReviewPanelStub = defineComponent({
+  name: 'CaseRecordReviewPanel',
+  props: {
+    instituteId: { type: String, required: true },
+    patientId: { type: String, required: true },
+    visitId: { type: String, required: true },
+    jobId: { type: String, default: undefined },
+    userId: { type: String, default: undefined },
+  },
+  emits: ['review-submitted', 'forbidden'],
+  setup(props) {
+    reviewPanelProps = props as unknown as Record<string, unknown>
+    return () => h('div', { 'data-testid': 'case-review-stub' })
+  },
+})
+
+function mountDrawer(
+  presentationMode?: 'flat' | 'grouped',
+  extraProps: Record<string, unknown> = {},
+) {
   return mount(QCRecordResultComparisonDrawer, {
     props: {
       open: true,
@@ -92,6 +128,7 @@ function mountDrawer(presentationMode?: 'flat' | 'grouped') {
         label: '测试病历',
       },
       ...(presentationMode ? { presentationMode } : {}),
+      ...extraProps,
     },
     global: {
       stubs: {
@@ -112,6 +149,7 @@ function mountDrawer(presentationMode?: 'flat' | 'grouped') {
           setup: (props) => () => h('div', { class: 'result-stub' }, props.title),
         }),
         QCRecordCompareWorkbench: QCRecordCompareWorkbenchStub,
+        CaseRecordReviewPanel: CaseRecordReviewPanelStub,
       },
     },
   })
@@ -128,6 +166,9 @@ describe('QCRecordResultComparisonDrawer', () => {
     exportLatestLuxian0609RecordResult.mockReset()
     downloadBlob.mockReset()
     workbenchProps = null
+    reviewPanelProps = null
+    authState.roles = []
+    authState.calls = 0
   })
 
   it('以醒目的当前病历上下文栏展示患者与质控完成信息', async () => {
@@ -351,5 +392,64 @@ describe('QCRecordResultComparisonDrawer', () => {
     expect(wrapper.text()).toContain('质控结果读取异常')
     expect(wrapper.text()).not.toContain('暂无已保存质控结果')
     expect(getLatestLuxian0609RecordResult).toHaveBeenCalledTimes(1)
+  })
+
+  it('未开启病例审核时不挂载审核面板且不访问登录态', async () => {
+    authState.roles = ['admin']
+    getLatestLuxian0609RecordResult.mockResolvedValue({ success: true, data: readyResult })
+    const wrapper = mountDrawer()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="case-review-stub"]').exists()).toBe(false)
+    expect(authState.calls).toBe(0)
+  })
+
+  it.each([
+    [['admin'], true],
+    [['qc_manager'], true],
+    [['qc_staff'], false],
+    [['doctor'], false],
+  ])('开启病例审核后按角色 %j 决定是否挂载面板', async (roles, mounted) => {
+    authState.roles = roles
+    getLatestLuxian0609RecordResult.mockResolvedValue({ success: true, data: readyResult })
+    const wrapper = mountDrawer('grouped', { recordReview: true })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="case-review-stub"]').exists()).toBe(mounted)
+    if (mounted) {
+      expect(reviewPanelProps).toMatchObject({
+        instituteId: 'H1',
+        patientId: 'P001',
+        visitId: 'V001',
+        jobId: 'job-safe-001',
+        userId: 'reviewer-1',
+      })
+    }
+  })
+
+  it('结果未就绪时不挂载审核面板', async () => {
+    authState.roles = ['admin']
+    getLatestLuxian0609RecordResult.mockResolvedValue({
+      success: true,
+      data: { ...readyResult, state: 'technical_error' },
+    })
+    const wrapper = mountDrawer('grouped', { recordReview: true })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="case-review-stub"]').exists()).toBe(false)
+  })
+
+  it('审核提交后向列表转发三坐标与决定；403 时隐藏面板', async () => {
+    authState.roles = ['qc_manager']
+    getLatestLuxian0609RecordResult.mockResolvedValue({ success: true, data: readyResult })
+    const wrapper = mountDrawer('grouped', { recordReview: true })
+    await flushPromises()
+    const panel = wrapper.getComponent(CaseRecordReviewPanelStub)
+    panel.vm.$emit('review-submitted', 'doubtful')
+    expect(wrapper.emitted('review-submitted')).toEqual([
+      [{ instituteId: 'H1', patientId: 'P001', visitId: 'V001', decision: 'doubtful' }],
+    ])
+
+    panel.vm.$emit('forbidden')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="case-review-stub"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('权限')
   })
 })

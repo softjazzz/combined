@@ -478,3 +478,261 @@ def test_job_memo_workspace_loads_each_job_once():
 
     assert calls == {"job": 2, "items": 3}
     assert memo.marker == "passthrough"
+
+
+# ---------------------------------------------------------------------------
+# workspace 上下文（P0-2）：以单病历 DTO 的最新 ready 结果为当前结果对象
+# ---------------------------------------------------------------------------
+
+CASE = ("H", "P1", "V1")
+
+
+class CaseWorkspace:
+    """单病历 DTO 替身：按三坐标返回登记的最新结果，并记录调用。"""
+
+    def __init__(self):
+        self.results: dict[tuple[str, str, str], dict] = {}
+        self.calls: list[tuple[str, str, str]] = []
+
+    def ready(self, identity, job_id, envelope_id, *, rule=LX):
+        self.results[identity] = {
+            "state": "ready", "reason_code": "", "job_id": job_id, "root_job_id": job_id,
+            "envelope_id": envelope_id, "rule_set_key": rule, "rule_set_version": VERSION,
+            "items": [{"rule_id": "LX0609-001"}],
+        }
+
+    def build_latest_single_record_result_dto(self, *, institute_id, patient_id, visit_id):
+        identity = (institute_id, patient_id, visit_id)
+        self.calls.append(identity)
+        return self.results.get(identity, {"state": "not_found", "reason_code": "", "job_id": "", "items": []})
+
+
+@pytest.fixture
+def case_ws(env):
+    workspace_double = CaseWorkspace()
+    workspace_double.ready(CASE, "job-1", "env-a1")
+    return workspace_double
+
+
+def case_view(ws, identity=CASE, actor="mgr-1"):
+    return service.get_case_review(
+        institute_id=identity[0], patient_id=identity[1], visit_id=identity[2],
+        actor_id=actor, workspace_factory=lambda: ws,
+    )
+
+
+def case_submit(ws, decision="approved", *, identity=CASE, job="job-1", envelope="env-a1",
+                request=REQ[6], reason=None, actor="mgr-1"):
+    return service.submit_case_review(
+        institute_id=identity[0], patient_id=identity[1], visit_id=identity[2],
+        job_id=job, envelope_id=envelope, decision=decision, reason=reason,
+        request_id=request, actor_id=actor, workspace_factory=lambda: ws,
+    )
+
+
+def test_task_context_rows_are_written_with_explicit_task_context(env):
+    submit()
+    row = env.reviews()[0]
+    assert row.review_context == "task" and row.task_id == "task-1" and row.run_number == 1
+
+
+def test_workspace_initial_review(env, case_ws):
+    before = case_view(case_ws)
+    assert before["review_context"] == "workspace"
+    assert before["state"] == "pending_review" and before["stage"] == "initial" and before["can_submit"] is True
+    assert before["result"] == {"job_id": "job-1", "envelope_id": "env-a1"}
+    assert before["current"] is None and before["history"] == []
+
+    saved = case_submit(case_ws)
+    assert saved["state"] == "approved" and saved["stage"] == "initial" and saved["idempotent"] is False
+    assert saved["review_context"] == "workspace"
+    row = env.reviews()[0]
+    assert (row.review_context, row.task_id, row.task_record_id, row.run_number) == ("workspace", None, None, None)
+    assert (row.job_id, row.envelope_id, row.institute_id, row.patient_id, row.visit_id,
+            row.rule_set_key, row.rule_set_version, row.reviewer_id) == (
+        "job-1", "env-a1", "H", "P1", "V1", LX, VERSION, "mgr-1")
+
+    after = case_view(case_ws)
+    assert after["state"] == "approved" and after["can_submit"] is False
+    assert after["current"]["id"] == saved["id"]
+
+
+def test_workspace_doubtful_then_new_result_then_recheck(env, case_ws):
+    doubtful = case_submit(case_ws, "doubtful", reason=" 依据不足 ")
+    assert doubtful["reason"] == "依据不足" and case_view(case_ws)["state"] == "doubtful"
+    # 重质控产生新结果对象（新 job + 新 Envelope 行）
+    case_ws.ready(CASE, "job-9", "env-a9")
+    pending = case_view(case_ws)
+    assert pending["state"] == "pending_recheck" and pending["stage"] == "recheck" and pending["can_submit"]
+    approved = case_submit(case_ws, job="job-9", envelope="env-a9", request=REQ[7])
+    assert approved["stage"] == "recheck"
+    final = case_view(case_ws)
+    assert final["state"] == "approved"
+    assert [item["decision"] for item in final["history"]] == ["approved", "doubtful"]
+
+
+@pytest.mark.parametrize("job,envelope", [("job-1", "env-a2"), ("job-2", "env-a1")])
+def test_workspace_result_changed_when_dto_moves(env, case_ws, job, envelope):
+    case_ws.ready(CASE, job, envelope)
+    with pytest.raises(service.RecordReviewConflict) as exc:
+        case_submit(case_ws)
+    assert exc.value.code == "result_changed"
+    assert env.reviews() == []
+
+
+def test_workspace_rereads_dto_inside_submit(env, case_ws):
+    case_ws.calls.clear()
+    case_submit(case_ws)
+    assert case_ws.calls == [CASE]
+
+
+@pytest.mark.parametrize("dto,reason_code,conflict", [
+    (None, "result_not_found", "result_unavailable"),
+    ({"state": "technical_error", "job_id": "job-1"}, "result_technical_error", "result_unavailable"),
+    ({"state": "ready", "job_id": "job-1", "root_job_id": "job-1", "envelope_id": "",
+      "rule_set_key": LX, "rule_set_version": VERSION}, "envelope_missing", "result_unavailable"),
+    ({"state": "ready", "job_id": "job-1", "root_job_id": "job-x", "envelope_id": "env-a1",
+      "rule_set_key": LX, "rule_set_version": VERSION}, "result_invalid", "result_unavailable"),
+    ({"state": "ready", "job_id": "job-1", "root_job_id": "job-1", "envelope_id": "env-a1",
+      "rule_set_key": "sc_content_other", "rule_set_version": "x"}, "unsupported_rule_set", "unsupported_rule_set"),
+])
+def test_workspace_unavailable_result(env, case_ws, dto, reason_code, conflict):
+    if dto is None:
+        case_ws.results.clear()
+    else:
+        case_ws.results[CASE] = dto
+    got = case_view(case_ws)
+    assert got["state"] == "unavailable" and got["reason_code"] == reason_code and got["can_submit"] is False
+    assert got["result"] == {"job_id": None, "envelope_id": None}
+    with pytest.raises(service.RecordReviewConflict) as exc:
+        case_submit(case_ws)
+    assert exc.value.code == conflict
+    assert env.reviews() == []
+
+
+def test_workspace_idempotent_replay_and_conflict(env, case_ws):
+    first = case_submit(case_ws, "doubtful", reason="原因")
+    case_ws.calls.clear()
+    replay = case_submit(case_ws, "doubtful", reason=" 原因 ")
+    assert replay["idempotent"] is True and replay["id"] == first["id"]
+    assert case_ws.calls == []  # 重放不重新读取结果
+    # 结果已变化后，同一请求仍按原决定重放
+    case_ws.ready(CASE, "job-9", "env-a9")
+    assert case_submit(case_ws, "doubtful", reason="原因")["idempotent"] is True
+    for changes in ({"decision": "approved"}, {"reason": "别的"}, {"actor": "mgr-2"},
+                    {"job": "job-9", "envelope": "env-a9"}, {"identity": ("H", "P2", "V2")}):
+        kwargs = {"decision": "doubtful", "reason": "原因", **changes}
+        with pytest.raises(service.RecordReviewConflict) as exc:
+            case_submit(case_ws, **kwargs)
+        assert exc.value.code == "idempotency_conflict"
+    assert len(env.reviews()) == 1
+
+
+def test_request_id_cannot_cross_contexts(env, case_ws):
+    submit(request=REQ[8])  # 任务上下文
+    with pytest.raises(service.RecordReviewConflict) as exc:
+        case_submit(case_ws, request=REQ[8])
+    assert exc.value.code == "idempotency_conflict"
+    # 反向：workspace 请求 ID 不能被任务上下文复用
+    case_ws.ready(("H", "P2", "V2"), "job-1", "env-b1")
+    case_submit(case_ws, identity=("H", "P2", "V2"), envelope="env-b1", request=REQ[9])
+    with pytest.raises(service.RecordReviewConflict) as exc:
+        submit(record="rec-b", envelope="env-b1", request=REQ[9])
+    assert exc.value.code == "idempotency_conflict"
+
+
+def test_same_result_object_allows_one_decision_across_contexts(env, case_ws):
+    # 任务上下文先决定 → workspace 视为已决定
+    task_saved = submit()
+    got = case_view(case_ws)
+    assert got["state"] == "approved" and got["current"]["id"] == task_saved["id"] and not got["can_submit"]
+    assert got["current"]["review_context"] == "task"
+    with pytest.raises(service.RecordReviewConflict) as exc:
+        case_submit(case_ws, "doubtful", reason="想改")
+    assert exc.value.code == "already_decided"
+    # 反向：workspace 先决定 → 任务上下文已决定
+    case_ws.ready(("H", "P2", "V2"), "job-1", "env-b1")
+    case_submit(case_ws, identity=("H", "P2", "V2"), envelope="env-b1", request=REQ[7])
+    task_view = view(record="rec-b")
+    assert task_view["state"] == "approved" and task_view["current"]["review_context"] == "workspace"
+    with pytest.raises(service.RecordReviewConflict) as exc:
+        submit(record="rec-b", envelope="env-b1", request=REQ[5])
+    assert exc.value.code == "already_decided"
+    assert len(env.reviews()) == 2
+
+
+@pytest.mark.parametrize("changes", [
+    {"identity": ("H", " ", "V1")}, {"identity": ("H", "P1", "V" * 129)}, {"job": " "}, {"job": "j" * 37},
+    {"envelope": " "}, {"decision": "doubtful"}, {"decision": "rejected"}, {"request": "bad"},
+    {"actor": " "},
+])
+def test_workspace_invalid_payload(env, case_ws, changes):
+    with pytest.raises((service.RecordReviewInvalid, service.RecordReviewForbidden)):
+        case_submit(case_ws, **changes)
+    assert env.reviews() == []
+
+
+def test_workspace_database_error_is_unavailable(env, case_ws, monkeypatch):
+    class Broken:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def begin(self):
+            return self
+
+        def get_bind(self):
+            return env.sessions.kw["bind"]
+
+        def execute(self, *args, **kwargs):
+            raise OperationalError("SELECT secret FROM qc_record_reviews", {}, Exception("boom"))
+
+    monkeypatch.setattr(service, "SessionLocal", lambda: Broken())
+    with pytest.raises(service.RecordReviewUnavailable):
+        case_view(case_ws)
+    with pytest.raises(service.RecordReviewUnavailable):
+        case_submit(case_ws)
+    with pytest.raises(service.RecordReviewUnavailable):
+        service.batch_review_states([_anchor(CASE, "job-1", "env-a1")])
+
+
+def _anchor(identity, job, envelope, rule=LX):
+    return {"institute_id": identity[0], "patient_id": identity[1], "visit_id": identity[2],
+            "job_id": job, "envelope_id": envelope, "rule_set_key": rule}
+
+
+def test_batch_review_states_match_single_case_derivation(env, case_ws):
+    cases = {
+        "approved": (("H", "P1", "V1"), "job-1", "env-a1"),
+        "doubtful": (("H", "P2", "V2"), "job-1", "env-b1"),
+        "recheck": (("H", "P4", "V4"), "job-3", "env-d9"),
+        "pending": (("H", "P6", "V6"), "job-5", "env-f1"),
+    }
+    case_submit(case_ws)  # V1 approved（workspace）
+    case_ws.ready(cases["doubtful"][0], "job-1", "env-b1")
+    case_submit(case_ws, "doubtful", reason="原因", identity=cases["doubtful"][0], envelope="env-b1", request=REQ[7])
+    # V4：任务上下文在 env-d1 上存疑，最新结果为 env-d9 → 待复审
+    submit(record="rec-d", task="task-2", envelope="env-d1", decision="doubtful", reason="原因", request=REQ[8])
+    for identity, job, envelope in cases.values():
+        case_ws.ready(identity, job, envelope)
+
+    anchors = [_anchor(*spec) for spec in cases.values()]
+    anchors += [
+        _anchor(("H", "P7", "V7"), "", "env-x"),  # 锚点不完整：跳过
+        _anchor(("H", "P5", "V5"), "job-4", "env-e1", rule="sc_content_other"),  # 非 LX0609：跳过
+        _anchor((" ", "P", "V"), "j", "e"),  # 三坐标不完整：跳过
+    ]
+    statements = []
+    engine = env.sessions.kw["bind"]
+    sa.event.listen(engine, "before_cursor_execute", lambda *args: statements.append(args[2]))
+    states = service.batch_review_states(anchors)
+    assert len(statements) == 1  # 决定一次查询
+    assert states == {
+        ("H", "P1", "V1"): "approved", ("H", "P2", "V2"): "doubtful",
+        ("H", "P4", "V4"): "pending_recheck", ("H", "P6", "V6"): "pending_review",
+    }
+    for identity, state in states.items():
+        assert case_view(case_ws, identity)["state"] == state
+    assert service.batch_review_states([]) == {}

@@ -80,6 +80,8 @@ def normalized_check(sql: object) -> str:
     )
     normalized = normalized.replace("btrim", "trim")
     normalized = re.sub(r"[\s()\[\]]", "", normalized)
+    # PostgreSQL 把 btrim(col, ' ') 反射为 TRIM(BOTH ' ' FROM col)，去空白后统一回 trimcol,'' 形式。
+    normalized = re.sub(r"trimboth''from([a-z_][a-z0-9_]*)", r"trim\1,''", normalized)
     return normalized.replace("=anyarray", "in")
 
 

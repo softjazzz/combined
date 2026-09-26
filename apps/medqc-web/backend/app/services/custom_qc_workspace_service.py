@@ -3213,7 +3213,7 @@ class CustomQCWorkspaceService:
                 }
 
             selected_job = selection.job
-            envelope = self._load_record_result_envelope_items(
+            envelope, envelope_id = self._load_record_result_envelope_with_id(
                 session,
                 root_job_id=_safe_text(selected_job.get("id")),
                 institute_id=normalized_institute_id,
@@ -3323,6 +3323,9 @@ class CustomQCWorkspaceService:
                 "data_origin": "canonical_result_envelope",
                 "record_ref": _safe_text(envelope.get("record_ref")),
                 "job_id": _safe_text(selected_job.get("id")),
+                # 仅供病历审核锚定结果对象，不改变选择行为；前端不展示。
+                "root_job_id": _safe_text(selected_job.get("id")),
+                "envelope_id": envelope_id,
                 "rule_set_key": normalized_rule_set_key,
                 "rule_set_version": normalized_rule_set_version,
                 "items": projected_items,
@@ -3627,12 +3630,17 @@ class CustomQCWorkspaceService:
                             "reason_code": "canonical_result_envelope_invalid",
                         }
                         continue
-                    projections[identity] = self._summarize_completed_record_result_envelope(
+                    summary = self._summarize_completed_record_result_envelope(
                         envelope_row=selected_envelopes[0],
                         completed_at=ready_selection.job.get("finished_at"),
                         include_items=include_items,
                         rule_set_key=normalized_rule_set_key,
                     )
+                    if summary.get("status") == "ready":
+                        # 仅供病历审核锚定结果对象，不改变选择行为；病历池输出会按白名单裁剪。
+                        summary["root_job_id"] = selected_job_id
+                        summary["envelope_id"] = _safe_text(selected_envelopes[0].get("id"))
+                    projections[identity] = summary
                     continue
 
                 # 仅以 visit_id 保存的历史根任务不能形成 ready。若该任务已有同
@@ -4606,7 +4614,7 @@ class CustomQCWorkspaceService:
             projection_key=projection_key,
         )
 
-    def _load_record_result_envelope_items(
+    def _load_record_result_envelope_with_id(
         self,
         session: Session,
         *,
@@ -4616,8 +4624,9 @@ class CustomQCWorkspaceService:
         visit_id: str,
         rule_set_key: str,
         rule_set_version: str,
-    ) -> Dict[str, Any]:
-        return CanonicalResultStore(self._record_result_envelope_table).load_selected(
+    ) -> tuple[Dict[str, Any], str]:
+        """读取所选 Envelope 及其行 id；行 id 用于病历审核锚定结果对象。"""
+        return CanonicalResultStore(self._record_result_envelope_table).load_selected_with_id(
             session,
             root_job_id=root_job_id,
             institute_id=institute_id,

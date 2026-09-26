@@ -111,6 +111,13 @@
                   <span v-if="row.sourceLabel" class="qc-record-result-table__source-state">{{
                     row.sourceLabel
                   }}</span>
+                  <span
+                    v-if="row.reviewState"
+                    class="qc-record-result-table__review-state"
+                    :class="`qc-record-result-table__review-state--${row.reviewState}`"
+                    data-testid="qc-record-review-state"
+                    >{{ reviewStateLabel(row.reviewState) }}</span
+                  >
                 </span>
               </div>
             </td>
@@ -209,6 +216,23 @@ export interface QcRecordResultRow {
   issueSummary: string
   latestQcTime?: string
   sourceLabel?: '资料同步待核实'
+  /** 仅已质控（ready）行携带；unknown 表示服务端未能给出审核状态。 */
+  reviewState?: QcRecordReviewState
+}
+
+export type QcRecordReviewState =
+  | 'pending_review'
+  | 'pending_recheck'
+  | 'approved'
+  | 'doubtful'
+  | 'unknown'
+
+const REVIEW_STATE_LABELS: Record<QcRecordReviewState, string> = {
+  pending_review: '待审核',
+  pending_recheck: '待复审',
+  approved: '审核通过',
+  doubtful: '审核存疑',
+  unknown: '审核状态未知',
 }
 
 const props = withDefaults(
@@ -249,6 +273,10 @@ function formatDisplayTime(value?: string): string {
   const match = text.match(/^(\d{4}-\d{2}-\d{2})(?:[T\s](\d{2}):(\d{2}))?/u)
   if (!match) return '—'
   return match[2] && match[3] ? `${match[1]} ${match[2]}:${match[3]}` : match[1]
+}
+
+function reviewStateLabel(state: QcRecordReviewState): string {
+  return REVIEW_STATE_LABELS[state] || REVIEW_STATE_LABELS.unknown
 }
 
 function openResult(recordKey: string) {
@@ -431,6 +459,39 @@ function togglePageSelection(event: Event) {
   margin-top: 2px;
   color: #94a3b8;
   font-size: 11px;
+}
+
+.qc-record-result-table__review-state {
+  display: table;
+  width: max-content;
+  margin-top: 4px;
+  padding: 0 6px;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+.qc-record-result-table__review-state--pending_review,
+.qc-record-result-table__review-state--pending_recheck {
+  border-color: rgba(43, 108, 246, 0.24);
+  background: #eef5ff;
+  color: #2456c7;
+}
+
+.qc-record-result-table__review-state--approved {
+  border-color: rgba(6, 118, 71, 0.24);
+  background: #ecfdf3;
+  color: #067647;
+}
+
+.qc-record-result-table__review-state--doubtful {
+  border-color: rgba(181, 71, 8, 0.24);
+  background: #fffaeb;
+  color: #b54708;
 }
 
 .qc-record-result-table__action-heading,

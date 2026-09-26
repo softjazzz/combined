@@ -1,10 +1,15 @@
-"""病历初审/复审（任务受领范围）。
+"""病历初审/复审。
 
 权威 owner：一次已保存的质控结果对象 R = (job_id, envelope_id, 三坐标, rule_set)。
-- 决定行只追加、不可修改；同一结果对象只允许一个决定。
+- 决定行只追加、不可修改；同一结果对象只允许一个决定（不区分审核上下文）。
 - stage 只由服务端计算：同三坐标 + rule_set_key 在“其他结果对象”上最近一次决定为
   doubtful → recheck，否则 initial。
-- “结果可用”判定复用 get_task_qc_run_record_result，不另写核对。
+- 审核上下文 review_context：
+  - task：任务受领范围，“结果可用”判定复用 get_task_qc_run_record_result；
+  - workspace：运行/终末列表范围，以单病历 DTO（build_latest_single_record_result_dto）
+    的最新 ready 结果为当前结果对象；QC_RESULTS.REVIEW 权限由路由层校验。
+- 两种上下文共用同一套状态推导、原因校验、幂等重放、advisory lock 与错误类。
+- batch_review_states 供病历列表批量挂载 review_state，与单病例同一推导函数。
 """
 
 from __future__ import annotations
@@ -28,6 +33,8 @@ from .task_qc_run_service import (
 )
 
 HISTORY_LIMIT = 50
+CONTEXT_TASK = "task"
+CONTEXT_WORKSPACE = "workspace"
 _IN_CHUNK = 500
 _IDENTITY_KEYS = ("institute_id", "patient_id", "visit_id")
 # 首页 scene -> QCTask.scene 实际取值（QCTask CHECK：running/final/outpatient）。
@@ -137,6 +144,7 @@ def _review_dict(row: Any) -> dict[str, Any]:
     return {
         "id": row.id,
         "request_id": row.request_id,
+        "review_context": row.review_context,
         "task_id": row.task_id,
         "task_record_id": row.task_record_id,
         "run_number": row.run_number,
@@ -159,6 +167,20 @@ def _stage_from_decisions(decisions: list[Any], job_id: str, envelope_id: str) -
             continue
         return "recheck" if row.decision == "doubtful" else "initial"
     return "initial"
+
+
+def _derive_state(decisions: list[Any], job_id: str, envelope_id: str) -> tuple[str, str, Any | None]:
+    """单病例与批量共用的唯一状态推导：返回 (state, stage, 当前决定行或 None)。
+
+    decisions 须为同三坐标 + rule_set_key 的全部决定，按 created_at、id 倒序。
+    """
+    current = next(
+        (row for row in decisions if row.job_id == job_id and row.envelope_id == envelope_id), None,
+    )
+    if current is not None:
+        return current.decision, current.stage, current
+    stage = _stage_from_decisions(decisions, job_id, envelope_id)
+    return ("pending_recheck" if stage == "recheck" else "pending_review"), stage, None
 
 
 def _envelope_ids(
@@ -309,17 +331,11 @@ def get_record_review(
     except SQLAlchemyError as exc:
         raise RecordReviewUnavailable("审核数据暂不可用") from exc
 
-    current = next(
-        (row for row in decisions if row.job_id == job_id and row.envelope_id == envelope_id), None,
-    )
+    state, stage, current = _derive_state(decisions, job_id, envelope_id)
     if current is not None:
-        view.update(state=current.decision, stage=current.stage, current=_review_dict(current))
+        view.update(state=state, stage=stage, current=_review_dict(current))
         return view
-    stage = _stage_from_decisions(decisions, job_id, envelope_id)
-    view.update(
-        state="pending_recheck" if stage == "recheck" else "pending_review",
-        stage=stage, can_submit=can_submit_status,
-    )
+    view.update(state=state, stage=stage, can_submit=can_submit_status)
     return view
 
 
@@ -330,14 +346,18 @@ def get_record_review(
 
 @dataclass(frozen=True)
 class _DecisionRequest:
-    task_id: str
-    task_record_id: str
-    run_number: int
+    task_id: str | None
+    task_record_id: str | None
+    run_number: int | None
     decision: str
     reason: str | None
     request_id: str
     envelope_id: str
     actor_id: str
+    review_context: str = CONTEXT_TASK
+    # workspace 上下文由客户端提交三坐标与 job_id；task 上下文由任务病历推出，保持 None。
+    identity: tuple[str, str, str] | None = None
+    job_id: str | None = None
 
 
 def _normalize_request(
@@ -347,6 +367,20 @@ def _normalize_request(
     _validate_actor(actor_id)
     if type(run_number) is not int or run_number <= 0:
         raise RecordReviewInvalid("运行序号无效")
+    reason = _normalize_decision_fields(
+        decision=decision, reason=reason, request_id=request_id, envelope_id=envelope_id,
+    )
+    return _DecisionRequest(
+        task_id=task_id, task_record_id=task_record_id, run_number=run_number,
+        decision=decision, reason=reason, request_id=request_id,
+        envelope_id=envelope_id, actor_id=actor_id,
+    )
+
+
+def _normalize_decision_fields(
+    *, decision: str, reason: str | None, request_id: str, envelope_id: str,
+) -> str | None:
+    """两种上下文共用的决定字段校验；返回规范化后的原因（存疑必填）。"""
     if decision not in {"approved", "doubtful"}:
         raise RecordReviewInvalid("审核决定无效")
     try:
@@ -363,16 +397,15 @@ def _normalize_request(
         reason = reason.strip() or None
     if decision == "doubtful" and not reason:
         raise RecordReviewInvalid("存疑必须填写原因")
-    return _DecisionRequest(
-        task_id=task_id, task_record_id=task_record_id, run_number=run_number,
-        decision=decision, reason=reason, request_id=request_id,
-        envelope_id=envelope_id, actor_id=actor_id,
-    )
+    return reason
 
 
 def _replay(row: QCRecordReview, req: _DecisionRequest) -> dict[str, Any]:
     if (
-        row.task_id != req.task_id or row.task_record_id != req.task_record_id
+        (row.review_context or CONTEXT_TASK) != req.review_context
+        or (req.job_id is not None and row.job_id != req.job_id)
+        or (req.identity is not None and (row.institute_id, row.patient_id, row.visit_id) != req.identity)
+        or row.task_id != req.task_id or row.task_record_id != req.task_record_id
         or row.run_number != req.run_number or row.decision != req.decision
         or (row.reason or None) != req.reason or row.envelope_id != req.envelope_id
         or row.reviewer_id != req.actor_id
@@ -408,8 +441,13 @@ def submit_record_review(
     )
     _require_session()
     factory = workspace_factory or _default_workspace_factory
+    return _run_submit(lambda: _submit(req, factory), req)
+
+
+def _run_submit(submit: Callable[[], dict[str, Any]], req: _DecisionRequest) -> dict[str, Any]:
+    """两种上下文共用的提交外壳：唯一约束竞争兜底与数据库故障脱敏。"""
     try:
-        return _submit(req, factory)
+        return submit()
     except IntegrityError:
         # 并发竞争：唯一约束兜底，回滚后按请求 ID / 结果对象重新判定。
         try:
@@ -431,6 +469,29 @@ def submit_record_review(
         raise RecordReviewUnavailable("审核保存失败，请稍后重试")
     except SQLAlchemyError as exc:
         raise RecordReviewUnavailable("审核数据暂不可用") from exc
+
+
+def _insert_decision(
+    session: Any, req: _DecisionRequest, *, identity: tuple[str, str, str],
+    rule_set_key: str, rule_set_version: str, job_id: str,
+) -> dict[str, Any]:
+    """锁内最后一步（两种上下文共用）：已决定检查 → 计算 stage → 追加一行决定。"""
+    decisions = _case_decisions(session, identity, rule_set_key, None)
+    if any(row.job_id == job_id and row.envelope_id == req.envelope_id for row in decisions):
+        raise RecordReviewConflict("already_decided", "该结果已有审核决定")
+    stage = _stage_from_decisions(decisions, job_id, req.envelope_id)
+    row = QCRecordReview(
+        id=str(uuid4()), request_id=req.request_id, review_context=req.review_context,
+        institute_id=identity[0], patient_id=identity[1], visit_id=identity[2],
+        rule_set_key=rule_set_key, rule_set_version=rule_set_version,
+        job_id=job_id, envelope_id=req.envelope_id,
+        task_id=req.task_id, task_record_id=req.task_record_id,
+        run_number=req.run_number, stage=stage, decision=req.decision,
+        reason=req.reason, reviewer_id=req.actor_id, created_at=_now(),
+    )
+    session.add(row)
+    session.flush()
+    return _review_dict(row)
 
 
 def _submit(req: _DecisionRequest, factory: Callable[[], Any]) -> dict[str, Any]:
@@ -503,24 +564,201 @@ def _submit(req: _DecisionRequest, factory: Callable[[], Any]) -> dict[str, Any]
             if envelope_ids[0] != req.envelope_id:
                 raise RecordReviewConflict("result_changed", "质控结果已被替换，请刷新后重新审核")
 
-            decisions = _case_decisions(session, identity, rule_set_key, None)
-            if any(row.job_id == job_id and row.envelope_id == req.envelope_id for row in decisions):
-                raise RecordReviewConflict("already_decided", "该结果已有审核决定")
-            stage = _stage_from_decisions(decisions, job_id, req.envelope_id)
-            row = QCRecordReview(
-                id=str(uuid4()), request_id=req.request_id,
-                institute_id=identity[0], patient_id=identity[1], visit_id=identity[2],
-                rule_set_key=rule_set_key, rule_set_version=rule_set_version,
-                job_id=job_id, envelope_id=req.envelope_id,
-                task_id=req.task_id, task_record_id=req.task_record_id,
-                run_number=req.run_number, stage=stage, decision=req.decision,
-                reason=req.reason, reviewer_id=req.actor_id, created_at=_now(),
+            response = _insert_decision(
+                session, req, identity=identity, rule_set_key=rule_set_key,
+                rule_set_version=rule_set_version, job_id=job_id,
             )
-            session.add(row)
-            session.flush()
-            response = _review_dict(row)
     state = response["decision"]
     return {**response, "state": state, "idempotent": False}
+
+
+# ---------------------------------------------------------------------------
+# workspace 上下文：运行/终末列表按单病历 DTO 的最新 ready 结果审核（P0-2）
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class _CaseAnchor:
+    job_id: str
+    envelope_id: str
+    rule_set_version: str
+
+
+def _normalize_identity(institute_id: Any, patient_id: Any, visit_id: Any) -> tuple[str, str, str] | None:
+    parts = []
+    for value in (institute_id, patient_id, visit_id):
+        if not isinstance(value, str) or not value.strip() or len(value.strip()) > 128:
+            return None
+        parts.append(value.strip())
+    return parts[0], parts[1], parts[2]
+
+
+def _require_identity(institute_id: Any, patient_id: Any, visit_id: Any) -> tuple[str, str, str]:
+    identity = _normalize_identity(institute_id, patient_id, visit_id)
+    if identity is None:
+        raise RecordReviewInvalid("病历三坐标无效")
+    return identity
+
+
+def _read_case_dto(identity: tuple[str, str, str], factory: Callable[[], Any]) -> Any:
+    """复用单病历结果读取器（与结果抽屉同一入口），不另写选择逻辑。"""
+    try:
+        return factory().build_latest_single_record_result_dto(
+            institute_id=identity[0], patient_id=identity[1], visit_id=identity[2],
+        )
+    except SQLAlchemyError as exc:
+        raise RecordReviewUnavailable("质控结果暂不可用") from exc
+
+
+def _case_anchor(dto: Any) -> tuple[_CaseAnchor | None, str | None]:
+    """从 DTO 取当前结果对象；不可审核时返回原因码。只读取字段，不重判结果。"""
+    if not isinstance(dto, dict):
+        return None, "result_invalid"
+    state = str(dto.get("state") or "").strip()
+    if state != "ready":
+        return None, f"result_{state or 'unknown'}"
+    if dto.get("rule_set_key") != LUXIAN_0609_RULE_SET_KEY:
+        return None, "unsupported_rule_set"
+    job_id = str(dto.get("job_id") or "").strip()
+    root_job_id = str(dto.get("root_job_id") or "").strip()
+    version = str(dto.get("rule_set_version") or "").strip()
+    if not root_job_id or root_job_id != job_id or len(root_job_id) > 36 or not version:
+        return None, "result_invalid"
+    envelope_id = str(dto.get("envelope_id") or "").strip()
+    if not envelope_id or len(envelope_id) > 36:
+        return None, "envelope_missing"
+    return _CaseAnchor(job_id=root_job_id, envelope_id=envelope_id, rule_set_version=version), None
+
+
+def get_case_review(
+    *, institute_id: str, patient_id: str, visit_id: str, actor_id: str,
+    workspace_factory: Callable[[], Any] | None = None,
+) -> dict[str, Any]:
+    """读取病例在最新 ready 结果上的审核状态、当前决定与历史（workspace 上下文）。"""
+    _validate_actor(actor_id)
+    identity = _require_identity(institute_id, patient_id, visit_id)
+    _require_session()
+    dto = _read_case_dto(identity, workspace_factory or _default_workspace_factory)
+    anchor, reason_code = _case_anchor(dto)
+    try:
+        with SessionLocal() as session:
+            decisions = _case_decisions(session, identity, LUXIAN_0609_RULE_SET_KEY, None)
+    except SQLAlchemyError as exc:
+        raise RecordReviewUnavailable("审核数据暂不可用") from exc
+
+    view: dict[str, Any] = {
+        "review_context": CONTEXT_WORKSPACE,
+        "institute_id": identity[0], "patient_id": identity[1], "visit_id": identity[2],
+        "rule_set_key": LUXIAN_0609_RULE_SET_KEY,
+        "state": "unavailable", "stage": None, "reason_code": reason_code, "can_submit": False,
+        "current": None, "history": [_review_dict(row) for row in decisions[:HISTORY_LIMIT]],
+        "result": {"job_id": None, "envelope_id": None},
+    }
+    if anchor is None:
+        return view
+    view["result"] = {"job_id": anchor.job_id, "envelope_id": anchor.envelope_id}
+    state, stage, current = _derive_state(decisions, anchor.job_id, anchor.envelope_id)
+    view.update(
+        state=state, stage=stage,
+        current=_review_dict(current) if current is not None else None,
+        can_submit=current is None,
+    )
+    return view
+
+
+def submit_case_review(
+    *, institute_id: str, patient_id: str, visit_id: str, job_id: str, envelope_id: str,
+    decision: str, reason: str | None, request_id: str, actor_id: str,
+    workspace_factory: Callable[[], Any] | None = None,
+) -> dict[str, Any]:
+    """在锁内重读单病历 DTO 核对结果对象，并追加一条 workspace 上下文决定。"""
+    _validate_actor(actor_id)
+    identity = _require_identity(institute_id, patient_id, visit_id)
+    if not isinstance(job_id, str) or not job_id.strip() or len(job_id) > 36:
+        raise RecordReviewInvalid("结果任务 ID 无效")
+    reason = _normalize_decision_fields(
+        decision=decision, reason=reason, request_id=request_id, envelope_id=envelope_id,
+    )
+    req = _DecisionRequest(
+        task_id=None, task_record_id=None, run_number=None,
+        decision=decision, reason=reason, request_id=request_id,
+        envelope_id=envelope_id, actor_id=actor_id,
+        review_context=CONTEXT_WORKSPACE, identity=identity, job_id=job_id,
+    )
+    _require_session()
+    factory = workspace_factory or _default_workspace_factory
+    return _run_submit(lambda: _submit_case(req, identity, factory), req)
+
+
+def _submit_case(
+    req: _DecisionRequest, identity: tuple[str, str, str], factory: Callable[[], Any],
+) -> dict[str, Any]:
+    with SessionLocal() as session:
+        with session.begin():
+            # 与任务上下文同一把锁：三坐标 + 规则集，保证跨上下文串行判定。
+            _advisory_lock(session, identity, LUXIAN_0609_RULE_SET_KEY)
+            existing = _find_by_request(session, req.request_id)
+            if existing is not None:
+                return _replay(existing, req)
+            anchor, reason_code = _case_anchor(_read_case_dto(identity, factory))
+            if anchor is None:
+                if reason_code == "unsupported_rule_set":
+                    raise RecordReviewConflict("unsupported_rule_set", "当前规则集不支持病历审核")
+                raise RecordReviewConflict("result_unavailable", "当前病历没有可审核的最新质控结果")
+            if anchor.job_id != req.job_id or anchor.envelope_id != req.envelope_id:
+                raise RecordReviewConflict("result_changed", "质控结果已更新，请刷新后重新审核")
+            response = _insert_decision(
+                session, req, identity=identity, rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+                rule_set_version=anchor.rule_set_version, job_id=anchor.job_id,
+            )
+    return {**response, "state": response["decision"], "idempotent": False}
+
+
+def batch_review_states(results: Iterable[Any]) -> dict[tuple[str, str, str], str]:
+    """批量推导病例审核状态，供运行/终末列表挂载 review_state。
+
+    入参每项含三坐标、job_id、envelope_id、rule_set_key；锚点不完整或规则集非 LX0609 的
+    病例不出现在返回值中（调用方显示为未知）。决定按 visit_id 分块一次性读取，
+    状态推导与单病例共用 _derive_state。数据库故障抛 RecordReviewUnavailable。
+    """
+    anchors: dict[tuple[str, str, str], tuple[str, str]] = {}
+    for item in results:
+        if not isinstance(item, dict) or item.get("rule_set_key") != LUXIAN_0609_RULE_SET_KEY:
+            continue
+        identity = _normalize_identity(item.get("institute_id"), item.get("patient_id"), item.get("visit_id"))
+        job_id = str(item.get("job_id") or "").strip()
+        envelope_id = str(item.get("envelope_id") or "").strip()
+        if identity is None or not job_id or not envelope_id:
+            continue
+        anchors[identity] = (job_id, envelope_id)
+    if not anchors:
+        return {}
+    _require_session()
+    decisions_by_case: dict[tuple[str, str, str], list[Any]] = {}
+    try:
+        with SessionLocal() as session:
+            for chunk in _chunks(sorted({identity[2] for identity in anchors})):
+                for row in session.execute(
+                    select(
+                        QCRecordReview.id, QCRecordReview.institute_id, QCRecordReview.patient_id,
+                        QCRecordReview.visit_id, QCRecordReview.job_id, QCRecordReview.envelope_id,
+                        QCRecordReview.stage, QCRecordReview.decision,
+                    )
+                    .where(
+                        QCRecordReview.visit_id.in_(chunk),
+                        QCRecordReview.rule_set_key == LUXIAN_0609_RULE_SET_KEY,
+                    )
+                    .order_by(QCRecordReview.created_at.desc(), QCRecordReview.id.desc())
+                ).all():
+                    case = (row.institute_id, row.patient_id, row.visit_id)
+                    if case in anchors:
+                        decisions_by_case.setdefault(case, []).append(row)
+    except SQLAlchemyError as exc:
+        raise RecordReviewUnavailable("审核数据暂不可用") from exc
+    return {
+        identity: _derive_state(decisions_by_case.get(identity, []), job_id, envelope_id)[0]
+        for identity, (job_id, envelope_id) in anchors.items()
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -716,9 +954,12 @@ __all__ = [
     "RecordReviewInvalid",
     "RecordReviewNotFound",
     "RecordReviewUnavailable",
+    "batch_review_states",
     "count_my_record_review_todos",
+    "get_case_review",
     "get_record_review",
     "list_my_record_review_todos",
+    "submit_case_review",
     "submit_record_review",
 ]
 

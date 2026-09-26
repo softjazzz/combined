@@ -28,7 +28,7 @@ from app.services.luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY
 from app.services.task_qc_run_service import TaskQCRunForbidden, TaskQCRunNotFound
 
 TARGET_DB = "medqc_v36_validation_20260924"
-TARGET_REVISION = "20260926_000057"
+TARGET_REVISION = "20260926_000058"  # 模型已含 review_context，须在迁移 58 之后运行
 INSTITUTE = "SYN-V36-RR"
 RULE_VERSION = "SYN-V36-RR-v1"
 
@@ -60,7 +60,8 @@ def pg_engine():
     try:
         with engine.connect() as conn:
             assert conn.execute(text("SELECT current_database()")).scalar_one() == TARGET_DB
-            assert conn.execute(text("SELECT version_num FROM public.alembic_version")).scalar_one() == TARGET_REVISION
+            # 版本号格式固定为 YYYYMMDD_NNNNNN，按字符串比较即可要求“不低于所需迁移”。
+            assert conn.execute(text("SELECT version_num FROM public.alembic_version")).scalar_one() >= TARGET_REVISION
             assert conn.execute(text("SELECT current_schema()")).scalar_one() == "qc"
             assert conn.execute(text("SELECT to_regclass('qc.qc_record_reviews') IS NOT NULL")).scalar_one()
         yield engine

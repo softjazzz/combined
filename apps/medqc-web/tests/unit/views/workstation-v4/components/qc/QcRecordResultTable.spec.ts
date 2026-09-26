@@ -267,4 +267,35 @@ describe('QcRecordResultTable', () => {
     expect(wrapper.get('button').text()).toBe('暂无结果')
     expect(wrapper.text()).not.toContain('床位待接入')
   })
+
+  it('审核状态标签按服务端状态映射，unknown 显示审核状态未知，未携带时不渲染', () => {
+    const states = ['pending_review', 'pending_recheck', 'approved', 'doubtful', 'unknown'] as const
+    const wrapper = mount(QcRecordResultTable, {
+      props: {
+        carePhase: 'inpatient',
+        compactReview: true,
+        rows: [
+          ...states.map((reviewState, index) => ({
+            ...rows[0],
+            recordKey: `row-${index}`,
+            reviewState,
+          })),
+          { ...rows[0], recordKey: 'row-none', resultStatus: 'not-run' as const },
+        ],
+      },
+    })
+
+    const tags = wrapper.findAll('[data-testid="qc-record-review-state"]')
+    expect(tags.map((item) => item.text())).toEqual([
+      '待审核',
+      '待复审',
+      '审核通过',
+      '审核存疑',
+      '审核状态未知',
+    ])
+    expect(tags[2].classes()).toContain('qc-record-result-table__review-state--approved')
+    expect(
+      wrapper.get('[data-record-key="row-none"]').find('[data-testid="qc-record-review-state"]').exists(),
+    ).toBe(false)
+  })
 })

@@ -1716,3 +1716,140 @@ def test_get_workstation_data_rejects_unknown_sync_scope(workstation_session_fac
             settings_loader=_workstation_settings_loader,
             demo_policy=_no_demo_policy,
         )
+
+
+# ---------------------------------------------------------------------------
+# 病历审核状态挂载（P0-2）：只对本页 ready 摘要原样挂 review_state
+# ---------------------------------------------------------------------------
+
+
+def _anchored_projection_loader(record_refs):
+    projections = {}
+    for ref in record_refs:
+        identity = (str(ref["institute_id"]), str(ref["patient_id"]), str(ref["visit_id"]))
+        if identity[2] in {"V1", "V2"}:
+            projections[identity] = {
+                "status": "ready",
+                "completed_at": "2026-08-08T10:00:00",
+                "total_rule_count": 1,
+                "status_counts": {"compliant": 1},
+                "root_job_id": f"job-{identity[2]}",
+                "envelope_id": f"env-{identity[2]}",
+            }
+        else:
+            projections[identity] = {"status": "not_run"}
+    return projections
+
+
+def _insert_review_state_records(session_factory):
+    _insert_workstation_records(
+        session_factory,
+        *(
+            MedicalRecordFrontpage(
+                institute_id="H1", patient_id=f"P{index}", visit_id=f"V{index}",
+                name=f"病历{index}", update_time=datetime(2026, 8, 8, 12, 0) - timedelta(hours=index),
+            )
+            for index in (1, 2, 3)
+        ),
+    )
+
+
+def test_workstation_attaches_review_state_to_ready_page_summaries(workstation_session_factory):
+    _insert_review_state_records(workstation_session_factory)
+    calls = []
+
+    def loader(results):
+        calls.append(results)
+        return {("H1", "P1", "V1"): "pending_recheck", ("H1", "P2", "V2"): "bogus"}
+
+    result = get_workstation_data(
+        page_size=50,
+        session_factory=workstation_session_factory,
+        settings_loader=_workstation_settings_loader,
+        demo_policy=_no_demo_policy,
+        qc_projection_loader=_anchored_projection_loader,
+        review_state_loader=loader,
+    )
+
+    summaries = {record["id"]: record["latest_qc_summary"] for record in result["records"]}
+    assert summaries["V1"]["review_state"] == "pending_recheck"
+    assert summaries["V2"]["review_state"] is None  # 非法取值不透传
+    assert summaries["V3"] == {"status": "not_run"}  # 非 ready 不挂
+    # 锚点不进入客户可见摘要
+    assert all("root_job_id" not in item and "envelope_id" not in item for item in summaries.values())
+    assert len(calls) == 1
+    assert sorted(calls[0], key=lambda item: item["visit_id"]) == [
+        {"institute_id": "H1", "patient_id": "P1", "visit_id": "V1", "job_id": "job-V1",
+         "envelope_id": "env-V1", "rule_set_key": "luxian_0609_qc_v1"},
+        {"institute_id": "H1", "patient_id": "P2", "visit_id": "V2", "job_id": "job-V2",
+         "envelope_id": "env-V2", "rule_set_key": "luxian_0609_qc_v1"},
+    ]
+    assert result["qc_summary"]["ready_records"] == 2
+
+
+def test_workstation_review_state_only_for_current_page(workstation_session_factory):
+    _insert_review_state_records(workstation_session_factory)
+    calls = []
+
+    def loader(results):
+        calls.append([item["visit_id"] for item in results])
+        return {}
+
+    result = get_workstation_data(
+        page=2,
+        page_size=1,
+        session_factory=workstation_session_factory,
+        settings_loader=_workstation_settings_loader,
+        demo_policy=_no_demo_policy,
+        qc_projection_loader=_anchored_projection_loader,
+        review_state_loader=loader,
+    )
+
+    assert [record["id"] for record in result["records"]] == ["V2"]
+    assert calls == [["V2"]]
+    assert result["records"][0]["latest_qc_summary"]["review_state"] is None
+
+
+def test_workstation_review_state_failure_degrades_to_unknown(workstation_session_factory, caplog):
+    _insert_review_state_records(workstation_session_factory)
+
+    def broken(_results):
+        raise RuntimeError("SELECT secret FROM qc_record_reviews")
+
+    with caplog.at_level("WARNING", logger=query_service_module.__name__):
+        result = get_workstation_data(
+            session_factory=workstation_session_factory,
+            settings_loader=_workstation_settings_loader,
+            demo_policy=_no_demo_policy,
+            qc_projection_loader=_anchored_projection_loader,
+            review_state_loader=broken,
+        )
+
+    summaries = {record["id"]: record["latest_qc_summary"] for record in result["records"]}
+    assert summaries["V1"]["status"] == "ready" and summaries["V1"]["review_state"] is None
+    assert summaries["V2"]["review_state"] is None
+    assert result["qc_summary"]["ready_records"] == 2
+    assert "RuntimeError" in caplog.text and "secret" not in caplog.text
+
+
+def test_workstation_default_review_state_loader_uses_review_service(workstation_session_factory, monkeypatch):
+    from app.services import record_review_service
+
+    _insert_review_state_records(workstation_session_factory)
+    calls = []
+
+    def fake_batch(results):
+        calls.append(results)
+        return {("H1", "P1", "V1"): "approved"}
+
+    monkeypatch.setattr(record_review_service, "batch_review_states", fake_batch)
+    result = get_workstation_data(
+        session_factory=workstation_session_factory,
+        settings_loader=_workstation_settings_loader,
+        demo_policy=_no_demo_policy,
+        qc_projection_loader=_anchored_projection_loader,
+    )
+
+    summaries = {record["id"]: record["latest_qc_summary"] for record in result["records"]}
+    assert summaries["V1"]["review_state"] == "approved"
+    assert len(calls) == 1

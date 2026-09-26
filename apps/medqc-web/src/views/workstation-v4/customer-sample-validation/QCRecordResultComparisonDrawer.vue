@@ -72,6 +72,21 @@
     </template>
 
     <a-spin :spinning="loading">
+      <div
+        v-if="showRecordReview && latestResult && focus"
+        class="customer-record-result-drawer__review"
+      >
+        <CaseRecordReviewPanel
+          :key="`case-review:${focus.instituteId}:${focus.patientId}:${focus.visitId}:${latestResult.job_id}`"
+          :institute-id="focus.instituteId"
+          :patient-id="focus.patientId"
+          :visit-id="focus.visitId"
+          :job-id="latestResult.job_id"
+          :user-id="reviewerId"
+          @review-submitted="handleReviewSubmitted"
+          @forbidden="reviewForbidden = true"
+        />
+      </div>
       <QCRecordCompareWorkbench
         v-if="latestResult && focus.visitId"
         :visit-id="focus.visitId"
@@ -101,6 +116,9 @@ import { message } from 'ant-design-vue'
 import { computed, ref, watch } from 'vue'
 import { ShieldCheck, X } from 'lucide-vue-next'
 import QcDiagnosticExport from '@/components/qc/QcDiagnosticExport.vue'
+import CaseRecordReviewPanel from '@/components/qc/CaseRecordReviewPanel.vue'
+import type { RecordReviewDecision } from '@/api/recordReviews'
+import { useAuthStore } from '@/stores/auth'
 import {
   exportLatestLuxian0609RecordResult,
   getLatestLuxian0609RecordResult,
@@ -129,13 +147,47 @@ const props = withDefaults(
     open: boolean
     focus: QCRecordResultFocus | null
     presentationMode?: 'flat' | 'grouped'
+    /** 运行/终末列表开启病例审核；仅 admin/qc_manager 挂载审核面板。 */
+    recordReview?: boolean
   }>(),
-  { presentationMode: 'flat' },
+  { presentationMode: 'flat', recordReview: false },
 )
+
+export interface QCRecordReviewSubmittedEvent {
+  instituteId: string
+  patientId: string
+  visitId: string
+  decision: RecordReviewDecision
+}
 
 const emit = defineEmits<{
   (event: 'close'): void
+  (event: 'review-submitted', payload: QCRecordReviewSubmittedEvent): void
 }>()
+
+const reviewForbidden = ref(false)
+/** 未开启审核的调用方（如客户样本验证）不访问登录态。 */
+const reviewAuth = computed(() => {
+  if (!props.recordReview) return null
+  const authStore = useAuthStore()
+  return {
+    allowed: authStore.hasRole('admin') || authStore.hasRole('qc_manager'),
+    userId: authStore.user?.id ?? '',
+  }
+})
+const reviewerId = computed(() => reviewAuth.value?.userId ?? '')
+const showRecordReview = computed(() => !!reviewAuth.value?.allowed && !reviewForbidden.value)
+
+function handleReviewSubmitted(decision: RecordReviewDecision) {
+  const focus = props.focus
+  if (!focus) return
+  emit('review-submitted', {
+    instituteId: focus.instituteId,
+    patientId: focus.patientId,
+    visitId: focus.visitId,
+    decision,
+  })
+}
 
 import avatarBoy from '@/assets/avatar-icons/patient-icon-boy.png'
 import avatarGirl from '@/assets/avatar-icons/patient-icon-girl.png'
@@ -235,6 +287,7 @@ async function loadLatestResult() {
   const requestSequence = ++activeRequestSequence
   const focus = props.focus
   latestResult.value = null
+  reviewForbidden.value = false
   qcTimeText.value = ''
   authorizedRecordRef.value = ''
   loadError.value = ''
@@ -343,6 +396,12 @@ watch(
   color: #005eb8;
   box-shadow: 0 4px 12px rgba(43, 108, 246, 0.14);
   transform: translateY(-1px);
+}
+
+.customer-record-result-drawer__review {
+  padding: 0 24px 14px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  background: #fff;
 }
 
 .customer-record-result-drawer__close-icon {

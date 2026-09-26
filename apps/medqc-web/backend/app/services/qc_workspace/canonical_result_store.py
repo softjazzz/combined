@@ -664,6 +664,29 @@ class CanonicalResultStore:
         rule_set_key: str,
         rule_set_version: str,
     ) -> Dict[str, Any]:
+        envelope, _ = self.load_selected_with_id(
+            session,
+            root_job_id=root_job_id,
+            institute_id=institute_id,
+            patient_id=patient_id,
+            visit_id=visit_id,
+            rule_set_key=rule_set_key,
+            rule_set_version=rule_set_version,
+        )
+        return envelope
+
+    def load_selected_with_id(
+        self,
+        session: Session,
+        *,
+        root_job_id: str,
+        institute_id: str,
+        patient_id: str,
+        visit_id: str,
+        rule_set_key: str,
+        rule_set_version: str,
+    ) -> tuple[Dict[str, Any], str]:
+        """与 ``load_selected`` 同一选择与校验，额外返回所选 Envelope 行 id（审核锚定用）。"""
         table = self._require_table()
         try:
             rows = (
@@ -684,9 +707,9 @@ class CanonicalResultStore:
                 .all()
             )
         except (sa.exc.ProgrammingError, sa.exc.OperationalError):
-            return {}
+            return {}, ""
         if len(rows) != 1:
-            return {}
+            return {}, ""
         envelope = _safe_json_loads(rows[0].get("envelope_json"), {})
         if (
             not isinstance(envelope, dict)
@@ -694,8 +717,9 @@ class CanonicalResultStore:
             or envelope.get("delivery_mode") != CANONICAL_RESULT_DELIVERY_MODE
             or not isinstance(envelope.get("items"), list)
         ):
-            return {}
-        return envelope
+            return {}, ""
+        envelope_id = rows[0].get("id")
+        return envelope, ("" if envelope_id is None else str(envelope_id).strip())
 
     def load_root_job_items(
         self,

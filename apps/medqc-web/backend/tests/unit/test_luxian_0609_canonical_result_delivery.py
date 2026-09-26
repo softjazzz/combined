@@ -2590,3 +2590,134 @@ def test_writer_accepts_064_non_compliant_with_projected_multievent_facts():
     )
 
     assert len(session.statements) == 2
+
+
+# ---------------------------------------------------------------------------
+# 病历审核锚点（P0-2）：ready 时只增加 root_job_id/envelope_id，不改选择行为
+# ---------------------------------------------------------------------------
+
+
+def _anchor_service() -> CustomQCWorkspaceService:
+    """不连接数据库构造读取器：只替换表对象，读取仍经 _ReadSession 按顺序返回行。"""
+    import sqlalchemy as sa
+
+    metadata = sa.MetaData()
+    service = object.__new__(CustomQCWorkspaceService)
+    service._batch_job_table = sa.Table(
+        "custom_qc_batch_jobs", metadata,
+        *(sa.Column(name, sa.Text) for name in (
+            "id", "status", "parent_job_id", "created_at", "finished_at",
+            "filters_json", "record_ids_json", "summary_json",
+        )),
+    )
+    service._record_result_envelope_table = sa.Table(
+        "luxian_0609_record_result_envelopes", metadata,
+        *(sa.Column(name, sa.Text) for name in (
+            "id", "job_id", "root_job_id", "record_id", "institute_id", "patient_id", "visit_id",
+            "rule_set_key", "rule_set_version", "envelope_json", "updated_at",
+        )),
+    )
+    return service
+
+
+def _review_anchor_envelope_json() -> str:
+    return json.dumps({
+        "schema_version": "lx0609-record-result-envelope-v1",
+        "delivery_mode": "canonical_straight_through",
+        "record_ref": "rec_1234567890abcdef12345678",
+        "items": [{
+            "rule_id": "LX0609-001",
+            "status": "compliant",
+            "result_status": "compliant",
+            "is_compliant": True,
+        }],
+    })
+
+
+def test_single_record_dto_ready_exposes_review_anchor(monkeypatch):
+    session = _ReadSession(
+        [[_selected_job()], [{"id": "env-row-1", "envelope_json": _review_anchor_envelope_json()}]]
+    )
+    monkeypatch.setattr(workspace_module, "_session", lambda: session)
+    monkeypatch.setattr(workspace_module, "_row_to_batch_job", lambda row: dict(row))
+    monkeypatch.setattr(
+        CustomQCWorkspaceService, "_aggregate_parent_job", lambda _self, _session, job: job,
+    )
+
+    result = _anchor_service().build_latest_single_record_result_dto(
+        institute_id="inst-1",
+        patient_id="patient-1",
+        visit_id="visit-1",
+        expected_rule_ids=["LX0609-001"],
+        rule_set_key="luxian_0609_qc_v1",
+        rule_set_version="2026-06-09",
+    )
+
+    assert result["state"] == "ready"
+    assert result["job_id"] == result["root_job_id"] == "job-current"
+    assert result["envelope_id"] == "env-row-1"
+
+
+def test_single_record_dto_not_ready_has_no_review_anchor(monkeypatch):
+    session = _ReadSession([[_selected_job()], []])
+    monkeypatch.setattr(workspace_module, "_session", lambda: session)
+    monkeypatch.setattr(workspace_module, "_row_to_batch_job", lambda row: dict(row))
+    monkeypatch.setattr(
+        CustomQCWorkspaceService, "_aggregate_parent_job", lambda _self, _session, job: job,
+    )
+
+    result = _anchor_service().build_latest_single_record_result_dto(
+        institute_id="inst-1",
+        patient_id="patient-1",
+        visit_id="visit-1",
+        rule_set_key="luxian_0609_qc_v1",
+        rule_set_version="2026-06-09",
+    )
+
+    assert result["state"] == "technical_error"
+    assert "root_job_id" not in result and "envelope_id" not in result
+
+
+def test_completed_summary_ready_exposes_review_anchor(monkeypatch):
+    identity = ("inst-1", "patient-1", "visit-1")
+    job = {
+        "id": "job-anchor",
+        "status": "completed",
+        "created_at": "2026-09-15T08:00:00",
+        "finished_at": "2026-09-15T08:05:00",
+        "filters_json": json.dumps({
+            "rule_set_key": "luxian_0609_qc_v1",
+            "rule_set_version": "2026-06-09",
+        }),
+        "record_ids_json": json.dumps([identity[2]]),
+        "summary_json": "{}",
+    }
+    envelope = {
+        "id": "env-row-9",
+        "root_job_id": job["id"],
+        "job_id": job["id"],
+        "institute_id": identity[0],
+        "patient_id": identity[1],
+        "visit_id": identity[2],
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "updated_at": "2026-09-15T08:05:00",
+        "envelope_json": _review_anchor_envelope_json(),
+    }
+    other = ("inst-1", "patient-2", "visit-2")
+    session = _ReadSession([[job], [envelope]])
+    monkeypatch.setattr(workspace_module, "_session", lambda: session)
+
+    result = _anchor_service().build_luxian_0609_completed_record_result_summaries(
+        record_refs=[
+            dict(zip(("institute_id", "patient_id", "visit_id"), identity)),
+            dict(zip(("institute_id", "patient_id", "visit_id"), other)),
+        ],
+        rule_set_key="luxian_0609_qc_v1",
+        rule_set_version="2026-06-09",
+    )
+
+    assert result[identity]["status"] == "ready"
+    assert result[identity]["root_job_id"] == "job-anchor"
+    assert result[identity]["envelope_id"] == "env-row-9"
+    assert result[other] == {"status": "not_run"}

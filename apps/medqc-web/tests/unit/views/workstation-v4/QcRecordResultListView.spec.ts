@@ -46,8 +46,9 @@ const ResultDrawerStub = defineComponent({
     open: { type: Boolean, default: false },
     focus: { type: Object, default: null },
     presentationMode: { type: String, default: 'flat' },
+    recordReview: { type: Boolean, default: false },
   },
-  emits: ['close'],
+  emits: ['close', 'review-submitted'],
   setup(props) {
     return () => h('div', { 'data-testid': 'result-drawer-stub', 'data-open': String(props.open) })
   },
@@ -699,5 +700,61 @@ describe('QcRecordResultListView', () => {
       visitId: 'V-analysis',
       recordId: 'V-analysis',
     })
+  })
+
+  it('ready 行按服务端 review_state 显示审核标签，null 为未知，非 ready 不显示', async () => {
+    const payload = response()
+    const summaries = payload.data.records.map((record) => record.latest_qc_summary) as Array<
+      Record<string, unknown> | undefined
+    >
+    summaries[0]!.review_state = 'pending_recheck'
+    summaries[1]!.review_state = 'approved'
+    summaries[2]!.review_state = null
+    summaries[3]!.review_state = 'approved'
+    summaries[4]!.review_state = 'doubtful'
+    mocks.getRaw.mockResolvedValue(payload)
+
+    const wrapper = mountView('inpatient')
+    await flushPromises()
+
+    const tagOf = (visitId: string) =>
+      wrapper
+        .get(`tbody tr[data-record-key='["H","P","${visitId}"]']`)
+        .find('[data-testid="qc-record-review-state"]')
+    expect(tagOf('V-priority').text()).toBe('待复审')
+    expect(tagOf('V-data-gap').text()).toBe('审核通过')
+    expect(tagOf('V-uncertain').text()).toBe('审核状态未知')
+    expect(tagOf('V-not-run').exists()).toBe(false)
+    expect(tagOf('V-technical').exists()).toBe(false)
+  })
+
+  it('结果抽屉开启病例审核，审核提交确认后重新拉取当前页', async () => {
+    mocks.getRaw.mockImplementation((_url: string, params: { page: number }) => {
+      const payload = response()
+      payload.data.total = 30
+      payload.data.page = params.page
+      return Promise.resolve(payload)
+    })
+    const wrapper = mountView('discharged')
+    await flushPromises()
+    wrapper.getComponent(Pagination).vm.$emit('change', 2, 15)
+    await flushPromises()
+
+    const drawer = wrapper.getComponent(ResultDrawerStub)
+    expect(drawer.props('recordReview')).toBe(true)
+    const requestsBefore = mocks.getRaw.mock.calls.length
+    drawer.vm.$emit('review-submitted', {
+      instituteId: 'H',
+      patientId: 'P',
+      visitId: 'V-priority',
+      decision: 'approved',
+    })
+    await flushPromises()
+
+    expect(mocks.getRaw.mock.calls.length).toBe(requestsBefore + 1)
+    expect(mocks.getRaw).toHaveBeenLastCalledWith(
+      '/api/medical-records/workstation',
+      expect.objectContaining({ page: 2 }),
+    )
   })
 })

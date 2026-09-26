@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from collections import Counter
 from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -21,12 +22,16 @@ from ...database.models.cdm import (
     MedicalRecordFrontpage,
     QCResult,
 )
+from ...services.luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY
 from ...services.workflow_queue_state_service import default_workflow_queue_state_service
 from ...services.frontpage_settings import (
     load_frontpage_settings,
     should_include_demo_records,
 )
 from .shared import build_demo_workstation_records, filter_demo_records
+
+
+logger = logging.getLogger(__name__)
 
 
 def _session_factory() -> Session:
@@ -476,6 +481,65 @@ def _load_latest_luxian_0609_qc_summaries(
         record_refs=record_refs,
         session_factory=session_factory,
     )
+
+
+def _load_review_states(results: list[dict[str, Any]]) -> dict[tuple[str, str, str], str]:
+    """病历审核状态唯一来源：审核服务的批量推导（与单病例同一函数）。"""
+
+    from ...services.record_review_service import batch_review_states
+
+    return batch_review_states(results)
+
+
+def _attach_review_states(
+    records: list[Any],
+    raw_summary_map: dict[tuple[str, str, str], dict[str, Any]],
+    latest_qc_summary_map: dict[tuple[str, str, str], dict[str, Any]],
+    review_state_loader: Callable[[list[dict[str, Any]]], dict[tuple[str, str, str], str]],
+) -> None:
+    """只对本页 ready 摘要原样挂 review_state，不重新判断审核状态。
+
+    锚点（root_job_id/envelope_id）取自读取器原始摘要，不进入客户可见摘要。
+    批量读取失败时不影响质控摘要：ready 摘要的 review_state 置为 None（前端显示“未知”），
+    并记录 warning（只记异常类型，不记患者身份或 SQL）。
+    """
+
+    page_ready: dict[tuple[str, str, str], dict[str, Any]] = {}
+    for record in records:
+        identity = (
+            str(record.institute_id).strip(),
+            str(record.patient_id).strip(),
+            str(record.visit_id).strip(),
+        )
+        summary = latest_qc_summary_map.get(identity)
+        if isinstance(summary, dict) and summary.get("status") == "ready":
+            page_ready[identity] = summary
+    if not page_ready:
+        return
+    anchors = []
+    for identity in page_ready:
+        raw = raw_summary_map.get(identity)
+        raw = raw if isinstance(raw, dict) else {}
+        anchors.append(
+            {
+                "institute_id": identity[0],
+                "patient_id": identity[1],
+                "visit_id": identity[2],
+                "job_id": raw.get("root_job_id"),
+                "envelope_id": raw.get("envelope_id"),
+                "rule_set_key": LUXIAN_0609_RULE_SET_KEY,
+            }
+        )
+    try:
+        states = review_state_loader(anchors)
+    except Exception as exc:  # noqa: BLE001 - 审核状态降级为未知，不阻断病历列表
+        logger.warning("病历列表审核状态批量读取失败，降级为未知 error_type=%s", type(exc).__name__)
+        states = {}
+    for identity, summary in page_ready.items():
+        state = states.get(identity) if isinstance(states, dict) else None
+        summary["review_state"] = (
+            state if state in {"pending_review", "pending_recheck", "approved", "doubtful"} else None
+        )
 
 
 def _build_qc_summary(
@@ -953,6 +1017,9 @@ def get_workstation_data(
     qc_projection_loader: Optional[
         Callable[[list[dict[str, str]]], dict[tuple[str, str, str], dict[str, Any]]]
     ] = None,
+    review_state_loader: Optional[
+        Callable[[list[dict[str, Any]]], dict[tuple[str, str, str], str]]
+    ] = None,
     analytics_job_id: Optional[str] = None,
     analytics_completed_from: Optional[datetime] = None,
     analytics_completed_to: Optional[datetime] = None,
@@ -1204,8 +1271,15 @@ def get_workstation_data(
                 session_factory=session_factory,
             )
         )
-        latest_qc_summary_map = _normalize_latest_qc_summary_map(summary_loader(full_record_refs))
+        raw_qc_summary_map = summary_loader(full_record_refs)
+        latest_qc_summary_map = _normalize_latest_qc_summary_map(raw_qc_summary_map)
         qc_summary = _build_qc_summary(full_record_refs, latest_qc_summary_map)
+        _attach_review_states(
+            records,
+            raw_qc_summary_map if isinstance(raw_qc_summary_map, dict) else {},
+            latest_qc_summary_map,
+            review_state_loader or _load_review_states,
+        )
 
         discharge_summary_map: dict[str, dict[str, Any]] = {}
         if records and discharge_summary is not None:

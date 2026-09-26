@@ -1,6 +1,12 @@
 import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { getRecordReviewTodos, getTaskRecordReview, submitTaskRecordReview } from '@/api/recordReviews'
+import {
+  getCaseRecordReview,
+  getRecordReviewTodos,
+  getTaskRecordReview,
+  submitCaseRecordReview,
+  submitTaskRecordReview,
+} from '@/api/recordReviews'
 import { getManualDefects, reviewManualDefect } from '@/api/manualDefectReviews'
 import { ApiService } from '@/services/apiService'
 
@@ -48,6 +54,32 @@ describe('病历审核 API', () => {
       success: false, status: 503, code: undefined, message: '病历审核服务暂不可用，请稍后重试',
     })
     await expect(submitTaskRecordReview('t', 'r', payload)).resolves.toMatchObject({ success: false, status: undefined, code: undefined })
+  })
+
+  it('病例上下文 GET 以三坐标为查询参数，返回服务端视图', async () => {
+    const view = { review_context: 'workspace', institute_id: 'H', patient_id: 'P', visit_id: 'V/1', state: 'pending_review' }
+    vi.mocked(ApiService.requestRaw).mockResolvedValueOnce(response({ success: true, data: view }))
+    await expect(getCaseRecordReview({ institute_id: 'H', patient_id: 'P', visit_id: 'V/1' }))
+      .resolves.toMatchObject({ success: true, data: view, status: 200 })
+    expect(ApiService.requestRaw).toHaveBeenCalledWith({
+      method: 'GET', url: '/api/v1/record-reviews/case', params: { institute_id: 'H', patient_id: 'P', visit_id: 'V/1' },
+    })
+  })
+
+  it('病例上下文 POST 原样提交载荷；409 与 403 复用同一错误解析', async () => {
+    const payload = {
+      institute_id: 'H', patient_id: 'P', visit_id: 'V', job_id: 'job', envelope_id: 'env',
+      decision: 'approved' as const, reason: null, request_id: 'rid',
+    }
+    vi.mocked(ApiService.requestRaw)
+      .mockRejectedValueOnce(httpError(409, { success: false, error: { code: 'result_changed', message: '质控结果已更新' } }))
+      .mockRejectedValueOnce(httpError(403, { detail: '没有病历审核权限' }))
+    await expect(submitCaseRecordReview(payload)).resolves.toEqual({
+      success: false, status: 409, code: 'result_changed', message: '质控结果已更新',
+    })
+    expect(ApiService.requestRaw).toHaveBeenCalledWith({ method: 'POST', url: '/api/v1/record-reviews/case', data: payload })
+    await expect(getCaseRecordReview({ institute_id: 'H', patient_id: 'P', visit_id: 'V' }))
+      .resolves.toMatchObject({ success: false, status: 403, code: undefined })
   })
 
   it('待办只传入已给定的筛选参数', async () => {

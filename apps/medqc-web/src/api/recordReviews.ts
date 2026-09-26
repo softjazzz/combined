@@ -1,5 +1,5 @@
 /**
- * 病历初审/复审 API（任务受领范围）
+ * 病历初审/复审 API（任务受领范围 + 运行/终末列表病例范围）
  *
  * 状态、阶段与原因码均由服务端推导，前端原样展示，不在本地重新解释。
  */
@@ -20,13 +20,12 @@ export type RecordReviewConflictCode =
   | 'unsupported_rule_set'
   | 'state_conflict'
 
-/** 一次审核决定（只追加、不可修改）。 */
-export interface RecordReviewEntry {
+export type RecordReviewContext = 'task' | 'workspace'
+
+/** 审核决定中与上下文无关的公共字段。 */
+export interface RecordReviewEntryBase {
   id: string
   request_id: string
-  task_id: string
-  task_record_id: string
-  run_number: number
   job_id: string
   envelope_id: string
   rule_set_key: string
@@ -38,17 +37,36 @@ export interface RecordReviewEntry {
   created_at: string
 }
 
-export interface RecordReviewView {
+/** 一次审核决定（只追加、不可修改）。 */
+export interface RecordReviewEntry extends RecordReviewEntryBase {
   task_id: string
   task_record_id: string
   run_number: number
+}
+
+/** 病例上下文历史：同一病例的任务与列表决定合并返回，workspace 行无任务字段。 */
+export interface CaseRecordReviewEntry extends RecordReviewEntryBase {
+  review_context: RecordReviewContext
+  task_id: string | null
+  task_record_id: string | null
+  run_number: number | null
+}
+
+/** 审核视图中与上下文无关的公共字段，供共享展示/交互使用。 */
+export interface RecordReviewViewBase<E extends RecordReviewEntryBase = RecordReviewEntryBase> {
   state: RecordReviewState
   stage: RecordReviewStage | null
   reason_code: string | null
   can_submit: boolean
-  current: RecordReviewEntry | null
-  history: RecordReviewEntry[]
+  current: E | null
+  history: E[]
   result: { job_id: string | null; envelope_id: string | null }
+}
+
+export interface RecordReviewView extends RecordReviewViewBase<RecordReviewEntry> {
+  task_id: string
+  task_record_id: string
+  run_number: number
 }
 
 export interface RecordReviewSubmitPayload {
@@ -60,6 +78,34 @@ export interface RecordReviewSubmitPayload {
 }
 
 export interface RecordReviewSubmitResult extends RecordReviewEntry {
+  state: RecordReviewDecision
+  idempotent: boolean
+}
+
+/** 病例（三坐标）上下文审核视图：以单病历最新 ready 结果为当前结果对象。 */
+export interface CaseRecordReviewView extends RecordReviewViewBase<CaseRecordReviewEntry> {
+  review_context: 'workspace'
+  institute_id: string
+  patient_id: string
+  visit_id: string
+  rule_set_key: string
+}
+
+export interface CaseRecordReviewIdentity {
+  institute_id: string
+  patient_id: string
+  visit_id: string
+}
+
+export interface CaseRecordReviewSubmitPayload extends CaseRecordReviewIdentity {
+  job_id: string
+  envelope_id: string
+  decision: RecordReviewDecision
+  reason?: string | null
+  request_id: string
+}
+
+export interface CaseRecordReviewSubmitResult extends CaseRecordReviewEntry {
   state: RecordReviewDecision
   idempotent: boolean
 }
@@ -167,6 +213,30 @@ export async function submitTaskRecordReview(taskId: string, taskRecordId: strin
     url: reviewUrl(taskId, taskRecordId),
     data: payload,
   }, '提交病历审核失败')
+}
+
+const CASE_REVIEW_URL = '/api/v1/record-reviews/case'
+
+/** 读取病例在最新 ready 结果上的审核状态、当前决定与历史（需 QC_RESULTS.REVIEW）。 */
+export async function getCaseRecordReview(identity: CaseRecordReviewIdentity) {
+  return request<CaseRecordReviewView>({
+    method: 'GET',
+    url: CASE_REVIEW_URL,
+    params: {
+      institute_id: identity.institute_id,
+      patient_id: identity.patient_id,
+      visit_id: identity.visit_id,
+    },
+  }, '读取病例审核状态失败')
+}
+
+/** 对病例最新 ready 结果对象提交审核；job_id/envelope_id 与服务端不一致时返回 409 result_changed。 */
+export async function submitCaseRecordReview(payload: CaseRecordReviewSubmitPayload) {
+  return request<CaseRecordReviewSubmitResult>({
+    method: 'POST',
+    url: CASE_REVIEW_URL,
+    data: payload,
+  }, '提交病例审核失败')
 }
 
 /** 本人待初审/待复审病例（与首页计数同一谓词，total 为精确值）。 */

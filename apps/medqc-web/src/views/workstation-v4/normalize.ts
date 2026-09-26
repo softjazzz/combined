@@ -3,6 +3,7 @@ import type {
   PatientRecord,
   QCIssueLike,
   RecordLatestQcSummary,
+  RecordLatestReviewState,
   RecordPoolQcSummary,
   RecordSourceState,
   WorkstationWorklistItem,
@@ -251,6 +252,20 @@ function normalizeStatusCounts(raw: unknown): Record<string, number> {
   )
 }
 
+const RECORD_REVIEW_STATES: readonly RecordLatestReviewState[] = [
+  'pending_review',
+  'pending_recheck',
+  'approved',
+  'doubtful',
+]
+
+/** 只搬运服务端审核状态；缺失或无法识别一律为 null（未知），不推断。 */
+function normalizeRecordReviewState(raw: unknown): RecordLatestReviewState | null {
+  return typeof raw === 'string' && (RECORD_REVIEW_STATES as readonly string[]).includes(raw)
+    ? (raw as RecordLatestReviewState)
+    : null
+}
+
 function normalizeRecordLatestQcSummary(raw: unknown): RecordLatestQcSummary {
   const source = (raw || {}) as LooseRecord
   const status = pickString(source, ['status'])
@@ -260,6 +275,7 @@ function normalizeRecordLatestQcSummary(raw: unknown): RecordLatestQcSummary {
       completedAt: pickString(source, ['completedAt', 'completed_at']) || null,
       totalRuleCount: asNumber(source.totalRuleCount ?? source.total_rule_count),
       statusCounts: normalizeStatusCounts(source.statusCounts ?? source.status_counts),
+      reviewState: normalizeRecordReviewState(source.reviewState ?? source.review_state),
     }
   }
   if (status === 'technical_error') {

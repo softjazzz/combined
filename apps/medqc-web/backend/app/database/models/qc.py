@@ -632,7 +632,11 @@ _RECORD_REVIEW_NONBLANK_COLUMNS = (
 
 
 class QCRecordReview(Base):
-    """病历初审/复审决定；每行即一次事务事件，只追加、不修改（迁移 57）。"""
+    """病历初审/复审决定；每行即一次事务事件，只追加、不修改（迁移 57/58）。
+
+    review_context：task 行记录任务上下文（三字段非空）；workspace 行来自运行/终末列表，
+    任务三字段均为空。同一结果对象跨上下文仍只允许一个决定。
+    """
 
     __tablename__ = "qc_record_reviews"
 
@@ -645,14 +649,15 @@ class QCRecordReview(Base):
     rule_set_version = Column(String(96), nullable=False)
     job_id = Column(String(36), nullable=False, comment="root job id")
     envelope_id = Column(String(36), nullable=False, comment="审核时的 Envelope 行 id")
-    task_id = Column(String(36), nullable=False)
-    task_record_id = Column(String(36), nullable=False)
-    run_number = Column(Integer, nullable=False)
+    task_id = Column(String(36), nullable=True)
+    task_record_id = Column(String(36), nullable=True)
+    run_number = Column(Integer, nullable=True)
     stage = Column(String(16), nullable=False)
     decision = Column(String(16), nullable=False)
     reason = Column(Text, nullable=True)
     reviewer_id = Column(String(64), nullable=False)
     created_at = Column(DateTime, nullable=False)
+    review_context = Column(String(16), nullable=False, server_default="task")
 
     __table_args__ = (
         PrimaryKeyConstraint("id", name="pk_qc_record_reviews"),
@@ -673,6 +678,14 @@ class QCRecordReview(Base):
                 f"trim({name}, {_RECORD_REVIEW_WS}) <> ''" for name in _RECORD_REVIEW_NONBLANK_COLUMNS
             ),
             name="ck_qc_record_reviews_identity_nonblank",
+        ),
+        CheckConstraint("review_context IN ('task', 'workspace')", name="ck_qc_record_reviews_context"),
+        CheckConstraint(
+            "(review_context = 'task' AND task_id IS NOT NULL AND task_record_id IS NOT NULL"
+            " AND run_number IS NOT NULL)"
+            " OR (review_context = 'workspace' AND task_id IS NULL AND task_record_id IS NULL"
+            " AND run_number IS NULL)",
+            name="ck_qc_record_reviews_context_fields",
         ),
         Index(
             "ix_qc_record_reviews_case",
