@@ -10,10 +10,50 @@ import { extractApiErrorMessageFromError, normalizeApiSuccess } from '@/utils/ap
 
 const BASE_URL = '/api/v1/tasks'
 
+/** 结构化业务错误（如 409 `{code, message, ...}`），额外字段原样保留供调用方展示。 */
+export interface TaskApiErrorDetail {
+    code: string
+    message?: string
+    /** original_reviewer_unmatched：不匹配的病历数 */
+    unmatched_count?: number
+    /** department_unassigned：没有对应受领人的科室 */
+    departments?: string[]
+    /** method_unavailable：不可用原因 */
+    reason?: string
+}
+
+/**
+ * 读取结构化错误 detail。
+ * 后端统一异常包装把 HTTPException.detail 放在 `error` 字段；直连 FastAPI 时位于 `detail`。
+ */
+function extractTaskErrorDetail(error: unknown): TaskApiErrorDetail | undefined {
+    if (!isAxiosError(error)) return undefined
+    const body: unknown = error.response?.data
+    if (typeof body !== 'object' || body === null) return undefined
+    for (const key of ['detail', 'error'] as const) {
+        const candidate: unknown = (body as Record<string, unknown>)[key]
+        if (typeof candidate !== 'object' || candidate === null) continue
+        const raw = candidate as Record<string, unknown>
+        if (typeof raw.code !== 'string' || !raw.code.trim()) continue
+        const detail: TaskApiErrorDetail = { code: raw.code }
+        if (typeof raw.message === 'string' && raw.message.trim()) detail.message = raw.message
+        if (typeof raw.reason === 'string' && raw.reason.trim()) detail.reason = raw.reason
+        if (typeof raw.unmatched_count === 'number' && Number.isInteger(raw.unmatched_count) && raw.unmatched_count >= 0) {
+            detail.unmatched_count = raw.unmatched_count
+        }
+        if (Array.isArray(raw.departments)) {
+            const departments = raw.departments.filter((item): item is string => typeof item === 'string' && !!item.trim())
+            if (departments.length) detail.departments = departments
+        }
+        return detail
+    }
+    return undefined
+}
+
 /** 通用请求封装 */
 async function request<T = any>(
     config: Parameters<typeof ApiService.requestRaw>[0]
-): Promise<{ success: boolean; data?: T; message?: string; status?: number }> {
+): Promise<{ success: boolean; data?: T; message?: string; status?: number; code?: string; errorDetail?: TaskApiErrorDetail }> {
     try {
         const response = await ApiService.requestRaw<T>(config)
         const normalized = normalizeApiSuccess<T>(response.data)
@@ -24,10 +64,12 @@ async function request<T = any>(
             ...(response.status === 404 ? { status: 404 } : {}),
         }
     } catch (error) {
+        const detail = extractTaskErrorDetail(error)
         return {
             success: false,
-            message: extractApiErrorMessageFromError(error, '网络异常或服务器不可用'),
+            message: detail?.message || extractApiErrorMessageFromError(error, '网络异常或服务器不可用'),
             status: isAxiosError(error) ? error.response?.status : undefined,
+            ...(detail ? { code: detail.code, errorDetail: detail } : {}),
         }
     }
 }
@@ -41,7 +83,15 @@ export type TaskTodo = 'assigned' | 'in_progress' | 'due_soon'
 export type TaskScene = 'running' | 'final' | 'outpatient'
 export type TaskSceneFilter = TaskScene | 'unclassified'
 export type SamplingMethod = 'all' | 'count' | 'percentage'
-export type AssignMethod = 'keep' | 'by_department' | 'by_ratio' | 'by_type'
+export type AssignMethod = 'keep' | 'by_department' | 'by_ratio' | 'by_type' | 'by_original_reviewer'
+/** 新建任务与分配接口当前可用的分配方式（病历类型不可用，见 V3.6 分配策略合同）。 */
+export type TaskAssignableMethod = 'by_ratio' | 'by_original_reviewer' | 'by_department'
+/** 原质控员策略下，病历无原质控员或其不在选定人中时的处理方式。 */
+export type AssignFallback = 'by_ratio' | 'reject'
+
+export interface TaskAssignConfig {
+    fallback?: AssignFallback
+}
 
 export interface TaskItem {
     id: string
@@ -61,6 +111,8 @@ export interface TaskItem {
     sampling_method?: SamplingMethod
     sampling_config?: Record<string, unknown> | null
     assign_method?: AssignMethod
+    /** 后端既有字段；by_original_reviewer 的 fallback 存于此（合同中记作 assign_config.fallback） */
+    assignee_config?: TaskAssignConfig | null
     date_range?: { start?: string; end?: string }
     department_filter?: string[]
     created_at: string
@@ -234,7 +286,8 @@ export interface TaskCreateData {
     sampling_method?: SamplingMethod
     sampling_config?: Record<string, any>
     assign_method?: AssignMethod
-    assignee_config?: Record<string, any>
+    /** 仅 by_original_reviewer 需要 fallback（合同中记作 assign_config.fallback，后端沿用 assignee_config） */
+    assignee_config?: TaskAssignConfig
     deadline?: string
 }
 
@@ -467,12 +520,36 @@ export async function executeSampling(taskId: string) {
     return request({ method: 'POST', url: `${BASE_URL}/${taskId}/sample` })
 }
 
-/** 分配任务 */
+/** 每人通过哪种途径获得病历；字段缺失表示后端未提供，不代表 0。 */
+export interface TaskAssignReasonCounts {
+    original_reviewer?: number
+    department?: number
+    ratio_fallback?: number
+}
+
+export interface TaskAssignmentDetail {
+    user_id: string
+    user_name: string
+    department?: string | null
+    count: number
+    reason_counts?: TaskAssignReasonCounts
+}
+
+export interface TaskAssignResult {
+    task_id?: string
+    total_assigned: number
+    assignment_summary?: Record<string, number>
+    assignment_details?: TaskAssignmentDetail[]
+    idempotent?: boolean
+}
+
+/** 分配任务；fallback 仅 by_original_reviewer 使用 */
 export async function assignTask(taskId: string, data: {
     assignees: Array<{ user_id: string; user_name: string; department?: string }>
     method?: AssignMethod
+    fallback?: AssignFallback
 }) {
-    return request<{ total_assigned: number }>({
+    return request<TaskAssignResult>({
         method: 'POST',
         url: `${BASE_URL}/${encodeURIComponent(taskId)}/assign`,
         data,

@@ -180,6 +180,47 @@ describe('任务统计 API', () => {
     })
   })
 
+  it('原质控员分配携带 fallback，响应中的来源分布原样透传', async () => {
+    const options = [{ user_id: 'qc-1', user_name: '质控员甲' }]
+    const result = {
+      total_assigned: 3,
+      assignment_details: [{ user_id: 'qc-1', user_name: '质控员甲', count: 3, reason_counts: { original_reviewer: 2, ratio_fallback: 1 } }],
+    }
+    vi.mocked(ApiService.requestRaw).mockResolvedValueOnce(response({ success: true, data: result }))
+    await expect(assignTask('task-1', { method: 'by_original_reviewer', fallback: 'by_ratio', assignees: options }))
+      .resolves.toMatchObject({ success: true, data: result })
+    expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
+      method: 'POST', url: '/api/v1/tasks/task-1/assign',
+      data: { method: 'by_original_reviewer', fallback: 'by_ratio', assignees: options },
+    })
+  })
+
+  it.each([
+    ['detail', { code: 'department_unassigned', message: '存在无受领人科室', departments: ['内科', ' ', 3, '外科'] }],
+    ['error', { code: 'original_reviewer_unmatched', message: '有病历无原质控员', unmatched_count: 4 }],
+  ] as const)('409 结构化业务码从 %s 字段解析并保留数量/科室', async (key, detail) => {
+    vi.mocked(ApiService.requestRaw).mockRejectedValueOnce(new AxiosError(
+      'Request failed', 'ERR_BAD_REQUEST', undefined, undefined,
+      { data: { success: false, [key]: detail }, status: 409, statusText: 'Conflict', headers: new AxiosHeaders(), config: { headers: new AxiosHeaders() } },
+    ))
+    const res = await assignTask('task-1', { method: 'by_department', assignees: [{ user_id: 'qc-1', user_name: '甲' }] })
+    expect(res).toMatchObject({ success: false, status: 409, code: detail.code, message: detail.message })
+    if (detail.code === 'department_unassigned') {
+      expect(res.errorDetail).toEqual({ code: detail.code, message: detail.message, departments: ['内科', '外科'] })
+    } else {
+      expect(res.errorDetail).toEqual({ code: detail.code, message: detail.message, unmatched_count: 4 })
+    }
+  })
+
+  it('字符串 detail 的错误不附带业务码', async () => {
+    vi.mocked(ApiService.requestRaw).mockRejectedValueOnce(new AxiosError(
+      'Request failed', 'ERR_BAD_REQUEST', undefined, undefined,
+      { data: { detail: '任务病历已有分配或状态变化' }, status: 409, statusText: 'Conflict', headers: new AxiosHeaders(), config: { headers: new AxiosHeaders() } },
+    ))
+    const res = await assignTask('task-1', { method: 'by_ratio', assignees: [{ user_id: 'qc-1', user_name: '甲' }] })
+    expect(res).toEqual({ success: false, status: 409, message: '任务病历已有分配或状态变化' })
+  })
+
   it('开始受领任务沿用 PUT 状态接口', async () => {
     await updateTask('task-1', { status: 'in_progress' })
     expect(ApiService.requestRaw).toHaveBeenLastCalledWith({

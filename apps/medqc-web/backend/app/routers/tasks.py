@@ -320,6 +320,31 @@ def _apply_task_scene_scope(query, scene: Optional[str]):
 # 创建任务
 # ============================
 
+_CREATABLE_ASSIGN_METHODS = frozenset({
+    AssignMethod.BY_RATIO, AssignMethod.BY_ORIGINAL_REVIEWER, AssignMethod.BY_DEPARTMENT,
+})
+
+
+def _validate_creation_assign_method(task_data: TaskCreateRequest) -> None:
+    """创建时只接受可执行的分配方式；按原质控员须在 assignee_config.fallback 给出处理方式。"""
+    method = task_data.assign_method
+    if method == AssignMethod.BY_RECORD_TYPE:
+        raise HTTPException(status_code=422, detail={
+            "code": "method_unavailable",
+            "message": "按病历类型分配暂不可用",
+            "reason": "当前可抽样场景内病历类型相同，没有可区分的权威事实",
+        })
+    if method not in _CREATABLE_ASSIGN_METHODS:
+        raise HTTPException(status_code=422, detail="新建任务不支持该分配方式")
+    if method == AssignMethod.BY_ORIGINAL_REVIEWER:
+        fallback = (task_data.assignee_config or {}).get("fallback")
+        if fallback not in {"by_ratio", "reject"}:
+            raise HTTPException(
+                status_code=422,
+                detail="按原质控员分配须在 assignee_config.fallback 指定 by_ratio 或 reject",
+            )
+
+
 @router.post("")
 @require_permission(ResourceType.QC_TASKS, PermissionAction.CREATE)
 async def create_task(
@@ -336,8 +361,7 @@ async def create_task(
         raise HTTPException(status_code=422, detail="规则集不存在或不可用")
     if rule_set.scope != task_data.scene.value:
         raise HTTPException(status_code=422, detail="规则集与任务场景不匹配")
-    if task_data.assign_method != AssignMethod.BY_RATIO:
-        raise HTTPException(status_code=422, detail="新建任务仅支持按比例分配")
+    _validate_creation_assign_method(task_data)
     if task_data.scene.value == "outpatient" or (
         task_data.scene.value == "running"
         and (task_data.sampling_config or {}).get("case_scope") == "active"
@@ -1097,13 +1121,17 @@ async def assign_task(
             actor_id=actor_id,
             assignees=[person.model_dump(exclude_none=True) for person in assign_data.assignees],
             method=assign_data.method.value,
+            fallback=assign_data.fallback.value if assign_data.fallback else None,
         )
     except AssignmentNotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except AssignmentForbidden as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except AssignmentConflict as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        detail = (
+            {"code": exc.code, "message": str(exc), **exc.details} if exc.code else str(exc)
+        )
+        raise HTTPException(status_code=409, detail=detail) from exc
     except Exception as exc:
         logger.exception("任务分配事务失败: task_id=%s", task_id)
         raise HTTPException(status_code=503, detail="任务分配暂不可用") from exc

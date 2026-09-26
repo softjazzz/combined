@@ -251,6 +251,8 @@ class QCTaskRecord(Base):
     completed_run_number = Column(Integer, nullable=True)
     completed_at = Column(DateTime)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    # 抽样时持久化的候选科室（迁移 60）；历史行保持 NULL，按科室分配时失败关闭。
+    department = Column(String(100), nullable=True)
 
     __table_args__ = (
         CheckConstraint(

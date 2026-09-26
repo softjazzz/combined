@@ -52,6 +52,7 @@ _TASK_RECORDS = table(
     column("status", String),
     column("defect_count", Integer),
     column("created_at", DateTime),
+    column("department", String),
 )
 _SNAPSHOT_FIELDS = (
     "scene",
@@ -187,6 +188,17 @@ def _validate_saved_modern_records(session, task_id: str) -> None:
         raise SamplingConflict("任务已保存病例存在重复三坐标，请人工核对")
 
 
+def _candidate_department(record: dict[str, Any]) -> str | None:
+    """候选科室去空白后持久化；空值写 NULL，超长失败关闭而不截断。"""
+    department = record.get("department")
+    if not isinstance(department, str) or not department.strip():
+        return None
+    department = department.strip()
+    if len(department) > 100:
+        raise SamplingConflict("候选病历科室名称超过 100 字符")
+    return department
+
+
 def _build_modern_task_records(
     task_id: str, sampled_records: list[dict[str, Any]], allowed: set[tuple[str, str, str]] | None
 ) -> list[dict[str, Any]]:
@@ -215,6 +227,7 @@ def _build_modern_task_records(
                 "status": "pending",
                 "defect_count": 0,
                 "created_at": created_at + timedelta(microseconds=index),
+                "department": _candidate_department(record),
             }
         )
     return task_records

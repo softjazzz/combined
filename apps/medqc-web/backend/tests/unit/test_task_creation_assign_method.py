@@ -1,4 +1,4 @@
-"""任务创建只接受可执行的比例分配方式，不触达真实数据库。"""
+"""任务创建只接受可执行的分配方式（比例/原质控员/科室），不触达真实数据库。"""
 
 from __future__ import annotations
 
@@ -82,7 +82,7 @@ def test_explicit_ratio_still_creates_task(client):
     assert inserted[0]["assign_method"] == "by_ratio"
 
 
-@pytest.mark.parametrize("assign_method", ["keep", "by_department", "by_type"])
+@pytest.mark.parametrize("assign_method", ["keep", "by_type"])
 def test_unimplemented_methods_rejected_before_insert(client, assign_method):
     test_client, inserted = client
     response = test_client.post(
@@ -99,4 +99,42 @@ def test_malformed_method_rejected_before_insert(client, assign_method):
         "/api/v1/tasks", json=payload(assign_method=assign_method),
     )
     assert response.status_code == 422
+    assert inserted == []
+
+
+@pytest.mark.parametrize("assign_method,config", [
+    ("by_department", {}),
+    ("by_original_reviewer", {"fallback": "by_ratio"}),
+    ("by_original_reviewer", {"fallback": "reject"}),
+])
+def test_new_assign_methods_accepted(client, assign_method, config):
+    test_client, inserted = client
+    response = test_client.post(
+        "/api/v1/tasks", json=payload(assign_method=assign_method, assignee_config=config),
+    )
+    assert response.status_code == 200
+    assert len(inserted) == 1
+    assert inserted[0]["assign_method"] == assign_method
+    assert inserted[0]["assignee_config"] == config
+
+
+@pytest.mark.parametrize("config", [None, {}, {"fallback": "keep"}, {"fallback": ""}])
+def test_original_reviewer_requires_fallback(client, config):
+    test_client, inserted = client
+    body = payload(assign_method="by_original_reviewer")
+    if config is not None:
+        body["assignee_config"] = config
+    response = test_client.post("/api/v1/tasks", json=body)
+    assert response.status_code == 422
+    assert "fallback" in response.text
+    assert inserted == []
+
+
+def test_record_type_method_unavailable_without_insert(client):
+    test_client, inserted = client
+    response = test_client.post("/api/v1/tasks", json=payload(assign_method="by_record_type"))
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert detail["code"] == "method_unavailable"
+    assert detail["reason"]
     assert inserted == []

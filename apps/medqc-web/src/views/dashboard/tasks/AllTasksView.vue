@@ -15,7 +15,7 @@
       :open="assignDialogVisible"
       title="分配质控任务"
       :confirm-loading="assignSubmitting"
-      :ok-button-props="{ disabled: assignLoading || !!assignError || assignRecoveryRequired || !selectedAssigneeIds.length || !assigneeCandidates.length }"
+      :ok-button-props="{ disabled: assignLoading || !!assignError || assignRecoveryRequired || !selectedAssigneeIds.length || !assigneeCandidates.length || assignFallbackMissing }"
       :cancel-button-props="{ disabled: assignSubmitting }"
       :mask-closable="!assignSubmitting"
       :closable="!assignSubmitting"
@@ -25,7 +25,36 @@
     >
       <p class="mb-4 text-sm text-gray-600">
         {{ assigningTask?.task_name }}
+        <span
+          v-if="assigningMethod"
+          data-testid="assign-method-label"
+        > · 分配方式：{{ ASSIGN_METHOD_LABELS[assigningMethod] }}</span>
       </p>
+      <div
+        v-if="assigningMethod === 'by_department'"
+        data-testid="assign-department-hint"
+        class="mb-3 text-xs text-amber-700"
+      >
+        受领人按其账号科室匹配病历科室，历史任务缺科室将无法分配
+      </div>
+      <div
+        v-if="assigningMethod === 'by_original_reviewer'"
+        class="mb-3"
+      >
+        <label class="mb-1 block text-sm text-gray-700">无原质控员时</label>
+        <a-radio-group
+          v-model:value="assignFallback"
+          data-testid="assign-fallback-group"
+          :disabled="assignSubmitting"
+        >
+          <a-radio value="by_ratio">
+            按比例分给选定人员
+          </a-radio>
+          <a-radio value="reject">
+            拒绝分配
+          </a-radio>
+        </a-radio-group>
+      </div>
       <div
         v-if="assignLoading"
         data-testid="assign-loading"
@@ -85,6 +114,14 @@
         管理和监控系统中的所有质控任务
       </p>
     </div>
+
+    <TaskAssignmentResult
+      v-if="lastAssignResult"
+      class="mb-8"
+      :result="lastAssignResult.result"
+      :task-name="lastAssignResult.taskName"
+      @close="lastAssignResult = null"
+    />
 
     <!-- 任务统计概览 -->
     <div class="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
@@ -418,13 +455,24 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { message } from 'ant-design-vue'
 import type { TableColumnsType } from 'ant-design-vue'
 import type { Dayjs } from 'dayjs'
 import { getTaskList, getTaskStats, deleteTask, assignTask, getTaskAssigneeOptions } from '@/api/tasks'
-import type { TaskAssigneeOption, TaskItem, TaskSceneFilter, TaskStats, TaskStatus } from '@/api/tasks'
+import type {
+  AssignFallback,
+  TaskAssignableMethod,
+  TaskAssigneeOption,
+  TaskAssignResult,
+  TaskItem,
+  TaskSceneFilter,
+  TaskStats,
+  TaskStatus,
+} from '@/api/tasks'
 import CreateTaskDrawer from '@/components/qc/CreateTaskDrawer.vue'
+import TaskAssignmentResult from '@/components/qc/TaskAssignmentResult.vue'
+import { describeTaskAssignError } from '@/utils/taskAssignment'
 import TaskDetailDrawer from '@/components/qc/TaskDetailDrawer.vue'
 import { useAuthStore } from '@/stores/auth'
 import {
@@ -473,7 +521,25 @@ const assignSubmitting = ref(false)
 const assignRecoveryRequired = ref(false)
 const assigneeCandidates = ref<TaskAssigneeOption[]>([])
 const selectedAssigneeIds = ref<string[]>([])
+const assignFallback = ref<AssignFallback | undefined>(undefined)
+const lastAssignResult = ref<{ taskName: string; result: TaskAssignResult } | null>(null)
 let assignRequestId = 0
+
+const ASSIGN_METHOD_LABELS: Record<TaskAssignableMethod, string> = {
+  by_ratio: '按比例均分',
+  by_original_reviewer: '原质控员',
+  by_department: '按科室',
+}
+const isAssignableMethod = (method: unknown): method is TaskAssignableMethod =>
+  method === 'by_ratio' || method === 'by_original_reviewer' || method === 'by_department'
+const assigningMethod = computed<TaskAssignableMethod | null>(() => {
+  const method = assigningTask.value?.assign_method
+  return isAssignableMethod(method) ? method : null
+})
+const assignFallbackMissing = computed(() =>
+  assigningMethod.value === 'by_original_reviewer' &&
+  assignFallback.value !== 'by_ratio' && assignFallback.value !== 'reject',
+)
 const listError = ref('')
 let listRequestId = 0
 
@@ -656,7 +722,7 @@ const handleViewDetail = (record: DashboardTaskItem) => {
 
 const canAssign = (record: DashboardTaskItem) => !!authStore.user?.id
   && record.creator_id === authStore.user.id
-  && record.assign_method === 'by_ratio'
+  && isAssignableMethod(record.assign_method)
   && record.status === 'sampling'
   && !assignRecoveryRequired.value
 
@@ -668,6 +734,9 @@ const handleAssign = (record: DashboardTaskItem) => {
   selectedAssigneeIds.value = []
   assigneeCandidates.value = []
   assignSubmitError.value = ''
+  // 以创建时保存的处理方式预填；缺失时须在此显式选择
+  const savedFallback = record.assignee_config?.fallback
+  assignFallback.value = savedFallback === 'by_ratio' || savedFallback === 'reject' ? savedFallback : undefined
   void loadAssigneeOptions()
 }
 
@@ -678,6 +747,7 @@ const closeAssignDialog = () => {
   assigningTask.value = null
   assigneeCandidates.value = []
   selectedAssigneeIds.value = []
+  assignFallback.value = undefined
   assignError.value = ''
   assignSubmitError.value = ''
   assignLoading.value = false
@@ -713,26 +783,37 @@ const loadAssigneeOptions = async () => {
 const submitAssignment = async () => {
   if (assignSubmitting.value || assignLoading.value || assignError.value || assignRecoveryRequired.value || !assigningTask.value) return
   if (!canAssign(assigningTask.value)) return
+  const method = assigningMethod.value
+  if (!method || assignFallbackMissing.value) return
   const selected = assigneeCandidates.value.filter((person) => selectedAssigneeIds.value.includes(person.user_id))
   if (!selected.length) return
   const taskId = assigningTask.value.id
+  const taskName = assigningTask.value.task_name
   assignSubmitting.value = true
   assignSubmitError.value = ''
   try {
     const result = await assignTask(taskId, {
-      method: 'by_ratio',
+      method,
       assignees: selected.map((person) => ({
         user_id: person.user_id,
         user_name: person.user_name,
         ...(person.department ? { department: person.department } : {}),
       })),
+      ...(method === 'by_original_reviewer' && assignFallback.value ? { fallback: assignFallback.value } : {}),
     })
+    // 已知策略业务码在写入前判定，未落库，可调整人员后重试
+    const businessError = result.success ? undefined : describeTaskAssignError(result.errorDetail, result.status)
+    if (businessError) {
+      assignSubmitError.value = businessError
+      return
+    }
     if (!result.success || typeof result.data?.total_assigned !== 'number') {
       assignRecoveryRequired.value = true
       assignSubmitError.value = `分配未确认，请核对任务状态后再操作。${result.message || ''}`
       return
     }
     assignSubmitting.value = false
+    lastAssignResult.value = { taskName, result: result.data }
     closeAssignDialog()
     message.success(result.message || '任务已分配')
     await Promise.all([fetchTasks(), fetchStats()])

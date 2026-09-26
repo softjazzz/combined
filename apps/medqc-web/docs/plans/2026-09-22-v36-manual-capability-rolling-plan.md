@@ -635,3 +635,8 @@
 - 实现：导出请求新增 `review_state`（仅筛选模式，选择模式同时携带 422）；导出 DTO 在 ready 时增量带出与列表同源的 `root_job_id`/`envelope_id` 锚点（不写入工作簿）；锚点构造改为公开函数 `build_review_anchors` 供列表与导出共用；审核服务新增 `batch_current_reviews`（与 `batch_review_states` 同一查询与推导）。“病历汇总”表末尾追加审核状态、审核原因、审核人（显示名）、审核时间（Asia/Shanghai）四列，非 ready 为“不适用”；说明区与审计记录审核状态筛选。带筛选时读取失败 503，不带时降级“未知”不阻断。1000 上限仍按过滤前数量检查（保守）。前端“导出当前筛选”携带当前审核状态筛选。
 - 验证：后端导出/列表/审核相关 169/169、Ruff；前端 vue-tsc、只读全量 ESLint、全量 Vitest 183/183 文件。`test_luxian_0609_canonical_result_delivery.py` 69 条依赖测试库的既存失败与 P0-2 时 HEAD 对照一致，本批修改的 bulk 用例需在有库环境确认。未做浏览器验收，PRD 覆盖状态不提升。
 
+## 79. 第七十三批：任务分配新增原质控员与按科室策略（P1-D）
+
+- 按 `docs/plans/2026-09-27-v36-task-assignment-strategies-design.md`：分配服务抽出计划生成（按比例原算法不变、原质控员、按科室），任务行锁、受领人校验、三坐标校验与逐行 CAS 仍为一套。原质控员取 `qc_record_reviews` 同三坐标最近一次决定的审核人（按 visit 分块批量），未命中按创建时保存的 `assignee_config.fallback` 按比例补分或 409 `original_reviewer_unmatched`；按科室以受领人 `sys_users.department` 精确匹配抽样时持久化的病历科室（迁移 60 新增 `qc_task_records.department`），缺科室 409 `department_missing`、无对应受领人 409 `department_unassigned`。已分配同方法重放直接返回现有汇总不重算；`by_record_type` 因当前场景病历类型无区分返回 422 `method_unavailable` 且不写任务。前端创建抽屉与全部任务分配弹窗支持新方式、fallback 必选、业务码提示与来源分布展示。
+- 验证：隔离库升级至 revision60 并回读双 schema；后端分配/创建/抽样持久化相关 138/138、Ruff；前端 vue-tsc、只读全量 ESLint、全量 Vitest 184/184 文件。获得途径未持久化，原质控员方式重放时 `reason_counts` 为 null；历史任务无科室不可按科室分配。真实 PG 分配竞争与浏览器正向未验收，PRD 覆盖状态不提升。
+

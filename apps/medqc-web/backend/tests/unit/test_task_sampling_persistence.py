@@ -509,7 +509,7 @@ def modern_database(monkeypatch):
         Column("patient_id", String), Column("visit_id", String),
         Column("assignee_id", String), Column("assignee_name", String),
         Column("status", String), Column("defect_count", Integer),
-        Column("created_at", String),
+        Column("created_at", String), Column("department", String),
     )
     metadata.create_all(engine)
     monkeypatch.setattr(persistence, "SessionLocal", sessionmaker(bind=engine, future=True))
@@ -653,3 +653,34 @@ def test_clinical_scene_missing_coordinate_columns_fail_before_write(monkeypatch
     task, saved = read_state(engine, tasks, records)
     assert task["status"] == "draft" and saved == []
     engine.dispose()
+
+
+@pytest.mark.parametrize("scene", ["running", "final", "outpatient"])
+def test_modern_sample_persists_trimmed_department_and_blank_as_null(modern_database, scene):
+    engine, tasks, records = modern_database
+    snapshot = modern_snapshot(scene)
+    insert_modern_task(engine, tasks, snapshot)
+    selected = [
+        {**modern_case(visit="v-1"), "department": "  内科 "},
+        {**modern_case(visit="v-2"), "department": "   "},
+        {**modern_case(visit="v-3"), "department": ""},
+        modern_case(visit="v-4"),
+        {**modern_case(visit="v-5"), "department": None},
+    ]
+
+    save_sample(snapshot, selected)
+
+    _, saved = read_state(engine, tasks, records)
+    assert [row["department"] for row in saved] == ["内科", None, None, None, None]
+
+
+def test_modern_sample_rejects_overlong_department_without_writes(modern_database):
+    engine, tasks, records = modern_database
+    snapshot = modern_snapshot("running")
+    insert_modern_task(engine, tasks, snapshot)
+
+    with pytest.raises(persistence.SamplingConflict, match="科室"):
+        save_sample(snapshot, [{**modern_case(), "department": "科" * 101}])
+
+    task, saved = read_state(engine, tasks, records)
+    assert task["status"] == "draft" and saved == []

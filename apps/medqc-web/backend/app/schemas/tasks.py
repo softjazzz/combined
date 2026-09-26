@@ -46,11 +46,19 @@ class SamplingMethod(str, Enum):
 
 
 class AssignMethod(str, Enum):
-    """分配方式"""
-    KEEP = "keep"               # 保持原有分配
+    """分配方式（可执行：by_ratio / by_original_reviewer / by_department）"""
+    KEEP = "keep"               # 保持原有分配（不可用）
     BY_DEPARTMENT = "by_department"  # 按科室
     BY_RATIO = "by_ratio"       # 按比例
-    BY_TYPE = "by_type"         # 按类型
+    BY_ORIGINAL_REVIEWER = "by_original_reviewer"  # 按原质控员
+    BY_RECORD_TYPE = "by_record_type"  # 按病历类型（无权威事实，创建时 422 method_unavailable）
+    BY_TYPE = "by_type"         # 旧值：按类型（不可用）
+
+
+class OriginalReviewerFallback(str, Enum):
+    """按原质控员分配时，无原质控员或原质控员不在选定人中的处理方式"""
+    BY_RATIO = "by_ratio"
+    REJECT = "reject"
 
 
 class TaskRecordStatus(str, Enum):
@@ -147,12 +155,20 @@ class TaskAssignRequest(BaseModel):
         description="分配列表 [{ user_id, user_name, department? }]"
     )
     method: AssignMethod = Field(AssignMethod.BY_RATIO, description="分配方式")
+    fallback: Optional[OriginalReviewerFallback] = Field(
+        None, description="仅 by_original_reviewer 使用且必填：by_ratio | reject"
+    )
 
     @model_validator(mode="after")
     def unique_assignees(self) -> "TaskAssignRequest":
         ids = [assignee.user_id for assignee in self.assignees]
         if len(ids) != len(set(ids)):
             raise ValueError("分配人员 user_id 不可重复")
+        if self.method == AssignMethod.BY_ORIGINAL_REVIEWER:
+            if self.fallback is None:
+                raise ValueError("按原质控员分配须指定 fallback（by_ratio 或 reject）")
+        elif self.fallback is not None:
+            raise ValueError("fallback 仅适用于按原质控员分配")
         return self
 
 

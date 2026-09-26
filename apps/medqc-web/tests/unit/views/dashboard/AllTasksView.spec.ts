@@ -52,6 +52,7 @@ vi.mock('@ant-design/icons-vue', () => {
 })
 
 import AllTasksView from '@/views/dashboard/tasks/AllTasksView.vue'
+import TaskAssignmentResult from '@/components/qc/TaskAssignmentResult.vue'
 
 const AButtonStub = defineComponent({
   name: 'AButton',
@@ -173,6 +174,8 @@ async function mountView() {
         'a-input': true,
         'a-modal': AModalStub,
         'a-progress': true,
+        'a-radio': true,
+        'a-radio-group': true,
         'a-range-picker': true,
         'a-select': ASelectStub,
         'a-table': ATableStub,
@@ -442,5 +445,76 @@ describe('AllTasksView 场景口径', () => {
     pending.resolve(listWith('抽样任务', 'running', 'sampling'))
     await flushPromises()
     expect(wrapper.get('[data-testid="task-row"]').text()).toContain('分配')
+  })
+
+  it('原质控员任务按保存的 fallback 提交，成功后展示每人数量与来源分布', async () => {
+    const list = listWith('原质控员任务', 'final', 'sampling')
+    Object.assign(list.data.items[0], { assign_method: 'by_original_reviewer', assignee_config: { fallback: 'by_ratio' } })
+    mocks.getTaskList.mockResolvedValue(list)
+    mocks.getTaskAssigneeOptions.mockResolvedValueOnce({ success: true, data: [{ user_id: 'qc-1', user_name: '质控员甲' }] })
+    const assignResult = {
+      total_assigned: 3,
+      assignment_details: [{ user_id: 'qc-1', user_name: '质控员甲', count: 3, reason_counts: { original_reviewer: 2, ratio_fallback: 1 } }],
+    }
+    mocks.assignTask.mockResolvedValueOnce({ success: true, data: assignResult })
+    const wrapper = await mountView()
+    await wrapper.get('[data-testid="task-row"] button:nth-child(2)').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="assign-method-label"]').text()).toContain('原质控员')
+    await wrapper.get('[data-testid="assign-candidates"]').trigger('click')
+    await wrapper.get('[data-testid="assign-confirm"]').trigger('click')
+    await flushPromises()
+    expect(mocks.assignTask).toHaveBeenCalledWith('原质控员任务', {
+      method: 'by_original_reviewer', fallback: 'by_ratio', assignees: [{ user_id: 'qc-1', user_name: '质控员甲' }],
+    })
+    const result = wrapper.getComponent(TaskAssignmentResult)
+    expect(result.props('result')).toEqual(assignResult)
+    expect(result.props('taskName')).toBe('原质控员任务')
+  })
+
+  it('原质控员任务缺少保存的 fallback 时须在分配时显式选择', async () => {
+    const list = listWith('待选处理', 'final', 'sampling')
+    Object.assign(list.data.items[0], { assign_method: 'by_original_reviewer' })
+    mocks.getTaskList.mockResolvedValue(list)
+    mocks.getTaskAssigneeOptions.mockResolvedValueOnce({ success: true, data: [{ user_id: 'qc-1', user_name: '质控员甲' }] })
+    const wrapper = await mountView()
+    await wrapper.get('[data-testid="task-row"] button:nth-child(2)').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="assign-candidates"]').trigger('click')
+    await nextTick()
+    expect(wrapper.get('[data-testid="assign-confirm"]').attributes('disabled')).toBeDefined()
+    const vm = wrapper.vm as unknown as { assignFallback: string }
+    vm.assignFallback = 'reject'
+    await nextTick()
+    expect(wrapper.get('[data-testid="assign-confirm"]').attributes('disabled')).toBeUndefined()
+    await wrapper.get('[data-testid="assign-confirm"]').trigger('click')
+    await flushPromises()
+    expect(mocks.assignTask).toHaveBeenCalledWith('待选处理', expect.objectContaining({ method: 'by_original_reviewer', fallback: 'reject' }))
+  })
+
+  it.each([
+    [{ code: 'department_unassigned', departments: ['内科', '外科'] }, '以下科室没有对应科室的受领人：内科、外科'],
+    [{ code: 'department_missing' }, '存在缺少科室的病历'],
+    [{ code: 'original_reviewer_unmatched', unmatched_count: 5 }, '有 5 条病历无原质控员'],
+  ])('409 策略业务码 %o 给出明确提示且不锁定重试', async (detail, text) => {
+    const isDepartment = detail.code.startsWith('department')
+    const list = listWith('科室任务', 'final', 'sampling')
+    Object.assign(list.data.items[0], { assign_method: isDepartment ? 'by_department' : 'by_original_reviewer', assignee_config: { fallback: 'reject' } })
+    mocks.getTaskList.mockResolvedValue(list)
+    mocks.getTaskAssigneeOptions.mockResolvedValueOnce({ success: true, data: [{ user_id: 'qc-1', user_name: '质控员甲', department: '内科' }] })
+    mocks.assignTask.mockResolvedValueOnce({ success: false, status: 409, code: detail.code, errorDetail: detail, message: '冲突' })
+    const wrapper = await mountView()
+    await wrapper.get('[data-testid="task-row"] button:nth-child(2)').trigger('click')
+    await flushPromises()
+    if (isDepartment) {
+      expect(wrapper.get('[data-testid="assign-department-hint"]').text()).toContain('按其账号科室匹配病历科室')
+    }
+    await wrapper.get('[data-testid="assign-candidates"]').trigger('click')
+    await wrapper.get('[data-testid="assign-confirm"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="assign-submit-error"]').text()).toContain(text)
+    expect(wrapper.get('[data-testid="assign-confirm"]').attributes('disabled')).toBeUndefined()
+    expect(mocks.getTaskList).toHaveBeenCalledTimes(1)
+    expect(wrapper.findComponent(TaskAssignmentResult).exists()).toBe(false)
   })
 })

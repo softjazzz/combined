@@ -305,18 +305,60 @@
     <div v-show="currentStep === 3">
       <a-form layout="vertical">
         <a-form-item label="分配方式">
-          <a-radio-group v-model:value="formData.assign_method">
-            <a-radio value="by_ratio">
-              按比例均分
-            </a-radio>
-            <a-radio value="keep" disabled>
-              保持原有分配（暂不可用）
-            </a-radio>
-            <a-radio value="by_department" disabled>
-              按科室分配（暂不可用）
+          <a-radio-group
+            v-model:value="formData.assign_method"
+            data-testid="assign-method-group"
+          >
+            <a-radio
+              v-for="opt in assignMethodOptions"
+              :key="opt.value"
+              :value="opt.value"
+              :disabled="opt.disabled"
+              :data-testid="`assign-method-${opt.value}`"
+            >
+              {{ opt.label }}
             </a-radio>
           </a-radio-group>
+          <div
+            class="text-xs text-gray-500 mt-2"
+            data-testid="assign-method-record-type-hint"
+          >
+            病历类型：当前场景病历类型无区分，暂不可用
+          </div>
         </a-form-item>
+
+        <a-form-item
+          v-if="formData.assign_method === 'by_original_reviewer'"
+          label="无原质控员时"
+          required
+        >
+          <a-radio-group
+            v-model:value="formData.assign_fallback"
+            data-testid="assign-fallback-group"
+          >
+            <a-radio value="by_ratio">
+              按比例分给选定人员
+            </a-radio>
+            <a-radio value="reject">
+              拒绝分配
+            </a-radio>
+          </a-radio-group>
+          <div
+            v-if="!formData.assign_fallback"
+            class="text-xs text-red-500 mt-2"
+            data-testid="assign-fallback-required"
+          >
+            请选择病历无原质控员或原质控员未被选定时的处理方式
+          </div>
+        </a-form-item>
+
+        <a-alert
+          v-if="formData.assign_method === 'by_department'"
+          data-testid="assign-department-hint"
+          type="warning"
+          show-icon
+          message="受领人按其账号科室匹配病历科室，历史任务缺科室将无法分配"
+        />
 
         <a-alert
           message="抽样后分配质控员"
@@ -427,7 +469,16 @@ import {
   DeleteOutlined,
 } from '@ant-design/icons-vue'
 import { createTask, getTaskRuleSets } from '@/api/tasks'
-import type { TaskCaseRef, TaskCreateData, TaskItem, TaskRuleSetOption, TaskScene } from '@/api/tasks'
+import type {
+  AssignFallback,
+  TaskAssignableMethod,
+  TaskCaseRef,
+  TaskCreateData,
+  TaskItem,
+  TaskRuleSetOption,
+  TaskScene,
+} from '@/api/tasks'
+import { describeTaskAssignError } from '@/utils/taskAssignment'
 import type { Dayjs } from 'dayjs'
 import dayjs from 'dayjs'
 
@@ -476,10 +527,28 @@ const formData = ref({
     by_department: false,
     group_by: null as string | null,
   },
-  assign_method: 'by_ratio' as 'keep' | 'by_department' | 'by_ratio',
+  assign_method: 'by_ratio' as TaskAssignableMethod,
+  // 原质控员策略必选，不给默认值，避免用户未确认即拒绝或兜底
+  assign_fallback: undefined as AssignFallback | undefined,
 })
 
 // ============= 选项配置 =============
+const ASSIGNABLE_METHODS: readonly TaskAssignableMethod[] = ['by_ratio', 'by_original_reviewer', 'by_department']
+const assignMethodOptions: Array<{ value: TaskAssignableMethod | 'by_record_type'; label: string; disabled?: boolean }> = [
+  { value: 'by_ratio', label: '按比例均分' },
+  { value: 'by_original_reviewer', label: '原质控员' },
+  { value: 'by_department', label: '按科室' },
+  { value: 'by_record_type', label: '病历类型（暂不可用）', disabled: true },
+]
+const ASSIGN_LABELS: Record<TaskAssignableMethod, string> = {
+  by_ratio: '按比例均分（抽样后选人）',
+  by_original_reviewer: '原质控员（抽样后选人）',
+  by_department: '按科室（抽样后选人，按账号科室匹配）',
+}
+const FALLBACK_LABELS: Record<AssignFallback, string> = {
+  by_ratio: '无原质控员时按比例分给选定人员',
+  reject: '无原质控员时拒绝分配',
+}
 const sceneOptions: Array<{ value: TaskScene; label: string }> = [
   { value: 'running', label: '运行病历' },
   { value: 'final', label: '终末病历' },
@@ -545,6 +614,16 @@ const selectedRuleSetIsValid = computed(() =>
   !ruleSetsLoading.value && !ruleSetsError.value &&
   matchingRuleSets.value.some((item) => item.rule_set_key === formData.value.rule_set_key),
 )
+const assignMethodError = computed(() => {
+  const method = formData.value.assign_method
+  if (!ASSIGNABLE_METHODS.includes(method)) return '请选择可用的分配方式'
+  if (method === 'by_original_reviewer' &&
+    formData.value.assign_fallback !== 'by_ratio' && formData.value.assign_fallback !== 'reject') {
+    return '请选择“无原质控员时”的处理方式'
+  }
+  return ''
+})
+
 const validSamplingGroup = computed(() => {
   const groupBy = formData.value.sampling_config.group_by
   return groupBy === null || groupBy === undefined || groupBy === 'department'
@@ -561,7 +640,7 @@ const canProceed = computed(() => {
     case 2:
       return formData.value.sampling_method !== 'percentage' || validSamplingGroup.value
     case 3:
-      return formData.value.assign_method === 'by_ratio'
+      return !assignMethodError.value
     default:
       return true
   }
@@ -580,7 +659,12 @@ const samplingLabel = computed(() => {
 })
 
 const assignLabel = computed(() => {
-  return formData.value.assign_method === 'by_ratio' ? '按比例均分（抽样后选人）' : '暂不可用'
+  const method = formData.value.assign_method
+  if (!ASSIGNABLE_METHODS.includes(method)) return '暂不可用'
+  const fallback = formData.value.assign_fallback
+  return method === 'by_original_reviewer' && fallback
+    ? `${ASSIGN_LABELS[method]}；${FALLBACK_LABELS[fallback]}`
+    : ASSIGN_LABELS[method]
 })
 
 watch(() => formData.value.scene, () => {
@@ -667,6 +751,7 @@ const resetForm = () => {
     sampling_method: 'all',
     sampling_config: { case_scope: undefined, total: 50, percentage: 10, by_department: false, group_by: null },
     assign_method: 'by_ratio',
+    assign_fallback: undefined,
   }
   rangeMode.value = 'date'
   dateRangeValue.value = null
@@ -716,8 +801,8 @@ const handleSubmit = async () => {
     message.warning('当前仅支持按科室分组或不分组抽样')
     return
   }
-  if (formData.value.assign_method !== 'by_ratio') {
-    message.warning('当前仅支持按比例均分，抽样后再选择质控员')
+  if (assignMethodError.value) {
+    message.warning(assignMethodError.value)
     return
   }
 
@@ -748,6 +833,9 @@ const handleSubmit = async () => {
       },
       assign_method: formData.value.assign_method,
     }
+    if (formData.value.assign_method === 'by_original_reviewer' && formData.value.assign_fallback) {
+      submitData.assignee_config = { fallback: formData.value.assign_fallback }
+    }
 
     if (rangeMode.value === 'refs') {
       submitData.record_refs = normalizedRecordRefs.value.map((item) => ({ ...item }))
@@ -768,7 +856,7 @@ const handleSubmit = async () => {
       emit('created', res.data)
       handleClose()
     } else {
-      message.error(res.message || '创建失败')
+      message.error(describeTaskAssignError(res.errorDetail, res.status) || res.message || '创建失败')
     }
   } catch (err: unknown) {
     message.error(err instanceof Error ? err.message : '创建任务异常')

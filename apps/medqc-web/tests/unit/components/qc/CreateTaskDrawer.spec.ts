@@ -48,7 +48,8 @@ type DrawerVm = {
     task_name: string
     scene: TaskScene | null
     rule_set_key?: string
-    assign_method: 'keep' | 'by_department' | 'by_ratio'
+    assign_method: string
+    assign_fallback?: 'by_ratio' | 'reject'
     deadline: ReturnType<typeof dayjs> | null
     description: string
     date_range: { start?: string; end?: string } | null
@@ -85,7 +86,7 @@ function mountDrawer() {
         'a-form-item': { template: '<div><slot /></div>' },
         'a-input': true,
         'a-input-number': true,
-        'a-radio': { template: '<label><slot /></label>' },
+        'a-radio': { props: ['value', 'disabled'], template: '<label :data-value="value" :data-disabled="String(!!disabled)"><slot /></label>' },
         'a-radio-button': true,
         'a-radio-group': { template: '<div><slot /></div>' },
         'a-range-picker': true,
@@ -165,7 +166,7 @@ describe('CreateTaskDrawer 创建草稿边界', () => {
     expect(vm.formData.assign_method).toBe('by_ratio')
     expect(vm.canProceed).toBe(true)
     expect(wrapper.text()).toContain('抽样后分配质控员')
-    expect(wrapper.text()).toContain('按科室分配（暂不可用）')
+    expect(wrapper.text()).toContain('病历类型（暂不可用）')
     expect(wrapper.text()).not.toContain('王质控')
 
     await vm.handleSubmit()
@@ -173,7 +174,7 @@ describe('CreateTaskDrawer 创建草稿边界', () => {
     expect(mocks.createTask.mock.calls[0][0]).not.toHaveProperty('assignee_config')
   })
 
-  it.each(['keep', 'by_department'] as const)('旧分配策略 %s 即使被强制设置也不可创建', async (method) => {
+  it.each(['keep', 'by_type', 'by_record_type'] as const)('不可用分配策略 %s 即使被强制设置也不可创建', async (method) => {
     const wrapper = mountDrawer()
     const vm = vmOf(wrapper)
     vm.formData.task_name = '无效分配任务'
@@ -185,7 +186,86 @@ describe('CreateTaskDrawer 创建草稿边界', () => {
     expect(vm.canProceed).toBe(false)
     await vm.handleSubmit()
     expect(mocks.createTask).not.toHaveBeenCalled()
-    expect(mocks.message.warning).toHaveBeenCalledWith('当前仅支持按比例均分，抽样后再选择质控员')
+    expect(mocks.message.warning).toHaveBeenCalledWith('请选择可用的分配方式')
+  })
+
+  it('分配方式提供比例/原质控员/科室，病历类型禁用并说明原因', async () => {
+    const wrapper = mountDrawer()
+    const vm = vmOf(wrapper)
+    await chooseRuleSet(vm, 'running')
+    vm.currentStep = 3
+    await nextTick()
+    const radios = wrapper.findAll('[data-testid="assign-method-group"] label')
+    expect(radios.map((item) => [item.attributes('data-value'), item.attributes('data-disabled')])).toEqual([
+      ['by_ratio', 'false'],
+      ['by_original_reviewer', 'false'],
+      ['by_department', 'false'],
+      ['by_record_type', 'true'],
+    ])
+    expect(wrapper.get('[data-testid="assign-method-record-type-hint"]').text()).toContain('当前场景病历类型无区分，暂不可用')
+    expect(wrapper.find('[data-testid="assign-fallback-group"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="assign-department-hint"]').exists()).toBe(false)
+  })
+
+  it('原质控员必须选择无原质控员时的处理方式，提交 assignee_config.fallback', async () => {
+    const wrapper = mountDrawer()
+    const vm = vmOf(wrapper)
+    vm.formData.task_name = '原质控员任务'
+    await chooseRuleSet(vm, 'final')
+    vm.currentStep = 3
+    vm.formData.assign_method = 'by_original_reviewer'
+    await nextTick()
+
+    expect(wrapper.find('[data-testid="assign-fallback-group"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="assign-fallback-required"]').text()).toContain('请选择')
+    expect(vm.canProceed).toBe(false)
+    await vm.handleSubmit()
+    expect(mocks.createTask).not.toHaveBeenCalled()
+    expect(mocks.message.warning).toHaveBeenCalledWith('请选择“无原质控员时”的处理方式')
+
+    vm.formData.assign_fallback = 'reject'
+    await nextTick()
+    expect(vm.canProceed).toBe(true)
+    await vm.handleSubmit()
+    expect(mocks.createTask).toHaveBeenCalledWith(expect.objectContaining({
+      assign_method: 'by_original_reviewer',
+      assignee_config: { fallback: 'reject' },
+    }))
+  })
+
+  it('按科室提示账号科室匹配，提交不带 assignee_config', async () => {
+    const wrapper = mountDrawer()
+    const vm = vmOf(wrapper)
+    vm.formData.task_name = '科室任务'
+    await chooseRuleSet(vm, 'final')
+    vm.currentStep = 3
+    vm.formData.assign_method = 'by_department'
+    vm.formData.assign_fallback = 'by_ratio'
+    await nextTick()
+
+    expect(wrapper.get('[data-testid="assign-department-hint"]').text())
+      .toContain('受领人按其账号科室匹配病历科室，历史任务缺科室将无法分配')
+    expect(vm.canProceed).toBe(true)
+    await vm.handleSubmit()
+    expect(mocks.createTask).toHaveBeenCalledWith(expect.objectContaining({ assign_method: 'by_department' }))
+    expect(mocks.createTask.mock.calls[0][0]).not.toHaveProperty('assignee_config')
+  })
+
+  it('422 method_unavailable 显示分配方式不可用及原因，保留表单', async () => {
+    mocks.createTask.mockResolvedValue({
+      success: false,
+      status: 422,
+      code: 'method_unavailable',
+      message: '病历类型无可区分事实',
+      errorDetail: { code: 'method_unavailable', message: '按病历类型分配暂不可用', reason: '病历类型无可区分事实' },
+    })
+    const wrapper = mountDrawer()
+    const vm = vmOf(wrapper)
+    vm.formData.task_name = '不可用任务'
+    await chooseRuleSet(vm, 'final')
+    await vm.handleSubmit()
+    expect(mocks.message.error).toHaveBeenCalledWith('该分配方式当前不可用（病历类型无可区分事实）')
+    expect(wrapper.emitted('created')).toBeUndefined()
   })
 
   it('比例抽样只提供科室分组；旧医生分组值不可继续或强制提交', async () => {

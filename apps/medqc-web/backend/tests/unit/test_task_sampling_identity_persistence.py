@@ -47,6 +47,7 @@ def database(monkeypatch):
         Column("status", String, nullable=False),
         Column("defect_count", Integer, nullable=False),
         Column("created_at", String, nullable=False),
+        Column("department", String),
     )
     metadata.create_all(engine)
     monkeypatch.setattr(persistence, "SessionLocal", sessionmaker(bind=engine, future=True))
