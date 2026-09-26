@@ -7108,6 +7108,8 @@ def test_004_finalizer_accepts_executor_safe_rescue_event_facts() -> None:
         "anchor_time": "2026-06-01 09:00:00",
         "observed_time": "2026-06-01 16:00:00",
         "elapsed_hours": 7.0,
+        # 原生执行器已发布的派生字段；Finalizer 只校验不补写（af1f1e4fb）。
+        "overdue_hours": 1.0,
         "rescue_events": [
             {
                 "event_index": 1,
