@@ -336,6 +336,8 @@
       v-model:open="detailDrawerVisible"
       :task-id="detailTaskId"
       :tab="activeTab"
+      :focus-task-record-id="detailFocusRecordId"
+      :focus-run-number="detailFocusRunNumber"
       @task-updated="handleTaskUpdated"
     />
   </div>
@@ -438,6 +440,9 @@ const sceneScopeLabel = computed(() =>
 // 详情抽屉
 const detailDrawerVisible = ref(false)
 const detailTaskId = ref<string | null>(null)
+// 待办下钻定位：task_id / task_record_id / run_number 只在进入时消费一次，随后从地址栏移除。
+const detailFocusRecordId = ref<string | null>(null)
+const detailFocusRunNumber = ref<number | null>(null)
 
 // 分页配置
 const pagination = ref({
@@ -880,6 +885,8 @@ const handleContinueWork = (record: TaskItem) => {
 }
 
 const handleViewDetail = (record: TaskItem) => {
+  detailFocusRecordId.value = null
+  detailFocusRunNumber.value = null
   detailTaskId.value = record.id
   detailDrawerVisible.value = true
 }
@@ -915,9 +922,35 @@ watch(
   },
 )
 
+function queryText(value: unknown) {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+async function consumeFocusQuery() {
+  const taskId = queryText(route.query.task_id)
+  if (!taskId && route.query.task_record_id === undefined && route.query.run_number === undefined) return
+  if (taskId && activeTab.value === 'received') {
+    const runNumber = Number(queryText(route.query.run_number))
+    detailFocusRecordId.value = queryText(route.query.task_record_id) || null
+    detailFocusRunNumber.value = Number.isInteger(runNumber) && runNumber > 0 ? runNumber : null
+    detailTaskId.value = taskId
+    detailDrawerVisible.value = true
+  }
+  const query = { ...route.query }
+  delete query.task_id
+  delete query.task_record_id
+  delete query.run_number
+  await router.replace({ query })
+}
+
+watch(() => route.query.task_id, (taskId) => {
+  if (taskId !== undefined) void consumeFocusQuery()
+})
+
 onMounted(() => {
   fetchTasks()
   fetchStats()
+  void consumeFocusQuery()
 })
 </script>
 

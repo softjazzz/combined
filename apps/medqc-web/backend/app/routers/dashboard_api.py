@@ -261,6 +261,37 @@ async def _get_db_stats_by_scene(scene: DashboardScene = "all", user_id: str = N
 # 待办统计
 # ============================
 
+async def _get_review_todo_counts(current_user: dict, scene: str) -> Dict[str, Any]:
+    """病历审核与人工缺陷审核待办的精确计数，分别由各自审核服务的列表谓词给出。
+
+    人工缺陷行不带场景，只有 scene=all 时返回全局计数；无审核权限或非 all 场景返回 None（前端显示不可用）。
+    任一计数失败时整体 503，不以 0 冒充。
+    """
+    from starlette.concurrency import run_in_threadpool
+
+    from ..core.permissions import PermissionAction, ResourceType, has_permission
+    from ..services.manual_defect_review_service import count_pending_manual_defects
+    from .record_reviews import count_my_record_review_todos
+    from .tasks import _get_task_scope_user_id
+
+    try:
+        actor_id = _get_task_scope_user_id(current_user)
+        record_counts = await run_in_threadpool(count_my_record_review_todos, actor_id, scene)
+        manual_defects = None
+        if scene == "all" and has_permission(current_user, ResourceType.QC_RESULTS, PermissionAction.REVIEW):
+            manual_defects = await run_in_threadpool(count_pending_manual_defects)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("review_todo_counts_failed error_type=%s", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="待办统计暂不可用，请稍后重试") from None
+    return {
+        "record_initial": int(record_counts["initial"]),
+        "record_recheck": int(record_counts["recheck"]),
+        "manual_defects": manual_defects,
+    }
+
+
 @router.get("/todo-stats")
 async def get_todo_stats(
     request: Request,
@@ -287,6 +318,8 @@ async def get_todo_stats(
     if db_stats is None or db_stats.get('_todo_sources_failed'):
         raise HTTPException(status_code=503, detail="待办统计暂不可用，请稍后重试")
 
+    review_counts = await _get_review_todo_counts(current_user, scene)
+
     if db_stats is not None:
         # 从数据库统计构建待办视图
         records = db_stats.get('records', {})
@@ -301,12 +334,12 @@ async def get_todo_stats(
             },
             "defect_stats": {
                 "clinical_appeals": None,
-                "pending_review": None,
+                "pending_review": review_counts["manual_defects"],
                 "urged": None,
             },
             "record_stats": {
-                "pending_review": None,
-                "pending_recheck": None,
+                "pending_review": review_counts["record_initial"],
+                "pending_recheck": review_counts["record_recheck"],
                 "total": records.get('total', 0),
             },
             "overview": {

@@ -97,6 +97,8 @@ const TaskDetailDrawerStub = defineComponent({
     open: Boolean,
     taskId: String,
     tab: String,
+    focusTaskRecordId: { type: String, default: null },
+    focusRunNumber: { type: Number, default: null },
   },
   emits: ['update:open', 'task-updated'],
   template: '<div data-testid="task-detail-drawer-stub" />',
@@ -969,4 +971,39 @@ describe('MyTasksView 我的任务口径', () => {
     expect(wrapper.get('[data-testid="pending-task-count"]').text()).toBe('2')
     expect(wrapper.find('[data-testid="task-stats-error"]').exists()).toBe(false)
   })
+
+  it('待办下钻 query 打开指定任务并定位病历与运行，消费后移除且不改动 todo/scene 范围', async () => {
+    routeState.query = { scene: 'running', task_id: 'task-9', task_record_id: 'assoc-9', run_number: '3' }
+    const wrapper = await mountView()
+
+    expect(wrapper.getComponent(TaskDetailDrawerStub).props()).toMatchObject({
+      open: true, taskId: 'task-9', tab: 'received', focusTaskRecordId: 'assoc-9', focusRunNumber: 3,
+    })
+    expect(mocks.routerReplace).toHaveBeenCalledWith({ query: { scene: 'running' } })
+    expect(mocks.getTaskList).toHaveBeenCalledTimes(1)
+    expect(mocks.getTaskList).toHaveBeenCalledWith(expect.objectContaining({ tab: 'received', scene: 'running' }))
+
+    // 用户手动查看其他任务时不再沿用下钻定位
+    const vm = wrapper.vm as unknown as { handleViewDetail: (record: { id: string }) => void }
+    vm.handleViewDetail({ id: 'task-other' })
+    await nextTick()
+    expect(wrapper.getComponent(TaskDetailDrawerStub).props()).toMatchObject({
+      taskId: 'task-other', focusTaskRecordId: null, focusRunNumber: null,
+    })
+  })
+
+  it('创建视图或非法运行序号下不按下钻定位打开受领详情', async () => {
+    routeState.query = { tab: 'created', task_id: 'task-9', task_record_id: 'assoc-9' }
+    const created = await mountView()
+    expect(created.getComponent(TaskDetailDrawerStub).props('open')).toBe(false)
+    expect(mocks.routerReplace).toHaveBeenCalledWith({ query: { tab: 'created' } })
+    created.unmount()
+
+    routeState.query = { task_id: 'task-9', run_number: 'abc' }
+    const invalidRun = await mountView()
+    expect(invalidRun.getComponent(TaskDetailDrawerStub).props()).toMatchObject({
+      open: true, taskId: 'task-9', focusTaskRecordId: null, focusRunNumber: null,
+    })
+  })
 })
+

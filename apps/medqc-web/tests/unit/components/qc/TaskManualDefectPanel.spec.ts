@@ -290,4 +290,16 @@ describe('TaskManualDefectPanel', () => {
       wrapper.unmount()
     }
   })
+
+  it('每条人工缺陷以标签展示审核状态，未知值显示为未知', async () => {
+    api.list.mockResolvedValueOnce(page([
+      defect('d-1'), defect('d-2', { manual_review_status: 'approved' }),
+      defect('d-3', { manual_review_status: 'rejected' }), defect('d-4', { manual_review_status: 'weird' }),
+    ]))
+    const wrapper = mountPanel()
+    await flushPromises()
+    expect(wrapper.findAll('[data-testid="manual-defect-review-status"]').map((tag) => tag.text()))
+      .toEqual(['待审核', '已通过', '已驳回', '未知'])
+  })
 })
+

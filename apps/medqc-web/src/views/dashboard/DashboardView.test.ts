@@ -111,4 +111,20 @@ describe('DashboardView', () => {
     })
     wrapper.unmount()
   })
+
+  it('透传服务端审核待办精确计数，非法值保持 null 而非 0', async () => {
+    requests.todo.mockResolvedValueOnce({ success: true, data: {
+      overview: { total_records: 12, avg_score: 90, pass_rate: 80 },
+      defect_stats: { clinical_appeals: null, pending_review: 3, urged: null },
+      record_stats: { pending_review: 2, pending_recheck: -1, total: 12 },
+    } })
+    const wrapper = mount(DashboardView, { global: { stubs } })
+    await flushPromises()
+    expect(boardData(wrapper)).toMatchObject({
+      defect_stats: { pending_review: 3 },
+      record_stats: { pending_review: 2, pending_recheck: null },
+    })
+    expect(wrapper.get('[data-testid="todo-board"]').attributes('scene')).toBe('all')
+    wrapper.unmount()
+  })
 })

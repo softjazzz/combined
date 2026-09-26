@@ -302,6 +302,10 @@ function availableNumber(value: number | null | undefined): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
+function exactCount(value: number | null | undefined): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : null
+}
+
 function formatStat(value: number | null): string {
   return value === null ? '暂无数据' : String(value)
 }
@@ -318,9 +322,10 @@ const fetchDashboardData = async () => {
   ])
   if (requestId !== dashboardRequestId) return
 
-  const overview = overviewResult.status === 'fulfilled' && overviewResult.value.success
-    ? overviewResult.value.data?.overview
+  const todoPayload = overviewResult.status === 'fulfilled' && overviewResult.value.success
+    ? overviewResult.value.data
     : undefined
+  const overview = todoPayload?.overview
   stats.value = {
     totalRecords: availableNumber(overview?.total_records),
     pendingRecords: null,
@@ -342,6 +347,10 @@ const fetchDashboardData = async () => {
       as_of: task.as_of,
     }
   }
+  // 审核待办为服务端精确计数；缺失/无权限保持 null，由看板显示“不可用”。
+  nextTodo.defect_stats.pending_review = exactCount(todoPayload?.defect_stats?.pending_review)
+  nextTodo.record_stats.pending_review = exactCount(todoPayload?.record_stats?.pending_review)
+  nextTodo.record_stats.pending_recheck = exactCount(todoPayload?.record_stats?.pending_recheck)
   if (appealResult.status === 'fulfilled' && Number.isInteger(appealResult.value.total) && appealResult.value.total >= 0) {
     nextTodo.defect_stats.clinical_appeals = appealResult.value.total
   }
@@ -636,7 +645,10 @@ watch(
       <!-- 2.5 待办看板 + 工作表现 -->
       <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 mb-5">
         <div class="lg:col-span-8">
-          <TodoBoard :todo-data="todoStatsRaw" />
+          <TodoBoard
+            :todo-data="todoStatsRaw"
+            :scene="currentScene"
+          />
         </div>
         <div class="lg:col-span-4">
           <PerformanceBoard

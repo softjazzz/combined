@@ -41,9 +41,17 @@
       >
         <div class="manual-defects__item-heading">
           <strong>{{ item.rule_name }}</strong>
-          <a-tag :color="severityColor(item.severity)">
-            {{ severityLabel(item.severity) }}
-          </a-tag>
+          <span class="manual-defects__tags">
+            <a-tag :color="severityColor(item.severity)">
+              {{ severityLabel(item.severity) }}
+            </a-tag>
+            <a-tag
+              :color="reviewColor(item.manual_review_status)"
+              data-testid="manual-defect-review-status"
+            >
+              {{ reviewLabel(item.manual_review_status) }}
+            </a-tag>
+          </span>
         </div>
         <p>{{ item.description }}</p>
         <p v-if="item.suggestion">
@@ -52,7 +60,7 @@
         <p v-if="item.evidence">
           <span>证据</span>{{ item.evidence }}
         </p>
-        <small>第 {{ item.run_number }} 次运行 · 复核：{{ reviewLabel(item.manual_review_status) }}</small>
+        <small>第 {{ item.run_number }} 次运行</small>
       </div>
       <p
         v-if="!items.length"
@@ -218,7 +226,14 @@ function severityColor(value: string) {
 }
 
 function reviewLabel(value: string) {
-  return ({ pending: '待复核', approved: '已通过', rejected: '已驳回' } as Record<string, string>)[value] || '待确认'
+  return ({ pending: '待审核', approved: '已通过', rejected: '已驳回' } as Record<string, string>)[value] || '未知'
+}
+
+function reviewColor(value: string) {
+  if (value === 'approved') return 'success'
+  if (value === 'rejected') return 'error'
+  if (value === 'pending') return 'processing'
+  return 'default'
 }
 
 async function readPage(key: string, token: number, offset: number) {
@@ -372,6 +387,7 @@ watch(contextKey, () => {
 .manual-defects__item p { margin: 6px 0 0; line-height: 22px; overflow-wrap: anywhere; }
 .manual-defects__item p span { margin-right: 9px; color: rgba(29, 29, 31, .6); }
 .manual-defects__item small, .manual-defects__muted, .manual-defects__paging { color: rgba(29, 29, 31, .6); font-size: 13px; }
+.manual-defects__tags { display: inline-flex; gap: 4px; }
 .manual-defects__error { color: #b42318; }
 .manual-defects__success { color: #067647; }
 .manual-defects__form { display: grid; gap: 8px; margin-top: 16px; padding-top: 14px; border-top: 1px solid rgba(0, 0, 0, .08); }

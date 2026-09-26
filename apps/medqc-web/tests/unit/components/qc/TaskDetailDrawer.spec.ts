@@ -119,6 +119,14 @@ const TaskRecordDocumentDrawerStub = defineComponent({
   },
 })
 
+const TaskRecordReviewPanelStub = defineComponent({
+  name: 'TaskRecordReviewPanel',
+  props: { taskId: String, taskRecordId: String, runNumber: Number, jobId: String, userId: String },
+  setup() {
+    return () => h('div', { 'data-testid': 'task-record-review-stub' })
+  },
+})
+
 function deferred<T>() {
   let resolve!: (value: T) => void
   const promise = new Promise<T>((promiseResolve) => {
@@ -181,7 +189,10 @@ function syncJob(jobId = 'sync-1', overrides: Record<string, unknown> = {}) {
 }
 
 function mountDrawer(
-  props: { open?: boolean; taskId?: string | null; tab?: 'all' | 'created' | 'received' } = {},
+  props: {
+    open?: boolean; taskId?: string | null; tab?: 'all' | 'created' | 'received'
+    focusTaskRecordId?: string | null; focusRunNumber?: number | null
+  } = {},
   options: { realTable?: boolean } = {},
 ) {
   return mount(TaskDetailDrawer, {
@@ -189,6 +200,8 @@ function mountDrawer(
       open: props.open ?? true,
       taskId: props.taskId ?? 'task-1',
       tab: props.tab ?? 'received',
+      focusTaskRecordId: props.focusTaskRecordId ?? null,
+      focusRunNumber: props.focusRunNumber ?? null,
     },
     global: {
       components: options.realTable ? { ASelect, ATable } : {},
@@ -202,6 +215,7 @@ function mountDrawer(
         'a-table': options.realTable ? false : TableStub,
         'a-tag': { template: '<span><slot /></span>' },
         TaskRecordDocumentDrawer: TaskRecordDocumentDrawerStub,
+        TaskRecordReviewPanel: TaskRecordReviewPanelStub,
         RotateCw: true,
       },
     },
@@ -1538,4 +1552,53 @@ describe('TaskDetailDrawer', () => {
     expect(mocks.getTaskDetail).toHaveBeenCalledTimes(1)
     expect(wrapper.emitted('task-updated')).toBeUndefined()
   })
+
+  it('本人 assigned 运行结果可用时挂载病历审核面板并传入当前上下文', async () => {
+    prepareCompletion()
+    const wrapper = mountDrawer()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="task-record-review-stub"]').exists()).toBe(false)
+    await wrapper.get('[data-testid="task-record-result-association-1"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.getComponent(TaskRecordReviewPanelStub).props()).toEqual({
+      taskId: 'task-1', taskRecordId: 'association-1', runNumber: 2, jobId: 'job-2', userId: 'creator',
+    })
+  })
+
+  it('结果不可用时不挂载病历审核面板', async () => {
+    prepareCompletion('unavailable', [])
+    const wrapper = mountDrawer()
+    await flushPromises()
+    await wrapper.get('[data-testid="task-record-result-association-1"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="task-record-review-stub"]').exists()).toBe(false)
+  })
+
+  it('下钻定位按指定运行序号选中运行并自动打开该病历结果', async () => {
+    mocks.getTaskDetail.mockResolvedValueOnce(detailResponse('待审核任务', [modernRecord({ status: 'in_progress' })], { scene: 'running' }))
+    mocks.getTaskQcRuns.mockResolvedValueOnce({ success: true, data: [
+      { task_id: 'task-1', run_number: 3, job_id: 'job-3', run_scope: 'assigned', triggered_by: 'creator', created_at: '2026-09-23' },
+      { task_id: 'task-1', run_number: 2, job_id: 'job-2', run_scope: 'assigned', triggered_by: 'creator', created_at: '2026-09-22' },
+    ] })
+    mocks.getTaskQcRunRecordResult.mockResolvedValueOnce({ success: true, data: {
+      task_id: 'task-1', run_number: 2, task_record_id: 'association-1', job_id: 'job-2',
+      job_status: 'completed', result_state: 'available', rule_set_key: 'lx0609', items: [{ rule_name: '检查项', status: 'compliant' }],
+    } })
+    const wrapper = mountDrawer({ focusTaskRecordId: 'association-1', focusRunNumber: 2 })
+    await flushPromises()
+    expect(mocks.getTaskQcRunRecordResult).toHaveBeenCalledWith('task-1', 2, 'association-1', 'assigned')
+    expect(wrapper.getComponent(TaskRecordReviewPanelStub).props()).toMatchObject({ taskRecordId: 'association-1', runNumber: 2, jobId: 'job-2' })
+  })
+
+  it('下钻病历不在本人清单时不自动读取结果，仍选中最新运行', async () => {
+    mocks.getTaskDetail.mockResolvedValueOnce(detailResponse('待审核任务', [modernRecord({ status: 'in_progress' })], { scene: 'running' }))
+    mocks.getTaskQcRuns.mockResolvedValueOnce({ success: true, data: [
+      { task_id: 'task-1', run_number: 3, job_id: 'job-3', run_scope: 'assigned', triggered_by: 'creator', created_at: '2026-09-23' },
+    ] })
+    mountDrawer({ focusTaskRecordId: 'association-x', focusRunNumber: 9 })
+    await flushPromises()
+    expect(mocks.getSichuanWorkspaceBatchJob).toHaveBeenCalledWith('job-3')
+    expect(mocks.getTaskQcRunRecordResult).not.toHaveBeenCalled()
+  })
 })
+

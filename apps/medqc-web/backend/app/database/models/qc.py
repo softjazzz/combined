@@ -621,3 +621,61 @@ class Notification(Base):
         Index("ix_notifications_is_read", "is_read"),
         Index("ix_notifications_created_at", "created_at"),
     )
+
+
+_RECORD_REVIEW_WS = "' \t\n\r\f\v'"
+_RECORD_REVIEW_NONBLANK_COLUMNS = (
+    "request_id", "institute_id", "patient_id", "visit_id",
+    "rule_set_key", "rule_set_version", "job_id", "envelope_id",
+    "task_id", "task_record_id", "reviewer_id",
+)
+
+
+class QCRecordReview(Base):
+    """病历初审/复审决定；每行即一次事务事件，只追加、不修改（迁移 57）。"""
+
+    __tablename__ = "qc_record_reviews"
+
+    id = Column(String(36), nullable=False)
+    request_id = Column(String(36), nullable=False)
+    institute_id = Column(String(128), nullable=False)
+    patient_id = Column(String(128), nullable=False)
+    visit_id = Column(String(128), nullable=False)
+    rule_set_key = Column(String(96), nullable=False)
+    rule_set_version = Column(String(96), nullable=False)
+    job_id = Column(String(36), nullable=False, comment="root job id")
+    envelope_id = Column(String(36), nullable=False, comment="审核时的 Envelope 行 id")
+    task_id = Column(String(36), nullable=False)
+    task_record_id = Column(String(36), nullable=False)
+    run_number = Column(Integer, nullable=False)
+    stage = Column(String(16), nullable=False)
+    decision = Column(String(16), nullable=False)
+    reason = Column(Text, nullable=True)
+    reviewer_id = Column(String(64), nullable=False)
+    created_at = Column(DateTime, nullable=False)
+
+    __table_args__ = (
+        PrimaryKeyConstraint("id", name="pk_qc_record_reviews"),
+        UniqueConstraint(
+            "job_id", "envelope_id", "institute_id", "patient_id", "visit_id", "rule_set_key",
+            name="uq_qc_record_reviews_result",
+        ),
+        UniqueConstraint("request_id", name="uq_qc_record_reviews_request"),
+        CheckConstraint("stage IN ('initial', 'recheck')", name="ck_qc_record_reviews_stage"),
+        CheckConstraint("decision IN ('approved', 'doubtful')", name="ck_qc_record_reviews_decision"),
+        CheckConstraint(
+            f"decision <> 'doubtful' OR (reason IS NOT NULL AND trim(reason, {_RECORD_REVIEW_WS}) <> '')",
+            name="ck_qc_record_reviews_doubtful_reason",
+        ),
+        CheckConstraint("run_number > 0", name="ck_qc_record_reviews_run_number_positive"),
+        CheckConstraint(
+            " AND ".join(
+                f"trim({name}, {_RECORD_REVIEW_WS}) <> ''" for name in _RECORD_REVIEW_NONBLANK_COLUMNS
+            ),
+            name="ck_qc_record_reviews_identity_nonblank",
+        ),
+        Index(
+            "ix_qc_record_reviews_case",
+            "institute_id", "patient_id", "visit_id", "rule_set_key", "created_at",
+        ),
+    )

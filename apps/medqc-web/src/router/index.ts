@@ -219,6 +219,26 @@ const routes: RouteRecordRaw[] = [
         },
       },
       {
+        path: 'qc/manual-defects',
+        name: 'ManualDefectReview',
+        component: () => import('@/views/qc/ManualDefectReviewView.vue'),
+        meta: {
+          title: '人工缺陷审核',
+          icon: 'AuditOutlined',
+          permission: ['admin', 'qc_manager'],
+        },
+      },
+      {
+        path: 'qc/record-reviews',
+        name: 'RecordReviewTodo',
+        component: () => import('@/views/qc/RecordReviewTodoView.vue'),
+        meta: {
+          title: '病历审核待办',
+          icon: 'FileSearchOutlined',
+          permission: ['admin', 'qc_manager', 'qc_staff'],
+        },
+      },
+      {
         path: 'qc/scoring-config',
         name: 'ScoringConfig',
         component: () => import('@/views/qc/ScoringConfigView.vue'),

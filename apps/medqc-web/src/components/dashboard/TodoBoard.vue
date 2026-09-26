@@ -70,7 +70,9 @@
           <div class="stat-divider" />
           <div
             class="stat-item"
-            @click="openUnavailable(todoData.defect_stats?.pending_review)"
+            data-testid="todo-manual-defect-review"
+            :class="{ clickable: canOpen(todoData.defect_stats?.pending_review) }"
+            @click="openTodo(todoData.defect_stats?.pending_review, '/dashboard/qc/manual-defects', { review_status: 'pending' })"
           >
             <span class="stat-number text-orange-500">{{ formatCount(todoData.defect_stats?.pending_review) }}</span>
             <span class="stat-label">人工缺陷待审核</span>
@@ -87,7 +89,9 @@
         <div class="card-body">
           <div
             class="stat-item"
-            @click="openUnavailable(todoData.record_stats?.pending_review)"
+            data-testid="todo-record-review"
+            :class="{ clickable: canOpen(todoData.record_stats?.pending_review) }"
+            @click="openRecordReview(todoData.record_stats?.pending_review, 'initial')"
           >
             <span class="stat-number text-blue-600">{{ formatCount(todoData.record_stats?.pending_review) }}</span>
             <span class="stat-label">待审核</span>
@@ -95,7 +99,9 @@
           <div class="stat-divider" />
           <div
             class="stat-item"
-            @click="openUnavailable(todoData.record_stats?.pending_recheck)"
+            data-testid="todo-record-recheck"
+            :class="{ clickable: canOpen(todoData.record_stats?.pending_recheck) }"
+            @click="openRecordReview(todoData.record_stats?.pending_recheck, 'recheck')"
           >
             <span class="stat-number text-cyan-600">{{ formatCount(todoData.record_stats?.pending_recheck) }}</span>
             <span class="stat-label">待复审</span>
@@ -124,17 +130,28 @@ type TodoBoardData = {
   record_stats?: { pending_review?: Count; pending_recheck?: Count }
 }
 
-const props = defineProps<{ todoData: TodoBoardData }>()
+const props = withDefaults(defineProps<{
+  todoData: TodoBoardData
+  /** 首页当前场景；病历审核待办下钻时原样带入。 */
+  scene?: 'all' | 'outpatient_emergency' | 'running' | 'final'
+}>(), { scene: 'all' })
 
 const router = useRouter()
+// 必需计数：任一缺失都不能宣称“没有待处理事项”。
 const deliveredCounts = computed(() => [
   props.todoData.task_stats?.in_progress,
   props.todoData.task_stats?.not_started,
   props.todoData.task_stats?.countdown,
   props.todoData.defect_stats?.clinical_appeals,
+  props.todoData.record_stats?.pending_review,
+  props.todoData.record_stats?.pending_recheck,
 ])
-const noData = computed(() => deliveredCounts.value.every((value) => !Number.isFinite(value)))
-const allEmpty = computed(() => deliveredCounts.value.every((value) => value === 0))
+// 人工缺陷待审核仅对有审核权限者提供，null 表示不适用，不阻止空态判断。
+const permissionScopedCounts = computed(() => [props.todoData.defect_stats?.pending_review])
+const noData = computed(() => [...deliveredCounts.value, ...permissionScopedCounts.value]
+  .every((value) => !Number.isFinite(value)))
+const allEmpty = computed(() => deliveredCounts.value.every((value) => value === 0)
+  && permissionScopedCounts.value.every((value) => value === 0 || !Number.isFinite(value)))
 
 function formatCount(value: Count) {
   return Number.isFinite(value) ? value : '不可用'
@@ -161,12 +178,8 @@ function openTaskTodo(value: Count, todo: 'in_progress' | 'assigned' | 'due_soon
   openTodo(value, '/dashboard/tasks/my', { todo, as_of: asOf })
 }
 
-function openUnavailable(value: Count) {
-  if (value === 0) {
-    message.info('没有待处理事项')
-    return
-  }
-  message.warning('待办数据暂不可用，请稍后重试')
+function openRecordReview(value: Count, stage: 'initial' | 'recheck') {
+  openTodo(value, '/dashboard/qc/record-reviews', { stage, scene: props.scene })
 }
 
 function openTodo(value: Count, path: string, query?: Record<string, string>) {

@@ -19,6 +19,21 @@ class _Supabase:
         return _Query(name)
 
 
+def _stub_review_counts(monkeypatch, *, initial=0, recheck=0, manual=0):
+    from app.routers import record_reviews
+    from app.services import manual_defect_review_service
+
+    calls = []
+
+    def record_counts(actor_id, scene=None):
+        calls.append((actor_id, scene))
+        return {"initial": initial, "recheck": recheck}
+
+    monkeypatch.setattr(record_reviews, "count_my_record_review_todos", record_counts)
+    monkeypatch.setattr(manual_defect_review_service, "count_pending_manual_defects", lambda: manual)
+    return calls
+
+
 def _request():
     return Request({"type": "http", "method": "GET", "path": "/api/v1/dashboard/todo-stats", "headers": []})
 
@@ -43,6 +58,7 @@ async def test_global_statuses_and_other_users_work_do_not_become_my_todos(monke
 
     monkeypatch.setattr(dashboard_api, "get_supabase", _Supabase)
     monkeypatch.setattr(dashboard_api, "async_execute", query)
+    calls = _stub_review_counts(monkeypatch)
 
     result = await dashboard_api.get_todo_stats(
         _request(), scene=scene, current_user={"user_id": "tester"}
@@ -59,8 +75,10 @@ async def test_global_statuses_and_other_users_work_do_not_become_my_todos(monke
         "pending_review": None,
         "urged": None,
     }
-    assert data["record_stats"]["pending_review"] is None
-    assert data["record_stats"]["pending_recheck"] is None
+    # 病历审核待办只来自审核服务的本人计数；medical_records 的全局 pending_review 状态不能冒充。
+    assert data["record_stats"]["pending_review"] == 0
+    assert data["record_stats"]["pending_recheck"] == 0
+    assert calls == [("tester", scene)]
     assert data["record_stats"]["total"] == (2 if scene == "all" else 0)
     assert data["overview"]["total_records"] == data["record_stats"]["total"]
     if scene == "all":

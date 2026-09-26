@@ -14,7 +14,8 @@ vi.mock('ant-design-vue', () => ({ message: { info: mocks.info, warning: mocks.w
 const zeroData = {
   task_stats: { in_progress: 0, not_started: 0, countdown: 0, as_of: '2026-09-24T10:00:00Z' },
   defect_stats: { clinical_appeals: 0, pending_review: null, urged: null },
-  record_stats: { pending_review: null, pending_recheck: null, total: 0 },
+  // 病历审核计数已接入（本人受领范围精确计数）；人工缺陷待审核无审核权限时为 null。
+  record_stats: { pending_review: 0, pending_recheck: 0, total: 0 },
 }
 
 describe('TodoBoard', () => {
@@ -66,6 +67,7 @@ describe('TodoBoard', () => {
         todoData: {
           ...zeroData,
           defect_stats: { ...zeroData.defect_stats, clinical_appeals: 2 },
+          record_stats: { pending_review: null, pending_recheck: null },
         },
       },
     })
@@ -82,5 +84,51 @@ describe('TodoBoard', () => {
     await items[6].trigger('click')
     expect(mocks.push).not.toHaveBeenCalled()
     expect(mocks.warning).toHaveBeenCalled()
+  })
+
+  it('审核计数为数字时下钻到对应列表并保留 stage/review_status 与 scene', async () => {
+    const wrapper = shallowMount(TodoBoard, {
+      props: {
+        scene: 'running',
+        todoData: {
+          ...zeroData,
+          defect_stats: { ...zeroData.defect_stats, pending_review: 5 },
+          record_stats: { pending_review: 2, pending_recheck: 1 },
+        },
+      },
+    })
+
+    expect(wrapper.find('[data-testid="todo-board-empty"]').exists()).toBe(false)
+    await wrapper.get('[data-testid="todo-manual-defect-review"]').trigger('click')
+    expect(mocks.push).toHaveBeenLastCalledWith({ path: '/dashboard/qc/manual-defects', query: { review_status: 'pending' } })
+    await wrapper.get('[data-testid="todo-record-review"]').trigger('click')
+    expect(mocks.push).toHaveBeenLastCalledWith({ path: '/dashboard/qc/record-reviews', query: { stage: 'initial', scene: 'running' } })
+    await wrapper.get('[data-testid="todo-record-recheck"]').trigger('click')
+    expect(mocks.push).toHaveBeenLastCalledWith({ path: '/dashboard/qc/record-reviews', query: { stage: 'recheck', scene: 'running' } })
+    expect(wrapper.get('[data-testid="todo-record-review"]').classes()).toContain('clickable')
+  })
+
+  it('审核计数为 null 显示不可用并提示，零值沿用空反馈不下钻', async () => {
+    const wrapper = shallowMount(TodoBoard, {
+      props: { todoData: { ...zeroData, record_stats: { pending_review: null, pending_recheck: 0 } } },
+    })
+
+    expect(wrapper.get('[data-testid="todo-manual-defect-review"]').text()).toContain('不可用')
+    expect(wrapper.get('[data-testid="todo-record-review"]').text()).toContain('不可用')
+    // 必需的病历审核计数缺失时不能宣称“没有待处理事项”
+    expect(wrapper.find('[data-testid="todo-board-empty"]').exists()).toBe(false)
+    await wrapper.get('[data-testid="todo-manual-defect-review"]').trigger('click')
+    await wrapper.get('[data-testid="todo-record-review"]').trigger('click')
+    expect(mocks.warning).toHaveBeenCalledTimes(2)
+    await wrapper.get('[data-testid="todo-record-recheck"]').trigger('click')
+    expect(mocks.info).toHaveBeenCalledWith('没有待处理事项')
+    expect(mocks.push).not.toHaveBeenCalled()
+  })
+
+  it('仅有审核计数时也不判定为整体无数据', () => {
+    const wrapper = shallowMount(TodoBoard, {
+      props: { todoData: { record_stats: { pending_review: 3, pending_recheck: null } } },
+    })
+    expect(wrapper.find('[data-testid="todo-board-unavailable"]').exists()).toBe(false)
   })
 })

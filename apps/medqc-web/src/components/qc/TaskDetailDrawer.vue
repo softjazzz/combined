@@ -433,6 +433,15 @@
                 :user-id="authStore.user!.id"
                 :eligible="canCompleteRecord"
               />
+              <TaskRecordReviewPanel
+                v-if="canViewManualDefects"
+                :key="`review:${detail.id}:${selectedTaskRecordId}:${selectedRun?.run_number}:${authStore.user?.id}`"
+                :task-id="detail.id"
+                :task-record-id="selectedTaskRecordId"
+                :run-number="selectedRun!.run_number"
+                :job-id="selectedRun!.job_id"
+                :user-id="authStore.user!.id"
+              />
               <div v-if="canCompleteRecord || completionNeedsVerification" class="task-detail-drawer__run-actions">
                 <a-button
                   v-if="completionNeedsVerification"
@@ -476,6 +485,7 @@ import { completeTaskRecord, createTaskQcRun, getTaskDetail, getTaskQcRunRecordR
 import TaskRecordSyncControl from './TaskRecordSyncControl.vue'
 import TaskRecordDocumentDrawer from './TaskRecordDocumentDrawer.vue'
 import TaskManualDefectPanel from './TaskManualDefectPanel.vue'
+import TaskRecordReviewPanel from './TaskRecordReviewPanel.vue'
 import type {
   TaskDetail,
   TaskQcRun,
@@ -492,6 +502,9 @@ const props = defineProps<{
   open: boolean
   taskId?: string | null
   tab: TaskTab
+  /** 从待办下钻时定位的任务病历与运行序号；仅在打开/切换任务时消费一次。 */
+  focusTaskRecordId?: string | null
+  focusRunNumber?: number | null
 }>()
 
 const emit = defineEmits<{
@@ -537,6 +550,7 @@ let recordResultSequence = 0
 let completionSequence = 0
 let recordActionSequence = 0
 const notifiedCompletions = new Set<string>()
+let pendingFocus: { taskId: string; taskRecordId: string; runNumber: number | null } | null = null
 
 const drawerWidth = 'min(820px, 100vw)'
 const drawerTitle = computed(() => detail.value?.task_name || '任务详情')
@@ -827,6 +841,8 @@ async function loadDetail() {
   recordDocumentsOpen.value = false
   recordDocumentsRecord.value = null
   const tab = props.tab
+  const focusRecordId = String(props.focusTaskRecordId || '').trim()
+  pendingFocus = focusRecordId ? { taskId, taskRecordId: focusRecordId, runNumber: props.focusRunNumber ?? null } : null
   clearRecordAction()
   syncingRecords.value = false
   const currentSequence = ++requestSequence
@@ -896,7 +912,11 @@ async function loadRuns() {
     }
     runs.value = response.data.filter((run) => run.task_id === taskId && run.run_scope === scope && !!run.job_id)
       .sort((a, b) => b.run_number - a.run_number)
-    if (runs.value.length) void selectRun(runs.value[0]!.job_id)
+    const focus = pendingFocus?.taskId === taskId ? pendingFocus : null
+    pendingFocus = null
+    const target = runs.value.find((run) => focus?.runNumber != null && run.run_number === focus.runNumber) || runs.value[0]
+    if (target) void selectRun(target.job_id)
+    if (target && focus && detail.value?.records.some((record) => record.id === focus.taskRecordId)) void loadRecordResult(focus.taskRecordId)
   } catch {
     if (sequence === runSequence && detailSequence === requestSequence && detail.value?.id === taskId && runScope.value === scope) runsError.value = '网络异常或服务器不可用'
   } finally {
@@ -1211,7 +1231,7 @@ function canDisplayLegacyRecordId(record: Pick<TaskRecordItem, 'institute_id' | 
     && [record.institute_id, record.patient_id, record.visit_id].every((value) => value == null)
 }
 
-watch([() => props.open, () => props.taskId, () => props.tab], ([open, taskId]) => {
+watch([() => props.open, () => props.taskId, () => props.tab, () => props.focusTaskRecordId, () => props.focusRunNumber], ([open, taskId]) => {
   if (!open || !String(taskId || '').trim()) {
     clearDetail()
     return
