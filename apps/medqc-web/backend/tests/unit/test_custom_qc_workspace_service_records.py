@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 from datetime import datetime, timedelta
 import pytest
+from tests.luxian_0609_published_result_support import published_lx0609_items
 
 import app.services.custom_qc_workspace_service as workspace_module
 from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
@@ -997,39 +998,15 @@ def test_record_result_envelopes_are_grouped_by_full_case_coordinate():
             executed.append(statement)
             return None
 
+    # 正式执行链发布的 001 合规与超时结果；只替换不在签章内的病例坐标。
+    compliant = published_lx0609_items(admission="within")["LX0609-01-01-01"]
+    late = published_lx0609_items(admission="late")["LX0609-01-01-01"]
+    assert (compliant["status"], late["status"]) == ("compliant", "non_compliant")
     items = [
-        {
-            "institute_id": "H1",
-            "patient_id": "P1",
-            "visit_id": "V-SAME",
-            "record_id": "V-SAME",
-            "rule_id": "LX0609-01-01-01",
-            "rule_code": "LX0609-01-01-01",
-            "status": "compliant",
-            "result_status": "compliant",
-            "display_status": "compliant",
-            "is_compliant": True,
-        },
-        {
-            "institute_id": "H2",
-            "patient_id": "P2",
-            "visit_id": "V-SAME",
-            "record_id": "V-SAME",
-            "rule_id": "LX0609-01-01-01",
-            "rule_code": "LX0609-01-01-01",
-            "status": "non_compliant",
-            "result_status": "non_compliant",
-            "display_status": "non_compliant",
-            "is_compliant": False,
-            "criterion_results": [
-                {
-                    "criterion_id": "requirement_check",
-                    "kind": "semantic_relation",
-                    "status": "failed",
-                    "reason_code": "requirement_violated",
-                }
-            ],
-        },
+        {**compliant, "institute_id": "H1", "patient_id": "P1",
+         "visit_id": "V-SAME", "record_id": "V-SAME"},
+        {**late, "institute_id": "H2", "patient_id": "P2",
+         "visit_id": "V-SAME", "record_id": "V-SAME"},
     ]
 
     service._write_record_result_envelopes(

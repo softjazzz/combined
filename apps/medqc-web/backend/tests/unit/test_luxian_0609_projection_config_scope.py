@@ -2,14 +2,21 @@
 
 import json
 from datetime import datetime
+from functools import lru_cache
 from types import SimpleNamespace
+
+import pytest
 
 import app.services.custom_qc_workspace_service as workspace
 import app.services.qc_workspace.canonical_result_store as canonical
-from tests.luxian_0609_identity_test_support import published_rule_ids
+from tests.luxian_0609_published_result_support import published_lx0609_items
 
 
-_PROJECTED_RULE_IDS = published_rule_ids(1, 72)
+@lru_cache(maxsize=1)
+def _published_templates():
+    """正式执行链发布的合法结果：001 合规、004 合规、暂停 03-01-01 not_executed。"""
+
+    return tuple(published_lx0609_items(include_paused_consultation=True).values())
 
 
 class CaptureSession:
@@ -23,17 +30,11 @@ class CaptureSession:
 
 
 def item(visit=0, rule=1):
+    # 病例坐标不在文案签章内；按就诊替换坐标即可复用同一已发布结果。
     return {
+        **_published_templates()[rule - 1],
         'record_id': f'visit-{visit}', 'visit_id': f'visit-{visit}',
         'institute_id': 'synthetic-inst', 'patient_id': f'patient-{visit}',
-        'rule_id': _PROJECTED_RULE_IDS[rule - 1], 'status': 'compliant',
-        'result_status': 'compliant', 'display_status': 'compliant',
-        'is_compliant': True, 'reason_code': 'requirement_satisfied',
-        'customer_evidence': [{
-            'source_type': 'daily_course_record',
-            'source_document_id': f'doc-{visit}',
-            'field_path': 'record_content', 'evidence_excerpt': '合成病程依据',
-        }],
     }
 
 
@@ -56,10 +57,21 @@ def test_2160_items_read_projection_settings_once(monkeypatch):
         calls.append(1)
         return SimpleNamespace(JWT_SECRET='synthetic-key')
     monkeypatch.setattr(canonical, 'get_settings', settings)
-    saved = write(monkeypatch, [item(v, r) for v in range(30) for r in range(1, 73)])
-    assert len(saved) == 30
+    rules = len(_published_templates())
+    visits = 2160 // rules
+    saved = write(monkeypatch, [item(v, r) for v in range(visits) for r in range(1, rules + 1)])
+    assert len(saved) == visits
     assert sum(len(e['items']) for e in saved) == 2160
     assert len(calls) == 1
+
+
+def test_save_rejects_published_result_missing_rule_facts(monkeypatch):
+    monkeypatch.setattr(canonical, 'get_settings', lambda: SimpleNamespace(JWT_SECRET='synthetic-key'))
+    broken = item()
+    assert broken['customer_display_facts']
+    broken['customer_display_facts'] = None
+    with pytest.raises(ValueError, match='客户结果解释合同不完整'):
+        write(monkeypatch, [broken])
 
 
 def test_next_save_sees_new_key_and_same_operation_keeps_one_key(monkeypatch):
@@ -69,7 +81,8 @@ def test_next_save_sees_new_key_and_same_operation_keeps_one_key(monkeypatch):
     second = write(monkeypatch, [item()])[0]
     for envelope, key in [(first, 'first-synthetic-key'), (second, 'second-synthetic-key')]:
         projected = canonical.envelope_item_from_rule_result(item(), hmac_key=key)
-        assert envelope['items'] == [projected]
+        # Store 以三坐标 Envelope 身份统一覆盖规则项 record_ref，其余字段与投影一致。
+        assert envelope['items'] == [{**projected, 'record_ref': envelope['record_ref']}]
         ref = workspace.CaseRef.from_mapping(item())
         assert envelope['record_ref'] == canonical.keyed_ref('rec', ref.as_key(), hmac_key=key)
     assert first['record_ref'] != second['record_ref']
