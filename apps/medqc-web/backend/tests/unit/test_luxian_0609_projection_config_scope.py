@@ -110,3 +110,55 @@ def test_explicit_key_preserves_projection_and_does_not_read_config(monkeypatch)
     after = canonical.envelope_item_from_rule_result(item(), hmac_key='same-synthetic-key')
     assert after == before
     assert after['evidence']
+
+
+def _saved_under_key_a_then_rotated_to_b(monkeypatch):
+    """密钥 A 下经正式保存入口写入合法结果，随后服务配置切换为密钥 B。"""
+
+    from sqlalchemy import MetaData, create_engine
+    from sqlalchemy.orm import Session
+
+    table = workspace._record_result_envelopes_table().to_metadata(MetaData(), schema=None)
+    engine = create_engine("sqlite://")
+    table.metadata.create_all(engine)
+    monkeypatch.setattr(workspace, 'diagnostic_capture_enabled', lambda: False)
+    monkeypatch.setattr(canonical, 'get_settings', lambda: SimpleNamespace(JWT_SECRET='key-a'))
+    service = workspace.CustomQCWorkspaceService.__new__(workspace.CustomQCWorkspaceService)
+    service._record_result_envelope_table = table
+    items = [item(0, rule) for rule in (1, 2, 3)]
+    case = {'institute_id': 'synthetic-inst', 'patient_id': 'patient-0', 'visit_id': 'visit-0'}
+    filters = {'rule_set_key': 'luxian_0609_qc_v1', 'rule_set_version': '2026-06-09',
+               'record_refs': [case]}
+    with Session(engine) as session:
+        service._write_record_result_envelopes(
+            session,
+            job_row={'id': 'rotation-job', 'created_by': 'synthetic-user',
+                     'filters_json': json.dumps(filters)},
+            items=items, now=datetime(2026, 9, 26),
+        )
+        session.commit()
+    monkeypatch.setattr(canonical, 'get_settings', lambda: SimpleNamespace(JWT_SECRET='key-b'))
+    store = canonical.CanonicalResultStore(table)
+    job = {'id': 'rotation-job', 'created_by': 'synthetic-user', 'status': 'completed',
+           'total_records': 1, 'filters': filters}
+    return engine, store, case, job, items
+
+
+def test_legal_history_stays_readable_after_service_key_rotation(monkeypatch):
+    from sqlalchemy.orm import Session
+
+    engine, store, case, job, items = _saved_under_key_a_then_rotated_to_b(monkeypatch)
+    with Session(engine) as session:
+        latest = store.load_selected(
+            session, root_job_id='rotation-job', rule_set_key='luxian_0609_qc_v1',
+            rule_set_version='2026-06-09', **case,
+        )
+    batch = store.load_root_job_items(job=job, session_factory=lambda: Session(engine))
+    assert [x['rule_id'] for x in latest['items']] == [x['rule_id'] for x in items]
+    assert [x['rule_id'] for x in batch] == [x['rule_id'] for x in items]
+    # 读取不重新生成历史病历引用，反馈等既有绑定保持原值。
+    assert {x['record_ref'] for x in batch} == {latest['record_ref']}
+    assert latest['record_ref'] == canonical.keyed_ref(
+        'rec', canonical.CaseRef(**case).as_key(), hmac_key='key-a',
+    )
+    engine.dispose()

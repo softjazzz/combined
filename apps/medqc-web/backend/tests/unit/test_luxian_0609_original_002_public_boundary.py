@@ -275,7 +275,7 @@ def test_original_002_sqlite_read_rejects_corrupted_published_facts():
                 projection_key="test-key",
             )
             db_session.commit()
-            loaded = store.load_selected(db_session, **expected, projection_key="test-key")
+            loaded = store.load_selected(db_session, **expected)
             assert loaded["items"][0]["customer_display_facts"] == published
             assert project_customer_safe_result_item(
                 loaded["items"][0], hmac_key="test-key",
@@ -285,6 +285,6 @@ def test_original_002_sqlite_read_rejects_corrupted_published_facts():
             db_session.execute(sa.update(table).values(envelope_json=json.dumps(corrupted)))
             db_session.commit()
             with pytest.raises(ValueError, match="解释合同不完整"):
-                store.load_selected(db_session, **expected, projection_key="test-key")
+                store.load_selected(db_session, **expected)
     finally:
         engine.dispose()

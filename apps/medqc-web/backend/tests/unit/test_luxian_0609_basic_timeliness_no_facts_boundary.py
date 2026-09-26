@@ -76,7 +76,6 @@ def test_native_binding_published_sqlite_read_accepts_legal_absent_facts(rule_id
             loaded = store.load_selected(
                 db, root_job_id="J", institute_id="I", patient_id="P", visit_id="V",
                 rule_set_key="luxian_0609_qc_v1", rule_set_version="2026-06-09",
-                projection_key="test-key",
             )["items"][0]
             assert (loaded["status"], loaded["reason_code"]) == expected
             assert "customer_display_facts" not in loaded

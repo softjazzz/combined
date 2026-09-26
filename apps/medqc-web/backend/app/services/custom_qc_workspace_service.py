@@ -313,30 +313,45 @@ def _canonical_reason_code(item: Dict[str, Any]) -> str:
     return "reason_unavailable"
 
 
+_CUSTOMER_TEXT_PRIVATE_KEYS = (
+    "record_id",
+    "visit_id",
+    "patient_id",
+    "institute_id",
+    "mr_no",
+    "patient_name",
+    "name",
+    "phone",
+    "id_card",
+    "certificate_no",
+)
+_CUSTOMER_CONCLUSION_KEYS = (
+    "conclusion", "customer_conclusion", "customer_message", "customer_summary",
+)
+_CUSTOMER_SUGGESTION_KEYS = (
+    "suggestion", "customer_suggestion", "customer_recommendation", "customer_action",
+)
+
+
+def _customer_text_is_safe(value: str, *, identity: Mapping[str, Any]) -> bool:
+    """客户文本过滤合同：不含内部术语，也不含本病例的身份值。"""
+
+    if not value or _CUSTOMER_TEXT_FORBIDDEN.search(value):
+        return False
+    private_values = {
+        _safe_text(identity.get(key))
+        for key in _CUSTOMER_TEXT_PRIVATE_KEYS
+        if _safe_text(identity.get(key))
+    }
+    return not any(private_value in value for private_value in private_values)
+
+
 def _explicit_customer_text(
     item: Dict[str, Any], keys: Sequence[str], fallback: str, *, preserve_length: bool = False,
 ) -> str:
-    private_values = {
-        _safe_text(item.get(key))
-        for key in (
-            "record_id",
-            "visit_id",
-            "patient_id",
-            "institute_id",
-            "mr_no",
-            "patient_name",
-            "name",
-            "phone",
-            "id_card",
-            "certificate_no",
-        )
-        if _safe_text(item.get(key))
-    }
     for key in keys:
         value = _safe_text(item.get(key))
-        if not value or _CUSTOMER_TEXT_FORBIDDEN.search(value):
-            continue
-        if any(private_value in value for private_value in private_values):
+        if not _customer_text_is_safe(value, identity=item):
             continue
         # 正式发布文案保留换行和空白；上面的归一化文本仅用于安全检查。
         return str(item.get(key)).strip() if preserve_length else _truncate_export_text(value, 360)
@@ -591,12 +606,7 @@ def project_customer_safe_result_item(
     preserve_published_text = is_current_luxian_result
     conclusion = _explicit_customer_text(
         raw,
-        (
-            "conclusion",
-            "customer_conclusion",
-            "customer_message",
-            "customer_summary",
-        )
+        _CUSTOMER_CONCLUSION_KEYS
         if reuse_saved_customer_text
         else (),
         generic_conclusion,
@@ -623,12 +633,7 @@ def project_customer_safe_result_item(
                 conclusion = controlled_finding
     suggestion = _explicit_customer_text(
         raw,
-        (
-            "suggestion",
-            "customer_suggestion",
-            "customer_recommendation",
-            "customer_action",
-        )
+        _CUSTOMER_SUGGESTION_KEYS
         if reuse_saved_customer_text
         else (),
         generic_suggestion,
@@ -672,6 +677,30 @@ def project_customer_safe_result_item(
     if model_analysis:
         projected["model_analysis"] = model_analysis
     return projected
+
+
+def _customer_filtered_saved_text(
+    item: Dict[str, Any], *, identity: Mapping[str, Any],
+) -> Dict[str, Any]:
+    """已保存条目原样返回；仅违反客户文本过滤合同的结论、建议字段按与客户
+    投影相同的规则回退为该状态的通用文案，不重生成、不截断正常文本。"""
+
+    filtered = dict(item)
+    generic = _GENERIC_CUSTOMER_TEXT.get(_canonical_customer_status(item))
+    if generic is None:
+        return filtered
+    probe_identity = {**item, **identity}
+    for keys, fallback in (
+        (_CUSTOMER_CONCLUSION_KEYS + ("findings",), generic[0]),
+        (_CUSTOMER_SUGGESTION_KEYS, generic[1]),
+    ):
+        for key in keys:
+            value = filtered.get(key)
+            if isinstance(value, str) and value.strip() and not _customer_text_is_safe(
+                _safe_text(value), identity=probe_identity,
+            ):
+                filtered[key] = fallback
+    return filtered
 
 
 def _is_current_rule_contract_result(item: Dict[str, Any]) -> bool:
@@ -3462,8 +3491,15 @@ class CustomQCWorkspaceService:
                 entry.rule_id: entry for entry in load_luxian_0609_rule_master()
             }
             projected_items = []
+            # 单病历结果页面向客户展示结论与建议：沿用与批详情、导出相同的
+            # 客户文本过滤合同；坐标仅用于比对，不写入响应。
+            case_identity = {
+                "institute_id": normalized_institute_id,
+                "patient_id": normalized_patient_id,
+                "visit_id": normalized_visit_id,
+            }
             for item, rule_id in zip(items, valid_rule_ids):
-                projected_item = dict(item)
+                projected_item = _customer_filtered_saved_text(item, identity=case_identity)
                 master_entry = rule_master_by_id.get(rule_id)
                 if master_entry is not None:
                     projected_item["source_document"] = master_entry.source_document

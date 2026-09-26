@@ -131,13 +131,13 @@ def test_sqlite_read_returns_original_and_rejects_corrupt_facts():
         with Session(engine) as db:
             store.replace_for_job(db, job_row={"id": "J", "created_by": "reviewer", "filters_json": json.dumps({"rule_set_key": "luxian_0609_qc_v1", "rule_set_version": "2026-06-09"})}, items=[item], now=datetime(2026, 9, 24, 10), projector=lambda raw: envelope_item_from_rule_result(raw, hmac_key="test-key"), projection_key="test-key")
             db.commit()
-            loaded = store.load_selected(db, **selected, projection_key="test-key")
+            loaded = store.load_selected(db, **selected)
             assert loaded["items"][0]["customer_display_facts"] == published
             damaged = json.loads(json.dumps(loaded))
             damaged["items"][0]["customer_display_facts"]["interval_hours"] = 72.004
             db.execute(sa.update(table).values(envelope_json=json.dumps(damaged)))
             db.commit()
             with pytest.raises(ValueError, match="解释合同不完整"):
-                store.load_selected(db, **selected, projection_key="test-key")
+                store.load_selected(db, **selected)
     finally:
         engine.dispose()

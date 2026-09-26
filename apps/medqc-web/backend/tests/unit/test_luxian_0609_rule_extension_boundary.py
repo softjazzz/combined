@@ -394,7 +394,6 @@ async def test_two_test_only_rule_contracts_cross_existing_extension_boundary(
             db.commit()
             loaded = store.load_selected(
                 db, root_job_id="EXT-JOB", institute_id="I", patient_id="P", visit_id="V", **filters,
-                projection_key="extension-test-key",
             )
         public_items = loaded["items"]
         assert [(item["rule_id"], item["status"], item["reason_code"]) for item in public_items] == [

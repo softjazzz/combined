@@ -363,24 +363,6 @@ def test_store_has_no_rule_specific_customer_fact_contract_or_aggregator_depende
     assert "historical_evidence_missing" not in source
 
 
-def _case_record_ref(
-    institute_id: str = "inst-1", patient_id: str = "patient-1", visit_id: str = "visit-1",
-) -> str:
-    """按现有引用机制，由病例三坐标与服务密钥生成保存时的 Envelope 病历引用。"""
-
-    from app.services.case_identity import CaseRef
-    from app.services.qc_workspace.canonical_result_store import (
-        customer_safe_projection_key,
-        keyed_ref,
-    )
-
-    return keyed_ref(
-        "rec",
-        CaseRef(institute_id, patient_id, visit_id).as_key(),
-        hmac_key=customer_safe_projection_key(),
-    )
-
-
 def _selected_job(*, legacy_items: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     return {
         "id": "job-current",
@@ -851,7 +833,7 @@ def test_bulk_record_result_dtos_read_complete_canonical_items_in_one_batch(monk
             {
                 "schema_version": "lx0609-record-result-envelope-v1",
                 "delivery_mode": "canonical_straight_through",
-                "record_ref": _case_record_ref(),
+                "record_ref": "rec_0123456789abcdef01234567",
                 "items": [
                     {
                         "rule_id": "LX0609-01-01-01",
@@ -876,7 +858,7 @@ def test_bulk_record_result_dtos_read_complete_canonical_items_in_one_batch(monk
 
     dto = result[("inst-1", "patient-1", "visit-1")]
     assert dto["state"] == "ready"
-    assert dto["record_ref"] == _case_record_ref()
+    assert dto["record_ref"] == "rec_0123456789abcdef01234567"
     assert dto["items"][0]["rule_id"] == "LX0609-01-01-01"
     assert dto["items"][0]["source_document"] == "入院记录"
 
@@ -954,7 +936,8 @@ def test_single_record_result_from_incomplete_task_is_ready_when_envelope_exists
     envelope = {
         "schema_version": "lx0609-record-result-envelope-v1",
         "delivery_mode": "canonical_straight_through",
-        "record_ref": _case_record_ref(),
+        "record_id": "visit-1",
+        "record_ref": "rec_1234567890abcdef12345678",
         "items": [_published_pilot_item_for_read_boundary("LX0609-01-01-01")],
     }
     session = _ReadSession(
@@ -1321,7 +1304,7 @@ def test_single_record_result_rejects_historical_non_deliverable_status_without_
     envelope = {
         "schema_version": "lx0609-record-result-envelope-v1",
         "delivery_mode": "canonical_straight_through",
-        "record_ref": _case_record_ref(),
+        "record_ref": "rec_1234567890abcdef12345678",
         "items": [canonical_item],
     }
     original_envelope_json = json.dumps(envelope, ensure_ascii=False)
@@ -1390,7 +1373,8 @@ def test_single_record_result_projects_catalog_rule_master_metadata_in_envelope_
     envelope = {
         "schema_version": "lx0609-record-result-envelope-v1",
         "delivery_mode": "canonical_straight_through",
-        "record_ref": _case_record_ref(),
+        "record_id": "visit-1",
+        "record_ref": "rec_1234567890abcdef12345678",
         "items": canonical_items,
     }
     session = _ReadSession(
@@ -1431,7 +1415,7 @@ def test_single_record_result_rejects_rule_id_removed_from_current_catalog(monke
     envelope = {
         "schema_version": "lx0609-record-result-envelope-v1",
         "delivery_mode": "canonical_straight_through",
-        "record_ref": _case_record_ref(),
+        "record_ref": "rec_1234567890abcdef12345678",
         "items": [
             {
                 "rule_id": "LX0609-01-01-01",
@@ -1512,7 +1496,7 @@ def test_single_record_result_rejects_invalid_rule_identity_before_metadata_proj
     envelope = {
         "schema_version": "lx0609-record-result-envelope-v1",
         "delivery_mode": "canonical_straight_through",
-        "record_ref": _case_record_ref(),
+        "record_ref": "rec_1234567890abcdef12345678",
         "items": canonical_items,
     }
     session = _ReadSession(
@@ -1558,7 +1542,7 @@ def test_single_record_result_rejects_malformed_item_mixed_with_valid_item(monke
     envelope = {
         "schema_version": "lx0609-record-result-envelope-v1",
         "delivery_mode": "canonical_straight_through",
-        "record_ref": _case_record_ref(),
+        "record_ref": "rec_1234567890abcdef12345678",
         "items": [
             {
                 "rule_id": "LX0609-04-02-04",
@@ -1660,7 +1644,7 @@ def test_single_record_result_rejects_historical_canonical_status_inconsistency(
     envelope = {
         "schema_version": "lx0609-record-result-envelope-v1",
         "delivery_mode": "canonical_straight_through",
-        "record_ref": _case_record_ref(),
+        "record_ref": "rec_1234567890abcdef12345678",
         "items": [canonical_item],
     }
     session = _ReadSession(
@@ -1708,7 +1692,7 @@ def test_completed_projection_with_items_rejects_historical_status_inconsistency
             {
                 "schema_version": "lx0609-record-result-envelope-v1",
                 "delivery_mode": "canonical_straight_through",
-                "record_ref": _case_record_ref(),
+                "record_ref": "rec_1234567890abcdef12345678",
                 "items": [
                     {
                         "rule_id": "LX0609-01-01-01",
@@ -1744,9 +1728,10 @@ def test_exact_batch_html_rejects_historical_status_inconsistency_without_legacy
     envelope = {
         "schema_version": "lx0609-record-result-envelope-v1",
         "delivery_mode": "canonical_straight_through",
+        "record_id": "visit-1",
         "job_id": "job-current",
         "root_job_id": "job-current",
-        "record_ref": _case_record_ref(),
+        "record_ref": "rec_1234567890abcdef12345678",
         "items": [
             {
                 "rule_id": "LX0609-01-01-01",
@@ -1937,7 +1922,7 @@ def test_original_rescue_timeliness_store_rejects_changed_published_overdue_hour
                 "rule_set_key": "luxian_0609_qc_v1",
                 "rule_set_version": "2026-06-09",
             }
-            loaded = store.load_selected(db_session, **expected, projection_key="unit-test-key")
+            loaded = store.load_selected(db_session, **expected)
             assert loaded["items"][0]["customer_display_facts"] == published
             assert loaded["items"][0]["status"] == "non_compliant"
             assert loaded["items"][0]["reason_code"] == "requirement_violated"
@@ -1955,7 +1940,7 @@ def test_original_rescue_timeliness_store_rejects_changed_published_overdue_hour
             )
             db_session.commit()
             with pytest.raises(ValueError, match="解释合同不完整"):
-                store.load_selected(db_session, **expected, projection_key="unit-test-key")
+                store.load_selected(db_session, **expected)
     finally:
         engine.dispose()
 
@@ -2165,7 +2150,6 @@ def test_rescue_non_compliant_safe_facts_survive_canonical_write_and_task_projec
             visit_id="visit-1",
             rule_set_key="luxian_0609_qc_v1",
             rule_set_version="2026-06-09",
-            projection_key="unit-test-key",
         )
     engine.dispose()
     assert loaded["items"][0]["customer_display_facts"] == safe_facts
@@ -2258,7 +2242,6 @@ def test_pathology_published_facts_commit_and_read_without_reprojection(
             db_session, root_job_id="job-pathology",
             institute_id="inst-1", patient_id="patient-1", visit_id="visit-1",
             rule_set_key="luxian_0609_qc_v1", rule_set_version="2026-06-09",
-            projection_key="unit-test-key",
         )
     engine.dispose()
     saved = loaded["items"][0]
@@ -2277,7 +2260,6 @@ def test_pathology_published_facts_commit_and_read_without_reprojection(
             root_job_id="job-pathology", institute_id="inst-1",
             patient_id="patient-1", visit_id="visit-1",
             rule_set_key="luxian_0609_qc_v1", rule_set_version="2026-06-09",
-            projection_key="unit-test-key",
         )
 
 
@@ -2391,13 +2373,6 @@ def test_published_rules_keep_identity_through_sqlite_dto_feedback_and_exports(
     import csv
     from io import StringIO
 
-    import app.services.qc_workspace.canonical_result_store as canonical_store
-
-    # 服务层读取按服务密钥复核 Envelope 病历引用；与本测试保存所用密钥保持一致。
-    monkeypatch.setattr(
-        canonical_store, "get_settings", lambda: SimpleNamespace(JWT_SECRET="unit-test-key"),
-    )
-
     from openpyxl import load_workbook
 
     canonical_table = workspace_module._record_result_envelopes_table().to_metadata(
@@ -2449,7 +2424,6 @@ def test_published_rules_keep_identity_through_sqlite_dto_feedback_and_exports(
             session, root_job_id="job-pilots", institute_id="inst-1",
             patient_id="patient-1", visit_id="visit-1",
             rule_set_key="luxian_0609_qc_v1", rule_set_version="2026-06-09",
-            projection_key="unit-test-key",
         )
     saved_items = loaded["items"]
     assert [item["rule_id"] for item in saved_items] == list(rule_ids)
@@ -2561,7 +2535,6 @@ def test_published_rules_keep_identity_through_sqlite_dto_feedback_and_exports(
                 job=job,
                 session_factory=lambda: Session(engine),
                 allow_partial=allow_partial,
-                projection_key="unit-test-key",
             )
         )
         with TestClient(app) as client:
@@ -2786,7 +2759,6 @@ def test_invalid_published_json_type_is_controlled_through_store_and_single_reco
             db_session, root_job_id="job-current",
             institute_id="inst-1", patient_id="patient-1", visit_id="visit-1",
             rule_set_key="luxian_0609_qc_v1", rule_set_version="2026-06-09",
-            projection_key="unit-test-key",
         )
         assert accepted["items"][0]["customer_display_facts"] == (
             _published_pilot_item_for_read_boundary(rule_id)["customer_display_facts"]
@@ -2809,7 +2781,6 @@ def test_invalid_published_json_type_is_controlled_through_store_and_single_reco
                 db_session, root_job_id="job-current",
                 institute_id="inst-1", patient_id="patient-1", visit_id="visit-1",
                 rule_set_key="luxian_0609_qc_v1", rule_set_version="2026-06-09",
-                projection_key="unit-test-key",
             )
     engine.dispose()
 

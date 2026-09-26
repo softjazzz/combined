@@ -365,13 +365,13 @@ def test_005_006_sqlite_read_rejects_corrupt_derivative(rule_id, target, label, 
                 projection_key="test-key",
             )
             db.commit()
-            loaded = store.load_selected(db, **expected, projection_key="test-key")
+            loaded = store.load_selected(db, **expected)
             assert loaded["items"][0]["customer_display_facts"] == published
             damaged = json.loads(json.dumps(loaded))
             damaged["items"][0]["customer_display_facts"]["overdue_hours"] = 999
             db.execute(sa.update(table).values(envelope_json=json.dumps(damaged)))
             db.commit()
             with pytest.raises(ValueError, match="解释合同不完整"):
-                store.load_selected(db, **expected, projection_key="test-key")
+                store.load_selected(db, **expected)
     finally:
         engine.dispose()

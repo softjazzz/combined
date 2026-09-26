@@ -99,7 +99,7 @@ def test_phase_gate_result_survives_canonical_sqlite_write_and_read():
             session, root_job_id="synthetic-job",
             institute_id="synthetic-inst", patient_id="synthetic-patient",
             visit_id="synthetic-visit", rule_set_key="luxian_0609_qc_v1",
-            rule_set_version="2026-06-09", projection_key="synthetic-ref-key",
+            rule_set_version="2026-06-09",
         )
     engine.dispose()
 

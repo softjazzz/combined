@@ -685,20 +685,10 @@ def _verify_deprecated_seal_and_contract_rejection(*, app, engine, table, job_id
         missing_facts = deepcopy(saved)
         missing_facts["items"][0]["customer_display_facts"] = None
         missing_facts["items"][0].pop("decision_facts", None)
-        # 病例归属：Envelope 病历引用指向另一病例（按现有引用机制生成的合法格式）。
-        from app.services.case_identity import CaseRef
-        from app.services.qc_workspace.canonical_result_store import (
-            customer_safe_projection_key,
-            keyed_ref,
-        )
-
+        # 病例归属：Envelope 明文 record_id 指向另一就诊（不依赖密钥即可识别）。
+        # 同一就诊下仅替换为另一患者的 record_ref 无法在不重算密钥的前提下识别。
         wrong_case = deepcopy(saved)
-        wrong_case["record_ref"] = keyed_ref(
-            "rec",
-            CaseRef(_RECORD_A["institute_id"], "LX075-PATIENT-OTHER", _RECORD_A["visit_id"]).as_key(),
-            hmac_key=customer_safe_projection_key(),
-        )
-        assert wrong_case["record_ref"] != saved["record_ref"]
+        wrong_case["record_id"] = "LX075-VISIT-OTHER"
         for label, corrupted in (
             ("illegal_status", illegal_status),
             ("missing_facts", missing_facts),
@@ -716,3 +706,108 @@ def _verify_deprecated_seal_and_contract_rejection(*, app, engine, table, job_id
         assert detail.status_code == 409, detail.text
     finally:
         rewrite(saved)
+
+
+@pytest.mark.integration
+def test_customer_text_filter_is_consistent_across_latest_detail_and_exports(
+    monkeypatch, _isolated_database,
+):
+    """同一份正式结果：latest-result、批详情与三格式导出沿用同一客户文本过滤合同。"""
+
+    engine, workspace = _isolated_database
+    pool_service = _install_sample_pool_sqlite(monkeypatch, engine)
+    _install_evidence_fixture(monkeypatch, consultation_row=True)
+    service = sichuan_qc_service.SichuanQCService({
+        "provider_code": "isolated", "model": "stable-semantic",
+        "allow_mock_when_unconfigured": True, "source": "lx075-semantic",
+    })
+    _wire_production_entry(monkeypatch, workspace, pool_service, _settings(), service)
+
+    async def stable_generate(_self, prompt, **_kwargs):
+        ref = json.loads(prompt.rsplit("输入：", 1)[1])["consultation_documents"][0]["ref"]
+        return {
+            "content": {"episodes": [{
+                "episode_ref": ref, "member_refs": [ref], "application_refs": [ref],
+                "opinion_refs": [ref], "application_state": "clear", "opinion_state": "clear",
+                "confidence": "high", "recommendations": [{
+                    "recommendation_ref": f"{ref}#r1", "opinion_ref": ref,
+                    "source_quote": "建议复查血常规", "normalized_action": "复查血常规",
+                    "action_type": "test",
+                }],
+            }], "non_target_refs": [], "unresolved_refs": []},
+            "usage": {"prompt_tokens": 17, "completion_tokens": 5, "total_tokens": 22},
+            "_api_time": 0.01,
+        }
+
+    monkeypatch.setattr(sichuan_qc_service.SichuanQCLLMClient, "generate", stable_generate)
+    original_aggregate = luxian_execution.aggregate_luxian_0609_results
+    published: dict[str, dict[str, Any]] = {}
+
+    def inject(**kwargs):
+        result = original_aggregate(**kwargs)
+        # 发布边界注入：结论含内部术语、建议含本病例自身的就诊号（均为既有
+        # 客户文本合同禁止输出）；不同病例各注入各自的身份值。
+        visit_id = kwargs["audit_context"]["visit_id"]
+        for key in ("findings", "customer_message", "conclusion"):
+            if result[0].get(key):
+                result[0][key] = result[0][key] + " prompt"
+        result[0]["suggestion"] = result[0]["suggestion"] + "（就诊" + visit_id + "）"
+        published[visit_id] = deepcopy(result[0])
+        return result
+
+    monkeypatch.setattr(luxian_execution, "aggregate_luxian_0609_results", inject)
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", CustomQCWorkspaceService)
+    app = _api_app(service)
+    checked: list[str] = []
+    def forbidden_tokens():
+        return (" prompt", *(f"（就诊{visit_id}）" for visit_id in published))
+
+    def verify(job_id, job, _ids):
+        assert job["status"] == "completed", job.get("error_message")
+        latest = _read_canonical(app, job_id, _RECORD_A, ["LX0609-03-01-04"])["LX0609-03-01-04"]
+        with TestClient(app) as client:
+            detail = client.get(f"/api/v1/qc/sichuan/workspace/batch-jobs/{job_id}").json()["data"]["items"]
+            exports = [
+                client.get(f"/api/v1/qc/sichuan/workspace/batch-jobs/{job_id}/export", params={"format": fmt})
+                for fmt in ("html", "csv")
+            ]
+            xlsx = client.get(f"/api/v1/qc/sichuan/workspace/batch-jobs/{job_id}/export", params={"format": "xlsx"})
+        detail_item = next(x for x in detail if x["rule_id"] == "LX0609-03-01-04")
+        for text in (
+            latest.get("conclusion"), latest.get("findings"), latest.get("suggestion"),
+            detail_item.get("conclusion"), detail_item.get("suggestion"),
+        ):
+            assert text and not any(token in text for token in forbidden_tokens()), text
+        assert all(response.status_code == 200 for response in exports + [xlsx])
+        for response in exports:
+            assert not any(token in response.text for token in forbidden_tokens())
+        from io import BytesIO
+
+        from openpyxl import load_workbook
+
+        workbook = load_workbook(BytesIO(xlsx.content), read_only=True)
+        workbook_text = "\n".join(
+            str(value) for sheet in workbook.worksheets
+            for row in sheet.iter_rows(values_only=True) for value in row if value is not None
+        )
+        assert not any(token in workbook_text for token in forbidden_tokens())
+        # 过滤只用于比对，内部病例坐标不进入公开条目。
+        for key in ("institute_id", "patient_id", "visit_id"):
+            assert key not in latest and key not in detail_item
+        # 禁止内容回退为相同状态的通用文案，两个出口一致；保存的原文未被改写。
+        assert latest["suggestion"] == detail_item["suggestion"]
+        with engine.connect() as connection:
+            table = workspace._record_result_envelope_table
+            (saved_json,) = connection.execute(
+                sa.select(table.c.envelope_json).where(
+                    table.c.job_id == job_id, table.c.visit_id == _RECORD_A["visit_id"],
+                )
+            ).one()
+        saved_item = json.loads(saved_json)["items"][0]
+        assert saved_item["suggestion"] == published[_RECORD_A["visit_id"]]["suggestion"]
+        checked.append(job_id)
+
+    pool_id, sample_id = _create_ready_sample_pool(engine, pool_service)
+    _entry_job_ids(app=app, workspace=workspace, pool_id=pool_id, sample_item_id=sample_id,
+                   workspace_rule_ids=["LX0609-03-01-04"], on_terminal=verify)
+    assert len(checked) == 3

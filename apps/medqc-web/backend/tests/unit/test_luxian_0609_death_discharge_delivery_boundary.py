@@ -49,14 +49,14 @@ def test_actual_store_preserves_facts_without_internal_projection(monkeypatch, r
                                   projection_key="test-key")
             db.commit()
             monkeypatch.setattr(module, projection_name, forbidden_projection)
-            loaded = store.load_selected(db, **selected, projection_key="test-key")
+            loaded = store.load_selected(db, **selected)
             assert loaded["items"][0]["customer_display_facts"] == facts
             damaged = deepcopy(loaded)
             damaged["items"][0]["customer_display_facts"]["source_document_id"] = "INTERNAL"
             db.execute(sa.update(table).values(envelope_json=json.dumps(damaged)))
             db.commit()
             with pytest.raises(ValueError, match="解释合同不完整"):
-                store.load_selected(db, **selected, projection_key="test-key")
+                store.load_selected(db, **selected)
     finally:
         engine.dispose()
 

@@ -160,6 +160,7 @@ def test_canonical_export_keeps_original_004_renderer_suggestion(data_gap: bool)
     envelope = {
         "schema_version": RECORD_RESULT_ENVELOPE_SCHEMA,
         "delivery_mode": CANONICAL_RESULT_DELIVERY_MODE,
+        "record_id": "visit-1",
         "record_ref": _case_record_ref(),
         "items": [stored_item],
     }
@@ -285,6 +286,7 @@ def test_export_batch_job_html_reads_only_this_jobs_canonical_envelopes(monkeypa
     envelope = {
         "schema_version": "lx0609-record-result-envelope-v1",
         "delivery_mode": "canonical_straight_through",
+        "record_id": "visit-1",
         "job_id": "job-canonical-child",
         "root_job_id": "job-canonical-only",
         "record_ref": _case_record_ref(),
@@ -1056,7 +1058,10 @@ _LONG_MULTILINE_TAIL = "\n" + "\n".join(
 )
 
 
-def _canonical_read_fixture(monkeypatch, *, record_ref: str | None = None):
+def _canonical_read_fixture(
+    monkeypatch, *, record_ref: str | None = None, envelope_record_id: str | None = None,
+    extra_rows: list[dict[str, Any]] | None = None,
+):
     """正式执行链发布的结果经保存投影落入 Envelope，再由正式读取入口读取。"""
 
     from tests.luxian_0609_published_result_support import published_lx0609_items
@@ -1081,11 +1086,12 @@ def _canonical_read_fixture(monkeypatch, *, record_ref: str | None = None):
     envelope = {
         "schema_version": RECORD_RESULT_ENVELOPE_SCHEMA,
         "delivery_mode": CANONICAL_RESULT_DELIVERY_MODE,
+        "record_id": envelope_record_id or _SYN_CASE["visit_id"],
         "root_job_id": "job-syn-901",
         "record_ref": record_ref or _case_record_ref(**_SYN_CASE),
         "items": stored,
     }
-    monkeypatch.setattr(workspace_module, "_session", lambda: _ReadSession([{
+    rows = [{
         "job_id": "job-syn-901",
         "root_job_id": "job-syn-901",
         "created_by": "owner-1",
@@ -1093,16 +1099,27 @@ def _canonical_read_fixture(monkeypatch, *, record_ref: str | None = None):
         "rule_set_key": "luxian_0609_qc_v1",
         "rule_set_version": "2026-06-09",
         "envelope_json": json.dumps(envelope, ensure_ascii=False),
-    }]))
+    }]
+    for extra in extra_rows or []:
+        rows.append({
+            **rows[0], **extra["case"],
+            "envelope_json": json.dumps(
+                {**envelope, "record_id": extra["case"]["visit_id"], **extra.get("envelope", {})},
+                ensure_ascii=False,
+            ),
+        })
+    monkeypatch.setattr(workspace_module, "_session", lambda: _ReadSession(rows))
     job = {
         "id": "job-syn-901",
         "created_by": "owner-1",
         "status": "completed",
-        "total_records": 1,
+        "total_records": 1 + len(extra_rows or []),
         "filters": {
             "rule_set_key": "luxian_0609_qc_v1",
             "rule_set_version": "2026-06-09",
-            "record_refs": [dict(_SYN_CASE)],
+            "record_refs": [dict(_SYN_CASE)] + [
+                dict(extra["case"]) for extra in extra_rows or []
+            ],
         },
     }
     return admission, rescue, paused, job
@@ -1151,13 +1168,27 @@ def test_formal_text_is_preserved_while_existing_sensitive_filter_still_applies(
     assert all(line in html for line in admission["suggestion"].split("\n"))
 
 
-def test_batch_read_rejects_envelope_ref_not_matching_row_case(monkeypatch):
-    # 行坐标与 Envelope 病历引用不一致：不能作为本病例的正常结果返回。
-    _admission, _rescue, _paused, job = _canonical_read_fixture(
-        monkeypatch,
-        record_ref=_case_record_ref("SYN-INST-901", "SYN-PATIENT-OTHER", "SYN-VISIT-901"),
-    )
+def _load_with(monkeypatch, **fixture_kwargs):
+    _admission, _rescue, _paused, job = _canonical_read_fixture(monkeypatch, **fixture_kwargs)
     service = object.__new__(CustomQCWorkspaceService)
     service._record_result_envelope_table = workspace_module._record_result_envelopes_table()
+    return service._load_batch_job_canonical_items(job=job)
+
+
+def test_batch_read_rejects_envelope_visit_not_matching_row(monkeypatch):
+    # Envelope 明文 record_id 指向另一就诊：不依赖密钥即可识别的错配。
     with pytest.raises(ValueError, match="病历引用无效"):
-        service._load_batch_job_canonical_items(job=job)
+        _load_with(monkeypatch, envelope_record_id="SYN-VISIT-OTHER")
+
+
+def test_batch_read_rejects_two_cases_sharing_one_record_ref(monkeypatch):
+    # 同一任务内另一病例的 Envelope 复用了本病例的病历引用：反馈绑定会串到错误病例。
+    other = {"institute_id": "SYN-INST-901", "patient_id": "SYN-PATIENT-902", "visit_id": "SYN-VISIT-902"}
+    with pytest.raises(ValueError, match="病历引用无效"):
+        _load_with(monkeypatch, extra_rows=[{"case": other}])
+    # 各病例使用各自引用时正常读取。
+    items = _load_with(
+        monkeypatch,
+        extra_rows=[{"case": other, "envelope": {"record_ref": _case_record_ref(**other)}}],
+    )
+    assert {item["patient_id"] for item in items} == {"SYN-PATIENT-901", "SYN-PATIENT-902"}
