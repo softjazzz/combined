@@ -22,6 +22,16 @@ if not _explicit_database_url:
 elif make_url(_explicit_database_url).database == "medqc":
     raise RuntimeError("拒绝在业务库 medqc 上运行后端测试")
 
+if not _explicit_database_url:
+    import psycopg2
+
+    def _refuse_psycopg2_connect(*_args, **_kwargs):
+        # 默认拒连模式下任何 PostgreSQL 连接（含 .env 中的 REMOTE_DB_URL）立即失败，
+        # 避免 Windows 上对拒连端口的 TCP 重试让每次连接空等约 2 秒。
+        raise psycopg2.OperationalError("单元测试默认拒连：未显式配置 DATABASE_URL")
+
+    psycopg2.connect = _refuse_psycopg2_connect
+
 # 导入应用
 from app.main import create_app  # noqa: E402 - 先隔离数据库再导入应用
 from app.core.rate_limit import reset_rate_limit_store_for_testing  # noqa: E402
