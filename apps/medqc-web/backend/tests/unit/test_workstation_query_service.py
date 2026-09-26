@@ -1853,3 +1853,238 @@ def test_workstation_default_review_state_loader_uses_review_service(workstation
     summaries = {record["id"]: record["latest_qc_summary"] for record in result["records"]}
     assert summaries["V1"]["review_state"] == "approved"
     assert len(calls) == 1
+
+
+# ---------------------------------------------------------------------------
+# 列表按审核状态筛选（P1-A 合同第 1 节）：先按审核状态过滤完整集合，再分页
+# ---------------------------------------------------------------------------
+
+_REVIEW_FILTER_STATES = {
+    "V1": "pending_review",
+    "V2": "pending_recheck",
+    "V3": "approved",
+    "V4": "doubtful",
+    "V5": "pending_review",
+}
+
+
+def _review_filter_projection_loader(record_refs):
+    """V1–V5 ready（带锚点），V6 技术错误，V7 未质控，V-IDX 为就诊索引病例（ready）。"""
+
+    projections = {}
+    for ref in record_refs:
+        identity = (str(ref["institute_id"]), str(ref["patient_id"]), str(ref["visit_id"]))
+        visit_id = identity[2]
+        if visit_id in _REVIEW_FILTER_STATES or visit_id == "V-IDX":
+            projections[identity] = {
+                "status": "ready",
+                "completed_at": "2026-08-08T10:00:00",
+                "total_rule_count": 2,
+                "status_counts": {"compliant": 1, "non_compliant": 1},
+                "root_job_id": f"job-{visit_id}",
+                "envelope_id": f"env-{visit_id}",
+            }
+        elif visit_id == "V6":
+            projections[identity] = {
+                "status": "technical_error",
+                "reason_code": "canonical_envelope_invalid",
+            }
+        else:
+            projections[identity] = {"status": "not_run"}
+    return projections
+
+
+def _insert_review_filter_records(session_factory):
+    _insert_workstation_records(
+        session_factory,
+        *(
+            MedicalRecordFrontpage(
+                institute_id="H1", patient_id=f"P{index}", visit_id=f"V{index}",
+                name=f"病历{index}", update_time=datetime(2026, 8, 8, 12, 0) - timedelta(hours=index),
+            )
+            for index in range(1, 8)
+        ),
+    )
+
+
+def _review_filter_loader(calls):
+    def loader(results):
+        calls.append(sorted(item["visit_id"] for item in results))
+        states = {**_REVIEW_FILTER_STATES, "V-IDX": "pending_recheck"}
+        return {
+            (item["institute_id"], item["patient_id"], item["visit_id"]): states[item["visit_id"]]
+            for item in results
+            if item["visit_id"] in states
+        }
+
+    return loader
+
+
+def _get_with_review_state(session_factory, review_state, calls, **kwargs):
+    return get_workstation_data(
+        session_factory=session_factory,
+        settings_loader=_workstation_settings_loader,
+        demo_policy=_no_demo_policy,
+        qc_projection_loader=_review_filter_projection_loader,
+        review_state_loader=_review_filter_loader(calls),
+        review_state=review_state,
+        **kwargs,
+    )
+
+
+def test_review_state_filter_multi_value_filters_full_set_before_paging(workstation_session_factory):
+    _insert_review_filter_records(workstation_session_factory)
+    calls = []
+
+    result = _get_with_review_state(
+        workstation_session_factory, ["pending_review", "pending_recheck"], calls, page_size=50,
+    )
+
+    assert [record["id"] for record in result["records"]] == ["V1", "V2", "V5"]
+    assert [record["latest_qc_summary"]["review_state"] for record in result["records"]] == [
+        "pending_review", "pending_recheck", "pending_review",
+    ]
+    assert result["total"] == 3 and result["totalPages"] == 1
+    # qc_summary 按过滤后的集合计算
+    assert result["qc_summary"]["total_records"] == 3
+    assert result["qc_summary"]["ready_records"] == 3
+    assert result["qc_summary"]["not_run_records"] == 0
+    assert result["qc_summary"]["technical_error_records"] == 0
+    assert result["qc_summary"]["status_counts"] == {"compliant": 3, "non_compliant": 3}
+    # 只对完整集合中 ready 病例批量读取一次；本页挂载复用同一结果
+    assert calls == [["V1", "V2", "V3", "V4", "V5"]]
+
+
+def test_review_state_filter_paginates_after_filtering(workstation_session_factory):
+    _insert_review_filter_records(workstation_session_factory)
+
+    page_two = _get_with_review_state(
+        workstation_session_factory, ["pending_review", "pending_recheck"], [], page=2, page_size=2,
+    )
+
+    assert [record["id"] for record in page_two["records"]] == ["V5"]
+    assert page_two["total"] == 3 and page_two["totalPages"] == 2
+    assert page_two["qc_summary"]["total_records"] == 3
+    assert page_two["records"][0]["latest_qc_summary"]["review_state"] == "pending_review"
+
+
+def test_review_state_filter_single_value_and_comma_string(workstation_session_factory):
+    _insert_review_filter_records(workstation_session_factory)
+
+    doubtful = _get_with_review_state(workstation_session_factory, ["doubtful"], [])
+    assert [record["id"] for record in doubtful["records"]] == ["V4"]
+
+    decided = _get_with_review_state(workstation_session_factory, "approved,doubtful", [])
+    assert [record["id"] for record in decided["records"]] == ["V3", "V4"]
+
+
+def test_review_state_filter_excludes_not_run_and_technical_error(workstation_session_factory):
+    _insert_review_filter_records(workstation_session_factory)
+
+    result = _get_with_review_state(
+        workstation_session_factory,
+        ["pending_review", "pending_recheck", "approved", "doubtful"],
+        [],
+    )
+
+    ids = [record["id"] for record in result["records"]]
+    assert ids == ["V1", "V2", "V3", "V4", "V5"]
+    assert result["total"] == 5
+    assert result["qc_summary"]["technical_error_records"] == 0
+    assert result["qc_summary"]["not_run_records"] == 0
+
+
+def test_review_state_filter_empty_result_when_no_ready_case(workstation_session_factory):
+    _insert_review_filter_records(workstation_session_factory)
+    calls = []
+
+    result = get_workstation_data(
+        session_factory=workstation_session_factory,
+        settings_loader=_workstation_settings_loader,
+        demo_policy=_no_demo_policy,
+        review_state_loader=_review_filter_loader(calls),
+        review_state=["pending_review"],
+    )
+
+    # 默认投影替身全部为 not_run：没有 ready 病例，不读取审核状态，结果为空
+    assert result["records"] == [] and result["total"] == 0
+    assert result["qc_summary"]["total_records"] == 0
+    assert calls == []
+
+
+def test_review_state_filter_applies_to_visit_index_records(workstation_session_factory):
+    _insert_review_filter_records(workstation_session_factory)
+    with workstation_session_factory() as session:
+        session.add(
+            InpatRegistration(
+                institute_id="H1", patient_id="P-IDX", visit_id="V-IDX", name="索引病例",
+                admission_dept_name="内科", admission_datetime=datetime(2026, 8, 12, 9, 30),
+                discharge_datetime=None, update_time=datetime(2026, 8, 13, 8, 0),
+            )
+        )
+        session.commit()
+    _insert_visit_index_rows(
+        workstation_session_factory,
+        {"institute_id": "H1", "patient_id": "P-IDX", "visit_id": "V-IDX",
+         "scene_current": "running", "updated_at": datetime(2026, 8, 13, 8, 5)},
+    )
+
+    rechecks = _get_with_review_state(workstation_session_factory, ["pending_recheck"], [])
+    assert sorted(record["id"] for record in rechecks["records"]) == ["V-IDX", "V2"]
+    assert rechecks["total"] == 2 and rechecks["qc_summary"]["total_records"] == 2
+
+    approved = _get_with_review_state(workstation_session_factory, ["approved"], [])
+    assert [record["id"] for record in approved["records"]] == ["V3"]
+
+
+def test_review_state_filter_failure_raises_unavailable(workstation_session_factory, caplog):
+    _insert_review_filter_records(workstation_session_factory)
+
+    def broken(_results):
+        raise RuntimeError("SELECT secret FROM qc_record_reviews")
+
+    with caplog.at_level("WARNING", logger=query_service_module.__name__):
+        with pytest.raises(query_service_module.WorkstationReviewStateUnavailable):
+            get_workstation_data(
+                session_factory=workstation_session_factory,
+                settings_loader=_workstation_settings_loader,
+                demo_policy=_no_demo_policy,
+                qc_projection_loader=_review_filter_projection_loader,
+                review_state_loader=broken,
+                review_state=["pending_review"],
+            )
+    assert "RuntimeError" in caplog.text and "secret" not in caplog.text
+
+
+@pytest.mark.parametrize("value", [[], ["rejected"], ["pending_review", ""], "pending_review,bogus"])
+def test_review_state_filter_rejects_invalid_values(workstation_session_factory, value):
+    with pytest.raises(ValueError, match="review_state"):
+        get_workstation_data(
+            session_factory=workstation_session_factory,
+            settings_loader=_workstation_settings_loader,
+            demo_policy=_no_demo_policy,
+            review_state=value,
+        )
+
+
+def test_without_review_state_parameter_behaviour_unchanged(workstation_session_factory):
+    """不带参数：total/qc_summary 覆盖全集，审核状态只按本页读取。"""
+
+    _insert_review_filter_records(workstation_session_factory)
+    calls = []
+
+    result = get_workstation_data(
+        page_size=3,
+        session_factory=workstation_session_factory,
+        settings_loader=_workstation_settings_loader,
+        demo_policy=_no_demo_policy,
+        qc_projection_loader=_review_filter_projection_loader,
+        review_state_loader=_review_filter_loader(calls),
+    )
+
+    assert result["total"] == 7
+    assert result["qc_summary"]["total_records"] == 7
+    assert result["qc_summary"]["technical_error_records"] == 1
+    assert result["qc_summary"]["not_run_records"] == 1
+    assert [record["id"] for record in result["records"]] == ["V1", "V2", "V3"]
+    assert calls == [["V1", "V2", "V3"]]

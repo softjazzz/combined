@@ -1,6 +1,12 @@
 import { computed, ref } from 'vue'
 import { ApiService } from '@/services/apiService'
-import type { DeptInfo, DoctorInfo, PatientRecord, RecordPoolQcSummary } from '../types'
+import type {
+  DeptInfo,
+  DoctorInfo,
+  PatientRecord,
+  RecordLatestReviewState,
+  RecordPoolQcSummary,
+} from '../types'
 import { normalizeRecord, normalizeRecordPoolQcSummary } from '../normalize'
 import { ANALYTICS_DRILLDOWN_QUERY_KEYS } from '../analyticsDrilldown'
 
@@ -93,6 +99,8 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
   const hospFilter = ref<HospitalStatusScope>(initialHospitalStatus)
   const syncScope = ref<RecordPoolSyncScope>('all')
   const inpatientSort = ref<InpatientSort>('default')
+  /** 审核状态筛选（多选）；空数组表示不按审核状态过滤。 */
+  const reviewStateFilter = ref<RecordLatestReviewState[]>([])
   let activeRequestSequence = 0
 
   const hospOptions: Array<{ value: HospitalStatusScope; label: string }> = [
@@ -145,6 +153,10 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
       }
       if (inpatientSort.value !== 'default') {
         params.inpatient_sort = inpatientSort.value
+      }
+      if (reviewStateFilter.value.length > 0) {
+        // 合同：逗号分隔多值；服务端按列表同源的审核状态过滤后再分页。
+        params.review_state = reviewStateFilter.value.join(',')
       }
       // 下钻上下文只有 analyticsDrilldown 一条资料链，参数名与后端查询项保持一致。
       const analyticsQuery = new URLSearchParams(window.location.search)
@@ -255,6 +267,7 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
     hospFilter.value = initialHospitalStatus
     syncScope.value = 'all'
     inpatientSort.value = 'default'
+    reviewStateFilter.value = []
     currentPage.value = 1
   }
 
@@ -278,6 +291,7 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
     hospFilter,
     syncScope,
     inpatientSort,
+    reviewStateFilter,
     hospOptions,
     filteredRecords,
     fetchData,

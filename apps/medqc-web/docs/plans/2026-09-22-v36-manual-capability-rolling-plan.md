@@ -617,3 +617,9 @@
 - 复核纠偏：子代理按合同读取 `qc_task_records.started_at` 生成“开始处理”事件，但该列无任何写入方（开始服务只改状态），读取无 owner 的列会误导且缺列时整接口 503；主协调者移除该事件，只保留由完成服务写入的 `completed_at`，并同步合同、前端类型与测试。
 - 验证：后端时间线/审核相关 156/156、Ruff 通过；隔离库只读事务实跑 6 条查询通过（0.74 秒）；前端 vue-tsc、只读全量 ESLint、全量 Vitest 178/178 文件通过。未做浏览器验收；催办/医生通知、改评分标准、自动缺陷操作历史仍不在范围（外部阻塞或无权威 owner）。PRD 覆盖状态不提升。
 
+## 76. 第七十批：V5 病历列表筛选模板与审核状态默认筛选（P1-A）
+
+- 按 `docs/plans/2026-09-27-v36-filter-templates-design.md`：V5 运行/终末列表新增 `review_state`（多值）筛选，基于审核服务同一批量推导在完整筛选集上过滤后再分页，total 与 qc_summary 按过滤后集合；带参时批量失败 503，不带参路径与原来一致。迁移 59 新增 `qc_user_filter_templates`（qc/public，名称唯一、每人每页一个默认的部分唯一索引、CAS version、每人每页 ≤20 由事务级 advisory lock 保证），模板 CRUD 仅本人可见（他人 404），filters 白名单逐键校验。
+- 前端新增快捷筛选（全部/待审核/待复审/审核中，后三项仅审核角色）与模板工具栏（应用、另存为、更新、设/取消默认、删除、重置）；审核角色默认“审核中”，默认模板优先；URL query 为筛选唯一来源，审核角色显式选“全部”写入仅前端标记 `review_scope=all` 以便刷新保持（不发后端、不入模板）。
+- 验证：隔离库升级至 revision59 并回读双 schema 与部分唯一索引；真实 PG 冒烟（第二默认自动替换、过期 version 409、并发设默认后恰一个默认），合成行已清理。后端新增与受影响 275/275、Ruff；前端 vue-tsc、只读全量 ESLint、全量 Vitest 181/181 文件。`test_medical_records_service.py::test_get_documents_concat_mode_handles_missing_table` 在干净 HEAD 同样失败，为既存问题。未做浏览器验收，PRD 覆盖状态不提升。
+

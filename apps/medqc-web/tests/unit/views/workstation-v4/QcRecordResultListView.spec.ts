@@ -7,8 +7,12 @@ const mocks = vi.hoisted(() => ({
   downloadBlob: vi.fn(),
   exportFilteredLuxian0609RecordResults: vi.fn(),
   getRaw: vi.fn(),
+  routerReplace: vi.fn(),
+  listFilterTemplates: vi.fn(),
+  hasRole: vi.fn(),
 }))
 const routeState = vi.hoisted(() => ({
+  path: '/workstation-v5/records',
   query: {} as Record<string, string>,
 }))
 
@@ -28,12 +32,21 @@ vi.mock('@/views/workstation-v4/customer-sample-validation/batchExport', () => (
 
 vi.mock('vue-router', () => ({
   useRoute: () => routeState,
+  useRouter: () => ({ replace: mocks.routerReplace }),
 }))
 
 vi.mock('@/stores/auth', () => ({
   useAuthStore: () => ({
     user: { id: 'qc-result-list-test', email: 'qc-result-list-test@example.com' },
+    hasRole: mocks.hasRole,
   }),
+}))
+
+vi.mock('@/api/filterTemplates', () => ({
+  listFilterTemplates: mocks.listFilterTemplates,
+  createFilterTemplate: vi.fn(),
+  updateFilterTemplate: vi.fn(),
+  removeFilterTemplate: vi.fn(),
 }))
 
 import QcRecordResultListView from '@/views/workstation-v4/QcRecordResultListView.vue'
@@ -220,6 +233,9 @@ describe('QcRecordResultListView', () => {
     window.sessionStorage.clear()
     routeState.query = {}
     mocks.getRaw.mockResolvedValue(response())
+    mocks.routerReplace.mockResolvedValue(undefined)
+    mocks.listFilterTemplates.mockResolvedValue({ success: true, data: [] })
+    mocks.hasRole.mockReturnValue(false)
     mocks.exportFilteredLuxian0609RecordResults.mockResolvedValue({
       success: true,
       data: new Blob(['xlsx']),
@@ -392,7 +408,7 @@ describe('QcRecordResultListView', () => {
     await inputs[0].setValue('患者甲')
     await inputs[1].setValue('2026-08-01')
     await inputs[2].setValue('2026-08-10')
-    await wrapper.find('select').setValue('重症医学科')
+    await wrapper.get('select[aria-label="科室筛选"]').setValue('重症医学科')
     await wrapper.get('select[aria-label="主管医师筛选"]').setValue('张医师')
     await flushPromises()
 
@@ -469,7 +485,7 @@ describe('QcRecordResultListView', () => {
     await inputs[0].setValue('患者甲')
     await inputs[1].setValue('2026-08-01')
     await inputs[2].setValue('2026-08-10')
-    await wrapper.find('select').setValue('重症医学科')
+    await wrapper.get('select[aria-label="科室筛选"]').setValue('重症医学科')
     await wrapper.get('select[aria-label="主管医师筛选"]').setValue('张医师')
     await flushPromises()
 
@@ -837,6 +853,213 @@ describe('QcRecordResultListView', () => {
       expect(focus.visitId).toBe('V-data-gap')
       expect(focus).not.toHaveProperty('admissionTime')
       expect(focus).not.toHaveProperty('dischargeTime')
+    })
+  })
+
+  describe('审核状态筛选、快捷筛选与 URL 同步', () => {
+    function workstationParams() {
+      return mocks.getRaw.mock.lastCall?.[1] as Record<string, unknown>
+    }
+
+    it('审核角色首次进入（URL 无筛选）默认“审核中”，请求带 review_state 并写入 query', async () => {
+      mocks.hasRole.mockImplementation((role: string) => role === 'qc_manager')
+      routeState.query = { tab: 'records' }
+      mountView('inpatient')
+      await flushPromises()
+
+      expect(mocks.listFilterTemplates).toHaveBeenCalledWith('v5_records_inpatient')
+      expect(mocks.getRaw).toHaveBeenCalledTimes(1)
+      expect(workstationParams()).toEqual({
+        page: 1,
+        page_size: 15,
+        date_field: 'admission',
+        hospital_status: 'inpatient',
+        review_state: 'pending_review,pending_recheck',
+      })
+      expect(mocks.routerReplace).toHaveBeenCalledWith({
+        query: { tab: 'records', review_state: 'pending_review,pending_recheck' },
+      })
+    })
+
+    it('默认模板优先于系统默认', async () => {
+      mocks.hasRole.mockImplementation((role: string) => role === 'admin')
+      mocks.listFilterTemplates.mockResolvedValue({
+        success: true,
+        data: [
+          {
+            id: 'tpl-default',
+            page_key: 'v5_records_discharged',
+            name: '本科室待复审',
+            filters: { dept: '重症医学科', review_state: ['pending_recheck'] },
+            is_default: true,
+            version: 1,
+            created_at: '',
+            updated_at: '',
+          },
+        ],
+      })
+      mountView('discharged')
+      await flushPromises()
+
+      expect(mocks.listFilterTemplates).toHaveBeenCalledWith('v5_records_discharged')
+      expect(mocks.getRaw).toHaveBeenCalledTimes(1)
+      expect(workstationParams()).toMatchObject({
+        dept: '重症医学科',
+        review_state: 'pending_recheck',
+      })
+      expect(mocks.routerReplace).toHaveBeenCalledWith({
+        query: { department: '重症医学科', review_state: 'pending_recheck' },
+      })
+    })
+
+    it('URL 已有筛选参数时以 URL 为准，不套用默认、不改写 query', async () => {
+      mocks.hasRole.mockImplementation((role: string) => role === 'qc_manager')
+      routeState.query = { review_state: 'approved,bogus', keyword: '患者甲' }
+      const wrapper = mountView('inpatient')
+      await flushPromises()
+
+      expect(mocks.getRaw).toHaveBeenCalledTimes(1)
+      expect(workstationParams()).toMatchObject({ keyword: '患者甲', review_state: 'approved' })
+      expect(mocks.routerReplace).not.toHaveBeenCalled()
+      expect(
+        (wrapper.get('input[aria-label="关键词筛选"]').element as HTMLInputElement).value,
+      ).toBe('患者甲')
+    })
+
+    it('快捷筛选写入 query 并据此请求第一页，保留其他筛选', async () => {
+      mocks.hasRole.mockImplementation((role: string) => role === 'qc_manager')
+      routeState.query = { department: '重症医学科' }
+      const wrapper = mountView('inpatient')
+      await flushPromises()
+
+      await wrapper.get('[data-testid="quick-filter-pending_review"]').trigger('click')
+      await flushPromises()
+      expect(workstationParams()).toEqual({
+        page: 1,
+        page_size: 15,
+        date_field: 'admission',
+        dept: '重症医学科',
+        hospital_status: 'inpatient',
+        review_state: 'pending_review',
+      })
+      expect(mocks.routerReplace).toHaveBeenLastCalledWith({
+        query: { department: '重症医学科', review_state: 'pending_review' },
+      })
+
+      await wrapper.get('[data-testid="quick-filter-all"]').trigger('click')
+      await flushPromises()
+      expect(workstationParams()).not.toHaveProperty('review_state')
+      expect(mocks.routerReplace).toHaveBeenLastCalledWith({
+        query: { department: '重症医学科', review_scope: 'all' },
+      })
+    })
+
+    it('审核角色显式选“全部”写入前端标记 review_scope=all，请求参数不含该键', async () => {
+      mocks.hasRole.mockImplementation((role: string) => role === 'qc_manager')
+      // 模拟路由：replace 后 query 即为新值。
+      mocks.routerReplace.mockImplementation(async (location: { query: Record<string, string> }) => {
+        routeState.query = location.query
+      })
+      const wrapper = mountView('inpatient')
+      await flushPromises()
+      expect(workstationParams()).toMatchObject({ review_state: 'pending_review,pending_recheck' })
+
+      await wrapper.get('[data-testid="quick-filter-all"]').trigger('click')
+      await flushPromises()
+      expect(mocks.routerReplace).toHaveBeenLastCalledWith({ query: { review_scope: 'all' } })
+      expect(workstationParams()).not.toHaveProperty('review_state')
+      expect(workstationParams()).not.toHaveProperty('review_scope')
+
+      // 标记存在时手动筛选沿用标记。
+      await wrapper.get('select[aria-label="科室筛选"]').setValue('重症医学科')
+      await flushPromises()
+      expect(mocks.routerReplace).toHaveBeenLastCalledWith({
+        query: { department: '重症医学科', review_scope: 'all' },
+      })
+    })
+
+    it('刷新时 review_scope=all 视为显式范围，保持“全部”，不套系统默认', async () => {
+      mocks.hasRole.mockImplementation((role: string) => role === 'qc_manager')
+      routeState.query = { review_scope: 'all' }
+      window.history.replaceState({}, '', '/workstation-v5/records?review_scope=all')
+      const wrapper = mountView('inpatient')
+      await flushPromises()
+      window.history.replaceState({}, '', '/')
+
+      expect(mocks.getRaw).toHaveBeenCalledTimes(1)
+      expect(workstationParams()).toEqual({
+        page: 1,
+        page_size: 15,
+        date_field: 'admission',
+        hospital_status: 'inpatient',
+      })
+      expect(mocks.routerReplace).not.toHaveBeenCalled()
+      expect(wrapper.get('[data-testid="quick-filter-all"]').attributes('aria-pressed')).toBe('true')
+    })
+
+    it('选其他快捷筛选或重置时移除 review_scope 标记', async () => {
+      mocks.hasRole.mockImplementation((role: string) => role === 'qc_manager')
+      routeState.query = { review_scope: 'all' }
+      const wrapper = mountView('inpatient')
+      await flushPromises()
+
+      await wrapper.get('[data-testid="quick-filter-pending_recheck"]').trigger('click')
+      await flushPromises()
+      expect(mocks.routerReplace).toHaveBeenLastCalledWith({
+        query: { review_state: 'pending_recheck' },
+      })
+
+      routeState.query = { review_scope: 'all' }
+      await wrapper.get('[data-testid="filter-template-reset"]').trigger('click')
+      await flushPromises()
+      expect(mocks.routerReplace).toHaveBeenLastCalledWith({
+        query: { review_state: 'pending_review,pending_recheck' },
+      })
+      expect(workstationParams()).toMatchObject({ review_state: 'pending_review,pending_recheck' })
+    })
+
+    it('手动筛选同样写入 query', async () => {
+      const wrapper = mountView('discharged')
+      await flushPromises()
+      await wrapper.get('select[aria-label="科室筛选"]').setValue('重症医学科')
+      await flushPromises()
+      expect(mocks.routerReplace).toHaveBeenLastCalledWith({ query: { department: '重症医学科' } })
+    })
+
+    it('非审核角色看不到审核快捷筛选，默认“全部”', async () => {
+      const wrapper = mountView('inpatient')
+      await flushPromises()
+      expect(wrapper.find('[data-testid="quick-filter-pending_review"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="quick-filter-all"]').exists()).toBe(true)
+      expect(workstationParams()).not.toHaveProperty('review_state')
+    })
+
+    it('模板加载失败不阻塞列表，仅提示模板不可用', async () => {
+      mocks.hasRole.mockImplementation((role: string) => role === 'qc_manager')
+      mocks.listFilterTemplates.mockResolvedValue({ success: false, status: 503 })
+      const wrapper = mountView('inpatient')
+      await flushPromises()
+      expect(wrapper.text()).toContain('筛选模板暂不可用')
+      expect(mocks.getRaw).toHaveBeenCalledTimes(1)
+      expect(workstationParams()).toMatchObject({ review_state: 'pending_review,pending_recheck' })
+      expect(wrapper.findAll('tbody tr[data-record-key]')).toHaveLength(5)
+    })
+
+    it('空结果区分“筛选无结果”与加载失败', async () => {
+      mocks.hasRole.mockImplementation((role: string) => role === 'qc_manager')
+      const empty = response()
+      empty.data.records = []
+      empty.data.total = 0
+      mocks.getRaw.mockResolvedValue(empty)
+      const filtered = mountView('inpatient')
+      await flushPromises()
+      expect(filtered.text()).toContain('当前筛选条件下暂无病历，可调整筛选或重置')
+
+      mocks.getRaw.mockRejectedValue(new Error('503'))
+      const failed = mountView('inpatient')
+      await flushPromises()
+      expect(failed.text()).toContain('加载失败，请重试')
+      expect(failed.text()).not.toContain('当前筛选条件下暂无病历')
     })
   })
 })

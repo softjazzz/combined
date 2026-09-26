@@ -4,11 +4,13 @@ from datetime import date, datetime
 from typing import Any, Dict, Literal, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ..core.security import get_current_user
 from ..core.pagination import HEAVY_MAX_PAGE_SIZE, page_param, page_size_param
 from ..services.medical_records.query_service import (
+    WORKSTATION_REVIEW_STATES,
+    WorkstationReviewStateUnavailable,
     get_departments,
     get_stats,
     get_workstation_data,
@@ -20,6 +22,22 @@ from ..services.medical_records.hospitalization_status_service import (
 from .medical_records_common import raise_medical_records_http_error
 
 router = APIRouter(tags=["病案数据-查询"])
+
+_REVIEW_STATE_UNAVAILABLE_DETAIL = "病历审核状态暂不可用，无法按审核状态筛选，请稍后重试"
+
+
+def _parse_review_state(value: Optional[str]) -> Optional[tuple[str, ...]]:
+    """解析逗号分隔的 review_state；不传为 None（不筛选），空值或非法值 422。"""
+
+    if value is None:
+        return None
+    items = [item.strip() for item in value.split(",")]
+    if not items or any(item not in WORKSTATION_REVIEW_STATES for item in items):
+        raise HTTPException(
+            status_code=422,
+            detail="review_state 取值无效，仅支持 pending_review/pending_recheck/approved/doubtful",
+        )
+    return tuple(dict.fromkeys(items))
 
 
 @router.post("/workstation/hospitalization-status/verify")
@@ -114,8 +132,14 @@ async def get_workstation_data_api(
         ]
     ] = Query(None, description="统计下钻 Canonical 结果状态"),
     analytics_scope: Optional[Literal["final"]] = Query(None, description="统计下钻资料范围"),
+    review_state: Optional[str] = Query(
+        None,
+        description="审核状态筛选，逗号分隔：pending_review/pending_recheck/approved/doubtful",
+    ),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
+    review_states = _parse_review_state(review_state)
+    extra: Dict[str, Any] = {} if review_states is None else {"review_state": review_states}
     try:
         return get_workstation_data(
             dept=dept,
@@ -135,6 +159,10 @@ async def get_workstation_data_api(
             analytics_rule_id=analytics_rule_id,
             analytics_result_status=analytics_result_status,
             analytics_scope=analytics_scope,
+            **extra,
         )
+    except WorkstationReviewStateUnavailable:
+        # 带审核状态筛选却读不到审核状态：不能返回未过滤结果，固定脱敏 503。
+        raise HTTPException(status_code=503, detail=_REVIEW_STATE_UNAVAILABLE_DETAIL) from None
     except Exception as exc:
         raise_medical_records_http_error(exc)

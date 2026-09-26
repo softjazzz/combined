@@ -7,9 +7,21 @@ import logging
 from collections import Counter
 from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Iterable, Optional
 
-from sqlalchemy import DateTime, String, and_, case, cast, exists, func, inspect as sa_inspect, or_, text
+from sqlalchemy import (
+    DateTime,
+    String,
+    and_,
+    case,
+    cast,
+    exists,
+    func,
+    inspect as sa_inspect,
+    or_,
+    text,
+    tuple_,
+)
 from sqlalchemy.orm import Session
 
 from ...database.connection import engine
@@ -32,6 +44,14 @@ from .shared import build_demo_workstation_records, filter_demo_records
 
 
 logger = logging.getLogger(__name__)
+
+# 列表按审核状态筛选的合法取值（与审核服务 batch_review_states 的输出值域一致）。
+WORKSTATION_REVIEW_STATES = frozenset({"pending_review", "pending_recheck", "approved", "doubtful"})
+_REVIEW_FILTER_CHUNK = 1000
+
+
+class WorkstationReviewStateUnavailable(RuntimeError):
+    """带 review_state 筛选时审核状态批量读取失败：无法兑现筛选，路由映射为 503。"""
 
 
 def _session_factory() -> Session:
@@ -491,6 +511,29 @@ def _load_review_states(results: list[dict[str, Any]]) -> dict[tuple[str, str, s
     return batch_review_states(results)
 
 
+def _review_anchors(
+    identities: Iterable[tuple[str, str, str]],
+    raw_summary_map: dict[tuple[str, str, str], dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """为 ready 病例构造审核状态批量读取锚点；锚点取自读取器原始摘要。"""
+
+    anchors = []
+    for identity in identities:
+        raw = raw_summary_map.get(identity)
+        raw = raw if isinstance(raw, dict) else {}
+        anchors.append(
+            {
+                "institute_id": identity[0],
+                "patient_id": identity[1],
+                "visit_id": identity[2],
+                "job_id": raw.get("root_job_id"),
+                "envelope_id": raw.get("envelope_id"),
+                "rule_set_key": LUXIAN_0609_RULE_SET_KEY,
+            }
+        )
+    return anchors
+
+
 def _attach_review_states(
     records: list[Any],
     raw_summary_map: dict[tuple[str, str, str], dict[str, Any]],
@@ -516,20 +559,7 @@ def _attach_review_states(
             page_ready[identity] = summary
     if not page_ready:
         return
-    anchors = []
-    for identity in page_ready:
-        raw = raw_summary_map.get(identity)
-        raw = raw if isinstance(raw, dict) else {}
-        anchors.append(
-            {
-                "institute_id": identity[0],
-                "patient_id": identity[1],
-                "visit_id": identity[2],
-                "job_id": raw.get("root_job_id"),
-                "envelope_id": raw.get("envelope_id"),
-                "rule_set_key": LUXIAN_0609_RULE_SET_KEY,
-            }
-        )
+    anchors = _review_anchors(page_ready, raw_summary_map)
     try:
         states = review_state_loader(anchors)
     except Exception as exc:  # noqa: BLE001 - 审核状态降级为未知，不阻断病历列表
@@ -537,9 +567,102 @@ def _attach_review_states(
         states = {}
     for identity, summary in page_ready.items():
         state = states.get(identity) if isinstance(states, dict) else None
-        summary["review_state"] = (
-            state if state in {"pending_review", "pending_recheck", "approved", "doubtful"} else None
+        summary["review_state"] = state if state in WORKSTATION_REVIEW_STATES else None
+
+
+def _normalize_review_state_filter(value: Optional[Iterable[str]]) -> frozenset[str] | None:
+    """None 表示不按审核状态筛选；否则必须是非空且全部合法的取值集合。"""
+
+    if value is None:
+        return None
+    if isinstance(value, str):
+        value = value.split(",")
+    normalized = frozenset(str(item).strip() for item in value)
+    if not normalized or not normalized <= WORKSTATION_REVIEW_STATES:
+        raise ValueError("review_state 无效")
+    return normalized
+
+
+def _collect_full_record_refs(q, indexed_filtered_records: list[Any]) -> list[dict[str, str]]:
+    """完整筛选集（病案首页 + 就诊索引）的三坐标引用，供摘要与审核状态筛选共用。"""
+
+    refs = [
+        {
+            "institute_id": str(row.institute_id).strip(),
+            "patient_id": str(row.patient_id).strip(),
+            "visit_id": str(row.visit_id).strip(),
+        }
+        for row in q.with_entities(
+            MedicalRecordFrontpage.institute_id,
+            MedicalRecordFrontpage.patient_id,
+            MedicalRecordFrontpage.visit_id,
+        ).all()
+        if all((row.institute_id, row.patient_id, row.visit_id))
+    ]
+    refs.extend(
+        {
+            "institute_id": str(row.institute_id).strip(),
+            "patient_id": str(row.patient_id).strip(),
+            "visit_id": str(row.visit_id).strip(),
+        }
+        for row in indexed_filtered_records
+    )
+    return refs
+
+
+def _review_state_matching_identities(
+    full_record_refs: list[dict[str, str]],
+    raw_summary_map: dict[tuple[str, str, str], dict[str, Any]],
+    latest_qc_summary_map: dict[tuple[str, str, str], dict[str, Any]],
+    review_state_loader: Callable[[list[dict[str, Any]]], dict[tuple[str, str, str], str]],
+    wanted: frozenset[str],
+) -> tuple[set[tuple[str, str, str]], dict[tuple[str, str, str], str]]:
+    """对完整筛选集中 ready 病例求审核状态，返回 (命中身份, 状态表)。
+
+    只有 ready 结果才有审核状态；未质控、技术错误不命中。批量读取失败时抛
+    WorkstationReviewStateUnavailable（不能降级为未过滤结果）。
+    """
+
+    ready_identities = list(
+        dict.fromkeys(
+            identity
+            for identity in (
+                (ref["institute_id"], ref["patient_id"], ref["visit_id"]) for ref in full_record_refs
+            )
+            if (latest_qc_summary_map.get(identity) or {}).get("status") == "ready"
         )
+    )
+    if not ready_identities:
+        return set(), {}
+    try:
+        states = review_state_loader(_review_anchors(ready_identities, raw_summary_map))
+    except Exception as exc:  # noqa: BLE001 - 只记异常类型，不记患者身份或 SQL
+        logger.warning("病历列表按审核状态筛选时批量读取失败 error_type=%s", type(exc).__name__)
+        raise WorkstationReviewStateUnavailable("审核状态暂不可用，无法按审核状态筛选") from None
+    if not isinstance(states, dict):
+        logger.warning("病历列表按审核状态筛选时批量读取返回值无效")
+        raise WorkstationReviewStateUnavailable("审核状态暂不可用，无法按审核状态筛选")
+    matching = {identity for identity in ready_identities if states.get(identity) in wanted}
+    return matching, states
+
+
+def _identity_in_condition(identities: set[tuple[str, str, str]]):
+    """三坐标 IN 条件；按块拼接，避免单条语句绑定参数过多。空集合恒假。"""
+
+    if not identities:
+        return text("1 = 0")
+    ordered = sorted(identities)
+    key = tuple_(
+        MedicalRecordFrontpage.institute_id,
+        MedicalRecordFrontpage.patient_id,
+        MedicalRecordFrontpage.visit_id,
+    )
+    return or_(
+        *(
+            key.in_(ordered[start : start + _REVIEW_FILTER_CHUNK])
+            for start in range(0, len(ordered), _REVIEW_FILTER_CHUNK)
+        )
+    )
 
 
 def _build_qc_summary(
@@ -1026,8 +1149,10 @@ def get_workstation_data(
     analytics_rule_id: Optional[str] = None,
     analytics_result_status: Optional[str] = None,
     analytics_scope: Optional[str] = None,
+    review_state: Optional[Iterable[str]] = None,
 ) -> dict[str, Any]:
     session_factory = session_factory or _session_factory
+    review_state_filter = _normalize_review_state_filter(review_state)
     normalized_hospital_status = str(hospital_status or "all").strip().lower()
     if normalized_hospital_status not in {"all", "inpatient", "discharged"}:
         raise ValueError("hospital_status must be one of: all, inpatient, discharged")
@@ -1211,6 +1336,52 @@ def get_workstation_data(
             # 不得以当前页可见演示数据混入图表明细。
             visible_demos = []
 
+        summary_loader = qc_projection_loader or (
+            lambda refs: _load_latest_luxian_0609_qc_summaries(
+                refs,
+                session_factory=session_factory,
+            )
+        )
+        page_review_state_loader = review_state_loader or _load_review_states
+        prefiltered_summary = None
+        if review_state_filter is not None:
+            # 审核状态筛选：在“其他筛选条件得出的完整集合”上先过滤，再分页；
+            # total 与 qc_summary 都按过滤后的集合计算。状态来源唯一为审核服务批量推导。
+            full_record_refs = _collect_full_record_refs(q, indexed_filtered_records)
+            raw_qc_summary_map = summary_loader(full_record_refs)
+            latest_qc_summary_map = _normalize_latest_qc_summary_map(raw_qc_summary_map)
+            matching_review_identities, filter_states = _review_state_matching_identities(
+                full_record_refs,
+                raw_qc_summary_map if isinstance(raw_qc_summary_map, dict) else {},
+                latest_qc_summary_map,
+                page_review_state_loader,
+                review_state_filter,
+            )
+            q = q.filter(_identity_in_condition(matching_review_identities))
+            indexed_filtered_records = [
+                row
+                for row in indexed_filtered_records
+                if (
+                    str(row.institute_id).strip(),
+                    str(row.patient_id).strip(),
+                    str(row.visit_id).strip(),
+                )
+                in matching_review_identities
+            ]
+            full_record_refs = [
+                ref
+                for ref in full_record_refs
+                if (ref["institute_id"], ref["patient_id"], ref["visit_id"]) in matching_review_identities
+            ]
+            # 演示病历没有审核状态，不能命中审核状态筛选。
+            visible_demos = []
+
+            # 本页挂载复用同一次批量结果，不再二次读取。
+            def page_review_state_loader(_anchors, _states=filter_states):
+                return _states
+
+            prefiltered_summary = (raw_qc_summary_map, latest_qc_summary_map)
+
         total_real_filtered = q.count() + len(indexed_filtered_records)
         offset = (page - 1) * page_size
         demo_count = len(visible_demos)
@@ -1244,41 +1415,18 @@ def get_workstation_data(
                 effective_inpatient_sort,
             )[real_offset : real_offset + real_limit]
 
-        full_record_refs = [
-            {
-                "institute_id": str(row.institute_id).strip(),
-                "patient_id": str(row.patient_id).strip(),
-                "visit_id": str(row.visit_id).strip(),
-            }
-            for row in q.with_entities(
-                MedicalRecordFrontpage.institute_id,
-                MedicalRecordFrontpage.patient_id,
-                MedicalRecordFrontpage.visit_id,
-            ).all()
-            if all((row.institute_id, row.patient_id, row.visit_id))
-        ]
-        full_record_refs.extend(
-            {
-                "institute_id": str(row.institute_id).strip(),
-                "patient_id": str(row.patient_id).strip(),
-                "visit_id": str(row.visit_id).strip(),
-            }
-            for row in indexed_filtered_records
-        )
-        summary_loader = qc_projection_loader or (
-            lambda refs: _load_latest_luxian_0609_qc_summaries(
-                refs,
-                session_factory=session_factory,
-            )
-        )
-        raw_qc_summary_map = summary_loader(full_record_refs)
-        latest_qc_summary_map = _normalize_latest_qc_summary_map(raw_qc_summary_map)
+        if prefiltered_summary is None:
+            full_record_refs = _collect_full_record_refs(q, indexed_filtered_records)
+            raw_qc_summary_map = summary_loader(full_record_refs)
+            latest_qc_summary_map = _normalize_latest_qc_summary_map(raw_qc_summary_map)
+        else:
+            raw_qc_summary_map, latest_qc_summary_map = prefiltered_summary
         qc_summary = _build_qc_summary(full_record_refs, latest_qc_summary_map)
         _attach_review_states(
             records,
             raw_qc_summary_map if isinstance(raw_qc_summary_map, dict) else {},
             latest_qc_summary_map,
-            review_state_loader or _load_review_states,
+            page_review_state_loader,
         )
 
         discharge_summary_map: dict[str, dict[str, Any]] = {}

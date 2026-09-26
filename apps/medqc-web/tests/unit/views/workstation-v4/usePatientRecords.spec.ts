@@ -96,6 +96,24 @@ describe('usePatientRecords workstation filters', () => {
     })
   })
 
+  it('审核状态多选以逗号分隔传给服务端，空数组不带参数，重置清空', async () => {
+    const records = usePatientRecords('inpatient')
+    records.reviewStateFilter.value = ['pending_review', 'pending_recheck']
+    await records.fetchData(1)
+    expect(mocks.getRaw).toHaveBeenLastCalledWith('/api/medical-records/workstation', {
+      page: 1,
+      page_size: 15,
+      date_field: 'visit',
+      hospital_status: 'inpatient',
+      review_state: 'pending_review,pending_recheck',
+    })
+
+    records.resetFilters()
+    expect(records.reviewStateFilter.value).toEqual([])
+    await records.fetchData(1)
+    expect(mocks.getRaw.mock.lastCall?.[1]).not.toHaveProperty('review_state')
+  })
+
   it('允许运行和终末页面以显式初始住院状态固定服务端范围', async () => {
     const runningRecords = usePatientRecords('inpatient')
     await runningRecords.fetchData()

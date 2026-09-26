@@ -56,6 +56,13 @@
     />
 
     <section v-if="activeView === 'records'" class="qc-record-result-list-view__workbench">
+      <RecordFilterTemplateBar
+        :page-key="filterTemplatePageKey"
+        :current-filters="activeFilters"
+        :resolve-initial-filters="!urlHadExplicitFilters && !filtersInitialized"
+        :disabled="loading"
+        @apply="commitFilters"
+      />
       <div class="qc-record-result-list-view__toolbar">
         <div class="qc-record-result-list-view__filters" aria-label="病历筛选条件">
           <label
@@ -305,6 +312,9 @@ import QcRecordResultTable, {
 import QcRecordResultAnalysisPanel from './components/qc/QcRecordResultAnalysisPanel.vue'
 import QcRecordReviewPreview from './components/qc/QcRecordReviewPreview.vue'
 import QcRunSelectedControl from './components/qc/QcRunSelectedControl.vue'
+import RecordFilterTemplateBar from './components/qc/RecordFilterTemplateBar.vue'
+import { isEmptyRecordFilter, parseRecordFilterQuery } from './composables/recordFilterQuery'
+import { useRecordFilterUrlSync } from './composables/useRecordFilterUrlSync'
 import { usePatientRecords } from './composables/usePatientRecords'
 import type { PatientRecord, RecordLatestQcSummary } from './types'
 import type { LuxianQcAnalysisRecordItem } from '@/services/luxian-qc-result-analysis-service'
@@ -360,10 +370,31 @@ const {
   loading,
   qcSummary,
   refreshData,
+  reviewStateFilter,
   searchText,
   selectHospFilter,
   serverTotal,
 } = usePatientRecords(props.carePhase)
+
+const filterTemplatePageKey = computed(() =>
+  isInpatient.value ? 'v5_records_inpatient' : 'v5_records_discharged',
+)
+// 筛选以 URL query 为唯一来源；URL 未显式给出时由模板栏发出初始筛选（默认模板 > 系统默认）。
+const filterSync = useRecordFilterUrlSync({
+  state: {
+    activeDept,
+    activeDoctor,
+    searchText,
+    startDate,
+    endDate,
+    dateRange,
+    reviewStateFilter,
+    currentPage,
+  },
+  fetchData,
+  onBeforeLoad: clearSelection,
+})
+const { activeFilters, urlHadExplicitFilters, filtersInitialized, commitFilters } = filterSync
 
 const departmentOptions = computed(() =>
   departments.value.map((item) => item.name).filter((name) => name && name !== '全部科室'),
@@ -466,6 +497,7 @@ function handleSelectPreview(recordKey: string) {
 const emptyMessage = computed(() => {
   if (loading.value) return '正在加载质控结果…'
   if (loadError.value) return '加载失败，请重试'
+  if (!isEmptyRecordFilter(activeFilters.value)) return '当前筛选条件下暂无病历，可调整筛选或重置'
   return '暂无符合当前范围的病历'
 })
 
@@ -617,10 +649,7 @@ function formatQcCompletedAt(value?: string | null): string {
 }
 
 function applyFilters() {
-  clearSelection()
-  dateRange.value = startDate.value || endDate.value ? [startDate.value, endDate.value] : null
-  currentPage.value = 1
-  fetchData(1)
+  commitFilters(filterSync.currentFilterSnapshot())
 }
 
 function updateSelectedRecordKeys(recordKeys: string[]) {
@@ -779,10 +808,12 @@ watch(
 
 onMounted(async () => {
   dateField.value = props.carePhase === 'inpatient' ? 'admission' : 'discharge'
+  if (!urlHadExplicitFilters) return
   const requestedRecordKey = routeQueryText('record_key')
   const requestedVisitId = routeQueryText('visit_id')
-  if (requestedRecordKey && requestedVisitId) searchText.value = requestedVisitId
-  await fetchData(1)
+  const fromUrl = parseRecordFilterQuery(route.query)
+  if (requestedRecordKey && requestedVisitId && !fromUrl.keyword) fromUrl.keyword = requestedVisitId
+  await filterSync.loadFilters(fromUrl)
   if (requestedRecordKey) handleOpenResult(requestedRecordKey)
 })
 

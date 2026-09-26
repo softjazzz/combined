@@ -692,3 +692,52 @@ class QCRecordReview(Base):
             "institute_id", "patient_id", "visit_id", "rule_set_key", "created_at",
         ),
     )
+
+
+_FILTER_TEMPLATE_WS = "' \t\n\r\f\v'"
+
+
+class QCUserFilterTemplate(Base):
+    """用户个人筛选模板（迁移 59，V3.6 P1-A）。
+
+    只属于 owner_id 本人；每人每页最多一个默认模板（部分唯一索引），
+    version 用于 CAS；filters_json 由服务层按白名单键校验后写入。
+    """
+
+    __tablename__ = "qc_user_filter_templates"
+
+    id = Column(String(36), nullable=False)
+    owner_id = Column(String(64), nullable=False)
+    page_key = Column(String(48), nullable=False)
+    name = Column(String(50), nullable=False)
+    filters_json = Column(Text, nullable=False)
+    is_default = Column(Boolean, nullable=False, server_default=text("false"))
+    version = Column(Integer, nullable=False, server_default=text("1"))
+    created_at = Column(DateTime, nullable=False)
+    updated_at = Column(DateTime, nullable=False)
+
+    __table_args__ = (
+        PrimaryKeyConstraint("id", name="pk_qc_user_filter_templates"),
+        UniqueConstraint("owner_id", "page_key", "name", name="uq_qc_user_filter_templates_name"),
+        CheckConstraint(
+            "page_key IN ('v5_records_inpatient', 'v5_records_discharged')",
+            name="ck_qc_user_filter_templates_page_key",
+        ),
+        CheckConstraint(
+            f"trim(owner_id, {_FILTER_TEMPLATE_WS}) <> ''",
+            name="ck_qc_user_filter_templates_owner_nonblank",
+        ),
+        CheckConstraint(
+            f"trim(name, {_FILTER_TEMPLATE_WS}) <> ''",
+            name="ck_qc_user_filter_templates_name_nonblank",
+        ),
+        CheckConstraint("version > 0", name="ck_qc_user_filter_templates_version_positive"),
+        Index(
+            "uq_qc_user_filter_templates_default",
+            "owner_id",
+            "page_key",
+            unique=True,
+            postgresql_where=text("is_default"),
+            sqlite_where=text("is_default"),
+        ),
+    )
