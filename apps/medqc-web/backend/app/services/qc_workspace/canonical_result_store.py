@@ -376,12 +376,17 @@ def validated_customer_explanation(
 
 
 def envelope_item_from_rule_result(
-    item: Dict[str, Any], *, hmac_key: str | None = None,
+    item: Dict[str, Any],
+    *,
+    hmac_key: str | None = None,
+    publication_key_provider: Callable[[], bytes] | None = None,
 ) -> Dict[str, Any]:
     """截取 RuleDecision 交付所需字段，避免 Envelope 变成任务调试日志。"""
 
     if CUSTOMER_TEXT_SEAL_KEY in item:
-        assert_published_customer_text_unchanged(item)
+        assert_published_customer_text_unchanged(
+            item, key_provider=publication_key_provider,
+        )
 
     allowed_keys = {
         "schema_version", "record_id", "institute_id", "patient_id", "visit_id",

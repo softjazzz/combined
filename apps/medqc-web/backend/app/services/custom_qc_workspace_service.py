@@ -41,6 +41,7 @@ from .luxian_0609.customer_remediation import build_customer_remediation_suggest
 from .luxian_0609.customer_text_publication import (
     CUSTOMER_TEXT_SEAL_KEY,
     assert_published_customer_text_unchanged,
+    operation_publication_key,
 )
 from .luxian_0609.record_result_read_model import (
     _generation_key,
@@ -5010,9 +5011,14 @@ class CustomQCWorkspaceService:
 
     @staticmethod
     def _envelope_item_from_rule_result(
-        item: Dict[str, Any], *, hmac_key: str | None = None,
+        item: Dict[str, Any],
+        *,
+        hmac_key: str | None = None,
+        publication_key_provider: Callable[[], bytes] | None = None,
     ) -> Dict[str, Any]:
-        return envelope_item_from_rule_result(item, hmac_key=hmac_key)
+        return envelope_item_from_rule_result(
+            item, hmac_key=hmac_key, publication_key_provider=publication_key_provider,
+        )
 
     def _write_record_result_envelopes(
         self,
@@ -5025,6 +5031,7 @@ class CustomQCWorkspaceService:
     ) -> tuple[tuple[CaseRef, str], ...]:
         # 一次保存使用同一份配置，下一次操作仍读取最新密钥。
         projection_key = customer_safe_projection_key()
+        publication_key_provider = operation_publication_key()
         envelope_job_row = job_row
         if expected_record_refs is not None:
             filters = _safe_json_loads(job_row.get("filters_json"), {})
@@ -5039,7 +5046,11 @@ class CustomQCWorkspaceService:
             job_row=envelope_job_row,
             items=items,
             now=now,
-            projector=partial(self._envelope_item_from_rule_result, hmac_key=projection_key),
+            projector=partial(
+                self._envelope_item_from_rule_result,
+                hmac_key=projection_key,
+                publication_key_provider=publication_key_provider,
+            ),
             collect_receipts=diagnostic_capture_enabled(),
             projection_key=projection_key,
         )

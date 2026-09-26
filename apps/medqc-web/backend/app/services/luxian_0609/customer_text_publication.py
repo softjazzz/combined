@@ -6,7 +6,7 @@ import hashlib
 import hmac
 import json
 import re
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 from ...core.settings import get_settings
 
@@ -58,21 +58,38 @@ def _publication_key() -> bytes:
     return secret.encode("utf-8")
 
 
-def seal_published_customer_text(item: Mapping[str, Any]) -> str:
+def operation_publication_key() -> Callable[[], bytes]:
+    """返回单次操作内复用的取钥函数：首次校验时读配置，不跨操作缓存。"""
+
+    resolved: list[bytes] = []
+
+    def key() -> bytes:
+        if not resolved:
+            resolved.append(_publication_key())
+        return resolved[0]
+
+    return key
+
+
+def seal_published_customer_text(
+    item: Mapping[str, Any], *, key_provider: Callable[[], bytes] | None = None,
+) -> str:
     """正式聚合器在最后一次文案修改后生成；不用于普通 DTO 或 Prompt。"""
 
     digest = hmac.new(
-        _publication_key(), _publication_material(item), hashlib.sha256
+        (key_provider or _publication_key)(), _publication_material(item), hashlib.sha256
     ).hexdigest()
     return f"{_SEAL_VERSION}:{digest}"
 
 
-def assert_published_customer_text_unchanged(item: Mapping[str, Any]) -> None:
+def assert_published_customer_text_unchanged(
+    item: Mapping[str, Any], *, key_provider: Callable[[], bytes] | None = None,
+) -> None:
     """有证明但文案已改变时拒绝交付；旧无证明结果由安全回退处理。"""
 
     seal = item.get(CUSTOMER_TEXT_SEAL_KEY)
     if not isinstance(seal, str) or not _SEAL_PATTERN.fullmatch(seal):
         raise ValueError(LX0609_CUSTOMER_RESULT_CONTRACT_ERROR)
-    expected = seal_published_customer_text(item)
+    expected = seal_published_customer_text(item, key_provider=key_provider)
     if not hmac.compare_digest(seal, expected):
         raise ValueError(LX0609_CUSTOMER_RESULT_CONTRACT_ERROR)

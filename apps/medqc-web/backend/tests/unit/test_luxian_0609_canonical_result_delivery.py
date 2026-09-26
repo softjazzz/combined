@@ -2880,11 +2880,13 @@ def test_writer_uses_facade_envelope_item_projector(monkeypatch):
         **_published_pilot_item_for_read_boundary("LX0609-01-01-01"),
         "projected_by_facade": True,
     }
-    monkeypatch.setattr(
-        service,
-        "_envelope_item_from_rule_result",
-        lambda item, *, hmac_key=None: dict(projected_item),
-    )
+    key_providers = []
+
+    def facade_projector(item, *, hmac_key=None, publication_key_provider=None):
+        key_providers.append(publication_key_provider)
+        return dict(projected_item)
+
+    monkeypatch.setattr(service, "_envelope_item_from_rule_result", facade_projector)
 
     service._write_record_result_envelopes(
         session,
@@ -2902,6 +2904,8 @@ def test_writer_uses_facade_envelope_item_projector(monkeypatch):
         now=datetime(2026, 8, 15, 10, 0, 0),
     )
 
+    # 保存操作向门面传入单次操作的签章取钥函数。
+    assert len(key_providers) == 1 and callable(key_providers[0])
     insert_params = session.statements[-1].compile().params
     envelope = json.loads(insert_params["envelope_json"])
     assert envelope["items"] == [{**projected_item, "record_ref": envelope["record_ref"]}]

@@ -7,7 +7,9 @@ from types import SimpleNamespace
 
 import pytest
 
+import app.core.settings as settings_module
 import app.services.custom_qc_workspace_service as workspace
+import app.services.luxian_0609.customer_text_publication as publication
 import app.services.qc_workspace.canonical_result_store as canonical
 from tests.luxian_0609_published_result_support import published_lx0609_items
 
@@ -57,12 +59,65 @@ def test_2160_items_read_projection_settings_once(monkeypatch):
         calls.append(1)
         return SimpleNamespace(JWT_SECRET='synthetic-key')
     monkeypatch.setattr(canonical, 'get_settings', settings)
+    # 签章按发布时的真实配置生成；先完成发布，只计数保存阶段且不替换密钥。
+    _published_templates()
+    publication_calls = []
+    real_settings = settings_module.get_settings
+    def publication_settings():
+        publication_calls.append(1)
+        return real_settings()
+    monkeypatch.setattr(publication, 'get_settings', publication_settings)
     rules = len(_published_templates())
     visits = 2160 // rules
     saved = write(monkeypatch, [item(v, r) for v in range(visits) for r in range(1, rules + 1)])
     assert len(saved) == visits
     assert sum(len(e['items']) for e in saved) == 2160
     assert len(calls) == 1
+    # 2160 条均带发布签章并逐条校验，但一次保存只读取一次签章密钥。
+    assert all('customer_text_seal' in entry for e in saved for entry in e['items'])
+    assert len(publication_calls) == 1
+
+
+def test_publication_key_is_reused_within_save_and_reread_after_rotation(monkeypatch):
+    monkeypatch.setattr(canonical, 'get_settings', lambda: SimpleNamespace(JWT_SECRET='synthetic-key'))
+    real_settings = settings_module.get_settings
+    _published_templates()
+    reads = []
+    rotated = SimpleNamespace(JWT_SECRET='rotated-publication-key')
+    def publication_settings():
+        reads.append(1)
+        return real_settings() if len(reads) == 1 else rotated
+    monkeypatch.setattr(publication, 'get_settings', publication_settings)
+
+    first = write(monkeypatch, [item(v, r) for v in range(3) for r in (1, 2, 3)])
+    assert len(first) == 3 and len(reads) == 1
+    # 下一次保存必须重新读取配置；密钥已轮换，旧签章不再成立而被拒绝，不重新签章。
+    with pytest.raises(ValueError, match='客户结果解释合同不完整'):
+        write(monkeypatch, [item()])
+    assert len(reads) == 2
+
+
+def test_save_rejects_tampered_published_text_within_reused_key_batch(monkeypatch):
+    monkeypatch.setattr(canonical, 'get_settings', lambda: SimpleNamespace(JWT_SECRET='synthetic-key'))
+    batch = [item(v, r) for v in range(3) for r in (1, 2, 3)]
+    tampered = next(entry for entry in batch if entry.get('findings'))
+    tampered['findings'] = tampered['findings'] + '（改写）'
+    with pytest.raises(ValueError, match='客户结果解释合同不完整'):
+        write(monkeypatch, batch)
+
+
+def test_operation_publication_key_reads_config_lazily_once(monkeypatch):
+    reads = []
+    def publication_settings():
+        reads.append(1)
+        return SimpleNamespace(JWT_SECRET='lazy-key')
+    monkeypatch.setattr(publication, 'get_settings', publication_settings)
+    provider = publication.operation_publication_key()
+    assert reads == []
+    assert provider() == provider() == b'lazy-key'
+    assert len(reads) == 1
+    assert publication.operation_publication_key()() == b'lazy-key'
+    assert len(reads) == 2
 
 
 def test_save_rejects_published_result_missing_rule_facts(monkeypatch):
