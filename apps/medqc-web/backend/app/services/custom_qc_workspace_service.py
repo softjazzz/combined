@@ -680,24 +680,34 @@ def project_customer_safe_result_item(
 def _customer_filtered_saved_text(
     item: Dict[str, Any], *, identity: Mapping[str, Any],
 ) -> Dict[str, Any]:
-    """已保存条目原样返回；仅违反客户文本过滤合同的结论、建议字段按与客户
-    投影相同的规则回退为该状态的通用文案，不重生成、不截断正常文本。"""
+    """已保存条目原样返回；主显示结论、建议与客户投影使用同一别名优先级、
+    安全检查和回退选择，不重生成、不截断正常文本。"""
 
     filtered = dict(item)
     generic = _GENERIC_CUSTOMER_TEXT.get(_canonical_customer_status(item))
     if generic is None:
         return filtered
     probe_identity = {**item, **identity}
-    for keys, fallback in (
-        (_CUSTOMER_CONCLUSION_KEYS + ("findings",), generic[0]),
-        (_CUSTOMER_SUGGESTION_KEYS, generic[1]),
+    for keys, extra_aliases, fallback in (
+        (_CUSTOMER_CONCLUSION_KEYS, ("findings",), generic[0]),
+        (_CUSTOMER_SUGGESTION_KEYS, (), generic[1]),
     ):
-        for key in keys:
+        aliases = (*keys, *extra_aliases)
+        if not any(
+            isinstance(filtered.get(key), str) and filtered[key].strip() for key in aliases
+        ):
+            # 未保存任何该类文案时保持原样，不在读取层补写新文案。
+            continue
+        # 与批详情/导出相同：主字段禁止时继续选合法备用别名，全部禁止才回退。
+        selected = _explicit_customer_text(probe_identity, keys, fallback, preserve_length=True)
+        filtered[keys[0]] = selected
+        for key in (*keys[1:], *extra_aliases):
             value = filtered.get(key)
             if isinstance(value, str) and value.strip() and not _customer_text_is_safe(
                 _safe_text(value), identity=probe_identity,
             ):
-                filtered[key] = fallback
+                # 其余公开别名不得重新输出禁止内容，统一为已选的安全主文案。
+                filtered[key] = selected
     return filtered
 
 

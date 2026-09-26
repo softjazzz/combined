@@ -811,3 +811,153 @@ def test_customer_text_filter_is_consistent_across_latest_detail_and_exports(
     _entry_job_ids(app=app, workspace=workspace, pool_id=pool_id, sample_item_id=sample_id,
                    workspace_rule_ids=["LX0609-03-01-04"], on_terminal=verify)
     assert len(checked) == 3
+
+
+
+_CONCLUSION_ALIASES = ("conclusion", "customer_conclusion", "customer_message", "customer_summary", "findings")
+_SUGGESTION_ALIASES = ("suggestion", "customer_suggestion", "customer_recommendation", "customer_action")
+_LEGAL_CONCLUSION = "会诊建议执行记录不具体，未写明执行时间与结果。"
+_LEGAL_SUGGESTION = "请在会诊执行记录中补充建议的执行时间、执行人及结果。"
+_LONG_CONCLUSION = "\n".join(f"第{i}项：会诊建议执行情况需逐条核对并记录。" for i in range(1, 16))
+_LONG_SUGGESTION = "\n".join(f"第{i}步：补充会诊建议的执行时间、执行人及结果。" for i in range(1, 16))
+
+
+def _alias_scenario(name: str, visit_id: str) -> dict[str, str]:
+    """发布边界写入的结论/建议别名；禁止内容为内部术语或本病例就诊号。"""
+
+    bad_conclusion = "内部 prompt 核对信息"
+    bad_suggestion = f"请核对就诊{visit_id}的会诊记录。"
+    if name == "primary-forbidden-alias-legal":
+        return {"conclusion": bad_conclusion, "customer_conclusion": _LEGAL_CONCLUSION,
+                "suggestion": bad_suggestion, "customer_suggestion": _LEGAL_SUGGESTION}
+    if name == "primary-legal-alias-forbidden":
+        return {"conclusion": _LEGAL_CONCLUSION, "customer_conclusion": bad_conclusion,
+                "suggestion": _LEGAL_SUGGESTION, "customer_suggestion": bad_suggestion}
+    if name == "all-aliases-forbidden":
+        return {"conclusion": bad_conclusion, "customer_conclusion": bad_conclusion,
+                "customer_message": bad_conclusion, "findings": bad_conclusion,
+                "suggestion": bad_suggestion, "customer_suggestion": bad_suggestion}
+    assert name == "normal-long-multiline"
+    return {"conclusion": _LONG_CONCLUSION, "suggestion": _LONG_SUGGESTION}
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("scenario", [
+    "primary-forbidden-alias-legal", "primary-legal-alias-forbidden",
+    "all-aliases-forbidden", "normal-long-multiline",
+])
+def test_customer_exits_choose_same_safe_text_across_aliases(
+    monkeypatch, _isolated_database, scenario,
+):
+    """同一份正式结果：latest-result、批详情与三格式导出按同一别名优先级与过滤选择主文案。"""
+
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    engine, workspace = _isolated_database
+    pool_service = _install_sample_pool_sqlite(monkeypatch, engine)
+    _install_evidence_fixture(monkeypatch, consultation_row=True)
+    service = sichuan_qc_service.SichuanQCService({
+        "provider_code": "isolated", "model": "stable-semantic",
+        "allow_mock_when_unconfigured": True, "source": "lx075-semantic",
+    })
+    _wire_production_entry(monkeypatch, workspace, pool_service, _settings(), service)
+
+    async def stable_generate(_self, prompt, **_kwargs):
+        ref = json.loads(prompt.rsplit("输入：", 1)[1])["consultation_documents"][0]["ref"]
+        return {
+            "content": {"episodes": [{
+                "episode_ref": ref, "member_refs": [ref], "application_refs": [ref],
+                "opinion_refs": [ref], "application_state": "clear", "opinion_state": "clear",
+                "confidence": "high", "recommendations": [{
+                    "recommendation_ref": f"{ref}#r1", "opinion_ref": ref,
+                    "source_quote": "建议复查血常规", "normalized_action": "复查血常规",
+                    "action_type": "test",
+                }],
+            }], "non_target_refs": [], "unresolved_refs": []},
+            "usage": {"prompt_tokens": 17, "completion_tokens": 5, "total_tokens": 22},
+            "_api_time": 0.01,
+        }
+
+    monkeypatch.setattr(sichuan_qc_service.SichuanQCLLMClient, "generate", stable_generate)
+    original_aggregate = luxian_execution.aggregate_luxian_0609_results
+    published: dict[str, dict[str, Any]] = {}
+
+    def inject(**kwargs):
+        result = original_aggregate(**kwargs)
+        visit_id = kwargs["audit_context"]["visit_id"]
+        result[0].update(_alias_scenario(scenario, visit_id))
+        published[visit_id] = deepcopy(result[0])
+        return result
+
+    monkeypatch.setattr(luxian_execution, "aggregate_luxian_0609_results", inject)
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", CustomQCWorkspaceService)
+    app = _api_app(service)
+    checked: list[str] = []
+    rule_id = "LX0609-03-01-04"
+
+    def forbidden_tokens():
+        return (" prompt", *(f"就诊{visit_id}" for visit_id in published))
+
+    def verify(job_id, job, _ids):
+        assert job["status"] == "completed", job.get("error_message")
+        latest = _read_canonical(app, job_id, _RECORD_A, [rule_id])[rule_id]
+        base = f"/api/v1/qc/sichuan/workspace/batch-jobs/{job_id}"
+        with TestClient(app) as client:
+            detail_items = client.get(base).json()["data"]["items"]
+            html = client.get(f"{base}/export", params={"format": "html"}).text
+            csv_text = client.get(f"{base}/export", params={"format": "csv"}).text
+            xlsx = client.get(f"{base}/export", params={"format": "xlsx"}).content
+        detail = next(
+            item for item in detail_items
+            if item["rule_id"] == rule_id and item["record_ref"] == latest["record_ref"]
+        )
+        workbook = load_workbook(BytesIO(xlsx), read_only=True)
+        workbook_text = "\n".join(
+            str(value) for sheet in workbook.worksheets
+            for row in sheet.iter_rows(values_only=True) for value in row if value is not None
+        )
+        # 1) 各出口的主显示结论、建议相同。
+        assert (latest["conclusion"], latest["suggestion"]) == (
+            detail["conclusion"], detail["suggestion"],
+        )
+        for text in (latest["conclusion"], latest["suggestion"]):
+            assert all(line in html for line in text.split("\n"))
+            assert text in csv_text and text in workbook_text
+        # 2) 公开响应的任何文案别名都不输出禁止内容。
+        for item in (latest, detail):
+            for key in (*_CONCLUSION_ALIASES, *_SUGGESTION_ALIASES):
+                value = item.get(key)
+                assert not (
+                    isinstance(value, str) and any(t in value for t in forbidden_tokens())
+                ), (key, value)
+        for exported in (html, csv_text, workbook_text):
+            assert not any(t in exported for t in forbidden_tokens())
+        # 3) 合法主字段优先，其次合法备用别名；全部禁止才用既有通用回退。
+        if scenario in ("primary-forbidden-alias-legal", "primary-legal-alias-forbidden"):
+            assert (latest["conclusion"], latest["suggestion"]) == (_LEGAL_CONCLUSION, _LEGAL_SUGGESTION)
+        elif scenario == "normal-long-multiline":
+            assert (latest["conclusion"], latest["suggestion"]) == (_LONG_CONCLUSION, _LONG_SUGGESTION)
+        else:
+            assert latest["conclusion"] and latest["suggestion"]
+        # 4) 库内权威原文及其他业务字段不变。
+        table = workspace._record_result_envelope_table
+        with engine.connect() as connection:
+            (saved_json,) = connection.execute(
+                sa.select(table.c.envelope_json).where(
+                    table.c.job_id == job_id, table.c.visit_id == _RECORD_A["visit_id"],
+                )
+            ).one()
+        saved = json.loads(saved_json)["items"][0]
+        origin = published[_RECORD_A["visit_id"]]
+        for key, value in _alias_scenario(scenario, _RECORD_A["visit_id"]).items():
+            assert saved[key] == value, key
+        for key in ("status", "reason_code", "customer_display_facts"):
+            assert saved[key] == origin[key] == latest[key], key
+        checked.append(job_id)
+
+    pool_id, sample_id = _create_ready_sample_pool(engine, pool_service)
+    _entry_job_ids(app=app, workspace=workspace, pool_id=pool_id, sample_item_id=sample_id,
+                   workspace_rule_ids=[rule_id], on_terminal=verify)
+    assert len(checked) == 3
