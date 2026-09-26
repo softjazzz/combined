@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from backend.scripts.audit_sample_sync_incremental_capabilities import (
+from scripts.audit_sample_sync_incremental_capabilities import (
     REQUIRED_PRIMARY_VISIBILITY_TABLES,
     audit_table_capability,
     audit_tables,
