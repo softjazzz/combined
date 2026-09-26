@@ -3,7 +3,7 @@ import { ref, onMounted, computed, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { getTodoStats, getPerformanceRanking } from '@/api/dashboard'
-import type { TodoStats, PerformanceData, DashboardScene } from '@/api/dashboard'
+import type { TodoStats, PerformanceData, PerformancePeriod, DashboardScene } from '@/api/dashboard'
 import { getTaskTodoStats } from '@/api/tasks'
 import { getAppeals } from '@/api/appeal'
 import type { WorkstationLaunchAction, WorkflowStageKey } from '@/types/workflow'
@@ -11,6 +11,7 @@ import { getAccessToken } from '@/utils/auth-token'
 import QCTrendChart from '@/components/charts/QCTrendChart.vue'
 import TodoBoard from '@/components/dashboard/TodoBoard.vue'
 import PerformanceBoard from '@/components/dashboard/PerformanceBoard.vue'
+import type { PerformanceBoardStatus } from '@/components/dashboard/PerformanceBoard.vue'
 import {
   ReloadOutlined,
   PlusOutlined,
@@ -104,8 +105,12 @@ const workflowCards = ref<WorkflowEntryCard[]>([
   },
 ])
 
-// 排名数据
+// 排名数据：失败/加载中不保留旧数据，也不补示例或 0
+const performancePeriod = ref<PerformancePeriod>('this_week')
+const performanceStatus = ref<PerformanceBoardStatus>('loading')
 const performanceData = ref<PerformanceData | null>(null)
+const performanceError = ref('')
+let performanceRequestId = 0
 
 // TodoBoard 原始数据
 const emptyTodoStats = (): TodoStats => ({
@@ -283,19 +288,34 @@ const refreshData = async () => {
   }
 }
 
-// 排名周期切换
-const handlePeriodChange = async (period: string) => {
+// 加载工作表现排名；周期或场景切换后，迟到的旧响应一律丢弃
+const loadPerformance = async () => {
+  const requestId = ++performanceRequestId
+  const period = performancePeriod.value
+  const scene = currentScene.value
+  performanceStatus.value = 'loading'
+  performanceData.value = null
+  performanceError.value = ''
+  let result: Awaited<ReturnType<typeof getPerformanceRanking>>
   try {
-    const res = await getPerformanceRanking(
-      period as 'this_week' | 'last_week' | 'this_month',
-      currentScene.value,
-    )
-    if (res.success && res.data) {
-      performanceData.value = res.data
-    }
-  } catch (err) {
-    console.error('切换排名周期失败:', err)
+    result = await getPerformanceRanking(period, scene)
+  } catch {
+    result = { success: false, message: '网络异常' }
   }
+  if (requestId !== performanceRequestId) return
+  if (result.success && result.data) {
+    performanceData.value = result.data
+    performanceStatus.value = 'ready'
+  } else {
+    performanceStatus.value = 'error'
+    performanceError.value = result.message || ''
+  }
+}
+
+// 排名周期切换
+const handlePeriodChange = async (period: PerformancePeriod) => {
+  performancePeriod.value = period
+  await loadPerformance()
 }
 
 function availableNumber(value: number | null | undefined): number | null {
@@ -314,13 +334,17 @@ function formatStat(value: number | null): string {
 const fetchDashboardData = async () => {
   const requestId = ++dashboardRequestId
   const scene = currentScene.value
-  const [overviewResult, taskResult, appealResult, rankingResult] = await Promise.allSettled([
+  // 排名独立加载并自带迟到丢弃，失败不遮蔽待办统计
+  const performanceTask = loadPerformance()
+  const [overviewResult, taskResult, appealResult] = await Promise.allSettled([
     getTodoStats(scene),
     getTaskTodoStats(),
     getAppeals({ status: 'reviewable', page: 1, pageSize: 1 }),
-    getPerformanceRanking('this_week', scene),
   ])
-  if (requestId !== dashboardRequestId) return
+  if (requestId !== dashboardRequestId) {
+    await performanceTask
+    return
+  }
 
   const todoPayload = overviewResult.status === 'fulfilled' && overviewResult.value.success
     ? overviewResult.value.data
@@ -356,10 +380,7 @@ const fetchDashboardData = async () => {
   }
   todoStatsRaw.value = nextTodo
 
-  performanceData.value = rankingResult.status === 'fulfilled' && rankingResult.value.success
-    ? rankingResult.value.data ?? null
-    : null
-  await fetchWorkflowCards()
+  await Promise.all([performanceTask, fetchWorkflowCards()])
 }
 
 const fetchWorkflowCards = async () => {
@@ -441,9 +462,8 @@ onMounted(async () => {
 watch(
   () => route.query.scene,
   async () => {
-    if (!loading.value) {
-      await fetchDashboardData()
-    }
+    // 首屏未完成时也要按新场景重取；旧请求由 requestId 丢弃
+    await fetchDashboardData()
   },
 )
 </script>
@@ -652,8 +672,12 @@ watch(
         </div>
         <div class="lg:col-span-4">
           <PerformanceBoard
-            :ranking-data="performanceData || {}"
+            :period="performancePeriod"
+            :status="performanceStatus"
+            :data="performanceData"
+            :error-message="performanceError"
             @period-change="handlePeriodChange"
+            @retry="loadPerformance"
           />
         </div>
       </div>

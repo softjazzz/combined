@@ -64,18 +64,128 @@ export interface TodoStats {
   scene?: DashboardScene
 }
 
-export interface RankingItem {
-  name: string
+export type PerformancePeriod = 'this_week' | 'last_week' | 'this_month'
+export type PerformanceUnavailableReason = 'scene_not_attributable'
+
+/** 排名项公共字段：name 取 sys_users.display_name，缺失时为 null，由前端回退显示 user_id */
+interface RankingItemBase {
+  user_id: string
+  name: string | null
   count: number
+  /** 竞争排名（1、1、3） */
   rank: number
 }
 
+/** 质控缺陷排名项：按人工缺陷创建人统计 */
+export interface DefectRankingItem extends RankingItemBase {
+  approved_count: number
+  rejected_count: number
+}
+
+/** 质控病历排名项：按病历审核决定人统计 */
+export interface RecordRankingItem extends RankingItemBase {
+  initial_count: number
+  recheck_count: number
+}
+
+export interface PerformanceRange {
+  start: string
+  end: string
+}
+
+/** 工作表现排名；排名为 null 时必须带不可用原因，不以空数组或 0 代替 */
 export interface PerformanceData {
-  defect_ranking: RankingItem[]
-  record_ranking: RankingItem[]
-  period: string
+  period: PerformancePeriod
   period_label: string
-  scene?: DashboardScene
+  range: PerformanceRange
+  scene: DashboardScene
+  defect_ranking: DefectRankingItem[] | null
+  record_ranking: RecordRankingItem[] | null
+  unavailable_reason: PerformanceUnavailableReason | null
+}
+
+const PERFORMANCE_PERIODS: readonly PerformancePeriod[] = ['this_week', 'last_week', 'this_month']
+const DASHBOARD_SCENES: readonly DashboardScene[] = ['all', 'outpatient_emergency', 'running', 'final']
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function isCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0
+}
+
+function normalizeRankingBase(raw: Record<string, unknown>): RankingItemBase | null {
+  const userId = typeof raw.user_id === 'number' && Number.isFinite(raw.user_id)
+    ? String(raw.user_id)
+    : raw.user_id
+  if (typeof userId !== 'string' || !userId.trim()) return null
+  if (raw.name !== null && typeof raw.name !== 'string') return null
+  if (!isCount(raw.count) || !isCount(raw.rank) || raw.rank < 1) return null
+  const name = typeof raw.name === 'string' && raw.name.trim() ? raw.name : null
+  return { user_id: userId, name, count: raw.count, rank: raw.rank }
+}
+
+function normalizeRankingList<T>(
+  raw: unknown,
+  mapItem: (item: Record<string, unknown>) => T | null,
+): T[] | null | undefined {
+  // 返回 undefined 表示格式非法；null 表示服务端声明不可用
+  if (raw === null) return null
+  if (!Array.isArray(raw)) return undefined
+  const items: T[] = []
+  for (const entry of raw) {
+    if (!isRecord(entry)) return undefined
+    const item = mapItem(entry)
+    if (!item) return undefined
+    items.push(item)
+  }
+  return items
+}
+
+function normalizeDefectItem(raw: Record<string, unknown>): DefectRankingItem | null {
+  const base = normalizeRankingBase(raw)
+  if (!base || !isCount(raw.approved_count) || !isCount(raw.rejected_count)) return null
+  return { ...base, approved_count: raw.approved_count, rejected_count: raw.rejected_count }
+}
+
+function normalizeRecordItem(raw: Record<string, unknown>): RecordRankingItem | null {
+  const base = normalizeRankingBase(raw)
+  if (!base || !isCount(raw.initial_count) || !isCount(raw.recheck_count)) return null
+  return { ...base, initial_count: raw.initial_count, recheck_count: raw.recheck_count }
+}
+
+/**
+ * 严格校验 /dashboard/performance 响应；任何字段不符合合同即返回 null（按请求失败处理），
+ * 不做缺省补 0 或示例兜底。
+ */
+export function normalizePerformanceData(raw: unknown): PerformanceData | null {
+  if (!isRecord(raw)) return null
+  const period = raw.period as PerformancePeriod
+  const scene = raw.scene as DashboardScene
+  if (!PERFORMANCE_PERIODS.includes(period) || !DASHBOARD_SCENES.includes(scene)) return null
+  if (typeof raw.period_label !== 'string') return null
+  const range = raw.range
+  if (!isRecord(range) || typeof range.start !== 'string' || typeof range.end !== 'string') return null
+  const rawReason = raw.unavailable_reason
+  if (rawReason !== null && rawReason !== 'scene_not_attributable') return null
+  const reason: PerformanceUnavailableReason | null = rawReason === null ? null : 'scene_not_attributable'
+
+  const defectRanking = normalizeRankingList(raw.defect_ranking, normalizeDefectItem)
+  const recordRanking = normalizeRankingList(raw.record_ranking, normalizeRecordItem)
+  if (defectRanking === undefined || recordRanking === undefined) return null
+  // 排名为 null 必须有不可用原因，否则无法区分“不支持”与“缺数据”
+  if ((defectRanking === null || recordRanking === null) && reason === null) return null
+
+  return {
+    period,
+    period_label: raw.period_label,
+    range: { start: range.start, end: range.end },
+    scene,
+    defect_ranking: defectRanking,
+    record_ranking: recordRanking,
+    unavailable_reason: reason,
+  }
 }
 
 export interface DashboardOverview {
@@ -99,16 +209,20 @@ export async function getTodoStats(scene: DashboardScene = 'all') {
   })
 }
 
-/** 获取工作表现排名 */
+/** 获取工作表现排名；响应不符合合同时按失败返回，不回退示例数据 */
 export async function getPerformanceRanking(
-  period: 'this_week' | 'last_week' | 'this_month' = 'this_week',
+  period: PerformancePeriod = 'this_week',
   scene: DashboardScene = 'all',
-) {
-  return request<PerformanceData>({
+): Promise<{ success: boolean; data?: PerformanceData; message?: string }> {
+  const result = await request<unknown>({
     method: 'GET',
     url: `${BASE_URL}/performance`,
     params: { period, scene },
   })
+  if (!result.success) return { success: false, message: result.message }
+  const data = normalizePerformanceData(result.data)
+  if (!data) return { success: false, message: '排名数据格式异常' }
+  return { success: true, data, message: result.message }
 }
 
 /** 获取概览数据 */

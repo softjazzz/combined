@@ -623,3 +623,9 @@
 - 前端新增快捷筛选（全部/待审核/待复审/审核中，后三项仅审核角色）与模板工具栏（应用、另存为、更新、设/取消默认、删除、重置）；审核角色默认“审核中”，默认模板优先；URL query 为筛选唯一来源，审核角色显式选“全部”写入仅前端标记 `review_scope=all` 以便刷新保持（不发后端、不入模板）。
 - 验证：隔离库升级至 revision59 并回读双 schema 与部分唯一索引；真实 PG 冒烟（第二默认自动替换、过期 version 409、并发设默认后恰一个默认），合成行已清理。后端新增与受影响 275/275、Ruff；前端 vue-tsc、只读全量 ESLint、全量 Vitest 181/181 文件。`test_medical_records_service.py::test_get_documents_concat_mode_handles_missing_table` 在干净 HEAD 同样失败，为既存问题。未做浏览器验收，PRD 覆盖状态不提升。
 
+## 77. 第七十一批：工作表现排名改为权威口径（P1-B）
+
+- 证据：`/dashboard/performance` 原按旧 `qc_results.analyzed_by` 计行，缺陷与病历两排名同口径；`last_week` 无结束边界含本周；吞异常；无数据时返回写死的示例人名和数字（伪造）。
+- 按 `docs/plans/2026-09-27-v36-performance-ranking-design.md` 重写：质控病历排名取 `qc_record_reviews` 按审核人聚合（初审/复审分计，两上下文都计入）；质控缺陷排名取任务人工缺陷按创建人聚合（最早 `manual_create` 落窗，附通过/驳回数，自动缺陷不计）；窗口按 Asia/Shanghai 左闭右开转 naive UTC；SQL 聚合、前 10、竞争排名、显示名批量读取；场景非 all 时两排名为 null 并注明不可归属；故障脱敏 503，删除示例兜底。前端排名改纯展示组件，独立加载、丢弃迟到响应，失败可重试不显示数字，旧示例结构按失败处理；首页场景切换不再因首屏加载中被忽略。
+- 验证：后端排名/首页相关 68/68、Ruff；隔离库只读实跑三周期聚合（本周起 09-21 周一 00:00、上周 09-14~09-21）；前端 vue-tsc、只读全量 ESLint、全量 Vitest 183/183 文件。`tests/test_new_features.py` 全文件 401 为既存问题。requirements 未列 tzdata（沿用既有 ZoneInfo 用法，Windows 部署需确认）。未做浏览器验收。
+

@@ -41,13 +41,19 @@ def test_dashboard_stats(auth_headers, monkeypatch):
     assert "task_stats" in data["data"]
     assert "defect_stats" in data["data"]
 
-def test_dashboard_performance(auth_headers):
-    # P1 Dashboard 工作表现排名
+def test_dashboard_performance(auth_headers, monkeypatch):
+    # P1 Dashboard 工作表现排名：按 V3.6 排名合同，服务结果原样返回，不再兜底示例数据。
+    stub = {
+        "period": "this_week", "period_label": "本周",
+        "range": {"start": "2026-09-21T00:00:00+08:00", "end": "2026-09-27T10:00:00+08:00"},
+        "scene": "all", "defect_ranking": [], "record_ranking": [], "unavailable_reason": None,
+    }
+    monkeypatch.setattr(dashboard_api, "get_performance_ranking_data", lambda **_kwargs: stub)
     response = client.get("/api/v1/dashboard/performance?period=this_week", headers=auth_headers)
     assert response.status_code == 200
     data = response.json()
     assert data["success"] is True
-    assert "defect_ranking" in data["data"]
+    assert data["data"] == stub
 
 def test_scoring_rules_crud(auth_headers):
     # P8 评分规则：List -> Create -> Update -> Delete

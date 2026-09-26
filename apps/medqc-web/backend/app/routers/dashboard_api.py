@@ -10,19 +10,24 @@
 import asyncio
 import logging
 import os
-from datetime import datetime, timedelta
 from typing import Dict, Any, Literal
 
 from fastapi import APIRouter, Request, Depends, Query, HTTPException
+from starlette.concurrency import run_in_threadpool
 
 from ..core.supabase_client import get_supabase, async_execute
 from ..core.response import success_response, get_trace_id
 from ..core.security import get_current_user
+from ..services.performance_ranking_service import (
+    PerformanceRankingInvalid,
+    get_performance_ranking as get_performance_ranking_data,
+)
 
 router = APIRouter(prefix="/api/v1/dashboard", tags=["dashboard"])
 logger = logging.getLogger(__name__)
 _DB_STATS_TIMEOUT_SECONDS = float(os.getenv("DASHBOARD_DB_STATS_TIMEOUT_SECONDS", "2.0"))
 DashboardScene = Literal["all", "outpatient_emergency", "running", "final"]
+_PERFORMANCE_UNAVAILABLE_DETAIL = "工作表现排名暂不可用，请稍后重试"
 
 OUTPATIENT_EMERGENCY_TYPES = {
     "outpatient",
@@ -381,129 +386,23 @@ async def get_performance_ranking(
     current_user: dict = Depends(get_current_user),
 ):
     """
-    获取工作表现排名（缺陷排名 + 病历排名）
+    获取工作表现排名（质控缺陷排名 + 质控病历排名），口径见
+    docs/plans/2026-09-27-v36-performance-ranking-design.md 第 2、3 节。
 
-    返回:
-    {
-      "defect_ranking": [ { "name": "张三", "count": 45, "rank": 1 }, ... ],
-      "record_ranking": [ { "name": "李四", "count": 120, "rank": 1 }, ... ],
-      "period": "this_week",
-      "period_label": "本周"
-    }
+    - period 非法返回 422；
+    - scene 非 all 时两个排名为 null，并附 unavailable_reason="scene_not_attributable"；
+    - 数据库故障固定脱敏为 503，不兜底示例数据，也不静默返回空列表。
     """
-    # 计算时间范围
-    now = datetime.now()
-    if period == "this_week":
-        start = now - timedelta(days=now.weekday())
-        label = "本周"
-    elif period == "last_week":
-        start = now - timedelta(days=now.weekday() + 7)
-        label = "上周"
-    elif period == "this_month":
-        start = now.replace(day=1)
-        label = "本月"
-    else:
-        start = now - timedelta(days=7)
-        label = "最近7天"
-
-    sb = get_supabase()
-
-    # 尝试从数据库获取排名
-    defect_ranking = []
-    record_ranking = []
-
-    if sb is not None:
-        try:
-            # 质控员缺陷发现数排名 - 从 qc_results 聚合
-            try:
-                resp = await async_execute(
-                    sb.table('qc_results')
-                    .select('analyzed_by,id,record_type,status,visit_type')
-                    .gte('created_at', start.isoformat())
-                )
-            except Exception:
-                resp = await async_execute(
-                    sb.table('qc_results')
-                    .select('analyzed_by,id,status')
-                    .gte('created_at', start.isoformat())
-                )
-            results = list(getattr(resp, 'data', None) or [])
-            results = [r for r in results if _record_matches_scene(r, scene)]
-            user_defects = {}
-            for r in results:
-                user = r.get('analyzed_by', '未知')
-                if user:
-                    user_defects[user] = user_defects.get(user, 0) + 1
-
-            defect_ranking = sorted(
-                [{"name": k, "count": v} for k, v in user_defects.items()],
-                key=lambda x: x["count"],
-                reverse=True
-            )[:10]
-            for i, item in enumerate(defect_ranking):
-                item["rank"] = i + 1
-        except Exception as e:
-            logger.warning(f"获取缺陷排名失败: {e}")
-
-        try:
-            # 质控员审查病历数排名
-            try:
-                resp = await async_execute(
-                    sb.table('qc_results')
-                    .select('analyzed_by,record_type,status,visit_type')
-                    .gte('created_at', start.isoformat())
-                )
-            except Exception:
-                resp = await async_execute(
-                    sb.table('qc_results')
-                    .select('analyzed_by,status')
-                    .gte('created_at', start.isoformat())
-                )
-            results = list(getattr(resp, 'data', None) or [])
-            results = [r for r in results if _record_matches_scene(r, scene)]
-            user_records = {}
-            for r in results:
-                user = r.get('analyzed_by', '未知')
-                if user:
-                    user_records[user] = user_records.get(user, 0) + 1
-
-            record_ranking = sorted(
-                [{"name": k, "count": v} for k, v in user_records.items()],
-                key=lambda x: x["count"],
-                reverse=True
-            )[:10]
-            for i, item in enumerate(record_ranking):
-                item["rank"] = i + 1
-        except Exception as e:
-            logger.warning(f"获取病历排名失败: {e}")
-
-    # 如果没有数据库数据，提供示例数据
-    if not defect_ranking:
-        defect_ranking = [
-            {"name": "王质控", "count": 45, "rank": 1},
-            {"name": "张质控", "count": 38, "rank": 2},
-            {"name": "李质控", "count": 32, "rank": 3},
-            {"name": "赵质控", "count": 28, "rank": 4},
-            {"name": "陈质控", "count": 21, "rank": 5},
-        ]
-
-    if not record_ranking:
-        record_ranking = [
-            {"name": "张质控", "count": 120, "rank": 1},
-            {"name": "王质控", "count": 105, "rank": 2},
-            {"name": "李质控", "count": 98, "rank": 3},
-            {"name": "赵质控", "count": 87, "rank": 4},
-            {"name": "陈质控", "count": 72, "rank": 5},
-        ]
-
+    try:
+        data = await run_in_threadpool(get_performance_ranking_data, period=period, scene=scene)
+    except PerformanceRankingInvalid as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        # PerformanceRankingUnavailable 与未知异常一律脱敏为 503，只记录异常类型。
+        logger.error("performance_ranking_failed error_type=%s", type(exc).__name__)
+        raise HTTPException(status_code=503, detail=_PERFORMANCE_UNAVAILABLE_DETAIL) from None
     return success_response(
-        data={
-            "defect_ranking": defect_ranking,
-            "record_ranking": record_ranking,
-            "period": period,
-            "period_label": label,
-            "scene": scene,
-        },
+        data=data,
         message="获取工作表现排名成功",
         trace_id=get_trace_id(request),
     )
