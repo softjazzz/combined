@@ -7,6 +7,7 @@ detached worker、SQLite 持久化与 Canonical API 回读均为生产实现。
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 import time
 from datetime import datetime
 from pathlib import Path
@@ -32,6 +33,7 @@ from app.services import sichuan_workspace_batch_worker as batch_worker
 from app.services.custom_qc_sample_pool_service import CustomQCSamplePoolService
 from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
 from app.services.luxian_0609 import execution as luxian_execution
+from app.services.luxian_0609.customer_text_publication import CUSTOMER_TEXT_SEAL_KEY
 from app.services.luxian_0609.evidence_snapshot_provider import SnapshotSourceRows
 from app.services.luxian_0609.phase_scope import load_luxian_0609_phase_scope
 from app.services.luxian_0609.rule_contracts import load_luxian_0609_rule_contracts
@@ -149,6 +151,14 @@ def _install_sample_pool_sqlite(monkeypatch: pytest.MonkeyPatch, engine: sa.Engi
 
 @pytest.fixture
 def _isolated_database(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    from app.database.connection import engine as default_engine
+    def reject_external(*args, **kwargs):
+        raise AssertionError("隔离验收禁止连接默认数据库")
+    monkeypatch.setattr(default_engine.dialect, "connect", reject_external)
+    from app.services import sample_programmatic_evidence
+    monkeypatch.setattr(sample_programmatic_evidence, "_fetch_source_table_fallback_items", lambda *_args, **_kwargs: ([], {}))
+    monkeypatch.setattr(sample_programmatic_evidence, "_fetch_detail_service_fallback_items", lambda *_args, **_kwargs: [])
+    monkeypatch.setenv("LUXIAN_0609_OPINION_FREEZE_DIR", str(tmp_path / "opinion-freeze"))
     engine, workspace = _install_workspace_sqlite(monkeypatch, tmp_path)
     try:
         yield engine, workspace
@@ -420,7 +430,26 @@ def test_consultation_semantic_llm_stub_is_normalized_across_three_entries(monke
     app = _api_app(service)
     jobs: list[dict[str, Any]] = []
     rule_ids = ["LX0609-03-01-04"]
-    job_ids = _entry_job_ids(app=app, workspace=workspace, pool_id=pool_id, sample_item_id=sample_item_id, workspace_rule_ids=rule_ids, workspace_run_mode=workspace_run_mode)
+    published_by_visit = {}
+    original_aggregate = luxian_execution.aggregate_luxian_0609_results
+
+    def observe_publish(**kwargs):
+        result = original_aggregate(**kwargs)
+        decision = kwargs["reduced_decisions"][0]
+        assert decision.final_state.value == result[0]["status"] == "non_compliant"
+        assert decision.reason_code == result[0]["reason_code"]
+        published_by_visit[kwargs["audit_context"]["visit_id"]] = deepcopy(result[0])
+        return result
+
+    monkeypatch.setattr(luxian_execution, "aggregate_luxian_0609_results", observe_publish)
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", CustomQCWorkspaceService)
+
+    def verify(job_id, job, requested_ids):
+        _verify_saved_business_content(app=app, workspace=workspace, engine=engine,
+                                       job_id=job_id, job=job, published_by_visit=published_by_visit,
+                                       rule_id=rule_ids[0], expected_status="non_compliant")
+
+    job_ids = _entry_job_ids(app=app, workspace=workspace, pool_id=pool_id, sample_item_id=sample_item_id, workspace_rule_ids=rule_ids, workspace_run_mode=workspace_run_mode, on_terminal=verify)
     jobs = [_wait_for_terminal_job(workspace, job_id) for job_id in job_ids]
     assert [job["status"] for job in jobs] == ["completed"] * 3
     assert [
@@ -435,3 +464,129 @@ def test_consultation_semantic_llm_stub_is_normalized_across_three_entries(monke
     sample_item = _items_for_visit(jobs[2], _RECORD_A["visit_id"])["LX0609-03-01-04"]
     assert _canonical_tuple(single_item) == _canonical_tuple(batch_item) == _canonical_tuple(sample_item)
     # 状态、事实和证据在三入口逐项相同；调用次数与 Token 另按上面的固定桩核对。
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("record_times,missing_end,expected_status", [
+    (["2026-07-02 14:00:00"], False, "compliant"),
+    (["2026-07-02 16:00:00"], False, "non_compliant"),
+    (["2026-07-02 14:00:00"], True, "data_gap"),
+    (["2026-07-02 16:00:00", "2026-07-02 17:00:00"], True, "non_compliant"),
+], ids=["within-six-hours", "overdue", "missing-end", "overdue-and-missing-end"])
+def test_original_rescue_execution_publish_store_http_chain(
+    monkeypatch, _isolated_database, record_times, missing_end, expected_status,
+):
+    """原004真实执行后，三入口落盘、重建服务与HTTP读取保持同一业务结果。"""
+    engine, workspace = _isolated_database
+    pool_service = _install_sample_pool_sqlite(monkeypatch, engine)
+    original_session = luxian_execution.build_luxian_0609_evidence_read_session
+
+    def read_rows(**kwargs):
+        rows = []
+        if kwargs["source_key"] == "rescue_record":
+            for index, record_time in enumerate(record_times):
+                no_end = missing_end and index == len(record_times) - 1
+                rows.append({
+                    "document_id": f"RESCUE-{kwargs['visit_id']}-{index}",
+                    "record_time": record_time,
+                    "record_content": "抢救结束，患者情况平稳。" if no_end else "抢救结束时间：2026-07-02 09:00:00",
+                })
+        return SnapshotSourceRows.create(source_key=kwargs["source_key"], rows=rows, truncated=False, limit_rows=50)
+
+    monkeypatch.setattr(luxian_execution, "build_luxian_0609_evidence_read_session",
+                        lambda **kwargs: original_session(**kwargs, row_reader=read_rows))
+    published = []
+    published_by_visit = {}
+    original_aggregate = luxian_execution.aggregate_luxian_0609_results
+
+    def observe_publish(**kwargs):
+        result = original_aggregate(**kwargs)
+        for item in result:
+            decision = next(d for d in kwargs["reduced_decisions"] if d.rule_id == item["rule_id"])
+            assert decision.final_state.value == item["status"] == expected_status
+            assert decision.reason_code == item["reason_code"]
+        published.extend(deepcopy(result))
+        published_by_visit[kwargs["audit_context"]["visit_id"]] = deepcopy(result[0])
+        return result
+
+    monkeypatch.setattr(luxian_execution, "aggregate_luxian_0609_results", observe_publish)
+    service = sichuan_qc_service.SichuanQCService({"provider_code": "isolated", "model": "stub", "allow_mock_when_unconfigured": True})
+    _wire_production_entry(monkeypatch, workspace, pool_service, _settings(), service)
+    llm_calls = []
+
+    async def forbidden_llm(*args, **kwargs):
+        llm_calls.append(1)
+        raise AssertionError("原004时效判定不得调用模型")
+
+    monkeypatch.setattr(sichuan_qc_service.SichuanQCLLMClient, "generate", forbidden_llm)
+    pool_id, sample_id = _create_ready_sample_pool(engine, pool_service)
+    app = _api_app(service)
+    rule_ids = ["LX0609-09-01-01"]
+    checked = []
+
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", CustomQCWorkspaceService)
+
+    def verify(job_id, job, requested_ids):
+        _verify_saved_business_content(app=app, workspace=workspace, engine=engine,
+                                       job_id=job_id, job=job, published_by_visit=published_by_visit,
+                                       rule_id=rule_ids[0], expected_status=expected_status)
+        checked.append(job_id)
+
+    _entry_job_ids(app=app, workspace=workspace, pool_id=pool_id, sample_item_id=sample_id,
+                   workspace_rule_ids=rule_ids, on_terminal=verify)
+    assert len(checked) == 3
+    assert len(published) == 4  # 单份1、批量2、样本1。
+    assert not llm_calls
+
+
+def _business_content(item):
+    """归一化既有文案别名、空数组及文书脱敏引用；文本和事实严格相等。"""
+    from app.services.qc_workspace.canonical_result_store import customer_safe_projection_key, keyed_ref
+    evidence = deepcopy(item.get("customer_evidence") or item.get("evidence") or [])
+    for row in evidence:
+        if "source_document_id" in row:
+            row["source_ref"] = keyed_ref("src", row.pop("source_document_id"), hmac_key=customer_safe_projection_key())
+    return {
+        "rule_id": item["rule_id"], "status": item["status"], "reason_code": item["reason_code"],
+        "facts": item.get("customer_display_facts"), "criteria": item.get("criterion_results") or [],
+        "conclusion": item.get("conclusion") or item.get("customer_conclusion") or item.get("findings"),
+        "suggestion": item.get("suggestion") or item.get("customer_suggestion"),
+        "evidence": evidence,
+    }
+
+
+def _verify_saved_business_content(*, app, workspace, engine, job_id, job, published_by_visit, rule_id, expected_status):
+    assert job["status"] == "completed", job.get("error_message")
+    # 独立连接直接读取落盘JSON，不能以worker内存结果代替实际保存。
+    table = workspace._record_result_envelope_table
+    with engine.connect() as connection:
+        rows = connection.execute(sa.select(table).where(table.c.job_id == job_id)).mappings().all()
+    assert rows
+    stored = []
+    for row in rows:
+        envelope = row["envelope_json"]
+        envelope = json.loads(envelope) if isinstance(envelope, str) else envelope
+        original = published_by_visit[row["visit_id"]]
+        assert envelope["items"][0][CUSTOMER_TEXT_SEAL_KEY] == original[CUSTOMER_TEXT_SEAL_KEY]
+        expected = _business_content(original)
+        assert [_business_content(x) for x in envelope["items"]] == [expected]
+        stored.extend(envelope["items"])
+    # 新服务实例读取，排除同一服务对象持有结果的假阳性。
+    latest = _read_canonical(app, job_id, _RECORD_A, [rule_id])[rule_id]
+    with TestClient(app) as client:
+        response = client.get(f"/api/v1/qc/sichuan/workspace/batch-jobs/{job_id}")
+    assert response.status_code == 200, response.text
+    detail_items = response.json()["data"]["items"]
+    assert len(detail_items) == len(stored)
+    item = _items_for_visit(job, _RECORD_A["visit_id"])[rule_id]
+    assert item["status"] == expected_status
+    assert item["customer_display_facts"]
+    assert item.get("suggestion")
+    assert item[CUSTOMER_TEXT_SEAL_KEY] == published_by_visit[_RECORD_A["visit_id"]][CUSTOMER_TEXT_SEAL_KEY]
+    for actual in [latest, item]:
+        assert _business_content(actual) == _business_content(published_by_visit[_RECORD_A["visit_id"]])
+    by_ref = {x["record_ref"]: _business_content(x) for x in stored}
+    assert len(by_ref) == len(detail_items)
+    for detail in detail_items:
+        for key, value in _business_content(detail).items():
+            assert value == by_ref[detail["record_ref"]][key], (key, value, by_ref[detail["record_ref"]][key])
