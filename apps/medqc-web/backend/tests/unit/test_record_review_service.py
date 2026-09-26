@@ -736,3 +736,58 @@ def test_batch_review_states_match_single_case_derivation(env, case_ws):
     for identity, state in states.items():
         assert case_view(case_ws, identity)["state"] == state
     assert service.batch_review_states([]) == {}
+
+
+def test_batch_current_reviews_share_derivation_and_carry_current_decision(env, case_ws):
+    from app.database.models.qc import SysUser
+
+    engine = env.sessions.kw["bind"]
+    SysUser.__table__.create(engine)
+    with env.sessions.begin() as session:
+        session.execute(SysUser.__table__.insert(), [
+            {"id": "mgr-1", "username": "mgr1", "display_name": "合成质控主管",
+             "created_at": datetime(2026, 9, 1), "updated_at": datetime(2026, 9, 1)},
+        ])
+    case_submit(case_ws, "doubtful", reason=" 依据不足 ")  # V1 当前结果对象存疑（mgr-1）
+    case_ws.ready(("H", "P2", "V2"), "job-1", "env-b1")
+    case_submit(case_ws, identity=("H", "P2", "V2"), envelope="env-b1", request=REQ[7], actor="mgr-x")
+    anchors = [
+        _anchor(CASE, "job-1", "env-a1"),
+        _anchor(("H", "P2", "V2"), "job-1", "env-b1"),
+        _anchor(("H", "P6", "V6"), "job-5", "env-f1"),
+        _anchor(("H", "P7", "V7"), "", "env-x"),  # 锚点不完整：跳过
+    ]
+
+    views = service.batch_current_reviews(anchors)
+
+    assert set(views) == {CASE, ("H", "P2", "V2"), ("H", "P6", "V6")}
+    # 状态与列表批量推导同源
+    assert {k: v["state"] for k, v in views.items()} == service.batch_review_states(anchors)
+    doubtful = views[CASE]
+    assert doubtful["decision"] == "doubtful" and doubtful["reason"] == "依据不足"
+    assert doubtful["reviewer_id"] == "mgr-1" and doubtful["reviewer_name"] == "合成质控主管"
+    assert isinstance(doubtful["reviewed_at"], datetime)
+    unnamed = views[("H", "P2", "V2")]
+    assert unnamed["state"] == "approved" and unnamed["reviewer_id"] == "mgr-x"
+    assert unnamed["reviewer_name"] is None
+    assert views[("H", "P6", "V6")] == {
+        "state": "pending_review", "decision": None, "reason": None,
+        "reviewer_id": None, "reviewer_name": None, "reviewed_at": None,
+    }
+    assert service.batch_current_reviews([]) == {}
+
+
+def test_batch_current_reviews_database_error_is_unavailable(env, monkeypatch):
+    class Broken:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def execute(self, *args, **kwargs):
+            raise OperationalError("SELECT secret FROM qc_record_reviews", {}, Exception("boom"))
+
+    monkeypatch.setattr(service, "SessionLocal", lambda: Broken())
+    with pytest.raises(service.RecordReviewUnavailable):
+        service.batch_current_reviews([_anchor(CASE, "job-1", "env-a1")])

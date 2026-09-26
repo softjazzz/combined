@@ -3814,6 +3814,9 @@ class CustomQCWorkspaceService:
                 "state": "ready",
                 "data_origin": "canonical_result_envelope",
                 "record_ref": _safe_text(projection.get("record_ref")),
+                # 与单病历 DTO 同源同义：仅供病历审核锚定结果对象，不改变选择行为、不进入工作簿。
+                "root_job_id": _safe_text(projection.get("root_job_id")),
+                "envelope_id": _safe_text(projection.get("envelope_id")),
                 "rule_set_key": rule_set_key,
                 "rule_set_version": rule_set_version,
                 "items": items,

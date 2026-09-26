@@ -1,8 +1,12 @@
+from io import BytesIO
+
 import pytest
+from openpyxl import load_workbook
 
 from app.core.access_control import enforce_default_auth
 from app.core.security import get_current_user
 from app.routers import qc_sichuan
+from app.services import record_review_service
 
 
 class _Workspace:
@@ -75,7 +79,8 @@ class _Workspace:
                 "schema_version": "lx0609-single-record-result-v1",
                 "state": "ready",
                 "record_ref": f"rec-{ref['visit_id']}",
-                "job_id": "job-safe",
+                "root_job_id": "job-safe",
+                "envelope_id": f"env-{ref['visit_id']}",
                 "rule_set_key": "luxian_0609_qc_v1",
                 "rule_set_version": "2026-06-09",
                 "expected_rule_count": 1,
@@ -331,3 +336,220 @@ def test_builtin_demo_doctor_still_cannot_export_record_results(client, monkeypa
 
     assert response.status_code == 403
     assert workspace.latest_calls == []
+
+
+# ---------------------------------------------------------------------------
+# 审核状态筛选导出（与病历列表 review_state 对齐）
+# ---------------------------------------------------------------------------
+
+
+def _summary(response):
+    workbook = load_workbook(BytesIO(response.content), read_only=True)
+    return (
+        list(workbook["病历汇总"].iter_rows(values_only=True)),
+        list(workbook["导出说明"].iter_rows(values_only=True)),
+    )
+
+
+def _capture_audit(monkeypatch):
+    events = []
+    monkeypatch.setattr(
+        qc_sichuan, "audit_event", lambda _request, **kwargs: events.append(kwargs)
+    )
+    return events
+
+
+def _fake_reviews(monkeypatch, states):
+    calls = []
+
+    def fake(anchors):
+        anchors = list(anchors)
+        calls.append(anchors)
+        return {
+            (a["institute_id"], a["patient_id"], a["visit_id"]): {
+                "state": states[a["visit_id"]],
+                "reason": "依据不足" if states[a["visit_id"]] == "doubtful" else None,
+                "reviewer_id": "mgr-1",
+                "reviewer_name": "合成质控主管",
+                "reviewed_at": None,
+            }
+            for a in anchors
+            if a["visit_id"] in states
+        }
+
+    monkeypatch.setattr(record_review_service, "batch_current_reviews", fake)
+    return calls
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {
+            "scope": "final",
+            "record_refs": [{"institute_id": "H-1", "patient_id": "P-1", "visit_id": "V-1"}],
+            "review_state": ["pending_review"],
+        },
+        {"scope": "final", "record_refs": [], "review_state": ["approved"]},
+        {"scope": "final", "review_state": []},
+        {"scope": "final", "review_state": ["bogus"]},
+    ],
+)
+def test_export_rejects_invalid_review_state_requests(client, monkeypatch, body):
+    _authorize(client)
+    workspace = _Workspace()
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+
+    response = client.post("/api/v1/qc/sichuan/workspace/records/export", json=body)
+
+    assert response.status_code == 422
+    assert not hasattr(workspace, "collect_kwargs")
+    assert workspace.bulk_calls == []
+
+
+def test_request_model_dedupes_review_state():
+    payload = qc_sichuan.Luxian0609RecordResultExportRequest(
+        review_state=["approved", "doubtful", "approved"]
+    )
+    assert payload.review_state == ["approved", "doubtful"]
+
+
+def test_filtered_export_filters_by_review_state_after_limit_check(client, monkeypatch):
+    _authorize(client)
+    workspace = _Workspace(record_count=4)
+    original = workspace.build_latest_luxian_0609_record_result_dtos
+
+    def dtos(*, record_refs):
+        results = original(record_refs=record_refs)
+        # V-3 未质控：不适用，永不命中审核状态筛选
+        results[("H-1", "P-3", "V-3")] = {"state": "not_found", "items": []}
+        return results
+
+    workspace.build_latest_luxian_0609_record_result_dtos = dtos
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+    calls = _fake_reviews(
+        monkeypatch,
+        {"V-0": "pending_review", "V-1": "approved", "V-2": "pending_recheck"},
+    )
+    events = _capture_audit(monkeypatch)
+
+    response = client.post(
+        "/api/v1/qc/sichuan/workspace/records/export",
+        json={
+            "scope": "final",
+            "date_field": "discharge",
+            "review_state": ["pending_review", "pending_recheck", "pending_review"],
+        },
+    )
+
+    assert response.status_code == 200
+    # 锚点来自导出 DTO 的 root_job_id/envelope_id，仅 ready 病例参与
+    assert calls == [
+        [
+            {
+                "institute_id": "H-1",
+                "patient_id": f"P-{index}",
+                "visit_id": f"V-{index}",
+                "job_id": "job-safe",
+                "envelope_id": f"env-V-{index}",
+                "rule_set_key": "luxian_0609_qc_v1",
+            }
+            for index in range(3)
+        ]
+    ]
+    rows, intro = _summary(response)
+    assert [row[1] for row in rows[1:]] == ["V-0", "V-2"]
+    assert [row[11] for row in rows[1:]] == ["待审核", "待复审"]
+    assert ("病历数量", 2) in intro
+    assert ("筛选-审核状态", "待审核、待复审") in intro
+    assert events[0]["details"]["review_state"] == ["pending_review", "pending_recheck"]
+    assert events[0]["details"]["record_count"] == 2
+    assert events[0]["details"]["pre_filter_record_count"] == 4
+    flattened = "".join(str(v) for row in rows for v in row if v is not None)
+    assert "job-safe" not in flattened and "env-V-0" not in flattened
+
+
+def test_filtered_export_limit_uses_pre_filter_count_with_review_state(client, monkeypatch):
+    _authorize(client)
+    workspace = _Workspace(record_count=1001)
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+    calls = _fake_reviews(monkeypatch, {})
+
+    response = client.post(
+        "/api/v1/qc/sichuan/workspace/records/export",
+        json={"scope": "final", "review_state": ["approved"]},
+    )
+
+    assert response.status_code == 422
+    assert workspace.bulk_calls == [] and calls == []
+
+
+def _broken_reviews(monkeypatch):
+    def broken(_anchors):
+        raise record_review_service.RecordReviewUnavailable("SELECT secret FROM qc_record_reviews")
+
+    monkeypatch.setattr(record_review_service, "batch_current_reviews", broken)
+
+
+def test_filtered_export_with_review_state_fails_closed_when_reviews_unavailable(
+    client, monkeypatch
+):
+    _authorize(client)
+    workspace = _Workspace(record_count=2)
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+    _broken_reviews(monkeypatch)
+    events = _capture_audit(monkeypatch)
+
+    response = client.post(
+        "/api/v1/qc/sichuan/workspace/records/export",
+        json={"scope": "final", "review_state": ["pending_review"]},
+    )
+
+    assert response.status_code == 503
+    assert "secret" not in response.text
+    assert "审核状态暂不可用" in response.text
+    assert events == []
+
+
+@pytest.mark.parametrize("selected", [False, True])
+def test_export_without_review_state_degrades_review_columns_to_unknown(
+    client, monkeypatch, selected
+):
+    _authorize(client)
+    workspace = _Workspace(record_count=2)
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+    _broken_reviews(monkeypatch)
+    events = _capture_audit(monkeypatch)
+    body = {"scope": "final"}
+    if selected:
+        body["record_refs"] = [
+            {"institute_id": "H-1", "patient_id": "P-0", "visit_id": "V-0"},
+            {"institute_id": "H-1", "patient_id": "P-1", "visit_id": "V-1"},
+        ]
+
+    response = client.post("/api/v1/qc/sichuan/workspace/records/export", json=body)
+
+    assert response.status_code == 200
+    rows, intro = _summary(response)
+    assert [row[11] for row in rows[1:]] == ["未知", "未知"]
+    assert all(row[0] != "筛选-审核状态" for row in intro)
+    assert events[0]["details"]["review_state"] is None
+    assert events[0]["details"]["review_state_available"] is False
+
+
+def test_selected_export_carries_review_columns(client, monkeypatch):
+    _authorize(client)
+    workspace = _Workspace()
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+    _fake_reviews(monkeypatch, {"V-7": "doubtful"})
+
+    response = client.post(
+        "/api/v1/qc/sichuan/workspace/records/export",
+        json={
+            "scope": "final",
+            "record_refs": [{"institute_id": "H-1", "patient_id": "P-7", "visit_id": "V-7"}],
+        },
+    )
+
+    assert response.status_code == 200
+    rows, _ = _summary(response)
+    assert rows[1][11:14] == ("审核存疑", "依据不足", "合成质控主管")

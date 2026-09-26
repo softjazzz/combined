@@ -881,6 +881,30 @@ describe('QcRecordResultListView', () => {
       })
     })
 
+    it('导出当前筛选带上列表审核状态筛选，导出所选不带', async () => {
+      mocks.hasRole.mockImplementation((role: string) => role === 'qc_manager')
+      routeState.query = { review_state: 'pending_review,pending_recheck' }
+      const wrapper = mountView('discharged')
+      await flushPromises()
+
+      await wrapper.get('[data-testid="qc-result-export-trigger"]').trigger('click')
+      await wrapper.get('[data-testid="qc-result-export-filtered"]').trigger('click')
+      await flushPromises()
+      expect(mocks.exportFilteredLuxian0609RecordResults).toHaveBeenLastCalledWith({
+        scope: 'final',
+        date_field: 'discharge',
+        review_state: ['pending_review', 'pending_recheck'],
+      })
+
+      await wrapper.get('input[aria-label="选择患者甲"]').setValue(true)
+      await wrapper.get('[data-testid="qc-result-export-trigger"]').trigger('click')
+      await wrapper.get('[data-testid="qc-result-export-selected"]').trigger('click')
+      await flushPromises()
+      const selectedPayload = mocks.exportFilteredLuxian0609RecordResults.mock.lastCall?.[0]
+      expect(selectedPayload).toHaveProperty('record_refs')
+      expect(selectedPayload).not.toHaveProperty('review_state')
+    })
+
     it('默认模板优先于系统默认', async () => {
       mocks.hasRole.mockImplementation((role: string) => role === 'admin')
       mocks.listFilterTemplates.mockResolvedValue({

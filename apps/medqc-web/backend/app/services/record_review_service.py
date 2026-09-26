@@ -9,7 +9,8 @@
   - workspace：运行/终末列表范围，以单病历 DTO（build_latest_single_record_result_dto）
     的最新 ready 结果为当前结果对象；QC_RESULTS.REVIEW 权限由路由层校验。
 - 两种上下文共用同一套状态推导、原因校验、幂等重放、advisory lock 与错误类。
-- batch_review_states 供病历列表批量挂载 review_state，与单病例同一推导函数。
+- batch_review_states 供病历列表批量挂载 review_state，与单病例同一推导函数；
+  batch_current_reviews 供导出，同一查询、同一推导，另带当前决定的原因/审核人/时间。
 """
 
 from __future__ import annotations
@@ -714,13 +715,8 @@ def _submit_case(
     return {**response, "state": response["decision"], "idempotent": False}
 
 
-def batch_review_states(results: Iterable[Any]) -> dict[tuple[str, str, str], str]:
-    """批量推导病例审核状态，供运行/终末列表挂载 review_state。
-
-    入参每项含三坐标、job_id、envelope_id、rule_set_key；锚点不完整或规则集非 LX0609 的
-    病例不出现在返回值中（调用方显示为未知）。决定按 visit_id 分块一次性读取，
-    状态推导与单病例共用 _derive_state。数据库故障抛 RecordReviewUnavailable。
-    """
+def _batch_anchors(results: Iterable[Any]) -> dict[tuple[str, str, str], tuple[str, str]]:
+    """批量锚点校验：锚点不完整或规则集非 LX0609 的病例直接跳过。"""
     anchors: dict[tuple[str, str, str], tuple[str, str]] = {}
     for item in results:
         if not isinstance(item, dict) or item.get("rule_set_key") != LUXIAN_0609_RULE_SET_KEY:
@@ -731,34 +727,97 @@ def batch_review_states(results: Iterable[Any]) -> dict[tuple[str, str, str], st
         if identity is None or not job_id or not envelope_id:
             continue
         anchors[identity] = (job_id, envelope_id)
+    return anchors
+
+
+def _batch_case_decisions(
+    session: Any, anchors: dict[tuple[str, str, str], tuple[str, str]],
+) -> dict[tuple[str, str, str], list[Any]]:
+    """列表挂载与导出共用的唯一批量决定查询：按 visit_id 分块，倒序。"""
+    decisions_by_case: dict[tuple[str, str, str], list[Any]] = {}
+    for chunk in _chunks(sorted({identity[2] for identity in anchors})):
+        for row in session.execute(
+            select(
+                QCRecordReview.id, QCRecordReview.institute_id, QCRecordReview.patient_id,
+                QCRecordReview.visit_id, QCRecordReview.job_id, QCRecordReview.envelope_id,
+                QCRecordReview.stage, QCRecordReview.decision, QCRecordReview.reason,
+                QCRecordReview.reviewer_id, QCRecordReview.created_at,
+            )
+            .where(
+                QCRecordReview.visit_id.in_(chunk),
+                QCRecordReview.rule_set_key == LUXIAN_0609_RULE_SET_KEY,
+            )
+            .order_by(QCRecordReview.created_at.desc(), QCRecordReview.id.desc())
+        ).all():
+            case = (row.institute_id, row.patient_id, row.visit_id)
+            if case in anchors:
+                decisions_by_case.setdefault(case, []).append(row)
+    return decisions_by_case
+
+
+def batch_review_states(results: Iterable[Any]) -> dict[tuple[str, str, str], str]:
+    """批量推导病例审核状态，供运行/终末列表挂载 review_state。
+
+    入参每项含三坐标、job_id、envelope_id、rule_set_key；锚点不完整或规则集非 LX0609 的
+    病例不出现在返回值中（调用方显示为未知）。决定按 visit_id 分块一次性读取，
+    状态推导与单病例共用 _derive_state。数据库故障抛 RecordReviewUnavailable。
+    """
+    anchors = _batch_anchors(results)
     if not anchors:
         return {}
     _require_session()
-    decisions_by_case: dict[tuple[str, str, str], list[Any]] = {}
     try:
         with SessionLocal() as session:
-            for chunk in _chunks(sorted({identity[2] for identity in anchors})):
-                for row in session.execute(
-                    select(
-                        QCRecordReview.id, QCRecordReview.institute_id, QCRecordReview.patient_id,
-                        QCRecordReview.visit_id, QCRecordReview.job_id, QCRecordReview.envelope_id,
-                        QCRecordReview.stage, QCRecordReview.decision,
-                    )
-                    .where(
-                        QCRecordReview.visit_id.in_(chunk),
-                        QCRecordReview.rule_set_key == LUXIAN_0609_RULE_SET_KEY,
-                    )
-                    .order_by(QCRecordReview.created_at.desc(), QCRecordReview.id.desc())
-                ).all():
-                    case = (row.institute_id, row.patient_id, row.visit_id)
-                    if case in anchors:
-                        decisions_by_case.setdefault(case, []).append(row)
+            decisions_by_case = _batch_case_decisions(session, anchors)
     except SQLAlchemyError as exc:
         raise RecordReviewUnavailable("审核数据暂不可用") from exc
     return {
         identity: _derive_state(decisions_by_case.get(identity, []), job_id, envelope_id)[0]
         for identity, (job_id, envelope_id) in anchors.items()
     }
+
+
+def batch_current_reviews(results: Iterable[Any]) -> dict[tuple[str, str, str], dict[str, Any]]:
+    """批量读取病例审核状态及“当前结果对象上的决定”，供服务端导出。
+
+    与 batch_review_states 同一锚点校验、同一决定查询、同一 _derive_state 推导；
+    额外返回当前决定的原因、审核人（显示名，缺失时为 None）与决定时间（库内无时区 UTC）。
+    尚无决定的病例 decision/reason/reviewer_*/reviewed_at 均为 None。
+    锚点不完整的病例不出现在返回值中；数据库故障抛 RecordReviewUnavailable。
+    """
+    from .case_operation_timeline_service import _display_names
+
+    anchors = _batch_anchors(results)
+    if not anchors:
+        return {}
+    _require_session()
+    try:
+        with SessionLocal() as session:
+            decisions_by_case = _batch_case_decisions(session, anchors)
+            derived = {
+                identity: _derive_state(decisions_by_case.get(identity, []), job_id, envelope_id)
+                for identity, (job_id, envelope_id) in anchors.items()
+            }
+            reviewer_ids = {
+                str(current.reviewer_id)
+                for _, _, current in derived.values()
+                if current is not None and current.reviewer_id
+            }
+            names = _display_names(session, reviewer_ids)
+    except SQLAlchemyError as exc:
+        raise RecordReviewUnavailable("审核数据暂不可用") from exc
+    views: dict[tuple[str, str, str], dict[str, Any]] = {}
+    for identity, (state, _stage, current) in derived.items():
+        reviewer_id = str(current.reviewer_id) if current is not None and current.reviewer_id else None
+        views[identity] = {
+            "state": state,
+            "decision": current.decision if current is not None else None,
+            "reason": current.reason if current is not None else None,
+            "reviewer_id": reviewer_id,
+            "reviewer_name": names.get(reviewer_id) if reviewer_id else None,
+            "reviewed_at": current.created_at if current is not None else None,
+        }
+    return views
 
 
 # ---------------------------------------------------------------------------
@@ -954,6 +1013,7 @@ __all__ = [
     "RecordReviewInvalid",
     "RecordReviewNotFound",
     "RecordReviewUnavailable",
+    "batch_current_reviews",
     "batch_review_states",
     "count_my_record_review_todos",
     "get_case_review",

@@ -801,6 +801,7 @@ def test_bulk_record_result_dtos_read_complete_canonical_items_in_one_batch(monk
         "summary_json": "{}",
     }
     envelope = {
+        "id": "env-1",
         "root_job_id": "job-1",
         "job_id": "job-1",
         "institute_id": "inst-1",
@@ -840,6 +841,47 @@ def test_bulk_record_result_dtos_read_complete_canonical_items_in_one_batch(monk
     assert dto["record_ref"] == "rec_0123456789abcdef01234567"
     assert dto["items"][0]["rule_id"] == "LX0609-001"
     assert dto["items"][0]["source_document"] == "入院记录"
+    # 审核锚点：与单病历 DTO 同源同义，只加字段不改选择
+    assert dto["root_job_id"] == "job-1"
+    assert dto["envelope_id"] == "env-1"
+
+
+def test_bulk_record_result_dtos_carry_review_anchor_only_when_ready(monkeypatch):
+    """导出 DTO 的 root_job_id/envelope_id 原样取自读取器投影，与单病历 DTO 同义。"""
+
+    ready_identity = ("inst-1", "patient-1", "visit-1")
+    missing_identity = ("inst-1", "patient-2", "visit-2")
+    # 绕过构造函数的建表副作用，仅验证投影 → DTO 的字段搬运。
+    service = CustomQCWorkspaceService.__new__(CustomQCWorkspaceService)
+    monkeypatch.setattr(
+        service,
+        "build_luxian_0609_completed_record_result_summaries",
+        lambda **_kwargs: {
+            ready_identity: {
+                "status": "ready",
+                "record_ref": "rec_safe",
+                "root_job_id": "job-1",
+                "envelope_id": "env-1",
+                "items": [{"rule_id": "LX0609-001", "status": "compliant"}],
+            },
+            missing_identity: {"status": "not_run"},
+        },
+    )
+
+    result = service.build_latest_luxian_0609_record_result_dtos(
+        record_refs=[
+            dict(zip(("institute_id", "patient_id", "visit_id"), identity))
+            for identity in (ready_identity, missing_identity)
+        ]
+    )
+
+    assert result[ready_identity]["state"] == "ready"
+    assert result[ready_identity]["root_job_id"] == "job-1"
+    assert result[ready_identity]["envelope_id"] == "env-1"
+    assert result[ready_identity]["items"][0]["rule_id"] == "LX0609-001"
+    assert result[missing_identity]["state"] == "not_found"
+    assert "root_job_id" not in result[missing_identity]
+    assert "envelope_id" not in result[missing_identity]
 
 
 def test_bulk_record_result_dtos_preserve_canonical_projection_failure_reason(monkeypatch):

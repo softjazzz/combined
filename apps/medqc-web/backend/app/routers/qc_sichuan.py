@@ -7,7 +7,7 @@ import logging
 import os
 import stat
 from pathlib import Path
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ValidationError, field_validator, model_validator
 from fastapi import APIRouter, Body, HTTPException, Query, Request, Depends
 from fastapi.responses import Response, StreamingResponse
 from starlette.concurrency import run_in_threadpool
@@ -370,6 +370,9 @@ class SichuanRuleVisitEvaluateRequest(BaseModel):
     model: Optional[str] = None
 
 
+RecordReviewStateValue = Literal["pending_review", "pending_recheck", "approved", "doubtful"]
+
+
 class Luxian0609RecordResultExportRequest(BaseModel):
     scope: Literal["all", "running", "final"] = "all"
     department: Optional[str] = None
@@ -379,6 +382,26 @@ class Luxian0609RecordResultExportRequest(BaseModel):
     end_date: Optional[str] = None
     keyword: Optional[str] = None
     record_refs: Optional[List[Dict[str, str]]] = None
+    # 审核状态筛选：仅筛选模式生效，取值与病历列表 review_state 一致。
+    review_state: Optional[List[RecordReviewStateValue]] = None
+
+    @field_validator("review_state")
+    @classmethod
+    def _normalize_review_state(
+        cls, value: Optional[List[RecordReviewStateValue]]
+    ) -> Optional[List[RecordReviewStateValue]]:
+        if value is None:
+            return None
+        if not value:
+            raise ValueError("review_state 不能为空")
+        return list(dict.fromkeys(value))
+
+    @model_validator(mode="after")
+    def _reject_review_state_with_selection(self) -> "Luxian0609RecordResultExportRequest":
+        # 勾选导出按所选病历精确导出，与审核状态筛选语义冲突，直接拒绝避免混淆。
+        if self.record_refs is not None and self.review_state is not None:
+            raise ValueError("勾选导出不支持审核状态筛选")
+        return self
 
 
 class SaveQCResultRequest(BaseModel):
@@ -2377,6 +2400,43 @@ async def export_latest_workspace_record_result_html(
     )
 
 
+def _load_export_record_reviews(
+    results: Dict[tuple[str, str, str], Dict[str, Any]],
+    *,
+    strict: bool,
+) -> Optional[Dict[tuple[str, str, str], Dict[str, Any]]]:
+    """为导出中 ready 病例批量读取审核状态与当前决定。
+
+    锚点复用病历列表的 _review_anchors（取 DTO 的 root_job_id/envelope_id），
+    状态由审核服务 batch_current_reviews 推导，本层只搬运。
+    strict=True（带 review_state 筛选）时读取失败抛 503；否则返回 None，审核列降级为“未知”。
+    """
+
+    from ..services.medical_records.query_service import build_review_anchors
+    from ..services.record_review_service import batch_current_reviews
+
+    ready = {
+        identity: dto
+        for identity, dto in results.items()
+        if isinstance(dto, dict) and str(dto.get("state") or "") == "ready"
+    }
+    if not ready:
+        return {}
+    try:
+        reviews = batch_current_reviews(build_review_anchors(ready, ready))
+        if not isinstance(reviews, dict):
+            raise TypeError("审核状态返回值无效")
+    except Exception as exc:  # noqa: BLE001 - 只记异常类型，不记患者身份或 SQL
+        if strict:
+            logger.warning("病历结果导出按审核状态筛选时读取失败 error_type=%s", type(exc).__name__)
+            raise HTTPException(
+                status_code=503, detail="审核状态暂不可用，无法按审核状态导出"
+            ) from None
+        logger.warning("病历结果导出审核状态读取失败，降级为未知 error_type=%s", type(exc).__name__)
+        return None
+    return reviews
+
+
 @router.post("/workspace/records/export")
 async def export_filtered_workspace_record_results(
     request: Request,
@@ -2460,10 +2520,35 @@ async def export_filtered_workspace_record_results(
     results = workspace.build_latest_luxian_0609_record_result_dtos(
         record_refs=canonical_record_refs,
     )
+    # 审核状态筛选仅筛选模式生效（勾选模式已由请求模型拒绝）。1000 上限按过滤前数量检查：
+    # 审核状态依赖 DTO 锚点，需先构建 DTO 才能判定，保守地以过滤前范围限流。
+    review_filter = list(payload.review_state) if payload.review_state is not None else None
+    reviews = _load_export_record_reviews(results, strict=review_filter is not None)
+    pre_filter_record_count = len(records)
+    if review_filter is not None:
+        wanted = set(review_filter)
+        review_map = reviews or {}
+        records = [
+            record
+            for record in records
+            if (
+                review_map.get(
+                    (
+                        str(record.get("institute_id") or "").strip(),
+                        str(record.get("patient_id") or "").strip(),
+                        str(record.get("visit_id") or "").strip(),
+                    )
+                )
+                or {}
+            ).get("state")
+            in wanted
+        ]
+        export_filters = {**export_filters, "review_state": review_filter}
     workbook = export_filtered_record_results_workbook(
         records=records,
         results=results,
         filters=export_filters,
+        reviews=reviews,
     )
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     audit_event(
@@ -2473,8 +2558,11 @@ async def export_filtered_workspace_record_results(
         outcome="success",
         details={
             "record_count": len(records),
+            "pre_filter_record_count": pre_filter_record_count,
             "scope": payload.scope,
             "mode": "selected" if requested_record_refs else "filtered",
+            "review_state": review_filter,
+            "review_state_available": reviews is not None,
         },
         current_user=current_user,
     )

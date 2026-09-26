@@ -9,6 +9,7 @@ import type {
   Luxian0609ReviewReport,
 } from '@/views/workstation-v4/semantic-rules/types'
 import type { SingleRecordQcResultPayload } from '@/views/workstation-v4/customer-sample-validation/single-record-result-model'
+import type { RecordLatestReviewState } from '@/views/workstation-v4/types'
 
 type ServiceResult<T> = {
   success: boolean
@@ -190,6 +191,8 @@ export async function exportFilteredLuxian0609RecordResults(payload: {
   start_date?: string
   end_date?: string
   keyword?: string
+  /** 审核状态筛选，仅“导出当前筛选”使用；与 record_refs 同传会被后端拒绝。 */
+  review_state?: RecordLatestReviewState[]
   record_refs?: Array<{
     institute_id: string
     patient_id: string

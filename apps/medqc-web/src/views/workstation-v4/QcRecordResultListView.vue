@@ -167,7 +167,7 @@
                 @click="runFilteredExport"
               >
                 <strong>导出当前筛选结果</strong>
-                <span>按当前科室、主管医师、日期和关键词导出</span>
+                <span>按当前科室、主管医师、日期、关键词和审核状态导出</span>
               </button>
             </div>
           </div>
@@ -760,6 +760,8 @@ async function exportCurrentFilter() {
   const department = String(activeDept.value || '').trim()
   const doctor = String(activeDoctor.value || '').trim()
   const keyword = String(searchText.value || '').trim()
+  // 与列表同一审核状态筛选；为空表示不按审核状态筛选（勾选导出不带该参数）。
+  const reviewStates = [...new Set(reviewStateFilter.value)]
   try {
     const response = await exportFilteredLuxian0609RecordResults({
       scope: isInpatient.value ? 'running' : 'final',
@@ -769,6 +771,7 @@ async function exportCurrentFilter() {
       ...(rangeStart ? { start_date: rangeStart } : {}),
       ...(rangeEnd ? { end_date: rangeEnd } : {}),
       ...(keyword ? { keyword } : {}),
+      ...(reviewStates.length > 0 ? { review_state: reviewStates } : {}),
     })
     if (!response.success || !response.data) {
       exportNotice.value = response.message || '导出当前筛选质控结果失败'

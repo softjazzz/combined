@@ -137,3 +137,92 @@ def test_selected_workbook_uses_selected_scope_description_without_technical_fil
     rows = list(workbook["导出说明"].iter_rows(values_only=True))
     assert ("导出口径", "已勾选病历的最新 Canonical 质控结果") in rows
     assert all(row[0] != "筛选-export_mode" for row in rows)
+
+
+def _summary_rows(output):
+    workbook = load_workbook(BytesIO(output.getvalue()), read_only=True)
+    return list(workbook["病历汇总"].iter_rows(values_only=True)), list(
+        workbook["导出说明"].iter_rows(values_only=True)
+    )
+
+
+def test_filtered_workbook_review_columns_carry_review_service_values():
+    from datetime import datetime
+
+    records = [
+        _record(),
+        {**_record(), "patient_id": "P-2", "visit_id": "V-2", "patient_name": "患者乙"},
+        {**_record(), "patient_id": "P-3", "visit_id": "V-3", "patient_name": "患者丙"},
+        {**_record(), "patient_id": "P-4", "visit_id": "V-4", "patient_name": "患者丁"},
+    ]
+    results = {
+        ("H-1", "P-1", "V-1"): _ready_result(),
+        ("H-1", "P-2", "V-2"): _ready_result(),
+        ("H-1", "P-3", "V-3"): {"state": "technical_error", "items": []},
+        # V-4 ready 但审核服务未返回（锚点不完整）→ 未知
+        ("H-1", "P-4", "V-4"): _ready_result(),
+    }
+    reviews = {
+        ("H-1", "P-1", "V-1"): {
+            "state": "doubtful",
+            "reason": "=证据不足",
+            "reviewer_id": "mgr-1",
+            "reviewer_name": "合成质控主管",
+            # 库内无时区 UTC → Asia/Shanghai
+            "reviewed_at": datetime(2026, 9, 26, 16, 30, 5),
+        },
+        ("H-1", "P-2", "V-2"): {
+            "state": "pending_recheck",
+            "reason": None,
+            "reviewer_id": None,
+            "reviewer_name": None,
+            "reviewed_at": None,
+        },
+    }
+
+    output = export_filtered_record_results_workbook(
+        records=records,
+        results=results,
+        filters={"scope": "final", "review_state": ["doubtful", "pending_recheck"]},
+        reviews=reviews,
+    )
+
+    rows, intro = _summary_rows(output)
+    assert rows[0][11:] == ("审核状态", "审核结论原因", "审核人", "审核时间")
+    assert rows[1][11:] == ("审核存疑", "'=证据不足", "合成质控主管", "2026-09-27 00:30:05")
+    assert rows[2][11] == "待复审" and rows[2][12:] == (None, None, None)
+    assert rows[3][11] == "不适用"
+    assert rows[4][11] == "未知"
+    assert ("筛选-审核状态", "审核存疑、待复审") in intro
+    assert all(row[0] != "筛选-review_state" for row in intro)
+    flattened = "\n".join(str(value) for row in rows for value in row if value is not None)
+    assert "mgr-1" not in flattened
+
+
+def test_filtered_workbook_reviewer_falls_back_to_id_and_unavailable_is_unknown():
+    reviews = {
+        ("H-1", "P-1", "V-1"): {
+            "state": "approved",
+            "reason": None,
+            "reviewer_id": "mgr-9",
+            "reviewer_name": None,
+            "reviewed_at": None,
+        }
+    }
+    output = export_filtered_record_results_workbook(
+        records=[_record()],
+        results={("H-1", "P-1", "V-1"): _ready_result()},
+        filters={"scope": "final"},
+        reviews=reviews,
+    )
+    rows, _ = _summary_rows(output)
+    assert rows[1][11] == "审核通过" and rows[1][13] == "mgr-9"
+
+    unavailable = export_filtered_record_results_workbook(
+        records=[_record()],
+        results={("H-1", "P-1", "V-1"): _ready_result()},
+        filters={"scope": "final"},
+        reviews=None,
+    )
+    rows, _ = _summary_rows(unavailable)
+    assert rows[1][11] == "未知"

@@ -511,7 +511,7 @@ def _load_review_states(results: list[dict[str, Any]]) -> dict[tuple[str, str, s
     return batch_review_states(results)
 
 
-def _review_anchors(
+def build_review_anchors(
     identities: Iterable[tuple[str, str, str]],
     raw_summary_map: dict[tuple[str, str, str], dict[str, Any]],
 ) -> list[dict[str, Any]]:
@@ -559,7 +559,7 @@ def _attach_review_states(
             page_ready[identity] = summary
     if not page_ready:
         return
-    anchors = _review_anchors(page_ready, raw_summary_map)
+    anchors = build_review_anchors(page_ready, raw_summary_map)
     try:
         states = review_state_loader(anchors)
     except Exception as exc:  # noqa: BLE001 - 审核状态降级为未知，不阻断病历列表
@@ -635,7 +635,7 @@ def _review_state_matching_identities(
     if not ready_identities:
         return set(), {}
     try:
-        states = review_state_loader(_review_anchors(ready_identities, raw_summary_map))
+        states = review_state_loader(build_review_anchors(ready_identities, raw_summary_map))
     except Exception as exc:  # noqa: BLE001 - 只记异常类型，不记患者身份或 SQL
         logger.warning("病历列表按审核状态筛选时批量读取失败 error_type=%s", type(exc).__name__)
         raise WorkstationReviewStateUnavailable("审核状态暂不可用，无法按审核状态筛选") from None

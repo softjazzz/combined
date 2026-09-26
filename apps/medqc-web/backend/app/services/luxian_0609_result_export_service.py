@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import html
 from collections import Counter, defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 from io import BytesIO
 from typing import Any, Mapping, Sequence
+from zoneinfo import ZoneInfo
 
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
@@ -209,6 +210,51 @@ def _result_summary(result: Mapping[str, Any]) -> tuple[str, Counter[str]]:
     return "已完成", counts
 
 
+_REVIEW_STATE_LABELS = {
+    "pending_review": "待审核",
+    "pending_recheck": "待复审",
+    "approved": "审核通过",
+    "doubtful": "审核存疑",
+}
+_REVIEW_UNKNOWN = "未知"
+_REVIEW_NOT_APPLICABLE = "不适用"
+_DISPLAY_TIMEZONE = ZoneInfo("Asia/Shanghai")
+
+
+def _review_time_text(value: Any) -> str:
+    """审核时间按医院时区显示；库内无时区时间视为 UTC。格式与“导出时间”一致。"""
+    if not isinstance(value, datetime):
+        return ""
+    aware = value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+    return aware.astimezone(_DISPLAY_TIMEZONE).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _review_columns(
+    result: Mapping[str, Any],
+    review: Mapping[str, Any] | None,
+    *,
+    reviews_available: bool,
+) -> list[str]:
+    """审核状态、审核结论原因、审核人、审核时间四列；只搬运审核服务结果，不重判。"""
+    if _text(result.get("state")) != "ready":
+        return [_REVIEW_NOT_APPLICABLE, "", "", ""]
+    if not reviews_available or not isinstance(review, Mapping):
+        return [_REVIEW_UNKNOWN, "", "", ""]
+    label = _REVIEW_STATE_LABELS.get(_text(review.get("state")), _REVIEW_UNKNOWN)
+    reviewer = _text(review.get("reviewer_name")) or _text(review.get("reviewer_id"))
+    return [
+        label,
+        _excel_text(review.get("reason")),
+        _excel_text(reviewer),
+        _review_time_text(review.get("reviewed_at")),
+    ]
+
+
+def _review_state_filter_text(value: Any) -> str:
+    states = [value] if isinstance(value, str) else list(value or [])
+    return "、".join(_REVIEW_STATE_LABELS.get(_text(state), _text(state)) for state in states)
+
+
 def _style_workbook(workbook: Workbook) -> None:
     header_fill = PatternFill("solid", fgColor="EAF2FF")
     for worksheet in workbook.worksheets:
@@ -229,8 +275,11 @@ def export_filtered_record_results_workbook(
     records: Sequence[Mapping[str, Any]],
     results: Mapping[tuple[str, str, str], Mapping[str, Any]],
     filters: Mapping[str, Any],
+    reviews: Mapping[tuple[str, str, str], Mapping[str, Any]] | None = None,
 ) -> BytesIO:
+    """reviews 为审核服务批量读取结果；None 表示读取失败/未提供，ready 病例审核列显示“未知”。"""
     output = BytesIO()
+    reviews_available = reviews is not None
     workbook = Workbook()
     intro = workbook.active
     intro.title = "导出说明"
@@ -249,12 +298,32 @@ def export_filtered_record_results_workbook(
     intro.append(["导出时间", datetime.now().strftime("%Y-%m-%d %H:%M:%S")])
     intro.append(["病历数量", len(records)])
     for key, value in filters.items():
+        if key == "review_state":
+            if value:
+                intro.append(["筛选-审核状态", _review_state_filter_text(value)])
+            continue
         if key != "export_mode" and _text(value):
             intro.append([f"筛选-{key}", _excel_text(value)])
 
     summary = workbook.create_sheet("病历汇总")
     summary.append(
-        ["患者", "住院号", "科室", "主管医师", "入院日期", "出院日期", "最新质控结果", "确定问题", "资料待核实", "待判断", "合规"]
+        [
+            "患者",
+            "住院号",
+            "科室",
+            "主管医师",
+            "入院日期",
+            "出院日期",
+            "最新质控结果",
+            "确定问题",
+            "资料待核实",
+            "待判断",
+            "合规",
+            "审核状态",
+            "审核结论原因",
+            "审核人",
+            "审核时间",
+        ]
     )
     issues = workbook.create_sheet("需处理明细")
     details = workbook.create_sheet("全部规则结果")
@@ -296,6 +365,11 @@ def export_filtered_record_results_workbook(
                 counts.get("data_gap", 0),
                 counts.get("uncertain", 0) + counts.get("evaluation_unknown", 0),
                 counts.get("compliant", 0),
+                *_review_columns(
+                    result,
+                    (reviews or {}).get(identity),
+                    reviews_available=reviews_available,
+                ),
             ]
         )
         for item in result.get("items") or []:
