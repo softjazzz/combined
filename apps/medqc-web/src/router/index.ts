@@ -1,5 +1,11 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
+import {
+  NO_PERMISSION_PATH,
+  canAccessRouteMeta,
+  resolveDeniedFallback,
+  resolveLoginLanding,
+} from '@/utils/routeAccess'
 
 const WORKSTATION_BASE_PATH = '/workstation-v5'
 const LEGACY_WORKSTATION_BASE_PATH = '/workstation-v4'
@@ -1189,6 +1195,16 @@ const routes: RouteRecordRaw[] = [
       title: '临床工作站样例',
     },
   },
+  // 无权访问兜底页：登录即可访问（不设 meta.permission），供守卫在无可访问默认页时落地
+  {
+    path: NO_PERMISSION_PATH,
+    name: 'NoPermission',
+    component: () => import('@/views/error/NoPermissionView.vue'),
+    meta: {
+      requiresAuth: true,
+      title: '无权访问',
+    },
+  },
   {
     path: '/:pathMatch(.*)*',
     name: 'NotFound',
@@ -1265,11 +1281,10 @@ router.beforeEach(async (to, from, next) => {
     }
 
     if (authStore.isAuthenticated) {
+      // 已登录：redirect 可访问则去 redirect，否则按角色默认落地（避免无 V5 权限的角色被送回工作台后循环重定向）
       const redirect =
-        typeof to.query.redirect === 'string'
-          ? normalizeWorkstationPath(to.query.redirect)
-          : WORKSTATION_BASE_PATH
-      next(redirect)
+        typeof to.query.redirect === 'string' ? normalizeWorkstationPath(to.query.redirect) : null
+      next(resolveLoginLanding(router, authStore.userRoles, redirect).target)
       return
     }
   }
@@ -1297,18 +1312,11 @@ router.beforeEach(async (to, from, next) => {
       }
     }
 
-    // 检查权限
-    if (to.meta.permission) {
-      const userRoles = authStore.userRoles
-      const requiredPermissions = to.meta.permission as string[]
-
-      const hasPermission = requiredPermissions.some((permission) => userRoles.includes(permission))
-
-      if (!hasPermission) {
-        // 没有权限，重定向到仪表板
-        next('/dashboard')
-        return
-      }
+    // 检查权限：以路由 meta.permission 为唯一来源，与菜单过滤、登录落地共用同一判断
+    if (!canAccessRouteMeta(to.meta, authStore.userRoles)) {
+      // 没有权限：转到角色默认页；默认页不可访问或就是当前被拒目标时落到无权访问页，避免循环重定向
+      next(resolveDeniedFallback(router, authStore.userRoles, to.path))
+      return
     }
   }
 

@@ -43,6 +43,7 @@
         >
           <!-- 仪表板 -->
           <a-menu-item
+            v-if="canSee('/dashboard')"
             key="/dashboard"
             class="menu-item-base"
           >
@@ -54,6 +55,7 @@
 
           <!-- 智能质控工作站 -->
           <a-menu-item
+            v-if="canSee('/dashboard/workstation')"
             key="/dashboard/workstation"
             class="menu-item-base"
           >
@@ -64,7 +66,7 @@
           </a-menu-item>
 
           <a-menu-item
-            v-if="authStore.hasRole('admin') || authStore.hasRole('qc_manager')"
+            v-if="canSee('/workstation-v5')"
             key="/workstation-v5"
             class="menu-item-base"
           >
@@ -76,6 +78,7 @@
 
           <!-- 病案质控 -->
           <a-sub-menu
+            v-if="canSeeAny(RECORDS_MENU_TARGETS)"
             key="/dashboard/records"
             class="menu-item-base"
           >
@@ -85,13 +88,19 @@
             <template #title>
               <span class="font-medium">病案质控</span>
             </template>
-            <a-menu-item key="/dashboard/records/running">
+            <a-menu-item
+              v-if="canSee('/dashboard/records/running')"
+              key="/dashboard/records/running"
+            >
               <template #icon>
                 <PlayCircleOutlined />
               </template>
               <span>运行病历</span>
             </a-menu-item>
-            <a-menu-item key="/dashboard/records/final">
+            <a-menu-item
+              v-if="canSee('/dashboard/records/final')"
+              key="/dashboard/records/final"
+            >
               <template #icon>
                 <CheckCircleOutlined />
               </template>
@@ -101,7 +110,7 @@
 
           <!-- 质控规则管理（改为子菜单，与V4工作站保持一致） -->
           <a-sub-menu
-            v-if="authStore.hasRole('admin') || authStore.hasRole('qc_manager')"
+            v-if="canSeeAny(RULES_MENU_TARGETS)"
             key="/dashboard/rules"
             class="menu-item-base"
           >
@@ -111,25 +120,37 @@
             <template #title>
               <span class="font-medium">质控规则</span>
             </template>
-            <a-menu-item key="/dashboard/rules?tab=coding">
+            <a-menu-item
+              v-if="canSee('/dashboard/rules?tab=coding')"
+              key="/dashboard/rules?tab=coding"
+            >
               <template #icon>
                 <MedicineBoxOutlined />
               </template>
               <span>编码质控规则</span>
             </a-menu-item>
-            <a-menu-item key="/dashboard/rules?tab=semantic">
+            <a-menu-item
+              v-if="canSee('/dashboard/rules?tab=semantic')"
+              key="/dashboard/rules?tab=semantic"
+            >
               <template #icon>
                 <BranchesOutlined />
               </template>
               <span>全病历质控规则</span>
             </a-menu-item>
-            <a-menu-item key="/dashboard/rules?tab=frontpage">
+            <a-menu-item
+              v-if="canSee('/dashboard/rules?tab=frontpage')"
+              key="/dashboard/rules?tab=frontpage"
+            >
               <template #icon>
                 <FileTextOutlined />
               </template>
               <span>首页质控规则</span>
             </a-menu-item>
-            <a-menu-item key="/dashboard/rules?tab=settlement">
+            <a-menu-item
+              v-if="canSee('/dashboard/rules?tab=settlement')"
+              key="/dashboard/rules?tab=settlement"
+            >
               <template #icon>
                 <DollarOutlined />
               </template>
@@ -138,7 +159,7 @@
           </a-sub-menu>
 
           <a-menu-item
-            v-if="authStore.hasRole('admin') || authStore.hasRole('qc_manager')"
+            v-if="canSee('/workstation-v5/rules/custom-workspace')"
             key="/workstation-v5/rules/custom-workspace"
             class="menu-item-base"
           >
@@ -150,6 +171,7 @@
 
           <!-- 任务管理 -->
           <a-sub-menu
+            v-if="canSeeAny(TASKS_MENU_TARGETS)"
             key="/dashboard/tasks"
             class="menu-item-base"
           >
@@ -159,14 +181,17 @@
             <template #title>
               <span class="font-medium">任务管理</span>
             </template>
-            <a-menu-item key="/dashboard/tasks/my">
+            <a-menu-item
+              v-if="canSee('/dashboard/tasks/my')"
+              key="/dashboard/tasks/my"
+            >
               <template #icon>
                 <UserOutlined />
               </template>
               <span>我的任务</span>
             </a-menu-item>
             <a-menu-item
-              v-if="authStore.hasRole('admin') || authStore.hasRole('qc_manager')"
+              v-if="canSee('/dashboard/tasks/all')"
               key="/dashboard/tasks/all"
             >
               <template #icon>
@@ -174,10 +199,20 @@
               </template>
               <span>全部任务</span>
             </a-menu-item>
+            <a-menu-item
+              v-if="canSee('/dashboard/qc/record-reviews')"
+              key="/dashboard/qc/record-reviews"
+            >
+              <template #icon>
+                <FileSearchOutlined />
+              </template>
+              <span>病历审核待办</span>
+            </a-menu-item>
           </a-sub-menu>
 
           <!-- 统计分析 -->
           <a-menu-item
+            v-if="canSee('/dashboard/statistics')"
             key="/dashboard/statistics"
             class="menu-item-base"
           >
@@ -189,6 +224,7 @@
 
           <!-- DRG/DIP -->
           <a-sub-menu
+            v-if="canSeeAny(DRG_MENU_TARGETS)"
             key="/dashboard/drg"
             class="menu-item-base"
           >
@@ -198,37 +234,55 @@
             <template #title>
               <span class="font-medium">DRG/DIP</span>
             </template>
-            <a-menu-item key="/dashboard/drg/index">
+            <a-menu-item
+              v-if="canSee('/dashboard/drg/index')"
+              key="/dashboard/drg/index"
+            >
               <template #icon>
                 <HomeOutlined />
               </template>
               <span>DRG 首页</span>
             </a-menu-item>
-            <a-menu-item key="/dashboard/drg/coding">
+            <a-menu-item
+              v-if="canSee('/dashboard/drg/coding')"
+              key="/dashboard/drg/coding"
+            >
               <template #icon>
                 <FileTextOutlined />
               </template>
               <span>编码辅助</span>
             </a-menu-item>
-            <a-menu-item key="/dashboard/drg/grouping">
+            <a-menu-item
+              v-if="canSee('/dashboard/drg/grouping')"
+              key="/dashboard/drg/grouping"
+            >
               <template #icon>
                 <BranchesOutlined />
               </template>
               <span>分组预测</span>
             </a-menu-item>
-            <a-menu-item key="/dashboard/drg/monitor">
+            <a-menu-item
+              v-if="canSee('/dashboard/drg/monitor')"
+              key="/dashboard/drg/monitor"
+            >
               <template #icon>
                 <RadarChartOutlined />
               </template>
               <span>事中监控</span>
             </a-menu-item>
-            <a-menu-item key="/dashboard/drg/fee-monitoring">
+            <a-menu-item
+              v-if="canSee('/dashboard/drg/fee-monitoring')"
+              key="/dashboard/drg/fee-monitoring"
+            >
               <template #icon>
                 <DollarOutlined />
               </template>
               <span>付费监测</span>
             </a-menu-item>
-            <a-menu-item key="/dashboard/drg/analysis">
+            <a-menu-item
+              v-if="canSee('/dashboard/drg/analysis')"
+              key="/dashboard/drg/analysis"
+            >
               <template #icon>
                 <BarChartOutlined />
               </template>
@@ -238,6 +292,7 @@
 
           <!-- 系统管理（与 DRG/DIP 平级） -->
           <a-sub-menu
+            v-if="canSeeAny(SYSTEM_MENU_TARGETS)"
             key="/dashboard/system"
             class="menu-item-base"
           >
@@ -250,7 +305,7 @@
 
             <!-- 系统设置 -->
             <a-menu-item
-              v-if="authStore.hasRole('admin')"
+              v-if="canSee('/dashboard/settings')"
               key="/dashboard/settings"
             >
               <template #icon>
@@ -448,6 +503,7 @@ import { ref, computed, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import type { MenuInfo } from 'ant-design-vue/es/menu/src/interface'
 import { useAuthStore } from '@/stores/auth'
+import { canAccessPath } from '@/utils/routeAccess'
 import {
   MenuUnfoldOutlined,
   MenuFoldOutlined,
@@ -474,11 +530,37 @@ import {
   TeamOutlined,
   DesktopOutlined,
   ThunderboltOutlined,
+  FileSearchOutlined,
 } from '@ant-design/icons-vue'
 
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
+
+// 菜单可见性：按目标路由 meta.permission 过滤（与路由守卫同一判断），分组无可访问子项时隐藏
+const canSee = (target: string) => canAccessPath(router, target, authStore.userRoles ?? [])
+const canSeeAny = (targets: readonly string[]) => targets.some(canSee)
+const RECORDS_MENU_TARGETS = ['/dashboard/records/running', '/dashboard/records/final'] as const
+const RULES_MENU_TARGETS = [
+  '/dashboard/rules?tab=coding',
+  '/dashboard/rules?tab=semantic',
+  '/dashboard/rules?tab=frontpage',
+  '/dashboard/rules?tab=settlement',
+] as const
+const TASKS_MENU_TARGETS = [
+  '/dashboard/tasks/my',
+  '/dashboard/tasks/all',
+  '/dashboard/qc/record-reviews',
+] as const
+const DRG_MENU_TARGETS = [
+  '/dashboard/drg/index',
+  '/dashboard/drg/coding',
+  '/dashboard/drg/grouping',
+  '/dashboard/drg/monitor',
+  '/dashboard/drg/fee-monitoring',
+  '/dashboard/drg/analysis',
+] as const
+const SYSTEM_MENU_TARGETS = ['/dashboard/settings'] as const
 
 // 响应式数据
 const collapsed = ref(false)

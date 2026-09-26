@@ -4,10 +4,13 @@ import { defineComponent, h } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import WorkstationLoginView from '@/views/workstation-v4/WorkstationLoginView.vue'
 
-const { message, routeQuery, routerPush, routerReplace, signIn } = vi.hoisted(() => ({
+const { authState, message, realRouterRef, routeQuery, routerPush, routerReplace, signIn } = vi.hoisted(() => ({
+  authState: { userRoles: ['admin'] as string[] },
+  realRouterRef: { current: null as null | { resolve: (to: unknown) => unknown } },
   message: {
     success: vi.fn(),
     error: vi.fn(),
+    warning: vi.fn(),
   },
   routeQuery: {} as Record<string, unknown>,
   routerPush: vi.fn(),
@@ -19,19 +22,25 @@ vi.mock('ant-design-vue', () => ({
   message,
 }))
 
-vi.mock('vue-router', () => ({
+// 登录落地依赖真实路由表的 meta.permission，resolve 交给真实 router
+vi.mock('vue-router', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('vue-router')>()),
   useRoute: () => ({
     query: routeQuery,
   }),
   useRouter: () => ({
     push: routerPush,
     replace: routerReplace,
+    resolve: (to: unknown) => realRouterRef.current!.resolve(to),
   }),
 }))
 
 vi.mock('@/stores/auth', () => ({
   useAuthStore: () => ({
     signIn,
+    get userRoles() {
+      return authState.userRoles
+    },
   }),
 }))
 
@@ -49,6 +58,11 @@ vi.mock('@ant-design/icons-vue', () => ({
     },
   }),
 }))
+
+window.scrollTo = vi.fn()
+realRouterRef.current = (await import('@/router')).default as unknown as {
+  resolve: (to: unknown) => unknown
+}
 
 const WorkstationLoginFormStub = defineComponent({
   name: 'WorkstationLoginForm',
@@ -123,6 +137,7 @@ describe('WorkstationLoginView', () => {
     vi.clearAllMocks()
     Object.keys(routeQuery).forEach((key) => delete routeQuery[key])
     signIn.mockResolvedValue({ success: true })
+    authState.userRoles = ['admin']
   })
 
   it('演示账号登录后进入工作台首页', async () => {
@@ -137,6 +152,7 @@ describe('WorkstationLoginView', () => {
   })
 
   it('普通账号登录后仍遵守 redirect 参数', async () => {
+    authState.userRoles = ['doctor']
     routeQuery.redirect = '/workstation-v5/rules?tab=semantic'
     const wrapper = mountView()
 
@@ -155,9 +171,44 @@ describe('WorkstationLoginView', () => {
     await flushPromises()
 
     expect(routerReplace).toHaveBeenCalledWith('/workstation-v5/records/final?source=legacy')
+    expect(message.warning).not.toHaveBeenCalled()
+  })
+
+  it('redirect 无权访问时回到角色默认页并提示', async () => {
+    authState.userRoles = ['doctor']
+    routeQuery.redirect = '/workstation-v5/records/final'
+    const wrapper = mountView()
+
+    await wrapper.find('.login-normal').trigger('click')
+    await flushPromises()
+
+    expect(routerReplace).toHaveBeenCalledWith('/dashboard/qc/rectifications')
+    expect(message.warning).toHaveBeenCalledWith('无权访问该页面')
+  })
+
+  it('无 redirect 时按角色默认落地：质控员进入我的任务-我收到', async () => {
+    authState.userRoles = ['qc_staff']
+    const wrapper = mountView()
+
+    await wrapper.find('.login-normal').trigger('click')
+    await flushPromises()
+
+    expect(routerReplace).toHaveBeenCalledWith('/dashboard/tasks/my?tab=received')
+    expect(message.warning).not.toHaveBeenCalled()
+  })
+
+  it('无 redirect 时按角色默认落地：医生优先进入整改任务', async () => {
+    authState.userRoles = ['doctor']
+    const wrapper = mountView()
+
+    await wrapper.find('.login-normal').trigger('click')
+    await flushPromises()
+
+    expect(routerReplace).toHaveBeenCalledWith('/dashboard/qc/rectifications')
   })
 
   it('实施账号支持 sync_admin 简写登录', async () => {
+    authState.userRoles = ['sync_admin']
     const wrapper = mountView()
 
     await wrapper.find('.login-sync-admin').trigger('click')

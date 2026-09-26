@@ -7,6 +7,7 @@ import { AuditOutlined, LockOutlined } from '@ant-design/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import WorkstationLoginForm from '@/views/workstation-v4/components/WorkstationLoginForm.vue'
 import type { LoginRequest } from '@/types/auth'
+import { ROUTE_ACCESS_DENIED_MESSAGE, resolveLoginLanding } from '@/utils/routeAccess'
 
 const router = useRouter()
 const route = useRoute()
@@ -14,14 +15,15 @@ const authStore = useAuthStore()
 const loading = ref(false)
 const showDemoAccounts = ref(false)
 
-const redirectTarget = computed(() => {
+// 工作台登录页只接受工作台内的 redirect；其余视为未指定，交由角色默认落地
+const redirectCandidate = computed<string | null>(() => {
   const raw = route.query.redirect
-  if (typeof raw !== 'string') return '/workstation-v5'
+  if (typeof raw !== 'string') return null
   if (raw.startsWith('/workstation-v5')) return raw
   if (raw.startsWith('/workstation-v4')) {
     return `/workstation-v5${raw.slice('/workstation-v4'.length)}`
   }
-  return '/workstation-v5'
+  return null
 })
 
 const loginAccountAliases: Record<string, string> = {
@@ -39,7 +41,13 @@ const demoAccounts = [
   },
 ]
 
-const navigateAfterLogin = async (target = redirectTarget.value) => {
+const navigateAfterLogin = async () => {
+  const { target, redirectDenied } = resolveLoginLanding(
+    router,
+    authStore.userRoles ?? [],
+    redirectCandidate.value,
+  )
+  if (redirectDenied) message.warning(ROUTE_ACCESS_DENIED_MESSAGE)
   try {
     await router.replace(target)
   } catch (error) {

@@ -80,33 +80,37 @@
           @open-change="handleMenuOpenChange"
         >
           <!-- 工作台 -->
-          <a-sub-menu key="workstation-sub" class="menu-item-base">
+          <a-sub-menu
+            v-if="canSeeAny(WORKSTATION_MENU_TARGETS)"
+            key="workstation-sub"
+            class="menu-item-base"
+          >
             <template #icon>
               <MonitorCog class="sidebar-icon" />
             </template>
             <template #title>
               <span class="font-medium">工作台</span>
             </template>
-            <a-menu-item key="/workstation-v5">
+            <a-menu-item v-if="canSee('/workstation-v5')" key="/workstation-v5">
               <template #icon>
                 <House class="sidebar-icon" />
               </template>
               <span>工作台首页</span>
             </a-menu-item>
-            <a-menu-item key="/workstation-v5/worklist">
+            <a-menu-item v-if="canSee('/workstation-v5/worklist')" key="/workstation-v5/worklist">
               <template #icon>
                 <FolderKanban class="sidebar-icon" />
               </template>
               <span>病历池</span>
             </a-menu-item>
-            <a-menu-item key="/workstation-v5/stats">
+            <a-menu-item v-if="canSee('/workstation-v5/stats')" key="/workstation-v5/stats">
               <template #icon>
                 <ChartNoAxesColumnIncreasing class="sidebar-icon" />
               </template>
               <span>统计分析</span>
             </a-menu-item>
             <a-menu-item
-              v-if="canAccessOutpatientEmergency"
+              v-if="canSee('/workstation-v5/records/outpatient-emergency')"
               key="/workstation-v5/records/outpatient-emergency"
             >
               <template #icon>
@@ -114,31 +118,35 @@
               </template>
               <span>门急诊病历</span>
             </a-menu-item>
-            <a-menu-item key="/workstation-v5/records/running">
+            <a-menu-item v-if="canSee('/workstation-v5/records/running')" key="/workstation-v5/records/running">
               <template #icon>
                 <PlayCircle class="sidebar-icon" />
               </template>
               <span>运行病历质控</span>
             </a-menu-item>
-            <a-menu-item key="/workstation-v5/records/final">
+            <a-menu-item v-if="canSee('/workstation-v5/records/final')" key="/workstation-v5/records/final">
               <template #icon>
                 <CircleCheck class="sidebar-icon" />
               </template>
               <span>已出院病历质控</span>
             </a-menu-item>
-            <a-menu-item v-if="isDemoFeedbackAccount" key="/workstation-v5/qc-feedback-demo">
+            <a-menu-item
+              v-if="isDemoFeedbackAccount && canSee('/workstation-v5/qc-feedback-demo')"
+              key="/workstation-v5/qc-feedback-demo"
+            >
               <template #icon>
                 <ReceiptText class="sidebar-icon" />
               </template>
               <span>质控反馈记录</span>
             </a-menu-item>
-            <a-menu-item key="/workstation-v5/customer-sample-validation">
+            <a-menu-item v-if="canSee('/workstation-v5/customer-sample-validation')" key="/workstation-v5/customer-sample-validation">
               <template #icon>
                 <FileSearch class="sidebar-icon" />
               </template>
               <span>客户样本验证</span>
             </a-menu-item>
             <a-menu-item
+              v-if="canSee(STAGE_MENU_TARGET)"
               key="ws-stage-frontpage-generate"
               @click="goStageMenu('frontpage_generate')"
             >
@@ -147,13 +155,21 @@
               </template>
               <span>生成首页</span>
             </a-menu-item>
-            <a-menu-item key="ws-stage-frontpage-qc" @click="goStageMenu('frontpage_qc')">
+            <a-menu-item
+              v-if="canSee(STAGE_MENU_TARGET)"
+              key="ws-stage-frontpage-qc"
+              @click="goStageMenu('frontpage_qc')"
+            >
               <template #icon>
                 <ShieldCheck class="sidebar-icon" />
               </template>
               <span>首页质控</span>
             </a-menu-item>
-            <a-menu-item key="ws-stage-settlement-qc" @click="goStageMenu('settlement_qc')">
+            <a-menu-item
+              v-if="canSee(STAGE_MENU_TARGET)"
+              key="ws-stage-settlement-qc"
+              @click="goStageMenu('settlement_qc')"
+            >
               <template #icon>
                 <ReceiptText class="sidebar-icon" />
               </template>
@@ -162,32 +178,48 @@
           </a-sub-menu>
 
           <!-- 质控规则 -->
-          <a-sub-menu key="qc-rules-sub" class="menu-item-base">
+          <a-sub-menu
+            v-if="canSeeAny(RULES_MENU_TARGETS)"
+            key="qc-rules-sub"
+            class="menu-item-base"
+          >
             <template #icon>
               <Shield class="sidebar-icon" />
             </template>
             <template #title>
               <span class="font-medium">质控规则</span>
             </template>
-            <a-menu-item key="/workstation-v5/rules?tab=coding">
+            <a-menu-item
+              v-if="canSee('/workstation-v5/rules?tab=coding')"
+              key="/workstation-v5/rules?tab=coding"
+            >
               <template #icon>
                 <Pill class="sidebar-icon" />
               </template>
               <span>编码质控规则</span>
             </a-menu-item>
-            <a-menu-item key="/workstation-v5/rules?tab=semantic&ruleSetKey=luxian_0609_qc_v1">
+            <a-menu-item
+              v-if="canSee('/workstation-v5/rules?tab=semantic&ruleSetKey=luxian_0609_qc_v1')"
+              key="/workstation-v5/rules?tab=semantic&ruleSetKey=luxian_0609_qc_v1"
+            >
               <template #icon>
                 <Workflow class="sidebar-icon" />
               </template>
               <span>全病历质控规则</span>
             </a-menu-item>
-            <a-menu-item key="/workstation-v5/rules?tab=frontpage">
+            <a-menu-item
+              v-if="canSee('/workstation-v5/rules?tab=frontpage')"
+              key="/workstation-v5/rules?tab=frontpage"
+            >
               <template #icon>
                 <FileText class="sidebar-icon" />
               </template>
               <span>首页质控规则</span>
             </a-menu-item>
-            <a-menu-item key="/workstation-v5/rules?tab=settlement">
+            <a-menu-item
+              v-if="canSee('/workstation-v5/rules?tab=settlement')"
+              key="/workstation-v5/rules?tab=settlement"
+            >
               <template #icon>
                 <ReceiptText class="sidebar-icon" />
               </template>
@@ -196,7 +228,7 @@
           </a-sub-menu>
 
           <!-- ICD 编码查询 -->
-          <a-menu-item key="/workstation-v5/icd" class="menu-item-base">
+          <a-menu-item v-if="canSee('/workstation-v5/icd')" key="/workstation-v5/icd" class="menu-item-base">
             <template #icon>
               <Search class="sidebar-icon" />
             </template>
@@ -204,38 +236,42 @@
           </a-menu-item>
 
           <!-- DRG/DIP 分析 -->
-          <a-sub-menu key="drg-sub" class="menu-item-base">
+          <a-sub-menu
+            v-if="canSeeAny(DRG_MENU_TARGETS)"
+            key="drg-sub"
+            class="menu-item-base"
+          >
             <template #icon>
               <Network class="sidebar-icon" />
             </template>
             <template #title>
               <span class="font-medium">DRG/DIP 分析</span>
             </template>
-            <a-menu-item key="/workstation-v5/drg/pre">
+            <a-menu-item v-if="canSee('/workstation-v5/drg/pre')" key="/workstation-v5/drg/pre">
               <template #icon>
                 <FileChartColumn class="sidebar-icon" />
               </template>
               <span>事前分析</span>
             </a-menu-item>
-            <a-menu-item key="/workstation-v5/drg/mid">
+            <a-menu-item v-if="canSee('/workstation-v5/drg/mid')" key="/workstation-v5/drg/mid">
               <template #icon>
                 <Activity class="sidebar-icon" />
               </template>
               <span>事中监控</span>
             </a-menu-item>
-            <a-menu-item key="/workstation-v5/drg/payment">
+            <a-menu-item v-if="canSee('/workstation-v5/drg/payment')" key="/workstation-v5/drg/payment">
               <template #icon>
                 <BadgeDollarSign class="sidebar-icon" />
               </template>
               <span>付费监测</span>
             </a-menu-item>
-            <a-menu-item key="/workstation-v5/drg/post">
+            <a-menu-item v-if="canSee('/workstation-v5/drg/post')" key="/workstation-v5/drg/post">
               <template #icon>
                 <ChartNoAxesColumnIncreasing class="sidebar-icon" />
               </template>
               <span>事后分析</span>
             </a-menu-item>
-            <a-menu-item key="/workstation-v5/grouper">
+            <a-menu-item v-if="canSee('/workstation-v5/grouper')" key="/workstation-v5/grouper">
               <template #icon>
                 <GitFork class="sidebar-icon" />
               </template>
@@ -243,7 +279,7 @@
             </a-menu-item>
           </a-sub-menu>
 
-          <a-menu-item key="/workstation-v5/rules/custom-workspace" class="menu-item-base">
+          <a-menu-item v-if="canSee('/workstation-v5/rules/custom-workspace')" key="/workstation-v5/rules/custom-workspace" class="menu-item-base">
             <template #icon>
               <Bolt class="sidebar-icon" />
             </template>
@@ -251,7 +287,7 @@
           </a-menu-item>
 
           <!-- 数据上传 -->
-          <a-menu-item key="/workstation-v5/upload" class="menu-item-base">
+          <a-menu-item v-if="canSee('/workstation-v5/upload')" key="/workstation-v5/upload" class="menu-item-base">
             <template #icon>
               <CloudUpload class="sidebar-icon" />
             </template>
@@ -259,7 +295,7 @@
           </a-menu-item>
 
           <!-- 系统配置 -->
-          <a-menu-item key="/workstation-v5/system-config" class="menu-item-base">
+          <a-menu-item v-if="canSee('/workstation-v5/system-config')" key="/workstation-v5/system-config" class="menu-item-base">
             <template #icon>
               <Settings class="sidebar-icon" />
             </template>
@@ -441,6 +477,7 @@ import RuntimeBuildStatus from '@/components/layout/RuntimeBuildStatus.vue'
 import { useRouter, useRoute } from 'vue-router'
 import type { MenuInfo } from 'ant-design-vue/es/menu/src/interface'
 import { useAuthStore } from '@/stores/auth'
+import { canAccessPath } from '@/utils/routeAccess'
 import {
   MenuUnfoldOutlined,
   MenuFoldOutlined,
@@ -561,9 +598,34 @@ const isDemoFeedbackAccount = computed(
 )
 
 const isQcOverviewRoute = computed(() => route.path === '/workstation-v5/qc-overview')
-const canAccessOutpatientEmergency = computed(() =>
-  authStore.userRoles.some((role) => ['admin', 'qc_manager'].includes(role)),
-)
+
+// 菜单可见性：按目标路由 meta.permission 过滤（与路由守卫同一判断），分组无可访问子项时隐藏
+const canSee = (target: string) => canAccessPath(router, target, authStore.userRoles ?? [])
+const canSeeAny = (targets: readonly string[]) => targets.some(canSee)
+/** 生成首页/首页质控/结算清单质控三个阶段入口均落到病历池 */
+const STAGE_MENU_TARGET = '/workstation-v5/worklist'
+const WORKSTATION_MENU_TARGETS = [
+  '/workstation-v5',
+  '/workstation-v5/worklist',
+  '/workstation-v5/stats',
+  '/workstation-v5/records/outpatient-emergency',
+  '/workstation-v5/records/running',
+  '/workstation-v5/records/final',
+  '/workstation-v5/customer-sample-validation',
+] as const
+const RULES_MENU_TARGETS = [
+  '/workstation-v5/rules?tab=coding',
+  '/workstation-v5/rules?tab=semantic&ruleSetKey=luxian_0609_qc_v1',
+  '/workstation-v5/rules?tab=frontpage',
+  '/workstation-v5/rules?tab=settlement',
+] as const
+const DRG_MENU_TARGETS = [
+  '/workstation-v5/drg/pre',
+  '/workstation-v5/drg/mid',
+  '/workstation-v5/drg/payment',
+  '/workstation-v5/drg/post',
+  '/workstation-v5/grouper',
+] as const
 
 // 方法
 async function navigateTo(path: string, query?: Record<string, string>) {
