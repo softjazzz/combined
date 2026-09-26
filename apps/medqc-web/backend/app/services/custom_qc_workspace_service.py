@@ -345,7 +345,8 @@ def _explicit_customer_text(
             continue
         if any(private_value in value for private_value in private_values):
             continue
-        return value if preserve_length else _truncate_export_text(value, 360)
+        # 正式发布文案保留换行和空白；上面的归一化文本仅用于安全检查。
+        return str(item.get(key)).strip() if preserve_length else _truncate_export_text(value, 360)
     return fallback
 
 
