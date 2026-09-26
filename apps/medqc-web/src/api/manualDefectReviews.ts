@@ -37,6 +37,18 @@ export interface ManualDefectReviewPage {
   page_size: number
 }
 
+/** 单病例人工缺陷：按 created_at 倒序，最多返回 200 条；total 为精确总数，可能大于 items 长度。 */
+export interface CaseManualDefectList {
+  items: ManualDefectReviewItem[]
+  total: number
+}
+
+export interface CaseManualDefectQuery {
+  institute_id: string
+  patient_id: string
+  visit_id: string
+}
+
 export interface ManualDefectReviewPayload {
   decision: ManualDefectReviewDecision
   reason?: string | null
@@ -118,4 +130,13 @@ export async function reviewManualDefect(defectId: string, payload: ManualDefect
     url: `/api/v1/manual-defects/${encodeURIComponent(defectId)}/review`,
     data: payload,
   }, '提交人工缺陷审核失败')
+}
+
+/** 按三坐标读取单病例全部人工缺陷（含已审核），供病历结果抽屉只读展示。 */
+export async function getCaseManualDefects(query: CaseManualDefectQuery) {
+  return request<CaseManualDefectList>({
+    method: 'GET',
+    url: '/api/v1/manual-defects/case',
+    params: { institute_id: query.institute_id, patient_id: query.patient_id, visit_id: query.visit_id },
+  }, '读取本病例人工缺陷失败')
 }

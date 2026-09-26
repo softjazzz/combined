@@ -110,6 +110,22 @@ const CaseRecordReviewPanelStub = defineComponent({
   },
 })
 
+let manualDefectPanelProps: Record<string, unknown> | null = null
+
+const CaseManualDefectPanelStub = defineComponent({
+  name: 'CaseManualDefectPanel',
+  props: {
+    instituteId: { type: String, required: true },
+    patientId: { type: String, required: true },
+    visitId: { type: String, required: true },
+  },
+  emits: ['forbidden'],
+  setup(props) {
+    manualDefectPanelProps = props as unknown as Record<string, unknown>
+    return () => h('div', { 'data-testid': 'case-manual-defects-stub' })
+  },
+})
+
 function mountDrawer(
   presentationMode?: 'flat' | 'grouped',
   extraProps: Record<string, unknown> = {},
@@ -150,6 +166,7 @@ function mountDrawer(
         }),
         QCRecordCompareWorkbench: QCRecordCompareWorkbenchStub,
         CaseRecordReviewPanel: CaseRecordReviewPanelStub,
+        CaseManualDefectPanel: CaseManualDefectPanelStub,
       },
     },
   })
@@ -167,6 +184,7 @@ describe('QCRecordResultComparisonDrawer', () => {
     downloadBlob.mockReset()
     workbenchProps = null
     reviewPanelProps = null
+    manualDefectPanelProps = null
     authState.roles = []
     authState.calls = 0
   })
@@ -451,5 +469,67 @@ describe('QCRecordResultComparisonDrawer', () => {
     await flushPromises()
     expect(wrapper.find('[data-testid="case-review-stub"]').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('权限')
+  })
+
+  it('未传入导航 props 时不显示上一个/下一个', async () => {
+    getLatestLuxian0609RecordResult.mockResolvedValue({ success: true, data: readyResult })
+    const wrapper = mountDrawer('grouped', { recordReview: true })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="record-result-nav"]').exists()).toBe(false)
+  })
+
+  it('导航按钮按 hasPrev/hasNext 禁用，显示位置并发出 navigate 事件', async () => {
+    getLatestLuxian0609RecordResult.mockResolvedValue({ success: true, data: readyResult })
+    const wrapper = mountDrawer('grouped', {
+      hasPrev: false,
+      hasNext: true,
+      currentIndex: 1,
+      totalCount: 3,
+    })
+    await flushPromises()
+    const prev = wrapper.get('[data-testid="record-result-nav-prev"]')
+    const next = wrapper.get('[data-testid="record-result-nav-next"]')
+    expect(prev.attributes('disabled')).toBeDefined()
+    expect(next.attributes('disabled')).toBeUndefined()
+    expect(wrapper.get('[data-testid="record-result-nav-position"]').text()).toBe('第 1 / 3 份')
+
+    await next.trigger('click')
+    expect(wrapper.emitted('navigate-next')).toHaveLength(1)
+    await prev.trigger('click')
+    expect(wrapper.emitted('navigate-prev')).toBeUndefined()
+
+    await wrapper.setProps({ hasPrev: true, currentIndex: undefined })
+    await wrapper.get('[data-testid="record-result-nav-prev"]').trigger('click')
+    expect(wrapper.emitted('navigate-prev')).toHaveLength(1)
+    expect(wrapper.find('[data-testid="record-result-nav-position"]').exists()).toBe(false)
+  })
+
+  it('人工缺陷分区与病例审核同条件挂载，并按三坐标传入', async () => {
+    authState.roles = ['qc_manager']
+    getLatestLuxian0609RecordResult.mockResolvedValue({ success: true, data: readyResult })
+    const wrapper = mountDrawer('grouped', { recordReview: true })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="case-manual-defects-stub"]').exists()).toBe(true)
+    expect(manualDefectPanelProps).toMatchObject({ instituteId: 'H1', patientId: 'P001', visitId: 'V001' })
+
+    // 审核面板 403 不影响人工缺陷分区；人工缺陷 403 只隐藏自身。
+    wrapper.getComponent(CaseRecordReviewPanelStub).vm.$emit('forbidden')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="case-review-stub"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="case-manual-defects-stub"]').exists()).toBe(true)
+    wrapper.getComponent(CaseManualDefectPanelStub).vm.$emit('forbidden')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="case-manual-defects-stub"]').exists()).toBe(false)
+  })
+
+  it.each([
+    [['qc_staff'], true],
+    [['admin'], false],
+  ])('角色 %j 或未开启审核(%s)时不挂载人工缺陷分区', async (roles, recordReview) => {
+    authState.roles = roles
+    getLatestLuxian0609RecordResult.mockResolvedValue({ success: true, data: readyResult })
+    const wrapper = mountDrawer('grouped', recordReview ? { recordReview: true } : {})
+    await flushPromises()
+    expect(wrapper.find('[data-testid="case-manual-defects-stub"]').exists()).toBe(false)
   })
 })

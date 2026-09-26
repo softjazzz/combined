@@ -47,8 +47,12 @@ const ResultDrawerStub = defineComponent({
     focus: { type: Object, default: null },
     presentationMode: { type: String, default: 'flat' },
     recordReview: { type: Boolean, default: false },
+    hasPrev: { type: Boolean, default: undefined },
+    hasNext: { type: Boolean, default: undefined },
+    currentIndex: { type: Number, default: undefined },
+    totalCount: { type: Number, default: undefined },
   },
-  emits: ['close', 'review-submitted'],
+  emits: ['close', 'review-submitted', 'navigate-prev', 'navigate-next'],
   setup(props) {
     return () => h('div', { 'data-testid': 'result-drawer-stub', 'data-open': String(props.open) })
   },
@@ -756,5 +760,83 @@ describe('QcRecordResultListView', () => {
       '/api/medical-records/workstation',
       expect.objectContaining({ page: 2 }),
     )
+  })
+
+  describe('抽屉上一个/下一个导航', () => {
+    /** 调整顺序：未质控与交付异常夹在两份 ready 病历之间。 */
+    function navigationPayload() {
+      const payload = response()
+      const [priority, dataGap, uncertain, notRun, technical, missing] = payload.data.records
+      payload.data.records = [priority, dataGap, notRun, technical, uncertain, missing]
+      return payload
+    }
+
+    async function openFull(wrapper: ReturnType<typeof mountView>, visitId: string) {
+      await wrapper
+        .getComponent(QcRecordReviewPreview)
+        .vm.$emit('open-full', `["H","P","${visitId}"]`)
+      await flushPromises()
+    }
+
+    it('只在当前页 ready 行内导航，跳过未质控与交付异常，边界禁用', async () => {
+      mocks.getRaw.mockResolvedValue(navigationPayload())
+      const wrapper = mountView('discharged')
+      await flushPromises()
+
+      // 排序后：V-data-gap、V-priority、V-not-run、V-technical、V-uncertain
+      await openFull(wrapper, 'V-data-gap')
+      const drawer = wrapper.getComponent(ResultDrawerStub)
+      expect(drawer.props()).toMatchObject({ hasPrev: false, hasNext: true, currentIndex: 1, totalCount: 3 })
+
+      drawer.vm.$emit('navigate-next')
+      await flushPromises()
+      expect(drawer.props('focus')).toMatchObject({ visitId: 'V-priority' })
+      expect(drawer.props()).toMatchObject({ hasPrev: true, hasNext: true, currentIndex: 2, totalCount: 3 })
+
+      drawer.vm.$emit('navigate-next')
+      await flushPromises()
+      expect(drawer.props('open')).toBe(true)
+      expect(drawer.props('focus')).toMatchObject({ visitId: 'V-uncertain' })
+      expect(drawer.props()).toMatchObject({ hasPrev: true, hasNext: false, currentIndex: 3, totalCount: 3 })
+      expect(wrapper.findComponent(DocumentWorkbenchStub).exists()).toBe(false)
+
+      drawer.vm.$emit('navigate-next')
+      await flushPromises()
+      expect(drawer.props('focus')).toMatchObject({ visitId: 'V-uncertain' })
+
+      drawer.vm.$emit('navigate-prev')
+      await flushPromises()
+      expect(drawer.props('focus')).toMatchObject({ visitId: 'V-priority' })
+    })
+
+    it('从分析面板下钻或关闭抽屉后不提供导航', async () => {
+      const wrapper = mountView('discharged')
+      await flushPromises()
+      await wrapper.get('[data-testid="qc-result-view-analysis"]').trigger('click')
+      await wrapper.get('[data-testid="result-analysis-stub"]').trigger('click')
+      const drawer = wrapper.getComponent(ResultDrawerStub)
+      expect(drawer.props('open')).toBe(true)
+      expect(drawer.props('hasPrev')).toBeUndefined()
+      expect(drawer.props('hasNext')).toBeUndefined()
+      expect(drawer.props('currentIndex')).toBeUndefined()
+    })
+
+    it('focus 透传入院/出院时间，缺失值不伪造', async () => {
+      const wrapper = mountView('discharged')
+      await flushPromises()
+      await openFull(wrapper, 'V-priority')
+      const drawer = wrapper.getComponent(ResultDrawerStub)
+      expect(drawer.props('focus')).toMatchObject({
+        admissionTime: '2026-08-09 08:00',
+        dischargeTime: '2026-08-12 10:00',
+      })
+
+      drawer.vm.$emit('navigate-prev')
+      await flushPromises()
+      const focus = drawer.props('focus') as Record<string, unknown>
+      expect(focus.visitId).toBe('V-data-gap')
+      expect(focus).not.toHaveProperty('admissionTime')
+      expect(focus).not.toHaveProperty('dischargeTime')
+    })
   })
 })

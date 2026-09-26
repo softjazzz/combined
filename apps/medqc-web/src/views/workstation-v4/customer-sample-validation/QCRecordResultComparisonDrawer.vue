@@ -53,6 +53,37 @@
           </span>
         </div>
         <div class="customer-record-result-title__actions">
+          <div
+            v-if="showNavigation"
+            class="customer-record-result-title__nav"
+            role="group"
+            aria-label="切换病历"
+            data-testid="record-result-nav"
+          >
+            <button
+              type="button"
+              class="customer-record-result-title__nav-button"
+              data-testid="record-result-nav-prev"
+              :disabled="!hasPrev"
+              @click="emit('navigate-prev')"
+            >
+              上一个
+            </button>
+            <span
+              v-if="navigationPositionText"
+              class="customer-record-result-title__nav-position"
+              data-testid="record-result-nav-position"
+            >{{ navigationPositionText }}</span>
+            <button
+              type="button"
+              class="customer-record-result-title__nav-button"
+              data-testid="record-result-nav-next"
+              :disabled="!hasNext"
+              @click="emit('navigate-next')"
+            >
+              下一个
+            </button>
+          </div>
           <QcDiagnosticExport
             v-if="open && latestResult && focus"
             :items="latestResult.items"
@@ -73,10 +104,11 @@
 
     <a-spin :spinning="loading">
       <div
-        v-if="showRecordReview && latestResult && focus"
+        v-if="showReviewSection && latestResult && focus"
         class="customer-record-result-drawer__review"
       >
         <CaseRecordReviewPanel
+          v-if="showRecordReview"
           :key="`case-review:${focus.instituteId}:${focus.patientId}:${focus.visitId}:${latestResult.job_id}`"
           :institute-id="focus.instituteId"
           :patient-id="focus.patientId"
@@ -85,6 +117,15 @@
           :user-id="reviewerId"
           @review-submitted="handleReviewSubmitted"
           @forbidden="reviewForbidden = true"
+        />
+        <!-- 人工缺陷分区：独立 owner（人工缺陷审核），此处只读；与病历审核同一挂载条件。 -->
+        <CaseManualDefectPanel
+          v-if="showManualDefects"
+          :key="`case-manual-defects:${focus.instituteId}:${focus.patientId}:${focus.visitId}`"
+          :institute-id="focus.instituteId"
+          :patient-id="focus.patientId"
+          :visit-id="focus.visitId"
+          @forbidden="manualDefectForbidden = true"
         />
       </div>
       <QCRecordCompareWorkbench
@@ -117,6 +158,7 @@ import { computed, ref, watch } from 'vue'
 import { ShieldCheck, X } from 'lucide-vue-next'
 import QcDiagnosticExport from '@/components/qc/QcDiagnosticExport.vue'
 import CaseRecordReviewPanel from '@/components/qc/CaseRecordReviewPanel.vue'
+import CaseManualDefectPanel from '@/components/qc/CaseManualDefectPanel.vue'
 import type { RecordReviewDecision } from '@/api/recordReviews'
 import { useAuthStore } from '@/stores/auth'
 import {
@@ -149,8 +191,21 @@ const props = withDefaults(
     presentationMode?: 'flat' | 'grouped'
     /** 运行/终末列表开启病例审核；仅 admin/qc_manager 挂载审核面板。 */
     recordReview?: boolean
+    /** 列表内导航：两者均未传入时不显示上一个/下一个（客户样本验证等调用方不变）。 */
+    hasPrev?: boolean
+    hasNext?: boolean
+    /** 当前病历在可导航集合中的序号（从 1 开始）与集合总数；缺失时不显示位置。 */
+    currentIndex?: number
+    totalCount?: number
   }>(),
-  { presentationMode: 'flat', recordReview: false },
+  {
+    presentationMode: 'flat',
+    recordReview: false,
+    hasPrev: undefined,
+    hasNext: undefined,
+    currentIndex: undefined,
+    totalCount: undefined,
+  },
 )
 
 export interface QCRecordReviewSubmittedEvent {
@@ -163,9 +218,27 @@ export interface QCRecordReviewSubmittedEvent {
 const emit = defineEmits<{
   (event: 'close'): void
   (event: 'review-submitted', payload: QCRecordReviewSubmittedEvent): void
+  (event: 'navigate-prev'): void
+  (event: 'navigate-next'): void
 }>()
 
+const showNavigation = computed(() => props.hasPrev !== undefined || props.hasNext !== undefined)
+const navigationPositionText = computed(() => {
+  const { currentIndex, totalCount } = props
+  if (
+    typeof currentIndex !== 'number' ||
+    typeof totalCount !== 'number' ||
+    !Number.isInteger(currentIndex) ||
+    currentIndex < 1 ||
+    currentIndex > totalCount
+  ) {
+    return ''
+  }
+  return `第 ${currentIndex} / ${totalCount} 份`
+})
+
 const reviewForbidden = ref(false)
+const manualDefectForbidden = ref(false)
 /** 未开启审核的调用方（如客户样本验证）不访问登录态。 */
 const reviewAuth = computed(() => {
   if (!props.recordReview) return null
@@ -177,6 +250,10 @@ const reviewAuth = computed(() => {
 })
 const reviewerId = computed(() => reviewAuth.value?.userId ?? '')
 const showRecordReview = computed(() => !!reviewAuth.value?.allowed && !reviewForbidden.value)
+const showManualDefects = computed(
+  () => !!reviewAuth.value?.allowed && !manualDefectForbidden.value,
+)
+const showReviewSection = computed(() => showRecordReview.value || showManualDefects.value)
 
 function handleReviewSubmitted(decision: RecordReviewDecision) {
   const focus = props.focus
@@ -288,6 +365,7 @@ async function loadLatestResult() {
   const focus = props.focus
   latestResult.value = null
   reviewForbidden.value = false
+  manualDefectForbidden.value = false
   qcTimeText.value = ''
   authorizedRecordRef.value = ''
   loadError.value = ''
@@ -513,6 +591,35 @@ watch(
   font-size: 12px;
   line-height: 20px;
   white-space: nowrap;
+}
+.customer-record-result-title__nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.customer-record-result-title__nav-position {
+  color: rgba(29, 29, 31, 0.58);
+  font-size: 12px;
+  line-height: 20px;
+  white-space: nowrap;
+}
+.customer-record-result-title__nav-button {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 8px;
+  background: #fff;
+  color: rgba(29, 29, 31, 0.8);
+  font-size: 13px;
+  cursor: pointer;
+}
+.customer-record-result-title__nav-button:hover:not(:disabled) {
+  border-color: rgba(43, 108, 246, 0.38);
+  color: #2b6cf6;
+}
+.customer-record-result-title__nav-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 .customer-record-result-title__export {
   min-height: 36px;

@@ -167,6 +167,67 @@ def list_manual_defects(
     return {"items": items, "total": int(total), "page": page, "page_size": page_size}
 
 
+CASE_LIST_LIMIT = 200
+
+
+def _case_identity(institute_id: Any, patient_id: Any, visit_id: Any) -> tuple[str, str, str]:
+    values = (institute_id, patient_id, visit_id)
+    if any(
+        not isinstance(value, str) or not value.strip() or value != value.strip() or len(value) > 128
+        for value in values
+    ):
+        raise ManualDefectReviewInvalid("病例三坐标无效")
+    return (str(institute_id), str(patient_id), str(visit_id))
+
+
+def list_case_manual_defects(*, institute_id: str, patient_id: str, visit_id: str) -> dict[str, Any]:
+    """按三坐标只读取该病例全部审核状态的任务人工缺陷（最近 CASE_LIST_LIMIT 条 + 精确 total）。
+
+    与审核列表共用人工缺陷谓词与字段白名单；只读，不改变任何状态。
+    """
+    identity = _case_identity(institute_id, patient_id, visit_id)
+    factory = _require_session_factory()
+    predicates = (
+        *_manual_scope(),
+        QCDefect.institute_id == identity[0],
+        QCDefect.patient_id == identity[1],
+        QCDefect.visit_id == identity[2],
+    )
+    try:
+        with factory() as session:
+            total = session.execute(select(func.count(QCDefect.id)).where(*predicates)).scalar_one()
+            defects = session.execute(
+                select(
+                    QCDefect.id, QCDefect.institute_id, QCDefect.patient_id,
+                    QCDefect.visit_id, QCDefect.rule_code, QCDefect.rule_name,
+                    QCDefect.description, QCDefect.severity, QCDefect.location,
+                    QCDefect.suggestion, QCDefect.manual_review_status,
+                    QCDefect.manual_created_by, QCDefect.created_at,
+                ).where(*predicates)
+                .order_by(QCDefect.created_at.desc(), QCDefect.id.desc())
+                .limit(CASE_LIST_LIMIT)
+            ).all()
+            by_defect: dict[str, list[Any]] = {}
+            if defects:
+                for history in session.execute(
+                    select(
+                        QCDefectHistory.defect_id, QCDefectHistory.actor_id,
+                        QCDefectHistory.details,
+                    ).where(
+                        QCDefectHistory.defect_id.in_([row.id for row in defects]),
+                        QCDefectHistory.action == "manual_create",
+                    )
+                ).all():
+                    by_defect.setdefault(history.defect_id, []).append(history)
+    except SQLAlchemyError as exc:
+        raise ManualDefectReviewUnavailable("病例人工缺陷读取失败") from exc
+    items = [
+        _list_item(row, _task_identity(by_defect.get(row.id, []), row.manual_created_by))
+        for row in defects
+    ]
+    return {"items": items, "total": int(total), "limit": CASE_LIST_LIMIT}
+
+
 def count_pending_manual_defects() -> int:
     """待审核人工缺陷精确计数；与 list_manual_defects(review_status='pending') 的 total 同一谓词。"""
     factory = _require_session_factory()

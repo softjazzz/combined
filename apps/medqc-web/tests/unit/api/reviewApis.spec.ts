@@ -7,7 +7,7 @@ import {
   submitCaseRecordReview,
   submitTaskRecordReview,
 } from '@/api/recordReviews'
-import { getManualDefects, reviewManualDefect } from '@/api/manualDefectReviews'
+import { getCaseManualDefects, getManualDefects, reviewManualDefect } from '@/api/manualDefectReviews'
 import { ApiService } from '@/services/apiService'
 
 vi.mock('@/services/apiService', () => ({ ApiService: { requestRaw: vi.fn() } }))
@@ -114,5 +114,18 @@ describe('人工缺陷审核 API', () => {
     await expect(reviewManualDefect('d/1', payload)).resolves.toEqual({
       success: false, status: 403, code: undefined, message: '审核人不能审核本人创建的人工缺陷',
     })
+  })
+
+  it('单病例人工缺陷以三坐标为查询参数；403 保留状态码', async () => {
+    const data = { items: [], total: 0 }
+    vi.mocked(ApiService.requestRaw)
+      .mockResolvedValueOnce(response({ success: true, data }))
+      .mockRejectedValueOnce(httpError(403, { detail: '没有权限' }))
+    const query = { institute_id: 'H', patient_id: 'P', visit_id: 'V/1' }
+    await expect(getCaseManualDefects(query)).resolves.toMatchObject({ success: true, data, status: 200 })
+    expect(ApiService.requestRaw).toHaveBeenCalledWith({
+      method: 'GET', url: '/api/v1/manual-defects/case', params: { institute_id: 'H', patient_id: 'P', visit_id: 'V/1' },
+    })
+    await expect(getCaseManualDefects(query)).resolves.toMatchObject({ success: false, status: 403 })
   })
 })

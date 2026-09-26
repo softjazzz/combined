@@ -256,8 +256,14 @@
       :focus="selectedFocus"
       presentation-mode="grouped"
       record-review
+      :has-prev="drawerNavigation?.hasPrev"
+      :has-next="drawerNavigation?.hasNext"
+      :current-index="drawerNavigation?.currentIndex"
+      :total-count="drawerNavigation?.totalCount"
       @close="closeResultDrawer"
       @review-submitted="refreshAfterRecordReview"
+      @navigate-prev="navigateResult(-1)"
+      @navigate-next="navigateResult(1)"
     />
     <Drawer
       :open="documentDrawerOpen"
@@ -316,6 +322,8 @@ const exportMenuOpen = ref(false)
 const drawerOpen = ref(false)
 const documentDrawerOpen = ref(false)
 const selectedFocus = ref<QCRecordResultFocus | null>(null)
+/** 当前抽屉对应的列表行；仅由列表行打开时有值，分析面板打开时为空（不提供导航）。 */
+const selectedRecordKey = ref('')
 const selectedRecordKeys = ref<string[]>([])
 const selectedRecordRefs = ref<
   Record<string, { institute_id: string; patient_id: string; visit_id: string }>
@@ -392,6 +400,43 @@ const rows = computed<QcRecordResultRow[]>(() => {
   return resultRows.sort(compareLatestQcTimeDesc)
 })
 const selectedCount = computed(() => selectedRecordKeys.value.length)
+
+/** 抽屉可导航的行：仅当前页已质控（ready）的病历，跳过未质控与结果校验异常。 */
+function isNavigableRow(row: QcRecordResultRow): boolean {
+  return row.resultStatus !== 'not-run' && row.resultStatus !== 'technical-error'
+}
+
+const navigableRows = computed(() => rows.value.filter(isNavigableRow))
+
+function findAdjacentNavigableKey(direction: -1 | 1): string {
+  const currentPosition = rows.value.findIndex((row) => row.recordKey === selectedRecordKey.value)
+  if (currentPosition < 0) return ''
+  for (
+    let index = currentPosition + direction;
+    index >= 0 && index < rows.value.length;
+    index += direction
+  ) {
+    const row = rows.value[index]
+    if (isNavigableRow(row)) return row.recordKey
+  }
+  return ''
+}
+
+const drawerNavigation = computed(() => {
+  if (!drawerOpen.value || !selectedRecordKey.value) return null
+  const index = navigableRows.value.findIndex((row) => row.recordKey === selectedRecordKey.value)
+  return {
+    hasPrev: Boolean(findAdjacentNavigableKey(-1)),
+    hasNext: Boolean(findAdjacentNavigableKey(1)),
+    currentIndex: index >= 0 ? index + 1 : undefined,
+    totalCount: navigableRows.value.length,
+  }
+})
+
+function navigateResult(direction: -1 | 1) {
+  const targetKey = findAdjacentNavigableKey(direction)
+  if (targetKey) handleOpenResult(targetKey)
+}
 const activePreviewKey = ref('')
 const previewRefreshKey = ref(0)
 const previewRow = computed(
@@ -774,8 +819,11 @@ function handleOpenResult(recordKey: string) {
     patientName: record.name,
     patientSex: record.sex,
     patientAge: record.age,
+    ...(row.admissionTime && row.admissionTime !== '—' ? { admissionTime: row.admissionTime } : {}),
+    ...(row.dischargeTime && row.dischargeTime !== '—' ? { dischargeTime: row.dischargeTime } : {}),
     label: labelParts.join(' · '),
   }
+  selectedRecordKey.value = recordKey
   if (row.resultStatus === 'not-run') documentDrawerOpen.value = true
   else drawerOpen.value = true
 }
@@ -811,6 +859,7 @@ function closeResultDrawer() {
   drawerOpen.value = false
   documentDrawerOpen.value = false
   selectedFocus.value = null
+  selectedRecordKey.value = ''
   detailNotice.value = ''
 }
 </script>

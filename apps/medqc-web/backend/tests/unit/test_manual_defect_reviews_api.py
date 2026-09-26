@@ -201,3 +201,42 @@ def test_database_errors_are_sanitized_503(monkeypatch):
     res = http.post(review_path("m-1"), json={"decision": "approved",
                                               "expected_status": "pending"})
     assert res.status_code == 503 and "secret" not in res.text
+
+
+CASE = "/api/v1/manual-defects/case"
+CASE_PARAMS = {"institute_id": "hospital-A", "patient_id": "patient", "visit_id": "visit"}
+
+
+def test_case_list_returns_all_review_states_for_exact_identity(sessions, monkeypatch):
+    """按三坐标读取全部审核状态的人工缺陷；自动缺陷与其他病例不出现，total 精确。"""
+    with sessions.begin() as session:
+        other = _defect("m-other", 7)
+        other["institute_id"] = "hospital-B"  # 同患者/就诊号、不同机构
+        session.execute(QCDefect.__table__.insert(), [other])
+    http, _ = client(monkeypatch)
+    res = http.get(CASE, params=CASE_PARAMS)
+    assert res.status_code == 200
+    data = res.json()["data"]
+    assert data["total"] == 5 and data["limit"] == 200
+    assert [i["id"] for i in data["items"]] == ["m-done", "m-own", "m-3", "m-2", "m-1"]
+    assert {i["manual_review_status"] for i in data["items"]} == {"pending", "approved"}
+    assert all(i["institute_id"] == "hospital-A" for i in data["items"])
+    assert data["items"][0]["task_id"] == "task-1"
+
+
+def test_case_list_requires_review_permission_and_identity(sessions, monkeypatch):
+    http, _ = client(monkeypatch, user_id="qc-2", roles=("qc_staff",))
+    assert http.get(CASE, params=CASE_PARAMS).status_code == 403
+    http, _ = client(monkeypatch)
+    assert http.get(CASE, params={**CASE_PARAMS, "visit_id": ""}).status_code == 422
+    assert http.get(CASE, params={"institute_id": "hospital-A"}).status_code == 422
+    assert http.get(CASE, params={**CASE_PARAMS, "patient_id": " patient"}).status_code == 422
+
+
+def test_case_list_database_error_is_sanitized_503(monkeypatch):
+    engine = sa.create_engine("sqlite://", poolclass=StaticPool)
+    monkeypatch.setattr(service, "SessionLocal", sessionmaker(bind=engine))
+    http, _ = client(monkeypatch)
+    res = http.get(CASE, params=CASE_PARAMS)
+    assert res.status_code == 503
+    assert "qc_defects" not in res.text

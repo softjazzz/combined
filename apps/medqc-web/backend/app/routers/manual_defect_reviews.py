@@ -27,6 +27,7 @@ from ..services.manual_defect_review_service import (
     ManualDefectReviewNotFound,
     ManualDefectReviewUnavailable,
     count_pending_manual_defects,
+    list_case_manual_defects,
     list_manual_defects,
     review_manual_defect,
 )
@@ -128,6 +129,37 @@ async def get_manual_defects(
     except Exception as exc:
         # 只记录异常类型，不回显 SQL 或异常原文。
         logger.error("manual_defect_list_failed error_type=%s", type(exc).__name__)
+        raise HTTPException(status_code=503, detail=_UNAVAILABLE_DETAIL) from None
+    return success_response(data=result, trace_id=get_trace_id(request))
+
+
+@router.get("/case")
+async def get_case_manual_defects(
+    request: Request,
+    institute_id: str = Query(..., min_length=1, max_length=128),
+    patient_id: str = Query(..., min_length=1, max_length=128),
+    visit_id: str = Query(..., min_length=1, max_length=128),
+    current_user: dict = Depends(get_current_user),
+):
+    """按三坐标只读取该病例的任务人工缺陷（全部审核状态，最近 200 条 + 精确 total）。"""
+    _require_review(current_user)
+    try:
+        data = await run_in_threadpool(
+            list_case_manual_defects,
+            institute_id=institute_id, patient_id=patient_id, visit_id=visit_id,
+        )
+        result = {
+            "items": [
+                ManualDefectListItem.model_validate(item).model_dump(mode="json")
+                for item in data["items"]
+            ],
+            "total": data["total"],
+            "limit": data["limit"],
+        }
+    except ManualDefectReviewInvalid as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.error("manual_defect_case_list_failed error_type=%s", type(exc).__name__)
         raise HTTPException(status_code=503, detail=_UNAVAILABLE_DETAIL) from None
     return success_response(data=result, trace_id=get_trace_id(request))
 
