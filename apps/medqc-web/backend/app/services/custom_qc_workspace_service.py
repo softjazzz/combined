@@ -35,13 +35,6 @@ from .document_domain_alignment import (
 from .luxian_0609.customer_renderer import (
     CUSTOMER_SCHEMA_VERSION as LUXIAN_0609_CUSTOMER_SCHEMA_VERSION,
     RULE_SET_VERSION,
-    exam_lab_data_gap_customer_message,
-)
-from .luxian_0609.customer_remediation import build_customer_remediation_suggestion
-from .luxian_0609.customer_text_publication import (
-    CUSTOMER_TEXT_SEAL_KEY,
-    assert_published_customer_text_unchanged,
-    operation_publication_key,
 )
 from .luxian_0609.record_result_read_model import (
     _generation_key,
@@ -593,15 +586,9 @@ def project_customer_safe_result_item(
         is_current_luxian_result
         or _safe_text(raw.get("schema_version")) == _CUSTOMER_RESULT_SCHEMA
     )
-    # 免裁剪只限当前 LX0609 结果：签章已验证的发布文案，或由其投影出的
-    # 客户 DTO 二次投影；其他规则集和旧形态继续走原有 360 字裁剪。
-    preserve_published_text = (
-        is_current_luxian_result
-        and _safe_text(raw.get("schema_version")) == _CUSTOMER_RESULT_SCHEMA
-    )
-    if is_current_luxian_result and CUSTOMER_TEXT_SEAL_KEY in raw:
-        assert_published_customer_text_unchanged(raw)
-        preserve_published_text = True
+    # 当前 LX0609 正式结果（v2 发布合同或其客户 DTO，且状态合同已校验）
+    # 保留发布文案全文；其他规则集和旧形态继续走原有 360 字裁剪。
+    preserve_published_text = is_current_luxian_result
     conclusion = _explicit_customer_text(
         raw,
         (
@@ -2035,46 +2022,12 @@ def _customer_export_rows(
     job: Dict[str, Any],
     *,
     hmac_key: str,
-    include_luxian_canonical_remediation: bool = False,
 ) -> tuple[List[Dict[str, Any]], List[List[str]], Dict[str, Any]]:
     source_items = iter_unique_customer_result_source_items(job, hmac_key=hmac_key)
     items: List[Dict[str, Any]] = []
     for source_item in source_items:
-        if CUSTOMER_TEXT_SEAL_KEY in source_item:
-            assert_published_customer_text_unchanged(source_item)
+        # 正式发布文案原样导出，不在读取层重生成建议或资料缺口结论。
         projected = project_customer_safe_result_item(source_item, hmac_key=hmac_key)
-        if (
-            include_luxian_canonical_remediation
-            and _safe_text(source_item.get("schema_version"))
-            == LUXIAN_0609_CUSTOMER_SCHEMA_VERSION
-            and _safe_text(projected.get("rule_id")).startswith("LX0609-")
-            and CUSTOMER_TEXT_SEAL_KEY not in source_item
-        ):
-            # 旧任务没有正式发布证明，沿用仅依赖受控事实的安全回退。
-            # 新任务的发布文案通过完整性校验后直接使用，不在读取层重生成。
-            safe_facts = projected.get("customer_display_facts")
-            canonical_suggestion = build_customer_remediation_suggestion(
-                rule_id=_safe_text(projected.get("rule_id")),
-                status=_safe_text(projected.get("status")),
-                reason_code=_safe_text(projected.get("reason_code")),
-                facts=safe_facts if isinstance(safe_facts, Mapping) else None,
-            )
-            # 没有受控建议时也必须清空保存的自由文本。否则已暂停规则或
-            # 尚无整改模板的规则会把上游 suggestion 原样带入 HTML。
-            projected["suggestion"] = canonical_suggestion
-            projected["customer_suggestion"] = canonical_suggestion
-            if _safe_text(projected.get("status")) == "data_gap":
-                gap_message = exam_lab_data_gap_customer_message(
-                    rule_id=_safe_text(projected.get("rule_id")),
-                    reason_code=_safe_text(projected.get("reason_code")),
-                )
-                if gap_message is not None:
-                    findings, _evidence, suggestion = gap_message
-                    projected["conclusion"] = findings
-                    projected["findings"] = findings
-                    projected["customer_conclusion"] = findings
-                    projected["suggestion"] = suggestion
-                    projected["customer_suggestion"] = suggestion
         items.append(projected)
     rows: List[List[str]] = []
     for item in items:
@@ -2141,7 +2094,6 @@ def _canonical_customer_export_rows(
     return _customer_export_rows(
         canonical_job,
         hmac_key=hmac_key,
-        include_luxian_canonical_remediation=True,
     )
 
 
@@ -5012,14 +4964,9 @@ class CustomQCWorkspaceService:
 
     @staticmethod
     def _envelope_item_from_rule_result(
-        item: Dict[str, Any],
-        *,
-        hmac_key: str | None = None,
-        publication_key_provider: Callable[[], bytes] | None = None,
+        item: Dict[str, Any], *, hmac_key: str | None = None,
     ) -> Dict[str, Any]:
-        return envelope_item_from_rule_result(
-            item, hmac_key=hmac_key, publication_key_provider=publication_key_provider,
-        )
+        return envelope_item_from_rule_result(item, hmac_key=hmac_key)
 
     def _write_record_result_envelopes(
         self,
@@ -5032,7 +4979,6 @@ class CustomQCWorkspaceService:
     ) -> tuple[tuple[CaseRef, str], ...]:
         # 一次保存使用同一份配置，下一次操作仍读取最新密钥。
         projection_key = customer_safe_projection_key()
-        publication_key_provider = operation_publication_key()
         envelope_job_row = job_row
         if expected_record_refs is not None:
             filters = _safe_json_loads(job_row.get("filters_json"), {})
@@ -5047,11 +4993,7 @@ class CustomQCWorkspaceService:
             job_row=envelope_job_row,
             items=items,
             now=now,
-            projector=partial(
-                self._envelope_item_from_rule_result,
-                hmac_key=projection_key,
-                publication_key_provider=publication_key_provider,
-            ),
+            projector=partial(self._envelope_item_from_rule_result, hmac_key=projection_key),
             collect_receipts=diagnostic_capture_enabled(),
             projection_key=projection_key,
         )

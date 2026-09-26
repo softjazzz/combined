@@ -61,7 +61,9 @@ from .effect_priority_qc import (
 from .qc_rule_sets import should_refine_rule_by_default
 from .qc_cancellation import raise_if_cancelled
 from .customer_rule_sets import load_customer_luxian_rules, invalidate_customer_rule_set_cache
-from .luxian_0609.customer_text_publication import CUSTOMER_TEXT_SEAL_KEY
+from .luxian_0609_result_schema import (
+    CUSTOMER_SCHEMA_VERSION as LUXIAN_0609_PUBLISHED_SCHEMA_VERSION,
+)
 from .luxian_0609 import (
     LUXIAN_0609_RULE_SET_KEY,
     build_luxian_0609_package_plan_from_settings,  # noqa: F401 - 编排模块动态解引用
@@ -1568,10 +1570,12 @@ class SichuanQCService:
         evaluation_results = []
         for item in rule_results:
             evaluation_results.append({
-                # 保留聚合器的发布文案证明；这里只搬运，不重新签章。
+                # Finalizer 正式发布（v2 合同）的结论与建议原样搬运，不重生成。
                 **({key: item[key] for key in (
-                    CUSTOMER_TEXT_SEAL_KEY, "conclusion", "customer_conclusion", "customer_suggestion",
-                ) if key in item} if CUSTOMER_TEXT_SEAL_KEY in item else {}),
+                    "conclusion", "customer_conclusion", "customer_suggestion",
+                ) if key in item}
+                    if item.get("schema_version") == LUXIAN_0609_PUBLISHED_SCHEMA_VERSION
+                    else {}),
                 "rule_id": item.get("rule_id"),
                 "rule_name": item.get("rule_name"),
                 "is_compliant": item.get("is_compliant"),

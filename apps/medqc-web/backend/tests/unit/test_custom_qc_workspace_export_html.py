@@ -135,10 +135,10 @@ def test_canonical_export_keeps_original_004_renderer_suggestion(data_gap: bool)
     assert published["status"] == ("data_gap" if data_gap else "compliant"), (
         published["status"], published.get("reason_code"), published.get("findings")
     )
-    assert envelope_item_from_rule_result(published)["customer_text_seal"] == (
-        published["customer_text_seal"]
-    )
+    # 结果签章已取消：发布与保存均不生成该字段。
+    assert "customer_text_seal" not in published
     stored_item = envelope_item_from_rule_result(published)
+    assert "customer_text_seal" not in stored_item
     envelope = {
         "schema_version": RECORD_RESULT_ENVELOPE_SCHEMA,
         "delivery_mode": CANONICAL_RESULT_DELIVERY_MODE,
@@ -159,13 +159,13 @@ def test_canonical_export_keeps_original_004_renderer_suggestion(data_gap: bool)
         _ReadSession([{"envelope_json": json.dumps(envelope)}]), **load_kwargs,
     )
     assert loaded["items"][0]["suggestion"] == published["suggestion"]
-    corrupted_envelope = deepcopy(envelope)
-    corrupted_envelope["items"][0]["suggestion"] = "伪造的整改建议"
-    with pytest.raises(ValueError, match="客户结果解释合同不完整"):
-        result_store.load_selected(
-            _ReadSession([{"envelope_json": json.dumps(corrupted_envelope)}]),
-            **load_kwargs,
-        )
+    # 历史 Envelope 附带的废弃签章字段在读取时被丢弃，不影响合法结果。
+    legacy_envelope = deepcopy(envelope)
+    legacy_envelope["items"][0]["customer_text_seal"] = "lx0609-customer-text-v1:" + "0" * 64
+    legacy_loaded = result_store.load_selected(
+        _ReadSession([{"envelope_json": json.dumps(legacy_envelope)}]), **load_kwargs,
+    )
+    assert legacy_loaded["items"] == loaded["items"]
     job = {
         "id": "job-original-004-text",
         "filters": {"rule_set_key": "luxian_0609_qc_v1"},
@@ -181,55 +181,21 @@ def test_canonical_export_keeps_original_004_renderer_suggestion(data_gap: bool)
         job["items"][0], hmac_key="unit-test-key",
     )
     _items, rows, _summary = workspace_module._customer_export_rows(
-        job, hmac_key="unit-test-key", include_luxian_canonical_remediation=True,
+        job, hmac_key="unit-test-key",
     )
+    # Renderer 发布的结论与建议在保存、读取、导出各阶段一致，不被重生成。
     assert rows[0][5] == projected["conclusion"]
-    assert rows[0][6] == projected["suggestion"]
+    assert rows[0][6] == projected["suggestion"] == published["suggestion"]
     if data_gap:
         assert "补充本次抢救的权威结束时间" in rows[0][6]
+    else:
+        assert rows[0][6]
 
-    corrupted = deepcopy(job)
-    corrupted["items"][0]["suggestion"] = "伪造的整改建议"
-    with pytest.raises(ValueError, match="客户结果解释合同不完整"):
-        workspace_module._customer_export_rows(
-            corrupted,
-            hmac_key="unit-test-key",
-            include_luxian_canonical_remediation=True,
-        )
-
+    # 规则身份合同仍拒绝错配的规则号。
     corrupted_rule = deepcopy(job)
     corrupted_rule["items"][0]["customer_rule_id"] = "LX0609-99-99-99"
     with pytest.raises(ValueError, match="客户结果解释合同不完整"):
-        workspace_module._customer_export_rows(
-            corrupted_rule,
-            hmac_key="unit-test-key",
-            include_luxian_canonical_remediation=True,
-        )
-
-    # 另一个 canonical_results 入口未经过统一 Renderer，不能把其自由文本
-    # 自动认证为已发布建议；导出继续使用受控回退。
-    untrusted = {key: value for key, value in published.items() if key != "customer_text_seal"}
-    untrusted["suggestion"] = "PRIVATE_UNVERIFIED_SUGGESTION"
-    untrusted_result = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": rule_id, "name": "抢救记录时效"}],
-        execution_results=[],
-        canonical_results=(untrusted,),
-        delivery_mode=CANONICAL_RESULT_DELIVERY_MODE,
-    )[0]
-    assert "customer_text_seal" not in untrusted_result
-    untrusted_job = {**job, "items": [{
-        **untrusted_result,
-        "record_id": "visit-1",
-        "institute_id": "inst-1",
-        "patient_id": "patient-1",
-        "visit_id": "visit-1",
-    }]}
-    _items, untrusted_rows, _summary = workspace_module._customer_export_rows(
-        untrusted_job,
-        hmac_key="unit-test-key",
-        include_luxian_canonical_remediation=True,
-    )
-    assert "PRIVATE_UNVERIFIED_SUGGESTION" not in untrusted_rows[0][6]
+        workspace_module._customer_export_rows(corrupted_rule, hmac_key="unit-test-key")
 
 
 class _Rows:
@@ -312,7 +278,7 @@ def test_export_batch_job_html_reads_only_this_jobs_canonical_envelopes(monkeypa
             "result_status": "non_compliant",
             "is_compliant": False,
             "reason_code": "requirement_violated",
-            "suggestion": "PRIVATE_PATIENT_NAME 任意上游建议不得直接导出",
+            "suggestion": "请补充第2次会诊的明确诊疗意见。",
             "customer_display_facts": {
                 "verification_kind": "consultation_opinion_quality_check",
                 "episode_count": 2,
@@ -353,8 +319,8 @@ def test_export_batch_job_html_reads_only_this_jobs_canonical_envelopes(monkeypa
             "result_status": "data_gap",
             "is_compliant": None,
             "reason_code": "authoritative_report_time_missing",
-            "findings": "PRIVATE_FREE_TEXT 不得直接导出",
-            "suggestion": "PRIVATE_FREE_SUGGESTION 不得直接导出",
+            "conclusion": "CT/MRI 报告缺少权威报告时间，暂无法判断病程记录时限。",
+            "suggestion": "请核对 CT/MRI 报告时间后重新质控。",
         }],
     }
     # Envelope 保存的是 Finalizer 已发布的公开形态；原始 source_document_id
@@ -419,24 +385,21 @@ def test_export_batch_job_html_reads_only_this_jobs_canonical_envelopes(monkeypa
     assert "原因码" not in html
     assert "病历引用" not in html
     assert "rec_0123456789abcdef01234567" not in html
-    # 旧式测试数据不具备正式 Renderer 生成的结论；导出不能借内部文书 ID
-    # 重建定位，也不能保留未经过公开合同的自由文本建议。
+    # 导出不能借内部文书 ID 重建定位；已保存的正式发布文案原样导出，
+    # 不在读取层重生成。
     assert "CONSULT-1" not in html
     assert "CONSULT-2" not in html
-    assert "PRIVATE_PATIENT_NAME" not in html
-    assert "任意上游建议不得直接导出" not in html
-    assert "CT/MRI 报告缺少权威报告时间" in html
-    assert "核对 CT/MRI 报告时间" in html
-    assert "PRIVATE_FREE_TEXT" not in html
-    assert "PRIVATE_FREE_SUGGESTION" not in html
+    assert "请补充第2次会诊的明确诊疗意见。" in html
+    assert "CT/MRI 报告缺少权威报告时间，暂无法判断病程记录时限。" in html
+    assert "请核对 CT/MRI 报告时间后重新质控。" in html
     assert html.count("data-record-group") == 1
     for exported in (csv_text, workbook_text):
         assert "LX0609-03-01-03" in exported
         assert "LX0609-06-01-04" in exported
         assert "LX0609-999" not in exported
         assert "legacy-record-must-not-render" not in exported
-        assert "PRIVATE_PATIENT_NAME" not in exported
-        assert "PRIVATE_FREE_SUGGESTION" not in exported
+        assert "请补充第2次会诊的明确诊疗意见。" in exported
+        assert "请核对 CT/MRI 报告时间后重新质控。" in exported
 
     partial_job = {
         **job,

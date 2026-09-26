@@ -1,10 +1,8 @@
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
 import app.services.custom_qc_workspace_service as workspace_module
-from app.services.luxian_0609 import customer_text_publication
 from app.services.luxian_0609_rule_catalog import get_luxian_0609_rule
 from app.services.custom_qc_workspace_service import (
     LX0609_CUSTOMER_RESULT_CONTRACT_ERROR,
@@ -13,18 +11,10 @@ from app.services.custom_qc_workspace_service import (
 )
 
 
-def test_signed_canonical_long_text_survives_detail_reprojection_and_export(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        customer_text_publication, "get_settings",
-        lambda: SimpleNamespace(JWT_SECRET="unit-test-publication-key"),
-    )
+def _current_long_text_item(conclusion: str, suggestion: str) -> dict:
     rule_id = "LX0609-03-02-01"
     rule = get_luxian_0609_rule(rule_id)
-    conclusion = "已核对的结论内容。" * 60
-    suggestion = "请按已核对事实完善病历。" * 40
-    item = {
+    return {
         "schema_version": "lx0609-customer-result-v2",
         "rule_id": rule_id,
         "rule_version": rule["rule_version"] if rule else "",
@@ -35,55 +25,41 @@ def test_signed_canonical_long_text_survives_detail_reprojection_and_export(
         "conclusion": conclusion,
         "suggestion": suggestion,
     }
-    item["customer_text_seal"] = customer_text_publication.seal_published_customer_text(item)
+
+
+@pytest.mark.parametrize("deprecated_seal", [False, True])
+def test_current_long_multiline_text_survives_detail_reprojection_and_export(
+    deprecated_seal: bool,
+) -> None:
+    conclusion = "已核对的结论内容。" * 60
+    suggestion = "\n".join(["请按已核对事实完善病历。"] * 40)
+    item = _current_long_text_item(conclusion, suggestion)
+    if deprecated_seal:
+        # 历史结果附带的废弃签章字段被忽略：不校验、不改变输出、不外传。
+        item["customer_text_seal"] = "lx0609-customer-text-v1:" + "f" * 64
 
     projected = project_customer_safe_result_item(item, hmac_key="unit-test-key")
     assert projected["conclusion"] == conclusion
     assert projected["suggestion"] == suggestion
+    assert "customer_text_seal" not in projected
     assert project_customer_safe_result_item(projected, hmac_key="unit-test-key") == projected
 
     job = {"filters": {"rule_set_key": "luxian_0609_qc_v1"}, "items": [item]}
     detail = project_customer_safe_batch_job(job, hmac_key="unit-test-key")
     assert detail["items"][0]["conclusion"] == conclusion
+    assert detail["items"][0]["suggestion"] == suggestion
     _items, rows, _summary = workspace_module._customer_export_rows(
         job, hmac_key="unit-test-key",
     )
     assert rows[0][5:7] == [conclusion, suggestion]
 
 
-def test_long_text_exemption_requires_verified_current_lx0609_result(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        customer_text_publication, "get_settings",
-        lambda: SimpleNamespace(JWT_SECRET="unit-test-publication-key"),
-    )
-    rule_id = "LX0609-03-02-01"
-    rule = get_luxian_0609_rule(rule_id)
+def test_long_text_exemption_is_limited_to_current_lx0609_results() -> None:
     long_text = "已核对的结论内容。" * 60
-    unsealed = {
-        "schema_version": "lx0609-customer-result-v2",
-        "rule_id": rule_id,
-        "rule_version": rule["rule_version"] if rule else "",
-        "status": "compliant",
-        "result_status": "compliant",
-        "display_status": "compliant",
-        "is_compliant": True,
-        "conclusion": long_text,
-        "suggestion": long_text,
-    }
-    # 无发布签章的当前形态仍走旧裁剪。
-    projected = project_customer_safe_result_item(unsealed, hmac_key="unit-test-key")
-    assert len(projected["conclusion"]) <= 363
-    assert projected["conclusion"] != long_text
-
-    # 签章存在但文案被篡改时拒绝，而不是放行全文。
-    sealed = {**unsealed}
-    sealed["customer_text_seal"] = customer_text_publication.seal_published_customer_text(sealed)
-    with pytest.raises(ValueError):
-        project_customer_safe_result_item(
-            {**sealed, "conclusion": long_text + "篡改"}, hmac_key="unit-test-key",
-        )
+    projected = project_customer_safe_result_item(
+        _current_long_text_item(long_text, long_text), hmac_key="unit-test-key",
+    )
+    assert projected["conclusion"] == long_text
 
     # 非 LX0609 规则声明客户 DTO schema 不能获得免裁剪权。
     foreign = {

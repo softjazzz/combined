@@ -21,10 +21,6 @@ from sqlalchemy.orm import Session
 
 from ...database.connection import DB_SCHEMA_MODE, SessionLocal, engine
 from ...schemas.qc_sichuan import QcResultFeedbackRequest
-from ..luxian_0609.customer_text_publication import (
-    CUSTOMER_TEXT_SEAL_KEY,
-    assert_published_customer_text_unchanged,
-)
 from ..custom_qc_workspace_service import _record_result_envelopes_table
 from .canonical_result_store import (
     CANONICAL_RESULT_DELIVERY_MODE,
@@ -228,9 +224,11 @@ class ResultFeedbackDemoStore:
 
     @staticmethod
     def _validated_items(envelope: Mapping[str, Any]) -> list[dict[str, Any]]:
-        """现行签章结果沿反馈读写共用校验；旧无签章结果保留既有兼容读取。"""
+        """正式 Canonical Envelope 逐项校验公开事实合同；更早无合同标记的
+        Envelope 保留既有兼容读取。"""
 
-        if "schema_version" in envelope or "delivery_mode" in envelope:
+        formal_envelope = "schema_version" in envelope or "delivery_mode" in envelope
+        if formal_envelope:
             if (
                 envelope.get("schema_version") != RECORD_RESULT_ENVELOPE_SCHEMA
                 or envelope.get("delivery_mode") != CANONICAL_RESULT_DELIVERY_MODE
@@ -243,8 +241,7 @@ class ResultFeedbackDemoStore:
             for item in items:
                 if not isinstance(item, dict):
                     raise ValueError("质控结果项目格式错误")
-                if CUSTOMER_TEXT_SEAL_KEY in item:
-                    assert_published_customer_text_unchanged(item)
+                if formal_envelope:
                     safe_customer_display_facts(item, rule_id=_rule_id(item))
         except ValueError as exc:
             raise ResultFeedbackDemoConflict("质控结果无法唯一确认") from exc

@@ -17,11 +17,6 @@ from ..case_identity import CaseRef
 from ..luxian_0609.canonical_result_finalizer import (
     validate_luxian_0609_published_customer_display_facts,
 )
-from ..luxian_0609.customer_text_publication import (
-    CUSTOMER_TEXT_SEAL_KEY,
-    LX0609_CUSTOMER_RESULT_CONTRACT_ERROR,
-    assert_published_customer_text_unchanged,
-)
 from ..luxian_0609.rule_contracts import CRITERION_KINDS
 from ..luxian_0609_result_schema import (
     CANONICAL_RESULT_DELIVERY_MODE,
@@ -76,6 +71,13 @@ _RECOMMENDATION_EVIDENCE_SOURCE_TYPES = {
     "labtest_item_report",
     "surgery_record",
 }
+
+
+LX0609_CUSTOMER_RESULT_CONTRACT_ERROR = (
+    "LX0609 客户结果解释合同不完整，拒绝交付确定问题"
+)
+# 已取消的结果文案签章字段；历史 Envelope 中若存在，读取时丢弃。
+_DEPRECATED_TEXT_SEAL_FIELD = "customer_text_seal"
 
 
 def _safe_text(value: Any, default: str = "") -> str:
@@ -268,6 +270,17 @@ def canonical_customer_status(item: Dict[str, Any]) -> str:
     return "uncertain"
 
 
+def _assert_consistent_lx0609_rule_identity(item: Dict[str, Any]) -> None:
+    """同一结果的 LX0609 规则身份字段必须指向同一规则，不能各取其一。"""
+
+    identities = {
+        _safe_text(item.get(key)).upper()
+        for key in ("customer_rule_id", "qc_point_id", "rule_id", "rule_code")
+    }
+    if len({value for value in identities if value.startswith("LX0609-")}) > 1:
+        raise ValueError(LX0609_CUSTOMER_RESULT_CONTRACT_ERROR)
+
+
 def safe_customer_display_facts(
     item: Dict[str, Any],
     *,
@@ -275,6 +288,7 @@ def safe_customer_display_facts(
 ) -> Dict[str, Any]:
     """仅透传 Finalizer 已验证的客户展示事实。"""
 
+    _assert_consistent_lx0609_rule_identity(item)
     raw = item.get("customer_display_facts")
     has_result_status = any(
         _safe_text(item.get(key)) for key in ("status", "result_status", "display_status")
@@ -376,17 +390,9 @@ def validated_customer_explanation(
 
 
 def envelope_item_from_rule_result(
-    item: Dict[str, Any],
-    *,
-    hmac_key: str | None = None,
-    publication_key_provider: Callable[[], bytes] | None = None,
+    item: Dict[str, Any], *, hmac_key: str | None = None,
 ) -> Dict[str, Any]:
     """截取 RuleDecision 交付所需字段，避免 Envelope 变成任务调试日志。"""
-
-    if CUSTOMER_TEXT_SEAL_KEY in item:
-        assert_published_customer_text_unchanged(
-            item, key_provider=publication_key_provider,
-        )
 
     allowed_keys = {
         "schema_version", "record_id", "institute_id", "patient_id", "visit_id",
@@ -395,7 +401,6 @@ def envelope_item_from_rule_result(
         "display_status", "is_compliant", "reason_code", "reason", "reason_detail",
         "reason_details", "conclusion", "findings", "detail", "actual", "standard",
         "suggestion", "customer_conclusion", "customer_suggestion", "customer_message",
-        CUSTOMER_TEXT_SEAL_KEY,
         "customer_display_facts", "criterion_results", "decision_facts",
         "customer_evidence", "evidence_items", "evidence_refs", "evidence",
         "model_analysis", "medical_analysis", "semantic_analysis", "llm_analysis",
@@ -729,8 +734,8 @@ class CanonicalResultStore:
         for item in envelope["items"]:
             if not isinstance(item, dict):
                 raise ValueError(LX0609_CUSTOMER_RESULT_CONTRACT_ERROR)
-            if CUSTOMER_TEXT_SEAL_KEY in item:
-                assert_published_customer_text_unchanged(item)
+            # 历史结果可能带已废弃的文案签章字段：读取时丢弃，不校验、不外传。
+            item.pop(_DEPRECATED_TEXT_SEAL_FIELD, None)
             rule_id = _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
             safe_customer_display_facts(item, rule_id=rule_id)
         return envelope
@@ -808,8 +813,7 @@ class CanonicalResultStore:
             if not canonical_envelope_items_are_consistent(envelope["items"]):
                 raise ValueError("canonical_result_envelope_invalid")
             for raw_item in envelope["items"]:
-                if CUSTOMER_TEXT_SEAL_KEY in raw_item:
-                    assert_published_customer_text_unchanged(raw_item)
+                raw_item.pop(_DEPRECATED_TEXT_SEAL_FIELD, None)
                 # Envelope 已通过 schema、delivery_mode 和逐项状态合同校验；
                 # 旧候选包的条目级 schema 标记曾在批任务落盘时被遗漏。读取时
                 # 只继承已验证的 Envelope 合同，不重新解释任何业务状态。

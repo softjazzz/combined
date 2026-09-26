@@ -27,8 +27,7 @@ from app.services.qc_workspace.canonical_result_store import (
 @pytest.mark.parametrize(
     "rule_id", ("LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03"),
 )
-def test_phase_gate_published_text_is_preserved_in_canonical_export(monkeypatch, rule_id):
-    monkeypatch.setenv("JWT_SECRET", "isolated-test-secret-not-for-production-0609")
+def test_phase_gate_published_text_is_preserved_in_canonical_export(rule_id):
     wrapper = get_luxian_0609_rule(rule_id)
     assert wrapper is not None
     published = aggregate_luxian_0609_results(
@@ -53,8 +52,7 @@ def test_phase_gate_published_text_is_preserved_in_canonical_export(monkeypatch,
     assert customer["suggestion"] == export_items[0]["suggestion"] == export_rows[0][6]
 
 
-def test_phase_gate_result_survives_canonical_sqlite_write_and_read(monkeypatch):
-    monkeypatch.setenv("JWT_SECRET", "isolated-test-secret-not-for-production-0609")
+def test_phase_gate_result_survives_canonical_sqlite_write_and_read():
     rule_id = "LX0609-03-01-01"
     wrapper = get_luxian_0609_rule(rule_id)
     assert wrapper is not None
@@ -120,14 +118,13 @@ def test_phase_gate_result_survives_canonical_sqlite_write_and_read(monkeypatch)
     assert saved["suggestion"] == customer["suggestion"] == export_items[0]["suggestion"]
 
 
-def test_phase_gate_public_read_rejects_changed_status_reason_rule_or_text(monkeypatch):
-    monkeypatch.setenv("JWT_SECRET", "isolated-test-secret-not-for-production-0609")
+def test_phase_gate_public_read_rejects_changed_status_reason_or_rule():
+    # 状态、原因码、规则身份由业务合同校验；文案不再做防篡改签章。
     published = build_luxian_0609_pending_definition_result("LX0609-03-01-01")
     for changed in (
         {**published, "status": "compliant", "result_status": "compliant"},
         {**published, "reason_code": "trigger_absent_complete"},
         {**published, "rule_id": "LX0609-03-01-04", "rule_code": "LX0609-03-01-04"},
-        {**published, "suggestion": "任意未经发布的建议"},
     ):
         with pytest.raises(ValueError):
             stored = envelope_item_from_rule_result(changed, hmac_key="synthetic-ref-key")

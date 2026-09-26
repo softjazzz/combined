@@ -462,29 +462,67 @@ def test_store_rejects_duplicate_or_mismatched_rule_version_envelopes(monkeypatc
         )
 
 
-def test_store_rejects_tampered_current_canonical_publication(monkeypatch):
+def _formal_canonical_row(item: dict) -> dict:
+    """正式 Canonical Envelope：带 schema 与交付模式，条目逐项校验公开事实合同。"""
+
     import json
 
-    from app.services.luxian_0609.customer_text_publication import (
-        CUSTOMER_TEXT_SEAL_KEY,
-        seal_published_customer_text,
+    from app.services.qc_workspace.canonical_result_store import (
+        CANONICAL_RESULT_DELIVERY_MODE,
+        RECORD_RESULT_ENVELOPE_SCHEMA,
     )
 
     row = _canonical_row()
     envelope = json.loads(row["envelope_json"])
-    item = envelope["items"][0]
-    item["conclusion"] = "原始结论"
-    item["suggestion"] = "原始建议"
-    item[CUSTOMER_TEXT_SEAL_KEY] = seal_published_customer_text(item)
-    item["conclusion"] = "被篡改的结论"
+    envelope["schema_version"] = RECORD_RESULT_ENVELOPE_SCHEMA
+    envelope["delivery_mode"] = CANONICAL_RESULT_DELIVERY_MODE
+    envelope["items"] = [item]
     row["envelope_json"] = json.dumps(envelope, ensure_ascii=False)
-    session = _CanonicalReadSession([row])
+    return row
+
+
+def _published_admission_item() -> dict:
+    from tests.luxian_0609_published_result_support import published_lx0609_items
+
+    return dict(published_lx0609_items(admission="late")["LX0609-01-01-01"])
+
+
+def _store_for(monkeypatch, rows, **session_kwargs):
+    session = _CanonicalReadSession(rows, **session_kwargs)
     monkeypatch.setattr(store_module, "engine", object())
     monkeypatch.setattr(store_module, "_session", lambda: session)
     store_module._feedback_table.cache_clear()
+    return ResultFeedbackDemoStore()
+
+
+@pytest.mark.parametrize("deprecated_seal", [False, True])
+def test_store_accepts_published_formal_result_without_seal(monkeypatch, deprecated_seal):
+    item = _published_admission_item()
+    assert item["status"] == "non_compliant"
+    assert "customer_text_seal" not in item
+    if deprecated_seal:
+        # 历史结果附带的废弃签章字段不校验，也不因失效而拒绝合法结果。
+        item["customer_text_seal"] = "lx0609-customer-text-v1:" + "0" * 64
+    store = _store_for(monkeypatch, [_formal_canonical_row(item)])
+
+    result = store.save(
+        root_job_id="root-1",
+        record_ref="rec_0123456789abcdef01234567",
+        rule_id="LX0609-01-01-01",
+        created_by="admin-001",
+        payload=_payload(),
+    )
+
+    assert result["original_status"] == "non_compliant"
+
+
+def test_store_rejects_formal_result_missing_required_facts(monkeypatch):
+    item = _published_admission_item()
+    item["customer_display_facts"] = None
+    store = _store_for(monkeypatch, [_formal_canonical_row(item)])
 
     with pytest.raises(ResultFeedbackDemoConflict):
-        ResultFeedbackDemoStore().save(
+        store.save(
             root_job_id="root-1",
             record_ref="rec_0123456789abcdef01234567",
             rule_id="LX0609-01-01-01",
@@ -493,27 +531,12 @@ def test_store_rejects_tampered_current_canonical_publication(monkeypatch):
         )
 
 
-def test_store_rejects_tampered_current_canonical_when_reading_feedback(monkeypatch):
-    import json
-
-    from app.services.luxian_0609.customer_text_publication import (
-        CUSTOMER_TEXT_SEAL_KEY,
-        seal_published_customer_text,
+def test_store_rejects_formal_result_missing_required_facts_when_reading_feedback(monkeypatch):
+    item = _published_admission_item()
+    item["customer_display_facts"] = None
+    store = _store_for(
+        monkeypatch, [_formal_canonical_row(item)], feedback_rows=[_feedback_row()],
     )
-
-    row = _canonical_row()
-    envelope = json.loads(row["envelope_json"])
-    item = envelope["items"][0]
-    item["conclusion"] = "原始结论"
-    item["suggestion"] = "原始建议"
-    item[CUSTOMER_TEXT_SEAL_KEY] = seal_published_customer_text(item)
-    item["conclusion"] = "被篡改的结论"
-    row["envelope_json"] = json.dumps(envelope, ensure_ascii=False)
-    session = _CanonicalReadSession([row], feedback_rows=[_feedback_row()])
-    monkeypatch.setattr(store_module, "engine", object())
-    monkeypatch.setattr(store_module, "_session", lambda: session)
-    store_module._feedback_table.cache_clear()
-    store = ResultFeedbackDemoStore()
 
     with pytest.raises(ResultFeedbackDemoConflict):
         store.list_for_record(

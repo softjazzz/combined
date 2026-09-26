@@ -51,3 +51,7 @@ tests/unit/test_custom_qc_workspace_export_html.py
 三入口测试本身包含完整隔离夹具，可使用不可连接的测试PG URL初始化（夹具禁止默认连接），运行`pytest -o addopts='' -q tests/integration/test_luxian_0609_all_rules_three_entry_acceptance.py`。过程日志和独立SQLite留在`.tmp/0910-full-audit/`，不提交。
 
 这是本地合成输入、固定模型响应、SQLite与进程内HTTP验证；不等于客户PG、真实模型泛化、跨进程重启或完整原始质控集临床验收。未推送、未合并、未发布客户版本。
+
+## 后续变更（2026-09-26）
+
+按用户决定取消 LX0609 结果文案签章。本文中“发布证明”的透传与断言已移除：服务层仅对 v2 正式结果透传结论与建议，Worker 原样搬运；三入口验收改为断言全链路不出现签章字段，并补充超长多行文案、废弃签章字段忽略、非法状态/缺事实经正式 API 拒绝、病例集合错配保存拒绝。多行与长文案保留、三入口实际保存与 API 读取、测试数据库及会诊缓存隔离保持不变。

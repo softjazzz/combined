@@ -43,7 +43,6 @@ from .luxian_0609 import (
     load_luxian_0609_rules,
     resolve_package_rollback_execution_rule_ids,
 )
-from .luxian_0609.customer_text_publication import CUSTOMER_TEXT_SEAL_KEY
 from .luxian_0609.evaluation_horizon import (
     resolve_record_evaluation_horizon_policy,
     resolve_record_evaluation_horizon_unavailable_reason,
@@ -3022,15 +3021,13 @@ async def run_sichuan_workspace_batch_job(
                             list_limits={"recommendation_evidence": 96},
                         )
                     if use_luxian_customer_results:
-                        # 搬运正式发布文案及已有证明，不能在任务装配时丢掉发布身份。
-                        # 不在此重签；保存层继续拒绝被篡改的文案。
-                        if CUSTOMER_TEXT_SEAL_KEY in eval_item:
-                            for published_key in (
-                                CUSTOMER_TEXT_SEAL_KEY, "conclusion", "customer_conclusion",
-                                "customer_suggestion",
-                            ):
-                                if published_key in eval_item:
-                                    issue_item[published_key] = eval_item[published_key]
+                        # 服务层仅对正式发布结果提供这些文案字段；此处原样搬运，
+                        # 不在任务装配时丢失或重写发布结论与建议。
+                        for published_key in (
+                            "conclusion", "customer_conclusion", "customer_suggestion",
+                        ):
+                            if published_key in eval_item:
+                                issue_item[published_key] = eval_item[published_key]
                         customer_message = eval_item.get("customer_message")
                         if isinstance(customer_message, str) and customer_message.strip():
                             issue_item["customer_message"] = customer_message.strip()

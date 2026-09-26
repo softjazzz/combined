@@ -33,7 +33,6 @@ from app.services import sichuan_workspace_batch_worker as batch_worker
 from app.services.custom_qc_sample_pool_service import CustomQCSamplePoolService
 from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
 from app.services.luxian_0609 import execution as luxian_execution
-from app.services.luxian_0609.customer_text_publication import CUSTOMER_TEXT_SEAL_KEY
 from app.services.luxian_0609.evidence_snapshot_provider import SnapshotSourceRows
 from app.services.luxian_0609.phase_scope import load_luxian_0609_phase_scope
 from app.services.luxian_0609.rule_contracts import load_luxian_0609_rule_contracts
@@ -394,9 +393,16 @@ def test_requested_75_empty_materials_deliver_70_equivalently_across_three_entri
         assert not projection.keys() & excluded_ids
 
 
+_LONG_TEXT_TAIL = "\n" + "\n".join(
+    f"第{index}条：请逐项核对会诊建议的执行情况，并在病程记录中写明执行时间、执行人及结果。"
+    for index in range(1, 11)
+)
+
+
 @pytest.mark.integration
+@pytest.mark.parametrize("long_text", [False, True], ids=["renderer-text", "long-multiline-text"])
 @pytest.mark.parametrize("workspace_run_mode", ["serial", "parallel", None], ids=["serial", "parallel", "default-parallel"])
-def test_consultation_semantic_llm_stub_is_normalized_across_three_entries(monkeypatch: pytest.MonkeyPatch, _isolated_database, workspace_run_mode: str | None) -> None:
+def test_consultation_semantic_llm_stub_is_normalized_across_three_entries(monkeypatch: pytest.MonkeyPatch, _isolated_database, workspace_run_mode: str | None, long_text: bool) -> None:
     """现行023有明确会诊建议时，三入口的事实抽取和交付一致。"""
     engine, workspace = _isolated_database
     sample_pool_service = _install_sample_pool_sqlite(monkeypatch, engine)
@@ -438,6 +444,13 @@ def test_consultation_semantic_llm_stub_is_normalized_across_three_entries(monke
         decision = kwargs["reduced_decisions"][0]
         assert decision.final_state.value == result[0]["status"] == "non_compliant"
         assert decision.reason_code == result[0]["reason_code"]
+        if long_text:
+            # 原004/023 Renderer 文案均不足 360 字；在发布边界把结论和建议扩展为
+            # 超长多行文本，验证保存、重建服务读取与正式 API 不裁剪、不压平。
+            for key in ("findings", "customer_message", "conclusion", "suggestion"):
+                if isinstance(result[0].get(key), str) and result[0][key]:
+                    result[0][key] = result[0][key] + _LONG_TEXT_TAIL
+            assert len(result[0]["suggestion"]) > 360
         published_by_visit[kwargs["audit_context"]["visit_id"]] = deepcopy(result[0])
         return result
 
@@ -567,7 +580,9 @@ def _verify_saved_business_content(*, app, workspace, engine, job_id, job, publi
         envelope = row["envelope_json"]
         envelope = json.loads(envelope) if isinstance(envelope, str) else envelope
         original = published_by_visit[row["visit_id"]]
-        assert envelope["items"][0][CUSTOMER_TEXT_SEAL_KEY] == original[CUSTOMER_TEXT_SEAL_KEY]
+        # 结果签章已取消：发布与落盘均不生成该字段。
+        assert "customer_text_seal" not in original
+        assert all("customer_text_seal" not in x for x in envelope["items"])
         expected = _business_content(original)
         assert [_business_content(x) for x in envelope["items"]] == [expected]
         stored.extend(envelope["items"])
@@ -582,7 +597,8 @@ def _verify_saved_business_content(*, app, workspace, engine, job_id, job, publi
     assert item["status"] == expected_status
     assert item["customer_display_facts"]
     assert item.get("suggestion")
-    assert item[CUSTOMER_TEXT_SEAL_KEY] == published_by_visit[_RECORD_A["visit_id"]][CUSTOMER_TEXT_SEAL_KEY]
+    for actual in [latest, item, *detail_items]:
+        assert "customer_text_seal" not in actual
     for actual in [latest, item]:
         assert _business_content(actual) == _business_content(published_by_visit[_RECORD_A["visit_id"]])
     by_ref = {x["record_ref"]: _business_content(x) for x in stored}
@@ -590,3 +606,93 @@ def _verify_saved_business_content(*, app, workspace, engine, job_id, job, publi
     for detail in detail_items:
         for key, value in _business_content(detail).items():
             assert value == by_ref[detail["record_ref"]][key], (key, value, by_ref[detail["record_ref"]][key])
+    _verify_deprecated_seal_and_contract_rejection(
+        app=app, engine=engine, table=table, job_id=job_id,
+        expected=_business_content(published_by_visit[_RECORD_A["visit_id"]]), rule_id=rule_id,
+    )
+    _verify_case_mismatch_rejected_at_save(
+        workspace=workspace, engine=engine, table=table,
+        published=published_by_visit[_RECORD_A["visit_id"]],
+    )
+
+
+def _latest_state(app, record):
+    with TestClient(app) as client:
+        response = client.get(
+            f"/api/v1/qc/sichuan/workspace/records/{record['visit_id']}/latest-result",
+            params={"institute_id": record["institute_id"], "patient_id": record["patient_id"]},
+        )
+    assert response.status_code == 200, response.text
+    return response.json()["data"]
+
+
+def _verify_case_mismatch_rejected_at_save(*, workspace, engine, table, published):
+    """病例归属：结果三坐标与任务冻结病例集合不符时拒绝保存，且不落盘。"""
+
+    from app.services.case_identity import CaseRef
+
+    job_id = "case-mismatch-job"
+    item = {**deepcopy(published), **_RECORD_A, "record_id": _RECORD_A["visit_id"]}
+    with Session(engine) as session:
+        with pytest.raises(ValueError, match="病例集合"):
+            workspace._write_record_result_envelopes(
+                session,
+                job_row={
+                    "id": job_id, "created_by": "tester",
+                    "filters_json": json.dumps({"rule_set_key": "luxian_0609_qc_v1"}),
+                },
+                items=[item],
+                now=datetime(2026, 9, 26),
+                expected_record_refs=[CaseRef(
+                    _RECORD_A["institute_id"], _RECORD_A["patient_id"], "OTHER-VISIT",
+                )],
+            )
+        session.rollback()
+    with engine.connect() as connection:
+        assert not connection.execute(
+            sa.select(table.c.job_id).where(table.c.job_id == job_id)
+        ).all()
+
+
+def _verify_deprecated_seal_and_contract_rejection(*, app, engine, table, job_id, expected, rule_id):
+    """在实际落盘的 Envelope 上改写后，由新服务实例经正式 API 读取。"""
+
+    where = sa.and_(table.c.job_id == job_id, table.c.visit_id == _RECORD_A["visit_id"])
+    with engine.connect() as connection:
+        (saved_json,) = connection.execute(sa.select(table.c.envelope_json).where(where)).one()
+    saved = json.loads(saved_json) if isinstance(saved_json, str) else saved_json
+
+    def rewrite(envelope):
+        with engine.begin() as connection:
+            connection.execute(
+                sa.update(table).where(where)
+                .values(envelope_json=json.dumps(envelope, ensure_ascii=False))
+            )
+
+    try:
+        # 历史结果附带的废弃签章字段：读取时忽略，不因失效拒绝合法结果，也不外传。
+        legacy = deepcopy(saved)
+        legacy["items"][0]["customer_text_seal"] = "lx0609-customer-text-v1:" + "0" * 64
+        rewrite(legacy)
+        legacy_latest = _read_canonical(app, job_id, _RECORD_A, [rule_id])[rule_id]
+        assert "customer_text_seal" not in legacy_latest
+        assert _business_content(legacy_latest) == expected
+
+        # 非法状态、缺必需事实仍被结果合同拒绝（读取侧）。
+        illegal_status = deepcopy(saved)
+        for key in ("status", "result_status", "display_status"):
+            illegal_status["items"][0][key] = "uncertain"
+        missing_facts = deepcopy(saved)
+        missing_facts["items"][0]["customer_display_facts"] = None
+        missing_facts["items"][0].pop("decision_facts", None)
+        for label, corrupted in (
+            ("illegal_status", illegal_status),
+            ("missing_facts", missing_facts),
+        ):
+            rewrite(corrupted)
+            data = _latest_state(app, _RECORD_A)
+            assert data["state"] == "technical_error", (label, data)
+            assert data["reason_code"] == "canonical_result_envelope_invalid", (label, data)
+            assert data["items"] == [], label
+    finally:
+        rewrite(saved)

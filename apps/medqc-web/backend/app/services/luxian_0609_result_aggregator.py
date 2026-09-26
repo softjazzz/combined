@@ -10,10 +10,6 @@ from .luxian_0609.canonical_result_finalizer import (
 )
 from .luxian_0609_result_schema import CANONICAL_RESULT_DELIVERY_MODE
 from .luxian_0609.decision_reducer import ReducedRuleDecision
-from .luxian_0609.customer_text_publication import (
-    CUSTOMER_TEXT_SEAL_KEY,
-    seal_published_customer_text,
-)
 from .luxian_0609_legacy_result_adapter import (
     Luxian0609CustomerDisplayFactsError,
     _confidence,
@@ -151,12 +147,6 @@ def aggregate_luxian_0609_results(
                 evidence_materials=(audit_context or {}).get("evidence_materials"),
                 trace_sink=decision_trace_sink,
             )
-            # 仅给经 RuleDecision→Renderer→Finalizer 发布的文案证明来源。
-            # 直接传入的 canonical_results 未经过此路径，仍走旧导出安全回退。
-            if delivery_mode == CANONICAL_RESULT_DELIVERY_MODE:
-                published[CUSTOMER_TEXT_SEAL_KEY] = seal_published_customer_text(
-                    published
-                )
             customer_results.append(published)
             continue
 

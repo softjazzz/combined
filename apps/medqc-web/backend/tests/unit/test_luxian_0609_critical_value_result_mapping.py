@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 import json
-from types import SimpleNamespace
 
 import pytest
 import sqlalchemy as sa
@@ -18,7 +17,6 @@ from app.services.luxian_0609.critical_value_result_mapping import (
     critical_value_customer_fact_status_is_valid,
     safe_critical_value_customer_display_facts,
 )
-from app.services.luxian_0609 import customer_text_publication
 from app.services.qc_workspace.canonical_result_store import (
     CANONICAL_RESULT_DELIVERY_MODE,
     RECORD_RESULT_ENVELOPE_SCHEMA,
@@ -100,13 +98,8 @@ def test_published_critical_value_facts_preserve_gap_and_window_contracts() -> N
     ) == gap
 
 
-def test_canonical_read_rejects_signed_text_with_conflicting_critical_facts(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        customer_text_publication, "get_settings",
-        lambda: SimpleNamespace(JWT_SECRET="unit-test-publication-key"),
-    )
+@pytest.mark.parametrize("deprecated_seal", [False, True])
+def test_canonical_read_rejects_conflicting_critical_facts(deprecated_seal: bool) -> None:
     rule_id = "LX0609-06-04-02"
     item = {
         "rule_id": rule_id,
@@ -117,7 +110,9 @@ def test_canonical_read_rejects_signed_text_with_conflicting_critical_facts(
         "suggestion": "已发布建议",
         "customer_display_facts": _facts(rule_id=rule_id, outcome="unhandled"),
     }
-    item["customer_text_seal"] = customer_text_publication.seal_published_customer_text(item)
+    if deprecated_seal:
+        # 历史结果附带的废弃签章字段不参与判定，状态与事实冲突仍被合同拒绝。
+        item["customer_text_seal"] = "lx0609-customer-text-v1:" + "0" * 64
     table = sa.Table(
         "canonical_test", sa.MetaData(),
         *(sa.Column(key, sa.String) for key in (

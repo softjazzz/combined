@@ -24,10 +24,6 @@ from ..luxian_0609_rule_catalog import (
     LUXIAN_0609_RULE_SET_KEY,
     get_luxian_0609_rule,
 )
-from .customer_text_publication import (
-    CUSTOMER_TEXT_SEAL_KEY,
-    seal_published_customer_text,
-)
 
 
 def _clean(value: object) -> str:
@@ -166,7 +162,6 @@ def build_luxian_0609_pending_definition_result(rule_id: str) -> dict[str, objec
         },
     }
     # 暂停文案由本函数的受控原因码模板生成，发布后不允许导出层重写。
-    result[CUSTOMER_TEXT_SEAL_KEY] = seal_published_customer_text(result)
     return result
 
 

@@ -1022,10 +1022,6 @@ def test_review_report_and_llm_payload_never_expose_record_identity_or_raw_body(
         assert forbidden not in dumped
     assert report["findings"][0]["record_ref"].startswith("rec_")
 
-    # findings 属于已签章文案；读取后被改写必须拒绝，不能借此注入原文。
-    with pytest.raises(ValueError, match=_CONTRACT_ERROR):
-        review_luxian_0609_batch_job(_published_job([{**rescue, "findings": "原始抢救正文"}]))
-
 
 def test_review_uses_same_canonical_status_and_reason_as_customer_projector() -> None:
     item = {
