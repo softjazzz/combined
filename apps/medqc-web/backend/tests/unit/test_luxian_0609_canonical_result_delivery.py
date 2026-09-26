@@ -3458,3 +3458,169 @@ def test_writer_accepts_064_non_compliant_with_projected_multievent_facts():
     )
 
     assert len(session.statements) == 2
+
+
+def _rule_scope_caches():
+    from app.services import luxian_0609_rule_catalog, luxian_0609_rule_master
+    from app.services import sample_validation_rule_sets as rule_sets
+    from app.services.luxian_0609 import phase_scope, rule_contracts
+
+    return (
+        luxian_0609_rule_master.load_luxian_0609_rule_master,
+        luxian_0609_rule_catalog.load_luxian_0609_rules,
+        phase_scope.load_luxian_0609_phase_scope,
+        rule_contracts.load_luxian_0609_rule_contracts,
+        rule_sets.get_luxian_0609_sample_validation_rule_set,
+        rule_sets.get_luxian_0609_customer_delivery_rule_ids,
+        rule_sets.get_luxian_0609_customer_execution_scope,
+    )
+
+
+@pytest.fixture
+def stop_new_execution(monkeypatch, tmp_path):
+    """隔离地把一条已登记规则改为不再注册进可执行目录（不改正式配置）。"""
+
+    from app.services import luxian_0609_rule_catalog, luxian_0609_rule_master
+    from app.services.luxian_0609 import rule_contracts
+
+    def without_rule(module, attr: str, rule_id: str) -> None:
+        # 现有“目录注册”机制：总表非 active 时，执行目录与合同不得再含该规则。
+        source = getattr(module, attr)
+        payload = json.loads(source.read_text(encoding="utf-8"))
+
+        def drop(rows):
+            return [
+                row for row in rows
+                if not (isinstance(row, dict) and str(row.get("rule_id") or "").upper() == rule_id)
+            ]
+
+        if isinstance(payload, list):
+            payload = drop(payload)
+        else:
+            payload = {
+                key: drop(value) if isinstance(value, list) else value
+                for key, value in payload.items()
+            }
+        copy = tmp_path / f"{attr}.json"
+        copy.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        monkeypatch.setattr(module, attr, copy)
+
+    def apply(rule_id: str) -> None:
+        for module, attr in (
+            (luxian_0609_rule_catalog, "_DATA_PATH"),
+            (luxian_0609_rule_catalog, "_PHASE1_EXTENSION_PATH"),
+            (rule_contracts, "_CONTRACT_PATH"),
+            (rule_contracts, "_PHASE1_EXTENSION_CONTRACT_PATH"),
+        ):
+            without_rule(module, attr, rule_id)
+        raw = json.loads(luxian_0609_rule_master._MASTER_PATH.read_text(encoding="utf-8"))
+        rows = raw if isinstance(raw, list) else next(v for v in raw.values() if isinstance(v, list))
+        entry = next(row for row in rows if row["rule_id"] == rule_id)
+        entry.update({
+            "implementation_status": "contract_ready",
+            "definition_note": "合成测试：停止新执行",
+            "phase_status": "pending_definition",
+            "pending_reason_code": "synthetic_stop_new_execution",
+        })
+        master_copy = tmp_path / "rule_master.json"
+        master_copy.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
+        monkeypatch.setattr(luxian_0609_rule_master, "_MASTER_PATH", master_copy)
+        for cached in _rule_scope_caches():
+            cached.cache_clear()
+
+    yield apply
+    for cached in _rule_scope_caches():
+        cached.cache_clear()
+
+
+def test_stopping_new_execution_keeps_saved_results_readable(monkeypatch, stop_new_execution):
+    """禁止新执行不能让已保存的合法历史结果变得不可读，也不重判历史结果。"""
+
+    from app.services.luxian_0609.phase_scope import partition_luxian_0609_rule_scope
+    from app.services.sample_validation_rule_sets import (
+        get_luxian_0609_sample_validation_rule_set,
+    )
+
+    rule_id = "LX0609-06-02-01"
+    canonical_table = workspace_module._record_result_envelopes_table().to_metadata(
+        MetaData(), schema=None,
+    )
+    engine = create_engine(
+        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool,
+    )
+    canonical_table.metadata.create_all(engine)
+    store = CanonicalResultStore(canonical_table)
+    items = [_published_pilot_item_for_read_boundary(rule_id)]
+    items[0]["conclusion"] = "病理报告单要素已核对。"
+    items[0]["suggestion"] = "病理报告单完整，\n无需补充。"
+    filters = {
+        "rule_set_key": "luxian_0609_qc_v1", "rule_set_version": "2026-06-09",
+        "scoped_customer_rule_ids": [rule_id],
+        "record_refs": [{"institute_id": "inst-1", "patient_id": "patient-1", "visit_id": "visit-1"}],
+    }
+    # 1) 规则仍启用时按正式保存流程写入一条合法结果。
+    with Session(engine) as session:
+        store.replace_for_job(
+            session,
+            job_row={"id": "job-stop", "created_by": "admin-001", "filters_json": json.dumps(filters)},
+            items=items,
+            now=datetime(2026, 9, 1, 10, 0, 0),
+            projector=lambda raw: envelope_item_from_rule_result(raw, hmac_key="unit-test-key"),
+            projection_key="unit-test-key",
+        )
+        session.commit()
+
+    # 2) 隔离地停止该规则参与新任务。
+    stop_new_execution(rule_id)
+    assert rule_id not in get_luxian_0609_sample_validation_rule_set().rule_ids  # 默认批量/客户样本
+    with pytest.raises(ValueError, match="invalid LX0609 customer rule id"):
+        partition_luxian_0609_rule_scope((rule_id,))  # 显式选规则/单病历执行范围
+
+    # 3) 已保存结果：Canonical 读取、latest、批详情与导出均可读，内容不变。
+    with Session(engine) as session:
+        loaded = store.load_selected(
+            session, root_job_id="job-stop", institute_id="inst-1", patient_id="patient-1",
+            visit_id="visit-1", rule_set_key="luxian_0609_qc_v1", rule_set_version="2026-06-09",
+        )
+    saved = loaded["items"][0]
+    monkeypatch.setattr(workspace_module, "_session", lambda: _ReadSession([
+        [_selected_job()], [{"envelope_json": json.dumps(loaded, ensure_ascii=False)}],
+    ]))
+    monkeypatch.setattr(workspace_module, "_row_to_batch_job", lambda row: dict(row))
+    monkeypatch.setattr(
+        CustomQCWorkspaceService, "_aggregate_parent_job", lambda _self, _session, job: job,
+    )
+    service = object.__new__(CustomQCWorkspaceService)
+    service._record_result_envelope_table = canonical_table
+    service._batch_job_table = sa.Table(
+        "custom_qc_batch_jobs", MetaData(),
+        sa.Column("id", sa.String(36)), sa.Column("status", sa.String(20)),
+        sa.Column("parent_job_id", sa.String(36)), sa.Column("finished_at", sa.DateTime()),
+        sa.Column("created_at", sa.DateTime()),
+    )
+    latest = service.build_latest_single_record_result_dto(
+        institute_id="inst-1", patient_id="patient-1", visit_id="visit-1",
+        rule_set_key="luxian_0609_qc_v1", rule_set_version="2026-06-09",
+    )
+    assert latest["state"] == "ready", latest
+    latest_item = next(item for item in latest["items"] if item["rule_id"] == rule_id)
+    for key in ("status", "reason_code", "customer_display_facts", "conclusion", "suggestion"):
+        assert latest_item[key] == saved[key], key
+
+    job = {
+        "id": "job-stop", "created_by": "admin-001", "status": "completed",
+        "total_records": 1, "filters": filters,
+    }
+    batch_items = store.load_root_job_items(job=job, session_factory=lambda: Session(engine))
+    detail = workspace_module.project_customer_safe_batch_job(
+        {**job, "items": batch_items, "rule_results": []}, hmac_key="unit-test-key",
+    )
+    detail_item = next(item for item in detail["items"] if item["rule_id"] == rule_id)
+    assert (detail_item["status"], detail_item["reason_code"]) == (saved["status"], saved["reason_code"])
+    assert detail_item["customer_display_facts"] == saved["customer_display_facts"]
+    export_items, rows, _summary = workspace_module._canonical_customer_export_rows(
+        job, hmac_key="unit-test-key", canonical_items=batch_items,
+    )
+    assert [item["rule_id"] for item in export_items] == [rule_id]
+    assert export_items[0]["suggestion"] == saved["suggestion"] == rows[0][6]
+    engine.dispose()

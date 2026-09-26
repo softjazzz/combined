@@ -141,17 +141,15 @@ _SAFE_SOURCE_TYPE_PATTERN = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$")
 
 
 def _luxian_0609_catalog_rule_ids() -> frozenset[str]:
-    """返回当前 LX0609 的完整目录，供历史 Envelope 做身份校验。
+    """返回总表登记的全部 LX0609 规则身份，供历史 Envelope 做身份校验。
 
     客户交付层会过滤明确排除的来源规则，但这些规则仍属于已知历史目录。
     因此身份校验必须针对完整目录，不能把“客户不展示”误当成“未知规则”。
+    同理，规则停止注册进可执行目录只禁止新执行，不能让其已保存的合法
+    历史结果变成未知规则；执行范围仍由可执行目录与 phase_scope 控制。
     """
 
-    return frozenset(
-        _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
-        for item in load_luxian_0609_rules()
-        if _safe_text(item.get("rule_id") or item.get("rule_code"))
-    )
+    return frozenset(entry.rule_id for entry in load_luxian_0609_rule_master())
 
 
 def _customer_result_rule_id(item: Any) -> str:

@@ -24,6 +24,7 @@ from ..luxian_0609_result_schema import (
     CUSTOMER_SCHEMA_VERSION,
     RULE_SET_VERSION,
 )
+from ..luxian_0609_rule_master import load_luxian_0609_rule_master
 from ..luxian_0609_rule_catalog import (
     LUXIAN_0609_RULE_SET_KEY,
     get_luxian_0609_rule,
@@ -124,8 +125,9 @@ def canonical_envelope_items_are_consistent(items: Any) -> bool:
             return False
         rule_id = _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
         if rule_id.startswith("LX0609-"):
-            # 正式结果只接收目录中的唯一新身份；历史转换在离线迁移完成。
-            if get_luxian_0609_rule(rule_id) is None:
+            # 正式结果只接收总表登记的唯一新身份；历史转换在离线迁移完成。
+            # 规则停止注册进可执行目录只禁止新执行，不使已保存结果失去身份。
+            if rule_id not in {entry.rule_id for entry in load_luxian_0609_rule_master()}:
                 return False
             if any(
                 _safe_text(item.get(key)).upper() not in {"", rule_id}

@@ -334,6 +334,22 @@ async def test_two_test_only_rule_contracts_cross_existing_extension_boundary(
                             for rule_id, name in rule_names.items()],
     ])
     monkeypatch.setattr(workspace_module, "load_luxian_0609_rules", catalog_module.load_luxian_0609_rules)
+    # 生产中目录必须等于总表 active 集合；测试规则进入目录的同时也须登记总表，
+    # 历史结果身份校验以总表为准。
+    from app.services import luxian_0609_rule_master as master_module
+    from app.services.qc_workspace import canonical_result_store as store_module
+
+    existing_master = master_module.load_luxian_0609_rule_master()
+    extended_master = (*existing_master, *(
+        master_module.Luxian0609RuleMasterEntry(
+            rule_id=rule_id, source_document="测试专用文书", qc_point=name,
+            implementation_status="active", policy_sources=("customer_confirmed",),
+            policy_summary="测试专用扩展边界规则",
+        )
+        for rule_id, name in rule_names.items()
+    ))
+    for module in (workspace_module, store_module):
+        monkeypatch.setattr(module, "load_luxian_0609_rule_master", lambda: extended_master)
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=decisions,
         expected_rule_ids=(_NATIVE_RULE_ID, _SEMANTIC_RULE_ID),
