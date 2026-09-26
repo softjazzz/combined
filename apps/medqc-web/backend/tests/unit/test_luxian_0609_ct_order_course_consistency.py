@@ -463,7 +463,7 @@ async def test_ct_order_evidence_survives_finalizer_sqlite_and_customer_projecti
             projector=lambda raw: envelope_item_from_rule_result(raw, hmac_key="test-key"), projection_key="test-key")
         session.commit()
         loaded = store.load_selected(session, root_job_id="ct-job", institute_id="test", patient_id="patient",
-                                     visit_id="visit", rule_set_key="luxian_0609_qc_v1", rule_set_version="2026-06-09")
+                                     visit_id="visit", rule_set_key="luxian_0609_qc_v1", rule_set_version="2026-06-09", projection_key="test-key")
     engine.dispose()
     published = project_customer_safe_result_item(loaded["items"][0], hmac_key="test-key")
     assert published["status"] == expected

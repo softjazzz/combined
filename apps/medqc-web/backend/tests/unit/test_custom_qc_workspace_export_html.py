@@ -94,6 +94,24 @@ def _published_timeliness_item(
     return item
 
 
+def _case_record_ref(
+    institute_id: str = "inst-1", patient_id: str = "patient-1", visit_id: str = "visit-1",
+) -> str:
+    """按现有引用机制，由病例三坐标与服务密钥生成保存时的 Envelope 病历引用。"""
+
+    from app.services.case_identity import CaseRef
+    from app.services.qc_workspace.canonical_result_store import (
+        customer_safe_projection_key,
+        keyed_ref,
+    )
+
+    return keyed_ref(
+        "rec",
+        CaseRef(institute_id, patient_id, visit_id).as_key(),
+        hmac_key=customer_safe_projection_key(),
+    )
+
+
 @pytest.mark.parametrize("data_gap", [False, True], ids=["compliant", "data_gap"])
 def test_canonical_export_keeps_original_004_renderer_suggestion(data_gap: bool) -> None:
     """导出应保留发布器的建议；本例不依赖患者原文或模型调用。"""
@@ -142,6 +160,7 @@ def test_canonical_export_keeps_original_004_renderer_suggestion(data_gap: bool)
     envelope = {
         "schema_version": RECORD_RESULT_ENVELOPE_SCHEMA,
         "delivery_mode": CANONICAL_RESULT_DELIVERY_MODE,
+        "record_ref": _case_record_ref(),
         "items": [stored_item],
     }
     result_store = CanonicalResultStore(
@@ -268,7 +287,7 @@ def test_export_batch_job_html_reads_only_this_jobs_canonical_envelopes(monkeypa
         "delivery_mode": "canonical_straight_through",
         "job_id": "job-canonical-child",
         "root_job_id": "job-canonical-only",
-        "record_ref": "rec_0123456789abcdef01234567",
+        "record_ref": _case_record_ref(),
         "items": [{
             "schema_version": "lx0609-customer-result-v2",
             "rule_id": "LX0609-03-01-03",
@@ -384,7 +403,7 @@ def test_export_batch_job_html_reads_only_this_jobs_canonical_envelopes(monkeypa
     assert "src_1234567890abcdef12345678" not in html
     assert "原因码" not in html
     assert "病历引用" not in html
-    assert "rec_0123456789abcdef01234567" not in html
+    assert _case_record_ref() not in html
     # 导出不能借内部文书 ID 重建定位；已保存的正式发布文案原样导出，
     # 不在读取层重生成。
     assert "CONSULT-1" not in html
@@ -1025,3 +1044,120 @@ def test_luxian_customer_projection_rejects_missing_review_finding_identity() ->
             job,
             hmac_key=customer_safe_projection_key(),
         )
+
+
+_SYN_CASE = {
+    "institute_id": "SYN-INST-901",
+    "patient_id": "SYN-PATIENT-901",
+    "visit_id": "SYN-VISIT-901",
+}
+_LONG_MULTILINE_TAIL = "\n" + "\n".join(
+    f"第{index}步：按已发布事实补齐入院记录并注明完成时间。" for index in range(1, 16)
+)
+
+
+def _canonical_read_fixture(monkeypatch, *, record_ref: str | None = None):
+    """正式执行链发布的结果经保存投影落入 Envelope，再由正式读取入口读取。"""
+
+    from tests.luxian_0609_published_result_support import published_lx0609_items
+
+    published = published_lx0609_items(
+        admission="late", rescue="late", include_paused_consultation=True,
+    )
+    admission = dict(published["LX0609-01-01-01"])
+    for key in ("conclusion", "customer_conclusion", "findings", "customer_message", "suggestion"):
+        if admission.get(key):
+            admission[key] = admission[key] + _LONG_MULTILINE_TAIL
+    rescue = dict(published["LX0609-09-01-01"])
+    # 本病例身份值进入文案：既有投影合同禁止输出。
+    rescue["suggestion"] = rescue["suggestion"] + "（患者 SYN-PATIENT-901）"
+    paused = dict(published["LX0609-03-01-01"])
+    # 内部术语进入文案：既有投影合同禁止输出。
+    paused["suggestion"] = paused["suggestion"] + " raw_response"
+    stored = [
+        envelope_item_from_rule_result({**item, **_SYN_CASE, "record_id": _SYN_CASE["visit_id"]})
+        for item in (admission, rescue, paused)
+    ]
+    envelope = {
+        "schema_version": RECORD_RESULT_ENVELOPE_SCHEMA,
+        "delivery_mode": CANONICAL_RESULT_DELIVERY_MODE,
+        "root_job_id": "job-syn-901",
+        "record_ref": record_ref or _case_record_ref(**_SYN_CASE),
+        "items": stored,
+    }
+    monkeypatch.setattr(workspace_module, "_session", lambda: _ReadSession([{
+        "job_id": "job-syn-901",
+        "root_job_id": "job-syn-901",
+        "created_by": "owner-1",
+        **_SYN_CASE,
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "envelope_json": json.dumps(envelope, ensure_ascii=False),
+    }]))
+    job = {
+        "id": "job-syn-901",
+        "created_by": "owner-1",
+        "status": "completed",
+        "total_records": 1,
+        "filters": {
+            "rule_set_key": "luxian_0609_qc_v1",
+            "rule_set_version": "2026-06-09",
+            "record_refs": [dict(_SYN_CASE)],
+        },
+    }
+    return admission, rescue, paused, job
+
+
+def test_formal_text_is_preserved_while_existing_sensitive_filter_still_applies(monkeypatch):
+    admission, rescue, paused, job = _canonical_read_fixture(monkeypatch)
+    service = object.__new__(CustomQCWorkspaceService)
+    service._record_result_envelope_table = workspace_module._record_result_envelopes_table()
+
+    canonical_items = service._load_batch_job_canonical_items(job=job)
+    detail = project_customer_safe_batch_job(
+        {**job, "items": canonical_items, "rule_results": []}, hmac_key="unit-test-key",
+    )
+    by_rule = {item["rule_id"]: item for item in detail["items"]}
+    # 正式结论与建议完整保留长文本和换行，不截断、不重生成。
+    # 与保存投影一致的结论取值顺序：conclusion → customer_conclusion → findings。
+    expected_conclusion = (
+        admission.get("conclusion") or admission.get("customer_conclusion") or admission["findings"]
+    )
+    assert by_rule["LX0609-01-01-01"]["conclusion"] == expected_conclusion
+    assert len(expected_conclusion) > 360 and "\n" in expected_conclusion
+    assert by_rule["LX0609-01-01-01"]["suggestion"] == admission["suggestion"]
+    assert len(admission["suggestion"]) > 360 and "\n" in admission["suggestion"]
+    # 本病例身份值、内部术语仍按既有合同不输出（整段回退为通用文案）。
+    assert "SYN-PATIENT-901" not in by_rule["LX0609-09-01-01"]["suggestion"]
+    assert by_rule["LX0609-09-01-01"]["suggestion"] != rescue["suggestion"]
+    assert "raw_response" not in by_rule["LX0609-03-01-01"]["suggestion"]
+
+    html = service.export_batch_job_html(job=job)
+    csv_text = service.export_batch_job_csv(job=job).getvalue()
+    workbook = load_workbook(service.export_batch_job_workbook(job=job), read_only=True)
+    workbook_text = "\n".join(
+        str(value)
+        for sheet in workbook.worksheets
+        for row in sheet.iter_rows(values_only=True)
+        for value in row
+        if value is not None
+    )
+    for exported in (html, csv_text, workbook_text):
+        for identity in _SYN_CASE.values():
+            assert identity not in exported
+        assert "raw_response" not in exported
+    for exported in (csv_text, workbook_text):
+        assert admission["suggestion"] in exported
+    assert all(line in html for line in admission["suggestion"].split("\n"))
+
+
+def test_batch_read_rejects_envelope_ref_not_matching_row_case(monkeypatch):
+    # 行坐标与 Envelope 病历引用不一致：不能作为本病例的正常结果返回。
+    _admission, _rescue, _paused, job = _canonical_read_fixture(
+        monkeypatch,
+        record_ref=_case_record_ref("SYN-INST-901", "SYN-PATIENT-OTHER", "SYN-VISIT-901"),
+    )
+    service = object.__new__(CustomQCWorkspaceService)
+    service._record_result_envelope_table = workspace_module._record_result_envelopes_table()
+    with pytest.raises(ValueError, match="病历引用无效"):
+        service._load_batch_job_canonical_items(job=job)

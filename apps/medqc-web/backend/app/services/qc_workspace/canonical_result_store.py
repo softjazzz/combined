@@ -281,6 +281,16 @@ def _assert_consistent_lx0609_rule_identity(item: Dict[str, Any]) -> None:
         raise ValueError(LX0609_CUSTOMER_RESULT_CONTRACT_ERROR)
 
 
+def _envelope_ref_matches_case(
+    envelope: Dict[str, Any], case_ref: CaseRef, *, hmac_key: str,
+) -> bool:
+    """Envelope 病历引用必须由本行三坐标按保存时的同一引用机制生成。"""
+
+    return _safe_text(envelope.get("record_ref")) == keyed_ref(
+        "rec", case_ref.as_key(), hmac_key=hmac_key,
+    )
+
+
 def safe_customer_display_facts(
     item: Dict[str, Any],
     *,
@@ -699,6 +709,7 @@ class CanonicalResultStore:
         visit_id: str,
         rule_set_key: str,
         rule_set_version: str,
+        projection_key: str | None = None,
     ) -> Dict[str, Any]:
         table = self._require_table()
         try:
@@ -731,6 +742,13 @@ class CanonicalResultStore:
             or not isinstance(envelope.get("items"), list)
         ):
             return {}
+        # 保存时已校验不代表读取的行与 Envelope 仍属同一病例；读取时按行坐标复核。
+        if not _envelope_ref_matches_case(
+            envelope,
+            CaseRef(institute_id, patient_id, visit_id),
+            hmac_key=projection_key or customer_safe_projection_key(),
+        ):
+            raise ValueError(LX0609_CUSTOMER_RESULT_CONTRACT_ERROR)
         for item in envelope["items"]:
             if not isinstance(item, dict):
                 raise ValueError(LX0609_CUSTOMER_RESULT_CONTRACT_ERROR)
@@ -746,6 +764,7 @@ class CanonicalResultStore:
         job: Dict[str, Any],
         session_factory: Callable[[], Session],
         allow_partial: bool = False,
+        projection_key: str | None = None,
     ) -> List[Dict[str, Any]]:
         job_id = _safe_text(job.get("id"))
         created_by = _safe_text(job.get("created_by"))
@@ -792,6 +811,8 @@ class CanonicalResultStore:
 
         rows_by_ref: Dict[CaseRef, Dict[str, Any]] = {}
         canonical_items: List[Dict[str, Any]] = []
+        if envelope_rows and not projection_key:
+            projection_key = customer_safe_projection_key()
         for raw_row in envelope_rows:
             row = dict(raw_row)
             case_ref = CaseRef.from_mapping(row)
@@ -808,7 +829,9 @@ class CanonicalResultStore:
             ):
                 raise ValueError("批量质控 Canonical Envelope 结构无效")
             record_ref = _safe_text(envelope.get("record_ref"))
-            if not re.fullmatch(r"rec_[0-9a-f]{24}", record_ref):
+            if not re.fullmatch(r"rec_[0-9a-f]{24}", record_ref) or not _envelope_ref_matches_case(
+                envelope, case_ref, hmac_key=projection_key,
+            ):
                 raise ValueError("批量质控 Canonical Envelope 病历引用无效")
             if not canonical_envelope_items_are_consistent(envelope["items"]):
                 raise ValueError("canonical_result_envelope_invalid")
@@ -821,6 +844,11 @@ class CanonicalResultStore:
                     **raw_item,
                     "schema_version": CUSTOMER_SCHEMA_VERSION,
                     "record_ref": record_ref,
+                    # 保存时已移除病例坐标；读取时按本行补回，供客户投影既有的
+                    # 本病例身份值过滤使用。投影输出不包含这些字段。
+                    "institute_id": case_ref.institute_id,
+                    "patient_id": case_ref.patient_id,
+                    "visit_id": case_ref.visit_id,
                 }
                 if not _safe_text(normalized_item.get("rule_version")):
                     catalog_rule = get_luxian_0609_rule(

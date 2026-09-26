@@ -228,13 +228,13 @@ def test_sqlite_gap_facts_survive_store_and_corruption_is_rejected(rule_id, raw)
                                   projector=lambda value: envelope_item_from_rule_result(value, hmac_key="test-key"),
                                   projection_key="test-key")
             db.commit()
-            loaded = store.load_selected(db, **selected)
+            loaded = store.load_selected(db, **selected, projection_key="test-key")
             assert loaded["items"][0]["customer_display_facts"] == facts
             damaged = deepcopy(loaded)
             damaged["items"][0]["customer_display_facts"]["source_document_refs"] = []
             db.execute(sa.update(table).values(envelope_json=json.dumps(damaged)))
             db.commit()
             with pytest.raises(ValueError, match="解释合同不完整"):
-                store.load_selected(db, **selected)
+                store.load_selected(db, **selected, projection_key="test-key")
     finally:
         engine.dispose()

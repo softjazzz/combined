@@ -678,21 +678,41 @@ def _verify_deprecated_seal_and_contract_rejection(*, app, engine, table, job_id
         assert "customer_text_seal" not in legacy_latest
         assert _business_content(legacy_latest) == expected
 
-        # 非法状态、缺必需事实仍被结果合同拒绝（读取侧）。
+        # 非法状态、缺必需事实、病例错配仍被结果合同拒绝（读取侧）。
         illegal_status = deepcopy(saved)
         for key in ("status", "result_status", "display_status"):
             illegal_status["items"][0][key] = "uncertain"
         missing_facts = deepcopy(saved)
         missing_facts["items"][0]["customer_display_facts"] = None
         missing_facts["items"][0].pop("decision_facts", None)
+        # 病例归属：Envelope 病历引用指向另一病例（按现有引用机制生成的合法格式）。
+        from app.services.case_identity import CaseRef
+        from app.services.qc_workspace.canonical_result_store import (
+            customer_safe_projection_key,
+            keyed_ref,
+        )
+
+        wrong_case = deepcopy(saved)
+        wrong_case["record_ref"] = keyed_ref(
+            "rec",
+            CaseRef(_RECORD_A["institute_id"], "LX075-PATIENT-OTHER", _RECORD_A["visit_id"]).as_key(),
+            hmac_key=customer_safe_projection_key(),
+        )
+        assert wrong_case["record_ref"] != saved["record_ref"]
         for label, corrupted in (
             ("illegal_status", illegal_status),
             ("missing_facts", missing_facts),
+            ("wrong_case", wrong_case),
         ):
             rewrite(corrupted)
             data = _latest_state(app, _RECORD_A)
             assert data["state"] == "technical_error", (label, data)
             assert data["reason_code"] == "canonical_result_envelope_invalid", (label, data)
             assert data["items"] == [], label
+        # 批详情同样不得把错配结果当作本病例正常结果返回（沿用既有 409 合同）。
+        rewrite(wrong_case)
+        with TestClient(app) as client:
+            detail = client.get(f"/api/v1/qc/sichuan/workspace/batch-jobs/{job_id}")
+        assert detail.status_code == 409, detail.text
     finally:
         rewrite(saved)
