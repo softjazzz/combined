@@ -374,6 +374,7 @@ def _to_envelope(
             api_time=api_time,
             model_execution_stats=model_execution_stats,
         ),
+        usage_observation_complete=getattr(raw, "usage_observation_complete", True),
     )
 
 

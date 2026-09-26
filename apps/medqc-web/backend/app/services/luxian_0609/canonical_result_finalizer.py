@@ -524,12 +524,19 @@ def validate_luxian_0609_published_customer_display_facts(
             raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
         return validated
     from .critical_value_result_mapping import (
+        critical_value_customer_fact_status_is_valid,
         is_critical_value_customer_rule,
         validate_published_critical_value_facts,
     )
     if is_critical_value_customer_rule(normalized_rule_id):
         valid, validated = validate_published_critical_value_facts(rule_id=normalized_rule_id, raw=raw)
-        if not valid:
+        if not valid or (
+            validated is not None
+            and status
+            and not critical_value_customer_fact_status_is_valid(
+                rule_id=normalized_rule_id, status=status, safe_facts=validated,
+            )
+        ):
             raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
         return validated
     from .continuity_result_mapping import (

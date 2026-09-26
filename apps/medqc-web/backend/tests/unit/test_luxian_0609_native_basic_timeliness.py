@@ -2205,6 +2205,7 @@ async def test_006_rejects_semantic_role_when_quote_is_not_in_same_document():
     assert llm.call_count == 2
     assert execution.llm_call_count == 2
     assert execution.total_tokens == 80
+    assert execution.usage_observation_complete is True
     assert reduced[0].final_state is CustomerFinalState.TECHNICAL_ERROR
     assert reduced[0].reason_code == "model_parse_error"
 
@@ -2336,8 +2337,55 @@ async def test_006_transport_failure_is_counted_and_never_becomes_clinical_resul
     assert llm.call_count == 1
     assert execution.llm_call_count == 1
     assert execution.total_tokens == 0
+    assert execution.usage_observation_complete is False
     assert reduced[0].final_state is CustomerFinalState.TECHNICAL_ERROR
     assert reduced[0].reason_code == "model_transport_error"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_006_retry_transport_failure_preserves_first_response_usage() -> None:
+    class _LLM:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def generate(self, _prompt: str) -> dict:
+            self.calls += 1
+            if self.calls == 1:
+                return {
+                    "choices": [{"message": {"content": "not-json"}}],
+                    "usage": {"prompt_tokens": 20, "completion_tokens": 2},
+                }
+            raise TimeoutError("synthetic retry timeout")
+
+    selected = ("LX0609-02-01-02",)
+    session = _typed_basic_session(
+        {
+            "inpat_registration": [{"admission_datetime": "2026-07-15 13:48:49"}],
+            "admission_record": [],
+            "daily_course_record": [],
+            "senior_course_record": [{
+                "document_id": "safe-upper-round-ref",
+                "document_title": "上级医师查房记录",
+                "record_time": "2026-07-16 10:30:02",
+                "record_content": "今日上级医师查房，分析病情与治疗计划。",
+            }],
+        },
+        selected_rule_ids=selected,
+        evaluation_as_of_date="2026-07-20",
+    )
+    llm = _LLM()
+    execution = await execute_luxian_0609_native_basic_timeliness(
+        rule_ids=selected, decision_rule_ids=selected, evidence_payload=None,
+        evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+        llm_client=llm,
+    )
+    assert llm.calls == execution.llm_call_count == 2
+    assert execution.prompt_tokens == 20
+    assert execution.completion_tokens == 2
+    assert execution.total_tokens == 22
+    assert execution.usage_observation_complete is False
+    assert execution.decisions[0].reason_code == "model_transport_error"
 
 
 @pytest.mark.unit

@@ -171,6 +171,7 @@ class NativeBasicTimelinessExecutionResult(NativeExecutionResult):
     completion_tokens: int = 0
     total_tokens: int = 0
     api_time: float = 0.0
+    usage_observation_complete: bool = True
 
 
 @dataclass(frozen=True)
@@ -2064,6 +2065,7 @@ def _with_semantic_usage(
     completion_tokens: int,
     total_tokens: int,
     api_time: float,
+    usage_observation_complete: bool = True,
 ) -> NativeBasicTimelinessExecutionResult:
     return NativeBasicTimelinessExecutionResult(
         results=result.results,
@@ -2077,6 +2079,7 @@ def _with_semantic_usage(
         completion_tokens=completion_tokens,
         total_tokens=total_tokens,
         api_time=api_time,
+        usage_observation_complete=usage_observation_complete,
     )
 
 
@@ -2089,6 +2092,7 @@ def _with_006_semantic_failure(
     completion_tokens: int,
     total_tokens: int,
     api_time: float,
+    usage_observation_complete: bool = True,
 ) -> NativeBasicTimelinessExecutionResult:
     """只把 006 的模型基础设施失败改成技术失败，保留同批其他规则。"""
 
@@ -2115,6 +2119,7 @@ def _with_006_semantic_failure(
         completion_tokens=completion_tokens,
         total_tokens=total_tokens,
         api_time=api_time,
+        usage_observation_complete=usage_observation_complete,
     )
 
 
@@ -2265,6 +2270,7 @@ def _execute_basic_timeliness_with_semantic_rounds(
                     completion_tokens=completion_tokens,
                     total_tokens=total_tokens,
                     api_time=max(api_time, time.perf_counter() - started),
+                    usage_observation_complete=False,
                 )
             next_prompt, next_completion, next_total, next_api_time = _usage(response)
             prompt_tokens += next_prompt
@@ -2376,6 +2382,10 @@ def execute_luxian_0609_native_basic_timeliness(
             completion_tokens=getattr(old, "completion_tokens", 0) + getattr(new, "completion_tokens", 0),
             total_tokens=getattr(old, "total_tokens", 0) + getattr(new, "total_tokens", 0),
             api_time=getattr(old, "api_time", 0.0) + getattr(new, "api_time", 0.0),
+            usage_observation_complete=(
+                getattr(old, "usage_observation_complete", True)
+                and getattr(new, "usage_observation_complete", True)
+            ),
         )
 
     if not isawaitable(legacy) and not isawaitable(content):

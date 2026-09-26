@@ -232,8 +232,11 @@ class FamilyExecutionEnvelope:
     total_tokens: int = 0
     api_time: float = 0.0
     usage_attribution: FamilyUsageAttribution | None = None
+    usage_observation_complete: bool = True
 
     def __post_init__(self) -> None:
+        if type(self.usage_observation_complete) is not bool:
+            raise TypeError("usage_observation_complete must be bool")
         if (
             type(self.results) is not tuple
             or type(self.decisions) is not tuple
@@ -356,6 +359,9 @@ def build_family_technical_envelope(
         total_tokens=(source_envelope.total_tokens if source_envelope else 0),
         api_time=(source_envelope.api_time if source_envelope else 0.0),
         usage_attribution=usage_attribution,
+        usage_observation_complete=(
+            source_envelope.usage_observation_complete if source_envelope else True
+        ),
     )
 
 

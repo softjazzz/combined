@@ -1,12 +1,103 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+import app.services.custom_qc_workspace_service as workspace_module
+from app.services.luxian_0609 import customer_text_publication
+from app.services.luxian_0609_rule_catalog import get_luxian_0609_rule
 from app.services.custom_qc_workspace_service import (
     LX0609_CUSTOMER_RESULT_CONTRACT_ERROR,
     project_customer_safe_batch_job,
     project_customer_safe_result_item,
 )
+
+
+def test_signed_canonical_long_text_survives_detail_reprojection_and_export(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        customer_text_publication, "get_settings",
+        lambda: SimpleNamespace(JWT_SECRET="unit-test-publication-key"),
+    )
+    rule_id = "LX0609-03-02-01"
+    rule = get_luxian_0609_rule(rule_id)
+    conclusion = "已核对的结论内容。" * 60
+    suggestion = "请按已核对事实完善病历。" * 40
+    item = {
+        "schema_version": "lx0609-customer-result-v2",
+        "rule_id": rule_id,
+        "rule_version": rule["rule_version"] if rule else "",
+        "status": "compliant",
+        "result_status": "compliant",
+        "display_status": "compliant",
+        "is_compliant": True,
+        "conclusion": conclusion,
+        "suggestion": suggestion,
+    }
+    item["customer_text_seal"] = customer_text_publication.seal_published_customer_text(item)
+
+    projected = project_customer_safe_result_item(item, hmac_key="unit-test-key")
+    assert projected["conclusion"] == conclusion
+    assert projected["suggestion"] == suggestion
+    assert project_customer_safe_result_item(projected, hmac_key="unit-test-key") == projected
+
+    job = {"filters": {"rule_set_key": "luxian_0609_qc_v1"}, "items": [item]}
+    detail = project_customer_safe_batch_job(job, hmac_key="unit-test-key")
+    assert detail["items"][0]["conclusion"] == conclusion
+    _items, rows, _summary = workspace_module._customer_export_rows(
+        job, hmac_key="unit-test-key",
+    )
+    assert rows[0][5:7] == [conclusion, suggestion]
+
+
+def test_long_text_exemption_requires_verified_current_lx0609_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        customer_text_publication, "get_settings",
+        lambda: SimpleNamespace(JWT_SECRET="unit-test-publication-key"),
+    )
+    rule_id = "LX0609-03-02-01"
+    rule = get_luxian_0609_rule(rule_id)
+    long_text = "已核对的结论内容。" * 60
+    unsealed = {
+        "schema_version": "lx0609-customer-result-v2",
+        "rule_id": rule_id,
+        "rule_version": rule["rule_version"] if rule else "",
+        "status": "compliant",
+        "result_status": "compliant",
+        "display_status": "compliant",
+        "is_compliant": True,
+        "conclusion": long_text,
+        "suggestion": long_text,
+    }
+    # 无发布签章的当前形态仍走旧裁剪。
+    projected = project_customer_safe_result_item(unsealed, hmac_key="unit-test-key")
+    assert len(projected["conclusion"]) <= 363
+    assert projected["conclusion"] != long_text
+
+    # 签章存在但文案被篡改时拒绝，而不是放行全文。
+    sealed = {**unsealed}
+    sealed["customer_text_seal"] = customer_text_publication.seal_published_customer_text(sealed)
+    with pytest.raises(ValueError):
+        project_customer_safe_result_item(
+            {**sealed, "conclusion": long_text + "篡改"}, hmac_key="unit-test-key",
+        )
+
+    # 非 LX0609 规则声明客户 DTO schema 不能获得免裁剪权。
+    foreign = {
+        "schema_version": "customer-qc-result-v1",
+        "rule_id": "CUSTOM-001",
+        "status": "non_compliant",
+        "result_status": "non_compliant",
+        "is_compliant": False,
+        "conclusion": long_text,
+        "suggestion": long_text,
+    }
+    foreign_projected = project_customer_safe_result_item(foreign, hmac_key="unit-test-key")
+    assert len(foreign_projected["conclusion"]) <= 363
+    assert len(foreign_projected["suggestion"]) <= 363
 
 
 def test_formal_batch_worker_has_no_legacy_consultation_body_evidence_projector() -> None:

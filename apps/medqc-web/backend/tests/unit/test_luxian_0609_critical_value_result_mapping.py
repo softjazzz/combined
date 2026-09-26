@@ -1,18 +1,28 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
+from types import SimpleNamespace
 
 import pytest
+import sqlalchemy as sa
 
 from app.services.luxian_0609.canonical_result_finalizer import (
     finalize_luxian_0609_canonical_result,
     finalize_luxian_0609_executor_customer_display_facts,
     finalizer_owns_executor_customer_display_facts,
     finalizer_requires_public_fact_ref_evidence,
+    validate_luxian_0609_published_customer_display_facts,
 )
 from app.services.luxian_0609.critical_value_result_mapping import (
     critical_value_customer_fact_status_is_valid,
     safe_critical_value_customer_display_facts,
+)
+from app.services.luxian_0609 import customer_text_publication
+from app.services.qc_workspace.canonical_result_store import (
+    CANONICAL_RESULT_DELIVERY_MODE,
+    RECORD_RESULT_ENVELOPE_SCHEMA,
+    CanonicalResultStore,
 )
 
 
@@ -48,6 +58,96 @@ def _facts(*, rule_id: str, outcome: str) -> dict[str, object]:
     if rule_id == "LX0609-06-04-01":
         facts.update(threshold_hours=6, actual_interval_hours=[2.0])
     return facts
+
+
+@pytest.mark.parametrize("rule_id", ["LX0609-06-04-01", "LX0609-06-04-02"])
+def test_published_critical_value_facts_reject_status_conflict(rule_id: str) -> None:
+    facts = _facts(rule_id=rule_id, outcome="unhandled")
+    with pytest.raises(ValueError, match="客户结果解释合同不完整"):
+        validate_luxian_0609_published_customer_display_facts(
+            rule_id=rule_id, raw=facts, status="compliant",
+        )
+    assert validate_luxian_0609_published_customer_display_facts(
+        rule_id=rule_id, raw=facts, status="non_compliant",
+    ) == facts
+    assert validate_luxian_0609_published_customer_display_facts(
+        rule_id=rule_id, raw=None, status="technical_error",
+    ) is None
+
+
+def test_published_critical_value_facts_preserve_gap_and_window_contracts() -> None:
+    handled = _facts(rule_id="LX0609-06-04-02", outcome="handled")
+    with pytest.raises(ValueError, match="客户结果解释合同不完整"):
+        validate_luxian_0609_published_customer_display_facts(
+            rule_id="LX0609-06-04-02", raw=handled, status="non_compliant",
+        )
+    immature = _facts(rule_id="LX0609-06-04-01", outcome="window_not_mature")
+    immature.update(
+        evaluation_window_mature=False,
+        deadline_times=["2026-06-01 14:00:00"],
+        evaluation_time="2026-06-01 12:00:00",
+    )
+    assert validate_luxian_0609_published_customer_display_facts(
+        rule_id="LX0609-06-04-01", raw=immature, status="not_applicable",
+    ) == immature
+    gap = {
+        "failure_kind": "critical_value_result_detail_missing",
+        "lab_report_count": 1,
+        "missing_source": "labtest_item_report",
+    }
+    assert validate_luxian_0609_published_customer_display_facts(
+        rule_id="LX0609-06-04-02", raw=gap, status="data_gap",
+    ) == gap
+
+
+def test_canonical_read_rejects_signed_text_with_conflicting_critical_facts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        customer_text_publication, "get_settings",
+        lambda: SimpleNamespace(JWT_SECRET="unit-test-publication-key"),
+    )
+    rule_id = "LX0609-06-04-02"
+    item = {
+        "rule_id": rule_id,
+        "status": "compliant",
+        "result_status": "compliant",
+        "is_compliant": True,
+        "conclusion": "已发布结论",
+        "suggestion": "已发布建议",
+        "customer_display_facts": _facts(rule_id=rule_id, outcome="unhandled"),
+    }
+    item["customer_text_seal"] = customer_text_publication.seal_published_customer_text(item)
+    table = sa.Table(
+        "canonical_test", sa.MetaData(),
+        *(sa.Column(key, sa.String) for key in (
+            "root_job_id", "record_id", "institute_id", "patient_id", "visit_id",
+            "rule_set_key", "rule_set_version",
+        )),
+    )
+    row = {"envelope_json": json.dumps({
+        "schema_version": RECORD_RESULT_ENVELOPE_SCHEMA,
+        "delivery_mode": CANONICAL_RESULT_DELIVERY_MODE,
+        "items": [item],
+    })}
+
+    class _Rows:
+        def mappings(self):
+            return self
+
+        def all(self):
+            return [row]
+
+    class _Session:
+        def execute(self, _statement):
+            return _Rows()
+
+    with pytest.raises(ValueError, match="客户结果解释合同不完整"):
+        CanonicalResultStore(table).load_selected(
+            _Session(), root_job_id="job", institute_id="inst", patient_id="patient",
+            visit_id="visit", rule_set_key="luxian_0609_qc_v1",
+            rule_set_version="2026-06-09",
+        )
 
 
 @pytest.mark.parametrize(

@@ -509,6 +509,8 @@ async def prepare_luxian_0609_execution(
             unified_engine_used = True
             for outcome in engine_report.outcomes:
                 envelope = outcome.envelope
+                if not envelope.usage_observation_complete:
+                    native_usage_unknown_executor_keys.append(outcome.executor_key)
                 if (
                     isinstance(outcome, FamilyExecutionFailure)
                     and outcome.failure_kind != "dependency"
@@ -613,6 +615,8 @@ async def prepare_luxian_0609_execution(
         )
         if inspect.isawaitable(basic_execution):
             basic_execution = await basic_execution
+        if not getattr(basic_execution, "usage_observation_complete", True):
+            native_usage_unknown_executor_keys.append(BASIC_TIMELINESS_EXECUTOR_KEY)
         native_results.extend(basic_execution.results)
         native_customer_display_facts.extend(
             getattr(basic_execution, "customer_display_facts", ())

@@ -319,7 +319,9 @@ def _canonical_reason_code(item: Dict[str, Any]) -> str:
     return "reason_unavailable"
 
 
-def _explicit_customer_text(item: Dict[str, Any], keys: Sequence[str], fallback: str) -> str:
+def _explicit_customer_text(
+    item: Dict[str, Any], keys: Sequence[str], fallback: str, *, preserve_length: bool = False,
+) -> str:
     private_values = {
         _safe_text(item.get(key))
         for key in (
@@ -342,7 +344,7 @@ def _explicit_customer_text(item: Dict[str, Any], keys: Sequence[str], fallback:
             continue
         if any(private_value in value for private_value in private_values):
             continue
-        return _truncate_export_text(value, 360)
+        return value if preserve_length else _truncate_export_text(value, 360)
     return fallback
 
 
@@ -567,11 +569,21 @@ def project_customer_safe_result_item(
     else:
         status = _canonical_customer_status(raw)
 
-    customer_display_facts, criterion_results = _validated_customer_explanation(
-        raw,
-        rule_id=rule_id,
-        status=status,
-    )
+    if (
+        is_luxian
+        and not is_current_luxian_result
+        and status == "technical_error"
+        and _safe_text(raw.get("reason_code")) == "canonical_result_envelope_invalid"
+    ):
+        # 旧内部项已被任务读取边界隔离为技术异常；不能再要求它满足
+        # 当前规则的事实合同，否则单条旧项会中断整个历史任务详情。
+        customer_display_facts, criterion_results = {}, []
+    else:
+        customer_display_facts, criterion_results = _validated_customer_explanation(
+            raw,
+            rule_id=rule_id,
+            status=status,
+        )
     generic_conclusion, generic_suggestion = _GENERIC_CUSTOMER_TEXT[status]
     # 当前 Canonical 文案由执行器/Renderer 已生成。读取层只做敏感裁剪，
     # 不得按规则、事实或 status 再次生成结论。
@@ -579,6 +591,15 @@ def project_customer_safe_result_item(
         is_current_luxian_result
         or _safe_text(raw.get("schema_version")) == _CUSTOMER_RESULT_SCHEMA
     )
+    # 免裁剪只限当前 LX0609 结果：签章已验证的发布文案，或由其投影出的
+    # 客户 DTO 二次投影；其他规则集和旧形态继续走原有 360 字裁剪。
+    preserve_published_text = (
+        is_current_luxian_result
+        and _safe_text(raw.get("schema_version")) == _CUSTOMER_RESULT_SCHEMA
+    )
+    if is_current_luxian_result and CUSTOMER_TEXT_SEAL_KEY in raw:
+        assert_published_customer_text_unchanged(raw)
+        preserve_published_text = True
     conclusion = _explicit_customer_text(
         raw,
         (
@@ -590,6 +611,7 @@ def project_customer_safe_result_item(
         if reuse_saved_customer_text
         else (),
         generic_conclusion,
+        preserve_length=preserve_published_text,
     )
     if (
         is_luxian
@@ -621,6 +643,7 @@ def project_customer_safe_result_item(
         if reuse_saved_customer_text
         else (),
         generic_suggestion,
+        preserve_length=preserve_published_text,
     )
     rule_name = _explicit_customer_text(
         raw,
