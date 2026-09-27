@@ -399,6 +399,9 @@ export type ManualTestRecordSourceMeta = {
   source_patient_name?: string
   source_department?: string
   created_from?: string
+  /** 测试病历编辑：被替换的旧条目 ID 与其 updated_at（CAS），仅限客户自建测试病历固定池。 */
+  supersedes_item_id?: string
+  supersedes_updated_at?: string
 }
 
 export type EditableMedicalRecordDocument = ManualTestRecordDocument & {

@@ -1,383 +1,318 @@
-﻿// @ts-nocheck
 /**
- * 测试病历模块服务层（模拟实现）
- * 提供列表查询、详情、批量操作以及筛选模板等基础能力
+ * 测试病历管理服务（V3.6 P1-E3）：全部走真实接口，不含 mock 数据。
+ * - 列表 / 关联质控点 / 移除：/api/v1/qc/sample-pools/test-records
+ * - 编辑：复用 POST /test-records 派生新副本，并以 supersedes_item_id 标记旧条目被替换
+ * - 运行：复用 POST /{pool_id}/run（固定池 + 三坐标）
+ * - 规则元数据：当前规则集版本详情 /api/v1/rule-set-versions
  */
+import { ApiService } from '@/services/apiService'
+import {
+  createManualTestMedicalRecord,
+  getEditableMedicalRecordDocuments,
+  runManualSamplePool,
+  type ManualSamplePoolRunPayload,
+} from '@/services/manual-case-sample-service'
+import { extractApiErrorMessageFromError, normalizeApiSuccess } from '@/utils/api-envelope'
 import type {
-  ApiResponse,
-  BatchActionPayload,
-  FilterTemplate,
-  PaginationState,
-  QuickFilterTag,
-  RecordListResponse,
-  RecordSearchConditions,
-  TestMedicalRecordDetail,
-  TestMedicalRecordSummary
+  CurrentRuleSetCatalog,
+  RuleSetEntryState,
+  RuleSetRuleOption,
+  TestRecordDocumentDraft,
+  TestRecordItem,
+  TestRecordListQuery,
+  TestRecordListResult,
 } from '@/types/test-medical-records'
+import type { ManualTestRecordCreateRequest } from '@/views/workstation-v4/customer-sample-validation/types'
 
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+export const CUSTOMER_TEST_POOL_ID = 'customer-created-test-records-v1'
+/** 测试病历按泸县0609客户规则集验证，与新建测试病历页一致。 */
+export const TEST_RECORD_RULE_SET_KEY = 'luxian_0609_qc_v1'
+const TEST_RECORDS_URL = '/api/v1/qc/sample-pools/test-records'
+const RUN_TIMEOUT_MS = 90000
 
-const mockRecords: TestMedicalRecordDetail[] = [
-  {
-    id: 'rec-001',
-    recordCode: 'TEST-REC-2024-001',
-    name: '胸痛患者入院记录（复杂）',
-    type: 'admission',
-    department: '心内科',
-    diseaseCategory: '心血管系统',
-    complexity: 'complex',
-    createdAt: '2024-12-01T08:00:00Z',
-    updatedAt: '2024-12-15T10:30:00Z',
-    createdBy: 'qc_admin',
-    status: 'verified',
-    relatedRuleCount: 12,
-    passRate: 0.86,
-    tags: ['高风险', '胸痛中心'],
-    description: '用于验证胸痛中心质控流程的标准入院病历，包含完整的诊疗路径与检查记录。',
-    expectedGrade: 'A',
-    expectedScoreRange: [90, 100],
-    expectedDefectTypes: ['诊疗路径缺失', '关键检查遗漏'],
-    expectedDefectCount: 0,
-    checkpoints: [
-      {
-        id: 'cp-01',
-        title: '首诊接诊记录完整性',
-        description: '包含发病时间、发病经过、既往史、首诊医师签名等关键字段',
-        priority: 'high'
-      },
-      {
-        id: 'cp-02',
-        title: '关键检查结果记录',
-        description: '心电图、肌钙蛋白等结果与时间戳齐全',
-        priority: 'medium'
-      }
-    ],
-    content: '【病史摘要】患者男性，58岁，胸痛3小时入院……'
-  },
-  {
-    id: 'rec-002',
-    recordCode: 'TEST-REC-2024-002',
-    name: '剖宫产术后病程记录（中等）',
-    type: 'progress',
-    department: '妇产科',
-    diseaseCategory: '产科',
-    complexity: 'medium',
-    createdAt: '2024-12-05T09:20:00Z',
-    updatedAt: '2024-12-06T16:45:00Z',
-    createdBy: 'ob_gyn_editor',
-    status: 'ready',
-    relatedRuleCount: 8,
-    passRate: 0.72,
-    tags: ['围产期', '典型案例'],
-    expectedGrade: 'B',
-    expectedScoreRange: [80, 95],
-    expectedDefectTypes: ['用药记录不完整'],
-    expectedDefectCount: 1,
-    checkpoints: [
-      {
-        id: 'cp-11',
-        title: '术后监测记录完整',
-        description: '生命体征、出血量、子宫收缩情况记录齐全',
-        priority: 'high'
-      }
-    ],
-    content: '【术后记录】患者女性，32岁，因胎位异常行剖宫产术……'
-  },
-  {
-    id: 'rec-003',
-    recordCode: 'TEST-REC-2024-003',
-    name: '慢阻肺患者出院总结（简单）',
-    type: 'discharge',
-    department: '呼吸内科',
-    diseaseCategory: '呼吸系统',
-    complexity: 'simple',
-    createdAt: '2024-11-28T13:00:00Z',
-    updatedAt: '2024-12-01T09:00:00Z',
-    createdBy: 'respiratory_qc',
-    status: 'archived',
-    relatedRuleCount: 5,
-    passRate: 0.94,
-    tags: ['示范', '慢病管理'],
-    expectedGrade: 'A',
-    expectedScoreRange: [88, 98],
-    content: '【出院总结】患者男性，65岁……'
-  },
-  {
-    id: 'rec-004',
-    recordCode: 'TEST-REC-2024-004',
-    name: '糖尿病足病例测试集',
-    type: 'admission',
-    department: '内分泌科',
-    diseaseCategory: '内分泌',
-    complexity: 'very_complex',
-    createdAt: '2024-12-10T07:50:00Z',
-    updatedAt: '2024-12-19T18:10:00Z',
-    createdBy: 'endocrine_specialist',
-    status: 'draft',
-    relatedRuleCount: 15,
-    passRate: 0.58,
-    tags: ['重点关注', '多学科'],
-    expectedGrade: 'C',
-    expectedScoreRange: [70, 85],
-    expectedDefectTypes: ['会诊记录缺失', '护理评估缺失'],
-    expectedDefectCount: 3,
-    checkpoints: [
-      {
-        id: 'cp-21',
-        title: '多学科会诊记录齐全',
-        description: '包含内分泌、血管外科、康复科的会诊意见',
-        priority: 'high'
-      },
-      {
-        id: 'cp-22',
-        title: '糖尿病足分级记录准确',
-        description: '参照Wagner分级并记录相应处理措施',
-        priority: 'high'
-      }
-    ],
-    content: '【病例综述】患者男性，62岁，糖尿病足溃疡……'
+export type ServiceResult<T> = {
+  success: boolean
+  data?: T
+  message?: string
+}
+
+async function requestEnvelope<T>(
+  config: Parameters<typeof ApiService.requestRaw>[0],
+  fallbackMessage: string,
+): Promise<ServiceResult<T>> {
+  try {
+    const response = await ApiService.requestRaw<T>(config)
+    const normalized = normalizeApiSuccess<T>(response.data)
+    return {
+      success: normalized.success,
+      data: normalized.data,
+      message: normalized.success ? normalized.message : normalized.message || fallbackMessage,
+    }
+  } catch (error) {
+    return { success: false, message: extractApiErrorMessageFromError(error, fallbackMessage) }
   }
-]
+}
 
-let filterTemplates: FilterTemplate[] = [
-  {
-    id: 'tpl-high-risk',
-    name: '高风险重点病历',
-    conditions: {
-      complexity: ['complex', 'very_complex'],
-      status: ['ready', 'verified'],
-      tags: ['高风险', '重点关注']
+export function listTestRecords(query: TestRecordListQuery) {
+  return requestEnvelope<TestRecordListResult>(
+    {
+      method: 'GET',
+      url: TEST_RECORDS_URL,
+      params: {
+        page: query.page,
+        page_size: query.page_size,
+        ...(query.include_removed ? { include_removed: true } : {}),
+        ...(query.q?.trim() ? { q: query.q.trim() } : {}),
+      },
     },
-    createdAt: '2024-12-15T09:00:00Z',
-    updatedAt: '2024-12-15T09:00:00Z'
-  },
-  {
-    id: 'tpl-ready-release',
-    name: '待发布病历',
-    conditions: {
-      status: ['ready'],
-      passRateGreaterThan: undefined
-    } as RecordSearchConditions,
-    createdAt: '2024-12-20T12:30:00Z',
-    updatedAt: '2024-12-20T12:30:00Z'
-  }
-]
-
-export const quickFilterTags: QuickFilterTag[] = [
-  {
-    key: 'recent-updated',
-    label: '近7日更新',
-    conditions: {
-      createdTimeRange: [
-        new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-        new Date().toISOString()
-      ]
-    }
-  },
-  {
-    key: 'ready-release',
-    label: '待发布',
-    conditions: {
-      status: ['ready']
-    }
-  },
-  {
-    key: 'high-risk',
-    label: '高风险测试集',
-    conditions: {
-      tags: ['高风险', '重点关注']
-    }
-  }
-]
-
-const paginate = (items: TestMedicalRecordSummary[], pagination: PaginationState): RecordListResponse => {
-  const start = (pagination.current - 1) * pagination.pageSize
-  const end = start + pagination.pageSize
-
-  return {
-    items: items.slice(start, end),
-    pagination: {
-      ...pagination,
-      total: items.length
-    }
-  }
+    '获取测试病历失败',
+  )
 }
 
-const matchesConditions = (record: TestMedicalRecordSummary, conditions: RecordSearchConditions): boolean => {
-  if (conditions.keyword && conditions.keywordType) {
-    const key = conditions.keywordType === 'id' ? record.recordCode
-      : conditions.keywordType === 'name' ? record.name
-      : record.createdBy
-    if (!key.toLowerCase().includes(conditions.keyword.toLowerCase())) {
-      return false
-    }
-  }
-
-  if (conditions.recordType?.length && !conditions.recordType.includes(record.type)) {
-    return false
-  }
-
-  if (conditions.departments?.length && !conditions.departments.includes(record.department)) {
-    return false
-  }
-
-  if (conditions.diseaseCategories?.length && !conditions.diseaseCategories.includes(record.diseaseCategory)) {
-    return false
-  }
-
-  if (conditions.complexity?.length && !conditions.complexity.includes(record.complexity)) {
-    return false
-  }
-
-  if (conditions.status?.length && !conditions.status.includes(record.status)) {
-    return false
-  }
-
-  if (conditions.tags?.length && !conditions.tags.some(tag => record.tags.includes(tag))) {
-    return false
-  }
-
-  if (conditions.createdTimeRange) {
-    const [start, end] = conditions.createdTimeRange
-    if (start && new Date(record.createdAt) < new Date(start)) return false
-    if (end && new Date(record.createdAt) > new Date(end)) return false
-  }
-
-  if (
-    typeof conditions.passRateGreaterThan === 'number' &&
-    record.passRate < conditions.passRateGreaterThan
-  ) {
-    return false
-  }
-
-  if (
-    typeof conditions.passRateLessThan === 'number' &&
-    record.passRate > conditions.passRateLessThan
-  ) {
-    return false
-  }
-
-  return true
+export function updateTestRecordRules(item: Pick<TestRecordItem, 'id' | 'updated_at'>, ruleIds: string[]) {
+  return requestEnvelope<TestRecordItem>(
+    {
+      method: 'PUT',
+      url: `${TEST_RECORDS_URL}/${encodeURIComponent(item.id)}/rules`,
+      data: { rule_ids: ruleIds, updated_at: item.updated_at },
+    },
+    '更新关联质控点失败',
+  )
 }
 
-export const TestMedicalRecordService = {
-  async fetchList(
-    conditions: RecordSearchConditions,
-    pagination: PaginationState
-  ): Promise<ApiResponse<RecordListResponse>> {
-    await delay(400)
+export function removeTestRecord(item: Pick<TestRecordItem, 'id' | 'updated_at'>) {
+  return requestEnvelope<TestRecordItem>(
+    {
+      method: 'DELETE',
+      url: `${TEST_RECORDS_URL}/${encodeURIComponent(item.id)}`,
+      params: { updated_at: item.updated_at },
+    },
+    '移除测试病历失败',
+  )
+}
 
-    const filtered = mockRecords.filter(record => matchesConditions(record, conditions))
-    const summaryList: TestMedicalRecordSummary[] = filtered.map(record => ({
-      id: record.id,
-      recordCode: record.recordCode,
-      name: record.name,
-      type: record.type,
-      department: record.department,
-      diseaseCategory: record.diseaseCategory,
-      complexity: record.complexity,
-      createdAt: record.createdAt,
-      updatedAt: record.updatedAt,
-      createdBy: record.createdBy,
-      status: record.status,
-      relatedRuleCount: record.relatedRuleCount,
-      passRate: record.passRate,
-      tags: record.tags
-    }))
+const ENTRY_STATES: RuleSetEntryState[] = ['active', 'paused', 'offline']
 
-    return {
-      success: true,
-      data: paginate(summaryList, pagination)
-    }
-  },
-
-  async fetchDetail(id: string): Promise<ApiResponse<TestMedicalRecordDetail | null>> {
-    await delay(200)
-    const record = mockRecords.find(item => item.id === id)
-    return {
-      success: !!record,
-      data: record ?? null,
-      message: record ? undefined : '未找到对应病历'
-    }
-  },
-
-  async performBatchAction(payload: BatchActionPayload): Promise<ApiResponse<{ succeeded: string[]; failed: string[] }>> {
-    await delay(300)
-    const knownIds = new Set(mockRecords.map(r => r.id))
-    const succeeded = payload.recordIds.filter(id => knownIds.has(id))
-    const failed = payload.recordIds.filter(id => !knownIds.has(id))
-
-    // 模拟状态更新
-    if (payload.action === 'updateStatus' && payload.targetStatus) {
-      mockRecords.forEach(record => {
-        if (succeeded.includes(record.id)) {
-          record.status = payload.targetStatus!
-          record.updatedAt = new Date().toISOString()
-        }
-      })
-    }
-
-    return {
-      success: failed.length === 0,
-      data: {
-        succeeded,
-        failed
-      },
-      message: failed.length
-        ? `部分病历未找到：${failed.join(', ')}`
-        : '批量操作执行成功'
-    }
-  },
-
-  async fetchFilterTemplates(): Promise<ApiResponse<FilterTemplate[]>> {
-    await delay(150)
-    return {
-      success: true,
-      data: filterTemplates
-    }
-  },
-
-  async saveFilterTemplate(template: Omit<FilterTemplate, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }): Promise<ApiResponse<FilterTemplate>> {
-    await delay(150)
-    if (template.id) {
-      const existing = filterTemplates.find(item => item.id === template.id)
-      if (existing) {
-        existing.name = template.name
-        existing.conditions = template.conditions
-        existing.updatedAt = new Date().toISOString()
-        return {
-          success: true,
-          data: existing
-        }
+function normalizeRuleEntries(value: unknown): RuleSetRuleOption[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((raw): RuleSetRuleOption | null => {
+      if (!raw || typeof raw !== 'object') return null
+      const row = raw as Record<string, unknown>
+      const ruleId = typeof row.rule_id === 'string' ? row.rule_id.trim() : ''
+      const state = ENTRY_STATES.find((item) => item === row.state)
+      if (!ruleId || !state) return null
+      return {
+        rule_id: ruleId,
+        state,
+        qc_point: typeof row.qc_point === 'string' && row.qc_point.trim() ? row.qc_point : null,
+        source_document:
+          typeof row.source_document === 'string' && row.source_document.trim()
+            ? row.source_document
+            : null,
+        ...(typeof row.executable === 'boolean' ? { executable: row.executable } : {}),
       }
-    }
+    })
+    .filter((item): item is RuleSetRuleOption => Boolean(item))
+}
 
-    const newTemplate: FilterTemplate = {
-      id: `tpl-${Date.now()}`,
-      name: template.name,
-      conditions: template.conditions,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    }
-    filterTemplates = [newTemplate, ...filterTemplates]
-    return {
-      success: true,
-      data: newTemplate
-    }
-  },
-
-  async deleteFilterTemplate(id: string): Promise<ApiResponse<boolean>> {
-    await delay(120)
-    const before = filterTemplates.length
-    filterTemplates = filterTemplates.filter(item => item.id !== id)
-    return {
-      success: true,
-      data: before !== filterTemplates.length
-    }
-  },
-
-  getQuickFilters(): QuickFilterTag[] {
-    return quickFilterTags
+/** 读取当前规则集版本的规则全集（与后端关联校验的集合一致）。 */
+export async function getCurrentRuleSetCatalog(): Promise<ServiceResult<CurrentRuleSetCatalog>> {
+  const listResult = await requestEnvelope<{ current_version?: string }>(
+    { method: 'GET', url: '/api/v1/rule-set-versions', params: { rule_set_key: TEST_RECORD_RULE_SET_KEY } },
+    '读取当前规则集版本失败',
+  )
+  const version = String(listResult.data?.current_version || '').trim()
+  if (!listResult.success || !version) {
+    return { success: false, message: listResult.message || '读取当前规则集版本失败' }
+  }
+  const detailResult = await requestEnvelope<{ entries?: unknown }>(
+    {
+      method: 'GET',
+      url: `/api/v1/rule-set-versions/${encodeURIComponent(TEST_RECORD_RULE_SET_KEY)}/${encodeURIComponent(version)}`,
+    },
+    '读取当前规则集版本详情失败',
+  )
+  if (!detailResult.success || !detailResult.data) {
+    return { success: false, message: detailResult.message }
+  }
+  return {
+    success: true,
+    data: {
+      rule_set_key: TEST_RECORD_RULE_SET_KEY,
+      version,
+      entries: normalizeRuleEntries(detailResult.data.entries),
+    },
   }
 }
 
+/** 仅有效条目且三坐标完整时可运行；身份不明时失败关闭。 */
+export function isRunnableTestRecord(item: TestRecordItem): boolean {
+  return (
+    item.state === 'active' &&
+    Boolean(item.institute_id.trim() && item.patient_id.trim() && item.visit_id.trim())
+  )
+}
+
+/** 多条病历的默认运行规则：各自关联质控点的并集（保持首次出现顺序）。 */
+export function unionTestRecordRuleIds(items: TestRecordItem[]): string[] {
+  const result: string[] = []
+  items.forEach((item) => {
+    item.rule_ids.forEach((ruleId) => {
+      if (!result.includes(ruleId)) result.push(ruleId)
+    })
+  })
+  return result
+}
+
+export function buildTestRecordRunPayload(
+  items: TestRecordItem[],
+  ruleIds: string[],
+): ManualSamplePoolRunPayload {
+  if (!items.length) throw new Error('请至少选择一条测试病历')
+  if (items.some((item) => !isRunnableTestRecord(item))) {
+    throw new Error('所选病历存在已移除、已被替换或三坐标不完整的条目')
+  }
+  const selectedRuleIds = Array.from(new Set(ruleIds.map((id) => id.trim()).filter(Boolean)))
+  if (!selectedRuleIds.length) throw new Error('请先选择要运行的质控点')
+  return {
+    sample_item_ids: items.map((item) => item.id),
+    record_refs: items.map((item) => ({
+      institute_id: item.institute_id,
+      patient_id: item.patient_id,
+      visit_id: item.visit_id,
+    })),
+    selected_rule_ids: selectedRuleIds,
+    validation_mode: 'customer',
+    rule_set_key: TEST_RECORD_RULE_SET_KEY,
+    max_parallel_records: Math.min(items.length, 4),
+  }
+}
+
+export function runTestRecords(items: TestRecordItem[], ruleIds: string[]) {
+  return runManualSamplePool(CUSTOMER_TEST_POOL_ID, buildTestRecordRunPayload(items, ruleIds), {
+    timeout: RUN_TIMEOUT_MS,
+  })
+}
+
+/** 读取测试病历现有文书（只读接口），作为编辑草稿。 */
+export async function loadTestRecordDocuments(
+  item: TestRecordItem,
+): Promise<ServiceResult<TestRecordDocumentDraft[]>> {
+  const result = await getEditableMedicalRecordDocuments(item.visit_id, {
+    institute_id: item.institute_id,
+    patient_id: item.patient_id,
+    visit_id: item.visit_id,
+  })
+  if (!result.success || !result.data) return { success: false, message: result.message }
+  return {
+    success: true,
+    data: result.data.documents.map((document, index) => ({
+      key: document.key || `document-${index + 1}`,
+      document_type: document.document_type,
+      title: document.title,
+      record_time: document.record_time || undefined,
+      submit_time: document.submit_time || undefined,
+      content: document.content || '',
+      doctor_name: document.doctor_name,
+      doctor_code: document.doctor_code,
+      enabled: document.enabled !== false,
+    })),
+  }
+}
+
+/**
+ * 病历时间按墙上时间原样传递（后端只取前 19 位、不处理时区），
+ * 不做 toISOString 转换，避免整体偏移 8 小时。
+ */
+export function normalizeWallClock(value?: string | null): string | undefined {
+  const text = String(value || '').trim()
+  const matched = text.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/)
+  if (!matched) return undefined
+  const [, year, month, day, hour = '00', minute = '00', second = '00'] = matched
+  const pad = (part: string) => part.padStart(2, '0')
+  return `${year}-${pad(month)}-${pad(day)}T${pad(hour)}:${minute}:${second}`
+}
+
+export interface TestRecordEditBasics {
+  caseTitle: string
+  sex: string
+  age: number | null
+  admissionTime: string
+}
+
+/** 编辑抽屉的必填人口学字段：源病历缺失时必须由用户填写，不使用默认值。 */
+export function findMissingEditBasics(basics: TestRecordEditBasics): string[] {
+  const missing: string[] = []
+  if (!basics.sex.trim()) missing.push('性别')
+  if (basics.age === null || !Number.isInteger(basics.age) || basics.age < 0 || basics.age > 120) {
+    missing.push('年龄')
+  }
+  if (!normalizeWallClock(basics.admissionTime)) missing.push('入院时间')
+  return missing
+}
+
+/**
+ * 编辑 = 派生可编辑副本：新建病历并指向旧条目；旧条目由后端在同一事务内标记为被替换。
+ * 不原地修改 CDM 文书，保留已发布 Bundle 与历史结果。
+ */
+export function buildTestRecordEditPayload(
+  item: TestRecordItem,
+  basics: TestRecordEditBasics,
+  documents: TestRecordDocumentDraft[],
+): ManualTestRecordCreateRequest {
+  const enabledDocuments = documents
+    .filter((document) => document.enabled && document.content.trim())
+    .map((document) => ({
+      document_type: document.document_type,
+      title: document.title,
+      record_time: normalizeWallClock(document.record_time),
+      submit_time: normalizeWallClock(document.submit_time),
+      content: document.content,
+      doctor_name: document.doctor_name,
+      doctor_code: document.doctor_code,
+      enabled: true,
+    }))
+  const missing = findMissingEditBasics(basics)
+  if (missing.length) throw new Error(`请填写${missing.join('、')}`)
+  const admissionTime = normalizeWallClock(basics.admissionTime) as string
+  if (!enabledDocuments.length) throw new Error('至少保留一份有正文的文书')
+  return {
+    case_title: basics.caseTitle.trim() || item.case_title || `${item.patient_name}测试病历`,
+    basic_info: {
+      patient_name: item.patient_name || '测试患者',
+      sex: basics.sex.trim(),
+      age: basics.age as number,
+      mr_no: undefined,
+      department: item.department || '未说明科室',
+      admission_time: admissionTime,
+    },
+    documents: enabledDocuments,
+    selected_rule_ids: [...item.rule_ids],
+    manual_issue_text: `测试病历编辑副本：替换 ${item.case_title || item.visit_id}。`,
+    template_key: 'customer_source_editable_copy',
+    source: {
+      type: 'customer_source_editable_copy',
+      source_pool_id: CUSTOMER_TEST_POOL_ID,
+      source_item_ids: [item.id],
+      source_visit_id: item.visit_id,
+      source_mr_no: item.mr_no,
+      source_patient_name: item.patient_name,
+      source_department: item.department,
+      created_from: 'test_record_management',
+      supersedes_item_id: item.id,
+      supersedes_updated_at: item.updated_at,
+    },
+  }
+}
+
+export function saveTestRecordEdit(payload: ManualTestRecordCreateRequest) {
+  return createManualTestMedicalRecord(payload)
+}
+
+export const TEST_RECORD_STATE_LABELS: Record<TestRecordItem['state'], string> = {
+  active: '有效',
+  removed: '已移除',
+  superseded: '已被替换',
+  unknown: '未知',
+}

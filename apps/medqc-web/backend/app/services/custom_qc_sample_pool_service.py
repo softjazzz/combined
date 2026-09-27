@@ -86,6 +86,78 @@ class SampleSyncJobConflictError(RuntimeError):
     """同一样本池已有排队中或执行中的同步任务。"""
 
 
+# 测试病历管理（V3.6 P1-E3 合同第 2 节）：固定池条目的软移除与替换标记。
+CUSTOMER_TEST_REMOVED_REASON = "test_record_removed"
+CUSTOMER_TEST_SUPERSEDED_PREFIX = "superseded_by:"
+
+
+class CustomerTestRecordNotFoundError(LookupError):
+    """条目不存在，或不属于客户自建测试病历固定池。"""
+
+
+class CustomerTestRecordConflictError(RuntimeError):
+    """条目已被他人修改（stale），或已移除/已被替换（inactive）。"""
+
+    def __init__(self, message: str, *, code: str) -> None:
+        super().__init__(message)
+        self.code = code
+
+
+def _customer_test_record_state(include_in_batch_1: Any, exclude_reason: Any) -> tuple[str, str]:
+    """返回 (state, superseded_by)；state 为 active/removed/superseded/unknown，未知原因不猜测。"""
+    reason = _safe_text(exclude_reason)
+    if bool(include_in_batch_1) and not reason:
+        return "active", ""
+    if not bool(include_in_batch_1) and reason == CUSTOMER_TEST_REMOVED_REASON:
+        return "removed", ""
+    if not bool(include_in_batch_1) and reason.startswith(CUSTOMER_TEST_SUPERSEDED_PREFIX):
+        return "superseded", reason[len(CUSTOMER_TEST_SUPERSEDED_PREFIX):]
+    return "unknown", ""
+
+
+def _parse_cas_timestamp(value: Any) -> Optional[datetime]:
+    """CAS 时间戳统一为 UTC naive，与 updated_at 列（datetime.utcnow 写入）比较。"""
+    if isinstance(value, datetime):
+        parsed = value
+    else:
+        text = _safe_text(value)
+        if not text:
+            return None
+        try:
+            parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    if parsed.tzinfo is not None:
+        return parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    return parsed
+
+
+def _parse_stored_age(age_year: Any, age_text: Any) -> Optional[int]:
+    """只解析已存年龄（age_year 纯数字或“N岁”）；不从出生日期推算。"""
+    year_text = _safe_text(age_year)
+    if year_text.isdigit():
+        return int(year_text)
+    matched = re.fullmatch(r"(\d+)\s*岁", _safe_text(age_text))
+    return int(matched.group(1)) if matched else None
+
+
+def _normalize_test_record_rule_ids(rule_ids: Iterable[Any]) -> List[str]:
+    normalized: List[str] = []
+    for rule_id in rule_ids or []:
+        text = _safe_text(rule_id).upper()
+        if text and text not in normalized:
+            normalized.append(text)
+    return normalized
+
+
+def _stored_test_record_rule_ids(value: Any) -> List[str]:
+    """直接解析 candidate_rule_ids_json；不走旧样本行的规则号正则与回退推断。"""
+    parsed = _safe_json_loads(value, [])
+    if not isinstance(parsed, list):
+        return []
+    return _normalize_test_record_rule_ids(parsed)
+
+
 def _lock_sample_sync_pool_transaction(session: Session, pool_id: str) -> None:
     """生产 PG 使用事务级 advisory lock；SQLite 测试使用写事务锁。"""
     bind = session.get_bind()
@@ -4252,6 +4324,12 @@ class CustomQCSamplePoolService:
         ]
         if not enabled_documents:
             raise ValueError("至少需要填写一份病历文书")
+        # 编辑测试病历 = 派生新副本并在同一事务内标记旧条目被替换；缺 CAS 时间戳时失败关闭。
+        supersede_source = payload.get("source") if isinstance(payload.get("source"), dict) else {}
+        supersedes_item_id = _safe_text(supersede_source.get("supersedes_item_id"))
+        supersedes_expected_at = _parse_cas_timestamp(supersede_source.get("supersedes_updated_at"))
+        if supersedes_item_id and supersedes_expected_at is None:
+            raise ValueError("编辑测试病历必须提供被替换条目的 updated_at")
 
         now_value = _now_utc()
         patient_name = _safe_text(basic.get("patient_name"), "测试患者")
@@ -4422,6 +4500,13 @@ class CustomQCSamplePoolService:
             lock_stack.close()
             raise
         try:
+            if supersedes_item_id:
+                # 写入任何 CDM 行之前先锁定并校验旧条目，失败时整个事务不提交。
+                self._lock_active_customer_test_item(
+                    session,
+                    item_id=supersedes_item_id,
+                    expected_updated_at=supersedes_expected_at,
+                )
             existing_pool = session.execute(
                 select(self._pool_table.c.id).where(self._pool_table.c.id == CUSTOMER_TEST_POOL_ID)
             ).first()
@@ -4500,6 +4585,8 @@ class CustomQCSamplePoolService:
                     "source_department": _safe_text(source_meta.get("source_department")),
                     "created_from": _safe_text(source_meta.get("created_from"), "customer_sample_validation"),
                 }
+                if supersedes_item_id:
+                    item_payload["source_record"]["supersedes_item_id"] = supersedes_item_id
             candidate_rule_ids = [
                 _safe_text(rule_id).upper()
                 for rule_id in (payload.get("selected_rule_ids") or [])
@@ -4546,6 +4633,17 @@ class CustomQCSamplePoolService:
                 set_={column: getattr(statement.excluded, column) for column in update_columns},
             )
             session.execute(statement)
+            if supersedes_item_id:
+                self._cas_update_customer_test_item(
+                    session,
+                    item_id=supersedes_item_id,
+                    expected_updated_at=supersedes_expected_at,
+                    values={
+                        "include_in_batch_1": False,
+                        "exclude_reason": f"{CUSTOMER_TEST_SUPERSEDED_PREFIX}{item_id}",
+                        "updated_at": now_value,
+                    },
+                )
             self._update_pool_counters(session, CUSTOMER_TEST_POOL_ID)
             session.commit()
         except Exception:
@@ -4615,6 +4713,273 @@ class CustomQCSamplePoolService:
             "bundle_status": bundle_status,
             "bundle_error": bundle_error,
         }
+
+    # ------------------------------------------------------------------
+    # 测试病历管理（V3.6 P1-E3 合同第 2 节）：只作用于固定池 customer-created-test-records-v1
+    # ------------------------------------------------------------------
+
+    def _row_to_customer_test_record(self, row: Dict[str, Any]) -> Dict[str, Any]:
+        raw_payload = _safe_json_loads(row.get("raw_payload_json"), {})
+        if not isinstance(raw_payload, dict):
+            raw_payload = {}
+        source_record = raw_payload.get("source_record")
+        source_record = source_record if isinstance(source_record, dict) else {}
+        state, superseded_by = _customer_test_record_state(
+            row.get("include_in_batch_1"), row.get("exclude_reason"),
+        )
+        rule_ids = _stored_test_record_rule_ids(row.get("candidate_rule_ids_json"))
+        document_count = raw_payload.get("document_count")
+        return {
+            "id": _safe_text(row.get("id")),
+            "institute_id": _safe_text(row.get("matched_institute_id")),
+            "patient_id": _safe_text(row.get("matched_patient_id")),
+            "visit_id": _safe_text(row.get("matched_visit_id")),
+            "case_title": _safe_text(raw_payload.get("case_title")),
+            "patient_name": _safe_text(row.get("patient_name")),
+            "department": _safe_text(row.get("department")),
+            "mr_no": _safe_text(row.get("mr_no")),
+            # 旧条目缺少文书数时返回 None，由前端显示“未知”。
+            "document_count": document_count if isinstance(document_count, int) else None,
+            "rule_ids": rule_ids,
+            "rule_count": len(rule_ids),
+            "latest_job_id": _safe_text(row.get("latest_job_id")),
+            "bundle_status": _safe_text(row.get("bundle_status"), "pending"),
+            "origin": "derived" if source_record else "created",
+            "source_item_id": _safe_text(source_record.get("supersedes_item_id")),
+            # 人口学字段由列表批量读取 CDM 后填充；缺失为 None，不推断、不默认。
+            "sex": None,
+            "age": None,
+            "admission_time": None,
+            "state": state,
+            "removed": state == "removed",
+            "superseded_by": superseded_by or None,
+            "created_at": row.get("created_at"),
+            "updated_at": row.get("updated_at"),
+        }
+
+    def list_customer_test_records(
+        self,
+        *,
+        include_removed: bool = False,
+        query: Optional[str] = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> SamplePoolListResult:
+        item_table = self._item_table
+        clauses = [item_table.c.pool_id == CUSTOMER_TEST_POOL_ID]
+        if not include_removed:
+            clauses.append(item_table.c.include_in_batch_1.is_(True))
+            clauses.append(func.coalesce(item_table.c.exclude_reason, "") == "")
+        keyword = _safe_text(query)
+        if keyword:
+            pattern = f"%{keyword}%"
+            clauses.append(
+                or_(
+                    item_table.c.patient_name.ilike(pattern),
+                    item_table.c.mr_no.ilike(pattern),
+                    item_table.c.matched_visit_id.ilike(pattern),
+                    item_table.c.department.ilike(pattern),
+                )
+            )
+        where_clause = and_(*clauses)
+        session = _session()
+        try:
+            total = int(
+                session.execute(select(func.count()).select_from(item_table).where(where_clause)).scalar()
+                or 0
+            )
+            rows = session.execute(
+                select(item_table)
+                .where(where_clause)
+                .order_by(item_table.c.created_at.desc(), item_table.c.id.desc())
+                .offset(max(page - 1, 0) * page_size)
+                .limit(page_size)
+            ).mappings().all()
+            records = [self._row_to_customer_test_record(dict(row)) for row in rows]
+            demographics = self._load_test_record_demographics(
+                session,
+                [(item["institute_id"], item["patient_id"], item["visit_id"]) for item in records],
+            )
+            for record in records:
+                record.update(
+                    demographics.get((record["institute_id"], record["patient_id"], record["visit_id"]), {})
+                )
+            return SamplePoolListResult(
+                items=records,
+                total=total,
+                page=page,
+                page_size=page_size,
+            )
+        finally:
+            session.close()
+
+    @staticmethod
+    def _load_test_record_demographics(
+        session: Session, case_keys: Sequence[CaseKey],
+    ) -> Dict[CaseKey, Dict[str, Any]]:
+        """按三坐标批量只读 inpat_registration（性别缺失时取 patient_information）；缺失为 None。"""
+        keys = sorted({key for key in case_keys if len(key) == 3 and all(key)})
+        if not keys:
+            return {}
+        registration = InpatRegistration.__table__
+        patient = PatientInformation.__table__
+        reg_rows = session.execute(
+            select(
+                registration.c.institute_id, registration.c.patient_id, registration.c.visit_id,
+                registration.c.sex, registration.c.age_year, registration.c.age,
+                registration.c.admission_datetime,
+            ).where(or_(*[
+                and_(
+                    registration.c.institute_id == institute_id,
+                    registration.c.patient_id == patient_id,
+                    registration.c.visit_id == visit_id,
+                )
+                for institute_id, patient_id, visit_id in keys
+            ]))
+        ).mappings().all()
+        patient_keys = sorted({(institute_id, patient_id) for institute_id, patient_id, _ in keys})
+        patient_sex = {
+            (_safe_text(row["institute_id"]), _safe_text(row["patient_id"])): _safe_text(row["sex"])
+            for row in session.execute(
+                select(patient.c.institute_id, patient.c.patient_id, patient.c.sex).where(or_(*[
+                    and_(patient.c.institute_id == institute_id, patient.c.patient_id == patient_id)
+                    for institute_id, patient_id in patient_keys
+                ]))
+            ).mappings().all()
+        }
+        result: Dict[CaseKey, Dict[str, Any]] = {
+            key: {"sex": patient_sex.get(key[:2]) or None, "age": None, "admission_time": None}
+            for key in keys
+        }
+        for row in reg_rows:
+            key = (_safe_text(row["institute_id"]), _safe_text(row["patient_id"]), _safe_text(row["visit_id"]))
+            if key not in result:
+                continue
+            sex = _safe_text(row["sex"])
+            if sex:
+                result[key]["sex"] = sex
+            result[key]["age"] = _parse_stored_age(row["age_year"], row["age"])
+            admission = row["admission_datetime"]
+            result[key]["admission_time"] = admission.isoformat() if isinstance(admission, datetime) else (
+                _safe_text(admission) or None
+            )
+        return result
+
+    def _lock_active_customer_test_item(
+        self,
+        session: Session,
+        *,
+        item_id: str,
+        expected_updated_at: Optional[datetime],
+    ) -> Dict[str, Any]:
+        """锁定条目并确认：属于固定池、仍为有效状态、updated_at 与调用方一致。"""
+        row = session.execute(
+            select(self._item_table)
+            .where(self._item_table.c.id == _safe_text(item_id))
+            .with_for_update()
+        ).mappings().first()
+        if not row or _safe_text(row.get("pool_id")) != CUSTOMER_TEST_POOL_ID:
+            raise CustomerTestRecordNotFoundError("测试病历不存在")
+        state, _ = _customer_test_record_state(row.get("include_in_batch_1"), row.get("exclude_reason"))
+        if state != "active":
+            raise CustomerTestRecordConflictError("测试病历已移除或已被替换", code="inactive")
+        if expected_updated_at is None or _parse_cas_timestamp(row.get("updated_at")) != expected_updated_at:
+            raise CustomerTestRecordConflictError("测试病历已被修改，请刷新后重试", code="stale")
+        return dict(row)
+
+    def _cas_update_customer_test_item(
+        self,
+        session: Session,
+        *,
+        item_id: str,
+        expected_updated_at: Optional[datetime],
+        values: Dict[str, Any],
+    ) -> None:
+        result = session.execute(
+            update(self._item_table)
+            .where(
+                and_(
+                    self._item_table.c.id == _safe_text(item_id),
+                    self._item_table.c.pool_id == CUSTOMER_TEST_POOL_ID,
+                    self._item_table.c.updated_at == expected_updated_at,
+                )
+            )
+            .values(**values)
+        )
+        if int(result.rowcount or 0) != 1:
+            raise CustomerTestRecordConflictError("测试病历已被修改，请刷新后重试", code="stale")
+
+    def update_customer_test_record_rules(
+        self,
+        *,
+        item_id: str,
+        rule_ids: Sequence[Any],
+        expected_updated_at: Any,
+        allowed_rule_ids: Iterable[str],
+    ) -> Dict[str, Any]:
+        """关联质控点：规则须属于当前规则集版本全集；candidate_rule_ids_json 与 selected_rule_ids 同步写入。"""
+        normalized = _normalize_test_record_rule_ids(rule_ids)
+        allowed = {_safe_text(rule_id).upper() for rule_id in allowed_rule_ids}
+        unknown = [rule_id for rule_id in normalized if rule_id not in allowed]
+        if unknown:
+            raise ValueError(f"规则不属于当前规则集版本：{'、'.join(unknown)}")
+        expected = _parse_cas_timestamp(expected_updated_at)
+        session = _session()
+        try:
+            row = self._lock_active_customer_test_item(
+                session, item_id=item_id, expected_updated_at=expected,
+            )
+            raw_payload = _safe_json_loads(row.get("raw_payload_json"), {})
+            if not isinstance(raw_payload, dict):
+                raw_payload = {}
+            raw_payload["selected_rule_ids"] = normalized
+            self._cas_update_customer_test_item(
+                session,
+                item_id=item_id,
+                expected_updated_at=expected,
+                values={
+                    "candidate_rule_ids_json": _safe_json_dumps(normalized),
+                    "raw_payload_json": _safe_json_dumps(raw_payload),
+                    "updated_at": _now_utc(),
+                },
+            )
+            session.commit()
+            updated = session.execute(
+                select(self._item_table).where(self._item_table.c.id == _safe_text(item_id))
+            ).mappings().first()
+            return self._row_to_customer_test_record(dict(updated or {}))
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
+    def remove_customer_test_record(self, *, item_id: str, expected_updated_at: Any) -> Dict[str, Any]:
+        """软移除：不纳入批次并记录原因；CDM 行与历史结果保留，便于追溯。"""
+        expected = _parse_cas_timestamp(expected_updated_at)
+        session = _session()
+        try:
+            self._lock_active_customer_test_item(session, item_id=item_id, expected_updated_at=expected)
+            self._cas_update_customer_test_item(
+                session,
+                item_id=item_id,
+                expected_updated_at=expected,
+                values={
+                    "include_in_batch_1": False,
+                    "exclude_reason": CUSTOMER_TEST_REMOVED_REASON,
+                    "updated_at": _now_utc(),
+                },
+            )
+            session.commit()
+            updated = session.execute(
+                select(self._item_table).where(self._item_table.c.id == _safe_text(item_id))
+            ).mappings().first()
+            return self._row_to_customer_test_record(dict(updated or {}))
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
 
     def refresh_pool_item_classifications(
         self,

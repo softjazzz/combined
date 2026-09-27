@@ -25,6 +25,8 @@ from ..routers.qc_sichuan import (
     _run_sichuan_workspace_batch_job,
 )
 from ..services.custom_qc_sample_pool_service import (
+    CustomerTestRecordConflictError,
+    CustomerTestRecordNotFoundError,
     CustomQCSamplePoolService,
     SampleSyncJobConflictError,
     build_sample_validation_execution_scope_hash,
@@ -37,6 +39,13 @@ from ..services.customer_rule_sets import (
     get_customer_luxian_rule_set,
 )
 from ..services.detached_task_runner import submit_detached_task
+from ..services.luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY
+from ..services.rule_set_version_service import (
+    RuleSetVersionNotFound,
+    RuleSetVersionUnavailable,
+    current_version as _current_rule_set_version,
+    resolve_rule_set_version,
+)
 from ..services.luxian_0609 import (
     build_family_scopes as _build_luxian_0609_family_scopes,
     normalize_customer_rule_ids as _normalize_rule_id_list,
@@ -328,6 +337,12 @@ class TestRecordSourceMeta(BaseModel):
     source_patient_name: Optional[str] = Field(default=None, description="来源患者姓名")
     source_department: Optional[str] = Field(default=None, description="来源科室")
     created_from: Optional[str] = Field(default=None, description="创建来源入口")
+    supersedes_item_id: Optional[str] = Field(
+        default=None, description="编辑测试病历时被替换的旧条目 ID（仅限客户自建测试病历固定池）"
+    )
+    supersedes_updated_at: Optional[str] = Field(
+        default=None, description="被替换旧条目的 updated_at，用于 CAS 防并发覆盖"
+    )
 
 
 class TestRecordCreateRequest(BaseModel):
@@ -339,6 +354,35 @@ class TestRecordCreateRequest(BaseModel):
     template_key: Optional[str] = Field(default=None, description="使用的测试病历模板 key")
     golden_answers: list[TestRecordGoldenAnswer] = Field(default_factory=list, description="人工预期结果")
     source: Optional[TestRecordSourceMeta] = Field(default=None, description="派生测试病历来源记录")
+
+
+class TestRecordRulesUpdateRequest(BaseModel):
+    rule_ids: list[str] = Field(default_factory=list, description="关联的质控点 rule_id")
+    updated_at: str = Field(..., min_length=1, description="条目当前 updated_at，用于 CAS")
+
+
+def _raise_test_record_error(exc: Exception) -> None:
+    if isinstance(exc, CustomerTestRecordNotFoundError):
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if isinstance(exc, CustomerTestRecordConflictError):
+        # 与本路由其余 409 一致用字符串 detail，前端错误信封可直接展示。
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    raise exc
+
+
+def _current_version_rule_ids() -> set[str]:
+    """当前规则集版本的全部规则（active、paused、excluded 合集）。"""
+    try:
+        resolution = resolve_rule_set_version(
+            LUXIAN_0609_RULE_SET_KEY, _current_rule_set_version(LUXIAN_0609_RULE_SET_KEY)
+        )
+    except (RuleSetVersionNotFound, RuleSetVersionUnavailable) as exc:
+        raise HTTPException(status_code=503, detail="当前规则集版本读取失败") from exc
+    return {
+        *resolution["active_rule_ids"],
+        *resolution["paused_rule_ids"],
+        *resolution["excluded_rule_ids"],
+    }
 
 
 @contextmanager
@@ -575,9 +619,82 @@ async def create_test_record(
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (CustomerTestRecordNotFoundError, CustomerTestRecordConflictError) as exc:
+        _raise_test_record_error(exc)
     return success_response(
         data=result,
         message="客户自建测试病历已创建",
+        trace_id=get_trace_id(request),
+    )
+
+
+@router.get("/test-records")
+async def list_test_records(
+    request: Request,
+    include_removed: bool = Query(default=False, description="同时列出已移除与已被替换的条目"),
+    q: Optional[str] = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    del current_user
+    result = _service().list_customer_test_records(
+        include_removed=include_removed, query=q, page=page, page_size=page_size,
+    )
+    return success_response(
+        data={
+            "items": result.items,
+            "total": result.total,
+            "page": result.page,
+            "page_size": result.page_size,
+        },
+        message="获取测试病历成功",
+        trace_id=get_trace_id(request),
+    )
+
+
+@router.put("/test-records/{item_id}/rules")
+async def update_test_record_rules(
+    request: Request,
+    item_id: str,
+    payload: TestRecordRulesUpdateRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    del current_user
+    allowed_rule_ids = _current_version_rule_ids()
+    try:
+        item = _service().update_customer_test_record_rules(
+            item_id=item_id,
+            rule_ids=payload.rule_ids,
+            expected_updated_at=payload.updated_at,
+            allowed_rule_ids=allowed_rule_ids,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (CustomerTestRecordNotFoundError, CustomerTestRecordConflictError) as exc:
+        _raise_test_record_error(exc)
+    return success_response(
+        data=item,
+        message="测试病历关联质控点已更新",
+        trace_id=get_trace_id(request),
+    )
+
+
+@router.delete("/test-records/{item_id}")
+async def remove_test_record(
+    request: Request,
+    item_id: str,
+    updated_at: str = Query(..., min_length=1, description="条目当前 updated_at，用于 CAS"),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    del current_user
+    try:
+        item = _service().remove_customer_test_record(item_id=item_id, expected_updated_at=updated_at)
+    except (CustomerTestRecordNotFoundError, CustomerTestRecordConflictError) as exc:
+        _raise_test_record_error(exc)
+    return success_response(
+        data=item,
+        message="测试病历已移除",
         trace_id=get_trace_id(request),
     )
 

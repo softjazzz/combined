@@ -673,3 +673,9 @@
 - 用户确认评分按“评分标准配置、默认不启用”实现。证据：LX0609 Canonical 无评分，`rules_v1.json` 的 49 条 `score_deduction` 全为 2 不可作标准，旧 `qc_results.overall_score` 来自旧链路。按 `docs/plans/2026-09-27-v36-scoring-standards-design.md`：迁移 62 新增 `qc_scoring_standards/groups/items`（qc/public，场景默认的部分唯一索引、项目组、单项否决）；`score_result` 纯函数只对执行器 `is_confirmed_issue` 扣分，组封顶、下限 0、档位左闭右开最高档右闭、否决强制档位、未配置的确定问题列入 `unscored_rule_ids`；按需计算不落库；`GET /api/v1/scoring/case` 与标准管理接口（CRUD、复制、条目整表保存 CAS、启用替换默认同事务、归档）。V5 列表对本页 ready 病例挂 `score_state`（无默认标准时不读条目、零成本；失败降级 unavailable），顶层 `score_standards` 供前端整列显示“未配置评分标准”。LX0609 同时计入 final 场景（终末执行与读取的就是 LX0609 结果）；0916 不计分；门急诊无规则集，建门诊标准返回 422。
 - 验证：隔离库升级至 revision62 并回读三表双 schema 与唯一索引；真实 PG 冒烟（第二个标准启用后原默认同事务归档、仅一个默认、级联删除无孤儿），合成标准已清理。冒烟过程中首次脚本仅替换了评分服务会话，规则集版本服务沿用应用默认会话对业务库执行了一次只读 SELECT（表不存在报错、无写入）；此后冒烟统一在导入应用前以进程环境指向隔离库并断言库名。后端评分与列表相关 132/132、Ruff。前端评分标准管理页与列表/抽屉展示待下一批；undefault 替换后缺“重新设为默认”接口，列为小缺口。未做浏览器验收，PRD 覆盖状态不提升。
 
+## 85. 第七十九批：测试病历真实化（P1-E3）
+
+- 证据：`records/test` 全链为 mock；`views/medical-records` 走旧病历表、非三坐标，不作落点；真实链为样本池 + CDM（`/test-records` 创建写 CDM 三坐标与文书、固定池 `customer-created-test-records-v1`、按规则运行与结果读取）。按 `docs/plans/2026-09-27-v36-test-records-design.md` 复用该链：新增测试病历列表（精确 total、合同字段、可含已移除/被替换）、关联质控点（按当前规则集版本全集校验，updated_at CAS，两字段同步）、软移除（不删 CDM 行）、编辑走派生副本并在同一创建事务内锁定旧条目、CAS 标记 `superseded_by`；所有写操作先确认条目属于固定池。前端删除 mock，列表、新建（跳合成病历创建页）、查看文书、编辑抽屉、移除、关联质控点、运行关联规则与结果抽屉均接真实接口；四项阻塞（预期结果比对、含文书 Excel 导入、other 文书归属、新建质控点验证）以说明文字呈现。
+- 复核纠偏：编辑抽屉原沿用“未说明/50 岁”默认人口学值（会影响年龄/性别相关规则判定），改为列表从 CDM 只读返回 sex/age/admission_time（缺失为 null、不推断），缺失项必填无默认值；顺带修正 `toISOString` 导致的 8 小时时间偏移。`records/test` 路由权限改为与后端一致（admin/qc_manager/sync_admin）。
+- 验证：后端测试病历管理 15/15、Ruff；前端 vue-tsc、只读全量 ESLint、全量 Vitest 195/195 文件。样本池既有两个测试文件 51 条失败与 HEAD 相同（拒连既有问题）。样本验证页派生副本流程存在同样的默认人口学值与 8 小时偏移，另立任务。未做浏览器验收，PRD 覆盖状态不提升。
+

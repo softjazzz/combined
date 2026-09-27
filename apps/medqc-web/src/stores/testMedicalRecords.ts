@@ -1,233 +1,112 @@
-﻿// @ts-nocheck
 /**
- * 娴嬭瘯鐥呭巻鍒楄〃绠＄悊 Store
- * 璐熻矗鍒楄〃鏁版嵁銆佺瓫閫夈€佸垎椤点€侀€夋嫨鍜屾ā鏉跨鐞?
+ * 测试病历管理 Store（V3.6 P1-E3）
+ * 只保存列表查询状态与接口结果；条目状态、替换关系由后端判定，这里不重判。
  */
 import { defineStore } from 'pinia'
-import { computed, reactive, ref } from 'vue'
-import { TestMedicalRecordService } from '@/services/test-medical-records'
-import type {
-  BatchActionPayload,
-  FilterTemplate,
-  PaginationState,
-  QuickFilterTag,
-  RecordSearchConditions,
-  TestMedicalRecordDetail,
-  TestMedicalRecordSummary
-} from '@/types/test-medical-records'
-
-const defaultPagination: PaginationState = {
-  current: 1,
-  pageSize: 10,
-  total: 0
-}
-
-const defaultConditions: RecordSearchConditions = {
-  keywordType: 'name',
-  recordType: [],
-  departments: [],
-  diseaseCategories: [],
-  complexity: [],
-  status: [],
-  tags: []
-}
-
-const mergeConditions = (
-  base: RecordSearchConditions,
-  overlay: Partial<RecordSearchConditions>
-): RecordSearchConditions => {
-  const result: RecordSearchConditions = { ...base }
-
-  Object.entries(overlay).forEach(([key, value]) => {
-    if (Array.isArray(value)) {
-      result[key as keyof RecordSearchConditions] = [...value]
-    } else if (value === undefined) {
-      delete result[key as keyof RecordSearchConditions]
-    } else {
-      result[key as keyof RecordSearchConditions] = value
-    }
-  })
-
-  return result
-}
+import { computed, ref } from 'vue'
+import {
+  getCurrentRuleSetCatalog,
+  listTestRecords,
+  removeTestRecord,
+  updateTestRecordRules,
+} from '@/services/test-medical-records'
+import type { CurrentRuleSetCatalog, TestRecordItem } from '@/types/test-medical-records'
 
 export const useTestMedicalRecordsStore = defineStore('testMedicalRecords', () => {
+  const items = ref<TestRecordItem[]>([])
+  const total = ref(0)
+  const page = ref(1)
+  const pageSize = ref(20)
+  const keyword = ref('')
+  const includeRemoved = ref(false)
   const loading = ref(false)
-  const records = ref<TestMedicalRecordSummary[]>([])
-  const pagination = reactive<PaginationState>({ ...defaultPagination })
-  const conditions = ref<RecordSearchConditions>({ ...defaultConditions })
-  const appliedConditions = ref<RecordSearchConditions>({ ...defaultConditions })
-  const selectedRowKeys = ref<string[]>([])
-  const detailCache = ref<Map<string, TestMedicalRecordDetail>>(new Map())
+  const loadError = ref('')
+  const selectedIds = ref<string[]>([])
+  const ruleCatalog = ref<CurrentRuleSetCatalog | null>(null)
+  const ruleCatalogError = ref('')
+  const ruleCatalogLoading = ref(false)
 
-  const quickFilters = ref<QuickFilterTag[]>(TestMedicalRecordService.getQuickFilters())
-  const activeQuickFilters = ref<Set<string>>(new Set())
+  const selectedItems = computed(() =>
+    items.value.filter((item) => selectedIds.value.includes(item.id)),
+  )
 
-  const filterTemplates = ref<FilterTemplate[]>([])
-  const templatesLoading = ref(false)
-
-  const hasActiveFilters = computed(() => {
-    const current = appliedConditions.value
-    const base = defaultConditions
-    return JSON.stringify(current) !== JSON.stringify(base)
-  })
-
-  const selectedCount = computed(() => selectedRowKeys.value.length)
-
-  const currentConditions = computed(() => appliedConditions.value)
-
-  const refreshQuickFilters = () => {
-    quickFilters.value = TestMedicalRecordService.getQuickFilters()
-  }
-
-  const loadRecords = async (
-    override?: Partial<RecordSearchConditions>,
-    paginationOverride?: Partial<PaginationState>
-  ) => {
+  async function load() {
     loading.value = true
-    try {
-      if (paginationOverride) {
-        Object.assign(pagination, { ...pagination, ...paginationOverride })
-      }
-
-      const mergedConditions = override
-        ? mergeConditions(appliedConditions.value, override)
-        : appliedConditions.value
-
-      const response = await TestMedicalRecordService.fetchList(mergedConditions, pagination)
-      records.value = response.data.items
-      Object.assign(pagination, response.data.pagination)
-      appliedConditions.value = mergedConditions
-    } finally {
-      loading.value = false
-    }
-  }
-
-  const updateConditions = (partial: Partial<RecordSearchConditions>) => {
-    conditions.value = mergeConditions(conditions.value, partial)
-  }
-
-  const applyFilters = async () => {
-    pagination.current = 1
-    await loadRecords(conditions.value)
-  }
-
-  const resetFilters = async () => {
-    conditions.value = { ...defaultConditions }
-    appliedConditions.value = { ...defaultConditions }
-    activeQuickFilters.value.clear()
-    pagination.current = 1
-    await loadRecords()
-  }
-
-  const toggleQuickFilter = async (tag: QuickFilterTag) => {
-    if (activeQuickFilters.value.has(tag.key)) {
-      activeQuickFilters.value.delete(tag.key)
-    } else {
-      activeQuickFilters.value.add(tag.key)
-    }
-
-    let merged = { ...defaultConditions }
-    activeQuickFilters.value.forEach(key => {
-      const quick = quickFilters.value.find(item => item.key === key)
-      if (!quick) return
-      merged = mergeConditions(merged, quick.conditions)
+    loadError.value = ''
+    const result = await listTestRecords({
+      page: page.value,
+      page_size: pageSize.value,
+      include_removed: includeRemoved.value,
+      q: keyword.value,
     })
-
-    conditions.value = mergeConditions(merged, conditions.value)
-    pagination.current = 1
-    await loadRecords(conditions.value)
-  }
-
-  const changePage = async (page: number, pageSize?: number) => {
-    pagination.current = page
-    if (pageSize && pageSize !== pagination.pageSize) {
-      pagination.pageSize = pageSize
+    loading.value = false
+    if (!result.success || !result.data) {
+      loadError.value = result.message || '获取测试病历失败'
+      items.value = []
+      total.value = 0
+      return
     }
-    await loadRecords()
+    items.value = result.data.items
+    total.value = result.data.total
+    const visibleIds = new Set(items.value.map((item) => item.id))
+    selectedIds.value = selectedIds.value.filter((id) => visibleIds.has(id))
   }
 
-  const fetchDetail = async (id: string) => {
-    if (detailCache.value.has(id)) {
-      return detailCache.value.get(id)!
+  async function changePage(nextPage: number, nextPageSize: number) {
+    page.value = nextPage
+    pageSize.value = nextPageSize
+    await load()
+  }
+
+  async function search() {
+    page.value = 1
+    await load()
+  }
+
+  async function ensureRuleCatalog(force = false) {
+    if (ruleCatalog.value && !force) return
+    ruleCatalogLoading.value = true
+    ruleCatalogError.value = ''
+    const result = await getCurrentRuleSetCatalog()
+    ruleCatalogLoading.value = false
+    if (!result.success || !result.data) {
+      ruleCatalogError.value = result.message || '读取当前规则集版本失败'
+      return
     }
-    const response = await TestMedicalRecordService.fetchDetail(id)
-    if (response.success && response.data) {
-      detailCache.value.set(id, response.data)
-      return response.data
-    }
-    throw new Error(response.message || '鑾峰彇鐥呭巻璇︽儏澶辫触')
+    ruleCatalog.value = result.data
   }
 
-  const performBatchAction = async (payload: BatchActionPayload) => {
-    if (!payload.recordIds.length) {
-      return {
-        succeeded: [] as string[],
-        failed: [] as string[]
-      }
-    }
-    const result = await TestMedicalRecordService.performBatchAction(payload)
-    await loadRecords()
-    selectedRowKeys.value = []
-    return result.data
+  async function saveRules(item: TestRecordItem, ruleIds: string[]) {
+    const result = await updateTestRecordRules(item, ruleIds)
+    if (result.success) await load()
+    return result
   }
 
-  const loadTemplates = async () => {
-    templatesLoading.value = true
-    try {
-      const response = await TestMedicalRecordService.fetchFilterTemplates()
-      filterTemplates.value = response.data
-    } finally {
-      templatesLoading.value = false
-    }
-  }
-
-  const saveTemplate = async (template: Omit<FilterTemplate, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }) => {
-    const response = await TestMedicalRecordService.saveFilterTemplate(template)
-    await loadTemplates()
-    return response.data
-  }
-
-  const deleteTemplate = async (id: string) => {
-    await TestMedicalRecordService.deleteFilterTemplate(id)
-    await loadTemplates()
-  }
-
-  const initialize = async () => {
-    refreshQuickFilters()
-    await loadTemplates()
-    await loadRecords()
+  async function remove(item: TestRecordItem) {
+    const result = await removeTestRecord(item)
+    if (result.success) await load()
+    return result
   }
 
   return {
-    // state
+    items,
+    total,
+    page,
+    pageSize,
+    keyword,
+    includeRemoved,
     loading,
-    templatesLoading,
-    records,
-    pagination,
-    conditions,
-    appliedConditions,
-    quickFilters,
-    activeQuickFilters,
-    filterTemplates,
-    selectedRowKeys,
-    // getters
-    hasActiveFilters,
-    selectedCount,
-    currentConditions,
-    // actions
-    initialize,
-    loadRecords,
-    updateConditions,
-    applyFilters,
-    resetFilters,
-    toggleQuickFilter,
+    loadError,
+    selectedIds,
+    selectedItems,
+    ruleCatalog,
+    ruleCatalogError,
+    ruleCatalogLoading,
+    load,
     changePage,
-    fetchDetail,
-    performBatchAction,
-    loadTemplates,
-    saveTemplate,
-    deleteTemplate
+    search,
+    ensureRuleCatalog,
+    saveRules,
+    remove,
   }
 })
-

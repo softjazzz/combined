@@ -1,632 +1,494 @@
 <template>
-  <div class="test-medical-records-page">
-    <div class="page-header">
-      <a-page-header
-        title="测试病历管理"
-        sub-title="管理质控验证所需的测试病历数据集"
-      >
-        <template #extra>
-          <a-space>
-            <a-button
-              type="default"
-              :disabled="!selectedCount"
-              @click="handleBatchAction('export')"
-            >
-              <template #icon>
-                <ExportOutlined />
-              </template>
-              导出
-            </a-button>
-            <a-button
-              type="default"
-              :disabled="!selectedCount"
-              @click="handleBatchAction('duplicate')"
-            >
-              <template #icon>
-                <CopyOutlined />
-              </template>
-              批量复制
-            </a-button>
-            <a-button type="primary">
-              <template #icon>
-                <PlusOutlined />
-              </template>
-              新建病历
-            </a-button>
-          </a-space>
-        </template>
-      </a-page-header>
-    </div>
-
+  <div class="test-records-page">
     <a-card
-      class="filter-card"
       :bordered="false"
+      class="test-records-page__header"
     >
-      <a-form
-        layout="inline"
-        class="filter-form"
-        @submit.prevent
-      >
-        <a-form-item label="关键字">
-          <a-input-group compact>
-            <a-select
-              v-model:value="filterForm.keywordType"
-              style="width: 120px"
-            >
-              <a-select-option value="name">
-                病历名称
-              </a-select-option>
-              <a-select-option value="id">
-                病历编号
-              </a-select-option>
-              <a-select-option value="creator">
-                创建人
-              </a-select-option>
-            </a-select>
-            <a-input
-              v-model:value="filterForm.keyword"
-              style="width: 220px"
-              placeholder="输入关键字搜索"
-              @press-enter="applyFilter"
-            />
-          </a-input-group>
-        </a-form-item>
-
-        <a-form-item label="病历类型">
-          <a-select
-            v-model:value="filterForm.recordType"
-            mode="multiple"
-            allow-clear
-            placeholder="选择病历类型"
-            style="width: 220px"
-          >
-            <a-select-option
-              v-for="item in recordTypeOptions"
-              :key="item.value"
-              :value="item.value"
-            >
-              {{ item.label }}
-            </a-select-option>
-          </a-select>
-        </a-form-item>
-
-        <a-form-item label="科室">
-          <a-select
-            v-model:value="filterForm.departments"
-            mode="multiple"
-            allow-clear
-            placeholder="选择科室"
-            style="width: 220px"
-          >
-            <a-select-option
-              v-for="item in departmentOptions"
-              :key="item"
-              :value="item"
-            >
-              {{ item }}
-            </a-select-option>
-          </a-select>
-        </a-form-item>
-
-        <a-form-item label="状态">
-          <a-select
-            v-model:value="filterForm.status"
-            mode="multiple"
-            allow-clear
-            placeholder="选择状态"
-            style="width: 200px"
-          >
-            <a-select-option
-              v-for="item in statusOptions"
-              :key="item.value"
-              :value="item.value"
-            >
-              {{ item.label }}
-            </a-select-option>
-          </a-select>
-        </a-form-item>
-
-        <a-form-item>
-          <a-space>
-            <a-button
-              type="primary"
-              @click="applyFilter"
-            >
-              <template #icon>
-                <SearchOutlined />
-              </template>
-              查询
-            </a-button>
-            <a-button @click="handleReset">
-              <template #icon>
-                <ReloadOutlined />
-              </template>
-              重置
-            </a-button>
-          </a-space>
-        </a-form-item>
-      </a-form>
-
-      <div class="quick-filter-section">
-        <span class="label">快速筛选:</span>
-        <a-space wrap>
-          <a-tag
-            v-for="tag in quickFilters"
-            :key="tag.key"
-            :color="isQuickActive(tag.key) ? 'blue' : undefined"
-            class="quick-filter-tag"
-            @click="toggleQuick(tag)"
-          >
-            {{ tag.label }}
-          </a-tag>
-        </a-space>
+      <div class="test-records-page__title-row">
+        <div>
+          <h2 class="test-records-page__title">
+            测试病历管理
+          </h2>
+          <p class="test-records-page__subtitle">
+            客户自建测试病历（固定池 {{ CUSTOMER_TEST_POOL_ID }}），用于验证质控点。
+          </p>
+        </div>
+        <a-button
+          type="primary"
+          @click="goCreate"
+        >
+          新建测试病历
+        </a-button>
       </div>
+      <a-alert
+        type="info"
+        show-icon
+        class="test-records-page__blocked"
+        message="以下能力缺少权威数据，暂未提供"
+      >
+        <template #description>
+          <ul class="test-records-page__blocked-list">
+            <li
+              v-for="note in BLOCKED_NOTES"
+              :key="note"
+            >
+              {{ note }}
+            </li>
+          </ul>
+        </template>
+      </a-alert>
     </a-card>
 
     <a-card :bordered="false">
-      <div class="table-toolbar">
-        <div class="left">
-          <a-space>
-            <a-button
-              size="small"
-              :loading="templatesLoading"
-              @click="loadTemplates"
-            >
-              <template #icon>
-                <FolderOpenOutlined />
-              </template>
-              筛选模板
-            </a-button>
-            <a-dropdown>
-              <template #overlay>
-                <a-menu>
-                  <a-menu-item
-                    v-for="template in filterTemplates"
-                    :key="template.id"
-                    @click="applyTemplate(template)"
-                  >
-                    {{ template.name }}
-                  </a-menu-item>
-                  <a-menu-divider v-if="filterTemplates.length" />
-                  <a-menu-item
-                    key="create-template"
-                    @click="saveCurrentTemplate"
-                  >
-                    保存当前筛选为模板
-                  </a-menu-item>
-                </a-menu>
-              </template>
-              <a-button size="small">
-                应用模板
-                <DownOutlined />
-              </a-button>
-            </a-dropdown>
-            <a-button
-              v-if="hasActiveFilters"
-              size="small"
-              danger
-              @click="handleReset"
-            >
-              清除筛选
-            </a-button>
-          </a-space>
-        </div>
-        <div class="right">
-          <span class="text-muted">已选择 {{ selectedCount }} 条</span>
-        </div>
+      <div class="test-records-page__toolbar">
+        <a-space wrap>
+          <a-input-search
+            v-model:value="keyword"
+            allow-clear
+            placeholder="患者姓名 / 住院号 / 就诊号 / 科室"
+            class="test-records-page__search"
+            @search="store.search()"
+          />
+          <a-checkbox
+            v-model:checked="includeRemoved"
+            @change="store.search()"
+          >
+            显示已移除和已被替换
+          </a-checkbox>
+        </a-space>
+        <a-space>
+          <span class="test-records-page__muted">已选 {{ selectedIds.length }} 条</span>
+          <a-button
+            :disabled="!selectedRunnable.length"
+            @click="openRun(selectedRunnable)"
+          >
+            运行所选病历
+          </a-button>
+        </a-space>
       </div>
+
+      <a-alert
+        v-if="loadError"
+        type="error"
+        show-icon
+        :message="loadError"
+        class="test-records-page__error"
+      />
 
       <a-table
         row-key="id"
         :loading="loading"
         :columns="columns"
-        :data-source="records"
+        :data-source="items"
         :pagination="pagination"
         :row-selection="rowSelection"
+        :scroll="{ x: 1280 }"
         @change="handleTableChange"
       >
-        <template #bodyCell="{ column, record }">
-          <template v-if="column.key === 'name'">
-            <div class="record-name-cell">
-              <div class="name">
-                {{ record.name }}
-              </div>
-              <div class="meta">
-                <a-tag color="geekblue">
-                  {{ getRecordTypeLabel(record.type) }}
+        <template #bodyCell="{ column, record: rawRecord }">
+          <template v-for="record in [asItem(rawRecord)]" :key="record.id">
+          <template v-if="column.key === 'title'">
+            <div class="test-records-page__cell-stack">
+              <strong>{{ record.case_title || '未命名测试病历' }}</strong>
+              <a-space
+                size="small"
+                wrap
+              >
+                <a-tag :color="resolveStateTag(record).color">
+                  {{ resolveStateTag(record).text }}
                 </a-tag>
-                <span class="text-muted">编号：{{ record.recordCode }}</span>
-              </div>
+                <span class="test-records-page__muted">{{ resolveOriginText(record) }}</span>
+              </a-space>
             </div>
           </template>
-
-          <template v-else-if="column.key === 'department'">
-            <div class="cell-stack">
-              <span>{{ record.department }}</span>
-              <span class="text-muted">{{ record.diseaseCategory }}</span>
+          <template v-else-if="column.key === 'patient'">
+            <div class="test-records-page__cell-stack">
+              <span>{{ record.patient_name || '未知' }}</span>
+              <span class="test-records-page__muted">{{ record.department || '未知科室' }}</span>
             </div>
           </template>
-
-          <template v-else-if="column.key === 'complexity'">
-            <a-tag :color="getComplexityColor(record.complexity)">
-              {{ getComplexityLabel(record.complexity) }}
-            </a-tag>
-          </template>
-
-          <template v-else-if="column.key === 'passRate'">
-            <a-progress
-              :percent="Math.round(record.passRate * 100)"
-              :status="record.passRate >= 0.85 ? 'success' : record.passRate >= 0.7 ? 'normal' : 'exception'"
-              :show-info="false"
-              size="small"
-            />
-            <div class="text-muted mt-1">
-              {{ (record.passRate * 100).toFixed(1) }}%
+          <template v-else-if="column.key === 'identity'">
+            <div class="test-records-page__cell-stack test-records-page__mono">
+              <span>{{ record.visit_id || '未知' }}</span>
+              <span class="test-records-page__muted">{{ record.institute_id }} / {{ record.patient_id }}</span>
             </div>
           </template>
-
-          <template v-else-if="column.key === 'status'">
-            <a-tag :color="getStatusColor(record.status)">
-              {{ getStatusLabel(record.status) }}
-            </a-tag>
+          <template v-else-if="column.key === 'documents'">
+            {{ formatDocumentCount(record.document_count) }}
           </template>
-
-          <template v-else-if="column.key === 'tags'">
+          <template v-else-if="column.key === 'rules'">
+            <div class="test-records-page__cell-stack">
+              <span>{{ record.rule_count }} 个</span>
+              <span class="test-records-page__muted">{{ record.rule_ids.slice(0, 3).join('、') }}{{ record.rule_ids.length > 3 ? ' …' : '' }}</span>
+            </div>
+          </template>
+          <template v-else-if="column.key === 'job'">
+            <span class="test-records-page__mono">{{ record.latest_job_id || '—' }}</span>
+          </template>
+          <template v-else-if="column.key === 'createdAt'">
+            {{ formatDateTime(record.created_at) }}
+          </template>
+          <template v-else-if="column.key === 'actions'">
             <a-space
               size="small"
               wrap
             >
-              <a-tag
-                v-for="tag in record.tags"
-                :key="tag"
-              >
-                {{ tag }}
-              </a-tag>
+              <a @click="openDocuments(record)">查看文书</a>
+              <a @click="openResult(record)">查看结果</a>
+              <template v-if="record.state === 'active'">
+                <a @click="openEdit(record)">编辑</a>
+                <a @click="openRules(record)">关联质控点</a>
+                <a @click="openRun([record])">运行</a>
+                <a
+                  class="test-records-page__danger"
+                  @click="confirmRemove(record)"
+                >移除</a>
+              </template>
             </a-space>
+          </template>
           </template>
         </template>
       </a-table>
     </a-card>
+
+    <TestRecordRulePickerModal
+      :open="rulesTarget !== null"
+      title="关联质控点"
+      ok-text="保存关联"
+      :catalog="ruleCatalog"
+      :catalog-error="ruleCatalogError"
+      :initial-rule-ids="rulesTarget?.rule_ids || []"
+      :submitting="rulesSaving"
+      hint="规则范围为当前规则集版本的全部规则（含暂停、下线）；保存后写入该病历的关联质控点。"
+      @confirm="saveRules"
+      @cancel="rulesTarget = null"
+    />
+
+    <TestRecordRulePickerModal
+      :open="runTargets.length > 0"
+      :title="`运行质控点（${runTargets.length} 份病历）`"
+      ok-text="创建运行任务"
+      :catalog="ruleCatalog"
+      :catalog-error="ruleCatalogError"
+      :initial-rule-ids="runInitialRuleIds"
+      :submitting="running"
+      require-selection
+      hint="默认勾选所选病历关联质控点的并集；此处临时调整只影响本次运行，不修改关联。"
+      @confirm="submitRun"
+      @cancel="runTargets = []"
+    />
+
+    <TestRecordEditDrawer
+      :open="editTarget !== null"
+      :item="editTarget"
+      @close="editTarget = null"
+      @saved="handleEditSaved"
+    />
+
+    <a-drawer
+      :open="documentsTarget !== null"
+      placement="right"
+      width="min(1380px, 100vw)"
+      title="病历文书"
+      :body-style="{ padding: 0 }"
+      @close="documentsTarget = null"
+    >
+      <QCRecordCompareWorkbench
+        v-if="documentsTarget"
+        :visit-id="documentsTarget.visit_id"
+        :institute-id="documentsTarget.institute_id"
+        :patient-id="documentsTarget.patient_id"
+        :issues="[]"
+        document-only
+      />
+    </a-drawer>
+
+    <QCRecordResultComparisonDrawer
+      :open="resultFocus !== null"
+      :focus="resultFocus"
+      presentation-mode="grouped"
+      @close="resultFocus = null"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import type { ColumnsType } from 'ant-design-vue/es/table'
 import { storeToRefs } from 'pinia'
-import {
-  CopyOutlined,
-  DownOutlined,
-  ExportOutlined,
-  FolderOpenOutlined,
-  PlusOutlined,
-  ReloadOutlined,
-  SearchOutlined
-} from '@ant-design/icons-vue'
-import type {
-  BatchActionPayload,
-  FilterTemplate,
-  QuickFilterTag,
-  RecordSearchConditions,
-  RecordStatus,
-  TestMedicalRecordSummary
-} from '@/types/test-medical-records'
 import { useTestMedicalRecordsStore } from '@/stores/testMedicalRecords'
+import {
+  CUSTOMER_TEST_POOL_ID,
+  isRunnableTestRecord,
+  runTestRecords,
+  unionTestRecordRuleIds,
+} from '@/services/test-medical-records'
+import type { TestRecordItem } from '@/types/test-medical-records'
+import QCRecordResultComparisonDrawer, {
+  type QCRecordResultFocus,
+} from '@/views/workstation-v4/customer-sample-validation/QCRecordResultComparisonDrawer.vue'
+import QCRecordCompareWorkbench from '@/views/workstation-v4/semantic-rules/components/QCRecordCompareWorkbench.vue'
+import TestRecordRulePickerModal from './components/TestRecordRulePickerModal.vue'
+import TestRecordEditDrawer from './components/TestRecordEditDrawer.vue'
+import {
+  formatDateTime,
+  formatDocumentCount,
+  resolveOriginText,
+  resolveStateTag,
+} from './components/testRecordPresentation'
 
+/** 合同第 3 节阻塞项：只做说明，不提供假功能。 */
+const BLOCKED_NOTES = [
+  '预期结果比对：人工预期结果目前只写入、没有权威读取来源。',
+  '含文书的 Excel 导入：尚无客户模板，现有导入只产出样本行。',
+  '文书类型“其他”的归属：目前映射到日常病程，待客户确认口径。',
+  '新建质控点时的测试病历验证：新质控点需先有执行器实现。',
+]
+
+const router = useRouter()
 const store = useTestMedicalRecordsStore()
 const {
-  records,
+  items,
+  total,
+  page,
+  pageSize,
+  keyword,
+  includeRemoved,
   loading,
-  pagination,
-  quickFilters,
-  activeQuickFilters,
-  filterTemplates,
-  selectedRowKeys,
-  hasActiveFilters,
-  selectedCount
+  loadError,
+  selectedIds,
+  selectedItems,
+  ruleCatalog,
+  ruleCatalogError,
 } = storeToRefs(store)
 
-const { templatesLoading } = storeToRefs(store)
-
-const filterForm = reactive<{
-  keyword: string
-  keywordType: NonNullable<RecordSearchConditions['keywordType']>
-  recordType: string[]
-  departments: string[]
-  status: RecordStatus[]
-}>({
-  keyword: '',
-  keywordType: 'name',
-  recordType: [] as string[],
-  departments: [] as string[],
-  status: [] as RecordStatus[]
-})
-
-const recordTypeOptions = [
-  { value: 'admission', label: '入院记录' },
-  { value: 'discharge', label: '出院记录' },
-  { value: 'progress', label: '病程记录' }
+const columns: ColumnsType<TestRecordItem> = [
+  { title: '测试病历', key: 'title', width: 260 },
+  { title: '患者 / 科室', key: 'patient', width: 150 },
+  { title: '就诊号 / 机构 / 患者 ID', key: 'identity', width: 260 },
+  { title: '文书数', key: 'documents', width: 80 },
+  { title: '关联质控点', key: 'rules', width: 200 },
+  { title: '最近任务', key: 'job', width: 150 },
+  { title: '创建时间', key: 'createdAt', width: 150 },
+  { title: '操作', key: 'actions', width: 260, fixed: 'right' },
 ]
 
-const departmentOptions = ['心内科', '外科', '妇产科', '儿科', '呼吸内科', '内分泌科', '急诊科']
-
-const statusOptions = [
-  { value: 'draft', label: '草稿' },
-  { value: 'ready', label: '已完成' },
-  { value: 'verified', label: '已验证' },
-  { value: 'archived', label: '已归档' }
-]
-
-const statusLabelMap = {
-  draft: '草稿',
-  ready: '已完成',
-  verified: '已验证',
-  archived: '已归档'
-} as const
-
-const statusColorMap = {
-  draft: 'default',
-  ready: 'blue',
-  verified: 'green',
-  archived: 'purple'
-} as const
-
-const complexityLabelMap = {
-  simple: '简单',
-  medium: '中等',
-  complex: '复杂',
-  very_complex: '极复杂'
-} as const
-
-const complexityColorMap = {
-  simple: 'default',
-  medium: 'processing',
-  complex: 'orange',
-  very_complex: 'red'
-} as const
-
-const getComplexityColor = (complexity: string): string =>
-  complexityColorMap[complexity as keyof typeof complexityColorMap] || 'default'
-
-const getComplexityLabel = (complexity: string): string =>
-  complexityLabelMap[complexity as keyof typeof complexityLabelMap] || complexity
-
-const getStatusColor = (status: string): string =>
-  statusColorMap[status as keyof typeof statusColorMap] || 'default'
-
-const getStatusLabel = (status: string): string =>
-  statusLabelMap[status as keyof typeof statusLabelMap] || status
-
-const columns: ColumnsType<TestMedicalRecordSummary> = [
-  {
-    title: '测试病历',
-    dataIndex: 'name',
-    key: 'name',
-    width: 260,
-    ellipsis: true
-  },
-  {
-    title: '科室 / 疾病类型',
-    dataIndex: 'department',
-    key: 'department',
-    width: 200
-  },
-  {
-    title: '复杂度',
-    dataIndex: 'complexity',
-    key: 'complexity',
-    width: 100
-  },
-  {
-    title: '质控关联',
-    dataIndex: 'relatedRuleCount',
-    key: 'relatedRuleCount',
-    width: 110,
-    sorter: (a, b) => a.relatedRuleCount - b.relatedRuleCount
-  },
-  {
-    title: '通过率',
-    dataIndex: 'passRate',
-    key: 'passRate',
-    width: 140,
-    sorter: (a, b) => a.passRate - b.passRate
-  },
-  {
-    title: '状态',
-    dataIndex: 'status',
-    key: 'status',
-    width: 100
-  },
-  {
-    title: '标签',
-    dataIndex: 'tags',
-    key: 'tags',
-    width: 240
-  },
-  {
-    title: '更新时间',
-    dataIndex: 'updatedAt',
-    key: 'updatedAt',
-    width: 180,
-    sorter: (a, b) => new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime()
-  }
-]
-
-const rowSelection = computed(() => ({
-  selectedRowKeys: selectedRowKeys.value,
-  onChange: (keys: (string | number)[]) => {
-    selectedRowKeys.value = keys.map((key) => String(key))
-  },
+const pagination = computed(() => ({
+  current: page.value,
+  pageSize: pageSize.value,
+  total: total.value,
+  showSizeChanger: true,
+  showTotal: (count: number) => `共 ${count} 条`,
 }))
 
-const applyFilter = async () => {
-  store.updateConditions({
-    keyword: filterForm.keyword || undefined,
-    keywordType: filterForm.keywordType,
-    recordType: filterForm.recordType.length ? filterForm.recordType : undefined,
-    departments: filterForm.departments.length ? filterForm.departments : undefined,
-    status: filterForm.status.length ? filterForm.status : undefined
-  })
-  await store.applyFilters()
+const rowSelection = computed(() => ({
+  selectedRowKeys: selectedIds.value,
+  onChange: (keys: (string | number)[]) => {
+    selectedIds.value = keys.map((key) => String(key))
+  },
+  getCheckboxProps: (record: TestRecordItem) => ({ disabled: !isRunnableTestRecord(record) }),
+}))
+
+/** 表格插槽的 record 类型为宽泛对象；数据源即 TestRecordItem[]，此处收窄。 */
+function asItem(record: Record<string, unknown>): TestRecordItem {
+  return record as unknown as TestRecordItem
 }
 
-const handleReset = async () => {
-  filterForm.keyword = ''
-  filterForm.keywordType = 'name'
-  filterForm.recordType = []
-  filterForm.departments = []
-  filterForm.status = []
-  await store.resetFilters()
+const selectedRunnable = computed(() => selectedItems.value.filter(isRunnableTestRecord))
+
+function handleTableChange(info: { current?: number; pageSize?: number }) {
+  void store.changePage(info.current || 1, info.pageSize || pageSize.value)
 }
 
-const isQuickActive = (key: string) => activeQuickFilters.value.has(key)
-
-const toggleQuick = async (tag: QuickFilterTag) => {
-  await store.toggleQuickFilter(tag)
+function goCreate() {
+  void router.push({ name: 'WorkstationV4SyntheticCaseNew' })
 }
 
-const handleTableChange = async (paginationInfo: any) => {
-  await store.changePage(paginationInfo.current, paginationInfo.pageSize)
+// 查看文书 / 结果
+const documentsTarget = ref<TestRecordItem | null>(null)
+const resultFocus = ref<QCRecordResultFocus | null>(null)
+
+function openDocuments(item: TestRecordItem) {
+  documentsTarget.value = item
 }
 
-const handleBatchAction = (action: BatchActionPayload['action']) => {
-  if (!selectedRowKeys.value.length) {
-    message.warning('请先选择至少一条病历')
+function openResult(item: TestRecordItem) {
+  if (!item.institute_id || !item.patient_id || !item.visit_id) {
+    message.warning('病例三坐标不完整，无法读取质控结果')
     return
   }
-
-  if (action === 'delete') {
-    Modal.confirm({
-      title: '确认删除选中的病历？',
-      content: '删除后不可恢复，请谨慎操作。',
-      okText: '确认删除',
-      okType: 'danger',
-      cancelText: '取消',
-      onOk: () => executeBatch(action)
-    })
-  } else {
-    void executeBatch(action)
+  resultFocus.value = {
+    visitId: item.visit_id,
+    instituteId: item.institute_id,
+    patientId: item.patient_id,
+    recordId: item.id,
+    patientName: item.patient_name,
+    label: [item.case_title || item.patient_name || '测试病历', item.department || '未分科室', `就诊号 ${item.visit_id}`].join(' · '),
   }
 }
 
-const executeBatch = async (action: BatchActionPayload['action']) => {
-  const result = await store.performBatchAction({
-    action,
-    recordIds: selectedRowKeys.value
-  })
-  if (result.failed.length) {
-    message.warning(`操作完成，但部分病历未处理：${result.failed.join(', ')}`)
-  } else {
-    message.success('批量操作执行成功')
-  }
+// 编辑
+const editTarget = ref<TestRecordItem | null>(null)
+
+function openEdit(item: TestRecordItem) {
+  editTarget.value = item
 }
 
-const loadTemplates = async () => {
-  await store.loadTemplates()
+async function handleEditSaved() {
+  editTarget.value = null
+  await store.load()
 }
 
-const applyTemplate = async (template: FilterTemplate) => {
-  store.updateConditions(template.conditions)
-  Object.assign(filterForm, {
-    keyword: template.conditions.keyword ?? '',
-    keywordType: template.conditions.keywordType ?? 'name',
-    recordType: template.conditions.recordType ?? [],
-    departments: template.conditions.departments ?? [],
-    status: template.conditions.status ?? []
-  })
-  await store.applyFilters()
-  message.success(`已应用模板 ${template.name}`)
+// 关联质控点
+const rulesTarget = ref<TestRecordItem | null>(null)
+const rulesSaving = ref(false)
+
+async function openRules(item: TestRecordItem) {
+  rulesTarget.value = item
+  await store.ensureRuleCatalog()
 }
 
-const saveCurrentTemplate = async () => {
-  if (!filterForm.keyword && !filterForm.recordType.length && !filterForm.departments.length && !filterForm.status.length) {
-    message.info('当前没有可保存的筛选条件')
+async function saveRules(ruleIds: string[]) {
+  const item = rulesTarget.value
+  if (!item) return
+  rulesSaving.value = true
+  const result = await store.saveRules(item, ruleIds)
+  rulesSaving.value = false
+  if (!result.success) {
+    message.error(result.message || '更新关联质控点失败')
     return
   }
-  const name = `筛选模板-${new Date().toLocaleString()}`
-  await store.saveTemplate({
-    name,
-    conditions: store.conditions
-  })
-  message.success(`已保存模板：${name}`)
+  message.success('关联质控点已更新')
+  rulesTarget.value = null
 }
 
-const getRecordTypeLabel = (type: string) =>
-  recordTypeOptions.find(opt => opt.value === type)?.label ?? type
+// 运行
+const runTargets = ref<TestRecordItem[]>([])
+const running = ref(false)
+const runInitialRuleIds = computed(() => unionTestRecordRuleIds(runTargets.value))
 
-onMounted(async () => {
-  await store.initialize()
+async function openRun(targets: TestRecordItem[]) {
+  runTargets.value = targets.filter(isRunnableTestRecord)
+  if (!runTargets.value.length) {
+    message.warning('所选病历均不可运行')
+    return
+  }
+  await store.ensureRuleCatalog()
+}
+
+async function submitRun(ruleIds: string[]) {
+  running.value = true
+  let result
+  try {
+    result = await runTestRecords(runTargets.value, ruleIds)
+  } catch (error) {
+    running.value = false
+    message.warning(error instanceof Error ? error.message : '运行参数不完整')
+    return
+  }
+  running.value = false
+  if (!result.success || !result.data) {
+    message.error(result.message || '创建运行任务失败')
+    return
+  }
+  message.success(`运行任务已创建：${result.data.job_id}，完成后可点击“查看结果”`)
+  runTargets.value = []
+}
+
+// 移除
+function confirmRemove(item: TestRecordItem) {
+  Modal.confirm({
+    title: '确认移除该测试病历？',
+    content: '移除后不再出现在列表和批次中；病历数据与已运行结果保留，可在“显示已移除”中追溯。',
+    okText: '确认移除',
+    okType: 'danger',
+    cancelText: '取消',
+    onOk: async () => {
+      const result = await store.remove(item)
+      if (!result.success) {
+        message.error(result.message || '移除测试病历失败')
+        return
+      }
+      message.success('测试病历已移除')
+    },
+  })
+}
+
+onMounted(() => {
+  void store.load()
 })
 </script>
 
 <style scoped>
-.test-medical-records-page {
+.test-records-page {
   display: flex;
   flex-direction: column;
   gap: 16px;
   padding: 16px;
+  background: var(--ant-color-bg-layout, #f5f7fa);
 }
 
-.page-header {
-  background: #fff;
-  border-radius: 8px;
-  overflow: hidden;
+.test-records-page__title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
 }
 
-.filter-card {
-  background: #fff;
+.test-records-page__title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
 }
 
-.filter-form {
+.test-records-page__subtitle,
+.test-records-page__muted {
+  margin: 4px 0 0;
+  color: var(--ant-color-text-secondary, #64748b);
+  font-size: 12px;
+}
+
+.test-records-page__blocked {
+  margin-top: 12px;
+}
+
+.test-records-page__blocked-list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.test-records-page__toolbar {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px 24px;
-}
-
-.quick-filter-section {
-  margin-top: 12px;
-  display: flex;
   align-items: center;
-  gap: 12px;
-}
-
-.quick-filter-section .label {
-  color: var(--ant-color-text-secondary);
-}
-
-.quick-filter-tag {
-  cursor: pointer;
-}
-
-.table-toolbar {
-  display: flex;
   justify-content: space-between;
-  align-items: center;
+  gap: 12px;
   margin-bottom: 12px;
 }
 
-.text-muted {
-  color: var(--ant-color-text-secondary);
-  font-size: 12px;
+.test-records-page__search {
+  width: 300px;
 }
 
-.record-name-cell .name {
-  font-weight: 600;
-  color: var(--ant-color-text);
+.test-records-page__error {
+  margin-bottom: 12px;
 }
 
-.record-name-cell .meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 4px;
-  font-size: 12px;
-  color: var(--ant-color-text-secondary);
-}
-
-.cell-stack {
+.test-records-page__cell-stack {
   display: flex;
   flex-direction: column;
+  gap: 2px;
+}
+
+.test-records-page__mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.test-records-page__danger {
+  color: var(--ant-color-error, #dc2626);
 }
 </style>

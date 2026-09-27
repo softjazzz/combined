@@ -181,7 +181,8 @@ const routes: RouteRecordRaw[] = [
           title: '病历管理',
           icon: 'ProfileOutlined',
           hidden: true,
-          permission: ['admin', 'qc_manager', 'developer'],
+          // 与后端 /api/v1/qc/sample-pools 路由角色一致，避免可见但接口 403。
+          permission: ['admin', 'qc_manager', 'sync_admin'],
         },
       },
       {

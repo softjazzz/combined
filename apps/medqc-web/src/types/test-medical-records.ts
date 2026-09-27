@@ -1,106 +1,84 @@
 /**
- * 测试病历模块类型定义
- * 对应 PRD 中的测试病历管理核心数据结构
+ * 测试病历管理类型定义（V3.6 P1-E3 合同第 2 节）
+ * 后端：/api/v1/qc/sample-pools/test-records，固定池 customer-created-test-records-v1。
  */
 
-// 病历复杂度
-export type RecordComplexity = 'simple' | 'medium' | 'complex' | 'very_complex'
+/** 条目状态由后端依据 include_in_batch_1 / exclude_reason 推导，前端只搬运。 */
+export type TestRecordState = 'active' | 'removed' | 'superseded' | 'unknown'
 
-// 病历状态
-export type RecordStatus = 'draft' | 'ready' | 'verified' | 'archived'
+/** created：页面新建；derived：由派生可编辑副本生成。 */
+export type TestRecordOrigin = 'created' | 'derived'
 
-// 质控等级
-export type ExpectedGrade = 'A' | 'B' | 'C'
-
-// 列表记录
-export interface TestMedicalRecordSummary {
+export interface TestRecordItem {
   id: string
-  recordCode: string
-  name: string
-  type: string
+  institute_id: string
+  patient_id: string
+  visit_id: string
+  case_title: string
+  patient_name: string
   department: string
-  diseaseCategory: string
-  complexity: RecordComplexity
-  createdAt: string
-  updatedAt: string
-  createdBy: string
-  status: RecordStatus
-  relatedRuleCount: number
-  passRate: number
-  tags: string[]
+  mr_no: string
+  /** 旧条目未记录文书数时为 null，页面显示“未知”。 */
+  document_count: number | null
+  rule_ids: string[]
+  rule_count: number
+  latest_job_id: string
+  bundle_status: string
+  origin: TestRecordOrigin
+  /** CDM 只读取得的人口学字段；缺失为 null，不推断、不默认。 */
+  sex: string | null
+  age: number | null
+  admission_time: string | null
+  /** 编辑派生时被替换的旧条目 ID。 */
+  source_item_id: string
+  state: TestRecordState
+  removed: boolean
+  superseded_by: string | null
+  created_at: string | null
+  /** CAS 令牌：原样回传给写接口。 */
+  updated_at: string
 }
 
-// 病历详情内容
-export interface TestMedicalRecordDetail extends TestMedicalRecordSummary {
-  description?: string
-  expectedGrade?: ExpectedGrade
-  expectedScoreRange?: [number, number]
-  expectedDefectTypes?: string[]
-  expectedDefectCount?: number
-  checkpoints?: Array<{
-    id: string
-    title: string
-    description: string
-    priority: 'high' | 'medium' | 'low'
-  }>
-  content: string
+export interface TestRecordListQuery {
+  include_removed?: boolean
+  q?: string
+  page: number
+  page_size: number
 }
 
-// 查询条件
-export interface RecordSearchConditions {
-  keyword?: string
-  keywordType?: 'id' | 'name' | 'creator'
-  recordType?: string[]
-  departments?: string[]
-  diseaseCategories?: string[]
-  complexity?: RecordComplexity[]
-  status?: RecordStatus[]
-  tags?: string[]
-  createdTimeRange?: [string, string]
-  passRateGreaterThan?: number
-  passRateLessThan?: number
-}
-
-// 批量操作
-export interface BatchActionPayload {
-  action: 'delete' | 'export' | 'duplicate' | 'updateStatus' | 'associateRules'
-  recordIds: string[]
-  targetStatus?: RecordStatus
-  targetRuleIds?: string[]
-}
-
-// 分页
-export interface PaginationState {
-  current: number
-  pageSize: number
+export interface TestRecordListResult {
+  items: TestRecordItem[]
   total: number
+  page: number
+  page_size: number
 }
 
-// 列表响应
-export interface RecordListResponse {
-  items: TestMedicalRecordSummary[]
-  pagination: PaginationState
+export type RuleSetEntryState = 'active' | 'paused' | 'offline'
+
+/** 当前规则集版本详情中的单条规则；qc_point/source_document 缺失时为 null，不猜名称。 */
+export interface RuleSetRuleOption {
+  rule_id: string
+  state: RuleSetEntryState
+  qc_point: string | null
+  source_document: string | null
+  executable?: boolean
 }
 
-// API 标准响应
-export interface ApiResponse<T> {
-  success: boolean
-  message?: string
-  data: T
+export interface CurrentRuleSetCatalog {
+  rule_set_key: string
+  version: string
+  entries: RuleSetRuleOption[]
 }
 
-// 快速筛选模板
-export interface FilterTemplate {
-  id: string
-  name: string
-  conditions: RecordSearchConditions
-  createdAt: string
-  updatedAt: string
-}
-
-// 快速过滤标签
-export interface QuickFilterTag {
+/** 编辑抽屉中的文书草稿。 */
+export interface TestRecordDocumentDraft {
   key: string
-  label: string
-  conditions: Partial<RecordSearchConditions>
+  document_type: string
+  title: string
+  record_time?: string
+  submit_time?: string
+  content: string
+  doctor_name?: string
+  doctor_code?: string
+  enabled: boolean
 }
