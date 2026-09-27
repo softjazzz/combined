@@ -154,7 +154,7 @@ async def test_worker_stale_receipt_fails_without_entering_qc(monkeypatch):
         error = None
 
         def get_batch_job_for_processing(self, *, job_id):
-            return {"id": job_id, "status": "queued", "filters": {"task_id": "task-1"}}
+            return {"id": job_id, "status": "queued", "scope": "running", "filters": {"task_id": "task-1"}}
 
         def fail_batch_job(self, *, job_id, error_message):
             self.error = (job_id, error_message)
@@ -171,7 +171,7 @@ async def test_worker_stale_receipt_fails_without_entering_qc(monkeypatch):
 
     monkeypatch.setattr(qc_sichuan, "run_sichuan_workspace_batch_job", must_not_run)
     await qc_sichuan._run_sichuan_workspace_batch_job("job-1")
-    assert workspace.error is not None
+    assert workspace.error == ("job-1", "任务病历同步收据已失效，请重新同步后运行")
     assert events == ["released:lock"]
 
 
@@ -179,7 +179,7 @@ async def test_worker_stale_receipt_fails_without_entering_qc(monkeypatch):
 async def test_receipt_failure_callback_exception_still_releases_lock(monkeypatch):
     class Workspace:
         def get_batch_job_for_processing(self, *, job_id):
-            return {"id": job_id, "status": "queued", "filters": {"task_id": "task-1"}}
+            return {"id": job_id, "status": "queued", "scope": "running", "filters": {"task_id": "task-1"}}
 
         def fail_batch_job(self, *, job_id, error_message):
             raise RuntimeError("storage unavailable")
@@ -219,7 +219,8 @@ async def test_worker_lock_timeout_marks_job_failed_before_qc(monkeypatch):
 async def test_worker_cancel_releases_shared_lock(monkeypatch):
     class Workspace:
         def get_batch_job_for_processing(self, *, job_id):
-            return {"id": job_id, "status": "queued", "filters": {}}
+            # 运行病历任务不触发终末归档核验，保证执行到被取消的质控阶段。
+            return {"id": job_id, "status": "queued", "scope": "running", "filters": {}}
 
     events: list[str] = []
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", Workspace)
