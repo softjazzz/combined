@@ -898,16 +898,20 @@ def test_bulk_record_result_dtos_carry_review_anchor_only_when_ready(monkeypatch
 
 def test_bulk_record_result_dtos_preserve_canonical_projection_failure_reason(monkeypatch):
     identity = ("inst-1", "patient-1", "visit-1")
-    service = CustomQCWorkspaceService()
+    # 绕过构造函数的建表副作用；批量 DTO 经内部投影取摘要（读取侧版本化后的调用点）。
+    service = CustomQCWorkspaceService.__new__(CustomQCWorkspaceService)
     monkeypatch.setattr(
         service,
-        "build_luxian_0609_completed_record_result_summaries",
-        lambda **_kwargs: {
-            identity: {
-                "status": "technical_error",
-                "reason_code": "canonical_result_envelope_invalid",
-            }
-        },
+        "_completed_record_result_projections",
+        lambda **_kwargs: (
+            {
+                identity: {
+                    "status": "technical_error",
+                    "reason_code": "canonical_result_envelope_invalid",
+                }
+            },
+            {},
+        ),
     )
 
     result = service.build_latest_luxian_0609_record_result_dtos(
