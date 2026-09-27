@@ -77,8 +77,8 @@ describe('resolveFinalRoute / canAccessPath', () => {
   })
 
   it('真实路由表：子路由继承父路由 permission，子路由自身 permission 覆盖父级', () => {
-    expect(canAccessPath(router, '/dashboard/drg/coding', ['coder'])).toBe(true)
-    expect(canAccessPath(router, '/dashboard/drg/analysis', ['coder'])).toBe(false)
+    expect(canAccessPath(router, '/dashboard/drg/coding', ['reviewer'])).toBe(true)
+    expect(canAccessPath(router, '/dashboard/drg/analysis', ['reviewer'])).toBe(false)
     expect(canAccessPath(router, '/dashboard/drg/analysis', ['qc_manager'])).toBe(true)
   })
 })

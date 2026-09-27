@@ -10,6 +10,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from starlette.concurrency import run_in_threadpool
 
+from ..core.data_scope import resolve_workstation_data_scope
 from ..core.pagination import HEAVY_MAX_PAGE_SIZE, page_param, page_size_param
 from ..core.permissions import PermissionAction, ResourceType, require_permission
 from ..core.response import get_trace_id, success_response
@@ -93,11 +94,13 @@ async def get_luxian_0609_home(
 ):
     """当前全病历质控首页的轻量读取入口。"""
 
+    scope = resolve_workstation_data_scope(current_user, department)
     try:
         data = default_workstation_aggregation_service.get_luxian_0609_home(
-            department=department,
+            department=scope.department,
             keyword=keyword,
             priority_limit=priority_limit,
+            hospital_scope=scope.hospital_scope,
         )
         return success_response(data=data, trace_id=get_trace_id(request))
     except Exception as exc:
@@ -115,12 +118,14 @@ async def get_luxian_0609_analytics(
 ):
     """全院临时范围内的泸县 Canonical 终末质控统计。"""
 
+    scope = resolve_workstation_data_scope(current_user, department)
     try:
         data = default_workstation_aggregation_service.get_luxian_0609_analytics(
             completed_from=completed_from,
             completed_to=completed_to,
-            department=department,
+            department=scope.department,
             job_id=str(job_id) if job_id else None,
+            hospital_scope=scope.hospital_scope,
         )
         return success_response(data=data, trace_id=get_trace_id(request))
     except Exception as exc:
@@ -152,10 +157,11 @@ async def get_luxian_0609_result_analysis(
 ):
     """读取当前范围中每份病历最新 Canonical 结果的规则下钻统计。"""
 
+    scope = resolve_workstation_data_scope(current_user, department)
     try:
         data = default_luxian_0609_result_analysis_service.get_analysis(
             care_phase=care_phase,
-            department=department,
+            department=scope.department,
             doctor=doctor,
             rule_id=rule_id,
             result_status=result_status,

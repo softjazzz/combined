@@ -342,6 +342,7 @@ class WorkstationAggregationService:
         department: Optional[str] = None,
         keyword: Optional[str] = None,
         priority_limit: int = 20,
+        hospital_scope: str = "all",
     ) -> Dict[str, Any]:
         """返回当前全病历质控首页所需的最小 Canonical 汇总。
 
@@ -356,6 +357,7 @@ class WorkstationAggregationService:
                 department=department,
                 keyword=keyword,
                 priority_limit=priority_limit,
+                hospital_scope=hospital_scope,
             )
             return {
                 "department_options": clinical_qc["department_options"],
@@ -372,6 +374,7 @@ class WorkstationAggregationService:
         completed_to: Optional[datetime] = None,
         department: Optional[str] = None,
         job_id: Optional[str] = None,
+        hospital_scope: str = "all",
     ) -> Dict[str, Any]:
         """按已完成根任务的 Canonical Envelope 汇总泸县质控统计。
 
@@ -596,7 +599,7 @@ class WorkstationAggregationService:
                 "scene": "final",
                 "rule_set_key": LUXIAN_0609_RULE_SET_KEY,
                 "rule_set_version": LUXIAN_0609_RULE_SET_VERSION,
-                "hospital_scope": "all",
+                "hospital_scope": hospital_scope,
                 "generated_at": datetime.now().astimezone().isoformat(),
             },
             "kpis": {
@@ -805,6 +808,7 @@ class WorkstationAggregationService:
         department: Optional[str],
         keyword: Optional[str],
         priority_limit: int,
+        hospital_scope: str = "all",
     ) -> Dict[str, Any]:
         """按病历池相同三坐标范围聚合全病历 Canonical 质控摘要。
 
@@ -963,7 +967,7 @@ class WorkstationAggregationService:
         generated_at = datetime.now().astimezone().isoformat()
         return {
             "scope": {
-                "hospital_scope": "all",
+                "hospital_scope": hospital_scope,
                 "department": department or None,
                 "scene": "final",
                 "rule_set_key": LUXIAN_0609_RULE_SET_KEY,

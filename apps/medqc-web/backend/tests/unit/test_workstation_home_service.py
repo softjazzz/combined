@@ -362,3 +362,17 @@ def test_home_record_loader_explicitly_uses_all_hospital_status(monkeypatch):
             "department": "内科",
         }
     ]
+
+
+def test_luxian_0609_home_reports_department_scope_from_caller(monkeypatch):
+    service = _service(
+        monkeypatch,
+        [_record(1, department="心内科")],
+        {("hospital-a", "patient-1", "visit-1"): _ready(non_compliant=1)},
+    )
+
+    payload = service.get_luxian_0609_home(department="心内科", hospital_scope="department")
+
+    assert payload["scope"]["hospital_scope"] == "department"
+    assert payload["scope"]["department"] == "心内科"
+    assert payload["department_options"] == ["心内科"]
