@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
 import {
-  DownOutlined,
   EyeInvisibleOutlined,
   EyeOutlined,
   LockOutlined,
@@ -75,58 +74,61 @@ const handleSubmit = () => {
 
 <template>
   <form
-    class="login-form"
+    class="workstation-login-form"
     @submit.prevent="handleSubmit"
   >
-    <div class="login-form__field">
-      <label for="login-account">用户名 / 手机号 / 邮箱</label>
-      <div class="login-form__control">
+    <div class="space-y-2">
+      <label class="text-[13px] font-bold tracking-[0.02em] text-slate-700">用户名 / 手机号 / 邮箱</label>
+      <div class="group relative">
         <MailOutlined
-          class="login-form__prefix"
-          aria-hidden="true"
+          class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[15px] text-slate-400 transition group-focus-within:text-sky-500"
         />
         <input
-          id="login-account"
           v-model="form.account"
           type="text"
           autocomplete="username"
-          placeholder="请输入账号"
+          placeholder="请输入用户名 / 手机号 / 邮箱"
+          class="h-13 w-full rounded-2xl border-none bg-slate-100/70 px-12 py-3.5 text-[15px] font-medium tracking-[-0.01em] text-slate-800 outline-none transition-all placeholder:font-normal placeholder:text-slate-400 focus:bg-white focus:ring-[3px] focus:ring-sky-500/20"
         >
       </div>
     </div>
 
-    <div class="login-form__field">
-      <label for="login-password">密码</label>
-      <div class="login-form__control">
+    <div class="space-y-2">
+      <label class="text-[13px] font-bold tracking-[0.02em] text-slate-700">登录密码</label>
+      <div class="group relative">
         <LockOutlined
-          class="login-form__prefix"
-          aria-hidden="true"
+          class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[15px] text-slate-400 transition group-focus-within:text-sky-500"
         />
         <input
-          id="login-password"
           v-model="form.password"
           :type="showPassword ? 'text' : 'password'"
           autocomplete="current-password"
           placeholder="请输入密码"
+          class="h-13 w-full rounded-2xl border-none bg-slate-100/70 px-12 py-3.5 pr-12 text-[15px] font-medium tracking-[-0.01em] text-slate-800 outline-none transition-all placeholder:font-normal placeholder:text-slate-400 focus:bg-white focus:ring-[3px] focus:ring-sky-500/20"
         >
         <button
           type="button"
-          class="login-form__reveal"
-          :aria-label="showPassword ? '隐藏密码' : '显示密码'"
+          class="absolute right-4 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-200/50 hover:text-slate-600 focus:outline-none"
           @click="showPassword = !showPassword"
         >
-          <EyeOutlined v-if="showPassword" />
-          <EyeInvisibleOutlined v-else />
+          <EyeOutlined
+            v-if="showPassword"
+            class="text-[16px]"
+          />
+          <EyeInvisibleOutlined
+            v-else
+            class="text-[16px]"
+          />
         </button>
       </div>
     </div>
 
-    <div class="login-form__field">
-      <label for="login-role">角色</label>
-      <div class="login-form__control">
+    <div class="space-y-2">
+      <label class="text-[13px] font-bold tracking-[0.02em] text-slate-700">选择角色</label>
+      <div class="group relative">
         <select
-          id="login-role"
           v-model="form.role"
+          class="h-13 w-full appearance-none rounded-2xl border-none bg-slate-100/70 px-4 py-3.5 text-[15px] font-medium tracking-[-0.01em] text-slate-800 outline-none transition-all focus:bg-white focus:ring-[3px] focus:ring-sky-500/20"
         >
           <option
             v-for="option in roleOptions"
@@ -136,208 +138,122 @@ const handleSubmit = () => {
             {{ option.label }}
           </option>
         </select>
-        <DownOutlined
-          class="login-form__suffix"
-          aria-hidden="true"
-        />
+        <span
+          class="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-xs text-slate-400 transition group-focus-within:text-sky-500"
+        >▼</span>
       </div>
     </div>
 
-    <div class="login-form__row">
-      <label class="login-form__remember">
-        <input
-          v-model="form.remember_me"
-          type="checkbox"
-        >
+    <div class="flex items-center justify-between pt-2">
+      <label
+        class="inline-flex cursor-pointer items-center gap-2.5 text-[14px] font-medium text-slate-500 transition hover:text-slate-700"
+      >
+        <div class="relative flex items-center">
+          <input
+            v-model="form.remember_me"
+            type="checkbox"
+            class="peer h-4 w-4 cursor-pointer appearance-none rounded-[4px] border-2 border-slate-300 bg-white transition-all checked:border-sky-500 checked:bg-sky-500 hover:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-500/30"
+          >
+          <svg
+            class="pointer-events-none absolute left-1/2 top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 text-white opacity-0 transition-opacity peer-checked:opacity-100"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            stroke-width="3"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M5 13l4 4L19 7"
+            />
+          </svg>
+        </div>
         记住登录状态
       </label>
       <button
         type="button"
-        class="login-form__link"
+        class="text-[14px] font-bold text-sky-600 transition-colors hover:text-blue-700 focus:outline-none"
         @click="$emit('forgot-password')"
       >
-        忘记密码
+        忘记密码？
       </button>
     </div>
 
-    <button
-      type="submit"
-      class="login-form__submit"
-      :disabled="props.loading || !canSubmit"
-    >
-      <LoginOutlined aria-hidden="true" />
-      {{ props.loading ? '正在进入系统…' : '登录' }}
-    </button>
+    <div class="pt-2">
+      <button
+        type="submit"
+        :disabled="props.loading || !canSubmit"
+        class="group relative flex h-14 w-full items-center justify-center gap-2 overflow-hidden rounded-2xl bg-gradient-to-r from-sky-500 to-blue-600 text-[16px] font-bold tracking-[0.02em] text-white shadow-[0_12px_24px_-8px_rgba(14,165,233,0.5)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_20px_32px_-12px_rgba(14,165,233,0.7)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0"
+      >
+        <!-- Button Shine Effect -->
+        <div
+          class="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/20 to-transparent transition-transform duration-700 group-hover:translate-x-full group-disabled:hidden"
+        />
+        <LoginOutlined class="text-[16px]" />
+        {{ props.loading ? '正在进入系统...' : '立即登录工作台' }}
+      </button>
+    </div>
   </form>
 </template>
 
 <style scoped>
-.login-form {
+.workstation-login-form {
   display: flex;
   flex-direction: column;
-  gap: var(--mq-space-4);
+  gap: 14px;
 }
-
-.login-form__field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+.workstation-login-form > div {
+  margin: 0 !important;
+  padding-top: 0;
 }
-
-.login-form__field > label {
-  color: var(--mq-text-secondary);
-  font-size: var(--mq-font-13);
+.workstation-login-form > div > label {
+  display: block;
+  margin-bottom: 6px;
+  color: #526176;
+  font-size: 13px;
+  font-weight: 400;
   line-height: 20px;
+  letter-spacing: 0;
 }
-
-.login-form__control {
-  position: relative;
+.workstation-login-form > div > .group {
+  margin-top: 0;
 }
-
-.login-form__control input,
-.login-form__control select {
-  width: 100%;
-  height: 40px;
+.workstation-login-form input:not([type='checkbox']),
+.workstation-login-form select {
   box-sizing: border-box;
-  padding: 0 12px 0 36px;
-  border: 1px solid var(--mq-border-strong);
-  border-radius: var(--mq-radius-control);
-  background: var(--mq-bg-surface);
-  color: var(--mq-text-primary);
+  height: 44px;
+  border: 1px solid rgba(93, 116, 147, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.8);
+  padding-top: 10px;
+  padding-bottom: 10px;
   font-family: inherit;
-  font-size: var(--mq-font-14);
-  outline: none;
-  transition:
-    border-color 120ms ease,
-    box-shadow 120ms ease;
-}
-
-.login-form__control input::placeholder {
-  color: var(--mq-text-disabled);
-}
-
-.login-form__control select {
-  padding-right: 36px;
-  padding-left: 12px;
-  appearance: none;
-}
-
-.login-form__control input:focus,
-.login-form__control select:focus {
-  border-color: var(--mq-brand-600);
-  box-shadow: 0 0 0 3px var(--mq-brand-50);
-}
-
-.login-form__prefix,
-.login-form__suffix {
-  position: absolute;
-  top: 50%;
-  color: var(--mq-text-tertiary);
   font-size: 14px;
-  pointer-events: none;
-  transform: translateY(-50%);
+  font-weight: 400;
+  line-height: 22px;
+  color: #26364b;
 }
-
-.login-form__prefix {
-  left: 12px;
+.workstation-login-form select {
+  padding-block: 0;
+  padding-right: 36px;
+  line-height: normal;
 }
-
-.login-form__suffix {
-  right: 12px;
-  font-size: 12px;
+.workstation-login-form input:not([type='checkbox']):focus,
+.workstation-login-form select:focus {
+  border-color: #80baff;
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
 }
-
-.login-form__reveal {
-  position: absolute;
-  top: 50%;
-  right: 4px;
+.workstation-login-form > .flex > label {
   display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border: 0;
-  border-radius: var(--mq-radius-control);
-  background: transparent;
-  color: var(--mq-text-tertiary);
-  cursor: pointer;
-  transform: translateY(-50%);
-}
-
-.login-form__reveal:hover {
-  color: var(--mq-text-primary);
-}
-
-.login-form__row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: var(--mq-font-13);
-}
-
-.login-form__remember {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--mq-space-2);
-  color: var(--mq-text-primary);
-  cursor: pointer;
-}
-
-.login-form__remember input {
-  width: 16px;
-  height: 16px;
   margin: 0;
-  accent-color: var(--mq-brand-600);
 }
-
-.login-form__link {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--mq-brand-600);
-  font: inherit;
-  cursor: pointer;
-}
-
-.login-form__link:hover {
-  color: var(--mq-brand-700);
-}
-
-.login-form__submit {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--mq-space-2);
-  height: 40px;
-  border: 1px solid var(--mq-brand-600);
-  border-radius: var(--mq-radius-control);
-  background: var(--mq-brand-600);
-  color: #ffffff;
-  font-family: inherit;
-  font-size: var(--mq-font-14);
+.workstation-login-form button[type='submit'] {
+  height: 44px;
+  border-radius: 8px;
+  background: #007aff;
+  font-size: 14px;
   font-weight: 500;
-  cursor: pointer;
-  transition: background-color 120ms ease;
-}
-
-.login-form__submit:hover:not(:disabled) {
-  border-color: var(--mq-brand-700);
-  background: var(--mq-brand-700);
-}
-
-/* 禁用态用灰底灰字，避免与浅色主按钮混淆 */
-.login-form__submit:disabled {
-  border-color: var(--mq-border);
-  background: var(--mq-bg-muted);
-  color: var(--mq-text-disabled);
-  cursor: not-allowed;
-}
-
-.login-form__reveal:focus-visible,
-.login-form__link:focus-visible,
-.login-form__submit:focus-visible,
-.login-form__remember input:focus-visible {
-  outline: 2px solid var(--mq-brand-600);
-  outline-offset: 2px;
+  transform: none;
+  box-shadow: 0 3px 8px rgba(0, 122, 255, 0.16);
 }
 </style>
