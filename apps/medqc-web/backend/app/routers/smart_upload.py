@@ -83,7 +83,6 @@ async def smart_upload(
     默认异步返回 task_id；显式 sync=true 时返回原始同步结果。
     """
     enforce_rate_limit(request, bucket="drg_smart_upload", max_requests=10, window_seconds=60)
-    task_service = get_smart_upload_async_service(UPLOAD_DIR)
 
     filename = file.filename or "unknown"
     ext = os.path.splitext(filename)[1].lower()
@@ -104,6 +103,9 @@ async def smart_upload(
         allowed_content_types=ALLOWED_MIME_TYPES,
         max_bytes=MAX_FILE_SIZE,
     )
+
+    # 先完成输入校验：任务服务构造依赖任务存储，其不可用不应把非法文件变成 500。
+    task_service = get_smart_upload_async_service(UPLOAD_DIR)
 
     if sync:
         try:
