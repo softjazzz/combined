@@ -1,11 +1,13 @@
 <template>
   <div class="qc-home-shell">
-    <main class="qc-home-canvas">
+    <main class="mq-page">
       <!-- 页头：日期眉标 + 大标题；右侧为范围与刷新（原范围行，功能不变） -->
-      <header class="qc-home-header">
-        <div class="qc-home-header__copy">
-          <span class="qc-home-eyebrow">{{ todayLabel }} · 泸县0609质控点</span>
-          <h1>质控首页概览</h1>
+      <header class="mq-page-head">
+        <div class="mq-page-head__copy">
+          <span class="mq-page-eyebrow">{{ todayLabel }} · 泸县0609质控点</span>
+          <h1 class="mq-page-title">
+            质控首页概览
+          </h1>
         </div>
         <div
           v-if="clinicalQc"
@@ -73,7 +75,7 @@
 
       <section
         v-if="loadError"
-        class="qc-home-notice"
+        class="mq-card qc-home-notice"
         data-testid="home-load-error"
       >
         <MqIconTile
@@ -96,7 +98,7 @@
 
       <section
         v-else-if="loading"
-        class="qc-home-loading"
+        class="mq-card qc-home-loading"
         data-testid="home-loading"
         aria-live="polite"
         aria-busy="true"
@@ -245,7 +247,7 @@
 
         <!-- 三栏指标卡 -->
         <section
-          class="qc-home-metrics"
+          class="mq-card qc-home-metrics"
           data-testid="home-kpis"
           aria-label="质控指标汇总"
         >
@@ -297,13 +299,16 @@
           data-testid="home-analysis"
         >
           <section
-            class="qc-home-panel qc-home-defect-analysis"
+            class="mq-card qc-home-panel qc-home-defect-analysis"
             data-testid="defect-analysis-chart"
             aria-labelledby="defect-analysis-title"
           >
             <header class="qc-home-panel__head">
               <div>
-                <h2 id="defect-analysis-title">
+                <h2
+                  id="defect-analysis-title"
+                  class="mq-card__title"
+                >
                   质控缺陷分析
                 </h2>
                 <p>缺陷仅统计确定问题，资料待核实与待判断不计入缺陷数。</p>
@@ -313,11 +318,13 @@
               <div class="qc-home-defect-analysis__control">
                 <span>统计对象</span>
                 <div
+                  class="mq-segmented mq-segmented--sm"
                   role="group"
                   aria-label="统计对象"
                 >
                   <button
                     type="button"
+                    class="mq-segmented__item"
                     :class="{ 'is-active': analysisObject === 'department' }"
                     data-testid="analysis-object-department"
                     @click="analysisObject = 'department'"
@@ -326,6 +333,7 @@
                   </button>
                   <button
                     type="button"
+                    class="mq-segmented__item"
                     :class="{ 'is-active': analysisObject === 'physician' }"
                     data-testid="analysis-object-physician"
                     @click="analysisObject = 'physician'"
@@ -337,11 +345,13 @@
               <div class="qc-home-defect-analysis__control">
                 <span>分析指标</span>
                 <div
+                  class="mq-segmented mq-segmented--sm"
                   role="group"
                   aria-label="分析指标"
                 >
                   <button
                     type="button"
+                    class="mq-segmented__item"
                     :class="{ 'is-active': analysisMetric === 'total' }"
                     data-testid="analysis-metric-total"
                     @click="analysisMetric = 'total'"
@@ -350,6 +360,7 @@
                   </button>
                   <button
                     type="button"
+                    class="mq-segmented__item"
                     :class="{ 'is-active': analysisMetric === 'average' }"
                     data-testid="analysis-metric-average"
                     @click="analysisMetric = 'average'"
@@ -361,11 +372,13 @@
               <div class="qc-home-defect-analysis__control">
                 <span>排序</span>
                 <div
+                  class="mq-segmented mq-segmented--sm"
                   role="group"
                   aria-label="排序方式"
                 >
                   <button
                     type="button"
+                    class="mq-segmented__item"
                     :class="{ 'is-active': analysisSort === 'metric' }"
                     data-testid="analysis-sort-metric"
                     @click="analysisSort = 'metric'"
@@ -374,6 +387,7 @@
                   </button>
                   <button
                     type="button"
+                    class="mq-segmented__item"
                     :class="{ 'is-active': analysisSort === 'risk' }"
                     data-testid="analysis-sort-risk"
                     @click="analysisSort = 'risk'"
@@ -382,6 +396,7 @@
                   </button>
                   <button
                     type="button"
+                    class="mq-segmented__item"
                     :class="{ 'is-active': analysisSort === 'gap' }"
                     data-testid="analysis-sort-gap"
                     @click="analysisSort = 'gap'"
@@ -462,13 +477,16 @@
 
           <div class="qc-home-side">
             <section
-              class="qc-home-panel qc-home-conclusion"
+              class="mq-card qc-home-panel qc-home-conclusion"
               data-testid="qc-conclusion-chart"
               aria-labelledby="qc-conclusion-title"
             >
               <header class="qc-home-panel__head">
                 <div>
-                  <h2 id="qc-conclusion-title">
+                  <h2
+                    id="qc-conclusion-title"
+                    class="mq-card__title"
+                  >
                     结论结构
                   </h2>
                   <p>已完成病历中的规则结论。</p>
@@ -514,12 +532,14 @@
             </section>
 
             <section
-              class="qc-home-panel qc-home-panel--health"
+              class="mq-card qc-home-panel qc-home-panel--health"
               data-testid="data-health"
             >
               <header class="qc-home-panel__head">
                 <div>
-                  <h2>数据与服务状态</h2>
+                  <h2 class="mq-card__title">
+                    数据与服务状态
+                  </h2>
                   <p>用于判断数据与任务是否可正常使用，不代表医疗结论。</p>
                 </div>
               </header>
@@ -573,7 +593,7 @@
 
       <section
         v-else-if="!loading"
-        class="qc-home-empty"
+        class="mq-card qc-home-empty"
         data-testid="home-empty"
       >
         <a-empty description="当前暂无可展示的全病历质控汇总">

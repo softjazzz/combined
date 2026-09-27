@@ -1,67 +1,5 @@
 /* v7.1 液态玻璃 · 首页概览 */
-.qc-home-shell {
-  color: var(--mq-text-primary);
-  font-family: var(--mq-font-family);
-  font-size: var(--mq-font-14);
-  line-height: 1.6;
-}
-
-.qc-home-canvas {
-  display: grid;
-  align-content: start;
-  gap: 20px;
-  max-width: 1440px;
-  min-height: 100vh;
-  margin: 0 auto;
-  padding: 8px 28px 32px 22px;
-  box-sizing: border-box;
-}
-
-/* 玻璃卡片 */
-.qc-home-metrics,
-.qc-home-panel,
-.qc-home-notice,
-.qc-home-empty,
-.qc-home-loading {
-  border: 1px solid var(--mq-glass-border);
-  border-radius: var(--mq-radius-card);
-  background: var(--mq-glass-bg);
-  -webkit-backdrop-filter: var(--mq-glass-blur);
-  backdrop-filter: var(--mq-glass-blur);
-  box-shadow: var(--mq-glass-shadow);
-}
-
-/* 页头 */
-.qc-home-header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 0 4px;
-}
-
-.qc-home-header__copy {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.qc-home-eyebrow {
-  color: var(--mq-text-tertiary);
-  font-size: var(--mq-font-13);
-  font-weight: 600;
-}
-
-.qc-home-header h1 {
-  margin: 0;
-  font-family: var(--mq-font-display);
-  font-size: var(--mq-font-title);
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  line-height: 1.1;
-}
-
+/* 页头右侧：范围与刷新 */
 .qc-home-scope {
   display: flex;
   flex-wrap: wrap;
@@ -159,7 +97,6 @@
 .qc-home-icon-button:focus-visible,
 .qc-home-shortcuts button:focus-visible,
 .qc-home-button:focus-visible,
-.qc-home-defect-analysis__control button:focus-visible,
 button.qc-home-defect-analysis__row:focus-visible {
   outline: 2px solid var(--mq-brand-600);
   outline-offset: 2px;
@@ -475,15 +412,6 @@ button.qc-home-defect-analysis__row:focus-visible {
   padding-bottom: 12px;
 }
 
-.qc-home-panel h2 {
-  margin: 0;
-  font-family: var(--mq-font-display);
-  font-size: var(--mq-font-20);
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.3;
-}
-
 .qc-home-panel__head p {
   margin: 4px 0 0;
   color: var(--mq-text-tertiary);
@@ -512,33 +440,6 @@ button.qc-home-defect-analysis__row:focus-visible {
   color: var(--mq-text-tertiary);
   font-size: var(--mq-font-12);
   white-space: nowrap;
-}
-
-.qc-home-defect-analysis__control > div {
-  display: inline-flex;
-  gap: 2px;
-  padding: 3px;
-  border-radius: 12px;
-  background: var(--mq-bg-muted);
-}
-
-.qc-home-defect-analysis__control button {
-  height: 28px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: 9px;
-  background: transparent;
-  color: var(--mq-text-secondary);
-  font: inherit;
-  font-size: var(--mq-font-13);
-  cursor: pointer;
-}
-
-.qc-home-defect-analysis__control button.is-active {
-  background: #ffffff;
-  box-shadow: 0 2px 6px rgba(10, 55, 115, 0.12);
-  color: var(--mq-text-primary);
-  font-weight: 600;
 }
 
 .qc-home-defect-analysis__list {
