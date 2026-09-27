@@ -722,6 +722,16 @@ const routes: RouteRecordRaw[] = [
         },
       },
       {
+        path: 'qc/reports/record-quality',
+        name: 'RecordQualityReport',
+        component: () => import('@/views/qc/reports/RecordQualityReportView.vue'),
+        meta: {
+          title: '病历质量分析',
+          icon: 'BarChartOutlined',
+          permission: ['admin', 'qc_manager'],
+        },
+      },
+      {
         path: 'analytics',
         name: 'Analytics',
         component: () => import('@/views/analytics/AnalyticsView.vue'),

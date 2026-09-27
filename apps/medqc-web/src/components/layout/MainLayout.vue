@@ -211,16 +211,19 @@
           </a-sub-menu>
 
           <!-- 统计分析 -->
-          <a-menu-item
-            v-if="canSee('/dashboard/statistics')"
-            key="/dashboard/statistics"
+          <a-sub-menu
+            v-if="canSeeAny(REPORT_MENU_TARGETS)"
+            key="statistics-reports-menu"
             class="menu-item-base"
           >
             <template #icon>
               <BarChartOutlined />
             </template>
-            <span class="font-medium">统计分析</span>
-          </a-menu-item>
+            <template #title><span class="font-medium">统计分析</span></template>
+            <a-menu-item v-if="canSee('/dashboard/statistics')" key="/dashboard/statistics">统计总览</a-menu-item>
+            <a-menu-item v-if="canSee('/dashboard/qc/reports/record-quality')" key="/dashboard/qc/reports/record-quality?scene=running">运行病历质量分析</a-menu-item>
+            <a-menu-item v-if="canSee('/dashboard/qc/reports/record-quality')" key="/dashboard/qc/reports/record-quality?scene=final">终末病历质量分析</a-menu-item>
+          </a-sub-menu>
 
           <!-- DRG/DIP -->
           <a-sub-menu
@@ -561,6 +564,7 @@ const DRG_MENU_TARGETS = [
   '/dashboard/drg/analysis',
 ] as const
 const SYSTEM_MENU_TARGETS = ['/dashboard/settings'] as const
+const REPORT_MENU_TARGETS = ['/dashboard/statistics', '/dashboard/qc/reports/record-quality'] as const
 
 // 响应式数据
 const collapsed = ref(false)
@@ -594,6 +598,12 @@ const breadcrumbItems = computed(() => {
         break
       case 'statistics':
         items.push({ title: '统计分析', path: null })
+        break
+      case 'qc':
+        if (pathSegments[2] === 'reports') {
+          items.push({ title: '统计分析', path: '/dashboard/statistics' })
+          items.push({ title: '病历质量分析', path: null })
+        }
         break
       case 'rules':
         items.push({ title: '质控规则管理', path: null })
@@ -684,6 +694,8 @@ watch(
     const tab = route.query.tab as string | undefined
     if (tab && base === '/dashboard/rules') {
       selectedKeys.value = [`${base}?tab=${tab}`]
+    } else if (base === '/dashboard/qc/reports/record-quality') {
+      selectedKeys.value = [`${base}?scene=${route.query.scene === 'final' ? 'final' : 'running'}`]
     } else {
       selectedKeys.value = [base]
     }

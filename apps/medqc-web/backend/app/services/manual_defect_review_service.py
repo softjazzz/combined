@@ -9,10 +9,10 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Iterable
 from uuid import uuid4
 
-from sqlalchemy import func, insert, select, update
+from sqlalchemy import func, insert, select, tuple_, update
 from sqlalchemy.exc import SQLAlchemyError
 
 from ..database.connection import SessionLocal
@@ -226,6 +226,48 @@ def list_case_manual_defects(*, institute_id: str, patient_id: str, visit_id: st
         for row in defects
     ]
     return {"items": items, "total": int(total), "limit": CASE_LIST_LIMIT}
+
+
+_CASE_BATCH_CHUNK = 200
+
+
+def list_manual_defects_for_cases(
+    identities: Iterable[tuple[str, str, str]],
+) -> list[dict[str, Any]]:
+    """报表用：按三坐标集合批量只读人工缺陷的最小字段（三坐标、rule_code、审核状态）。
+
+    与审核列表同一谓词；在 SQL 中按完整三坐标分块过滤。
+    不返回描述、证据等正文字段。数据库故障抛 ManualDefectReviewUnavailable。
+    """
+    wanted = {_case_identity(i, p, v) for i, p, v in identities}
+    if not wanted:
+        return []
+    factory = _require_session_factory()
+    ordered = sorted(wanted)
+    rows: list[dict[str, Any]] = []
+    try:
+        with factory() as session:
+            for start in range(0, len(ordered), _CASE_BATCH_CHUNK):
+                chunk = ordered[start:start + _CASE_BATCH_CHUNK]
+                for row in session.execute(
+                    select(
+                        QCDefect.institute_id, QCDefect.patient_id, QCDefect.visit_id,
+                        QCDefect.rule_code, QCDefect.manual_review_status,
+                    ).where(
+                        *_manual_scope(),
+                        tuple_(QCDefect.institute_id, QCDefect.patient_id, QCDefect.visit_id).in_(chunk),
+                    )
+                ).all():
+                    identity = (str(row.institute_id), str(row.patient_id), str(row.visit_id))
+                    if identity in wanted:
+                        rows.append({
+                            "identity": identity,
+                            "rule_code": str(row.rule_code or "").strip().upper(),
+                            "review_status": row.manual_review_status,
+                        })
+    except SQLAlchemyError as exc:
+        raise ManualDefectReviewUnavailable("人工缺陷读取失败") from exc
+    return rows
 
 
 def count_pending_manual_defects() -> int:

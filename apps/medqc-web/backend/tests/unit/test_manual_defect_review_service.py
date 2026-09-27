@@ -104,6 +104,31 @@ def _state(factory, defect_id):
     return row, history
 
 
+def test_report_batch_uses_full_identity_and_manual_scope(sessions, monkeypatch):
+    with sessions.begin() as session:
+        session.execute(QCDefect.__table__.insert(), [
+            _defect("other-hospital", minutes=20, institute_id="hospital-B"),
+            _defect("other-patient", minutes=21, patient_id="other"),
+        ])
+    monkeypatch.setattr(service, "_CASE_BATCH_CHUNK", 1)
+    items = service.list_manual_defects_for_cases([
+        ("hospital-A", "patient", "visit"),
+        ("hospital-A", "patient", "visit"),
+        ("hospital-X", "patient", "visit"),
+    ])
+    assert len(items) == 9
+    assert {row["identity"] for row in items} == {("hospital-A", "patient", "visit")}
+    assert {row["review_status"] for row in items} == {"pending", "approved", "rejected"}
+    assert all(set(row) == {"identity", "rule_code", "review_status"} for row in items)
+
+
+def test_report_batch_empty_does_not_open_session(monkeypatch):
+    monkeypatch.setattr(service, "SessionLocal", None)
+    assert service.list_manual_defects_for_cases([]) == []
+    with pytest.raises(service.ManualDefectReviewInvalid):
+        service.list_manual_defects_for_cases([("hospital-A", " patient", "visit")])
+
+
 def test_approve_updates_only_review_status_and_appends_history(sessions):
     result = service.review_manual_defect(
         defect_id="m-1", reviewer_id="mgr-1", decision="approved",
