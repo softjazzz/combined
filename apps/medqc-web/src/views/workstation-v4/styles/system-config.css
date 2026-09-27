@@ -490,10 +490,73 @@
   overflow: hidden;
 }
 
-/* 其他页签：子面板放进玻璃卡 */
+/* 其他页签：子面板放进玻璃卡；面板内部原有白卡改为半透明子容器（与 .mq-inset 一致） */
 .system-config-panel {
   min-width: 0;
   overflow: hidden;
+  padding: 24px 28px;
+}
+
+.system-config-panel :deep(.ds-root) {
+  max-width: none;
+  padding: 0;
+  font-family: var(--mq-font-family);
+}
+
+.system-config-panel :deep(.ds-card),
+.system-config-panel :deep(.ds-aside-card),
+.system-config-panel :deep(.ds-hero),
+.system-config-panel :deep(.ds-meta-card),
+.sync-advanced__panel :deep(.bg-white:not(.connection-studio)),
+.system-config-panel :deep(.ant-card) {
+  border: 1px solid rgba(255, 255, 255, 0.9) !important;
+  border-radius: 18px !important;
+  background: rgba(255, 255, 255, 0.7) !important;
+  box-shadow: 0 2px 10px rgba(10, 55, 115, 0.05) !important;
+}
+
+.system-config-panel :deep(.ds-card__footer) {
+  border-top: 0.5px solid var(--mq-border);
+  background: transparent;
+}
+
+.system-config-panel :deep(.ds-divide > *),
+.system-config-panel :deep(.ds-row) {
+  border-color: var(--mq-border) !important;
+}
+
+.system-config-panel :deep(.ds-section-title) {
+  font-family: var(--mq-font-display);
+  font-size: var(--mq-font-20);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.system-config-panel :deep(.ds-section-desc),
+.system-config-panel :deep(.ds-row__hint) {
+  color: var(--mq-text-tertiary);
+}
+
+.system-config-panel :deep(.ds-aside-eyebrow),
+.system-config-panel :deep(.ds-group__title) {
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* 高级区：连接配置、执行日志面板去掉白底，融入 .mq-inset */
+.sync-advanced__panel :deep(.connection-studio),
+.sync-advanced__panel :deep(.bg-white.connection-studio) {
+  background: transparent !important;
+}
+
+.sync-advanced__panel :deep(.studio-input) {
+  height: 36px;
+  border: 1px solid rgba(60, 60, 80, 0.1);
+  border-radius: var(--mq-radius-control);
+  background: rgba(255, 255, 255, 0.85);
 }
 
 /* ---------- 执行前确认弹窗内容 ---------- */
