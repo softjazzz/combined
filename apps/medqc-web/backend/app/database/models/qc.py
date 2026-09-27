@@ -18,6 +18,7 @@ from sqlalchemy import (
     Index,
     Integer,
     JSON,
+    Numeric,
     PrimaryKeyConstraint,
     SmallInteger,
     String,
@@ -805,4 +806,124 @@ class QCRuleSetVersion(Base):
             postgresql_where=text("status = 'draft'"),
             sqlite_where=text("status = 'draft'"),
         ),
+    )
+
+
+_SCORING_WS = "' \t\n\r\f\v'"
+
+
+class QCScoringStandard(Base):
+    """评分标准（迁移 62，V3.6 P2-S）。
+
+    只有 draft 可编辑；启用后不可改，须复制为新草稿再启用。每个场景最多一个
+    启用中的默认标准（部分唯一索引）；version_seq 用于 CAS；grade_bands_json 为
+    按分数降序的 [{name, min_score, max_score}]，由服务层校验连续覆盖 [0, base_score]。
+    """
+
+    __tablename__ = "qc_scoring_standards"
+
+    id = Column(String(36), nullable=False)
+    name = Column(String(100), nullable=False)
+    scene = Column(String(16), nullable=False)
+    rule_set_key = Column(String(96), nullable=False)
+    status = Column(String(16), nullable=False)
+    is_default = Column(Boolean, nullable=False, server_default=text("false"))
+    base_score = Column(Numeric(6, 2), nullable=False)
+    grade_bands_json = Column(Text, nullable=False)
+    veto_grade = Column(String(50), nullable=False)
+    version_seq = Column(Integer, nullable=False, server_default=text("1"))
+    created_by = Column(String(64), nullable=False)
+    created_at = Column(DateTime, nullable=False)
+    updated_by = Column(String(64), nullable=False)
+    updated_at = Column(DateTime, nullable=False)
+    activated_by = Column(String(64), nullable=True)
+    activated_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        PrimaryKeyConstraint("id", name="pk_qc_scoring_standards"),
+        UniqueConstraint("name", "scene", name="uq_qc_scoring_standards_name_scene"),
+        CheckConstraint(
+            "scene IN ('running', 'final', 'outpatient')", name="ck_qc_scoring_standards_scene",
+        ),
+        CheckConstraint(
+            "status IN ('draft', 'active', 'archived')", name="ck_qc_scoring_standards_status",
+        ),
+        CheckConstraint(f"trim(name, {_SCORING_WS}) <> ''", name="ck_qc_scoring_standards_name_nonblank"),
+        CheckConstraint(
+            f"trim(rule_set_key, {_SCORING_WS}) <> ''", name="ck_qc_scoring_standards_key_nonblank",
+        ),
+        CheckConstraint(
+            f"trim(veto_grade, {_SCORING_WS}) <> ''", name="ck_qc_scoring_standards_veto_nonblank",
+        ),
+        CheckConstraint("base_score > 0", name="ck_qc_scoring_standards_base_positive"),
+        CheckConstraint("version_seq > 0", name="ck_qc_scoring_standards_seq_positive"),
+        CheckConstraint(
+            "status = 'active' OR NOT is_default", name="ck_qc_scoring_standards_default_active",
+        ),
+        CheckConstraint(
+            "status = 'draft' OR (activated_by IS NOT NULL AND activated_at IS NOT NULL)",
+            name="ck_qc_scoring_standards_activated_fields",
+        ),
+        Index(
+            "uq_qc_scoring_standards_default",
+            "scene",
+            unique=True,
+            postgresql_where=text("status = 'active' AND is_default"),
+            sqlite_where=text("status = 'active' AND is_default"),
+        ),
+    )
+
+
+class QCScoringGroup(Base):
+    """评分标准项目组（迁移 62）：max_deduction 为空表示该组不封顶。"""
+
+    __tablename__ = "qc_scoring_groups"
+
+    id = Column(String(36), nullable=False)
+    standard_id = Column(String(36), nullable=False)
+    group_name = Column(String(100), nullable=False)
+    max_deduction = Column(Numeric(6, 2), nullable=True)
+    sort_order = Column(Integer, nullable=False, server_default=text("0"))
+
+    __table_args__ = (
+        PrimaryKeyConstraint("id", name="pk_qc_scoring_groups"),
+        UniqueConstraint("standard_id", "group_name", name="uq_qc_scoring_groups_standard_group"),
+        ForeignKeyConstraint(
+            ["standard_id"], ["qc_scoring_standards.id"],
+            name="fk_qc_scoring_groups_standard", ondelete="CASCADE",
+        ),
+        CheckConstraint(
+            f"trim(group_name, {_SCORING_WS}) <> ''", name="ck_qc_scoring_groups_name_nonblank",
+        ),
+        CheckConstraint(
+            "max_deduction IS NULL OR max_deduction >= 0", name="ck_qc_scoring_groups_max_nonnegative",
+        ),
+    )
+
+
+class QCScoringItem(Base):
+    """评分标准扣分条目（迁移 62）：一条规则在一个标准内只属于一个项目组。"""
+
+    __tablename__ = "qc_scoring_items"
+
+    id = Column(String(36), nullable=False)
+    standard_id = Column(String(36), nullable=False)
+    group_name = Column(String(100), nullable=False)
+    rule_id = Column(String(64), nullable=False)
+    deduction = Column(Numeric(6, 2), nullable=False)
+    is_veto = Column(Boolean, nullable=False, server_default=text("false"))
+    enabled = Column(Boolean, nullable=False, server_default=text("true"))
+
+    __table_args__ = (
+        PrimaryKeyConstraint("id", name="pk_qc_scoring_items"),
+        UniqueConstraint("standard_id", "rule_id", name="uq_qc_scoring_items_standard_rule"),
+        ForeignKeyConstraint(
+            ["standard_id"], ["qc_scoring_standards.id"],
+            name="fk_qc_scoring_items_standard", ondelete="CASCADE",
+        ),
+        CheckConstraint(
+            f"trim(group_name, {_SCORING_WS}) <> ''", name="ck_qc_scoring_items_group_nonblank",
+        ),
+        CheckConstraint(f"trim(rule_id, {_SCORING_WS}) <> ''", name="ck_qc_scoring_items_rule_nonblank"),
+        CheckConstraint("deduction >= 0", name="ck_qc_scoring_items_deduction_nonnegative"),
     )

@@ -112,6 +112,27 @@ def _default_qc_projection_is_not_run_for_frontpage_only_fixture(monkeypatch):
     )
 
 
+_ORIGINAL_LOAD_SCORE_STATES = query_service_module._load_score_states
+
+
+@pytest.fixture(autouse=True)
+def _default_score_states_are_no_standard(monkeypatch):
+    """旧工作台单测不建评分标准表，默认得分替身为“未配置评分标准”。"""
+
+    monkeypatch.setattr(
+        query_service_module,
+        "_load_score_states",
+        lambda page_scenes, anchors, **_kwargs: (
+            {
+                identity: {"status": "no_standard", "score": None, "grade": None, "veto_hit": None,
+                           "standard_id": None, "reason_code": None}
+                for identity in page_scenes
+            },
+            {scene: {"status": "no_standard"} for scene in set(page_scenes.values())},
+        ),
+    )
+
+
 @pytest.fixture()
 def workstation_session_factory(monkeypatch):
     engine = create_engine("sqlite:///:memory:")
@@ -2088,3 +2109,118 @@ def test_without_review_state_parameter_behaviour_unchanged(workstation_session_
     assert result["qc_summary"]["not_run_records"] == 1
     assert [record["id"] for record in result["records"]] == ["V1", "V2", "V3"]
     assert calls == [["V1", "V2", "V3"]]
+
+
+# ---------------------------------------------------------------------------
+# 列表得分挂载（P2-S 第 5 节）：只对本页 ready 摘要原样挂 score_state
+# ---------------------------------------------------------------------------
+
+
+def test_workstation_attaches_score_state_to_ready_page_summaries(workstation_session_factory):
+    _insert_review_state_records(workstation_session_factory)
+    calls = []
+
+    def loader(page_scenes, anchors):
+        calls.append((dict(page_scenes), dict(anchors)))
+        return (
+            {
+                ("H1", "P1", "V1"): {"status": "scored", "score": 97.0, "grade": "甲", "veto_hit": False,
+                                     "standard_id": "std-1", "reason_code": None},
+                ("H1", "P2", "V2"): {"status": "bogus"},
+            },
+            {"running": {"status": "configured", "standard_id": "std-1"}},
+        )
+
+    result = get_workstation_data(
+        page_size=50,
+        hospital_status="inpatient",
+        session_factory=workstation_session_factory,
+        settings_loader=_workstation_settings_loader,
+        demo_policy=_no_demo_policy,
+        qc_projection_loader=_anchored_projection_loader,
+        review_state_loader=lambda anchors: {},
+        score_state_loader=loader,
+    )
+
+    summaries = {record["id"]: record["latest_qc_summary"] for record in result["records"]}
+    assert summaries["V1"]["score_state"]["score"] == 97.0 and summaries["V1"]["score_state"]["grade"] == "甲"
+    assert summaries["V2"]["score_state"]["status"] == "unavailable"  # 非法取值不透传
+    assert "score_state" not in summaries["V3"]  # 非 ready 不挂
+    assert len(calls) == 1
+    page_scenes, anchors = calls[0]
+    assert page_scenes == {("H1", "P1", "V1"): "running", ("H1", "P2", "V2"): "running"}
+    assert anchors[("H1", "P1", "V1")]["envelope_id"] == "env-V1"
+    assert result["score_standards"] == {"running": {"status": "configured", "standard_id": "std-1"}}
+
+
+def test_workstation_score_scene_follows_list_scope(workstation_session_factory):
+    _insert_review_state_records(workstation_session_factory)
+    scenes = []
+
+    def loader(page_scenes, anchors):
+        scenes.append(set(page_scenes.values()))
+        return {}, {}
+
+    get_workstation_data(
+        session_factory=workstation_session_factory,
+        settings_loader=_workstation_settings_loader,
+        demo_policy=_no_demo_policy,
+        qc_projection_loader=_anchored_projection_loader,
+        review_state_loader=lambda anchors: {},
+        score_state_loader=loader,
+    )
+    # 全部范围：无出院时间的记录按运行场景计分
+    assert scenes == [{"running"}]
+
+
+def test_workstation_score_failure_degrades_to_unavailable(workstation_session_factory, caplog):
+    _insert_review_state_records(workstation_session_factory)
+
+    def broken(page_scenes, anchors):
+        raise RuntimeError("SELECT secret FROM qc_scoring_standards")
+
+    with caplog.at_level("WARNING", logger=query_service_module.__name__):
+        result = get_workstation_data(
+            session_factory=workstation_session_factory,
+            settings_loader=_workstation_settings_loader,
+            demo_policy=_no_demo_policy,
+            qc_projection_loader=_anchored_projection_loader,
+            review_state_loader=lambda anchors: {},
+            score_state_loader=broken,
+        )
+
+    summaries = {record["id"]: record["latest_qc_summary"] for record in result["records"]}
+    assert summaries["V1"]["status"] == "ready"
+    assert summaries["V1"]["score_state"]["status"] == "unavailable"
+    assert result["qc_summary"]["ready_records"] == 2
+    assert result["score_standards"] == {}
+    assert "RuntimeError" in caplog.text and "secret" not in caplog.text
+
+
+def test_workstation_default_score_loader_uses_scoring_service(workstation_session_factory, monkeypatch):
+    from app.services import scoring_service
+
+    _insert_review_state_records(workstation_session_factory)
+    # 撤掉默认替身，验证真实默认加载路径
+    monkeypatch.setattr(query_service_module, "_load_score_states", _ORIGINAL_LOAD_SCORE_STATES)
+    monkeypatch.setattr(
+        query_service_module,
+        "_load_latest_luxian_0609_qc_summaries",
+        lambda record_refs, **_kwargs: _anchored_projection_loader(record_refs),
+    )
+    calls = []
+
+    def fake_page(page_scenes, anchors, *, session_factory):
+        calls.append(session_factory)
+        return {identity: {"status": "no_standard"} for identity in page_scenes}, {"running": {"status": "no_standard"}}
+
+    monkeypatch.setattr(scoring_service, "score_workstation_page", fake_page)
+    result = get_workstation_data(
+        session_factory=workstation_session_factory,
+        settings_loader=_workstation_settings_loader,
+        demo_policy=_no_demo_policy,
+        review_state_loader=lambda anchors: {},
+    )
+    summaries = {record["id"]: record["latest_qc_summary"] for record in result["records"]}
+    assert summaries["V1"]["score_state"]["status"] == "no_standard"
+    assert calls == [workstation_session_factory]

@@ -1,0 +1,323 @@
+"""评分标准 HTTP 与服务合同：CRUD、CAS、启用替换默认、只读限制、422/403/503（SQLite 合成数据，不连真实库）。"""
+
+from __future__ import annotations
+
+import logging
+
+import pytest
+import sqlalchemy as sa
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+
+from app.database.models.qc import QCScoringGroup, QCScoringItem, QCScoringStandard
+from app.routers import scoring as routes
+from app.services import scoring_service
+from app.services import scoring_standard_service as service
+
+BASE = "/api/v1/scoring"
+BANDS = [
+    {"name": "甲", "min_score": 90, "max_score": 100},
+    {"name": "乙", "min_score": 75, "max_score": 90},
+    {"name": "丙", "min_score": 0, "max_score": 75},
+]
+GROUPS = [{"group_name": "病程记录", "max_deduction": 10}, {"group_name": "首页"}]
+ITEMS = [
+    {"group_name": "病程记录", "rule_id": "lx0609-001", "deduction": 2},
+    {"group_name": "首页", "rule_id": "LX0609-002", "deduction": 1.5, "is_veto": True},
+]
+
+
+@pytest.fixture
+def sessions(monkeypatch):
+    engine = sa.create_engine(
+        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool,
+    )
+    for model in (QCScoringStandard, QCScoringGroup, QCScoringItem):
+        model.__table__.create(engine)
+    factory = sessionmaker(bind=engine, expire_on_commit=False)
+    monkeypatch.setattr(service, "SessionLocal", factory)
+    yield factory
+    engine.dispose()
+
+
+def client(roles=("qc_manager",), user_id="u-1"):
+    app = FastAPI()
+    app.include_router(routes.router)
+    app.dependency_overrides[routes.get_current_user] = lambda: {"id": user_id, "roles": list(roles)}
+    return TestClient(app)
+
+
+def create(http, name="运行标准", scene="running", **extra):
+    body = {"name": name, "scene": scene, "base_score": 100, "grade_bands": BANDS, "veto_grade": "丙", **extra}
+    return http.post(f"{BASE}/standards", json=body)
+
+
+def ready_draft(http, name="运行标准"):
+    draft = create(http, name).json()["data"]
+    saved = http.put(f"{BASE}/standards/{draft['id']}/items",
+                     json={"version_seq": 1, "groups": GROUPS, "items": ITEMS})
+    assert saved.status_code == 200, saved.text
+    return saved.json()["data"]
+
+
+def test_scene_catalog_maps_rule_sets_by_scope():
+    assert service.scene_rule_set_keys("running") == ("luxian_0609_qc_v1",)  # 0916 不计分
+    final = service.scene_rule_set_keys("final")
+    assert "luxian_0609_qc_v1" in final and "sc_content_v1" in final
+    assert service.scene_rule_set_keys("outpatient") == ()
+
+
+def test_create_update_items_and_detail_flow(sessions):
+    http = client()
+    created = create(http)
+    assert created.status_code == 200
+    draft = created.json()["data"]
+    assert draft["status"] == "draft" and draft["is_default"] is False and draft["version_seq"] == 1
+    assert draft["rule_set_key"] == "luxian_0609_qc_v1" and draft["grade_bands"] == [
+        {"name": band["name"], "min_score": float(band["min_score"]), "max_score": float(band["max_score"])}
+        for band in BANDS
+    ]
+    assert create(http).json()["detail"]["code"] == "name_exists"
+
+    updated = http.put(f"{BASE}/standards/{draft['id']}", json={"version_seq": 1, "name": "运行标准v2"})
+    assert updated.status_code == 200 and updated.json()["data"]["version_seq"] == 2
+    stale = http.put(f"{BASE}/standards/{draft['id']}", json={"version_seq": 1, "name": "x"})
+    assert stale.status_code == 409 and stale.json()["detail"]["code"] == "version_conflict"
+
+    saved = http.put(f"{BASE}/standards/{draft['id']}/items",
+                     json={"version_seq": 2, "groups": GROUPS, "items": ITEMS})
+    assert saved.status_code == 200
+    data = saved.json()["data"]
+    assert data["version_seq"] == 3
+    assert data["items"] == [
+        {"group_name": "病程记录", "rule_id": "LX0609-001", "deduction": 2.0, "is_veto": False, "enabled": True},
+        {"group_name": "首页", "rule_id": "LX0609-002", "deduction": 1.5, "is_veto": True, "enabled": True},
+    ]
+    assert data["groups"][0] == {"group_name": "病程记录", "max_deduction": 10.0, "sort_order": 1}
+    assert data["groups"][1]["max_deduction"] is None
+    # 整表替换
+    again = http.put(f"{BASE}/standards/{draft['id']}/items",
+                     json={"version_seq": 3, "groups": GROUPS[:1], "items": ITEMS[:1]})
+    assert again.status_code == 200 and len(again.json()["data"]["items"]) == 1
+
+    listed = http.get(f"{BASE}/standards", params={"scene": "running"}).json()["data"]
+    assert [item["name"] for item in listed["items"]] == ["运行标准v2"] and "items" not in listed["items"][0]
+    assert http.get(f"{BASE}/standards/{draft['id']}").json()["data"]["item_count"] == 1
+    assert http.get(f"{BASE}/standards/nope").status_code == 404
+
+
+def test_final_scene_requires_rule_set_key_matching_scene(sessions):
+    http = client()
+    missing = create(http, scene="final")
+    assert missing.status_code == 422
+    mismatch = create(http, scene="final", rule_set_key="luxian_0916_qc_v1")
+    assert mismatch.status_code == 422 and mismatch.json()["detail"]["code"] == "rule_set_scene_mismatch"
+    assert create(http, scene="final", rule_set_key="luxian_0609_qc_v1").status_code == 200
+    outpatient = create(http, scene="outpatient")
+    assert outpatient.status_code == 422 and outpatient.json()["detail"]["code"] == "scene_without_rule_set"
+
+
+def test_bands_validation_is_422_with_problems(sessions):
+    http = client()
+    response = create(http, grade_bands=[BANDS[0], {"name": "乙", "min_score": 70, "max_score": 85}, BANDS[2]],
+                      veto_grade="丁")
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert detail["code"] == "standard_validation_failed"
+    assert any("空隙" in problem for problem in detail["problems"])
+    assert any("重叠" in problem for problem in detail["problems"])
+    assert any("veto_grade" in problem for problem in detail["problems"])
+
+
+def test_unknown_rule_ids_are_422(sessions):
+    http = client()
+    draft = create(http).json()["data"]
+    response = http.put(f"{BASE}/standards/{draft['id']}/items", json={
+        "version_seq": 1, "groups": GROUPS,
+        "items": [*ITEMS, {"group_name": "首页", "rule_id": "LX0916-001", "deduction": 1},
+                  {"group_name": "不存在", "rule_id": "LX0609-003", "deduction": 1},
+                  {"group_name": "首页", "rule_id": "LX0609-001", "deduction": 1}],
+    })
+    assert response.status_code == 422
+    problems = response.json()["detail"]["problems"]
+    assert any("LX0916-001" in problem for problem in problems)
+    assert any("所属项目组不存在" in problem for problem in problems)
+    assert any("规则重复" in problem for problem in problems)
+    assert http.get(f"{BASE}/standards/{draft['id']}").json()["data"]["version_seq"] == 1
+
+
+def test_activate_replaces_default_in_same_scene_and_active_is_readonly(sessions):
+    http = client()
+    first = ready_draft(http, "标准一")
+    empty = create(http, "空标准").json()["data"]
+    no_items = http.post(f"{BASE}/standards/{empty['id']}/activate", json={"version_seq": 1})
+    assert no_items.status_code == 422
+
+    activated = http.post(f"{BASE}/standards/{first['id']}/activate", json={"version_seq": first["version_seq"]})
+    assert activated.status_code == 200
+    active = activated.json()["data"]
+    assert active["status"] == "active" and active["is_default"] is True and active["activated_by"] == "u-1"
+    assert service.get_default_standard("running")["id"] == first["id"]
+    assert service.get_default_standard("final") is None
+
+    # 启用中的标准不可编辑、不可删除
+    edit = http.put(f"{BASE}/standards/{first['id']}", json={"version_seq": active["version_seq"], "name": "改"})
+    assert edit.status_code == 409 and edit.json()["detail"]["code"] == "not_draft"
+    items = http.put(f"{BASE}/standards/{first['id']}/items",
+                     json={"version_seq": active["version_seq"], "groups": [], "items": []})
+    assert items.status_code == 409
+    delete = http.delete(f"{BASE}/standards/{first['id']}", params={"version_seq": active["version_seq"]})
+    assert delete.status_code == 409
+
+    # 复制成新草稿再启用：原默认在同一事务内归档
+    copied = http.post(f"{BASE}/standards/{first['id']}/copy", json={"name": "标准二"}).json()["data"]
+    assert copied["status"] == "draft" and copied["items"] == active["items"]
+    second = http.post(f"{BASE}/standards/{copied['id']}/activate", json={"version_seq": 1})
+    assert second.status_code == 200
+    assert http.get(f"{BASE}/standards/{first['id']}").json()["data"]["status"] == "archived"
+    assert service.get_default_standard("running")["id"] == copied["id"]
+
+    # undefault：原默认保持 active 但取消默认
+    third = http.post(f"{BASE}/standards/{copied['id']}/copy", json={"name": "标准三"}).json()["data"]
+    response = http.post(f"{BASE}/standards/{third['id']}/activate",
+                         json={"version_seq": 1, "replace_mode": "undefault"})
+    assert response.status_code == 200
+    previous = http.get(f"{BASE}/standards/{copied['id']}").json()["data"]
+    assert previous["status"] == "active" and previous["is_default"] is False
+    assert service.get_default_standard("running")["id"] == third["id"]
+
+
+def test_activate_rolls_back_when_default_swap_fails(sessions, monkeypatch):
+    http = client()
+    first = ready_draft(http, "标准一")
+    http.post(f"{BASE}/standards/{first['id']}/activate", json={"version_seq": first["version_seq"]})
+    copied = http.post(f"{BASE}/standards/{first['id']}/copy", json={"name": "标准二"}).json()["data"]
+
+    original = service._cas_update
+
+    def failing(session, row, version_seq, **values):
+        if values.get("status") == "active":
+            raise service.ScoringStandardConflict("并发", code="version_conflict")
+        return original(session, row, version_seq, **values)
+
+    monkeypatch.setattr(service, "_cas_update", failing)
+    response = http.post(f"{BASE}/standards/{copied['id']}/activate", json={"version_seq": 1})
+    assert response.status_code == 409
+    # 同一事务：原默认标准未被归档
+    assert service.get_default_standard("running")["id"] == first["id"]
+
+
+def test_archive_and_delete_rules(sessions):
+    http = client()
+    draft = ready_draft(http)
+    assert http.post(f"{BASE}/standards/{draft['id']}/archive", json={"version_seq": 2}).status_code == 409
+    stale = http.delete(f"{BASE}/standards/{draft['id']}", params={"version_seq": 1})
+    assert stale.status_code == 409 and stale.json()["detail"]["code"] == "version_conflict"
+    deleted = http.delete(f"{BASE}/standards/{draft['id']}", params={"version_seq": 2})
+    assert deleted.status_code == 200 and deleted.json()["data"] == {"id": draft["id"], "deleted": True}
+    with sessions() as session:
+        assert session.execute(sa.select(sa.func.count()).select_from(QCScoringItem.__table__)).scalar() == 0
+
+    other = ready_draft(http, "标准B")
+    active = http.post(f"{BASE}/standards/{other['id']}/activate", json={"version_seq": 2}).json()["data"]
+    archived = http.post(f"{BASE}/standards/{other['id']}/archive", json={"version_seq": active["version_seq"]})
+    assert archived.status_code == 200
+    assert archived.json()["data"]["status"] == "archived" and archived.json()["data"]["is_default"] is False
+    assert service.get_default_standard("running") is None
+
+
+@pytest.mark.parametrize("method,path,body", [
+    ("post", f"{BASE}/standards", {"name": "x", "scene": "running", "base_score": 100,
+                                   "grade_bands": BANDS, "veto_grade": "丙"}),
+    ("put", f"{BASE}/standards/s-1", {"version_seq": 1, "name": "x"}),
+    ("put", f"{BASE}/standards/s-1/items", {"version_seq": 1, "groups": [], "items": []}),
+    ("post", f"{BASE}/standards/s-1/copy", {"name": "x"}),
+    ("post", f"{BASE}/standards/s-1/activate", {"version_seq": 1}),
+    ("post", f"{BASE}/standards/s-1/archive", {"version_seq": 1}),
+    ("delete", f"{BASE}/standards/s-1?version_seq=1", None),
+])
+def test_write_endpoints_require_admin_or_qc_manager(sessions, method, path, body):
+    http = client(roles=("qc_doctor",))
+    kwargs = {} if body is None else {"json": body}
+    assert getattr(http, method)(path, **kwargs).status_code == 403
+    assert service.list_standards()["items"] == []
+
+
+def test_admin_can_write_and_any_user_can_read(sessions):
+    assert create(client(roles=("admin",))).status_code == 200
+    reader = client(roles=("qc_doctor",))
+    assert reader.get(f"{BASE}/standards").status_code == 200
+    assert reader.get(f"{BASE}/scenes").status_code == 200
+
+
+def test_database_failure_is_desensitized_503(monkeypatch, caplog):
+    def broken():
+        raise sa.exc.OperationalError("select", {}, Exception("password=secret host=db.internal"))
+
+    monkeypatch.setattr(service, "SessionLocal", broken)
+    http = client()
+    with caplog.at_level(logging.ERROR):
+        responses = [
+            http.get(f"{BASE}/standards"),
+            create(http),
+            http.get(f"{BASE}/case", params={"institute_id": "H", "patient_id": "P", "visit_id": "V",
+                                             "scene": "running"}),
+        ]
+    for response in responses:
+        assert response.status_code == 503
+        assert response.json()["detail"] == "评分服务暂不可用，请稍后重试"
+        assert "secret" not in response.text and "db.internal" not in response.text
+    assert "secret" not in caplog.text and "db.internal" not in caplog.text
+
+
+def test_extra_fields_are_rejected(sessions):
+    http = client()
+    assert create(http, status="active").status_code == 422
+    assert create(http, base_score=True).status_code == 422
+
+
+def _case(http, scene="running"):
+    return http.get(f"{BASE}/case", params={"institute_id": "H1", "patient_id": "P1", "visit_id": "V1",
+                                            "scene": scene})
+
+
+class _Workspace:
+    def __init__(self, dto):
+        self.dto = dto
+
+    def build_latest_single_record_result_dto(self, **kwargs):
+        return self.dto
+
+
+def test_case_score_no_standard_no_result_and_scored(sessions, monkeypatch):
+    http = client(roles=("qc_doctor",))
+    assert _case(http).json()["data"] == {"status": "no_standard", "scene": "running"}
+
+    manager = client()
+    draft = ready_draft(manager)
+    manager.post(f"{BASE}/standards/{draft['id']}/activate", json={"version_seq": 2})
+    monkeypatch.setattr(scoring_service, "_default_workspace",
+                        lambda: _Workspace({"state": "not_found", "items": []}))
+    data = _case(http).json()["data"]
+    assert data["status"] == "no_result" and data["result_state"] == "not_found"
+
+    monkeypatch.setattr(scoring_service, "_default_workspace", lambda: _Workspace({
+        "state": "ready", "job_id": "job-1", "rule_set_key": "luxian_0609_qc_v1",
+        "items": [{"rule_id": "LX0609-002"}, {"rule_id": "LX0609-001"}],
+    }))
+    monkeypatch.setattr(scoring_service, "project_customer_items", lambda items: [
+        {"rule_id": item["rule_id"], "is_confirmed_issue": item["rule_id"] == "LX0609-002"} for item in items
+    ])
+    data = _case(http).json()["data"]
+    assert data["status"] == "scored" and data["score"] == 98.5 and data["veto_hit"] is True
+    assert data["grade"] == "丙" and data["standard_id"] == draft["id"]
+    assert data["deductions"] == [
+        {"rule_id": "LX0609-002", "group_name": "首页", "deduction": 1.5, "is_veto": True},
+    ]
+    assert data["standard_updated_at"]
+
+
+def test_case_score_rejects_bad_scene(sessions):
+    assert _case(client(), scene="other").status_code == 422

@@ -668,3 +668,8 @@
 - 实现：版本详情与草稿响应的 entries 追加只读派生字段 `executable`、`qc_point`、`source_document`（0609 取规则主表，含下线规则；0916 无权威元数据为 null），不入库、不影响 digest，写接口拒绝派生字段。质控点管理页重写为真实数据：已上线（active）/未上线（paused+offline）页签、批量开启/暂停/下线写草稿（首次自动以当前版本建草稿，version_seq CAS，不可执行规则禁用开启）、草稿差异面板、发布（422 problems 逐条、409 按 code）、版本历史与下线；admin/qc_manager 可写，0916 只读。新建质控点页改为明确不可创建（需执行器实现与规则主表登记），删除假保存与假功能。
 - 验证：后端版本相关 113/113、Ruff；前端相关 23/23、vue-tsc、ESLint。未做浏览器验收，PRD 覆盖状态不提升。
 
+## 84. 第七十八批：评分标准与计分服务后端（P2-S）
+
+- 用户确认评分按“评分标准配置、默认不启用”实现。证据：LX0609 Canonical 无评分，`rules_v1.json` 的 49 条 `score_deduction` 全为 2 不可作标准，旧 `qc_results.overall_score` 来自旧链路。按 `docs/plans/2026-09-27-v36-scoring-standards-design.md`：迁移 62 新增 `qc_scoring_standards/groups/items`（qc/public，场景默认的部分唯一索引、项目组、单项否决）；`score_result` 纯函数只对执行器 `is_confirmed_issue` 扣分，组封顶、下限 0、档位左闭右开最高档右闭、否决强制档位、未配置的确定问题列入 `unscored_rule_ids`；按需计算不落库；`GET /api/v1/scoring/case` 与标准管理接口（CRUD、复制、条目整表保存 CAS、启用替换默认同事务、归档）。V5 列表对本页 ready 病例挂 `score_state`（无默认标准时不读条目、零成本；失败降级 unavailable），顶层 `score_standards` 供前端整列显示“未配置评分标准”。LX0609 同时计入 final 场景（终末执行与读取的就是 LX0609 结果）；0916 不计分；门急诊无规则集，建门诊标准返回 422。
+- 验证：隔离库升级至 revision62 并回读三表双 schema 与唯一索引；真实 PG 冒烟（第二个标准启用后原默认同事务归档、仅一个默认、级联删除无孤儿），合成标准已清理。冒烟过程中首次脚本仅替换了评分服务会话，规则集版本服务沿用应用默认会话对业务库执行了一次只读 SELECT（表不存在报错、无写入）；此后冒烟统一在导入应用前以进程环境指向隔离库并断言库名。后端评分与列表相关 132/132、Ruff。前端评分标准管理页与列表/抽屉展示待下一批；undefault 替换后缺“重新设为默认”接口，列为小缺口。未做浏览器验收，PRD 覆盖状态不提升。
+

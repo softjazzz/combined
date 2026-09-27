@@ -570,6 +570,82 @@ def _attach_review_states(
         summary["review_state"] = state if state in WORKSTATION_REVIEW_STATES else None
 
 
+def _record_scoring_scene(record: Any, hospital_status: str, is_inpatient_scope: bool) -> str:
+    """列表行计分场景：运行列表 running、终末列表 final；全部范围按有无出院时间区分。"""
+
+    if is_inpatient_scope:
+        return "running"
+    if hospital_status == "discharged":
+        return "final"
+    return "final" if getattr(record, "discharge_datetime", None) else "running"
+
+
+def _load_score_states(
+    page_scenes: dict[tuple[str, str, str], str],
+    anchors: dict[tuple[str, str, str], dict[str, Any]],
+    *,
+    session_factory: Callable[[], Any],
+) -> tuple[dict[tuple[str, str, str], dict[str, Any]], dict[str, dict[str, Any]]]:
+    """病历列表得分唯一来源：计分服务（场景默认标准 + 纯函数计分）。"""
+
+    from ...services.scoring_service import score_workstation_page
+
+    return score_workstation_page(page_scenes, anchors, session_factory=session_factory)
+
+
+def _attach_score_states(
+    records: list[Any],
+    raw_summary_map: dict[tuple[str, str, str], dict[str, Any]],
+    latest_qc_summary_map: dict[tuple[str, str, str], dict[str, Any]],
+    score_state_loader: Callable[..., Any],
+    scene_for: Callable[[Any], str],
+) -> dict[str, dict[str, Any]]:
+    """只对本页 ready 摘要原样挂 score_state，不在本层计分。
+
+    返回本页涉及场景的标准概况（前端据此整列显示“未配置评分标准”）。
+    加载失败时 ready 摘要一律 unavailable，不阻断列表；只记录异常类型。
+    """
+
+    page_scenes: dict[tuple[str, str, str], str] = {}
+    scenes: set[str] = set()
+    for record in records:
+        identity = (
+            str(record.institute_id).strip(),
+            str(record.patient_id).strip(),
+            str(record.visit_id).strip(),
+        )
+        scene = scene_for(record)
+        scenes.add(scene)
+        summary = latest_qc_summary_map.get(identity)
+        if isinstance(summary, dict) and summary.get("status") == "ready":
+            page_scenes[identity] = scene
+    if not page_scenes:
+        return {}
+    try:
+        states, overview = score_state_loader(
+            page_scenes, {identity: raw_summary_map.get(identity) or {} for identity in page_scenes},
+        )
+    except Exception as exc:  # noqa: BLE001 - 得分降级为不可用，不阻断病历列表
+        logger.warning("病历列表得分批量计算失败，降级为不可用 error_type=%s", type(exc).__name__)
+        states, overview = {}, {}
+    if not isinstance(states, dict):
+        states = {}
+    unavailable = {
+        "status": "unavailable", "score": None, "grade": None, "veto_hit": None,
+        "standard_id": None, "reason_code": "score_unavailable",
+    }
+    for identity in page_scenes:
+        state = states.get(identity)
+        latest_qc_summary_map[identity]["score_state"] = (
+            dict(state) if isinstance(state, dict) and state.get("status") in {"scored", "no_standard", "unavailable"}
+            else dict(unavailable)
+        )
+    return {
+        scene: overview[scene] for scene in sorted(scenes)
+        if isinstance(overview, dict) and isinstance(overview.get(scene), dict)
+    }
+
+
 def _normalize_review_state_filter(value: Optional[Iterable[str]]) -> frozenset[str] | None:
     """None 表示不按审核状态筛选；否则必须是非空且全部合法的取值集合。"""
 
@@ -1150,6 +1226,7 @@ def get_workstation_data(
     analytics_result_status: Optional[str] = None,
     analytics_scope: Optional[str] = None,
     review_state: Optional[Iterable[str]] = None,
+    score_state_loader: Optional[Callable[..., Any]] = None,
 ) -> dict[str, Any]:
     session_factory = session_factory or _session_factory
     review_state_filter = _normalize_review_state_filter(review_state)
@@ -1427,6 +1504,20 @@ def get_workstation_data(
             raw_qc_summary_map if isinstance(raw_qc_summary_map, dict) else {},
             latest_qc_summary_map,
             page_review_state_loader,
+        )
+        score_standards = _attach_score_states(
+            records,
+            raw_qc_summary_map if isinstance(raw_qc_summary_map, dict) else {},
+            latest_qc_summary_map,
+            score_state_loader
+            or (
+                lambda page_scenes, anchors: _load_score_states(
+                    page_scenes, anchors, session_factory=session_factory,
+                )
+            ),
+            lambda record: _record_scoring_scene(
+                record, normalized_hospital_status, is_inpatient_scope,
+            ),
         )
 
         discharge_summary_map: dict[str, dict[str, Any]] = {}
@@ -1719,4 +1810,6 @@ def get_workstation_data(
         "pageSize": page_size,
         "totalPages": (total_count + page_size - 1) // page_size,
         "qc_summary": qc_summary,
+        # 本页涉及场景的评分标准概况：{scene: {status: configured|no_standard|unavailable, ...}}。
+        "score_standards": score_standards,
     }
