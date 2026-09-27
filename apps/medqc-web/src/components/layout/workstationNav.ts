@@ -3,24 +3,7 @@
  * 只重排入口与分组，不改路由地址、页面功能与权限；旧 URL（?tab=、?stage=）继续有效。
  * 选中项、面包屑与可见性都由本模块的纯函数计算，布局组件只负责渲染。
  */
-import type { Component } from 'vue'
-import {
-  Activity,
-  ChartNoAxesColumnIncreasing,
-  CircleCheck,
-  CloudUpload,
-  Database,
-  FileSearch,
-  FolderKanban,
-  House,
-  ListTree,
-  Network,
-  ReceiptText,
-  Search,
-  Settings,
-  Shield,
-  SquarePlus,
-} from 'lucide-vue-next'
+import type { MqIconName } from '@/components/icons/mqIcons'
 
 export const WORKSTATION_BASE = '/workstation-v5'
 
@@ -41,8 +24,9 @@ export interface NavItem {
   key: string
   label: string
   to: NavLocation
-  icon?: Component
-  /** 分组内的步骤序号（首页与结算清单 1→3） */
+  /** 定制图标名（见 components/icons/mqIcons.ts） */
+  iconName: MqIconName
+  /** 分组内的步骤序号（首页与结算清单 1→3），用于读屏与提示 */
   step?: number
   /** 仅演示反馈账号可见 */
   demoFeedbackOnly?: boolean
@@ -118,7 +102,7 @@ export const WORKSTATION_NAV: NavGroup[] = [
         key: 'home',
         label: '首页',
         to: { path: p() },
-        icon: House,
+        iconName: 'overview',
         match: (route) =>
           (route.path === p() && !hasHomeLaunchQuery(route)) || route.path === p('/qc-overview'),
       },
@@ -132,7 +116,7 @@ export const WORKSTATION_NAV: NavGroup[] = [
         key: 'worklist',
         label: '病历池',
         to: { path: p('/worklist') },
-        icon: FolderKanban,
+        iconName: 'pool',
         match: (route) =>
           (route.path === p('/worklist') && stageOf(route) === '') ||
           (route.path === p() && hasHomeLaunchQuery(route) && stageOf(route) === ''),
@@ -141,21 +125,21 @@ export const WORKSTATION_NAV: NavGroup[] = [
         key: 'records-running',
         label: '运行病历质控',
         to: { path: p('/records/running') },
-        icon: Activity,
+        iconName: 'running',
         match: matchPrefix(p('/records/running')),
       },
       {
         key: 'records-final',
         label: '终末病历质控',
         to: { path: p('/records/final') },
-        icon: CircleCheck,
+        iconName: 'final',
         match: matchPrefix(p('/records/final')),
       },
       {
         key: 'customer-sample-validation',
         label: '客户样本验证',
         to: { path: p('/customer-sample-validation') },
-        icon: FileSearch,
+        iconName: 'sample',
         match: matchPrefix(p('/customer-sample-validation'), [
           p('/customer-sample-validation/surgery-catalog'),
         ]),
@@ -164,7 +148,7 @@ export const WORKSTATION_NAV: NavGroup[] = [
         key: 'qc-feedback-demo',
         label: '质控反馈记录',
         to: { path: p('/qc-feedback-demo') },
-        icon: ReceiptText,
+        iconName: 'doc',
         demoFeedbackOnly: true,
         match: matchPrefix(p('/qc-feedback-demo')),
       },
@@ -176,6 +160,7 @@ export const WORKSTATION_NAV: NavGroup[] = [
     items: [
       {
         key: 'stage-frontpage-generate',
+        iconName: 'fp_generate',
         label: '生成首页',
         step: 1,
         to: { path: p('/worklist'), query: { stage: 'frontpage_generate' } },
@@ -183,6 +168,7 @@ export const WORKSTATION_NAV: NavGroup[] = [
       },
       {
         key: 'stage-frontpage-qc',
+        iconName: 'fp_qc',
         label: '首页质控',
         step: 2,
         to: { path: p('/worklist'), query: { stage: 'frontpage_qc' } },
@@ -190,6 +176,7 @@ export const WORKSTATION_NAV: NavGroup[] = [
       },
       {
         key: 'stage-settlement-qc',
+        iconName: 'settlement',
         label: '结算清单质控',
         step: 3,
         to: { path: p('/worklist'), query: { stage: 'settlement_qc' } },
@@ -205,21 +192,21 @@ export const WORKSTATION_NAV: NavGroup[] = [
         key: 'rules',
         label: '质控规则',
         to: { path: p('/rules') },
-        icon: Shield,
+        iconName: 'rules',
         match: (route) => route.path === p('/rules'),
       },
       {
         key: 'custom-rules',
         label: '自定义质控点',
         to: { path: p('/rules/custom-workspace') },
-        icon: SquarePlus,
+        iconName: 'custom_rule',
         match: matchPrefix(p('/rules/custom-workspace')),
       },
       {
         key: 'surgery-catalog',
         label: '手术分级目录',
         to: { path: p('/customer-sample-validation/surgery-catalog') },
-        icon: ListTree,
+        iconName: 'surgery_catalog',
         match: matchPrefix(p('/customer-sample-validation/surgery-catalog')),
       },
     ],
@@ -232,21 +219,21 @@ export const WORKSTATION_NAV: NavGroup[] = [
         key: 'stats',
         label: '统计分析',
         to: { path: p('/stats') },
-        icon: ChartNoAxesColumnIncreasing,
+        iconName: 'stats',
         match: matchPrefix(p('/stats')),
       },
       {
         key: 'drg',
         label: 'DRG/DIP 分析',
         to: { path: DRG_SECTION_TABS[0].path },
-        icon: Network,
+        iconName: 'drg',
         match: (route) => DRG_SECTION_TABS.some((tab) => route.path === tab.path),
       },
       {
         key: 'icd',
         label: 'ICD 编码查询',
         to: { path: p('/icd') },
-        icon: Search,
+        iconName: 'icd',
         match: matchPrefix(p('/icd')),
       },
     ],
@@ -259,21 +246,21 @@ export const WORKSTATION_NAV: NavGroup[] = [
         key: 'upload',
         label: '数据上传',
         to: { path: p('/upload') },
-        icon: CloudUpload,
+        iconName: 'upload',
         match: matchPrefix(p('/upload')),
       },
       {
         key: 'data',
         label: '数据管理',
         to: { path: p('/data') },
-        icon: Database,
+        iconName: 'data',
         match: matchPrefix(p('/data')),
       },
       {
         key: 'system-config',
         label: '系统配置',
         to: { path: p('/system-config') },
-        icon: Settings,
+        iconName: 'settings',
         match: matchPrefix(p('/system-config')),
       },
     ],

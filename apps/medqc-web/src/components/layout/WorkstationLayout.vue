@@ -14,23 +14,19 @@
           class="ws-brand__mark"
           aria-hidden="true"
         >
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6l-8-3z" />
-            <path d="M12 9v6" />
-            <path d="M9 12h6" />
-          </svg>
+          <MqIcon
+            name="rules"
+            color="#FFFFFF"
+            :size="18"
+          />
         </span>
         <span
           v-if="!collapsed"
-          class="ws-brand__title"
-        >病案质控系统</span>
+          class="ws-brand__copy"
+        >
+          <span class="ws-brand__title">病案质控系统</span>
+          <span class="ws-brand__subtitle">Medical Record QC</span>
+        </span>
       </RouterLink>
 
       <nav
@@ -62,17 +58,12 @@
               :aria-current="activeKey === item.key ? 'page' : undefined"
               :aria-label="collapsed ? item.label : undefined"
             >
-              <component
-                :is="item.icon"
-                v-if="item.icon"
-                class="ws-nav__icon"
-                aria-hidden="true"
+              <MqIconTile
+                :name="item.iconName"
+                :tone="activeKey === item.key ? 'brand' : 'neutral'"
+                :size="24"
+                :icon-size="16"
               />
-              <span
-                v-else
-                class="ws-nav__step"
-                aria-hidden="true"
-              >{{ item.step }}</span>
               <span
                 v-if="!collapsed"
                 class="ws-nav__label"
@@ -250,6 +241,8 @@ import {
   User,
 } from 'lucide-vue-next'
 import RuntimeBuildStatus from '@/components/layout/RuntimeBuildStatus.vue'
+import MqIcon from '@/components/icons/MqIcon.vue'
+import MqIconTile from '@/components/icons/MqIconTile.vue'
 import { useAuthStore } from '@/stores/auth'
 import {
   DRG_SECTION_TABS,
@@ -347,25 +340,34 @@ const handleLogout = async () => {
 <style scoped>
 @import '../../styles/source-han-sans-sc.css';
 
+/* v7.1 液态玻璃外壳：光晕底 + 悬浮玻璃侧栏 + 半透明顶栏 */
 .ws-shell {
   display: flex;
   min-height: 100vh;
-  background: var(--mq-bg-page);
+  background: var(--mq-bg-mesh);
+  background-attachment: fixed;
   color: var(--mq-text-primary);
   font-family: var(--mq-font-family);
+  -webkit-font-smoothing: antialiased;
 }
 
-/* 侧栏 */
 .ws-sider {
   position: sticky;
-  top: 0;
+  top: 14px;
   display: flex;
   flex: 0 0 var(--mq-sider-width);
   flex-direction: column;
   width: var(--mq-sider-width);
-  height: 100vh;
-  background: var(--mq-bg-surface);
-  border-right: 1px solid var(--mq-border);
+  height: calc(100vh - 28px);
+  margin: 14px 0 14px 14px;
+  padding: 16px 10px 10px;
+  box-sizing: border-box;
+  border: 1px solid var(--mq-glass-border);
+  border-radius: 22px;
+  background: var(--mq-glass-bg);
+  -webkit-backdrop-filter: var(--mq-glass-blur);
+  backdrop-filter: var(--mq-glass-blur);
+  box-shadow: var(--mq-glass-shadow);
   transition:
     width 200ms ease,
     flex-basis 200ms ease;
@@ -375,23 +377,22 @@ const handleLogout = async () => {
 .ws-shell--collapsed .ws-sider {
   flex-basis: var(--mq-sider-collapsed-width);
   width: var(--mq-sider-collapsed-width);
+  padding-inline: 8px;
 }
 
 .ws-brand {
   display: flex;
   flex-shrink: 0;
   align-items: center;
-  gap: var(--mq-space-3);
-  height: var(--mq-header-height);
-  padding: 0 var(--mq-space-5);
-  border-bottom: 1px solid var(--mq-bg-muted);
+  gap: 10px;
+  padding: 0 8px 14px;
   color: var(--mq-text-primary);
   text-decoration: none;
 }
 
 .ws-shell--collapsed .ws-brand {
   justify-content: center;
-  padding: 0;
+  padding-inline: 0;
 }
 
 .ws-brand__mark {
@@ -399,21 +400,31 @@ const handleLogout = async () => {
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: var(--mq-radius-control);
-  background: var(--mq-brand-600);
-  color: #ffffff;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: var(--mq-brand-gradient);
+  box-shadow:
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.45),
+    0 2px 6px rgba(10, 100, 230, 0.3);
 }
 
-.ws-brand__mark svg {
-  width: 16px;
-  height: 16px;
+.ws-brand__copy {
+  display: flex;
+  flex-direction: column;
+  line-height: 16px;
 }
 
 .ws-brand__title {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.ws-brand__subtitle {
+  color: var(--mq-text-tertiary);
+  font-size: 11px;
   white-space: nowrap;
 }
 
@@ -421,27 +432,28 @@ const handleLogout = async () => {
   flex: 1 1 0;
   min-height: 0;
   overflow-y: auto;
-  padding: var(--mq-space-3);
-  scrollbar-width: thin;
+  padding: 0 2px;
+  scrollbar-width: none;
 }
 
-.ws-nav__group + .ws-nav__group {
-  margin-top: var(--mq-space-1);
+.ws-nav::-webkit-scrollbar {
+  display: none;
 }
 
 .ws-nav__group-label {
-  padding: var(--mq-space-3) 10px var(--mq-space-1);
+  padding: 10px 10px 3px;
   color: var(--mq-text-tertiary);
-  font-size: var(--mq-font-12);
-  line-height: 18px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
   white-space: nowrap;
 }
 
 .ws-shell--collapsed .ws-nav__group-label {
-  height: 1px;
-  margin: var(--mq-space-2) var(--mq-space-2);
+  height: 0.5px;
+  margin: 10px;
   padding: 0;
-  background: var(--mq-border);
+  background: var(--mq-border-strong);
 }
 
 .ws-nav__item {
@@ -449,27 +461,35 @@ const handleLogout = async () => {
   align-items: center;
   gap: 10px;
   height: 32px;
-  margin: 1px 0;
-  padding: 0 10px;
-  border-radius: var(--mq-radius-control);
+  margin: 0;
+  padding: 0 8px;
+  border-radius: 10px;
   color: var(--mq-text-primary);
   font-size: var(--mq-font-13);
   text-decoration: none;
   white-space: nowrap;
   transition:
-    background-color 120ms ease,
-    color 120ms ease;
+    background-color 140ms ease,
+    box-shadow 140ms ease;
 }
 
 .ws-shell--collapsed .ws-nav__item {
   justify-content: center;
-  height: 36px;
+  height: 40px;
   padding: 0;
 }
 
 .ws-nav__item:hover {
-  background: var(--mq-bg-muted);
+  background: rgba(255, 255, 255, 0.5);
   color: var(--mq-text-primary);
+}
+
+.ws-nav__item--active,
+.ws-nav__item--active:hover {
+  background: var(--mq-glass-bg-strong);
+  box-shadow: var(--mq-float-shadow);
+  color: var(--mq-text-primary);
+  font-weight: 600;
 }
 
 .ws-nav__item:focus-visible,
@@ -482,37 +502,6 @@ const handleLogout = async () => {
   outline-offset: 2px;
 }
 
-.ws-nav__item--active,
-.ws-nav__item--active:hover {
-  background: var(--mq-brand-50);
-  color: var(--mq-brand-700);
-  font-weight: 500;
-}
-
-.ws-nav__icon {
-  flex-shrink: 0;
-  width: 16px;
-  height: 16px;
-  color: var(--mq-text-secondary);
-  stroke-width: 1.8;
-}
-
-.ws-nav__item--active .ws-nav__icon {
-  color: var(--mq-brand-700);
-}
-
-.ws-nav__step {
-  flex-shrink: 0;
-  width: 16px;
-  color: var(--mq-text-tertiary);
-  font-size: var(--mq-font-12);
-  text-align: center;
-}
-
-.ws-nav__item--active .ws-nav__step {
-  color: var(--mq-brand-700);
-}
-
 .ws-nav__label {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -522,21 +511,17 @@ const handleLogout = async () => {
   display: flex;
   flex-shrink: 0;
   align-items: center;
+  justify-content: center;
   gap: var(--mq-space-2);
-  height: 40px;
-  padding: 0 22px;
+  height: 36px;
+  margin-top: 6px;
   border: 0;
-  border-top: 1px solid var(--mq-bg-muted);
+  border-top: 0.5px solid var(--mq-border);
   background: transparent;
   color: var(--mq-text-secondary);
   font: inherit;
   font-size: var(--mq-font-13);
   cursor: pointer;
-}
-
-.ws-shell--collapsed .ws-sider__toggle {
-  justify-content: center;
-  padding: 0;
 }
 
 .ws-sider__toggle svg {
@@ -546,7 +531,6 @@ const handleLogout = async () => {
 
 .ws-sider__toggle:hover {
   color: var(--mq-text-primary);
-  background: var(--mq-bg-subtle);
 }
 
 /* 主区 */
@@ -567,9 +551,10 @@ const handleLogout = async () => {
   justify-content: space-between;
   gap: var(--mq-space-4);
   height: var(--mq-header-height);
-  padding: 0 var(--mq-space-6);
-  background: var(--mq-bg-surface);
-  border-bottom: 1px solid var(--mq-border);
+  padding: 0 28px 0 24px;
+  background: rgba(241, 243, 248, 0.55);
+  -webkit-backdrop-filter: var(--mq-glass-blur);
+  backdrop-filter: var(--mq-glass-blur);
 }
 
 .ws-breadcrumb ol {
@@ -583,7 +568,7 @@ const handleLogout = async () => {
 }
 
 .ws-breadcrumb li {
-  color: var(--mq-text-secondary);
+  color: var(--mq-text-tertiary);
 }
 
 .ws-breadcrumb li + li::before {
@@ -594,7 +579,7 @@ const handleLogout = async () => {
 
 .ws-breadcrumb li[aria-current='page'] {
   color: var(--mq-text-primary);
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .ws-header__actions {
@@ -608,23 +593,23 @@ const handleLogout = async () => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  border: 0;
-  border-radius: var(--mq-radius-control);
-  background: transparent;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--mq-glass-border);
+  border-radius: 50%;
+  background: var(--mq-bg-subtle);
+  box-shadow: var(--mq-shadow-sm);
   color: var(--mq-text-secondary);
   cursor: pointer;
 }
 
 .ws-icon-button:hover {
-  background: var(--mq-bg-muted);
   color: var(--mq-text-primary);
 }
 
 .ws-icon-button svg {
-  width: 18px;
-  height: 18px;
+  width: 17px;
+  height: 17px;
 }
 
 .ws-notice {
@@ -634,7 +619,7 @@ const handleLogout = async () => {
 .ws-notice__title {
   margin-bottom: var(--mq-space-2);
   font-size: var(--mq-font-14);
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .ws-notice__empty {
@@ -650,17 +635,14 @@ const handleLogout = async () => {
   align-items: center;
   gap: var(--mq-space-2);
   height: 40px;
-  padding: 0 var(--mq-space-2);
-  border: 0;
-  border-radius: var(--mq-radius-control);
-  background: transparent;
+  padding: 0 12px 0 4px;
+  border: 1px solid var(--mq-glass-border);
+  border-radius: 999px;
+  background: var(--mq-bg-subtle);
+  box-shadow: var(--mq-shadow-sm);
   color: var(--mq-text-primary);
   font: inherit;
   cursor: pointer;
-}
-
-.ws-user:hover {
-  background: var(--mq-bg-muted);
 }
 
 .ws-user__avatar {
@@ -668,8 +650,8 @@ const handleLogout = async () => {
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   background: var(--mq-brand-50);
   color: var(--mq-brand-700);
@@ -681,12 +663,12 @@ const handleLogout = async () => {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  line-height: 18px;
+  line-height: 16px;
 }
 
 .ws-user__role {
   font-size: var(--mq-font-13);
-  font-weight: 500;
+  font-weight: 600;
   white-space: nowrap;
 }
 
@@ -720,7 +702,7 @@ const handleLogout = async () => {
   max-width: 220px;
   color: var(--mq-text-primary);
   font-size: var(--mq-font-13);
-  font-weight: 500;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -736,24 +718,26 @@ const handleLogout = async () => {
   color: var(--mq-danger-text);
 }
 
-/* DRG/DIP 页内 Tab */
+/* DRG/DIP 页内切换：玻璃分段控件 */
 .ws-section-tabs {
-  display: flex;
+  display: inline-flex;
   flex-shrink: 0;
-  gap: var(--mq-space-1);
-  padding: 0 var(--mq-space-6);
-  background: var(--mq-bg-surface);
-  border-bottom: 1px solid var(--mq-border);
+  align-self: flex-start;
+  gap: 2px;
+  margin: 4px 0 0 24px;
+  padding: 3px;
+  border-radius: 13px;
+  background: var(--mq-bg-muted);
 }
 
 .ws-section-tabs__item {
-  position: relative;
   display: inline-flex;
   align-items: center;
-  height: 44px;
-  padding: 0 var(--mq-space-3);
+  height: 32px;
+  padding: 0 16px;
+  border-radius: 10px;
   color: var(--mq-text-secondary);
-  font-size: var(--mq-font-14);
+  font-size: var(--mq-font-13);
   text-decoration: none;
 }
 
@@ -763,37 +747,28 @@ const handleLogout = async () => {
 
 .ws-section-tabs__item--active,
 .ws-section-tabs__item--active:hover {
-  color: var(--mq-brand-700);
-  font-weight: 500;
-}
-
-.ws-section-tabs__item--active::after {
-  position: absolute;
-  right: var(--mq-space-3);
-  bottom: -1px;
-  left: var(--mq-space-3);
-  height: 2px;
-  border-radius: 1px;
-  background: var(--mq-brand-600);
-  content: '';
+  background: #ffffff;
+  box-shadow: 0 2px 6px rgba(10, 55, 115, 0.12);
+  color: var(--mq-text-primary);
+  font-weight: 600;
 }
 
 .ws-content {
   flex: 1 1 auto;
   min-width: 0;
   overflow-x: hidden;
-  background: var(--mq-bg-page);
+  background: transparent;
 }
 
 /*
- * 过渡期：页面根节点仍带旧的整页渐变背景，这里统一压成 bg-page。
- * 质控结果列表（running-qc-refined）本轮不改版，保留原渐变画布。
+ * 过渡期：旧页面根节点自带整页背景，这里统一透明以露出光晕底。
+ * 质控结果列表（running-qc-refined）尚未迁移，保留原渐变画布。
  */
 .ws-content :deep(.workstation-route-view),
 .ws-content :deep(.workstation-route-view > *),
 .ws-content :deep(.record-pool-refined),
 .ws-content :deep(.qc-home-shell) {
-  background: var(--mq-bg-page) !important;
+  background: transparent !important;
 }
 
 .ws-content :deep(.running-qc-refined) {
