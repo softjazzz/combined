@@ -1,4 +1,5 @@
 from typing import List, Dict, Any, Literal, Optional, Sequence
+
 import asyncio
 import uuid
 import json
@@ -13,6 +14,8 @@ from fastapi.responses import Response, StreamingResponse
 from starlette.concurrency import run_in_threadpool
 from datetime import datetime, timedelta, timezone
 
+from ..services.luxian_0609.phase_scope import get_luxian_0609_acceptance_only_rule_ids
+from ..services.sample_validation_rule_sets import get_luxian_0609_customer_delivery_rule_ids
 from ..core.response import success_response, error_response, get_trace_id, ErrorCode, StatusCode
 from ..core.audit import audit_event
 from ..services.sichuan_qc_service import SichuanQCService
@@ -1927,15 +1930,21 @@ async def create_workspace_batch_job(
         for item in (payload.rule_ids or [])
         if str(item or "").strip()
     ]
+    acceptance_only = get_luxian_0609_acceptance_only_rule_ids()
+    if acceptance_only.intersection(requested_payload_rule_ids):
+        raise HTTPException(422, "待验收规则仅支持客户样本验证显式选择")
     requested_rule_set_rule_ids = list(
         requested_payload_rule_ids
         or (requested_rule_set.rule_ids if requested_rule_set else ())
     )
     if requested_rule_set and requested_rule_set.key == LUXIAN_0609_RULE_SET_KEY:
+        if not requested_payload_rule_ids:
+            requested_rule_set_rule_ids = list(get_luxian_0609_customer_delivery_rule_ids())
         requested_rule_set_rule_ids = [
             rule_id
             for rule_id in requested_rule_set_rule_ids
             if str(rule_id).strip().upper() not in LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
+            and (requested_payload_rule_ids or str(rule_id).strip().upper() not in acceptance_only)
         ]
         if requested_payload_rule_ids and not requested_rule_set_rule_ids:
             raise HTTPException(status_code=422, detail="所选规则不在当前客户运行范围")
@@ -2832,7 +2841,10 @@ async def retry_workspace_batch_job(
     current_user: Dict[str, Any] = Depends(require_product_activation),
 ):
     workspace = _sichuan_workspace_service()
-    job = workspace.retry_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
+    try:
+        job = workspace.retry_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     if not _is_workspace_batch_job(job):
         existing = workspace.get_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
         if _is_workspace_batch_job(existing) and (

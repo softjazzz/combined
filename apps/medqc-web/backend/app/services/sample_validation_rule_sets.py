@@ -348,7 +348,7 @@ def get_luxian_0916_sample_validation_rule_set() -> QCRuleSet:
 
 @lru_cache(maxsize=1)
 def get_luxian_0609_customer_delivery_rule_ids() -> tuple[str, ...]:
-    """返回客户交付范围（70条），保持目录顺序并排除客户明确无来源的规则。"""
+    """返回客户可选交付范围，保持目录顺序并排除客户明确无来源的规则。"""
 
     return tuple(get_luxian_0609_sample_validation_rule_set().rule_ids)
 
@@ -357,7 +357,7 @@ def get_luxian_0609_customer_delivery_rule_ids() -> tuple[str, ...]:
 def get_luxian_0609_customer_execution_scope() -> tuple[
     tuple[str, ...], tuple[str, ...]
 ]:
-    """将客户交付范围拆为可执行64条与冻结6条。"""
+    """按当前目录将客户交付范围拆为可执行与暂停规则。"""
 
     return partition_luxian_0609_rule_scope(get_luxian_0609_customer_delivery_rule_ids())
 

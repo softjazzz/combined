@@ -404,11 +404,16 @@ export function buildBatchJobPresentation(job: SichuanBatchJob): BatchJobPresent
   const ruleSetText = String(
     job.rule_set_name || summary.rule_set_name || job.rule_name || '质控任务',
   )
-  const scopeText = ruleIds.length
+  const baseScopeText = ruleIds.length
     ? `选定 ${ruleIds.length} 个质控点`
     : customerRuleCount > 0
       ? `全量规则 · ${customerRuleCount} 个客户质控点`
       : '质控范围未返回'
+  const acceptanceRules = asRecord(job.filters).acceptance_only_rule_ids
+  const acceptanceCount = Array.isArray(acceptanceRules) ? acceptanceRules.length : 0
+  const scopeText = acceptanceCount
+    ? `${baseScopeText} · 待验收 ${acceptanceCount} 条`
+    : baseScopeText
   const compactRuleIdsText = ruleIds.length
     ? `${customerRuleCount || ruleIds.length} 个 ${resolveRulePrefix(ruleIds)} 质控点：${ruleIds.slice(0, 3).join('、')}${ruleIds.length > 3 ? ` +${ruleIds.length - 3}` : ''}`
     : customerRuleCount > 0

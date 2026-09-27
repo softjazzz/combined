@@ -3519,6 +3519,7 @@ def stop_new_execution(monkeypatch, tmp_path):
         entry.update({
             "implementation_status": "contract_ready",
             "definition_note": "合成测试：停止新执行",
+            "release_scope": "default",
             "phase_status": "pending_definition",
             "pending_reason_code": "synthetic_stop_new_execution",
         })

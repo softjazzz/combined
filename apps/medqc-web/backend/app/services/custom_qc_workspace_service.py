@@ -4,6 +4,7 @@ import html
 import json
 import re
 import uuid
+
 from dataclasses import dataclass
 from datetime import date, datetime
 from io import BytesIO, StringIO
@@ -26,6 +27,7 @@ from sqlalchemy import (
     update,
 )
 from sqlalchemy.orm import Session
+from .luxian_0609.phase_scope import frozen_luxian_0609_delivery_scope
 from .qc_diagnostics.capture import capture_committed_results, diagnostic_capture_enabled
 
 from .document_domain_alignment import (
@@ -4396,6 +4398,8 @@ class CustomQCWorkspaceService:
                 or (automatic and original_filters_json != expected_attempt_filters_json)
             ):
                 return None
+            if formal_0609:
+                current["filters"]["scoped_customer_rule_ids"] = frozen_luxian_0609_delivery_scope(current["filters"])
             parent_job_id = _safe_text(current.get("parent_job_id"))
             rule_count = int(current.get("rule_count") or 1)
             total_records = int(current.get("total_records") or 0)
@@ -4403,6 +4407,10 @@ class CustomQCWorkspaceService:
             retry_scope_result = build_failed_rule_retry_scope(current)
             if retry_scope_result is not None:
                 retry_scope, normalized_failures = retry_scope_result
+                if formal_0609 and not set(retry_scope["rule_ids"]).issubset(
+                    current["filters"]["scoped_customer_rule_ids"]
+                ):
+                    raise ValueError("失败规则超出原任务冻结范围，请新建质控任务")
                 current_filters = dict(current.get("filters") or {})
                 current_filters.pop(LX0609_ATTEMPT_FILTER_KEY, None)
                 if formal_0609:
@@ -4536,6 +4544,7 @@ class CustomQCWorkspaceService:
                             return None
                         child_filters = _safe_json_loads(child_row.get("filters_json"), {})
                         child_filters = dict(child_filters) if isinstance(child_filters, dict) else {}
+                        child_filters["scoped_customer_rule_ids"] = frozen_luxian_0609_delivery_scope(child_filters)
                         # 父任务已清空子任务基准结果，本轮必须按原计划全量执行。
                         child_filters.pop(FAILED_RULE_RETRY_FILTER_KEY, None)
                         child_filters[LX0609_ATTEMPT_FILTER_KEY] = uuid.uuid4().hex

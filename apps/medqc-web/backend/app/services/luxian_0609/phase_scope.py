@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Iterable
+from typing import Iterable, Mapping
 
 from ..luxian_0609_rule_master import (
     LUXIAN_0609_RULE_DEFINITION_VERSION,
@@ -190,3 +190,35 @@ def partition_luxian_0609_rule_scope(
         if entry.rule_id in requested and entry.phase_status != "phase_1_target"
     )
     return executable, withheld
+
+
+def get_luxian_0609_acceptance_only_rule_ids() -> frozenset[str]:
+    """待验收选择范围仅由总表投影，不改变执行合同或历史身份。"""
+    return frozenset(
+        entry.rule_id for entry in load_luxian_0609_rule_master()
+        if entry.release_scope == "acceptance_only"
+    )
+
+
+def frozen_luxian_0609_delivery_scope(filters: Mapping[str, object]) -> list[str]:
+    """恢复已保存的交付范围；旧任务只读原计划，禁止用当前目录猜测。"""
+    def ids(key: str) -> list[str]:
+        value = filters.get(key)
+        if value is None:
+            return []
+        if not isinstance(value, (list, tuple)) or any(
+            not isinstance(item, str) or not item.strip().upper().startswith("LX0609-")
+            for item in value
+        ):
+            raise ValueError("任务规则范围无法恢复，请新建质控任务")
+        return list(dict.fromkeys(item.strip().upper() for item in value))
+
+    scope = ids("scoped_customer_rule_ids")
+    if scope:
+        return scope
+    execution = ids("rule_ids")
+    paused = ids("paused_customer_rule_ids")
+    gates = ids("gate_only_customer_rule_ids")
+    if not execution and not paused and not gates:
+        raise ValueError("任务缺少已保存的规则范围，请新建质控任务")
+    return list(dict.fromkeys(execution + paused + gates))

@@ -429,27 +429,42 @@ export function useCustomerSampleValidationController() {
   const allLuxianRuleIds = computed(() =>
     normalizeLuxianRuleIds(luxianRuleFamilies.value.flatMap((family) => family.ruleIds)),
   )
+  const acceptanceOnlyRuleIds = computed(() => new Set(
+    luxian0609RuleCatalog.value
+      .filter((rule) => rule.release_scope === 'acceptance_only')
+      .map((rule) => rule.rule_id),
+  ))
+  const defaultLuxianRuleIds = computed(() =>
+    allLuxianRuleIds.value.filter((id) => !acceptanceOnlyRuleIds.value.has(id)),
+  )
+  const selectedAcceptanceCount = computed(() =>
+    selectedLuxianCustomerRuleIds.value.filter((id) => acceptanceOnlyRuleIds.value.has(id)).length,
+  )
   const isAllLuxianRulesSelected = computed(() => {
     if (!allLuxianRuleIds.value.length) return false
     const selected = new Set(selectedLuxianCustomerRuleIds.value)
-    return allLuxianRuleIds.value.every((ruleId) => selected.has(ruleId))
+    return defaultLuxianRuleIds.value.length > 0 && defaultLuxianRuleIds.value.every((ruleId) => selected.has(ruleId))
   })
   const selectedLuxianFamilyCount = computed(
     () =>
       luxianRuleFamilies.value.filter((family) => luxianRuleFamilySelectedCount(family) > 0).length,
   )
-  const luxianDefaultRuleCount = computed(() => Number(selectedRuleSet.value?.rule_count || 71))
+  const luxianDefaultRuleCount = computed(() =>
+    Number(selectedRuleSet.value?.rule_count || 71) - acceptanceOnlyRuleIds.value.size,
+  )
   const luxianScopeModeText = computed(() =>
     selectedLuxianCustomerRuleIds.value.length
-      ? isAllLuxianRulesSelected.value
+      ? selectedAcceptanceCount.value
+        ? `当前将运行：${selectedLuxianCustomerRuleIds.value.length} 个质控点 · 待验收 ${selectedAcceptanceCount.value} 条`
+        : isAllLuxianRulesSelected.value
         ? `当前将运行：全部 ${selectedLuxianCustomerRuleIds.value.length} 个质控点`
         : `当前将运行：${selectedLuxianFamilyCount.value} 个质控族 · ${selectedLuxianCustomerRuleIds.value.length} 个质控点`
       : `当前将运行：全部 ${luxianDefaultRuleCount.value} 个0609质控点`,
   )
   const luxianScopeHelperText = computed(() =>
     selectedLuxianCustomerRuleIds.value.length
-      ? '已限定本次质控范围；只会验证勾选的 LX0609 质控点。'
-      : `未选择时默认运行全部 ${luxianDefaultRuleCount.value} 个 0609 质控点；也可按质控族快速限定范围。`,
+      ? '已限定本次质控范围；待验收规则须逐条勾选，全选和质控族选择不包含待验收规则。'
+      : `未选择时默认运行全部 ${luxianDefaultRuleCount.value} 个 0609 质控点；待验收规则须逐条勾选，全选和质控族选择不包含待验收规则。`,
   )
   const mainRuleSets = computed(() =>
     ruleSets.value.filter((item) => !item.advanced && (item.display_group || 'main') === 'main'),
@@ -1342,6 +1357,7 @@ export function useCustomerSampleValidationController() {
         : '')
     return {
       ruleId,
+      releaseScope: rule.release_scope,
       name: String(rule.name || rule.description || ruleId).trim() || ruleId,
       description: String(rule.description || rule.name || '').trim(),
       requiredDocumentsLabel: String(requiredDocumentsLabel || '').trim(),
@@ -1637,7 +1653,9 @@ export function useCustomerSampleValidationController() {
   }
 
   function selectLuxianRuleFamily(ruleIds: string[]) {
-    const normalizedRuleIds = normalizeLuxianRuleIds(ruleIds)
+    const normalizedRuleIds = normalizeLuxianRuleIds(ruleIds).filter(
+      (id) => !acceptanceOnlyRuleIds.value.has(id),
+    )
     const current = new Set(selectedLuxianCustomerRuleIds.value)
     if (normalizedRuleIds.every((ruleId) => current.has(ruleId))) {
       normalizedRuleIds.forEach((ruleId) => current.delete(ruleId))
@@ -1650,7 +1668,7 @@ export function useCustomerSampleValidationController() {
   function toggleAllLuxianRuleFamilies() {
     selectedLuxianCustomerRuleIds.value = isAllLuxianRulesSelected.value
       ? []
-      : normalizeLuxianRuleIds(allLuxianRuleIds.value)
+      : normalizeLuxianRuleIds(defaultLuxianRuleIds.value)
   }
 
   function clearLuxianRuleScope() {

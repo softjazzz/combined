@@ -59,6 +59,7 @@ class Luxian0609RuleMasterEntry:
     active_criteria: tuple[str, ...] = ()
     pending_criteria: tuple[str, ...] = ()
     pending_reason_code: str = ""
+    release_scope: str = "default"
 
     def __post_init__(self) -> None:
         if not _RULE_ID_PATTERN.fullmatch(self.rule_id):
@@ -72,6 +73,12 @@ class Luxian0609RuleMasterEntry:
         if self.implementation_status != "active" and not self.definition_note:
             raise ValueError(f"inactive LX0609 rule must explain its status: {self.rule_id}")
 
+        if self.release_scope not in {"default", "acceptance_only"}:
+            raise ValueError(f"invalid LX0609 release scope: {self.rule_id}")
+        if self.release_scope == "acceptance_only" and (
+            self.implementation_status != "active" or self.phase_status != "phase_1_target"
+        ):
+            raise ValueError(f"acceptance-only rule must be an active phase target: {self.rule_id}")
         if self.phase_status not in _PHASE_STATUSES:
             raise ValueError(f"invalid LX0609 phase status: {self.rule_id}")
         if (
@@ -172,6 +179,7 @@ def compile_luxian_0609_rule_master(
                 source_document=_clean(raw.get("source_document")),
                 qc_point=_clean(raw.get("qc_point")),
                 implementation_status=_clean(raw.get("implementation_status")),
+                release_scope=_clean(raw.get("release_scope", "default")),
                 definition_note=_clean(raw.get("definition_note")),
                 policy_sources=tuple(raw_policy_sources),
                 policy_summary=_clean(raw.get("policy_summary")),

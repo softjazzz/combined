@@ -19,6 +19,7 @@ export const RUN_DUPLICATE_GUARD_MS = 120000
 export const CUSTOMER_SAMPLE_GUIDE_STORAGE_KEY = 'medqc_customer_sample_validation_guide_seen_v1'
 export type LuxianRuleOption = {
   ruleId: string
+  releaseScope?: 'default' | 'acceptance_only'
   name: string
   description: string
   requiredDocumentsLabel: string

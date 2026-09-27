@@ -13,6 +13,7 @@ import uuid
 from fastapi import HTTPException
 
 from ..core.settings import get_settings
+from .luxian_0609.phase_scope import frozen_luxian_0609_delivery_scope
 from .case_identity import CaseRef, case_refs_from_records, normalize_case_refs
 from .custom_qc_workspace_service import (
     CustomQCWorkspaceService,
@@ -1316,6 +1317,8 @@ async def run_sichuan_workspace_batch_job(
             return
         current = workspace.get_batch_job_for_processing(job_id=job_id) or job
         filters = dict(current.get("filters") or {})
+        if filters.get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY:
+            filters["scoped_customer_rule_ids"] = frozen_luxian_0609_delivery_scope(filters)
         filters.pop(LX0609_ATTEMPT_FILTER_KEY, None)
         filters.pop(LX0609_LEASE_FILTER_KEY, None)
         failed_rule_retry_scope = (
@@ -1327,6 +1330,14 @@ async def run_sichuan_workspace_batch_job(
             failed_rule_retry_scope.get("schema_version")
             == FAILED_RULE_RETRY_SCHEMA_VERSION
         )
+        if (
+            filters.get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY
+            and is_failed_rule_retry
+            and not set(failed_rule_retry_scope.get("rule_ids") or []).issubset(
+                filters["scoped_customer_rule_ids"]
+            )
+        ):
+            raise ValueError("失败规则超出原任务冻结范围，请新建质控任务")
         retry_base_items = list(current.get("items") or []) if is_failed_rule_retry else []
         retry_base_failures = (
             list(current.get("failed_records") or []) if is_failed_rule_retry else []

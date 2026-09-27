@@ -153,6 +153,7 @@ export type ManualSampleValidationRuleSetListResult = {
 }
 
 export type ManualLuxian0609RuleCatalogItem = {
+  release_scope?: 'default' | 'acceptance_only'
   rule_id: string
   rule_code?: string
   name: string

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import uuid
+
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Annotated, Any, Dict, Literal, Optional
@@ -11,6 +12,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPExcepti
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
+from ..services.luxian_0609.phase_scope import get_luxian_0609_acceptance_only_rule_ids
 from ..core.response import get_trace_id, success_response
 from ..core.settings import get_settings
 from ..core.security import get_current_user, require_roles
@@ -1195,6 +1197,10 @@ async def run_sample_pool_intrinsic_validation(
         rule_set_version = formal_rule_set.version
 
     if rule_set_key == LUXIAN_0609_QC_RULE_SET_KEY:
+        if not requested_selected_rule_ids:
+            acceptance_only = get_luxian_0609_acceptance_only_rule_ids()
+            rule_ids = [rid for rid in rule_ids if rid not in acceptance_only]
+            selected_customer_delivery_rule_ids = list(rule_ids)
         paused_selected_rule_ids = [
             rule_id
             for rule_id in requested_selected_rule_ids
@@ -1220,7 +1226,7 @@ async def run_sample_pool_intrinsic_validation(
         paused_customer_rule_ids = (
             paused_selected_rule_ids
             if requested_selected_rule_ids
-            else sorted(_LUXIAN_0609_PAUSED_CUSTOMER_RULE_IDS)
+            else sorted(_LUXIAN_0609_PAUSED_CUSTOMER_RULE_IDS.intersection(selected_customer_delivery_rule_ids))
         )
     else:
         paused_customer_rule_ids = []
@@ -1430,6 +1436,12 @@ async def run_sample_pool_intrinsic_validation(
         "selected_rule_ids": requested_selected_rule_ids,
         "selected_record_ids": record_ids if selected_record_count else [],
         "scoped_customer_rule_ids": selected_customer_delivery_rule_ids,
+        # 仅用于任务摘要，执行范围仍由上面的冻结计划决定。
+        "acceptance_only_rule_ids": [
+            rid for rid in selected_customer_delivery_rule_ids
+            if rule_set_key == LUXIAN_0609_QC_RULE_SET_KEY
+            and rid in get_luxian_0609_acceptance_only_rule_ids()
+        ],
         "selected_sample_item_ids": [str(item.get("id") or "").strip() for item in runnable_items if str(item.get("id") or "").strip()],
         "selected_sample_count": len(runnable_items),
         "dedup_record_count": len(record_refs),
@@ -1471,7 +1483,9 @@ async def run_sample_pool_intrinsic_validation(
         luxian_scope_rule_ids = selected_customer_delivery_rule_ids
         if not luxian_scope_rule_ids:
             luxian_scope_rule_ids = _normalize_rule_id_list(rule_ids)
-        luxian_family_scopes = _build_luxian_0609_family_scopes(luxian_scope_rule_ids)
+        luxian_family_scopes = _build_luxian_0609_family_scopes(
+            [rid for rid in luxian_scope_rule_ids if rid not in paused_customer_rule_ids]
+        )
         paused_rule_ids_by_family = {
             str(scope.get("key") or "").strip(): _normalize_rule_id_list(
                 list(scope.get("rule_ids") or [])
@@ -1576,11 +1590,7 @@ async def run_sample_pool_intrinsic_validation(
                 for family_scope in luxian_family_scopes
                 for rule_id in list(family_scope.get("rule_ids") or [])
             ],
-            "scoped_customer_rule_ids": [
-                rule_id
-                for family_scope in luxian_family_scopes
-                for rule_id in list(family_scope.get("rule_ids") or [])
-            ],
+            "scoped_customer_rule_ids": list(selected_customer_delivery_rule_ids),
         }
         parent_job = workspace.create_batch_job(
             draft=pseudo_draft,
@@ -1650,6 +1660,10 @@ async def run_sample_pool_intrinsic_validation(
                 "paused_customer_rule_count": len(family_paused_rule_ids),
                 "selected_rule_ids": family_rule_ids,
                 "scoped_customer_rule_ids": family_delivery_rule_ids,
+                "acceptance_only_rule_ids": [
+                    rid for rid in job_filters["acceptance_only_rule_ids"]
+                    if rid in family_delivery_rule_ids
+                ],
                 "record_rule_map": family_record_rule_map,
                 "group_by_luxian_family": False,
                 "parent_job_id": parent_job_id,

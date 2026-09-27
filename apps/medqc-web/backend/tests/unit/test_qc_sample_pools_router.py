@@ -1715,10 +1715,9 @@ async def test_run_sample_pool_intrinsic_validation_should_use_luxian_0609_rule_
             "LX0609-05-01-04",
             "LX0609-05-03-01",
             "LX0609-10-03-01",
-        }
+        } | qc_sample_pools.get_luxian_0609_acceptance_only_rule_ids()
     ]
-    assert len(luxian_rule_set.rule_ids) == 72
-    assert luxian_rule_set.rule_ids[-1] == "LX0609-01-02-02"
+    assert len(luxian_rule_set.rule_ids) == 79
     assert sample_service.get_runnable_items_calls[0]["validation_mode"] == "customer"
     assert created["draft_ids"] == expected_task_rule_ids
     assert created["filters"]["validation_mode"] == "customer"
@@ -1726,9 +1725,9 @@ async def test_run_sample_pool_intrinsic_validation_should_use_luxian_0609_rule_
     assert created["filters"]["rule_set_name"] == "泸县0609质控点验证 v1"
     assert created["filters"]["rule_set_version"] == luxian_rule_set.version
     assert created["filters"]["rule_count"] == len(expected_task_rule_ids)
-    assert created["filters"]["customer_rule_count"] == 72
+    assert created["filters"]["customer_rule_count"] == 74
     assert created["filters"]["execution_rule_count"] == len(expected_task_rule_ids)
-    assert created["filters"]["paused_customer_rule_ids"] == [
+    assert set(created["filters"]["paused_customer_rule_ids"]) == {
         "LX0609-03-01-01",
         "LX0609-03-01-02",
         "LX0609-03-01-03",
@@ -1739,25 +1738,26 @@ async def test_run_sample_pool_intrinsic_validation_should_use_luxian_0609_rule_
         "LX0609-05-01-04",
         "LX0609-05-03-01",
         "LX0609-10-03-01",
-    ]
+    }
     assert created["filters"]["paused_customer_rule_count"] == 10
     assert created["filters"]["selected_rule_ids"] == []
-    assert created["filters"]["scoped_customer_rule_ids"] == []
-    assert set(identity_capture["selected_rule_ids"]) == set(luxian_rule_set.rule_ids)
+    expected_delivery = set(luxian_rule_set.rule_ids) - qc_sample_pools.get_luxian_0609_acceptance_only_rule_ids()
+    assert set(created["filters"]["scoped_customer_rule_ids"]) == expected_delivery
+    assert set(identity_capture["selected_rule_ids"]) == expected_delivery
     assert "record_rule_map" not in created["filters"]
     assert response["data"]["validation_mode"] == "customer"
     assert response["data"]["rule_set_key"] == "luxian_0609_qc_v1"
     assert response["data"]["rule_count"] == len(expected_task_rule_ids)
-    assert response["data"]["customer_rule_count"] == 72
+    assert response["data"]["customer_rule_count"] == 74
     assert response["data"]["execution_rule_count"] == len(expected_task_rule_ids)
     assert response["data"]["selected_rule_ids"] == []
-    assert response["data"]["scoped_customer_rule_ids"] == []
+    assert set(response["data"]["scoped_customer_rule_ids"]) == expected_delivery
     assert response["data"]["rule_ids"] == expected_task_rule_ids
 
 
 def test_luxian_0609_default_rule_set_must_follow_phase_scope_and_preserve_pending_delivery():
     rule_set = sample_validation_rule_sets.get_luxian_0609_sample_validation_rule_set()
-    all_ids = [entry.rule_id for entry in load_luxian_0609_phase_scope()]
+    all_ids = [entry.rule_id for entry in load_luxian_0609_phase_scope() if entry.catalog_registered]
     executable_ids, pending_ids = partition_luxian_0609_rule_scope(all_ids)
     excluded_ids = sample_validation_rule_sets.LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
     expected_customer_ids = tuple(rule_id for rule_id in all_ids if rule_id not in excluded_ids)
@@ -1766,8 +1766,8 @@ def test_luxian_0609_default_rule_set_must_follow_phase_scope_and_preserve_pendi
     assert excluded_ids == frozenset(
         {"LX0609-11-01-01", "LX0609-11-02-01", "LX0609-11-02-02", "LX0609-11-03-01", "LX0609-11-03-02"}
     )
-    assert len(rule_set.rule_ids) == 72
-    assert len(executable_ids) == 67
+    assert len(rule_set.rule_ids) == 79
+    assert len(executable_ids) == 74
     assert set(excluded_ids).isdisjoint(set(rule_set.rule_ids))
     assert pending_ids == (
         "LX0609-03-01-01",
@@ -1861,9 +1861,9 @@ async def test_run_sample_pool_should_skip_paused_customer_rules_but_keep_catalo
     }
     created = workspace_service.create_batch_job_calls[0]
     assert paused.isdisjoint(created["filters"]["rule_ids"])
-    assert created["filters"]["rule_count"] == 62
-    assert response["data"]["rule_count"] == 62
-    assert len(sample_validation_rule_sets.get_luxian_0609_sample_validation_rule_set().rule_ids) == 72
+    assert created["filters"]["rule_count"] == 64
+    assert response["data"]["rule_count"] == 64
+    assert len(sample_validation_rule_sets.get_luxian_0609_sample_validation_rule_set().rule_ids) == 79
 
 
 @pytest.mark.asyncio
@@ -2541,7 +2541,7 @@ async def test_grouped_full_luxian_run_assigns_paused_rules_to_family_delivery_s
     children_by_family = {call["family_key"]: call for call in child_calls}
 
     surgery = children_by_family["surgery_anesthesia"]["filters"]
-    assert surgery["rule_ids"] == [
+    assert set(surgery["rule_ids"]) == {
         "LX0609-04-02-01",
         "LX0609-04-02-03",
         "LX0609-04-01-01",
@@ -2552,8 +2552,10 @@ async def test_grouped_full_luxian_run_assigns_paused_rules_to_family_delivery_s
         "LX0609-04-04-03",
         "LX0609-04-01-02",
         "LX0609-04-01-03",
-    ]
-    assert surgery["scoped_customer_rule_ids"] == [
+        "LX0609-04-01-04",
+        "LX0609-04-01-05",
+    }
+    assert set(surgery["scoped_customer_rule_ids"]) == {
         "LX0609-04-02-01",
         "LX0609-04-02-03",
         "LX0609-04-02-04",
@@ -2567,26 +2569,28 @@ async def test_grouped_full_luxian_run_assigns_paused_rules_to_family_delivery_s
         "LX0609-04-04-03",
         "LX0609-04-01-02",
         "LX0609-04-01-03",
-    ]
-    assert surgery["paused_customer_rule_ids"] == [
+        "LX0609-04-01-04",
+        "LX0609-04-01-05",
+    }
+    assert set(surgery["paused_customer_rule_ids"]) == {
         "LX0609-04-02-04",
         "LX0609-05-01-01",
         "LX0609-04-04-01",
-    ]
+    }
 
     transfusion = children_by_family["transfusion"]["filters"]
-    assert transfusion["rule_ids"] == [
+    assert set(transfusion["rule_ids"]) == {
         "LX0609-07-01-01",
         "LX0609-07-01-02",
         "LX0609-07-02-01",
         "LX0609-07-02-02",
         "LX0609-07-03-01",
         "LX0609-07-04-01",
-    ]
-    assert transfusion["scoped_customer_rule_ids"] == [
+    }
+    assert set(transfusion["scoped_customer_rule_ids"]) == {
         *transfusion["rule_ids"],
         "LX0609-07-04-02",
-    ]
+    }
     assert transfusion["paused_customer_rule_ids"] == ["LX0609-07-04-02"]
 
     all_delivery_rule_ids = {
@@ -2599,11 +2603,11 @@ async def test_grouped_full_luxian_run_assigns_paused_rules_to_family_delivery_s
         for child in child_calls
         for rule_id in child["filters"]["rule_ids"]
     }
-    assert len(all_delivery_rule_ids) == 72
-    assert len(all_execution_rule_ids) == 62
+    assert len(all_delivery_rule_ids) == 74
+    assert len(all_execution_rule_ids) == 64
     assert all_delivery_rule_ids == set(
         sample_validation_rule_sets.get_luxian_0609_sample_validation_rule_set().rule_ids
-    )
+    ) - qc_sample_pools.get_luxian_0609_acceptance_only_rule_ids()
     assert all_execution_rule_ids == all_delivery_rule_ids - set(
         qc_sample_pools._LUXIAN_0609_PAUSED_CUSTOMER_RULE_IDS
     )

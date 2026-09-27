@@ -592,8 +592,8 @@ def test_parent_retry_rotates_each_child_queued_snapshot(storage):
     assert new_first.pop(workspace_module.LX0609_ATTEMPT_FILTER_KEY) != new_second.pop(
         workspace_module.LX0609_ATTEMPT_FILTER_KEY
     )
-    assert new_first == first_filters
-    assert new_second == second_filters
+    assert new_first == {**first_filters, "scoped_customer_rule_ids": first_filters["rule_ids"]}
+    assert new_second == {**second_filters, "scoped_customer_rule_ids": second_filters["rule_ids"]}
     assert first["items"] == []
     assert first["failed_records"] == []
     service.fail_batch_job(

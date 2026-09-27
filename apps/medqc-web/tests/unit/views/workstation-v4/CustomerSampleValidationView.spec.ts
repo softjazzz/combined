@@ -1414,6 +1414,36 @@ describe('CustomerSampleValidationView', () => {
     })
   })
 
+  it('待验收规则不被全选或族选择带入，但可以逐条勾选', async () => {
+    const rules = buildLuxian0609Rules()
+    const acceptanceId = rules[0].rule_id
+    listLuxian0609CustomerRules.mockResolvedValue({
+      success: true,
+      data: { rules: rules.map((rule) => ({ ...rule,
+        release_scope: rule.rule_id === acceptanceId ? 'acceptance_only' : 'default',
+      })) },
+    })
+    const wrapper = await mountView()
+    await flushPromises()
+    await wrapper.findAll('button').find((node) => node.text().includes('全选8个质控族'))!.trigger('click')
+    await nextTick()
+    const group = wrapper.findAll('.customer-sample-luxian-rule-group')[0]
+    const expand = group.findAll('button').find((node) => node.text().includes('查看质控点'))
+    if (expand) await expand.trigger('click')
+    await nextTick()
+    const input = wrapper.find(`input.luxian-rule-checkbox[value="${acceptanceId}"]`)
+    expect(input.exists()).toBe(true)
+    expect((input.element as HTMLInputElement).checked).toBe(false)
+    expect(group.text()).toContain('待验收')
+    // 取消/重选本组均不自动勾选待验收项。
+    await group.findAll('button').find((node) => node.text().includes('取消本组'))!.trigger('click')
+    await group.findAll('button').find((node) => node.text().includes('选择本组'))!.trigger('click')
+    expect((input.element as HTMLInputElement).checked).toBe(false)
+    await input.setValue(true)
+    expect((input.element as HTMLInputElement).checked).toBe(true)
+    expect(wrapper.text()).toContain('待验收 1 条')
+  })
+
   it('病历池明确标注在院、已出院和状态待同步病例', async () => {
     getManualSamplePoolRecords.mockResolvedValueOnce({
       success: true,
