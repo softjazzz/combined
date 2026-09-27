@@ -1,0 +1,73 @@
+# 工作台 UI 迁移到 v7.1 液态玻璃（长程任务）
+
+> 创建：2026-09-27 ｜ 分支：`codex/lx0609-rule-id-integration` ｜ 规范：[WorkstationV4-医疗浅色-DESIGN.md](../0418/UI/WorkstationV4-医疗浅色-DESIGN.md)（v7.1）
+>
+> 目标：工作台 17 个导航入口及其弹窗、抽屉，全部按 v7.1 规范与设计稿统一视觉。**只改 UI，不改后端接口、业务逻辑、状态语义。**
+
+## 已完成（基础层）
+
+| 提交 | 内容 |
+| --- | --- |
+| `d0a458edf` `ee4e6364c` `241793527` | Token、定制图标 `MqIcon`、外壳玻璃侧栏 |
+| `14ec5f7cc` | 首页概览 |
+| `55999286d` | 去掉顶栏，账号区移入侧栏 |
+| `8af96a298` | 公共类 `mq-components.css` + 工作台 antd 主题 |
+| `1c4baa3f0` | 系统配置页（数据同步 Tab）+ 执行前确认弹窗 |
+| `4dc896e70` | 设计规范 v7.1 |
+
+## 任务队列（每轮只做一项，按顺序）
+
+状态：`待办` / `进行中` / `完成（提交号）` / `待确认`（需用户看设计稿） / `阻塞`（写明原因）
+
+| # | 页面（路由 `/workstation-v5/…`） | 源文件 | 模板 | 状态 |
+| --- | --- | --- | --- | --- |
+| 1 | 病历池 `worklist`（含生成首页/首页质控/结算清单质控三个 `?stage=`） | `workstation-v4/WorkstationV4View.vue`、`components/WorkstationV4ListView.vue` | 列表 + 预览（PoolV71） | 待办 |
+| 2 | 运行病历质控 `records/running`、终末病历质控 `records/final` | `workstation-v4/QcRecordResultListView.vue` 及其预览组件 | 列表 + 预览（RunningV71） | 待办 |
+| 3 | 质控规则 `rules` | `workstation-v4/WorkstationRulesView.vue` 及其子组件 | 目录（RulesV71） | 待办 |
+| 4 | 系统配置剩余部分：连接配置、执行日志、首页抽取设置、模型性能、模型配置 | `components/sync-console/ConnectionStudio.vue`、`SyncRunPanel.vue`、`components/system-config/*`、`components/LLMApiConfig.vue` | 表单 / 设置（SystemConfigV71） | 待办 |
+| 5 | 客户样本验证 `customer-sample-validation` | `workstation-v4/CustomerSampleValidationView.vue` | 列表 + 预览 | 待办 |
+| 6 | 质控反馈记录 `qc-feedback-demo` | `workstation-v4/QcResultFeedbackDemoListView.vue` | 列表 + 预览 | 待办 |
+| 7 | 手术分级目录 `customer-sample-validation/surgery-catalog` | `workstation-v4/components/SurgeryProcedureCatalogView.vue` | 目录 | 待办 |
+| 8 | 自定义质控点 `rules/custom-workspace` | `views/rules/CustomRuleWorkspaceView.vue` | 目录 + 编辑器（先出设计稿） | 待办 |
+| 9 | 统计分析 `stats` | `workstation-v4/LuxianQcAnalyticsView.vue` | 概览 | 待办 |
+| 10 | DRG/DIP 分析、ICD 编码查询、数据上传 `drg/*` `icd` `upload` | `workstation-v4/WorkstationV2View.vue` 及其子组件 | 概览 / 目录 / 表单 | 待办 |
+| 11 | 数据管理 `data` | `workstation-v4/CDMDataView.vue` | 目录 | 待办 |
+| 12 | 全站收尾：残留旧色值、`wv4-*` 旧类引用、过渡期 `:deep` 背景覆盖清理，全页截图总览 | `WorkstationLayout.vue` 等 | — | 待办 |
+
+不在范围：登录页（用户要求保留原品牌设计）、旧版后台（非 `/workstation-v5`）。
+
+## 每一轮的固定步骤
+
+1. **定位**：读本文件，取第一项 `待办` 或 `进行中`，标为 `进行中`。用 CodeGraph（`codegraph explore`）或读源码弄清页面结构、子组件、弹窗和抽屉、单测里依赖的 `data-testid` 与文案。
+2. **迁移前截图**：`MSYS_NO_PATHCONV=1 node ../../.tmp/ui-design-v71/shot.cjs <路由> <标签> 1440,1180`，截图保存在 `../../.tmp/ui-baseline-20260927/`，并对照对应设计稿（`design-*V71-private.png`）。
+3. **判断是否需要设计稿**：页面能套进已有的四类模板就直接做。如果需要模板之外的新结构（例如第 8 项的编辑器），先用 `.tmp/ui-design-v71/gen_v71_config.py` 的写法补一张设计稿，发给用户，本项标为 `待确认`，然后跳到下一项，不等回复。
+4. **实现**，遵守规范第 10 节：
+   - 页头用 `.mq-page-head`，页内一级切换用 `.mq-segmented`，卡片用 `.mq-card`，状态用 `.mq-status`，弹窗用 `<a-modal wrap-class-name="mq-modal">`。
+   - 页面私有样式放到 `styles/<page>.css`，通过 `<style scoped src>` 引入，不复制公共类的写法。缺少的公共件补进 `mq-components.css`。
+   - 只改模板和样式。脚本只允许做纯展示层的调整：状态到 class 的映射、Tab 列表的 computed、删掉模板从未引用的展示文案。接口调用、状态语义、事件流一律不动。
+   - 保留全部 `data-testid`。`.vue` 文件不超过 1200 行，原本就超的至少不能再增加。
+5. **验证**：
+   - 运行 `npx eslint --fix <改动文件>`、`npm run type-check`（或 `npx vue-tsc --noEmit`），以及相关单测。
+   - 单测断言按新结构更新时，不能删掉功能断言。
+   - 迁移后在两个宽度各截一张图并查看，确认没有溢出、没有中文逐字换行、没有和设计稿明显偏离的地方。
+6. **提交**：先 `npm run check:encoding`，再按路径 `git add`。只暂存本项的 UI 文件，后端 `.py`、`index.prebuilt.css` 等不属于本任务的改动一律不暂存。提交信息用中文，结尾带 Co-Authored-By。
+7. **更新本文件**：把本项状态改为 `完成（提交号）`，并在「执行记录」里追加一行：日期、做了什么、验证结果、遗留问题。这次更新和本项代码放在同一个提交里，或者紧跟着单独提交。
+
+## 停止条件
+
+- 队列中所有项都是 `完成`、`待确认` 或 `阻塞` 时，结束 loop，向用户汇总。
+- 遇到需要用户决定的事，比如要改接口、要删功能、业务口径不清楚：标为 `阻塞` 并写明原因，然后继续下一项。
+- 同一项连续两轮验证失败：标为 `阻塞`，记录失败输出。
+
+## 已知环境情况
+
+- 开发服务器在 `127.0.0.1:3100`，可能由其他会话启动，截图脚本可以直接用。如果连不上，用 `preview_start medqc-web-worktree` 启动。
+- 本地连不上医院源库，依赖源库的状态只能靠单测验证，截图里的连接失败提示和改版无关。
+- `QCOverviewView.spec.ts` 里「最近成功质控」时间断言依赖北京时区，在美国中部时区的机器上会失败。这是改版前就有的问题，按用户要求不处理。
+- 截图用的是演示账号（功能演示账号），它看不到高级设置等实施专用区块。
+
+## 执行记录
+
+| 日期 | 项 | 结果 |
+| --- | --- | --- |
+| 2026-09-27 | 创建计划 | 基础层与系统配置数据同步 Tab 已完成，队列从第 1 项开始 |
