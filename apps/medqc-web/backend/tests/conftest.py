@@ -41,6 +41,38 @@ def _isolate_consultation_opinion_freeze(tmp_path, monkeypatch):
     )
 
 
+@pytest.fixture(autouse=True)
+def _empty_rule_set_version_store(monkeypatch):
+    """默认拒连时，规则集版本表视为空表（只有内置版本）。
+
+    任务创建与 prepare 会读取 current_version；单元测试不连库，用内存 SQLite 空表
+    模拟“未发布任何版本”，与生产表为空时的行为一致。显式配置隔离库时不替换。
+    需要其他版本数据或故障语义的用例自行覆盖 SessionLocal。
+    """
+
+    if _explicit_database_url:
+        yield
+        return
+    import sqlalchemy as sa
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+
+    from app.database.models.qc import QCRuleSetVersion
+    from app.services import rule_set_version_service
+
+    engine = sa.create_engine(
+        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool,
+    )
+    QCRuleSetVersion.__table__.create(engine)
+    monkeypatch.setattr(
+        rule_set_version_service,
+        "SessionLocal",
+        sessionmaker(bind=engine, expire_on_commit=False),
+    )
+    yield
+    engine.dispose()
+
+
 @pytest.fixture(scope="session")
 def app():
     """

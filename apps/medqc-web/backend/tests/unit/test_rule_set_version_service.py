@@ -18,6 +18,14 @@ from app.services import sichuan_workspace_batch_prepare as prepare_module
 from app.services.qc_rule_sets import SICHUAN_RULE_SETS
 from app.services.sample_validation_rule_sets import LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
 
+
+@pytest.fixture(autouse=True)
+def _publish_gate_open(monkeypatch):
+    """本文件验证发布逻辑本身，显式打开发布闸门（生产默认关闭，见 PUBLISH_ENABLED）。"""
+    from app.services import rule_set_version_service as _svc
+
+    monkeypatch.setattr(_svc, "PUBLISH_ENABLED", True)
+
 KEY = "luxian_0609_qc_v1"
 BUILTIN = "2026-06-09"
 ACTOR = "u-manager"
@@ -91,10 +99,11 @@ def _prepare_filters(rule_set_key: str) -> dict[str, Any]:
 
 @pytest.mark.parametrize("rule_set_key", sorted(SICHUAN_RULE_SETS))
 def test_builtin_resolution_equals_current_prepare_computation(rule_set_key, monkeypatch):
-    # 内置版本不得读数据库：会话工厂置空仍可解析。
-    monkeypatch.setattr(service, "SessionLocal", None)
     rule_set = SICHUAN_RULE_SETS[rule_set_key]
+    # prepare 按 current_version 取版本，需读版本表（conftest 提供空表，即只有内置版本）。
     filters = _prepare_filters(rule_set_key)
+    # 内置版本解析不得读数据库：会话工厂置空仍可解析。
+    monkeypatch.setattr(service, "SessionLocal", None)
     resolved = service.resolve_rule_set_version(rule_set_key, rule_set.version)
 
     assert resolved["source"] == "builtin"

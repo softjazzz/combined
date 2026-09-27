@@ -37,6 +37,11 @@ from ..core.audit import audit_event
 from ..core.response import success_response, paginated_response, get_trace_id
 from ..core.security import get_current_user
 from ..services.qc_rule_sets import get_sichuan_rule_set
+from ..services.rule_set_version_service import (
+    RuleSetVersionNotFound,
+    RuleSetVersionUnavailable,
+    current_version,
+)
 from ..services.detached_task_runner import submit_detached_task
 from ..services.product_activation import require_product_activation
 from ..services.sichuan_qc_service import SichuanQCService
@@ -379,6 +384,13 @@ async def create_task(
             validate_active_running_date_range(task_data.date_range)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+    # 任务冻结创建时的当前规则集版本（最近一次发布；未发布时为内置版本）。
+    try:
+        frozen_rule_set_version = await run_in_threadpool(current_version, rule_set.key)
+    except RuleSetVersionNotFound as exc:
+        raise HTTPException(status_code=422, detail="规则集不存在或不可用") from exc
+    except RuleSetVersionUnavailable as exc:
+        raise HTTPException(status_code=503, detail="规则集版本暂不可读取，请稍后重试") from exc
     task_id = str(uuid.uuid4())
     task_number = _generate_task_number()
 
@@ -408,7 +420,7 @@ async def create_task(
     }
     task["scene"] = task_data.scene.value
     task["rule_set_key"] = rule_set.key
-    task["rule_set_version"] = rule_set.version
+    task["rule_set_version"] = frozen_rule_set_version
     if task_data.record_refs:
         task["record_refs"] = [record_ref.model_dump() for record_ref in task_data.record_refs]
 

@@ -20,13 +20,17 @@ from ..services.luxian_0609 import (
 )
 from ..services.luxian_0609.evaluation_horizon import build_record_evaluation_horizon_snapshot
 from ..services.luxian_0609.native_package import assert_luxian_0609_formal_package_plan_native_only
-from ..services.luxian_0609.phase_scope import partition_luxian_0609_rule_scope
 from ..services.luxian_0609.rule_decision_settings import (
     assert_luxian_0609_customer_native_delivery_ready,
     resolve_mainline_rule_decision_settings,
 )
 from ..services.qc_rule_sets import get_sichuan_rule_set
-from ..services.sample_validation_rule_sets import LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
+from ..services.rule_set_version_service import (
+    RuleSetVersionNotFound,
+    RuleSetVersionUnavailable,
+    current_version,
+    resolve_rule_set_version,
+)
 from ..services.sichuan_qc_service import SichuanQCService
 from ..services.sichuan_workspace_batch_worker import (
     _assert_luxian_0609_formal_customer_rule_ids,
@@ -142,6 +146,48 @@ def _normalize_date_field(date_field: Optional[str]) -> str:
     return value
 
 
+def _resolve_prepare_rule_set_version(
+    rule_set_key: str,
+    *,
+    task_run_context: Mapping[str, str] | None,
+    frozen_rule_set_version: str | None,
+) -> Dict[str, Any]:
+    """按规则集版本解析结果确定本次执行范围（合同第 5 节）。
+
+    任务运行只按任务冻结版本解析，缺失即失败关闭；其他入口按当前版本解析。
+    解析 owner 是 rule_set_version_service，本函数只做错误语义映射。
+    """
+    try:
+        if task_run_context is not None:
+            version = str(frozen_rule_set_version or "").strip()
+            if not version:
+                raise HTTPException(status_code=422, detail="任务运行上下文缺少冻结规则集版本")
+        else:
+            version = str(frozen_rule_set_version or "").strip() or current_version(rule_set_key)
+        return resolve_rule_set_version(rule_set_key, version)
+    except RuleSetVersionNotFound as exc:
+        raise HTTPException(status_code=409, detail="规则集版本不存在或已不可用") from exc
+    except RuleSetVersionUnavailable as exc:
+        raise HTTPException(status_code=503, detail="规则集版本暂不可读取，请稍后重试") from exc
+
+
+def _partition_by_rule_set_version(
+    selected_rule_ids: Sequence[str],
+    resolution: Mapping[str, Any],
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """所选规则按解析版本拆为执行（active）与暂停（paused），顺序沿用解析结果。
+
+    内置版本的 active/paused 即现行 phase 划分（总表目录顺序、逐条判定），
+    故与 partition_luxian_0609_rule_scope(selected) 结果逐项相同。
+    """
+    selected = {str(rule_id or "").strip().upper() for rule_id in selected_rule_ids if str(rule_id or "").strip()}
+    active = tuple(rule_id for rule_id in resolution["active_rule_ids"] if rule_id in selected)
+    paused = tuple(rule_id for rule_id in resolution["paused_rule_ids"] if rule_id in selected)
+    if len(active) + len(paused) != len(selected):
+        raise HTTPException(status_code=422, detail="所选规则不在当前规则集版本范围")
+    return active, paused
+
+
 def prepare_workspace_batch_job(
     payload: SichuanWorkspaceBatchJobCreateRequest,
     *,
@@ -151,6 +197,7 @@ def prepare_workspace_batch_job(
     workspace_provider: Callable[[], CustomQCWorkspaceService] | None = None,
     settings_provider: Callable[[], Any] = get_settings,
     task_run_context: Mapping[str, str] | None = None,
+    frozen_rule_set_version: str | None = None,
 ) -> PreparedWorkspaceBatchJob:
     # 显式声明的范围必须先受控校验：规则集默认范围允许覆盖 payload 范围，
     # 但不得把显式 outpatient/未知范围掩盖成可执行的住院取数范围。
@@ -164,6 +211,18 @@ def prepare_workspace_batch_job(
             raise HTTPException(422, "排障采集仅支持单病历泸县0609质控")
     if payload.rule_set_key and not requested_rule_set:
         raise HTTPException(status_code=422, detail=f"未知规则集: {payload.rule_set_key}")
+    rule_set_resolution = (
+        _resolve_prepare_rule_set_version(
+            requested_rule_set.key,
+            task_run_context=task_run_context,
+            frozen_rule_set_version=frozen_rule_set_version,
+        )
+        if requested_rule_set
+        else None
+    )
+    excluded_customer_rule_ids = frozenset(
+        (rule_set_resolution or {}).get("excluded_rule_ids") or ()
+    )
 
     requested_payload_rule_ids = [
         str(item or "").strip().upper()
@@ -178,7 +237,7 @@ def prepare_workspace_batch_job(
         requested_rule_set_rule_ids = [
             rule_id
             for rule_id in requested_rule_set_rule_ids
-            if str(rule_id).strip().upper() not in LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
+            if str(rule_id).strip().upper() not in excluded_customer_rule_ids
         ]
         if requested_payload_rule_ids and not requested_rule_set_rule_ids:
             raise HTTPException(status_code=422, detail="所选规则不在当前客户运行范围")
@@ -197,8 +256,8 @@ def prepare_workspace_batch_job(
         and len(direct_native_rule_ids) == len(set(requested_rule_set_rule_ids))
     )
     active_customer_rule_ids, pending_customer_rule_ids = (
-        partition_luxian_0609_rule_scope(direct_native_rule_ids)
-        if is_direct_native_selection
+        _partition_by_rule_set_version(direct_native_rule_ids, rule_set_resolution)
+        if is_direct_native_selection and rule_set_resolution is not None
         else ((), ())
     )
 
@@ -215,7 +274,7 @@ def prepare_workspace_batch_job(
         )
         rule_set_key = requested_rule_set.key
         rule_set_name = requested_rule_set.name
-        rule_set_version = requested_rule_set.version
+        rule_set_version = str((rule_set_resolution or {}).get("version") or "")
         execution_strategy = normalize_execution_strategy(requested_rule_set.execution_strategy)
         quality_profile = requested_rule_set.quality_profile
         bucket_strategy = requested_rule_set.bucket_strategy
@@ -364,6 +423,11 @@ def prepare_workspace_batch_job(
         "record_refs": effective_record_ref_payload,
         "record_scene_snapshot": record_scene_snapshot,
         "rule_set_key": rule_set_key,
+        **(
+            {"rule_set_content_digest": rule_set_resolution["content_digest"]}
+            if rule_set_resolution is not None
+            else {}
+        ),
         "rule_ids": sorted({str(rule_id).strip().upper() for rule_id in rule_ids if str(rule_id).strip()}),
         **(
             {
@@ -427,6 +491,14 @@ def prepare_workspace_batch_job(
             "rule_set_key": rule_set_key,
             "rule_set_name": rule_set_name,
             "rule_set_version": rule_set_version,
+            **(
+                {
+                    "rule_set_content_digest": rule_set_resolution["content_digest"],
+                    "excluded_customer_rule_ids": list(rule_set_resolution["excluded_rule_ids"]),
+                }
+                if rule_set_resolution is not None
+                else {}
+            ),
             "execution_strategy": execution_strategy,
             "quality_profile": quality_profile,
             "bucket_strategy": bucket_strategy,

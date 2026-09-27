@@ -158,6 +158,55 @@ def build_luxian_0609_pending_definition_result(rule_id: str) -> dict[str, objec
     }
 
 
+_RULE_SET_VERSION_PAUSED_MESSAGES = (
+    "本质控点在本次任务使用的规则集版本中已暂停，未生成合规或问题判定。",
+    "如需恢复本质控点，请由质控管理员发布启用该质控点的新规则集版本后重新质控。",
+)
+
+
+def build_luxian_0609_paused_rule_result(rule_id: str) -> dict[str, object]:
+    """暂停规则的正式 not_executed 结果（唯一文案 owner）。
+
+    - 总表 pending_definition：与 ``build_luxian_0609_pending_definition_result`` 完全相同；
+    - 总表可执行（phase_1_target）但被已发布规则集版本置为暂停：同结构的
+      not_executed 结果，原因码 ``rule_set_version_paused``。
+    """
+
+    entry = get_luxian_0609_phase_scope(rule_id)
+    if entry is not None and entry.phase_status == "pending_definition":
+        return build_luxian_0609_pending_definition_result(entry.rule_id)
+    if entry is None or entry.phase_status != "phase_1_target":
+        raise ValueError("rule is not an LX0609 paused rule")
+    wrapper = get_luxian_0609_rule(entry.rule_id)
+    if wrapper is None:
+        raise ValueError("paused rule is missing from the LX0609 catalog")
+    findings, suggestion = _RULE_SET_VERSION_PAUSED_MESSAGES
+    return {
+        "rule_id": entry.rule_id,
+        "rule_code": entry.rule_id,
+        "qc_point_id": entry.rule_id,
+        "rule_name": _clean(wrapper.get("name")),
+        "rule_version": _clean(wrapper.get("rule_version")),
+        "rule_set_key": LUXIAN_0609_RULE_SET_KEY,
+        "rule_set_version": RULE_SET_VERSION,
+        "schema_version": CUSTOMER_SCHEMA_VERSION,
+        "status": "not_executed",
+        "result_status": "not_executed",
+        "display_status": "not_executed",
+        "is_compliant": None,
+        "findings": findings,
+        "facts": {},
+        "evidence": [],
+        "suggestion": suggestion,
+        "confidence": 0.0,
+        "metadata": {
+            "execution_source": "lx0609_rule_set_version",
+            "executor_type": "programmatic",
+            "reason_code": "rule_set_version_paused",
+        },
+    }
+
+
 def partition_luxian_0609_rule_scope(
     selected_rule_ids: Iterable[str],
 ) -> tuple[tuple[str, ...], tuple[str, ...]]:

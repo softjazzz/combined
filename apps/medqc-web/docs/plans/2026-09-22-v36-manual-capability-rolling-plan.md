@@ -647,3 +647,11 @@
 - 路由集成 spec 会真实懒加载结果清单等组件树，前几批视图增大后全量并发下单条超过 15 秒；与干净 HEAD 同条件对比单跑执行时间 7.34s→8.72s，非性能回归；三个路由集成 spec 统一放宽到 30 秒并注明原因。
 - 验证：前端 vue-tsc、只读全量 ESLint、全量 Vitest 189/189 文件。发现的前后端权限口径不一致（DRG 角色相反、qc_manager 可见仅 admin 可用的配置页、V5 规则/DRG/上传路由无 permission、全院统计接口仅校验登录）已另立任务，不在本批修改。未做浏览器验收。
 
+## 81. 第七十五批：规则集版本存储与运行链接入（P1-E1a/b）
+
+- 用户确认规则管理按“规则集版本发布”实现。只读调查与核实：规则集为代码静态字典、每 key 单版本；任务运行要求冻结版本等于当前目录版本；prepare 与 worker 投影均按当前静态 phase 与 EXCLUDED 计算；执行器只接受规则主表已有规则。按 `docs/plans/2026-09-27-v36-rule-set-version-publish-design.md`：
+- P1-E1a（b34aadce9）：迁移 61 新增 `qc_rule_set_versions`；`resolve_rule_set_version` 为版本内容唯一 owner，内置版本不读库且与 prepare 现行静态划分严格等价；草稿 CRUD、发布校验（覆盖全部规则、active 仅限可执行、digest）、下线。隔离库 revision61 真实走通草稿→发布→解析（内置 64/10/5，暂停一条后 63/11/5），合成版本已清理。
+- P1-E1b：任务创建冻结 `current_version`；运行校验改为“冻结版本可解析”；prepare 按冻结版本（任务）或当前版本（其他入口）解析，filters 新增 `rule_set_content_digest` 与 `excluded_customer_rule_ids`；worker 对带 digest 的新 job 以 filters 为准投影，历史 job 走原分支原代码；可执行但被版本暂停的规则投影为 not_executed（`rule_set_version_paused`）。样本池入口不走 prepare，暂不跟随版本。等价性以提交前 prepare 原样冻结为参考夹具，7 个代表输入在空版本表下 filters 逐键相等、worker 投影相同。全局 conftest 增加 autouse 空版本表（仅未配置数据库时），避免 7 个既有文件 27 条用例因拒连失败。
+- 复核发现：读取侧（病历池摘要、单病历结果、导出、分析等十余处）仍按静态 `RULE_SET_VERSION` 与静态排除名单选择和投影结果，发布新版本会使新 job 结果在这些入口不可见。故发布接口加闸门 `PUBLISH_ENABLED=False`（409 `publish_not_ready`），待读取侧版本化（P1-E1c）后移除；在此之前系统行为与内置版本逐字节一致。
+- 验证：版本服务/接口/运行链/迁移 103/103；prepare、worker、任务运行与创建相关 205/205；Ruff。未做浏览器验收，PRD 覆盖状态不提升。
+

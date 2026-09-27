@@ -68,7 +68,7 @@ from .sample_validation_rule_sets import (
     get_sample_programmatic_rule_set,
 )
 from .luxian_0609.phase_scope import (
-    build_luxian_0609_pending_definition_result,
+    build_luxian_0609_paused_rule_result,
     partition_luxian_0609_rule_scope,
 )
 from .sichuan_qc_service import RuleSourceGuardError, SichuanQCService
@@ -167,6 +167,48 @@ def _enforce_sc_source_guard(
         return qc_service.assert_sc_rule_source_ready(context=context, block_batch=block_batch)
     except RuleSourceGuardError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
+
+
+def _luxian_0609_customer_output_scope(
+    filters: Mapping[str, Any],
+    *,
+    scoped_customer_rule_ids: set[str],
+    paused_customer_rule_ids: set[str],
+) -> tuple[set[str], List[tuple[str, Dict[str, Any]]]]:
+    """LX0609 客户结果投影范围：返回（暂停规则集合，按总表顺序的输出规则及其目录项）。
+
+    - filters 带 rule_set_content_digest（按规则集版本准备的新 job）：暂停与排除以 filters
+      冻结的 paused_customer_rule_ids / excluded_customer_rule_ids 为准，不读当前静态名单。
+    - 无摘要的历史 job：保持原逻辑，暂停集合补入当前 phase 未就绪规则，排除按静态客户名单。
+    """
+    paused = set(paused_customer_rule_ids)
+    if str(filters.get("rule_set_content_digest") or "").strip():
+        excluded_rule_ids = {
+            str(rule_id or "").strip().upper()
+            for rule_id in list(filters.get("excluded_customer_rule_ids") or [])
+            if str(rule_id or "").strip()
+        }
+    else:
+        _, phase_pending_rule_ids = partition_luxian_0609_rule_scope(
+            tuple(
+                str(wrapper.get("rule_id") or wrapper.get("rule_code") or "").strip().upper()
+                for wrapper in load_luxian_0609_rules()
+                if str(wrapper.get("rule_id") or wrapper.get("rule_code") or "").strip()
+            )
+        )
+        paused.update(phase_pending_rule_ids)
+        excluded_rule_ids = set(LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS)
+    output: List[tuple[str, Dict[str, Any]]] = []
+    for wrapper in load_luxian_0609_rules():
+        customer_rule_id = str(wrapper.get("rule_id") or wrapper.get("rule_code") or "").strip().upper()
+        if not customer_rule_id:
+            continue
+        if customer_rule_id in excluded_rule_ids:
+            continue
+        if scoped_customer_rule_ids and customer_rule_id not in scoped_customer_rule_ids:
+            continue
+        output.append((customer_rule_id, wrapper))
+    return paused, output
 
 
 def _resolve_workspace_bundle_scene(*, query_scope: str, record_scope: str) -> str:
@@ -1598,28 +1640,17 @@ async def run_sichuan_workspace_batch_job(
             for rule_id in list(filters.get("paused_customer_rule_ids") or [])
             if str(rule_id or "").strip()
         }
-        if use_luxian_customer_results:
-            _, phase_pending_rule_ids = partition_luxian_0609_rule_scope(
-                tuple(
-                    str(wrapper.get("rule_id") or wrapper.get("rule_code") or "").strip().upper()
-                    for wrapper in load_luxian_0609_rules()
-                    if str(wrapper.get("rule_id") or wrapper.get("rule_code") or "").strip()
-                )
-            )
-            paused_customer_rule_ids.update(phase_pending_rule_ids)
         output_rule_states: Dict[str, Dict[str, Any]] = rule_states
         output_rule_ids: List[str] = list(valid_rule_ids)
         if use_luxian_customer_results:
+            paused_customer_rule_ids, customer_output_scope = _luxian_0609_customer_output_scope(
+                filters,
+                scoped_customer_rule_ids=scoped_customer_rule_ids,
+                paused_customer_rule_ids=paused_customer_rule_ids,
+            )
             output_rule_states = {}
             output_rule_ids = []
-            for wrapper in load_luxian_0609_rules():
-                customer_rule_id = str(wrapper.get("rule_id") or wrapper.get("rule_code") or "").strip().upper()
-                if not customer_rule_id:
-                    continue
-                if customer_rule_id in LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS:
-                    continue
-                if scoped_customer_rule_ids and customer_rule_id not in scoped_customer_rule_ids:
-                    continue
+            for customer_rule_id, wrapper in customer_output_scope:
                 output_rule_ids.append(customer_rule_id)
                 output_rule_states[customer_rule_id] = {
                     "rule_id": customer_rule_id,
@@ -2655,7 +2686,7 @@ async def run_sichuan_workspace_batch_job(
                         if use_luxian_customer_results:
                             if is_paused_customer_rule:
                                 eval_item = {
-                                    **build_luxian_0609_pending_definition_result(
+                                    **build_luxian_0609_paused_rule_result(
                                         normalized_rule_id
                                     ),
                                     "rule_name": rule_name,

@@ -26,6 +26,7 @@ from .luxian_0916.execution_integrity import (
 from .luxian_0916.rule_catalog import get_luxian_0916_rule_definition
 from .qc_rule_sets import get_sichuan_rule_set
 from .qc_workspace.canonical_result_store import customer_safe_projection_key, keyed_ref
+from .rule_set_version_service import RuleSetVersionNotFound, resolve_rule_set_version
 from .sichuan_workspace_batch_prepare import (
     SichuanWorkspaceBatchJobCreateRequest,
     prepare_workspace_batch_job,
@@ -82,8 +83,13 @@ def _task_and_refs(
     if rule_set is None or rule_set.scope != scene:
         raise TaskQCRunConflict("任务规则集已失效或与场景不匹配")
     frozen_version = task.get("rule_set_version")
-    if not frozen_version or frozen_version != rule_set.version:
+    if not frozen_version:
         raise TaskQCRunConflict("任务规则集版本缺失或已与当前目录不一致")
+    # 冻结版本只需可解析（内置/已发布/已下线均可）；版本不存在沿用原冲突语义。
+    try:
+        resolve_rule_set_version(rule_set.key, frozen_version)
+    except RuleSetVersionNotFound as exc:
+        raise TaskQCRunConflict("任务规则集版本缺失或已与当前目录不一致") from exc
 
     rows = session.execute(
         select(QCTaskRecord.__table__)
@@ -311,6 +317,7 @@ def create_task_qc_run(
                 qc_service=qc_service,
                 workspace=workspace,
                 task_run_context={"task_id": task_id, "run_number": str(run_number)},
+                frozen_rule_set_version=task["rule_set_version"],
             )
             filters = prepared.create_kwargs.get("filters")
             if (

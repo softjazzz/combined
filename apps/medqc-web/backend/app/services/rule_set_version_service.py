@@ -699,6 +699,11 @@ def delete_draft(rule_set_key: Any, *, actor: str, version_seq: Any) -> dict[str
     return {"rule_set_key": rule_set.key, "deleted": True}
 
 
+# 发布闸门：读取侧（病历池摘要、单病历结果、导出、分析）仍按静态 RULE_SET_VERSION 与静态排除名单
+# 选择结果；在其支持多版本之前发布新版本会使新 job 的结果在这些入口不可见。读取侧版本化完成后移除。
+PUBLISH_ENABLED = False
+
+
 def publish_draft(
     rule_set_key: Any, *, actor: str, version: Any, note: Any = None, version_seq: Any = None,
 ) -> dict[str, Any]:
@@ -706,6 +711,10 @@ def publish_draft(
 
     version_seq 可选；传入时做 CAS，避免发布他人刚改过的草稿。版本号不得与内置版本或已有版本重复。
     """
+    if not PUBLISH_ENABLED:
+        raise RuleSetVersionConflict(
+            "读取侧尚未支持多版本结果，暂不允许发布新规则集版本", code="publish_not_ready",
+        )
     rule_set = _versionable_rule_set(rule_set_key)
     actor = _actor(actor)
     version = _publish_version(version)

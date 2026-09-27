@@ -15,6 +15,14 @@ from app.database.models.qc import QCRuleSetVersion
 from app.routers import rule_set_versions as routes
 from app.services import rule_set_version_service as service
 
+
+@pytest.fixture(autouse=True)
+def _publish_gate_open(monkeypatch):
+    """本文件验证发布逻辑本身，显式打开发布闸门（生产默认关闭，见 PUBLISH_ENABLED）。"""
+    from app.services import rule_set_version_service as _svc
+
+    monkeypatch.setattr(_svc, "PUBLISH_ENABLED", True)
+
 BASE = "/api/v1/rule-set-versions"
 KEY = "luxian_0609_qc_v1"
 BUILTIN = "2026-06-09"
@@ -170,3 +178,13 @@ def test_extra_fields_are_rejected(sessions):
     http = client()
     response = http.post(f"{BASE}/{KEY}/draft", json={"status": "published"})
     assert response.status_code == 422
+
+
+def test_publish_is_gated_until_read_side_supports_versions(monkeypatch):
+    """生产默认关闭发布：读取侧尚未版本化，发布返回 409 publish_not_ready 且不写库。"""
+    from app.services import rule_set_version_service as svc
+
+    monkeypatch.setattr(svc, "PUBLISH_ENABLED", False)
+    with pytest.raises(svc.RuleSetVersionConflict) as error:
+        svc.publish_draft("luxian_0609_qc_v1", actor="mgr-1", version="2026-09-27.1")
+    assert error.value.code == "publish_not_ready"
