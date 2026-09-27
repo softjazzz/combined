@@ -640,3 +640,10 @@
 - 按 `docs/plans/2026-09-27-v36-task-assignment-strategies-design.md`：分配服务抽出计划生成（按比例原算法不变、原质控员、按科室），任务行锁、受领人校验、三坐标校验与逐行 CAS 仍为一套。原质控员取 `qc_record_reviews` 同三坐标最近一次决定的审核人（按 visit 分块批量），未命中按创建时保存的 `assignee_config.fallback` 按比例补分或 409 `original_reviewer_unmatched`；按科室以受领人 `sys_users.department` 精确匹配抽样时持久化的病历科室（迁移 60 新增 `qc_task_records.department`），缺科室 409 `department_missing`、无对应受领人 409 `department_unassigned`。已分配同方法重放直接返回现有汇总不重算；`by_record_type` 因当前场景病历类型无区分返回 422 `method_unavailable` 且不写任务。前端创建抽屉与全部任务分配弹窗支持新方式、fallback 必选、业务码提示与来源分布展示。
 - 验证：隔离库升级至 revision60 并回读双 schema；后端分配/创建/抽样持久化相关 138/138、Ruff；前端 vue-tsc、只读全量 ESLint、全量 Vitest 184/184 文件。获得途径未持久化，原质控员方式重放时 `reason_counts` 为 null；历史任务无科室不可按科室分配。真实 PG 分配竞争与浏览器正向未验收，PRD 覆盖状态不提升。
 
+## 80. 第七十四批：登录后角色分流与受限页无限重定向修复
+
+- 现状：两套布局菜单手写、不读路由 `meta.permission`，无权菜单照常显示；守卫拒绝访问时硬编码跳 `/dashboard`，而 `/dashboard` 重定向到 V5 首页，无 V5 首页权限的角色（qc_staff、coder、空角色）在两者间无限重定向直至内存溢出。
+- 实现：新增 `src/utils/routeAccess.ts` 作为唯一路由权限判断（守卫改调用它，先写锁定测试保证原行为）；两套菜单按其过滤，空分组隐藏；登录落地按“可访问的 redirect → 角色默认页（admin/qc_manager V5 首页、qc_staff 我收到的任务、doctor 整改/申诉优先）”，不可访问 redirect 提示“无权访问该页面”；拒绝访问时跳角色默认页，默认页亦不可访问时落新增的 `/no-permission` 页（含退出登录）；恢复无限重定向复现为参数化回归测试。/dashboard 菜单为 admin/qc_manager/qc_staff 增加“病历审核待办”。
+- 路由集成 spec 会真实懒加载结果清单等组件树，前几批视图增大后全量并发下单条超过 15 秒；与干净 HEAD 同条件对比单跑执行时间 7.34s→8.72s，非性能回归；三个路由集成 spec 统一放宽到 30 秒并注明原因。
+- 验证：前端 vue-tsc、只读全量 ESLint、全量 Vitest 189/189 文件。发现的前后端权限口径不一致（DRG 角色相反、qc_manager 可见仅 admin 可用的配置页、V5 规则/DRG/上传路由无 permission、全院统计接口仅校验登录）已另立任务，不在本批修改。未做浏览器验收。
+

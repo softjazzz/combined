@@ -42,5 +42,6 @@ describe('运行与终末质控结果清单路由', () => {
       loadRouteComponent(finalLoader),
     ])
     expect(runningModule.default).toBe(finalModule.default)
-  }, 15_000)
+    // 真实动态加载结果清单视图整棵组件树（含筛选模板、审核面板等），全量并发时单条可超过 15 秒。
+  }, 30_000)
 })

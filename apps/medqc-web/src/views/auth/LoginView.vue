@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { useAuthStore } from '@/stores/auth'
 import type { LoginRequest } from '@/types/auth'
+import { ROUTE_ACCESS_DENIED_MESSAGE, resolveLoginLanding } from '@/utils/routeAccess'
 import {
   LoginOutlined,
   SafetyCertificateOutlined,
@@ -49,8 +50,15 @@ const handleLogin = async (loginData: LoginRequest) => {
     if (result.success) {
       message.success('登录成功')
       console.log('✅ 登录成功，准备跳转到dashboard')
-      const redirect = (router.currentRoute.value.query.redirect as string) || '/dashboard'
-      await router.push(redirect)
+      // redirect 可访问则去 redirect，否则按角色默认落地；redirect 无权访问时提示
+      const rawRedirect = router.currentRoute.value.query.redirect
+      const { target, redirectDenied } = resolveLoginLanding(
+        router,
+        authStore.userRoles ?? [],
+        typeof rawRedirect === 'string' ? rawRedirect : null,
+      )
+      if (redirectDenied) message.warning(ROUTE_ACCESS_DENIED_MESSAGE)
+      await router.push(target)
     } else {
       console.error('❌ 登录失败:', result.error)
       message.error(result.error || '登录失败')

@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 
+// 本文件用例会真实导航并懒加载路由组件树（结果清单、审核面板等），全量并发下单条可超过 15 秒。
+vi.setConfig({ testTimeout: 30_000 })
+
 vi.unmock('vue-router')
 
 vi.mock('@/stores/auth', () => ({
@@ -59,7 +62,7 @@ describe('旧 Dashboard 首页路由', () => {
         '/workstation-v5/records/running?source=legacy',
       )
     },
-    15_000,
+    30_000,
   )
 
   it('旧运行病历入口保留 query 和 hash，并只进入 V5 病历池', async () => {

@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 
+// 本文件用例会真实导航并懒加载路由组件树（结果清单、审核面板等），全量并发下单条可超过 15 秒。
+vi.setConfig({ testTimeout: 30_000 })
+
 vi.unmock('vue-router')
 
 vi.mock('@/stores/auth', () => ({
@@ -30,5 +33,5 @@ describe('客户样本验证路由权限', () => {
 
     await router.push(paths[0])
     expect(router.currentRoute.value.path).toBe(paths[0])
-  }, 15_000)
+  }, 30_000)
 })
