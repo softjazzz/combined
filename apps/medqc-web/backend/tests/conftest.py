@@ -52,6 +52,14 @@ def _isolate_consultation_opinion_freeze(tmp_path, monkeypatch):
 
 
 @pytest.fixture
+def memory_async_job_store(monkeypatch):
+    """用内存替身替换异步任务存储，避免读写真实库的 qc.qc_async_jobs。"""
+    from tests.fixtures.memory_async_job_store import MemoryAsyncJobStore
+
+    return MemoryAsyncJobStore().install(monkeypatch)
+
+
+@pytest.fixture
 def offline_workspace_schema(monkeypatch):
     """工作区表只在内存中定义，不在构造服务时对数据库执行建表/补列。
 

@@ -138,7 +138,7 @@ class _SlowGroupingService:
 
 
 @pytest.fixture(autouse=True)
-def reset_drg_batch_tasks():
+def reset_drg_batch_tasks(memory_async_job_store):
     batch_task_service.reset_batch_tasks_for_testing()
     yield
     batch_task_service.reset_batch_tasks_for_testing()

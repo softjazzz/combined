@@ -47,7 +47,9 @@ def _wait_for_status(client, task_id: str, headers: dict[str, str], target: str,
 
 
 @pytest.fixture(autouse=True)
-def _reset_service_state():
+def _reset_service_state(memory_async_job_store):
+    reset_smart_upload_async_service_for_testing()
+    yield
     reset_smart_upload_async_service_for_testing()
 
 
