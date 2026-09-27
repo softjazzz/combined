@@ -1,0 +1,83 @@
+/*
+ * 设计 Token v2（UI 重设计 v1 基础层）
+ * 唯一来源：新页面与重构区块只引用 --mq-*；旧变量逐页替换后再删除。
+ * 本文件只新增变量，不覆盖任何现有全局样式，避免波及尚未改版的质控结果页。
+ */
+:root {
+  /* 品牌：唯一主蓝，与 App.vue colorPrimary、tailwind primary 同值 */
+  --mq-brand-50: #eef3fe;
+  --mq-brand-200: #c9d8fc;
+  --mq-brand-600: #2b6cf6;
+  --mq-brand-700: #1f55c9;
+
+  /* 文字：三级均 >= 4.5:1；disabled 只用于占位符与禁用态 */
+  --mq-text-primary: #0f172a;
+  --mq-text-secondary: #475569;
+  --mq-text-tertiary: #64748b;
+  --mq-text-disabled: #94a3b8;
+
+  /* 背景与边框 */
+  --mq-bg-page: #f4f6f9;
+  --mq-bg-surface: #ffffff;
+  --mq-bg-subtle: #f8fafc;
+  --mq-bg-muted: #f1f5f9;
+  --mq-border: #e2e8f0;
+  --mq-border-strong: #cbd5e1;
+
+  /* 语义色：text 用于文字，icon 用于图标/描边，bg/border 用于底色块 */
+  --mq-success-text: #15803d;
+  --mq-success-icon: #16a34a;
+  --mq-success-bg: #f0fdf4;
+  --mq-success-border: #bbf7d0;
+  --mq-warning-text: #b45309;
+  --mq-warning-icon: #d97706;
+  --mq-warning-bg: #fffbeb;
+  --mq-warning-border: #fde68a;
+  --mq-danger-text: #b91c1c;
+  --mq-danger-icon: #dc2626;
+  --mq-danger-bg: #fef2f2;
+  --mq-danger-border: #fecaca;
+  --mq-info-text: #1f55c9;
+  --mq-info-icon: #2b6cf6;
+  --mq-info-bg: #eef3fe;
+  --mq-info-border: #c9d8fc;
+  --mq-neutral-text: #475569;
+  --mq-neutral-bg: #f1f5f9;
+
+  /* 字号 7 档，最小 12px */
+  --mq-font-family: 'Source Han Sans SC', 'PingFang SC', 'Microsoft YaHei UI', 'Microsoft YaHei',
+    system-ui, sans-serif;
+  --mq-font-12: 12px;
+  --mq-font-13: 13px;
+  --mq-font-14: 14px;
+  --mq-font-16: 16px;
+  --mq-font-20: 20px;
+  --mq-font-24: 24px;
+  --mq-font-28: 28px;
+
+  /* 间距 4 基数 */
+  --mq-space-1: 4px;
+  --mq-space-2: 8px;
+  --mq-space-3: 12px;
+  --mq-space-4: 16px;
+  --mq-space-5: 20px;
+  --mq-space-6: 24px;
+  --mq-space-8: 32px;
+
+  /* 圆角 4 档：标签 / 控件 / 卡片 / 弹窗 */
+  --mq-radius-tag: 4px;
+  --mq-radius-control: 6px;
+  --mq-radius-card: 8px;
+  --mq-radius-overlay: 12px;
+
+  /* 阴影 3 档：卡片默认只用边框 */
+  --mq-shadow-none: none;
+  --mq-shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.08);
+  --mq-shadow-md: 0 8px 24px rgba(15, 23, 42, 0.12);
+
+  /* 布局 */
+  --mq-sider-width: 232px;
+  --mq-sider-collapsed-width: 64px;
+  --mq-header-height: 56px;
+  --mq-control-height: 32px;
+}

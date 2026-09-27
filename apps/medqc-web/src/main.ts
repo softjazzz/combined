@@ -8,6 +8,7 @@ import router from './router'
 import 'ant-design-vue/dist/reset.css'
 // 导入样式 - 项目样式放在 Ant reset 之后，确保字体与主题 token 生效
 import '@/styles/index.css'
+import '@/styles/tokens-v2.css'
 
 // 创建应用实例
 const app = createApp(App)
