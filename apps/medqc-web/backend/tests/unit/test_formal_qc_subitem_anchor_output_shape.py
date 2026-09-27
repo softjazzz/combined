@@ -73,9 +73,10 @@ def test_output_shape_should_neutralize_anchor_even_if_input_marks_defect():
         parent_metadata=parent_meta,
     )
 
-    assert row["display_status"] == "needs_review"
+    assert row["display_status"] == "qc_review_candidate"
     assert row["can_show_as_defect"] == "False"
     assert row["doctor_display_risk"] == "False"
+    assert row["anchor_display_safety"] == "safe_for_review_bucket"
 
 
 def test_output_csv_should_include_required_shape_fields(tmp_path):

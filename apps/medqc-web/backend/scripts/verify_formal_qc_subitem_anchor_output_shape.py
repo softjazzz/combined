@@ -143,7 +143,8 @@ def assess_anchor_output_shape(
     field_loss_risk = bool(missing_fields or parent_metadata_loss_risk)
     frontend_visibility_risk = "needs_explicit_page_mapping"
 
-    if display_status in {"needs_review", "data_quality_gap"} and not can_show_as_defect:
+    # qc_review_candidate 为当前二审候选桶；needs_review 保留以兼容旧输出。
+    if display_status in {"qc_review_candidate", "needs_review", "data_quality_gap"} and not can_show_as_defect:
         anchor_display_safety = "safe_for_review_bucket"
     else:
         anchor_display_safety = "unsafe_check_required"
