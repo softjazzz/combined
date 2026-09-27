@@ -550,6 +550,7 @@ export interface SichuanBatchJobResultTrace {
 }
 
 export interface SichuanBatchJob {
+  acceptance_only_rule_ids?: string[]
   id: string
   read_only?: boolean
   draft_id?: string

@@ -2,6 +2,9 @@
 
 import asyncio
 import json
+import shutil
+import subprocess
+from pathlib import Path
 from dataclasses import replace
 
 import pytest
@@ -274,3 +277,132 @@ def test_grouped_default_freezes_parent_and_children(monkeypatch, _isolated_data
     assert delivered == expected
     assert len(delivered) == 74
     assert len(executed) == 64
+
+
+@pytest.mark.parametrize(
+    "grouped,extra", [(True, []), (False, []), (True, ["LX0609-03-01-04"])]
+)
+def test_explicit_paused_family_completes_parent(
+    monkeypatch, _isolated_database, grouped, extra
+):
+    engine, workspace, app, pool_id, item_id = setup_chain(
+        monkeypatch, _isolated_database
+    )
+    selected = ["LX0609-01-01-01", "LX0609-06-01-03", "LX0609-03-01-01", *extra]
+    monkeypatch.setattr(
+        chain.qc_sample_pools, "submit_detached_task", lambda *args, **kwargs: None
+    )
+    with TestClient(app) as client:
+        response = client.post(
+            f"/api/v1/qc/sample-pools/{pool_id}/run",
+            json={
+                "rule_set_key": chain.LUXIAN_0609_RULE_SET_KEY,
+                "validation_mode": "customer",
+                "selected_rule_ids": selected,
+                "sample_item_ids": [item_id],
+                "record_refs": [chain._RECORD_A],
+                "group_by_luxian_family": grouped,
+            },
+        )
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    job_id = data["job_id"]
+    children = data.get("child_job_ids") or []
+    if children:
+        scopes = [
+            workspace.get_batch_job_for_processing(job_id=cid)["filters"][
+                "scoped_customer_rule_ids"
+            ]
+            for cid in children
+        ]
+        assert {rid for scope in scopes for rid in scope} == set(selected)
+        assert sum(len(scope) for scope in scopes) == len(selected)
+    for target in children or [job_id]:
+        asyncio.run(chain.qc_sichuan._run_sichuan_workspace_batch_job(target))
+    if children:
+        workspace.refresh_parent_batch_job(parent_job_id=job_id)
+    result = workspace.get_batch_job_for_processing(job_id=job_id)
+    assert result["status"] == "completed", result.get("error_message")
+    items = chain._read_canonical(app, job_id, chain._RECORD_A, selected)
+    assert items["LX0609-03-01-01"]["status"] == "not_executed"
+    with TestClient(app) as client:
+        public = client.get(f"/api/v1/qc/sichuan/workspace/batch-jobs/{job_id}").json()[
+            "data"
+        ]
+    assert "filters" not in public
+    assert public["acceptance_only_rule_ids"] == ["LX0609-06-01-03"]
+    _assert_frontend_scope(public, ["LX0609-06-01-03"])
+    for child in public.get("child_jobs", []):
+        assert "filters" not in child
+        _assert_frontend_scope(child, child["acceptance_only_rule_ids"])
+
+
+def _assert_frontend_scope(public, expected):
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("正式DTO到前端摘要验证需要Node")
+    app_root = Path(__file__).resolve().parents[3]
+    script = """
+import { buildBatchJobPresentation } from './src/views/workstation-v4/customer-sample-validation/batchJobPresentation.ts';
+let input = ''; for await (const chunk of process.stdin) input += chunk;
+process.stdout.write(JSON.stringify(buildBatchJobPresentation(JSON.parse(input)).scopeText));
+"""
+    result = subprocess.run(
+        [node, "--import", "tsx", "--input-type=module", "-e", script],
+        cwd=app_root,
+        input=json.dumps(public),
+        text=True,
+        encoding="utf-8",
+        capture_output=True,
+        timeout=30,
+        check=True,
+    )
+    text = json.loads(result.stdout)
+    assert ("待验收" in text) == bool(expected), text
+    if expected:
+        assert f"待验收 {len(expected)} 条" in text
+
+
+@pytest.mark.parametrize(
+    "snapshot,expected",
+    [(None, []), ([], []), (["LX0609-06-02-01"], ["LX0609-06-02-01"])],
+)
+def test_public_task_snapshot_reaches_frontend(
+    monkeypatch, _isolated_database, snapshot, expected
+):
+    engine, workspace, app, pool_id, item_id = setup_chain(
+        monkeypatch, _isolated_database
+    )
+    monkeypatch.setattr(
+        chain.qc_sample_pools, "submit_detached_task", lambda *args, **kwargs: None
+    )
+    with TestClient(app) as client:
+        response = client.post(
+            f"/api/v1/qc/sample-pools/{pool_id}/run",
+            json={
+                "rule_set_key": chain.LUXIAN_0609_RULE_SET_KEY,
+                "validation_mode": "customer",
+                "selected_rule_ids": expected or ["LX0609-01-01-01"],
+                "sample_item_ids": [item_id],
+                "record_refs": [chain._RECORD_A],
+                "group_by_luxian_family": False,
+            },
+        )
+        assert response.status_code == 200, response.text
+        job_id = response.json()["data"]["job_id"]
+        if snapshot is None:
+            filters = workspace.get_batch_job_for_processing(job_id=job_id)["filters"]
+            filters.pop("acceptance_only_rule_ids", None)
+            with Session(engine) as session:
+                session.execute(
+                    sa.update(workspace._batch_job_table)
+                    .where(workspace._batch_job_table.c.id == job_id)
+                    .values(filters_json=json.dumps(filters))
+                )
+                session.commit()
+        public = client.get(f"/api/v1/qc/sichuan/workspace/batch-jobs/{job_id}").json()[
+            "data"
+        ]
+    assert "filters" not in public
+    assert public["acceptance_only_rule_ids"] == expected
+    _assert_frontend_scope(public, expected)

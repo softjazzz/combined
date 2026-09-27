@@ -1252,11 +1252,18 @@ def project_customer_safe_batch_job(
         if len(item_record_refs) == 1
         else None
     )
+    # 仅投影保存时的展示快照；不按当前发布配置重算，也不暴露内部filters。
+    acceptance_snapshot = filters.get("acceptance_only_rule_ids")
+    acceptance_rule_ids = sorted({
+        value for value in acceptance_snapshot
+        if isinstance(value, str) and value in _luxian_0609_catalog_rule_ids()
+    }) if isinstance(acceptance_snapshot, list) else []
     execution_scope_hash = _safe_text(filters.get("execution_scope_hash")).lower()
     if not re.fullmatch(r"[0-9a-f]{64}", execution_scope_hash):
         execution_scope_hash = ""
     return {
         "schema_version": "customer-qc-job-v1",
+        "acceptance_only_rule_ids": acceptance_rule_ids,
         "id": _safe_text(job.get("id")),
         "job_id": _safe_text(job.get("id")),
         "operation_ref": _keyed_ref("op", job.get("id"), hmac_key=hmac_key),

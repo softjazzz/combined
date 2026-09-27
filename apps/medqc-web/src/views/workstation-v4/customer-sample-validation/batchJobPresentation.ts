@@ -409,7 +409,7 @@ export function buildBatchJobPresentation(job: SichuanBatchJob): BatchJobPresent
     : customerRuleCount > 0
       ? `全量规则 · ${customerRuleCount} 个客户质控点`
       : '质控范围未返回'
-  const acceptanceRules = asRecord(job.filters).acceptance_only_rule_ids
+  const acceptanceRules = job.acceptance_only_rule_ids
   const acceptanceCount = Array.isArray(acceptanceRules) ? acceptanceRules.length : 0
   const scopeText = acceptanceCount
     ? `${baseScopeText} · 待验收 ${acceptanceCount} 条`

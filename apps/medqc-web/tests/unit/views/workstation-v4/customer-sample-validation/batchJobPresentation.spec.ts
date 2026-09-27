@@ -35,7 +35,7 @@ function buildJob(overrides: Partial<SichuanBatchJob> = {}): SichuanBatchJob {
 describe('batchJobPresentation', () => {
   it('任务摘要使用创建时保存的待验收标记', () => {
     const model = buildBatchJobPresentation(buildJob({
-      filters: { acceptance_only_rule_ids: ['LX0609-06-02-01'] },
+      acceptance_only_rule_ids: ['LX0609-06-02-01'],
     }))
     expect(model.scopeText).toContain('待验收 1 条')
   })

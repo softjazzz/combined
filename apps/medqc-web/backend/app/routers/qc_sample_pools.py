@@ -1494,6 +1494,19 @@ async def run_sample_pool_intrinsic_validation(
             if str(scope.get("key") or "").strip()
         }
 
+        # 仅含暂停项的族不启动医学执行；由首个已有子任务通过既有暂停路径交付。
+        # 不删除父范围中的选择，也不为暂停规则增加模型调用。
+        active_family_keys = {str(scope["key"]) for scope in luxian_family_scopes}
+        orphan_paused_ids = [
+            rid for key, ids in paused_rule_ids_by_family.items()
+            if key not in active_family_keys for rid in ids
+        ]
+        if orphan_paused_ids and luxian_family_scopes:
+            owner_key = str(luxian_family_scopes[0]["key"])
+            paused_rule_ids_by_family[owner_key] = _normalize_rule_id_list(
+                paused_rule_ids_by_family.get(owner_key, []) + orphan_paused_ids
+            )
+
     selected_sample_item_ids = [
         str(item.get("id") or "").strip()
         for item in runnable_items
