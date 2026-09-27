@@ -3,7 +3,7 @@
     <section class="command-header">
       <div class="command-top">
         <div class="title-block">
-          <span class="eyebrow">DRG / DIP PRE-GROUPING</span>
+          <span class="eyebrow">分析 · DRG/DIP</span>
           <h1>事前分析</h1>
           <p>只读完成病历字段抽取、编码核对与模拟入组，不写正式结果。</p>
         </div>

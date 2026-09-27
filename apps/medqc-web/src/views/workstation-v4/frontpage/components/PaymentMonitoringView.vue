@@ -13,7 +13,7 @@
           </button>
           <div>
             <div class="payment-eyebrow">
-              DRG/DIP · PAYMENT
+              分析 · DRG/DIP
             </div>
             <h2 class="payment-title">
               付费监测

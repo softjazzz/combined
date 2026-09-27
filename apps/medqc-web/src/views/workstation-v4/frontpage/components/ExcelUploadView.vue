@@ -15,7 +15,7 @@
             <ArrowLeft class="upload-back-icon" />
           </button>
           <div>
-            <span class="upload-eyebrow">数据导入</span>
+            <span class="upload-eyebrow">数据与配置 · 数据导入</span>
             <h2>DRG/DIP 数据分析</h2>
             <p>上传任意格式的 Excel 文件，AI 自动识别字段并生成分析报表</p>
           </div>

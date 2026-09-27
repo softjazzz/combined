@@ -3,12 +3,10 @@
     <div class="mx-auto flex w-full max-w-7xl flex-col gap-4">
       <div class="flex flex-wrap items-start justify-between gap-3">
         <div class="min-w-0">
-          <div
-            class="inline-flex items-center gap-1.5 rounded-full border border-blue-100 bg-blue-50/60 px-3 py-1 text-[11px] font-semibold text-[#0057b8]"
-          >
-            编码工作台
+          <div class="icd-hero-eyebrow">
+            分析 · 编码工作台
           </div>
-          <h1 class="mt-3 text-[22px] font-semibold tracking-normal text-slate-900">
+          <h1 class="mt-1">
             ICD 智能检索
           </h1>
           <p class="mt-2 max-w-[760px] text-[13px] leading-6 text-slate-500">
@@ -176,22 +174,25 @@ function selectCodeType(value: string) {
 </script>
 
 <style scoped>
+/* v7.1：页头不再是白色横带，眉标灰色、标题 40px */
 .icd-search-hero {
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-  background: rgba(255, 255, 255, 0.82);
-  -webkit-backdrop-filter: blur(18px);
-  backdrop-filter: blur(18px);
+  border-bottom: 0;
+  background: transparent;
+}
+
+.icd-hero-eyebrow {
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-13);
+  font-weight: 600;
 }
 
 .icd-search-hero h1 {
-  color: #1d1d1f !important;
-  font-family:
-    'Source Han Sans SC', 'SF Pro Display', 'SF Pro Text', 'San Francisco', 'PingFang SC',
-    'Microsoft YaHei UI', system-ui, sans-serif;
-  font-size: 24px !important;
+  color: var(--mq-text-primary) !important;
+  font-family: var(--mq-font-display);
+  font-size: var(--mq-font-title) !important;
   font-weight: 700 !important;
-  letter-spacing: -0.01em !important;
-  line-height: 31px !important;
+  letter-spacing: -0.03em !important;
+  line-height: 1.1 !important;
 }
 
 .icd-search-hero p {

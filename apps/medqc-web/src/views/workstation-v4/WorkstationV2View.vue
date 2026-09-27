@@ -1467,4 +1467,71 @@ onUnmounted(() => {
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: rgba(29, 29, 31, 0.26);
 }
+
+/* ===== v7.1 液态玻璃覆盖：工作台内嵌时的容器与各子页页头 ===== */
+.ws-v2,
+.ws-v2-embedded,
+.ws-v2-main,
+.workbench-layout,
+.icd-fullpage,
+.qc-message-page {
+  background: transparent;
+}
+
+/* 外壳已无顶栏，嵌入高度不再扣除 64px */
+.ws-v2-embedded {
+  height: 100vh;
+}
+
+.ws-v2-main :deep(.pre-analysis-shell),
+.ws-v2-main :deep(.in-process-page),
+.ws-v2-main :deep(.payment-monitoring-page),
+.ws-v2-main :deep(.post-event-analysis-page),
+.ws-v2-main :deep(.upload-workstation),
+.ws-v2-main :deep(.icd-search-hero) {
+  --bg: transparent;
+  background: transparent !important;
+  font-family: var(--mq-font-family);
+}
+
+/* 页头标题统一 40px */
+.ws-v2-main :deep(.command-header .title-block h1),
+.ws-v2-main :deep(.in-process-page .page-header h2),
+.ws-v2-main :deep(.payment-title),
+.ws-v2-main :deep(.analysis-header h2),
+.ws-v2-main :deep(.upload-header h2) {
+  margin: 4px 0 0;
+  color: var(--mq-text-primary);
+  font-family: var(--mq-font-display);
+  font-size: var(--mq-font-title) !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+/* 眉标统一灰色、无底色 */
+.ws-v2-main :deep(.command-header .eyebrow),
+.ws-v2-main :deep(.payment-eyebrow),
+.ws-v2-main :deep(.upload-eyebrow),
+.ws-v2-main :deep(.in-process-page .breadcrumb) {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-13);
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* 事前分析顶部主卡与各子页白卡：统一玻璃卡 */
+.ws-v2-main :deep(.command-header),
+.ws-v2-main :deep(.drg-workbench-page .panel),
+.ws-v2-main :deep(.upload-page > section),
+.ws-v2-main :deep(.icd-fullpage .rounded-2xl) {
+  border-color: var(--mq-glass-border) !important;
+  border-radius: var(--mq-radius-card) !important;
+  background: var(--mq-glass-bg) !important;
+  box-shadow: var(--mq-glass-shadow) !important;
+}
 </style>
