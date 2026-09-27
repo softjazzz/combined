@@ -19,13 +19,6 @@ from app.services.qc_rule_sets import SICHUAN_RULE_SETS
 from app.services.sample_validation_rule_sets import LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
 
 
-@pytest.fixture(autouse=True)
-def _publish_gate_open(monkeypatch):
-    """本文件验证发布逻辑本身，显式打开发布闸门（生产默认关闭，见 PUBLISH_ENABLED）。"""
-    from app.services import rule_set_version_service as _svc
-
-    monkeypatch.setattr(_svc, "PUBLISH_ENABLED", True)
-
 KEY = "luxian_0609_qc_v1"
 BUILTIN = "2026-06-09"
 ACTOR = "u-manager"

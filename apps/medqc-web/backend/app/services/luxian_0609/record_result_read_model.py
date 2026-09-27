@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Iterable, Mapping, Optional
+from typing import AbstractSet, Any, Iterable, Mapping, Optional
 
 
 @dataclass(frozen=True)
@@ -75,7 +75,8 @@ def select_latest_authoritative_record_result_job(
     *,
     record_id: str,
     rule_set_key: str,
-    rule_set_version: str,
+    rule_set_version: str = "",
+    rule_set_versions: Optional[AbstractSet[str]] = None,
 ) -> LatestRecordResultJobSelection:
     """按任务身份选唯一权威任务，不以状态、文案或解释完整度裁决。
 
@@ -83,16 +84,26 @@ def select_latest_authoritative_record_result_job(
     包含目标就诊号、且规则集与当前版本完全一致的任务。全院质控视图按
     跨创建者的最新完成代次选择；完成时间与创建时间均并列时无法确定当前
     代次，必须 fail-closed。
+
+    ``rule_set_versions``（规则集版本发布合同 8.2）：读取侧的已知版本集合；传入时候选范围
+    从单一版本放宽为该集合，比较逻辑不变，跨版本仍按完成/创建时间取最新代次。
     """
 
     normalized_record_id = _text(record_id)
     normalized_rule_set_key = _text(rule_set_key)
-    normalized_rule_set_version = _text(rule_set_version)
+    if rule_set_versions is not None:
+        normalized_rule_set_versions = frozenset(
+            _text(value) for value in rule_set_versions if _text(value)
+        )
+    else:
+        normalized_rule_set_versions = frozenset(
+            {_text(rule_set_version)} if _text(rule_set_version) else ()
+        )
     if not all(
         (
             normalized_record_id,
             normalized_rule_set_key,
-            normalized_rule_set_version,
+            normalized_rule_set_versions,
         )
     ):
         raise ValueError("record_id、rule_set_key、rule_set_version 均不能为空")
@@ -107,7 +118,7 @@ def select_latest_authoritative_record_result_job(
             continue
         if _rule_set_value(candidate, "rule_set_key") != normalized_rule_set_key:
             continue
-        if _rule_set_value(candidate, "rule_set_version") != normalized_rule_set_version:
+        if _rule_set_value(candidate, "rule_set_version") not in normalized_rule_set_versions:
             continue
         eligible.append(dict(candidate))
 

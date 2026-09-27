@@ -36,13 +36,6 @@ from app.services.sichuan_workspace_batch_worker import _luxian_0609_customer_ou
 from tests.fixtures import legacy_workspace_batch_prepare as legacy_module
 
 
-@pytest.fixture(autouse=True)
-def _publish_gate_open(monkeypatch):
-    """本文件验证发布逻辑本身，显式打开发布闸门（生产默认关闭，见 PUBLISH_ENABLED）。"""
-    from app.services import rule_set_version_service as _svc
-
-    monkeypatch.setattr(_svc, "PUBLISH_ENABLED", True)
-
 KEY = "luxian_0609_qc_v1"
 BUILTIN = SICHUAN_RULE_SETS[KEY].version
 ACTOR = "u-manager"

@@ -97,3 +97,31 @@
 - 前端质控点列表和发布界面放在 P1-E2。
 - 测试病历放在 P1-E3。
 - “新建质控点”要让它真正执行，需要先有执行器实现和规则主表条目，这属于质控引擎范围，只能标为需要执行器配合。
+
+## 8. P1-E1c：读取侧版本化（移除发布闸门的前提）
+
+### 8.1 证据
+
+`custom_qc_workspace_service.py` 读取侧的多个入口默认 `rule_set_version=RULE_SET_VERSION`（静态值），并用静态的 `LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS` 过滤条目：
+
+- 病历池摘要 `build_luxian_0609_completed_record_result_summaries`
+- 单病历 DTO `build_latest_single_record_result_dto`
+- 批量 DTO `build_latest_luxian_0609_record_result_dtos`
+- 统计分析等其余入口
+
+同样用静态名单过滤的还有 `qc_sichuan.py:3108`。发布新版本后，新 job 的 `rule_set_version` 与静态值不一致，会被这些选择器排除。
+
+### 8.2 合同
+
+- **版本集合**：读取侧不再用单一静态版本，改为“该规则集的已知版本集合”：内置版本，加上全部 `published`/`retired` 版本（草稿除外）。
+  - 由 `rule_set_version_service.known_versions(key)` 提供，只有一个 owner。
+  - 同一请求内只读库一次；版本表为空时直接返回 `{内置}`，不读库。
+- **最新结果选择**：在已知版本集合内做，跨版本仍按现有的代次/完成时间规则取最新一次。
+  - `select_latest_authoritative_record_result_job` 的比较逻辑不变，只是候选范围从单一版本放宽为版本集合。
+- **条目排除**：
+  - job 的 filters 带 `rule_set_content_digest` 时，以 filters 中的 `excluded_customer_rule_ids` 为准；
+  - 否则沿用静态名单（历史 job）。
+  - 被版本暂停的规则按 worker 投影的 not_executed 原样展示，读取侧不再重新判定。
+- **版本号展示**：结果 DTO 中的版本号取所选 job 的 filters 版本，不再写死静态值。
+- **等价性**：版本表为空时，上述每个入口在同一输入下的输出与改动前逐键相同（金样对比，方法同 P1-E1b）。
+- **发布闸门**：以上全部完成并验证后，删除 `PUBLISH_ENABLED` 及其测试开关。补充端到端用例：发布暂停一条规则的新版本，新 job 结果能在病历池摘要、单病历 DTO 和导出中看到，且该规则显示为未执行；历史 job 仍可见。

@@ -853,19 +853,28 @@ def test_bulk_record_result_dtos_carry_review_anchor_only_when_ready(monkeypatch
     missing_identity = ("inst-1", "patient-2", "visit-2")
     # 绕过构造函数的建表副作用，仅验证投影 → DTO 的字段搬运。
     service = CustomQCWorkspaceService.__new__(CustomQCWorkspaceService)
+    # 批量 DTO 经内部投影取得病历池摘要与所选根任务（排除条目、版本号取自所选 job）。
     monkeypatch.setattr(
         service,
-        "build_luxian_0609_completed_record_result_summaries",
-        lambda **_kwargs: {
-            ready_identity: {
-                "status": "ready",
-                "record_ref": "rec_safe",
-                "root_job_id": "job-1",
-                "envelope_id": "env-1",
-                "items": [{"rule_id": "LX0609-001", "status": "compliant"}],
+        "_completed_record_result_projections",
+        lambda **_kwargs: (
+            {
+                ready_identity: {
+                    "status": "ready",
+                    "record_ref": "rec_safe",
+                    "root_job_id": "job-1",
+                    "envelope_id": "env-1",
+                    "items": [{"rule_id": "LX0609-001", "status": "compliant"}],
+                },
+                missing_identity: {"status": "not_run"},
             },
-            missing_identity: {"status": "not_run"},
-        },
+            {
+                ready_identity: {
+                    "id": "job-1",
+                    "filters": {"rule_set_key": "luxian_0609_qc_v1", "rule_set_version": "2026-06-09"},
+                },
+            },
+        ),
     )
 
     result = service.build_latest_luxian_0609_record_result_dtos(

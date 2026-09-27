@@ -628,9 +628,14 @@ class WorkstationAggregationService:
         completed_to: Optional[datetime],
         job_id: Optional[str],
     ) -> tuple[list[Dict[str, Any]], int]:
-        """读取当前版本已完成根任务的 Canonical 事件，缺失只进入数据健康。"""
+        """读取已知规则集版本内已完成根任务的 Canonical 事件，缺失只进入数据健康。
+
+        规则集版本（合同 8.2）：候选范围为已知版本集合（内置 + published/retired），
+        版本表为空时即内置版本，与历史行为一致。
+        """
 
         from ..custom_qc_workspace_service import CustomQCWorkspaceService
+        from ..rule_set_version_read_scope import read_rule_set_versions
         from ..qc_workspace.canonical_result_store import (
             CANONICAL_RESULT_DELIVERY_MODE as _CANONICAL_RESULT_DELIVERY_MODE,
             _CUSTOMER_STATUSES,
@@ -638,6 +643,7 @@ class WorkstationAggregationService:
         )
 
         workspace_service = CustomQCWorkspaceService()
+        rule_set_versions = read_rule_set_versions(LUXIAN_0609_RULE_SET_KEY)
         jobs_query = select(
             workspace_service._batch_job_table.c.id,
             workspace_service._batch_job_table.c.finished_at,
@@ -684,7 +690,7 @@ class WorkstationAggregationService:
             filter_rule_set_version = _safe_text(source.get("rule_set_version")).strip()
             if (
                 filter_rule_set_key == LUXIAN_0609_RULE_SET_KEY
-                and filter_rule_set_version == LUXIAN_0609_RULE_SET_VERSION
+                and filter_rule_set_version in rule_set_versions
             ):
                 jobs[current_job_id] = job
             elif not filter_rule_set_key and not filter_rule_set_version:
@@ -706,7 +712,7 @@ class WorkstationAggregationService:
                     continue
                 if (
                     _safe_text(summary.get("rule_set_key")).strip() == LUXIAN_0609_RULE_SET_KEY
-                    and _safe_text(summary.get("rule_set_version")).strip() == LUXIAN_0609_RULE_SET_VERSION
+                    and _safe_text(summary.get("rule_set_version")).strip() in rule_set_versions
                 ):
                     jobs[current_job_id] = legacy_candidates[current_job_id]
         if not jobs:
@@ -723,7 +729,9 @@ class WorkstationAggregationService:
                 and_(
                     workspace_service._record_result_envelope_table.c.root_job_id.in_(list(jobs)),
                     workspace_service._record_result_envelope_table.c.rule_set_key == LUXIAN_0609_RULE_SET_KEY,
-                    workspace_service._record_result_envelope_table.c.rule_set_version == LUXIAN_0609_RULE_SET_VERSION,
+                    workspace_service._record_result_envelope_table.c.rule_set_version.in_(
+                        sorted(rule_set_versions)
+                    ),
                 )
             )
         ).mappings().all()

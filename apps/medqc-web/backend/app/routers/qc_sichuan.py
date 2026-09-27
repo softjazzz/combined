@@ -78,8 +78,9 @@ from ..services.luxian_0609.surgery_procedure_catalog import (
 from ..services.luxian_0609.rule_decision_settings import (
     resolve_mainline_rule_decision_settings,
 )
+from ..services.rule_set_version_read_scope import current_excluded_rule_ids
+from ..services.rule_set_version_service import RuleSetVersionUnavailable
 from ..services.sample_validation_rule_sets import (
-    LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS,
     LUXIAN_0916_QC_RULE_SET_KEY,
     is_workspace_batch_draft_id,
 )
@@ -3101,11 +3102,18 @@ async def rules(
             load_luxian_0609_rules(),
             wanted_docs=wanted_docs,
         )
+        # 规则目录按当前规则集版本隐藏客户排除条目（版本表为空时即静态客户排除名单）。
+        try:
+            excluded_rule_ids = await run_in_threadpool(
+                current_excluded_rule_ids, LUXIAN_0609_RULE_SET_KEY,
+            )
+        except RuleSetVersionUnavailable as exc:
+            raise HTTPException(status_code=503, detail="规则集版本暂不可读取，请稍后重试") from exc
         data = [
             rule
             for rule in data
             if str(rule.get("rule_id") or rule.get("rule_code") or "").strip().upper()
-            not in LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
+            not in excluded_rule_ids
         ]
         data = attach_luxian_0609_customer_policy(data)
 

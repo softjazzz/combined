@@ -34,7 +34,6 @@ from .document_domain_alignment import (
 )
 from .luxian_0609.customer_renderer import (
     CUSTOMER_SCHEMA_VERSION as LUXIAN_0609_CUSTOMER_SCHEMA_VERSION,
-    RULE_SET_VERSION,
     exam_lab_data_gap_customer_message,
 )
 from .luxian_0609.customer_remediation import build_customer_remediation_suggestion
@@ -91,6 +90,11 @@ from .qc_workspace.failed_rule_retry import (
 )
 from .qc_rule_sets import get_sichuan_rule_set
 from .sample_validation_rule_sets import LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
+from .rule_set_version_read_scope import (
+    excluded_rule_ids_for_job,
+    job_rule_set_version,
+    read_rule_set_versions,
+)
 from .bundles.emr_view import load_bundle_documents
 from .case_identity import CaseRef, CaseRefInput, normalize_case_refs
 from ..database.connection import DB_SCHEMA_MODE, SessionLocal, engine
@@ -217,13 +221,42 @@ def _validate_luxian_batch_rule_ids(job: Dict[str, Any]) -> None:
                 raise ValueError(LX0609_CUSTOMER_RESULT_CONTRACT_ERROR)
 
 
-def _is_visible_luxian_customer_item(item: Dict[str, Any], *, enabled: bool) -> bool:
+def _expected_luxian_rule_ids(
+    expected_rule_ids: Optional[Sequence[str]],
+    excluded_rule_ids: frozenset[str],
+) -> List[str]:
+    """读取侧期望规则：调用方给定的规则（去掉排除条目），为空时取目录中未排除的规则。"""
+
+    resolved = [
+        _safe_text(rule_id).upper()
+        for rule_id in list(expected_rule_ids or [])
+        if _safe_text(rule_id)
+        and _safe_text(rule_id).upper() not in excluded_rule_ids
+    ]
+    if not resolved:
+        resolved = [
+            _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
+            for item in load_luxian_0609_rules()
+            if _safe_text(item.get("rule_id") or item.get("rule_code"))
+            and _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
+            not in excluded_rule_ids
+        ]
+    return resolved
+
+
+def _is_visible_luxian_customer_item(
+    item: Dict[str, Any],
+    *,
+    enabled: bool,
+    excluded_rule_ids: frozenset[str] = LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS,
+) -> bool:
     if not enabled:
         return True
     rule_id = _customer_result_rule_id(item)
     if not rule_id or rule_id not in _luxian_0609_catalog_rule_ids():
         raise ValueError(LX0609_CUSTOMER_RESULT_CONTRACT_ERROR)
-    return rule_id not in LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
+    # 排除条目由所选 job 决定（excluded_rule_ids_for_job），默认沿用静态客户排除名单。
+    return rule_id not in excluded_rule_ids
 
 
 _GENERIC_CUSTOMER_TEXT = {
@@ -645,6 +678,7 @@ def iter_unique_customer_result_source_items(
     *,
     hmac_key: str,
     _validate_luxian: Optional[bool] = None,
+    _excluded_rule_ids: Optional[frozenset[str]] = None,
 ) -> List[Dict[str, Any]]:
     """按统一优先级返回供 API、复核和导出共用的去重原始行集。"""
 
@@ -655,6 +689,9 @@ def iter_unique_customer_result_source_items(
     )
     if validate_luxian:
         _validate_luxian_batch_rule_ids(job)
+    excluded_rule_ids = (
+        excluded_rule_ids_for_job(job) if _excluded_rule_ids is None else _excluded_rule_ids
+    )
 
     children = [
         child
@@ -677,7 +714,9 @@ def iter_unique_customer_result_source_items(
     # 不能因为状态或原因码不同而把旧、新结论并排展示。
     unique_by_rule: Dict[tuple[str, str], tuple[tuple[int, int], Dict[str, Any]]] = {}
     for index, item in enumerate(raw_items):
-        if not _is_visible_luxian_customer_item(item, enabled=validate_luxian):
+        if not _is_visible_luxian_customer_item(
+            item, enabled=validate_luxian, excluded_rule_ids=excluded_rule_ids,
+        ):
             continue
         if not _is_current_rule_contract_result(item):
             continue
@@ -722,6 +761,7 @@ def flatten_customer_safe_result_items(
     *,
     hmac_key: str,
     _validate_luxian: Optional[bool] = None,
+    _excluded_rule_ids: Optional[frozenset[str]] = None,
 ) -> List[Dict[str, Any]]:
     """按内部结果原顺序生成供 API、复核和全部导出共用的唯一行集。"""
 
@@ -731,6 +771,7 @@ def flatten_customer_safe_result_items(
             job,
             hmac_key=hmac_key,
             _validate_luxian=_validate_luxian,
+            _excluded_rule_ids=_excluded_rule_ids,
         )
     ]
 
@@ -772,6 +813,7 @@ def _safe_review_report(
     *,
     hmac_key: str,
     _validate_luxian: bool = False,
+    _excluded_rule_ids: frozenset[str] = LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS,
 ) -> Optional[Dict[str, Any]]:
     if not isinstance(value, dict):
         return None
@@ -785,7 +827,7 @@ def _safe_review_report(
         if _validate_luxian:
             if not rule_id or rule_id not in _luxian_0609_catalog_rule_ids():
                 raise ValueError(LX0609_CUSTOMER_RESULT_CONTRACT_ERROR)
-            if rule_id in LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS:
+            if rule_id in _excluded_rule_ids:
                 continue
         rule = get_luxian_0609_rule(rule_id) or {}
         canonical_status = _canonical_customer_status(
@@ -863,8 +905,12 @@ def project_customer_safe_batch_job(
     *,
     hmac_key: str,
     _validate_luxian: Optional[bool] = None,
+    _excluded_rule_ids: Optional[frozenset[str]] = None,
 ) -> Dict[str, Any]:
-    """生成 API/复核共用的客户任务 DTO，不回传原始 filters/summary 技术对象。"""
+    """生成 API/复核共用的客户任务 DTO，不回传原始 filters/summary 技术对象。
+
+    排除条目以根任务为准（excluded_rule_ids_for_job），并原样传给子任务投影。
+    """
 
     validate_luxian = (
         _is_luxian_0609_export_job(job)
@@ -873,10 +919,14 @@ def project_customer_safe_batch_job(
     )
     if validate_luxian:
         _validate_luxian_batch_rule_ids(job)
+    excluded_rule_ids = (
+        excluded_rule_ids_for_job(job) if _excluded_rule_ids is None else _excluded_rule_ids
+    )
     items = flatten_customer_safe_result_items(
         job,
         hmac_key=hmac_key,
         _validate_luxian=validate_luxian,
+        _excluded_rule_ids=excluded_rule_ids,
     )
     status_counts: Dict[str, int] = {}
     for item in items:
@@ -896,6 +946,7 @@ def project_customer_safe_batch_job(
         raw_summary.get("review_report"),
         hmac_key=hmac_key,
         _validate_luxian=validate_luxian,
+        _excluded_rule_ids=excluded_rule_ids,
     )
     safe_summary: Dict[str, Any] = {
         "total_records": _to_int(raw_summary.get("total_records"), _to_int(job.get("total_records"))),
@@ -1076,13 +1127,15 @@ def project_customer_safe_batch_job(
         if validate_luxian:
             if not raw_rule_id or raw_rule_id not in _luxian_0609_catalog_rule_ids():
                 raise ValueError(LX0609_CUSTOMER_RESULT_CONTRACT_ERROR)
-            if raw_rule_id in LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS:
+            if raw_rule_id in excluded_rule_ids:
                 continue
         raw_rule_items = [
             project_customer_safe_result_item(item, hmac_key=hmac_key)
             for item in list(raw_rule.get("items") or [])
             if isinstance(item, dict)
-            and _is_visible_luxian_customer_item(item, enabled=validate_luxian)
+            and _is_visible_luxian_customer_item(
+                item, enabled=validate_luxian, excluded_rule_ids=excluded_rule_ids,
+            )
             and _is_current_rule_contract_result(item)
         ]
         safe_rule_results.append(
@@ -1111,6 +1164,7 @@ def project_customer_safe_batch_job(
             child,
             hmac_key=hmac_key,
             _validate_luxian=validate_luxian,
+            _excluded_rule_ids=excluded_rule_ids,
         )
         for child in list(job.get("child_jobs") or job.get("children") or [])
         if isinstance(child, dict)
@@ -3102,7 +3156,7 @@ class CustomQCWorkspaceService:
         patient_id: str,
         visit_id: str,
         rule_set_key: str = LUXIAN_0609_RULE_SET_KEY,
-        rule_set_version: str = RULE_SET_VERSION,
+        rule_set_version: Optional[str] = None,
         expected_rule_ids: Optional[Sequence[str]] = None,
     ) -> Dict[str, Any]:
         """读取一份病历当前规则代次的唯一客户结果。
@@ -3111,36 +3165,32 @@ class CustomQCWorkspaceService:
         ``institute_id + patient_id + visit_id`` 限定，再从全院所有创建者中
         选择已为该病历写入 Canonical Envelope 的当前规则代次最新唯一根任务；
         不得以批次整体状态、文案丰富度、证据数量或完整度替换较新的任务。
+
+        规则集版本（合同 8.2）：默认在已知版本集合内选择，跨版本按代次取最新；显式传入
+        ``rule_set_version`` 时只用该版本。排除条目与展示版本号取自所选 job。
         """
 
         normalized_institute_id = _safe_text(institute_id)
         normalized_patient_id = _safe_text(patient_id)
         normalized_visit_id = _safe_text(visit_id)
         normalized_rule_set_key = _safe_text(rule_set_key)
-        normalized_rule_set_version = _safe_text(rule_set_version)
-        expected_rule_ids_for_count = [
-            _safe_text(rule_id).upper()
-            for rule_id in list(expected_rule_ids or [])
-            if _safe_text(rule_id)
-            and _safe_text(rule_id).upper() not in LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
-        ]
-        if not expected_rule_ids_for_count:
-            expected_rule_ids_for_count = [
-                _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
-                for item in load_luxian_0609_rules()
-                if _safe_text(item.get("rule_id") or item.get("rule_code"))
-                and _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
-                not in LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
-            ]
+        # 尚未选中 job 时（not_found 等）按静态客户排除名单计数，与历史行为一致。
+        expected_rule_ids_for_count = _expected_luxian_rule_ids(
+            expected_rule_ids, LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS,
+        )
         if not all(
             (
                 normalized_institute_id,
                 normalized_patient_id,
                 normalized_visit_id,
                 normalized_rule_set_key,
-                normalized_rule_set_version,
             )
         ):
+            raise ValueError("单病历结果读取缺少三坐标身份或规则集参数")
+        normalized_rule_set_versions = read_rule_set_versions(
+            normalized_rule_set_key, rule_set_version,
+        )
+        if not normalized_rule_set_versions:
             raise ValueError("单病历结果读取缺少三坐标身份或规则集参数")
 
         session = _session()
@@ -3169,8 +3219,9 @@ class CustomQCWorkspaceService:
                             self._record_result_envelope_table.c.visit_id == normalized_visit_id,
                             self._record_result_envelope_table.c.rule_set_key
                             == normalized_rule_set_key,
-                            self._record_result_envelope_table.c.rule_set_version
-                            == normalized_rule_set_version,
+                            self._record_result_envelope_table.c.rule_set_version.in_(
+                                sorted(normalized_rule_set_versions)
+                            ),
                         )
                     )
                     .distinct()
@@ -3197,7 +3248,7 @@ class CustomQCWorkspaceService:
                 candidates,
                 record_id=normalized_visit_id,
                 rule_set_key=normalized_rule_set_key,
-                rule_set_version=normalized_rule_set_version,
+                rule_set_versions=normalized_rule_set_versions,
             )
             if selection.state != "ready" or not isinstance(selection.job, dict):
                 return {
@@ -3213,6 +3264,11 @@ class CustomQCWorkspaceService:
                 }
 
             selected_job = selection.job
+            selected_rule_set_version = job_rule_set_version(selected_job)
+            excluded_rule_ids = excluded_rule_ids_for_job(selected_job)
+            expected_rule_ids_for_count = _expected_luxian_rule_ids(
+                expected_rule_ids, excluded_rule_ids,
+            )
             envelope, envelope_id = self._load_record_result_envelope_with_id(
                 session,
                 root_job_id=_safe_text(selected_job.get("id")),
@@ -3220,7 +3276,7 @@ class CustomQCWorkspaceService:
                 patient_id=normalized_patient_id,
                 visit_id=normalized_visit_id,
                 rule_set_key=normalized_rule_set_key,
-                rule_set_version=normalized_rule_set_version,
+                rule_set_version=selected_rule_set_version,
             )
             if not envelope:
                 return {
@@ -3244,13 +3300,7 @@ class CustomQCWorkspaceService:
                 )
             )
             if not resolved_expected_rule_ids:
-                resolved_expected_rule_ids = [
-                    _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
-                    for item in load_luxian_0609_rules()
-                    if _safe_text(item.get("rule_id") or item.get("rule_code"))
-                    and _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
-                    not in LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
-                ]
+                resolved_expected_rule_ids = _expected_luxian_rule_ids((), excluded_rule_ids)
             if not _canonical_envelope_items_are_consistent(raw_items):
                 return {
                     "schema_version": "lx0609-single-record-result-v1",
@@ -3289,7 +3339,7 @@ class CustomQCWorkspaceService:
                 dict(item)
                 for item in raw_items
                 if _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
-                not in LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
+                not in excluded_rule_ids
             ]
             delivered_rule_ids = [
                 _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
@@ -3327,7 +3377,7 @@ class CustomQCWorkspaceService:
                 "root_job_id": _safe_text(selected_job.get("id")),
                 "envelope_id": envelope_id,
                 "rule_set_key": normalized_rule_set_key,
-                "rule_set_version": normalized_rule_set_version,
+                "rule_set_version": selected_rule_set_version,
                 "items": projected_items,
                 "expected_rule_count": len(resolved_expected_rule_ids),
                 "result_rule_count": len(items),
@@ -3343,7 +3393,7 @@ class CustomQCWorkspaceService:
         *,
         record_refs: Sequence[Mapping[str, Any]],
         rule_set_key: str = LUXIAN_0609_RULE_SET_KEY,
-        rule_set_version: str = RULE_SET_VERSION,
+        rule_set_version: Optional[str] = None,
         session_factory: Optional[Callable[[], Session]] = None,
         include_items: bool = False,
     ) -> Dict[tuple[str, str, str], Dict[str, Any]]:
@@ -3351,8 +3401,33 @@ class CustomQCWorkspaceService:
 
         只读取完成的根任务及其显式 Envelope。它不会读取 legacy items、Bundle
         或 QCResult；无法以三坐标确认的结果不允许进入 ``ready`` 状态。
+        规则集版本（合同 8.2）：默认在已知版本集合内选择，显式传入版本时只用该版本。
         """
 
+        projections, _ = self._completed_record_result_projections(
+            record_refs=record_refs,
+            rule_set_key=rule_set_key,
+            rule_set_version=rule_set_version,
+            session_factory=session_factory,
+            include_items=include_items,
+        )
+        return projections
+
+    def _completed_record_result_projections(
+        self,
+        *,
+        record_refs: Sequence[Mapping[str, Any]],
+        rule_set_key: str,
+        rule_set_version: Optional[str],
+        session_factory: Optional[Callable[[], Session]],
+        include_items: bool,
+    ) -> tuple[
+        Dict[tuple[str, str, str], Dict[str, Any]],
+        Dict[tuple[str, str, str], Dict[str, Any]],
+    ]:
+        """病历池摘要的实现；另返回每个 ready 病历所选的根任务（只含选择字段）。"""
+
+        selected_jobs: Dict[tuple[str, str, str], Dict[str, Any]] = {}
         identities = {
             (
                 _safe_text(ref.get("institute_id")),
@@ -3364,12 +3439,17 @@ class CustomQCWorkspaceService:
         }
         identities = {identity for identity in identities if all(identity)}
         if not identities:
-            return {}
+            return {}, selected_jobs
 
         normalized_rule_set_key = _safe_text(rule_set_key)
-        normalized_rule_set_version = _safe_text(rule_set_version)
-        if not normalized_rule_set_key or not normalized_rule_set_version:
+        normalized_rule_set_versions = (
+            read_rule_set_versions(normalized_rule_set_key, rule_set_version)
+            if normalized_rule_set_key
+            else frozenset()
+        )
+        if not normalized_rule_set_key or not normalized_rule_set_versions:
             raise ValueError("病历池结果摘要缺少规则集身份")
+        sorted_rule_set_versions = sorted(normalized_rule_set_versions)
 
         visit_ids = sorted({identity[2] for identity in identities})
         escaped_visit_ids = {
@@ -3389,14 +3469,20 @@ class CustomQCWorkspaceService:
         filters_rule_set_candidate = self._batch_job_table.c.filters_json.ilike(
             f"%{normalized_rule_set_key}%"
         )
-        filters_rule_version_candidate = self._batch_job_table.c.filters_json.ilike(
-            f"%{normalized_rule_set_version}%"
+        filters_rule_version_candidate = or_(
+            *(
+                self._batch_job_table.c.filters_json.ilike(f"%{version}%")
+                for version in sorted_rule_set_versions
+            )
         )
         summary_rule_set_candidate = self._batch_job_table.c.summary_json.ilike(
             f"%{normalized_rule_set_key}%"
         )
-        summary_rule_version_candidate = self._batch_job_table.c.summary_json.ilike(
-            f"%{normalized_rule_set_version}%"
+        summary_rule_version_candidate = or_(
+            *(
+                self._batch_job_table.c.summary_json.ilike(f"%{version}%")
+                for version in sorted_rule_set_versions
+            )
         )
         rule_set_candidate = or_(filters_rule_set_candidate, summary_rule_set_candidate)
         rule_version_candidate = or_(filters_rule_version_candidate, summary_rule_version_candidate)
@@ -3461,8 +3547,10 @@ class CustomQCWorkspaceService:
                     and (
                         normalized_rule_set_key not in raw_filters_text
                         and normalized_rule_set_key not in raw_summary_text
-                        or normalized_rule_set_version not in raw_filters_text
-                        and normalized_rule_set_version not in raw_summary_text
+                        or not any(
+                            version in raw_filters_text or version in raw_summary_text
+                            for version in sorted_rule_set_versions
+                        )
                     )
                 ):
                     continue
@@ -3481,7 +3569,7 @@ class CustomQCWorkspaceService:
                     )
                     or (
                         filter_rule_set_version
-                        and filter_rule_set_version != normalized_rule_set_version
+                        and filter_rule_set_version not in normalized_rule_set_versions
                     )
                 ):
                     continue
@@ -3494,7 +3582,7 @@ class CustomQCWorkspaceService:
                         None
                         if (
                             filter_rule_set_key == normalized_rule_set_key
-                            and filter_rule_set_version == normalized_rule_set_version
+                            and filter_rule_set_version in normalized_rule_set_versions
                         )
                         else _safe_json_loads(row.get("summary_json"), None)
                     )
@@ -3517,7 +3605,8 @@ class CustomQCWorkspaceService:
                 jobs_by_id[job_id] = job
                 if (
                     _rule_set_value(job, "rule_set_key") != normalized_rule_set_key
-                    or _rule_set_value(job, "rule_set_version") != normalized_rule_set_version
+                    or _rule_set_value(job, "rule_set_version")
+                    not in normalized_rule_set_versions
                 ):
                     continue
                 for visit_id in set(_safe_text(value) for value in job["record_ids"]):
@@ -3527,7 +3616,7 @@ class CustomQCWorkspaceService:
                     ):
                         current_jobs_by_visit.setdefault(visit_id, []).append(job)
             if not jobs_by_id:
-                return {identity: {"status": "not_run"} for identity in identities}
+                return {identity: {"status": "not_run"} for identity in identities}, selected_jobs
 
             envelope_rows = (
                 session.execute(
@@ -3555,7 +3644,7 @@ class CustomQCWorkspaceService:
                     continue
                 if (
                     _safe_text(row.get("rule_set_key")) == normalized_rule_set_key
-                    and _safe_text(row.get("rule_set_version")) == normalized_rule_set_version
+                    and _safe_text(row.get("rule_set_version")) in normalized_rule_set_versions
                 ):
                     current_envelopes_by_job_visit.setdefault((job_id, identity[2]), []).append(row)
                     if identity in identities:
@@ -3598,7 +3687,7 @@ class CustomQCWorkspaceService:
                     ready_candidates,
                     record_id=visit_id,
                     rule_set_key=normalized_rule_set_key,
-                    rule_set_version=normalized_rule_set_version,
+                    rule_set_versions=normalized_rule_set_versions,
                 )
                 # 只有当前规则版本、且没有任何当前版本同 visit Envelope 的根任务
                 # 才是无法确认三坐标归属的缺失候选。旧版本 Envelope 完全不参与
@@ -3635,11 +3724,13 @@ class CustomQCWorkspaceService:
                         completed_at=ready_selection.job.get("finished_at"),
                         include_items=include_items,
                         rule_set_key=normalized_rule_set_key,
+                        excluded_rule_ids=excluded_rule_ids_for_job(ready_selection.job),
                     )
                     if summary.get("status") == "ready":
                         # 仅供病历审核锚定结果对象，不改变选择行为；病历池输出会按白名单裁剪。
                         summary["root_job_id"] = selected_job_id
                         summary["envelope_id"] = _safe_text(selected_envelopes[0].get("id"))
+                        selected_jobs[identity] = ready_selection.job
                     projections[identity] = summary
                     continue
 
@@ -3649,7 +3740,7 @@ class CustomQCWorkspaceService:
                     ambiguous_candidates,
                     record_id=visit_id,
                     rule_set_key=normalized_rule_set_key,
-                    rule_set_version=normalized_rule_set_version,
+                    rule_set_versions=normalized_rule_set_versions,
                 )
                 if ambiguous_selection.state == "technical_error":
                     projections[identity] = {
@@ -3663,7 +3754,7 @@ class CustomQCWorkspaceService:
                     }
                 else:
                     projections[identity] = {"status": "not_run"}
-            return projections
+            return projections, selected_jobs
         finally:
             session.close()
 
@@ -3674,8 +3765,13 @@ class CustomQCWorkspaceService:
         completed_at: Any,
         include_items: bool = False,
         rule_set_key: str = LUXIAN_0609_RULE_SET_KEY,
+        excluded_rule_ids: Optional[frozenset[str]] = None,
     ) -> Dict[str, Any]:
-        """把一份通过结构校验的 Canonical Envelope 缩减为病历池摘要。"""
+        """把一份通过结构校验的 Canonical Envelope 缩减为病历池摘要。
+
+        ``excluded_rule_ids`` 由调用方按所选 job 给出（excluded_rule_ids_for_job）；
+        未给出时沿用静态客户排除名单。
+        """
 
         envelope = _safe_json_loads(envelope_row.get("envelope_json"), {})
         if (
@@ -3707,7 +3803,11 @@ class CustomQCWorkspaceService:
                 }
 
         excluded_rule_ids = (
-            LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
+            (
+                LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
+                if excluded_rule_ids is None
+                else excluded_rule_ids
+            )
             if _safe_text(rule_set_key) == LUXIAN_0609_RULE_SET_KEY
             else frozenset()
         )
@@ -3760,25 +3860,23 @@ class CustomQCWorkspaceService:
         *,
         record_refs: Sequence[Mapping[str, Any]],
         rule_set_key: str = LUXIAN_0609_RULE_SET_KEY,
-        rule_set_version: str = RULE_SET_VERSION,
+        rule_set_version: Optional[str] = None,
         session_factory: Optional[Callable[[], Session]] = None,
     ) -> Dict[tuple[str, str, str], Dict[str, Any]]:
-        """一次读取一组病历的最新 Canonical 完整结果，供服务端全量导出。"""
+        """一次读取一组病历的最新 Canonical 完整结果，供服务端全量导出。
 
-        projections = self.build_luxian_0609_completed_record_result_summaries(
+        排除条目、期望规则与展示版本号取自每份病历所选的 job（合同 8.2）。
+        """
+
+        projections, selected_jobs = self._completed_record_result_projections(
             record_refs=record_refs,
             rule_set_key=rule_set_key,
             rule_set_version=rule_set_version,
             session_factory=session_factory,
             include_items=True,
         )
-        expected_rule_ids = [
-            _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
-            for item in load_luxian_0609_rules()
-            if _safe_text(item.get("rule_id") or item.get("rule_code"))
-            and _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
-            not in LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
-        ]
+        # 未选中 job（not_found / technical_error）时按静态客户排除名单计数，与历史行为一致。
+        expected_rule_ids = _expected_luxian_rule_ids((), LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS)
         results: Dict[tuple[str, str, str], Dict[str, Any]] = {}
         for identity, projection in projections.items():
             status = _safe_text(projection.get("status"))
@@ -3794,12 +3892,15 @@ class CustomQCWorkspaceService:
                     "is_complete": False,
                 }
                 continue
+            selected_job = selected_jobs[identity]
+            excluded_rule_ids = excluded_rule_ids_for_job(selected_job)
+            job_expected_rule_ids = _expected_luxian_rule_ids((), excluded_rule_ids)
             items = [
                 dict(item)
                 for item in projection.get("items") or []
                 if isinstance(item, dict)
                 and _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
-                not in LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
+                not in excluded_rule_ids
             ]
             delivered_rule_ids = {
                 _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
@@ -3807,7 +3908,7 @@ class CustomQCWorkspaceService:
                 if _safe_text(item.get("rule_id") or item.get("rule_code"))
             }
             missing_rule_ids = [
-                rule_id for rule_id in expected_rule_ids if rule_id not in delivered_rule_ids
+                rule_id for rule_id in job_expected_rule_ids if rule_id not in delivered_rule_ids
             ]
             results[identity] = {
                 "schema_version": "lx0609-single-record-result-v1",
@@ -3818,9 +3919,9 @@ class CustomQCWorkspaceService:
                 "root_job_id": _safe_text(projection.get("root_job_id")),
                 "envelope_id": _safe_text(projection.get("envelope_id")),
                 "rule_set_key": rule_set_key,
-                "rule_set_version": rule_set_version,
+                "rule_set_version": job_rule_set_version(selected_job),
                 "items": items,
-                "expected_rule_count": len(expected_rule_ids),
+                "expected_rule_count": len(job_expected_rule_ids),
                 "result_rule_count": len(items),
                 "is_complete": not missing_rule_ids,
                 "missing_rule_ids": missing_rule_ids,
@@ -3832,18 +3933,26 @@ class CustomQCWorkspaceService:
         *,
         record_refs: Sequence[CaseRefInput],
         rule_set_key: str = LUXIAN_0609_RULE_SET_KEY,
-        rule_set_version: str = RULE_SET_VERSION,
+        rule_set_version: Optional[str] = None,
         session_factory: Optional[Callable[[], Session]] = None,
     ) -> tuple[CaseRef, ...]:
-        """筛出已有运行期结果、且尚未启动终末复评的出院病历。"""
+        """筛出已有运行期结果、且尚未启动终末复评的出院病历。
+
+        规则集版本（合同 8.2）：默认在已知版本集合内判断，显式传入版本时只用该版本。
+        """
 
         normalized_refs = normalize_case_refs(record_refs)
         if not normalized_refs:
             return ()
         normalized_rule_set_key = _safe_text(rule_set_key)
-        normalized_rule_set_version = _safe_text(rule_set_version)
-        if not normalized_rule_set_key or not normalized_rule_set_version:
+        normalized_rule_set_versions = (
+            read_rule_set_versions(normalized_rule_set_key, rule_set_version)
+            if normalized_rule_set_key
+            else frozenset()
+        )
+        if not normalized_rule_set_key or not normalized_rule_set_versions:
             raise ValueError("终末复评候选读取缺少规则集参数")
+        sorted_rule_set_versions = sorted(normalized_rule_set_versions)
 
         identities = [
             (ref.institute_id, ref.patient_id, ref.visit_id) for ref in normalized_refs
@@ -3877,8 +3986,9 @@ class CustomQCWorkspaceService:
                             ),
                             self._record_result_envelope_table.c.rule_set_key
                             == normalized_rule_set_key,
-                            self._record_result_envelope_table.c.rule_set_version
-                            == normalized_rule_set_version,
+                            self._record_result_envelope_table.c.rule_set_version.in_(
+                                sorted_rule_set_versions
+                            ),
                             tuple_(
                                 self._record_result_envelope_table.c.institute_id,
                                 self._record_result_envelope_table.c.patient_id,
@@ -3906,8 +4016,11 @@ class CustomQCWorkspaceService:
                             self._batch_job_table.c.filters_json.ilike(
                                 f"%{normalized_rule_set_key}%"
                             ),
-                            self._batch_job_table.c.filters_json.ilike(
-                                f"%{normalized_rule_set_version}%"
+                            or_(
+                                *(
+                                    self._batch_job_table.c.filters_json.ilike(f"%{version}%")
+                                    for version in sorted_rule_set_versions
+                                )
                             ),
                             or_(
                                 self._batch_job_table.c.parent_job_id.is_(None),
@@ -3952,7 +4065,7 @@ class CustomQCWorkspaceService:
                     continue
                 if _safe_text(filters.get("rule_set_key")) != normalized_rule_set_key:
                     continue
-                if _safe_text(filters.get("rule_set_version")) != normalized_rule_set_version:
+                if _safe_text(filters.get("rule_set_version")) not in normalized_rule_set_versions:
                     continue
                 try:
                     active_refs = normalize_case_refs(filters.get("record_refs") or [])
@@ -4011,7 +4124,7 @@ class CustomQCWorkspaceService:
         visit_id: str,
         expected_rule_ids: Optional[Sequence[str]] = None,
         rule_set_key: str = LUXIAN_0609_RULE_SET_KEY,
-        rule_set_version: str = RULE_SET_VERSION,
+        rule_set_version: Optional[str] = None,
     ) -> Dict[str, Any]:
         """单病历结果接口的唯一服务入口。"""
 

@@ -344,6 +344,29 @@ def current_version(rule_set_key: Any) -> str:
         raise RuleSetVersionUnavailable("规则集版本读取失败") from exc
 
 
+def known_versions(rule_set_key: Any) -> frozenset[str]:
+    """读取侧版本集合唯一 owner（合同 8.2）：内置版本 + 全部 published/retired 版本（草稿除外）。
+
+    非版本化规则集不读数据库，只返回内置版本；版本化规则集只执行一次查询，
+    表中没有已发布/已下线行时返回 {内置}。读库失败抛 RuleSetVersionUnavailable（失败关闭）。
+    """
+    rule_set = _rule_set(rule_set_key)
+    if rule_set.key not in VERSIONABLE_RULE_SET_KEYS:
+        return frozenset({rule_set.version})
+    factory = _require_session_factory()
+    try:
+        with factory() as session:
+            rows = session.execute(
+                select(_TABLE.c.version).where(
+                    _TABLE.c.rule_set_key == rule_set.key,
+                    _TABLE.c.status.in_((STATUS_PUBLISHED, STATUS_RETIRED)),
+                )
+            ).all()
+    except SQLAlchemyError as exc:
+        raise RuleSetVersionUnavailable("规则集版本读取失败") from exc
+    return frozenset({rule_set.version, *(_clean(row.version) for row in rows if _clean(row.version))})
+
+
 # ---------------------------------------------------------------------------
 # 发布校验
 # ---------------------------------------------------------------------------
@@ -699,11 +722,6 @@ def delete_draft(rule_set_key: Any, *, actor: str, version_seq: Any) -> dict[str
     return {"rule_set_key": rule_set.key, "deleted": True}
 
 
-# 发布闸门：读取侧（病历池摘要、单病历结果、导出、分析）仍按静态 RULE_SET_VERSION 与静态排除名单
-# 选择结果；在其支持多版本之前发布新版本会使新 job 的结果在这些入口不可见。读取侧版本化完成后移除。
-PUBLISH_ENABLED = False
-
-
 def publish_draft(
     rule_set_key: Any, *, actor: str, version: Any, note: Any = None, version_seq: Any = None,
 ) -> dict[str, Any]:
@@ -711,10 +729,6 @@ def publish_draft(
 
     version_seq 可选；传入时做 CAS，避免发布他人刚改过的草稿。版本号不得与内置版本或已有版本重复。
     """
-    if not PUBLISH_ENABLED:
-        raise RuleSetVersionConflict(
-            "读取侧尚未支持多版本结果，暂不允许发布新规则集版本", code="publish_not_ready",
-        )
     rule_set = _versionable_rule_set(rule_set_key)
     actor = _actor(actor)
     version = _publish_version(version)
