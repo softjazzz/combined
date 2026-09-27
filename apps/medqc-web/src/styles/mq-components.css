@@ -335,3 +335,26 @@
   font-family: var(--mq-font-mono);
   font-size: var(--mq-font-12);
 }
+
+/* ---------- 弹窗：a-modal 传 wrap-class-name="mq-modal" ---------- */
+.mq-modal .ant-modal-content {
+  padding: 28px 28px 24px;
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  border-radius: var(--mq-radius-overlay);
+  background: rgba(255, 255, 255, 0.88);
+  -webkit-backdrop-filter: blur(40px) saturate(1.8);
+  backdrop-filter: blur(40px) saturate(1.8);
+  box-shadow:
+    inset 0 1px 0 #ffffff,
+    0 2px 6px rgba(10, 45, 90, 0.06),
+    0 30px 80px rgba(10, 40, 90, 0.28);
+}
+
+.mq-modal .ant-modal-close {
+  top: 18px;
+  right: 18px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--mq-bg-muted);
+}

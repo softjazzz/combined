@@ -20,6 +20,7 @@ const components: Partial<OverrideToken> = {
   },
   Modal: {
     borderRadiusLG: 26,
+    colorBgMask: 'rgba(28, 38, 60, 0.26)',
     paddingContentHorizontalLG: 28,
   },
   Drawer: {

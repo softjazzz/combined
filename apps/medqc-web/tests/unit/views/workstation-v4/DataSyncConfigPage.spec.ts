@@ -1,4 +1,4 @@
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { computed, reactive, ref } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import DataSyncConfigPage from '@/views/workstation-v4/DataSyncConfigPage.vue'
@@ -95,6 +95,7 @@ function mountPage() {
         'a-button': { template: '<button><slot /></button>' },
         'a-tag': { template: '<span><slot /></span>' },
         'a-progress': { template: '<div class="progress-stub" />' },
+        'a-modal': { template: '<div><slot /></div>' },
         'a-select': {
           props: ['value', 'options', 'disabled'],
           template: '<div class="select-stub"><slot /></div>',
@@ -161,7 +162,9 @@ describe('DataSyncConfigPage visit progress', () => {
     expect(wrapper.text()).toContain('0 / 20 份')
     expect(wrapper.text()).not.toContain('3 / 20 份')
     expect(wrapper.text()).not.toContain('有 2 份病历明细已同步但病历池暂不可见')
-    expect(wrapper.find('.wv4-status-chip--warning').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="sync-progress-status"]').classes()).not.toContain(
+      'mq-status--warning',
+    )
   })
 
   it('未重新检查范围时本次同步计数全部从零开始', async () => {
@@ -309,6 +312,37 @@ describe('DataSyncConfigPage visit progress', () => {
 
     expect(wrapper.text()).toContain('我已确认同步 12 份病历')
     expect(wrapper.text()).toContain('开始同步')
+  })
+
+  it('执行同步前在页面内弹窗展示范围摘要，取消后不执行', async () => {
+    mockUserRoles = ['sync_admin']
+    mockState.preflightResult = {
+      source: 'pg',
+      estimated_impact: 12,
+      executable: true,
+      blockers: [],
+      warnings: [],
+    }
+    const wrapper = mountPage()
+    expect(wrapper.find('.sync-confirm').exists()).toBe(false)
+
+    await wrapper.get('.sync-actions__confirm input').setValue(true)
+    const executeButton = wrapper
+      .findAll('button')
+      .find((button) => button.text() === '确认执行同步')
+    await executeButton?.trigger('click')
+    await flushPromises()
+
+    const dialog = wrapper.get('.sync-confirm')
+    expect(dialog.text()).toContain('执行前确认')
+    expect(dialog.text()).toContain('找到可同步病历 12 份')
+    expect(dialog.text()).toContain('已出院病历')
+    expect(dialog.text()).toContain('2026-06-01 ~ 2026-06-30')
+
+    const cancelButton = dialog.findAll('button').find((button) => button.text() === '取消')
+    await cancelButton?.trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.sync-confirm').exists()).toBe(false)
   })
 
   it('演示账号只看到简化同步向导并隐藏实施诊断信息', () => {
