@@ -1,4 +1,4 @@
-from backend.scripts.benchmark_customer_sample_sync import (
+from scripts.benchmark_customer_sample_sync import (
     build_sync_payload,
     build_acceptance_template,
     evaluate_acceptance,

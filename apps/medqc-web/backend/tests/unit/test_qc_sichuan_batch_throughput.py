@@ -33,6 +33,17 @@ from app.services.luxian_0609.source_evidence_reader import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _no_cdm_read_lock(monkeypatch):
+    """本文件的内存工作区只验证批量执行与结果投影。
+
+    CDM 共享读锁与锁内任务归属/同步收据复核需要真实任务库，
+    分别由 test_task_qc_shared_lock、test_task_sync_qc_pg_race 等专门测试覆盖。
+    """
+    monkeypatch.setattr(qc_sichuan, "_acquire_cdm_read_lock", lambda: None)
+    monkeypatch.setattr(qc_sichuan, "_validate_task_job_after_cdm_lock", lambda *_: None)
+
+
 def _luxian_native_settings(**overrides: Any) -> SimpleNamespace:
     values = {
         "LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED": True,
@@ -1027,14 +1038,8 @@ async def test_sc_batch_nonempty_result_has_completed_execution_status(monkeypat
     assert workspace.summary["failed_record_count"] == 0
 
 
-def _skip_task_receipt_recheck_for_projection_test(monkeypatch):
-    # 这些内存任务只验证结果投影，不验证持久化任务归属或同步收据。
-    monkeypatch.setattr(qc_sichuan, "_validate_task_job_after_cdm_lock", lambda *_: None)
-
-
 @pytest.mark.asyncio
 async def test_sc_task_batch_persists_compact_executor_compliant_results(monkeypatch):
-    _skip_task_receipt_recheck_for_projection_test(monkeypatch)
     workspace = _WorkspaceStub()
     workspace.job["filters"] = {
         "rule_ids": ["SC-001", "SC-002"],
@@ -1088,7 +1093,6 @@ async def test_sc_non_task_batch_keeps_compliant_results_sparse(monkeypatch, tas
     workspace = _WorkspaceStub()
     workspace.job["filters"] = {"rule_ids": ["SC-001"], "rule_set_key": "sc_content_v1"}
     if task_run_number is not None:
-        _skip_task_receipt_recheck_for_projection_test(monkeypatch)
         workspace.job["filters"].update({
             "task_id": "task-001",
             "task_run_number": task_run_number,
@@ -1112,7 +1116,6 @@ async def test_sc_non_task_batch_keeps_compliant_results_sparse(monkeypatch, tas
 
 @pytest.mark.asyncio
 async def test_sc_task_batch_keeps_non_compliant_item_unchanged(monkeypatch):
-    _skip_task_receipt_recheck_for_projection_test(monkeypatch)
     workspace = _WorkspaceStub()
     workspace.job["filters"] = {
         "rule_ids": ["SC-001"],
@@ -1141,7 +1144,6 @@ async def test_sc_task_batch_keeps_non_compliant_item_unchanged(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_sc_task_retry_recompresses_merged_rule_summary(monkeypatch):
-    _skip_task_receipt_recheck_for_projection_test(monkeypatch)
     workspace = _WorkspaceStub()
     refs = [
         {"institute_id": "HOSP-001", "patient_id": f"PAT-{visit_id}", "visit_id": visit_id}
@@ -1213,7 +1215,6 @@ async def test_sc_task_retry_recompresses_merged_rule_summary(monkeypatch):
     ["duplicate", "duplicate_non_compliant", "duplicate_uncertain", "invalid_status", "contradictory"],
 )
 async def test_sc_task_batch_rejects_ambiguous_results(monkeypatch, invalid_kind):
-    _skip_task_receipt_recheck_for_projection_test(monkeypatch)
     workspace = _WorkspaceStub()
     workspace.job["filters"] = {
         "rule_ids": ["SC-001"],
@@ -3095,6 +3096,17 @@ async def test_full_luxian_batch_worker_uses_unified_customer_package_entry(
         batch_worker,
         "get_settings",
         _luxian_native_settings,
+    )
+
+    # 模拟已加载但无文书文本的病例 bundle，验证其质量标记原样进入统一入口。
+    monkeypatch.setattr(
+        batch_worker,
+        "load_running_final_bundle",
+        lambda **_: {
+            "medical_text": "",
+            "document_hits": {},
+            "data_quality_flags": ["text_unavailable"],
+        },
     )
 
     await batch_worker.run_sichuan_workspace_batch_job(

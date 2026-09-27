@@ -22,6 +22,16 @@ if not _explicit_database_url:
 elif make_url(_explicit_database_url).database == "medqc":
     raise RuntimeError("拒绝在业务库 medqc 上运行后端测试")
 
+if not _explicit_database_url:
+    import psycopg2
+
+    def _refuse_psycopg2_connect(*_args, **_kwargs):
+        # 默认拒连模式下任何 PostgreSQL 连接（含 .env 中的 REMOTE_DB_URL）立即失败，
+        # 避免 Windows 上对拒连端口的 TCP 重试让每次连接空等约 2 秒。
+        raise psycopg2.OperationalError("单元测试默认拒连：未显式配置 DATABASE_URL")
+
+    psycopg2.connect = _refuse_psycopg2_connect
+
 # 导入应用
 from app.main import create_app  # noqa: E402 - 先隔离数据库再导入应用
 from app.core.rate_limit import reset_rate_limit_store_for_testing  # noqa: E402
@@ -71,6 +81,33 @@ def _empty_rule_set_version_store(monkeypatch):
     )
     yield
     engine.dispose()
+
+
+@pytest.fixture
+def memory_async_job_store(monkeypatch):
+    """用内存替身替换异步任务存储，避免读写真实库的 qc.qc_async_jobs。"""
+    from tests.fixtures.memory_async_job_store import MemoryAsyncJobStore
+
+    return MemoryAsyncJobStore().install(monkeypatch)
+
+
+@pytest.fixture
+def offline_workspace_schema(monkeypatch):
+    """工作区表只在内存中定义，不在构造服务时对数据库执行建表/补列。
+
+    CustomQCWorkspaceService 构造时会 create_all 并检查批任务父子列；
+    注入 session_factory 的单元测试不应因此连接数据库。
+    """
+    import app.services.custom_qc_workspace_service as workspace_module
+
+    cached_tables = (workspace_module._drafts_table, workspace_module._batch_jobs_table)
+    for cached in cached_tables:
+        cached.cache_clear()
+    monkeypatch.setattr(workspace_module.MetaData, "create_all", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(workspace_module, "_sync_batch_job_parent_columns", lambda **_kwargs: None)
+    yield
+    for cached in cached_tables:
+        cached.cache_clear()
 
 
 @pytest.fixture(scope="session")

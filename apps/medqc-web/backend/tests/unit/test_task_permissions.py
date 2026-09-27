@@ -46,10 +46,38 @@ def test_task_rights_do_not_expand_medical_record_rights():
     assert not has_permission(doctor, ResourceType.QC_TASKS, PermissionAction.CREATE)
 
 
+# 任务内人工缺陷补录写入的是缺陷（质控结果）资源，沿用缺陷入口的 QC_RESULTS 权限；
+# 受领人范围由服务层另行校验。例外必须逐条登记，新增路由默认仍须使用任务资源。
+_NON_TASK_RESOURCE_ROUTES = {
+    ("POST", "/{task_id}/records/{task_record_id}/manual-defects"): (
+        ResourceType.QC_RESULTS,
+        PermissionAction.CREATE,
+    ),
+}
+
+
 def test_all_task_routes_use_task_permission_resource():
+    seen_exceptions = set()
     for route in tasks.router.routes:
         permission = getclosurevars(route.endpoint).nonlocals
-        assert permission["resource"] == ResourceType.QC_TASKS, route.path
+        for method in route.methods:
+            key = (method, route.path.removeprefix(tasks.router.prefix))
+            if key in _NON_TASK_RESOURCE_ROUTES:
+                seen_exceptions.add(key)
+                expected = _NON_TASK_RESOURCE_ROUTES[key]
+                assert (permission["resource"], permission["action"]) == expected, key
+            else:
+                assert permission["resource"] == ResourceType.QC_TASKS, key
+    assert seen_exceptions == set(_NON_TASK_RESOURCE_ROUTES)
+
+
+def test_manual_defect_create_right_matches_task_analyze_right():
+    """人工缺陷补录不得让无任务处理权的角色获得写入口。"""
+    for role in (UserRole.ADMIN, UserRole.QC_MANAGER, UserRole.QC_STAFF, UserRole.DOCTOR):
+        user = {"roles": [role]}
+        assert has_permission(user, ResourceType.QC_RESULTS, PermissionAction.CREATE) is (
+            has_permission(user, ResourceType.QC_TASKS, PermissionAction.ANALYZE)
+        ), role
 
 
 @pytest.mark.parametrize(

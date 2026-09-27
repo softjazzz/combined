@@ -301,7 +301,7 @@ async def test_mapping_suggest_route_scopes_uncached_call_to_file_id(
     assert context.executor_key == "field_mapper"
 
 
-def test_background_mapping_scopes_call_to_task_id(monkeypatch, tmp_path):
+def test_background_mapping_scopes_call_to_task_id(monkeypatch, tmp_path, memory_async_job_store):
     task_id = "task-root-456"
     captured: dict[str, Any] = {}
 

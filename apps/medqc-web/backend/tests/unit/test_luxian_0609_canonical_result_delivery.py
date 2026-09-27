@@ -50,6 +50,9 @@ from app.services.luxian_0609.canonical_result_finalizer import (
 )
 
 
+pytestmark = pytest.mark.usefixtures("offline_workspace_schema")
+
+
 class _Rows:
     def __init__(self, rows: list[dict[str, Any]]):
         self._rows = rows
