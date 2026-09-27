@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.core.access_control import enforce_default_auth
+from app.services.task_delete_service import TaskDeleteConflict
 
 
 @pytest.fixture
@@ -14,31 +15,6 @@ def client(app):
         yield test_client
     finally:
         test_client.close()
-
-
-class _DummyResp:
-    def __init__(self, data=None, count=None):
-        self.data = data if data is not None else []
-        self.count = count
-
-
-class _FakeQuery:
-    def select(self, *_args, **_kwargs):
-        return self
-
-    def eq(self, *_args, **_kwargs):
-        return self
-
-    def update(self, *_args, **_kwargs):
-        return self
-
-    def delete(self, *_args, **_kwargs):
-        return self
-
-
-class _FakeSupabase:
-    def table(self, _name: str):
-        return _FakeQuery()
 
 
 def _admin_headers(client) -> dict[str, str]:
@@ -141,11 +117,12 @@ def test_delete_task_emits_audit_event(client, monkeypatch):
     headers = _admin_headers(client)
     audit_calls: list[dict] = []
 
-    async def _fake_async_execute(_query):
-        return _DummyResp(data=[{"ok": True}])
-
-    monkeypatch.setattr("app.routers.tasks.get_supabase", lambda: _FakeSupabase())
-    monkeypatch.setattr("app.routers.tasks.async_execute", _fake_async_execute)
+    deleted: list[str] = []
+    # 草稿删除保护由 test_task_delete_guard 覆盖；此处只验证路由审计。
+    monkeypatch.setattr(
+        "app.routers.tasks.delete_empty_draft_task",
+        lambda *, task_id: deleted.append(task_id),
+    )
     monkeypatch.setattr(
         "app.routers.tasks.audit_event",
         lambda _request, **kwargs: audit_calls.append(kwargs),
@@ -156,9 +133,34 @@ def test_delete_task_emits_audit_event(client, monkeypatch):
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["success"] is True
+    assert deleted == ["task-del-1"]
     assert any(
         call.get("action") == "tasks.lifecycle.delete"
         and call.get("details", {}).get("task_id") == "task-del-1"
         for call in audit_calls
     )
+    client.app.dependency_overrides.clear()
+
+
+def test_delete_task_conflict_does_not_emit_success_audit(client, monkeypatch):
+    async def _noop_auth_gate():
+        return None
+
+    client.app.dependency_overrides[enforce_default_auth] = _noop_auth_gate
+    headers = _admin_headers(client)
+    audit_calls: list[dict] = []
+
+    def _conflict(*, task_id):
+        raise TaskDeleteConflict("任务已有关联病历，不能删除")
+
+    monkeypatch.setattr("app.routers.tasks.delete_empty_draft_task", _conflict)
+    monkeypatch.setattr(
+        "app.routers.tasks.audit_event",
+        lambda _request, **kwargs: audit_calls.append(kwargs),
+    )
+
+    resp = client.delete("/api/v1/tasks/task-del-2", headers=headers)
+
+    assert resp.status_code == 409, resp.text
+    assert not any(call.get("action") == "tasks.lifecycle.delete" for call in audit_calls)
     client.app.dependency_overrides.clear()
