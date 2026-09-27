@@ -5,7 +5,10 @@ import type {
   RecordLatestQcSummary,
   RecordLatestReviewState,
   RecordPoolQcSummary,
+  RecordScoreState,
   RecordSourceState,
+  ScoreStandardOverview,
+  ScoreStandardOverviewMap,
   WorkstationWorklistItem,
 } from './types'
 import type { QueueStatusCode, QueueStatusSource } from '@/types/workflow'
@@ -266,6 +269,61 @@ function normalizeRecordReviewState(raw: unknown): RecordLatestReviewState | nul
     : null
 }
 
+function finiteOrNull(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function textOrNull(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+/** 只搬运服务端得分状态；无法识别的状态为 null（未知），scored 缺分数降级为 unavailable，不伪造。 */
+function normalizeRecordScoreState(raw: unknown): RecordScoreState | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const source = raw as LooseRecord
+  const status = source.status
+  if (status !== 'scored' && status !== 'no_standard' && status !== 'unavailable') return null
+  const score = finiteOrNull(source.score)
+  const reasonCode = textOrNull(source.reasonCode ?? source.reason_code)
+  const standardId = textOrNull(source.standardId ?? source.standard_id)
+  if (status === 'scored' && score === null) {
+    return { status: 'unavailable', score: null, grade: null, vetoHit: null, standardId, reasonCode: reasonCode ?? 'score_missing' }
+  }
+  const vetoHit = source.vetoHit ?? source.veto_hit
+  return {
+    status,
+    score: status === 'scored' ? score : null,
+    grade: status === 'scored' ? textOrNull(source.grade) : null,
+    vetoHit: status === 'scored' && typeof vetoHit === 'boolean' ? vetoHit : null,
+    standardId,
+    reasonCode,
+  }
+}
+
+const SCORE_OVERVIEW_STATUSES: readonly ScoreStandardOverview['status'][] = ['configured', 'no_standard', 'unavailable']
+const SCORE_SCENES = ['running', 'final', 'outpatient'] as const
+
+/** 顶层 score_standards：只保留可识别的场景与状态。 */
+export function normalizeScoreStandards(raw: unknown): ScoreStandardOverviewMap {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
+  const source = raw as LooseRecord
+  const result: ScoreStandardOverviewMap = {}
+  for (const scene of SCORE_SCENES) {
+    const entry = source[scene]
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue
+    const value = entry as LooseRecord
+    const status = value.status
+    if (typeof status !== 'string' || !(SCORE_OVERVIEW_STATUSES as readonly string[]).includes(status)) continue
+    result[scene] = {
+      status: status as ScoreStandardOverview['status'],
+      standardId: textOrNull(value.standardId ?? value.standard_id),
+      standardName: textOrNull(value.standardName ?? value.standard_name),
+      standardUpdatedAt: textOrNull(value.standardUpdatedAt ?? value.standard_updated_at),
+    }
+  }
+  return result
+}
+
 function normalizeRecordLatestQcSummary(raw: unknown): RecordLatestQcSummary {
   const source = (raw || {}) as LooseRecord
   const status = pickString(source, ['status'])
@@ -276,6 +334,7 @@ function normalizeRecordLatestQcSummary(raw: unknown): RecordLatestQcSummary {
       totalRuleCount: asNumber(source.totalRuleCount ?? source.total_rule_count),
       statusCounts: normalizeStatusCounts(source.statusCounts ?? source.status_counts),
       reviewState: normalizeRecordReviewState(source.reviewState ?? source.review_state),
+      scoreState: normalizeRecordScoreState(source.scoreState ?? source.score_state),
     }
   }
   if (status === 'technical_error') {

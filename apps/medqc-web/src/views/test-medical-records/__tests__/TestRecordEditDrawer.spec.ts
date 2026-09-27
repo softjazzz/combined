@@ -1,4 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+// 挂载完整编辑抽屉（AntD 表单与文书编辑区），全量并发下单条可接近 10 秒。
+vi.setConfig({ testTimeout: 30_000 })
 import { flushPromises, mount } from '@vue/test-utils'
 import Antd from 'ant-design-vue'
 

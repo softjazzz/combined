@@ -142,6 +142,23 @@ const CaseOperationTimelineStub = defineComponent({
   },
 })
 
+let scorePanelProps: Record<string, unknown> | null = null
+
+const CaseScorePanelStub = defineComponent({
+  name: 'CaseScorePanel',
+  props: {
+    instituteId: { type: String, required: true },
+    patientId: { type: String, required: true },
+    visitId: { type: String, required: true },
+    scene: { type: String, required: true },
+  },
+  emits: ['forbidden'],
+  setup(props) {
+    scorePanelProps = props as unknown as Record<string, unknown>
+    return () => h('div', { 'data-testid': 'case-score-stub' })
+  },
+})
+
 function mountDrawer(
   presentationMode?: 'flat' | 'grouped',
   extraProps: Record<string, unknown> = {},
@@ -184,6 +201,7 @@ function mountDrawer(
         CaseRecordReviewPanel: CaseRecordReviewPanelStub,
         CaseManualDefectPanel: CaseManualDefectPanelStub,
         CaseOperationTimeline: CaseOperationTimelineStub,
+        CaseScorePanel: CaseScorePanelStub,
       },
     },
   })
@@ -203,6 +221,7 @@ describe('QCRecordResultComparisonDrawer', () => {
     reviewPanelProps = null
     manualDefectPanelProps = null
     operationTimelineProps = null
+    scorePanelProps = null
     authState.roles = []
     authState.calls = 0
   })
@@ -591,5 +610,40 @@ describe('QCRecordResultComparisonDrawer', () => {
     const wrapper = mountDrawer('grouped', { recordReview: true })
     await flushPromises()
     expect(wrapper.find('[data-testid="case-operations-stub"]').exists()).toBe(false)
+  })
+
+  it('传入得分场景时挂载得分分区（不依赖审核角色），位于审核面板之后；403 只隐藏自身', async () => {
+    authState.roles = ['admin']
+    getLatestLuxian0609RecordResult.mockResolvedValue({ success: true, data: readyResult })
+    const wrapper = mountDrawer('grouped', { recordReview: true, scoreScene: 'final' })
+    await flushPromises()
+    const html = wrapper.html()
+    expect(html.indexOf('case-score-stub')).toBeGreaterThan(html.indexOf('case-review-stub'))
+    expect(scorePanelProps).toMatchObject({ instituteId: 'H1', patientId: 'P001', visitId: 'V001', scene: 'final' })
+    wrapper.getComponent(CaseScorePanelStub).vm.$emit('forbidden')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="case-score-stub"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="case-review-stub"]').exists()).toBe(true)
+  })
+
+  it('非审核角色也显示得分分区；未传场景或结果未就绪时不挂载', async () => {
+    authState.roles = ['doctor']
+    getLatestLuxian0609RecordResult.mockResolvedValue({ success: true, data: readyResult })
+    const withScene = mountDrawer('grouped', { recordReview: true, scoreScene: 'running' })
+    await flushPromises()
+    expect(withScene.find('[data-testid="case-score-stub"]').exists()).toBe(true)
+    expect(withScene.find('[data-testid="case-review-stub"]').exists()).toBe(false)
+
+    const withoutScene = mountDrawer('grouped', { recordReview: true })
+    await flushPromises()
+    expect(withoutScene.find('[data-testid="case-score-stub"]').exists()).toBe(false)
+
+    getLatestLuxian0609RecordResult.mockResolvedValue({
+      success: true,
+      data: { ...readyResult, state: 'technical_error' },
+    })
+    const notReady = mountDrawer('grouped', { scoreScene: 'running' })
+    await flushPromises()
+    expect(notReady.find('[data-testid="case-score-stub"]').exists()).toBe(false)
   })
 })

@@ -4,6 +4,7 @@
     :class="{
       'qc-record-result-table--inpatient': carePhase === 'inpatient' || compactReview,
       'qc-record-result-table--compact-review': compactReview,
+      'qc-record-result-table--with-score': showScore,
     }"
     data-testid="qc-record-result-table"
   >
@@ -30,6 +31,13 @@
             </th>
             <th scope="col">问题摘要</th>
             <th scope="col">最近质控</th>
+            <th
+              v-if="showScore"
+              scope="col"
+              class="qc-record-result-table__score-heading"
+            >
+              得分 / 等级
+            </th>
             <th scope="col" class="qc-record-result-table__action-heading">
               {{ compactReview ? '预览' : '查看结果' }}
             </th>
@@ -155,6 +163,35 @@
               </template>
             </td>
             <td>{{ formatDisplayTime(row.latestQcTime) }}</td>
+            <td
+              v-if="showScore"
+              class="qc-record-result-table__score-cell"
+              data-testid="qc-record-score"
+            >
+              <template v-if="row.score?.kind === 'scored'">
+                <span class="qc-record-result-table__score-value">{{
+                  formatScoreValue(row.score.score)
+                }}</span>
+                <span class="qc-record-result-table__score-separator"> / </span>
+                <span class="qc-record-result-table__score-grade">{{ row.score.grade || '未知' }}</span>
+                <span
+                  v-if="row.score.vetoHit"
+                  class="qc-record-result-table__score-veto"
+                  data-testid="qc-record-score-veto"
+                  >单项否决</span
+                >
+              </template>
+              <span
+                v-else-if="row.score?.kind === 'no_standard'"
+                class="qc-record-result-table__score-muted"
+                >{{ SCORE_NO_STANDARD_TEXT }}</span
+              >
+              <span
+                v-else-if="row.score?.kind === 'unavailable'"
+                class="qc-record-result-table__score-muted"
+                >{{ SCORE_UNAVAILABLE_TEXT }}</span
+              >
+            </td>
             <td class="qc-record-result-table__action-cell">
               <button
                 class="qc-record-result-table__result-button"
@@ -174,7 +211,7 @@
             </td>
           </tr>
           <tr v-if="rows.length === 0" class="qc-record-result-table__empty-row">
-            <td :colspan="compactReview ? 5 : 7">
+            <td :colspan="(compactReview ? 5 : 7) + (showScore ? 1 : 0)">
               {{ emptyMessage }}
             </td>
           </tr>
@@ -189,6 +226,12 @@ import { computed } from 'vue'
 import { ChevronRight } from 'lucide-vue-next'
 
 import { patientAvatarSrc } from './patient-avatar'
+import {
+  SCORE_NO_STANDARD_TEXT,
+  SCORE_UNAVAILABLE_TEXT,
+  formatScoreValue,
+  type QcRecordScoreCell,
+} from './qcRecordScore'
 
 export type QcRecordCarePhase = 'inpatient' | 'discharged'
 
@@ -218,6 +261,8 @@ export interface QcRecordResultRow {
   sourceLabel?: '资料同步待核实'
   /** 仅已质控（ready）行携带；unknown 表示服务端未能给出审核状态。 */
   reviewState?: QcRecordReviewState
+  /** 仅已质控（ready）行携带；未携带时得分列留空。 */
+  score?: QcRecordScoreCell
 }
 
 export type QcRecordReviewState =
@@ -243,11 +288,14 @@ const props = withDefaults(
     emptyMessage?: string
     compactReview?: boolean
     activeRecordKey?: string
+    /** 显示“得分 / 等级”列（V5 运行/终末列表开启）；默认关闭以保持其他调用方列布局。 */
+    showScore?: boolean
   }>(),
   {
     selectedRecordKeys: () => [],
     emptyMessage: '暂无符合当前范围的病历',
     compactReview: false,
+    showScore: false,
   },
 )
 
@@ -494,6 +542,43 @@ function togglePageSelection(event: Event) {
   color: #b54708;
 }
 
+.qc-record-result-table__score-heading,
+.qc-record-result-table__score-cell {
+  width: 132px;
+  white-space: nowrap;
+}
+
+.qc-record-result-table__score-value {
+  color: #1d1d1f;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.qc-record-result-table__score-separator {
+  color: #c4ccd7;
+}
+
+.qc-record-result-table__score-grade {
+  color: #334155;
+}
+
+.qc-record-result-table__score-veto {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  border: 1px solid rgba(180, 35, 24, 0.24);
+  border-radius: 6px;
+  background: #fef3f2;
+  color: #b42318;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.qc-record-result-table__score-muted {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
 .qc-record-result-table__action-heading,
 .qc-record-result-table__action-cell {
   width: 136px;
@@ -714,6 +799,16 @@ function togglePageSelection(event: Event) {
   width: 148px;
 }
 .qc-record-result-table--compact-review th:nth-child(5) {
+  width: 46px;
+}
+/* 得分列插在“最近质控”之后：按类名重新指定列宽，避免 nth-child 错位。 */
+.qc-record-result-table--compact-review.qc-record-result-table--with-score .qc-record-result-table__table {
+  min-width: 720px;
+}
+.qc-record-result-table--compact-review th.qc-record-result-table__score-heading {
+  width: 132px;
+}
+.qc-record-result-table--compact-review th.qc-record-result-table__action-heading {
   width: 46px;
 }
 

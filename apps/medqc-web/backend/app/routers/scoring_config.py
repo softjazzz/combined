@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from ..core.supabase_client import get_supabase, async_execute
 from ..core.response import success_response, get_trace_id
 from ..core.security import get_current_user
+from ..core.permissions import UserRole, require_role
 
 router = APIRouter(prefix="/api/v1/scoring-config", tags=["evaluator-config"])
 logger = logging.getLogger(__name__)
@@ -119,7 +120,9 @@ async def get_scoring_config(request: Request, current_user: dict = Depends(get_
         raise HTTPException(status_code=500, detail=f"获取评分配置失败: {str(e)}")
 
 
+# 旧评分阈值接口（兼容入口）：前端已改用 /api/v1/scoring 评分标准；写操作补齐与规则管理一致的角色校验。
 @router.put("")
+@require_role([UserRole.ADMIN, UserRole.QC_MANAGER])
 async def update_scoring_config(request: Request, current_user: dict = Depends(get_current_user)):
     """更新评分阈值配置"""
     sb = _ensure_db()

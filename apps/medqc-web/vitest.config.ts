@@ -5,6 +5,9 @@ import { fileURLToPath } from 'url'
 
 const dirname = fileURLToPath(new URL('.', import.meta.url))
 
+// 医院系统按 Asia/Shanghai 运行；固定测试进程时区，使日期断言不随开发机系统时区漂移（worker 继承此环境变量）。
+process.env.TZ = 'Asia/Shanghai'
+
 export default defineConfig({
   plugins: [vue()],
   resolve: {

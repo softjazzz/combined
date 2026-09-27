@@ -64,6 +64,7 @@ const ResultDrawerStub = defineComponent({
     hasNext: { type: Boolean, default: undefined },
     currentIndex: { type: Number, default: undefined },
     totalCount: { type: Number, default: undefined },
+    scoreScene: { type: String, default: undefined },
   },
   emits: ['close', 'review-submitted', 'navigate-prev', 'navigate-next'],
   setup(props) {
@@ -746,6 +747,79 @@ describe('QcRecordResultListView', () => {
     expect(tagOf('V-uncertain').text()).toBe('审核状态未知')
     expect(tagOf('V-not-run').exists()).toBe(false)
     expect(tagOf('V-technical').exists()).toBe(false)
+  })
+
+  it('ready 行显示服务端得分 / 等级与单项否决，unavailable 显示暂不可用，非 ready 不显示', async () => {
+    const payload = response() as ReturnType<typeof response> & { data: Record<string, unknown> }
+    const summaries = payload.data.records.map((record) => record.latest_qc_summary) as Array<
+      Record<string, unknown> | undefined
+    >
+    summaries[0]!.review_state = 'pending_review'
+    summaries[0]!.score_state = {
+      status: 'scored', score: 86.5, grade: '乙', veto_hit: false, standard_id: 's1', reason_code: null,
+    }
+    summaries[1]!.score_state = {
+      status: 'scored', score: 95, grade: '丙', veto_hit: true, standard_id: 's1', reason_code: null,
+    }
+    summaries[2]!.score_state = {
+      status: 'unavailable', score: null, grade: null, veto_hit: null, standard_id: 's1', reason_code: 'result_changed',
+    }
+    payload.data.score_standards = {
+      running: { status: 'configured', standard_id: 's1', standard_name: '运行标准', standard_updated_at: null },
+    }
+    mocks.getRaw.mockResolvedValue(payload)
+
+    const wrapper = mountView('inpatient')
+    await flushPromises()
+
+    expect(wrapper.findAll('thead th').map((item) => item.text())).toContain('得分 / 等级')
+    const cellOf = (visitId: string) =>
+      wrapper.get(`tbody tr[data-record-key='["H","P","${visitId}"]']`).get('[data-testid="qc-record-score"]')
+    expect(cellOf('V-priority').text()).toBe('86.5 / 乙')
+    expect(cellOf('V-data-gap').text()).toContain('95 / 丙')
+    expect(cellOf('V-data-gap').find('[data-testid="qc-record-score-veto"]').text()).toBe('单项否决')
+    expect(cellOf('V-uncertain').text()).toBe('得分暂不可用')
+    expect(cellOf('V-not-run').text()).toBe('')
+    expect(cellOf('V-technical').text()).toBe('')
+    // 审核状态标签不受得分列影响。
+    expect(
+      wrapper
+        .get(`tbody tr[data-record-key='["H","P","V-priority"]']`)
+        .get('[data-testid="qc-record-review-state"]')
+        .text(),
+    ).toBe('待审核')
+    expect(wrapper.getComponent(ResultDrawerStub).props('scoreScene')).toBe('running')
+  })
+
+  it('场景无默认标准时 ready 行整列显示“未配置评分标准”，终末列表抽屉场景为 final', async () => {
+    const payload = response() as ReturnType<typeof response> & { data: Record<string, unknown> }
+    const summaries = payload.data.records.map((record) => record.latest_qc_summary) as Array<
+      Record<string, unknown> | undefined
+    >
+    for (const summary of summaries) {
+      if (summary?.status === 'ready') {
+        summary.score_state = {
+          status: 'no_standard', score: null, grade: null, veto_hit: null, standard_id: null, reason_code: null,
+        }
+      }
+    }
+    payload.data.score_standards = {
+      final: { status: 'no_standard', standard_id: null, standard_name: null, standard_updated_at: null },
+    }
+    mocks.getRaw.mockResolvedValue(payload)
+
+    const wrapper = mountView('discharged')
+    await flushPromises()
+
+    const texts = ['V-priority', 'V-data-gap', 'V-uncertain', 'V-not-run'].map((visitId) =>
+      wrapper
+        .get(`tbody tr[data-record-key='["H","P","${visitId}"]']`)
+        .get('[data-testid="qc-record-score"]')
+        .text(),
+    )
+    expect(texts).toEqual(['未配置评分标准', '未配置评分标准', '未配置评分标准', ''])
+    expect(wrapper.text()).not.toContain('0 / ')
+    expect(wrapper.getComponent(ResultDrawerStub).props('scoreScene')).toBe('final')
   })
 
   it('结果抽屉开启病例审核，审核提交确认后重新拉取当前页', async () => {

@@ -254,9 +254,10 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'qc/scoring-config',
         name: 'ScoringConfig',
-        component: () => import('@/views/qc/ScoringConfigView.vue'),
+        // V3.6 P2-S：替换为评分标准管理页；旧阈值页接的是未被计分服务读取的旧 scoring_config 表。
+        component: () => import('@/views/qc/ScoringStandardsView.vue'),
         meta: {
-          title: '评分阈值配置',
+          title: '评分标准配置',
           icon: 'SettingOutlined',
           permission: ['admin', 'qc_manager'],
         },

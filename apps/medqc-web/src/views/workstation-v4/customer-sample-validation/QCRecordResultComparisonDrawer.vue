@@ -104,7 +104,7 @@
 
     <a-spin :spinning="loading">
       <div
-        v-if="showReviewSection && latestResult && focus"
+        v-if="(showReviewSection || showScorePanel) && latestResult && focus"
         class="customer-record-result-drawer__review"
       >
         <CaseRecordReviewPanel
@@ -117,6 +117,15 @@
           :user-id="reviewerId"
           @review-submitted="handleReviewSubmitted"
           @forbidden="reviewForbidden = true"
+        />
+        <!-- 本病例得分：计分服务按场景默认标准实时计算，只读；场景由调用方传入，未传不显示。 -->
+        <CaseScorePanel
+          v-if="showScorePanel && scoreScene"
+          :institute-id="focus.instituteId"
+          :patient-id="focus.patientId"
+          :visit-id="focus.visitId"
+          :scene="scoreScene"
+          @forbidden="scoreForbidden = true"
         />
         <!-- 人工缺陷分区：独立 owner（人工缺陷审核），此处只读；与病历审核同一挂载条件。 -->
         <CaseManualDefectPanel
@@ -169,6 +178,8 @@ import QcDiagnosticExport from '@/components/qc/QcDiagnosticExport.vue'
 import CaseRecordReviewPanel from '@/components/qc/CaseRecordReviewPanel.vue'
 import CaseManualDefectPanel from '@/components/qc/CaseManualDefectPanel.vue'
 import CaseOperationTimeline from '@/components/qc/CaseOperationTimeline.vue'
+import CaseScorePanel from '@/components/qc/CaseScorePanel.vue'
+import type { ScoringScene } from '@/api/scoring'
 import type { RecordReviewDecision } from '@/api/recordReviews'
 import { useAuthStore } from '@/stores/auth'
 import {
@@ -207,6 +218,8 @@ const props = withDefaults(
     /** 当前病历在可导航集合中的序号（从 1 开始）与集合总数；缺失时不显示位置。 */
     currentIndex?: number
     totalCount?: number
+    /** 得分场景：运行列表 running、终末列表 final；未传时不显示得分分区。 */
+    scoreScene?: ScoringScene
   }>(),
   {
     presentationMode: 'flat',
@@ -215,6 +228,7 @@ const props = withDefaults(
     hasNext: undefined,
     currentIndex: undefined,
     totalCount: undefined,
+    scoreScene: undefined,
   },
 )
 
@@ -250,6 +264,9 @@ const navigationPositionText = computed(() => {
 const reviewForbidden = ref(false)
 const manualDefectForbidden = ref(false)
 const operationsForbidden = ref(false)
+const scoreForbidden = ref(false)
+/** 得分读取只需登录，不依赖审核角色；403 时隐藏。 */
+const showScorePanel = computed(() => !!props.scoreScene && !scoreForbidden.value)
 /** 未开启审核的调用方（如客户样本验证）不访问登录态。 */
 const reviewAuth = computed(() => {
   if (!props.recordReview) return null
@@ -381,6 +398,7 @@ async function loadLatestResult() {
   reviewForbidden.value = false
   manualDefectForbidden.value = false
   operationsForbidden.value = false
+  scoreForbidden.value = false
   qcTimeText.value = ''
   authorizedRecordRef.value = ''
   loadError.value = ''

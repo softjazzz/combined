@@ -57,7 +57,29 @@ export interface RecordLatestQcSummary {
   reasonCode?: string | null
   /** 仅 ready 摘要携带；null 为未知。 */
   reviewState?: RecordLatestReviewState | null
+  /** 仅 ready 摘要携带（服务端计分服务搬运，前端不计分）；缺失或无法识别为 null。 */
+  scoreState?: RecordScoreState | null
 }
+
+/** 列表行得分状态（合同第 5 节）：scored 已计分；no_standard 场景无默认标准；unavailable 暂不可用。 */
+export interface RecordScoreState {
+  status: 'scored' | 'no_standard' | 'unavailable'
+  score: number | null
+  grade: string | null
+  vetoHit: boolean | null
+  standardId: string | null
+  reasonCode: string | null
+}
+
+/** 响应顶层 score_standards：各场景默认标准概况。 */
+export interface ScoreStandardOverview {
+  status: 'configured' | 'no_standard' | 'unavailable'
+  standardId: string | null
+  standardName: string | null
+  standardUpdatedAt: string | null
+}
+
+export type ScoreStandardOverviewMap = Partial<Record<'running' | 'final' | 'outpatient', ScoreStandardOverview>>
 
 export interface RecordPoolQcSummary {
   totalRecords: number

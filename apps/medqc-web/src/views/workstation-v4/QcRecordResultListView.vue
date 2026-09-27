@@ -210,6 +210,7 @@
           <QcRecordResultTable
             :care-phase="carePhase"
             compact-review
+            show-score
             :active-record-key="activePreviewKey"
             :rows="rows"
             :selected-record-keys="selectedRecordKeys"
@@ -263,6 +264,7 @@
       :focus="selectedFocus"
       presentation-mode="grouped"
       record-review
+      :score-scene="scoreScene"
       :has-prev="drawerNavigation?.hasPrev"
       :has-next="drawerNavigation?.hasNext"
       :current-index="drawerNavigation?.currentIndex"
@@ -311,6 +313,7 @@ import QcRecordResultTable, {
 } from './components/qc/QcRecordResultTable.vue'
 import QcRecordResultAnalysisPanel from './components/qc/QcRecordResultAnalysisPanel.vue'
 import QcRecordReviewPreview from './components/qc/QcRecordReviewPreview.vue'
+import { resolveScoreCell, scoreSceneForCarePhase } from './components/qc/qcRecordScore'
 import QcRunSelectedControl from './components/qc/QcRunSelectedControl.vue'
 import RecordFilterTemplateBar from './components/qc/RecordFilterTemplateBar.vue'
 import { isEmptyRecordFilter, parseRecordFilterQuery } from './composables/recordFilterQuery'
@@ -371,10 +374,13 @@ const {
   qcSummary,
   refreshData,
   reviewStateFilter,
+  scoreStandards,
   searchText,
   selectHospFilter,
   serverTotal,
 } = usePatientRecords(props.carePhase)
+/** 得分场景：运行列表 running、终末列表 final（与服务端列表计分口径一致）。 */
+const scoreScene = computed(() => scoreSceneForCarePhase(props.carePhase))
 
 const filterTemplatePageKey = computed(() =>
   isInpatient.value ? 'v5_records_inpatient' : 'v5_records_discharged',
@@ -539,6 +545,7 @@ function toResultRow(record: PatientRecord): QcRecordResultRow {
       record.sourceState && record.sourceState.status !== 'unknown' ? '资料同步待核实' : undefined,
     ...result,
     reviewState: resolveReviewState(record.latestQcSummary),
+    score: resolveScoreCell(record.latestQcSummary, scoreStandards.value[scoreScene.value]),
   }
 }
 

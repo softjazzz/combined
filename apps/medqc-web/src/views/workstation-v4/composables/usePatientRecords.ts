@@ -6,8 +6,9 @@ import type {
   PatientRecord,
   RecordLatestReviewState,
   RecordPoolQcSummary,
+  ScoreStandardOverviewMap,
 } from '../types'
-import { normalizeRecord, normalizeRecordPoolQcSummary } from '../normalize'
+import { normalizeRecord, normalizeRecordPoolQcSummary, normalizeScoreStandards } from '../normalize'
 import { ANALYTICS_DRILLDOWN_QUERY_KEYS } from '../analyticsDrilldown'
 
 const WORKSTATION_PAGE_SIZE = 15
@@ -90,6 +91,8 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
   const loading = ref(false)
   const loadError = ref(false)
   const qcSummary = ref<RecordPoolQcSummary>({ ...EMPTY_QC_SUMMARY })
+  /** 响应顶层 score_standards：本页涉及场景的默认评分标准概况。 */
+  const scoreStandards = ref<ScoreStandardOverviewMap>({})
 
   const activeDept = ref(initialDepartment || ALL_DEPARTMENTS)
   const activeDoctor = ref(initialDoctor || ALL_DOCTORS)
@@ -200,11 +203,13 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
       currentPage.value = Number(data.page ?? data.current_page ?? page) || 1
       pageSize.value = requestedPageSize
       qcSummary.value = normalizeRecordPoolQcSummary(data.qc_summary)
+      scoreStandards.value = normalizeScoreStandards(data.score_standards)
     } catch (error) {
       if (requestSequence !== activeRequestSequence) return
       console.error('\u52a0\u8f7d\u5de5\u4f5c\u53f0\u6570\u636e\u5931\u8d25:', error)
       loadError.value = true
       qcSummary.value = { ...EMPTY_QC_SUMMARY }
+      scoreStandards.value = {}
     } finally {
       if (requestSequence === activeRequestSequence) {
         loading.value = false
@@ -283,6 +288,7 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
     loading,
     loadError,
     qcSummary,
+    scoreStandards,
     activeDept,
     activeDoctor,
     searchText,
