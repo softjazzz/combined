@@ -761,18 +761,15 @@ const handleLogout = async () => {
 
 /*
  * 过渡期：旧页面根节点自带整页背景，这里统一透明以露出光晕底。
- * 质控结果列表（running-qc-refined）尚未迁移，保留原渐变画布。
  */
 .ws-content :deep(.workstation-route-view),
 .ws-content :deep(.workstation-route-view > *),
 .ws-content :deep(.record-pool-refined),
-.ws-content :deep(.qc-home-shell) {
+.ws-content :deep(.qc-home-shell),
+.ws-content :deep(.running-qc-refined) {
   background: transparent !important;
 }
 
-.ws-content :deep(.running-qc-refined) {
-  background: linear-gradient(125deg, #dce8f6 0%, #f1f3f7 48%, #e4eaf3 100%) !important;
-}
 
 .fade-enter-active,
 .fade-leave-active {

@@ -1,8 +1,10 @@
 <template>
   <main class="qc-record-result-list-view running-qc-refined running-qc-apple">
-    <section class="qc-record-result-list-view__header">
-      <div>
-        <h1>
+    <!-- 页头：眉标 + 大标题；右侧视图切换与“质控所选” -->
+    <section class="qc-record-result-list-view__header mq-page-head">
+      <div class="mq-page-head__copy">
+        <span class="mq-page-eyebrow">质控作业 · 泸县0609质控点</span>
+        <h1 class="mq-page-title">
           {{ pageTitle
           }}<span
             class="review-workbench-scope"
@@ -12,44 +14,46 @@
           }}</span>
         </h1>
       </div>
+      <div class="mq-page-head__actions">
+        <nav
+          class="qc-record-result-list-view__view-switch mq-segmented"
+          aria-label="质控结果视图"
+        >
+          <button
+            type="button"
+            class="mq-segmented__item"
+            data-testid="qc-result-view-records"
+            :class="{ 'is-active': activeView === 'records' }"
+            :aria-pressed="activeView === 'records'"
+            @click="activeView = 'records'"
+          >
+            病历结果
+          </button>
+          <button
+            type="button"
+            class="mq-segmented__item"
+            data-testid="qc-result-view-analysis"
+            :class="{ 'is-active': activeView === 'analysis' }"
+            :aria-pressed="activeView === 'analysis'"
+            @click="activeView = 'analysis'"
+          >
+            结果分析
+          </button>
+        </nav>
+        <div class="review-workbench-primary">
+          <QcRunSelectedControl
+            :care-phase="carePhase"
+            :record-refs="selectedQcRecordRefs"
+            :selected-count="selectedCount"
+            :status-target="`#qc-record-result-task-status-${carePhase}`"
+            @completed="refreshAfterSelectedQc"
+          />
+        </div>
+      </div>
     </section>
 
-    <nav
-      class="qc-record-result-list-view__view-switch"
-      aria-label="质控结果视图"
-    >
-      <button
-        type="button"
-        data-testid="qc-result-view-records"
-        :class="{ 'is-active': activeView === 'records' }"
-        :aria-pressed="activeView === 'records'"
-        @click="activeView = 'records'"
-      >
-        病历结果
-      </button>
-      <button
-        type="button"
-        data-testid="qc-result-view-analysis"
-        :class="{ 'is-active': activeView === 'analysis' }"
-        :aria-pressed="activeView === 'analysis'"
-        @click="activeView = 'analysis'"
-      >
-        结果分析
-      </button>
-    </nav>
-
-    <div class="review-workbench-primary">
-      <QcRunSelectedControl
-        :care-phase="carePhase"
-        :record-refs="selectedQcRecordRefs"
-        :selected-count="selectedCount"
-        :status-target="`#qc-record-result-task-status-${carePhase}`"
-        @completed="refreshAfterSelectedQc"
-      />
-    </div>
-
     <section
-      class="review-workbench-metrics"
+      class="review-workbench-metrics mq-card"
       aria-label="质控结果汇总"
     >
       <div
@@ -60,6 +64,13 @@
         <span>{{ metric.key === 'priority' ? '确定问题' : metric.label }}</span>
         <strong>{{ metric.value }}</strong>
         <span>{{ metric.key === 'records' || metric.key === 'completed' ? '份' : '项' }}</span>
+        <MqIconTile
+          class="review-metric__icon"
+          :name="METRIC_ICONS[metric.key].name"
+          :tone="METRIC_ICONS[metric.key].tone"
+          :size="38"
+          :icon-size="22"
+        />
       </div>
     </section>
 
@@ -281,6 +292,8 @@ import { Pagination } from 'ant-design-vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ChevronDown, Download } from 'lucide-vue-next'
+import MqIconTile from '@/components/icons/MqIconTile.vue'
+import type { MqIconName, MqIconTone } from '@/components/icons/mqIcons'
 
 import { exportFilteredLuxian0609RecordResults } from '@/services/sichuan-rule-workspace-service'
 
@@ -360,6 +373,14 @@ interface QcRecordMetricItem {
   key: QcRecordMetricKey
   label: string
   value: number
+}
+
+// 指标卡图标：与首页、设计稿 RunningV71 一致
+const METRIC_ICONS: Record<string, { name: MqIconName; tone: MqIconTone }> = {
+  records: { name: 'stack', tone: 'brand' },
+  completed: { name: 'fp_qc', tone: 'success' },
+  priority: { name: 'issue', tone: 'danger' },
+  dataGap: { name: 'data_gap', tone: 'warning' },
 }
 
 const metricItems = computed<QcRecordMetricItem[]>(() => [
