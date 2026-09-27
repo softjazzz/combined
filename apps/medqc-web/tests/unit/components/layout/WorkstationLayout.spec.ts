@@ -268,19 +268,9 @@ describe('WorkstationLayout 菜单按路由权限过滤', () => {
     '数据上传',
     '系统配置',
   ]
-  const SHARED_TOOLS = [
-    '编码质控规则',
-    '全病历质控规则',
-    '首页质控规则',
-    '医保结算清单规则',
-    'ICD 编码查询',
-    '事前分析',
-    '事中监控',
-    '付费监测',
-    '事后分析',
-    '分组器',
-    '数据上传',
-  ]
+  const STAGES = ['生成首页', '首页质控', '结算清单质控']
+  // DRG 角色（后端 drg.py：admin/qc_manager/doctor/reviewer）可见的 DRG 工具；事后分析另限质控科
+  const DRG_TOOLS = ['事前分析', '事中监控', '付费监测', '分组器']
 
   beforeEach(() => {
     mobileMatches = false
@@ -306,14 +296,24 @@ describe('WorkstationLayout 菜单按路由权限过滤', () => {
     }
   }
 
+  // 菜单快照：以后端接口角色为准，任一角色的可见项变化都需要同步核对后端依赖
   it.each([
     ['admin', FULL_MENU, 3],
     ['qc_manager', FULL_MENU, 3],
-    ['qc_staff', ['统计分析', ...SHARED_TOOLS], 3],
+    // 质控员：统计、规则、DRG、上传均无后端权限，仅保留登录即可用的 ICD 查询
+    ['qc_staff', ['ICD 编码查询'], 0],
     [
       'doctor',
-      ['工作台首页', '病历池', '统计分析', '生成首页', '首页质控', '结算清单质控', ...SHARED_TOOLS],
-      3,
+      ['工作台首页', '病历池', ...STAGES, 'ICD 编码查询', ...DRG_TOOLS, '数据上传'],
+      2,
+    ],
+    ['reviewer', ['ICD 编码查询', ...DRG_TOOLS, '数据上传'], 1],
+    // coder 不在后端 DRG 角色内
+    ['coder', ['ICD 编码查询'], 0],
+    [
+      'sync_admin',
+      ['工作台首页', '病历池', '客户样本验证', ...STAGES, 'ICD 编码查询', '系统配置'],
+      1,
     ],
   ])('%s 可见菜单', (role, expected, groups) => {
     const menu = visibleMenu(role as string)

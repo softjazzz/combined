@@ -153,14 +153,15 @@ describe('WorkstationLoginView', () => {
 
   it('普通账号登录后仍遵守 redirect 参数', async () => {
     authState.userRoles = ['doctor']
-    routeQuery.redirect = '/workstation-v5/rules?tab=semantic'
+    // 规则管理仅 admin/qc_manager（后端 custom-qc），医生用可访问的 DRG 页面验证 redirect
+    routeQuery.redirect = '/workstation-v5/drg/pre?source=link'
     const wrapper = mountView()
 
     await wrapper.find('.login-normal').trigger('click')
     await flushPromises()
 
     expect(signIn).toHaveBeenCalledWith('doctor@medqc.com', 'doctor-pass', 'doctor')
-    expect(routerReplace).toHaveBeenCalledWith('/workstation-v5/rules?tab=semantic')
+    expect(routerReplace).toHaveBeenCalledWith('/workstation-v5/drg/pre?source=link')
   })
 
   it('旧 V4 redirect 参数会升级为 V5 地址', async () => {

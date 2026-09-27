@@ -6,6 +6,12 @@ import {
   resolveDeniedFallback,
   resolveLoginLanding,
 } from '@/utils/routeAccess'
+import {
+  DRG_ANALYSIS_ROLES,
+  DRG_ROLES,
+  QC_ANALYTICS_ROLES,
+  RULE_ADMIN_ROLES,
+} from './routeRoles'
 
 const WORKSTATION_BASE_PATH = '/workstation-v5'
 const LEGACY_WORKSTATION_BASE_PATH = '/workstation-v4'
@@ -732,7 +738,7 @@ const routes: RouteRecordRaw[] = [
           title: 'DRG/DIP',
           icon: 'MedicineBoxOutlined',
           allowDemo: true,
-          permission: ['admin', 'qc_manager', 'coder', 'reviewer'],
+          permission: DRG_ROLES,
         },
         children: [
           {
@@ -821,7 +827,7 @@ const routes: RouteRecordRaw[] = [
               title: '事后分析',
               icon: 'BarChartOutlined',
               description: 'DRG 绩效统计和盈亏分析',
-              permission: ['admin', 'qc_manager'],
+              permission: DRG_ANALYSIS_ROLES,
             },
           },
         ],
@@ -1094,47 +1100,48 @@ const routes: RouteRecordRaw[] = [
         name: 'WorkstationV4Upload',
         component: () => import('@/views/workstation-v4/WorkstationV2View.vue'),
         props: { embedded: true, initialView: 'upload' },
-        meta: { title: '数据上传' },
+        // 上传后的批次查询走 /api/v1/drg/batches（DRG 角色）
+        meta: { title: '数据上传', permission: DRG_ROLES },
       },
       {
         path: 'stats',
         name: 'WorkstationV4Stats',
         component: () => import('@/views/workstation-v4/LuxianQcAnalyticsView.vue'),
-        meta: { title: '统计分析' },
+        meta: { title: '统计分析', permission: QC_ANALYTICS_ROLES },
       },
       {
         path: 'drg/pre',
         name: 'WorkstationV4DRGPre',
         component: () => import('@/views/workstation-v4/WorkstationV2View.vue'),
         props: { embedded: true, initialView: 'pre-analysis' },
-        meta: { title: '事前分析' },
+        meta: { title: '事前分析', permission: DRG_ROLES },
       },
       {
         path: 'drg/mid',
         name: 'WorkstationV4DRGMid',
         component: () => import('@/views/workstation-v4/WorkstationV2View.vue'),
         props: { embedded: true, initialView: 'mid-analysis' },
-        meta: { title: '事中监控' },
+        meta: { title: '事中监控', permission: DRG_ROLES },
       },
       {
         path: 'drg/payment',
         name: 'WorkstationV4DRGPayment',
         component: () => import('@/views/workstation-v4/WorkstationV2View.vue'),
         props: { embedded: true, initialView: 'payment' },
-        meta: { title: '付费监测' },
+        meta: { title: '付费监测', permission: DRG_ROLES },
       },
       {
         path: 'drg/post',
         name: 'WorkstationV4DRGPost',
         component: () => import('@/views/workstation-v4/WorkstationV2View.vue'),
         props: { embedded: true, initialView: 'post-analysis' },
-        meta: { title: '事后分析' },
+        meta: { title: '事后分析', permission: DRG_ANALYSIS_ROLES },
       },
       {
         path: 'grouper',
         name: 'WorkstationV4Grouper',
         component: () => import('@/views/drg-grouper/GrouperTabsView.vue'),
-        meta: { title: '医保分组器' },
+        meta: { title: '医保分组器', permission: DRG_ROLES },
       },
       {
         path: 'data',
@@ -1146,7 +1153,7 @@ const routes: RouteRecordRaw[] = [
         path: 'rules',
         name: 'WorkstationV4Rules',
         component: () => import('@/views/workstation-v4/WorkstationRulesView.vue'),
-        meta: { title: '质控规则管理' },
+        meta: { title: '质控规则管理', permission: RULE_ADMIN_ROLES },
       },
       {
         path: 'rules/custom-workspace',

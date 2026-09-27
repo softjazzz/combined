@@ -87,6 +87,8 @@ function visibleMenu(role: string) {
 }
 
 const DRG = ['DRG 首页', '编码辅助', '分组预测', '事中监控', '付费监测', '事后分析']
+// DRG 角色（后端 drg.py：admin/qc_manager/doctor/reviewer）；事后分析另限质控科
+const DRG_WITHOUT_ANALYSIS = DRG.filter((item) => item !== '事后分析')
 const RULES = ['编码质控规则', '全病历质控规则', '首页质控规则', '医保结算清单规则']
 
 describe('MainLayout 菜单按路由权限过滤', () => {
@@ -130,7 +132,14 @@ describe('MainLayout 菜单按路由权限过滤', () => {
     ],
     // 质控员：病案质控、质控规则、DRG、系统管理分组均无可访问子项而整体隐藏
     ['qc_staff', ['我的任务', '病历审核待办', '统计分析'], 1],
-    ['doctor', ['仪表板', '智能质控工作站', '工作台首页', '我的任务', '统计分析'], 1],
+    [
+      'doctor',
+      ['仪表板', '智能质控工作站', '工作台首页', '我的任务', '统计分析', ...DRG_WITHOUT_ANALYSIS],
+      2,
+    ],
+    ['reviewer', ['我的任务', '统计分析', ...DRG_WITHOUT_ANALYSIS], 2],
+    // coder 不在后端 DRG 角色内，DRG 分组整体隐藏
+    ['coder', ['智能质控工作站', '我的任务', '统计分析'], 1],
   ])('%s 可见菜单', (role, expected, groups) => {
     const menu = visibleMenu(role as string)
     expect(menu.items).toEqual(expected)

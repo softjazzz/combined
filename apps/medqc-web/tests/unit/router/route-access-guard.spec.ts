@@ -74,7 +74,14 @@ describe('路由守卫权限判断（锁定现有行为）', () => {
   })
 
   it('子路由继承父路由的 meta.permission', async () => {
+    authState.userRoles = ['reviewer']
+    expect(await visit('/dashboard/drg/coding')).toBe('/dashboard/drg/coding')
+  })
+
+  it('DRG 与后端口径一致：coder 被拒回默认页，doctor 放行', async () => {
     authState.userRoles = ['coder']
+    expect(await visit('/dashboard/drg/coding')).toBe('/dashboard/workstation')
+    authState.userRoles = ['doctor']
     expect(await visit('/dashboard/drg/coding')).toBe('/dashboard/drg/coding')
   })
 
