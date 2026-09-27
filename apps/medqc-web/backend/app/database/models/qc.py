@@ -743,3 +743,66 @@ class QCUserFilterTemplate(Base):
             sqlite_where=text("is_default"),
         ),
     )
+
+
+_RULE_SET_VERSION_WS = "' \t\n\r\f\v'"
+
+
+class QCRuleSetVersion(Base):
+    """规则集版本（迁移 61，V3.6 P1-E1）。
+
+    草稿（每个规则集最多一份，部分唯一索引）发布后成为不可修改的版本，
+    只允许 published → retired；version_seq 用于 CAS；entries_json 为按
+    rule_id 排序的 [{rule_id, state}]，content_digest 为其规范化 SHA-256。
+    """
+
+    __tablename__ = "qc_rule_set_versions"
+
+    id = Column(String(36), nullable=False)
+    rule_set_key = Column(String(96), nullable=False)
+    version = Column(String(64), nullable=False)
+    status = Column(String(16), nullable=False)
+    base_version = Column(String(64), nullable=False)
+    entries_json = Column(Text, nullable=False)
+    content_digest = Column(String(64), nullable=True)
+    note = Column(Text, nullable=True)
+    version_seq = Column(Integer, nullable=False, server_default=text("1"))
+    created_by = Column(String(64), nullable=False)
+    created_at = Column(DateTime, nullable=False)
+    published_by = Column(String(64), nullable=True)
+    published_at = Column(DateTime, nullable=True)
+    retired_by = Column(String(64), nullable=True)
+    retired_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        PrimaryKeyConstraint("id", name="pk_qc_rule_set_versions"),
+        UniqueConstraint("rule_set_key", "version", name="uq_qc_rule_set_versions_key_version"),
+        CheckConstraint(
+            "status IN ('draft', 'published', 'retired')",
+            name="ck_qc_rule_set_versions_status",
+        ),
+        CheckConstraint(
+            f"trim(rule_set_key, {_RULE_SET_VERSION_WS}) <> ''",
+            name="ck_qc_rule_set_versions_key_nonblank",
+        ),
+        CheckConstraint(
+            f"trim(version, {_RULE_SET_VERSION_WS}) <> ''",
+            name="ck_qc_rule_set_versions_version_nonblank",
+        ),
+        CheckConstraint("version_seq > 0", name="ck_qc_rule_set_versions_seq_positive"),
+        CheckConstraint(
+            "status = 'draft' OR (content_digest IS NOT NULL AND published_at IS NOT NULL)",
+            name="ck_qc_rule_set_versions_published_fields",
+        ),
+        CheckConstraint(
+            "status <> 'retired' OR retired_at IS NOT NULL",
+            name="ck_qc_rule_set_versions_retired_fields",
+        ),
+        Index(
+            "uq_qc_rule_set_versions_draft",
+            "rule_set_key",
+            unique=True,
+            postgresql_where=text("status = 'draft'"),
+            sqlite_where=text("status = 'draft'"),
+        ),
+    )
