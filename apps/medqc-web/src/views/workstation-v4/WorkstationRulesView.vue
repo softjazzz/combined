@@ -63,9 +63,16 @@ const resolveTab = (tab: string | undefined): TabKey => {
   return 'coding'
 }
 
+// 导航合并为单一入口后，语义规则 Tab 沿用原侧栏入口的默认规则集
+const DEFAULT_SEMANTIC_RULE_SET_KEY = 'luxian_0609_qc_v1'
+
 const selectTab = (tab: TabKey) => {
   activeTab.value = tab
-  void router.replace({ query: { ...route.query, tab } })
+  const query: Record<string, unknown> = { ...route.query, tab }
+  if (tab === 'semantic' && !route.query.ruleSetKey) {
+    query.ruleSetKey = DEFAULT_SEMANTIC_RULE_SET_KEY
+  }
+  void router.replace({ query: query as typeof route.query })
 }
 
 onMounted(() => {
