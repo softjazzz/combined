@@ -28,7 +28,7 @@
 | 5 | 客户样本验证 `customer-sample-validation` | `workstation-v4/CustomerSampleValidationView.vue` | 列表 + 预览 | 完成（见执行记录） |
 | 6 | 质控反馈记录 `qc-feedback-demo` | `workstation-v4/QcResultFeedbackDemoListView.vue` | 列表 + 预览 | 完成（见执行记录） |
 | 7 | 手术分级目录 `customer-sample-validation/surgery-catalog` | `workstation-v4/components/SurgeryProcedureCatalogView.vue` | 目录 | 完成（见执行记录） |
-| 8 | 自定义质控点 `rules/custom-workspace` | `views/rules/CustomRuleWorkspaceView.vue` | 目录 + 编辑器（先出设计稿） | 待确认（设计稿 CustomRuleV71） |
+| 8 | 自定义质控点 `rules/custom-workspace` | `views/rules/CustomRuleWorkspaceView.vue` | 目录 + 编辑器（先出设计稿） | 完成（见执行记录） |
 | 9 | 统计分析 `stats` | `workstation-v4/LuxianQcAnalyticsView.vue` | 概览 | 完成（见执行记录） |
 | 10 | DRG/DIP 分析、ICD 编码查询、数据上传 `drg/*` `icd` `upload` | `workstation-v4/WorkstationV2View.vue` 及其子组件 | 概览 / 目录 / 表单 | 完成（见执行记录） |
 | 11 | 数据管理 `data` | `workstation-v4/CDMDataView.vue` | 目录 | 完成（见执行记录） |
@@ -83,3 +83,4 @@
 | 2026-09-27 | 10 DRG/DIP、ICD、数据上传 | `WorkstationV2View` 追加覆盖块：容器去掉灰底露出光晕、嵌入高度不再扣顶栏 64px、事前/事中/付费/事后/上传各子页标题统一 40px、眉标统一灰色中文（事前分析「DRG / DIP PRE-GROUPING」、付费监测「DRG/DIP · PAYMENT」改为「分析 · DRG/DIP」，上传改为「数据与配置 · 数据导入」）、主卡与面板统一玻璃卡；ICD 检索页头去掉白色横带，改为「分析 · 编码工作台」眉标 + 40px 标题。相关 3 个测试文件 32 项、类型检查通过，事前分析/付费监测/ICD/上传 1440 截图核对。右下角质控提醒浮动按钮保留原样（功能入口） |
 | 2026-09-27 | 11 数据管理 | 页头眉标改为「数据与配置 · 数据中心」、标题 40px，刷新按钮改为品牌渐变胶囊；统计卡、数据源条、表浏览与数据预览面板统一玻璃卡。在原 scoped 样式末尾追加覆盖块。无专属单测；类型检查、lint 通过，1180 截图核对 |
 | 2026-09-27 | 12 全站收尾 | `src/views/workstation-v4`、`src/views/workstation` 下 99 个文件共 1235 处旧品牌蓝机械替换为 v7.1：#2b6cf6/#007aff/#2f6fed→#0a6cff，#0057b8/#1e5ae0→#0a5fd6，对应 rgba 同步；共享组件（`components/rules` 等旧后台也在用）未动。全量前端单测 1124 项中 1121 通过，3 项失败均为本机美国中部时区导致（QCOverview 时间断言、date-utils 两项，与本次无关，按用户要求不处理）；lint、类型检查通过，首页截图复核。**未做**：各页旧样式文件中被覆盖层压住的重复规则尚未删除（行为无影响，属代码整洁度，建议另立任务） |
+| 2026-09-27 | 8 自定义质控点 | 用户以 `/goal` 指示完成全部页面，按设计稿方向落地：页头改为眉标 + 40px 标题，「批量执行 / 规则设计」视图切换移入页头分段控件；四项指标合为玻璃卡；批量视图下四个步骤改为分段切换、`v-show` 只显示当前步骤（DOM 与数据流不变，设计视图仍全量显示），解决原先六块平铺与右侧截断。本页 CSS 变量改指 `--mq-*` Token，面板、按钮、表格统一 v7.1；`.mq-page-title` 公共类补显式文字色。单测 4 项、类型检查通过，1440 截图与浏览器内切换到步骤四实测核对 |

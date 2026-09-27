@@ -52,6 +52,7 @@
 
 .mq-page-title {
   margin: 0;
+  color: var(--mq-text-primary);
   font-family: var(--mq-font-display);
   font-size: var(--mq-font-title);
   font-weight: 700;
