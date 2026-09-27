@@ -2,7 +2,7 @@
   <div class="cdm-data-view">
     <header class="cdm-page-header">
       <div>
-        <span class="cdm-eyebrow">数据中心</span>
+        <span class="cdm-eyebrow">数据与配置 · 数据中心</span>
         <h1>数据管理</h1>
         <p>查看本地 CDM 数据库的病案、诊断、手术和费用数据结构，辅助排查数据同步质量。</p>
       </div>
@@ -1332,5 +1332,79 @@ onMounted(loadData)
   .main-content {
     grid-template-columns: 1fr;
   }
+}
+
+/* ===== v7.1 液态玻璃覆盖（同选择器后写生效） ===== */
+.cdm-data-view {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 8px 28px 32px 22px;
+  background: transparent;
+  color: var(--mq-text-primary);
+  font-family: var(--mq-font-family);
+}
+
+.cdm-page-header {
+  align-items: flex-end;
+  margin-bottom: 20px;
+  padding: 0 4px;
+}
+
+.cdm-eyebrow {
+  margin-bottom: 4px;
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-13);
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.4;
+}
+
+.cdm-page-header h1 {
+  font-family: var(--mq-font-display);
+  font-size: var(--mq-font-title);
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.cdm-page-header p {
+  margin-top: 4px;
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-13);
+  font-weight: 400;
+}
+
+.cdm-refresh-btn {
+  height: 38px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--mq-brand-gradient);
+  box-shadow: var(--mq-brand-shadow);
+}
+
+.stat-card,
+.datasource-bar,
+.schema-panel,
+.data-panel {
+  border: 1px solid var(--mq-glass-border);
+  border-radius: var(--mq-radius-card);
+  background: var(--mq-glass-bg);
+  -webkit-backdrop-filter: var(--mq-glass-blur);
+  backdrop-filter: var(--mq-glass-blur);
+  box-shadow: var(--mq-glass-shadow);
+}
+
+.stat-card:hover {
+  border-color: var(--mq-glass-border);
+  transform: none;
+}
+
+.stat-value {
+  font-family: var(--mq-font-display);
+  letter-spacing: -0.03em;
+}
+
+.stat-icon {
+  border-radius: 12px;
 }
 </style>
