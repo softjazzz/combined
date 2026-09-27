@@ -1443,4 +1443,112 @@ onMounted(() => {
     grid-template-columns: 20px minmax(72px, 0.9fr) minmax(80px, 1.5fr) 28px;
   }
 }
+
+/* ===== v7.1 液态玻璃覆盖（同选择器后写生效） ===== */
+.analytics-shell {
+  padding: 8px 28px 32px 22px;
+  background: transparent;
+  color: var(--mq-text-primary);
+  font-family: var(--mq-font-family);
+}
+
+.analytics-canvas {
+  gap: 20px;
+  max-width: 1440px;
+}
+
+.analytics-surface,
+.analytics-kpis {
+  border: 1px solid var(--mq-glass-border);
+  border-radius: var(--mq-radius-card);
+  background: var(--mq-glass-bg);
+  -webkit-backdrop-filter: var(--mq-glass-blur);
+  backdrop-filter: var(--mq-glass-blur);
+  box-shadow: var(--mq-glass-shadow);
+}
+
+/* 页头：标题与筛选不再套卡片 */
+.analytics-command-surface {
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.analytics-heading {
+  align-items: flex-end;
+}
+
+.analytics-eyebrow {
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-13);
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.analytics-heading h1 {
+  margin: 4px 0 0;
+  font-family: var(--mq-font-display);
+  font-size: var(--mq-font-title);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.analytics-heading p:not(.analytics-eyebrow) {
+  color: var(--mq-text-tertiary);
+}
+
+.analytics-toolbar :deep(.ant-picker),
+.analytics-toolbar :deep(.ant-select-selector),
+.analytics-toolbar :deep(.ant-input-affix-wrapper) {
+  border: 1px solid rgba(255, 255, 255, 0.9) !important;
+  border-radius: var(--mq-radius-control) !important;
+  background: rgba(255, 255, 255, 0.75) !important;
+  box-shadow: 0 1px 3px rgba(10, 55, 115, 0.06);
+}
+
+.analytics-toolbar :deep(.ant-btn) {
+  border-radius: 999px;
+}
+
+.analytics-context {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 0.5px solid var(--mq-border);
+}
+
+/* 指标：去掉彩色顶条，数值统一中性色 */
+.analytics-kpi {
+  padding: 18px 22px;
+  border-right: 0.5px solid var(--mq-border);
+}
+
+.analytics-kpi::before {
+  display: none;
+}
+
+.analytics-kpi span {
+  color: var(--mq-text-primary);
+  font-size: var(--mq-font-14);
+}
+
+.analytics-kpi strong,
+.analytics-kpi.is-brand strong,
+.analytics-kpi.is-danger strong,
+.analytics-kpi.is-warning strong {
+  margin-top: 10px;
+  color: var(--mq-text-primary);
+  font-family: var(--mq-font-display);
+  font-size: 40px;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.panel-heading p {
+  color: var(--mq-text-tertiary);
+  letter-spacing: 0;
+}
 </style>

@@ -29,7 +29,7 @@
 | 6 | 质控反馈记录 `qc-feedback-demo` | `workstation-v4/QcResultFeedbackDemoListView.vue` | 列表 + 预览 | 完成（见执行记录） |
 | 7 | 手术分级目录 `customer-sample-validation/surgery-catalog` | `workstation-v4/components/SurgeryProcedureCatalogView.vue` | 目录 | 完成（见执行记录） |
 | 8 | 自定义质控点 `rules/custom-workspace` | `views/rules/CustomRuleWorkspaceView.vue` | 目录 + 编辑器（先出设计稿） | 待确认（设计稿 CustomRuleV71） |
-| 9 | 统计分析 `stats` | `workstation-v4/LuxianQcAnalyticsView.vue` | 概览 | 待办 |
+| 9 | 统计分析 `stats` | `workstation-v4/LuxianQcAnalyticsView.vue` | 概览 | 完成（见执行记录） |
 | 10 | DRG/DIP 分析、ICD 编码查询、数据上传 `drg/*` `icd` `upload` | `workstation-v4/WorkstationV2View.vue` 及其子组件 | 概览 / 目录 / 表单 | 待办 |
 | 11 | 数据管理 `data` | `workstation-v4/CDMDataView.vue` | 目录 | 待办 |
 | 12 | 全站收尾：残留旧色值、`wv4-*` 旧类引用、过渡期 `:deep` 背景覆盖清理，全页截图总览 | `WorkstationLayout.vue` 等 | — | 待办 |
@@ -79,3 +79,4 @@
 | 2026-09-27 | 6 质控反馈记录 | 页头改为眉标 + 40px 标题，刷新按钮改为玻璃胶囊；四栏指标加定制图标、数值统一中性色（零值不强调）；列表改为玻璃卡，科室与提交时间不再逐字换行，反馈类型改为语义胶囊。样式整块重写（约 200 行，全部基于 Token）。单测 2 项、类型检查通过，1440 截图核对 |
 | 2026-09-27 | 7 手术分级目录 | 页头改为「规则 · 只读配置」眉标 + 40px 标题，工作台改为玻璃卡，统计项（即分类筛选）选中态改为白色浮起胶囊，编码改为浅蓝等宽胶囊，按钮、表格、分页统一 v7.1。在原 scoped 样式末尾追加同选择器覆盖块。单测 1 项、类型检查通过，1440 截图核对 |
 | 2026-09-27 | 8 自定义质控点 | **待确认**。现状把草稿列表、规则创建、Prompt 编辑、病历筛选与执行、任务列表、结果汇总六块平铺在一页（1440 宽度下右侧还有截断），属结构问题。已出设计稿 `.tmp/ui-design-v71/project/CustomRuleV71.dc.html`：页头分段切换四个阶段（规则草稿 / Prompt 编辑 / 病历筛选与执行 / 任务与结果），默认阶段为左草稿列表 + 右当前草稿详情与 Prompt 预览。已发用户，确认前不改代码 |
+| 2026-09-27 | 9 统计分析 | 页头不再套卡片，标题 40px、眉标改灰；筛选控件改为玻璃胶囊；四栏指标去掉彩色顶条、数值统一中性色（零值不强调）；所有分析面板改为玻璃卡。在原 scoped 样式末尾追加同选择器覆盖块。单测 5 项、类型检查通过，1440 截图核对（本地无已完成质控事件，图表面板未出现在截图中） |
