@@ -33,6 +33,7 @@ from .luxian_0609.phase_scope import (
     partition_luxian_0609_rule_scope,
 )
 from .luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY
+from .luxian_0609_rule_master import load_luxian_0609_rule_master
 from .qc_rule_sets import QCRuleSet, get_sichuan_rule_set
 from .sample_validation_rule_sets import LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
 
@@ -169,6 +170,45 @@ def executable_rule_ids(rule_set_key: Any) -> frozenset[str]:
         and entry.catalog_registered
         and entry.rule_id in inventory
     )
+
+
+def _rule_display_metadata(rule_set_key: str) -> dict[str, tuple[str | None, str | None]]:
+    """规则展示元数据 {rule_id: (qc_point, source_document)}。
+
+    LX0609 取规则主表（含已下线规则，一次加载且模块内缓存）；其余规则集暂无权威元数据，返回空映射，
+    调用方给 null（前端显示未知，不猜测）。
+    """
+    if rule_set_key != LUXIAN_0609_RULE_SET_KEY:
+        return {}
+    return {
+        entry.rule_id: (entry.qc_point or None, entry.source_document or None)
+        for entry in load_luxian_0609_rule_master()
+    }
+
+
+def with_executable_flags(rule_set_key: Any, item: Mapping[str, Any]) -> dict[str, Any]:
+    """只读派生：为响应 entries 的每条规则附加 executable、qc_point、source_document。
+
+    executable 的判定唯一 owner 仍为 ``executable_rule_ids``；qc_point/source_document 只搬运
+    规则主表字段。这些字段不入库、不参与摘要，写接口的 entries 只接受 rule_id 与 state，
+    调用方回传前须去掉。
+    """
+    entries = item.get("entries")
+    if not isinstance(entries, list):
+        return dict(item)
+    rule_set = _rule_set(rule_set_key)
+    executable = executable_rule_ids(rule_set.key)
+    metadata = _rule_display_metadata(rule_set.key)
+    flagged = []
+    for entry in entries:
+        qc_point, source_document = metadata.get(entry["rule_id"], (None, None))
+        flagged.append({
+            **entry,
+            "executable": entry["rule_id"] in executable,
+            "qc_point": qc_point,
+            "source_document": source_document,
+        })
+    return {**item, "entries": flagged}
 
 
 # ---------------------------------------------------------------------------
@@ -854,4 +894,5 @@ __all__ = [
     "retire_version",
     "update_draft",
     "validate_publish_entries",
+    "with_executable_flags",
 ]

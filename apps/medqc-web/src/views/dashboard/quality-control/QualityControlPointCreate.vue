@@ -24,6 +24,15 @@
       </h2>
     </div>
 
+    <!-- 能力说明：新建质控点需执行器配合，界面暂不支持创建 -->
+    <a-alert
+      type="warning"
+      show-icon
+      class="create-unavailable mb-6"
+      message="新建质控点需先完成执行器实现与规则主表登记，当前不可在界面创建"
+      description="已有质控点的开启、暂停与下线请在质控点管理页写入草稿并发布新版本。"
+    />
+
     <!-- 步骤指引 -->
     <div class="steps-container mb-8">
       <a-steps
@@ -37,13 +46,15 @@
 
       <!-- 下一步按钮 -->
       <div class="step-actions">
-        <a-button
-          type="primary"
-          class="next-btn"
-          @click="handleNextStep"
-        >
-          下一步
-        </a-button>
+        <a-tooltip :title="CREATE_UNAVAILABLE_REASON">
+          <a-button
+            type="primary"
+            class="next-btn"
+            disabled
+          >
+            保存并下一步
+          </a-button>
+        </a-tooltip>
       </div>
     </div>
 
@@ -53,6 +64,7 @@
         ref="formRef"
         :model="formData"
         :rules="formRules"
+        disabled
         layout="vertical"
         class="quality-point-form"
       >
@@ -251,14 +263,16 @@
 
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
-import { message } from 'ant-design-vue'
 import type { FormInstance, FormProps } from 'ant-design-vue'
 import type { QualityControlPointForm } from '@/types/quality-control'
+
+/** 新建质控点需要执行器实现与规则主表条目（质控引擎范围），界面不提供保存。 */
+const CREATE_UNAVAILABLE_REASON = '新建质控点需先完成执行器实现与规则主表登记，当前不可在界面创建'
 
 // 当前步骤
 const currentStep = ref(0)
 
-// 表单引用
+// 表单引用（保留页面结构；表单整体禁用）
 const formRef = ref<FormInstance>()
 
 // 表单数据
@@ -284,19 +298,6 @@ const formRules: FormProps['rules'] = {
   category: [{ required: true, message: '请选择质控大类', trigger: 'change' }],
   type: [{ required: true, message: '请选择质控类型', trigger: 'change' }],
   document: [{ required: true, message: '请选择质控文书', trigger: 'change' }],
-}
-
-// 下一步处理
-const handleNextStep = async () => {
-  try {
-    await formRef.value?.validate()
-    if (currentStep.value < 2) {
-      currentStep.value++
-      message.success('信息保存成功，进入下一步')
-    }
-  } catch (error) {
-    message.error('请完善必填信息')
-  }
 }
 </script>
 

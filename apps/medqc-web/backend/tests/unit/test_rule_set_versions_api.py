@@ -63,7 +63,7 @@ def test_list_detail_draft_publish_retire_flow(sessions):
     assert http.get(f"{BASE}/{KEY}/draft").json()["data"]["id"] == draft["id"]
 
     entries = [
-        {**item, "state": "active"} if item["rule_id"] == "LX0609-033" else item
+        {"rule_id": item["rule_id"], "state": "active" if item["rule_id"] == "LX0609-033" else item["state"]}
         for item in draft["entries"]
     ]
     updated = http.put(f"{BASE}/{KEY}/draft", json={"version_seq": 1, "entries": entries})
@@ -92,7 +92,7 @@ def test_publish_validation_failure_is_422_with_problems(sessions):
     http = client()
     draft = http.post(f"{BASE}/{KEY}/draft", json={}).json()["data"]
     entries = [
-        {**item, "state": "active"} if item["rule_id"] == "LX0609-020" else item
+        {"rule_id": item["rule_id"], "state": "active" if item["rule_id"] == "LX0609-020" else item["state"]}
         for item in draft["entries"]
     ]
     assert http.put(f"{BASE}/{KEY}/draft", json={"version_seq": 1, "entries": entries}).status_code == 200
@@ -101,6 +101,57 @@ def test_publish_validation_failure_is_422_with_problems(sessions):
     detail = response.json()["detail"]
     assert detail["code"] == "publish_validation_failed"
     assert any("LX0609-020" in problem for problem in detail["problems"])
+
+
+def test_entries_carry_readonly_executable_flag(sessions):
+    http = client()
+    executable = service.executable_rule_ids(KEY)
+    detail = http.get(f"{BASE}/{KEY}/{BUILTIN}").json()["data"]
+    flags = {item["rule_id"]: item["executable"] for item in detail["entries"]}
+    assert flags["LX0609-033"] is True and flags["LX0609-020"] is False
+    assert flags == {rule_id: rule_id in executable for rule_id in flags}
+    # 摘要只覆盖 rule_id/state，附加字段不影响内容摘要。
+    assert detail["content_digest"] == service.compute_entries_digest(detail["entries"])
+
+    draft = http.post(f"{BASE}/{KEY}/draft", json={}).json()["data"]
+    assert all(isinstance(item["executable"], bool) for item in draft["entries"])
+    assert http.get(f"{BASE}/{KEY}/draft").json()["data"]["entries"] == draft["entries"]
+    listed = http.get(BASE, params={"rule_set_key": KEY}).json()["data"]
+    assert listed["draft"]["entries"] == draft["entries"]
+    assert "entries" not in listed["items"][0]
+    # 写接口仍只接受 rule_id/state，回传 executable 被拒绝。
+    rejected = http.put(f"{BASE}/{KEY}/draft", json={"version_seq": 1, "entries": draft["entries"]})
+    assert rejected.status_code == 422
+
+    other = http.get(f"{BASE}/luxian_0916_qc_v1/2026-09-16").json()["data"]
+    assert other["entries"] and all(item["executable"] is True for item in other["entries"])
+    # 0916 暂无权威元数据：名称与文书为 null，不猜测。
+    assert all(item["qc_point"] is None and item["source_document"] is None for item in other["entries"])
+
+
+def test_entries_carry_rule_master_metadata_including_offline_rules(sessions):
+    from app.services.luxian_0609_rule_master import load_luxian_0609_rule_master
+
+    http = client()
+    master = {entry.rule_id: entry for entry in load_luxian_0609_rule_master()}
+    detail = http.get(f"{BASE}/{KEY}/{BUILTIN}").json()["data"]
+    by_id = {item["rule_id"]: item for item in detail["entries"]}
+    offline = [item for item in detail["entries"] if item["state"] == "offline"]
+    assert offline, "内置版本应含客户排除（下线）规则"
+    for item in detail["entries"]:
+        assert item["qc_point"] == master[item["rule_id"]].qc_point
+        assert item["source_document"] == master[item["rule_id"]].source_document
+    # 下线规则（如 LX0609-033）同样有名称与来源文书。
+    assert by_id["LX0609-033"]["state"] == "offline" and by_id["LX0609-033"]["qc_point"]
+    assert detail["content_digest"] == service.compute_entries_digest(detail["entries"])
+
+    draft = http.post(f"{BASE}/{KEY}/draft", json={}).json()["data"]
+    assert {item["rule_id"]: item["qc_point"] for item in draft["entries"]} == {
+        rule_id: item["qc_point"] for rule_id, item in by_id.items()
+    }
+    # 写接口拒绝回传派生字段。
+    polluted = [{"rule_id": item["rule_id"], "state": item["state"], "qc_point": item["qc_point"]} for item in draft["entries"]]
+    assert http.put(f"{BASE}/{KEY}/draft", json={"version_seq": 1, "entries": polluted}).status_code == 422
 
 
 def test_delete_draft_uses_version_seq(sessions):

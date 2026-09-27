@@ -1,87 +1,112 @@
 <template>
   <div class="quality-control-point-management">
-    <!-- 页面标题 -->
+    <!-- 页面标题与规则集 -->
     <div class="page-header mb-6">
       <h2 class="page-title">
         非编码质控点管理
       </h2>
+      <div class="rule-set-bar">
+        <span class="bar-label">规则集</span>
+        <a-select
+          v-model:value="ruleSetKey"
+          class="rule-set-select"
+          :options="ruleSetOptions"
+          :disabled="saving"
+        />
+        <span class="current-version">
+          当前生效版本：<strong>{{ versionList?.current_version || UNKNOWN_TEXT }}</strong>
+        </span>
+        <a-button
+          class="action-btn history-btn"
+          :disabled="!versionList"
+          @click="historyOpen = true"
+        >
+          版本历史
+        </a-button>
+      </div>
     </div>
 
+    <a-alert
+      v-if="versionList && !versionList.versionable"
+      type="info"
+      show-icon
+      class="page-alert"
+      message="该规则集暂仅内置版本，质控点状态只读展示。"
+    />
+    <a-alert
+      v-else-if="versionList && !canManage"
+      type="info"
+      show-icon
+      class="page-alert"
+      message="当前角色只读：仅管理员或质控管理员可调整质控点状态并发布版本。"
+    />
+    <a-alert
+      v-if="loadError"
+      type="error"
+      show-icon
+      class="page-alert"
+      :message="loadError"
+    />
+
+    <!-- 草稿面板 -->
+    <RuleSetDraftPanel
+      v-if="draft && versionList"
+      :rule-set-key="ruleSetKey"
+      :draft="draft"
+      :diff="draftDiff"
+      :current-version="versionList.current_version"
+      :can-write="editable"
+      @refresh="load"
+    />
+
     <!-- 标签页 -->
-    <div class="tabs-container mb-6">
+    <div class="tabs-container">
       <a-tabs
         v-model:active-key="activeTab"
         class="custom-tabs"
       >
         <a-tab-pane
           key="online"
-          tab="已上线"
+          :tab="`已上线（${onlineCount}）`"
         />
         <a-tab-pane
           key="offline"
-          tab="未上线"
+          :tab="`未上线（${offlineCount}）`"
         />
       </a-tabs>
     </div>
 
     <!-- 操作栏 -->
     <div class="action-bar mb-4">
-      <!-- 左侧批量操作按钮 -->
       <div class="batch-actions">
-        <template v-if="activeTab === 'online'">
+        <template v-if="editable">
+          <a-tooltip :title="enableBlockedReason">
+            <a-button
+              :disabled="selectedRowKeys.length === 0 || Boolean(enableBlockedReason) || saving"
+              class="batch-btn batch-enable"
+              @click="applyBatch('active')"
+            >
+              批量开启
+            </a-button>
+          </a-tooltip>
           <a-button
-            :disabled="selectedRowKeys.length === 0"
-            class="batch-btn"
-            @click="handleBatchEnable"
+            :disabled="selectedRowKeys.length === 0 || saving"
+            class="batch-btn batch-pause"
+            @click="applyBatch('paused')"
           >
-            批量开启
+            批量暂停
           </a-button>
           <a-button
-            :disabled="selectedRowKeys.length === 0"
-            class="batch-btn"
-            @click="handleBatchDisable"
-          >
-            批量关闭
-          </a-button>
-          <a-button
-            :disabled="selectedRowKeys.length === 0"
-            class="batch-btn"
-            @click="handleBatchOffline"
+            :disabled="selectedRowKeys.length === 0 || saving"
+            class="batch-btn batch-offline"
+            @click="applyBatch('offline')"
           >
             批量下线
           </a-button>
+          <span class="batch-hint">改动先写入草稿，发布新版本后生效</span>
         </template>
-        <template v-else>
-          <a-button
-            :disabled="selectedRowKeys.length === 0"
-            class="batch-btn"
-            @click="handleBatchDelete"
-          >
-            批量删除
-          </a-button>
-          <a-button
-            :disabled="selectedRowKeys.length === 0"
-            class="batch-btn"
-            @click="handleBatchOnline"
-          >
-            批量上线
-          </a-button>
-        </template>
-
-        <!-- 导入导出按钮 -->
         <a-button
-          class="action-btn"
-          @click="handleImport"
-        >
-          导入质控点
-        </a-button>
-        <a-button
-          class="action-btn"
-          @click="handleExport"
-        >
-          导出质控点
-        </a-button>
-        <a-button
+          v-if="canManage"
           type="primary"
           class="create-btn"
           @click="handleCreateNew"
@@ -95,7 +120,6 @@
         <a-select
           v-model:value="searchType"
           class="search-type-select"
-          placeholder="质控点ID"
         >
           <a-select-option value="id">
             质控点ID
@@ -109,6 +133,7 @@
           placeholder="请输入"
           class="search-input"
           enter-button
+          allow-clear
           @search="handleSearch"
         />
       </div>
@@ -119,241 +144,172 @@
       <a-table
         :columns="tableColumns"
         :data-source="tableData"
-        :row-selection="rowSelection"
+        :row-selection="editable ? rowSelection : undefined"
         :pagination="paginationConfig"
         :loading="loading"
-        row-key="id"
+        row-key="rule_id"
         size="middle"
         class="quality-point-table"
       >
-        <!-- 质控点名称列 -->
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'name'">
             <div class="name-cell">
               <div class="name-text">
-                {{ record.name }}
+                {{ asRow(record).name || UNKNOWN_TEXT }}
               </div>
               <div class="source-text">
-                {{ record.source }}
+                文书：{{ asRow(record).document || UNKNOWN_TEXT }}
               </div>
             </div>
           </template>
 
-          <!-- 启用状态列 -->
-          <template v-if="column.key === 'enabled' && activeTab === 'online'">
-            <a-switch
-              v-model:checked="record.enabled"
-              size="small"
-              @change="
-                (checked: boolean) => handleToggleEnable(record as QualityControlPoint, checked)
-              "
-            />
+          <template v-else-if="column.key === 'state'">
+            <div class="state-cell">
+              <a-tag :color="ENTRY_STATE_COLOR[asRow(record).state]">
+                {{ ENTRY_STATE_LABEL[asRow(record).state] }}
+              </a-tag>
+              <a-tag
+                v-if="asRow(record).draftState"
+                color="blue"
+                class="draft-state-tag"
+              >
+                草稿：{{ ENTRY_STATE_LABEL[asRow(record).draftState as RuleSetEntryState] }}
+              </a-tag>
+            </div>
           </template>
 
-          <!-- 操作列 -->
-          <template v-if="column.key === 'action'">
-            <div class="action-buttons">
-              <a-button
-                type="link"
-                size="small"
-                @click="handleView(record as QualityControlPoint)"
-              >
-                查看
-              </a-button>
-              <a-button
-                type="link"
-                size="small"
-                @click="handleEdit(record as QualityControlPoint)"
-              >
-                编辑
-              </a-button>
-              <a-button
-                type="link"
-                size="small"
-                danger
-                @click="handleDelete(record as QualityControlPoint)"
-              >
-                下线
-              </a-button>
-            </div>
+          <template v-else-if="column.key === 'executable'">
+            <a-tag
+              v-if="asRow(record).executable === true"
+              color="green"
+            >
+              可执行
+            </a-tag>
+            <a-tooltip
+              v-else-if="asRow(record).executable === false"
+              title="执行器未实现或规则未就绪，只能暂停或下线"
+            >
+              <a-tag color="red">
+                不可执行
+              </a-tag>
+            </a-tooltip>
+            <span
+              v-else
+              class="unknown-text"
+            >{{ UNKNOWN_TEXT }}</span>
           </template>
         </template>
       </a-table>
     </div>
+
+    <RuleSetVersionHistoryDrawer
+      v-model:open="historyOpen"
+      :rule-set-key="ruleSetKey"
+      :items="versionList?.items ?? []"
+      :can-retire="editable"
+      @refresh="load"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import type { TableColumnsType, TableProps } from 'ant-design-vue'
 import { useRouter } from 'vue-router'
-import type {
-  QualityControlPoint,
-  QualityControlSearchParams,
-  PaginationConfig,
-} from '@/types/quality-control'
+import { useAuthStore } from '@/stores/auth'
+import {
+  createRuleSetDraft,
+  getRuleSetVersion,
+  listRuleSetVersions,
+  updateRuleSetDraft,
+  type RuleSetEntryState,
+  type RuleSetVersionDetail,
+  type RuleSetVersionList,
+} from '@/api/ruleSetVersions'
+import RuleSetDraftPanel from './components/RuleSetDraftPanel.vue'
+import RuleSetVersionHistoryDrawer from './components/RuleSetVersionHistoryDrawer.vue'
+import {
+  ENTRY_STATE_COLOR,
+  ENTRY_STATE_LABEL,
+  LX0609_RULE_SET_KEY,
+  RULE_SET_OPTIONS,
+  UNKNOWN_TEXT,
+  applyStateToEntries,
+  buildPointRows,
+  describeFailure,
+  diffEntries,
+  filterRows,
+  needsRefresh,
+  nonExecutableRuleIds,
+  rowsForTab,
+  type EntryDiffItem,
+  type PointTab,
+  type QualityPointRow,
+} from './ruleSetVersionModel'
 
 const router = useRouter()
+const authStore = useAuthStore()
 
-// 响应式数据
-const loading = ref(false)
-const activeTab = ref('online')
+const ruleSetOptions = RULE_SET_OPTIONS.map((item) => ({ ...item }))
+const ruleSetKey = ref<string>(LX0609_RULE_SET_KEY)
+const activeTab = ref<PointTab>('online')
 const selectedRowKeys = ref<string[]>([])
-const searchType = ref('id')
+const searchType = ref<'id' | 'name'>('id')
 const searchKeyword = ref('')
+const appliedKeyword = ref('')
+const historyOpen = ref(false)
 
-// 表格数据
-const tableData = ref<QualityControlPoint[]>([
-  {
-    id: 'Q2120',
-    name: '专病-乳腺癌-乳腺癌...',
-    source: '病历书写与管理基本规...',
-    category: '内涵质控',
-    type: '规范性',
-    coreSystem: '',
-    document: '入院记录',
-    onlineDate: '2024-03-11 16:46',
-    lastOperator: '王某',
-    enabled: true,
-    status: 'online',
-  },
-  {
-    id: 'Q2121',
-    name: '专病-乳腺癌-乳腺癌...',
-    source: '病历书写与管理基本规...',
-    category: '内涵质控',
-    type: '规范性',
-    coreSystem: '',
-    document: '入院记录',
-    onlineDate: '2024-03-11 16:46',
-    lastOperator: '王某',
-    enabled: true,
-    status: 'online',
-  },
-  {
-    id: 'Q2122',
-    name: '专病-乳腺癌-乳腺癌...',
-    source: '病历书写与管理基本规...',
-    category: '内涵质控',
-    type: '规范性',
-    coreSystem: '',
-    document: '入院记录',
-    onlineDate: '2024-03-11 16:46',
-    lastOperator: '王某',
-    enabled: true,
-    status: 'online',
-  },
-])
+const loading = ref(false)
+const saving = ref(false)
+const loadError = ref('')
+const versionList = ref<RuleSetVersionList | null>(null)
+const currentDetail = ref<RuleSetVersionDetail | null>(null)
+/** 草稿基础版本不是当前版本时单独读取的基础版本详情。 */
+const baseDetail = ref<RuleSetVersionDetail | null>(null)
 
-// 表格列配置
-const tableColumns = computed<TableColumnsType<QualityControlPoint>>(() => {
-  const baseColumns: TableColumnsType<QualityControlPoint> = [
-    {
-      title: '质控点ID',
-      dataIndex: 'id',
-      key: 'id',
-      width: 100,
-      sorter: true,
-    },
-    {
-      title: '质控点名称',
-      dataIndex: 'name',
-      key: 'name',
-      width: 200,
-      sorter: true,
-    },
-    {
-      title: '质控点来源',
-      dataIndex: 'source',
-      key: 'source',
-      width: 150,
-      sorter: true,
-    },
-    {
-      title: '质控大类',
-      dataIndex: 'category',
-      key: 'category',
-      width: 120,
-      sorter: true,
-    },
-    {
-      title: '质控类型',
-      dataIndex: 'type',
-      key: 'type',
-      width: 100,
-      sorter: true,
-    },
-    {
-      title: '核心制度分类',
-      dataIndex: 'coreSystem',
-      key: 'coreSystem',
-      width: 120,
-      sorter: true,
-    },
-    {
-      title: '质控文书',
-      dataIndex: 'document',
-      key: 'document',
-      width: 100,
-      sorter: true,
-    },
-  ]
+/** 写权限沿用规则管理路由：admin / qc_manager。 */
+const canManage = computed(() => authStore.hasRole('admin') || authStore.hasRole('qc_manager'))
+/** 可写 = 角色可写且规则集支持版本发布（本批仅 LX0609）。 */
+const editable = computed(() => canManage.value && versionList.value?.versionable === true)
+const draft = computed(() => versionList.value?.draft ?? null)
 
-  if (activeTab.value === 'online') {
-    baseColumns.push(
-      {
-        title: '上线日期',
-        dataIndex: 'onlineDate',
-        key: 'onlineDate',
-        width: 150,
-        sorter: true,
-      },
-      {
-        title: '最后操作人',
-        dataIndex: 'lastOperator',
-        key: 'lastOperator',
-        width: 100,
-        sorter: true,
-      },
-      {
-        title: '启用状态',
-        dataIndex: 'enabled',
-        key: 'enabled',
-        width: 100,
-      },
-    )
-  } else {
-    baseColumns.push(
-      {
-        title: '最后状态',
-        dataIndex: 'status',
-        key: 'status',
-        width: 100,
-        sorter: true,
-      },
-      {
-        title: '上线日期',
-        dataIndex: 'onlineDate',
-        key: 'onlineDate',
-        width: 150,
-        sorter: true,
-      },
-    )
-  }
+const rows = computed<QualityPointRow[]>(() =>
+  currentDetail.value
+    ? buildPointRows(currentDetail.value.entries, draft.value?.entries ?? null)
+    : [],
+)
+const onlineCount = computed(() => rowsForTab(rows.value, 'online').length)
+const offlineCount = computed(() => rowsForTab(rows.value, 'offline').length)
+const tableData = computed(() =>
+  filterRows(rowsForTab(rows.value, activeTab.value), searchType.value, appliedKeyword.value),
+)
 
-  baseColumns.push({
-    title: '操作',
-    dataIndex: 'action',
-    key: 'action',
-    width: 150,
-    fixed: 'right' as const,
-  })
-
-  return baseColumns
+const draftDiff = computed<EntryDiffItem[] | null>(() => {
+  const current = draft.value
+  if (!current) return []
+  const base = current.base_version === currentDetail.value?.version ? currentDetail.value : baseDetail.value
+  return base ? diffEntries(base.entries, current.entries) : null
 })
 
-// 行选择配置
+const enableBlockedReason = computed(() => {
+  const blocked = nonExecutableRuleIds(rows.value, selectedRowKeys.value)
+  if (!blocked.length) return ''
+  return `所选质控点中 ${blocked.join('、')} 当前不可执行（执行器未实现或规则未就绪），不能开启`
+})
+
+const tableColumns = computed<TableColumnsType<QualityPointRow>>(() => [
+  { title: '质控点ID', dataIndex: 'rule_id', key: 'rule_id', width: 140 },
+  { title: '质控点名称 / 文书', dataIndex: 'name', key: 'name' },
+  {
+    title: activeTab.value === 'online' ? '状态' : '状态（暂停 / 下线）',
+    dataIndex: 'state',
+    key: 'state',
+    width: 220,
+  },
+  { title: '是否可执行', dataIndex: 'executable', key: 'executable', width: 120 },
+])
+
 const rowSelection = computed<TableProps['rowSelection']>(() => ({
   selectedRowKeys: selectedRowKeys.value,
   onChange: (keys: Array<string | number>) => {
@@ -361,77 +317,111 @@ const rowSelection = computed<TableProps['rowSelection']>(() => ({
   },
 }))
 
-// 分页配置
 const paginationConfig = reactive({
-  current: 1,
-  pageSize: 10,
-  total: 2093,
+  pageSize: 20,
   showSizeChanger: true,
   showQuickJumper: true,
   showTotal: (total: number) => `共 ${total} 条`,
   pageSizeOptions: ['10', '20', '50', '100'],
 })
 
-// 事件处理函数
-const handleBatchEnable = () => {
-  message.success(`已批量开启 ${selectedRowKeys.value.length} 个质控点`)
+function asRow(record: Record<string, unknown>): QualityPointRow {
+  return record as unknown as QualityPointRow
+}
+
+async function load() {
+  const key = ruleSetKey.value
+  loading.value = true
+  loadError.value = ''
   selectedRowKeys.value = []
+  try {
+    const listResult = await listRuleSetVersions(key)
+    if (key !== ruleSetKey.value) return
+    if (!listResult.success || !listResult.data) {
+      versionList.value = null
+      currentDetail.value = null
+      baseDetail.value = null
+      loadError.value = listResult.message || '读取规则集版本失败'
+      return
+    }
+    const list = listResult.data
+    const detailResult = await getRuleSetVersion(key, list.current_version)
+    const draftBase = list.draft?.base_version
+    const baseResult = draftBase && draftBase !== list.current_version
+      ? await getRuleSetVersion(key, draftBase)
+      : null
+    if (key !== ruleSetKey.value) return
+    versionList.value = list
+    currentDetail.value = detailResult.success ? detailResult.data ?? null : null
+    baseDetail.value = baseResult?.success ? baseResult.data ?? null : null
+    if (!detailResult.success) loadError.value = detailResult.message || '读取当前版本详情失败'
+  } finally {
+    if (key === ruleSetKey.value) loading.value = false
+  }
 }
 
-const handleBatchDisable = () => {
-  message.success(`已批量关闭 ${selectedRowKeys.value.length} 个质控点`)
-  selectedRowKeys.value = []
+/** 批量修改质控点状态：只写草稿；无草稿时先以当前版本为基础创建草稿。 */
+async function applyBatch(state: RuleSetEntryState) {
+  const list = versionList.value
+  if (!editable.value || !list || selectedRowKeys.value.length === 0) return
+  if (state === 'active' && enableBlockedReason.value) {
+    message.warning(enableBlockedReason.value)
+    return
+  }
+  const key = ruleSetKey.value
+  saving.value = true
+  try {
+    let working = list.draft
+    if (!working) {
+      const created = await createRuleSetDraft(key, { base_version: list.current_version })
+      if (!created.success || !created.data) {
+        message.warning(describeFailure(created, '创建草稿失败'))
+        if (needsRefresh(created)) await load()
+        return
+      }
+      working = created.data
+      versionList.value = { ...list, draft: working }
+    }
+    const { entries, changed } = applyStateToEntries(working.entries, selectedRowKeys.value, state)
+    if (changed === 0) {
+      message.info(`所选质控点在草稿中已是“${ENTRY_STATE_LABEL[state]}”`)
+      return
+    }
+    const updated = await updateRuleSetDraft(key, { version_seq: working.version_seq, entries })
+    if (!updated.success || !updated.data) {
+      message.warning(describeFailure(updated, '保存草稿失败'))
+      if (needsRefresh(updated) || updated.status === 404) await load()
+      return
+    }
+    versionList.value = { ...list, draft: updated.data }
+    selectedRowKeys.value = []
+    message.success(`已写入草稿：${changed} 个质控点改为“${ENTRY_STATE_LABEL[state]}”，发布新版本后生效`)
+  } finally {
+    saving.value = false
+  }
 }
 
-const handleBatchOffline = () => {
-  message.success(`已批量下线 ${selectedRowKeys.value.length} 个质控点`)
-  selectedRowKeys.value = []
-}
-
-const handleBatchDelete = () => {
-  message.success(`已批量删除 ${selectedRowKeys.value.length} 个质控点`)
-  selectedRowKeys.value = []
-}
-
-const handleBatchOnline = () => {
-  message.success(`已批量上线 ${selectedRowKeys.value.length} 个质控点`)
-  selectedRowKeys.value = []
-}
-
-const handleImport = () => {
-  message.info('导入质控点功能')
-}
-
-const handleExport = () => {
-  message.info('导出质控点功能')
-}
-
-const handleCreateNew = () => {
+function handleCreateNew() {
   router.push('/dashboard/quality-control/create')
 }
 
-const handleSearch = () => {
-  message.info(`搜索: ${searchType.value} - ${searchKeyword.value}`)
+function handleSearch() {
+  appliedKeyword.value = searchKeyword.value
 }
 
-const handleToggleEnable = (record: QualityControlPoint, checked: boolean) => {
-  message.success(`质控点 ${record.id} 已${checked ? '启用' : '禁用'}`)
-}
+watch(ruleSetKey, () => {
+  versionList.value = null
+  currentDetail.value = null
+  baseDetail.value = null
+  void load()
+})
 
-const handleView = (record: QualityControlPoint) => {
-  message.info(`查看质控点: ${record.id}`)
-}
-
-const handleEdit = (record: QualityControlPoint) => {
-  message.info(`编辑质控点: ${record.id}`)
-}
-
-const handleDelete = (record: QualityControlPoint) => {
-  message.info(`删除质控点: ${record.id}`)
-}
+watch(activeTab, () => {
+  selectedRowKeys.value = []
+})
 
 onMounted(() => {
-  // 初始化数据加载
+  void load()
 })
 </script>
 
@@ -442,11 +432,58 @@ onMounted(() => {
   min-height: 100vh;
 
   .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+
     .page-title {
       font-size: 20px;
       font-weight: 600;
       color: #333333;
       margin: 0;
+    }
+
+    .rule-set-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+
+      .bar-label {
+        color: #666666;
+      }
+
+      .rule-set-select {
+        width: 200px;
+      }
+
+      .current-version {
+        color: #666666;
+
+        strong {
+          color: #333333;
+        }
+      }
+    }
+  }
+
+  .page-alert {
+    margin-bottom: 16px;
+  }
+
+  .action-btn {
+    height: 32px;
+    padding: 0 16px;
+    font-size: 14px;
+    border-radius: 6px;
+    border-color: #d9d9d9;
+    color: #666666;
+
+    &:hover {
+      border-color: #2b6cf6;
+      color: #2b6cf6;
     }
   }
 
@@ -490,6 +527,7 @@ onMounted(() => {
       display: flex;
       gap: 8px;
       align-items: center;
+      flex-wrap: wrap;
 
       .batch-btn {
         height: 32px;
@@ -502,18 +540,9 @@ onMounted(() => {
         }
       }
 
-      .action-btn {
-        height: 32px;
-        padding: 0 16px;
-        font-size: 14px;
-        border-radius: 6px;
-        border-color: #d9d9d9;
-        color: #666666;
-
-        &:hover {
-          border-color: #2b6cf6;
-          color: #2b6cf6;
-        }
+      .batch-hint {
+        font-size: 12px;
+        color: #999999;
       }
 
       .create-btn {
@@ -542,22 +571,6 @@ onMounted(() => {
 
       .search-input {
         width: 240px;
-
-        :deep(.ant-input-group-wrapper) {
-          .ant-input-wrapper {
-            .ant-input {
-              height: 32px;
-              border-radius: 6px 0 0 6px;
-            }
-          }
-
-          .ant-input-group-addon {
-            .ant-btn {
-              height: 32px;
-              border-radius: 0 6px 6px 0;
-            }
-          }
-        }
       }
     }
   }
@@ -597,15 +610,14 @@ onMounted(() => {
         }
       }
 
-      .action-buttons {
+      .state-cell {
         display: flex;
-        gap: 8px;
+        flex-wrap: wrap;
+        gap: 4px;
+      }
 
-        :deep(.ant-btn-link) {
-          padding: 0;
-          height: auto;
-          font-size: 14px;
-        }
+      .unknown-text {
+        color: #999999;
       }
     }
   }
@@ -620,10 +632,6 @@ onMounted(() => {
       flex-direction: column;
       gap: 16px;
       align-items: stretch;
-
-      .batch-actions {
-        flex-wrap: wrap;
-      }
 
       .search-area {
         justify-content: stretch;

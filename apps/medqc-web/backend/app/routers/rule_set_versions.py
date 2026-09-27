@@ -9,6 +9,7 @@
 - POST   /api/v1/rule-set-versions/{key}/draft/publish      发布 {version, note}
 - POST   /api/v1/rule-set-versions/{key}/{version}/retire   下线（不能下线当前/内置版本）
 读取需登录；写操作沿用规则管理路由的 admin/qc_manager 角色要求。数据库故障固定脱敏为 503。
+响应中的 entries（含列表里的草稿）附加只读派生字段 executable、qc_point、source_document；写接口 entries 只接受 rule_id/state。
 """
 
 from __future__ import annotations
@@ -36,6 +37,7 @@ from ..services.rule_set_version_service import (
     publish_draft,
     retire_version,
     update_draft,
+    with_executable_flags,
 )
 
 router = APIRouter(prefix="/api/v1/rule-set-versions", tags=["rule-set-versions"])
@@ -114,6 +116,21 @@ def _raise_http(exc: Exception, action: str) -> None:
     raise HTTPException(status_code=503, detail=_UNAVAILABLE_DETAIL) from None
 
 
+def _flagged(rule_set_key: str, data: Any) -> Any:
+    """响应 entries（含列表中的草稿）附加只读派生字段（可执行标记与质控点名称/来源文书），由服务层给出。"""
+    if not isinstance(data, dict):
+        return data
+    if isinstance(data.get("draft"), dict):
+        data = {**data, "draft": with_executable_flags(rule_set_key, data["draft"])}
+    if isinstance(data.get("entries"), list):
+        data = with_executable_flags(rule_set_key, data)
+    return data
+
+
+def _with_flags(func: Any, rule_set_key: str, *args: Any, **kwargs: Any) -> Any:
+    return _flagged(rule_set_key, func(rule_set_key, *args, **kwargs))
+
+
 def _ok(request: Request, data: Any, message: str = "success"):
     return success_response(data=data, message=message, trace_id=get_trace_id(request))
 
@@ -136,7 +153,7 @@ async def get_rule_set_versions(
     current_user: dict = Depends(get_current_user),
 ):
     try:
-        data = await run_in_threadpool(list_versions, rule_set_key)
+        data = await run_in_threadpool(_with_flags, list_versions, rule_set_key)
     except Exception as exc:
         _raise_http(exc, "list")
     return _ok(request, _json(data))
@@ -149,7 +166,7 @@ async def get_rule_set_draft(
     current_user: dict = Depends(get_current_user),
 ):
     try:
-        data = await run_in_threadpool(get_draft, rule_set_key)
+        data = await run_in_threadpool(_with_flags, get_draft, rule_set_key)
     except Exception as exc:
         _raise_http(exc, "draft_get")
     return _ok(request, _json(data))
@@ -163,7 +180,7 @@ async def get_rule_set_version(
     current_user: dict = Depends(get_current_user),
 ):
     try:
-        data = await run_in_threadpool(get_version_detail, rule_set_key, version)
+        data = await run_in_threadpool(_with_flags, get_version_detail, rule_set_key, version)
     except Exception as exc:
         _raise_http(exc, "detail")
     return _ok(request, _json(data))
@@ -180,7 +197,7 @@ async def post_rule_set_draft(
     actor = _actor(current_user)
     try:
         data = await run_in_threadpool(
-            create_draft, rule_set_key, actor=actor, base_version=body.base_version,
+            _with_flags, create_draft, rule_set_key, actor=actor, base_version=body.base_version,
             entries=_entries(body.entries), note=body.note,
         )
     except Exception as exc:
@@ -199,7 +216,7 @@ async def put_rule_set_draft(
     actor = _actor(current_user)
     try:
         data = await run_in_threadpool(
-            update_draft, rule_set_key, actor=actor, version_seq=body.version_seq,
+            _with_flags, update_draft, rule_set_key, actor=actor, version_seq=body.version_seq,
             entries=_entries(body.entries), note=body.note,
         )
     except Exception as exc:
@@ -236,7 +253,7 @@ async def post_rule_set_draft_publish(
     actor = _actor(current_user)
     try:
         data = await run_in_threadpool(
-            publish_draft, rule_set_key, actor=actor, version=body.version,
+            _with_flags, publish_draft, rule_set_key, actor=actor, version=body.version,
             note=body.note, version_seq=body.version_seq,
         )
     except Exception as exc:
@@ -254,7 +271,7 @@ async def post_rule_set_version_retire(
 ):
     actor = _actor(current_user)
     try:
-        data = await run_in_threadpool(retire_version, rule_set_key, version, actor=actor)
+        data = await run_in_threadpool(_with_flags, retire_version, rule_set_key, version, actor=actor)
     except Exception as exc:
         _raise_http(exc, "retire")
     return _ok(request, _json(data), "规则集版本已下线")
