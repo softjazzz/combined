@@ -1436,8 +1436,8 @@ watch(
 }
 
 .result-tab.is-active {
-  border-color: #2b6cf6;
-  background: #2b6cf6;
+  border-color: #0a6cff;
+  background: #0a6cff;
   color: #fff;
   box-shadow: none;
 }
@@ -1517,7 +1517,7 @@ watch(
 }
 
 .result-document-group-toggle:hover {
-  color: #2b6cf6;
+  color: #0a6cff;
 }
 
 .result-document-group-toggle > span {
@@ -1564,7 +1564,7 @@ watch(
   left: 0;
   width: 3px;
   border-radius: 0 3px 3px 0;
-  background: #2b6cf6;
+  background: #0a6cff;
   content: '';
   opacity: 0;
   transform: scaleY(0.35);
@@ -1581,7 +1581,7 @@ watch(
 }
 
 .result-row:hover {
-  border-color: rgba(43, 108, 246, 0.22);
+  border-color: rgba(10, 108, 255, 0.22);
   background: #fff;
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
 }
@@ -1673,9 +1673,9 @@ watch(
 }
 
 .result-row-debug-copy:hover:not(:disabled) {
-  border-color: rgba(43, 108, 246, 0.28);
+  border-color: rgba(10, 108, 255, 0.28);
   background: #f5f9ff;
-  color: #2b6cf6;
+  color: #0a6cff;
 }
 
 .result-row-debug-copy:disabled {
@@ -1732,8 +1732,8 @@ watch(
 }
 
 .result-row.is-expanded .toggle-mark {
-  background: rgba(43, 108, 246, 0.08);
-  color: #2b6cf6;
+  background: rgba(10, 108, 255, 0.08);
+  color: #0a6cff;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1849,7 +1849,7 @@ watch(
   padding: 4px 0;
   border: 0;
   background: transparent;
-  color: #2b6cf6;
+  color: #0a6cff;
   font-size: 12px;
   line-height: 18px;
   font-weight: 400;
@@ -2030,7 +2030,7 @@ watch(
 }
 
 .detail-disclosure summary:hover {
-  color: #2b6cf6;
+  color: #0a6cff;
 }
 
 .detail-disclosure[open] summary {
@@ -2254,7 +2254,7 @@ watch(
   padding: 8px 9px;
   border: 1px solid rgba(0, 0, 0, 0.07);
   border-radius: 8px;
-  background: rgba(43, 108, 246, 0.025);
+  background: rgba(10, 108, 255, 0.025);
 }
 
 .copy-pair-head {
@@ -2284,7 +2284,7 @@ watch(
 
 .copy-pair-documents svg {
   flex: 0 0 auto;
-  color: rgba(43, 108, 246, 0.55);
+  color: rgba(10, 108, 255, 0.55);
 }
 
 .copy-pair-hint {
@@ -2296,7 +2296,7 @@ watch(
 
 .medical-analysis summary {
   cursor: pointer;
-  color: #2b6cf6;
+  color: #0a6cff;
   list-style-position: inside;
 }
 
@@ -2328,7 +2328,7 @@ watch(
 }
 
 .evidence-link:hover {
-  background: rgba(43, 108, 246, 0.035);
+  background: rgba(10, 108, 255, 0.035);
 }
 
 .evidence-content {
@@ -2369,7 +2369,7 @@ watch(
   flex: 0 0 auto;
   align-items: center;
   gap: 3px;
-  color: #2b6cf6;
+  color: #0a6cff;
   font-size: 11px;
   font-weight: 600;
   line-height: 17px;

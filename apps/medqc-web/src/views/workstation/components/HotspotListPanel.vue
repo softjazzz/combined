@@ -6,7 +6,7 @@
       class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-3 shadow-sm relative z-10 shrink-0"
     >
       <div>
-        <div class="text-[11px] font-semibold text-[#2b6cf6]">
+        <div class="text-[11px] font-semibold text-[#0a6cff]">
           优先处理队列
         </div>
         <h3 class="text-[18px] font-semibold text-[#1d1d1f]">
@@ -117,7 +117,7 @@
         :style="{ gridTemplateColumns: columnTemplate }"
         :class="
           item.id === selectedId
-            ? 'bg-[#eaf2ff]/60 relative before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1 before:bg-[#2b6cf6]'
+            ? 'bg-[#eaf2ff]/60 relative before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1 before:bg-[#0a6cff]'
             : 'bg-white'
         "
         @click="emit('select', item.id)"
@@ -148,7 +148,7 @@
 
         <div class="min-w-0 flex items-center">
           <span
-            class="rounded border border-[#2b6cf6]/15 bg-[#eaf2ff] px-1.5 py-0.5 text-[11px] font-medium text-[#2b6cf6] truncate"
+            class="rounded border border-[#0a6cff]/15 bg-[#eaf2ff] px-1.5 py-0.5 text-[11px] font-medium text-[#0a6cff] truncate"
           >
             {{ workflowLabel(item.workflow_type) }}
           </span>
@@ -198,7 +198,7 @@
 
         <div class="flex items-center justify-end gap-2">
           <span class="text-[12px] font-semibold text-slate-500">查看详情</span>
-          <span class="text-[12px] font-semibold text-[#2b6cf6]">→</span>
+          <span class="text-[12px] font-semibold text-[#0a6cff]">→</span>
         </div>
       </button>
     </div>

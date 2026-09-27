@@ -220,12 +220,12 @@ function tabClass(tab: DetailMainTab) {
 }
 
 .detail-workspace-tab--active {
-  border-color: rgba(43, 108, 246, 0.22);
-  background: rgba(43, 108, 246, 0.08);
+  border-color: rgba(10, 108, 255, 0.22);
+  background: rgba(10, 108, 255, 0.08);
   color: #1d1d1f;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.95),
-    0 3px 12px rgba(43, 108, 246, 0.08);
+    0 3px 12px rgba(10, 108, 255, 0.08);
 }
 
 .detail-workspace-tab__icon {
@@ -236,13 +236,13 @@ function tabClass(tab: DetailMainTab) {
   align-items: center;
   justify-content: center;
   border-radius: 11px;
-  background: rgba(43, 108, 246, 0.08);
-  color: #2b6cf6;
+  background: rgba(10, 108, 255, 0.08);
+  color: #0a6cff;
   font-size: 17px;
 }
 
 .detail-workspace-tab--active .detail-workspace-tab__icon {
-  background: #2b6cf6;
+  background: #0a6cff;
   color: #fff;
 }
 
@@ -278,8 +278,8 @@ function tabClass(tab: DetailMainTab) {
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  background: rgba(43, 108, 246, 0.1);
-  color: #2b6cf6;
+  background: rgba(10, 108, 255, 0.1);
+  color: #0a6cff;
   font-size: 10px;
   font-weight: 650;
   padding: 0 5px;
@@ -290,10 +290,10 @@ function tabClass(tab: DetailMainTab) {
   min-width: 132px;
   align-items: center;
   gap: 8px;
-  border: 1px solid rgba(43, 108, 246, 0.16);
+  border: 1px solid rgba(10, 108, 255, 0.16);
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.68);
-  color: #2b6cf6;
+  color: #0a6cff;
   cursor: pointer;
   padding: 7px 12px;
   text-align: left;
@@ -304,9 +304,9 @@ function tabClass(tab: DetailMainTab) {
 }
 
 .frontpage-profile-entry:hover {
-  border-color: rgba(43, 108, 246, 0.24);
+  border-color: rgba(10, 108, 255, 0.24);
   background: rgba(255, 255, 255, 0.94);
-  box-shadow: 0 3px 12px rgba(43, 108, 246, 0.1);
+  box-shadow: 0 3px 12px rgba(10, 108, 255, 0.1);
 }
 
 .frontpage-profile-entry__icon {
@@ -317,7 +317,7 @@ function tabClass(tab: DetailMainTab) {
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  background: #2b6cf6;
+  background: #0a6cff;
   color: #ffffff;
   font-size: 14px;
 }
@@ -329,7 +329,7 @@ function tabClass(tab: DetailMainTab) {
 }
 
 .frontpage-profile-entry__main span {
-  color: #2b6cf6;
+  color: #0a6cff;
   font-size: 13px;
   font-weight: 650;
   line-height: 16px;

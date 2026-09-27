@@ -231,9 +231,9 @@ function riskBadgeClass(riskType: string) {
 }
 
 .priority-lane__segment--active {
-  border-color: rgba(43, 108, 246, 0.18);
-  background: rgba(43, 108, 246, 0.1);
-  color: var(--workstation-primary, #2b6cf6);
+  border-color: rgba(10, 108, 255, 0.18);
+  background: rgba(10, 108, 255, 0.1);
+  color: var(--workstation-primary, #0a6cff);
   box-shadow: none;
   transform: translateY(-1px);
 }
@@ -267,10 +267,10 @@ function riskBadgeClass(riskType: string) {
 }
 
 .priority-lane__card:first-child {
-  border-color: rgba(43, 108, 246, 0.26);
+  border-color: rgba(10, 108, 255, 0.26);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.98),
-    0 10px 24px rgba(43, 108, 246, 0.08);
+    0 10px 24px rgba(10, 108, 255, 0.08);
 }
 
 .priority-lane__card--stack {
@@ -286,7 +286,7 @@ function riskBadgeClass(riskType: string) {
   justify-content: center;
   border-radius: 999px;
   background: #eaf2ff;
-  color: var(--workstation-primary, #2b6cf6);
+  color: var(--workstation-primary, #0a6cff);
   font-size: 14px;
 }
 
@@ -386,17 +386,17 @@ function riskBadgeClass(riskType: string) {
 
 .priority-lane__action--primary {
   border: 0 !important;
-  background: #2b6cf6 !important;
+  background: #0a6cff !important;
   color: #fff !important;
-  box-shadow: 0 5px 14px rgba(43, 108, 246, 0.18) !important;
+  box-shadow: 0 5px 14px rgba(10, 108, 255, 0.18) !important;
 }
 
 .priority-lane__card:hover .priority-lane__action--primary,
 .priority-lane__action--primary:hover {
-  background: #0057b8 !important;
+  background: #0a5fd6 !important;
   border-color: transparent !important;
   color: #fff !important;
-  box-shadow: 0 8px 18px rgba(43, 108, 246, 0.22) !important;
+  box-shadow: 0 8px 18px rgba(10, 108, 255, 0.22) !important;
 }
 
 .priority-lane__action--secondary {
@@ -410,7 +410,7 @@ function riskBadgeClass(riskType: string) {
 
 .priority-lane__action--secondary:hover {
   background: transparent !important;
-  color: var(--workstation-brand-600, #1e5ae0) !important;
+  color: var(--workstation-brand-600, #0a5fd6) !important;
 }
 
 .priority-lane__segment-label {

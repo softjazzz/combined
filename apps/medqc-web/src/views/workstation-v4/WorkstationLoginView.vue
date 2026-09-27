@@ -312,7 +312,7 @@ const handleDemoLogin = async (account: (typeof demoAccounts)[number]) => {
 }
 .login-intro h1 span {
   background: none;
-  color: #007aff;
+  color: #0a6cff;
 }
 .login-intro .flex-wrap > div {
   font-size: 14px;
@@ -376,11 +376,11 @@ const handleDemoLogin = async (account: (typeof demoAccounts)[number]) => {
 .login-glass-card :deep(button[type='submit']) {
   height: 44px;
   border-radius: 8px;
-  background: #007aff;
+  background: #0a6cff;
   font-size: 14px;
   font-weight: 500;
   transform: none;
-  box-shadow: 0 3px 8px rgba(0, 122, 255, 0.18);
+  box-shadow: 0 3px 8px rgba(10, 108, 255, 0.18);
 }
 @media (max-width: 1023px) {
   .login-intro {

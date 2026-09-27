@@ -1625,7 +1625,7 @@ const AgentResponseCard = defineComponent({
 }
 
 .qc-agent-drawer__title-icon {
-  color: #2b6cf6;
+  color: #0a6cff;
   font-size: 18px;
 }
 
@@ -1689,7 +1689,7 @@ const AgentResponseCard = defineComponent({
 .qc-agent-capability--active {
   border-color: #bfdbfe;
   background: #eff6ff;
-  color: #2b6cf6;
+  color: #0a6cff;
 }
 
 .qc-agent-shortcuts {
@@ -1716,7 +1716,7 @@ const AgentResponseCard = defineComponent({
   border-color: #dbeafe;
   border-radius: 8px;
   background: #f8fbff;
-  color: #0057b8;
+  color: #0a5fd6;
   font-weight: 700;
 }
 
@@ -1791,7 +1791,7 @@ const AgentResponseCard = defineComponent({
 }
 
 .qc-agent-message--user .qc-agent-message__bubble {
-  background: #2b6cf6;
+  background: #0a6cff;
   color: #ffffff;
 }
 
@@ -1849,7 +1849,7 @@ const AgentResponseCard = defineComponent({
 
 .qc-agent-result-type {
   background: #eff6ff;
-  color: #0057b8;
+  color: #0a5fd6;
 }
 
 .qc-agent-execution-tag--partial {
@@ -1978,7 +1978,7 @@ const AgentResponseCard = defineComponent({
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #2b6cf6;
+  background: #0a6cff;
 }
 
 .qc-agent-plan__tool {
@@ -2059,7 +2059,7 @@ const AgentResponseCard = defineComponent({
   margin-top: 8px;
   border: 0;
   border-radius: 8px;
-  background: #2b6cf6;
+  background: #0a6cff;
   padding: 5px 9px;
   color: #ffffff;
   cursor: pointer;
@@ -2071,7 +2071,7 @@ const AgentResponseCard = defineComponent({
 .qc-agent-rule-card__id,
 .qc-agent-skipped-rule__head span,
 .qc-agent-code-card__code {
-  color: #0057b8;
+  color: #0a5fd6;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
   font-weight: 700;
@@ -2208,7 +2208,7 @@ const AgentResponseCard = defineComponent({
   height: 28px;
   border-radius: 8px;
   background: #eff6ff;
-  color: #0057b8;
+  color: #0a5fd6;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
   font-weight: 700;
@@ -2234,7 +2234,7 @@ const AgentResponseCard = defineComponent({
 }
 
 .qc-agent-catalog-rule__id {
-  color: #0057b8;
+  color: #0a5fd6;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
   font-weight: 700;
@@ -2290,7 +2290,7 @@ const AgentResponseCard = defineComponent({
   border-radius: 8px;
   background: #ffffff;
   padding: 4px 8px;
-  color: #2b6cf6;
+  color: #0a6cff;
   cursor: pointer;
   font-size: 12px;
   font-weight: 700;
@@ -2301,7 +2301,7 @@ const AgentResponseCard = defineComponent({
 }
 
 .qc-agent-more-rules summary {
-  color: #2b6cf6;
+  color: #0a6cff;
   cursor: pointer;
   font-size: 12px;
   font-weight: 700;
@@ -2453,7 +2453,7 @@ const AgentResponseCard = defineComponent({
   border: 1px solid #dbeafe;
   border-radius: 50%;
   background: #eff6ff;
-  color: #2b6cf6;
+  color: #0a6cff;
   font-size: 11px;
   font-weight: 700;
 }
@@ -2531,7 +2531,7 @@ const AgentResponseCard = defineComponent({
 }
 
 .qc-agent-sqlbot__eyebrow {
-  color: #2b6cf6;
+  color: #0a6cff;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -2572,7 +2572,7 @@ const AgentResponseCard = defineComponent({
   border-radius: 999px;
   background: #f8fbff;
   padding: 4px 10px;
-  color: #2b6cf6;
+  color: #0a6cff;
   cursor: pointer;
   font-size: 12px;
   font-weight: 700;
@@ -2624,7 +2624,7 @@ const AgentResponseCard = defineComponent({
   border-radius: 999px;
   background: #f8fbff;
   padding: 6px 10px;
-  color: #0057b8;
+  color: #0a5fd6;
   cursor: pointer;
   font-size: 12px;
   font-weight: 700;
@@ -2636,7 +2636,7 @@ const AgentResponseCard = defineComponent({
 
 .qc-agent-prompt-chip:hover,
 .qc-agent-next-action:hover {
-  border-color: #2b6cf6;
+  border-color: #0a6cff;
   background: #eff6ff;
   color: #1e40af;
 }
@@ -2815,7 +2815,7 @@ const AgentResponseCard = defineComponent({
   border-radius: 999px;
   background: #eff6ff;
   padding: 3px 8px;
-  color: #2b6cf6;
+  color: #0a6cff;
   font-size: 11px;
   font-weight: 850;
   line-height: 1.2;
@@ -2854,7 +2854,7 @@ const AgentResponseCard = defineComponent({
   border-radius: 999px;
   background: #dbeafe;
   padding: 3px 8px;
-  color: #0057b8;
+  color: #0a5fd6;
   font-size: 11px;
   font-weight: 850;
 }
@@ -2903,7 +2903,7 @@ const AgentResponseCard = defineComponent({
 
 .qc-agent-drawer .qc-agent-icd-overview__best strong {
   margin-top: 4px;
-  color: #0057b8;
+  color: #0a5fd6;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 17px;
   font-weight: 700;
@@ -2966,7 +2966,7 @@ const AgentResponseCard = defineComponent({
   height: 34px;
   border-radius: 12px;
   background: #eff6ff;
-  color: #2b6cf6;
+  color: #0a6cff;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
   font-weight: 700;
@@ -2992,7 +2992,7 @@ const AgentResponseCard = defineComponent({
 }
 
 .qc-agent-drawer .qc-agent-code-card__code {
-  color: #0057b8;
+  color: #0a5fd6;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 17px;
   font-weight: 700;
@@ -3003,7 +3003,7 @@ const AgentResponseCard = defineComponent({
   border-radius: 999px;
   background: #eef6ff;
   padding: 3px 8px;
-  color: #2b6cf6;
+  color: #0a6cff;
   font-size: 11px;
   font-style: normal;
   font-weight: 850;
@@ -3101,7 +3101,7 @@ const AgentResponseCard = defineComponent({
   border-radius: 999px;
   background: #ffffff;
   padding: 5px 10px;
-  color: #2b6cf6;
+  color: #0a6cff;
   cursor: pointer;
   font-size: 12px;
   font-weight: 850;
@@ -3120,7 +3120,7 @@ const AgentResponseCard = defineComponent({
 }
 
 .qc-agent-drawer .qc-agent-more-codes summary {
-  color: #2b6cf6;
+  color: #0a6cff;
   cursor: pointer;
   font-size: 12px;
   font-weight: 850;

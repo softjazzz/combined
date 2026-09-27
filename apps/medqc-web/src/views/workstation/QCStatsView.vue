@@ -65,7 +65,7 @@
               <div class="bar-wrapper">
                 <div
                   class="bar"
-                  :style="{ height: bar.height + '%', background: '#2b6cf6' }"
+                  :style="{ height: bar.height + '%', background: '#0a6cff' }"
                 >
                   <span class="bar-value">{{ bar.value }}</span>
                 </div>
@@ -195,7 +195,7 @@ const kpiData = computed(() => [
     subValue: '12',
     percent: 78,
     target: '200',
-    color: '#2b6cf6',
+    color: '#0a6cff',
     icon: FileTextOutlined,
   },
   {
@@ -244,7 +244,7 @@ const trendData = computed(() => {
 
 // 科室分布
 const deptDistribution = [
-  { name: '心内科', count: 28, percent: 22, color: '#2b6cf6' },
+  { name: '心内科', count: 28, percent: 22, color: '#0a6cff' },
   { name: '呼吸内科', count: 24, percent: 19, color: '#52c41a' },
   { name: '普外科', count: 21, percent: 17, color: '#faad14' },
   { name: '骨科', count: 18, percent: 14, color: '#722ed1' },

@@ -45,7 +45,7 @@
             </div>
           </div>
           <span
-            class="rounded-full border border-blue-100 bg-blue-50/80 px-2.5 py-1 text-[11px] font-semibold text-[#0057b8]"
+            class="rounded-full border border-blue-100 bg-blue-50/80 px-2.5 py-1 text-[11px] font-semibold text-[#0a5fd6]"
           >
             {{ selectedCode.type === 'icd10' ? '诊断' : '手术' }}
           </span>
@@ -53,22 +53,22 @@
 
         <div class="mb-3 flex items-start justify-between">
           <span
-            class="rounded-md border border-blue-100 bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-[#0057b8]"
+            class="rounded-md border border-blue-100 bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-[#0a5fd6]"
           >
             {{ selectedCode.type === 'icd10' ? 'ICD-10 诊断' : 'ICD-9-CM-3 手术' }}
           </span>
 
           <div class="flex items-center gap-2">
             <button
-              class="group flex cursor-pointer items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-[12px] font-semibold text-slate-600 shadow-sm transition-all hover:border-blue-300 hover:text-[#2b6cf6]"
+              class="group flex cursor-pointer items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-[12px] font-semibold text-slate-600 shadow-sm transition-all hover:border-blue-300 hover:text-[#0a6cff]"
               @click="$emit('copy', selectedCode.code)"
             >
-              <CopyOutlined class="text-slate-400 transition-colors group-hover:text-[#2b6cf6]" />
+              <CopyOutlined class="text-slate-400 transition-colors group-hover:text-[#0a6cff]" />
               复制
             </button>
             <button
               v-if="allowApply"
-              class="flex cursor-pointer items-center gap-1.5 rounded-xl bg-gradient-to-r from-[#2b6cf6] to-[#0057b8] px-3 py-1.5 text-[12px] font-semibold text-white shadow-[0_8px_18px_rgba(43,108,246,0.18)] transition-all hover:from-[#0057b8] hover:to-[#0057b8]"
+              class="flex cursor-pointer items-center gap-1.5 rounded-xl bg-gradient-to-r from-[#0a6cff] to-[#0a5fd6] px-3 py-1.5 text-[12px] font-semibold text-white shadow-[0_8px_18px_rgba(10, 108, 255,0.18)] transition-all hover:from-[#0a5fd6] hover:to-[#0a5fd6]"
               @click="$emit('apply', selectedCode)"
             >
               <CheckCircleOutlined />
@@ -77,7 +77,7 @@
           </div>
         </div>
 
-        <div class="mb-2 font-mono text-[28px] font-extrabold tracking-tight text-[#0057b8]">
+        <div class="mb-2 font-mono text-[28px] font-extrabold tracking-tight text-[#0a5fd6]">
           {{ selectedCode.code }}
         </div>
         <h2 class="text-[18px] font-bold leading-snug text-slate-900">
@@ -119,12 +119,12 @@
             <div class="mb-1 flex items-center gap-3">
               <span class="font-mono font-semibold text-slate-700">{{ selectedCode.code }}</span>
               <span class="text-slate-400">→</span>
-              <span class="font-mono font-semibold text-[#0057b8]">
+              <span class="font-mono font-semibold text-[#0a5fd6]">
                 {{ selectedCode.mapped_code }}
               </span>
             </div>
             <div class="flex items-center gap-1 text-[12px]">
-              <span class="text-[#2b6cf6]">
+              <span class="text-[#0a6cff]">
                 {{ selectedCode.is_diff ? '编码有差异' : '编码一致' }}
               </span>
               <span
@@ -277,20 +277,20 @@ defineEmits<{
 .icd-detail-panel .bg-blue-50\/50,
 .icd-detail-panel .bg-blue-50\/80,
 .icd-detail-panel .bg-\[linear-gradient\(180deg\,\#f0f6ff\,\#dbeafe\)\] {
-  background: rgba(43, 108, 246, 0.08) !important;
+  background: rgba(10, 108, 255, 0.08) !important;
 }
 
 .icd-detail-panel .border-blue-100,
 .icd-detail-panel .border-blue-100\/80 {
-  border-color: rgba(43, 108, 246, 0.16) !important;
+  border-color: rgba(10, 108, 255, 0.16) !important;
 }
 
-.icd-detail-panel .text-\[\#0057b8\],
-.icd-detail-panel .text-\[\#2b6cf6\],
+.icd-detail-panel .text-\[\#0a5fd6\],
+.icd-detail-panel .text-\[\#0a6cff\],
 .icd-detail-panel .text-blue-500,
 .icd-detail-panel .text-blue-400,
 .icd-detail-panel .text-blue-300 {
-  color: #2b6cf6 !important;
+  color: #0a6cff !important;
 }
 
 .icd-detail-panel button {
@@ -305,9 +305,9 @@ defineEmits<{
   transform: translateY(-1px);
 }
 
-.icd-detail-panel .from-\[\#2b6cf6\],
-.icd-detail-panel .to-\[\#0057b8\] {
-  --tw-gradient-from: #2b6cf6 var(--tw-gradient-from-position) !important;
-  --tw-gradient-to: #0057b8 var(--tw-gradient-to-position) !important;
+.icd-detail-panel .from-\[\#0a6cff\],
+.icd-detail-panel .to-\[\#0a5fd6\] {
+  --tw-gradient-from: #0a6cff var(--tw-gradient-from-position) !important;
+  --tw-gradient-to: #0a5fd6 var(--tw-gradient-to-position) !important;
 }
 </style>

@@ -8,7 +8,7 @@
           我的待办汇总
         </h3>
       </div>
-      <div class="rounded-md bg-[#eaf2ff] px-2 py-0.5 text-[11px] font-semibold text-[#2b6cf6]">
+      <div class="rounded-md bg-[#eaf2ff] px-2 py-0.5 text-[11px] font-semibold text-[#0a6cff]">
         个人执行项
       </div>
     </div>
@@ -55,7 +55,7 @@ const cards = computed(() => [
   {
     label: '待处理',
     value: props.summary.pending_total || 0,
-    dotColor: 'bg-[#2b6cf6]',
+    dotColor: 'bg-[#0a6cff]',
     desc: '待进入处理流程',
   },
   {

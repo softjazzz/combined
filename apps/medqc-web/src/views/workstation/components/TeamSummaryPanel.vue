@@ -22,7 +22,7 @@
             </div>
             <a-tag
               color="blue"
-              class="!mr-0 !text-[10px] !border-[#2b6cf6]/15 !bg-[#eaf2ff] !text-[#2b6cf6] shrink-0"
+              class="!mr-0 !text-[10px] !border-[#0a6cff]/15 !bg-[#eaf2ff] !text-[#0a6cff] shrink-0"
             >
               {{ workflowLabel(item.workflow_type) }}
             </a-tag>
@@ -68,7 +68,7 @@
           </div>
           <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200">
             <div
-              class="h-full rounded-full bg-[#2b6cf6]"
+              class="h-full rounded-full bg-[#0a6cff]"
               :style="{ width: `${calcPercent(item.count)}%` }"
             />
           </div>

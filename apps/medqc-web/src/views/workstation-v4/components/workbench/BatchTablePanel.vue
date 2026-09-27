@@ -490,7 +490,7 @@ const columns = computed(() => (recordPoolMode.value ? recordPoolColumns : stage
 
 .batch-table-panel__task-status :deep(.record-pool-qc-status) {
   border-radius: 10px;
-  background: rgba(43, 108, 246, 0.045);
+  background: rgba(10, 108, 255, 0.045);
   box-shadow: none;
 }
 
@@ -538,7 +538,7 @@ const columns = computed(() => (recordPoolMode.value ? recordPoolColumns : stage
 .batch-table-panel__summary-pill--selected {
   border-color: var(--workstation-brand-border, rgba(191, 219, 254, 0.96));
   background: var(--workstation-brand-100, rgba(239, 246, 255, 0.96));
-  color: var(--workstation-brand-600, #1e5ae0);
+  color: var(--workstation-brand-600, #0a5fd6);
 }
 
 .batch-table-panel__action {
@@ -556,13 +556,13 @@ const columns = computed(() => (recordPoolMode.value ? recordPoolColumns : stage
 
 .batch-table-panel__action--primary {
   border: 0 !important;
-  background: var(--workstation-brand-500, #2b6cf6) !important;
+  background: var(--workstation-brand-500, #0a6cff) !important;
   color: #fff !important;
   box-shadow: 0 12px 22px rgba(47, 111, 237, 0.18) !important;
 }
 
 .batch-table-panel__action--primary:hover {
-  background: var(--workstation-brand-600, #1e5ae0) !important;
+  background: var(--workstation-brand-600, #0a5fd6) !important;
   box-shadow: 0 14px 26px rgba(47, 111, 237, 0.22) !important;
 }
 
@@ -587,7 +587,7 @@ const columns = computed(() => (recordPoolMode.value ? recordPoolColumns : stage
 .batch-table-panel__action--ghost:hover,
 .batch-table-panel__detail-button:hover {
   border-color: transparent !important;
-  color: var(--workstation-brand-600, #1e5ae0) !important;
+  color: var(--workstation-brand-600, #0a5fd6) !important;
 }
 
 .batch-table-panel :deep(.ant-pagination-options) {
@@ -633,7 +633,7 @@ const columns = computed(() => (recordPoolMode.value ? recordPoolColumns : stage
   object-fit: cover;
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.96),
-    0 2px 6px rgba(43, 108, 246, 0.08);
+    0 2px 6px rgba(10, 108, 255, 0.08);
 }
 
 .batch-table-panel__patient-meta {
@@ -695,8 +695,8 @@ const columns = computed(() => (recordPoolMode.value ? recordPoolColumns : stage
 }
 
 .batch-table-panel__hospitalization-status--inpatient {
-  background: rgba(43, 108, 246, 0.1);
-  color: var(--workstation-brand-600, #1e5ae0);
+  background: rgba(10, 108, 255, 0.1);
+  color: var(--workstation-brand-600, #0a5fd6);
 }
 
 .batch-table-panel__hospitalization-status--discharged {
@@ -733,7 +733,7 @@ const columns = computed(() => (recordPoolMode.value ? recordPoolColumns : stage
 }
 
 .batch-table-panel__date-pending {
-  color: var(--workstation-brand-600, #1e5ae0);
+  color: var(--workstation-brand-600, #0a5fd6);
 }
 
 .batch-table-panel__updated-at {
@@ -759,7 +759,7 @@ const columns = computed(() => (recordPoolMode.value ? recordPoolColumns : stage
     var(--workstation-brand-050, rgba(234, 242, 255, 0.98)) 88%,
     white
   );
-  color: var(--workstation-brand-600, #1e5ae0);
+  color: var(--workstation-brand-600, #0a5fd6);
 }
 
 .batch-table-panel__tag--review {
@@ -830,8 +830,8 @@ const columns = computed(() => (recordPoolMode.value ? recordPoolColumns : stage
 }
 
 .batch-table-panel :deep(.ant-checkbox-checked .ant-checkbox-inner) {
-  background: var(--workstation-brand-500, #2f6fed);
-  border-color: var(--workstation-brand-500, #2f6fed);
+  background: var(--workstation-brand-500, #0a6cff);
+  border-color: var(--workstation-brand-500, #0a6cff);
 }
 
 .batch-table-panel :deep(.ant-empty) {
@@ -874,7 +874,7 @@ const columns = computed(() => (recordPoolMode.value ? recordPoolColumns : stage
 .batch-table-panel--record-pool .batch-table-panel__clear-selection {
   padding-inline: 2px;
   font-size: 12px;
-  color: var(--workstation-brand-500, #2b6cf6);
+  color: var(--workstation-brand-500, #0a6cff);
 }
 
 .batch-table-panel--record-pool .batch-table-panel__patient-name {
@@ -891,7 +891,7 @@ const columns = computed(() => (recordPoolMode.value ? recordPoolColumns : stage
 .batch-table-panel--record-pool .batch-table-panel__detail-button {
   height: 30px !important;
   background: transparent !important;
-  color: var(--workstation-brand-500, #2b6cf6) !important;
+  color: var(--workstation-brand-500, #0a6cff) !important;
   box-shadow: none !important;
   font-size: 13px !important;
   font-weight: 500 !important;

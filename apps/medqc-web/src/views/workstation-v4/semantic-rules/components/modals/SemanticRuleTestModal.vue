@@ -213,7 +213,7 @@ const emit = defineEmits<{
 
 .test-kicker {
   margin-bottom: 5px;
-  color: #2b6cf6;
+  color: #0a6cff;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -258,7 +258,7 @@ const emit = defineEmits<{
 }
 
 .test-example-btn.active {
-  color: #2b6cf6;
+  color: #0a6cff;
   background: rgba(255, 255, 255, 0.92);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
 }
@@ -275,8 +275,8 @@ const emit = defineEmits<{
 
 .test-textarea:focus,
 .test-textarea:hover {
-  border-color: rgba(43, 108, 246, 0.32);
-  box-shadow: 0 0 0 3px rgba(43, 108, 246, 0.08);
+  border-color: rgba(10, 108, 255, 0.32);
+  box-shadow: 0 0 0 3px rgba(10, 108, 255, 0.08);
 }
 
 .test-actions {
@@ -294,11 +294,11 @@ const emit = defineEmits<{
 .test-primary-btn {
   height: 34px;
   border-radius: 8px;
-  background: #2b6cf6;
-  border-color: #2b6cf6;
+  background: #0a6cff;
+  border-color: #0a6cff;
   font-size: 13px;
   font-weight: 600;
-  box-shadow: 0 2px 8px rgba(43, 108, 246, 0.16);
+  box-shadow: 0 2px 8px rgba(10, 108, 255, 0.16);
 }
 
 .test-result {
@@ -333,10 +333,10 @@ const emit = defineEmits<{
 
 .test-confidence {
   border-radius: 999px;
-  border: 1px solid rgba(43, 108, 246, 0.18);
-  background: rgba(43, 108, 246, 0.08);
+  border: 1px solid rgba(10, 108, 255, 0.18);
+  background: rgba(10, 108, 255, 0.08);
   padding: 4px 9px;
-  color: #2b6cf6;
+  color: #0a6cff;
   font-weight: 700;
   font-size: 12px;
 }

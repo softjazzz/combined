@@ -12,7 +12,7 @@
               结算清单工作区
             </div>
             <span
-              class="rounded-full border border-blue-100 bg-blue-50/85 px-2.5 py-0.5 text-[11px] font-bold text-[#0057b8]"
+              class="rounded-full border border-blue-100 bg-blue-50/85 px-2.5 py-0.5 text-[11px] font-bold text-[#0a5fd6]"
             >
               {{ settlementStatusLabel }}
             </span>
@@ -93,7 +93,7 @@
         >
           <span class="text-base text-blue-500">☑</span>
           <div class="min-w-0">
-            <div class="text-sm font-semibold text-[#0057b8]">
+            <div class="text-sm font-semibold text-[#0a5fd6]">
               AI 生成草稿
             </div>
             <div class="text-xs text-slate-500">
@@ -121,7 +121,7 @@
               </div>
             </div>
             <span
-              class="rounded-full border border-blue-100 bg-blue-50 px-2.5 py-0.5 text-[11px] font-bold text-[#0057b8]"
+              class="rounded-full border border-blue-100 bg-blue-50 px-2.5 py-0.5 text-[11px] font-bold text-[#0a5fd6]"
             >
               待人工复核
             </span>
@@ -190,7 +190,7 @@
           </h4>
           <div class="mb-4 grid grid-cols-4 gap-2.5">
             <div class="rounded-[14px] border border-blue-100/80 bg-blue-50/70 p-3 text-center">
-              <div class="text-2xl font-semibold text-[#2b6cf6]">
+              <div class="text-2xl font-semibold text-[#0a6cff]">
                 {{ settlementQcReport.summary.total }}
               </div>
               <div class="text-[10px] text-slate-400 mt-1">
@@ -206,7 +206,7 @@
               </div>
             </div>
             <div class="rounded-[14px] border border-blue-100/80 bg-blue-50/50 p-3 text-center">
-              <div class="text-2xl font-semibold text-[#0057b8]">
+              <div class="text-2xl font-semibold text-[#0a5fd6]">
                 {{ settlementQcReport.summary.failed }}
               </div>
               <div class="text-[10px] text-slate-400 mt-1">
@@ -254,9 +254,9 @@
         class="flex min-h-[360px] flex-col items-center justify-center rounded-[16px] border border-dashed border-slate-200/80 bg-white/86 px-6 py-12 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.88),0_2px_12px_rgba(0,0,0,0.055)]"
       >
         <div
-          class="mb-4 flex h-16 w-16 items-center justify-center rounded-[20px] border border-blue-100/80 bg-blue-50/80 shadow-[0_4px_12px_rgba(43,108,246,0.12),inset_0_1px_0_rgba(255,255,255,0.8)]"
+          class="mb-4 flex h-16 w-16 items-center justify-center rounded-[20px] border border-blue-100/80 bg-blue-50/80 shadow-[0_4px_12px_rgba(10, 108, 255,0.12),inset_0_1px_0_rgba(255,255,255,0.8)]"
         >
-          <MedicineBoxOutlined class="text-[28px] text-[#2b6cf6]" />
+          <MedicineBoxOutlined class="text-[28px] text-[#0a6cff]" />
         </div>
         <div class="text-[18px] font-semibold text-slate-900">
           暂无结算清单数据
@@ -375,10 +375,10 @@ const settlementMissingFields = computed(() =>
   color: rgba(29, 29, 31, 0.56) !important;
 }
 
-.settlement-apple-workspace :deep(.text-\[\#0057b8\]),
-.settlement-apple-workspace :deep(.text-\[\#2b6cf6\]),
+.settlement-apple-workspace :deep(.text-\[\#0a5fd6\]),
+.settlement-apple-workspace :deep(.text-\[\#0a6cff\]),
 .settlement-apple-workspace :deep(.text-blue-500) {
-  color: #2b6cf6 !important;
+  color: #0a6cff !important;
 }
 
 .settlement-apple-workspace :deep(.bg-blue-50),
@@ -387,7 +387,7 @@ const settlementMissingFields = computed(() =>
 .settlement-apple-workspace :deep(.bg-blue-50\/70),
 .settlement-apple-workspace :deep(.bg-blue-50\/80),
 .settlement-apple-workspace :deep(.bg-blue-50\/85) {
-  background: rgba(43, 108, 246, 0.08) !important;
+  background: rgba(10, 108, 255, 0.08) !important;
 }
 
 .settlement-apple-workspace :deep(.border-blue-100),
@@ -401,10 +401,10 @@ const settlementMissingFields = computed(() =>
 }
 
 .settlement-apple-workspace :deep(.ant-btn-primary) {
-  border-color: #2b6cf6 !important;
-  background: #2b6cf6 !important;
+  border-color: #0a6cff !important;
+  background: #0a6cff !important;
   color: #fff !important;
-  box-shadow: 0 4px 12px rgba(43, 108, 246, 0.16) !important;
+  box-shadow: 0 4px 12px rgba(10, 108, 255, 0.16) !important;
 }
 
 .settlement-apple-workspace :deep(.ant-btn:not(.ant-btn-primary)) {

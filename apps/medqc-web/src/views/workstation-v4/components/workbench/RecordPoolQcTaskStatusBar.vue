@@ -508,7 +508,7 @@ onBeforeUnmount(() => {
   gap: 20px;
   overflow: hidden;
   padding: 16px 20px;
-  border: 1px solid rgba(43, 108, 246, 0.13);
+  border: 1px solid rgba(10, 108, 255, 0.13);
   border-radius: 10px;
   background: #fff;
   box-shadow: none;
@@ -519,14 +519,14 @@ onBeforeUnmount(() => {
   position: absolute;
   inset: 0 auto 0 0;
   width: 3px;
-  background: #2b6cf6;
+  background: #0a6cff;
   content: none;
 }
 
 /* 执行态沿用客户样本验证状态条的视觉层级，任务数据仍由原组件负责。 */
 .record-pool-qc-status.is-active {
   padding: 16px;
-  border-color: rgba(43, 108, 246, 0.18);
+  border-color: rgba(10, 108, 255, 0.18);
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.9);
   box-shadow: 0 8px 22px rgba(37, 99, 235, 0.08);
@@ -537,8 +537,8 @@ onBeforeUnmount(() => {
   flex: none;
   margin: 0 5px;
   border-radius: 50%;
-  background: #2b6cf6;
-  box-shadow: 0 0 0 5px rgba(43, 108, 246, 0.1);
+  background: #0a6cff;
+  box-shadow: 0 0 0 5px rgba(10, 108, 255, 0.1);
 }
 .record-pool-qc-status__phase {
   margin: -4px 0 2px 28px;
@@ -554,7 +554,7 @@ onBeforeUnmount(() => {
 .record-pool-qc-status.is-active .record-pool-qc-status__progress {
   height: 8px;
   border-radius: 999px;
-  background: rgba(43, 108, 246, 0.1);
+  background: rgba(10, 108, 255, 0.1);
 }
 .record-pool-qc-status__percent {
   color: #175d9c;
@@ -606,7 +606,7 @@ onBeforeUnmount(() => {
 .record-pool-qc-status__export:hover:not(:disabled) {
   border-color: #bbd2ec;
   background: #f5f8fc;
-  color: #2b6cf6;
+  color: #0a6cff;
 }
 
 .record-pool-qc-status__export:disabled {
@@ -623,7 +623,7 @@ onBeforeUnmount(() => {
   border: 0;
   border-radius: 12px;
   background: transparent;
-  color: #2b6cf6;
+  color: #0a6cff;
 }
 
 .record-pool-qc-status--success .record-pool-qc-status__indicator {
@@ -659,7 +659,7 @@ onBeforeUnmount(() => {
 .record-pool-qc-status__progress > span {
   display: block;
   height: 100%;
-  background: #2b6cf6;
+  background: #0a6cff;
   border-radius: inherit;
   transition: width 200ms ease;
 }
@@ -687,8 +687,8 @@ onBeforeUnmount(() => {
 .record-pool-qc-status__heading span {
   padding: 2px 8px;
   border-radius: 999px;
-  background: rgba(43, 108, 246, 0.08);
-  color: #2b6cf6;
+  background: rgba(10, 108, 255, 0.08);
+  color: #0a6cff;
   font-size: 12px;
   line-height: 18px;
   font-weight: 600;
@@ -772,13 +772,13 @@ onBeforeUnmount(() => {
 }
 
 .record-pool-qc-status__concurrency span.is-active {
-  border-color: rgba(43, 108, 246, 0.14);
-  background: rgba(43, 108, 246, 0.07);
+  border-color: rgba(10, 108, 255, 0.14);
+  background: rgba(10, 108, 255, 0.07);
   color: #0055aa;
 }
 
 .record-pool-qc-status__concurrency span.is-active strong {
-  color: #2b6cf6;
+  color: #0a6cff;
 }
 
 .record-pool-qc-status__concurrency span.is-complete {
@@ -855,14 +855,14 @@ onBeforeUnmount(() => {
   top: -11px;
   right: 12px;
   padding: 3px 8px;
-  border: 1px solid rgba(43, 108, 246, 0.2);
+  border: 1px solid rgba(10, 108, 255, 0.2);
   border-radius: 999px;
   background: #fff;
-  color: #2b6cf6;
+  color: #0a6cff;
   font-size: 11px;
   line-height: 16px;
   font-weight: 700;
-  box-shadow: 0 3px 10px rgba(43, 108, 246, 0.1);
+  box-shadow: 0 3px 10px rgba(10, 108, 255, 0.1);
 }
 
 .record-pool-qc-status__stages li.is-complete {
@@ -879,14 +879,14 @@ onBeforeUnmount(() => {
 }
 
 .record-pool-qc-status__stages li.is-active {
-  border-color: rgba(43, 108, 246, 0.42);
+  border-color: rgba(10, 108, 255, 0.42);
   background: transparent;
   color: #0055aa;
 }
 
 .record-pool-qc-status__stages li.is-active .record-pool-qc-status__stage-marker {
-  border-color: #2b6cf6;
-  box-shadow: 0 0 0 3px rgba(43, 108, 246, 0.1);
+  border-color: #0a6cff;
+  box-shadow: 0 0 0 3px rgba(10, 108, 255, 0.1);
 }
 
 .record-pool-qc-status__stages li.is-error {
@@ -983,7 +983,7 @@ onBeforeUnmount(() => {
 .record-pool-qc-status__heading em {
   font-size: 24px;
   line-height: 30px;
-  color: #007aff;
+  color: #0a6cff;
   letter-spacing: -0.5px;
 }
 .record-pool-qc-status__heading em small {
@@ -999,7 +999,7 @@ onBeforeUnmount(() => {
   width: 7px;
   height: 7px;
   margin: 0 3px;
-  background: #007aff;
+  background: #0a6cff;
   box-shadow: 0 0 0 4px #e5efff;
 }
 .record-pool-qc-status__phase {
@@ -1014,7 +1014,7 @@ onBeforeUnmount(() => {
   border-radius: 99px;
 }
 .record-pool-qc-status__progress > span {
-  background: #007aff;
+  background: #0a6cff;
 }
 .record-pool-qc-status__metrics {
   gap: 8px 20px;
@@ -1034,7 +1034,7 @@ onBeforeUnmount(() => {
   font-size: 12px;
 }
 .record-pool-qc-status__details summary:focus-visible {
-  outline: 2px solid #007aff;
+  outline: 2px solid #0a6cff;
   outline-offset: 3px;
   border-radius: 4px;
 }

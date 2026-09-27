@@ -139,7 +139,7 @@
             <a-badge
               :count="table.column_count"
               :number-style="{
-                backgroundColor: selectedTable === table.name ? '#2b6cf6' : 'rgba(29,29,31,0.38)',
+                backgroundColor: selectedTable === table.name ? '#0a6cff' : 'rgba(29,29,31,0.38)',
                 fontSize: '11px',
               }"
             />
@@ -695,7 +695,7 @@ onMounted(loadData)
 .cdm-eyebrow {
   display: block;
   margin-bottom: 6px;
-  color: #2b6cf6;
+  color: #0a6cff;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -722,11 +722,11 @@ onMounted(loadData)
 .cdm-refresh-btn {
   height: 36px;
   border-radius: 10px;
-  background: #2b6cf6;
-  border-color: #2b6cf6;
+  background: #0a6cff;
+  border-color: #0a6cff;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    0 5px 14px rgba(43, 108, 246, 0.18);
+    0 5px 14px rgba(10, 108, 255, 0.18);
   font-size: 13px;
   font-weight: 600;
 }
@@ -772,29 +772,29 @@ onMounted(loadData)
   justify-content: center;
   font-size: 21px;
   flex-shrink: 0;
-  border: 1px solid rgba(43, 108, 246, 0.14);
-  background: rgba(43, 108, 246, 0.07);
-  color: #2b6cf6;
+  border: 1px solid rgba(10, 108, 255, 0.14);
+  background: rgba(10, 108, 255, 0.07);
+  color: #0a6cff;
 }
 .stat-records .stat-icon {
-  background: rgba(43, 108, 246, 0.09);
-  color: #2b6cf6;
+  background: rgba(10, 108, 255, 0.09);
+  color: #0a6cff;
 }
 .stat-diag .stat-icon {
-  background: rgba(43, 108, 246, 0.06);
-  color: #2b6cf6;
+  background: rgba(10, 108, 255, 0.06);
+  color: #0a6cff;
 }
 .stat-surgery .stat-icon {
-  background: rgba(43, 108, 246, 0.06);
-  color: #2b6cf6;
+  background: rgba(10, 108, 255, 0.06);
+  color: #0a6cff;
 }
 .stat-dept .stat-icon {
-  background: rgba(43, 108, 246, 0.06);
-  color: #2b6cf6;
+  background: rgba(10, 108, 255, 0.06);
+  color: #0a6cff;
 }
 .stat-tables .stat-icon {
-  background: rgba(43, 108, 246, 0.06);
-  color: #2b6cf6;
+  background: rgba(10, 108, 255, 0.06);
+  color: #0a6cff;
 }
 .stat-value {
   font-size: 28px;
@@ -939,7 +939,7 @@ onMounted(loadData)
 }
 .toggle-btn.active {
   background: rgba(255, 255, 255, 0.92);
-  color: #2b6cf6;
+  color: #0a6cff;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
@@ -976,13 +976,13 @@ onMounted(loadData)
   transition: all 0.2s;
 }
 .table-tab:hover {
-  background: rgba(43, 108, 246, 0.06);
-  border-color: rgba(43, 108, 246, 0.22);
+  background: rgba(10, 108, 255, 0.06);
+  border-color: rgba(10, 108, 255, 0.22);
 }
 .table-tab.active {
-  background: rgba(43, 108, 246, 0.1);
-  color: #2b6cf6;
-  border-color: rgba(43, 108, 246, 0.24);
+  background: rgba(10, 108, 255, 0.1);
+  color: #0a6cff;
+  border-color: rgba(10, 108, 255, 0.24);
 }
 .tab-label {
   font-weight: 600;
@@ -993,7 +993,7 @@ onMounted(loadData)
   font-size: 11px;
 }
 .table-tab.active .tab-name {
-  color: rgba(43, 108, 246, 0.58);
+  color: rgba(10, 108, 255, 0.58);
 }
 
 /* 结构视图 */
@@ -1027,7 +1027,7 @@ onMounted(loadData)
   background: rgba(0, 0, 0, 0.025);
 }
 .col-pk {
-  background: rgba(43, 108, 246, 0.06);
+  background: rgba(10, 108, 255, 0.06);
 }
 .col-name {
   font-family: 'SF Mono', 'Cascadia Code', ui-monospace, monospace;
@@ -1038,7 +1038,7 @@ onMounted(loadData)
   gap: 6px;
 }
 .col-type {
-  color: #2b6cf6;
+  color: #0a6cff;
   font-family: 'SF Mono', 'Cascadia Code', ui-monospace, monospace;
   font-size: 12px;
 }
@@ -1047,7 +1047,7 @@ onMounted(loadData)
   font-size: 12px;
 }
 .pk-badge {
-  background: #2b6cf6;
+  background: #0a6cff;
   color: white;
   font-size: 9px;
   padding: 1px 5px;
@@ -1166,13 +1166,13 @@ onMounted(loadData)
   flex-shrink: 0;
 }
 .patient-card:hover {
-  border-color: rgba(43, 108, 246, 0.24);
+  border-color: rgba(10, 108, 255, 0.24);
   background: rgba(255, 255, 255, 0.9);
 }
 .patient-card.active {
-  border-color: rgba(43, 108, 246, 0.32);
-  background: rgba(43, 108, 246, 0.08);
-  box-shadow: 0 0 0 2px rgba(43, 108, 246, 0.1);
+  border-color: rgba(10, 108, 255, 0.32);
+  background: rgba(10, 108, 255, 0.08);
+  box-shadow: 0 0 0 2px rgba(10, 108, 255, 0.1);
 }
 .pt-top {
   display: flex;
@@ -1223,11 +1223,11 @@ onMounted(loadData)
 .pt-view-btn {
   font-size: 11px !important;
   padding: 0 4px !important;
-  color: #2b6cf6 !important;
+  color: #0a6cff !important;
   font-weight: 600;
 }
 .pt-view-btn:hover {
-  color: #0057b8 !important;
+  color: #0a5fd6 !important;
 }
 
 /* 详情 */
@@ -1276,8 +1276,8 @@ onMounted(loadData)
 .diag-code {
   font-family: 'SF Mono', 'Cascadia Code', ui-monospace, monospace;
   font-size: 13px;
-  color: #2b6cf6;
-  background: rgba(43, 108, 246, 0.08);
+  color: #0a6cff;
+  background: rgba(10, 108, 255, 0.08);
   padding: 2px 8px;
   border-radius: 4px;
 }
@@ -1288,9 +1288,9 @@ onMounted(loadData)
 }
 .cost-total {
   grid-column: span 3;
-  border: 1px solid rgba(43, 108, 246, 0.16);
-  background: rgba(43, 108, 246, 0.08);
-  color: #2b6cf6;
+  border: 1px solid rgba(10, 108, 255, 0.16);
+  background: rgba(10, 108, 255, 0.08);
+  color: #0a6cff;
   padding: 16px;
   border-radius: 12px;
   display: flex;

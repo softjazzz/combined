@@ -80,7 +80,7 @@ defineEmits<{
 .recent-label :deep(svg) {
   width: 18px;
   height: 18px;
-  color: #2b6cf6;
+  color: #0a6cff;
 }
 
 .recent-label__title {
@@ -130,15 +130,15 @@ defineEmits<{
 
 .recent-tag:hover {
   transform: translateY(-1px);
-  border-color: rgba(43, 108, 246, 0.18);
-  box-shadow: 0 5px 14px rgba(43, 108, 246, 0.08);
+  border-color: rgba(10, 108, 255, 0.18);
+  box-shadow: 0 5px 14px rgba(10, 108, 255, 0.08);
 }
 
 .recent-tag__code {
   flex-shrink: 0;
   font-size: 12px;
   font-weight: 700;
-  color: #0057b8;
+  color: #0a5fd6;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
@@ -164,7 +164,7 @@ defineEmits<{
 }
 
 .recent-clear:hover {
-  border-color: rgba(43, 108, 246, 0.18);
-  color: #0057b8;
+  border-color: rgba(10, 108, 255, 0.18);
+  color: #0a5fd6;
 }
 </style>

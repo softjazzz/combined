@@ -218,14 +218,14 @@ const filteredRecords = computed(() => {
 
 .draft-list-sidebar :deep(.anticon),
 .draft-list-sidebar .text-blue-500 {
-  color: #2b6cf6 !important;
+  color: #0a6cff !important;
 }
 
 .draft-list-sidebar__count,
 .draft-list-sidebar__filter--active {
-  border: 1px solid rgba(43, 108, 246, 0.16);
-  background: rgba(43, 108, 246, 0.08);
-  color: #2b6cf6;
+  border: 1px solid rgba(10, 108, 255, 0.16);
+  background: rgba(10, 108, 255, 0.08);
+  color: #0a6cff;
 }
 
 .draft-list-sidebar__search {
@@ -236,8 +236,8 @@ const filteredRecords = computed(() => {
 }
 
 .draft-list-sidebar__search:focus {
-  border-color: rgba(43, 108, 246, 0.32);
-  box-shadow: 0 0 0 3px rgba(43, 108, 246, 0.08);
+  border-color: rgba(10, 108, 255, 0.32);
+  box-shadow: 0 0 0 3px rgba(10, 108, 255, 0.08);
 }
 
 .draft-list-sidebar__filter--idle {
@@ -252,8 +252,8 @@ const filteredRecords = computed(() => {
 }
 
 .draft-list-sidebar__item--active {
-  border-color: rgba(43, 108, 246, 0.18) !important;
-  background: rgba(43, 108, 246, 0.07) !important;
+  border-color: rgba(10, 108, 255, 0.18) !important;
+  background: rgba(10, 108, 255, 0.07) !important;
 }
 
 .draft-list-sidebar__item--idle {
@@ -267,7 +267,7 @@ const filteredRecords = computed(() => {
 }
 
 .draft-list-sidebar__indicator {
-  background: #2b6cf6;
+  background: #0a6cff;
 }
 
 .draft-list-sidebar__status {
@@ -281,9 +281,9 @@ const filteredRecords = computed(() => {
 }
 
 .draft-list-sidebar__status--processing {
-  border-color: rgba(43, 108, 246, 0.16);
-  background: rgba(43, 108, 246, 0.08);
-  color: #2b6cf6;
+  border-color: rgba(10, 108, 255, 0.16);
+  background: rgba(10, 108, 255, 0.08);
+  color: #0a6cff;
 }
 
 .draft-list-sidebar__status--idle {

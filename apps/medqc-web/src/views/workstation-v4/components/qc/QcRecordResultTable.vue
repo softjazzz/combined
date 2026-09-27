@@ -360,7 +360,7 @@ function togglePageSelection(event: Event) {
   width: 15px;
   height: 15px;
   margin: 0;
-  accent-color: #2b6cf6;
+  accent-color: #0a6cff;
   cursor: pointer;
 }
 
@@ -384,11 +384,11 @@ function togglePageSelection(event: Event) {
 .qc-record-result-table__row:hover,
 .qc-record-result-table__row:focus-visible {
   background: rgba(248, 250, 252, 0.88);
-  box-shadow: inset 3px 0 0 #2b6cf6;
+  box-shadow: inset 3px 0 0 #0a6cff;
 }
 
 .qc-record-result-table__row--selected {
-  background: rgba(43, 108, 246, 0.045);
+  background: rgba(10, 108, 255, 0.045);
 }
 
 .qc-record-result-table__patient-cell {
@@ -408,7 +408,7 @@ function togglePageSelection(event: Event) {
   object-fit: cover;
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.96),
-    0 2px 6px rgba(43, 108, 246, 0.08);
+    0 2px 6px rgba(10, 108, 255, 0.08);
 }
 
 .qc-record-result-table__patient-meta {
@@ -504,16 +504,16 @@ function togglePageSelection(event: Event) {
 }
 
 .qc-record-result-table__result-button--available {
-  border-color: #2b6cf6;
-  background: #2b6cf6;
+  border-color: #0a6cff;
+  background: #0a6cff;
   color: #fff;
-  box-shadow: 0 3px 9px rgba(43, 108, 246, 0.16);
+  box-shadow: 0 3px 9px rgba(10, 108, 255, 0.16);
 }
 
 .qc-record-result-table__result-button:hover {
-  color: #2b6cf6;
-  border-color: #2b6cf6;
-  box-shadow: 0 4px 11px rgba(43, 108, 246, 0.15);
+  color: #0a6cff;
+  border-color: #0a6cff;
+  box-shadow: 0 4px 11px rgba(10, 108, 255, 0.15);
   transform: translateY(-1px);
 }
 
@@ -592,7 +592,7 @@ function togglePageSelection(event: Event) {
 }
 .qc-record-result-table--inpatient .qc-record-result-table__table input[type='checkbox']:checked {
   appearance: auto;
-  accent-color: #2b6cf6;
+  accent-color: #0a6cff;
 }
 .qc-record-result-table--inpatient .qc-record-result-table__table input[type='checkbox']:disabled {
   background: #f1f4f8;
@@ -631,7 +631,7 @@ function togglePageSelection(event: Event) {
 
 .qc-record-result-table--inpatient .qc-record-result-table__row:focus-visible {
   background: #edf4fc;
-  box-shadow: inset 3px 0 0 #2b6cf6;
+  box-shadow: inset 3px 0 0 #0a6cff;
 }
 
 .qc-record-result-table--inpatient .qc-record-result-table__result-button {
@@ -645,19 +645,19 @@ function togglePageSelection(event: Event) {
 
 .qc-record-result-table--inpatient .qc-record-result-table__result-button--available {
   background: transparent;
-  color: #2b6cf6;
+  color: #0a6cff;
 }
 
 .qc-record-result-table--inpatient .qc-record-result-table__result-button:hover {
-  border-color: rgba(43, 108, 246, 0.14);
-  background: rgba(43, 108, 246, 0.09);
-  color: #2b6cf6;
+  border-color: rgba(10, 108, 255, 0.14);
+  background: rgba(10, 108, 255, 0.09);
+  color: #0a6cff;
   transform: none;
 }
 
 .qc-record-result-table--inpatient .qc-record-result-table__result-button:focus-visible,
 .qc-record-result-table--inpatient input:focus-visible {
-  outline: 2px solid #2b6cf6;
+  outline: 2px solid #0a6cff;
   outline-offset: 3px;
 }
 
@@ -779,13 +779,13 @@ function togglePageSelection(event: Event) {
 .qc-record-result-table--compact-review
   .qc-record-result-table__row--selected
   .qc-record-result-table__result-button {
-  color: #2b6cf6;
+  color: #0a6cff;
 }
 
 .qc-record-result-table--compact-review .qc-record-result-table__row--active,
 .qc-record-result-table--compact-review .qc-record-result-table__row--active:hover {
   background: #f2f7fd;
-  box-shadow: inset 3px 0 0 #2b6cf6;
+  box-shadow: inset 3px 0 0 #0a6cff;
 }
 
 @media (max-width: 768px) {

@@ -429,7 +429,7 @@ function isEvidenceGroupExpanded(index: number) {
   border-radius: 16px;
   border: 1px solid rgba(191, 219, 254, 0.9);
   background: #eff6ff;
-  color: #2b6cf6;
+  color: #0a6cff;
   font-size: 13px;
   font-weight: 700;
   box-shadow: 0 8px 18px rgba(37, 99, 235, 0.08);
@@ -456,7 +456,7 @@ function isEvidenceGroupExpanded(index: number) {
 .evidence-loading__steps span:first-child {
   border-color: rgba(147, 197, 253, 0.8);
   background: #eff6ff;
-  color: #2b6cf6;
+  color: #0a6cff;
 }
 .evidence-block-title {
   font-size: 15px;
@@ -492,7 +492,7 @@ function isEvidenceGroupExpanded(index: number) {
   border-radius: 999px;
   padding: 4px 10px;
   background: #dbeafe;
-  color: #0057b8;
+  color: #0a5fd6;
   font-size: 12px;
   font-weight: 700;
 }
@@ -545,7 +545,7 @@ function isEvidenceGroupExpanded(index: number) {
   margin-top: 10px;
   border: none;
   background: transparent;
-  color: #2b6cf6;
+  color: #0a6cff;
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
@@ -628,20 +628,20 @@ function isEvidenceGroupExpanded(index: number) {
 
 .evidence-recommend-label,
 .evidence-loading__steps span:first-child {
-  border: 1px solid rgba(43, 108, 246, 0.18);
-  background: rgba(43, 108, 246, 0.08);
-  color: #2b6cf6;
+  border: 1px solid rgba(10, 108, 255, 0.18);
+  background: rgba(10, 108, 255, 0.08);
+  color: #0a6cff;
 }
 
 .evidence-loading__icon {
-  border-color: rgba(43, 108, 246, 0.18);
-  background: rgba(43, 108, 246, 0.08);
-  color: #2b6cf6;
-  box-shadow: 0 4px 12px rgba(43, 108, 246, 0.14);
+  border-color: rgba(10, 108, 255, 0.18);
+  background: rgba(10, 108, 255, 0.08);
+  color: #0a6cff;
+  box-shadow: 0 4px 12px rgba(10, 108, 255, 0.14);
 }
 
 .evidence-toggle-btn {
-  color: #2b6cf6;
+  color: #0a6cff;
   font-weight: 600;
 }
 

@@ -1649,7 +1649,7 @@ onUnmounted(() => {
 }
 
 .synthetic-case-wizard button:hover {
-  border-color: rgba(43, 108, 246, 0.22);
+  border-color: rgba(10, 108, 255, 0.22);
   transform: translateY(-1px);
 }
 
@@ -1683,14 +1683,14 @@ onUnmounted(() => {
 }
 
 .synthetic-case-wizard button.is-active {
-  border-color: rgba(43, 108, 246, 0.28);
-  background: rgba(43, 108, 246, 0.07);
-  box-shadow: inset 0 0 0 1px rgba(43, 108, 246, 0.08);
+  border-color: rgba(10, 108, 255, 0.28);
+  background: rgba(10, 108, 255, 0.07);
+  box-shadow: inset 0 0 0 1px rgba(10, 108, 255, 0.08);
 }
 
 .synthetic-case-wizard button.is-active > span,
 .synthetic-case-wizard button.is-complete > span {
-  background: #2b6cf6;
+  background: #0a6cff;
   color: #fff;
 }
 
@@ -1718,7 +1718,7 @@ onUnmounted(() => {
   gap: 6px;
   border: 0;
   background: transparent;
-  color: #2b6cf6;
+  color: #0a6cff;
   cursor: pointer;
   font-size: 13px;
   font-weight: 600;
@@ -1727,7 +1727,7 @@ onUnmounted(() => {
 
 .synthetic-case-eyebrow {
   margin-top: 10px;
-  color: #2b6cf6;
+  color: #0a6cff;
   font-size: 12px;
   font-weight: 700;
   line-height: 18px;
@@ -1757,9 +1757,9 @@ onUnmounted(() => {
 }
 
 .synthetic-case-section-chip {
-  border-color: rgba(43, 108, 246, 0.16);
-  background: rgba(43, 108, 246, 0.07);
-  color: #2b6cf6;
+  border-color: rgba(10, 108, 255, 0.16);
+  background: rgba(10, 108, 255, 0.07);
+  color: #0a6cff;
 }
 
 .synthetic-case-header-actions,
@@ -1799,9 +1799,9 @@ onUnmounted(() => {
 
 .synthetic-case-primary-button {
   min-width: 128px;
-  background: #2b6cf6;
-  border-color: #2b6cf6;
-  box-shadow: 0 7px 18px rgba(43, 108, 246, 0.18);
+  background: #0a6cff;
+  border-color: #0a6cff;
+  box-shadow: 0 7px 18px rgba(10, 108, 255, 0.18);
 }
 
 .synthetic-case-ghost-button :deep(.ant-btn-icon),
@@ -1813,7 +1813,7 @@ onUnmounted(() => {
 }
 
 .synthetic-case-primary-button.is-strong {
-  box-shadow: 0 9px 22px rgba(43, 108, 246, 0.24);
+  box-shadow: 0 9px 22px rgba(10, 108, 255, 0.24);
 }
 
 .synthetic-case-ghost-button:hover,
@@ -1856,7 +1856,7 @@ onUnmounted(() => {
 }
 
 .synthetic-case-rule-set-card strong {
-  color: #2b6cf6;
+  color: #0a6cff;
   font-size: 14px;
   font-weight: 700;
   line-height: 20px;
@@ -1889,8 +1889,8 @@ onUnmounted(() => {
   width: 22px;
   height: 22px;
   border-radius: 8px;
-  background: rgba(43, 108, 246, 0.09);
-  color: #2b6cf6;
+  background: rgba(10, 108, 255, 0.09);
+  color: #0a6cff;
   font-size: 11px;
   font-weight: 700;
 }
@@ -1947,7 +1947,7 @@ onUnmounted(() => {
 
 .synthetic-case-template:hover,
 .synthetic-case-doc-nav button:hover {
-  border-color: rgba(43, 108, 246, 0.28);
+  border-color: rgba(10, 108, 255, 0.28);
   box-shadow:
     0 2px 12px rgba(0, 0, 0, 0.08),
     0 6px 22px rgba(0, 0, 0, 0.055);
@@ -1955,8 +1955,8 @@ onUnmounted(() => {
 }
 
 .synthetic-case-template.is-active {
-  border-color: rgba(43, 108, 246, 0.42);
-  background: rgba(43, 108, 246, 0.08);
+  border-color: rgba(10, 108, 255, 0.42);
+  background: rgba(10, 108, 255, 0.08);
 }
 
 .synthetic-case-template strong,
@@ -1969,7 +1969,7 @@ onUnmounted(() => {
 
 .synthetic-case-template span,
 .synthetic-case-doc-nav span {
-  color: #2b6cf6;
+  color: #0a6cff;
   font-size: 12px;
   font-weight: 700;
 }
@@ -1992,10 +1992,10 @@ onUnmounted(() => {
 
 .synthetic-case-rule-grid-head button {
   height: 30px;
-  border: 1px solid rgba(43, 108, 246, 0.14);
+  border: 1px solid rgba(10, 108, 255, 0.14);
   border-radius: 9px;
-  background: rgba(43, 108, 246, 0.07);
-  color: #2b6cf6;
+  background: rgba(10, 108, 255, 0.07);
+  color: #0a6cff;
   cursor: pointer;
   font-size: 12px;
   font-weight: 700;
@@ -2005,8 +2005,8 @@ onUnmounted(() => {
 }
 
 .synthetic-case-rule-grid-head button:hover {
-  border-color: rgba(43, 108, 246, 0.28);
-  background: rgba(43, 108, 246, 0.11);
+  border-color: rgba(10, 108, 255, 0.28);
+  background: rgba(10, 108, 255, 0.11);
 }
 
 .synthetic-case-generate-button {
@@ -2024,7 +2024,7 @@ onUnmounted(() => {
   width: 26px;
   height: 26px;
   border-radius: 9px;
-  background: rgba(43, 108, 246, 0.08);
+  background: rgba(10, 108, 255, 0.08);
 }
 
 .synthetic-case-editor {
@@ -2055,8 +2055,8 @@ onUnmounted(() => {
 }
 
 .synthetic-case-editor-tabs button.is-active {
-  background: rgba(43, 108, 246, 0.1);
-  color: #2b6cf6;
+  background: rgba(10, 108, 255, 0.1);
+  color: #0a6cff;
 }
 
 .synthetic-case-card {
@@ -2149,29 +2149,29 @@ onUnmounted(() => {
 }
 
 .synthetic-case-rule-card:hover {
-  border-color: rgba(43, 108, 246, 0.22);
+  border-color: rgba(10, 108, 255, 0.22);
   transform: translateY(-1px);
 }
 
 .synthetic-case-rule-card.is-selected {
-  border-color: rgba(43, 108, 246, 0.36);
-  background: rgba(43, 108, 246, 0.07);
+  border-color: rgba(10, 108, 255, 0.36);
+  background: rgba(10, 108, 255, 0.07);
 }
 
 .synthetic-case-rule-card input {
   width: 16px;
   height: 16px;
   margin-top: 2px;
-  accent-color: #2b6cf6;
+  accent-color: #0a6cff;
 }
 
 .synthetic-case-rule-card strong {
   display: inline-flex;
   margin-bottom: 6px;
   border-radius: 9px;
-  background: rgba(43, 108, 246, 0.08);
+  background: rgba(10, 108, 255, 0.08);
   padding: 2px 8px;
-  color: #2b6cf6;
+  color: #0a6cff;
   font-size: 12px;
   font-weight: 750;
 }
@@ -2234,15 +2234,15 @@ onUnmounted(() => {
 }
 
 .synthetic-case-fixed-status {
-  border: 1px solid rgba(43, 108, 246, 0.14);
+  border: 1px solid rgba(10, 108, 255, 0.14);
   border-radius: 14px;
-  background: rgba(43, 108, 246, 0.055);
+  background: rgba(10, 108, 255, 0.055);
   padding: 10px 11px;
 }
 
 .synthetic-case-fixed-status strong {
   display: block;
-  color: #2b6cf6;
+  color: #0a6cff;
   font-size: 14px;
   font-weight: 750;
 }
@@ -2286,8 +2286,8 @@ onUnmounted(() => {
 }
 
 .synthetic-case-selected-rules em {
-  background: rgba(43, 108, 246, 0.08);
-  color: #2b6cf6;
+  background: rgba(10, 108, 255, 0.08);
+  color: #0a6cff;
 }
 
 .synthetic-case-form-grid,
@@ -2321,7 +2321,7 @@ onUnmounted(() => {
 }
 
 .synthetic-case-doc:hover {
-  border-color: rgba(43, 108, 246, 0.18);
+  border-color: rgba(10, 108, 255, 0.18);
 }
 
 .synthetic-case-doc-head {
@@ -2334,7 +2334,7 @@ onUnmounted(() => {
 
 .synthetic-case-doc-head span {
   display: block;
-  color: #2b6cf6;
+  color: #0a6cff;
   font-size: 12px;
   font-weight: 700;
 }
@@ -2395,7 +2395,7 @@ onUnmounted(() => {
 }
 
 .synthetic-case-tab-doc-list button:hover {
-  border-color: rgba(43, 108, 246, 0.22);
+  border-color: rgba(10, 108, 255, 0.22);
 }
 
 .synthetic-case-tab-doc-list strong {
@@ -2476,7 +2476,7 @@ onUnmounted(() => {
 }
 
 .synthetic-case-confirm-list strong {
-  color: #2b6cf6;
+  color: #0a6cff;
   font-size: 13px;
   font-weight: 750;
 }
@@ -2604,8 +2604,8 @@ onUnmounted(() => {
 .synthetic-case-page :deep(.ant-input:focus),
 .synthetic-case-page :deep(.ant-input-focused),
 .synthetic-case-page :deep(.ant-select-focused .ant-select-selector) {
-  border-color: rgba(43, 108, 246, 0.46) !important;
-  box-shadow: 0 0 0 3px rgba(43, 108, 246, 0.08) !important;
+  border-color: rgba(10, 108, 255, 0.46) !important;
+  box-shadow: 0 0 0 3px rgba(10, 108, 255, 0.08) !important;
 }
 
 .synthetic-case-tour-layer {
@@ -2701,8 +2701,8 @@ onUnmounted(() => {
 }
 
 .synthetic-case-tour-actions :deep(.ant-btn-primary) {
-  border-color: #2b6cf6;
-  background: #2b6cf6;
+  border-color: #0a6cff;
+  background: #0a6cff;
 }
 
 .synthetic-case-tour-target {

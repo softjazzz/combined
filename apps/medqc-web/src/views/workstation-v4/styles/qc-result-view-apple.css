@@ -47,7 +47,7 @@
 }
 :global(.customer-record-result-drawer .result-tab.is-active) {
   background: #fff;
-  color: #007aff;
+  color: #0a6cff;
   box-shadow: 0 1px 3px rgba(30, 50, 80, 0.1);
 }
 :global(.customer-record-result-drawer .result-list) {
@@ -98,7 +98,7 @@
   line-height: 22px;
 }
 :global(.customer-record-result-drawer button:focus-visible) {
-  outline: 2px solid rgba(0, 122, 255, 0.65);
+  outline: 2px solid rgba(10, 108, 255, 0.65);
   outline-offset: 2px;
 }
 :global(.customer-record-result-drawer .empty-state) {
@@ -129,7 +129,7 @@
   flex-shrink: 0;
 }
 :global(.customer-record-result-drawer .toolbar-summary .result-section-title svg) {
-  color: #007aff;
+  color: #0a6cff;
 }
 :global(.customer-record-result-drawer .result-tab svg) {
   flex-shrink: 0;
@@ -138,7 +138,7 @@
 :global(.customer-record-result-drawer .result-tab b) {
   padding: 0 5px;
   border-radius: 5px;
-  background: rgba(0, 122, 255, 0.07);
+  background: rgba(10, 108, 255, 0.07);
   font-size: 12px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
@@ -210,15 +210,15 @@
 }
 :global(.customer-record-result-drawer .result-tab.is-active) {
   background: #fff;
-  color: #007aff;
+  color: #0a6cff;
   box-shadow: 0 1px 4px rgba(33, 53, 81, 0.1);
 }
 :global(.customer-record-result-drawer .result-tab.is-active b) {
-  color: #007aff;
+  color: #0a6cff;
   background: #edf5ff;
 }
 :global(.customer-record-result-drawer .result-tab:focus-visible) {
-  outline: 2px solid rgba(0, 122, 255, 0.45);
+  outline: 2px solid rgba(10, 108, 255, 0.45);
   outline-offset: 1px;
 }
 
@@ -335,7 +335,7 @@
   gap: 3px;
   font-size: 12px;
   font-weight: 400;
-  color: #007aff;
+  color: #0a6cff;
   white-space: nowrap;
 }
 :global(.customer-record-result-drawer .evidence-path) {
@@ -383,7 +383,7 @@
 :global(.customer-record-result-drawer .result-card-actions .result-feedback-action:hover) {
   background: #e3efff;
   border-color: #8fb7e8;
-  color: #0057b8;
+  color: #0a5fd6;
 }
 :global(.customer-record-result-drawer .result-card-actions) {
   flex-wrap: wrap;
@@ -425,7 +425,7 @@
 }
 :global(.customer-record-result-drawer .readonly-medical-document-filter button.is-active) {
   background: #fff;
-  color: #007aff;
+  color: #0a6cff;
   box-shadow: 0 1px 3px rgba(33, 53, 81, 0.08);
 }
 :global(.customer-record-result-drawer .readonly-medical-document-group-title) {
@@ -644,9 +644,9 @@
   color: #7b8796;
 }
 :global(.customer-record-result-drawer .result-tab.is-active) {
-  background: #007aff !important;
+  background: #0a6cff !important;
   color: #fff !important;
-  box-shadow: 0 2px 5px rgba(0, 122, 255, 0.14);
+  box-shadow: 0 2px 5px rgba(10, 108, 255, 0.14);
 }
 :global(.customer-record-result-drawer .result-tab.is-active b) {
   background: rgba(255, 255, 255, 0.18);

@@ -858,8 +858,8 @@ function closeResultDrawer() {
   margin-top: 6px;
   padding: 5px 10px;
   border-radius: 999px;
-  background: rgba(43, 108, 246, 0.08);
-  color: #2b6cf6;
+  background: rgba(10, 108, 255, 0.08);
+  color: #0a6cff;
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
@@ -895,7 +895,7 @@ function closeResultDrawer() {
 .qc-record-result-list-view__view-switch button.is-active {
   background: #fff;
   box-shadow: 0 2px 6px rgba(15, 23, 42, 0.1);
-  color: #2b6cf6;
+  color: #0a6cff;
 }
 
 .qc-record-result-list-view__workbench {
@@ -936,15 +936,15 @@ function closeResultDrawer() {
   gap: 7px;
   min-height: 38px;
   padding: 0 15px;
-  border: 1px solid #2b6cf6;
+  border: 1px solid #0a6cff;
   border-radius: 10px;
-  background: #2b6cf6;
+  background: #0a6cff;
   color: #fff;
   font-size: 13px;
   font-weight: 650;
   white-space: nowrap;
   cursor: pointer;
-  box-shadow: 0 7px 16px rgba(43, 108, 246, 0.18);
+  box-shadow: 0 7px 16px rgba(10, 108, 255, 0.18);
 }
 
 .qc-record-result-list-view__export-options {
@@ -977,7 +977,7 @@ function closeResultDrawer() {
 
 .qc-record-result-list-view__export-options button:hover:not(:disabled),
 .qc-record-result-list-view__export-options button:focus-visible {
-  background: rgba(43, 108, 246, 0.07);
+  background: rgba(10, 108, 255, 0.07);
   outline: none;
 }
 
@@ -1048,7 +1048,7 @@ function closeResultDrawer() {
   border: 1px solid rgba(0, 0, 0, 0.09);
   border-radius: 8px;
   background: #fff;
-  color: #2b6cf6;
+  color: #0a6cff;
   cursor: pointer;
   font: inherit;
   font-size: 13px;
@@ -1062,7 +1062,7 @@ function closeResultDrawer() {
   border: 1px solid rgba(0, 0, 0, 0.09);
   border-radius: 8px;
   background: #fff;
-  color: #2b6cf6;
+  color: #0a6cff;
   cursor: pointer;
   font: inherit;
   font-size: 13px;
@@ -1071,14 +1071,14 @@ function closeResultDrawer() {
 }
 
 .qc-record-result-list-view__query-button {
-  border-color: #2b6cf6;
-  background: #2b6cf6;
+  border-color: #0a6cff;
+  background: #0a6cff;
   color: #fff;
 }
 
 .qc-record-result-list-view__refresh-button {
-  border-color: #2b6cf6;
-  background: #2b6cf6;
+  border-color: #0a6cff;
+  background: #0a6cff;
   color: #fff;
 }
 
@@ -1128,9 +1128,9 @@ function closeResultDrawer() {
 
 .qc-record-result-list-view__notice {
   padding: 12px 20px;
-  border-top: 1px solid rgba(43, 108, 246, 0.1);
-  background: rgba(43, 108, 246, 0.045);
-  color: #2b6cf6 !important;
+  border-top: 1px solid rgba(10, 108, 255, 0.1);
+  background: rgba(10, 108, 255, 0.045);
+  color: #0a6cff !important;
   font-weight: 600;
 }
 

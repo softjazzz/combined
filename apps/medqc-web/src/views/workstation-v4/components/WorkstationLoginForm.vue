@@ -241,7 +241,7 @@ const handleSubmit = () => {
 .workstation-login-form input:not([type='checkbox']):focus,
 .workstation-login-form select:focus {
   border-color: #80baff;
-  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
+  box-shadow: 0 0 0 3px rgba(10, 108, 255, 0.1);
 }
 .workstation-login-form > .flex > label {
   display: inline-flex;
@@ -250,10 +250,10 @@ const handleSubmit = () => {
 .workstation-login-form button[type='submit'] {
   height: 44px;
   border-radius: 8px;
-  background: #007aff;
+  background: #0a6cff;
   font-size: 14px;
   font-weight: 500;
   transform: none;
-  box-shadow: 0 3px 8px rgba(0, 122, 255, 0.16);
+  box-shadow: 0 3px 8px rgba(10, 108, 255, 0.16);
 }
 </style>

@@ -7,7 +7,7 @@
       class="group relative overflow-hidden rounded-[16px] border p-4 text-left shadow-[0_1px_3px_rgba(0,0,0,0.02)] transition-all duration-200"
       :class="
         activeKey === card.key
-          ? 'border-[#2b6cf6]/35 bg-[#eaf2ff]/60'
+          ? 'border-[#0a6cff]/35 bg-[#eaf2ff]/60'
           : 'border-black/10 bg-white/85 hover:border-black/15 hover:bg-white'
       "
       @click="emit('select', card.key)"

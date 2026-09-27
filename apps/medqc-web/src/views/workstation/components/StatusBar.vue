@@ -99,9 +99,9 @@ const indicators = computed(() => [
     key: 'my_in_progress_total',
     label: '进行中',
     value: props.kpis.my_in_progress_total,
-    dotBgClass: 'bg-[#2b6cf6]',
-    activeTextColor: 'text-[#2b6cf6]',
-    numActiveBgColor: 'bg-[#eaf2ff] text-[#2b6cf6]',
+    dotBgClass: 'bg-[#0a6cff]',
+    activeTextColor: 'text-[#0a6cff]',
+    numActiveBgColor: 'bg-[#eaf2ff] text-[#0a6cff]',
   },
 ])
 </script>

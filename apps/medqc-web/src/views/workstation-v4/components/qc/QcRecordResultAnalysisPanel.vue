@@ -687,7 +687,7 @@ onMounted(() => {
   flex: 0 0 auto;
   align-items: center;
   gap: 10px;
-  color: #2b6cf6;
+  color: #0a6cff;
 }
 .qc-result-analysis__command-copy strong,
 .qc-result-analysis h2 {
@@ -754,9 +754,9 @@ onMounted(() => {
 }
 .qc-result-analysis__query {
   height: 34px;
-  border: 1px solid #2b6cf6;
+  border: 1px solid #0a6cff;
   padding: 0 11px;
-  background: #2b6cf6;
+  background: #0a6cff;
   color: #fff;
 }
 .qc-result-analysis__reset,
@@ -806,7 +806,7 @@ onMounted(() => {
 .qc-result-analysis__status-button.is-active {
   border-color: #d5e3f3;
   background: #fff;
-  color: #2b6cf6;
+  color: #0a6cff;
   box-shadow: 0 1px 3px rgba(25, 49, 80, 0.07);
 }
 .qc-result-analysis__status-button.is-non_compliant:not(.is-active) {
@@ -822,11 +822,11 @@ onMounted(() => {
   color: #59677a;
 }
 .qc-result-analysis__status-button:hover {
-  color: #2b6cf6;
+  color: #0a6cff;
   background: #eaf1f9;
 }
 .qc-result-analysis__status-button:focus-visible {
-  outline: 2px solid #2b6cf6;
+  outline: 2px solid #0a6cff;
   outline-offset: -2px;
 }
 .qc-result-analysis__state {
@@ -855,7 +855,7 @@ onMounted(() => {
 .qc-result-analysis__state--error button {
   border: 0;
   background: transparent;
-  color: #2b6cf6;
+  color: #0a6cff;
   font: inherit;
   font-size: 13px;
   font-weight: 650;
@@ -863,7 +863,7 @@ onMounted(() => {
 }
 .qc-result-analysis__spin {
   animation: qc-result-analysis-spin 1s linear infinite;
-  color: #2b6cf6;
+  color: #0a6cff;
 }
 .qc-result-analysis__summary {
   display: flex;
@@ -888,7 +888,7 @@ onMounted(() => {
   font-variant-numeric: tabular-nums;
 }
 .qc-result-analysis__rule-table tbody > tr.is-selected td:first-child {
-  box-shadow: inset 3px 0 #2b6cf6;
+  box-shadow: inset 3px 0 #0a6cff;
 }
 .qc-result-analysis__summary strong {
   color: #1d1d1f;
@@ -933,7 +933,7 @@ onMounted(() => {
   line-height: 24px;
 }
 .qc-result-analysis__panel-heading > strong {
-  color: #2b6cf6;
+  color: #0a6cff;
   font-size: 14px;
 }
 .qc-result-analysis__panel-note {
@@ -970,7 +970,7 @@ onMounted(() => {
 }
 .qc-result-analysis__rule-table tbody > tr:not(.qc-result-analysis__department-row):hover,
 .qc-result-analysis__rule-table tbody > tr.is-selected {
-  background: rgba(43, 108, 246, 0.045);
+  background: rgba(10, 108, 255, 0.045);
 }
 .qc-result-analysis__rule-table td:first-child {
   min-width: 260px;
@@ -1010,11 +1010,11 @@ onMounted(() => {
   border: 0;
   border-radius: 7px;
   background: transparent;
-  color: #2b6cf6;
+  color: #0a6cff;
   cursor: pointer;
 }
 .qc-result-analysis__expand:hover {
-  background: rgba(43, 108, 246, 0.08);
+  background: rgba(10, 108, 255, 0.08);
 }
 .qc-result-analysis__department-row > td {
   padding: 0;
@@ -1038,7 +1038,7 @@ onMounted(() => {
   cursor: pointer;
 }
 .qc-result-analysis__department-list button:hover {
-  background: rgba(43, 108, 246, 0.055);
+  background: rgba(10, 108, 255, 0.055);
 }
 .qc-result-analysis__department-list small {
   color: rgba(29, 29, 31, 0.48);
@@ -1158,7 +1158,7 @@ onMounted(() => {
   cursor: pointer;
 }
 .qc-result-analysis__physician-list button:hover {
-  background: rgba(43, 108, 246, 0.055);
+  background: rgba(10, 108, 255, 0.055);
 }
 .qc-result-analysis__physician-list span {
   grid-row: span 2;
@@ -1238,7 +1238,7 @@ onMounted(() => {
   border: 0;
   padding: 5px 0;
   background: transparent;
-  color: #2b6cf6;
+  color: #0a6cff;
   white-space: nowrap;
 }
 @keyframes qc-result-analysis-spin {

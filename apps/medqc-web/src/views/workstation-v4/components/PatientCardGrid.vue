@@ -125,15 +125,15 @@ function cardTone(status?: string) {
 function statusTone(status?: string) {
   const theme = getStatusTheme(status || 'pending')
   if (theme === 'rose') return 'bg-rose-50 text-rose-600'
-  if (theme === 'blue') return 'bg-blue-50 text-[#0057b8]'
+  if (theme === 'blue') return 'bg-blue-50 text-[#0a5fd6]'
   if (theme === 'emerald') return 'bg-slate-100 text-slate-700'
   return 'bg-amber-50 text-amber-700'
 }
 
 function stayTone(days?: number) {
   if (!days || days <= 7) return 'text-slate-500'
-  if (days <= 14) return 'text-[#2b6cf6]'
-  return 'text-[#2b6cf6]'
+  if (days <= 14) return 'text-[#0a6cff]'
+  return 'text-[#0a6cff]'
 }
 
 function stayLabel(days?: number) {
@@ -217,13 +217,13 @@ function formatDateRange(admissionDate?: string, dischargeDate?: string) {
   font-weight: 600 !important;
 }
 
-.patient-card-grid :deep(.text-\[\#2b6cf6\]),
-.patient-card-grid :deep(.text-\[\#0057b8\]) {
-  color: #2b6cf6 !important;
+.patient-card-grid :deep(.text-\[\#0a6cff\]),
+.patient-card-grid :deep(.text-\[\#0a5fd6\]) {
+  color: #0a6cff !important;
 }
 
 .patient-card-grid :deep(.bg-blue-50) {
-  background-color: rgba(43, 108, 246, 0.08) !important;
+  background-color: rgba(10, 108, 255, 0.08) !important;
 }
 
 .patient-card-grid :deep(.bg-slate-100) {

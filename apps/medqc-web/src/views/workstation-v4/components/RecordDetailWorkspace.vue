@@ -8,10 +8,10 @@
         class="absolute right-4 top-0 flex items-center gap-1 rounded-b-md border-x border-b px-2 py-0.5 text-[10px] font-bold opacity-75"
         :class="
           selectedRecord.status === 'completed'
-            ? 'bg-blue-50 text-[#2b6cf6] border-blue-100/50'
+            ? 'bg-blue-50 text-[#0a6cff] border-blue-100/50'
             : selectedRecord.status === 'has_defects' || selectedRecord.status === 'warning'
               ? 'bg-slate-50 text-slate-500 border-slate-200/70'
-              : 'bg-blue-50 text-[#2b6cf6] border-blue-100/50'
+              : 'bg-blue-50 text-[#0a6cff] border-blue-100/50'
         "
       >
         <CheckCircleOutlined v-if="selectedRecord.status === 'completed'" />
@@ -86,7 +86,7 @@
             </a-button>
           </div>
           <div
-            class="mb-4 flex items-center gap-2 rounded-[10px] border border-blue-100/80 bg-blue-50/55 px-3 py-2 text-xs text-[#0057b8]"
+            class="mb-4 flex items-center gap-2 rounded-[10px] border border-blue-100/80 bg-blue-50/55 px-3 py-2 text-xs text-[#0a5fd6]"
           >
             <WarningOutlined />
             <span>EMR 高亮视图暂不可用，已自动切换到原始文书预览。</span>
@@ -106,7 +106,7 @@
                   {{ section.title }}
                 </h3>
               </span>
-              <span class="text-[11px] font-semibold text-[#2b6cf6]">
+              <span class="text-[11px] font-semibold text-[#0a6cff]">
                 {{ isSectionExpanded(idx) ? '收起' : '展开' }}
               </span>
             </button>
@@ -279,10 +279,10 @@ const AsyncEMRViewer = defineAsyncComponent(() => import('@/components/qc/EMRVie
   color: rgba(29, 29, 31, 0.34) !important;
 }
 
-.record-detail-workspace .text-\[\#2b6cf6\],
+.record-detail-workspace .text-\[\#0a6cff\],
 .record-detail-workspace .text-blue-400,
-.record-detail-workspace .text-\[\#0057b8\] {
-  color: #2b6cf6 !important;
+.record-detail-workspace .text-\[\#0a5fd6\] {
+  color: #0a6cff !important;
 }
 
 .record-detail-workspace .bg-blue-50,
@@ -324,8 +324,8 @@ const AsyncEMRViewer = defineAsyncComponent(() => import('@/components/qc/EMRVie
 }
 
 .record-detail-workspace :deep(.ant-btn:hover) {
-  border-color: rgba(43, 108, 246, 0.2) !important;
-  color: #2b6cf6 !important;
+  border-color: rgba(10, 108, 255, 0.2) !important;
+  color: #0a6cff !important;
 }
 
 .medical-record-document__content {

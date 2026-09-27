@@ -336,8 +336,8 @@ function buildCustomRow(record: SemanticRuleItem) {
 
 .semantic-rule-select-dropdown
   .ant-select-item-option-selected:not(.ant-select-item-option-disabled) {
-  background: rgba(43, 108, 246, 0.08);
-  color: #2b6cf6;
+  background: rgba(10, 108, 255, 0.08);
+  color: #0a6cff;
   font-weight: 600;
 }
 

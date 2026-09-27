@@ -261,7 +261,7 @@ const sectionViews = computed<SectionView[]>(() =>
 }
 
 .readonly-report-table tbody tr:hover {
-  background: rgba(43, 108, 246, 0.025);
+  background: rgba(10, 108, 255, 0.025);
 }
 
 .readonly-report-result-value {

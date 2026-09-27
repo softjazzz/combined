@@ -1228,7 +1228,7 @@ onUnmounted(() => {
   padding: 0 13px;
   border-radius: 8px;
   color: #fff;
-  background: #2b6cf6;
+  background: #0a6cff;
   box-shadow: 0 3px 10px rgb(0 102 204 / 18%);
   font-size: 13px;
   font-weight: 600;
@@ -1381,7 +1381,7 @@ onUnmounted(() => {
   width: 14px;
   height: 14px;
   margin: 0;
-  accent-color: #2b6cf6;
+  accent-color: #0a6cff;
 }
 
 .qc-sync-and-run-control__department-hint {
@@ -1436,7 +1436,7 @@ onUnmounted(() => {
 }
 
 .qc-sync-and-run-control__date-inputs input:focus {
-  border-color: #2b6cf6;
+  border-color: #0a6cff;
   outline: 2px solid rgb(0 102 204 / 14%);
   outline-offset: 1px;
 }
@@ -1473,7 +1473,7 @@ onUnmounted(() => {
 
 .qc-sync-and-run-control__primary-button {
   color: #fff;
-  background: #2b6cf6;
+  background: #0a6cff;
 }
 
 .qc-sync-and-run-control__primary-button:hover {
@@ -1513,7 +1513,7 @@ onUnmounted(() => {
 }
 
 .qc-sync-and-run-control__steps li.is-active {
-  color: #2b6cf6;
+  color: #0a6cff;
   font-weight: 600;
 }
 
@@ -1537,7 +1537,7 @@ onUnmounted(() => {
 }
 
 .qc-sync-and-run-control__steps li.is-active .qc-sync-and-run-control__step-mark {
-  border-color: #2b6cf6;
+  border-color: #0a6cff;
   background: rgb(0 102 204 / 9%);
 }
 

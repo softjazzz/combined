@@ -6,7 +6,7 @@
   --drg-text: #1d1d1f;
   --drg-muted: rgba(29, 29, 31, 0.6);
   --drg-subtle: rgba(29, 29, 31, 0.38);
-  --drg-primary: #2b6cf6;
+  --drg-primary: #0a6cff;
   --drg-primary-soft: #eaf2ff;
   color: var(--drg-text);
   background: var(--drg-page-bg);
@@ -122,9 +122,9 @@
 .post-event-analysis-page
   :is(.primary-button, .ant-btn-primary, button.bg-blue-500, button.bg-blue-600),
 .in-process-page :is(.primary-button, .ant-btn-primary, button.bg-blue-500, button.bg-blue-600) {
-  border-color: #2b6cf6 !important;
-  background: #2b6cf6 !important;
-  box-shadow: 0 5px 14px rgba(43, 108, 246, 0.18) !important;
+  border-color: #0a6cff !important;
+  background: #0a6cff !important;
+  box-shadow: 0 5px 14px rgba(10, 108, 255, 0.18) !important;
 }
 
 .pre-analysis-shell
@@ -155,9 +155,9 @@
 .post-event-analysis-page
   :is(.metric-tabs button.active, .tone-blue .kpi-icon, .tone-blue.insight-row .insight-icon),
 .in-process-page :is(.threshold-chip, .kpi-icon--blue, .change-tag--down) {
-  border-color: rgba(43, 108, 246, 0.16) !important;
-  background: rgba(43, 108, 246, 0.08) !important;
-  color: #2b6cf6 !important;
+  border-color: rgba(10, 108, 255, 0.16) !important;
+  background: rgba(10, 108, 255, 0.08) !important;
+  color: #0a6cff !important;
 }
 
 .payment-monitoring-page :is(.kpi-card-green, .kpi-card-red, .kpi-card-amber),
@@ -204,7 +204,7 @@
 .payment-monitoring-page :is(.text-link, .link-button, a),
 .post-event-analysis-page :is(.text-link, .link-button, a),
 .in-process-page :is(.text-link, .link-button, a) {
-  color: #2b6cf6 !important;
+  color: #0a6cff !important;
 }
 
 .drg-workbench-page .drg-page-header,
@@ -314,7 +314,7 @@
   background: var(--drg-primary) !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    0 5px 14px rgba(43, 108, 246, 0.18) !important;
+    0 5px 14px rgba(10, 108, 255, 0.18) !important;
 }
 
 .drg-workbench-page .ant-tag {
@@ -358,7 +358,7 @@
 .workbench-layout .panel-body > .space-y-6 [class*='bg-gradient-to-br']::before {
   position: absolute;
   inset: 0;
-  border-left: 3px solid #2b6cf6;
+  border-left: 3px solid #0a6cff;
   pointer-events: none;
   content: '';
 }
@@ -395,18 +395,18 @@
   text-transform: none !important;
 }
 
-.workbench-layout .panel-body > .space-y-6 [class*='text-[#0057b8]'],
+.workbench-layout .panel-body > .space-y-6 [class*='text-[#0a5fd6]'],
 .workbench-layout .panel-body > .space-y-6 [class*='text-blue-500'],
-.workbench-layout .panel-body > .space-y-6 [class*='hover:text-[#2b6cf6]'] {
-  color: #2b6cf6 !important;
+.workbench-layout .panel-body > .space-y-6 [class*='hover:text-[#0a6cff]'] {
+  color: #0a6cff !important;
 }
 
 .workbench-layout .panel-body > .space-y-6 [class*='bg-blue-100'],
 .workbench-layout .panel-body > .space-y-6 [class*='bg-blue-50'],
 .workbench-layout .panel-body > .space-y-6 [class*='bg-white/20'] {
-  border: 1px solid rgba(43, 108, 246, 0.12) !important;
-  background: rgba(43, 108, 246, 0.08) !important;
-  color: #2b6cf6 !important;
+  border: 1px solid rgba(10, 108, 255, 0.12) !important;
+  background: rgba(10, 108, 255, 0.08) !important;
+  color: #0a6cff !important;
 }
 
 .workbench-layout .panel-body > .space-y-6 [class*='bg-slate-100'] {
@@ -418,7 +418,7 @@
   border-radius: 8px !important;
   font-weight: 600 !important;
   letter-spacing: 0 !important;
-  box-shadow: 0 5px 14px rgba(43, 108, 246, 0.16) !important;
+  box-shadow: 0 5px 14px rgba(10, 108, 255, 0.16) !important;
 }
 
 .workbench-layout .panel-body > .h-full {
@@ -430,9 +430,9 @@
 
 .workbench-layout .panel-body > .h-full [class*='bg-blue-50'],
 .workbench-layout .panel-body > .h-full [class*='dark:bg-blue'] {
-  border: 1px solid rgba(43, 108, 246, 0.12) !important;
-  background: rgba(43, 108, 246, 0.08) !important;
-  color: #2b6cf6 !important;
+  border: 1px solid rgba(10, 108, 255, 0.12) !important;
+  background: rgba(10, 108, 255, 0.08) !important;
+  color: #0a6cff !important;
 }
 
 .workbench-layout .panel-body > .h-full [class*='text-slate'],
@@ -448,8 +448,8 @@
 }
 
 .workbench-layout .panel-body > .h-full button[class*='bg-blue'] {
-  border-color: #2b6cf6 !important;
-  background: #2b6cf6 !important;
+  border-color: #0a6cff !important;
+  background: #0a6cff !important;
   color: #ffffff !important;
 }
 
@@ -491,9 +491,9 @@
 }
 
 .drg-grouping-tab :is([class*='bg-white/20'], [class*='bg-blue-100'], [class*='bg-blue-50']) {
-  border: 1px solid rgba(43, 108, 246, 0.12) !important;
-  background: rgba(43, 108, 246, 0.08) !important;
-  color: #2b6cf6 !important;
+  border: 1px solid rgba(10, 108, 255, 0.12) !important;
+  background: rgba(10, 108, 255, 0.08) !important;
+  color: #0a6cff !important;
 }
 
 .drg-grouping-tab :is([class*='rounded-xl'], [class*='rounded-lg']) {

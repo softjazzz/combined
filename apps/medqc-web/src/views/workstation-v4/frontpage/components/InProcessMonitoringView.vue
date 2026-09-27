@@ -1033,8 +1033,8 @@ function renderCmiChart(data: CmiTrend) {
         type: 'line',
         smooth: true,
         symbolSize: 8,
-        lineStyle: { color: '#2b6cf6', width: 3 },
-        itemStyle: { color: '#2b6cf6' },
+        lineStyle: { color: '#0a6cff', width: 3 },
+        itemStyle: { color: '#0a6cff' },
         areaStyle: {
           color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
             { offset: 0, color: 'rgba(59, 130, 246, 0.28)' },
@@ -1246,8 +1246,8 @@ onUnmounted(() => {
 
 .back-button:hover {
   border-color: #bfdbfe;
-  color: #2b6cf6;
-  background: rgba(43, 108, 246, 0.06);
+  color: #0a6cff;
+  background: rgba(10, 108, 255, 0.06);
 }
 
 .breadcrumb {
@@ -1300,7 +1300,7 @@ onUnmounted(() => {
 }
 
 .threshold-chip {
-  color: #0057b8;
+  color: #0a5fd6;
   background: #eff6ff;
   border-color: #bfdbfe;
 }
@@ -1332,14 +1332,14 @@ onUnmounted(() => {
 }
 
 .primary-button {
-  border: 1px solid #2b6cf6;
+  border: 1px solid #0a6cff;
   color: #ffffff;
-  background: #2b6cf6;
+  background: #0a6cff;
   box-shadow: 0 8px 18px rgba(37, 99, 235, 0.18);
 }
 
 .primary-button:hover {
-  background: #0057b8;
+  background: #0a5fd6;
 }
 
 .secondary-button {
@@ -1349,7 +1349,7 @@ onUnmounted(() => {
 }
 
 .secondary-button:hover {
-  color: #2b6cf6;
+  color: #0a6cff;
   border-color: #bfdbfe;
   background: #eff6ff;
 }
@@ -1390,7 +1390,7 @@ onUnmounted(() => {
 }
 
 .kpi-icon--blue {
-  color: #2b6cf6;
+  color: #0a6cff;
   background: #eaf2ff;
 }
 
@@ -1513,7 +1513,7 @@ onUnmounted(() => {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #2b6cf6;
+  background: #0a6cff;
   content: '';
   transform: translateY(-50%);
 }
@@ -1615,7 +1615,7 @@ onUnmounted(() => {
 .link-button,
 .text-link {
   border: 0;
-  color: #2b6cf6;
+  color: #0a6cff;
   background: transparent;
   font-size: 13px;
   font-weight: 700;
@@ -1623,7 +1623,7 @@ onUnmounted(() => {
 
 .link-button:hover,
 .text-link:hover {
-  color: #0057b8;
+  color: #0a5fd6;
 }
 
 .priority-panel {
@@ -1702,7 +1702,7 @@ onUnmounted(() => {
 }
 
 .priority-action {
-  color: #2b6cf6;
+  color: #0a6cff;
   font-size: 12px;
   font-weight: 700;
   text-align: right;
@@ -1731,7 +1731,7 @@ onUnmounted(() => {
   height: 7px;
   margin-top: 7px;
   border-radius: 50%;
-  background: #2b6cf6;
+  background: #0a6cff;
 }
 
 .suggestion-dot--critical {
@@ -1825,7 +1825,7 @@ onUnmounted(() => {
 }
 
 .change-tag--down {
-  color: #2b6cf6;
+  color: #0a6cff;
   background: #dbeafe;
 }
 
@@ -1843,8 +1843,8 @@ onUnmounted(() => {
   --workstation-text: #1d1d1f;
   --workstation-muted: rgba(29, 29, 31, 0.6);
   --workstation-subtle: rgba(29, 29, 31, 0.38);
-  --workstation-primary: #2b6cf6;
-  --workstation-primary-soft: rgba(43, 108, 246, 0.1);
+  --workstation-primary: #0a6cff;
+  --workstation-primary-soft: rgba(10, 108, 255, 0.1);
 
   background: var(--workstation-canvas) !important;
   color: var(--workstation-text) !important;
@@ -1919,7 +1919,7 @@ onUnmounted(() => {
 
 .back-button:hover,
 .secondary-button:hover {
-  border-color: rgba(43, 108, 246, 0.22);
+  border-color: rgba(10, 108, 255, 0.22);
   background: var(--workstation-primary-soft);
   color: var(--workstation-primary);
 }
@@ -1927,7 +1927,7 @@ onUnmounted(() => {
 .threshold-chip,
 .kpi-icon--blue,
 .change-tag--down {
-  border-color: rgba(43, 108, 246, 0.16);
+  border-color: rgba(10, 108, 255, 0.16);
   background: var(--workstation-primary-soft);
   color: var(--workstation-primary);
 }
@@ -1935,11 +1935,11 @@ onUnmounted(() => {
 .primary-button {
   border-color: var(--workstation-primary);
   background: var(--workstation-primary);
-  box-shadow: 0 4px 10px rgba(43, 108, 246, 0.16);
+  box-shadow: 0 4px 10px rgba(10, 108, 255, 0.16);
 }
 
 .primary-button:hover {
-  background: #0057b8;
+  background: #0a5fd6;
 }
 
 .chart-toolbar span::before,
