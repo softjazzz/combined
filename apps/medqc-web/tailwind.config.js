@@ -31,11 +31,11 @@ export default {
         // Ant Design 兼容色彩
         // primary 是品牌主色，与 src/styles/index.css 的 --primary-color 及
         // App.vue 的 antd token.colorPrimary 同源同值。
-        primary: '#2b6cf6',
+        primary: '#0a6cff',
         success: '#52c41a',
         warning: '#faad14',
         error: '#f5222d',
-        info: '#2b6cf6',
+        info: '#0a6cff',
       },
       fontFamily: {
         sans: [

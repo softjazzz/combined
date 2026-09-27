@@ -11,7 +11,7 @@ dayjs.locale('zh-cn')
 // antd 主题：品牌主色只在这里、tailwind.config.js 的 primary 和
 // src/styles/index.css 的 --primary-color 三处声明，取值必须一致。
 // 只收敛主色，不改变圆角/字号/间距等既有视觉参数。
-const BRAND_PRIMARY = '#2b6cf6'
+const BRAND_PRIMARY = '#0a6cff'
 const brandTheme = {
   token: {
     colorPrimary: BRAND_PRIMARY,

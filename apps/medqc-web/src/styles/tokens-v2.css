@@ -1,52 +1,75 @@
 /*
- * 设计 Token v2（UI 重设计 v1 基础层）
+ * 设计 Token（v7.1 液态玻璃 · 纯蓝）
  * 唯一来源：新页面与重构区块只引用 --mq-*；旧变量逐页替换后再删除。
- * 本文件只新增变量，不覆盖任何现有全局样式，避免波及尚未改版的质控结果页。
+ * 品牌蓝与 App.vue colorPrimary、tailwind primary、index.css --primary-color 同值。
  */
 :root {
-  /* 品牌：唯一主蓝，与 App.vue colorPrimary、tailwind primary 同值 */
-  --mq-brand-50: #eef3fe;
-  --mq-brand-200: #c9d8fc;
-  --mq-brand-600: #2b6cf6;
-  --mq-brand-700: #1f55c9;
+  /* 品牌：唯一主蓝（无紫色） */
+  --mq-brand-50: #eaf2ff;
+  --mq-brand-200: #bcd6ff;
+  --mq-brand-400: #3b8bff;
+  --mq-brand-600: #0a6cff;
+  --mq-brand-700: #0a5fd6;
+  --mq-brand-gradient: linear-gradient(135deg, #3b8bff, #0a6cff);
+  --mq-brand-hero: linear-gradient(135deg, #3a8dff 0%, #2477ff 50%, #0a5fe0 100%);
+  --mq-brand-shadow: 0 8px 20px rgba(10, 100, 230, 0.3);
 
   /* 文字：三级均 >= 4.5:1；disabled 只用于占位符与禁用态 */
-  --mq-text-primary: #0f172a;
-  --mq-text-secondary: #475569;
-  --mq-text-tertiary: #64748b;
-  --mq-text-disabled: #94a3b8;
+  --mq-text-primary: #1d1d1f;
+  --mq-text-secondary: #515154;
+  --mq-text-tertiary: #6e6e73;
+  --mq-text-disabled: #9a9da4;
 
-  /* 背景与边框 */
-  --mq-bg-page: #f4f6f9;
+  /* 背景：浅色光晕底 + 玻璃卡片 */
+  --mq-bg-page: #f1f3f8;
+  --mq-bg-mesh:
+    radial-gradient(1000px 640px at 10% -4%, rgba(122, 176, 255, 0.34), transparent 62%),
+    radial-gradient(900px 600px at 94% 6%, rgba(150, 210, 255, 0.26), transparent 62%),
+    radial-gradient(900px 700px at 60% 110%, rgba(140, 180, 255, 0.18), transparent 62%), #f1f3f8;
   --mq-bg-surface: #ffffff;
-  --mq-bg-subtle: #f8fafc;
-  --mq-bg-muted: #f1f5f9;
-  --mq-border: #e2e8f0;
-  --mq-border-strong: #cbd5e1;
+  --mq-bg-subtle: rgba(255, 255, 255, 0.75);
+  --mq-bg-muted: rgba(118, 128, 160, 0.12);
+  --mq-border: rgba(0, 0, 0, 0.07);
+  --mq-border-strong: rgba(0, 0, 0, 0.12);
 
-  /* 语义色：text 用于文字，icon 用于图标/描边，bg/border 用于底色块 */
-  --mq-success-text: #15803d;
-  --mq-success-icon: #16a34a;
-  --mq-success-bg: #f0fdf4;
-  --mq-success-border: #bbf7d0;
-  --mq-warning-text: #b45309;
-  --mq-warning-icon: #d97706;
-  --mq-warning-bg: #fffbeb;
-  --mq-warning-border: #fde68a;
-  --mq-danger-text: #b91c1c;
-  --mq-danger-icon: #dc2626;
-  --mq-danger-bg: #fef2f2;
-  --mq-danger-border: #fecaca;
-  --mq-info-text: #1f55c9;
-  --mq-info-icon: #2b6cf6;
-  --mq-info-bg: #eef3fe;
-  --mq-info-border: #c9d8fc;
-  --mq-neutral-text: #475569;
-  --mq-neutral-bg: #f1f5f9;
+  /* 玻璃材质 */
+  --mq-glass-bg: rgba(255, 255, 255, 0.62);
+  --mq-glass-bg-strong: rgba(255, 255, 255, 0.85);
+  --mq-glass-border: rgba(255, 255, 255, 0.8);
+  --mq-glass-blur: blur(30px) saturate(1.7);
+  --mq-glass-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 1px 2px rgba(10, 45, 90, 0.04),
+    0 16px 40px rgba(10, 55, 115, 0.1);
+  --mq-float-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.05), 0 2px 8px rgba(10, 55, 115, 0.1);
 
-  /* 字号 7 档，最小 12px */
-  --mq-font-family: 'Source Han Sans SC', 'PingFang SC', 'Microsoft YaHei UI', 'Microsoft YaHei',
-    system-ui, sans-serif;
+  /* 语义色：text 用于文字，icon 用于图标/进度，bg/border 用于底色块；只用于数据状态 */
+  --mq-success-text: #1e9e47;
+  --mq-success-icon: #34c759;
+  --mq-success-bg: rgba(52, 199, 89, 0.12);
+  --mq-success-border: rgba(52, 199, 89, 0.24);
+  --mq-warning-text: #c25e00;
+  --mq-warning-icon: #ff9500;
+  --mq-warning-bg: rgba(255, 149, 0, 0.1);
+  --mq-warning-border: rgba(255, 149, 0, 0.22);
+  --mq-danger-text: #e0263a;
+  --mq-danger-icon: #ff3b30;
+  --mq-danger-bg: rgba(255, 59, 48, 0.1);
+  --mq-danger-border: rgba(255, 59, 48, 0.22);
+  --mq-info-text: #0a5fd6;
+  --mq-info-icon: #0a6cff;
+  --mq-info-bg: rgba(10, 108, 255, 0.08);
+  --mq-info-border: rgba(10, 108, 255, 0.16);
+  --mq-neutral-text: #4a5468;
+  --mq-neutral-bg: rgba(118, 128, 160, 0.12);
+
+  /* 字体：苹果系统字体优先，Windows 回退思源黑体 */
+  --mq-font-family:
+    -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Source Han Sans SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif;
+  --mq-font-display:
+    -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'PingFang SC', 'Source Han Sans SC',
+    'Microsoft YaHei UI', sans-serif;
+  --mq-font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   --mq-font-12: 12px;
   --mq-font-13: 13px;
   --mq-font-14: 14px;
@@ -54,6 +77,7 @@
   --mq-font-20: 20px;
   --mq-font-24: 24px;
   --mq-font-28: 28px;
+  --mq-font-title: 40px;
 
   /* 间距 4 基数 */
   --mq-space-1: 4px;
@@ -64,20 +88,20 @@
   --mq-space-6: 24px;
   --mq-space-8: 32px;
 
-  /* 圆角 4 档：标签 / 控件 / 卡片 / 弹窗 */
-  --mq-radius-tag: 4px;
-  --mq-radius-control: 6px;
-  --mq-radius-card: 8px;
-  --mq-radius-overlay: 12px;
+  /* 圆角：标签 / 控件 / 卡片 / 主卡 */
+  --mq-radius-tag: 999px;
+  --mq-radius-control: 12px;
+  --mq-radius-card: 24px;
+  --mq-radius-overlay: 26px;
 
-  /* 阴影 3 档：卡片默认只用边框 */
+  /* 阴影 */
   --mq-shadow-none: none;
-  --mq-shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.08);
-  --mq-shadow-md: 0 8px 24px rgba(15, 23, 42, 0.12);
+  --mq-shadow-sm: 0 1px 3px rgba(10, 55, 115, 0.08);
+  --mq-shadow-md: 0 12px 32px rgba(10, 55, 115, 0.14);
 
   /* 布局 */
-  --mq-sider-width: 232px;
-  --mq-sider-collapsed-width: 64px;
-  --mq-header-height: 56px;
-  --mq-control-height: 32px;
+  --mq-sider-width: 240px;
+  --mq-sider-collapsed-width: 72px;
+  --mq-header-height: 60px;
+  --mq-control-height: 36px;
 }
