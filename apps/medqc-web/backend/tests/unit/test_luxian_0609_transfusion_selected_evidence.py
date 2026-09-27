@@ -114,7 +114,7 @@ async def test_045_selects_every_checked_blood_record_not_irrelevant_daily_recor
     """045 的逐条判定只核对专用输血记录，日常病程不得因旧来源推断混入。"""
 
     _execution, decision, session = await _execute_typed(
-        rule_id="LX0609-045",
+        rule_id="LX0609-07-02-01",
         rows_by_source={
             "mr_bloodtrans": _trigger(),
             "bloodtrans_record": [
@@ -147,7 +147,7 @@ async def test_046_selects_all_complete_records_or_only_incomplete_records() -> 
     """046 合规逐笔核对全部记录；缺项结论只定位实际缺项记录。"""
 
     complete_execution, complete, complete_session = await _execute_typed(
-        rule_id="LX0609-046",
+        rule_id="LX0609-07-02-02",
         rows_by_source={
             "mr_bloodtrans": _trigger(),
             "bloodtrans_record": [
@@ -178,7 +178,7 @@ async def test_046_selects_all_complete_records_or_only_incomplete_records() -> 
         "2026-06-05 19:00输血结束。输血过程中严密观察，未见不良反应。"
     )
     _incomplete_execution, incomplete, incomplete_session = await _execute_typed(
-        rule_id="LX0609-046",
+        rule_id="LX0609-07-02-02",
         rows_by_source={
             "mr_bloodtrans": _trigger(),
             "bloodtrans_record": [
@@ -203,7 +203,7 @@ async def test_045_selects_every_material_row_for_a_duplicated_business_document
     """公共投影要求同一业务 ID 的重复材料行被完整选择，不能只选其中一行。"""
 
     _execution, decision, session = await _execute_typed(
-        rule_id="LX0609-045",
+        rule_id="LX0609-07-02-01",
         rows_by_source={
             "mr_bloodtrans": _trigger(),
             "bloodtrans_record": [
@@ -236,7 +236,7 @@ async def test_044_structured_application_path_selects_the_actual_application_do
     """044 的结构化申请单路径必须带出参与判断的申请单，而不是来源级猜测。"""
 
     _execution, decision, session = await _execute_typed(
-        rule_id="LX0609-044",
+        rule_id="LX0609-07-01-02",
         rows_by_source={
             "mr_bloodtrans": _trigger(),
             "blood_application": [
@@ -272,7 +272,7 @@ async def test_047_selects_daily_evaluation_document_when_daily_record_supplies_
     """047 日常病程提供评价时，结束输血文书和实际评价文书都必须可定位。"""
 
     _execution, decision, session = await _execute_typed(
-        rule_id="LX0609-047",
+        rule_id="LX0609-07-03-01",
         rows_by_source={
             "mr_bloodtrans": _trigger(),
             "bloodtrans_record": [
@@ -308,7 +308,7 @@ async def test_047_selects_blood_record_when_it_supplies_evaluation() -> None:
     """047 评价写在输血记录内时，不得额外选择无关日常病程。"""
 
     _execution, decision, session = await _execute_typed(
-        rule_id="LX0609-047",
+        rule_id="LX0609-07-03-01",
         rows_by_source={
             "mr_bloodtrans": _trigger(),
             "bloodtrans_record": [
@@ -346,7 +346,7 @@ async def test_045_stale_selected_document_id_becomes_technical_error_not_data_g
 
     def stale_selected_id(**kwargs: object):
         facts = original(**kwargs)
-        if kwargs.get("rule_id") != "LX0609-045" or not isinstance(facts, dict):
+        if kwargs.get("rule_id") != "LX0609-07-02-01" or not isinstance(facts, dict):
             return facts
         stale = dict(facts)
         stale["source_document_ids"] = ["BLOOD-045-NOT-IN-SNAPSHOT"]
@@ -358,7 +358,7 @@ async def test_045_stale_selected_document_id_becomes_technical_error_not_data_g
         stale_selected_id,
     )
     _execution, decision, session = await _execute_typed(
-        rule_id="LX0609-045",
+        rule_id="LX0609-07-02-01",
         rows_by_source={
             "mr_bloodtrans": _trigger(),
             "bloodtrans_record": [
@@ -377,7 +377,7 @@ async def test_045_too_many_selected_documents_becomes_one_rule_technical_error(
     """RuleDecision 的128条引用上限不得靠截断规避或中断整个规则族。"""
 
     _execution, decision, session = await _execute_typed(
-        rule_id="LX0609-045",
+        rule_id="LX0609-07-02-01",
         rows_by_source={
             "mr_bloodtrans": _trigger(),
             "bloodtrans_record": [
@@ -403,7 +403,7 @@ async def test_044_nonstructured_daily_assessment_selects_matched_daily_and_bloo
     """非结构化 044 由日常病程命中评估时，仅选择命中文书及输血锚点。"""
 
     _execution, decision, session = await _execute_typed(
-        rule_id="LX0609-044",
+        rule_id="LX0609-07-01-02",
         rows_by_source={
             "mr_bloodtrans": _trigger(),
             "bloodtrans_record": [
@@ -435,7 +435,7 @@ async def test_044_complete_text_without_document_id_keeps_clinical_status() -> 
     """不可定位的命中文本不能反向改变 044 的既有临床判定。"""
 
     _execution, decision, _session = await _execute_typed(
-        rule_id="LX0609-044",
+        rule_id="LX0609-07-01-02",
         rows_by_source={
             "mr_bloodtrans": _trigger(),
             "bloodtrans_record": [
@@ -458,7 +458,7 @@ async def test_041_selects_transfusion_consent_not_unrelated_surgical_consent() 
     """041 已找到输血同意书时，证据只能指向实际参与核对的输血同意书。"""
 
     _execution, decision, session = await _execute_typed(
-        rule_id="LX0609-041",
+        rule_id="LX0609-11-03-01",
         rows_by_source={
             "mr_bloodtrans": _trigger(),
             "bloodtrans_record": [
@@ -490,7 +490,7 @@ async def test_047_selects_earliest_qualified_daily_evaluation_only() -> None:
     """047 多份合格日常评价按既有最早时间规则选择对应文书，不能全量投影。"""
 
     _execution, decision, session = await _execute_typed(
-        rule_id="LX0609-047",
+        rule_id="LX0609-07-03-01",
         rows_by_source={
             "mr_bloodtrans": _trigger(),
             "bloodtrans_record": [
@@ -526,7 +526,7 @@ async def test_044_keeps_two_source_coordinates_when_application_and_blood_share
     """相同业务 ID 不等于同一文书：044 必须保留申请与输血两种来源坐标。"""
 
     _execution, decision, session = await _execute_typed(
-        rule_id="LX0609-044",
+        rule_id="LX0609-07-01-02",
         rows_by_source={
             "mr_bloodtrans": _trigger(),
             "blood_application": [
@@ -561,7 +561,7 @@ async def test_045_whitespace_normalized_stale_document_id_is_technical_error(
 
     def stale_selected_id(**kwargs: object):
         facts = original(**kwargs)
-        if kwargs.get("rule_id") != "LX0609-045" or not isinstance(facts, dict):
+        if kwargs.get("rule_id") != "LX0609-07-02-01" or not isinstance(facts, dict):
             return facts
         stale = dict(facts)
         stale["source_document_ids"] = ["BLOOD-045-REAL\\n"]
@@ -573,7 +573,7 @@ async def test_045_whitespace_normalized_stale_document_id_is_technical_error(
         stale_selected_id,
     )
     _execution, decision, _session = await _execute_typed(
-        rule_id="LX0609-045",
+        rule_id="LX0609-07-02-01",
         rows_by_source={
             "mr_bloodtrans": _trigger(),
             "bloodtrans_record": [

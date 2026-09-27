@@ -35,7 +35,7 @@ beforeEach(() => {
   saveFeedbackMock.mockResolvedValue({
     success: true,
     data: {
-      rule_id: 'LX0609-001',
+      rule_id: 'LX0609-01-01-01',
       original_status: 'non_compliant',
       feedback_type: 'correct',
     },
@@ -103,7 +103,7 @@ describe('QcResultFeedbackControl', () => {
     const wrapper = mount(QcResultFeedbackControl, {
       props: {
         feedback: {
-          rule_id: 'LX0609-001',
+          rule_id: 'LX0609-01-01-01',
           original_status: 'non_compliant',
           feedback_type: 'incorrect',
           expected_status: 'not_applicable',
@@ -129,7 +129,7 @@ describe('QcResultFeedbackControl', () => {
 
     await wrapper.setProps({
       feedback: {
-        rule_id: 'LX0609-001',
+        rule_id: 'LX0609-01-01-01',
         original_status: 'non_compliant',
         feedback_type: 'incorrect',
         expected_status: 'data_gap',
@@ -152,7 +152,7 @@ describe('QcResultFeedbackControl', () => {
 
     await wrapper.setProps({
       feedback: {
-        rule_id: 'LX0609-001',
+        rule_id: 'LX0609-01-01-01',
         original_status: 'non_compliant',
         feedback_type: 'note',
         comment: '建议补充核对范围。',
@@ -212,6 +212,27 @@ describe('useQcResultFeedback', () => {
     await flushPromises()
     expect(getFeedbackMock).not.toHaveBeenCalled()
     expect(wrapper.text()).toBe('disabled')
+    wrapper.unmount()
+  })
+
+  it('反馈主链拒绝旧三位泸县编号，不向接口发送另一身份', async () => {
+    useAuthStoreMock.mockReturnValue({
+      user: { id: 'admin-001', email: 'admin@medqc.com', is_demo_account: true },
+    })
+    const host = defineComponent({
+      setup() {
+        return useQcResultFeedback('job-demo', 'rec-demo')
+      },
+      render() {
+        return h('button', { onClick: () => this.save('LX0609-001', { feedback_type: 'correct' }) })
+      },
+    })
+
+    const wrapper = mount(host)
+    await flushPromises()
+    await wrapper.get('button').trigger('click')
+    await flushPromises()
+    expect(saveFeedbackMock).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 })

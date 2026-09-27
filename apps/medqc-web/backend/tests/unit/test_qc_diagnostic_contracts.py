@@ -9,8 +9,8 @@ from app.services.qc_diagnostics.contracts import (
 )
 
 
-def sample_documents(rule_id="LX0609-032"):
-    is_032 = rule_id == "LX0609-032"
+def sample_documents(rule_id="LX0609-04-03-01"):
+    is_032 = rule_id == "LX0609-04-03-01"
     reason = "trigger_absent_complete" if is_032 else "requirement_satisfied"
     return {
         "manifest.json": {
@@ -46,7 +46,7 @@ def sample_documents(rule_id="LX0609-032"):
     }
 
 
-@pytest.mark.parametrize("rule_id", ["LX0609-032", "LX0609-066"])
+@pytest.mark.parametrize("rule_id", ["LX0609-04-03-01", "LX0609-04-05-03"])
 def test_valid_documents_are_returned_without_mutation(rule_id):
     documents = sample_documents(rule_id)
     before = deepcopy(documents)
@@ -58,7 +58,7 @@ def test_valid_documents_are_returned_without_mutation(rule_id):
     ("schema_version", "future-v2"), ("replay_capability", "executor_with_recorded_responses"),
     ("capture_completeness", "complete"), ("redaction_policy_version", "customer-v1"),
     ("package_id", "not-a-uuid"), ("git_commit", "a" * 39),
-    ("rule_ids", ["LX0609-020"]), ("rule_ids", ["LX0609-032", "LX0609-032"]),
+    ("rule_ids", ["LX0609-03-01-01"]), ("rule_ids", ["LX0609-04-03-01", "LX0609-04-03-01"]),
     ("rule_ids", [None]), ("missing_components", []), ("build_id", "https://example.invalid"),
 ])
 def test_unsupported_manifest_is_rejected(field, value):
@@ -83,7 +83,7 @@ def test_invalid_decisions_are_rejected(field, value):
 
 @pytest.mark.parametrize("count", [True, None, -1, 10001, 1.5, "2"])
 def test_count_contract_does_not_coerce_values(count):
-    documents = sample_documents("LX0609-066")
+    documents = sample_documents("LX0609-04-05-03")
     documents["inputs.json"]["rules"][0]["display_facts"]["performed_surgery_count"] = count
     with pytest.raises(DiagnosticPackageError):
         validate_documents(documents)

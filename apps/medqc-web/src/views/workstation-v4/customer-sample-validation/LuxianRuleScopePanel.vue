@@ -40,7 +40,7 @@
         个质控族已选
       </span>
       <span>
-        <strong>{{ selectedRuleIds.length || allRuleIds.length }}</strong>
+        <strong>{{ selectedRuleIds.length || families.flatMap((family) => family.rules).filter((rule) => rule.releaseScope !== 'acceptance_only').length }}</strong>
         个质控点将运行
       </span>
     </div>
@@ -106,7 +106,7 @@
               @change="emit('toggle-rule', rule.ruleId)"
             >
             <span>{{ rule.ruleId }}</span>
-            <em>{{ rule.name }}</em>
+            <em>{{ rule.name }}<small v-if="rule.releaseScope === 'acceptance_only'"> · 待验收</small></em>
           </label>
         </div>
       </div>
@@ -128,6 +128,7 @@ import {
 
 type LuxianRuleOption = {
   ruleId: string
+  releaseScope?: 'default' | 'acceptance_only'
   name: string
   description: string
   requiredDocumentsLabel: string
@@ -177,7 +178,10 @@ function familySelectedCount(family: LuxianRuleFamily): number {
 }
 
 function isFamilySelected(ruleIds: string[]): boolean {
-  return ruleIds.length > 0 && ruleIds.every((ruleId) => selectedRuleSet.value.has(ruleId))
+  const acceptanceOnly = new Set(props.families.flatMap((family) => family.rules)
+    .filter((rule) => rule.releaseScope === 'acceptance_only').map((rule) => rule.ruleId))
+  const defaultIds = ruleIds.filter((id) => !acceptanceOnly.has(id))
+  return defaultIds.length > 0 && defaultIds.every((ruleId) => selectedRuleSet.value.has(ruleId))
 }
 
 function isFamilyExpanded(familyKey: string): boolean {

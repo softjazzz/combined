@@ -1,4 +1,4 @@
-"""LX0609-028 合成 Golden 无持久化烟测。
+"""LX0609-05-01-01 合成 Golden 无持久化烟测。
 
 基于已验证的手术病例证据结构，在内存副本中注入预防抗菌药时间与语义，
 调用当前配置的裁决模型做一次事实抽取，再由 Python 完成来源校验和时长判定。
@@ -34,7 +34,7 @@ from app.services.luxian_0609.native_surgery_gate_execution import (
 from app.services.qc_llm_client import SichuanQCLLMClient
 
 
-RULE_ID = "LX0609-028"
+RULE_ID = "LX0609-05-01-01"
 
 
 @dataclass(frozen=True)
@@ -162,7 +162,7 @@ def main() -> int:
     try:
         report = asyncio.run(_run())
     except Exception:
-        print("LX0609-028 synthetic Golden failed safely", file=sys.stderr)
+        print("LX0609-05-01-01 synthetic Golden failed safely", file=sys.stderr)
         return 1
     print(json.dumps(report, ensure_ascii=False, separators=(",", ":")))
     return 0 if report["passed"] == report["case_count"] and report["privacy_safe"] else 2

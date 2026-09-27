@@ -38,7 +38,7 @@ function response(ruleId = '') {
     ],
     rule_distribution: [
       {
-        rule_id: 'LX0609-001',
+        rule_id: 'LX0609-01-01-01',
         rule_name: '入院记录时限',
         evaluated_count: 5,
         non_compliant_count: 3,
@@ -122,7 +122,7 @@ describe('QcRecordResultAnalysisPanel', () => {
     await flushPromises()
 
     expect(mocks.getLuxianQcResultAnalysis).toHaveBeenLastCalledWith(
-      expect.objectContaining({ ruleId: 'LX0609-001' }),
+      expect.objectContaining({ ruleId: 'LX0609-01-01-01' }),
     )
     await wrapper.find('.qc-result-analysis__open').trigger('click')
     expect(wrapper.emitted('open-result')?.[0]).toEqual([

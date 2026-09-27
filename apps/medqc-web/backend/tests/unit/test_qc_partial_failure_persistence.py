@@ -19,10 +19,13 @@ def storage(monkeypatch):
     service = workspace.CustomQCWorkspaceService()
     metadata = sa.MetaData()
     table = service._batch_job_table.to_metadata(metadata, schema=None)
+    # 终态保存会整体替换该 root 的正式 Canonical，隔离库里也要有真实结果表。
+    envelope_table = service._record_result_envelope_table.to_metadata(metadata, schema=None)
     engine = sa.create_engine("sqlite://")
     metadata.create_all(engine)
     factory = sessionmaker(bind=engine)
     service._batch_job_table = table
+    service._record_result_envelope_table = envelope_table
     monkeypatch.setattr(workspace, "_session", factory)
     with engine.begin() as connection:
         connection.execute(table.insert().values(
@@ -31,7 +34,7 @@ def storage(monkeypatch):
             rule_name="测试", scope="final", total_records=1,
             filters_json=json.dumps({
                 "rule_set_key": "luxian_0609_qc_v1",
-                "rule_ids": ["LX0609-011", "LX0609-012"],
+                "rule_ids": ["LX0609-06-01-04", "LX0609-06-01-05"],
                 "record_refs": [
                     {"institute_id": "test-i", "patient_id": "test-p", "visit_id": "test-v"}
                 ],
@@ -47,16 +50,16 @@ def storage(monkeypatch):
 def _payload():
     identity = {"institute_id": "test-i", "patient_id": "test-p", "visit_id": "test-v"}
     item = {
-        **identity, "rule_id": "LX0609-011", "rule_version": "2026-06-09",
+        **identity, "rule_id": "LX0609-06-01-04", "rule_version": "2026-06-09",
         "schema_version": "lx0609-customer-result-v2",
         "status": "compliant", "result_status": "compliant", "display_status": "compliant",
         "is_compliant": True, "reason_code": "exam_result_recorded", "findings": "已记录检查结果。",
     }
-    failure = {**identity, "rule_id": "LX0609-012", "reason_code": "model_invalid_output", "error_phase": "result_status"}
+    failure = {**identity, "rule_id": "LX0609-06-01-05", "reason_code": "model_invalid_output", "error_phase": "result_status"}
     summary = {
         "total_records": 1, "success_count": 0, "failed_count": 1, "compliant_records": 0,
         "execution_status": "partial_failed", "completed_rule_count": 1, "failed_rule_count": 1,
-        "failed_rule_ids": ["LX0609-012"],
+        "failed_rule_ids": ["LX0609-06-01-05"],
         "automatic_failed_rule_retry": {
             "max_attempts": 3,
             "completed_attempts": 0,
@@ -80,16 +83,16 @@ def test_partial_delivery_selects_only_complete_records_without_failures():
     record_a = {"institute_id": "test-i", "patient_id": "test-pa", "visit_id": "test-va"}
     record_b = {"institute_id": "test-i", "patient_id": "test-pb", "visit_id": "test-vb"}
     items = [
-        {**record_a, "rule_id": "LX0609-011"},
-        {**record_b, "rule_id": "LX0609-011"},
-        {**record_b, "rule_id": "LX0609-012"},
+        {**record_a, "rule_id": "LX0609-06-01-04"},
+        {**record_b, "rule_id": "LX0609-06-01-04"},
+        {**record_b, "rule_id": "LX0609-06-01-05"},
     ]
-    failures = [{**record_a, "rule_id": "LX0609-012"}]
+    failures = [{**record_a, "rule_id": "LX0609-06-01-05"}]
 
     selected_items, selected_refs = select_complete_record_items(
         items=items,
         failures=failures,
-        expected_rule_ids=["LX0609-011", "LX0609-012"],
+        expected_rule_ids=["LX0609-06-01-04", "LX0609-06-01-05"],
     )
 
     assert [item["visit_id"] for item in selected_items] == ["test-vb", "test-vb"]
@@ -102,10 +105,10 @@ def test_partial_delivery_fails_closed_when_failure_identity_is_incomplete():
             "institute_id": "test-i",
             "patient_id": "test-p",
             "visit_id": "test-v",
-            "rule_id": "LX0609-011",
+            "rule_id": "LX0609-06-01-04",
         }],
-        failures=[{"visit_id": "test-v", "rule_id": "LX0609-012"}],
-        expected_rule_ids=["LX0609-011"],
+        failures=[{"visit_id": "test-v", "rule_id": "LX0609-06-01-05"}],
+        expected_rule_ids=["LX0609-06-01-04"],
     )
 
     assert selected_items == ()
@@ -189,7 +192,7 @@ def test_failed_job_persists_valid_items_and_operational_failure(storage, all_fa
     summary, items, failures = _payload()
     if all_failed:
         items = []
-        failures.append({**failures[0], "rule_id": "LX0609-011"})
+        failures.append({**failures[0], "rule_id": "LX0609-06-01-04"})
         summary.update(execution_status="failed", completed_rule_count=0, failed_rule_count=2, failed_count=2)
     service.complete_batch_job(job_id="partial-job", summary=summary, items=items, failed_records=failures)
     with engine.connect() as connection:
@@ -216,7 +219,7 @@ def test_failed_job_persists_valid_items_and_operational_failure(storage, all_fa
         "delay_seconds": 0.0,
     }
     assert len(safe["items"]) == len(items)
-    assert safe["failed_records"][0]["rule_id"] == "LX0609-012"
+    assert safe["failed_records"][0]["rule_id"] == "LX0609-06-01-05"
 
 
 def test_failed_child_keeps_parent_failed_and_other_compliant_case_count(storage):
@@ -260,7 +263,7 @@ def test_partial_job_writes_only_fully_completed_record_envelopes(storage, monke
                 filters_json=json.dumps({
                     "rule_set_key": "luxian_0609_qc_v1",
                     "rule_set_version": "2026-06-09",
-                    "rule_ids": ["LX0609-011", "LX0609-012"],
+                    "rule_ids": ["LX0609-06-01-04", "LX0609-06-01-05"],
                     "record_refs": [record_a, record_b],
                 }),
             )
@@ -281,13 +284,13 @@ def test_partial_job_writes_only_fully_completed_record_envelopes(storage, monke
         }
 
     items = [
-        item(record_a, "LX0609-011"),
-        item(record_b, "LX0609-011"),
-        item(record_b, "LX0609-012"),
+        item(record_a, "LX0609-06-01-04"),
+        item(record_b, "LX0609-06-01-04"),
+        item(record_b, "LX0609-06-01-05"),
     ]
     failures = [{
         **record_a,
-        "rule_id": "LX0609-012",
+        "rule_id": "LX0609-06-01-05",
         "reason_code": "model_invalid_output",
         "error_phase": "result_status",
     }]
@@ -298,7 +301,7 @@ def test_partial_job_writes_only_fully_completed_record_envelopes(storage, monke
         "execution_status": "partial_failed",
         "completed_rule_count": 3,
         "failed_rule_count": 1,
-        "failed_rule_ids": ["LX0609-012"],
+        "failed_rule_ids": ["LX0609-06-01-05"],
     }
     captured = {}
 
@@ -370,7 +373,7 @@ def test_partial_envelope_writer_narrows_record_contract_without_mutating_job(mo
         "id": "partial-job",
         "filters_json": json.dumps({
             "rule_set_key": "luxian_0609_qc_v1",
-            "rule_ids": ["LX0609-011"],
+            "rule_ids": ["LX0609-06-01-04"],
             "record_refs": [record_a, record_b],
         }),
     }
@@ -389,7 +392,7 @@ def test_partial_envelope_writer_narrows_record_contract_without_mutating_job(mo
     service._write_record_result_envelopes(
         object(),
         job_row=job_row,
-        items=[{**record_b, "rule_id": "LX0609-011"}],
+        items=[{**record_b, "rule_id": "LX0609-06-01-04"}],
         now=datetime(2026, 9, 15),
         expected_record_refs=[CaseRef.from_mapping(record_b)],
     )
@@ -423,20 +426,31 @@ def test_retry_partial_failure_preserves_valid_items_and_queues_only_failed_rule
         failed_records=failures,
     )
 
+    with engine.connect() as connection:
+        accepted_filters_json = connection.execute(
+            sa.select(table.c.filters_json).where(table.c.id == "partial-job")
+        ).scalar_one()
+    assert service.retry_batch_job(
+        job_id="partial-job",
+        created_by="tester",
+        automatic=True,
+        expected_attempt_filters_json='{"stale_attempt":true}',
+    ) is None
     retried = service.retry_batch_job(
         job_id="partial-job",
         created_by="tester",
         automatic=True,
+        expected_attempt_filters_json=accepted_filters_json,
     )
 
     assert retried is not None
     assert retried["status"] == "queued"
     assert len(retried["items"]) == 1
-    assert retried["items"][0]["rule_id"] == "LX0609-011"
+    assert retried["items"][0]["rule_id"] == "LX0609-06-01-04"
     assert retried["items"][0]["status"] == "compliant"
-    assert retried["failed_records"][0]["rule_id"] == "LX0609-012"
+    assert retried["failed_records"][0]["rule_id"] == "LX0609-06-01-05"
     retry_scope = retried["filters"]["failed_rule_retry"]
-    assert retry_scope["rule_ids"] == ["LX0609-012"]
+    assert retry_scope["rule_ids"] == ["LX0609-06-01-05"]
     assert retry_scope["record_refs"] == [
         {"institute_id": "test-i", "patient_id": "test-p", "visit_id": "test-v"}
     ]
@@ -449,8 +463,8 @@ def test_retry_partial_failure_preserves_valid_items_and_queues_only_failed_rule
         hmac_key="synthetic-test-key",
     )
     assert len(safe["items"]) == 1
-    assert safe["items"][0]["rule_id"] == "LX0609-011"
-    assert safe["failed_records"][0]["rule_id"] == "LX0609-012"
+    assert safe["items"][0]["rule_id"] == "LX0609-06-01-04"
+    assert safe["failed_records"][0]["rule_id"] == "LX0609-06-01-05"
     with engine.connect() as connection:
         row = dict(connection.execute(sa.select(table)).mappings().one())
     assert json.loads(row["items_json"]) == items
@@ -478,8 +492,346 @@ async def test_retry_route_returns_customer_safe_partial_result(storage, monkeyp
 
     payload = response["data"]
     assert payload["summary"]["execution_status"] == "partial_failed"
-    assert payload["items"][0]["rule_id"] == "LX0609-011"
-    assert payload["failed_records"][0]["rule_id"] == "LX0609-012"
+    assert payload["items"][0]["rule_id"] == "LX0609-06-01-04"
+    assert payload["failed_records"][0]["rule_id"] == "LX0609-06-01-05"
     serialized = json.dumps(payload, ensure_ascii=False)
     assert "test-p" not in serialized
     assert "test-v" not in serialized
+
+
+# --- 原始 0609 叶子根任务：终态保存必须整体替换该 root 的 Canonical ---
+
+_RERUN_RULE_IDS = ("LX0609-06-01-04", "LX0609-06-01-05")
+_RERUN_RECORD_A = {"institute_id": "test-i", "patient_id": "test-pa", "visit_id": "test-va"}
+_RERUN_RECORD_B = {"institute_id": "test-i", "patient_id": "test-pb", "visit_id": "test-vb"}
+
+
+def _canonical_item(identity: dict, rule_id: str) -> dict:
+    return {
+        **identity,
+        "rule_id": rule_id,
+        "rule_version": workspace.RULE_SET_VERSION,
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "compliant",
+        "result_status": "compliant",
+        "display_status": "compliant",
+        "is_compliant": True,
+        "reason_code": "fact_present",
+        "findings": "已完成核对。",
+    }
+
+
+def _rule_failure(identity: dict, rule_id: str) -> dict:
+    return {
+        **identity,
+        "rule_id": rule_id,
+        "reason_code": "model_invalid_output",
+        "error_phase": "result_status",
+        "error": "规则执行未形成可交付结果",
+    }
+
+
+def _partial_summary(*, total_records: int, delivered: int, failed_rules: list[str]) -> dict:
+    return {
+        "total_records": total_records,
+        "success_count": total_records - 1,
+        "failed_count": 1,
+        "execution_status": "partial_failed",
+        "completed_rule_count": delivered,
+        "failed_rule_count": len(failed_rules),
+        "failed_rule_ids": list(failed_rules),
+    }
+
+
+def _completed_summary(*, total_records: int, delivered: int) -> dict:
+    return {
+        "total_records": total_records,
+        "success_count": total_records,
+        "failed_count": 0,
+        "execution_status": "completed",
+        "completed_rule_count": delivered,
+        "failed_rule_count": 0,
+        "failed_rule_ids": [],
+    }
+
+
+def _root_envelope_refs(engine, envelopes, *, root_job_id: str) -> list[tuple[str, int]]:
+    with engine.connect() as connection:
+        return sorted(
+            (row["visit_id"], row["result_count"])
+            for row in connection.execute(
+                sa.select(envelopes.c.visit_id, envelopes.c.result_count).where(
+                    envelopes.c.root_job_id == root_job_id
+                )
+            ).mappings()
+        )
+
+
+def _load_job(engine, jobs, *, job_id: str) -> dict:
+    with engine.connect() as connection:
+        return workspace._row_to_batch_job(
+            dict(
+                connection.execute(sa.select(jobs).where(jobs.c.id == job_id))
+                .mappings()
+                .one()
+            ),
+            include_items=True,
+        )
+
+
+@pytest.fixture
+def canonical_storage(monkeypatch):
+    """叶子根任务的正式 Canonical 写入：任务表与结果表都落在隔离 SQLite。"""
+
+    service = workspace.CustomQCWorkspaceService()
+    metadata = sa.MetaData()
+    jobs = service._batch_job_table.to_metadata(metadata, schema=None)
+    envelopes = service._record_result_envelope_table.to_metadata(metadata, schema=None)
+    engine = sa.create_engine("sqlite://")
+    metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+    service._batch_job_table = jobs
+    service._record_result_envelope_table = envelopes
+    monkeypatch.setattr(workspace, "_session", factory)
+    with engine.begin() as connection:
+        connection.execute(jobs.insert().values(
+            id="rerun-job",
+            draft_id="sichuan-rule-library",
+            created_by="tester",
+            status="queued",
+            rule_code="LX0609",
+            rule_name="重跑验证任务",
+            scope="final",
+            created_at=datetime(2026, 9, 20),
+            updated_at=datetime(2026, 9, 20),
+            total_records=2,
+            record_ids_json=json.dumps(["test-va", "test-vb"]),
+            filters_json=json.dumps({
+                "rule_set_key": workspace.LUXIAN_0609_RULE_SET_KEY,
+                "rule_set_version": workspace.RULE_SET_VERSION,
+                "rule_ids": list(_RERUN_RULE_IDS),
+                "scoped_customer_rule_ids": list(_RERUN_RULE_IDS),
+                "record_refs": [_RERUN_RECORD_A, _RERUN_RECORD_B],
+            }),
+        ))
+    yield service, engine, jobs, envelopes
+    engine.dispose()
+
+
+def _complete_full_run(service) -> str:
+    claim = service.mark_batch_job_running(job_id="rerun-job")
+    assert isinstance(claim, str)
+    assert service.complete_batch_job(
+        job_id="rerun-job",
+        attempt_filters_json=claim,
+        summary=_completed_summary(total_records=2, delivered=4),
+        items=[
+            _canonical_item(_RERUN_RECORD_A, _RERUN_RULE_IDS[0]),
+            _canonical_item(_RERUN_RECORD_A, _RERUN_RULE_IDS[1]),
+            _canonical_item(_RERUN_RECORD_B, _RERUN_RULE_IDS[0]),
+            _canonical_item(_RERUN_RECORD_B, _RERUN_RULE_IDS[1]),
+        ],
+        failed_records=[],
+    ) is True
+    return claim
+
+
+def test_root_leaf_rerun_replaces_published_canonical_envelopes(canonical_storage):
+    service, engine, jobs, envelopes = canonical_storage
+    first_claim = _complete_full_run(service)
+    assert _root_envelope_refs(engine, envelopes, root_job_id="rerun-job") == [
+        ("test-va", 2),
+        ("test-vb", 2),
+    ]
+
+    # 任务列表对 completed 的 0609 任务提供“重试”。
+    assert service.retry_batch_job(job_id="rerun-job", created_by="tester")["status"] == "queued"
+    rerun_claim = service.mark_batch_job_running(job_id="rerun-job")
+    assert isinstance(rerun_claim, str) and rerun_claim != first_claim
+    assert service.complete_batch_job(
+        job_id="rerun-job",
+        attempt_filters_json=rerun_claim,
+        summary=_partial_summary(total_records=2, delivered=2, failed_rules=[_RERUN_RULE_IDS[1]]),
+        items=[
+            _canonical_item(_RERUN_RECORD_A, _RERUN_RULE_IDS[0]),
+            _canonical_item(_RERUN_RECORD_A, _RERUN_RULE_IDS[1]),
+        ],
+        failed_records=[_rule_failure(_RERUN_RECORD_B, _RERUN_RULE_IDS[1])],
+    ) is True
+
+    job = _load_job(engine, jobs, job_id="rerun-job")
+    root_refs = _root_envelope_refs(engine, envelopes, root_job_id="rerun-job")
+    assert root_refs == [("test-va", 2)]
+    assert len(root_refs) == job["success_count"] == 1
+
+    stale = service.build_latest_single_record_result_dto(
+        institute_id=_RERUN_RECORD_B["institute_id"],
+        patient_id=_RERUN_RECORD_B["patient_id"],
+        visit_id=_RERUN_RECORD_B["visit_id"],
+        rule_set_key=workspace.LUXIAN_0609_RULE_SET_KEY,
+        rule_set_version=workspace.RULE_SET_VERSION,
+    )
+    assert stale["state"] == "not_found"
+    assert stale["items"] == []
+
+    export_items = service._load_batch_job_export_items(job=job)
+    # 导出只包含本次实际交付的病历结果（客户投影不保留原三坐标字段）。
+    assert len(export_items) == 2
+    assert {item["display_status"] for item in export_items} == {"compliant"}
+
+
+def test_root_leaf_failed_attempt_without_delivery_removes_previous_results(canonical_storage):
+    service, engine, jobs, envelopes = canonical_storage
+    _complete_full_run(service)
+
+    assert service.retry_batch_job(job_id="rerun-job", created_by="tester")["status"] == "queued"
+    rerun_claim = service.mark_batch_job_running(job_id="rerun-job")
+    assert service.complete_batch_job(
+        job_id="rerun-job",
+        attempt_filters_json=rerun_claim,
+        summary={
+            "total_records": 2,
+            "success_count": 0,
+            "failed_count": 2,
+            "execution_status": "failed",
+            "completed_rule_count": 0,
+            "failed_rule_count": 4,
+            "failed_rule_ids": list(_RERUN_RULE_IDS),
+        },
+        items=[],
+        failed_records=[
+            _rule_failure(record, rule_id)
+            for record in (_RERUN_RECORD_A, _RERUN_RECORD_B)
+            for rule_id in _RERUN_RULE_IDS
+        ],
+    ) is True
+
+    assert _root_envelope_refs(engine, envelopes, root_job_id="rerun-job") == []
+    for record in (_RERUN_RECORD_A, _RERUN_RECORD_B):
+        latest = service.build_latest_single_record_result_dto(
+            institute_id=record["institute_id"],
+            patient_id=record["patient_id"],
+            visit_id=record["visit_id"],
+            rule_set_key=workspace.LUXIAN_0609_RULE_SET_KEY,
+            rule_set_version=workspace.RULE_SET_VERSION,
+        )
+        assert latest["state"] == "not_found"
+    job = _load_job(engine, jobs, job_id="rerun-job")
+    with pytest.raises(ValueError, match="尚未形成可导出"):
+        service._load_batch_job_export_items(job=job)
+
+
+def test_late_root_leaf_attempt_failure_does_not_delete_published_canonical(canonical_storage):
+    service, engine, jobs, envelopes = canonical_storage
+    first_claim = _complete_full_run(service)
+
+    assert service.retry_batch_job(job_id="rerun-job", created_by="tester")["status"] == "queued"
+    assert isinstance(service.mark_batch_job_running(job_id="rerun-job"), str)
+    # 旧代次迟到完成：CAS 未命中，既不能覆盖任务也不能删除当前 root 结果。
+    assert service.complete_batch_job(
+        job_id="rerun-job",
+        attempt_filters_json=first_claim,
+        summary=_completed_summary(total_records=2, delivered=4),
+        items=[
+            _canonical_item(_RERUN_RECORD_A, _RERUN_RULE_IDS[0]),
+            _canonical_item(_RERUN_RECORD_A, _RERUN_RULE_IDS[1]),
+            _canonical_item(_RERUN_RECORD_B, _RERUN_RULE_IDS[0]),
+            _canonical_item(_RERUN_RECORD_B, _RERUN_RULE_IDS[1]),
+        ],
+        failed_records=[],
+    ) is False
+
+    assert _root_envelope_refs(engine, envelopes, root_job_id="rerun-job") == [
+        ("test-va", 2),
+        ("test-vb", 2),
+    ]
+    assert _load_job(engine, jobs, job_id="rerun-job")["status"] == "running"
+
+
+def test_precise_failed_rule_retry_keeps_other_records_in_canonical(canonical_storage):
+    service, engine, jobs, envelopes = canonical_storage
+    first_claim = service.mark_batch_job_running(job_id="rerun-job")
+    assert service.complete_batch_job(
+        job_id="rerun-job",
+        attempt_filters_json=first_claim,
+        summary=_partial_summary(total_records=2, delivered=2, failed_rules=[_RERUN_RULE_IDS[1]]),
+        items=[
+            _canonical_item(_RERUN_RECORD_A, _RERUN_RULE_IDS[0]),
+            _canonical_item(_RERUN_RECORD_A, _RERUN_RULE_IDS[1]),
+        ],
+        failed_records=[_rule_failure(_RERUN_RECORD_B, _RERUN_RULE_IDS[1])],
+    ) is True
+    assert _root_envelope_refs(engine, envelopes, root_job_id="rerun-job") == [("test-va", 2)]
+
+    retried = service.retry_batch_job(job_id="rerun-job", created_by="tester")
+    assert retried["status"] == "queued"
+    retry_scope = retried["filters"]["failed_rule_retry"]
+    assert retry_scope["rule_ids"] == [_RERUN_RULE_IDS[1]]
+    assert retry_scope["record_refs"] == [_RERUN_RECORD_B]
+    assert [item["visit_id"] for item in retried["items"]] == ["test-va", "test-va"]
+
+    rerun_claim = service.mark_batch_job_running(job_id="rerun-job")
+    assert service.complete_batch_job(
+        job_id="rerun-job",
+        attempt_filters_json=rerun_claim,
+        summary=_completed_summary(total_records=2, delivered=4),
+        items=[
+            _canonical_item(_RERUN_RECORD_A, _RERUN_RULE_IDS[0]),
+            _canonical_item(_RERUN_RECORD_A, _RERUN_RULE_IDS[1]),
+            _canonical_item(_RERUN_RECORD_B, _RERUN_RULE_IDS[0]),
+            _canonical_item(_RERUN_RECORD_B, _RERUN_RULE_IDS[1]),
+        ],
+        failed_records=[],
+    ) is True
+
+    assert _root_envelope_refs(engine, envelopes, root_job_id="rerun-job") == [
+        ("test-va", 2),
+        ("test-vb", 2),
+    ]
+    job = _load_job(engine, jobs, job_id="rerun-job")
+    assert job["success_count"] == 2
+    assert len(service._load_batch_job_export_items(job=job)) == 4
+
+
+def test_child_leaf_completion_does_not_delete_root_published_canonical(canonical_storage):
+    service, engine, jobs, envelopes = canonical_storage
+    # 只声明子任务归属，不建父任务行：隔离子任务自身的 Envelope 写入语义，
+    # 父任务 root 的整体替换由 refresh_parent_batch_job 负责。
+    with engine.begin() as connection:
+        connection.execute(
+            jobs.update().where(jobs.c.id == "rerun-job").values(parent_job_id="parent-job")
+        )
+        # 同一 root 下已由其它子任务交付的第三份病历。
+        connection.execute(envelopes.insert().values(
+            id="existing-envelope",
+            job_id="other-child-job",
+            root_job_id="parent-job",
+            created_by="tester",
+            record_id="test-vc",
+            institute_id="test-i",
+            patient_id="test-pc",
+            visit_id="test-vc",
+            rule_set_key=workspace.LUXIAN_0609_RULE_SET_KEY,
+            rule_set_version=workspace.RULE_SET_VERSION,
+            envelope_json=json.dumps({"items": []}),
+            result_count=0,
+            created_at=datetime(2026, 9, 20),
+            updated_at=datetime(2026, 9, 20),
+        ))
+
+    claim = service.mark_batch_job_running(job_id="rerun-job")
+    assert service.complete_batch_job(
+        job_id="rerun-job",
+        attempt_filters_json=claim,
+        summary=_partial_summary(total_records=2, delivered=2, failed_rules=[_RERUN_RULE_IDS[1]]),
+        items=[
+            _canonical_item(_RERUN_RECORD_A, _RERUN_RULE_IDS[0]),
+            _canonical_item(_RERUN_RECORD_A, _RERUN_RULE_IDS[1]),
+        ],
+        failed_records=[_rule_failure(_RERUN_RECORD_B, _RERUN_RULE_IDS[1])],
+    ) is True
+
+    assert _root_envelope_refs(engine, envelopes, root_job_id="parent-job") == [
+        ("test-va", 2),
+        ("test-vc", 0),
+    ]

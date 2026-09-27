@@ -1,12 +1,12 @@
 {
-  "schema_version": "lx0609-rule-master-v1",
-  "master_version": "2026-09-05-r3",
-  "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+  "schema_version": "lx0609-rule-master-v2",
+  "master_version": "2026-09-22-identity-v1",
+  "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
   "rule_set_key": "luxian_0609_qc_v1",
   "description": "泸县0609客户质控点唯一业务总表。active 表示规则已纳入客户工作台；是否参与当前正式结论由同版本 phase_scope 唯一决定。",
   "rules": [
     {
-      "rule_id": "LX0609-001",
+      "rule_id": "LX0609-01-01-01",
       "source_document": "入院记录",
       "qc_point": "入院后24小时内是否完成",
       "implementation_status": "active",
@@ -14,7 +14,7 @@
       "policy_summary": "当前按客户已确认的《入院记录》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-002",
+      "rule_id": "LX0609-01-02-01",
       "source_document": "首次病程",
       "qc_point": "入院后8小时内无首次病程记录",
       "implementation_status": "active",
@@ -22,7 +22,7 @@
       "policy_summary": "当前按客户已确认的《首次病程》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-003",
+      "rule_id": "LX0609-04-02-01",
       "source_document": "手术记录",
       "qc_point": "手术后24小时内是否完成",
       "implementation_status": "active",
@@ -30,7 +30,7 @@
       "policy_summary": "当前按客户已确认的《手术记录》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-004",
+      "rule_id": "LX0609-09-01-01",
       "source_document": "抢救记录",
       "qc_point": "抢救结束后6小时内是否完成",
       "implementation_status": "active",
@@ -38,7 +38,7 @@
       "policy_summary": "当前按客户已确认的《抢救记录》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-005",
+      "rule_id": "LX0609-02-01-01",
       "source_document": "上级医生查房记录",
       "qc_point": "入院后48小时内无主治医师首次查房记录",
       "implementation_status": "active",
@@ -46,7 +46,7 @@
       "policy_summary": "当前按客户已确认的《上级医生查房记录》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-006",
+      "rule_id": "LX0609-02-01-02",
       "source_document": "上级医生查房记录",
       "qc_point": "入院后72小时内无最高级别（副主任医师或主任医师）首次查房记录",
       "implementation_status": "active",
@@ -54,7 +54,7 @@
       "policy_summary": "当前按客户已确认的《上级医生查房记录》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-007",
+      "rule_id": "LX0609-02-01-03",
       "source_document": "查房记录",
       "qc_point": "病情稳定（未下病危、病重医嘱）患者3天内无查房病程记录",
       "implementation_status": "active",
@@ -62,7 +62,7 @@
       "policy_summary": "当前按客户已确认的《查房记录》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-008",
+      "rule_id": "LX0609-02-01-04",
       "source_document": "查房记录",
       "qc_point": "病重（下了病重医嘱）患者2天内无查房病程记录",
       "implementation_status": "active",
@@ -70,7 +70,7 @@
       "policy_summary": "当前按客户已确认的《查房记录》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-009",
+      "rule_id": "LX0609-02-01-05",
       "source_document": "查房记录",
       "qc_point": "病危（下了病危医嘱）患者未每天记录查房病程，或病情变化时未记录病程",
       "implementation_status": "active",
@@ -78,7 +78,7 @@
       "policy_summary": "病危期间每日记录病程；症状、体征或生命体征、精神或脏器功能、检验检查、并发症及特殊状态发生动态改变时，应在变化事件后24小时内形成对应病程记录。"
     },
     {
-      "rule_id": "LX0609-010",
+      "rule_id": "LX0609-06-01-02",
       "source_document": "CT/MRI检查记录",
       "qc_point": "CT/MRI检查前无说明检查原因的病程记录",
       "implementation_status": "active",
@@ -86,7 +86,7 @@
       "policy_summary": "每次CT/MRI检查按医嘱order_id关联检查主记录，再按exam_id关联报告；检查前病程须说明本次检查原因。关联不唯一或资料不完整时返回数据不足，不按相邻时间强行串联。"
     },
     {
-      "rule_id": "LX0609-011",
+      "rule_id": "LX0609-06-01-04",
       "source_document": "CT/MRI检查记录",
       "qc_point": "CT/MRI影像报告结果出具后24小时内未在病程中记录",
       "implementation_status": "active",
@@ -94,7 +94,7 @@
       "policy_summary": "本院保留影像报告出具后24小时内在病程记录结果的时限；省手册用于检查记录要点参考，不将24小时归因于省手册。"
     },
     {
-      "rule_id": "LX0609-012",
+      "rule_id": "LX0609-06-01-05",
       "source_document": "CT/MRI检查记录",
       "qc_point": "CT/MRI影像报告结果出具后24小时内未对阳性结果进行分析",
       "implementation_status": "active",
@@ -102,7 +102,7 @@
       "policy_summary": "本院保留影像报告出具后24小时内分析阳性结果的时限；CT/MRI报告检出任一明确异常病灶或异常征象即视为阳性，包括炎症、结节、退变和陈旧灶等，不要求原文出现“阳性”，也不等同于癌症或确诊某病；报告整体明确未检出异常征象时为阴性，仅有待排或不除外等不确定描述时保持待判断。省手册不定义该24小时。"
     },
     {
-      "rule_id": "LX0609-013",
+      "rule_id": "LX0609-06-02-03",
       "source_document": "病理检查",
       "qc_point": "病理检查结果在手术记录、病程中未记录",
       "implementation_status": "active",
@@ -110,7 +110,7 @@
       "policy_summary": "当前按客户已确认的《病理检查》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-014",
+      "rule_id": "LX0609-06-03-03",
       "source_document": "细菌培养记录",
       "qc_point": "细菌培养结果在报告出具后24小时内未在病程中记录",
       "implementation_status": "active",
@@ -118,7 +118,7 @@
       "policy_summary": "本院保留培养报告出具后24小时内在病程记录结果的时限；省手册用于培养结果记录要点参考，不将24小时归因于省手册。"
     },
     {
-      "rule_id": "LX0609-015",
+      "rule_id": "LX0609-06-03-04",
       "source_document": "细菌培养结果无分析",
       "qc_point": "细菌培养结果有阳性菌，报告出具后24小时内未在病程记录中分析",
       "implementation_status": "active",
@@ -126,7 +126,7 @@
       "policy_summary": "本院保留阳性培养报告出具后24小时内在病程分析的时限；省手册用于培养结果分析要点参考，不将24小时归因于省手册。"
     },
     {
-      "rule_id": "LX0609-016",
+      "rule_id": "LX0609-12-01-01",
       "source_document": "不合理复制病历",
       "qc_point": "首次病程记录病例特点与入院记录、现病史完全相同",
       "implementation_status": "active",
@@ -134,7 +134,7 @@
       "policy_summary": "当前按客户已确认的《不合理复制病历》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-017",
+      "rule_id": "LX0609-12-01-02",
       "source_document": "不合理复制病历",
       "qc_point": "2次以上病程记录完全相同（相似度大于70%）",
       "implementation_status": "active",
@@ -142,7 +142,7 @@
       "policy_summary": "对同次住院病程先做归一化与快速相似度筛选，再精确比较候选组合；相似度≥70%时进入问题候选，最终展示最高的3至5组可定位证据；模板与实质内容难以区分时仅对候选统一调用一次LLM复核。"
     },
     {
-      "rule_id": "LX0609-018",
+      "rule_id": "LX0609-01-01-02",
       "source_document": "入院记录",
       "qc_point": "主诉只写症状不写诊断、超过20字，或不能导出第一诊断",
       "implementation_status": "active",
@@ -151,7 +151,7 @@
       "policy_summary": "主诉≤20字为硬性不合规判定条件，并须能导出第一诊断；本任务不改变现有行为。"
     },
     {
-      "rule_id": "LX0609-019",
+      "rule_id": "LX0609-06-02-02",
       "source_document": "病理检查",
       "qc_point": "取材情况未在病程记录或手术记录中记录",
       "implementation_status": "active",
@@ -159,7 +159,7 @@
       "policy_summary": "当前按客户已确认的《病理检查》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-020",
+      "rule_id": "LX0609-03-01-01",
       "source_document": "会诊记录",
       "qc_point": "有会诊记录单无请会诊执行记录",
       "implementation_status": "active",
@@ -167,10 +167,10 @@
       "pending_reason_code": "consultation_source_document_unavailable_customer_scope",
       "policy_sources": ["sichuan_2023_standard", "customer_confirmed"],
       "policy_summary": "核对会诊意见及执行情况需以会诊记录单为对照；客户确认系统内会诊文书实为请会诊执行记录，无独立会诊记录单来源，本质控点暂不执行，不得因该来源缺失生成数据不足或不合规结论。",
-      "pending_definition_note": "待院方提供可核查的会诊记录单来源并完成口径验收后再启用；会诊执行记录自身规范性由 LX0609-023 单独核对。"
+      "pending_definition_note": "待院方提供可核查的会诊记录单来源并完成口径验收后再启用；会诊执行记录自身规范性由 LX0609-03-01-04 单独核对。"
     },
     {
-      "rule_id": "LX0609-021",
+      "rule_id": "LX0609-03-01-02",
       "source_document": "会诊记录",
       "qc_point": "会诊申请单会诊目的不明确",
       "implementation_status": "active",
@@ -181,7 +181,7 @@
       "pending_definition_note": "待院方提供会诊申请单数据源并完成口径验收后再启用。"
     },
     {
-      "rule_id": "LX0609-022",
+      "rule_id": "LX0609-03-01-03",
       "source_document": "会诊记录",
       "qc_point": "会诊记录单会诊意见不明确（如出现必要时行检查或药物治疗）",
       "implementation_status": "active",
@@ -192,7 +192,7 @@
       "pending_definition_note": "待院方提供会诊记录单来源并完成口径验收后再启用。"
     },
     {
-      "rule_id": "LX0609-023",
+      "rule_id": "LX0609-03-01-04",
       "source_document": "会诊记录",
       "qc_point": "会诊建议未找到执行证据，或执行记录未明确具体执行情况",
       "implementation_status": "active",
@@ -200,7 +200,7 @@
       "policy_summary": "会诊建议按会诊执行记录正文语义提取，再逐条与后续医嘱、病程等执行证据比对；任一建议完全未找到执行证据，或执行记录仅作笼统表述、未明确具体措施时判不规范。因缺少上游会诊申请/原始意见，不判断是否照抄。"
     },
     {
-      "rule_id": "LX0609-024",
+      "rule_id": "LX0609-04-02-03",
       "source_document": "手术记录",
       "qc_point": "恶性肿瘤手术记录未书写淋巴结清扫情况",
       "implementation_status": "active",
@@ -208,7 +208,7 @@
       "policy_summary": "当前按客户已确认的《手术记录》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-025",
+      "rule_id": "LX0609-04-02-04",
       "source_document": "手术记录",
       "qc_point": "未记录植入物名称、种类、规格或型号、材质及数量等信息",
       "implementation_status": "active",
@@ -219,7 +219,7 @@
       "pending_definition_note": "五字段口径已冻结；仍需完成多台手术、文书缺失及字段冲突的真实病例金标验收。"
     },
     {
-      "rule_id": "LX0609-026",
+      "rule_id": "LX0609-05-02-01",
       "source_document": "恶性肿瘤化学治疗记录",
       "qc_point": "病程中化学治疗记录的药物名称、剂量、使用方法、时间与医嘱不一致",
       "implementation_status": "active",
@@ -227,7 +227,7 @@
       "policy_summary": "当前按客户已确认的《恶性肿瘤化学治疗记录》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-027",
+      "rule_id": "LX0609-08-01-04",
       "source_document": "出院记录",
       "qc_point": "恶性肿瘤患者出院记录中无出院后肿瘤相关治疗计划",
       "implementation_status": "active",
@@ -235,7 +235,7 @@
       "policy_summary": "当前按客户已确认的《出院记录》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-028",
+      "rule_id": "LX0609-05-01-01",
       "source_document": "抗菌药物使用记录",
       "qc_point": "I类、II类切口手术预防使用抗菌药物超过24小时，特殊情况超过48小时",
       "implementation_status": "active",
@@ -245,7 +245,7 @@
       "policy_summary": "当前按客户已确认的《抗菌药物使用记录》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-029",
+      "rule_id": "LX0609-04-01-01",
       "source_document": "术前小结",
       "qc_point": "有手术医嘱但无术前小结",
       "implementation_status": "active",
@@ -253,7 +253,7 @@
       "policy_summary": "当前按客户已确认的《术前小结》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-030",
+      "rule_id": "LX0609-04-02-02",
       "source_document": "手术记录",
       "qc_point": "有手术医嘱但无手术记录",
       "implementation_status": "active",
@@ -261,7 +261,7 @@
       "policy_summary": "当前按客户已确认的《手术记录》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-031",
+      "rule_id": "LX0609-04-02-05",
       "source_document": "手术记录",
       "qc_point": "手术记录非手术者签字（核对术者及签名医生）",
       "implementation_status": "active",
@@ -269,7 +269,7 @@
       "policy_summary": "当前按客户已确认的《手术记录》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-032",
+      "rule_id": "LX0609-04-03-01",
       "source_document": "手术安全核查表",
       "qc_point": "有手术记录但无手术安全核查表",
       "implementation_status": "active",
@@ -277,7 +277,7 @@
       "policy_summary": "当前按客户已确认的《手术安全核查表》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-033",
+      "rule_id": "LX0609-11-01-01",
       "source_document": "手术知情同意书",
       "qc_point": "有手术记录但无手术知情同意书",
       "implementation_status": "active",
@@ -285,7 +285,7 @@
       "policy_summary": "当前按客户已确认的《手术知情同意书》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-034",
+      "rule_id": "LX0609-11-02-01",
       "source_document": "麻醉知情同意书",
       "qc_point": "有麻醉记录但无麻醉知情同意书",
       "implementation_status": "active",
@@ -293,7 +293,7 @@
       "policy_summary": "当前按客户已确认的《麻醉知情同意书》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-035",
+      "rule_id": "LX0609-11-02-02",
       "source_document": "麻醉知情同意书",
       "qc_point": "填写不规范（无患者或医生签名、签名时间未精确到分钟）",
       "implementation_status": "active",
@@ -301,7 +301,7 @@
       "policy_summary": "当前按客户已确认的《麻醉知情同意书》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-036",
+      "rule_id": "LX0609-04-04-01",
       "source_document": "麻醉访视",
       "qc_point": "无麻醉术前或麻醉术后访视记录（局麻除外）",
       "implementation_status": "active",
@@ -311,7 +311,7 @@
       "pending_reason_code": "anesthesia_visit_sources_unavailable_customer_scope"
     },
     {
-      "rule_id": "LX0609-037",
+      "rule_id": "LX0609-04-04-02",
       "source_document": "麻醉访视",
       "qc_point": "麻醉术前和术后访视记录填写不规范（局麻除外）",
       "implementation_status": "active",
@@ -319,7 +319,7 @@
       "policy_summary": "当前按客户已确认的《麻醉访视》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-038",
+      "rule_id": "LX0609-04-04-03",
       "source_document": "麻醉记录单",
       "qc_point": "无麻醉记录单（局麻除外）",
       "implementation_status": "active",
@@ -327,7 +327,7 @@
       "policy_summary": "当前按客户已确认的《麻醉记录单》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-039",
+      "rule_id": "LX0609-04-01-02",
       "source_document": "术前讨论记录",
       "qc_point": "除紧急抢救生命的急诊手术外，住院患者手术无术前讨论或术者未参加",
       "implementation_status": "active",
@@ -335,7 +335,7 @@
       "policy_summary": "当前按客户已确认的《术前讨论记录》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-040",
+      "rule_id": "LX0609-04-01-03",
       "source_document": "术前多学科讨论记录",
       "qc_point": "四级手术术前讨论未开展多学科讨论",
       "implementation_status": "active",
@@ -343,7 +343,7 @@
       "policy_summary": "四级手术按院内手术目录判定，院内绩效优先国家目录，“条件四级”按四级处理。"
     },
     {
-      "rule_id": "LX0609-041",
+      "rule_id": "LX0609-11-03-01",
       "source_document": "输血知情同意书",
       "qc_point": "无输血知情同意书",
       "implementation_status": "active",
@@ -351,7 +351,7 @@
       "policy_summary": "当前按客户已确认的《输血知情同意书》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-042",
+      "rule_id": "LX0609-11-03-02",
       "source_document": "输血知情同意书",
       "qc_point": "输血知情同意书填写或签名不完整",
       "implementation_status": "active",
@@ -359,7 +359,7 @@
       "policy_summary": "当前按客户已确认的《输血知情同意书》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-043",
+      "rule_id": "LX0609-07-01-01",
       "source_document": "输血前辅助检查",
       "qc_point": "输血前常规检查不完整",
       "implementation_status": "active",
@@ -367,7 +367,7 @@
       "policy_summary": "当前按客户已确认的《输血前辅助检查》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-044",
+      "rule_id": "LX0609-07-01-02",
       "source_document": "输血前评估",
       "qc_point": "无输血前评估记录或记录不完整",
       "implementation_status": "active",
@@ -375,7 +375,7 @@
       "policy_summary": "已实施输血时，输血申请单在实际输血前记录申请理由及至少一项客观评估指标，即认定完成输血前评估，不强制另写病程；缺任一项为不完整，申请晚于输血为时间冲突，关键时间不可读为资料不足。"
     },
     {
-      "rule_id": "LX0609-045",
+      "rule_id": "LX0609-07-02-01",
       "source_document": "输血记录",
       "qc_point": "无输血病程记录",
       "implementation_status": "active",
@@ -383,7 +383,7 @@
       "policy_summary": "输血前评估、输血病程、输血后评价细分规则保持独立；汇总仅提示三项未同时齐备，不改单条状态。"
     },
     {
-      "rule_id": "LX0609-046",
+      "rule_id": "LX0609-07-02-02",
       "source_document": "输血记录",
       "qc_point": "输血病程记录不完整或不规范",
       "implementation_status": "active",
@@ -391,7 +391,7 @@
       "policy_summary": "输血前评估、输血病程、输血后评价细分规则保持独立；汇总仅提示三项未同时齐备，不改单条状态。"
     },
     {
-      "rule_id": "LX0609-047",
+      "rule_id": "LX0609-07-03-01",
       "source_document": "输血后评价",
       "qc_point": "无输血后评价",
       "implementation_status": "active",
@@ -399,7 +399,7 @@
       "policy_summary": "输血前评估、输血病程、输血后评价细分规则保持独立；汇总仅提示三项未同时齐备，不改单条状态。"
     },
     {
-      "rule_id": "LX0609-048",
+      "rule_id": "LX0609-07-04-01",
       "source_document": "输血记录",
       "qc_point": "有术中输血，但手术记录、麻醉记录、术后首次病程记录中输血相关内容不一致",
       "implementation_status": "active",
@@ -407,7 +407,7 @@
       "policy_summary": "当前按客户已确认的《输血记录》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-049",
+      "rule_id": "LX0609-07-04-02",
       "source_document": "输血医嘱",
       "qc_point": "输血医嘱与收费不一致",
       "implementation_status": "active",
@@ -417,7 +417,7 @@
       "policy_summary": "当前没有可用收费数据，本质控点暂不执行；不得因收费资料缺失生成数据不足或不合规结论。"
     },
     {
-      "rule_id": "LX0609-050",
+      "rule_id": "LX0609-03-02-01",
       "source_document": "疑难病历讨论记录",
       "qc_point": "诊断不明确（入院后7天）未书写疑难病历讨论",
       "implementation_status": "active",
@@ -425,7 +425,7 @@
       "policy_summary": "当前按客户已确认的《疑难病历讨论记录》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-051",
+      "rule_id": "LX0609-09-02-01",
       "source_document": "死亡病历讨论记录",
       "qc_point": "患者死亡后7天未书写死亡病历讨论记录",
       "implementation_status": "active",
@@ -433,7 +433,7 @@
       "policy_summary": "当前按客户已确认的《死亡病历讨论记录》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-052",
+      "rule_id": "LX0609-06-04-01",
       "source_document": "危急值记录",
       "qc_point": "6小时内未书写危急值处置记录",
       "implementation_status": "active",
@@ -441,7 +441,7 @@
       "policy_summary": "当前按客户已确认的《危急值记录》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-053",
+      "rule_id": "LX0609-06-04-02",
       "source_document": "危急值记录",
       "qc_point": "检验检查危急值报告后无危急值处置记录",
       "implementation_status": "active",
@@ -449,7 +449,7 @@
       "policy_summary": "当前按客户已确认的《危急值记录》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-054",
+      "rule_id": "LX0609-05-01-02",
       "source_document": "抗菌药物使用记录",
       "qc_point": "使用、停用、更换、联合或超说明书范围使用时，无用药理由或理由不充分",
       "implementation_status": "active",
@@ -457,7 +457,7 @@
       "policy_summary": "当前按客户已确认的《抗菌药物使用记录》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-055",
+      "rule_id": "LX0609-05-01-03",
       "source_document": "抗菌药物使用记录",
       "qc_point": "48至72小时内无效果评价",
       "implementation_status": "active",
@@ -465,7 +465,7 @@
       "policy_summary": "当前按客户已确认的《抗菌药物使用记录》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-056",
+      "rule_id": "LX0609-05-01-04",
       "source_document": "抗菌药物使用记录",
       "qc_point": "接受两个或两个以上重点抗菌药物，使用前未完善病原学检查",
       "implementation_status": "active",
@@ -475,7 +475,7 @@
       "policy_summary": "重点抗菌药物目录尚未冻结，本质控点暂不执行；不得因目录或病原学资料缺失生成数据不足或不合规结论。"
     },
     {
-      "rule_id": "LX0609-057",
+      "rule_id": "LX0609-05-01-05",
       "source_document": "抗菌药物使用记录",
       "qc_point": "经验用药时未说明理由，无样可采时未注明原因",
       "implementation_status": "active",
@@ -483,7 +483,7 @@
       "policy_summary": "当前按客户已确认的《抗菌药物使用记录》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-058",
+      "rule_id": "LX0609-05-01-06",
       "source_document": "抗菌药物使用记录",
       "qc_point": "使用特殊级抗菌药物缺少专家查房或会诊记录",
       "implementation_status": "active",
@@ -491,7 +491,7 @@
       "policy_summary": "当前按客户已确认的《抗菌药物使用记录》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-059",
+      "rule_id": "LX0609-05-03-01",
       "source_document": "医嘱",
       "qc_point": "缺诊疗医嘱，或诊疗医嘱与病程记录不一致",
       "implementation_status": "active",
@@ -502,7 +502,7 @@
       "pending_definition_note": "需完成多事件、多业务键冲突、医嘱动作与病程语义关联的真实病例金标验收。"
     },
     {
-      "rule_id": "LX0609-060",
+      "rule_id": "LX0609-04-02-06",
       "source_document": "死亡记录",
       "qc_point": "死亡患者无死亡记录",
       "implementation_status": "active",
@@ -510,7 +510,7 @@
       "policy_summary": "当前按客户已确认的《死亡记录》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-061",
+      "rule_id": "LX0609-08-01-01",
       "source_document": "出院记录",
       "qc_point": "出院记录未在出院后24小时内完成",
       "implementation_status": "active",
@@ -518,7 +518,7 @@
       "policy_summary": "当前按客户已确认的《出院记录》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-062",
+      "rule_id": "LX0609-08-01-02",
       "source_document": "出院记录",
       "qc_point": "出院带药不详细（无药品名称、剂量、途径、时间，或药名、剂量错误）",
       "implementation_status": "active",
@@ -526,7 +526,7 @@
       "policy_summary": "当前按客户已确认的《出院记录》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-063",
+      "rule_id": "LX0609-08-01-03",
       "source_document": "出院记录",
       "qc_point": "出院诊断或死亡诊断错填、漏填、顺序错误",
       "implementation_status": "active",
@@ -534,7 +534,7 @@
       "policy_summary": "当前按客户已确认的《出院记录》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-064",
+      "rule_id": "LX0609-04-05-01",
       "source_document": "术后连续三天查房记录",
       "qc_point": "术后三天无连续病程记录（包含术后术者查房记录）",
       "implementation_status": "active",
@@ -542,7 +542,7 @@
       "policy_summary": "当前按客户已确认的《术后连续三天查房记录》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-065",
+      "rule_id": "LX0609-04-05-02",
       "source_document": "术后三天内上级医师查房记录",
       "qc_point": "无术后三天内上级医师查看病人记录",
       "implementation_status": "active",
@@ -550,7 +550,7 @@
       "policy_summary": "当前按客户已确认的《术后三天内上级医师查房记录》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-066",
+      "rule_id": "LX0609-04-05-03",
       "source_document": "术后首次病程记录",
       "qc_point": "无术后首次病程记录",
       "implementation_status": "active",
@@ -558,7 +558,7 @@
       "policy_summary": "当前按客户已确认的《术后首次病程记录》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-067",
+      "rule_id": "LX0609-08-02-01",
       "source_document": "出院前病程记录",
       "qc_point": "无出院前一天或当天的病程记录",
       "implementation_status": "active",
@@ -566,7 +566,7 @@
       "policy_summary": "当前按客户已确认的《出院前病程记录》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-068",
+      "rule_id": "LX0609-08-02-02",
       "source_document": "出院前病程记录",
       "qc_point": "无上级医师同意出院的意见",
       "implementation_status": "active",
@@ -574,7 +574,7 @@
       "policy_summary": "当前按客户已确认的《出院前病程记录》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-069",
+      "rule_id": "LX0609-04-02-07",
       "source_document": "会诊记录",
       "qc_point": "会诊记录单未在会诊申请发出后24小时内完成",
       "implementation_status": "active",
@@ -582,7 +582,7 @@
       "policy_summary": "当前按客户已确认的《会诊记录》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-070",
+      "rule_id": "LX0609-07-01-03",
       "source_document": "输血前评估",
       "qc_point": "未做输血前相关九项检查",
       "implementation_status": "active",
@@ -591,7 +591,7 @@
       "pending_definition_note": "急诊补检规则尚未由客户确认，需补充受控口径后接入。"
     },
     {
-      "rule_id": "LX0609-071",
+      "rule_id": "LX0609-10-01-01",
       "source_document": "交接班记录",
       "qc_point": "经治医师变更时无交接班记录，或交班前、接班后24小时内未按时完成",
       "implementation_status": "active",
@@ -599,7 +599,7 @@
       "policy_summary": "当前按客户已确认的《交接班记录》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-072",
+      "rule_id": "LX0609-10-02-01",
       "source_document": "转科记录",
       "qc_point": "转科病人24小时内未完成转入、转出记录",
       "implementation_status": "active",
@@ -607,7 +607,7 @@
       "policy_summary": "当前按客户已确认的《转科记录》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-073",
+      "rule_id": "LX0609-10-02-02",
       "source_document": "转科记录",
       "qc_point": "有转科医嘱但无转入、转出记录",
       "implementation_status": "active",
@@ -615,7 +615,7 @@
       "policy_summary": "当前按客户已确认的《转科记录》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-074",
+      "rule_id": "LX0609-12-02-01",
       "source_document": "病程记录",
       "qc_point": "修正或补充诊断时，未记录修改或补充理由及诊断依据",
       "implementation_status": "active",
@@ -623,7 +623,7 @@
       "policy_summary": "当前按客户已确认的《病程记录》质控点执行；新增或变更口径须单独验收。"
     },
     {
-      "rule_id": "LX0609-075",
+      "rule_id": "LX0609-10-03-01",
       "source_document": "有创操作记录",
       "qc_point": "有创操作医嘱但无有创操作记录",
       "implementation_status": "active",
@@ -633,7 +633,7 @@
       "policy_summary": "有创操作目录尚未冻结，本质控点暂不执行；不得因目录或操作记录缺失生成数据不足或不合规结论。"
     },
     {
-      "rule_id": "LX0609-076",
+      "rule_id": "LX0609-04-02-08",
       "source_document": "死亡记录",
       "qc_point": "死亡时间缺失",
       "implementation_status": "active",
@@ -641,7 +641,7 @@
       "policy_summary": "沿用已确认规则 LXE-43：死亡记录必须填写具体死亡时间，记录完成时间不得替代死亡时间。"
     },
     {
-      "rule_id": "LX0609-077",
+      "rule_id": "LX0609-01-02-02",
       "source_document": "首次病程记录",
       "qc_point": "鉴别诊断未与初步诊断中第一诊断相关联",
       "implementation_status": "active",
@@ -649,20 +649,89 @@
       "policy_summary": "沿用已确认规则 LX-011：首次病程中已写出的鉴别诊断应围绕第一诊断的临床问题展开。"
     },
     {
-      "rule_id": "LX0609-078",
+      "rule_id": "LX0609-04-01-04",
       "source_document": "术前小结",
       "qc_point": "术前小结内容不完整",
       "implementation_status": "active",
       "policy_sources": ["sichuan_2023_standard", "customer_confirmed"],
-      "policy_summary": "以SC-081为来源证明，仅核对已存在且有实质正文的术前小结内容；文书存在性由LX0609-029单独交付。"
+      "policy_summary": "以SC-081为来源证明，仅核对已存在且有实质正文的术前小结内容；文书存在性由LX0609-04-01-01单独交付。"
     },
     {
-      "rule_id": "LX0609-079",
+      "rule_id": "LX0609-04-01-05",
       "source_document": "术前讨论记录",
       "qc_point": "术前讨论记录内容不完整",
       "implementation_status": "active",
       "policy_sources": ["sichuan_2023_standard", "customer_confirmed"],
-      "policy_summary": "以SC-085为来源证明，仅核对已存在且有可核验结构字段与正文内容的术前讨论记录；文书存在性及术者参加由LX0609-039单独交付。"
+      "policy_summary": "以SC-085为来源证明，仅核对已存在且有可核验结构字段与正文内容的术前讨论记录；文书存在性及术者参加由LX0609-04-01-02单独交付。"
+    },
+    {
+      "rule_id": "LX0609-06-01-01",
+      "release_scope": "acceptance_only",
+      "source_document": "CT/MRI检查记录",
+      "qc_point": "医嘱与病程一致性",
+      "implementation_status": "active",
+      "policy_sources": [
+        "sichuan_2026_handbook"
+      ],
+      "policy_summary": "按实际检查事件核对医嘱与病程。正式报告可证明执行；缺材料或归属不明为资料不足，只有同一事件的明确矛盾为不合规；不另设24小时窗口。"
+    },
+    {
+      "rule_id": "LX0609-06-01-03",
+      "release_scope": "acceptance_only",
+      "source_document": "CT/MRI检查记录",
+      "qc_point": "报告单完整性",
+      "implementation_status": "active",
+      "policy_sources": [
+        "sichuan_2026_handbook"
+      ],
+      "policy_summary": "按实际检查事件业务键核对影像报告，不以报告明细总行数比较；缺执行证明或上游覆盖未证明时仅提示资料不足。"
+    },
+    {
+      "rule_id": "LX0609-06-03-01",
+      "source_document": "微生物培养检查记录",
+      "qc_point": "医嘱与病程一致性",
+      "implementation_status": "pending_definition",
+      "pending_definition_note": "培养主记录缺少医嘱关联键，当前不能安全形成逐事件医嘱—病程一致性结论。",
+      "definition_note": "培养主记录缺少医嘱关联键，当前不能安全形成逐事件医嘱—病程一致性结论。",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "culture_order_course_linkage_unavailable",
+      "policy_sources": [
+        "sichuan_2026_handbook"
+      ],
+      "policy_summary": "逐事件核对细菌、真菌及病毒培养的医嘱与病程；普通病毒检测不自动等同微生物培养。"
+    },
+    {
+      "rule_id": "LX0609-06-03-02",
+      "release_scope": "acceptance_only",
+      "source_document": "微生物培养检查记录",
+      "qc_point": "报告单完整性",
+      "implementation_status": "active",
+      "policy_sources": [
+        "sichuan_2026_handbook"
+      ],
+      "policy_summary": "按检验业务键核对已执行培养与报告，一次培养多行结果只计同一报告；关联或执行不明确为资料不足。"
+    },
+    {
+      "rule_id": "LX0609-06-02-01",
+      "release_scope": "acceptance_only",
+      "source_document": "病理检查记录",
+      "qc_point": "报告单完整性",
+      "implementation_status": "active",
+      "policy_sources": [
+        "sichuan_2026_handbook"
+      ],
+      "policy_summary": "按病理检查业务键关联报告；申请不等于已执行，本地未查到报告不直接认定源系统临床漏报告。"
+    },
+    {
+      "rule_id": "LX0609-09-01-02",
+      "release_scope": "acceptance_only",
+      "source_document": "抢救记录",
+      "qc_point": "内容完整性",
+      "implementation_status": "active",
+      "policy_sources": [
+        "sichuan_2026_handbook"
+      ],
+      "policy_summary": "逐份核对病情变化、抢救时间、措施、结果、参加医务人员姓名和专业技术职称；不拼接不同抢救记录补齐内容。"
     }
   ]
 }

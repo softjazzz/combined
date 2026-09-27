@@ -53,7 +53,7 @@ def _material_coordinates(
     (
         # 034：麻醉记录触发，知情同意书为目标。
         (
-            "LX0609-034",
+            "LX0609-11-02-01",
             {
                 "anesthesia_record": _rows(_anesthesia_record()),
                 "consent_form": _rows(_consent(complete=True)),
@@ -64,7 +64,7 @@ def _material_coordinates(
             {"anesthesia_record", "consent_form"},
         ),
         (
-            "LX0609-034",
+            "LX0609-11-02-01",
             {"anesthesia_record": _rows(_anesthesia_record())},
             frozenset(),
             "non_compliant",
@@ -72,7 +72,7 @@ def _material_coordinates(
             {"anesthesia_record"},
         ),
         (
-            "LX0609-034",
+            "LX0609-11-02-01",
             {},
             frozenset(),
             "not_applicable",
@@ -80,7 +80,7 @@ def _material_coordinates(
             {"anesthesia_record", "consent_form", "mr_surgery"},
         ),
         (
-            "LX0609-034",
+            "LX0609-11-02-01",
             {
                 "anesthesia_record": _rows(
                     _anesthesia_record("anesthesia-1"),
@@ -93,7 +93,7 @@ def _material_coordinates(
             {"anesthesia_record"},
         ),
         (
-            "LX0609-034",
+            "LX0609-11-02-01",
             {},
             frozenset({"anesthesia_record"}),
             "technical_error",
@@ -102,7 +102,7 @@ def _material_coordinates(
         ),
         # 036：麻醉主表触发，术前/术后访视为目标。
         (
-            "LX0609-036",
+            "LX0609-04-04-01",
             {
                 "anesthesia_record": _rows(_anesthesia_record()),
                 "mr_surgery": _rows(_surgery("mr-1")),
@@ -119,7 +119,7 @@ def _material_coordinates(
             {"mr_surgery", "preane_surveil_record", "postane_surveil_record"},
         ),
         (
-            "LX0609-036",
+            "LX0609-04-04-01",
             {
                 "anesthesia_record": _rows(_anesthesia_record()),
                 "mr_surgery": _rows(_surgery("mr-1")),
@@ -131,7 +131,7 @@ def _material_coordinates(
             {"mr_surgery", "preane_surveil_record"},
         ),
         (
-            "LX0609-036",
+            "LX0609-04-04-01",
             {
                 "anesthesia_record": _rows(
                     {**_anesthesia_record(), "anesthesia_method": "局部麻醉"}
@@ -144,7 +144,7 @@ def _material_coordinates(
             {"mr_surgery"},
         ),
         (
-            "LX0609-036",
+            "LX0609-04-04-01",
             {
                 "anesthesia_record": _rows(
                     {"document_id": "anesthesia-no-method", "record_content": "麻醉记录"}
@@ -157,7 +157,7 @@ def _material_coordinates(
             {"anesthesia_record"},
         ),
         (
-            "LX0609-036",
+            "LX0609-04-04-01",
             {"anesthesia_record": _rows(_anesthesia_record())},
             frozenset({"mr_surgery"}),
             "technical_error",
@@ -166,7 +166,7 @@ def _material_coordinates(
         ),
         # 039：已实施手术触发；讨论和抢救例外资料只在实际参与结论时进入 refs。
         (
-            "LX0609-039",
+            "LX0609-04-01-02",
             {
                 "surgery_record": _rows(
                     {
@@ -182,7 +182,7 @@ def _material_coordinates(
             {"surgery_record", "presurg_discussion"},
         ),
         (
-            "LX0609-039",
+            "LX0609-04-01-02",
             {
                 "surgery_record": _rows(
                     {
@@ -197,7 +197,7 @@ def _material_coordinates(
             {"surgery_record"},
         ),
         (
-            "LX0609-039",
+            "LX0609-04-01-02",
             {},
             frozenset(),
             "not_applicable",
@@ -205,7 +205,7 @@ def _material_coordinates(
             {"surgery_record", "mr_surgery", "rescue_record", "presurg_discussion"},
         ),
         (
-            "LX0609-039",
+            "LX0609-04-01-02",
             {"surgery_record": _rows(_surgery("surgery-1"))},
             frozenset(),
             "data_gap",
@@ -213,7 +213,7 @@ def _material_coordinates(
             {"surgery_record"},
         ),
         (
-            "LX0609-039",
+            "LX0609-04-01-02",
             {
                 "surgery_record": _rows(
                     {

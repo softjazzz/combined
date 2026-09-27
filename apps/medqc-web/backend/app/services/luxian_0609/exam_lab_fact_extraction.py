@@ -21,10 +21,10 @@ from .imaging_report_scope import is_guidance_only_imaging_rows
 SCHEMA_VERSION = "lx0609-exam-lab-text-facts-v3"
 MULTI_EVENT_SCHEMA_VERSION = "lx0609-exam-lab-text-facts-v4"
 ALLOWED_RULE_IDS = frozenset(
-    {"LX0609-010", "LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015"}
+    {"LX0609-06-01-02", "LX0609-06-01-04", "LX0609-06-01-05", "LX0609-06-03-03", "LX0609-06-03-04"}
 )
-EXAM_RULE_IDS = frozenset({"LX0609-010", "LX0609-011", "LX0609-012"})
-CULTURE_RULE_IDS = frozenset({"LX0609-014", "LX0609-015"})
+EXAM_RULE_IDS = frozenset({"LX0609-06-01-02", "LX0609-06-01-04", "LX0609-06-01-05"})
+CULTURE_RULE_IDS = frozenset({"LX0609-06-03-03", "LX0609-06-03-04"})
 COURSE_SOURCE_KEYS = frozenset(
     {"first_course_record", "daily_course_record", "senior_course_record", "rescue_record"}
 )
@@ -205,7 +205,7 @@ def _course_refs_for_rule_event(
         )
     )
     event = events[event_position - 1]
-    if rule_id == "LX0609-010":
+    if rule_id == "LX0609-06-01-02":
         if event.exam_time is None:
             return ()
         return tuple(
@@ -1160,7 +1160,7 @@ def build_exam_lab_fact_prompt(
                 "target_confirmed": event.target_confirmed,
                 **(
                     {"guidance_only": True}
-                    if event.guidance_only and rule_id in {"LX0609-011", "LX0609-012"}
+                    if event.guidance_only and rule_id in {"LX0609-06-01-04", "LX0609-06-01-05"}
                     else {}
                 ),
             }
@@ -1210,7 +1210,7 @@ def build_exam_lab_fact_prompt(
                 "semantic_state": "unknown",
                 "positive_state": (
                     "not_relevant"
-                    if rule_id not in {"LX0609-012", "LX0609-015"}
+                    if rule_id not in {"LX0609-06-01-05", "LX0609-06-03-04"}
                     else "unknown"
                 ),
                 "course_doc_positions": [],
@@ -1253,7 +1253,7 @@ def build_exam_lab_fact_prompt(
             "semantic_state": "present" if example_positions else "absent",
             "positive_state": (
                 "positive"
-                if first_rule in {"LX0609-012", "LX0609-015"}
+                if first_rule in {"LX0609-06-01-05", "LX0609-06-03-04"}
                 else "not_relevant"
             ),
             "course_doc_positions": example_positions,
@@ -1367,7 +1367,7 @@ def parse_exam_lab_fact_response(
         for raw in payload["facts"]:
             if (
                 not isinstance(raw, Mapping)
-                or str(raw.get("rule_id") or "").strip().upper() != "LX0609-010"
+                or str(raw.get("rule_id") or "").strip().upper() != "LX0609-06-01-02"
             ):
                 continue
             event_position = raw.get("event_position")
@@ -1429,7 +1429,7 @@ def parse_exam_lab_fact_response(
         )
         family = "exam" if rule_id in EXAM_RULE_IDS else "culture"
         event = events_for_family(projection, family)[event_position - 1]
-        if rule_id == "LX0609-010" and multi_event_schema and normalized_course:
+        if rule_id == "LX0609-06-01-02" and multi_event_schema and normalized_course:
             cross_event_positions = {
                 position
                 for position in course_positions
@@ -1454,7 +1454,7 @@ def parse_exam_lab_fact_response(
         ))
         event_refs = set(event.document_refs) if event is not None else set()
         if (
-            rule_id in {"LX0609-011", "LX0609-012"}
+            rule_id in {"LX0609-06-01-04", "LX0609-06-01-05"}
             and event is not None
             and event.guidance_only
         ):
@@ -1465,7 +1465,7 @@ def parse_exam_lab_fact_response(
             applicability, semantic, positive, normalized_course = (
                 "not_applicable", "absent", "not_relevant", (),
             )
-        elif rule_id not in {"LX0609-012", "LX0609-015"}:
+        elif rule_id not in {"LX0609-06-01-05", "LX0609-06-03-04"}:
             # 已确认事件由 Python 锁定适用性；泛候选则保留模型的
             # not_applicable/unknown，避免把“未标明类型”伪造成阳性事件。
             if event is not None and event.target_confirmed:
@@ -1554,7 +1554,7 @@ def parse_exam_lab_fact_response(
             # 一条跨窗口引用把同批所有规则都升级为技术异常。
             normalized_course = ()
             semantic = "unknown"
-            if rule_id not in {"LX0609-012", "LX0609-015"}:
+            if rule_id not in {"LX0609-06-01-05", "LX0609-06-03-04"}:
                 applicability = "unknown"
                 positive = "not_relevant"
             elif event is not None and event.positive_hint == "positive":
@@ -1564,7 +1564,7 @@ def parse_exam_lab_fact_response(
                 applicability = "unknown"
                 positive = "unknown"
         if (
-            rule_id == "LX0609-012"
+            rule_id == "LX0609-06-01-05"
             and semantic == "present"
             and normalized_course
             and all(
@@ -1583,7 +1583,7 @@ def parse_exam_lab_fact_response(
             semantic = "absent"
             normalized_course = ()
         if (
-            rule_id == "LX0609-015"
+            rule_id == "LX0609-06-03-04"
             and semantic == "present"
             and normalized_course
         ):
@@ -1606,9 +1606,9 @@ def parse_exam_lab_fact_response(
         # 事件的全部辅助行一并投影到客户结果。没有明细报告时保留已绑定主记录。
         report_source_keys = (
             {"exam_item_report"}
-            if rule_id in {"LX0609-011", "LX0609-012"}
+            if rule_id in {"LX0609-06-01-04", "LX0609-06-01-05"}
             else {"labtest_item_report"}
-            if rule_id in {"LX0609-014", "LX0609-015"}
+            if rule_id in {"LX0609-06-03-03", "LX0609-06-03-04"}
             else set()
         )
         source_document_refs = projection.source_document_refs or {}
@@ -1623,7 +1623,7 @@ def parse_exam_lab_fact_response(
         if (
             not normalized_evidence
             or (
-                rule_id not in {"LX0609-012", "LX0609-015"}
+                rule_id not in {"LX0609-06-01-05", "LX0609-06-03-04"}
                 and positive != "not_relevant"
             )
         ):
@@ -1739,7 +1739,7 @@ def parse_exam_lab_fact_response_isolated(
 
         # 011/012/014/015 的病程引用必须落在该事件的 Python 白名单内；
         # 010 的既有多事件共享病程语义仍由公开解析器单独处理。
-        if rule_id in {"LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015"}:
+        if rule_id in {"LX0609-06-01-04", "LX0609-06-01-05", "LX0609-06-03-03", "LX0609-06-03-04"}:
             allowed_event_course = set(_course_refs_for_rule_event(
                 projection,
                 rule_id=rule_id,
@@ -1778,7 +1778,7 @@ def parse_exam_lab_fact_response_isolated(
                 projection=projection,
             )
             if (
-                rule_id in {"LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015"}
+                rule_id in {"LX0609-06-01-04", "LX0609-06-01-05", "LX0609-06-03-03", "LX0609-06-03-04"}
                 and not projection.course_time_incomplete
                 and not projection.course_projection_truncated
                 and any(

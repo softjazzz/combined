@@ -5,6 +5,7 @@ from pathlib import Path
 import re
 
 import pytest
+from tests.luxian_0609_identity_test_support import published_rule_ids
 
 from scripts.review_luxian_0609_semantic20 import (
     SemanticReviewContractError,
@@ -13,11 +14,11 @@ from scripts.review_luxian_0609_semantic20 import (
 
 
 RULE_COUNTS = {
-    "LX0609-017": 20,
-    "LX0609-020": 14,
-    "LX0609-021": 16,
-    "LX0609-022": 16,
-    "LX0609-023": 14,
+    "LX0609-12-01-02": 20,
+    "LX0609-03-01-01": 14,
+    "LX0609-03-01-02": 16,
+    "LX0609-03-01-03": 16,
+    "LX0609-03-01-04": 14,
 }
 
 
@@ -45,7 +46,7 @@ def _candidate() -> dict:
             {
                 "case_label": f"case-{case_index:02d}",
                 "selector_digest": "a" * 64,
-                "rule_id": f"LX0609-{rule_index:03d}",
+                "rule_id": rule_id,
                 "observed_state": "data_gap",
                 "observed_reason_code": "candidate_reason_marker",
                 "evidence_ref_hashes": ["b" * 64],
@@ -53,7 +54,7 @@ def _candidate() -> dict:
                 "decision_kind": "semantic",
             }
             for case_index in range(1, 21)
-            for rule_index in range(1, 50)
+            for rule_id in published_rule_ids(1, 49)
         ],
     }
 
@@ -95,15 +96,15 @@ class _Client:
         selected = re.search(r"本次规则=\[([^]]+)\]", prompt)
         requested = [] if selected is None else selected.group(1).split(",")
         reasons = {
-            "LX0609-017": (
+            "LX0609-12-01-02": (
                 "insufficient_comparable_records"
                 if self.state == "not_applicable"
                 else "unreasonable_copy_not_established"
             ),
-            "LX0609-020": "execution_record_present",
-            "LX0609-021": "purpose_clear",
-            "LX0609-022": "opinion_clear",
-            "LX0609-023": "execution_specific",
+            "LX0609-03-01-01": "execution_record_present",
+            "LX0609-03-01-02": "purpose_clear",
+            "LX0609-03-01-03": "opinion_clear",
+            "LX0609-03-01-04": "execution_specific",
         }
         reviews = []
         for rule_id in requested:
@@ -113,7 +114,7 @@ class _Client:
                 "confidence_bucket": self.confidence,
                 "reason_code": reasons[rule_id],
             }
-            if rule_id == "LX0609-017" and self.state != "not_applicable":
+            if rule_id == "LX0609-12-01-02" and self.state != "not_applicable":
                 review.update(
                     {
                         "substantive_updates": {
@@ -191,7 +192,7 @@ async def test_candidate_state_never_enters_prompt_and_each_case_uses_at_most_tw
     )
     assert len(client.prompts) <= 40
     assert all("candidate_reason_marker" not in prompt for prompt in client.prompts)
-    copy_prompts = [prompt for prompt in client.prompts if "只复核LX0609-017" in prompt]
+    copy_prompts = [prompt for prompt in client.prompts if "只复核LX0609-12-01-02" in prompt]
     assert len(copy_prompts) == 20
     # fake行是生产强高相似终端路径；二审仍必须拿到最佳双文书，而不是空gray_context。
     assert all("PHONE_13800138000_BEARER_SECRET" in prompt for prompt in copy_prompts)
@@ -221,8 +222,8 @@ async def test_medium_or_low_confidence_is_forced_to_unknown():
         case_map=_case_map(), candidate=_candidate(), review_queue=_review_queue(),
         llm_client=_Client(confidence="medium"), row_loader=_row_loader_factory([]),
     )
-    copy_rows = [row for row in output["rows"] if row["rule_id"] == "LX0609-017"]
-    consultation_rows = [row for row in output["rows"] if row["rule_id"] != "LX0609-017"]
+    copy_rows = [row for row in output["rows"] if row["rule_id"] == "LX0609-12-01-02"]
+    consultation_rows = [row for row in output["rows"] if row["rule_id"] != "LX0609-12-01-02"]
     assert {row["review_state"] for row in copy_rows} == {"compliant"}
     assert {row["review_reason_code"] for row in copy_rows} == {
         "substantive_dynamic_update_present"
@@ -250,9 +251,9 @@ async def test_one_invalid_consultation_rule_does_not_fail_three_valid_rules():
 
         async def generate(self, prompt: str) -> dict:
             response = await super().generate(prompt)
-            if not self.changed and "LX0609-020" in prompt and "逐张会诊" in prompt:
+            if not self.changed and "LX0609-03-01-01" in prompt and "逐张会诊" in prompt:
                 payload = json.loads(response["choices"][0]["message"]["content"])
-                next(row for row in payload["reviews"] if row["rule_id"] == "LX0609-020")[
+                next(row for row in payload["reviews"] if row["rule_id"] == "LX0609-03-01-01")[
                     "state"
                 ] = "invalid_state"
                 response["choices"][0]["message"]["content"] = json.dumps(payload)
@@ -302,7 +303,7 @@ async def test_copy_template_shell_or_dynamic_update_is_synthesized_compliant():
 
         async def generate(self, prompt: str) -> dict:
             response = await super().generate(prompt)
-            if "本次规则=[LX0609-017]" in prompt:
+            if "本次规则=[LX0609-12-01-02]" in prompt:
                 payload = json.loads(response["choices"][0]["message"]["content"])
                 row = payload["reviews"][0]
                 row["substantive_updates"] = {
@@ -325,7 +326,7 @@ async def test_copy_template_shell_or_dynamic_update_is_synthesized_compliant():
             case_map=_case_map(), candidate=_candidate(), review_queue=_review_queue(),
             llm_client=client, row_loader=_row_loader_factory([]),
         )
-        copy_rows = [row for row in output["rows"] if row["rule_id"] == "LX0609-017"]
+        copy_rows = [row for row in output["rows"] if row["rule_id"] == "LX0609-12-01-02"]
         assert {row["review_state"] for row in copy_rows} == {"compliant"}
 
 

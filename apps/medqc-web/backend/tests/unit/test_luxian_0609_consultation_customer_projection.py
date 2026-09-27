@@ -32,7 +32,7 @@ def test_021_projection_strips_internal_document_ids_and_keeps_episode_locator()
     }
 
     assert safe_consultation_customer_display_facts(
-        rule_id="LX0609-021", raw=raw
+        rule_id="LX0609-03-01-02", raw=raw
     ) == {
         "verification_kind": "consultation_application_quality_check",
         "episode_count": 2,
@@ -95,7 +95,7 @@ def test_020_projection_keeps_only_safe_recommendation_evidence_refs() -> None:
         ],
     }
 
-    facts = safe_consultation_customer_display_facts(rule_id="LX0609-020", raw=raw)
+    facts = safe_consultation_customer_display_facts(rule_id="LX0609-03-01-01", raw=raw)
 
     assert facts is not None
     assert facts | {"recommendation_evidence": []} == {
@@ -166,7 +166,7 @@ def test_020_projection_rejects_executor_counts_that_conflict_with_complete_resu
     }
 
     assert (
-        safe_consultation_customer_display_facts(rule_id="LX0609-020", raw=raw)
+        safe_consultation_customer_display_facts(rule_id="LX0609-03-01-01", raw=raw)
         is None
     )
 
@@ -191,7 +191,7 @@ def test_020_projection_keeps_unknown_out_of_missing_count() -> None:
         ],
     }
 
-    facts = safe_consultation_customer_display_facts(rule_id="LX0609-020", raw=raw)
+    facts = safe_consultation_customer_display_facts(rule_id="LX0609-03-01-01", raw=raw)
 
     assert facts is not None
     assert facts["missing_execution_count"] == 0
@@ -210,7 +210,7 @@ def test_020_projection_accepts_empty_complete_recommendation_set() -> None:
         "recommendation_results": [],
     }
 
-    assert safe_consultation_customer_display_facts(rule_id="LX0609-020", raw=raw) is not None
+    assert safe_consultation_customer_display_facts(rule_id="LX0609-03-01-01", raw=raw) is not None
 
 
 def test_020_projection_rejects_recommendation_result_overflow() -> None:
@@ -234,7 +234,7 @@ def test_020_projection_rejects_recommendation_result_overflow() -> None:
         ],
     }
 
-    assert safe_consultation_customer_display_facts(rule_id="LX0609-020", raw=raw) is None
+    assert safe_consultation_customer_display_facts(rule_id="LX0609-03-01-01", raw=raw) is None
 
 
 def test_023_projection_rejects_executor_counts_that_conflict_with_complete_evidence() -> None:
@@ -258,7 +258,7 @@ def test_023_projection_rejects_executor_counts_that_conflict_with_complete_evid
         ],
     }
 
-    assert safe_consultation_customer_display_facts(rule_id="LX0609-023", raw=raw) is None
+    assert safe_consultation_customer_display_facts(rule_id="LX0609-03-01-04", raw=raw) is None
 
 
 def test_023_projection_accepts_missing_or_generic_relation_state() -> None:
@@ -283,7 +283,7 @@ def test_023_projection_accepts_missing_or_generic_relation_state() -> None:
     }
 
     facts = safe_consultation_customer_display_facts(
-        rule_id="LX0609-023", raw=raw
+        rule_id="LX0609-03-01-04", raw=raw
     )
 
     assert facts is not None
@@ -306,7 +306,7 @@ def test_023_projection_accepts_no_triggered_recommendation_set() -> None:
     }
 
     facts = safe_consultation_customer_display_facts(
-        rule_id="LX0609-023", raw=raw
+        rule_id="LX0609-03-01-04", raw=raw
     )
 
     assert facts is not None
@@ -323,7 +323,7 @@ def test_023_legacy_projection_strips_private_document_ids() -> None:
     }
 
     assert safe_consultation_customer_display_facts(
-        rule_id="LX0609-023", raw=raw
+        rule_id="LX0609-03-01-04", raw=raw
     ) == {
         "failure_kind": "consultation_execution_too_generic",
         "observed_expression": "仅笼统记录已按会诊意见执行",
@@ -334,7 +334,7 @@ def test_023_legacy_projection_strips_private_document_ids() -> None:
 def test_non_consultation_rule_is_not_owned_by_consultation_projection() -> None:
     assert (
         safe_consultation_customer_display_facts(
-            rule_id="LX0609-069", raw={"verification_kind": "consultation_timeliness_check"}
+            rule_id="LX0609-04-02-07", raw={"verification_kind": "consultation_timeliness_check"}
         )
         is None
     )

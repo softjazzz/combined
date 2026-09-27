@@ -14,7 +14,7 @@ from app.services.luxian_0609.remediation_draft import (
 
 def _item(**overrides: Any) -> dict[str, Any]:
     base: dict[str, Any] = {
-        "rule_id": "LX0609-020",
+        "rule_id": "LX0609-03-01-01",
         "rule_name": "会诊意见执行记录",
         "qc_point": "请会诊执行记录不规范，未进行归纳总结，未明确具体会诊意见执行情况",
         "status": "non_compliant",
@@ -57,13 +57,13 @@ async def _returns(content: str) -> Mapping[str, Any]:
 
 
 def test_supported_rule_ids_are_the_consultation_triad() -> None:
-    assert REMEDIATION_DRAFT_RULE_IDS == {"LX0609-020", "LX0609-022", "LX0609-023"}
+    assert REMEDIATION_DRAFT_RULE_IDS == {"LX0609-03-01-01", "LX0609-03-01-03", "LX0609-03-01-04"}
 
 
 def test_prompt_uses_only_customer_visible_fields() -> None:
     prompt = build_remediation_draft_prompt(item=_item())
 
-    assert "LX0609-020" in prompt
+    assert "LX0609-03-01-01" in prompt
     assert "第2次会诊意见未见对应执行记录" in prompt
     assert "会诊记录单" in prompt
     assert "第2条建议：有会诊意见证据" in prompt
@@ -93,13 +93,13 @@ async def test_unsupported_rule_is_not_generated() -> None:
         return await _returns("草稿")
 
     result = await generate_remediation_draft(
-        item=_item(rule_id="LX0609-018"),
+        item=_item(rule_id="LX0609-01-01-02"),
         generate=_generate,
     )
 
     assert result == {
         "available": False,
-        "rule_id": "LX0609-018",
+        "rule_id": "LX0609-01-01-02",
         "reason": "rule_not_supported",
     }
     assert called is False
@@ -114,7 +114,7 @@ async def test_non_compliant_status_is_required() -> None:
 
     assert result == {
         "available": False,
-        "rule_id": "LX0609-020",
+        "rule_id": "LX0609-03-01-01",
         "reason": "status_not_supported",
     }
 
@@ -128,7 +128,7 @@ async def test_generation_failure_degrades_without_raising() -> None:
 
     assert result == {
         "available": False,
-        "rule_id": "LX0609-020",
+        "rule_id": "LX0609-03-01-01",
         "reason": "generation_failed",
     }
 
@@ -142,7 +142,7 @@ async def test_empty_draft_is_reported_as_unavailable() -> None:
 
     assert result == {
         "available": False,
-        "rule_id": "LX0609-020",
+        "rule_id": "LX0609-03-01-01",
         "reason": "empty_draft",
     }
 

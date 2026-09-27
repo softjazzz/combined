@@ -5,6 +5,7 @@ from contextlib import nullcontext
 from datetime import datetime, timezone
 import logging
 import re
+import threading
 import time
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 import uuid
@@ -12,8 +13,13 @@ import uuid
 from fastapi import HTTPException
 
 from ..core.settings import get_settings
-from .case_identity import CaseRef
-from .custom_qc_workspace_service import CustomQCWorkspaceService
+from .luxian_0609.phase_scope import frozen_luxian_0609_delivery_scope
+from .case_identity import CaseRef, case_refs_from_records, normalize_case_refs
+from .custom_qc_workspace_service import (
+    CustomQCWorkspaceService,
+    LX0609_ATTEMPT_FILTER_KEY,
+    LX0609_LEASE_FILTER_KEY,
+)
 from .customer_rule_sets import CUSTOMER_LUXIAN_RULE_SET_KEY
 from .effect_priority_qc import (
     DEFAULT_MAX_REFINE_CANDIDATES,
@@ -46,6 +52,10 @@ from .luxian_0609.native_package import (
     assert_luxian_0609_formal_package_plan_native_only,
 )
 from .luxian_0609.rule_decision_settings import (
+    LX0609_TASK_SETTINGS_FILTER_KEY,
+    LX0609_TASK_RUNTIME_FILTER_KEY,
+    assert_luxian_0609_task_settings_match,
+    assert_luxian_0609_task_runtime_match,
     assert_luxian_0609_customer_native_delivery_ready,
     resolve_mainline_rule_decision_settings,
 )
@@ -54,6 +64,7 @@ from .luxian_0609.shadow_audit_summary import (
     merge_luxian_0609_shadow_summaries,
 )
 from .qc_cancellation import QCJobCancelled, raise_if_cancelled
+from .qc_llm_client_runtime import SichuanQCLLMClient
 from .qc_input_adapters import evaluate_running_final_bundle
 from .qc_input_adapters.running_final_bundle_runtime import load_running_final_bundle
 from .qc_result_adjudicator import adjudicate_postprocessed_qc_results
@@ -409,7 +420,7 @@ def _guard_luxian_copy_result_for_batch(
     record: Dict[str, Any],
 ) -> Dict[str, Any]:
     normalized_rule_id = str(rule_id or eval_item.get("rule_id") or eval_item.get("rule_code") or "").strip().upper()
-    if normalized_rule_id != "LX0609-016":
+    if normalized_rule_id != "LX0609-12-01-01":
         return eval_item
     display_facts = eval_item.get("customer_display_facts")
     if (
@@ -1236,6 +1247,25 @@ def _result_diagnostic_trace(
     return _sanitize_trace_value(trace, removed_keys)
 
 
+LX0609_LEASE_HEARTBEAT_SECONDS = 30
+
+
+def _renew_luxian_0609_lease_until_stopped(
+    *, workspace: CustomQCWorkspaceService, job_id: str,
+    attempt_filters_json: str, stopped: threading.Event,
+) -> None:
+    """独立于模型请求事件循环续约；失去当前代次后停止心跳。"""
+
+    while not stopped.wait(LX0609_LEASE_HEARTBEAT_SECONDS):
+        try:
+            if not workspace.renew_luxian_0609_batch_job_lease(
+                job_id=job_id, attempt_filters_json=attempt_filters_json,
+            ):
+                return
+        except Exception:
+            logger.exception("LX0609 任务续约失败: job_id=%s", job_id)
+
+
 @diagnostic_job_lifecycle
 async def run_sichuan_workspace_batch_job(
     job_id: str,
@@ -1252,15 +1282,45 @@ async def run_sichuan_workspace_batch_job(
         logger.info("跳过泸县0609父任务执行，仅执行其规则族子任务: job_id=%s", job_id)
         return
 
+    formal_0609_job = (job.get("filters") or {}).get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY
+    claim_filters_json = job.get("_claim_filters_json")
+    attempt_filters_json: str | None = None
+    attempt_kwargs: dict[str, str] = {}
+    lease_stop: threading.Event | None = None
     try:
         # HTTP 门禁之外在所有实际质控 Worker 入口统一验签，阻止旧队列或内部调用绕过授权。
         # 不存在的任务及父任务已在上方返回，不触发授权检查。
         get_product_activation_service().enforce()
-        if not workspace.mark_batch_job_running(job_id=job_id):
+        claim = workspace.mark_batch_job_running(job_id=job_id)
+        if not claim:
             return
+        if isinstance(claim, str):
+            attempt_filters_json = claim
+            attempt_kwargs = {"attempt_filters_json": claim}
+            if callable(getattr(workspace, "renew_luxian_0609_batch_job_lease", None)):
+                lease_stop = threading.Event()
+                threading.Thread(
+                    target=_renew_luxian_0609_lease_until_stopped,
+                    kwargs={
+                        "workspace": workspace,
+                        "job_id": job_id,
+                        "attempt_filters_json": claim,
+                        "stopped": lease_stop,
+                    },
+                    name="lx0609-task-lease",
+                    daemon=True,
+                ).start()
         qc_service = await qc_service_provider()
+        if attempt_filters_json is not None and workspace.is_batch_job_canceled_or_missing(
+            job_id=job_id, **attempt_kwargs
+        ):
+            return
         current = workspace.get_batch_job_for_processing(job_id=job_id) or job
         filters = dict(current.get("filters") or {})
+        if filters.get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY:
+            filters["scoped_customer_rule_ids"] = frozen_luxian_0609_delivery_scope(filters)
+        filters.pop(LX0609_ATTEMPT_FILTER_KEY, None)
+        filters.pop(LX0609_LEASE_FILTER_KEY, None)
         failed_rule_retry_scope = (
             dict(filters.get(FAILED_RULE_RETRY_FILTER_KEY) or {})
             if isinstance(filters.get(FAILED_RULE_RETRY_FILTER_KEY), dict)
@@ -1270,6 +1330,14 @@ async def run_sichuan_workspace_batch_job(
             failed_rule_retry_scope.get("schema_version")
             == FAILED_RULE_RETRY_SCHEMA_VERSION
         )
+        if (
+            filters.get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY
+            and is_failed_rule_retry
+            and not set(failed_rule_retry_scope.get("rule_ids") or []).issubset(
+                filters["scoped_customer_rule_ids"]
+            )
+        ):
+            raise ValueError("失败规则超出原任务冻结范围，请新建质控任务")
         retry_base_items = list(current.get("items") or []) if is_failed_rule_retry else []
         retry_base_failures = (
             list(current.get("failed_records") or []) if is_failed_rule_retry else []
@@ -1327,6 +1395,18 @@ async def run_sichuan_workspace_batch_job(
         )
         settings = resolve_mainline_rule_decision_settings(get_settings())
         if rule_set_key == LUXIAN_0609_RULE_SET_KEY:
+            # 正式服务由路由共享并允许热重载。领取后复制客户端，保证本任务运行期间
+            # 一审、二审模型及推理参数不会被另一个请求原地改写。测试替身仍由注入方负责。
+            if isinstance(qc_service, SichuanQCService) and isinstance(
+                getattr(qc_service, "client", None), SichuanQCLLMClient
+            ):
+                qc_service = qc_service.isolated_luxian_0609_runtime()
+            assert_luxian_0609_task_settings_match(
+                filters.get(LX0609_TASK_SETTINGS_FILTER_KEY), settings,
+            )
+            assert_luxian_0609_task_runtime_match(
+                filters.get(LX0609_TASK_RUNTIME_FILTER_KEY), qc_service,
+            )
             assert_luxian_0609_customer_native_delivery_ready(
                 settings,
                 context=f"workspace_batch_job:{job_id}",
@@ -1429,8 +1509,14 @@ async def run_sichuan_workspace_batch_job(
             record_ids=None if has_persisted_record_refs else current.get("record_ids") or None,
             record_refs=persisted_record_refs if has_persisted_record_refs else None,
         )
+        if rule_set_key == LUXIAN_0609_RULE_SET_KEY and has_persisted_record_refs:
+            accepted_refs = set(normalize_case_refs(persisted_record_refs))
+            collected_refs = set(case_refs_from_records(records)) if records else set()
+            if collected_refs != accepted_refs:
+                raise ValueError("已接纳病例范围与当前重取结果不一致，拒绝执行部分病历")
         workspace.update_batch_job_progress(
             job_id=job_id,
+            **attempt_kwargs,
             step_key="prepare",
             rule_index=0,
             rule_count=max(1, len(rule_ids)),
@@ -1480,6 +1566,8 @@ async def run_sichuan_workspace_batch_job(
         total_context_tokens_estimate = 0
         total_refined_rule_count = 0
         model_execution_stats_total: Optional[Dict[str, int]] = None
+        usage_observation_complete: Optional[bool] = None
+        usage_unknown_executor_keys: set[str] = set()
         refine_summary_total: Dict[str, Any] = {
             "enabled": enable_selective_refine,
             "candidate_count": 0,
@@ -1629,6 +1717,20 @@ async def run_sichuan_workspace_batch_job(
             ]
             if normalized_rule_ids:
                 record_rule_map[normalized_record_id] = normalized_rule_ids
+        if rule_set_key == LUXIAN_0609_RULE_SET_KEY and record_rule_map_raw:
+            for record in hydrated_records:
+                record_id = str(record.get("record_id") or record.get("visit_id") or "").strip()
+                visit_id = str(record.get("visit_id") or record_id).strip()
+                record_ref = CaseRef(
+                    str(record.get("institute_id") or "").strip(),
+                    str(record.get("patient_id") or "").strip(),
+                    visit_id,
+                )
+                record_key = record_ref.as_key() if all(record_ref) else record_id
+                if not any(
+                    key in record_rule_map for key in (record_key, visit_id, record_id)
+                ):
+                    raise ValueError("LX0609任务逐病例规则范围不完整，拒绝回退为整批规则")
         prefer_rule_level_visit_eval = (
             validation_mode == "sc"
             and (
@@ -1675,7 +1777,7 @@ async def run_sichuan_workspace_batch_job(
                 None,
             )
             if callable(lightweight_check):
-                return bool(lightweight_check(job_id=job_id))
+                return bool(lightweight_check(job_id=job_id, **attempt_kwargs))
             latest = workspace.get_batch_job_for_processing(job_id=job_id)
             if not latest:
                 return True
@@ -1741,6 +1843,9 @@ async def run_sichuan_workspace_batch_job(
             )
             if model_execution_summary is not None:
                 patch["model_execution_stats"] = model_execution_summary
+            if use_luxian_customer_results and isinstance(usage_observation_complete, bool):
+                patch["luxian_0609_usage_observation_complete"] = usage_observation_complete
+                patch["luxian_0609_usage_unknown_executor_keys"] = sorted(usage_unknown_executor_keys)
             return patch
 
         def _item_is_confirmed_defect(item: Dict[str, Any]) -> bool:
@@ -2028,6 +2133,7 @@ async def run_sichuan_workspace_batch_job(
                         trace_state["terminal_state_persisted"] = True
                         workspace.update_batch_job_progress(
                             job_id=job_id,
+                            **attempt_kwargs,
                             step_key="run",
                             rule_index=int(trace_state["completed_rule_count"]),
                             rule_count=int(trace_state["total_rule_count"]),
@@ -2109,10 +2215,26 @@ async def run_sichuan_workspace_batch_job(
                 record_luxian_0609_input_profile: Dict[str, Any] = {}
                 record_luxian_0609_shadow_evaluations: Dict[str, Any] = {}
                 record_model_execution_stats: Optional[Dict[str, int]] = None
+                record_usage_observation_complete: Optional[bool] = None
+                record_usage_unknown_executor_keys: set[str] = set()
                 bundle_scene = ""
                 bundle_payload: Optional[Dict[str, Any]] = None
                 attempted_bundle_scenes: List[str] = []
                 runtime_shadow_summary: Optional[Dict[str, Any]] = None
+
+                def _capture_usage_observation(payload: Dict[str, Any]) -> None:
+                    nonlocal record_usage_observation_complete
+                    observed = payload.get("luxian_0609_usage_observation_complete")
+                    if isinstance(observed, bool):
+                        record_usage_observation_complete = (
+                            observed if record_usage_observation_complete is None
+                            else record_usage_observation_complete and observed
+                        )
+                    unknown_keys = payload.get("luxian_0609_usage_unknown_executor_keys")
+                    if isinstance(unknown_keys, (list, tuple)):
+                        record_usage_unknown_executor_keys.update(
+                            key for key in unknown_keys if isinstance(key, str) and key
+                        )
 
                 async def _evaluate_rule_level_visit_bundle() -> bool:
                     nonlocal eval_items
@@ -2147,6 +2269,7 @@ async def run_sichuan_workspace_batch_job(
                             bundle_schema="public",
                             cancellation_check=_is_cancelled,
                         )
+                        _capture_usage_observation(single_result)
                         per_rule_items = list(
                             single_result.get("evaluation_results")
                             or single_result.get("parsed_evaluation_results")
@@ -2192,6 +2315,7 @@ async def run_sichuan_workspace_batch_job(
                     return True
 
                 if use_luxian_customer_results and not active_rule_ids:
+                    record_usage_observation_complete = True
                     used_bundle_path = True
                     bundle_fallback_reason = "仅包含适用性门控质控点，无需调用底层执行规则"
                     eval_items = []
@@ -2313,6 +2437,11 @@ async def run_sichuan_workspace_batch_job(
                             refine_confidence_threshold=refine_confidence_threshold,
                             max_refine_candidates=max_refine_candidates,
                             rule_set_key=rule_set_key,
+                            **(
+                                {"task_settings": settings}
+                                if rule_set_key == LUXIAN_0609_RULE_SET_KEY
+                                else {}
+                            ),
                             evaluation_as_of_date=evaluation_as_of_date or None,
                             evaluation_horizon_policy=evaluation_horizon_policy,
                             evaluation_horizon_unavailable_reason=(
@@ -2359,6 +2488,7 @@ async def run_sichuan_workspace_batch_job(
                     record_refine_summary = dict(result.get("refine_summary") or {})
                     record_luxian_0609_input_profile = dict(result.get("luxian_0609_input_profile") or {})
                     record_model_execution_stats = _extract_luxian_model_execution_stats(result)
+                    _capture_usage_observation(result)
                     record_luxian_0609_shadow_evaluations = dict(
                         result.get("luxian_0609_shadow_evaluations") or {}
                     )
@@ -2456,7 +2586,10 @@ async def run_sichuan_workspace_batch_job(
                             single_result.get("luxian_0609_input_profile") or {}
                         )
                         record_model_execution_stats = _extract_luxian_model_execution_stats(single_result)
+                        _capture_usage_observation(single_result)
                     except Exception as bundle_exc:
+                        if use_luxian_customer_results:
+                            record_usage_observation_complete = False
                         if prefer_rule_level_visit_eval and len(active_rule_ids) == 1:
                             try:
                                 used_bundle_path = await _evaluate_rule_level_visit_bundle()
@@ -2524,6 +2657,7 @@ async def run_sichuan_workspace_batch_job(
                     record_refine_summary = dict(result.get("refine_summary") or {})
                     record_luxian_0609_input_profile = dict(result.get("luxian_0609_input_profile") or {})
                     record_model_execution_stats = _extract_luxian_model_execution_stats(result)
+                    _capture_usage_observation(result)
                     record_luxian_0609_shadow_evaluations = dict(
                         result.get("luxian_0609_shadow_evaluations") or {}
                     )
@@ -2898,6 +3032,13 @@ async def run_sichuan_workspace_batch_job(
                             list_limits={"recommendation_evidence": 96},
                         )
                     if use_luxian_customer_results:
+                        # 服务层仅对正式发布结果提供这些文案字段；此处原样搬运，
+                        # 不在任务装配时丢失或重写发布结论与建议。
+                        for published_key in (
+                            "conclusion", "customer_conclusion", "customer_suggestion",
+                        ):
+                            if published_key in eval_item:
+                                issue_item[published_key] = eval_item[published_key]
                         customer_message = eval_item.get("customer_message")
                         if isinstance(customer_message, str) and customer_message.strip():
                             issue_item["customer_message"] = customer_message.strip()
@@ -3039,13 +3180,15 @@ async def run_sichuan_workspace_batch_job(
                     "refine_summary": record_refine_summary,
                     "luxian_0609_shadow_evaluations": record_luxian_0609_shadow_evaluations,
                     "model_execution_stats": record_model_execution_stats,
+                    "luxian_0609_usage_observation_complete": record_usage_observation_complete,
+                    "luxian_0609_usage_unknown_executor_keys": sorted(record_usage_unknown_executor_keys),
                 }
             except QCJobCancelled:
                 raise
             except Exception as exc:
                 failure_error = str(exc)
                 failure_rule_id = str(getattr(exc, "rule_id", "") or "").strip().upper()
-                if re.fullmatch(r"LX0609-\d{3}", failure_rule_id):
+                if re.fullmatch(r"LX0609-(?!00)\d{2}-(?!00)\d{2}-(?!00)\d{2}", failure_rule_id):
                     failure_error = f"{failure_error} [{failure_rule_id}]"
                 for rule_id in result_rule_ids:
                     state = result_rule_states[rule_id]
@@ -3090,6 +3233,10 @@ async def run_sichuan_workspace_batch_job(
                     "refine_summary": {},
                     "luxian_0609_shadow_evaluations": {},
                     "model_execution_stats": None,
+                    "luxian_0609_usage_observation_complete": (
+                        False if use_luxian_customer_results else None
+                    ),
+                    "luxian_0609_usage_unknown_executor_keys": sorted(record_usage_unknown_executor_keys),
                 }
 
         async def _evaluate_single_record(record: Dict[str, Any]) -> Dict[str, Any]:
@@ -3135,6 +3282,7 @@ async def run_sichuan_workspace_batch_job(
             nonlocal total_context_tokens_estimate
             nonlocal total_refined_rule_count
             nonlocal model_execution_stats_total
+            nonlocal usage_observation_complete
 
             completed_records_state["count"] = max(
                 int(completed_records_state["count"]), processed_records_count
@@ -3166,6 +3314,17 @@ async def run_sichuan_workspace_batch_job(
                     record_result.get("model_execution_stats")
                 ),
             )
+            record_observed = record_result.get("luxian_0609_usage_observation_complete")
+            if isinstance(record_observed, bool):
+                usage_observation_complete = (
+                    record_observed if usage_observation_complete is None
+                    else usage_observation_complete and record_observed
+                )
+            record_unknown_keys = record_result.get("luxian_0609_usage_unknown_executor_keys")
+            if isinstance(record_unknown_keys, (list, tuple)):
+                usage_unknown_executor_keys.update(
+                    key for key in record_unknown_keys if isinstance(key, str) and key
+                )
 
             record_first_result_latency = float(record_result.get("first_result_latency") or 0.0)
             if record_first_result_latency > 0 and first_result_latency is None:
@@ -3268,6 +3427,7 @@ async def run_sichuan_workspace_batch_job(
 
             workspace.update_batch_job_progress(
                 job_id=job_id,
+                **attempt_kwargs,
                 step_key="run",
                 rule_index=len(output_rule_ids) if output_rule_ids else 0,
                 rule_count=total_rules,
@@ -3308,6 +3468,7 @@ async def run_sichuan_workspace_batch_job(
 
         workspace.update_batch_job_progress(
             job_id=job_id,
+            **attempt_kwargs,
             step_key="run",
             rule_index=0,
             rule_count=total_rules,
@@ -3326,6 +3487,7 @@ async def run_sichuan_workspace_batch_job(
                     processed_count = int(completed_records_state["count"])
                     workspace.update_batch_job_progress(
                         job_id=job_id,
+                        **attempt_kwargs,
                         step_key="run",
                         rule_index=0,
                         rule_count=total_rules,
@@ -3371,6 +3533,7 @@ async def run_sichuan_workspace_batch_job(
                 processed_count = int(completed_records_state["count"])
                 workspace.update_batch_job_progress(
                     job_id=job_id,
+                    **attempt_kwargs,
                     step_key="run",
                     rule_index=0,
                     rule_count=total_rules,
@@ -3451,6 +3614,17 @@ async def run_sichuan_workspace_batch_job(
                 ),
                 model_execution_stats_total,
             )
+            base_observed = retry_base_summary.get("luxian_0609_usage_observation_complete")
+            if isinstance(base_observed, bool):
+                usage_observation_complete = (
+                    base_observed if usage_observation_complete is None
+                    else usage_observation_complete and base_observed
+                )
+            base_unknown_keys = retry_base_summary.get("luxian_0609_usage_unknown_executor_keys")
+            if isinstance(base_unknown_keys, (list, tuple)):
+                usage_unknown_executor_keys.update(
+                    key for key in base_unknown_keys if isinstance(key, str) and key
+                )
 
         if (
             use_luxian_customer_results and failed_record_ids and all_failed_records
@@ -3487,6 +3661,7 @@ async def run_sichuan_workspace_batch_job(
                     break
             workspace.update_batch_job_progress(
                 job_id=job_id,
+                **attempt_kwargs,
                 step_key="failed",
                 rule_index=len(output_rule_ids),
                 rule_count=total_rules,
@@ -3504,7 +3679,7 @@ async def run_sichuan_workspace_batch_job(
                 first_failure_error or "unknown",
             )
             invalid_facts_match = re.fullmatch(
-                r"invalid customer display facts(?: \[(LX0609-\d{3})\])?",
+                r"invalid customer display facts(?: \[(LX0609-(?!00)\d{2}-(?!00)\d{2}-(?!00)\d{2})\])?",
                 first_failure_error,
             )
             customer_safe_reason = "规则执行失败"
@@ -3675,6 +3850,11 @@ async def run_sichuan_workspace_batch_job(
         model_execution_summary = _build_luxian_model_execution_summary(model_execution_stats_total)
         if model_execution_summary is not None:
             summary["model_execution_stats"] = model_execution_summary
+        if use_luxian_customer_results:
+            if usage_observation_complete is None:
+                usage_observation_complete = total_records == 0
+            summary["luxian_0609_usage_observation_complete"] = usage_observation_complete
+            summary["luxian_0609_usage_unknown_executor_keys"] = sorted(usage_unknown_executor_keys)
         automatic_retry_plan = build_failed_rule_auto_retry_plan(
             summary=summary,
             failures=all_failed_records,
@@ -3733,6 +3913,7 @@ async def run_sichuan_workspace_batch_job(
         }
         workspace.update_batch_job_progress(
             job_id=job_id,
+            **attempt_kwargs,
             step_key="aggregate",
             rule_index=len(output_rule_ids),
             rule_count=total_rules,
@@ -3747,12 +3928,15 @@ async def run_sichuan_workspace_batch_job(
             progress_patch=_record_runtime_progress(total_records),
         )
         with diagnostic_capture.result_scope() if diagnostic_capture else nullcontext():
-            workspace.complete_batch_job(
+            completed = workspace.complete_batch_job(
                 job_id=job_id,
+                **attempt_kwargs,
                 summary=summary,
                 items=all_items,
                 failed_records=all_failed_records,
             )
+        if attempt_filters_json is not None and completed is not True:
+            return
         if automatic_retry_plan.get("should_retry") is True:
             created_by = str(current.get("created_by") or "").strip()
             retry_method = getattr(workspace, "retry_batch_job", None)
@@ -3768,6 +3952,7 @@ async def run_sichuan_workspace_batch_job(
                 job_id=job_id,
                 created_by=created_by,
                 automatic=True,
+                **({"expected_attempt_filters_json": attempt_filters_json} if attempt_filters_json is not None else {}),
             )
             if not retried_job or str(retried_job.get("status") or "") != "queued":
                 logger.error("部分失败任务自动补跑入队失败: job_id=%s", job_id)
@@ -3795,4 +3980,16 @@ async def run_sichuan_workspace_batch_job(
         logger.info("四川规则批量任务 %s 已取消，后台执行已停止", job_id)
     except Exception as exc:
         logger.exception("四川规则批量任务执行失败: %s", exc)
-        workspace.fail_batch_job(job_id=job_id, error_message=str(exc))
+        workspace.fail_batch_job(
+            job_id=job_id, error_message=str(exc),
+            **(
+                attempt_kwargs if attempt_filters_json is not None
+                else {
+                    "queued_only": True,
+                    "expected_queued_filters_json": claim_filters_json,
+                } if formal_0609_job else {}
+            ),
+        )
+    finally:
+        if lease_stop is not None:
+            lease_stop.set()

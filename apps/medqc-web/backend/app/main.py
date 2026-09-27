@@ -382,6 +382,10 @@ def create_app() -> FastAPI:
             except Exception:
                 logger.warning("LLM 默认配置预热失败，将按需加载", exc_info=True)
 
+            # 只重投尚未领取的 LX0609 叶任务；Worker 再校验冻结模型/构建身份。
+            qc_sichuan_router.resume_queued_luxian_0609_workspace_jobs()
+            qc_sichuan_router.start_luxian_0609_task_recovery_monitor()
+
             # 生产可启用 SC 规则来源持续巡检（巡检接口等价 /rules/source）
             qc_sichuan_router.start_rule_source_monitor()
             logger.info("ℹ️ 跳过启动阶段的四川质控服务初始化（将按需懒加载）")
@@ -394,6 +398,7 @@ def create_app() -> FastAPI:
     async def shutdown_event():
         """应用关闭时清理后台任务。"""
         try:
+            await qc_sichuan_router.stop_luxian_0609_task_recovery_monitor()
             await qc_sichuan_router.stop_rule_source_monitor()
         except Exception:
             logger.warning("停止 SC 规则来源巡检任务失败", exc_info=True)

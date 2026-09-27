@@ -412,10 +412,10 @@ def build_visit_001() -> SyntheticVisit:
     )
     visit.golden_answers.extend(
         [
-            golden("LX0609-001", "non_compliant", True, ["入院时间为2026-06-01 08:00", "入院记录提交时间为2026-06-02 10:30，超过24小时"], [("admission_record", "submit_datetime", "2026-06-02 10:30")], "入院记录超过入院后24小时完成。"),
-            golden("LX0609-002", "non_compliant", True, ["首次病程记录时间为2026-06-01 18:30", "距离入院10.5小时"], [("first_course_record", "record_datetime", "2026-06-01 18:30")], "首次病程记录未在入院后8小时内完成。"),
-            golden("LX0609-005", "non_compliant", True, ["入院后48小时内未见主治医师首次查房记录"], [("senior_course_record", "record_content", "主任医师查房记录")], "48小时内缺少主治医师首次查房记录。"),
-            golden("LX0609-006", "non_compliant", True, ["主任医师查房记录在入院后77.5小时出现"], [("senior_course_record", "submit_datetime", "2026-06-04 13:30")], "72小时内未完成高级职称医师首次查房记录。"),
+            golden("LX0609-01-01-01", "non_compliant", True, ["入院时间为2026-06-01 08:00", "入院记录提交时间为2026-06-02 10:30，超过24小时"], [("admission_record", "submit_datetime", "2026-06-02 10:30")], "入院记录超过入院后24小时完成。"),
+            golden("LX0609-01-02-01", "non_compliant", True, ["首次病程记录时间为2026-06-01 18:30", "距离入院10.5小时"], [("first_course_record", "record_datetime", "2026-06-01 18:30")], "首次病程记录未在入院后8小时内完成。"),
+            golden("LX0609-02-01-01", "non_compliant", True, ["入院后48小时内未见主治医师首次查房记录"], [("senior_course_record", "record_content", "主任医师查房记录")], "48小时内缺少主治医师首次查房记录。"),
+            golden("LX0609-02-01-02", "non_compliant", True, ["主任医师查房记录在入院后77.5小时出现"], [("senior_course_record", "submit_datetime", "2026-06-04 13:30")], "72小时内未完成高级职称医师首次查房记录。"),
         ]
     )
     return visit
@@ -461,10 +461,10 @@ def build_visit_002() -> SyntheticVisit:
     doc_row(visit, "discharge_record", "DIS", "出院记录", "出院记录\n诊疗经过：患者经治疗后腹痛缓解。\n出院医嘱：清淡饮食，门诊随访。", submit_time=visit.discharge_time)
     visit.golden_answers.extend(
         [
-            golden("LX0609-001", "compliant", False, ["入院记录在入院后3小时完成"], [("admission_record", "submit_datetime", "2026-06-02 12:00")], "入院记录时限合规。", case_type="negative"),
-            golden("LX0609-002", "compliant", False, ["首次病程记录在入院后2.5小时完成"], [("first_course_record", "record_datetime", "2026-06-02 11:30")], "首次病程时限合规。", case_type="negative"),
-            golden("LX0609-005", "compliant", False, ["48小时内有主治医师查房记录"], [("senior_course_record", "record_content", "主治医师查房记录")], "48小时主治医师查房合规。", case_type="negative"),
-            golden("LX0609-006", "compliant", False, ["72小时内有主任医师查房记录"], [("senior_course_record", "record_content", "主任医师查房记录")], "72小时高级职称查房合规。", case_type="negative"),
+            golden("LX0609-01-01-01", "compliant", False, ["入院记录在入院后3小时完成"], [("admission_record", "submit_datetime", "2026-06-02 12:00")], "入院记录时限合规。", case_type="negative"),
+            golden("LX0609-01-02-01", "compliant", False, ["首次病程记录在入院后2.5小时完成"], [("first_course_record", "record_datetime", "2026-06-02 11:30")], "首次病程时限合规。", case_type="negative"),
+            golden("LX0609-02-01-01", "compliant", False, ["48小时内有主治医师查房记录"], [("senior_course_record", "record_content", "主治医师查房记录")], "48小时主治医师查房合规。", case_type="negative"),
+            golden("LX0609-02-01-02", "compliant", False, ["72小时内有主任医师查房记录"], [("senior_course_record", "record_content", "主任医师查房记录")], "72小时高级职称查房合规。", case_type="negative"),
         ]
     )
     return visit
@@ -504,9 +504,9 @@ def build_visit_003() -> SyntheticVisit:
     doc_row(visit, "discharge_record", "DIS", "出院记录", "出院记录\n患者肺部感染较前吸收，出院后呼吸科随访。", submit_time=visit.discharge_time)
     visit.golden_answers.extend(
         [
-            golden("LX0609-008", "non_compliant", True, ["2026-06-09 08:20下达病重医嘱", "2026-06-10、2026-06-11未见查房病程记录"], [("inpat_nondrug_order", "order_name", "病重"), ("daily_course_record", "record_content", "2026-06-12 09:30")], "病重患者2天内缺少查房病程记录。"),
-            golden("LX0609-009", "not_applicable", False, ["未下达病危医嘱"], [("inpat_nondrug_order", "order_name", "病重")], "该样本只有病重医嘱，不适用于病危每日记录规则。", case_type="boundary"),
-            golden("LX0609-007", "not_applicable", False, ["患者存在病重医嘱，不属于病情稳定患者"], [("inpat_nondrug_order", "record_content", "下达病重医嘱")], "病情稳定3天查房规则不适用。", case_type="boundary"),
+            golden("LX0609-02-01-04", "non_compliant", True, ["2026-06-09 08:20下达病重医嘱", "2026-06-10、2026-06-11未见查房病程记录"], [("inpat_nondrug_order", "order_name", "病重"), ("daily_course_record", "record_content", "2026-06-12 09:30")], "病重患者2天内缺少查房病程记录。"),
+            golden("LX0609-02-01-05", "not_applicable", False, ["未下达病危医嘱"], [("inpat_nondrug_order", "order_name", "病重")], "该样本只有病重医嘱，不适用于病危每日记录规则。", case_type="boundary"),
+            golden("LX0609-02-01-03", "not_applicable", False, ["患者存在病重医嘱，不属于病情稳定患者"], [("inpat_nondrug_order", "record_content", "下达病重医嘱")], "病情稳定3天查房规则不适用。", case_type="boundary"),
         ]
     )
     return visit
@@ -544,9 +544,9 @@ def build_visit_004() -> SyntheticVisit:
     doc_row(visit, "discharge_record", "DIS", "出院记录", "出院记录\n治疗后心衰症状改善，嘱心内科随访。", submit_time=visit.discharge_time)
     visit.golden_answers.extend(
         [
-            golden("LX0609-004", "non_compliant", True, ["抢救结束时间2026-06-05 12:00", "抢救记录记录时间2026-06-05 20:30"], [("rescue_record", "record_content", "抢救结束时间：2026-06-05 12:00"), ("rescue_record", "submit_datetime", "2026-06-05 20:30")], "抢救记录超过抢救结束后6小时完成。"),
-            golden("LX0609-001", "compliant", False, ["入院记录入院后2小时完成"], [("admission_record", "submit_datetime", "2026-06-05 08:30")], "入院记录时限合规。", case_type="negative"),
-            golden("LX0609-002", "compliant", False, ["首次病程入院后2小时完成"], [("first_course_record", "record_datetime", "2026-06-05 08:30")], "首次病程时限合规。", case_type="negative"),
+            golden("LX0609-09-01-01", "non_compliant", True, ["抢救结束时间2026-06-05 12:00", "抢救记录记录时间2026-06-05 20:30"], [("rescue_record", "record_content", "抢救结束时间：2026-06-05 12:00"), ("rescue_record", "submit_datetime", "2026-06-05 20:30")], "抢救记录超过抢救结束后6小时完成。"),
+            golden("LX0609-01-01-01", "compliant", False, ["入院记录入院后2小时完成"], [("admission_record", "submit_datetime", "2026-06-05 08:30")], "入院记录时限合规。", case_type="negative"),
+            golden("LX0609-01-02-01", "compliant", False, ["首次病程入院后2小时完成"], [("first_course_record", "record_datetime", "2026-06-05 08:30")], "首次病程时限合规。", case_type="negative"),
         ]
     )
     return visit
@@ -592,9 +592,9 @@ def build_visit_005() -> SyntheticVisit:
     doc_row(visit, "discharge_record", "DIS", "出院记录", "出院记录\n出院诊断：腰椎间盘突出症；尿路感染。出院后骨科门诊复查。", submit_time=visit.discharge_time)
     visit.golden_answers.extend(
         [
-            golden("LX0609-010", "non_compliant", True, ["行腰椎MRI检查前未见说明检查必要性的病程记录"], [("exam_item_report", "record_content", "腰椎MRI报告"), ("daily_course_record", "record_content", "已完善腰椎MRI检查")], "MRI检查前缺少有针对性的病程记录说明。"),
-            golden("LX0609-012", "non_compliant", True, ["2026-06-03 14:20腰椎MRI阳性报告", "报告后24小时内病程未分析阳性结果与症状、诊断或治疗方案关系"], [("exam_item_report", "exam_conclusion", "L4/5椎间盘突出并右侧神经根受压"), ("daily_course_record", "record_content", "继续予止痛、营养神经治疗")], "MRI阳性结果未在24小时内进行临床分析。"),
-            golden("LX0609-014", "non_compliant", True, ["2026-06-04 09:10尿培养阳性", "24小时内病程未针对阳性菌和药敏调整治疗进行分析"], [("labtest_item_report", "result", "大肠埃希菌生长"), ("daily_course_record", "record_content", "尿频较前减轻")], "细菌培养阳性结果未在病程中及时分析。"),
+            golden("LX0609-06-01-02", "non_compliant", True, ["行腰椎MRI检查前未见说明检查必要性的病程记录"], [("exam_item_report", "record_content", "腰椎MRI报告"), ("daily_course_record", "record_content", "已完善腰椎MRI检查")], "MRI检查前缺少有针对性的病程记录说明。"),
+            golden("LX0609-06-01-05", "non_compliant", True, ["2026-06-03 14:20腰椎MRI阳性报告", "报告后24小时内病程未分析阳性结果与症状、诊断或治疗方案关系"], [("exam_item_report", "exam_conclusion", "L4/5椎间盘突出并右侧神经根受压"), ("daily_course_record", "record_content", "继续予止痛、营养神经治疗")], "MRI阳性结果未在24小时内进行临床分析。"),
+            golden("LX0609-06-03-03", "non_compliant", True, ["2026-06-04 09:10尿培养阳性", "24小时内病程未针对阳性菌和药敏调整治疗进行分析"], [("labtest_item_report", "result", "大肠埃希菌生长"), ("daily_course_record", "record_content", "尿频较前减轻")], "细菌培养阳性结果未在病程中及时分析。"),
         ]
     )
     return visit
@@ -627,9 +627,9 @@ def build_visit_006() -> SyntheticVisit:
     doc_row(visit, "discharge_record", "DIS", "出院记录", "出院记录\n诊疗经过：完善检查后考虑急性阑尾炎，予抗感染治疗后症状缓解。", submit_time=visit.discharge_time)
     visit.golden_answers.extend(
         [
-            golden("LX0609-016", "non_compliant", True, ["首次病程与连续日常病程存在高度重复段落"], [("first_course_record", "record_content", repeated), ("daily_course_record", "record_content", repeated)], "多份病程记录核心描述高度重复，存在复制病历风险。"),
-            golden("LX0609-017", "non_compliant", True, ["主诉为“不适3天”，不能导出第一诊断急性阑尾炎"], [("admission_record", "chief_complaint", "不适3天"), ("diagnosis", "diagnosis_name", "急性阑尾炎")], "主诉过于笼统，无法支撑第一诊断。"),
-            golden("LX0609-018", "non_compliant", True, ["首次病程拟诊讨论未充分说明第一诊断依据"], [("first_course_record", "record_content", "第一诊断依据记录不足")], "首次病程诊断分析不足。"),
+            golden("LX0609-12-01-01", "non_compliant", True, ["首次病程与连续日常病程存在高度重复段落"], [("first_course_record", "record_content", repeated), ("daily_course_record", "record_content", repeated)], "多份病程记录核心描述高度重复，存在复制病历风险。"),
+            golden("LX0609-12-01-02", "non_compliant", True, ["主诉为“不适3天”，不能导出第一诊断急性阑尾炎"], [("admission_record", "chief_complaint", "不适3天"), ("diagnosis", "diagnosis_name", "急性阑尾炎")], "主诉过于笼统，无法支撑第一诊断。"),
+            golden("LX0609-01-01-02", "non_compliant", True, ["首次病程拟诊讨论未充分说明第一诊断依据"], [("first_course_record", "record_content", "第一诊断依据记录不足")], "首次病程诊断分析不足。"),
         ]
     )
     return visit
@@ -668,9 +668,9 @@ def build_visit_007() -> SyntheticVisit:
     doc_row(visit, "discharge_record", "DIS", "出院记录", "出院记录\n患者胸闷改善，嘱心内科、内分泌科门诊随访。", submit_time=visit.discharge_time)
     visit.golden_answers.extend(
         [
-            golden("LX0609-020", "non_compliant", True, ["会诊目的仅写“请会诊”"], [("consultation_record", "record_content", "会诊目的：请会诊")], "会诊申请未明确会诊目的。"),
-            golden("LX0609-021", "non_compliant", True, ["会诊意见笼统，缺少针对性诊疗建议"], [("consultation_record", "record_content", "建议完善相关检查，继续目前治疗")], "会诊意见过于笼统，不具备可执行性。"),
-            golden("LX0609-022", "non_compliant", True, ["后续病程照抄会诊意见，未记录执行情况"], [("daily_course_record", "record_content", "建议完善相关检查，继续目前治疗")], "病程记录未说明会诊意见执行情况。"),
+            golden("LX0609-03-01-01", "non_compliant", True, ["会诊目的仅写“请会诊”"], [("consultation_record", "record_content", "会诊目的：请会诊")], "会诊申请未明确会诊目的。"),
+            golden("LX0609-03-01-02", "non_compliant", True, ["会诊意见笼统，缺少针对性诊疗建议"], [("consultation_record", "record_content", "建议完善相关检查，继续目前治疗")], "会诊意见过于笼统，不具备可执行性。"),
+            golden("LX0609-03-01-03", "non_compliant", True, ["后续病程照抄会诊意见，未记录执行情况"], [("daily_course_record", "record_content", "建议完善相关检查，继续目前治疗")], "病程记录未说明会诊意见执行情况。"),
         ]
     )
     return visit
@@ -721,10 +721,10 @@ def build_visit_008() -> SyntheticVisit:
     doc_row(visit, "discharge_record", "DIS", "出院记录", "出院记录\n患者术后恢复可，出院后普通外科门诊随访。", submit_time=visit.discharge_time)
     visit.golden_answers.extend(
         [
-            golden("LX0609-003", "non_compliant", True, ["手术结束2026-06-03 10:40", "手术记录提交2026-06-04 14:00"], [("surgery_record", "submit_datetime", "2026-06-04 14:00")], "手术记录超过术后24小时完成。"),
-            golden("LX0609-039", "non_compliant", True, ["术前讨论未记录替代方案、主要风险和参会人员具体意见"], [("presurg_discussion", "record_content", "未记录替代方案、主要风险")], "术前讨论内容不完整。"),
-            golden("LX0609-032", "non_compliant", True, ["手术安全核查记录不完整，麻醉前核查项未签名"], [("surgery_safecheck_record", "record_content", "麻醉前核查项未签名")], "手术安全核查记录存在缺项。"),
-            golden("LX0609-038", "non_compliant", True, ["麻醉记录生命体征记录间断，出室评分未填写"], [("anesthesia_record", "record_content", "出室评分未填写")], "麻醉记录填写不完整。"),
+            golden("LX0609-04-02-01", "non_compliant", True, ["手术结束2026-06-03 10:40", "手术记录提交2026-06-04 14:00"], [("surgery_record", "submit_datetime", "2026-06-04 14:00")], "手术记录超过术后24小时完成。"),
+            golden("LX0609-04-01-02", "non_compliant", True, ["术前讨论未记录替代方案、主要风险和参会人员具体意见"], [("presurg_discussion", "record_content", "未记录替代方案、主要风险")], "术前讨论内容不完整。"),
+            golden("LX0609-04-03-01", "non_compliant", True, ["手术安全核查记录不完整，麻醉前核查项未签名"], [("surgery_safecheck_record", "record_content", "麻醉前核查项未签名")], "手术安全核查记录存在缺项。"),
+            golden("LX0609-04-04-03", "non_compliant", True, ["麻醉记录生命体征记录间断，出室评分未填写"], [("anesthesia_record", "record_content", "出室评分未填写")], "麻醉记录填写不完整。"),
         ]
     )
     return visit
@@ -748,8 +748,8 @@ def build_visit_009() -> SyntheticVisit:
     add_row(visit, "mr_surgery", {**common_identity(visit), "document_id": doc_id(visit, "MR-SURG"), "surgery_id": doc_id(visit, "SURG-01"), "surgery_name": "腹腔镜远端胃癌根治术", "surgical_level": "四级", "surgery_begin_datetime": dt("2026-06-06 09:00"), "surgery_end_datetime": dt("2026-06-06 13:30"), "surgeon": "手术医师A", "main_surgery_sign": "1"})
     doc_row(visit, "presurg_discussion", "PREDISC", "术前讨论记录", "术前讨论记录\n患者拟行四级手术腹腔镜远端胃癌根治术，未见MDT多学科讨论记录。", submit_time=dt("2026-06-05 16:00"))
     doc_row(visit, "surgery_record", "SURG", "手术记录", "手术记录\n手术名称：腹腔镜远端胃癌根治术。术中切除胃远端病灶，记录未明确淋巴结清扫范围及送检组数。", submit_time=dt("2026-06-06 16:00"))
-    add_row(visit, "pathology_exam_master", {**common_identity(visit), "pathology_exam_id": doc_id(visit, "PATH"), "pathology_id": "P-LX0609-009", "clinical_history": "胃恶性肿瘤术后", "surgery_name": "腹腔镜远端胃癌根治术", "specimen_name": "胃远端及淋巴结", "request_datetime": dt("2026-06-06 14:00"), "record_content": "胃远端及淋巴结病理申请。"})
-    add_row(visit, "pathology_exam_report", {**common_identity(visit), "pathology_exam_id": doc_id(visit, "PATH"), "pathology_id": "P-LX0609-009", "specimen_name": "胃远端及淋巴结", "diagnosis": "胃腺癌，中分化，浸润至浆膜下层。淋巴结转移情况待补充。", "report_status": "已审核", "report_datetime": dt("2026-06-10 10:00"), "record_content": "病理诊断：胃腺癌，中分化，浸润至浆膜下层。"})
+    add_row(visit, "pathology_exam_master", {**common_identity(visit), "pathology_exam_id": doc_id(visit, "PATH"), "pathology_id": "P-LX0609-02-01-05", "clinical_history": "胃恶性肿瘤术后", "surgery_name": "腹腔镜远端胃癌根治术", "specimen_name": "胃远端及淋巴结", "request_datetime": dt("2026-06-06 14:00"), "record_content": "胃远端及淋巴结病理申请。"})
+    add_row(visit, "pathology_exam_report", {**common_identity(visit), "pathology_exam_id": doc_id(visit, "PATH"), "pathology_id": "P-LX0609-02-01-05", "specimen_name": "胃远端及淋巴结", "diagnosis": "胃腺癌，中分化，浸润至浆膜下层。淋巴结转移情况待补充。", "report_status": "已审核", "report_datetime": dt("2026-06-10 10:00"), "record_content": "病理诊断：胃腺癌，中分化，浸润至浆膜下层。"})
     add_row(visit, "inpat_drug_order", {**common_identity(visit), "order_id": doc_id(visit, "ORD-CHEMO"), "drug_type": "化疗药", "generic_name": "奥沙利铂", "drug_apply_method": "静脉滴注", "prescribed_datetime": dt("2026-06-12 09:00"), "prescribed_doctor": "肿瘤医师A", "order_status": "执行", "record_content": "奥沙利铂静脉滴注化疗医嘱。"})
     doc_row(visit, "daily_course_record", "D-CHEMO", "日常病程记录", "日常病程记录\n记录时间：2026-06-12 18:00\n患者术后恢复可，继续补液、护胃、营养支持治疗。", submit_time=dt("2026-06-12 18:00"))
     doc_row(
@@ -763,10 +763,10 @@ def build_visit_009() -> SyntheticVisit:
     )
     visit.golden_answers.extend(
         [
-            golden("LX0609-013", "non_compliant", True, ["病理报告提示胃腺癌", "病程和首页未充分记录病理诊断分析"], [("pathology_exam_report", "diagnosis", "胃腺癌，中分化")], "恶性肿瘤病理信息未充分进入病程/首页质控证据链。"),
-            golden("LX0609-019", "non_compliant", True, ["胃癌根治术记录未明确淋巴结清扫范围及送检组数"], [("surgery_record", "record_content", "未明确淋巴结清扫范围及送检组数")], "恶性肿瘤手术记录未体现淋巴结清扫关键信息。"),
-            golden("LX0609-040", "non_compliant", True, ["四级手术术前讨论未见MDT记录"], [("presurg_discussion", "record_content", "未见MDT多学科讨论记录")], "四级手术缺少MDT或高级别术前讨论支撑。"),
-            golden("LX0609-027", "non_compliant", True, ["出院医嘱未包含肿瘤科复诊、辅助化疗评估或病理回看计划"], [("discharge_record", "discharge_order", "注意休息，保持切口清洁")], "恶性肿瘤出院后治疗计划不完整。"),
+            golden("LX0609-06-02-03", "non_compliant", True, ["病理报告提示胃腺癌", "病程和首页未充分记录病理诊断分析"], [("pathology_exam_report", "diagnosis", "胃腺癌，中分化")], "恶性肿瘤病理信息未充分进入病程/首页质控证据链。"),
+            golden("LX0609-06-02-02", "non_compliant", True, ["胃癌根治术记录未明确淋巴结清扫范围及送检组数"], [("surgery_record", "record_content", "未明确淋巴结清扫范围及送检组数")], "恶性肿瘤手术记录未体现淋巴结清扫关键信息。"),
+            golden("LX0609-04-01-03", "non_compliant", True, ["四级手术术前讨论未见MDT记录"], [("presurg_discussion", "record_content", "未见MDT多学科讨论记录")], "四级手术缺少MDT或高级别术前讨论支撑。"),
+            golden("LX0609-08-01-04", "non_compliant", True, ["出院医嘱未包含肿瘤科复诊、辅助化疗评估或病理回看计划"], [("discharge_record", "discharge_order", "注意休息，保持切口清洁")], "恶性肿瘤出院后治疗计划不完整。"),
         ]
     )
     return visit
@@ -795,10 +795,10 @@ def build_visit_010() -> SyntheticVisit:
     doc_row(visit, "discharge_record", "DIS", "出院记录", "出院记录\n患者骨折术后恢复可，贫血较前改善，出院后骨科门诊随访。", submit_time=visit.discharge_time)
     visit.golden_answers.extend(
         [
-            golden("LX0609-041", "non_compliant", True, ["存在输血申请和输血医嘱", "未见完整输血知情同意记录"], [("blood_application", "record_content", "未见完整输血风险告知记录")], "输血前知情同意资料不完整。"),
-            golden("LX0609-043", "non_compliant", True, ["存在输血申请和输血医嘱", "未见乙肝、丙肝、梅毒、HIV等输血前常规检查结果"], [("blood_application", "record_content", "申请输注红细胞悬液2U")], "输血前常规检查资料不完整。"),
-            golden("LX0609-047", "non_compliant", True, ["输血记录未见输血后疗效评价及不良反应观察结论"], [("bloodtrans_record", "record_content", "未见输血后疗效评价")], "输血后评价记录不完整。"),
-            golden("LX0609-049", "non_compliant", True, ["医嘱输血2U", "费用明细收费4U"], [("inpat_nondrug_order", "order_name", "输注红细胞悬液2U"), ("inpat_bill_item", "record_content", "红细胞悬液收费4U")], "输血医嘱与收费数量不一致。"),
+            golden("LX0609-11-03-01", "non_compliant", True, ["存在输血申请和输血医嘱", "未见完整输血知情同意记录"], [("blood_application", "record_content", "未见完整输血风险告知记录")], "输血前知情同意资料不完整。"),
+            golden("LX0609-07-01-01", "non_compliant", True, ["存在输血申请和输血医嘱", "未见乙肝、丙肝、梅毒、HIV等输血前常规检查结果"], [("blood_application", "record_content", "申请输注红细胞悬液2U")], "输血前常规检查资料不完整。"),
+            golden("LX0609-07-03-01", "non_compliant", True, ["输血记录未见输血后疗效评价及不良反应观察结论"], [("bloodtrans_record", "record_content", "未见输血后疗效评价")], "输血后评价记录不完整。"),
+            golden("LX0609-07-04-02", "non_compliant", True, ["医嘱输血2U", "费用明细收费4U"], [("inpat_nondrug_order", "order_name", "输注红细胞悬液2U"), ("inpat_bill_item", "record_content", "红细胞悬液收费4U")], "输血医嘱与收费数量不一致。"),
         ]
     )
     return visit

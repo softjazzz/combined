@@ -10,7 +10,7 @@ const safeRef = (source_type: string, source_ref: string) => ({ source_type, sou
 describe('record comparison consultation evidence', () => {
   it('flattens safe per-recommendation references with role and index', () => {
     const item = {
-      rule_id: 'LX0609-020',
+      rule_id: 'LX0609-03-01-01',
       status: 'compliant',
       is_compliant: true,
       customer_display_facts: {
@@ -40,7 +40,7 @@ describe('record comparison consultation evidence', () => {
 
   it('ignores raw document ids and deduplicates identical safe references', () => {
     const item = {
-      rule_id: 'LX0609-020',
+      rule_id: 'LX0609-03-01-01',
       status: 'non_compliant',
       is_compliant: false,
       customer_display_facts: {
@@ -66,7 +66,7 @@ describe('record comparison consultation evidence', () => {
 
   it('keeps the existing six-item UI cap after flattening', () => {
     const item = {
-      rule_id: 'LX0609-020',
+      rule_id: 'LX0609-03-01-01',
       status: 'non_compliant',
       record_id: 'visit-1',
       customer_display_facts: {
@@ -92,7 +92,7 @@ describe('record comparison consultation evidence', () => {
       {
         items: [
           {
-            rule_id: 'LX0609-020',
+            rule_id: 'LX0609-03-01-01',
             status: 'non_compliant',
             record_id: 'visit-1',
             evidence: [safeRef('consultation_record', 'src_aaaaaaaaaaaaaaaaaaaaaaaa')],

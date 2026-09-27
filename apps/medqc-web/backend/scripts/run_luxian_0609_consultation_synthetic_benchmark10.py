@@ -17,7 +17,7 @@ import time
 from typing import Any, Callable, Mapping, Sequence
 
 
-_RULE_IDS = ("LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023")
+_RULE_IDS = ("LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03", "LX0609-03-01-04")
 _FORMAL_ROUNDS = 10
 _EXPECTED_STATUS_BY_RULE = {rule_id: "compliant" for rule_id in _RULE_IDS}
 _EXPECTED_REASON_BY_RULE = {rule_id: "requirement_satisfied" for rule_id in _RULE_IDS}

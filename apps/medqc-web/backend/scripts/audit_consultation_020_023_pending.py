@@ -29,13 +29,13 @@ def main():
     missing = assessment("missing", "no_trace")
     vague = assessment("vague", "generic_trace")
     cases = (
-        ("020-specific-plus-unknown", "LX0609-020", (specific, unknown), (), "evaluation_unknown"),
-        ("020-specific-with-course-gap", "LX0609-020", (specific,), ("senior_course_record",), "compliant"),
-        ("020-missing-plus-unknown", "LX0609-020", (missing, unknown), (), "non_compliant"),
-        ("020-missing-with-course-gap", "LX0609-020", (missing,), ("senior_course_record",), "data_gap"),
-        ("020-missing-with-auxiliary-gap", "LX0609-020", (missing,), ("exam_master",), "non_compliant"),
-        ("023-high-vague-plus-unknown", "LX0609-023", (vague, unknown), (), "non_compliant"),
-        ("023-medium-vague-plus-specific", "LX0609-023", (replace(vague, confidence="medium"), specific), (), "evaluation_unknown"),
+        ("020-specific-plus-unknown", "LX0609-03-01-01", (specific, unknown), (), "evaluation_unknown"),
+        ("020-specific-with-course-gap", "LX0609-03-01-01", (specific,), ("senior_course_record",), "compliant"),
+        ("020-missing-plus-unknown", "LX0609-03-01-01", (missing, unknown), (), "non_compliant"),
+        ("020-missing-with-course-gap", "LX0609-03-01-01", (missing,), ("senior_course_record",), "data_gap"),
+        ("020-missing-with-auxiliary-gap", "LX0609-03-01-01", (missing,), ("exam_master",), "non_compliant"),
+        ("023-high-vague-plus-unknown", "LX0609-03-01-04", (vague, unknown), (), "non_compliant"),
+        ("023-medium-vague-plus-specific", "LX0609-03-01-04", (replace(vague, confidence="medium"), specific), (), "evaluation_unknown"),
     )
     for label, rule, items, gaps, expected in cases:
         actual = _execution_outcome(

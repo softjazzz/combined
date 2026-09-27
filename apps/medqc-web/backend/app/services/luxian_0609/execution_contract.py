@@ -11,7 +11,7 @@ from .decision_model import RuleDecision
 from .native_execution import build_luxian_0609_native_result
 
 
-_RULE_ID_PATTERN = re.compile(r"^LX0609-\d{3}$")
+_RULE_ID_PATTERN = re.compile(r"^LX0609-\d{2}-\d{2}-\d{2}$")
 _EXECUTOR_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 _MODEL_EXECUTION_STATS_KEYS = (
     "requested_rule_count",
@@ -136,7 +136,6 @@ class FamilyUsageAttribution:
         if (
             type(rule_ids) is not tuple
             or not rule_ids
-            or rule_ids != tuple(sorted(rule_ids))
             or len(rule_ids) != len(set(rule_ids))
             or any(
                 not isinstance(rule_id, str)
@@ -233,8 +232,11 @@ class FamilyExecutionEnvelope:
     total_tokens: int = 0
     api_time: float = 0.0
     usage_attribution: FamilyUsageAttribution | None = None
+    usage_observation_complete: bool = True
 
     def __post_init__(self) -> None:
+        if type(self.usage_observation_complete) is not bool:
+            raise TypeError("usage_observation_complete must be bool")
         if (
             type(self.results) is not tuple
             or type(self.decisions) is not tuple
@@ -357,6 +359,9 @@ def build_family_technical_envelope(
         total_tokens=(source_envelope.total_tokens if source_envelope else 0),
         api_time=(source_envelope.api_time if source_envelope else 0.0),
         usage_attribution=usage_attribution,
+        usage_observation_complete=(
+            source_envelope.usage_observation_complete if source_envelope else True
+        ),
     )
 
 

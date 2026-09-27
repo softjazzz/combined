@@ -30,7 +30,7 @@ def test_051_mapping_strips_private_document_selection_payload() -> None:
     }
 
     assert safe_death_document_customer_display_facts(
-        rule_id="LX0609-051", raw=raw
+        rule_id="LX0609-09-02-01", raw=raw
     ) == _TIMELY_051_FACTS
 
 
@@ -42,7 +42,7 @@ def test_051_finalizer_preserves_boundary_overdue_state_after_display_rounding()
     }
     finalized, handled = finalize_luxian_0609_executor_customer_display_facts(
         result={
-            "rule_id": "LX0609-051",
+            "rule_id": "LX0609-09-02-01",
             "status": "non_compliant",
             "reason_code": "threshold_exceeded",
         },
@@ -66,7 +66,7 @@ def test_060_finalizer_rejects_presence_status_conflict() -> None:
     }
     finalized, handled = finalize_luxian_0609_executor_customer_display_facts(
         result={
-            "rule_id": "LX0609-060",
+            "rule_id": "LX0609-04-02-06",
             "status": "non_compliant",
             "reason_code": "required_document_missing",
             "findings": "不应保留",

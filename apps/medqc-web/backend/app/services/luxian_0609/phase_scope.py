@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Iterable
+from typing import Iterable, Mapping
 
 from ..luxian_0609_rule_master import (
     LUXIAN_0609_RULE_DEFINITION_VERSION,
@@ -44,7 +44,7 @@ _PENDING_DEFINITION_CUSTOMER_MESSAGES: dict[str, tuple[str, str]] = {
         "系统内的会诊文书实际为请会诊执行记录，缺少可核查的会诊申请单或会诊记录单，"
         "本质控点已暂停，未生成合规或问题判定。",
         "待院方提供会诊申请单或会诊记录单来源并完成口径验收后再启用本质控点；"
-        "会诊执行记录自身的规范性由 LX0609-023 单独核对。",
+        "会诊执行记录自身的规范性由 LX0609-03-01-04 单独核对。",
     ),
 }
 
@@ -122,7 +122,11 @@ def build_luxian_0609_pending_definition_result(rule_id: str) -> dict[str, objec
     """由总表投影唯一生成暂停规则的正式结果。"""
 
     entry = get_luxian_0609_phase_scope(rule_id)
-    if entry is None or entry.phase_status != "pending_definition":
+    if (
+        entry is None
+        or not entry.catalog_registered
+        or entry.phase_status != "pending_definition"
+    ):
         raise ValueError("rule is not an LX0609 pending definition")
     wrapper = get_luxian_0609_rule(entry.rule_id)
     if wrapper is None:
@@ -131,7 +135,7 @@ def build_luxian_0609_pending_definition_result(rule_id: str) -> dict[str, objec
         entry.pending_reason_code,
         _DEFAULT_PENDING_DEFINITION_MESSAGES,
     )
-    return {
+    result = {
         "rule_id": entry.rule_id,
         "rule_code": entry.rule_id,
         "qc_point_id": entry.rule_id,
@@ -141,6 +145,7 @@ def build_luxian_0609_pending_definition_result(rule_id: str) -> dict[str, objec
         "rule_set_version": RULE_SET_VERSION,
         "schema_version": CUSTOMER_SCHEMA_VERSION,
         "status": "not_executed",
+        "reason_code": "policy_definition_pending",
         "result_status": "not_executed",
         "display_status": "not_executed",
         "is_compliant": None,
@@ -156,6 +161,8 @@ def build_luxian_0609_pending_definition_result(rule_id: str) -> dict[str, objec
             "pending_reason_code": entry.pending_reason_code,
         },
     }
+    # 暂停文案由本函数的受控原因码模板生成，发布后不允许导出层重写。
+    return result
 
 
 def partition_luxian_0609_rule_scope(
@@ -167,7 +174,9 @@ def partition_luxian_0609_rule_scope(
         _clean(rule_id).upper() for rule_id in selected_rule_ids if _clean(rule_id)
     }
     entries = load_luxian_0609_phase_scope()
-    known_rule_ids = {entry.rule_id for entry in entries}
+    known_rule_ids = {
+        entry.rule_id for entry in entries if entry.catalog_registered
+    }
     if requested.difference(known_rule_ids):
         raise ValueError("invalid LX0609 customer rule id")
     executable = tuple(
@@ -181,3 +190,35 @@ def partition_luxian_0609_rule_scope(
         if entry.rule_id in requested and entry.phase_status != "phase_1_target"
     )
     return executable, withheld
+
+
+def get_luxian_0609_acceptance_only_rule_ids() -> frozenset[str]:
+    """待验收选择范围仅由总表投影，不改变执行合同或历史身份。"""
+    return frozenset(
+        entry.rule_id for entry in load_luxian_0609_rule_master()
+        if entry.release_scope == "acceptance_only"
+    )
+
+
+def frozen_luxian_0609_delivery_scope(filters: Mapping[str, object]) -> list[str]:
+    """恢复已保存的交付范围；旧任务只读原计划，禁止用当前目录猜测。"""
+    def ids(key: str) -> list[str]:
+        value = filters.get(key)
+        if value is None:
+            return []
+        if not isinstance(value, (list, tuple)) or any(
+            not isinstance(item, str) or not item.strip().upper().startswith("LX0609-")
+            for item in value
+        ):
+            raise ValueError("任务规则范围无法恢复，请新建质控任务")
+        return list(dict.fromkeys(item.strip().upper() for item in value))
+
+    scope = ids("scoped_customer_rule_ids")
+    if scope:
+        return scope
+    execution = ids("rule_ids")
+    paused = ids("paused_customer_rule_ids")
+    gates = ids("gate_only_customer_rule_ids")
+    if not execution and not paused and not gates:
+        raise ValueError("任务缺少已保存的规则范围，请新建质控任务")
+    return list(dict.fromkeys(execution + paused + gates))

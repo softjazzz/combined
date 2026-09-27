@@ -189,7 +189,7 @@ def test_exam_lab_session_uses_filtered_order_source_not_truncated_generic_order
         return _rows(source_key, [])
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-010", "LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015"),
+        selected_rule_ids=("LX0609-06-01-02", "LX0609-06-01-04", "LX0609-06-01-05", "LX0609-06-03-03", "LX0609-06-03-04"),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -223,7 +223,7 @@ def test_exam_lab_post_rules_freeze_existing_horizon_sources() -> None:
         return _rows(source_key, rows, limit_rows=1 if rows else 50)
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-011", "LX0609-015"),
+        selected_rule_ids=("LX0609-06-01-04", "LX0609-06-03-04"),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -258,7 +258,7 @@ def test_008_009_horizon_is_single_read_safe_fact_and_snapshot_identity() -> Non
 
     def build(*, evaluation_as_of_date: str, created_at: str):
         return build_luxian_0609_evidence_read_session(
-            selected_rule_ids=("LX0609-008", "LX0609-009"),
+            selected_rule_ids=("LX0609-02-01-04", "LX0609-02-01-05"),
             institute_id="institute-private-horizon",
             patient_id="patient-private-horizon",
             visit_id="visit-private-horizon",
@@ -339,7 +339,7 @@ def test_008_009_horizon_uses_authoritative_discharge_or_frozen_as_of(
         return _rows(source_key, [])
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-008", "LX0609-009"),
+        selected_rule_ids=("LX0609-02-01-04", "LX0609-02-01-05"),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -370,7 +370,7 @@ def test_disabled_horizon_policy_ignores_available_authoritative_discharge() -> 
         return _rows(source_key, [])
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-012",),
+        selected_rule_ids=("LX0609-06-01-05",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -403,7 +403,7 @@ def test_008_009_invalid_nonempty_discharge_datetime_fails_closed() -> None:
 
     with pytest.raises(ValueError, match="discharge_datetime must be a valid date"):
         build_luxian_0609_evidence_read_session(
-            selected_rule_ids=("LX0609-008",),
+            selected_rule_ids=("LX0609-02-01-04",),
             institute_id="I",
             patient_id="P",
             visit_id="V",
@@ -427,7 +427,7 @@ def test_020_023_freeze_admission_and_authoritative_horizon_in_one_session() -> 
         return _rows(source_key, [])
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-020", "LX0609-023"),
+        selected_rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -466,7 +466,7 @@ def test_evaluation_horizon_rejects_discharge_before_current_admission() -> None
         return _rows(source_key, [])
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-012",),
+        selected_rule_ids=("LX0609-06-01-05",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -496,7 +496,7 @@ def test_authoritative_horizon_detects_same_day_minute_level_time_conflict() -> 
         return _rows(source_key, [])
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-012",),
+        selected_rule_ids=("LX0609-06-01-05",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -530,7 +530,7 @@ def test_027_projects_discharge_record_into_the_same_evidence_session() -> None:
         return _rows(source_key, [])
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-027",),
+        selected_rule_ids=("LX0609-08-01-04",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -563,7 +563,7 @@ def test_027_projects_discharge_record_into_the_same_evidence_session() -> None:
 def test_027_legacy_executor_prefetches_discharge_record() -> None:
     assert resolve_legacy_executor_material_source_keys(
         ("tumor_pathology",),
-        selected_rule_ids=("LX0609-027",),
+        selected_rule_ids=("LX0609-08-01-04",),
     ) == (
         "diagnosis",
         "discharge_record",
@@ -576,7 +576,7 @@ def test_027_legacy_executor_prefetches_discharge_record() -> None:
 def test_026_prefetches_stage_matched_diagnosis_sources() -> None:
     assert resolve_legacy_executor_material_source_keys(
         ("tumor_pathology",),
-        selected_rule_ids=("LX0609-026",),
+        selected_rule_ids=("LX0609-05-02-01",),
     ) == (
         "admission_record_diagnosis",
         "daily_course_record",
@@ -589,7 +589,7 @@ def test_026_prefetches_stage_matched_diagnosis_sources() -> None:
     )
 
 
-def _build(*, selected_rule_ids=("LX0609-030",), row_reader, **overrides):
+def _build(*, selected_rule_ids=("LX0609-04-02-02",), row_reader, **overrides):
     values = {
         "selected_rule_ids": selected_rule_ids,
         "institute_id": "institute-private-001",
@@ -622,7 +622,7 @@ def test_055_058_session_reads_each_executor_input_source() -> None:
         return _rows(source_key, [])
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-055", "LX0609-058"),
+        selected_rule_ids=("LX0609-05-01-03", "LX0609-05-01-06"),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -640,7 +640,7 @@ def test_055_058_session_reads_each_executor_input_source() -> None:
     assert required.issubset(calls)
     assert all(session.materials.has_source(source_key) for source_key in required)
 
-    sources_058 = set(resolve_luxian_0609_decision_support_source_keys(("LX0609-058",)))
+    sources_058 = set(resolve_luxian_0609_decision_support_source_keys(("LX0609-05-01-06",)))
     assert sources_058 == {
         "inpat_drug_order",
         "consultation_record",
@@ -657,7 +657,7 @@ def test_063_session_prefetches_mr_diagnosis_as_a_bounded_source() -> None:
         return _rows(source_key, [])
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-063",),
+        selected_rule_ids=("LX0609-08-01-03",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -686,7 +686,7 @@ def test_063_unavailable_mr_diagnosis_is_kept_as_unavailable_observation() -> No
         return _rows(source_key, [])
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-063",),
+        selected_rule_ids=("LX0609-08-01-03",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -730,17 +730,17 @@ def test_055_focused_scopes_freeze_the_same_evaluation_horizon() -> None:
         )
         return session.materials.rows(EVALUATION_HORIZON_SOURCE_KEY)
 
-    reference = horizon_rows(("LX0609-052",))
+    reference = horizon_rows(("LX0609-06-04-01",))
     focused_six = (
-        "LX0609-054",
-        "LX0609-055",
-        "LX0609-057",
-        "LX0609-058",
-        "LX0609-069",
-        "LX0609-071",
+        "LX0609-05-01-02",
+        "LX0609-05-01-03",
+        "LX0609-05-01-05",
+        "LX0609-05-01-06",
+        "LX0609-04-02-07",
+        "LX0609-10-01-01",
     )
 
-    assert horizon_rows(("LX0609-055",)) == reference
+    assert horizon_rows(("LX0609-05-01-03",)) == reference
     assert horizon_rows(focused_six) == reference
     assert reference[0]["horizon_date"] == "2026-08-05"
     assert reference[0]["basis"] == "evaluation_as_of"
@@ -771,7 +771,7 @@ def test_033_reads_only_surgery_record_and_surgery_consent_sources() -> None:
         return _rows(source_key, rows_by_source.get(source_key, ()))
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-033",),
+        selected_rule_ids=("LX0609-11-01-01",),
         institute_id="I-033",
         patient_id="P-033",
         visit_id="V-033",
@@ -826,7 +826,7 @@ def test_007_builds_exact_unstable_order_fact_once(
         return _rows(source_key, [])
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-007",),
+        selected_rule_ids=("LX0609-02-01-03",),
         institute_id="institute-private-001",
         patient_id="patient-private-001",
         visit_id="visit-private-001",
@@ -872,7 +872,7 @@ def test_007_reads_admission_anchor_and_derived_evaluation_horizon() -> None:
         return _rows(source_key, rows_by_source.get(source_key, []))
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-007",),
+        selected_rule_ids=("LX0609-02-01-03",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -910,7 +910,7 @@ def test_007_preserves_date_only_frozen_evaluation_horizon() -> None:
         return _rows(source_key, rows_by_source.get(source_key, []))
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-007",),
+        selected_rule_ids=("LX0609-02-01-03",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -946,7 +946,7 @@ def test_051_freezes_evaluation_horizon_in_the_same_evidence_session() -> None:
         return _rows(source_key, rows_by_source.get(source_key, []))
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-051",),
+        selected_rule_ids=("LX0609-09-02-01",),
         institute_id="I-051",
         patient_id="P-051",
         visit_id="V-051",
@@ -992,7 +992,7 @@ def test_052_freezes_evaluation_horizon_in_the_same_evidence_session() -> None:
         return _rows(source_key, rows_by_source.get(source_key, []))
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-052",),
+        selected_rule_ids=("LX0609-06-04-01",),
         institute_id="I-052",
         patient_id="P-052",
         visit_id="V-052",
@@ -1035,7 +1035,7 @@ def test_072_freezes_evaluation_horizon_in_the_same_evidence_session() -> None:
         return _rows(source_key, rows_by_source.get(source_key, []))
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-072",),
+        selected_rule_ids=("LX0609-10-02-01",),
         institute_id="I-072",
         patient_id="P-072",
         visit_id="V-072",
@@ -1069,7 +1069,7 @@ def test_non_007_does_not_query_unstable_order_fact() -> None:
         calls.append(source_key)
         return _rows(source_key, [])
 
-    _build(selected_rule_ids=("LX0609-017",), row_reader=reader)
+    _build(selected_rule_ids=("LX0609-12-01-02",), row_reader=reader)
 
     assert CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY not in calls
 
@@ -1082,7 +1082,7 @@ def test_017_reads_only_its_whitelisted_copy_support_sources() -> None:
         calls.append(source_key)
         return _rows(source_key, [])
 
-    _build(selected_rule_ids=("LX0609-017",), row_reader=reader)
+    _build(selected_rule_ids=("LX0609-12-01-02",), row_reader=reader)
 
     assert {
         "daily_course_record",
@@ -1098,7 +1098,7 @@ def test_017_reads_only_its_whitelisted_copy_support_sources() -> None:
     assert "treatment_course" not in calls
 
     calls.clear()
-    _build(selected_rule_ids=("LX0609-007",), row_reader=reader)
+    _build(selected_rule_ids=("LX0609-02-01-03",), row_reader=reader)
     assert not set(calls).intersection({
         "exam_item_report",
         "labtest_master",
@@ -1151,7 +1151,7 @@ def test_surgery_record_builds_only_exact_performed_or_complete_empty_fact(
         raise SourceEvidenceQueryError("raw SQL Bearer_secret 13800138000")
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-003",),
+        selected_rule_ids=("LX0609-04-02-01",),
         institute_id="institute-private-001",
         patient_id="patient-private-001",
         visit_id="visit-private-001",
@@ -1235,7 +1235,7 @@ def test_029_surgery_order_fact_uses_strict_type_and_status(
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-029",),
+        selected_rule_ids=("LX0609-04-01-01",),
         institute_id="I-029",
         patient_id="P-029",
         visit_id="V-029",
@@ -1271,7 +1271,7 @@ def test_029_surgery_order_fact_is_one_source_aggregate_for_multiple_orders() ->
         return _rows(source_key, rows if source_key == "inpat_nondrug_order" else ())
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-029",),
+        selected_rule_ids=("LX0609-04-01-01",),
         institute_id="I-029-multi",
         patient_id="P-029-multi",
         visit_id="V-029-multi",
@@ -1305,7 +1305,7 @@ def test_039_mr_surgery_typed_time_builds_hash_only_performed_fact() -> None:
         return _rows(source_key, rows)
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-039",),
+        selected_rule_ids=("LX0609-04-01-02",),
         institute_id="institute-private-039",
         patient_id="patient-private-039",
         visit_id="visit-private-039",
@@ -1347,7 +1347,7 @@ def test_039_explicit_non_emergency_surgery_builds_negated_exception_fact() -> N
         return _rows(source_key, rows)
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-039",),
+        selected_rule_ids=("LX0609-04-01-02",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -1388,7 +1388,7 @@ def test_single_028_prefetches_surgery_record_for_surgery_gate() -> None:
         return _rows(source_key, rows)
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-028",),
+        selected_rule_ids=("LX0609-05-01-01",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -1428,7 +1428,7 @@ def test_007_controlled_fact_preserves_source_failure_state(
         return _rows(source_key, [])
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-007",),
+        selected_rule_ids=("LX0609-02-01-03",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -1458,7 +1458,7 @@ def test_provider_queries_selected_rule_source_union_once_in_stable_order() -> N
         return _rows(source_key, [{"safe": source_key}])
 
     snapshot = _build(
-        selected_rule_ids=("LX0609-029", "LX0609-030", "LX0609-032"),
+        selected_rule_ids=("LX0609-04-01-01", "LX0609-04-02-02", "LX0609-04-03-01"),
         row_reader=reader,
     )
 
@@ -1517,11 +1517,11 @@ def test_provider_reads_anesthesia_and_visit_sources_for_034_to_038() -> None:
 
     snapshot = _build(
         selected_rule_ids=(
-            "LX0609-034",
-            "LX0609-035",
-            "LX0609-036",
-            "LX0609-037",
-            "LX0609-038",
+            "LX0609-11-02-01",
+            "LX0609-11-02-02",
+            "LX0609-04-04-01",
+            "LX0609-04-04-02",
+            "LX0609-04-04-03",
         ),
         row_reader=reader,
     )
@@ -1553,7 +1553,7 @@ def test_consultation_decision_support_retains_private_material_once_without_saf
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-020",),
+        selected_rule_ids=("LX0609-03-01-01",),
         institute_id="institute-private-001",
         patient_id="patient-private-001",
         visit_id="visit-private-001",
@@ -1616,7 +1616,7 @@ def test_mdt_040_decision_support_includes_consultation_record() -> None:
         calls.append(kwargs["source_key"])
         return _rows(kwargs["source_key"], [])
 
-    _build(selected_rule_ids=("LX0609-040",), row_reader=reader)
+    _build(selected_rule_ids=("LX0609-04-01-03",), row_reader=reader)
 
     assert "consultation_record" in calls
     assert calls.count("consultation_record") == 1
@@ -1633,7 +1633,7 @@ def test_admission_record_body_is_private_material_and_never_safe_snapshot_outpu
         return _rows(source_key, rows)
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-016", "LX0609-018"),
+        selected_rule_ids=("LX0609-12-01-01", "LX0609-01-01-02"),
         institute_id="institute-private-001",
         patient_id="patient-private-001",
         visit_id="visit-private-001",
@@ -1658,7 +1658,7 @@ def test_001_005_006_read_private_discharge_admission_date_once_without_affectin
         return _rows(source_key, rows)
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-001", "LX0609-005", "LX0609-006"),
+        selected_rule_ids=("LX0609-01-01-01", "LX0609-02-01-01", "LX0609-02-01-02"),
         institute_id="institute-private-admission-date",
         patient_id="patient-private-admission-date",
         visit_id="visit-private-admission-date",
@@ -1677,7 +1677,7 @@ def test_001_005_006_read_private_discharge_admission_date_once_without_affectin
 
     calls.clear()
     build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-002", "LX0609-007"),
+        selected_rule_ids=("LX0609-01-02-01", "LX0609-02-01-03"),
         institute_id="institute-private-other-rules",
         patient_id="patient-private-other-rules",
         visit_id="visit-private-other-rules",
@@ -1897,7 +1897,7 @@ def test_rescue_record_uses_bounded_reader_after_typed_migration() -> None:
             limit_rows=50,
         )
 
-    snapshot = _build(selected_rule_ids=("LX0609-004",), row_reader=reader)
+    snapshot = _build(selected_rule_ids=("LX0609-09-01-01",), row_reader=reader)
     assert calls == [CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY, "rescue_record"]
     assert len(snapshot.observations) == 2
     assert {item.source_key for item in snapshot.observations} == set(calls)

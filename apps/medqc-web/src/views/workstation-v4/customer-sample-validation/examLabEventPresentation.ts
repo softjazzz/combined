@@ -21,7 +21,7 @@ export interface ExamLabEventPresentation {
 }
 
 /**
- * `not_applicable` 三个互斥出口的客户文案（012/015 多事件卡片）。
+ * `not_applicable` 三个互斥出口的客户文案（LX0609-06-01-05/LX0609-06-03-04 多事件卡片）。
  *
  * 真值源在后端 `backend/app/services/luxian_0609/customer_renderer.py`
  * 的多事件 `not_applicable` 分支（`conclusion = "..."`）。此处逐字复制用于前端渲染，
@@ -35,8 +35,8 @@ export const NOT_APPLICABLE_UNKNOWN_TEXT = '未确认本次检查为需分析的
 export function buildExamLabEventPresentation(
   item: SingleRecordQcResultItem,
 ): ExamLabEventPresentation | null {
-  const analysisRule = ['LX0609-012', 'LX0609-015'].includes(item.rule_id)
-  const recordingRule = ['LX0609-011', 'LX0609-014'].includes(item.rule_id)
+  const analysisRule = ['LX0609-06-01-05', 'LX0609-06-03-04'].includes(item.rule_id)
+  const recordingRule = ['LX0609-06-01-04', 'LX0609-06-03-03'].includes(item.rule_id)
   if (!analysisRule && !recordingRule) return null
   const facts = item.customer_display_facts
   const expectedRequirement = analysisRule

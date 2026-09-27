@@ -22,7 +22,7 @@ from app.services.luxian_0609.executor_registry import (
 from app.services.luxian_0609_result_aggregator import aggregate_luxian_0609_results
 
 
-RULE_IDS = ("LX0609-013", "LX0609-019", "LX0609-026", "LX0609-027")
+RULE_IDS = ("LX0609-06-02-03", "LX0609-06-02-02", "LX0609-05-02-01", "LX0609-08-01-04")
 CREATED_AT = "2026-09-07T10:00:00+08:00"
 
 
@@ -294,10 +294,10 @@ async def test_tumor_pathology_freeze_real_chain_locks_current_contract() -> Non
     assert client.prompts == []
 
     facts = dict(execution.customer_display_facts)
-    assert facts["LX0609-013"]["verification_kind"] == "pathology_result_documentation_check"
-    assert facts["LX0609-019"]["verification_kind"] == "pathology_sampling_documentation_check"
-    assert facts["LX0609-026"]["verification_kind"] == "chemotherapy_order_course_comparison"
-    assert facts["LX0609-027"]["verification_kind"] == "malignant_discharge_plan_check"
+    assert facts["LX0609-06-02-03"]["verification_kind"] == "pathology_result_documentation_check"
+    assert facts["LX0609-06-02-02"]["verification_kind"] == "pathology_sampling_documentation_check"
+    assert facts["LX0609-05-02-01"]["verification_kind"] == "chemotherapy_order_course_comparison"
+    assert facts["LX0609-08-01-04"]["verification_kind"] == "malignant_discharge_plan_check"
 
     by_rule_id = {item["rule_id"]: item for item in customer_results}
     assert [item["status"] for item in customer_results] == [
@@ -308,14 +308,14 @@ async def test_tumor_pathology_freeze_real_chain_locks_current_contract() -> Non
     ]
     assert {
         (item["source_type"], item["source_document_id"])
-        for item in by_rule_id["LX0609-013"]["customer_evidence"]
+        for item in by_rule_id["LX0609-06-02-03"]["customer_evidence"]
     } == {
         ("pathology_exam_report", "path-report-1"),
         ("surgery_record", "surgery-1"),
     }
     assert {
         (item["source_type"], item["source_document_id"])
-        for item in by_rule_id["LX0609-019"]["customer_evidence"]
+        for item in by_rule_id["LX0609-06-02-02"]["customer_evidence"]
     } == {
         ("pathology_exam_master", "path-master-1"),
         ("pathology_exam_report", "path-report-1"),
@@ -323,14 +323,14 @@ async def test_tumor_pathology_freeze_real_chain_locks_current_contract() -> Non
     }
     assert {
         (item["source_type"], item["source_document_id"])
-        for item in by_rule_id["LX0609-026"]["customer_evidence"]
+        for item in by_rule_id["LX0609-05-02-01"]["customer_evidence"]
     } == {
         ("inpat_drug_order", "chemo-order-1"),
         ("daily_course_record", "course-1"),
     }
     assert {
         (item["source_type"], item["source_document_id"])
-        for item in by_rule_id["LX0609-027"]["customer_evidence"]
+        for item in by_rule_id["LX0609-08-01-04"]["customer_evidence"]
     } == {
         ("discharge_record", "discharge-1"),
     }
@@ -342,7 +342,7 @@ async def test_tumor_pathology_freeze_empty_and_source_error_remain_distinct() -
 
     absent, absent_reduced, absent_results, _session, client = await _execute_and_aggregate(
         rows_by_source={},
-        rule_ids=("LX0609-013", "LX0609-019"),
+        rule_ids=("LX0609-06-02-03", "LX0609-06-02-02"),
     )
     assert absent.results == ()
     assert [item.final_state.value for item in absent_reduced] == [
@@ -368,7 +368,7 @@ async def test_tumor_pathology_freeze_019_semantic_transport_failure_is_technica
     client = _FailingRuleClient()
     execution, reduced, customer_results, _session, returned_client = await _execute_and_aggregate(
         rows_by_source=rows,
-        rule_ids=("LX0609-019",),
+        rule_ids=("LX0609-06-02-02",),
         llm_client=client,
     )
 
@@ -383,7 +383,7 @@ async def test_tumor_pathology_freeze_019_semantic_transport_failure_is_technica
 
     errored, errored_reduced, errored_results, _session, client = await _execute_and_aggregate(
         rows_by_source=_rows(),
-        rule_ids=("LX0609-013", "LX0609-019"),
+        rule_ids=("LX0609-06-02-03", "LX0609-06-02-02"),
         failing_sources=frozenset({"pathology_exam_report"}),
     )
     assert errored.results == ()
@@ -413,7 +413,7 @@ async def test_tumor_pathology_semantic_failures_are_technical_errors_through_bi
 
     execution, reduced, customer_results, _session, returned_client = await _execute_and_aggregate(
         rows_by_source=_semantic_fallback_rows(),
-        rule_ids=("LX0609-013", "LX0609-019"),
+        rule_ids=("LX0609-06-02-03", "LX0609-06-02-02"),
         llm_client=client,
     )
 
@@ -449,7 +449,7 @@ async def test_tumor_pathology_missing_semantic_client_is_technical_error_throug
     trace_events: list[dict[str, Any]] = []
     execution, reduced, customer_results, _session, returned_client = await _execute_and_aggregate(
         rows_by_source=_semantic_fallback_rows(),
-        rule_ids=("LX0609-013", "LX0609-019"),
+        rule_ids=("LX0609-06-02-03", "LX0609-06-02-02"),
         without_llm=True,
         decision_trace_sink=trace_events.append,
     )
@@ -489,8 +489,8 @@ async def test_tumor_pathology_direct_missing_semantic_client_freezes_llm_aggreg
     """兼容直出路径保留 llm 执行审计，不影响 typed 主链合同。"""
 
     execution = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
-        rule_ids=("LX0609-013", "LX0609-019"),
-        wrapper_rules=[_wrapper("LX0609-013"), _wrapper("LX0609-019")],
+        rule_ids=("LX0609-06-02-03", "LX0609-06-02-02"),
+        wrapper_rules=[_wrapper("LX0609-06-02-03"), _wrapper("LX0609-06-02-02")],
         evidence_payload={
             "programmatic_timeline": {
                 "documents": {
@@ -513,7 +513,7 @@ async def test_tumor_pathology_direct_missing_semantic_client_freezes_llm_aggreg
         llm_client=None,
     )
     customer_results = aggregate_luxian_0609_results(
-        wrapper_rules=[_wrapper("LX0609-013"), _wrapper("LX0609-019")],
+        wrapper_rules=[_wrapper("LX0609-06-02-03"), _wrapper("LX0609-06-02-02")],
         execution_results=list(execution.results),
         format_evidence=False,
     )
@@ -541,7 +541,7 @@ async def test_tumor_pathology_semantic_fallback_normal_output_is_unchanged() ->
     client = _FixedRuleClient(_semantic_response('{"is_compliant": true}'))
     execution, reduced, customer_results, _session, returned_client = await _execute_and_aggregate(
         rows_by_source=_semantic_fallback_rows(),
-        rule_ids=("LX0609-019",),
+        rule_ids=("LX0609-06-02-02",),
         llm_client=client,
     )
 

@@ -72,7 +72,7 @@ def _material_headers(prompt: str) -> list[str]:
 
 def test_single_imaging_prompt_excludes_culture_material_but_keeps_course_allowlist():
     prompt = build_exam_lab_fact_prompt(
-        selected_rule_ids=("LX0609-011",),
+        selected_rule_ids=("LX0609-06-01-04",),
         projection=_mixed_projection(),
     )
 
@@ -86,7 +86,7 @@ def test_single_imaging_prompt_excludes_culture_material_but_keeps_course_allowl
 
 def test_single_culture_prompt_excludes_imaging_material_but_keeps_culture_course():
     prompt = build_exam_lab_fact_prompt(
-        selected_rule_ids=("LX0609-014",),
+        selected_rule_ids=("LX0609-06-03-03",),
         projection=_mixed_projection(),
     )
 
@@ -100,7 +100,7 @@ def test_single_culture_prompt_excludes_imaging_material_but_keeps_culture_cours
 
 def test_mixed_prompt_keeps_both_requested_material_families():
     prompt = build_exam_lab_fact_prompt(
-        selected_rule_ids=("LX0609-011", "LX0609-014"),
+        selected_rule_ids=("LX0609-06-01-04", "LX0609-06-03-03"),
         projection=_mixed_projection(),
     )
 

@@ -64,16 +64,16 @@ def test_runtime_manifest_binds_all_rules_to_current_safe_runtime() -> None:
     assert manifest["schema_version"] == "lx0609-runtime-manifest-v1"
     assert manifest["git_head"] == "a" * 40
     assert manifest["generated_at"] == "2026-07-23T18:00:00Z"
-    assert manifest["rule_set"]["rule_count"] == 77
+    assert manifest["rule_set"]["rule_count"] == len(expected_rule_ids)
     assert manifest["rule_set"]["rule_ids"] == expected_rule_ids
-    assert len(manifest["rules"]) == 77
-    assert len({item["rule_id"] for item in manifest["rules"]}) == 77
+    assert len(manifest["rules"]) == len(expected_rule_ids)
+    assert len({item["rule_id"] for item in manifest["rules"]}) == len(expected_rule_ids)
 
     executable_ids, withheld_ids = get_luxian_0609_customer_execution_scope()
     delivery_ids = get_luxian_0609_customer_delivery_rule_ids()
-    assert manifest["customer_delivery_count"] == 72
-    assert manifest["executable_count"] == 62
-    assert manifest["withheld_count"] == 10
+    assert manifest["customer_delivery_count"] == len(delivery_ids)
+    assert manifest["executable_count"] == len(executable_ids)
+    assert manifest["withheld_count"] == len(withheld_ids)
     assert manifest["customer_delivery_rule_ids"] == list(delivery_ids)
     assert manifest["executable_rule_ids"] == list(executable_ids)
     assert manifest["withheld_rule_ids"] == list(withheld_ids)
@@ -83,31 +83,31 @@ def test_runtime_manifest_binds_all_rules_to_current_safe_runtime() -> None:
     assert not set(manifest["executable_rule_ids"]) & set(manifest["withheld_rule_ids"])
 
     by_rule = {item["rule_id"]: item for item in manifest["rules"]}
-    assert by_rule["LX0609-020"]["active_path"] == "compatibility"
-    assert by_rule["LX0609-029"]["active_path"] == "native"
-    assert by_rule["LX0609-030"]["active_path"] == "native"
-    assert by_rule["LX0609-032"]["active_path"] == "native"
-    assert by_rule["LX0609-009"]["phase_status"] == "phase_1_target"
-    assert by_rule["LX0609-009"]["active_criteria"] == []
-    assert by_rule["LX0609-018"]["phase_status"] == "phase_1_target"
-    assert by_rule["LX0609-018"]["active_criteria"] == [
+    assert by_rule["LX0609-03-01-01"]["active_path"] == "compatibility"
+    assert by_rule["LX0609-04-01-01"]["active_path"] == "native"
+    assert by_rule["LX0609-04-02-02"]["active_path"] == "native"
+    assert by_rule["LX0609-04-03-01"]["active_path"] == "native"
+    assert by_rule["LX0609-02-01-05"]["phase_status"] == "phase_1_target"
+    assert by_rule["LX0609-02-01-05"]["active_criteria"] == []
+    assert by_rule["LX0609-01-01-02"]["phase_status"] == "phase_1_target"
+    assert by_rule["LX0609-01-01-02"]["active_criteria"] == [
         "chief_complaint_length",
         "diagnostic_direction"
     ]
-    assert by_rule["LX0609-018"]["pending_criteria"] == []
-    assert by_rule["LX0609-018"]["pending_reason_code"] == ""
-    assert by_rule["LX0609-018"]["decision_authority"] == "program_then_optional_llm"
-    assert by_rule["LX0609-018"]["max_llm_calls_per_rule"] == 1
-    assert by_rule["LX0609-010"]["phase_status"] == "phase_1_target"
-    assert by_rule["LX0609-010"]["pending_reason_code"] == ""
+    assert by_rule["LX0609-01-01-02"]["pending_criteria"] == []
+    assert by_rule["LX0609-01-01-02"]["pending_reason_code"] == ""
+    assert by_rule["LX0609-01-01-02"]["decision_authority"] == "program_then_optional_llm"
+    assert by_rule["LX0609-01-01-02"]["max_llm_calls_per_rule"] == 1
+    assert by_rule["LX0609-06-01-02"]["phase_status"] == "phase_1_target"
+    assert by_rule["LX0609-06-01-02"]["pending_reason_code"] == ""
     assert all(item["contract_version"] for item in manifest["rules"])
     assert all(item["definition_version"] for item in manifest["rules"])
     assert (
-        by_rule["LX0609-007"]["decision_rollout_flag"]
+        by_rule["LX0609-02-01-03"]["decision_rollout_flag"]
         == "LUXIAN_0609_RULE_DECISION_007_ENABLED"
     )
-    assert by_rule["LX0609-018"]["decision_rollout_flag"] is None
-    assert by_rule["LX0609-075"]["decision_rollout_flag"] is None
+    assert by_rule["LX0609-01-01-02"]["decision_rollout_flag"] is None
+    assert by_rule["LX0609-10-03-01"]["decision_rollout_flag"] is None
     assert manifest["flags"]["unified_engine"] is True
     assert manifest["flags"]["rule_decision_surgery_document"] is True
     assert manifest["flags"]["native_consultation"] is False
@@ -139,7 +139,7 @@ def test_runtime_manifest_honors_explicit_mainline_rollback_flags() -> None:
     )
 
     by_rule = {item["rule_id"]: item for item in manifest["rules"]}
-    assert by_rule["LX0609-029"]["active_path"] == "compatibility"
+    assert by_rule["LX0609-04-01-01"]["active_path"] == "compatibility"
     assert manifest["flags"]["unified_engine"] is False
     assert manifest["flags"]["rule_decision_surgery_document"] is False
 

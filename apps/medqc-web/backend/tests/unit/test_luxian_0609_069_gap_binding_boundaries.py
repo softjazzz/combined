@@ -62,11 +62,11 @@ async def test_missing_id_does_not_bind_another_document_with_same_time():
     assert outcome.consumed_document_rows == ()
     snapshot, materials = _consultation_session(rows)
     native = await execute_luxian_0609_native_extended_document_rules(
-        rule_ids=("LX0609-069",), decision_rule_ids=("LX0609-069",),
+        rule_ids=("LX0609-04-02-07",), decision_rule_ids=("LX0609-04-02-07",),
         evidence_snapshot=snapshot, evidence_materials=materials,
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
-        decisions=native.decisions, expected_rule_ids=("LX0609-069",),
+        decisions=native.decisions, expected_rule_ids=("LX0609-04-02-07",),
         snapshot=snapshot, evidence_materials=materials,
     )[0]
     assert reduced.final_state.value == "data_gap"

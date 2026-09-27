@@ -207,7 +207,7 @@ def _multi_document_session(rule_ids: tuple[str, ...]):
 
 @pytest.mark.unit
 def test_001_002_005_006_multi_document_selection_and_evidence_are_frozen():
-    rule_ids = ("LX0609-001", "LX0609-002", "LX0609-005", "LX0609-006")
+    rule_ids = ("LX0609-01-01-01", "LX0609-01-02-01", "LX0609-02-01-01", "LX0609-02-01-02")
     session = _multi_document_session(rule_ids)
 
     execution, reduced, results = _execute_and_aggregate(session, rule_ids)
@@ -219,7 +219,7 @@ def test_001_002_005_006_multi_document_selection_and_evidence_are_frozen():
         ("compliant", "requirement_within_threshold"),
     ]
     expected_customer_display_facts = {
-        "LX0609-001": {
+        "LX0609-01-01-01": {
             "failure_kind": "timeliness_requirement_satisfied",
             "target_document": "admission_record",
             "source_label": "入院记录",
@@ -230,7 +230,7 @@ def test_001_002_005_006_multi_document_selection_and_evidence_are_frozen():
             "elapsed_hours": 3.0,
             "remaining_hours": 21.0,
         },
-        "LX0609-002": {
+        "LX0609-01-02-01": {
             "failure_kind": "timeliness_requirement_satisfied",
             "target_document": "first_course_record",
             "source_label": "首次病程记录",
@@ -241,7 +241,7 @@ def test_001_002_005_006_multi_document_selection_and_evidence_are_frozen():
             "elapsed_hours": 2.0,
             "remaining_hours": 6.0,
         },
-        "LX0609-005": {
+        "LX0609-02-01-01": {
             "failure_kind": "timeliness_requirement_satisfied",
             "target_document": "attending_course_record",
             "source_label": "主治医师及以上首次查房记录",
@@ -252,7 +252,7 @@ def test_001_002_005_006_multi_document_selection_and_evidence_are_frozen():
             "elapsed_hours": 24.0,
             "remaining_hours": 24.0,
         },
-        "LX0609-006": {
+        "LX0609-02-01-02": {
             "failure_kind": "timeliness_requirement_satisfied",
             "target_document": "senior_course_record",
             "source_label": "副主任医师或主任医师首次查房记录",
@@ -291,7 +291,7 @@ def test_001_002_005_006_multi_document_selection_and_evidence_are_frozen():
         ],
     ]
     assert _fact_ref_source_keys(session, execution) == {
-        "LX0609-001": frozenset(
+        "LX0609-01-01-01": frozenset(
             {
             "evaluation_context.horizon",
             "inpat_registration",
@@ -299,7 +299,7 @@ def test_001_002_005_006_multi_document_selection_and_evidence_are_frozen():
             "discharge_record",
             }
         ),
-        "LX0609-002": frozenset(
+        "LX0609-01-02-01": frozenset(
             {
             "evaluation_context.horizon",
             "inpat_registration",
@@ -307,7 +307,7 @@ def test_001_002_005_006_multi_document_selection_and_evidence_are_frozen():
             "admission_record",
             }
         ),
-        "LX0609-005": frozenset(
+        "LX0609-02-01-01": frozenset(
             {
             "evaluation_context.horizon",
             "inpat_registration",
@@ -317,7 +317,7 @@ def test_001_002_005_006_multi_document_selection_and_evidence_are_frozen():
             "senior_course_record",
             }
         ),
-        "LX0609-006": frozenset(
+        "LX0609-02-01-02": frozenset(
             {
             "evaluation_context.horizon",
             "inpat_registration",
@@ -333,7 +333,7 @@ def test_001_002_005_006_multi_document_selection_and_evidence_are_frozen():
 @pytest.mark.unit
 def test_004_multi_rescue_events_and_effective_order_without_record_are_frozen():
     event_session = _session(
-        rule_ids=("LX0609-004",),
+        rule_ids=("LX0609-09-01-01",),
         rows_by_source={
             "rescue_record": [
                 {
@@ -355,14 +355,14 @@ def test_004_multi_rescue_events_and_effective_order_without_record_are_frozen()
         },
     )
     execution, reduced, results = _execute_and_aggregate(
-        event_session, ("LX0609-004",)
+        event_session, ("LX0609-09-01-01",)
     )
 
     assert [(item.final_state.value, item.reason_code) for item in reduced] == [
         ("non_compliant", "threshold_exceeded")
     ]
     assert dict(execution.customer_display_facts) == {
-        "LX0609-004": {
+        "LX0609-09-01-01": {
             "failure_kind": "timeliness_requirement_not_met",
             "target_document": "rescue_record",
             "source_label": "抢救记录",
@@ -439,11 +439,11 @@ def test_004_multi_rescue_events_and_effective_order_without_record_are_frozen()
     }
     assert len(event_coordinates) == len(set(event_coordinates)) == 3
     _repeat_execution, _repeat_reduced, repeat_results = _execute_and_aggregate(
-        event_session, ("LX0609-004",)
+        event_session, ("LX0609-09-01-01",)
     )
     assert _coordinates(repeat_results[0]) == event_coordinates
     assert _fact_ref_source_keys(event_session, execution) == {
-        "LX0609-004": frozenset(
+        "LX0609-09-01-01": frozenset(
             {
             CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY,
             "rescue_record",
@@ -459,7 +459,7 @@ def test_004_multi_rescue_events_and_effective_order_without_record_are_frozen()
     assert rescue_document_refs.issubset(execution.decisions[0].fact_refs)
 
     order_session = _session(
-        rule_ids=("LX0609-004",),
+        rule_ids=("LX0609-09-01-01",),
         rows_by_source={
             "rescue_record": [],
             CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY: [
@@ -469,14 +469,14 @@ def test_004_multi_rescue_events_and_effective_order_without_record_are_frozen()
         },
     )
     order_execution, order_reduced, order_results = _execute_and_aggregate(
-        order_session, ("LX0609-004",)
+        order_session, ("LX0609-09-01-01",)
     )
 
     assert [(item.final_state.value, item.reason_code) for item in order_reduced] == [
         ("data_gap", "rescue_record_missing_after_trigger")
     ]
     assert dict(order_execution.customer_display_facts) == {
-        "LX0609-004": {
+        "LX0609-09-01-01": {
             "failure_kind": "rescue_record_missing_after_trigger",
             "target_document": "rescue_record",
             "source_label": "抢救记录",
@@ -509,7 +509,7 @@ def test_004_multi_rescue_events_and_effective_order_without_record_are_frozen()
         }
     ]
     assert _fact_ref_source_keys(order_session, order_execution) == {
-        "LX0609-004": frozenset(
+        "LX0609-09-01-01": frozenset(
             {
                 CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY,
                 "rescue_record",
@@ -524,7 +524,7 @@ def test_004_multi_rescue_events_and_effective_order_without_record_are_frozen()
     )
     assert order_document_refs.issubset(order_execution.decisions[0].fact_refs)
     _repeat_execution, _repeat_reduced, repeat_order_results = _execute_and_aggregate(
-        order_session, ("LX0609-004",)
+        order_session, ("LX0609-09-01-01",)
     )
     assert _coordinates(repeat_order_results[0]) == order_coordinates
 
@@ -532,7 +532,7 @@ def test_004_multi_rescue_events_and_effective_order_without_record_are_frozen()
 @pytest.mark.unit
 def test_001_missing_selected_document_id_does_not_borrow_another_document_coordinate():
     session = _session(
-        rule_ids=("LX0609-001",),
+        rule_ids=("LX0609-01-01-01",),
         rows_by_source={
             "inpat_registration": [
                 {"admission_datetime": "2026-06-01 08:00:00"}
@@ -553,13 +553,13 @@ def test_001_missing_selected_document_id_does_not_borrow_another_document_coord
         },
     )
 
-    execution, reduced, results = _execute_and_aggregate(session, ("LX0609-001",))
+    execution, reduced, results = _execute_and_aggregate(session, ("LX0609-01-01-01",))
 
     assert [(item.final_state.value, item.reason_code) for item in reduced] == [
         ("compliant", "requirement_within_threshold")
     ]
     assert dict(execution.customer_display_facts) == {
-        "LX0609-001": {
+        "LX0609-01-01-01": {
             "failure_kind": "timeliness_requirement_satisfied",
             "target_document": "admission_record",
             "source_label": "入院记录",
@@ -573,11 +573,11 @@ def test_001_missing_selected_document_id_does_not_borrow_another_document_coord
     }
     assert results[0]["customer_display_facts"] == dict(
         execution.customer_display_facts
-    )["LX0609-001"]
+    )["LX0609-01-01-01"]
     assert results[0]["findings"] == "已确认入院记录在入院后 24 小时内完成。"
     assert _coordinates(results[0]) == []
     assert _fact_ref_source_keys(session, execution) == {
-        "LX0609-001": frozenset(
+        "LX0609-01-01-01": frozenset(
             {
             "evaluation_context.horizon",
             "inpat_registration",
@@ -592,7 +592,7 @@ def test_001_missing_selected_document_id_does_not_borrow_another_document_coord
 def test_001_same_document_id_on_multiple_rows_does_not_use_source_snapshot_fallback():
     """同 ID 并不代表同一材料行，缺行事实时不能投影任一坐标。"""
 
-    rule_ids = ("LX0609-001",)
+    rule_ids = ("LX0609-01-01-01",)
     session = _session(
         rule_ids=rule_ids,
         rows_by_source={
@@ -616,7 +616,7 @@ def test_001_same_document_id_on_multiple_rows_does_not_use_source_snapshot_fall
         },
     )
     execution, reduced, _results = _execute_and_aggregate(session, rule_ids)
-    selected = {"LX0609-001"}
+    selected = {"LX0609-01-01-01"}
     results_without_display_facts = aggregate_luxian_0609_results(
         wrapper_rules=[
             rule for rule in load_luxian_0609_rules() if rule["rule_id"] in selected
@@ -631,7 +631,7 @@ def test_001_same_document_id_on_multiple_rows_does_not_use_source_snapshot_fall
         },
     )
 
-    assert dict(execution.customer_display_facts)["LX0609-001"]["observed_time"] == (
+    assert dict(execution.customer_display_facts)["LX0609-01-01-01"]["observed_time"] == (
         "2026-06-01 09:00:00"
     )
     assert _coordinates(results_without_display_facts[0]) == []
@@ -641,7 +641,7 @@ def test_001_same_document_id_on_multiple_rows_does_not_use_source_snapshot_fall
 def test_001_single_material_row_keeps_source_snapshot_fallback_coordinate():
     """单条可识别材料是尚未迁移行事实前唯一可安全补回的坐标。"""
 
-    rule_ids = ("LX0609-001",)
+    rule_ids = ("LX0609-01-01-01",)
     session = _session(
         rule_ids=rule_ids,
         rows_by_source={
@@ -659,7 +659,7 @@ def test_001_single_material_row_keeps_source_snapshot_fallback_coordinate():
         },
     )
     _execution, reduced, _results = _execute_and_aggregate(session, rule_ids)
-    selected = {"LX0609-001"}
+    selected = {"LX0609-01-01-01"}
     results_without_display_facts = aggregate_luxian_0609_results(
         wrapper_rules=[
             rule for rule in load_luxian_0609_rules() if rule["rule_id"] in selected
@@ -705,7 +705,7 @@ def test_fact_v2_without_document_id_does_not_backfill_from_multiple_material_ro
 
     decision = reduce_luxian_0609_rule_decision(
         RuleDecision(
-            rule_id="LX0609-018",
+            rule_id="LX0609-01-01-02",
             snapshot_hash="a" * 64,
             applicability=ApplicabilityState.APPLICABLE,
             evidence_state=EvidenceState.SUFFICIENT,
@@ -717,7 +717,7 @@ def test_fact_v2_without_document_id_does_not_backfill_from_multiple_material_ro
         )
     )
     result = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-018", "name": "主诉能导出第一诊断"}],
+        wrapper_rules=[{"rule_id": "LX0609-01-01-02", "name": "主诉能导出第一诊断"}],
         execution_results=[],
         reduced_decisions=(decision,),
         audit_context={
@@ -748,7 +748,7 @@ def test_document_refs_require_materials_for_binding():
     """逐文书引用必须携带可验证材料，不能仅凭全局引用存在而放行。"""
 
     session = _session(
-        rule_ids=("LX0609-001",),
+        rule_ids=("LX0609-01-01-01",),
         rows_by_source={
             "inpat_registration": [
                 {"admission_datetime": "2026-06-01 08:00:00"}
@@ -763,13 +763,13 @@ def test_document_refs_require_materials_for_binding():
             ],
         },
     )
-    execution, reduced, _results = _execute_and_aggregate(session, ("LX0609-001",))
+    execution, reduced, _results = _execute_and_aggregate(session, ("LX0609-01-01-01",))
     document_ref = build_material_document_refs(
         "admission_record", tuple(session.materials.rows("admission_record"))
     )[0]
     document_ref_reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=(replace(execution.decisions[0], fact_refs=(document_ref,)),),
-        expected_rule_ids=("LX0609-001",),
+        expected_rule_ids=("LX0609-01-01-01",),
         snapshot=session.snapshot,
     )
 
@@ -777,7 +777,7 @@ def test_document_refs_require_materials_for_binding():
         ("compliant", "requirement_within_threshold")
     ]
     assert _fact_ref_source_keys(session, execution) == {
-        "LX0609-001": frozenset(
+        "LX0609-01-01-01": frozenset(
             {
                 "evaluation_context.horizon",
                 "inpat_registration",

@@ -15,6 +15,7 @@ import secrets
 import socket
 import subprocess
 import sys
+from tempfile import TemporaryDirectory
 from typing import Any, Mapping, Sequence
 from types import SimpleNamespace
 
@@ -208,7 +209,7 @@ def _allowlisted_public_facts(*, rule_id: str, raw: Any) -> dict[str, Any]:
             if isinstance(item, Mapping) and key in item
         }
 
-    if rule_id in {"LX0609-020", "LX0609-023"}:
+    if rule_id in {"LX0609-03-01-01", "LX0609-03-01-04"}:
         facts = select(
             raw,
             (
@@ -221,7 +222,7 @@ def _allowlisted_public_facts(*, rule_id: str, raw: Any) -> dict[str, Any]:
                 "relation_state",
             ),
         )
-        if rule_id == "LX0609-020" and isinstance(raw.get("recommendation_results"), list):
+        if rule_id == "LX0609-03-01-01" and isinstance(raw.get("recommendation_results"), list):
             facts["recommendation_results"] = [
                 select(
                     item,
@@ -254,7 +255,7 @@ def _allowlisted_public_facts(*, rule_id: str, raw: Any) -> dict[str, Any]:
                 evidence_items.append(projected)
             facts["recommendation_evidence"] = evidence_items
         return facts
-    if rule_id in {"LX0609-021", "LX0609-022"}:
+    if rule_id in {"LX0609-03-01-02", "LX0609-03-01-03"}:
         facts = select(
             raw,
             (
@@ -443,12 +444,24 @@ async def run_replay(
     """在离线哨兵内运行，不读取真实配置、数据库或网络。"""
 
     key = session_hmac_key or secrets.token_bytes(32)
-    with _offline_execution_guards() as activity:
-        replay = await _run_replay_unchecked(
-            fixture_path,
-            variant_root=variant_root,
-            activity=activity,
-        )
+    freeze_env = "LUXIAN_0609_OPINION_FREEZE_DIR"
+    previous_freeze_dir = os.environ.get(freeze_env)
+    # 会诊事实冻结会落盘；每次离线回放必须使用自己的临时目录，否则同一
+    # synthetic visit 的上轮事实会跳过本轮受控模型响应，破坏等价比较。
+    with TemporaryDirectory(prefix="lx0609-consultation-replay-") as freeze_dir:
+        os.environ[freeze_env] = freeze_dir
+        try:
+            with _offline_execution_guards() as activity:
+                replay = await _run_replay_unchecked(
+                    fixture_path,
+                    variant_root=variant_root,
+                    activity=activity,
+                )
+        finally:
+            if previous_freeze_dir is None:
+                os.environ.pop(freeze_env, None)
+            else:
+                os.environ[freeze_env] = previous_freeze_dir
     replay["_prompt_session_marker"] = _prompt_marker(
         prompts=tuple(replay.get("_prompt_bytes") or ()),
         session_hmac_key=key,

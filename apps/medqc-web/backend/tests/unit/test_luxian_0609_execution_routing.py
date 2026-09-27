@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from tests.luxian_0609_identity_test_support import published_rule_ids
+from app.services.luxian_0609_rule_master import load_luxian_0609_rule_master
+
 import asyncio
 from types import SimpleNamespace
 
@@ -45,7 +48,7 @@ def _settings(**overrides: bool) -> SimpleNamespace:
 
 
 def _rule_ids(start: int, end: int) -> tuple[str, ...]:
-    return tuple(f"LX0609-{index:03d}" for index in range(start, end + 1))
+    return published_rule_ids(start, end)
 
 
 def test_rollout_groups_cover_legacy_rules_once() -> None:
@@ -55,8 +58,12 @@ def test_rollout_groups_cover_legacy_rules_once() -> None:
         for rule_id in rule_ids
     ]
 
-    assert len(flattened) == len(set(flattened)) == 49
-    assert set(flattened) == set(_rule_ids(1, 49))
+    assert len(flattened) == len(set(flattened))
+    assert set(_rule_ids(1, 49)).issubset(flattened)
+    assert set(flattened).issubset(
+        entry.rule_id for entry in load_luxian_0609_rule_master()
+        if entry.implementation_status == "active"
+    )
 
 
 def test_full_mainline_selects_only_currently_executable_typed_decisions() -> None:
@@ -75,22 +82,25 @@ def test_full_mainline_selects_only_currently_executable_typed_decisions() -> No
         for rule_id in selected
         if rule_id
         not in {
-            "LX0609-020",
-            "LX0609-021",
-            "LX0609-022",
-            "LX0609-025",
-            "LX0609-028",
-            "LX0609-036",
-            "LX0609-049",
-            "LX0609-056",
-            "LX0609-059",
-            "LX0609-075",
+            "LX0609-03-01-01",
+            "LX0609-03-01-02",
+            "LX0609-03-01-03",
+            "LX0609-04-02-04",
+            "LX0609-05-01-01",
+            "LX0609-04-04-01",
+            "LX0609-07-04-02",
+            "LX0609-05-01-04",
+            "LX0609-05-03-01",
+            "LX0609-10-03-01",
         }
     )
 
 
-def test_all_77_rules_have_one_contract_executor_and_registered_material_sources() -> None:
-    expected_rule_ids = _rule_ids(1, 77)
+def test_all_catalog_rules_have_one_contract_executor_and_registered_material_sources() -> None:
+    expected_rule_ids = tuple(
+        entry.rule_id for entry in load_luxian_0609_rule_master()
+        if entry.implementation_status == "active"
+    )
     contracts = load_luxian_0609_rule_contracts()
     dependencies = load_luxian_0609_dependency_inventory()
 
@@ -140,56 +150,56 @@ def test_unified_engine_off_keeps_only_always_typed_extended_rules() -> None:
     assert resolved == tuple(
         rule_id
         for rule_id in _rule_ids(50, 77)
-        if rule_id not in {"LX0609-056", "LX0609-059", "LX0609-075"}
+        if rule_id not in {"LX0609-05-01-04", "LX0609-05-03-01", "LX0609-10-03-01"}
     )
 
 
 def test_consultation_typed_decisions_require_native_dispatch() -> None:
-    selected = ("LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023")
+    selected = ("LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03", "LX0609-03-01-04")
 
     resolved = resolve_typed_decision_rule_ids(
         selected_rule_ids=selected,
         settings=_settings(),
         unified_engine_enabled=True,
         always_typed_rule_ids=(),
-        native_async_rule_ids=("LX0609-021", "LX0609-022", "LX0609-023"),
+        native_async_rule_ids=("LX0609-03-01-02", "LX0609-03-01-03", "LX0609-03-01-04"),
     )
 
     # 020/021/022 暂停后不再进入 Typed Decision 范围，023 仍要求 native 派发。
-    assert resolved == ("LX0609-023",)
+    assert resolved == ("LX0609-03-01-04",)
 
 
 def test_new_native_rule_without_legacy_rollout_group_uses_its_typed_contract() -> None:
     resolved = resolve_typed_decision_rule_ids(
-        selected_rule_ids=("LX0609-077",),
+        selected_rule_ids=("LX0609-01-02-02",),
         settings=_settings(),
         unified_engine_enabled=True,
         always_typed_rule_ids=(),
-        native_async_rule_ids=("LX0609-077",),
+        native_async_rule_ids=("LX0609-01-02-02",),
     )
 
-    assert resolved == ("LX0609-077",)
+    assert resolved == ("LX0609-01-02-02",)
 
 
 def test_disabled_rollout_flag_only_removes_its_group() -> None:
     resolved = resolve_typed_decision_rule_ids(
-        selected_rule_ids=("LX0609-007", "LX0609-008", "LX0609-018"),
+        selected_rule_ids=("LX0609-02-01-03", "LX0609-02-01-04", "LX0609-01-01-02"),
         settings=_settings(LUXIAN_0609_RULE_DECISION_007_ENABLED=False),
         unified_engine_enabled=True,
         always_typed_rule_ids=(),
-        native_async_rule_ids=("LX0609-007", "LX0609-008", "LX0609-018"),
+        native_async_rule_ids=("LX0609-02-01-03", "LX0609-02-01-04", "LX0609-01-01-02"),
     )
 
-    assert resolved == ("LX0609-008", "LX0609-018")
+    assert resolved == ("LX0609-02-01-04", "LX0609-01-01-02")
 
 
 @pytest.mark.parametrize(
     ("rule_id", "pending_reason_code"),
     (
-        ("LX0609-049", "charging_source_unavailable_customer_scope"),
-        ("LX0609-056", "key_antimicrobial_catalog_missing"),
-        ("LX0609-059", "treatment_event_order_course_real_gold_pending"),
-        ("LX0609-075", "invasive_procedure_catalog_missing"),
+        ("LX0609-07-04-02", "charging_source_unavailable_customer_scope"),
+        ("LX0609-05-01-04", "key_antimicrobial_catalog_missing"),
+        ("LX0609-05-03-01", "treatment_event_order_course_real_gold_pending"),
+        ("LX0609-10-03-01", "invasive_procedure_catalog_missing"),
     ),
 )
 def test_public_execution_returns_controlled_not_executed_for_pending_rule(
@@ -263,7 +273,7 @@ def test_formal_execution_wraps_llm_client_at_single_egress_boundary(monkeypatch
         {"rule_id": rule_id}
         for rule_id in resolve_package_entry_execution_rule_ids(
             inventory=inventory,
-            selected_rule_ids=("LX0609-025",),
+            selected_rule_ids=("LX0609-04-02-04",),
         )
     ]
 
@@ -281,7 +291,7 @@ def test_formal_execution_wraps_llm_client_at_single_egress_boundary(monkeypatch
                 LUXIAN_0609_EVIDENCE_FORMATTER_ENABLED=False,
                 LUXIAN_0609_UNIFIED_ENGINE_ENABLED=False,
             ),
-            selected_customer_rule_ids=("LX0609-025",),
+            selected_customer_rule_ids=("LX0609-04-02-04",),
         )
     )
 

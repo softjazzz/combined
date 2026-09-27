@@ -34,16 +34,16 @@ async def test_029_excludes_unrelated_orders_from_decision_and_customer_evidence
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-029",), institute_id="I", patient_id="P", visit_id="V",
+        selected_rule_ids=("LX0609-04-01-01",), institute_id="I", patient_id="P", visit_id="V",
         source_schema=None, created_at="2026-09-08T00:00:00+08:00", row_reader=reader,
     )
     result = await execute_luxian_0609_native_surgery_document_rules(
-        rule_ids=("LX0609-029",), wrapper_rules=[], evidence_payload=None,
+        rule_ids=("LX0609-04-01-01",), wrapper_rules=[], evidence_payload=None,
         llm_client=None, evidence_snapshot=session.snapshot, evidence_materials=session.materials,
-        decision_rule_ids=("LX0609-029",),
+        decision_rule_ids=("LX0609-04-01-01",),
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
-        decisions=result.decisions, expected_rule_ids=("LX0609-029",),
+        decisions=result.decisions, expected_rule_ids=("LX0609-04-01-01",),
         snapshot=session.snapshot, evidence_materials=session.materials,
     )
     expected_state = "compliant" if has_summary else "non_compliant"
@@ -58,7 +58,7 @@ async def test_029_excludes_unrelated_orders_from_decision_and_customer_evidence
     for ref, _ in session.materials.document_rows("presurg_summary", snapshot=session.snapshot):
         assert ref in adopted_refs
     canonical = finalize_luxian_0609_reduced_customer_result(
-        decision=reduced[0], raw_customer_display_facts=dict(result.customer_display_facts)["LX0609-029"],
+        decision=reduced[0], raw_customer_display_facts=dict(result.customer_display_facts)["LX0609-04-01-01"],
         evidence_snapshot=session.snapshot, evidence_materials=session.materials,
     )
     expected_coordinates = {("inpat_nondrug_order", "operation||1")}

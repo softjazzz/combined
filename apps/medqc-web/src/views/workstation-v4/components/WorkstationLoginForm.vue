@@ -73,11 +73,12 @@ const handleSubmit = () => {
 </script>
 
 <template>
-  <form class="workstation-login-form" @submit.prevent="handleSubmit">
+  <form
+    class="workstation-login-form"
+    @submit.prevent="handleSubmit"
+  >
     <div class="space-y-2">
-      <label class="text-[13px] font-bold tracking-[0.02em] text-slate-700"
-        >用户名 / 手机号 / 邮箱</label
-      >
+      <label class="text-[13px] font-bold tracking-[0.02em] text-slate-700">用户名 / 手机号 / 邮箱</label>
       <div class="group relative">
         <MailOutlined
           class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[15px] text-slate-400 transition group-focus-within:text-sky-500"
@@ -88,7 +89,7 @@ const handleSubmit = () => {
           autocomplete="username"
           placeholder="请输入用户名 / 手机号 / 邮箱"
           class="h-13 w-full rounded-2xl border-none bg-slate-100/70 px-12 py-3.5 text-[15px] font-medium tracking-[-0.01em] text-slate-800 outline-none transition-all placeholder:font-normal placeholder:text-slate-400 focus:bg-white focus:ring-[3px] focus:ring-sky-500/20"
-        />
+        >
       </div>
     </div>
 
@@ -104,14 +105,20 @@ const handleSubmit = () => {
           autocomplete="current-password"
           placeholder="请输入密码"
           class="h-13 w-full rounded-2xl border-none bg-slate-100/70 px-12 py-3.5 pr-12 text-[15px] font-medium tracking-[-0.01em] text-slate-800 outline-none transition-all placeholder:font-normal placeholder:text-slate-400 focus:bg-white focus:ring-[3px] focus:ring-sky-500/20"
-        />
+        >
         <button
           type="button"
           class="absolute right-4 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-200/50 hover:text-slate-600 focus:outline-none"
           @click="showPassword = !showPassword"
         >
-          <EyeOutlined v-if="showPassword" class="text-[16px]" />
-          <EyeInvisibleOutlined v-else class="text-[16px]" />
+          <EyeOutlined
+            v-if="showPassword"
+            class="text-[16px]"
+          />
+          <EyeInvisibleOutlined
+            v-else
+            class="text-[16px]"
+          />
         </button>
       </div>
     </div>
@@ -123,14 +130,17 @@ const handleSubmit = () => {
           v-model="form.role"
           class="h-13 w-full appearance-none rounded-2xl border-none bg-slate-100/70 px-4 py-3.5 text-[15px] font-medium tracking-[-0.01em] text-slate-800 outline-none transition-all focus:bg-white focus:ring-[3px] focus:ring-sky-500/20"
         >
-          <option v-for="option in roleOptions" :key="option.value" :value="option.value">
+          <option
+            v-for="option in roleOptions"
+            :key="option.value"
+            :value="option.value"
+          >
             {{ option.label }}
           </option>
         </select>
         <span
           class="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-xs text-slate-400 transition group-focus-within:text-sky-500"
-          >▼</span
-        >
+        >▼</span>
       </div>
     </div>
 
@@ -143,7 +153,7 @@ const handleSubmit = () => {
             v-model="form.remember_me"
             type="checkbox"
             class="peer h-4 w-4 cursor-pointer appearance-none rounded-[4px] border-2 border-slate-300 bg-white transition-all checked:border-sky-500 checked:bg-sky-500 hover:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-500/30"
-          />
+          >
           <svg
             class="pointer-events-none absolute left-1/2 top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 text-white opacity-0 transition-opacity peer-checked:opacity-100"
             fill="none"
@@ -151,7 +161,11 @@ const handleSubmit = () => {
             stroke="currentColor"
             stroke-width="3"
           >
-            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M5 13l4 4L19 7"
+            />
           </svg>
         </div>
         记住登录状态

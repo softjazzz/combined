@@ -108,7 +108,7 @@ const calls: LlmRecordCallAttempts = {
       attempt_no: 1,
       business_scene: 'luxian_0609_qc',
       root_job_id: 'job-1',
-      executor_key: 'LX0609-025',
+      executor_key: 'LX0609-04-02-04',
       provider_code: 'alibaba',
       model: 'qwen3.8-flash',
       model_role: 'quality_control',
@@ -128,7 +128,7 @@ const calls: LlmRecordCallAttempts = {
       attempt_no: 1,
       business_scene: 'luxian_0609_qc',
       root_job_id: 'job-1',
-      executor_key: 'LX0609-044',
+      executor_key: 'LX0609-07-01-02',
       provider_code: 'alibaba',
       model: 'qwen3.8-flash',
       model_role: 'quality_control',
@@ -382,7 +382,7 @@ describe('LlmPerformanceObservabilityPanel', () => {
       }),
     )
     expect(wrapper.find('[data-testid="attempt-drawer"]').exists()).toBe(true)
-    expect(wrapper.text()).toContain('LX0609-025')
+    expect(wrapper.text()).toContain('LX0609-04-02-04')
     expect(wrapper.text()).toContain('第 1 次尝试')
     expect(wrapper.text()).toContain('用量已上报')
     expect(wrapper.text()).toContain('用量未上报')

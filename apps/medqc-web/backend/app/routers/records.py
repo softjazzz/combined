@@ -5,12 +5,11 @@ from typing import Any, Dict, Optional, List
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Request, Query
-from pydantic import BaseModel
 from sqlalchemy import and_, desc, func, or_, text
 
 from ..core.supabase_client import get_supabase, async_execute
 from ..core.security import get_current_user
-from ..core.response import success_response, paginated_response, get_trace_id, ErrorCode, StatusCode
+from ..core.response import success_response, paginated_response, get_trace_id, StatusCode
 from ..schemas.records import MedicalRecordResponse
 from ..storage.memory import medical_records_db
 from ..core.settings import get_settings
@@ -388,11 +387,13 @@ def _should_prefer_bundle_documents(existing_docs: List[Dict[str, Any]], bundle_
 def _load_review_items_from_latest_batch(record_id: str) -> Dict[str, Any]:
     if engine is None:
         return {"review_items": [], "review_job": None}
+    from ..services.luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY
+
     schema = _workspace_schema()
     draft_id_list = ", ".join(f"'{draft_id}'" for draft_id in sorted(WORKSPACE_BATCH_DRAFT_IDS))
     sql = text(
         f"""
-        SELECT id, created_at, items_json
+        SELECT id, created_at, filters_json, items_json
         FROM {schema}.custom_qc_batch_jobs
         WHERE draft_id IN ({draft_id_list})
           AND status = 'completed'
@@ -404,12 +405,20 @@ def _load_review_items_from_latest_batch(record_id: str) -> Dict[str, Any]:
     with engine.connect() as conn:
         rows = conn.execute(sql).mappings().all()
     for row in rows:
+        filters = _safe_json_loads(row.get("filters_json"), {})
+        if isinstance(filters, dict) and str(filters.get("rule_set_key") or "").strip() == LUXIAN_0609_RULE_SET_KEY:
+            # 以任务冻结的规则集身份阻断整批原始项；单项缺编号时仍不可绕过。
+            continue
         items = _safe_json_loads(row.get("items_json"), [])
         if not isinstance(items, list):
             continue
         matched: List[Dict[str, Any]] = []
         for idx, raw_item in enumerate(items):
             if not isinstance(raw_item, dict):
+                continue
+            if _is_luxian_0609_result_item(raw_item):
+                # 正式 0609 结果只能由已发布 Canonical Envelope 交付；
+                # items_json 原始项一律不进入客户可见结果，避免绕过发布签章。
                 continue
             item_record_id = str(raw_item.get("record_id") or raw_item.get("visit_id") or "").strip()
             if item_record_id != record_id:
@@ -424,6 +433,200 @@ def _load_review_items_from_latest_batch(record_id: str) -> Dict[str, Any]:
                 },
             }
     return {"review_items": [], "review_job": None}
+
+
+LUXIAN_0609_RULE_ID_PREFIX = "LX0609-"
+# Canonical 未发布或受控失败时的状态；前端据此显示“结果不可用”而非“无问题”。
+LUXIAN_0609_NO_RESULT_STATE = "unavailable"
+
+
+def _is_luxian_0609_result_item(item: Any) -> bool:
+    """0609 正式/历史编号的原始项；其他规则集 legacy 项不命中。"""
+
+    if not isinstance(item, dict):
+        return False
+    return any(
+        str(item.get(field) or "").strip().upper().startswith(LUXIAN_0609_RULE_ID_PREFIX)
+        for field in ("rule_id", "rule_code")
+    )
+
+
+def _controlled_review_state(value: Any) -> str:
+    """只透传已知读取状态，禁止把任意文本带进响应。"""
+
+    state = str(value or "").strip().lower()
+    if not state:
+        return LUXIAN_0609_NO_RESULT_STATE
+    return state if state in {"ready", "incomplete", "not_found", "technical_error", "identity_unresolved", "identity_ambiguous", "identity_conflict"} else "technical_error"
+
+
+def _luxian_0609_envelope_identities(
+    record_id: str, *, rule_set_key: str, rule_set_version: str
+) -> set:
+    """只按 visit_id 反查当前规则集/版本的 Canonical 三坐标身份，不读取正文。"""
+
+    if engine is None:
+        return set()
+    schema = _workspace_schema()
+    sql = text(
+        f"""
+        SELECT DISTINCT institute_id, patient_id, visit_id
+        FROM {schema}.luxian_0609_record_result_envelopes
+        WHERE visit_id = :record_id
+          AND rule_set_key = :rule_set_key
+          AND rule_set_version = :rule_set_version
+        LIMIT 2
+        """
+    )
+    with engine.connect() as conn:
+        rows = conn.execute(
+            sql,
+            {
+                "record_id": record_id,
+                "rule_set_key": rule_set_key,
+                "rule_set_version": rule_set_version,
+            },
+        ).mappings().all()
+    identities = {
+        (
+            str(row.get("institute_id") or "").strip(),
+            str(row.get("patient_id") or "").strip(),
+            str(row.get("visit_id") or "").strip(),
+        )
+        for row in rows
+    }
+    return {identity for identity in identities if all(identity)}
+
+
+def _resolve_luxian_0609_identity(
+    record_id: str, *, rule_set_key: str, rule_set_version: str
+) -> tuple[Optional[tuple], str]:
+    """以当前 Envelope 唯一身份为准确定三坐标；CDM 身份只作一致性核对。"""
+
+    envelope_identities = _luxian_0609_envelope_identities(
+        record_id, rule_set_key=rule_set_key, rule_set_version=rule_set_version
+    )
+    if len(envelope_identities) != 1:
+        # 没有当前版本 Envelope 时，CDM 身份不能单独证明存在已发布结果。
+        return None, "identity_ambiguous" if envelope_identities else "identity_unresolved"
+    identity = next(iter(envelope_identities))
+    cdm = _resolve_visit_identity(record_id)
+    cdm_identity = (
+        str(cdm.get("institute_id") or "").strip(),
+        str(cdm.get("patient_id") or "").strip(),
+        str(cdm.get("visit_id") or "").strip(),
+    )
+    if all(cdm_identity) and cdm_identity != identity:
+        return None, "identity_conflict"
+    return identity, "ready"
+
+
+def _map_canonical_item_to_review_item(
+    item: Dict[str, Any], *, job_id: str, record_id: str, index: int
+) -> Dict[str, Any]:
+    """把已发布 Canonical 项映射为既有 review_items 结构。
+
+    只搬运 Canonical 的 ``conclusion``/``suggestion``/``status``；缺少必需字段
+    时抛出 ValueError，由调用方收敛为受控无结果，不用旧内部字段兜底。
+    """
+
+    rule_id = str(item.get("rule_id") or item.get("rule_code") or "").strip()
+    conclusion = item.get("conclusion")
+    status = str(item.get("status") or "").strip().lower()
+    if not rule_id or not isinstance(conclusion, str) or not conclusion.strip() or not status:
+        raise ValueError("canonical item missing required published fields")
+    # 只复用已发布证据的现有客户排版；格式错误时由调用方拒绝整份结果。
+    from ..services.luxian_0609_result_export_service import customer_evidence_summary
+
+    evidence = customer_evidence_summary(
+        list(item.get("evidence") or []), facts=item.get("customer_display_facts")
+    )
+    return {
+        "id": f"canonical:{job_id}:{rule_id or index}",
+        "source": "canonical_result_envelope",
+        "job_id": job_id,
+        "created_at": "",
+        "record_id": record_id,
+        "visit_id": record_id,
+        "patient_name": "",
+        "rule_code": rule_id,
+        "rule_name": str(item.get("qc_point") or item.get("rule_name") or "").strip(),
+        "status": status,
+        "document_type": str(item.get("source_document") or "").strip(),
+        "rule_family": "",
+        "defect_level": "",
+        "findings": conclusion.strip(),
+        "evidence": evidence,
+        "suggestion": str(item.get("suggestion") or "").strip(),
+        "confidence": None,
+    }
+
+
+def _load_luxian_0609_review_items_from_canonical(record_id: str) -> Dict[str, Any]:
+    """0609 单病历复核项的唯一正式读取入口：只交付已发布 Canonical 结果。
+
+    身份缺失/歧义或与 CDM 冲突、Envelope 缺失或损坏都收敛为“无 0609 结果”，
+    绝不回退到 ``items_json`` 原始项。异常在此吞掉，避免被路由总 catch 变成 500。
+    """
+
+    empty = {"review_items": [], "review_job": None, "state": LUXIAN_0609_NO_RESULT_STATE}
+    try:
+        from ..services.custom_qc_workspace_service import CustomQCWorkspaceService
+        from ..services.luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY
+        from ..services.luxian_0609_result_schema import RULE_SET_VERSION
+    except Exception as exc:  # pragma: no cover - 依赖缺失时保持空结果
+        logger.warning("加载 0609 Canonical 读取依赖失败（%s）", type(exc).__name__)
+        return dict(empty)
+
+    try:
+        identity, state = _resolve_luxian_0609_identity(
+            record_id, rule_set_key=LUXIAN_0609_RULE_SET_KEY, rule_set_version=RULE_SET_VERSION
+        )
+    except Exception as exc:
+        # 数据库异常可能包含 SQL 绑定参数，只记录异常类型。
+        logger.warning("核对 0609 病历身份失败（%s）", type(exc).__name__)
+        return {**empty, "state": "technical_error"}
+    if identity is None:
+        return {**empty, "state": state}
+
+    institute_id, patient_id, visit_id = identity
+    try:
+        result = CustomQCWorkspaceService().get_latest_luxian_0609_record_result(
+            institute_id=institute_id,
+            patient_id=patient_id,
+            visit_id=visit_id,
+            rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        )
+    except Exception as exc:
+        logger.warning("读取 0609 Canonical 结果失败（%s）", type(exc).__name__)
+        return {**empty, "state": "technical_error"}
+
+    if not isinstance(result, dict):
+        logger.warning("0609 Canonical 结果结构无效")
+        return {**empty, "state": "technical_error"}
+    if str(result.get("state") or "").strip() != "ready":
+        # Canonical 缺失或损坏：受控返回无 0609 结果，不读取任何原始结果。
+        return {**empty, "state": _controlled_review_state(result.get("state"))}
+
+    items = list(result.get("items") or [])
+    if not items:
+        return {**empty, "state": LUXIAN_0609_NO_RESULT_STATE}
+    job_id = str(result.get("job_id") or "").strip()
+    try:
+        review_items = [
+            _map_canonical_item_to_review_item(
+                item, job_id=job_id, record_id=visit_id, index=index
+            )
+            for index, item in enumerate(items)
+        ]
+    except Exception as exc:
+        logger.warning("0609 Canonical 结果缺少必需字段（%s）", type(exc).__name__)
+        return {**empty, "state": "technical_error"}
+    return {
+        "review_items": review_items,
+        "review_job": {"id": job_id, "created_at": "", "source": "canonical_result_envelope"},
+        "state": "incomplete" if result.get("is_complete") is False else "ready",
+    }
 
 
 def _parse_iso_date_or_422(value: Optional[str], field_name: str) -> Optional[date]:
@@ -1026,6 +1229,8 @@ async def get_record_qc_detail(
         "defects": [],
         "review_items": [],
         "review_job": None,
+        # 受控的 0609 读取状态，供前端区分“无问题”与“结果不可用”。
+        "review_result_state": "none",
         "remediation": [],
         "appeals": [],
         "operation_history": [],
@@ -1147,9 +1352,24 @@ async def get_record_qc_detail(
             payload["exists"] = True
 
         if not payload["defects"]:
-            review_payload = _load_review_items_from_latest_batch(record_id)
-            payload["review_items"] = list(review_payload.get("review_items") or [])
-            payload["review_job"] = review_payload.get("review_job")
+            # 正式 0609 结果只从已发布 Canonical Envelope 读取；raw items_json
+            # 仅保留给非 0609 legacy 规则集。
+            canonical_payload = _load_luxian_0609_review_items_from_canonical(record_id)
+            canonical_items = list(canonical_payload.get("review_items") or [])
+            canonical_state = _controlled_review_state(canonical_payload.get("state"))
+            if canonical_items:
+                payload["review_items"] = canonical_items
+                payload["review_job"] = canonical_payload.get("review_job")
+                payload["review_result_state"] = canonical_state
+            else:
+                review_payload = _load_review_items_from_latest_batch(record_id)
+                payload["review_items"] = list(review_payload.get("review_items") or [])
+                payload["review_job"] = review_payload.get("review_job")
+                payload["review_result_state"] = (
+                    canonical_state
+                    if canonical_state in {"technical_error", "identity_ambiguous", "identity_conflict", "unavailable"}
+                    else ("legacy" if payload["review_items"] else canonical_state)
+                )
             if payload["review_items"]:
                 payload["exists"] = True
 

@@ -1,10 +1,10 @@
 {
   "schema_version": "lx0609-acceptance-matrix-v1",
   "rule_set_key": "luxian_0609_qc_v1",
-  "rule_master_version": "2026-09-05-r3",
+  "rule_master_version": "2026-09-22-identity-v1",
   "generated_from": {
     "runtime_manifest_schema": "lx0609-runtime-manifest-v1",
-    "runtime_contract_hash": "c2744c3a1b5b33257b5bdb20108296ecf406d3f2618ea957c2d23f4492f1c565",
+    "runtime_contract_hash": "0bfab9fac4ea4c96de628bb14a90f8448013f41d815c38dbaa7117cfc84dd49b",
     "synthetic_fixture_set": "0426-derived-v3"
   },
   "coverage_semantics": {
@@ -15,21 +15,26 @@
   },
   "rules": [
     {
-      "rule_id": "LX0609-001",
+      "rule_id": "LX0609-01-01-01",
       "title": "入院记录：入院后24小时内是否完成",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "basic_timeliness",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-001", "0426-v3:case-004"],
+          "fixture_refs": [
+            "0426-v3:case-001",
+            "0426-v3:case-004"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-002"],
+          "fixture_refs": [
+            "0426-v3:case-002"
+          ],
           "expected_status": "non_compliant"
         },
         "not_applicable": {
@@ -39,47 +44,63 @@
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-001]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-01-01-01]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["入院时间", "记录时间"],
-      "required_evidence": ["admission_record"],
+      "required_facts": [
+        "入院时间",
+        "记录时间"
+      ],
+      "required_evidence": [
+        "admission_record"
+      ],
       "expected_executor": "basic_timeliness",
       "decision_authority": "program_only",
       "max_llm_calls_per_rule": 0,
       "time_boundaries": {
         "before_threshold": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-001"]
+          "fixture_refs": [
+            "0426-v3:case-001"
+          ]
         },
         "at_threshold": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-004"]
+          "fixture_refs": [
+            "0426-v3:case-004"
+          ]
         },
         "after_threshold": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-002"]
+          "fixture_refs": [
+            "0426-v3:case-002"
+          ]
         }
       }
     },
     {
-      "rule_id": "LX0609-002",
+      "rule_id": "LX0609-01-02-01",
       "title": "首次病程：入院后8小时内无首次病程记录",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "basic_timeliness",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-001", "0426-v3:case-004"],
+          "fixture_refs": [
+            "0426-v3:case-001",
+            "0426-v3:case-004"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-002"],
+          "fixture_refs": [
+            "0426-v3:case-002"
+          ],
           "expected_status": "non_compliant"
         },
         "not_applicable": {
@@ -89,42 +110,57 @@
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-002]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-01-02-01]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["入院时间", "记录时间"],
-      "required_evidence": ["daily_course_record", "first_course_record", "senior_course_record"],
+      "required_facts": [
+        "入院时间",
+        "记录时间"
+      ],
+      "required_evidence": [
+        "daily_course_record",
+        "first_course_record",
+        "senior_course_record"
+      ],
       "expected_executor": "basic_timeliness",
       "decision_authority": "program_only",
       "max_llm_calls_per_rule": 0,
       "time_boundaries": {
         "before_threshold": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-001"]
+          "fixture_refs": [
+            "0426-v3:case-001"
+          ]
         },
         "at_threshold": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-004"]
+          "fixture_refs": [
+            "0426-v3:case-004"
+          ]
         },
         "after_threshold": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-002"]
+          "fixture_refs": [
+            "0426-v3:case-002"
+          ]
         }
       }
     },
     {
-      "rule_id": "LX0609-003",
+      "rule_id": "LX0609-04-02-01",
       "title": "手术记录：手术后24小时内是否完成",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "surgery_anesthesia",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-017"],
+          "fixture_refs": [
+            "0426-v3:case-017"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
@@ -137,20 +173,25 @@
         "not_applicable": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-003]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-04-02-01]"
           ],
           "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-003]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-04-02-01]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["手术时间", "记录时间"],
-      "required_evidence": ["surgery_record"],
+      "required_facts": [
+        "手术时间",
+        "记录时间"
+      ],
+      "required_evidence": [
+        "surgery_record"
+      ],
       "expected_executor": "surgery_gate",
       "decision_authority": "program_only",
       "max_llm_calls_per_rule": 0,
@@ -170,21 +211,26 @@
       }
     },
     {
-      "rule_id": "LX0609-004",
+      "rule_id": "LX0609-09-01-01",
       "title": "抢救记录：抢救结束后6小时内是否完成",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "basic_timeliness",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-001", "0426-v3:case-004"],
+          "fixture_refs": [
+            "0426-v3:case-001",
+            "0426-v3:case-004"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-002"],
+          "fixture_refs": [
+            "0426-v3:case-002"
+          ],
           "expected_status": "non_compliant"
         },
         "not_applicable": {
@@ -194,47 +240,63 @@
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-004]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-09-01-01]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["抢救结束时间", "记录时间"],
-      "required_evidence": ["rescue_record"],
+      "required_facts": [
+        "抢救结束时间",
+        "记录时间"
+      ],
+      "required_evidence": [
+        "rescue_record"
+      ],
       "expected_executor": "basic_timeliness",
       "decision_authority": "program_only",
       "max_llm_calls_per_rule": 0,
       "time_boundaries": {
         "before_threshold": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-001"]
+          "fixture_refs": [
+            "0426-v3:case-001"
+          ]
         },
         "at_threshold": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-004"]
+          "fixture_refs": [
+            "0426-v3:case-004"
+          ]
         },
         "after_threshold": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-002"]
+          "fixture_refs": [
+            "0426-v3:case-002"
+          ]
         }
       }
     },
     {
-      "rule_id": "LX0609-005",
+      "rule_id": "LX0609-02-01-01",
       "title": "上级医生查房记录：入院后48小时内无主治医师首次查房记录",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "basic_timeliness",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-001", "0426-v3:case-004"],
+          "fixture_refs": [
+            "0426-v3:case-001",
+            "0426-v3:case-004"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-002"],
+          "fixture_refs": [
+            "0426-v3:case-002"
+          ],
           "expected_status": "non_compliant"
         },
         "not_applicable": {
@@ -244,47 +306,64 @@
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-005]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-02-01-01]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["入院时间", "查房时间", "医师层级"],
-      "required_evidence": ["senior_course_record"],
+      "required_facts": [
+        "入院时间",
+        "查房时间",
+        "医师层级"
+      ],
+      "required_evidence": [
+        "senior_course_record"
+      ],
       "expected_executor": "basic_timeliness",
       "decision_authority": "program_only",
       "max_llm_calls_per_rule": 0,
       "time_boundaries": {
         "before_threshold": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-001"]
+          "fixture_refs": [
+            "0426-v3:case-001"
+          ]
         },
         "at_threshold": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-004"]
+          "fixture_refs": [
+            "0426-v3:case-004"
+          ]
         },
         "after_threshold": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-002"]
+          "fixture_refs": [
+            "0426-v3:case-002"
+          ]
         }
       }
     },
     {
-      "rule_id": "LX0609-006",
+      "rule_id": "LX0609-02-01-02",
       "title": "上级医生查房记录：入院后72小时内无最高级别（副主任医师或主任医师）首次查房记录",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "basic_timeliness",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-001", "0426-v3:case-004"],
+          "fixture_refs": [
+            "0426-v3:case-001",
+            "0426-v3:case-004"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-002"],
+          "fixture_refs": [
+            "0426-v3:case-002"
+          ],
           "expected_status": "non_compliant"
         },
         "not_applicable": {
@@ -294,34 +373,54 @@
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-006]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-02-01-02]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["入院时间", "查房时间", "医师层级"],
-      "required_evidence": ["daily_course_record", "senior_course_record"],
+      "required_facts": [
+        "入院时间",
+        "查房时间",
+        "医师层级"
+      ],
+      "required_evidence": [
+        "daily_course_record",
+        "senior_course_record"
+      ],
       "expected_executor": "basic_timeliness",
       "decision_authority": "program_then_optional_llm",
       "max_llm_calls_per_rule": 1,
       "time_boundaries": {
         "before_threshold": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-001"]
+          "fixture_refs": [
+            "0426-v3:case-001"
+          ]
         },
         "at_threshold": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-004"]
+          "fixture_refs": [
+            "0426-v3:case-004"
+          ]
         },
         "after_threshold": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-002"]
+          "fixture_refs": [
+            "0426-v3:case-002"
+          ]
         }
       },
       "semantic_contract": {
         "minimal_input": {
-          "documents": ["daily_course_record", "senior_course_record"],
-          "facts": ["入院时间", "查房时间", "医师层级"]
+          "documents": [
+            "daily_course_record",
+            "senior_course_record"
+          ],
+          "facts": [
+            "入院时间",
+            "查房时间",
+            "医师层级"
+          ]
         },
         "controlled_status_enum": [
           "compliant",
@@ -336,16 +435,18 @@
       }
     },
     {
-      "rule_id": "LX0609-007",
+      "rule_id": "LX0609-02-01-03",
       "title": "查房记录：病情稳定（未下病危、病重医嘱）患者3天内无查房病程记录",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "course_quality",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-005"],
+          "fixture_refs": [
+            "0426-v3:case-005"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
@@ -358,20 +459,26 @@
         "not_applicable": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-007]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-02-01-03]"
           ],
           "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-007]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-02-01-03]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["病危病重排除", "记录时间轴"],
-      "required_evidence": ["daily_course_record", "senior_course_record"],
+      "required_facts": [
+        "病危病重排除",
+        "记录时间轴"
+      ],
+      "required_evidence": [
+        "daily_course_record",
+        "senior_course_record"
+      ],
       "expected_executor": "course_quality",
       "decision_authority": "program_only",
       "max_llm_calls_per_rule": 0,
@@ -391,16 +498,18 @@
       }
     },
     {
-      "rule_id": "LX0609-008",
+      "rule_id": "LX0609-02-01-04",
       "title": "查房记录：病重（下了病重医嘱）患者2天内无查房病程记录",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "course_quality",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-006"],
+          "fixture_refs": [
+            "0426-v3:case-006"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
@@ -413,19 +522,22 @@
         "not_applicable": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-008]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-02-01-04]"
           ],
           "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-008]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-02-01-04]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["病重医嘱起止时间", "记录时间轴"],
+      "required_facts": [
+        "病重医嘱起止时间",
+        "记录时间轴"
+      ],
       "required_evidence": [
         "daily_course_record",
         "exam_attention_report",
@@ -451,16 +563,18 @@
       }
     },
     {
-      "rule_id": "LX0609-009",
+      "rule_id": "LX0609-02-01-05",
       "title": "查房记录：病危（下了病危医嘱）患者未每天记录查房病程，或病情变化时未记录病程",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "course_quality",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-007"],
+          "fixture_refs": [
+            "0426-v3:case-007"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
@@ -473,19 +587,22 @@
         "not_applicable": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-009]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-02-01-05]"
           ],
           "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-009]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-02-01-05]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["病危医嘱起止时间", "病情变化证据"],
+      "required_facts": [
+        "病危医嘱起止时间",
+        "病情变化证据"
+      ],
       "required_evidence": [
         "daily_course_record",
         "exam_attention_report",
@@ -517,7 +634,10 @@
             "lab_attention_report",
             "senior_course_record"
           ],
-          "facts": ["病危医嘱起止时间", "病情变化证据"]
+          "facts": [
+            "病危医嘱起止时间",
+            "病情变化证据"
+          ]
         },
         "controlled_status_enum": [
           "compliant",
@@ -532,21 +652,27 @@
       }
     },
     {
-      "rule_id": "LX0609-010",
+      "rule_id": "LX0609-06-01-02",
       "title": "CT/MRI检查记录：CT/MRI检查前无说明检查原因的病程记录",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "exam_lab",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-009", "0426-v3:case-011", "0426-v3:case-012"],
+          "fixture_refs": [
+            "0426-v3:case-009",
+            "0426-v3:case-011",
+            "0426-v3:case-012"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-010"],
+          "fixture_refs": [
+            "0426-v3:case-010"
+          ],
           "expected_status": "non_compliant"
         },
         "not_applicable": {
@@ -556,12 +682,16 @@
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-010]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-06-01-02]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["CT/MRI医嘱", "检查时间", "报告时间"],
+      "required_facts": [
+        "CT/MRI医嘱",
+        "检查时间",
+        "报告时间"
+      ],
       "required_evidence": [
         "daily_course_record",
         "first_course_record",
@@ -581,7 +711,11 @@
             "rescue_record",
             "senior_course_record"
           ],
-          "facts": ["CT/MRI医嘱", "检查时间", "报告时间"]
+          "facts": [
+            "CT/MRI医嘱",
+            "检查时间",
+            "报告时间"
+          ]
         },
         "controlled_status_enum": [
           "compliant",
@@ -596,39 +730,49 @@
       }
     },
     {
-      "rule_id": "LX0609-011",
+      "rule_id": "LX0609-06-01-04",
       "title": "CT/MRI检查记录：CT/MRI影像报告结果出具后24小时内未在病程中记录",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "exam_lab",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-009", "0426-v3:case-011", "0426-v3:case-012"],
+          "fixture_refs": [
+            "0426-v3:case-009",
+            "0426-v3:case-011",
+            "0426-v3:case-012"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-010"],
+          "fixture_refs": [
+            "0426-v3:case-010"
+          ],
           "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-011]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-06-01-04]"
           ],
           "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-011]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-06-01-04]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["报告时间", "检查类型", "记录时间"],
+      "required_facts": [
+        "报告时间",
+        "检查类型",
+        "记录时间"
+      ],
       "required_evidence": [
         "daily_course_record",
         "first_course_record",
@@ -660,7 +804,11 @@
             "rescue_record",
             "senior_course_record"
           ],
-          "facts": ["报告时间", "检查类型", "记录时间"]
+          "facts": [
+            "报告时间",
+            "检查类型",
+            "记录时间"
+          ]
         },
         "controlled_status_enum": [
           "compliant",
@@ -675,39 +823,48 @@
       }
     },
     {
-      "rule_id": "LX0609-012",
+      "rule_id": "LX0609-06-01-05",
       "title": "CT/MRI检查记录：CT/MRI影像报告结果出具后24小时内未对阳性结果进行分析",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "exam_lab",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-009", "0426-v3:case-012"],
+          "fixture_refs": [
+            "0426-v3:case-009",
+            "0426-v3:case-012"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-010", "0426-v3:case-011"],
+          "fixture_refs": [
+            "0426-v3:case-010",
+            "0426-v3:case-011"
+          ],
           "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-012]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-06-01-05]"
           ],
           "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-012]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-06-01-05]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["报告时间", "阳性结果标志"],
+      "required_facts": [
+        "报告时间",
+        "阳性结果标志"
+      ],
       "required_evidence": [
         "daily_course_record",
         "first_course_record",
@@ -739,7 +896,10 @@
             "rescue_record",
             "senior_course_record"
           ],
-          "facts": ["报告时间", "阳性结果标志"]
+          "facts": [
+            "报告时间",
+            "阳性结果标志"
+          ]
         },
         "controlled_status_enum": [
           "compliant",
@@ -754,47 +914,63 @@
       }
     },
     {
-      "rule_id": "LX0609-013",
+      "rule_id": "LX0609-06-02-03",
       "title": "病理检查：病理检查结果在手术记录、病程中未记录",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "tumor_pathology",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-028"],
+          "fixture_refs": [
+            "0426-v3:case-028"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-029"],
+          "fixture_refs": [
+            "0426-v3:case-029"
+          ],
           "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-013]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-06-02-03]"
           ],
           "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-013]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-06-02-03]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["病理报告时间", "病理结果"],
-      "required_evidence": ["daily_course_record", "surgery_record"],
+      "required_facts": [
+        "病理报告时间",
+        "病理结果"
+      ],
+      "required_evidence": [
+        "daily_course_record",
+        "surgery_record"
+      ],
       "expected_executor": "tumor_pathology",
       "decision_authority": "program_then_optional_llm",
       "max_llm_calls_per_rule": 1,
       "semantic_contract": {
         "minimal_input": {
-          "documents": ["daily_course_record", "surgery_record"],
-          "facts": ["病理报告时间", "病理结果"]
+          "documents": [
+            "daily_course_record",
+            "surgery_record"
+          ],
+          "facts": [
+            "病理报告时间",
+            "病理结果"
+          ]
         },
         "controlled_status_enum": [
           "compliant",
@@ -809,39 +985,48 @@
       }
     },
     {
-      "rule_id": "LX0609-014",
+      "rule_id": "LX0609-06-03-03",
       "title": "细菌培养记录：细菌培养结果在报告出具后24小时内未在病程中记录",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "exam_lab",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-009", "0426-v3:case-011", "0426-v3:case-012"],
+          "fixture_refs": [
+            "0426-v3:case-009",
+            "0426-v3:case-011",
+            "0426-v3:case-012"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-010"],
+          "fixture_refs": [
+            "0426-v3:case-010"
+          ],
           "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-014]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-06-03-03]"
           ],
           "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-014]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-06-03-03]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["细菌培养报告时间", "记录时间"],
+      "required_facts": [
+        "细菌培养报告时间",
+        "记录时间"
+      ],
       "required_evidence": [
         "daily_course_record",
         "first_course_record",
@@ -873,7 +1058,10 @@
             "rescue_record",
             "senior_course_record"
           ],
-          "facts": ["细菌培养报告时间", "记录时间"]
+          "facts": [
+            "细菌培养报告时间",
+            "记录时间"
+          ]
         },
         "controlled_status_enum": [
           "compliant",
@@ -888,39 +1076,49 @@
       }
     },
     {
-      "rule_id": "LX0609-015",
+      "rule_id": "LX0609-06-03-04",
       "title": "细菌培养结果无分析：细菌培养结果有阳性菌，报告出具后24小时内未在病程记录中分析",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "exam_lab",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-009", "0426-v3:case-012"],
+          "fixture_refs": [
+            "0426-v3:case-009",
+            "0426-v3:case-012"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-010", "0426-v3:case-011"],
+          "fixture_refs": [
+            "0426-v3:case-010",
+            "0426-v3:case-011"
+          ],
           "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-015]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-06-03-04]"
           ],
           "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-015]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-06-03-04]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["阳性菌", "药敏", "报告时间"],
+      "required_facts": [
+        "阳性菌",
+        "药敏",
+        "报告时间"
+      ],
       "required_evidence": [
         "daily_course_record",
         "first_course_record",
@@ -954,7 +1152,11 @@
             "rescue_record",
             "senior_course_record"
           ],
-          "facts": ["阳性菌", "药敏", "报告时间"]
+          "facts": [
+            "阳性菌",
+            "药敏",
+            "报告时间"
+          ]
         },
         "controlled_status_enum": [
           "compliant",
@@ -969,16 +1171,18 @@
       }
     },
     {
-      "rule_id": "LX0609-016",
+      "rule_id": "LX0609-12-01-01",
       "title": "不合理复制病历：首次病程记录病例特点与入院记录、现病史完全相同",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "course_quality",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-005"],
+          "fixture_refs": [
+            "0426-v3:case-005"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
@@ -995,28 +1199,35 @@
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-016]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-12-01-01]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["无"],
-      "required_evidence": ["admission_record", "first_course_record"],
+      "required_facts": [
+        "无"
+      ],
+      "required_evidence": [
+        "admission_record",
+        "first_course_record"
+      ],
       "expected_executor": "course_quality",
       "decision_authority": "program_only",
       "max_llm_calls_per_rule": 0
     },
     {
-      "rule_id": "LX0609-017",
+      "rule_id": "LX0609-12-01-02",
       "title": "不合理复制病历：2次以上病程记录完全相同（相似度大于70%）",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "course_quality",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-006"],
+          "fixture_refs": [
+            "0426-v3:case-006"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
@@ -1030,12 +1241,14 @@
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-017]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-12-01-02]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["无"],
+      "required_facts": [
+        "无"
+      ],
       "required_evidence": [
         "daily_course_record",
         "first_course_record",
@@ -1053,7 +1266,9 @@
             "rescue_record",
             "senior_course_record"
           ],
-          "facts": ["无"]
+          "facts": [
+            "无"
+          ]
         },
         "controlled_status_enum": [
           "compliant",
@@ -1068,16 +1283,18 @@
       }
     },
     {
-      "rule_id": "LX0609-018",
+      "rule_id": "LX0609-01-01-02",
       "title": "入院记录：主诉只写症状不写诊断、超过20字，或不能导出第一诊断",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "course_quality",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-005"],
+          "fixture_refs": [
+            "0426-v3:case-005"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
@@ -1094,20 +1311,28 @@
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-018]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-01-01-02]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["主诊断"],
-      "required_evidence": ["admission_record"],
+      "required_facts": [
+        "主诊断"
+      ],
+      "required_evidence": [
+        "admission_record"
+      ],
       "expected_executor": "course_quality",
       "decision_authority": "program_then_optional_llm",
       "max_llm_calls_per_rule": 1,
       "semantic_contract": {
         "minimal_input": {
-          "documents": ["admission_record"],
-          "facts": ["主诊断"]
+          "documents": [
+            "admission_record"
+          ],
+          "facts": [
+            "主诊断"
+          ]
         },
         "controlled_status_enum": [
           "compliant",
@@ -1122,47 +1347,61 @@
       }
     },
     {
-      "rule_id": "LX0609-019",
+      "rule_id": "LX0609-06-02-02",
       "title": "病理检查：取材情况未在病程记录或手术记录中记录",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "tumor_pathology",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-028"],
+          "fixture_refs": [
+            "0426-v3:case-028"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-029"],
+          "fixture_refs": [
+            "0426-v3:case-029"
+          ],
           "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-019]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-06-02-02]"
           ],
           "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-019]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-06-02-02]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["病理检查存在性"],
-      "required_evidence": ["daily_course_record", "surgery_record"],
+      "required_facts": [
+        "病理检查存在性"
+      ],
+      "required_evidence": [
+        "daily_course_record",
+        "surgery_record"
+      ],
       "expected_executor": "tumor_pathology",
       "decision_authority": "program_then_optional_llm",
       "max_llm_calls_per_rule": 1,
       "semantic_contract": {
         "minimal_input": {
-          "documents": ["daily_course_record", "surgery_record"],
-          "facts": ["病理检查存在性"]
+          "documents": [
+            "daily_course_record",
+            "surgery_record"
+          ],
+          "facts": [
+            "病理检查存在性"
+          ]
         },
         "controlled_status_enum": [
           "compliant",
@@ -1177,11 +1416,11 @@
       }
     },
     {
-      "rule_id": "LX0609-020",
+      "rule_id": "LX0609-03-01-01",
       "title": "会诊记录：有会诊记录单无请会诊执行记录",
       "definition_status": "formal",
       "definition_phase": "pending_definition",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "consultation_quality",
       "cases": {
         "compliant": {
@@ -1201,15 +1440,27 @@
           "fixture_refs": []
         }
       },
-      "required_facts": ["会诊时间", "执行记录时间"],
-      "required_evidence": ["consultation_record", "daily_course_record"],
+      "required_facts": [
+        "会诊时间",
+        "执行记录时间"
+      ],
+      "required_evidence": [
+        "consultation_record",
+        "daily_course_record"
+      ],
       "expected_executor": "consultation_quality",
       "decision_authority": "program_then_optional_llm",
       "max_llm_calls_per_rule": 1,
       "semantic_contract": {
         "minimal_input": {
-          "documents": ["consultation_record", "daily_course_record"],
-          "facts": ["会诊时间", "执行记录时间"]
+          "documents": [
+            "consultation_record",
+            "daily_course_record"
+          ],
+          "facts": [
+            "会诊时间",
+            "执行记录时间"
+          ]
         },
         "controlled_status_enum": [
           "compliant",
@@ -1224,11 +1475,11 @@
       }
     },
     {
-      "rule_id": "LX0609-021",
+      "rule_id": "LX0609-03-01-02",
       "title": "会诊记录：会诊申请单会诊目的不明确",
       "definition_status": "formal",
       "definition_phase": "pending_definition",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "consultation_quality",
       "cases": {
         "compliant": {
@@ -1248,15 +1499,23 @@
           "fixture_refs": []
         }
       },
-      "required_facts": ["无"],
-      "required_evidence": ["consultation_record"],
+      "required_facts": [
+        "无"
+      ],
+      "required_evidence": [
+        "consultation_record"
+      ],
       "expected_executor": "consultation_quality",
       "decision_authority": "program_then_optional_llm",
       "max_llm_calls_per_rule": 1,
       "semantic_contract": {
         "minimal_input": {
-          "documents": ["consultation_record"],
-          "facts": ["无"]
+          "documents": [
+            "consultation_record"
+          ],
+          "facts": [
+            "无"
+          ]
         },
         "controlled_status_enum": [
           "compliant",
@@ -1271,11 +1530,11 @@
       }
     },
     {
-      "rule_id": "LX0609-022",
+      "rule_id": "LX0609-03-01-03",
       "title": "会诊记录：会诊记录单会诊意见不明确（如出现必要时行检查或药物治疗）",
       "definition_status": "formal",
       "definition_phase": "pending_definition",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "consultation_quality",
       "cases": {
         "compliant": {
@@ -1295,15 +1554,23 @@
           "fixture_refs": []
         }
       },
-      "required_facts": ["无"],
-      "required_evidence": ["consultation_record"],
+      "required_facts": [
+        "无"
+      ],
+      "required_evidence": [
+        "consultation_record"
+      ],
       "expected_executor": "consultation_quality",
       "decision_authority": "program_then_optional_llm",
       "max_llm_calls_per_rule": 1,
       "semantic_contract": {
         "minimal_input": {
-          "documents": ["consultation_record"],
-          "facts": ["无"]
+          "documents": [
+            "consultation_record"
+          ],
+          "facts": [
+            "无"
+          ]
         },
         "controlled_status_enum": [
           "compliant",
@@ -1318,16 +1585,18 @@
       }
     },
     {
-      "rule_id": "LX0609-023",
+      "rule_id": "LX0609-03-01-04",
       "title": "会诊记录：会诊建议未找到执行证据，或执行记录未明确具体执行情况",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "consultation_quality",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-013"],
+          "fixture_refs": [
+            "0426-v3:case-013"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
@@ -1341,12 +1610,16 @@
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-023]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-03-01-04]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["会诊执行记录正文", "后续病程时间与正文", "后续医嘱"],
+      "required_facts": [
+        "会诊执行记录正文",
+        "后续病程时间与正文",
+        "后续医嘱"
+      ],
       "required_evidence": [
         "consultation_record",
         "daily_course_record",
@@ -1366,7 +1639,11 @@
             "inpat_drug_order",
             "inpat_nondrug_order"
           ],
-          "facts": ["会诊执行记录正文", "后续病程时间与正文", "后续医嘱"]
+          "facts": [
+            "会诊执行记录正文",
+            "后续病程时间与正文",
+            "后续医嘱"
+          ]
         },
         "controlled_status_enum": [
           "compliant",
@@ -1381,16 +1658,18 @@
       }
     },
     {
-      "rule_id": "LX0609-024",
+      "rule_id": "LX0609-04-02-03",
       "title": "手术记录：恶性肿瘤手术记录未书写淋巴结清扫情况",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "surgery_anesthesia",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-017"],
+          "fixture_refs": [
+            "0426-v3:case-017"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
@@ -1407,20 +1686,28 @@
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-024]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-04-02-03]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["恶性肿瘤诊断或病理诊断"],
-      "required_evidence": ["surgery_record"],
+      "required_facts": [
+        "恶性肿瘤诊断或病理诊断"
+      ],
+      "required_evidence": [
+        "surgery_record"
+      ],
       "expected_executor": "surgery_gate",
       "decision_authority": "program_then_optional_llm",
       "max_llm_calls_per_rule": 2,
       "semantic_contract": {
         "minimal_input": {
-          "documents": ["surgery_record"],
-          "facts": ["恶性肿瘤诊断或病理诊断"]
+          "documents": [
+            "surgery_record"
+          ],
+          "facts": [
+            "恶性肿瘤诊断或病理诊断"
+          ]
         },
         "controlled_status_enum": [
           "compliant",
@@ -1435,11 +1722,11 @@
       }
     },
     {
-      "rule_id": "LX0609-025",
+      "rule_id": "LX0609-04-02-04",
       "title": "手术记录：未记录植入物名称、种类、规格或型号、材质及数量等信息",
       "definition_status": "formal",
       "definition_phase": "pending_definition",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "surgery_anesthesia",
       "cases": {
         "compliant": {
@@ -1468,13 +1755,17 @@
         "implant_quantity",
         "病程记录仅辅助确认实际使用，不得替代正式手术记录五字段"
       ],
-      "required_evidence": ["surgery_record"],
+      "required_evidence": [
+        "surgery_record"
+      ],
       "expected_executor": "surgery_gate",
       "decision_authority": "program_then_optional_llm",
       "max_llm_calls_per_rule": 1,
       "semantic_contract": {
         "minimal_input": {
-          "documents": ["surgery_record"],
+          "documents": [
+            "surgery_record"
+          ],
           "facts": [
             "永久性植入物实际使用",
             "implant_name",
@@ -1498,21 +1789,25 @@
       }
     },
     {
-      "rule_id": "LX0609-026",
+      "rule_id": "LX0609-05-02-01",
       "title": "恶性肿瘤化学治疗记录：病程中化学治疗记录的药物名称、剂量、使用方法、时间与医嘱不一致",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "tumor_pathology",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-028"],
+          "fixture_refs": [
+            "0426-v3:case-028"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-029"],
+          "fixture_refs": [
+            "0426-v3:case-029"
+          ],
           "expected_status": "non_compliant"
         },
         "not_applicable": {
@@ -1522,20 +1817,38 @@
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-026]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-05-02-01]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["化疗医嘱", "药名", "剂量", "方法", "时间"],
-      "required_evidence": ["daily_course_record", "inpat_drug_order"],
+      "required_facts": [
+        "化疗医嘱",
+        "药名",
+        "剂量",
+        "方法",
+        "时间"
+      ],
+      "required_evidence": [
+        "daily_course_record",
+        "inpat_drug_order"
+      ],
       "expected_executor": "tumor_pathology",
       "decision_authority": "program_then_optional_llm",
       "max_llm_calls_per_rule": 1,
       "semantic_contract": {
         "minimal_input": {
-          "documents": ["daily_course_record", "inpat_drug_order"],
-          "facts": ["化疗医嘱", "药名", "剂量", "方法", "时间"]
+          "documents": [
+            "daily_course_record",
+            "inpat_drug_order"
+          ],
+          "facts": [
+            "化疗医嘱",
+            "药名",
+            "剂量",
+            "方法",
+            "时间"
+          ]
         },
         "controlled_status_enum": [
           "compliant",
@@ -1550,47 +1863,59 @@
       }
     },
     {
-      "rule_id": "LX0609-027",
+      "rule_id": "LX0609-08-01-04",
       "title": "出院记录：恶性肿瘤患者出院记录中无出院后肿瘤相关治疗计划",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "tumor_pathology",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-028"],
+          "fixture_refs": [
+            "0426-v3:case-028"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-029"],
+          "fixture_refs": [
+            "0426-v3:case-029"
+          ],
           "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-027]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-08-01-04]"
           ],
           "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-027]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-08-01-04]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["恶性肿瘤诊断"],
-      "required_evidence": ["discharge_record"],
+      "required_facts": [
+        "恶性肿瘤诊断"
+      ],
+      "required_evidence": [
+        "discharge_record"
+      ],
       "expected_executor": "tumor_pathology",
       "decision_authority": "program_then_optional_llm",
       "max_llm_calls_per_rule": 1,
       "semantic_contract": {
         "minimal_input": {
-          "documents": ["discharge_record"],
-          "facts": ["恶性肿瘤诊断"]
+          "documents": [
+            "discharge_record"
+          ],
+          "facts": [
+            "恶性肿瘤诊断"
+          ]
         },
         "controlled_status_enum": [
           "compliant",
@@ -1605,11 +1930,11 @@
       }
     },
     {
-      "rule_id": "LX0609-028",
+      "rule_id": "LX0609-05-01-01",
       "title": "抗菌药物使用记录：I类、II类切口手术预防使用抗菌药物超过24小时，特殊情况超过48小时",
       "definition_status": "formal",
       "definition_phase": "pending_definition",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "surgery_anesthesia",
       "cases": {
         "compliant": {
@@ -1629,8 +1954,14 @@
           "fixture_refs": []
         }
       },
-      "required_facts": ["切口等级", "手术时间", "抗菌药物医嘱起止时间"],
-      "required_evidence": ["daily_course_record"],
+      "required_facts": [
+        "切口等级",
+        "手术时间",
+        "抗菌药物医嘱起止时间"
+      ],
+      "required_evidence": [
+        "daily_course_record"
+      ],
       "expected_executor": "surgery_gate",
       "decision_authority": "program_then_optional_llm",
       "max_llm_calls_per_rule": 1,
@@ -1650,8 +1981,14 @@
       },
       "semantic_contract": {
         "minimal_input": {
-          "documents": ["daily_course_record"],
-          "facts": ["切口等级", "手术时间", "抗菌药物医嘱起止时间"]
+          "documents": [
+            "daily_course_record"
+          ],
+          "facts": [
+            "切口等级",
+            "手术时间",
+            "抗菌药物医嘱起止时间"
+          ]
         },
         "controlled_status_enum": [
           "compliant",
@@ -1666,16 +2003,18 @@
       }
     },
     {
-      "rule_id": "LX0609-029",
+      "rule_id": "LX0609-04-01-01",
       "title": "术前小结：有手术医嘱但无术前小结",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "surgery_anesthesia",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-018"],
+          "fixture_refs": [
+            "0426-v3:case-018"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
@@ -1688,19 +2027,21 @@
         "not_applicable": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-029]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-04-01-01]"
           ],
           "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-029]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-04-01-01]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["手术医嘱"],
+      "required_facts": [
+        "手术医嘱"
+      ],
       "required_evidence": [
         "postsurg_firstcourse_record",
         "presurg_discussion",
@@ -1712,16 +2053,18 @@
       "max_llm_calls_per_rule": 0
     },
     {
-      "rule_id": "LX0609-030",
+      "rule_id": "LX0609-04-02-02",
       "title": "手术记录：有手术医嘱但无手术记录",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "surgery_anesthesia",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-018"],
+          "fixture_refs": [
+            "0426-v3:case-018"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
@@ -1734,35 +2077,41 @@
         "not_applicable": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-030]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-04-02-02]"
           ],
           "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-030]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-04-02-02]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["手术医嘱"],
-      "required_evidence": ["surgery_record"],
+      "required_facts": [
+        "手术医嘱"
+      ],
+      "required_evidence": [
+        "surgery_record"
+      ],
       "expected_executor": "surgery_presence",
       "decision_authority": "program_only",
       "max_llm_calls_per_rule": 0
     },
     {
-      "rule_id": "LX0609-031",
+      "rule_id": "LX0609-04-02-05",
       "title": "手术记录：手术记录非手术者签字（核对术者及签名医生）",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "surgery_anesthesia",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-017"],
+          "fixture_refs": [
+            "0426-v3:case-017"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
@@ -1775,19 +2124,23 @@
         "not_applicable": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-031]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-04-02-05]"
           ],
           "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-031]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-04-02-05]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["术者", "记录者", "签名医生"],
+      "required_facts": [
+        "术者",
+        "记录者",
+        "签名医生"
+      ],
       "required_evidence": [
         "postsurg_firstcourse_record",
         "presurg_discussion",
@@ -1799,16 +2152,18 @@
       "max_llm_calls_per_rule": 0
     },
     {
-      "rule_id": "LX0609-032",
+      "rule_id": "LX0609-04-03-01",
       "title": "手术安全核查表：有手术记录但无手术安全核查表",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "surgery_anesthesia",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-018"],
+          "fixture_refs": [
+            "0426-v3:case-018"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
@@ -1821,19 +2176,21 @@
         "not_applicable": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-032]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-04-03-01]"
           ],
           "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-032]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-04-03-01]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["无"],
+      "required_facts": [
+        "无"
+      ],
       "required_evidence": [
         "anesthesia_record",
         "postsurg_firstcourse_record",
@@ -1848,16 +2205,20 @@
       "max_llm_calls_per_rule": 0
     },
     {
-      "rule_id": "LX0609-033",
+      "rule_id": "LX0609-11-01-01",
       "title": "手术知情同意书：有手术记录但无手术知情同意书",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "surgery_anesthesia",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-018"],
+          "fixture_refs": [
+            "0426-v3:case-018",
+            "0426-v3:case-023",
+            "0426-v3:case-024"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
@@ -1870,27 +2231,37 @@
         "not_applicable": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-033]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-11-01-01]"
           ],
           "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-033]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-11-01-01]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["无"],
-      "required_evidence": ["consent_form", "surgery_record"],
+      "required_facts": [
+        "无"
+      ],
+      "required_evidence": [
+        "consent_form",
+        "surgery_record"
+      ],
       "expected_executor": "surgery_gate",
       "decision_authority": "program_then_optional_llm",
       "max_llm_calls_per_rule": 1,
       "semantic_contract": {
         "minimal_input": {
-          "documents": ["consent_form", "surgery_record"],
-          "facts": ["无"]
+          "documents": [
+            "consent_form",
+            "surgery_record"
+          ],
+          "facts": [
+            "无"
+          ]
         },
         "controlled_status_enum": [
           "compliant",
@@ -1905,16 +2276,20 @@
       }
     },
     {
-      "rule_id": "LX0609-034",
+      "rule_id": "LX0609-11-02-01",
       "title": "麻醉知情同意书：有麻醉记录但无麻醉知情同意书",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "surgery_anesthesia",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-019"],
+          "fixture_refs": [
+            "0426-v3:case-019",
+            "0426-v3:case-023",
+            "0426-v3:case-025"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
@@ -1927,35 +2302,42 @@
         "not_applicable": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-034]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-11-02-01]"
           ],
           "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-034]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-11-02-01]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["无"],
-      "required_evidence": ["anesthesia_record", "consent_form"],
+      "required_facts": [
+        "无"
+      ],
+      "required_evidence": [
+        "anesthesia_record",
+        "consent_form"
+      ],
       "expected_executor": "surgery_document",
       "decision_authority": "program_only",
       "max_llm_calls_per_rule": 0
     },
     {
-      "rule_id": "LX0609-035",
+      "rule_id": "LX0609-11-02-02",
       "title": "麻醉知情同意书：填写不规范（无患者或医生签名、签名时间未精确到分钟）",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "surgery_anesthesia",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-019"],
+          "fixture_refs": [
+            "0426-v3:case-019"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
@@ -1972,23 +2354,29 @@
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-035]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-11-02-02]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["签名", "签署时间"],
-      "required_evidence": ["anesthesia_record", "consent_form"],
+      "required_facts": [
+        "签名",
+        "签署时间"
+      ],
+      "required_evidence": [
+        "anesthesia_record",
+        "consent_form"
+      ],
       "expected_executor": "surgery_document",
       "decision_authority": "program_only",
       "max_llm_calls_per_rule": 0
     },
     {
-      "rule_id": "LX0609-036",
+      "rule_id": "LX0609-04-04-01",
       "title": "麻醉访视：无麻醉术前或麻醉术后访视记录（局麻除外）",
       "definition_status": "formal",
       "definition_phase": "pending_definition",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "surgery_anesthesia",
       "cases": {
         "compliant": {
@@ -2008,23 +2396,29 @@
           "fixture_refs": []
         }
       },
-      "required_facts": ["麻醉方式"],
-      "required_evidence": ["anesthesia_record"],
+      "required_facts": [
+        "麻醉方式"
+      ],
+      "required_evidence": [
+        "anesthesia_record"
+      ],
       "expected_executor": "surgery_document",
       "decision_authority": "program_only",
       "max_llm_calls_per_rule": 0
     },
     {
-      "rule_id": "LX0609-037",
+      "rule_id": "LX0609-04-04-02",
       "title": "麻醉访视：麻醉术前和术后访视记录填写不规范（局麻除外）",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "surgery_anesthesia",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-019"],
+          "fixture_refs": [
+            "0426-v3:case-019"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
@@ -2037,35 +2431,43 @@
         "not_applicable": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-037]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-04-04-02]"
           ],
           "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-037]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-04-04-02]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["麻醉方式", "访视必要字段"],
-      "required_evidence": ["anesthesia_record", "consent_form"],
+      "required_facts": [
+        "麻醉方式",
+        "访视必要字段"
+      ],
+      "required_evidence": [
+        "anesthesia_record",
+        "consent_form"
+      ],
       "expected_executor": "surgery_document",
       "decision_authority": "program_only",
       "max_llm_calls_per_rule": 0
     },
     {
-      "rule_id": "LX0609-038",
+      "rule_id": "LX0609-04-04-03",
       "title": "麻醉记录单：无麻醉记录单（局麻除外）",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "surgery_anesthesia",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-019"],
+          "fixture_refs": [
+            "0426-v3:case-019"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
@@ -2078,35 +2480,41 @@
         "not_applicable": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-038]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-04-04-03]"
           ],
           "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-038]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-04-04-03]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["麻醉方式"],
-      "required_evidence": ["consent_form"],
+      "required_facts": [
+        "麻醉方式"
+      ],
+      "required_evidence": [
+        "consent_form"
+      ],
       "expected_executor": "surgery_document",
       "decision_authority": "program_only",
       "max_llm_calls_per_rule": 0
     },
     {
-      "rule_id": "LX0609-039",
+      "rule_id": "LX0609-04-01-02",
       "title": "术前讨论记录：除紧急抢救生命的急诊手术外，住院患者手术无术前讨论或术者未参加",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "surgery_anesthesia",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-020"],
+          "fixture_refs": [
+            "0426-v3:case-020"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
@@ -2119,35 +2527,42 @@
         "not_applicable": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-039]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-04-01-02]"
           ],
           "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-039]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-04-01-02]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["急诊抢救标志", "术者"],
-      "required_evidence": ["presurg_discussion"],
+      "required_facts": [
+        "急诊抢救标志",
+        "术者"
+      ],
+      "required_evidence": [
+        "presurg_discussion"
+      ],
       "expected_executor": "surgery_document",
       "decision_authority": "program_only",
       "max_llm_calls_per_rule": 0
     },
     {
-      "rule_id": "LX0609-040",
+      "rule_id": "LX0609-04-01-03",
       "title": "术前多学科讨论记录：四级手术术前讨论未开展多学科讨论",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "surgery_anesthesia",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-020"],
+          "fixture_refs": [
+            "0426-v3:case-020"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
@@ -2160,19 +2575,21 @@
         "not_applicable": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-040]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-04-01-03]"
           ],
           "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-040]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-04-01-03]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["手术级别"],
+      "required_facts": [
+        "手术级别"
+      ],
       "required_evidence": [
         "postsurg_firstcourse_record",
         "presurg_discussion",
@@ -2190,7 +2607,9 @@
             "presurg_summary",
             "surgery_record"
           ],
-          "facts": ["手术级别"]
+          "facts": [
+            "手术级别"
+          ]
         },
         "controlled_status_enum": [
           "compliant",
@@ -2205,164 +2624,197 @@
       }
     },
     {
-      "rule_id": "LX0609-041",
+      "rule_id": "LX0609-11-03-01",
       "title": "输血知情同意书：无输血知情同意书",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "transfusion",
       "cases": {
         "compliant": {
-          "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-023"],
-          "expected_status": "compliant"
+          "coverage": "missing",
+          "fixture_refs": []
         },
         "confirmed_issue": {
-          "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-024"],
-          "expected_status": "non_compliant"
+          "coverage": "missing",
+          "fixture_refs": []
         },
         "not_applicable": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-041]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-11-03-01]"
           ],
           "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-041]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-11-03-01]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["输血医嘱或输血记录"],
-      "required_evidence": ["bloodtrans_record", "consent_form"],
+      "required_facts": [
+        "输血医嘱或输血记录"
+      ],
+      "required_evidence": [
+        "bloodtrans_record",
+        "consent_form"
+      ],
       "expected_executor": "transfusion",
       "decision_authority": "program_only",
       "max_llm_calls_per_rule": 0
     },
     {
-      "rule_id": "LX0609-042",
+      "rule_id": "LX0609-11-03-02",
       "title": "输血知情同意书：输血知情同意书填写或签名不完整",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "transfusion",
       "cases": {
         "compliant": {
-          "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-023"],
-          "expected_status": "compliant"
+          "coverage": "missing",
+          "fixture_refs": []
         },
         "confirmed_issue": {
-          "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-025"],
-          "expected_status": "non_compliant"
+          "coverage": "missing",
+          "fixture_refs": []
         },
         "not_applicable": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-042]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-11-03-02]"
           ],
           "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-042]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-11-03-02]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["签名", "输血指征", "风险告知"],
-      "required_evidence": ["consent_form"],
+      "required_facts": [
+        "签名",
+        "输血指征",
+        "风险告知"
+      ],
+      "required_evidence": [
+        "consent_form"
+      ],
       "expected_executor": "transfusion",
       "decision_authority": "program_only",
       "max_llm_calls_per_rule": 0
     },
     {
-      "rule_id": "LX0609-043",
+      "rule_id": "LX0609-07-01-01",
       "title": "输血前辅助检查：输血前常规检查不完整",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "transfusion",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-023"],
+          "fixture_refs": [
+            "0426-v3:case-023"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-025"],
+          "fixture_refs": [
+            "0426-v3:case-025"
+          ],
           "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-043]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-07-01-01]"
           ],
           "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-043]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-07-01-01]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["输血前检验项目", "检验时间"],
-      "required_evidence": ["daily_course_record", "exam_item_report"],
+      "required_facts": [
+        "输血前检验项目",
+        "检验时间"
+      ],
+      "required_evidence": [
+        "daily_course_record",
+        "exam_item_report"
+      ],
       "expected_executor": "transfusion",
       "decision_authority": "program_only",
       "max_llm_calls_per_rule": 0
     },
     {
-      "rule_id": "LX0609-044",
+      "rule_id": "LX0609-07-01-02",
       "title": "输血前评估：无输血前评估记录或记录不完整",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "transfusion",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-023"],
+          "fixture_refs": [
+            "0426-v3:case-023"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-025"],
+          "fixture_refs": [
+            "0426-v3:case-025"
+          ],
           "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-044]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-07-01-02]"
           ],
           "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-044]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-07-01-02]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["输血医嘱", "输血申请"],
-      "required_evidence": ["bloodtrans_record", "daily_course_record"],
+      "required_facts": [
+        "输血医嘱",
+        "输血申请"
+      ],
+      "required_evidence": [
+        "bloodtrans_record",
+        "daily_course_record"
+      ],
       "expected_executor": "transfusion",
       "decision_authority": "program_then_optional_llm",
       "max_llm_calls_per_rule": 1,
       "semantic_contract": {
         "minimal_input": {
-          "documents": ["bloodtrans_record", "daily_course_record"],
-          "facts": ["输血医嘱", "输血申请"]
+          "documents": [
+            "bloodtrans_record",
+            "daily_course_record"
+          ],
+          "facts": [
+            "输血医嘱",
+            "输血申请"
+          ]
         },
         "controlled_status_enum": [
           "compliant",
@@ -2377,47 +2829,61 @@
       }
     },
     {
-      "rule_id": "LX0609-045",
+      "rule_id": "LX0609-07-02-01",
       "title": "输血记录：无输血病程记录",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "transfusion",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-023"],
+          "fixture_refs": [
+            "0426-v3:case-023"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-026"],
+          "fixture_refs": [
+            "0426-v3:case-026"
+          ],
           "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-045]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-07-02-01]"
           ],
           "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-045]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-07-02-01]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["输血时间"],
-      "required_evidence": ["bloodtrans_record", "daily_course_record"],
+      "required_facts": [
+        "输血时间"
+      ],
+      "required_evidence": [
+        "bloodtrans_record",
+        "daily_course_record"
+      ],
       "expected_executor": "transfusion",
       "decision_authority": "program_then_optional_llm",
       "max_llm_calls_per_rule": 1,
       "semantic_contract": {
         "minimal_input": {
-          "documents": ["bloodtrans_record", "daily_course_record"],
-          "facts": ["输血时间"]
+          "documents": [
+            "bloodtrans_record",
+            "daily_course_record"
+          ],
+          "facts": [
+            "输血时间"
+          ]
         },
         "controlled_status_enum": [
           "compliant",
@@ -2432,47 +2898,65 @@
       }
     },
     {
-      "rule_id": "LX0609-046",
+      "rule_id": "LX0609-07-02-02",
       "title": "输血记录：输血病程记录不完整或不规范",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "transfusion",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-023"],
+          "fixture_refs": [
+            "0426-v3:case-023"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-027"],
+          "fixture_refs": [
+            "0426-v3:case-027"
+          ],
           "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-046]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-07-02-02]"
           ],
           "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-046]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-07-02-02]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["输血成分", "输血量", "反应"],
-      "required_evidence": ["bloodtrans_record", "daily_course_record"],
+      "required_facts": [
+        "输血成分",
+        "输血量",
+        "反应"
+      ],
+      "required_evidence": [
+        "bloodtrans_record",
+        "daily_course_record"
+      ],
       "expected_executor": "transfusion",
       "decision_authority": "program_then_optional_llm",
       "max_llm_calls_per_rule": 1,
       "semantic_contract": {
         "minimal_input": {
-          "documents": ["bloodtrans_record", "daily_course_record"],
-          "facts": ["输血成分", "输血量", "反应"]
+          "documents": [
+            "bloodtrans_record",
+            "daily_course_record"
+          ],
+          "facts": [
+            "输血成分",
+            "输血量",
+            "反应"
+          ]
         },
         "controlled_status_enum": [
           "compliant",
@@ -2487,78 +2971,95 @@
       }
     },
     {
-      "rule_id": "LX0609-047",
+      "rule_id": "LX0609-07-03-01",
       "title": "输血后评价：无输血后评价",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "transfusion",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-023"],
+          "fixture_refs": [
+            "0426-v3:case-023"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-026"],
+          "fixture_refs": [
+            "0426-v3:case-026"
+          ],
           "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-047]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-07-03-01]"
           ],
           "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-047]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-07-03-01]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["输血结束时间"],
-      "required_evidence": ["bloodtrans_record", "daily_course_record"],
+      "required_facts": [
+        "输血结束时间"
+      ],
+      "required_evidence": [
+        "bloodtrans_record",
+        "daily_course_record"
+      ],
       "expected_executor": "transfusion",
       "decision_authority": "program_only",
       "max_llm_calls_per_rule": 0
     },
     {
-      "rule_id": "LX0609-048",
+      "rule_id": "LX0609-07-04-01",
       "title": "输血记录：有术中输血，但手术记录、麻醉记录、术后首次病程记录中输血相关内容不一致",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "transfusion",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-023"],
+          "fixture_refs": [
+            "0426-v3:case-023"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-027"],
+          "fixture_refs": [
+            "0426-v3:case-027"
+          ],
           "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-048]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-07-04-01]"
           ],
           "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-048]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-07-04-01]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["输血成分", "剂量", "时间"],
+      "required_facts": [
+        "输血成分",
+        "剂量",
+        "时间"
+      ],
       "required_evidence": [
         "bloodtrans_record",
         "daily_course_record",
@@ -2574,11 +3075,11 @@
       "max_llm_calls_per_rule": 0
     },
     {
-      "rule_id": "LX0609-049",
+      "rule_id": "LX0609-07-04-02",
       "title": "输血医嘱：输血医嘱与收费不一致",
       "definition_status": "formal",
       "definition_phase": "pending_definition",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "transfusion",
       "cases": {
         "compliant": {
@@ -2598,18 +3099,26 @@
           "fixture_refs": []
         }
       },
-      "required_facts": ["输血医嘱", "费用明细", "输血成分和数量"],
-      "required_evidence": ["daily_course_record", "exam_item_report", "medical_order"],
+      "required_facts": [
+        "输血医嘱",
+        "费用明细",
+        "输血成分和数量"
+      ],
+      "required_evidence": [
+        "daily_course_record",
+        "exam_item_report",
+        "medical_order"
+      ],
       "expected_executor": "transfusion",
       "decision_authority": "program_only",
       "max_llm_calls_per_rule": 0
     },
     {
-      "rule_id": "LX0609-050",
+      "rule_id": "LX0609-03-02-01",
       "title": "疑难病历讨论记录：诊断不明确（入院后7天）未书写疑难病历讨论",
       "definition_status": "temporary",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
@@ -2621,7 +3130,9 @@
         },
         "confirmed_issue": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-032"],
+          "fixture_refs": [
+            "0426-v3:case-032"
+          ],
           "expected_status": "non_compliant"
         },
         "not_applicable": {
@@ -2631,13 +3142,20 @@
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-050]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-03-02-01]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["入院时间", "诊断不明确事件", "疑难病历讨论记录"],
-      "required_evidence": ["daily_course_record", "diffcase_discussion_record"],
+      "required_facts": [
+        "入院时间",
+        "诊断不明确事件",
+        "疑难病历讨论记录"
+      ],
+      "required_evidence": [
+        "daily_course_record",
+        "diffcase_discussion_record"
+      ],
       "expected_executor": "extended_document",
       "decision_authority": "program_only",
       "max_llm_calls_per_rule": 0,
@@ -2657,16 +3175,18 @@
       }
     },
     {
-      "rule_id": "LX0609-051",
+      "rule_id": "LX0609-09-02-01",
       "title": "死亡病历讨论记录：患者死亡后7天未书写死亡病历讨论记录",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-033"],
+          "fixture_refs": [
+            "0426-v3:case-033"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
@@ -2679,20 +3199,26 @@
         "not_applicable": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-051]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-09-02-01]"
           ],
           "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-051]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-09-02-01]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["死亡时间", "死亡病历讨论记录时间"],
-      "required_evidence": ["death_record", "death_discussion"],
+      "required_facts": [
+        "死亡时间",
+        "死亡病历讨论记录时间"
+      ],
+      "required_evidence": [
+        "death_record",
+        "death_discussion"
+      ],
       "expected_executor": "extended_document",
       "decision_authority": "program_only",
       "max_llm_calls_per_rule": 0,
@@ -2712,38 +3238,52 @@
       }
     },
     {
-      "rule_id": "LX0609-052",
+      "rule_id": "LX0609-06-04-01",
       "title": "危急值记录：6小时内未书写危急值处置记录",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-012"],
+          "fixture_refs": [
+            "0426-v3:case-012"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-011"],
+          "fixture_refs": [
+            "0426-v3:case-011"
+          ],
           "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-009", "0426-v3:case-010"],
+          "fixture_refs": [
+            "0426-v3:case-009",
+            "0426-v3:case-010"
+          ],
           "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-052]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-06-04-01]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["PL/PH标识", "检验报告时间", "处置记录时间"],
-      "required_evidence": ["labtest_item_report", "crisis_value_record"],
+      "required_facts": [
+        "PL/PH标识",
+        "检验报告时间",
+        "处置记录时间"
+      ],
+      "required_evidence": [
+        "labtest_item_report",
+        "crisis_value_record"
+      ],
       "expected_executor": "extended_document",
       "decision_authority": "program_only",
       "max_llm_calls_per_rule": 0,
@@ -2763,58 +3303,75 @@
       }
     },
     {
-      "rule_id": "LX0609-053",
+      "rule_id": "LX0609-06-04-02",
       "title": "危急值记录：检验检查危急值报告后无危急值处置记录",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-012"],
+          "fixture_refs": [
+            "0426-v3:case-012"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-011"],
+          "fixture_refs": [
+            "0426-v3:case-011"
+          ],
           "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-009", "0426-v3:case-010"],
+          "fixture_refs": [
+            "0426-v3:case-009",
+            "0426-v3:case-010"
+          ],
           "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-053]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-06-04-02]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["PL/PH标识", "危急值处置记录"],
-      "required_evidence": ["labtest_item_report", "crisis_value_record"],
+      "required_facts": [
+        "PL/PH标识",
+        "危急值处置记录"
+      ],
+      "required_evidence": [
+        "labtest_item_report",
+        "crisis_value_record"
+      ],
       "expected_executor": "extended_document",
       "decision_authority": "program_only",
       "max_llm_calls_per_rule": 0
     },
     {
-      "rule_id": "LX0609-054",
+      "rule_id": "LX0609-05-01-02",
       "title": "抗菌药物使用记录：使用、停用、更换、联合或超说明书范围使用时，无用药理由或理由不充分",
       "definition_status": "temporary",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-034"],
+          "fixture_refs": [
+            "0426-v3:case-034"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-035"],
+          "fixture_refs": [
+            "0426-v3:case-035"
+          ],
           "expected_status": "non_compliant"
         },
         "not_applicable": {
@@ -2824,33 +3381,43 @@
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-054]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-05-01-02]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["抗菌药物医嘱", "用药理由"],
-      "required_evidence": ["inpat_drug_order", "daily_course_record"],
+      "required_facts": [
+        "抗菌药物医嘱",
+        "用药理由"
+      ],
+      "required_evidence": [
+        "inpat_drug_order",
+        "daily_course_record"
+      ],
       "expected_executor": "extended_document",
       "decision_authority": "program_only",
       "max_llm_calls_per_rule": 0
     },
     {
-      "rule_id": "LX0609-055",
+      "rule_id": "LX0609-05-01-03",
       "title": "抗菌药物使用记录：48至72小时内无效果评价",
       "definition_status": "temporary",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-034"],
+          "fixture_refs": [
+            "0426-v3:case-034"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-035"],
+          "fixture_refs": [
+            "0426-v3:case-035"
+          ],
           "expected_status": "non_compliant"
         },
         "not_applicable": {
@@ -2860,13 +3427,20 @@
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-055]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-05-01-03]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["用药时间", "效果评价时间", "效果评价内容"],
-      "required_evidence": ["inpat_drug_order", "daily_course_record"],
+      "required_facts": [
+        "用药时间",
+        "效果评价时间",
+        "效果评价内容"
+      ],
+      "required_evidence": [
+        "inpat_drug_order",
+        "daily_course_record"
+      ],
       "expected_executor": "extended_document",
       "decision_authority": "program_only",
       "max_llm_calls_per_rule": 0,
@@ -2886,11 +3460,11 @@
       }
     },
     {
-      "rule_id": "LX0609-056",
+      "rule_id": "LX0609-05-01-04",
       "title": "抗菌药物使用记录：接受两个或两个以上重点抗菌药物，使用前未完善病原学检查",
       "definition_status": "temporary",
       "definition_phase": "pending_definition",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
@@ -2910,28 +3484,39 @@
           "fixture_refs": []
         }
       },
-      "required_facts": ["重点抗菌药物", "用药时间", "标本采集时间"],
-      "required_evidence": ["inpat_drug_order", "labtest_master"],
+      "required_facts": [
+        "重点抗菌药物",
+        "用药时间",
+        "标本采集时间"
+      ],
+      "required_evidence": [
+        "inpat_drug_order",
+        "labtest_master"
+      ],
       "expected_executor": "extended_document",
       "decision_authority": "program_only",
       "max_llm_calls_per_rule": 0
     },
     {
-      "rule_id": "LX0609-057",
+      "rule_id": "LX0609-05-01-05",
       "title": "抗菌药物使用记录：经验用药时未说明理由，无样可采时未注明原因",
       "definition_status": "temporary",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-034"],
+          "fixture_refs": [
+            "0426-v3:case-034"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-035"],
+          "fixture_refs": [
+            "0426-v3:case-035"
+          ],
           "expected_status": "non_compliant"
         },
         "not_applicable": {
@@ -2941,62 +3526,79 @@
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-057]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-05-01-05]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["经验用药标识", "用药理由", "病原学标本"],
-      "required_evidence": ["inpat_drug_order", "daily_course_record"],
+      "required_facts": [
+        "经验用药标识",
+        "用药理由",
+        "病原学标本"
+      ],
+      "required_evidence": [
+        "inpat_drug_order",
+        "daily_course_record"
+      ],
       "expected_executor": "extended_document",
       "decision_authority": "program_only",
       "max_llm_calls_per_rule": 0
     },
     {
-      "rule_id": "LX0609-058",
+      "rule_id": "LX0609-05-01-06",
       "title": "抗菌药物使用记录：使用特殊级抗菌药物缺少专家查房或会诊记录",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-034"],
+          "fixture_refs": [
+            "0426-v3:case-034"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-035"],
+          "fixture_refs": [
+            "0426-v3:case-035"
+          ],
           "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-058]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-05-01-06]"
           ],
           "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-058]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-05-01-06]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["特殊级抗菌药物目录", "专家查房或会诊"],
-      "required_evidence": ["inpat_drug_order", "consultation_record"],
+      "required_facts": [
+        "特殊级抗菌药物目录",
+        "专家查房或会诊"
+      ],
+      "required_evidence": [
+        "inpat_drug_order",
+        "consultation_record"
+      ],
       "expected_executor": "extended_document",
       "decision_authority": "program_only",
       "max_llm_calls_per_rule": 0
     },
     {
-      "rule_id": "LX0609-059",
+      "rule_id": "LX0609-05-03-01",
       "title": "医嘱：缺诊疗医嘱，或诊疗医嘱与病程记录不一致",
       "definition_status": "temporary",
       "definition_phase": "pending_definition",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
@@ -3081,16 +3683,18 @@
       }
     },
     {
-      "rule_id": "LX0609-060",
+      "rule_id": "LX0609-04-02-06",
       "title": "死亡记录：死亡患者无死亡记录",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-033"],
+          "fixture_refs": [
+            "0426-v3:case-033"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
@@ -3103,35 +3707,42 @@
         "not_applicable": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-060]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-04-02-06]"
           ],
           "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-060]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-04-02-06]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["死亡状态", "死亡记录"],
-      "required_evidence": ["death_record"],
+      "required_facts": [
+        "死亡状态",
+        "死亡记录"
+      ],
+      "required_evidence": [
+        "death_record"
+      ],
       "expected_executor": "extended_document",
       "decision_authority": "program_only",
       "max_llm_calls_per_rule": 0
     },
     {
-      "rule_id": "LX0609-061",
+      "rule_id": "LX0609-08-01-01",
       "title": "出院记录：出院记录未在出院后24小时内完成",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-031"],
+          "fixture_refs": [
+            "0426-v3:case-031"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
@@ -3148,13 +3759,18 @@
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-061]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-08-01-01]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["出院时间", "出院记录时间"],
-      "required_evidence": ["discharge_record"],
+      "required_facts": [
+        "出院时间",
+        "出院记录时间"
+      ],
+      "required_evidence": [
+        "discharge_record"
+      ],
       "expected_executor": "extended_document",
       "decision_authority": "program_only",
       "max_llm_calls_per_rule": 0,
@@ -3174,16 +3790,18 @@
       }
     },
     {
-      "rule_id": "LX0609-062",
+      "rule_id": "LX0609-08-01-02",
       "title": "出院记录：出院带药不详细（无药品名称、剂量、途径、时间，或药名、剂量错误）",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-031"],
+          "fixture_refs": [
+            "0426-v3:case-031"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
@@ -3200,28 +3818,34 @@
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-062]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-08-01-02]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["结构化出院带药"],
-      "required_evidence": ["discharge_record"],
+      "required_facts": [
+        "结构化出院带药"
+      ],
+      "required_evidence": [
+        "discharge_record"
+      ],
       "expected_executor": "extended_document",
       "decision_authority": "program_only",
       "max_llm_calls_per_rule": 0
     },
     {
-      "rule_id": "LX0609-063",
+      "rule_id": "LX0609-08-01-03",
       "title": "出院记录：出院诊断或死亡诊断错填、漏填、顺序错误",
       "definition_status": "temporary",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-031"],
+          "fixture_refs": [
+            "0426-v3:case-031"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
@@ -3234,35 +3858,44 @@
         "not_applicable": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-063]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-08-01-03]"
           ],
           "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-063]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-08-01-03]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["权威诊断", "出院记录诊断", "诊断顺序"],
-      "required_evidence": ["diagnosis", "discharge_record_diagnosis"],
+      "required_facts": [
+        "权威诊断",
+        "出院记录诊断",
+        "诊断顺序"
+      ],
+      "required_evidence": [
+        "diagnosis",
+        "discharge_record_diagnosis"
+      ],
       "expected_executor": "extended_document",
       "decision_authority": "program_only",
       "max_llm_calls_per_rule": 0
     },
     {
-      "rule_id": "LX0609-064",
+      "rule_id": "LX0609-04-05-01",
       "title": "术后连续三天查房记录：术后三天无连续病程记录（包含术后术者查房记录）",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-021"],
+          "fixture_refs": [
+            "0426-v3:case-021"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
@@ -3279,13 +3912,22 @@
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-064]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-04-05-01]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["手术时间", "病程时间", "术者身份", "文书作者或签名"],
-      "required_evidence": ["surgery_record", "daily_course_record", "senior_course_record"],
+      "required_facts": [
+        "手术时间",
+        "病程时间",
+        "术者身份",
+        "文书作者或签名"
+      ],
+      "required_evidence": [
+        "surgery_record",
+        "daily_course_record",
+        "senior_course_record"
+      ],
       "expected_executor": "extended_document",
       "decision_authority": "program_only",
       "max_llm_calls_per_rule": 0,
@@ -3305,16 +3947,18 @@
       }
     },
     {
-      "rule_id": "LX0609-065",
+      "rule_id": "LX0609-04-05-02",
       "title": "术后三天内上级医师查房记录：无术后三天内上级医师查看病人记录",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-021"],
+          "fixture_refs": [
+            "0426-v3:case-021"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
@@ -3331,13 +3975,19 @@
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-065]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-04-05-02]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["手术时间", "上级医师查房记录时间"],
-      "required_evidence": ["surgery_record", "senior_course_record"],
+      "required_facts": [
+        "手术时间",
+        "上级医师查房记录时间"
+      ],
+      "required_evidence": [
+        "surgery_record",
+        "senior_course_record"
+      ],
       "expected_executor": "extended_document",
       "decision_authority": "program_only",
       "max_llm_calls_per_rule": 0,
@@ -3357,16 +4007,18 @@
       }
     },
     {
-      "rule_id": "LX0609-066",
+      "rule_id": "LX0609-04-05-03",
       "title": "术后首次病程记录：无术后首次病程记录",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-021"],
+          "fixture_refs": [
+            "0426-v3:case-021"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
@@ -3383,28 +4035,36 @@
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-066]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-04-05-03]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["已实施手术", "术后首次病程记录"],
-      "required_evidence": ["surgery_record", "postsurg_firstcourse_record"],
+      "required_facts": [
+        "已实施手术",
+        "术后首次病程记录"
+      ],
+      "required_evidence": [
+        "surgery_record",
+        "postsurg_firstcourse_record"
+      ],
       "expected_executor": "extended_document",
       "decision_authority": "program_only",
       "max_llm_calls_per_rule": 0
     },
     {
-      "rule_id": "LX0609-067",
+      "rule_id": "LX0609-08-02-01",
       "title": "出院前病程记录：无出院前一天或当天的病程记录",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-031"],
+          "fixture_refs": [
+            "0426-v3:case-031"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
@@ -3421,28 +4081,37 @@
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-067]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-08-02-01]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["出院时间", "病程记录时间"],
-      "required_evidence": ["discharge_record", "daily_course_record", "senior_course_record"],
+      "required_facts": [
+        "出院时间",
+        "病程记录时间"
+      ],
+      "required_evidence": [
+        "discharge_record",
+        "daily_course_record",
+        "senior_course_record"
+      ],
       "expected_executor": "extended_document",
       "decision_authority": "program_only",
       "max_llm_calls_per_rule": 0
     },
     {
-      "rule_id": "LX0609-068",
+      "rule_id": "LX0609-08-02-02",
       "title": "出院前病程记录：无上级医师同意出院的意见",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-031"],
+          "fixture_refs": [
+            "0426-v3:case-031"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
@@ -3459,50 +4128,71 @@
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-068]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-08-02-02]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["出院时间", "病程记录", "上级医师意见", "自动出院书签署记录"],
-      "required_evidence": ["discharge_record", "daily_course_record", "senior_course_record"],
+      "required_facts": [
+        "出院时间",
+        "病程记录",
+        "上级医师意见",
+        "自动出院书签署记录"
+      ],
+      "required_evidence": [
+        "discharge_record",
+        "daily_course_record",
+        "senior_course_record"
+      ],
       "expected_executor": "extended_document",
       "decision_authority": "program_only",
       "max_llm_calls_per_rule": 0
     },
     {
-      "rule_id": "LX0609-069",
+      "rule_id": "LX0609-04-02-07",
       "title": "会诊记录：会诊记录单未在会诊申请发出后24小时内完成",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-013"],
+          "fixture_refs": [
+            "0426-v3:case-013"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-014"],
+          "fixture_refs": [
+            "0426-v3:case-014"
+          ],
           "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-016"],
+          "fixture_refs": [
+            "0426-v3:case-016"
+          ],
           "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-069]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-04-02-07]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["会诊申请时间", "会诊记录时间", "会诊关联标识"],
-      "required_evidence": ["consultation_record"],
+      "required_facts": [
+        "会诊申请时间",
+        "会诊记录时间",
+        "会诊关联标识"
+      ],
+      "required_evidence": [
+        "consultation_record"
+      ],
       "expected_executor": "extended_document",
       "decision_authority": "program_only",
       "max_llm_calls_per_rule": 0,
@@ -3522,16 +4212,18 @@
       }
     },
     {
-      "rule_id": "LX0609-070",
+      "rule_id": "LX0609-07-01-03",
       "title": "输血前评估：未做输血前相关九项检查",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-023"],
+          "fixture_refs": [
+            "0426-v3:case-023"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
@@ -3544,40 +4236,50 @@
         "not_applicable": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-070]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-07-01-03]"
           ],
           "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-070]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-07-01-03]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["输血事件", "输血前九项检验"],
-      "required_evidence": ["bloodtrans_record", "labtest_item_report"],
+      "required_facts": [
+        "输血事件",
+        "输血前九项检验"
+      ],
+      "required_evidence": [
+        "bloodtrans_record",
+        "labtest_item_report"
+      ],
       "expected_executor": "extended_document",
       "decision_authority": "program_only",
       "max_llm_calls_per_rule": 0
     },
     {
-      "rule_id": "LX0609-071",
+      "rule_id": "LX0609-10-01-01",
       "title": "交接班记录：经治医师变更时无交接班记录，或交班前、接班后24小时内未按时完成",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-036"],
+          "fixture_refs": [
+            "0426-v3:case-036"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-037"],
+          "fixture_refs": [
+            "0426-v3:case-037"
+          ],
           "expected_status": "non_compliant"
         },
         "not_applicable": {
@@ -3587,13 +4289,20 @@
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-071]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-10-01-01]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["经治医师变更事件", "交班记录时间", "接班记录时间"],
-      "required_evidence": ["handoff_record", "handover_record"],
+      "required_facts": [
+        "经治医师变更事件",
+        "交班记录时间",
+        "接班记录时间"
+      ],
+      "required_evidence": [
+        "handoff_record",
+        "handover_record"
+      ],
       "expected_executor": "extended_document",
       "decision_authority": "program_only",
       "max_llm_calls_per_rule": 0,
@@ -3613,40 +4322,51 @@
       }
     },
     {
-      "rule_id": "LX0609-072",
+      "rule_id": "LX0609-10-02-01",
       "title": "转科记录：转科病人24小时内未完成转入、转出记录",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-036"],
+          "fixture_refs": [
+            "0426-v3:case-036"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-037"],
+          "fixture_refs": [
+            "0426-v3:case-037"
+          ],
           "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-072]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-10-02-01]"
           ],
           "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-072]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-10-02-01]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["转科医嘱时间", "转入记录时间", "转出记录时间"],
-      "required_evidence": ["transfer_in_record", "transfer_out_record"],
+      "required_facts": [
+        "转科医嘱时间",
+        "转入记录时间",
+        "转出记录时间"
+      ],
+      "required_evidence": [
+        "transfer_in_record",
+        "transfer_out_record"
+      ],
       "expected_executor": "extended_document",
       "decision_authority": "program_only",
       "max_llm_calls_per_rule": 0,
@@ -3666,60 +4386,75 @@
       }
     },
     {
-      "rule_id": "LX0609-073",
+      "rule_id": "LX0609-10-02-02",
       "title": "转科记录：有转科医嘱但无转入、转出记录",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-036"],
+          "fixture_refs": [
+            "0426-v3:case-036"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-038"],
+          "fixture_refs": [
+            "0426-v3:case-038"
+          ],
           "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-073]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-10-02-02]"
           ],
           "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-073]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-10-02-02]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["转科医嘱", "转入记录", "转出记录"],
-      "required_evidence": ["transfer_in_record", "transfer_out_record"],
+      "required_facts": [
+        "转科医嘱",
+        "转入记录",
+        "转出记录"
+      ],
+      "required_evidence": [
+        "transfer_in_record",
+        "transfer_out_record"
+      ],
       "expected_executor": "extended_document",
       "decision_authority": "program_only",
       "max_llm_calls_per_rule": 0
     },
     {
-      "rule_id": "LX0609-074",
+      "rule_id": "LX0609-12-02-01",
       "title": "病程记录：修正或补充诊断时，未记录修改或补充理由及诊断依据",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-036"],
+          "fixture_refs": [
+            "0426-v3:case-036"
+          ],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-037"],
+          "fixture_refs": [
+            "0426-v3:case-037"
+          ],
           "expected_status": "non_compliant"
         },
         "not_applicable": {
@@ -3729,23 +4464,29 @@
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-074]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-12-02-01]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["诊断变更历史", "病程记录"],
-      "required_evidence": ["daily_course_record", "senior_course_record"],
+      "required_facts": [
+        "诊断变更历史",
+        "病程记录"
+      ],
+      "required_evidence": [
+        "daily_course_record",
+        "senior_course_record"
+      ],
       "expected_executor": "extended_document",
       "decision_authority": "program_only",
       "max_llm_calls_per_rule": 0
     },
     {
-      "rule_id": "LX0609-075",
+      "rule_id": "LX0609-10-03-01",
       "title": "有创操作记录：有创操作医嘱但无有创操作记录",
       "definition_status": "temporary",
       "definition_phase": "pending_definition",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
@@ -3765,18 +4506,25 @@
           "fixture_refs": []
         }
       },
-      "required_facts": ["有创操作目录", "有创操作医嘱", "操作记录"],
-      "required_evidence": ["inpat_nondrug_order", "daily_course_record"],
+      "required_facts": [
+        "有创操作目录",
+        "有创操作医嘱",
+        "操作记录"
+      ],
+      "required_evidence": [
+        "inpat_nondrug_order",
+        "daily_course_record"
+      ],
       "expected_executor": "extended_document",
       "decision_authority": "program_only",
       "max_llm_calls_per_rule": 0
     },
     {
-      "rule_id": "LX0609-076",
+      "rule_id": "LX0609-04-02-08",
       "title": "死亡记录：死亡时间缺失",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
@@ -3797,7 +4545,7 @@
           "coverage": "covered",
           "fixture_refs": [
             "native-integration:tests/integration/test_luxian_0609_real_production_rules_076_077.py::test_076_does_not_duplicate_060_when_death_record_is_absent",
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-076]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-04-02-08]"
           ],
           "expected_status": "not_applicable"
         },
@@ -3805,23 +4553,29 @@
           "coverage": "covered",
           "fixture_refs": [
             "native-integration:tests/integration/test_luxian_0609_real_production_rules_076_077.py::test_076_source_unavailable_is_data_gap",
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-076]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-04-02-08]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["死亡状态", "死亡记录", "死亡时间"],
-      "required_evidence": ["death_record"],
+      "required_facts": [
+        "死亡状态",
+        "死亡记录",
+        "死亡时间"
+      ],
+      "required_evidence": [
+        "death_record"
+      ],
       "expected_executor": "extended_document",
       "decision_authority": "program_only",
       "max_llm_calls_per_rule": 0
     },
     {
-      "rule_id": "LX0609-077",
+      "rule_id": "LX0609-01-02-02",
       "title": "首次病程记录：鉴别诊断未与初步诊断中第一诊断相关联",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "course_quality",
       "cases": {
         "compliant": {
@@ -3846,20 +4600,32 @@
           "coverage": "covered",
           "fixture_refs": [
             "native-integration:tests/integration/test_luxian_0609_real_production_rules_076_077.py::test_077_missing_inputs_are_data_gap_without_calling_model",
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-077]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-01-02-02]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["第一诊断", "鉴别诊断"],
-      "required_evidence": ["first_course_record", "first_course_record_diagnosis"],
+      "required_facts": [
+        "第一诊断",
+        "鉴别诊断"
+      ],
+      "required_evidence": [
+        "first_course_record",
+        "first_course_record_diagnosis"
+      ],
       "expected_executor": "course_quality",
       "decision_authority": "program_then_optional_llm",
       "max_llm_calls_per_rule": 1,
       "semantic_contract": {
         "minimal_input": {
-          "documents": ["first_course_record", "first_course_record_diagnosis"],
-          "facts": ["第一诊断", "鉴别诊断"]
+          "documents": [
+            "first_course_record",
+            "first_course_record_diagnosis"
+          ],
+          "facts": [
+            "第一诊断",
+            "鉴别诊断"
+          ]
         },
         "controlled_status_enum": [
           "compliant",
@@ -3874,11 +4640,11 @@
       }
     },
     {
-      "rule_id": "LX0609-078",
+      "rule_id": "LX0609-04-01-04",
       "title": "术前小结：术前小结内容不完整",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "surgery_anesthesia",
       "cases": {
         "compliant": {
@@ -3896,20 +4662,28 @@
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-078]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-04-01-04]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["术前小结正文"],
-      "required_evidence": ["presurg_summary"],
+      "required_facts": [
+        "术前小结正文"
+      ],
+      "required_evidence": [
+        "presurg_summary"
+      ],
       "expected_executor": "surgery_document",
       "decision_authority": "program_then_optional_llm",
       "max_llm_calls_per_rule": 1,
       "semantic_contract": {
         "minimal_input": {
-          "documents": ["presurg_summary"],
-          "facts": ["术前小结正文"]
+          "documents": [
+            "presurg_summary"
+          ],
+          "facts": [
+            "术前小结正文"
+          ]
         },
         "controlled_status_enum": [
           "compliant",
@@ -3924,11 +4698,11 @@
       }
     },
     {
-      "rule_id": "LX0609-079",
+      "rule_id": "LX0609-04-01-05",
       "title": "术前讨论记录：术前讨论记录内容不完整",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
       "family_key": "surgery_anesthesia",
       "cases": {
         "compliant": {
@@ -3946,20 +4720,292 @@
         "data_insufficient": {
           "coverage": "covered",
           "fixture_refs": [
-            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-079]"
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-04-01-05]"
           ],
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["术前讨论结构字段与正文/可核验内容"],
-      "required_evidence": ["presurg_discussion"],
+      "required_facts": [
+        "术前讨论结构字段与正文/可核验内容"
+      ],
+      "required_evidence": [
+        "presurg_discussion"
+      ],
       "expected_executor": "surgery_document",
       "decision_authority": "program_then_optional_llm",
       "max_llm_calls_per_rule": 1,
       "semantic_contract": {
         "minimal_input": {
-          "documents": ["presurg_discussion"],
-          "facts": ["术前讨论结构字段与正文/可核验内容"]
+          "documents": [
+            "presurg_discussion"
+          ],
+          "facts": [
+            "术前讨论结构字段与正文/可核验内容"
+          ]
+        },
+        "controlled_status_enum": [
+          "compliant",
+          "non_compliant",
+          "not_applicable",
+          "data_gap",
+          "technical_error",
+          "evaluation_unknown",
+          "not_executed"
+        ],
+        "max_llm_calls_per_rule": 1
+      }
+    },
+    {
+      "rule_id": "LX0609-06-01-01",
+      "title": "CT/MRI检查记录：医嘱与病程一致性",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
+      "family_key": "exam_lab",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": [
+            "native-unit:tests/unit/test_luxian_0609_ct_order_course_consistency.py::test_complete_positive_facts_keep_same_event_refs_and_publish_without_text"
+          ],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "covered",
+          "fixture_refs": [
+            "native-unit:tests/unit/test_luxian_0609_ct_order_course_consistency.py::test_conflict_cannot_force_association_to_another_exam"
+          ],
+          "expected_status": "non_compliant"
+        },
+        "not_applicable": {
+          "coverage": "covered",
+          "fixture_refs": [
+            "native-unit:tests/unit/test_luxian_0609_ct_order_course_consistency.py::test_empty_sources_and_course_only_trigger_have_different_results"
+          ],
+          "expected_status": "not_applicable"
+        },
+        "data_insufficient": {
+          "coverage": "covered",
+          "fixture_refs": [
+            "native-unit:tests/unit/test_luxian_0609_ct_order_course_consistency.py::test_no_clinical_defect_from_missing_or_uncertain_material",
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-06-01-01]"
+          ],
+          "expected_status": "data_gap"
+        }
+      },
+      "required_facts": [
+        "CT/MRI检查记录原始材料",
+        "逐事件来源及覆盖情况"
+      ],
+      "required_evidence": [
+        "exam_master",
+        "exam_item_report",
+        "inpat_nondrug_order",
+        "first_course_record",
+        "daily_course_record",
+        "senior_course_record",
+        "rescue_record"
+      ],
+      "expected_executor": "exam_lab",
+      "decision_authority": "program_then_optional_llm",
+      "max_llm_calls_per_rule": 1,
+      "semantic_contract": {
+        "minimal_input": {
+          "documents": [
+            "exam_master",
+            "exam_item_report",
+            "inpat_nondrug_order",
+            "first_course_record",
+            "daily_course_record",
+            "senior_course_record",
+            "rescue_record"
+          ],
+          "facts": [
+            "CT/MRI检查记录原始材料",
+            "逐事件来源及覆盖情况"
+          ]
+        },
+        "controlled_status_enum": [
+          "compliant",
+          "non_compliant",
+          "not_applicable",
+          "data_gap",
+          "technical_error",
+          "evaluation_unknown",
+          "not_executed"
+        ],
+        "max_llm_calls_per_rule": 1
+      }
+    },
+    {
+      "rule_id": "LX0609-06-01-03",
+      "title": "CT/MRI检查记录：报告单完整性",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
+      "family_key": "exam_lab",
+      "cases": {
+        "compliant": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "not_required",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-06-01-03]"
+          ],
+          "expected_status": "data_gap"
+        }
+      },
+      "required_facts": [
+        "CT/MRI检查记录原始材料",
+        "逐事件来源及覆盖情况"
+      ],
+      "required_evidence": [
+        "exam_master",
+        "exam_item_report",
+        "inpat_nondrug_order"
+      ],
+      "expected_executor": "exam_lab",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0
+    },
+    {
+      "rule_id": "LX0609-06-03-02",
+      "title": "微生物培养检查记录：报告单完整性",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
+      "family_key": "exam_lab",
+      "cases": {
+        "compliant": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "not_required",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-06-03-02]"
+          ],
+          "expected_status": "data_gap"
+        }
+      },
+      "required_facts": [
+        "微生物培养检查记录原始材料",
+        "逐事件来源及覆盖情况"
+      ],
+      "required_evidence": [
+        "labtest_master",
+        "labtest_item_report",
+        "inpat_nondrug_order"
+      ],
+      "expected_executor": "exam_lab",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0
+    },
+    {
+      "rule_id": "LX0609-06-02-01",
+      "title": "病理检查记录：报告单完整性",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
+      "family_key": "tumor_pathology",
+      "cases": {
+        "compliant": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "not_required",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-06-02-01]"
+          ],
+          "expected_status": "data_gap"
+        }
+      },
+      "required_facts": [
+        "病理检查记录原始材料",
+        "逐事件来源及覆盖情况"
+      ],
+      "required_evidence": [
+        "pathology_exam_master",
+        "pathology_exam_report"
+      ],
+      "expected_executor": "tumor_pathology",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0
+    },
+    {
+      "rule_id": "LX0609-09-01-02",
+      "title": "抢救记录：内容完整性",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
+      "family_key": "basic_timeliness",
+      "cases": {
+        "compliant": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "not_required",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-09-01-02]"
+          ],
+          "expected_status": "data_gap"
+        }
+      },
+      "required_facts": [
+        "抢救记录原始材料",
+        "逐事件来源及覆盖情况"
+      ],
+      "required_evidence": [
+        "rescue_record"
+      ],
+      "expected_executor": "basic_timeliness",
+      "decision_authority": "program_then_optional_llm",
+      "max_llm_calls_per_rule": 1,
+      "semantic_contract": {
+        "minimal_input": {
+          "documents": [
+            "rescue_record"
+          ],
+          "facts": [
+            "抢救记录原始材料",
+            "逐事件来源及覆盖情况"
+          ]
         },
         "controlled_status_enum": [
           "compliant",

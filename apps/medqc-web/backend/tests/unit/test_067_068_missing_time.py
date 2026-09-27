@@ -55,8 +55,8 @@ def _run(rule, *, valid=False, approval=True, llm_client=None):
 
 
 @pytest.mark.parametrize("rule,kind", [
-    ("LX0609-067", "predischarge_course_time_missing"),
-    ("LX0609-068", "senior_discharge_approval_time_missing"),
+    ("LX0609-08-02-01", "predischarge_course_time_missing"),
+    ("LX0609-08-02-02", "senior_discharge_approval_time_missing"),
 ])
 def test_missing_time_preserves_window_and_selected_document(rule, kind):
     session, result = _run(rule)
@@ -90,7 +90,7 @@ def test_missing_time_preserves_window_and_selected_document(rule, kind):
     assert [item["source_document_id"] for item in canonical["customer_evidence"]] == ["undated"]
 
 
-@pytest.mark.parametrize("rule", ["LX0609-067", "LX0609-068"])
+@pytest.mark.parametrize("rule", ["LX0609-08-02-01", "LX0609-08-02-02"])
 def test_valid_window_evidence_is_not_blocked_by_undated_document(rule):
     _, result = _run(rule, valid=True)
     assert result.decisions[0].reason_code == "requirement_satisfied"
@@ -99,15 +99,15 @@ def test_valid_window_evidence_is_not_blocked_by_undated_document(rule):
 
 
 def test_068_without_approval_keeps_original_missing_semantics():
-    _, result = _run("LX0609-068", approval=False)
+    _, result = _run("LX0609-08-02-02", approval=False)
     assert result.decisions[0].reason_code == "source_empty"
     assert result.llm_call_count == 0
-    assert dict(result.customer_display_facts)["LX0609-068"]["approval_present"] is False
+    assert dict(result.customer_display_facts)["LX0609-08-02-02"]["approval_present"] is False
 
 
 def test_068_deterministic_undated_approval_skips_semantic_fallback():
     client = _CountingLLMClient()
-    _, result = _run("LX0609-068", llm_client=client)
+    _, result = _run("LX0609-08-02-02", llm_client=client)
 
     assert result.decisions[0].reason_code == "authoritative_time_missing"
     assert result.llm_call_count == 0

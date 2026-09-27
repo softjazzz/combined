@@ -13,6 +13,14 @@ from app.services.custom_qc_workspace_service import (
     project_customer_safe_result_item,
 )
 from app.services.luxian_0609_result_review_service import review_luxian_0609_batch_job
+from tests.luxian_0609_published_result_support import (
+    ADMISSION_TIMELINESS_RULE_ID,
+    PAUSED_CONSULTATION_RULE_ID,
+    RESCUE_TIMELINESS_RULE_ID,
+    published_lx0609_items,
+)
+
+_CONTRACT_ERROR = "客户结果解释合同不完整"
 
 
 def _canonical_luxian_item(item: dict[str, Any]) -> dict[str, Any]:
@@ -64,6 +72,19 @@ def _job(
     }
 
 
+def _published_job(items: list[dict[str, Any]], **extra: Any) -> dict[str, Any]:
+    """正式发布产物原样放入任务；不经 _canonical_luxian_item，避免改写已签章文案。"""
+
+    return {
+        "id": "job-review-published",
+        "rule_code": "luxian_0609_qc_v1",
+        "filters": {"rule_set_id": "luxian_0609_qc_v1"},
+        "summary": {"rule_set_id": "luxian_0609_qc_v1"},
+        "items": [dict(item) for item in items],
+        **extra,
+    }
+
+
 def test_serialized_batch_result_roundtrip_keeps_rule_facts_and_one_record_binding() -> None:
     """模拟任务 JSON 落库后的回读；不得丢失事实或将结果绑定到其他病历。"""
 
@@ -84,7 +105,7 @@ def test_serialized_batch_result_roundtrip_keeps_rule_facts_and_one_record_bindi
                 "patient_id": "P1",
                 "visit_id": "VISIT-ONE",
                 "record_id": "VISIT-ONE",
-                "rule_id": "LX0609-025",
+                "rule_id": "LX0609-04-02-04",
                 "schema_version": "lx0609-customer-result-v2",
                 "rule_version": "2026-08-15-golden-pending",
                 "status": "non_compliant",
@@ -183,33 +204,35 @@ def test_review_service_rejects_non_luxian_job() -> None:
     assert report["findings"] == []
 
 
-def test_review_service_flags_consultation_without_strong_evidence() -> None:
-    report = review_luxian_0609_batch_job(
-        _job(
-            items=[
-                {
-                    "rule_id": "LX0609-020",
-                    "rule_code": "LX0609-020",
-                    "rule_name": "会诊记录：有会诊记录单无请会诊执行记录",
-                    "record_id": "2329756",
-                    "status": "uncertain",
-                    "findings": "病程未记录会诊执行情况。",
-                    "evidence_items": [
-                        {
-                            "source_document": "日常病程记录",
-                            "quote": "患者一般情况可，继续目前治疗。",
-                        }
-                    ],
-                }
-            ],
-        )
-    )
+def test_review_accepts_published_paused_consultation_and_rejects_forged_uncertain() -> None:
+    """03-01-01 因上游会诊申请单来源缺失暂停；合法发布只有 not_executed。"""
 
+    paused = published_lx0609_items(include_paused_consultation=True)[
+        PAUSED_CONSULTATION_RULE_ID
+    ]
+    assert (paused["status"], paused["reason_code"]) == (
+        "not_executed", "policy_definition_pending",
+    )
+    report = review_luxian_0609_batch_job(_published_job([paused]))
     assert report["review_status"] == "completed"
-    assert report["summary"]["p1"] == 1
-    assert report["findings"][0]["suggested_status"] == "not_applicable"
-    assert report["findings"][0]["risk_type"] == "applicability_gate"
-    assert report["findings"][0]["auto_applied"] is False
+    # 暂停项没有判定，不应再被当作会诊执行问题触发适用性复核。
+    assert "applicability_gate" not in {item["risk_type"] for item in report["findings"]}
+
+    # 旧形态把暂停规则伪造成 uncertain 且无公开事实，必须在复核前拒绝。
+    with pytest.raises(ValueError, match=_CONTRACT_ERROR):
+        review_luxian_0609_batch_job(
+            _job(
+                items=[
+                    {
+                        "rule_id": PAUSED_CONSULTATION_RULE_ID,
+                        "rule_code": PAUSED_CONSULTATION_RULE_ID,
+                        "record_id": "2329756",
+                        "status": "uncertain",
+                        "findings": "病程未记录会诊执行情况。",
+                    }
+                ],
+            )
+        )
 
 
 def test_review_service_flags_non_compliant_positive_conclusion() -> None:
@@ -218,8 +241,8 @@ def test_review_service_flags_non_compliant_positive_conclusion() -> None:
             items=[
                 {
                     "schema_version": "customer-qc-result-v1",
-                    "rule_id": "LX0609-003",
-                    "rule_code": "LX0609-003",
+                    "rule_id": "LX0609-04-02-01",
+                    "rule_code": "LX0609-04-02-01",
                     "rule_name": "手术记录：术后24小时内是否完成",
                     "record_id": "2207717",
                     "status": "non_compliant",
@@ -249,8 +272,8 @@ def test_review_service_flags_data_gap_defect_badge() -> None:
         _job(
             items=[
                 {
-                    "rule_id": "LX0609-013",
-                    "rule_code": "LX0609-013",
+                    "rule_id": "LX0609-06-02-03",
+                    "rule_code": "LX0609-06-02-03",
                     "status": "data_gap",
                     "defect_level": "轻微缺陷",
                     "findings": "缺少病理报告时间。",
@@ -266,23 +289,29 @@ def test_review_service_flags_data_gap_defect_badge() -> None:
 
 
 def test_review_service_flags_internal_terms_and_weak_evidence() -> None:
-    report = review_luxian_0609_batch_job(
-        _job(
-            items=[
-                {
-                    "rule_id": "LX0609-017",
-                    "rule_code": "LX0609-017",
-                    "status": "uncertain",
-                    "findings": "待复核。",
-                    "evidence": "证据模板：复制类 映射执行规则：CL-275 执行证据：长期",
-                }
-            ],
-        )
-    )
+    # 合法发布结果的证据若混入内部话术，复核仍须标出；证据字段不在文案签章内。
+    admission = dict(published_lx0609_items()[ADMISSION_TIMELINESS_RULE_ID])
+    admission["evidence"] = "证据模板：复制类 映射执行规则：CL-275 执行证据：长期"
+    report = review_luxian_0609_batch_job(_published_job([admission]))
 
     risk_types = {item["risk_type"] for item in report["findings"]}
     assert "presentation" in risk_types
     assert "evidence_quality" in risk_types
+
+    # 无规则事实的 uncertain 旧项不属于交付结果，复核前拒绝。
+    with pytest.raises(ValueError, match=_CONTRACT_ERROR):
+        review_luxian_0609_batch_job(
+            _job(
+                items=[
+                    {
+                        "rule_id": "LX0609-12-01-02",
+                        "rule_code": "LX0609-12-01-02",
+                        "status": "uncertain",
+                        "findings": "待复核。",
+                    }
+                ],
+            )
+        )
 
 
 def test_review_service_flags_transfusion_without_strong_fact() -> None:
@@ -290,8 +319,8 @@ def test_review_service_flags_transfusion_without_strong_fact() -> None:
         _job(
             items=[
                 {
-                    "rule_id": "LX0609-044",
-                    "rule_code": "LX0609-044",
+                    "rule_id": "LX0609-07-01-02",
+                    "rule_code": "LX0609-07-01-02",
                     "status": "data_gap",
                     "findings": "发现相关事件但缺少输血知情同意书。",
                     "evidence": "应包含证据要素：输血申请、输血医嘱、输血记录。",
@@ -310,8 +339,8 @@ def test_review_service_flags_chemo_without_order_or_record() -> None:
             items=[
                 {
                     "schema_version": "customer-qc-result-v1",
-                    "rule_id": "LX0609-026",
-                    "rule_code": "LX0609-026",
+                    "rule_id": "LX0609-05-02-01",
+                    "rule_code": "LX0609-05-02-01",
                     "status": "non_compliant",
                     "findings": "恶性肿瘤患者病程未记录化疗。",
                     "evidence": "病理报告：胃腺癌。",
@@ -338,8 +367,8 @@ def test_review_service_flags_mdt_without_level_4_surgery() -> None:
             items=[
                 {
                     "schema_version": "customer-qc-result-v1",
-                    "rule_id": "LX0609-040",
-                    "rule_code": "LX0609-040",
+                    "rule_id": "LX0609-04-01-03",
+                    "rule_code": "LX0609-04-01-03",
                     "status": "non_compliant",
                     "findings": "术前讨论未体现MDT讨论意见。",
                     "evidence": "手术记录：腹腔镜胆囊切除术。",
@@ -375,37 +404,44 @@ def test_llm_verifier_receives_only_sanitized_review_context() -> None:
             }
         ]
 
-    report = review_luxian_0609_batch_job(
-        _job(
-            items=[
-                {
-                    "rule_id": "LX0609-020",
-                    "rule_code": "LX0609-020",
-                    "status": "uncertain",
-                    "findings": "病程未记录会诊执行情况。",
-                    "evidence": "执行证据：【日常病程记录】患者一般情况可。",
-                    "raw_response": "secret",
-                    "prompt": "secret",
-                    "embedding": [1, 2, 3],
-                    "medical_text": "完整病历全文",
-                    "record_content": "完整正文",
-                    "documents": [{"content": "完整文书"}],
-                    "bundle": {"documents": []},
-                    "llm_raw_output": "secret",
-                }
-            ],
-        ),
-        llm_verifier=fake_llm,
+    # 在正式发布结果上附带内部原始字段，验证复核载荷只取安全上下文。
+    rescue = dict(
+        published_lx0609_items(rescue="end_time_missing")[RESCUE_TIMELINESS_RULE_ID]
     )
+    assert rescue["status"] == "data_gap"
+    rescue.update(
+        {
+            "raw_response": "secret",
+            "prompt": "secret",
+            "embedding": [1, 2, 3],
+            "medical_text": "完整病历全文",
+            "record_content": "完整正文",
+            "documents": [{"content": "完整文书"}],
+            "bundle": {"documents": []},
+            "llm_raw_output": "secret",
+        }
+    )
+    report = review_luxian_0609_batch_job(_published_job([rescue]), llm_verifier=fake_llm)
 
-    dumped = json.dumps(captured, ensure_ascii=False)
     assert captured
-    assert "raw_response" not in dumped
-    assert "medical_text" not in dumped
-    assert "record_content" not in dumped
-    assert "documents" not in dumped
-    assert "bundle" not in dumped
-    assert "完整病历全文" not in dumped
+
+    def keys(value: Any) -> set[str]:
+        if isinstance(value, dict):
+            return set(value) | {k for child in value.values() for k in keys(child)}
+        if isinstance(value, list):
+            return {k for child in value for k in keys(child)}
+        return set()
+
+    # 载荷只允许白名单字段；注入的原始字段及其内容均不得外泄。
+    # 注：客户投影证据含 field_path 定位值，属白名单 evidence 字段本身。
+    injected = {
+        "raw_response", "prompt", "embedding", "medical_text", "record_content",
+        "documents", "bundle", "llm_raw_output",
+    }
+    assert injected.isdisjoint(keys(captured))
+    dumped = json.dumps(captured, ensure_ascii=False)
+    for secret in ("secret", "完整病历全文", "完整正文", "完整文书"):
+        assert secret not in dumped
     assert report["llm_review_status"] == "completed"
 
 
@@ -424,7 +460,7 @@ def test_customer_projector_uses_canonical_status_and_safe_fields_only() -> None
             "mr_no": "M-001",
             "patient_name": "张某某",
             "phone": "13800138000",
-            "rule_id": "LX0609-033",
+            "rule_id": "LX0609-11-01-01",
             "rule_name": "手术知情同意书",
             "customer_conclusion": "当前受控来源尚不足以形成确定结论。",
             "findings": "原始结论不得回退。",
@@ -467,13 +503,14 @@ def test_customer_projector_uses_canonical_status_and_safe_fields_only() -> None
 
 
 def test_customer_projector_keeps_ai_suggestion_separate_from_confirmed_issue() -> None:
+    # AI 建议状态属于通用客户投影；不是 LX0609 允许的交付状态。
     projected = project_customer_safe_result_item(
         {
             "display_status": "ai_suggested_non_compliant",
             "is_compliant": False,
             "reason_code": "Semantic-Low-Confidence",
             "record_id": "R-002",
-            "rule_code": "LX0609-021",
+            "rule_code": "CUSTOM-RULE-01",
             "findings": "不得作为客户结论。",
         },
         hmac_key="unit-test-key",
@@ -484,13 +521,26 @@ def test_customer_projector_keeps_ai_suggestion_separate_from_confirmed_issue() 
     assert projected["reason_code"] == "reason_unavailable"
     assert projected["conclusion"] == "AI建议结合病历资料进一步确认。"
 
+    # LX0609 结果缺规则事实时不能借 AI 建议状态交付。
+    with pytest.raises(ValueError, match=_CONTRACT_ERROR):
+        project_customer_safe_result_item(
+            {
+                "display_status": "ai_suggested_non_compliant",
+                "is_compliant": False,
+                "record_id": "R-002",
+                "rule_code": "LX0609-03-01-02",
+                "findings": "不得作为客户结论。",
+            },
+            hmac_key="unit-test-key",
+        )
+
 
 def test_customer_projector_never_trusts_unprojected_customer_text() -> None:
     with pytest.raises(ValueError, match="客户结果解释合同不完整"):
         project_customer_safe_result_item(
             {
                 "record_id": "R-RAW-TEXT",
-                "rule_id": "LX0609-001",
+                "rule_id": "LX0609-01-01-01",
                 "status": "non_compliant",
                 "customer_conclusion": "患者张三于某日出现高热咳嗽，肺部啰音明显。",
                 "customer_suggestion": "请针对张三原始病历立即整改。",
@@ -500,39 +550,25 @@ def test_customer_projector_never_trusts_unprojected_customer_text() -> None:
 
 
 def test_customer_projector_preserves_shared_lx004_timeliness_facts() -> None:
-    projected = project_customer_safe_result_item(
-        {
-            "record_id": "R-004",
-            "rule_id": "LX0609-004",
-            "rule_version": "2026-07-29",
-            "status": "non_compliant",
-            "reason_code": "threshold_exceeded",
-            "customer_display_facts": {
-                "failure_kind": "timeliness_requirement_not_met",
-                "target_document": "rescue_record",
-                "source_label": "抢救记录",
-                "timeliness_state": "late",
-                "threshold_hours": 6,
-                "anchor_time": "2026-06-01 09:00:00",
-                "observed_time": "2026-06-01 16:15:00",
-                "elapsed_hours": 7.25,
-            },
-        },
-        hmac_key="unit-test-key",
-    )
+    published = published_lx0609_items(rescue="late")[RESCUE_TIMELINESS_RULE_ID]
+    assert published["status"] == "non_compliant"
+    projected = project_customer_safe_result_item(published, hmac_key="unit-test-key")
 
     assert projected["status"] == "non_compliant"
-    assert projected["customer_display_facts"] == {
-        "failure_kind": "timeliness_requirement_not_met",
-        "target_document": "rescue_record",
-        "source_label": "抢救记录",
-        "timeliness_state": "late",
-        "threshold_hours": 6,
-        "anchor_time": "2026-06-01 09:00:00",
-        "observed_time": "2026-06-01 16:15:00",
-        "elapsed_hours": 7.25,
-        "overdue_hours": 1.25,
+    # 已发布的 004 事实（含执行器派生的 overdue_hours）读取时原样保留。
+    assert projected["customer_display_facts"] == published["customer_display_facts"]
+    assert projected["customer_display_facts"]["timeliness_state"] == "late"
+    assert "overdue_hours" in projected["customer_display_facts"]
+
+    # 缺执行器派生字段的手写事实不是已发布形态，读取拒绝而不补写。
+    handwritten = dict(published)
+    handwritten["customer_display_facts"] = {
+        key: value
+        for key, value in published["customer_display_facts"].items()
+        if key != "overdue_hours"
     }
+    with pytest.raises(ValueError, match=_CONTRACT_ERROR):
+        project_customer_safe_result_item(handwritten, hmac_key="unit-test-key")
 
 
 def test_customer_projector_rejects_lx004_facts_with_internal_document_id() -> None:
@@ -540,7 +576,7 @@ def test_customer_projector_rejects_lx004_facts_with_internal_document_id() -> N
         project_customer_safe_result_item(
             {
                 "record_id": "R-004-INVALID",
-                "rule_id": "LX0609-004",
+                "rule_id": "LX0609-09-01-01",
                 "rule_version": "2026-07-29",
                 "status": "non_compliant",
                 "reason_code": "threshold_exceeded",
@@ -564,7 +600,7 @@ def test_customer_projector_preserves_only_controlled_lx018_criteria() -> None:
     projected = project_customer_safe_result_item(
         {
             "record_id": "PRIVATE_RECORD",
-            "rule_id": "LX0609-018",
+            "rule_id": "LX0609-01-01-02",
             "rule_version": "2026-07-28",
             "status": "non_compliant",
             "model_analysis": "原始模型医学分析：主诉的症状、病程与第一诊断之间缺少足够的特异性对应。",
@@ -621,13 +657,13 @@ def test_old_018_result_is_logically_invalidated_without_deleting_storage() -> N
         items=[
             {
                 "record_id": "R-OLD",
-                "rule_id": "LX0609-018",
+                "rule_id": "LX0609-01-01-02",
                 "rule_version": "2026-06-09",
                 "status": "non_compliant",
             },
             {
                 "record_id": "R-NEW",
-                "rule_id": "LX0609-018",
+                "rule_id": "LX0609-01-01-02",
                 "rule_version": "2026-07-28",
                 "status": "non_compliant",
                 "criterion_results": [
@@ -656,7 +692,7 @@ def test_incomplete_historical_safe_dto_cannot_reuse_generic_confirmed_issue_tex
             {
                 "schema_version": "customer-qc-result-v1",
                 "record_id": "R-OLD",
-                "rule_id": "LX0609-025",
+                "rule_id": "LX0609-04-02-04",
                 "status": "non_compliant",
                 "conclusion": "发现该质控点对应的明确问题。",
                 "suggestion": "请按质控要求补充或修正记录。",
@@ -670,7 +706,7 @@ def test_non_compliant_result_rejects_passed_only_criteria() -> None:
         project_customer_safe_result_item(
             {
                 "record_id": "R-PASSED-ONLY",
-                "rule_id": "LX0609-018",
+                "rule_id": "LX0609-01-01-02",
                 "status": "non_compliant",
                 "criterion_results": [
                     {
@@ -690,7 +726,7 @@ def test_lx025_non_compliant_result_rejects_empty_missing_fields() -> None:
         project_customer_safe_result_item(
             {
                 "record_id": "R-025-EMPTY",
-                "rule_id": "LX0609-025",
+                "rule_id": "LX0609-04-02-04",
                 "status": "non_compliant",
                 "customer_display_facts": {
                     "missing_fields": [],
@@ -706,7 +742,7 @@ def test_duplicate_record_rule_keeps_explained_latest_candidate_only() -> None:
         items=[
             {
                 "record_id": "R-ONE",
-                "rule_id": "LX0609-025",
+                "rule_id": "LX0609-04-02-04",
                 "rule_version": "2026-08-15-golden-pending",
                 "status": "non_compliant",
                 "reason_code": "implant_information_incomplete",
@@ -721,7 +757,7 @@ def test_duplicate_record_rule_keeps_explained_latest_candidate_only() -> None:
             },
             {
                 "record_id": "R-ONE",
-                "rule_id": "LX0609-025",
+                "rule_id": "LX0609-04-02-04",
                 "rule_version": "2026-08-15-golden-pending",
                 "status": "non_compliant",
                 "reason_code": "implant_information_incomplete",
@@ -765,19 +801,19 @@ def test_old_018_result_is_also_hidden_from_grouped_rule_results() -> None:
     job = _job()
     job["rule_results"] = [
         {
-            "rule_code": "LX0609-018",
+            "rule_code": "LX0609-01-01-02",
             "rule_name": "主诉能导出第一诊断",
             "items": [
                 {
                     "record_id": "R-OLD",
-                    "rule_id": "LX0609-018",
+                    "rule_id": "LX0609-01-01-02",
                     "rule_version": "2026-06-09",
                     "status": "non_compliant",
                     "reason_code": "complaint_too_short",
                 },
                 {
                     "record_id": "R-NEW",
-                    "rule_id": "LX0609-018",
+                    "rule_id": "LX0609-01-01-02",
                     "rule_version": "2026-07-28",
                     "status": "non_compliant",
                     "criterion_results": [
@@ -809,7 +845,7 @@ def test_customer_projector_rejects_unvalidated_lx025_missing_fields() -> None:
         project_customer_safe_result_item(
             {
                 "record_id": "PRIVATE_RECORD",
-                "rule_id": "LX0609-025",
+                "rule_id": "LX0609-04-02-04",
                 "status": "non_compliant",
                 "customer_display_facts": {
                     "missing_fields": [
@@ -833,7 +869,7 @@ def test_customer_projector_keeps_only_controlled_surgery_document_gap_facts() -
     projected = project_customer_safe_result_item(
         {
             "record_id": "PRIVATE_RECORD",
-            "rule_id": "LX0609-030",
+            "rule_id": "LX0609-04-02-02",
             "status": "non_compliant",
             "customer_display_facts": {
                 "failure_kind": "surgery_document_missing",
@@ -857,7 +893,7 @@ def test_customer_projector_keeps_only_controlled_surgery_document_gap_facts() -
     ("rule_id", "status", "facts"),
     [
         (
-            "LX0609-003",
+            "LX0609-04-02-01",
             "compliant",
             {
                 "failure_kind": "surgery_record_within_threshold",
@@ -870,7 +906,7 @@ def test_customer_projector_keeps_only_controlled_surgery_document_gap_facts() -
             },
         ),
         (
-            "LX0609-035",
+            "LX0609-11-02-02",
             "non_compliant",
             {
                 "failure_kind": "anesthesia_consent_incomplete",
@@ -879,7 +915,7 @@ def test_customer_projector_keeps_only_controlled_surgery_document_gap_facts() -
             },
         ),
         (
-            "LX0609-040",
+            "LX0609-04-01-03",
             "compliant",
             {
                 "performed_surgery_confirmed": True,
@@ -914,7 +950,7 @@ def test_customer_projector_is_idempotent_for_safe_identity_and_decision() -> No
     first = project_customer_safe_result_item(
         {
             "record_id": "R-IDEMPOTENT",
-            "rule_id": "LX0609-028",
+            "rule_id": "LX0609-05-01-01",
             "result_status": "data_gap",
             "reason_code": "actual_interval_unavailable",
             "customer_conclusion": "实际用药时间证据不足。",
@@ -938,7 +974,7 @@ def test_customer_projector_persists_rule_specific_compliant_explanation() -> No
         {
             "record_id": "R-COMPLIANT",
             "schema_version": "lx0609-customer-result-v2",
-            "rule_id": "LX0609-032",
+            "rule_id": "LX0609-04-03-01",
             "status": "compliant",
             "reason_code": "requirement_satisfied",
             "findings": "符合质控要求",
@@ -958,32 +994,31 @@ def test_review_report_and_llm_payload_never_expose_record_identity_or_raw_body(
         captured.extend(payloads)
         return []
 
-    report = review_luxian_0609_batch_job(
-        _job(
-            items=[
-                {
-                    "rule_id": "LX0609-020",
-                    "status": "uncertain",
-                    "record_id": "R-003",
-                    "visit_id": "V-003",
-                    "patient_id": "P-003",
-                    "institute_id": "I-003",
-                    "patient_name": "李某某",
-                    "findings": "原始会诊正文",
-                    "evidence_items": [
-                        {
-                            "source_document": "日常病程记录",
-                            "quote": "患者一般情况可，继续目前治疗。",
-                        }
-                    ],
-                }
-            ]
-        ),
-        llm_verifier=fake_llm,
+    rescue = dict(
+        published_lx0609_items(rescue="end_time_missing")[RESCUE_TIMELINESS_RULE_ID]
     )
+    rescue.update(
+        {
+            "record_id": "R-003",
+            "visit_id": "V-003",
+            "patient_id": "P-003",
+            "institute_id": "I-003",
+            "patient_name": "李某某",
+            # 以内部话术触发一条复核发现，使 LLM 载荷被实际构造。
+            "evidence": "映射执行规则：CL-275",
+            "evidence_items": [
+                {
+                    "source_document": "抢救记录",
+                    "quote": "患者一般情况可，继续目前治疗。",
+                },
+                {"source_document": "抢救记录", "quote": "原始抢救正文"},
+            ],
+        }
+    )
+    report = review_luxian_0609_batch_job(_published_job([rescue]), llm_verifier=fake_llm)
 
     dumped = json.dumps({"report": report, "payload": captured}, ensure_ascii=False)
-    for forbidden in ("R-003", "V-003", "P-003", "I-003", "李某某", "原始会诊正文", "患者一般情况可"):
+    for forbidden in ("R-003", "V-003", "P-003", "I-003", "李某某", "原始抢救正文", "患者一般情况可"):
         assert forbidden not in dumped
     assert report["findings"][0]["record_ref"].startswith("rec_")
 
@@ -991,7 +1026,7 @@ def test_review_report_and_llm_payload_never_expose_record_identity_or_raw_body(
 def test_review_uses_same_canonical_status_and_reason_as_customer_projector() -> None:
     item = {
         "schema_version": "lx0609-customer-result-v2",
-        "rule_id": "LX0609-013",
+        "rule_id": "LX0609-06-02-03",
         "result_status": "data_gap",
         "status": "data_gap",
         "display_status": "data_gap",
@@ -1010,38 +1045,27 @@ def test_review_uses_same_canonical_status_and_reason_as_customer_projector() ->
 
 
 def test_review_uses_same_unique_source_rows_as_customer_projection() -> None:
-    duplicated = {
-        "rule_id": "LX0609-020",
-        "status": "data_gap",
-        "reason_code": "source_incomplete",
-        "record_id": "R-DUPLICATED",
-        "findings": "未发现会诊文书。",
-    }
+    rescue = published_lx0609_items(rescue="end_time_missing")[RESCUE_TIMELINESS_RULE_ID]
     report = review_luxian_0609_batch_job(
-        _job(
-            items=[duplicated],
-            summary={"rule_results": [{"items": [dict(duplicated)]}]},
+        _published_job(
+            [rescue],
+            summary={
+                "rule_set_id": "luxian_0609_qc_v1",
+                "rule_results": [{"items": [dict(rescue)]}],
+            },
         )
     )
 
-    assert [finding["risk_type"] for finding in report["findings"]] == [
-        "applicability_gate",
-        "evidence_quality",
-    ]
+    # 同一病历同一规则在 items 与 rule_results 中重复出现，只复核一次。
+    assert len({finding["record_ref"] for finding in report["findings"]}) == 1
+    assert {finding["rule_id"] for finding in report["findings"]} == {RESCUE_TIMELINESS_RULE_ID}
+    assert len(report["findings"]) == len({f["risk_type"] for f in report["findings"]})
 
 
 def test_review_accepts_already_projected_batch_job() -> None:
+    items = published_lx0609_items(include_paused_consultation=True)
     projected = project_customer_safe_batch_job(
-        _job(
-            items=[
-                {
-                    "record_id": "R-PROJECTED",
-                    "rule_id": "LX0609-020",
-                    "status": "data_gap",
-                    "reason_code": "source_incomplete",
-                }
-            ]
-        ),
+        _published_job(list(items.values())),
         hmac_key="unit-test-key",
     )
 
@@ -1049,6 +1073,7 @@ def test_review_accepts_already_projected_batch_job() -> None:
 
     assert report["scope"] == "luxian_0609_qc_v1"
     assert report["review_status"] == "completed"
+    assert {item["rule_id"] for item in projected["items"]} == set(items)
 
 
 def test_review_provider_exception_is_reduced_to_safe_error_code() -> None:
@@ -1059,7 +1084,7 @@ def test_review_provider_exception_is_reduced_to_safe_error_code() -> None:
         _job(
             items=[
                 {
-                    "rule_id": "LX0609-013",
+                    "rule_id": "LX0609-06-02-03",
                     "status": "data_gap",
                     "record_id": "R-ERROR",
                     "defect_level": "一般缺陷",

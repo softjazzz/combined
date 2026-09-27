@@ -86,7 +86,7 @@ def test_demo_account_can_load_current_feedback(monkeypatch):
         {
             "root_job_id": "root-1",
             "record_ref": "rec_0123456789abcdef01234567",
-            "rule_id": "LX0609-001",
+            "rule_id": "LX0609-01-01-01",
             "original_status": "compliant",
             "feedback_type": "correct",
             "expected_status": None,
@@ -107,7 +107,7 @@ def test_demo_account_can_load_current_feedback(monkeypatch):
     )
 
     assert response.status_code == 200
-    assert response.json()["data"]["items"]["LX0609-001"]["feedback_type"] == "correct"
+    assert response.json()["data"]["items"]["LX0609-01-01-01"]["feedback_type"] == "correct"
 
 
 class _WorkspaceRecords:
@@ -132,7 +132,7 @@ def test_demo_account_can_load_all_feedback_with_safe_record_context(monkeypatch
             {
                 "root_job_id": "root-1",
                 "record_ref": "rec_0123456789abcdef01234567",
-                "rule_id": "LX0609-001",
+                "rule_id": "LX0609-01-01-01",
                 "original_status": "compliant",
                 "feedback_type": "correct",
                 "expected_status": None,
@@ -146,7 +146,7 @@ def test_demo_account_can_load_all_feedback_with_safe_record_context(monkeypatch
             {
                 "root_job_id": "root-2",
                 "record_ref": "rec_abcdefabcdefabcdefabcdef",
-                "rule_id": "LX0609-012",
+                "rule_id": "LX0609-06-01-05",
                 "original_status": "non_compliant",
                 "feedback_type": "incorrect",
                 "expected_status": "data_gap",
@@ -179,7 +179,7 @@ def test_demo_account_can_load_all_feedback_with_safe_record_context(monkeypatch
     assert response.status_code == 200
     assert response.json()["data"]["total"] == 2
     feedback = response.json()["data"]["items"][1]
-    assert feedback["rule_id"] == "LX0609-012"
+    assert feedback["rule_id"] == "LX0609-06-01-05"
     assert feedback["rule_name"] == "CT/MRI阳性结果分析"
     assert feedback["patient_name"] == "冯丽平"
     assert feedback["record_number"] == "208790"
@@ -230,7 +230,7 @@ def test_admin_role_without_fixed_demo_identity_is_rejected(monkeypatch):
 def test_demo_account_can_submit_current_feedback(monkeypatch):
     store = _FeedbackStore()
     response = _client(monkeypatch, DEMO_USER, store).put(
-        "/api/v1/qc/sichuan/workspace/result-feedback-demo/LX0609-001",
+        "/api/v1/qc/sichuan/workspace/result-feedback-demo/LX0609-01-01-01",
         json={
             "root_job_id": "root-1",
             "record_ref": "rec_0123456789abcdef01234567",
@@ -242,14 +242,14 @@ def test_demo_account_can_submit_current_feedback(monkeypatch):
     )
 
     assert response.status_code == 200
-    assert response.json()["data"]["rule_id"] == "LX0609-001"
+    assert response.json()["data"]["rule_id"] == "LX0609-01-01-01"
     assert store.saved[0]["root_job_id"] == "root-1"
 
 
 def test_sensitive_comment_is_rejected_without_echoing_input(monkeypatch):
     sensitive_comment = "患者电话 13812345678"
     response = _client(monkeypatch, DEMO_USER, _FeedbackStore()).put(
-        "/api/v1/qc/sichuan/workspace/result-feedback-demo/LX0609-001",
+        "/api/v1/qc/sichuan/workspace/result-feedback-demo/LX0609-01-01-01",
         json={
             "root_job_id": "root-1",
             "record_ref": "rec_0123456789abcdef01234567",
@@ -270,7 +270,7 @@ def test_hospital_identity_like_digits_are_rejected_without_echoing_input(
     monkeypatch, sensitive_comment
 ):
     response = _client(monkeypatch, DEMO_USER, _FeedbackStore()).put(
-        "/api/v1/qc/sichuan/workspace/result-feedback-demo/LX0609-001",
+        "/api/v1/qc/sichuan/workspace/result-feedback-demo/LX0609-01-01-01",
         json={
             "root_job_id": "root-1",
             "record_ref": "rec_0123456789abcdef01234567",
@@ -356,7 +356,7 @@ def _canonical_row(*, root_job_id="root-1", record_ref="rec_0123456789abcdef0123
                 "rule_set_version": version,
                 "items": [
                     {
-                        "rule_id": "LX0609-001",
+                        "rule_id": "LX0609-01-01-01",
                         "rule_name": "入院记录完成时限",
                         "status": "non_compliant",
                         "reason_code": "missing_record",
@@ -370,12 +370,38 @@ def _canonical_row(*, root_job_id="root-1", record_ref="rec_0123456789abcdef0123
     }
 
 
+@pytest.mark.parametrize(
+    ("field", "invalid_value"),
+    [
+        ("schema_version", "unknown-envelope-v1"),
+        ("delivery_mode", "legacy_items_json"),
+    ],
+)
+def test_feedback_rejects_explicitly_invalid_canonical_envelope_metadata(
+    field: str, invalid_value: str,
+) -> None:
+    import json
+
+    row = _canonical_row()
+    envelope = json.loads(row["envelope_json"])
+    envelope[field] = invalid_value
+    row["envelope_json"] = json.dumps(envelope, ensure_ascii=False)
+
+    with pytest.raises(ResultFeedbackDemoConflict):
+        ResultFeedbackDemoStore._canonical_item_from_row(
+            row,
+            root_job_id="root-1",
+            record_ref="rec_0123456789abcdef01234567",
+            rule_id="LX0609-01-01-01",
+        )
+
+
 def _feedback_row():
     return {
         "id": "feedback-1",
         "root_job_id": "root-1",
         "record_ref": "rec_0123456789abcdef01234567",
-        "rule_id": "LX0609-001",
+        "rule_id": "LX0609-01-01-01",
         "original_status": "non_compliant",
         "feedback_type": "incorrect",
         "expected_status": "not_applicable",
@@ -412,7 +438,7 @@ def test_store_rejects_child_root_or_missing_canonical_result(monkeypatch):
         store.save(
             root_job_id="child-1",
             record_ref="rec_0123456789abcdef01234567",
-            rule_id="LX0609-001",
+            rule_id="LX0609-01-01-01",
             created_by="admin-001",
             payload=_payload(root_job_id="child-1"),
         )
@@ -430,10 +456,96 @@ def test_store_rejects_duplicate_or_mismatched_rule_version_envelopes(monkeypatc
         store.save(
             root_job_id="root-1",
             record_ref="rec_0123456789abcdef01234567",
-            rule_id="LX0609-001",
+            rule_id="LX0609-01-01-01",
             created_by="admin-001",
             payload=_payload(),
         )
+
+
+def _formal_canonical_row(item: dict) -> dict:
+    """正式 Canonical Envelope：带 schema 与交付模式，条目逐项校验公开事实合同。"""
+
+    import json
+
+    from app.services.qc_workspace.canonical_result_store import (
+        CANONICAL_RESULT_DELIVERY_MODE,
+        RECORD_RESULT_ENVELOPE_SCHEMA,
+    )
+
+    row = _canonical_row()
+    envelope = json.loads(row["envelope_json"])
+    envelope["schema_version"] = RECORD_RESULT_ENVELOPE_SCHEMA
+    envelope["delivery_mode"] = CANONICAL_RESULT_DELIVERY_MODE
+    envelope["items"] = [item]
+    row["envelope_json"] = json.dumps(envelope, ensure_ascii=False)
+    return row
+
+
+def _published_admission_item() -> dict:
+    from tests.luxian_0609_published_result_support import published_lx0609_items
+
+    return dict(published_lx0609_items(admission="late")["LX0609-01-01-01"])
+
+
+def _store_for(monkeypatch, rows, **session_kwargs):
+    session = _CanonicalReadSession(rows, **session_kwargs)
+    monkeypatch.setattr(store_module, "engine", object())
+    monkeypatch.setattr(store_module, "_session", lambda: session)
+    store_module._feedback_table.cache_clear()
+    return ResultFeedbackDemoStore()
+
+
+@pytest.mark.parametrize("deprecated_seal", [False, True])
+def test_store_accepts_published_formal_result_without_seal(monkeypatch, deprecated_seal):
+    item = _published_admission_item()
+    assert item["status"] == "non_compliant"
+    assert "customer_text_seal" not in item
+    if deprecated_seal:
+        # 历史结果附带的废弃签章字段不校验，也不因失效而拒绝合法结果。
+        item["customer_text_seal"] = "lx0609-customer-text-v1:" + "0" * 64
+    store = _store_for(monkeypatch, [_formal_canonical_row(item)])
+
+    result = store.save(
+        root_job_id="root-1",
+        record_ref="rec_0123456789abcdef01234567",
+        rule_id="LX0609-01-01-01",
+        created_by="admin-001",
+        payload=_payload(),
+    )
+
+    assert result["original_status"] == "non_compliant"
+
+
+def test_store_rejects_formal_result_missing_required_facts(monkeypatch):
+    item = _published_admission_item()
+    item["customer_display_facts"] = None
+    store = _store_for(monkeypatch, [_formal_canonical_row(item)])
+
+    with pytest.raises(ResultFeedbackDemoConflict):
+        store.save(
+            root_job_id="root-1",
+            record_ref="rec_0123456789abcdef01234567",
+            rule_id="LX0609-01-01-01",
+            created_by="admin-001",
+            payload=_payload(),
+        )
+
+
+def test_store_rejects_formal_result_missing_required_facts_when_reading_feedback(monkeypatch):
+    item = _published_admission_item()
+    item["customer_display_facts"] = None
+    store = _store_for(
+        monkeypatch, [_formal_canonical_row(item)], feedback_rows=[_feedback_row()],
+    )
+
+    with pytest.raises(ResultFeedbackDemoConflict):
+        store.list_for_record(
+            root_job_id="root-1",
+            record_ref="rec_0123456789abcdef01234567",
+            created_by="admin-001",
+        )
+    with pytest.raises(ResultFeedbackDemoConflict):
+        store.list_all(created_by="admin-001", limit=20)
 
 
 def test_store_rejects_envelope_owned_by_another_account(monkeypatch):
@@ -447,7 +559,7 @@ def test_store_rejects_envelope_owned_by_another_account(monkeypatch):
         store.save(
             root_job_id="root-1",
             record_ref="rec_0123456789abcdef01234567",
-            rule_id="LX0609-001",
+            rule_id="LX0609-01-01-01",
             created_by="admin-001",
             payload=_payload(),
         )
@@ -472,7 +584,7 @@ def test_store_reads_canonical_but_only_writes_feedback_table(monkeypatch):
     result = store.save(
         root_job_id="root-1",
         record_ref="rec_0123456789abcdef01234567",
-        rule_id="LX0609-001",
+        rule_id="LX0609-01-01-01",
         created_by="admin-001",
         payload=_payload(),
     )

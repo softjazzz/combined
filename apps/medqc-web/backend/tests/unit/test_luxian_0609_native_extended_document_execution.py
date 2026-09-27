@@ -209,7 +209,7 @@ async def _evaluate(
 ):
     rows_by_source = dict(rows_by_source)
     if (
-        rule_id in {"LX0609-055", "LX0609-064", "LX0609-065", "LX0609-072"}
+        rule_id in {"LX0609-05-01-03", "LX0609-04-05-01", "LX0609-04-05-02", "LX0609-10-02-01"}
         and "evaluation_context.horizon" not in rows_by_source
     ):
         # 055/064/065/072 的既有行为测试都描述已完成的观察窗口；显式传入 horizon
@@ -219,7 +219,7 @@ async def _evaluate(
             "basis": "evaluation_as_of",
         },)
     if (
-        rule_id == "LX0609-052"
+        rule_id == "LX0609-06-04-01"
         and "evaluation_context.horizon" not in rows_by_source
     ):
         # 既有危急值夹具均描述已过 6 小时的完整观察窗口；显式注入冻结终点，
@@ -257,7 +257,7 @@ async def _evaluate_selected(
 ):
     rows_by_source = dict(rows_by_source)
     if (
-        {"LX0609-055", "LX0609-064", "LX0609-065", "LX0609-072"}.intersection(rule_ids)
+        {"LX0609-05-01-03", "LX0609-04-05-01", "LX0609-04-05-02", "LX0609-10-02-01"}.intersection(rule_ids)
         and "evaluation_context.horizon" not in rows_by_source
     ):
         rows_by_source["evaluation_context.horizon"] = ({
@@ -265,7 +265,7 @@ async def _evaluate_selected(
             "basis": "evaluation_as_of",
         },)
     if (
-        "LX0609-052" in rule_ids
+        "LX0609-06-04-01" in rule_ids
         and "evaluation_context.horizon" not in rows_by_source
     ):
         rows_by_source["evaluation_context.horizon"] = ({
@@ -392,7 +392,7 @@ def _canonical_extended_result(*, rule_id, snapshot, materials, result, reduced)
 
 def test_extended_surgery_and_transfusion_rules_bind_authoritative_trigger_sources() -> None:
     sources = resolve_luxian_0609_decision_support_source_keys(
-        ("LX0609-064", "LX0609-065", "LX0609-066", "LX0609-070")
+        ("LX0609-04-05-01", "LX0609-04-05-02", "LX0609-04-05-03", "LX0609-07-01-03")
     )
 
     assert "mr_surgery" in sources
@@ -402,33 +402,33 @@ def test_extended_surgery_and_transfusion_rules_bind_authoritative_trigger_sourc
 
 
 def test_064_binds_evaluation_horizon_for_postoperative_window_maturity() -> None:
-    sources = resolve_luxian_0609_decision_support_source_keys(("LX0609-064",))
+    sources = resolve_luxian_0609_decision_support_source_keys(("LX0609-04-05-01",))
 
     assert "evaluation_context.horizon" in sources
 
 
 def test_065_binds_evaluation_horizon_for_postoperative_window_maturity() -> None:
-    sources = resolve_luxian_0609_decision_support_source_keys(("LX0609-065",))
+    sources = resolve_luxian_0609_decision_support_source_keys(("LX0609-04-05-02",))
 
     assert "evaluation_context.horizon" in sources
 
 
 def test_072_binds_evaluation_horizon_without_expanding_073_sources() -> None:
     assert "evaluation_context.horizon" in resolve_luxian_0609_decision_support_source_keys(
-        ("LX0609-072",)
+        ("LX0609-10-02-01",)
     )
     assert "evaluation_context.horizon" not in resolve_luxian_0609_decision_support_source_keys(
-        ("LX0609-073",)
+        ("LX0609-10-02-02",)
     )
 
 
 def test_052_binds_evaluation_horizon_without_expanding_053_sources() -> None:
     source_keys = resolve_luxian_0609_decision_support_source_keys(
-        ("LX0609-052", "LX0609-053")
+        ("LX0609-06-04-01", "LX0609-06-04-02")
     )
 
     assert "evaluation_context.horizon" in source_keys
-    assert set(resolve_luxian_0609_decision_support_source_keys(("LX0609-053",))) == {
+    assert set(resolve_luxian_0609_decision_support_source_keys(("LX0609-06-04-02",))) == {
         "labtest_master",
         "labtest_item_report",
         "crisis_value_record",
@@ -436,13 +436,13 @@ def test_052_binds_evaluation_horizon_without_expanding_053_sources() -> None:
 
 
 def test_055_binds_evaluation_horizon_for_antimicrobial_effect_window() -> None:
-    sources = resolve_luxian_0609_decision_support_source_keys(("LX0609-055",))
+    sources = resolve_luxian_0609_decision_support_source_keys(("LX0609-05-01-03",))
 
     assert "evaluation_context.horizon" in sources
 
 
 def test_071_binds_authoritative_order_and_daily_signature_change_sources() -> None:
-    sources = resolve_luxian_0609_decision_support_source_keys(("LX0609-071",))
+    sources = resolve_luxian_0609_decision_support_source_keys(("LX0609-10-01-01",))
 
     assert "physician_change_event" in sources
     assert "inpat_nondrug_order" in sources
@@ -452,7 +452,7 @@ def test_071_binds_authoritative_order_and_daily_signature_change_sources() -> N
 def test_068_binds_daily_and_senior_course_sources() -> None:
     sources = {
         entry.document_type
-        for entry in resolve_luxian_0609_rule_sources(("LX0609-068",))["LX0609-068"]
+        for entry in resolve_luxian_0609_rule_sources(("LX0609-08-02-02",))["LX0609-08-02-02"]
     }
 
     assert "discharge_record" in sources
@@ -462,18 +462,18 @@ def test_068_binds_daily_and_senior_course_sources() -> None:
 
 def test_death_and_ordinary_discharge_rules_bind_mutual_exclusion_sources() -> None:
     expected_by_rule = {
-        "LX0609-051": {
+        "LX0609-09-02-01": {
             "inpat_registration",
             "discharge_record",
             "evaluation_context.horizon",
         },
-        "LX0609-060": {"inpat_registration", "discharge_record"},
-        "LX0609-061": {
+        "LX0609-04-02-06": {"inpat_registration", "discharge_record"},
+        "LX0609-08-01-01": {
             "evaluation_context.horizon",
             "inpat_registration",
             "death_record",
         },
-        "LX0609-068": {
+        "LX0609-08-02-02": {
             "evaluation_context.horizon",
             "inpat_registration",
             "death_record",
@@ -487,7 +487,7 @@ def test_death_and_ordinary_discharge_rules_bind_mutual_exclusion_sources() -> N
 
 
 def test_067_binds_the_frozen_discharge_horizon() -> None:
-    assert set(resolve_luxian_0609_decision_support_source_keys(("LX0609-067",))) == {
+    assert set(resolve_luxian_0609_decision_support_source_keys(("LX0609-08-02-01",))) == {
         "evaluation_context.horizon",
         "inpat_registration",
     }
@@ -496,7 +496,7 @@ def test_067_binds_the_frozen_discharge_horizon() -> None:
 @pytest.mark.asyncio
 async def test_death_rules_treat_complete_discharge_record_as_non_death() -> None:
     _, _, result, reduced = await _evaluate_selected(
-        ("LX0609-051", "LX0609-060"),
+        ("LX0609-09-02-01", "LX0609-04-02-06"),
         {
             "inpat_registration": (
                 {"discharge_datetime": "2026-07-15 16:20:31"},
@@ -511,11 +511,11 @@ async def test_death_rules_treat_complete_discharge_record_as_non_death() -> Non
         item.rule_id: (item.final_state, item.reason_code)
         for item in reduced
     } == {
-        "LX0609-051": (
+        "LX0609-09-02-01": (
             CustomerFinalState.NOT_APPLICABLE,
             "trigger_absent_complete",
         ),
-        "LX0609-060": (
+        "LX0609-04-02-06": (
             CustomerFinalState.NOT_APPLICABLE,
             "trigger_absent_complete",
         ),
@@ -527,7 +527,7 @@ async def test_death_rules_treat_complete_discharge_record_as_non_death() -> Non
 @pytest.mark.asyncio
 async def test_051_active_inpatient_with_complete_empty_death_source_is_not_applicable() -> None:
     snapshot, materials, result, reduced = await _evaluate_selected(
-        ("LX0609-051",),
+        ("LX0609-09-02-01",),
         {
             "inpat_registration": (
                 {
@@ -538,7 +538,7 @@ async def test_051_active_inpatient_with_complete_empty_death_source_is_not_appl
         },
     )
     canonical = _canonical_extended_result(
-        rule_id="LX0609-051",
+        rule_id="LX0609-09-02-01",
         snapshot=snapshot,
         materials=materials,
         result=result,
@@ -557,7 +557,7 @@ async def test_051_active_inpatient_with_complete_empty_death_source_is_not_appl
 @pytest.mark.asyncio
 async def test_051_active_inpatient_keeps_data_gap_when_death_source_is_unavailable() -> None:
     result, reduced = await _evaluate(
-        "LX0609-051",
+        "LX0609-09-02-01",
         {
             "inpat_registration": (
                 {
@@ -580,7 +580,7 @@ async def test_051_death_record_document_time_without_death_time_is_data_gap() -
     """死亡记录的归档时间不能替代记录正文中的实际死亡时间。"""
 
     result, reduced = await _evaluate(
-        "LX0609-051",
+        "LX0609-09-02-01",
         {
             "death_record": (
                 {
@@ -607,7 +607,7 @@ async def test_051_death_record_document_time_without_death_time_is_data_gap() -
 @pytest.mark.asyncio
 async def test_060_active_inpatient_with_complete_empty_death_source_is_not_applicable() -> None:
     snapshot, materials, result, reduced = await _evaluate_selected(
-        ("LX0609-060",),
+        ("LX0609-04-02-06",),
         {
             "inpat_registration": (
                 {
@@ -618,7 +618,7 @@ async def test_060_active_inpatient_with_complete_empty_death_source_is_not_appl
         },
     )
     canonical = _canonical_extended_result(
-        rule_id="LX0609-060",
+        rule_id="LX0609-04-02-06",
         snapshot=snapshot,
         materials=materials,
         result=result,
@@ -636,7 +636,7 @@ async def test_060_active_inpatient_with_complete_empty_death_source_is_not_appl
 @pytest.mark.asyncio
 async def test_death_case_skips_ordinary_discharge_rules() -> None:
     _, _, result, reduced = await _evaluate_selected(
-        ("LX0609-051", "LX0609-060", "LX0609-061", "LX0609-068"),
+        ("LX0609-09-02-01", "LX0609-04-02-06", "LX0609-08-01-01", "LX0609-08-02-02"),
         {
             "inpat_registration": (
                 {"discharge_datetime": "2026-07-15 16:20:31"},
@@ -657,19 +657,19 @@ async def test_death_case_skips_ordinary_discharge_rules() -> None:
         item.rule_id: (item.final_state, item.reason_code)
         for item in reduced
     } == {
-        "LX0609-051": (
+        "LX0609-09-02-01": (
             CustomerFinalState.COMPLIANT,
             "requirement_within_threshold",
         ),
-        "LX0609-060": (
+        "LX0609-04-02-06": (
             CustomerFinalState.COMPLIANT,
             "requirement_satisfied",
         ),
-        "LX0609-061": (
+        "LX0609-08-01-01": (
             CustomerFinalState.NOT_APPLICABLE,
             "trigger_absent_complete",
         ),
-        "LX0609-068": (
+        "LX0609-08-02-02": (
             CustomerFinalState.NOT_APPLICABLE,
             "trigger_absent_complete",
         ),
@@ -681,7 +681,7 @@ async def test_death_case_skips_ordinary_discharge_rules() -> None:
 @pytest.mark.asyncio
 async def test_ordinary_discharge_rules_fail_closed_when_death_source_is_unavailable() -> None:
     _, _, result, reduced = await _evaluate_selected(
-        ("LX0609-061", "LX0609-068"),
+        ("LX0609-08-01-01", "LX0609-08-02-02"),
         {
             "inpat_registration": (
                 {"discharge_datetime": "2026-07-15 16:20:31"},
@@ -694,11 +694,11 @@ async def test_ordinary_discharge_rules_fail_closed_when_death_source_is_unavail
         item.rule_id: (item.final_state, item.reason_code)
         for item in reduced
     } == {
-        "LX0609-061": (
+        "LX0609-08-01-01": (
             CustomerFinalState.DATA_GAP,
             "source_unavailable",
         ),
-        "LX0609-068": (
+        "LX0609-08-02-02": (
             CustomerFinalState.DATA_GAP,
             "source_unavailable",
         ),
@@ -710,7 +710,7 @@ async def test_ordinary_discharge_rules_fail_closed_when_death_source_is_unavail
 @pytest.mark.asyncio
 async def test_060_death_patient_without_death_record_is_non_compliant() -> None:
     result, reduced = await _evaluate(
-        "LX0609-060",
+        "LX0609-04-02-06",
         {
             "inpat_registration": (
                 {
@@ -739,7 +739,7 @@ async def test_051_death_discussion_uses_seven_day_threshold(
     expected_state: CustomerFinalState,
 ) -> None:
     _, reduced = await _evaluate(
-        "LX0609-051",
+        "LX0609-09-02-01",
         {
             "death_record": (
                 {
@@ -757,7 +757,7 @@ async def test_051_death_discussion_uses_seven_day_threshold(
 @pytest.mark.asyncio
 async def test_051_boundary_overdue_result_keeps_second_precision_in_customer_finding() -> None:
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-051",),
+        ("LX0609-09-02-01",),
         {
             "death_record": ({
                 "document_id": "death-record-051-boundary",
@@ -771,7 +771,7 @@ async def test_051_boundary_overdue_result_keeps_second_precision_in_customer_fi
     )
 
     canonical = _canonical_extended_result(
-        rule_id="LX0609-051",
+        rule_id="LX0609-09-02-01",
         snapshot=snapshot,
         materials=materials,
         result=execution,
@@ -788,7 +788,7 @@ async def test_051_boundary_overdue_result_keeps_second_precision_in_customer_fi
 @pytest.mark.asyncio
 async def test_051_uses_earliest_postdeath_discussion_and_only_its_exact_evidence() -> None:
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-051",),
+        ("LX0609-09-02-01",),
         {
             "death_record": ({
                 "document_id": "death-record-051",
@@ -810,7 +810,7 @@ async def test_051_uses_earliest_postdeath_discussion_and_only_its_exact_evidenc
     )
 
     canonical = _canonical_extended_result(
-        rule_id="LX0609-051",
+        rule_id="LX0609-09-02-01",
         snapshot=snapshot,
         materials=materials,
         result=execution,
@@ -854,7 +854,7 @@ async def test_051_uses_earliest_postdeath_discussion_and_only_its_exact_evidenc
 @pytest.mark.asyncio
 async def test_051_only_predated_discussion_is_missing_after_maturity_window() -> None:
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-051",),
+        ("LX0609-09-02-01",),
         {
             "death_record": ({
                 "document_id": "death-record-051",
@@ -873,7 +873,7 @@ async def test_051_only_predated_discussion_is_missing_after_maturity_window() -
     )
 
     canonical = _canonical_extended_result(
-        rule_id="LX0609-051",
+        rule_id="LX0609-09-02-01",
         snapshot=snapshot,
         materials=materials,
         result=execution,
@@ -901,7 +901,7 @@ async def test_051_only_predated_discussion_is_missing_after_maturity_window() -
 @pytest.mark.asyncio
 async def test_051_only_predated_discussion_waits_until_seven_day_window_matures() -> None:
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-051",),
+        ("LX0609-09-02-01",),
         {
             "death_record": ({
                 "document_id": "death-record-051",
@@ -919,7 +919,7 @@ async def test_051_only_predated_discussion_waits_until_seven_day_window_matures
         },
     )
     canonical = _canonical_extended_result(
-        rule_id="LX0609-051",
+        rule_id="LX0609-09-02-01",
         snapshot=snapshot,
         materials=materials,
         result=execution,
@@ -946,7 +946,7 @@ async def test_051_only_predated_discussion_waits_until_seven_day_window_matures
 @pytest.mark.asyncio
 async def test_051_date_only_horizon_on_deadline_day_does_not_guess_maturity() -> None:
     execution, reduced = await _evaluate(
-        "LX0609-051",
+        "LX0609-09-02-01",
         {
             "death_record": ({
                 "death_datetime": "2026-07-30 12:00:00",
@@ -961,7 +961,7 @@ async def test_051_date_only_horizon_on_deadline_day_does_not_guess_maturity() -
     assert reduced.final_state is CustomerFinalState.DATA_GAP
     assert reduced.reason_code == "evaluation_window_not_mature"
     assert execution.customer_display_facts == ((
-        "LX0609-051",
+        "LX0609-09-02-01",
         {
             "verification_kind": "death_discussion_window_not_mature",
             "death_time": "2026-07-30 12:00:00",
@@ -974,7 +974,7 @@ async def test_051_date_only_horizon_on_deadline_day_does_not_guess_maturity() -
 @pytest.mark.asyncio
 async def test_051_conflicting_death_times_fail_closed_before_discussion_matching() -> None:
     execution, reduced = await _evaluate(
-        "LX0609-051",
+        "LX0609-09-02-01",
         {
             "death_record": (
                 {"death_datetime": "2026-07-30 12:00:00"},
@@ -1012,14 +1012,14 @@ async def test_051_confirmed_death_explains_unavailable_evaluation_horizon(
     expected_finding: str,
 ) -> None:
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-051",),
+        ("LX0609-09-02-01",),
         {
             "death_record": ({"death_datetime": "2026-07-30 12:00:00"},),
             "evaluation_context.horizon": horizon_rows,
         },
     )
     canonical = _canonical_extended_result(
-        rule_id="LX0609-051",
+        rule_id="LX0609-09-02-01",
         snapshot=snapshot,
         materials=materials,
         result=execution,
@@ -1040,7 +1040,7 @@ async def test_051_confirmed_death_explains_unavailable_evaluation_horizon(
 @pytest.mark.asyncio
 async def test_051_without_real_document_ids_does_not_invent_customer_evidence() -> None:
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-051",),
+        ("LX0609-09-02-01",),
         {
             "death_record": ({
                 "death_datetime": "2026-07-01 12:00:00",
@@ -1052,7 +1052,7 @@ async def test_051_without_real_document_ids_does_not_invent_customer_evidence()
     )
 
     canonical = _canonical_extended_result(
-        rule_id="LX0609-051",
+        rule_id="LX0609-09-02-01",
         snapshot=snapshot,
         materials=materials,
         result=execution,
@@ -1069,7 +1069,7 @@ async def test_051_without_real_document_ids_does_not_invent_customer_evidence()
 @pytest.mark.asyncio
 async def test_051_does_not_fall_back_to_an_unselected_discussion_document_id() -> None:
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-051",),
+        ("LX0609-09-02-01",),
         {
             "death_record": ({
                 "document_id": "death-record-051",
@@ -1089,7 +1089,7 @@ async def test_051_does_not_fall_back_to_an_unselected_discussion_document_id() 
     )
 
     canonical = _canonical_extended_result(
-        rule_id="LX0609-051",
+        rule_id="LX0609-09-02-01",
         snapshot=snapshot,
         materials=materials,
         result=execution,
@@ -1109,7 +1109,7 @@ async def test_051_does_not_fall_back_to_an_unselected_discussion_document_id() 
 @pytest.mark.asyncio
 async def test_051_alive_discharge_gate_binds_registration_evidence() -> None:
     _, reduced = await _evaluate(
-        "LX0609-051",
+        "LX0609-09-02-01",
         {
             "inpat_registration": (
                 {"patient_status": "出院", "discharge_datetime": "2026-07-01 12:00:00"},
@@ -1134,7 +1134,7 @@ async def test_061_discharge_record_uses_24_hour_threshold(
     expected_state: CustomerFinalState,
 ) -> None:
     _, reduced = await _evaluate(
-        "LX0609-061",
+        "LX0609-08-01-01",
         {
             "inpat_registration": (
                 {
@@ -1176,8 +1176,8 @@ async def test_061_equivalent_aware_offsets_keep_timeliness_decision() -> None:
         },),
     }
 
-    _, base_reduced = await _evaluate("LX0609-061", base_rows)
-    _, equivalent_reduced = await _evaluate("LX0609-061", equivalent_rows)
+    _, base_reduced = await _evaluate("LX0609-08-01-01", base_rows)
+    _, equivalent_reduced = await _evaluate("LX0609-08-01-01", equivalent_rows)
 
     assert (base_reduced.final_state, base_reduced.reason_code) == (
         CustomerFinalState.COMPLIANT,
@@ -1192,7 +1192,7 @@ async def test_061_equivalent_aware_offsets_keep_timeliness_decision() -> None:
 @pytest.mark.asyncio
 async def test_061_exposes_the_authoritative_discharge_time_source() -> None:
     result, reduced = await _evaluate(
-        "LX0609-061",
+        "LX0609-08-01-01",
         {
             "inpat_registration": (
                 {
@@ -1205,14 +1205,14 @@ async def test_061_exposes_the_authoritative_discharge_time_source() -> None:
     )
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT
-    facts = dict(result.customer_display_facts)["LX0609-061"]
+    facts = dict(result.customer_display_facts)["LX0609-08-01-01"]
     assert facts["discharge_time_source"] == "inpat_registration.discharge_datetime"
 
 
 @pytest.mark.asyncio
 async def test_061_fails_closed_when_discharge_record_precedes_discharge_time() -> None:
     result, reduced = await _evaluate(
-        "LX0609-061",
+        "LX0609-08-01-01",
         {
             "inpat_registration": (
                 {
@@ -1228,7 +1228,7 @@ async def test_061_fails_closed_when_discharge_record_precedes_discharge_time() 
     assert reduced.reason_code == "authoritative_time_conflict"
     assert result.customer_display_facts == (
         (
-            "LX0609-061",
+            "LX0609-08-01-01",
             {
                 "verification_kind": "discharge_record_timeliness_check",
                 "discharge_time": "2026-07-01 12:00:00",
@@ -1244,7 +1244,7 @@ async def test_061_fails_closed_when_discharge_record_precedes_discharge_time() 
 @pytest.mark.asyncio
 async def test_061_preserves_a_one_second_negative_interval_for_customer_display() -> None:
     result, reduced = await _evaluate(
-        "LX0609-061",
+        "LX0609-08-01-01",
         {
             "inpat_registration": (
                 {
@@ -1257,14 +1257,14 @@ async def test_061_preserves_a_one_second_negative_interval_for_customer_display
     )
 
     assert reduced.final_state is CustomerFinalState.DATA_GAP
-    facts = dict(result.customer_display_facts)["LX0609-061"]
+    facts = dict(result.customer_display_facts)["LX0609-08-01-01"]
     assert facts["actual_interval_hours"] == pytest.approx(-1 / 3600)
 
 
 @pytest.mark.asyncio
 async def test_061_does_not_use_business_discharge_time_as_document_completion_time() -> None:
     result, reduced = await _evaluate(
-        "LX0609-061",
+        "LX0609-08-01-01",
         {
             "inpat_registration": (
                 {
@@ -1284,7 +1284,7 @@ async def test_061_does_not_use_business_discharge_time_as_document_completion_t
 
     assert reduced.final_state is CustomerFinalState.DATA_GAP
     assert reduced.reason_code == "authoritative_time_missing"
-    facts = dict(result.customer_display_facts)["LX0609-061"]
+    facts = dict(result.customer_display_facts)["LX0609-08-01-01"]
     assert facts["discharge_time"] == "2026-07-01 15:15:00"
     assert facts["record_time"] is None
     assert facts["actual_interval_hours"] is None
@@ -1293,7 +1293,7 @@ async def test_061_does_not_use_business_discharge_time_as_document_completion_t
 @pytest.mark.asyncio
 async def test_061_does_not_use_sync_update_time_as_document_completion_time() -> None:
     result, reduced = await _evaluate(
-        "LX0609-061",
+        "LX0609-08-01-01",
         {
             "inpat_registration": (
                 {
@@ -1313,7 +1313,7 @@ async def test_061_does_not_use_sync_update_time_as_document_completion_time() -
 
     assert reduced.final_state is CustomerFinalState.DATA_GAP
     assert reduced.reason_code == "authoritative_time_missing"
-    facts = dict(result.customer_display_facts)["LX0609-061"]
+    facts = dict(result.customer_display_facts)["LX0609-08-01-01"]
     assert facts["discharge_time"] == "2026-07-01 12:00:00"
     assert facts["record_time"] is None
     assert facts["actual_interval_hours"] is None
@@ -1324,7 +1324,7 @@ async def test_061_prefers_record_or_submit_time_over_business_discharge_time() 
     """业务出院字段不能掩盖真实文书完成时间。"""
 
     _, reduced = await _evaluate(
-        "LX0609-061",
+        "LX0609-08-01-01",
         {
             "inpat_registration": (
                 {
@@ -1351,7 +1351,7 @@ async def test_061_uses_latest_authoritative_completion_when_discharge_rows_are_
     """同一就诊返回多条出院记录时，不能依赖数据库返回顺序。"""
 
     result, reduced = await _evaluate(
-        "LX0609-061",
+        "LX0609-08-01-01",
         {
             "inpat_registration": (
                 {
@@ -1374,7 +1374,7 @@ async def test_061_uses_latest_authoritative_completion_when_discharge_rows_are_
 
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
     assert reduced.reason_code == "threshold_exceeded"
-    facts = dict(result.customer_display_facts)["LX0609-061"]
+    facts = dict(result.customer_display_facts)["LX0609-08-01-01"]
     assert facts["record_time"] == "2026-07-02 13:00:00"
 
 
@@ -1401,11 +1401,11 @@ async def test_061_fails_closed_when_registration_discharge_times_conflict() -> 
         reversed(rows["inpat_registration"])
     )
     for candidate_rows in (rows, reversed_rows):
-        result, reduced = await _evaluate("LX0609-061", candidate_rows)
+        result, reduced = await _evaluate("LX0609-08-01-01", candidate_rows)
 
         assert reduced.final_state is CustomerFinalState.DATA_GAP
         assert reduced.reason_code == "authoritative_time_conflict"
-        facts = dict(result.customer_display_facts)["LX0609-061"]
+        facts = dict(result.customer_display_facts)["LX0609-08-01-01"]
         assert facts["conflicting_discharge_times"] == [
             "2026-07-01 12:00:00",
             "2026-07-02 12:00:00",
@@ -1417,7 +1417,7 @@ async def test_discharge_family_uses_frozen_bundle_horizon() -> None:
     """061/067/068 必须共用 Bundle 已冻结的权威出院终点。"""
 
     _, _, result, reduced = await _evaluate_selected(
-        ("LX0609-061", "LX0609-067", "LX0609-068"),
+        ("LX0609-08-01-01", "LX0609-08-02-01", "LX0609-08-02-02"),
         {
             "inpat_registration": ({"patient_status": "出院"},),
             "evaluation_context.horizon": ({
@@ -1439,14 +1439,14 @@ async def test_discharge_family_uses_frozen_bundle_horizon() -> None:
     )
 
     decisions = {item.rule_id: item for item in reduced}
-    assert decisions["LX0609-061"].final_state is CustomerFinalState.DATA_GAP
-    assert decisions["LX0609-061"].reason_code == "authoritative_time_conflict"
-    assert decisions["LX0609-067"].final_state is CustomerFinalState.COMPLIANT
-    assert decisions["LX0609-068"].final_state is CustomerFinalState.COMPLIANT
+    assert decisions["LX0609-08-01-01"].final_state is CustomerFinalState.DATA_GAP
+    assert decisions["LX0609-08-01-01"].reason_code == "authoritative_time_conflict"
+    assert decisions["LX0609-08-02-01"].final_state is CustomerFinalState.COMPLIANT
+    assert decisions["LX0609-08-02-02"].final_state is CustomerFinalState.COMPLIANT
     facts = dict(result.customer_display_facts)
-    assert facts["LX0609-061"]["discharge_time_source"] == "evaluation_context.horizon"
-    assert facts["LX0609-067"]["checked_dates"] == ["2026-07-02", "2026-07-03"]
-    assert facts["LX0609-068"]["checked_dates"] == ("2026-07-02", "2026-07-03")
+    assert facts["LX0609-08-01-01"]["discharge_time_source"] == "evaluation_context.horizon"
+    assert facts["LX0609-08-02-01"]["checked_dates"] == ["2026-07-02", "2026-07-03"]
+    assert facts["LX0609-08-02-02"]["checked_dates"] == ("2026-07-02", "2026-07-03")
     assert result.llm_call_count == result.total_tokens == 0
 
 
@@ -1459,7 +1459,7 @@ async def test_discharge_family_never_falls_back_from_invalid_frozen_horizon(
     reason_code,
 ) -> None:
     _, _, result, reduced = await _evaluate_selected(
-        ("LX0609-061", "LX0609-067", "LX0609-068"),
+        ("LX0609-08-01-01", "LX0609-08-02-01", "LX0609-08-02-02"),
         {
             "inpat_registration": ({
                 "patient_status": "出院",
@@ -1492,7 +1492,7 @@ async def test_061_preserves_same_day_discharge_time_precision() -> None:
     """日期与时间同日时保留时分秒，避免午夜值掩盖负时间间隔。"""
 
     result, reduced = await _evaluate(
-        "LX0609-061",
+        "LX0609-08-01-01",
         {
             "inpat_registration": ({"patient_status": "出院"},),
             "discharge_record": ({
@@ -1505,7 +1505,7 @@ async def test_061_preserves_same_day_discharge_time_precision() -> None:
 
     assert reduced.final_state is CustomerFinalState.DATA_GAP
     assert reduced.reason_code == "authoritative_time_conflict"
-    facts = dict(result.customer_display_facts)["LX0609-061"]
+    facts = dict(result.customer_display_facts)["LX0609-08-01-01"]
     assert facts["discharge_time"] == "2026-07-03 12:00:00"
     assert facts["discharge_time_source"] == "discharge_record.discharge_time"
 
@@ -1513,7 +1513,7 @@ async def test_061_preserves_same_day_discharge_time_precision() -> None:
 @pytest.mark.asyncio
 async def test_064_requires_three_dates_and_surgeon_round() -> None:
     _, reduced = await _evaluate(
-        "LX0609-064",
+        "LX0609-04-05-01",
         {
             "mr_surgery": (
                 {
@@ -1540,7 +1540,7 @@ async def test_064_does_not_count_dated_course_rows_with_empty_body() -> None:
     """有权威日期但正文明确为空的病程行不能充当术后三日记录。"""
 
     _, reduced = await _evaluate(
-        "LX0609-064",
+        "LX0609-04-05-01",
         {
             "mr_surgery": (
                 {
@@ -1566,7 +1566,7 @@ async def test_064_does_not_count_dated_course_rows_with_empty_body() -> None:
 @pytest.mark.asyncio
 async def test_064_fails_closed_when_surgeon_identity_is_anonymized() -> None:
     result, reduced = await _evaluate(
-        "LX0609-064",
+        "LX0609-04-05-01",
         {
             "surgery_record": (
                 {
@@ -1586,13 +1586,13 @@ async def test_064_fails_closed_when_surgeon_identity_is_anonymized() -> None:
 
     assert reduced.final_state is CustomerFinalState.DATA_GAP
     assert reduced.reason_code == "association_failed"
-    assert "LX0609-064" not in dict(result.customer_display_facts)
+    assert "LX0609-04-05-01" not in dict(result.customer_display_facts)
 
 
 @pytest.mark.asyncio
 async def test_064_uses_comparable_surgeon_when_anonymized_alias_is_also_present() -> None:
     _result, reduced = await _evaluate(
-        "LX0609-064",
+        "LX0609-04-05-01",
         {
             "surgery_record": (
                 {
@@ -1617,7 +1617,7 @@ async def test_064_uses_comparable_surgeon_when_anonymized_alias_is_also_present
 @pytest.mark.asyncio
 async def test_064_uses_postoperative_calendar_days_not_72_hour_cutoff() -> None:
     _, reduced = await _evaluate(
-        "LX0609-064",
+        "LX0609-04-05-01",
         {
             "mr_surgery": (
                 {
@@ -1644,7 +1644,7 @@ async def test_064_does_not_judge_missing_future_postoperative_days_before_windo
     """评价时点尚未覆盖术后第3日时，不应提前判定病程缺失。"""
 
     _, reduced = await _evaluate(
-        "LX0609-064",
+        "LX0609-04-05-01",
         {
             "surgery_record": (
                 {
@@ -1670,7 +1670,7 @@ async def test_064_does_not_judge_missing_future_postoperative_days_before_windo
 @pytest.mark.asyncio
 async def test_064_window_maturity_gap_survives_customer_projection() -> None:
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-064",),
+        ("LX0609-04-05-01",),
         {
             "surgery_record": ({
                 "document_id": "E-projection-gap",
@@ -1685,7 +1685,7 @@ async def test_064_window_maturity_gap_survives_customer_projection() -> None:
     )
 
     canonical = _canonical_extended_result(
-        rule_id="LX0609-064",
+        rule_id="LX0609-04-05-01",
         snapshot=snapshot,
         materials=materials,
         result=execution,
@@ -1725,7 +1725,7 @@ async def test_064_missing_or_conflicting_evaluation_horizon_remains_data_gap(
     horizon_rows, reason_code
 ) -> None:
     _, reduced = await _evaluate(
-        "LX0609-064",
+        "LX0609-04-05-01",
         {
             "surgery_record": ({
                 "document_id": "E-horizon",
@@ -1743,7 +1743,7 @@ async def test_064_missing_or_conflicting_evaluation_horizon_remains_data_gap(
 @pytest.mark.asyncio
 async def test_065_binds_surgery_senior_round_and_evaluation_horizon_sources() -> None:
     _, reduced = await _evaluate(
-        "LX0609-065",
+        "LX0609-04-05-02",
         {
             "mr_surgery": (
                 {
@@ -1769,7 +1769,7 @@ async def test_065_binds_surgery_senior_round_and_evaluation_horizon_sources() -
 @pytest.mark.asyncio
 async def test_068_binds_discharge_gate_and_senior_opinion_without_daily_source() -> None:
     snapshot, materials, result, reduced = await _evaluate_selected(
-        ("LX0609-068",),
+        ("LX0609-08-02-02",),
         {
             "inpat_registration": (
                 {"patient_status": "出院", "discharge_datetime": "2026-07-03 12:00:00"},
@@ -1793,14 +1793,14 @@ async def test_068_binds_discharge_gate_and_senior_opinion_without_daily_source(
     assert result.decisions[0].fact_refs
     assert set(result.decisions[0].fact_refs).isdisjoint(snapshot.document_refs)
     canonical = _canonical_extended_result(
-        rule_id="LX0609-068",
+        rule_id="LX0609-08-02-02",
         snapshot=snapshot,
         materials=materials,
         result=result,
         reduced=reduced,
     )
     assert "customer_evidence" not in canonical
-    assert dict(result.customer_display_facts)["LX0609-068"] == {
+    assert dict(result.customer_display_facts)["LX0609-08-02-02"] == {
         "verification_kind": "senior_discharge_approval_present",
         "discharge_date": "2026-07-03",
         "checked_dates": ("2026-07-02", "2026-07-03"),
@@ -1814,7 +1814,7 @@ async def test_068_binds_discharge_gate_and_senior_opinion_without_daily_source(
 async def test_068_accepts_senior_yuyi_discharge_without_model_call() -> None:
     client = _DischargeApprovalClient()
     snapshot, materials, result, reduced = await _evaluate_selected(
-        ("LX0609-068",),
+        ("LX0609-08-02-02",),
         {
             "inpat_registration": ({
                 "patient_status": "出院",
@@ -1835,7 +1835,7 @@ async def test_068_accepts_senior_yuyi_discharge_without_model_call() -> None:
     assert result.llm_call_count == 0
     assert client.calls == []
     canonical = _canonical_extended_result(
-        rule_id="LX0609-068",
+        rule_id="LX0609-08-02-02",
         snapshot=snapshot,
         materials=materials,
         result=result,
@@ -1861,7 +1861,7 @@ async def test_068_does_not_match_nonapproval_yuyi_discharge(
         "doc_01", opinion=opinion, quote=text
     ))
     result, reduced = await _evaluate(
-        "LX0609-068",
+        "LX0609-08-02-02",
         {
             "inpat_registration": ({
                 "patient_status": "出院",
@@ -1889,7 +1889,7 @@ async def test_068_missing_senior_discharge_opinion_exposes_checked_dates() -> N
         "doc_01", opinion="unknown", quote="病情稳定。"
     ))
     result, reduced = await _evaluate(
-        "LX0609-068",
+        "LX0609-08-02-02",
         {
             "inpat_registration": (
                 {"patient_status": "出院", "discharge_datetime": "2026-07-03 12:00:00"},
@@ -1906,7 +1906,7 @@ async def test_068_missing_senior_discharge_opinion_exposes_checked_dates() -> N
 
     assert reduced.final_state is CustomerFinalState.DATA_GAP
     assert reduced.reason_code == "source_empty"
-    assert dict(result.customer_display_facts)["LX0609-068"] == {
+    assert dict(result.customer_display_facts)["LX0609-08-02-02"] == {
         "failure_kind": "senior_discharge_approval_missing",
         "discharge_date": "2026-07-03",
         "checked_dates": ("2026-07-02", "2026-07-03"),
@@ -1920,7 +1920,7 @@ async def test_068_missing_senior_discharge_opinion_exposes_checked_dates() -> N
 @pytest.mark.asyncio
 async def test_068_accepts_complete_automatic_discharge_process_in_daily_course() -> None:
     result, reduced = await _evaluate(
-        "LX0609-068",
+        "LX0609-08-02-02",
         {
             "inpat_registration": (
                 {"patient_status": "出院", "discharge_datetime": "2026-07-03 12:00:00"},
@@ -1942,7 +1942,7 @@ async def test_068_accepts_complete_automatic_discharge_process_in_daily_course(
     )
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT
-    assert dict(result.customer_display_facts)["LX0609-068"] == {
+    assert dict(result.customer_display_facts)["LX0609-08-02-02"] == {
         "verification_kind": "senior_discharge_approval_present",
         "discharge_date": "2026-07-03",
         "checked_dates": ("2026-07-02", "2026-07-03"),
@@ -1955,7 +1955,7 @@ async def test_068_accepts_complete_automatic_discharge_process_in_daily_course(
 @pytest.mark.asyncio
 async def test_068_automatic_discharge_preserves_canonical_customer_delivery() -> None:
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-068",),
+        ("LX0609-08-02-02",),
         {
             "inpat_registration": (
                 {"patient_status": "出院", "discharge_datetime": "2026-07-03 12:00:00"},
@@ -1980,7 +1980,7 @@ async def test_068_automatic_discharge_preserves_canonical_customer_delivery() -
     )
 
     canonical = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-068"}],
+        wrapper_rules=[{"rule_id": "LX0609-08-02-02"}],
         execution_results=[],
         reduced_decisions=reduced,
         customer_display_facts=execution.customer_display_facts,
@@ -2018,7 +2018,7 @@ async def test_068_automatic_discharge_preserves_canonical_customer_delivery() -
 @pytest.mark.asyncio
 async def test_068_accepts_daily_course_evidence_when_senior_source_is_unavailable() -> None:
     _, reduced = await _evaluate(
-        "LX0609-068",
+        "LX0609-08-02-02",
         {
             "inpat_registration": (
                 {"patient_status": "出院", "discharge_datetime": "2026-07-03 12:00:00"},
@@ -2045,7 +2045,7 @@ async def test_068_accepts_daily_course_evidence_when_senior_source_is_unavailab
 @pytest.mark.asyncio
 async def test_068_accepts_senior_approval_recorded_in_daily_course() -> None:
     result, reduced = await _evaluate(
-        "LX0609-068",
+        "LX0609-08-02-02",
         {
             "inpat_registration": (
                 {"patient_status": "出院", "discharge_datetime": "2026-07-03 12:00:00"},
@@ -2064,10 +2064,10 @@ async def test_068_accepts_senior_approval_recorded_in_daily_course() -> None:
     )
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT
-    assert dict(result.customer_display_facts)["LX0609-068"]["checked_source"] == (
+    assert dict(result.customer_display_facts)["LX0609-08-02-02"]["checked_source"] == (
         "daily_course_record"
     )
-    assert dict(result.customer_display_facts)["LX0609-068"]["approval_path"] == (
+    assert dict(result.customer_display_facts)["LX0609-08-02-02"]["approval_path"] == (
         "senior_approval"
     )
 
@@ -2080,7 +2080,7 @@ async def test_068_does_not_accept_unsigned_automatic_discharge() -> None:
         quote="家属坚持自动出院",
     ))
     _, reduced = await _evaluate(
-        "LX0609-068",
+        "LX0609-08-02-02",
         {
             "inpat_registration": (
                 {"patient_status": "出院", "discharge_datetime": "2026-07-03 12:00:00"},
@@ -2110,7 +2110,7 @@ async def test_068_does_not_treat_senior_rejection_as_discharge_approval() -> No
         "doc_01", opinion="denied", quote="上级医师不同意出院"
     ))
     _, reduced = await _evaluate(
-        "LX0609-068",
+        "LX0609-08-02-02",
         {
             "inpat_registration": (
                 {"patient_status": "出院", "discharge_datetime": "2026-07-03 12:00:00"},
@@ -2151,7 +2151,7 @@ async def test_068_semantic_equivalent_approval_uses_existing_senior_path(
 ) -> None:
     client = _DischargeApprovalClient(_approval_item("doc_01", quote=quote))
     result, reduced = await _evaluate(
-        "LX0609-068",
+        "LX0609-08-02-02",
         {
             "inpat_registration": ({
                 "patient_status": "出院",
@@ -2169,7 +2169,7 @@ async def test_068_semantic_equivalent_approval_uses_existing_senior_path(
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT
     assert reduced.reason_code == "requirement_satisfied"
-    facts = dict(result.customer_display_facts)["LX0609-068"]
+    facts = dict(result.customer_display_facts)["LX0609-08-02-02"]
     assert facts["approval_path"] == "senior_approval"
     assert facts["checked_source"] == "senior_course_record"
     assert result.llm_call_count == 0
@@ -2186,7 +2186,7 @@ async def test_068_real_conditional_clause_is_not_promoted_to_approval() -> None
         quote=text,
     ))
     result, reduced = await _evaluate(
-        "LX0609-068",
+        "LX0609-08-02-02",
         {
             "inpat_registration": ({
                 "patient_status": "出院",
@@ -2204,7 +2204,7 @@ async def test_068_real_conditional_clause_is_not_promoted_to_approval() -> None
 
     assert reduced.final_state is CustomerFinalState.DATA_GAP
     assert reduced.reason_code == "source_empty"
-    assert dict(result.customer_display_facts)["LX0609-068"]["approval_present"] is False
+    assert dict(result.customer_display_facts)["LX0609-08-02-02"]["approval_present"] is False
     assert result.llm_call_count == 1
 
 
@@ -2213,7 +2213,7 @@ async def test_068_deterministic_undated_approval_keeps_time_missing_semantics()
     text = "主任医师查房后认为恢复良好，予以出院。"
     client = _DischargeApprovalClient(_approval_item("doc_01", quote=text))
     result, reduced = await _evaluate(
-        "LX0609-068",
+        "LX0609-08-02-02",
         {
             "inpat_registration": ({
                 "patient_status": "出院",
@@ -2230,7 +2230,7 @@ async def test_068_deterministic_undated_approval_keeps_time_missing_semantics()
 
     assert reduced.final_state is CustomerFinalState.DATA_GAP
     assert reduced.reason_code == "authoritative_time_missing"
-    facts = dict(result.customer_display_facts)["LX0609-068"]
+    facts = dict(result.customer_display_facts)["LX0609-08-02-02"]
     assert facts["missing_time_count"] == 1
     assert result.llm_call_count == 0
 
@@ -2251,7 +2251,7 @@ async def test_068_dated_semantics_take_priority_over_undated_fixed_approval(
         _approval_item("doc_02", opinion=dated_opinion, quote=dated_text),
     )
     snapshot, materials, result, reduced = await _evaluate_selected(
-        ("LX0609-068",),
+        ("LX0609-08-02-02",),
         {
             "inpat_registration": ({
                 "patient_status": "出院",
@@ -2277,7 +2277,7 @@ async def test_068_dated_semantics_take_priority_over_undated_fixed_approval(
         assert reduced[0].final_state is CustomerFinalState.COMPLIANT
         assert reduced[0].reason_code == "requirement_satisfied"
         canonical = _canonical_extended_result(
-            rule_id="LX0609-068",
+            rule_id="LX0609-08-02-02",
             snapshot=snapshot,
             materials=materials,
             result=result,
@@ -2289,7 +2289,7 @@ async def test_068_dated_semantics_take_priority_over_undated_fixed_approval(
     else:
         assert reduced[0].final_state is CustomerFinalState.DATA_GAP
         assert reduced[0].reason_code == "authoritative_time_missing"
-        assert dict(result.customer_display_facts)["LX0609-068"]["missing_time_count"] == 1
+        assert dict(result.customer_display_facts)["LX0609-08-02-02"]["missing_time_count"] == 1
     assert result.llm_call_count == 0
 
 
@@ -2297,7 +2297,7 @@ async def test_068_dated_semantics_take_priority_over_undated_fixed_approval(
 async def test_068_semantic_context_overflow_is_explicit_gap_without_call() -> None:
     client = _DischargeApprovalClient()
     result, reduced = await _evaluate(
-        "LX0609-068",
+        "LX0609-08-02-02",
         {
             "inpat_registration": ({
                 "patient_status": "出院",
@@ -2328,7 +2328,7 @@ async def test_068_semantic_model_failure_is_technical_error(failure) -> None:
         else _DischargeApprovalClient(error=TimeoutError())
     )
     result, reduced = await _evaluate(
-        "LX0609-068",
+        "LX0609-08-02-02",
         {
             "inpat_registration": ({
                 "patient_status": "出院",
@@ -2354,7 +2354,7 @@ async def test_068_semantic_model_failure_is_technical_error(failure) -> None:
 
 @pytest.mark.asyncio
 async def test_066_without_performed_surgery_is_not_applicable() -> None:
-    _, reduced = await _evaluate("LX0609-066", {})
+    _, reduced = await _evaluate("LX0609-04-05-03", {})
 
     assert reduced.final_state is CustomerFinalState.NOT_APPLICABLE
 
@@ -2362,7 +2362,7 @@ async def test_066_without_performed_surgery_is_not_applicable() -> None:
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "rule_id",
-    ("LX0609-064", "LX0609-065", "LX0609-066"),
+    ("LX0609-04-05-01", "LX0609-04-05-02", "LX0609-04-05-03"),
 )
 async def test_postoperative_rules_ignore_catalog_operation(rule_id: str) -> None:
     _, reduced = await _evaluate(
@@ -2385,7 +2385,7 @@ async def test_postoperative_rules_ignore_catalog_operation(rule_id: str) -> Non
 @pytest.mark.asyncio
 async def test_069_consultation_over_24_hours_is_non_compliant() -> None:
     _, reduced = await _evaluate(
-        "LX0609-069",
+        "LX0609-04-02-07",
         {
             "consultation_record": (
                 {
@@ -2402,7 +2402,7 @@ async def test_069_consultation_over_24_hours_is_non_compliant() -> None:
 @pytest.mark.asyncio
 async def test_069_pairs_separate_consultation_request_and_record_rows() -> None:
     result, reduced = await _evaluate(
-        "LX0609-069",
+        "LX0609-04-02-07",
         {
             "consultation_record": (
                 {
@@ -2418,7 +2418,7 @@ async def test_069_pairs_separate_consultation_request_and_record_rows() -> None
     )
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT
-    facts = dict(result.customer_display_facts)["LX0609-069"]
+    facts = dict(result.customer_display_facts)["LX0609-04-02-07"]
     assert facts["actual_interval_hours"] == [6.0]
     assert facts["request_times"] == ["2026-07-01 08:00:00"]
     assert facts["record_times"] == ["2026-07-01 14:00:00"]
@@ -2427,7 +2427,7 @@ async def test_069_pairs_separate_consultation_request_and_record_rows() -> None
 @pytest.mark.asyncio
 async def test_069_multiple_unlinked_consultations_fail_closed() -> None:
     _, reduced = await _evaluate(
-        "LX0609-069",
+        "LX0609-04-02-07",
         {
             "consultation_record": (
                 {"document_title": "会诊申请单", "record_time": "2026-07-01 08:00:00"},
@@ -2444,7 +2444,7 @@ async def test_069_multiple_unlinked_consultations_fail_closed() -> None:
 @pytest.mark.asyncio
 async def test_071_physician_change_requires_handoff_and_handover() -> None:
     snapshot, materials, result, reduced = await _evaluate_selected(
-        ("LX0609-071",),
+        ("LX0609-10-01-01",),
         {
             "physician_change_event": (
                 {
@@ -2486,7 +2486,7 @@ async def test_071_physician_change_requires_handoff_and_handover() -> None:
 
     assert reduced[0].final_state is CustomerFinalState.COMPLIANT
     canonical = _canonical_extended_result(
-        rule_id="LX0609-071",
+        rule_id="LX0609-10-01-01",
         snapshot=snapshot,
         materials=materials,
         result=result,
@@ -2519,7 +2519,7 @@ async def test_071_single_event_preserves_selected_rule_ids(
         else ()
     )
     _, _, result, _ = await _evaluate_selected(
-        ("LX0609-071",),
+        ("LX0609-10-01-01",),
         {
             "physician_change_event": (
                 {"change_datetime": "2026-07-01 08:00:00"},
@@ -2531,13 +2531,13 @@ async def test_071_single_event_preserves_selected_rule_ids(
         },
     )
 
-    assert result.planned_rule_ids == ("LX0609-071",)
+    assert result.planned_rule_ids == ("LX0609-10-01-01",)
 
 
 @pytest.mark.asyncio
 async def test_071_missing_shift_time_keeps_deliverable_association_facts() -> None:
     snapshot, materials, result, reduced = await _evaluate_selected(
-        ("LX0609-071",),
+        ("LX0609-10-01-01",),
         {
             "inpat_nondrug_order": (
                 {
@@ -2563,7 +2563,7 @@ async def test_071_missing_shift_time_keeps_deliverable_association_facts() -> N
     assert reduced[0].final_state is CustomerFinalState.DATA_GAP
     assert reduced[0].reason_code == "association_failed"
     canonical = _canonical_extended_result(
-        rule_id="LX0609-071",
+        rule_id="LX0609-10-01-01",
         snapshot=snapshot,
         materials=materials,
         result=result,
@@ -2596,7 +2596,7 @@ async def test_071_missing_shift_time_keeps_deliverable_association_facts() -> N
 @pytest.mark.asyncio
 async def test_071_multiple_change_events_report_association_gap_with_existing_records() -> None:
     snapshot, materials, result, reduced = await _evaluate_selected(
-        ("LX0609-071",),
+        ("LX0609-10-01-01",),
         {
             "physician_change_event": (
                 {"change_datetime": "2026-07-01 08:00:00"},
@@ -2616,9 +2616,9 @@ async def test_071_multiple_change_events_report_association_gap_with_existing_r
 
     assert reduced[0].final_state is CustomerFinalState.DATA_GAP
     assert reduced[0].reason_code == "association_failed"
-    assert result.planned_rule_ids == ("LX0609-071",)
+    assert result.planned_rule_ids == ("LX0609-10-01-01",)
     canonical = _canonical_extended_result(
-        rule_id="LX0609-071",
+        rule_id="LX0609-10-01-01",
         snapshot=snapshot,
         materials=materials,
         result=result,
@@ -2655,7 +2655,7 @@ async def test_071_multiple_change_events_report_association_gap_with_existing_r
 @pytest.mark.asyncio
 async def test_071_multiple_change_events_are_checked_in_disjoint_event_windows() -> None:
     snapshot, materials, result, reduced = await _evaluate_selected(
-        ("LX0609-071",),
+        ("LX0609-10-01-01",),
         {
             "physician_change_event": (
                 {"event_id": "CHANGE-1", "change_datetime": "2026-07-01 08:00:00", "old_physician_name": "甲1", "new_physician_name": "乙1"},
@@ -2673,7 +2673,7 @@ async def test_071_multiple_change_events_are_checked_in_disjoint_event_windows(
     )
 
     canonical = _canonical_extended_result(
-        rule_id="LX0609-071",
+        rule_id="LX0609-10-01-01",
         snapshot=snapshot,
         materials=materials,
         result=result,
@@ -2682,7 +2682,7 @@ async def test_071_multiple_change_events_are_checked_in_disjoint_event_windows(
 
     assert reduced[0].final_state is CustomerFinalState.COMPLIANT
     assert reduced[0].reason_code == "requirement_satisfied"
-    assert result.planned_rule_ids == ("LX0609-071",)
+    assert result.planned_rule_ids == ("LX0609-10-01-01",)
     assert canonical["status"] == "compliant"
     assert canonical["customer_display_facts"]["change_event_count"] == 2
     assert canonical["customer_display_facts"]["events"] == [
@@ -2736,7 +2736,7 @@ async def test_071_multiple_change_events_are_checked_in_disjoint_event_windows(
 @pytest.mark.asyncio
 async def test_071_multiple_change_events_report_the_specific_incomplete_event() -> None:
     snapshot, materials, result, reduced = await _evaluate_selected(
-        ("LX0609-071",),
+        ("LX0609-10-01-01",),
         {
             "physician_change_event": (
                 {"event_id": "CHANGE-1", "change_datetime": "2026-07-01 08:00:00", "old_physician_name": "甲1", "new_physician_name": "乙1"},
@@ -2753,7 +2753,7 @@ async def test_071_multiple_change_events_report_the_specific_incomplete_event()
     )
 
     canonical = _canonical_extended_result(
-        rule_id="LX0609-071",
+        rule_id="LX0609-10-01-01",
         snapshot=snapshot,
         materials=materials,
         result=result,
@@ -2787,11 +2787,11 @@ async def test_071_multiple_change_event_order_does_not_change_the_result() -> N
         ),
     }
     snapshot, materials, result, reduced = await _evaluate_selected(
-        ("LX0609-071",), source_rows
+        ("LX0609-10-01-01",), source_rows
     )
 
     canonical = _canonical_extended_result(
-        rule_id="LX0609-071",
+        rule_id="LX0609-10-01-01",
         snapshot=snapshot,
         materials=materials,
         result=result,
@@ -2808,7 +2808,7 @@ async def test_071_multiple_change_event_order_does_not_change_the_result() -> N
 @pytest.mark.asyncio
 async def test_071_multiple_records_in_one_event_window_fail_closed() -> None:
     _, _, result, reduced = await _evaluate_selected(
-        ("LX0609-071",),
+        ("LX0609-10-01-01",),
         {
             "physician_change_event": (
                 {"change_datetime": "2026-07-01 08:00:00", "old_physician_name": "甲1", "new_physician_name": "乙1"},
@@ -2834,7 +2834,7 @@ async def test_071_multiple_records_in_one_event_window_fail_closed() -> None:
 @pytest.mark.asyncio
 async def test_071_multiple_change_events_with_untimed_record_fail_closed() -> None:
     snapshot, materials, result, reduced = await _evaluate_selected(
-        ("LX0609-071",),
+        ("LX0609-10-01-01",),
         {
             "physician_change_event": (
                 {"change_datetime": "2026-07-01 08:00:00", "old_physician_name": "甲1", "new_physician_name": "乙1"},
@@ -2853,14 +2853,14 @@ async def test_071_multiple_change_events_with_untimed_record_fail_closed() -> N
 
     assert reduced[0].final_state is CustomerFinalState.DATA_GAP
     assert reduced[0].reason_code == "authoritative_time_missing"
-    assert result.planned_rule_ids == ("LX0609-071",)
+    assert result.planned_rule_ids == ("LX0609-10-01-01",)
     assert result.llm_call_count == result.total_tokens == 0
 
 
 @pytest.mark.asyncio
 async def test_071_multiple_change_events_report_exact_late_handover() -> None:
     snapshot, materials, result, reduced = await _evaluate_selected(
-        ("LX0609-071",),
+        ("LX0609-10-01-01",),
         {
             "physician_change_event": (
                 {"change_datetime": "2026-07-01 08:00:00", "old_physician_name": "甲1", "new_physician_name": "乙1"},
@@ -2878,7 +2878,7 @@ async def test_071_multiple_change_events_report_exact_late_handover() -> None:
     )
 
     canonical = _canonical_extended_result(
-        rule_id="LX0609-071",
+        rule_id="LX0609-10-01-01",
         snapshot=snapshot,
         materials=materials,
         result=result,
@@ -2901,7 +2901,7 @@ async def test_071_multiple_change_events_report_exact_late_handover() -> None:
 @pytest.mark.asyncio
 async def test_071_missing_change_time_reports_exact_gap_without_hiding_records() -> None:
     snapshot, materials, result, reduced = await _evaluate_selected(
-        ("LX0609-071",),
+        ("LX0609-10-01-01",),
         {
             "physician_change_event": ({"event_id": "CHANGE-NO-TIME"},),
             "handoff_record": ({
@@ -2918,7 +2918,7 @@ async def test_071_missing_change_time_reports_exact_gap_without_hiding_records(
     assert reduced[0].final_state is CustomerFinalState.DATA_GAP
     assert reduced[0].reason_code == "authoritative_time_missing"
     canonical = _canonical_extended_result(
-        rule_id="LX0609-071",
+        rule_id="LX0609-10-01-01",
         snapshot=snapshot,
         materials=materials,
         result=result,
@@ -2950,7 +2950,7 @@ async def test_071_existing_handoff_source_without_authoritative_time_is_data_ga
     },)
 
     _, _, result, reduced = await _evaluate_selected(
-        ("LX0609-071",),
+        ("LX0609-10-01-01",),
         {
             "physician_change_event": ({
                 "change_datetime": "2026-07-01 08:00:00",
@@ -2969,7 +2969,7 @@ async def test_071_existing_handoff_source_without_authoritative_time_is_data_ga
 @pytest.mark.asyncio
 async def test_071_truly_empty_handoff_source_is_non_compliant() -> None:
     _, _, result, reduced = await _evaluate_selected(
-        ("LX0609-071",),
+        ("LX0609-10-01-01",),
         {
             "physician_change_event": ({
                 "change_datetime": "2026-07-01 08:00:00",
@@ -2994,7 +2994,7 @@ async def test_071_truly_empty_handoff_source_is_non_compliant() -> None:
 @pytest.mark.asyncio
 async def test_071_uses_explicit_physician_change_order_when_event_table_is_empty() -> None:
     result, reduced = await _evaluate(
-        "LX0609-071",
+        "LX0609-10-01-01",
         {
             "inpat_nondrug_order": (
                 {
@@ -3009,7 +3009,7 @@ async def test_071_uses_explicit_physician_change_order_when_event_table_is_empt
     )
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT
-    facts = dict(result.customer_display_facts)["LX0609-071"]
+    facts = dict(result.customer_display_facts)["LX0609-10-01-01"]
     assert facts["change_time"] == "2026-07-01 08:00:00"
     assert facts["handover_threshold_hours"] == 24
 
@@ -3017,7 +3017,7 @@ async def test_071_uses_explicit_physician_change_order_when_event_table_is_empt
 @pytest.mark.asyncio
 async def test_071_missing_event_table_with_complete_empty_daily_source_is_not_applicable() -> None:
     _, reduced = await _evaluate(
-        "LX0609-071",
+        "LX0609-10-01-01",
         {},
         unavailable_sources={"physician_change_event"},
     )
@@ -3029,7 +3029,7 @@ async def test_071_missing_event_table_with_complete_empty_daily_source_is_not_a
 @pytest.mark.asyncio
 async def test_072_transfer_records_must_be_completed_in_24_hours() -> None:
     _, reduced = await _evaluate(
-        "LX0609-072",
+        "LX0609-10-02-01",
         {
             "inpat_nondrug_order": (
                 {
@@ -3048,7 +3048,7 @@ async def test_072_transfer_records_must_be_completed_in_24_hours() -> None:
 @pytest.mark.asyncio
 async def test_072_uses_the_unique_order_start_time_when_other_times_are_absent() -> None:
     _, reduced = await _evaluate(
-        "LX0609-072",
+        "LX0609-10-02-01",
         {
             "inpat_nondrug_order": (
                 {"order_name": "转科医嘱", "start_time": "2026-07-01 08:00:00"},
@@ -3064,7 +3064,7 @@ async def test_072_uses_the_unique_order_start_time_when_other_times_are_absent(
 @pytest.mark.asyncio
 async def test_072_refuses_conflicting_authoritative_order_times() -> None:
     _, reduced = await _evaluate(
-        "LX0609-072",
+        "LX0609-10-02-01",
         {
             "inpat_nondrug_order": (
                 {
@@ -3085,7 +3085,7 @@ async def test_072_refuses_conflicting_authoritative_order_times() -> None:
 @pytest.mark.asyncio
 async def test_072_does_not_treat_a_prior_admission_transfer_record_as_this_transfer() -> None:
     _, reduced = await _evaluate(
-        "LX0609-072",
+        "LX0609-10-02-01",
         {
             "inpat_nondrug_order": ({"order_name": "转科医嘱", "prescribed_datetime": "2026-07-01 08:00:00"},),
             "transfer_in_record": ({"record_time": "2025-12-31 09:00:00"},),
@@ -3100,7 +3100,7 @@ async def test_072_does_not_treat_a_prior_admission_transfer_record_as_this_tran
 @pytest.mark.asyncio
 async def test_072_missing_transfer_record_waits_until_24_hour_window_is_mature() -> None:
     _, reduced = await _evaluate(
-        "LX0609-072",
+        "LX0609-10-02-01",
         {
             "inpat_nondrug_order": (
                 {"order_name": "转科医嘱", "prescribed_datetime": "2026-07-01 08:00:00"},
@@ -3121,7 +3121,7 @@ async def test_072_missing_transfer_record_waits_until_24_hour_window_is_mature(
 @pytest.mark.asyncio
 async def test_072_missing_transfer_record_is_noncompliant_after_24_hour_window() -> None:
     _, reduced = await _evaluate(
-        "LX0609-072",
+        "LX0609-10-02-01",
         {
             "inpat_nondrug_order": (
                 {"order_name": "转科医嘱", "prescribed_datetime": "2026-07-01 08:00:00"},
@@ -3157,7 +3157,7 @@ async def test_072_missing_transfer_record_requires_one_authoritative_evaluation
     horizon_rows, reason_code
 ) -> None:
     _, reduced = await _evaluate(
-        "LX0609-072",
+        "LX0609-10-02-01",
         {
             "inpat_nondrug_order": (
                 {"order_name": "转科医嘱", "prescribed_datetime": "2026-07-01 08:00:00"},
@@ -3175,7 +3175,7 @@ async def test_072_missing_transfer_record_requires_one_authoritative_evaluation
 async def test_072_transfer_date_excludes_historical_record_even_when_recorded_later() -> None:
     """历史转科补录时间较新时，仍不能满足本次转科医嘱。"""
     _, reduced = await _evaluate(
-        "LX0609-072",
+        "LX0609-10-02-01",
         {
             "inpat_nondrug_order": (
                 {"order_name": "转科医嘱", "prescribed_datetime": "2026-07-01 08:00:00"},
@@ -3199,7 +3199,7 @@ async def test_072_transfer_date_excludes_historical_record_even_when_recorded_l
 @pytest.mark.asyncio
 async def test_072_date_only_transfer_record_is_not_used_to_prove_24_hour_timeliness() -> None:
     _, reduced = await _evaluate(
-        "LX0609-072",
+        "LX0609-10-02-01",
         {
             "inpat_nondrug_order": ({"order_name": "转科医嘱", "prescribed_datetime": "2026-07-01 08:00:00"},),
             "transfer_in_record": ({"transfer_date": "2026-07-01"},),
@@ -3214,7 +3214,7 @@ async def test_072_date_only_transfer_record_is_not_used_to_prove_24_hour_timeli
 @pytest.mark.asyncio
 async def test_073_requires_one_current_transfer_in_and_out_record() -> None:
     _, reduced = await _evaluate(
-        "LX0609-073",
+        "LX0609-10-02-02",
         {
             "inpat_nondrug_order": ({"order_name": "转科医嘱", "prescribed_datetime": "2026-07-01 08:00:00"},),
             "transfer_in_record": ({"record_time": "2026-07-01 09:00:00"},),
@@ -3228,7 +3228,7 @@ async def test_073_requires_one_current_transfer_in_and_out_record() -> None:
 @pytest.mark.asyncio
 async def test_073_presence_rule_does_not_wait_for_072_evaluation_window() -> None:
     _, reduced = await _evaluate(
-        "LX0609-073",
+        "LX0609-10-02-02",
         {
             "inpat_nondrug_order": (
                 {"order_name": "转科医嘱", "prescribed_datetime": "2026-07-01 08:00:00"},
@@ -3249,7 +3249,7 @@ async def test_073_presence_rule_does_not_wait_for_072_evaluation_window() -> No
 @pytest.mark.asyncio
 async def test_073_accepts_one_current_transfer_in_and_out_record() -> None:
     result, reduced = await _evaluate(
-        "LX0609-073",
+        "LX0609-10-02-02",
         {
             "inpat_nondrug_order": (
                 {
@@ -3263,7 +3263,7 @@ async def test_073_accepts_one_current_transfer_in_and_out_record() -> None:
     )
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT
-    assert dict(result.customer_display_facts)["LX0609-073"] == {
+    assert dict(result.customer_display_facts)["LX0609-10-02-02"] == {
         "verification_kind": "transfer_record_presence_check",
         "transfer_order_time": "2026-07-01 08:00:00",
         "transfer_in_time": "2026-07-01 09:00:00",
@@ -3276,7 +3276,7 @@ async def test_073_accepts_one_current_transfer_in_and_out_record() -> None:
 @pytest.mark.asyncio
 async def test_073_transfer_date_prevents_historical_record_from_satisfying_presence() -> None:
     _, reduced = await _evaluate(
-        "LX0609-073",
+        "LX0609-10-02-02",
         {
             "inpat_nondrug_order": (
                 {"order_name": "转科医嘱", "prescribed_datetime": "2026-07-01 08:00:00"},
@@ -3300,7 +3300,7 @@ async def test_073_transfer_date_prevents_historical_record_from_satisfying_pres
 @pytest.mark.asyncio
 async def test_073_refuses_to_associate_multiple_current_transfer_candidates() -> None:
     _, reduced = await _evaluate(
-        "LX0609-073",
+        "LX0609-10-02-02",
         {
             "inpat_nondrug_order": ({"order_name": "转科医嘱", "prescribed_datetime": "2026-07-01 08:00:00"},),
             "transfer_in_record": (
@@ -3318,7 +3318,7 @@ async def test_073_refuses_to_associate_multiple_current_transfer_candidates() -
 @pytest.mark.asyncio
 async def test_073_refuses_to_associate_multiple_transfer_orders() -> None:
     _, reduced = await _evaluate(
-        "LX0609-073",
+        "LX0609-10-02-02",
         {
             "inpat_nondrug_order": (
                 {"order_name": "转科医嘱", "prescribed_datetime": "2026-07-01 08:00:00"},
@@ -3336,7 +3336,7 @@ async def test_073_refuses_to_associate_multiple_transfer_orders() -> None:
 @pytest.mark.asyncio
 async def test_074_changed_diagnosis_requires_reason_and_basis() -> None:
     _, reduced = await _evaluate(
-        "LX0609-074",
+        "LX0609-12-02-01",
         {
             "diagnosis": (
                 {
@@ -3367,7 +3367,7 @@ async def test_074_changed_diagnosis_requires_reason_and_basis() -> None:
 @pytest.mark.asyncio
 async def test_074_single_change_requires_changed_diagnosis_reference() -> None:
     _, reduced = await _evaluate(
-        "LX0609-074",
+        "LX0609-12-02-01",
         {
             "diagnosis": (
                 {
@@ -3400,7 +3400,7 @@ async def test_074_single_change_requires_changed_diagnosis_reference() -> None:
 @pytest.mark.asyncio
 async def test_074_single_change_with_changed_diagnosis_reference_is_compliant() -> None:
     _, reduced = await _evaluate(
-        "LX0609-074",
+        "LX0609-12-02-01",
         {
             "diagnosis": (
                 {
@@ -3432,7 +3432,7 @@ async def test_074_single_change_with_changed_diagnosis_reference_is_compliant()
 @pytest.mark.asyncio
 async def test_074_reason_written_before_diagnosis_change_does_not_pass() -> None:
     _, reduced = await _evaluate(
-        "LX0609-074",
+        "LX0609-12-02-01",
         {
             "diagnosis": (
                 {
@@ -3467,7 +3467,7 @@ async def test_074_reason_written_before_diagnosis_change_does_not_pass() -> Non
 @pytest.mark.asyncio
 async def test_074_changed_diagnosis_requires_both_reason_and_basis() -> None:
     _, reduced = await _evaluate(
-        "LX0609-074",
+        "LX0609-12-02-01",
         {
             "diagnosis": (
                 {
@@ -3496,7 +3496,7 @@ async def test_074_changed_diagnosis_requires_both_reason_and_basis() -> None:
 @pytest.mark.asyncio
 async def test_074_parallel_diagnoses_in_distinct_slots_are_not_a_diagnosis_change() -> None:
     execution, reduced = await _evaluate(
-        "LX0609-074",
+        "LX0609-12-02-01",
         {
             "diagnosis": (
                 {
@@ -3524,7 +3524,7 @@ async def test_074_parallel_diagnoses_in_distinct_slots_are_not_a_diagnosis_chan
 @pytest.mark.asyncio
 async def test_074_same_slot_same_time_conflicting_names_refuse_to_infer_change_order() -> None:
     _, reduced = await _evaluate(
-        "LX0609-074",
+        "LX0609-12-02-01",
         {
             "diagnosis": (
                 {
@@ -3550,7 +3550,7 @@ async def test_074_same_slot_same_time_conflicting_names_refuse_to_infer_change_
 @pytest.mark.asyncio
 async def test_074_missing_diagnosis_slot_refuses_to_infer_a_change() -> None:
     _, reduced = await _evaluate(
-        "LX0609-074",
+        "LX0609-12-02-01",
         {
             "diagnosis": (
                 {
@@ -3569,7 +3569,7 @@ async def test_074_missing_diagnosis_slot_refuses_to_infer_a_change() -> None:
 @pytest.mark.asyncio
 async def test_074_reason_and_basis_without_authoritative_course_time_are_data_gap() -> None:
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-074",),
+        ("LX0609-12-02-01",),
         {
             "diagnosis": (
                 {
@@ -3591,7 +3591,7 @@ async def test_074_reason_and_basis_without_authoritative_course_time_are_data_g
         },
     )
     canonical = _canonical_extended_result(
-        rule_id="LX0609-074",
+        rule_id="LX0609-12-02-01",
         snapshot=snapshot,
         materials=materials,
         result=execution,
@@ -3612,7 +3612,7 @@ async def test_074_reason_and_basis_without_authoritative_course_time_are_data_g
 @pytest.mark.asyncio
 async def test_074_multiple_changes_do_not_reuse_one_course_record_for_every_change() -> None:
     execution, reduced = await _evaluate(
-        "LX0609-074",
+        "LX0609-12-02-01",
         {
             "diagnosis": (
                 {
@@ -3647,7 +3647,7 @@ async def test_074_multiple_changes_do_not_reuse_one_course_record_for_every_cha
     assert reduced.final_state is CustomerFinalState.DATA_GAP
     assert reduced.reason_code == "association_failed"
     assert execution.customer_display_facts == ((
-        "LX0609-074",
+        "LX0609-12-02-01",
         {
             "failure_kind": "diagnosis_change_association_failed",
             "diagnosis_record_count": 3,
@@ -3662,7 +3662,7 @@ async def test_074_multiple_changes_do_not_reuse_one_course_record_for_every_cha
 @pytest.mark.asyncio
 async def test_multiple_surgeries_without_document_linkage_are_data_gap() -> None:
     _, reduced = await _evaluate(
-        "LX0609-064",
+        "LX0609-04-05-01",
         {
             "mr_surgery": (
                 {
@@ -3691,7 +3691,7 @@ async def test_multiple_surgeries_without_document_linkage_are_data_gap() -> Non
 async def test_064_065_count_formal_surgery_records_as_distinct_events_not_mr_rows() -> None:
     """正式手术记录是一台手术的唯一事件基准，操作目录不能增加台次。"""
     snapshot, _materials, result, reduced = await _evaluate_selected(
-        ("LX0609-064", "LX0609-065"),
+        ("LX0609-04-05-01", "LX0609-04-05-02"),
         {
             "surgery_record": (
                 {
@@ -3743,9 +3743,9 @@ async def test_064_065_count_formal_surgery_records_as_distinct_events_not_mr_ro
         CustomerFinalState.COMPLIANT,
     ]
     facts_by_rule = dict(result.customer_display_facts)
-    assert facts_by_rule["LX0609-064"]["performed_surgery_count"] == 2
-    assert [item["document_id"] for item in facts_by_rule["LX0609-064"]["surgery_events"]] == ["E1", "E2"]
-    assert [item["document_id"] for item in facts_by_rule["LX0609-065"]["surgery_events"]] == ["E1", "E2"]
+    assert facts_by_rule["LX0609-04-05-01"]["performed_surgery_count"] == 2
+    assert [item["document_id"] for item in facts_by_rule["LX0609-04-05-01"]["surgery_events"]] == ["E1", "E2"]
+    assert [item["document_id"] for item in facts_by_rule["LX0609-04-05-02"]["surgery_events"]] == ["E1", "E2"]
     assert result.llm_call_count == result.total_tokens == 0
     assert snapshot.snapshot_hash
 
@@ -3754,7 +3754,7 @@ async def test_064_065_count_formal_surgery_records_as_distinct_events_not_mr_ro
 async def test_064_requires_surgeon_title_before_round_marker_not_later_mention() -> None:
     """术者姓名出现在“查房记录”之后或普通叙述中，不能算术者查房。"""
     _snapshot, _materials, result, reduced = await _evaluate_selected(
-        ("LX0609-064",),
+        ("LX0609-04-05-01",),
         {
             "surgery_record": ({
                 "document_id": "E1",
@@ -3780,7 +3780,7 @@ async def test_064_requires_surgeon_title_before_round_marker_not_later_mention(
     )
 
     assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
-    facts = dict(result.customer_display_facts)["LX0609-064"]
+    facts = dict(result.customer_display_facts)["LX0609-04-05-01"]
     assert facts["surgery_events"][0]["surgeon_round_present"] is False
     assert result.llm_call_count == result.total_tokens == 0
 
@@ -3789,7 +3789,7 @@ async def test_064_requires_surgeon_title_before_round_marker_not_later_mention(
 async def test_064_uses_surgeon_sign_but_not_generic_surgery_author_as_event_surgeon() -> None:
     """手术事件仅采纳术者专属字段，病程作者字段仍可作为查房医师。"""
     signed_result, signed_reduced = await _evaluate(
-        "LX0609-064",
+        "LX0609-04-05-01",
         {
             "surgery_record": ({
                 "document_id": "E-signed",
@@ -3805,7 +3805,7 @@ async def test_064_uses_surgeon_sign_but_not_generic_surgery_author_as_event_sur
         },
     )
     generic_result, generic_reduced = await _evaluate(
-        "LX0609-064",
+        "LX0609-04-05-01",
         {
             "surgery_record": ({
                 "document_id": "E-generic",
@@ -3833,7 +3833,7 @@ async def test_064_uses_surgeon_sign_but_not_generic_surgery_author_as_event_sur
 async def test_064_accepts_surgeon_named_in_postoperative_round_title() -> None:
     """“术后查房”是查房标题，不应被误认为术者说明。"""
     result, reduced = await _evaluate(
-        "LX0609-064",
+        "LX0609-04-05-01",
         {
             "surgery_record": ({
                 "document_id": "E-postop-round",
@@ -3856,7 +3856,7 @@ async def test_064_accepts_surgeon_named_in_postoperative_round_title() -> None:
     )
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT
-    assert dict(result.customer_display_facts)["LX0609-064"]["surgeon_round_present"] is True
+    assert dict(result.customer_display_facts)["LX0609-04-05-01"]["surgeon_round_present"] is True
     assert result.llm_call_count == result.total_tokens == 0
 
 
@@ -3864,7 +3864,7 @@ async def test_064_accepts_surgeon_named_in_postoperative_round_title() -> None:
 async def test_064_multievent_compatible_summary_reaches_customer_conclusion() -> None:
     """多台手术的汇总事实必须穿过 Reducer、Aggregator 和 Renderer。"""
     snapshot, materials, result, reduced = await _evaluate_selected(
-        ("LX0609-064",),
+        ("LX0609-04-05-01",),
         {
             "surgery_record": (
                 {
@@ -3889,7 +3889,7 @@ async def test_064_multievent_compatible_summary_reaches_customer_conclusion() -
         },
     )
     canonical = _canonical_extended_result(
-        rule_id="LX0609-064",
+        rule_id="LX0609-04-05-01",
         snapshot=snapshot,
         materials=materials,
         result=result,
@@ -3911,7 +3911,7 @@ async def test_064_multievent_compatible_summary_reaches_customer_conclusion() -
 async def test_064_multievent_customer_findings_keep_three_days_and_surgeon_per_event() -> None:
     """相邻两台手术必须逐台展示术后3天与术者，不能合并成4天窗口。"""
     snapshot, materials, result, reduced = await _evaluate_selected(
-        ("LX0609-064",),
+        ("LX0609-04-05-01",),
         {
             "surgery_record": (
                 {
@@ -3937,7 +3937,7 @@ async def test_064_multievent_customer_findings_keep_three_days_and_surgeon_per_
         },
     )
     canonical = _canonical_extended_result(
-        rule_id="LX0609-064",
+        rule_id="LX0609-04-05-01",
         snapshot=snapshot,
         materials=materials,
         result=result,
@@ -3977,7 +3977,7 @@ async def test_064_multievent_customer_findings_keep_three_days_and_surgeon_per_
 @pytest.mark.asyncio
 async def test_065_multievent_compatible_summary_reaches_customer_conclusion() -> None:
     snapshot, materials, result, reduced = await _evaluate_selected(
-        ("LX0609-065",),
+        ("LX0609-04-05-02",),
         {
             "surgery_record": (
                 {
@@ -3998,7 +3998,7 @@ async def test_065_multievent_compatible_summary_reaches_customer_conclusion() -
         },
     )
     canonical = _canonical_extended_result(
-        rule_id="LX0609-065",
+        rule_id="LX0609-04-05-02",
         snapshot=snapshot,
         materials=materials,
         result=result,
@@ -4027,7 +4027,7 @@ async def test_065_multievent_compatible_summary_reaches_customer_conclusion() -
 async def test_065_partial_multievent_delivery_summarizes_unmet_count() -> None:
     """任一手术缺上级查房时，交付文案说明缺失台数而不归属具体文书。"""
     snapshot, materials, result, reduced = await _evaluate_selected(
-        ("LX0609-065",),
+        ("LX0609-04-05-02",),
         {
             "surgery_record": (
                 {
@@ -4054,7 +4054,7 @@ async def test_065_partial_multievent_delivery_summarizes_unmet_count() -> None:
         },
     )
     canonical = _canonical_extended_result(
-        rule_id="LX0609-065",
+        rule_id="LX0609-04-05-02",
         snapshot=snapshot,
         materials=materials,
         result=result,
@@ -4089,7 +4089,7 @@ async def test_065_partial_multievent_delivery_summarizes_unmet_count() -> None:
 @pytest.mark.asyncio
 async def test_064_non_compliant_multievent_delivery_keeps_missing_day_summary() -> None:
     snapshot, materials, result, reduced = await _evaluate_selected(
-        ("LX0609-064",),
+        ("LX0609-04-05-01",),
         {
             "surgery_record": ({
                 "document_id": "E1",
@@ -4105,7 +4105,7 @@ async def test_064_non_compliant_multievent_delivery_keeps_missing_day_summary()
     )
 
     canonical = _canonical_extended_result(
-        rule_id="LX0609-064",
+        rule_id="LX0609-04-05-01",
         snapshot=snapshot,
         materials=materials,
         result=result,
@@ -4124,7 +4124,7 @@ async def test_064_non_compliant_multievent_delivery_keeps_missing_day_summary()
 @pytest.mark.asyncio
 async def test_064_data_gap_delivery_keeps_missing_surgery_time_explanation() -> None:
     snapshot, materials, result, reduced = await _evaluate_selected(
-        ("LX0609-064",),
+        ("LX0609-04-05-01",),
         {
             "surgery_record": ({
                 "document_id": "E1",
@@ -4136,7 +4136,7 @@ async def test_064_data_gap_delivery_keeps_missing_surgery_time_explanation() ->
     )
 
     canonical = _canonical_extended_result(
-        rule_id="LX0609-064",
+        rule_id="LX0609-04-05-01",
         snapshot=snapshot,
         materials=materials,
         result=result,
@@ -4151,7 +4151,7 @@ async def test_064_data_gap_delivery_keeps_missing_surgery_time_explanation() ->
 @pytest.mark.asyncio
 async def test_064_reports_the_specific_formal_surgery_missing_a_postoperative_day() -> None:
     result, reduced = await _evaluate(
-        "LX0609-064",
+        "LX0609-04-05-01",
         {
             "surgery_record": (
                 {
@@ -4176,7 +4176,7 @@ async def test_064_reports_the_specific_formal_surgery_missing_a_postoperative_d
     )
 
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
-    facts = dict(result.customer_display_facts)["LX0609-064"]
+    facts = dict(result.customer_display_facts)["LX0609-04-05-01"]
     assert facts["unmet_surgery_events"] == [
         {
             "document_id": "E2",
@@ -4190,7 +4190,7 @@ async def test_064_reports_the_specific_formal_surgery_missing_a_postoperative_d
 @pytest.mark.asyncio
 async def test_065_does_not_allow_one_surgery_senior_round_to_cover_another() -> None:
     result, reduced = await _evaluate(
-        "LX0609-065",
+        "LX0609-04-05-02",
         {
             "surgery_record": (
                 {
@@ -4211,7 +4211,7 @@ async def test_065_does_not_allow_one_surgery_senior_round_to_cover_another() ->
     )
 
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
-    facts = dict(result.customer_display_facts)["LX0609-065"]
+    facts = dict(result.customer_display_facts)["LX0609-04-05-02"]
     assert facts["unmet_surgery_events"] == [
         {"document_id": "E2", "senior_round_times": []}
     ]
@@ -4221,7 +4221,7 @@ async def test_065_does_not_allow_one_surgery_senior_round_to_cover_another() ->
 @pytest.mark.asyncio
 async def test_064_065_do_not_use_record_time_when_formal_surgery_end_time_is_missing() -> None:
     _snapshot, _materials, _result, reduced = await _evaluate_selected(
-        ("LX0609-064", "LX0609-065"),
+        ("LX0609-04-05-01", "LX0609-04-05-02"),
         {
             "surgery_record": ({
                 "document_id": "E1",
@@ -4254,7 +4254,7 @@ async def test_064_065_do_not_use_record_time_when_formal_surgery_end_time_is_mi
 @pytest.mark.asyncio
 async def test_050_uncertain_diagnosis_after_seven_days_requires_discussion() -> None:
     _, reduced = await _evaluate(
-        "LX0609-050",
+        "LX0609-03-02-01",
         {
             "inpat_registration": ({"admission_datetime": "2026-06-01 08:00:00"},),
             "daily_course_record": ({
@@ -4270,7 +4270,7 @@ async def test_050_uncertain_diagnosis_after_seven_days_requires_discussion() ->
 @pytest.mark.asyncio
 async def test_050_local_reason_pending_does_not_prove_case_diagnosis_uncertain() -> None:
     snapshot, materials, result, reduced_items = await _evaluate_selected(
-        ("LX0609-050",),
+        ("LX0609-03-02-01",),
         {
             "inpat_registration": ({"admission_datetime": "2026-06-01 08:00:00"},),
             "daily_course_record": ({
@@ -4282,7 +4282,7 @@ async def test_050_local_reason_pending_does_not_prove_case_diagnosis_uncertain(
 
     reduced = reduced_items[0]
     canonical = _canonical_extended_result(
-        rule_id="LX0609-050",
+        rule_id="LX0609-03-02-01",
         snapshot=snapshot,
         materials=materials,
         result=result,
@@ -4294,7 +4294,7 @@ async def test_050_local_reason_pending_does_not_prove_case_diagnosis_uncertain(
     assert canonical["status"] == "uncertain"
     assert canonical["reason_code"] == "diagnosis_scope_uncertain"
     assert "不能据此认定缺少疑难病例讨论" in canonical["findings"]
-    assert dict(result.customer_display_facts)["LX0609-050"] == {
+    assert dict(result.customer_display_facts)["LX0609-03-02-01"] == {
         "verification_kind": "uncertain_diagnosis_scope_unverified",
         "admission_time": "2026-06-01 08:00:00",
         "uncertain_record_times": ["2026-06-09 09:00:00"],
@@ -4307,7 +4307,7 @@ async def test_050_local_reason_pending_does_not_prove_case_diagnosis_uncertain(
 @pytest.mark.asyncio
 async def test_050_without_diagnosis_uncertainty_marker_remains_not_applicable() -> None:
     result, reduced = await _evaluate(
-        "LX0609-050",
+        "LX0609-03-02-01",
         {
             "inpat_registration": ({"admission_datetime": "2026-06-01 08:00:00"},),
             "daily_course_record": ({
@@ -4319,7 +4319,7 @@ async def test_050_without_diagnosis_uncertainty_marker_remains_not_applicable()
 
     assert reduced.final_state is CustomerFinalState.NOT_APPLICABLE
     assert reduced.reason_code == "trigger_absent_complete"
-    assert dict(result.customer_display_facts)["LX0609-050"] == {
+    assert dict(result.customer_display_facts)["LX0609-03-02-01"] == {
         "verification_kind": "uncertain_diagnosis_discussion_check",
         "admission_time": "2026-06-01 08:00:00",
         "uncertain_record_times": [],
@@ -4330,20 +4330,20 @@ async def test_050_without_diagnosis_uncertainty_marker_remains_not_applicable()
 @pytest.mark.asyncio
 async def test_050_source_failure_does_not_project_diagnosis_scope_facts() -> None:
     result, reduced = await _evaluate(
-        "LX0609-050",
+        "LX0609-03-02-01",
         {"inpat_registration": ({"admission_datetime": "2026-06-01 08:00:00"},)},
         unavailable_sources=frozenset({"daily_course_record"}),
     )
 
     assert reduced.final_state is CustomerFinalState.DATA_GAP
     assert reduced.reason_code == "source_unavailable"
-    assert "LX0609-050" not in dict(result.customer_display_facts)
+    assert "LX0609-03-02-01" not in dict(result.customer_display_facts)
 
 
 @pytest.mark.asyncio
 async def test_050_uses_admission_record_when_registration_time_is_missing() -> None:
     result, reduced = await _evaluate(
-        "LX0609-050",
+        "LX0609-03-02-01",
         {
             "admission_record": ({"admission_datetime": "2026-06-01 08:00:00"},),
             "daily_course_record": ({
@@ -4358,7 +4358,7 @@ async def test_050_uses_admission_record_when_registration_time_is_missing() -> 
     )
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT
-    facts = dict(result.customer_display_facts)["LX0609-050"]
+    facts = dict(result.customer_display_facts)["LX0609-03-02-01"]
     assert facts["admission_time"] == "2026-06-01 08:00:00"
     assert facts["discussion_count"] == 1
 
@@ -4366,7 +4366,7 @@ async def test_050_uses_admission_record_when_registration_time_is_missing() -> 
 @pytest.mark.asyncio
 async def test_052_unhandled_critical_value_before_exact_deadline_is_not_applicable() -> None:
     result, reduced = await _evaluate(
-        "LX0609-052",
+        "LX0609-06-04-01",
         {
             "labtest_item_report": ({
                 "item_name": "血钾",
@@ -4383,7 +4383,7 @@ async def test_052_unhandled_critical_value_before_exact_deadline_is_not_applica
 
     assert reduced.final_state is CustomerFinalState.NOT_APPLICABLE
     assert reduced.reason_code == "evaluation_window_not_mature"
-    facts = dict(result.customer_display_facts)["LX0609-052"]
+    facts = dict(result.customer_display_facts)["LX0609-06-04-01"]
     assert facts["evaluation_window_mature"] is False
     assert facts["evaluation_time"] == "2026-06-01 19:59:59"
     assert facts["deadline_times"] == ["2026-06-01 20:00:00"]
@@ -4393,7 +4393,7 @@ async def test_052_unhandled_critical_value_before_exact_deadline_is_not_applica
 @pytest.mark.asyncio
 async def test_052_date_only_horizon_on_deadline_day_does_not_guess_maturity() -> None:
     result, reduced = await _evaluate(
-        "LX0609-052",
+        "LX0609-06-04-01",
         {
             "labtest_item_report": ({
                 "item_name": "血钾",
@@ -4409,7 +4409,7 @@ async def test_052_date_only_horizon_on_deadline_day_does_not_guess_maturity() -
 
     assert reduced.final_state is CustomerFinalState.NOT_APPLICABLE
     assert reduced.reason_code == "evaluation_window_not_mature"
-    facts = dict(result.customer_display_facts)["LX0609-052"]
+    facts = dict(result.customer_display_facts)["LX0609-06-04-01"]
     assert facts["evaluation_window_mature"] is False
     assert facts["evaluation_date"] == "2026-06-01"
 
@@ -4424,10 +4424,10 @@ async def test_052_missing_or_conflicting_evaluation_horizon_is_data_gap() -> No
         },),
     }
     missing_result, missing = await _evaluate(
-        "LX0609-052", {**base, "evaluation_context.horizon": ()}
+        "LX0609-06-04-01", {**base, "evaluation_context.horizon": ()}
     )
     conflicting_result, conflicting = await _evaluate(
-        "LX0609-052",
+        "LX0609-06-04-01",
         {
             **base,
             "evaluation_context.horizon": ({
@@ -4442,7 +4442,7 @@ async def test_052_missing_or_conflicting_evaluation_horizon_is_data_gap() -> No
         CustomerFinalState.DATA_GAP,
         "authoritative_time_missing",
     )
-    assert dict(missing_result.customer_display_facts)["LX0609-052"] == {
+    assert dict(missing_result.customer_display_facts)["LX0609-06-04-01"] == {
         "verification_kind": "critical_value_evaluation_horizon_unavailable",
         "issue": "authoritative_time_missing",
     }
@@ -4450,7 +4450,7 @@ async def test_052_missing_or_conflicting_evaluation_horizon_is_data_gap() -> No
         CustomerFinalState.DATA_GAP,
         "authoritative_time_conflict",
     )
-    assert dict(conflicting_result.customer_display_facts)["LX0609-052"] == {
+    assert dict(conflicting_result.customer_display_facts)["LX0609-06-04-01"] == {
         "verification_kind": "critical_value_evaluation_horizon_unavailable",
         "issue": "authoritative_time_conflict",
     }
@@ -4459,7 +4459,7 @@ async def test_052_missing_or_conflicting_evaluation_horizon_is_data_gap() -> No
 @pytest.mark.asyncio
 async def test_052_mature_missing_disposition_stays_non_compliant_while_053_is_unchanged() -> None:
     _snapshot, _materials, result, reduced = await _evaluate_selected(
-        ("LX0609-052", "LX0609-053"),
+        ("LX0609-06-04-01", "LX0609-06-04-02"),
         {
             "labtest_item_report": ({
                 "item_name": "血钾",
@@ -4482,7 +4482,7 @@ async def test_052_mature_missing_disposition_stays_non_compliant_while_053_is_u
 @pytest.mark.asyncio
 async def test_052_window_not_mature_survives_binding_aggregator_and_renderer() -> None:
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-052", "LX0609-053"),
+        ("LX0609-06-04-01", "LX0609-06-04-02"),
         {
             "labtest_item_report": ({
                 "item_name": "血钾",
@@ -4498,7 +4498,7 @@ async def test_052_window_not_mature_survives_binding_aggregator_and_renderer() 
     )
 
     canonical = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-052"}, {"rule_id": "LX0609-053"}],
+        wrapper_rules=[{"rule_id": "LX0609-06-04-01"}, {"rule_id": "LX0609-06-04-02"}],
         execution_results=[],
         reduced_decisions=reduced,
         customer_display_facts=execution.customer_display_facts,
@@ -4509,11 +4509,11 @@ async def test_052_window_not_mature_survives_binding_aggregator_and_renderer() 
     )
 
     by_rule = {item["rule_id"]: item for item in canonical}
-    assert (by_rule["LX0609-052"]["status"], by_rule["LX0609-052"]["reason_code"]) == (
+    assert (by_rule["LX0609-06-04-01"]["status"], by_rule["LX0609-06-04-01"]["reason_code"]) == (
         "not_applicable",
         "evaluation_window_not_mature",
     )
-    assert by_rule["LX0609-052"]["customer_display_facts"] == {
+    assert by_rule["LX0609-06-04-01"]["customer_display_facts"] == {
         "verification_kind": "critical_value_timeliness_check",
         "critical_item_names": ["血钾"],
         "critical_flags": ["PH"],
@@ -4533,9 +4533,9 @@ async def test_052_window_not_mature_survives_binding_aggregator_and_renderer() 
     }
     # 053 只核对处置存在性；052 新增评价终点不得改写其 Canonical 结果。
     assert (
-        by_rule["LX0609-053"]["status"],
-        by_rule["LX0609-053"]["reason_code"],
-        by_rule["LX0609-053"]["customer_display_facts"],
+        by_rule["LX0609-06-04-02"]["status"],
+        by_rule["LX0609-06-04-02"]["reason_code"],
+        by_rule["LX0609-06-04-02"]["customer_display_facts"],
     ) == (
         "non_compliant",
         "required_document_missing",
@@ -4556,7 +4556,7 @@ async def test_052_window_not_mature_survives_binding_aggregator_and_renderer() 
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("rule_id", ["LX0609-052", "LX0609-053"])
+@pytest.mark.parametrize("rule_id", ["LX0609-06-04-01", "LX0609-06-04-02"])
 async def test_critical_value_without_disposition_is_non_compliant(rule_id: str) -> None:
     _, reduced = await _evaluate(
         rule_id,
@@ -4569,7 +4569,7 @@ async def test_critical_value_without_disposition_is_non_compliant(rule_id: str)
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("rule_id", ["LX0609-052", "LX0609-053"])
+@pytest.mark.parametrize("rule_id", ["LX0609-06-04-01", "LX0609-06-04-02"])
 async def test_critical_value_master_without_result_detail_is_data_gap(
     rule_id: str,
 ) -> None:
@@ -4597,7 +4597,7 @@ async def test_critical_value_master_without_result_detail_is_data_gap(
 @pytest.mark.asyncio
 async def test_critical_value_accepts_customer_abnormal_indicator() -> None:
     _, reduced = await _evaluate(
-        "LX0609-052",
+        "LX0609-06-04-01",
         {"labtest_item_report": ({
             "item_name": "白细胞计数",
             "result": "1.0",
@@ -4611,7 +4611,7 @@ async def test_critical_value_accepts_customer_abnormal_indicator() -> None:
 @pytest.mark.asyncio
 async def test_critical_value_rules_use_one_public_execution_with_timely_disposition() -> None:
     _snapshot, _materials, result, reduced = await _evaluate_selected(
-        ("LX0609-052", "LX0609-053"),
+        ("LX0609-06-04-01", "LX0609-06-04-02"),
         {
             "labtest_item_report": ({
                 "item_name": "血钾",
@@ -4626,9 +4626,9 @@ async def test_critical_value_rules_use_one_public_execution_with_timely_disposi
         },
     )
 
-    assert result.planned_rule_ids == ("LX0609-052", "LX0609-053")
+    assert result.planned_rule_ids == ("LX0609-06-04-01", "LX0609-06-04-02")
     assert [item.rule_id for item in result.decisions] == [
-        "LX0609-052", "LX0609-053",
+        "LX0609-06-04-01", "LX0609-06-04-02",
     ]
     assert [item.reason_code for item in result.decisions] == [
         "requirement_within_threshold",
@@ -4639,7 +4639,7 @@ async def test_critical_value_rules_use_one_public_execution_with_timely_disposi
         CustomerFinalState.COMPLIANT,
     ]
     display = dict(result.customer_display_facts)
-    assert display["LX0609-052"] == {
+    assert display["LX0609-06-04-01"] == {
         "verification_kind": "critical_value_timeliness_check",
         "critical_item_names": ["血钾"],
         "critical_flags": ["PH"],
@@ -4656,7 +4656,7 @@ async def test_critical_value_rules_use_one_public_execution_with_timely_disposi
             "outcome": "timely",
         }],
     }
-    assert display["LX0609-053"] == {
+    assert display["LX0609-06-04-02"] == {
         "verification_kind": "critical_value_disposition_presence_check",
         "critical_item_names": ["血钾"],
         "critical_flags": ["PH"],
@@ -4683,7 +4683,7 @@ async def test_critical_value_disposition_cannot_cover_two_distinct_reports() ->
     """同一处置记录不能被跨报告的两个危急值重复认领。"""
 
     _snapshot, _materials, result, reduced = await _evaluate_selected(
-        ("LX0609-052", "LX0609-053"),
+        ("LX0609-06-04-01", "LX0609-06-04-02"),
         {
             "labtest_item_report": (
                 {
@@ -4715,7 +4715,7 @@ async def test_critical_value_disposition_cannot_cover_two_distinct_reports() ->
         "required_document_missing",
     ]
     expected_event_results = {
-        "LX0609-052": [
+        "LX0609-06-04-01": [
             {
                 "critical_item_names": ["血钾"],
                 "critical_flags": ["PH"],
@@ -4731,7 +4731,7 @@ async def test_critical_value_disposition_cannot_cover_two_distinct_reports() ->
                 "outcome": "unhandled",
             },
         ],
-        "LX0609-053": [
+        "LX0609-06-04-02": [
             {
                 "critical_item_names": ["血钾"],
                 "critical_flags": ["PH"],
@@ -4758,7 +4758,7 @@ async def test_critical_value_single_report_rejects_explicitly_mismatched_dispos
     """单事件只兼容无业务键的旧处置，不能接受明确属于另一报告的记录。"""
 
     _snapshot, _materials, result, reduced = await _evaluate_selected(
-        ("LX0609-052", "LX0609-053"),
+        ("LX0609-06-04-01", "LX0609-06-04-02"),
         {
             "labtest_item_report": ({
                 "test_id": "LAB-A",
@@ -4781,7 +4781,7 @@ async def test_critical_value_single_report_rejects_explicitly_mismatched_dispos
         "association_failed",
         "association_failed",
     ]
-    for rule_id in ("LX0609-052", "LX0609-053"):
+    for rule_id in ("LX0609-06-04-01", "LX0609-06-04-02"):
         assert dict(result.customer_display_facts)[rule_id]["event_results"] == [{
             "critical_item_names": ["血钾"],
             "critical_flags": ["PH"],
@@ -4797,7 +4797,7 @@ async def test_critical_value_same_report_items_can_share_one_disposition() -> N
     """同一检验报告的多个危急项目属于一个事件，可共享其处置记录。"""
 
     _snapshot, _materials, result, reduced = await _evaluate_selected(
-        ("LX0609-052", "LX0609-053"),
+        ("LX0609-06-04-01", "LX0609-06-04-02"),
         {
             "labtest_item_report": (
                 {"test_id": "LAB-ONE", "item_name": "血钾", "result_flag": "PH", "report_time": "2026-06-01 08:00:00"},
@@ -4815,7 +4815,7 @@ async def test_critical_value_same_report_items_can_share_one_disposition() -> N
         "requirement_within_threshold",
         "requirement_satisfied",
     ]
-    for rule_id in ("LX0609-052", "LX0609-053"):
+    for rule_id in ("LX0609-06-04-01", "LX0609-06-04-02"):
         facts = dict(result.customer_display_facts)[rule_id]
         assert facts["event_results"][0]["critical_item_names"] == ["血钾", "血钙"]
         assert facts["event_results"][0]["report_time"] == "2026-06-01 08:00:00"
@@ -4828,7 +4828,7 @@ async def test_critical_value_same_test_id_different_report_times_refuse_cross_e
     """同项目不同报告时间不能因共用 test_id 而把一次处置覆盖到两次报告。"""
 
     _snapshot, _materials, result, reduced = await _evaluate_selected(
-        ("LX0609-052", "LX0609-053"),
+        ("LX0609-06-04-01", "LX0609-06-04-02"),
         {
             "labtest_item_report": (
                 {
@@ -4859,7 +4859,7 @@ async def test_critical_value_same_test_id_different_report_times_refuse_cross_e
         "association_failed",
         "association_failed",
     ]
-    for rule_id in ("LX0609-052", "LX0609-053"):
+    for rule_id in ("LX0609-06-04-01", "LX0609-06-04-02"):
         facts = dict(result.customer_display_facts)[rule_id]
         assert [item["report_time"] for item in facts["event_results"]] == [
             "2026-06-01 08:00:00",
@@ -4878,7 +4878,7 @@ async def test_critical_value_report_id_overrides_shared_test_id_for_association
     """同一申请下多份报告必须优先按报告标识逐份核对。"""
 
     _snapshot, _materials, result, reduced = await _evaluate_selected(
-        ("LX0609-052", "LX0609-053"),
+        ("LX0609-06-04-01", "LX0609-06-04-02"),
         {
             "labtest_item_report": (
                 {
@@ -4917,11 +4917,11 @@ async def test_critical_value_report_id_overrides_shared_test_id_for_association
         "threshold_exceeded",
         "required_document_missing",
     ]
-    for rule_id in ("LX0609-052", "LX0609-053"):
+    for rule_id in ("LX0609-06-04-01", "LX0609-06-04-02"):
         assert [
             item["outcome"]
             for item in dict(result.customer_display_facts)[rule_id]["event_results"]
-        ] == (["timely", "unhandled"] if rule_id == "LX0609-052" else ["handled", "unhandled"])
+        ] == (["timely", "unhandled"] if rule_id == "LX0609-06-04-01" else ["handled", "unhandled"])
 
 
 @pytest.mark.asyncio
@@ -4929,7 +4929,7 @@ async def test_critical_value_text_marker_survives_canonical_customer_projection
     """正文中的 (PL/PH) 标记必须被归一化，不能让 Canonical 拒绝结果。"""
 
     _snapshot, _materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-052", "LX0609-053"),
+        ("LX0609-06-04-01", "LX0609-06-04-02"),
         {
             "labtest_item_report": (
                 {
@@ -4942,7 +4942,7 @@ async def test_critical_value_text_marker_survives_canonical_customer_projection
     )
 
     canonical = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-052"}, {"rule_id": "LX0609-053"}],
+        wrapper_rules=[{"rule_id": "LX0609-06-04-01"}, {"rule_id": "LX0609-06-04-02"}],
         execution_results=[],
         reduced_decisions=reduced,
         customer_display_facts=execution.customer_display_facts,
@@ -4959,7 +4959,7 @@ async def test_critical_value_conflicting_markers_are_data_gap_without_canonical
     """同一结果出现相互冲突标记时只能待核，不能投影为空标记。"""
 
     _snapshot, _materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-052", "LX0609-053"),
+        ("LX0609-06-04-01", "LX0609-06-04-02"),
         {
             "labtest_item_report": (
                 {
@@ -4982,7 +4982,7 @@ async def test_critical_value_conflicting_markers_are_data_gap_without_canonical
     ]
     assert execution.customer_display_facts == ()
     canonical = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-052"}, {"rule_id": "LX0609-053"}],
+        wrapper_rules=[{"rule_id": "LX0609-06-04-01"}, {"rule_id": "LX0609-06-04-02"}],
         execution_results=[],
         reduced_decisions=reduced,
         customer_display_facts=execution.customer_display_facts,
@@ -4995,7 +4995,7 @@ async def test_critical_value_ignores_crisis_document_id_as_cross_table_key() ->
     """危急值处置文书自身 ID 不是跨表业务键，单事件按无键兼容规则核对。"""
 
     _snapshot, _materials, result, reduced = await _evaluate_selected(
-        ("LX0609-052", "LX0609-053"),
+        ("LX0609-06-04-01", "LX0609-06-04-02"),
         {
             "labtest_item_report": (
                 {
@@ -5034,7 +5034,7 @@ async def test_critical_value_multi_report_without_disposition_key_is_data_gap()
     """多报告时处置记录缺少关联键，不得按时间把它分配给某个报告。"""
 
     _snapshot, _materials, result, reduced = await _evaluate_selected(
-        ("LX0609-052", "LX0609-053"),
+        ("LX0609-06-04-01", "LX0609-06-04-02"),
         {
             "labtest_item_report": (
                 {"test_id": "LAB-08", "item_name": "血钾", "result_flag": "PH", "report_time": "2026-06-01 08:00:00"},
@@ -5052,7 +5052,7 @@ async def test_critical_value_multi_report_without_disposition_key_is_data_gap()
         "association_failed",
         "association_failed",
     ]
-    for rule_id in ("LX0609-052", "LX0609-053"):
+    for rule_id in ("LX0609-06-04-01", "LX0609-06-04-02"):
         assert [
             item["outcome"]
             for item in dict(result.customer_display_facts)[rule_id]["event_results"]
@@ -5066,7 +5066,7 @@ async def test_critical_value_association_failure_is_not_rendered_as_matched_or_
     """关联失败必须明确告知存在处置、但不能唯一对应，不能覆盖成旧的存在性文案。"""
 
     _snapshot, _materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-052", "LX0609-053"),
+        ("LX0609-06-04-01", "LX0609-06-04-02"),
         {
             "labtest_item_report": (
                 {
@@ -5087,7 +5087,7 @@ async def test_critical_value_association_failure_is_not_rendered_as_matched_or_
     )
 
     canonical = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-052"}, {"rule_id": "LX0609-053"}],
+        wrapper_rules=[{"rule_id": "LX0609-06-04-01"}, {"rule_id": "LX0609-06-04-02"}],
         execution_results=[],
         reduced_decisions=reduced,
         customer_display_facts=execution.customer_display_facts,
@@ -5107,7 +5107,7 @@ async def test_critical_value_association_failure_is_not_rendered_as_matched_or_
 @pytest.mark.asyncio
 async def test_critical_value_rules_preserve_canonical_customer_delivery() -> None:
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-052", "LX0609-053"),
+        ("LX0609-06-04-01", "LX0609-06-04-02"),
         {
             "labtest_item_report": ({
                 "item_name": "血钾",
@@ -5124,8 +5124,8 @@ async def test_critical_value_rules_preserve_canonical_customer_delivery() -> No
 
     canonical = aggregate_luxian_0609_results(
         wrapper_rules=[
-            {"rule_id": "LX0609-052"},
-            {"rule_id": "LX0609-053"},
+            {"rule_id": "LX0609-06-04-01"},
+            {"rule_id": "LX0609-06-04-02"},
         ],
         execution_results=[],
         reduced_decisions=reduced,
@@ -5149,7 +5149,7 @@ async def test_critical_value_rules_preserve_canonical_customer_delivery() -> No
         for item in canonical
     ] == [
         (
-            "LX0609-052",
+            "LX0609-06-04-01",
             "compliant",
             "requirement_within_threshold",
             True,
@@ -5159,7 +5159,7 @@ async def test_critical_value_rules_preserve_canonical_customer_delivery() -> No
             "继续保持。",
         ),
         (
-            "LX0609-053",
+            "LX0609-06-04-02",
             "compliant",
             "requirement_satisfied",
             True,
@@ -5208,7 +5208,7 @@ async def test_critical_value_rules_preserve_canonical_customer_delivery() -> No
 @pytest.mark.asyncio
 async def test_critical_value_fact_refs_only_include_actual_event_and_earliest_disposition() -> None:
     snapshot, materials, execution, _reduced = await _evaluate_selected(
-        ("LX0609-052", "LX0609-053"),
+        ("LX0609-06-04-01", "LX0609-06-04-02"),
         {
             "labtest_item_report": (
                 {
@@ -5258,21 +5258,21 @@ async def test_critical_value_fact_refs_only_include_actual_event_and_earliest_d
     expected_refs = tuple(sorted((critical_item_ref, earliest_disposition_ref)))
     by_rule = {item.rule_id: item for item in execution.decisions}
 
-    assert by_rule["LX0609-052"].fact_refs == expected_refs
-    assert by_rule["LX0609-053"].fact_refs == expected_refs
+    assert by_rule["LX0609-06-04-01"].fact_refs == expected_refs
+    assert by_rule["LX0609-06-04-02"].fact_refs == expected_refs
     later_disposition_ref = next(
         reference
         for reference, row in crisis_rows
         if row["record_time"] == "2026-06-01 18:00:00"
     )
-    assert later_disposition_ref not in by_rule["LX0609-052"].fact_refs
-    assert horizon_rows[0][0] not in by_rule["LX0609-052"].fact_refs
+    assert later_disposition_ref not in by_rule["LX0609-06-04-01"].fact_refs
+    assert horizon_rows[0][0] not in by_rule["LX0609-06-04-01"].fact_refs
 
 
 @pytest.mark.asyncio
 async def test_critical_value_ambiguous_disposition_never_guesses_disposition_fact_refs() -> None:
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-052", "LX0609-053"),
+        ("LX0609-06-04-01", "LX0609-06-04-02"),
         {
             "labtest_item_report": (
                 {
@@ -5312,7 +5312,7 @@ async def test_critical_value_ambiguous_disposition_never_guesses_disposition_fa
 @pytest.mark.asyncio
 async def test_critical_value_detail_gap_only_projects_confirmed_master_fact_refs() -> None:
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-052", "LX0609-053"),
+        ("LX0609-06-04-01", "LX0609-06-04-02"),
         {
             "labtest_master": (
                 {"report_id": "master-1"},
@@ -5467,12 +5467,12 @@ async def test_critical_value_rules_freeze_dual_rule_outcomes(
     expected_reasons,
 ) -> None:
     _snapshot, _materials, result, reduced = await _evaluate_selected(
-        ("LX0609-052", "LX0609-053"),
+        ("LX0609-06-04-01", "LX0609-06-04-02"),
         rows_by_source,
         unavailable_sources=unavailable_sources,
     )
 
-    assert result.planned_rule_ids == ("LX0609-052", "LX0609-053")
+    assert result.planned_rule_ids == ("LX0609-06-04-01", "LX0609-06-04-02")
     assert [item.final_state for item in reduced] == list(expected_states)
     assert [item.reason_code for item in reduced] == list(expected_reasons)
     assert result.llm_call_count == 0
@@ -5485,7 +5485,7 @@ async def test_critical_value_rules_recognize_all_existing_text_markers(
     marker: str,
 ) -> None:
     _snapshot, _materials, result, reduced = await _evaluate_selected(
-        ("LX0609-052", "LX0609-053"),
+        ("LX0609-06-04-01", "LX0609-06-04-02"),
         {
             "labtest_item_report": ({
                 "item_name": "血钾",
@@ -5495,7 +5495,7 @@ async def test_critical_value_rules_recognize_all_existing_text_markers(
         },
     )
 
-    assert result.planned_rule_ids == ("LX0609-052", "LX0609-053")
+    assert result.planned_rule_ids == ("LX0609-06-04-01", "LX0609-06-04-02")
     assert [item.final_state for item in reduced] == [
         CustomerFinalState.NON_COMPLIANT,
         CustomerFinalState.NON_COMPLIANT,
@@ -5505,8 +5505,8 @@ async def test_critical_value_rules_recognize_all_existing_text_markers(
         "required_document_missing",
     ]
     display = dict(result.customer_display_facts)
-    assert display["LX0609-052"]["critical_item_names"] == ["血钾"]
-    assert display["LX0609-053"]["critical_item_names"] == ["血钾"]
+    assert display["LX0609-06-04-01"]["critical_item_names"] == ["血钾"]
+    assert display["LX0609-06-04-02"]["critical_item_names"] == ["血钾"]
     assert result.llm_call_count == 0
     assert result.total_tokens == 0
 
@@ -5522,23 +5522,23 @@ async def test_critical_value_rules_keep_catalog_order_for_reversed_input() -> N
         "crisis_value_record": ({"record_time": "2026-06-01 16:00:00"},),
     })
     result = await execute_luxian_0609_native_extended_document_rules(
-        rule_ids=("LX0609-053", "LX0609-052"),
+        rule_ids=("LX0609-06-04-02", "LX0609-06-04-01"),
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-053", "LX0609-052"),
+        decision_rule_ids=("LX0609-06-04-02", "LX0609-06-04-01"),
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-052", "LX0609-053"),
+        expected_rule_ids=("LX0609-06-04-01", "LX0609-06-04-02"),
         snapshot=snapshot,
         evidence_materials=materials,
     )
 
-    assert result.planned_rule_ids == ("LX0609-052", "LX0609-053")
+    assert result.planned_rule_ids == ("LX0609-06-04-01", "LX0609-06-04-02")
     assert [item.rule_id for item in result.decisions] == [
-        "LX0609-052", "LX0609-053",
+        "LX0609-06-04-01", "LX0609-06-04-02",
     ]
-    assert [item.rule_id for item in reduced] == ["LX0609-052", "LX0609-053"]
+    assert [item.rule_id for item in reduced] == ["LX0609-06-04-01", "LX0609-06-04-02"]
     assert [item.final_state for item in reduced] == [
         CustomerFinalState.COMPLIANT,
         CustomerFinalState.COMPLIANT,
@@ -5560,7 +5560,7 @@ async def test_large_lab_evidence_keeps_extended_family_decisions(count) -> None
             "result_flag": "N", "report_time": "2026-06-01 14:00:00",
         } for index in range(count)),
     })
-    scope = ("LX0609-051", "LX0609-052", "LX0609-053", "LX0609-060")
+    scope = ("LX0609-09-02-01", "LX0609-06-04-01", "LX0609-06-04-02", "LX0609-04-02-06")
     result = await execute_luxian_0609_native_extended_document_rules(
         rule_ids=scope, decision_rule_ids=scope,
         evidence_snapshot=snapshot, evidence_materials=materials,
@@ -5587,12 +5587,12 @@ async def test_critical_marker_after_128_normal_items_is_not_discarded() -> None
                   "result_flag": "N", "report_time": "2026-06-01 14:00:00"}
                  for i in range(300))
     _, _, result, reduced = await _evaluate_selected(
-        ("LX0609-052", "LX0609-053"),
+        ("LX0609-06-04-01", "LX0609-06-04-02"),
         {"labtest_item_report": rows + ({"id": "critical-last", "item_name": "血钾",
           "result_flag": "PH", "report_time": "2026-06-01 14:00:00"},)},
     )
     assert all(item.final_state is CustomerFinalState.NON_COMPLIANT for item in reduced)
-    assert dict(result.customer_display_facts)["LX0609-052"]["critical_item_names"] == ["血钾"]
+    assert dict(result.customer_display_facts)["LX0609-06-04-01"]["critical_item_names"] == ["血钾"]
     assert result.llm_call_count == 0
 
 
@@ -5617,10 +5617,10 @@ async def test_critical_value_rules_are_repeatable_for_one_evidence_session() ->
         ),
     })
     kwargs = {
-        "rule_ids": ("LX0609-052", "LX0609-053"),
+        "rule_ids": ("LX0609-06-04-01", "LX0609-06-04-02"),
         "evidence_snapshot": snapshot,
         "evidence_materials": materials,
-        "decision_rule_ids": ("LX0609-052", "LX0609-053"),
+        "decision_rule_ids": ("LX0609-06-04-01", "LX0609-06-04-02"),
     }
 
     first = await execute_luxian_0609_native_extended_document_rules(**kwargs)
@@ -5653,10 +5653,10 @@ def test_discharge_medication_labels_form_a_structured_contract() -> None:
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "rule_id",
-    ["LX0609-054", "LX0609-055", "LX0609-056", "LX0609-058"],
+    ["LX0609-05-01-02", "LX0609-05-01-03", "LX0609-05-01-04", "LX0609-05-01-06"],
 )
 async def test_controlled_antimicrobial_evidence_is_compliant(rule_id: str) -> None:
-    client = _AntimicrobialActionClient() if rule_id == "LX0609-054" else None
+    client = _AntimicrobialActionClient() if rule_id == "LX0609-05-01-02" else None
     result, reduced = await _evaluate(
         rule_id,
         {
@@ -5690,7 +5690,7 @@ async def test_controlled_antimicrobial_evidence_is_compliant(rule_id: str) -> N
         llm_client=client,
     )
     assert reduced.final_state is CustomerFinalState.COMPLIANT
-    expected_calls = 1 if rule_id == "LX0609-054" else 0
+    expected_calls = 1 if rule_id == "LX0609-05-01-02" else 0
     assert result.llm_call_count == expected_calls
     assert result.prompt_tokens == expected_calls * 10
     assert result.completion_tokens == expected_calls * 5
@@ -5700,7 +5700,7 @@ async def test_controlled_antimicrobial_evidence_is_compliant(rule_id: str) -> N
 @pytest.mark.asyncio
 async def test_054_bare_antimicrobial_action_without_reason_is_non_compliant() -> None:
     _, reduced = await _evaluate(
-        "LX0609-054",
+        "LX0609-05-01-02",
         {
             "inpat_drug_order": ({
                 "generic_name": "美罗培南",
@@ -5719,7 +5719,7 @@ async def test_054_bare_antimicrobial_action_without_reason_is_non_compliant() -
 @pytest.mark.asyncio
 async def test_054_unacted_second_order_does_not_create_a_second_trigger_event() -> None:
     result, reduced = await _evaluate(
-        "LX0609-054",
+        "LX0609-05-01-02",
         {
             "inpat_drug_order": (
                 {"order_id": "A-1", "generic_name": "美罗培南"},
@@ -5734,7 +5734,7 @@ async def test_054_unacted_second_order_does_not_create_a_second_trigger_event()
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT
     assert reduced.reason_code == "requirement_satisfied"
-    facts = dict(result.customer_display_facts)["LX0609-054"]
+    facts = dict(result.customer_display_facts)["LX0609-05-01-02"]
     assert facts["reason_documented"] is True
     assert facts["antimicrobials"] == ["美罗培南"]
     assert facts["unmatched_antimicrobials"] == []
@@ -5743,7 +5743,7 @@ async def test_054_unacted_second_order_does_not_create_a_second_trigger_event()
 @pytest.mark.asyncio
 async def test_054_antimicrobial_orders_without_documented_action_are_not_applicable() -> None:
     result, reduced = await _evaluate(
-        "LX0609-054",
+        "LX0609-05-01-02",
         {
             "inpat_drug_order": (
                 {"order_id": "M-1", "generic_name": "美罗培南"},
@@ -5756,13 +5756,13 @@ async def test_054_antimicrobial_orders_without_documented_action_are_not_applic
 
     assert reduced.final_state is CustomerFinalState.NOT_APPLICABLE
     assert reduced.reason_code == "trigger_absent_complete"
-    assert "LX0609-054" not in dict(result.customer_display_facts)
+    assert "LX0609-05-01-02" not in dict(result.customer_display_facts)
 
 
 @pytest.mark.asyncio
 async def test_054_multiple_same_drug_actions_cannot_share_one_unlinked_reason() -> None:
     result, reduced = await _evaluate(
-        "LX0609-054",
+        "LX0609-05-01-02",
         {
             "inpat_drug_order": (
                 {"order_id": "M-1", "generic_name": "美罗培南"},
@@ -5790,7 +5790,7 @@ async def test_054_multiple_same_drug_actions_cannot_share_one_unlinked_reason()
 
     assert reduced.final_state is CustomerFinalState.DATA_GAP
     assert reduced.reason_code == "association_failed"
-    facts = dict(result.customer_display_facts)["LX0609-054"]
+    facts = dict(result.customer_display_facts)["LX0609-05-01-02"]
     assert facts["reason_documented"] is False
     assert facts["unmatched_antimicrobials"] == ["美罗培南"]
     assert facts["association_ambiguous"] is True
@@ -5808,7 +5808,7 @@ async def test_054_action_without_a_matching_current_antimicrobial_order_is_data
     orders,
 ) -> None:
     result, reduced = await _evaluate(
-        "LX0609-054",
+        "LX0609-05-01-02",
         {
             "inpat_drug_order": orders,
             "daily_course_record": ({
@@ -5820,7 +5820,7 @@ async def test_054_action_without_a_matching_current_antimicrobial_order_is_data
 
     assert reduced.final_state is CustomerFinalState.DATA_GAP
     assert reduced.reason_code == "association_failed"
-    facts = dict(result.customer_display_facts)["LX0609-054"]
+    facts = dict(result.customer_display_facts)["LX0609-05-01-02"]
     assert facts["antimicrobials"] == ["美罗培南"]
     assert facts["association_ambiguous"] is True
 
@@ -5828,7 +5828,7 @@ async def test_054_action_without_a_matching_current_antimicrobial_order_is_data
 @pytest.mark.asyncio
 async def test_054_explicit_action_with_same_record_reason_is_compliant() -> None:
     result, reduced = await _evaluate(
-        "LX0609-054",
+        "LX0609-05-01-02",
         {
             "inpat_drug_order": ({"order_id": "M-1", "generic_name": "美罗培南"},),
             "daily_course_record": ({
@@ -5840,7 +5840,7 @@ async def test_054_explicit_action_with_same_record_reason_is_compliant() -> Non
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT
     assert reduced.reason_code == "requirement_satisfied"
-    facts = dict(result.customer_display_facts)["LX0609-054"]
+    facts = dict(result.customer_display_facts)["LX0609-05-01-02"]
     assert facts["reason_documented"] is True
     assert facts["unmatched_antimicrobials"] == []
     assert facts["association_ambiguous"] is False
@@ -5849,7 +5849,7 @@ async def test_054_explicit_action_with_same_record_reason_is_compliant() -> Non
 @pytest.mark.asyncio
 async def test_054_change_after_infusion_pruritus_has_documented_reason() -> None:
     result, reduced = await _evaluate(
-        "LX0609-054",
+        "LX0609-05-01-02",
         {
             "inpat_drug_order": (
                 {"order_id": "L-1", "generic_name": "左氧氟沙星"},
@@ -5868,7 +5868,7 @@ async def test_054_change_after_infusion_pruritus_has_documented_reason() -> Non
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT
     assert reduced.reason_code == "requirement_satisfied"
-    facts = dict(result.customer_display_facts)["LX0609-054"]
+    facts = dict(result.customer_display_facts)["LX0609-05-01-02"]
     assert facts["antimicrobials"] == ["头孢呋辛", "左氧氟沙星"]
     assert facts["action_count"] == 2
     assert facts["reason_documented"] is True
@@ -6098,7 +6098,7 @@ async def test_054_recognizes_only_affirmed_yuyi_antimicrobial_action(
         else "no_action"
     )
     _, reduced = await _evaluate(
-        "LX0609-054",
+        "LX0609-05-01-02",
         {
             "inpat_drug_order": ({
                 "order_id": "L-1",
@@ -6120,7 +6120,7 @@ async def test_054_recognizes_only_affirmed_yuyi_antimicrobial_action(
 async def test_054_semantic_uncertainty_is_explicit_evaluation_unknown_with_usage() -> None:
     client = _AntimicrobialActionClient("uncertain")
     result, reduced = await _evaluate(
-        "LX0609-054",
+        "LX0609-05-01-02",
         {
             "inpat_drug_order": ({
                 "order_id": "L-1",
@@ -6144,7 +6144,7 @@ async def test_054_semantic_uncertainty_is_explicit_evaluation_unknown_with_usag
 @pytest.mark.asyncio
 async def test_054_semantic_candidate_without_model_is_technical_error() -> None:
     result, reduced = await _evaluate(
-        "LX0609-054",
+        "LX0609-05-01-02",
         {
             "inpat_drug_order": ({
                 "order_id": "L-1",
@@ -6165,29 +6165,29 @@ async def test_054_semantic_candidate_without_model_is_technical_error() -> None
 @pytest.mark.asyncio
 async def test_054_unavailable_course_source_remains_data_gap() -> None:
     result, reduced = await _evaluate(
-        "LX0609-054",
+        "LX0609-05-01-02",
         {"inpat_drug_order": ({"generic_name": "美罗培南"},)},
         unavailable_sources={"daily_course_record"},
     )
 
     assert reduced.final_state is CustomerFinalState.DATA_GAP
     assert reduced.reason_code == "source_unavailable"
-    assert "LX0609-054" not in dict(result.customer_display_facts)
+    assert "LX0609-05-01-02" not in dict(result.customer_display_facts)
 
 
 @pytest.mark.asyncio
 async def test_054_without_antimicrobial_is_not_applicable() -> None:
-    result, reduced = await _evaluate("LX0609-054", {"inpat_drug_order": ()})
+    result, reduced = await _evaluate("LX0609-05-01-02", {"inpat_drug_order": ()})
 
     assert reduced.final_state is CustomerFinalState.NOT_APPLICABLE
     assert reduced.reason_code == "trigger_absent_complete"
-    assert "LX0609-054" not in dict(result.customer_display_facts)
+    assert "LX0609-05-01-02" not in dict(result.customer_display_facts)
 
 
 @pytest.mark.asyncio
 async def test_054_order_only_case_survives_binding_aggregator_and_renderer() -> None:
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-054",),
+        ("LX0609-05-01-02",),
         {
             "inpat_drug_order": ({
                 "order_id": "M-1",
@@ -6201,7 +6201,7 @@ async def test_054_order_only_case_survives_binding_aggregator_and_renderer() ->
     )
 
     canonical = _canonical_extended_result(
-        rule_id="LX0609-054",
+        rule_id="LX0609-05-01-02",
         snapshot=snapshot,
         materials=materials,
         result=execution,
@@ -6223,7 +6223,7 @@ async def test_054_order_only_case_survives_binding_aggregator_and_renderer() ->
 @pytest.mark.asyncio
 async def test_057_empiric_antimicrobial_without_reason_is_non_compliant() -> None:
     _, reduced = await _evaluate(
-        "LX0609-057",
+        "LX0609-05-01-05",
         {
             "inpat_drug_order": ({
                 "generic_name": "美罗培南",
@@ -6241,7 +6241,7 @@ async def test_057_empiric_antimicrobial_without_reason_is_non_compliant() -> No
 @pytest.mark.asyncio
 async def test_057_culture_then_start_and_susceptibility_adjustment_is_not_empiric_use() -> None:
     result, reduced = await _evaluate(
-        "LX0609-057",
+        "LX0609-05-01-05",
         {
             "inpat_drug_order": ({"generic_name": "美罗培南"},),
             "daily_course_record": ({
@@ -6253,13 +6253,13 @@ async def test_057_culture_then_start_and_susceptibility_adjustment_is_not_empir
 
     assert reduced.final_state is CustomerFinalState.NOT_APPLICABLE
     assert reduced.reason_code == "trigger_absent_complete"
-    assert "LX0609-057" not in dict(result.customer_display_facts)
+    assert "LX0609-05-01-05" not in dict(result.customer_display_facts)
 
 
 @pytest.mark.asyncio
 async def test_057_generic_culture_then_start_sequence_is_not_empiric_use() -> None:
     _, reduced = await _evaluate(
-        "LX0609-057",
+        "LX0609-05-01-05",
         {
             "inpat_drug_order": ({"generic_name": "美罗培南"},),
             "daily_course_record": ({
@@ -6275,7 +6275,7 @@ async def test_057_generic_culture_then_start_sequence_is_not_empiric_use() -> N
 @pytest.mark.asyncio
 async def test_057_antimicrobial_order_without_explicit_empiric_use_is_not_applicable() -> None:
     _, reduced = await _evaluate(
-        "LX0609-057",
+        "LX0609-05-01-05",
         {
             "inpat_drug_order": ({"generic_name": "美罗培南"},),
             "daily_course_record": (),
@@ -6290,7 +6290,7 @@ async def test_057_antimicrobial_order_without_explicit_empiric_use_is_not_appli
 @pytest.mark.asyncio
 async def test_057_explicit_empiric_use_with_reason_is_compliant() -> None:
     result, reduced = await _evaluate(
-        "LX0609-057",
+        "LX0609-05-01-05",
         {
             "inpat_drug_order": ({"order_id": "A-1", "generic_name": "美罗培南"},),
             "daily_course_record": ({
@@ -6302,13 +6302,13 @@ async def test_057_explicit_empiric_use_with_reason_is_compliant() -> None:
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT
     assert reduced.reason_code == "requirement_satisfied"
-    assert dict(result.customer_display_facts)["LX0609-057"]["empiric_use_confirmed"] is True
+    assert dict(result.customer_display_facts)["LX0609-05-01-05"]["empiric_use_confirmed"] is True
 
 
 @pytest.mark.asyncio
 async def test_057_explicit_empiric_use_without_unique_drug_event_is_data_gap() -> None:
     _, reduced = await _evaluate(
-        "LX0609-057",
+        "LX0609-05-01-05",
         {
             "inpat_drug_order": (
                 {"order_id": "A-1", "generic_name": "美罗培南"},
@@ -6372,7 +6372,7 @@ async def test_054_and_057_group_strict_duplicate_order_rows_and_keep_all_refs()
         "record_content": "考虑右肾感染可能，予以左氧氟沙星经验性抗感染处理。",
     }
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-054", "LX0609-057"),
+        ("LX0609-05-01-02", "LX0609-05-01-05"),
         {
             "inpat_drug_order": _duplicate_levofloxacin_order_rows(
                 second_start="2026-06-01 10:00:00+08:00"
@@ -6407,7 +6407,7 @@ async def test_054_and_057_group_strict_duplicate_order_rows_and_keep_all_refs()
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("rule_id", ("LX0609-054", "LX0609-057"))
+@pytest.mark.parametrize("rule_id", ("LX0609-05-01-02", "LX0609-05-01-05"))
 @pytest.mark.parametrize(
     ("second_start", "second_overrides"),
     (
@@ -6448,7 +6448,7 @@ async def test_antimicrobial_nearby_distinct_orders_remain_ambiguous(
 @pytest.mark.asyncio
 async def test_057_absent_empiric_trigger_survives_binding_aggregator_and_renderer() -> None:
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-057",),
+        ("LX0609-05-01-05",),
         {
             "inpat_drug_order": ({"generic_name": "美罗培南"},),
             "daily_course_record": ({
@@ -6458,7 +6458,7 @@ async def test_057_absent_empiric_trigger_survives_binding_aggregator_and_render
     )
 
     canonical = _canonical_extended_result(
-        rule_id="LX0609-057",
+        rule_id="LX0609-05-01-05",
         snapshot=snapshot,
         materials=materials,
         result=execution,
@@ -6480,7 +6480,7 @@ async def test_057_absent_empiric_trigger_survives_binding_aggregator_and_render
 @pytest.mark.asyncio
 async def test_059_legacy_antimicrobial_branch_does_not_deliver_a_formal_defect() -> None:
     result, reduced = await _evaluate(
-        "LX0609-059",
+        "LX0609-05-03-01",
         {
             "inpat_drug_order": ({"generic_name": "美罗培南"},),
             "daily_course_record": (),
@@ -6506,7 +6506,7 @@ async def test_055_keeps_exact_48_to_72_hour_post_order_effect_evaluation(
     expected_interval: float,
 ) -> None:
     result, reduced = await _evaluate(
-        "LX0609-055",
+        "LX0609-05-01-03",
         {
             "inpat_drug_order": (
                 {
@@ -6524,7 +6524,7 @@ async def test_055_keeps_exact_48_to_72_hour_post_order_effect_evaluation(
     )
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT
-    assert dict(result.customer_display_facts)["LX0609-055"]["evaluation_intervals"] == [
+    assert dict(result.customer_display_facts)["LX0609-05-01-03"]["evaluation_intervals"] == [
         expected_interval
     ]
 
@@ -6532,7 +6532,7 @@ async def test_055_keeps_exact_48_to_72_hour_post_order_effect_evaluation(
 @pytest.mark.asyncio
 async def test_055_falls_back_to_prescribed_time_when_planned_start_missing() -> None:
     _, reduced = await _evaluate(
-        "LX0609-055",
+        "LX0609-05-01-03",
         {
             "inpat_drug_order": ({
                 "generic_name": "美罗培南",
@@ -6553,7 +6553,7 @@ async def test_055_falls_back_to_prescribed_time_when_planned_start_missing() ->
 @pytest.mark.asyncio
 async def test_055_excludes_skin_test_order_from_treatment_event_windows() -> None:
     result, reduced = await _evaluate(
-        "LX0609-055",
+        "LX0609-05-01-03",
         {
             "inpat_drug_order": (
                 {
@@ -6578,7 +6578,7 @@ async def test_055_excludes_skin_test_order_from_treatment_event_windows() -> No
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT
     assert reduced.reason_code == "requirement_within_threshold"
-    facts = dict(result.customer_display_facts)["LX0609-055"]
+    facts = dict(result.customer_display_facts)["LX0609-05-01-03"]
     assert facts["antimicrobials"] == ["美罗培南"]
     assert facts["event_windows"] == [{
         "antimicrobial": "美罗培南",
@@ -6593,7 +6593,7 @@ async def test_055_excludes_skin_test_order_from_treatment_event_windows() -> No
 @pytest.mark.asyncio
 async def test_055_skin_test_only_does_not_trigger_treatment_evaluation() -> None:
     snapshot, _materials, result, reduced_items = await _evaluate_selected(
-        ("LX0609-055",),
+        ("LX0609-05-01-03",),
         {
             "inpat_drug_order": ({
                 "order_id": "SKIN-TEST-1",
@@ -6608,7 +6608,7 @@ async def test_055_skin_test_only_does_not_trigger_treatment_evaluation() -> Non
     reduced = reduced_items[0]
     assert reduced.final_state is CustomerFinalState.NOT_APPLICABLE
     assert reduced.reason_code == "trigger_absent_complete"
-    assert "LX0609-055" not in dict(result.customer_display_facts)
+    assert "LX0609-05-01-03" not in dict(result.customer_display_facts)
     order_source_ref = next(
         observation.snapshot_ref.removeprefix("sha256:")
         for observation in snapshot.observations
@@ -6632,7 +6632,7 @@ async def test_055_does_not_report_missing_evaluation_before_event_window_mature
     expected_reason: str,
 ) -> None:
     result, reduced = await _evaluate(
-        "LX0609-055",
+        "LX0609-05-01-03",
         {
             "inpat_drug_order": ({
                 "generic_name": "美罗培南",
@@ -6649,14 +6649,14 @@ async def test_055_does_not_report_missing_evaluation_before_event_window_mature
 
     assert reduced.final_state is CustomerFinalState.NOT_APPLICABLE
     assert reduced.reason_code == expected_reason
-    facts = dict(result.customer_display_facts)["LX0609-055"]
+    facts = dict(result.customer_display_facts)["LX0609-05-01-03"]
     assert facts["unmatched_antimicrobials"] == []
 
 
 @pytest.mark.asyncio
 async def test_055_keeps_mature_missing_event_when_another_event_is_not_mature() -> None:
     result, reduced = await _evaluate(
-        "LX0609-055",
+        "LX0609-05-01-03",
         {
             "inpat_drug_order": (
                 {
@@ -6681,14 +6681,14 @@ async def test_055_keeps_mature_missing_event_when_another_event_is_not_mature()
 
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
     assert reduced.reason_code == "threshold_exceeded"
-    facts = dict(result.customer_display_facts)["LX0609-055"]
+    facts = dict(result.customer_display_facts)["LX0609-05-01-03"]
     assert facts["unmatched_antimicrobials"] == ["美罗培南"]
 
 
 @pytest.mark.asyncio
 async def test_055_rejects_evaluation_horizon_before_antimicrobial_start() -> None:
     _, reduced = await _evaluate(
-        "LX0609-055",
+        "LX0609-05-01-03",
         {
             "inpat_drug_order": ({
                 "generic_name": "美罗培南",
@@ -6710,7 +6710,7 @@ async def test_055_rejects_evaluation_horizon_before_antimicrobial_start() -> No
 @pytest.mark.asyncio
 async def test_055_requires_evaluation_horizon() -> None:
     _, reduced = await _evaluate(
-        "LX0609-055",
+        "LX0609-05-01-03",
         {
             "inpat_drug_order": ({
                 "generic_name": "美罗培南",
@@ -6728,7 +6728,7 @@ async def test_055_requires_evaluation_horizon() -> None:
 @pytest.mark.asyncio
 async def test_055_not_mature_window_survives_binding_aggregation_and_renderer() -> None:
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-055",),
+        ("LX0609-05-01-03",),
         {
             "inpat_drug_order": ({
                 "generic_name": "美罗培南",
@@ -6744,7 +6744,7 @@ async def test_055_not_mature_window_survives_binding_aggregation_and_renderer()
     )
 
     canonical = _canonical_extended_result(
-        rule_id="LX0609-055",
+        rule_id="LX0609-05-01-03",
         snapshot=snapshot,
         materials=materials,
         result=execution,
@@ -6755,7 +6755,7 @@ async def test_055_not_mature_window_survives_binding_aggregation_and_renderer()
     assert canonical["reason_code"] == "evaluation_window_not_mature"
     facts = canonical["customer_display_facts"]
     assert facts["unmatched_antimicrobials"] == []
-    native_facts = dict(execution.customer_display_facts)["LX0609-055"]
+    native_facts = dict(execution.customer_display_facts)["LX0609-05-01-03"]
     assert native_facts["window_state"] == "evaluation_window_not_mature"
     assert native_facts["event_windows"] == [{
         "antimicrobial": "美罗培南",
@@ -6776,7 +6776,7 @@ async def test_055_not_mature_window_survives_binding_aggregation_and_renderer()
 @pytest.mark.asyncio
 async def test_055_generic_effect_record_cannot_cover_multiple_drug_events() -> None:
     _, reduced = await _evaluate(
-        "LX0609-055",
+        "LX0609-05-01-03",
         {
             "inpat_drug_order": (
                 {
@@ -6804,7 +6804,7 @@ async def test_055_generic_effect_record_cannot_cover_multiple_drug_events() -> 
 @pytest.mark.asyncio
 async def test_055_one_order_row_with_two_drugs_requires_each_named_evaluation() -> None:
     result, reduced = await _evaluate(
-        "LX0609-055",
+        "LX0609-05-01-03",
         {
             "inpat_drug_order": ({
                 "order_id": "MV-1",
@@ -6819,7 +6819,7 @@ async def test_055_one_order_row_with_two_drugs_requires_each_named_evaluation()
     )
 
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
-    assert dict(result.customer_display_facts)["LX0609-055"][
+    assert dict(result.customer_display_facts)["LX0609-05-01-03"][
         "unmatched_antimicrobials"
     ] == ["万古霉素"]
 
@@ -6827,7 +6827,7 @@ async def test_055_one_order_row_with_two_drugs_requires_each_named_evaluation()
 @pytest.mark.asyncio
 async def test_055_excludes_pre_order_course_records_from_effect_evidence() -> None:
     result, reduced = await _evaluate(
-        "LX0609-055",
+        "LX0609-05-01-03",
         {
             "inpat_drug_order": (
                 {
@@ -6853,7 +6853,7 @@ async def test_055_excludes_pre_order_course_records_from_effect_evidence() -> N
     )
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT
-    assert dict(result.customer_display_facts)["LX0609-055"]["evaluation_intervals"] == [
+    assert dict(result.customer_display_facts)["LX0609-05-01-03"]["evaluation_intervals"] == [
         48.0,
         74.0,
     ]
@@ -6862,7 +6862,7 @@ async def test_055_excludes_pre_order_course_records_from_effect_evidence() -> N
 @pytest.mark.asyncio
 async def test_055_only_pre_order_effect_records_leave_no_evaluation_intervals() -> None:
     result, reduced = await _evaluate(
-        "LX0609-055",
+        "LX0609-05-01-03",
         {
             "inpat_drug_order": (
                 {
@@ -6887,7 +6887,7 @@ async def test_055_only_pre_order_effect_records_leave_no_evaluation_intervals()
 
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
     assert reduced.reason_code == "threshold_exceeded"
-    assert dict(result.customer_display_facts)["LX0609-055"]["evaluation_intervals"] == []
+    assert dict(result.customer_display_facts)["LX0609-05-01-03"]["evaluation_intervals"] == []
     assert result.llm_call_count == 0
     assert result.prompt_tokens == 0
     assert result.completion_tokens == 0
@@ -6898,7 +6898,7 @@ async def test_055_only_pre_order_effect_records_leave_no_evaluation_intervals()
 async def test_055_bare_inflammatory_markers_at_48_hours_are_not_effect_evaluation() -> None:
     """白细胞、CRP 等检验描述不能单独证明已完成疗效评价。"""
     _, reduced = await _evaluate(
-        "LX0609-055",
+        "LX0609-05-01-03",
         {
             "inpat_drug_order": ({
                 "generic_name": "美罗培南",
@@ -6919,7 +6919,7 @@ async def test_055_bare_inflammatory_markers_at_48_hours_are_not_effect_evaluati
 async def test_055_non_antimicrobial_treatment_effect_is_not_antibiotic_evaluation() -> None:
     """非抗菌治疗的“治疗效果”不能覆盖抗菌药物48～72小时评价。"""
     _, reduced = await _evaluate(
-        "LX0609-055",
+        "LX0609-05-01-03",
         {
             "inpat_drug_order": ({
                 "generic_name": "美罗培南",
@@ -6940,7 +6940,7 @@ async def test_055_non_antimicrobial_treatment_effect_is_not_antibiotic_evaluati
 async def test_055_explicit_negative_effect_evaluation_at_48_hours_is_compliant() -> None:
     """疗效不佳并拟调整方案属于真实的疗效评价，不能被误删。"""
     _, reduced = await _evaluate(
-        "LX0609-055",
+        "LX0609-05-01-03",
         {
             "inpat_drug_order": ({
                 "generic_name": "美罗培南",
@@ -6959,7 +6959,7 @@ async def test_055_explicit_negative_effect_evaluation_at_48_hours_is_compliant(
 @pytest.mark.asyncio
 async def test_055_untimed_explicit_effect_evaluation_is_data_gap() -> None:
     _, reduced = await _evaluate(
-        "LX0609-055",
+        "LX0609-05-01-03",
         {
             "inpat_drug_order": ({
                 "generic_name": "美罗培南",
@@ -6978,7 +6978,7 @@ async def test_055_untimed_explicit_effect_evaluation_is_data_gap() -> None:
 @pytest.mark.asyncio
 async def test_055_timed_in_window_evaluation_remains_compliant_with_untimed_candidate() -> None:
     _, reduced = await _evaluate(
-        "LX0609-055",
+        "LX0609-05-01-03",
         {
             "inpat_drug_order": ({
                 "generic_name": "美罗培南",
@@ -7000,7 +7000,7 @@ async def test_055_timed_in_window_evaluation_remains_compliant_with_untimed_can
 @pytest.mark.asyncio
 async def test_058_expert_support_after_special_antimicrobial_use_is_non_compliant() -> None:
     _, reduced = await _evaluate(
-        "LX0609-058",
+        "LX0609-05-01-06",
         {
             "inpat_drug_order": ({
                 "generic_name": "美罗培南",
@@ -7021,7 +7021,7 @@ async def test_058_expert_support_after_special_antimicrobial_use_is_non_complia
 async def test_058_explicitly_refused_expert_consultation_is_not_support() -> None:
     """拒绝/未完成会诊的否定句不能充当特殊级用药前支持。"""
     result, reduced = await _evaluate(
-        "LX0609-058",
+        "LX0609-05-01-06",
         {
             "inpat_drug_order": ({
                 "generic_name": "美罗培南",
@@ -7036,7 +7036,7 @@ async def test_058_explicitly_refused_expert_consultation_is_not_support() -> No
 
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
     assert reduced.reason_code == "required_document_missing"
-    facts = dict(result.customer_display_facts)["LX0609-058"]
+    facts = dict(result.customer_display_facts)["LX0609-05-01-06"]
     assert facts["expert_support_present"] is False
     assert facts["support_before_use"] is False
 
@@ -7044,7 +7044,7 @@ async def test_058_explicitly_refused_expert_consultation_is_not_support() -> No
 @pytest.mark.asyncio
 async def test_058_falls_back_to_prescribed_time_when_planned_start_missing() -> None:
     _, reduced = await _evaluate(
-        "LX0609-058",
+        "LX0609-05-01-06",
         {
             "inpat_drug_order": ({
                 "generic_name": "美罗培南",
@@ -7065,7 +7065,7 @@ async def test_058_falls_back_to_prescribed_time_when_planned_start_missing() ->
 @pytest.mark.asyncio
 async def test_058_generic_expert_support_cannot_cover_multiple_special_drug_events() -> None:
     _, reduced = await _evaluate(
-        "LX0609-058",
+        "LX0609-05-01-06",
         {
             "inpat_drug_order": (
                 {
@@ -7093,7 +7093,7 @@ async def test_058_generic_expert_support_cannot_cover_multiple_special_drug_eve
 @pytest.mark.asyncio
 async def test_058_support_for_one_named_drug_does_not_cover_later_named_drug() -> None:
     result, reduced = await _evaluate(
-        "LX0609-058",
+        "LX0609-05-01-06",
         {
             "inpat_drug_order": (
                 {
@@ -7116,14 +7116,14 @@ async def test_058_support_for_one_named_drug_does_not_cover_later_named_drug() 
 
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
     assert reduced.reason_code == "required_document_missing"
-    facts = dict(result.customer_display_facts)["LX0609-058"]
+    facts = dict(result.customer_display_facts)["LX0609-05-01-06"]
     assert facts["unmatched_special_antimicrobials"] == ["万古霉素"]
 
 
 @pytest.mark.asyncio
 async def test_058_one_order_row_with_two_drugs_requires_each_named_support() -> None:
     result, reduced = await _evaluate(
-        "LX0609-058",
+        "LX0609-05-01-06",
         {
             "inpat_drug_order": ({
                 "order_id": "MV-1",
@@ -7138,7 +7138,7 @@ async def test_058_one_order_row_with_two_drugs_requires_each_named_support() ->
     )
 
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
-    assert dict(result.customer_display_facts)["LX0609-058"][
+    assert dict(result.customer_display_facts)["LX0609-05-01-06"][
         "unmatched_special_antimicrobials"
     ] == ["万古霉素"]
 
@@ -7146,7 +7146,7 @@ async def test_058_one_order_row_with_two_drugs_requires_each_named_support() ->
 @pytest.mark.asyncio
 async def test_058_timed_consultation_support_is_compliant_when_daily_source_unavailable() -> None:
     _, reduced = await _evaluate(
-        "LX0609-058",
+        "LX0609-05-01-06",
         {
             "inpat_drug_order": ({
                 "generic_name": "美罗培南",
@@ -7167,7 +7167,7 @@ async def test_058_timed_consultation_support_is_compliant_when_daily_source_una
 @pytest.mark.asyncio
 async def test_058_timed_consultation_support_is_compliant_when_senior_source_unavailable() -> None:
     _, reduced = await _evaluate(
-        "LX0609-058",
+        "LX0609-05-01-06",
         {
             "inpat_drug_order": ({
                 "generic_name": "美罗培南",
@@ -7188,7 +7188,7 @@ async def test_058_timed_consultation_support_is_compliant_when_senior_source_un
 @pytest.mark.asyncio
 async def test_058_late_support_with_unavailable_senior_source_is_data_gap() -> None:
     _, reduced = await _evaluate(
-        "LX0609-058",
+        "LX0609-05-01-06",
         {
             "inpat_drug_order": ({
                 "generic_name": "美罗培南",
@@ -7208,7 +7208,7 @@ async def test_058_late_support_with_unavailable_senior_source_is_data_gap() -> 
 @pytest.mark.asyncio
 async def test_058_without_special_antimicrobial_is_not_applicable_before_support_sources() -> None:
     result, reduced = await _evaluate(
-        "LX0609-058",
+        "LX0609-05-01-06",
         {
             "inpat_drug_order": ({
                 "generic_name": "阿莫西林",
@@ -7220,13 +7220,13 @@ async def test_058_without_special_antimicrobial_is_not_applicable_before_suppor
 
     assert reduced.final_state is CustomerFinalState.NOT_APPLICABLE
     assert reduced.reason_code == "trigger_absent_complete"
-    assert "LX0609-058" not in dict(result.customer_display_facts)
+    assert "LX0609-05-01-06" not in dict(result.customer_display_facts)
 
 
 @pytest.mark.asyncio
 async def test_058_expert_support_without_authoritative_time_is_data_gap() -> None:
     _, reduced = await _evaluate(
-        "LX0609-058",
+        "LX0609-05-01-06",
         {
             "inpat_drug_order": ({
                 "generic_name": "美罗培南",
@@ -7245,7 +7245,7 @@ async def test_058_expert_support_without_authoritative_time_is_data_gap() -> No
 @pytest.mark.asyncio
 async def test_058_special_antimicrobial_without_authoritative_use_time_is_data_gap() -> None:
     _, reduced = await _evaluate(
-        "LX0609-058",
+        "LX0609-05-01-06",
         {
             "inpat_drug_order": ({
                 "generic_name": "美罗培南",
@@ -7265,7 +7265,7 @@ async def test_058_special_antimicrobial_without_authoritative_use_time_is_data_
 async def test_058_any_special_antimicrobial_without_time_blocks_earliest_use_guess() -> None:
     """多条特殊级医嘱中任一条缺时，不能用另一条时间猜测首用药时点。"""
     _, reduced = await _evaluate(
-        "LX0609-058",
+        "LX0609-05-01-06",
         {
             "inpat_drug_order": (
                 {
@@ -7288,7 +7288,7 @@ async def test_058_any_special_antimicrobial_without_time_blocks_earliest_use_gu
 @pytest.mark.asyncio
 async def test_058_legacy_order_times_do_not_supply_planned_start() -> None:
     _, reduced = await _evaluate(
-        "LX0609-058",
+        "LX0609-05-01-06",
         {
             "inpat_drug_order": ({
                 "generic_name": "美罗培南",
@@ -7309,7 +7309,7 @@ async def test_058_legacy_order_times_do_not_supply_planned_start() -> None:
 @pytest.mark.asyncio
 async def test_058_expert_support_at_special_antimicrobial_use_time_is_compliant() -> None:
     result, reduced = await _evaluate(
-        "LX0609-058",
+        "LX0609-05-01-06",
         {
             "inpat_drug_order": ({
                 "generic_name": "美罗培南",
@@ -7323,7 +7323,7 @@ async def test_058_expert_support_at_special_antimicrobial_use_time_is_compliant
     )
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT
-    facts = dict(result.customer_display_facts)["LX0609-058"]
+    facts = dict(result.customer_display_facts)["LX0609-05-01-06"]
     assert facts["support_before_use"] is True
     assert facts["first_antimicrobial_time"] == "2026-06-01 10:00:00"
 
@@ -7332,7 +7332,7 @@ async def test_058_expert_support_at_special_antimicrobial_use_time_is_compliant
 async def test_058_cross_timezone_late_support_is_non_compliant() -> None:
     """Offset-bearing timestamps compare by instant, not wall-clock text."""
     _, reduced = await _evaluate(
-        "LX0609-058",
+        "LX0609-05-01-06",
         {
             "inpat_drug_order": ({
                 "generic_name": "美罗培南",
@@ -7353,7 +7353,7 @@ async def test_058_cross_timezone_late_support_is_non_compliant() -> None:
 @pytest.mark.asyncio
 async def test_058_cross_timezone_same_instant_support_is_compliant() -> None:
     _, reduced = await _evaluate(
-        "LX0609-058",
+        "LX0609-05-01-06",
         {
             "inpat_drug_order": ({
                 "generic_name": "美罗培南",
@@ -7374,7 +7374,7 @@ async def test_058_cross_timezone_same_instant_support_is_compliant() -> None:
 @pytest.mark.asyncio
 async def test_063_matching_authoritative_and_discharge_diagnoses_is_compliant() -> None:
     _, reduced = await _evaluate(
-        "LX0609-063",
+        "LX0609-08-01-03",
         {
             "discharge_record": ({"record_time": "2026-06-09 09:00:00"},),
             "diagnosis": ({"diagnosis_no": 1, "diagnosis_name": "社区获得性肺炎"},),
@@ -7398,7 +7398,7 @@ async def test_070_complete_pretransfusion_nine_tests_is_compliant() -> None:
         ("ALT", "谷丙转氨酶"),
     )
     _, reduced = await _evaluate(
-        "LX0609-070",
+        "LX0609-07-01-03",
         {
             "inpat_registration": (
                 {"admission_datetime": "2026-06-01 08:00:00"},
@@ -7429,7 +7429,7 @@ async def test_070_uses_actual_bloodtrans_record_when_frontpage_detail_is_empty(
         ("ALT", "谷丙转氨酶"),
     )
     result, reduced = await _evaluate(
-        "LX0609-070",
+        "LX0609-07-01-03",
         {
             "inpat_registration": (
                 {"admission_datetime": "2026-06-01 08:00:00"},
@@ -7468,7 +7468,7 @@ async def test_070_uses_actual_bloodtrans_record_when_frontpage_detail_is_empty(
 @pytest.mark.asyncio
 async def test_070_cannot_claim_no_transfusion_when_record_source_is_unavailable() -> None:
     _, reduced = await _evaluate(
-        "LX0609-070",
+        "LX0609-07-01-03",
         {"mr_bloodtrans": ()},
         unavailable_sources=frozenset({"bloodtrans_record"}),
     )
@@ -7487,7 +7487,7 @@ async def test_070_rejects_nine_tests_reported_after_transfusion() -> None:
         ("ALT", "谷丙转氨酶"),
     )
     result, reduced = await _evaluate(
-        "LX0609-070",
+        "LX0609-07-01-03",
         {
             "inpat_registration": (
                 {"admission_datetime": "2026-06-01 08:00:00"},
@@ -7508,7 +7508,7 @@ async def test_070_rejects_nine_tests_reported_after_transfusion() -> None:
     )
 
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
-    assert dict(result.customer_display_facts)["LX0609-070"]["late_items"] == ["hiv"]
+    assert dict(result.customer_display_facts)["LX0609-07-01-03"]["late_items"] == ["hiv"]
     assert result.llm_call_count == 0
     assert result.total_tokens == 0
 
@@ -7516,7 +7516,7 @@ async def test_070_rejects_nine_tests_reported_after_transfusion() -> None:
 @pytest.mark.asyncio
 async def test_070_without_authoritative_transfusion_time_is_data_gap() -> None:
     result, reduced = await _evaluate(
-        "LX0609-070",
+        "LX0609-07-01-03",
         {
             "inpat_registration": (
                 {"admission_datetime": "2026-06-01 08:00:00"},
@@ -7541,7 +7541,7 @@ async def test_070_reuses_same_stay_nine_items_for_each_later_transfusion() -> N
         ("ALT", "谷丙转氨酶"),
     )
     result, reduced = await _evaluate(
-        "LX0609-070",
+        "LX0609-07-01-03",
         {
             "inpat_registration": (
                 {"admission_datetime": "2026-06-01 08:00:00"},
@@ -7563,7 +7563,7 @@ async def test_070_reuses_same_stay_nine_items_for_each_later_transfusion() -> N
     )
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT
-    facts = dict(result.customer_display_facts)["LX0609-070"]
+    facts = dict(result.customer_display_facts)["LX0609-07-01-03"]
     assert facts["transfusion_event_count"] == 2
     assert facts["checked_transfusion_times"] == [
         "2026-06-02 14:00:00",
@@ -7584,7 +7584,7 @@ async def test_070_multi_transfusion_preserves_canonical_decision_facts_and_evid
         ("ALT", "谷丙转氨酶"),
     )
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-070",),
+        ("LX0609-07-01-03",),
         {
             "inpat_registration": ({
                 "document_id": "admission-070",
@@ -7624,7 +7624,7 @@ async def test_070_multi_transfusion_preserves_canonical_decision_facts_and_evid
     )
 
     canonical = _canonical_extended_result(
-        rule_id="LX0609-070",
+        rule_id="LX0609-07-01-03",
         snapshot=snapshot,
         materials=materials,
         result=execution,
@@ -7662,7 +7662,7 @@ async def test_070_multi_transfusion_preserves_canonical_decision_facts_and_evid
     assert canonical["reason_code"] == "requirement_satisfied"
     # Native 的逐笔事实是判定唯一所有者；生产 Aggregator 仅保留当前已受控的
     # 客户摘要，不能借本次测试扩大其展示字段白名单。
-    native_facts = dict(execution.customer_display_facts)["LX0609-070"]
+    native_facts = dict(execution.customer_display_facts)["LX0609-07-01-03"]
     assert native_facts["transfusion_event_count"] == 2
     assert native_facts["checked_transfusion_times"] == [
         "2026-06-02 14:00:00",
@@ -7722,7 +7722,7 @@ async def test_070_multi_transfusion_preserves_canonical_decision_facts_and_evid
 @pytest.mark.asyncio
 async def test_070_trigger_absent_does_not_project_registration_or_lab_documents() -> None:
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-070",),
+        ("LX0609-07-01-03",),
         {
             "inpat_registration": ({
                 "document_id": "admission-no-transfusion-070",
@@ -7749,7 +7749,7 @@ async def test_070_trigger_absent_does_not_project_registration_or_lab_documents
     )
 
     canonical = _canonical_extended_result(
-        rule_id="LX0609-070",
+        rule_id="LX0609-07-01-03",
         snapshot=snapshot,
         materials=materials,
         result=execution,
@@ -7784,7 +7784,7 @@ async def test_070_does_not_use_nine_items_reported_after_earlier_transfusion() 
         ("ALT", "谷丙转氨酶"),
     )
     result, reduced = await _evaluate(
-        "LX0609-070",
+        "LX0609-07-01-03",
         {
             "inpat_registration": (
                 {"admission_datetime": "2026-06-01 08:00:00"},
@@ -7806,7 +7806,7 @@ async def test_070_does_not_use_nine_items_reported_after_earlier_transfusion() 
     )
 
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
-    facts = dict(result.customer_display_facts)["LX0609-070"]
+    facts = dict(result.customer_display_facts)["LX0609-07-01-03"]
     assert facts["failed_transfusion_times"] == ["2026-06-02 14:00:00"]
     assert result.llm_call_count == 0
     assert result.total_tokens == 0
@@ -7822,7 +7822,7 @@ async def test_070_rejects_nine_items_from_before_current_admission() -> None:
         ("ALT", "谷丙转氨酶"),
     )
     _, reduced = await _evaluate(
-        "LX0609-070",
+        "LX0609-07-01-03",
         {
             "inpat_registration": (
                 {"admission_datetime": "2026-06-02 08:00:00"},
@@ -7853,7 +7853,7 @@ async def test_070_without_authoritative_admission_time_is_data_gap() -> None:
         ("ALT", "谷丙转氨酶"),
     )
     result, reduced = await _evaluate(
-        "LX0609-070",
+        "LX0609-07-01-03",
         {
             "mr_bloodtrans": ({"transfution_datetime": "2026-06-02 14:00:00"},),
             "labtest_item_report": tuple(
@@ -7884,7 +7884,7 @@ async def test_070_without_authoritative_nine_item_report_time_is_data_gap() -> 
         ("ALT", "谷丙转氨酶"),
     )
     result, reduced = await _evaluate(
-        "LX0609-070",
+        "LX0609-07-01-03",
         {
             "inpat_registration": (
                 {"admission_datetime": "2026-06-01 08:00:00"},
@@ -7904,7 +7904,7 @@ async def test_070_without_authoritative_nine_item_report_time_is_data_gap() -> 
 
     assert reduced.final_state is CustomerFinalState.DATA_GAP
     assert reduced.reason_code == "authoritative_time_missing"
-    facts = dict(result.customer_display_facts)["LX0609-070"]
+    facts = dict(result.customer_display_facts)["LX0609-07-01-03"]
     assert facts["missing_time_items"] == ["hiv"]
     assert result.llm_call_count == 0
     assert result.total_tokens == 0
@@ -7913,7 +7913,7 @@ async def test_070_without_authoritative_nine_item_report_time_is_data_gap() -> 
 @pytest.mark.asyncio
 async def test_050_uncertain_diagnosis_with_discussion_is_compliant() -> None:
     result, reduced = await _evaluate(
-        "LX0609-050",
+        "LX0609-03-02-01",
         {
             "inpat_registration": ({"admission_datetime": "2026-06-01 08:00:00"},),
             "daily_course_record": ({
@@ -7928,7 +7928,7 @@ async def test_050_uncertain_diagnosis_with_discussion_is_compliant() -> None:
     )
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT
-    assert dict(result.customer_display_facts)["LX0609-050"] == {
+    assert dict(result.customer_display_facts)["LX0609-03-02-01"] == {
         "verification_kind": "uncertain_diagnosis_discussion_check",
         "admission_time": "2026-06-01 08:00:00",
         "uncertain_record_times": ["2026-06-08 09:00:00"],
@@ -7961,12 +7961,12 @@ async def test_062_partial_uncertainty_only_reports_confirmed_missing_fields(mis
     if missing_route:
         text = text.replace("口服，", "")
     result, reduced = await _evaluate(
-        "LX0609-062", {"discharge_record": ({"discharge_order": text},)}, llm_client=Client(),
+        "LX0609-08-01-02", {"discharge_record": ({"discharge_order": text},)}, llm_client=Client(),
     )
     assert result.llm_call_count == 1
     if missing_route and known_drug_name:
         assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
-        facts = dict(result.customer_display_facts)["LX0609-062"]
+        facts = dict(result.customer_display_facts)["LX0609-08-01-02"]
         assert facts["missing_fields"] == ["route"]
         assert facts["medication_count"] == 1
     else:
@@ -8017,14 +8017,14 @@ async def test_062_multiple_medications_keep_confirmed_gap_despite_other_uncerta
 
     client = Client()
     result, reduced = await _evaluate(
-        "LX0609-062",
+        "LX0609-08-01-02",
         {"discharge_record": ({"discharge_order": text},)},
         llm_client=client,
     )
 
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
     assert reduced.reason_code == "requirement_violated"
-    assert dict(result.customer_display_facts)["LX0609-062"] == {
+    assert dict(result.customer_display_facts)["LX0609-08-01-02"] == {
         "verification_kind": "discharge_medication_completeness_check",
         "medication_count": 2,
         "required_fields": ["drug_name", "dose", "route", "duration"],
@@ -8037,7 +8037,7 @@ async def test_062_multiple_medications_keep_confirmed_gap_despite_other_uncerta
 @pytest.mark.asyncio
 async def test_062_incomplete_discharge_medication_is_non_compliant() -> None:
     result, reduced = await _evaluate(
-        "LX0609-062",
+        "LX0609-08-01-02",
         {
             "discharge_record": ({
                 "record_time": "2026-06-09 09:00:00",
@@ -8047,7 +8047,7 @@ async def test_062_incomplete_discharge_medication_is_non_compliant() -> None:
     )
 
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
-    assert dict(result.customer_display_facts)["LX0609-062"]["missing_fields"] == [
+    assert dict(result.customer_display_facts)["LX0609-08-01-02"]["missing_fields"] == [
         "duration",
         "route",
     ]
@@ -8056,7 +8056,7 @@ async def test_062_incomplete_discharge_medication_is_non_compliant() -> None:
 @pytest.mark.asyncio
 async def test_062_generic_discharge_instruction_without_medication_is_not_applicable() -> None:
     result, reduced = await _evaluate(
-        "LX0609-062",
+        "LX0609-08-01-02",
         {
             "discharge_record": ({
                 "record_time": "2026-06-09 09:00:00",
@@ -8073,7 +8073,7 @@ async def test_062_generic_discharge_instruction_without_medication_is_not_appli
 @pytest.mark.asyncio
 async def test_062_unstructured_instruction_without_client_is_technical_error() -> None:
     _result, reduced = await _evaluate(
-        "LX0609-062",
+        "LX0609-08-01-02",
         {
             "discharge_record": ({
                 "record_time": "2026-06-09 09:00:00",
@@ -8089,7 +8089,7 @@ async def test_062_unstructured_instruction_without_client_is_technical_error() 
 @pytest.mark.asyncio
 async def test_063_mismatched_discharge_diagnoses_are_non_compliant() -> None:
     result, reduced = await _evaluate(
-        "LX0609-063",
+        "LX0609-08-01-03",
         {
             "discharge_record": ({"record_time": "2026-06-09 09:00:00"},),
             "diagnosis": (
@@ -8112,13 +8112,13 @@ async def test_063_mismatched_discharge_diagnoses_are_non_compliant() -> None:
     )
 
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
-    facts = dict(result.customer_display_facts)["LX0609-063"]
+    facts = dict(result.customer_display_facts)["LX0609-08-01-03"]
     assert facts["diagnoses_consistent"] is False
     assert facts["authoritative_diagnoses"] != facts["written_diagnoses"]
 
 
 def test_063_declares_mr_diagnosis_as_internal_decision_support_source() -> None:
-    assert set(resolve_luxian_0609_decision_support_source_keys(("LX0609-063",))) == {
+    assert set(resolve_luxian_0609_decision_support_source_keys(("LX0609-08-01-03",))) == {
         "discharge_record",
         "mr_diagnosis",
     }
@@ -8174,11 +8174,11 @@ async def test_063_prefers_mr_diagnosis_when_diagnosis_is_empty() -> None:
             },
         ),
     }
-    result, reduced = await _evaluate("LX0609-063", rows_by_source)
+    result, reduced = await _evaluate("LX0609-08-01-03", rows_by_source)
     expected_snapshot, _ = _session(rows_by_source)
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT
-    facts = dict(result.customer_display_facts)["LX0609-063"]
+    facts = dict(result.customer_display_facts)["LX0609-08-01-03"]
     assert facts["authoritative_diagnoses"] == ["社区获得性肺炎", "高血压病"]
     assert facts["written_diagnoses"] == ["社区获得性肺炎", "高血压病"]
     assert all("阶段诊断" not in name for name in facts["authoritative_diagnoses"])
@@ -8216,11 +8216,11 @@ async def test_063_single_mr_diagnosis_is_naturally_ordered_without_sequence() -
             },
         ),
     }
-    result, reduced = await _evaluate("LX0609-063", rows_by_source)
+    result, reduced = await _evaluate("LX0609-08-01-03", rows_by_source)
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT
     assert reduced.reason_code == "requirement_satisfied"
-    facts = dict(result.customer_display_facts)["LX0609-063"]
+    facts = dict(result.customer_display_facts)["LX0609-08-01-03"]
     assert facts == {
         "verification_kind": "discharge_diagnosis_consistency_check",
         "authoritative_diagnoses": ["社区获得性肺炎"],
@@ -8233,7 +8233,7 @@ async def test_063_single_mr_diagnosis_is_naturally_ordered_without_sequence() -
 @pytest.mark.asyncio
 async def test_063_mr_diagnosis_content_mismatch_is_defect_even_when_written_order_missing() -> None:
     result, reduced = await _evaluate(
-        "LX0609-063",
+        "LX0609-08-01-03",
         {
             "discharge_record": ({"record_time": "2026-06-09 09:00:00"},),
             "diagnosis": (),
@@ -8264,7 +8264,7 @@ async def test_063_mr_diagnosis_content_mismatch_is_defect_even_when_written_ord
 
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
     assert reduced.reason_code == "requirement_violated"
-    facts = dict(result.customer_display_facts)["LX0609-063"]
+    facts = dict(result.customer_display_facts)["LX0609-08-01-03"]
     assert facts["diagnoses_consistent"] is False
     assert facts["order_comparable"] is False
 
@@ -8272,7 +8272,7 @@ async def test_063_mr_diagnosis_content_mismatch_is_defect_even_when_written_ord
 @pytest.mark.asyncio
 async def test_063_compares_death_diagnoses() -> None:
     result, reduced = await _evaluate(
-        "LX0609-063",
+        "LX0609-08-01-03",
         {
             "discharge_record": ({"record_time": "2026-06-09 09:00:00"},),
             "diagnosis": (),
@@ -8290,7 +8290,7 @@ async def test_063_compares_death_diagnoses() -> None:
     )
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT
-    facts = dict(result.customer_display_facts)["LX0609-063"]
+    facts = dict(result.customer_display_facts)["LX0609-08-01-03"]
     assert facts["authoritative_diagnoses"] == ["重症肺炎"]
     assert facts["written_diagnoses"] == ["重症肺炎"]
 
@@ -8298,7 +8298,7 @@ async def test_063_compares_death_diagnoses() -> None:
 @pytest.mark.asyncio
 async def test_063_mr_diagnosis_unavailable_does_not_fallback_to_diagnosis() -> None:
     result, reduced = await _evaluate(
-        "LX0609-063",
+        "LX0609-08-01-03",
         {
             "discharge_record": ({"record_time": "2026-06-09 09:00:00"},),
             "diagnosis": ({
@@ -8321,13 +8321,13 @@ async def test_063_mr_diagnosis_unavailable_does_not_fallback_to_diagnosis() -> 
 
     assert reduced.final_state is CustomerFinalState.DATA_GAP
     assert reduced.reason_code == "source_unavailable"
-    assert dict(result.customer_display_facts).get("LX0609-063") is None
+    assert dict(result.customer_display_facts).get("LX0609-08-01-03") is None
 
 
 @pytest.mark.asyncio
 async def test_064_missing_postoperative_day_is_non_compliant() -> None:
     result, reduced = await _evaluate(
-        "LX0609-064",
+        "LX0609-04-05-01",
         {
             "mr_surgery": ({
                 "surgery_code": "01.2400X013",
@@ -8344,7 +8344,7 @@ async def test_064_missing_postoperative_day_is_non_compliant() -> None:
     )
 
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
-    facts = dict(result.customer_display_facts)["LX0609-064"]
+    facts = dict(result.customer_display_facts)["LX0609-04-05-01"]
     assert facts["surgeon_round_present"] is True
     assert "2026-07-04" not in facts["covered_postop_dates"]
 
@@ -8352,7 +8352,7 @@ async def test_064_missing_postoperative_day_is_non_compliant() -> None:
 @pytest.mark.asyncio
 async def test_065_missing_postoperative_senior_round_is_non_compliant() -> None:
     result, reduced = await _evaluate(
-        "LX0609-065",
+        "LX0609-04-05-02",
         {
             "mr_surgery": ({
                 "surgery_code": "01.2400X013",
@@ -8369,7 +8369,7 @@ async def test_065_missing_postoperative_senior_round_is_non_compliant() -> None
     )
 
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
-    assert dict(result.customer_display_facts)["LX0609-065"]["senior_round_times"] == [
+    assert dict(result.customer_display_facts)["LX0609-04-05-02"]["senior_round_times"] == [
         "共1台手术中，1台手术结束后72小时内未查到上级医师查房"
     ]
 
@@ -8377,7 +8377,7 @@ async def test_065_missing_postoperative_senior_round_is_non_compliant() -> None
 @pytest.mark.asyncio
 async def test_065_does_not_report_missing_senior_round_before_72_hour_window_matures() -> None:
     result, reduced = await _evaluate(
-        "LX0609-065",
+        "LX0609-04-05-02",
         {
             "mr_surgery": ({
                 "surgery_code": "01.2400X013",
@@ -8396,7 +8396,7 @@ async def test_065_does_not_report_missing_senior_round_before_72_hour_window_ma
 
     assert reduced.final_state is CustomerFinalState.NOT_APPLICABLE
     assert reduced.reason_code == "evaluation_window_not_mature"
-    facts = dict(result.customer_display_facts)["LX0609-065"]
+    facts = dict(result.customer_display_facts)["LX0609-04-05-02"]
     assert facts["surgery_events"][0]["deadline"] == "2026-07-04 10:00:00"
     assert facts["surgery_events"][0]["window_state"] == "evaluation_window_not_mature"
 
@@ -8404,7 +8404,7 @@ async def test_065_does_not_report_missing_senior_round_before_72_hour_window_ma
 @pytest.mark.asyncio
 async def test_065_reports_missing_senior_round_at_exact_72_hour_deadline() -> None:
     _, reduced = await _evaluate(
-        "LX0609-065",
+        "LX0609-04-05-02",
         {
             "mr_surgery": ({
                 "surgery_code": "01.2400X013",
@@ -8428,7 +8428,7 @@ async def test_065_reports_missing_senior_round_at_exact_72_hour_deadline() -> N
 @pytest.mark.asyncio
 async def test_065_reports_mature_missing_surgery_even_when_another_surgery_is_not_mature() -> None:
     result, reduced = await _evaluate(
-        "LX0609-065",
+        "LX0609-04-05-02",
         {
             "surgery_record": (
                 {
@@ -8451,7 +8451,7 @@ async def test_065_reports_mature_missing_surgery_even_when_another_surgery_is_n
         },
     )
 
-    facts = dict(result.customer_display_facts)["LX0609-065"]
+    facts = dict(result.customer_display_facts)["LX0609-04-05-02"]
     assert facts["unmet_surgery_events"] == [{
         "document_id": "S-1",
         "senior_round_times": [],
@@ -8466,7 +8466,7 @@ async def test_065_reports_mature_missing_surgery_even_when_another_surgery_is_n
 @pytest.mark.asyncio
 async def test_065_requires_evaluation_horizon_before_missing_senior_round_is_reported() -> None:
     _, reduced = await _evaluate(
-        "LX0609-065",
+        "LX0609-04-05-02",
         {
             "mr_surgery": ({
                 "surgery_code": "01.2400X013",
@@ -8486,7 +8486,7 @@ async def test_065_requires_evaluation_horizon_before_missing_senior_round_is_re
 @pytest.mark.asyncio
 async def test_065_rejects_conflicting_evaluation_horizon_before_missing_senior_round_is_reported() -> None:
     _, reduced = await _evaluate(
-        "LX0609-065",
+        "LX0609-04-05-02",
         {
             "mr_surgery": ({
                 "surgery_code": "01.2400X013",
@@ -8510,7 +8510,7 @@ async def test_065_rejects_conflicting_evaluation_horizon_before_missing_senior_
 @pytest.mark.asyncio
 async def test_055_fact_refs_only_include_matched_start_order_and_window_evaluation() -> None:
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-055",),
+        ("LX0609-05-01-03",),
         {
             "inpat_drug_order": ({
                 "document_id": "ORDER-055-M",
@@ -8580,7 +8580,7 @@ async def test_055_fact_refs_only_include_matched_start_order_and_window_evaluat
 @pytest.mark.asyncio
 async def test_054_fact_refs_only_include_trigger_action_matched_order_and_reason() -> None:
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-054",),
+        ("LX0609-05-01-02",),
         {
             "inpat_drug_order": ({
                 "document_id": "ORDER-054-MATCH",
@@ -8625,7 +8625,7 @@ async def test_054_fact_refs_only_include_trigger_action_matched_order_and_reaso
 @pytest.mark.asyncio
 async def test_057_fact_refs_only_include_empiric_trigger_matched_order_and_reason() -> None:
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-057",),
+        ("LX0609-05-01-05",),
         {
             "inpat_drug_order": ({
                 "document_id": "ORDER-057-MATCH",
@@ -8670,7 +8670,7 @@ async def test_057_fact_refs_only_include_empiric_trigger_matched_order_and_reas
 @pytest.mark.asyncio
 async def test_058_noncompliant_fact_refs_include_only_order_and_late_matched_support() -> None:
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-058",),
+        ("LX0609-05-01-06",),
         {
             "inpat_drug_order": ({
                 "document_id": "ORDER-058-MATCH",
@@ -8713,7 +8713,7 @@ async def test_058_noncompliant_fact_refs_include_only_order_and_late_matched_su
 def test_antimicrobial_invalid_exact_fact_ref_is_technical_failure_not_business_state() -> None:
     snapshot, materials = _session({"inpat_drug_order": ()})
     decision = module._decision(
-        rule_id="LX0609-055",
+        rule_id="LX0609-05-01-03",
         snapshot=snapshot,
         source_keys=(),
         document_refs=("0" * 64,),
@@ -8724,7 +8724,7 @@ def test_antimicrobial_invalid_exact_fact_ref_is_technical_failure_not_business_
 
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=(decision,),
-        expected_rule_ids=("LX0609-055",),
+        expected_rule_ids=("LX0609-05-01-03",),
         snapshot=snapshot,
         evidence_materials=materials,
     )
@@ -8736,7 +8736,7 @@ def test_antimicrobial_invalid_exact_fact_ref_is_technical_failure_not_business_
 @pytest.mark.asyncio
 async def test_066_missing_postoperative_first_course_is_non_compliant() -> None:
     result, reduced = await _evaluate(
-        "LX0609-066",
+        "LX0609-04-05-03",
         {
             "mr_surgery": ({
                 "surgery_code": "01.2400X013",
@@ -8749,7 +8749,7 @@ async def test_066_missing_postoperative_first_course_is_non_compliant() -> None
     )
 
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
-    facts = dict(result.customer_display_facts)["LX0609-066"]
+    facts = dict(result.customer_display_facts)["LX0609-04-05-03"]
     assert facts["verification_kind"] == "postoperative_first_course_presence_check"
     assert facts["performed_surgery_count"] == 1
     assert facts["postoperative_first_course_count"] == 0
@@ -8760,7 +8760,7 @@ async def test_066_missing_postoperative_first_course_is_non_compliant() -> None
 async def test_066_uses_formal_surgery_records_and_links_postoperative_courses_per_event() -> None:
     """正式手术记录存在时，操作目录不能虚增手术台次或阻断逐台核对。"""
     result, reduced = await _evaluate(
-        "LX0609-066",
+        "LX0609-04-05-03",
         {
             "surgery_record": (
                 {
@@ -8792,7 +8792,7 @@ async def test_066_uses_formal_surgery_records_and_links_postoperative_courses_p
     )
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT
-    facts = dict(result.customer_display_facts)["LX0609-066"]
+    facts = dict(result.customer_display_facts)["LX0609-04-05-03"]
     assert facts["performed_surgery_count"] == 2
     assert facts["postoperative_first_course_count"] == 2
     assert [item["document_id"] for item in facts["surgery_events"]] == ["E1", "E2"]
@@ -8803,7 +8803,7 @@ async def test_066_uses_formal_surgery_records_and_links_postoperative_courses_p
 @pytest.mark.asyncio
 async def test_066_reports_the_specific_formal_surgery_without_a_linked_postoperative_course() -> None:
     result, reduced = await _evaluate(
-        "LX0609-066",
+        "LX0609-04-05-03",
         {
             "surgery_record": (
                 {
@@ -8824,7 +8824,7 @@ async def test_066_reports_the_specific_formal_surgery_without_a_linked_postoper
     )
 
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
-    facts = dict(result.customer_display_facts)["LX0609-066"]
+    facts = dict(result.customer_display_facts)["LX0609-04-05-03"]
     assert facts["unmet_surgery_events"] == ["E2"]
 
 
@@ -8832,7 +8832,7 @@ async def test_066_reports_the_specific_formal_surgery_without_a_linked_postoper
 async def test_066_does_not_reuse_one_postoperative_course_when_formal_document_ids_repeat() -> None:
     """一行正式手术记录即一台事件，即使文书ID重复也不能复用术后首次病程。"""
     result, reduced = await _evaluate(
-        "LX0609-066",
+        "LX0609-04-05-03",
         {
             "surgery_record": (
                 {
@@ -8853,7 +8853,7 @@ async def test_066_does_not_reuse_one_postoperative_course_when_formal_document_
     )
 
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
-    facts = dict(result.customer_display_facts)["LX0609-066"]
+    facts = dict(result.customer_display_facts)["LX0609-04-05-03"]
     assert [
         item["postoperative_first_course_document_ids"]
         for item in facts["surgery_events"]
@@ -8864,7 +8864,7 @@ async def test_066_does_not_reuse_one_postoperative_course_when_formal_document_
 @pytest.mark.asyncio
 async def test_066_requires_authoritative_postoperative_course_time_for_per_event_linkage() -> None:
     _result, reduced = await _evaluate(
-        "LX0609-066",
+        "LX0609-04-05-03",
         {
             "surgery_record": ({
                 "document_id": "E1",
@@ -8882,7 +8882,7 @@ async def test_066_requires_authoritative_postoperative_course_time_for_per_even
 @pytest.mark.asyncio
 async def test_064_fact_refs_only_include_event_covering_courses_and_surgeon_round() -> None:
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-064",),
+        ("LX0609-04-05-01",),
         {
             "surgery_record": ({
                 "document_id": "SURGERY-064",
@@ -8947,7 +8947,7 @@ async def test_064_fact_refs_only_include_event_covering_courses_and_surgeon_rou
 @pytest.mark.asyncio
 async def test_065_fact_refs_only_include_event_and_matched_72_hour_senior_round() -> None:
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-065",),
+        ("LX0609-04-05-02",),
         {
             "surgery_record": ({
                 "document_id": "SURGERY-065",
@@ -9000,7 +9000,7 @@ async def test_065_fact_refs_only_include_event_and_matched_72_hour_senior_round
 @pytest.mark.asyncio
 async def test_066_noncompliant_fact_refs_only_include_surgery_without_first_course() -> None:
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-066",),
+        ("LX0609-04-05-03",),
         {
             "surgery_record": (
                 {
@@ -9040,7 +9040,7 @@ async def test_066_noncompliant_fact_refs_only_include_surgery_without_first_cou
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("rule_id", ("LX0609-064", "LX0609-065", "LX0609-066"))
+@pytest.mark.parametrize("rule_id", ("LX0609-04-05-01", "LX0609-04-05-02", "LX0609-04-05-03"))
 @pytest.mark.parametrize(
     ("surgery_code", "surgery_name"),
     (
@@ -9078,7 +9078,7 @@ async def test_postoperative_not_applicable_binds_catalog_confirmed_operation_re
 @pytest.mark.asyncio
 async def test_postoperative_not_applicable_unknown_operation_keeps_source_anchor() -> None:
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-066",),
+        ("LX0609-04-05-03",),
         {
             "mr_surgery": ({
                 "document_id": "OP-UNKNOWN",
@@ -9104,7 +9104,7 @@ async def test_postoperative_not_applicable_unknown_operation_keeps_source_ancho
 @pytest.mark.asyncio
 async def test_065_multisurgery_fact_refs_keep_each_event_with_its_own_round() -> None:
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-065",),
+        ("LX0609-04-05-02",),
         {
             "surgery_record": (
                 {
@@ -9164,7 +9164,7 @@ async def test_065_multisurgery_fact_refs_keep_each_event_with_its_own_round() -
 def test_postoperative_invalid_exact_fact_ref_is_technical_failure_not_business_state() -> None:
     snapshot, materials = _session({"surgery_record": ()})
     decision = module._decision(
-        rule_id="LX0609-066",
+        rule_id="LX0609-04-05-03",
         snapshot=snapshot,
         source_keys=(),
         document_refs=("0" * 64,),
@@ -9175,7 +9175,7 @@ def test_postoperative_invalid_exact_fact_ref_is_technical_failure_not_business_
 
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=(decision,),
-        expected_rule_ids=("LX0609-066",),
+        expected_rule_ids=("LX0609-04-05-03",),
         snapshot=snapshot,
         evidence_materials=materials,
     )
@@ -9187,7 +9187,7 @@ def test_postoperative_invalid_exact_fact_ref_is_technical_failure_not_business_
 @pytest.mark.asyncio
 async def test_067_missing_predischarge_course_is_non_compliant() -> None:
     snapshot, materials, result, reduced = await _evaluate_selected(
-        ("LX0609-067",),
+        ("LX0609-08-02-01",),
         {
             "inpat_registration": ({
                 "patient_status": "出院",
@@ -9204,14 +9204,14 @@ async def test_067_missing_predischarge_course_is_non_compliant() -> None:
     reduced_decision = reduced[0]
     assert reduced_decision.final_state is CustomerFinalState.DATA_GAP
     assert reduced_decision.reason_code == "source_empty"
-    assert dict(result.customer_display_facts)["LX0609-067"] == {
+    assert dict(result.customer_display_facts)["LX0609-08-02-01"] == {
         "verification_kind": "predischarge_course_presence_check",
         "discharge_date": "2026-07-03",
         "checked_dates": ["2026-07-02", "2026-07-03"],
         "course_present": False,
     }
     canonical = _canonical_extended_result(
-        rule_id="LX0609-067",
+        rule_id="LX0609-08-02-01",
         snapshot=snapshot,
         materials=materials,
         result=result,
@@ -9226,7 +9226,7 @@ async def test_067_missing_predischarge_course_is_non_compliant() -> None:
 @pytest.mark.asyncio
 async def test_067_death_case_is_not_a_discharge_trigger() -> None:
     _, _, result, reduced = await _evaluate_selected(
-        ("LX0609-067",),
+        ("LX0609-08-02-01",),
         {
             "inpat_registration": ({
                 "patient_status": "死亡",
@@ -9245,14 +9245,14 @@ async def test_067_death_case_is_not_a_discharge_trigger() -> None:
 
     assert reduced[0].final_state is CustomerFinalState.NOT_APPLICABLE
     assert reduced[0].reason_code == "trigger_absent_complete"
-    assert "LX0609-067" not in dict(result.customer_display_facts)
+    assert "LX0609-08-02-01" not in dict(result.customer_display_facts)
     assert result.llm_call_count == result.total_tokens == 0
 
 
 @pytest.mark.asyncio
 async def test_067_existing_course_without_authoritative_time_is_data_gap() -> None:
     _, _, result, reduced = await _evaluate_selected(
-        ("LX0609-067",),
+        ("LX0609-08-02-01",),
         {
             "inpat_registration": ({
                 "patient_status": "出院",
@@ -9273,7 +9273,7 @@ async def test_067_existing_course_without_authoritative_time_is_data_gap() -> N
 @pytest.mark.asyncio
 async def test_067_valid_window_course_wins_over_another_course_without_time() -> None:
     snapshot, materials, result, reduced = await _evaluate_selected(
-        ("LX0609-067",),
+        ("LX0609-08-02-01",),
         {
             "inpat_registration": ({
                 "patient_status": "出院",
@@ -9294,7 +9294,7 @@ async def test_067_valid_window_course_wins_over_another_course_without_time() -
     )
 
     canonical = _canonical_extended_result(
-        rule_id="LX0609-067",
+        rule_id="LX0609-08-02-01",
         snapshot=snapshot,
         materials=materials,
         result=result,
@@ -9315,7 +9315,7 @@ async def test_067_valid_window_course_wins_over_another_course_without_time() -
 @pytest.mark.asyncio
 async def test_067_window_daily_course_is_the_only_customer_evidence() -> None:
     snapshot, materials, result, reduced = await _evaluate_selected(
-        ("LX0609-067",),
+        ("LX0609-08-02-01",),
         {
             "inpat_registration": ({
                 "patient_status": "出院",
@@ -9330,7 +9330,7 @@ async def test_067_window_daily_course_is_the_only_customer_evidence() -> None:
     )
 
     canonical = _canonical_extended_result(
-        rule_id="LX0609-067",
+        rule_id="LX0609-08-02-01",
         snapshot=snapshot,
         materials=materials,
         result=result,
@@ -9351,7 +9351,7 @@ async def test_067_window_daily_course_is_the_only_customer_evidence() -> None:
 @pytest.mark.asyncio
 async def test_067_multiple_selected_courses_project_each_exact_coordinate() -> None:
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-067",),
+        ("LX0609-08-02-01",),
         {
             "inpat_registration": ({
                 "patient_status": "出院",
@@ -9371,7 +9371,7 @@ async def test_067_multiple_selected_courses_project_each_exact_coordinate() -> 
     )
 
     canonical = _canonical_extended_result(
-        rule_id="LX0609-067",
+        rule_id="LX0609-08-02-01",
         snapshot=snapshot,
         materials=materials,
         result=execution,
@@ -9398,7 +9398,7 @@ async def test_067_multiple_selected_courses_project_each_exact_coordinate() -> 
 @pytest.mark.asyncio
 async def test_067_duplicate_selected_document_id_never_guesses_customer_evidence() -> None:
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-067",),
+        ("LX0609-08-02-01",),
         {
             "inpat_registration": ({
                 "patient_status": "出院",
@@ -9422,7 +9422,7 @@ async def test_067_duplicate_selected_document_id_never_guesses_customer_evidenc
     )
 
     canonical = _canonical_extended_result(
-        rule_id="LX0609-067",
+        rule_id="LX0609-08-02-01",
         snapshot=snapshot,
         materials=materials,
         result=execution,
@@ -9446,7 +9446,7 @@ async def test_067_duplicate_selected_document_id_never_guesses_customer_evidenc
 @pytest.mark.asyncio
 async def test_067_window_senior_course_excludes_old_daily_course_evidence() -> None:
     snapshot, materials, result, reduced = await _evaluate_selected(
-        ("LX0609-067",),
+        ("LX0609-08-02-01",),
         {
             "inpat_registration": ({
                 "patient_status": "出院",
@@ -9465,7 +9465,7 @@ async def test_067_window_senior_course_excludes_old_daily_course_evidence() -> 
     )
 
     canonical = _canonical_extended_result(
-        rule_id="LX0609-067",
+        rule_id="LX0609-08-02-01",
         snapshot=snapshot,
         materials=materials,
         result=result,
@@ -9485,7 +9485,7 @@ async def test_067_window_senior_course_excludes_old_daily_course_evidence() -> 
 @pytest.mark.asyncio
 async def test_067_window_course_without_id_never_borrows_old_course_id() -> None:
     snapshot, materials, result, reduced = await _evaluate_selected(
-        ("LX0609-067",),
+        ("LX0609-08-02-01",),
         {
             "inpat_registration": ({
                 "patient_status": "出院",
@@ -9503,7 +9503,7 @@ async def test_067_window_course_without_id_never_borrows_old_course_id() -> Non
     )
 
     canonical = _canonical_extended_result(
-        rule_id="LX0609-067",
+        rule_id="LX0609-08-02-01",
         snapshot=snapshot,
         materials=materials,
         result=result,
@@ -9518,7 +9518,7 @@ async def test_067_window_course_without_id_never_borrows_old_course_id() -> Non
 @pytest.mark.asyncio
 async def test_075_invasive_order_with_matching_record_is_compliant() -> None:
     _, reduced = await _evaluate(
-        "LX0609-075",
+        "LX0609-10-03-01",
         {
             "inpat_nondrug_order": ({"order_name": "中心静脉置管术"},),
             "daily_course_record": ({
@@ -9534,7 +9534,7 @@ async def test_075_invasive_order_with_matching_record_is_compliant() -> None:
 @pytest.mark.asyncio
 async def test_075_invasive_order_without_course_record_delivers_defect_facts() -> None:
     result, reduced = await _evaluate(
-        "LX0609-075",
+        "LX0609-10-03-01",
         {
             "inpat_nondrug_order": ({"order_name": "中心静脉置管术"},),
             "daily_course_record": (),
@@ -9542,7 +9542,7 @@ async def test_075_invasive_order_without_course_record_delivers_defect_facts() 
     )
 
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
-    assert dict(result.customer_display_facts)["LX0609-075"] == {
+    assert dict(result.customer_display_facts)["LX0609-10-03-01"] == {
         "failure_kind": "invasive_procedure_course_record_missing",
         "ordered_procedures": ["中心静脉置管"],
         "course_documented": False,
@@ -9552,7 +9552,7 @@ async def test_075_invasive_order_without_course_record_delivers_defect_facts() 
 @pytest.mark.asyncio
 async def test_069_fact_refs_only_include_the_paired_consultation_documents() -> None:
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-069",),
+        ("LX0609-04-02-07",),
         {
             "consultation_record": (
                 {
@@ -9587,7 +9587,7 @@ async def test_069_fact_refs_only_include_the_paired_consultation_documents() ->
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("rule_id", ("LX0609-072", "LX0609-073"))
+@pytest.mark.parametrize("rule_id", ("LX0609-10-02-01", "LX0609-10-02-02"))
 async def test_transfer_fact_refs_exclude_horizon_and_unmatched_transfer_documents(
     rule_id: str,
 ) -> None:
@@ -9662,7 +9662,7 @@ async def test_transfer_fact_refs_exclude_horizon_and_unmatched_transfer_documen
 @pytest.mark.asyncio
 async def test_074_fact_refs_only_include_changed_diagnosis_and_matching_course() -> None:
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-074",),
+        ("LX0609-12-02-01",),
         {
             "diagnosis": (
                 {
@@ -9712,7 +9712,7 @@ async def test_074_fact_refs_only_include_changed_diagnosis_and_matching_course(
 def test_continuity_invalid_exact_fact_ref_is_technical_failure_not_business_state() -> None:
     snapshot, materials = _session({"consultation_record": ()})
     decision = module._decision(
-        rule_id="LX0609-069",
+        rule_id="LX0609-04-02-07",
         snapshot=snapshot,
         source_keys=(),
         document_refs=("0" * 64,),
@@ -9723,7 +9723,7 @@ def test_continuity_invalid_exact_fact_ref_is_technical_failure_not_business_sta
 
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=(decision,),
-        expected_rule_ids=("LX0609-069",),
+        expected_rule_ids=("LX0609-04-02-07",),
         snapshot=snapshot,
         evidence_materials=materials,
     )
@@ -9742,7 +9742,7 @@ async def test_069_consumed_document_binding_failure_closes_as_technical_error(
         lambda **_kwargs: ContinuityEvidenceBinding((), binding_failed=True),
     )
     _, _, _execution, reduced = await _evaluate_selected(
-        ("LX0609-069",),
+        ("LX0609-04-02-07",),
         {
             "consultation_record": (
                 {
@@ -9776,7 +9776,7 @@ async def test_074_diagnosis_reference_and_time_must_belong_to_same_course(
     matching_time, expected_state
 ):
     _, reduced = await _evaluate(
-        "LX0609-074",
+        "LX0609-12-02-01",
         {
             "diagnosis": tuple(
                 {
@@ -9815,7 +9815,7 @@ async def test_074_course_marker_without_reason_or_basis_is_non_compliant_c07_pa
         basis_quote="",
     ))
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-074",),
+        ("LX0609-12-02-01",),
         {"daily_course_record": ({
             "document_id": "COURSE-C07-CHANGE",
             "record_time": "2025-06-17 09:00:00",
@@ -9852,7 +9852,7 @@ async def test_074_course_marker_with_reason_and_basis_is_compliant_c20_pattern(
         basis_quote="诊断依据：MRI提示异常，动态脑电异常",
     ))
     _, _, execution, reduced = await _evaluate_selected(
-        ("LX0609-074",),
+        ("LX0609-12-02-01",),
         {"senior_course_record": ({
             "document_id": "COURSE-C20-CHANGE",
             "record_time": "2025-07-05 10:00:00",
@@ -9878,7 +9878,7 @@ async def test_074_empty_diagnosis_and_no_course_marker_is_not_applicable():
 
     client = _DiagnosisChangeClient()
     execution, reduced = await _evaluate(
-        "LX0609-074",
+        "LX0609-12-02-01",
         {
             "admission_record": ({"admission_diagnosis": "肺部感染"},),
             "discharge_record": ({"discharge_diagnosis": "细菌性肺炎"},),
@@ -9902,7 +9902,7 @@ async def test_074_structured_change_declaration_without_reason_is_non_compliant
 
     client = _DiagnosisChangeClient()
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-074",),
+        ("LX0609-12-02-01",),
         {
             "admission_record_diagnosis": ({
                 "document_id": "ADMISSION-DIAG-CHANGE-074",
@@ -9922,7 +9922,7 @@ async def test_074_structured_change_declaration_without_reason_is_non_compliant
 
     assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
     assert reduced[0].reason_code == "requirement_violated"
-    assert dict(execution.customer_display_facts)["LX0609-074"] == {
+    assert dict(execution.customer_display_facts)["LX0609-12-02-01"] == {
         "verification_kind": "diagnosis_change_documentation_check",
         "diagnosis_change_count": 1,
         "reason_recorded": False,
@@ -9951,7 +9951,7 @@ async def test_074_without_structured_change_declaration_is_not_applicable():
 
     client = _DiagnosisChangeClient()
     _, _, execution, reduced = await _evaluate_selected(
-        ("LX0609-074",),
+        ("LX0609-12-02-01",),
         {
             "admission_record_diagnosis": (
                 {"diagnosis_type": "入院诊断", "diagnosis_name": "肺部感染"},
@@ -9982,7 +9982,7 @@ async def test_074_no_declaration_produces_no_display_facts_or_evidence():
 
     client = _DiagnosisChangeClient()
     snapshot, _, execution, reduced = await _evaluate_selected(
-        ("LX0609-074",),
+        ("LX0609-12-02-01",),
         {
             "admission_record_diagnosis": ({
                 "diagnosis_type": "入院诊断",
@@ -10041,7 +10041,7 @@ async def test_074_structured_declaration_with_course_reason_and_basis_is_compli
         basis_quote="诊断依据：痰培养提示肺炎克雷伯菌",
     ))
     _, _, execution, reduced = await _evaluate_selected(
-        ("LX0609-074",),
+        ("LX0609-12-02-01",),
         {
             "admission_record_diagnosis": ({
                 "diagnosis_type": "修正诊断",
@@ -10060,7 +10060,7 @@ async def test_074_structured_declaration_with_course_reason_and_basis_is_compli
     # 命中理由/依据标记门禁的候选仍由受控抽取器给出事实级判定。
     assert execution.llm_call_count == 1
     assert len(client.calls) == 1
-    assert dict(execution.customer_display_facts)["LX0609-074"] == {
+    assert dict(execution.customer_display_facts)["LX0609-12-02-01"] == {
         "verification_kind": "diagnosis_change_documentation_check",
         "diagnosis_change_count": 1,
         "reason_recorded": True,
@@ -10074,7 +10074,7 @@ async def test_074_unavailable_structured_declaration_source_keeps_data_gap():
 
     client = _DiagnosisChangeClient()
     _, _, execution, reduced = await _evaluate_selected(
-        ("LX0609-074",),
+        ("LX0609-12-02-01",),
         {"daily_course_record": ({
             "record_time": "2025-08-20 10:00:00",
             "record_content": "今日查房，患者一般情况可，继续当前治疗。",
@@ -10095,7 +10095,7 @@ async def test_074_unavailable_structured_declaration_source_keeps_data_gap():
 async def test_074_diagnosis_source_error_takes_priority_and_skips_model():
     client = _DiagnosisChangeClient(_diagnosis_change_item("doc_01"))
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-074",),
+        ("LX0609-12-02-01",),
         {"daily_course_record": ({
             "document_id": "COURSE-CHANGE-DIAGNOSIS-GAP",
             "record_time": "2025-07-05 10:00:00",
@@ -10137,7 +10137,7 @@ async def test_074_negated_conditional_or_generic_marker_is_not_an_event(text):
 
     client = _DiagnosisChangeClient()
     execution, reduced = await _evaluate(
-        "LX0609-074",
+        "LX0609-12-02-01",
         {"daily_course_record": ({
             "document_id": "COURSE-NON-EVENT",
             "record_time": "2025-07-05 10:00:00",
@@ -10170,7 +10170,7 @@ async def test_074_explicit_event_formats_reach_single_extraction_call(text):
         basis_quote="",
     ))
     execution, reduced = await _evaluate(
-        "LX0609-074",
+        "LX0609-12-02-01",
         {"daily_course_record": ({
             "document_id": "COURSE-EXPLICIT-EVENT",
             "record_time": "2025-07-05 10:00:00",
@@ -10201,7 +10201,7 @@ async def test_074_multiple_course_events_cannot_cross_fill_reason_and_basis():
         ),
     )
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-074",),
+        ("LX0609-12-02-01",),
         {
             "daily_course_record": ({
                 "document_id": "COURSE-CHANGE-1",
@@ -10235,7 +10235,7 @@ async def test_074_multiple_course_events_cannot_cross_fill_reason_and_basis():
 async def test_074_course_event_without_authoritative_time_is_gap_and_skips_model():
     client = _DiagnosisChangeClient()
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-074",),
+        ("LX0609-12-02-01",),
         {"daily_course_record": ({
             "document_id": "COURSE-CHANGE-UNTIMED",
             "record_content": "修正诊断为细菌性肺炎。",
@@ -10265,7 +10265,7 @@ async def test_074_unknown_without_missing_is_uncertain():
         basis_quote="诊断依据：MRI提示异常",
     ))
     execution, reduced = await _evaluate(
-        "LX0609-074",
+        "LX0609-12-02-01",
         {"senior_course_record": ({
             "document_id": "COURSE-CHANGE-UNKNOWN",
             "record_time": "2025-07-05 10:00:00",
@@ -10299,7 +10299,7 @@ async def test_074_model_failure_is_technical_and_never_retries(
     client, expected_reason, expected_tokens
 ):
     execution, reduced = await _evaluate(
-        "LX0609-074",
+        "LX0609-12-02-01",
         {"senior_course_record": ({
             "document_id": "COURSE-CHANGE-MODEL-FAIL",
             "record_time": "2025-07-05 10:00:00",

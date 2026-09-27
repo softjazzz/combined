@@ -155,7 +155,7 @@ async def evaluate_legacy_rule_for_visit(
         source_documents=[dict(item) for item in list(rule_input.source_documents or [])],
         rule_ids=[str(rule.get("rule_id") or rule.get("rule_code") or "")],
     )
-    return {
+    result = {
         "document_id": visit_id,
         "document_type": rule_input.document_type,
         "total_rules": 1,
@@ -196,3 +196,14 @@ async def evaluate_legacy_rule_for_visit(
             "policy_version": domain_bundle.get("policy_version") or "",
         },
     }
+    # 与完整 bundle 路径（SichuanQCService._evaluate_rules_with_engine）同一合同：
+    # 引擎未明确给出观测完整性时不补键；给出时透传未知执行器列表，Worker 据此区分
+    # “确定零调用”和“成本未知”。
+    usage_observation_complete = orchestrated.get("luxian_0609_usage_observation_complete")
+    if isinstance(usage_observation_complete, bool):
+        result["luxian_0609_usage_observation_complete"] = usage_observation_complete
+        unknown_keys = orchestrated.get("luxian_0609_usage_unknown_executor_keys")
+        result["luxian_0609_usage_unknown_executor_keys"] = list(
+            unknown_keys if isinstance(unknown_keys, (list, tuple)) else []
+        )
+    return result

@@ -31,7 +31,7 @@ from .source_registry import (
 
 
 _BINDING_EVALUATOR_VERSION = "decision-binding-v1"
-_RULE_ID_PATTERN = re.compile(r"^LX0609-\d{3}$")
+_RULE_ID_PATTERN = re.compile(r"^LX0609-\d{2}-\d{2}-\d{2}$")
 logger = logging.getLogger(__name__)
 
 
@@ -125,10 +125,10 @@ def _allowed_material_document_refs(
 def _requires_evidence_ref(decision: RuleDecision) -> bool:
     if (
         decision.rule_id in {
-            "LX0609-020",
-            "LX0609-021",
-            "LX0609-022",
-            "LX0609-023",
+            "LX0609-03-01-01",
+            "LX0609-03-01-02",
+            "LX0609-03-01-03",
+            "LX0609-03-01-04",
         }
         and
         decision.applicability is ApplicabilityState.NOT_APPLICABLE

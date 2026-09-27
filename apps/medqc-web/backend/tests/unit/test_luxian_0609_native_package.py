@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.luxian_0609_identity_test_support import published_rule_ids
+
 from dataclasses import replace
 from types import SimpleNamespace
 
@@ -21,13 +23,43 @@ from app.services.luxian_0609_rule_catalog import load_luxian_0609_rules
 
 
 @pytest.mark.unit
-def test_dependency_inventory_covers_all_79_registered_rules_and_eight_families():
+def test_native_rule_does_not_require_a_legacy_rule_mapping():
+    rule_id = "LX0609-01-01-01"
+    wrapper = next(
+        item for item in load_luxian_0609_rules() if item["rule_id"] == rule_id
+    )
+    inventory = build_luxian_0609_dependency_inventory(
+        rules=[{**wrapper, "mapped_rule_ids": []}],
+        family_definitions=[
+            {"key": "basic_timeliness", "name": "基础时限", "rule_ids": (rule_id,)}
+        ],
+    )
+
+    assert inventory[0].execution_mode == EXECUTION_MODE_NATIVE_SYNC
+    assert inventory[0].compatibility_rule_ids == ()
+
+
+@pytest.mark.unit
+def test_compatibility_rule_still_requires_a_legacy_rule_mapping():
+    rule_id = "LX0609-99-99-01"
+    wrapper = load_luxian_0609_rules()[0]
+    with pytest.raises(ValueError, match="missing compatibility dependency"):
+        build_luxian_0609_dependency_inventory(
+            rules=[{**wrapper, "rule_id": rule_id, "mapped_rule_ids": []}],
+            family_definitions=[
+                {"key": "extension_test", "name": "测试扩展", "rule_ids": (rule_id,)}
+            ],
+        )
+
+
+@pytest.mark.unit
+def test_dependency_inventory_covers_all_84_execution_catalog_rules_and_eight_families():
     inventory = build_luxian_0609_dependency_inventory(
         rules=load_luxian_0609_rules(),
         family_definitions=RULE_FAMILY_DEFINITIONS,
     )
 
-    assert len(inventory) == 79
+    assert len(inventory) == 84
     assert tuple(item.rule_id for item in inventory) == tuple(
         str(item["rule_id"]) for item in load_luxian_0609_rules()
     )
@@ -41,7 +73,7 @@ def test_dependency_inventory_covers_all_79_registered_rules_and_eight_families(
         "tumor_pathology",
         "extended_document",
     }
-    assert sum(len(item.compatibility_rule_ids) for item in inventory) == 120
+    assert sum(len(item.compatibility_rule_ids) for item in inventory) == 125
     assert all(item.applicable_documents for item in inventory)
     assert all(item.dependency_type for item in inventory)
 
@@ -55,91 +87,101 @@ def test_dependency_inventory_exposes_current_native_and_compatibility_boundary(
     modes = {item.rule_id: item.execution_mode for item in inventory}
 
     assert {rule_id for rule_id, mode in modes.items() if mode == EXECUTION_MODE_NATIVE_SYNC} == {
-        "LX0609-001",
-        "LX0609-002",
-        "LX0609-004",
-        "LX0609-005",
-        "LX0609-006",
-        "LX0609-030",
-        "LX0609-032",
+        "LX0609-01-01-01",
+        "LX0609-01-02-01",
+        "LX0609-09-01-01",
+        "LX0609-02-01-01",
+        "LX0609-02-01-02",
+        "LX0609-04-02-02",
+        "LX0609-04-03-01",
+        "LX0609-09-01-02",
     }
     assert {rule_id for rule_id, mode in modes.items() if mode == EXECUTION_MODE_NATIVE_ASYNC} == {
-        "LX0609-010",
-        "LX0609-011",
-        "LX0609-012",
-        "LX0609-013",
-        "LX0609-014",
-        "LX0609-015",
-        "LX0609-019",
-        "LX0609-026",
-        "LX0609-027",
-        "LX0609-020",
-        "LX0609-021",
-        "LX0609-022",
-        "LX0609-023",
-        "LX0609-040",
-        "LX0609-041",
-        "LX0609-042",
-        "LX0609-043",
-        "LX0609-044",
-        "LX0609-045",
-        "LX0609-046",
-        "LX0609-047",
-        "LX0609-048",
-        "LX0609-049",
-        "LX0609-050",
-        "LX0609-052",
-        "LX0609-053",
-        "LX0609-054",
-        "LX0609-055",
-        "LX0609-056",
-        "LX0609-057",
-        "LX0609-058",
-        "LX0609-059",
-        "LX0609-063",
-        "LX0609-070",
-        "LX0609-075",
-        "LX0609-076",
-        "LX0609-077",
-        "LX0609-078",
-        "LX0609-079",
-        "LX0609-003",
-        "LX0609-007",
-        "LX0609-008",
-        "LX0609-009",
-        "LX0609-016",
-        "LX0609-017",
-        "LX0609-018",
-        "LX0609-024",
-        "LX0609-025",
-        "LX0609-028",
-        "LX0609-029",
-        "LX0609-031",
-        "LX0609-033",
-        "LX0609-034",
-        "LX0609-035",
-        "LX0609-036",
-        "LX0609-037",
-        "LX0609-038",
-        "LX0609-039",
-        "LX0609-051",
-        "LX0609-060",
-        "LX0609-061",
-        "LX0609-062",
-        "LX0609-064",
-        "LX0609-065",
-        "LX0609-066",
-        "LX0609-067",
-        "LX0609-068",
-        "LX0609-069",
-        "LX0609-071",
-        "LX0609-072",
-        "LX0609-073",
-        "LX0609-074",
+        "LX0609-06-01-01",
+        "LX0609-06-01-02",
+        "LX0609-06-01-04",
+        "LX0609-06-01-05",
+        "LX0609-06-02-03",
+        "LX0609-06-03-03",
+        "LX0609-06-03-04",
+        "LX0609-06-02-02",
+        "LX0609-05-02-01",
+        "LX0609-08-01-04",
+        "LX0609-03-01-01",
+        "LX0609-03-01-02",
+        "LX0609-03-01-03",
+        "LX0609-03-01-04",
+        "LX0609-04-01-03",
+        "LX0609-11-03-01",
+        "LX0609-11-03-02",
+        "LX0609-07-01-01",
+        "LX0609-07-01-02",
+        "LX0609-07-02-01",
+        "LX0609-07-02-02",
+        "LX0609-07-03-01",
+        "LX0609-07-04-01",
+        "LX0609-07-04-02",
+        "LX0609-03-02-01",
+        "LX0609-06-04-01",
+        "LX0609-06-04-02",
+        "LX0609-05-01-02",
+        "LX0609-05-01-03",
+        "LX0609-05-01-04",
+        "LX0609-05-01-05",
+        "LX0609-05-01-06",
+        "LX0609-05-03-01",
+        "LX0609-08-01-03",
+        "LX0609-07-01-03",
+        "LX0609-10-03-01",
+        "LX0609-04-02-08",
+        "LX0609-01-02-02",
+        "LX0609-04-01-04",
+        "LX0609-04-01-05",
+        "LX0609-04-02-01",
+        "LX0609-02-01-03",
+        "LX0609-02-01-04",
+        "LX0609-02-01-05",
+        "LX0609-12-01-01",
+        "LX0609-12-01-02",
+        "LX0609-01-01-02",
+        "LX0609-04-02-03",
+        "LX0609-04-02-04",
+        "LX0609-05-01-01",
+        "LX0609-04-01-01",
+        "LX0609-04-02-05",
+        "LX0609-11-01-01",
+        "LX0609-11-02-01",
+        "LX0609-11-02-02",
+        "LX0609-04-04-01",
+        "LX0609-04-04-02",
+        "LX0609-04-04-03",
+        "LX0609-04-01-02",
+        "LX0609-09-02-01",
+        "LX0609-04-02-06",
+        "LX0609-08-01-01",
+        "LX0609-08-01-02",
+        "LX0609-04-05-01",
+        "LX0609-04-05-02",
+        "LX0609-04-05-03",
+        "LX0609-08-02-01",
+        "LX0609-08-02-02",
+        "LX0609-04-02-07",
+        "LX0609-10-01-01",
+        "LX0609-10-02-01",
+        "LX0609-10-02-02",
+        "LX0609-12-02-01",
+        "LX0609-06-01-03",
+        "LX0609-06-03-02",
+        "LX0609-06-02-01",
     }
-    # 023 仍保留会诊执行器归属；是否派发由包计划的第一阶段白名单决定，
-    # 不能通过把它降为 compatibility 来破坏规则契约。
-    assert sum(mode == EXECUTION_MODE_COMPATIBILITY for mode in modes.values()) == 0
+    # 培养医嘱—病程一致性仍只登记；CT一致性已进入原生异步族。
+    assert {
+        rule_id
+        for rule_id, mode in modes.items()
+        if mode == EXECUTION_MODE_COMPATIBILITY
+    } == set()
+    assert "LX0609-06-03-01" not in modes
+    assert modes["LX0609-06-01-01"] == EXECUTION_MODE_NATIVE_ASYNC
 
 
 @pytest.mark.unit
@@ -148,7 +190,7 @@ def test_exam_lab_family_flag_partitions_only_five_customer_rules():
         rules=load_luxian_0609_rules(),
         family_definitions=RULE_FAMILY_DEFINITIONS,
     )
-    selected = ["LX0609-010", "LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015"]
+    selected = ["LX0609-06-01-02", "LX0609-06-01-04", "LX0609-06-01-05", "LX0609-06-03-03", "LX0609-06-03-04"]
 
     enabled = build_luxian_0609_package_plan(
         inventory=inventory,
@@ -180,7 +222,7 @@ def test_formal_plan_rejects_exam_lab_compatibility_and_accepts_fully_native_pla
     )
     common = {
         "inventory": inventory,
-        "selected_rule_ids": ["LX0609-010"],
+        "selected_rule_ids": ["LX0609-06-01-02"],
         "native_sync_enabled": True,
         "native_mdt_enabled": False,
     }
@@ -193,7 +235,7 @@ def test_formal_plan_rejects_exam_lab_compatibility_and_accepts_fully_native_pla
         native_exam_lab_enabled=True,
     )
 
-    with pytest.raises(ValueError, match="正式质控禁止兼容执行.*LX0609-010.*LXE-23"):
+    with pytest.raises(ValueError, match="正式质控禁止兼容执行.*LX0609-06-01-02.*LXE-23"):
         assert_luxian_0609_formal_package_plan_native_only(
             compatibility,
             context="test",
@@ -205,13 +247,13 @@ def test_formal_plan_rejects_exam_lab_compatibility_and_accepts_fully_native_pla
 
     pending = build_luxian_0609_package_plan(
         inventory=inventory,
-        selected_rule_ids=["LX0609-025"],
+        selected_rule_ids=["LX0609-04-02-04"],
         native_sync_enabled=True,
         native_mdt_enabled=False,
         native_surgery_gate_enabled=True,
     )
-    assert pending.not_executed_rule_ids == ("LX0609-025",)
-    assert "LX0609-025" in pending.prepared_rule_ids_to_remove
+    assert pending.not_executed_rule_ids == ("LX0609-04-02-04",)
+    assert "LX0609-04-02-04" in pending.prepared_rule_ids_to_remove
     assert_luxian_0609_formal_package_plan_native_only(
         pending,
         context="test",
@@ -224,7 +266,7 @@ def test_transfusion_family_flag_partitions_only_nine_customer_rules():
         rules=load_luxian_0609_rules(),
         family_definitions=RULE_FAMILY_DEFINITIONS,
     )
-    selected = [f"LX0609-{number:03d}" for number in range(41, 50)]
+    selected = list(published_rule_ids(41, 49))
 
     enabled = build_luxian_0609_package_plan(
         inventory=inventory,
@@ -245,13 +287,13 @@ def test_transfusion_family_flag_partitions_only_nine_customer_rules():
     assert enabled.native_async_rule_ids == expected_executable
     assert enabled.compatibility_rule_ids == ()
     assert enabled.native_executor_batches == (("transfusion", expected_executable),)
-    assert enabled.not_executed_rule_ids == ("LX0609-049",)
-    assert "LX0609-049" in enabled.prepared_rule_ids_to_remove
+    assert enabled.not_executed_rule_ids == ("LX0609-07-04-02",)
+    assert "LX0609-07-04-02" in enabled.prepared_rule_ids_to_remove
     assert disabled.native_async_rule_ids == ()
     assert disabled.compatibility_rule_ids == expected_executable
-    assert disabled.not_executed_rule_ids == ("LX0609-049",)
-    assert "LX0609-041" not in disabled.prepared_rule_ids_to_remove
-    assert "LX0609-049" in disabled.prepared_rule_ids_to_remove
+    assert disabled.not_executed_rule_ids == ("LX0609-07-04-02",)
+    assert "LX0609-11-03-01" not in disabled.prepared_rule_ids_to_remove
+    assert "LX0609-07-04-02" in disabled.prepared_rule_ids_to_remove
 
 
 @pytest.mark.unit
@@ -260,7 +302,7 @@ def test_tumor_pathology_family_flag_partitions_only_four_customer_rules():
         rules=load_luxian_0609_rules(),
         family_definitions=RULE_FAMILY_DEFINITIONS,
     )
-    selected = ["LX0609-013", "LX0609-019", "LX0609-026", "LX0609-027"]
+    selected = ["LX0609-06-02-03", "LX0609-06-02-02", "LX0609-05-02-01", "LX0609-08-01-04"]
 
     enabled = build_luxian_0609_package_plan(
         inventory=inventory,
@@ -289,17 +331,17 @@ def test_tumor_pathology_family_flag_partitions_only_four_customer_rules():
     ("selected", "flag_name", "executor_key"),
     [
         (
-            ["LX0609-007", "LX0609-008", "LX0609-009", "LX0609-016", "LX0609-017", "LX0609-018"],
+            ["LX0609-02-01-03", "LX0609-02-01-04", "LX0609-02-01-05", "LX0609-12-01-01", "LX0609-12-01-02", "LX0609-01-01-02"],
             "native_course_quality_enabled",
             "course_quality",
         ),
         (
-            ["LX0609-003", "LX0609-024", "LX0609-025", "LX0609-028", "LX0609-031", "LX0609-033"],
+            ["LX0609-04-02-01", "LX0609-04-02-03", "LX0609-04-02-04", "LX0609-05-01-01", "LX0609-04-02-05", "LX0609-11-01-01"],
             "native_surgery_gate_enabled",
             "surgery_gate",
         ),
         (
-            ["LX0609-034", "LX0609-035", "LX0609-036", "LX0609-037", "LX0609-038", "LX0609-039"],
+            ["LX0609-11-02-01", "LX0609-11-02-02", "LX0609-04-04-01", "LX0609-04-04-02", "LX0609-04-04-03", "LX0609-04-01-02"],
             "native_surgery_document_enabled",
             "surgery_document",
         ),
@@ -340,9 +382,9 @@ def test_remaining_family_flags_partition_only_their_customer_rules(
     ("native_mdt_enabled", "native_extended_document_enabled", "expected_native"),
     (
         (False, False, ()),
-        (False, True, ("LX0609-050",)),
-        (True, False, ("LX0609-040",)),
-        (True, True, ("LX0609-040", "LX0609-050")),
+        (False, True, ("LX0609-03-02-01",)),
+        (True, False, ("LX0609-04-01-03",)),
+        (True, True, ("LX0609-04-01-03", "LX0609-03-02-01")),
     ),
 )
 def test_mdt_and_extended_document_gates_are_independent(
@@ -357,11 +399,11 @@ def test_mdt_and_extended_document_gates_are_independent(
         family_definitions=RULE_FAMILY_DEFINITIONS,
     )
     selected = (
-        "LX0609-040",
-        "LX0609-050",
-        "LX0609-056",
-        "LX0609-059",
-        "LX0609-075",
+        "LX0609-04-01-03",
+        "LX0609-03-02-01",
+        "LX0609-05-01-04",
+        "LX0609-05-03-01",
+        "LX0609-10-03-01",
     )
 
     plan = build_luxian_0609_package_plan_from_settings(
@@ -378,13 +420,13 @@ def test_mdt_and_extended_document_gates_are_independent(
 
     assert plan.native_async_rule_ids == expected_native
     assert plan.not_executed_rule_ids == (
-        "LX0609-056",
-        "LX0609-059",
-        "LX0609-075",
+        "LX0609-05-01-04",
+        "LX0609-05-03-01",
+        "LX0609-10-03-01",
     )
     assert plan.compatibility_rule_ids == tuple(
         rule_id
-        for rule_id in ("LX0609-040", "LX0609-050")
+        for rule_id in ("LX0609-04-01-03", "LX0609-03-02-01")
         if rule_id not in expected_native
     )
 
@@ -395,7 +437,7 @@ def test_unknown_native_async_executor_is_not_implicitly_enabled():
 
     inventory = tuple(
         replace(item, executor_key="future_async_executor")
-        if item.rule_id == "LX0609-050"
+        if item.rule_id == "LX0609-03-02-01"
         else item
         for item in build_luxian_0609_dependency_inventory(
             rules=load_luxian_0609_rules(),
@@ -405,14 +447,14 @@ def test_unknown_native_async_executor_is_not_implicitly_enabled():
 
     plan = build_luxian_0609_package_plan(
         inventory=inventory,
-        selected_rule_ids=("LX0609-050",),
+        selected_rule_ids=("LX0609-03-02-01",),
         native_sync_enabled=True,
         native_mdt_enabled=True,
         native_extended_document_enabled=True,
     )
 
     assert plan.native_async_rule_ids == ()
-    assert plan.compatibility_rule_ids == ("LX0609-050",)
+    assert plan.compatibility_rule_ids == ("LX0609-03-02-01",)
     assert plan.native_executor_batches == ()
 
 
@@ -441,13 +483,12 @@ def test_stage_one_consultation_flags_keep_execution_rules_on_compatibility_path
         native_surgery_document_029_enabled=True,
     )
 
-    assert len(plan.native_sync_rule_ids) + len(plan.native_async_rule_ids) == 69
-    assert len(plan.not_executed_rule_ids) == 6
-    assert plan.compatibility_rule_ids == ("LX0609-020", "LX0609-023")
+    assert len(plan.native_sync_rule_ids) + len(plan.native_async_rule_ids) == 73
+    assert len(plan.not_executed_rule_ids) == 10
+    assert plan.compatibility_rule_ids == ("LX0609-03-01-04",)
     assert plan.compatibility_execution_rule_ids == (
-        "LX-017",
-        "CL-250",
         "CL-248",
+        "CL-250",
         "CL-071",
     )
 
@@ -477,9 +518,9 @@ def test_all_enabled_native_families_leave_only_029_as_explicit_compatibility_ex
         native_surgery_document_029_enabled=False,
     )
 
-    assert len(plan.native_sync_rule_ids) + len(plan.native_async_rule_ids) == 70
-    assert len(plan.not_executed_rule_ids) == 6
-    assert plan.compatibility_rule_ids == ("LX0609-029",)
+    assert len(plan.native_sync_rule_ids) + len(plan.native_async_rule_ids) == 73
+    assert len(plan.not_executed_rule_ids) == 10
+    assert plan.compatibility_rule_ids == ("LX0609-04-01-01",)
     assert plan.compatibility_execution_rule_ids == ("CL-181", "SC-081")
 
 
@@ -491,7 +532,7 @@ def test_029_surgery_document_requires_its_explicit_unified_opt_in():
     )
     common = {
         "inventory": inventory,
-        "selected_rule_ids": ["LX0609-029"],
+        "selected_rule_ids": ["LX0609-04-01-01"],
         "native_sync_enabled": True,
         "native_mdt_enabled": False,
         "native_surgery_document_enabled": True,
@@ -503,11 +544,11 @@ def test_029_surgery_document_requires_its_explicit_unified_opt_in():
         native_surgery_document_029_enabled=True,
     )
 
-    assert compatibility.compatibility_rule_ids == ("LX0609-029",)
+    assert compatibility.compatibility_rule_ids == ("LX0609-04-01-01",)
     assert compatibility.compatibility_execution_rule_ids == ("CL-181", "SC-081")
-    assert enabled.native_async_rule_ids == ("LX0609-029",)
+    assert enabled.native_async_rule_ids == ("LX0609-04-01-01",)
     assert enabled.native_executor_batches == (
-        ("surgery_document", ("LX0609-029",)),
+        ("surgery_document", ("LX0609-04-01-01",)),
     )
 
 
@@ -519,7 +560,7 @@ def test_package_plan_accepts_only_customer_ids_and_keeps_legacy_ids_internal():
     )
     plan = build_luxian_0609_package_plan(
         inventory=inventory,
-        selected_rule_ids=["LX0609-040", "LX0609-029", "LX0609-001"],
+        selected_rule_ids=["LX0609-04-01-03", "LX0609-04-01-01", "LX0609-01-01-01"],
         native_sync_enabled=True,
         native_mdt_enabled=False,
         native_basic_timeliness_enabled=True,
@@ -527,15 +568,15 @@ def test_package_plan_accepts_only_customer_ids_and_keeps_legacy_ids_internal():
         native_surgery_document_029_enabled=True,
     )
 
-    assert plan.selected_rule_ids == ("LX0609-001", "LX0609-029", "LX0609-040")
-    assert plan.native_sync_rule_ids == ("LX0609-001",)
-    assert plan.native_async_rule_ids == ("LX0609-029",)
-    assert plan.compatibility_rule_ids == ("LX0609-040",)
+    assert plan.selected_rule_ids == ("LX0609-01-01-01", "LX0609-04-01-01", "LX0609-04-01-03")
+    assert plan.native_sync_rule_ids == ("LX0609-01-01-01",)
+    assert plan.native_async_rule_ids == ("LX0609-04-01-01",)
+    assert plan.compatibility_rule_ids == ("LX0609-04-01-03",)
     assert plan.compatibility_execution_rule_ids == ("SC-083", "CL-108")
     assert plan.bypassed_execution_rule_ids == ("SC-002", "CL-181", "SC-081")
     assert plan.native_executor_batches == (
-        ("basic_timeliness", ("LX0609-001",)),
-        ("surgery_document", ("LX0609-029",)),
+        ("basic_timeliness", ("LX0609-01-01-01",)),
+        ("surgery_document", ("LX0609-04-01-01",)),
     )
 
     with pytest.raises(ValueError, match="invalid LX0609 customer rule id"):
@@ -556,7 +597,7 @@ def test_package_plan_keeps_pending_rules_visible_but_never_dispatches_them():
 
     plan = build_luxian_0609_package_plan(
         inventory=inventory,
-        selected_rule_ids=["LX0609-059", "LX0609-017", "LX0609-049"],
+        selected_rule_ids=["LX0609-05-03-01", "LX0609-12-01-02", "LX0609-07-04-02"],
         native_sync_enabled=True,
         native_mdt_enabled=True,
         native_course_quality_enabled=True,
@@ -564,15 +605,15 @@ def test_package_plan_keeps_pending_rules_visible_but_never_dispatches_them():
     )
 
     assert plan.selected_rule_ids == (
-        "LX0609-017",
-        "LX0609-049",
-        "LX0609-059",
+        "LX0609-12-01-02",
+        "LX0609-07-04-02",
+        "LX0609-05-03-01",
     )
-    assert plan.executable_rule_ids == ("LX0609-017",)
-    assert plan.not_executed_rule_ids == ("LX0609-049", "LX0609-059")
-    assert plan.native_async_rule_ids == ("LX0609-017",)
-    assert "LX0609-049" not in plan.compatibility_rule_ids
-    assert "LX0609-059" not in plan.compatibility_rule_ids
+    assert plan.executable_rule_ids == ("LX0609-12-01-02",)
+    assert plan.not_executed_rule_ids == ("LX0609-07-04-02", "LX0609-05-03-01")
+    assert plan.native_async_rule_ids == ("LX0609-12-01-02",)
+    assert "LX0609-07-04-02" not in plan.compatibility_rule_ids
+    assert "LX0609-05-03-01" not in plan.compatibility_rule_ids
 
 
 @pytest.mark.unit
@@ -580,10 +621,10 @@ def test_package_plan_keeps_pending_rules_visible_but_never_dispatches_them():
     ("native_consultation_enabled", "execution_link_enabled", "expected_native", "expected_compatibility"),
     (
         # 020/021/022 因会诊来源缺失暂停，只剩 023 参与本族包计划。
-        (False, False, (), ("LX0609-023",)),
-        (False, True, (), ("LX0609-023",)),
-        (True, False, (), ("LX0609-023",)),
-        (True, True, ("LX0609-023",), ()),
+        (False, False, (), ("LX0609-03-01-04",)),
+        (False, True, (), ("LX0609-03-01-04",)),
+        (True, False, (), ("LX0609-03-01-04",)),
+        (True, True, ("LX0609-03-01-04",), ()),
     ),
 )
 def test_consultation_two_stage_package_dispatch(
@@ -600,10 +641,10 @@ def test_consultation_two_stage_package_dispatch(
     plan = build_luxian_0609_package_plan(
         inventory=inventory,
         selected_rule_ids=[
-            "LX0609-020",
-            "LX0609-021",
-            "LX0609-022",
-            "LX0609-023",
+            "LX0609-03-01-01",
+            "LX0609-03-01-02",
+            "LX0609-03-01-03",
+            "LX0609-03-01-04",
         ],
         native_sync_enabled=True,
         native_mdt_enabled=False,
@@ -632,7 +673,7 @@ def test_transition_adapter_resolves_raw_ids_to_customer_ids_in_catalog_order():
     assert resolve_selected_customer_rule_ids(
         inventory=inventory,
         prepared_rule_ids={"SC-083", "CL-181", "SC-002"},
-    ) == ("LX0609-001", "LX0609-029", "LX0609-040")
+    ) == ("LX0609-01-01-01", "LX0609-04-01-01", "LX0609-04-01-03")
 
 
 @pytest.mark.unit
@@ -644,7 +685,7 @@ def test_public_package_entry_expands_only_inside_the_package():
 
     assert resolve_package_entry_execution_rule_ids(
         inventory=inventory,
-        selected_rule_ids=["LX0609-013"],
+        selected_rule_ids=["LX0609-06-02-03"],
     ) == ("SC-037", "SC-099", "SC-114")
 
     with pytest.raises(ValueError, match="invalid LX0609 customer rule id"):
@@ -658,12 +699,12 @@ def test_public_package_entry_expands_only_inside_the_package():
 @pytest.mark.parametrize(
     "rule_id",
     (
-        "LX0609-025",
-        "LX0609-028",
-        "LX0609-049",
-        "LX0609-056",
-        "LX0609-059",
-        "LX0609-075",
+        "LX0609-04-02-04",
+        "LX0609-05-01-01",
+        "LX0609-07-04-02",
+        "LX0609-05-01-04",
+        "LX0609-05-03-01",
+        "LX0609-10-03-01",
     ),
 )
 def test_public_package_entry_never_expands_pending_rules_to_legacy_execution_ids(

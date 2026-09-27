@@ -1,4 +1,4 @@
-"""LX0609-072/073 转科文书按单次转科事件关联的确定性判定。"""
+"""LX0609-10-02-01、LX0609-10-02-02 转科文书按单次转科事件关联的确定性判定。"""
 
 from __future__ import annotations
 
@@ -162,7 +162,7 @@ def _display_facts(
     facts: dict[str, Any] = {
         "verification_kind": (
             "transfer_record_timeliness_check"
-            if rule_id == "LX0609-072"
+            if rule_id == "LX0609-10-02-01"
             else "transfer_record_presence_check"
         ),
         "transfer_order_time": order_time.isoformat(sep=" ") if order_time else None,
@@ -173,7 +173,7 @@ def _display_facts(
             transfer_out_time.isoformat(sep=" ") if transfer_out_time else None
         ),
     }
-    if rule_id == "LX0609-072" and order_time is not None:
+    if rule_id == "LX0609-10-02-01" and order_time is not None:
         facts["threshold_hours"] = 24
         facts["transfer_in_interval_hours"] = (
             round((transfer_in_time - order_time).total_seconds() / 3600, 2)
@@ -185,7 +185,7 @@ def _display_facts(
             if transfer_out_time is not None
             else None
         )
-    if rule_id == "LX0609-073":
+    if rule_id == "LX0609-10-02-02":
         facts["transfer_in_associated"] = (
             True if transfer_in_state == "matched" else False if transfer_in_state in {"missing", "historical"} else None
         )
@@ -276,7 +276,7 @@ def evaluate_transfer_documentation(
     if "multiple" in states:
         return TransferDocumentationOutcome("data_gap", "association_failed", facts)
     if "missing" in states or "historical" in states:
-        if rule_id == "LX0609-072":
+        if rule_id == "LX0609-10-02-01":
             window_mature, window_error = _transfer_window_state(
                 order_time=order_time,
                 evaluation_horizon_date=evaluation_horizon_date,
@@ -296,7 +296,7 @@ def evaluate_transfer_documentation(
         return TransferDocumentationOutcome(
             "data_gap", "authoritative_time_missing", facts
         )
-    if rule_id == "LX0609-073":
+    if rule_id == "LX0609-10-02-02":
         return TransferDocumentationOutcome("compliant", "requirement_satisfied", facts)
 
     intervals = (

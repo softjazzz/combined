@@ -95,17 +95,17 @@ _DATA_GAP_EXPLANATIONS = {
 }
 
 _RULE_DATA_GAP_EXPLANATIONS = {
-    ("LX0609-069", "source_unavailable"): {
+    ("LX0609-04-02-07", "source_unavailable"): {
         "reason_label": "机构数据源未接入",
         "missing_sources": ["会诊申请时间"],
         "missing_fields": [],
     },
-    ("LX0609-009", "candidate_scope_incomplete"): {
+    ("LX0609-02-01-05", "candidate_scope_incomplete"): {
         "reason_label": "自动核对范围超限",
         "missing_sources": [],
         "missing_fields": [],
     },
-    ("LX0609-028", "required_field_missing"): {
+    ("LX0609-05-01-01", "required_field_missing"): {
         "reason_label": "预防性抗菌药物时长字段不完整",
         "missing_sources": [],
         "missing_fields": [
@@ -115,12 +115,12 @@ _RULE_DATA_GAP_EXPLANATIONS = {
             "抗菌药物实际停用时间",
         ],
     },
-    ("LX0609-031", "association_failed"): {
+    ("LX0609-04-02-05", "association_failed"): {
         "reason_label": "手术签名信息暂无法核对",
         "missing_sources": [],
         "missing_fields": ["主刀医师签名", "手术事件与手术记录的对应关系"],
     },
-    ("LX0609-048", "transfusion_comparison_fields_unavailable"): {
+    ("LX0609-07-04-01", "transfusion_comparison_fields_unavailable"): {
         "reason_label": "术中输血比对资料不完整",
         "missing_sources": [],
         "missing_fields": [],
@@ -150,38 +150,43 @@ _CUSTOMER_SOURCE_LABELS = {
     "lab_attention_report": "检验危急值报告",
 }
 
+_PRIVATE_CUSTOMER_FACT_KEYS = frozenset(
+    {
+        "source_document_id",
+        "source_document_ids",
+        "source_document_refs",
+        "trigger_order_id",
+        "trigger_source",
+    }
+)
+
+
+def _contains_private_customer_fact_identifier(value: Any) -> bool:
+    if isinstance(value, Mapping):
+        return any(
+            not isinstance(key, str)
+            or key in _PRIVATE_CUSTOMER_FACT_KEYS
+            or _contains_private_customer_fact_identifier(item)
+            for key, item in value.items()
+        )
+    if isinstance(value, (list, tuple)):
+        return any(_contains_private_customer_fact_identifier(item) for item in value)
+    return False
+
+
 def validate_luxian_0609_executor_customer_display_facts(
     *, rule_id: str, raw: Any
 ) -> dict[str, Any] | None | NotImplementedType:
     """接收执行器已验证的客户事实，拒绝任何内部文书标识。"""
 
-    private_keys = frozenset(
-        {
-            "source_document_id",
-            "source_document_ids",
-            "source_document_refs",
-            "trigger_order_id",
-            "trigger_source",
-        }
-    )
-
-    def contains_private_identifier(value: Any) -> bool:
-        if isinstance(value, Mapping):
-            return any(
-                not isinstance(key, str)
-                or key in private_keys
-                or contains_private_identifier(item)
-                for key, item in value.items()
-            )
-        if isinstance(value, (list, tuple)):
-            return any(contains_private_identifier(item) for item in value)
-        return False
+    contains_private_identifier = _contains_private_customer_fact_identifier
 
     # 规则族的受控字段合同仍由其执行器侧投影器拥有；Finalizer 只提供
     # 一个统一接收边界，避免聚合层重新解释客户事实。
     from .basic_timeliness_customer_projection import (
         is_basic_timeliness_customer_rule,
         safe_basic_timeliness_customer_display_facts,
+        validate_published_basic_timeliness_facts,
     )
     from .antimicrobial_result_mapping import (
         is_antimicrobial_customer_rule,
@@ -349,10 +354,15 @@ def validate_luxian_0609_executor_customer_display_facts(
             else None
         )
     if is_consultation_customer_rule(rule_id):
-        safe_facts = safe_consultation_customer_display_facts(
-            rule_id=rule_id,
-            raw=raw,
-        )
+        from .consultation_customer_projection import validate_published_consultation_facts
+
+        # 原生会诊执行器已经投影一次；已发布形态只校验，旧内部形态才投影。
+        safe_facts = validate_published_consultation_facts(rule_id=rule_id, raw=raw)
+        if safe_facts is None:
+            safe_facts = safe_consultation_customer_display_facts(
+                rule_id=rule_id,
+                raw=raw,
+            )
         return (
             safe_facts
             if safe_facts is not None and not contains_private_identifier(safe_facts)
@@ -410,9 +420,177 @@ def validate_luxian_0609_executor_customer_display_facts(
         )
     if not is_basic_timeliness_customer_rule(rule_id):
         return NotImplemented
-    if not isinstance(raw, Mapping) or contains_private_identifier(raw):
+    normalized_rule_id = str(rule_id or "").strip().upper()
+    if (
+        not isinstance(raw, Mapping)
+        or (
+            normalized_rule_id != "LX0609-09-01-02"
+            and contains_private_identifier(raw)
+        )
+    ):
         return None
-    return safe_basic_timeliness_customer_display_facts(rule_id=rule_id, raw=raw)
+    # 基础时限原生执行器已在 add_customer_fact 完成事实投影；Finalizer只
+    # 校验已发布形态，避免二次舍入或删改临界时长。新增抢救内容规则保留
+    # 其独立原子事实投影合同。
+    safe_facts = (
+        validate_published_basic_timeliness_facts(rule_id=normalized_rule_id, raw=raw)
+        if normalized_rule_id != "LX0609-09-01-02"
+        else safe_basic_timeliness_customer_display_facts(rule_id=normalized_rule_id, raw=raw)
+    )
+    return (
+        safe_facts
+        if safe_facts is not None and not contains_private_identifier(safe_facts)
+        else None
+    )
+
+
+def validate_luxian_0609_published_customer_display_facts(
+    *, rule_id: str, raw: Any, status: str = "", reason_code: str = "",
+) -> dict[str, Any] | None | NotImplementedType:
+    """校验已发布的公开事实；已隔离规则不再进入执行器内部事实投影。"""
+
+    normalized_rule_id = str(rule_id or "").strip().upper()
+    if raw is None or raw == {}:
+        if status == "not_executed" and reason_code == "policy_definition_pending":
+            from .phase_scope import get_luxian_0609_phase_scope
+
+            scope = get_luxian_0609_phase_scope(normalized_rule_id)
+            if scope is not None and scope.phase_status == "pending_definition":
+                return None
+    from .basic_timeliness_customer_projection import (
+        basic_timeliness_allows_absent_published_facts,
+        basic_timeliness_customer_fact_status_is_valid,
+        is_basic_timeliness_customer_rule,
+        validate_published_basic_timeliness_facts,
+    )
+    if is_basic_timeliness_customer_rule(normalized_rule_id):
+        if raw is None or raw == {}:
+            if basic_timeliness_allows_absent_published_facts(
+                rule_id=normalized_rule_id, status=status, reason_code=reason_code,
+            ):
+                return None
+            raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
+        validated = validate_published_basic_timeliness_facts(
+            rule_id=normalized_rule_id, raw=raw,
+        )
+        if validated is None or (
+            status and not basic_timeliness_customer_fact_status_is_valid(
+                rule_id=normalized_rule_id, status=status, safe_facts=validated,
+            )
+        ):
+            raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
+        return validated
+    if normalized_rule_id == "LX0609-06-02-01":
+        from .tumor_pathology_result_mapping import (
+            validate_published_pathology_report_completeness_facts,
+        )
+
+        validated = validate_published_pathology_report_completeness_facts(raw)
+        if validated is None:
+            raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
+        return validated
+    if normalized_rule_id == "LX0609-06-01-01":
+        from .ct_order_course_consistency import validate_ct_display_facts
+
+        validated = validate_ct_display_facts(raw)
+        if validated is None:
+            raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
+        return validated
+    from .course_quality_result_mapping import (
+        is_course_quality_customer_rule,
+        validate_published_course_quality_facts,
+    )
+    if is_course_quality_customer_rule(normalized_rule_id):
+        valid, validated = validate_published_course_quality_facts(
+            rule_id=normalized_rule_id, raw=raw, status=status, reason_code=reason_code,
+        )
+        if not valid:
+            raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
+        return validated
+    from .consultation_customer_projection import (
+        is_consultation_customer_rule,
+        validate_published_consultation_facts,
+    )
+    if is_consultation_customer_rule(normalized_rule_id):
+        if (
+            normalized_rule_id == "LX0609-03-01-04"
+            and (raw is None or raw == {})
+            and status == "not_applicable"
+            and reason_code == "trigger_absent_complete"
+        ):
+            return None
+        validated = validate_published_consultation_facts(rule_id=normalized_rule_id, raw=raw)
+        if validated is None:
+            raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
+        return validated
+    from .critical_value_result_mapping import (
+        critical_value_customer_fact_status_is_valid,
+        is_critical_value_customer_rule,
+        validate_published_critical_value_facts,
+    )
+    if is_critical_value_customer_rule(normalized_rule_id):
+        valid, validated = validate_published_critical_value_facts(rule_id=normalized_rule_id, raw=raw)
+        if not valid or (
+            validated is not None
+            and status
+            and not critical_value_customer_fact_status_is_valid(
+                rule_id=normalized_rule_id, status=status, safe_facts=validated,
+            )
+        ):
+            raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
+        return validated
+    from .continuity_result_mapping import (
+        is_continuity_customer_rule,
+        validate_published_continuity_facts,
+    )
+    if is_continuity_customer_rule(normalized_rule_id):
+        valid, validated = validate_published_continuity_facts(rule_id=normalized_rule_id, raw=raw)
+        if not valid:
+            raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
+        return validated
+    from .death_document_result_mapping import (
+        is_death_document_customer_rule,
+        validate_published_death_document_facts,
+    )
+    if is_death_document_customer_rule(normalized_rule_id):
+        if raw is None or raw == {}:
+            return None
+        validated = validate_published_death_document_facts(rule_id=normalized_rule_id, raw=raw)
+        if validated is None:
+            raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
+        return validated
+    from .discharge_result_mapping import (
+        is_discharge_customer_rule,
+        validate_published_discharge_facts,
+    )
+    if is_discharge_customer_rule(normalized_rule_id):
+        if raw is None or raw == {}:
+            return None
+        validated = validate_published_discharge_facts(rule_id=normalized_rule_id, raw=raw)
+        if validated is None:
+            raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
+        return validated
+    if raw is None or not isinstance(raw, dict):
+        return None
+    validated = validate_luxian_0609_executor_customer_display_facts(
+        rule_id=normalized_rule_id, raw=raw,
+    )
+    if validated is None:
+        # 非空的已发布事实未通过其规则族合同，不能在读取时静默丢成空事实。
+        raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
+    from .antimicrobial_result_mapping import (
+        antimicrobial_customer_fact_status_is_valid,
+        is_antimicrobial_customer_rule,
+    )
+    if (
+        status
+        and is_antimicrobial_customer_rule(normalized_rule_id)
+        and not antimicrobial_customer_fact_status_is_valid(
+            rule_id=normalized_rule_id, status=status, safe_facts=validated,
+        )
+    ):
+        raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
+    return validated
 
 
 def finalizer_owns_executor_customer_display_facts(rule_id: str) -> bool:
@@ -434,10 +612,10 @@ def finalizer_owns_executor_customer_display_facts(rule_id: str) -> bool:
     from .death_document_result_mapping import is_death_document_customer_rule
     from .discharge_result_mapping import is_discharge_customer_rule
     from .critical_value_result_mapping import is_critical_value_customer_rule
+    from .continuity_result_mapping import is_continuity_customer_rule
     from .basic_timeliness_customer_projection import is_basic_timeliness_customer_rule
     from .antimicrobial_result_mapping import is_antimicrobial_customer_rule
     from .postoperative_result_mapping import is_postoperative_customer_rule
-    from .continuity_result_mapping import is_continuity_customer_rule
     from .surgery_presence_result_mapping import is_surgery_presence_customer_rule
 
     return (
@@ -525,6 +703,7 @@ def finalize_luxian_0609_executor_customer_display_facts(
     raw_facts: Any,
     contract_failure: bool = False,
     preserve_legacy_exception: bool = False,
+    _validated_facts: dict[str, Any] | None | NotImplementedType = NotImplemented,
 ) -> tuple[dict[str, Any], bool]:
     """在单规则边界收敛执行器客户事实合同失败。
 
@@ -538,12 +717,14 @@ def finalize_luxian_0609_executor_customer_display_facts(
         str(finalized.get("rule_id") or finalized.get("rule_code") or "")
     ):
         return finalized, False
+    normalized_rule_id = str(
+        finalized.get("rule_id") or finalized.get("rule_code") or ""
+    ).strip().upper()
     safe_facts = (
-        None
-        if contract_failure
-        else validate_luxian_0609_executor_customer_display_facts(
-            rule_id=str(finalized.get("rule_id") or finalized.get("rule_code") or ""),
-            raw=raw_facts,
+        None if contract_failure else
+        _validated_facts if _validated_facts is not NotImplemented else
+        validate_luxian_0609_executor_customer_display_facts(
+            rule_id=normalized_rule_id, raw=raw_facts,
         )
     )
     if safe_facts is NotImplemented:
@@ -586,6 +767,10 @@ def finalize_luxian_0609_executor_customer_display_facts(
     from .critical_value_result_mapping import (
         critical_value_customer_fact_status_is_valid,
         is_critical_value_customer_rule,
+    )
+    from .exam_lab_result_mapping import (
+        exam_lab_customer_fact_status_is_valid,
+        is_exam_lab_customer_rule,
     )
     from .tumor_pathology_result_mapping import (
         is_tumor_pathology_customer_rule,
@@ -718,6 +903,16 @@ def finalize_luxian_0609_executor_customer_display_facts(
     )
     if is_critical_value_customer_rule(rule_id) and not critical_value_status_valid:
         safe_facts = None
+    exam_lab_status_valid = (
+        is_exam_lab_customer_rule(rule_id)
+        and exam_lab_customer_fact_status_is_valid(
+            rule_id=rule_id,
+            status=str(finalized.get("status") or "").strip().lower(),
+            safe_facts=safe_facts,
+        )
+    )
+    if is_exam_lab_customer_rule(rule_id) and not exam_lab_status_valid:
+        safe_facts = None
     tumor_pathology_status_valid = (
         is_tumor_pathology_customer_rule(rule_id)
         and tumor_pathology_customer_fact_status_is_valid(
@@ -816,6 +1011,13 @@ def finalize_luxian_0609_reduced_customer_result(
     """
 
     from .decision_reducer import ReducedRuleDecision
+    from .basic_timeliness_customer_projection import is_basic_timeliness_customer_rule
+    from .course_quality_result_mapping import is_course_quality_customer_rule
+    from .consultation_customer_projection import is_consultation_customer_rule
+    from .critical_value_result_mapping import is_critical_value_customer_rule
+    from .continuity_result_mapping import is_continuity_customer_rule
+    from .death_document_result_mapping import is_death_document_customer_rule
+    from .discharge_result_mapping import is_discharge_customer_rule
 
     if not isinstance(decision, ReducedRuleDecision):
         raise TypeError("decision must be a ReducedRuleDecision")
@@ -859,6 +1061,19 @@ def finalize_luxian_0609_reduced_customer_result(
             result=result,
             raw_facts=raw_customer_display_facts,
             preserve_legacy_exception=True,
+            _validated_facts=(
+                safe_facts
+                if (is_basic_timeliness_customer_rule(rule_id)
+                    or is_course_quality_customer_rule(rule_id)
+                    or is_consultation_customer_rule(rule_id)
+                    or is_critical_value_customer_rule(rule_id)
+                    or is_continuity_customer_rule(rule_id)
+                    or is_death_document_customer_rule(rule_id)
+                    or is_discharge_customer_rule(rule_id)
+                    or rule_id == "LX0609-06-02-01")
+                and raw_customer_display_facts is not None
+                else NotImplemented
+            ),
         )
         if handled and "customer_display_facts" not in result:
             return finalize_luxian_0609_canonical_result(result)
@@ -883,19 +1098,36 @@ def finalize_luxian_0609_reduced_customer_result(
         evidence_materials=evidence_materials,
         preferred_source_fields=(
             {"surgery_record": "surgery_name"}
-            if rule_id == "LX0609-024"
+            if rule_id == "LX0609-04-02-03"
             else (
                 {"presurg_discussion": "discuss_staff"}
-                if rule_id == "LX0609-040" and safe_facts
+                if rule_id == "LX0609-04-01-03" and safe_facts
                 and safe_facts.get("mdt_assessment_basis") == "discuss_staff"
                 else None
             )
         ),
     )
+    if rule_id == "LX0609-06-01-01" and safe_facts:
+        required_positions = {
+            position for order in safe_facts["order_results"]
+            for position in (*order["order_reference_positions"],
+                             *(location["reference_position"] for location in order["course_locations"]))
+        }
+        located_positions = {
+            position for evidence in customer_evidence
+            for position in evidence.get("decision_reference_positions", ())
+        }
+        if not required_positions.issubset(located_positions):
+            # 已知的单规则发布合同失败，复用既有清除临床结论的失败路径。
+            # 不放行失去定位的事实，也不让该异常逃出整个病例的聚合。
+            result, _ = finalize_luxian_0609_executor_customer_display_facts(
+                result=result, raw_facts=None, contract_failure=True,
+            )
+            return finalize_luxian_0609_canonical_result(result)
     if customer_evidence:
         result["customer_evidence"] = customer_evidence
     if (
-        rule_id == "LX0609-074"
+        rule_id == "LX0609-12-02-01"
         and not customer_evidence
         and str(result.get("status") or "").strip().lower() == "non_compliant"
     ):
@@ -936,17 +1168,17 @@ def _complete_data_gap_explanation(result: dict[str, Any]) -> None:
     )
     existing_details = result.get("data_gap_details")
     from .surgery_gate_result_mapping import surgery_timeliness_gap_display
-    surgery_gap = surgery_timeliness_gap_display(result.get("customer_display_facts")) if rule_id == "LX0609-003" else None
+    surgery_gap = surgery_timeliness_gap_display(result.get("customer_display_facts")) if rule_id == "LX0609-04-02-01" else None
     if surgery_gap is not None:
         defaults = {**defaults, "missing_fields": surgery_gap[0]}
     from .course_quality_result_mapping import course_007_gap_display
-    course_gap = course_007_gap_display(result.get("customer_display_facts")) if rule_id == "LX0609-007" else None
+    course_gap = course_007_gap_display(result.get("customer_display_facts")) if rule_id == "LX0609-02-01-03" else None
     if course_gap is not None:
         defaults = {**defaults, "missing_sources": course_gap[0], "missing_fields": course_gap[1], "reason_label": "查房间隔核对资料不足"}
     from .tumor_pathology_result_mapping import pathology_report_gap_missing_fields
     pathology_report_gap_fields = (
         pathology_report_gap_missing_fields(result.get("customer_display_facts"))
-        if rule_id in {"LX0609-013", "LX0609-019"}
+        if rule_id in {"LX0609-06-02-03", "LX0609-06-02-02"}
         and reason_code == "required_field_missing"
         else None
     )
@@ -964,14 +1196,14 @@ def _complete_data_gap_explanation(result: dict[str, Any]) -> None:
     )
     signature_gap_fields = (
         physician_signature_gap_fields(result.get("customer_display_facts"))
-        if rule_id == "LX0609-071" and reason_code == "required_field_missing"
+        if rule_id == "LX0609-10-01-01" and reason_code == "required_field_missing"
         else None
     )
     if signature_gap_fields is not None:
         defaults = {**defaults, "missing_fields": signature_gap_fields}
     transfer_association_gap = (
         transfer_event_association_gap_display(result.get("customer_display_facts"))
-        if rule_id in {"LX0609-072", "LX0609-073"}
+        if rule_id in {"LX0609-10-02-01", "LX0609-10-02-02"}
         and reason_code == "association_failed"
         else None
     )
@@ -984,7 +1216,7 @@ def _complete_data_gap_explanation(result: dict[str, Any]) -> None:
         }
     consultation_time_gap = (
         consultation_business_time_gap_display(result.get("customer_display_facts"))
-        if rule_id == "LX0609-069" and reason_code == "authoritative_time_missing"
+        if rule_id == "LX0609-04-02-07" and reason_code == "authoritative_time_missing"
         else None
     )
     if consultation_time_gap is not None:

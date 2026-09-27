@@ -1,4 +1,4 @@
-"""LX0609-024/025/033 合成 Golden 的无持久化真实模型验证。
+"""LX0609-04-02-03/025/033 合成 Golden 的无持久化真实模型验证。
 
 每个场景只构造当前就诊、当前规则最小文书投影；脚本不访问数据库、
 不创建任务或客户结果，也不输出病例正文、提示词、原始模型回复或坐标。
@@ -47,54 +47,54 @@ class Scenario:
 
 SCENARIOS = (
     Scenario(
-        "golden-024-complete", "LX0609-024", "compliant",
+        "golden-024-complete", "LX0609-04-02-03", "compliant",
         "本次已实施恶性肿瘤根治手术，术中完成区域淋巴结清扫并记录。",
     ),
     Scenario(
-        "golden-024-missing-lymph", "LX0609-024", "non_compliant",
+        "golden-024-missing-lymph", "LX0609-04-02-03", "non_compliant",
         "本次已实施恶性肿瘤根治手术；手术记录未记录淋巴结清扫。",
     ),
     Scenario(
-        "golden-024-nonmalignant", "LX0609-024", "not_applicable",
+        "golden-024-nonmalignant", "LX0609-04-02-03", "not_applicable",
         "本次已实施良性病变手术，明确不是恶性肿瘤手术。",
     ),
     Scenario(
-        "golden-024-linkage-unclear", "LX0609-024", "data_gap",
+        "golden-024-linkage-unclear", "LX0609-04-02-03", "data_gap",
         "本次已实施手术；病理性质待明确，无法判断是否属于恶性肿瘤手术。",
     ),
     Scenario(
-        "golden-025-complete", "LX0609-025", "compliant",
+        "golden-025-complete", "LX0609-04-02-04", "compliant",
         "本次手术实际永久植入人工关节假体；名称、类型、规格、材料、数量及条码均已记录。",
     ),
     Scenario(
-        "golden-025-missing-field", "LX0609-025", "non_compliant",
+        "golden-025-missing-field", "LX0609-04-02-04", "non_compliant",
         "本次手术实际永久植入人工关节假体；名称、类型、规格、材料、数量已记录，但未记录条码。",
     ),
     Scenario(
-        "golden-025-explicit-none", "LX0609-025", "not_applicable",
+        "golden-025-explicit-none", "LX0609-04-02-04", "not_applicable",
         "本次手术明确未植入任何永久性植入物。",
     ),
     Scenario(
-        "golden-025-generic-material", "LX0609-025", "data_gap",
+        "golden-025-generic-material", "LX0609-04-02-04", "data_gap",
         "手术中使用常规耗材，未说明是否实际永久植入。",
     ),
     Scenario(
-        "golden-033-signed", "LX0609-033", "compliant",
+        "golden-033-signed", "LX0609-11-01-01", "compliant",
         "本次已实施手术。",
         consent_text="本次手术知情同意书，关联本次手术；患者已签名，术者已签名。",
     ),
     Scenario(
-        "golden-033-missing-patient-sign", "LX0609-033", "non_compliant",
+        "golden-033-missing-patient-sign", "LX0609-11-01-01", "non_compliant",
         "本次已实施手术。",
         consent_text="本次手术知情同意书，关联本次手术；患者签名缺失，术者已签名。",
     ),
     Scenario(
-        "golden-033-source-unproven", "LX0609-033", "data_gap",
+        "golden-033-source-unproven", "LX0609-11-01-01", "data_gap",
         "本次已实施手术。",
         consent_source_state="empty",
     ),
     Scenario(
-        "golden-033-source-error", "LX0609-033", "technical_error",
+        "golden-033-source-error", "LX0609-11-01-01", "technical_error",
         "本次已实施手术。",
         consent_source_state="error",
     ),
@@ -123,7 +123,7 @@ def _session_for(scenario: Scenario):
     def reader(**kwargs: Any) -> SnapshotSourceRows:
         source_key = str(kwargs["source_key"])
         if (
-            scenario.rule_id == "LX0609-033"
+            scenario.rule_id == "LX0609-11-01-01"
             and source_key == "surgery_inform_consent"
             and scenario.consent_source_state == "error"
         ):

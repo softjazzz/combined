@@ -9,7 +9,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 
 from app.constants.doc_types import DOC_TYPE_CN_TO_EN, DOC_TYPE_FULL_MAP
-from ..core.settings import get_settings
+from ..core.settings import Settings, get_settings
 from ..core.http import safe_post_json
 from ..core.supabase_client import get_supabase
 from ..database.connection import SessionLocal
@@ -61,6 +61,9 @@ from .effect_priority_qc import (
 from .qc_rule_sets import should_refine_rule_by_default
 from .qc_cancellation import raise_if_cancelled
 from .customer_rule_sets import load_customer_luxian_rules, invalidate_customer_rule_set_cache
+from .luxian_0609_result_schema import (
+    CUSTOMER_SCHEMA_VERSION as LUXIAN_0609_PUBLISHED_SCHEMA_VERSION,
+)
 from .luxian_0609 import (
     LUXIAN_0609_RULE_SET_KEY,
     build_luxian_0609_package_plan_from_settings,  # noqa: F401 - 编排模块动态解引用
@@ -79,6 +82,7 @@ from .luxian_0609.execution import (
 from .luxian_0609.shadow_audit_summary import project_luxian_0609_shadow_summaries
 from .luxian_0609 import source_evidence_reader
 from .luxian_0609.rule_decision_settings import (
+    ReadOnlySettingsOverlay,
     assert_luxian_0609_customer_native_delivery_ready,  # noqa: F401 - 编排模块动态解引用
     resolve_mainline_rule_decision_settings,  # noqa: F401 - 编排模块动态解引用
 )
@@ -92,7 +96,7 @@ from .sc_rule_family import (
 
 logger = logging.getLogger(__name__)
 
-_COPY_ROUND_RULE_IDS = {"CL-037", "CL-275", "LX0609-017"}
+_COPY_ROUND_RULE_IDS = {"CL-037", "CL-275", "LX0609-12-01-02"}
 _COPY_FIRST_COURSE_RULE_IDS = {"CL-273", "CL-274", "CL-276"}
 _COPY_SIGNAL_RULE_IDS = _COPY_ROUND_RULE_IDS | _COPY_FIRST_COURSE_RULE_IDS
 _COPY_SIMILARITY_THRESHOLD = 0.5
@@ -268,7 +272,7 @@ def _selected_luxian_0609_033_raw_rules(selected_rules: List[Dict[str, Any]]) ->
         if str(rule.get("rule_id") or rule.get("rule_code") or "").strip()
     }
     for wrapper in load_luxian_0609_rules():
-        if str(wrapper.get("rule_id") or wrapper.get("rule_code") or "").strip().upper() != "LX0609-033":
+        if str(wrapper.get("rule_id") or wrapper.get("rule_code") or "").strip().upper() != "LX0609-11-01-01":
             continue
         mapped_rule_ids = {
             str(rule_id or "").strip().upper()
@@ -291,7 +295,7 @@ def _build_luxian_0609_033_live_source_decisions(
         return {}
     if consent_document_present:
         return {
-            "LX0609-033": build_luxian_0609_033_live_source_decision(
+            "LX0609-11-01-01": build_luxian_0609_033_live_source_decision(
                 source_state="consent_document_present",
                 source_status="available",
                 source_row_count=1,
@@ -302,7 +306,7 @@ def _build_luxian_0609_033_live_source_decisions(
     visit_id = str((bundle or {}).get("visit_id") or "").strip()
     if not all((institute_id, patient_id, visit_id)):
         return {
-            "LX0609-033": build_luxian_0609_033_live_source_decision(
+            "LX0609-11-01-01": build_luxian_0609_033_live_source_decision(
                 source_state="unavailable", source_status="unavailable", source_row_count=0
             )
         }
@@ -328,7 +332,7 @@ def _build_luxian_0609_033_live_source_decisions(
         else:
             source_state = "nonexact_rows"
     return {
-        "LX0609-033": build_luxian_0609_033_live_source_decision(
+        "LX0609-11-01-01": build_luxian_0609_033_live_source_decision(
             source_state=source_state,
             source_status=source_status,
             source_row_count=row_count,
@@ -406,6 +410,46 @@ class SichuanQCService:
             enable_truncate=self.enable_truncate,
             max_content_length=self.max_content_length,
         )
+
+    @staticmethod
+    def _client_runtime_config(client: SichuanQCLLMClient) -> Dict[str, Any]:
+        """从当前客户端复制运行参数；凭据只留在进程内，不进入任务快照。"""
+
+        return {
+            "provider_code": client.provider_code,
+            "api_endpoint": client.api_endpoint,
+            "api_key": client.api_key,
+            "model": client.model,
+            "timeout_seconds": client.timeout_seconds,
+            "allow_mock_when_unconfigured": client.allow_mock_when_unconfigured,
+            "source": client.config_source,
+            "model_role": client.model_role,
+            "adjudicator_model_source": client.adjudicator_model_source,
+            "custom_parameters": {
+                "temperature": client.temperature,
+                "top_p": client.top_p,
+                "max_tokens": client.max_tokens,
+                "enable_thinking": client.enable_thinking,
+                "thinking_budget": client.thinking_budget,
+                "reasoning_effort": client.reasoning_effort,
+                "execution_concurrency": {
+                    "max_parallel_records": client.max_parallel_records,
+                    "family_max_concurrency": client.family_max_concurrency,
+                    "http_max_concurrency": client.http_max_concurrency,
+                },
+            },
+        }
+
+    def isolated_luxian_0609_runtime(self) -> "SichuanQCService":
+        """为已领取的原始0609任务保留独立客户端，避免全局热重载串改在途模型。"""
+
+        runtime = SichuanQCService(self._client_runtime_config(self.client))
+        runtime.adjudicator_client = SichuanQCLLMClient(
+            self._client_runtime_config(self.adjudicator_client)
+        )
+        runtime.client._stats_parent = self.client
+        runtime.adjudicator_client._stats_parent = self.adjudicator_client
+        return runtime
 
     def _ensure_rule_execution_meta(self, rule: Dict[str, Any]) -> Dict[str, Any]:
         normalized = dict(rule or {})
@@ -1526,6 +1570,12 @@ class SichuanQCService:
         evaluation_results = []
         for item in rule_results:
             evaluation_results.append({
+                # Finalizer 正式发布（v2 合同）的结论与建议原样搬运，不重生成。
+                **({key: item[key] for key in (
+                    "conclusion", "customer_conclusion", "customer_suggestion",
+                ) if key in item}
+                    if item.get("schema_version") == LUXIAN_0609_PUBLISHED_SCHEMA_VERSION
+                    else {}),
                 "rule_id": item.get("rule_id"),
                 "rule_name": item.get("rule_name"),
                 "is_compliant": item.get("is_compliant"),
@@ -1651,6 +1701,13 @@ class SichuanQCService:
         model_execution_stats = orchestrated.get("model_execution_stats")
         if isinstance(model_execution_stats, dict) and model_execution_stats:
             result["model_execution_stats"] = dict(model_execution_stats)
+        usage_observation_complete = orchestrated.get("luxian_0609_usage_observation_complete")
+        if isinstance(usage_observation_complete, bool):
+            result["luxian_0609_usage_observation_complete"] = usage_observation_complete
+            unknown_keys = orchestrated.get("luxian_0609_usage_unknown_executor_keys")
+            result["luxian_0609_usage_unknown_executor_keys"] = list(
+                unknown_keys if isinstance(unknown_keys, (list, tuple)) else []
+            )
         return result
 
     async def _evaluate_rules_with_engine(
@@ -4153,7 +4210,7 @@ class SichuanQCService:
         has_new_plan = semantic_checks.get("has_new_plan")
         llm_raw_output = str(normalized.get("llm_raw_output") or "").strip()
         allow_program_only_fallback = (
-            rule_id in {"CL-275", "LX0609-017"}
+            rule_id in {"CL-275", "LX0609-12-01-02"}
             and not llm_raw_output
             and has_new_analysis is None
             and has_new_plan is None
@@ -4529,6 +4586,7 @@ class SichuanQCService:
         evaluation_as_of_date: str | None = None,
         evaluation_horizon_policy: str | None = None,
         evaluation_horizon_unavailable_reason: str | None = None,
+        task_settings: Settings | ReadOnlySettingsOverlay | None = None,
         cancellation_check: Optional[Callable[[], bool]] = None,
         execution_trace_sink: Optional[Callable[[Dict[str, Any]], None]] = None,
     ) -> Dict[str, Any]:
@@ -4551,6 +4609,7 @@ class SichuanQCService:
             evaluation_horizon_unavailable_reason=evaluation_horizon_unavailable_reason,
             cancellation_check=cancellation_check,
             execution_trace_sink=execution_trace_sink,
+            **({"task_settings": task_settings} if task_settings is not None else {}),
         )
 
     async def evaluate_rule_for_visit(

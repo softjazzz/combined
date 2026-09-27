@@ -41,14 +41,15 @@ def load_luxian_0609_rules() -> list[dict[str, Any]]:
     ]
     wrappers_by_id: dict[str, dict[str, Any]] = {}
     for wrapper in wrappers:
-        rule_id = str(
-            wrapper.get("rule_id") or wrapper.get("rule_code") or ""
-        ).strip().upper()
+        rule_id = str(wrapper.get("rule_id") or "").strip().upper()
         if not rule_id or rule_id in wrappers_by_id:
             raise ValueError("LX0609 execution catalog contains an invalid or duplicate rule ID")
+        # 通用API保留同值rule_code字段，不允许形成另一套规则身份。
+        if str(wrapper.get("rule_code") or rule_id).strip().upper() != rule_id:
+            raise ValueError("LX0609 execution catalog contains conflicting rule identities")
         wrappers_by_id[rule_id] = wrapper
 
-    # 业务范围以 75 条唯一总表为准；执行目录只能投影总表中已启用的规则。
+    # 业务范围由唯一总表决定；执行目录只能投影总表中已启用的规则。
     active_rule_ids = tuple(
         entry.rule_id
         for entry in load_luxian_0609_rule_master()
@@ -65,7 +66,7 @@ def get_luxian_0609_rule(rule_id: str) -> dict[str, Any] | None:
     if not normalized_rule_id:
         return None
     for rule in load_luxian_0609_rules():
-        candidate_id = str(rule.get("rule_id") or rule.get("rule_code") or "").strip().upper()
+        candidate_id = str(rule.get("rule_id") or "").strip().upper()
         if candidate_id == normalized_rule_id:
             return dict(rule)
     return None
@@ -92,6 +93,7 @@ def attach_luxian_0609_customer_policy(
         master_entry = master_by_id.get(rule_id)
         if master_entry is None:
             raise ValueError(f"LX0609 customer policy is missing for {rule_id or '<blank>'}")
+        copied_wrapper["release_scope"] = master_entry.release_scope
         copied_wrapper["customer_policy"] = {
             "source_document": master_entry.source_document,
             "qc_point": master_entry.qc_point,

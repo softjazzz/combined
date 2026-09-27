@@ -13,6 +13,7 @@ from app.services.luxian_0609.transfusion_result_mapping import (
     safe_transfusion_customer_display_facts,
 )
 from app.services.luxian_0609.native_transfusion_execution import (
+    TRANSFUSION_RULE_IDS,
     _customer_display_facts_for_outcome,
 )
 
@@ -32,7 +33,7 @@ def test_transfusion_mapping_strips_internal_document_references() -> None:
     }
 
     assert safe_transfusion_customer_display_facts(
-        rule_id="LX0609-047", raw=raw
+        rule_id="LX0609-07-03-01", raw=raw
     ) == {
         "verification_kind": "posttransfusion_evaluation_complete",
         "performed_transfusion_confirmed": True,
@@ -46,7 +47,7 @@ def test_transfusion_mapping_strips_internal_document_references() -> None:
 
 def test_transfusion_mapping_rejects_invalid_system_gap_contract() -> None:
     assert safe_transfusion_customer_display_facts(
-        rule_id="LX0609-041",
+        rule_id="LX0609-11-03-01",
         raw={
             "failure_kind": "system_data_contract_gap",
             "system_gap_reason": "wrong_reason",
@@ -60,7 +61,7 @@ def test_transfusion_mapping_rejects_invalid_system_gap_contract() -> None:
 def test_transfusion_fact_status_conflict_is_isolated_technical_error() -> None:
     result, handled = finalize_luxian_0609_executor_customer_display_facts(
         result={
-            "rule_id": "LX0609-044",
+            "rule_id": "LX0609-07-01-02",
             "status": "compliant",
             "reason_code": "requirement_satisfied",
             "findings": "must be removed",
@@ -86,23 +87,23 @@ def test_transfusion_fact_status_conflict_is_isolated_technical_error() -> None:
 
 def test_transfusion_contract_owner_includes_migrated_041_to_048_and_070() -> None:
     assert all(
-        is_transfusion_customer_rule(f"LX0609-{number:03d}")
+        is_transfusion_customer_rule(rule_id)
         and finalizer_owns_executor_customer_display_facts(
-            f"LX0609-{number:03d}"
+            rule_id
         )
-        for number in range(41, 49)
+        for rule_id in TRANSFUSION_RULE_IDS[:-1]
     )
-    assert is_transfusion_customer_rule("LX0609-070")
-    assert finalizer_owns_executor_customer_display_facts("LX0609-070")
-    assert not is_transfusion_customer_rule("LX0609-049")
-    assert not finalizer_owns_executor_customer_display_facts("LX0609-049")
+    assert is_transfusion_customer_rule("LX0609-07-01-03")
+    assert finalizer_owns_executor_customer_display_facts("LX0609-07-01-03")
+    assert not is_transfusion_customer_rule("LX0609-07-04-02")
+    assert not finalizer_owns_executor_customer_display_facts("LX0609-07-04-02")
 
 
 def test_049_conservative_typed_data_gap_is_not_reclassified_by_transfusion_finalizer() -> None:
     """049 仍走保守缺口合同，不能被 041–048 的 facts 迁移误接管。"""
 
     raw_facts = _customer_display_facts_for_outcome(
-        rule_id="LX0609-049",
+        rule_id="LX0609-07-04-02",
         status="data_gap",
         reason_code="billing_linkage_source_unavailable",
     )
@@ -110,7 +111,7 @@ def test_049_conservative_typed_data_gap_is_not_reclassified_by_transfusion_fina
     assert raw_facts is not None
     finalized, handled = finalize_luxian_0609_executor_customer_display_facts(
         result={
-            "rule_id": "LX0609-049",
+            "rule_id": "LX0609-07-04-02",
             "status": "data_gap",
             "reason_code": "billing_linkage_source_unavailable",
         },
@@ -165,7 +166,7 @@ def _070_complete_facts() -> dict[str, object]:
 
 def test_070_mapping_freezes_event_checks_and_strips_private_material() -> None:
     safe = safe_transfusion_customer_display_facts(
-        rule_id="LX0609-070", raw=_070_complete_facts()
+        rule_id="LX0609-07-01-03", raw=_070_complete_facts()
     )
 
     assert safe == {
@@ -210,7 +211,7 @@ def test_070_mapping_freezes_event_checks_and_strips_private_material() -> None:
 def test_070_status_conflict_and_partial_event_facts_downgrade_to_technical_error() -> None:
     result, handled = finalize_luxian_0609_executor_customer_display_facts(
         result={
-            "rule_id": "LX0609-070",
+            "rule_id": "LX0609-07-01-03",
             "status": "non_compliant",
             "reason_code": "requirement_violated",
             "findings": "must be removed",
@@ -232,7 +233,7 @@ def test_070_status_conflict_and_partial_event_facts_downgrade_to_technical_erro
 def test_070_missing_facts_preserves_existing_gap_or_not_applicable_status() -> None:
     for status in ("data_gap", "not_applicable"):
         result, handled = finalize_luxian_0609_executor_customer_display_facts(
-            result={"rule_id": "LX0609-070", "status": status, "reason_code": "native"},
+            result={"rule_id": "LX0609-07-01-03", "status": status, "reason_code": "native"},
             raw_facts=None,
         )
 
@@ -242,11 +243,11 @@ def test_070_missing_facts_preserves_existing_gap_or_not_applicable_status() -> 
 
 
 def test_070_alone_requires_public_fact_ref_evidence() -> None:
-    assert is_transfusion_public_fact_ref_evidence_rule("LX0609-070")
-    assert finalizer_requires_public_fact_ref_evidence("LX0609-070")
+    assert is_transfusion_public_fact_ref_evidence_rule("LX0609-07-01-03")
+    assert finalizer_requires_public_fact_ref_evidence("LX0609-07-01-03")
     assert not any(
-        finalizer_requires_public_fact_ref_evidence(f"LX0609-{number:03d}")
-        for number in range(41, 49)
+        finalizer_requires_public_fact_ref_evidence(rule_id)
+        for rule_id in TRANSFUSION_RULE_IDS[:-1]
     )
 
 
@@ -258,4 +259,4 @@ def test_aggregator_has_no_070_reference() -> None:
         / "luxian_0609_result_aggregator.py"
     ).read_text(encoding="utf-8")
 
-    assert "LX0609-070" not in source
+    assert "LX0609-07-01-03" not in source

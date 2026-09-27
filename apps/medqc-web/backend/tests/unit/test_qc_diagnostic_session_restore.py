@@ -12,7 +12,7 @@ from tests.unit.test_qc_diagnostic_execution_inputs import session_fixture
 def fixture():
     session, _ = session_fixture()
     inputs = freeze_execution_inputs(
-        session, selected_rule_ids=("LX0609-020", "LX0609-023"),
+        session, selected_rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         evaluation_as_of_date="2026-07-05", evaluation_horizon_policy=None,
         horizon_unavailable_reason=None,
     )
@@ -129,7 +129,7 @@ def test_derived_facts_are_restored_by_dependencies_not_hash_sort_order():
     )
     data = freeze_execution_inputs(
         Luxian0609EvidenceReadSession(snapshot=rebuilt_snapshot, materials=materials),
-        selected_rule_ids=("LX0609-020",), evaluation_as_of_date="2026-07-05",
+        selected_rule_ids=("LX0609-03-01-01",), evaluation_as_of_date="2026-07-05",
         evaluation_horizon_policy=None, horizon_unavailable_reason=None,
     )
     restored = restore_execution_session(data, coordinates=("I", "P", "V"))

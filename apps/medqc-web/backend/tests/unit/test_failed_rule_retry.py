@@ -28,16 +28,16 @@ def test_scope_uses_only_failed_record_rule_pairs() -> None:
         "status": "failed",
         "job_kind": "leaf",
         "summary": {"execution_status": "partial_failed"},
-        "items": [_row("LX0609-011", status="compliant")],
+        "items": [_row("LX0609-06-01-04", status="compliant")],
         "failed_records": [
-            _row("LX0609-012"),
+            _row("LX0609-06-01-05"),
             {
                 "visit_id": "visit-2",
-                "rule_id": "LX0609-040",
+                "rule_id": "LX0609-04-01-03",
             },
         ],
         "filters": {
-            "rule_ids": ["LX0609-011", "LX0609-012", "LX0609-040"],
+            "rule_ids": ["LX0609-06-01-04", "LX0609-06-01-05", "LX0609-04-01-03"],
             "record_refs": [
                 {
                     "institute_id": "hospital-1",
@@ -57,11 +57,11 @@ def test_scope_uses_only_failed_record_rule_pairs() -> None:
 
     assert result is not None
     scope, normalized_failures = result
-    assert scope["rule_ids"] == ["LX0609-012", "LX0609-040"]
+    assert scope["rule_ids"] == ["LX0609-06-01-05", "LX0609-04-01-03"]
     assert scope["pending_count"] == 2
     assert scope["record_rule_map"] == {
-        '["hospital-1","patient-1","visit-1"]': ["LX0609-012"],
-        '["hospital-1","patient-2","visit-2"]': ["LX0609-040"],
+        '["hospital-1","patient-1","visit-1"]': ["LX0609-06-01-05"],
+        '["hospital-1","patient-2","visit-2"]': ["LX0609-04-01-03"],
     }
     assert normalized_failures[1]["patient_id"] == "patient-2"
 
@@ -70,8 +70,8 @@ def test_scope_rejects_ambiguous_legacy_visit_identity() -> None:
     job = {
         "status": "failed",
         "summary": {"execution_status": "partial_failed"},
-        "items": [_row("LX0609-011", status="compliant")],
-        "failed_records": [{"visit_id": "visit-1", "rule_id": "LX0609-012"}],
+        "items": [_row("LX0609-06-01-04", status="compliant")],
+        "failed_records": [{"visit_id": "visit-1", "rule_id": "LX0609-06-01-05"}],
         "filters": {
             "record_refs": [
                 {"institute_id": "hospital-1", "patient_id": "patient-1", "visit_id": "visit-1"},
@@ -89,7 +89,7 @@ def test_scope_supports_all_model_results_failed() -> None:
         "status": "failed",
         "summary": {"execution_status": "failed"},
         "items": [],
-        "failed_records": [_row("LX0609-012")],
+        "failed_records": [_row("LX0609-06-01-05")],
         "filters": {
             "record_refs": [
                 {
@@ -106,13 +106,13 @@ def test_scope_supports_all_model_results_failed() -> None:
     assert result is not None
     scope, _ = result
     assert scope["pending_count"] == 1
-    assert scope["rule_ids"] == ["LX0609-012"]
+    assert scope["rule_ids"] == ["LX0609-06-01-05"]
 
 
 def test_merge_replaces_only_pending_failure_and_preserves_valid_result() -> None:
-    valid = _row("LX0609-011", status="compliant")
-    pending = _row("LX0609-012")
-    recovered = _row("LX0609-012", status="non_compliant")
+    valid = _row("LX0609-06-01-04", status="compliant")
+    pending = _row("LX0609-06-01-05")
+    recovered = _row("LX0609-06-01-05", status="non_compliant")
 
     items, failures = merge_failed_rule_retry_results(
         base_items=[valid],
@@ -128,17 +128,17 @@ def test_merge_replaces_only_pending_failure_and_preserves_valid_result() -> Non
 def test_merge_rejects_out_of_scope_result() -> None:
     with pytest.raises(ValueError, match="范围外"):
         merge_failed_rule_retry_results(
-            base_items=[_row("LX0609-011", status="compliant")],
-            base_failures=[_row("LX0609-012")],
-            retry_items=[_row("LX0609-040", status="compliant")],
+            base_items=[_row("LX0609-06-01-04", status="compliant")],
+            base_failures=[_row("LX0609-06-01-05")],
+            retry_items=[_row("LX0609-04-01-03", status="compliant")],
             retry_failures=[],
         )
 
 
 def test_merge_keeps_valid_results_when_retry_still_fails() -> None:
-    valid = _row("LX0609-011", status="compliant")
-    pending = {**_row("LX0609-012"), "reason_code": "model_invalid_output"}
-    retry_failure = {**_row("LX0609-012"), "reason_code": "semantic_output_unknown"}
+    valid = _row("LX0609-06-01-04", status="compliant")
+    pending = {**_row("LX0609-06-01-05"), "reason_code": "model_invalid_output"}
+    retry_failure = {**_row("LX0609-06-01-05"), "reason_code": "semantic_output_unknown"}
 
     items, failures = merge_failed_rule_retry_results(
         base_items=[valid],
@@ -152,7 +152,7 @@ def test_merge_keeps_valid_results_when_retry_still_fails() -> None:
 
 
 def test_auto_retry_plan_retries_contract_failures_until_limit() -> None:
-    failure = {**_row("LX0609-012"), "error_phase": "result_status"}
+    failure = {**_row("LX0609-06-01-05"), "error_phase": "result_status"}
 
     first = build_failed_rule_auto_retry_plan(
         summary={"execution_status": "partial_failed"},
@@ -178,7 +178,7 @@ def test_auto_retry_plan_retries_contract_failures_until_limit() -> None:
 
 
 def test_auto_retry_plan_does_not_repeat_non_model_failure() -> None:
-    failure = {**_row("LX0609-012"), "error_phase": "record_load"}
+    failure = {**_row("LX0609-06-01-05"), "error_phase": "record_load"}
 
     plan = build_failed_rule_auto_retry_plan(
         summary={"execution_status": "partial_failed"},

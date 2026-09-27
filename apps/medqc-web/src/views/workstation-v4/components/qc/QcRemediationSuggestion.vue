@@ -98,7 +98,7 @@ const QC_REMEDIATION_LABELS = ['修改对象', '需要补充', '推荐写法', '
 const QC_REMEDIATION_LABEL_PATTERN = QC_REMEDIATION_LABELS.join('|')
 
 /** 与后端 REMEDIATION_DRAFT_RULE_IDS 保持一致：只在这三个会诊规则上提供草稿。 */
-export const QC_REMEDIATION_DRAFT_RULE_IDS = ['LX0609-020', 'LX0609-022', 'LX0609-023'] as const
+export const QC_REMEDIATION_DRAFT_RULE_IDS = ['LX0609-03-01-01', 'LX0609-03-01-03', 'LX0609-03-01-04'] as const
 
 export interface QcRemediationDraftContext {
   instituteId?: string

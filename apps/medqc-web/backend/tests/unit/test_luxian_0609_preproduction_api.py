@@ -8,6 +8,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.core.settings import Settings
 from app.routers import luxian_0609_preproduction
 from app.services.luxian_0609 import evidence_snapshot_provider, execution
 from app.services.luxian_0609 import preproduction_bundle_reader
@@ -28,7 +29,13 @@ def _build_client(*, enabled: bool) -> TestClient:
     app.include_router(luxian_0609_preproduction.router)
     app.dependency_overrides[
         luxian_0609_preproduction._settings_dependency
-    ] = lambda: SimpleNamespace(LUXIAN_0609_PREPRODUCTION_API_ENABLED=enabled)
+    ] = lambda: SimpleNamespace(
+        LUXIAN_0609_PREPRODUCTION_API_ENABLED=enabled,
+        # 预生产 Overlay 把未覆盖字段转发给基础配置；统一引擎必读族并发上限。
+        LUXIAN_0609_FAMILY_MAX_CONCURRENCY=Settings.model_fields[
+            "LUXIAN_0609_FAMILY_MAX_CONCURRENCY"
+        ].default,
+    )
     client = TestClient(app)
     client.headers.update({"Authorization": "Bearer safe-test-token"})
     return client
@@ -40,7 +47,7 @@ def _request_body() -> dict:
         "institute_id": "institute-safe-coordinate",
         "patient_id": "patient-safe-coordinate",
         "visit_id": "visit-safe-coordinate",
-        "selected_customer_rule_ids": ["LX0609-007", "LX0609-008"],
+        "selected_customer_rule_ids": ["LX0609-02-01-03", "LX0609-02-01-04"],
         "evaluation_as_of_date": "2026-07-17",
     }
 
@@ -195,7 +202,7 @@ def test_preproduction_api_enabled_passes_exact_safe_contract_once(monkeypatch) 
         captured["observation_context"] = current_llm_observation_context()
         return {
             "schema_version": "lx0609-preproduction-runner-v1",
-            "results": [{"rule_id": "LX0609-007", "status": "compliant"}],
+            "results": [{"rule_id": "LX0609-02-01-03", "status": "compliant"}],
             "metrics": {"total_tokens": 0},
         }
 
@@ -227,7 +234,7 @@ def test_preproduction_api_enabled_passes_exact_safe_contract_once(monkeypatch) 
     assert response.status_code == 200
     assert response.json() == {
         "schema_version": "lx0609-preproduction-runner-v1",
-        "results": [{"rule_id": "LX0609-007", "status": "compliant"}],
+        "results": [{"rule_id": "LX0609-02-01-03", "status": "compliant"}],
         "metrics": {"total_tokens": 0},
     }
     assert captured["settings"] == 1
@@ -247,7 +254,7 @@ def test_preproduction_api_enabled_passes_exact_safe_contract_once(monkeypatch) 
     }
     assert captured["kwargs"] == {
         "bundle": {"scene": "running", "documents": {}},
-        "selected_customer_rule_ids": ["LX0609-007", "LX0609-008"],
+        "selected_customer_rule_ids": ["LX0609-02-01-03", "LX0609-02-01-04"],
         "evaluation_as_of_date": "2026-07-17",
         "llm_client": fake_client,
         "base_settings": base_settings,
@@ -263,11 +270,11 @@ def test_preproduction_api_exam_lab_typed_entry_isolated_to_selected_rules(
     """公共旁路只执行所选010-015 typed规则，不派发旧映射或其他客户规则。"""
 
     selected = (
-        "LX0609-010",
-        "LX0609-011",
-        "LX0609-012",
-        "LX0609-014",
-        "LX0609-015",
+        "LX0609-06-01-02",
+        "LX0609-06-01-04",
+        "LX0609-06-01-05",
+        "LX0609-06-03-03",
+        "LX0609-06-03-04",
     )
     captured: dict[str, object] = {"executor_calls": 0, "llm_calls": 0}
 
@@ -283,11 +290,11 @@ def test_preproduction_api_exam_lab_typed_entry_isolated_to_selected_rules(
                 fact["semantic_state"] = "present"
                 fact["positive_state"] = (
                     "positive"
-                    if rule_id in {"LX0609-012", "LX0609-015"}
+                    if rule_id in {"LX0609-06-01-05", "LX0609-06-03-04"}
                     else "not_relevant"
                 )
                 fact["course_doc_positions"] = [
-                    1 if rule_id == "LX0609-010" else 2
+                    1 if rule_id == "LX0609-06-01-02" else 2
                 ]
             return {
                 "choices": [{"message": {"content": json.dumps({

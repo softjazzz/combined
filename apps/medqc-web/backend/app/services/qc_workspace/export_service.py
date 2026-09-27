@@ -71,6 +71,31 @@ def _status_css_class(status: Any) -> str:
     }.get(key, "unknown")
 
 
+def append_complete_workbook_row(worksheet: Any, values: Sequence[Any]) -> None:
+    """长字段在独立页按顺序完整保存，避免 Excel 单元格静默截断。
+
+    两条正式 XLSX 导出链共用此格式边界；不裁剪证据、不改变业务结果。
+    每片最多16000码点，即使全为非BMP字符也小于32767个UTF-16单元。
+    """
+    row = list(values)
+    for column, value in enumerate(row, 1):
+        if not isinstance(value, str) or len(value.encode("utf-16-le")) // 2 <= 32767:
+            continue
+        workbook = worksheet.parent
+        if "长文本" not in workbook.sheetnames:
+            overflow = workbook.create_sheet("长文本")
+            overflow.append(["来源工作表", "来源行", "来源列", "分段序号", "完整内容分段"])
+            overflow.freeze_panes = "A2"
+        overflow = workbook["长文本"]
+        start_row = overflow.max_row + 1
+        for part, start in enumerate(range(0, len(value), 16000), 1):
+            overflow.append([worksheet.title, worksheet.max_row + 1, column, part, value[start:start + 16000]])
+            # 分片可能以公式字符开头；全部按文本保留。
+            overflow.cell(overflow.max_row, 5).data_type = "s"
+        row[column - 1] = f"完整内容见长文本第{start_row}至{overflow.max_row}行（按分段序号连接）"
+    worksheet.append(row)
+
+
 def render_customer_safe_workbook(
     *,
     items: Sequence[Dict[str, Any]],
@@ -94,12 +119,12 @@ def render_customer_safe_workbook(
     ws_issues.append(CUSTOMER_EXPORT_HEADERS)
     for item, row in zip(items, rows):
         if item.get("is_confirmed_issue") is True:
-            ws_issues.append(list(row))
+            append_complete_workbook_row(ws_issues, row)
 
     ws_all = workbook.create_sheet("全部明细")
     ws_all.append(CUSTOMER_EXPORT_HEADERS)
     for row in rows:
-        ws_all.append(list(row))
+        append_complete_workbook_row(ws_all, row)
     ws_issues.freeze_panes = "A2"
     ws_all.freeze_panes = "A2"
     workbook.save(output)

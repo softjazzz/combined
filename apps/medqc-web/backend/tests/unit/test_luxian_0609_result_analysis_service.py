@@ -81,8 +81,8 @@ def _service(monkeypatch, records: list[dict[str, str]], results: dict[tuple[str
         record_scope_loader=load_scope,
         result_loader=lambda refs: results,
         rule_name_loader=lambda: {
-            "LX0609-001": "入院记录时限",
-            "LX0609-017": "病程记录复制",
+            "LX0609-01-01-01": "入院记录时限",
+            "LX0609-12-01-02": "病程记录复制",
         },
     )
     return service, captured
@@ -94,13 +94,13 @@ def test_analysis_uses_latest_canonical_items_and_never_exposes_technical_status
     results = {
         ("inst-a", "patient-visit-1", "visit-1"): _ready(
             "2026-08-19T08:00:00+00:00",
-            ("LX0609-001", "non_compliant"),
-            ("LX0609-017", "compliant"),
+            ("LX0609-01-01-01", "non_compliant"),
+            ("LX0609-12-01-02", "compliant"),
         ),
         ("inst-a", "patient-visit-2", "visit-2"): _ready(
             "2026-08-19T09:00:00+00:00",
-            ("LX0609-001", "data_gap"),
-            ("LX0609-017", "not_executed"),
+            ("LX0609-01-01-01", "data_gap"),
+            ("LX0609-12-01-02", "not_executed"),
         ),
     }
     service, captured = _service(monkeypatch, [first, second], results)
@@ -128,8 +128,8 @@ def test_analysis_uses_latest_canonical_items_and_never_exposes_technical_status
     ]
     assert all(item["status"] != "technical_error" for item in payload["status_distribution"])
     assert [(item["rule_id"], item["issue_count"]) for item in payload["rule_distribution"]] == [
-        ("LX0609-001", 2),
-        ("LX0609-017", 0),
+        ("LX0609-01-01-01", 2),
+        ("LX0609-12-01-02", 0),
     ]
 
 
@@ -140,27 +140,27 @@ def test_analysis_filters_selected_rule_and_status_then_returns_case_drilldown(m
     results = {
         ("inst-a", "patient-visit-1", "visit-1"): _ready(
             "2026-08-19T08:00:00+00:00",
-            ("LX0609-001", "non_compliant"),
+            ("LX0609-01-01-01", "non_compliant"),
         ),
         ("inst-a", "patient-visit-2", "visit-2"): _ready(
             "2026-08-19T08:00:00+00:00",
-            ("LX0609-001", "data_gap"),
+            ("LX0609-01-01-01", "data_gap"),
         ),
         ("inst-a", "patient-visit-3", "visit-3"): _ready(
             "2026-08-19T08:00:00+00:00",
-            ("LX0609-017", "non_compliant"),
+            ("LX0609-12-01-02", "non_compliant"),
         ),
     }
     service, _ = _service(monkeypatch, [first, second, third], results)
 
     payload = service.get_analysis(
         care_phase="discharged",
-        rule_id="lx0609-001",
+        rule_id="lx0609-01-01-01",
         result_status="non_compliant",
     )
 
     assert payload["selected_rule"] == {
-        "rule_id": "LX0609-001",
+        "rule_id": "LX0609-01-01-01",
         "rule_name": "入院记录时限",
     }
     assert payload["record_page"] == {
@@ -183,7 +183,7 @@ def test_analysis_filters_selected_rule_and_status_then_returns_case_drilldown(m
     }
     assert payload["rule_distribution"] == [
         {
-            "rule_id": "LX0609-001",
+            "rule_id": "LX0609-01-01-01",
             "rule_name": "入院记录时限",
             "evaluated_count": 1,
             "non_compliant_count": 1,
@@ -223,7 +223,7 @@ def test_analysis_interprets_completion_day_filters_in_beijing_time(monkeypatch)
         ("inst-a", "patient-visit-1", "visit-1"): _ready(
             # 这是北京时间 2026-08-20 00:30，不能被当作 UTC 的 8 月 19 日排除。
             "2026-08-19T16:30:00+00:00",
-            ("LX0609-001", "compliant"),
+            ("LX0609-01-01-01", "compliant"),
         )
     }
     service, _ = _service(monkeypatch, [record], results)
@@ -251,7 +251,7 @@ def test_analysis_fails_closed_for_invalid_latest_canonical_projection(monkeypat
         ("inst-a", "patient-visit-1", "visit-1"): {
             "status": "ready",
             "completed_at": "2026-08-19T08:00:00+00:00",
-            "items": [{"rule_id": "LX0609-001", "status": "technical_error"}],
+            "items": [{"rule_id": "LX0609-01-01-01", "status": "technical_error"}],
         }
     }
     service, _ = _service(monkeypatch, [record], results)

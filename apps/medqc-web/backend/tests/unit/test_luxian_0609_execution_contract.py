@@ -12,11 +12,33 @@ from app.services.luxian_0609.decision_model import (
 )
 from app.services.luxian_0609.execution_contract import (
     FamilyExecutionEnvelope,
+    FamilyUsageAttribution,
     validate_family_execution_envelope,
 )
 
 
-EXPECTED = ("LX0609-001", "LX0609-002")
+EXPECTED = ("LX0609-01-01-01", "LX0609-01-02-01")
+
+
+@pytest.mark.unit
+def test_usage_attribution_preserves_master_order_that_is_not_four_part_lexical_order():
+    covered = (
+        "LX0609-01-02-01",
+        "LX0609-04-02-01",
+        "LX0609-09-01-01",
+    )
+
+    attribution = FamilyUsageAttribution(
+        executor_key="identity_test",
+        llm_call_count=0,
+        prompt_tokens=0,
+        completion_tokens=0,
+        total_tokens=0,
+        covered_customer_rule_ids=covered,
+        latency_ms=0.0,
+    )
+
+    assert attribution.covered_customer_rule_ids == covered
 
 
 def _result(rule_id: str, *, status: str = "compliant") -> dict:
@@ -78,8 +100,8 @@ def test_exact_family_execution_envelope_passes_without_rebuilding_results():
 @pytest.mark.unit
 def test_mixed_legacy_results_and_typed_decisions_preserve_partition_order():
     envelope = FamilyExecutionEnvelope(
-        results=(_result("LX0609-002"),),
-        decisions=(_decision("LX0609-001"),),
+        results=(_result("LX0609-01-02-01"),),
+        decisions=(_decision("LX0609-01-01-01"),),
         planned_rule_ids=EXPECTED,
     )
 
@@ -95,8 +117,8 @@ def test_mixed_legacy_results_and_typed_decisions_preserve_partition_order():
 @pytest.mark.unit
 def test_result_and_decision_overlap_fails_closed_for_whole_family():
     envelope = FamilyExecutionEnvelope(
-        results=(_result("LX0609-001"), _result("LX0609-002")),
-        decisions=(_decision("LX0609-001"),),
+        results=(_result("LX0609-01-01-01"), _result("LX0609-01-02-01")),
+        decisions=(_decision("LX0609-01-01-01"),),
         planned_rule_ids=EXPECTED,
     )
 
@@ -118,31 +140,31 @@ def test_result_and_decision_overlap_fails_closed_for_whole_family():
 @pytest.mark.parametrize(
     ("results", "reason_code"),
     [
-        ((_result("LX0609-001"),), "family_result_missing"),
+        ((_result("LX0609-01-01-01"),), "family_result_missing"),
         (
-            (_result("LX0609-001"), _result("LX0609-001")),
+            (_result("LX0609-01-01-01"), _result("LX0609-01-01-01")),
             "family_result_duplicate",
         ),
         (
             (
-                _result("LX0609-001"),
-                _result("LX0609-002"),
+                _result("LX0609-01-01-01"),
+                _result("LX0609-01-02-01"),
                 _result("SC-002"),
             ),
             "family_result_extra",
         ),
         (
-            (_result("LX0609-002"), _result("LX0609-001")),
+            (_result("LX0609-01-02-01"), _result("LX0609-01-01-01")),
             "family_result_order_mismatch",
         ),
-        (({"status": "compliant"}, _result("LX0609-002")), "family_result_invalid"),
-        (("not-a-result", _result("LX0609-002")), "family_result_invalid"),
+        (({"status": "compliant"}, _result("LX0609-01-02-01")), "family_result_invalid"),
+        (("not-a-result", _result("LX0609-01-02-01")), "family_result_invalid"),
         (
-            (_result("lx0609-001"), _result("LX0609-002")),
+            (_result("lx0609-001"), _result("LX0609-01-02-01")),
             "family_result_extra",
         ),
         (
-            (_result(" LX0609-001 "), _result("LX0609-002")),
+            (_result(" LX0609-01-01-01 "), _result("LX0609-01-02-01")),
             "family_result_extra",
         ),
     ],
@@ -180,7 +202,7 @@ def test_envelope_rejects_invalid_metrics_and_planned_scope():
     envelope = _envelope(*(_result(rule_id) for rule_id in EXPECTED))
 
     with pytest.raises(ValueError, match="planned_rule_ids"):
-        replace(envelope, planned_rule_ids=("LX0609-001", "LX0609-001"))
+        replace(envelope, planned_rule_ids=("LX0609-01-01-01", "LX0609-01-01-01"))
     with pytest.raises(ValueError, match="token metrics"):
         replace(envelope, total_tokens=-1)
     with pytest.raises(ValueError, match="token metrics"):

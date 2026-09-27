@@ -119,20 +119,20 @@ _ENUMS = {
 }
 
 _RULE_FACT_FIELDS = {
-    "LX0609-024": (
+    "LX0609-04-02-03": (
         "surgery_occurrence", "malignant_relation",
         "lymph_node_documentation",
     ),
-    "LX0609-025": (
+    "LX0609-04-02-04": (
         "surgery_occurrence", "implant_use", *LX0609_025_REQUIRED_FIELDS,
         "implant_items",
     ),
-    "LX0609-028": (
+    "LX0609-05-01-01": (
         "surgery_occurrence", "incision_class", "antimicrobial_intent",
         "start_time_ref", "start_time_role", "end_time_ref", "end_time_role",
         "interval_scope", "special_extension_reason",
     ),
-    "LX0609-033": (
+    "LX0609-11-01-01": (
         "consent_role", "consent_linkage",
         "patient_signature", "surgeon_signature",
     ),
@@ -316,7 +316,7 @@ def build_surgery_text_fact_prompt(
     max_completion_tokens: int | None = None,
 ) -> str:
     selected = tuple(str(item).strip().upper() for item in selected_rule_ids)
-    allowed = {"LX0609-024", "LX0609-025", "LX0609-028", "LX0609-033"}
+    allowed = {"LX0609-04-02-03", "LX0609-04-02-04", "LX0609-05-01-01", "LX0609-11-01-01"}
     if not selected or any(item not in allowed for item in selected):
         raise ValueError("unsupported surgery text fact scope")
     if max_completion_tokens is not None and max_completion_tokens <= 0:
@@ -335,7 +335,7 @@ def build_surgery_text_fact_prompt(
         separators=(",", ":"),
     )
     actual_028_example = ""
-    if selected == ("LX0609-028",):
+    if selected == ("LX0609-05-01-01",):
         ordered_candidates = sorted(
             projection.time_candidates.items(),
             key=lambda item: (item[1].value, item[0]),
@@ -374,7 +374,7 @@ def build_surgery_text_fact_prompt(
     if actual_028_example:
         response_example = actual_028_example
     consent_033_instruction = ""
-    if "LX0609-033" in selected:
+    if "LX0609-11-01-01" in selected:
         consent_033_instruction = (
             "033 只阅读给定的本次手术知情同意书正文；已实施手术锚点已由程序确认，"
             "不得从正文重新推断手术是否发生。只输出 consent_role、consent_linkage、"
@@ -387,7 +387,7 @@ def build_surgery_text_fact_prompt(
         "缝线、引流、止血材料、器械、导管鞘、导丝、拟植入、取出旧物均不得当作本次实际植入。"
     )
     implant_025_instruction = ""
-    if "LX0609-025" in selected:
+    if "LX0609-04-02-04" in selected:
         required_implant_fields = "、".join(LX0609_025_REQUIRED_FIELDS)
         implant_025_instruction = (
             "材料名称本身不能证明植入，"
@@ -472,7 +472,7 @@ def parse_surgery_text_fact_response(
         # 联合提示词可能同时携带手术、病理、用药等材料；033 仍必须至少
         # 锚定一份手术知情同意书，不能把其它同意书或治疗文书当作手术同意书。
         if (
-            "LX0609-033" in selected
+            "LX0609-11-01-01" in selected
             and projection.document_source_keys
             and not any(
                 projection.document_source_keys.get(item)
@@ -545,7 +545,7 @@ def parse_surgery_text_fact_response(
             value = raw.get(key) if key in selected_fields else None
             normalized = None if value is None else str(value).strip()
             if normalized and normalized not in projection.time_candidates:
-                if set(selected) == {"LX0609-028"}:
+                if set(selected) == {"LX0609-05-01-01"}:
                     normalized = None
                 else:
                     raise ValueError("surgery event time ref mismatch")
@@ -554,7 +554,7 @@ def parse_surgery_text_fact_response(
                 and projection.time_candidates[normalized].document_ref
                 not in normalized_evidence
             ):
-                if set(selected) == {"LX0609-028"}:
+                if set(selected) == {"LX0609-05-01-01"}:
                     normalized = None
                 else:
                     raise ValueError("surgery event time evidence ref mismatch")

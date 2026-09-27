@@ -766,6 +766,14 @@ async def run_luxian_0609_preproduction(
         **observed_usage,
         "usage_complete": usage_complete,
         "usage_error_reason": usage_error_reason,
+        "usage_observation_complete": (
+            usage_complete
+            and context is not None
+            and not bool(getattr(context, "native_usage_unknown_executor_keys", ()))
+        ),
+        "usage_unknown_executor_keys": list(
+            getattr(context, "native_usage_unknown_executor_keys", ())
+        ),
         "usage_attributions": list(usage_attributions),
         "unattributed_prompt_tokens": (
             0 if usage_complete else observed_usage["prompt_tokens"]

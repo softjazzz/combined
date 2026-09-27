@@ -581,7 +581,7 @@ def test_consultation_rule_matrix_no_consultation_and_069_control(
     monkeypatch.setattr(workspace, "update_batch_job_progress", capture_update_progress)
     pool_id, sample_item_id = _create_ready_sample_pool(engine=engine, service=sample_pool_service)
     app = _api_app(service=controlled_service)
-    consultation_rules = ["LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023"]
+    consultation_rules = ["LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03", "LX0609-03-01-04"]
 
     def create_workspace_job(rule_ids: list[str], record_refs: list[dict[str, str]]) -> str:
         with TestClient(app) as client:
@@ -715,7 +715,7 @@ def test_consultation_rule_matrix_no_consultation_and_069_control(
             "/api/v1/qc/sichuan/workspace/batch-jobs",
             json={
                 "rule_set_key": "luxian_0609_qc_v1",
-                "rule_ids": ["LX0609-069"],
+                "rule_ids": ["LX0609-04-02-07"],
                 "scope": "final",
                 "record_refs": [_RECORD_A],
                 "run_mode": "serial",
@@ -728,7 +728,7 @@ def test_consultation_rule_matrix_no_consultation_and_069_control(
     rule_069_item = _saved_item(
         rule_069_job,
         visit_id=_RECORD_A["visit_id"],
-        rule_id="LX0609-069",
+        rule_id="LX0609-04-02-07",
     )
     assert (rule_069_item["status"], rule_069_item["reason_code"]) == (
         "not_applicable",
@@ -740,7 +740,7 @@ def test_consultation_rule_matrix_no_consultation_and_069_control(
         job_id=rule_069_job_id,
         task_item=rule_069_item,
         record=_RECORD_A,
-        expected_rule_ids=["LX0609-069"],
+        expected_rule_ids=["LX0609-04-02-07"],
         evidence_required=False,
     )
     assert _envelope_customer_projection(rule_069_envelope) == {
@@ -781,7 +781,7 @@ def test_consultation_rule_matrix_no_consultation_and_069_control(
             "/api/v1/qc/sichuan/workspace/batch-jobs",
             json={
                 "rule_set_key": "luxian_0609_qc_v1",
-                "rule_ids": ["LX0609-069"],
+                "rule_ids": ["LX0609-04-02-07"],
                 "scope": "final",
                 "record_refs": [_RECORD_A],
                 "run_mode": "serial",

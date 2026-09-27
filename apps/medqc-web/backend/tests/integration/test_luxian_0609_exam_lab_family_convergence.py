@@ -27,18 +27,25 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.database.models.cdm import (
     AdmissionRecord,
     DischargeRecord,
+    InpatRegistration,
     MedicalRecordFrontpage,
 )
 from app.services import custom_qc_workspace_service as workspace_module
 from app.services import custom_qc_sample_pool_service as sample_pool_module
 from app.services import sichuan_qc_service
 from app.services import sichuan_workspace_batch_worker as batch_worker
+from app.services import sample_programmatic_evidence
 from app.routers import qc_sample_pools, qc_sichuan
 from app.services.custom_qc_sample_pool_service import CustomQCSamplePoolService
 from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
 from app.services.luxian_0609 import execution as luxian_execution
+from app.services.luxian_0609.ct_order_course_consistency import SCHEMA_VERSION as CT_SCHEMA_VERSION
 from app.services.luxian_0609.evidence_snapshot_provider import SnapshotSourceRows
-from app.services.luxian_0609.native_exam_lab_execution import EXAM_LAB_RULE_IDS
+from app.services.luxian_0609.handbook_exam_lab import ORDER_SOURCE
+from app.services.luxian_0609.native_exam_lab_execution import (
+    EXAM_LAB_RULE_IDS,
+    EXECUTABLE_EXAM_LAB_RULE_IDS,
+)
 from app.services.luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY
 from tests.integration.test_luxian_0609_consultation_api_entry_flow import (
     _api_app,
@@ -49,7 +56,23 @@ from tests.integration.test_luxian_0609_consultation_api_entry_flow import (
 )
 
 
-RULE_ID = "LX0609-012"
+_ASGI_EXPECTED_OUTCOMES = {
+    rule_id: ("compliant", "requirement_satisfied")
+    for rule_id in EXAM_LAB_RULE_IDS
+}
+_ASGI_EXPECTED_OUTCOMES.update(
+    {
+        # CT一致性fixture没有本次事件的可用医嘱关联。
+        "LX0609-06-01-01": ("data_gap", "required_field_missing"),
+        # 入口测试的脱敏 fixture 有已执行检查但没有正式影像报告。
+        "LX0609-06-01-03": ("data_gap", "target_report_missing"),
+        # 微生物 fixture 缺少可唯一关联主记录与报告的业务键。
+        "LX0609-06-03-02": ("data_gap", "association_failed"),
+    }
+)
+
+
+RULE_ID = "LX0609-06-01-05"
 RULE_SET_VERSION = "2026-06-09"
 _RECORD_A = {
     "institute_id": "EXAM-HOSPITAL",
@@ -72,6 +95,7 @@ def _formal_settings() -> SimpleNamespace:
         LUXIAN_0609_NATIVE_EXECUTION_ENABLED=True,
         LUXIAN_0609_NATIVE_EXAM_LAB_ENABLED=True,
         LUXIAN_0609_UNIFIED_ENGINE_ENABLED=True,
+        LUXIAN_0609_FAMILY_MAX_CONCURRENCY=4,
         LUXIAN_0609_RULE_DECISION_EXAM_LAB_ENABLED=True,
         LUXIAN_0609_TRIGGER_GATE_ENABLED=False,
         LUXIAN_0609_LLM_TRIGGER_GATE_ENABLED=False,
@@ -132,12 +156,12 @@ class _DeterministicExamLabFactClient:
                                         "positive_state": (
                                             "positive"
                                             if self.rule_id
-                                            in {"LX0609-012", "LX0609-015"}
+                                            in {"LX0609-06-01-05", "LX0609-06-03-04"}
                                             else "not_relevant"
                                         ),
                                         "course_doc_positions": [
                                             1
-                                            if self.rule_id == "LX0609-010"
+                                            if self.rule_id == "LX0609-06-01-02"
                                             else 2
                                         ],
                                     }
@@ -154,6 +178,32 @@ class _DeterministicExamLabFactClient:
                 "total_tokens": 110,
             },
             "_api_time": 0.2,
+        }
+
+
+class _DeterministicCtFactClient:
+    """仅固定 CT 语义事实，保留正式执行和 Token 统计。"""
+
+    def __init__(self, record_state: str) -> None:
+        self.record_state = record_state
+        self.prompts: list[str] = []
+
+    async def generate(self, prompt: str, *, allow_length_retry: bool = False) -> dict[str, object]:
+        assert allow_length_retry is False
+        self.prompts.append(prompt)
+        return {
+            "content": json.dumps({
+                "schema_version": CT_SCHEMA_VERSION,
+                "events": [{
+                    "event_position": 1,
+                    "order_position": 1,
+                    "record_state": self.record_state,
+                    "clause_ids": ["C1"],
+                }],
+                "unmatched_current_clause_ids": [],
+            }, ensure_ascii=False),
+            "usage": {"prompt_tokens": 100, "completion_tokens": 20},
+            "_api_time": 0.01,
         }
 
 
@@ -273,10 +323,10 @@ def _fact_response() -> dict[str, object]:
                 "semantic_state": "present",
                 "positive_state": (
                     "positive"
-                    if rule_id in {"LX0609-012", "LX0609-015"}
+                    if rule_id in {"LX0609-06-01-05", "LX0609-06-03-04"}
                     else "not_relevant"
                 ),
-                "course_doc_positions": [1 if rule_id == "LX0609-010" else 2],
+                "course_doc_positions": [1 if rule_id == "LX0609-06-01-02" else 2],
             }
             for rule_id in EXAM_LAB_RULE_IDS
         ],
@@ -362,19 +412,19 @@ async def test_exam_lab_family_freezes_canonical_facts_evidence_and_prompt_usage
     ) == (100, 10, 110)
     assert delivered["executor_breakdown"] == {"llm": 1}
     assert all(item.fact_refs for item in context.reduced_decisions)
-    assert "LX0609-010" not in dict(context.customer_display_facts)
+    assert "LX0609-06-01-02" not in dict(context.customer_display_facts)
 
     expected_facts = {
         rule_id: {
             "verification_kind": "exam_lab_requirement_checked",
             "subject": (
                 "ct_mri"
-                if rule_id in {"LX0609-011", "LX0609-012"}
+                if rule_id in {"LX0609-06-01-04", "LX0609-06-01-05"}
                 else "culture_susceptibility"
             ),
             "requirement": (
                 "positive_result_analysis_within_24h"
-                if rule_id in {"LX0609-012", "LX0609-015"}
+                if rule_id in {"LX0609-06-01-05", "LX0609-06-03-04"}
                 else "result_recording_within_24h"
             ),
             "event_phase": "report",
@@ -383,7 +433,7 @@ async def test_exam_lab_family_freezes_canonical_facts_evidence_and_prompt_usage
             "requirement_met": True,
             "positive_state": (
                 "positive"
-                if rule_id in {"LX0609-012", "LX0609-015"}
+                if rule_id in {"LX0609-06-01-05", "LX0609-06-03-04"}
                 else "not_relevant"
             ),
             "report_time": "2026-07-02 12:00:00",
@@ -395,10 +445,10 @@ async def test_exam_lab_family_freezes_canonical_facts_evidence_and_prompt_usage
             "event_count": 1,
             "event_position": 1,
         }
-        for rule_id in ("LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015")
+        for rule_id in ("LX0609-06-01-04", "LX0609-06-01-05", "LX0609-06-03-03", "LX0609-06-03-04")
     }
     expected_evidence_coordinates = {
-        "LX0609-010": [
+        "LX0609-06-01-02": [
             (
                 "exam_master",
                 f"EXAM-REPORT-{_RECORD_A['visit_id']}",
@@ -406,7 +456,7 @@ async def test_exam_lab_family_freezes_canonical_facts_evidence_and_prompt_usage
                 "2026-07-02 08:00:00",
             )
         ],
-        "LX0609-011": [
+        "LX0609-06-01-04": [
             (
                 "daily_course_record",
                 f"COURSE-AFTER-{_RECORD_A['visit_id']}",
@@ -420,8 +470,8 @@ async def test_exam_lab_family_freezes_canonical_facts_evidence_and_prompt_usage
                 "2026-07-02 08:00:00",
             ),
         ],
-        "LX0609-012": [],
-        "LX0609-014": [
+        "LX0609-06-01-05": [],
+        "LX0609-06-03-03": [
             (
                 "daily_course_record",
                 f"COURSE-AFTER-{_RECORD_A['visit_id']}",
@@ -435,13 +485,13 @@ async def test_exam_lab_family_freezes_canonical_facts_evidence_and_prompt_usage
                 "2026-07-02 12:00:00",
             ),
         ],
-        "LX0609-015": [],
+        "LX0609-06-03-04": [],
     }
-    expected_evidence_coordinates["LX0609-012"] = list(
-        expected_evidence_coordinates["LX0609-011"]
+    expected_evidence_coordinates["LX0609-06-01-05"] = list(
+        expected_evidence_coordinates["LX0609-06-01-04"]
     )
-    expected_evidence_coordinates["LX0609-015"] = list(
-        expected_evidence_coordinates["LX0609-014"]
+    expected_evidence_coordinates["LX0609-06-03-04"] = list(
+        expected_evidence_coordinates["LX0609-06-03-03"]
     )
     for item in results:
         evidence_coordinates = [
@@ -458,7 +508,7 @@ async def test_exam_lab_family_freezes_canonical_facts_evidence_and_prompt_usage
         expected_coordinates = expected_evidence_coordinates[item["rule_id"]]
         assert len(evidence_coordinates) == len(expected_coordinates)
         assert set(evidence_coordinates) == set(expected_coordinates)
-        if item["rule_id"] == "LX0609-010":
+        if item["rule_id"] == "LX0609-06-01-02":
             # 冻结迁移前 Canonical 行为：010 的合规事实只存在于执行上下文，
             # 当前聚合结果不重复保存 customer_display_facts。
             assert "customer_display_facts" not in item
@@ -523,6 +573,41 @@ def _fixture_evidence_session_builder(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
+def _ct_evidence_session_builder(monkeypatch: pytest.MonkeyPatch, *, course_body: str) -> None:
+    """以完整医嘱、检查主记录、正式报告和病程运行正式快照会话。"""
+
+    original = luxian_execution.build_luxian_0609_evidence_read_session
+
+    def read_fixture(**kwargs: Any) -> SnapshotSourceRows:
+        source_key = str(kwargs["source_key"])
+        visit_id = str(kwargs["visit_id"])
+        assert visit_id in {_RECORD_A["visit_id"], _RECORD_B["visit_id"]}
+        rows: list[dict[str, str]] = []
+        if source_key == ORDER_SOURCE:
+            rows = [{"order_id": "ORDER-001", "order_name": "左膝CT", "order_status": "新开"}]
+        elif source_key == "exam_master":
+            rows = [{"exam_id": "EXAM-001", "order_id": "ORDER-001"}]
+        elif source_key == "exam_item_report":
+            rows = [{
+                "exam_id": "EXAM-001", "description": "左膝骨折。",
+                "report_time": "2026-07-02T09:00:00+08:00",
+            }]
+        elif source_key == "daily_course_record":
+            rows = [{"document_id": f"COURSE-{visit_id}", "record_content": course_body}]
+        elif source_key in {"evaluation_context.horizon", "inpat_registration.discharge_horizon"}:
+            rows = _rows_for_source(source_key=source_key, visit_id=visit_id, explicit_course=True)
+        return SnapshotSourceRows.create(
+            source_key=source_key, rows=rows, truncated=False, limit_rows=50
+        )
+
+    def build_with_fixture_reader(**kwargs: Any) -> Any:
+        return original(**kwargs, row_reader=read_fixture)
+
+    monkeypatch.setattr(
+        luxian_execution, "build_luxian_0609_evidence_read_session", build_with_fixture_reader
+    )
+
+
 def _install_isolated_sqlite(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> CustomQCWorkspaceService:
@@ -541,7 +626,12 @@ def _install_isolated_sqlite(
         workspace_module, "_sync_batch_job_parent_columns", lambda **_kwargs: None
     )
 
-    for model in (MedicalRecordFrontpage, AdmissionRecord, DischargeRecord):
+    for model in (
+        MedicalRecordFrontpage,
+        AdmissionRecord,
+        DischargeRecord,
+        InpatRegistration,
+    ):
         model.__table__.create(bind=engine, checkfirst=True)
     with Session(engine) as session:
         for ref in (_RECORD_A, _RECORD_B):
@@ -908,7 +998,7 @@ async def test_exam_lab_formal_worker_is_consistent_across_three_business_entrie
 
 
 @pytest.mark.integration
-@pytest.mark.parametrize("rule_id", EXAM_LAB_RULE_IDS)
+@pytest.mark.parametrize("rule_id", EXECUTABLE_EXAM_LAB_RULE_IDS)
 def test_exam_lab_asgi_entries_create_same_selection_and_dispatch_formal_worker(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, rule_id: str
 ) -> None:
@@ -1101,10 +1191,9 @@ def test_exam_lab_asgi_entries_create_same_selection_and_dispatch_formal_worker(
         )
 
     for item in (single_item, pool_item, sample_item):
-        assert (item["status"], item["reason_code"]) == (
-            "compliant",
-            "requirement_satisfied",
-        )
+        assert (item["status"], item["reason_code"]) == _ASGI_EXPECTED_OUTCOMES[
+            rule_id
+        ]
         assert (item.get("metadata") or {}).get("executor_key") == "exam_lab"
         assert not item.get("llm_fallback")
         assert not item.get("pack_fallback")
@@ -1125,3 +1214,161 @@ def test_exam_lab_asgi_entries_create_same_selection_and_dispatch_formal_worker(
         batches == (("exam_lab", (rule_id,)),)
         for batches in unified_execution_calls
     )
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "record_state,course_body,expected_status,expected_reason",
+    [
+        (
+            "consistent_description", "ORDER-001左膝CT完成。",
+            "compliant", "requirement_satisfied",
+        ),
+        (
+            "contradictory_description", "ORDER-001实际为右膝CT，与医嘱左膝不一致。",
+            "non_compliant", "requirement_violated",
+        ),
+    ],
+)
+def test_ct_semantic_decision_survives_three_asgi_entries_and_latest_read(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    record_state: str,
+    course_body: str,
+    expected_status: str,
+    expected_reason: str,
+) -> None:
+    """CT 语义判定经工作台、病历池、样本池写入并从公开 latest 读回。"""
+
+    rule_id = "LX0609-06-01-01"
+    workspace = _install_isolated_sqlite(monkeypatch, tmp_path)
+    engine = workspace_module.engine
+    sample_pool_service = _install_sample_pool_sqlite(monkeypatch, engine=engine)
+    _ct_evidence_session_builder(monkeypatch, course_body=course_body)
+    # 本用例只验收冻结资料/SQLite；旧timeline回退不得访问医院数据库。
+    monkeypatch.setattr(sample_programmatic_evidence, "engine", None)
+    settings = _formal_settings()
+    monkeypatch.setattr(batch_worker, "get_settings", lambda: settings)
+    monkeypatch.setattr(sichuan_qc_service, "get_settings", lambda: settings)
+    monkeypatch.setattr(qc_sichuan, "get_settings", lambda: settings)
+    monkeypatch.setattr(batch_worker, "get_product_activation_service", lambda: _ActivationStub())
+    monkeypatch.setattr(
+        sichuan_qc_service, "build_adjudicator_runtime_config", lambda config: dict(config or {})
+    )
+    monkeypatch.setattr(
+        batch_worker,
+        "load_running_final_bundle",
+        lambda *, institute_id, patient_id, visit_id, **_kwargs: _bundle_for_record(
+            visit_id=str(visit_id), patient_id=str(patient_id)
+        ),
+    )
+    monkeypatch.setattr(
+        sample_pool_module, "get_settings",
+        lambda: SimpleNamespace(JWT_SECRET="isolated-api-entry-test-secret"),
+    )
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+    monkeypatch.setattr(qc_sample_pools, "_workspace_service", lambda: workspace)
+    monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_pool_service)
+    service = sichuan_qc_service.SichuanQCService({
+        "provider_code": "isolated-test", "model": "controlled-stub",
+        "allow_mock_when_unconfigured": True, "source": "ct-api-entry-isolated",
+    })
+    fact_client = _DeterministicCtFactClient(record_state)
+    service.adjudicator_client = fact_client
+
+    async def provide_qc_service() -> Any:
+        return service
+
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", provide_qc_service)
+    pool_id, sample_item_id = _create_ready_exam_lab_sample_pool(
+        engine=engine, service=sample_pool_service
+    )
+    app = _api_app(service=service)
+
+    def create_workspace_job(record_refs: list[dict[str, str]]) -> str:
+        with TestClient(app) as client:
+            response = client.post(
+                "/api/v1/qc/sichuan/workspace/batch-jobs",
+                json={
+                    "rule_set_key": LUXIAN_0609_RULE_SET_KEY,
+                    "rule_ids": [rule_id], "scope": "final",
+                    "record_refs": record_refs, "run_mode": "serial",
+                },
+            )
+        assert response.status_code == 200, response.text
+        assert response.json()["success"] is True
+        return str(response.json()["data"]["id"])
+
+    single_job_id = create_workspace_job([_RECORD_A])
+    single_job = _wait_for_terminal_job(workspace=workspace, job_id=single_job_id)
+    assert single_job["status"] == "completed", single_job
+    single_item = _canonical_saved_item(
+        single_job, visit_id=_RECORD_A["visit_id"], rule_id=rule_id
+    )
+    single_envelope = _read_saved_envelope(
+        app=app, job_id=single_job_id, task_item=single_item,
+        record=_RECORD_A, expected_rule_ids=[rule_id],
+    )
+    pool_job_id = create_workspace_job([_RECORD_A, _RECORD_B])
+    pool_job = _wait_for_terminal_job(workspace=workspace, job_id=pool_job_id)
+    pool_item = _canonical_saved_item(
+        pool_job, visit_id=_RECORD_A["visit_id"], rule_id=rule_id
+    )
+    pool_envelope = _read_saved_envelope(
+        app=app, job_id=pool_job_id, task_item=pool_item,
+        record=_RECORD_A, expected_rule_ids=[rule_id],
+    )
+    with TestClient(app) as client:
+        response = client.post(
+            f"/api/v1/qc/sample-pools/{pool_id}/run",
+            json={
+                "validation_mode": "customer", "rule_set_key": LUXIAN_0609_RULE_SET_KEY,
+                "selected_rule_ids": [rule_id], "sample_item_ids": [sample_item_id],
+                "record_refs": [_RECORD_A], "group_by_luxian_family": False,
+            },
+        )
+    assert response.status_code == 200, response.text
+    assert response.json()["success"] is True
+    sample_job_id = str(response.json()["data"]["job_id"])
+    sample_job = _wait_for_terminal_job(workspace=workspace, job_id=sample_job_id)
+    sample_item = _canonical_saved_item(
+        sample_job, visit_id=_RECORD_A["visit_id"], rule_id=rule_id
+    )
+    items = [single_item, pool_item, sample_item]
+    assert all(job["status"] == "completed" and not job.get("failed_records")
+               for job in (single_job, pool_job, sample_job))
+    assert len(fact_client.prompts) == 4
+    for item in items:
+        assert (item["status"], item["reason_code"]) == (expected_status, expected_reason)
+        assert (item.get("metadata") or {}).get("executor_key") == "exam_lab"
+        facts = item["customer_display_facts"]
+        assert len(facts["order_results"]) == 1
+        order = facts["order_results"][0]
+        assert order["status"] == expected_status
+        assert order["order_reference_positions"]
+        assert len(order["course_locations"]) == 1
+        assert order["course_locations"][0]["clause_id"] == "C1"
+        assert _customer_evidence_coordinate_set(item)
+    assert _canonical_projection(items[0]) == _canonical_projection(items[1]) == _canonical_projection(items[2])
+    assert _customer_evidence_coordinate_set(items[0]) == _customer_evidence_coordinate_set(items[1]) == _customer_evidence_coordinate_set(items[2])
+
+    envelope = _read_saved_envelope(
+        app=app, job_id=sample_job_id, task_item=sample_item,
+        record=_RECORD_A, expected_rule_ids=[rule_id],
+    )
+    assert _envelope_customer_projection(single_envelope) == _envelope_customer_projection(pool_envelope) == _envelope_customer_projection(envelope)
+    assert (envelope["status"], envelope["reason_code"]) == (expected_status, expected_reason)
+    assert envelope["customer_display_facts"] == items[2]["customer_display_facts"]
+    order = envelope["customer_display_facts"]["order_results"][0]
+    evidence = list(envelope["evidence"])
+    positions = set(order["order_reference_positions"])
+    assert any(positions <= set(row["decision_reference_positions"]) for row in evidence)
+    location = order["course_locations"][0]
+    assert any(
+        row["source_type"] == "daily_course_record"
+        and location["reference_position"] in row["decision_reference_positions"]
+        and re.fullmatch(r"src_[0-9a-f]{24}", row["source_ref"])
+        and "source_document_id" not in row
+        for row in evidence
+    )
+    assert course_body[location["start"]:location["end"]] == course_body

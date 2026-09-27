@@ -1,4 +1,5 @@
 from typing import List, Dict, Any, Literal, Optional, Sequence
+
 import asyncio
 import uuid
 import json
@@ -11,8 +12,10 @@ from pydantic import BaseModel, ValidationError
 from fastapi import APIRouter, Body, HTTPException, Query, Request, Depends
 from fastapi.responses import Response, StreamingResponse
 from starlette.concurrency import run_in_threadpool
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
+from ..services.luxian_0609.phase_scope import get_luxian_0609_acceptance_only_rule_ids
+from ..services.sample_validation_rule_sets import get_luxian_0609_customer_delivery_rule_ids
 from ..core.response import success_response, error_response, get_trace_id, ErrorCode, StatusCode
 from ..core.audit import audit_event
 from ..services.sichuan_qc_service import SichuanQCService
@@ -74,6 +77,10 @@ from ..services.luxian_0609.surgery_procedure_catalog import (
 )
 from ..services.luxian_0609.rule_decision_settings import (
     assert_luxian_0609_customer_native_delivery_ready,
+    capture_luxian_0609_task_settings,
+    capture_luxian_0609_task_runtime,
+    LX0609_TASK_SETTINGS_FILTER_KEY,
+    LX0609_TASK_RUNTIME_FILTER_KEY,
     resolve_mainline_rule_decision_settings,
 )
 from ..services.luxian_0609.native_package import (
@@ -1851,6 +1858,57 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             finalize(job_id)
 
 
+def resume_queued_luxian_0609_workspace_jobs() -> int:
+    """应用重启时重投持久化队列；多进程重复投递由正式 Worker 的领取 CAS 拦截。"""
+
+    job_ids = _sichuan_workspace_service().list_queued_luxian_0609_batch_job_ids()
+    for job_id in job_ids:
+        submit_detached_task(
+            "sichuan_workspace_batch_job_startup_resume",
+            _run_sichuan_workspace_batch_job,
+            job_id,
+        )
+    if job_ids:
+        logger.info("重新投递 %d 个尚未领取的 LX0609 批量质控任务", len(job_ids))
+    return len(job_ids)
+
+
+_LX0609_RECOVERY_MONITOR: asyncio.Task[None] | None = None
+_LX0609_RECOVERY_SCAN_SECONDS = 30
+_LX0609_LEASE_STALE_AFTER = timedelta(minutes=3)
+
+
+async def _monitor_luxian_0609_stale_attempts() -> None:
+    while True:
+        await asyncio.sleep(_LX0609_RECOVERY_SCAN_SECONDS)
+        try:
+            expired = await asyncio.to_thread(
+                _sichuan_workspace_service().fail_stale_luxian_0609_running_jobs,
+                stale_before=datetime.utcnow() - _LX0609_LEASE_STALE_AFTER,
+            )
+            if expired:
+                logger.warning("已停止 %d 个续约过期的 LX0609 执行尝试", len(expired))
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("LX0609 任务续约巡检失败")
+
+
+def start_luxian_0609_task_recovery_monitor() -> None:
+    global _LX0609_RECOVERY_MONITOR
+    if _LX0609_RECOVERY_MONITOR is None or _LX0609_RECOVERY_MONITOR.done():
+        _LX0609_RECOVERY_MONITOR = asyncio.create_task(_monitor_luxian_0609_stale_attempts())
+
+
+async def stop_luxian_0609_task_recovery_monitor() -> None:
+    global _LX0609_RECOVERY_MONITOR
+    task = _LX0609_RECOVERY_MONITOR
+    _LX0609_RECOVERY_MONITOR = None
+    if task is not None:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+
 @router.post("/workspace/batch-jobs")
 async def create_workspace_batch_job(
     request: Request,
@@ -1872,15 +1930,21 @@ async def create_workspace_batch_job(
         for item in (payload.rule_ids or [])
         if str(item or "").strip()
     ]
+    acceptance_only = get_luxian_0609_acceptance_only_rule_ids()
+    if acceptance_only.intersection(requested_payload_rule_ids):
+        raise HTTPException(422, "待验收规则仅支持客户样本验证显式选择")
     requested_rule_set_rule_ids = list(
         requested_payload_rule_ids
         or (requested_rule_set.rule_ids if requested_rule_set else ())
     )
     if requested_rule_set and requested_rule_set.key == LUXIAN_0609_RULE_SET_KEY:
+        if not requested_payload_rule_ids:
+            requested_rule_set_rule_ids = list(get_luxian_0609_customer_delivery_rule_ids())
         requested_rule_set_rule_ids = [
             rule_id
             for rule_id in requested_rule_set_rule_ids
             if str(rule_id).strip().upper() not in LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
+            and (requested_payload_rule_ids or str(rule_id).strip().upper() not in acceptance_only)
         ]
         if requested_payload_rule_ids and not requested_rule_set_rule_ids:
             raise HTTPException(status_code=422, detail="所选规则不在当前客户运行范围")
@@ -1949,6 +2013,8 @@ async def create_workspace_batch_job(
             status_code=422,
             detail="LX0609质控任务不接受 record_ids，请改用 record_refs",
         )
+    task_settings_snapshot = None
+    task_runtime_snapshot = None
     if is_direct_native_selection:
         effective_settings = resolve_mainline_rule_decision_settings(get_settings())
         try:
@@ -1965,6 +2031,8 @@ async def create_workspace_batch_job(
                 formal_package_plan,
                 context="workspace_batch_create",
             )
+            task_settings_snapshot = capture_luxian_0609_task_settings(effective_settings)
+            task_runtime_snapshot = capture_luxian_0609_task_runtime(qc_service)
         except ValueError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
     compatibility_rule_ids = (
@@ -2046,6 +2114,8 @@ async def create_workspace_batch_job(
         else []
     )
     idempotency_payload = {
+        **({LX0609_TASK_SETTINGS_FILTER_KEY: task_settings_snapshot} if task_settings_snapshot is not None else {}),
+        **({LX0609_TASK_RUNTIME_FILTER_KEY: task_runtime_snapshot} if task_runtime_snapshot is not None else {}),
         **({"diagnostic_capture": True} if payload.diagnostic_capture else {}),
         "scope": normalized_scope,
         "query_scope": normalized_scope,
@@ -2149,6 +2219,8 @@ async def create_workspace_batch_job(
             "rule_ids": rule_ids,
             "paused_customer_rule_ids": list(pending_customer_rule_ids),
             "rule_set_key": rule_set_key,
+            **({LX0609_TASK_SETTINGS_FILTER_KEY: task_settings_snapshot} if task_settings_snapshot is not None else {}),
+            **({LX0609_TASK_RUNTIME_FILTER_KEY: task_runtime_snapshot} if task_runtime_snapshot is not None else {}),
             "rule_set_name": rule_set_name,
             "rule_set_version": rule_set_version,
             "execution_strategy": execution_strategy,
@@ -2769,8 +2841,16 @@ async def retry_workspace_batch_job(
     current_user: Dict[str, Any] = Depends(require_product_activation),
 ):
     workspace = _sichuan_workspace_service()
-    job = workspace.retry_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
+    try:
+        job = workspace.retry_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     if not _is_workspace_batch_job(job):
+        existing = workspace.get_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
+        if _is_workspace_batch_job(existing) and (
+            (existing.get("filters") or {}).get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY
+        ):
+            raise HTTPException(status_code=409, detail="任务已在排队或执行中，不能重复入队")
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
     if str(job.get("job_kind") or "").strip().lower() == "parent":
         child_jobs = list(job.get("child_jobs") or job.get("children") or [])

@@ -27,7 +27,7 @@ def test_zero_verifiable_recommendations_are_not_presented_as_zero_advice(state)
     facts = _frozen_unresolved_facts()
     facts["relation_state"] = state
     before = deepcopy(facts)
-    finding = customer_finding_from_controlled_facts(rule_id="LX0609-020", facts=facts)
+    finding = customer_finding_from_controlled_facts(rule_id="LX0609-03-01-01", facts=facts)
     assert finding == "已识别6次会诊，但资料或对应关系不足，尚无法完成建议及执行情况核对。"
     assert facts == before
     assert all(text not in finding for text in ("0条", "无建议", "未执行", "未闭环"))
@@ -50,7 +50,7 @@ def test_nonzero_recommendations_keep_existing_execution_summary(state, executio
         }],
     })
     before = deepcopy(facts)
-    finding = customer_finding_from_controlled_facts(rule_id="LX0609-020", facts=facts)
+    finding = customer_finding_from_controlled_facts(rule_id="LX0609-03-01-01", facts=facts)
     assert finding.startswith("共核对6次已完成会诊的1条建议：")
     assert ("未闭环：第1次会诊的检查类建议。" in finding) == (execution_state == "missing")
     assert facts == before
@@ -65,12 +65,12 @@ def test_nonzero_recommendations_keep_existing_execution_summary(state, executio
 def test_unresolved_wording_does_not_bypass_invalid_facts(patch):
     facts = _frozen_unresolved_facts()
     facts.update(patch)
-    assert customer_finding_from_controlled_facts(rule_id="LX0609-020", facts=facts) == ""
+    assert customer_finding_from_controlled_facts(rule_id="LX0609-03-01-01", facts=facts) == ""
 
 
 def test_zero_count_other_relation_state_keeps_existing_behavior():
     facts = _frozen_unresolved_facts()
     facts["relation_state"] = "execution_missing"
-    assert customer_finding_from_controlled_facts(rule_id="LX0609-020", facts=facts).startswith(
+    assert customer_finding_from_controlled_facts(rule_id="LX0609-03-01-01", facts=facts).startswith(
         "共核对6次已完成会诊的0条建议："
     )

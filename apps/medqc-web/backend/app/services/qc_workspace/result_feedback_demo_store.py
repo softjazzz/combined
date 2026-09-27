@@ -22,6 +22,11 @@ from sqlalchemy.orm import Session
 from ...database.connection import DB_SCHEMA_MODE, SessionLocal, engine
 from ...schemas.qc_sichuan import QcResultFeedbackRequest
 from ..custom_qc_workspace_service import _record_result_envelopes_table
+from .canonical_result_store import (
+    CANONICAL_RESULT_DELIVERY_MODE,
+    RECORD_RESULT_ENVELOPE_SCHEMA,
+    safe_customer_display_facts,
+)
 
 
 class ResultFeedbackDemoStoreUnavailable(RuntimeError):
@@ -218,6 +223,31 @@ class ResultFeedbackDemoStore:
         self._canonical_table = canonical_table
 
     @staticmethod
+    def _validated_items(envelope: Mapping[str, Any]) -> list[dict[str, Any]]:
+        """正式 Canonical Envelope 逐项校验公开事实合同；更早无合同标记的
+        Envelope 保留既有兼容读取。"""
+
+        formal_envelope = "schema_version" in envelope or "delivery_mode" in envelope
+        if formal_envelope:
+            if (
+                envelope.get("schema_version") != RECORD_RESULT_ENVELOPE_SCHEMA
+                or envelope.get("delivery_mode") != CANONICAL_RESULT_DELIVERY_MODE
+            ):
+                raise ResultFeedbackDemoConflict("质控结果无法唯一确认")
+        items = envelope.get("items")
+        if not isinstance(items, list):
+            raise ResultFeedbackDemoConflict("质控结果无法唯一确认")
+        try:
+            for item in items:
+                if not isinstance(item, dict):
+                    raise ValueError("质控结果项目格式错误")
+                if formal_envelope:
+                    safe_customer_display_facts(item, rule_id=_rule_id(item))
+        except ValueError as exc:
+            raise ResultFeedbackDemoConflict("质控结果无法唯一确认") from exc
+        return items
+
+    @staticmethod
     def _canonical_item_from_row(
         row: Mapping[str, Any],
         *,
@@ -238,9 +268,7 @@ class ResultFeedbackDemoStore:
             or not _safe_text(envelope.get("rule_set_version"))
         ):
             return None
-        items = envelope.get("items")
-        if not isinstance(items, list):
-            raise ResultFeedbackDemoConflict("质控结果无法唯一确认")
+        items = ResultFeedbackDemoStore._validated_items(envelope)
         matches = [item for item in items if isinstance(item, dict) and _rule_id(item) == rule_id]
         if len(matches) > 1:
             raise ResultFeedbackDemoConflict("质控结果无法唯一确认")
@@ -325,6 +353,7 @@ class ResultFeedbackDemoStore:
                 _safe_text(envelope.get("root_job_id")) == root_job_id
                 and _safe_text(envelope.get("record_ref")) == record_ref
             ):
+                self._validated_items(envelope)
                 rule_set_key = _safe_text(envelope.get("rule_set_key"))
                 rule_set_version = _safe_text(envelope.get("rule_set_version"))
                 if not rule_set_key or not rule_set_version:
@@ -430,6 +459,10 @@ class ResultFeedbackDemoStore:
             raise ResultFeedbackDemoStoreUnavailable("反馈功能暂不可用") from exc
 
         contexts: dict[tuple[str, str], dict[str, Any]] = {}
+        feedback_keys = {
+            (_safe_text(row.get("root_job_id")), _safe_text(row.get("record_ref")))
+            for row in feedback_rows
+        }
         for row in canonical_rows:
             try:
                 envelope = json.loads(_safe_text(row.get("envelope_json")))
@@ -442,15 +475,16 @@ class ResultFeedbackDemoStore:
             if root_job_id not in root_job_ids or not _SAFE_RECORD_REF.fullmatch(record_ref):
                 continue
             key = (root_job_id, record_ref)
+            if key not in feedback_keys:
+                continue
+            items = self._validated_items(envelope)
             identity = {
                 "institute_id": _safe_text(row.get("institute_id")),
                 "patient_id": _safe_text(row.get("patient_id")),
                 "visit_id": _safe_text(row.get("visit_id") or row.get("record_id")),
             }
             rule_names: dict[str, str] = {}
-            for item in list(envelope.get("items") or []):
-                if not isinstance(item, Mapping):
-                    continue
+            for item in items:
                 rule_id = _rule_id(item)
                 rule_name = _safe_text(
                     item.get("rule_name")

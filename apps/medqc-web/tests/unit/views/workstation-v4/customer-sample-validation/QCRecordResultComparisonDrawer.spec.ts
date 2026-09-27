@@ -58,7 +58,7 @@ const readyResult = {
   rule_set_version: '2026.08.27',
   items: [
     {
-      rule_id: 'LX0609-018',
+      rule_id: 'LX0609-01-01-02',
       rule_name: '主诉能导出第一诊断',
       status: 'non_compliant',
       conclusion: '主诉长度不符合要求。',

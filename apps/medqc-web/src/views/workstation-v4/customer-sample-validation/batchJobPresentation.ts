@@ -108,22 +108,22 @@ const EXECUTOR_LABELS: Record<string, string> = {
 }
 
 const BRIEF_BY_RULE_ID: Record<string, string> = {
-  'LX0609-001': '入院记录未在24小时内完成',
-  'LX0609-002': '首次病程记录时间超过8小时',
-  'LX0609-003': '手术记录未在术后24小时内完成',
-  'LX0609-005': '入院48小时内无主治医师首次查房记录',
-  'LX0609-007': '病情稳定患者3天内无查房病程记录',
-  'LX0609-008': '病重患者2天内无查房病程记录',
-  'LX0609-009': '病危患者未每天记录查房病程',
-  'LX0609-016': '首次病程与入院记录存在复制风险',
-  'LX0609-017': '多次病程记录高度重复',
-  'LX0609-018': '主诉不能导出第一诊断',
-  'LX0609-020': '会诊后未记录会诊意见执行情况',
-  'LX0609-021': '会诊申请目的不明确',
-  'LX0609-022': '会诊意见不明确',
-  'LX0609-023': '会诊执行记录不规范',
-  'LX0609-041': '缺少输血知情同意书',
-  'LX0609-049': '输血医嘱与收费不一致',
+  'LX0609-01-01-01': '入院记录未在24小时内完成',
+  'LX0609-01-02-01': '首次病程记录时间超过8小时',
+  'LX0609-04-02-01': '手术记录未在术后24小时内完成',
+  'LX0609-02-01-01': '入院48小时内无主治医师首次查房记录',
+  'LX0609-02-01-03': '病情稳定患者3天内无查房病程记录',
+  'LX0609-02-01-04': '病重患者2天内无查房病程记录',
+  'LX0609-02-01-05': '病危患者未每天记录查房病程',
+  'LX0609-12-01-01': '首次病程与入院记录存在复制风险',
+  'LX0609-12-01-02': '多次病程记录高度重复',
+  'LX0609-01-01-02': '主诉不能导出第一诊断',
+  'LX0609-03-01-01': '会诊后未记录会诊意见执行情况',
+  'LX0609-03-01-02': '会诊申请目的不明确',
+  'LX0609-03-01-03': '会诊意见不明确',
+  'LX0609-03-01-04': '会诊执行记录不规范',
+  'LX0609-11-03-01': '缺少输血知情同意书',
+  'LX0609-07-04-02': '输血医嘱与收费不一致',
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -174,7 +174,9 @@ function resolveStatusCounts(job: SichuanBatchJob): Record<string, number> {
 
 function normalizeRuleIds(value: unknown): string[] {
   return Array.isArray(value)
-    ? value.map((item) => String(item).trim()).filter((item) => /^LX(?:0609|0916)-\d+/u.test(item))
+    ? value
+        .map((item) => String(item).trim())
+        .filter((item) => /^(?:LX0609-\d{2}-\d{2}-\d{2}|LX0916-\d+)$/u.test(item))
     : []
 }
 
@@ -402,11 +404,16 @@ export function buildBatchJobPresentation(job: SichuanBatchJob): BatchJobPresent
   const ruleSetText = String(
     job.rule_set_name || summary.rule_set_name || job.rule_name || '质控任务',
   )
-  const scopeText = ruleIds.length
+  const baseScopeText = ruleIds.length
     ? `选定 ${ruleIds.length} 个质控点`
     : customerRuleCount > 0
       ? `全量规则 · ${customerRuleCount} 个客户质控点`
       : '质控范围未返回'
+  const acceptanceRules = job.acceptance_only_rule_ids
+  const acceptanceCount = Array.isArray(acceptanceRules) ? acceptanceRules.length : 0
+  const scopeText = acceptanceCount
+    ? `${baseScopeText} · 待验收 ${acceptanceCount} 条`
+    : baseScopeText
   const compactRuleIdsText = ruleIds.length
     ? `${customerRuleCount || ruleIds.length} 个 ${resolveRulePrefix(ruleIds)} 质控点：${ruleIds.slice(0, 3).join('、')}${ruleIds.length > 3 ? ` +${ruleIds.length - 3}` : ''}`
     : customerRuleCount > 0

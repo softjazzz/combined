@@ -66,9 +66,9 @@ def test_select_latest_authoritative_record_job_fails_closed_for_current_generat
 
 def test_select_latest_authoritative_record_job_does_not_choose_a_candidate_by_explanation_or_status():
     sparse_new = _job("new", created_at="2026-07-29T10:00:00")
-    sparse_new["items"] = [{"rule_id": "LX0609-018", "conclusion": ""}]
+    sparse_new["items"] = [{"rule_id": "LX0609-01-01-02", "conclusion": ""}]
     verbose_old = _job("old", created_at="2026-07-29T09:00:00")
-    verbose_old["items"] = [{"rule_id": "LX0609-018", "conclusion": "历史长文案"}]
+    verbose_old["items"] = [{"rule_id": "LX0609-01-01-02", "conclusion": "历史长文案"}]
 
     selection = select_latest_authoritative_record_result_job(
         [verbose_old, sparse_new],

@@ -10,7 +10,7 @@ from test_luxian_0609_native_extended_document_execution import (
 
 async def _run(daily, senior=()):
     snapshot, materials, result, reduced = await _evaluate_selected(
-        ("LX0609-067",),
+        ("LX0609-08-02-01",),
         {
             "inpat_registration": ({"patient_status": "出院", "discharge_datetime": "2026-07-03 12:00:00"},),
             "daily_course_record": daily,
@@ -18,7 +18,7 @@ async def _run(daily, senior=()):
         },
     )
     canonical = _canonical_extended_result(
-        rule_id="LX0609-067", snapshot=snapshot, materials=materials,
+        rule_id="LX0609-08-02-01", snapshot=snapshot, materials=materials,
         result=result, reduced=reduced,
     )
     assert result.llm_call_count == result.total_tokens == 0
@@ -97,4 +97,4 @@ def test_body_gap_display_rejects_invalid_executor_facts(field, value):
         "checked_dates": ["2026-07-02", "2026-07-03"], "missing_body_count": 1,
     }
     raw[field] = value
-    assert safe_discharge_customer_display_facts(rule_id="LX0609-067", raw=raw) is None
+    assert safe_discharge_customer_display_facts(rule_id="LX0609-08-02-01", raw=raw) is None

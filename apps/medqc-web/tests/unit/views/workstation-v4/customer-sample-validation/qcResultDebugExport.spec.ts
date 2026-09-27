@@ -9,7 +9,7 @@ describe('qcResultDebugExport', () => {
   it('exports the safe discharge time source as a readable diagnostic field', () => {
     const result = buildQcResultDebugText([
       {
-        rule_id: 'LX0609-061',
+        rule_id: 'LX0609-08-01-01',
         rule_name: '出院记录时限',
         status: 'non_compliant',
         customer_display_facts: {
@@ -27,7 +27,7 @@ describe('qcResultDebugExport', () => {
     const result = buildQcResultDebugText(
       [
         {
-          rule_id: 'LX0609-011',
+          rule_id: 'LX0609-06-01-04',
           rule_name: 'CT/MRI 报告后病程记录',
           status: 'data_gap',
           display_status: '数据不足',
@@ -81,7 +81,7 @@ describe('qcResultDebugExport', () => {
     expect(result).toContain('规则集版本：2026.08.27')
     expect(result).toContain('结果完整性：完整')
     expect(result).toContain('- data_gap：1')
-    expect(result).toContain('LX0609-011 CT/MRI 报告后病程记录')
+    expect(result).toContain('LX0609-06-01-04 CT/MRI 报告后病程记录')
     expect(result).toContain('原始状态：data_gap')
     expect(result).toContain('原因码：required_time_unavailable')
     expect(result).toContain('质控结论：缺少可用于时序核对的病程记录时间。')
@@ -97,7 +97,7 @@ describe('qcResultDebugExport', () => {
     const result = buildQcResultDebugText(
       [
         {
-          rule_id: 'LX0609-018',
+          rule_id: 'LX0609-01-01-02',
           rule_name: '主诉与第一诊断',
           status: 'non_compliant',
           conclusion:
@@ -152,7 +152,7 @@ describe('qcResultDebugExport', () => {
     expect(result).toContain('住址：[地址已脱敏]')
     expect(result).toContain('医师签名：医务人员A')
     expect(result).toContain('[本地路径已脱敏]')
-    expect(result).toContain('LX0609-018')
+    expect(result).toContain('LX0609-01-01-02')
     expect(result).toContain('first_course_record.record_content')
     expect(result).toContain('non_compliant')
   })
@@ -160,7 +160,7 @@ describe('qcResultDebugExport', () => {
   it('infers a patient name from a strongly labelled narrative when context has no name', () => {
     const result = buildQcResultDebugText([
       {
-        rule_id: 'LX0609-006',
+        rule_id: 'LX0609-02-01-02',
         rule_name: '上级医师查房记录',
         status: 'compliant',
         conclusion: '患者李庆珍,性别女,年龄89岁，已完成上级医师查房。',
@@ -174,7 +174,7 @@ describe('qcResultDebugExport', () => {
   it('removes credentials, infrastructure details and full raw documents while retaining debug facts', () => {
     const result = buildQcResultDebugText([
       {
-        rule_id: 'LX0609-020',
+        rule_id: 'LX0609-03-01-01',
         rule_name: '会诊建议执行情况',
         status: 'data_gap',
         reason_code: 'consultation_evidence_missing',
@@ -212,7 +212,7 @@ describe('qcResultDebugExport', () => {
     ])
 
     expect(result).toContain('格式版本：medqc-qc-debug-v4-redacted-minimal')
-    expect(result).toContain('LX0609-020')
+    expect(result).toContain('LX0609-03-01-01')
     expect(result).toContain('consultation_evidence_missing')
     expect(result).toContain('consultation_record.record_content')
     expect(result).toContain('会诊意见建议继续保肝治疗，已遵执行。')

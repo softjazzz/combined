@@ -36,12 +36,12 @@ from app.services.luxian_0609_result_aggregator import (
 
 
 _FAMILY_RULE_IDS = (
-    "LX0609-007",
-    "LX0609-008",
-    "LX0609-009",
-    "LX0609-016",
-    "LX0609-017",
-    "LX0609-018",
+    "LX0609-02-01-03",
+    "LX0609-02-01-04",
+    "LX0609-02-01-05",
+    "LX0609-12-01-01",
+    "LX0609-12-01-02",
+    "LX0609-01-01-02",
 )
 
 
@@ -75,7 +75,7 @@ class _StubClient:
 
 
 class _CopyStubClient:
-    """Return the exact one-pair schema required by LX0609-017."""
+    """Return the exact one-pair schema required by LX0609-12-01-02."""
 
     def __init__(self) -> None:
         self.prompts: list[str] = []
@@ -272,7 +272,7 @@ def _fact_ref_sources(snapshot: Any, fact_refs: Sequence[str]) -> set[str]:
     ),
     (
         (
-            "LX0609-007",
+            "LX0609-02-01-03",
             {
                 CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY: (),
                 "inpat_registration": (
@@ -294,21 +294,21 @@ def _fact_ref_sources(snapshot: Any, fact_refs: Sequence[str]) -> set[str]:
             },
         ),
         (
-            "LX0609-008",
+            "LX0609-02-01-04",
             {"inpat_nondrug_order": (), "daily_course_record": (), "senior_course_record": ()},
             "not_applicable",
             "trigger_absent_complete",
             set(),
         ),
         (
-            "LX0609-009",
+            "LX0609-02-01-05",
             {"inpat_nondrug_order": (), "daily_course_record": (), "senior_course_record": ()},
             "not_applicable",
             "trigger_absent_complete",
             set(),
         ),
         (
-            "LX0609-016",
+            "LX0609-12-01-01",
             {
                 "admission_record": (
                     {"document_id": "admission-16", "record_content": "", "history_of_present_illness": "病例特点完全一致。"},
@@ -325,7 +325,7 @@ def _fact_ref_sources(snapshot: Any, fact_refs: Sequence[str]) -> set[str]:
             },
         ),
         (
-            "LX0609-017",
+            "LX0609-12-01-02",
             {
                 "daily_course_record": (
                     _row("患者病情稳定，继续当前治疗方案并观察病情变化。" * 3, "2026-01-01 09:00:00"),
@@ -350,7 +350,7 @@ async def test_course_quality_freezes_native_binding_aggregate_outputs(
     expected_reason: str,
     expected_evidence: set[tuple[str, str, str, str]],
 ) -> None:
-    client = _CopyStubClient() if rule_id == "LX0609-017" else None
+    client = _CopyStubClient() if rule_id == "LX0609-12-01-02" else None
     session, execution, reduced, result = await _run_chain(
         rule_id, rows_by_source, client=client
     )
@@ -362,7 +362,7 @@ async def test_course_quality_freezes_native_binding_aggregate_outputs(
     assert reduced.fact_refs == decision.fact_refs
     assert result["status"] == expected_status
     assert result["reason_code"] == expected_reason
-    if rule_id == "LX0609-007":
+    if rule_id == "LX0609-02-01-03":
         # 当前聚合器会移除执行器已经选中的末端文书 ID；这是冻结到的
         # 双重展示事实所有者，迁移前不能把它“顺手修正”。
         assert result.get("customer_display_facts") == {
@@ -380,7 +380,7 @@ async def test_course_quality_freezes_native_binding_aggregate_outputs(
             "interval_seconds": 259200,
             "overdue_seconds": 0,
         }
-    elif rule_id == "LX0609-017":
+    elif rule_id == "LX0609-12-01-02":
         # 017 同样存在旧聚合层的展示投影：它会丢弃执行器提供的内部
         # 文书指纹，不应在冻结提交中改变这种当前客户 DTO 行为。
         expected_facts = dict(execution.customer_display_facts)[rule_id]
@@ -389,7 +389,7 @@ async def test_course_quality_freezes_native_binding_aggregate_outputs(
             for key, value in expected_facts.items()
             if key != "copy_match_document_fingerprints"
         }
-    elif rule_id == "LX0609-016":
+    elif rule_id == "LX0609-12-01-01":
         # source_document_ids 是执行器内部坐标；迁移后只能由 fact_refs
         # 经公共投影形成 customer_evidence，不能继续进入客户展示 facts。
         assert result.get("customer_display_facts") == {
@@ -401,7 +401,7 @@ async def test_course_quality_freezes_native_binding_aggregate_outputs(
         assert result.get("customer_display_facts") == dict(execution.customer_display_facts).get(rule_id)
     assert _fact_ref_sources(session.snapshot, decision.fact_refs)
     assert _evidence_coordinates(result) == expected_evidence
-    expected_llm_calls = 1 if rule_id == "LX0609-017" else 0
+    expected_llm_calls = 1 if rule_id == "LX0609-12-01-02" else 0
     assert execution.llm_call_count == expected_llm_calls
     if expected_llm_calls:
         assert (execution.prompt_tokens, execution.completion_tokens, execution.total_tokens) == (41, 7, 48)
@@ -424,7 +424,7 @@ async def test_course_quality_freezes_lx018_semantic_stub_prompt_usage_and_canon
         }
     )
     session, execution, reduced, result = await _run_chain(
-        "LX0609-018",
+        "LX0609-01-01-02",
         {
             "admission_record": (
                 {
@@ -469,7 +469,7 @@ async def test_course_quality_freezes_lx018_semantic_stub_prompt_usage_and_canon
 async def test_course_quality_freezes_lx009_semantic_stub_prompt_usage_and_canonical_result() -> None:
     client = _Rule009StubClient()
     session, execution, reduced, result = await _run_chain(
-        "LX0609-009",
+        "LX0609-02-01-05",
         {
             CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY: (
                 {
@@ -513,7 +513,7 @@ async def test_course_quality_freezes_lx009_semantic_stub_prompt_usage_and_canon
 
 
 def test_course_quality_freezes_family_membership_before_migration() -> None:
-    assert tuple(rule_id for rule_id in COURSE_QUALITY_RULE_IDS if rule_id != "LX0609-077") == _FAMILY_RULE_IDS
+    assert tuple(rule_id for rule_id in COURSE_QUALITY_RULE_IDS if rule_id != "LX0609-01-02-02") == _FAMILY_RULE_IDS
 
 
 def test_course_quality_rules_have_no_aggregator_specific_branches() -> None:

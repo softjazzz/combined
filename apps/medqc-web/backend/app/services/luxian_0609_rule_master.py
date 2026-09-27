@@ -8,15 +8,16 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Mapping
 
 
-LUXIAN_0609_RULE_MASTER_SCHEMA_VERSION = "lx0609-rule-master-v1"
-LUXIAN_0609_RULE_MASTER_VERSION = "2026-09-05-r3"
-LUXIAN_0609_RULE_DEFINITION_VERSION = "lx0609-defined-scope-2026-09-05-r3"
+LUXIAN_0609_RULE_MASTER_SCHEMA_VERSION = "lx0609-rule-master-v2"
+LUXIAN_0609_RULE_MASTER_VERSION = "2026-09-22-identity-v1"
+LUXIAN_0609_RULE_DEFINITION_VERSION = "lx0609-defined-scope-2026-09-22-identity-v1"
 
 _MASTER_PATH = (
     Path(__file__).resolve().parent.parent
@@ -37,6 +38,7 @@ _POLICY_SOURCE_ORDER = (
 )
 _POLICY_SOURCE_CODES = frozenset(_POLICY_SOURCE_ORDER)
 _MAX_POLICY_TEXT_LENGTH = 240
+_RULE_ID_PATTERN = re.compile(r"^LX0609-(?!00)\d{2}-(?!00)\d{2}-(?!00)\d{2}$")
 
 
 def _clean(value: Any) -> str:
@@ -57,8 +59,11 @@ class Luxian0609RuleMasterEntry:
     active_criteria: tuple[str, ...] = ()
     pending_criteria: tuple[str, ...] = ()
     pending_reason_code: str = ""
+    release_scope: str = "default"
 
     def __post_init__(self) -> None:
+        if not _RULE_ID_PATTERN.fullmatch(self.rule_id):
+            raise ValueError("invalid LX0609 rule identity")
         if self.implementation_status not in _IMPLEMENTATION_STATUSES:
             raise ValueError(f"invalid LX0609 implementation status: {self.rule_id}")
         if not self.source_document or not self.qc_point:
@@ -68,6 +73,12 @@ class Luxian0609RuleMasterEntry:
         if self.implementation_status != "active" and not self.definition_note:
             raise ValueError(f"inactive LX0609 rule must explain its status: {self.rule_id}")
 
+        if self.release_scope not in {"default", "acceptance_only"}:
+            raise ValueError(f"invalid LX0609 release scope: {self.rule_id}")
+        if self.release_scope == "acceptance_only" and (
+            self.implementation_status != "active" or self.phase_status != "phase_1_target"
+        ):
+            raise ValueError(f"acceptance-only rule must be an active phase target: {self.rule_id}")
         if self.phase_status not in _PHASE_STATUSES:
             raise ValueError(f"invalid LX0609 phase status: {self.rule_id}")
         if (
@@ -168,6 +179,7 @@ def compile_luxian_0609_rule_master(
                 source_document=_clean(raw.get("source_document")),
                 qc_point=_clean(raw.get("qc_point")),
                 implementation_status=_clean(raw.get("implementation_status")),
+                release_scope=_clean(raw.get("release_scope", "default")),
                 definition_note=_clean(raw.get("definition_note")),
                 policy_sources=tuple(raw_policy_sources),
                 policy_summary=_clean(raw.get("policy_summary")),
@@ -189,12 +201,9 @@ def compile_luxian_0609_rule_master(
 
     if not entries:
         raise ValueError("LX0609 rule master must contain at least one rule")
-    expected_ids = tuple(
-        f"LX0609-{index:03d}" for index in range(1, len(entries) + 1)
-    )
     actual_ids = tuple(entry.rule_id for entry in entries)
-    if actual_ids != expected_ids:
-        raise ValueError("LX0609 rule master must contain continuous ordered rule IDs")
+    if len(set(actual_ids)) != len(actual_ids):
+        raise ValueError("LX0609 rule master must contain unique rule IDs")
     return tuple(entries)
 
 

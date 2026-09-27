@@ -16,7 +16,7 @@ from .luxian_0609_trigger_gate import (
 
 logger = logging.getLogger(__name__)
 
-_SUPPORTED_LLM_GATE_RULE_IDS = {"LX0609-024"}
+_SUPPORTED_LLM_GATE_RULE_IDS = {"LX0609-04-02-03"}
 _VALID_LLM_GATE_STATUSES = {TRIGGER_PRESENT, TRIGGER_ABSENT, TRIGGER_DATA_GAP, TRIGGER_UNKNOWN}
 _MAX_GATE_CONTEXT_CHARS = 7000
 
@@ -110,9 +110,9 @@ def _as_text_tuple(value: Any, *, limit: int = 6) -> tuple[str, ...]:
 
 
 def _build_lx0609_024_prompt(record_text: str) -> str:
-    return f"""你是病历质控的“适用性门控”助手，只判断 LX0609-024 是否适用于本次病历。
+    return f"""你是病历质控的“适用性门控”助手，只判断 LX0609-04-02-03 是否适用于本次病历。
 
-LX0609-024 只适用于“本次住院/本次手术是恶性肿瘤相关手术，或本次手术涉及恶性肿瘤病灶、恶性肿瘤标本、淋巴结清扫/送检/冰冻病理”的场景。
+LX0609-04-02-03 只适用于“本次住院/本次手术是恶性肿瘤相关手术，或本次手术涉及恶性肿瘤病灶、恶性肿瘤标本、淋巴结清扫/送检/冰冻病理”的场景。
 
 请严格区分：
 1. 本次手术是恶性肿瘤手术：status=present。
@@ -157,13 +157,13 @@ def _decision_from_lx0609_024_llm_payload(
         if original and original.status != TRIGGER_ABSENT:
             return original
         return Luxian0609GateDecision(
-            rule_id="LX0609-024",
+            rule_id="LX0609-04-02-03",
             status=TRIGGER_UNKNOWN,
             reason=f"恶性肿瘤手术适用性未形成可靠自动结论：{reason}",
             matched_keywords=evidence,
             source="llm_gate",
             extra={
-                "llm_gate_rule_id": "LX0609-024",
+                "llm_gate_rule_id": "LX0609-04-02-03",
                 "llm_gate_status": status,
                 "llm_gate_confidence": confidence,
                 "llm_gate_reason": reason,
@@ -179,14 +179,14 @@ def _decision_from_lx0609_024_llm_payload(
         final_reason = reason if reason else "模型门控认为缺少适用性判定字段"
 
     return Luxian0609GateDecision(
-        rule_id="LX0609-024",
+        rule_id="LX0609-04-02-03",
         status=status,
         reason=final_reason,
         data_gap_fields=missing_fields if status == TRIGGER_DATA_GAP else (),
         matched_keywords=evidence,
         source="llm_gate",
         extra={
-            "llm_gate_rule_id": "LX0609-024",
+            "llm_gate_rule_id": "LX0609-04-02-03",
             "llm_gate_status": status,
             "llm_gate_confidence": confidence,
             "llm_gate_reason": reason,
@@ -228,7 +228,7 @@ async def evaluate_luxian_0609_trigger_gates_with_llm(
         if rule_id not in _SUPPORTED_LLM_GATE_RULE_IDS:
             continue
         original = decisions.get(rule_id)
-        if rule_id == "LX0609-024" and not _should_call_lx0609_024_llm_gate(
+        if rule_id == "LX0609-04-02-03" and not _should_call_lx0609_024_llm_gate(
             decision=original,
             record_text=record_text,
         ):

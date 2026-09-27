@@ -1,28 +1,56 @@
 <template>
-  <section class="qc-result-analysis" aria-label="质控结果分析">
+  <section
+    class="qc-result-analysis"
+    aria-label="质控结果分析"
+  >
     <header class="qc-result-analysis__command-bar">
-      <div class="qc-result-analysis__filters" aria-label="结果分析筛选">
+      <div
+        class="qc-result-analysis__filters"
+        aria-label="结果分析筛选"
+      >
         <label>
           <span>质控完成日期</span>
-          <input v-model="completedFrom" type="date" aria-label="质控完成开始日期" />
+          <input
+            v-model="completedFrom"
+            type="date"
+            aria-label="质控完成开始日期"
+          >
         </label>
         <span class="qc-result-analysis__date-separator">至</span>
         <label class="qc-result-analysis__date-end">
           <span class="sr-only">质控完成结束日期</span>
-          <input v-model="completedTo" type="date" aria-label="质控完成结束日期" />
+          <input
+            v-model="completedTo"
+            type="date"
+            aria-label="质控完成结束日期"
+          >
         </label>
         <label>
           <span>科室</span>
-          <select v-model="department" aria-label="分析科室筛选">
+          <select
+            v-model="department"
+            aria-label="分析科室筛选"
+          >
             <option value="">全部科室</option>
-            <option v-for="item in departmentOptions" :key="item" :value="item">{{ item }}</option>
+            <option
+              v-for="item in departmentOptions"
+              :key="item"
+              :value="item"
+            >{{ item }}</option>
           </select>
         </label>
         <label>
           <span>主治医师</span>
-          <select v-model="doctor" aria-label="分析主治医师筛选">
+          <select
+            v-model="doctor"
+            aria-label="分析主治医师筛选"
+          >
             <option value="">全部医师</option>
-            <option v-for="item in physicianOptions" :key="item" :value="item">{{ item }}</option>
+            <option
+              v-for="item in physicianOptions"
+              :key="item"
+              :value="item"
+            >{{ item }}</option>
           </select>
         </label>
         <button
@@ -31,7 +59,10 @@
           :disabled="loading"
           @click="void queryAnalysis()"
         >
-          <Search :size="15" aria-hidden="true" />
+          <Search
+            :size="15"
+            aria-hidden="true"
+          />
           查询
         </button>
         <button
@@ -40,13 +71,19 @@
           :disabled="loading"
           @click="void resetFilters()"
         >
-          <RotateCcw :size="14" aria-hidden="true" />
+          <RotateCcw
+            :size="14"
+            aria-hidden="true"
+          />
           重置
         </button>
       </div>
     </header>
 
-    <nav class="qc-result-analysis__status-nav" aria-label="按质控结论筛选">
+    <nav
+      class="qc-result-analysis__status-nav"
+      aria-label="按质控结论筛选"
+    >
       <button
         v-for="item in statusNavigator"
         :key="item.key"
@@ -73,10 +110,23 @@
         <strong>结果分析暂时无法加载</strong>
         <span>{{ error }}</span>
       </div>
-      <button type="button" @click="void queryAnalysis()">重试</button>
+      <button
+        type="button"
+        @click="void queryAnalysis()"
+      >
+        重试
+      </button>
     </section>
-    <section v-else-if="loading" class="qc-result-analysis__state" aria-live="polite">
-      <LoaderCircle :size="22" class="qc-result-analysis__spin" aria-hidden="true" />
+    <section
+      v-else-if="loading"
+      class="qc-result-analysis__state"
+      aria-live="polite"
+    >
+      <LoaderCircle
+        :size="22"
+        class="qc-result-analysis__spin"
+        aria-hidden="true"
+      />
       <div>
         <strong>正在汇总最新质控结果</strong>
         <span>只读取当前范围内已交付的 Canonical 结果。</span>
@@ -84,18 +134,23 @@
     </section>
 
     <template v-else-if="payload">
-      <section class="qc-result-analysis__summary" aria-label="当前分析范围">
-        <span
-          ><strong>{{ payload.kpis.scoped_record_total }}</strong> 份纳入病历</span
-        >
+      <section
+        class="qc-result-analysis__summary"
+        aria-label="当前分析范围"
+      >
+        <span><strong>{{ payload.kpis.scoped_record_total }}</strong> 份纳入病历</span>
         <i aria-hidden="true" />
-        <span
-          ><strong>{{ payload.kpis.ready_record_total }}</strong> 份已完成质控</span
-        >
+        <span><strong>{{ payload.kpis.ready_record_total }}</strong> 份已完成质控</span>
         <i aria-hidden="true" />
         <span>当前范围：{{ carePhaseLabel }}</span>
-        <span v-if="department" class="qc-result-analysis__scope-chip">科室：{{ department }}</span>
-        <span v-if="doctor" class="qc-result-analysis__scope-chip">医师：{{ doctor }}</span>
+        <span
+          v-if="department"
+          class="qc-result-analysis__scope-chip"
+        >科室：{{ department }}</span>
+        <span
+          v-if="doctor"
+          class="qc-result-analysis__scope-chip"
+        >医师：{{ doctor }}</span>
       </section>
 
       <div class="qc-result-analysis__content-grid">
@@ -115,20 +170,39 @@
             </button>
           </header>
 
-          <div v-if="payload.rule_distribution.length" class="qc-result-analysis__rule-table-wrap">
+          <div
+            v-if="payload.rule_distribution.length"
+            class="qc-result-analysis__rule-table-wrap"
+          >
             <table class="qc-result-analysis__rule-table">
               <thead>
                 <tr>
-                  <th scope="col">质控点</th>
-                  <th scope="col">确定问题</th>
-                  <th scope="col">资料待核实</th>
-                  <th scope="col">待判断</th>
-                  <th scope="col">已核对</th>
-                  <th scope="col" aria-label="展开科室" />
+                  <th scope="col">
+                    质控点
+                  </th>
+                  <th scope="col">
+                    确定问题
+                  </th>
+                  <th scope="col">
+                    资料待核实
+                  </th>
+                  <th scope="col">
+                    待判断
+                  </th>
+                  <th scope="col">
+                    已核对
+                  </th>
+                  <th
+                    scope="col"
+                    aria-label="展开科室"
+                  />
                 </tr>
               </thead>
               <tbody>
-                <template v-for="rule in payload.rule_distribution" :key="rule.rule_id">
+                <template
+                  v-for="rule in payload.rule_distribution"
+                  :key="rule.rule_id"
+                >
                   <tr
                     :class="{ 'is-selected': selectedRuleId === rule.rule_id }"
                     @click="void selectRule(rule.rule_id)"
@@ -166,7 +240,11 @@
                           :size="16"
                           aria-hidden="true"
                         />
-                        <ChevronRight v-else :size="16" aria-hidden="true" />
+                        <ChevronRight
+                          v-else
+                          :size="16"
+                          aria-hidden="true"
+                        />
                       </button>
                     </td>
                   </tr>
@@ -188,37 +266,40 @@
                           <span>{{ departmentItem.department }}</span>
                           <small>{{ departmentItem.record_total }} 份病历</small>
                           <strong>
-                            <em v-if="departmentItem.non_compliant_count"
-                              >确定 {{ departmentItem.non_compliant_count }}</em
-                            >
-                            <em v-if="departmentItem.data_gap_count"
-                              >待核实 {{ departmentItem.data_gap_count }}</em
-                            >
-                            <em v-if="departmentItem.uncertain_count"
-                              >待判断 {{ departmentItem.uncertain_count }}</em
-                            >
+                            <em v-if="departmentItem.non_compliant_count">确定 {{ departmentItem.non_compliant_count }}</em>
+                            <em v-if="departmentItem.data_gap_count">待核实 {{ departmentItem.data_gap_count }}</em>
+                            <em v-if="departmentItem.uncertain_count">待判断 {{ departmentItem.uncertain_count }}</em>
                             <template
                               v-if="
                                 !departmentItem.non_compliant_count &&
-                                !departmentItem.data_gap_count &&
-                                !departmentItem.uncertain_count
+                                  !departmentItem.data_gap_count &&
+                                  !departmentItem.uncertain_count
                               "
-                              >无重点问题</template
-                            >
+                            >无重点问题</template>
                           </strong>
                         </button>
                       </div>
-                      <p v-else>当前筛选下没有可归属的科室结果。</p>
+                      <p v-else>
+                        当前筛选下没有可归属的科室结果。
+                      </p>
                     </td>
                   </tr>
                 </template>
               </tbody>
             </table>
           </div>
-          <div v-else class="qc-result-analysis__empty">当前筛选下暂无可交付的质控结论。</div>
+          <div
+            v-else
+            class="qc-result-analysis__empty"
+          >
+            当前筛选下暂无可交付的质控结论。
+          </div>
         </article>
 
-        <aside class="qc-result-analysis__insights" aria-label="筛选结果概览">
+        <aside
+          class="qc-result-analysis__insights"
+          aria-label="筛选结果概览"
+        >
           <section>
             <header class="qc-result-analysis__panel-heading">
               <div>
@@ -228,7 +309,10 @@
               <strong>{{ totalStatusCount }} 条</strong>
             </header>
             <ul class="qc-result-analysis__status-list">
-              <li v-for="item in visibleStatusItems" :key="item.key">
+              <li
+                v-for="item in visibleStatusItems"
+                :key="item.key"
+              >
                 <span :class="`is-${item.key}`" />
                 <strong>{{ item.label }}</strong>
                 <i><b :style="{ width: `${item.percent}%` }" /></i>
@@ -244,9 +328,18 @@
               </div>
               <span class="qc-result-analysis__panel-note">点击筛选</span>
             </header>
-            <ol v-if="topPhysicians.length" class="qc-result-analysis__physician-list">
-              <li v-for="(item, index) in topPhysicians" :key="item.physician">
-                <button type="button" @click="void selectPhysician(item.physician)">
+            <ol
+              v-if="topPhysicians.length"
+              class="qc-result-analysis__physician-list"
+            >
+              <li
+                v-for="(item, index) in topPhysicians"
+                :key="item.physician"
+              >
+                <button
+                  type="button"
+                  @click="void selectPhysician(item.physician)"
+                >
                   <span>{{ String(index + 1).padStart(2, '0') }}</span>
                   <strong>{{ item.physician }}</strong>
                   <small>
@@ -257,13 +350,17 @@
                       v-if="
                         !item.non_compliant_count && !item.data_gap_count && !item.uncertain_count
                       "
-                      >已核对 {{ item.record_total }}</template
-                    >
+                    >已核对 {{ item.record_total }}</template>
                   </small>
                 </button>
               </li>
             </ol>
-            <p v-else class="qc-result-analysis__empty-inline">暂无可归属的主治医师结果。</p>
+            <p
+              v-else
+              class="qc-result-analysis__empty-inline"
+            >
+              暂无可归属的主治医师结果。
+            </p>
           </section>
         </aside>
       </div>
@@ -280,11 +377,15 @@
               }}
             </h2>
           </div>
-          <span v-if="selectedRule" class="qc-result-analysis__panel-note"
-            >{{ payload.record_page.total }} 份匹配病历</span
-          >
+          <span
+            v-if="selectedRule"
+            class="qc-result-analysis__panel-note"
+          >{{ payload.record_page.total }} 份匹配病历</span>
         </header>
-        <div v-if="!selectedRule" class="qc-result-analysis__drilldown-empty">
+        <div
+          v-if="!selectedRule"
+          class="qc-result-analysis__drilldown-empty"
+        >
           请在上方选择一个质控点，查看对应科室、医师和病历结果。
         </div>
         <div
@@ -294,16 +395,29 @@
           <table class="qc-result-analysis__record-table">
             <thead>
               <tr>
-                <th scope="col">患者 / 住院号</th>
-                <th scope="col">科室</th>
-                <th scope="col">主治医师</th>
-                <th scope="col">本项结论</th>
-                <th scope="col">最近质控</th>
+                <th scope="col">
+                  患者 / 住院号
+                </th>
+                <th scope="col">
+                  科室
+                </th>
+                <th scope="col">
+                  主治医师
+                </th>
+                <th scope="col">
+                  本项结论
+                </th>
+                <th scope="col">
+                  最近质控
+                </th>
                 <th scope="col" />
               </tr>
             </thead>
             <tbody>
-              <tr v-for="record in payload.record_page.items" :key="record.record_key">
+              <tr
+                v-for="record in payload.record_page.items"
+                :key="record.record_key"
+              >
                 <td>
                   <strong>{{ record.patient_name || '患者信息待核实' }}</strong>
                   <span>住院号 {{ record.visit_id }}</span>
@@ -322,14 +436,22 @@
                     class="qc-result-analysis__open"
                     @click="emit('open-result', record)"
                   >
-                    查看结果 <ExternalLink :size="14" aria-hidden="true" />
+                    查看结果 <ExternalLink
+                      :size="14"
+                      aria-hidden="true"
+                    />
                   </button>
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
-        <div v-else class="qc-result-analysis__drilldown-empty">当前筛选下没有对应病历。</div>
+        <div
+          v-else
+          class="qc-result-analysis__drilldown-empty"
+        >
+          当前筛选下没有对应病历。
+        </div>
       </section>
     </template>
   </section>

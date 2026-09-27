@@ -114,7 +114,7 @@ function mountDraftable(props: Record<string, unknown> = {}) {
     props: {
       suggestion: STRUCTURED_SUGGESTION,
       status: 'non_compliant',
-      ruleId: 'LX0609-020',
+      ruleId: 'LX0609-03-01-01',
       recordContext: DRAFT_CONTEXT,
       ...props,
     },
@@ -123,13 +123,13 @@ function mountDraftable(props: Record<string, unknown> = {}) {
 
 describe('QcRemediationSuggestion 按需整改草稿', () => {
   it('只对三个会诊规则、不合规且三坐标齐全的结果开放入口', () => {
-    expect(canRequestQcRemediationDraft('LX0609-020', 'non_compliant', DRAFT_CONTEXT)).toBe(true)
-    expect(canRequestQcRemediationDraft('LX0609-022', 'non_compliant', DRAFT_CONTEXT)).toBe(true)
-    expect(canRequestQcRemediationDraft('LX0609-023', 'non_compliant', DRAFT_CONTEXT)).toBe(true)
+    expect(canRequestQcRemediationDraft('LX0609-03-01-01', 'non_compliant', DRAFT_CONTEXT)).toBe(true)
+    expect(canRequestQcRemediationDraft('LX0609-03-01-03', 'non_compliant', DRAFT_CONTEXT)).toBe(true)
+    expect(canRequestQcRemediationDraft('LX0609-03-01-04', 'non_compliant', DRAFT_CONTEXT)).toBe(true)
 
-    expect(canRequestQcRemediationDraft('LX0609-018', 'non_compliant', DRAFT_CONTEXT)).toBe(false)
-    expect(canRequestQcRemediationDraft('LX0609-020', 'data_gap', DRAFT_CONTEXT)).toBe(false)
-    expect(canRequestQcRemediationDraft('LX0609-020', 'non_compliant', { instituteId: 'x' })).toBe(
+    expect(canRequestQcRemediationDraft('LX0609-01-01-02', 'non_compliant', DRAFT_CONTEXT)).toBe(false)
+    expect(canRequestQcRemediationDraft('LX0609-03-01-01', 'data_gap', DRAFT_CONTEXT)).toBe(false)
+    expect(canRequestQcRemediationDraft('LX0609-03-01-01', 'non_compliant', { instituteId: 'x' })).toBe(
       false,
     )
   })
@@ -146,7 +146,7 @@ describe('QcRemediationSuggestion 按需整改草稿', () => {
       success: true,
       data: {
         available: true,
-        rule_id: 'LX0609-020',
+        rule_id: 'LX0609-03-01-01',
         draft: '拟补充第2次会诊意见的执行情况。',
       },
     })
@@ -158,7 +158,7 @@ describe('QcRemediationSuggestion 按需整改草稿', () => {
     await wrapper.find('[data-testid="qc-remediation-draft-request"]').trigger('click')
     await flushPromises()
 
-    expect(requestLuxian0609RemediationDraft).toHaveBeenCalledWith(DRAFT_CONTEXT, 'LX0609-020')
+    expect(requestLuxian0609RemediationDraft).toHaveBeenCalledWith(DRAFT_CONTEXT, 'LX0609-03-01-01')
     expect(wrapper.find('[data-testid="qc-remediation-draft-text"]').text()).toBe(
       '拟补充第2次会诊意见的执行情况。',
     )

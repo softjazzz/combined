@@ -36,7 +36,7 @@ function payload(
     is_complete: true,
     items: [
       {
-        rule_id: 'LX0609-001',
+        rule_id: 'LX0609-01-01-01',
         rule_name: '测试质控项',
         status: 'non_compliant',
         conclusion: '后端已保存的结论',
@@ -126,7 +126,7 @@ describe('QcRecordReviewPreview', () => {
     expect(wrapper.text()).not.toContain('定位成功')
   })
 
-  it('全文展开复用同一说明节点，建议独立折叠且完整分段', async () => {
+  it('全文展开复用同一说明节点，已保存建议默认展示且完整分段', async () => {
     const data = payload()
     data.items[0].suggestion =
       '修改对象：会诊记录 需要补充：执行结果 推荐写法：依据事实记录 注意事项：不要倒签'
@@ -134,14 +134,15 @@ describe('QcRecordReviewPreview', () => {
     const wrapper = mount(QcRecordReviewPreview, { props: { row } })
     await flushPromises()
     const summary = wrapper.get('.item-summary').element
-    expect(wrapper.get('.suggestion-details').attributes('open')).toBeUndefined()
-    expect(wrapper.get('.suggestion-details summary').text()).toBe('处理建议')
-    expect(wrapper.findAll('.suggestion-content p')).toHaveLength(4)
+    const suggestion = wrapper.get('[data-testid="qc-remediation-suggestion"]')
+    expect(suggestion.text()).toContain('修改建议')
+    expect(suggestion.findAll('.qc-remediation-section')).toHaveLength(4)
+    expect(suggestion.text()).toContain('不要倒签')
     await wrapper.get('.expand-button').trigger('click')
     expect(wrapper.get('.item-summary').element).toBe(summary)
     expect(wrapper.get('.item-summary').classes()).toContain('is-expanded')
     expect(wrapper.text().split('后端已保存的结论')).toHaveLength(2)
-    expect(wrapper.get('.suggestion-content').text()).toContain('不要倒签')
+    expect(wrapper.get('[data-testid="qc-remediation-suggestion"]').text()).toContain('不要倒签')
     await wrapper.get('.expand-button').trigger('click')
     expect(wrapper.get('.item-summary').classes()).not.toContain('is-expanded')
     wrapper.unmount()

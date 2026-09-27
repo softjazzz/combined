@@ -12,7 +12,7 @@ import zipfile
 from .contracts import DiagnosticPackageError
 
 _LIMIT = 20 * 1024 * 1024
-_RULE = re.compile(r"LX0609-\d{3}\Z")
+_RULE = re.compile(r"LX0609-(?!00)\d{2}-(?!00)\d{2}-(?!00)\d{2}\Z")
 _IDENTITY = frozenset({"institute_id", "institute_name", "patient_id", "patient_name",
     "visit_id", "document_id", "order_id", "surgery_id", "diagnosis_id", "row_ref",
     "physician_name", "doctor_name", "apply_doctor", "anesthetist_sign", "mr_no",

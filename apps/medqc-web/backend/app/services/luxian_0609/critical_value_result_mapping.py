@@ -12,7 +12,7 @@ from math import isfinite
 from typing import Any
 
 
-CRITICAL_VALUE_CUSTOMER_RULE_IDS = frozenset({"LX0609-052", "LX0609-053"})
+CRITICAL_VALUE_CUSTOMER_RULE_IDS = frozenset({"LX0609-06-04-01", "LX0609-06-04-02"})
 
 
 def is_critical_value_customer_rule(rule_id: str) -> bool:
@@ -310,11 +310,155 @@ def safe_critical_value_customer_display_facts(
     if not isinstance(raw, Mapping):
         return None
     normalized = str(rule_id or "").strip().upper()
-    if normalized == "LX0609-052":
+    if normalized == "LX0609-06-04-01":
         return _safe_052(raw)
-    if normalized == "LX0609-053":
+    if normalized == "LX0609-06-04-02":
         return _safe_053(raw)
     return None
+
+
+def _published_text_list(value: Any, *, minimum: int = 0, maximum: int = 100, item_maximum: int = 160) -> bool:
+    return (type(value) is list and minimum <= len(value) <= maximum
+            and all(type(item) is str and bool(item) and len(item) <= item_maximum
+                    and "\n" not in item and "\r" not in item for item in value))
+
+
+def _published_number(value: Any) -> bool:
+    if type(value) not in {int, float}:
+        return False
+    try:
+        return isfinite(value) and value == round(value, 2)
+    except (OverflowError, ValueError):
+        return False
+
+
+def _published_iso(value: Any, *, date_only: bool = False) -> bool:
+    if type(value) is not str or not value:
+        return False
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return not date_only or (len(value) == 10 and parsed.strftime("%Y-%m-%d") == value)
+
+
+def _published_window_consistent(raw: dict[str, Any], *, date_only: bool) -> bool:
+    """保留旧发布合同的截止关系，只验证自洽，不改变已发布值。"""
+    try:
+        deadlines = tuple(datetime.fromisoformat(value.replace("Z", "+00:00"))
+                          for value in raw["deadline_times"])
+        reports = tuple(datetime.fromisoformat(event["report_time"].replace("Z", "+00:00"))
+                        for event in raw["event_results"])
+        if date_only:
+            evaluation_date = datetime.fromisoformat(f"{raw['evaluation_date']}T00:00:00").date()
+            return all(deadline - report == timedelta(hours=6) and evaluation_date <= deadline.date()
+                       for report, deadline in zip(reports, deadlines))
+        evaluation_time = datetime.fromisoformat(str(raw["evaluation_time"]).replace("Z", "+00:00"))
+        return all(deadline - report == timedelta(hours=6) and evaluation_time < deadline
+                   for report, deadline in zip(reports, deadlines))
+    except (TypeError, ValueError):
+        return False
+
+
+def _published_events(value: Any, *, timing_rule: bool) -> bool:
+    if type(value) is not list or not 0 < len(value) <= 100:
+        return False
+    outcomes = ({"timely", "overdue", "unhandled", "window_not_mature", "association_failed"}
+                if timing_rule else {"handled", "unhandled", "association_failed"})
+    base = {"critical_item_names", "critical_flags", "report_time", "outcome"}
+    for event in value:
+        if type(event) is not dict or not base <= set(event):
+            return False
+        names, flags = event["critical_item_names"], event["critical_flags"]
+        outcome = event["outcome"]
+        if (not _published_text_list(names, minimum=1, maximum=20, item_maximum=40)
+                or type(flags) is not list or len(flags) != len(names)
+                or any(type(flag) is not str or flag not in {"PL", "PH"} for flag in flags)
+                or type(event["report_time"]) is not str or not event["report_time"]
+                or len(event["report_time"]) > 32 or "\n" in event["report_time"] or "\r" in event["report_time"]
+                or type(outcome) is not str or outcome not in outcomes):
+            return False
+        expected = set(base)
+        if outcome in ({"timely", "overdue"} if timing_rule else {"handled"}):
+            expected.add("disposition_time")
+            disposition = event.get("disposition_time")
+            if (type(disposition) is not str or not disposition or len(disposition) > 32
+                    or "\n" in disposition or "\r" in disposition):
+                return False
+        if timing_rule and outcome in {"timely", "overdue"}:
+            expected.add("interval_hours")
+            interval = event.get("interval_hours")
+            if not _published_number(interval) or interval < 0:
+                return False
+        if set(event) != expected:
+            return False
+    return True
+
+
+def _published_052(raw: dict[str, Any]) -> bool:
+    base = {"verification_kind", "critical_item_names", "critical_flags", "report_times",
+            "disposition_times", "threshold_hours", "actual_interval_hours", "event_results"}
+    if raw.get("failure_kind") == "critical_value_result_detail_missing":
+        return (set(raw) == {"failure_kind", "lab_report_count", "missing_source"}
+                and type(raw["lab_report_count"]) is int and raw["lab_report_count"] > 0
+                and raw["missing_source"] == "labtest_item_report")
+    if raw.get("verification_kind") == "critical_value_evaluation_horizon_unavailable":
+        return (set(raw) == {"verification_kind", "issue"} and type(raw["issue"]) is str
+                and raw["issue"] in {"authoritative_time_missing", "authoritative_time_conflict"})
+    if (not base <= set(raw) or raw["verification_kind"] != "critical_value_timeliness_check"
+            or not _published_text_list(raw["critical_item_names"], minimum=1)
+            or type(raw["critical_flags"]) is not list
+            or any(type(flag) is not str or flag not in {"PL", "PH"} for flag in raw["critical_flags"])
+            or not _published_text_list(raw["report_times"])
+            or not _published_text_list(raw["disposition_times"])
+            or type(raw["threshold_hours"]) is not int or raw["threshold_hours"] != 6
+            or type(raw["actual_interval_hours"]) is not list
+            or any(not _published_number(value) for value in raw["actual_interval_hours"])
+            or not _published_events(raw["event_results"], timing_rule=True)):
+        return False
+    if set(raw) == base:
+        return True
+    extra = set(raw) - base
+    if extra not in ({"evaluation_window_mature", "deadline_times", "evaluation_time"},
+                     {"evaluation_window_mature", "deadline_times", "evaluation_date"}):
+        return False
+    deadlines = raw["deadline_times"]
+    if (raw["evaluation_window_mature"] is not False or type(deadlines) is not list
+            or len(deadlines) != len(raw["event_results"])
+            or not all(_published_iso(value) for value in deadlines)
+            or any(event["outcome"] != "window_not_mature" for event in raw["event_results"])):
+        return False
+    date_only = "evaluation_date" in extra
+    evaluation = raw["evaluation_date"] if date_only else raw["evaluation_time"]
+    return (_published_iso(evaluation, date_only=date_only)
+            and _published_window_consistent(raw, date_only=date_only))
+
+
+def _published_053(raw: dict[str, Any]) -> bool:
+    if raw.get("failure_kind") == "critical_value_result_detail_missing":
+        return (set(raw) == {"failure_kind", "lab_report_count", "missing_source"}
+                and type(raw["lab_report_count"]) is int and raw["lab_report_count"] > 0
+                and raw["missing_source"] == "labtest_item_report")
+    expected = {"verification_kind", "critical_item_names", "critical_flags", "report_times",
+                "disposition_times", "event_results"}
+    return (set(raw) == expected and raw["verification_kind"] == "critical_value_disposition_presence_check"
+            and _published_text_list(raw["critical_item_names"], minimum=1)
+            and type(raw["critical_flags"]) is list
+            and all(type(flag) is str and flag in {"PL", "PH"} for flag in raw["critical_flags"])
+            and _published_text_list(raw["report_times"])
+            and _published_text_list(raw["disposition_times"])
+            and _published_events(raw["event_results"], timing_rule=False))
+
+
+def validate_published_critical_value_facts(*, rule_id: str, raw: Any) -> tuple[bool, dict[str, Any] | None]:
+    """只验证已发布 JSON 事实；合法值原样搬运，不重算时效。"""
+    normalized = str(rule_id or "").strip().upper()
+    if raw is None and normalized in CRITICAL_VALUE_CUSTOMER_RULE_IDS:
+        return True, None
+    if type(raw) is not dict or any(type(key) is not str for key in raw):
+        return False, None
+    validator = {"LX0609-06-04-01": _published_052, "LX0609-06-04-02": _published_053}.get(normalized)
+    return (True, dict(raw)) if validator is not None and validator(raw) else (False, None)
 
 
 def critical_value_customer_fact_status_is_valid(
@@ -336,7 +480,7 @@ def critical_value_customer_fact_status_is_valid(
     }:
         return normalized_status == "data_gap"
     outcomes = [item.get("outcome") for item in safe_facts.get("event_results", ())]
-    if str(rule_id).strip().upper() == "LX0609-053":
+    if str(rule_id).strip().upper() == "LX0609-06-04-02":
         if "association_failed" in outcomes:
             return normalized_status == "data_gap"
         return normalized_status == (
@@ -363,4 +507,5 @@ __all__ = [
     "critical_value_customer_fact_status_is_valid",
     "is_critical_value_customer_rule",
     "safe_critical_value_customer_display_facts",
+    "validate_published_critical_value_facts",
 ]

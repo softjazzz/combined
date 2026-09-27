@@ -1,6 +1,6 @@
 {
   "schema_version": "lx0609-rule-contracts-v1",
-  "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+  "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
   "defaults": {
     "allowed_final_states": [
       "compliant",
@@ -16,7 +16,7 @@
   },
   "rules": [
     {
-      "rule_id": "LX0609-001",
+      "rule_id": "LX0609-01-01-01",
       "contract_version": "v2",
       "family_key": "basic_timeliness",
       "executor_key": "basic_timeliness",
@@ -27,7 +27,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-002",
+      "rule_id": "LX0609-01-02-01",
       "contract_version": "v2",
       "family_key": "basic_timeliness",
       "executor_key": "basic_timeliness",
@@ -38,7 +38,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-003",
+      "rule_id": "LX0609-04-02-01",
       "contract_version": "v2",
       "family_key": "surgery_anesthesia",
       "executor_key": "surgery_gate",
@@ -49,7 +49,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-004",
+      "rule_id": "LX0609-09-01-01",
       "contract_version": "v2",
       "family_key": "basic_timeliness",
       "executor_key": "basic_timeliness",
@@ -60,7 +60,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-005",
+      "rule_id": "LX0609-02-01-01",
       "contract_version": "v2",
       "family_key": "basic_timeliness",
       "executor_key": "basic_timeliness",
@@ -71,7 +71,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-006",
+      "rule_id": "LX0609-02-01-02",
       "contract_version": "v2",
       "family_key": "basic_timeliness",
       "executor_key": "basic_timeliness",
@@ -82,7 +82,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-007",
+      "rule_id": "LX0609-02-01-03",
       "contract_version": "v2",
       "family_key": "course_quality",
       "executor_key": "course_quality",
@@ -93,7 +93,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-008",
+      "rule_id": "LX0609-02-01-04",
       "contract_version": "v2",
       "family_key": "course_quality",
       "executor_key": "course_quality",
@@ -104,7 +104,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-009",
+      "rule_id": "LX0609-02-01-05",
       "contract_version": "v4",
       "family_key": "course_quality",
       "executor_key": "course_quality",
@@ -115,7 +115,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-010",
+      "rule_id": "LX0609-06-01-02",
       "contract_version": "v2",
       "family_key": "exam_lab",
       "executor_key": "exam_lab",
@@ -126,7 +126,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-011",
+      "rule_id": "LX0609-06-01-04",
       "contract_version": "v3",
       "family_key": "exam_lab",
       "executor_key": "exam_lab",
@@ -137,7 +137,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-012",
+      "rule_id": "LX0609-06-01-05",
       "contract_version": "v3",
       "family_key": "exam_lab",
       "executor_key": "exam_lab",
@@ -148,7 +148,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-013",
+      "rule_id": "LX0609-06-02-03",
       "contract_version": "v3",
       "family_key": "tumor_pathology",
       "executor_key": "tumor_pathology",
@@ -159,7 +159,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-014",
+      "rule_id": "LX0609-06-03-03",
       "contract_version": "v3",
       "family_key": "exam_lab",
       "executor_key": "exam_lab",
@@ -170,7 +170,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-015",
+      "rule_id": "LX0609-06-03-04",
       "contract_version": "v3",
       "family_key": "exam_lab",
       "executor_key": "exam_lab",
@@ -181,7 +181,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-016",
+      "rule_id": "LX0609-12-01-01",
       "contract_version": "v3",
       "family_key": "course_quality",
       "executor_key": "course_quality",
@@ -192,7 +192,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-017",
+      "rule_id": "LX0609-12-01-02",
       "contract_version": "v7",
       "family_key": "course_quality",
       "executor_key": "course_quality",
@@ -203,7 +203,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-018",
+      "rule_id": "LX0609-01-01-02",
       "contract_version": "v4",
       "family_key": "course_quality",
       "executor_key": "course_quality",
@@ -214,7 +214,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-019",
+      "rule_id": "LX0609-06-02-02",
       "contract_version": "v3",
       "family_key": "tumor_pathology",
       "executor_key": "tumor_pathology",
@@ -225,7 +225,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-020",
+      "rule_id": "LX0609-03-01-01",
       "contract_version": "v3",
       "family_key": "consultation_quality",
       "executor_key": "consultation_quality",
@@ -236,7 +236,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-021",
+      "rule_id": "LX0609-03-01-02",
       "contract_version": "v3",
       "family_key": "consultation_quality",
       "executor_key": "consultation_quality",
@@ -247,7 +247,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-022",
+      "rule_id": "LX0609-03-01-03",
       "contract_version": "v3",
       "family_key": "consultation_quality",
       "executor_key": "consultation_quality",
@@ -258,7 +258,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-023",
+      "rule_id": "LX0609-03-01-04",
       "contract_version": "v2",
       "family_key": "consultation_quality",
       "executor_key": "consultation_quality",
@@ -269,7 +269,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-024",
+      "rule_id": "LX0609-04-02-03",
       "contract_version": "v3",
       "family_key": "surgery_anesthesia",
       "executor_key": "surgery_gate",
@@ -280,7 +280,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-025",
+      "rule_id": "LX0609-04-02-04",
       "contract_version": "v3",
       "family_key": "surgery_anesthesia",
       "executor_key": "surgery_gate",
@@ -291,7 +291,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-026",
+      "rule_id": "LX0609-05-02-01",
       "contract_version": "v4",
       "family_key": "tumor_pathology",
       "executor_key": "tumor_pathology",
@@ -302,7 +302,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-027",
+      "rule_id": "LX0609-08-01-04",
       "contract_version": "v4",
       "family_key": "tumor_pathology",
       "executor_key": "tumor_pathology",
@@ -313,7 +313,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-028",
+      "rule_id": "LX0609-05-01-01",
       "contract_version": "v2",
       "family_key": "surgery_anesthesia",
       "executor_key": "surgery_gate",
@@ -324,7 +324,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-029",
+      "rule_id": "LX0609-04-01-01",
       "contract_version": "v3",
       "family_key": "surgery_anesthesia",
       "executor_key": "surgery_document",
@@ -335,7 +335,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-030",
+      "rule_id": "LX0609-04-02-02",
       "contract_version": "v2",
       "family_key": "surgery_anesthesia",
       "executor_key": "surgery_presence",
@@ -346,7 +346,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-031",
+      "rule_id": "LX0609-04-02-05",
       "contract_version": "v2",
       "family_key": "surgery_anesthesia",
       "executor_key": "surgery_gate",
@@ -357,7 +357,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-032",
+      "rule_id": "LX0609-04-03-01",
       "contract_version": "v2",
       "family_key": "surgery_anesthesia",
       "executor_key": "surgery_presence",
@@ -368,7 +368,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-033",
+      "rule_id": "LX0609-11-01-01",
       "contract_version": "v2",
       "family_key": "surgery_anesthesia",
       "executor_key": "surgery_gate",
@@ -379,7 +379,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-034",
+      "rule_id": "LX0609-11-02-01",
       "contract_version": "v2",
       "family_key": "surgery_anesthesia",
       "executor_key": "surgery_document",
@@ -390,7 +390,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-035",
+      "rule_id": "LX0609-11-02-02",
       "contract_version": "v2",
       "family_key": "surgery_anesthesia",
       "executor_key": "surgery_document",
@@ -401,7 +401,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-036",
+      "rule_id": "LX0609-04-04-01",
       "contract_version": "v2",
       "family_key": "surgery_anesthesia",
       "executor_key": "surgery_document",
@@ -412,7 +412,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-037",
+      "rule_id": "LX0609-04-04-02",
       "contract_version": "v2",
       "family_key": "surgery_anesthesia",
       "executor_key": "surgery_document",
@@ -423,7 +423,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-038",
+      "rule_id": "LX0609-04-04-03",
       "contract_version": "v2",
       "family_key": "surgery_anesthesia",
       "executor_key": "surgery_document",
@@ -434,7 +434,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-039",
+      "rule_id": "LX0609-04-01-02",
       "contract_version": "v2",
       "family_key": "surgery_anesthesia",
       "executor_key": "surgery_document",
@@ -445,7 +445,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-040",
+      "rule_id": "LX0609-04-01-03",
       "contract_version": "v2",
       "family_key": "surgery_anesthesia",
       "executor_key": "surgery_mdt",
@@ -456,7 +456,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-041",
+      "rule_id": "LX0609-11-03-01",
       "contract_version": "v2",
       "family_key": "transfusion",
       "executor_key": "transfusion",
@@ -467,7 +467,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-042",
+      "rule_id": "LX0609-11-03-02",
       "contract_version": "v2",
       "family_key": "transfusion",
       "executor_key": "transfusion",
@@ -478,7 +478,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-043",
+      "rule_id": "LX0609-07-01-01",
       "contract_version": "v2",
       "family_key": "transfusion",
       "executor_key": "transfusion",
@@ -489,7 +489,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-044",
+      "rule_id": "LX0609-07-01-02",
       "contract_version": "v2",
       "family_key": "transfusion",
       "executor_key": "transfusion",
@@ -500,7 +500,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-045",
+      "rule_id": "LX0609-07-02-01",
       "contract_version": "v2",
       "family_key": "transfusion",
       "executor_key": "transfusion",
@@ -511,7 +511,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-046",
+      "rule_id": "LX0609-07-02-02",
       "contract_version": "v2",
       "family_key": "transfusion",
       "executor_key": "transfusion",
@@ -522,7 +522,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-047",
+      "rule_id": "LX0609-07-03-01",
       "contract_version": "v2",
       "family_key": "transfusion",
       "executor_key": "transfusion",
@@ -533,7 +533,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-048",
+      "rule_id": "LX0609-07-04-01",
       "contract_version": "v2",
       "family_key": "transfusion",
       "executor_key": "transfusion",
@@ -544,7 +544,7 @@
       "golden_gate_state": "pending"
     },
     {
-      "rule_id": "LX0609-049",
+      "rule_id": "LX0609-07-04-02",
       "contract_version": "v2",
       "family_key": "transfusion",
       "executor_key": "transfusion",

@@ -155,7 +155,7 @@ def test_044_returns_data_gap_when_authoritative_times_are_missing() -> None:
 
 def test_044_customer_projection_preserves_controlled_times_and_conflict_delta() -> None:
     facts = safe_luxian_0609_customer_display_facts(
-        rule_id="LX0609-044",
+        rule_id="LX0609-07-01-02",
         raw={
             "failure_kind": "pretransfusion_assessment_time_conflict",
             "performed_transfusion_confirmed": True,
@@ -214,7 +214,7 @@ async def test_044_projects_application_and_transfusion_record_locators() -> Non
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-044",),
+        selected_rule_ids=("LX0609-07-01-02",),
         institute_id="044-evidence-institute",
         patient_id="044-evidence-patient",
         visit_id="044-evidence-visit",
@@ -223,8 +223,8 @@ async def test_044_projects_application_and_transfusion_record_locators() -> Non
         row_reader=read,
     )
     execution = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-044",),
-        wrapper_rules=[{"rule_id": "LX0609-044", "rule_name": "输血前评估"}],
+        rule_ids=("LX0609-07-01-02",),
+        wrapper_rules=[{"rule_id": "LX0609-07-01-02", "rule_name": "输血前评估"}],
         evidence_payload=None,
         institute_id="044-evidence-institute",
         patient_id="044-evidence-patient",
@@ -233,11 +233,11 @@ async def test_044_projects_application_and_transfusion_record_locators() -> Non
         llm_client=None,
         evidence_materials=session.materials,
         evidence_snapshot=session.snapshot,
-        decision_rule_ids=("LX0609-044",),
+        decision_rule_ids=("LX0609-07-01-02",),
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=execution.decisions,
-        expected_rule_ids=("LX0609-044",),
+        expected_rule_ids=("LX0609-07-01-02",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )

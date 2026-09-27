@@ -138,7 +138,7 @@ class RuntimeShadowAssembly:
         if self.disposition == "skipped_no_effective_rules" and (self.planned_rule_ids or self.source_query_observations or self.fact_pairs or self.deterministic_coverage_outcomes):
             raise ValueError("invalid skipped assembly")
         if self.disposition == "assembled":
-            if not self.planned_rule_ids or self.planned_rule_ids != tuple(rule for rule in ("LX0609-029", "LX0609-030", "LX0609-032") if rule in self.planned_rule_ids) or not self.source_query_observations or not self.deterministic_coverage_outcomes:
+            if not self.planned_rule_ids or self.planned_rule_ids != tuple(rule for rule in ("LX0609-04-01-01", "LX0609-04-02-02", "LX0609-04-03-01") if rule in self.planned_rule_ids) or not self.source_query_observations or not self.deterministic_coverage_outcomes:
                 raise ValueError("invalid assembled scope")
             if tuple(item.source_key for item in self.source_query_observations) != tuple(sorted(item.source_key for item in self.source_query_observations)) or len({item.source_key for item in self.source_query_observations}) != len(self.source_query_observations):
                 raise ValueError("invalid assembly sources")

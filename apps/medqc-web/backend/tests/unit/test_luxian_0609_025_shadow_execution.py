@@ -39,7 +39,7 @@ from app.services.luxian_0609.implant_information_shadow import (
 )
 
 
-RULE_ID = "LX0609-025"
+RULE_ID = "LX0609-04-02-04"
 COORDINATES = ("PRIVATE-INSTITUTE", "PRIVATE-PATIENT", "PRIVATE-VISIT")
 
 
@@ -181,7 +181,7 @@ def test_025_shadow_setting_defaults_off(monkeypatch: pytest.MonkeyPatch) -> Non
     ("enabled", "selected_rule_ids", "coordinates", "with_session"),
     (
         (False, (RULE_ID,), COORDINATES, True),
-        (True, ("LX0609-001",), COORDINATES, True),
+        (True, ("LX0609-01-01-01",), COORDINATES, True),
         (True, (RULE_ID,), ("", COORDINATES[1], COORDINATES[2]), True),
         (True, (RULE_ID,), COORDINATES, False),
     ),
@@ -314,7 +314,7 @@ def test_025_shadow_surgery_source_preflight_failures_are_safe(
     expected_reason: str,
 ) -> None:
     session = (
-        _session(selected_rule_ids=("LX0609-050",))
+        _session(selected_rule_ids=("LX0609-03-02-01",))
         if kind == "missing"
         else _session(
             unavailable_surgery_record=kind == "unavailable",
@@ -432,7 +432,7 @@ def test_025_shadow_execution_metadata_does_not_change_formal_025_or_totals(
     snapshot_hash = session.snapshot.snapshot_hash
     _, context = asyncio.run(prepare_luxian_0609_execution(
         rule_set_key=LUXIAN_0609_RULE_SET_KEY,
-        prepared_rules=[{"rule_id": "LX0609-050"}, {"rule_id": RULE_ID}],
+        prepared_rules=[{"rule_id": "LX0609-03-02-01"}, {"rule_id": RULE_ID}],
         visit_id=COORDINATES[2],
         medical_text="",
         evidence_payload=None,
@@ -440,7 +440,7 @@ def test_025_shadow_execution_metadata_does_not_change_formal_025_or_totals(
         settings=_settings(),
         institute_id=COORDINATES[0],
         patient_id=COORDINATES[1],
-        selected_customer_rule_ids=("LX0609-050", RULE_ID),
+        selected_customer_rule_ids=("LX0609-03-02-01", RULE_ID),
     ))
     assert context.evidence_snapshot is session.snapshot
     assert session.snapshot.snapshot_hash == snapshot_hash

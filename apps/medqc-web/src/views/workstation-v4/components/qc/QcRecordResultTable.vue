@@ -11,7 +11,10 @@
       <table class="qc-record-result-table__table">
         <thead>
           <tr>
-            <th scope="col" class="qc-record-result-table__selection-heading">
+            <th
+              scope="col"
+              class="qc-record-result-table__selection-heading"
+            >
               <input
                 type="checkbox"
                 aria-label="选择当前页全部病历"
@@ -19,18 +22,33 @@
                 :disabled="rows.length === 0"
                 @click.stop
                 @change="togglePageSelection"
-              />
+              >
             </th>
             <th scope="col">
               {{ compactReview ? '患者 / 科室' : '患者 / 住院号' }}
             </th>
-            <th v-if="!compactReview" scope="col">科室 / 床位</th>
-            <th v-if="!compactReview" scope="col">
+            <th
+              v-if="!compactReview"
+              scope="col"
+            >
+              科室 / 床位
+            </th>
+            <th
+              v-if="!compactReview"
+              scope="col"
+            >
               {{ timeColumnLabel }}
             </th>
-            <th scope="col">问题摘要</th>
-            <th scope="col">最近质控</th>
-            <th scope="col" class="qc-record-result-table__action-heading">
+            <th scope="col">
+              问题摘要
+            </th>
+            <th scope="col">
+              最近质控
+            </th>
+            <th
+              scope="col"
+              class="qc-record-result-table__action-heading"
+            >
               {{ compactReview ? '预览' : '查看结果' }}
             </th>
           </tr>
@@ -59,7 +77,7 @@
                 :checked="selectedRecordKeys.includes(row.recordKey)"
                 @click.stop
                 @change="toggleRowSelection(row.recordKey, $event)"
-              />
+              >
             </td>
             <td>
               <div class="qc-record-result-table__patient-cell">
@@ -67,7 +85,7 @@
                   class="qc-record-result-table__avatar"
                   :src="patientAvatarSrc(row)"
                   :alt="`${row.patientName || '患者'}头像`"
-                />
+                >
                 <span class="qc-record-result-table__patient-meta">
                   <span :class="{ 'qc-record-result-table__identity-line': compactReview }">
                     <span
@@ -80,8 +98,7 @@
                       v-if="compactReview"
                       class="qc-record-result-table__inline-visit"
                       :title="row.visitId"
-                      >{{ row.visitId || '待接入' }}</span
-                    >
+                    >{{ row.visitId || '待接入' }}</span>
                   </span>
                   <span
                     v-if="compactReview"
@@ -96,19 +113,23 @@
                       [row.department || '未分科室', row.bedNumber].filter(Boolean).join(' · ')
                     }}</span>
                   </span>
-                  <span v-else class="qc-record-result-table__visit-line">
+                  <span
+                    v-else
+                    class="qc-record-result-table__visit-line"
+                  >
                     <span
                       v-if="carePhase !== 'inpatient'"
                       class="qc-record-result-table__visit-label"
-                      >住院号：</span
-                    >
+                    >住院号：</span>
                     <span
                       class="qc-record-result-table__visit-id"
                       :title="carePhase === 'inpatient' ? row.visitId : undefined"
-                      >{{ row.visitId || '待接入' }}</span
-                    >
+                    >{{ row.visitId || '待接入' }}</span>
                   </span>
-                  <span v-if="row.sourceLabel" class="qc-record-result-table__source-state">{{
+                  <span
+                    v-if="row.sourceLabel"
+                    class="qc-record-result-table__source-state"
+                  >{{
                     row.sourceLabel
                   }}</span>
                 </span>
@@ -118,20 +139,32 @@
               <span class="qc-record-result-table__department">
                 {{ row.department || '未分科室' }}
               </span>
-              <span v-if="row.bedNumber" class="qc-record-result-table__bed-number">{{
+              <span
+                v-if="row.bedNumber"
+                class="qc-record-result-table__bed-number"
+              >{{
                 row.bedNumber
               }}</span>
             </td>
             <td v-if="!compactReview">
               {{ displayTime(row) }}
             </td>
-            <td class="qc-record-result-table__summary" :title="row.issueSummary">
+            <td
+              class="qc-record-result-table__summary"
+              :title="row.issueSummary"
+            >
               <span
                 v-if="carePhase === 'inpatient' || compactReview"
                 class="qc-record-result-table__summary-items"
               >
-                <template v-for="(part, index) in row.issueSummary.split(' · ')" :key="index">
-                  <span v-if="index > 0" class="qc-record-result-table__summary-separator">{{
+                <template
+                  v-for="(part, index) in row.issueSummary.split(' · ')"
+                  :key="index"
+                >
+                  <span
+                    v-if="index > 0"
+                    class="qc-record-result-table__summary-separator"
+                  >{{
                     ' · '
                   }}</span>
                   <span
@@ -139,8 +172,7 @@
                     :class="{
                       'qc-record-result-table__summary-item--issue': part.startsWith('确定问题 '),
                     }"
-                    >{{ part }}</span
-                  >
+                  >{{ part }}</span>
                 </template>
               </span>
               <template v-else>
@@ -159,14 +191,21 @@
                 :aria-label="compactReview ? '查看病历预览' : undefined"
                 @click.stop="openResult(row.recordKey)"
               >
-                <ChevronRight v-if="compactReview" :size="17" aria-hidden="true" />
+                <ChevronRight
+                  v-if="compactReview"
+                  :size="17"
+                  aria-hidden="true"
+                />
                 <template v-else>
                   {{ row.resultStatus === 'not-run' ? '暂无结果' : '查看结果' }}
                 </template>
               </button>
             </td>
           </tr>
-          <tr v-if="rows.length === 0" class="qc-record-result-table__empty-row">
+          <tr
+            v-if="rows.length === 0"
+            class="qc-record-result-table__empty-row"
+          >
             <td :colspan="compactReview ? 5 : 7">
               {{ emptyMessage }}
             </td>

@@ -1,5 +1,7 @@
 # LX0609 质控引擎收敛 Implementation Plan
 
+> 2026-09-23：本文保留历史设计与证据。当前职责收敛任务的基线、试点和执行顺序以[新主计划](2026-09-23-lx0609-engine-boundary-refactor-master-plan.md)为准；不得直接沿用本文旧规则数量、旧编号和试点范围。此说明不表示历史任务全部完成。
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** 在不重写质控引擎、不改变 Canonical Envelope 对外合同的前提下，将 LX0609 的 75 条质控规则收敛为可定位、可验证、可逐族替换的单一路由，使后续修复单个质控点时能够快速判断问题发生在资料、关联、适用性、判定还是交付环节。

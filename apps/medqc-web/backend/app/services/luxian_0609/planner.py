@@ -1,4 +1,4 @@
-"""LX0609-029/030/032 的纯前置 shadow scope/source planner。
+"""LX0609-04-01-01、LX0609-04-02-02、LX0609-04-03-01 的纯前置 shadow scope/source planner。
 
 本模块只声明后续程序化切片所需的规则、事实与来源，不读取 Manifest/Fact bundle，
 不判断来源状态、适用性或质控结果，也不连接现有执行链。
@@ -16,14 +16,66 @@ from types import MappingProxyType
 from typing import Any, Iterable, Mapping
 
 
-SUPPORTED_RULE_IDS = ("LX0609-029", "LX0609-030", "LX0609-032")
+SUPPORTED_RULE_IDS = ("LX0609-04-01-01", "LX0609-04-02-02", "LX0609-04-03-01")
+_NORMALIZABLE_RULE_ID_ORDER = (
+    "LX0609-01-01-01",
+    "LX0609-01-02-01",
+    "LX0609-04-02-01",
+    "LX0609-09-01-01",
+    "LX0609-02-01-01",
+    "LX0609-02-01-02",
+    "LX0609-02-01-03",
+    "LX0609-02-01-04",
+    "LX0609-02-01-05",
+    "LX0609-06-01-02",
+    "LX0609-06-01-04",
+    "LX0609-06-01-05",
+    "LX0609-06-02-03",
+    "LX0609-06-03-03",
+    "LX0609-06-03-04",
+    "LX0609-12-01-01",
+    "LX0609-12-01-02",
+    "LX0609-01-01-02",
+    "LX0609-06-02-02",
+    "LX0609-03-01-01",
+    "LX0609-03-01-02",
+    "LX0609-03-01-03",
+    "LX0609-03-01-04",
+    "LX0609-04-02-03",
+    "LX0609-04-02-04",
+    "LX0609-05-02-01",
+    "LX0609-08-01-04",
+    "LX0609-05-01-01",
+    "LX0609-04-01-01",
+    "LX0609-04-02-02",
+    "LX0609-04-02-05",
+    "LX0609-04-03-01",
+    "LX0609-11-01-01",
+    "LX0609-11-02-01",
+    "LX0609-11-02-02",
+    "LX0609-04-04-01",
+    "LX0609-04-04-02",
+    "LX0609-04-04-03",
+    "LX0609-04-01-02",
+    "LX0609-04-01-03",
+    "LX0609-11-03-01",
+    "LX0609-11-03-02",
+    "LX0609-07-01-01",
+    "LX0609-07-01-02",
+    "LX0609-07-02-01",
+    "LX0609-07-02-02",
+    "LX0609-07-03-01",
+    "LX0609-07-04-01",
+    "LX0609-07-04-02",
+)
+_NORMALIZABLE_RULE_IDS = frozenset(_NORMALIZABLE_RULE_ID_ORDER)
 MAX_SCOPE_RULE_IDS = 256
 MAX_RECORD_VISITS = 512
 MAX_RULES_PER_VISIT = 256
 MAX_TOTAL_RECORD_RULES = 8_192
 MAX_PLAN_EXCLUSIONS = 1_024
 
-_RULE_ID_PATTERN = re.compile(r"^LX0609-[0-9]{3}$")
+_RULE_ID_PATTERN = re.compile(r"^LX0609-[0-9]{2}-[0-9]{2}-[0-9]{2}$")
 _CODE_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$")
 _ID_CARD_PATTERN = re.compile(r"(?<!\d)\d{17}[\dXx](?!\d)")
 _PHONE_PATTERN = re.compile(r"(?<!\d)1[3-9]\d{9}(?!\d)")
@@ -133,7 +185,7 @@ _PERFORMED_TRIGGER_REQUIREMENT = TriggerRequirement.for_fact_type(
 
 
 _RULE_METADATA = MappingProxyType({
-    "LX0609-029": MappingProxyType({
+    "LX0609-04-01-01": MappingProxyType({
         "family": "surgery_anesthesia",
         "execution_kind": "programmatic_zero_llm",
         "trigger_requirements": (
@@ -147,7 +199,7 @@ _RULE_METADATA = MappingProxyType({
         "dependency_reason_codes": (),
         "independent_target_source": True,
     }),
-    "LX0609-030": MappingProxyType({
+    "LX0609-04-02-02": MappingProxyType({
         "family": "surgery_anesthesia",
         "execution_kind": "programmatic_zero_llm",
         "trigger_requirements": (
@@ -161,14 +213,14 @@ _RULE_METADATA = MappingProxyType({
         "dependency_reason_codes": (),
         "independent_target_source": True,
     }),
-    "LX0609-032": MappingProxyType({
+    "LX0609-04-03-01": MappingProxyType({
         "family": "surgery_anesthesia",
         "execution_kind": "programmatic_zero_llm",
         "trigger_requirements": (_PERFORMED_TRIGGER_REQUIREMENT,),
         "trigger_alternative_policy": "any",
         "target_source_key": "surgery_safecheck_record",
         "source_requirement_version": "lx0609-surgery-source-v3",
-        "parent_rule_ids": ("LX0609-030",),
+        "parent_rule_ids": ("LX0609-04-02-02",),
         "dependency_reason_codes": ("informational_parent_only",),
         "independent_target_source": True,
     }),
@@ -218,7 +270,7 @@ def _normalize_rule_id(value: Any) -> str:
     normalized = value.strip().upper()
     if (
         not _RULE_ID_PATTERN.fullmatch(normalized)
-        or not 1 <= int(normalized.rsplit("-", 1)[1]) <= 49
+        or normalized not in _NORMALIZABLE_RULE_IDS
     ):
         raise ValueError("invalid rule_id")
     return normalized
@@ -239,7 +291,10 @@ def _materialize_rule_ids(
     raw_values = tuple(islice(iterator, limit + 1))
     if len(raw_values) > limit:
         raise ValueError(f"too many {field_name}")
-    return tuple(sorted({_normalize_rule_id(value) for value in raw_values}))
+    normalized = {_normalize_rule_id(value) for value in raw_values}
+    return tuple(
+        rule_id for rule_id in _NORMALIZABLE_RULE_ID_ORDER if rule_id in normalized
+    )
 
 
 def _materialize_record_rule_map(
@@ -416,7 +471,13 @@ def _expected_exclusions(
         raise ValueError("too many planning exclusions")
     return tuple(
         PlanningExclusion(rule_id=rule_id, reason_code=reason)
-        for rule_id, reason in sorted(exclusions)
+        for rule_id, reason in sorted(
+            exclusions,
+            key=lambda item: (
+                _NORMALIZABLE_RULE_ID_ORDER.index(item[0]),
+                item[1],
+            ),
+        )
     )
 
 

@@ -10,12 +10,12 @@ from app.services.luxian_0609.source_evidence_reader import SnapshotSourceRows, 
 
 FROZEN = {"record_id": "V", "record_scene": "final", "resolution_status": "resolved", "evaluation_basis": "discharge_datetime", "admission_datetime": "2026-06-01 08:00:00", "discharge_datetime": "2026-06-10 12:00:00", "evaluation_horizon": "2026-06-10", **CaseRef("I", "P", "V").as_dict(), "record_key": CaseRef("I", "P", "V").as_key()}
 FOCUSED_SIX = (
-    "LX0609-054",
-    "LX0609-055",
-    "LX0609-057",
-    "LX0609-058",
-    "LX0609-069",
-    "LX0609-071",
+    "LX0609-05-01-02",
+    "LX0609-05-01-03",
+    "LX0609-05-01-05",
+    "LX0609-05-01-06",
+    "LX0609-04-02-07",
+    "LX0609-10-01-01",
 )
 
 
@@ -26,7 +26,7 @@ def _kwargs(snapshot=FROZEN, live="2026-07-20 12:00:00", policy="authoritative_d
             raise SourceEvidenceQueryError("synthetic unavailable source")
         rows = [{"admission_datetime": "2026-07-01 08:00:00"}] if source == "inpat_registration" else [{"discharge_datetime": live}] if source == CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY and live else []
         return SnapshotSourceRows.create(source_key=source, rows=rows, truncated=False, limit_rows=50)
-    return dict(selected_rule_ids=("LX0609-007",), institute_id="I", patient_id="P", visit_id="V", source_schema=None, created_at="2026-08-01T09:00:00+08:00", evaluation_horizon_policy=policy, evaluation_horizon_snapshot=snapshot, evaluation_as_of_date="2026-08-01", row_reader=reader)
+    return dict(selected_rule_ids=("LX0609-02-01-03",), institute_id="I", patient_id="P", visit_id="V", source_schema=None, created_at="2026-08-01T09:00:00+08:00", evaluation_horizon_policy=policy, evaluation_horizon_snapshot=snapshot, evaluation_as_of_date="2026-08-01", row_reader=reader)
 
 
 @pytest.mark.parametrize("live", ["2026-07-20 12:00:00", "", "error"])
@@ -40,7 +40,7 @@ def test_frozen_final_wins_over_changed_missing_or_failed_live_sources(live):
         assert session.materials.rows(CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY)[0]["discharge_datetime"] == live
 
 
-@pytest.mark.parametrize("rule_id", ("LX0609-061", "LX0609-067", "LX0609-068"))
+@pytest.mark.parametrize("rule_id", ("LX0609-08-01-01", "LX0609-08-02-01", "LX0609-08-02-02"))
 def test_discharge_documentation_rules_receive_the_frozen_discharge_horizon(rule_id):
     session = build_luxian_0609_evidence_read_session(
         **{**_kwargs(live="2026-07-20 12:00:00"), "selected_rule_ids": (rule_id,)}
@@ -64,7 +64,7 @@ def test_repeated_calls_do_not_refresh_frozen_endpoint():
 @pytest.mark.parametrize(
     "selected_rule_ids,live",
     [
-        (("LX0609-055",), "2026-07-20 12:00:00"),
+        (("LX0609-05-01-03",), "2026-07-20 12:00:00"),
         (FOCUSED_SIX, "2026-07-30 13:00:00"),
     ],
 )
@@ -72,7 +72,7 @@ def test_055_final_scopes_use_the_same_frozen_discharge_horizon_as_052(
     selected_rule_ids, live
 ):
     reference = build_luxian_0609_evidence_read_session(
-        **{**_kwargs(live="2026-07-10 10:00:00"), "selected_rule_ids": ("LX0609-052",)}
+        **{**_kwargs(live="2026-07-10 10:00:00"), "selected_rule_ids": ("LX0609-06-04-01",)}
     )
     session = build_luxian_0609_evidence_read_session(
         **{**_kwargs(live=live), "selected_rule_ids": selected_rule_ids}
@@ -89,7 +89,7 @@ def test_055_final_scopes_use_the_same_frozen_discharge_horizon_as_052(
     }
 
 
-@pytest.mark.parametrize("selected_rule_ids", [("LX0609-055",), FOCUSED_SIX])
+@pytest.mark.parametrize("selected_rule_ids", [("LX0609-05-01-03",), FOCUSED_SIX])
 @pytest.mark.parametrize(
     "patch,reason",
     [
@@ -119,15 +119,15 @@ def test_055_final_scopes_never_fall_back_from_invalid_frozen_horizon(
 @pytest.mark.parametrize(
     "selected_rule_ids,live",
     [
-        (("LX0609-065",), "2026-07-20 12:00:00"),
-        (("LX0609-064", "LX0609-065"), "2026-07-30 13:00:00"),
+        (("LX0609-04-05-02",), "2026-07-20 12:00:00"),
+        (("LX0609-04-05-01", "LX0609-04-05-02"), "2026-07-30 13:00:00"),
     ],
 )
 def test_065_scopes_use_the_same_frozen_discharge_horizon_as_064(
     selected_rule_ids, live
 ):
     reference = build_luxian_0609_evidence_read_session(
-        **{**_kwargs(live="2026-07-10 10:00:00"), "selected_rule_ids": ("LX0609-064",)}
+        **{**_kwargs(live="2026-07-10 10:00:00"), "selected_rule_ids": ("LX0609-04-05-01",)}
     )
     session = build_luxian_0609_evidence_read_session(
         **{**_kwargs(live=live), "selected_rule_ids": selected_rule_ids}
@@ -142,7 +142,7 @@ def test_065_scopes_use_the_same_frozen_discharge_horizon_as_064(
 
 
 @pytest.mark.parametrize(
-    "selected_rule_ids", [("LX0609-065",), ("LX0609-064", "LX0609-065")]
+    "selected_rule_ids", [("LX0609-04-05-02",), ("LX0609-04-05-01", "LX0609-04-05-02")]
 )
 @pytest.mark.parametrize(
     "patch,reason",

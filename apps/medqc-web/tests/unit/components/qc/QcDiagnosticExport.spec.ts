@@ -18,7 +18,7 @@ const context = {
   visitId: 'VISIT-SYNTHETIC-009',
 }
 const item: SingleRecordQcResultItem = {
-  rule_id: 'LX0609-018',
+  rule_id: 'LX0609-01-01-02',
   rule_name: '主诉与第一诊断',
   status: 'non_compliant',
   reason_code: 'diagnosis_mismatch',
@@ -70,13 +70,13 @@ describe('本地诊断导包', () => {
     const generate = vi.spyOn(debugExport, 'buildQcResultDebugText')
     const wrapper = render([
       item,
-      { rule_id: 'LX0609-070', rule_name: '其他规则', status: 'compliant' },
+      { rule_id: 'LX0609-07-01-03', rule_name: '其他规则', status: 'compliant' },
     ])
     await wrapper.get('button').trigger('click')
     const preview = wrapper.get('pre').element.textContent!
     expect(generate).toHaveBeenCalledTimes(1)
-    expect(preview).toContain('LX0609-018')
-    expect(preview).toContain('LX0609-070')
+    expect(preview).toContain('LX0609-01-01-02')
+    expect(preview).toContain('LX0609-07-01-03')
     expect(preview).toContain('diagnosis_mismatch')
     expect(preview).toContain('主诉头痛')
     expect(preview).not.toContain(context.patientName)

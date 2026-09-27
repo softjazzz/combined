@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import uuid
+
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Annotated, Any, Dict, Literal, Optional
@@ -11,13 +12,16 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPExcepti
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
+from ..services.luxian_0609.phase_scope import get_luxian_0609_acceptance_only_rule_ids
 from ..core.response import get_trace_id, success_response
+from ..core.settings import get_settings
 from ..core.security import get_current_user, require_roles
 from ..services.product_activation import require_product_activation
 from ..services.fast_screen_qc import EXECUTION_STRATEGY_FAST_SCREEN, EXECUTION_STRATEGY_STANDARD, get_fast_screen_full_rule_ids
 from ..routers.qc_sichuan import (
     _build_workspace_record_scene_snapshot,
     _run_sichuan_workspace_batch_job,
+    get_qc_service,
 )
 from ..services.custom_qc_sample_pool_service import (
     CustomQCSamplePoolService,
@@ -39,6 +43,13 @@ from ..services.luxian_0609 import (
 )
 from ..services.luxian_0609.evaluation_horizon import (
     build_record_evaluation_horizon_snapshot,
+)
+from ..services.luxian_0609.rule_decision_settings import (
+    LX0609_TASK_SETTINGS_FILTER_KEY,
+    LX0609_TASK_RUNTIME_FILTER_KEY,
+    capture_luxian_0609_task_settings,
+    capture_luxian_0609_task_runtime,
+    resolve_mainline_rule_decision_settings,
 )
 from ..services.sample_validation_rule_sets import (
     FORMAL_FAST_SCREEN_FULL_MODE,
@@ -295,7 +306,7 @@ class TestRecordDocument(BaseModel):
 
 
 class TestRecordGoldenAnswer(BaseModel):
-    qc_point_id: str = Field(..., description="客户质控点 ID，如 LX0609-001")
+    qc_point_id: str = Field(..., description="客户质控点 ID，如 LX0609-01-01-01")
     expected_status: Literal[
         "non_compliant",
         "ai_suggested_non_compliant",
@@ -1186,6 +1197,10 @@ async def run_sample_pool_intrinsic_validation(
         rule_set_version = formal_rule_set.version
 
     if rule_set_key == LUXIAN_0609_QC_RULE_SET_KEY:
+        if not requested_selected_rule_ids:
+            acceptance_only = get_luxian_0609_acceptance_only_rule_ids()
+            rule_ids = [rid for rid in rule_ids if rid not in acceptance_only]
+            selected_customer_delivery_rule_ids = list(rule_ids)
         paused_selected_rule_ids = [
             rule_id
             for rule_id in requested_selected_rule_ids
@@ -1211,7 +1226,7 @@ async def run_sample_pool_intrinsic_validation(
         paused_customer_rule_ids = (
             paused_selected_rule_ids
             if requested_selected_rule_ids
-            else sorted(_LUXIAN_0609_PAUSED_CUSTOMER_RULE_IDS)
+            else sorted(_LUXIAN_0609_PAUSED_CUSTOMER_RULE_IDS.intersection(selected_customer_delivery_rule_ids))
         )
     else:
         paused_customer_rule_ids = []
@@ -1356,6 +1371,38 @@ async def run_sample_pool_intrinsic_validation(
         else []
     )
 
+    task_settings_snapshot = (
+        capture_luxian_0609_task_settings(
+            resolve_mainline_rule_decision_settings(get_settings())
+        )
+        if rule_set_key == LUXIAN_0609_QC_RULE_SET_KEY
+        else None
+    )
+    task_runtime_snapshot = None
+    if rule_set_key == LUXIAN_0609_QC_RULE_SET_KEY:
+        try:
+            task_runtime_snapshot = capture_luxian_0609_task_runtime(await get_qc_service())
+        except ValueError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        first_pass = task_runtime_snapshot["first_pass"]
+        requested_model_options = {
+            "model_code": (payload.model_code or "").strip() if payload.model_code is not None else None,
+            "temperature": payload.temperature,
+            "top_p": payload.top_p,
+            "max_tokens": payload.max_tokens,
+        }
+        for requested_key, effective_key in (
+            ("model_code", "model"),
+            ("temperature", "temperature"),
+            ("top_p", "top_p"),
+            ("max_tokens", "max_tokens"),
+        ):
+            requested_value = requested_model_options[requested_key]
+            if requested_value is not None and requested_value != first_pass[effective_key]:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"LX0609任务不支持覆盖当前模型配置：{requested_key}；请在系统设置中调整后重新发起",
+                )
     pseudo_draft = resolve_sample_validation_pseudo_draft(
         validation_mode=validation_mode,
         pool_name=str(pool.get("name") or ""),
@@ -1364,6 +1411,8 @@ async def run_sample_pool_intrinsic_validation(
         rule_set_name=rule_set_name,
     )
     job_filters = {
+        **({LX0609_TASK_SETTINGS_FILTER_KEY: task_settings_snapshot} if task_settings_snapshot is not None else {}),
+        **({LX0609_TASK_RUNTIME_FILTER_KEY: task_runtime_snapshot} if task_runtime_snapshot is not None else {}),
         "rule_ids": rule_ids,
         "rule_set_key": rule_set_key,
         "rule_set_name": rule_set_name,
@@ -1387,6 +1436,12 @@ async def run_sample_pool_intrinsic_validation(
         "selected_rule_ids": requested_selected_rule_ids,
         "selected_record_ids": record_ids if selected_record_count else [],
         "scoped_customer_rule_ids": selected_customer_delivery_rule_ids,
+        # 仅用于任务摘要，执行范围仍由上面的冻结计划决定。
+        "acceptance_only_rule_ids": [
+            rid for rid in selected_customer_delivery_rule_ids
+            if rule_set_key == LUXIAN_0609_QC_RULE_SET_KEY
+            and rid in get_luxian_0609_acceptance_only_rule_ids()
+        ],
         "selected_sample_item_ids": [str(item.get("id") or "").strip() for item in runnable_items if str(item.get("id") or "").strip()],
         "selected_sample_count": len(runnable_items),
         "dedup_record_count": len(record_refs),
@@ -1428,7 +1483,9 @@ async def run_sample_pool_intrinsic_validation(
         luxian_scope_rule_ids = selected_customer_delivery_rule_ids
         if not luxian_scope_rule_ids:
             luxian_scope_rule_ids = _normalize_rule_id_list(rule_ids)
-        luxian_family_scopes = _build_luxian_0609_family_scopes(luxian_scope_rule_ids)
+        luxian_family_scopes = _build_luxian_0609_family_scopes(
+            [rid for rid in luxian_scope_rule_ids if rid not in paused_customer_rule_ids]
+        )
         paused_rule_ids_by_family = {
             str(scope.get("key") or "").strip(): _normalize_rule_id_list(
                 list(scope.get("rule_ids") or [])
@@ -1436,6 +1493,19 @@ async def run_sample_pool_intrinsic_validation(
             for scope in _build_luxian_0609_family_scopes(paused_customer_rule_ids)
             if str(scope.get("key") or "").strip()
         }
+
+        # 仅含暂停项的族不启动医学执行；由首个已有子任务通过既有暂停路径交付。
+        # 不删除父范围中的选择，也不为暂停规则增加模型调用。
+        active_family_keys = {str(scope["key"]) for scope in luxian_family_scopes}
+        orphan_paused_ids = [
+            rid for key, ids in paused_rule_ids_by_family.items()
+            if key not in active_family_keys for rid in ids
+        ]
+        if orphan_paused_ids and luxian_family_scopes:
+            owner_key = str(luxian_family_scopes[0]["key"])
+            paused_rule_ids_by_family[owner_key] = _normalize_rule_id_list(
+                paused_rule_ids_by_family.get(owner_key, []) + orphan_paused_ids
+            )
 
     selected_sample_item_ids = [
         str(item.get("id") or "").strip()
@@ -1463,6 +1533,8 @@ async def run_sample_pool_intrinsic_validation(
         group_by_luxian_family=bool(payload.group_by_luxian_family),
         effective_scope=effective_scope,
         execution_options={
+            **({LX0609_TASK_SETTINGS_FILTER_KEY: task_settings_snapshot} if task_settings_snapshot is not None else {}),
+            **({LX0609_TASK_RUNTIME_FILTER_KEY: task_runtime_snapshot} if task_runtime_snapshot is not None else {}),
             "model_code": payload.model_code,
             "temperature": payload.temperature,
             "top_p": payload.top_p,
@@ -1531,11 +1603,7 @@ async def run_sample_pool_intrinsic_validation(
                 for family_scope in luxian_family_scopes
                 for rule_id in list(family_scope.get("rule_ids") or [])
             ],
-            "scoped_customer_rule_ids": [
-                rule_id
-                for family_scope in luxian_family_scopes
-                for rule_id in list(family_scope.get("rule_ids") or [])
-            ],
+            "scoped_customer_rule_ids": list(selected_customer_delivery_rule_ids),
         }
         parent_job = workspace.create_batch_job(
             draft=pseudo_draft,
@@ -1605,6 +1673,10 @@ async def run_sample_pool_intrinsic_validation(
                 "paused_customer_rule_count": len(family_paused_rule_ids),
                 "selected_rule_ids": family_rule_ids,
                 "scoped_customer_rule_ids": family_delivery_rule_ids,
+                "acceptance_only_rule_ids": [
+                    rid for rid in job_filters["acceptance_only_rule_ids"]
+                    if rid in family_delivery_rule_ids
+                ],
                 "record_rule_map": family_record_rule_map,
                 "group_by_luxian_family": False,
                 "parent_job_id": parent_job_id,

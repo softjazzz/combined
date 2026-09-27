@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from tests.luxian_0609_identity_test_support import published_rule_ids
+
 from datetime import datetime
 from types import SimpleNamespace
 
 import pytest
 
+from app.core.settings import Settings
 from app.routers.qc_sichuan import _build_record_status_counts
 from app.services.luxian_0609_result_aggregator import (
     aggregate_luxian_0609_results,
@@ -73,7 +76,7 @@ from app.services.luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("rule_ids", (["LX0609-001"], [], None))
+@pytest.mark.parametrize("rule_ids", (["LX0609-01-01-01"], [], None))
 async def test_luxian_direct_service_rejects_customer_aggregation_without_unified_engine(
     monkeypatch,
     rule_ids,
@@ -110,10 +113,10 @@ async def test_formal_direct_service_rejects_exam_lab_compatibility_before_legac
         ),
     )
 
-    with pytest.raises(ValueError, match="正式质控禁止兼容执行.*LX0609-010.*LXE-23"):
+    with pytest.raises(ValueError, match="正式质控禁止兼容执行.*LX0609-06-01-02.*LXE-23"):
         await SichuanQCService().evaluate_running_final_bundle_input(
             bundle={"scene": "running", "structured_context": {"documents": {}}},
-            rule_ids=["LX0609-010"],
+            rule_ids=["LX0609-06-01-02"],
             rule_set_key=LUXIAN_0609_RULE_SET_KEY,
         )
 
@@ -142,13 +145,13 @@ def _wrapper(
 @pytest.mark.asyncio
 async def test_native_040_enabled_bypasses_legacy_dispatch_and_accounts_tokens(monkeypatch):
     wrapper = _wrapper(
-        "LX0609-040",
+        "LX0609-04-01-03",
         name="四级手术术前多学科讨论",
         mapped_rule_ids=["SC-083", "CL-108"],
         trigger_condition="四级手术",
     )
     native_item = {
-        "rule_id": "LX0609-040",
+        "rule_id": "LX0609-04-01-03",
         "status": "compliant",
         "is_compliant": True,
         "findings": "未发现该项缺失。",
@@ -202,7 +205,7 @@ async def test_native_040_enabled_bypasses_legacy_dispatch_and_accounts_tokens(m
 
     assert executable == []
     assert context.legacy_wrapper_rules == []
-    assert [item["rule_id"] for item in context.native_results] == ["LX0609-040"]
+    assert [item["rule_id"] for item in context.native_results] == ["LX0609-04-01-03"]
     assert [
         item.to_safe_dict() for item in context.native_usage_attributions
     ] == [
@@ -212,7 +215,7 @@ async def test_native_040_enabled_bypasses_legacy_dispatch_and_accounts_tokens(m
             "prompt_tokens": 100,
             "completion_tokens": 10,
             "total_tokens": 110,
-            "covered_customer_rule_ids": ["LX0609-040"],
+            "covered_customer_rule_ids": ["LX0609-04-01-03"],
             "latency_ms": 400.0,
         }
     ]
@@ -227,7 +230,7 @@ async def test_native_040_enabled_bypasses_legacy_dispatch_and_accounts_tokens(m
     assert orchestrated["total_tokens"] == 110
     assert orchestrated["total_prompt_tokens"] == 100
     assert orchestrated["total_completion_tokens"] == 10
-    assert [item["rule_id"] for item in orchestrated["results"]] == ["LX0609-040"]
+    assert [item["rule_id"] for item in orchestrated["results"]] == ["LX0609-04-01-03"]
     assert "mapped_rule_ids" not in repr(orchestrated["results"])
 
 
@@ -235,8 +238,8 @@ def test_orchestrated_aggregation_projects_usage_executor_key_without_forging_un
     monkeypatch,
 ):
     customer_results = [
-        {"rule_id": "LX0609-001", "metadata": {}},
-        {"rule_id": "LX0609-002", "metadata": {}},
+        {"rule_id": "LX0609-01-01-01", "metadata": {}},
+        {"rule_id": "LX0609-01-02-01", "metadata": {}},
     ]
     monkeypatch.setattr(
         luxian_execution,
@@ -248,7 +251,7 @@ def test_orchestrated_aggregation_projects_usage_executor_key_without_forging_un
         native_usage_attributions=(
             luxian_execution.build_family_usage_attribution(
                 executor_key="consultation_quality",
-                covered_customer_rule_ids=("LX0609-001",),
+                covered_customer_rule_ids=("LX0609-01-01-01",),
                 llm_call_count=1,
                 prompt_tokens=0,
                 completion_tokens=0,
@@ -267,8 +270,8 @@ def test_orchestrated_aggregation_projects_usage_executor_key_without_forging_un
     )
 
     by_rule_id = {item["rule_id"]: item for item in delivered["results"]}
-    assert by_rule_id["LX0609-001"]["metadata"]["executor_key"] == "consultation_quality"
-    assert "executor_key" not in by_rule_id["LX0609-002"]["metadata"]
+    assert by_rule_id["LX0609-01-01-01"]["metadata"]["executor_key"] == "consultation_quality"
+    assert "executor_key" not in by_rule_id["LX0609-01-02-01"]["metadata"]
 
 
 def test_formal_orchestration_explicitly_delivers_canonical_mode(monkeypatch) -> None:
@@ -303,12 +306,12 @@ def test_formal_orchestration_explicitly_delivers_canonical_mode(monkeypatch) ->
 @pytest.mark.parametrize(
     ("attributions", "customer_result", "error_match"),
     (
-        (("invalid",), {"rule_id": "LX0609-001", "metadata": {}}, "invalid native usage attribution"),
+        (("invalid",), {"rule_id": "LX0609-01-01-01", "metadata": {}}, "invalid native usage attribution"),
         (
             (
                 luxian_execution.build_family_usage_attribution(
                     executor_key="basic_timeliness",
-                    covered_customer_rule_ids=("LX0609-001",),
+                    covered_customer_rule_ids=("LX0609-01-01-01",),
                     llm_call_count=0,
                     prompt_tokens=0,
                     completion_tokens=0,
@@ -317,7 +320,7 @@ def test_formal_orchestration_explicitly_delivers_canonical_mode(monkeypatch) ->
                 ),
                 luxian_execution.build_family_usage_attribution(
                     executor_key="exam_lab",
-                    covered_customer_rule_ids=("LX0609-001",),
+                    covered_customer_rule_ids=("LX0609-01-01-01",),
                     llm_call_count=0,
                     prompt_tokens=0,
                     completion_tokens=0,
@@ -325,14 +328,14 @@ def test_formal_orchestration_explicitly_delivers_canonical_mode(monkeypatch) ->
                     api_time=0.0,
                 ),
             ),
-            {"rule_id": "LX0609-001", "metadata": {}},
+            {"rule_id": "LX0609-01-01-01", "metadata": {}},
             "duplicate native usage attribution",
         ),
         (
             (
                 luxian_execution.build_family_usage_attribution(
                     executor_key="surgery_mdt",
-                    covered_customer_rule_ids=("LX0609-001",),
+                    covered_customer_rule_ids=("LX0609-01-01-01",),
                     llm_call_count=0,
                     prompt_tokens=0,
                     completion_tokens=0,
@@ -341,7 +344,7 @@ def test_formal_orchestration_explicitly_delivers_canonical_mode(monkeypatch) ->
                 ),
                 luxian_execution.build_family_usage_attribution(
                     executor_key="surgery_mdt",
-                    covered_customer_rule_ids=("LX0609-001",),
+                    covered_customer_rule_ids=("LX0609-01-01-01",),
                     llm_call_count=0,
                     prompt_tokens=0,
                     completion_tokens=0,
@@ -349,14 +352,14 @@ def test_formal_orchestration_explicitly_delivers_canonical_mode(monkeypatch) ->
                     api_time=0.0,
                 ),
             ),
-            {"rule_id": "LX0609-001", "metadata": {}},
+            {"rule_id": "LX0609-01-01-01", "metadata": {}},
             "duplicate native usage attribution",
         ),
         (
             (
                 luxian_execution.build_family_usage_attribution(
                     executor_key="consultation_quality",
-                    covered_customer_rule_ids=("LX0609-001",),
+                    covered_customer_rule_ids=("LX0609-01-01-01",),
                     llm_call_count=0,
                     prompt_tokens=0,
                     completion_tokens=0,
@@ -365,7 +368,7 @@ def test_formal_orchestration_explicitly_delivers_canonical_mode(monkeypatch) ->
                 ),
             ),
             {
-                "rule_id": "LX0609-001",
+                "rule_id": "LX0609-01-01-01",
                 "metadata": {"executor_key": "basic_timeliness"},
             },
             "conflicting customer result executor_key",
@@ -401,6 +404,11 @@ async def _async_value(value):
     return value
 
 
+_PRODUCTION_FAMILY_MAX_CONCURRENCY = Settings.model_fields[
+    "LUXIAN_0609_FAMILY_MAX_CONCURRENCY"
+].default
+
+
 def _all_native_settings(**overrides):
     values = {
         "LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED": True,
@@ -424,6 +432,8 @@ def _all_native_settings(**overrides):
         "LUXIAN_0609_RULE_DECISION_BASIC_TIMELINESS_ENABLED": False,
         "LUXIAN_0609_RULE_DECISION_COURSE_SEVERITY_ENABLED": False,
         "LUXIAN_0609_RULE_DECISION_TRANSFUSION_ENABLED": False,
+        # 统一引擎族并发上限是生产 Settings 必备字段；取模型默认值，避免替身与合同漂移。
+        "LUXIAN_0609_FAMILY_MAX_CONCURRENCY": _PRODUCTION_FAMILY_MAX_CONCURRENCY,
     }
     values.update(overrides)
     return SimpleNamespace(**values)
@@ -492,7 +502,7 @@ def _rule_007_evidence_session() -> Luxian0609EvidenceReadSession:
         )
 
     return build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-007",),
+        selected_rule_ids=("LX0609-02-01-03",),
         institute_id="private-institute",
         patient_id="private-patient",
         visit_id="private-visit",
@@ -536,7 +546,7 @@ def _course_severity_evidence_session() -> Luxian0609EvidenceReadSession:
         )
 
     return build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-008", "LX0609-009"),
+        selected_rule_ids=("LX0609-02-01-04", "LX0609-02-01-05"),
         institute_id="private-institute",
         patient_id="private-patient",
         visit_id="private-visit",
@@ -594,11 +604,11 @@ def _basic_timeliness_evidence_session() -> Luxian0609EvidenceReadSession:
 
     return build_luxian_0609_evidence_read_session(
         selected_rule_ids=(
-            "LX0609-001",
-            "LX0609-002",
-            "LX0609-004",
-            "LX0609-005",
-            "LX0609-006",
+            "LX0609-01-01-01",
+            "LX0609-01-02-01",
+            "LX0609-09-01-01",
+            "LX0609-02-01-01",
+            "LX0609-02-01-02",
         ),
         institute_id="private-institute",
         patient_id="private-patient",
@@ -654,10 +664,10 @@ def _transfusion_044_047_evidence_session() -> Luxian0609EvidenceReadSession:
 
     return build_luxian_0609_evidence_read_session(
         selected_rule_ids=(
-            "LX0609-044",
-            "LX0609-045",
-            "LX0609-046",
-            "LX0609-047",
+            "LX0609-07-01-02",
+            "LX0609-07-02-01",
+            "LX0609-07-02-02",
+            "LX0609-07-03-01",
         ),
         institute_id="private-institute",
         patient_id="private-patient",
@@ -669,7 +679,7 @@ def _transfusion_044_047_evidence_session() -> Luxian0609EvidenceReadSession:
 
 
 def test_evidence_snapshot_rule_refs_bind_all_49_to_one_hash() -> None:
-    selected = tuple(f"LX0609-{index:03d}" for index in range(1, 50))
+    selected = published_rule_ids(1, 49)
     snapshot = _safe_evidence_snapshot()
 
     refs = luxian_execution.build_luxian_0609_evidence_snapshot_rule_refs(
@@ -690,7 +700,7 @@ def test_evidence_snapshot_rule_refs_bind_all_49_to_one_hash() -> None:
 async def test_unified_engine_uses_registry_order_once_and_keeps_customer_order(
     monkeypatch,
 ) -> None:
-    selected = ("LX0609-001", "LX0609-010", "LX0609-029")
+    selected = ("LX0609-01-01-01", "LX0609-06-01-02", "LX0609-04-01-01")
     snapshot = _safe_evidence_snapshot()
     session = Luxian0609EvidenceReadSession(
         snapshot=snapshot,
@@ -702,15 +712,15 @@ async def test_unified_engine_uses_registry_order_once_and_keeps_customer_order(
     calls: list[tuple[str, tuple[str, ...]]] = []
     package_plan = Luxian0609PackagePlan(
         selected_rule_ids=selected,
-        native_sync_rule_ids=("LX0609-001",),
-        native_async_rule_ids=("LX0609-010", "LX0609-029"),
+        native_sync_rule_ids=("LX0609-01-01-01",),
+        native_async_rule_ids=("LX0609-06-01-02", "LX0609-04-01-01"),
         compatibility_rule_ids=(),
         compatibility_execution_rule_ids=(),
         bypassed_execution_rule_ids=(),
         native_executor_batches=(
-            ("basic_timeliness", ("LX0609-001",)),
-            ("exam_lab", ("LX0609-010",)),
-            ("surgery_document", ("LX0609-029",)),
+            ("basic_timeliness", ("LX0609-01-01-01",)),
+            ("exam_lab", ("LX0609-06-01-02",)),
+            ("surgery_document", ("LX0609-04-01-01",)),
         ),
     )
 
@@ -776,7 +786,7 @@ async def test_unified_engine_uses_registry_order_once_and_keeps_customer_order(
         calls.append(("surgery_document", rule_ids))
         unexpected_non_typed_decision = RuleDecision(
             # 回归：当前选择范围外的合法 RuleDecision 不得污染 typed 绑定。
-            rule_id="LX0609-004",
+            rule_id="LX0609-09-01-01",
             snapshot_hash=snapshot.snapshot_hash,
             applicability=ApplicabilityState.APPLICABLE,
             evidence_state=EvidenceState.SUFFICIENT,
@@ -871,15 +881,15 @@ async def test_unified_engine_uses_registry_order_once_and_keeps_customer_order(
 
     assert executable == []
     assert calls == [
-        ("basic_timeliness", ("LX0609-001",)),
-        ("exam_lab", ("LX0609-010",)),
-        ("surgery_document", ("LX0609-029",)),
+        ("basic_timeliness", ("LX0609-01-01-01",)),
+        ("exam_lab", ("LX0609-06-01-02",)),
+        ("surgery_document", ("LX0609-04-01-01",)),
     ]
     assert [item["rule_id"] for item in context.native_results] == [
-        "LX0609-001",
-        "LX0609-010",
+        "LX0609-01-01-01",
+        "LX0609-06-01-02",
     ]
-    assert [item.rule_id for item in context.reduced_decisions] == ["LX0609-029"]
+    assert [item.rule_id for item in context.reduced_decisions] == ["LX0609-04-01-01"]
     assert context.reduced_decisions[0].final_state.value == "technical_error"
     assert context.reduced_decisions[0].reason_code == "decision_contract_violation"
     assert context.native_llm_call_count == 1
@@ -893,7 +903,7 @@ async def test_unified_engine_uses_registry_order_once_and_keeps_customer_order(
             "prompt_tokens": 0,
             "completion_tokens": 0,
             "total_tokens": 0,
-            "covered_customer_rule_ids": ["LX0609-001"],
+            "covered_customer_rule_ids": ["LX0609-01-01-01"],
             "latency_ms": 0.0,
         },
         {
@@ -902,7 +912,7 @@ async def test_unified_engine_uses_registry_order_once_and_keeps_customer_order(
             "prompt_tokens": 10,
             "completion_tokens": 5,
             "total_tokens": 15,
-            "covered_customer_rule_ids": ["LX0609-010"],
+            "covered_customer_rule_ids": ["LX0609-06-01-02"],
             "latency_ms": 200.0,
         },
         {
@@ -911,7 +921,7 @@ async def test_unified_engine_uses_registry_order_once_and_keeps_customer_order(
             "prompt_tokens": 0,
             "completion_tokens": 0,
             "total_tokens": 0,
-            "covered_customer_rule_ids": ["LX0609-029"],
+            "covered_customer_rule_ids": ["LX0609-04-01-01"],
             "latency_ms": 0.0,
         },
     ]
@@ -924,7 +934,7 @@ async def test_unified_027_missing_decision_and_projection_fail_closed(
     monkeypatch,
 ) -> None:
     """027 正式执行缺少决策/投影时必须失败关闭，不能交给聚合器补判。"""
-    selected = ("LX0609-027",)
+    selected = ("LX0609-08-01-04",)
     snapshot = _safe_evidence_snapshot()
     session = Luxian0609EvidenceReadSession(
         snapshot=snapshot,
@@ -966,7 +976,7 @@ async def test_unified_027_missing_decision_and_projection_fail_closed(
         "load_luxian_0609_rules",
         lambda: [
             _wrapper(
-                "LX0609-027",
+                "LX0609-08-01-04",
                 name="出院记录中是否记录肿瘤后续治疗计划",
                 mapped_rule_ids=["SC-114"],
                 trigger_condition="肿瘤患者出院记录应体现后续治疗计划。",
@@ -994,7 +1004,7 @@ async def test_unified_027_missing_decision_and_projection_fail_closed(
     )
 
     assert executable == []
-    assert [item["rule_id"] for item in context.native_results] == ["LX0609-027"]
+    assert [item["rule_id"] for item in context.native_results] == ["LX0609-08-01-04"]
     assert context.native_results[0]["status"] == "technical_error"
     assert context.native_results[0]["is_compliant"] is False
     assert context.native_results[0]["metadata"]["reason_code"] == "family_result_missing"
@@ -1008,7 +1018,7 @@ async def test_unified_027_missing_decision_and_projection_fail_closed(
         model_name="unused",
         evidence_payload={"programmatic_timeline": {}},
     )
-    assert [item["rule_id"] for item in delivered["results"]] == ["LX0609-027"]
+    assert [item["rule_id"] for item in delivered["results"]] == ["LX0609-08-01-04"]
     customer_result = delivered["results"][0]
     assert customer_result["status"] == "technical_error"
     assert customer_result["result_status"] == "technical_error"
@@ -1022,22 +1032,22 @@ async def test_unified_027_missing_decision_and_projection_fail_closed(
 @pytest.mark.parametrize(
     ("migration_case", "rule_id", "expected_owner"),
     (
-        ("003-positive-time", "LX0609-003", "surgery_gate"),
-        ("007-critical-context", "LX0609-007", "course_quality"),
-        ("019-safe-evidence", "LX0609-019", "tumor_pathology"),
-        ("019-recorded-specimen", "LX0609-019", "tumor_pathology"),
-        ("019-final-pathology-gap", "LX0609-019", "tumor_pathology"),
-        ("019-source-absent", "LX0609-019", "tumor_pathology"),
-        ("024-current-malignancy", "LX0609-024", "surgery_gate"),
-        ("025-required-facts", "LX0609-025", "not_executed"),
-        ("028-antibiotic-time", "LX0609-028", "not_executed"),
-        ("033-source-gap-1", "LX0609-033", "surgery_gate"),
-        ("033-source-gap-2", "LX0609-033", "surgery_gate"),
-        ("033-source-gap-3", "LX0609-033", "surgery_gate"),
-        ("038-anesthesia-source", "LX0609-038", "surgery_document"),
-        ("039-signature-fact", "LX0609-039", "surgery_document"),
-        ("026-chemo-trigger", "LX0609-026", "tumor_pathology"),
-        ("040-level-4-trigger", "LX0609-040", "surgery_mdt"),
+        ("003-positive-time", "LX0609-04-02-01", "surgery_gate"),
+        ("007-critical-context", "LX0609-02-01-03", "course_quality"),
+        ("019-safe-evidence", "LX0609-06-02-02", "tumor_pathology"),
+        ("019-recorded-specimen", "LX0609-06-02-02", "tumor_pathology"),
+        ("019-final-pathology-gap", "LX0609-06-02-02", "tumor_pathology"),
+        ("019-source-absent", "LX0609-06-02-02", "tumor_pathology"),
+        ("024-current-malignancy", "LX0609-04-02-03", "surgery_gate"),
+        ("025-required-facts", "LX0609-04-02-04", "not_executed"),
+        ("028-antibiotic-time", "LX0609-05-01-01", "not_executed"),
+        ("033-source-gap-1", "LX0609-11-01-01", "surgery_gate"),
+        ("033-source-gap-2", "LX0609-11-01-01", "surgery_gate"),
+        ("033-source-gap-3", "LX0609-11-01-01", "surgery_gate"),
+        ("038-anesthesia-source", "LX0609-04-04-03", "surgery_document"),
+        ("039-signature-fact", "LX0609-04-01-02", "surgery_document"),
+        ("026-chemo-trigger", "LX0609-05-02-01", "tumor_pathology"),
+        ("040-level-4-trigger", "LX0609-04-01-03", "surgery_mdt"),
     ),
 )
 def test_migrated_customer_guard_is_owned_by_native_or_pending_contract(
@@ -1067,7 +1077,7 @@ def test_migrated_customer_guard_is_owned_by_native_or_pending_contract(
 async def test_rule_007_typed_decision_reaches_customer_renderer_without_legacy_result(
     monkeypatch,
 ) -> None:
-    selected = ("LX0609-007",)
+    selected = ("LX0609-02-01-03",)
     package_plan = Luxian0609PackagePlan(
         selected_rule_ids=selected,
         native_sync_rule_ids=(),
@@ -1092,8 +1102,8 @@ async def test_rule_007_typed_decision_reaches_customer_renderer_without_legacy_
         "load_luxian_0609_rules",
         lambda: [
             _wrapper(
-                "LX0609-007",
-                name="LX0609-007",
+                "LX0609-02-01-03",
+                name="LX0609-02-01-03",
                 mapped_rule_ids=["LXE-18"],
                 trigger_condition="test",
             )
@@ -1118,7 +1128,7 @@ async def test_rule_007_typed_decision_reaches_customer_renderer_without_legacy_
 
     assert executable == []
     assert context.native_results == []
-    assert [item.rule_id for item in context.reduced_decisions] == ["LX0609-007"]
+    assert [item.rule_id for item in context.reduced_decisions] == ["LX0609-02-01-03"]
     assert context.reduced_decisions[0].final_state.value == "compliant"
     assert context.native_llm_call_count == 0
     assert context.native_total_tokens == 0
@@ -1136,7 +1146,7 @@ async def test_rule_007_typed_decision_reaches_customer_renderer_without_legacy_
         model_name="",
         evidence_payload=None,
     )
-    assert [item["rule_id"] for item in orchestrated["results"]] == ["LX0609-007"]
+    assert [item["rule_id"] for item in orchestrated["results"]] == ["LX0609-02-01-03"]
     assert orchestrated["results"][0]["status"] == "compliant"
     assert orchestrated["results"][0]["metadata"] == {
         "executor_key": "course_quality"
@@ -1148,7 +1158,7 @@ async def test_rule_007_typed_decision_reaches_customer_renderer_without_legacy_
 async def test_course_008_009_typed_decisions_use_natural_days_and_zero_model(
     monkeypatch,
 ) -> None:
-    selected = ("LX0609-008", "LX0609-009")
+    selected = ("LX0609-02-01-04", "LX0609-02-01-05")
     package_plan = Luxian0609PackagePlan(
         selected_rule_ids=selected,
         native_sync_rule_ids=(),
@@ -1245,11 +1255,11 @@ async def test_basic_timeliness_typed_decisions_share_snapshot_and_skip_legacy_r
     monkeypatch,
 ) -> None:
     selected = (
-        "LX0609-001",
-        "LX0609-002",
-        "LX0609-004",
-        "LX0609-005",
-        "LX0609-006",
+        "LX0609-01-01-01",
+        "LX0609-01-02-01",
+        "LX0609-09-01-01",
+        "LX0609-02-01-01",
+        "LX0609-02-01-02",
     )
     package_plan = Luxian0609PackagePlan(
         selected_rule_ids=selected,
@@ -1344,7 +1354,7 @@ async def test_basic_timeliness_typed_decisions_share_snapshot_and_skip_legacy_r
 async def test_public_entry_keeps_native_result_when_scene_bundles_are_unavailable_but_material_store_is_complete(
     monkeypatch,
 ) -> None:
-    selected = ("LX0609-001",)
+    selected = ("LX0609-01-01-01",)
     package_plan = Luxian0609PackagePlan(
         selected_rule_ids=selected,
         native_sync_rule_ids=selected,
@@ -1381,9 +1391,9 @@ async def test_public_entry_keeps_native_result_when_scene_bundles_are_unavailab
         "load_luxian_0609_rules",
         lambda: [
             _wrapper(
-                "LX0609-001",
+                "LX0609-01-01-01",
                 name="入院记录：入院后24小时内是否完成",
-                mapped_rule_ids=["RAW-LX0609-001"],
+                mapped_rule_ids=["RAW-LX0609-01-01-01"],
                 trigger_condition="入院记录应在入院后24小时内完成。",
             )
         ],
@@ -1417,7 +1427,7 @@ async def test_public_entry_keeps_native_result_when_scene_bundles_are_unavailab
     )
 
     customer_results = list(result["evaluation_results"])
-    assert [item["rule_id"] for item in customer_results] == ["LX0609-001"]
+    assert [item["rule_id"] for item in customer_results] == ["LX0609-01-01-01"]
     assert customer_results[0]["status"] == "compliant"
     assert customer_results[0]["reason_code"] == "requirement_within_threshold"
     assert all(item["status"] != "data_gap" for item in customer_results)
@@ -1428,7 +1438,7 @@ async def test_public_entry_keeps_native_result_when_scene_bundles_are_unavailab
 async def test_transfusion_044_047_typed_decisions_replace_raw_results_without_drift(
     monkeypatch,
 ) -> None:
-    selected = ("LX0609-044", "LX0609-045", "LX0609-046", "LX0609-047")
+    selected = ("LX0609-07-01-02", "LX0609-07-02-01", "LX0609-07-02-02", "LX0609-07-03-01")
     package_plan = Luxian0609PackagePlan(
         selected_rule_ids=selected,
         native_sync_rule_ids=(),
@@ -1514,7 +1524,7 @@ async def test_transfusion_044_047_typed_decisions_replace_raw_results_without_d
 async def test_transfusion_rule_decision_flag_off_preserves_raw_result_contract(
     monkeypatch,
 ) -> None:
-    selected = ("LX0609-045",)
+    selected = ("LX0609-07-02-01",)
     package_plan = Luxian0609PackagePlan(
         selected_rule_ids=selected,
         native_sync_rule_ids=(),
@@ -1539,9 +1549,9 @@ async def test_transfusion_rule_decision_flag_off_preserves_raw_result_contract(
         "load_luxian_0609_rules",
         lambda: [
             _wrapper(
-                "LX0609-045",
-                name="LX0609-045",
-                mapped_rule_ids=["RAW-LX0609-045"],
+                "LX0609-07-02-01",
+                name="LX0609-07-02-01",
+                mapped_rule_ids=["RAW-LX0609-07-02-01"],
                 trigger_condition="test",
             )
         ],
@@ -1585,21 +1595,10 @@ async def test_transfusion_rule_decision_flag_off_preserves_raw_result_contract(
 async def test_consultation_episode_typed_decisions_replace_raw_results(
     monkeypatch,
 ) -> None:
-    selected = ("LX0609-021", "LX0609-022")
-    package_plan = Luxian0609PackagePlan(
-        selected_rule_ids=selected,
-        native_sync_rule_ids=(),
-        native_async_rule_ids=selected,
-        compatibility_rule_ids=(),
-        compatibility_execution_rule_ids=(),
-        bypassed_execution_rule_ids=(),
-        native_executor_batches=(("consultation_quality", selected),),
-    )
-    monkeypatch.setattr(
-        luxian_execution,
-        "build_luxian_0609_package_plan_from_settings",
-        lambda **_kwargs: package_plan,
-    )
+    # 03-01-02/03 因上游会诊申请单来源缺失暂停，只有 023（03-01-04）仍启用。
+    # 使用生产包计划，验证暂停规则不派发，启用规则的 typed 决策替代旧结果。
+    paused = ("LX0609-03-01-02", "LX0609-03-01-03")
+    selected = (*paused, "LX0609-03-01-04")
 
     def read(**kwargs):
         return SnapshotSourceRows.create(
@@ -1647,6 +1646,8 @@ async def test_consultation_episode_typed_decisions_replace_raw_results(
         settings=_all_native_settings(
             LUXIAN_0609_UNIFIED_ENGINE_ENABLED=True,
             LUXIAN_0609_RULE_DECISION_CONSULTATION_ENABLED=True,
+            # 与生产默认一致：023 经会诊执行链接入原生执行。
+            LUXIAN_0609_CONSULTATION_EXECUTION_LINK_ENABLED=True,
         ),
         institute_id="private-institute",
         patient_id="private-patient",
@@ -1654,10 +1655,28 @@ async def test_consultation_episode_typed_decisions_replace_raw_results(
     )
 
     assert executable == []
-    assert context.native_results == []
-    assert [item.rule_id for item in context.reduced_decisions] == list(selected)
+    # 暂停项只由阶段门控生成 not_executed，不经执行器、不产生判定。
+    assert [
+        (
+            item["rule_id"],
+            item["status"],
+            item["reason_code"],
+            item["metadata"]["execution_source"],
+            item["metadata"]["pending_reason_code"],
+        )
+        for item in context.native_results
+    ] == [
+        (
+            rule_id,
+            "not_executed",
+            "policy_definition_pending",
+            "lx0609_phase_gate",
+            "consultation_source_document_unavailable_customer_scope",
+        )
+        for rule_id in paused
+    ]
+    assert [item.rule_id for item in context.reduced_decisions] == ["LX0609-03-01-04"]
     assert [item.final_state.value for item in context.reduced_decisions] == [
-        "not_applicable",
         "not_applicable",
     ]
     # 完整来源确认不存在会诊事件时没有可定位文书，不能再以来源级引用冒充
@@ -1671,7 +1690,7 @@ async def test_consultation_episode_typed_decisions_replace_raw_results(
 async def test_consultation_invalid_model_output_survives_prepare_binding_and_aggregate(
     monkeypatch,
 ) -> None:
-    selected = ("LX0609-020", "LX0609-023")
+    selected = ("LX0609-03-01-01", "LX0609-03-01-04")
     rows_by_source = {
         "consultation_record": [
             {
@@ -1742,10 +1761,12 @@ async def test_consultation_invalid_model_output_survives_prepare_binding_and_ag
     )
 
     assert executable == []
-    assert [(item.final_state.value, item.reason_code) for item in context.reduced_decisions] == [
-        ("technical_error", "model_invalid_output"),
-        ("technical_error", "model_invalid_output"),
-    ]
+    # 03-01-01 因上游会诊申请单来源缺失而暂停，不得进入执行决策；
+    # 仍启用的 023（03-01-04）照常调用一次模型，非法输出按技术失败处理。
+    assert [
+        (item.rule_id, item.final_state.value, item.reason_code)
+        for item in context.reduced_decisions
+    ] == [("LX0609-03-01-04", "technical_error", "model_invalid_output")]
     assert len(client.prompts) == 1
     assert context.native_llm_call_count == 1
     orchestrated = luxian_execution.aggregate_luxian_0609_orchestrated_results(
@@ -1755,12 +1776,18 @@ async def test_consultation_invalid_model_output_survives_prepare_binding_and_ag
         model_name="test-model",
         evidence_payload={},
     )
-    assert [(item["status"], item["reason_code"]) for item in orchestrated["results"]] == [
-        ("technical_error", "model_invalid_output"),
-        ("technical_error", "model_invalid_output"),
-    ]
+    paused, consultation_023 = orchestrated["results"]
+    assert (paused["rule_id"], paused["status"], paused["reason_code"]) == (
+        "LX0609-03-01-01", "not_executed", "policy_definition_pending",
+    )
+    assert paused["metadata"]["pending_reason_code"] == (
+        "consultation_source_document_unavailable_customer_scope"
+    )
+    assert (
+        consultation_023["rule_id"], consultation_023["status"], consultation_023["reason_code"],
+    ) == ("LX0609-03-01-04", "technical_error", "model_invalid_output")
     assert all("data_gap_details" not in item for item in orchestrated["results"])
-    assert all(item["criterion_results"] == [] for item in orchestrated["results"])
+    assert consultation_023["criterion_results"] == []
 
 
 @pytest.mark.asyncio
@@ -1769,7 +1796,7 @@ async def test_executor_contract_stub_projection_keeps_invalid_display_facts_tec
 ) -> None:
     """仅冻结非法展示 facts 的聚合投影；模型合同回归见上一测试。"""
 
-    selected = ("LX0609-020", "LX0609-023")
+    selected = ("LX0609-03-01-01", "LX0609-03-01-04")
 
     def read(**kwargs):
         return SnapshotSourceRows.create(
@@ -1794,11 +1821,16 @@ async def test_executor_contract_stub_projection_keeps_invalid_display_facts_tec
         lambda **_kwargs: session,
     )
 
+    dispatched_rule_ids: list[tuple[str, ...]] = []
+
     async def invalid_display_facts(**kwargs):
         snapshot = kwargs["evidence_snapshot"]
+        # 与真实执行器一致：只对引擎实际派发的规则产出决策。
+        planned = tuple(kwargs["rule_ids"])
+        dispatched_rule_ids.append(planned)
         return NativeConsultationEpisodeExecutionResult(
             results=(),
-            planned_rule_ids=selected,
+            planned_rule_ids=planned,
             decisions=tuple(
                 RuleDecision(
                     rule_id=rule_id,
@@ -1810,11 +1842,11 @@ async def test_executor_contract_stub_projection_keeps_invalid_display_facts_tec
                     fact_refs=(),
                     evaluator_version="test-consultation-stub-v1",
                 )
-                for rule_id in selected
+                for rule_id in planned
             ),
             customer_display_facts=tuple(
                 (rule_id, {"invalid_model_contract": True})
-                for rule_id in selected
+                for rule_id in planned
             ),
         )
 
@@ -1848,9 +1880,14 @@ async def test_executor_contract_stub_projection_keeps_invalid_display_facts_tec
         model_name="test-model",
         evidence_payload=None,
     )
-    assert [(item["status"], item["reason_code"]) for item in orchestrated["results"]] == [
-        ("technical_error", "model_invalid_output"),
-        ("technical_error", "model_invalid_output"),
+    # 暂停的 03-01-01 不派发给执行器；023 的非法展示事实仍按技术失败处理。
+    assert dispatched_rule_ids == [("LX0609-03-01-04",)]
+    assert [
+        (item["rule_id"], item["status"], item["reason_code"])
+        for item in orchestrated["results"]
+    ] == [
+        ("LX0609-03-01-01", "not_executed", "policy_definition_pending"),
+        ("LX0609-03-01-04", "technical_error", "model_invalid_output"),
     ]
     assert all("data_gap_details" not in item for item in orchestrated["results"])
     # 客户事实合同非法属于技术失败；不得保留可能由非法事实导出的临床
@@ -1863,11 +1900,11 @@ async def test_tumor_and_course_admission_typed_flags_reach_unified_reducer(
     monkeypatch,
 ) -> None:
     selected = (
-        "LX0609-013",
-        "LX0609-016",
-        "LX0609-018",
-        "LX0609-019",
-        "LX0609-027",
+        "LX0609-06-02-03",
+        "LX0609-12-01-01",
+        "LX0609-01-01-02",
+        "LX0609-06-02-02",
+        "LX0609-08-01-04",
     )
     package_plan = Luxian0609PackagePlan(
         selected_rule_ids=selected,
@@ -1877,8 +1914,8 @@ async def test_tumor_and_course_admission_typed_flags_reach_unified_reducer(
         compatibility_execution_rule_ids=(),
         bypassed_execution_rule_ids=(),
         native_executor_batches=(
-            ("tumor_pathology", ("LX0609-013", "LX0609-019", "LX0609-027")),
-            ("course_quality", ("LX0609-016", "LX0609-018")),
+            ("tumor_pathology", ("LX0609-06-02-03", "LX0609-06-02-02", "LX0609-08-01-04")),
+            ("course_quality", ("LX0609-12-01-01", "LX0609-01-01-02")),
         ),
     )
     monkeypatch.setattr(
@@ -1959,7 +1996,7 @@ async def test_tumor_and_course_admission_typed_flags_reach_unified_reducer(
 async def test_lx018_typed_reaches_unified_reducer_when_shared_course_flag_off(
     monkeypatch,
 ) -> None:
-    selected = ("LX0609-018",)
+    selected = ("LX0609-01-01-02",)
     package_plan = Luxian0609PackagePlan(
         selected_rule_ids=selected,
         native_sync_rule_ids=(),
@@ -1999,9 +2036,9 @@ async def test_lx018_typed_reaches_unified_reducer_when_shared_course_flag_off(
         "load_luxian_0609_rules",
         lambda: [
             _wrapper(
-                "LX0609-018",
-                name="LX0609-018",
-                mapped_rule_ids=["RAW-LX0609-018"],
+                "LX0609-01-01-02",
+                name="LX0609-01-01-02",
+                mapped_rule_ids=["RAW-LX0609-01-01-02"],
                 trigger_condition="test",
             )
         ],
@@ -2028,7 +2065,7 @@ async def test_lx018_typed_reaches_unified_reducer_when_shared_course_flag_off(
     assert [
         (item.rule_id, item.final_state.value, item.reason_code)
         for item in context.reduced_decisions
-    ] == [("LX0609-018", "data_gap", "required_field_missing")]
+    ] == [("LX0609-01-01-02", "data_gap", "required_field_missing")]
     assert context.native_llm_call_count == 0
     assert context.native_total_tokens == 0
 
@@ -2037,7 +2074,7 @@ async def test_lx018_typed_reaches_unified_reducer_when_shared_course_flag_off(
 async def test_surgery_003_typed_flag_reaches_unified_reducer_without_model(
     monkeypatch,
 ) -> None:
-    selected = ("LX0609-003",)
+    selected = ("LX0609-04-02-01",)
     package_plan = Luxian0609PackagePlan(
         selected_rule_ids=selected,
         native_sync_rule_ids=(),
@@ -2088,7 +2125,7 @@ async def test_surgery_003_typed_flag_reaches_unified_reducer_without_model(
         "load_luxian_0609_rules",
         lambda: [
             _wrapper(
-                "LX0609-003",
+                "LX0609-04-02-01",
                 name="手术记录24小时完成",
                 mapped_rule_ids=["RAW-003"],
                 trigger_condition="test",
@@ -2114,7 +2151,7 @@ async def test_surgery_003_typed_flag_reaches_unified_reducer_without_model(
 
     assert executable == []
     assert context.native_results == []
-    assert [item.rule_id for item in context.reduced_decisions] == ["LX0609-003"]
+    assert [item.rule_id for item in context.reduced_decisions] == ["LX0609-04-02-01"]
     assert context.reduced_decisions[0].final_state.value == "compliant"
     assert context.reduced_decisions[0].reason_code == "requirement_within_threshold"
     assert context.native_llm_call_count == 0
@@ -2125,7 +2162,7 @@ async def test_surgery_003_typed_flag_reaches_unified_reducer_without_model(
 async def test_unified_engine_infrastructure_failure_never_replays_legacy_chain(
     monkeypatch,
 ) -> None:
-    selected = ("LX0609-001",)
+    selected = ("LX0609-01-01-01",)
     package_plan = Luxian0609PackagePlan(
         selected_rule_ids=selected,
         native_sync_rule_ids=selected,
@@ -2160,9 +2197,9 @@ async def test_unified_engine_infrastructure_failure_never_replays_legacy_chain(
         "load_luxian_0609_rules",
         lambda: [
             _wrapper(
-                "LX0609-001",
-                name="LX0609-001",
-                mapped_rule_ids=["RAW-LX0609-001"],
+                "LX0609-01-01-01",
+                name="LX0609-01-01-01",
+                mapped_rule_ids=["RAW-LX0609-01-01-01"],
                 trigger_condition="test",
             )
         ],
@@ -2189,7 +2226,7 @@ async def test_unified_engine_infrastructure_failure_never_replays_legacy_chain(
     assert executable == []
     assert legacy_calls == 0
     assert context.unified_engine_used is True
-    assert [item["rule_id"] for item in context.native_results] == ["LX0609-001"]
+    assert [item["rule_id"] for item in context.native_results] == ["LX0609-01-01-01"]
     assert context.native_results[0]["status"] == "technical_error"
     assert (
         context.native_results[0]["metadata"]["reason_code"]
@@ -2201,7 +2238,7 @@ async def test_unified_engine_infrastructure_failure_never_replays_legacy_chain(
 async def test_unified_engine_snapshot_failure_is_technical_not_silent_legacy_fallback(
     monkeypatch,
 ) -> None:
-    selected = ("LX0609-001",)
+    selected = ("LX0609-01-01-01",)
     package_plan = Luxian0609PackagePlan(
         selected_rule_ids=selected,
         native_sync_rule_ids=selected,
@@ -2233,9 +2270,9 @@ async def test_unified_engine_snapshot_failure_is_technical_not_silent_legacy_fa
         "load_luxian_0609_rules",
         lambda: [
             _wrapper(
-                "LX0609-001",
-                name="LX0609-001",
-                mapped_rule_ids=["RAW-LX0609-001"],
+                "LX0609-01-01-01",
+                name="LX0609-01-01-01",
+                mapped_rule_ids=["RAW-LX0609-01-01-01"],
                 trigger_condition="test",
             )
         ],
@@ -2263,7 +2300,7 @@ async def test_unified_engine_snapshot_failure_is_technical_not_silent_legacy_fa
     assert executable == []
     assert legacy_calls == 0
     assert context.unified_engine_used is True
-    assert [item["rule_id"] for item in context.native_results] == ["LX0609-001"]
+    assert [item["rule_id"] for item in context.native_results] == ["LX0609-01-01-01"]
     assert context.native_results[0]["status"] == "technical_error"
     assert (
         context.native_results[0]["metadata"]["reason_code"]
@@ -2274,7 +2311,7 @@ async def test_unified_engine_snapshot_failure_is_technical_not_silent_legacy_fa
 
 @pytest.mark.asyncio
 async def test_public_entry_rejects_020_023_compatibility_before_legacy_lookup(monkeypatch):
-    selected = [f"LX0609-{index:03d}" for index in range(1, 50)]
+    selected = list(published_rule_ids(1, 49))
     captured: dict[str, object] = {}
 
     async def _prepare(**kwargs):
@@ -2350,7 +2387,7 @@ async def test_public_entry_rejects_020_023_compatibility_before_legacy_lookup(m
 async def test_mainline_master_switch_enables_all_rule_decisions_and_freezes_as_of(
     monkeypatch,
 ):
-    selected = [f"LX0609-{index:03d}" for index in range(1, 50)]
+    selected = list(published_rule_ids(1, 49))
     captured: dict[str, object] = {}
     base_settings = _all_native_settings(
         LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED=True,
@@ -2444,7 +2481,7 @@ async def test_mainline_master_switch_enables_all_rule_decisions_and_freezes_as_
 async def test_public_entry_snapshot_sidecar_is_once_internal_and_output_compatible(
     monkeypatch,
 ) -> None:
-    selected = [f"LX0609-{index:03d}" for index in range(1, 50)]
+    selected = list(published_rule_ids(1, 49))
     snapshot = _safe_evidence_snapshot()
     sidecar_enabled = False
     provider_calls: list[dict] = []
@@ -2581,7 +2618,7 @@ async def test_snapshot_sidecar_requires_three_coordinates_before_provider(
     monkeypatch,
 ) -> None:
     package_plan = Luxian0609PackagePlan(
-        selected_rule_ids=("LX0609-001",),
+        selected_rule_ids=("LX0609-01-01-01",),
         native_sync_rule_ids=(),
         native_async_rule_ids=(),
         compatibility_rule_ids=(),
@@ -2615,7 +2652,7 @@ async def test_snapshot_sidecar_requires_three_coordinates_before_provider(
         ),
         institute_id="",
         patient_id="private-patient",
-        selected_customer_rule_ids=("LX0609-001",),
+        selected_customer_rule_ids=("LX0609-01-01-01",),
     )
 
     assert executable == []
@@ -2625,7 +2662,7 @@ async def test_snapshot_sidecar_requires_three_coordinates_before_provider(
 
 @pytest.mark.asyncio
 async def test_public_entry_rejects_disabled_family_before_legacy_lookup(monkeypatch):
-    selected = ["LX0609-001", "LX0609-041", "LX0609-042"]
+    selected = ["LX0609-01-01-01", "LX0609-11-03-01", "LX0609-11-03-02"]
     lookups: list[str] = []
     captured: dict[str, object] = {}
 
@@ -2729,7 +2766,7 @@ async def test_public_entry_customer_package_off_keeps_full_legacy_rollback(monk
             "structured_context": {"documents": {}},
             "text_available": False,
         },
-        rule_ids=["LX0609-001", "LX0609-040"],
+        rule_ids=["LX0609-01-01-01", "LX0609-04-01-03"],
         rule_set_key=LUXIAN_0609_RULE_SET_KEY,
         use_execution_cache=False,
     )
@@ -2741,7 +2778,7 @@ async def test_public_entry_customer_package_off_keeps_full_legacy_rollback(monk
 @pytest.mark.asyncio
 async def test_native_040_flag_off_preserves_legacy_rules(monkeypatch):
     wrapper = _wrapper(
-        "LX0609-040",
+        "LX0609-04-01-03",
         name="四级手术术前多学科讨论",
         mapped_rule_ids=["SC-083", "CL-108"],
         trigger_condition="四级手术",
@@ -2770,19 +2807,20 @@ async def test_native_040_flag_off_preserves_legacy_rules(monkeypatch):
 
     assert [item["rule_id"] for item in executable] == ["SC-083", "CL-108"]
     assert context.native_results == []
-    assert [item["rule_id"] for item in context.legacy_wrapper_rules] == ["LX0609-040"]
+    assert [item["rule_id"] for item in context.legacy_wrapper_rules] == ["LX0609-04-01-03"]
 
 
 @pytest.mark.asyncio
 async def test_native_029_triple_flags_bypass_legacy_raw_rules_at_service_entry(monkeypatch):
     """029 仅在统一引擎、原生文书与 RuleDecision 三开关均开启时绕过旧映射。"""
     wrappers = [
-        _wrapper("LX0609-029", name="术前小结", mapped_rule_ids=["CL-181", "SC-081"], trigger_condition="手术患者"),
-        _wrapper("LX0609-030", name="手术记录", mapped_rule_ids=["LX-025", "SC-095"], trigger_condition="手术患者"),
-        _wrapper("LX0609-032", name="手术安全核查", mapped_rule_ids=["SC-102", "LXE-33"], trigger_condition="手术患者"),
+        _wrapper("LX0609-04-01-01", name="术前小结", mapped_rule_ids=["CL-181", "SC-081"], trigger_condition="手术患者"),
+        _wrapper("LX0609-04-02-02", name="手术记录", mapped_rule_ids=["LX-025", "SC-095"], trigger_condition="手术患者"),
+        _wrapper("LX0609-04-03-01", name="手术安全核查", mapped_rule_ids=["SC-102", "LXE-33"], trigger_condition="手术患者"),
     ]
     legacy_raw_ids = ["CL-181", "SC-081", "LX-025", "SC-095", "SC-102", "LXE-33"]
     settings = SimpleNamespace(
+        LUXIAN_0609_FAMILY_MAX_CONCURRENCY=_PRODUCTION_FAMILY_MAX_CONCURRENCY,
         LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=True,
         LUXIAN_0609_TRIGGER_GATE_ENABLED=False,
         LUXIAN_0609_LLM_TRIGGER_GATE_ENABLED=False,
@@ -2874,7 +2912,7 @@ async def test_native_029_triple_flags_bypass_legacy_raw_rules_at_service_entry(
     assert dispatched == []
     assert result["token_usage"]["total_tokens"] == 0
     assert [item["rule_id"] for item in result["evaluation_results"]] == [
-        "LX0609-029", "LX0609-030", "LX0609-032"
+        "LX0609-04-01-01", "LX0609-04-02-02", "LX0609-04-03-01"
     ]
     for item in result["evaluation_results"]:
         assert not {
@@ -2899,7 +2937,7 @@ async def test_native_029_triple_flags_bypass_legacy_raw_rules_at_service_entry(
         (
             True,
             [["LX-017", "CL-250", "CL-248", "CL-071"]],
-            [("LX0609-021", "LX0609-022")],
+            [("LX0609-03-01-02", "LX0609-03-01-03")],
             140,
             ["LX-017", "CL-250", "CL-248", "CL-071"],
         ),
@@ -2918,25 +2956,25 @@ async def test_native_consultation_public_entry_rejects_compatibility_for_both_f
 ):
     wrappers = [
         _wrapper(
-            "LX0609-020",
+            "LX0609-03-01-01",
             name="会诊执行记录缺失",
             mapped_rule_ids=["LX-017", "CL-250"],
             trigger_condition="有会诊记录",
         ),
         _wrapper(
-            "LX0609-021",
+            "LX0609-03-01-02",
             name="会诊目的不明确",
             mapped_rule_ids=["SC-068", "LX-015"],
             trigger_condition="有会诊申请",
         ),
         _wrapper(
-            "LX0609-022",
+            "LX0609-03-01-03",
             name="会诊意见不明确",
             mapped_rule_ids=["SC-069"],
             trigger_condition="有会诊意见",
         ),
         _wrapper(
-            "LX0609-023",
+            "LX0609-03-01-04",
             name="会诊执行记录不规范",
             mapped_rule_ids=["CL-248", "CL-250", "CL-071"],
             trigger_condition="有会诊执行记录",
@@ -3045,13 +3083,13 @@ async def test_native_consultation_public_entry_rejects_compatibility_for_both_f
 
 @pytest.mark.asyncio
 async def test_native_exam_lab_public_entry_bypasses_four_legacy_rules_and_keeps_order(monkeypatch):
-    selected = ["LX0609-010", "LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015"]
+    selected = ["LX0609-06-01-02", "LX0609-06-01-04", "LX0609-06-01-05", "LX0609-06-03-03", "LX0609-06-03-04"]
     mappings = {
-        "LX0609-010": ["LXE-23"],
-        "LX0609-011": ["LXE-23", "SC-114"],
-        "LX0609-012": ["LXE-23"],
-        "LX0609-014": ["LXE-24"],
-        "LX0609-015": ["LXE-24", "LX-031"],
+        "LX0609-06-01-02": ["LXE-23"],
+        "LX0609-06-01-04": ["LXE-23", "SC-114"],
+        "LX0609-06-01-05": ["LXE-23"],
+        "LX0609-06-03-03": ["LXE-24"],
+        "LX0609-06-03-04": ["LXE-24", "LX-031"],
     }
     wrappers = []
     for rule_id in selected:
@@ -3153,13 +3191,13 @@ async def test_native_exam_lab_public_entry_bypasses_four_legacy_rules_and_keeps
 
 @pytest.mark.asyncio
 async def test_native_exam_lab_flag_off_rejects_legacy_dispatch(monkeypatch):
-    selected = ["LX0609-010", "LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015"]
+    selected = ["LX0609-06-01-02", "LX0609-06-01-04", "LX0609-06-01-05", "LX0609-06-03-03", "LX0609-06-03-04"]
     mappings = {
-        "LX0609-010": ["LXE-23"],
-        "LX0609-011": ["LXE-23", "SC-114"],
-        "LX0609-012": ["LXE-23"],
-        "LX0609-014": ["LXE-24"],
-        "LX0609-015": ["LXE-24", "LX-031"],
+        "LX0609-06-01-02": ["LXE-23"],
+        "LX0609-06-01-04": ["LXE-23", "SC-114"],
+        "LX0609-06-01-05": ["LXE-23"],
+        "LX0609-06-03-03": ["LXE-24"],
+        "LX0609-06-03-04": ["LXE-24", "LX-031"],
     }
     wrappers = [
         _wrapper(rule_id, name=rule_id, mapped_rule_ids=mappings[rule_id], trigger_condition="test")
@@ -3218,17 +3256,17 @@ async def test_native_exam_lab_flag_off_rejects_legacy_dispatch(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_native_transfusion_public_entry_bypasses_legacy_rules_and_keeps_order(monkeypatch):
-    selected = [f"LX0609-{number:03d}" for number in range(41, 50)]
+    selected = list(published_rule_ids(41, 49))
     mappings = {
-        "LX0609-041": ["SC-133", "LXE-52"],
-        "LX0609-042": ["SC-134", "SC-133"],
-        "LX0609-043": ["SC-073", "SC-138"],
-        "LX0609-044": ["SC-074", "LX-018"],
-        "LX0609-045": ["SC-074", "LX-018"],
-        "LX0609-046": ["SC-074", "LX-018"],
-        "LX0609-047": ["CL-255", "SC-074"],
-        "LX0609-048": ["CL-256", "CL-208", "SC-074"],
-        "LX0609-049": ["SC-146"],
+        "LX0609-11-03-01": ["SC-133", "LXE-52"],
+        "LX0609-11-03-02": ["SC-134", "SC-133"],
+        "LX0609-07-01-01": ["SC-073", "SC-138"],
+        "LX0609-07-01-02": ["SC-074", "LX-018"],
+        "LX0609-07-02-01": ["SC-074", "LX-018"],
+        "LX0609-07-02-02": ["SC-074", "LX-018"],
+        "LX0609-07-03-01": ["CL-255", "SC-074"],
+        "LX0609-07-04-01": ["CL-256", "CL-208", "SC-074"],
+        "LX0609-07-04-02": ["SC-146"],
     }
     wrappers = []
     for rule_id in selected:
@@ -3343,7 +3381,7 @@ async def test_native_transfusion_public_entry_bypasses_legacy_rules_and_keeps_o
         "data_gap",
     ]
     rule_043 = next(
-        item for item in result["evaluation_results"] if item["rule_id"] == "LX0609-043"
+        item for item in result["evaluation_results"] if item["rule_id"] == "LX0609-07-01-01"
     )
     assert rule_043["status"] == "data_gap"
     assert (
@@ -3351,7 +3389,7 @@ async def test_native_transfusion_public_entry_bypasses_legacy_rules_and_keeps_o
         == "pretransfusion_item_contract_unavailable"
     )
     rule_045 = next(
-        item for item in result["evaluation_results"] if item["rule_id"] == "LX0609-045"
+        item for item in result["evaluation_results"] if item["rule_id"] == "LX0609-07-02-01"
     )
     assert rule_045["status"] == "compliant"
     assert (
@@ -3359,7 +3397,7 @@ async def test_native_transfusion_public_entry_bypasses_legacy_rules_and_keeps_o
         == "transfusion_course_record_present"
     )
     rule_046 = next(
-        item for item in result["evaluation_results"] if item["rule_id"] == "LX0609-046"
+        item for item in result["evaluation_results"] if item["rule_id"] == "LX0609-07-02-02"
     )
     assert rule_046["status"] == "non_compliant"
     assert (
@@ -3367,7 +3405,7 @@ async def test_native_transfusion_public_entry_bypasses_legacy_rules_and_keeps_o
         == "transfusion_purpose_or_indication_missing"
     )
     rule_047 = next(
-        item for item in result["evaluation_results"] if item["rule_id"] == "LX0609-047"
+        item for item in result["evaluation_results"] if item["rule_id"] == "LX0609-07-03-01"
     )
     assert rule_047["status"] == "compliant"
     assert rule_047["metadata"]["reason_code"] == "posttransfusion_evaluation_complete"
@@ -3380,7 +3418,7 @@ async def test_native_transfusion_public_entry_bypasses_legacy_rules_and_keeps_o
     executable_mappings = {
         rule_id: raw_ids
         for rule_id, raw_ids in mappings.items()
-        if rule_id != "LX0609-049"
+        if rule_id != "LX0609-07-04-02"
     }
     assert all(
         raw_id not in repr(result["evaluation_results"])
@@ -3388,7 +3426,7 @@ async def test_native_transfusion_public_entry_bypasses_legacy_rules_and_keeps_o
         for raw_id in ids
     )
     rule_049 = next(
-        item for item in result["evaluation_results"] if item["rule_id"] == "LX0609-049"
+        item for item in result["evaluation_results"] if item["rule_id"] == "LX0609-07-04-02"
     )
     assert rule_049["status"] == "not_executed"
     assert rule_049["findings"] == "本质控点当前不参与正式结论，未生成合规或问题判定。"
@@ -3397,17 +3435,17 @@ async def test_native_transfusion_public_entry_bypasses_legacy_rules_and_keeps_o
 
 @pytest.mark.asyncio
 async def test_native_transfusion_flag_off_rejects_legacy_dispatch(monkeypatch):
-    selected = [f"LX0609-{number:03d}" for number in range(41, 50)]
+    selected = list(published_rule_ids(41, 49))
     mappings = {
-        "LX0609-041": ["SC-133", "LXE-52"],
-        "LX0609-042": ["SC-134", "SC-133"],
-        "LX0609-043": ["SC-073", "SC-138"],
-        "LX0609-044": ["SC-074", "LX-018"],
-        "LX0609-045": ["SC-074", "LX-018"],
-        "LX0609-046": ["SC-074", "LX-018"],
-        "LX0609-047": ["CL-255", "SC-074"],
-        "LX0609-048": ["CL-256", "CL-208", "SC-074"],
-        "LX0609-049": ["SC-146"],
+        "LX0609-11-03-01": ["SC-133", "LXE-52"],
+        "LX0609-11-03-02": ["SC-134", "SC-133"],
+        "LX0609-07-01-01": ["SC-073", "SC-138"],
+        "LX0609-07-01-02": ["SC-074", "LX-018"],
+        "LX0609-07-02-01": ["SC-074", "LX-018"],
+        "LX0609-07-02-02": ["SC-074", "LX-018"],
+        "LX0609-07-03-01": ["CL-255", "SC-074"],
+        "LX0609-07-04-01": ["CL-256", "CL-208", "SC-074"],
+        "LX0609-07-04-02": ["SC-146"],
     }
     wrappers = [
         _wrapper(rule_id, name=rule_id, mapped_rule_ids=mappings[rule_id], trigger_condition="test")
@@ -3468,12 +3506,12 @@ async def test_native_transfusion_flag_off_rejects_legacy_dispatch(monkeypatch):
 async def test_native_tumor_pathology_public_entry_bypasses_legacy_rules_and_keeps_order(
     monkeypatch,
 ):
-    selected = ["LX0609-013", "LX0609-019", "LX0609-026", "LX0609-027"]
+    selected = ["LX0609-06-02-03", "LX0609-06-02-02", "LX0609-05-02-01", "LX0609-08-01-04"]
     mappings = {
-        "LX0609-013": ["SC-037", "SC-099", "SC-114"],
-        "LX0609-019": ["SC-037", "SC-099"],
-        "LX0609-026": ["SC-034", "SC-146"],
-        "LX0609-027": ["SC-116", "SC-124"],
+        "LX0609-06-02-03": ["SC-037", "SC-099", "SC-114"],
+        "LX0609-06-02-02": ["SC-037", "SC-099"],
+        "LX0609-05-02-01": ["SC-034", "SC-146"],
+        "LX0609-08-01-04": ["SC-116", "SC-124"],
     }
     wrappers = []
     for rule_id in selected:
@@ -3588,12 +3626,12 @@ async def test_native_tumor_pathology_public_entry_bypasses_legacy_rules_and_kee
 
 @pytest.mark.asyncio
 async def test_native_tumor_pathology_flag_off_rejects_legacy_dispatch(monkeypatch):
-    selected = ["LX0609-013", "LX0609-019", "LX0609-026", "LX0609-027"]
+    selected = ["LX0609-06-02-03", "LX0609-06-02-02", "LX0609-05-02-01", "LX0609-08-01-04"]
     mappings = {
-        "LX0609-013": ["SC-037", "SC-099", "SC-114"],
-        "LX0609-019": ["SC-037", "SC-099"],
-        "LX0609-026": ["SC-034", "SC-146"],
-        "LX0609-027": ["SC-116", "SC-124"],
+        "LX0609-06-02-03": ["SC-037", "SC-099", "SC-114"],
+        "LX0609-06-02-02": ["SC-037", "SC-099"],
+        "LX0609-05-02-01": ["SC-034", "SC-146"],
+        "LX0609-08-01-04": ["SC-116", "SC-124"],
     }
     wrappers = [
         _wrapper(
@@ -3661,21 +3699,21 @@ async def test_remaining_native_families_bypass_all_legacy_rules_and_keep_custom
     monkeypatch,
 ):
     selected = [
-        "LX0609-003", "LX0609-007", "LX0609-008", "LX0609-009", "LX0609-016",
-        "LX0609-017", "LX0609-018", "LX0609-024", "LX0609-025", "LX0609-028",
-        "LX0609-031", "LX0609-033", "LX0609-034", "LX0609-035", "LX0609-036",
-        "LX0609-037", "LX0609-038", "LX0609-039",
+        "LX0609-04-02-01", "LX0609-02-01-03", "LX0609-02-01-04", "LX0609-02-01-05", "LX0609-12-01-01",
+        "LX0609-12-01-02", "LX0609-01-01-02", "LX0609-04-02-03", "LX0609-04-02-04", "LX0609-05-01-01",
+        "LX0609-04-02-05", "LX0609-11-01-01", "LX0609-11-02-01", "LX0609-11-02-02", "LX0609-04-04-01",
+        "LX0609-04-04-02", "LX0609-04-04-03", "LX0609-04-01-02",
     ]
     mappings = {
-        "LX0609-003": ["LX-026", "SC-096"], "LX0609-007": ["LXE-18"],
-        "LX0609-008": ["SC-051", "CL-231"], "LX0609-009": ["SC-051", "CL-231"],
-        "LX0609-016": ["CL-273"], "LX0609-017": ["CL-275", "LXE-21"],
-        "LX0609-018": ["SC-008", "LX-001", "CL-068"], "LX0609-024": ["SC-099"],
-        "LX0609-025": ["SC-100", "SC-101"], "LX0609-028": ["SC-044", "LX-012"],
-        "LX0609-031": ["LX-027", "CL-173", "SC-098"], "LX0609-033": ["SC-087", "LXE-31"],
-        "LX0609-034": ["LX-022", "SC-090"], "LX0609-035": ["SC-090", "LX-022"],
-        "LX0609-036": ["LX-020"], "LX0609-037": ["LX-020", "SC-090"],
-        "LX0609-038": ["SC-090"], "LX0609-039": ["LX-019", "SC-082"],
+        "LX0609-04-02-01": ["LX-026", "SC-096"], "LX0609-02-01-03": ["LXE-18"],
+        "LX0609-02-01-04": ["SC-051", "CL-231"], "LX0609-02-01-05": ["SC-051", "CL-231"],
+        "LX0609-12-01-01": ["CL-273"], "LX0609-12-01-02": ["CL-275", "LXE-21"],
+        "LX0609-01-01-02": ["SC-008", "LX-001", "CL-068"], "LX0609-04-02-03": ["SC-099"],
+        "LX0609-04-02-04": ["SC-100", "SC-101"], "LX0609-05-01-01": ["SC-044", "LX-012"],
+        "LX0609-04-02-05": ["LX-027", "CL-173", "SC-098"], "LX0609-11-01-01": ["SC-087", "LXE-31"],
+        "LX0609-11-02-01": ["LX-022", "SC-090"], "LX0609-11-02-02": ["SC-090", "LX-022"],
+        "LX0609-04-04-01": ["LX-020"], "LX0609-04-04-02": ["LX-020", "SC-090"],
+        "LX0609-04-04-03": ["SC-090"], "LX0609-04-01-02": ["LX-019", "SC-082"],
     }
     wrappers = [
         _wrapper(rule_id, name=rule_id, mapped_rule_ids=mappings[rule_id], trigger_condition="native-test")
@@ -3758,49 +3796,63 @@ async def test_remaining_native_families_bypass_all_legacy_rules_and_keep_custom
         use_execution_cache=False,
     )
 
+    # 暂停规则（含来源缺失而暂停的麻醉访视 04-04-01）不得进入任何执行批次。
+    paused = {"LX0609-04-02-04", "LX0609-05-01-01", "LX0609-04-04-01"}
+    assert paused.isdisjoint(rule_id for _key, batch in calls for rule_id in batch)
     assert dispatched == []
     assert calls == [
-        ("course_quality", ("LX0609-007", "LX0609-008", "LX0609-009", "LX0609-016", "LX0609-017", "LX0609-018")),
-        ("surgery_gate", ("LX0609-003", "LX0609-024", "LX0609-031", "LX0609-033")),
-        ("surgery_document", ("LX0609-034", "LX0609-035", "LX0609-036", "LX0609-037", "LX0609-038", "LX0609-039")),
+        ("course_quality", ("LX0609-02-01-03", "LX0609-02-01-04", "LX0609-02-01-05", "LX0609-12-01-01", "LX0609-12-01-02", "LX0609-01-01-02")),
+        ("surgery_gate", ("LX0609-04-02-01", "LX0609-04-02-03", "LX0609-04-02-05", "LX0609-11-01-01")),
+        ("surgery_document", ("LX0609-11-02-01", "LX0609-11-02-02", "LX0609-04-04-02", "LX0609-04-04-03", "LX0609-04-01-02")),
     ]
     assert [item["rule_id"] for item in result["evaluation_results"]] == selected
     assert [
         item["status"] for item in result["evaluation_results"]
-        if item["rule_id"] in {"LX0609-025", "LX0609-028"}
-    ] == ["not_executed"] * 2
+        if item["rule_id"] in paused
+    ] == ["not_executed"] * 3
+    anesthesia = next(
+        item for item in result["evaluation_results"] if item["rule_id"] == "LX0609-04-04-01"
+    )
+    assert anesthesia["metadata"]["pending_reason_code"] == (
+        "anesthesia_visit_sources_unavailable_customer_scope"
+    )
     assert [
         item["status"] for item in result["evaluation_results"]
-        if item["rule_id"] not in {"LX0609-025", "LX0609-028"}
-    ] == ["data_gap"] * 16
+        if item["rule_id"] not in paused
+    ] == ["data_gap"] * 15
     assert result["token_usage"]["total_tokens"] == 0
     legacy_ids = {
         raw_id
         for rule_id, values in mappings.items()
-        if rule_id not in {"LX0609-025", "LX0609-028"}
+        if rule_id not in paused
         for raw_id in values
     }
-    assert all(raw_id not in repr(result["evaluation_results"]) for raw_id in legacy_ids)
+    # 暂停项按现有合同在 metadata 中保留映射追溯；04-04-01 与启用的 04-04-02
+    # 共用 LX-020，因此旧结果隔离只对实际执行的规则断言。
+    active_results = [
+        item for item in result["evaluation_results"] if item["rule_id"] not in paused
+    ]
+    assert all(raw_id not in repr(active_results) for raw_id in legacy_ids)
 
 
 @pytest.mark.asyncio
 async def test_remaining_native_family_flags_off_reject_legacy_dispatch(monkeypatch):
     selected = [
-        "LX0609-003", "LX0609-007", "LX0609-008", "LX0609-009", "LX0609-016",
-        "LX0609-017", "LX0609-018", "LX0609-024", "LX0609-025", "LX0609-028",
-        "LX0609-031", "LX0609-033", "LX0609-034", "LX0609-035", "LX0609-036",
-        "LX0609-037", "LX0609-038", "LX0609-039",
+        "LX0609-04-02-01", "LX0609-02-01-03", "LX0609-02-01-04", "LX0609-02-01-05", "LX0609-12-01-01",
+        "LX0609-12-01-02", "LX0609-01-01-02", "LX0609-04-02-03", "LX0609-04-02-04", "LX0609-05-01-01",
+        "LX0609-04-02-05", "LX0609-11-01-01", "LX0609-11-02-01", "LX0609-11-02-02", "LX0609-04-04-01",
+        "LX0609-04-04-02", "LX0609-04-04-03", "LX0609-04-01-02",
     ]
     mappings = {
-        "LX0609-003": ["LX-026", "SC-096"], "LX0609-007": ["LXE-18"],
-        "LX0609-008": ["SC-051", "CL-231"], "LX0609-009": ["SC-051", "CL-231"],
-        "LX0609-016": ["CL-273"], "LX0609-017": ["CL-275", "LXE-21"],
-        "LX0609-018": ["SC-008", "LX-001", "CL-068"], "LX0609-024": ["SC-099"],
-        "LX0609-025": ["SC-100", "SC-101"], "LX0609-028": ["SC-044", "LX-012"],
-        "LX0609-031": ["LX-027", "CL-173", "SC-098"], "LX0609-033": ["SC-087", "LXE-31"],
-        "LX0609-034": ["LX-022", "SC-090"], "LX0609-035": ["SC-090", "LX-022"],
-        "LX0609-036": ["LX-020"], "LX0609-037": ["LX-020", "SC-090"],
-        "LX0609-038": ["SC-090"], "LX0609-039": ["LX-019", "SC-082"],
+        "LX0609-04-02-01": ["LX-026", "SC-096"], "LX0609-02-01-03": ["LXE-18"],
+        "LX0609-02-01-04": ["SC-051", "CL-231"], "LX0609-02-01-05": ["SC-051", "CL-231"],
+        "LX0609-12-01-01": ["CL-273"], "LX0609-12-01-02": ["CL-275", "LXE-21"],
+        "LX0609-01-01-02": ["SC-008", "LX-001", "CL-068"], "LX0609-04-02-03": ["SC-099"],
+        "LX0609-04-02-04": ["SC-100", "SC-101"], "LX0609-05-01-01": ["SC-044", "LX-012"],
+        "LX0609-04-02-05": ["LX-027", "CL-173", "SC-098"], "LX0609-11-01-01": ["SC-087", "LXE-31"],
+        "LX0609-11-02-01": ["LX-022", "SC-090"], "LX0609-11-02-02": ["SC-090", "LX-022"],
+        "LX0609-04-04-01": ["LX-020"], "LX0609-04-04-02": ["LX-020", "SC-090"],
+        "LX0609-04-04-03": ["SC-090"], "LX0609-04-01-02": ["LX-019", "SC-082"],
     }
     wrappers = [
         _wrapper(rule_id, name=rule_id, mapped_rule_ids=mappings[rule_id], trigger_condition="test")
@@ -3910,7 +3962,7 @@ async def test_public_bundle_entry_rejects_customer_id_when_its_family_is_not_na
             "structured_context": {"documents": {}},
             "text_available": False,
         },
-        rule_ids=["LX0609-013"],
+        rule_ids=["LX0609-06-02-03"],
         rule_set_key=LUXIAN_0609_RULE_SET_KEY,
         use_execution_cache=False,
     )
@@ -3922,7 +3974,7 @@ async def test_public_bundle_entry_rejects_customer_id_when_its_family_is_not_na
 @pytest.mark.asyncio
 async def test_native_flag_off_preserves_legacy_rules_and_never_calls_native(monkeypatch):
     wrapper = _wrapper(
-        "LX0609-029",
+        "LX0609-04-01-01",
         name="术前小结",
         mapped_rule_ids=["CL-181", "SC-081"],
         trigger_condition="手术患者",
@@ -3993,7 +4045,7 @@ async def test_evaluate_document_forwards_native_source_coordinates(monkeypatch)
 @pytest.mark.asyncio
 async def test_029_keeps_legacy_mapping_when_triple_flags_are_not_enabled(monkeypatch):
     wrapper = _wrapper(
-        "LX0609-029",
+        "LX0609-04-01-01",
         name="术前小结",
         mapped_rule_ids=["CL-181", "SC-081"],
         trigger_condition="手术患者",
@@ -4002,7 +4054,7 @@ async def test_029_keeps_legacy_mapping_when_triple_flags_are_not_enabled(monkey
     monkeypatch.setattr(
         luxian_execution,
         "execute_luxian_0609_native_rules",
-        lambda **_: NativeExecutionResult((), ("LX0609-029",), terminal_reason_code="native_result_incomplete"),
+        lambda **_: NativeExecutionResult((), ("LX0609-04-01-01",), terminal_reason_code="native_result_incomplete"),
     )
 
     executable, context = await luxian_execution.prepare_luxian_0609_execution(
@@ -4030,10 +4082,10 @@ async def test_029_keeps_legacy_mapping_when_triple_flags_are_not_enabled(monkey
 @pytest.mark.asyncio
 async def test_029_stays_in_legacy_partition_without_triple_flags(monkeypatch):
     native_wrapper = _wrapper(
-        "LX0609-029", name="术前小结", mapped_rule_ids=["CL-181", "SC-081"], trigger_condition="手术患者"
+        "LX0609-04-01-01", name="术前小结", mapped_rule_ids=["CL-181", "SC-081"], trigger_condition="手术患者"
     )
     legacy_wrapper = _wrapper(
-        "LX0609-033", name="手术同意书", mapped_rule_ids=["SC-087", "LXE-31"], trigger_condition="手术患者"
+        "LX0609-11-01-01", name="手术同意书", mapped_rule_ids=["SC-087", "LXE-31"], trigger_condition="手术患者"
     )
     monkeypatch.setattr(luxian_execution, "load_luxian_0609_rules", lambda: [native_wrapper, legacy_wrapper])
     monkeypatch.setattr(
@@ -4041,7 +4093,7 @@ async def test_029_stays_in_legacy_partition_without_triple_flags(monkeypatch):
         "execute_luxian_0609_native_rules",
         lambda **_: NativeExecutionResult(
             ({
-                "rule_id": "LX0609-029", "status": "compliant", "is_compliant": True,
+                "rule_id": "LX0609-04-01-01", "status": "compliant", "is_compliant": True,
                 "findings": "未发现该项缺失。", "evidence": "", "suggestion": "", "confidence": 1.0,
                 "metadata": {
                     "execution_source": "lx0609_native", "executor_type": "program",
@@ -4050,7 +4102,7 @@ async def test_029_stays_in_legacy_partition_without_triple_flags(monkeypatch):
                     "completion_tokens": 0, "total_tokens": 0,
                 },
             },),
-            ("LX0609-029",),
+            ("LX0609-04-01-01",),
         ),
     )
 
@@ -4080,10 +4132,10 @@ async def test_029_stays_in_legacy_partition_without_triple_flags(monkeypatch):
 @pytest.mark.asyncio
 async def test_generic_gate_receives_only_legacy_wrappers_when_native_enabled(monkeypatch):
     native_wrapper = _wrapper(
-        "LX0609-029", name="术前小结", mapped_rule_ids=["CL-181", "SC-081"], trigger_condition="手术患者"
+        "LX0609-04-01-01", name="术前小结", mapped_rule_ids=["CL-181", "SC-081"], trigger_condition="手术患者"
     )
     legacy_wrapper = _wrapper(
-        "LX0609-033", name="手术同意书", mapped_rule_ids=["SC-087", "LXE-31"], trigger_condition="手术患者"
+        "LX0609-11-01-01", name="手术同意书", mapped_rule_ids=["SC-087", "LXE-31"], trigger_condition="手术患者"
     )
     captured: list[list[str]] = []
 
@@ -4095,7 +4147,7 @@ async def test_generic_gate_receives_only_legacy_wrappers_when_native_enabled(mo
     monkeypatch.setattr(
         luxian_execution,
         "execute_luxian_0609_native_rules",
-        lambda **_: luxian_execution.build_luxian_0609_native_technical_results(("LX0609-029",)),
+        lambda **_: luxian_execution.build_luxian_0609_native_technical_results(("LX0609-04-01-01",)),
     )
     monkeypatch.setattr(luxian_execution, "evaluate_luxian_0609_trigger_gates_with_llm", _gate)
     monkeypatch.setattr(luxian_execution, "filter_executable_rules_by_gate", lambda **kwargs: kwargs["executable_rules"])
@@ -4117,7 +4169,7 @@ async def test_generic_gate_receives_only_legacy_wrappers_when_native_enabled(mo
         institute_id="i",
         patient_id="p",
     )
-    assert captured == [["LX0609-029", "LX0609-033"]]
+    assert captured == [["LX0609-04-01-01", "LX0609-11-01-01"]]
 
 
 @pytest.mark.asyncio
@@ -4125,7 +4177,7 @@ async def test_lx0609_033_live_strict_performed_source_gap_stops_mapped_rules_be
     raw_body_marker = "SAFE_BODY_MARKER_033_STRICT_DATA_GAP"
     wrappers = [
         _wrapper(
-            "LX0609-033",
+            "LX0609-11-01-01",
             name="手术知情同意书：无手术知情同意书",
             mapped_rule_ids=["SC-087", "LXE-31"],
             trigger_condition="手术患者应有手术知情同意书。",
@@ -4197,8 +4249,8 @@ async def test_lx0609_033_live_strict_performed_source_gap_stops_mapped_rules_be
         len(reader_calls),
         len(dispatch_calls),
     )
-    assert observed == (["LX0609-033"], "data_gap", 1, 0)
-    assert gate_calls == [["LX0609-033"]]
+    assert observed == (["LX0609-11-01-01"], "data_gap", 1, 0)
+    assert gate_calls == [["LX0609-11-01-01"]]
     assert result["token_usage"]["total_tokens"] == 0
     assert "evidence_payload" not in result
     assert raw_body_marker not in repr(result)
@@ -4208,13 +4260,13 @@ async def test_lx0609_033_live_strict_performed_source_gap_stops_mapped_rules_be
 async def test_lx0609_033_live_guard_scopes_wrappers_to_selected_raw_ids(monkeypatch):
     wrappers = [
         _wrapper(
-            "LX0609-033",
+            "LX0609-11-01-01",
             name="手术知情同意书：无手术知情同意书",
             mapped_rule_ids=["SC-087", "LXE-31"],
             trigger_condition="手术患者应有手术知情同意书。",
         ),
         _wrapper(
-            "LX0609-024",
+            "LX0609-04-02-03",
             name="恶性肿瘤手术记录",
             mapped_rule_ids=["SC-099"],
             trigger_condition="仅用于证明 wrapper scope 被收紧。",
@@ -4271,7 +4323,7 @@ async def test_lx0609_033_live_guard_scopes_wrappers_to_selected_raw_ids(monkeyp
         gate_calls,
         len(dispatch_calls),
     )
-    assert observed == (["LX0609-033"], [["LX0609-033"]], 0)
+    assert observed == (["LX0609-11-01-01"], [["LX0609-11-01-01"]], 0)
     assert result["token_usage"]["total_tokens"] == 0
 
 
@@ -4290,7 +4342,7 @@ async def test_lx0609_033_live_source_guard_handles_only_controlled_reader_outco
 ):
     wrappers = [
         _wrapper(
-            "LX0609-033",
+            "LX0609-11-01-01",
             name="手术知情同意书：无手术知情同意书",
             mapped_rule_ids=["SC-087", "LXE-31"],
             trigger_condition="手术患者应有手术知情同意书。",
@@ -4377,13 +4429,13 @@ async def test_lx0609_033_live_reader_is_off_for_disabled_non_package_or_unselec
 ):
     wrappers = [
         _wrapper(
-            "LX0609-033",
+            "LX0609-11-01-01",
             name="手术知情同意书：无手术知情同意书",
             mapped_rule_ids=["SC-087", "LXE-31"],
             trigger_condition="手术患者应有手术知情同意书。",
         ),
         _wrapper(
-            "LX0609-024",
+            "LX0609-04-02-03",
             name="恶性肿瘤手术记录",
             mapped_rule_ids=["SC-099"],
             trigger_condition="仅用于范围隔离。",
@@ -4447,7 +4499,7 @@ async def test_lx0609_033_gate_off_preserves_customer_aggregation_without_live_r
     raw_body_marker = "SAFE_BODY_MARKER_033_GATE_OFF"
     wrappers = [
         _wrapper(
-            "LX0609-033",
+            "LX0609-11-01-01",
             name="手术知情同意书：无手术知情同意书",
             mapped_rule_ids=["SC-087", "LXE-31"],
             trigger_condition="手术患者应有手术知情同意书。",
@@ -4492,7 +4544,7 @@ async def test_lx0609_033_gate_off_preserves_customer_aggregation_without_live_r
 
     customer_results = list(result["evaluation_results"])
     assert reader_calls == []
-    assert [item["rule_id"] for item in customer_results] == ["LX0609-033"]
+    assert [item["rule_id"] for item in customer_results] == ["LX0609-11-01-01"]
     assert all(item["rule_id"] not in {"SC-087", "LXE-31"} for item in customer_results)
     assert customer_results[0]["status"] == "not_applicable"
     assert result["token_usage"]["total_tokens"] == 0
@@ -4508,7 +4560,7 @@ async def test_lx0609_033_available_consent_preserves_semantic_dispatch_without_
     raw_body_marker = "SAFE_BODY_MARKER_033_AVAILABLE_CONSENT"
     wrappers = [
         _wrapper(
-            "LX0609-033",
+            "LX0609-11-01-01",
             name="手术知情同意书：无手术知情同意书",
             mapped_rule_ids=["SC-087", "LXE-31"],
             trigger_condition="手术患者应有手术知情同意书。",
@@ -4593,7 +4645,7 @@ async def test_lx0609_033_available_consent_preserves_semantic_dispatch_without_
     assert reader_calls == []
     assert dispatch_calls == [["SC-087", "LXE-31"]]
     expected_status = raw_status
-    assert [(item["rule_id"], item["status"]) for item in customer_results] == [("LX0609-033", expected_status)]
+    assert [(item["rule_id"], item["status"]) for item in customer_results] == [("LX0609-11-01-01", expected_status)]
     assert customer_metadata["live_source_state"] == "consent_document_present"
     assert raw_body_marker not in repr(customer_metadata)
     assert result["token_usage"]["total_tokens"] == 0
@@ -4658,7 +4710,7 @@ def test_surgery_inform_consent_alias_is_isolated_to_sc087():
 def test_trigger_gate_should_mark_absent_trigger_as_not_applicable_candidate():
     rules = [
         _wrapper(
-            "LX0609-010",
+            "LX0609-06-01-02",
             name="CT/MRI检查前记录",
             mapped_rule_ids=["SC-146"],
             trigger_condition="当存在或应存在 CT/MRI 检查，需要读取报告时间。",
@@ -4673,7 +4725,7 @@ def test_trigger_gate_should_mark_absent_trigger_as_not_applicable_candidate():
         evidence_payload={},
     )
 
-    assert decisions["LX0609-010"].status == TRIGGER_ABSENT
+    assert decisions["LX0609-06-01-02"].status == TRIGGER_ABSENT
     aggregated = aggregate_luxian_0609_results(
         wrapper_rules=rules,
         execution_results=[],
@@ -4692,26 +4744,26 @@ def test_trigger_gate_should_mark_absent_trigger_as_not_applicable_candidate():
 def test_trigger_gate_decision_result_should_use_customer_readable_evidence():
     absent = decision_to_result(
         _wrapper(
-            "LX0609-010",
+            "LX0609-06-01-02",
             name="CT/MRI检查前记录",
             mapped_rule_ids=["SC-146"],
             trigger_condition="当存在或应存在 CT/MRI 检查，需要读取报告时间。",
         ),
         Luxian0609GateDecision(
-            rule_id="LX0609-010",
+            rule_id="LX0609-06-01-02",
             status=TRIGGER_ABSENT,
             reason="未发现触发事实",
         ),
     )
     data_gap = decision_to_result(
         _wrapper(
-            "LX0609-012",
+            "LX0609-06-01-05",
             name="CT/MRI检查结果未分析",
             mapped_rule_ids=["SC-147"],
             trigger_condition="存在 CT/MRI 检查报告后需分析。",
         ),
         Luxian0609GateDecision(
-            rule_id="LX0609-012",
+            rule_id="LX0609-06-01-05",
             status=TRIGGER_DATA_GAP,
             reason="缺少报告时间",
             data_gap_fields=["报告时间"],
@@ -4729,7 +4781,7 @@ def test_trigger_gate_decision_result_should_use_customer_readable_evidence():
 def test_trigger_gate_absent_should_override_customer_programmatic_gap():
     rules = [
         _wrapper(
-            "LX0609-041",
+            "LX0609-11-03-01",
             name="输血知情同意书：无输血知情同意书",
             mapped_rule_ids=["SC-133"],
             trigger_condition="存在输血事件时检查输血知情同意记录。",
@@ -4738,8 +4790,8 @@ def test_trigger_gate_absent_should_override_customer_programmatic_gap():
         )
     ]
     decisions = {
-        "LX0609-041": Luxian0609GateDecision(
-            rule_id="LX0609-041",
+        "LX0609-11-03-01": Luxian0609GateDecision(
+            rule_id="LX0609-11-03-01",
             status=TRIGGER_ABSENT,
             reason="病历文本和证据中未发现transfusion相关触发事实",
         )
@@ -4749,7 +4801,7 @@ def test_trigger_gate_absent_should_override_customer_programmatic_gap():
         wrapper_rules=rules,
         execution_results=[
             {
-                "rule_id": "LX0609-041",
+                "rule_id": "LX0609-11-03-01",
                 "status": "data_gap",
                 "is_compliant": False,
                 "findings": "已发现触发事件，但缺少输血记录。",
@@ -4767,7 +4819,7 @@ def test_trigger_gate_absent_should_override_customer_programmatic_gap():
 def test_trigger_gate_should_mark_structured_gap_and_data_gap_not_compliant():
     rules = [
         _wrapper(
-            "LX0609-043",
+            "LX0609-07-01-01",
             name="输血前常规检查不完整",
             mapped_rule_ids=["SC-133"],
             trigger_condition="当存在输血事件，需要读取输血记录、输血前常规检查。",
@@ -4782,7 +4834,7 @@ def test_trigger_gate_should_mark_structured_gap_and_data_gap_not_compliant():
         evidence_payload={},
     )
 
-    assert decisions["LX0609-043"].status == TRIGGER_DATA_GAP
+    assert decisions["LX0609-07-01-01"].status == TRIGGER_DATA_GAP
     aggregated = aggregate_luxian_0609_results(
         wrapper_rules=rules,
         execution_results=[],
@@ -4797,7 +4849,7 @@ def test_trigger_gate_should_mark_structured_gap_and_data_gap_not_compliant():
 def test_aggregator_should_prioritize_non_compliant_over_primary_compliant():
     rules = [
         _wrapper(
-            "LX0609-003",
+            "LX0609-04-02-01",
             name="手术后24小时内是否完成",
             mapped_rule_ids=["LX-026", "SC-096"],
             primary="LX-026",
@@ -4836,7 +4888,7 @@ def test_aggregator_should_prioritize_non_compliant_over_primary_compliant():
         gate_decisions={},
     )
 
-    assert aggregated[0]["rule_id"] == "LX0609-003"
+    assert aggregated[0]["rule_id"] == "LX0609-04-02-01"
     assert aggregated[0]["status"] == "non_compliant"
     assert aggregated[0]["metadata"]["selected_execution_rule_id"] == "SC-096"
     assert aggregated[0]["metadata"]["mapped_rule_ids"] == ["LX-026", "SC-096"]
@@ -4854,7 +4906,7 @@ def test_aggregator_should_prioritize_non_compliant_over_primary_compliant():
 def test_aggregator_should_keep_specimen_detail_absence_as_non_compliant():
     rules = [
         _wrapper(
-            "LX0609-019",
+            "LX0609-06-02-02",
             name="病理检查：取材情况未在病程记录或手术记录中进行记录",
             mapped_rule_ids=["SC-099"],
             trigger_condition="病理取材情况应在手术记录或病程中记录。",
@@ -4892,13 +4944,13 @@ def test_aggregator_should_keep_specimen_detail_absence_as_non_compliant():
 def test_filter_executable_rules_should_skip_only_when_all_mapped_wrappers_terminal():
     wrappers = [
         _wrapper(
-            "LX0609-010",
+            "LX0609-06-01-02",
             name="CT检查",
             mapped_rule_ids=["SC-146"],
             trigger_condition="当存在 CT/MRI 检查，需要读取报告时间。",
         ),
         _wrapper(
-            "LX0609-011",
+            "LX0609-06-01-04",
             name="CT报告后记录",
             mapped_rule_ids=["SC-146"],
             trigger_condition="当存在 CT/MRI 检查，需要读取报告时间。",
@@ -4917,8 +4969,8 @@ def test_filter_executable_rules_should_skip_only_when_all_mapped_wrappers_termi
     ) == []
 
     present_decisions = dict(absent_decisions)
-    present_decisions["LX0609-011"] = type(absent_decisions["LX0609-011"])(
-        rule_id="LX0609-011",
+    present_decisions["LX0609-06-01-04"] = type(absent_decisions["LX0609-06-01-04"])(
+        rule_id="LX0609-06-01-04",
         status=TRIGGER_PRESENT,
         reason="已发现检查触发事实",
         matched_keywords=("CT",),
@@ -4933,7 +4985,7 @@ def test_filter_executable_rules_should_skip_only_when_all_mapped_wrappers_termi
 def test_filter_executable_rules_should_skip_direct_customer_rule_when_gate_terminal():
     wrappers = [
         _wrapper(
-            "LX0609-016",
+            "LX0609-12-01-01",
             name="不合理复制病历",
             mapped_rule_ids=["CL-273"],
             trigger_condition="首次病程记录病例特点与入院记录、现病史完全相同。",
@@ -4945,21 +4997,21 @@ def test_filter_executable_rules_should_skip_direct_customer_rule_when_gate_term
         evidence_payload={},
     )
     executable = [
-        {"rule_id": "LX0609-016", "name": "不合理复制病历"},
-        {"rule_id": "LX0609-017", "name": "病程记录重复"},
+        {"rule_id": "LX0609-12-01-01", "name": "不合理复制病历"},
+        {"rule_id": "LX0609-12-01-02", "name": "病程记录重复"},
     ]
 
     assert filter_executable_rules_by_gate(
         executable_rules=executable,
         wrapper_rules=wrappers,
         decisions=decisions,
-    ) == [{"rule_id": "LX0609-017", "name": "病程记录重复"}]
+    ) == [{"rule_id": "LX0609-12-01-02", "name": "病程记录重复"}]
 
 
 def test_trigger_gate_should_not_run_antibiotic_rule_without_antibiotic_fact():
     rules = [
         _wrapper(
-            "LX0609-028",
+            "LX0609-05-01-01",
             name="抗菌药物使用记录：I类、II类切口手术预防使用抗菌药物时间超过24小时",
             mapped_rule_ids=["SC-ANTIBIOTIC"],
             trigger_condition="手术患者预防使用抗菌药物时需核对医嘱起止时间。",
@@ -4972,14 +5024,14 @@ def test_trigger_gate_should_not_run_antibiotic_rule_without_antibiotic_fact():
         evidence_payload={},
     )
 
-    assert decisions["LX0609-028"].status == TRIGGER_ABSENT
-    assert "未发现抗菌药物医嘱" in decisions["LX0609-028"].reason
+    assert decisions["LX0609-05-01-01"].status == TRIGGER_ABSENT
+    assert "未发现抗菌药物医嘱" in decisions["LX0609-05-01-01"].reason
 
 
 def test_trigger_gate_should_not_run_antibiotic_rule_without_class_i_ii_incision_fact():
     rules = [
         _wrapper(
-            "LX0609-028",
+            "LX0609-05-01-01",
             name="抗菌药物使用记录",
             mapped_rule_ids=["SC-ANTIBIOTIC"],
             trigger_condition="手术患者预防使用抗菌药物时需核对医嘱起止时间。",
@@ -4992,14 +5044,14 @@ def test_trigger_gate_should_not_run_antibiotic_rule_without_class_i_ii_incision
         evidence_payload={},
     )
 
-    assert decisions["LX0609-028"].status == TRIGGER_ABSENT
-    assert "未发现I类/II类切口" in decisions["LX0609-028"].reason
+    assert decisions["LX0609-05-01-01"].status == TRIGGER_ABSENT
+    assert "未发现I类/II类切口" in decisions["LX0609-05-01-01"].reason
 
 
 def test_trigger_gate_should_return_data_gap_when_antibiotic_time_is_incomplete():
     rules = [
         _wrapper(
-            "LX0609-028",
+            "LX0609-05-01-01",
             name="抗菌药物使用记录",
             mapped_rule_ids=["SC-ANTIBIOTIC"],
             trigger_condition="手术患者预防使用抗菌药物时需核对医嘱起止时间。",
@@ -5012,14 +5064,14 @@ def test_trigger_gate_should_return_data_gap_when_antibiotic_time_is_incomplete(
         evidence_payload={},
     )
 
-    assert decisions["LX0609-028"].status == TRIGGER_DATA_GAP
-    assert "抗菌药物医嘱停止时间" in decisions["LX0609-028"].data_gap_fields
+    assert decisions["LX0609-05-01-01"].status == TRIGGER_DATA_GAP
+    assert "抗菌药物医嘱停止时间" in decisions["LX0609-05-01-01"].data_gap_fields
 
 
 def test_trigger_gate_should_run_antibiotic_rule_with_class_i_ii_incision_and_order_times():
     rules = [
         _wrapper(
-            "LX0609-028",
+            "LX0609-05-01-01",
             name="抗菌药物使用记录",
             mapped_rule_ids=["SC-ANTIBIOTIC"],
             trigger_condition="手术患者预防使用抗菌药物时需核对医嘱起止时间。",
@@ -5032,13 +5084,13 @@ def test_trigger_gate_should_run_antibiotic_rule_with_class_i_ii_incision_and_or
         evidence_payload={},
     )
 
-    assert decisions["LX0609-028"].status == TRIGGER_PRESENT
+    assert decisions["LX0609-05-01-01"].status == TRIGGER_PRESENT
 
 
 def test_trigger_gate_should_not_run_pathology_result_rule_on_tumor_keyword_only():
     rules = [
         _wrapper(
-            "LX0609-013",
+            "LX0609-06-02-03",
             name="病理检查：病理检查结果在手术记录、病程中未记录",
             mapped_rule_ids=["SC-PATH"],
             trigger_condition="有病理报告时，应在手术记录或病程中记录病理结果。",
@@ -5051,14 +5103,14 @@ def test_trigger_gate_should_not_run_pathology_result_rule_on_tumor_keyword_only
         evidence_payload={},
     )
 
-    assert decisions["LX0609-013"].status == TRIGGER_ABSENT
-    assert "未发现病理报告" in decisions["LX0609-013"].reason
+    assert decisions["LX0609-06-02-03"].status == TRIGGER_ABSENT
+    assert "未发现病理报告" in decisions["LX0609-06-02-03"].reason
 
 
 def test_trigger_gate_should_run_pathology_result_rule_with_report_fact():
     rules = [
         _wrapper(
-            "LX0609-013",
+            "LX0609-06-02-03",
             name="病理检查：病理检查结果在手术记录、病程中未记录",
             mapped_rule_ids=["SC-PATH"],
             trigger_condition="有病理报告时，应在手术记录或病程中记录病理结果。",
@@ -5071,18 +5123,18 @@ def test_trigger_gate_should_run_pathology_result_rule_with_report_fact():
         evidence_payload={},
     )
 
-    assert decisions["LX0609-013"].status == TRIGGER_PRESENT
+    assert decisions["LX0609-06-02-03"].status == TRIGGER_PRESENT
 
 
 def test_evidence_formatter_should_add_family_slots_without_changing_decision():
     rule = _wrapper(
-        "LX0609-043",
+        "LX0609-07-01-01",
         name="输血前常规检查不完整",
         mapped_rule_ids=["SC-133"],
         trigger_condition="存在输血事件时检查输血申请、医嘱、记录和费用。",
     )
     result = {
-        "rule_id": "LX0609-043",
+        "rule_id": "LX0609-07-01-01",
         "rule_name": "输血前常规检查不完整",
         "status": "data_gap",
         "is_compliant": False,
@@ -5093,7 +5145,7 @@ def test_evidence_formatter_should_add_family_slots_without_changing_decision():
         "metadata": {},
     }
     gate = Luxian0609GateDecision(
-        rule_id="LX0609-043",
+        rule_id="LX0609-07-01-01",
         status=TRIGGER_DATA_GAP,
         reason="已发现输血触发事实，但缺少输血前检查项",
         data_gap_fields=("输血前检查项",),
@@ -5120,13 +5172,13 @@ def test_evidence_formatter_should_add_family_slots_without_changing_decision():
 
 def test_luxian_evidence_formatter_should_hide_internal_unknown_gate_status():
     rule = _wrapper(
-        "LX0609-012",
+        "LX0609-06-01-05",
         name="CT/MRI检查结果24小时内分析",
         mapped_rule_ids=["SC-036"],
         trigger_condition="CT/MRI影像报告结果出具后24小时内阳性结果未进行分析。",
     )
     result = {
-        "rule_id": "LX0609-012",
+        "rule_id": "LX0609-06-01-05",
         "status": "non_compliant",
         "is_compliant": False,
         "findings": "影像阳性结果未在病程中分析。",
@@ -5135,7 +5187,7 @@ def test_luxian_evidence_formatter_should_hide_internal_unknown_gate_status():
         "metadata": {},
     }
     gate = Luxian0609GateDecision(
-        rule_id="LX0609-012",
+        rule_id="LX0609-06-01-05",
         status="unknown",
         reason="未识别到可安全门控的触发族，进入常规执行",
     )
@@ -5156,13 +5208,13 @@ def test_luxian_evidence_formatter_should_hide_internal_unknown_gate_status():
 
 def test_luxian_evidence_formatter_should_not_emit_internal_gate_reason_only():
     rule = _wrapper(
-        "LX0609-003",
+        "LX0609-04-02-01",
         name="手术记录：手术后24小时内是否完成",
         mapped_rule_ids=["SC-061"],
         trigger_condition="手术后24小时内应完成手术记录。",
     )
     result = {
-        "rule_id": "LX0609-003",
+        "rule_id": "LX0609-04-02-01",
         "status": "data_gap",
         "is_compliant": False,
         "findings": "已发现手术事件，但缺少手术时间。",
@@ -5171,7 +5223,7 @@ def test_luxian_evidence_formatter_should_not_emit_internal_gate_reason_only():
         "metadata": {},
     }
     gate = Luxian0609GateDecision(
-        rule_id="LX0609-003",
+        rule_id="LX0609-04-02-01",
         status=TRIGGER_DATA_GAP,
         reason="已发现手术触发事实，但缺少手术时间",
         data_gap_fields=("手术时间",),
@@ -5190,19 +5242,19 @@ def test_luxian_evidence_formatter_should_not_emit_internal_gate_reason_only():
 
 def test_luxian_result_schema_should_not_expose_internal_evidence_template_as_fallback_quote():
     rule = _wrapper(
-        "LX0609-018",
+        "LX0609-01-01-02",
         name="主诉能导出第一诊断",
         mapped_rule_ids=["SC-008", "LX-001"],
         trigger_condition="主诉应能导出第一诊断。",
     )
     result = {
-        "rule_id": "LX0609-018",
+        "rule_id": "LX0609-01-01-02",
         "status": "non_compliant",
         "is_compliant": False,
         "findings": "主诉与第一诊断逻辑链条不完整。",
         "evidence": (
             "证据模板：通用质控\n"
-            "质控点：LX0609-018 主诉能导出第一诊断\n"
+            "质控点：LX0609-01-01-02 主诉能导出第一诊断\n"
             "映射执行规则：SC-008、LX-001\n"
             "应包含证据要素：触发事实、来源文书、判定依据\n"
             "执行证据：【入院记录】纳差3天，腹泻1天"
@@ -5223,7 +5275,7 @@ def test_luxian_result_schema_should_not_expose_internal_evidence_template_as_fa
 def test_aggregator_should_strip_sensitive_raw_fields():
     rules = [
         _wrapper(
-            "LX0609-001",
+            "LX0609-01-01-01",
             name="入院记录24小时内完成",
             mapped_rule_ids=["SC-002"],
             trigger_condition="入院记录是否24小时内完成。",
@@ -5264,7 +5316,7 @@ def test_aggregator_should_strip_sensitive_raw_fields():
 def test_aggregator_should_strip_nested_sensitive_fields():
     rules = [
         _wrapper(
-            "LX0609-001",
+            "LX0609-01-01-01",
             name="入院记录24小时内完成",
             mapped_rule_ids=["SC-002"],
             trigger_condition="入院记录是否24小时内完成。",
@@ -5311,7 +5363,7 @@ def test_aggregator_should_strip_nested_sensitive_fields():
 def test_aggregator_should_add_schema_fields_for_non_compliant_result():
     rules = [
         _wrapper(
-            "LX0609-017",
+            "LX0609-12-01-02",
             name="不合理复制病历：2次以上病程记录完全相同",
             mapped_rule_ids=["CL-275"],
             trigger_condition="当存在多篇日常病程记录时检查相似度。",
@@ -5340,7 +5392,7 @@ def test_aggregator_should_add_schema_fields_for_non_compliant_result():
     )
 
     row = aggregated[0]
-    assert row["qc_point_id"] == "LX0609-017"
+    assert row["qc_point_id"] == "LX0609-12-01-02"
     assert row["rule_set_key"] == "luxian_0609_qc_v1"
     assert row["rule_set_version"] == "2026-06-09"
     assert row["result_status"] == "non_compliant"
@@ -5365,7 +5417,7 @@ def test_aggregator_should_add_schema_fields_for_non_compliant_result():
 def test_aggregator_should_add_schema_fields_for_data_gap_result():
     rules = [
         _wrapper(
-            "LX0609-008",
+            "LX0609-02-01-04",
             name="病重患者2天内无查房病程记录",
             mapped_rule_ids=["SC-051"],
             trigger_condition="当存在病重医嘱时检查2天内查房病程记录。",
@@ -5374,7 +5426,7 @@ def test_aggregator_should_add_schema_fields_for_data_gap_result():
         )
     ]
     gate = Luxian0609GateDecision(
-        rule_id="LX0609-008",
+        rule_id="LX0609-02-01-04",
         status=TRIGGER_DATA_GAP,
         reason="已发现病重触发事实，但缺少医嘱起止时间",
         data_gap_fields=("病重医嘱起止时间",),
@@ -5384,7 +5436,7 @@ def test_aggregator_should_add_schema_fields_for_data_gap_result():
     aggregated = aggregate_luxian_0609_results(
         wrapper_rules=rules,
         execution_results=[],
-        gate_decisions={"LX0609-008": gate},
+        gate_decisions={"LX0609-02-01-04": gate},
     )
 
     row = aggregated[0]
@@ -5401,7 +5453,7 @@ def test_aggregator_should_add_schema_fields_for_data_gap_result():
 def test_aggregator_should_add_schema_fields_for_not_applicable_result():
     rules = [
         _wrapper(
-            "LX0609-049",
+            "LX0609-07-04-02",
             name="输血医嘱与收费不一致",
             mapped_rule_ids=["SC-146"],
             trigger_condition="当存在输血记录时检查医嘱与费用一致性。",
@@ -5410,7 +5462,7 @@ def test_aggregator_should_add_schema_fields_for_not_applicable_result():
         )
     ]
     gate = Luxian0609GateDecision(
-        rule_id="LX0609-049",
+        rule_id="LX0609-07-04-02",
         status=TRIGGER_ABSENT,
         reason="病历文本和证据中未发现transfusion相关触发事实",
     )
@@ -5418,7 +5470,7 @@ def test_aggregator_should_add_schema_fields_for_not_applicable_result():
     aggregated = aggregate_luxian_0609_results(
         wrapper_rules=rules,
         execution_results=[],
-        gate_decisions={"LX0609-049": gate},
+        gate_decisions={"LX0609-07-04-02": gate},
     )
 
     row = aggregated[0]
@@ -5433,7 +5485,7 @@ def test_aggregator_should_add_schema_fields_for_not_applicable_result():
 def test_aggregator_should_prioritize_data_gap_over_compliant():
     rules = [
         _wrapper(
-            "LX0609-043",
+            "LX0609-07-01-01",
             name="输血前常规检查不完整",
             mapped_rule_ids=["SC-133", "LXE-52"],
             primary="SC-133",
@@ -5476,7 +5528,7 @@ def test_aggregator_should_prioritize_data_gap_over_compliant():
 def test_aggregator_should_prioritize_data_gap_over_uncertain():
     rules = [
         _wrapper(
-            "LX0609-043",
+            "LX0609-07-01-01",
             name="输血前常规检查不完整",
             mapped_rule_ids=["SC-133", "LXE-52"],
             primary="SC-133",
@@ -5566,7 +5618,7 @@ def test_batch_record_status_counts_should_separate_not_applicable_from_complian
 def test_aggregator_should_prioritize_direct_customer_programmatic_result():
     rules = [
         _wrapper(
-            "LX0609-002",
+            "LX0609-01-02-01",
             name="首次病程8小时内完成",
             mapped_rule_ids=["CL-081", "SC-021"],
             primary="CL-081",
@@ -5583,7 +5635,7 @@ def test_aggregator_should_prioritize_direct_customer_programmatic_result():
             "metadata": {},
         },
         {
-            "rule_id": "LX0609-002",
+            "rule_id": "LX0609-01-02-01",
             "status": "non_compliant",
             "is_compliant": False,
             "findings": "首次病程记录未在入院后8小时内完成。",
@@ -5603,32 +5655,32 @@ def test_aggregator_should_prioritize_direct_customer_programmatic_result():
 
     assert aggregated[0]["status"] == "non_compliant"
     assert aggregated[0]["metadata"]["aggregation_source"] == "customer_programmatic"
-    assert aggregated[0]["metadata"]["selected_execution_rule_id"] == "LX0609-002"
+    assert aggregated[0]["metadata"]["selected_execution_rule_id"] == "LX0609-01-02-01"
     assert "10.5小时" in aggregated[0]["evidence"]
 
 
 def test_luxian_programmatic_rules_should_evaluate_core_timeline_rules():
     rules = [
         _wrapper(
-            "LX0609-001",
+            "LX0609-01-01-01",
             name="入院记录24小时内完成",
             mapped_rule_ids=["SC-002"],
             trigger_condition="入院记录是否24小时内完成。",
         ),
         _wrapper(
-            "LX0609-002",
+            "LX0609-01-02-01",
             name="首次病程8小时内完成",
             mapped_rule_ids=["CL-081", "SC-021"],
             trigger_condition="首次病程是否8小时内完成。",
         ),
         _wrapper(
-            "LX0609-005",
+            "LX0609-02-01-01",
             name="主治医师首次查房48小时内完成",
             mapped_rule_ids=["SC-048"],
             trigger_condition="主治医师首次查房是否48小时内完成。",
         ),
         _wrapper(
-            "LX0609-006",
+            "LX0609-02-01-02",
             name="高级职称首次查房72小时内完成",
             mapped_rule_ids=["SC-049"],
             trigger_condition="副主任/主任医师首次查房是否72小时内完成。",
@@ -5658,20 +5710,20 @@ def test_luxian_programmatic_rules_should_evaluate_core_timeline_rules():
     )
     by_id = {item["rule_id"]: item for item in results}
 
-    assert by_id["LX0609-001"]["status"] == "non_compliant"
-    assert "26.5小时" in by_id["LX0609-001"]["evidence"]
-    assert by_id["LX0609-002"]["status"] == "non_compliant"
-    assert "10.5小时" in by_id["LX0609-002"]["evidence"]
-    assert by_id["LX0609-005"]["status"] == "non_compliant"
-    assert "主治医师首次查房：缺失" in by_id["LX0609-005"]["evidence"]
-    assert by_id["LX0609-006"]["status"] == "non_compliant"
-    assert "77.5小时" in by_id["LX0609-006"]["evidence"]
+    assert by_id["LX0609-01-01-01"]["status"] == "non_compliant"
+    assert "26.5小时" in by_id["LX0609-01-01-01"]["evidence"]
+    assert by_id["LX0609-01-02-01"]["status"] == "non_compliant"
+    assert "10.5小时" in by_id["LX0609-01-02-01"]["evidence"]
+    assert by_id["LX0609-02-01-01"]["status"] == "non_compliant"
+    assert "主治医师首次查房：缺失" in by_id["LX0609-02-01-01"]["evidence"]
+    assert by_id["LX0609-02-01-02"]["status"] == "non_compliant"
+    assert "77.5小时" in by_id["LX0609-02-01-02"]["evidence"]
 
 
 def test_luxian_programmatic_rules_should_accept_deputy_acting_attending_round():
     rules = [
         _wrapper(
-            "LX0609-005",
+            "LX0609-02-01-01",
             name="主治医师首次查房48小时内完成",
             mapped_rule_ids=["SC-048"],
             trigger_condition="主治医师首次查房是否48小时内完成。",
@@ -5700,7 +5752,7 @@ def test_luxian_programmatic_rules_should_accept_deputy_acting_attending_round()
         evidence_payload=evidence_payload,
     )
 
-    assert results[0]["rule_id"] == "LX0609-005"
+    assert results[0]["rule_id"] == "LX0609-02-01-01"
     assert results[0]["status"] == "compliant"
     assert "副主任医师代主治医师查房记录" in results[0]["evidence"]
 
@@ -5708,7 +5760,7 @@ def test_luxian_programmatic_rules_should_accept_deputy_acting_attending_round()
 def test_luxian_programmatic_rules_should_detect_stable_round_gap_over_three_days():
     rules = [
         _wrapper(
-            "LX0609-007",
+            "LX0609-02-01-03",
             name="病情稳定患者3天内无查房病程记录",
             mapped_rule_ids=["SC-051", "CL-231"],
             trigger_condition="未下病危、病重医嘱的病情稳定患者3天内应有查房病程记录。",
@@ -5734,7 +5786,7 @@ def test_luxian_programmatic_rules_should_detect_stable_round_gap_over_three_day
         evidence_payload=evidence_payload,
     )
 
-    assert results[0]["rule_id"] == "LX0609-007"
+    assert results[0]["rule_id"] == "LX0609-02-01-03"
     assert results[0]["status"] == "non_compliant"
     assert "间隔：4.9天" in results[0]["evidence"]
     assert "未见病危/病重医嘱" in results[0]["evidence"]
@@ -5747,7 +5799,7 @@ def test_luxian_programmatic_rules_should_detect_stable_round_gap_over_three_day
 def test_luxian_programmatic_rules_should_not_apply_stable_round_when_critical_order_exists():
     rules = [
         _wrapper(
-            "LX0609-007",
+            "LX0609-02-01-03",
             name="病情稳定患者3天内无查房病程记录",
             mapped_rule_ids=["SC-051", "CL-231"],
             trigger_condition="未下病危、病重医嘱的病情稳定患者3天内应有查房病程记录。",
@@ -5778,7 +5830,7 @@ def test_luxian_programmatic_rules_should_not_apply_stable_round_when_critical_o
 def test_programmatic_timeline_schema_should_include_threshold_actual_and_delta():
     rules = [
         _wrapper(
-            "LX0609-002",
+            "LX0609-01-02-01",
             name="首次病程8小时内完成",
             mapped_rule_ids=["CL-081", "SC-021"],
             trigger_condition="首次病程是否8小时内完成。",
@@ -5820,7 +5872,7 @@ def test_programmatic_timeline_schema_should_include_threshold_actual_and_delta(
 def test_cross_document_schema_should_keep_multiple_source_documents_and_quotes():
     rules = [
         _wrapper(
-            "LX0609-017",
+            "LX0609-12-01-02",
             name="不合理复制病历：2次以上病程记录完全相同",
             mapped_rule_ids=["CL-275"],
             trigger_condition="当存在多篇日常病程记录时检查相似度。",
@@ -5886,11 +5938,11 @@ def test_document_result_should_use_display_rule_count_and_not_count_data_gap_co
     service = SichuanQCService.__new__(SichuanQCService)
     service.client = type("Client", (), {"model": "unit-test-model"})()
     orchestrated = {
-        "display_rule_ids": ["LX0609-001", "LX0609-002", "LX0609-003"],
+        "display_rule_ids": ["LX0609-01-01-01", "LX0609-01-02-01", "LX0609-04-02-01"],
         "display_rule_count": 3,
         "results": [
             {
-                "rule_id": "LX0609-001",
+                "rule_id": "LX0609-01-01-01",
                 "rule_name": "入院记录24小时内完成",
                 "status": "compliant",
                 "is_compliant": True,
@@ -5916,14 +5968,14 @@ def test_document_result_should_use_display_rule_count_and_not_count_data_gap_co
                 "metadata": {},
             },
             {
-                "rule_id": "LX0609-002",
+                "rule_id": "LX0609-01-02-01",
                 "rule_name": "首次病程8小时内完成",
                 "status": "not_applicable",
                 "is_compliant": True,
                 "metadata": {},
             },
             {
-                "rule_id": "LX0609-003",
+                "rule_id": "LX0609-04-02-01",
                 "rule_name": "手术记录24小时内完成",
                 "status": "data_gap",
                 "is_compliant": False,
@@ -5955,7 +6007,7 @@ def test_document_result_should_use_display_rule_count_and_not_count_data_gap_co
     )
 
     assert result["total_rules"] == 3
-    assert result["applicable_rules"] == ["LX0609-001", "LX0609-002", "LX0609-003"]
+    assert result["applicable_rules"] == ["LX0609-01-01-01", "LX0609-01-02-01", "LX0609-04-02-01"]
     assert result["evaluation_summary"]["compliant_rules"] == 1
     assert result["evaluation_summary"]["not_applicable"] == 1
     assert result["evaluation_summary"]["data_gap_count"] == 1
@@ -5984,19 +6036,19 @@ def test_document_result_should_use_display_rule_count_and_not_count_data_gap_co
 def test_trigger_gate_should_ignore_clear_negated_trigger_phrases():
     rules = [
         _wrapper(
-            "LX0609-041",
+            "LX0609-11-03-01",
             name="输血知情同意记录",
             mapped_rule_ids=["SC-133"],
             trigger_condition="当存在输血事件，需要检查输血知情同意记录。",
         ),
         _wrapper(
-            "LX0609-003",
+            "LX0609-04-02-01",
             name="手术记录24小时内完成",
             mapped_rule_ids=["LX-026"],
             trigger_condition="当存在手术记录，需要读取手术时间、记录时间。",
         ),
         _wrapper(
-            "LX0609-009",
+            "LX0609-02-01-05",
             name="病危每日记录",
             mapped_rule_ids=["SC-051"],
             trigger_condition="当存在病危医嘱时，检查每日病程记录。",
@@ -6009,15 +6061,15 @@ def test_trigger_gate_should_ignore_clear_negated_trigger_phrases():
         evidence_payload={},
     )
 
-    assert decisions["LX0609-041"].status == TRIGGER_ABSENT
-    assert decisions["LX0609-003"].status == TRIGGER_ABSENT
-    assert decisions["LX0609-009"].status == TRIGGER_ABSENT
+    assert decisions["LX0609-11-03-01"].status == TRIGGER_ABSENT
+    assert decisions["LX0609-04-02-01"].status == TRIGGER_ABSENT
+    assert decisions["LX0609-02-01-05"].status == TRIGGER_ABSENT
 
 
 def test_critical_round_gate_should_require_explicit_critical_order():
     rules = [
         _wrapper(
-            "LX0609-008",
+            "LX0609-02-01-04",
             name="病重患者2天内无查房病程记录",
             mapped_rule_ids=["SC-051", "CL-231"],
             trigger_condition="病重患者应至少每2天记录查房病程。",
@@ -6025,7 +6077,7 @@ def test_critical_round_gate_should_require_explicit_critical_order():
             dependency_type="跨表联查",
         ),
         _wrapper(
-            "LX0609-009",
+            "LX0609-02-01-05",
             name="病危患者每日查房病程",
             mapped_rule_ids=["SC-051", "CL-231"],
             trigger_condition="病危患者应每日记录查房病程。",
@@ -6043,14 +6095,14 @@ def test_critical_round_gate_should_require_explicit_critical_order():
         },
     )
 
-    assert decisions["LX0609-008"].status == TRIGGER_ABSENT
-    assert decisions["LX0609-009"].status == TRIGGER_ABSENT
+    assert decisions["LX0609-02-01-04"].status == TRIGGER_ABSENT
+    assert decisions["LX0609-02-01-05"].status == TRIGGER_ABSENT
 
 
 def test_critical_round_gate_should_continue_when_order_has_timing_context():
     rules = [
         _wrapper(
-            "LX0609-009",
+            "LX0609-02-01-05",
             name="病危患者每日查房病程",
             mapped_rule_ids=["SC-051", "CL-231"],
             trigger_condition="病危患者应每日记录查房病程。",
@@ -6068,14 +6120,14 @@ def test_critical_round_gate_should_continue_when_order_has_timing_context():
         evidence_payload={},
     )
 
-    assert decisions["LX0609-009"].status == TRIGGER_PRESENT
-    assert decisions["LX0609-009"].matched_keywords == ("病危医嘱",)
+    assert decisions["LX0609-02-01-05"].status == TRIGGER_PRESENT
+    assert decisions["LX0609-02-01-05"].matched_keywords == ("病危医嘱",)
 
 
 def test_transfusion_gate_should_not_treat_generic_infusion_as_transfusion():
     rules = [
         _wrapper(
-            "LX0609-047",
+            "LX0609-07-03-01",
             name="输血后评价",
             mapped_rule_ids=["CL-255", "SC-074"],
             trigger_condition="存在输血事件时检查输血后评价。",
@@ -6089,13 +6141,13 @@ def test_transfusion_gate_should_not_treat_generic_infusion_as_transfusion():
         evidence_payload={},
     )
 
-    assert decisions["LX0609-047"].status == TRIGGER_ABSENT
+    assert decisions["LX0609-07-03-01"].status == TRIGGER_ABSENT
 
 
 def test_transfusion_gate_should_ignore_rule_metadata_in_evidence_payload():
     rules = [
         _wrapper(
-            "LX0609-045",
+            "LX0609-07-02-01",
             name="输血记录：无输血病程记录",
             mapped_rule_ids=["SC-074"],
             trigger_condition="存在输血事件时检查输血病程记录。",
@@ -6118,13 +6170,13 @@ def test_transfusion_gate_should_ignore_rule_metadata_in_evidence_payload():
         },
     )
 
-    assert decisions["LX0609-045"].status == TRIGGER_ABSENT
+    assert decisions["LX0609-07-02-01"].status == TRIGGER_ABSENT
 
 
 def test_transfusion_gate_should_ignore_missing_document_requirements():
     rules = [
         _wrapper(
-            "LX0609-041",
+            "LX0609-11-03-01",
             name="输血知情同意书：无输血知情同意书",
             mapped_rule_ids=["SC-133"],
             trigger_condition="存在输血事件时检查输血知情同意记录。",
@@ -6142,13 +6194,13 @@ def test_transfusion_gate_should_ignore_missing_document_requirements():
         },
     )
 
-    assert decisions["LX0609-041"].status == TRIGGER_ABSENT
+    assert decisions["LX0609-11-03-01"].status == TRIGGER_ABSENT
 
 
 def test_transfusion_gate_should_ignore_internal_gap_summary_keywords():
     rules = [
         _wrapper(
-            "LX0609-047",
+            "LX0609-07-03-01",
             name="输血后评价：无输血后评价",
             mapped_rule_ids=["CL-255", "SC-074"],
             trigger_condition="存在输血事件时检查输血后评价。",
@@ -6164,13 +6216,13 @@ def test_transfusion_gate_should_ignore_internal_gap_summary_keywords():
         },
     )
 
-    assert decisions["LX0609-047"].status == TRIGGER_ABSENT
+    assert decisions["LX0609-07-03-01"].status == TRIGGER_ABSENT
 
 
 def test_transfusion_gate_should_ignore_result_gap_text_without_patient_fact():
     rules = [
         _wrapper(
-            "LX0609-041",
+            "LX0609-11-03-01",
             name="输血知情同意书：无输血知情同意书",
             mapped_rule_ids=["SC-133"],
             trigger_condition="存在输血事件时检查输血知情同意记录。",
@@ -6188,13 +6240,13 @@ def test_transfusion_gate_should_ignore_result_gap_text_without_patient_fact():
         evidence_payload={},
     )
 
-    assert decisions["LX0609-041"].status == TRIGGER_ABSENT
+    assert decisions["LX0609-11-03-01"].status == TRIGGER_ABSENT
 
 
 def test_transfusion_gate_should_require_blood_product_or_transfusion_document():
     rules = [
         _wrapper(
-            "LX0609-041",
+            "LX0609-11-03-01",
             name="输血知情同意书",
             mapped_rule_ids=["SC-133"],
             trigger_condition="存在输血事件时检查输血知情同意记录。",
@@ -6208,14 +6260,14 @@ def test_transfusion_gate_should_require_blood_product_or_transfusion_document()
         evidence_payload={},
     )
 
-    assert decisions["LX0609-041"].status == TRIGGER_PRESENT
-    assert decisions["LX0609-041"].matched_keywords
+    assert decisions["LX0609-11-03-01"].status == TRIGGER_PRESENT
+    assert decisions["LX0609-11-03-01"].matched_keywords
 
 
 def test_transfusion_gate_should_accept_real_transfusion_application_context():
     rules = [
         _wrapper(
-            "LX0609-044",
+            "LX0609-07-01-02",
             name="输血前评估",
             mapped_rule_ids=["SC-074"],
             trigger_condition="存在输血事件时检查输血前评估。",
@@ -6229,14 +6281,14 @@ def test_transfusion_gate_should_accept_real_transfusion_application_context():
         evidence_payload={},
     )
 
-    assert decisions["LX0609-044"].status == TRIGGER_DATA_GAP
-    assert "输血申请" in decisions["LX0609-044"].matched_keywords
+    assert decisions["LX0609-07-01-02"].status == TRIGGER_DATA_GAP
+    assert "输血申请" in decisions["LX0609-07-01-02"].matched_keywords
 
 
 def test_transfusion_gate_should_ignore_blood_product_words_without_strong_trigger():
     rules = [
         _wrapper(
-            "LX0609-047",
+            "LX0609-07-03-01",
             name="输血后评价",
             mapped_rule_ids=["SC-074"],
             trigger_condition="存在输血事件时检查输血后评价。",
@@ -6253,20 +6305,20 @@ def test_transfusion_gate_should_ignore_blood_product_words_without_strong_trigg
         evidence_payload={},
     )
 
-    assert decisions["LX0609-047"].status == TRIGGER_ABSENT
+    assert decisions["LX0609-07-03-01"].status == TRIGGER_ABSENT
 
 
 def test_trigger_gate_should_use_lx0609_rule_family_before_keyword_guessing():
     rules = [
         _wrapper(
-            "LX0609-012",
+            "LX0609-06-01-05",
             name="CT/MRI 阳性结果未分析",
             mapped_rule_ids=["LXE-23"],
             trigger_condition="CT/MRI影像报告结果出具后24小时内阳性结果未进行分析。",
             data_dependencies=["报告时间"],
         ),
         _wrapper(
-            "LX0609-013",
+            "LX0609-06-02-03",
             name="病理检查结果在手术记录、病程中未记录",
             mapped_rule_ids=["SC-037"],
             trigger_condition="病理检查结果应在手术记录、病程中记录。",
@@ -6280,23 +6332,23 @@ def test_trigger_gate_should_use_lx0609_rule_family_before_keyword_guessing():
         evidence_payload={},
     )
 
-    assert decisions["LX0609-012"].status == TRIGGER_DATA_GAP
-    assert decisions["LX0609-012"].matched_keywords == ("MRI",)
-    assert decisions["LX0609-013"].status == TRIGGER_DATA_GAP
-    assert "病理报告" in decisions["LX0609-013"].matched_keywords
+    assert decisions["LX0609-06-01-05"].status == TRIGGER_DATA_GAP
+    assert decisions["LX0609-06-01-05"].matched_keywords == ("MRI",)
+    assert decisions["LX0609-06-02-03"].status == TRIGGER_DATA_GAP
+    assert "病理报告" in decisions["LX0609-06-02-03"].matched_keywords
 
 
 def test_investigation_gate_should_ignore_course_keywords_without_report_entity():
     rules = [
         _wrapper(
-            "LX0609-012",
+            "LX0609-06-01-05",
             name="CT/MRI 阳性结果未分析",
             mapped_rule_ids=["LXE-23"],
             trigger_condition="CT/MRI影像报告结果出具后24小时内阳性结果未进行分析。",
             data_dependencies=["报告时间"],
         ),
         _wrapper(
-            "LX0609-014",
+            "LX0609-06-03-03",
             name="细菌培养结果在病程中未记录",
             mapped_rule_ids=["SC-036"],
             trigger_condition="细菌培养结果出具后应在病程中记录分析。",
@@ -6310,21 +6362,21 @@ def test_investigation_gate_should_ignore_course_keywords_without_report_entity(
         evidence_payload={},
     )
 
-    assert decisions["LX0609-012"].status == TRIGGER_ABSENT
-    assert decisions["LX0609-014"].status == TRIGGER_ABSENT
+    assert decisions["LX0609-06-01-05"].status == TRIGGER_ABSENT
+    assert decisions["LX0609-06-03-03"].status == TRIGGER_ABSENT
 
 
 def test_investigation_gate_should_accept_report_entity_or_order_with_report_time():
     rules = [
         _wrapper(
-            "LX0609-012",
+            "LX0609-06-01-05",
             name="CT/MRI 阳性结果未分析",
             mapped_rule_ids=["LXE-23"],
             trigger_condition="CT/MRI影像报告结果出具后24小时内阳性结果未进行分析。",
             data_dependencies=["报告时间"],
         ),
         _wrapper(
-            "LX0609-014",
+            "LX0609-06-03-03",
             name="细菌培养结果在病程中未记录",
             mapped_rule_ids=["SC-036"],
             trigger_condition="细菌培养结果出具后应在病程中记录分析。",
@@ -6341,14 +6393,14 @@ def test_investigation_gate_should_accept_report_entity_or_order_with_report_tim
         evidence_payload={},
     )
 
-    assert decisions["LX0609-012"].status == TRIGGER_PRESENT
-    assert decisions["LX0609-014"].status == TRIGGER_DATA_GAP
+    assert decisions["LX0609-06-01-05"].status == TRIGGER_PRESENT
+    assert decisions["LX0609-06-03-03"].status == TRIGGER_DATA_GAP
 
 
 def test_trigger_gate_should_not_treat_empty_surgery_template_as_surgery_event():
     rules = [
         _wrapper(
-            "LX0609-003",
+            "LX0609-04-02-01",
             name="手术记录24小时内完成",
             mapped_rule_ids=["LX-026", "SC-096"],
             trigger_condition="手术记录应在术后24小时内完成。",
@@ -6366,13 +6418,13 @@ def test_trigger_gate_should_not_treat_empty_surgery_template_as_surgery_event()
         evidence_payload={},
     )
 
-    assert decisions["LX0609-003"].status == TRIGGER_ABSENT
+    assert decisions["LX0609-04-02-01"].status == TRIGGER_ABSENT
 
 
 def test_lx0609_024_gate_should_not_apply_to_non_tumor_surgery():
     rules = [
         _wrapper(
-            "LX0609-024",
+            "LX0609-04-02-03",
             name="恶性肿瘤手术记录未书写淋巴结清扫情况",
             mapped_rule_ids=["SC-099"],
             trigger_condition="恶性肿瘤手术记录应书写淋巴结清扫情况。",
@@ -6389,7 +6441,7 @@ def test_lx0609_024_gate_should_not_apply_to_non_tumor_surgery():
         evidence_payload={},
     )
 
-    assert decisions["LX0609-024"].status == TRIGGER_ABSENT
+    assert decisions["LX0609-04-02-03"].status == TRIGGER_ABSENT
     aggregated = aggregate_luxian_0609_results(
         wrapper_rules=rules,
         execution_results=[
@@ -6405,7 +6457,7 @@ def test_lx0609_024_gate_should_not_apply_to_non_tumor_surgery():
         gate_decisions=decisions,
     )
 
-    assert aggregated[0]["rule_id"] == "LX0609-024"
+    assert aggregated[0]["rule_id"] == "LX0609-04-02-03"
     assert aggregated[0]["status"] == "not_applicable"
     assert aggregated[0]["metadata"]["trigger_gate_status"] == TRIGGER_ABSENT
 
@@ -6413,7 +6465,7 @@ def test_lx0609_024_gate_should_not_apply_to_non_tumor_surgery():
 def test_lx0609_024_gate_should_apply_to_malignant_tumor_surgery():
     rules = [
         _wrapper(
-            "LX0609-024",
+            "LX0609-04-02-03",
             name="恶性肿瘤手术记录未书写淋巴结清扫情况",
             mapped_rule_ids=["SC-099"],
             trigger_condition="恶性肿瘤手术记录应书写淋巴结清扫情况。",
@@ -6429,14 +6481,14 @@ def test_lx0609_024_gate_should_apply_to_malignant_tumor_surgery():
         evidence_payload={},
     )
 
-    assert decisions["LX0609-024"].status == TRIGGER_PRESENT
-    assert any("胃癌" in keyword or "腺癌" in keyword for keyword in decisions["LX0609-024"].matched_keywords)
+    assert decisions["LX0609-04-02-03"].status == TRIGGER_PRESENT
+    assert any("胃癌" in keyword or "腺癌" in keyword for keyword in decisions["LX0609-04-02-03"].matched_keywords)
 
 
 def test_lx0609_024_gate_should_not_use_history_cancer_for_current_urology_surgery():
     rules = [
         _wrapper(
-            "LX0609-024",
+            "LX0609-04-02-03",
             name="恶性肿瘤手术记录未书写淋巴结清扫情况",
             mapped_rule_ids=["SC-099"],
             trigger_condition="恶性肿瘤手术记录应书写淋巴结清扫情况。",
@@ -6453,7 +6505,7 @@ def test_lx0609_024_gate_should_not_use_history_cancer_for_current_urology_surge
         evidence_payload={},
     )
 
-    assert decisions["LX0609-024"].status == TRIGGER_ABSENT
+    assert decisions["LX0609-04-02-03"].status == TRIGGER_ABSENT
 
 
 class _FakeLLMGateClient:
@@ -6470,7 +6522,7 @@ class _FakeLLMGateClient:
 async def test_lx0609_024_llm_gate_should_not_run_when_deterministic_gate_is_present():
     rules = [
         _wrapper(
-            "LX0609-024",
+            "LX0609-04-02-03",
             name="恶性肿瘤手术记录未书写淋巴结清扫情况",
             mapped_rule_ids=["SC-099"],
             trigger_condition="恶性肿瘤手术记录应书写淋巴结清扫情况。",
@@ -6488,7 +6540,7 @@ async def test_lx0609_024_llm_gate_should_not_run_when_deterministic_gate_is_pre
         llm_client=client,
     )
 
-    assert decisions["LX0609-024"].status == TRIGGER_PRESENT
+    assert decisions["LX0609-04-02-03"].status == TRIGGER_PRESENT
     assert client.prompts == []
 
 
@@ -6496,7 +6548,7 @@ async def test_lx0609_024_llm_gate_should_not_run_when_deterministic_gate_is_pre
 async def test_lx0609_024_llm_gate_should_promote_ambiguous_candidate_to_present():
     rules = [
         _wrapper(
-            "LX0609-024",
+            "LX0609-04-02-03",
             name="恶性肿瘤手术记录未书写淋巴结清扫情况",
             mapped_rule_ids=["SC-099"],
             trigger_condition="恶性肿瘤手术记录应书写淋巴结清扫情况。",
@@ -6524,7 +6576,7 @@ async def test_lx0609_024_llm_gate_should_promote_ambiguous_candidate_to_present
         llm_client=client,
     )
 
-    decision = decisions["LX0609-024"]
+    decision = decisions["LX0609-04-02-03"]
     assert decision.status == TRIGGER_PRESENT
     assert decision.source == "llm_gate"
     assert decision.to_metadata()["llm_gate_confidence"] == 0.86
@@ -6535,7 +6587,7 @@ async def test_lx0609_024_llm_gate_should_promote_ambiguous_candidate_to_present
 async def test_lx0609_024_llm_gate_should_keep_deterministic_result_on_invalid_payload():
     rules = [
         _wrapper(
-            "LX0609-024",
+            "LX0609-04-02-03",
             name="恶性肿瘤手术记录未书写淋巴结清扫情况",
             mapped_rule_ids=["SC-099"],
             trigger_condition="恶性肿瘤手术记录应书写淋巴结清扫情况。",
@@ -6553,14 +6605,14 @@ async def test_lx0609_024_llm_gate_should_keep_deterministic_result_on_invalid_p
         llm_client=client,
     )
 
-    assert decisions["LX0609-024"].status == TRIGGER_ABSENT
-    assert decisions["LX0609-024"].source == "deterministic"
+    assert decisions["LX0609-04-02-03"].status == TRIGGER_ABSENT
+    assert decisions["LX0609-04-02-03"].source == "deterministic"
 
 
 def test_trigger_gate_should_not_treat_normal_lymph_node_exam_as_tumor_pathology_event():
     rules = [
         _wrapper(
-            "LX0609-013",
+            "LX0609-06-02-03",
             name="病理检查结果在手术记录、病程中未记录",
             mapped_rule_ids=["SC-037"],
             trigger_condition="病理检查结果应在手术记录、病程中记录。",
@@ -6574,13 +6626,13 @@ def test_trigger_gate_should_not_treat_normal_lymph_node_exam_as_tumor_pathology
         evidence_payload={},
     )
 
-    assert decisions["LX0609-013"].status == TRIGGER_ABSENT
+    assert decisions["LX0609-06-02-03"].status == TRIGGER_ABSENT
 
 
 def test_trigger_gate_should_require_pathology_specimen_context_for_lx0609_019():
     rules = [
         _wrapper(
-            "LX0609-019",
+            "LX0609-06-02-02",
             name="病理检查：取材情况未在病程记录或手术记录中进行记录",
             mapped_rule_ids=["SC-099"],
             trigger_condition="病理取材情况应在病程记录或手术记录中记录。",
@@ -6598,10 +6650,10 @@ def test_trigger_gate_should_require_pathology_specimen_context_for_lx0609_019()
         evidence_payload={},
     )
 
-    assert absent["LX0609-019"].status == TRIGGER_ABSENT
-    assert "病理检查" in absent["LX0609-019"].reason
-    assert present["LX0609-019"].status == TRIGGER_PRESENT
-    assert present["LX0609-019"].matched_keywords
+    assert absent["LX0609-06-02-02"].status == TRIGGER_ABSENT
+    assert "病理检查" in absent["LX0609-06-02-02"].reason
+    assert present["LX0609-06-02-02"].status == TRIGGER_PRESENT
+    assert present["LX0609-06-02-02"].matched_keywords
 
 
 
@@ -6647,14 +6699,14 @@ async def _assert_pending_rule_uses_public_not_executed(rule_id: str) -> None:
 
 @pytest.mark.asyncio
 async def test_lx0609_028_uncertain_should_be_not_applicable_without_class_i_ii_incision():
-    await _assert_pending_rule_uses_public_not_executed("LX0609-028")
+    await _assert_pending_rule_uses_public_not_executed("LX0609-05-01-01")
 
 
 
 def test_trigger_gate_should_mark_copy_rule_data_gap_when_first_course_is_empty():
     rules = [
         _wrapper(
-            "LX0609-016",
+            "LX0609-12-01-01",
             name="不合理复制病历",
             mapped_rule_ids=["CL-273"],
             trigger_condition="首次病程记录病例特点与入院记录、现病史完全相同。",
@@ -6678,14 +6730,14 @@ def test_trigger_gate_should_mark_copy_rule_data_gap_when_first_course_is_empty(
         },
     )
 
-    assert decisions["LX0609-016"].status == TRIGGER_DATA_GAP
-    assert decisions["LX0609-016"].data_gap_fields == ("首次病程记录正文",)
+    assert decisions["LX0609-12-01-01"].status == TRIGGER_DATA_GAP
+    assert decisions["LX0609-12-01-01"].data_gap_fields == ("首次病程记录正文",)
 
 
 def test_trigger_gate_should_mark_copy_rule_data_gap_without_first_course_text():
     rules = [
         _wrapper(
-            "LX0609-016",
+            "LX0609-12-01-01",
             name="不合理复制病历",
             mapped_rule_ids=["CL-273"],
             trigger_condition="首次病程记录病例特点与入院记录、现病史完全相同。",
@@ -6698,13 +6750,13 @@ def test_trigger_gate_should_mark_copy_rule_data_gap_without_first_course_text()
         evidence_payload={},
     )
 
-    assert decisions["LX0609-016"].status == TRIGGER_DATA_GAP
+    assert decisions["LX0609-12-01-01"].status == TRIGGER_DATA_GAP
 
 
 def test_trigger_gate_should_accept_first_course_text_without_regex_error():
     rules = [
         _wrapper(
-            "LX0609-016",
+            "LX0609-12-01-01",
             name="不合理复制病历",
             mapped_rule_ids=["CL-273"],
             trigger_condition="首次病程记录病例特点与入院记录、现病史完全相同。",
@@ -6721,20 +6773,20 @@ def test_trigger_gate_should_accept_first_course_text_without_regex_error():
         evidence_payload={},
     )
 
-    assert decisions.get("LX0609-016") is None or decisions["LX0609-016"].status != TRIGGER_DATA_GAP
+    assert decisions.get("LX0609-12-01-01") is None or decisions["LX0609-12-01-01"].status != TRIGGER_DATA_GAP
 
 
 def test_trigger_gate_should_keep_real_surgery_and_pathology_events_applicable():
     rules = [
         _wrapper(
-            "LX0609-003",
+            "LX0609-04-02-01",
             name="手术记录24小时内完成",
             mapped_rule_ids=["LX-026", "SC-096"],
             trigger_condition="手术记录应在术后24小时内完成。",
             data_dependencies=["手术时间", "手术记录"],
         ),
         _wrapper(
-            "LX0609-013",
+            "LX0609-06-02-03",
             name="病理检查结果在手术记录、病程中未记录",
             mapped_rule_ids=["SC-037"],
             trigger_condition="病理检查结果应在手术记录、病程中记录。",
@@ -6748,14 +6800,14 @@ def test_trigger_gate_should_keep_real_surgery_and_pathology_events_applicable()
         evidence_payload={},
     )
 
-    assert decisions["LX0609-003"].status in {TRIGGER_PRESENT, TRIGGER_DATA_GAP}
-    assert decisions["LX0609-013"].status == TRIGGER_DATA_GAP
+    assert decisions["LX0609-04-02-01"].status in {TRIGGER_PRESENT, TRIGGER_DATA_GAP}
+    assert decisions["LX0609-06-02-03"].status == TRIGGER_DATA_GAP
 
 
 def test_synthetic_text_overrides_should_not_run_for_real_visit_payloads():
     rules = [
         _wrapper(
-            "LX0609-012",
+            "LX0609-06-01-05",
             name="CT/MRI阳性结果24小时内分析",
             mapped_rule_ids=["SC-036"],
             trigger_condition="CT/MRI影像报告结果出具后24小时内阳性结果未进行分析。",
@@ -6774,14 +6826,14 @@ def test_synthetic_text_overrides_should_not_run_for_real_visit_payloads():
     payload["programmatic_timeline"]["visit_id"] = "LX0609_SYN_005"
     results = evaluate_luxian_0609_programmatic_rules(wrapper_rules=rules, evidence_payload=payload)
 
-    assert results[0]["rule_id"] == "LX0609-012"
+    assert results[0]["rule_id"] == "LX0609-06-01-05"
     assert results[0]["status"] == "non_compliant"
 
 
 def test_customer_created_test_case_text_overrides_should_run_without_affecting_real_visits():
     rules = [
         _wrapper(
-            "LX0609-021",
+            "LX0609-03-01-02",
             name="会诊申请目的不明确",
             mapped_rule_ids=["SC-068"],
             trigger_condition="会诊申请单会诊目的不明确。",
@@ -6804,7 +6856,7 @@ def test_customer_created_test_case_text_overrides_should_run_without_affecting_
     payload["programmatic_timeline"]["visit_id"] = "CUSTOMER_TEST_20260622120059B36C80"
     results = evaluate_luxian_0609_programmatic_rules(wrapper_rules=rules, evidence_payload=payload)
 
-    assert results[0]["rule_id"] == "LX0609-021"
+    assert results[0]["rule_id"] == "LX0609-03-01-02"
     assert results[0]["status"] == "non_compliant"
     assert "会诊目的" in results[0]["findings"]
 
@@ -6812,19 +6864,19 @@ def test_customer_created_test_case_text_overrides_should_run_without_affecting_
 def test_customer_created_consultation_template_should_hit_selected_lx0609_points():
     rules = [
         _wrapper(
-            "LX0609-020",
+            "LX0609-03-01-01",
             name="有会诊记录单无请会诊执行记录",
             mapped_rule_ids=["LX-017", "CL-250"],
             trigger_condition="会诊后病程未记录执行情况。",
         ),
         _wrapper(
-            "LX0609-021",
+            "LX0609-03-01-02",
             name="会诊申请目的不明确",
             mapped_rule_ids=["SC-068"],
             trigger_condition="会诊申请单会诊目的不明确。",
         ),
         _wrapper(
-            "LX0609-022",
+            "LX0609-03-01-03",
             name="会诊意见不明确",
             mapped_rule_ids=["SC-069"],
             trigger_condition="会诊记录单会诊意见不明确。",
@@ -6858,25 +6910,25 @@ def test_customer_created_consultation_template_should_hit_selected_lx0609_point
     results = evaluate_luxian_0609_programmatic_rules(wrapper_rules=rules, evidence_payload=payload)
     by_id = {item["rule_id"]: item for item in results}
 
-    assert by_id["LX0609-020"]["status"] == "non_compliant"
-    assert "执行情况" in by_id["LX0609-020"]["findings"]
+    assert by_id["LX0609-03-01-01"]["status"] == "non_compliant"
+    assert "执行情况" in by_id["LX0609-03-01-01"]["findings"]
     evidence_roles = {
         item["evidence_role"]
-        for item in by_id["LX0609-020"]["evidence_items"]
+        for item in by_id["LX0609-03-01-01"]["evidence_items"]
     }
     assert "consultation_request" in evidence_roles
     assert "consultation_opinion" in evidence_roles
     assert "consultation_execution_record" in evidence_roles
-    assert by_id["LX0609-021"]["status"] == "non_compliant"
-    assert "会诊目的" in by_id["LX0609-021"]["findings"]
-    assert by_id["LX0609-022"]["status"] == "non_compliant"
-    assert "会诊意见" in by_id["LX0609-022"]["findings"]
+    assert by_id["LX0609-03-01-02"]["status"] == "non_compliant"
+    assert "会诊目的" in by_id["LX0609-03-01-02"]["findings"]
+    assert by_id["LX0609-03-01-03"]["status"] == "non_compliant"
+    assert "会诊意见" in by_id["LX0609-03-01-03"]["findings"]
 
 
 def test_consultation_customer_result_should_keep_request_opinion_execution_evidence_chain():
     rules = [
         _wrapper(
-            "LX0609-020",
+            "LX0609-03-01-01",
             name="会诊记录：有会诊记录单无请会诊执行记录",
             mapped_rule_ids=["LX-017", "CL-250"],
             trigger_condition="存在会诊记录时，病程应记录会诊意见执行情况。",
@@ -6932,7 +6984,7 @@ def test_consultation_customer_result_should_keep_request_opinion_execution_evid
 def test_customer_created_consultation_should_explain_missing_followup_course_execution():
     rules = [
         _wrapper(
-            "LX0609-020",
+            "LX0609-03-01-01",
             name="会诊记录：有会诊记录单无请会诊执行记录",
             mapped_rule_ids=["LX-017", "CL-250"],
             trigger_condition="存在会诊记录时，病程应记录会诊意见执行情况。",
@@ -6974,37 +7026,37 @@ def test_customer_created_consultation_should_explain_missing_followup_course_ex
 def test_customer_created_demo_templates_should_return_direct_non_compliant_results():
     rules = [
         _wrapper(
-            "LX0609-003",
+            "LX0609-04-02-01",
             name="手术记录24小时内完成",
             mapped_rule_ids=["LX-026", "SC-096"],
             trigger_condition="手术记录应在术后24小时内完成。",
         ),
         _wrapper(
-            "LX0609-009",
+            "LX0609-02-01-05",
             name="病危每日病程记录",
             mapped_rule_ids=["SC-051"],
             trigger_condition="病危患者应每日记录病程。",
         ),
         _wrapper(
-            "LX0609-038",
+            "LX0609-04-04-03",
             name="麻醉记录单完整性",
             mapped_rule_ids=["SC-104"],
             trigger_condition="有麻醉记录时检查关键字段。",
         ),
         _wrapper(
-            "LX0609-041",
+            "LX0609-11-03-01",
             name="输血知情同意书",
             mapped_rule_ids=["SC-133"],
             trigger_condition="存在输血事件时检查输血知情同意记录。",
         ),
         _wrapper(
-            "LX0609-044",
+            "LX0609-07-01-02",
             name="输血前评估",
             mapped_rule_ids=["SC-074", "LX-018"],
             trigger_condition="存在输血事件时检查输血前评估完整性。",
         ),
         _wrapper(
-            "LX0609-049",
+            "LX0609-07-04-02",
             name="输血医嘱与收费一致性",
             mapped_rule_ids=["SC-146"],
             trigger_condition="存在输血事件时检查医嘱与收费一致性。",
@@ -7084,7 +7136,7 @@ def test_customer_created_demo_templates_should_return_direct_non_compliant_resu
     results = evaluate_luxian_0609_programmatic_rules(wrapper_rules=rules, evidence_payload=payload)
     by_id = {item["rule_id"]: item for item in results}
 
-    for rule_id in ["LX0609-003", "LX0609-009", "LX0609-038", "LX0609-041", "LX0609-044", "LX0609-049"]:
+    for rule_id in ["LX0609-04-02-01", "LX0609-02-01-05", "LX0609-04-04-03", "LX0609-11-03-01", "LX0609-07-01-02", "LX0609-07-04-02"]:
         assert by_id[rule_id]["status"] == "non_compliant"
         assert by_id[rule_id]["applicability"]["reason"] == "text_pattern"
 
@@ -7092,19 +7144,19 @@ def test_customer_created_demo_templates_should_return_direct_non_compliant_resu
 def test_customer_created_tumor_chemo_template_should_return_customer_readable_evidence_items():
     rules = [
         _wrapper(
-            "LX0609-013",
+            "LX0609-06-02-03",
             name="病理检查结果未在病程中记录",
             mapped_rule_ids=["SC-037", "SC-099", "SC-114"],
             trigger_condition="病理检查结果应在手术记录、病程中记录。",
         ),
         _wrapper(
-            "LX0609-019",
+            "LX0609-06-02-02",
             name="病理检查取材情况记录",
             mapped_rule_ids=["SC-118"],
             trigger_condition="病理取材情况应在病程记录或手术记录中记录。",
         ),
         _wrapper(
-            "LX0609-026",
+            "LX0609-05-02-01",
             name="化疗记录与医嘱一致性",
             mapped_rule_ids=["SC-161"],
             trigger_condition="恶性肿瘤化学治疗记录应与医嘱一致。",
@@ -7166,19 +7218,19 @@ def test_customer_created_tumor_chemo_template_should_return_customer_readable_e
     results = evaluate_luxian_0609_programmatic_rules(wrapper_rules=rules, evidence_payload=payload)
     by_id = {item["rule_id"]: item for item in results}
 
-    assert by_id["LX0609-013"]["status"] == "non_compliant"
-    assert "病理报告提示胃腺癌" in by_id["LX0609-013"]["findings"]
-    assert any("中分化腺癌" in item["quote"] for item in by_id["LX0609-013"]["evidence_items"])
+    assert by_id["LX0609-06-02-03"]["status"] == "non_compliant"
+    assert "病理报告提示胃腺癌" in by_id["LX0609-06-02-03"]["findings"]
+    assert any("中分化腺癌" in item["quote"] for item in by_id["LX0609-06-02-03"]["evidence_items"])
 
-    assert by_id["LX0609-019"]["status"] == "non_compliant"
-    assert by_id["LX0609-019"]["evidence_items"][0]["field_path"] == "标本处理"
-    assert "未逐项标明近端切缘" in by_id["LX0609-019"]["evidence_items"][0]["quote"]
+    assert by_id["LX0609-06-02-02"]["status"] == "non_compliant"
+    assert by_id["LX0609-06-02-02"]["evidence_items"][0]["field_path"] == "标本处理"
+    assert "未逐项标明近端切缘" in by_id["LX0609-06-02-02"]["evidence_items"][0]["quote"]
 
-    assert by_id["LX0609-026"]["status"] == "non_compliant"
-    quotes = [item["quote"] for item in by_id["LX0609-026"]["evidence_items"]]
+    assert by_id["LX0609-05-02-01"]["status"] == "non_compliant"
+    quotes = [item["quote"] for item in by_id["LX0609-05-02-01"]["evidence_items"]]
     assert any("奥沙利铂 130mg" in quote for quote in quotes)
     assert any("今日准备开始辅助化疗" in quote for quote in quotes)
-    assert "药物、剂量、用法和时间" in by_id["LX0609-026"]["findings"]
+    assert "药物、剂量、用法和时间" in by_id["LX0609-05-02-01"]["findings"]
 
 
 def test_lx0609_017_single_course_uncertain_should_not_be_non_compliant():
@@ -7280,7 +7332,7 @@ def _native_039_outcome(monkeypatch, *, surgery_rows, discussion_rows):
         lambda _snapshot, source_key: "available",
     )
     return surgery_doc._typed_terminal_outcome(
-        rule_id="LX0609-039",
+        rule_id="LX0609-04-01-02",
         snapshot=object(),
         materials=_Typed039Materials(
             {
@@ -7347,7 +7399,7 @@ def test_lx0609_039_should_not_show_missing_discussion_when_discussion_time_exis
 def test_lx0609_025_rejects_legacy_barcode_defect_without_required_facts():
     rules = [
         _wrapper(
-            "LX0609-025",
+            "LX0609-04-02-04",
             name="手术记录中未记录植入物名称、种类、规格型号、材质及数量",
             mapped_rule_ids=["SC-100"],
             trigger_condition="存在植入物时核对条码和植入物信息。",
@@ -7409,7 +7461,7 @@ async def test_lx0609_033_should_not_treat_operation_text_consent_phrase_as_sour
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-033",),
+        selected_rule_ids=("LX0609-11-01-01",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -7418,8 +7470,8 @@ async def test_lx0609_033_should_not_treat_operation_text_consent_phrase_as_sour
         row_reader=reader,
     )
     result = await surgery_gate.execute_luxian_0609_native_surgery_gate_rules(
-        rule_ids=("LX0609-033",),
-        decision_rule_ids=("LX0609-033",),
+        rule_ids=("LX0609-11-01-01",),
+        decision_rule_ids=("LX0609-11-01-01",),
         wrapper_rules=[],
         evidence_payload={},
         institute_id="I",
@@ -7432,7 +7484,7 @@ async def test_lx0609_033_should_not_treat_operation_text_consent_phrase_as_sour
     )
 
     assert result.decisions[0].reason_code == "requirement_violated"
-    assert dict(result.customer_display_facts)["LX0609-033"]["failure_kind"] == (
+    assert dict(result.customer_display_facts)["LX0609-11-01-01"]["failure_kind"] == (
         "surgery_consent_document_missing"
     )
     assert result.llm_call_count == 0
@@ -7442,7 +7494,7 @@ async def test_lx0609_033_should_not_treat_operation_text_consent_phrase_as_sour
 def test_lx0609_018_semantic_result_with_controlled_criterion_is_non_compliant():
     rules = [
         _wrapper(
-            "LX0609-018",
+            "LX0609-01-01-02",
             name="主诉能导出第一诊断",
             mapped_rule_ids=["SC-008"],
             trigger_condition="主诉应能导出第一诊断。",
@@ -7474,7 +7526,7 @@ def test_lx0609_018_semantic_result_with_controlled_criterion_is_non_compliant()
 def test_lx0609_026_gate_should_require_chemo_order_or_record_not_malignancy_only():
     rules = [
         _wrapper(
-            "LX0609-026",
+            "LX0609-05-02-01",
             name="恶性肿瘤化学治疗记录与医嘱一致",
             mapped_rule_ids=["SC-161"],
             trigger_condition="化疗记录与医嘱应一致。",
@@ -7488,7 +7540,7 @@ def test_lx0609_026_gate_should_require_chemo_order_or_record_not_malignancy_onl
         evidence_payload={},
     )
 
-    assert decisions["LX0609-026"].status == TRIGGER_ABSENT
+    assert decisions["LX0609-05-02-01"].status == TRIGGER_ABSENT
     aggregated = aggregate_luxian_0609_results(
         wrapper_rules=rules,
         execution_results=[
@@ -7509,7 +7561,7 @@ def test_lx0609_026_gate_should_require_chemo_order_or_record_not_malignancy_onl
 def test_lx0609_040_gate_should_require_level_4_surgery_before_mdt_rule():
     rules = [
         _wrapper(
-            "LX0609-040",
+            "LX0609-04-01-03",
             name="四级手术术前讨论未体现MDT",
             mapped_rule_ids=["SC-106"],
             trigger_condition="四级手术需核对MDT讨论记录。",
@@ -7527,8 +7579,8 @@ def test_lx0609_040_gate_should_require_level_4_surgery_before_mdt_rule():
         evidence_payload={},
     )
 
-    assert absent["LX0609-040"].status == TRIGGER_ABSENT
-    assert present["LX0609-040"].status == TRIGGER_PRESENT
+    assert absent["LX0609-04-01-03"].status == TRIGGER_ABSENT
+    assert present["LX0609-04-01-03"].status == TRIGGER_PRESENT
 
 
 def test_lx0609_039_should_be_compliant_when_preop_discussion_is_recorded_as_complete(monkeypatch):
@@ -7562,7 +7614,7 @@ def test_lx0609_039_should_not_mark_missing_discussion_when_preop_discussion_exi
 def test_lx0609_048_gate_should_require_intraoperative_transfusion():
     rules = [
         _wrapper(
-            "LX0609-048",
+            "LX0609-07-04-01",
             name="术中输血记录完整性",
             mapped_rule_ids=["SC-147"],
             trigger_condition="有术中输血时核对手术、麻醉和输血记录。",
@@ -7581,5 +7633,5 @@ def test_lx0609_048_gate_should_require_intraoperative_transfusion():
         evidence_payload={},
     )
 
-    assert absent["LX0609-048"].status == TRIGGER_ABSENT
-    assert present["LX0609-048"].status == TRIGGER_PRESENT
+    assert absent["LX0609-07-04-01"].status == TRIGGER_ABSENT
+    assert present["LX0609-07-04-01"].status == TRIGGER_PRESENT

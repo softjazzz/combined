@@ -4,6 +4,7 @@ import html
 import json
 import re
 import uuid
+
 from dataclasses import dataclass
 from datetime import date, datetime
 from io import BytesIO, StringIO
@@ -26,6 +27,7 @@ from sqlalchemy import (
     update,
 )
 from sqlalchemy.orm import Session
+from .luxian_0609.phase_scope import frozen_luxian_0609_delivery_scope
 from .qc_diagnostics.capture import capture_committed_results, diagnostic_capture_enabled
 
 from .document_domain_alignment import (
@@ -35,9 +37,7 @@ from .document_domain_alignment import (
 from .luxian_0609.customer_renderer import (
     CUSTOMER_SCHEMA_VERSION as LUXIAN_0609_CUSTOMER_SCHEMA_VERSION,
     RULE_SET_VERSION,
-    exam_lab_data_gap_customer_message,
 )
-from .luxian_0609.customer_remediation import build_customer_remediation_suggestion
 from .luxian_0609.record_result_read_model import (
     _generation_key,
     _rule_set_value,
@@ -92,6 +92,7 @@ from .qc_workspace.failed_rule_retry import (
 from .sample_validation_rule_sets import LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
 from .bundles.emr_view import load_bundle_documents
 from .case_identity import CaseRef, CaseRefInput, normalize_case_refs
+from .luxian_0609.decision_model import _MAX_FACT_REFS
 from ..database.connection import DB_SCHEMA_MODE, SessionLocal, engine
 
 
@@ -100,6 +101,29 @@ DEFAULT_COMPLEXITY = "中复杂度"
 DEFAULT_DEFECT_LEVEL = "一般缺陷"
 DEFAULT_BATCH_JOB_PAGE_SIZE = 10
 LX0609_CUSTOMER_RESULT_CONTRACT_ERROR = _LX0609_CUSTOMER_RESULT_CONTRACT_ERROR
+LX0609_ATTEMPT_FILTER_KEY = "_lx0609_attempt_id"
+LX0609_LEASE_FILTER_KEY = "_lx0609_lease_v1"
+
+
+def _batch_job_write_scope(
+    table: Table, *, job_id: str, attempt_filters_json: str | None,
+    observed_filters_json: str | None = None, queued_only: bool = False,
+) -> Any:
+    if attempt_filters_json is None:
+        observed = _safe_json_loads(observed_filters_json, {})
+        if isinstance(observed, dict) and LX0609_ATTEMPT_FILTER_KEY in observed and not queued_only:
+            return sa.false()
+        formal_0609 = isinstance(observed, dict) and observed.get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY
+        return and_(
+            table.c.id == job_id,
+            table.c.status == "queued" if queued_only else table.c.status != "canceled",
+            table.c.filters_json == observed_filters_json if formal_0609 else sa.true(),
+        )
+    return and_(
+        table.c.id == job_id,
+        table.c.status == "running",
+        table.c.filters_json == attempt_filters_json,
+    )
 
 SEVERITY_TO_DEFECT_LEVEL = {
     "critical": "严重缺陷",
@@ -119,17 +143,15 @@ _SAFE_SOURCE_TYPE_PATTERN = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$")
 
 
 def _luxian_0609_catalog_rule_ids() -> frozenset[str]:
-    """返回当前 LX0609 的完整目录，供历史 Envelope 做身份校验。
+    """返回总表登记的全部 LX0609 规则身份，供历史 Envelope 做身份校验。
 
     客户交付层会过滤明确排除的来源规则，但这些规则仍属于已知历史目录。
     因此身份校验必须针对完整目录，不能把“客户不展示”误当成“未知规则”。
+    同理，规则停止注册进可执行目录只禁止新执行，不能让其已保存的合法
+    历史结果变成未知规则；执行范围仍由可执行目录与 phase_scope 控制。
     """
 
-    return frozenset(
-        _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
-        for item in load_luxian_0609_rules()
-        if _safe_text(item.get("rule_id") or item.get("rule_code"))
-    )
+    return frozenset(entry.rule_id for entry in load_luxian_0609_rule_master())
 
 
 def _customer_result_rule_id(item: Any) -> str:
@@ -291,40 +313,58 @@ def _canonical_reason_code(item: Dict[str, Any]) -> str:
     return "reason_unavailable"
 
 
-def _explicit_customer_text(item: Dict[str, Any], keys: Sequence[str], fallback: str) -> str:
+_CUSTOMER_TEXT_PRIVATE_KEYS = (
+    "record_id",
+    "visit_id",
+    "patient_id",
+    "institute_id",
+    "mr_no",
+    "patient_name",
+    "name",
+    "phone",
+    "id_card",
+    "certificate_no",
+)
+_CUSTOMER_CONCLUSION_KEYS = (
+    "conclusion", "customer_conclusion", "customer_message", "customer_summary",
+)
+_CUSTOMER_SUGGESTION_KEYS = (
+    "suggestion", "customer_suggestion", "customer_recommendation", "customer_action",
+)
+
+
+def _customer_text_is_safe(value: str, *, identity: Mapping[str, Any]) -> bool:
+    """客户文本过滤合同：不含内部术语，也不含本病例的身份值。"""
+
+    if not value or _CUSTOMER_TEXT_FORBIDDEN.search(value):
+        return False
     private_values = {
-        _safe_text(item.get(key))
-        for key in (
-            "record_id",
-            "visit_id",
-            "patient_id",
-            "institute_id",
-            "mr_no",
-            "patient_name",
-            "name",
-            "phone",
-            "id_card",
-            "certificate_no",
-        )
-        if _safe_text(item.get(key))
+        _safe_text(identity.get(key))
+        for key in _CUSTOMER_TEXT_PRIVATE_KEYS
+        if _safe_text(identity.get(key))
     }
+    return not any(private_value in value for private_value in private_values)
+
+
+def _explicit_customer_text(
+    item: Dict[str, Any], keys: Sequence[str], fallback: str, *, preserve_length: bool = False,
+) -> str:
     for key in keys:
         value = _safe_text(item.get(key))
-        if not value or _CUSTOMER_TEXT_FORBIDDEN.search(value):
+        if not _customer_text_is_safe(value, identity=item):
             continue
-        if any(private_value in value for private_value in private_values):
-            continue
-        return _truncate_export_text(value, 360)
+        # 正式发布文案保留换行和空白；上面的归一化文本仅用于安全检查。
+        return str(item.get(key)).strip() if preserve_length else _truncate_export_text(value, 360)
     return fallback
 
 
-def _safe_evidence_rows(item: Dict[str, Any], *, hmac_key: str) -> List[Dict[str, str]]:
+def _safe_evidence_rows(item: Dict[str, Any], *, hmac_key: str) -> List[Dict[str, Any]]:
     candidates: List[Any] = []
     for key in ("customer_evidence", "evidence_items", "evidence_refs", "evidence"):
         value = item.get(key)
         if isinstance(value, list):
             candidates.extend(value)
-    rows: List[Dict[str, str]] = []
+    rows: List[Dict[str, Any]] = []
     seen: set[tuple[str, str]] = set()
     for candidate in candidates:
         if not isinstance(candidate, dict):
@@ -351,7 +391,15 @@ def _safe_evidence_rows(item: Dict[str, Any], *, hmac_key: str) -> List[Dict[str
         if identity in seen:
             continue
         seen.add(identity)
-        row = {"source_type": source_type, "source_ref": source_ref}
+        row: Dict[str, Any] = {"source_type": source_type, "source_ref": source_ref}
+        if "decision_reference_positions" in candidate:
+            positions = candidate["decision_reference_positions"]
+            if (not isinstance(positions, list) or not positions or len(positions) > _MAX_FACT_REFS
+                    or any(type(value) is not int or not 1 <= value <= _MAX_FACT_REFS for value in positions)
+                    or len(positions) != len(set(positions))):
+                raise ValueError(LX0609_CUSTOMER_RESULT_CONTRACT_ERROR)
+            # 执行器引用顺序已在Finalizer绑定至授权文书，此处仅搬运定位。
+            row["decision_reference_positions"] = list(positions)
         # 字段路径不是病历正文，只用于让单病历页在已授权文书内定位结构化章节。
         # 只允许普通字段名，禁止把任意模型输出或正文透传为字段路径。
         field_path = _safe_text(
@@ -505,13 +553,16 @@ def project_customer_safe_result_item(
         else _keyed_ref("rec", record_material, hmac_key=hmac_key)
     )
     is_luxian = rule_id.startswith("LX0609-")
-    is_current_luxian_canonical = (
+    # 客户安全 DTO 可能再次进入列表投影/导出；二次投影仍须校验状态与公开事实。
+    is_current_luxian_result = (
         is_luxian
-        and _safe_text(raw.get("schema_version")) == LUXIAN_0609_CUSTOMER_SCHEMA_VERSION
+        and _safe_text(raw.get("schema_version")) in {
+            LUXIAN_0609_CUSTOMER_SCHEMA_VERSION, _CUSTOMER_RESULT_SCHEMA,
+        }
         and bool(_safe_text(raw.get("status")))
         and bool(_safe_text(raw.get("result_status")))
     )
-    if is_current_luxian_canonical:
+    if is_current_luxian_result:
         status = _safe_text(raw.get("status")).lower()
         result_status = _safe_text(raw.get("result_status")).lower()
         display_status = _safe_text(raw.get("display_status")).lower()
@@ -528,33 +579,42 @@ def project_customer_safe_result_item(
     else:
         status = _canonical_customer_status(raw)
 
-    customer_display_facts, criterion_results = _validated_customer_explanation(
-        raw,
-        rule_id=rule_id,
-        status=status,
-    )
+    if (
+        is_luxian
+        and not is_current_luxian_result
+        and status == "technical_error"
+        and _safe_text(raw.get("reason_code")) == "canonical_result_envelope_invalid"
+    ):
+        # 旧内部项已被任务读取边界隔离为技术异常；不能再要求它满足
+        # 当前规则的事实合同，否则单条旧项会中断整个历史任务详情。
+        customer_display_facts, criterion_results = {}, []
+    else:
+        customer_display_facts, criterion_results = _validated_customer_explanation(
+            raw,
+            rule_id=rule_id,
+            status=status,
+        )
     generic_conclusion, generic_suggestion = _GENERIC_CUSTOMER_TEXT[status]
     # 当前 Canonical 文案由执行器/Renderer 已生成。读取层只做敏感裁剪，
     # 不得按规则、事实或 status 再次生成结论。
     reuse_saved_customer_text = (
-        is_current_luxian_canonical
+        is_current_luxian_result
         or _safe_text(raw.get("schema_version")) == _CUSTOMER_RESULT_SCHEMA
     )
+    # 当前 LX0609 正式结果（v2 发布合同或其客户 DTO，且状态合同已校验）
+    # 保留发布文案全文；其他规则集和旧形态继续走原有 360 字裁剪。
+    preserve_published_text = is_current_luxian_result
     conclusion = _explicit_customer_text(
         raw,
-        (
-            "conclusion",
-            "customer_conclusion",
-            "customer_message",
-            "customer_summary",
-        )
+        _CUSTOMER_CONCLUSION_KEYS
         if reuse_saved_customer_text
         else (),
         generic_conclusion,
+        preserve_length=preserve_published_text,
     )
     if (
         is_luxian
-        and not is_current_luxian_canonical
+        and not is_current_luxian_result
         and _safe_text(raw.get("schema_version")) != _CUSTOMER_RESULT_SCHEMA
     ):
         # 兼容测试/复核中的旧内部投影形状；正式 LX0609 批详情在进入此函数前
@@ -573,15 +633,11 @@ def project_customer_safe_result_item(
                 conclusion = controlled_finding
     suggestion = _explicit_customer_text(
         raw,
-        (
-            "suggestion",
-            "customer_suggestion",
-            "customer_recommendation",
-            "customer_action",
-        )
+        _CUSTOMER_SUGGESTION_KEYS
         if reuse_saved_customer_text
         else (),
         generic_suggestion,
+        preserve_length=preserve_published_text,
     )
     rule_name = _explicit_customer_text(
         raw,
@@ -596,11 +652,11 @@ def project_customer_safe_result_item(
         "qc_point_id": rule_id,
         "rule_name": rule_name,
         "status": status,
-        "result_status": result_status if is_current_luxian_canonical else status,
+        "result_status": result_status if is_current_luxian_result else status,
         "display_status": (
-            display_status or status if is_current_luxian_canonical else status
+            display_status or status if is_current_luxian_result else status
         ),
-        "is_compliant": raw.get("is_compliant") if is_current_luxian_canonical else (
+        "is_compliant": raw.get("is_compliant") if is_current_luxian_result else (
             True if status == "compliant" else False if status == "non_compliant" else None
         ),
         "is_confirmed_issue": status == "non_compliant",
@@ -621,6 +677,40 @@ def project_customer_safe_result_item(
     if model_analysis:
         projected["model_analysis"] = model_analysis
     return projected
+
+
+def _customer_filtered_saved_text(
+    item: Dict[str, Any], *, identity: Mapping[str, Any],
+) -> Dict[str, Any]:
+    """已保存条目原样返回；主显示结论、建议与客户投影使用同一别名优先级、
+    安全检查和回退选择，不重生成、不截断正常文本。"""
+
+    filtered = dict(item)
+    generic = _GENERIC_CUSTOMER_TEXT.get(_canonical_customer_status(item))
+    if generic is None:
+        return filtered
+    probe_identity = {**item, **identity}
+    for keys, extra_aliases, fallback in (
+        (_CUSTOMER_CONCLUSION_KEYS, ("findings",), generic[0]),
+        (_CUSTOMER_SUGGESTION_KEYS, (), generic[1]),
+    ):
+        aliases = (*keys, *extra_aliases)
+        if not any(
+            isinstance(filtered.get(key), str) and filtered[key].strip() for key in aliases
+        ):
+            # 未保存任何该类文案时保持原样，不在读取层补写新文案。
+            continue
+        # 与批详情/导出相同：主字段禁止时继续选合法备用别名，全部禁止才回退。
+        selected = _explicit_customer_text(probe_identity, keys, fallback, preserve_length=True)
+        filtered[keys[0]] = selected
+        for key in (*keys[1:], *extra_aliases):
+            value = filtered.get(key)
+            if isinstance(value, str) and value.strip() and not _customer_text_is_safe(
+                _safe_text(value), identity=probe_identity,
+            ):
+                # 其余公开别名不得重新输出禁止内容，统一为已选的安全主文案。
+                filtered[key] = selected
+    return filtered
 
 
 def _is_current_rule_contract_result(item: Dict[str, Any]) -> bool:
@@ -680,13 +770,16 @@ def iter_unique_customer_result_source_items(
             continue
         if not _is_current_rule_contract_result(item):
             continue
-        is_current_luxian_canonical = (
+        # 已投影的客户 DTO 是安全读模型，重入时不应误判成旧内部结果。
+        is_current_luxian_result = (
             _safe_text(item.get("rule_id") or item.get("rule_code")).startswith("LX0609-")
-            and _safe_text(item.get("schema_version")) == LUXIAN_0609_CUSTOMER_SCHEMA_VERSION
+            and _safe_text(item.get("schema_version")) in {
+                LUXIAN_0609_CUSTOMER_SCHEMA_VERSION, _CUSTOMER_RESULT_SCHEMA,
+            }
             and bool(_safe_text(item.get("status")))
             and bool(_safe_text(item.get("result_status")))
         )
-        if validate_luxian and not is_current_luxian_canonical:
+        if validate_luxian and not is_current_luxian_result:
             # 旧批任务项没有 Canonical 交付合同。读取 API 明确隔离为既有
             # technical_error，绝不在此重算状态或客户结论，也不让单条旧项
             # 中断整个任务详情。
@@ -964,7 +1057,7 @@ def project_customer_safe_batch_job(
         safe_summary["failed_rule_ids"] = sorted({
             _safe_text(rule_id).upper()
             for rule_id in (raw_summary.get("failed_rule_ids") or [])
-            if re.fullmatch(r"LX0609-\d{3}", _safe_text(rule_id).upper())
+            if re.fullmatch(r"LX0609-(?!00)\d{2}-(?!00)\d{2}-(?!00)\d{2}", _safe_text(rule_id).upper())
         })
     raw_automatic_retry = (
         raw_summary.get("automatic_failed_rule_retry")
@@ -1008,6 +1101,16 @@ def project_customer_safe_batch_job(
     model_counts = _normalize_luxian_model_execution_stats(raw_summary.get("model_execution_stats"))
     if model_counts is not None:
         safe_summary["model_execution_stats"] = _build_luxian_model_execution_summary(model_counts)
+    usage_observed = raw_summary.get("luxian_0609_usage_observation_complete")
+    if isinstance(usage_observed, bool):
+        safe_summary["luxian_0609_usage_observation_complete"] = usage_observed
+        raw_unknown_keys = raw_summary.get("luxian_0609_usage_unknown_executor_keys")
+        safe_summary["luxian_0609_usage_unknown_executor_keys"] = sorted({
+            key for raw_key in (
+                raw_unknown_keys if isinstance(raw_unknown_keys, (list, tuple)) else []
+            )
+            if (key := _safe_text(raw_key)) and re.fullmatch(r"[a-z][a-z0-9_]{0,63}", key)
+        })[:30]
     raw_profile = (
         raw_summary.get("performance_profile")
         if isinstance(raw_summary.get("performance_profile"), dict)
@@ -1127,7 +1230,7 @@ def project_customer_safe_batch_job(
             "status": "technical_error",
             "reason_code": "record_execution_failed",
             "rule_id": _safe_text(item.get("rule_id")).upper()
-            if re.fullmatch(r"LX0609-\d{3}", _safe_text(item.get("rule_id")).upper()) else "",
+            if re.fullmatch(r"LX0609-(?!00)\d{2}-(?!00)\d{2}-(?!00)\d{2}", _safe_text(item.get("rule_id")).upper()) else "",
         }
         for item in list(job.get("failed_records") or [])
         if isinstance(item, dict)
@@ -1149,11 +1252,18 @@ def project_customer_safe_batch_job(
         if len(item_record_refs) == 1
         else None
     )
+    # 仅投影保存时的展示快照；不按当前发布配置重算，也不暴露内部filters。
+    acceptance_snapshot = filters.get("acceptance_only_rule_ids")
+    acceptance_rule_ids = sorted({
+        value for value in acceptance_snapshot
+        if isinstance(value, str) and value in _luxian_0609_catalog_rule_ids()
+    }) if isinstance(acceptance_snapshot, list) else []
     execution_scope_hash = _safe_text(filters.get("execution_scope_hash")).lower()
     if not re.fullmatch(r"[0-9a-f]{64}", execution_scope_hash):
         execution_scope_hash = ""
     return {
         "schema_version": "customer-qc-job-v1",
+        "acceptance_only_rule_ids": acceptance_rule_ids,
         "id": _safe_text(job.get("id")),
         "job_id": _safe_text(job.get("id")),
         "operation_ref": _keyed_ref("op", job.get("id"), hmac_key=hmac_key),
@@ -1530,7 +1640,9 @@ def _row_to_batch_job(row: Dict[str, Any], *, include_items: bool = True) -> Dic
     failed_records = _safe_json_loads(row.get("failed_records_json"), []) if include_items else []
     child_job_ids = _safe_json_loads(row.get("child_job_ids_json"), [])
     child_summary = _safe_json_loads(row.get("child_summary_json"), {})
-    filters_dict = filters if isinstance(filters, dict) else {}
+    filters_dict = dict(filters) if isinstance(filters, dict) else {}
+    filters_dict.pop(LX0609_ATTEMPT_FILTER_KEY, None)
+    filters_dict.pop(LX0609_LEASE_FILTER_KEY, None)
     summary_dict = summary if isinstance(summary, dict) else None
     draft_ids = _normalize_string_list(filters_dict.get("draft_ids"))
     if not draft_ids:
@@ -1556,7 +1668,11 @@ def _row_to_batch_job(row: Dict[str, Any], *, include_items: bool = True) -> Dic
                 normalized_items.append(
                     {
                         **raw_item,
-                        "rule_code": _safe_text(raw_item.get("rule_code")) or _safe_text(row.get("rule_code")),
+                        "rule_code": _safe_text(raw_item.get("rule_code")) or (
+                            _safe_text(raw_item.get("rule_id"))
+                            if filters_dict.get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY
+                            else _safe_text(row.get("rule_code"))
+                        ),
                         "rule_name": _safe_text(raw_item.get("rule_name")) or _safe_text(row.get("rule_name")),
                     }
                 )
@@ -1952,47 +2068,18 @@ def _customer_export_rows(
     job: Dict[str, Any],
     *,
     hmac_key: str,
-    include_luxian_canonical_remediation: bool = False,
 ) -> tuple[List[Dict[str, Any]], List[List[str]], Dict[str, Any]]:
     source_items = iter_unique_customer_result_source_items(job, hmac_key=hmac_key)
     items: List[Dict[str, Any]] = []
     for source_item in source_items:
+        # 正式发布文案原样导出，不在读取层重生成建议或资料缺口结论。
         projected = project_customer_safe_result_item(source_item, hmac_key=hmac_key)
-        if (
-            include_luxian_canonical_remediation
-            and _safe_text(source_item.get("schema_version"))
-            == LUXIAN_0609_CUSTOMER_SCHEMA_VERSION
-            and _safe_text(projected.get("rule_id")).startswith("LX0609-")
-        ):
-            # HTML 只读取已落 Canonical 的 LX0609 Renderer 结果，并且只用
-            # 再次通过客户投影白名单的状态、原因码和事实生成整改建议。
-            # 不直接信任或导出 Canonical 中保存的自由文本。
-            safe_facts = projected.get("customer_display_facts")
-            canonical_suggestion = build_customer_remediation_suggestion(
-                rule_id=_safe_text(projected.get("rule_id")),
-                status=_safe_text(projected.get("status")),
-                reason_code=_safe_text(projected.get("reason_code")),
-                facts=safe_facts if isinstance(safe_facts, Mapping) else None,
-            )
-            if canonical_suggestion:
-                projected["suggestion"] = canonical_suggestion
-                projected["customer_suggestion"] = canonical_suggestion
-            if _safe_text(projected.get("status")) == "data_gap":
-                gap_message = exam_lab_data_gap_customer_message(
-                    rule_id=_safe_text(projected.get("rule_id")),
-                    reason_code=_safe_text(projected.get("reason_code")),
-                )
-                if gap_message is not None:
-                    findings, _evidence, suggestion = gap_message
-                    projected["conclusion"] = findings
-                    projected["findings"] = findings
-                    projected["customer_conclusion"] = findings
-                    projected["suggestion"] = suggestion
-                    projected["customer_suggestion"] = suggestion
         items.append(projected)
     rows: List[List[str]] = []
     for item in items:
-        evidence_text = customer_evidence_summary(list(item.get("evidence") or []))
+        evidence_text = customer_evidence_summary(
+            list(item.get("evidence") or []), facts=item.get("customer_display_facts"),
+        )
         rows.append(
             [
                 _safe_text(item.get("record_ref")),
@@ -2039,21 +2126,31 @@ def _export_customer_safe_csv(job: Dict[str, Any], *, hmac_key: str) -> StringIO
     return render_customer_safe_csv(rows=rows, summary=summary)
 
 
+def _canonical_customer_export_rows(
+    job: Dict[str, Any],
+    *,
+    hmac_key: str,
+    canonical_items: Sequence[Dict[str, Any]],
+) -> tuple[List[Dict[str, Any]], List[List[str]], Dict[str, Any]]:
+    canonical_job = {
+        "id": job.get("id"),
+        "filters": {"rule_set_key": LUXIAN_0609_RULE_SET_KEY},
+        "items": list(canonical_items),
+    }
+    return _customer_export_rows(
+        canonical_job,
+        hmac_key=hmac_key,
+    )
+
+
 def _export_customer_safe_html(
     job: Dict[str, Any],
     *,
     hmac_key: str,
     canonical_items: Sequence[Dict[str, Any]],
 ) -> str:
-    canonical_job = {
-        "id": job.get("id"),
-        "filters": {"rule_set_key": LUXIAN_0609_RULE_SET_KEY},
-        "items": list(canonical_items),
-    }
-    items, rows, summary = _customer_export_rows(
-        canonical_job,
-        hmac_key=hmac_key,
-        include_luxian_canonical_remediation=True,
+    items, rows, summary = _canonical_customer_export_rows(
+        job, hmac_key=hmac_key, canonical_items=canonical_items,
     )
     return render_customer_safe_html(items=items, rows=rows, summary=summary)
 
@@ -2314,6 +2411,54 @@ class CustomQCWorkspaceService:
         if parent_performance_profile:
             parent_summary["performance_profile"] = parent_performance_profile
         child_summaries = [child.get("summary") or {} for child in child_jobs]
+        child_usage_states = [
+            summary.get("luxian_0609_usage_observation_complete")
+            for summary in child_summaries
+        ]
+        formal_luxian_parent = (
+            (parent_job.get("filters") or {}).get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY
+        )
+        if formal_luxian_parent and aggregate_status in {"completed", "failed"}:
+            if include_items:
+                filters = parent_job.get("filters") or {}
+                scoped_rule_ids = list(filters.get("scoped_customer_rule_ids") or [])
+                expected_rule_ids = [
+                    *(scoped_rule_ids or list(filters.get("rule_ids") or [])),
+                    *list(filters.get("gate_only_customer_rule_ids") or []),
+                    *list(filters.get("paused_customer_rule_ids") or []),
+                ]
+                _, complete_refs = select_complete_record_items(
+                    items=[
+                        item for child in child_jobs for item in list(child.get("items") or [])
+                    ],
+                    failures=[
+                        failure for child in child_jobs
+                        for failure in list(child.get("failed_records") or [])
+                    ],
+                    expected_rule_ids=expected_rule_ids,
+                )
+                success_count = len(complete_refs)
+                failed_count = max(
+                    0, int(parent_job.get("total_records") or 0) - success_count
+                )
+            else:
+                # 列表不加载结果项；使用父任务终态事务保存的病历计数。
+                success_count = int(parent_job.get("success_count") or 0)
+                failed_count = int(parent_job.get("failed_count") or 0)
+        if any(isinstance(state, bool) for state in child_usage_states) or (
+            formal_luxian_parent and canceled
+        ):
+            parent_summary["luxian_0609_usage_observation_complete"] = (
+                len(child_usage_states) == len(child_jobs)
+                and all(state is True for state in child_usage_states)
+                and canceled == 0
+            )
+            parent_summary["luxian_0609_usage_unknown_executor_keys"] = sorted({
+                key for summary in child_summaries
+                for unknown_keys in [summary.get("luxian_0609_usage_unknown_executor_keys")]
+                if isinstance(unknown_keys, (list, tuple))
+                for key in unknown_keys if isinstance(key, str) and key
+            })
         if any("execution_status" in summary for summary in child_summaries):
             completed_rules = sum(_to_int(summary.get("completed_rule_count")) for summary in child_summaries)
             failed_rules = sum(_to_int(summary.get("failed_rule_count")) for summary in child_summaries)
@@ -2365,6 +2510,37 @@ class CustomQCWorkspaceService:
             aggregate = self._aggregate_parent_job(session, parent_job, include_items=True)
             status = _safe_text(aggregate.get("status"), "queued")
             now = _now_utc()
+            formal_luxian_parent = (
+                (parent_job.get("filters") or {}).get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY
+            )
+            canonical_items = [
+                item
+                for child in list(aggregate.get("children") or [])
+                if isinstance(child, dict)
+                for item in list(child.get("items") or [])
+                if isinstance(item, dict)
+            ] if status in {"completed", "failed"} else []
+            partial_items: tuple[dict[str, Any], ...] = ()
+            partial_refs: tuple[CaseRef, ...] = ()
+            if formal_luxian_parent and status == "failed":
+                filters = parent_job.get("filters") or {}
+                scoped_rule_ids = list(filters.get("scoped_customer_rule_ids") or [])
+                expected_rule_ids = [
+                    *(scoped_rule_ids or list(filters.get("rule_ids") or [])),
+                    *list(filters.get("gate_only_customer_rule_ids") or []),
+                    *list(filters.get("paused_customer_rule_ids") or []),
+                ]
+                failures = [
+                    failure
+                    for child in list(aggregate.get("children") or [])
+                    if isinstance(child, dict)
+                    for failure in list(child.get("failed_records") or [])
+                ]
+                partial_items, partial_refs = select_complete_record_items(
+                    items=canonical_items,
+                    failures=failures,
+                    expected_rule_ids=expected_rule_ids,
+                )
             values: Dict[str, Any] = {
                 "status": status,
                 "summary_json": _safe_json_dumps(aggregate.get("summary") or {}),
@@ -2378,14 +2554,19 @@ class CustomQCWorkspaceService:
             }
             if status in {"completed", "failed", "canceled"}:
                 values["finished_at"] = now
+            parent_conditions = [
+                self._batch_job_table.c.id == normalized_parent_id,
+                self._batch_job_table.c.status != "canceled",
+            ]
+            if formal_luxian_parent:
+                parent_conditions.extend((
+                    self._batch_job_table.c.status == row["status"],
+                    self._batch_job_table.c.filters_json == row["filters_json"],
+                    self._batch_job_table.c.summary_json == row["summary_json"],
+                ))
             parent_update = session.execute(
                 update(self._batch_job_table)
-                .where(
-                    and_(
-                        self._batch_job_table.c.id == normalized_parent_id,
-                        self._batch_job_table.c.status != "canceled",
-                    )
-                )
+                .where(and_(*parent_conditions))
                 .values(**values)
             )
             # 与子任务完成相同，父任务取消与最后一个子任务收尾可能竞争。
@@ -2394,19 +2575,30 @@ class CustomQCWorkspaceService:
             if getattr(parent_update, "rowcount", 0) != 1:
                 session.rollback()
                 return
+            if formal_luxian_parent and status in {"completed", "failed"}:
+                # 子任务写入时已完成合同校验；父任务终态只交付完整病历。
+                # 删除与父任务发布在同一事务内，避免同一 root 下重复病例。
+                session.execute(
+                    self._record_result_envelope_table.delete().where(and_(
+                        self._record_result_envelope_table.c.root_job_id == normalized_parent_id,
+                        self._record_result_envelope_table.c.created_by == row["created_by"],
+                        self._record_result_envelope_table.c.rule_set_key == LUXIAN_0609_RULE_SET_KEY,
+                    ))
+                )
             if status == "completed":
-                canonical_items = [
-                    item
-                    for child in list(aggregate.get("children") or [])
-                    if isinstance(child, dict)
-                    for item in list(child.get("items") or [])
-                    if isinstance(item, dict)
-                ]
                 self._write_record_result_envelopes(
                     session,
                     job_row=dict(row),
                     items=canonical_items,
                     now=now,
+                )
+            elif formal_luxian_parent and status == "failed" and partial_items:
+                self._write_record_result_envelopes(
+                    session,
+                    job_row=dict(row),
+                    items=partial_items,
+                    now=now,
+                    expected_record_refs=partial_refs,
                 )
             session.commit()
         finally:
@@ -2918,7 +3110,32 @@ class CustomQCWorkspaceService:
             ).mappings().first()
             if not row:
                 return None
-            return self._aggregate_parent_job(session, _row_to_batch_job(dict(row)))
+            job = self._aggregate_parent_job(session, _row_to_batch_job(dict(row)))
+            return {**job, "_claim_filters_json": row.get("filters_json")}
+        finally:
+            session.close()
+
+    def list_queued_luxian_0609_batch_job_ids(self) -> tuple[str, ...]:
+        """重启后只恢复尚未领取的正式 LX0609 叶任务；领取仍由 Worker CAS 完成。"""
+
+        session = _session()
+        try:
+            rows = session.execute(
+                select(
+                    self._batch_job_table.c.id,
+                    self._batch_job_table.c.job_kind,
+                    self._batch_job_table.c.filters_json,
+                )
+                .where(self._batch_job_table.c.status == "queued")
+                .order_by(asc(self._batch_job_table.c.created_at))
+            ).mappings().all()
+            return tuple(
+                str(row["id"])
+                for row in rows
+                if _safe_text(row.get("job_kind")).lower() != "parent"
+                and isinstance((filters := _safe_json_loads(row.get("filters_json"), {})), dict)
+                and filters.get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY
+            )
         finally:
             session.close()
 
@@ -3182,15 +3399,32 @@ class CustomQCWorkspaceService:
                 }
 
             selected_job = selection.job
-            envelope = self._load_record_result_envelope_items(
-                session,
-                root_job_id=_safe_text(selected_job.get("id")),
-                institute_id=normalized_institute_id,
-                patient_id=normalized_patient_id,
-                visit_id=normalized_visit_id,
-                rule_set_key=normalized_rule_set_key,
-                rule_set_version=normalized_rule_set_version,
-            )
+            try:
+                envelope = self._load_record_result_envelope_items(
+                    session,
+                    root_job_id=_safe_text(selected_job.get("id")),
+                    institute_id=normalized_institute_id,
+                    patient_id=normalized_patient_id,
+                    visit_id=normalized_visit_id,
+                    rule_set_key=normalized_rule_set_key,
+                    rule_set_version=normalized_rule_set_version,
+                )
+            except ValueError as exc:
+                # 已发布合同损坏沿用既有结构化失败，不变成未找到，也不吞其他错误。
+                if str(exc) != LX0609_CUSTOMER_RESULT_CONTRACT_ERROR:
+                    raise
+                return {
+                    "schema_version": "lx0609-single-record-result-v1",
+                    "state": "technical_error",
+                    "reason_code": "canonical_result_envelope_invalid",
+                    "data_origin": "canonical_result_envelope",
+                    "record_ref": "",
+                    "job_id": _safe_text(selected_job.get("id")),
+                    "items": [],
+                    "expected_rule_count": len(expected_rule_ids_for_count),
+                    "result_rule_count": 0,
+                    "is_complete": False,
+                }
             if not envelope:
                 return {
                     "schema_version": "lx0609-single-record-result-v1",
@@ -3274,8 +3508,15 @@ class CustomQCWorkspaceService:
                 entry.rule_id: entry for entry in load_luxian_0609_rule_master()
             }
             projected_items = []
+            # 单病历结果页面向客户展示结论与建议：沿用与批详情、导出相同的
+            # 客户文本过滤合同；坐标仅用于比对，不写入响应。
+            case_identity = {
+                "institute_id": normalized_institute_id,
+                "patient_id": normalized_patient_id,
+                "visit_id": normalized_visit_id,
+            }
             for item, rule_id in zip(items, valid_rule_ids):
-                projected_item = dict(item)
+                projected_item = _customer_filtered_saved_text(item, identity=case_identity)
                 master_entry = rule_master_by_id.get(rule_id)
                 if master_entry is not None:
                     projected_item["source_document"] = master_entry.source_document
@@ -4028,7 +4269,7 @@ class CustomQCWorkspaceService:
             row = session.execute(
                 select(self._batch_job_table).where(
                     and_(self._batch_job_table.c.id == job_id, self._batch_job_table.c.created_by == created_by)
-                )
+                ).with_for_update()
             ).mappings().first()
             if not row:
                 return None
@@ -4044,6 +4285,10 @@ class CustomQCWorkspaceService:
                 if isinstance(current_summary.get("progress"), dict)
                 else {}
             )
+            running_luxian_attempt = (
+                current.get("status") == "running"
+                and (current.get("filters") or {}).get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY
+            )
             cancellation_update = session.execute(
                 update(self._batch_job_table)
                 .where(
@@ -4058,6 +4303,8 @@ class CustomQCWorkspaceService:
                     summary_json=_safe_json_dumps(
                         {
                             **current_summary,
+                            **({"luxian_0609_usage_observation_complete": False}
+                               if running_luxian_attempt else {}),
                             "progress": {
                                 **cancelled_progress,
                                 "step_key": "canceled",
@@ -4088,22 +4335,46 @@ class CustomQCWorkspaceService:
                 child_where = self._batch_job_table.c.parent_job_id == job_id
                 if child_ids:
                     child_where = or_(child_where, self._batch_job_table.c.id.in_(child_ids))
-                session.execute(
-                    update(self._batch_job_table)
-                    .where(
-                        and_(
-                            child_where,
-                            self._batch_job_table.c.created_by == created_by,
-                            self._batch_job_table.c.status.in_(["queued", "running"]),
-                        )
-                    )
-                    .values(
-                        status="canceled",
-                        error_message="parent_cancelled: 总任务已取消",
-                        finished_at=now,
-                        updated_at=now,
-                    )
+                active_child_scope = and_(
+                    child_where,
+                    self._batch_job_table.c.created_by == created_by,
+                    self._batch_job_table.c.status.in_(["queued", "running"]),
                 )
+                child_cancel_values = {
+                    "status": "canceled",
+                    "error_message": "parent_cancelled: 总任务已取消",
+                    "finished_at": now,
+                    "updated_at": now,
+                }
+                if (current.get("filters") or {}).get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY:
+                    child_rows = session.execute(
+                        select(self._batch_job_table).where(active_child_scope).with_for_update()
+                    ).mappings().all()
+                    for child_row in child_rows:
+                        child_summary = _safe_json_loads(child_row.get("summary_json"), {})
+                        if not isinstance(child_summary, dict):
+                            child_summary = {}
+                        session.execute(
+                            update(self._batch_job_table)
+                            .where(and_(
+                                self._batch_job_table.c.id == child_row["id"],
+                                self._batch_job_table.c.created_by == created_by,
+                                self._batch_job_table.c.status.in_(["queued", "running"]),
+                            ))
+                            .values(
+                                **child_cancel_values,
+                                summary_json=_safe_json_dumps({
+                                    **child_summary,
+                                    "luxian_0609_usage_observation_complete": False,
+                                }),
+                            )
+                        )
+                else:
+                    session.execute(
+                        update(self._batch_job_table)
+                        .where(active_child_scope)
+                        .values(**child_cancel_values)
+                    )
             session.commit()
             return self.get_batch_job(job_id=job_id, created_by=created_by)
         finally:
@@ -4115,6 +4386,7 @@ class CustomQCWorkspaceService:
         job_id: str,
         created_by: str,
         automatic: bool = False,
+        expected_attempt_filters_json: str | None = None,
     ) -> Optional[Dict[str, Any]]:
         session = _session()
         try:
@@ -4126,6 +4398,15 @@ class CustomQCWorkspaceService:
             if not row:
                 return None
             current = _row_to_batch_job(dict(row))
+            formal_0609 = (current.get("filters") or {}).get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY
+            original_filters_json = row.get("filters_json")
+            if formal_0609 and (
+                current.get("status") not in {"canceled", "completed", "failed"}
+                or (automatic and original_filters_json != expected_attempt_filters_json)
+            ):
+                return None
+            if formal_0609:
+                current["filters"]["scoped_customer_rule_ids"] = frozen_luxian_0609_delivery_scope(current["filters"])
             parent_job_id = _safe_text(current.get("parent_job_id"))
             rule_count = int(current.get("rule_count") or 1)
             total_records = int(current.get("total_records") or 0)
@@ -4133,7 +4414,14 @@ class CustomQCWorkspaceService:
             retry_scope_result = build_failed_rule_retry_scope(current)
             if retry_scope_result is not None:
                 retry_scope, normalized_failures = retry_scope_result
+                if formal_0609 and not set(retry_scope["rule_ids"]).issubset(
+                    current["filters"]["scoped_customer_rule_ids"]
+                ):
+                    raise ValueError("失败规则超出原任务冻结范围，请新建质控任务")
                 current_filters = dict(current.get("filters") or {})
+                current_filters.pop(LX0609_ATTEMPT_FILTER_KEY, None)
+                if formal_0609:
+                    current_filters[LX0609_ATTEMPT_FILTER_KEY] = uuid.uuid4().hex
                 current_filters[FAILED_RULE_RETRY_FILTER_KEY] = retry_scope
                 current_summary = dict(current.get("summary") or {})
                 retry_rule_count = len(retry_scope["rule_ids"])
@@ -4166,6 +4454,9 @@ class CustomQCWorkspaceService:
                 )
             else:
                 current_filters = dict(current.get("filters") or {})
+                current_filters.pop(LX0609_ATTEMPT_FILTER_KEY, None)
+                if formal_0609:
+                    current_filters[LX0609_ATTEMPT_FILTER_KEY] = uuid.uuid4().hex
                 current_filters.pop(FAILED_RULE_RETRY_FILTER_KEY, None)
                 reset_values = dict(
                     status="queued",
@@ -4196,13 +4487,49 @@ class CustomQCWorkspaceService:
                     total_tokens=0,
                     total_processing_time=0.0,
                 )
-            session.execute(
+            retry_update = session.execute(
                 update(self._batch_job_table)
                 .where(
-                    and_(self._batch_job_table.c.id == job_id, self._batch_job_table.c.created_by == created_by)
+                    and_(
+                        self._batch_job_table.c.id == job_id,
+                        self._batch_job_table.c.created_by == created_by,
+                        self._batch_job_table.c.status == current.get("status"),
+                        self._batch_job_table.c.filters_json == original_filters_json,
+                    ) if formal_0609 else and_(
+                        self._batch_job_table.c.id == job_id,
+                        self._batch_job_table.c.created_by == created_by,
+                    )
                 )
                 .values(**reset_values)
             )
+            if formal_0609 and getattr(retry_update, "rowcount", 0) != 1:
+                session.rollback()
+                return None
+            # 子任务单独重试也会废弃父聚合的旧读取快照；与父刷新争用同一父行。
+            if formal_0609 and parent_job_id:
+                parent_row = session.execute(
+                    select(self._batch_job_table).where(
+                        and_(self._batch_job_table.c.id == parent_job_id,
+                             self._batch_job_table.c.created_by == created_by)
+                    )
+                ).mappings().first()
+                if parent_row:
+                    parent_filters = _safe_json_loads(parent_row.get("filters_json"), {})
+                    if isinstance(parent_filters, dict) and parent_filters.get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY:
+                        parent_filters = dict(parent_filters)
+                        parent_filters[LX0609_ATTEMPT_FILTER_KEY] = uuid.uuid4().hex
+                        invalidated = session.execute(
+                            update(self._batch_job_table)
+                            .where(and_(
+                                self._batch_job_table.c.id == parent_job_id,
+                                self._batch_job_table.c.status == parent_row["status"],
+                                self._batch_job_table.c.filters_json == parent_row["filters_json"],
+                            ))
+                            .values(filters_json=_safe_json_dumps(parent_filters), updated_at=now)
+                        )
+                        if getattr(invalidated, "rowcount", 0) != 1:
+                            session.rollback()
+                            return None
             if str(current.get("job_kind") or "").strip().lower() == "parent":
                 child_ids = [
                     str(item or "").strip()
@@ -4212,22 +4539,38 @@ class CustomQCWorkspaceService:
                 child_where = self._batch_job_table.c.parent_job_id == job_id
                 if child_ids:
                     child_where = or_(child_where, self._batch_job_table.c.id.in_(child_ids))
-                session.execute(
-                    update(self._batch_job_table)
-                    .where(
-                        and_(
-                            child_where,
-                            self._batch_job_table.c.created_by == created_by,
+                child_scope = and_(child_where, self._batch_job_table.c.created_by == created_by)
+                child_reset = {key: value for key, value in reset_values.items() if key != "filters_json"}
+                if formal_0609:
+                    child_rows = session.execute(
+                        select(self._batch_job_table).where(child_scope)
+                    ).mappings().all()
+                    for child_row in child_rows:
+                        if child_row["status"] not in {"canceled", "completed", "failed"}:
+                            session.rollback()
+                            return None
+                        child_filters = _safe_json_loads(child_row.get("filters_json"), {})
+                        child_filters = dict(child_filters) if isinstance(child_filters, dict) else {}
+                        child_filters["scoped_customer_rule_ids"] = frozen_luxian_0609_delivery_scope(child_filters)
+                        # 父任务已清空子任务基准结果，本轮必须按原计划全量执行。
+                        child_filters.pop(FAILED_RULE_RETRY_FILTER_KEY, None)
+                        child_filters[LX0609_ATTEMPT_FILTER_KEY] = uuid.uuid4().hex
+                        child_update = session.execute(
+                            update(self._batch_job_table)
+                            .where(and_(
+                                self._batch_job_table.c.id == child_row["id"],
+                                self._batch_job_table.c.status == child_row["status"],
+                                self._batch_job_table.c.filters_json == child_row["filters_json"],
+                            ))
+                            .values(**child_reset, filters_json=_safe_json_dumps(child_filters))
                         )
+                        if getattr(child_update, "rowcount", 0) != 1:
+                            session.rollback()
+                            return None
+                else:
+                    session.execute(
+                        update(self._batch_job_table).where(child_scope).values(**child_reset)
                     )
-                    .values(
-                        **{
-                            key: value
-                            for key, value in reset_values.items()
-                            if key != "filters_json"
-                        }
-                    )
-                )
             session.commit()
             self.refresh_parent_batch_job(parent_job_id=parent_job_id)
             return self.get_batch_job(job_id=job_id, created_by=created_by)
@@ -4253,7 +4596,7 @@ class CustomQCWorkspaceService:
         finally:
             session.close()
 
-    def mark_batch_job_running(self, *, job_id: str) -> bool:
+    def mark_batch_job_running(self, *, job_id: str) -> bool | str:
         session = _session()
         try:
             row = session.execute(
@@ -4262,7 +4605,11 @@ class CustomQCWorkspaceService:
             if not row:
                 return False
             current = _row_to_batch_job(dict(row))
+            current_filters = current.get("filters") or {}
+            formal_0609 = current_filters.get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY
             if current.get("status") in {"canceled", "completed", "failed"}:
+                return False
+            if formal_0609 and current.get("status") != "queued":
                 return False
             current_summary = _safe_json_loads(row.get("summary_json"), {})
             if not isinstance(current_summary, dict):
@@ -4271,12 +4618,28 @@ class CustomQCWorkspaceService:
             if not isinstance(progress_value, dict):
                 progress_value = {}
             now = _now_utc()
-            session.execute(
+            original_filters_json = row.get("filters_json")
+            next_filters_json = (
+                _safe_json_dumps({
+                    **current_filters,
+                    LX0609_ATTEMPT_FILTER_KEY: uuid.uuid4().hex,
+                    LX0609_LEASE_FILTER_KEY: 1,
+                })
+                if formal_0609 else original_filters_json
+            )
+            running_update = session.execute(
                 update(self._batch_job_table)
-                .where(self._batch_job_table.c.id == job_id)
+                .where(
+                    and_(
+                        self._batch_job_table.c.id == job_id,
+                        self._batch_job_table.c.status == "queued",
+                        self._batch_job_table.c.filters_json == original_filters_json,
+                    ) if formal_0609 else self._batch_job_table.c.id == job_id
+                )
                 .values(
                     status="running",
                     started_at=now,
+                    **({"filters_json": next_filters_json} if formal_0609 else {}),
                     updated_at=now,
                     error_message=None,
                     summary_json=_safe_json_dumps(
@@ -4291,10 +4654,110 @@ class CustomQCWorkspaceService:
                     ),
                 )
             )
+            if formal_0609 and getattr(running_update, "rowcount", 0) != 1:
+                session.rollback()
+                return False
+            session.commit()
+            return next_filters_json if formal_0609 else True
+        finally:
+            session.close()
+
+    def renew_luxian_0609_batch_job_lease(
+        self, *, job_id: str, attempt_filters_json: str,
+    ) -> bool:
+        """只续当前0609执行代次；不读写可能很大的病例结果及进度摘要。"""
+
+        filters = _safe_json_loads(attempt_filters_json, {})
+        if not isinstance(filters, dict) or type(filters.get(LX0609_LEASE_FILTER_KEY)) is not int:
+            return False
+        if filters.get(LX0609_LEASE_FILTER_KEY) != 1:
+            return False
+        session = _session()
+        try:
+            renewed = session.execute(
+                update(self._batch_job_table)
+                .where(_batch_job_write_scope(
+                    self._batch_job_table,
+                    job_id=job_id,
+                    attempt_filters_json=attempt_filters_json,
+                ))
+                .values(updated_at=_now_utc())
+            )
+            if getattr(renewed, "rowcount", 0) != 1:
+                session.rollback()
+                return False
             session.commit()
             return True
         finally:
             session.close()
+
+    def fail_stale_luxian_0609_running_jobs(self, *, stale_before: datetime) -> tuple[str, ...]:
+        """仅将续约协议内、超过期限的执行尝试受控失败；不重跑医学判断。"""
+
+        session = _session()
+        failed_ids: list[str] = []
+        affected_parents: set[str] = set()
+        try:
+            rows = session.execute(
+                select(
+                    self._batch_job_table.c.id,
+                    self._batch_job_table.c.job_kind,
+                    self._batch_job_table.c.parent_job_id,
+                    self._batch_job_table.c.filters_json,
+                    self._batch_job_table.c.summary_json,
+                    self._batch_job_table.c.updated_at,
+                ).where(and_(
+                    self._batch_job_table.c.status == "running",
+                    self._batch_job_table.c.updated_at < stale_before,
+                ))
+            ).mappings().all()
+            for row in rows:
+                filters = _safe_json_loads(row.get("filters_json"), {})
+                if not isinstance(filters, dict) or (
+                    filters.get("rule_set_key") != LUXIAN_0609_RULE_SET_KEY
+                    or _safe_text(row.get("job_kind")).lower() == "parent"
+                    or type(filters.get(LX0609_LEASE_FILTER_KEY)) is not int
+                    or filters.get(LX0609_LEASE_FILTER_KEY) != 1
+                ):
+                    continue
+                summary = _safe_json_loads(row.get("summary_json"), {})
+                summary = dict(summary) if isinstance(summary, dict) else {}
+                progress = summary.get("progress")
+                progress = dict(progress) if isinstance(progress, dict) else {}
+                now = _now_utc()
+                expired = session.execute(
+                    update(self._batch_job_table)
+                    .where(and_(
+                        self._batch_job_table.c.id == row["id"],
+                        self._batch_job_table.c.status == "running",
+                        self._batch_job_table.c.filters_json == row["filters_json"],
+                        self._batch_job_table.c.updated_at == row["updated_at"],
+                        self._batch_job_table.c.updated_at < stale_before,
+                    ))
+                    .values(
+                        status="failed",
+                        error_message="执行尝试续约已过期，结果写入已停止；请重试任务",
+                        finished_at=now,
+                        updated_at=now,
+                        summary_json=_safe_json_dumps({
+                            **summary,
+                            "luxian_0609_usage_observation_complete": False,
+                            "progress": {**progress, "step_key": "failed"},
+                            "updated_at": now.isoformat(),
+                        }),
+                    )
+                )
+                if getattr(expired, "rowcount", 0) == 1:
+                    failed_ids.append(str(row["id"]))
+                    parent_id = _safe_text(row.get("parent_job_id"))
+                    if parent_id:
+                        affected_parents.add(parent_id)
+            session.commit()
+        finally:
+            session.close()
+        for parent_id in affected_parents:
+            self.refresh_parent_batch_job(parent_job_id=parent_id)
+        return tuple(failed_ids)
 
     def update_batch_job_progress(
         self,
@@ -4309,6 +4772,7 @@ class CustomQCWorkspaceService:
         progress_patch: Optional[Dict[str, Any]] = None,
         items: Optional[List[Dict[str, Any]]] = None,
         failed_records: Optional[List[Dict[str, Any]]] = None,
+        attempt_filters_json: str | None = None,
     ) -> Optional[Dict[str, Any]]:
         session = _session()
         try:
@@ -4317,6 +4781,7 @@ class CustomQCWorkspaceService:
                     self._batch_job_table.c.id,
                     self._batch_job_table.c.status,
                     self._batch_job_table.c.summary_json,
+                    self._batch_job_table.c.filters_json,
                 ).where(self._batch_job_table.c.id == job_id)
             ).mappings().first()
             if not row:
@@ -4371,11 +4836,20 @@ class CustomQCWorkspaceService:
             if failed_records is not None:
                 values["failed_records_json"] = _safe_json_dumps(failed_records)
 
-            session.execute(
+            progress_update = session.execute(
                 update(self._batch_job_table)
-                .where(and_(self._batch_job_table.c.id == job_id, self._batch_job_table.c.status != "canceled"))
+                .where(_batch_job_write_scope(
+                    self._batch_job_table, job_id=job_id, attempt_filters_json=attempt_filters_json,
+                    observed_filters_json=row.get("filters_json"),
+                ))
                 .values(**values)
             )
+            if getattr(progress_update, "rowcount", 0) != 1 and (
+                attempt_filters_json is not None
+                or LX0609_ATTEMPT_FILTER_KEY in _safe_json_loads(row.get("filters_json"), {})
+            ):
+                session.rollback()
+                return None
             session.commit()
             # 进度写入是高频热路径。调用方只关心写入是否成功，不应在每次
             # commit 后重新读取并反序列化可能达到几十 MB 的完整任务结果。
@@ -4387,17 +4861,24 @@ class CustomQCWorkspaceService:
         finally:
             session.close()
 
-    def is_batch_job_canceled_or_missing(self, *, job_id: str) -> bool:
+    def is_batch_job_canceled_or_missing(self, *, job_id: str, attempt_filters_json: str | None = None) -> bool:
         """取消轮询只读取状态列，避免反序列化完整批量结果。"""
 
         session = _session()
         try:
-            status = session.execute(
-                select(self._batch_job_table.c.status).where(
+            if attempt_filters_json is None:
+                status = session.execute(
+                    select(self._batch_job_table.c.status).where(self._batch_job_table.c.id == job_id)
+                ).scalar_one_or_none()
+                return status is None or _safe_text(status) == "canceled"
+            row = session.execute(
+                select(self._batch_job_table.c.status, self._batch_job_table.c.filters_json).where(
                     self._batch_job_table.c.id == job_id
                 )
-            ).scalar_one_or_none()
-            return status is None or _safe_text(status) == "canceled"
+            ).mappings().first()
+            if row is None:
+                return True
+            return _safe_text(row["status"]) != "running" or row["filters_json"] != attempt_filters_json
         finally:
             session.close()
 
@@ -4409,7 +4890,8 @@ class CustomQCWorkspaceService:
         items: List[Dict[str, Any]],
         failed_records: List[Dict[str, Any]],
         persist_record_envelopes: bool = True,
-    ) -> None:
+        attempt_filters_json: str | None = None,
+    ) -> bool | None:
         session = _session()
         try:
             row = session.execute(
@@ -4461,7 +4943,10 @@ class CustomQCWorkspaceService:
             }
             completion_update = session.execute(
                 update(self._batch_job_table)
-                .where(and_(self._batch_job_table.c.id == job_id, self._batch_job_table.c.status != "canceled"))
+                .where(_batch_job_write_scope(
+                    self._batch_job_table, job_id=job_id, attempt_filters_json=attempt_filters_json,
+                    observed_filters_json=row.get("filters_json"),
+                ))
                 .values(
                     status="failed" if execution_failed else "completed",
                     summary_json=_safe_json_dumps(merged_summary),
@@ -4482,8 +4967,22 @@ class CustomQCWorkspaceService:
             # 不能让迟到的执行结果继续写入 Canonical Envelope。
             if getattr(completion_update, "rowcount", 0) != 1:
                 session.rollback()
-                self.refresh_parent_batch_job(parent_job_id=parent_job_id)
-                return
+                if attempt_filters_json is None and rule_set_key != LUXIAN_0609_RULE_SET_KEY:
+                    self.refresh_parent_batch_job(parent_job_id=parent_job_id)
+                return False if attempt_filters_json is not None else None
+            # 原始 0609 叶子根任务没有父任务刷新兜底：本次尝试的正式结果必须整体替换
+            # 该 root 的旧 Canonical，否则上一代已交付、本次未交付（含本次零交付）的病历
+            # 仍会被读取为当前交付。父任务 root 的整体替换由 refresh_parent_batch_job
+            # 负责，子任务保持逐病例写入，其它规则集不变；即使调用方本次不写
+            # Canonical（persist_record_envelopes=False）也不得留下上一代正式结果。
+            if rule_set_key == LUXIAN_0609_RULE_SET_KEY and not parent_job_id:
+                session.execute(
+                    self._record_result_envelope_table.delete().where(and_(
+                        self._record_result_envelope_table.c.root_job_id == job_id,
+                        self._record_result_envelope_table.c.created_by == row.get("created_by"),
+                        self._record_result_envelope_table.c.rule_set_key == LUXIAN_0609_RULE_SET_KEY,
+                    ))
+                )
             envelope_items: Sequence[Dict[str, Any]] = (
                 items if persist_record_envelopes and not execution_failed else ()
             )
@@ -4516,6 +5015,7 @@ class CustomQCWorkspaceService:
             if getattr(completion_update, "rowcount", None) == 1:
                 capture_committed_results(diagnostic_receipts)
             self.refresh_parent_batch_job(parent_job_id=parent_job_id)
+            return True if attempt_filters_json is not None else None
         except Exception:
             session.rollback()
             raise
@@ -4579,7 +5079,11 @@ class CustomQCWorkspaceService:
             rule_set_version=rule_set_version,
         )
 
-    def fail_batch_job(self, *, job_id: str, error_message: str) -> None:
+    def fail_batch_job(
+        self, *, job_id: str, error_message: str,
+        attempt_filters_json: str | None = None, queued_only: bool = False,
+        expected_queued_filters_json: str | None = None,
+    ) -> None:
         session = _session()
         try:
             row = session.execute(
@@ -4587,19 +5091,38 @@ class CustomQCWorkspaceService:
             ).mappings().first()
             if not row:
                 return
+            if queued_only and expected_queued_filters_json is None and (
+                (_safe_json_loads(row.get("filters_json"), {}) or {}).get("rule_set_key")
+                == LUXIAN_0609_RULE_SET_KEY
+            ):
+                return
+            if queued_only and expected_queued_filters_json is not None and (
+                row.get("filters_json") != expected_queued_filters_json
+            ):
+                return
             parent_job_id = _safe_text(row.get("parent_job_id"))
             current_summary = _safe_json_loads(row.get("summary_json"), {})
             if not isinstance(current_summary, dict):
                 current_summary = {}
+            failed_running_luxian_attempt = (
+                row.get("status") == "running"
+                and (_safe_json_loads(row.get("filters_json"), {}) or {}).get("rule_set_key")
+                == LUXIAN_0609_RULE_SET_KEY
+            )
             now = _now_utc()
-            session.execute(
+            failure_update = session.execute(
                 update(self._batch_job_table)
-                .where(and_(self._batch_job_table.c.id == job_id, self._batch_job_table.c.status != "canceled"))
+                .where(_batch_job_write_scope(
+                    self._batch_job_table, job_id=job_id, attempt_filters_json=attempt_filters_json,
+                    observed_filters_json=row.get("filters_json"), queued_only=queued_only,
+                ))
                 .values(
                     status="failed",
                     summary_json=_safe_json_dumps(
                         {
                             **current_summary,
+                            **({"luxian_0609_usage_observation_complete": False}
+                               if failed_running_luxian_attempt else {}),
                             "progress": {
                                 **(
                                     current_summary.get("progress")
@@ -4616,6 +5139,14 @@ class CustomQCWorkspaceService:
                     updated_at=now,
                 )
             )
+            if getattr(failure_update, "rowcount", 0) != 1:
+                session.rollback()
+                if attempt_filters_json is None and (
+                    (_safe_json_loads(row.get("filters_json"), {}) or {}).get("rule_set_key")
+                    != LUXIAN_0609_RULE_SET_KEY
+                ):
+                    self.refresh_parent_batch_job(parent_job_id=parent_job_id)
+                return
             session.commit()
             self.refresh_parent_batch_job(parent_job_id=parent_job_id)
         finally:
@@ -4623,10 +5154,12 @@ class CustomQCWorkspaceService:
 
     def export_batch_job_workbook(self, *, job: Dict[str, Any]) -> BytesIO:
         if _is_luxian_0609_export_job(job):
-            return _export_customer_safe_workbook(
+            items, rows, summary = _canonical_customer_export_rows(
                 job,
                 hmac_key=customer_safe_projection_key(),
+                canonical_items=self._load_batch_job_export_items(job=job),
             )
+            return render_customer_safe_workbook(items=items, rows=rows, summary=summary)
         return self._export_batch_job_workbook_legacy(job=job)
 
     def _export_batch_job_workbook_legacy(self, *, job: Dict[str, Any]) -> BytesIO:
@@ -4828,10 +5361,12 @@ class CustomQCWorkspaceService:
 
     def export_batch_job_csv(self, *, job: Dict[str, Any]) -> StringIO:
         if _is_luxian_0609_export_job(job):
-            return _export_customer_safe_csv(
+            _items, rows, summary = _canonical_customer_export_rows(
                 job,
                 hmac_key=customer_safe_projection_key(),
+                canonical_items=self._load_batch_job_export_items(job=job),
             )
+            return render_customer_safe_csv(rows=rows, summary=summary)
         return self._export_batch_job_csv_legacy(job=job)
 
     def _export_batch_job_csv_legacy(self, *, job: Dict[str, Any]) -> StringIO:
@@ -4918,12 +5453,20 @@ class CustomQCWorkspaceService:
             allow_partial=allow_partial,
         )
 
+    def _load_batch_job_export_items(self, *, job: Dict[str, Any]) -> List[Dict[str, Any]]:
+        summary = job.get("summary") if isinstance(job.get("summary"), dict) else {}
+        allow_partial = (
+            _safe_text(job.get("status")) == "failed"
+            and _safe_text(summary.get("execution_status")) == "partial_failed"
+        )
+        return self._load_batch_job_canonical_items(job=job, allow_partial=allow_partial)
+
     def export_batch_job_html(self, *, job: Dict[str, Any]) -> str:
         if _is_luxian_0609_export_job(job):
             return _export_customer_safe_html(
                 job,
                 hmac_key=customer_safe_projection_key(),
-                canonical_items=self._load_batch_job_canonical_items(job=job),
+                canonical_items=self._load_batch_job_export_items(job=job),
             )
         return self._export_batch_job_html_legacy(job=job)
 

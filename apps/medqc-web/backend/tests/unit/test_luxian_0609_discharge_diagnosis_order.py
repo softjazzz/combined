@@ -8,12 +8,12 @@ from app.services.luxian_0609.customer_renderer import customer_finding_from_con
 
 
 async def _case(authority, written):
-    result, reduced = await _evaluate("LX0609-063", {"discharge_record": ({"document_id": "discharge"},), "diagnosis": tuple(authority), "discharge_record_diagnosis": tuple(written)})
-    facts = dict(result.customer_display_facts).get("LX0609-063")
-    safe = safe_discharge_customer_display_facts(rule_id="LX0609-063", raw=facts)
+    result, reduced = await _evaluate("LX0609-08-01-03", {"discharge_record": ({"document_id": "discharge"},), "diagnosis": tuple(authority), "discharge_record_diagnosis": tuple(written)})
+    facts = dict(result.customer_display_facts).get("LX0609-08-01-03")
+    safe = safe_discharge_customer_display_facts(rule_id="LX0609-08-01-03", raw=facts)
     assert safe is not None
     assert result.llm_call_count == 0
-    assert discharge_customer_fact_status_is_valid(rule_id="LX0609-063", status=reduced.final_state.value, safe_facts=safe)
+    assert discharge_customer_fact_status_is_valid(rule_id="LX0609-08-01-03", status=reduced.final_state.value, safe_facts=safe)
     return reduced, safe
 
 
@@ -32,7 +32,7 @@ async def test_different_content_remains_defect_even_without_order():
     reduced, facts = await _case([{"diagnosis_name": "诊断甲"}, {"diagnosis_name": "诊断乙"}], [{"diagnosis_name": "诊断甲"}, {"diagnosis_name": "诊断丙"}])
     assert reduced.final_state.value == "non_compliant"
     assert facts["order_comparable"] is False
-    text = customer_finding_from_controlled_facts(rule_id="LX0609-063", facts=facts)
+    text = customer_finding_from_controlled_facts(rule_id="LX0609-08-01-03", facts=facts)
     assert "内容不一致" in text
     assert "顺序尚无法核对" in text
 
@@ -54,11 +54,11 @@ async def test_duplicate_diagnosis_quantity_is_not_lost():
 
 @pytest.mark.asyncio
 async def test_gap_survives_final_customer_aggregation():
-    snapshot, materials, result, reduced = await _evaluate_selected(("LX0609-063",), {
+    snapshot, materials, result, reduced = await _evaluate_selected(("LX0609-08-01-03",), {
         "discharge_record": ({"document_id": "discharge"},), "diagnosis": (),
         "discharge_record_diagnosis": ({"document_id": "discharge", "diagnosis_name": "诊断甲"}, {"document_id": "discharge", "diagnosis_name": "诊断乙"}),
     })
-    final = _canonical_extended_result(rule_id="LX0609-063", snapshot=snapshot, materials=materials, result=result, reduced=reduced)
+    final = _canonical_extended_result(rule_id="LX0609-08-01-03", snapshot=snapshot, materials=materials, result=result, reduced=reduced)
     assert final["status"] == "data_gap"
     assert final["reason_code"] == "required_field_missing"
     assert "未取得权威出院诊断" in final["findings"]
@@ -68,7 +68,7 @@ async def test_gap_survives_final_customer_aggregation():
 
 @pytest.mark.parametrize("patch", [{"authoritative_gap": "guessed"}, {"written_gap": []}, {"authoritative_gap": None, "written_gap": None}, {"raw_body": "private"}])
 def test_gap_contract_rejects_invalid_fields(patch):
-    assert safe_discharge_customer_display_facts(rule_id="LX0609-063", raw={
+    assert safe_discharge_customer_display_facts(rule_id="LX0609-08-01-03", raw={
         "verification_kind": "discharge_diagnosis_data_gap", "authoritative_gap": "order_missing", "written_gap": None, **patch,
     }) is None
 
@@ -87,7 +87,7 @@ async def test_empty_authority_and_unordered_written_are_both_explained():
     assert reduced.final_state.value == "data_gap"
     assert facts["authoritative_gap"] == "diagnoses_missing"
     assert facts["written_gap"] == "order_missing"
-    text = customer_finding_from_controlled_facts(rule_id="LX0609-063", facts=facts)
+    text = customer_finding_from_controlled_facts(rule_id="LX0609-08-01-03", facts=facts)
     assert "未取得权威出院诊断" in text
     assert "出院记录诊断缺少可靠排列序号" in text
 

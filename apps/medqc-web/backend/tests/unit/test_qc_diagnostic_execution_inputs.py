@@ -26,7 +26,7 @@ def session_fixture():
             raise SourceEvidenceQueryError("DO_NOT_CAPTURE_EXCEPTION")
         return SnapshotSourceRows.create(source_key=key, rows=rows, truncated=False, limit_rows=7)
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-020", "LX0609-023"), institute_id="I", patient_id="P", visit_id="V",
+        selected_rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"), institute_id="I", patient_id="P", visit_id="V",
         source_schema=None, created_at="2026-07-05T00:00:00+08:00", evaluation_as_of_date="2026-07-05",
         additional_source_keys=("admission_record",), row_reader=reader,
     )
@@ -34,7 +34,7 @@ def session_fixture():
 
 
 def record(session):
-    capture_execution_inputs(session, selected_rule_ids=("LX0609-020", "LX0609-023"),
+    capture_execution_inputs(session, selected_rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
                              evaluation_as_of_date="2026-07-05", evaluation_horizon_policy=None,
                              horizon_unavailable_reason=None)
 
@@ -149,7 +149,7 @@ async def test_formal_preparation_reuses_session_and_capture_failure_is_fail_ope
     from unittest.mock import AsyncMock, Mock
     from app.services.luxian_0609 import execution
     from app.services.luxian_0609.native_package import Luxian0609PackagePlan
-    selected = ("LX0609-020", "LX0609-023")
+    selected = ("LX0609-03-01-01", "LX0609-03-01-04")
     session, _ = session_fixture()
     package_plan = Luxian0609PackagePlan(
         selected_rule_ids=selected, native_sync_rule_ids=(), native_async_rule_ids=selected,

@@ -33,7 +33,7 @@ SOURCES = (
 )
 
 
-def _plan(rule_ids=("LX0609-030",)):
+def _plan(rule_ids=("LX0609-04-02-02",)):
     return build_luxian_0609_shadow_plan(visit_ref=VISIT, selected_rule_ids=list(rule_ids), scoped_customer_rule_ids=list(rule_ids), record_rule_map={VISIT: list(rule_ids)}, planner_schema_version="planner-v1", rule_plan_version="slice-v1", created_at=CREATED)
 
 
@@ -84,7 +84,7 @@ def _coverage(*, plan, manifest, bundle, overrides=None):
     return build_luxian_0609_fact_coverage_shadow(plan=plan, manifest=manifest, bundle=bundle, observations=tuple(observations), coverage_schema_version="coverage-v1", coverage_policy_version="policy-v1", created_at=CREATED)
 
 
-def _gate(*, rule_ids=("LX0609-030",), statuses=None, facts=(), overrides=None, manifest=None, qualifications=None):
+def _gate(*, rule_ids=("LX0609-04-02-02",), statuses=None, facts=(), overrides=None, manifest=None, qualifications=None):
     plan = _plan(rule_ids)
     manifest = _manifest(statuses) if manifest is None else manifest
     bundle = _bundle(manifest, facts)
@@ -93,7 +93,7 @@ def _gate(*, rule_ids=("LX0609-030",), statuses=None, facts=(), overrides=None, 
         qualifications = tuple(
             TargetQualification(VISIT, rule.rule_id, rule.target_source_key, "target-qualification-v1", "f" * 64, 1)
             for rule in plan.planned_rules
-            if rule.rule_id in ("LX0609-029", "LX0609-032")
+            if rule.rule_id in ("LX0609-04-01-01", "LX0609-04-03-01")
             and next(entry.query_status for entry in manifest.entries if entry.source_key == rule.target_source_key) is QueryStatus.AVAILABLE
         )
     return build_luxian_0609_deterministic_gate_shadow(plan=plan, manifest=manifest, bundle=bundle, coverage=coverage, target_qualifications=qualifications, gate_schema_version="gate-v1", gate_policy_version="policy-v1", created_at=CREATED)
@@ -102,43 +102,43 @@ def _gate(*, rule_ids=("LX0609-030",), statuses=None, facts=(), overrides=None, 
 def test_available_qualified_targets_require_exact_safe_sidecar_scope_and_order():
     order_fact = _fact(fact_type="current_visit_surgery_order_confirmed", source_key="inpat_nondrug_order")
     with pytest.raises(ValueError, match="qualification"):
-        _gate(rule_ids=("LX0609-029",), facts=(order_fact,), qualifications=())
-    qualification = TargetQualification(VISIT, "LX0609-029", "presurg_summary", "target-qualification-v1", "f" * 64, 1)
-    extra = TargetQualification(VISIT, "LX0609-032", "surgery_safecheck_record", "target-qualification-v1", "e" * 64, 1)
+        _gate(rule_ids=("LX0609-04-01-01",), facts=(order_fact,), qualifications=())
+    qualification = TargetQualification(VISIT, "LX0609-04-01-01", "presurg_summary", "target-qualification-v1", "f" * 64, 1)
+    extra = TargetQualification(VISIT, "LX0609-04-03-01", "surgery_safecheck_record", "target-qualification-v1", "e" * 64, 1)
     with pytest.raises(ValueError, match="qualification"):
-        _gate(rule_ids=("LX0609-029",), facts=(order_fact,), qualifications=(qualification, extra))
-    wrong_visit = TargetQualification("visit-other-001", "LX0609-029", "presurg_summary", "target-qualification-v1", "f" * 64, 1)
+        _gate(rule_ids=("LX0609-04-01-01",), facts=(order_fact,), qualifications=(qualification, extra))
+    wrong_visit = TargetQualification("visit-other-001", "LX0609-04-01-01", "presurg_summary", "target-qualification-v1", "f" * 64, 1)
     with pytest.raises(ValueError, match="qualification"):
-        _gate(rule_ids=("LX0609-029",), facts=(order_fact,), qualifications=(wrong_visit,))
+        _gate(rule_ids=("LX0609-04-01-01",), facts=(order_fact,), qualifications=(wrong_visit,))
 
 
 def test_nonavailable_target_cannot_be_overridden_by_target_qualification():
     order_fact = _fact(fact_type="current_visit_surgery_order_confirmed", source_key="inpat_nondrug_order")
-    qualification = TargetQualification(VISIT, "LX0609-029", "presurg_summary", "target-qualification-v1", "f" * 64, 1)
+    qualification = TargetQualification(VISIT, "LX0609-04-01-01", "presurg_summary", "target-qualification-v1", "f" * 64, 1)
     with pytest.raises(ValueError, match="qualification"):
         _gate(
-            rule_ids=("LX0609-029",), facts=(order_fact,),
+            rule_ids=("LX0609-04-01-01",), facts=(order_fact,),
             statuses={"presurg_summary": QueryStatus.EMPTY}, qualifications=(qualification,),
         )
 
 
 def test_target_qualification_safe_identity_changes_gate_fingerprint_not_created_at():
     order_fact = _fact(fact_type="current_visit_surgery_order_confirmed", source_key="inpat_nondrug_order")
-    first = TargetQualification(VISIT, "LX0609-029", "presurg_summary", "target-qualification-v1", "f" * 64, 1)
-    second = TargetQualification(VISIT, "LX0609-029", "presurg_summary", "target-qualification-v1", "e" * 64, 1)
-    first_gate = _gate(rule_ids=("LX0609-029",), facts=(order_fact,), qualifications=(first,))
-    second_gate = _gate(rule_ids=("LX0609-029",), facts=(order_fact,), qualifications=(second,))
+    first = TargetQualification(VISIT, "LX0609-04-01-01", "presurg_summary", "target-qualification-v1", "f" * 64, 1)
+    second = TargetQualification(VISIT, "LX0609-04-01-01", "presurg_summary", "target-qualification-v1", "e" * 64, 1)
+    first_gate = _gate(rule_ids=("LX0609-04-01-01",), facts=(order_fact,), qualifications=(first,))
+    second_gate = _gate(rule_ids=("LX0609-04-01-01",), facts=(order_fact,), qualifications=(second,))
     assert first_gate.fingerprint() != second_gate.fingerprint()
     assert first_gate.fingerprint() == replace(first_gate, created_at="2026-07-13T12:00:00+08:00").fingerprint()
 
 
 def test_target_qualification_rejects_unapproved_policy_and_count_above_target_records():
     with pytest.raises(ValueError, match="target qualification"):
-        TargetQualification(VISIT, "LX0609-029", "presurg_summary", "target-qualification-v2", "f" * 64, 1)
+        TargetQualification(VISIT, "LX0609-04-01-01", "presurg_summary", "target-qualification-v2", "f" * 64, 1)
     order_fact = _fact(fact_type="current_visit_surgery_order_confirmed", source_key="inpat_nondrug_order")
-    excessive = TargetQualification(VISIT, "LX0609-029", "presurg_summary", "target-qualification-v1", "f" * 64, 3)
+    excessive = TargetQualification(VISIT, "LX0609-04-01-01", "presurg_summary", "target-qualification-v1", "f" * 64, 3)
     with pytest.raises(ValueError, match="target qualification"):
-        _gate(rule_ids=("LX0609-029",), facts=(order_fact,), qualifications=(excessive,))
+        _gate(rule_ids=("LX0609-04-01-01",), facts=(order_fact,), qualifications=(excessive,))
 
 
 @pytest.mark.parametrize(("status", "resolution", "readiness"), [(QueryStatus.AVAILABLE, TargetResolution.PRESENT, GateReadiness.READY), (QueryStatus.EMPTY, TargetResolution.EMPTY, GateReadiness.READY), (QueryStatus.UNAVAILABLE, TargetResolution.UNAVAILABLE, GateReadiness.BLOCKED), (QueryStatus.ERROR, TargetResolution.ERROR, GateReadiness.BLOCKED)])
@@ -150,7 +150,7 @@ def test_a_matched_target_matrix(status, resolution, readiness):
     assert (report.decisions[0].target_resolution, report.decisions[0].readiness) == (resolution, readiness)
 
 
-@pytest.mark.parametrize(("rule_id", "source"), [("LX0609-029", "presurg_summary"), ("LX0609-032", "surgery_safecheck_record")])
+@pytest.mark.parametrize(("rule_id", "source"), [("LX0609-04-01-01", "presurg_summary"), ("LX0609-04-03-01", "surgery_safecheck_record")])
 def test_target_qualification_keeps_raw_available_but_resolves_unqualified_as_empty(rule_id, source):
     fact = _fact(fact_type="current_visit_surgery_confirmed", source_key="surgery_record")
     pair = (fact.fact_type, fact.source_key)
@@ -164,17 +164,17 @@ def test_target_qualification_keeps_raw_available_but_resolves_unqualified_as_em
 def test_a_public_constructor_rejects_illegal_matched_crosses(target, readiness):
     ref = GateFactRef("b" * 64, "current_visit_surgery_order_confirmed", "inpat_nondrug_order")
     with pytest.raises(ValueError, match="invalid matched"):
-        GateDecision("LX0609-030", "matched", "surgery_record", target, readiness, (ref,), (), ())
+        GateDecision("LX0609-04-02-02", "matched", "surgery_record", target, readiness, (ref,), (), ())
 
 
 def test_b_exact_rule_metadata_and_allowed_ref_pairs():
-    assert GateDecision("LX0609-029", "absent_complete", "presurg_summary", None, "not_triggered", (), (), ()).rule_id == "LX0609-029"
-    assert GateDecision("LX0609-032", "absent_complete", "surgery_safecheck_record", None, "not_triggered", (), ("LX0609-030",), ("informational_parent_only",)).rule_id == "LX0609-032"
+    assert GateDecision("LX0609-04-01-01", "absent_complete", "presurg_summary", None, "not_triggered", (), (), ()).rule_id == "LX0609-04-01-01"
+    assert GateDecision("LX0609-04-03-01", "absent_complete", "surgery_safecheck_record", None, "not_triggered", (), ("LX0609-04-02-02",), ("informational_parent_only",)).rule_id == "LX0609-04-03-01"
     bad = GateFactRef("c" * 64, "current_visit_surgery_order_confirmed", "inpat_nondrug_order")
     with pytest.raises(ValueError, match="not allowed"):
-        GateDecision("LX0609-032", "matched", "surgery_safecheck_record", "present", "ready", (bad,), ("LX0609-030",), ("informational_parent_only",))
+        GateDecision("LX0609-04-03-01", "matched", "surgery_safecheck_record", "present", "ready", (bad,), ("LX0609-04-02-02",), ("informational_parent_only",))
     with pytest.raises(ValueError, match="metadata"):
-        GateDecision("LX0609-030", "absent_complete", "wrong_target", None, "not_triggered", (), (), ())
+        GateDecision("LX0609-04-02-02", "absent_complete", "wrong_target", None, "not_triggered", (), (), ())
 
 
 @pytest.mark.parametrize("marker", ["Bearer_secret", "sk-secret", "full_text", "medical_text", "raw_response", "patient_name", "phone_13800000000", "11010519491231002X"])
@@ -195,13 +195,13 @@ def test_b_invalid_enums_are_non_echo(field, value, message):
     values = {"trigger": "absent_complete", "target": None, "readiness": "not_triggered"}
     values[field] = value
     with pytest.raises(ValueError) as error:
-        GateDecision("LX0609-030", values["trigger"], "surgery_record", values["target"], values["readiness"], (), (), ())
+        GateDecision("LX0609-04-02-02", values["trigger"], "surgery_record", values["target"], values["readiness"], (), (), ())
     assert str(error.value) == f"invalid {message}"
 
 
 @pytest.mark.parametrize("mode", ["matched", "absent", "conflict", "blocker"])
 def test_c_missing_target_rejects_before_every_resolution(mode):
-    plan = _plan(("LX0609-029",))
+    plan = _plan(("LX0609-04-01-01",))
     manifest = _manifest(omit=("presurg_summary",))
     pair = ("current_visit_surgery_order_confirmed", "inpat_nondrug_order")
     facts = ()
@@ -284,7 +284,7 @@ def test_gate_decision_rejects_unapproved_performed_source():
     )
     with pytest.raises(ValueError, match="not allowed"):
         GateDecision(
-            "LX0609-030",
+            "LX0609-04-02-02",
             "matched",
             "surgery_record",
             "present",
@@ -365,25 +365,25 @@ def test_g_030_empty_target_and_standalone_032():
     report = _gate(statuses={"surgery_record": QueryStatus.EMPTY}, facts=(fact,), overrides={pair: _observation(pair, fact_ids=(fact.fact_id,))})
     assert report.decisions[0].target_resolution is TargetResolution.EMPTY
     surgical = _fact(fact_type="current_visit_surgery_confirmed", source_key="surgery_record")
-    standalone = _gate(rule_ids=("LX0609-032",), facts=(surgical,), overrides={(surgical.fact_type, surgical.source_key): _observation((surgical.fact_type, surgical.source_key), fact_ids=(surgical.fact_id,))})
+    standalone = _gate(rule_ids=("LX0609-04-03-01",), facts=(surgical,), overrides={(surgical.fact_type, surgical.source_key): _observation((surgical.fact_type, surgical.source_key), fact_ids=(surgical.fact_id,))})
     assert standalone.decisions[0].trigger_resolution is TriggerResolution.MATCHED
-    assert standalone.decisions[0].parent_rule_ids == ("LX0609-030",)
+    assert standalone.decisions[0].parent_rule_ids == ("LX0609-04-02-02",)
 
 
 def test_h_zero_multi_constructor_bounds_and_ref_identity():
     assert _gate(rule_ids=()).decisions == ()
-    multi = _gate(rule_ids=("LX0609-029", "LX0609-030", "LX0609-032"))
-    assert tuple(item.rule_id for item in multi.decisions) == ("LX0609-029", "LX0609-030", "LX0609-032")
+    multi = _gate(rule_ids=("LX0609-04-01-01", "LX0609-04-02-02", "LX0609-04-03-01"))
+    assert tuple(item.rule_id for item in multi.decisions) == ("LX0609-04-01-01", "LX0609-04-02-02", "LX0609-04-03-01")
     with pytest.raises(ValueError):
         replace(multi, decisions=multi.decisions[::-1])
     with pytest.raises(ValueError):
-        GateDecision("LX0609-030", "absent_complete", "surgery_record", None, "not_triggered", (GateFactRef("d" * 64, "current_visit_surgery_order_confirmed", "inpat_nondrug_order"),), (), ())
+        GateDecision("LX0609-04-02-02", "absent_complete", "surgery_record", None, "not_triggered", (GateFactRef("d" * 64, "current_visit_surgery_order_confirmed", "inpat_nondrug_order"),), (), ())
     refs = (GateFactRef("f" * 64, "current_visit_surgery_confirmed", "surgery_record"), GateFactRef("e" * 64, "current_visit_surgery_order_confirmed", "inpat_nondrug_order"))
-    decision = GateDecision("LX0609-030", "matched", "surgery_record", "present", "ready", refs, (), ())
+    decision = GateDecision("LX0609-04-02-02", "matched", "surgery_record", "present", "ready", refs, (), ())
     assert tuple(ref.fact_id for ref in decision.matched_fact_refs) == ("e" * 64, "f" * 64)
     too_many = tuple(GateFactRef(f"{index:064x}", "current_visit_surgery_order_confirmed", "inpat_nondrug_order") for index in range(1, 514))
     with pytest.raises(ValueError, match="matched fact refs"):
-        GateDecision("LX0609-030", "matched", "surgery_record", "present", "ready", too_many, (), ())
+        GateDecision("LX0609-04-02-02", "matched", "surgery_record", "present", "ready", too_many, (), ())
 
 
 def test_i_cross_object_fingerprint_mismatch():
@@ -393,7 +393,7 @@ def test_i_cross_object_fingerprint_mismatch():
     class ShadowRulePlan: pass
     with pytest.raises(TypeError, match="accepted value objects"):
         build_luxian_0609_deterministic_gate_shadow(plan=ShadowRulePlan(), manifest=manifest, bundle=bundle, coverage=coverage, gate_schema_version="gate-v1", gate_policy_version="policy-v1", created_at=CREATED)
-    other_plan = build_luxian_0609_shadow_plan(visit_ref="visit-gate-002", selected_rule_ids=["LX0609-030"], scoped_customer_rule_ids=["LX0609-030"], record_rule_map={"visit-gate-002": ["LX0609-030"]}, planner_schema_version="planner-v1", rule_plan_version="slice-v1", created_at=CREATED)
+    other_plan = build_luxian_0609_shadow_plan(visit_ref="visit-gate-002", selected_rule_ids=["LX0609-04-02-02"], scoped_customer_rule_ids=["LX0609-04-02-02"], record_rule_map={"visit-gate-002": ["LX0609-04-02-02"]}, planner_schema_version="planner-v1", rule_plan_version="slice-v1", created_at=CREATED)
     with pytest.raises(ValueError, match="visit_ref"):
         build_luxian_0609_deterministic_gate_shadow(plan=other_plan, manifest=manifest, bundle=bundle, coverage=coverage, gate_schema_version="gate-v1", gate_policy_version="policy-v1", created_at=CREATED)
 
@@ -416,11 +416,11 @@ def test_j_safe_only_output_non_echo_and_forbidden_status_scan():
     for token in ("compliant", "not_applicable", "data_gap", "ai_suggested", "technical_error"):
         assert token not in report.canonical_json()
     with pytest.raises(ValueError, match="invalid"):
-        GateDecision("LX0609-030", "matched", "surgery_record", "patient_name", "ready", (), (), ())
+        GateDecision("LX0609-04-02-02", "matched", "surgery_record", "patient_name", "ready", (), (), ())
 
 
 def test_report_constructor_exact_order_and_created_at_independent_identity():
     report = _gate()
     assert report.fingerprint() == replace(report, created_at="2026-07-13T12:00:00+08:00").fingerprint()
     with pytest.raises(ValueError):
-        GateReport("gate-v1", "policy-v1", VISIT, "a" * 64, "b" * 64, "c" * 64, "d" * 64, "e" * 64, ("LX0609-030",), (), CREATED)
+        GateReport("gate-v1", "policy-v1", VISIT, "a" * 64, "b" * 64, "c" * 64, "d" * 64, "e" * 64, ("LX0609-04-02-02",), (), CREATED)

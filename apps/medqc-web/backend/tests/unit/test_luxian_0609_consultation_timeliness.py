@@ -73,10 +73,10 @@ def _consultation_session(rows):
 async def _execute(rows):
     snapshot, materials = _consultation_session(rows)
     return await execute_luxian_0609_native_extended_document_rules(
-        rule_ids=("LX0609-069",),
+        rule_ids=("LX0609-04-02-07",),
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-069",),
+        decision_rule_ids=("LX0609-04-02-07",),
     )
 
 
@@ -172,7 +172,7 @@ async def test_069_single_source_row_uses_authoritative_consultation_times() -> 
     assert decision.evidence_state is EvidenceState.SUFFICIENT
     assert decision.qc_direction is QcDirection.SATISFIED
     assert decision.reason_code == "requirement_within_threshold"
-    facts = dict(result.customer_display_facts)["LX0609-069"]
+    facts = dict(result.customer_display_facts)["LX0609-04-02-07"]
     assert facts["event_results"] == [
         {
             "sequence": 1,
@@ -202,7 +202,7 @@ async def test_069_same_physical_row_is_an_event_even_when_titled_as_a_record() 
     decision = result.decisions[0]
     assert decision.qc_direction is QcDirection.SATISFIED
     assert decision.reason_code == "requirement_within_threshold"
-    facts = dict(result.customer_display_facts)["LX0609-069"]
+    facts = dict(result.customer_display_facts)["LX0609-04-02-07"]
     assert facts["event_results"][0]["interval_seconds"] == 28800
 
 
@@ -222,7 +222,7 @@ async def test_069_completion_before_request_is_an_authoritative_time_conflict()
     assert decision.evidence_state is EvidenceState.DATA_GAP
     assert decision.qc_direction is QcDirection.UNKNOWN
     assert decision.reason_code == "authoritative_time_conflict"
-    facts = dict(result.customer_display_facts)["LX0609-069"]
+    facts = dict(result.customer_display_facts)["LX0609-04-02-07"]
     assert facts["event_results"] == [
         {
             "sequence": 1,
@@ -251,7 +251,7 @@ async def test_069_unique_unidentified_request_and_record_can_pair_by_role_and_t
 
     decision = result.decisions[0]
     assert decision.qc_direction is QcDirection.SATISFIED
-    facts = dict(result.customer_display_facts)["LX0609-069"]
+    facts = dict(result.customer_display_facts)["LX0609-04-02-07"]
     assert facts["event_results"][0]["interval_seconds"] == 21600
 
 
@@ -312,7 +312,7 @@ async def test_069_invalid_explicit_request_time_does_not_fall_back_to_record_ti
     decision = result.decisions[0]
     assert decision.evidence_state is EvidenceState.DATA_GAP
     assert decision.reason_code == "authoritative_time_missing"
-    assert result.customer_display_facts == (("LX0609-069", {
+    assert result.customer_display_facts == (("LX0609-04-02-07", {
         "failure_kind": "consultation_business_time_missing",
         "missing_time_roles": ["request"],
     }),)
@@ -332,7 +332,7 @@ async def test_069_direct_row_without_explicit_completion_time_fails_closed() ->
     decision = result.decisions[0]
     assert decision.evidence_state is EvidenceState.DATA_GAP
     assert decision.reason_code == "authoritative_time_missing"
-    assert result.customer_display_facts == (("LX0609-069", {
+    assert result.customer_display_facts == (("LX0609-04-02-07", {
         "failure_kind": "consultation_business_time_missing",
         "missing_time_roles": ["completion"],
     }),)
@@ -392,7 +392,7 @@ async def test_069_multiple_events_pair_by_business_id_and_keep_each_outcome() -
     decision = result.decisions[0]
     assert decision.qc_direction is QcDirection.DEFECT
     assert decision.reason_code == "threshold_exceeded"
-    facts = dict(result.customer_display_facts)["LX0609-069"]
+    facts = dict(result.customer_display_facts)["LX0609-04-02-07"]
     assert facts["event_results"] == [
         {
             "sequence": 1,
@@ -436,6 +436,6 @@ async def test_069_ignores_unclassified_empty_rows_when_a_valid_pair_exists() ->
 
     decision = result.decisions[0]
     assert decision.qc_direction is QcDirection.SATISFIED
-    facts = dict(result.customer_display_facts)["LX0609-069"]
+    facts = dict(result.customer_display_facts)["LX0609-04-02-07"]
     assert len(facts["event_results"]) == 1
     assert facts["event_results"][0]["interval_seconds"] == 14400

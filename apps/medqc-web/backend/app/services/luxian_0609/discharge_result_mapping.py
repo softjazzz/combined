@@ -16,11 +16,11 @@ from typing import Any
 
 DISCHARGE_CUSTOMER_RULE_IDS = frozenset(
     {
-        "LX0609-061",
-        "LX0609-062",
-        "LX0609-063",
-        "LX0609-067",
-        "LX0609-068",
+        "LX0609-08-01-01",
+        "LX0609-08-01-02",
+        "LX0609-08-01-03",
+        "LX0609-08-02-01",
+        "LX0609-08-02-02",
     }
 )
 
@@ -274,21 +274,21 @@ def _safe_course_time_gap(raw: Mapping[str, Any]) -> dict[str, Any] | None:
 
 
 def discharge_course_time_gap_display(rule_id: str, raw: Any) -> tuple[list[str], str] | None:
-    kinds = {"LX0609-067": "predischarge_course_time_missing", "LX0609-068": "senior_discharge_approval_time_missing"}
+    kinds = {"LX0609-08-02-01": "predischarge_course_time_missing", "LX0609-08-02-02": "senior_discharge_approval_time_missing"}
     if not isinstance(raw, Mapping) or rule_id not in kinds or raw.get("failure_kind") != kinds[rule_id]:
         return None
     safe = _safe_course_time_gap(raw)
     if safe is None:
         return None
     count = safe["missing_time_count"]
-    description = (f"已找到{count}份含同意出院意见的病程记录" if rule_id == "LX0609-068" else f"已读取{count}份病程记录")
+    description = (f"已找到{count}份含同意出院意见的病程记录" if rule_id == "LX0609-08-02-02" else f"已读取{count}份病程记录")
     message = (f"出院日期{safe['discharge_date']}，核查窗口为{'、'.join(safe['checked_dates'])}。"
                f"{description}，但缺少有效记录时间，无法确认是否位于该窗口。请通过证据定位核对这些文书的时间。")
     return [f"相关病程记录的权威时间（{count}份）"], message
 
 
 def discharge_course_body_gap_display(rule_id: str, raw: Any) -> tuple[list[str], str] | None:
-    if rule_id != "LX0609-067" or not isinstance(raw, Mapping) or raw.get("failure_kind") != "predischarge_course_body_missing":
+    if rule_id != "LX0609-08-02-01" or not isinstance(raw, Mapping) or raw.get("failure_kind") != "predischarge_course_body_missing":
         return None
     safe = _safe_067(raw)
     if safe is None:
@@ -430,17 +430,154 @@ def safe_discharge_customer_display_facts(
     if not isinstance(raw, Mapping):
         return None
     normalized = str(rule_id or "").strip().upper()
-    if normalized == "LX0609-061":
+    if normalized == "LX0609-08-01-01":
         return _safe_061(raw)
-    if normalized == "LX0609-062":
+    if normalized == "LX0609-08-01-02":
         return _safe_062(raw)
-    if normalized == "LX0609-063":
+    if normalized == "LX0609-08-01-03":
         return _safe_063(raw)
-    if normalized == "LX0609-067":
+    if normalized == "LX0609-08-02-01":
         return _safe_067(raw)
-    if normalized == "LX0609-068":
+    if normalized == "LX0609-08-02-02":
         return _safe_068(raw)
     return None
+
+
+def _published_finite_number(value: Any) -> bool:
+    if type(value) not in (int, float):
+        return False
+    try:
+        return math.isfinite(float(value))
+    except (OverflowError, ValueError):
+        return False
+
+
+def _published_discharge_window(raw: dict[str, Any]) -> bool:
+    date = _safe_date(raw.get("discharge_date"))
+    checked = _safe_text_list(raw.get("checked_dates"), minimum=2, maximum=2)
+    if not date or checked is None or any(not _safe_date(item) for item in checked):
+        return False
+    return checked == [(datetime.strptime(date, "%Y-%m-%d") - timedelta(days=1)).date().isoformat(), date]
+
+
+def _published_ordered_window(raw: dict[str, Any]) -> bool:
+    date = _safe_date(raw.get("discharge_date"))
+    checked = _safe_text_list(raw.get("checked_dates"), minimum=2, maximum=2)
+    return bool(date and checked is not None and all(_safe_date(item) for item in checked)
+                and checked == sorted(checked) and len(set(checked)) == 2 and checked[-1] == date)
+
+
+def validate_published_discharge_facts(
+    *, rule_id: str, raw: Any,
+) -> dict[str, Any] | None:
+    """验证已发布的出院文书公开 JSON，不投影、不舍入。"""
+
+    if not isinstance(raw, dict) or any(type(key) is not str for key in raw):
+        return None
+    rid = str(rule_id or "").strip().upper()
+    keys = set(raw)
+    if rid == "LX0609-08-01-01":
+        base = {"verification_kind", "discharge_time", "record_time", "threshold_hours", "actual_interval_hours"}
+        if (raw.get("verification_kind") != "discharge_record_timeliness_check"
+                or type(raw.get("threshold_hours")) is not int or raw["threshold_hours"] != 24):
+            return None
+        if keys == base | {"conflicting_discharge_times"}:
+            conflicts = _safe_text_list(raw["conflicting_discharge_times"], minimum=2, item_maximum=40)
+            if (conflicts is None or any(not _safe_datetime(item) for item in conflicts)
+                    or any(raw[key] is not None for key in ("discharge_time", "record_time", "actual_interval_hours"))):
+                return None
+            try:
+                parsed = [datetime.fromisoformat(item.replace("Z", "+00:00")) for item in conflicts]
+                if len(set(parsed)) != len(parsed) or sorted(parsed) != parsed:
+                    return None
+            except (ValueError, TypeError):
+                return None
+        elif keys in (base, base | {"discharge_time_source"}):
+            value = raw.get("actual_interval_hours")
+            source = raw.get("discharge_time_source")
+            if (not _safe_datetime(raw.get("discharge_time"))
+                    or (raw.get("record_time") is not None and not _safe_datetime(raw["record_time"]))
+                    or (value is not None and not _published_finite_number(value))
+                    or (value is not None and value >= 0 and type(value) is float and value != round(value, 2))
+                    or ("discharge_time_source" in raw and (type(source) is not str or source not in _TIME_SOURCES))):
+                return None
+        else:
+            return None
+    elif rid == "LX0609-08-01-02":
+        if raw.get("verification_kind") == "discharge_medication_extraction_pending":
+            if (keys != {"verification_kind", "extraction_state"}
+                    or type(raw.get("extraction_state")) is not str
+                    or raw["extraction_state"] not in {"unknown", "data_gap", "technical_error"}):
+                return None
+        else:
+            required = ["drug_name", "dose", "route", "duration"]
+            missing = _safe_text_list(raw.get("missing_fields"), maximum=4)
+            if (keys != {"verification_kind", "medication_count", "required_fields", "missing_fields"}
+                    or raw.get("verification_kind") != "discharge_medication_completeness_check"
+                    or type(raw.get("medication_count")) is not int or raw["medication_count"] <= 0
+                    or raw.get("required_fields") != required or missing is None
+                    or any(item not in required for item in missing)):
+                return None
+    elif rid == "LX0609-08-01-03":
+        if raw.get("verification_kind") == "discharge_diagnosis_data_gap":
+            gaps = (raw.get("authoritative_gap"), raw.get("written_gap"))
+            allowed = {"diagnoses_missing", "name_missing", "order_missing", "order_invalid"}
+            if (keys != {"verification_kind", "authoritative_gap", "written_gap"}
+                    or not any(gaps)
+                    or any(value is not None and (type(value) is not str or value not in allowed) for value in gaps)):
+                return None
+        else:
+            authoritative = _safe_text_list(raw.get("authoritative_diagnoses"), minimum=1)
+            written = _safe_text_list(raw.get("written_diagnoses"), minimum=1)
+            comparable = raw.get("order_comparable", True)
+            consistent = raw.get("diagnoses_consistent")
+            base = {"verification_kind", "authoritative_diagnoses", "written_diagnoses", "diagnoses_consistent"}
+            if (keys not in (base, base | {"order_comparable"})
+                    or raw.get("verification_kind") != "discharge_diagnosis_consistency_check"
+                    or authoritative is None or written is None or type(consistent) is not bool
+                    or type(comparable) is not bool or consistent != (authoritative == written)
+                    or (not comparable and (consistent or sorted(authoritative) == sorted(written)))):
+                return None
+    elif rid in {"LX0609-08-02-01", "LX0609-08-02-02"}:
+        gap_kind = ("predischarge_course_time_missing" if rid == "LX0609-08-02-01"
+                    else "senior_discharge_approval_time_missing")
+        if raw.get("failure_kind") == gap_kind:
+            if (keys != {"failure_kind", "discharge_date", "checked_dates", "missing_time_count"}
+                    or not _published_discharge_window(raw)
+                    or type(raw.get("missing_time_count")) is not int or raw["missing_time_count"] <= 0):
+                return None
+        elif rid == "LX0609-08-02-01" and raw.get("failure_kind") == "predischarge_course_body_missing":
+            if (keys != {"failure_kind", "discharge_date", "checked_dates", "missing_body_count"}
+                    or not _published_discharge_window(raw)
+                    or type(raw.get("missing_body_count")) is not int or raw["missing_body_count"] <= 0):
+                return None
+        elif rid == "LX0609-08-02-01":
+            if (keys != {"verification_kind", "discharge_date", "checked_dates", "course_present"}
+                    or raw.get("verification_kind") != "predischarge_course_presence_check"
+                    or not _published_ordered_window(raw) or type(raw.get("course_present")) is not bool):
+                return None
+        else:
+            base = {"discharge_date", "checked_dates", "checked_source", "approval_present"}
+            if not _published_ordered_window(raw) or type(raw.get("approval_present")) is not bool:
+                return None
+            if raw.get("verification_kind") == "senior_discharge_approval_present":
+                if (keys != base | {"verification_kind", "approval_path"}
+                        or type(raw.get("checked_source")) is not str
+                        or raw["checked_source"] not in {"daily_course_record", "senior_course_record"}
+                        or raw["approval_present"] is not True
+                        or type(raw.get("approval_path")) is not str
+                        or raw["approval_path"] not in {"automatic_discharge", "senior_approval"}):
+                    return None
+            elif raw.get("failure_kind") == "senior_discharge_approval_missing":
+                if (keys != base | {"failure_kind"}
+                        or raw.get("checked_source") != "daily_course_record,senior_course_record"
+                        or raw["approval_present"] is not False):
+                    return None
+            else:
+                return None
+    else:
+        return None
+    return dict(raw)
 
 
 def discharge_customer_fact_status_is_valid(
@@ -456,7 +593,7 @@ def discharge_customer_fact_status_is_valid(
     if not isinstance(safe_facts, Mapping):
         return False
     normalized = str(rule_id or "").strip().upper()
-    if normalized == "LX0609-061":
+    if normalized == "LX0609-08-01-01":
         return normalized_status == (
             "data_gap"
             if safe_facts.get("actual_interval_hours") is None
@@ -465,7 +602,7 @@ def discharge_customer_fact_status_is_valid(
             if safe_facts["actual_interval_hours"] <= 24
             else "non_compliant"
         )
-    if normalized == "LX0609-062":
+    if normalized == "LX0609-08-01-02":
         if safe_facts.get("verification_kind") == "discharge_medication_extraction_pending":
             return normalized_status == {
                 "unknown": "uncertain", "data_gap": "data_gap", "technical_error": "technical_error",
@@ -473,7 +610,7 @@ def discharge_customer_fact_status_is_valid(
         return normalized_status == (
             "compliant" if not safe_facts.get("missing_fields") else "non_compliant"
         )
-    if normalized == "LX0609-063":
+    if normalized == "LX0609-08-01-03":
         if safe_facts.get("verification_kind") == "discharge_diagnosis_data_gap":
             return normalized_status == "data_gap"
         return normalized_status == (
@@ -481,11 +618,11 @@ def discharge_customer_fact_status_is_valid(
             if safe_facts.get("diagnoses_consistent") is True
             else "non_compliant"
         )
-    if normalized == "LX0609-067":
+    if normalized == "LX0609-08-02-01":
         return normalized_status == (
             "compliant" if safe_facts.get("course_present") is True else "data_gap"
         )
-    if normalized == "LX0609-068":
+    if normalized == "LX0609-08-02-02":
         return normalized_status == (
             "compliant" if safe_facts.get("approval_present") is True else "data_gap"
         )
@@ -497,4 +634,5 @@ __all__ = [
     "discharge_customer_fact_status_is_valid",
     "is_discharge_customer_rule",
     "safe_discharge_customer_display_facts",
+    "validate_published_discharge_facts",
 ]

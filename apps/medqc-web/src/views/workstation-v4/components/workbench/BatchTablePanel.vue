@@ -1,5 +1,8 @@
 <template>
-  <section class="batch-table-panel" :class="{ 'batch-table-panel--record-pool': recordPoolMode }">
+  <section
+    class="batch-table-panel"
+    :class="{ 'batch-table-panel--record-pool': recordPoolMode }"
+  >
     <div class="batch-table-panel__header px-4 py-2">
       <div
         class="batch-table-panel__toolbar flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between"
@@ -15,10 +18,8 @@
               />
               {{ recordPoolMode ? '病历列表' : title }}
             </div>
-            <span class="batch-table-panel__summary-pill"
-              >{{ recordPoolMode ? '本页' : '当前' }} {{ rows.length }}
-              {{ recordPoolMode ? '份' : '条' }}</span
-            >
+            <span class="batch-table-panel__summary-pill">{{ recordPoolMode ? '本页' : '当前' }} {{ rows.length }}
+              {{ recordPoolMode ? '份' : '条' }}</span>
             <span
               v-if="showSelection && (!recordPoolMode || selectedRowKeys.length > 0)"
               class="batch-table-panel__summary-pill batch-table-panel__summary-pill--selected"
@@ -129,9 +130,12 @@
               class="batch-table-panel__avatar"
               :src="patientAvatarSrc(record)"
               :alt="`${record.patientName || '患者'}头像`"
-            />
+            >
             <span class="batch-table-panel__patient-meta">
-              <span class="batch-table-panel__patient-name" :title="record.patientName">
+              <span
+                class="batch-table-panel__patient-name"
+                :title="record.patientName"
+              >
                 {{ record.patientName }}
               </span>
               <span class="batch-table-panel__visit-line">
@@ -176,12 +180,18 @@
           </span>
         </template>
         <template v-else-if="column.key === 'admissionDate'">
-          <span class="batch-table-panel__standalone-date" :title="record.admissionDate">
+          <span
+            class="batch-table-panel__standalone-date"
+            :title="record.admissionDate"
+          >
             {{ displayHospitalDate(record.admissionDate) }}
           </span>
         </template>
         <template v-else-if="column.key === 'dischargeDate'">
-          <span class="batch-table-panel__standalone-date" :title="record.dischargeDate">
+          <span
+            class="batch-table-panel__standalone-date"
+            :title="record.dischargeDate"
+          >
             {{ dischargeDateLabel(record) }}
           </span>
         </template>
@@ -220,7 +230,11 @@
             "
             @click="emit('open-record', record.recordKey || record.id)"
           >
-            <Eye v-if="recordPoolMode" :size="14" aria-hidden="true" />
+            <Eye
+              v-if="recordPoolMode"
+              :size="14"
+              aria-hidden="true"
+            />
             {{ recordPoolMode ? '查看' : rowActionLabel }}
           </a-button>
         </template>

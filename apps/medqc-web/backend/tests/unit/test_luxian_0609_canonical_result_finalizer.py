@@ -21,7 +21,7 @@ def test_finalizer_delegates_consultation_facts_to_the_family_projection() -> No
     )
 
     facts = validate_luxian_0609_executor_customer_display_facts(
-        rule_id="LX0609-022",
+        rule_id="LX0609-03-01-03",
         raw={
             "verification_kind": "consultation_opinion_quality_check",
             "episode_count": 1,
@@ -53,11 +53,11 @@ def test_finalizer_requires_public_fact_ref_evidence_for_migrated_surgery_rules(
 
     assert all(
         finalizer_requires_public_fact_ref_evidence(rule_id)
-        for rule_id in ("LX0609-034", "LX0609-036", "LX0609-039", "LX0609-040")
+        for rule_id in ("LX0609-11-02-01", "LX0609-04-04-01", "LX0609-04-01-02", "LX0609-04-01-03")
     )
     assert all(
         not finalizer_requires_public_fact_ref_evidence(rule_id)
-        for rule_id in ("LX0609-029", "LX0609-035", "LX0609-037", "LX0609-038")
+        for rule_id in ("LX0609-04-01-01", "LX0609-11-02-02", "LX0609-04-04-02", "LX0609-04-04-03")
     )
 
 
@@ -65,7 +65,7 @@ def test_finalizer_requires_public_fact_ref_evidence_for_migrated_surgery_rules(
     ("rule_id", "raw"),
     (
         (
-            "LX0609-030",
+            "LX0609-04-02-02",
             {
                 "verification_kind": "surgery_document_present",
                 "target_document": "surgery_record",
@@ -73,7 +73,7 @@ def test_finalizer_requires_public_fact_ref_evidence_for_migrated_surgery_rules(
             },
         ),
         (
-            "LX0609-032",
+            "LX0609-04-03-01",
             {
                 "failure_kind": "surgery_document_blank",
                 "target_document": "surgery_safecheck_record",
@@ -105,7 +105,7 @@ def test_finalizer_delegates_surgery_presence_facts_without_claiming_public_evid
     ("rule_id", "raw_facts"),
     (
         (
-            "LX0609-069",
+            "LX0609-04-02-07",
             {
                 "verification_kind": "consultation_timeliness_check",
                 "threshold_hours": 24,
@@ -124,7 +124,7 @@ def test_finalizer_delegates_surgery_presence_facts_without_claiming_public_evid
             },
         ),
         (
-            "LX0609-071",
+            "LX0609-10-01-01",
             {
                 "verification_kind": "physician_handoff_timeliness_check",
                 "change_time": "2026-07-01 08:00:00",
@@ -134,7 +134,7 @@ def test_finalizer_delegates_surgery_presence_facts_without_claiming_public_evid
             },
         ),
         (
-            "LX0609-072",
+            "LX0609-10-02-01",
             {
                 "failure_kind": "transfer_records_missing",
                 "transfer_order_count": 1,
@@ -143,7 +143,7 @@ def test_finalizer_delegates_surgery_presence_facts_without_claiming_public_evid
             },
         ),
         (
-            "LX0609-073",
+            "LX0609-10-02-02",
             {
                 "verification_kind": "transfer_record_presence_check",
                 "transfer_order_time": "2026-07-01 08:00:00",
@@ -154,7 +154,7 @@ def test_finalizer_delegates_surgery_presence_facts_without_claiming_public_evid
             },
         ),
         (
-            "LX0609-074",
+            "LX0609-12-02-01",
             {
                 "verification_kind": "diagnosis_change_documentation_check",
                 "diagnosis_change_count": 1,
@@ -187,7 +187,7 @@ def test_finalizer_delegates_continuity_facts_to_the_family_mapping(
 
 @pytest.mark.parametrize(
     "rule_id",
-    ("LX0609-069", "LX0609-071", "LX0609-072", "LX0609-073", "LX0609-074"),
+    ("LX0609-04-02-07", "LX0609-10-01-01", "LX0609-10-02-01", "LX0609-10-02-02", "LX0609-12-02-01"),
 )
 def test_continuity_finalizer_converts_invalid_typed_facts_to_technical_error(
     rule_id: str,
@@ -225,7 +225,7 @@ def test_finalizer_converts_invalid_executor_facts_to_isolated_technical_error()
 
     finalized, handled = finalize_luxian_0609_executor_customer_display_facts(
         result={
-            "rule_id": "LX0609-022",
+            "rule_id": "LX0609-03-01-03",
             "status": "non_compliant",
             "reason_code": "requirement_violated",
             "customer_display_facts": {"private": "must not survive"},
@@ -264,11 +264,11 @@ def test_finalizer_converts_invalid_basic_timeliness_facts_to_technical_error() 
     )
 
     assert finalizer_rejects_invalid_public_executor_customer_display_facts(
-        "LX0609-005"
+        "LX0609-02-01-01"
     ) is True
     finalized, handled = finalize_luxian_0609_executor_customer_display_facts(
         result={
-            "rule_id": "LX0609-005",
+            "rule_id": "LX0609-02-01-01",
             "status": "non_compliant",
             "reason_code": "requirement_violated",
             "findings": "不得残留的临床结论",
@@ -292,7 +292,7 @@ def test_finalizer_converts_conflicting_020_execution_counts_to_technical_error(
 
     finalized, handled = finalize_luxian_0609_executor_customer_display_facts(
         result={
-            "rule_id": "LX0609-020",
+            "rule_id": "LX0609-03-01-01",
             "status": "non_compliant",
             "reason_code": "requirement_violated",
             "data_gap_details": {"reason_code": "unexpected_gap"},
@@ -336,7 +336,7 @@ def test_finalizer_preserves_existing_technical_reason_for_invalid_executor_fact
 
     finalized, handled = finalize_luxian_0609_executor_customer_display_facts(
         result={
-            "rule_id": "LX0609-020",
+            "rule_id": "LX0609-03-01-01",
             "status": "technical_error",
             "reason_code": "snapshot_mismatch",
         },
@@ -354,10 +354,10 @@ def test_exam_lab_finalizer_strips_internal_refs_from_valid_facts() -> None:
         finalizer_owns_executor_customer_display_facts,
     )
 
-    assert finalizer_owns_executor_customer_display_facts("LX0609-012") is True
+    assert finalizer_owns_executor_customer_display_facts("LX0609-06-01-05") is True
     finalized, handled = finalize_luxian_0609_executor_customer_display_facts(
         result={
-            "rule_id": "LX0609-012",
+            "rule_id": "LX0609-06-01-05",
             "status": "non_compliant",
             "reason_code": "requirement_violated",
         },
@@ -392,7 +392,7 @@ def test_exam_lab_finalizer_fails_closed_for_invalid_facts_only() -> None:
 
     finalized, handled = finalize_luxian_0609_executor_customer_display_facts(
         result={
-            "rule_id": "LX0609-015",
+            "rule_id": "LX0609-06-03-04",
             "status": "non_compliant",
             "reason_code": "requirement_violated",
             "findings": "不得保留",
@@ -419,10 +419,10 @@ def test_discharge_finalizer_owns_facts_and_strips_private_document_refs() -> No
         finalizer_owns_executor_customer_display_facts,
     )
 
-    assert finalizer_owns_executor_customer_display_facts("LX0609-067") is True
+    assert finalizer_owns_executor_customer_display_facts("LX0609-08-02-01") is True
     finalized, handled = finalize_luxian_0609_executor_customer_display_facts(
         result={
-            "rule_id": "LX0609-067",
+            "rule_id": "LX0609-08-02-01",
             "status": "compliant",
             "reason_code": "requirement_satisfied",
             "findings": "PRIVATE_FINDING",
@@ -457,11 +457,11 @@ def test_discharge_finalizer_owns_facts_and_strips_private_document_refs() -> No
 @pytest.mark.parametrize(
     ("rule_id", "raw_facts"),
     (
-        ("LX0609-009", {"raw_private_text": "PRIVATE-009"}),
-        ("LX0609-017", {
+        ("LX0609-02-01-05", {"raw_private_text": "PRIVATE-009"}),
+        ("LX0609-12-01-02", {
             "failure_kind": "copy_similarity_threshold_exceeded",
         }),
-        ("LX0609-018", {"raw_private_text": "PRIVATE-018"}),
+        ("LX0609-01-01-02", {"raw_private_text": "PRIVATE-018"}),
     ),
 )
 def test_course_quality_finalizer_rejects_invalid_typed_facts_as_technical_error(
@@ -521,7 +521,7 @@ def test_course_quality_finalizer_rejects_invalid_typed_facts_as_technical_error
 def test_finalizer_never_rewrites_the_executor_non_compliant_status(extra: dict):
     result = _finalize(
         {
-            "rule_id": "LX0609-029",
+            "rule_id": "LX0609-04-01-01",
             "status": "non_compliant",
             "result_status": "non_compliant",
             "reason_code": "requirement_violated",
@@ -542,7 +542,7 @@ def test_finalizer_accepts_every_canonical_status_and_preserves_non_defect_reaso
 ):
     result = _finalize(
         {
-            "rule_id": "LX0609-001",
+            "rule_id": "LX0609-01-01-01",
             "status": status,
             "result_status": "stale-value",
             "reason_code": "original_reason",
@@ -570,13 +570,13 @@ def test_finalizer_rejects_missing_identity_and_unknown_status():
         _finalize({"status": "compliant"})
 
     with pytest.raises(ValueError, match="status"):
-        _finalize({"rule_id": "LX0609-001", "status": "future_status"})
+        _finalize({"rule_id": "LX0609-01-01-01", "status": "future_status"})
 
 
 def test_location_without_excerpt_does_not_change_the_executor_status():
     result = _finalize(
         {
-            "rule_id": "LX0609-029",
+            "rule_id": "LX0609-04-01-01",
             "status": "non_compliant",
             "reason_code": "requirement_violated",
             "customer_evidence": [
@@ -592,7 +592,7 @@ def test_location_without_excerpt_does_not_change_the_executor_status():
 
 def test_finalizer_is_idempotent_and_does_not_mutate_nested_input():
     source = {
-        "rule_id": "LX0609-029",
+        "rule_id": "LX0609-04-01-01",
         "status": "non_compliant",
         "result_status": "non_compliant",
         "reason_code": "requirement_violated",
@@ -616,7 +616,7 @@ def test_finalizer_is_idempotent_and_does_not_mutate_nested_input():
 def test_rule_040_does_not_replace_the_executor_decision_with_a_generic_result():
     result = _finalize(
         {
-            "rule_id": "LX0609-040",
+            "rule_id": "LX0609-04-01-03",
             "status": "non_compliant",
             "reason_code": "requirement_violated",
         }
@@ -632,7 +632,7 @@ def test_rule_040_does_not_replace_the_executor_decision_with_a_generic_result()
 def test_data_gap_always_has_customer_readable_missing_data_contract():
     result = _finalize(
         {
-            "rule_id": "LX0609-011",
+            "rule_id": "LX0609-06-01-04",
             "status": "data_gap",
             "reason_code": "required_field_missing",
         }
@@ -657,7 +657,7 @@ def test_data_gap_always_has_customer_readable_missing_data_contract():
 def test_rule_009_candidate_scope_gap_does_not_claim_missing_source() -> None:
     result = _finalize(
         {
-            "rule_id": "LX0609-009",
+            "rule_id": "LX0609-02-01-05",
             "status": "data_gap",
             "reason_code": "candidate_scope_incomplete",
         }
@@ -671,7 +671,7 @@ def test_rule_009_candidate_scope_gap_does_not_claim_missing_source() -> None:
 
     other_rule = _finalize(
         {
-            "rule_id": "LX0609-054",
+            "rule_id": "LX0609-05-01-02",
             "status": "data_gap",
             "reason_code": "candidate_scope_incomplete",
         }
@@ -683,7 +683,7 @@ def test_rule_009_candidate_scope_gap_does_not_claim_missing_source() -> None:
 def test_rule_048_names_the_missing_anesthesia_record_instead_of_generic_materials() -> None:
     result = _finalize(
         {
-            "rule_id": "LX0609-048",
+            "rule_id": "LX0609-07-04-01",
             "status": "data_gap",
             "reason_code": "transfusion_comparison_fields_unavailable",
             "customer_display_facts": {
@@ -703,7 +703,7 @@ def test_rule_048_names_the_missing_anesthesia_record_instead_of_generic_materia
 def test_rule_031_signature_association_gap_names_the_unavailable_signature_fields() -> None:
     result = _finalize(
         {
-            "rule_id": "LX0609-031",
+            "rule_id": "LX0609-04-02-05",
             "status": "data_gap",
             "reason_code": "association_failed",
         }
@@ -719,8 +719,8 @@ def test_rule_031_signature_association_gap_names_the_unavailable_signature_fiel
 @pytest.mark.parametrize(
     ("rule_id", "order_count", "transfer_in_count", "transfer_out_count"),
     (
-        ("LX0609-072", 3, 2, 1),
-        ("LX0609-073", 2, 1, 0),
+        ("LX0609-10-02-01", 3, 2, 1),
+        ("LX0609-10-02-02", 2, 1, 0),
     ),
 )
 def test_transfer_event_association_gap_names_event_linkage_only(
@@ -760,7 +760,7 @@ def test_transfer_event_association_gap_names_event_linkage_only(
 def test_rule_028_required_field_gap_names_the_actual_prophylaxis_inputs() -> None:
     result = _finalize(
         {
-            "rule_id": "LX0609-028",
+            "rule_id": "LX0609-05-01-01",
             "status": "data_gap",
             "reason_code": "required_field_missing",
         }
@@ -803,7 +803,7 @@ def test_every_data_gap_reason_gets_a_controlled_customer_explanation(
 ):
     result = _finalize(
         {
-            "rule_id": "LX0609-054",
+            "rule_id": "LX0609-05-01-02",
             "status": "data_gap",
             "reason_code": reason_code,
         }
@@ -818,7 +818,7 @@ def test_every_data_gap_reason_gets_a_controlled_customer_explanation(
 def test_069_source_unavailable_is_labeled_as_institution_source_gap() -> None:
     result = _finalize(
         {
-            "rule_id": "LX0609-069",
+            "rule_id": "LX0609-04-02-07",
             "status": "data_gap",
             "reason_code": "source_unavailable",
         }
@@ -833,7 +833,7 @@ def test_069_source_unavailable_is_labeled_as_institution_source_gap() -> None:
 def test_data_gap_completion_preserves_more_precise_existing_details():
     result = _finalize(
         {
-            "rule_id": "LX0609-052",
+            "rule_id": "LX0609-06-04-01",
             "status": "data_gap",
             "reason_code": "required_field_missing",
             "missing_sources": ["检验结果明细"],
@@ -860,7 +860,7 @@ def test_data_gap_completion_does_not_overwrite_rule_specific_detail_fields():
     }
     result = _finalize(
         {
-            "rule_id": "LX0609-012",
+            "rule_id": "LX0609-06-01-05",
             "status": "data_gap",
             "reason_code": "authoritative_time_missing",
             "data_gap_details": existing_details,
@@ -877,7 +877,7 @@ def test_data_gap_rejects_conflicting_top_level_and_detail_explanations():
     with pytest.raises(ValueError, match="conflicting data gap explanation field"):
         _finalize(
             {
-                "rule_id": "LX0609-012",
+                "rule_id": "LX0609-06-01-05",
                 "status": "data_gap",
                 "reason_code": "authoritative_time_missing",
                 "customer_message": "顶层解释",
@@ -892,7 +892,7 @@ def test_data_gap_rejects_conflicting_top_level_and_detail_explanations():
 def test_data_gap_uses_controlled_missing_source_from_customer_facts():
     result = _finalize(
         {
-            "rule_id": "LX0609-052",
+            "rule_id": "LX0609-06-04-01",
             "status": "data_gap",
             "reason_code": "required_field_missing",
             "customer_display_facts": {

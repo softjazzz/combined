@@ -9,7 +9,7 @@ import {
 describe('single-record-result-model canonical 直通展示', () => {
   it('保持引擎返回的业务字段，不用前端受控事实重写结论', () => {
     const source: SingleRecordQcResultItem = {
-      rule_id: 'LX0609-025',
+      rule_id: 'LX0609-04-02-04',
       rule_name: '植入物记录完整性',
       status: 'non_compliant',
       reason_code: 'implant_information_incomplete',
@@ -36,13 +36,13 @@ describe('single-record-result-model canonical 直通展示', () => {
   it('保持 Canonical Envelope 的条目顺序', () => {
     const items: SingleRecordQcResultItem[] = [
       {
-        rule_id: 'LX0609-100',
+        rule_id: 'LX0609-99-99-99',
         rule_name: '先返回的合规项',
         status: 'compliant',
         conclusion: '合规',
       },
       {
-        rule_id: 'LX0609-001',
+        rule_id: 'LX0609-01-01-01',
         rule_name: '后返回的问题项',
         status: 'non_compliant',
         conclusion: '不合规',
@@ -50,14 +50,14 @@ describe('single-record-result-model canonical 直通展示', () => {
     ]
 
     expect(buildSingleRecordQcResultItems(items).map((item) => item.rule_id)).toEqual([
-      'LX0609-100',
-      'LX0609-001',
+      'LX0609-99-99-99',
+      'LX0609-01-01-01',
     ])
   })
 
   it('运行时收到非数组 evidence 时不崩溃，并按空证据渲染', () => {
     const malformed = {
-      rule_id: 'LX0609-003',
+      rule_id: 'LX0609-04-02-01',
       rule_name: '手术记录及时性',
       status: 'not_applicable',
       conclusion: '本次不适用。',
@@ -71,7 +71,7 @@ describe('single-record-result-model canonical 直通展示', () => {
   it('解释不足原因不能驱动前端重算服务端最终状态', () => {
     const items: SingleRecordQcResultItem[] = [
       {
-        rule_id: 'LX0609-029',
+        rule_id: 'LX0609-04-01-01',
         rule_name: '术前小结',
         status: 'non_compliant',
         reason_code: 'customer_explanation_incomplete',
@@ -79,7 +79,7 @@ describe('single-record-result-model canonical 直通展示', () => {
         evidence: [],
       },
       {
-        rule_id: 'LX0609-040',
+        rule_id: 'LX0609-04-01-03',
         rule_name: '术前多学科讨论',
         status: 'uncertain',
         reason_code: 'customer_explanation_incomplete',
@@ -112,21 +112,21 @@ describe('single-record-result-model 病历质控报告分组', () => {
   it('按权威来源文书稳定分组，并保持 Envelope 条目顺序', () => {
     const items: SingleRecordQcResultItem[] = [
       {
-        rule_id: 'LX0609-025',
+        rule_id: 'LX0609-04-02-04',
         rule_name: '植入物相关记录',
         source_document: '手术记录',
         qc_point: '未记录植入物种类及数量',
         status: 'non_compliant',
       },
       {
-        rule_id: 'LX0609-020',
+        rule_id: 'LX0609-03-01-01',
         rule_name: '会诊意见执行情况',
         source_document: '会诊记录',
         qc_point: '后续病程未记录会诊意见执行情况',
         status: 'data_gap',
       },
       {
-        rule_id: 'LX0609-031',
+        rule_id: 'LX0609-04-02-05',
         rule_name: '手术记录签名',
         source_document: '手术记录',
         qc_point: '手术记录签名不规范',
@@ -142,11 +142,11 @@ describe('single-record-result-model 病历质控报告分组', () => {
       '会诊记录',
     ])
     expect(presentation.sectionsByTab.all[0]?.items.map((item) => item.rule_id)).toEqual([
-      'LX0609-025',
-      'LX0609-031',
+      'LX0609-04-02-04',
+      'LX0609-04-02-05',
     ])
     expect(presentation.sectionsByTab.non_compliant[0]?.items[0]).toMatchObject({
-      rule_id: 'LX0609-025',
+      rule_id: 'LX0609-04-02-04',
       source_document: '手术记录',
       qc_point: '未记录植入物种类及数量',
       status: 'non_compliant',
@@ -156,13 +156,13 @@ describe('single-record-result-model 病历质控报告分组', () => {
   it('缺失或重复规则身份失败关闭，不静默去重或合并结论', () => {
     const items: SingleRecordQcResultItem[] = [
       {
-        rule_id: 'LX0609-025',
+        rule_id: 'LX0609-04-02-04',
         rule_name: '植入物相关记录',
         source_document: '手术记录',
         status: 'non_compliant',
       },
       {
-        rule_id: 'lx0609-025',
+        rule_id: 'lx0609-04-02-04',
         rule_name: '植入物相关记录',
         source_document: '病程记录',
         status: 'data_gap',
@@ -170,7 +170,7 @@ describe('single-record-result-model 病历质控报告分组', () => {
     ]
 
     expect(() => buildSingleRecordQcPresentation(items)).toThrowError(
-      '单病历质控结果存在重复规则：LX0609-025',
+      '单病历质控结果存在重复规则：LX0609-04-02-04',
     )
     expect(() =>
       buildSingleRecordQcPresentation([
@@ -193,7 +193,7 @@ describe('single-record-result-model 病历质控报告分组', () => {
       'ai_suggested_compliant',
     ]
     const items = statuses.map((status, index) => ({
-      rule_id: `LX0609-${String(index + 1).padStart(3, '0')}`,
+      rule_id: `LX0609-${String(index + 1).padStart(2, '0')}-01-01`,
       rule_name: `规则${index + 1}`,
       source_document: '病程记录',
       status,
@@ -243,7 +243,7 @@ describe('single-record-result-model 病历质控报告分组', () => {
   it('缺少来源文书时只进入其他质控点，不根据规则编号或证据猜测分组', () => {
     const presentation = buildSingleRecordQcPresentation([
       {
-        rule_id: 'LX0609-066',
+        rule_id: 'LX0609-04-05-03',
         rule_name: '术后首次病程记录',
         source_document: '   ',
         status: 'non_compliant',
@@ -254,7 +254,7 @@ describe('single-record-result-model 病历质控报告分组', () => {
     expect(presentation.sectionsByTab.all).toEqual([
       expect.objectContaining({
         sourceDocument: '其他质控点',
-        items: [expect.objectContaining({ rule_id: 'LX0609-066' })],
+        items: [expect.objectContaining({ rule_id: 'LX0609-04-05-03' })],
       }),
     ])
   })

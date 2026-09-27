@@ -11,8 +11,8 @@ from typing import Any
 
 
 SURGERY_PRESENCE_DOCUMENT_TARGETS = {
-    "LX0609-030": "surgery_record",
-    "LX0609-032": "surgery_safecheck_record",
+    "LX0609-04-02-02": "surgery_record",
+    "LX0609-04-03-01": "surgery_safecheck_record",
 }
 
 
@@ -78,7 +78,7 @@ def safe_surgery_presence_customer_display_facts(
     target_document = SURGERY_PRESENCE_DOCUMENT_TARGETS[normalized_rule_id]
     trigger_facts = (
         _safe_030_trigger_facts(raw)
-        if normalized_rule_id == "LX0609-030"
+        if normalized_rule_id == "LX0609-04-02-02"
         else (
             {"performed_surgery_confirmed": True}
             if raw.get("performed_surgery_confirmed") is True

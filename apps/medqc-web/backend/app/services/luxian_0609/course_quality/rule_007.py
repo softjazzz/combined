@@ -1,4 +1,4 @@
-"""LX0609-007 稳定患者病程记录间隔判定。"""
+"""LX0609-02-01-03 稳定患者病程记录间隔判定。"""
 
 from __future__ import annotations
 
@@ -333,7 +333,7 @@ def evaluate_rule_007_typed(
         confidence: float | None,
     ) -> RuleDecision:
         return RuleDecision(
-            rule_id="LX0609-007",
+            rule_id="LX0609-02-01-03",
             snapshot_hash=snapshot.snapshot_hash,
             applicability=applicability,
             evidence_state=evidence_state,
@@ -792,7 +792,7 @@ def rule_007_customer_display_facts(
 ) -> Mapping[str, Any] | None:
     """输出实际查房间隔或不适用门控事实，不返回病历正文。"""
 
-    if decision.rule_id != "LX0609-007":
+    if decision.rule_id != "LX0609-02-01-03":
         return None
     if (
         decision.applicability is ApplicabilityState.NOT_APPLICABLE

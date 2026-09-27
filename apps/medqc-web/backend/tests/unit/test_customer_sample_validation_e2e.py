@@ -74,7 +74,7 @@ def _preflight_responses(*, ready: bool = True) -> dict:
                 "items": [
                     {
                         "rule_set_key": "luxian_0609_qc_v1",
-                        "rule_ids": ["LX0609-001", "LX0609-017", "LX0609-029"],
+                        "rule_ids": ["LX0609-01-01-01", "LX0609-12-01-02", "LX0609-04-01-01"],
                         "artifact_freshness": {"status": "fresh"},
                         "release_gate_summary": {"release_ready": False},
                     }
@@ -84,9 +84,9 @@ def _preflight_responses(*, ready: bool = True) -> dict:
         ("GET", "/api/v1/qc/sichuan/rules"): _response(
             {
                 "rules": [
-                    {"rule_id": "LX0609-001"},
-                    {"rule_id": "LX0609-017"},
-                    {"rule_id": "LX0609-029"},
+                    {"rule_id": "LX0609-01-01-01"},
+                    {"rule_id": "LX0609-12-01-02"},
+                    {"rule_id": "LX0609-04-01-01"},
                 ]
             }
         ),
@@ -131,7 +131,7 @@ def _minimal_write_responses() -> dict:
                 {
                     "status": "completed",
                     "summary": {},
-                    "items": [{"rule_id": "LX0609-001", "status": "compliant"}],
+                    "items": [{"rule_id": "LX0609-01-01-01", "status": "compliant"}],
                 }
             ),
             (
@@ -191,7 +191,7 @@ def test_dry_run_is_get_only_and_emits_safe_ledger(tmp_path: Path):
     ledger = e2e.run_e2e(
         api=client,
         fixture_pool=marker,
-        selected_rule_ids=("LX0609-001", "LX0609-017", "LX0609-029"),
+        selected_rule_ids=("LX0609-01-01-01", "LX0609-12-01-02", "LX0609-04-01-01"),
         dry_run=True,
         allow_local_writes=False,
         output_path=output_path,
@@ -223,7 +223,7 @@ def test_write_mode_requires_explicit_allow_before_any_request():
         e2e.run_e2e(
             api=client,
             fixture_pool="lx0609-e2e-v1",
-            selected_rule_ids=("LX0609-001",),
+            selected_rule_ids=("LX0609-01-01-01",),
             dry_run=False,
             allow_local_writes=False,
         )
@@ -238,7 +238,7 @@ def test_unready_fixture_stops_before_task_creation():
     ledger = e2e.run_e2e(
         api=client,
         fixture_pool="lx0609-e2e-v1",
-        selected_rule_ids=("LX0609-001",),
+        selected_rule_ids=("LX0609-01-01-01",),
         dry_run=True,
         allow_local_writes=False,
     )
@@ -285,9 +285,9 @@ def test_write_flow_runs_exact_scope_polls_reviews_and_checks_exports():
                             },
                         },
                         "items": [
-                            {"rule_id": "LX0609-001", "status": "compliant"},
-                            {"rule_id": "LX0609-017", "status": "non_compliant"},
-                            {"rule_id": "LX0609-029", "status": "data_gap"},
+                            {"rule_id": "LX0609-01-01-01", "status": "compliant"},
+                            {"rule_id": "LX0609-12-01-02", "status": "non_compliant"},
+                            {"rule_id": "LX0609-04-01-01", "status": "data_gap"},
                         ],
                     }
                 ),
@@ -343,7 +343,7 @@ def test_write_flow_runs_exact_scope_polls_reviews_and_checks_exports():
     ledger = e2e.run_e2e(
         api=client,
         fixture_pool="lx0609-e2e-v1",
-        selected_rule_ids=("LX0609-001", "LX0609-017", "LX0609-029"),
+        selected_rule_ids=("LX0609-01-01-01", "LX0609-12-01-02", "LX0609-04-01-01"),
         dry_run=False,
         allow_local_writes=True,
         poll_interval_seconds=0,
@@ -355,9 +355,9 @@ def test_write_flow_runs_exact_scope_polls_reviews_and_checks_exports():
         if call["method"] == "POST" and call["path"].endswith("/run")
     )
     assert run_call["json_data"]["selected_rule_ids"] == [
-        "LX0609-001",
-        "LX0609-017",
-        "LX0609-029",
+        "LX0609-01-01-01",
+        "LX0609-12-01-02",
+        "LX0609-04-01-01",
     ]
     assert run_call["json_data"]["record_ids"] == ["LX0609_SYN_001"]
     assert run_call["json_data"]["group_by_luxian_family"] is True
@@ -398,7 +398,7 @@ def test_preflight_failure_stops_before_fixture_lookup():
     ledger = e2e.run_e2e(
         api=client,
         fixture_pool="lx0609-e2e-v1",
-        selected_rule_ids=("LX0609-001",),
+        selected_rule_ids=("LX0609-01-01-01",),
         dry_run=True,
         allow_local_writes=False,
     )
@@ -420,7 +420,7 @@ def test_stale_release_artifact_stops_before_fixture_lookup():
     ledger = e2e.run_e2e(
         api=client,
         fixture_pool="lx0609-e2e-v1",
-        selected_rule_ids=("LX0609-001",),
+        selected_rule_ids=("LX0609-01-01-01",),
         dry_run=True,
         allow_local_writes=False,
     )
@@ -440,7 +440,7 @@ def test_fixture_identity_mismatch_stops_before_records_and_run():
     ledger = e2e.run_e2e(
         api=client,
         fixture_pool="lx0609-e2e-v1",
-        selected_rule_ids=("LX0609-001",),
+        selected_rule_ids=("LX0609-01-01-01",),
         dry_run=True,
         allow_local_writes=False,
     )
@@ -462,7 +462,7 @@ def test_failed_job_stops_before_review_and_export():
     ledger = e2e.run_e2e(
         api=client,
         fixture_pool="lx0609-e2e-v1",
-        selected_rule_ids=("LX0609-001",),
+        selected_rule_ids=("LX0609-01-01-01",),
         dry_run=False,
         allow_local_writes=True,
         poll_interval_seconds=0,
@@ -485,7 +485,7 @@ def test_review_failure_stops_before_export():
     ledger = e2e.run_e2e(
         api=client,
         fixture_pool="lx0609-e2e-v1",
-        selected_rule_ids=("LX0609-001",),
+        selected_rule_ids=("LX0609-01-01-01",),
         dry_run=False,
         allow_local_writes=True,
         poll_interval_seconds=0,
@@ -513,7 +513,7 @@ def test_invalid_review_report_fails_closed_before_export(invalid_total: object)
     ledger = e2e.run_e2e(
         api=client,
         fixture_pool="lx0609-e2e-v1",
-        selected_rule_ids=("LX0609-001",),
+        selected_rule_ids=("LX0609-01-01-01",),
         dry_run=False,
         allow_local_writes=True,
         poll_interval_seconds=0,
@@ -536,7 +536,7 @@ def test_wrong_export_mime_fails_privacy_export_stage():
     ledger = e2e.run_e2e(
         api=client,
         fixture_pool="lx0609-e2e-v1",
-        selected_rule_ids=("LX0609-001",),
+        selected_rule_ids=("LX0609-01-01-01",),
         dry_run=False,
         allow_local_writes=True,
         poll_interval_seconds=0,
@@ -566,7 +566,7 @@ def test_run_identity_must_match_safe_format(field: str, value: str, reason_code
     ledger = e2e.run_e2e(
         api=client,
         fixture_pool="lx0609-e2e-v1",
-        selected_rule_ids=("LX0609-001",),
+        selected_rule_ids=("LX0609-01-01-01",),
         dry_run=False,
         allow_local_writes=True,
         poll_interval_seconds=0,
@@ -589,7 +589,7 @@ def test_unknown_job_result_status_fails_closed():
     ledger = e2e.run_e2e(
         api=client,
         fixture_pool="lx0609-e2e-v1",
-        selected_rule_ids=("LX0609-001",),
+        selected_rule_ids=("LX0609-01-01-01",),
         dry_run=False,
         allow_local_writes=True,
         poll_interval_seconds=0,

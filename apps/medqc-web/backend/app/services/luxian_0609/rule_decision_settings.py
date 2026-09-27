@@ -2,49 +2,182 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Any, Mapping
+from uuid import uuid4
 
 from .phase_scope import partition_luxian_0609_rule_scope
+from ..qc_diagnostics.runtime_build import load_runtime_build
+
+
+LX0609_TASK_SETTINGS_FILTER_KEY = "lx0609_task_settings"
+LX0609_TASK_RUNTIME_FILTER_KEY = "lx0609_task_runtime"
+_LX0609_TASK_SETTINGS_VERSION = 1
+_LX0609_TASK_RUNTIME_VERSION = 1
+_UNVERSIONED_PROCESS_ID = uuid4().hex
+# 旧进程即使安装目录被覆盖，也不能把磁盘上的新构建号冒认为自身代码身份。
+_PROCESS_RUNTIME_BUILD = load_runtime_build()
+# 只包含会改变正式执行路径和客户证据组织的有效布尔值；资源预算、影子开关与凭据不入任务。
+_LX0609_TASK_MEDICAL_FLAGS = (
+    "MAINLINE_RULE_DECISION_ENABLED", "CUSTOMER_AGGREGATION_ENABLED", "UNIFIED_ENGINE_ENABLED",
+    "NATIVE_EXECUTION_ENABLED", "NATIVE_MDT_040_ENABLED", "NATIVE_EXTENDED_DOCUMENT_ENABLED",
+    "NATIVE_BASIC_TIMELINESS_ENABLED", "NATIVE_CONSULTATION_ENABLED",
+    "CONSULTATION_EXECUTION_LINK_ENABLED", "NATIVE_EXAM_LAB_ENABLED",
+    "NATIVE_TRANSFUSION_ENABLED", "NATIVE_TUMOR_PATHOLOGY_ENABLED",
+    "NATIVE_COURSE_QUALITY_ENABLED", "NATIVE_SURGERY_GATE_ENABLED",
+    "NATIVE_SURGERY_DOCUMENT_ENABLED",
+    "RULE_DECISION_007_ENABLED", "RULE_DECISION_COURSE_SEVERITY_ENABLED",
+    "RULE_DECISION_BASIC_TIMELINESS_ENABLED", "RULE_DECISION_TRANSFUSION_ENABLED",
+    "RULE_DECISION_CONSULTATION_ENABLED", "RULE_DECISION_COURSE_COPY_ENABLED",
+    "RULE_DECISION_COURSE_ADMISSION_ENABLED", "RULE_DECISION_TUMOR_PATHOLOGY_ENABLED",
+    "RULE_DECISION_MDT_040_ENABLED", "RULE_DECISION_SURGERY_TIMELINESS_ENABLED",
+    "RULE_DECISION_SURGERY_GATE_REMAINING_ENABLED", "RULE_DECISION_EXAM_LAB_ENABLED",
+    "RULE_DECISION_SURGERY_DOCUMENT_ENABLED", "TRIGGER_GATE_ENABLED",
+    "LLM_TRIGGER_GATE_ENABLED", "EVIDENCE_SNAPSHOT_SIDECAR_ENABLED",
+)
+_LX0609_TASK_DELIVERY_FLAGS = ("EVIDENCE_FORMATTER_ENABLED",)
+_LX0609_TASK_FLAG_NAMES = tuple(
+    f"LUXIAN_0609_{suffix}"
+    for suffix in (*_LX0609_TASK_MEDICAL_FLAGS, *_LX0609_TASK_DELIVERY_FLAGS)
+)
+
+
+def capture_luxian_0609_task_settings(effective_settings: Any) -> dict[str, Any]:
+    """创建任务时记录已解析的有效执行路径，而非环境原始配置。"""
+
+    values: dict[str, bool] = {}
+    for name in _LX0609_TASK_FLAG_NAMES:
+        value = getattr(effective_settings, name)
+        if type(value) is not bool:
+            raise ValueError(f"LX0609任务配置非法：{name}不是布尔值")
+        values[name] = value
+    return {"schema_version": _LX0609_TASK_SETTINGS_VERSION, "flags": values}
+
+
+def assert_luxian_0609_task_settings_match(
+    frozen: Any, effective_settings: Any,
+) -> None:
+    """旧任务、损坏快照或运行时配置漂移均在医学计划前失败关闭。"""
+
+    if (
+        not isinstance(frozen, dict)
+        or type(frozen.get("schema_version")) is not int
+        or frozen["schema_version"] != _LX0609_TASK_SETTINGS_VERSION
+        or set(frozen) != {"schema_version", "flags"}
+        or not isinstance(frozen.get("flags"), dict)
+        or set(frozen["flags"]) != set(_LX0609_TASK_FLAG_NAMES)
+        or any(type(value) is not bool for value in frozen["flags"].values())
+    ):
+        raise ValueError("LX0609任务执行配置快照缺失或非法，请重新发起任务")
+    current = capture_luxian_0609_task_settings(effective_settings)
+    changed = [name for name in _LX0609_TASK_FLAG_NAMES if frozen["flags"][name] != current["flags"][name]]
+    if changed:
+        raise ValueError(f"LX0609任务执行配置已变化，请重新发起任务：{', '.join(changed)}")
+
+
+def _luxian_0609_model_identity(client: Any) -> dict[str, Any]:
+    """只冻结影响推理的有效客户端配置；凭据与端点原文不入任务。"""
+
+    if client is None:
+        raise ValueError("LX0609任务模型配置不可用")
+    provider = str(getattr(client, "provider_code", "") or "").strip().lower()
+    model = str(getattr(client, "model", "") or "").strip()
+    if not provider or not model:
+        raise ValueError("LX0609任务模型配置不可用")
+    endpoint = str(getattr(client, "api_endpoint", "") or "").strip()
+    return {
+        "provider": provider,
+        "model": model,
+        "endpoint_sha256": hashlib.sha256(endpoint.encode("utf-8")).hexdigest(),
+        "temperature": getattr(client, "temperature", None),
+        "top_p": getattr(client, "top_p", None),
+        "max_tokens": getattr(client, "max_tokens", None),
+        "enable_thinking": getattr(client, "enable_thinking", None),
+        "thinking_budget": getattr(client, "thinking_budget", None),
+        "reasoning_effort": str(getattr(client, "reasoning_effort", "") or "").strip(),
+        "allow_mock_when_unconfigured": getattr(client, "allow_mock_when_unconfigured", None),
+    }
+
+
+def capture_luxian_0609_task_runtime(qc_service: Any) -> dict[str, Any]:
+    """记录任务接纳时实际服务的模型及代码版本，不重新加载模型配置。"""
+
+    build = _PROCESS_RUNTIME_BUILD
+    implementation = (
+        {"kind": "release", "build_id": build["build_id"], "git_commit": build["git_commit"]}
+        if build.get("available") is True
+        else {"kind": "process", "id": _UNVERSIONED_PROCESS_ID}
+    )
+    snapshot = {
+        "schema_version": _LX0609_TASK_RUNTIME_VERSION,
+        "implementation": implementation,
+        "first_pass": _luxian_0609_model_identity(getattr(qc_service, "client", None)),
+        "adjudicator": _luxian_0609_model_identity(getattr(qc_service, "adjudicator_client", None)),
+    }
+    try:
+        json.dumps(snapshot, ensure_ascii=False, sort_keys=True, allow_nan=False)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("LX0609任务模型配置不可序列化") from exc
+    return snapshot
+
+
+def assert_luxian_0609_task_runtime_match(frozen: Any, qc_service: Any) -> None:
+    """模型、推理参数或部署版本变化时，在读取病例前拒绝旧任务。"""
+
+    if type(frozen) is not dict or set(frozen) != {
+        "schema_version", "implementation", "first_pass", "adjudicator"
+    } or type(frozen.get("schema_version")) is not int or frozen["schema_version"] != _LX0609_TASK_RUNTIME_VERSION:
+        raise ValueError("LX0609任务运行身份快照缺失或非法，请重新发起任务")
+    try:
+        serialized = json.dumps(frozen, ensure_ascii=False, sort_keys=True, allow_nan=False)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("LX0609任务运行身份快照缺失或非法，请重新发起任务") from exc
+    current = capture_luxian_0609_task_runtime(qc_service)
+    if serialized != json.dumps(current, ensure_ascii=False, sort_keys=True, allow_nan=False):
+        raise ValueError("LX0609任务模型或实现版本已变化，请重新发起任务")
 
 
 RULE_DECISION_ROLLOUT_GROUPS: tuple[tuple[str | None, tuple[str, ...]], ...] = (
     ("LUXIAN_0609_RULE_DECISION_BASIC_TIMELINESS_ENABLED", (
-        "LX0609-001", "LX0609-002", "LX0609-004", "LX0609-005", "LX0609-006",
+        "LX0609-01-01-01", "LX0609-01-02-01", "LX0609-09-01-01", "LX0609-02-01-01", "LX0609-02-01-02",
     )),
-    ("LUXIAN_0609_RULE_DECISION_SURGERY_TIMELINESS_ENABLED", ("LX0609-003",)),
-    ("LUXIAN_0609_RULE_DECISION_007_ENABLED", ("LX0609-007",)),
+    ("LUXIAN_0609_RULE_DECISION_SURGERY_TIMELINESS_ENABLED", ("LX0609-04-02-01",)),
+    ("LUXIAN_0609_RULE_DECISION_007_ENABLED", ("LX0609-02-01-03",)),
     ("LUXIAN_0609_RULE_DECISION_COURSE_SEVERITY_ENABLED", (
-        "LX0609-008", "LX0609-009",
+        "LX0609-02-01-04", "LX0609-02-01-05",
     )),
     ("LUXIAN_0609_RULE_DECISION_EXAM_LAB_ENABLED", (
-        "LX0609-010", "LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015",
+        "LX0609-06-01-02", "LX0609-06-01-04", "LX0609-06-01-05", "LX0609-06-03-03", "LX0609-06-03-04",
     )),
     ("LUXIAN_0609_RULE_DECISION_TUMOR_PATHOLOGY_ENABLED", (
-        "LX0609-013", "LX0609-019", "LX0609-026", "LX0609-027",
+        "LX0609-06-02-03", "LX0609-06-02-02", "LX0609-05-02-01", "LX0609-08-01-04",
     )),
-    ("LUXIAN_0609_RULE_DECISION_COURSE_ADMISSION_ENABLED", ("LX0609-016",)),
-    ("LUXIAN_0609_RULE_DECISION_COURSE_COPY_ENABLED", ("LX0609-017",)),
-    (None, ("LX0609-018",)),
+    ("LUXIAN_0609_RULE_DECISION_COURSE_ADMISSION_ENABLED", ("LX0609-12-01-01",)),
+    ("LUXIAN_0609_RULE_DECISION_COURSE_COPY_ENABLED", ("LX0609-12-01-02",)),
+    (None, ("LX0609-01-01-02",)),
+    # 新增抢救内容点沿用基础族同步/await桥接，但没有历史兼容执行路径。
+    (None, ("LX0609-09-01-02",)),
     ("LUXIAN_0609_RULE_DECISION_CONSULTATION_ENABLED", (
-        "LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023",
+        "LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03", "LX0609-03-01-04",
     )),
     ("LUXIAN_0609_RULE_DECISION_SURGERY_GATE_REMAINING_ENABLED", (
-        "LX0609-024", "LX0609-025", "LX0609-028", "LX0609-031", "LX0609-033",
+        "LX0609-04-02-03", "LX0609-04-02-04", "LX0609-05-01-01", "LX0609-04-02-05", "LX0609-11-01-01",
     )),
     ("LUXIAN_0609_RULE_DECISION_SURGERY_DOCUMENT_ENABLED", (
-        "LX0609-029", "LX0609-034", "LX0609-035", "LX0609-036",
-        "LX0609-037", "LX0609-038", "LX0609-039",
+        "LX0609-04-01-01", "LX0609-11-02-01", "LX0609-11-02-02", "LX0609-04-04-01",
+        "LX0609-04-04-02", "LX0609-04-04-03", "LX0609-04-01-02",
     )),
-    ("LUXIAN_0609_NATIVE_EXECUTION_ENABLED", ("LX0609-030", "LX0609-032")),
-    ("LUXIAN_0609_RULE_DECISION_MDT_040_ENABLED", ("LX0609-040",)),
+    ("LUXIAN_0609_NATIVE_EXECUTION_ENABLED", ("LX0609-04-02-02", "LX0609-04-03-01")),
+    ("LUXIAN_0609_RULE_DECISION_MDT_040_ENABLED", ("LX0609-04-01-03",)),
     ("LUXIAN_0609_RULE_DECISION_TRANSFUSION_ENABLED", (
-        "LX0609-041", "LX0609-042", "LX0609-043", "LX0609-044", "LX0609-045",
-        "LX0609-046", "LX0609-047", "LX0609-048", "LX0609-049",
+        "LX0609-11-03-01", "LX0609-11-03-02", "LX0609-07-01-01", "LX0609-07-01-02", "LX0609-07-02-01",
+        "LX0609-07-02-02", "LX0609-07-03-01", "LX0609-07-04-01", "LX0609-07-04-02",
     )),
 )
 
 _CONSULTATION_RULE_IDS = frozenset(
-    {"LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023"}
+    {"LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03", "LX0609-03-01-04"}
 )
 
 _RULE_DECISION_FLAG_BY_RULE_ID = {
@@ -70,12 +203,14 @@ def resolve_typed_decision_rule_ids(
     unified_engine_enabled: bool,
     always_typed_rule_ids: tuple[str, ...],
     native_async_rule_ids: tuple[str, ...],
+    native_sync_rule_ids: tuple[str, ...] = (),
 ) -> tuple[str, ...]:
     """从唯一发布组解析Typed Decision范围，并保持客户规则目录顺序。"""
 
     executable_rule_ids, _ = partition_luxian_0609_rule_scope(selected_rule_ids)
     always_typed = frozenset(always_typed_rule_ids)
     native_async = frozenset(native_async_rule_ids)
+    native_rule_ids = native_async | frozenset(native_sync_rule_ids)
     enabled_rollout: set[str] = set()
     if unified_engine_enabled:
         for flag_name, rule_ids in RULE_DECISION_ROLLOUT_GROUPS:
@@ -99,7 +234,7 @@ def resolve_typed_decision_rule_ids(
                 # 包计划且没有历史开关的新规则，直接采用其 RuleDecision 合同；
                 # 否则每新增规则都必须再次修改这个公共发布列表。
                 or (
-                    rule_id in native_async
+                    rule_id in native_rule_ids
                     and rule_id not in _RULE_DECISION_FLAG_BY_RULE_ID
                 )
             )

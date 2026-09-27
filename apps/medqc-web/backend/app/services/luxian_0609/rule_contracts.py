@@ -39,7 +39,7 @@ _SOURCE_CONTRACT_STATES = frozenset(
     {"legacy_projection_v1", "typed_shadow_v1", "typed_malignancy_gate_v1"}
 )
 _GOLDEN_GATE_STATES = frozenset({"pending", "accepted"})
-_CRITERION_KINDS = frozenset(
+CRITERION_KINDS = frozenset(
     {
         "presence",
         "timeliness",
@@ -87,7 +87,7 @@ class RuleCriterionContract:
             or any(ord(char) < 32 for char in self.label)
         ):
             raise ValueError("invalid LX0609 criterion label")
-        if self.kind not in _CRITERION_KINDS:
+        if self.kind not in CRITERION_KINDS:
             raise ValueError("invalid LX0609 criterion kind")
         if self.kind == "text_length":
             if (
@@ -193,7 +193,7 @@ class Luxian0609RuleContract:
             0
             if self.decision_authority == "program_only"
             else 2
-            if self.rule_id in {"LX0609-023", "LX0609-024"}
+            if self.rule_id in {"LX0609-03-01-04", "LX0609-04-02-03"}
             else 1
         )
         if self.max_llm_calls_per_rule != expected_calls:
@@ -295,7 +295,10 @@ def compile_luxian_0609_rule_contracts(
     dependency_by_id = {item.rule_id: item for item in inventory}
     phase_scope = load_luxian_0609_phase_scope()
     phase_scope_by_id = {item.rule_id: item for item in phase_scope}
-    if tuple(phase_scope_by_id) != tuple(item.rule_id for item in inventory):
+    registered_phase_ids = tuple(
+        item.rule_id for item in phase_scope if item.catalog_registered
+    )
+    if registered_phase_ids != tuple(item.rule_id for item in inventory):
         raise ValueError("LX0609 phase scope does not match dependency inventory")
     if _clean(payload.get("schema_version")) != RULE_CONTRACT_SCHEMA_VERSION:
         raise ValueError("unsupported LX0609 rule contract schema")

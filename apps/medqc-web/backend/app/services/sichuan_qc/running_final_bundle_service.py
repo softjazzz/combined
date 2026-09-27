@@ -6,6 +6,7 @@
 import sys
 from typing import Any, Callable, Dict, List, Optional
 
+from ...core.settings import Settings
 from ..effect_priority_qc import (
     BATCH_OUTPUT_MODE_FULL,
     DEFAULT_MAX_REFINE_CANDIDATES,
@@ -13,6 +14,8 @@ from ..effect_priority_qc import (
     QUALITY_PROFILE_THROUGHPUT,
 )
 from ..luxian_0609 import LUXIAN_0609_RULE_SET_KEY
+from ..luxian_0609.rule_decision_settings import ReadOnlySettingsOverlay
+from ..luxian_0609.native_package import Luxian0609PackagePlan
 
 
 def _resolve_facade_module(host: Any) -> Any:
@@ -49,6 +52,7 @@ async def evaluate_running_final_bundle_input(
     evaluation_as_of_date: str | None = None,
     evaluation_horizon_policy: str | None = None,
     evaluation_horizon_unavailable_reason: str | None = None,
+    task_settings: Settings | ReadOnlySettingsOverlay | None = None,
     cancellation_check: Optional[Callable[[], bool]] = None,
     execution_trace_sink: Optional[Callable[[Dict[str, Any]], None]] = None,
 ) -> Dict[str, Any]:
@@ -76,13 +80,20 @@ async def evaluate_running_final_bundle_input(
     evidence_payload = dict(eval_args.get("evidence_payload") or {})
     normalized_rule_set_key = str(rule_set_key or "").strip()
     quality_profile_normalized = host_module.normalize_quality_profile(quality_profile)
-    settings = host_module.get_settings()
+    settings = (
+        task_settings
+        if normalized_rule_set_key == LUXIAN_0609_RULE_SET_KEY
+        and task_settings is not None
+        else host_module.get_settings()
+    )
     if normalized_rule_set_key == LUXIAN_0609_RULE_SET_KEY:
-        settings = host_module.resolve_mainline_rule_decision_settings(settings)
+        if task_settings is None:
+            settings = host_module.resolve_mainline_rule_decision_settings(settings)
         host_module.assert_luxian_0609_customer_native_delivery_ready(
             settings,
             context="evaluate_running_final_bundle_input",
         )
+    package_plan: Luxian0609PackagePlan | None = None
     selected_customer_rule_ids: tuple[str, ...] | None = None
     if normalized_rule_set_key == LUXIAN_0609_RULE_SET_KEY and resolved_rule_ids:
         normalized_requested_ids = tuple(
@@ -192,6 +203,7 @@ async def evaluate_running_final_bundle_input(
                 evaluation_horizon_unavailable_reason
             ),
             selected_customer_rule_ids=selected_customer_rule_ids,
+            **({"prepared_package_plan": package_plan} if package_plan is not None else {}),
             trace_sink=execution_trace_sink,
         )
 

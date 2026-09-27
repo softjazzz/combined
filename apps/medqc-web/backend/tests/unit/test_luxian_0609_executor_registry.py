@@ -44,17 +44,17 @@ from app.services.luxian_0609.source_registry import SOURCE_REGISTRY_VERSION
 
 
 RULE_BY_EXECUTOR = {
-    "surgery_presence": "LX0609-030",
-    "basic_timeliness": "LX0609-001",
-    "exam_lab": "LX0609-010",
-    "consultation_quality": "LX0609-020",
-    "transfusion": "LX0609-041",
-    "tumor_pathology": "LX0609-013",
-    "course_quality": "LX0609-007",
-    "surgery_gate": "LX0609-003",
-    "surgery_document": "LX0609-034",
-    "surgery_mdt": "LX0609-040",
-    "extended_document": "LX0609-051",
+    "surgery_presence": "LX0609-04-02-02",
+    "basic_timeliness": "LX0609-01-01-01",
+    "exam_lab": "LX0609-06-01-02",
+    "consultation_quality": "LX0609-03-01-01",
+    "transfusion": "LX0609-11-03-01",
+    "tumor_pathology": "LX0609-06-02-03",
+    "course_quality": "LX0609-02-01-03",
+    "surgery_gate": "LX0609-04-02-01",
+    "surgery_document": "LX0609-11-02-01",
+    "surgery_mdt": "LX0609-04-01-03",
+    "extended_document": "LX0609-09-02-01",
 }
 
 
@@ -92,7 +92,7 @@ def _result(rule_id: str) -> dict:
 
 def test_single_result_typed_envelope_omits_none_customer_result() -> None:
     marker = RuleDecision(
-        rule_id="LX0609-040",
+        rule_id="LX0609-04-01-03",
         snapshot_hash="a" * 64,
         applicability=ApplicabilityState.APPLICABLE,
         evidence_state=EvidenceState.SUFFICIENT,
@@ -113,20 +113,20 @@ def test_single_result_typed_envelope_omits_none_customer_result() -> None:
             api_time=0.0,
         ),
         executor_key="surgery_mdt",
-        selected_rule_ids=("LX0609-040",),
+        selected_rule_ids=("LX0609-04-01-03",),
         single_result=True,
     )
 
     assert envelope.results == ()
     assert envelope.decisions == (marker,)
-    assert envelope.planned_rule_ids == ("LX0609-040",)
+    assert envelope.planned_rule_ids == ("LX0609-04-01-03",)
 
 
 def test_adapter_builds_one_safe_usage_attribution_for_multi_rule_family() -> None:
     envelope = _to_envelope(
         SimpleNamespace(
-            results=(_result("LX0609-010"), _result("LX0609-011")),
-            planned_rule_ids=("LX0609-010", "LX0609-011"),
+            results=(_result("LX0609-06-01-02"), _result("LX0609-06-01-04")),
+            planned_rule_ids=("LX0609-06-01-02", "LX0609-06-01-04"),
             decisions=(),
             llm_call_count=1,
             prompt_tokens=120,
@@ -134,20 +134,20 @@ def test_adapter_builds_one_safe_usage_attribution_for_multi_rule_family() -> No
             total_tokens=140,
             api_time=0.25,
         ),
-        selected_rule_ids=("LX0609-010", "LX0609-011"),
+        selected_rule_ids=("LX0609-06-01-02", "LX0609-06-01-04"),
         executor_key="exam_lab",
     )
 
     usage = envelope.usage_attribution
     assert usage.executor_key == "exam_lab"
-    assert usage.covered_customer_rule_ids == ("LX0609-010", "LX0609-011")
+    assert usage.covered_customer_rule_ids == ("LX0609-06-01-02", "LX0609-06-01-04")
     assert usage.to_safe_dict() == {
         "executor_key": "exam_lab",
         "llm_call_count": 1,
         "prompt_tokens": 120,
         "completion_tokens": 20,
         "total_tokens": 140,
-        "covered_customer_rule_ids": ["LX0609-010", "LX0609-011"],
+        "covered_customer_rule_ids": ["LX0609-06-01-02", "LX0609-06-01-04"],
         "latency_ms": 250.0,
     }
 
@@ -155,8 +155,8 @@ def test_adapter_builds_one_safe_usage_attribution_for_multi_rule_family() -> No
 def test_adapter_records_programmatic_family_as_explicit_zero_usage() -> None:
     envelope = _to_envelope(
         SimpleNamespace(
-            results=(_result("LX0609-001"),),
-            planned_rule_ids=("LX0609-001",),
+            results=(_result("LX0609-01-01-01"),),
+            planned_rule_ids=("LX0609-01-01-01",),
             decisions=(),
             llm_call_count=0,
             prompt_tokens=0,
@@ -164,7 +164,7 @@ def test_adapter_records_programmatic_family_as_explicit_zero_usage() -> None:
             total_tokens=0,
             api_time=0.0,
         ),
-        selected_rule_ids=("LX0609-001",),
+        selected_rule_ids=("LX0609-01-01-01",),
         executor_key="basic_timeliness",
     )
 
@@ -174,7 +174,7 @@ def test_adapter_records_programmatic_family_as_explicit_zero_usage() -> None:
         "prompt_tokens": 0,
         "completion_tokens": 0,
         "total_tokens": 0,
-        "covered_customer_rule_ids": ["LX0609-001"],
+        "covered_customer_rule_ids": ["LX0609-01-01-01"],
         "latency_ms": 0.0,
     }
 
@@ -182,8 +182,8 @@ def test_adapter_records_programmatic_family_as_explicit_zero_usage() -> None:
 def test_adapter_preserves_model_call_when_provider_usage_is_missing() -> None:
     envelope = _to_envelope(
         SimpleNamespace(
-            results=(_result("LX0609-010"),),
-            planned_rule_ids=("LX0609-010",),
+            results=(_result("LX0609-06-01-02"),),
+            planned_rule_ids=("LX0609-06-01-02",),
             decisions=(),
             llm_call_count=1,
             prompt_tokens=0,
@@ -191,7 +191,7 @@ def test_adapter_preserves_model_call_when_provider_usage_is_missing() -> None:
             total_tokens=0,
             api_time=0.3,
         ),
-        selected_rule_ids=("LX0609-010",),
+        selected_rule_ids=("LX0609-06-01-02",),
         executor_key="exam_lab",
     )
 
@@ -201,7 +201,7 @@ def test_adapter_preserves_model_call_when_provider_usage_is_missing() -> None:
         "prompt_tokens": 0,
         "completion_tokens": 0,
         "total_tokens": 0,
-        "covered_customer_rule_ids": ["LX0609-010"],
+        "covered_customer_rule_ids": ["LX0609-06-01-02"],
         "latency_ms": 300.0,
     }
 
@@ -219,8 +219,8 @@ def test_adapter_transmits_safe_model_execution_stats() -> None:
     }
     envelope = _to_envelope(
         SimpleNamespace(
-            results=(_result("LX0609-010"),),
-            planned_rule_ids=("LX0609-010",),
+            results=(_result("LX0609-06-01-02"),),
+            planned_rule_ids=("LX0609-06-01-02",),
             decisions=(),
             llm_call_count=2,
             prompt_tokens=120,
@@ -229,7 +229,7 @@ def test_adapter_transmits_safe_model_execution_stats() -> None:
             api_time=0.25,
             model_execution_stats=stats,
         ),
-        selected_rule_ids=("LX0609-010",),
+        selected_rule_ids=("LX0609-06-01-02",),
         executor_key="exam_lab",
     )
 
@@ -250,7 +250,7 @@ def test_compatibility_usage_fallback_transmits_model_execution_stats() -> None:
     }
     usage = _build_execution_usage_attribution(
         executor_key="exam_lab",
-        rule_ids=("LX0609-010",),
+        rule_ids=("LX0609-06-01-02",),
         execution=SimpleNamespace(
             llm_call_count=2,
             prompt_tokens=120,
@@ -291,8 +291,8 @@ def test_model_execution_stats_rejects_unsafe_keys_and_invalid_counts() -> None:
         with pytest.raises((TypeError, ValueError), match="model execution stats"):
             _to_envelope(
                 SimpleNamespace(
-                    results=(_result("LX0609-010"),),
-                    planned_rule_ids=("LX0609-010",),
+                    results=(_result("LX0609-06-01-02"),),
+                    planned_rule_ids=("LX0609-06-01-02",),
                     llm_call_count=1,
                     prompt_tokens=1,
                     completion_tokens=1,
@@ -300,7 +300,7 @@ def test_model_execution_stats_rejects_unsafe_keys_and_invalid_counts() -> None:
                     api_time=0.1,
                     model_execution_stats=stats,
                 ),
-                selected_rule_ids=("LX0609-010",),
+                selected_rule_ids=("LX0609-06-01-02",),
                 executor_key="exam_lab",
             )
 
@@ -318,8 +318,8 @@ def test_model_execution_stats_uses_none_for_zero_denominators() -> None:
     }
     envelope = _to_envelope(
         SimpleNamespace(
-            results=(_result("LX0609-010"),),
-            planned_rule_ids=("LX0609-010",),
+            results=(_result("LX0609-06-01-02"),),
+            planned_rule_ids=("LX0609-06-01-02",),
             llm_call_count=0,
             prompt_tokens=0,
             completion_tokens=0,
@@ -327,7 +327,7 @@ def test_model_execution_stats_uses_none_for_zero_denominators() -> None:
             api_time=0.0,
             model_execution_stats=stats,
         ),
-        selected_rule_ids=("LX0609-010",),
+        selected_rule_ids=("LX0609-06-01-02",),
         executor_key="exam_lab",
     )
 
@@ -347,8 +347,8 @@ def test_model_execution_stats_allows_model_failure_without_retry() -> None:
     }
     envelope = _to_envelope(
         SimpleNamespace(
-            results=(_result("LX0609-010"),),
-            planned_rule_ids=("LX0609-010",),
+            results=(_result("LX0609-06-01-02"),),
+            planned_rule_ids=("LX0609-06-01-02",),
             llm_call_count=1,
             prompt_tokens=1,
             completion_tokens=1,
@@ -356,7 +356,7 @@ def test_model_execution_stats_allows_model_failure_without_retry() -> None:
             api_time=0.1,
             model_execution_stats=stats,
         ),
-        selected_rule_ids=("LX0609-010",),
+        selected_rule_ids=("LX0609-06-01-02",),
         executor_key="exam_lab",
     )
 
@@ -376,7 +376,7 @@ def test_execution_metadata_attaches_exam_lab_stats_without_mutating_results() -
     }
     usage = _build_execution_usage_attribution(
         executor_key="exam_lab",
-        rule_ids=("LX0609-010",),
+        rule_ids=("LX0609-06-01-02",),
         execution=SimpleNamespace(
             llm_call_count=1,
             prompt_tokens=1,
@@ -386,7 +386,7 @@ def test_execution_metadata_attaches_exam_lab_stats_without_mutating_results() -
             model_execution_stats=stats,
         ),
     )
-    results = [{"rule_id": "LX0609-010", "status": "compliant"}]
+    results = [{"rule_id": "LX0609-06-01-02", "status": "compliant"}]
     orchestrated = {"results": results}
 
     attach_luxian_0609_execution_metadata(
@@ -418,7 +418,7 @@ def test_surgery_gate_declares_strict_surgery_record_material_dependency() -> No
         "surgery_record",
     )
     assert resolve_legacy_executor_material_source_keys(
-        ("surgery_gate",), selected_rule_ids=("LX0609-024",)
+        ("surgery_gate",), selected_rule_ids=("LX0609-04-02-03",)
     ) == (
         "admission_record_diagnosis",
         "diagnosis",
@@ -454,11 +454,11 @@ def test_consultation_declares_relation_and_support_material_dependencies() -> N
 def test_tumor_pathology_materials_are_scoped_by_rule() -> None:
     assert resolve_legacy_executor_material_source_keys(
         ("tumor_pathology",),
-        selected_rule_ids=("LX0609-013", "LX0609-019"),
+        selected_rule_ids=("LX0609-06-02-03", "LX0609-06-02-02"),
     ) == ("pathology_exam_master", "pathology_exam_report")
     assert resolve_legacy_executor_material_source_keys(
         ("tumor_pathology",),
-        selected_rule_ids=("LX0609-026", "LX0609-027"),
+        selected_rule_ids=("LX0609-05-02-01", "LX0609-08-01-04"),
     ) == (
         "admission_record_diagnosis",
         "daily_course_record",
@@ -471,7 +471,7 @@ def test_tumor_pathology_materials_are_scoped_by_rule() -> None:
     )
     assert resolve_legacy_executor_material_source_keys(
         ("tumor_pathology",),
-        selected_rule_ids=("LX0609-027",),
+        selected_rule_ids=("LX0609-08-01-04",),
     ) == (
         "diagnosis",
         "discharge_record",
@@ -504,7 +504,7 @@ async def test_legacy_adapters_cover_registered_keys_and_preserve_call_order():
     def mdt(**kwargs):
         calls.append(("surgery_mdt", kwargs))
         return SimpleNamespace(
-            result=_result("LX0609-040"),
+            result=_result("LX0609-04-01-03"),
             llm_call_count=0,
             prompt_tokens=0,
             completion_tokens=0,
@@ -531,7 +531,7 @@ async def test_legacy_adapters_cover_registered_keys_and_preserve_call_order():
         sources={},
     )
     resources = LegacyFamilyExecutionResources(
-        wrapper_rules=({"rule_id": "LX0609-010"},),
+        wrapper_rules=({"rule_id": "LX0609-06-01-02"},),
         evidence_payload={"safe": True},
         institute_id="safe-institute",
         patient_id="safe-patient",
@@ -575,7 +575,7 @@ async def test_legacy_adapters_cover_registered_keys_and_preserve_call_order():
     assert calls[0][1]["evidence_materials"] is materials
     assert calls[1][1]["evidence_materials"] is materials
     assert calls[1][1]["llm_client"] is resources.llm_client
-    assert calls[2][1]["wrapper_rules"] == [{"rule_id": "LX0609-010"}]
+    assert calls[2][1]["wrapper_rules"] == [{"rule_id": "LX0609-06-01-02"}]
     assert calls[3][1]["evidence_materials"] is materials
     assert calls[4][1]["evidence_materials"] is materials
     assert calls[5][1]["evidence_snapshot"] is snapshot
@@ -587,5 +587,5 @@ async def test_legacy_adapters_cover_registered_keys_and_preserve_call_order():
     assert calls[7][1]["malignancy_resolver"] is resources.malignancy_resolver
     assert calls[-2][1]["evidence_materials"] is materials
     assert "rule_ids" not in calls[-2][1]
-    assert calls[-1][1]["rule_ids"] == ("LX0609-051",)
+    assert calls[-1][1]["rule_ids"] == ("LX0609-09-02-01",)
     assert calls[-1][1]["evidence_materials"] is materials

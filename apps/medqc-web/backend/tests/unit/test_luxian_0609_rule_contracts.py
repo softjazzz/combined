@@ -33,18 +33,21 @@ _CONTRACT_PATH = (
 def test_rule_contracts_cover_all_phase1_registered_rules_in_catalog_order() -> None:
     contracts = load_luxian_0609_rule_contracts()
 
-    assert len(contracts) == 79
+    assert len(contracts) == 84
     assert tuple(contract.rule_id for contract in contracts) == tuple(
         str(item["rule_id"]) for item in load_luxian_0609_rules()
     )
-    assert sum(contract.phase_status == "phase_1_target" for contract in contracts) == 69
+    assert sum(contract.phase_status == "phase_1_target" for contract in contracts) == 74
     assert sum(contract.phase_status == "phase_1_partial" for contract in contracts) == 0
     assert sum(contract.phase_status == "pending_definition" for contract in contracts) == 10
+    assert {"LX0609-06-03-01"}.isdisjoint(
+        contract.rule_id for contract in contracts
+    )
     assert {contract.definition_version for contract in contracts} == {
-        "lx0609-defined-scope-2026-09-05-r3"
+        "lx0609-defined-scope-2026-09-22-identity-v1"
     }
     assert json.loads(_CONTRACT_PATH.read_text(encoding="utf-8"))["definition_version"] == (
-        "lx0609-defined-scope-2026-09-05-r3"
+        "lx0609-defined-scope-2026-09-22-identity-v1"
     )
     assert all(
         "not_executed" in contract.allowed_final_states for contract in contracts
@@ -55,11 +58,11 @@ def test_rule_contracts_cover_all_phase1_registered_rules_in_catalog_order() -> 
 def test_rule_contracts_include_partial_and_pending_definition_boundaries() -> None:
     contracts = {item.rule_id: item for item in load_luxian_0609_rule_contracts()}
 
-    critical_course = contracts["LX0609-009"]
+    critical_course = contracts["LX0609-02-01-05"]
     assert critical_course.phase_status == "phase_1_target"
     assert critical_course.pending_criteria == ()
 
-    complaint_rule = contracts["LX0609-018"]
+    complaint_rule = contracts["LX0609-01-01-02"]
     assert complaint_rule.phase_status == "phase_1_target"
     assert complaint_rule.active_criteria == (
         "chief_complaint_length",
@@ -70,31 +73,31 @@ def test_rule_contracts_include_partial_and_pending_definition_boundaries() -> N
     assert complaint_rule.decision_authority == "program_then_optional_llm"
     assert complaint_rule.max_llm_calls_per_rule == 1
 
-    copy_rule = contracts["LX0609-016"]
+    copy_rule = contracts["LX0609-12-01-01"]
     assert copy_rule.decision_authority == "program_only"
     assert copy_rule.max_llm_calls_per_rule == 0
 
-    basic_senior_round = contracts["LX0609-006"]
+    basic_senior_round = contracts["LX0609-02-01-02"]
     assert basic_senior_round.family_key == "basic_timeliness"
     assert basic_senior_round.executor_key == "basic_timeliness"
     assert basic_senior_round.execution_mode == "native_sync"
     assert basic_senior_round.decision_authority == "program_then_optional_llm"
     assert basic_senior_round.max_llm_calls_per_rule == 1
 
-    repeated_course = contracts["LX0609-017"]
+    repeated_course = contracts["LX0609-12-01-02"]
     assert repeated_course.contract_version == "v7"
     assert repeated_course.decision_authority == "program_then_optional_llm"
     assert repeated_course.max_llm_calls_per_rule == 1
 
-    exam_course = contracts["LX0609-010"]
+    exam_course = contracts["LX0609-06-01-02"]
     assert exam_course.phase_status == "phase_1_target"
     assert exam_course.pending_reason_code == ""
 
-    implant = contracts["LX0609-025"]
+    implant = contracts["LX0609-04-02-04"]
     assert implant.phase_status == "pending_definition"
     assert implant.pending_reason_code == "implant_five_field_real_gold_pending"
 
-    treatment_order = contracts["LX0609-059"]
+    treatment_order = contracts["LX0609-05-03-01"]
     expected_treatment_sources = (
         "exam_master",
         "exam_item_report",
@@ -116,13 +119,13 @@ def test_rule_contracts_include_partial_and_pending_definition_boundaries() -> N
 @pytest.mark.unit
 def test_003_decision_support_loads_anesthesia_record_for_end_time() -> None:
     assert "anesthesia_record" in resolve_luxian_0609_decision_support_source_keys(
-        ("LX0609-003",)
+        ("LX0609-04-02-01",)
     )
 
 
 @pytest.mark.unit
 def test_009_decision_support_loads_daily_coverage_and_minimal_change_sources() -> None:
-    assert set(resolve_luxian_0609_decision_support_source_keys(("LX0609-009",))) == {
+    assert set(resolve_luxian_0609_decision_support_source_keys(("LX0609-02-01-05",))) == {
         "evaluation_context.horizon",
         "inpat_registration.discharge_horizon",
         "inpat_nondrug_order.severity_order",
@@ -136,7 +139,7 @@ def test_009_decision_support_loads_daily_coverage_and_minimal_change_sources() 
 
 @pytest.mark.unit
 def test_025_decision_support_loads_surgery_and_course_record_sources() -> None:
-    assert set(resolve_luxian_0609_decision_support_source_keys(("LX0609-025",))) == {
+    assert set(resolve_luxian_0609_decision_support_source_keys(("LX0609-04-02-04",))) == {
         "surgery_record",
         "mr_surgery",
         "daily_course_record",
@@ -147,7 +150,7 @@ def test_025_decision_support_loads_surgery_and_course_record_sources() -> None:
 def test_025_and_059_compile_the_latest_machine_verifiable_pending_contracts() -> None:
     contracts = {item.rule_id: item for item in load_luxian_0609_rule_contracts()}
 
-    implant = contracts["LX0609-025"]
+    implant = contracts["LX0609-04-02-04"]
     assert implant.phase_status == "pending_definition"
     assert implant.decision_authority == "program_then_optional_llm"
     assert implant.max_llm_calls_per_rule == 1
@@ -165,7 +168,7 @@ def test_025_and_059_compile_the_latest_machine_verifiable_pending_contracts() -
         implant.data_dependencies
     )
 
-    treatment_order = contracts["LX0609-059"]
+    treatment_order = contracts["LX0609-05-03-01"]
     expected_treatment_sources = (
         "exam_master",
         "exam_item_report",
@@ -212,143 +215,151 @@ def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() 
     }
 
     assert program_only == {
-        "LX0609-001",
-        "LX0609-002",
-        "LX0609-003",
-        "LX0609-004",
-        "LX0609-005",
-        "LX0609-007",
-        "LX0609-008",
-        "LX0609-016",
-        "LX0609-031",
-        "LX0609-034",
-        "LX0609-035",
-        "LX0609-036",
-        "LX0609-037",
-        "LX0609-038",
-        "LX0609-039",
-        "LX0609-041",
-        "LX0609-042",
-        "LX0609-043",
-        "LX0609-047",
-        "LX0609-048",
-        "LX0609-049",
-        "LX0609-050",
-        "LX0609-052",
-        "LX0609-053",
-        "LX0609-054",
-        "LX0609-055",
-        "LX0609-056",
-        "LX0609-057",
-        "LX0609-058",
-        "LX0609-063",
-        "LX0609-070",
-        "LX0609-075",
-        "LX0609-076",
-        "LX0609-029",
-        "LX0609-030",
-        "LX0609-032",
-        "LX0609-051",
-        "LX0609-060",
-        "LX0609-061",
-        "LX0609-062",
-        "LX0609-064",
-        "LX0609-065",
-        "LX0609-066",
-        "LX0609-067",
-        "LX0609-068",
-        "LX0609-069",
-        "LX0609-071",
-        "LX0609-072",
-        "LX0609-073",
-        "LX0609-074",
+        "LX0609-01-01-01",
+        "LX0609-01-02-01",
+        "LX0609-04-02-01",
+        "LX0609-09-01-01",
+        "LX0609-02-01-01",
+        "LX0609-02-01-03",
+        "LX0609-02-01-04",
+        "LX0609-12-01-01",
+        "LX0609-04-02-05",
+        "LX0609-11-02-01",
+        "LX0609-11-02-02",
+        "LX0609-04-04-01",
+        "LX0609-04-04-02",
+        "LX0609-04-04-03",
+        "LX0609-04-01-02",
+        "LX0609-11-03-01",
+        "LX0609-11-03-02",
+        "LX0609-07-01-01",
+        "LX0609-07-03-01",
+        "LX0609-07-04-01",
+        "LX0609-07-04-02",
+        "LX0609-03-02-01",
+        "LX0609-06-04-01",
+        "LX0609-06-04-02",
+        "LX0609-05-01-02",
+        "LX0609-05-01-03",
+        "LX0609-05-01-04",
+        "LX0609-05-01-05",
+        "LX0609-05-01-06",
+        "LX0609-08-01-03",
+        "LX0609-07-01-03",
+        "LX0609-10-03-01",
+        "LX0609-04-02-08",
+        "LX0609-04-01-01",
+        "LX0609-04-02-02",
+        "LX0609-04-03-01",
+        "LX0609-09-02-01",
+        "LX0609-04-02-06",
+        "LX0609-08-01-01",
+        "LX0609-08-01-02",
+        "LX0609-04-05-01",
+        "LX0609-04-05-02",
+        "LX0609-04-05-03",
+        "LX0609-08-02-01",
+        "LX0609-08-02-02",
+        "LX0609-04-02-07",
+        "LX0609-10-01-01",
+        "LX0609-10-02-01",
+        "LX0609-10-02-02",
+        "LX0609-12-02-01",
+        "LX0609-06-01-03",
+        "LX0609-06-03-02",
+        "LX0609-06-02-01",
     }
     assert typed_shadow == {
-        "LX0609-001",
-        "LX0609-002",
-        "LX0609-003",
-        "LX0609-004",
-        "LX0609-005",
-        "LX0609-006",
-        "LX0609-007",
-        "LX0609-008",
-        "LX0609-009",
-        "LX0609-010",
-        "LX0609-011",
-        "LX0609-012",
-        "LX0609-013",
-        "LX0609-014",
-        "LX0609-015",
-        "LX0609-016",
-        "LX0609-017",
-        "LX0609-018",
-        "LX0609-019",
-        "LX0609-020",
-        "LX0609-021",
-        "LX0609-022",
-        "LX0609-023",
-        "LX0609-025",
-        "LX0609-028",
-        "LX0609-029",
-        "LX0609-030",
-        "LX0609-032",
-        "LX0609-031",
-        "LX0609-033",
-        "LX0609-034",
-        "LX0609-035",
-        "LX0609-036",
-        "LX0609-037",
-        "LX0609-038",
-        "LX0609-039",
-        "LX0609-040",
-        "LX0609-041",
-        "LX0609-042",
-        "LX0609-043",
-        "LX0609-044",
-        "LX0609-045",
-        "LX0609-046",
-        "LX0609-047",
-        "LX0609-048",
-        "LX0609-049",
-        "LX0609-050",
-        "LX0609-052",
-        "LX0609-053",
-        "LX0609-054",
-        "LX0609-055",
-        "LX0609-056",
-        "LX0609-057",
-        "LX0609-058",
-        "LX0609-059",
-        "LX0609-063",
-        "LX0609-070",
-        "LX0609-075",
-        "LX0609-051",
-        "LX0609-060",
-        "LX0609-061",
-        "LX0609-062",
-        "LX0609-064",
-        "LX0609-065",
-        "LX0609-066",
-        "LX0609-067",
-        "LX0609-068",
-        "LX0609-069",
-        "LX0609-071",
-        "LX0609-072",
-        "LX0609-073",
-        "LX0609-074",
-        "LX0609-076",
-        "LX0609-077",
-        "LX0609-078",
-        "LX0609-079",
+        "LX0609-06-01-01",
+        "LX0609-01-01-01",
+        "LX0609-01-02-01",
+        "LX0609-04-02-01",
+        "LX0609-09-01-01",
+        "LX0609-02-01-01",
+        "LX0609-02-01-02",
+        "LX0609-02-01-03",
+        "LX0609-02-01-04",
+        "LX0609-02-01-05",
+        "LX0609-06-01-02",
+        "LX0609-06-01-04",
+        "LX0609-06-01-05",
+        "LX0609-06-02-03",
+        "LX0609-06-03-03",
+        "LX0609-06-03-04",
+        "LX0609-12-01-01",
+        "LX0609-12-01-02",
+        "LX0609-01-01-02",
+        "LX0609-06-02-02",
+        "LX0609-03-01-01",
+        "LX0609-03-01-02",
+        "LX0609-03-01-03",
+        "LX0609-03-01-04",
+        "LX0609-04-02-04",
+        "LX0609-05-01-01",
+        "LX0609-04-01-01",
+        "LX0609-04-02-02",
+        "LX0609-04-03-01",
+        "LX0609-04-02-05",
+        "LX0609-11-01-01",
+        "LX0609-11-02-01",
+        "LX0609-11-02-02",
+        "LX0609-04-04-01",
+        "LX0609-04-04-02",
+        "LX0609-04-04-03",
+        "LX0609-04-01-02",
+        "LX0609-04-01-03",
+        "LX0609-11-03-01",
+        "LX0609-11-03-02",
+        "LX0609-07-01-01",
+        "LX0609-07-01-02",
+        "LX0609-07-02-01",
+        "LX0609-07-02-02",
+        "LX0609-07-03-01",
+        "LX0609-07-04-01",
+        "LX0609-07-04-02",
+        "LX0609-03-02-01",
+        "LX0609-06-04-01",
+        "LX0609-06-04-02",
+        "LX0609-05-01-02",
+        "LX0609-05-01-03",
+        "LX0609-05-01-04",
+        "LX0609-05-01-05",
+        "LX0609-05-01-06",
+        "LX0609-05-03-01",
+        "LX0609-08-01-03",
+        "LX0609-07-01-03",
+        "LX0609-10-03-01",
+        "LX0609-09-02-01",
+        "LX0609-04-02-06",
+        "LX0609-08-01-01",
+        "LX0609-08-01-02",
+        "LX0609-04-05-01",
+        "LX0609-04-05-02",
+        "LX0609-04-05-03",
+        "LX0609-08-02-01",
+        "LX0609-08-02-02",
+        "LX0609-04-02-07",
+        "LX0609-10-01-01",
+        "LX0609-10-02-01",
+        "LX0609-10-02-02",
+        "LX0609-12-02-01",
+        "LX0609-04-02-08",
+        "LX0609-01-02-02",
+        "LX0609-04-01-04",
+        "LX0609-04-01-05",
+        "LX0609-06-01-03",
+        "LX0609-06-03-02",
+        "LX0609-06-02-01",
+        "LX0609-09-01-02",
     }
-    assert typed_malignancy == {"LX0609-024", "LX0609-026", "LX0609-027"}
+    assert typed_malignancy == {"LX0609-04-02-03", "LX0609-05-02-01", "LX0609-08-01-04"}
     assert all(contract.golden_gate_state == "pending" for contract in contracts)
     assert all(contract.data_dependencies for contract in contracts)
     assert all(
         contract.max_llm_calls_per_rule == 0
         if contract.decision_authority == "program_only"
         else contract.max_llm_calls_per_rule
-        == (2 if contract.rule_id in {"LX0609-023", "LX0609-024"} else 1)
+        == (2 if contract.rule_id in {"LX0609-03-01-04", "LX0609-04-02-03"} else 1)
         and bool(contract.prompt_version)
         for contract in contracts
     )
@@ -362,7 +373,7 @@ def test_rule_contract_compiler_rejects_executor_registry_drift() -> None:
 
     with pytest.raises(
         ValueError,
-        match=r"LX0609 rule contract drift: LX0609-001\.executor_key",
+        match=r"LX0609 rule contract drift: LX0609-01-01-01\.executor_key",
     ):
         compile_luxian_0609_rule_contracts(
             payload=drifted,
@@ -389,7 +400,7 @@ def test_018_compiles_two_independent_criteria_from_catalog() -> None:
     contract = next(
         item
         for item in load_luxian_0609_rule_contracts()
-        if item.rule_id == "LX0609-018"
+        if item.rule_id == "LX0609-01-01-02"
     )
 
     assert [

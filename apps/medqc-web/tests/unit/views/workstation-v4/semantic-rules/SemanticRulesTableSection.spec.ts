@@ -120,8 +120,8 @@ describe('SemanticRulesTableSection', () => {
         loading: false,
         rules: [
           {
-            rule_id: 'LX0609-001',
-            rule_code: 'LX0609-001',
+            rule_id: 'LX0609-01-01-01',
+            rule_code: 'LX0609-01-01-01',
             name: '入院记录：入院后24小时内是否完成',
             description: '入院记录时效性核对',
             category: '入院记录',
@@ -163,7 +163,7 @@ describe('SemanticRulesTableSection', () => {
       },
     })
 
-    expect(wrapper.text()).toContain('LX0609-001')
+    expect(wrapper.text()).toContain('LX0609-01-01-01')
     expect(wrapper.text()).toContain('入院记录：入院后24小时内是否完成')
     expect(wrapper.text()).not.toContain('可执行')
     expect(wrapper.text()).not.toContain('单文书')

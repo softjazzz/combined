@@ -2,6 +2,12 @@
 
 from __future__ import annotations
 
+from .ct_order_course_consistency import (
+    RULE_ID as CT_CONSISTENCY_RULE,
+    validate_ct_display_facts,
+    ct_display_status_matches,
+)
+
 from dataclasses import dataclass
 import re
 from typing import Any, Collection, Mapping, Sequence
@@ -19,6 +25,7 @@ from .exam_lab_fact_extraction import (
     event_for_fact,
     events_for_family,
 )
+from .handbook_exam_lab import REPORT_RULES as HANDBOOK_REPORT_RULES, safe_handbook_display_facts
 
 
 @dataclass(frozen=True)
@@ -31,11 +38,14 @@ class ExamLabOutcome:
 
 EXAM_LAB_CUSTOMER_RULE_IDS = frozenset(
     {
-        "LX0609-010",
-        "LX0609-011",
-        "LX0609-012",
-        "LX0609-014",
-        "LX0609-015",
+        CT_CONSISTENCY_RULE,
+        "LX0609-06-01-02",
+        "LX0609-06-01-03",
+        "LX0609-06-01-04",
+        "LX0609-06-01-05",
+        "LX0609-06-03-02",
+        "LX0609-06-03-03",
+        "LX0609-06-03-04",
     }
 )
 
@@ -91,11 +101,16 @@ def safe_exam_lab_customer_display_facts(
     """
 
     normalized_rule_id = str(rule_id or "").strip().upper()
+    if normalized_rule_id == CT_CONSISTENCY_RULE:
+        return validate_ct_display_facts(raw)
     if normalized_rule_id not in EXAM_LAB_CUSTOMER_RULE_IDS or not isinstance(raw, Mapping):
         return None
 
+    if normalized_rule_id in HANDBOOK_REPORT_RULES:
+        return safe_handbook_display_facts(normalized_rule_id, raw)
+
     if (
-        normalized_rule_id == "LX0609-010"
+        normalized_rule_id == "LX0609-06-01-02"
         and raw.get("requirement") == "order_course_report_consistency"
     ):
         allowed_public_keys = {
@@ -222,7 +237,7 @@ def safe_exam_lab_customer_display_facts(
     if raw.get("failure_kind") == "exam_lab_target_report_missing":
         expected_subject = (
             "ct_mri"
-            if normalized_rule_id in {"LX0609-011", "LX0609-012"}
+            if normalized_rule_id in {"LX0609-06-01-04", "LX0609-06-01-05"}
             else "culture_susceptibility"
         )
         trigger_orders = _controlled_trigger_orders(raw.get("trigger_orders"))
@@ -242,21 +257,21 @@ def safe_exam_lab_customer_display_facts(
         }
 
     requirements = {
-        "LX0609-010": "reason_before_order",
-        "LX0609-011": "result_recording_within_24h",
-        "LX0609-012": "positive_result_analysis_within_24h",
-        "LX0609-014": "result_recording_within_24h",
-        "LX0609-015": "positive_result_analysis_within_24h",
+        "LX0609-06-01-02": "reason_before_order",
+        "LX0609-06-01-04": "result_recording_within_24h",
+        "LX0609-06-01-05": "positive_result_analysis_within_24h",
+        "LX0609-06-03-03": "result_recording_within_24h",
+        "LX0609-06-03-04": "positive_result_analysis_within_24h",
     }
     expected_subject = (
         "ct_mri"
-        if normalized_rule_id in {"LX0609-010", "LX0609-011", "LX0609-012"}
+        if normalized_rule_id in {"LX0609-06-01-02", "LX0609-06-01-04", "LX0609-06-01-05"}
         else "culture_susceptibility"
     )
-    expected_phase = "order" if normalized_rule_id == "LX0609-010" else "report"
+    expected_phase = "order" if normalized_rule_id == "LX0609-06-01-02" else "report"
     expected_sources = (
         ["exam_lab_order", "course_record"]
-        if normalized_rule_id == "LX0609-010"
+        if normalized_rule_id == "LX0609-06-01-02"
         else ["exam_lab_report", "course_record"]
     )
     allowed_event_keys = {
@@ -512,6 +527,34 @@ def safe_exam_lab_customer_display_facts(
     return facts
 
 
+def exam_lab_customer_fact_status_is_valid(
+    *, rule_id: str, status: str, safe_facts: Mapping[str, Any] | None
+) -> bool:
+    """校验 2026 手册新增报告完整性事实与已裁决状态一致。"""
+
+    normalized_rule_id = str(rule_id or "").strip().upper()
+    if normalized_rule_id == CT_CONSISTENCY_RULE:
+        return ct_display_status_matches(status, safe_facts)
+    if normalized_rule_id not in HANDBOOK_REPORT_RULES:
+        return True
+    if not isinstance(safe_facts, Mapping):
+        return False
+    items = safe_facts.get("event_results")
+    if not isinstance(items, list):
+        return False
+    event_statuses = [item.get("event_status") for item in items if isinstance(item, Mapping)]
+    if len(event_statuses) != len(items):
+        return False
+    complete = safe_facts.get("review_scope_complete") is True
+    expected = (
+        "non_compliant" if "non_compliant" in event_statuses
+        else "data_gap" if not complete or "data_gap" in event_statuses
+        else "compliant" if "compliant" in event_statuses
+        else "not_applicable"
+    )
+    return str(status or "").strip().lower() == expected
+
+
 def build_exam_lab_rule_decision(
     *,
     outcome: ExamLabOutcome,
@@ -665,7 +708,7 @@ def build_default_display_facts(
             facts["source_document_ids"] = list(ids)
         return facts
 
-    if rule_id == "LX0609-010":
+    if rule_id == "LX0609-06-01-02":
         return with_document_ids({
             "failure_kind": "exam_lab_requirement_not_documented",
             "subject": "ct_mri",
@@ -673,18 +716,18 @@ def build_default_display_facts(
             "event_phase": "order",
             "checked_sources": ["exam_lab_order", "course_record"],
         })
-    if rule_id in {"LX0609-011", "LX0609-014"}:
+    if rule_id in {"LX0609-06-01-04", "LX0609-06-03-03"}:
         return with_document_ids({
             "failure_kind": "exam_lab_requirement_not_documented",
-            "subject": "ct_mri" if rule_id == "LX0609-011" else "culture_susceptibility",
+            "subject": "ct_mri" if rule_id == "LX0609-06-01-04" else "culture_susceptibility",
             "requirement": "result_recording_within_24h",
             "event_phase": "report",
             "checked_sources": ["exam_lab_report", "course_record"],
         })
-    if rule_id in {"LX0609-012", "LX0609-015"}:
+    if rule_id in {"LX0609-06-01-05", "LX0609-06-03-04"}:
         return with_document_ids({
             "failure_kind": "exam_lab_requirement_not_documented",
-            "subject": "ct_mri" if rule_id == "LX0609-012" else "culture_susceptibility",
+            "subject": "ct_mri" if rule_id == "LX0609-06-01-05" else "culture_susceptibility",
             "requirement": "positive_result_analysis_within_24h",
             "event_phase": "report",
             "checked_sources": ["exam_lab_report", "course_record"],
@@ -705,7 +748,7 @@ def build_text_outcome_display_facts(
     """输出报告事件、响应病程和24小时计算事实，不暴露正文。"""
 
     if (
-        rule_id not in {"LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015"}
+        rule_id not in {"LX0609-06-01-04", "LX0609-06-01-05", "LX0609-06-03-03", "LX0609-06-03-04"}
         or (
             status not in {"compliant", "non_compliant", "not_applicable"}
             and not (
@@ -715,12 +758,12 @@ def build_text_outcome_display_facts(
         )
     ):
         return None
-    is_exam_rule = rule_id in {"LX0609-011", "LX0609-012"}
+    is_exam_rule = rule_id in {"LX0609-06-01-04", "LX0609-06-01-05"}
     event = event_for_fact(projection, fact)
     if event is None:
         return None
     subject = "ct_mri" if is_exam_rule else "culture_susceptibility"
-    analysis_rule = rule_id in {"LX0609-012", "LX0609-015"}
+    analysis_rule = rule_id in {"LX0609-06-01-05", "LX0609-06-03-04"}
     requirement = (
         "positive_result_analysis_within_24h"
         if analysis_rule
@@ -777,7 +820,7 @@ def build_text_outcome_display_facts(
     if (
         status == "non_compliant"
         and not fact.course_doc_refs
-        and rule_id != "LX0609-015"
+        and rule_id != "LX0609-06-03-04"
     ):
         evidence_refs = tuple((*evidence_refs, *projection.course_times.keys()))
     located_documents = [
@@ -811,6 +854,7 @@ def _clean(value: Any) -> str:
 
 __all__ = [
     "EXAM_LAB_CUSTOMER_RULE_IDS",
+    "exam_lab_customer_fact_status_is_valid",
     "ExamLabOutcome",
     "build_default_display_facts",
     "build_exam_lab_rule_decision",

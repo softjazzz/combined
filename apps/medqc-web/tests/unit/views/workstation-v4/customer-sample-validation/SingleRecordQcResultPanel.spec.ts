@@ -5,7 +5,7 @@ import SingleRecordQcResultPanel from '@/views/workstation-v4/customer-sample-va
 
 const items = [
   {
-    rule_id: 'LX0609-018',
+    rule_id: 'LX0609-01-01-02',
     rule_name: '主诉能导出第一诊断',
     status: 'non_compliant',
     conclusion: '主诉共14字，未达到不超过20字的要求；诊断指向性未通过。',
@@ -43,13 +43,13 @@ const items = [
     ],
   },
   {
-    rule_id: 'LX0609-003',
+    rule_id: 'LX0609-04-02-01',
     rule_name: '手术记录：手术后24小时内是否完成',
     status: 'not_applicable',
     conclusion: '本次住院未识别到已实施手术。',
   },
   {
-    rule_id: 'LX0609-025',
+    rule_id: 'LX0609-04-02-04',
     rule_name: '手术记录植入物信息完整性',
     status: 'non_compliant',
     conclusion: '发现该质控点对应的明确问题。',
@@ -82,14 +82,14 @@ const items = [
 ]
 
 const incompleteNonCompliantItem = {
-  rule_id: 'LX0609-025',
+  rule_id: 'LX0609-04-02-04',
   rule_name: '手术记录植入物信息完整性',
   status: 'non_compliant',
   conclusion: '发现该质控点对应的明确问题。',
 }
 
 const surgeryConsentMissingItem = {
-  rule_id: 'LX0609-033',
+  rule_id: 'LX0609-11-01-01',
   rule_name: '手术知情同意书：无手术知情同意书（有手术记录）',
   status: 'non_compliant',
   conclusion: '已确认实施手术，未检索到手术知情同意书。',
@@ -119,7 +119,7 @@ const surgeryConsentSignatureMissingItem = {
 }
 
 const explainedCompliantItem = {
-  rule_id: 'LX0609-008',
+  rule_id: 'LX0609-02-01-04',
   rule_name: '病重患者查房记录',
   status: 'compliant',
   conclusion: '病重医嘱期间的查房记录频次符合要求。',
@@ -148,14 +148,14 @@ const explainedCompliantItem = {
 }
 
 const historicalCompliantItem = {
-  rule_id: 'LX0609-029',
+  rule_id: 'LX0609-04-01-01',
   rule_name: '术前小结',
   status: 'compliant',
   conclusion: '未发现问题。',
 }
 
 const explainedDataGapItem = {
-  rule_id: 'LX0609-011',
+  rule_id: 'LX0609-06-01-04',
   rule_name: 'CT/MRI 报告后病程记录',
   status: 'data_gap',
   conclusion: '检查报告时间已返回，但缺少可用于时序核对的病程记录时间。',
@@ -207,17 +207,38 @@ describe('SingleRecordQcResultPanel', () => {
     await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
 
     const copied = String(writeText.mock.calls[0]?.[0] || '')
-    expect(copied).toContain('LX0609-018 主诉能导出第一诊断')
+    expect(copied).toContain('LX0609-01-01-02 主诉能导出第一诊断')
     expect(copied).toContain('质控结论：主诉共14字')
     expect(copied).toContain('受控子结论 criterion_results')
     expect(copied).toContain('关键证据 evidence')
-    expect(copied).not.toContain('LX0609-003 手术记录：手术后24小时内是否完成')
+    expect(copied).not.toContain('LX0609-04-02-01 手术记录：手术后24小时内是否完成')
     expect(copied).toContain('结果数量：1')
     expect(copied).toContain('格式版本：medqc-qc-debug-v4-redacted-minimal')
     expect(copied).toContain('患者ID：患者-001')
     expect(copied).toContain('就诊ID：就诊-001')
     expect(copied).toContain('质控任务ID：任务-001')
     expect(copied).not.toContain('job-safe-001')
+  })
+
+  it('选择一条规则后，反馈请求与导出仍沿用同一个四段式身份', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    })
+    const selectedRuleId = items[0]!.rule_id
+    const wrapper = mount(SingleRecordQcResultPanel, {
+      props: { items: [items[0]!], feedbackEnabled: true },
+    })
+
+    expect(wrapper.get('.rule-code').text()).toBe(selectedRuleId)
+    await wrapper.get('[data-testid="single-record-feedback-entry-hint"]').trigger('click')
+    await wrapper.get('[data-testid="qc-result-feedback-correct"]').trigger('click')
+    expect(wrapper.emitted('submit-feedback')).toEqual([[selectedRuleId, { feedback_type: 'correct' }]])
+
+    await wrapper.get('[data-testid="copy-single-qc-debug-result"]').trigger('click')
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
+    expect(String(writeText.mock.calls[0]?.[0] || '')).toContain(`${selectedRuleId} `)
   })
 
   it('结果卡片精简时仍保留完整调试字段', async () => {
@@ -287,7 +308,8 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.find('.result-detail').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('完整判定说明')
     expect(wrapper.text()).not.toContain('关键证据')
-    expect(wrapper.text()).not.toContain('处理建议')
+    expect(wrapper.text()).toContain('修改建议')
+    expect(wrapper.text()).toContain(items[0]!.suggestion)
 
     await ruleName.trigger('click')
 
@@ -296,7 +318,8 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.find('.result-detail').exists()).toBe(true)
     expect(wrapper.text()).toContain('完整判定说明')
     expect(wrapper.text()).toContain('关键证据')
-    expect(wrapper.text()).toContain('处理建议')
+    expect(wrapper.text()).toContain('修改建议')
+    expect(wrapper.text()).toContain(items[0]!.suggestion)
 
     await ruleName.trigger('click')
 
@@ -322,7 +345,7 @@ describe('SingleRecordQcResultPanel', () => {
 
   it('资料缺口卡片不重复分组、不提供空证据折叠栏，反馈默认收起', async () => {
     const item = {
-      rule_id: 'LX0609-001',
+      rule_id: 'LX0609-01-01-01',
       rule_name: '入院记录：入院后24小时内是否完成',
       source_document: '入院记录',
       status: 'data_gap' as const,
@@ -394,7 +417,7 @@ describe('SingleRecordQcResultPanel', () => {
       props: {
         items: [
           {
-            rule_id: 'LX0609-016',
+            rule_id: 'LX0609-12-01-01',
             rule_name: '不合理复制病历',
             status: 'non_compliant',
             conclusion: '入院记录与首次病程记录存在高度重复',
@@ -431,7 +454,7 @@ describe('SingleRecordQcResultPanel', () => {
       props: {
         items: [
           {
-            rule_id: 'LX0609-017',
+            rule_id: 'LX0609-12-01-02',
             rule_name: '不合理复制病历：2次以上病程记录完全相同（相似度大于70%）',
             status: 'non_compliant',
             conclusion: '两份日常病程记录全文相似度 100%，达到判定阈值 70%。',
@@ -469,7 +492,7 @@ describe('SingleRecordQcResultPanel', () => {
       props: {
         items: [
           {
-            rule_id: 'LX0609-017',
+            rule_id: 'LX0609-12-01-02',
             rule_name: '不合理复制病历：2次以上病程记录完全相同（相似度大于70%）',
             status: 'non_compliant',
             conclusion: '最高相似度100%，另有3组病程记录达到判定阈值。',
@@ -541,7 +564,7 @@ describe('SingleRecordQcResultPanel', () => {
       props: {
         items: [
           {
-            rule_id: 'LX0609-017',
+            rule_id: 'LX0609-12-01-02',
             rule_name: '不合理复制病历',
             status: 'non_compliant',
             conclusion: '发现需要复核的病程记录相似内容。',
@@ -576,15 +599,15 @@ describe('SingleRecordQcResultPanel', () => {
     const rows = wrapper.findAll('[data-testid="single-record-result-row"]')
     expect(rows).toHaveLength(3)
     expect(rows[0]!.get('[data-testid="single-record-result-row-header"]').text()).toContain(
-      'LX0609-018',
+      'LX0609-01-01-02',
     )
     expect(rows[0]!.get('.status-cell').text()).toContain('确定问题')
-    expect(rows[0]!.get('.result-row-meta').text()).toContain('LX0609-018')
+    expect(rows[0]!.get('.result-row-meta').text()).toContain('LX0609-01-01-02')
     expect(rows[0]!.get('[data-testid="single-record-result-conclusion"]').text()).toContain(
       '主诉共14字，未达到不超过20字的要求；诊断指向性未通过。',
     )
-    expect(rows[1]!.text()).toContain('LX0609-003')
-    expect(rows[2]!.text()).toContain('LX0609-025')
+    expect(rows[1]!.text()).toContain('LX0609-04-02-01')
+    expect(rows[2]!.text()).toContain('LX0609-04-02-04')
     expect(wrapper.text()).toContain('全部')
     expect(wrapper.text()).toContain('确定问题')
     expect(wrapper.text()).toContain('待处理')
@@ -609,7 +632,7 @@ describe('SingleRecordQcResultPanel', () => {
   it('分组模式按客户文书主题展示六类报告页签，技术异常只进入系统状态和全部规则', async () => {
     const groupedItems = [
       {
-        rule_id: 'LX0609-025',
+        rule_id: 'LX0609-04-02-04',
         rule_name: '植入物相关记录',
         source_document: '手术记录',
         qc_point: '未记录植入物种类及数量',
@@ -618,28 +641,28 @@ describe('SingleRecordQcResultPanel', () => {
         evidence: [{ source_ref: 'src_surgery_025', source_type: 'surgery_record' }],
       },
       {
-        rule_id: 'LX0609-020',
+        rule_id: 'LX0609-03-01-01',
         rule_name: '会诊意见执行情况',
         source_document: '会诊记录',
         status: 'data_gap',
         conclusion: '缺少可核对的后续病程记录。',
       },
       {
-        rule_id: 'LX0609-023',
+        rule_id: 'LX0609-03-01-04',
         rule_name: '会诊意见落实内容',
         source_document: '会诊记录',
         status: 'uncertain',
         conclusion: '执行内容仍需人工判断。',
       },
       {
-        rule_id: 'LX0609-002',
+        rule_id: 'LX0609-01-02-01',
         rule_name: '首次病程记录',
         source_document: '首次病程记录',
         status: 'technical_error',
         conclusion: '本次结果生成异常。',
       },
       {
-        rule_id: 'LX0609-001',
+        rule_id: 'LX0609-01-01-01',
         rule_name: '入院记录及时性',
         source_document: '入院记录',
         status: 'compliant',
@@ -664,14 +687,14 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.findAll('[data-testid="single-record-document-group"]')).toHaveLength(0)
     expect(wrapper.text()).toContain('1处证据')
     expect(wrapper.findAll('[data-testid="single-record-result-row"]')).toHaveLength(1)
-    expect(wrapper.text()).not.toContain('LX0609-002')
+    expect(wrapper.text()).not.toContain('LX0609-01-02-01')
 
     await wrapper.get('[data-testid="single-record-report-tab-all"]').trigger('click')
     expect(wrapper.findAll('[data-testid="single-record-document-group"]')).toHaveLength(1)
     expect(wrapper.get('[data-testid="single-record-document-group"]').text()).toContain('会诊记录')
     expect(wrapper.findAll('[data-testid="single-record-result-row"]')).toHaveLength(5)
-    expect(wrapper.text()).toContain('LX0609-002')
-    expect(wrapper.text()).toContain('LX0609-001')
+    expect(wrapper.text()).toContain('LX0609-01-02-01')
+    expect(wrapper.text()).toContain('LX0609-01-01-01')
 
     const surgeryGroupToggle = wrapper.findAll(
       '[data-testid="single-record-document-group-toggle"]',
@@ -700,13 +723,13 @@ describe('SingleRecordQcResultPanel', () => {
         presentationMode: 'grouped',
         items: [
           {
-            rule_id: 'LX0609-020',
+            rule_id: 'LX0609-03-01-01',
             rule_name: '会诊意见执行情况',
             source_document: '会诊记录',
             status: 'data_gap',
           },
           {
-            rule_id: 'LX0609-023',
+            rule_id: 'LX0609-03-01-04',
             rule_name: '会诊意见落实内容',
             source_document: '会诊记录',
             status: 'uncertain',
@@ -722,7 +745,7 @@ describe('SingleRecordQcResultPanel', () => {
     await wrapper.setProps({
       items: [
         {
-          rule_id: 'LX0609-023',
+          rule_id: 'LX0609-03-01-04',
           rule_name: '会诊意见落实内容',
           source_document: '会诊记录',
           status: 'uncertain',
@@ -736,7 +759,7 @@ describe('SingleRecordQcResultPanel', () => {
     await wrapper.setProps({
       items: [
         {
-          rule_id: 'LX0609-001',
+          rule_id: 'LX0609-01-01-01',
           rule_name: '入院记录及时性',
           source_document: '入院记录',
           status: 'compliant',
@@ -753,7 +776,7 @@ describe('SingleRecordQcResultPanel', () => {
       props: {
         items: [
           {
-            rule_id: 'LX0609-045',
+            rule_id: 'LX0609-07-02-01',
             rule_name: '输血记录：无输血病程记录',
             status: 'compliant',
             conclusion: '已找到可核对的输血病程记录（3份）。',
@@ -795,7 +818,7 @@ describe('SingleRecordQcResultPanel', () => {
       props: {
         items: [
           {
-            rule_id: 'LX0609-046',
+            rule_id: 'LX0609-07-02-02',
             rule_name: '输血病程记录完整性',
             status: 'non_compliant',
             conclusion: '共核对 3 份输血病程记录，其中 2 份存在缺项。',
@@ -816,13 +839,44 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.get('[data-testid="single-record-evidence"]').text()).not.toContain('来源文书')
   })
 
+  it('将已发布抢救证据显示为抢救记录', async () => {
+    const wrapper = mount(SingleRecordQcResultPanel, {
+      props: {
+        items: [
+          {
+            rule_id: 'LX0609-09-01-01',
+            rule_name: '抢救记录时限',
+            status: 'compliant',
+            conclusion: '抢救记录已按时完成。',
+            evidence: [
+              {
+                source_ref: 'src_aaaaaaaaaaaaaaaaaaaaaaaa',
+                source_type: 'rescue_record',
+                record_time: '2026-09-01 10:00:00',
+                evidence_excerpt: '合成记录：抢救结束后五小时完成记录',
+                excerpt_kind: '文书级依据',
+              },
+            ],
+          },
+        ],
+      },
+    })
+
+    await wrapper.get('[data-testid="single-record-result-tab-all"]').trigger('click')
+    await wrapper.get('[data-testid="single-record-result-toggle"]').trigger('click')
+
+    const evidence = wrapper.get('[data-testid="single-record-evidence"]')
+    expect(evidence.text()).toContain('抢救记录')
+    expect(evidence.text()).not.toContain('来源文书')
+  })
+
   it('占位结果单独计为未执行，不把质控点总数冒充执行完成数', () => {
     const wrapper = mount(SingleRecordQcResultPanel, {
       props: {
         items: [
           ...items,
           {
-            rule_id: 'LX0609-051',
+            rule_id: 'LX0609-09-02-01',
             rule_name: '死亡病历讨论记录',
             status: 'not_executed',
             conclusion: '本次未执行',
@@ -840,19 +894,19 @@ describe('SingleRecordQcResultPanel', () => {
     const tabItems = [
       ...items,
       {
-        rule_id: 'LX0609-001',
+        rule_id: 'LX0609-01-01-01',
         rule_name: '入院记录',
         status: 'data_gap',
         conclusion: '资料不足。',
       },
       {
-        rule_id: 'LX0609-002',
+        rule_id: 'LX0609-01-02-01',
         rule_name: '首次病程',
         status: 'technical_error',
         conclusion: '来源异常。',
       },
       {
-        rule_id: 'LX0609-004',
+        rule_id: 'LX0609-09-01-01',
         rule_name: '入院病程',
         status: 'compliant',
         conclusion: '符合要求。',
@@ -877,9 +931,9 @@ describe('SingleRecordQcResultPanel', () => {
 
     await wrapper.get('[data-testid="single-record-result-tab-pending"]').trigger('click')
     expect(wrapper.findAll('[data-testid="single-record-result-row"]')).toHaveLength(2)
-    expect(wrapper.text()).toContain('LX0609-001')
-    expect(wrapper.text()).toContain('LX0609-002')
-    expect(wrapper.text()).not.toContain('LX0609-025')
+    expect(wrapper.text()).toContain('LX0609-01-01-01')
+    expect(wrapper.text()).toContain('LX0609-01-02-01')
+    expect(wrapper.text()).not.toContain('LX0609-04-02-04')
 
     await wrapper.get('[data-testid="single-record-result-tab-non_compliant"]').trigger('click')
     await wrapper
@@ -900,7 +954,7 @@ describe('SingleRecordQcResultPanel', () => {
 
     expect(wrapper.findAllComponents(CriterionResultBlock)).toHaveLength(1)
     expect(wrapper.findAll('.criterion-row')).toHaveLength(2)
-    expect(wrapper.emitted('select')).toEqual([['LX0609-018-0']])
+    expect(wrapper.emitted('select')).toEqual([['LX0609-01-01-02-0']])
     expect(wrapper.text()).toContain('完整判定说明')
     expect(wrapper.text()).toContain('逐项判定')
     expect(wrapper.text()).toContain('主诉书写规范性')
@@ -912,8 +966,9 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.text()).toContain('医学分析')
     expect(wrapper.text()).toContain('模型分析 / 医学判断')
     expect(wrapper.text()).toContain('当前主诉缺少可区分第一诊断的特异性线索')
-    expect(wrapper.text()).toContain('处理建议')
-    expect(wrapper.text()).toContain('点击查看')
+    expect(wrapper.text()).toContain('修改建议')
+    expect(wrapper.text()).toContain(items[0]!.suggestion)
+    expect(wrapper.text()).toContain('定位原文')
     expect(wrapper.find('[data-testid="single-record-detail-grid"]').exists()).toBe(true)
     expect(wrapper.get('[data-testid="single-record-evidence"]').classes()).toContain(
       'evidence-row',
@@ -984,7 +1039,7 @@ describe('SingleRecordQcResultPanel', () => {
       props: {
         items: [
           {
-            rule_id: 'LX0609-018',
+            rule_id: 'LX0609-01-01-02',
             rule_name: '主诉能导出第一诊断',
             status: 'non_compliant',
             conclusion: '发现该质控点对应的明确问题。',
@@ -1054,7 +1109,7 @@ describe('SingleRecordQcResultPanel', () => {
 
   it.each([
     {
-      rule_id: 'LX0609-055',
+      rule_id: 'LX0609-05-01-03',
       facts: {
         verification_kind: 'antimicrobial_response_evaluation_check',
         antimicrobials: ['青霉素', '哌拉西林', '头孢他啶'],
@@ -1064,7 +1119,7 @@ describe('SingleRecordQcResultPanel', () => {
       expected: ['抗菌药物', '青霉素、哌拉西林、头孢他啶', '评估时限', '48 小时、72 小时'],
     },
     {
-      rule_id: 'LX0609-058',
+      rule_id: 'LX0609-05-01-06',
       facts: {
         verification_kind: 'special_antimicrobial_expert_support_check',
         special_antimicrobials: ['美罗培南'],
@@ -1073,7 +1128,7 @@ describe('SingleRecordQcResultPanel', () => {
       expected: ['特殊级抗菌药物', '美罗培南', '专家支持记录', '否'],
     },
     {
-      rule_id: 'LX0609-064',
+      rule_id: 'LX0609-04-05-01',
       facts: {
         verification_kind: 'postoperative_three_day_coverage_check',
         performed_surgery_count: 2,
@@ -1085,7 +1140,7 @@ describe('SingleRecordQcResultPanel', () => {
       expected: ['已实施手术', '2', '手术时间', '应记录日期', '已覆盖日期', '术者查房记录'],
     },
     {
-      rule_id: 'LX0609-074',
+      rule_id: 'LX0609-12-02-01',
       facts: {
         verification_kind: 'diagnosis_change_documentation_check',
         diagnosis_change_count: 2,
@@ -1095,7 +1150,7 @@ describe('SingleRecordQcResultPanel', () => {
       expected: ['诊断修正或补充', '2', '修改理由', '否', '诊断依据', '是'],
     },
     {
-      rule_id: 'LX0609-020',
+      rule_id: 'LX0609-03-01-01',
       facts: {
         verification_kind: 'consultation_execution_relation_check',
         completed_opinion_episode_count: 2,
@@ -1107,7 +1162,7 @@ describe('SingleRecordQcResultPanel', () => {
       expected: ['已完成会诊', '2', '会诊建议', '4', '明确执行记录', '未找到执行记录'],
     },
     {
-      rule_id: 'LX0609-075',
+      rule_id: 'LX0609-10-03-01',
       facts: {
         failure_kind: 'invasive_procedure_course_record_missing',
         ordered_procedures: ['中心静脉置管', '气管插管'],
@@ -1143,7 +1198,7 @@ describe('SingleRecordQcResultPanel', () => {
       props: {
         items: [
           {
-            rule_id: 'LX0609-029',
+            rule_id: 'LX0609-04-01-01',
             rule_name: '术前小结',
             status: 'non_compliant',
             conclusion: '已实施手术，但未找到对应术前小结。',
@@ -1164,7 +1219,7 @@ describe('SingleRecordQcResultPanel', () => {
       props: {
         items: [
           {
-            rule_id: 'LX0609-012',
+            rule_id: 'LX0609-06-01-05',
             rule_name: 'CT/MRI 阳性结果无分析',
             status: 'non_compliant',
             conclusion:
@@ -1226,7 +1281,7 @@ describe('SingleRecordQcResultPanel', () => {
       props: {
         items: [
           {
-            rule_id: 'LX0609-012',
+            rule_id: 'LX0609-06-01-05',
             rule_name: 'CT/MRI 检查记录：阳性结果分析',
             status: 'non_compliant',
             conclusion:
@@ -1273,7 +1328,7 @@ describe('SingleRecordQcResultPanel', () => {
       props: {
         items: [
           {
-            rule_id: 'LX0609-040',
+            rule_id: 'LX0609-04-01-03',
             rule_name: '四级手术术前多学科讨论',
             status: 'non_compliant',
             conclusion: '四级手术术前未完成多学科讨论。',
@@ -1304,7 +1359,7 @@ describe('SingleRecordQcResultPanel', () => {
       props: {
         items: [
           {
-            rule_id: 'LX0609-002',
+            rule_id: 'LX0609-01-02-01',
             rule_name: '首次病程记录',
             status: 'non_compliant',
             conclusion: '首次病程记录距入院时间共 448.6 小时，超过 8 小时要求 440.6 小时。',
@@ -1357,7 +1412,7 @@ describe('SingleRecordQcResultPanel', () => {
       props: {
         items: [
           {
-            rule_id: 'LX0609-005',
+            rule_id: 'LX0609-02-01-01',
             rule_name: '上级医生查房记录：入院后48小时内完成',
             status: 'non_compliant',
             conclusion: '入院后48小时内未找到符合要求的上级医师查房记录。',
@@ -1386,7 +1441,7 @@ describe('SingleRecordQcResultPanel', () => {
       props: {
         items: [
           {
-            rule_id: 'LX0609-002',
+            rule_id: 'LX0609-01-02-01',
             rule_name: '首次病程记录',
             status: 'data_gap',
             conclusion: '已返回核对时间，但缺少完整时限指标。',
@@ -1416,7 +1471,7 @@ describe('SingleRecordQcResultPanel', () => {
       props: {
         items: [
           {
-            rule_id: 'LX0609-001',
+            rule_id: 'LX0609-01-01-01',
             rule_name: '入院记录：入院后24小时内是否完成',
             status: 'compliant',
             conclusion: '符合质控要求',
@@ -1521,7 +1576,7 @@ describe('SingleRecordQcResultPanel', () => {
   it('数据不足结果未保存具体缺口时不由前端补造说明', async () => {
     const wrapper = mount(SingleRecordQcResultPanel, {
       props: {
-        items: [{ rule_id: 'LX0609-014', rule_name: '细菌培养记录', status: 'data_gap' }],
+        items: [{ rule_id: 'LX0609-06-03-03', rule_name: '细菌培养记录', status: 'data_gap' }],
       },
     })
     await wrapper.get('[data-testid="single-record-result-tab-all"]').trigger('click')
@@ -1559,7 +1614,7 @@ describe('SingleRecordQcResultPanel', () => {
       props: {
         items: [
           {
-            rule_id: 'LX0609-020',
+            rule_id: 'LX0609-03-01-01',
             rule_name: '会诊记录：有会诊记录单无请会诊执行记录',
             status: 'non_compliant',
             conclusion:

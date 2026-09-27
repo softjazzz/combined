@@ -59,7 +59,7 @@ def _event(**overrides) -> dict:
         "record_key_hash": "record-hash-1",
         "rule_set_key": "luxian_0609_qc",
         "rule_set_version": "2026-06-09",
-        "executor_key": "LX0609-025",
+        "executor_key": "LX0609-04-02-04",
         "provider_code": "alibaba",
         "model": "qwen-plus",
         "model_role": "qc_fact_extractor",

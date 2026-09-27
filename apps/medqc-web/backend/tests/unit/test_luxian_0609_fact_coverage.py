@@ -33,7 +33,7 @@ SNAPSHOT = "a" * 64
 SOURCES = ("inpat_nondrug_order", "mr_surgery", "surgery_application", "surgery_record")
 
 
-def _plan(rule_ids=("LX0609-029", "LX0609-030", "LX0609-032")):
+def _plan(rule_ids=("LX0609-04-01-01", "LX0609-04-02-02", "LX0609-04-03-01")):
     return build_luxian_0609_shadow_plan(
         visit_ref=VISIT_REF,
         selected_rule_ids=list(rule_ids),
@@ -167,8 +167,8 @@ def _build(*, plan=None, manifest=None, bundle=None, observations=None):
 
 
 def test_pair_expansion_uses_trigger_requirements_not_query_union_or_target_source() -> None:
-    plan_029 = _plan(("LX0609-029",))
-    plan_032 = _plan(("LX0609-032",))
+    plan_029 = _plan(("LX0609-04-01-01",))
+    plan_032 = _plan(("LX0609-04-03-01",))
     assert _pairs(plan_029) == (
         ("current_visit_surgery_confirmed", "mr_surgery"),
         ("current_visit_surgery_confirmed", "surgery_application"),
@@ -202,7 +202,7 @@ def test_zero_rule_plan_requires_zero_observations_and_is_not_qc_state() -> None
 
 
 def test_available_complete_zero_facts_is_distinct_from_partial_not_run_and_error() -> None:
-    plan = _plan(("LX0609-032",))
+    plan = _plan(("LX0609-04-03-01",))
     manifest = _manifest()
     pairs = _pairs(plan)
     complete = _build(plan=plan, manifest=manifest, observations=tuple(_observation(pair) for pair in pairs))
@@ -233,7 +233,7 @@ def test_available_complete_zero_facts_is_distinct_from_partial_not_run_and_erro
     ],
 )
 def test_source_query_truth_table(query_status, state, processed, reason, error, is_valid) -> None:
-    plan = _plan(("LX0609-032",))
+    plan = _plan(("LX0609-04-03-01",))
     manifest = _manifest({source: query_status for source in SOURCES})
     observations = tuple(_observation(pair, state=state, processed=processed, reason=reason, error=error) for pair in _pairs(plan))
     if is_valid:
@@ -244,7 +244,7 @@ def test_source_query_truth_table(query_status, state, processed, reason, error,
 
 
 def test_observations_must_exactly_match_required_pairs() -> None:
-    plan = _plan(("LX0609-032",))
+    plan = _plan(("LX0609-04-03-01",))
     pairs = _pairs(plan)
     with pytest.raises(ValueError, match="exactly cover"):
         _build(plan=plan, observations=(_observation(pairs[0]),))
@@ -256,7 +256,7 @@ def test_observations_must_exactly_match_required_pairs() -> None:
 
 
 def test_fact_refs_must_exist_match_pair_and_be_claimed_once() -> None:
-    plan = _plan(("LX0609-032",))
+    plan = _plan(("LX0609-04-03-01",))
     manifest = _manifest()
     facts = tuple(_fact(source_key=source, fact_type=fact_type) for fact_type, source in _pairs(plan))
     bundle = _bundle(manifest, facts)
@@ -279,7 +279,7 @@ def test_fact_refs_must_exist_match_pair_and_be_claimed_once() -> None:
 
 
 def test_unrelated_bundle_facts_do_not_expand_or_leak_coverage_pairs() -> None:
-    plan = _plan(("LX0609-032",))
+    plan = _plan(("LX0609-04-03-01",))
     manifest = _manifest()
     related = _fact(source_key="surgery_record", fact_type="current_visit_surgery_confirmed")
     unrelated = _fact(source_key="inpat_nondrug_order", fact_type="unrelated_fact_type")
@@ -294,7 +294,7 @@ def test_unrelated_bundle_facts_do_not_expand_or_leak_coverage_pairs() -> None:
 
 
 def test_cross_value_object_consistency_and_concrete_observations_fail_closed() -> None:
-    plan = _plan(("LX0609-032",))
+    plan = _plan(("LX0609-04-03-01",))
     manifest = _manifest()
     bundle = _bundle(manifest)
     with pytest.raises(TypeError):
@@ -303,9 +303,9 @@ def test_cross_value_object_consistency_and_concrete_observations_fail_closed() 
         _build(plan=plan, manifest=manifest, bundle=replace(bundle, manifest_fingerprint="b" * 64))
     other_plan = build_luxian_0609_shadow_plan(
         visit_ref="other-visit",
-        selected_rule_ids=["LX0609-032"],
-        scoped_customer_rule_ids=["LX0609-032"],
-        record_rule_map={"other-visit": ["LX0609-032"]},
+        selected_rule_ids=["LX0609-04-03-01"],
+        scoped_customer_rule_ids=["LX0609-04-03-01"],
+        record_rule_map={"other-visit": ["LX0609-04-03-01"]},
         planner_schema_version="planner-v1",
         rule_plan_version="slice-v1",
         created_at=CREATED_AT,
@@ -328,7 +328,7 @@ def test_public_observation_boundary_and_defensive_output() -> None:
 
 
 def test_direct_report_revalidates_exact_pairs_refs_and_bounded_collections(monkeypatch) -> None:
-    plan = _plan(("LX0609-032",))
+    plan = _plan(("LX0609-04-03-01",))
     manifest = _manifest()
     facts = tuple(_fact(source_key=source, fact_type=fact_type) for fact_type, source in _pairs(plan))
     report = _build(
@@ -353,7 +353,7 @@ def test_direct_report_revalidates_exact_pairs_refs_and_bounded_collections(monk
 
 @pytest.mark.parametrize("state", [ExtractionCoverageState.PARTIAL, ExtractionCoverageState.ERROR])
 def test_zero_processed_records_cannot_claim_produced_fact_ids(state) -> None:
-    plan = _plan(("LX0609-032",))
+    plan = _plan(("LX0609-04-03-01",))
     manifest = _manifest()
     fact = _fact(source_key="surgery_application", fact_type="current_visit_surgery_confirmed")
     app_pair = next(pair for pair in _pairs(plan) if pair[1] == "surgery_application")
@@ -387,7 +387,7 @@ def test_zero_processed_records_cannot_claim_produced_fact_ids(state) -> None:
 
 
 def test_multiple_produced_fact_ids_are_canonicalized_independent_of_input_order() -> None:
-    plan = _plan(("LX0609-032",))
+    plan = _plan(("LX0609-04-03-01",))
     manifest = _manifest()
     first = _fact(source_key="surgery_record", fact_type="current_visit_surgery_confirmed", document_id="doc-a")
     second = _fact(source_key="surgery_record", fact_type="current_visit_surgery_confirmed", document_id="doc-b")

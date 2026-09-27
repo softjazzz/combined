@@ -41,9 +41,9 @@ def _typed_basic_session(
     rows_by_source: dict[str, list[dict]],
     *,
     selected_rule_ids: tuple[str, ...] = (
-        "LX0609-001",
-        "LX0609-005",
-        "LX0609-006",
+        "LX0609-01-01-01",
+        "LX0609-02-01-01",
+        "LX0609-02-01-02",
     ),
     failures: dict[str, Exception] | None = None,
     truncated_sources: frozenset[str] = frozenset(),
@@ -85,12 +85,12 @@ def _typed_basic_session(
 def test_004_complete_empty_rescue_records_and_orders_are_not_applicable() -> None:
     session = _typed_basic_session(
         {"rescue_record": []},
-        selected_rule_ids=("LX0609-004",),
+        selected_rule_ids=("LX0609-09-01-01",),
     )
 
-    execution, reduced = _reduce_typed_basic(session, ("LX0609-004",))
+    execution, reduced = _reduce_typed_basic(session, ("LX0609-09-01-01",))
     canonical = aggregate_luxian_0609_results(
-        wrapper_rules=_rules("LX0609-004"),
+        wrapper_rules=_rules("LX0609-09-01-01"),
         execution_results=[],
         reduced_decisions=reduced,
         customer_display_facts=execution.customer_display_facts,
@@ -110,10 +110,10 @@ def test_004_complete_empty_rescue_records_and_orders_are_not_applicable() -> No
 @pytest.mark.parametrize(
     ("rule_id", "evaluation_as_of_date"),
     [
-        ("LX0609-001", "2026-06-02"),
-        ("LX0609-002", "2026-06-01"),
-        ("LX0609-005", "2026-06-03"),
-        ("LX0609-006", "2026-06-04"),
+        ("LX0609-01-01-01", "2026-06-02"),
+        ("LX0609-01-02-01", "2026-06-01"),
+        ("LX0609-02-01-01", "2026-06-03"),
+        ("LX0609-02-01-02", "2026-06-04"),
     ],
 )
 def test_missing_timeliness_document_before_maturity_is_not_non_compliant(
@@ -134,7 +134,7 @@ def test_missing_timeliness_document_before_maturity_is_not_non_compliant(
 
     expected_state = (
         CustomerFinalState.NOT_APPLICABLE
-        if rule_id == "LX0609-006"
+        if rule_id == "LX0609-02-01-02"
         else CustomerFinalState.DATA_GAP
     )
     assert reduced[0].final_state is expected_state
@@ -145,10 +145,10 @@ def test_missing_timeliness_document_before_maturity_is_not_non_compliant(
 @pytest.mark.parametrize(
     ("rule_id", "evaluation_as_of_date"),
     [
-        ("LX0609-001", "2026-06-03"),
-        ("LX0609-002", "2026-06-02"),
-        ("LX0609-005", "2026-06-04"),
-        ("LX0609-006", "2026-06-05"),
+        ("LX0609-01-01-01", "2026-06-03"),
+        ("LX0609-01-02-01", "2026-06-02"),
+        ("LX0609-02-01-01", "2026-06-04"),
+        ("LX0609-02-01-02", "2026-06-05"),
     ],
 )
 def test_missing_timeliness_document_after_maturity_is_data_gap(
@@ -167,10 +167,10 @@ def test_missing_timeliness_document_after_maturity_is_data_gap(
 
     _, reduced = _reduce_typed_basic(session, (rule_id,))
 
-    if rule_id == "LX0609-005":
+    if rule_id == "LX0609-02-01-01":
         assert reduced[0].final_state is CustomerFinalState.DATA_GAP
         assert reduced[0].reason_code == "source_empty"
-    elif rule_id == "LX0609-006":
+    elif rule_id == "LX0609-02-01-02":
         assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
         assert reduced[0].reason_code == "required_document_missing"
     else:
@@ -196,17 +196,17 @@ def test_001_empty_template_after_maturity_is_treated_as_missing_admission_recor
                 }
             ],
         },
-        selected_rule_ids=("LX0609-001",),
+        selected_rule_ids=("LX0609-01-01-01",),
         evaluation_as_of_date="2026-06-03",
     )
 
-    execution, reduced = _reduce_typed_basic(session, ("LX0609-001",))
+    execution, reduced = _reduce_typed_basic(session, ("LX0609-01-01-01",))
 
     assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
     assert reduced[0].reason_code == "required_document_missing"
-    assert dict(execution.customer_display_facts)["LX0609-001"]["timeliness_state"] == "missing"
+    assert dict(execution.customer_display_facts)["LX0609-01-01-01"]["timeliness_state"] == "missing"
     assert (
-        dict(execution.customer_display_facts)["LX0609-001"]["document_content_state"]
+        dict(execution.customer_display_facts)["LX0609-01-01-01"]["document_content_state"]
         == "blank_or_placeholder"
     )
 
@@ -226,11 +226,11 @@ def test_001_empty_template_before_maturity_keeps_evaluation_window_open():
                 }
             ],
         },
-        selected_rule_ids=("LX0609-001",),
+        selected_rule_ids=("LX0609-01-01-01",),
         evaluation_as_of_date="2026-06-02",
     )
 
-    execution, reduced = _reduce_typed_basic(session, ("LX0609-001",))
+    execution, reduced = _reduce_typed_basic(session, ("LX0609-01-01-01",))
 
     assert reduced[0].final_state is CustomerFinalState.DATA_GAP
     assert reduced[0].reason_code == "evaluation_window_not_mature"
@@ -274,11 +274,11 @@ def test_001_short_placeholder_body_is_not_a_substantive_admission_record(
                 }
             ],
         },
-        selected_rule_ids=("LX0609-001",),
+        selected_rule_ids=("LX0609-01-01-01",),
         evaluation_as_of_date="2026-06-03",
     )
 
-    _, reduced = _reduce_typed_basic(session, ("LX0609-001",))
+    _, reduced = _reduce_typed_basic(session, ("LX0609-01-01-01",))
 
     assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
     assert reduced[0].reason_code == "required_document_missing"
@@ -310,19 +310,19 @@ def test_001_short_clinical_content_is_a_substantive_admission_record(
                 }
             ],
         },
-        selected_rule_ids=("LX0609-001",),
+        selected_rule_ids=("LX0609-01-01-01",),
         evaluation_as_of_date="2026-06-03",
     )
 
-    execution, reduced = _reduce_typed_basic(session, ("LX0609-001",))
+    execution, reduced = _reduce_typed_basic(session, ("LX0609-01-01-01",))
 
     assert reduced[0].final_state is CustomerFinalState.COMPLIANT
     assert reduced[0].reason_code == "requirement_within_threshold"
-    assert "source_document_id" not in dict(execution.customer_display_facts)["LX0609-001"]
+    assert "source_document_id" not in dict(execution.customer_display_facts)["LX0609-01-01-01"]
     _assert_selected_document_ref(
         execution,
         session,
-        rule_id="LX0609-001",
+        rule_id="LX0609-01-01-01",
         source_key="admission_record",
         document_id="short-clinical-document",
     )
@@ -342,11 +342,11 @@ def test_001_substantive_admission_record_without_authoritative_time_is_data_gap
                 }
             ],
         },
-        selected_rule_ids=("LX0609-001",),
+        selected_rule_ids=("LX0609-01-01-01",),
         evaluation_as_of_date="2026-06-03",
     )
 
-    execution, reduced = _reduce_typed_basic(session, ("LX0609-001",))
+    execution, reduced = _reduce_typed_basic(session, ("LX0609-01-01-01",))
 
     assert reduced[0].final_state is CustomerFinalState.DATA_GAP
     assert reduced[0].reason_code == "authoritative_time_missing"
@@ -373,20 +373,20 @@ def test_001_ignores_earlier_empty_template_and_uses_substantive_document():
                 },
             ],
         },
-        selected_rule_ids=("LX0609-001",),
+        selected_rule_ids=("LX0609-01-01-01",),
     )
 
-    execution, reduced = _reduce_typed_basic(session, ("LX0609-001",))
+    execution, reduced = _reduce_typed_basic(session, ("LX0609-01-01-01",))
 
     assert reduced[0].final_state is CustomerFinalState.COMPLIANT
     assert reduced[0].reason_code == "requirement_within_threshold"
-    facts = dict(execution.customer_display_facts)["LX0609-001"]
+    facts = dict(execution.customer_display_facts)["LX0609-01-01-01"]
     assert facts["observed_time"] == "2026-06-01 10:00:00"
     assert "source_document_id" not in facts
     _assert_selected_document_ref(
         execution,
         session,
-        rule_id="LX0609-001",
+        rule_id="LX0609-01-01-01",
         source_key="admission_record",
         document_id="substantive-document",
     )
@@ -400,11 +400,11 @@ def test_missing_timeliness_document_with_negative_evaluation_interval_fails_clo
                 {"admission_datetime": "2026-06-01 08:00:00"}
             ],
         },
-        selected_rule_ids=("LX0609-001",),
+        selected_rule_ids=("LX0609-01-01-01",),
         evaluation_as_of_date="2026-05-31",
     )
 
-    _, reduced = _reduce_typed_basic(session, ("LX0609-001",))
+    _, reduced = _reduce_typed_basic(session, ("LX0609-01-01-01",))
 
     assert reduced[0].final_state is CustomerFinalState.EVALUATION_UNKNOWN
     assert reduced[0].reason_code == "evidence_conflict"
@@ -451,9 +451,9 @@ def _private_course_rows(attending_time: str, senior_time: str) -> dict[str, lis
 def _reduce_typed_basic(
     session,
     rule_ids: tuple[str, ...] = (
-        "LX0609-001",
-        "LX0609-005",
-        "LX0609-006",
+        "LX0609-01-01-01",
+        "LX0609-02-01-01",
+        "LX0609-02-01-02",
     ),
 ):
     execution = execute_luxian_0609_native_basic_timeliness(
@@ -538,7 +538,7 @@ def test_001_005_006_emit_snapshot_bound_python_decisions_from_one_admission_anc
     assert all(item.fact_refs for item in reduced)
     assert execution.customer_display_facts == (
         (
-            "LX0609-001",
+            "LX0609-01-01-01",
             {
                 "failure_kind": "timeliness_requirement_satisfied",
                 "target_document": "admission_record",
@@ -552,7 +552,7 @@ def test_001_005_006_emit_snapshot_bound_python_decisions_from_one_admission_anc
             },
         ),
         (
-            "LX0609-005",
+            "LX0609-02-01-01",
             {
                 "failure_kind": "timeliness_requirement_satisfied",
                 "target_document": "attending_course_record",
@@ -566,7 +566,7 @@ def test_001_005_006_emit_snapshot_bound_python_decisions_from_one_admission_anc
             },
         ),
         (
-            "LX0609-006",
+            "LX0609-02-01-02",
             {
                 "failure_kind": "timeliness_requirement_satisfied",
                 "target_document": "senior_course_record",
@@ -581,15 +581,15 @@ def test_001_005_006_emit_snapshot_bound_python_decisions_from_one_admission_anc
         ),
     )
     _assert_selected_document_ref(
-        execution, session, rule_id="LX0609-001", source_key="admission_record",
+        execution, session, rule_id="LX0609-01-01-01", source_key="admission_record",
         document_id="safe-admission-ref",
     )
     _assert_selected_document_ref(
-        execution, session, rule_id="LX0609-005", source_key="daily_course_record",
+        execution, session, rule_id="LX0609-02-01-01", source_key="daily_course_record",
         document_id="safe-attending-ref",
     )
     _assert_selected_document_ref(
-        execution, session, rule_id="LX0609-006", source_key="senior_course_record",
+        execution, session, rule_id="LX0609-02-01-02", source_key="senior_course_record",
         document_id="safe-senior-ref",
     )
 
@@ -611,15 +611,15 @@ def test_001_compliant_keeps_time_facts_without_guessing_a_missing_document_id()
             "daily_course_record": [],
             "senior_course_record": [],
         },
-        selected_rule_ids=("LX0609-001",),
+        selected_rule_ids=("LX0609-01-01-01",),
     )
 
-    execution, reduced = _reduce_typed_basic(session, ("LX0609-001",))
+    execution, reduced = _reduce_typed_basic(session, ("LX0609-01-01-01",))
 
     assert reduced[0].final_state is CustomerFinalState.COMPLIANT
     assert execution.customer_display_facts == (
         (
-            "LX0609-001",
+            "LX0609-01-01-01",
             {
                 "failure_kind": "timeliness_requirement_satisfied",
                 "target_document": "admission_record",
@@ -653,16 +653,16 @@ def test_001_time_conflict_exposes_both_times_and_exact_lead_for_customer_projec
             "daily_course_record": [],
             "senior_course_record": [],
         },
-        selected_rule_ids=("LX0609-001",),
+        selected_rule_ids=("LX0609-01-01-01",),
     )
 
-    execution, reduced = _reduce_typed_basic(session, ("LX0609-001",))
+    execution, reduced = _reduce_typed_basic(session, ("LX0609-01-01-01",))
 
     assert reduced[0].final_state is CustomerFinalState.EVALUATION_UNKNOWN
     assert reduced[0].reason_code == "evidence_conflict"
     assert execution.customer_display_facts == (
         (
-            "LX0609-001",
+            "LX0609-01-01-01",
             {
                 "failure_kind": "evidence_time_conflict",
                 "target_document": "admission_record",
@@ -676,7 +676,7 @@ def test_001_time_conflict_exposes_both_times_and_exact_lead_for_customer_projec
         ),
     )
     _assert_selected_document_ref(
-        execution, session, rule_id="LX0609-001", source_key="admission_record",
+        execution, session, rule_id="LX0609-01-01-01", source_key="admission_record",
         document_id="admission-conflict-document",
     )
 
@@ -710,7 +710,7 @@ def test_typed_basic_timeliness_projects_only_safe_late_or_missing_explanation_f
     ]
     assert execution.customer_display_facts == (
         (
-            "LX0609-001",
+            "LX0609-01-01-01",
             {
                 "failure_kind": "timeliness_requirement_not_met",
                 "target_document": "admission_record",
@@ -724,7 +724,7 @@ def test_typed_basic_timeliness_projects_only_safe_late_or_missing_explanation_f
             },
         ),
         (
-            "LX0609-006",
+            "LX0609-02-01-02",
             {
                 "failure_kind": "timeliness_requirement_not_met",
                 "target_document": "senior_course_record",
@@ -741,7 +741,7 @@ def test_typed_basic_timeliness_projects_only_safe_late_or_missing_explanation_f
         "required_document_missing",
     ]
     _assert_selected_document_ref(
-        execution, session, rule_id="LX0609-001", source_key="admission_record",
+        execution, session, rule_id="LX0609-01-01-01", source_key="admission_record",
         document_id="admission-private-id",
     )
 
@@ -750,7 +750,7 @@ def test_typed_basic_timeliness_projects_only_safe_late_or_missing_explanation_f
 def test_002_006_accept_authoritative_submit_datetime_used_by_customer_documents():
     """客户同步文书以 submit_datetime 展示记录时间时，原生时限链必须使用同一权威值。"""
 
-    selected = ("LX0609-002", "LX0609-006")
+    selected = ("LX0609-01-02-01", "LX0609-02-01-02")
     session = _typed_basic_session(
         {
             "inpat_registration": [
@@ -793,7 +793,7 @@ def test_002_006_accept_authoritative_submit_datetime_used_by_customer_documents
 def test_001_002_accept_the_localized_customer_record_time_and_document_identity():
     """客户源 record_time/sys_index_id 经同步映射后必须形成可定位的确定结论。"""
 
-    selected = ("LX0609-001", "LX0609-002")
+    selected = ("LX0609-01-01-01", "LX0609-01-02-01")
     session = _typed_basic_session(
         {
             "inpat_registration": [],
@@ -829,11 +829,11 @@ def test_001_002_accept_the_localized_customer_record_time_and_document_identity
     facts = dict(execution.customer_display_facts)
     assert all("source_document_id" not in fact for fact in facts.values())
     _assert_selected_document_ref(
-        execution, session, rule_id="LX0609-001", source_key="admission_record",
+        execution, session, rule_id="LX0609-01-01-01", source_key="admission_record",
         document_id="101",
     )
     _assert_selected_document_ref(
-        execution, session, rule_id="LX0609-002", source_key="first_course_record",
+        execution, session, rule_id="LX0609-01-02-01", source_key="first_course_record",
         document_id="102",
     )
 
@@ -1068,10 +1068,10 @@ def test_002_uses_authoritative_first_course_time_without_model(
                 }
             ],
         },
-        selected_rule_ids=("LX0609-002",),
+        selected_rule_ids=("LX0609-01-02-01",),
     )
 
-    execution, reduced = _reduce_typed_basic(session, ("LX0609-002",))
+    execution, reduced = _reduce_typed_basic(session, ("LX0609-01-02-01",))
 
     assert execution.results == ()
     assert reduced[0].final_state is expected_state
@@ -1083,12 +1083,12 @@ def test_002_uses_authoritative_first_course_time_without_model(
 def test_002_missing_first_course_after_maturity_has_persistable_explanation():
     session = _typed_basic_session(
         {"inpat_registration": [{"admission_datetime": "2026-06-01 08:00:00"}]},
-        selected_rule_ids=("LX0609-002",),
+        selected_rule_ids=("LX0609-01-02-01",),
         evaluation_as_of_date="2026-06-02",
     )
-    execution, reduced = _reduce_typed_basic(session, ("LX0609-002",))
+    execution, reduced = _reduce_typed_basic(session, ("LX0609-01-02-01",))
     canonical = aggregate_luxian_0609_results(
-        wrapper_rules=_rules("LX0609-002"),
+        wrapper_rules=_rules("LX0609-01-02-01"),
         execution_results=[],
         reduced_decisions=reduced,
         customer_display_facts=execution.customer_display_facts,
@@ -1103,9 +1103,9 @@ def test_002_missing_first_course_after_maturity_has_persistable_explanation():
     assert canonical["status"] == "non_compliant"
     assert canonical["reason_code"] == "required_document_missing"
     facts, _ = validated_customer_explanation(
-        canonical, rule_id="LX0609-002", status=canonical["status"]
+        canonical, rule_id="LX0609-01-02-01", status=canonical["status"]
     )
-    assert facts == dict(execution.customer_display_facts)["LX0609-002"] == {
+    assert facts == dict(execution.customer_display_facts)["LX0609-01-02-01"] == {
         "failure_kind": "timeliness_requirement_not_met",
         "target_document": "first_course_record",
         "source_label": "首次病程记录",
@@ -1136,10 +1136,10 @@ def test_002_missing_first_course_without_mature_anchor_has_no_defect_facts(
 ):
     session = _typed_basic_session(
         {"inpat_registration": [{"admission_datetime": admission_datetime}]},
-        selected_rule_ids=("LX0609-002",),
+        selected_rule_ids=("LX0609-01-02-01",),
         evaluation_as_of_date=evaluation_as_of_date,
     )
-    execution, reduced = _reduce_typed_basic(session, ("LX0609-002",))
+    execution, reduced = _reduce_typed_basic(session, ("LX0609-01-02-01",))
 
     assert reduced[0].final_state is CustomerFinalState.DATA_GAP
     assert reduced[0].reason_code == expected_reason
@@ -1161,13 +1161,13 @@ def test_002_late_result_exposes_actual_and_overdue_hours():
                 }
             ],
         },
-        selected_rule_ids=("LX0609-002",),
+        selected_rule_ids=("LX0609-01-02-01",),
     )
 
-    execution, reduced = _reduce_typed_basic(session, ("LX0609-002",))
+    execution, reduced = _reduce_typed_basic(session, ("LX0609-01-02-01",))
 
     assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
-    assert dict(execution.customer_display_facts)["LX0609-002"] == {
+    assert dict(execution.customer_display_facts)["LX0609-01-02-01"] == {
         "failure_kind": "timeliness_requirement_not_met",
         "target_document": "first_course_record",
         "source_label": "首次病程记录",
@@ -1196,13 +1196,13 @@ def test_002_compliant_result_exposes_actual_interval_and_source_document():
                 }
             ],
         },
-        selected_rule_ids=("LX0609-002",),
+        selected_rule_ids=("LX0609-01-02-01",),
     )
 
-    execution, reduced = _reduce_typed_basic(session, ("LX0609-002",))
+    execution, reduced = _reduce_typed_basic(session, ("LX0609-01-02-01",))
 
     assert reduced[0].final_state is CustomerFinalState.COMPLIANT
-    assert dict(execution.customer_display_facts)["LX0609-002"] == {
+    assert dict(execution.customer_display_facts)["LX0609-01-02-01"] == {
         "failure_kind": "timeliness_requirement_satisfied",
         "target_document": "first_course_record",
         "source_label": "首次病程记录",
@@ -1214,7 +1214,7 @@ def test_002_compliant_result_exposes_actual_interval_and_source_document():
         "remaining_hours": 5.5,
     }
     _assert_selected_document_ref(
-        execution, session, rule_id="LX0609-002", source_key="first_course_record",
+        execution, session, rule_id="LX0609-01-02-01", source_key="first_course_record",
         document_id="first-course-safe-ref",
     )
 
@@ -1263,10 +1263,10 @@ def test_004_uses_exact_rescue_end_label_without_model(
 ):
     session = _typed_basic_session(
         {"rescue_record": rows},
-        selected_rule_ids=("LX0609-004",),
+        selected_rule_ids=("LX0609-09-01-01",),
     )
 
-    execution, reduced = _reduce_typed_basic(session, ("LX0609-004",))
+    execution, reduced = _reduce_typed_basic(session, ("LX0609-09-01-01",))
 
     assert execution.results == ()
     assert reduced[0].final_state is expected_state
@@ -1286,15 +1286,15 @@ def test_004_projects_safe_late_rescue_timeline_facts() -> None:
                 }
             ]
         },
-        selected_rule_ids=("LX0609-004",),
+        selected_rule_ids=("LX0609-09-01-01",),
     )
 
-    execution, reduced = _reduce_typed_basic(session, ("LX0609-004",))
+    execution, reduced = _reduce_typed_basic(session, ("LX0609-09-01-01",))
 
     assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
     assert execution.customer_display_facts == (
         (
-            "LX0609-004",
+            "LX0609-09-01-01",
             {
                 "failure_kind": "timeliness_requirement_not_met",
                 "target_document": "rescue_record",
@@ -1309,7 +1309,7 @@ def test_004_projects_safe_late_rescue_timeline_facts() -> None:
         ),
     )
     _assert_selected_document_ref(
-        execution, session, rule_id="LX0609-004", source_key="rescue_record",
+        execution, session, rule_id="LX0609-09-01-01", source_key="rescue_record",
         document_id="rescue-private-id",
     )
 
@@ -1331,13 +1331,13 @@ def test_004_compliant_result_projects_worst_rescue_interval() -> None:
                 },
             ]
         },
-        selected_rule_ids=("LX0609-004",),
+        selected_rule_ids=("LX0609-09-01-01",),
     )
 
-    execution, reduced = _reduce_typed_basic(session, ("LX0609-004",))
+    execution, reduced = _reduce_typed_basic(session, ("LX0609-09-01-01",))
 
     assert reduced[0].final_state is CustomerFinalState.COMPLIANT
-    assert dict(execution.customer_display_facts)["LX0609-004"] == {
+    assert dict(execution.customer_display_facts)["LX0609-09-01-01"] == {
         "failure_kind": "timeliness_requirement_satisfied",
         "target_document": "rescue_record",
         "source_label": "抢救记录",
@@ -1365,11 +1365,11 @@ def test_004_compliant_result_projects_worst_rescue_interval() -> None:
         ],
     }
     _assert_selected_document_ref(
-        execution, session, rule_id="LX0609-004", source_key="rescue_record",
+        execution, session, rule_id="LX0609-09-01-01", source_key="rescue_record",
         document_id="rescue-first",
     )
     _assert_selected_document_ref(
-        execution, session, rule_id="LX0609-004", source_key="rescue_record",
+        execution, session, rule_id="LX0609-09-01-01", source_key="rescue_record",
         document_id="rescue-worst",
     )
 
@@ -1386,18 +1386,18 @@ def test_004_uses_submit_datetime_and_keeps_late_evidence_ref() -> None:
                 }
             ]
         },
-        selected_rule_ids=("LX0609-004",),
+        selected_rule_ids=("LX0609-09-01-01",),
     )
 
-    execution, reduced = _reduce_typed_basic(session, ("LX0609-004",))
+    execution, reduced = _reduce_typed_basic(session, ("LX0609-09-01-01",))
 
     assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
-    facts = dict(execution.customer_display_facts)["LX0609-004"]
+    facts = dict(execution.customer_display_facts)["LX0609-09-01-01"]
     assert "source_document_id" not in facts
     assert facts["elapsed_hours"] == pytest.approx(6.0, abs=0.01)
     assert "overdue_hours" not in facts
     _assert_selected_document_ref(
-        execution, session, rule_id="LX0609-004", source_key="rescue_record",
+        execution, session, rule_id="LX0609-09-01-01", source_key="rescue_record",
         document_id="rescue-submit-ref",
     )
 
@@ -1435,18 +1435,18 @@ def test_conflicting_admission_anchors_fail_closed_for_all_anchor_rules() -> Non
 
 @pytest.mark.unit
 def test_complete_empty_and_unavailable_rescue_sources_are_distinct() -> None:
-    complete = _typed_basic_session({}, selected_rule_ids=("LX0609-004",))
+    complete = _typed_basic_session({}, selected_rule_ids=("LX0609-09-01-01",))
     unavailable = _typed_basic_session(
         {},
-        selected_rule_ids=("LX0609-004",),
+        selected_rule_ids=("LX0609-09-01-01",),
         failures={"rescue_record": SourceEvidenceUnavailable()},
     )
 
     _complete_execution, complete_reduced = _reduce_typed_basic(
-        complete, ("LX0609-004",)
+        complete, ("LX0609-09-01-01",)
     )
     _unavailable_execution, unavailable_reduced = _reduce_typed_basic(
-        unavailable, ("LX0609-004",)
+        unavailable, ("LX0609-09-01-01",)
     )
 
     assert complete_reduced[0].final_state is CustomerFinalState.NOT_APPLICABLE
@@ -1467,14 +1467,14 @@ def test_004_effective_rescue_order_without_record_is_data_gap() -> None:
                 }
             ],
         },
-        selected_rule_ids=("LX0609-004",),
+        selected_rule_ids=("LX0609-09-01-01",),
     )
 
-    execution, reduced = _reduce_typed_basic(session, ("LX0609-004",))
+    execution, reduced = _reduce_typed_basic(session, ("LX0609-09-01-01",))
 
     assert reduced[0].final_state is CustomerFinalState.DATA_GAP
     assert reduced[0].reason_code == "rescue_record_missing_after_trigger"
-    assert dict(execution.customer_display_facts)["LX0609-004"] == {
+    assert dict(execution.customer_display_facts)["LX0609-09-01-01"] == {
         "failure_kind": "rescue_record_missing_after_trigger",
         "target_document": "rescue_record",
         "source_label": "抢救记录",
@@ -1482,7 +1482,7 @@ def test_004_effective_rescue_order_without_record_is_data_gap() -> None:
     _assert_selected_document_ref(
         execution,
         session,
-        rule_id="LX0609-004",
+        rule_id="LX0609-09-01-01",
         source_key=source_evidence_reader.CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY,
         document_id="rescue-order-ref",
         identity_key="order_id",
@@ -1496,10 +1496,10 @@ def test_004_cancelled_rescue_orders_filtered_by_source_do_not_trigger() -> None
             "rescue_record": [],
             source_evidence_reader.CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY: [],
         },
-        selected_rule_ids=("LX0609-004",),
+        selected_rule_ids=("LX0609-09-01-01",),
     )
 
-    _execution, reduced = _reduce_typed_basic(session, ("LX0609-004",))
+    _execution, reduced = _reduce_typed_basic(session, ("LX0609-09-01-01",))
 
     assert reduced[0].final_state is CustomerFinalState.NOT_APPLICABLE
     assert reduced[0].reason_code == "trigger_absent_complete"
@@ -1509,14 +1509,14 @@ def test_004_cancelled_rescue_orders_filtered_by_source_do_not_trigger() -> None
 def test_004_empty_record_with_unavailable_rescue_order_source_is_data_gap() -> None:
     session = _typed_basic_session(
         {"rescue_record": []},
-        selected_rule_ids=("LX0609-004",),
+        selected_rule_ids=("LX0609-09-01-01",),
         failures={
             source_evidence_reader.CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY:
                 SourceEvidenceUnavailable()
         },
     )
 
-    _execution, reduced = _reduce_typed_basic(session, ("LX0609-004",))
+    _execution, reduced = _reduce_typed_basic(session, ("LX0609-09-01-01",))
 
     assert reduced[0].final_state is CustomerFinalState.DATA_GAP
     assert reduced[0].reason_code == "source_unavailable"
@@ -1531,10 +1531,10 @@ def test_004_unresolved_rescue_order_status_is_data_gap() -> None:
                 {"order_id": "unknown-status-ref", "status_state": "unresolved"}
             ],
         },
-        selected_rule_ids=("LX0609-004",),
+        selected_rule_ids=("LX0609-09-01-01",),
     )
 
-    _execution, reduced = _reduce_typed_basic(session, ("LX0609-004",))
+    _execution, reduced = _reduce_typed_basic(session, ("LX0609-09-01-01",))
 
     assert reduced[0].final_state is CustomerFinalState.DATA_GAP
     assert reduced[0].reason_code == "required_field_missing"
@@ -1562,14 +1562,14 @@ def test_004_overdue_event_wins_but_all_rescue_events_remain_projected() -> None
                 },
             ]
         },
-        selected_rule_ids=("LX0609-004",),
+        selected_rule_ids=("LX0609-09-01-01",),
     )
 
-    execution, reduced = _reduce_typed_basic(session, ("LX0609-004",))
+    execution, reduced = _reduce_typed_basic(session, ("LX0609-09-01-01",))
 
     assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
     assert reduced[0].reason_code == "threshold_exceeded"
-    facts = dict(execution.customer_display_facts)["LX0609-004"]
+    facts = dict(execution.customer_display_facts)["LX0609-09-01-01"]
     assert "source_document_id" not in facts
     assert facts["elapsed_hours"] == 9.0
     events = facts["rescue_events"]
@@ -1583,7 +1583,7 @@ def test_004_overdue_event_wins_but_all_rescue_events_remain_projected() -> None
         "late-rescue-ref", "most-overdue-rescue-ref", "missing-end-ref"
     ):
         _assert_selected_document_ref(
-            execution, session, rule_id="LX0609-004", source_key="rescue_record",
+            execution, session, rule_id="LX0609-09-01-01", source_key="rescue_record",
             document_id=document_id,
         )
 
@@ -1605,11 +1605,11 @@ def test_006_ignores_round_after_frozen_horizon_and_keeps_window_not_mature() ->
                 }
             ],
         },
-        selected_rule_ids=("LX0609-006",),
+        selected_rule_ids=("LX0609-02-01-02",),
         evaluation_as_of_date="2026-07-16",
     )
 
-    execution, reduced = _reduce_typed_basic(session, ("LX0609-006",))
+    execution, reduced = _reduce_typed_basic(session, ("LX0609-02-01-02",))
 
     assert reduced[0].final_state is CustomerFinalState.NOT_APPLICABLE
     assert reduced[0].reason_code == "evaluation_window_not_mature"
@@ -1633,11 +1633,11 @@ def test_006_window_not_mature_precedes_ambiguous_candidate_role() -> None:
                 }
             ],
         },
-        selected_rule_ids=("LX0609-006",),
+        selected_rule_ids=("LX0609-02-01-02",),
         evaluation_as_of_date="2026-07-16",
     )
 
-    _execution, reduced = _reduce_typed_basic(session, ("LX0609-006",))
+    _execution, reduced = _reduce_typed_basic(session, ("LX0609-02-01-02",))
 
     assert reduced[0].final_state is CustomerFinalState.NOT_APPLICABLE
     assert reduced[0].reason_code == "evaluation_window_not_mature"
@@ -1678,18 +1678,18 @@ def test_004_distinguishes_missing_and_conflicting_rescue_times(
 ) -> None:
     session = _typed_basic_session(
         {"rescue_record": [row]},
-        selected_rule_ids=("LX0609-004",),
+        selected_rule_ids=("LX0609-09-01-01",),
     )
 
-    execution, reduced = _reduce_typed_basic(session, ("LX0609-004",))
+    execution, reduced = _reduce_typed_basic(session, ("LX0609-09-01-01",))
 
     assert reduced[0].final_state is CustomerFinalState.DATA_GAP
     assert reduced[0].reason_code == expected_reason
-    facts = dict(execution.customer_display_facts)["LX0609-004"]
+    facts = dict(execution.customer_display_facts)["LX0609-09-01-01"]
     assert facts["failure_kind"] == expected_reason
     assert "source_document_id" not in facts
     _assert_selected_document_ref(
-        execution, session, rule_id="LX0609-004", source_key="rescue_record",
+        execution, session, rule_id="LX0609-09-01-01", source_key="rescue_record",
         document_id=row["document_id"],
     )
 
@@ -1734,7 +1734,7 @@ def test_001_005_006_typed_thresholds_are_exact_and_senior_satisfies_attending_o
 
 @pytest.mark.unit
 def test_2496813_basic_timeliness_002_004_005_matches_source_truth():
-    selected = ("LX0609-002", "LX0609-004", "LX0609-005")
+    selected = ("LX0609-01-02-01", "LX0609-09-01-01", "LX0609-02-01-01")
     session = _typed_basic_session(
         {
             "inpat_registration": [
@@ -1860,7 +1860,7 @@ def test_005_006_typed_fail_closed_without_text_time_guess(
 
 @pytest.mark.unit
 def test_005_accepts_customer_standard_upper_physician_round_within_48_hours():
-    selected = ("LX0609-005", "LX0609-006")
+    selected = ("LX0609-02-01-01", "LX0609-02-01-02")
     session = _typed_basic_session(
         {
             "inpat_registration": [
@@ -1885,10 +1885,10 @@ def test_005_accepts_customer_standard_upper_physician_round_within_48_hours():
     assert reduced[0].final_state is CustomerFinalState.COMPLIANT
     assert reduced[0].reason_code == "requirement_within_threshold"
     facts = dict(execution.customer_display_facts)
-    assert "source_document_id" not in facts["LX0609-005"]
-    assert facts["LX0609-005"]["elapsed_hours"] == 20.69
+    assert "source_document_id" not in facts["LX0609-02-01-01"]
+    assert facts["LX0609-02-01-01"]["elapsed_hours"] == 20.69
     _assert_selected_document_ref(
-        execution, session, rule_id="LX0609-005", source_key="senior_course_record",
+        execution, session, rule_id="LX0609-02-01-01", source_key="senior_course_record",
         document_id="safe-upper-round-ref",
     )
     # “上级医师”只满足主治医师及以上，不得放宽副主任/主任医师规则。
@@ -1897,7 +1897,7 @@ def test_005_accepts_customer_standard_upper_physician_round_within_48_hours():
 
 @pytest.mark.unit
 def test_005_accepts_senior_course_source_without_redundant_document_title():
-    selected = ("LX0609-005", "LX0609-006")
+    selected = ("LX0609-02-01-01", "LX0609-02-01-02")
     session = _typed_basic_session(
         {
             "inpat_registration": [
@@ -1922,10 +1922,10 @@ def test_005_accepts_senior_course_source_without_redundant_document_title():
     assert reduced[0].final_state is CustomerFinalState.COMPLIANT
     assert reduced[0].reason_code == "requirement_within_threshold"
     facts = dict(execution.customer_display_facts)
-    assert "source_document_id" not in facts["LX0609-005"]
-    assert facts["LX0609-005"]["elapsed_hours"] == 20.69
+    assert "source_document_id" not in facts["LX0609-02-01-01"]
+    assert facts["LX0609-02-01-01"]["elapsed_hours"] == 20.69
     _assert_selected_document_ref(
-        execution, session, rule_id="LX0609-005", source_key="senior_course_record",
+        execution, session, rule_id="LX0609-02-01-01", source_key="senior_course_record",
         document_id="upper-round-without-title",
     )
     # 来源身份只证明“上级医师”，不能自动升级为副主任医师或主任医师。
@@ -1938,7 +1938,7 @@ def test_006_explicit_senior_round_remains_zero_llm_call():
         async def generate(self, _prompt: str) -> dict:
             raise AssertionError("结构化职称已明确时不应调用模型")
 
-    selected = ("LX0609-006",)
+    selected = ("LX0609-02-01-02",)
     session = _typed_basic_session(
         {
             "inpat_registration": [
@@ -1990,7 +1990,7 @@ def test_006_future_semantic_candidate_does_not_call_llm_before_window_matures()
         async def generate(self, _prompt: str) -> dict:
             raise AssertionError("评价时点后的查房记录不得进入语义判定")
 
-    selected = ("LX0609-006",)
+    selected = ("LX0609-02-01-02",)
     session = _typed_basic_session(
         {
             "inpat_registration": [
@@ -2027,7 +2027,7 @@ def test_006_future_semantic_candidate_does_not_call_llm_before_window_matures()
 
 @pytest.mark.unit
 def test_006_recognizes_explicit_senior_round_role_from_customer_record_body():
-    selected = ("LX0609-006",)
+    selected = ("LX0609-02-01-02",)
     session = _typed_basic_session(
         {
             "inpat_registration": [
@@ -2054,10 +2054,10 @@ def test_006_recognizes_explicit_senior_round_role_from_customer_record_body():
     assert reduced[0].final_state is CustomerFinalState.COMPLIANT
     assert reduced[0].reason_code == "requirement_within_threshold"
     facts = dict(execution.customer_display_facts)
-    assert "source_document_id" not in facts["LX0609-006"]
-    assert facts["LX0609-006"]["elapsed_hours"] == 23.29
+    assert "source_document_id" not in facts["LX0609-02-01-02"]
+    assert facts["LX0609-02-01-02"]["elapsed_hours"] == 23.29
     _assert_selected_document_ref(
-        execution, session, rule_id="LX0609-006", source_key="senior_course_record",
+        execution, session, rule_id="LX0609-02-01-02", source_key="senior_course_record",
         document_id="zhang-yunhai-senior-round",
     )
     assert not hasattr(execution, "__await__")
@@ -2094,7 +2094,7 @@ async def test_006_uses_one_bounded_semantic_call_for_upper_physician_round_body
                 "response_time": 0.2,
             }
 
-    selected = ("LX0609-005", "LX0609-006")
+    selected = ("LX0609-02-01-01", "LX0609-02-01-02")
     session = _typed_basic_session(
         {
             "inpat_registration": [
@@ -2138,10 +2138,10 @@ async def test_006_uses_one_bounded_semantic_call_for_upper_physician_round_body
     assert reduced[1].final_state is CustomerFinalState.COMPLIANT
     assert reduced[1].reason_code == "requirement_within_threshold"
     facts = dict(execution.customer_display_facts)
-    assert "source_document_id" not in facts["LX0609-006"]
-    assert facts["LX0609-006"]["elapsed_hours"] == 20.69
+    assert "source_document_id" not in facts["LX0609-02-01-02"]
+    assert facts["LX0609-02-01-02"]["elapsed_hours"] == 20.69
     _assert_selected_document_ref(
-        execution, session, rule_id="LX0609-006", source_key="senior_course_record",
+        execution, session, rule_id="LX0609-02-01-02", source_key="senior_course_record",
         document_id="safe-upper-round-ref",
     )
 
@@ -2165,7 +2165,7 @@ async def test_006_rejects_semantic_role_when_quote_is_not_in_same_document():
                 "usage": {"prompt_tokens": 30, "completion_tokens": 10},
             }
 
-    selected = ("LX0609-006",)
+    selected = ("LX0609-02-01-02",)
     session = _typed_basic_session(
         {
             "inpat_registration": [
@@ -2205,6 +2205,7 @@ async def test_006_rejects_semantic_role_when_quote_is_not_in_same_document():
     assert llm.call_count == 2
     assert execution.llm_call_count == 2
     assert execution.total_tokens == 80
+    assert execution.usage_observation_complete is True
     assert reduced[0].final_state is CustomerFinalState.TECHNICAL_ERROR
     assert reduced[0].reason_code == "model_parse_error"
 
@@ -2239,7 +2240,7 @@ async def test_006_recovers_once_from_invalid_payload_and_keeps_usage():
                 "usage": {"prompt_tokens": 20, "completion_tokens": 8},
             }
 
-    selected = ("LX0609-006",)
+    selected = ("LX0609-02-01-02",)
     session = _typed_basic_session(
         {
             "inpat_registration": [
@@ -2296,7 +2297,7 @@ async def test_006_transport_failure_is_counted_and_never_becomes_clinical_resul
             self.call_count += 1
             raise TimeoutError("model timeout")
 
-    selected = ("LX0609-006",)
+    selected = ("LX0609-02-01-02",)
     session = _typed_basic_session(
         {
             "inpat_registration": [
@@ -2336,13 +2337,60 @@ async def test_006_transport_failure_is_counted_and_never_becomes_clinical_resul
     assert llm.call_count == 1
     assert execution.llm_call_count == 1
     assert execution.total_tokens == 0
+    assert execution.usage_observation_complete is False
     assert reduced[0].final_state is CustomerFinalState.TECHNICAL_ERROR
     assert reduced[0].reason_code == "model_transport_error"
 
 
 @pytest.mark.unit
+@pytest.mark.asyncio
+async def test_006_retry_transport_failure_preserves_first_response_usage() -> None:
+    class _LLM:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def generate(self, _prompt: str) -> dict:
+            self.calls += 1
+            if self.calls == 1:
+                return {
+                    "choices": [{"message": {"content": "not-json"}}],
+                    "usage": {"prompt_tokens": 20, "completion_tokens": 2},
+                }
+            raise TimeoutError("synthetic retry timeout")
+
+    selected = ("LX0609-02-01-02",)
+    session = _typed_basic_session(
+        {
+            "inpat_registration": [{"admission_datetime": "2026-07-15 13:48:49"}],
+            "admission_record": [],
+            "daily_course_record": [],
+            "senior_course_record": [{
+                "document_id": "safe-upper-round-ref",
+                "document_title": "上级医师查房记录",
+                "record_time": "2026-07-16 10:30:02",
+                "record_content": "今日上级医师查房，分析病情与治疗计划。",
+            }],
+        },
+        selected_rule_ids=selected,
+        evaluation_as_of_date="2026-07-20",
+    )
+    llm = _LLM()
+    execution = await execute_luxian_0609_native_basic_timeliness(
+        rule_ids=selected, decision_rule_ids=selected, evidence_payload=None,
+        evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+        llm_client=llm,
+    )
+    assert llm.calls == execution.llm_call_count == 2
+    assert execution.prompt_tokens == 20
+    assert execution.completion_tokens == 2
+    assert execution.total_tokens == 22
+    assert execution.usage_observation_complete is False
+    assert execution.decisions[0].reason_code == "model_transport_error"
+
+
+@pytest.mark.unit
 def test_006_unavailable_llm_is_explicit_technical_failure_without_fake_call():
-    selected = ("LX0609-006",)
+    selected = ("LX0609-02-01-02",)
     session = _typed_basic_session(
         {
             "inpat_registration": [
@@ -2401,7 +2449,7 @@ async def test_006_valid_unclear_role_is_specific_data_gap_not_execution_failure
                 "usage": {"prompt_tokens": 20, "completion_tokens": 8},
             }
 
-    selected = ("LX0609-006",)
+    selected = ("LX0609-02-01-02",)
     session = _typed_basic_session(
         {
             "inpat_registration": [
@@ -2471,7 +2519,7 @@ async def test_006_strict_schema_call_disables_thinking_for_role_extraction():
                 "usage": {"prompt_tokens": 20, "completion_tokens": 8},
             }
 
-    selected = ("LX0609-006",)
+    selected = ("LX0609-02-01-02",)
     session = _typed_basic_session(
         {
             "inpat_registration": [
@@ -2700,7 +2748,7 @@ def test_live_course_source_uses_private_time_only_rows_for_005_and_006(
     }
 
     execution = execute_luxian_0609_native_basic_timeliness(
-        rule_ids=("LX0609-005", "LX0609-006"),
+        rule_ids=("LX0609-02-01-01", "LX0609-02-01-02"),
         evidence_payload=payload,
         institute_id="I",
         patient_id="P",
@@ -2755,7 +2803,7 @@ def test_basic_timeliness_consumes_shared_course_material_without_live_reader(
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-005", "LX0609-006"),
+        selected_rule_ids=("LX0609-02-01-01", "LX0609-02-01-02"),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -2781,7 +2829,7 @@ def test_basic_timeliness_consumes_shared_course_material_without_live_reader(
     }
 
     execution = execute_luxian_0609_native_basic_timeliness(
-        rule_ids=("LX0609-005", "LX0609-006"),
+        rule_ids=("LX0609-02-01-01", "LX0609-02-01-02"),
         evidence_payload=payload,
         institute_id="I",
         patient_id="P",
@@ -2830,7 +2878,7 @@ def test_course_source_read_failure_is_data_gap_only_for_005_and_006(monkeypatch
     )
 
     execution = execute_luxian_0609_native_basic_timeliness(
-        rule_ids=("LX0609-001", "LX0609-005", "LX0609-006"),
+        rule_ids=("LX0609-01-01-01", "LX0609-02-01-01", "LX0609-02-01-02"),
         evidence_payload=payload,
         institute_id="I",
         patient_id="P",
@@ -2864,7 +2912,7 @@ def test_missing_source_coordinates_fail_closed_for_005_and_006():
     )
 
     execution = execute_luxian_0609_native_basic_timeliness(
-        rule_ids=("LX0609-005", "LX0609-006"),
+        rule_ids=("LX0609-02-01-01", "LX0609-02-01-02"),
         evidence_payload=payload,
     )
 
@@ -2926,7 +2974,7 @@ def test_first_course_shell_or_missing_body_is_data_gap_without_content_echo(
     marker = "SHELL_MARKER_MUST_NOT_ECHO"
     rows = [dict(item, text_preview=marker) for item in first_course_rows]
     execution = execute_luxian_0609_native_basic_timeliness(
-        rule_ids=("LX0609-002",),
+        rule_ids=("LX0609-01-02-01",),
         evidence_payload={
             "programmatic_timeline": {
                 "admission_time": "2026-06-01 08:00:00",
@@ -2935,7 +2983,7 @@ def test_first_course_shell_or_missing_body_is_data_gap_without_content_echo(
         },
     )
 
-    assert execution.planned_rule_ids == ("LX0609-002",)
+    assert execution.planned_rule_ids == ("LX0609-01-02-01",)
     assert len(execution.results) == 1
     result = execution.results[0]
     assert result["status"] == "data_gap"
@@ -2962,7 +3010,7 @@ def test_first_course_substantive_body_keeps_eight_hour_boundary(
     expected_status: str,
 ):
     execution = execute_luxian_0609_native_basic_timeliness(
-        rule_ids=("LX0609-002",),
+        rule_ids=("LX0609-01-02-01",),
         evidence_payload={
             "programmatic_timeline": {
                 "admission_time": "2026-06-01 08:00:00",
@@ -3012,7 +3060,7 @@ def test_admission_anchor_rules_reject_untrusted_or_unattested_legal_datetime(
         timeline["admission_time_trusted"] = admission_time_trusted
 
     execution = execute_luxian_0609_native_basic_timeliness(
-        rule_ids=("LX0609-001", "LX0609-005", "LX0609-006"),
+        rule_ids=("LX0609-01-01-01", "LX0609-02-01-01", "LX0609-02-01-02"),
         evidence_payload={"programmatic_timeline": timeline},
     )
 
@@ -3027,7 +3075,7 @@ def test_admission_anchor_rules_reject_untrusted_or_unattested_legal_datetime(
 @pytest.mark.unit
 def test_untrusted_admission_anchor_does_not_change_002_or_004():
     execution = execute_luxian_0609_native_basic_timeliness(
-        rule_ids=("LX0609-002", "LX0609-004"),
+        rule_ids=("LX0609-01-02-01", "LX0609-09-01-01"),
         evidence_payload={
             "programmatic_timeline": {
                 "admission_time": "2026-06-01 08:00:00",
@@ -3062,7 +3110,7 @@ def test_untrusted_admission_anchor_does_not_change_002_or_004():
 @pytest.mark.unit
 def test_admission_anchor_rules_reject_forged_trusted_flag_without_approved_basis():
     execution = execute_luxian_0609_native_basic_timeliness(
-        rule_ids=("LX0609-001", "LX0609-005", "LX0609-006"),
+        rule_ids=("LX0609-01-01-01", "LX0609-02-01-01", "LX0609-02-01-02"),
         evidence_payload={
             "programmatic_timeline": {
                 "admission_time": "2026-06-01 08:00:00",
@@ -3091,7 +3139,7 @@ def test_admission_record_time_is_approved_for_0426_timeliness_rules(monkeypatch
         ),
     )
     execution = execute_luxian_0609_native_basic_timeliness(
-        rule_ids=("LX0609-001", "LX0609-005", "LX0609-006"),
+        rule_ids=("LX0609-01-01-01", "LX0609-02-01-01", "LX0609-02-01-02"),
         evidence_payload={
             "programmatic_timeline": {
                 "admission_time": "2026-06-01 08:00:00",
@@ -3158,7 +3206,7 @@ def test_customer_approved_admission_basis_must_bind_same_admission_record_time(
     admission_rows: list[dict[str, str]],
 ):
     execution = execute_luxian_0609_native_basic_timeliness(
-        rule_ids=("LX0609-001", "LX0609-005", "LX0609-006"),
+        rule_ids=("LX0609-01-01-01", "LX0609-02-01-01", "LX0609-02-01-02"),
         evidence_payload={
             "programmatic_timeline": {
                 "admission_time": "2026-06-01 08:00:00",
@@ -3209,7 +3257,7 @@ def test_trusted_admission_anchor_keeps_24_48_72_hour_boundaries(
         lambda **_kwargs: _private_course_rows(attending_time, senior_time),
     )
     execution = execute_luxian_0609_native_basic_timeliness(
-        rule_ids=("LX0609-001", "LX0609-005", "LX0609-006"),
+        rule_ids=("LX0609-01-01-01", "LX0609-02-01-01", "LX0609-02-01-02"),
         evidence_payload={
             "programmatic_timeline": {
                 "admission_time": "2026-06-01 08:00:00",
@@ -3256,7 +3304,7 @@ def test_rescue_record_uses_strict_end_label_and_six_hour_boundary(
     expected_status: str,
 ):
     results = evaluate_luxian_0609_programmatic_rules(
-        wrapper_rules=_rules("LX0609-004"),
+        wrapper_rules=_rules("LX0609-09-01-01"),
         evidence_payload={
             "programmatic_timeline": {
                 "documents": {
@@ -3289,7 +3337,7 @@ def test_rescue_record_uses_strict_end_label_and_six_hour_boundary(
 )
 def test_rescue_record_rejects_nonexact_or_missing_end_time(content: str):
     results = evaluate_luxian_0609_programmatic_rules(
-        wrapper_rules=_rules("LX0609-004"),
+        wrapper_rules=_rules("LX0609-09-01-01"),
         evidence_payload={
             "programmatic_timeline": {
                 "documents": {

@@ -15,7 +15,7 @@ REQUIRED_FILES = (
     "results.json", "privacy-report.json",
 )
 SCHEMA_VERSION = "qc-diagnostic-render-v1"
-_RULES = {"LX0609-032", "LX0609-066"}
+_RULES = {"LX0609-04-03-01", "LX0609-04-05-03"}
 _HEX64 = re.compile(r"[0-9a-f]{64}\Z")
 _TOKEN = re.compile(r"[a-z0-9][a-z0-9._-]{0,63}\Z")
 _MANIFEST_KEYS = {
@@ -92,7 +92,7 @@ def _validate_input(value: object):
         "applicability", "evidence_state", "qc_direction", "reason_code",
     )))
     _require(raw["confidence"] is None or type(raw["confidence"]) in (int, float))
-    if item["rule_id"] == "LX0609-032":
+    if item["rule_id"] == "LX0609-04-03-01":
         expected = ("not_applicable", "sufficient", "unknown", "trigger_absent_complete")
         _object(item["display_facts"], set())
     else:

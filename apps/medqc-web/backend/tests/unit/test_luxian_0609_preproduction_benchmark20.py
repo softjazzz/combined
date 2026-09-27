@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 import pytest
+from tests.luxian_0609_identity_test_support import published_rule_ids
 
 from scripts import run_luxian_0609_preproduction_benchmark20 as benchmark20
 from scripts.build_luxian_0609_golden_ledger import build_candidate_ledger
@@ -25,25 +26,25 @@ _DETERMINISTIC_RULE_IDS = frozenset(
 )
 _WITHHELD_RULE_IDS = frozenset(
     {
-        "LX0609-020",
-        "LX0609-021",
-        "LX0609-022",
-        "LX0609-025",
-        "LX0609-028",
-        "LX0609-036",
-        "LX0609-049",
-        "LX0609-056",
-        "LX0609-059",
-        "LX0609-075",
+        "LX0609-03-01-01",
+        "LX0609-03-01-02",
+        "LX0609-03-01-03",
+        "LX0609-04-02-04",
+        "LX0609-05-01-01",
+        "LX0609-04-04-01",
+        "LX0609-07-04-02",
+        "LX0609-05-01-04",
+        "LX0609-05-03-01",
+        "LX0609-10-03-01",
     }
 )
 _CUSTOMER_EXCLUDED_RULE_IDS = frozenset(
     {
-        "LX0609-033",
-        "LX0609-034",
-        "LX0609-035",
-        "LX0609-041",
-        "LX0609-042",
+        "LX0609-11-01-01",
+        "LX0609-11-02-01",
+        "LX0609-11-02-02",
+        "LX0609-11-03-01",
+        "LX0609-11-03-02",
     }
 )
 _CATALOG_RULE_IDS = tuple(
@@ -55,10 +56,10 @@ def test_rule_attestations_use_authoritative_executable_phase_scope():
     rule_ids, executor_types = benchmark20._rule_attestations()
 
     assert rule_ids == tuple(
-        f"LX0609-{index:03d}"
-        for index in range(1, 78)
-        if f"LX0609-{index:03d}" not in _WITHHELD_RULE_IDS
-        and f"LX0609-{index:03d}" not in _CUSTOMER_EXCLUDED_RULE_IDS
+        rule_id
+        for rule_id in published_rule_ids(1, 77)
+        if rule_id not in _WITHHELD_RULE_IDS
+        and rule_id not in _CUSTOMER_EXCLUDED_RULE_IDS
     )
     assert len(rule_ids) == 62
     assert not set(rule_ids).intersection(
@@ -309,7 +310,7 @@ def _assert_candidate_decision_kind_contract(candidate: dict) -> None:
     assert all(
         row["decision_kind"] == "semantic"
         for row in rows
-        if row["rule_id"] == "LX0609-017"
+        if row["rule_id"] == "LX0609-12-01-02"
     )
 
 
@@ -432,7 +433,7 @@ async def test_benchmark20_runs_exact_cases_in_order_and_returns_safe_golden_bat
 
 @pytest.mark.asyncio
 async def test_benchmark20_counts_one_family_call_once_while_covering_multiple_rules():
-    selected_rule_ids = ("LX0609-010", "LX0609-011")
+    selected_rule_ids = ("LX0609-06-01-02", "LX0609-06-01-04")
     call_numbers = count(1)
 
     async def fake_runner(**kwargs):
@@ -456,8 +457,8 @@ async def test_benchmark20_counts_one_family_call_once_while_covering_multiple_r
                         "completion_tokens": 2,
                         "total_tokens": 12,
                         "covered_customer_rule_ids": [
-                            "LX0609-010",
-                            "LX0609-011",
+                            "LX0609-06-01-02",
+                            "LX0609-06-01-04",
                         ],
                         "latency_ms": 5.0,
                     },
@@ -481,7 +482,7 @@ async def test_benchmark20_counts_one_family_call_once_while_covering_multiple_r
         safe_response = case["response"]
         assert safe_response["metrics"]["usage_attributions"][0][
             "covered_customer_rule_ids"
-        ] == ["LX0609-010", "LX0609-011"]
+        ] == ["LX0609-06-01-02", "LX0609-06-01-04"]
         assert all(
             not {"prompt_tokens", "completion_tokens", "total_tokens"}
             & set(result["metadata"])
@@ -497,8 +498,8 @@ async def test_benchmark20_counts_one_family_call_once_while_covering_multiple_r
         for row in candidate["rows"]
         if row["case_label"] == "case-01"
     }
-    assert by_rule["LX0609-010"]["total_tokens"] == 12
-    assert by_rule["LX0609-011"]["total_tokens"] == 12
+    assert by_rule["LX0609-06-01-02"]["total_tokens"] == 12
+    assert by_rule["LX0609-06-01-04"]["total_tokens"] == 12
 
 
 @pytest.mark.asyncio
@@ -608,7 +609,7 @@ async def test_benchmark20_fails_closed_for_family_usage_attribution(
             response["metrics"]["unattributed_completion_tokens"] = 1
         elif failure_kind == "duplicate_executor":
             duplicate = dict(response["metrics"]["usage_attributions"][0])
-            duplicate["covered_customer_rule_ids"] = ["LX0609-001"]
+            duplicate["covered_customer_rule_ids"] = ["LX0609-01-01-01"]
             response["metrics"]["usage_attributions"].append(duplicate)
         elif failure_kind == "unknown_coverage":
             response["metrics"]["usage_attributions"][0][
@@ -659,21 +660,21 @@ async def test_benchmark20_selected_rules_run_only_canonical_subset_and_build_sa
         runner=fake_runner,
         llm_client=object(),
         base_settings=SimpleNamespace(),
-        selected_rule_ids=("LX0609-030", "LX0609-029"),
+        selected_rule_ids=("LX0609-04-02-02", "LX0609-04-01-01"),
     )
 
-    assert runner_calls == [("LX0609-029", "LX0609-030")] * 20
+    assert runner_calls == [("LX0609-04-01-01", "LX0609-04-02-02")] * 20
     assert batch["rule_scope"] == {
         "mode": "selected_subset",
-        "selected_rule_ids": ["LX0609-029", "LX0609-030"],
+        "selected_rule_ids": ["LX0609-04-01-01", "LX0609-04-02-02"],
     }
     assert batch["summary"]["judgment_count"] == 40
     assert batch["summary"]["selected_rule_count"] == 2
     assert all(
         tuple(case["evidence_attestations"])
-        == ("LX0609-029", "LX0609-030")
+        == ("LX0609-04-01-01", "LX0609-04-02-02")
         and [item["rule_id"] for item in case["response"]["results"]]
-        == ["LX0609-029", "LX0609-030"]
+        == ["LX0609-04-01-01", "LX0609-04-02-02"]
         for case in batch["cases"]
     )
     candidate = build_candidate_ledger(
@@ -683,8 +684,8 @@ async def test_benchmark20_selected_rules_run_only_canonical_subset_and_build_sa
     )
     assert candidate["candidate_count"] == 40
     assert {row["rule_id"] for row in candidate["rows"]} == {
-        "LX0609-029",
-        "LX0609-030",
+        "LX0609-04-01-01",
+        "LX0609-04-02-02",
     }
     assert all("private" not in repr(row).lower() for row in candidate["rows"])
 
@@ -694,12 +695,12 @@ async def test_benchmark20_selected_rules_run_only_canonical_subset_and_build_sa
     "selected_rule_ids",
     [
         (),
-        ("LX0609-029", "LX0609-029"),
+        ("LX0609-04-01-01", "LX0609-04-01-01"),
         ("LX0609-000",),
         *((rule_id,) for rule_id in sorted(_WITHHELD_RULE_IDS)),
         ("LX0609-999",),
         ("lx0609-029",),
-        ("LX0609-029 ",),
+        ("LX0609-04-01-01 ",),
     ],
 )
 async def test_benchmark20_rejects_invalid_selected_rule_scope_before_reading(
@@ -745,8 +746,8 @@ async def test_benchmark20_fails_fast_on_technical_error_without_echo():
         _emit_attestations(
             kwargs,
             salt=str(runner_calls),
-            state_overrides={"LX0609-001": "technical_error"},
-            reason_overrides={"LX0609-001": "runner_failed"},
+            state_overrides={"LX0609-01-01-01": "technical_error"},
+            reason_overrides={"LX0609-01-01-01": "runner_failed"},
         )
         response["metrics"]["technical_error_count"] = 1
         return response
@@ -775,8 +776,8 @@ async def test_benchmark20_can_emit_diagnostic_batch_when_technical_error_is_all
         _emit_attestations(
             kwargs,
             salt=str(next(call_numbers)),
-            state_overrides={"LX0609-001": "technical_error"},
-            reason_overrides={"LX0609-001": "runner_failed"},
+            state_overrides={"LX0609-01-01-01": "technical_error"},
+            reason_overrides={"LX0609-01-01-01": "runner_failed"},
         )
         response["metrics"]["technical_error_count"] = 1
         return response
@@ -858,17 +859,17 @@ async def test_benchmark20_fails_before_read_when_rule_authority_is_missing_or_u
 ):
     contracts = [
         SimpleNamespace(
-            rule_id=f"LX0609-{index:03d}",
+            rule_id=rule_id,
             decision_authority=(
                 authority if index == 74 else "program_only"
             ),
             phase_status=(
                 "pending_definition"
-                if f"LX0609-{index:03d}" in _WITHHELD_RULE_IDS
+                if rule_id in _WITHHELD_RULE_IDS
                 else "phase_1_target"
             ),
         )
-        for index in range(1, 78)
+        for index, rule_id in enumerate(published_rule_ids(1, 77), start=1)
     ]
     monkeypatch.setattr(
         benchmark20,
@@ -931,8 +932,8 @@ async def test_benchmark20_rejects_attested_state_mismatch_without_echo():
         _emit_attestations(
             kwargs,
             salt=str(next(call_numbers)),
-            state_overrides={"LX0609-001": "non_compliant"},
-            reason_overrides={"LX0609-001": "mismatch_reason"},
+            state_overrides={"LX0609-01-01-01": "non_compliant"},
+            reason_overrides={"LX0609-01-01-01": "mismatch_reason"},
         )
         return _safe_response()
 
@@ -951,9 +952,9 @@ async def test_benchmark20_rejects_attested_state_mismatch_without_echo():
 
 def test_golden_response_normalizes_public_uncertain_to_evaluation_unknown():
     response = {"schema_version": "lx0609-preproduction-runner-v1"}
-    results = [{"rule_id": "LX0609-023", "status": "uncertain"}]
+    results = [{"rule_id": "LX0609-03-01-04", "status": "uncertain"}]
     attestations = {
-        "LX0609-023": {
+        "LX0609-03-01-04": {
             "evidence_hash": "a" * 64,
             "observed_state": "evaluation_unknown",
             "reason_code": "semantic_low_confidence",
@@ -963,13 +964,13 @@ def test_golden_response_normalizes_public_uncertain_to_evaluation_unknown():
     projected = benchmark20._golden_response(
         response,
         results=results,
-        executor_types={"LX0609-023": "llm"},
+        executor_types={"LX0609-03-01-04": "llm"},
         evidence_attestations=attestations,
     )
 
     assert projected["results"] == [
         {
-            "rule_id": "LX0609-023",
+            "rule_id": "LX0609-03-01-04",
             "status": "evaluation_unknown",
             "metadata": {
                 "reason_code": "semantic_low_confidence",
@@ -1048,7 +1049,7 @@ def test_benchmark20_cli_passes_explicit_rule_subset_and_marks_output_scope(
         "rule_set_digest": "b" * 64,
         "rule_scope": {
             "mode": "selected_subset",
-            "selected_rule_ids": ["LX0609-029", "LX0609-030"],
+            "selected_rule_ids": ["LX0609-04-01-01", "LX0609-04-02-02"],
         },
         "summary": {
             "case_count": 20,
@@ -1077,14 +1078,14 @@ def test_benchmark20_cli_passes_explicit_rule_subset_and_marks_output_scope(
             "--runtime-manifest",
             str(runtime_manifest_path),
             "--rule-id",
-            "LX0609-030",
+            "LX0609-04-02-02",
             "--rule-id",
-            "LX0609-029",
+            "LX0609-04-01-01",
         ]
     )
 
     assert exit_code == 0
-    assert captured_args["selected_rule_ids"] == ("LX0609-030", "LX0609-029")
+    assert captured_args["selected_rule_ids"] == ("LX0609-04-02-02", "LX0609-04-01-01")
     stdout = json.loads(capsys.readouterr().out)
     assert stdout["rule_scope"] == safe_batch["rule_scope"]
     assert stdout["judgment_count"] == 40

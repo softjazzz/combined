@@ -12,7 +12,7 @@ def test_synthetic_replay_runs_formal_execution_reducer_and_aggregator() -> None
         Path(__file__).parents[1]
         / "fixtures"
         / "luxian_0609"
-        / "consultation-family-replay.json"
+        / "consultation-023-engine-replay.json"
     )
 
     replay = asyncio.run(verify.run_replay(fixture))
@@ -21,12 +21,7 @@ def test_synthetic_replay_runs_formal_execution_reducer_and_aggregator() -> None
     assert replay["network_used"] is False
     assert replay["llm_call_count"] == 2
     assert replay["prompt_count"] == 2
-    assert [item["status"] for item in replay["results"]] == [
-        "compliant",
-        "compliant",
-        "compliant",
-        "compliant",
-    ]
+    assert [item["status"] for item in replay["results"]] == ["compliant"]
     assert all(item["reason_code"] == "requirement_satisfied" for item in replay["results"])
     assert replay["results"][0]["fact_ref_count"] > 0
     assert replay["results"][0]["evidence_coordinates"]
@@ -52,7 +47,7 @@ def test_variant_comparison_reports_byte_equal_prompts_without_serializing_them(
         Path(__file__).parents[1]
         / "fixtures"
         / "luxian_0609"
-        / "consultation-family-replay.json"
+        / "consultation-023-engine-replay.json"
     )
 
     comparison = verify.compare_replays(
@@ -81,7 +76,7 @@ def test_variant_comparison_normalizes_coordinate_order_but_reports_fact_ref_cou
         Path(__file__).parents[1]
         / "fixtures"
         / "luxian_0609"
-        / "consultation-family-replay.json"
+        / "consultation-023-engine-replay.json"
     )
     baseline = asyncio.run(verify.run_replay(fixture))
     candidate = deepcopy(baseline)
@@ -110,17 +105,15 @@ def test_variant_subprocess_decodes_utf8_json_output() -> None:
             Path(__file__).parents[1]
             / "fixtures"
             / "luxian_0609"
-            / "consultation-family-replay.json"
+            / "consultation-023-engine-replay.json"
         ),
         variant_root=workspace_root,
     )
-    application_result = next(
-        item for item in replay["results"] if item["rule_id"] == "LX0609-021"
+    execution_result = next(
+        item for item in replay["results"] if item["rule_id"] == "LX0609-03-01-04"
     )
 
-    assert application_result["facts"]["checked_requirement"] == (
-        "说明具体临床问题、会诊理由或明确会诊目的"
-    )
+    assert execution_result["facts"]["recommendation_count"] == 1
 
 
 def test_variant_subprocesses_compare_prompt_bytes_with_one_session_key() -> None:
@@ -130,7 +123,7 @@ def test_variant_subprocesses_compare_prompt_bytes_with_one_session_key() -> Non
         Path(__file__).parents[1]
         / "fixtures"
         / "luxian_0609"
-        / "consultation-family-replay.json"
+        / "consultation-023-engine-replay.json"
     )
     workspace_root = Path(__file__).parents[3]
     session_key = b"consultation-replay-test-session"

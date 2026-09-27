@@ -43,6 +43,21 @@ from .exam_lab_window import (
     resolve_evaluation_window_state,
 )
 from .exam_order_linkage import resolve_exam_master_order_ids
+from .handbook_exam_lab import (
+    REPORT_RULES as HANDBOOK_REPORT_RULES,
+    build_handbook_ledger,
+    evaluate_report_completeness,
+)
+from .ct_order_course_consistency import (
+    RULE_ID as CT_CONSISTENCY_RULE,
+    REPORT_RULE_ID as CT_REPORT_RULE,
+    COURSE_SOURCES as CT_COURSE_SOURCES,
+    build_ct_review_input,
+    build_ct_fact_prompt,
+    ct_fact_response_format,
+    evaluate_ct_review,
+    CtEvidenceBudgetExceeded,
+)
 from .native_execution import build_luxian_0609_native_result
 from .source_evidence_reader import (
     CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY,
@@ -55,19 +70,28 @@ logger = logging.getLogger(__name__)
 
 
 EXAM_LAB_RULE_IDS = (
-    "LX0609-010",
-    "LX0609-011",
-    "LX0609-012",
-    "LX0609-014",
-    "LX0609-015",
+    "LX0609-06-01-02",
+    "LX0609-06-01-04",
+    "LX0609-06-01-05",
+    "LX0609-06-03-03",
+    "LX0609-06-03-04",
 )
-EXAM_RULE_IDS = frozenset({"LX0609-010", "LX0609-011", "LX0609-012"})
-CULTURE_RULE_IDS = frozenset({"LX0609-014", "LX0609-015"})
+# 该公开常量是既有五规则调用方的稳定范围，不能因扩展手册规则而隐式变成
+# “全族运行”。新增规则只在目录明确选中后进入内部执行集合。
+EXECUTABLE_EXAM_LAB_RULE_IDS = (
+    *EXAM_LAB_RULE_IDS,
+    CT_CONSISTENCY_RULE,
+    "LX0609-06-01-03",
+    "LX0609-06-03-02",
+)
+EXAM_RULE_IDS = frozenset({"LX0609-06-01-02", "LX0609-06-01-04", "LX0609-06-01-05"})
+CULTURE_RULE_IDS = frozenset({"LX0609-06-03-03", "LX0609-06-03-04"})
+_EXECUTABLE_EXAM_RULE_IDS = frozenset({*EXAM_RULE_IDS, CT_CONSISTENCY_RULE, "LX0609-06-01-03"})
 EXECUTOR_KEY = "exam_lab"
-_TYPED_DECISION_RULE_IDS = frozenset(EXAM_LAB_RULE_IDS)
+_TYPED_DECISION_RULE_IDS = frozenset(EXECUTABLE_EXAM_LAB_RULE_IDS)
 _TYPED_EVALUATOR_VERSION = "exam-lab-ruledecision-shadow-v2"
 
-# LX0609-012 的客户契约允许状态（`docs/0602/luxian_0609_formal_rule_catalog.csv`
+# LX0609-06-01-05 的客户契约允许状态（`docs/0602/luxian_0609_formal_rule_catalog.csv`
 # 中含 `LX-012` 的目录行 `allowed_result_statuses`：hit; not_hit; data_quality_gap;
 # not_applicable; needs_manual_review）不含 `evaluation_unknown`。运行时
 # `rule_contracts.py` 的 `ALLOWED_FINAL_STATES` 是全 75 点共享词表、无权判定单
@@ -94,7 +118,7 @@ def _contract_allowed_status(rule_id: str, status: str) -> str:
     保持原样；其它规则一律不动。
     """
 
-    if rule_id != "LX0609-012":
+    if rule_id != "LX0609-06-01-05":
         return status
     return "data_gap" if status == "evaluation_unknown" else status
 
@@ -117,22 +141,22 @@ _PRESENT_FACT_STATES = frozenset({"present", "performed", "available", "positive
 _ABSENT_FACT_STATES = frozenset({"explicit_negative", "absent", "not_present"})
 _MAPPING_LINE_PATTERN = re.compile(r"^.*(?:主执行规则|映射执行规则).*$", re.MULTILINE)
 _STRONG_SEMANTIC_PATTERNS = {
-    "LX0609-011": re.compile(
+    "LX0609-06-01-04": re.compile(
         r"(?:CT|MRI|计算机断层|磁共振|影像(?:报告|提示)?).{0,30}"
         r"(?:未见(?:明显)?异常|未见明确病变|占位|病变|梗死|出血|炎症|结节|肿块|积液|异常|突出|受压)",
         re.IGNORECASE,
     ),
-    "LX0609-012": re.compile(
+    "LX0609-06-01-05": re.compile(
         r"(?:CT|MRI|计算机断层|磁共振|影像(?:报告|提示)?).{0,40}"
         r"(?:分析|考虑|结合|处理|进一步|计划)",
         re.IGNORECASE,
     ),
-    "LX0609-014": re.compile(
+    "LX0609-06-03-03": re.compile(
         r"(?:培养|药敏|微生物(?:报告|结果)?).{0,40}"
         r"(?:阳性|阴性|无生长|检出.{0,16}(?:菌|病原体)|"
         r"分离出.{0,16}(?:菌|病原体)|敏感|耐药)",
     ),
-    "LX0609-015": re.compile(
+    "LX0609-06-03-04": re.compile(
         r"(?:培养|药敏|菌).{0,50}(?:调整|制定|选择|更换|改用|继续|停用|抗感染|用药|处置)",
     ),
 }
@@ -162,22 +186,26 @@ _TYPED_TRIGGER_SOURCES = {
     "culture": ("labtest_master", "labtest_item_report"),
 }
 _TYPED_RULE_SOURCE_KEYS = {
+    CT_CONSISTENCY_RULE: (_ORDER_SOURCE_KEY, *_TYPED_TRIGGER_SOURCES["exam"], *CT_COURSE_SOURCES),
     # 010 按省手册核对已执行检查的医嘱、病程和报告完整性。
-    "LX0609-010": (*_TYPED_TRIGGER_SOURCES["exam"], _ORDER_SOURCE_KEY, *_COURSE_SOURCE_KEYS),
-    "LX0609-011": (*_TYPED_TRIGGER_SOURCES["exam"], _ORDER_SOURCE_KEY, *_COURSE_SOURCE_KEYS),
-    "LX0609-012": (*_TYPED_TRIGGER_SOURCES["exam"], _ORDER_SOURCE_KEY, *_COURSE_SOURCE_KEYS),
-    "LX0609-014": (*_TYPED_TRIGGER_SOURCES["culture"], _ORDER_SOURCE_KEY, *_COURSE_SOURCE_KEYS),
-    "LX0609-015": (*_TYPED_TRIGGER_SOURCES["culture"], _ORDER_SOURCE_KEY, *_COURSE_SOURCE_KEYS),
+    "LX0609-06-01-02": (*_TYPED_TRIGGER_SOURCES["exam"], _ORDER_SOURCE_KEY, *_COURSE_SOURCE_KEYS),
+    # 2026 手册报告完整性只消费同一证据会话的结构化事件，不进入旧语义抽取。
+    "LX0609-06-01-03": (_ORDER_SOURCE_KEY, *_TYPED_TRIGGER_SOURCES["exam"]),
+    "LX0609-06-01-04": (*_TYPED_TRIGGER_SOURCES["exam"], _ORDER_SOURCE_KEY, *_COURSE_SOURCE_KEYS),
+    "LX0609-06-01-05": (*_TYPED_TRIGGER_SOURCES["exam"], _ORDER_SOURCE_KEY, *_COURSE_SOURCE_KEYS),
+    "LX0609-06-03-02": (_ORDER_SOURCE_KEY, *_TYPED_TRIGGER_SOURCES["culture"]),
+    "LX0609-06-03-03": (*_TYPED_TRIGGER_SOURCES["culture"], _ORDER_SOURCE_KEY, *_COURSE_SOURCE_KEYS),
+    "LX0609-06-03-04": (*_TYPED_TRIGGER_SOURCES["culture"], _ORDER_SOURCE_KEY, *_COURSE_SOURCE_KEYS),
 }
 _TRIGGER_SOURCES_BY_RULE = {
     # 病程先写了 CT/MRI 而没有医嘱，同样是 010 的明确缺陷。
-    "LX0609-010": (*_TYPED_TRIGGER_SOURCES["exam"], _ORDER_SOURCE_KEY, *_COURSE_SOURCE_KEYS),
-    "LX0609-011": (*_TYPED_TRIGGER_SOURCES["exam"], _ORDER_SOURCE_KEY),
-    "LX0609-012": (*_TYPED_TRIGGER_SOURCES["exam"], _ORDER_SOURCE_KEY),
-    "LX0609-014": (*_TYPED_TRIGGER_SOURCES["culture"], _ORDER_SOURCE_KEY),
-    "LX0609-015": (*_TYPED_TRIGGER_SOURCES["culture"], _ORDER_SOURCE_KEY),
+    "LX0609-06-01-02": (*_TYPED_TRIGGER_SOURCES["exam"], _ORDER_SOURCE_KEY, *_COURSE_SOURCE_KEYS),
+    "LX0609-06-01-04": (*_TYPED_TRIGGER_SOURCES["exam"], _ORDER_SOURCE_KEY),
+    "LX0609-06-01-05": (*_TYPED_TRIGGER_SOURCES["exam"], _ORDER_SOURCE_KEY),
+    "LX0609-06-03-03": (*_TYPED_TRIGGER_SOURCES["culture"], _ORDER_SOURCE_KEY),
+    "LX0609-06-03-04": (*_TYPED_TRIGGER_SOURCES["culture"], _ORDER_SOURCE_KEY),
 }
-_POST_RULE_IDS = frozenset({"LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015"})
+_POST_RULE_IDS = frozenset({"LX0609-06-01-04", "LX0609-06-01-05", "LX0609-06-03-03", "LX0609-06-03-04"})
 _HORIZON_SOURCE_KEYS = (
     CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY,
     EVALUATION_HORIZON_SOURCE_KEY,
@@ -283,6 +311,13 @@ class _StrictJsonSchemaExamLabClient(Protocol):
         *,
         response_format: Mapping[str, Any],
         enable_thinking: bool | None = None,
+    ) -> dict[str, Any]: ...
+
+
+class _SinglePassCtClient(Protocol):
+    async def generate(
+        self, prompt: str, *, allow_length_retry: bool,
+        response_format: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]: ...
 
 
@@ -662,18 +697,18 @@ def _order_exam_structure_outcome(
     ):
         # 放射/影像主记录已有报告时间，但类型与关联未明，不能把识别失败
         # 当成检查未实施。这里不推定它就是CT/MRI，也不让模型猜测事件。
-        return _ExamLabOutcome("LX0609-010", "data_gap", "required_field_missing")
+        return _ExamLabOutcome("LX0609-06-01-02", "data_gap", "required_field_missing")
     if orders and not exam_rows and not report_rows:
         # 医嘱只表示计划。检查主表和正式报告均为空时尚未形成实际检查事件，
         # 不应因“医嘱无主表”提前产生资料缺口。
         return None
     if course_rows and not orders and not exam_rows:
-        return _ExamLabOutcome("LX0609-010", "data_gap", "association_failed")
+        return _ExamLabOutcome("LX0609-06-01-02", "data_gap", "association_failed")
     if not orders:
         # 正式检查行若声明了order_id，则完整医嘱集中找不到该键属于关联冲突；
         # 只有检查来源本身不提供order_id时，才按院方“仅报告”能力继续核对。
         if any(_clean(row.get("order_id")) for row in exam_rows):
-            return _ExamLabOutcome("LX0609-010", "data_gap", "association_failed")
+            return _ExamLabOutcome("LX0609-06-01-02", "data_gap", "association_failed")
         return None
 
     # 检查主表缺键时无法确认实际事件，仍须在核对报告前失败关闭。
@@ -681,7 +716,7 @@ def _order_exam_structure_outcome(
         not _clean(row.get("order_id")) or not _clean(row.get("exam_id"))
         for row in exam_rows
     ):
-        return _ExamLabOutcome("LX0609-010", "data_gap", "association_failed")
+        return _ExamLabOutcome("LX0609-06-01-02", "data_gap", "association_failed")
 
     orders_by_id: dict[str, tuple[datetime | None, Mapping[str, Any]]] = {}
     missing_order_id = False
@@ -691,9 +726,9 @@ def _order_exam_structure_outcome(
             missing_order_id = True
             continue
         if order_id in orders_by_id:
-            return _ExamLabOutcome("LX0609-010", "data_gap", "association_failed")
+            return _ExamLabOutcome("LX0609-06-01-02", "data_gap", "association_failed")
         if order_time is None:
-            return _ExamLabOutcome("LX0609-010", "data_gap", "authoritative_order_time_missing")
+            return _ExamLabOutcome("LX0609-06-01-02", "data_gap", "authoritative_order_time_missing")
         orders_by_id[order_id] = (order_time, order)
 
     exams_by_order: dict[str, list[Mapping[str, Any]]] = {}
@@ -704,17 +739,17 @@ def _order_exam_structure_outcome(
             known_order_ids=tuple(orders_by_id),
         )
         if not exam_id or not linked_order_ids:
-            return _ExamLabOutcome("LX0609-010", "data_gap", "association_failed")
+            return _ExamLabOutcome("LX0609-06-01-02", "data_gap", "association_failed")
         for order_id in linked_order_ids:
             exams_by_order.setdefault(order_id, []).append(exam)
     # exam_id 是检查主表的报告级唯一键。同一合并检查可显式枚举多个医嘱，
     # 但同一个医嘱仍不能被多条检查主记录重复占用。
     exam_ids = [_clean(exam.get("exam_id")) for exam in exam_rows]
     if len(exam_ids) != len(set(exam_ids)):
-        return _ExamLabOutcome("LX0609-010", "data_gap", "association_failed")
+        return _ExamLabOutcome("LX0609-06-01-02", "data_gap", "association_failed")
     # 只核对已形成检查主表的实际事件；仍处于待执行状态的医嘱不参与本轮。
     if any(len(exams) != 1 for exams in exams_by_order.values()):
-        return _ExamLabOutcome("LX0609-010", "data_gap", "association_failed")
+        return _ExamLabOutcome("LX0609-06-01-02", "data_gap", "association_failed")
 
     executed = tuple(exam_rows)
 
@@ -725,10 +760,10 @@ def _order_exam_structure_outcome(
             exam.get("report_time") or exam.get("report_datetime")
         ) is not None
         if not has_report and not has_master_report_time:
-            return _ExamLabOutcome("LX0609-010", "non_compliant", "exam_report_missing")
+            return _ExamLabOutcome("LX0609-06-01-02", "non_compliant", "exam_report_missing")
     # 未关联医嘱缺键不遮蔽完整实际事件已证明的缺报告；无确定缺陷时仍保留缺口。
     if missing_order_id:
-        return _ExamLabOutcome("LX0609-010", "data_gap", "association_failed")
+        return _ExamLabOutcome("LX0609-06-01-02", "data_gap", "association_failed")
     return None
 
 
@@ -880,10 +915,10 @@ def _decision_from_outcome(
     snapshot: Luxian0609EvidenceSnapshot,
 ) -> RuleDecision:
     allowed_source_keys = set(_TYPED_RULE_SOURCE_KEYS[outcome.rule_id])
-    if outcome.rule_id in {"LX0609-014", "LX0609-015"}:
+    if outcome.rule_id in {"LX0609-06-03-03", "LX0609-06-03-04"}:
         # 会诊仅参与“无培养事件”的反证校验，不作为报告正文的替代来源。
         allowed_source_keys.add("consultation_record")
-    if outcome.rule_id == "LX0609-010" and outcome.reason_code == "association_failed":
+    if outcome.rule_id == "LX0609-06-01-02" and outcome.reason_code == "association_failed":
         # 关联失败只由医嘱、检查主表和报告支持；病程来源不能作为该结论的关键证据。
         allowed_source_keys = {_ORDER_SOURCE_KEY, *_EXAM_SOURCE_KEYS}
     if outcome.rule_id in _POST_RULE_IDS:
@@ -1079,7 +1114,7 @@ def _target_report_missing_display_facts(
     rule_id: str,
     rows_by_source: Mapping[str, Sequence[Mapping[str, Any]]],
 ) -> Mapping[str, Any]:
-    fact_kind = "exam" if rule_id in EXAM_RULE_IDS else "culture"
+    fact_kind = "exam" if rule_id in _EXECUTABLE_EXAM_RULE_IDS else "culture"
     return {
         "failure_kind": "exam_lab_target_report_missing",
         "subject": "ct_mri" if fact_kind == "exam" else "culture_susceptibility",
@@ -1200,17 +1235,17 @@ def _single_text_fact_outcome(
     event = event_for_fact(projection, fact)
     safe_refs = projection.safe_refs or {}
     selected_evidence_refs = fact.evidence_refs
-    if rule_id == "LX0609-010" and event is not None:
+    if rule_id == "LX0609-06-01-02" and event is not None:
         # 010 的语义事实用于确认“检查前原因”是否存在，但客户证据沿用既有
         # 检查事件坐标，不把被模型命中的病程再作为第二份关键证据投影。
         selected_evidence_refs = event.document_refs
-    elif rule_id in {"LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015"}:
+    elif rule_id in {"LX0609-06-01-04", "LX0609-06-01-05", "LX0609-06-03-03", "LX0609-06-03-04"}:
         # 事件可能同时含主记录和结果明细；只要结果明细可定位，就由它代表
         # 本次报告，避免同一事件将两类记录重复投影。病程只限模型实际命中的
         # 同事件文书，015 的跨培养过滤已在事实解析器完成。
         report_source_keys = (
             {"exam_item_report"}
-            if rule_id in {"LX0609-011", "LX0609-012"}
+            if rule_id in {"LX0609-06-01-04", "LX0609-06-01-05"}
             else {"labtest_item_report"}
         )
         source_document_refs = projection.source_document_refs or {}
@@ -1232,7 +1267,7 @@ def _single_text_fact_outcome(
         if item in safe_refs
     )
     if (
-        rule_id in {"LX0609-011", "LX0609-012"}
+        rule_id in {"LX0609-06-01-04", "LX0609-06-01-05"}
         and event is not None
         and event.guidance_only
     ):
@@ -1245,7 +1280,7 @@ def _single_text_fact_outcome(
             _contract_allowed_status(
                 rule_id,
                 "evaluation_unknown"
-                if rule_id in {"LX0609-012", "LX0609-015"}
+                if rule_id in {"LX0609-06-01-05", "LX0609-06-03-04"}
                 and event is not None
                 and event.target_confirmed
                 and event.result_text_available
@@ -1254,7 +1289,7 @@ def _single_text_fact_outcome(
             "exam_lab_text_fact_unknown",
             refs,
         )
-    if rule_id in {"LX0609-012", "LX0609-015"}:
+    if rule_id in {"LX0609-06-01-05", "LX0609-06-03-04"}:
         if fact.positive_state in {"negative", "not_relevant"}:
             return _ExamLabOutcome(rule_id, "not_applicable", "exam_lab_text_fact_absent", refs)
         if fact.positive_state != "positive":
@@ -1270,7 +1305,7 @@ def _single_text_fact_outcome(
                 refs,
             )
 
-    role = "exam_time" if rule_id == "LX0609-010" else "report_time"
+    role = "exam_time" if rule_id == "LX0609-06-01-02" else "report_time"
     if event is None:
         return _ExamLabOutcome(rule_id, "data_gap", "authoritative_event_missing", refs)
     if role in event.conflict_roles:
@@ -1289,7 +1324,7 @@ def _single_text_fact_outcome(
                 "course_projection_incomplete",
                 refs,
             )
-        if rule_id == "LX0609-010":
+        if rule_id == "LX0609-06-01-02":
             return _ExamLabOutcome(rule_id, "non_compliant", "exam_lab_text_fact", refs)
         window_state = resolve_evaluation_window_state(
             projection=projection,
@@ -1329,7 +1364,7 @@ def _single_text_fact_outcome(
     if not course_times or any(item is None for item in course_times):
         return _ExamLabOutcome(rule_id, "data_gap", "course_record_time_missing", refs)
     intervals = tuple(item - event_time for item in course_times if item is not None)
-    if rule_id == "LX0609-010":
+    if rule_id == "LX0609-06-01-02":
         compliant = any(
             -timedelta(hours=48) <= interval <= timedelta(0)
             for interval in intervals
@@ -1385,7 +1420,7 @@ def _text_fact_outcome(
 
     rule_facts = tuple(item for item in facts if item.rule_id == rule_id)
     expected_count = len(events_for_family(
-        projection, "exam" if rule_id in EXAM_RULE_IDS else "culture"
+        projection, "exam" if rule_id in _EXECUTABLE_EXAM_RULE_IDS else "culture"
     ))
     if not rule_facts or len(rule_facts) != expected_count:
         return _ExamLabOutcome(rule_id, "data_gap", "exam_lab_fact_scope_missing")
@@ -1537,18 +1572,18 @@ def _strong_semantic_fact(
 ) -> ExamLabEventFact | None:
     """提取可由明确短语验证的病程语义；灰区返回 None 交给一次 LLM。"""
 
-    if rule_id == "LX0609-010":
+    if rule_id == "LX0609-06-01-02":
         # 检查原因依赖整段病程语义，禁止恢复关键词快速判定。
         return None
     events = events_for_family(
-        projection, "exam" if rule_id in EXAM_RULE_IDS else "culture"
+        projection, "exam" if rule_id in _EXECUTABLE_EXAM_RULE_IDS else "culture"
     )
     # 多事件必须逐事件绑定病程；全局关键词强匹配无法证明具体归属，交给
     # 同一次受控事实抽取，避免把一份病程复制给所有事件。
     if len(events) != 1:
         return None
     event = events[0]
-    if rule_id in {"LX0609-012", "LX0609-015"}:
+    if rule_id in {"LX0609-06-01-05", "LX0609-06-03-04"}:
         if event.positive_hint == "negative":
             return ExamLabEventFact(
                 rule_id=rule_id,
@@ -1563,7 +1598,7 @@ def _strong_semantic_fact(
         positive_state = "positive"
     else:
         positive_state = "not_relevant"
-    family = "exam" if rule_id in EXAM_RULE_IDS else "culture"
+    family = "exam" if rule_id in _EXECUTABLE_EXAM_RULE_IDS else "culture"
     allowed_course_refs = (projection.event_course_refs or {}).get(
         (family, 1)
     )
@@ -1589,20 +1624,20 @@ def _strong_semantic_fact(
             if _UNCERTAIN_SEMANTIC_PATTERN.search(clause):
                 continue
             if (
-                rule_id == "LX0609-015"
+                rule_id == "LX0609-06-03-04"
                 and not _event_identity_mentions_course(event, clause)
             ):
                 # 仅有另一种标本（例如导管尖端培养）的抗感染动作，
                 # 不能直接归属于当前阳性培养事件。
                 continue
-            if rule_id == "LX0609-015":
+            if rule_id == "LX0609-06-03-04":
                 if (
                     _NEGATED_CULTURE_ACTION_PATTERN.search(clause)
                     or _CONDITIONAL_CULTURE_ACTION_PATTERN.search(clause)
                 ):
                     continue
             if (
-                rule_id == "LX0609-012"
+                rule_id == "LX0609-06-01-05"
                 and _CONDITIONAL_ANALYSIS_PATTERN.search(clause)
                 and not _DEFINITE_ANALYSIS_PATTERN.search(clause)
             ):
@@ -1614,9 +1649,9 @@ def _strong_semantic_fact(
         # 阳性报告已明确记入病程，但完整病程投影中没有分析/处置事实时，
         # 可直接形成“已记录结果、未完成分析”的闭世界结论。条件性计划或
         # “待结合病情观察”不是已经完成的分析/处置，不得据此降为资料不足。
-        if rule_id in {"LX0609-012", "LX0609-015"}:
+        if rule_id in {"LX0609-06-01-05", "LX0609-06-03-04"}:
             mention_pattern = _STRONG_SEMANTIC_PATTERNS[
-                "LX0609-011" if rule_id == "LX0609-012" else "LX0609-014"
+                "LX0609-06-01-04" if rule_id == "LX0609-06-01-05" else "LX0609-06-03-03"
             ]
             mention_refs = tuple(
                 ref
@@ -1624,7 +1659,7 @@ def _strong_semantic_fact(
                 if any(
                     mention_pattern.search(clause)
                     and (
-                        rule_id != "LX0609-015"
+                        rule_id != "LX0609-06-03-04"
                         or _event_identity_mentions_course(event, clause)
                     )
                     and not _UNCERTAIN_SEMANTIC_PATTERN.search(clause)
@@ -1679,8 +1714,14 @@ async def execute_luxian_0609_native_exam_lab_rules(
 ) -> NativeExamLabExecutionResult:
     """按客户目录顺序执行；未通过事实门控的规则不调用模型。"""
 
-    requested = {str(rule_id or "").strip().upper() for rule_id in rule_ids}
-    selected = tuple(rule_id for rule_id in EXAM_LAB_RULE_IDS if rule_id in requested)
+    requested = tuple(dict.fromkeys(
+        str(rule_id or "").strip().upper()
+        for rule_id in rule_ids
+        if str(rule_id or "").strip()
+    ))
+    selected = tuple(
+        rule_id for rule_id in requested if rule_id in EXECUTABLE_EXAM_LAB_RULE_IDS
+    )
     normalized_decision_ids = tuple(
         str(rule_id or "").strip().upper() for rule_id in decision_rule_ids
     )
@@ -1736,11 +1777,11 @@ async def execute_luxian_0609_native_exam_lab_rules(
     ) -> None:
         assert evidence_snapshot is not None
         if status == "non_compliant" and not source_document_ids:
-            fact_kind = "exam" if rule_id in EXAM_RULE_IDS else "culture"
+            fact_kind = "exam" if rule_id in _EXECUTABLE_EXAM_RULE_IDS else "culture"
             source_document_ids = _target_source_document_ids(
                 display_rows_by_source,
                 fact_kind=fact_kind,
-                include_order_document=rule_id == "LX0609-010",
+                include_order_document=rule_id == "LX0609-06-01-02",
             )
         if display_facts is None:
             display_facts = _customer_display_facts_for_outcome(
@@ -1774,10 +1815,85 @@ async def execute_luxian_0609_native_exam_lab_rules(
     if typed_requested:
         assert evidence_snapshot is not None
         assert evidence_materials is not None
+        handbook_report_ids = tuple(
+            rule_id
+            for rule_id in selected
+            if rule_id in typed_requested and rule_id in HANDBOOK_REPORT_RULES
+        )
+        ledger_rule_ids = tuple(dict.fromkeys((
+            *handbook_report_ids,
+            *((CT_REPORT_RULE,) if CT_CONSISTENCY_RULE in typed_requested else ()),
+        )))
+        if ledger_rule_ids:
+            handbook_ledger = build_handbook_ledger(
+                rule_ids=ledger_rule_ids,
+                snapshot=evidence_snapshot,
+                materials=evidence_materials,
+            )
+            for rule_id in handbook_report_ids:
+                evaluation = evaluate_report_completeness(rule_id, handbook_ledger)
+                emit_typed(
+                    rule_id,
+                    evaluation.status,
+                    evaluation.reason_code,
+                    evaluation.refs,
+                    display_facts=evaluation.display_facts,
+                )
+                typed_processed.add(rule_id)
+            if CT_CONSISTENCY_RULE in typed_requested:
+                review = build_ct_review_input(
+                    ledger=handbook_ledger, snapshot=evidence_snapshot,
+                    materials=evidence_materials,
+                )
+                payload = None
+                model_failure = None
+                if review.needs_model:
+                    model_rule_count += 1
+                    if llm_client is None:
+                        model_failure = "exam_lab_llm_failure"
+                    else:
+                        llm_call_count += 1
+                        try:
+                            if _supports_strict_json_schema(llm_client):
+                                response = await cast(_SinglePassCtClient, llm_client).generate(
+                                    build_ct_fact_prompt(review),
+                                    response_format=ct_fact_response_format(review),
+                                    allow_length_retry=False,
+                                )
+                            else:
+                                response = await cast(_SinglePassCtClient, llm_client).generate(
+                                    build_ct_fact_prompt(review), allow_length_retry=False,
+                                )
+                            used_prompt, used_completion, used_total, used_time = _usage(response)
+                            prompt_tokens += used_prompt
+                            completion_tokens += used_completion
+                            total_tokens += used_total
+                            api_time += used_time
+                        except Exception:  # noqa: BLE001
+                            model_failure = "exam_lab_llm_failure"
+                        if model_failure is None:
+                            try:
+                                payload = json.loads(_response_text(response))
+                            except (TypeError, ValueError):
+                                model_failure = "exam_lab_llm_invalid_output"
+                if model_failure is None:
+                    try:
+                        evaluation = evaluate_ct_review(review, payload)
+                    except CtEvidenceBudgetExceeded:
+                        model_failure = "ct_evidence_budget_exceeded"
+                    except (TypeError, ValueError):
+                        model_failure = "exam_lab_llm_invalid_output"
+                if model_failure:
+                    emit_typed(CT_CONSISTENCY_RULE, "technical_error", model_failure)
+                else:
+                    first_success_count += int(review.needs_model)
+                    emit_typed(CT_CONSISTENCY_RULE, evaluation.status, evaluation.reason_code,
+                               evaluation.refs, display_facts=evaluation.display_facts)
+                typed_processed.add(CT_CONSISTENCY_RULE)
         for rule_id in selected:
-            if rule_id not in typed_requested:
+            if rule_id not in typed_requested or rule_id in typed_processed:
                 continue
-            fact_kind = "exam" if rule_id in EXAM_RULE_IDS else "culture"
+            fact_kind = "exam" if rule_id in _EXECUTABLE_EXAM_RULE_IDS else "culture"
             typed_state, _ = _typed_trigger_state(
                 fact_kind=fact_kind,
                 snapshot=evidence_snapshot,
@@ -1854,7 +1970,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
             if material.state in {"present", "empty"}:
                 rows_by_source[source_key] = material.rows
         if eligible_rule_ids:
-            if "LX0609-010" in eligible_rule_ids:
+            if "LX0609-06-01-02" in eligible_rule_ids:
                 # 医嘱—检查—报告关联先由结构化键完成；只有结构可靠时，
                 # 检查前原因才进入后续48小时病程语义抽取。
                 order_outcome = _order_exam_structure_outcome(rows_by_source)
@@ -1884,8 +2000,8 @@ async def execute_luxian_0609_native_exam_lab_rules(
                         else (),
                         display_facts=order_display_facts,
                     )
-                    typed_processed.add("LX0609-010")
-                    eligible_rule_ids.remove("LX0609-010")
+                    typed_processed.add("LX0609-06-01-02")
+                    eligible_rule_ids.remove("LX0609-06-01-02")
             try:
                 horizon_observation = next(
                     (
@@ -1911,7 +2027,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
             if projection is not None:
                 semantic_rule_ids: list[str] = []
                 for rule_id in eligible_rule_ids:
-                    family = "exam" if rule_id in EXAM_RULE_IDS else "culture"
+                    family = "exam" if rule_id in _EXECUTABLE_EXAM_RULE_IDS else "culture"
                     events = events_for_family(projection, family)
                     absence_gap, absence_refs = (
                         _culture_absence_gap(evidence_snapshot, evidence_materials)
@@ -1957,7 +2073,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
                                 "exam_lab_target_event_absent",
                             )
                         typed_processed.add(rule_id)
-                    elif rule_id in {"LX0609-011", "LX0609-012"} and all(
+                    elif rule_id in {"LX0609-06-01-04", "LX0609-06-01-05"} and all(
                         event.guidance_only for event in events
                     ):
                         emit_typed(
@@ -1994,14 +2110,14 @@ async def execute_luxian_0609_native_exam_lab_rules(
                         event.target_confirmed
                         and (
                             (
-                                rule_id == "LX0609-010"
+                                rule_id == "LX0609-06-01-02"
                                 and (
                                     "exam_time" in event.conflict_roles
                                     or event.exam_time is None
                                 )
                             )
                             or (
-                                rule_id != "LX0609-010"
+                                rule_id != "LX0609-06-01-02"
                                 and (
                                     "report_time" in event.conflict_roles
                                     or event.report_time is None
@@ -2015,7 +2131,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
                             rule_id,
                             "data_gap",
                             "authoritative_time_missing"
-                            if rule_id == "LX0609-010"
+                            if rule_id == "LX0609-06-01-02"
                             else "authoritative_report_time_missing",
                         )
                         typed_processed.add(rule_id)
@@ -2029,7 +2145,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
                 # 对报告及病程中可由明确短语直接验证的事实优先使用 Python。
                 # 含混、否定不清或条件性表述仍保留给一次受控 LLM。
                 for rule_id in tuple(eligible_rule_ids):
-                    if rule_id == "LX0609-010":
+                    if rule_id == "LX0609-06-01-02":
                         # 检查原因依赖整段病程语义，不再用关键词提前收口。
                         continue
                     fact = _strong_semantic_fact(
@@ -2068,7 +2184,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
                 and all(
                     all(event.target_confirmed for event in events_for_family(
                         projection,
-                        "exam" if rule_id in EXAM_RULE_IDS else "culture",
+                        "exam" if rule_id in _EXECUTABLE_EXAM_RULE_IDS else "culture",
                     ))
                     for rule_id in eligible_rule_ids
                 )
@@ -2078,8 +2194,8 @@ async def execute_luxian_0609_native_exam_lab_rules(
                 # 提示。012 报告尚未完成异常/正常分类时仍需一次受控模型判断；
                 # 模型只分类报告，病程为空和最终缺陷仍由 Python 确定。
                 for rule_id in tuple(eligible_rule_ids):
-                    family = "exam" if rule_id in EXAM_RULE_IDS else "culture"
-                    if rule_id == "LX0609-012" and any(
+                    family = "exam" if rule_id in _EXECUTABLE_EXAM_RULE_IDS else "culture"
+                    if rule_id == "LX0609-06-01-05" and any(
                         event.positive_hint == "unknown"
                         for event in events_for_family(projection, family)
                     ):
@@ -2089,7 +2205,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
                             rule_id=rule_id,
                             applicability=(
                                 "unknown"
-                                if rule_id in {"LX0609-012", "LX0609-015"}
+                                if rule_id in {"LX0609-06-01-05", "LX0609-06-03-04"}
                                 and event.positive_hint == "unknown"
                                 else "not_applicable"
                                 if event.positive_hint == "negative"
@@ -2097,13 +2213,13 @@ async def execute_luxian_0609_native_exam_lab_rules(
                             ),
                             semantic_state=(
                                 "unknown"
-                                if rule_id in {"LX0609-012", "LX0609-015"}
+                                if rule_id in {"LX0609-06-01-05", "LX0609-06-03-04"}
                                 and event.positive_hint == "unknown"
                                 else "absent"
                             ),
                             positive_state=(
                                 event.positive_hint
-                                if rule_id in {"LX0609-012", "LX0609-015"}
+                                if rule_id in {"LX0609-06-01-05", "LX0609-06-03-04"}
                                 else "not_relevant"
                             ),
                             course_doc_refs=(),
@@ -2200,7 +2316,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
                                 isolated_rule_failures[rule_id] == "evidence_ref"
                                 and len(events_for_family(
                                     projection,
-                                    "exam" if rule_id in EXAM_RULE_IDS else "culture",
+                                    "exam" if rule_id in _EXECUTABLE_EXAM_RULE_IDS else "culture",
                                 )) > 1
                                 for rule_id in retry_rule_ids
                             )
@@ -2217,8 +2333,8 @@ async def execute_luxian_0609_native_exam_lab_rules(
                                                 enable_thinking=(
                                                     False
                                                     if rule_id in {
-                                                        "LX0609-011",
-                                                        "LX0609-014",
+                                                        "LX0609-06-01-04",
+                                                        "LX0609-06-03-03",
                                                     }
                                                     else None
                                                 ),
@@ -2352,7 +2468,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
                         typed_processed.add(rule_id)
 
     for rule_id in selected:
-        fact_kind = "exam" if rule_id in EXAM_RULE_IDS else "culture"
+        fact_kind = "exam" if rule_id in _EXECUTABLE_EXAM_RULE_IDS else "culture"
         if rule_id in typed_requested:
             if rule_id not in typed_processed:
                 emit_typed(rule_id, "technical_error", "executor_exception")

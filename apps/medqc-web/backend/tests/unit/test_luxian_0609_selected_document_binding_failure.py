@@ -12,10 +12,10 @@ from test_luxian_0609_basic_timeliness_evidence_freeze import (
 @pytest.mark.parametrize(
     ("rule_id", "source_key"),
     (
-        ("LX0609-001", "admission_record"),
-        ("LX0609-002", "first_course_record"),
-        ("LX0609-005", "daily_course_record"),
-        ("LX0609-006", "senior_course_record"),
+        ("LX0609-01-01-01", "admission_record"),
+        ("LX0609-01-02-01", "first_course_record"),
+        ("LX0609-02-01-01", "daily_course_record"),
+        ("LX0609-02-01-02", "senior_course_record"),
     ),
 )
 def test_selected_row_reference_failure_is_technical_and_not_customer_fact(

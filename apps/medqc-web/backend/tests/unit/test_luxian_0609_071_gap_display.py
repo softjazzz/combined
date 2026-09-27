@@ -8,7 +8,7 @@ from app.services.luxian_0609.decision_reducer import reduce_luxian_0609_rule_de
 
 def render_gap(title=0, time=0, signature=3):
     decision = reduce_luxian_0609_rule_decision(RuleDecision(
-        rule_id="LX0609-071", snapshot_hash="a" * 64,
+        rule_id="LX0609-10-01-01", snapshot_hash="a" * 64,
         applicability=ApplicabilityState.APPLICABLE, evidence_state=EvidenceState.DATA_GAP,
         qc_direction=QcDirection.UNKNOWN, reason_code="required_field_missing",
         fact_refs=("b" * 64,), evaluator_version="test-v1", confidence=0.9,

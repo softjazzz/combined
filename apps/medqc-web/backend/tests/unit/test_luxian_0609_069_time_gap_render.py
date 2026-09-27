@@ -14,11 +14,11 @@ async def test_final_result_distinguishes_empty_time_from_missing_source_field(h
         row["request_time"] = None
     snapshot, materials = _consultation_session((row,))
     native = await execute_luxian_0609_native_extended_document_rules(
-        rule_ids=("LX0609-069",), decision_rule_ids=("LX0609-069",),
+        rule_ids=("LX0609-04-02-07",), decision_rule_ids=("LX0609-04-02-07",),
         evidence_snapshot=snapshot, evidence_materials=materials,
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
-        decisions=native.decisions, expected_rule_ids=("LX0609-069",),
+        decisions=native.decisions, expected_rule_ids=("LX0609-04-02-07",),
         snapshot=snapshot, evidence_materials=materials,
     )[0]
     final = finalize_luxian_0609_reduced_customer_result(

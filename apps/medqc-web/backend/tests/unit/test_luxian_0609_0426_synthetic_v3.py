@@ -70,10 +70,10 @@ def test_v3_family_projection_preserves_the_frozen_001_to_075_scope() -> None:
     flattened_active = [rule_id for rules in active_rules.values() for rule_id in rules]
     assert len(flattened_all) == len(set(flattened_all)) == 75
     assert len(flattened_active) == len(set(flattened_active)) == 75
-    assert "LX0609-052" in all_rules["检查检验"]
-    assert "LX0609-052" in active_rules["检查检验"]
-    assert "LX0609-075" in all_rules["手术麻醉"]
-    assert "LX0609-075" in active_rules["手术麻醉"]
+    assert "LX0609-06-04-01" in all_rules["检查检验"]
+    assert "LX0609-06-04-01" in active_rules["检查检验"]
+    assert "LX0609-10-03-01" in all_rules["手术麻醉"]
+    assert "LX0609-10-03-01" in active_rules["手术麻醉"]
 
 
 def test_v3_coverage_ledger_never_activates_ready_or_pending_rules() -> None:
@@ -206,11 +206,11 @@ def test_v3_exam_lab_upgrade_attaches_reviewable_expected_results() -> None:
         }
         for case in cases
     }
-    assert expectations[cases[0].target_visit_id]["LX0609-010"] == "compliant"
-    assert expectations[cases[1].target_visit_id]["LX0609-010"] == "non_compliant"
-    assert expectations[cases[2].target_visit_id]["LX0609-012"] == "non_compliant"
-    assert expectations[cases[2].target_visit_id]["LX0609-052"] == "non_compliant"
-    assert expectations[cases[3].target_visit_id]["LX0609-052"] == "compliant"
+    assert expectations[cases[0].target_visit_id]["LX0609-06-01-02"] == "compliant"
+    assert expectations[cases[1].target_visit_id]["LX0609-06-01-02"] == "non_compliant"
+    assert expectations[cases[2].target_visit_id]["LX0609-06-01-05"] == "non_compliant"
+    assert expectations[cases[2].target_visit_id]["LX0609-06-04-01"] == "non_compliant"
+    assert expectations[cases[3].target_visit_id]["LX0609-06-04-01"] == "compliant"
 
 
 def test_v3_full_validation_upgrade_assigns_all_rules_and_preserves_real_status_variants() -> None:
@@ -241,7 +241,7 @@ def test_v3_full_validation_upgrade_assigns_all_rules_and_preserves_real_status_
         rule_id: {
             row["expected_status"] for row in matrix if row["rule_id"] == rule_id
         }
-        for rule_id in ("LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015")
+        for rule_id in ("LX0609-06-01-04", "LX0609-06-01-05", "LX0609-06-03-03", "LX0609-06-03-04")
     }
     assert all(statuses == {"compliant", "non_compliant"} for statuses in statuses_by_rule.values())
     timeliness_statuses = {
@@ -249,11 +249,11 @@ def test_v3_full_validation_upgrade_assigns_all_rules_and_preserves_real_status_
             row["expected_status"] for row in matrix if row["rule_id"] == rule_id
         }
         for rule_id in (
-            "LX0609-001",
-            "LX0609-002",
-            "LX0609-004",
-            "LX0609-005",
-            "LX0609-006",
+            "LX0609-01-01-01",
+            "LX0609-01-02-01",
+            "LX0609-09-01-01",
+            "LX0609-02-01-01",
+            "LX0609-02-01-02",
         )
     }
     assert all(
@@ -265,14 +265,14 @@ def test_v3_full_validation_upgrade_assigns_all_rules_and_preserves_real_status_
             row["expected_status"] for row in matrix if row["rule_id"] == rule_id
         }
         for rule_id in (
-            "LX0609-041",
-            "LX0609-042",
-            "LX0609-043",
-            "LX0609-044",
-            "LX0609-045",
-            "LX0609-046",
-            "LX0609-047",
-            "LX0609-048",
+            "LX0609-11-03-01",
+            "LX0609-11-03-02",
+            "LX0609-07-01-01",
+            "LX0609-07-01-02",
+            "LX0609-07-02-01",
+            "LX0609-07-02-02",
+            "LX0609-07-03-01",
+            "LX0609-07-04-01",
         )
     }
     assert all(
@@ -280,9 +280,9 @@ def test_v3_full_validation_upgrade_assigns_all_rules_and_preserves_real_status_
         for statuses in transfusion_statuses.values()
     )
     for rule_ids in (
-        ("LX0609-013", "LX0609-019", "LX0609-026", "LX0609-027"),
-        ("LX0609-054", "LX0609-055", "LX0609-057", "LX0609-058"),
-        ("LX0609-071", "LX0609-072", "LX0609-073", "LX0609-074"),
+        ("LX0609-06-02-03", "LX0609-06-02-02", "LX0609-05-02-01", "LX0609-08-01-04"),
+        ("LX0609-05-01-02", "LX0609-05-01-03", "LX0609-05-01-05", "LX0609-05-01-06"),
+        ("LX0609-10-01-01", "LX0609-10-02-01", "LX0609-10-02-02", "LX0609-12-02-01"),
     ):
         assert all(
             {
@@ -294,7 +294,7 @@ def test_v3_full_validation_upgrade_assigns_all_rules_and_preserves_real_status_
             for rule_id in rule_ids
         )
 
-    for rule_id in ("LX0609-020", "LX0609-021", "LX0609-022", "LX0609-069"):
+    for rule_id in ("LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03", "LX0609-04-02-07"):
         assert {
             row["expected_status"]
             for row in matrix
@@ -328,7 +328,7 @@ def test_v3_gold_acceptance_contracts_freeze_37_reviewed_assertions() -> None:
     assert all(row["required_sources"] for row in contracts)
     assert all(row["expected_evidence_roles"] for row in contracts)
 
-    case_017 = next(row for row in contracts if row["rule_id"] == "LX0609-017")
+    case_017 = next(row for row in contracts if row["rule_id"] == "LX0609-12-01-02")
     assert case_017["case_index"] == 6
     assert case_017["expected_status"] == "compliant"
     assert case_017["expected_reason_code"] == "copy_similarity_within_threshold"
@@ -464,7 +464,7 @@ async def test_v3_020_mdt_executes_programmatically_as_compliant() -> None:
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-040",),
+        selected_rule_ids=("LX0609-04-01-03",),
         institute_id="I",
         patient_id="P",
         visit_id=visit_id,
@@ -490,12 +490,12 @@ async def test_v3_020_mdt_executes_programmatically_as_compliant() -> None:
         llm_client=FailIfCalled(),
         evidence_materials=session.materials,
         evidence_snapshot=session.snapshot,
-        decision_rule_ids=("LX0609-040",),
+        decision_rule_ids=("LX0609-04-01-03",),
     )
 
     assert execution.llm_call_count == 0
     assert execution.decisions[0].qc_direction is QcDirection.SATISFIED
-    assert dict(execution.customer_display_facts)["LX0609-040"][
+    assert dict(execution.customer_display_facts)["LX0609-04-01-03"][
         "mdt_discussion_state"
     ] == "completed"
 

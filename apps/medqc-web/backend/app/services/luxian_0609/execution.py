@@ -28,7 +28,7 @@ from .evidence_snapshot_provider import (
     build_luxian_0609_evidence_read_session,
     build_luxian_0609_evidence_snapshot,
 )
-from .engine import Luxian0609ExecutionEngine
+from .engine import FamilyExecutionFailure, Luxian0609ExecutionEngine
 from .execution_contract import (
     FamilyUsageAttribution,
     build_family_technical_envelope,
@@ -123,6 +123,7 @@ class Luxian0609ExecutionContext:
     native_total_tokens: int = 0
     native_api_time: float = 0.0
     native_usage_attributions: tuple[FamilyUsageAttribution, ...] = ()
+    native_usage_unknown_executor_keys: tuple[str, ...] = ()
     package_plan: Luxian0609PackagePlan | None = None
     evidence_snapshot: Luxian0609EvidenceSnapshot | None = None
     # 仅在本次执行/聚合调用内使用，用于把已绑定的 source snapshot 精确映射回
@@ -214,6 +215,7 @@ async def prepare_luxian_0609_execution(
     evaluation_horizon_snapshot: Mapping[str, Any] | None = None,
     evaluation_horizon_unavailable_reason: str | None = None,
     selected_customer_rule_ids: Iterable[str] | None = None,
+    prepared_package_plan: Luxian0609PackagePlan | None = None,
     trace_sink: Callable[[dict[str, Any]], None] | None = None,
 ) -> tuple[list[dict[str, Any]], Luxian0609ExecutionContext]:
     """Prepare LX0609 customer package execution without changing caller behavior."""
@@ -251,11 +253,20 @@ async def prepare_luxian_0609_execution(
             prepared_rule_ids=prepared_rule_ids,
         )
     )
-    package_plan = build_luxian_0609_package_plan_from_settings(
-        inventory=dependency_inventory,
-        selected_rule_ids=requested_customer_rule_ids,
-        settings=settings,
-    )
+    if prepared_package_plan is None:
+        package_plan = build_luxian_0609_package_plan_from_settings(
+            inventory=dependency_inventory,
+            selected_rule_ids=requested_customer_rule_ids,
+            settings=settings,
+        )
+    else:
+        # 仅接纳本次调用方已校验的不可变计划，不能套用任务全量或其他病例范围。
+        requested_ids = {str(value or "").strip().upper() for value in requested_customer_rule_ids}
+        requested_ids.discard("")
+        if (not isinstance(prepared_package_plan, Luxian0609PackagePlan)
+                or set(prepared_package_plan.selected_rule_ids) != requested_ids):
+            raise ValueError("LX0609预备计划与当前病例规则范围不一致")
+        package_plan = prepared_package_plan
     evidence_snapshot: Luxian0609EvidenceSnapshot | None = None
     evidence_materials: Luxian0609EvidenceMaterialStore | None = None
     evidence_snapshot_rule_refs: tuple[tuple[str, str], ...] = ()
@@ -264,7 +275,7 @@ async def prepare_luxian_0609_execution(
         getattr(settings, "LUXIAN_0609_UNIFIED_ENGINE_ENABLED", False)
     )
     surgery_document_source_guard_required = bool(
-        {"LX0609-029", "LX0609-032"}.intersection(package_plan.executable_rule_ids)
+        {"LX0609-04-01-01", "LX0609-04-03-01"}.intersection(package_plan.executable_rule_ids)
     )
     extended_document_required = bool(
         set(EXTENDED_DOCUMENT_RULE_IDS).intersection(package_plan.executable_rule_ids)
@@ -275,6 +286,7 @@ async def prepare_luxian_0609_execution(
         unified_engine_enabled=unified_engine_enabled,
         always_typed_rule_ids=tuple(EXTENDED_DOCUMENT_RULE_IDS),
         native_async_rule_ids=package_plan.native_async_rule_ids,
+        native_sync_rule_ids=package_plan.native_sync_rule_ids,
     )
     if (
         package_plan.executable_rule_ids
@@ -369,6 +381,7 @@ async def prepare_luxian_0609_execution(
     native_total_tokens = 0
     native_api_time = 0.0
     native_usage_attributions: list[FamilyUsageAttribution] = []
+    native_usage_unknown_executor_keys: list[str] = []
     native_customer_rule_ids = {
         *package_plan.native_sync_rule_ids,
         *package_plan.native_async_rule_ids,
@@ -489,10 +502,22 @@ async def prepare_luxian_0609_execution(
                     reason_code="unified_engine_infrastructure_failed",
                 ).results
             )
+            native_usage_unknown_executor_keys.extend(
+                executor_key for executor_key, _ in package_plan.native_executor_batches
+            )
         else:
             unified_engine_used = True
             for outcome in engine_report.outcomes:
                 envelope = outcome.envelope
+                if not envelope.usage_observation_complete:
+                    native_usage_unknown_executor_keys.append(outcome.executor_key)
+                if (
+                    isinstance(outcome, FamilyExecutionFailure)
+                    and outcome.failure_kind != "dependency"
+                    and envelope.usage_attribution is None
+                ):
+                    # 执行器已经进入运行但未返回成本信封；零仅是已观测下界。
+                    native_usage_unknown_executor_keys.append(outcome.executor_key)
                 native_results.extend(envelope.results)
                 native_rule_decisions.extend(envelope.decisions)
                 native_customer_display_facts.extend(envelope.customer_display_facts)
@@ -590,6 +615,8 @@ async def prepare_luxian_0609_execution(
         )
         if inspect.isawaitable(basic_execution):
             basic_execution = await basic_execution
+        if not getattr(basic_execution, "usage_observation_complete", True):
+            native_usage_unknown_executor_keys.append(BASIC_TIMELINESS_EXECUTOR_KEY)
         native_results.extend(basic_execution.results)
         native_customer_display_facts.extend(
             getattr(basic_execution, "customer_display_facts", ())
@@ -954,6 +981,7 @@ async def prepare_luxian_0609_execution(
         native_total_tokens=native_total_tokens,
         native_api_time=native_api_time,
         native_usage_attributions=tuple(native_usage_attributions),
+        native_usage_unknown_executor_keys=tuple(native_usage_unknown_executor_keys),
         package_plan=package_plan,
         evidence_snapshot=evidence_snapshot,
         evidence_materials=evidence_materials,
@@ -1030,6 +1058,13 @@ def aggregate_luxian_0609_orchestrated_results(
         return orchestrated
 
     orchestrated.setdefault("results", [])
+    orchestrated["luxian_0609_usage_observation_complete"] = not bool(
+        context.native_usage_unknown_executor_keys
+    )
+    if context.native_usage_unknown_executor_keys:
+        orchestrated["luxian_0609_usage_unknown_executor_keys"] = list(
+            context.native_usage_unknown_executor_keys
+        )
     orchestrated["total_prompt_tokens"] = int(orchestrated.get("total_prompt_tokens") or 0) + context.native_prompt_tokens
     orchestrated["total_completion_tokens"] = int(orchestrated.get("total_completion_tokens") or 0) + context.native_completion_tokens
     orchestrated["total_tokens"] = int(orchestrated.get("total_tokens") or 0) + context.native_total_tokens

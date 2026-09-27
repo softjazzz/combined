@@ -1,6 +1,6 @@
 """肿瘤病理规则族的客户展示事实合同。
 
-本模块只验证 013/019/026/027 执行器已裁决的展示事实，不读取文书，
+本模块只验证肿瘤病理执行器已裁决的展示事实，不读取文书，
 不推断病理、化疗或出院计划，也不生成客户证据。正式主链的证据只能由
 ``RuleDecision.fact_refs → Binding → 公共 selected-document projector`` 产生。
 """
@@ -13,12 +13,21 @@ from typing import Any
 
 
 TUMOR_PATHOLOGY_CUSTOMER_RULE_IDS = frozenset(
-    {"LX0609-013", "LX0609-019", "LX0609-026", "LX0609-027"}
+    {"LX0609-06-02-01", "LX0609-06-02-03", "LX0609-06-02-02", "LX0609-05-02-01", "LX0609-08-01-04"}
 )
 _PATHOLOGY_SOURCES = frozenset({"pathology_exam_master", "pathology_exam_report"})
 _TARGET_SOURCES = ("surgery_record", "daily_course_record")
 _LX019_TARGET_SOURCES = (*_TARGET_SOURCES, "senior_course_record")
 _DATETIME = re.compile(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}")
+_DOCUMENT_REF = re.compile(r"[a-f0-9]{64}")
+_COMPLETENESS_STATUSES = frozenset({"compliant", "non_compliant", "not_applicable", "data_gap"})
+_COMPLETENESS_EVENT_REASONS = frozenset({
+    "pathology_business_key_missing", "pathology_business_key_ambiguous",
+    "pathology_execution_conflict", "pathology_report_present",
+    "pathology_report_content_unproven", "pathology_event_not_performed",
+    "pathology_execution_unproven", "pathology_report_source_unavailable",
+    "pathology_report_linkage_unresolved", "target_report_missing",
+})
 
 
 def is_tumor_pathology_customer_rule(rule_id: str) -> bool:
@@ -49,6 +58,107 @@ def _safe_checked_sources(
             return None
         result.append({"source": source, "state": str(item["state"])})
     return result
+
+
+def _safe_report_completeness(
+    raw: Mapping[str, Any], *, published: bool = False,
+) -> dict[str, Any] | None:
+    """只校验执行器的逐事件合同，不重读报告或按数量决定合规。"""
+
+    counters = (
+        "event_count", "report_count", "missing_report_count",
+        "unresolved_event_count", "excluded_event_count",
+    )
+    if (
+        raw.get("verification_kind") != "pathology_report_completeness"
+        or not isinstance(raw.get("decision_status"), str)
+        or raw["decision_status"] not in _COMPLETENESS_STATUSES
+        or any(type(raw.get(key)) is not int or raw[key] < 0 for key in counters)
+    ):
+        return None
+    sources = raw.get("checked_sources")
+    events = raw.get("events")
+    if not isinstance(sources, list) or len(sources) != 2 or not isinstance(events, list):
+        return None
+    safe_sources: list[dict[str, str]] = []
+    for source, item in zip(("pathology_exam_master", "pathology_exam_report"), sources):
+        if (
+            not isinstance(item, Mapping)
+            or item.get("source") != source
+            or not isinstance(item.get("state"), str)
+            or item["state"] not in {"present", "empty", "unavailable", "error", "truncated"}
+            or not isinstance(item.get("completeness"), str)
+            or item["completeness"] not in {"complete", "unproven", "truncated"}
+        ):
+            return None
+        safe_sources.append({key: item[key] for key in ("source", "state", "completeness")})
+    safe_events: list[dict[str, Any]] = []
+    safe_event_keys = {
+        "event_index", "status", "reason_code", "execution_confirmed",
+        "report_count",
+    }
+    for index, item in enumerate(events, start=1):
+        if not isinstance(item, Mapping):
+            return None
+        current_shape = (
+            "safe" if set(item) == safe_event_keys else
+            "raw" if "fact_refs" in item else None
+        )
+        if current_shape != ("safe" if published else "raw"):
+            return None
+        if (
+            type(item.get("event_index")) is not int or item["event_index"] != index
+            or not isinstance(item.get("status"), str)
+            or item["status"] not in _COMPLETENESS_STATUSES
+            or not isinstance(item.get("reason_code"), str)
+            or item["reason_code"] not in _COMPLETENESS_EVENT_REASONS
+            or type(item.get("execution_confirmed")) is not bool
+            or type(item.get("report_count")) is not int or item["report_count"] not in {0, 1}
+            or (current_shape == "raw" and (
+                not isinstance(item.get("fact_refs"), list)
+                or any(
+                    not isinstance(ref, str) or _DOCUMENT_REF.fullmatch(ref) is None
+                    for ref in item["fact_refs"]
+                )
+            ))
+        ):
+            return None
+        safe_events.append({
+            key: item[key]
+            for key in (
+                "event_index",
+                "status",
+                "reason_code",
+                "execution_confirmed",
+                "report_count",
+            )
+        })
+    if (
+        raw["event_count"] != len(safe_events)
+        or raw["report_count"] != sum(item["report_count"] for item in safe_events)
+        or raw["missing_report_count"] != sum(item["reason_code"] == "target_report_missing" for item in safe_events)
+        or raw["unresolved_event_count"] != sum(item["status"] == "data_gap" for item in safe_events)
+        or raw["excluded_event_count"] != sum(item["status"] == "not_applicable" for item in safe_events)
+    ):
+        return None
+    return {
+        "verification_kind": "pathology_report_completeness",
+        "decision_status": raw["decision_status"],
+        **{key: raw[key] for key in counters},
+        "checked_sources": safe_sources,
+        "events": safe_events,
+    }
+
+
+def validate_published_pathology_report_completeness_facts(
+    raw: Any,
+) -> dict[str, Any] | None:
+    """公开结果只能包含报告完整性的受控字段。"""
+
+    if not isinstance(raw, Mapping):
+        return None
+    validated = _safe_report_completeness(raw, published=True)
+    return validated if validated is not None and dict(raw) == validated else None
 
 
 def _safe_013(raw: Mapping[str, Any]) -> dict[str, Any] | None:
@@ -226,10 +336,11 @@ def safe_tumor_pathology_customer_display_facts(
     if normalized not in TUMOR_PATHOLOGY_CUSTOMER_RULE_IDS or not isinstance(raw, Mapping):
         return None
     return {
-        "LX0609-013": _safe_013,
-        "LX0609-019": _safe_019,
-        "LX0609-026": _safe_026,
-        "LX0609-027": _safe_027,
+        "LX0609-06-02-01": _safe_report_completeness,
+        "LX0609-06-02-03": _safe_013,
+        "LX0609-06-02-02": _safe_019,
+        "LX0609-05-02-01": _safe_026,
+        "LX0609-08-01-04": _safe_027,
     }[normalized](raw)
 
 
@@ -246,7 +357,13 @@ def tumor_pathology_customer_fact_status_is_valid(
     if not isinstance(safe_facts, Mapping):
         return False
     normalized_rule_id = str(rule_id or "").strip().upper()
-    if normalized_rule_id == "LX0609-027" and safe_facts.get("verification_kind") == "malignant_diagnosis_applicability_uncertain":
+    if normalized_rule_id == "LX0609-06-02-01":
+        return (
+            normalized_status in _COMPLETENESS_STATUSES
+            and safe_facts.get("verification_kind") == "pathology_report_completeness"
+            and normalized_status == safe_facts.get("decision_status")
+        )
+    if normalized_rule_id == "LX0609-08-01-04" and safe_facts.get("verification_kind") == "malignant_diagnosis_applicability_uncertain":
         # M17：该事实同时允许 `uncertain` 与 `data_gap`。
         # 027 的客户契约不允许交付 `uncertain`（catalog 027 行 allowed_result_statuses
         # = hit; not_hit; data_quality_gap; not_applicable; needs_manual_review），
@@ -254,11 +371,11 @@ def tumor_pathology_customer_fact_status_is_valid(
         # 于是执行器只能丢弃该事实（客户看不到未决线索），一旦携带就被本校验判为
         # 不自洽 → finalizer 升级为 `technical_error/model_invalid_output`。
         # 该事实是**纯展示事实**，不参与判定，故接受 `data_gap` 不放松任何判据。
-        # 作用域仅限 `LX0609-027`，`013`/`019`/`026` 不受影响。
+        # 作用域仅限 `LX0609-08-01-04`，`013`/`019`/`026` 不受影响。
         return normalized_status in {"uncertain", "data_gap"}
-    if normalized_rule_id in {"LX0609-013", "LX0609-027"}:
+    if normalized_rule_id in {"LX0609-06-02-03", "LX0609-08-01-04"}:
         if (
-            normalized_rule_id == "LX0609-013"
+            normalized_rule_id == "LX0609-06-02-03"
             and safe_facts.get("verification_kind") == "pathology_report_field_gap"
         ):
             return normalized_status == "data_gap"
@@ -268,7 +385,7 @@ def tumor_pathology_customer_fact_status_is_valid(
             and isinstance(requirement_met, bool)
             and requirement_met == (normalized_status == "compliant")
         )
-    if normalized_rule_id == "LX0609-019":
+    if normalized_rule_id == "LX0609-06-02-02":
         if safe_facts.get("verification_kind") == "pathology_report_field_gap":
             return normalized_status == "data_gap"
         if (
@@ -286,7 +403,7 @@ def tumor_pathology_customer_fact_status_is_valid(
             normalized_status == "non_compliant"
             and safe_facts.get("failure_kind") == "pathology_sampling_not_documented"
         )
-    if normalized_rule_id == "LX0609-026":
+    if normalized_rule_id == "LX0609-05-02-01":
         field_results = safe_facts.get("field_results")
         missing_fields = safe_facts.get("missing_order_fields")
         if not isinstance(field_results, Mapping) or not isinstance(

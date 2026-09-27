@@ -1,4 +1,4 @@
-"""LX0609-016/017 病程复制判定：确定性比较与单次受控语义复核。"""
+"""LX0609-12-01-01、LX0609-12-01-02 病程复制判定：确定性比较与单次受控语义复核。"""
 
 from __future__ import annotations
 
@@ -1096,7 +1096,7 @@ def _rule_017_decision(
     )
     if not required_copy_sources.issubset({item.source_key for item in observations}):
         return RuleDecision(
-            rule_id="LX0609-017",
+            rule_id="LX0609-12-01-02",
             snapshot_hash=snapshot.snapshot_hash,
             applicability=ApplicabilityState.ERROR,
             evidence_state=EvidenceState.TECHNICAL_ERROR,
@@ -1190,7 +1190,7 @@ def _rule_017_decision(
             item.snapshot_ref.removeprefix("sha256:") for item in observations
         )
     return RuleDecision(
-        rule_id="LX0609-017",
+        rule_id="LX0609-12-01-02",
         snapshot_hash=snapshot.snapshot_hash,
         applicability=applicability,
         evidence_state=evidence_state,

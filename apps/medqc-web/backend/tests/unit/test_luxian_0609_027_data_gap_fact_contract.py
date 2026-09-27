@@ -7,7 +7,7 @@
 校验即判不自洽 → finalizer 升级为 `technical_error / model_invalid_output`。
 
 M17 收口：执行器恢复携带该事实，校验同时接受 `data_gap`。该事实是**纯展示事实**，
-不参与判定，故接受 `data_gap` 不放松任何判据；作用域仅限 `LX0609-027`。
+不参与判定，故接受 `data_gap` 不放松任何判据；作用域仅限 `LX0609-08-01-04`。
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ def test_027_uncertain_fact_is_accepted_with_data_gap() -> None:
 
     assert (
         tumor_pathology_customer_fact_status_is_valid(
-            rule_id="LX0609-027", status="data_gap", safe_facts=_UNCERTAIN_FACTS
+            rule_id="LX0609-08-01-04", status="data_gap", safe_facts=_UNCERTAIN_FACTS
         )
         is True
     )
@@ -39,7 +39,7 @@ def test_027_uncertain_fact_still_accepted_with_uncertain() -> None:
 
     assert (
         tumor_pathology_customer_fact_status_is_valid(
-            rule_id="LX0609-027", status="uncertain", safe_facts=_UNCERTAIN_FACTS
+            rule_id="LX0609-08-01-04", status="uncertain", safe_facts=_UNCERTAIN_FACTS
         )
         is True
     )
@@ -51,7 +51,7 @@ def test_027_uncertain_fact_rejects_compliant_and_non_compliant() -> None:
     for status in ("compliant", "non_compliant"):
         assert (
             tumor_pathology_customer_fact_status_is_valid(
-                rule_id="LX0609-027", status=status, safe_facts=_UNCERTAIN_FACTS
+                rule_id="LX0609-08-01-04", status=status, safe_facts=_UNCERTAIN_FACTS
             )
             is False
         ), f"status={status} 应被拒绝"
@@ -62,7 +62,7 @@ def test_027_technical_error_still_bypasses_fact_validation() -> None:
 
     assert (
         tumor_pathology_customer_fact_status_is_valid(
-            rule_id="LX0609-027", status="technical_error", safe_facts=None
+            rule_id="LX0609-08-01-04", status="technical_error", safe_facts=None
         )
         is True
     )
@@ -71,7 +71,7 @@ def test_027_technical_error_still_bypasses_fact_validation() -> None:
 def test_other_rules_are_not_affected_by_the_027_branch() -> None:
     """作用域纪律：同一事实形状用在 013 上不得因本次改动而被放行。"""
 
-    for rule_id in ("LX0609-013", "LX0609-019", "LX0609-026"):
+    for rule_id in ("LX0609-06-02-03", "LX0609-06-02-02", "LX0609-05-02-01"):
         for status in ("data_gap", "uncertain"):
             assert (
                 tumor_pathology_customer_fact_status_is_valid(

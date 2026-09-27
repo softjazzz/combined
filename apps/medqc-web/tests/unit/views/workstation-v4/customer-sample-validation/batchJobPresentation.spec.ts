@@ -33,6 +33,13 @@ function buildJob(overrides: Partial<SichuanBatchJob> = {}): SichuanBatchJob {
 }
 
 describe('batchJobPresentation', () => {
+  it('任务摘要使用创建时保存的待验收标记', () => {
+    const model = buildBatchJobPresentation(buildJob({
+      acceptance_only_rule_ids: ['LX0609-06-02-01'],
+    }))
+    expect(model.scopeText).toContain('待验收 1 条')
+  })
+
   it('自动补跑排队期间保持运行态，不展示最终失败', () => {
     const job = buildJob({ status: 'failed' })
     job.summary = {
@@ -94,12 +101,12 @@ describe('batchJobPresentation', () => {
         rule_set_name: '泸县0609质控点验证 v1',
         filters: {
           selected_rule_ids: [
-            'LX0609-001',
-            'LX0609-002',
-            'LX0609-003',
-            'LX0609-004',
-            'LX0609-005',
-            'LX0609-006',
+            'LX0609-01-01-01',
+            'LX0609-01-02-01',
+            'LX0609-04-02-01',
+            'LX0609-09-01-01',
+            'LX0609-02-01-01',
+            'LX0609-02-01-02',
           ],
         },
         summary: {
@@ -125,7 +132,7 @@ describe('batchJobPresentation', () => {
     expect(model.statusLabel).toBe('已完成')
     expect(model.ruleSetText).toBe('泸县0609质控点验证 v1')
     expect(model.scopeText).toBe('选定 6 个质控点')
-    expect(model.compactRuleIdsText).toContain('LX0609-001、LX0609-002、LX0609-003 +3')
+    expect(model.compactRuleIdsText).toContain('LX0609-01-01-01、LX0609-01-02-01、LX0609-04-02-01 +3')
     expect(model.recordText).toBe('1 份病历')
     expect(model.recordProgressText).toBe('病历进度：已完成 1 / 1 份')
     expect(model.resultCount).toBe(6)
@@ -243,14 +250,14 @@ describe('batchJobPresentation', () => {
         status: 'running',
         items: [
           {
-            rule_id: 'LX0609-020',
+            rule_id: 'LX0609-03-01-01',
             rule_name: '会诊意见及执行情况',
             status: 'non_compliant',
             is_compliant: false,
             conclusion: '后续病程未记录会诊意见及执行情况。',
           },
           {
-            rule_id: 'LX0609-045',
+            rule_id: 'LX0609-07-02-01',
             rule_name: '输血记录',
             status: 'compliant',
             is_compliant: true,
@@ -262,12 +269,12 @@ describe('batchJobPresentation', () => {
 
     expect(model.liveResultLines).toEqual([
       expect.objectContaining({
-        ruleId: 'LX0609-045',
+        ruleId: 'LX0609-07-02-01',
         statusLabel: '合规',
         text: '已找到输血记录。',
       }),
       expect.objectContaining({
-        ruleId: 'LX0609-020',
+        ruleId: 'LX0609-03-01-01',
         statusLabel: '不合规',
         text: '后续病程未记录会诊意见及执行情况。',
       }),

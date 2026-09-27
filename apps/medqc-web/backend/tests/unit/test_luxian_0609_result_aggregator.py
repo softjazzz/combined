@@ -116,12 +116,12 @@ def test_canonical_delivery_missing_reduced_decision_never_calls_legacy_adapter(
 
     result = module.aggregate_luxian_0609_results(
         wrapper_rules=[{
-            "rule_id": "LX0609-001",
+            "rule_id": "LX0609-01-01-01",
             "name": "入院记录时限",
             "rule_version": "2026-06-09",
         }],
         execution_results=[{
-            "rule_id": "LX0609-001",
+            "rule_id": "LX0609-01-01-01",
             "status": "compliant",
         }],
         delivery_mode=CANONICAL_RESULT_DELIVERY_MODE,
@@ -140,12 +140,12 @@ def test_canonical_delivery_partial_reduced_scope_keeps_missing_rule_technical(m
         lambda **kwargs: pytest.fail('partial Canonical scope entered legacy adapter'),
     )
     results = module.aggregate_luxian_0609_results(
-        wrapper_rules=[{'rule_id': 'LX0609-001'}, {'rule_id': 'LX0609-002'}],
-        execution_results=[{'rule_id': 'LX0609-002', 'status': 'compliant'}],
-        reduced_decisions=(_reduced_decision('LX0609-001'),),
+        wrapper_rules=[{'rule_id': 'LX0609-01-01-01'}, {'rule_id': 'LX0609-01-02-01'}],
+        execution_results=[{'rule_id': 'LX0609-01-02-01', 'status': 'compliant'}],
+        reduced_decisions=(_reduced_decision('LX0609-01-01-01'),),
         delivery_mode=CANONICAL_RESULT_DELIVERY_MODE,
     )
-    assert [item['rule_id'] for item in results] == ['LX0609-001', 'LX0609-002']
+    assert [item['rule_id'] for item in results] == ['LX0609-01-01-01', 'LX0609-01-02-01']
     assert results[1]['status'] == 'technical_error'
     assert results[1]['reason_code'] == 'decision_contract_violation'
 
@@ -166,10 +166,10 @@ def test_canonical_delivery_accepts_explicit_pending_result_without_legacy_adapt
         "adapt_luxian_0609_legacy_customer_result",
         lambda **_kwargs: pytest.fail("canonical delivery touched legacy adapter"),
     )
-    pending = build_luxian_0609_pending_definition_result("LX0609-025")
+    pending = build_luxian_0609_pending_definition_result("LX0609-04-02-04")
 
     result = module.aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-025"}],
+        wrapper_rules=[{"rule_id": "LX0609-04-02-04"}],
         execution_results=[pending],
         canonical_results=(pending,),
         delivery_mode=CANONICAL_RESULT_DELIVERY_MODE,
@@ -188,7 +188,7 @@ def test_031_projects_multi_surgery_signature_gaps_per_event() -> None:
             {"document_id": "5039223||2", "surgery_name": "手术B", "surgeon": "李医师", "signer": "", "missing_fields": ["surgeon_sign"]},
         ],
     }
-    safe = safe_luxian_0609_customer_display_facts(rule_id="LX0609-031", raw=facts)
+    safe = safe_luxian_0609_customer_display_facts(rule_id="LX0609-04-02-05", raw=facts)
     assert safe is not None
     assert len(safe["surgery_events"]) == 2
     assert all("document_id" not in event for event in safe["surgery_events"])
@@ -234,10 +234,10 @@ def test_020_recommendation_evidence_projects_each_mapping_without_raw_ids():
     }
 
     result = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-020"}],
+        wrapper_rules=[{"rule_id": "LX0609-03-01-01"}],
         execution_results=[],
-        reduced_decisions=(_reduced_decision("LX0609-020"),),
-        customer_display_facts=(("LX0609-020", facts),),
+        reduced_decisions=(_reduced_decision("LX0609-03-01-01"),),
+        customer_display_facts=(("LX0609-03-01-01", facts),),
     )[0]
 
     projected = result["customer_display_facts"]["recommendation_evidence"]
@@ -288,7 +288,7 @@ def test_020_recommendation_evidence_rejects_duplicate_indexes_fail_closed():
     }
 
     assert safe_luxian_0609_customer_display_facts(
-        rule_id="LX0609-020", raw=raw
+        rule_id="LX0609-03-01-01", raw=raw
     ) is None
 
 
@@ -329,7 +329,7 @@ def test_020_recommendation_evidence_accepts_mixed_reference_shapes_per_episode(
         ],
     }
 
-    safe = safe_luxian_0609_customer_display_facts(rule_id="LX0609-020", raw=raw)
+    safe = safe_luxian_0609_customer_display_facts(rule_id="LX0609-03-01-01", raw=raw)
 
     assert safe is not None
     assert safe["recommendation_evidence"][0]["opinion_evidence"][0]["source_ref"] == "src_" + "a" * 24
@@ -338,7 +338,7 @@ def test_020_recommendation_evidence_accepts_mixed_reference_shapes_per_episode(
 
 def test_canonical_projection_rejects_raw_recommendation_evidence_ids():
     item = {
-        "rule_id": "LX0609-020",
+        "rule_id": "LX0609-03-01-01",
         "status": "compliant",
         "result_status": "compliant",
         "is_compliant": True,
@@ -391,10 +391,10 @@ def test_native_display_facts_never_reproject_private_document_refs() -> None:
     }
 
     result = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-040", "name": "MDT 讨论"}],
+        wrapper_rules=[{"rule_id": "LX0609-04-01-03", "name": "MDT 讨论"}],
         execution_results=[
             {
-                "rule_id": "LX0609-040",
+                "rule_id": "LX0609-04-01-03",
                 "status": "non_compliant",
                 "metadata": {
                     "execution_source": "lx0609_native",
@@ -431,18 +431,18 @@ def test_040_customer_evidence_uses_only_public_selected_fact_refs(
         project_selected_document_evidence,
     )
     result = aggregator.aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-040", "name": "手术 MDT"}],
+        wrapper_rules=[{"rule_id": "LX0609-04-01-03", "name": "手术 MDT"}],
         execution_results=[],
         reduced_decisions=(
             _reduced_decision(
-                "LX0609-040",
+                "LX0609-04-01-03",
                 direction=QcDirection.DEFECT,
                 fact_refs=(fact_ref,),
             ),
         ),
         customer_display_facts=(
             (
-                "LX0609-040",
+                "LX0609-04-01-03",
                 {
                     "performed_surgery_confirmed": True,
                     "procedure_kind": "surgery",
@@ -479,7 +479,7 @@ def test_058_safe_projection_keeps_only_timed_expert_support_facts() -> None:
     }
 
     assert safe_luxian_0609_customer_display_facts(
-        rule_id="LX0609-058", raw=raw
+        rule_id="LX0609-05-01-06", raw=raw
     ) == raw
 
 
@@ -496,7 +496,7 @@ def test_058_safe_projection_rejects_inconsistent_timed_expert_support_facts() -
     }
 
     assert safe_luxian_0609_customer_display_facts(
-        rule_id="LX0609-058", raw=raw
+        rule_id="LX0609-05-01-06", raw=raw
     ) is None
 
 
@@ -513,10 +513,10 @@ def test_058_canonical_projection_renders_expert_support_after_special_use() -> 
     }
 
     result = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-058", "name": "特殊级抗菌药物"}],
+        wrapper_rules=[{"rule_id": "LX0609-05-01-06", "name": "特殊级抗菌药物"}],
         execution_results=[
             {
-                "rule_id": "LX0609-058",
+                "rule_id": "LX0609-05-01-06",
                 "status": "non_compliant",
                 "is_compliant": False,
                 "metadata": {
@@ -542,7 +542,7 @@ def test_058_canonical_projection_renders_expert_support_after_special_use() -> 
     ("rule_id", "raw"),
     (
         (
-            "LX0609-054",
+            "LX0609-05-01-02",
             {
                 "verification_kind": "antimicrobial_reason_documentation_check",
                 "antimicrobials": ["美罗培南", "万古霉素"],
@@ -552,7 +552,7 @@ def test_058_canonical_projection_renders_expert_support_after_special_use() -> 
             },
         ),
         (
-            "LX0609-055",
+            "LX0609-05-01-03",
             {
                 "verification_kind": "antimicrobial_effect_evaluation_check",
                 "antimicrobials": ["美罗培南", "万古霉素"],
@@ -584,14 +584,14 @@ def test_antimicrobial_safe_projection_keeps_per_event_association_facts(
 @pytest.mark.parametrize(
     ("rule_id", "raw"),
     (
-        ("LX0609-054", {
+        ("LX0609-05-01-02", {
             "verification_kind": "antimicrobial_reason_documentation_check",
             "antimicrobials": ["美罗培南"],
             "reason_documented": False,
             "unmatched_antimicrobials": ["万古霉素"],
             "association_ambiguous": False,
         }),
-        ("LX0609-055", {
+        ("LX0609-05-01-03", {
             "verification_kind": "antimicrobial_effect_evaluation_check",
             "antimicrobials": ["美罗培南"],
             "window_hours": [48, 72],
@@ -633,7 +633,7 @@ def test_069_safe_projection_keeps_strict_per_event_timeliness_facts() -> None:
     }
 
     assert safe_luxian_0609_customer_display_facts(
-        rule_id="LX0609-069", raw=raw
+        rule_id="LX0609-04-02-07", raw=raw
     ) == raw
 
 
@@ -657,7 +657,7 @@ def test_069_safe_projection_rejects_private_or_inconsistent_event_facts() -> No
     }
 
     assert safe_luxian_0609_customer_display_facts(
-        rule_id="LX0609-069", raw=raw
+        rule_id="LX0609-04-02-07", raw=raw
     ) is None
 
 
@@ -680,7 +680,7 @@ def test_customer_aggregator_rejects_removed_legacy_rejudgment_keyword() -> None
     ("rule_id", "status", "facts"),
     [
         (
-            "LX0609-003",
+            "LX0609-04-02-01",
             "not_applicable",
             {
                 "failure_kind": "qualified_surgery_absent",
@@ -688,7 +688,7 @@ def test_customer_aggregator_rejects_removed_legacy_rejudgment_keyword() -> None
             },
         ),
         (
-            "LX0609-003",
+            "LX0609-04-02-01",
             "not_applicable",
             {
                 "failure_kind": "surgery_not_performed",
@@ -696,7 +696,7 @@ def test_customer_aggregator_rejects_removed_legacy_rejudgment_keyword() -> None
             },
         ),
         (
-            "LX0609-044",
+            "LX0609-07-01-02",
             "non_compliant",
             {
                 "failure_kind": "pretransfusion_assessment_incomplete",
@@ -739,7 +739,7 @@ def test_native_003_044_accepts_current_executor_customer_fact_contract(
     ("rule_id", "status", "facts"),
     [
         (
-            "LX0609-003",
+            "LX0609-04-02-01",
             "non_compliant",
             {
                 "failure_kind": "qualified_surgery_absent",
@@ -774,7 +774,7 @@ def test_legacy_customer_display_guard_must_not_rejudge_executor_decision() -> N
     result = aggregate_luxian_0609_results(
         wrapper_rules=[
             {
-                "rule_id": "LX0609-020",
+                "rule_id": "LX0609-03-01-01",
                 "name": "会诊记录：有会诊记录单无请会诊执行记录",
                 "mapped_rule_ids": ["CL-250"],
             }
@@ -819,10 +819,10 @@ def test_default_legacy_aggregation_preserves_executor_status_without_display_re
     }
 
     first_course_missing = aggregate(
-        wrapper_rules=[{"rule_id": "LX0609-016"}],
+        wrapper_rules=[{"rule_id": "LX0609-12-01-01"}],
         execution_results=[
             {
-                "rule_id": "LX0609-016",
+                "rule_id": "LX0609-12-01-01",
                 "status": "non_compliant",
                 "is_compliant": False,
                 "findings": "执行器已判定首次病程复制。",
@@ -836,10 +836,10 @@ def test_default_legacy_aggregation_preserves_executor_status_without_display_re
     assert "copy_rule_priority_guard" not in first_course_missing.get("metadata", {})
 
     uncertain_copy = aggregate(
-        wrapper_rules=[{"rule_id": "LX0609-017"}],
+        wrapper_rules=[{"rule_id": "LX0609-12-01-02"}],
         execution_results=[
             {
-                "rule_id": "LX0609-017",
+                "rule_id": "LX0609-12-01-02",
                 "status": "uncertain",
                 "is_compliant": None,
                 "findings": "需要人工复核。",
@@ -874,9 +874,9 @@ def test_default_legacy_aggregation_preserves_executor_status_without_display_re
 @pytest.mark.parametrize(
     ("rule_id", "status", "is_compliant"),
     (
-        ("LX0609-016", "non_compliant", False),
-        ("LX0609-025", "not_executed", None),
-        ("LX0609-059", "not_executed", None),
+        ("LX0609-12-01-01", "non_compliant", False),
+        ("LX0609-04-02-04", "not_executed", None),
+        ("LX0609-05-03-01", "not_executed", None),
     ),
 )
 def test_native_and_phase_results_never_enter_legacy_display_rejudgment(
@@ -895,7 +895,7 @@ def test_native_and_phase_results_never_enter_legacy_display_rejudgment(
                 "metadata": {
                     "execution_source": (
                         "lx0609_native"
-                        if rule_id == "LX0609-016"
+                        if rule_id == "LX0609-12-01-01"
                         else "lx0609_phase_gate"
                     ),
                     "reason_code": (
@@ -934,7 +934,7 @@ def test_046_preserves_controlled_per_record_missing_counts() -> None:
     }
 
     assert safe_luxian_0609_customer_display_facts(
-        rule_id="LX0609-046", raw=facts
+        rule_id="LX0609-07-02-02", raw=facts
     ) == facts
 
 
@@ -956,7 +956,7 @@ def _010_association_facts() -> dict[str, object]:
 def test_010_new_contract_accepts_only_controlled_association_counts() -> None:
     facts = _010_association_facts()
 
-    assert safe_luxian_0609_customer_display_facts(rule_id="LX0609-010", raw=facts) == facts
+    assert safe_luxian_0609_customer_display_facts(rule_id="LX0609-06-01-02", raw=facts) == facts
 
 
 @pytest.mark.parametrize(
@@ -974,7 +974,7 @@ def test_010_new_contract_rejects_invalid_or_private_association_facts(
 ) -> None:
     facts = {**_010_association_facts(), **patch}
 
-    assert safe_luxian_0609_customer_display_facts(rule_id="LX0609-010", raw=facts) is None
+    assert safe_luxian_0609_customer_display_facts(rule_id="LX0609-06-01-02", raw=facts) is None
 
 
 @pytest.mark.parametrize(
@@ -988,13 +988,13 @@ def test_010_invalid_strict_contract_fails_closed(entry_path) -> None:
     )
     invalid = {**_010_association_facts(), "private_text": "must-not-pass"}
     execution_result = {
-        "rule_id": "LX0609-010",
+        "rule_id": "LX0609-06-01-02",
         "status": "non_compliant",
         "findings": "关联资料待核实。",
     }
     customer_display_facts = ()
     if entry_path == "explicit":
-        customer_display_facts = (("LX0609-010", invalid),)
+        customer_display_facts = (("LX0609-06-01-02", invalid),)
     else:
         execution_result["metadata"] = {
             "execution_source": "lx0609_native",
@@ -1008,7 +1008,7 @@ def test_010_invalid_strict_contract_fails_closed(entry_path) -> None:
     if entry_path == "explicit":
         with pytest.raises(ValueError, match="^invalid customer display facts$") as exc_info:
             module.aggregate_luxian_0609_results(
-                wrapper_rules=[{"rule_id": "LX0609-010"}],
+                wrapper_rules=[{"rule_id": "LX0609-06-01-02"}],
                 execution_results=[execution_result],
                 customer_display_facts=customer_display_facts,
             )
@@ -1016,7 +1016,7 @@ def test_010_invalid_strict_contract_fails_closed(entry_path) -> None:
         return
 
     result = module.aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-010"}],
+        wrapper_rules=[{"rule_id": "LX0609-06-01-02"}],
         execution_results=[execution_result],
         customer_display_facts=customer_display_facts,
     )[0]
@@ -1039,7 +1039,7 @@ def test_010_invalid_executor_facts_are_isolated_as_technical_error(
         invalid["requirement"] = requirement
     result, handled = finalize_luxian_0609_executor_customer_display_facts(
         result={
-            "rule_id": "LX0609-010",
+            "rule_id": "LX0609-06-01-02",
             "status": "non_compliant",
             "reason_code": "requirement_violated",
             "findings": "规则要求未满足。",
@@ -1057,10 +1057,10 @@ def test_010_invalid_executor_facts_are_isolated_as_technical_error(
 def test_native_equal_dual_source_customer_facts_are_accepted() -> None:
     facts = _010_association_facts()
     result = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-010"}],
+        wrapper_rules=[{"rule_id": "LX0609-06-01-02"}],
         execution_results=[
             {
-                "rule_id": "LX0609-010",
+                "rule_id": "LX0609-06-01-02",
                 "status": "non_compliant",
                 "metadata": {
                     "execution_source": "lx0609_native",
@@ -1085,7 +1085,7 @@ def test_native_conflicting_dual_source_safe_facts_are_isolated_as_technical_err
 
     result, handled = finalize_luxian_0609_executor_customer_display_facts(
         result={
-            "rule_id": "LX0609-010",
+            "rule_id": "LX0609-06-01-02",
             "status": "non_compliant",
             "reason_code": "requirement_violated",
         },
@@ -1106,7 +1106,7 @@ def test_native_conflicting_dual_source_010_private_facts_are_isolated() -> None
 
     result, handled = finalize_luxian_0609_executor_customer_display_facts(
         result={
-            "rule_id": "LX0609-010",
+            "rule_id": "LX0609-06-01-02",
             "status": "non_compliant",
             "reason_code": "requirement_violated",
         },
@@ -1123,10 +1123,10 @@ def test_native_conflicting_dual_source_010_private_facts_are_isolated() -> None
 def test_native_equal_dual_source_010_strict_raw_facts_are_discarded() -> None:
     strict_facts = {**_010_association_facts(), "private_text": "must-not-pass"}
     result = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-010"}],
+        wrapper_rules=[{"rule_id": "LX0609-06-01-02"}],
         execution_results=[
             {
-                "rule_id": "LX0609-010",
+                "rule_id": "LX0609-06-01-02",
                 "status": "non_compliant",
                 "metadata": {
                     "execution_source": "lx0609_native",
@@ -1150,10 +1150,10 @@ def test_033_source_query_error_preserves_only_controlled_source_labels() -> Non
     }
 
     assert safe_luxian_0609_customer_display_facts(
-        rule_id="LX0609-033", raw=facts
+        rule_id="LX0609-11-01-01", raw=facts
     ) == facts
     assert safe_luxian_0609_customer_display_facts(
-        rule_id="LX0609-033",
+        rule_id="LX0609-11-01-01",
         raw={**facts, "source_labels": ["手术知情同意书", "内部SQL"]},
     ) is None
 
@@ -1162,7 +1162,7 @@ def test_033_source_query_error_preserves_only_controlled_source_labels() -> Non
     ("rule_id", "facts"),
     [
         (
-            "LX0609-013",
+            "LX0609-06-02-03",
             {
                 "verification_kind": "pathology_result_documentation_check",
                 "pathology_trigger_sources": ["pathology_exam_report"],
@@ -1175,7 +1175,7 @@ def test_033_source_query_error_preserves_only_controlled_source_labels() -> Non
             },
         ),
         (
-            "LX0609-019",
+            "LX0609-06-02-02",
             {
                 "verification_kind": "pathology_sampling_documentation_check",
                 "pathology_trigger_sources": ["pathology_exam_master"],
@@ -1188,7 +1188,7 @@ def test_033_source_query_error_preserves_only_controlled_source_labels() -> Non
             },
         ),
         (
-            "LX0609-026",
+            "LX0609-05-02-01",
             {
                 "verification_kind": "chemotherapy_order_course_comparison",
                 "order_count": 1,
@@ -1202,7 +1202,7 @@ def test_033_source_query_error_preserves_only_controlled_source_labels() -> Non
             },
         ),
         (
-            "LX0609-027",
+            "LX0609-08-01-04",
             {
                 "verification_kind": "malignant_discharge_plan_check",
                 "malignant_diagnosis_present": True,
@@ -1220,7 +1220,7 @@ def test_task3_customer_display_fact_contracts_are_preserved(rule_id, facts):
     assert safe_luxian_0609_customer_display_facts(rule_id=rule_id, raw=facts) == facts
 
 
-@pytest.mark.parametrize("rule_id", ["LX0609-052", "LX0609-053"])
+@pytest.mark.parametrize("rule_id", ["LX0609-06-04-01", "LX0609-06-04-02"])
 def test_critical_value_missing_result_detail_facts_are_preserved(rule_id):
     facts = {
         "failure_kind": "critical_value_result_detail_missing",
@@ -1242,7 +1242,7 @@ def test_critical_value_missing_result_detail_facts_are_preserved(rule_id):
     ("rule_id", "facts"),
     [
         (
-            "LX0609-052",
+            "LX0609-06-04-01",
             {
                 "verification_kind": "critical_value_timeliness_check",
                 "critical_item_names": ["血钾", "血钙"],
@@ -1264,7 +1264,7 @@ def test_critical_value_missing_result_detail_facts_are_preserved(rule_id):
             },
         ),
         (
-            "LX0609-053",
+            "LX0609-06-04-02",
             {
                 "verification_kind": "critical_value_disposition_presence_check",
                 "critical_item_names": ["血钾"],
@@ -1309,7 +1309,7 @@ def test_critical_value_event_results_reject_internal_identifiers():
     }
 
     assert safe_luxian_0609_customer_display_facts(
-        rule_id="LX0609-053",
+        rule_id="LX0609-06-04-02",
         raw=facts,
     ) is None
 
@@ -1318,7 +1318,7 @@ def test_critical_value_event_results_reject_internal_identifiers():
     ("rule_id", "facts"),
     [
         (
-            "LX0609-068",
+            "LX0609-08-02-02",
             {
                 "failure_kind": "senior_discharge_approval_missing",
                 "discharge_date": "2026-07-13",
@@ -1352,7 +1352,7 @@ def test_extended_defect_facts_survive_customer_projection(rule_id, facts):
     ("rule_id", "facts"),
     [
         (
-            "LX0609-020",
+            "LX0609-03-01-01",
             {
                 "verification_kind": "consultation_execution_relation_check",
                 "completed_opinion_episode_count": 1,
@@ -1379,7 +1379,7 @@ def test_extended_defect_facts_survive_customer_projection(rule_id, facts):
             },
         ),
         (
-            "LX0609-021",
+            "LX0609-03-01-02",
             {
                 "verification_kind": "consultation_application_quality_check",
                 "episode_count": 1,
@@ -1390,7 +1390,7 @@ def test_extended_defect_facts_survive_customer_projection(rule_id, facts):
             },
         ),
         (
-            "LX0609-022",
+            "LX0609-03-01-03",
             {
                 "verification_kind": "consultation_opinion_quality_check",
                 "episode_count": 1,
@@ -1435,7 +1435,7 @@ def test_022_episode_results_are_strictly_validated_for_customer_delivery():
     }
 
     assert safe_luxian_0609_customer_display_facts(
-        rule_id="LX0609-022", raw=facts
+        rule_id="LX0609-03-01-03", raw=facts
     ) == {
         "verification_kind": "consultation_opinion_quality_check",
         "episode_count": 2,
@@ -1459,7 +1459,7 @@ def test_022_episode_results_are_strictly_validated_for_customer_delivery():
     }
     facts["episode_results"][1]["record_time"] = "2026-02-30 10:00:00"
     assert (
-        safe_luxian_0609_customer_display_facts(rule_id="LX0609-022", raw=facts)
+        safe_luxian_0609_customer_display_facts(rule_id="LX0609-03-01-03", raw=facts)
         is None
     )
 
@@ -1486,7 +1486,7 @@ def test_021_customer_facts_allow_realistic_consultation_episode_count():
     }
 
     safe = safe_luxian_0609_customer_display_facts(
-        rule_id="LX0609-021", raw=facts
+        rule_id="LX0609-03-01-02", raw=facts
     )
 
     assert safe is not None
@@ -1495,13 +1495,13 @@ def test_021_customer_facts_allow_realistic_consultation_episode_count():
     facts["episode_results"][1]["record_time"] = "2026-07-20 02:00:00"
     facts["episode_results"][1]["document_title"] = "PRIVATE_PATIENT_TITLE"
     assert (
-        safe_luxian_0609_customer_display_facts(rule_id="LX0609-022", raw=facts)
+        safe_luxian_0609_customer_display_facts(rule_id="LX0609-03-01-03", raw=facts)
         is None
     )
     facts["episode_results"][1]["document_title"] = "会诊记录单"
     facts["episode_results"][1]["source_document_id"] = "FORGED-DOCUMENT"
     assert (
-        safe_luxian_0609_customer_display_facts(rule_id="LX0609-022", raw=facts)
+        safe_luxian_0609_customer_display_facts(rule_id="LX0609-03-01-03", raw=facts)
         is None
     )
 
@@ -1545,12 +1545,12 @@ def test_withheld_022_keeps_safe_episode_projection_without_rule_template() -> N
     }
 
     result = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-022"}],
+        wrapper_rules=[{"rule_id": "LX0609-03-01-03"}],
         execution_results=[],
         reduced_decisions=(
-            _reduced_decision("LX0609-022", direction=QcDirection.DEFECT),
+            _reduced_decision("LX0609-03-01-03", direction=QcDirection.DEFECT),
         ),
-        customer_display_facts=(("LX0609-022", facts),),
+        customer_display_facts=(("LX0609-03-01-03", facts),),
     )[0]
 
     assert result["status"] == "non_compliant"
@@ -1588,12 +1588,12 @@ def test_021_episode_locator_is_renderable_but_document_ids_only_enter_customer_
     }
 
     result = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-021"}],
+        wrapper_rules=[{"rule_id": "LX0609-03-01-02"}],
         execution_results=[],
         reduced_decisions=(
-            _reduced_decision("LX0609-021", direction=QcDirection.DEFECT),
+            _reduced_decision("LX0609-03-01-02", direction=QcDirection.DEFECT),
         ),
-        customer_display_facts=(("LX0609-021", facts),),
+        customer_display_facts=(("LX0609-03-01-02", facts),),
     )[0]
 
     assert result["findings"] == (
@@ -1651,10 +1651,10 @@ def test_customer_evidence_uses_frozen_material_for_time_and_excerpt() -> None:
     }
 
     result = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-021"}],
+        wrapper_rules=[{"rule_id": "LX0609-03-01-02"}],
         execution_results=[],
-        reduced_decisions=(_reduced_decision("LX0609-021", direction=QcDirection.DEFECT),),
-        customer_display_facts=(("LX0609-021", facts),),
+        reduced_decisions=(_reduced_decision("LX0609-03-01-02", direction=QcDirection.DEFECT),),
+        customer_display_facts=(("LX0609-03-01-02", facts),),
         audit_context={"evidence_materials": _Materials()},
     )[0]
 
@@ -1707,16 +1707,16 @@ def test_022_failed_episode_after_eighth_still_has_customer_evidence() -> None:
         for index in range(1, 13)
     )
     facts = consultation_episode._consultation_semantic_display_facts(
-        rule_id="LX0609-022", episodes=episodes, documents=documents
+        rule_id="LX0609-03-01-03", episodes=episodes, documents=documents
     )
 
     result = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-022"}],
+        wrapper_rules=[{"rule_id": "LX0609-03-01-03"}],
         execution_results=[],
         reduced_decisions=(
-            _reduced_decision("LX0609-022", direction=QcDirection.DEFECT),
+            _reduced_decision("LX0609-03-01-03", direction=QcDirection.DEFECT),
         ),
-        customer_display_facts=(("LX0609-022", facts),),
+        customer_display_facts=(("LX0609-03-01-03", facts),),
     )[0]
 
     assert "customer_evidence" not in result
@@ -1754,10 +1754,10 @@ def test_020_uses_exact_opinion_and_execution_document_refs_for_customer_evidenc
     }
 
     result = module.aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-020"}],
+        wrapper_rules=[{"rule_id": "LX0609-03-01-01"}],
         execution_results=[],
-        reduced_decisions=(_reduced_decision("LX0609-020"),),
-        customer_display_facts=(("LX0609-020", facts),),
+        reduced_decisions=(_reduced_decision("LX0609-03-01-01"),),
+        customer_display_facts=(("LX0609-03-01-01", facts),),
     )[0]
 
     assert "customer_evidence" not in result
@@ -1801,12 +1801,12 @@ def test_020_non_compliant_delivery_explains_missing_recommendation_and_locates_
     }
 
     result = module.aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-020"}],
+        wrapper_rules=[{"rule_id": "LX0609-03-01-01"}],
         execution_results=[],
         reduced_decisions=(
-            _reduced_decision("LX0609-020", direction=QcDirection.DEFECT),
+            _reduced_decision("LX0609-03-01-01", direction=QcDirection.DEFECT),
         ),
-        customer_display_facts=(("LX0609-020", facts),),
+        customer_display_facts=(("LX0609-03-01-01", facts),),
     )[0]
 
     assert result["findings"] == (
@@ -1852,7 +1852,7 @@ def test_020_customer_projection_rejects_boolean_recommendation_index():
 
     assert (
         module.safe_luxian_0609_customer_display_facts(
-            rule_id="LX0609-020", raw=facts
+            rule_id="LX0609-03-01-01", raw=facts
         )
         is None
     )
@@ -1885,10 +1885,10 @@ def test_023_uses_exact_opinion_and_execution_document_refs_for_customer_evidenc
     }
 
     result = module.aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-023"}],
+        wrapper_rules=[{"rule_id": "LX0609-03-01-04"}],
         execution_results=[],
-        reduced_decisions=(_reduced_decision("LX0609-023"),),
-        customer_display_facts=(("LX0609-023", facts),),
+        reduced_decisions=(_reduced_decision("LX0609-03-01-04"),),
+        customer_display_facts=(("LX0609-03-01-04", facts),),
     )[0]
 
     assert "customer_evidence" not in result
@@ -1903,13 +1903,13 @@ def test_023_uses_exact_opinion_and_execution_document_refs_for_customer_evidenc
     ("rule_id", "verification_kind", "requirement", "document_title"),
     [
         (
-            "LX0609-021",
+            "LX0609-03-01-02",
             "consultation_application_quality_check",
             "说明具体临床问题、会诊理由或明确会诊目的",
             "会诊申请单",
         ),
         (
-            "LX0609-022",
+            "LX0609-03-01-03",
             "consultation_opinion_quality_check",
             "给出针对当前病情的明确诊疗意见",
             "会诊记录单",
@@ -1957,10 +1957,10 @@ def test_023_customer_display_projection_is_idempotent() -> None:
         "source_document_ids": ["CONSULT-1"],
     }
 
-    first = safe_luxian_0609_customer_display_facts(rule_id="LX0609-023", raw=raw)
+    first = safe_luxian_0609_customer_display_facts(rule_id="LX0609-03-01-04", raw=raw)
     assert first is not None
     assert safe_luxian_0609_customer_display_facts(
-        rule_id="LX0609-023", raw=first
+        rule_id="LX0609-03-01-04", raw=first
     ) == first
 
 
@@ -1968,7 +1968,7 @@ def test_023_customer_display_projection_is_idempotent() -> None:
     ("rule_id", "facts"),
     [
         (
-            "LX0609-020",
+            "LX0609-03-01-01",
             {
                 "source_document_ids": ["CONSULT-REQUEST", "CONSULT-OPINION"],
                 "consultation_assessment": "不符合要求",
@@ -1977,14 +1977,14 @@ def test_023_customer_display_projection_is_idempotent() -> None:
             },
         ),
         (
-            "LX0609-021",
+            "LX0609-03-01-02",
             {
                 "source_document_ids": ["CONSULT-REQUEST"],
                 "consultation_assessment": "明确",
             },
         ),
         (
-            "LX0609-022",
+            "LX0609-03-01-03",
             {
                 "source_document_ids": ["CONSULT-OPINION"],
                 "consultation_assessment": "不符合要求",
@@ -2003,7 +2003,7 @@ def test_explicit_consultation_facts_are_strictly_validated(rule_id, facts):
     ("rule_id", "facts"),
     [
         (
-            "LX0609-020",
+            "LX0609-03-01-01",
             {
                 "source_document_ids": ["CONSULT-REQUEST", "CONSULT-OPINION"],
                 "consultation_assessment": "不符合要求",
@@ -2013,7 +2013,7 @@ def test_explicit_consultation_facts_are_strictly_validated(rule_id, facts):
             },
         ),
         (
-            "LX0609-021",
+            "LX0609-03-01-02",
             {
                 "source_document_ids": ["CONSULT-REQUEST"],
                 "consultation_assessment": "明确",
@@ -2021,7 +2021,7 @@ def test_explicit_consultation_facts_are_strictly_validated(rule_id, facts):
             },
         ),
         (
-            "LX0609-022",
+            "LX0609-03-01-03",
             {
                 "source_document_ids": ["CONSULT-OPINION"],
                 "consultation_assessment": "不符合要求",
@@ -2029,7 +2029,7 @@ def test_explicit_consultation_facts_are_strictly_validated(rule_id, facts):
             },
         ),
         (
-            "LX0609-023",
+            "LX0609-03-01-04",
             {
                 "verification_kind": "consultation_execution_quality_check",
                 "completed_opinion_episode_count": 1,
@@ -2090,7 +2090,7 @@ def test_invalid_consultation_customer_facts_yield_isolated_technical_error(
     ("rule_id", "facts"),
     [
         (
-            "LX0609-003",
+            "LX0609-04-02-01",
             {
                 "failure_kind": "surgery_record_within_threshold",
                 "performed_surgery_confirmed": True,
@@ -2102,7 +2102,7 @@ def test_invalid_consultation_customer_facts_yield_isolated_technical_error(
             },
         ),
         (
-            "LX0609-031",
+            "LX0609-04-02-05",
             {
                 "verification_kind": "surgery_signature_confirmed",
                 "performed_surgery_confirmed": True,
@@ -2111,7 +2111,7 @@ def test_invalid_consultation_customer_facts_yield_isolated_technical_error(
             },
         ),
         (
-            "LX0609-035",
+            "LX0609-11-02-02",
             {
                 "failure_kind": "anesthesia_consent_incomplete",
                 "performed_anesthesia_confirmed": True,
@@ -2119,7 +2119,7 @@ def test_invalid_consultation_customer_facts_yield_isolated_technical_error(
             },
         ),
         (
-            "LX0609-038",
+            "LX0609-04-04-03",
             {
                 "verification_kind": "anesthesia_record_present",
                 "performed_anesthesia_confirmed": True,
@@ -2127,7 +2127,7 @@ def test_invalid_consultation_customer_facts_yield_isolated_technical_error(
             },
         ),
         (
-            "LX0609-040",
+            "LX0609-04-01-03",
             {
                 "performed_surgery_confirmed": True,
                 "procedure_kind": "surgery",
@@ -2189,10 +2189,10 @@ def test_051_direct_aggregation_does_not_reproject_private_document_ids() -> Non
     }
 
     result = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-051"}],
+        wrapper_rules=[{"rule_id": "LX0609-09-02-01"}],
         execution_results=[],
-        reduced_decisions=(_reduced_decision("LX0609-051"),),
-        customer_display_facts=(("LX0609-051", facts),),
+        reduced_decisions=(_reduced_decision("LX0609-09-02-01"),),
+        customer_display_facts=(("LX0609-09-02-01", facts),),
     )[0]
 
     assert "customer_evidence" not in result
@@ -2221,10 +2221,10 @@ def test_067_private_document_ref_cannot_be_searched_by_aggregator() -> None:
         ],
     }
     result = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-067"}],
+        wrapper_rules=[{"rule_id": "LX0609-08-02-01"}],
         execution_results=[],
-        reduced_decisions=(_reduced_decision("LX0609-067"),),
-        customer_display_facts=(("LX0609-067", facts),),
+        reduced_decisions=(_reduced_decision("LX0609-08-02-01"),),
+        customer_display_facts=(("LX0609-08-02-01", facts),),
     )[0]
 
     assert result["status"] == "compliant"
@@ -2264,10 +2264,10 @@ def test_071_does_not_project_legacy_handoff_and_handover_refs() -> None:
     ])
 
     result = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-071"}],
+        wrapper_rules=[{"rule_id": "LX0609-10-01-01"}],
         execution_results=[],
-        reduced_decisions=(_reduced_decision("LX0609-071"),),
-        customer_display_facts=(("LX0609-071", facts),),
+        reduced_decisions=(_reduced_decision("LX0609-10-01-01"),),
+        customer_display_facts=(("LX0609-10-01-01", facts),),
     )[0]
 
     assert "customer_evidence" not in result
@@ -2294,10 +2294,10 @@ def test_071_derived_single_event_does_not_project_legacy_document_refs() -> Non
     facts = _071_derived_single_facts(refs)
 
     result = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-071"}],
+        wrapper_rules=[{"rule_id": "LX0609-10-01-01"}],
         execution_results=[],
-        reduced_decisions=(_reduced_decision("LX0609-071"),),
-        customer_display_facts=(("LX0609-071", facts),),
+        reduced_decisions=(_reduced_decision("LX0609-10-01-01"),),
+        customer_display_facts=(("LX0609-10-01-01", facts),),
     )[0]
 
     assert "customer_evidence" not in result
@@ -2320,10 +2320,10 @@ def test_071_derived_single_event_rejects_invalid_or_excess_daily_refs(refs) -> 
     facts = _071_derived_single_facts(refs)
 
     result = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-071"}],
+        wrapper_rules=[{"rule_id": "LX0609-10-01-01"}],
         execution_results=[],
-        reduced_decisions=(_reduced_decision("LX0609-071"),),
-        customer_display_facts=(("LX0609-071", facts),),
+        reduced_decisions=(_reduced_decision("LX0609-10-01-01"),),
+        customer_display_facts=(("LX0609-10-01-01", facts),),
     )[0]
 
     assert "customer_evidence" not in result
@@ -2343,10 +2343,10 @@ def test_071_signature_timeline_gap_keeps_facts_without_legacy_daily_ref() -> No
     }
 
     result = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-071"}],
+        wrapper_rules=[{"rule_id": "LX0609-10-01-01"}],
         execution_results=[],
-        reduced_decisions=(_reduced_decision("LX0609-071"),),
-        customer_display_facts=(("LX0609-071", facts),),
+        reduced_decisions=(_reduced_decision("LX0609-10-01-01"),),
+        customer_display_facts=(("LX0609-10-01-01", facts),),
     )[0]
 
     assert result["customer_display_facts"]["failure_kind"] == (
@@ -2359,7 +2359,7 @@ def test_071_signature_timeline_gap_keeps_facts_without_legacy_daily_ref() -> No
     ("rule_id", "raw_facts", "source_type"),
     (
         (
-            "LX0609-069",
+            "LX0609-04-02-07",
             {
                 "verification_kind": "consultation_timeliness_check",
                 "threshold_hours": 24,
@@ -2379,7 +2379,7 @@ def test_071_signature_timeline_gap_keeps_facts_without_legacy_daily_ref() -> No
             "consultation_record",
         ),
         (
-            "LX0609-071",
+            "LX0609-10-01-01",
             {
                 "verification_kind": "physician_handoff_timeliness_check",
                 "change_time": "2026-07-01 08:00:00",
@@ -2390,7 +2390,7 @@ def test_071_signature_timeline_gap_keeps_facts_without_legacy_daily_ref() -> No
             "handoff_record",
         ),
         (
-            "LX0609-072",
+            "LX0609-10-02-01",
             {
                 "failure_kind": "transfer_records_missing",
                 "transfer_order_count": 1,
@@ -2400,7 +2400,7 @@ def test_071_signature_timeline_gap_keeps_facts_without_legacy_daily_ref() -> No
             "transfer_order",
         ),
         (
-            "LX0609-073",
+            "LX0609-10-02-02",
             {
                 "verification_kind": "transfer_record_presence_check",
                 "transfer_order_time": "2026-07-01 08:00:00",
@@ -2412,7 +2412,7 @@ def test_071_signature_timeline_gap_keeps_facts_without_legacy_daily_ref() -> No
             "transfer_in_record",
         ),
         (
-            "LX0609-074",
+            "LX0609-12-02-01",
             {
                 "verification_kind": "diagnosis_change_documentation_check",
                 "diagnosis_change_count": 1,
@@ -2471,7 +2471,7 @@ def test_aggregator_contains_no_continuity_facts_or_legacy_display_evidence_bran
     import app.services.luxian_0609_result_aggregator as aggregator
 
     source = inspect.getsource(aggregator)
-    for rule_id in ("LX0609-069", "LX0609-071", "LX0609-072", "LX0609-073", "LX0609-074"):
+    for rule_id in ("LX0609-04-02-07", "LX0609-10-01-01", "LX0609-10-02-01", "LX0609-10-02-02", "LX0609-12-02-01"):
         assert rule_id not in source
     assert "controlled_consultation_events" not in source
     assert "legacy_surgery_gate_customer_evidence" not in source
@@ -2495,7 +2495,7 @@ def test_071_handoff_identity_gap_projects_strict_facts() -> None:
         ],
     }
 
-    safe = safe_luxian_0609_customer_display_facts(rule_id="LX0609-071", raw=facts)
+    safe = safe_luxian_0609_customer_display_facts(rule_id="LX0609-10-01-01", raw=facts)
 
     assert safe is not None
     assert safe["failure_kind"] == "physician_handoff_identity_missing"
@@ -2507,7 +2507,7 @@ def test_071_single_change_association_gap_keeps_controlled_facts() -> None:
     facts["change_times"] = ["2026-07-01 08:00:00"]
 
     assert safe_luxian_0609_customer_display_facts(
-        rule_id="LX0609-071",
+        rule_id="LX0609-10-01-01",
         raw=facts,
     ) == {
         "failure_kind": "physician_handoff_association_failed",
@@ -2530,14 +2530,14 @@ def test_074_association_failure_keeps_only_controlled_diagnosis_facts() -> None
     }
 
     assert safe_luxian_0609_customer_display_facts(
-        rule_id="LX0609-074",
+        rule_id="LX0609-12-02-01",
         raw=raw,
     ) == raw
 
 
 def test_074_association_failure_rejects_uncontrolled_issue_text() -> None:
     assert safe_luxian_0609_customer_display_facts(
-        rule_id="LX0609-074",
+        rule_id="LX0609-12-02-01",
         raw={
             "failure_kind": "diagnosis_change_association_failed",
             "diagnosis_record_count": 3,
@@ -2556,7 +2556,7 @@ def test_074_untimed_documentation_keeps_only_controlled_time_gap_facts() -> Non
     }
 
     assert safe_luxian_0609_customer_display_facts(
-        rule_id="LX0609-074",
+        rule_id="LX0609-12-02-01",
         raw=raw,
     ) == raw
 
@@ -2585,10 +2585,10 @@ def test_071_rejects_invalid_internal_refs_without_legacy_fallback(
     facts["source_document_ids"] = ["legacy-071"]
 
     result = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-071"}],
+        wrapper_rules=[{"rule_id": "LX0609-10-01-01"}],
         execution_results=[],
-        reduced_decisions=(_reduced_decision("LX0609-071"),),
-        customer_display_facts=(("LX0609-071", facts),),
+        reduced_decisions=(_reduced_decision("LX0609-10-01-01"),),
+        customer_display_facts=(("LX0609-10-01-01", facts),),
     )[0]
 
     assert "customer_evidence" not in result
@@ -2617,7 +2617,7 @@ def test_071_rejects_invalid_internal_refs_without_legacy_fallback(
 )
 def test_071_rejects_inconsistent_controlled_counts(facts) -> None:
     assert safe_luxian_0609_customer_display_facts(
-        rule_id="LX0609-071",
+        rule_id="LX0609-10-01-01",
         raw=facts,
     ) is None
 
@@ -2630,10 +2630,10 @@ def test_071_refs_cannot_exceed_the_declared_source_record_counts() -> None:
     ])
 
     result = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-071"}],
+        wrapper_rules=[{"rule_id": "LX0609-10-01-01"}],
         execution_results=[],
-        reduced_decisions=(_reduced_decision("LX0609-071"),),
-        customer_display_facts=(("LX0609-071", facts),),
+        reduced_decisions=(_reduced_decision("LX0609-10-01-01"),),
+        customer_display_facts=(("LX0609-10-01-01", facts),),
     )[0]
 
     assert "customer_evidence" not in result
@@ -2670,7 +2670,7 @@ def test_071_accepts_strict_multi_event_facts() -> None:
     facts = _071_multi_event_facts()
 
     assert safe_luxian_0609_customer_display_facts(
-        rule_id="LX0609-071", raw=facts
+        rule_id="LX0609-10-01-01", raw=facts
     ) == facts
 
 
@@ -2690,18 +2690,18 @@ def test_071_rejects_invalid_multi_event_facts(mutate) -> None:
     mutate(facts)
 
     assert safe_luxian_0609_customer_display_facts(
-        rule_id="LX0609-071", raw=facts
+        rule_id="LX0609-10-01-01", raw=facts
     ) is None
 
 
 def _gate(kind):
-    if kind is FindingKind.REQUIREMENT_SATISFIED: decision = GateDecision("LX0609-030", "matched", "surgery_record", "present", "ready", (GateFactRef("a" * 64, "current_visit_surgery_order_confirmed", "inpat_nondrug_order"),), (), ())
-    elif kind is FindingKind.REQUIRED_DOCUMENT_MISSING: decision = GateDecision("LX0609-030", "matched", "surgery_record", "empty", "ready", (GateFactRef("a" * 64, "current_visit_surgery_order_confirmed", "inpat_nondrug_order"),), (), ())
-    elif kind is FindingKind.TRIGGER_ABSENT: decision = GateDecision("LX0609-030", "absent_complete", "surgery_record", None, "not_triggered", (), (), ())
-    elif kind is FindingKind.EVIDENCE_CONFLICT: decision = GateDecision("LX0609-030", "semantic_conflict", "surgery_record", None, "blocked", (), (), ())
-    elif kind is FindingKind.SOURCE_INCOMPLETE: decision = GateDecision("LX0609-030", "coverage_partial", "surgery_record", None, "blocked", (), (), ())
-    else: decision = GateDecision("LX0609-030", "coverage_error", "surgery_record", None, "blocked", (), (), ())
-    return GateReport("gate-v1", "policy-v1", "visit-prog-001", "a" * 64, "b" * 64, "c" * 64, "d" * 64, "e" * 64, ("LX0609-030",), (decision,), CREATED)
+    if kind is FindingKind.REQUIREMENT_SATISFIED: decision = GateDecision("LX0609-04-02-02", "matched", "surgery_record", "present", "ready", (GateFactRef("a" * 64, "current_visit_surgery_order_confirmed", "inpat_nondrug_order"),), (), ())
+    elif kind is FindingKind.REQUIRED_DOCUMENT_MISSING: decision = GateDecision("LX0609-04-02-02", "matched", "surgery_record", "empty", "ready", (GateFactRef("a" * 64, "current_visit_surgery_order_confirmed", "inpat_nondrug_order"),), (), ())
+    elif kind is FindingKind.TRIGGER_ABSENT: decision = GateDecision("LX0609-04-02-02", "absent_complete", "surgery_record", None, "not_triggered", (), (), ())
+    elif kind is FindingKind.EVIDENCE_CONFLICT: decision = GateDecision("LX0609-04-02-02", "semantic_conflict", "surgery_record", None, "blocked", (), (), ())
+    elif kind is FindingKind.SOURCE_INCOMPLETE: decision = GateDecision("LX0609-04-02-02", "coverage_partial", "surgery_record", None, "blocked", (), (), ())
+    else: decision = GateDecision("LX0609-04-02-02", "coverage_error", "surgery_record", None, "blocked", (), (), ())
+    return GateReport("gate-v1", "policy-v1", "visit-prog-001", "a" * 64, "b" * 64, "c" * 64, "d" * 64, "e" * 64, ("LX0609-04-02-02",), (decision,), CREATED)
 
 
 def _pair(kind):
@@ -2721,7 +2721,7 @@ def test_all_attested_findings_have_exact_aggregator_owned_final_state(kind):
 
 def test_only_gate_attested_report_can_reach_final_mapping():
     gate, valid = _pair(FindingKind.REQUIREMENT_SATISFIED)
-    forged = ProgrammaticFindingReport("finding-v1", "policy-v1", "visit-prog-001", "a" * 64, (ProgrammaticFinding("LX0609-030", "requirement_satisfied", "surgery_record", "matched", "present", "ready", (), (), ("a" * 64,)),), CREATED)
+    forged = ProgrammaticFindingReport("finding-v1", "policy-v1", "visit-prog-001", "a" * 64, (ProgrammaticFinding("LX0609-04-02-02", "requirement_satisfied", "surgery_record", "matched", "present", "ready", (), (), ("a" * 64,)),), CREATED)
     with pytest.raises(TypeError): aggregate_luxian_0609_programmatic_findings_shadow(finding_report=forged, aggregation_schema_version="aggregation-v1", aggregation_policy_version="policy-v1", created_at=CREATED)  # type: ignore[call-arg]
     with pytest.raises(ValueError, match="attest"):
         aggregate_luxian_0609_programmatic_findings_shadow(gate_report=gate, finding_report=forged, expected_finding_schema_version="finding-v1", expected_finding_policy_version="policy-v1", aggregation_schema_version="aggregation-v1", aggregation_policy_version="policy-v1", created_at=CREATED)
@@ -2743,7 +2743,7 @@ def test_native_direct_customer_result_must_not_expose_legacy_mapping_diagnostic
     status, expected_is_compliant, expected_customer_status
 ):
     wrapper = {
-        "rule_id": "LX0609-029",
+        "rule_id": "LX0609-04-01-01",
         "name": "术前小结",
         "mapped_rule_ids": ["CL-181", "SC-081"],
         "primary_execution_rule_id": "CL-181",
@@ -2751,7 +2751,7 @@ def test_native_direct_customer_result_must_not_expose_legacy_mapping_diagnostic
     result = __import__("app.services.luxian_0609_result_aggregator", fromlist=["aggregate_luxian_0609_results"]).aggregate_luxian_0609_results(
         wrapper_rules=[wrapper],
         execution_results=[{
-            "rule_id": "LX0609-029", "status": status, "is_compliant": expected_is_compliant,
+            "rule_id": "LX0609-04-01-01", "status": status, "is_compliant": expected_is_compliant,
             "findings": "符合要求", "evidence": "", "suggestion": "", "confidence": 1.0,
             "metadata": {
                 "execution_source": "lx0609_native",
@@ -2808,28 +2808,28 @@ def test_reduced_decision_has_priority_and_bypasses_legacy_result_pipeline(monke
     traces = []
     result = module.aggregate_luxian_0609_results(
         wrapper_rules=[{
-            "rule_id": "LX0609-029",
+            "rule_id": "LX0609-04-01-01",
             "name": "UNTRUSTED_WRAPPER_NAME",
             "mapped_rule_ids": ["CL-181", "SC-081"],
         }],
         execution_results=[{
-            "rule_id": "LX0609-029",
+            "rule_id": "LX0609-04-01-01",
             "status": "non_compliant",
             "findings": "RAW_EXECUTION_MARKER",
             "metadata": {"raw_text": "RAW_METADATA_MARKER"},
         }],
-        gate_decisions={"LX0609-029": object()},
-        reduced_decisions=(_reduced_decision("LX0609-029"),),
+        gate_decisions={"LX0609-04-01-01": object()},
+        reduced_decisions=(_reduced_decision("LX0609-04-01-01"),),
         decision_trace_sink=traces.append,
         audit_context={"medical_text": "RAW_AUDIT_MARKER"},
     )[0]
 
     assert result["status"] == "compliant"
-    assert result["rule_id"] == "LX0609-029"
+    assert result["rule_id"] == "LX0609-04-01-01"
     assert result["rule_name"] != "UNTRUSTED_WRAPPER_NAME"
     assert "metadata" not in result and "audit" not in result
     assert len(traces) == 1
-    assert traces[0]["rule_id"] == "LX0609-029"
+    assert traces[0]["rule_id"] == "LX0609-04-01-01"
     assert all(
         marker not in repr(result)
         for marker in (
@@ -2850,10 +2850,10 @@ def test_reduced_decision_strips_unsupported_018_customer_display_facts():
     private_marker = "PRIVATE_UNSUPPORTED_018_FACT"
 
     result = module.aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-018", "name": "主诉能导出第一诊断"}],
+        wrapper_rules=[{"rule_id": "LX0609-01-01-02", "name": "主诉能导出第一诊断"}],
         execution_results=[],
-        reduced_decisions=(_reduced_decision("LX0609-018"),),
-        customer_display_facts=(("LX0609-018", {
+        reduced_decisions=(_reduced_decision("LX0609-01-01-02"),),
+        customer_display_facts=(("LX0609-01-01-02", {
             "complaint_length": 12,
             "diagnostic_relation_state": "supported",
             "source_label": private_marker,
@@ -2905,12 +2905,12 @@ def test_lx0609_033_public_aggregation_keeps_each_consent_defect_explanation(
         fromlist=["aggregate_luxian_0609_results"],
     )
     result = module.aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-033", "name": "手术知情同意书"}],
+        wrapper_rules=[{"rule_id": "LX0609-11-01-01", "name": "手术知情同意书"}],
         execution_results=[],
         reduced_decisions=(
-            _reduced_decision("LX0609-033", direction=QcDirection.DEFECT),
+            _reduced_decision("LX0609-11-01-01", direction=QcDirection.DEFECT),
         ),
-        customer_display_facts=(("LX0609-033", facts),),
+        customer_display_facts=(("LX0609-11-01-01", facts),),
         format_evidence=False,
     )[0]
 
@@ -2926,14 +2926,14 @@ def test_002_late_result_renders_actual_interval_and_overdue_duration():
         fromlist=["aggregate_luxian_0609_results"],
     )
     result = module.aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-002", "name": "首次病程记录"}],
+        wrapper_rules=[{"rule_id": "LX0609-01-02-01", "name": "首次病程记录"}],
         execution_results=[],
         reduced_decisions=(
-            _reduced_decision("LX0609-002", direction=QcDirection.DEFECT),
+            _reduced_decision("LX0609-01-02-01", direction=QcDirection.DEFECT),
         ),
         customer_display_facts=(
             (
-                "LX0609-002",
+                "LX0609-01-02-01",
                 {
                     "failure_kind": "timeliness_requirement_not_met",
                     "target_document": "first_course_record",
@@ -2960,7 +2960,7 @@ def test_002_late_result_renders_actual_interval_and_overdue_duration():
 def test_001_time_conflict_renders_exact_customer_finding_and_review_action():
     decision = reduce_luxian_0609_rule_decision(
         RuleDecision(
-            rule_id="LX0609-001",
+            rule_id="LX0609-01-01-01",
             snapshot_hash="a" * 64,
             applicability=ApplicabilityState.APPLICABLE,
             evidence_state=EvidenceState.CONFLICT,
@@ -2983,10 +2983,10 @@ def test_001_time_conflict_renders_exact_customer_finding_and_review_action():
     }
 
     result = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-001", "name": "入院记录时限"}],
+        wrapper_rules=[{"rule_id": "LX0609-01-01-01", "name": "入院记录时限"}],
         execution_results=[],
         reduced_decisions=(decision,),
-        customer_display_facts=(("LX0609-001", facts),),
+        customer_display_facts=(("LX0609-01-01-01", facts),),
         format_evidence=False,
     )[0]
 
@@ -3013,7 +3013,7 @@ def test_001_time_conflict_rejects_a_duration_that_does_not_match_both_times():
     }
 
     assert validate_luxian_0609_executor_customer_display_facts(
-        rule_id="LX0609-001",
+        rule_id="LX0609-01-01-01",
         raw=facts,
     ) is None
 
@@ -3029,11 +3029,11 @@ def test_001_blank_or_placeholder_fact_is_strictly_whitelisted():
     }
 
     assert validate_luxian_0609_executor_customer_display_facts(
-        rule_id="LX0609-001",
+        rule_id="LX0609-01-01-01",
         raw=facts,
     ) == facts
     assert validate_luxian_0609_executor_customer_display_facts(
-        rule_id="LX0609-001",
+        rule_id="LX0609-01-01-01",
         raw={**facts, "document_content_state": "untrusted"},
     ) is None
 
@@ -3041,7 +3041,7 @@ def test_001_blank_or_placeholder_fact_is_strictly_whitelisted():
 def test_001_blank_or_placeholder_fact_projects_the_specific_customer_finding():
     decision = reduce_luxian_0609_rule_decision(
         RuleDecision(
-            rule_id="LX0609-001",
+            rule_id="LX0609-01-01-01",
             snapshot_hash="a" * 64,
             applicability=ApplicabilityState.APPLICABLE,
             evidence_state=EvidenceState.SUFFICIENT,
@@ -3062,10 +3062,10 @@ def test_001_blank_or_placeholder_fact_projects_the_specific_customer_finding():
     }
 
     result = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-001", "name": "入院记录时限"}],
+        wrapper_rules=[{"rule_id": "LX0609-01-01-01", "name": "入院记录时限"}],
         execution_results=[],
         reduced_decisions=(decision,),
-        customer_display_facts=(("LX0609-001", facts),),
+        customer_display_facts=(("LX0609-01-01-01", facts),),
         format_evidence=False,
     )[0]
 
@@ -3094,12 +3094,12 @@ def test_007_overdue_interval_names_both_rounds_and_locates_both_records():
     }
 
     result = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-007", "name": "稳定患者查房时限"}],
+        wrapper_rules=[{"rule_id": "LX0609-02-01-03", "name": "稳定患者查房时限"}],
         execution_results=[],
         reduced_decisions=(
-            _reduced_decision("LX0609-007", direction=QcDirection.DEFECT),
+            _reduced_decision("LX0609-02-01-03", direction=QcDirection.DEFECT),
         ),
-        customer_display_facts=(("LX0609-007", facts),),
+        customer_display_facts=(("LX0609-02-01-03", facts),),
         format_evidence=False,
     )[0]
 
@@ -3133,7 +3133,7 @@ def test_007_start_boundary_overdue_delivers_controlled_fact_and_only_record_evi
     }
 
     safe = safe_luxian_0609_customer_display_facts(
-        rule_id="LX0609-007",
+        rule_id="LX0609-02-01-03",
         raw=facts,
     )
     assert safe == {
@@ -3143,12 +3143,12 @@ def test_007_start_boundary_overdue_delivers_controlled_fact_and_only_record_evi
     }
 
     result = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-007", "name": "稳定患者查房时限"}],
+        wrapper_rules=[{"rule_id": "LX0609-02-01-03", "name": "稳定患者查房时限"}],
         execution_results=[],
         reduced_decisions=(
-            _reduced_decision("LX0609-007", direction=QcDirection.DEFECT),
+            _reduced_decision("LX0609-02-01-03", direction=QcDirection.DEFECT),
         ),
-        customer_display_facts=(("LX0609-007", facts),),
+        customer_display_facts=(("LX0609-02-01-03", facts),),
         format_evidence=False,
     )[0]
 
@@ -3176,18 +3176,18 @@ def test_007_date_only_tail_boundary_delivers_confirmed_overdue_without_document
     }
 
     safe = safe_luxian_0609_customer_display_facts(
-        rule_id="LX0609-007",
+        rule_id="LX0609-02-01-03",
         raw=facts,
     )
     assert safe == facts
 
     result = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-007", "name": "稳定患者查房时限"}],
+        wrapper_rules=[{"rule_id": "LX0609-02-01-03", "name": "稳定患者查房时限"}],
         execution_results=[],
         reduced_decisions=(
-            _reduced_decision("LX0609-007", direction=QcDirection.DEFECT),
+            _reduced_decision("LX0609-02-01-03", direction=QcDirection.DEFECT),
         ),
-        customer_display_facts=(("LX0609-007", facts),),
+        customer_display_facts=(("LX0609-02-01-03", facts),),
         format_evidence=False,
     )[0]
 
@@ -3243,7 +3243,7 @@ def test_007_zero_rounds_boundary_facts_are_safe_without_document_evidence(
     expected: str,
 ) -> None:
     safe = safe_luxian_0609_customer_display_facts(
-        rule_id="LX0609-007",
+        rule_id="LX0609-02-01-03",
         raw=facts,
     )
 
@@ -3284,7 +3284,7 @@ def test_007_interval_details_fail_closed_when_the_pair_is_inconsistent(
     facts[field] = invalid_value
 
     safe = safe_luxian_0609_customer_display_facts(
-        rule_id="LX0609-007",
+        rule_id="LX0609-02-01-03",
         raw=facts,
     )
     if field == "interval_end_document_id":
@@ -3304,13 +3304,13 @@ def test_reduced_transfusion_result_renders_exact_controlled_gap_in_backend():
         fromlist=["aggregate_luxian_0609_results"],
     )
     result = module.aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-043", "name": "输血前九项"}],
+        wrapper_rules=[{"rule_id": "LX0609-07-01-01", "name": "输血前九项"}],
         execution_results=[],
         reduced_decisions=(
-            _reduced_decision("LX0609-043", direction=QcDirection.DEFECT),
+            _reduced_decision("LX0609-07-01-01", direction=QcDirection.DEFECT),
         ),
         customer_display_facts=((
-            "LX0609-043",
+            "LX0609-07-01-01",
             {
                 "failure_kind": "pretransfusion_items_incomplete",
                 "performed_transfusion_confirmed": True,
@@ -3342,12 +3342,12 @@ def test_extended_document_facts_are_whitelisted_and_rendered_in_backend():
         "raw_record_content": "PRIVATE_DISCHARGE_TEXT",
     }
     result = module.aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-061", "name": "出院记录时限"}],
+        wrapper_rules=[{"rule_id": "LX0609-08-01-01", "name": "出院记录时限"}],
         execution_results=[],
         reduced_decisions=(
-            _reduced_decision("LX0609-061", direction=QcDirection.DEFECT),
+            _reduced_decision("LX0609-08-01-01", direction=QcDirection.DEFECT),
         ),
-        customer_display_facts=(("LX0609-061", raw_facts),),
+        customer_display_facts=(("LX0609-08-01-01", raw_facts),),
     )[0]
 
     assert result["findings"] == (
@@ -3378,12 +3378,12 @@ def test_061_conflicting_discharge_times_are_preserved_and_rendered():
         ],
     }
     result = module.aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-061", "name": "出院记录时限"}],
+        wrapper_rules=[{"rule_id": "LX0609-08-01-01", "name": "出院记录时限"}],
         execution_results=[],
         reduced_decisions=(
             reduce_luxian_0609_rule_decision(
                 RuleDecision(
-                    rule_id="LX0609-061",
+                    rule_id="LX0609-08-01-01",
                     snapshot_hash="a" * 64,
                     applicability=ApplicabilityState.APPLICABLE,
                     evidence_state=EvidenceState.DATA_GAP,
@@ -3395,7 +3395,7 @@ def test_061_conflicting_discharge_times_are_preserved_and_rendered():
                 )
             ),
         ),
-        customer_display_facts=(("LX0609-061", raw_facts),),
+        customer_display_facts=(("LX0609-08-01-01", raw_facts),),
     )[0]
 
     assert result["customer_display_facts"] == raw_facts
@@ -3411,7 +3411,7 @@ def test_extended_document_list_facts_are_normalized_without_raw_text():
         fromlist=["safe_luxian_0609_customer_display_facts"],
     ).safe_luxian_0609_customer_display_facts
     result = safe(
-        rule_id="LX0609-064",
+        rule_id="LX0609-04-05-01",
         raw={
             "verification_kind": "postoperative_three_day_coverage_check",
             "surgery_time": "2026-07-01 10:00:00",
@@ -3437,7 +3437,7 @@ def test_064_multievent_facts_expose_only_customer_safe_surgery_details():
         fromlist=["safe_luxian_0609_customer_display_facts"],
     ).safe_luxian_0609_customer_display_facts
     result = safe(
-        rule_id="LX0609-064",
+        rule_id="LX0609-04-05-01",
         raw={
             "verification_kind": "postoperative_three_day_coverage_check",
             "performed_surgery_count": 1,
@@ -3471,14 +3471,14 @@ def test_064_multievent_facts_expose_only_customer_safe_surgery_details():
     assert "PRIVATE_DOCUMENT_ID" not in repr(result)
     assert "PRIVATE_RECORD_CONTENT" not in repr(result)
 
-    projected_again = safe(rule_id="LX0609-064", raw=result)
+    projected_again = safe(rule_id="LX0609-04-05-01", raw=result)
 
     assert projected_again == result
 
 
 def test_064_missing_surgery_end_time_is_a_safe_data_gap_fact():
     safe = safe_luxian_0609_customer_display_facts(
-        rule_id="LX0609-064",
+        rule_id="LX0609-04-05-01",
         raw={
             "verification_kind": "postoperative_surgery_event_time_check",
             "performed_surgery_count": 1,
@@ -3505,12 +3505,12 @@ def test_reduced_decision_preserves_surgery_record_present_facts():
         fromlist=["aggregate_luxian_0609_results"],
     )
     result = module.aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-030", "name": "手术记录"}],
+        wrapper_rules=[{"rule_id": "LX0609-04-02-02", "name": "手术记录"}],
         execution_results=[],
-        reduced_decisions=(_reduced_decision("LX0609-030"),),
+        reduced_decisions=(_reduced_decision("LX0609-04-02-02"),),
         customer_display_facts=(
             (
-                "LX0609-030",
+                "LX0609-04-02-02",
                 {
                     "verification_kind": "surgery_document_present",
                     "target_document": "surgery_record",
@@ -3533,14 +3533,14 @@ def test_040_preserves_controlled_level_source_and_mdt_facts():
         fromlist=["aggregate_luxian_0609_results"],
     )
     result = module.aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-040", "name": "四级手术术前多学科讨论"}],
+        wrapper_rules=[{"rule_id": "LX0609-04-01-03", "name": "四级手术术前多学科讨论"}],
         execution_results=[],
         reduced_decisions=(
-            _reduced_decision("LX0609-040", direction=QcDirection.DEFECT),
+            _reduced_decision("LX0609-04-01-03", direction=QcDirection.DEFECT),
         ),
         customer_display_facts=(
             (
-                "LX0609-040",
+                "LX0609-04-01-03",
                 {
                     "performed_surgery_confirmed": True,
                     "procedure_kind": "surgery",
@@ -3591,7 +3591,7 @@ def test_040_rejects_malformed_emergency_exemption_facts(
         raw.pop(missing_field)
 
     assert safe_luxian_0609_customer_display_facts(
-        rule_id="LX0609-040",
+        rule_id="LX0609-04-01-03",
         raw=raw,
     ) is None
 
@@ -3617,7 +3617,7 @@ def test_040_rejects_mdt_facts_that_do_not_describe_performed_grade_four_surgery
     }
 
     assert safe_luxian_0609_customer_display_facts(
-        rule_id="LX0609-040",
+        rule_id="LX0609-04-01-03",
         raw=raw,
     ) is None
 
@@ -3628,12 +3628,12 @@ def test_surgery_record_present_facts_keep_only_exact_referenced_evidence():
         fromlist=["aggregate_luxian_0609_results"],
     )
     result = module.aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-030", "name": "手术记录"}],
+        wrapper_rules=[{"rule_id": "LX0609-04-02-02", "name": "手术记录"}],
         execution_results=[],
-        reduced_decisions=(_reduced_decision("LX0609-030"),),
+        reduced_decisions=(_reduced_decision("LX0609-04-02-02"),),
         customer_display_facts=(
             (
-                "LX0609-030",
+                "LX0609-04-02-02",
                 {
                     "verification_kind": "surgery_document_present",
                     "target_document": "surgery_record",
@@ -3677,9 +3677,9 @@ def test_reduced_decision_derives_customer_evidence_from_referenced_facts_only()
         fromlist=["aggregate_luxian_0609_results"],
     )
     result = module.aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-018", "name": "主诉能导出第一诊断"}],
+        wrapper_rules=[{"rule_id": "LX0609-01-01-02", "name": "主诉能导出第一诊断"}],
         execution_results=[],
-        reduced_decisions=(_reduced_decision("LX0609-018"),),
+        reduced_decisions=(_reduced_decision("LX0609-01-01-02"),),
         audit_context={
             "evidence_snapshot": SimpleNamespace(
                 facts=(
@@ -3716,9 +3716,9 @@ def test_reduced_decision_derives_evidence_from_uniquely_bound_source_material()
         fromlist=["aggregate_luxian_0609_results"],
     )
     result = module.aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-018", "name": "主诉能导出第一诊断"}],
+        wrapper_rules=[{"rule_id": "LX0609-01-01-02", "name": "主诉能导出第一诊断"}],
         execution_results=[],
-        reduced_decisions=(_reduced_decision("LX0609-018"),),
+        reduced_decisions=(_reduced_decision("LX0609-01-01-02"),),
         audit_context={
             "evidence_snapshot": SimpleNamespace(
                 facts=(),
@@ -3754,9 +3754,9 @@ def test_reduced_decision_fills_unique_document_id_from_frozen_materials():
         fromlist=["aggregate_luxian_0609_results"],
     )
     result = module.aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-018", "name": "主诉能导出第一诊断"}],
+        wrapper_rules=[{"rule_id": "LX0609-01-01-02", "name": "主诉能导出第一诊断"}],
         execution_results=[],
-        reduced_decisions=(_reduced_decision("LX0609-018", fact_refs=("d" * 64,)),),
+        reduced_decisions=(_reduced_decision("LX0609-01-01-02", fact_refs=("d" * 64,)),),
         audit_context={
             "evidence_snapshot": SimpleNamespace(
                 facts=(
@@ -3793,9 +3793,9 @@ def test_reduced_decision_does_not_guess_when_source_has_multiple_documents():
         fromlist=["aggregate_luxian_0609_results"],
     )
     result = module.aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-018", "name": "主诉能导出第一诊断"}],
+        wrapper_rules=[{"rule_id": "LX0609-01-01-02", "name": "主诉能导出第一诊断"}],
         execution_results=[],
-        reduced_decisions=(_reduced_decision("LX0609-018", fact_refs=("d" * 64,)),),
+        reduced_decisions=(_reduced_decision("LX0609-01-01-02", fact_refs=("d" * 64,)),),
         audit_context={
             "evidence_snapshot": SimpleNamespace(
                 facts=(
@@ -3838,7 +3838,7 @@ def test_legacy_source_level_evidence_freezes_generic_fallback_shapes() -> None:
 
         return project_legacy_source_level_evidence(
             decision=_reduced_decision(
-                "LX0609-018", fact_refs=tuple(reference(item) for item in fact_refs)
+                "LX0609-01-01-02", fact_refs=tuple(reference(item) for item in fact_refs)
             ),
             evidence_snapshot=SimpleNamespace(
                 facts=tuple(
@@ -3998,7 +3998,7 @@ def test_001_customer_evidence_excludes_discharge_anchor_source():
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-001",),
+        selected_rule_ids=("LX0609-01-01-01",),
         institute_id="aggregation-001-institute",
         patient_id="aggregation-001-patient",
         visit_id="aggregation-001-visit",
@@ -4015,7 +4015,7 @@ def test_001_customer_evidence_excludes_discharge_anchor_source():
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=(
             RuleDecision(
-                rule_id="LX0609-001",
+                rule_id="LX0609-01-01-01",
                 snapshot_hash=session.snapshot.snapshot_hash,
                 applicability=ApplicabilityState.APPLICABLE,
                 evidence_state=EvidenceState.SUFFICIENT,
@@ -4026,12 +4026,12 @@ def test_001_customer_evidence_excludes_discharge_anchor_source():
                 confidence=None,
             ),
         ),
-        expected_rule_ids=("LX0609-001",),
+        expected_rule_ids=("LX0609-01-01-01",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
     result = module.aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-001", "name": "入院记录时限"}],
+        wrapper_rules=[{"rule_id": "LX0609-01-01-01", "name": "入院记录时限"}],
         execution_results=[],
         reduced_decisions=reduced,
         audit_context={
@@ -4054,11 +4054,11 @@ def test_038_customer_evidence_preserves_explicitly_selected_coordinates():
         fromlist=["aggregate_luxian_0609_results"],
     )
     result = module.aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-038", "name": "麻醉记录单"}],
+        wrapper_rules=[{"rule_id": "LX0609-04-04-03", "name": "麻醉记录单"}],
         execution_results=[],
         reduced_decisions=(
             _reduced_decision(
-                "LX0609-038",
+                "LX0609-04-04-03",
                 fact_refs=("b" * 64, "c" * 64),
             ),
         ),
@@ -4097,11 +4097,11 @@ def test_026_customer_evidence_uses_only_executor_selected_fact_refs():
         fromlist=["aggregate_luxian_0609_results"],
     )
     result = module.aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-026", "name": "化疗记录与医嘱一致性"}],
+        wrapper_rules=[{"rule_id": "LX0609-05-02-01", "name": "化疗记录与医嘱一致性"}],
         execution_results=[],
         reduced_decisions=(
             _reduced_decision(
-                "LX0609-026",
+                "LX0609-05-02-01",
                 fact_refs=("b" * 64, "d" * 64),
             ),
         ),
@@ -4149,10 +4149,10 @@ def test_reduced_non_compliant_without_explanation_facts_keeps_the_reducer_statu
         fromlist=["aggregate_luxian_0609_results"],
     )
     result = module.aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-029", "name": "术前小结"}],
+        wrapper_rules=[{"rule_id": "LX0609-04-01-01", "name": "术前小结"}],
         execution_results=[],
         reduced_decisions=(
-            _reduced_decision("LX0609-029", direction=QcDirection.DEFECT),
+            _reduced_decision("LX0609-04-01-01", direction=QcDirection.DEFECT),
         ),
     )[0]
 
@@ -4167,14 +4167,14 @@ def test_reduced_non_compliant_with_controlled_facts_keeps_customer_defect_statu
         fromlist=["aggregate_luxian_0609_results"],
     )
     result = module.aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-029", "name": "术前小结"}],
+        wrapper_rules=[{"rule_id": "LX0609-04-01-01", "name": "术前小结"}],
         execution_results=[],
         reduced_decisions=(
-            _reduced_decision("LX0609-029", direction=QcDirection.DEFECT),
+            _reduced_decision("LX0609-04-01-01", direction=QcDirection.DEFECT),
         ),
         customer_display_facts=(
             (
-                "LX0609-029",
+                "LX0609-04-01-01",
                 {
                     "failure_kind": "surgery_document_missing",
                     "target_document": "presurg_summary",
@@ -4193,7 +4193,7 @@ def test_reduced_non_compliant_with_controlled_facts_keeps_customer_defect_statu
     ("rule_id", "raw_facts", "expected"),
     [
         (
-            "LX0609-019",
+            "LX0609-06-02-02",
             {
                 "failure_kind": "pathology_sampling_not_documented",
                 "pathology_trigger_sources": [
@@ -4216,7 +4216,7 @@ def test_reduced_non_compliant_with_controlled_facts_keeps_customer_defect_statu
             },
         ),
         (
-            "LX0609-025",
+            "LX0609-04-02-04",
             {
                 "failure_kind": "implant_information_incomplete",
                 "performed_surgery_confirmed": True,
@@ -4251,7 +4251,7 @@ def test_reduced_non_compliant_with_controlled_facts_keeps_customer_defect_statu
             },
         ),
         (
-            "LX0609-024",
+            "LX0609-04-02-03",
             {
                 "failure_kind": "lymph_node_dissection_not_documented",
                 "performed_surgery_confirmed": True,
@@ -4267,7 +4267,7 @@ def test_reduced_non_compliant_with_controlled_facts_keeps_customer_defect_statu
             },
         ),
         (
-            "LX0609-028",
+            "LX0609-05-01-01",
             {
                 "failure_kind": "prophylaxis_extension_reason_missing",
                 "incision_class": "II",
@@ -4287,7 +4287,7 @@ def test_reduced_non_compliant_with_controlled_facts_keeps_customer_defect_statu
             },
         ),
         (
-            "LX0609-034",
+            "LX0609-11-02-01",
             {
                 "failure_kind": "anesthesia_consent_missing",
                 "performed_anesthesia_confirmed": True,
@@ -4303,7 +4303,7 @@ def test_reduced_non_compliant_with_controlled_facts_keeps_customer_defect_statu
             },
         ),
         (
-            "LX0609-036",
+            "LX0609-04-04-01",
             {
                 "failure_kind": "anesthesia_visit_missing",
                 "performed_anesthesia_confirmed": True,
@@ -4324,7 +4324,7 @@ def test_reduced_non_compliant_with_controlled_facts_keeps_customer_defect_statu
             },
         ),
         (
-            "LX0609-037",
+            "LX0609-04-04-02",
             {
                 "failure_kind": "anesthesia_visit_incomplete",
                 "performed_anesthesia_confirmed": True,
@@ -4352,7 +4352,7 @@ def test_reduced_non_compliant_with_controlled_facts_keeps_customer_defect_statu
             },
         ),
         (
-            "LX0609-039",
+            "LX0609-04-01-02",
             {
                 "failure_kind": "preop_discussion_missing",
                 "performed_surgery_confirmed": True,
@@ -4368,7 +4368,7 @@ def test_reduced_non_compliant_with_controlled_facts_keeps_customer_defect_statu
             },
         ),
         (
-            "LX0609-006",
+            "LX0609-02-01-02",
             {
                 "failure_kind": "timeliness_requirement_not_met",
                 "target_document": "senior_course_record",
@@ -4392,7 +4392,7 @@ def test_reduced_non_compliant_with_controlled_facts_keeps_customer_defect_statu
             },
         ),
         (
-            "LX0609-004",
+            "LX0609-09-01-01",
             {
                 "failure_kind": "timeliness_requirement_not_met",
                 "target_document": "rescue_record",
@@ -4417,7 +4417,7 @@ def test_reduced_non_compliant_with_controlled_facts_keeps_customer_defect_statu
             },
         ),
         (
-            "LX0609-003",
+            "LX0609-04-02-01",
             {
                 "failure_kind": "surgery_record_late",
                 "performed_surgery_confirmed": True,
@@ -4439,7 +4439,7 @@ def test_reduced_non_compliant_with_controlled_facts_keeps_customer_defect_statu
             },
         ),
         (
-            "LX0609-033",
+            "LX0609-11-01-01",
             {
                 "failure_kind": "surgery_consent_signature_missing",
                 "consent_state": "signature_missing",
@@ -4455,7 +4455,7 @@ def test_reduced_non_compliant_with_controlled_facts_keeps_customer_defect_statu
             },
         ),
         (
-            "LX0609-008",
+            "LX0609-02-01-04",
             {
                 "failure_kind": "severity_course_gap_exceeded",
                 "severity": "serious",
@@ -4479,7 +4479,7 @@ def test_reduced_non_compliant_with_controlled_facts_keeps_customer_defect_statu
             },
         ),
         (
-            "LX0609-009",
+            "LX0609-02-01-05",
             {
                 "failure_kind": "critical_daily_record_missing",
                 "severity": "critical",
@@ -4534,17 +4534,17 @@ def test_legacy_native_result_preserves_only_controlled_customer_display_facts(
     )[0]
 
     assert result["customer_display_facts"] == expected
-    if rule_id == "LX0609-025":
+    if rule_id == "LX0609-04-02-04":
         assert "customer_evidence" not in result
     assert "PRIVATE_" not in repr(result)
 
 
 def test_consultation_native_invalid_facts_are_technical_error():
     result = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-020", "name": "LX0609-020"}],
+        wrapper_rules=[{"rule_id": "LX0609-03-01-01", "name": "LX0609-03-01-01"}],
         execution_results=[
             {
-                "rule_id": "LX0609-020",
+                "rule_id": "LX0609-03-01-01",
                 "status": "technical_error",
                 "reason_code": "snapshot_mismatch",
                 "findings": "规则要求未满足。",
@@ -4572,13 +4572,13 @@ def test_consultation_native_invalid_facts_are_technical_error():
 
 
 _STRICT_CUSTOMER_FACT_RULES = (
-    "LX0609-005",
-    "LX0609-009",
-    "LX0609-040",
-    "LX0609-043",
-    "LX0609-054",
-    "LX0609-064",
-    "LX0609-071",
+    "LX0609-02-01-01",
+    "LX0609-02-01-05",
+    "LX0609-04-01-03",
+    "LX0609-07-01-01",
+    "LX0609-05-01-02",
+    "LX0609-04-05-01",
+    "LX0609-10-01-01",
 )
 
 
@@ -4594,13 +4594,13 @@ def test_030_invalid_customer_display_facts_preserves_all_entry_contracts(
     private_marker = f"PRIVATE_CUSTOMER_FACT_LX0609_030_{entry_path}"
     invalid_facts = {"raw_private_text": private_marker}
     execution_result: dict[str, Any] = {
-        "rule_id": "LX0609-030",
+        "rule_id": "LX0609-04-02-02",
         "status": "non_compliant",
         "findings": "规则要求未满足。",
     }
     customer_display_facts: tuple[tuple[str, dict[str, str]], ...] = ()
     if entry_path in {"explicit", "native_explicit"}:
-        customer_display_facts = (("LX0609-030", invalid_facts),)
+        customer_display_facts = (("LX0609-04-02-02", invalid_facts),)
         if entry_path == "native_explicit":
             execution_result["metadata"] = {
                 "execution_source": "lx0609_native",
@@ -4619,7 +4619,7 @@ def test_030_invalid_customer_display_facts_preserves_all_entry_contracts(
     if entry_path == "explicit":
         with pytest.raises(ValueError, match="^invalid customer display facts$") as exc_info:
             aggregate_luxian_0609_results(
-                wrapper_rules=[{"rule_id": "LX0609-030", "name": "LX0609-030"}],
+                wrapper_rules=[{"rule_id": "LX0609-04-02-02", "name": "LX0609-04-02-02"}],
                 execution_results=[execution_result],
                 customer_display_facts=customer_display_facts,
                 format_evidence=False,
@@ -4628,7 +4628,7 @@ def test_030_invalid_customer_display_facts_preserves_all_entry_contracts(
         return
 
     result = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-030", "name": "LX0609-030"}],
+        wrapper_rules=[{"rule_id": "LX0609-04-02-02", "name": "LX0609-04-02-02"}],
         execution_results=[execution_result],
         customer_display_facts=customer_display_facts,
         format_evidence=False,
@@ -4647,10 +4647,10 @@ def test_030_public_aggregation_allows_result_without_customer_display_facts() -
     """030 不要求所有状态都携带展示 facts，保持迁移前公共入口合同。"""
 
     result = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-030", "name": "LX0609-030"}],
+        wrapper_rules=[{"rule_id": "LX0609-04-02-02", "name": "LX0609-04-02-02"}],
         execution_results=[
             {
-                "rule_id": "LX0609-030",
+                "rule_id": "LX0609-04-02-02",
                 "status": "non_compliant",
                 "findings": "规则要求未满足。",
             }
@@ -4695,7 +4695,7 @@ def test_public_aggregation_rejects_invalid_customer_display_facts(
         else:
             execution_result["customer_display_facts"] = invalid_facts
 
-    if rule_id == "LX0609-043" and entry_path != "explicit":
+    if rule_id == "LX0609-07-01-01" and entry_path != "explicit":
         result = aggregate_luxian_0609_results(
             wrapper_rules=[{"rule_id": rule_id, "name": rule_id}],
             execution_results=[execution_result],
@@ -4707,7 +4707,7 @@ def test_public_aggregation_rejects_invalid_customer_display_facts(
         assert private_marker not in repr(result)
         return
 
-    if rule_id == "LX0609-009":
+    if rule_id == "LX0609-02-01-05":
         if entry_path == "explicit":
             with pytest.raises(ValueError, match="^invalid customer display facts$") as exc_info:
                 aggregate_luxian_0609_results(
@@ -4746,10 +4746,10 @@ def test_public_aggregation_rejects_invalid_customer_display_facts(
 def test_011_invalid_executor_facts_are_isolated_as_technical_error(
     private_key: str,
 ) -> None:
-    private_marker = "PRIVATE_CUSTOMER_FACT_LX0609-011"
+    private_marker = "PRIVATE_CUSTOMER_FACT_LX0609-06-01-04"
     result, handled = finalize_luxian_0609_executor_customer_display_facts(
         result={
-            "rule_id": "LX0609-011",
+            "rule_id": "LX0609-06-01-04",
             "status": "non_compliant",
             "reason_code": "requirement_violated",
             "findings": "规则要求未满足。",
@@ -4837,7 +4837,7 @@ def test_025_multi_surgery_projection_keeps_event_facts_and_all_real_evidence() 
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-025",),
+        selected_rule_ids=("LX0609-04-02-04",),
         institute_id="aggregation-025-institute",
         patient_id="aggregation-025-patient",
         visit_id="aggregation-025-visit",
@@ -4854,7 +4854,7 @@ def test_025_multi_surgery_projection_keeps_event_facts_and_all_real_evidence() 
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=(
             RuleDecision(
-                rule_id="LX0609-025",
+                rule_id="LX0609-04-02-04",
                 snapshot_hash=session.snapshot.snapshot_hash,
                 applicability=ApplicabilityState.APPLICABLE,
                 evidence_state=EvidenceState.SUFFICIENT,
@@ -4865,16 +4865,16 @@ def test_025_multi_surgery_projection_keeps_event_facts_and_all_real_evidence() 
                 confidence=None,
             ),
         ),
-        expected_rule_ids=("LX0609-025",),
+        expected_rule_ids=("LX0609-04-02-04",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
 
     result = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-025", "name": "植入物信息"}],
+        wrapper_rules=[{"rule_id": "LX0609-04-02-04", "name": "植入物信息"}],
         execution_results=[],
         reduced_decisions=reduced,
-        customer_display_facts=(("LX0609-025", raw_facts),),
+        customer_display_facts=(("LX0609-04-02-04", raw_facts),),
         format_evidence=False,
         audit_context={
             "evidence_snapshot": session.snapshot,
@@ -4948,7 +4948,7 @@ def test_025_invalid_event_projection_fails_closed(mutate) -> None:
     mutate(facts)
 
     assert safe_luxian_0609_customer_display_facts(
-        rule_id="LX0609-025", raw=facts
+        rule_id="LX0609-04-02-04", raw=facts
     ) is None
 
 
@@ -4973,7 +4973,7 @@ def test_025_event_without_known_implant_name_keeps_migration_contract() -> None
     }
 
     assert safe_luxian_0609_customer_display_facts(
-        rule_id="LX0609-025", raw=facts
+        rule_id="LX0609-04-02-04", raw=facts
     ) == {
         "failure_kind": "implant_information_incomplete",
         "performed_surgery_confirmed": True,
@@ -5035,12 +5035,12 @@ def test_025_public_aggregation_fails_closed_for_invalid_display_facts(
         ValueError, match="lx0609_025_display_fact_status_mismatch"
     ):
         aggregate_luxian_0609_results(
-            wrapper_rules=[{"rule_id": "LX0609-025", "name": "植入物信息"}],
+            wrapper_rules=[{"rule_id": "LX0609-04-02-04", "name": "植入物信息"}],
             execution_results=[],
             reduced_decisions=(
-                _reduced_decision("LX0609-025", direction=QcDirection.DEFECT),
+                _reduced_decision("LX0609-04-02-04", direction=QcDirection.DEFECT),
             ),
-            customer_display_facts=(("LX0609-025", invalid_facts),),
+            customer_display_facts=(("LX0609-04-02-04", invalid_facts),),
             format_evidence=False,
         )
 
@@ -5090,7 +5090,7 @@ def _025_reduced_for_status(status: str) -> ReducedRuleDecision:
     if status == "not_applicable":
         return reduce_luxian_0609_rule_decision(
             RuleDecision(
-                rule_id="LX0609-025",
+                rule_id="LX0609-04-02-04",
                 snapshot_hash="a" * 64,
                 applicability=ApplicabilityState.NOT_APPLICABLE,
                 evidence_state=EvidenceState.SUFFICIENT,
@@ -5101,7 +5101,7 @@ def _025_reduced_for_status(status: str) -> ReducedRuleDecision:
             )
         )
     return _reduced_decision(
-        "LX0609-025",
+        "LX0609-04-02-04",
         direction=(
             QcDirection.DEFECT if status == "non_compliant" else QcDirection.SATISFIED
         ),
@@ -5110,7 +5110,7 @@ def _025_reduced_for_status(status: str) -> ReducedRuleDecision:
 
 def _aggregate_025_public_path(path: str, status: str, facts: dict | None) -> dict:
     kwargs = {
-        "wrapper_rules": [{"rule_id": "LX0609-025", "name": "植入物信息"}],
+        "wrapper_rules": [{"rule_id": "LX0609-04-02-04", "name": "植入物信息"}],
         "format_evidence": False,
     }
     if path == "reduced":
@@ -5118,12 +5118,12 @@ def _aggregate_025_public_path(path: str, status: str, facts: dict | None) -> di
             execution_results=[],
             reduced_decisions=(_025_reduced_for_status(status),),
             customer_display_facts=(
-                (("LX0609-025", facts),) if facts is not None else ()
+                (("LX0609-04-02-04", facts),) if facts is not None else ()
             ),
         )
     else:
         result = {
-            "rule_id": "LX0609-025",
+            "rule_id": "LX0609-04-02-04",
             "status": status,
         }
         if path == "native":
@@ -5151,7 +5151,7 @@ def _bound_025_not_applicable(reason_code: str):
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-025",),
+        selected_rule_ids=("LX0609-04-02-04",),
         institute_id="aggregation-025-institute",
         patient_id="aggregation-025-patient",
         visit_id="aggregation-025-visit",
@@ -5160,7 +5160,7 @@ def _bound_025_not_applicable(reason_code: str):
         row_reader=read,
     )
     decision = RuleDecision(
-        rule_id="LX0609-025",
+        rule_id="LX0609-04-02-04",
         snapshot_hash=session.snapshot.snapshot_hash,
         applicability=ApplicabilityState.NOT_APPLICABLE,
         evidence_state=EvidenceState.SUFFICIENT,
@@ -5174,7 +5174,7 @@ def _bound_025_not_applicable(reason_code: str):
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=(decision,),
-        expected_rule_ids=("LX0609-025",),
+        expected_rule_ids=("LX0609-04-02-04",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
@@ -5213,10 +5213,10 @@ def test_025_only_performed_event_absent_na_may_omit_facts_after_binding(
 
     session, reduced = _bound_025_not_applicable(reason_code)
     kwargs = {
-        "wrapper_rules": [{"rule_id": "LX0609-025", "name": "植入物信息"}],
+        "wrapper_rules": [{"rule_id": "LX0609-04-02-04", "name": "植入物信息"}],
         "execution_results": [],
         "reduced_decisions": reduced,
-        "customer_display_facts": (("LX0609-025", facts),) if facts is not None else (),
+        "customer_display_facts": (("LX0609-04-02-04", facts),) if facts is not None else (),
         "format_evidence": False,
         "audit_context": {
             "evidence_snapshot": session.snapshot,
@@ -5277,8 +5277,8 @@ def test_025_all_public_paths_fail_closed_for_missing_or_invalid_protected_facts
 )
 def test_025_non_decision_statuses_may_omit_customer_display_facts(status) -> None:
     result = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-025", "name": "植入物信息"}],
-        execution_results=[{"rule_id": "LX0609-025", "status": status}],
+        wrapper_rules=[{"rule_id": "LX0609-04-02-04", "name": "植入物信息"}],
+        execution_results=[{"rule_id": "LX0609-04-02-04", "status": status}],
         format_evidence=False,
     )[0]
 
@@ -5325,16 +5325,16 @@ def test_011_multi_event_details_reach_canonical_customer_finding():
         "app.services.luxian_0609_result_aggregator",
         fromlist=["aggregate_luxian_0609_results"],
     ).aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-011", "name": "检查结果记录"}],
+        wrapper_rules=[{"rule_id": "LX0609-06-01-04", "name": "检查结果记录"}],
         execution_results=[],
         reduced_decisions=(
             _reduced_decision(
-                "LX0609-011",
+                "LX0609-06-01-04",
                 direction=QcDirection.DEFECT,
                 fact_refs=("c" * 64, "d" * 64),
             ),
         ),
-        customer_display_facts=(("LX0609-011", raw_facts),),
+        customer_display_facts=(("LX0609-06-01-04", raw_facts),),
         audit_context={
             "evidence_snapshot": SimpleNamespace(
                 facts=(
@@ -5384,11 +5384,11 @@ def test_012_unknown_positive_state_is_limited_to_incomplete_review() -> None:
     }
 
     assert safe_luxian_0609_customer_display_facts(
-        rule_id="LX0609-012", raw=facts
+        rule_id="LX0609-06-01-05", raw=facts
     ) == facts
     facts["verification_kind"] = "exam_lab_requirement_checked"
     assert safe_luxian_0609_customer_display_facts(
-        rule_id="LX0609-012", raw=facts
+        rule_id="LX0609-06-01-05", raw=facts
     ) is None
 
 
@@ -5417,7 +5417,7 @@ def test_012_unknown_event_positive_state_is_limited_to_data_gap(
     }
 
     assert safe_luxian_0609_customer_display_facts(
-        rule_id="LX0609-012", raw=facts
+        rule_id="LX0609-06-01-05", raw=facts
     ) is None
 
 
@@ -5425,7 +5425,7 @@ def test_012_unknown_event_positive_state_is_limited_to_data_gap(
     ("rule_id", "raw_facts"),
     [
         (
-            "LX0609-034",
+            "LX0609-11-02-01",
             {
                 "failure_kind": "anesthesia_consent_missing",
                 "performed_anesthesia_confirmed": True,
@@ -5436,7 +5436,7 @@ def test_012_unknown_event_positive_state_is_limited_to_data_gap(
             },
         ),
         (
-            "LX0609-036",
+            "LX0609-04-04-01",
             {
                 "failure_kind": "anesthesia_visit_missing",
                 "performed_anesthesia_confirmed": True,
@@ -5446,7 +5446,7 @@ def test_012_unknown_event_positive_state_is_limited_to_data_gap(
             },
         ),
         (
-            "LX0609-039",
+            "LX0609-04-01-02",
             {
                 "failure_kind": "preop_discussion_missing",
                 "performed_surgery_confirmed": True,
@@ -5489,7 +5489,7 @@ def test_migrated_surgery_document_display_facts_do_not_restore_legacy_evidence(
     ("rule_id", "raw_facts", "snapshot_facts", "expected_evidence"),
     [
         (
-            "LX0609-010",
+            "LX0609-06-01-02",
             {
                 "failure_kind": "exam_lab_requirement_not_documented",
                 "subject": "ct_mri",
@@ -5503,7 +5503,7 @@ def test_migrated_surgery_document_display_facts_do_not_restore_legacy_evidence(
             {("exam_master", "private-exam-document-id")},
         ),
         (
-            "LX0609-012",
+            "LX0609-06-01-05",
             {
                 "failure_kind": "exam_lab_requirement_not_documented",
                 "subject": "ct_mri",
@@ -5584,10 +5584,10 @@ def test_native_045_display_facts_do_not_restore_legacy_evidence_projection():
     }
 
     result = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-045", "name": "输血记录"}],
+        wrapper_rules=[{"rule_id": "LX0609-07-02-01", "name": "输血记录"}],
         execution_results=[
             {
-                "rule_id": "LX0609-045",
+                "rule_id": "LX0609-07-02-01",
                 "status": "compliant",
                 "findings": "已找到可核对的输血病程记录。",
                 "metadata": {
@@ -5613,17 +5613,17 @@ def test_native_018_invalid_customer_display_facts_are_isolated_without_legacy_r
     private_marker = "PRIVATE_UNSUPPORTED_NATIVE_018_FACT"
 
     result = aggregate(
-        wrapper_rules=[{"rule_id": "LX0609-018", "name": "主诉能导出第一诊断"}],
+        wrapper_rules=[{"rule_id": "LX0609-01-01-02", "name": "主诉能导出第一诊断"}],
         execution_results=[
             {
-                "rule_id": "LX0609-018",
+                "rule_id": "LX0609-01-01-02",
                 "status": "non_compliant",
                 "confidence": 0.99,
                 "findings": "兼容链通用结论",
                 "metadata": {"execution_source": "compatibility"},
             },
             {
-                "rule_id": "LX0609-018",
+                "rule_id": "LX0609-01-01-02",
                 "status": "non_compliant",
                 "confidence": 0.1,
                 "findings": "原生结论",
@@ -5649,7 +5649,7 @@ def test_native_018_invalid_customer_display_facts_are_isolated_without_legacy_r
 def test_exam_lab_native_result_preserves_only_safe_explanation_facts():
     result, handled = finalize_luxian_0609_executor_customer_display_facts(
         result={
-            "rule_id": "LX0609-011",
+            "rule_id": "LX0609-06-01-04",
             "status": "non_compliant",
             "reason_code": "requirement_violated",
         },
@@ -5676,11 +5676,11 @@ def test_exam_lab_native_result_preserves_only_safe_explanation_facts():
 @pytest.mark.parametrize(
     ("rule_id", "system_gap_reason"),
     (
-        ("LX0609-041", "consent_source_unavailable"),
-        ("LX0609-042", "consent_signature_contract_unavailable"),
-        ("LX0609-043", "pretransfusion_item_contract_unavailable"),
-        ("LX0609-044", "pretransfusion_assessment_source_unavailable"),
-        ("LX0609-048", "transfusion_comparison_fields_unavailable"),
+        ("LX0609-11-03-01", "consent_source_unavailable"),
+        ("LX0609-11-03-02", "consent_signature_contract_unavailable"),
+        ("LX0609-07-01-01", "pretransfusion_item_contract_unavailable"),
+        ("LX0609-07-01-02", "pretransfusion_assessment_source_unavailable"),
+        ("LX0609-07-04-01", "transfusion_comparison_fields_unavailable"),
     ),
 )
 def test_transfusion_native_result_preserves_only_controlled_system_gap_facts(
@@ -5720,8 +5720,8 @@ def test_transfusion_native_result_preserves_only_controlled_system_gap_facts(
 @pytest.mark.parametrize(
     ("rule_id", "system_gap_reason"),
     (
-        ("LX0609-041", "transfusion_comparison_fields_unavailable"),
-        ("LX0609-048", "consent_source_unavailable"),
+        ("LX0609-11-03-01", "transfusion_comparison_fields_unavailable"),
+        ("LX0609-07-04-01", "consent_source_unavailable"),
     ),
 )
 def test_transfusion_system_gap_reason_cannot_be_borrowed_between_rules(
@@ -5756,11 +5756,11 @@ def test_transfusion_system_gap_reason_cannot_be_borrowed_between_rules(
 @pytest.mark.parametrize(
     ("rule_id", "system_gap_reason"),
     (
-        ("LX0609-041", "consent_source_unavailable"),
-        ("LX0609-042", "consent_signature_contract_unavailable"),
-        ("LX0609-043", "pretransfusion_item_contract_unavailable"),
-        ("LX0609-044", "pretransfusion_assessment_source_unavailable"),
-        ("LX0609-048", "transfusion_comparison_fields_unavailable"),
+        ("LX0609-11-03-01", "consent_source_unavailable"),
+        ("LX0609-11-03-02", "consent_signature_contract_unavailable"),
+        ("LX0609-07-01-01", "pretransfusion_item_contract_unavailable"),
+        ("LX0609-07-01-02", "pretransfusion_assessment_source_unavailable"),
+        ("LX0609-07-04-01", "transfusion_comparison_fields_unavailable"),
     ),
 )
 @pytest.mark.parametrize("entry_path", ("native", "reduced"))
@@ -5804,7 +5804,7 @@ def test_transfusion_system_gap_facts_require_data_gap_status(
     ("rule_id", "raw", "expected"),
     [
         (
-            "LX0609-041",
+            "LX0609-11-03-01",
             {
                 "verification_kind": "transfusion_consent_present",
                 "performed_transfusion_confirmed": True,
@@ -5818,7 +5818,7 @@ def test_transfusion_system_gap_facts_require_data_gap_status(
             },
         ),
         (
-            "LX0609-042",
+            "LX0609-11-03-02",
             {
                 "failure_kind": "transfusion_consent_incomplete",
                 "performed_transfusion_confirmed": True,
@@ -5832,7 +5832,7 @@ def test_transfusion_system_gap_facts_require_data_gap_status(
             },
         ),
         (
-            "LX0609-043",
+            "LX0609-07-01-01",
             {
                 "verification_kind": "pretransfusion_items_complete",
                 "performed_transfusion_confirmed": True,
@@ -5862,7 +5862,7 @@ def test_transfusion_system_gap_facts_require_data_gap_status(
             },
         ),
         (
-            "LX0609-070",
+            "LX0609-07-01-03",
             {
                 "failure_kind": "pretransfusion_items_incomplete",
                 "performed_transfusion_confirmed": True,
@@ -5884,7 +5884,7 @@ def test_transfusion_system_gap_facts_require_data_gap_status(
             },
         ),
         (
-            "LX0609-048",
+            "LX0609-07-04-01",
             {
                 "failure_kind": "transfusion_records_inconsistent",
                 "performed_intraoperative_transfusion_confirmed": True,
@@ -5926,24 +5926,24 @@ def test_transfusion_controlled_facts_are_whitelisted_without_raw_text(
 @pytest.mark.parametrize(
     ("reduced_decisions", "error_type", "message"),
     [
-        ([_reduced_decision("LX0609-029")], TypeError, "tuple"),
+        ([_reduced_decision("LX0609-04-01-01")], TypeError, "tuple"),
         (
             (
-                _reduced_decision("LX0609-029"),
-                _reduced_decision("LX0609-029"),
+                _reduced_decision("LX0609-04-01-01"),
+                _reduced_decision("LX0609-04-01-01"),
             ),
             ValueError,
             "duplicate",
         ),
         (
-            (_reduced_decision("LX0609-031"),),
+            (_reduced_decision("LX0609-04-02-05"),),
             ValueError,
             "outside customer scope",
         ),
         (
             (
-                _reduced_decision("LX0609-030"),
-                _reduced_decision("LX0609-029"),
+                _reduced_decision("LX0609-04-02-02"),
+                _reduced_decision("LX0609-04-01-01"),
             ),
             ValueError,
             "order mismatch",
@@ -5960,8 +5960,8 @@ def test_reduced_decision_scope_contract_fails_closed(
     with pytest.raises(error_type, match=message):
         aggregate(
             wrapper_rules=[
-                {"rule_id": "LX0609-029"},
-                {"rule_id": "LX0609-030"},
+                {"rule_id": "LX0609-04-01-01"},
+                {"rule_id": "LX0609-04-02-02"},
             ],
             execution_results=[],
             reduced_decisions=reduced_decisions,
@@ -5977,11 +5977,11 @@ def test_reduced_decision_rejects_duplicate_customer_wrapper_scope():
     with pytest.raises(ValueError, match="duplicate customer wrapper"):
         aggregate(
             wrapper_rules=[
-                {"rule_id": "LX0609-029"},
-                {"rule_id": "LX0609-029"},
+                {"rule_id": "LX0609-04-01-01"},
+                {"rule_id": "LX0609-04-01-01"},
             ],
             execution_results=[],
-            reduced_decisions=(_reduced_decision("LX0609-029"),),
+            reduced_decisions=(_reduced_decision("LX0609-04-01-01"),),
             format_evidence=False,
         )
 
@@ -5996,9 +5996,9 @@ def test_reduced_decision_requires_exact_tuple_type():
     ).aggregate_luxian_0609_results
     with pytest.raises(TypeError, match="tuple"):
         aggregate(
-            wrapper_rules=[{"rule_id": "LX0609-029"}],
+            wrapper_rules=[{"rule_id": "LX0609-04-01-01"}],
             execution_results=[],
-            reduced_decisions=SwitchingTuple((_reduced_decision("LX0609-029"),)),
+            reduced_decisions=SwitchingTuple((_reduced_decision("LX0609-04-01-01"),)),
             format_evidence=False,
         )
 
@@ -6016,12 +6016,12 @@ def test_reduced_decision_does_not_copy_covered_legacy_result():
         fromlist=["aggregate_luxian_0609_results"],
     ).aggregate_luxian_0609_results
     result = aggregate(
-        wrapper_rules=[{"rule_id": "LX0609-029"}],
-        execution_results=[ExplosiveLegacyResult(rule_id="LX0609-029")],
-        reduced_decisions=(_reduced_decision("LX0609-029"),),
+        wrapper_rules=[{"rule_id": "LX0609-04-01-01"}],
+        execution_results=[ExplosiveLegacyResult(rule_id="LX0609-04-01-01")],
+        reduced_decisions=(_reduced_decision("LX0609-04-01-01"),),
         format_evidence=False,
     )[0]
-    assert result["rule_id"] == "LX0609-029"
+    assert result["rule_id"] == "LX0609-04-01-01"
     assert result["status"] == "compliant"
     assert result["schema_version"] == "lx0609-customer-result-v2"
 
@@ -6032,9 +6032,9 @@ def test_empty_reduced_tuple_does_not_let_finalizer_rewrite_the_native_status():
         fromlist=["aggregate_luxian_0609_results"],
     ).aggregate_luxian_0609_results
     result = aggregate(
-        wrapper_rules=[{"rule_id": "LX0609-029", "name": "术前小结"}],
+        wrapper_rules=[{"rule_id": "LX0609-04-01-01", "name": "术前小结"}],
         execution_results=[{
-            "rule_id": "LX0609-029",
+            "rule_id": "LX0609-04-01-01",
             "status": "non_compliant",
             "metadata": {"execution_source": "lx0609_native"},
         }],
@@ -6077,19 +6077,19 @@ def test_all_five_delivery_paths_use_the_same_canonical_finalizer(monkeypatch):
     )
     cases = (
         {
-            "wrapper_rules": [{"rule_id": "LX0609-029"}],
+            "wrapper_rules": [{"rule_id": "LX0609-04-01-01"}],
             "execution_results": [],
-            "reduced_decisions": (_reduced_decision("LX0609-029"),),
+            "reduced_decisions": (_reduced_decision("LX0609-04-01-01"),),
         },
         {
-            "wrapper_rules": [{"rule_id": "LX0609-016"}],
+            "wrapper_rules": [{"rule_id": "LX0609-12-01-01"}],
             "execution_results": [],
             "gate_decisions": {
-                "LX0609-016": __import__(
+                "LX0609-12-01-01": __import__(
                     "app.services.luxian_0609_trigger_gate",
                     fromlist=["Luxian0609GateDecision"],
                 ).Luxian0609GateDecision(
-                    rule_id="LX0609-016",
+                    rule_id="LX0609-12-01-01",
                     status="data_gap",
                     reason="首次病程记录缺失",
                     data_gap_fields=("首次病程记录",),
@@ -6097,20 +6097,20 @@ def test_all_five_delivery_paths_use_the_same_canonical_finalizer(monkeypatch):
             },
         },
         {
-            "wrapper_rules": [{"rule_id": "LX0609-029"}],
+            "wrapper_rules": [{"rule_id": "LX0609-04-01-01"}],
             "execution_results": [
                 {
-                    "rule_id": "LX0609-029",
+                    "rule_id": "LX0609-04-01-01",
                     "status": "compliant",
                     "metadata": {"execution_source": "lx0609_native"},
                 }
             ],
         },
         {
-            "wrapper_rules": [{"rule_id": "LX0609-029"}],
+            "wrapper_rules": [{"rule_id": "LX0609-04-01-01"}],
             "execution_results": [
                 {
-                    "rule_id": "LX0609-029",
+                    "rule_id": "LX0609-04-01-01",
                     "status": "compliant",
                     "metadata": {"execution_source": "customer_programmatic"},
                 }
@@ -6119,7 +6119,7 @@ def test_all_five_delivery_paths_use_the_same_canonical_finalizer(monkeypatch):
         {
             "wrapper_rules": [
                 {
-                    "rule_id": "LX0609-029",
+                    "rule_id": "LX0609-04-01-01",
                     "mapped_rule_ids": ["SC-TEST-029"],
                 }
             ],
@@ -6140,11 +6140,11 @@ def test_all_five_delivery_paths_use_the_same_canonical_finalizer(monkeypatch):
         assert result["canonical_finalizer_called"] is True
 
     assert finalized_rule_ids == [
-        "LX0609-029",
-        "LX0609-016",
-        "LX0609-029",
-        "LX0609-029",
-        "LX0609-029",
+        "LX0609-04-01-01",
+        "LX0609-12-01-01",
+        "LX0609-04-01-01",
+        "LX0609-04-01-01",
+        "LX0609-04-01-01",
     ]
 
 
@@ -6159,11 +6159,11 @@ def test_trigger_gate_data_gap_uses_canonical_is_compliant_semantics():
     )
 
     result = module.aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-016"}],
+        wrapper_rules=[{"rule_id": "LX0609-12-01-01"}],
         execution_results=[],
         gate_decisions={
-            "LX0609-016": trigger_gate.Luxian0609GateDecision(
-                rule_id="LX0609-016",
+            "LX0609-12-01-01": trigger_gate.Luxian0609GateDecision(
+                rule_id="LX0609-12-01-01",
                 status="data_gap",
                 reason="首次病程记录缺失",
                 data_gap_fields=("首次病程记录",),
@@ -6184,12 +6184,12 @@ def test_native_llm_result_keeps_native_source_without_legacy_diagnostics():
     ).aggregate_luxian_0609_results
     result = aggregate(
         wrapper_rules=[{
-            "rule_id": "LX0609-041",
+            "rule_id": "LX0609-11-03-01",
             "name": "输血知情同意书",
             "mapped_rule_ids": ["SC-133", "LXE-52"],
         }],
         execution_results=[{
-            "rule_id": "LX0609-041",
+            "rule_id": "LX0609-11-03-01",
             "status": "compliant",
             "is_compliant": True,
             "findings": "满足要求",
@@ -6218,12 +6218,12 @@ def test_native_result_executor_type_is_projected_from_current_metadata():
     ).aggregate_luxian_0609_results
     result = aggregate(
         wrapper_rules=[{
-            "rule_id": "LX0609-022",
+            "rule_id": "LX0609-03-01-03",
             "name": "会诊意见明确性",
             "mapped_rule_ids": [],
         }],
         execution_results=[{
-            "rule_id": "LX0609-022",
+            "rule_id": "LX0609-03-01-03",
             "status": "compliant",
             "is_compliant": True,
             "findings": "已核对会诊意见。",
@@ -6263,12 +6263,12 @@ def test_native_result_without_executor_metadata_defaults_to_program():
     ).aggregate_luxian_0609_results
     result = aggregate(
         wrapper_rules=[{
-            "rule_id": "LX0609-029",
+            "rule_id": "LX0609-04-01-01",
             "name": "术前小结",
             "mapped_rule_ids": [],
         }],
         execution_results=[{
-            "rule_id": "LX0609-029",
+            "rule_id": "LX0609-04-01-01",
             "status": "compliant",
             "is_compliant": True,
             "metadata": {"execution_source": "lx0609_native"},
@@ -6287,12 +6287,12 @@ def test_native_copy_without_controlled_facts_does_not_restore_legacy_evidence()
     ).aggregate_luxian_0609_results
     result = aggregate(
         wrapper_rules=[{
-            "rule_id": "LX0609-017",
+            "rule_id": "LX0609-12-01-02",
             "name": "复制病历",
             "mapped_rule_ids": ["CL-275", "LXE-21"],
         }],
         execution_results=[{
-            "rule_id": "LX0609-017",
+            "rule_id": "LX0609-12-01-02",
             "status": "non_compliant",
             "is_compliant": False,
             "findings": "发现两份病程记录高度重复。",
@@ -6334,7 +6334,7 @@ def test_017_canonical_aggregation_keeps_inclusive_similarity_boundary(
         ],
     }
     assert safe_luxian_0609_customer_display_facts(
-        rule_id="LX0609-017", raw=facts
+        rule_id="LX0609-12-01-02", raw=facts
     ) == facts
 
     class _Materials:
@@ -6361,10 +6361,10 @@ def test_017_canonical_aggregation_keeps_inclusive_similarity_boundary(
         "app.services.luxian_0609_result_aggregator",
         fromlist=["aggregate_luxian_0609_results"],
     ).aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-017", "name": "不合理复制病历"}],
+        wrapper_rules=[{"rule_id": "LX0609-12-01-02", "name": "不合理复制病历"}],
         execution_results=[],
-        reduced_decisions=(_reduced_decision("LX0609-017", direction=direction),),
-        customer_display_facts=(("LX0609-017", facts),),
+        reduced_decisions=(_reduced_decision("LX0609-12-01-02", direction=direction),),
+        customer_display_facts=(("LX0609-12-01-02", facts),),
         audit_context={"evidence_materials": _Materials()},
         format_evidence=False,
     )[0]
@@ -6458,12 +6458,12 @@ def test_017_canonical_aggregation_rejects_invalid_customer_display_facts(
     ).aggregate_luxian_0609_results
 
     result = aggregate(
-        wrapper_rules=[{"rule_id": "LX0609-017", "name": "不合理复制病历"}],
+        wrapper_rules=[{"rule_id": "LX0609-12-01-02", "name": "不合理复制病历"}],
         execution_results=[],
         reduced_decisions=(
-            _reduced_decision("LX0609-017", direction=QcDirection.DEFECT),
+            _reduced_decision("LX0609-12-01-02", direction=QcDirection.DEFECT),
         ),
-        customer_display_facts=(("LX0609-017", facts),),
+        customer_display_facts=(("LX0609-12-01-02", facts),),
         format_evidence=False,
     )[0]
     assert "customer_evidence" not in result
@@ -6505,12 +6505,12 @@ def test_017_canonical_aggregation_ignores_unbound_candidate_fingerprints():
     ).aggregate_luxian_0609_results
 
     result = aggregate(
-        wrapper_rules=[{"rule_id": "LX0609-017", "name": "不合理复制病历"}],
+        wrapper_rules=[{"rule_id": "LX0609-12-01-02", "name": "不合理复制病历"}],
         execution_results=[],
         reduced_decisions=(
-            _reduced_decision("LX0609-017", direction=QcDirection.DEFECT),
+            _reduced_decision("LX0609-12-01-02", direction=QcDirection.DEFECT),
         ),
-        customer_display_facts=(("LX0609-017", facts),),
+        customer_display_facts=(("LX0609-12-01-02", facts),),
         audit_context={"evidence_materials": _Materials()},
         format_evidence=False,
     )[0]
@@ -6551,10 +6551,10 @@ def _017_fingerprint_facts() -> dict:
 
 def _017_native_result(*, facts: dict, audit_context=None, status="non_compliant"):
     return aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-017", "name": "不合理复制病历"}],
+        wrapper_rules=[{"rule_id": "LX0609-12-01-02", "name": "不合理复制病历"}],
         execution_results=[
             {
-                "rule_id": "LX0609-017",
+                "rule_id": "LX0609-12-01-02",
                 "status": status,
                 "findings": (
                     "发现两份病程记录存在实质复制。"
@@ -6885,12 +6885,12 @@ def test_017_reduced_status_must_match_terminal_facts(
     facts.pop("copy_match_document_fingerprints")
 
     result = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-017", "name": "不合理复制病历"}],
+        wrapper_rules=[{"rule_id": "LX0609-12-01-02", "name": "不合理复制病历"}],
         execution_results=[],
         reduced_decisions=(
-            _reduced_decision("LX0609-017", direction=direction),
+            _reduced_decision("LX0609-12-01-02", direction=direction),
         ),
-        customer_display_facts=(("LX0609-017", facts),),
+        customer_display_facts=(("LX0609-12-01-02", facts),),
         format_evidence=False,
     )[0]
     assert (result["status"], result["reason_code"]) == (
@@ -6903,12 +6903,12 @@ def test_017_reduced_status_must_match_terminal_facts(
 
 def test_017_reduced_fingerprints_do_not_require_legacy_evidence_materials():
     result = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-017", "name": "不合理复制病历"}],
+        wrapper_rules=[{"rule_id": "LX0609-12-01-02", "name": "不合理复制病历"}],
         execution_results=[],
         reduced_decisions=(
-            _reduced_decision("LX0609-017", direction=QcDirection.DEFECT),
+            _reduced_decision("LX0609-12-01-02", direction=QcDirection.DEFECT),
         ),
-        customer_display_facts=(("LX0609-017", _017_fingerprint_facts()),),
+        customer_display_facts=(("LX0609-12-01-02", _017_fingerprint_facts()),),
         format_evidence=False,
     )[0]
     _assert_017_direct_result_has_no_selected_evidence(result)
@@ -6919,12 +6919,12 @@ def test_017_without_fingerprints_allows_missing_evidence_materials():
     facts.pop("copy_match_document_fingerprints")
 
     result = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-017", "name": "不合理复制病历"}],
+        wrapper_rules=[{"rule_id": "LX0609-12-01-02", "name": "不合理复制病历"}],
         execution_results=[],
         reduced_decisions=(
-            _reduced_decision("LX0609-017", direction=QcDirection.DEFECT),
+            _reduced_decision("LX0609-12-01-02", direction=QcDirection.DEFECT),
         ),
-        customer_display_facts=(("LX0609-017", facts),),
+        customer_display_facts=(("LX0609-12-01-02", facts),),
         format_evidence=False,
     )[0]
 
@@ -6956,12 +6956,12 @@ def test_017_customer_evidence_fails_closed_when_record_time_is_ambiguous():
         "app.services.luxian_0609_result_aggregator",
         fromlist=["aggregate_luxian_0609_results"],
     ).aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-017", "name": "不合理复制病历"}],
+        wrapper_rules=[{"rule_id": "LX0609-12-01-02", "name": "不合理复制病历"}],
         execution_results=[],
         reduced_decisions=(
-            _reduced_decision("LX0609-017", direction=QcDirection.DEFECT),
+            _reduced_decision("LX0609-12-01-02", direction=QcDirection.DEFECT),
         ),
-        customer_display_facts=(("LX0609-017", facts),),
+        customer_display_facts=(("LX0609-12-01-02", facts),),
         audit_context={"evidence_materials": _AmbiguousMaterials()},
         format_evidence=False,
     )[0]
@@ -7007,12 +7007,12 @@ def test_017_canonical_aggregation_keeps_four_ranked_copy_pairs_without_legacy_e
         "app.services.luxian_0609_result_aggregator",
         fromlist=["aggregate_luxian_0609_results"],
     ).aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-017", "name": "不合理复制病历"}],
+        wrapper_rules=[{"rule_id": "LX0609-12-01-02", "name": "不合理复制病历"}],
         execution_results=[],
         reduced_decisions=(
-            _reduced_decision("LX0609-017", direction=QcDirection.DEFECT),
+            _reduced_decision("LX0609-12-01-02", direction=QcDirection.DEFECT),
         ),
-        customer_display_facts=(("LX0609-017", facts),),
+        customer_display_facts=(("LX0609-12-01-02", facts),),
         audit_context={"evidence_materials": _Materials()},
         format_evidence=False,
     )[0]
@@ -7031,8 +7031,8 @@ def test_attestation_rejects_every_safe_provenance_tamper(field):
 
 
 def test_032_is_independent_and_return_is_safe_only():
-    decision = GateDecision("LX0609-032", "matched", "surgery_safecheck_record", "present", "ready", (GateFactRef("a" * 64, "current_visit_surgery_confirmed", "surgery_record"),), ("LX0609-030",), ("informational_parent_only",))
-    gate = GateReport("gate-v1", "policy-v1", "visit-prog-001", "a" * 64, "b" * 64, "c" * 64, "d" * 64, "e" * 64, ("LX0609-032",), (decision,), CREATED)
+    decision = GateDecision("LX0609-04-03-01", "matched", "surgery_safecheck_record", "present", "ready", (GateFactRef("a" * 64, "current_visit_surgery_confirmed", "surgery_record"),), ("LX0609-04-02-02",), ("informational_parent_only",))
+    gate = GateReport("gate-v1", "policy-v1", "visit-prog-001", "a" * 64, "b" * 64, "c" * 64, "d" * 64, "e" * 64, ("LX0609-04-03-01",), (decision,), CREATED)
     finding = build_luxian_0609_programmatic_findings_shadow(gate_report=gate, finding_schema_version="finding-v1", finding_policy_version="policy-v1", created_at=CREATED)
     result = aggregate_luxian_0609_programmatic_findings_shadow(gate_report=gate, finding_report=finding, expected_finding_schema_version="finding-v1", expected_finding_policy_version="policy-v1", aggregation_schema_version="aggregation-v1", aggregation_policy_version="policy-v1", created_at=CREATED)
     assert result.results[0].final_state is FinalState.COMPLIANT
@@ -7041,7 +7041,7 @@ def test_032_is_independent_and_return_is_safe_only():
 
 
 def test_constructor_mapping_and_real_type_boundary_fail_closed():
-    with pytest.raises(ValueError): AggregatedRuleResult("LX0609-030", FindingKind.REQUIRED_DOCUMENT_MISSING, FinalState.COMPLIANT)
+    with pytest.raises(ValueError): AggregatedRuleResult("LX0609-04-02-02", FindingKind.REQUIRED_DOCUMENT_MISSING, FinalState.COMPLIANT)
     with pytest.raises(TypeError): aggregate_luxian_0609_programmatic_findings_shadow(gate_report=object(), finding_report=object(), expected_finding_schema_version="finding-v1", expected_finding_policy_version="policy-v1", aggregation_schema_version="aggregation-v1", aggregation_policy_version="policy-v1", created_at=CREATED)
 
 
@@ -7079,22 +7079,22 @@ def test_transfer_customer_facts_allow_only_controlled_event_fields() -> None:
     }
 
     assert safe_luxian_0609_customer_display_facts(
-        rule_id="LX0609-072", raw=facts
+        rule_id="LX0609-10-02-01", raw=facts
     ) == facts
     assert safe_luxian_0609_customer_display_facts(
-        rule_id="LX0609-072", raw={**facts, "document_id": "internal"}
+        rule_id="LX0609-10-02-01", raw={**facts, "document_id": "internal"}
     ) == facts
     assert safe_luxian_0609_customer_display_facts(
-        rule_id="LX0609-072", raw={**facts, "transfer_in_time": "not-a-time"}
+        rule_id="LX0609-10-02-01", raw={**facts, "transfer_in_time": "not-a-time"}
     ) is None
     assert safe_luxian_0609_customer_display_facts(
-        rule_id="LX0609-072", raw={**facts, "transfer_order_time": None}
+        rule_id="LX0609-10-02-01", raw={**facts, "transfer_order_time": None}
     ) is None
     assert safe_luxian_0609_customer_display_facts(
-        rule_id="LX0609-072", raw={**facts, "transfer_order_time": "2026-07-01"}
+        rule_id="LX0609-10-02-01", raw={**facts, "transfer_order_time": "2026-07-01"}
     ) is None
     assert safe_luxian_0609_customer_display_facts(
-        rule_id="LX0609-072", raw={**facts, "transfer_in_time": "2026-07-01"}
+        rule_id="LX0609-10-02-01", raw={**facts, "transfer_in_time": "2026-07-01"}
     ) is None
 
 
@@ -7108,6 +7108,8 @@ def test_004_finalizer_accepts_executor_safe_rescue_event_facts() -> None:
         "anchor_time": "2026-06-01 09:00:00",
         "observed_time": "2026-06-01 16:00:00",
         "elapsed_hours": 7.0,
+        # 原生执行器已发布的派生字段；Finalizer 只校验不补写（af1f1e4fb）。
+        "overdue_hours": 1.0,
         "rescue_events": [
             {
                 "event_index": 1,
@@ -7125,7 +7127,7 @@ def test_004_finalizer_accepts_executor_safe_rescue_event_facts() -> None:
     }
 
     safe = validate_luxian_0609_executor_customer_display_facts(
-        rule_id="LX0609-004", raw=raw
+        rule_id="LX0609-09-01-01", raw=raw
     )
 
     assert safe is not None
@@ -7172,7 +7174,7 @@ def test_004_accepts_controlled_incomplete_time_facts(
     }
 
     safe = validate_luxian_0609_executor_customer_display_facts(
-        rule_id="LX0609-004", raw=raw
+        rule_id="LX0609-09-01-01", raw=raw
     )
 
     assert safe is not None
@@ -7188,7 +7190,7 @@ def test_004_finalizer_accepts_safe_missing_record_facts() -> None:
     }
 
     assert validate_luxian_0609_executor_customer_display_facts(
-        rule_id="LX0609-004", raw=raw
+        rule_id="LX0609-09-01-01", raw=raw
     ) == {
         "failure_kind": "rescue_record_missing_after_trigger",
         "target_document": "rescue_record",
@@ -7215,7 +7217,7 @@ def test_004_rejects_inconsistent_or_unexpected_rescue_event_fields() -> None:
     }
 
     assert validate_luxian_0609_executor_customer_display_facts(
-        rule_id="LX0609-004",
+        rule_id="LX0609-09-01-01",
         raw={
             **base,
             "rescue_events": [
@@ -7224,7 +7226,7 @@ def test_004_rejects_inconsistent_or_unexpected_rescue_event_fields() -> None:
         },
     ) is None
     assert validate_luxian_0609_executor_customer_display_facts(
-        rule_id="LX0609-004",
+        rule_id="LX0609-09-01-01",
         raw={
             **base,
             "rescue_events": [

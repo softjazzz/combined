@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 from datetime import datetime, timedelta
 import pytest
+from tests.luxian_0609_published_result_support import published_lx0609_items
 
 import app.services.custom_qc_workspace_service as workspace_module
 from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
@@ -744,6 +745,94 @@ def test_aggregate_parent_job_preserves_parent_cancellation_over_child_projectio
     assert aggregate["cancellable"] is expected_cancellable
 
 
+def test_parent_usage_observation_uses_all_child_attempts(monkeypatch):
+    class _Rows:
+        def mappings(self):
+            return self
+
+        def all(self):
+            return [
+                {
+                    "id": "child-1", "status": "completed",
+                    "summary": {
+                        "luxian_0609_usage_observation_complete": True,
+                        "luxian_0609_usage_unknown_executor_keys": [],
+                    },
+                },
+                {
+                    "id": "child-2", "status": "completed",
+                    "summary": {
+                        "luxian_0609_usage_observation_complete": False,
+                        "luxian_0609_usage_unknown_executor_keys": ["exam_lab"],
+                    },
+                },
+            ]
+
+    class _Session:
+        def execute(self, _statement):
+            return _Rows()
+
+    service = CustomQCWorkspaceService()
+    monkeypatch.setattr(workspace_module, "_row_to_batch_job", lambda row, include_items=True: row)
+    aggregate = service._aggregate_parent_job(
+        _Session(),
+        {"id": "parent-1", "job_kind": "parent", "status": "running", "summary": {}},
+    )
+
+    assert aggregate["summary"]["luxian_0609_usage_observation_complete"] is False
+    assert aggregate["summary"]["luxian_0609_usage_unknown_executor_keys"] == ["exam_lab"]
+
+
+def test_parent_canceled_child_cannot_leave_cost_observation_complete(monkeypatch):
+    class _Rows:
+        def mappings(self):
+            return self
+
+        def all(self):
+            return [
+                {"id": "child-1", "status": "completed", "summary": {
+                    "luxian_0609_usage_observation_complete": True,
+                }},
+                {"id": "child-2", "status": "canceled", "summary": {
+                    "luxian_0609_usage_observation_complete": True,
+                }},
+            ]
+
+    class _Session:
+        def execute(self, _statement):
+            return _Rows()
+
+    service = CustomQCWorkspaceService()
+    monkeypatch.setattr(workspace_module, "_row_to_batch_job", lambda row, include_items=True: row)
+    aggregate = service._aggregate_parent_job(
+        _Session(),
+        {
+            "id": "parent-1", "job_kind": "parent", "status": "canceled",
+            "filters": {"rule_set_key": "luxian_0609_qc_v1"}, "summary": {},
+        },
+    )
+    assert aggregate["summary"]["luxian_0609_usage_observation_complete"] is False
+
+
+def test_public_usage_observation_only_exposes_executor_keys():
+    projected = workspace_module.project_customer_safe_batch_job(
+        {
+            "id": "job-1",
+            "status": "completed",
+            "summary": {
+                "luxian_0609_usage_observation_complete": False,
+                "luxian_0609_usage_unknown_executor_keys": [
+                    "exam_lab", "patient=secret", "exam_lab",
+                ],
+            },
+        },
+        hmac_key="test-secret",
+        _validate_luxian=False,
+    )
+    assert projected["summary"]["luxian_0609_usage_observation_complete"] is False
+    assert projected["summary"]["luxian_0609_usage_unknown_executor_keys"] == ["exam_lab"]
+
+
 def test_record_result_envelope_keeps_delivery_facts_evidence_and_model_analysis():
     item = CustomQCWorkspaceService._envelope_item_from_rule_result(
         {
@@ -751,7 +840,7 @@ def test_record_result_envelope_keeps_delivery_facts_evidence_and_model_analysis
             "institute_id": "H1",
             "patient_id": "P1",
             "visit_id": "V1",
-            "rule_id": "LX0609-018",
+            "rule_id": "LX0609-01-01-02",
             "status": "non_compliant",
             "findings": "引擎已形成的不合规结论。",
             "criterion_results": [{"key": "chief_complaint_length", "passed": False}],
@@ -780,7 +869,7 @@ def test_record_result_envelope_keeps_delivery_facts_evidence_and_model_analysis
 
 def test_record_result_envelope_normalizes_legacy_semantic_analysis_name():
     item = CustomQCWorkspaceService._envelope_item_from_rule_result(
-        {"rule_id": "LX0609-018", "semantic_analysis": "主诉症状无法区分急性下呼吸道感染。"}
+        {"rule_id": "LX0609-01-01-02", "semantic_analysis": "主诉症状无法区分急性下呼吸道感染。"}
     )
 
     assert item["model_analysis"] == "主诉症状无法区分急性下呼吸道感染。"
@@ -789,7 +878,7 @@ def test_record_result_envelope_normalizes_legacy_semantic_analysis_name():
 def test_record_result_envelope_keeps_llm_analysis_and_actionable_suggestion():
     item = CustomQCWorkspaceService._envelope_item_from_rule_result(
         {
-            "rule_id": "LX0609-018",
+            "rule_id": "LX0609-01-01-02",
             "status": "non_compliant",
             "medical_analysis": "主诉仅写咳嗽、咳痰，不能区分慢阻肺急性加重与下呼吸道感染。",
             "model_suggestion": "补充急性加重的时间、痰色变化及感染相关症状。",
@@ -803,7 +892,7 @@ def test_record_result_envelope_keeps_llm_analysis_and_actionable_suggestion():
 def test_record_result_envelope_keeps_compliant_facts_criteria_and_evidence():
     item = CustomQCWorkspaceService._envelope_item_from_rule_result(
         {
-            "rule_id": "LX0609-001",
+            "rule_id": "LX0609-01-01-01",
             "status": "compliant",
             "detail": "入院记录在入院后 2 小时内完成。",
             "actual": "记录时间：2026-07-07 16:10",
@@ -826,7 +915,7 @@ def test_record_result_envelope_keeps_compliant_facts_criteria_and_evidence():
 def test_record_result_envelope_normalizes_text_evidence_to_empty_array():
     item = CustomQCWorkspaceService._envelope_item_from_rule_result(
         {
-            "rule_id": "LX0609-003",
+            "rule_id": "LX0609-04-02-01",
             "status": "not_applicable",
             "findings": "本次不适用。",
             "evidence": "完整适用性证据未触发本质控点。",
@@ -839,7 +928,7 @@ def test_record_result_envelope_normalizes_text_evidence_to_empty_array():
 def test_record_result_envelope_keeps_data_gap_source_and_field_facts():
     item = CustomQCWorkspaceService._envelope_item_from_rule_result(
         {
-            "rule_id": "LX0609-011",
+            "rule_id": "LX0609-06-01-04",
             "status": "data_gap",
             "reason_code": "required_source_unavailable",
             "reason": "影像报告已检出，但对应病程记录来源未返回。",
@@ -861,7 +950,7 @@ def test_record_result_envelope_keeps_data_gap_source_and_field_facts():
 def test_record_result_envelope_preserves_data_gap_customer_message():
     item = CustomQCWorkspaceService._envelope_item_from_rule_result(
         {
-            "rule_id": "LX0609-011",
+            "rule_id": "LX0609-06-01-04",
             "status": "data_gap",
             "reason_code": "required_field_missing",
             "customer_message": "缺少检查报告时间，暂时无法完成本项质控。",
@@ -879,7 +968,7 @@ def test_record_result_envelope_preserves_data_gap_customer_message():
 def test_record_result_envelope_preserves_finalized_state_fields_verbatim():
     item = CustomQCWorkspaceService._envelope_item_from_rule_result(
         {
-            "rule_id": "LX0609-029",
+            "rule_id": "LX0609-04-01-01",
             "status": "uncertain",
             "result_status": "uncertain",
             "reason_code": "customer_explanation_incomplete",
@@ -909,39 +998,15 @@ def test_record_result_envelopes_are_grouped_by_full_case_coordinate():
             executed.append(statement)
             return None
 
+    # 正式执行链发布的 001 合规与超时结果；只替换不在签章内的病例坐标。
+    compliant = published_lx0609_items(admission="within")["LX0609-01-01-01"]
+    late = published_lx0609_items(admission="late")["LX0609-01-01-01"]
+    assert (compliant["status"], late["status"]) == ("compliant", "non_compliant")
     items = [
-        {
-            "institute_id": "H1",
-            "patient_id": "P1",
-            "visit_id": "V-SAME",
-            "record_id": "V-SAME",
-            "rule_id": "LX0609-001",
-            "rule_code": "LX0609-001",
-            "status": "compliant",
-            "result_status": "compliant",
-            "display_status": "compliant",
-            "is_compliant": True,
-        },
-        {
-            "institute_id": "H2",
-            "patient_id": "P2",
-            "visit_id": "V-SAME",
-            "record_id": "V-SAME",
-            "rule_id": "LX0609-001",
-            "rule_code": "LX0609-001",
-            "status": "non_compliant",
-            "result_status": "non_compliant",
-            "display_status": "non_compliant",
-            "is_compliant": False,
-            "criterion_results": [
-                {
-                    "criterion_id": "requirement_check",
-                    "kind": "semantic_relation",
-                    "status": "failed",
-                    "reason_code": "requirement_violated",
-                }
-            ],
-        },
+        {**compliant, "institute_id": "H1", "patient_id": "P1",
+         "visit_id": "V-SAME", "record_id": "V-SAME"},
+        {**late, "institute_id": "H2", "patient_id": "P2",
+         "visit_id": "V-SAME", "record_id": "V-SAME"},
     ]
 
     service._write_record_result_envelopes(

@@ -13,13 +13,13 @@ def test_existing_rounds_with_missing_registration_explain_actual_gap():
                 if source == "senior_course_record" else [])
         return SnapshotSourceRows.create(source_key=source, rows=rows, truncated=False, limit_rows=50)
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-007",), institute_id="I", patient_id="P", visit_id="V",
+        selected_rule_ids=("LX0609-02-01-03",), institute_id="I", patient_id="P", visit_id="V",
         source_schema=None, created_at="2026-01-03T09:00:00+08:00", row_reader=reader,
     )
     decision = evaluate_rule_007_typed(snapshot=session.snapshot, materials=session.materials)
     facts = rule_007_customer_display_facts(materials=session.materials, decision=decision)
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
-        decisions=(decision,), expected_rule_ids=("LX0609-007",), snapshot=session.snapshot,
+        decisions=(decision,), expected_rule_ids=("LX0609-02-01-03",), snapshot=session.snapshot,
         evidence_materials=session.materials,
     )[0]
     result = finalize_luxian_0609_reduced_customer_result(
@@ -50,13 +50,13 @@ def _run_admission_fallback_case(registration_rows, admission_rows):
         return SnapshotSourceRows.create(source_key=source, rows=rows_by_source.get(source, []), truncated=False, limit_rows=50)
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-007",), institute_id="I", patient_id="P", visit_id="V",
+        selected_rule_ids=("LX0609-02-01-03",), institute_id="I", patient_id="P", visit_id="V",
         source_schema=None, created_at="2025-08-16T09:00:00+08:00", row_reader=reader,
     )
     decision = evaluate_rule_007_typed(snapshot=session.snapshot, materials=session.materials)
     facts = rule_007_customer_display_facts(materials=session.materials, decision=decision)
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
-        decisions=(decision,), expected_rule_ids=("LX0609-007",), snapshot=session.snapshot,
+        decisions=(decision,), expected_rule_ids=("LX0609-02-01-03",), snapshot=session.snapshot,
         evidence_materials=session.materials,
     )[0]
     return finalize_luxian_0609_reduced_customer_result(
@@ -140,7 +140,7 @@ def _run_round_time_gap_case(*, discharge_time, registration_has_id=True, round_
         return SnapshotSourceRows.create(source_key=source, rows=rows_by_source.get(source, []), truncated=False, limit_rows=50)
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-007",), institute_id="I", patient_id="P", visit_id="V",
+        selected_rule_ids=("LX0609-02-01-03",), institute_id="I", patient_id="P", visit_id="V",
         source_schema=None, created_at="2026-09-09T09:00:00+08:00", row_reader=reader,
     )
     decision = evaluate_rule_007_typed(snapshot=session.snapshot, materials=session.materials)
@@ -152,7 +152,7 @@ def _run_round_time_gap_case(*, discharge_time, registration_has_id=True, round_
         assert missing_refs and missing_refs.isdisjoint(decision.fact_refs)
     facts = rule_007_customer_display_facts(materials=session.materials, decision=decision)
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
-        decisions=(decision,), expected_rule_ids=("LX0609-007",), snapshot=session.snapshot,
+        decisions=(decision,), expected_rule_ids=("LX0609-02-01-03",), snapshot=session.snapshot,
         evidence_materials=session.materials,
     )[0]
     return finalize_luxian_0609_reduced_customer_result(

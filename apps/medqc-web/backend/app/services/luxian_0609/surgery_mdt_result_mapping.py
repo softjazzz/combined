@@ -11,7 +11,7 @@ from collections.abc import Mapping
 from typing import Any
 
 
-SURGERY_MDT_CUSTOMER_RULE_ID = "LX0609-040"
+SURGERY_MDT_CUSTOMER_RULE_ID = "LX0609-04-01-03"
 _PROCEDURE_KINDS = frozenset({"surgery", "non_surgical_operation", "none", "unknown"})
 _SURGERY_LEVELS = frozenset({"一级", "二级", "三级", "四级"})
 _LEVEL_SOURCES = frozenset(

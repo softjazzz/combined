@@ -30,7 +30,7 @@ describe('QcResultFeedbackDemoListView', () => {
       data: [
         {
           id: 'feedback-1',
-          rule_id: 'LX0609-012',
+          rule_id: 'LX0609-06-01-05',
           rule_name: 'CT/MRI阳性结果分析',
           original_status: 'non_compliant',
           feedback_type: 'incorrect',
@@ -43,7 +43,7 @@ describe('QcResultFeedbackDemoListView', () => {
         },
         {
           id: 'feedback-2',
-          rule_id: 'LX0609-001',
+          rule_id: 'LX0609-01-01-01',
           original_status: 'compliant',
           feedback_type: 'correct',
           updated_at: '2026-08-18T07:00:00+00:00',
@@ -59,7 +59,7 @@ describe('QcResultFeedbackDemoListView', () => {
     expect(mocks.list).toHaveBeenCalledWith()
     expect(wrapper.text()).toContain('全部反馈')
     expect(wrapper.text()).toContain('2')
-    expect(wrapper.text()).toContain('LX0609-012')
+    expect(wrapper.text()).toContain('LX0609-06-01-05')
     expect(wrapper.text()).toContain('CT/MRI阳性结果分析')
     expect(wrapper.text()).toContain('冯丽平')
     expect(wrapper.text()).toContain('208790')

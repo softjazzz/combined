@@ -55,7 +55,7 @@ def _session(
         )
 
     return build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-078", "LX0609-079"),
+        selected_rule_ids=("LX0609-04-01-04", "LX0609-04-01-05"),
         institute_id="safe-institute",
         patient_id="safe-patient",
         visit_id="safe-visit",
@@ -103,7 +103,7 @@ async def test_empty_sources_are_not_applicable_without_model():
     session = _session()
     client = _Client("{}")
     result = await evaluate_preop_content_rules(
-        rule_ids=("LX0609-078", "LX0609-079"),
+        rule_ids=("LX0609-04-01-04", "LX0609-04-01-05"),
         snapshot=session.snapshot,
         materials=session.materials,
         llm_client=client,
@@ -131,7 +131,7 @@ def test_running_preop_rules_do_not_request_mr_surgery():
         )
 
     build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-078", "LX0609-079"),
+        selected_rule_ids=("LX0609-04-01-04", "LX0609-04-01-05"),
         institute_id="safe-institute",
         patient_id="safe-patient",
         visit_id="safe-visit",
@@ -159,7 +159,7 @@ def test_079_only_reads_its_own_discussion_source():
         )
 
     build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-079",),
+        selected_rule_ids=("LX0609-04-01-05",),
         institute_id="safe-institute",
         patient_id="safe-patient",
         visit_id="safe-visit",
@@ -231,7 +231,7 @@ async def test_both_rules_share_one_call_and_missing_is_per_document():
         )
     )
     result = await evaluate_preop_content_rules(
-        rule_ids=("LX0609-078", "LX0609-079"),
+        rule_ids=("LX0609-04-01-04", "LX0609-04-01-05"),
         snapshot=session.snapshot,
         materials=session.materials,
         llm_client=client,
@@ -288,7 +288,7 @@ async def test_real_client_compatible_generate_signature_is_used():
         ),
     )
     result = await evaluate_preop_content_rules(
-        rule_ids=("LX0609-078",),
+        rule_ids=("LX0609-04-01-04",),
         snapshot=session.snapshot,
         materials=session.materials,
         llm_client=client,
@@ -351,13 +351,13 @@ async def test_two_procedures_are_matched_and_checked_within_their_own_events():
         )
     )
     result = await evaluate_preop_content_rules(
-        rule_ids=("LX0609-078",),
+        rule_ids=("LX0609-04-01-04",),
         snapshot=session.snapshot,
         materials=session.materials,
         llm_client=client,
     )
     decision = result.decisions[0]
-    facts = dict(result.customer_display_facts)["LX0609-078"]
+    facts = dict(result.customer_display_facts)["LX0609-04-01-04"]
     assert decision.qc_direction.value == "defect"
     assert facts["missing_fields"] == ["precautions"]
     assert [item["event_index"] for item in facts["documents"]] == [1, 2]
@@ -378,7 +378,7 @@ async def test_same_name_surgeries_without_time_narrowing_are_data_gap():
         ),
     )
     result = await evaluate_preop_content_rules(
-        rule_ids=("LX0609-078",),
+        rule_ids=("LX0609-04-01-04",),
         snapshot=session.snapshot,
         materials=session.materials,
         llm_client=_Client(
@@ -411,7 +411,7 @@ async def test_single_surgery_conflicting_explicit_procedure_is_data_gap_without
         ),
     )
     result = await evaluate_preop_content_rules(
-        rule_ids=("LX0609-078",),
+        rule_ids=("LX0609-04-01-04",),
         snapshot=session.snapshot,
         materials=session.materials,
         llm_client=_Client(
@@ -426,7 +426,7 @@ async def test_single_surgery_conflicting_explicit_procedure_is_data_gap_without
     )
 
     decision = result.decisions[0]
-    facts = dict(result.customer_display_facts)["LX0609-078"]
+    facts = dict(result.customer_display_facts)["LX0609-04-01-04"]
     assert (
         decision.applicability.value,
         decision.evidence_state.value,
@@ -480,7 +480,7 @@ async def test_single_surgery_identity_variant_is_data_gap_without_event_attribu
         ),
     )
     result = await evaluate_preop_content_rules(
-        rule_ids=("LX0609-078",),
+        rule_ids=("LX0609-04-01-04",),
         snapshot=session.snapshot,
         materials=session.materials,
         llm_client=_Client(
@@ -495,7 +495,7 @@ async def test_single_surgery_identity_variant_is_data_gap_without_event_attribu
     )
 
     decision = result.decisions[0]
-    facts = dict(result.customer_display_facts)["LX0609-078"]
+    facts = dict(result.customer_display_facts)["LX0609-04-01-04"]
     assert (
         decision.applicability.value,
         decision.evidence_state.value,
@@ -543,7 +543,7 @@ async def test_same_name_surgeries_on_different_days_use_structured_planned_time
         ),
     )
     result = await evaluate_preop_content_rules(
-        rule_ids=("LX0609-078",),
+        rule_ids=("LX0609-04-01-04",),
         snapshot=session.snapshot,
         materials=session.materials,
         llm_client=_Client(
@@ -556,7 +556,7 @@ async def test_same_name_surgeries_on_different_days_use_structured_planned_time
             )
         ),
     )
-    facts = dict(result.customer_display_facts)["LX0609-078"]
+    facts = dict(result.customer_display_facts)["LX0609-04-01-04"]
     assert result.decisions[0].qc_direction.value == "satisfied"
     assert facts["documents"][0]["event_index"] == 2
 
@@ -585,7 +585,7 @@ async def test_same_name_surgeries_use_planned_time_label_from_synced_content():
         ),
     )
     result = await evaluate_preop_content_rules(
-        rule_ids=("LX0609-078",),
+        rule_ids=("LX0609-04-01-04",),
         snapshot=session.snapshot,
         materials=session.materials,
         llm_client=_Client(
@@ -598,7 +598,7 @@ async def test_same_name_surgeries_use_planned_time_label_from_synced_content():
             )
         ),
     )
-    facts = dict(result.customer_display_facts)["LX0609-078"]
+    facts = dict(result.customer_display_facts)["LX0609-04-01-04"]
     assert result.decisions[0].qc_direction.value == "satisfied"
     assert facts["documents"][0]["event_index"] == 2
 
@@ -629,7 +629,7 @@ async def test_same_name_same_day_surgeries_require_exact_planned_minute():
         ),
     )
     result = await evaluate_preop_content_rules(
-        rule_ids=("LX0609-078",),
+        rule_ids=("LX0609-04-01-04",),
         snapshot=session.snapshot,
         materials=session.materials,
         llm_client=_Client(
@@ -642,7 +642,7 @@ async def test_same_name_same_day_surgeries_require_exact_planned_minute():
             )
         ),
     )
-    facts = dict(result.customer_display_facts)["LX0609-078"]
+    facts = dict(result.customer_display_facts)["LX0609-04-01-04"]
     assert result.decisions[0].qc_direction.value == "satisfied"
     assert facts["documents"][0]["event_index"] == 2
 
@@ -668,7 +668,7 @@ async def test_named_surgery_with_conflicting_planned_clock_time_is_data_gap():
         ),
     )
     result = await evaluate_preop_content_rules(
-        rule_ids=("LX0609-078",),
+        rule_ids=("LX0609-04-01-04",),
         snapshot=session.snapshot,
         materials=session.materials,
         llm_client=_Client(
@@ -710,7 +710,7 @@ async def test_same_name_same_day_surgeries_with_date_only_planned_time_are_data
         ),
     )
     result = await evaluate_preop_content_rules(
-        rule_ids=("LX0609-078",),
+        rule_ids=("LX0609-04-01-04",),
         snapshot=session.snapshot,
         materials=session.materials,
         llm_client=_Client(
@@ -747,7 +747,7 @@ async def test_named_surgery_with_conflicting_planned_date_is_data_gap():
         ),
     )
     result = await evaluate_preop_content_rules(
-        rule_ids=("LX0609-078",),
+        rule_ids=("LX0609-04-01-04",),
         snapshot=session.snapshot,
         materials=session.materials,
         llm_client=_Client(
@@ -781,7 +781,7 @@ async def test_two_summary_roles_can_complete_one_surgery_only_within_the_event(
         ),
     )
     result = await evaluate_preop_content_rules(
-        rule_ids=("LX0609-078",),
+        rule_ids=("LX0609-04-01-04",),
         snapshot=session.snapshot,
         materials=session.materials,
         llm_client=_Client(
@@ -816,7 +816,7 @@ async def test_document_that_names_two_surgeries_is_ambiguous():
         ),
     )
     result = await evaluate_preop_content_rules(
-        rule_ids=("LX0609-078",),
+        rule_ids=("LX0609-04-01-04",),
         snapshot=session.snapshot,
         materials=session.materials,
         llm_client=_Client(
@@ -845,7 +845,7 @@ async def test_confirmed_missing_is_not_hidden_by_ambiguous_document_without_tha
         ),
     )
     result = await evaluate_preop_content_rules(
-        rule_ids=("LX0609-078",),
+        rule_ids=("LX0609-04-01-04",),
         snapshot=session.snapshot,
         materials=session.materials,
         llm_client=_Client(
@@ -891,7 +891,7 @@ async def test_ambiguous_document_cannot_fill_confirmed_missing_field_across_eve
         ),
     )
     result = await evaluate_preop_content_rules(
-        rule_ids=("LX0609-078",),
+        rule_ids=("LX0609-04-01-04",),
         snapshot=session.snapshot,
         materials=session.materials,
         llm_client=_Client(
@@ -941,7 +941,7 @@ async def test_invalid_document_id_or_quote_is_data_gap():
         }
     )
     result = await evaluate_preop_content_rules(
-        rule_ids=("LX0609-078",),
+        rule_ids=("LX0609-04-01-04",),
         snapshot=session.snapshot,
         materials=session.materials,
         llm_client=_Client(payload),
@@ -962,7 +962,7 @@ async def test_truncated_source_is_data_gap_without_model():
     )
     client = _Client("{}")
     result = await evaluate_preop_content_rules(
-        rule_ids=("LX0609-078",),
+        rule_ids=("LX0609-04-01-04",),
         snapshot=session.snapshot,
         materials=session.materials,
         llm_client=client,
@@ -975,7 +975,7 @@ async def test_truncated_source_is_data_gap_without_model():
 async def test_source_query_error_is_delivered_as_data_gap_without_model():
     session = _session(error_sources=("presurg_summary",))
     result = await evaluate_preop_content_rules(
-        rule_ids=("LX0609-078",),
+        rule_ids=("LX0609-04-01-04",),
         snapshot=session.snapshot,
         materials=session.materials,
         llm_client=_Client("{}"),
@@ -1034,13 +1034,13 @@ async def test_discussion_structured_fields_are_not_treated_as_blank_document():
         )
     )
     result = await evaluate_preop_content_rules(
-        rule_ids=("LX0609-079",),
+        rule_ids=("LX0609-04-01-05",),
         snapshot=session.snapshot,
         materials=session.materials,
         llm_client=client,
     )
     assert result.decisions[0].qc_direction.value == "defect"
-    assert "recorder_signature" not in dict(result.customer_display_facts)["LX0609-079"][
+    assert "recorder_signature" not in dict(result.customer_display_facts)["LX0609-04-01-05"][
         "missing_fields"
     ]
     assert result.llm_call_count == 1 and client.prompts
@@ -1092,7 +1092,7 @@ async def test_submitter_is_deterministic_recorder_signature_when_model_returns_
     )
     session = _session(discussion=(row,))
     result = await evaluate_preop_content_rules(
-        rule_ids=("LX0609-079",),
+        rule_ids=("LX0609-04-01-05",),
         snapshot=session.snapshot,
         materials=session.materials,
         llm_client=client,
@@ -1103,7 +1103,7 @@ async def test_submitter_is_deterministic_recorder_signature_when_model_returns_
         "satisfied",
     )
     assert decision.reason_code == "requirement_satisfied"
-    assert dict(result.customer_display_facts)["LX0609-079"]["missing_fields"] == []
+    assert dict(result.customer_display_facts)["LX0609-04-01-05"]["missing_fields"] == []
 
 
 @pytest.mark.asyncio
@@ -1125,7 +1125,7 @@ async def test_079_content_is_not_blocked_by_unmatched_multi_surgery_association
         ),
     )
     result = await evaluate_preop_content_rules(
-        rule_ids=("LX0609-079",),
+        rule_ids=("LX0609-04-01-05",),
         snapshot=session.snapshot,
         materials=session.materials,
         llm_client=_Client(
@@ -1144,7 +1144,7 @@ async def test_079_content_is_not_blocked_by_unmatched_multi_surgery_association
         "satisfied",
     )
     assert decision.reason_code == "requirement_satisfied"
-    facts = dict(result.customer_display_facts)["LX0609-079"]
+    facts = dict(result.customer_display_facts)["LX0609-04-01-05"]
     assert facts["documents"][0]["association_state"] == "not_required"
 
 
@@ -1166,7 +1166,7 @@ async def test_host_summary_signature_satisfies_when_submitter_is_empty():
     )
     session = _session(discussion=(row,))
     result = await evaluate_preop_content_rules(
-        rule_ids=("LX0609-079",),
+        rule_ids=("LX0609-04-01-05",),
         snapshot=session.snapshot,
         materials=session.materials,
         llm_client=client,
@@ -1193,7 +1193,7 @@ async def test_missing_submitter_and_body_signature_is_non_compliant():
     )
     session = _session(discussion=(row,))
     result = await evaluate_preop_content_rules(
-        rule_ids=("LX0609-079",),
+        rule_ids=("LX0609-04-01-05",),
         snapshot=session.snapshot,
         materials=session.materials,
         llm_client=client,
@@ -1204,7 +1204,7 @@ async def test_missing_submitter_and_body_signature_is_non_compliant():
         "defect",
     )
     assert decision.reason_code == "requirement_violated"
-    assert dict(result.customer_display_facts)["LX0609-079"]["missing_fields"] == [
+    assert dict(result.customer_display_facts)["LX0609-04-01-05"]["missing_fields"] == [
         "recorder_signature"
     ]
 
@@ -1230,7 +1230,7 @@ async def test_v2_schema_whitelists_only_discussion_suggestion():
     )
     session = _session(discussion=(row,))
     await evaluate_preop_content_rules(
-        rule_ids=("LX0609-079",),
+        rule_ids=("LX0609-04-01-05",),
         snapshot=session.snapshot,
         materials=session.materials,
         llm_client=client,
@@ -1261,7 +1261,7 @@ async def test_json_v2_schema_still_whitelists_only_discussion_suggestion():
     )
     session = _session(discussion=(row,))
     await evaluate_preop_content_rules(
-        rule_ids=("LX0609-079",),
+        rule_ids=("LX0609-04-01-05",),
         snapshot=session.snapshot,
         materials=session.materials,
         llm_client=client,

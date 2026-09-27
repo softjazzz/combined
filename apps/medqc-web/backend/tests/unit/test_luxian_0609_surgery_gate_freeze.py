@@ -21,7 +21,7 @@ from app.services.luxian_0609.surgery_gate_result_mapping import (
 from app.services.luxian_0609_result_aggregator import aggregate_luxian_0609_results
 
 
-RULE_IDS = ("LX0609-003", "LX0609-024", "LX0609-025", "LX0609-028", "LX0609-031", "LX0609-033")
+RULE_IDS = ("LX0609-04-02-01", "LX0609-04-02-03", "LX0609-04-02-04", "LX0609-05-01-01", "LX0609-04-02-05", "LX0609-11-01-01")
 
 
 def test_surgery_gate_rules_do_not_return_to_result_aggregator() -> None:
@@ -39,7 +39,7 @@ def test_surgery_gate_rules_do_not_return_to_result_aggregator() -> None:
 
 def test_surgery_gate_031_keeps_single_event_signer_failure_contract() -> None:
     assert safe_surgery_gate_customer_display_facts(
-        rule_id="LX0609-031",
+        rule_id="LX0609-04-02-05",
         raw={
             "failure_kind": "surgery_signer_not_qualified",
             "performed_surgery_confirmed": True,
@@ -258,10 +258,10 @@ async def test_surgery_gate_freeze_real_chain_locks_states_facts_copy_and_eviden
     assert execution.prompt_tokens == 101
     assert execution.total_tokens == 112
     assert len(client.prompts) == 1
-    assert all(rule_id in client.prompts[0] for rule_id in RULE_IDS if rule_id not in {"LX0609-003", "LX0609-031"})
+    assert all(rule_id in client.prompts[0] for rule_id in RULE_IDS if rule_id not in {"LX0609-04-02-01", "LX0609-04-02-05"})
 
     facts = dict(execution.customer_display_facts)
-    assert facts["LX0609-003"] == {
+    assert facts["LX0609-04-02-01"] == {
         "failure_kind": "surgery_record_within_threshold",
         "performed_surgery_confirmed": True,
         "surgery_end_time": "2026-01-01 10:00:00",
@@ -271,11 +271,11 @@ async def test_surgery_gate_freeze_real_chain_locks_states_facts_copy_and_eviden
         "source_label": "手术记录",
         "source_document_id": "surgery-gate-1",
     }
-    assert facts["LX0609-025"]["checked_fields"] == [
+    assert facts["LX0609-04-02-04"]["checked_fields"] == [
         "implant_name", "implant_type", "implant_specification", "implant_material", "implant_quantity"
     ]
-    assert facts["LX0609-025"]["source_document_id"] == "surgery-gate-1"
-    assert facts["LX0609-031"] == {
+    assert facts["LX0609-04-02-04"]["source_document_id"] == "surgery-gate-1"
+    assert facts["LX0609-04-02-05"] == {
         "verification_kind": "surgery_signature_confirmed",
         "performed_surgery_confirmed": True,
         "surgeon_signature_matches": True,
@@ -288,12 +288,12 @@ async def test_surgery_gate_freeze_real_chain_locks_states_facts_copy_and_eviden
         "compliant", "compliant", "compliant", "data_gap", "compliant", "compliant"
     ]
     assert all(item["criterion_results"] == [] for item in customer_results)
-    assert "24 小时内" in by_rule_id["LX0609-003"]["findings"]
-    assert "植入物" in by_rule_id["LX0609-025"]["findings"]
-    assert "术者" in by_rule_id["LX0609-031"]["findings"]
+    assert "24 小时内" in by_rule_id["LX0609-04-02-01"]["findings"]
+    assert "植入物" in by_rule_id["LX0609-04-02-04"]["findings"]
+    assert "术者" in by_rule_id["LX0609-04-02-05"]["findings"]
     assert {
         (item["source_type"], item["source_document_id"])
-        for item in by_rule_id["LX0609-033"]["customer_evidence"]
+        for item in by_rule_id["LX0609-11-01-01"]["customer_evidence"]
     } == {
         ("surgery_record", "surgery-gate-1"),
         ("surgery_inform_consent", "consent-gate-1"),
@@ -358,7 +358,7 @@ async def test_surgery_gate_freeze_absent_and_source_error_remain_distinct() -> 
     assert [item["status"] for item in absent_results] == ["not_applicable"] * len(RULE_IDS)
     assert [item["reason_code"] for item in absent_results] == ["performed_event_absent"] * len(RULE_IDS)
     absent_by_rule_id = {item["rule_id"]: item for item in absent_results}
-    assert "customer_display_facts" not in absent_by_rule_id["LX0609-025"]
+    assert "customer_display_facts" not in absent_by_rule_id["LX0609-04-02-04"]
 
     errored, errored_reduced, errored_results, _ = await _execute_and_aggregate(
         rows_by_source={}, client=None, failing_sources=frozenset({"surgery_record"})
@@ -396,7 +396,7 @@ async def test_surgery_gate_freeze_two_surgeries_do_not_hide_an_unsigned_event()
         {"surgeon": "术者乙", "main_surgery_sign": ""},
     ]
     execution, reduced, customer_results, _ = await _execute_and_aggregate(
-        rows_by_source=rows, client=None, rule_ids=("LX0609-031",)
+        rows_by_source=rows, client=None, rule_ids=("LX0609-04-02-05",)
     )
 
     assert execution.llm_call_count == execution.total_tokens == 0
@@ -428,7 +428,7 @@ async def test_surgery_gate_freeze_031_only_projects_the_selected_signature_sour
     execution, reduced, customer_results, _ = await _execute_and_aggregate(
         rows_by_source=rows,
         client=None,
-        rule_ids=("LX0609-031",),
+        rule_ids=("LX0609-04-02-05",),
     )
 
     assert execution.llm_call_count == execution.total_tokens == 0
@@ -469,7 +469,7 @@ async def test_surgery_gate_freeze_missing_consent_keeps_every_trigger_coordinat
     execution, reduced, customer_results, _ = await _execute_and_aggregate(
         rows_by_source=rows,
         client=None,
-        rule_ids=("LX0609-033",),
+        rule_ids=("LX0609-11-01-01",),
     )
 
     assert execution.llm_call_count == execution.total_tokens == 0
@@ -518,7 +518,7 @@ async def test_surgery_gate_freeze_controlled_llm_failure_semantics(
     else:
         assert execution.prompt_tokens == 101
         assert execution.total_tokens == 112
-    assert by_rule_id["LX0609-024"].final_state.value == expected_state
-    assert by_rule_id["LX0609-024"].reason_code == expected_reason
-    assert by_customer_rule_id["LX0609-024"]["status"] == expected_state
-    assert by_customer_rule_id["LX0609-024"]["reason_code"] == expected_reason
+    assert by_rule_id["LX0609-04-02-03"].final_state.value == expected_state
+    assert by_rule_id["LX0609-04-02-03"].reason_code == expected_reason
+    assert by_customer_rule_id["LX0609-04-02-03"]["status"] == expected_state
+    assert by_customer_rule_id["LX0609-04-02-03"]["reason_code"] == expected_reason

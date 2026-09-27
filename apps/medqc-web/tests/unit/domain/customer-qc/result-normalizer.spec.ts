@@ -6,24 +6,44 @@ import {
 } from '@/domain/customer-qc/result-normalizer'
 
 describe('normalizeCustomerQcResult', () => {
+  it.each([
+    ['LX0609-001', 'LX0609-01-01-01'],
+    ['LX0609-01-01-01', 'LX0609-001'],
+    ['LX0609-01-01-01', 'LX0609-01-02-01'],
+    ['LX0609-01-00-01', 'LX0609-01-00-01'],
+  ])('不把冲突身份归到任一规则：%s / %s', (rule_id, rule_code) => {
+    expect(normalizeCustomerQcResult({ rule_id, rule_code, status: 'compliant' }).ruleId).toBe('UNKNOWN')
+  })
+
+  it('旧三位泸县编号被拒绝，不在结果主链中静默保留', () => {
+    const result = normalizeCustomerQcResult({
+      rule_id: 'LX0609-001',
+      rule_code: 'LX0609-001',
+      status: 'non_compliant',
+      reason_code: 'requirement_violated',
+    })
+
+    expect(result.ruleId).toBe('UNKNOWN')
+  })
+
   it('安全 DTO 直接复用后端受控解释，页面不再维护第二套质控结论', () => {
     const result = normalizeCustomerQcResult({
       schema_version: 'customer-qc-result-v1',
       explanation_contract_version: 'lx0609-customer-explanation-v1',
-      rule_id: 'LX0609-001',
+      rule_id: 'LX0609-01-01-01',
       status: 'non_compliant',
       reason_code: 'deadline_exceeded',
-      conclusion: 'LX0609-001：入院记录完成时间超过24小时。',
+      conclusion: 'LX0609-01-01-01：入院记录完成时间超过24小时。',
       detail: '入院记录未在规定时限内完成。',
-      requirement: 'LX0609-001：入院记录应在入院后24小时内完成。',
+      requirement: 'LX0609-01-01-01：入院记录应在入院后24小时内完成。',
       suggestion: '请及时完成入院记录并核对记录时间。',
       findings: 'PRIVATE_RAW_FINDING_MUST_NOT_WIN',
     })
 
     expect(result.display).toMatchObject({
-      summary: 'LX0609-001：入院记录完成时间超过24小时。',
+      summary: 'LX0609-01-01-01：入院记录完成时间超过24小时。',
       detail: '入院记录未在规定时限内完成。',
-      requirement: 'LX0609-001：入院记录应在入院后24小时内完成。',
+      requirement: 'LX0609-01-01-01：入院记录应在入院后24小时内完成。',
       suggestion: '请及时完成入院记录并核对记录时间。',
     })
     expect(JSON.stringify(result)).not.toContain('PRIVATE_RAW_FINDING_MUST_NOT_WIN')
@@ -32,7 +52,7 @@ describe('normalizeCustomerQcResult', () => {
   it('缺少解释合同版本时保留执行器状态并隐藏伪造文案', () => {
     const result = normalizeCustomerQcResult({
       schema_version: 'customer-qc-result-v1',
-      rule_id: 'LX0609-001',
+      rule_id: 'LX0609-01-01-01',
       status: 'non_compliant',
       reason_code: 'threshold_exceeded',
       conclusion: 'PRIVATE_UNTRUSTED_CONCLUSION',
@@ -51,7 +71,7 @@ describe('normalizeCustomerQcResult', () => {
 
   it('通用不合规占位文案不能通过客户可解释质量门', () => {
     const raw = {
-      rule_id: 'LX0609-040',
+      rule_id: 'LX0609-04-01-03',
       status: 'non_compliant',
       reason_code: 'requirement_violated',
       conclusion: '发现该质控点对应的明确问题。',
@@ -71,7 +91,7 @@ describe('normalizeCustomerQcResult', () => {
   it('75 条 LX0609 规则缺少可核对事实时均保留状态且不回退泛化文案', () => {
     const results = Array.from({ length: 75 }, (_, index) =>
       normalizeCustomerQcResult({
-        rule_id: `LX0609-${String(index + 1).padStart(3, '0')}`,
+        rule_id: `LX0609-${String(index + 1).padStart(2, '0')}-01-01`,
         status: 'non_compliant',
         reason_code: 'requirement_violated',
       }),
@@ -84,9 +104,9 @@ describe('normalizeCustomerQcResult', () => {
     }
   })
 
-  it('将 LX0609-018 的受控事实转换为客户可读明细，而不携带主诉正文', () => {
+  it('将 LX0609-01-01-02 的受控事实转换为客户可读明细，而不携带主诉正文', () => {
     const result = normalizeCustomerQcResult({
-      rule_id: 'LX0609-018',
+      rule_id: 'LX0609-01-01-02',
       status: 'non_compliant',
       reason_code: 'complaint_too_long',
       criterion_results: [
@@ -121,7 +141,7 @@ describe('normalizeCustomerQcResult', () => {
     })
 
     expect(result).toMatchObject({
-      ruleId: 'LX0609-018',
+      ruleId: 'LX0609-01-01-02',
       decisionStatus: 'non_compliant',
       evidenceAvailability: 'available',
       display: {
@@ -148,14 +168,14 @@ describe('normalizeCustomerQcResult', () => {
     const result = normalizeCustomerQcResult({
       schema_version: 'customer-qc-result-v1',
       explanation_contract_version: 'lx0609-customer-explanation-v1',
-      rule_id: 'LX0609-018',
+      rule_id: 'LX0609-01-01-02',
       status: 'non_compliant',
       reason_code: 'complaint_too_long',
       conclusion:
         '入院记录“主诉”字段共28字，超过20字上限。主诉与第一诊断的对应关系判断通过，本次仅因主诉过长判定不合规。',
       detail:
         '本项按两个独立子项完成核对：\n1. 主诉书写规范性：主诉长度为28字，超过20字上限。\n2. 诊断指向性：基于本次可用的主诉材料与第一诊断完成对应关系判断；两者诊断方向一致，诊断指向子项通过。\n综合判定：诊断指向子项通过，本次仅因主诉过长判定不合规。',
-      requirement: 'LX0609-018：主诉应能导出第一诊断，且主诉长度应不超过20字。',
+      requirement: 'LX0609-01-01-02：主诉应能导出第一诊断，且主诉长度应不超过20字。',
       suggestion: '请精简主诉并保留诊断指向信息，确保与第一诊断一致。',
       criterion_results: [
         {
@@ -198,16 +218,16 @@ describe('normalizeCustomerQcResult', () => {
     })
   })
 
-  it('缺少字段级事实时，不把 LX0609-025 旧结果展示为确定问题', () => {
+  it('缺少字段级事实时，不把 LX0609-04-02-04 旧结果展示为确定问题', () => {
     const result = normalizeCustomerQcResult({
-      rule_id: 'LX0609-025',
+      rule_id: 'LX0609-04-02-04',
       status: 'non_compliant',
       reason_code: 'implant_information_incomplete',
       findings: '手术记录中存在原文片段，不得返回给客户展示模型。',
     })
 
     expect(result).toMatchObject({
-      ruleId: 'LX0609-025',
+      ruleId: 'LX0609-04-02-04',
       decisionStatus: 'non_compliant',
       display: {
         summary: '执行器已判定发现质控问题，但当前客户解释资料不完整。',
@@ -217,9 +237,9 @@ describe('normalizeCustomerQcResult', () => {
     expect(JSON.stringify(result)).not.toContain('原文片段')
   })
 
-  it('为 LX0609-025 展示受控字段级缺项，不回显手术原文', () => {
+  it('为 LX0609-04-02-04 展示受控字段级缺项，不回显手术原文', () => {
     const raw = {
-      rule_id: 'LX0609-025',
+      rule_id: 'LX0609-04-02-04',
       status: 'non_compliant',
       reason_code: 'requirement_violated',
       customer_display_facts: {
@@ -263,7 +283,7 @@ describe('normalizeCustomerQcResult', () => {
     const result = normalizeCustomerQcResult({
       schema_version: 'customer-qc-result-v1',
       explanation_contract_version: 'lx0609-customer-explanation-v1',
-      rule_id: 'LX0609-025',
+      rule_id: 'LX0609-04-02-04',
       status: 'non_compliant',
       conclusion: '发现该质控点对应的明确问题。',
       detail: '受控证据表明本次记录未满足质控要求。',
@@ -291,7 +311,7 @@ describe('normalizeCustomerQcResult', () => {
 
   it('025拒绝混入条码的旧字段清单，不对其余字段做部分交付', () => {
     const result = normalizeCustomerQcResult({
-      rule_id: 'LX0609-025',
+      rule_id: 'LX0609-04-02-04',
       status: 'non_compliant',
       customer_display_facts: {
         failure_kind: 'implant_information_incomplete',
@@ -401,7 +421,7 @@ describe('normalizeCustomerQcResult', () => {
     },
   ])('025不从不可信来源或未确认手术事实生成专属描述', ({ status, facts, forbidden }) => {
     const result = normalizeCustomerQcResult({
-      rule_id: 'LX0609-025',
+      rule_id: 'LX0609-04-02-04',
       status,
       customer_display_facts: facts,
     })
@@ -411,7 +431,7 @@ describe('normalizeCustomerQcResult', () => {
 
   it('为已实施手术缺失目标文书展示确定性原因，不把来源不可用伪装为缺文书', () => {
     const raw = {
-      rule_id: 'LX0609-030',
+      rule_id: 'LX0609-04-02-02',
       status: 'non_compliant',
       customer_display_facts: {
         failure_kind: 'surgery_document_missing',
@@ -441,9 +461,9 @@ describe('normalizeCustomerQcResult', () => {
     expect(unavailable.display.summary).not.toContain('未找到手术记录')
   })
 
-  it('为 LX0609-017 展示两份被比较文书、记录时间和相似度，不透传正文', () => {
+  it('为 LX0609-12-01-02 展示两份被比较文书、记录时间和相似度，不透传正文', () => {
     const raw = {
-      rule_id: 'LX0609-017',
+      rule_id: 'LX0609-12-01-02',
       status: 'non_compliant',
       reason_code: 'threshold_exceeded',
       customer_display_facts: {
@@ -468,9 +488,9 @@ describe('normalizeCustomerQcResult', () => {
     expect(JSON.stringify(result)).not.toContain('PRIVATE_COURSE_TEXT')
   })
 
-  it('为 LX0609-016 明确展示相似度、阈值和超出幅度', () => {
+  it('为 LX0609-12-01-01 明确展示相似度、阈值和超出幅度', () => {
     const result = normalizeCustomerQcResult({
-      rule_id: 'LX0609-016',
+      rule_id: 'LX0609-12-01-01',
       status: 'non_compliant',
       reason_code: 'requirement_violated',
       customer_display_facts: {
@@ -483,7 +503,7 @@ describe('normalizeCustomerQcResult', () => {
 
     expect(
       hasActionableCustomerExplanation({
-        rule_id: 'LX0609-016',
+        rule_id: 'LX0609-12-01-01',
         status: 'non_compliant',
         customer_display_facts: {
           copy_similarity: 1,
@@ -498,9 +518,9 @@ describe('normalizeCustomerQcResult', () => {
     })
   })
 
-  it('为 LX0609-007 展示权威时间区间，不透传病程正文', () => {
+  it('为 LX0609-02-01-03 展示权威时间区间，不透传病程正文', () => {
     const raw = {
-      rule_id: 'LX0609-007',
+      rule_id: 'LX0609-02-01-03',
       status: 'non_compliant',
       reason_code: 'threshold_exceeded',
       customer_display_facts: {
@@ -525,9 +545,9 @@ describe('normalizeCustomerQcResult', () => {
     expect(JSON.stringify(result)).not.toContain('PRIVATE_COURSE_TEXT')
   })
 
-  it('为 LX0609-007 展示首尾边界，不把边界伪装成查房文书', () => {
+  it('为 LX0609-02-01-03 展示首尾边界，不把边界伪装成查房文书', () => {
     const startBoundary = normalizeCustomerQcResult({
-      rule_id: 'LX0609-007',
+      rule_id: 'LX0609-02-01-03',
       status: 'non_compliant',
       customer_display_facts: {
         failure_kind: 'course_record_interval_over_72h',
@@ -540,7 +560,7 @@ describe('normalizeCustomerQcResult', () => {
       },
     })
     const dateBoundary = normalizeCustomerQcResult({
-      rule_id: 'LX0609-007',
+      rule_id: 'LX0609-02-01-03',
       status: 'non_compliant',
       customer_display_facts: {
         failure_kind: 'course_record_interval_over_72h',
@@ -553,7 +573,7 @@ describe('normalizeCustomerQcResult', () => {
       },
     })
     const preciseTailBoundary = normalizeCustomerQcResult({
-      rule_id: 'LX0609-007',
+      rule_id: 'LX0609-02-01-03',
       status: 'non_compliant',
       customer_display_facts: {
         failure_kind: 'course_record_interval_over_72h',
@@ -566,7 +586,7 @@ describe('normalizeCustomerQcResult', () => {
       },
     })
     const zeroRoundsDateBoundary = normalizeCustomerQcResult({
-      rule_id: 'LX0609-007',
+      rule_id: 'LX0609-02-01-03',
       status: 'non_compliant',
       customer_display_facts: {
         failure_kind: 'course_record_interval_over_72h',
@@ -605,7 +625,7 @@ describe('normalizeCustomerQcResult', () => {
 
   it('为基础时限规则展示锚点、首个可计入记录和超时原因', () => {
     const raw = {
-      rule_id: 'LX0609-006',
+      rule_id: 'LX0609-02-01-02',
       status: 'non_compliant',
       customer_display_facts: {
         failure_kind: 'timeliness_requirement_not_met',
@@ -632,7 +652,7 @@ describe('normalizeCustomerQcResult', () => {
 
   it('为缺失的基础时限目标文书说明缺失边界，不伪造时间', () => {
     const raw = {
-      rule_id: 'LX0609-002',
+      rule_id: 'LX0609-01-02-01',
       status: 'non_compliant',
       customer_display_facts: {
         failure_kind: 'timeliness_requirement_not_met',
@@ -651,7 +671,7 @@ describe('normalizeCustomerQcResult', () => {
 
   it('为抢救记录展示抢救结束到记录形成的实际超时区间', () => {
     const raw = {
-      rule_id: 'LX0609-004',
+      rule_id: 'LX0609-09-01-01',
       status: 'non_compliant',
       customer_display_facts: {
         failure_kind: 'timeliness_requirement_not_met',
@@ -674,9 +694,9 @@ describe('normalizeCustomerQcResult', () => {
     })
   })
 
-  it('为 LX0609-003 展示权威手术结束时间、文书时间和超时区间', () => {
+  it('为 LX0609-04-02-01 展示权威手术结束时间、文书时间和超时区间', () => {
     const raw = {
-      rule_id: 'LX0609-003',
+      rule_id: 'LX0609-04-02-01',
       status: 'non_compliant',
       customer_display_facts: {
         failure_kind: 'surgery_record_late',
@@ -699,9 +719,9 @@ describe('normalizeCustomerQcResult', () => {
     expect(JSON.stringify(result)).not.toContain('PRIVATE_SURGERY_TEXT')
   })
 
-  it('为 LX0609-033 区分同意书缺失与来源未证明，避免将资料不足报成缺陷', () => {
+  it('为 LX0609-11-01-01 区分同意书缺失与来源未证明，避免将资料不足报成缺陷', () => {
     const missing = {
-      rule_id: 'LX0609-033',
+      rule_id: 'LX0609-11-01-01',
       status: 'non_compliant',
       customer_display_facts: {
         failure_kind: 'surgery_consent_document_missing',
@@ -710,7 +730,7 @@ describe('normalizeCustomerQcResult', () => {
       },
     }
     const unproven = {
-      rule_id: 'LX0609-033',
+      rule_id: 'LX0609-11-01-01',
       status: 'data_gap',
       customer_display_facts: {
         failure_kind: 'surgery_consent_source_unproven',
@@ -727,7 +747,7 @@ describe('normalizeCustomerQcResult', () => {
 
   it('为 008/009 展示超期区间或缺失日期，而不透传病程正文', () => {
     const seriousGap = {
-      rule_id: 'LX0609-008',
+      rule_id: 'LX0609-02-01-04',
       status: 'non_compliant',
       customer_display_facts: {
         failure_kind: 'severity_course_gap_exceeded',
@@ -742,7 +762,7 @@ describe('normalizeCustomerQcResult', () => {
       findings: 'PRIVATE_COURSE_TEXT',
     }
     const criticalGap = {
-      rule_id: 'LX0609-009',
+      rule_id: 'LX0609-02-01-05',
       status: 'non_compliant',
       customer_display_facts: {
         failure_kind: 'critical_daily_record_missing',
@@ -768,9 +788,9 @@ describe('normalizeCustomerQcResult', () => {
     )
   })
 
-  it('为 LX0609-019 展示已核对来源与取材记录缺口，不透传原文', () => {
+  it('为 LX0609-06-02-02 展示已核对来源与取材记录缺口，不透传原文', () => {
     const raw = {
-      rule_id: 'LX0609-019',
+      rule_id: 'LX0609-06-02-02',
       status: 'non_compliant',
       reason_code: 'pathology_sampling_not_documented',
       customer_display_facts: {
@@ -795,9 +815,9 @@ describe('normalizeCustomerQcResult', () => {
     expect(JSON.stringify(result)).not.toContain('PRIVATE_PATHOLOGY_TEXT')
   })
 
-  it('为 LX0609-024 展示恶性手术门控与已核对的淋巴结清扫来源', () => {
+  it('为 LX0609-04-02-03 展示恶性手术门控与已核对的淋巴结清扫来源', () => {
     const raw = {
-      rule_id: 'LX0609-024',
+      rule_id: 'LX0609-04-02-03',
       status: 'non_compliant',
       customer_display_facts: {
         failure_kind: 'lymph_node_dissection_not_documented',
@@ -817,9 +837,9 @@ describe('normalizeCustomerQcResult', () => {
     expect(JSON.stringify(result)).not.toContain('PRIVATE_LYMPH_TEXT')
   })
 
-  it('为 LX0609-028 展示实际预防用药时长与缺少延长理由', () => {
+  it('为 LX0609-05-01-01 展示实际预防用药时长与缺少延长理由', () => {
     const raw = {
-      rule_id: 'LX0609-028',
+      rule_id: 'LX0609-05-01-01',
       status: 'non_compliant',
       customer_display_facts: {
         failure_kind: 'prophylaxis_extension_reason_missing',
@@ -844,7 +864,7 @@ describe('normalizeCustomerQcResult', () => {
 
   it('为麻醉/术前文书缺失展示已确认事件与具体缺失文书', () => {
     const consent = normalizeCustomerQcResult({
-      rule_id: 'LX0609-034',
+      rule_id: 'LX0609-11-02-01',
       status: 'non_compliant',
       customer_display_facts: {
         failure_kind: 'anesthesia_consent_missing',
@@ -854,7 +874,7 @@ describe('normalizeCustomerQcResult', () => {
       },
     })
     const visits = normalizeCustomerQcResult({
-      rule_id: 'LX0609-036',
+      rule_id: 'LX0609-04-04-01',
       status: 'non_compliant',
       customer_display_facts: {
         failure_kind: 'anesthesia_visit_missing',
@@ -863,7 +883,7 @@ describe('normalizeCustomerQcResult', () => {
       },
     })
     const discussion = normalizeCustomerQcResult({
-      rule_id: 'LX0609-039',
+      rule_id: 'LX0609-04-01-02',
       status: 'non_compliant',
       customer_display_facts: {
         failure_kind: 'preop_discussion_missing',
@@ -880,7 +900,7 @@ describe('normalizeCustomerQcResult', () => {
 
   it('为检查检验原生不合规展示触发事件、缺少记录与已核对来源', () => {
     const raw = {
-      rule_id: 'LX0609-011',
+      rule_id: 'LX0609-06-01-04',
       status: 'non_compliant',
       customer_display_facts: {
         failure_kind: 'exam_lab_requirement_not_documented',
@@ -905,7 +925,7 @@ describe('normalizeCustomerQcResult', () => {
 
   it('为输血原生不合规展示具体缺口与已核对来源', () => {
     const raw = {
-      rule_id: 'LX0609-048',
+      rule_id: 'LX0609-07-04-01',
       status: 'non_compliant',
       customer_display_facts: {
         failure_kind: 'transfusion_requirement_not_documented',
@@ -924,9 +944,9 @@ describe('normalizeCustomerQcResult', () => {
     expect(JSON.stringify(result)).not.toContain('PRIVATE_TRANSFUSION_TEXT')
   })
 
-  it('缺少细分原因码时保留 LX0609-025 状态并使用安全提示', () => {
+  it('缺少细分原因码时保留 LX0609-04-02-04 状态并使用安全提示', () => {
     const result = normalizeCustomerQcResult({
-      rule_id: 'LX0609-025',
+      rule_id: 'LX0609-04-02-04',
       status: 'non_compliant',
       reason_code: 'reason_unavailable',
     })
@@ -937,7 +957,7 @@ describe('normalizeCustomerQcResult', () => {
 
   it('将通用 data_gap 与临床结论分离，并给出安全的补充资料说明', () => {
     const result = normalizeCustomerQcResult({
-      rule_id: 'LX0609-033',
+      rule_id: 'LX0609-11-01-01',
       status: 'data_gap',
       evidence_problem_type: 'source_unavailable',
       suggestion: '不要透传这条内部建议。',
@@ -956,7 +976,7 @@ describe('normalizeCustomerQcResult', () => {
 
   it('将 AI 建议态保留为 evaluation_unknown，不能混入最终不合规', () => {
     const result = normalizeCustomerQcResult({
-      rule_id: 'LX0609-021',
+      rule_id: 'LX0609-03-01-02',
       status: 'ai_suggested_non_compliant',
     })
 
@@ -966,7 +986,7 @@ describe('normalizeCustomerQcResult', () => {
 
   it('忽略空 result_status 并原样保留后续状态；无事实时使用安全提示', () => {
     const result = normalizeCustomerQcResult({
-      rule_id: 'LX0609-018',
+      rule_id: 'LX0609-01-01-02',
       result_status: '',
       status: 'non_compliant',
       reason_code: 'complaint_too_short',
@@ -977,7 +997,7 @@ describe('normalizeCustomerQcResult', () => {
 
   it('展示手术记录24小时内完成的实际时间事实', () => {
     const result = normalizeCustomerQcResult({
-      rule_id: 'LX0609-003',
+      rule_id: 'LX0609-04-02-01',
       status: 'compliant',
       customer_display_facts: {
         failure_kind: 'surgery_record_within_threshold',
@@ -995,7 +1015,7 @@ describe('normalizeCustomerQcResult', () => {
 
   it('为手术安全核查表合规结果说明已找到目标文书', () => {
     const result = normalizeCustomerQcResult({
-      rule_id: 'LX0609-032',
+      rule_id: 'LX0609-04-03-01',
       status: 'compliant',
       customer_display_facts: {
         verification_kind: 'surgery_document_present',
@@ -1009,7 +1029,7 @@ describe('normalizeCustomerQcResult', () => {
 
   it('为麻醉同意书列出具体缺失签名和分钟级时间', () => {
     const result = normalizeCustomerQcResult({
-      rule_id: 'LX0609-035',
+      rule_id: 'LX0609-11-02-02',
       status: 'non_compliant',
       customer_display_facts: {
         failure_kind: 'anesthesia_consent_incomplete',
@@ -1023,7 +1043,7 @@ describe('normalizeCustomerQcResult', () => {
 
   it('说明第一助手书写但术者签名的031例外', () => {
     const result = normalizeCustomerQcResult({
-      rule_id: 'LX0609-031',
+      rule_id: 'LX0609-04-02-05',
       status: 'compliant',
       customer_display_facts: {
         verification_kind: 'surgery_signature_confirmed',
@@ -1038,7 +1058,7 @@ describe('normalizeCustomerQcResult', () => {
 
   it('展示040的手术编码、院内优先分级和MDT结论', () => {
     const result = normalizeCustomerQcResult({
-      rule_id: 'LX0609-040',
+      rule_id: 'LX0609-04-01-03',
       status: 'compliant',
       customer_display_facts: {
         performed_surgery_confirmed: true,

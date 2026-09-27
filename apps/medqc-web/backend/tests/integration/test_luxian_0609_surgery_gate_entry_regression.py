@@ -44,15 +44,15 @@ from tests.integration.test_luxian_0609_transfusion_family_convergence import (
 
 
 REQUESTED_RULE_IDS = (
-    "LX0609-003",
-    "LX0609-024",
-    "LX0609-025",
-    "LX0609-028",
-    "LX0609-031",
-    "LX0609-033",
+    "LX0609-04-02-01",
+    "LX0609-04-02-03",
+    "LX0609-04-02-04",
+    "LX0609-05-01-01",
+    "LX0609-04-02-05",
+    "LX0609-11-01-01",
 )
-ACTIVE_RULE_IDS = ("LX0609-003", "LX0609-024", "LX0609-031")
-PAUSED_RULE_IDS = ("LX0609-025", "LX0609-028")
+ACTIVE_RULE_IDS = ("LX0609-04-02-01", "LX0609-04-02-03", "LX0609-04-02-05")
+PAUSED_RULE_IDS = ("LX0609-04-02-04", "LX0609-05-01-01")
 _USAGE = (90, 10, 100)
 
 
@@ -117,7 +117,7 @@ _SCENARIOS = (
     _Scenario(
         "all_compliant",
         {
-            "LX0609-003": ("compliant", "requirement_within_threshold"),
+            "LX0609-04-02-01": ("compliant", "requirement_within_threshold"),
             **{
                 rule_id: ("compliant", "requirement_satisfied")
                 for rule_id in REQUESTED_RULE_IDS[1:]
@@ -128,7 +128,7 @@ _SCENARIOS = (
     _Scenario(
         "all_non_compliant",
         {
-            "LX0609-003": ("non_compliant", "threshold_exceeded"),
+            "LX0609-04-02-01": ("non_compliant", "threshold_exceeded"),
             **{
                 rule_id: ("non_compliant", "requirement_violated")
                 for rule_id in REQUESTED_RULE_IDS[1:]
@@ -148,7 +148,7 @@ _SCENARIOS = (
     _Scenario(
         "all_data_gap",
         {
-            "LX0609-003": ("data_gap", "authoritative_time_missing"),
+            "LX0609-04-02-01": ("data_gap", "authoritative_time_missing"),
             **{
                 rule_id: ("data_gap", "required_field_missing")
                 for rule_id in REQUESTED_RULE_IDS[1:]
@@ -186,7 +186,7 @@ class _SurgeryFactClient:
         if self._event is None:
             raise AssertionError("非语义场景不得调用模型")
         assert "你是泸县0609手术事实抽取器" in prompt
-        assert "本次规则：LX0609-024。" in prompt
+        assert "本次规则：LX0609-04-02-03。" in prompt
         assert prompt.count("材料：") == 1
         self.prompts.append(prompt)
         self.options.append((max_completion_tokens, allow_length_retry))
@@ -387,7 +387,7 @@ def test_surgery_gate_entries_preserve_canonical_state_prompt_and_coordinates(
         for item in list(single_job.get("items") or [])
     } == set((*ACTIVE_RULE_IDS, *PAUSED_RULE_IDS))
     assert set(single_job["filters"]["paused_customer_rule_ids"]) == set(PAUSED_RULE_IDS)
-    assert "LX0609-033" not in single_job["filters"]["scoped_customer_rule_ids"]
+    assert "LX0609-11-01-01" not in single_job["filters"]["scoped_customer_rule_ids"]
     single_saved = {
         rule_id: _read_saved_item(app=app, job_id=str(single_job["id"]), task_item=_item(single_job, rule_id=rule_id), record=_RECORD_A, rule_id=rule_id)
         for rule_id in ACTIVE_RULE_IDS
@@ -426,7 +426,7 @@ def test_surgery_gate_entries_preserve_canonical_state_prompt_and_coordinates(
         assert _coordinates(single_item) == _coordinates(batch_item) == _coordinates(sample_item)
         assert _projection(single_saved[rule_id]) == _projection(batch_saved[rule_id]) == _projection(sample_saved[rule_id])
         assert _coordinates(single_saved[rule_id]) == _coordinates(batch_saved[rule_id]) == _coordinates(sample_saved[rule_id])
-        if scenario.semantic_event is not None and rule_id in {"LX0609-003", "LX0609-024"}:
+        if scenario.semantic_event is not None and rule_id in {"LX0609-04-02-01", "LX0609-04-02-03"}:
             assert any(source_type == "surgery_record" for source_type, *_ in _coordinates(single_item))
 
     expected_calls = 4 if scenario.semantic_event is not None else 0

@@ -8,12 +8,17 @@ from .luxian_0609_result_schema import (
     apply_luxian_0609_result_schema,
 )
 from .luxian_0609.canonical_result_finalizer import (
+    _contains_private_customer_fact_identifier,
     finalizer_owns_executor_customer_display_facts,
     finalizer_rejects_invalid_public_executor_customer_display_facts,
     finalizer_validates_missing_executor_customer_display_facts,
     finalize_luxian_0609_canonical_result,
     finalize_luxian_0609_executor_customer_display_facts,
     validate_luxian_0609_executor_customer_display_facts,
+)
+from .luxian_0609.basic_timeliness_customer_projection import (
+    ORIGINAL_BASIC_TIMELINESS_CUSTOMER_RULE_IDS,
+    safe_basic_timeliness_customer_display_facts,
 )
 from .luxian_0609.customer_evidence_enrichment import (
     enrich_customer_evidence,
@@ -334,6 +339,17 @@ def _copy_native_customer_fields(
     )
 
     def safe_executor_display_facts(raw: Any) -> tuple[dict[str, Any] | None, bool]:
+        if wrapper_id in ORIGINAL_BASIC_TIMELINESS_CUSTOMER_RULE_IDS:
+            # 旧无 ReducedDecision 入口仍消费未发布的原生形态，保留其既有
+            # 单次投影值；正式主链由 native 一次生成最终事实后只校验。
+            if not isinstance(raw, Mapping) or _contains_private_customer_fact_identifier(raw):
+                return None, True
+            return (
+                safe_basic_timeliness_customer_display_facts(
+                    rule_id=wrapper_id, raw=raw,
+                ),
+                True,
+            )
         validated_facts = validate_luxian_0609_executor_customer_display_facts(
             rule_id=wrapper_id,
             raw=raw,
@@ -461,6 +477,12 @@ def _copy_native_customer_fields(
             raw_facts=raw_display_facts,
             contract_failure=contract_failure,
             preserve_legacy_exception=True,
+            _validated_facts=(
+                safe_display_facts
+                if wrapper_id in ORIGINAL_BASIC_TIMELINESS_CUSTOMER_RULE_IDS
+                and safe_display_facts is not None
+                else NotImplemented
+            ),
         )
     return result
 

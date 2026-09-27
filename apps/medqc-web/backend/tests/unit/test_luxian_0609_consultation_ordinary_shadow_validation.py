@@ -37,7 +37,7 @@ def test_ledger_row_uses_strict_safe_allowlist_and_never_serializes_model_text()
         case_label="case-01",
         selector_fingerprint="a" * 64,
         results=(_result(
-            rule_id="LX0609-020",
+            rule_id="LX0609-03-01-01",
             final_state="evaluation_unknown",
             reason_code="semantic_output_unknown",
         ),),
@@ -68,7 +68,7 @@ def test_invalid_model_payload_yields_only_empty_enums_and_safe_reason():
         case_label="case-02",
         selector_fingerprint="b" * 64,
         results=(_result(
-            rule_id="LX0609-023",
+            rule_id="LX0609-03-01-04",
             final_state="evaluation_unknown",
             reason_code="semantic_output_unknown",
         ),),
@@ -93,7 +93,7 @@ def test_non_target_document_reason_is_preserved_in_safe_ledger():
         case_label="case-03",
         selector_fingerprint="c" * 64,
         results=(_result(
-            rule_id="LX0609-020",
+            rule_id="LX0609-03-01-01",
             final_state="not_applicable",
             reason_code="non_target_document",
         ),),

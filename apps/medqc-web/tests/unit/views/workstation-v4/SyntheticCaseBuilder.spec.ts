@@ -46,7 +46,7 @@ describe('SyntheticCaseBuilder 按质控点创建', () => {
       expect(template?.documents.length).toBeGreaterThan(0)
 
       family.rules.forEach((rule) => {
-        expect(rule.ruleId).toMatch(/^LX0609-\d{3}$/u)
+        expect(rule.ruleId).toMatch(/^LX0609-\d{2}-\d{2}-\d{2}$/u)
         expect(template?.suggestedRuleIds).toContain(rule.ruleId)
         expect(template?.goldenAnswers.some((answer) => answer.qc_point_id === rule.ruleId)).toBe(
           true,
@@ -57,22 +57,22 @@ describe('SyntheticCaseBuilder 按质控点创建', () => {
 
   it('完整 0609 目录进入创建页时手术麻醉族应保留 16 条质控点', () => {
     const surgeryRuleIds = [
-      'LX0609-003',
-      'LX0609-024',
-      'LX0609-025',
-      'LX0609-028',
-      'LX0609-029',
-      'LX0609-030',
-      'LX0609-031',
-      'LX0609-032',
-      'LX0609-033',
-      'LX0609-034',
-      'LX0609-035',
-      'LX0609-036',
-      'LX0609-037',
-      'LX0609-038',
-      'LX0609-039',
-      'LX0609-040',
+      'LX0609-04-02-01',
+      'LX0609-04-02-03',
+      'LX0609-04-02-04',
+      'LX0609-05-01-01',
+      'LX0609-04-01-01',
+      'LX0609-04-02-02',
+      'LX0609-04-02-05',
+      'LX0609-04-03-01',
+      'LX0609-11-01-01',
+      'LX0609-11-02-01',
+      'LX0609-11-02-02',
+      'LX0609-04-04-01',
+      'LX0609-04-04-02',
+      'LX0609-04-04-03',
+      'LX0609-04-01-02',
+      'LX0609-04-01-03',
     ]
     const families = buildSyntheticCaseRuleFamiliesFromCatalog(
       surgeryRuleIds.map((ruleId) => ({
@@ -92,10 +92,10 @@ describe('SyntheticCaseBuilder 按质控点创建', () => {
   it('保存 payload 保留所选质控点和 golden answer，且过滤停用文书', () => {
     const form = createDefaultSyntheticCaseForm()
     form.caseTitle = '会诊质量测试'
-    form.selectedRuleIds = ['LX0609-020', 'LX0609-021']
+    form.selectedRuleIds = ['LX0609-03-01-01', 'LX0609-03-01-02']
     form.goldenAnswers = [
       createGoldenAnswer({
-        qc_point_id: 'lx0609-020',
+        qc_point_id: 'lx0609-03-01-01',
         expected_status: 'non_compliant',
         trigger_facts: ['会诊意见已出具', '病程未记录执行情况'],
         evidence_keywords: ['会诊记录单', '未记录执行情况'],
@@ -116,16 +116,16 @@ describe('SyntheticCaseBuilder 按质控点创建', () => {
 
     const payload = normalizeSyntheticCasePayload(form)
 
-    expect(payload.selected_rule_ids).toEqual(['LX0609-020', 'LX0609-021'])
+    expect(payload.selected_rule_ids).toEqual(['LX0609-03-01-01', 'LX0609-03-01-02'])
     expect(payload.golden_answers).toHaveLength(1)
-    expect(payload.golden_answers?.[0]?.qc_point_id).toBe('LX0609-020')
+    expect(payload.golden_answers?.[0]?.qc_point_id).toBe('LX0609-03-01-01')
     expect(payload.documents).toHaveLength(1)
     expect(payload.documents[0]?.document_type).toBe('consultation_record')
   })
 
   it('保存并验证 payload 只请求选中的 LX0609 质控点', () => {
     const form = createDefaultSyntheticCaseForm()
-    form.selectedRuleIds = ['lx0609-020', 'LX0609-021', 'LX0609-020']
+    form.selectedRuleIds = ['lx0609-03-01-01', 'LX0609-03-01-02', 'LX0609-03-01-01']
 
     const payload = buildSyntheticCaseRunPayload(form, {
       sampleItemId: 'ITEM-SCOPE-001',
@@ -147,7 +147,7 @@ describe('SyntheticCaseBuilder 按质控点创建', () => {
       ],
       max_parallel_records: 1,
     })
-    expect(payload.selected_rule_ids).toEqual(['LX0609-020', 'LX0609-021'])
+    expect(payload.selected_rule_ids).toEqual(['LX0609-03-01-01', 'LX0609-03-01-02'])
   })
 
   it('缺少样本标识或病例三坐标时拒绝构造运行请求', () => {
@@ -164,11 +164,11 @@ describe('SyntheticCaseBuilder 按质控点创建', () => {
   it('按质控点生成的测试病历名称应包含规则族、质控点和创建时间', () => {
     const title = buildRuleDrivenCaseTitle(
       ['会诊质量'],
-      ['LX0609-021', 'lx0609-020', 'LX0609-020'],
+      ['LX0609-03-01-02', 'lx0609-03-01-01', 'LX0609-03-01-01'],
       new Date('2026-06-23T15:30:00'),
     )
 
-    expect(title).toBe('会诊质量质控病历｜LX020/021｜0623-1530')
+    expect(title).toBe('会诊质量质控病历｜LX03-01-01/03-01-02｜0623-1530')
     expect(title).not.toMatch(/测试患者|测试病历/u)
   })
 

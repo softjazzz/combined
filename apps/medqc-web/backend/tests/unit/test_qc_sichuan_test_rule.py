@@ -12,7 +12,7 @@ from app.routers.qc_sichuan import (
 )
 
 
-@pytest.mark.parametrize("rule_id", ("LX0609-001", "LX0609-003", "LX0609-004", "LX0609-039"))
+@pytest.mark.parametrize("rule_id", ("LX0609-01-01-01", "LX0609-04-02-01", "LX0609-09-01-01", "LX0609-04-01-02"))
 def test_test_rule_api_rejects_luxian_wrappers_before_any_engine_call(
     rule_id: str,
     app,

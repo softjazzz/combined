@@ -100,7 +100,7 @@ def _decision(
     reason_code: str = "requirement_satisfied",
 ) -> RuleDecision:
     return RuleDecision(
-        rule_id="LX0609-001",
+        rule_id="LX0609-01-01-01",
         snapshot_hash=SNAPSHOT_HASH,
         applicability=applicability,
         evidence_state=evidence_state,
@@ -124,7 +124,7 @@ def test_all_48_dimension_combinations_are_explicitly_accepted_or_rejected(
     dimensions = (applicability, evidence_state, qc_direction)
     expected = LEGAL_TRUTH_TABLE.get(dimensions)
     kwargs = {
-        "rule_id": "LX0609-001",
+        "rule_id": "LX0609-01-01-01",
         "snapshot_hash": SNAPSHOT_HASH,
         "applicability": applicability,
         "evidence_state": evidence_state,
@@ -330,7 +330,7 @@ def test_rule_decision_rejects_contradictory_dimensions(
 ):
     with pytest.raises(ValueError, match="decision dimensions"):
         RuleDecision(
-            rule_id="LX0609-001",
+            rule_id="LX0609-01-01-01",
             snapshot_hash=SNAPSHOT_HASH,
             applicability=applicability,
             evidence_state=evidence_state,
@@ -433,7 +433,7 @@ def test_candidate_scope_incomplete_is_allowed_for_data_gap_decision():
 def test_reduced_decision_cannot_be_constructed_outside_the_reducer():
     with pytest.raises(TypeError, match="reducer-owned"):
         ReducedRuleDecision(
-            rule_id="LX0609-001",
+            rule_id="LX0609-01-01-01",
             snapshot_hash=SNAPSHOT_HASH,
             final_state=CustomerFinalState.NON_COMPLIANT,
             reason_code="requirement_violated",

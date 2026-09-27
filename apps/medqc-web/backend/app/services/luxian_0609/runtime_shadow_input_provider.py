@@ -362,13 +362,13 @@ def provide_luxian_0609_runtime_shadow_inputs(
     observation_by_source = {item.source_key: item for item in observations}
     qualifications: list[deterministic_gate.TargetQualification] = []
     for rule in plan.planned_rules:
-        if rule.rule_id not in ("LX0609-029", "LX0609-032"):
+        if rule.rule_id not in ("LX0609-04-01-01", "LX0609-04-03-01"):
             continue
         if observation_by_source[rule.target_source_key].query_status is not QueryStatus.AVAILABLE:
             continue
         target_rows = rows_by_source[rule.target_source_key]
         target_snapshot_hash = _digest({"source_key": rule.target_source_key, "documents": documents[rule.target_source_key]})
-        if rule.rule_id == "LX0609-029":
+        if rule.rule_id == "LX0609-04-01-01":
             qualified_count = sum(
                 1
                 for row in target_rows

@@ -94,7 +94,7 @@ def test_extract_luxian_0609_facts_should_capture_pathology_and_chemo_sources():
 def test_fact_gate_should_not_trigger_chemo_rule_without_chemo_fact():
     rules = [
         _wrapper(
-            "LX0609-026",
+            "LX0609-05-02-01",
             name="恶性肿瘤化学治疗记录",
             trigger_condition="化疗医嘱与病程化疗记录应一致。",
         )
@@ -115,14 +115,14 @@ def test_fact_gate_should_not_trigger_chemo_rule_without_chemo_fact():
         families=["tumor_pathology"],
     )
 
-    assert evaluation.decisions["LX0609-026"].status == TRIGGER_ABSENT
-    assert "未发现明确化疗医嘱或化疗记录" in evaluation.decisions["LX0609-026"].reason
+    assert evaluation.decisions["LX0609-05-02-01"].status == TRIGGER_ABSENT
+    assert "未发现明确化疗医嘱或化疗记录" in evaluation.decisions["LX0609-05-02-01"].reason
 
 
 def test_fact_gate_should_trigger_pathology_specimen_rule_from_surgery_specimen_fact():
     rules = [
         _wrapper(
-            "LX0609-019",
+            "LX0609-06-02-02",
             name="病理检查取材情况记录",
             mapped_rule_ids=["SC-099"],
             trigger_condition="病理取材情况应在病程记录或手术记录中记录。",
@@ -145,13 +145,13 @@ def test_fact_gate_should_trigger_pathology_specimen_rule_from_surgery_specimen_
     )
 
     assert any(fact.fact_type == "pathology_specimen_sent" for fact in facts)
-    assert evaluation.decisions["LX0609-019"].status == TRIGGER_PRESENT
+    assert evaluation.decisions["LX0609-06-02-02"].status == TRIGGER_PRESENT
 
 
 def test_fact_gate_should_mark_antibiotic_rule_data_gap_when_stop_time_missing():
     rules = [
         _wrapper(
-            "LX0609-028",
+            "LX0609-05-01-01",
             name="I类、II类切口预防使用抗菌药物时间超过24小时",
             trigger_condition="I类、II类切口手术预防使用抗菌药物需核对医嘱起止时间。",
         )
@@ -178,14 +178,14 @@ def test_fact_gate_should_mark_antibiotic_rule_data_gap_when_stop_time_missing()
         families=["surgery_anesthesia"],
     )
 
-    assert evaluation.decisions["LX0609-028"].status == TRIGGER_DATA_GAP
-    assert "抗菌药物医嘱停止时间" in evaluation.decisions["LX0609-028"].data_gap_fields
+    assert evaluation.decisions["LX0609-05-01-01"].status == TRIGGER_DATA_GAP
+    assert "抗菌药物医嘱停止时间" in evaluation.decisions["LX0609-05-01-01"].data_gap_fields
 
 
 def test_fact_gate_should_not_trigger_antibiotic_rule_without_antibiotic_fact():
     rules = [
         _wrapper(
-            "LX0609-028",
+            "LX0609-05-01-01",
             name="I类、II类切口预防使用抗菌药物时间超过24小时",
             trigger_condition="I类、II类切口手术预防使用抗菌药物需核对医嘱起止时间。",
         )
@@ -206,8 +206,8 @@ def test_fact_gate_should_not_trigger_antibiotic_rule_without_antibiotic_fact():
         families=["surgery_anesthesia"],
     )
 
-    assert evaluation.decisions["LX0609-028"].status == TRIGGER_ABSENT
-    assert "未发现抗菌药物医嘱" in evaluation.decisions["LX0609-028"].reason
+    assert evaluation.decisions["LX0609-05-01-01"].status == TRIGGER_ABSENT
+    assert "未发现抗菌药物医嘱" in evaluation.decisions["LX0609-05-01-01"].reason
 
 
 def test_render_fact_context_and_prompt_should_not_mix_fact_extraction_with_compliance_judgement():

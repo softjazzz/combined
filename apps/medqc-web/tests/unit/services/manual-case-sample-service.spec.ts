@@ -271,7 +271,7 @@ describe('editable medical-record document normalization', () => {
         record_count: 1,
         rule_count: 2,
         record_ids: ['visit-1'],
-        rule_ids: ['LX0609-001', 'LX0609-002'],
+        rule_ids: ['LX0609-01-01-01', 'LX0609-01-02-01'],
         operation_ref: 'sample-op-safe',
         execution_scope_hash: 'a'.repeat(64),
         deduplicated: true,
@@ -281,7 +281,7 @@ describe('editable medical-record document normalization', () => {
     const result = await runManualSamplePool('pool-1', {
       sample_item_ids: ['item-1'],
       record_refs: [{ institute_id: 'hospital-1', patient_id: 'patient-1', visit_id: 'visit-1' }],
-      selected_rule_ids: ['LX0609-001', 'LX0609-002'],
+      selected_rule_ids: ['LX0609-01-01-01', 'LX0609-01-02-01'],
       group_by_luxian_family: false,
       validation_mode: 'customer',
       rule_set_key: 'luxian_0609_qc_v1',
@@ -293,7 +293,7 @@ describe('editable medical-record document normalization', () => {
       data: {
         sample_item_ids: ['item-1'],
         record_refs: [{ institute_id: 'hospital-1', patient_id: 'patient-1', visit_id: 'visit-1' }],
-        selected_rule_ids: ['LX0609-001', 'LX0609-002'],
+        selected_rule_ids: ['LX0609-01-01-01', 'LX0609-01-02-01'],
         group_by_luxian_family: false,
         validation_mode: 'customer',
         rule_set_key: 'luxian_0609_qc_v1',
@@ -329,6 +329,17 @@ describe('editable medical-record document normalization', () => {
       } as never),
     ).rejects.toThrow('record_ids')
     expect(mocks.requestRaw).toHaveBeenCalledTimes(1)
+  })
+
+  it('拒绝旧三位 LX0609 规则编号后再发送运行请求', async () => {
+    await expect(
+      runManualSamplePool('pool-1', {
+        selected_rule_ids: ['LX0609-001'],
+        validation_mode: 'customer',
+        rule_set_key: 'luxian_0609_qc_v1',
+      }),
+    ).rejects.toThrow('四段式编号')
+    expect(mocks.requestRaw).not.toHaveBeenCalled()
   })
 
   it.each([

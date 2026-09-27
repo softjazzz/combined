@@ -72,7 +72,7 @@ def test_zero_plan_does_not_read_downstream_inputs():
 
 
 def test_required_pairs_are_trigger_derived_not_targets_and_032_has_no_order_pair():
-    assembly = _assemble(_plan("LX0609-032"))
+    assembly = _assemble(_plan("LX0609-04-03-01"))
     assert {(item.fact_type, item.source_key) for item in assembly.deterministic_coverage_outcomes} == {
         ("current_visit_surgery_confirmed", "mr_surgery"),
         ("current_visit_surgery_confirmed", "surgery_application"),
@@ -82,7 +82,7 @@ def test_required_pairs_are_trigger_derived_not_targets_and_032_has_no_order_pai
 
 
 def test_target_only_source_query_truth_is_validated_before_orch():
-    plan = _plan("LX0609-032")
+    plan = _plan("LX0609-04-03-01")
     payload = _payload(plan)
     del payload["programmatic_timeline"]["documents"]["surgery_safecheck_record"]
     with pytest.raises(ValueError, match="source status and document count mismatch"):
@@ -94,7 +94,7 @@ def test_target_only_source_query_truth_is_validated_before_orch():
 
 
 def test_signal_maps_to_pair_ref_and_safe_outcome():
-    plan = _plan("LX0609-030")
+    plan = _plan("LX0609-04-02-02")
     signal = _signal()
     assembly = _assemble(plan, signal)
     assert assembly.fact_pairs[0].pair_ref == signal.signal_ref
@@ -110,7 +110,7 @@ def test_invalid_surgery_signal_event_is_rejected(event_status):
 
 
 def test_order_signal_allows_ordered_and_source_requirement_blocks_cross_source():
-    plan = _plan("LX0609-030")
+    plan = _plan("LX0609-04-02-02")
     assembly = _assemble(plan, _signal("current_visit_surgery_order_confirmed", "inpat_nondrug_order", "ordered"))
     assert assembly.summary_dict()["fact_count"] == 1
     with pytest.raises(ValueError, match="signal pair"):
@@ -119,14 +119,14 @@ def test_order_signal_allows_ordered_and_source_requirement_blocks_cross_source(
 
 @pytest.mark.parametrize("status", ["empty", "unavailable", "error"])
 def test_source_status_truth_table(status):
-    plan = _plan("LX0609-030")
+    plan = _plan("LX0609-04-02-02")
     assembly = _assemble(plan, statuses={"surgery_record": status})
     assert assembly.summary_dict()["fact_count"] == 0
 
 
 @pytest.mark.parametrize("status,state,reason,error", [("empty", "not_run", "", ""), ("unavailable", "not_run", "source_unavailable", "bad"), ("error", "not_run", "source_query_error", "bad")])
 def test_empty_and_query_boundaries_reject_late_failure_combinations(status, state, reason, error):
-    plan = _plan("LX0609-030")
+    plan = _plan("LX0609-04-02-02")
     values = list(_inputs(plan, statuses={"surgery_record": status}))
     index = next(index for index, item in enumerate(values) if item.source_key == "surgery_record")
     item = values[index]
@@ -136,7 +136,7 @@ def test_empty_and_query_boundaries_reject_late_failure_combinations(status, sta
 
 
 def test_available_count_and_partial_truth_are_fail_closed():
-    plan = _plan("LX0609-030")
+    plan = _plan("LX0609-04-02-02")
     values = list(_inputs(plan))
     index = next(index for index, item in enumerate(values) if item.source_key == "surgery_record")
     values[index] = RuntimePairExtractionInput(values[index].fact_type, values[index].source_key, "complete", "extractor-v1", "mapping-v1", 0, ())
@@ -145,7 +145,7 @@ def test_available_count_and_partial_truth_are_fail_closed():
 
 
 def test_scope_and_duplicate_input_reject_without_payload_inference():
-    plan = _plan("LX0609-030")
+    plan = _plan("LX0609-04-02-02")
     observations = _observations(plan)[:-1]
     with pytest.raises(ValueError, match="source observations"):
         _assemble(plan, observations=observations)
@@ -155,19 +155,19 @@ def test_scope_and_duplicate_input_reject_without_payload_inference():
 
 
 def test_safe_identity_created_at_and_mutation_boundary():
-    assembly = _assemble(_plan("LX0609-030"), _signal())
+    assembly = _assemble(_plan("LX0609-04-02-02"), _signal())
     data = assembly.safe_to_dict(); data["facts"].clear()
     assert assembly.summary_dict()["fact_count"] == 1
-    assert assembly.fingerprint() == assemble_luxian_0609_runtime_shadow_inputs(plan=_plan("LX0609-030"), evidence_payload=_payload(_plan("LX0609-030")), source_query_observations=_observations(_plan("LX0609-030")), extraction_inputs=_inputs(_plan("LX0609-030"), _signal()), assembler_schema_version="assembler-v1", assembler_policy_version="policy-v1", created_at="2026-07-13T18:00:00+08:00").fingerprint()
+    assert assembly.fingerprint() == assemble_luxian_0609_runtime_shadow_inputs(plan=_plan("LX0609-04-02-02"), evidence_payload=_payload(_plan("LX0609-04-02-02")), source_query_observations=_observations(_plan("LX0609-04-02-02")), extraction_inputs=_inputs(_plan("LX0609-04-02-02"), _signal()), assembler_schema_version="assembler-v1", assembler_policy_version="policy-v1", created_at="2026-07-13T18:00:00+08:00").fingerprint()
 
 
-@pytest.mark.parametrize("rule_id", ["LX0609-030", "LX0609-032"])
+@pytest.mark.parametrize("rule_id", ["LX0609-04-02-02", "LX0609-04-03-01"])
 def test_real_orch_accepts_assembled_performed_signal(rule_id):
     plan = _plan(rule_id)
     payload = _payload(plan)
     assembly = _assemble(plan, _signal())
     qualifications = ()
-    if rule_id == "LX0609-032":
+    if rule_id == "LX0609-04-03-01":
         target_source = "surgery_safecheck_record"
         snapshot = hashlib.sha256(json.dumps(
             {"source_key": target_source, "documents": payload["programmatic_timeline"]["documents"][target_source]},
@@ -186,14 +186,14 @@ def test_real_orch_accepts_assembled_performed_signal(rule_id):
 
 @pytest.mark.parametrize("status,expected", [("empty", "non_compliant"), ("unavailable", "data_gap"), ("error", "technical_error")])
 def test_real_orch_target_unavailable_and_error(status, expected):
-    plan = _plan("LX0609-030")
+    plan = _plan("LX0609-04-02-02")
     assembly = _assemble(plan, _signal("current_visit_surgery_order_confirmed", "inpat_nondrug_order", "ordered", "order-" + status), statuses={"surgery_record": status})
-    report = build_luxian_0609_shadow_execution(visit_ref=VISIT, selected_rule_ids=["LX0609-030"], scoped_customer_rule_ids=["LX0609-030"], record_rule_map={VISIT: ["LX0609-030"]}, evidence_payload=_payload(plan, statuses={"surgery_record": status}), source_query_observations=assembly.source_query_observations, fact_pairs=assembly.fact_pairs, deterministic_coverage_outcomes=assembly.deterministic_coverage_outcomes, redaction_terms=(), planner_schema_version="planner-v1", rule_plan_version="slice-v1", manifest_schema_version="manifest-v1", bundle_schema_version="bundle-v1", coverage_schema_version="coverage-v1", coverage_policy_version="policy-v1", gate_schema_version="gate-v1", gate_policy_version="policy-v1", finding_schema_version="finding-v1", finding_policy_version="policy-v1", aggregation_schema_version="aggregation-v1", aggregation_policy_version="policy-v1", execution_schema_version="execution-v1", execution_policy_version="policy-v1", package_version="package-v1", planner_created_at=CREATED, manifest_created_at=CREATED, bundle_created_at=CREATED, coverage_created_at=CREATED, gate_created_at=CREATED, finding_created_at=CREATED, aggregation_created_at=CREATED, created_at=CREATED)
+    report = build_luxian_0609_shadow_execution(visit_ref=VISIT, selected_rule_ids=["LX0609-04-02-02"], scoped_customer_rule_ids=["LX0609-04-02-02"], record_rule_map={VISIT: ["LX0609-04-02-02"]}, evidence_payload=_payload(plan, statuses={"surgery_record": status}), source_query_observations=assembly.source_query_observations, fact_pairs=assembly.fact_pairs, deterministic_coverage_outcomes=assembly.deterministic_coverage_outcomes, redaction_terms=(), planner_schema_version="planner-v1", rule_plan_version="slice-v1", manifest_schema_version="manifest-v1", bundle_schema_version="bundle-v1", coverage_schema_version="coverage-v1", coverage_policy_version="policy-v1", gate_schema_version="gate-v1", gate_policy_version="policy-v1", finding_schema_version="finding-v1", finding_policy_version="policy-v1", aggregation_schema_version="aggregation-v1", aggregation_policy_version="policy-v1", execution_schema_version="execution-v1", execution_policy_version="policy-v1", package_version="package-v1", planner_created_at=CREATED, manifest_created_at=CREATED, bundle_created_at=CREATED, coverage_created_at=CREATED, gate_created_at=CREATED, finding_created_at=CREATED, aggregation_created_at=CREATED, created_at=CREATED)
     assert report.results[0].final_state.value == expected
 
 
 def test_public_assembly_rejects_forged_nested_quote_or_trace():
-    assembly = _assemble(_plan("LX0609-030"), _signal())
+    assembly = _assemble(_plan("LX0609-04-02-02"), _signal())
     pair = assembly.fact_pairs[0]
     forged = replace(pair, legacy_fact=replace(pair.legacy_fact, quote="SECRET_RAW_QUOTE", trace={"prompt": "SECRET"}))
     with pytest.raises(ValueError, match="assembly fact pair"):
@@ -208,7 +208,7 @@ def test_signal_sensitive_metadata_rejects_without_echo(marker):
 
 
 def test_top_level_generator_and_subclass_reject_after_nonzero_plan():
-    plan = _plan("LX0609-030")
+    plan = _plan("LX0609-04-02-02")
     with pytest.raises(TypeError):
         assemble_luxian_0609_runtime_shadow_inputs(plan=plan, evidence_payload=_payload(plan), source_query_observations=(item for item in _observations(plan)), extraction_inputs=_inputs(plan), assembler_schema_version="assembler-v1", assembler_policy_version="policy-v1", created_at=CREATED)
     class Inputs(list): pass

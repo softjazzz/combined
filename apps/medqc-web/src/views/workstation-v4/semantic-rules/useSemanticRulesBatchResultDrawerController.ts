@@ -126,7 +126,7 @@ export function useSemanticRulesBatchResultDrawerController(
   }
 
   const LUXIAN_0609_RULE_SET_KEY = 'luxian_0609_qc_v1'
-  const LUXIAN_0609_NATIVE_RULE_IDS = new Set(['LX0609-029', 'LX0609-030', 'LX0609-032'])
+  const LUXIAN_0609_NATIVE_RULE_IDS = new Set(['LX0609-04-01-01', 'LX0609-04-02-02', 'LX0609-04-03-01'])
   const LUXIAN_0609_FOCUS_STATUSES: StructuredQCStatus[] = [
     'non_compliant',
     'ai_suggested_non_compliant',
@@ -460,9 +460,9 @@ export function useSemanticRulesBatchResultDrawerController(
     if (!isLuxian0609BatchJob.value || !isFocusedRecordMode.value) return null
 
     const definitions = [
-      { ruleId: 'LX0609-044', label: '输血前评估' },
-      { ruleId: 'LX0609-045', label: '输血病程' },
-      { ruleId: 'LX0609-047', label: '输血后评价' },
+      { ruleId: 'LX0609-07-01-02', label: '输血前评估' },
+      { ruleId: 'LX0609-07-02-01', label: '输血病程' },
+      { ruleId: 'LX0609-07-03-01', label: '输血后评价' },
     ]
     const sourceItems = canonicalLuxianIssueSourceItems.value
     const entries = definitions.map((definition) => {

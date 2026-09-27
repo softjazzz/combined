@@ -23,7 +23,7 @@ from app.services.luxian_0609.planner import (
 
 
 CREATED_AT = "2026-07-12T09:00:00+08:00"
-ALL_SLICE_RULES = ["LX0609-029", "LX0609-030", "LX0609-032"]
+ALL_SLICE_RULES = ["LX0609-04-01-01", "LX0609-04-02-02", "LX0609-04-03-01"]
 
 
 def _build(
@@ -86,9 +86,9 @@ def test_single_supported_rule_is_planned_only_through_all_three_scopes(rule_id:
 
 def test_scope_intersection_order_and_duplicates_are_stable() -> None:
     left = _build(
-        selected_rule_ids=["lx0609-032", "LX0609-029", "LX0609-030", "LX0609-029"],
-        scoped_customer_rule_ids=["LX0609-030", "LX0609-032", "LX0609-029"],
-        record_rule_map={"visit-001": ["LX0609-032", "lx0609-029", "LX0609-030"]},
+        selected_rule_ids=["lx0609-04-03-01", "LX0609-04-01-01", "LX0609-04-02-02", "LX0609-04-01-01"],
+        scoped_customer_rule_ids=["LX0609-04-02-02", "LX0609-04-03-01", "LX0609-04-01-01"],
+        record_rule_map={"visit-001": ["LX0609-04-03-01", "lx0609-04-01-01", "LX0609-04-02-02"]},
     )
     right = _build()
     assert [item.rule_id for item in left.planned_rules] == ALL_SLICE_RULES
@@ -97,16 +97,16 @@ def test_scope_intersection_order_and_duplicates_are_stable() -> None:
 
 def test_scope_exclusions_remain_bounded_and_traceable() -> None:
     plan = _build(
-        selected_rule_ids=["LX0609-029", "LX0609-030", "LX0609-028"],
-        scoped_customer_rule_ids=["LX0609-030", "LX0609-032", "LX0609-028"],
-        record_rule_map={"visit-001": ["LX0609-032", "LX0609-028"]},
+        selected_rule_ids=["LX0609-04-01-01", "LX0609-04-02-02", "LX0609-05-01-01"],
+        scoped_customer_rule_ids=["LX0609-04-02-02", "LX0609-04-03-01", "LX0609-05-01-01"],
+        record_rule_map={"visit-001": ["LX0609-04-03-01", "LX0609-05-01-01"]},
     )
     assert plan.planned_rules == ()
     assert [(item.rule_id, item.reason_code) for item in plan.exclusions] == [
-        ("LX0609-028", "unsupported_slice_rule"),
-        ("LX0609-029", "selected_not_scoped"),
-        ("LX0609-030", "record_excluded"),
-        ("LX0609-032", "scoped_not_selected"),
+        ("LX0609-05-01-01", "unsupported_slice_rule"),
+        ("LX0609-04-01-01", "selected_not_scoped"),
+        ("LX0609-04-02-02", "record_excluded"),
+        ("LX0609-04-03-01", "scoped_not_selected"),
     ]
 
 
@@ -124,13 +124,13 @@ def test_nonempty_record_map_missing_current_visit_never_falls_back() -> None:
         29,
         True,
         "LX0609-29",
-        "LX0609-0029",
+        "LX0609-01-02-019",
         "LX0609-000",
-        "LX0609-050",
+        "LX0609-03-02-01",
         "LX0609-999",
         "SC-029",
         "",
-        "LX0609-029\nsecret",
+        "LX0609-04-01-01\nsecret",
     ],
 )
 def test_invalid_rule_ids_fail_closed_without_echo(invalid) -> None:
@@ -142,11 +142,11 @@ def test_invalid_rule_ids_fail_closed_without_echo(invalid) -> None:
 
 @pytest.mark.parametrize("field", ["selected_rule_ids", "scoped_customer_rule_ids"])
 def test_scope_iterables_are_bounded_and_bare_text_is_rejected(field: str) -> None:
-    kwargs = {field: "LX0609-029"}
+    kwargs = {field: "LX0609-04-01-01"}
     with pytest.raises(TypeError):
         _build(**kwargs)
 
-    values = ["LX0609-029"] * (MAX_SCOPE_RULE_IDS + 1)
+    values = ["LX0609-04-01-01"] * (MAX_SCOPE_RULE_IDS + 1)
     with pytest.raises(ValueError, match="too many"):
         _build(**{field: values})
 
@@ -158,7 +158,7 @@ def test_scope_generator_consumes_at_most_max_plus_one() -> None:
         nonlocal consumed
         for _ in range(MAX_SCOPE_RULE_IDS + 100):
             consumed += 1
-            yield "LX0609-029"
+            yield "LX0609-04-01-01"
 
     with pytest.raises(ValueError, match="too many selected_rule_ids"):
         _build(selected_rule_ids=values())
@@ -171,7 +171,7 @@ def test_record_map_requires_exact_concrete_mapping_and_values() -> None:
 
     with pytest.raises(TypeError):
         _build(record_rule_map=DictSubclass({"visit-001": ALL_SLICE_RULES}))
-    for invalid_value in ("LX0609-029", (item for item in ALL_SLICE_RULES), {"LX0609-029"}):
+    for invalid_value in ("LX0609-04-01-01", (item for item in ALL_SLICE_RULES), {"LX0609-04-01-01"}):
         with pytest.raises(TypeError):
             _build(record_rule_map={"visit-001": invalid_value})
 
@@ -189,19 +189,19 @@ def test_record_map_visit_and_per_visit_limits() -> None:
     with pytest.raises(ValueError, match="too many record_rule_map visits"):
         _build(record_rule_map={**allowed_visits, "visit-overflow": []})
 
-    _build(record_rule_map={"visit-001": ["LX0609-029"] * MAX_RULES_PER_VISIT})
+    _build(record_rule_map={"visit-001": ["LX0609-04-01-01"] * MAX_RULES_PER_VISIT})
     with pytest.raises(ValueError, match="too many record_rule_map rules for visit"):
-        _build(record_rule_map={"visit-001": ["LX0609-029"] * (MAX_RULES_PER_VISIT + 1)})
+        _build(record_rule_map={"visit-001": ["LX0609-04-01-01"] * (MAX_RULES_PER_VISIT + 1)})
 
 
 def test_record_map_total_limit_counts_duplicates_before_dedupe(monkeypatch) -> None:
     monkeypatch.setattr(planner_module, "MAX_TOTAL_RECORD_RULES", 3)
-    _build(record_rule_map={"visit-001": ["LX0609-029", "LX0609-029"], "other": ["LX0609-030"]})
+    _build(record_rule_map={"visit-001": ["LX0609-04-01-01", "LX0609-04-01-01"], "other": ["LX0609-04-02-02"]})
     with pytest.raises(ValueError, match="too many total record_rule_map rules"):
         _build(
             record_rule_map={
-                "visit-001": ["LX0609-029", "LX0609-029"],
-                "other": ["LX0609-030", "LX0609-030"],
+                "visit-001": ["LX0609-04-01-01", "LX0609-04-01-01"],
+                "other": ["LX0609-04-02-02", "LX0609-04-02-02"],
             }
         )
 
@@ -212,17 +212,17 @@ def test_record_map_actual_total_contract_constant_exceeds_single_visit_limit() 
 
 def test_rule_metadata_declares_exact_sources_facts_and_dependency() -> None:
     items = {item.rule_id: item for item in _build().planned_rules}
-    assert items["LX0609-029"].target_source_key == "presurg_summary"
-    assert items["LX0609-030"].target_source_key == "surgery_record"
-    assert items["LX0609-032"].target_source_key == "surgery_safecheck_record"
-    assert items["LX0609-029"].required_trigger_fact_types == (
+    assert items["LX0609-04-01-01"].target_source_key == "presurg_summary"
+    assert items["LX0609-04-02-02"].target_source_key == "surgery_record"
+    assert items["LX0609-04-03-01"].target_source_key == "surgery_safecheck_record"
+    assert items["LX0609-04-01-01"].required_trigger_fact_types == (
         "current_visit_surgery_order_confirmed",
         "current_visit_surgery_confirmed",
     )
-    assert items["LX0609-030"].required_trigger_fact_types == items["LX0609-029"].required_trigger_fact_types
-    safecheck = items["LX0609-032"]
+    assert items["LX0609-04-02-02"].required_trigger_fact_types == items["LX0609-04-01-01"].required_trigger_fact_types
+    safecheck = items["LX0609-04-03-01"]
     assert safecheck.required_trigger_fact_types == ("current_visit_surgery_confirmed",)
-    assert safecheck.parent_rule_ids == ("LX0609-030",)
+    assert safecheck.parent_rule_ids == ("LX0609-04-02-02",)
     assert safecheck.dependency_reason_codes == ("informational_parent_only",)
     assert safecheck.independent_target_source is True
     assert safecheck.required_source_keys == (
@@ -233,20 +233,20 @@ def test_rule_metadata_declares_exact_sources_facts_and_dependency() -> None:
     )
     assert safecheck.trigger_alternative_policy == "any"
     assert safecheck.trigger_source_keys != ("surgery_record",)
-    assert items["LX0609-029"].required_source_keys == (
+    assert items["LX0609-04-01-01"].required_source_keys == (
         "inpat_nondrug_order",
         "mr_surgery",
         "presurg_summary",
         "surgery_application",
         "surgery_record",
     )
-    assert items["LX0609-030"].required_source_keys == (
+    assert items["LX0609-04-02-02"].required_source_keys == (
         "inpat_nondrug_order",
         "mr_surgery",
         "surgery_application",
         "surgery_record",
     )
-    assert items["LX0609-029"].parent_rule_ids == ()
+    assert items["LX0609-04-01-01"].parent_rule_ids == ()
 
 
 def test_trigger_requirements_bind_fact_source_scope_assertion_and_event_status() -> None:
@@ -267,7 +267,7 @@ def test_trigger_requirements_bind_fact_source_scope_assertion_and_event_status(
         "fact_type": "current_visit_surgery_confirmed",
         "trigger_scope": "current_visit",
     }
-    for rule_id in ("LX0609-029", "LX0609-030"):
+    for rule_id in ("LX0609-04-01-01", "LX0609-04-02-02"):
         item = items[rule_id]
         assert item.trigger_alternative_policy == "any"
         assert [requirement.to_dict() for requirement in item.trigger_requirements] == [
@@ -279,7 +279,7 @@ def test_trigger_requirements_bind_fact_source_scope_assertion_and_event_status(
             sorted({*item.trigger_source_keys, item.target_source_key})
         )
 
-    safecheck = items["LX0609-032"]
+    safecheck = items["LX0609-04-03-01"]
     assert [requirement.to_dict() for requirement in safecheck.trigger_requirements] == [
         expected_performed
     ]
@@ -337,14 +337,14 @@ def test_planner_only_declares_metadata_and_zero_llm_expectation() -> None:
 
 
 def test_direct_planned_rule_construction_cannot_change_fixed_metadata() -> None:
-    item = PlannedRule.for_rule_id("LX0609-029")
+    item = PlannedRule.for_rule_id("LX0609-04-01-01")
     with pytest.raises(ValueError, match="metadata mismatch"):
         replace(item, target_source_key="surgery_record")
     with pytest.raises(ValueError, match="metadata mismatch"):
         replace(item, family="other")
     with pytest.raises(ValueError, match="metadata mismatch"):
         replace(item, trigger_requirements=tuple(reversed(item.trigger_requirements)))
-    safecheck = PlannedRule.for_rule_id("LX0609-032")
+    safecheck = PlannedRule.for_rule_id("LX0609-04-03-01")
     with pytest.raises(ValueError, match="metadata mismatch"):
         replace(
             safecheck,
@@ -371,13 +371,13 @@ def test_trigger_requirement_is_frozen_and_to_dict_is_defensive() -> None:
 
 def test_global_rule_metadata_is_deeply_immutable() -> None:
     with pytest.raises(TypeError):
-        planner_module._RULE_METADATA["LX0609-029"]["target_source_key"] = "changed"
+        planner_module._RULE_METADATA["LX0609-04-01-01"]["target_source_key"] = "changed"
     with pytest.raises(TypeError):
         planner_module._TRIGGER_REQUIREMENT_SPECS[
             "current_visit_surgery_order_confirmed"
         ]["allowed_source_keys"] = ("changed",)
-    assert PlannedRule.for_rule_id("LX0609-029").target_source_key == "presurg_summary"
-    assert PlannedRule.for_rule_id("LX0609-029").source_requirement_version.endswith("v3")
+    assert PlannedRule.for_rule_id("LX0609-04-01-01").target_source_key == "presurg_summary"
+    assert PlannedRule.for_rule_id("LX0609-04-01-01").source_requirement_version.endswith("v3")
 
 
 def test_direct_plan_construction_revalidates_order_scope_and_exclusions() -> None:
@@ -387,7 +387,7 @@ def test_direct_plan_construction_revalidates_order_scope_and_exclusions() -> No
     with pytest.raises(ValueError, match="exclusions"):
         replace(
             plan,
-            exclusions=(PlanningExclusion("LX0609-029", "record_excluded"),),
+            exclusions=(PlanningExclusion("LX0609-04-01-01", "record_excluded"),),
         )
     with pytest.raises(ValueError, match="record_scope_state"):
         replace(plan, record_scope_state="global")
@@ -402,7 +402,7 @@ def test_direct_plan_construction_revalidates_order_scope_and_exclusions() -> No
 def test_direct_exclusion_rejects_customer_status_reason() -> None:
     for reason in ("compliant", "non_compliant", "ai_suggested", "technical_error"):
         with pytest.raises(ValueError):
-            PlanningExclusion("LX0609-029", reason)
+            PlanningExclusion("LX0609-04-01-01", reason)
 
 
 def test_inputs_and_defensive_outputs_are_isolated_from_mutation() -> None:
@@ -450,10 +450,10 @@ def test_fingerprint_is_canonical_and_excludes_created_at() -> None:
         {"planner_schema_version": "planner-v2"},
         {"rule_plan_version": "slice-v2"},
         {"visit_ref": "visit-002", "record_rule_map": {"visit-002": ALL_SLICE_RULES}},
-        {"selected_rule_ids": ["LX0609-029", "LX0609-030"]},
-        {"scoped_customer_rule_ids": ["LX0609-029", "LX0609-032"]},
-        {"record_rule_map": {"visit-001": ["LX0609-029"]}},
-        {"selected_rule_ids": [*ALL_SLICE_RULES, "LX0609-028"]},
+        {"selected_rule_ids": ["LX0609-04-01-01", "LX0609-04-02-02"]},
+        {"scoped_customer_rule_ids": ["LX0609-04-01-01", "LX0609-04-03-01"]},
+        {"record_rule_map": {"visit-001": ["LX0609-04-01-01"]}},
+        {"selected_rule_ids": [*ALL_SLICE_RULES, "LX0609-05-01-01"]},
     ],
 )
 def test_each_identity_dimension_changes_fingerprint(changes) -> None:
@@ -461,16 +461,16 @@ def test_each_identity_dimension_changes_fingerprint(changes) -> None:
 
 
 def test_unrelated_record_map_order_and_content_do_not_leak_into_current_plan() -> None:
-    left = _build(record_rule_map={"other-a": ["LX0609-028"], "visit-001": ALL_SLICE_RULES})
-    right = _build(record_rule_map={"visit-001": ALL_SLICE_RULES, "other-b": ["LX0609-033"]})
+    left = _build(record_rule_map={"other-a": ["LX0609-05-01-01"], "visit-001": ALL_SLICE_RULES})
+    right = _build(record_rule_map={"visit-001": ALL_SLICE_RULES, "other-b": ["LX0609-11-01-01"]})
     assert left.fingerprint() == right.fingerprint()
     serialized = left.canonical_json()
     assert "other-a" not in serialized
-    assert "LX0609-028" not in serialized
+    assert "LX0609-05-01-01" not in serialized
 
 
 def test_output_recursively_contains_no_customer_status_tokens() -> None:
-    payload = _build(selected_rule_ids=[*ALL_SLICE_RULES, "LX0609-028"]).to_dict()
+    payload = _build(selected_rule_ids=[*ALL_SLICE_RULES, "LX0609-05-01-01"]).to_dict()
     serialized = json.dumps(payload, ensure_ascii=False)
     compact = re.sub(r"[_\s-]+", "", serialized).lower()
     for token in (

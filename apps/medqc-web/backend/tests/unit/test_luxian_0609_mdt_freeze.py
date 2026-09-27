@@ -27,7 +27,7 @@ from app.services.luxian_0609_result_aggregator import aggregate_luxian_0609_res
 from app.services.luxian_0609_rule_catalog import load_luxian_0609_rules
 
 
-RULE_ID = "LX0609-040"
+RULE_ID = "LX0609-04-01-03"
 _SOURCE_KEYS = (
     "mr_surgery",
     "presurg_summary",

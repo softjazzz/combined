@@ -26,7 +26,7 @@ LUXIAN_0609_QC_RULE_SET_KEY = "luxian_0609_qc_v1"
 LUXIAN_0916_QC_RULE_SET_KEY = "luxian_0916_qc_v1"
 # 客户已明确排除缺失同意书/收费资料的五条规则；阶段冻结规则另由 worker 以 not_executed 投影。
 LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS: frozenset[str] = frozenset(
-    {"LX0609-033", "LX0609-034", "LX0609-035", "LX0609-041", "LX0609-042"}
+    {"LX0609-11-01-01", "LX0609-11-02-01", "LX0609-11-02-02", "LX0609-11-03-01", "LX0609-11-03-02"}
 )
 SAMPLE_PROGRAMMATIC_RULE_SET_KEY = "sample_programmatic_gate_v1"
 SAMPLE_PROGRAMMATIC_RULE_SET_NAME = "样本硬门槛程序规则包 v1"
@@ -348,7 +348,7 @@ def get_luxian_0916_sample_validation_rule_set() -> QCRuleSet:
 
 @lru_cache(maxsize=1)
 def get_luxian_0609_customer_delivery_rule_ids() -> tuple[str, ...]:
-    """返回客户交付范围（70条），保持目录顺序并排除客户明确无来源的规则。"""
+    """返回客户可选交付范围，保持目录顺序并排除客户明确无来源的规则。"""
 
     return tuple(get_luxian_0609_sample_validation_rule_set().rule_ids)
 
@@ -357,7 +357,7 @@ def get_luxian_0609_customer_delivery_rule_ids() -> tuple[str, ...]:
 def get_luxian_0609_customer_execution_scope() -> tuple[
     tuple[str, ...], tuple[str, ...]
 ]:
-    """将客户交付范围拆为可执行64条与冻结6条。"""
+    """按当前目录将客户交付范围拆为可执行与暂停规则。"""
 
     return partition_luxian_0609_rule_scope(get_luxian_0609_customer_delivery_rule_ids())
 

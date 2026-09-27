@@ -16,7 +16,7 @@ from . import result_aggregator as aggregator
 from . import shadow_fact_bundle as bundle
 from . import source_manifest_builder as manifest_builder
 
-_RULES = ("LX0609-029", "LX0609-030", "LX0609-032")
+_RULES = ("LX0609-04-01-01", "LX0609-04-02-02", "LX0609-04-03-01")
 _CODE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$")
 _SHA = re.compile(r"^[a-f0-9]{64}$")
 _SENSITIVE = re.compile(r"(?i)(full[_ -]?text|medical[_ -]?text|raw[_ -]?(text|response|output)|patient[_ -]?name|mobile|address|source[_ -]?document|record[_ -]?content|error[_ -]?stack|sql|private[_ -]?key|prompt|quote|value|trace|response|authorization|bearer|api[_ -]?key|password|(?:^|[_-])sk[_-]|phone|id[_ -]?card)")
@@ -118,7 +118,7 @@ def build_luxian_0609_shadow_execution(*, visit_ref: str, selected_rule_ids: Any
     if len(observed_sources) != len(source_query_observations) or observed_sources != expected_sources: raise ValueError("source observations do not exactly match plan scope")
     manifest = manifest_builder.build_luxian_0609_source_manifest_shadow(visit_ref=plan.visit_ref, evidence_payload=evidence_payload, observations=source_query_observations, manifest_schema_version=manifest_schema_version, created_at=manifest_created_at)
     qualification_by_rule = {item.rule_id: item for item in target_qualifications if isinstance(item, gate.TargetQualification)}
-    qualification_candidates = tuple(rule for rule in plan.planned_rules if rule.rule_id in ("LX0609-029", "LX0609-032"))
+    qualification_candidates = tuple(rule for rule in plan.planned_rules if rule.rule_id in ("LX0609-04-01-01", "LX0609-04-03-01"))
     manifest_entries = {entry.source_key: entry for entry in manifest.entries} if qualification_candidates else {}
     required_qualification_rules = tuple(
         rule.rule_id

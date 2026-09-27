@@ -40,7 +40,7 @@ function appendix(markdown: string): DiagnosticDocument {
 
 function result(index: number): SingleRecordQcResultItem {
   return {
-    rule_id: `LX0609-${String(index).padStart(3, '0')}`,
+    rule_id: `LX0609-${String(index).padStart(2, '0')}-01-01`,
     rule_name: '合成规则',
     status: index <= 24 ? 'data_gap' : 'compliant',
     reason_code: index <= 24 ? 'association_failed' : 'requirement_satisfied',
@@ -100,7 +100,7 @@ describe('质控诊断包机器附录', () => {
         { diagnosticPackage: true },
       ),
     )
-    expect(doc.summary.duplicate_rule_ids).toEqual(['LX0609-001'])
+    expect(doc.summary.duplicate_rule_ids).toEqual(['LX0609-01-01-01'])
     expect(doc.summary.unique_rule_count).toBe(1)
     expect(doc.summary.scope).toBe('partial_or_unknown')
   })
@@ -121,13 +121,13 @@ describe('质控诊断包机器附录', () => {
           source_type: 'exam_master',
           evidence_count: 2,
           unique_reference_count: 1,
-          rule_ids: ['LX0609-010'],
+          rule_ids: ['LX0609-10-01-01'],
         },
         {
           source_type: 'inpat_nondrug_order',
           evidence_count: 1,
           unique_reference_count: 1,
-          rule_ids: ['LX0609-010'],
+          rule_ids: ['LX0609-10-01-01'],
         },
       ]),
     )

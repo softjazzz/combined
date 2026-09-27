@@ -7,7 +7,7 @@ from datetime import date, datetime, timedelta
 from typing import Mapping, Sequence
 
 
-CRITICAL_VALUE_RULE_IDS = ("LX0609-052", "LX0609-053")
+CRITICAL_VALUE_RULE_IDS = ("LX0609-06-04-01", "LX0609-06-04-02")
 CRITICAL_VALUE_SOURCE_KEYS = (
     "labtest_master",
     "labtest_item_report",
@@ -271,7 +271,7 @@ def _display_facts(
     facts: dict[str, object] = {
         "verification_kind": (
             "critical_value_timeliness_check"
-            if rule_id == "LX0609-052"
+            if rule_id == "LX0609-06-04-01"
             else "critical_value_disposition_presence_check"
         ),
         "critical_item_names": [item.item_name[:40] for item in critical_items],
@@ -291,7 +291,7 @@ def _display_facts(
         ],
         "event_results": list(event_results),
     }
-    if rule_id == "LX0609-052":
+    if rule_id == "LX0609-06-04-01":
         facts["threshold_hours"] = 6
         facts["actual_interval_hours"] = [
             item["interval_hours"]
@@ -425,7 +425,7 @@ def evaluate_critical_value_rules(
                     )
                     for event in events
                 )
-            elif rule_id == "LX0609-053":
+            elif rule_id == "LX0609-06-04-02":
                 event_results = tuple(
                     _event_display(
                         event=event,

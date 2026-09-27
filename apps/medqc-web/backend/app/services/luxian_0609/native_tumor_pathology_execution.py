@@ -31,31 +31,41 @@ from .source_evidence_reader import (
     SourceEvidenceUnavailable,
     read_luxian_0609_native_source_rows,
 )
+from .pathology_report_completeness import (
+    PATHOLOGY_COMPLETENESS_SOURCES,
+    PATHOLOGY_REPORT_COMPLETENESS_RULE_ID,
+    evaluate_pathology_report_completeness,
+)
 
 
 TUMOR_PATHOLOGY_RULE_IDS = (
-    "LX0609-013",
-    "LX0609-019",
-    "LX0609-026",
-    "LX0609-027",
+    "LX0609-06-02-03",
+    "LX0609-06-02-02",
+    "LX0609-05-02-01",
+    "LX0609-08-01-04",
+)
+EXECUTABLE_TUMOR_PATHOLOGY_RULE_IDS = (
+    *TUMOR_PATHOLOGY_RULE_IDS,
+    PATHOLOGY_REPORT_COMPLETENESS_RULE_ID,
 )
 EXECUTOR_KEY = "tumor_pathology"
-_TYPED_DECISION_RULE_IDS = frozenset(TUMOR_PATHOLOGY_RULE_IDS)
+_TYPED_DECISION_RULE_IDS = frozenset(EXECUTABLE_TUMOR_PATHOLOGY_RULE_IDS)
 _TYPED_RULE_SOURCE_KEYS = {
-    "LX0609-013": (
+    PATHOLOGY_REPORT_COMPLETENESS_RULE_ID: PATHOLOGY_COMPLETENESS_SOURCES,
+    "LX0609-06-02-03": (
         "pathology_exam_master",
         "pathology_exam_report",
         "surgery_record",
         "daily_course_record",
     ),
-    "LX0609-019": (
+    "LX0609-06-02-02": (
         "pathology_exam_master",
         "pathology_exam_report",
         "surgery_record",
         "daily_course_record",
         "senior_course_record",
     ),
-    "LX0609-026": (
+    "LX0609-05-02-01": (
         "admission_record_diagnosis",
         "diagnosis",
         "discharge_record_diagnosis",
@@ -65,7 +75,7 @@ _TYPED_RULE_SOURCE_KEYS = {
         "inpat_drug_order",
         "daily_course_record",
     ),
-    "LX0609-027": (
+    "LX0609-08-01-04": (
         "diagnosis",
         "discharge_record_diagnosis",
         "pathology_exam_report",
@@ -306,7 +316,10 @@ def _typed_decision_from_outcome(
             ApplicabilityState.UNKNOWN if source_gap else ApplicabilityState.APPLICABLE,
             EvidenceState.DATA_GAP,
             QcDirection.UNKNOWN,
-            "source_unavailable" if source_gap else "required_field_missing",
+            "target_report_missing"
+            if outcome.rule_id == PATHOLOGY_REPORT_COMPLETENESS_RULE_ID
+            and outcome.reason_code == "target_report_missing"
+            else "source_unavailable" if source_gap else "required_field_missing",
         )
     elif outcome.status == "technical_error":
         technical_reason = (
@@ -1425,9 +1438,14 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
 ) -> NativeTumorPathologyExecutionResult:
     """按客户目录顺序执行；无受控适用事实时不调用模型。"""
 
-    requested = {str(rule_id or "").strip().upper() for rule_id in rule_ids}
+    requested = tuple(dict.fromkeys(
+        str(rule_id or "").strip().upper()
+        for rule_id in rule_ids
+        if str(rule_id or "").strip()
+    ))
     selected = tuple(
-        rule_id for rule_id in TUMOR_PATHOLOGY_RULE_IDS if rule_id in requested
+        rule_id for rule_id in requested
+        if rule_id in EXECUTABLE_TUMOR_PATHOLOGY_RULE_IDS
     )
     typed_requested = {
         str(rule_id or "").strip().upper() for rule_id in decision_rule_ids
@@ -1575,7 +1593,40 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
         source_for_rule = typed_source if typed_rule else source
         facts_for_rule = () if typed_rule else facts
         context_sources: tuple[str, ...]
-        if rule_id in {"LX0609-013", "LX0609-019"}:
+        if rule_id == PATHOLOGY_REPORT_COMPLETENESS_RULE_ID:
+            # 新完整性规则只使用同一会话材料；不依赖恶性诊断、旧 payload
+            # 或限8行的旧入口，也不能把申请记录视为已执行检查。
+            session_available = (
+                evidence_snapshot is not None
+                and evidence_materials is not None
+                and evidence_materials.snapshot_hash == evidence_snapshot.snapshot_hash
+            )
+            materials = {
+                key: typed_source(key) if session_available else SourceMaterial("unavailable")
+                for key in PATHOLOGY_COMPLETENESS_SOURCES
+            }
+            completeness = {
+                item.source_key: item.completeness.value
+                for item in evidence_snapshot.observations
+                if item.source_key in PATHOLOGY_COMPLETENESS_SOURCES
+            } if session_available else {}
+            outcome = evaluate_pathology_report_completeness(
+                master_rows=materials["pathology_exam_master"].rows,
+                report_rows=materials["pathology_exam_report"].rows,
+                source_states={key: material.state for key, material in materials.items()},
+                source_completeness=completeness,
+                document_refs=lambda key, rows: typed_document_refs((key, rows)),
+            )
+            emit_outcome(
+                rule_id,
+                outcome.status,
+                outcome.reason_code,
+                executor_type="program",
+                display_facts=outcome.display_facts,
+                fact_refs=outcome.fact_refs,
+            )
+            continue
+        if rule_id in {"LX0609-06-02-03", "LX0609-06-02-02"}:
             master = source_for_rule("pathology_exam_master")
             report = source_for_rule("pathology_exam_report")
             if rule_id in typed_requested and any(
@@ -1614,8 +1665,8 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                     executor_type="program",
                 )
                 continue
-            requires_complete_pathology_result = rule_id == "LX0609-013" or (
-                rule_id == "LX0609-019" and typed_rule
+            requires_complete_pathology_result = rule_id == "LX0609-06-02-03" or (
+                rule_id == "LX0609-06-02-02" and typed_rule
             )
             complete_pathology_report_row = (
                 _complete_pathology_result_row(report)
@@ -1641,13 +1692,13 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                 continue
             target_context_sources = (
                 _LX019_PATHOLOGY_TARGET_SOURCES
-                if rule_id == "LX0609-019"
+                if rule_id == "LX0609-06-02-02"
                 else _PATHOLOGY_TARGET_SOURCES
             )
             context_sources = (*_PATHOLOGY_SOURCES, *target_context_sources)
         else:
             diagnosis = source_for_rule("diagnosis")
-            if typed_rule and rule_id == "LX0609-026":
+            if typed_rule and rule_id == "LX0609-05-02-01":
                 chemotherapy_orders = source_for_rule("inpat_drug_order")
                 course_records = source_for_rule("daily_course_record")
                 if chemotherapy_orders.state == "error":
@@ -1692,7 +1743,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                 malignancy = await shared_malignancy.resolve(
                     _malignancy_sources(source_for_rule, visit_stage=stage)
                 )
-                usage = shared_malignancy.claim_usage()
+                usage = shared_malignancy.claim_usage(malignancy)
                 llm_call_count += usage.llm_call_count
                 prompt_tokens += usage.prompt_tokens
                 completion_tokens += usage.completion_tokens
@@ -1769,7 +1820,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                     ),
                 )
                 continue
-            if typed_rule and rule_id == "LX0609-027":
+            if typed_rule and rule_id == "LX0609-08-01-04":
                 stage = _discharge_stage(
                     source_for_rule("inpat_registration.discharge_horizon"),
                     source_for_rule("discharge_record"),
@@ -1801,7 +1852,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                 malignancy = await shared_malignancy.resolve(
                     _malignancy_sources(source_for_rule, visit_stage=stage)
                 )
-                usage = shared_malignancy.claim_usage()
+                usage = shared_malignancy.claim_usage(malignancy)
                 llm_call_count += usage.llm_call_count
                 prompt_tokens += usage.prompt_tokens
                 completion_tokens += usage.completion_tokens
@@ -1895,7 +1946,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                     executor_type="program",
                 )
                 continue
-            if rule_id == "LX0609-026":
+            if rule_id == "LX0609-05-02-01":
                 chemo_present = _has_fact(
                     facts_for_rule,
                     _CHEMO_FACT_TYPES,
@@ -1919,11 +1970,11 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
         }
         required_sources = (
             _LX019_PATHOLOGY_TARGET_SOURCES
-            if rule_id == "LX0609-019" and typed_rule
+            if rule_id == "LX0609-06-02-02" and typed_rule
             else _PATHOLOGY_TARGET_SOURCES
-            if rule_id in {"LX0609-013", "LX0609-019"}
+            if rule_id in {"LX0609-06-02-03", "LX0609-06-02-02"}
             else ("inpat_drug_order", "daily_course_record")
-            if rule_id == "LX0609-026"
+            if rule_id == "LX0609-05-02-01"
             else ("discharge_record",)
         )
         if rule_id in typed_requested and any(
@@ -1951,7 +2002,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
         target_states = tuple(
             materials[source_key].state for source_key in required_sources
         )
-        if rule_id == "LX0609-013" and all(
+        if rule_id == "LX0609-06-02-03" and all(
             state == "empty" for state in target_states
         ):
             emit_outcome(
@@ -1978,7 +2029,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                 ),
             )
             continue
-        if rule_id == "LX0609-019" and all(
+        if rule_id == "LX0609-06-02-02" and all(
             state == "empty" for state in target_states
         ):
             missing_sampling_facts = _lx019_missing_sampling_display_facts(
@@ -2006,7 +2057,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                 ),
             )
             continue
-        if rule_id in {"LX0609-013", "LX0609-019"}:
+        if rule_id in {"LX0609-06-02-03", "LX0609-06-02-02"}:
             target_material_available = (
                 all(state in {"present", "empty"} for state in target_states)
                 and "present" in target_states
@@ -2023,7 +2074,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                 executor_type="program",
             )
             continue
-        if rule_id == "LX0609-027" and typed_rule:
+        if rule_id == "LX0609-08-01-04" and typed_rule:
             status, reason_code, display_facts = _typed_discharge_plan_outcome(
                 materials["discharge_record"]
             )
@@ -2044,7 +2095,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
             continue
         sampling_surgery = materials.get("surgery_record")
         if (
-            rule_id == "LX0609-019"
+            rule_id == "LX0609-06-02-02"
             and rule_id not in typed_requested
             and sampling_surgery is not None
             and not any("surgery_process" in row for row in sampling_surgery.rows)
@@ -2067,7 +2118,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                 materials["daily_course_record"],
                 materials["senior_course_record"],
             )
-            if rule_id == "LX0609-019"
+            if rule_id == "LX0609-06-02-02"
             else ()
         )
         sampling_row = (
@@ -2075,7 +2126,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
             if sampling_materials
             else None
         )
-        if rule_id == "LX0609-019" and sampling_row is not None:
+        if rule_id == "LX0609-06-02-02" and sampling_row is not None:
             sampling_source = next(
                 source_key
                 for source_key, material in zip(
@@ -2106,7 +2157,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                 ),
             )
             continue
-        if rule_id == "LX0609-013":
+        if rule_id == "LX0609-06-02-03":
             documented_row = _documented_pathology_result_row(
                 report,
                 materials["surgery_record"],
@@ -2184,10 +2235,10 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                 materials["daily_course_record"],
                 materials["senior_course_record"],
             )
-            if rule_id == "LX0609-019"
+            if rule_id == "LX0609-06-02-02"
             else ()
         )
-        if rule_id == "LX0609-019" and missing_sampling_rows:
+        if rule_id == "LX0609-06-02-02" and missing_sampling_rows:
             missing_sampling_facts = _lx019_missing_sampling_display_facts(
                 pathology_master=master,
                 pathology_report=report,
@@ -2298,7 +2349,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
             continue
         status = "compliant" if is_compliant else "non_compliant"
         display_facts = None
-        if rule_id == "LX0609-013":
+        if rule_id == "LX0609-06-02-03":
             display_facts = _pathology_result_display_facts(
                 status=status,
                 pathology_master=master,
@@ -2306,7 +2357,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                 surgery_record=materials["surgery_record"],
                 daily_course_record=materials["daily_course_record"],
             )
-        elif rule_id == "LX0609-019" and status == "non_compliant":
+        elif rule_id == "LX0609-06-02-02" and status == "non_compliant":
             display_facts = _lx019_missing_sampling_display_facts(
                 pathology_master=master,
                 pathology_report=report,

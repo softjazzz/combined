@@ -30,13 +30,13 @@ from app.services.luxian_0609.source_evidence_reader import SourceEvidenceQueryE
 
 
 _RULE_NAMES = {
-    "LX0609-029": "术前小结",
-    "LX0609-034": "麻醉知情同意书存在",
-    "LX0609-035": "麻醉知情同意书填写完整",
-    "LX0609-036": "麻醉术前及术后访视存在",
-    "LX0609-037": "麻醉访视填写完整",
-    "LX0609-038": "麻醉记录单存在",
-    "LX0609-039": "术前讨论及术者参加",
+    "LX0609-04-01-01": "术前小结",
+    "LX0609-11-02-01": "麻醉知情同意书存在",
+    "LX0609-11-02-02": "麻醉知情同意书填写完整",
+    "LX0609-04-04-01": "麻醉术前及术后访视存在",
+    "LX0609-04-04-02": "麻醉访视填写完整",
+    "LX0609-04-04-03": "麻醉记录单存在",
+    "LX0609-04-01-02": "术前讨论及术者参加",
 }
 
 
@@ -265,7 +265,7 @@ def _fact_ref_coordinates(session: Any, fact_refs: Sequence[str]) -> tuple[tuple
     ),
     (
         (
-            "LX0609-029",
+            "LX0609-04-01-01",
             {
                 "surgery_record": _rows(_surgery()),
                 "mr_surgery": _rows(_surgery("mr-surgery-1")),
@@ -297,7 +297,7 @@ def _fact_ref_coordinates(session: Any, fact_refs: Sequence[str]) -> tuple[tuple
             "已确认本次实施手术具备术前小结。",
         ),
         (
-            "LX0609-034",
+            "LX0609-11-02-01",
             {
                 "anesthesia_record": _rows(_anesthesia_record()),
                 "mr_surgery": _rows(_surgery("mr-surgery-1")),
@@ -315,7 +315,7 @@ def _fact_ref_coordinates(session: Any, fact_refs: Sequence[str]) -> tuple[tuple
             "已实施麻醉，但未找到对应的麻醉知情同意书",
         ),
         (
-            "LX0609-035",
+            "LX0609-11-02-02",
             {
                 "anesthesia_record": _rows(_anesthesia_record()),
                 "mr_surgery": _rows(_surgery("mr-surgery-1")),
@@ -339,7 +339,7 @@ def _fact_ref_coordinates(session: Any, fact_refs: Sequence[str]) -> tuple[tuple
             "发现质控问题",
         ),
         (
-            "LX0609-036",
+            "LX0609-04-04-01",
             {
                 "anesthesia_record": _rows(_anesthesia_record()),
                 "mr_surgery": _rows(_surgery("mr-surgery-1")),
@@ -363,7 +363,7 @@ def _fact_ref_coordinates(session: Any, fact_refs: Sequence[str]) -> tuple[tuple
             "已实施麻醉，但缺少麻醉术前或术后访视记录",
         ),
         (
-            "LX0609-037",
+            "LX0609-04-04-02",
             {
                 "anesthesia_record": _rows(_anesthesia_record()),
                 "mr_surgery": _rows(_surgery("mr-surgery-1")),
@@ -413,7 +413,7 @@ def _fact_ref_coordinates(session: Any, fact_refs: Sequence[str]) -> tuple[tuple
             ),
         ),
         (
-            "LX0609-038",
+            "LX0609-04-04-03",
             {
                 "anesthesia_record": _rows(_anesthesia_record()),
                 "mr_surgery": _rows(_surgery("mr-surgery-1")),
@@ -430,7 +430,7 @@ def _fact_ref_coordinates(session: Any, fact_refs: Sequence[str]) -> tuple[tuple
             "已确认本次麻醉具备麻醉记录单。",
         ),
         (
-            "LX0609-039",
+            "LX0609-04-01-02",
             {
                 "surgery_record": _rows(
                     {
@@ -503,7 +503,7 @@ async def test_lx029_order_only_trigger_freezes_mutually_exclusive_facts_and_coo
     """029 的手术医嘱触发不得伪称手术已经实施。"""
 
     session, execution, reduced, result = await _run_chain(
-        "LX0609-029",
+        "LX0609-04-01-01",
         {
             "inpat_nondrug_order": _rows(
                 {
@@ -560,14 +560,14 @@ async def test_lx029_order_only_trigger_freezes_mutually_exclusive_facts_and_coo
 async def test_surgery_document_family_freezes_not_applicable_data_gap_and_technical_error() -> None:
     cases = (
         (
-            "LX0609-029",
+            "LX0609-04-01-01",
             {},
             frozenset(),
             "not_applicable",
             "performed_event_absent",
         ),
         (
-            "LX0609-029",
+            "LX0609-04-01-01",
             {
                 "surgery_record": _rows(
                     _surgery("surgery-1"),
@@ -589,7 +589,7 @@ async def test_surgery_document_family_freezes_not_applicable_data_gap_and_techn
             "association_failed",
         ),
         (
-            "LX0609-034",
+            "LX0609-11-02-01",
             {},
             frozenset({"anesthesia_record"}),
             "technical_error",
@@ -614,13 +614,13 @@ async def test_surgery_document_family_freezes_not_applicable_data_gap_and_techn
 
 def test_surgery_document_family_rule_set_and_aggregator_ownership_is_zero() -> None:
     assert SURGERY_DOCUMENT_RULE_IDS == (
-            "LX0609-029",
-            "LX0609-034",
-            "LX0609-035",
-            "LX0609-036",
-            "LX0609-037",
-            "LX0609-038",
-            "LX0609-039",
+            "LX0609-04-01-01",
+            "LX0609-11-02-01",
+            "LX0609-11-02-02",
+            "LX0609-04-04-01",
+            "LX0609-04-04-02",
+            "LX0609-04-04-03",
+            "LX0609-04-01-02",
     )
 
     # 迁移完成后，聚合器不得再按本族规则号解释事实、状态或证据。
@@ -633,7 +633,7 @@ def test_surgery_document_family_rule_set_and_aggregator_ownership_is_zero() -> 
     assert all(rule_id not in aggregator_source for rule_id in SURGERY_DOCUMENT_RULE_IDS)
 
     assert safe_luxian_0609_customer_display_facts(
-        rule_id="LX0609-038",
+        rule_id="LX0609-04-04-03",
         raw={
             "failure_kind": "anesthesia_record_missing",
             "performed_anesthesia_confirmed": True,

@@ -14,7 +14,7 @@ import re
 from typing import Any
 
 
-DEATH_DOCUMENT_CUSTOMER_RULE_IDS = frozenset({"LX0609-051", "LX0609-060"})
+DEATH_DOCUMENT_CUSTOMER_RULE_IDS = frozenset({"LX0609-09-02-01", "LX0609-04-02-06"})
 _DATETIME = re.compile(
     r"\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}"
     r"(?:\.\d{1,6})?(?:Z|[+-]\d{2}:?\d{2})?"
@@ -50,6 +50,15 @@ def _safe_number(value: Any, *, minimum: float = 0) -> float | int | None:
     ):
         return None
     return value
+
+
+def _published_number(value: Any, *, minimum: float = 0) -> bool:
+    if type(value) not in (int, float):
+        return False
+    try:
+        return math.isfinite(float(value)) and value >= minimum
+    except (OverflowError, ValueError):
+        return False
 
 
 def _safe_051(raw: Mapping[str, Any]) -> dict[str, Any] | None:
@@ -156,11 +165,71 @@ def safe_death_document_customer_display_facts(
     if not isinstance(raw, Mapping):
         return None
     normalized = str(rule_id or "").strip().upper()
-    if normalized == "LX0609-051":
+    if normalized == "LX0609-09-02-01":
         return _safe_051(raw)
-    if normalized == "LX0609-060":
+    if normalized == "LX0609-04-02-06":
         return _safe_060(raw)
     return None
+
+
+def validate_published_death_document_facts(
+    *, rule_id: str, raw: Any,
+) -> dict[str, Any] | None:
+    """只校验已发布的死亡文书事实；不重新执行内部白名单投影。"""
+
+    if not isinstance(raw, dict) or any(type(key) is not str for key in raw):
+        return None
+    rid = str(rule_id or "").strip().upper()
+    keys = set(raw)
+    if rid == "LX0609-04-02-06":
+        expected = {"verification_kind", "death_confirmed", "death_record_count"}
+        count = raw.get("death_record_count")
+        if (keys not in (expected, expected | {"death_time"})
+                or raw.get("verification_kind") != _PRESENCE_KIND
+                or raw.get("death_confirmed") is not True
+                or type(count) is not int or count < 0
+                or ("death_time" in raw and not _safe_time(raw["death_time"]))):
+            return None
+        return dict(raw)
+    if rid != "LX0609-09-02-01" or not _safe_time(raw.get("death_time")):
+        return None
+    kind = raw.get("verification_kind") or raw.get("failure_kind")
+    if kind == _TIMELINESS_KIND:
+        actual = raw.get("actual_interval_hours")
+        if (keys != {"verification_kind", "death_time", "discussion_time", "threshold_hours", "actual_interval_hours"}
+                or not _safe_time(raw.get("discussion_time"))
+                or type(raw.get("threshold_hours")) is not int or raw["threshold_hours"] != 168
+                or not _published_number(actual)):
+            return None
+    elif kind == _MISSING_KIND:
+        count = raw.get("discussion_count")
+        if (keys != {"failure_kind", "death_time", "threshold_hours", "discussion_count"}
+                or type(raw.get("threshold_hours")) is not int or raw["threshold_hours"] != 168
+                or type(count) is not int or count < 0):
+            return None
+    elif kind == _WINDOW_KIND:
+        base = {"verification_kind", "death_time", "deadline_time"}
+        if not _safe_time(raw.get("deadline_time")):
+            return None
+        if keys == base | {"evaluation_time", "remaining_seconds"}:
+            if (not _safe_time(raw.get("evaluation_time"))
+                    or type(raw.get("remaining_seconds")) is not int
+                    or raw["remaining_seconds"] < 1):
+                return None
+        elif keys == base | {"evaluation_date"}:
+            if type(raw["evaluation_date"]) is not str or _DATE.fullmatch(raw["evaluation_date"]) is None:
+                return None
+        else:
+            return None
+    elif kind == _HORIZON_KIND:
+        issue = raw.get("issue")
+        if (keys != {"verification_kind", "death_time", "issue"}
+                or type(issue) is not str
+                or issue not in {"authoritative_time_missing", "authoritative_time_conflict"}):
+            return None
+    else:
+        return None
+    return dict(raw)
 
 
 def death_document_customer_fact_status_is_valid(
@@ -176,7 +245,7 @@ def death_document_customer_fact_status_is_valid(
     if not isinstance(safe_facts, Mapping):
         return False
     normalized_rule_id = str(rule_id or "").strip().upper()
-    if normalized_rule_id == "LX0609-060":
+    if normalized_rule_id == "LX0609-04-02-06":
         count = safe_facts.get("death_record_count")
         return (
             isinstance(count, int)
@@ -204,4 +273,5 @@ __all__ = [
     "death_document_customer_fact_status_is_valid",
     "is_death_document_customer_rule",
     "safe_death_document_customer_display_facts",
+    "validate_published_death_document_facts",
 ]

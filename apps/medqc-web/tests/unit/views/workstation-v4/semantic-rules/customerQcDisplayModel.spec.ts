@@ -4,7 +4,7 @@ import { buildCustomerQcDisplayModel } from '@/views/workstation-v4/semantic-rul
 describe('customerQcDisplayModel', () => {
   it('读取客户安全 DTO 顶层受控事实，不再退回通用占位文案', () => {
     const model = buildCustomerQcDisplayModel({
-      rule_id: 'LX0609-018',
+      rule_id: 'LX0609-01-01-02',
       status: 'non_compliant',
       reason_code: 'requirement_violated',
       customer_display_facts: {
@@ -29,9 +29,9 @@ describe('customerQcDisplayModel', () => {
     expect(model.conclusion).not.toBe('发现该质控点对应的明确问题。')
   })
 
-  it('将 LX0609-018 的长度缺陷转换为可直接给质控员阅读的明细', () => {
+  it('将 LX0609-01-01-02 的长度缺陷转换为可直接给质控员阅读的明细', () => {
     const model = buildCustomerQcDisplayModel({
-      rule_id: 'LX0609-018',
+      rule_id: 'LX0609-01-01-02',
       status: 'non_compliant',
       reason_code: 'threshold_exceeded',
       findings: '规则要求未满足。',
@@ -59,7 +59,7 @@ describe('customerQcDisplayModel', () => {
 
   it('在来源不足时不伪造实际值，并给出可理解的缺口说明', () => {
     const model = buildCustomerQcDisplayModel({
-      rule_id: 'LX0609-018',
+      rule_id: 'LX0609-01-01-02',
       status: 'data_gap',
       reason_code: 'complaint_or_primary_diagnosis_unavailable',
     })
@@ -73,7 +73,7 @@ describe('customerQcDisplayModel', () => {
 
   it('将 018 受控语义原因映射为客户可理解的结论，不展示模型原文', () => {
     const model = buildCustomerQcDisplayModel({
-      rule_id: 'LX0609-018',
+      rule_id: 'LX0609-01-01-02',
       status: 'non_compliant',
       reason_code: 'course_customer_prompt',
       metadata: {
@@ -95,7 +95,7 @@ describe('customerQcDisplayModel', () => {
 
   it('对未建设专用展示合同的规则保留安全的原始客户结论', () => {
     const model = buildCustomerQcDisplayModel({
-      rule_id: 'LX0609-029',
+      rule_id: 'LX0609-04-01-01',
       status: 'non_compliant',
       findings: '术前小结未记录。',
       suggestion: '请补充术前小结。',
@@ -108,7 +108,7 @@ describe('customerQcDisplayModel', () => {
 
   it('拒绝 025 的旧字段清单并保留安全回退文案', () => {
     const model = buildCustomerQcDisplayModel({
-      rule_id: 'LX0609-025',
+      rule_id: 'LX0609-04-02-04',
       status: 'non_compliant',
       customer_display_facts: {
         missing_fields: ['implant_barcode', 'implant_quantity'],
@@ -129,7 +129,7 @@ describe('customerQcDisplayModel', () => {
     ['display_status', { display_status: '未执行' }],
   ] as const)('将 %s 字段的未执行状态显示为阶段性结果', (_field, status) => {
     const model = buildCustomerQcDisplayModel({
-      rule_id: 'LX0609-025',
+      rule_id: 'LX0609-04-02-04',
       ...status,
     })
 
@@ -143,7 +143,7 @@ describe('customerQcDisplayModel', () => {
 
   it('将 016 的复制判定显示为客户可复核的百分比', () => {
     const model = buildCustomerQcDisplayModel({
-      rule_id: 'LX0609-016',
+      rule_id: 'LX0609-12-01-01',
       status: 'non_compliant',
       customer_display_facts: {
         failure_kind: 'admission_first_course_copy_detected',

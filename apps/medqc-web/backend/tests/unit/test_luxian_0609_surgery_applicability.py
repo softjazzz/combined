@@ -39,7 +39,7 @@ def _session(rows_by_source=None, *, failing_source="", unavailable_source=""):
         )
 
     return build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-029",),
+        selected_rule_ids=("LX0609-04-01-01",),
         institute_id="safe-institute",
         patient_id="safe-patient",
         visit_id="safe-visit",

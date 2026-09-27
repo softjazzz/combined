@@ -891,7 +891,7 @@ interface SafeCriterionResult {
 }
 
 function legacyLx018Criteria(raw: RawCustomerQcResult): SafeCriterionResult[] {
-  if (resolveRuleId(raw) !== 'LX0609-018') return []
+  if (resolveRuleId(raw) !== 'LX0609-01-01-02') return []
   const facts = extractCustomerDisplayFacts(raw)
   const criteria: SafeCriterionResult[] = []
   if (facts.complaintLength !== undefined) {
@@ -1693,8 +1693,21 @@ function transfusionDescriptor(facts: CustomerDisplayFacts): CustomerReasonDescr
   return descriptions[transfusion.requirement]
 }
 
+const LUXIAN_0609_RULE_ID_PATTERN = /^LX0609-(?!00)\d{2}-(?!00)\d{2}-(?!00)\d{2}$/u
+const LUXIAN_0609_PREFIX_PATTERN = /^LX0609-/iu
+
 function resolveRuleId(raw: RawCustomerQcResult): string {
-  return asString(raw.rule_id) ?? asString(raw.rule_code) ?? asString(raw.qc_point_id) ?? 'UNKNOWN'
+  const candidates = [raw.rule_id, raw.rule_code, raw.qc_point_id]
+    .map((value) => asString(value))
+    .filter((value): value is string => Boolean(value))
+  if (candidates.some((value) => LUXIAN_0609_PREFIX_PATTERN.test(value))) {
+    const identities = candidates.map((value) => value.toUpperCase())
+    const identity = identities[0] || ''
+    return LUXIAN_0609_RULE_ID_PATTERN.test(identity) && identities.every((value) => value === identity)
+      ? identity
+      : 'UNKNOWN'
+  }
+  return candidates[0] || 'UNKNOWN'
 }
 
 function resolveRawStatus(raw: RawCustomerQcResult): unknown {
@@ -1743,36 +1756,36 @@ function ruleSpecificDescriptor(
   ruleId: string,
   facts: CustomerDisplayFacts,
 ): CustomerReasonDescriptor | undefined {
-  if (ruleId === 'LX0609-016') return lx016Descriptor(facts)
-  if (ruleId === 'LX0609-025') return lx025Descriptor(facts)
-  if (ruleId === 'LX0609-024') return lx024Descriptor(facts)
-  if (ruleId === 'LX0609-028') return lx028Descriptor(facts)
+  if (ruleId === 'LX0609-12-01-01') return lx016Descriptor(facts)
+  if (ruleId === 'LX0609-04-02-04') return lx025Descriptor(facts)
+  if (ruleId === 'LX0609-04-02-03') return lx024Descriptor(facts)
+  if (ruleId === 'LX0609-05-01-01') return lx028Descriptor(facts)
   if (
-    ['LX0609-034', 'LX0609-035', 'LX0609-036', 'LX0609-037', 'LX0609-038', 'LX0609-039'].includes(
+    ['LX0609-11-02-01', 'LX0609-11-02-02', 'LX0609-04-04-01', 'LX0609-04-04-02', 'LX0609-04-04-03', 'LX0609-04-01-02'].includes(
       ruleId,
     )
   ) {
     return anesthesiaDocumentationDescriptor(facts)
   }
-  if (['LX0609-029', 'LX0609-030', 'LX0609-032'].includes(ruleId)) {
+  if (['LX0609-04-01-01', 'LX0609-04-02-02', 'LX0609-04-03-01'].includes(ruleId)) {
     return surgeryDocumentDescriptor(facts)
   }
-  if (['LX0609-001', 'LX0609-002', 'LX0609-004', 'LX0609-005', 'LX0609-006'].includes(ruleId)) {
+  if (['LX0609-01-01-01', 'LX0609-01-02-01', 'LX0609-09-01-01', 'LX0609-02-01-01', 'LX0609-02-01-02'].includes(ruleId)) {
     return timelinessDescriptor(facts)
   }
-  if (ruleId === 'LX0609-003') return surgeryTimelinessDescriptor(facts)
-  if (ruleId === 'LX0609-033') return surgeryConsentDescriptor(facts)
-  if (ruleId === 'LX0609-031') return surgerySignatureDescriptor(facts)
-  if (ruleId === 'LX0609-040') return surgeryMdtDescriptor(facts)
-  if (ruleId === 'LX0609-008') return severityCourseGapDescriptor(facts)
-  if (ruleId === 'LX0609-009') return criticalDailyCoverageDescriptor(facts)
-  if (ruleId === 'LX0609-017') return lx017Descriptor(facts)
-  if (ruleId === 'LX0609-007') return lx007Descriptor(facts)
-  if (ruleId === 'LX0609-019') return lx019Descriptor(facts)
-  if (['LX0609-010', 'LX0609-011', 'LX0609-012', 'LX0609-014', 'LX0609-015'].includes(ruleId)) {
+  if (ruleId === 'LX0609-04-02-01') return surgeryTimelinessDescriptor(facts)
+  if (ruleId === 'LX0609-11-01-01') return surgeryConsentDescriptor(facts)
+  if (ruleId === 'LX0609-04-02-05') return surgerySignatureDescriptor(facts)
+  if (ruleId === 'LX0609-04-01-03') return surgeryMdtDescriptor(facts)
+  if (ruleId === 'LX0609-02-01-04') return severityCourseGapDescriptor(facts)
+  if (ruleId === 'LX0609-02-01-05') return criticalDailyCoverageDescriptor(facts)
+  if (ruleId === 'LX0609-12-01-02') return lx017Descriptor(facts)
+  if (ruleId === 'LX0609-02-01-03') return lx007Descriptor(facts)
+  if (ruleId === 'LX0609-06-02-02') return lx019Descriptor(facts)
+  if (['LX0609-06-01-02', 'LX0609-06-01-04', 'LX0609-06-01-05', 'LX0609-06-03-03', 'LX0609-06-03-04'].includes(ruleId)) {
     return examLabDescriptor(facts)
   }
-  if (['LX0609-044', 'LX0609-046', 'LX0609-047', 'LX0609-048'].includes(ruleId)) {
+  if (['LX0609-07-01-02', 'LX0609-07-02-02', 'LX0609-07-03-01', 'LX0609-07-04-01'].includes(ruleId)) {
     return transfusionDescriptor(facts)
   }
   return undefined
@@ -1794,7 +1807,7 @@ export function hasActionableCustomerExplanation(raw: RawCustomerQcResult): bool
   )
     return true
   if (
-    ruleId === 'LX0609-018' &&
+    ruleId === 'LX0609-01-01-02' &&
     [
       'complaint_or_primary_diagnosis_unavailable',
       'complaint_too_long',
@@ -1861,11 +1874,11 @@ export function normalizeCustomerQcResult(raw: RawCustomerQcResult): CustomerQcR
   const evidenceSources = criteriaDisplay?.evidenceSources ?? evidenceSourcesFor(facts)
   const actualValue =
     criteriaDisplay?.actualValue ??
-    (ruleId === 'LX0609-016' &&
+    (ruleId === 'LX0609-12-01-01' &&
     facts.copySimilarity !== undefined &&
     facts.copySimilarityThreshold !== undefined
       ? `相似度：${formatPercentage(facts.copySimilarity)}；判定阈值：${formatPercentage(facts.copySimilarityThreshold)}；超出阈值：${formatPercentage(Math.max(0, facts.copySimilarity - facts.copySimilarityThreshold)).replace('%', '个百分点')}。`
-      : ruleId === 'LX0609-025' && facts.missingFields?.length && facts.implantEvents?.length
+      : ruleId === 'LX0609-04-02-04' && facts.missingFields?.length && facts.implantEvents?.length
         ? facts.implantEvents
             .map((event) => {
               const names = event.implantNames.length ? `（${event.implantNames.join('、')}）` : ''
@@ -1875,9 +1888,9 @@ export function normalizeCustomerQcResult(raw: RawCustomerQcResult): CustomerQcR
               return `第${event.eventPosition}台手术${names}缺失：${fields}`
             })
             .join('；') + '。'
-        : ruleId === 'LX0609-024' && facts.lymphNodeDocumentation?.checkedSources.length
+        : ruleId === 'LX0609-04-02-03' && facts.lymphNodeDocumentation?.checkedSources.length
           ? `已确认：本次手术已实施且属于恶性肿瘤手术；已核对来源：${facts.lymphNodeDocumentation.checkedSources.map((source) => PATHOLOGY_SOURCE_LABELS[source]).join('、')}。`
-          : ruleId === 'LX0609-028' && facts.prophylaxisDuration
+          : ruleId === 'LX0609-05-01-01' && facts.prophylaxisDuration
             ? `切口类别：${facts.prophylaxisDuration.incisionClass}类；实际预防用药：${facts.prophylaxisDuration.startTime}至${facts.prophylaxisDuration.endTime}，共${facts.prophylaxisDuration.durationHours}小时。`
             : undefined)
 

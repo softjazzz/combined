@@ -83,7 +83,7 @@ def _luxian_0609_copy_guard_result(
     meta: RuleExecutionMeta,
 ) -> dict[str, Any] | None:
     rule_id = str(rule.get("rule_id") or rule.get("rule_code") or "").strip().upper()
-    if rule_id != "LX0609-016":
+    if rule_id != "LX0609-12-01-01":
         return None
     if _has_meaningful_first_course_text(medical_record):
         return None

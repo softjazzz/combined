@@ -1,4 +1,4 @@
-"""LX0609-018 主诉长度与第一诊断指向的受控判定。"""
+"""LX0609-01-01-02 主诉长度与第一诊断指向的受控判定。"""
 
 from __future__ import annotations
 
@@ -82,7 +82,7 @@ def _lx018_criteria() -> tuple[RuleCriterionContract, RuleCriterionContract]:
     contract = next(
         item
         for item in load_luxian_0609_rule_contracts()
-        if item.rule_id == "LX0609-018"
+        if item.rule_id == "LX0609-01-01-02"
     )
     criteria = {item.criterion_id: item for item in contract.criteria}
     length = criteria.get("chief_complaint_length")
@@ -94,7 +94,7 @@ def _lx018_criteria() -> tuple[RuleCriterionContract, RuleCriterionContract]:
         or relation.kind != "semantic_relation"
         or len(criteria) != 2
     ):
-        raise ValueError("LX0609-018 criteria contract is incomplete")
+        raise ValueError("LX0609-01-01-02 criteria contract is incomplete")
     return length, relation
 
 

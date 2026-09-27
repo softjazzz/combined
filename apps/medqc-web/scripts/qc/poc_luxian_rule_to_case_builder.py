@@ -318,80 +318,80 @@ TEMPLATE_BUILDERS = {
 
 
 RULE_BLUEPRINTS: Dict[str, RuleBlueprint] = {
-    "LX0609-001": RuleBlueprint(
-        rule_id="LX0609-001",
+    "LX0609-01-01-01": RuleBlueprint(
+        rule_id="LX0609-01-01-01",
         template_key="basic_timeliness",
         expected_status="non_compliant",
         trigger_facts=["入院时间为2026-06-01 08:00", "入院记录记录时间为2026-06-02 10:00"],
         evidence_keywords=["入院记录", "2026-06-02", "超过24小时"],
         human_reason="入院记录完成时间晚于入院后24小时。",
     ),
-    "LX0609-002": RuleBlueprint(
-        rule_id="LX0609-002",
+    "LX0609-01-02-01": RuleBlueprint(
+        rule_id="LX0609-01-02-01",
         template_key="basic_timeliness",
         expected_status="non_compliant",
         trigger_facts=["入院时间为2026-06-01 08:00", "首次病程记录时间为2026-06-01 19:00"],
         evidence_keywords=["首次病程记录", "8小时", "11小时"],
         human_reason="首次病程记录晚于入院后8小时。",
     ),
-    "LX0609-005": RuleBlueprint(
-        rule_id="LX0609-005",
+    "LX0609-02-01-01": RuleBlueprint(
+        rule_id="LX0609-02-01-01",
         template_key="basic_timeliness",
         expected_status="non_compliant",
         trigger_facts=["入院48小时内未见主治医师首次查房记录"],
         evidence_keywords=["上级医师查房记录", "2026-06-04", "48小时内未见"],
         human_reason="入院后48小时内缺少主治医师首次查房记录。",
     ),
-    "LX0609-012": RuleBlueprint(
-        rule_id="LX0609-012",
+    "LX0609-06-01-05": RuleBlueprint(
+        rule_id="LX0609-06-01-05",
         template_key="ct_mri_culture",
         expected_status="non_compliant",
         trigger_facts=["2026-06-01 14:00 腰椎MRI报告阳性", "24小时内病程未分析神经根受压与诊疗方案关系"],
         evidence_keywords=["腰椎MRI", "神经根受压", "继续予止痛、营养神经治疗"],
         human_reason="MRI阳性结果后24小时内未在病程中完成结果分析。",
     ),
-    "LX0609-014": RuleBlueprint(
-        rule_id="LX0609-014",
+    "LX0609-06-03-03": RuleBlueprint(
+        rule_id="LX0609-06-03-03",
         template_key="ct_mri_culture",
         expected_status="non_compliant",
         trigger_facts=["尿培养大肠埃希菌阳性", "报告后24小时内病程未分析阳性菌和药敏结果"],
         evidence_keywords=["尿培养报告", "大肠埃希菌阳性", "药敏"],
         human_reason="培养阳性结果未在病程中及时分析并形成治疗调整依据。",
     ),
-    "LX0609-020": RuleBlueprint(
-        rule_id="LX0609-020",
+    "LX0609-03-01-01": RuleBlueprint(
+        rule_id="LX0609-03-01-01",
         template_key="consultation_quality",
         expected_status="non_compliant",
         trigger_facts=["后续病程未记录会诊意见执行情况"],
         evidence_keywords=["日常病程记录", "未记录执行情况"],
         human_reason="病程未说明会诊意见是否采纳及执行结果。",
     ),
-    "LX0609-021": RuleBlueprint(
-        rule_id="LX0609-021",
+    "LX0609-03-01-02": RuleBlueprint(
+        rule_id="LX0609-03-01-02",
         template_key="consultation_quality",
         expected_status="non_compliant",
         trigger_facts=["会诊申请目的仅写请会诊"],
         evidence_keywords=["会诊申请单", "申请目的：请会诊", "目的不明确"],
         human_reason="会诊目的未说明具体需要解决的问题。",
     ),
-    "LX0609-022": RuleBlueprint(
-        rule_id="LX0609-022",
+    "LX0609-03-01-03": RuleBlueprint(
+        rule_id="LX0609-03-01-03",
         template_key="consultation_quality",
         expected_status="non_compliant",
         trigger_facts=["会诊意见使用必要时调整用药等泛化表述"],
         evidence_keywords=["会诊记录单", "必要时调整用药", "不具备可执行性"],
         human_reason="会诊意见缺少明确处理方案或可执行措施。",
     ),
-    "LX0609-003": RuleBlueprint(
-        rule_id="LX0609-003",
+    "LX0609-04-02-01": RuleBlueprint(
+        rule_id="LX0609-04-02-01",
         template_key="surgery_anesthesia",
         expected_status="non_compliant",
         trigger_facts=["手术结束时间为2026-06-01 11:30", "手术记录记录时间为2026-06-03 12:00"],
         evidence_keywords=["手术结束时间", "记录时间", "超过术后24小时"],
         human_reason="手术记录完成时间超过术后24小时。",
     ),
-    "LX0609-038": RuleBlueprint(
-        rule_id="LX0609-038",
+    "LX0609-04-04-03": RuleBlueprint(
+        rule_id="LX0609-04-04-03",
         template_key="surgery_anesthesia",
         expected_status="non_compliant",
         trigger_facts=["存在麻醉记录", "麻醉方式、麻醉医师代码填写不完整"],
@@ -516,7 +516,7 @@ def main() -> int:
         "--rules",
         nargs="*",
         default=[],
-        help="指定一个规则组合，例如 --rules LX0609-020 LX0609-021 LX0609-022",
+        help="指定一个规则组合，例如 --rules LX0609-03-01-01 LX0609-03-01-02 LX0609-03-01-03",
     )
     args = parser.parse_args()
 
@@ -525,10 +525,10 @@ def main() -> int:
         [normalize_rule_ids(args.rules)]
         if args.rules
         else [
-            ["LX0609-001", "LX0609-002", "LX0609-005"],
-            ["LX0609-012", "LX0609-014"],
-            ["LX0609-020", "LX0609-021", "LX0609-022"],
-            ["LX0609-003", "LX0609-038"],
+            ["LX0609-01-01-01", "LX0609-01-02-01", "LX0609-02-01-01"],
+            ["LX0609-06-01-05", "LX0609-06-03-03"],
+            ["LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03"],
+            ["LX0609-04-02-01", "LX0609-04-04-03"],
         ]
     )
 

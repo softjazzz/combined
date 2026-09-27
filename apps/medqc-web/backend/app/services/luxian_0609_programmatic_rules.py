@@ -10,37 +10,37 @@ from .luxian_0609.source_evidence_reader import (
 
 
 _TARGET_RULE_IDS = {
-    "LX0609-001",
-    "LX0609-002",
-    "LX0609-003",
-    "LX0609-004",
-    "LX0609-005",
-    "LX0609-006",
-    "LX0609-007",
-    "LX0609-008",
-    "LX0609-009",
-    "LX0609-010",
-    "LX0609-012",
-    "LX0609-013",
-    "LX0609-014",
-    "LX0609-016",
-    "LX0609-017",
-    "LX0609-018",
-    "LX0609-019",
-    "LX0609-020",
-    "LX0609-021",
-    "LX0609-022",
-    "LX0609-026",
-    "LX0609-027",
-    "LX0609-032",
-    "LX0609-038",
-    "LX0609-039",
-    "LX0609-040",
-    "LX0609-041",
-    "LX0609-043",
-    "LX0609-044",
-    "LX0609-047",
-    "LX0609-049",
+    "LX0609-01-01-01",
+    "LX0609-01-02-01",
+    "LX0609-04-02-01",
+    "LX0609-09-01-01",
+    "LX0609-02-01-01",
+    "LX0609-02-01-02",
+    "LX0609-02-01-03",
+    "LX0609-02-01-04",
+    "LX0609-02-01-05",
+    "LX0609-06-01-02",
+    "LX0609-06-01-05",
+    "LX0609-06-02-03",
+    "LX0609-06-03-03",
+    "LX0609-12-01-01",
+    "LX0609-12-01-02",
+    "LX0609-01-01-02",
+    "LX0609-06-02-02",
+    "LX0609-03-01-01",
+    "LX0609-03-01-02",
+    "LX0609-03-01-03",
+    "LX0609-05-02-01",
+    "LX0609-08-01-04",
+    "LX0609-04-03-01",
+    "LX0609-04-04-03",
+    "LX0609-04-01-02",
+    "LX0609-04-01-03",
+    "LX0609-11-03-01",
+    "LX0609-07-01-01",
+    "LX0609-07-01-02",
+    "LX0609-07-03-01",
+    "LX0609-07-04-02",
 }
 
 def _norm(value: Any) -> str:
@@ -896,7 +896,7 @@ def _consultation_evidence_items(timeline: dict[str, Any]) -> list[dict[str, Any
 def _evaluate_text_pattern_rule(rule: dict[str, Any], text: str, timeline: dict[str, Any]) -> dict[str, Any] | None:
     rule_id = _norm_id(rule.get("rule_id") or rule.get("rule_code"))
 
-    if rule_id == "LX0609-003" and (
+    if rule_id == "LX0609-04-02-01" and (
         _contains_all(text, "手术记录", "手术时间：2026-06-03 09:00-10:40", "记录时间：2026-06-04 14:00")
         or _contains_all(text, "手术记录", "手术结束时间：2026-06-01 11:30", "记录时间：2026-06-03 12:00")
     ):
@@ -912,7 +912,7 @@ def _evaluate_text_pattern_rule(rule: dict[str, Any], text: str, timeline: dict[
             suggestion="核对手术结束时间与手术记录提交时间，超过24小时需按缺陷复核。",
         )
 
-    if rule_id == "LX0609-007" and _has_positive_critical_order_context(text):
+    if rule_id == "LX0609-02-01-03" and _has_positive_critical_order_context(text):
         return _text_result(
             rule,
             status="not_applicable",
@@ -921,7 +921,7 @@ def _evaluate_text_pattern_rule(rule: dict[str, Any], text: str, timeline: dict[
             suggestion="病重患者应按病重/病危相关查房规则复核。",
         )
 
-    if rule_id == "LX0609-008" and _contains(text, "病重医嘱"):
+    if rule_id == "LX0609-02-01-04" and _contains(text, "病重医嘱"):
         return _text_result(
             rule,
             status="non_compliant",
@@ -930,7 +930,7 @@ def _evaluate_text_pattern_rule(rule: dict[str, Any], text: str, timeline: dict[
             suggestion="病重患者应按制度记录查房或病程变化，不应跨2天无相应记录。",
         )
 
-    if rule_id == "LX0609-009" and (_contains(text, "未下达病危医嘱") or not _contains(text, "病危医嘱")):
+    if rule_id == "LX0609-02-01-05" and (_contains(text, "未下达病危医嘱") or not _contains(text, "病危医嘱")):
         return _text_result(
             rule,
             status="not_applicable",
@@ -939,7 +939,7 @@ def _evaluate_text_pattern_rule(rule: dict[str, Any], text: str, timeline: dict[
             suggestion="如后续下达病危医嘱，应按病危每日记录规则复核。",
         )
 
-    if rule_id == "LX0609-009" and _contains(text, "病危医嘱") and _contains(
+    if rule_id == "LX0609-02-01-05" and _contains(text, "病危医嘱") and _contains(
         text,
         "未见病危日常病程记录",
         "病危当天未见每日病程",
@@ -957,7 +957,7 @@ def _evaluate_text_pattern_rule(rule: dict[str, Any], text: str, timeline: dict[
             suggestion="病危医嘱期间应每日记录病程和病情变化，补充缺失日期的处理经过及上级医师意见。",
         )
 
-    if rule_id == "LX0609-010" and _contains_all(text, "腰椎MRI", "已完善腰椎MRI检查"):
+    if rule_id == "LX0609-06-01-02" and _contains_all(text, "腰椎MRI", "已完善腰椎MRI检查"):
         return _text_result(
             rule,
             status="non_compliant",
@@ -966,7 +966,7 @@ def _evaluate_text_pattern_rule(rule: dict[str, Any], text: str, timeline: dict[
             suggestion="检查前病程应说明检查目的、必要性及与诊疗计划的关系。",
         )
 
-    if rule_id == "LX0609-012" and _contains_all(text, "L4/5椎间盘突出", "神经根受压"):
+    if rule_id == "LX0609-06-01-05" and _contains_all(text, "L4/5椎间盘突出", "神经根受压"):
         return _text_result(
             rule,
             status="non_compliant",
@@ -975,7 +975,7 @@ def _evaluate_text_pattern_rule(rule: dict[str, Any], text: str, timeline: dict[
             suggestion="病程记录应分析阳性影像结果与症状、诊断及治疗方案的关系。",
         )
 
-    if rule_id == "LX0609-014" and _contains_all(text, "大肠埃希菌", "尿培养"):
+    if rule_id == "LX0609-06-03-03" and _contains_all(text, "大肠埃希菌", "尿培养"):
         return _text_result(
             rule,
             status="non_compliant",
@@ -984,7 +984,7 @@ def _evaluate_text_pattern_rule(rule: dict[str, Any], text: str, timeline: dict[
             suggestion="病程记录应补充培养阳性结果、药敏信息和抗菌药物调整依据。",
         )
 
-    if rule_id == "LX0609-016" and _contains(text, "患者一般情况尚可，生命体征平稳"):
+    if rule_id == "LX0609-12-01-01" and _contains(text, "患者一般情况尚可，生命体征平稳"):
         first_courses = _documents(timeline, "first_course_record")
         if not any(_has_meaningful_document_content(item) for item in first_courses):
             return _text_result(
@@ -1020,7 +1020,7 @@ def _evaluate_text_pattern_rule(rule: dict[str, Any], text: str, timeline: dict[
             ],
         )
 
-    if rule_id == "LX0609-017" and _contains_all(text, "不适3天", "急性阑尾炎"):
+    if rule_id == "LX0609-12-01-02" and _contains_all(text, "不适3天", "急性阑尾炎"):
         return _text_result(
             rule,
             status="non_compliant",
@@ -1029,7 +1029,7 @@ def _evaluate_text_pattern_rule(rule: dict[str, Any], text: str, timeline: dict[
             suggestion="主诉应体现与第一诊断相关的主要症状、持续时间和部位。",
         )
 
-    if rule_id == "LX0609-018" and _contains(text, "第一诊断依据记录不足"):
+    if rule_id == "LX0609-01-01-02" and _contains(text, "第一诊断依据记录不足"):
         return _text_result(
             rule,
             status="non_compliant",
@@ -1039,7 +1039,7 @@ def _evaluate_text_pattern_rule(rule: dict[str, Any], text: str, timeline: dict[
         )
 
     if (
-        rule_id == "LX0609-020"
+        rule_id == "LX0609-03-01-01"
         and _contains(text, "会诊记录单", "会诊意见")
         and not _contains(text, "请会诊执行记录", "会诊意见执行", "采纳会诊", "按会诊意见")
     ):
@@ -1052,7 +1052,7 @@ def _evaluate_text_pattern_rule(rule: dict[str, Any], text: str, timeline: dict[
             evidence_items=_consultation_evidence_items(timeline),
         )
 
-    if rule_id == "LX0609-021" and _contains(text, "会诊目的：请会诊", "申请目的：请会诊"):
+    if rule_id == "LX0609-03-01-02" and _contains(text, "会诊目的：请会诊", "申请目的：请会诊"):
         return _text_result(
             rule,
             status="non_compliant",
@@ -1062,7 +1062,7 @@ def _evaluate_text_pattern_rule(rule: dict[str, Any], text: str, timeline: dict[
             evidence_items=_consultation_evidence_items(timeline),
         )
 
-    if rule_id == "LX0609-022" and _contains(text, "建议完善相关检查，继续目前治疗", "必要时调整用药"):
+    if rule_id == "LX0609-03-01-03" and _contains(text, "建议完善相关检查，继续目前治疗", "必要时调整用药"):
         return _text_result(
             rule,
             status="non_compliant",
@@ -1072,7 +1072,7 @@ def _evaluate_text_pattern_rule(rule: dict[str, Any], text: str, timeline: dict[
             evidence_items=_consultation_evidence_items(timeline),
         )
 
-    if rule_id == "LX0609-022" and _contains(text, "建议完善相关检查，继续目前治疗", "未记录执行情况", "照抄会诊意见"):
+    if rule_id == "LX0609-03-01-03" and _contains(text, "建议完善相关检查，继续目前治疗", "未记录执行情况", "照抄会诊意见"):
         return _text_result(
             rule,
             status="non_compliant",
@@ -1086,7 +1086,7 @@ def _evaluate_text_pattern_rule(rule: dict[str, Any], text: str, timeline: dict[
             evidence_items=_consultation_evidence_items(timeline),
         )
 
-    if rule_id == "LX0609-013" and _contains(text, "胃腺癌", "中分化腺癌"):
+    if rule_id == "LX0609-06-02-03" and _contains(text, "胃腺癌", "中分化腺癌"):
         return _text_result(
             rule,
             status="non_compliant",
@@ -1096,7 +1096,7 @@ def _evaluate_text_pattern_rule(rule: dict[str, Any], text: str, timeline: dict[
             evidence_items=_tumor_pathology_evidence_items(timeline),
         )
 
-    if rule_id == "LX0609-019" and (
+    if rule_id == "LX0609-06-02-02" and (
         _contains_all(text, "胃癌根治术", "未明确淋巴结清扫范围")
         or _contains_all(text, "标本处理", "未逐项标明近端切缘")
     ):
@@ -1109,7 +1109,7 @@ def _evaluate_text_pattern_rule(rule: dict[str, Any], text: str, timeline: dict[
             evidence_items=_specimen_evidence_items(timeline),
         )
 
-    if rule_id == "LX0609-026" and _contains_all(text, "奥沙利铂", "卡培他滨", "今日准备开始辅助化疗"):
+    if rule_id == "LX0609-05-02-01" and _contains_all(text, "奥沙利铂", "卡培他滨", "今日准备开始辅助化疗"):
         return _text_result(
             rule,
             status="non_compliant",
@@ -1119,7 +1119,7 @@ def _evaluate_text_pattern_rule(rule: dict[str, Any], text: str, timeline: dict[
             evidence_items=_chemo_evidence_items(timeline),
         )
 
-    if rule_id == "LX0609-027" and _contains(text, "注意休息，保持切口清洁"):
+    if rule_id == "LX0609-08-01-04" and _contains(text, "注意休息，保持切口清洁"):
         return _text_result(
             rule,
             status="non_compliant",
@@ -1128,7 +1128,7 @@ def _evaluate_text_pattern_rule(rule: dict[str, Any], text: str, timeline: dict[
             suggestion="补充肿瘤科复诊、辅助化疗/放疗评估、病理回看和必要复查计划。",
         )
 
-    if rule_id == "LX0609-032" and _contains_all(text, "手术安全核查记录", "麻醉前核查项未签名"):
+    if rule_id == "LX0609-04-03-01" and _contains_all(text, "手术安全核查记录", "麻醉前核查项未签名"):
         return _text_result(
             rule,
             status="non_compliant",
@@ -1137,7 +1137,7 @@ def _evaluate_text_pattern_rule(rule: dict[str, Any], text: str, timeline: dict[
             suggestion="补齐手术安全核查各阶段签名和核查项目。",
         )
 
-    if rule_id == "LX0609-038" and _contains(text, "出室评分未填写", "出室评分：未填写"):
+    if rule_id == "LX0609-04-04-03" and _contains(text, "出室评分未填写", "出室评分：未填写"):
         return _text_result(
             rule,
             status="non_compliant",
@@ -1146,7 +1146,7 @@ def _evaluate_text_pattern_rule(rule: dict[str, Any], text: str, timeline: dict[
             suggestion="补齐麻醉记录生命体征连续记录、出室评分和签名。",
         )
 
-    if rule_id == "LX0609-039" and _contains_all(text, "术前讨论记录", "未记录替代方案", "主要风险"):
+    if rule_id == "LX0609-04-01-02" and _contains_all(text, "术前讨论记录", "未记录替代方案", "主要风险"):
         return _text_result(
             rule,
             status="non_compliant",
@@ -1155,7 +1155,7 @@ def _evaluate_text_pattern_rule(rule: dict[str, Any], text: str, timeline: dict[
             suggestion="补充术前讨论的替代方案、主要风险和参会人员具体意见。",
         )
 
-    if rule_id == "LX0609-040" and _contains(text, "未见MDT"):
+    if rule_id == "LX0609-04-01-03" and _contains(text, "未见MDT"):
         return _text_result(
             rule,
             status="non_compliant",
@@ -1164,7 +1164,7 @@ def _evaluate_text_pattern_rule(rule: dict[str, Any], text: str, timeline: dict[
             suggestion="四级手术应补充MDT或多学科讨论记录。",
         )
 
-    if rule_id == "LX0609-041" and _contains(text, "输血") and _contains(
+    if rule_id == "LX0609-11-03-01" and _contains(text, "输血") and _contains(
         text,
         "未见完整输血风险告知记录",
         "未检索到本次输血治疗知情同意书",
@@ -1182,7 +1182,7 @@ def _evaluate_text_pattern_rule(rule: dict[str, Any], text: str, timeline: dict[
             suggestion="补齐输血风险告知、替代方案和患者/家属签字。",
         )
 
-    if rule_id == "LX0609-043" and _contains_all(text, "红细胞悬液2U", "未见完整输血风险告知记录"):
+    if rule_id == "LX0609-07-01-01" and _contains_all(text, "红细胞悬液2U", "未见完整输血风险告知记录"):
         return _text_result(
             rule,
             status="non_compliant",
@@ -1191,7 +1191,7 @@ def _evaluate_text_pattern_rule(rule: dict[str, Any], text: str, timeline: dict[
             suggestion="补齐输血前乙肝、丙肝、梅毒、HIV等感染筛查结果。",
         )
 
-    if rule_id == "LX0609-044" and _contains(text, "输血") and _contains(
+    if rule_id == "LX0609-07-01-02" and _contains(text, "输血") and _contains(
         text,
         "输血风险分级",
         "输血前评估记录不完整",
@@ -1209,7 +1209,7 @@ def _evaluate_text_pattern_rule(rule: dict[str, Any], text: str, timeline: dict[
             suggestion="输血前应完整记录输血适应证、风险评估、既往反应史、替代方案和必要性判断。",
         )
 
-    if rule_id == "LX0609-047" and _contains(text, "未见输血后疗效评价"):
+    if rule_id == "LX0609-07-03-01" and _contains(text, "未见输血后疗效评价"):
         return _text_result(
             rule,
             status="non_compliant",
@@ -1218,7 +1218,7 @@ def _evaluate_text_pattern_rule(rule: dict[str, Any], text: str, timeline: dict[
             suggestion="输血后应记录疗效评价、不良反应观察和后续处理。",
         )
 
-    if rule_id == "LX0609-049" and (
+    if rule_id == "LX0609-07-04-02" and (
         _contains_all(text, "输注红细胞悬液2U", "血费", "红细胞悬液", "4", "U")
         or _contains_all(text, "输注去白悬浮红细胞2U", "去白悬浮红细胞4U")
     ):
@@ -1258,16 +1258,16 @@ def evaluate_luxian_0609_programmatic_rules(
         if text_result is not None:
             results.append(text_result)
             continue
-        if rule_id == "LX0609-001":
+        if rule_id == "LX0609-01-01-01":
             results.append(_evaluate_admission_24h(rule, timeline))
-        elif rule_id == "LX0609-002":
+        elif rule_id == "LX0609-01-02-01":
             results.append(_evaluate_first_course_8h(rule, timeline))
-        elif rule_id == "LX0609-004":
+        elif rule_id == "LX0609-09-01-01":
             results.append(_evaluate_rescue_6h(rule, timeline))
-        elif rule_id == "LX0609-005":
+        elif rule_id == "LX0609-02-01-01":
             results.append(_evaluate_round(rule, timeline, role="attending", hours=48))
-        elif rule_id == "LX0609-006":
+        elif rule_id == "LX0609-02-01-02":
             results.append(_evaluate_round(rule, timeline, role="senior", hours=72))
-        elif rule_id == "LX0609-007":
+        elif rule_id == "LX0609-02-01-03":
             results.append(_evaluate_stable_round_3d(rule, timeline, combined_text))
     return results

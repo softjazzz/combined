@@ -15,14 +15,16 @@ from sqlalchemy.orm import Session
 from ...core.settings import get_settings
 from ..case_identity import CaseRef
 from ..luxian_0609.canonical_result_finalizer import (
-    validate_luxian_0609_executor_customer_display_facts,
+    validate_luxian_0609_published_customer_display_facts,
 )
+from ..luxian_0609.rule_contracts import CRITERION_KINDS
 from ..luxian_0609_result_schema import (
     CANONICAL_RESULT_DELIVERY_MODE,
     CANONICAL_RESULT_STATUSES,
     CUSTOMER_SCHEMA_VERSION,
     RULE_SET_VERSION,
 )
+from ..luxian_0609_rule_master import load_luxian_0609_rule_master
 from ..luxian_0609_rule_catalog import (
     LUXIAN_0609_RULE_SET_KEY,
     get_luxian_0609_rule,
@@ -30,9 +32,6 @@ from ..luxian_0609_rule_catalog import (
 
 
 RECORD_RESULT_ENVELOPE_SCHEMA = "lx0609-record-result-envelope-v1"
-LX0609_CUSTOMER_RESULT_CONTRACT_ERROR = (
-    "LX0609 客户结果解释合同不完整，拒绝交付确定问题"
-)
 _LX018_DIAGNOSTIC_DIMENSIONS = {
     "anatomic_site",
     "laterality",
@@ -73,6 +72,13 @@ _RECOMMENDATION_EVIDENCE_SOURCE_TYPES = {
     "labtest_item_report",
     "surgery_record",
 }
+
+
+LX0609_CUSTOMER_RESULT_CONTRACT_ERROR = (
+    "LX0609 客户结果解释合同不完整，拒绝交付确定问题"
+)
+# 已取消的结果文案签章字段；历史 Envelope 中若存在，读取时丢弃。
+_DEPRECATED_TEXT_SEAL_FIELD = "customer_text_seal"
 
 
 def _safe_text(value: Any, default: str = "") -> str:
@@ -118,6 +124,16 @@ def canonical_envelope_items_are_consistent(items: Any) -> bool:
         if not isinstance(item, dict):
             return False
         rule_id = _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
+        if rule_id.startswith("LX0609-"):
+            # 正式结果只接收总表登记的唯一新身份；历史转换在离线迁移完成。
+            # 规则停止注册进可执行目录只禁止新执行，不使已保存结果失去身份。
+            if rule_id not in {entry.rule_id for entry in load_luxian_0609_rule_master()}:
+                return False
+            if any(
+                _safe_text(item.get(key)).upper() not in {"", rule_id}
+                for key in ("rule_code", "qc_point_id", "customer_rule_id")
+            ):
+                return False
         status = _safe_text(item.get("status"))
         result_status = _safe_text(item.get("result_status"))
         display_status = _safe_text(item.get("display_status"))
@@ -256,6 +272,28 @@ def canonical_customer_status(item: Dict[str, Any]) -> str:
     return "uncertain"
 
 
+def _assert_consistent_lx0609_rule_identity(item: Dict[str, Any]) -> None:
+    """同一结果的 LX0609 规则身份字段必须指向同一规则，不能各取其一。"""
+
+    identities = {
+        _safe_text(item.get(key)).upper()
+        for key in ("customer_rule_id", "qc_point_id", "rule_id", "rule_code")
+    }
+    if len({value for value in identities if value.startswith("LX0609-")}) > 1:
+        raise ValueError(LX0609_CUSTOMER_RESULT_CONTRACT_ERROR)
+
+
+def _envelope_visit_matches_row(envelope: Dict[str, Any], visit_id: str) -> bool:
+    """Envelope 明文 record_id（保存时即本行 visit_id）须与数据库行一致。
+
+    record_ref 是按保存时服务密钥生成的不可逆引用，读取时不以当前密钥重算，
+    否则密钥轮换会使历史合法结果不可读；机构、患者层面的归属因此无法仅凭
+    Envelope 独立证明，由行坐标与任务冻结病例集合约束。
+    """
+
+    return _safe_text(envelope.get("record_id")) == _safe_text(visit_id)
+
+
 def safe_customer_display_facts(
     item: Dict[str, Any],
     *,
@@ -263,12 +301,16 @@ def safe_customer_display_facts(
 ) -> Dict[str, Any]:
     """仅透传 Finalizer 已验证的客户展示事实。"""
 
+    _assert_consistent_lx0609_rule_identity(item)
     raw = item.get("customer_display_facts")
-    if not isinstance(raw, dict):
-        return {}
-    shared = validate_luxian_0609_executor_customer_display_facts(
+    has_result_status = any(
+        _safe_text(item.get(key)) for key in ("status", "result_status", "display_status")
+    ) or item.get("is_compliant") is not None
+    shared = validate_luxian_0609_published_customer_display_facts(
         rule_id=rule_id,
         raw=raw,
+        status=canonical_customer_status(item) if has_result_status else "",
+        reason_code=_safe_text(item.get("reason_code")),
     )
     return dict(shared) if isinstance(shared, dict) else {}
 
@@ -289,7 +331,7 @@ def safe_criterion_results(item: Dict[str, Any]) -> List[Dict[str, Any]]:
         reason_code = _safe_text(raw.get("reason_code"))
         if (
             not re.fullmatch(r"[a-z][a-z0-9_]{1,63}", criterion_id)
-            or kind not in {"text_length", "semantic_relation", "completeness"}
+            or kind not in CRITERION_KINDS
             or status not in {"passed", "failed", "unknown"}
             or not re.fullmatch(r"[a-z][a-z0-9_]{1,63}", reason_code)
         ):
@@ -587,24 +629,31 @@ class CanonicalResultStore:
         prepared_envelopes: List[tuple[CaseRef, Dict[str, Any]]] = []
         for record_ref, record_items in grouped.items():
             record_id = record_ref.visit_id
+            envelope_record_ref = keyed_ref(
+                "rec",
+                record_ref.as_key(),
+                hmac_key=(
+                    projection_key
+                    if projection_key is not None
+                    else customer_safe_projection_key()
+                ),
+            )
+            projected_items = []
+            for item in record_items:
+                projected_item = dict(projector(item))
+                # 病历引用由 Envelope 的三坐标身份统一生成，不能由规则项只按 visit_id 另算。
+                projected_item["record_ref"] = envelope_record_ref
+                projected_items.append(projected_item)
             envelope = {
                 "schema_version": RECORD_RESULT_ENVELOPE_SCHEMA,
                 "delivery_mode": CANONICAL_RESULT_DELIVERY_MODE,
                 "record_id": record_id,
-                "record_ref": keyed_ref(
-                    "rec",
-                    record_ref.as_key(),
-                    hmac_key=(
-                        projection_key
-                        if projection_key is not None
-                        else customer_safe_projection_key()
-                    ),
-                ),
+                "record_ref": envelope_record_ref,
                 "job_id": job_id,
                 "root_job_id": root_job_id,
                 "rule_set_key": rule_set_key,
                 "rule_set_version": rule_set_version,
-                "items": [projector(item) for item in record_items],
+                "items": projected_items,
             }
             prepared_envelopes.append((record_ref, envelope))
 
@@ -695,6 +744,16 @@ class CanonicalResultStore:
             or not isinstance(envelope.get("items"), list)
         ):
             return {}
+        # 保存时已校验不代表读取的行与 Envelope 仍属同一就诊；按明文 visit 复核。
+        if not _envelope_visit_matches_row(envelope, visit_id):
+            raise ValueError(LX0609_CUSTOMER_RESULT_CONTRACT_ERROR)
+        for item in envelope["items"]:
+            if not isinstance(item, dict):
+                raise ValueError(LX0609_CUSTOMER_RESULT_CONTRACT_ERROR)
+            # 历史结果可能带已废弃的文案签章字段：读取时丢弃，不校验、不外传。
+            item.pop(_DEPRECATED_TEXT_SEAL_FIELD, None)
+            rule_id = _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
+            safe_customer_display_facts(item, rule_id=rule_id)
         return envelope
 
     def load_root_job_items(
@@ -749,6 +808,7 @@ class CanonicalResultStore:
 
         rows_by_ref: Dict[CaseRef, Dict[str, Any]] = {}
         canonical_items: List[Dict[str, Any]] = []
+        case_by_record_ref: Dict[str, CaseRef] = {}
         for raw_row in envelope_rows:
             row = dict(raw_row)
             case_ref = CaseRef.from_mapping(row)
@@ -765,11 +825,17 @@ class CanonicalResultStore:
             ):
                 raise ValueError("批量质控 Canonical Envelope 结构无效")
             record_ref = _safe_text(envelope.get("record_ref"))
-            if not re.fullmatch(r"rec_[0-9a-f]{24}", record_ref):
+            if (
+                not re.fullmatch(r"rec_[0-9a-f]{24}", record_ref)
+                or not _envelope_visit_matches_row(envelope, case_ref.visit_id)
+                # 同一任务内不同病例不得共用同一病历引用。
+                or case_by_record_ref.setdefault(record_ref, case_ref) != case_ref
+            ):
                 raise ValueError("批量质控 Canonical Envelope 病历引用无效")
             if not canonical_envelope_items_are_consistent(envelope["items"]):
                 raise ValueError("canonical_result_envelope_invalid")
             for raw_item in envelope["items"]:
+                raw_item.pop(_DEPRECATED_TEXT_SEAL_FIELD, None)
                 # Envelope 已通过 schema、delivery_mode 和逐项状态合同校验；
                 # 旧候选包的条目级 schema 标记曾在批任务落盘时被遗漏。读取时
                 # 只继承已验证的 Envelope 合同，不重新解释任何业务状态。
@@ -777,6 +843,11 @@ class CanonicalResultStore:
                     **raw_item,
                     "schema_version": CUSTOMER_SCHEMA_VERSION,
                     "record_ref": record_ref,
+                    # 保存时已移除病例坐标；读取时按本行补回，供客户投影既有的
+                    # 本病例身份值过滤使用。投影输出不包含这些字段。
+                    "institute_id": case_ref.institute_id,
+                    "patient_id": case_ref.patient_id,
+                    "visit_id": case_ref.visit_id,
                 }
                 if not _safe_text(normalized_item.get("rule_version")):
                     catalog_rule = get_luxian_0609_rule(

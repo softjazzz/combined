@@ -163,9 +163,28 @@ class SichuanQCLLMClient:
         self.total_api_time = 0.0
         self.success_count = 0
         self.error_count = 0
+        self._stats_parent: SichuanQCLLMClient | None = None
         self._observability_recorder = (
             observability_recorder or get_llm_observability_recorder()
         )
+
+    def _record_stats_delta(
+        self, *, calls: int = 0, successes: int = 0, errors: int = 0,
+        tokens: int = 0, api_time: float = 0.0,
+    ) -> None:
+        """保留任务本地用量，并同步到原服务的进程统计。"""
+
+        self.call_count += calls
+        self.success_count += successes
+        self.error_count += errors
+        self.total_tokens += tokens
+        self.total_api_time += api_time
+        parent = self._stats_parent
+        if parent is not None and parent is not self:
+            parent._record_stats_delta(
+                calls=calls, successes=successes, errors=errors,
+                tokens=tokens, api_time=api_time,
+            )
 
     async def generate(
         self,
@@ -189,7 +208,7 @@ class SichuanQCLLMClient:
             )
         response_format_payload = self._copy_response_format(response_format)
 
-        self.call_count += 1
+        self._record_stats_delta(calls=1)
         api_start = time.time()
         logical_call_id = str(uuid4())
         attempt_no = 0
@@ -198,7 +217,7 @@ class SichuanQCLLMClient:
         if not self.api_endpoint:
             if self.allow_mock_when_unconfigured:
                 api_time = time.time() - api_start
-                self.success_count += 1
+                self._record_stats_delta(successes=1)
                 return {
                     "choices": [
                         {
@@ -212,7 +231,7 @@ class SichuanQCLLMClient:
                     "_api_time": api_time,
                 }
 
-            self.error_count += 1
+            self._record_stats_delta(errors=1)
             raise RuntimeError(
                 "LLM is not configured. Set endpoint/model in env or database config."
             )
@@ -312,9 +331,10 @@ class SichuanQCLLMClient:
 
             usage_breakdown = self._aggregate_attempt_usages(attempt_usages)
             api_time = time.time() - api_start
-            self.total_api_time += api_time
-            self.success_count += 1
-            self.total_tokens += int(usage_breakdown.get("total_tokens") or 0)
+            self._record_stats_delta(
+                api_time=api_time, successes=1,
+                tokens=int(usage_breakdown.get("total_tokens") or 0),
+            )
             result["_api_time"] = api_time
             result["_first_result_latency"] = api_time
             result["_usage_breakdown"] = usage_breakdown
@@ -322,8 +342,7 @@ class SichuanQCLLMClient:
             return result
         except Exception:
             api_time = time.time() - api_start
-            self.total_api_time += api_time
-            self.error_count += 1
+            self._record_stats_delta(api_time=api_time, errors=1)
             raise
 
     async def _perform_observed_attempt(

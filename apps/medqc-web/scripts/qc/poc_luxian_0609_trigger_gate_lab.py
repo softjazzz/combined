@@ -116,43 +116,43 @@ EVENT_REQUIRED_RULE_IDS = {
     **{rule_id: "abnormal_imaging" for rule_id in ABNORMAL_IMAGING_RULE_IDS},
 }
 CUSTOMER_GATE_FAMILY_BY_ID = {
-    "LX0609-003": "surgery_event",
-    "LX0609-004": "critical_status",
-    "LX0609-008": "critical_status",
-    "LX0609-009": "critical_status",
-    "LX0609-010": "ct_mri_report_event",
-    "LX0609-011": "ct_mri_report_event",
-    "LX0609-012": "positive_ct_mri_report",
-    "LX0609-013": "pathology_event",
-    "LX0609-014": "culture_report_event",
-    "LX0609-015": "positive_culture_event",
-    "LX0609-019": "pathology_event",
-    "LX0609-024": "surgery_event",
-    "LX0609-025": "surgery_event",
-    "LX0609-026": "chemo_order_or_record_event",
-    "LX0609-027": "discharge_record_event",
-    "LX0609-028": "surgery_event",
-    "LX0609-029": "surgery_event",
-    "LX0609-030": "surgery_event",
-    "LX0609-031": "surgery_event",
-    "LX0609-032": "surgery_event",
-    "LX0609-033": "surgery_event",
-    "LX0609-034": "surgery_event",
-    "LX0609-035": "surgery_event",
-    "LX0609-036": "surgery_event",
-    "LX0609-037": "surgery_event",
-    "LX0609-038": "surgery_event",
-    "LX0609-039": "surgery_event",
-    "LX0609-040": "surgery_event",
-    "LX0609-041": "transfusion_event",
-    "LX0609-042": "transfusion_event",
-    "LX0609-043": "transfusion_event",
-    "LX0609-044": "transfusion_event",
-    "LX0609-045": "transfusion_event",
-    "LX0609-046": "transfusion_event",
-    "LX0609-047": "transfusion_event",
-    "LX0609-048": "transfusion_event",
-    "LX0609-049": "transfusion_event",
+    "LX0609-04-02-01": "surgery_event",
+    "LX0609-09-01-01": "critical_status",
+    "LX0609-02-01-04": "critical_status",
+    "LX0609-02-01-05": "critical_status",
+    "LX0609-06-01-02": "ct_mri_report_event",
+    "LX0609-06-01-04": "ct_mri_report_event",
+    "LX0609-06-01-05": "positive_ct_mri_report",
+    "LX0609-06-02-03": "pathology_event",
+    "LX0609-06-03-03": "culture_report_event",
+    "LX0609-06-03-04": "positive_culture_event",
+    "LX0609-06-02-02": "pathology_event",
+    "LX0609-04-02-03": "surgery_event",
+    "LX0609-04-02-04": "surgery_event",
+    "LX0609-05-02-01": "chemo_order_or_record_event",
+    "LX0609-08-01-04": "discharge_record_event",
+    "LX0609-05-01-01": "surgery_event",
+    "LX0609-04-01-01": "surgery_event",
+    "LX0609-04-02-02": "surgery_event",
+    "LX0609-04-02-05": "surgery_event",
+    "LX0609-04-03-01": "surgery_event",
+    "LX0609-11-01-01": "surgery_event",
+    "LX0609-11-02-01": "surgery_event",
+    "LX0609-11-02-02": "surgery_event",
+    "LX0609-04-04-01": "surgery_event",
+    "LX0609-04-04-02": "surgery_event",
+    "LX0609-04-04-03": "surgery_event",
+    "LX0609-04-01-02": "surgery_event",
+    "LX0609-04-01-03": "surgery_event",
+    "LX0609-11-03-01": "transfusion_event",
+    "LX0609-11-03-02": "transfusion_event",
+    "LX0609-07-01-01": "transfusion_event",
+    "LX0609-07-01-02": "transfusion_event",
+    "LX0609-07-02-01": "transfusion_event",
+    "LX0609-07-02-02": "transfusion_event",
+    "LX0609-07-03-01": "transfusion_event",
+    "LX0609-07-04-01": "transfusion_event",
+    "LX0609-07-04-02": "transfusion_event",
 }
 
 
@@ -428,7 +428,7 @@ def _apply_luxian_poc_customer_overrides(rows: list[dict[str, Any]], record: dic
         evidence = _safe_text(row.get("evidence"))
         combined = f"{medical_text}\n{findings}\n{evidence}"
 
-        if rid == "LX0609-001":
+        if rid == "LX0609-01-01-01":
             if case_group == 1 or _contains_any(combined, ("入院记录提交时间为2026-06-02 10:30", "超过24小时")):
                 set_result(
                     row,
@@ -446,7 +446,7 @@ def _apply_luxian_poc_customer_overrides(rows: list[dict[str, Any]], record: dic
                     suggestion="",
                 )
 
-        if rid == "LX0609-002":
+        if rid == "LX0609-01-02-01":
             if case_group == 1 or _contains_any(combined, ("首次病程记录时间为2026-06-01 18:30", "距离入院10.5小时")):
                 set_result(
                     row,
@@ -464,7 +464,7 @@ def _apply_luxian_poc_customer_overrides(rows: list[dict[str, Any]], record: dic
                     suggestion="",
                 )
 
-        if rid == "LX0609-004" and case_group == 4:
+        if rid == "LX0609-09-01-01" and case_group == 4:
             set_result(
                 row,
                 status="non_compliant",
@@ -473,7 +473,7 @@ def _apply_luxian_poc_customer_overrides(rows: list[dict[str, Any]], record: dic
                 suggestion="抢救结束后应在6小时内完成抢救记录；请核对记录时间并补充迟记原因。",
             )
 
-        if rid == "LX0609-006":
+        if rid == "LX0609-02-01-02":
             if case_group == 1 or _contains_any(combined, ("主任医师查房记录在入院后77.5小时出现", "2026-06-04 13:30")):
                 set_result(
                     row,
@@ -491,8 +491,8 @@ def _apply_luxian_poc_customer_overrides(rows: list[dict[str, Any]], record: dic
                     suggestion="",
                 )
 
-        if rid in {"LX0609-007", "LX0609-009"} and case_group == 3:
-            target_name = "病情稳定三天查房规则" if rid == "LX0609-007" else "病危每日记录规则"
+        if rid in {"LX0609-02-01-03", "LX0609-02-01-05"} and case_group == 3:
+            target_name = "病情稳定三天查房规则" if rid == "LX0609-02-01-03" else "病危每日记录规则"
             set_result(
                 row,
                 status="not_applicable",
@@ -501,7 +501,7 @@ def _apply_luxian_poc_customer_overrides(rows: list[dict[str, Any]], record: dic
                 suggestion="本次不进入缺陷判断；若后续出现病危医嘱或病情稳定场景，再按对应规则复核。",
             )
 
-        if rid == "LX0609-008" and case_group == 3:
+        if rid == "LX0609-02-01-04" and case_group == 3:
             set_result(
                 row,
                 status="non_compliant",
@@ -510,7 +510,7 @@ def _apply_luxian_poc_customer_overrides(rows: list[dict[str, Any]], record: dic
                 suggestion="病重患者应按制度完成查房/病程记录，请补充相应记录或说明缺失原因。",
             )
 
-        if rid in {"LX0609-010", "LX0609-012"}:
+        if rid in {"LX0609-06-01-02", "LX0609-06-01-05"}:
             has_ct_mri_result = _contains_any(combined, ("腰椎MRI", "椎间盘突出", "神经根受压", "狭窄"))
             weak_course_analysis = _contains_any(combined, ("已完善腰椎MRI检查，继续予止痛、营养神经治疗", "继续对症治疗"))
             if has_ct_mri_result and weak_course_analysis:
@@ -525,7 +525,7 @@ def _apply_luxian_poc_customer_overrides(rows: list[dict[str, Any]], record: dic
                     }
                 )
 
-        if rid == "LX0609-049":
+        if rid == "LX0609-07-04-02":
             has_order_fee_mismatch = _contains_any(combined, ("输注红细胞悬液2U", "收费4U", "医嘱显示输注2U"))
             if has_order_fee_mismatch:
                 row.update(
@@ -539,7 +539,7 @@ def _apply_luxian_poc_customer_overrides(rows: list[dict[str, Any]], record: dic
                     }
                 )
 
-        if rid == "LX0609-043":
+        if rid == "LX0609-07-01-01":
             missing_pre_transfusion_tests = _contains_any(combined, ("输血前九项检查", "未明确体现", "未见完整"))
             has_transfusion_event = _contains_any(combined, ("输注红细胞悬液", "输血申请", "输血医嘱"))
             if missing_pre_transfusion_tests and has_transfusion_event:
@@ -554,7 +554,7 @@ def _apply_luxian_poc_customer_overrides(rows: list[dict[str, Any]], record: dic
                     }
                 )
 
-        if rid == "LX0609-039":
+        if rid == "LX0609-04-01-02":
             incomplete_preop_discussion = _contains_any(
                 combined,
                 ("未记录替代方案", "主要风险和参会人员具体意见", "术前讨论记录内容简单"),
@@ -571,7 +571,7 @@ def _apply_luxian_poc_customer_overrides(rows: list[dict[str, Any]], record: dic
                     }
                 )
 
-        if rid == "LX0609-013":
+        if rid == "LX0609-06-02-03":
             pathology_report = _contains_any(combined, ("胃腺癌，中分化", "病理报告", "病理诊断"))
             weak_pathology_course = _contains_any(
                 combined,
@@ -589,7 +589,7 @@ def _apply_luxian_poc_customer_overrides(rows: list[dict[str, Any]], record: dic
                     }
                 )
 
-        if rid == "LX0609-019":
+        if rid == "LX0609-06-02-02":
             missing_sampling_detail = _contains_any(combined, ("未明确淋巴结清扫范围及送检组数", "取材情况未在病程记录/手术记录"))
             malignant_surgery = _contains_any(combined, ("胃癌根治术", "胃恶性肿瘤", "胃腺癌"))
             if malignant_surgery and missing_sampling_detail:
@@ -604,7 +604,7 @@ def _apply_luxian_poc_customer_overrides(rows: list[dict[str, Any]], record: dic
                     }
                 )
 
-        if rid == "LX0609-027":
+        if rid == "LX0609-08-01-04":
             weak_discharge_plan = _contains_any(combined, ("注意休息，保持切口清洁", "未包含肿瘤科复诊", "辅助化疗评估", "病理回看计划"))
             malignant_tumor = _contains_any(combined, ("胃恶性肿瘤", "胃腺癌", "恶性肿瘤"))
             if malignant_tumor and weak_discharge_plan:
@@ -619,7 +619,7 @@ def _apply_luxian_poc_customer_overrides(rows: list[dict[str, Any]], record: dic
                     }
                 )
 
-        if rid == "LX0609-005" and case_group == 1:
+        if rid == "LX0609-02-01-01" and case_group == 1:
             set_evidence_result(
                 row,
                 status="non_compliant",
@@ -633,7 +633,7 @@ def _apply_luxian_poc_customer_overrides(rows: list[dict[str, Any]], record: dic
                 suggestion="补充或核对入院后48小时内主治医师首次查房记录，不能以主任医师查房记录替代主治医师首次查房时限要求。",
             )
 
-        if rid == "LX0609-005" and case_group == 2:
+        if rid == "LX0609-02-01-01" and case_group == 2:
             set_evidence_result(
                 row,
                 status="compliant",
@@ -647,7 +647,7 @@ def _apply_luxian_poc_customer_overrides(rows: list[dict[str, Any]], record: dic
                 suggestion="",
             )
 
-        if rid == "LX0609-003" and case_group == 8:
+        if rid == "LX0609-04-02-01" and case_group == 8:
             set_evidence_result(
                 row,
                 status="non_compliant",
@@ -663,7 +663,7 @@ def _apply_luxian_poc_customer_overrides(rows: list[dict[str, Any]], record: dic
                 confidence=1.0,
             )
 
-        if rid == "LX0609-014" and case_group == 5:
+        if rid == "LX0609-06-03-03" and case_group == 5:
             set_evidence_result(
                 row,
                 status="non_compliant",
@@ -679,7 +679,7 @@ def _apply_luxian_poc_customer_overrides(rows: list[dict[str, Any]], record: dic
                 suggestion="在病程记录中补充培养阳性结果、药敏信息、抗菌药物调整依据和后续观察计划。",
             )
 
-        if rid == "LX0609-016" and case_group == 6:
+        if rid == "LX0609-12-01-01" and case_group == 6:
             repeated_text = "患者一般情况尚可，生命体征平稳，腹部查体较前无明显变化，继续目前治疗方案。"
             set_evidence_result(
                 row,
@@ -694,7 +694,7 @@ def _apply_luxian_poc_customer_overrides(rows: list[dict[str, Any]], record: dic
                 suggestion="首次病程记录应重新归纳病例特点、诊断依据和鉴别诊断，避免直接复制入院记录或现病史。",
             )
 
-        if rid == "LX0609-017" and case_group == 6:
+        if rid == "LX0609-12-01-02" and case_group == 6:
             set_evidence_result(
                 row,
                 status="non_compliant",
@@ -710,7 +710,7 @@ def _apply_luxian_poc_customer_overrides(rows: list[dict[str, Any]], record: dic
                 suggestion="病程记录应体现当日病情变化、查体变化、治疗反应和下一步计划；主诉与诊断依据不足时应补充诊断分析。",
             )
 
-        if rid == "LX0609-020" and case_group == 7:
+        if rid == "LX0609-03-01-01" and case_group == 7:
             set_evidence_result(
                 row,
                 status="non_compliant",
@@ -727,7 +727,7 @@ def _apply_luxian_poc_customer_overrides(rows: list[dict[str, Any]], record: dic
                 suggestion="在病程记录中补充会诊意见采纳情况、已执行医嘱、未执行原因及后续处理计划。",
             )
 
-        if rid == "LX0609-021" and case_group == 7:
+        if rid == "LX0609-03-01-02" and case_group == 7:
             set_evidence_result(
                 row,
                 status="non_compliant",
@@ -744,7 +744,7 @@ def _apply_luxian_poc_customer_overrides(rows: list[dict[str, Any]], record: dic
                 suggestion="会诊申请应写明患者当前诊疗问题、需会诊科室解决的具体问题和申请医师签名。",
             )
 
-        if rid == "LX0609-022" and case_group == 7:
+        if rid == "LX0609-03-01-03" and case_group == 7:
             set_evidence_result(
                 row,
                 status="non_compliant",
@@ -759,7 +759,7 @@ def _apply_luxian_poc_customer_overrides(rows: list[dict[str, Any]], record: dic
                 suggestion="会诊意见应明确诊断判断、具体检查或治疗建议、执行条件和随访要求。",
             )
 
-        if rid == "LX0609-038" and case_group == 8:
+        if rid == "LX0609-04-04-03" and case_group == 8:
             set_evidence_result(
                 row,
                 status="non_compliant",
@@ -775,7 +775,7 @@ def _apply_luxian_poc_customer_overrides(rows: list[dict[str, Any]], record: dic
                 confidence=1.0,
             )
 
-        if rid == "LX0609-013" and case_group == 9:
+        if rid == "LX0609-06-02-03" and case_group == 9:
             set_evidence_result(
                 row,
                 status="non_compliant",
@@ -791,7 +791,7 @@ def _apply_luxian_poc_customer_overrides(rows: list[dict[str, Any]], record: dic
                 confidence=0.95,
             )
 
-        if rid == "LX0609-043" and case_group == 10:
+        if rid == "LX0609-07-01-01" and case_group == 10:
             set_evidence_result(
                 row,
                 status="non_compliant",

@@ -1,0 +1,83 @@
+{
+  "fixture_kind": "synthetic_contract_branch_replay",
+  "historical_b3_response": false,
+  "case_label": "synthetic-active-023-engine-model-branch",
+  "coordinates": {
+    "institute_id": "SYNTHETIC-INSTITUTE",
+    "patient_id": "SYNTHETIC-PATIENT",
+    "visit_id": "SYNTHETIC-VISIT"
+  },
+  "rule_ids": ["LX0609-03-01-04"],
+  "source_rows": {
+    "consultation_record": [
+      {
+        "document_id": "CONSULT-SYN-001",
+        "document_title": "会诊记录单",
+        "record_time": "2026-07-02 09:30:00",
+        "record_content": "感染科会诊意见：建议复查血常规。"
+      }
+    ],
+    "daily_course_record": [
+      {
+        "document_id": "COURSE-SYN-001",
+        "document_title": "日常病程记录",
+        "record_time": "2026-07-02 13:30:00",
+        "record_content": "遵会诊意见，已复查血常规。"
+      }
+    ],
+    "inpat_registration": [
+      {"admission_datetime": "2026-07-01 08:00:00"}
+    ],
+    "current_visit_discharge_horizon": [
+      {"discharge_datetime": "2026-07-03 08:00:00"}
+    ]
+  },
+  "responses": [
+    {
+      "payload": {
+        "episodes": [
+          {
+            "episode_ref": "consultation_record-1",
+            "member_refs": ["consultation_record-1"],
+            "application_refs": ["consultation_record-1"],
+            "opinion_refs": ["consultation_record-1"],
+            "application_state": "clear",
+            "opinion_state": "clear",
+            "confidence": "high",
+            "recommendations": [
+              {
+                "recommendation_ref": "consultation_record-1#r1",
+                "opinion_ref": "consultation_record-1",
+                "source_quote": "建议复查血常规",
+                "normalized_action": "复查血常规",
+                "action_type": "test"
+              }
+            ]
+          }
+        ],
+        "non_target_refs": [],
+        "unresolved_refs": []
+      },
+      "usage": {"prompt_tokens": 17, "completion_tokens": 5, "total_tokens": 22},
+      "api_time": 0.01
+    },
+    {
+      "payload": {
+        "executions": [
+          {
+            "recommendation_ref": "consultation_record-1#r1",
+            "execution_state": "absent",
+            "execution_record_state": "specific_trace",
+            "execution_refs": [],
+            "trace_refs": ["daily_course_record-1"],
+            "structured_action_refs": [],
+            "execution_quotes": ["复查血常规"],
+            "confidence": "high"
+          }
+        ]
+      },
+      "usage": {"prompt_tokens": 12, "completion_tokens": 4, "total_tokens": 16},
+      "api_time": 0.01
+    }
+  ]
+}

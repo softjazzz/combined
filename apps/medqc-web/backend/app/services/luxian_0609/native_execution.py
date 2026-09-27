@@ -1,4 +1,4 @@
-"""LX0609-029/030/032 正式原生确定性执行切片。"""
+"""LX0609-04-01-01、LX0609-04-02-02、LX0609-04-03-01 正式原生确定性执行切片。"""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -25,12 +25,12 @@ from .evidence_snapshot_provider import classify_current_visit_surgery_order_row
 
 
 # 029 已迁入 surgery_document 异步执行器；这里仅保留纯存在性判定。
-NATIVE_RULE_IDS = ("LX0609-030", "LX0609-032")
+NATIVE_RULE_IDS = ("LX0609-04-02-02", "LX0609-04-03-01")
 NATIVE_LEGACY_RULE_IDS_BY_RULE_ID = MappingProxyType(
     {
-        "LX0609-029": ("CL-181", "SC-081"),
-        "LX0609-030": ("LX-025", "SC-095"),
-        "LX0609-032": ("SC-102", "LXE-33"),
+        "LX0609-04-01-01": ("CL-181", "SC-081"),
+        "LX0609-04-02-02": ("LX-025", "SC-095"),
+        "LX0609-04-03-01": ("SC-102", "LXE-33"),
     }
 )
 NATIVE_MAPPED_RULE_IDS = tuple(
@@ -58,13 +58,13 @@ _PACKAGE_VERSION = "lx0609-native-v1"
 _TYPED_EVALUATOR_VERSION = "surgery-presence-ruledecision-v2"
 _TYPED_RULE_SOURCE_KEYS = MappingProxyType(
     {
-        "LX0609-029": frozenset(
+        "LX0609-04-01-01": frozenset(
             {"presurg_summary", "surgery_record", "mr_surgery"}
         ),
-        "LX0609-030": frozenset(
+        "LX0609-04-02-02": frozenset(
             {"inpat_nondrug_order", "surgery_record", "mr_surgery"}
         ),
-        "LX0609-032": frozenset(
+        "LX0609-04-03-01": frozenset(
             {"surgery_safecheck_record", "surgery_record", "mr_surgery"}
         ),
     }
@@ -428,7 +428,7 @@ def _selected_surgery_presence_fact_refs(
     if final_state not in {"compliant", "non_compliant", "data_gap"}:
         return None
     source_keys = ["surgery_record"]
-    if rule_id == "LX0609-032" and final_state in {"compliant", "data_gap"}:
+    if rule_id == "LX0609-04-03-01" and final_state in {"compliant", "data_gap"}:
         source_keys.append("surgery_safecheck_record")
     refs: list[str] = []
     for source_key in source_keys:
@@ -443,7 +443,7 @@ def _selected_surgery_presence_fact_refs(
             if final_state != "data_gap":
                 raise
     selected = tuple(dict.fromkeys(refs))
-    if rule_id == "LX0609-030" and final_state == "non_compliant" and not selected:
+    if rule_id == "LX0609-04-02-02" and final_state == "non_compliant" and not selected:
         order_rows = materials.document_rows(
             "inpat_nondrug_order", snapshot=snapshot
         )
@@ -465,7 +465,7 @@ def _surgery_presence_display_trigger_facts(
 ) -> dict[str, Any]:
     """把 provider 已确认的 030 触发来源投影为客户 facts。"""
 
-    if rule_id != "LX0609-030":
+    if rule_id != "LX0609-04-02-02":
         # 032 的展示事实合同沿用既有手术实施判定；本次修复只收紧 030。
         return {"performed_surgery_confirmed": True}
 
@@ -611,9 +611,9 @@ def execute_luxian_0609_native_rules(
             return "required_field_missing"
         if final_state != "non_compliant":
             return "native_deterministic"
-        if rule_id == "LX0609-030":
+        if rule_id == "LX0609-04-02-02":
             return "required_document_missing"
-        if rule_id != "LX0609-032":
+        if rule_id != "LX0609-04-03-01":
             return "requirement_violated"
         timeline = provided.evidence_payload.get("programmatic_timeline")
         documents = timeline.get("documents") if isinstance(timeline, Mapping) else None
@@ -635,7 +635,7 @@ def execute_luxian_0609_native_rules(
     final_state_by_rule_id = {
         result.rule_id: result.final_state.value for result in execution.results
     }
-    if "LX0609-032" in typed_selected and evidence_materials is not None:
+    if "LX0609-04-03-01" in typed_selected and evidence_materials is not None:
         try:
             linkage_outcome = _resolve_multi_surgery_safecheck_linkage(
                 surgery_rows=tuple(evidence_materials.rows("surgery_record")),
@@ -647,10 +647,10 @@ def execute_luxian_0609_native_rules(
             linkage_outcome = ("data_gap", "association_failed")
         if (
             linkage_outcome is not None
-            and final_state_by_rule_id.get("LX0609-032") != "technical_error"
+            and final_state_by_rule_id.get("LX0609-04-03-01") != "technical_error"
         ):
-            final_state_by_rule_id["LX0609-032"], reason_by_rule_id[
-                "LX0609-032"
+            final_state_by_rule_id["LX0609-04-03-01"], reason_by_rule_id[
+                "LX0609-04-03-01"
             ] = linkage_outcome
     all_results = tuple(
         build_luxian_0609_native_result(
@@ -713,8 +713,8 @@ def execute_luxian_0609_native_rules(
     results = tuple(item for item in all_results if item["rule_id"] not in typed_set)
     customer_display_facts: list[tuple[str, Mapping[str, Any]]] = []
     target_documents = {
-        "LX0609-030": "surgery_record",
-        "LX0609-032": "surgery_safecheck_record",
+        "LX0609-04-02-02": "surgery_record",
+        "LX0609-04-03-01": "surgery_safecheck_record",
     }
     for result in execution.results:
         rule_id = result.rule_id
@@ -725,7 +725,7 @@ def execute_luxian_0609_native_rules(
             rule_id=rule_id,
             provided=provided,
         )
-        if rule_id == "LX0609-030" and not trigger_facts:
+        if rule_id == "LX0609-04-02-02" and not trigger_facts:
             # 030 的判定结果没有可观察的已组装触发信号时，不能凭状态猜测
             # “已实施手术”；状态与原因码仍由上游执行器原样保留。
             continue

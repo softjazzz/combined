@@ -27,14 +27,14 @@ def test_mdt_facts_remove_internal_ids_and_preserve_the_public_contract() -> Non
     }
 
     assert safe_surgery_mdt_customer_display_facts(
-        rule_id="LX0609-040", raw=raw
+        rule_id="LX0609-04-01-03", raw=raw
     ) == _MISSING_FACTS
 
 
 def test_mdt_status_and_safe_facts_conflict_becomes_technical_error() -> None:
     finalized, handled = finalize_luxian_0609_executor_customer_display_facts(
         result={
-            "rule_id": "LX0609-040",
+            "rule_id": "LX0609-04-01-03",
             "status": "compliant",
             "reason_code": "requirement_satisfied",
             "findings": "不应保留",
@@ -51,7 +51,7 @@ def test_mdt_status_and_safe_facts_conflict_becomes_technical_error() -> None:
 def test_mdt_invalid_typed_facts_become_technical_error() -> None:
     finalized, handled = finalize_luxian_0609_executor_customer_display_facts(
         result={
-            "rule_id": "LX0609-040",
+            "rule_id": "LX0609-04-01-03",
             "status": "non_compliant",
             "reason_code": "preoperative_mdt_absent",
             "findings": "不应保留",

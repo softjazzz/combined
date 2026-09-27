@@ -148,12 +148,12 @@ async def test_four_rules_use_two_bounded_fact_calls_and_return_controlled_resul
         },
         {
             "facts": {
-                "LX0609-020": {
+                "LX0609-03-01-01": {
                     "fact": "execution_all_present",
                     "evidence_refs": ["C01", "D01"],
                     "confidence": "high",
                 },
-                "LX0609-023": {
+                "LX0609-03-01-04": {
                     "fact": "execution_specific",
                     "evidence_refs": ["C01", "D01"],
                     "confidence": "high",
@@ -213,7 +213,7 @@ async def test_semantic_parse_failure_retries_once_then_uses_valid_payload(monke
     )
 
     execution = await consultation.execute_luxian_0609_native_consultation_rules(
-        rule_ids=("LX0609-021", "LX0609-022"),
+        rule_ids=("LX0609-03-01-02", "LX0609-03-01-03"),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -245,7 +245,7 @@ async def test_semantic_parse_failure_after_retry_is_technical_error(monkeypatch
     client = _SequenceClient("not-json", "still-not-json")
 
     execution = await consultation.execute_luxian_0609_native_consultation_rules(
-        rule_ids=("LX0609-021", "LX0609-022"),
+        rule_ids=("LX0609-03-01-02", "LX0609-03-01-03"),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -288,7 +288,7 @@ async def test_execution_parse_failure_retries_once_and_returns_uncertain(monkey
     client = _SequenceClient("not-json", "still-not-json")
 
     execution = await consultation.execute_luxian_0609_native_consultation_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -312,7 +312,7 @@ def test_fact_prompts_keep_semantic_and_execution_boundaries_separate():
         context='{"ref":"C01"}'
     )
     execution_prompt = consultation._consultation_rule_fact_prompt(
-        selected=("LX0609-020", "LX0609-023"),
+        selected=("LX0609-03-01-01", "LX0609-03-01-04"),
         context='{"ref":"C01"}',
     )
 

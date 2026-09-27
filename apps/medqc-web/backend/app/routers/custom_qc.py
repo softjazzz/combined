@@ -16,6 +16,7 @@ from ..services.custom_qc_service import (
     generate_custom_prompt,
 )
 from ..services.custom_qc_workspace_service import CustomQCWorkspaceService
+from ..services.luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY
 from ..services.llm_observability import llm_observation_context
 from ..services.product_activation import require_product_activation
 from ..services.sichuan_qc_service import SichuanQCService
@@ -233,10 +234,25 @@ def _normalize_run_mode(value: Optional[str]) -> str:
     return "serial"
 
 
+def _wrong_workspace_batch_owner(job: Mapping[str, Any]) -> bool:
+    """正式四川规则任务必须由其专用 Worker 领取。"""
+
+    filters = job.get("filters")
+    filters = filters if isinstance(filters, Mapping) else {}
+    rule_set_key = str(filters.get("rule_set_key") or "").strip()
+    return rule_set_key == LUXIAN_0609_RULE_SET_KEY or (
+        str(job.get("draft_id") or "").strip() == "sichuan-rule-library"
+        and not rule_set_key
+    )
+
+
 async def _run_workspace_batch_job(job_id: str) -> None:
     workspace = get_workspace_service()
     job = workspace.get_batch_job_for_processing(job_id=job_id)
     if not job:
+        return
+    if _wrong_workspace_batch_owner(job):
+        logger.error("通用 Worker 拒绝领取正式四川规则任务或缺少规则集身份: job_id=%s", job_id)
         return
 
     try:
@@ -1346,6 +1362,11 @@ async def retry_workspace_batch_job(
     current_user: Dict[str, Any] = Depends(require_product_activation),
     workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
 ):
+    existing = workspace.get_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
+    if not existing:
+        raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
+    if _wrong_workspace_batch_owner(existing):
+        raise HTTPException(status_code=409, detail="该任务须从四川规则任务入口重试，或规则集身份缺失")
     job = workspace.retry_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
     if not job:
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")

@@ -187,7 +187,7 @@ def predict_case(row: dict[str, Any]) -> dict[str, Any]:
         "confidence": confidence,
         "evidence_summary": evidence_summary,
         "matched_text": matched_text,
-        "document_type": "多文书" if qc_point_id in {"LX0609-017", "LX0609-032"} else "会诊记录",
+        "document_type": "多文书" if qc_point_id in {"LX0609-12-01-02", "LX0609-04-03-01"} else "会诊记录",
         "document_name": "客户样本池病历文书",
         "suggestion": "请结合证据片段人工复核；若证据不足，按 data_quality_gap 处理。",
     }

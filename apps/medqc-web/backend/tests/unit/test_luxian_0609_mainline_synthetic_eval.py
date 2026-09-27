@@ -5,6 +5,7 @@ import importlib.util
 from pathlib import Path
 
 import pytest
+from tests.luxian_0609_identity_test_support import published_rule_ids
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -67,11 +68,11 @@ def test_defined_only_matrix_excludes_current_pending_rules(tmp_path: Path) -> N
             handle, fieldnames=("visit_id", "rule_id", "expected_status")
         )
         writer.writeheader()
-        for index in range(1, 76):
+        for index, rule_id in enumerate(published_rule_ids(1, 75), start=1):
             writer.writerow(
                 {
                     "visit_id": f"LX0609_0426_SYN_V3_{index:03d}",
-                    "rule_id": f"LX0609-{index:03d}",
+                    "rule_id": rule_id,
                     "expected_status": "compliant",
                 }
             )
@@ -84,12 +85,12 @@ def test_defined_only_matrix_excludes_current_pending_rules(tmp_path: Path) -> N
     assert len(selected_rule_ids) == 69
     assert selected_rule_ids.isdisjoint(
         {
-            "LX0609-025",
-            "LX0609-028",
-            "LX0609-049",
-            "LX0609-056",
-            "LX0609-059",
-            "LX0609-075",
+            "LX0609-04-02-04",
+            "LX0609-05-01-01",
+            "LX0609-07-04-02",
+            "LX0609-05-01-04",
+            "LX0609-05-03-01",
+            "LX0609-10-03-01",
         }
     )
 
@@ -100,11 +101,11 @@ def test_validation_matrix_summary_separates_rules_from_assertions() -> None:
     summary = module.summarize_validation_matrix(
         {
             "LX0609_0426_SYN_V3_001": {
-                "LX0609-001": "compliant",
-                "LX0609-002": "non_compliant",
+                "LX0609-01-01-01": "compliant",
+                "LX0609-01-02-01": "non_compliant",
             },
             "LX0609_0426_SYN_V3_002": {
-                "LX0609-001": "non_compliant",
+                "LX0609-01-01-01": "non_compliant",
             },
         }
     )

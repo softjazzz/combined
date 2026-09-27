@@ -23,7 +23,7 @@ def _run(known_hours, missing_count, horizon_hours, date_only=False):
         return SnapshotSourceRows.create(source_key=source, rows=sources.get(source, []), truncated=False, limit_rows=50)
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-007",), institute_id="I", patient_id="P", visit_id="V", source_schema=None,
+        selected_rule_ids=("LX0609-02-01-03",), institute_id="I", patient_id="P", visit_id="V", source_schema=None,
         created_at="2026-09-09T09:00:00+08:00", row_reader=reader,
         evaluation_as_of_date=horizon.date().isoformat() if date_only else None,
         evaluation_horizon_policy="frozen_task_date" if date_only else None,

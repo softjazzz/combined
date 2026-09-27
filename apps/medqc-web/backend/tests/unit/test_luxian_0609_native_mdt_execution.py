@@ -80,7 +80,7 @@ def _session(
         )
 
     return build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-040",),
+        selected_rule_ids=("LX0609-04-01-03",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -104,12 +104,12 @@ def _material_document_refs(session, *source_keys: str) -> set[str]:
 def _aggregate_typed(session, execution):
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=execution.decisions,
-        expected_rule_ids=("LX0609-040",),
+        expected_rule_ids=("LX0609-04-01-03",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
     result = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-040", "name": "四级手术术前多学科讨论"}],
+        wrapper_rules=[{"rule_id": "LX0609-04-01-03", "name": "四级手术术前多学科讨论"}],
         execution_results=[],
         reduced_decisions=reduced,
         customer_display_facts=execution.customer_display_facts,
@@ -179,7 +179,7 @@ async def test_typed_mdt_builds_bound_decision_from_same_session_without_custome
         llm_client=_LLM(),
         evidence_materials=session.materials,
         evidence_snapshot=session.snapshot,
-        decision_rule_ids=("LX0609-040",),
+        decision_rule_ids=("LX0609-04-01-03",),
     )
 
     assert execution.result is None
@@ -252,7 +252,7 @@ async def test_typed_mdt_replaces_midnight_placeholder_with_strict_formal_time()
         llm_client=llm,
         evidence_materials=session.materials,
         evidence_snapshot=session.snapshot,
-        decision_rule_ids=("LX0609-040",),
+        decision_rule_ids=("LX0609-04-01-03",),
     )
 
     assert execution.decisions[0].reason_code == "requirement_satisfied"
@@ -346,7 +346,7 @@ async def test_typed_mdt_does_not_replace_midnight_for_unreliable_formal_associa
         llm_client=llm,
         evidence_materials=session.materials,
         evidence_snapshot=session.snapshot,
-        decision_rule_ids=("LX0609-040",),
+        decision_rule_ids=("LX0609-04-01-03",),
     )
 
     assert execution.decisions[0].reason_code == "requirement_violated"
@@ -386,12 +386,12 @@ async def test_hospital_performance_level_promotes_catalog_surgery_to_level_four
         llm_client=_LLM(),
         evidence_materials=session.materials,
         evidence_snapshot=session.snapshot,
-        decision_rule_ids=("LX0609-040",),
+        decision_rule_ids=("LX0609-04-01-03",),
     )
 
     assert execution.decisions[0].qc_direction is QcDirection.SATISFIED
     assert execution.decisions[0].reason_code == "requirement_satisfied"
-    assert dict(execution.customer_display_facts)["LX0609-040"] == {
+    assert dict(execution.customer_display_facts)["LX0609-04-01-03"] == {
         "performed_surgery_confirmed": True,
         "procedure_kind": "surgery",
         "effective_surgery_level": "四级",
@@ -428,12 +428,12 @@ async def test_catalog_operation_never_triggers_level_four_mdt():
         llm_client=_LLM(),
         evidence_materials=session.materials,
         evidence_snapshot=session.snapshot,
-        decision_rule_ids=("LX0609-040",),
+        decision_rule_ids=("LX0609-04-01-03",),
     )
 
     assert execution.decisions[0].applicability is ApplicabilityState.NOT_APPLICABLE
     assert execution.decisions[0].reason_code == "trigger_absent_complete"
-    assert dict(execution.customer_display_facts)["LX0609-040"] == {
+    assert dict(execution.customer_display_facts)["LX0609-04-01-03"] == {
         "performed_surgery_confirmed": False,
         "procedure_kind": "non_surgical_operation",
     }
@@ -457,7 +457,7 @@ async def test_typed_mdt_complete_empty_trigger_is_bound_not_applicable():
         llm_client=_LLM(),
         evidence_materials=session.materials,
         evidence_snapshot=session.snapshot,
-        decision_rule_ids=("LX0609-040",),
+        decision_rule_ids=("LX0609-04-01-03",),
     )
 
     decision = execution.decisions[0]
@@ -500,7 +500,7 @@ async def test_typed_mdt_surgery_record_only_without_level_is_data_gap():
         llm_client=_LLM(),
         evidence_materials=session.materials,
         evidence_snapshot=session.snapshot,
-        decision_rule_ids=("LX0609-040",),
+        decision_rule_ids=("LX0609-04-01-03",),
     )
 
     decision = execution.decisions[0]
@@ -509,7 +509,7 @@ async def test_typed_mdt_surgery_record_only_without_level_is_data_gap():
     assert decision.qc_direction is QcDirection.UNKNOWN
     assert decision.reason_code == "required_field_missing"
     assert set(decision.fact_refs) == _material_document_refs(session, "surgery_record")
-    assert dict(execution.customer_display_facts)["LX0609-040"] == {
+    assert dict(execution.customer_display_facts)["LX0609-04-01-03"] == {
         "performed_surgery_confirmed": True,
         "procedure_kind": "surgery",
         "mdt_discussion_state": "unknown",
@@ -544,7 +544,7 @@ async def test_typed_mdt_surgery_record_only_with_non_level4_is_not_applicable()
         llm_client=_LLM(),
         evidence_materials=session.materials,
         evidence_snapshot=session.snapshot,
-        decision_rule_ids=("LX0609-040",),
+        decision_rule_ids=("LX0609-04-01-03",),
     )
 
     decision = execution.decisions[0]
@@ -552,7 +552,7 @@ async def test_typed_mdt_surgery_record_only_with_non_level4_is_not_applicable()
     assert decision.evidence_state is EvidenceState.SUFFICIENT
     assert decision.reason_code == "trigger_absent_complete"
     assert set(decision.fact_refs) == _material_document_refs(session, "surgery_record")
-    assert dict(execution.customer_display_facts)["LX0609-040"] == {
+    assert dict(execution.customer_display_facts)["LX0609-04-01-03"] == {
         "performed_surgery_confirmed": True,
         "procedure_kind": "surgery",
         "effective_surgery_level": "三级",
@@ -596,7 +596,7 @@ async def test_typed_mdt_missing_or_nonlevel_uses_only_trigger_surgery_evidence(
         llm_client=_LLM(),
         evidence_materials=session.materials,
         evidence_snapshot=session.snapshot,
-        decision_rule_ids=("LX0609-040",),
+        decision_rule_ids=("LX0609-04-01-03",),
     )
 
     assert execution.decisions[0].reason_code == expected_reason
@@ -655,7 +655,7 @@ async def test_typed_mdt_preserves_raw_llm_state_calls_and_tokens(monkeypatch):
         llm_client=_LLM("absent"),
         evidence_materials=session.materials,
         evidence_snapshot=session.snapshot,
-        decision_rule_ids=("LX0609-040",),
+        decision_rule_ids=("LX0609-04-01-03",),
     )
 
     assert raw.result["status"] == "non_compliant"
@@ -706,7 +706,7 @@ async def test_typed_mdt_preserves_source_failure_states(
         llm_client=_LLM(),
         evidence_materials=session.materials,
         evidence_snapshot=session.snapshot,
-        decision_rule_ids=("LX0609-040",),
+        decision_rule_ids=("LX0609-04-01-03",),
     )
 
     assert execution.result is None
@@ -741,7 +741,7 @@ async def test_typed_mdt_conditional_source_error_has_no_clinical_evidence():
         llm_client=_LLM(),
         evidence_materials=session.materials,
         evidence_snapshot=session.snapshot,
-        decision_rule_ids=("LX0609-040",),
+        decision_rule_ids=("LX0609-04-01-03",),
     )
 
     assert execution.decisions[0].reason_code == "source_query_error"
@@ -773,7 +773,7 @@ async def test_typed_mdt_rejects_mixed_snapshot_and_material_store():
             llm_client=_LLM(),
             evidence_materials=second.materials,
             evidence_snapshot=first.snapshot,
-            decision_rule_ids=("LX0609-040",),
+            decision_rule_ids=("LX0609-04-01-03",),
         )
 
 
@@ -800,7 +800,7 @@ async def test_mdt_consumes_shared_material_without_live_reader(monkeypatch):
         )
 
     session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-040",),
+        selected_rule_ids=("LX0609-04-01-03",),
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -1133,7 +1133,7 @@ async def test_emergency_surgery_is_exempt_from_preoperative_mdt():
         llm_client=None,
         evidence_materials=session.materials,
         evidence_snapshot=session.snapshot,
-        decision_rule_ids=("LX0609-040",),
+        decision_rule_ids=("LX0609-04-01-03",),
     )
 
     assert execution.decisions[0].applicability is ApplicabilityState.NOT_APPLICABLE
@@ -1144,18 +1144,18 @@ async def test_emergency_surgery_is_exempt_from_preoperative_mdt():
         "presurg_summary",
     )
     assert (
-        dict(execution.customer_display_facts)["LX0609-040"]["mdt_exception"]
+        dict(execution.customer_display_facts)["LX0609-04-01-03"]["mdt_exception"]
         == "emergency_lifesaving_surgery"
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=execution.decisions,
-        expected_rule_ids=("LX0609-040",),
+        expected_rule_ids=("LX0609-04-01-03",),
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
 
     result = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-040", "name": "四级手术术前多学科讨论"}],
+        wrapper_rules=[{"rule_id": "LX0609-04-01-03", "name": "四级手术术前多学科讨论"}],
         execution_results=[],
         reduced_decisions=reduced,
         customer_display_facts=execution.customer_display_facts,
@@ -1362,7 +1362,7 @@ async def test_typed_mdt_model_failure_keeps_only_prompt_candidate_evidence():
         llm_client=_LLM(invalid=True),
         evidence_materials=session.materials,
         evidence_snapshot=session.snapshot,
-        decision_rule_ids=("LX0609-040",),
+        decision_rule_ids=("LX0609-04-01-03",),
     )
 
     assert execution.decisions[0].reason_code == "model_invalid_output"

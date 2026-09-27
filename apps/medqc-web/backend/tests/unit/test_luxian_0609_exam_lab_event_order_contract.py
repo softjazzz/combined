@@ -45,7 +45,7 @@ def _display(*, positions: tuple[int, ...]) -> dict[str, Any]:
     )
     facts = tuple(
         ExamLabEventFact(
-            rule_id="LX0609-012",
+            rule_id="LX0609-06-01-05",
             applicability="unknown",
             semantic_state="unknown",
             positive_state="unknown",
@@ -56,12 +56,12 @@ def _display(*, positions: tuple[int, ...]) -> dict[str, Any]:
         for position in positions
     )
     outcome = exam_lab._text_fact_outcome(
-        rule_id="LX0609-012",
+        rule_id="LX0609-06-01-05",
         facts=facts,
         projection=projection,
     )
     display = exam_lab._display_facts_for_text_outcome(
-        rule_id="LX0609-012",
+        rule_id="LX0609-06-01-05",
         facts=facts,
         projection=projection,
         outcome=outcome,
@@ -81,7 +81,7 @@ def test_contract_accepts_ascending_positions() -> None:
     display = _display(positions=(1, 2))
     assert [item["event_position"] for item in display["event_results"]] == [1, 2]
 
-    safe = safe_exam_lab_customer_display_facts(rule_id="LX0609-012", raw=display)
+    safe = safe_exam_lab_customer_display_facts(rule_id="LX0609-06-01-05", raw=display)
 
     assert safe is not None
     assert _positions(safe) == [1, 2]
@@ -94,7 +94,7 @@ def test_contract_accepts_out_of_order_but_complete_positions() -> None:
     display["event_results"] = list(reversed(display["event_results"]))
     assert [item["event_position"] for item in display["event_results"]] == [2, 1]
 
-    safe = safe_exam_lab_customer_display_facts(rule_id="LX0609-012", raw=display)
+    safe = safe_exam_lab_customer_display_facts(rule_id="LX0609-06-01-05", raw=display)
 
     assert safe is not None, "乱序不属于合同违反，不得判失败"
     assert _positions(safe) == [1, 2], "输出必须归一化为升序"
@@ -111,7 +111,7 @@ def test_contract_rejects_position_gap_with_matching_length() -> None:
     display["event_results"][1]["event_position"] = 3
     assert [item["event_position"] for item in display["event_results"]] == [1, 3]
 
-    assert safe_exam_lab_customer_display_facts(rule_id="LX0609-012", raw=display) is None
+    assert safe_exam_lab_customer_display_facts(rule_id="LX0609-06-01-05", raw=display) is None
 
 
 def test_contract_rejects_duplicate_positions() -> None:
@@ -120,7 +120,7 @@ def test_contract_rejects_duplicate_positions() -> None:
     display = _display(positions=(1, 1))
     assert [item["event_position"] for item in display["event_results"]] == [1, 1]
 
-    assert safe_exam_lab_customer_display_facts(rule_id="LX0609-012", raw=display) is None
+    assert safe_exam_lab_customer_display_facts(rule_id="LX0609-06-01-05", raw=display) is None
 
 
 def test_contract_rejects_out_of_range_position() -> None:
@@ -130,7 +130,7 @@ def test_contract_rejects_out_of_range_position() -> None:
         display = _display(positions=(1, 2))
         display["event_results"][1]["event_position"] = out_of_range
         assert safe_exam_lab_customer_display_facts(
-            rule_id="LX0609-012", raw=display
+            rule_id="LX0609-06-01-05", raw=display
         ) is None, f"event_position={out_of_range} 应被拒绝"
 
 
@@ -140,7 +140,7 @@ def test_contract_rejects_non_integer_position() -> None:
     display = _display(positions=(1, 2))
     display["event_results"][1]["event_position"] = "2"
 
-    assert safe_exam_lab_customer_display_facts(rule_id="LX0609-012", raw=display) is None
+    assert safe_exam_lab_customer_display_facts(rule_id="LX0609-06-01-05", raw=display) is None
 
 
 def test_contract_still_rejects_illegal_event_status() -> None:
@@ -149,7 +149,7 @@ def test_contract_still_rejects_illegal_event_status() -> None:
     display = _display(positions=(1, 2))
     display["event_results"][0]["event_status"] = "bogus"
 
-    assert safe_exam_lab_customer_display_facts(rule_id="LX0609-012", raw=display) is None
+    assert safe_exam_lab_customer_display_facts(rule_id="LX0609-06-01-05", raw=display) is None
 
 
 def test_contract_still_rejects_unknown_extra_key() -> None:
@@ -158,7 +158,7 @@ def test_contract_still_rejects_unknown_extra_key() -> None:
     display = _display(positions=(1, 2))
     display["event_results"][0]["unexpected_key"] = "x"
 
-    assert safe_exam_lab_customer_display_facts(rule_id="LX0609-012", raw=display) is None
+    assert safe_exam_lab_customer_display_facts(rule_id="LX0609-06-01-05", raw=display) is None
 
 
 def _top_level(facts: dict[str, Any]) -> dict[str, Any]:

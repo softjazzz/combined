@@ -35,16 +35,26 @@ from .source_registry import (
 )
 
 
-TRANSFUSION_RULE_IDS = tuple(f"LX0609-{number:03d}" for number in range(41, 50))
+TRANSFUSION_RULE_IDS = (
+    "LX0609-11-03-01",
+    "LX0609-11-03-02",
+    "LX0609-07-01-01",
+    "LX0609-07-01-02",
+    "LX0609-07-02-01",
+    "LX0609-07-02-02",
+    "LX0609-07-03-01",
+    "LX0609-07-04-01",
+    "LX0609-07-04-02",
+)
 EXECUTOR_KEY = "transfusion"
 _TYPED_DECISION_RULE_IDS = frozenset(TRANSFUSION_RULE_IDS)
 _TYPED_EVALUATOR_VERSION = "transfusion-ruledecision-shadow-v1"
 
 # 049 仍缺少可受控关联的收费数量，因此旧的直接执行入口继续保守返回 DATA_GAP；
 # 新建客户任务会在任务入口明确暂停该规则，不会把此系统缺口交付为客户质控结论。
-_CONSERVATIVE_DATA_GAP_RULE_IDS = frozenset({"LX0609-049"})
+_CONSERVATIVE_DATA_GAP_RULE_IDS = frozenset({"LX0609-07-04-02"})
 _CONSERVATIVE_DATA_GAP_REASONS = {
-    "LX0609-049": "billing_linkage_source_unavailable",
+    "LX0609-07-04-02": "billing_linkage_source_unavailable",
 }
 
 _TRIGGER_SOURCES = ("mr_bloodtrans", "bloodtrans_record")
@@ -193,9 +203,9 @@ _CN_DATETIME_PATTERN = re.compile(
 )
 
 _RULE_CONTEXT_SOURCES = {
-    "LX0609-041": ("bloodtrans_record", "consent_form"),
-    "LX0609-042": ("bloodtrans_record", "consent_form"),
-    "LX0609-043": (
+    "LX0609-11-03-01": ("bloodtrans_record", "consent_form"),
+    "LX0609-11-03-02": ("bloodtrans_record", "consent_form"),
+    "LX0609-07-01-01": (
         "bloodtrans_record",
         "blood_application",
         "labtest_master",
@@ -203,17 +213,17 @@ _RULE_CONTEXT_SOURCES = {
         "exam_master",
         "exam_item_report",
     ),
-    "LX0609-044": ("bloodtrans_record", "blood_application", "daily_course_record"),
-    "LX0609-045": ("bloodtrans_record", "daily_course_record"),
-    "LX0609-046": ("bloodtrans_record", "daily_course_record"),
-    "LX0609-047": ("bloodtrans_record", "daily_course_record"),
-    "LX0609-048": (
+    "LX0609-07-01-02": ("bloodtrans_record", "blood_application", "daily_course_record"),
+    "LX0609-07-02-01": ("bloodtrans_record", "daily_course_record"),
+    "LX0609-07-02-02": ("bloodtrans_record", "daily_course_record"),
+    "LX0609-07-03-01": ("bloodtrans_record", "daily_course_record"),
+    "LX0609-07-04-01": (
         "bloodtrans_record",
         "surgery_record",
         "anesthesia_record",
         "postsurg_firstcourse_record",
     ),
-    "LX0609-049": (
+    "LX0609-07-04-02": (
         "bloodtrans_record",
         "inpat_nondrug_order",
         "inpat_bill_item",
@@ -223,23 +233,23 @@ _RULE_CONTEXT_SOURCES = {
 
 # 每组至少一个来源有实质内容才允许模型判断；缺少来源能力不能伪装成临床缺项。
 _RULE_REQUIRED_SOURCE_GROUPS = {
-    "LX0609-041": (("bloodtrans_record",), ("consent_form",)),
-    "LX0609-042": (("bloodtrans_record",), ("consent_form",)),
-    "LX0609-043": (
+    "LX0609-11-03-01": (("bloodtrans_record",), ("consent_form",)),
+    "LX0609-11-03-02": (("bloodtrans_record",), ("consent_form",)),
+    "LX0609-07-01-01": (
         ("bloodtrans_record",),
         ("labtest_master", "labtest_item_report", "exam_master", "exam_item_report"),
     ),
-    "LX0609-044": (("bloodtrans_record",), ("blood_application", "daily_course_record")),
-    "LX0609-045": (("bloodtrans_record",), ("daily_course_record",)),
-    "LX0609-046": (("bloodtrans_record",), ("daily_course_record",)),
-    "LX0609-047": (("bloodtrans_record",), ("daily_course_record",)),
-    "LX0609-048": (
+    "LX0609-07-01-02": (("bloodtrans_record",), ("blood_application", "daily_course_record")),
+    "LX0609-07-02-01": (("bloodtrans_record",), ("daily_course_record",)),
+    "LX0609-07-02-02": (("bloodtrans_record",), ("daily_course_record",)),
+    "LX0609-07-03-01": (("bloodtrans_record",), ("daily_course_record",)),
+    "LX0609-07-04-01": (
         ("bloodtrans_record",),
         ("surgery_record",),
         ("anesthesia_record",),
         ("postsurg_firstcourse_record",),
     ),
-    "LX0609-049": (
+    "LX0609-07-04-02": (
         ("bloodtrans_record",),
         ("inpat_nondrug_order",),
         ("inpat_bill_item",),
@@ -275,7 +285,7 @@ def _typed_rule_source_keys(rule_id: str) -> frozenset[str]:
         physical_sources.update(
             _TYPED_SOURCE_ALIASES.get(logical_source, (logical_source,))
         )
-    if rule_id == "LX0609-047":
+    if rule_id == "LX0609-07-03-01":
         physical_sources.update(
             resolve_luxian_0609_decision_support_source_keys((rule_id,))
         )
@@ -385,7 +395,7 @@ def _selected_document_identities(
 
     raw_ids = display_facts.get("source_document_ids")
     if raw_ids is not None:
-        if rule_id not in {"LX0609-045", "LX0609-046"} or not isinstance(raw_ids, list):
+        if rule_id not in {"LX0609-07-02-01", "LX0609-07-02-02"} or not isinstance(raw_ids, list):
             raise ValueError("invalid selected transfusion document ids")
         for raw_id in raw_ids:
             document_id = _declared_document_identity(
@@ -473,10 +483,10 @@ def _typed_decision_from_outcome(
     elif status == "not_applicable":
         reason_code = (
             "eligibility_not_met"
-            if outcome.rule_id == "LX0609-042"
+            if outcome.rule_id == "LX0609-11-03-02"
             and outcome.reason_code == "transfusion_consent_absent"
             else "evaluation_window_not_mature"
-            if outcome.rule_id == "LX0609-047"
+            if outcome.rule_id == "LX0609-07-03-01"
             and outcome.reason_code == "evaluation_window_not_mature"
             else "trigger_absent_complete"
         )
@@ -489,15 +499,15 @@ def _typed_decision_from_outcome(
     elif status == "data_gap":
         source_gap = "source_unavailable" in outcome.reason_code
         authoritative_time_gap = (
-            outcome.rule_id == "LX0609-047"
+            outcome.rule_id == "LX0609-07-03-01"
             and outcome.reason_code == "posttransfusion_evaluation_time_unavailable"
         )
         authoritative_time_conflict = (
-            outcome.rule_id == "LX0609-047"
+            outcome.rule_id == "LX0609-07-03-01"
             and outcome.reason_code == "posttransfusion_evaluation_horizon_conflict"
         )
         association_gap = (
-            outcome.rule_id == "LX0609-047"
+            outcome.rule_id == "LX0609-07-03-01"
             and outcome.reason_code == "association_failed"
         )
         dimensions = (
@@ -680,7 +690,7 @@ def _typed_documents_from_evidence_session(
         else:
             logical_states[logical_source] = "missing"
 
-    if rule_id == "LX0609-047":
+    if rule_id == "LX0609-07-03-01":
         horizon_observation = observation_by_source.get(
             _EVALUATION_HORIZON_SOURCE_KEY
         )
@@ -1346,7 +1356,7 @@ def _programmatic_044_status(
         return structured
 
     sourced_entries: list[tuple[str, Mapping[str, Any], str]] = []
-    for source_key in _RULE_CONTEXT_SOURCES["LX0609-044"]:
+    for source_key in _RULE_CONTEXT_SOURCES["LX0609-07-01-02"]:
         for row in _source_document_rows(documents, source_key):
             title = _clean(row.get("document_title") or row.get("title"))
             content = _row_text(row)
@@ -1375,7 +1385,7 @@ def _programmatic_044_status(
         refs: Sequence[Mapping[str, str]] = (),
     ) -> Mapping[str, Any] | None:
         facts = _programmatic_transfusion_display_facts(
-            rule_id="LX0609-044",
+            rule_id="LX0609-07-01-02",
             status=status,
             reason_code=reason_code,
             documents=documents,
@@ -2530,15 +2540,15 @@ def _customer_display_facts_for_outcome(
     if status != "non_compliant":
         return None
     cases = {
-        ("LX0609-044", "pretransfusion_assessment_missing"): (
+        ("LX0609-07-01-02", "pretransfusion_assessment_missing"): (
             "pretransfusion_assessment",
             ["bloodtrans_record", "blood_application", "course_record"],
         ),
-        ("LX0609-046", "transfusion_purpose_or_indication_missing"): (
+        ("LX0609-07-02-02", "transfusion_purpose_or_indication_missing"): (
             "purpose_or_indication",
             ["bloodtrans_record"],
         ),
-        ("LX0609-047", "posttransfusion_evaluation_missing"): (
+        ("LX0609-07-03-01", "posttransfusion_evaluation_missing"): (
             "posttransfusion_evaluation",
             ["bloodtrans_record", "course_record"],
         ),
@@ -2566,7 +2576,7 @@ def _programmatic_transfusion_display_facts(
     """从已参与裁决的同一份资料中生成受控事实，不回显正文。"""
 
     records = _source_document_rows(documents, "bloodtrans_record")
-    if rule_id == "LX0609-044":
+    if rule_id == "LX0609-07-01-02":
         entries = [
             *_source_entries(documents, "blood_application", limit=None),
             *_source_entries(documents, "bloodtrans_record", limit=None),
@@ -2609,7 +2619,7 @@ def _programmatic_transfusion_display_facts(
                 else "pretransfusion_assessment_incomplete"
             )
         return payload
-    if rule_id == "LX0609-045":
+    if rule_id == "LX0609-07-02-01":
         payload: dict[str, Any] = {
             "verification_kind" if status == "compliant" else "failure_kind": (
                 "transfusion_course_record_present"
@@ -2631,7 +2641,7 @@ def _programmatic_transfusion_display_facts(
         if source_document_ids:
             payload["source_document_ids"] = list(dict.fromkeys(source_document_ids))
         return payload
-    if rule_id == "LX0609-046":
+    if rule_id == "LX0609-07-02-02":
         llm_component_refs = set(component_evidence_document_refs)
         checks_by_record = []
         for index, record in enumerate(records, start=1):
@@ -2684,7 +2694,7 @@ def _programmatic_transfusion_display_facts(
             else "transfusion_course_record_incomplete"
         )
         return payload
-    if rule_id == "LX0609-047":
+    if rule_id == "LX0609-07-03-01":
         assessment = posttransfusion_assessment or _programmatic_047_assessment(
             documents
         )
@@ -3026,11 +3036,11 @@ async def execute_luxian_0609_native_transfusion_rules(
                 executor_type="program",
             )
             continue
-        if rule_id in {"LX0609-041", "LX0609-042", "LX0609-043"}:
+        if rule_id in {"LX0609-11-03-01", "LX0609-11-03-02", "LX0609-07-01-01"}:
             programmatic = {
-                "LX0609-041": _programmatic_041_status,
-                "LX0609-042": _programmatic_042_status,
-                "LX0609-043": evaluate_pretransfusion_nine_items,
+                "LX0609-11-03-01": _programmatic_041_status,
+                "LX0609-11-03-02": _programmatic_042_status,
+                "LX0609-07-01-01": evaluate_pretransfusion_nine_items,
             }[rule_id](documents)
             status, reason_code, display_facts = programmatic
             emit_outcome(
@@ -3055,7 +3065,7 @@ async def execute_luxian_0609_native_transfusion_rules(
                 executor_type="program",
             )
             continue
-        if rule_id == "LX0609-048":
+        if rule_id == "LX0609-07-04-01":
             status, reason_code, display_facts = _programmatic_048_status(documents)
             emit_outcome(
                 rule_id,
@@ -3067,7 +3077,7 @@ async def execute_luxian_0609_native_transfusion_rules(
             continue
         # 044–047 的专用输血记录具有更高证据优先级。先尝试确定性判定，
         # 只有不能定论时才检查日常病程等辅助投影并进入裁剪模型。
-        if rule_id == "LX0609-044":
+        if rule_id == "LX0609-07-01-02":
             programmatic_status = _programmatic_044_status(documents)
             reason_candidate = build_pretransfusion_reason_candidate(documents)
             needs_reason_semantics = (
@@ -3169,7 +3179,7 @@ async def execute_luxian_0609_native_transfusion_rules(
                     display_facts=display_facts,
                 )
                 continue
-        if rule_id == "LX0609-045":
+        if rule_id == "LX0609-07-02-01":
             programmatic_status = _programmatic_045_status(documents)
             if programmatic_status is not None:
                 status, reason_code = programmatic_status
@@ -3186,7 +3196,7 @@ async def execute_luxian_0609_native_transfusion_rules(
                     ),
                 )
                 continue
-        if rule_id == "LX0609-046":
+        if rule_id == "LX0609-07-02-02":
             programmatic_status = _programmatic_046_status(documents)
             if programmatic_status is not None:
                 status, reason_code = programmatic_status
@@ -3286,7 +3296,7 @@ async def execute_luxian_0609_native_transfusion_rules(
                     ),
                 )
                 continue
-        if rule_id == "LX0609-047":
+        if rule_id == "LX0609-07-03-01":
             assessment = _programmatic_047_assessment(documents)
             status, reason_code = assessment.status, assessment.reason_code
             emit_outcome(

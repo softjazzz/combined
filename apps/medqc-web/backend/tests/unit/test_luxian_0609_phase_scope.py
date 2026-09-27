@@ -14,71 +14,71 @@ from app.services.sample_validation_rule_sets import (
 )
 
 
-def test_phase_scope_freezes_all_77_customer_rules() -> None:
+def test_phase_scope_freezes_all_85_customer_rules() -> None:
     entries = load_luxian_0609_phase_scope()
 
-    assert len(entries) == 77
-    assert tuple(entry.rule_id for entry in entries) == tuple(
-        f"LX0609-{index:03d}" for index in range(1, 78)
-    )
+    assert len(entries) == 85
+    registered_ids = tuple(entry.rule_id for entry in entries if entry.catalog_registered)
+    assert registered_ids == tuple(str(item["rule_id"]) for item in load_luxian_0609_rules())
     assert {entry.definition_version for entry in entries} == {
-        "lx0609-defined-scope-2026-09-05-r3"
+        "lx0609-defined-scope-2026-09-22-identity-v1"
     }
-    assert sum(entry.phase_status == "phase_1_target" for entry in entries) == 67
+    assert sum(entry.phase_status == "phase_1_target" for entry in entries) == 74
     assert sum(entry.phase_status == "phase_1_partial" for entry in entries) == 0
-    assert sum(entry.phase_status == "pending_definition" for entry in entries) == 10
-    assert sum(entry.catalog_registered for entry in entries) == 77
+    assert sum(entry.phase_status == "pending_definition" for entry in entries) == 11
+    assert sum(entry.catalog_registered for entry in entries) == 84
 
 
 def test_phase_scope_uses_latest_confirmed_contract_and_freezes_only_unresolved_rules() -> None:
     entries = {entry.rule_id: entry for entry in load_luxian_0609_phase_scope()}
 
-    for rule_id in ("LX0609-009", "LX0609-010", "LX0609-017", "LX0609-023"):
+    for rule_id in ("LX0609-02-01-05", "LX0609-06-01-02", "LX0609-12-01-02", "LX0609-03-01-04"):
         assert entries[rule_id].phase_status == "phase_1_target"
         assert entries[rule_id].pending_reason_code == ""
 
-    assert entries["LX0609-025"].phase_status == "pending_definition"
+    assert entries["LX0609-04-02-04"].phase_status == "pending_definition"
     assert (
-        entries["LX0609-025"].pending_reason_code
+        entries["LX0609-04-02-04"].pending_reason_code
         == "implant_five_field_real_gold_pending"
     )
-    assert entries["LX0609-059"].phase_status == "pending_definition"
+    assert entries["LX0609-05-03-01"].phase_status == "pending_definition"
     assert (
-        entries["LX0609-059"].pending_reason_code
+        entries["LX0609-05-03-01"].pending_reason_code
         == "treatment_event_order_course_real_gold_pending"
     )
-    assert entries["LX0609-018"].phase_status == "phase_1_target"
-    assert entries["LX0609-018"].active_criteria == (
+    assert entries["LX0609-01-01-02"].phase_status == "phase_1_target"
+    assert entries["LX0609-01-01-02"].active_criteria == (
         "chief_complaint_length",
         "diagnostic_direction",
     )
-    assert entries["LX0609-018"].pending_criteria == ()
-    assert entries["LX0609-018"].pending_reason_code == ""
+    assert entries["LX0609-01-01-02"].pending_criteria == ()
+    assert entries["LX0609-01-01-02"].pending_reason_code == ""
     assert {
         rule_id
         for rule_id, entry in entries.items()
         if entry.phase_status == "pending_definition"
     } == {
-        "LX0609-020",
-        "LX0609-021",
-        "LX0609-022",
-        "LX0609-025",
-        "LX0609-028",
-        "LX0609-036",
-        "LX0609-049",
-        "LX0609-056",
-        "LX0609-059",
-        "LX0609-075",
+        "LX0609-03-01-01",
+        "LX0609-03-01-02",
+        "LX0609-03-01-03",
+        "LX0609-04-02-04",
+        "LX0609-05-01-01",
+        "LX0609-04-04-01",
+        "LX0609-07-04-02",
+        "LX0609-05-01-04",
+        "LX0609-05-03-01",
+        "LX0609-10-03-01",
+        "LX0609-06-03-01",
     }
 
 
 @pytest.mark.parametrize(
     ("rule_id", "pending_reason_code"),
     (
-        ("LX0609-049", "charging_source_unavailable_customer_scope"),
-        ("LX0609-056", "key_antimicrobial_catalog_missing"),
-        ("LX0609-059", "treatment_event_order_course_real_gold_pending"),
-        ("LX0609-075", "invasive_procedure_catalog_missing"),
+        ("LX0609-07-04-02", "charging_source_unavailable_customer_scope"),
+        ("LX0609-05-01-04", "key_antimicrobial_catalog_missing"),
+        ("LX0609-05-03-01", "treatment_event_order_course_real_gold_pending"),
+        ("LX0609-10-03-01", "invasive_procedure_catalog_missing"),
     ),
 )
 def test_pending_definition_result_has_one_empty_evidence_contract(
@@ -130,11 +130,11 @@ def test_phase_scope_is_a_read_only_master_projection() -> None:
 
 def test_phase_scope_partitions_customer_selection_in_catalog_order() -> None:
     executable, pending = partition_luxian_0609_rule_scope(
-        ("LX0609-059", "LX0609-017", "LX0609-049", "LX0609-001")
+        ("LX0609-05-03-01", "LX0609-12-01-02", "LX0609-07-04-02", "LX0609-01-01-01")
     )
 
-    assert executable == ("LX0609-001", "LX0609-017")
-    assert pending == ("LX0609-049", "LX0609-059")
+    assert executable == ("LX0609-01-01-01", "LX0609-12-01-02")
+    assert pending == ("LX0609-07-04-02", "LX0609-05-03-01")
 
 
 def test_consultation_family_keeps_only_023_executable() -> None:
@@ -142,8 +142,8 @@ def test_consultation_family_keeps_only_023_executable() -> None:
 
     entries = {entry.rule_id: entry for entry in load_luxian_0609_phase_scope()}
 
-    assert entries["LX0609-023"].phase_status == "phase_1_target"
-    for rule_id in ("LX0609-020", "LX0609-021", "LX0609-022"):
+    assert entries["LX0609-03-01-04"].phase_status == "phase_1_target"
+    for rule_id in ("LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03"):
         assert entries[rule_id].phase_status == "pending_definition"
         assert (
             entries[rule_id].pending_reason_code
@@ -153,26 +153,32 @@ def test_consultation_family_keeps_only_023_executable() -> None:
         assert result["status"] == "not_executed"
         assert result["is_compliant"] is None
         assert "请会诊执行记录" in result["findings"]
-        assert "LX0609-023" in result["suggestion"]
+        assert "LX0609-03-01-04" in result["suggestion"]
 
     executable, withheld = partition_luxian_0609_rule_scope(
-        ("LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023")
+        ("LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03", "LX0609-03-01-04")
     )
-    assert executable == ("LX0609-023",)
-    assert withheld == ("LX0609-020", "LX0609-021", "LX0609-022")
+    assert executable == ("LX0609-03-01-04",)
+    assert withheld == ("LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03")
 
 
-def test_customer_delivery_scope_is_72_with_62_executable_and_10_withheld() -> None:
+def test_customer_delivery_excludes_registration_only_handbook_rules() -> None:
     delivery = get_luxian_0609_customer_delivery_rule_ids()
     executable, withheld = get_luxian_0609_customer_execution_scope()
 
-    assert len(delivery) == 72
-    assert len(executable) == 62
+    assert len(delivery) == 79
+    assert len(executable) == 69
     assert len(withheld) == 10
-    assert "LX0609-036" in withheld
-    assert {"LX0609-020", "LX0609-021", "LX0609-022"}.issubset(withheld)
-    assert "LX0609-023" in executable
-    result = build_luxian_0609_pending_definition_result("LX0609-036")
+    assert "LX0609-04-04-01" in withheld
+    assert {"LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03"}.issubset(withheld)
+    assert "LX0609-03-01-04" in executable
+    assert "LX0609-06-03-01" not in delivery
+    assert "LX0609-06-01-01" in executable
+    with pytest.raises(ValueError, match="invalid LX0609 customer rule id"):
+        partition_luxian_0609_rule_scope(("LX0609-06-03-01",))
+    with pytest.raises(ValueError, match="not an LX0609 pending definition"):
+        build_luxian_0609_pending_definition_result("LX0609-06-01-01")
+    result = build_luxian_0609_pending_definition_result("LX0609-04-04-01")
     assert result["status"] == "not_executed"
     assert result["is_compliant"] is None
     assert "数据源暂不可用" in result["findings"]
@@ -184,21 +190,22 @@ def test_customer_delivery_scope_is_72_with_62_executable_and_10_withheld() -> N
         for item in load_luxian_0609_rules()
     }
     assert set(delivery) == catalog_ids - {
-        "LX0609-033",
-        "LX0609-034",
-        "LX0609-035",
-        "LX0609-041",
-        "LX0609-042",
+        "LX0609-11-01-01",
+        "LX0609-11-02-01",
+        "LX0609-11-02-02",
+        "LX0609-11-03-01",
+        "LX0609-11-03-02",
     }
     assert delivery == tuple(
         entry.rule_id
         for entry in load_luxian_0609_phase_scope()
-        if entry.rule_id not in {
-            "LX0609-033",
-            "LX0609-034",
-            "LX0609-035",
-            "LX0609-041",
-            "LX0609-042",
+        if entry.catalog_registered
+        and entry.rule_id not in {
+            "LX0609-11-01-01",
+            "LX0609-11-02-01",
+            "LX0609-11-02-02",
+            "LX0609-11-03-01",
+            "LX0609-11-03-02",
         }
     )
 
@@ -208,13 +215,13 @@ def test_phase_scope_fails_closed_for_partial_rule_until_criterion_projection_ex
 ) -> None:
     entries = (
         Luxian0609PhaseScopeEntry(
-            rule_id="LX0609-001",
+            rule_id="LX0609-01-01-01",
             phase_status="phase_1_target",
             catalog_registered=True,
             definition_version="v-test",
         ),
         Luxian0609PhaseScopeEntry(
-            rule_id="LX0609-002",
+            rule_id="LX0609-01-02-01",
             phase_status="phase_1_partial",
             catalog_registered=True,
             definition_version="v-test",
@@ -222,7 +229,7 @@ def test_phase_scope_fails_closed_for_partial_rule_until_criterion_projection_ex
             pending_criteria=("criterion_pending",),
         ),
         Luxian0609PhaseScopeEntry(
-            rule_id="LX0609-003",
+            rule_id="LX0609-04-02-01",
             phase_status="pending_definition",
             catalog_registered=True,
             definition_version="v-test",
@@ -235,8 +242,8 @@ def test_phase_scope_fails_closed_for_partial_rule_until_criterion_projection_ex
     )
 
     executable, withheld = partition_luxian_0609_rule_scope(
-        ("LX0609-003", "LX0609-002", "LX0609-001")
+        ("LX0609-04-02-01", "LX0609-01-02-01", "LX0609-01-01-01")
     )
 
-    assert executable == ("LX0609-001",)
-    assert withheld == ("LX0609-002", "LX0609-003")
+    assert executable == ("LX0609-01-01-01",)
+    assert withheld == ("LX0609-01-02-01", "LX0609-04-02-01")

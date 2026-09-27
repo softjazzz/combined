@@ -1,8 +1,16 @@
 <template>
-  <a-popover placement="bottomRight" trigger="click">
+  <a-popover
+    placement="bottomRight"
+    trigger="click"
+  >
     <template #content>
-      <section class="runtime-build-details" aria-label="运行版本详情">
-        <div class="runtime-build-heading">运行版本</div>
+      <section
+        class="runtime-build-details"
+        aria-label="运行版本详情"
+      >
+        <div class="runtime-build-heading">
+          运行版本
+        </div>
         <dl>
           <dt>前端构建号</dt>
           <dd>{{ frontend.buildId || (frontend.development ? '开发环境' : '前端未标记') }}</dd>
@@ -17,10 +25,19 @@
           <dt>后端进程</dt>
           <dd>{{ backend ? `PID ${backend.pid}` : '—' }}</dd>
         </dl>
-        <p v-if="detailMessage" class="runtime-build-message">
+        <p
+          v-if="detailMessage"
+          class="runtime-build-message"
+        >
           {{ detailMessage }}
         </p>
-        <a-button size="small" :loading="loading" @click="refresh"> 刷新版本 </a-button>
+        <a-button
+          size="small"
+          :loading="loading"
+          @click="refresh"
+        >
+          刷新版本
+        </a-button>
       </section>
     </template>
     <button
@@ -28,9 +45,15 @@
       :class="['runtime-build-status', `is-${state}`]"
       :aria-label="`运行版本：${label}，前端${frontend.buildId || '未标记'}`"
     >
-      <span class="runtime-build-dot" aria-hidden="true" />
+      <span
+        class="runtime-build-dot"
+        aria-hidden="true"
+      />
       <span>{{ label }}</span>
-      <span class="runtime-build-short" :title="frontend.buildId || '前端未标记'">{{
+      <span
+        class="runtime-build-short"
+        :title="frontend.buildId || '前端未标记'"
+      >{{
         shortBuildId
       }}</span>
     </button>

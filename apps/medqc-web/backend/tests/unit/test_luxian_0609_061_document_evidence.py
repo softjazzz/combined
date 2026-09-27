@@ -11,11 +11,11 @@ from tests.unit.test_luxian_0609_native_extended_document_execution import (
 
 async def _evaluate_061(rows_by_source):
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-061",),
+        ("LX0609-08-01-01",),
         rows_by_source,
     )
     canonical = _canonical_extended_result(
-        rule_id="LX0609-061",
+        rule_id="LX0609-08-01-01",
         snapshot=snapshot,
         materials=materials,
         result=execution,

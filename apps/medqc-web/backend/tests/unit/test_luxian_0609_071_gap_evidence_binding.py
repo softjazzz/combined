@@ -46,18 +46,18 @@ async def test_missing_title_document_is_located_without_changing_data_gap():
         unavailable_sources={"physician_change_event", "inpat_nondrug_order"},
     )
     native = await execute_luxian_0609_native_extended_document_rules(
-        rule_ids=("LX0609-071",), decision_rule_ids=("LX0609-071",),
+        rule_ids=("LX0609-10-01-01",), decision_rule_ids=("LX0609-10-01-01",),
         evidence_snapshot=snapshot, evidence_materials=materials,
     )
     result = bind_and_reduce_luxian_0609_rule_decisions(
-        decisions=native.decisions, expected_rule_ids=("LX0609-071",),
+        decisions=native.decisions, expected_rule_ids=("LX0609-10-01-01",),
         snapshot=snapshot, evidence_materials=materials,
     )[0]
     assert result.final_state.value == "data_gap"
     assert result.reason_code == "required_field_missing"
-    assert dict(native.customer_display_facts)["LX0609-071"]["source_document_refs"] == [{"source_type": "daily_course_record", "source_document_id": "NO-TITLE"}]
+    assert dict(native.customer_display_facts)["LX0609-10-01-01"]["source_document_refs"] == [{"source_type": "daily_course_record", "source_document_id": "NO-TITLE"}]
     final = finalize_luxian_0609_reduced_customer_result(
-        decision=result, raw_customer_display_facts=dict(native.customer_display_facts)["LX0609-071"],
+        decision=result, raw_customer_display_facts=dict(native.customer_display_facts)["LX0609-10-01-01"],
         evidence_snapshot=snapshot, evidence_materials=materials,
     )
     assert final["status"] == "data_gap"

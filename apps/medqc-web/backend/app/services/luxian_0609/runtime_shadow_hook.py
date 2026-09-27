@@ -153,7 +153,7 @@ def run_luxian_0609_runtime_shadow(
             extraction_inputs = provided.extraction_inputs
             target_qualifications = provided.target_qualifications
             evidence_payload = provided.evidence_payload
-        qualification_required = any(rule_id in ("LX0609-029", "LX0609-032") for rule_id in planned)
+        qualification_required = any(rule_id in ("LX0609-04-01-01", "LX0609-04-03-01") for rule_id in planned)
         if source_query_observations is None or extraction_inputs is None or (qualification_required and target_qualifications is None):
             return _summary("inputs_unavailable", planned_rule_ids=planned, planner_fingerprint=plan_fingerprint, elapsed_ms=(time.perf_counter() - started) * 1000)
         assembly = runtime_shadow_assembler.assemble_luxian_0609_runtime_shadow_inputs(

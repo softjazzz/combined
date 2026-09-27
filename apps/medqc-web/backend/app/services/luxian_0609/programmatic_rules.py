@@ -14,8 +14,8 @@ from . import deterministic_gate as gate_module
 MAX_FINDINGS = 3
 _SHA = re.compile(r"^[a-f0-9]{64}$")
 _CODE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$")
-_RULES = ("LX0609-029", "LX0609-030", "LX0609-032")
-_TARGETS = {"LX0609-029": "presurg_summary", "LX0609-030": "surgery_record", "LX0609-032": "surgery_safecheck_record"}
+_RULES = ("LX0609-04-01-01", "LX0609-04-02-02", "LX0609-04-03-01")
+_TARGETS = {"LX0609-04-01-01": "presurg_summary", "LX0609-04-02-02": "surgery_record", "LX0609-04-03-01": "surgery_safecheck_record"}
 _SENSITIVE = re.compile(r"(?i)(full[_ -]?text|medical[_ -]?text|raw[_ -]?(text|response|output)|record[_ -]?content|source[_ -]?document|patient[_ -]?name|id[_ -]?card|phone|mobile|address|quote|value|(record|submit|update)[_ -]?time|trace|prompt|response|error[_ -]?stack|sql|authorization|bearer|api[_ -]?key|password|private[_ -]?key|(?:^|[_-])sk[_-])")
 _ID_CARD = re.compile(r"(?<!\d)\d{17}[\dXx](?!\d)")
 _PHONE = re.compile(r"(?<!\d)1[3-9]\d{9}(?!\d)")
@@ -154,8 +154,8 @@ class ProgrammaticFinding:
                 raise ValueError("invalid absent finding provenance")
         elif facts or target is not None or readiness is not gate_module.GateReadiness.BLOCKED:
             raise ValueError("invalid blocked finding provenance")
-        if rule == "LX0609-032":
-            if parent != ("LX0609-030",) or dependency != ("informational_parent_only",):
+        if rule == "LX0609-04-03-01":
+            if parent != ("LX0609-04-02-02",) or dependency != ("informational_parent_only",):
                 raise ValueError("032 dependency metadata mismatch")
         elif parent or dependency:
             raise ValueError("unexpected dependency metadata")

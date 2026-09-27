@@ -17,7 +17,7 @@ vi.mock('@/services/manual-case-sample-service', () => ({
 const issues: QCRecordCompareIssue[] = [
   {
     key: 'issue-compliant',
-    rule_code: 'LX0609-002',
+    rule_code: 'LX0609-01-02-01',
     rule_name: '首次病程记录完整性',
     status: 'compliant',
     status_text: '合规',
@@ -29,7 +29,7 @@ const issues: QCRecordCompareIssue[] = [
   },
   {
     key: 'issue-danger',
-    rule_code: 'LX0609-001',
+    rule_code: 'LX0609-01-01-01',
     rule_name: '首次病程记录及时性',
     status: 'non_compliant',
     status_text: '不合规',
@@ -284,8 +284,8 @@ describe('QCRecordCompareWorkbench', () => {
       view: 'summary',
     })
     const resultItems = wrapper.findAll('.record-result-item')
-    expect(resultItems[0]?.text()).toContain('LX0609-001')
-    expect(resultItems[1]?.text()).toContain('LX0609-002')
+    expect(resultItems[0]?.text()).toContain('LX0609-01-01-01')
+    expect(resultItems[1]?.text()).toContain('LX0609-01-02-01')
     expect(wrapper.find('.record-content-toolbar').text()).toContain('首次病程记录')
     expect(wrapper.find('.record-content-toolbar').text()).toContain('记录时间')
     expect(wrapper.find('.record-content-toolbar').text()).toContain('2026-07-24 11:00:00')
@@ -477,7 +477,7 @@ describe('QCRecordCompareWorkbench', () => {
         issues: [],
         singleRecordItems: [
           {
-            rule_id: 'LX0609-018',
+            rule_id: 'LX0609-01-01-02',
             rule_name: '主诉能导出第一诊断',
             status: 'non_compliant',
             conclusion: '主诉字数超过20字。',
@@ -518,7 +518,7 @@ describe('QCRecordCompareWorkbench', () => {
   it('只把单病历报告展示模式透传给结果面板，不改写固定结果条目', async () => {
     const singleRecordItems = [
       {
-        rule_id: 'LX0609-025',
+        rule_id: 'LX0609-04-02-04',
         rule_name: '植入物相关记录',
         source_document: '手术记录',
         status: 'non_compliant',
@@ -932,7 +932,7 @@ describe('QCRecordCompareWorkbench', () => {
           {
             ...issues[1]!,
             key: 'issue-implant-missing',
-            rule_code: 'LX0609-025',
+            rule_code: 'LX0609-04-02-04',
             evidences: [
               {
                 key: 'evidence-surgery-record',
@@ -1199,7 +1199,7 @@ describe('QCRecordCompareWorkbench', () => {
     const multiEvidenceIssue: QCRecordCompareIssue = {
       ...issues[0]!,
       key: 'issue-multi-evidence',
-      rule_code: 'LX0609-007',
+      rule_code: 'LX0609-02-01-03',
       rule_name: '查房记录频次',
       evidences: [
         {
@@ -1240,7 +1240,7 @@ describe('QCRecordCompareWorkbench', () => {
           {
             ...issues[0]!,
             key: 'issue-course-document',
-            rule_code: 'LX0609-020',
+            rule_code: 'LX0609-03-01-01',
             rule_name: '日常病程记录：记录内容是否符合要求',
             target_document_type: '',
             evidences: [],

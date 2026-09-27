@@ -323,7 +323,7 @@ def _rule_is_consultation(wrapper_rule: dict[str, Any]) -> bool:
         for key in ("rule_id", "name", "rule_name", "description", "trigger_condition", "data_dependencies")
         if wrapper_rule.get(key) is not None
     )
-    return "会诊" in profile or _text(wrapper_rule.get("rule_id")).upper() in {"LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023"}
+    return "会诊" in profile or _text(wrapper_rule.get("rule_id")).upper() in {"LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03", "LX0609-03-01-04"}
 
 
 def _consultation_evidence_items_from_context(audit_context: dict[str, Any] | None) -> list[dict[str, Any]]:

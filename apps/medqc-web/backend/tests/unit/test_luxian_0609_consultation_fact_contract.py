@@ -85,7 +85,7 @@ def test_model_cannot_return_final_rule_status_or_reason():
         validate_consultation_fact_payload(
             {
                 "results": {
-                    "LX0609-020": {
+                    "LX0609-03-01-01": {
                         "status": "compliant",
                         "reason_code": "execution_specific",
                     }
@@ -124,10 +124,10 @@ def test_role_specific_applicability_request_only_and_opinion_only():
         ],
     )
     request_states = states(request)
-    assert request_states["LX0609-021"].status == "non_compliant"
+    assert request_states["LX0609-03-01-02"].status == "non_compliant"
     assert {
         request_states[rule_id].status
-        for rule_id in ("LX0609-020", "LX0609-022", "LX0609-023")
+        for rule_id in ("LX0609-03-01-01", "LX0609-03-01-03", "LX0609-03-01-04")
     } == {"not_applicable"}
 
     opinion = validate(
@@ -135,8 +135,8 @@ def test_role_specific_applicability_request_only_and_opinion_only():
         [fact("consultation_record-1", role="opinion", opinion_state="missing")],
     )
     opinion_states = states(opinion)
-    assert opinion_states["LX0609-021"].status == "evaluation_unknown"
-    assert opinion_states["LX0609-022"].status == "non_compliant"
+    assert opinion_states["LX0609-03-01-02"].status == "evaluation_unknown"
+    assert opinion_states["LX0609-03-01-03"].status == "non_compliant"
 
 
 def test_split_application_and_opinion_are_composed_as_one_episode():
@@ -161,9 +161,9 @@ def test_split_application_and_opinion_are_composed_as_one_episode():
         ],
     )
     result = states(parsed)
-    assert result["LX0609-021"].reason_code == "purpose_vague"
-    assert result["LX0609-022"].reason_code == "opinion_clear"
-    assert result["LX0609-020"].reason_code == "execution_missing"
+    assert result["LX0609-03-01-02"].reason_code == "purpose_vague"
+    assert result["LX0609-03-01-03"].reason_code == "opinion_clear"
+    assert result["LX0609-03-01-01"].reason_code == "execution_missing"
 
 
 def test_one_document_can_express_application_and_opinion_roles():
@@ -179,8 +179,8 @@ def test_one_document_can_express_application_and_opinion_roles():
         ],
     )
     result = states(parsed)
-    assert result["LX0609-021"].status == "compliant"
-    assert result["LX0609-022"].status == "compliant"
+    assert result["LX0609-03-01-02"].status == "compliant"
+    assert result["LX0609-03-01-03"].status == "compliant"
 
 
 def test_linked_vague_execution_is_present_for_020_but_defective_for_023():
@@ -214,8 +214,8 @@ def test_linked_vague_execution_is_present_for_020_but_defective_for_023():
         ],
     )
     result = states(parsed)
-    assert result["LX0609-020"].status == "compliant"
-    assert result["LX0609-023"].reason_code == "execution_vague_or_copied"
+    assert result["LX0609-03-01-01"].status == "compliant"
+    assert result["LX0609-03-01-04"].reason_code == "execution_vague_or_copied"
 
 
 def test_one_course_execution_claimed_by_two_consultations_is_ambiguous():
@@ -262,9 +262,9 @@ def test_one_course_execution_claimed_by_two_consultations_is_ambiguous():
         ],
     )
     result = states(parsed)
-    assert result["LX0609-020"].status == "evaluation_unknown"
-    assert result["LX0609-020"].reason_code == "semantic_low_confidence"
-    assert result["LX0609-023"].status == "evaluation_unknown"
+    assert result["LX0609-03-01-01"].status == "evaluation_unknown"
+    assert result["LX0609-03-01-01"].reason_code == "semantic_low_confidence"
+    assert result["LX0609-03-01-04"].status == "evaluation_unknown"
 
 
 def test_021_clear_application_fact_is_stable_without_purpose_heading():
@@ -287,8 +287,8 @@ def test_021_clear_application_fact_is_stable_without_purpose_heading():
         parsed,
         consultation_source_complete=True,
     )
-    assert result["LX0609-021"].status == "compliant"
-    assert result["LX0609-021"].reason_code == "purpose_clear"
+    assert result["LX0609-03-01-02"].status == "compliant"
+    assert result["LX0609-03-01-02"].reason_code == "purpose_clear"
 
 
 @pytest.mark.parametrize(
@@ -328,8 +328,8 @@ def test_structured_events_can_link_consultation_execution(source, time):
         ],
     )
     result = states(parsed)
-    assert result["LX0609-020"].status == "compliant"
-    assert result["LX0609-023"].status == "compliant"
+    assert result["LX0609-03-01-01"].status == "compliant"
+    assert result["LX0609-03-01-04"].status == "compliant"
 
 
 def test_incomplete_legacy_course_source_cannot_prove_execution_missing():
@@ -338,9 +338,9 @@ def test_incomplete_legacy_course_source_cannot_prove_execution_missing():
         [fact("consultation_record-1", role="opinion")],
     )
     result = states(parsed, course_complete=False)
-    assert result["LX0609-020"].status == "evaluation_unknown"
-    assert result["LX0609-023"].status == "evaluation_unknown"
-    assert result["LX0609-023"].reason_code == "semantic_low_confidence"
+    assert result["LX0609-03-01-01"].status == "evaluation_unknown"
+    assert result["LX0609-03-01-04"].status == "evaluation_unknown"
+    assert result["LX0609-03-01-04"].reason_code == "semantic_low_confidence"
 
 
 def test_unknown_duplicate_and_low_confidence_reused_refs_fail_closed():
@@ -388,11 +388,11 @@ def test_unknown_duplicate_and_low_confidence_reused_refs_fail_closed():
         )
     ]
     parsed = validate(documents, facts, links)
-    assert states(parsed)["LX0609-020"].status == "evaluation_unknown"
+    assert states(parsed)["LX0609-03-01-01"].status == "evaluation_unknown"
 
     links[1]["confidence"] = "low"
     parsed = validate(documents, facts, links)
-    assert states(parsed)["LX0609-020"].status == "evaluation_unknown"
+    assert states(parsed)["LX0609-03-01-01"].status == "evaluation_unknown"
 
 
 def test_compact_episode_payload_expands_roles_links_and_non_targets():
@@ -423,10 +423,10 @@ def test_compact_episode_payload_expands_roles_links_and_non_targets():
     )
 
     result = states(parsed)
-    assert result["LX0609-020"].status == "compliant"
-    assert result["LX0609-021"].status == "compliant"
-    assert result["LX0609-022"].status == "compliant"
-    assert result["LX0609-023"].status == "non_compliant"
+    assert result["LX0609-03-01-01"].status == "compliant"
+    assert result["LX0609-03-01-02"].status == "compliant"
+    assert result["LX0609-03-01-03"].status == "compliant"
+    assert result["LX0609-03-01-04"].status == "non_compliant"
 
 
 def test_simple_rule_facts_keep_execution_presence_separate_from_quality():
@@ -434,22 +434,22 @@ def test_simple_rule_facts_keep_execution_presence_separate_from_quality():
     facts = validate_consultation_rule_fact_payload(
         {
             "facts": {
-                "LX0609-020": {
+                "LX0609-03-01-01": {
                     "fact": "execution_all_present",
                     "evidence_refs": [consultation_ref],
                     "confidence": "high",
                 },
-                "LX0609-021": {
+                "LX0609-03-01-02": {
                     "fact": "purpose_clear",
                     "evidence_refs": [consultation_ref],
                     "confidence": "high",
                 },
-                "LX0609-022": {
+                "LX0609-03-01-03": {
                     "fact": "opinion_clear",
                     "evidence_refs": [consultation_ref],
                     "confidence": "high",
                 },
-                "LX0609-023": {
+                "LX0609-03-01-04": {
                     "fact": "execution_vague",
                     "evidence_refs": [consultation_ref],
                     "confidence": "high",
@@ -458,10 +458,10 @@ def test_simple_rule_facts_keep_execution_presence_separate_from_quality():
         },
         [doc("consultation_record-1")],
         selected_rule_ids=(
-            "LX0609-020",
-            "LX0609-021",
-            "LX0609-022",
-            "LX0609-023",
+            "LX0609-03-01-01",
+            "LX0609-03-01-02",
+            "LX0609-03-01-03",
+            "LX0609-03-01-04",
         ),
     )
     result = synthesize_consultation_rule_fact_states(
@@ -469,10 +469,10 @@ def test_simple_rule_facts_keep_execution_presence_separate_from_quality():
         consultation_source_complete=True,
         course_source_complete=True,
     )
-    assert result["LX0609-020"].status == "compliant"
-    assert result["LX0609-021"].status == "compliant"
-    assert result["LX0609-022"].status == "compliant"
-    assert result["LX0609-023"].status == "non_compliant"
+    assert result["LX0609-03-01-01"].status == "compliant"
+    assert result["LX0609-03-01-02"].status == "compliant"
+    assert result["LX0609-03-01-03"].status == "compliant"
+    assert result["LX0609-03-01-04"].status == "non_compliant"
 
 
 def test_simple_rule_facts_distinguish_absent_roles_from_missing_content():
@@ -480,17 +480,17 @@ def test_simple_rule_facts_distinguish_absent_roles_from_missing_content():
     facts = validate_consultation_rule_fact_payload(
         {
             "facts": {
-                "LX0609-020": {
+                "LX0609-03-01-01": {
                     "fact": "no_completed_opinion",
                     "evidence_refs": [consultation_ref],
                     "confidence": "high",
                 },
-                "LX0609-021": {
+                "LX0609-03-01-02": {
                     "fact": "no_application",
                     "evidence_refs": [consultation_ref],
                     "confidence": "high",
                 },
-                "LX0609-022": {
+                "LX0609-03-01-03": {
                     "fact": "no_completed_opinion",
                     "evidence_refs": [consultation_ref],
                     "confidence": "high",
@@ -498,7 +498,7 @@ def test_simple_rule_facts_distinguish_absent_roles_from_missing_content():
             }
         },
         [doc("consultation_record-1")],
-        selected_rule_ids=("LX0609-020", "LX0609-021", "LX0609-022"),
+        selected_rule_ids=("LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03"),
     )
 
     complete = synthesize_consultation_rule_fact_states(
@@ -521,12 +521,12 @@ def test_simple_rule_facts_fail_closed_when_consultation_source_is_incomplete():
     facts = validate_consultation_rule_fact_payload(
         {
             "facts": {
-                "LX0609-021": {
+                "LX0609-03-01-02": {
                     "fact": "purpose_missing",
                     "evidence_refs": [consultation_ref],
                     "confidence": "high",
                 },
-                "LX0609-022": {
+                "LX0609-03-01-03": {
                     "fact": "opinion_vague",
                     "evidence_refs": [consultation_ref],
                     "confidence": "high",
@@ -534,7 +534,7 @@ def test_simple_rule_facts_fail_closed_when_consultation_source_is_incomplete():
             }
         },
         [doc("consultation_record-1")],
-        selected_rule_ids=("LX0609-021", "LX0609-022"),
+        selected_rule_ids=("LX0609-03-01-02", "LX0609-03-01-03"),
     )
 
     result = synthesize_consultation_rule_fact_states(
@@ -543,8 +543,8 @@ def test_simple_rule_facts_fail_closed_when_consultation_source_is_incomplete():
         course_source_complete=True,
     )
 
-    assert result["LX0609-021"].status == "data_gap"
-    assert result["LX0609-022"].status == "data_gap"
+    assert result["LX0609-03-01-02"].status == "data_gap"
+    assert result["LX0609-03-01-03"].status == "data_gap"
 
 
 def test_simple_rule_fact_refs_are_scoped_and_020_reason_is_presence_only():
@@ -558,7 +558,7 @@ def test_simple_rule_fact_refs_are_scoped_and_020_reason_is_presence_only():
         validate_consultation_rule_fact_payload(
             {
                 "facts": {
-                    "LX0609-021": {
+                    "LX0609-03-01-02": {
                         "fact": "purpose_clear",
                         "evidence_refs": [course_ref],
                         "confidence": "high",
@@ -566,13 +566,13 @@ def test_simple_rule_fact_refs_are_scoped_and_020_reason_is_presence_only():
                 }
             },
             documents,
-            selected_rule_ids=("LX0609-021",),
+            selected_rule_ids=("LX0609-03-01-02",),
         )
 
     facts = validate_consultation_rule_fact_payload(
         {
             "facts": {
-                "LX0609-020": {
+                "LX0609-03-01-01": {
                     "fact": "execution_all_present",
                     "evidence_refs": [consultation_ref, course_ref],
                     "confidence": "high",
@@ -580,13 +580,13 @@ def test_simple_rule_fact_refs_are_scoped_and_020_reason_is_presence_only():
             }
         },
         documents,
-        selected_rule_ids=("LX0609-020",),
+        selected_rule_ids=("LX0609-03-01-01",),
     )
     result = synthesize_consultation_rule_fact_states(
         facts,
         consultation_source_complete=True,
         course_source_complete=True,
     )
-    assert result["LX0609-020"].reason_code == (
+    assert result["LX0609-03-01-01"].reason_code == (
         "all_completed_opinions_have_execution"
     )

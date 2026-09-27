@@ -13,7 +13,7 @@ from . import programmatic_rules as rules_module
 from . import deterministic_gate as gate_module
 
 _SHA = re.compile(r"^[a-f0-9]{64}$")
-_RULES = ("LX0609-029", "LX0609-030", "LX0609-032")
+_RULES = ("LX0609-04-01-01", "LX0609-04-02-02", "LX0609-04-03-01")
 _CODE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$")
 _SENSITIVE = re.compile(r"(?i)(full[_ -]?text|medical[_ -]?text|raw[_ -]?(text|response|output)|record[_ -]?content|internal[_ -]?data|source[_ -]?document|patient[_ -]?name|id[_ -]?card|phone|mobile|address|quote|value|(record|submit|update)[_ -]?time|trace|prompt|response|error[_ -]?stack|sql|authorization|bearer|api[_ -]?key|password|private[_ -]?key|(?:^|[_-])sk[_-])")
 _ID_CARD = re.compile(r"(?<!\d)\d{17}[\dXx](?!\d)")

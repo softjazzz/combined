@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.luxian_0609_identity_test_support import published_rule_ids
+
 import importlib.util
 import json
 from pathlib import Path
@@ -51,7 +53,7 @@ def _runtime_manifest() -> dict:
             "key": "luxian_0609_qc_v1",
             "version": "2026-06-09",
             "rule_count": 49,
-            "rule_ids": [f"LX0609-{index:03d}" for index in range(1, 50)],
+            "rule_ids": list(published_rule_ids(1, 49)),
         },
         "runtime": {
             "models": {"primary": "safe-model", "adjudicator": "safe-adjudicator"},
@@ -179,7 +181,7 @@ def test_eval_rejects_unbound_legacy_prediction_instead_of_restamping_it(
             {
                 "results": [
                     {
-                        "qc_point_id": "LX0609-001",
+                        "qc_point_id": "LX0609-01-01-01",
                         "case_id": "legacy-case",
                         "status": "non_compliant",
                     }

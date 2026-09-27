@@ -12,12 +12,12 @@ from typing import Any, Mapping
 
 SURGERY_GATE_CUSTOMER_RULE_IDS = frozenset(
     {
-        "LX0609-003",
-        "LX0609-024",
-        "LX0609-025",
-        "LX0609-028",
-        "LX0609-031",
-        "LX0609-033",
+        "LX0609-04-02-01",
+        "LX0609-04-02-03",
+        "LX0609-04-02-04",
+        "LX0609-05-01-01",
+        "LX0609-04-02-05",
+        "LX0609-11-01-01",
     }
 )
 _IMPLANT_FIELDS = (
@@ -36,7 +36,7 @@ def is_surgery_gate_customer_rule(rule_id: str) -> bool:
 
 def requires_missing_facts_status_validation(rule_id: str) -> bool:
     """只有025的确定终态需要在缺事实时继续验证精确例外。"""
-    return rule_id == "LX0609-025"
+    return rule_id == "LX0609-04-02-04"
 
 
 def _document_id(value: Any) -> str:
@@ -359,8 +359,8 @@ def safe_surgery_gate_customer_display_facts(*, rule_id: str, raw: Any) -> dict[
     if not isinstance(raw, Mapping):
         return None
     handlers = {
-        "LX0609-003": _safe_003, "LX0609-024": _safe_024, "LX0609-025": _safe_025,
-        "LX0609-028": _safe_028, "LX0609-031": _safe_031, "LX0609-033": _safe_033,
+        "LX0609-04-02-01": _safe_003, "LX0609-04-02-03": _safe_024, "LX0609-04-02-04": _safe_025,
+        "LX0609-05-01-01": _safe_028, "LX0609-04-02-05": _safe_031, "LX0609-11-01-01": _safe_033,
     }
     handler = handlers.get(rule_id)
     return handler(raw) if handler else None
@@ -368,7 +368,7 @@ def safe_surgery_gate_customer_display_facts(*, rule_id: str, raw: Any) -> dict[
 
 def surgery_gate_customer_fact_status_is_valid(*, rule_id: str, status: str, reason_code: str, raw_facts: Any, safe_facts: Mapping[str, Any] | None) -> bool:
     """状态与 executor facts 的既有一致性合同，供 Finalizer fail-closed 使用。"""
-    if rule_id == "LX0609-003" and isinstance(safe_facts, Mapping):
+    if rule_id == "LX0609-04-02-01" and isinstance(safe_facts, Mapping):
         if safe_facts.get("failure_kind") == "surgery_timeliness_data_gap":
             return status == "data_gap" and reason_code == safe_facts.get("gap_reason")
         expected = {
@@ -376,7 +376,7 @@ def surgery_gate_customer_fact_status_is_valid(*, rule_id: str, status: str, rea
             "surgery_record_late": "non_compliant", "surgery_record_within_threshold": "compliant",
         }.get(str(safe_facts.get("verification_kind") or safe_facts.get("failure_kind") or ""))
         return expected is None or status == expected
-    if rule_id != "LX0609-025":
+    if rule_id != "LX0609-04-02-04":
         return True
     expected = {"non_compliant": "implant_information_incomplete", "compliant": "implant_information_complete", "not_applicable": "implant_not_used"}.get(status)
     if raw_facts is None:
@@ -396,7 +396,7 @@ def legacy_surgery_gate_contract_error(
 ) -> str:
     """保留迁移前公共聚合入口对 003/025 非法合同的拒绝语义。"""
 
-    if rule_id == "LX0609-003" and isinstance(safe_facts, Mapping):
+    if rule_id == "LX0609-04-02-01" and isinstance(safe_facts, Mapping):
         if not surgery_gate_customer_fact_status_is_valid(
             rule_id=rule_id,
             status=status,
@@ -406,7 +406,7 @@ def legacy_surgery_gate_contract_error(
         ):
             return "invalid customer display fact status"
         return ""
-    if rule_id == "LX0609-025" and not surgery_gate_customer_fact_status_is_valid(
+    if rule_id == "LX0609-04-02-04" and not surgery_gate_customer_fact_status_is_valid(
         rule_id=rule_id,
         status=status,
         reason_code=reason_code,

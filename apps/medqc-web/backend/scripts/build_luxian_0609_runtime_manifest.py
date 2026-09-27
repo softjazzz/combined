@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -39,6 +40,7 @@ SCHEMA_VERSION = "lx0609-runtime-manifest-v1"
 RULE_SET_KEY = "luxian_0609_qc_v1"
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 EVIDENCE_SCOPES = frozenset({"synthetic", "real", "mixed"})
+_RULE_ID_PATTERN = re.compile(r"^LX0609-\d{2}-\d{2}-\d{2}$")
 
 _SAFE_FLAG_FIELDS: tuple[tuple[str, str], ...] = (
     ("trigger_gate", "LUXIAN_0609_TRIGGER_GATE_ENABLED"),
@@ -121,13 +123,20 @@ def _normalized_rule_ids(rule_catalog: Sequence[Mapping[str, Any]]) -> list[str]
     ]
     if not rule_ids:
         raise ValueError("LX0609 runtime manifest requires a non-empty rule catalog")
-    if any(not rule_id.startswith("LX0609-") for rule_id in rule_ids):
-        raise ValueError("LX0609 runtime manifest only accepts LX0609 rule ids")
+    if any(_RULE_ID_PATTERN.fullmatch(rule_id) is None for rule_id in rule_ids):
+        raise ValueError("LX0609 runtime manifest only accepts published four-part rule ids")
     if len(rule_ids) != len(set(rule_ids)):
         raise ValueError("LX0609 runtime manifest requires unique rule ids")
-    if rule_ids != sorted(rule_ids):
-        raise ValueError("LX0609 runtime manifest requires an ordered rule catalog")
     return rule_ids
+
+
+def _decision_rollout_flag(rule_id: str) -> str | None:
+    """Only migrated rollout rules own a rollback flag; native extensions do not."""
+
+    try:
+        return get_rule_decision_rollout_flag(rule_id)
+    except ValueError:
+        return None
 
 
 def _safe_flags(settings: Any) -> dict[str, bool]:
@@ -192,11 +201,7 @@ def build_runtime_manifest(
             "active_criteria": list(contract_by_id[item.rule_id].active_criteria),
             "pending_criteria": list(contract_by_id[item.rule_id].pending_criteria),
             "pending_reason_code": contract_by_id[item.rule_id].pending_reason_code,
-            "decision_rollout_flag": (
-                get_rule_decision_rollout_flag(item.rule_id)
-                if int(item.rule_id.rsplit("-", 1)[-1]) <= 49
-                else None
-            ),
+            "decision_rollout_flag": _decision_rollout_flag(item.rule_id),
         }
         for item in dependencies
     ]

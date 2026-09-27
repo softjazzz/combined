@@ -45,7 +45,7 @@ def _daily_document_binding(rows):
     ]
     reduced = _bind(
         snapshot,
-        _decision(snapshot, document_ref, rule_id="LX0609-005"),
+        _decision(snapshot, document_ref, rule_id="LX0609-02-01-01"),
         materials,
     )
     return snapshot, materials, document_ref, reduced
@@ -53,9 +53,9 @@ def _daily_document_binding(rows):
 
 def test_001_projects_selected_admission_document_coordinate():
     _execution, _reduced, results = _execute_and_aggregate(
-        _multi_document_session(("LX0609-001",)), ("LX0609-001",)
+        _multi_document_session(("LX0609-01-01-01",)), ("LX0609-01-01-01",)
     )
-    result = _result_by_rule(results, "LX0609-001")
+    result = _result_by_rule(results, "LX0609-01-01-01")
 
     assert result["status"] == "compliant"
     assert _coordinates(result) == [
@@ -65,9 +65,9 @@ def test_001_projects_selected_admission_document_coordinate():
 
 def test_002_projects_selected_first_course_document_coordinate():
     _execution, _reduced, results = _execute_and_aggregate(
-        _multi_document_session(("LX0609-002",)), ("LX0609-002",)
+        _multi_document_session(("LX0609-01-02-01",)), ("LX0609-01-02-01",)
     )
-    result = _result_by_rule(results, "LX0609-002")
+    result = _result_by_rule(results, "LX0609-01-02-01")
 
     assert result["status"] == "compliant"
     assert _coordinates(result) == [
@@ -96,7 +96,7 @@ def test_024_customer_evidence_prefers_surgery_name_over_generic_record_content(
     )[0]
     reduced = _bind(
         snapshot,
-        _decision(snapshot, document_ref, rule_id="LX0609-024"),
+        _decision(snapshot, document_ref, rule_id="LX0609-04-02-03"),
         materials,
     )
 
@@ -122,9 +122,9 @@ def test_024_customer_evidence_prefers_surgery_name_over_generic_record_content(
 
 def test_005_projects_selected_daily_course_document_coordinate():
     _execution, _reduced, results = _execute_and_aggregate(
-        _multi_document_session(("LX0609-005",)), ("LX0609-005",)
+        _multi_document_session(("LX0609-02-01-01",)), ("LX0609-02-01-01",)
     )
-    result = _result_by_rule(results, "LX0609-005")
+    result = _result_by_rule(results, "LX0609-02-01-01")
 
     assert result["status"] == "compliant"
     assert _coordinates(result) == [
@@ -179,7 +179,7 @@ def test_projector_deduplicates_all_selected_rows_with_same_business_id():
     )
     snapshot, materials = _snapshot_and_materials({"daily_course_record": rows})
     refs = build_material_document_refs("daily_course_record", rows.rows)
-    decision = replace(_decision(snapshot, refs[0], rule_id="LX0609-005"), fact_refs=refs)
+    decision = replace(_decision(snapshot, refs[0], rule_id="LX0609-02-01-01"), fact_refs=refs)
     reduced = _bind(snapshot, decision, materials)
 
     assert project_selected_document_evidence(
@@ -210,7 +210,7 @@ def test_projector_projects_multiple_fully_selected_business_ids_from_one_source
     )
     snapshot, materials = _snapshot_and_materials({"daily_course_record": rows})
     refs = build_material_document_refs("daily_course_record", rows.rows)
-    decision = replace(_decision(snapshot, refs[0], rule_id="LX0609-005"), fact_refs=refs)
+    decision = replace(_decision(snapshot, refs[0], rule_id="LX0609-02-01-01"), fact_refs=refs)
     reduced = _bind(snapshot, decision, materials)
 
     projected = project_selected_document_evidence(
@@ -249,7 +249,7 @@ def test_projector_returns_empty_for_cross_snapshot_or_tampered_materials():
     )
     tampered_reduced = _bind(
         snapshot,
-        _decision(snapshot, document_ref, rule_id="LX0609-005"),
+        _decision(snapshot, document_ref, rule_id="LX0609-02-01-01"),
         tampered,
     )
 
@@ -272,7 +272,7 @@ def test_projector_does_not_deliver_partial_coordinates_for_multiple_selected_re
     )
     snapshot, materials = _snapshot_and_materials({"daily_course_record": rows})
     refs = build_material_document_refs("daily_course_record", rows.rows)
-    decision = replace(_decision(snapshot, refs[0], rule_id="LX0609-005"), fact_refs=refs)
+    decision = replace(_decision(snapshot, refs[0], rule_id="LX0609-02-01-01"), fact_refs=refs)
     reduced = _bind(snapshot, decision, materials)
 
     assert project_selected_document_evidence(

@@ -2,14 +2,20 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
+from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
+import sqlalchemy as sa
+from sqlalchemy import MetaData, create_engine
 from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm import Session
+from sqlalchemy.pool import StaticPool
 
 import app.services.custom_qc_workspace_service as workspace_module
 from app.services.custom_qc_workspace_service import (
@@ -36,17 +42,25 @@ from app.services.luxian_0609.native_package import (
 from app.services.luxian_0609.rule_decision_settings import (
     RULE_DECISION_ROLLOUT_GROUPS,
 )
+from app.services.luxian_0609_rule_catalog import load_luxian_0609_rules
 from app.services.luxian_0609_rule_master import load_luxian_0609_rule_master
 from app.services.sample_validation_rule_sets import (
     LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS,
 )
 from app.services.qc_workspace.canonical_result_store import (
+    CanonicalResultStore,
     canonical_envelope_items_are_consistent,
     envelope_item_from_rule_result,
     safe_customer_display_facts,
 )
+from app.services.qc_workspace import result_feedback_demo_store as feedback_module
+from app.services.qc_workspace.result_feedback_demo_store import ResultFeedbackDemoStore
+from app.schemas.qc_sichuan import QcResultFeedbackRequest
 from app.services.luxian_0609.canonical_result_finalizer import (
     validate_luxian_0609_executor_customer_display_facts,
+)
+from app.services.luxian_0609.basic_timeliness_customer_projection import (
+    safe_basic_timeliness_customer_display_facts,
 )
 
 
@@ -94,7 +108,7 @@ class _BrokenReadSession:
     ("rule_id", "raw", "expected"),
     [
         (
-            "LX0609-024",
+            "LX0609-04-02-03",
             {
                 "failure_kind": "lymph_node_dissection_not_documented",
                 "performed_surgery_confirmed": True,
@@ -109,7 +123,7 @@ class _BrokenReadSession:
             },
         ),
         (
-            "LX0609-025",
+            "LX0609-04-02-04",
             {
                 "failure_kind": "implant_information_incomplete",
                 "performed_surgery_confirmed": True,
@@ -142,7 +156,7 @@ class _BrokenReadSession:
             },
         ),
         (
-            "LX0609-028",
+            "LX0609-05-01-01",
             {
                 "failure_kind": "prophylaxis_duration_over_48h",
                 "incision_class": "I",
@@ -161,7 +175,7 @@ class _BrokenReadSession:
             },
         ),
         (
-            "LX0609-029",
+            "LX0609-04-01-01",
             {
                 "failure_kind": "surgery_document_missing",
                 "target_document": "presurg_summary",
@@ -176,7 +190,7 @@ class _BrokenReadSession:
             },
         ),
         (
-            "LX0609-030",
+            "LX0609-04-02-02",
             {
                 "failure_kind": "surgery_document_missing",
                 "target_document": "surgery_record",
@@ -189,7 +203,7 @@ class _BrokenReadSession:
             },
         ),
         (
-            "LX0609-032",
+            "LX0609-04-03-01",
             {
                 "failure_kind": "surgery_document_blank",
                 "target_document": "surgery_safecheck_record",
@@ -202,7 +216,7 @@ class _BrokenReadSession:
             },
         ),
         (
-            "LX0609-034",
+            "LX0609-11-02-01",
             {
                 "failure_kind": "anesthesia_consent_missing",
                 "performed_anesthesia_confirmed": True,
@@ -217,7 +231,7 @@ class _BrokenReadSession:
             },
         ),
         (
-            "LX0609-035",
+            "LX0609-11-02-02",
             {
                 "failure_kind": "anesthesia_consent_missing",
                 "performed_anesthesia_confirmed": True,
@@ -232,7 +246,7 @@ class _BrokenReadSession:
             },
         ),
         (
-            "LX0609-036",
+            "LX0609-04-04-01",
             {
                 "failure_kind": "anesthesia_visit_missing",
                 "performed_anesthesia_confirmed": True,
@@ -245,7 +259,7 @@ class _BrokenReadSession:
             },
         ),
         (
-            "LX0609-037",
+            "LX0609-04-04-02",
             {
                 "failure_kind": "anesthesia_visit_missing",
                 "performed_anesthesia_confirmed": True,
@@ -258,7 +272,7 @@ class _BrokenReadSession:
             },
         ),
         (
-            "LX0609-039",
+            "LX0609-04-01-02",
             {
                 "failure_kind": "preop_discussion_missing",
                 "performed_surgery_confirmed": True,
@@ -296,9 +310,9 @@ def test_store_projects_only_finalizer_validated_customer_facts(
 @pytest.mark.parametrize(
     ("rule_id", "raw"),
     [
-        ("LX0609-025", {"missing_fields": ["implant_material"]}),
+        ("LX0609-04-02-04", {"missing_fields": ["implant_material"]}),
         (
-            "LX0609-025",
+            "LX0609-04-02-04",
             {
                 "failure_kind": "implant_information_incomplete",
                 "performed_surgery_confirmed": True,
@@ -317,16 +331,23 @@ def test_store_projects_only_finalizer_validated_customer_facts(
                 "patient_id": "PRIVATE-025",
             },
         ),
-        ("LX0609-999", {"failure_kind": "unknown"}),
     ],
 )
-def test_store_rejects_unvalidated_or_unknown_customer_facts(
+def test_store_rejects_invalid_known_rule_customer_facts(
     rule_id: str,
     raw: dict[str, Any],
 ) -> None:
+    with pytest.raises(ValueError, match="客户结果解释合同"):
+        safe_customer_display_facts(
+            {"customer_display_facts": raw},
+            rule_id=rule_id,
+        )
+
+
+def test_store_does_not_project_unknown_rule_customer_facts() -> None:
     assert safe_customer_display_facts(
-        {"customer_display_facts": raw},
-        rule_id=rule_id,
+        {"customer_display_facts": {"failure_kind": "unknown"}},
+        rule_id="LX0609-999",
     ) == {}
 
 
@@ -481,7 +502,7 @@ def test_completed_projection_indexes_summary_jobs_without_heavy_job_hydration(m
                     "delivery_mode": "canonical_straight_through",
                     "items": [
                         {
-                            "rule_id": "LX0609-001",
+                            "rule_id": "LX0609-01-01-01",
                             "status": "compliant",
                             "result_status": "compliant",
                             "is_compliant": True,
@@ -563,7 +584,7 @@ def test_completed_record_envelope_from_incomplete_task_is_ready(monkeypatch, ta
             "schema_version": "lx0609-record-result-envelope-v1",
             "delivery_mode": "canonical_straight_through",
             "items": [{
-                "rule_id": "LX0609-001",
+                "rule_id": "LX0609-01-01-01",
                 "status": "compliant",
                 "result_status": "compliant",
                 "is_compliant": True,
@@ -624,7 +645,7 @@ def test_running_retry_without_envelope_does_not_hide_previous_completed_result(
             "schema_version": "lx0609-record-result-envelope-v1",
             "delivery_mode": "canonical_straight_through",
             "items": [{
-                "rule_id": "LX0609-001",
+                "rule_id": "LX0609-01-01-01",
                 "status": "compliant",
                 "result_status": "compliant",
                 "is_compliant": True,
@@ -680,7 +701,7 @@ def test_completed_projection_rejects_removed_rule_from_current_catalog(monkeypa
                 "delivery_mode": "canonical_straight_through",
                 "items": [
                     {
-                        "rule_id": "LX0609-001",
+                        "rule_id": "LX0609-01-01-01",
                         "status": "compliant",
                         "result_status": "compliant",
                         "is_compliant": True,
@@ -747,13 +768,13 @@ def test_completed_projection_filters_known_customer_excluded_rule(monkeypatch):
                 "delivery_mode": "canonical_straight_through",
                 "items": [
                     {
-                        "rule_id": "LX0609-033",
+                        "rule_id": "LX0609-11-01-01",
                         "status": "not_executed",
                         "result_status": "not_executed",
                         "is_compliant": None,
                     },
                     {
-                        "rule_id": "LX0609-001",
+                        "rule_id": "LX0609-01-01-01",
                         "status": "compliant",
                         "result_status": "compliant",
                         "is_compliant": True,
@@ -782,7 +803,7 @@ def test_completed_projection_filters_known_customer_excluded_rule(monkeypatch):
     projection = result[identity]
     assert projection["status"] == "ready"
     assert projection["total_rule_count"] == 1
-    assert projection["items"][0]["rule_id"] == "LX0609-001"
+    assert projection["items"][0]["rule_id"] == "LX0609-01-01-01"
 
 
 def test_bulk_record_result_dtos_read_complete_canonical_items_in_one_batch(monkeypatch):
@@ -815,7 +836,7 @@ def test_bulk_record_result_dtos_read_complete_canonical_items_in_one_batch(monk
                 "record_ref": "rec_0123456789abcdef01234567",
                 "items": [
                     {
-                        "rule_id": "LX0609-001",
+                        "rule_id": "LX0609-01-01-01",
                         "status": "non_compliant",
                         "result_status": "non_compliant",
                         "is_compliant": False,
@@ -838,7 +859,7 @@ def test_bulk_record_result_dtos_read_complete_canonical_items_in_one_batch(monk
     dto = result[("inst-1", "patient-1", "visit-1")]
     assert dto["state"] == "ready"
     assert dto["record_ref"] == "rec_0123456789abcdef01234567"
-    assert dto["items"][0]["rule_id"] == "LX0609-001"
+    assert dto["items"][0]["rule_id"] == "LX0609-01-01-01"
     assert dto["items"][0]["source_document"] == "入院记录"
 
 
@@ -872,7 +893,7 @@ def test_single_record_result_does_not_fall_back_to_legacy_items_when_envelope_i
     legacy_item = {
         "record_id": "visit-1",
         "visit_id": "visit-1",
-        "rule_id": "LX0609-001",
+        "rule_id": "LX0609-01-01-01",
         "status": "non_compliant",
         "conclusion": "旧任务结果不得交付。",
     }
@@ -890,7 +911,7 @@ def test_single_record_result_does_not_fall_back_to_legacy_items_when_envelope_i
         institute_id="inst-1",
         patient_id="patient-1",
         visit_id="visit-1",
-        expected_rule_ids=["LX0609-001"],
+        expected_rule_ids=["LX0609-01-01-01"],
         rule_set_key="luxian_0609_qc_v1",
         rule_set_version="2026-06-09",
     )
@@ -915,15 +936,9 @@ def test_single_record_result_from_incomplete_task_is_ready_when_envelope_exists
     envelope = {
         "schema_version": "lx0609-record-result-envelope-v1",
         "delivery_mode": "canonical_straight_through",
+        "record_id": "visit-1",
         "record_ref": "rec_1234567890abcdef12345678",
-        "items": [
-            {
-                "rule_id": "LX0609-001",
-                "status": "compliant",
-                "result_status": "compliant",
-                "is_compliant": True,
-            }
-        ],
+        "items": [_published_pilot_item_for_read_boundary("LX0609-01-01-01")],
     }
     session = _ReadSession(
         [
@@ -943,7 +958,7 @@ def test_single_record_result_from_incomplete_task_is_ready_when_envelope_exists
         institute_id="inst-1",
         patient_id="patient-1",
         visit_id="visit-1",
-        expected_rule_ids=["LX0609-001"],
+        expected_rule_ids=["LX0609-01-01-01"],
         rule_set_key="luxian_0609_qc_v1",
         rule_set_version="2026-06-09",
     )
@@ -969,7 +984,7 @@ def test_single_record_result_does_not_convert_database_read_error_to_not_found(
             institute_id="inst-1",
             patient_id="patient-1",
             visit_id="visit-1",
-            expected_rule_ids=["LX0609-001"],
+            expected_rule_ids=["LX0609-01-01-01"],
             rule_set_key="luxian_0609_qc_v1",
             rule_set_version="2026-06-09",
         )
@@ -1010,7 +1025,7 @@ def test_completed_projection_does_not_fall_back_when_newer_root_job_lacks_envel
                 "delivery_mode": "canonical_straight_through",
                 "items": [
                     {
-                        "rule_id": "LX0609-001",
+                        "rule_id": "LX0609-01-01-01",
                         "status": "compliant",
                         "result_status": "compliant",
                         "is_compliant": True,
@@ -1127,7 +1142,7 @@ def test_completed_projection_keeps_current_ready_when_newer_job_only_has_old_ve
                 "delivery_mode": "canonical_straight_through",
                 "items": [
                     {
-                        "rule_id": "LX0609-001",
+                        "rule_id": "LX0609-01-01-01",
                         "status": "compliant",
                         "result_status": "compliant",
                         "is_compliant": True,
@@ -1207,13 +1222,13 @@ def test_completed_projection_treats_current_job_with_only_old_version_envelope_
         ],
         [
             {
-                "rule_id": "LX0609-001",
+                "rule_id": "LX0609-01-01-01",
                 "status": "compliant",
                 "result_status": "compliant",
                 "is_compliant": True,
             },
             {
-                "rule_code": "LX0609-001",
+                "rule_code": "LX0609-01-01-01",
                 "status": "non_compliant",
                 "result_status": "non_compliant",
                 "is_compliant": False,
@@ -1270,7 +1285,7 @@ def test_single_record_result_rejects_historical_non_deliverable_status_without_
     monkeypatch,
 ):
     canonical_item = {
-        "rule_id": "LX0609-025",
+        "rule_id": "LX0609-04-02-04",
         "rule_name": "植入物相关记录",
         "status": "uncertain",
         "result_status": "uncertain",
@@ -1321,7 +1336,7 @@ def test_single_record_result_rejects_historical_non_deliverable_status_without_
         institute_id="inst-1",
         patient_id="patient-1",
         visit_id="visit-1",
-        expected_rule_ids=["LX0609-025"],
+        expected_rule_ids=["LX0609-04-02-04"],
         rule_set_key="luxian_0609_qc_v1",
         rule_set_version="2026-06-09",
     )
@@ -1333,27 +1348,32 @@ def test_single_record_result_rejects_historical_non_deliverable_status_without_
     assert json.dumps(envelope, ensure_ascii=False) == original_envelope_json
 
 
-def test_single_record_result_projects_all_rule_master_metadata_in_envelope_order(monkeypatch):
-    master_entries = load_luxian_0609_rule_master()
-    customer_entries = [
-        entry
-        for entry in master_entries
-        if entry.rule_id not in LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
+def test_single_record_result_projects_catalog_rule_master_metadata_in_envelope_order(monkeypatch):
+    master_by_id = {
+        entry.rule_id: entry for entry in load_luxian_0609_rule_master()
+    }
+    customer_rule_ids = [
+        str(item.get("rule_id") or item.get("rule_code") or "").strip().upper()
+        for item in load_luxian_0609_rules()
+        if str(item.get("rule_id") or item.get("rule_code") or "").strip().upper()
+        not in LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
     ]
-    rule_ids = [entry.rule_id for entry in customer_entries]
+    assert all(master_by_id[rule_id].source_document and master_by_id[rule_id].qc_point
+               for rule_id in customer_rule_ids)
+    # 跨族验证正式读取顺序；不能为全目录伪造同一条“合规且无事实”的结果。
+    rule_ids = [
+        "LX0609-01-01-01", "LX0609-09-01-01", "LX0609-09-01-02",
+        "LX0609-06-01-01", "LX0609-06-02-01",
+    ]
+    assert set(rule_ids).issubset(customer_rule_ids)
     canonical_items = [
-        {
-            "rule_id": entry.rule_id,
-            "status": "compliant",
-            "result_status": "compliant",
-            "is_compliant": True,
-            "reason_code": "requirement_satisfied",
-        }
-        for entry in reversed(customer_entries)
+        _published_pilot_item_for_read_boundary(rule_id)
+        for rule_id in reversed(rule_ids)
     ]
     envelope = {
         "schema_version": "lx0609-record-result-envelope-v1",
         "delivery_mode": "canonical_straight_through",
+        "record_id": "visit-1",
         "record_ref": "rec_1234567890abcdef12345678",
         "items": canonical_items,
     }
@@ -1383,7 +1403,6 @@ def test_single_record_result_projects_all_rule_master_metadata_in_envelope_orde
     assert result["state"] == "ready"
     assert result["is_complete"] is True
     assert [item["rule_id"] for item in result["items"]] == list(reversed(rule_ids))
-    master_by_id = {entry.rule_id: entry for entry in customer_entries}
     for item in result["items"]:
         master_entry = master_by_id[item["rule_id"]]
         assert item["source_document"] == master_entry.source_document
@@ -1399,7 +1418,7 @@ def test_single_record_result_rejects_rule_id_removed_from_current_catalog(monke
         "record_ref": "rec_1234567890abcdef12345678",
         "items": [
             {
-                "rule_id": "LX0609-001",
+                "rule_id": "LX0609-01-01-01",
                 "status": "compliant",
                 "result_status": "compliant",
                 "is_compliant": True,
@@ -1448,7 +1467,7 @@ def test_single_record_result_rejects_rule_id_removed_from_current_catalog(monke
         ],
         [
             {
-                "rule_id": "LX0609-025",
+                "rule_id": "LX0609-04-02-04",
                 "status": "invented_status",
                 "result_status": "invented_status",
                 "is_compliant": None,
@@ -1456,13 +1475,13 @@ def test_single_record_result_rejects_rule_id_removed_from_current_catalog(monke
         ],
         [
             {
-                "rule_id": "LX0609-025",
+                "rule_id": "LX0609-04-02-04",
                 "status": "compliant",
                 "result_status": "compliant",
                 "is_compliant": True,
             },
             {
-                "rule_id": "LX0609-025",
+                "rule_id": "LX0609-04-02-04",
                 "status": "non_compliant",
                 "result_status": "non_compliant",
                 "is_compliant": False,
@@ -1503,7 +1522,7 @@ def test_single_record_result_rejects_invalid_rule_identity_before_metadata_proj
         institute_id="inst-1",
         patient_id="patient-1",
         visit_id="visit-1",
-        expected_rule_ids=["LX0609-025"],
+        expected_rule_ids=["LX0609-04-02-04"],
         rule_set_key="luxian_0609_qc_v1",
         rule_set_version="2026-06-09",
     )
@@ -1513,19 +1532,25 @@ def test_single_record_result_rejects_invalid_rule_identity_before_metadata_proj
     assert result["items"] == []
 
 
-def test_single_record_result_rejects_malformed_item_mixed_with_valid_item(monkeypatch):
+@pytest.mark.parametrize("malformed_item", [
+    "malformed",
+    {"rule_id": "LX0609-09-01-02", "status": "compliant", "result_status": "compliant", "is_compliant": True},
+    {"rule_id": "LX0609-06-02-01", "status": "compliant", "result_status": "compliant", "is_compliant": True,
+     "customer_display_facts": {"raw_text": "invalid private fields"}},
+])
+def test_single_record_result_rejects_malformed_item_mixed_with_valid_item(monkeypatch, malformed_item):
     envelope = {
         "schema_version": "lx0609-record-result-envelope-v1",
         "delivery_mode": "canonical_straight_through",
         "record_ref": "rec_1234567890abcdef12345678",
         "items": [
             {
-                "rule_id": "LX0609-025",
+                "rule_id": "LX0609-04-02-04",
                 "status": "compliant",
                 "result_status": "compliant",
                 "is_compliant": True,
             },
-            "malformed",
+            malformed_item,
         ],
     }
     session = _ReadSession(
@@ -1546,7 +1571,7 @@ def test_single_record_result_rejects_malformed_item_mixed_with_valid_item(monke
         institute_id="inst-1",
         patient_id="patient-1",
         visit_id="visit-1",
-        expected_rule_ids=["LX0609-025"],
+        expected_rule_ids=["LX0609-04-02-04"],
     )
 
     assert result["state"] == "technical_error"
@@ -1558,26 +1583,26 @@ def test_single_record_result_rejects_malformed_item_mixed_with_valid_item(monke
     "canonical_item",
     [
         {
-            "rule_id": "LX0609-025",
+            "rule_id": "LX0609-04-02-04",
             "status": "compliant",
             "result_status": "compliant",
             "is_compliant": False,
         },
         {
-            "rule_id": "LX0609-025",
+            "rule_id": "LX0609-04-02-04",
             "status": "non_compliant",
             "result_status": "non_compliant",
             "is_compliant": True,
         },
         {
-            "rule_id": "LX0609-025",
+            "rule_id": "LX0609-04-02-04",
             "status": "data_gap",
             "result_status": "data_gap",
             "is_compliant": False,
         },
         *[
             {
-                "rule_id": "LX0609-025",
+                "rule_id": "LX0609-04-02-04",
                 "status": status,
                 "result_status": status,
                 "is_compliant": True,
@@ -1592,20 +1617,20 @@ def test_single_record_result_rejects_malformed_item_mixed_with_valid_item(monke
             )
         ],
         {
-            "rule_id": "LX0609-025",
+            "rule_id": "LX0609-04-02-04",
             "status": "non_compliant",
             "result_status": "uncertain",
             "is_compliant": False,
         },
         {
-            "rule_id": "LX0609-025",
+            "rule_id": "LX0609-04-02-04",
             "status": "non_compliant",
             "result_status": "non_compliant",
             "display_status": "uncertain",
             "is_compliant": False,
         },
         {
-            "rule_id": "LX0609-025",
+            "rule_id": "LX0609-04-02-04",
             "status": "COMPLIANT",
             "result_status": "COMPLIANT",
             "is_compliant": True,
@@ -1640,7 +1665,7 @@ def test_single_record_result_rejects_historical_canonical_status_inconsistency(
         institute_id="inst-1",
         patient_id="patient-1",
         visit_id="visit-1",
-        expected_rule_ids=["LX0609-025"],
+        expected_rule_ids=["LX0609-04-02-04"],
     )
 
     assert result["state"] == "technical_error"
@@ -1670,7 +1695,7 @@ def test_completed_projection_with_items_rejects_historical_status_inconsistency
                 "record_ref": "rec_1234567890abcdef12345678",
                 "items": [
                     {
-                        "rule_id": "LX0609-001",
+                        "rule_id": "LX0609-01-01-01",
                         "status": "compliant",
                         "result_status": "compliant",
                         "is_compliant": False,
@@ -1703,12 +1728,13 @@ def test_exact_batch_html_rejects_historical_status_inconsistency_without_legacy
     envelope = {
         "schema_version": "lx0609-record-result-envelope-v1",
         "delivery_mode": "canonical_straight_through",
+        "record_id": "visit-1",
         "job_id": "job-current",
         "root_job_id": "job-current",
         "record_ref": "rec_1234567890abcdef12345678",
         "items": [
             {
-                "rule_id": "LX0609-001",
+                "rule_id": "LX0609-01-01-01",
                 "status": "non_compliant",
                 "result_status": "non_compliant",
                 "is_compliant": True,
@@ -1758,26 +1784,29 @@ def test_exact_batch_html_rejects_historical_status_inconsistency_without_legacy
         ("compliant", True),
         ("non_compliant", False),
         ("data_gap", None),
-        ("not_applicable", None),
-        ("not_executed", None),
-        ("ai_suggested_compliant", None),
-        ("ai_suggested_non_compliant", None),
     ],
 )
-def test_writer_accepts_frozen_canonical_status_semantics(status, is_compliant):
+def test_writer_accepts_rule_001_published_status_semantics(status, is_compliant):
     session = _WriteSession()
     item = {
-        "record_id": "visit-1",
-        "visit_id": "visit-1",
-        "institute_id": "inst-1",
-        "patient_id": "patient-1",
-        "rule_id": "LX0609-001",
+        **_published_pilot_item_for_read_boundary("LX0609-01-01-01"),
         "status": status,
         "result_status": status,
         "display_status": status,
         "is_compliant": is_compliant,
     }
     if status == "non_compliant":
+        item["reason_code"] = "deadline_exceeded"
+        item["customer_display_facts"] = safe_basic_timeliness_customer_display_facts(
+            rule_id="LX0609-01-01-01",
+            raw={
+                "failure_kind": "timeliness_requirement_not_met",
+                "target_document": "admission_record", "source_label": "入院记录",
+                "timeliness_state": "late", "threshold_hours": 24,
+                "elapsed_hours": 26,
+            },
+        )
+        assert item["customer_display_facts"] is not None
         item["criterion_results"] = [
             {
                 "criterion_id": "requirement_check",
@@ -1786,6 +1815,9 @@ def test_writer_accepts_frozen_canonical_status_semantics(status, is_compliant):
                 "reason_code": "requirement_violated",
             }
         ]
+    elif status == "data_gap":
+        item["reason_code"] = "source_unavailable"
+        item.pop("customer_display_facts")
 
     CustomQCWorkspaceService()._write_record_result_envelopes(
         session,
@@ -1806,10 +1838,117 @@ def test_writer_accepts_frozen_canonical_status_semantics(status, is_compliant):
     assert len(session.statements) == 2
 
 
+@pytest.mark.parametrize(
+    "status", ["not_applicable", "not_executed", "ai_suggested_compliant", "ai_suggested_non_compliant"],
+)
+def test_writer_rejects_rule_001_unsupported_status_without_reinterpreting_facts(status):
+    session = _WriteSession()
+    item = _published_pilot_item_for_read_boundary("LX0609-01-01-01")
+    item.update(status=status, result_status=status, display_status=status, is_compliant=None)
+
+    with pytest.raises(ValueError, match="LX0609 客户结果解释合同不完整"):
+        CustomQCWorkspaceService()._write_record_result_envelopes(
+            session,
+            job_row={
+                "id": "job-current", "created_by": "reviewer-a",
+                "filters_json": json.dumps({
+                    "rule_set_key": "luxian_0609_qc_v1", "rule_set_version": "2026-06-09",
+                }),
+            },
+            items=[item],
+            now=datetime(2026, 8, 15, 10, 0, 0),
+        )
+    assert session.statements == []
+
+
+def test_original_rescue_timeliness_store_rejects_changed_published_overdue_hours():
+    rule_id = "LX0609-09-01-01"
+    published = safe_basic_timeliness_customer_display_facts(
+        rule_id=rule_id,
+        raw={
+            "failure_kind": "timeliness_requirement_not_met",
+            "target_document": "rescue_record",
+            "source_label": "抢救记录",
+            "timeliness_state": "late",
+            "threshold_hours": 6,
+            "elapsed_hours": 7,
+        },
+    )
+    assert published is not None
+    item = {
+        "record_id": "visit-1",
+        "visit_id": "visit-1",
+        "institute_id": "inst-1",
+        "patient_id": "patient-1",
+        "rule_id": rule_id,
+        "status": "non_compliant",
+        "result_status": "non_compliant",
+        "display_status": "non_compliant",
+        "is_compliant": False,
+        "reason_code": "requirement_violated",
+        "customer_display_facts": published,
+    }
+    table = workspace_module._record_result_envelopes_table().to_metadata(
+        MetaData(), schema=None,
+    )
+    engine = create_engine("sqlite://")
+    table.metadata.create_all(engine)
+    store = CanonicalResultStore(table)
+    try:
+        with Session(engine) as db_session:
+            store.replace_for_job(
+                db_session,
+                job_row={
+                    "id": "job-current",
+                    "created_by": "reviewer-a",
+                    "filters_json": json.dumps({
+                        "rule_set_key": "luxian_0609_qc_v1",
+                        "rule_set_version": "2026-06-09",
+                    }),
+                },
+                items=[item],
+                now=datetime(2026, 9, 24, 10, 0, 0),
+                projector=lambda raw: envelope_item_from_rule_result(
+                    raw, hmac_key="unit-test-key",
+                ),
+                projection_key="unit-test-key",
+            )
+            db_session.commit()
+            expected = {
+                "root_job_id": "job-current",
+                "institute_id": "inst-1",
+                "patient_id": "patient-1",
+                "visit_id": "visit-1",
+                "rule_set_key": "luxian_0609_qc_v1",
+                "rule_set_version": "2026-06-09",
+            }
+            loaded = store.load_selected(db_session, **expected)
+            assert loaded["items"][0]["customer_display_facts"] == published
+            assert loaded["items"][0]["status"] == "non_compliant"
+            assert loaded["items"][0]["reason_code"] == "requirement_violated"
+            projected = project_customer_safe_result_item(
+                loaded["items"][0], hmac_key="unit-test-key",
+            )
+            assert projected["customer_display_facts"] == published
+            assert projected["status"] == "non_compliant"
+            assert projected["reason_code"] == "requirement_violated"
+            assert projected.get("customer_evidence", []) == loaded["items"][0].get("customer_evidence", [])
+            changed = deepcopy(loaded)
+            changed["items"][0]["customer_display_facts"]["overdue_hours"] = 999
+            db_session.execute(
+                sa.update(table).values(envelope_json=json.dumps(changed)),
+            )
+            db_session.commit()
+            with pytest.raises(ValueError, match="解释合同不完整"):
+                store.load_selected(db_session, **expected)
+    finally:
+        engine.dispose()
+
+
 @pytest.mark.parametrize("status", ["uncertain", "technical_error"])
 def test_canonical_consistency_rejects_non_deliverable_status(status):
     item = {
-        "rule_id": "LX0609-001",
+        "rule_id": "LX0609-01-01-01",
         "status": status,
         "result_status": status,
         "is_compliant": None,
@@ -1826,7 +1965,7 @@ def test_writer_rejects_non_deliverable_status_before_mutating_any_envelope(stat
         "visit_id": "visit-1",
         "institute_id": "inst-1",
         "patient_id": "patient-1",
-        "rule_id": "LX0609-001",
+        "rule_id": "LX0609-01-01-01",
         "status": status,
         "result_status": status,
         "display_status": status,
@@ -1862,7 +2001,7 @@ def test_writer_rejects_unexplained_current_lx0609_defect_without_rejudging_stat
         "visit_id": "visit-1",
         "institute_id": "inst-1",
         "patient_id": "patient-1",
-        "rule_id": "LX0609-025",
+        "rule_id": "LX0609-04-02-04",
         "schema_version": "lx0609-customer-result-v2",
         "status": "non_compliant",
         "result_status": "non_compliant",
@@ -1903,7 +2042,7 @@ def test_writer_persists_finalizer_validated_customer_facts_unchanged():
         "checked_sources": ["surgery_record"],
     }
     expected_facts = validate_luxian_0609_executor_customer_display_facts(
-        rule_id="LX0609-024",
+        rule_id="LX0609-04-02-03",
         raw=raw_facts,
     )
 
@@ -1925,7 +2064,7 @@ def test_writer_persists_finalizer_validated_customer_facts_unchanged():
                 "visit_id": "visit-1",
                 "institute_id": "inst-1",
                 "patient_id": "patient-1",
-                "rule_id": "LX0609-024",
+                "rule_id": "LX0609-04-02-03",
                 "status": "non_compliant",
                 "result_status": "non_compliant",
                 "display_status": "non_compliant",
@@ -1939,6 +2078,770 @@ def test_writer_persists_finalizer_validated_customer_facts_unchanged():
     envelope = json.loads(session.statements[-1].compile().params["envelope_json"])
     assert expected_facts is not None
     assert envelope["items"][0]["customer_display_facts"] == expected_facts
+
+
+def test_rescue_non_compliant_safe_facts_survive_canonical_write_and_task_projection():
+    fields = (
+        "condition_change", "rescue_time", "rescue_measures", "rescue_outcome",
+        "participant_names", "participant_titles",
+    )
+    safe_facts = {
+        "target_document": "rescue_record",
+        "source_label": "抢救记录",
+        "content_state": "non_compliant",
+        "required_fields": list(fields),
+        "missing_fields": ["participant_titles"],
+        "unknown_fields": [],
+        "rescue_content_events": [{
+            "event_index": 1,
+            "record_time": "2026-09-01T10:00:00+08:00",
+            "body_scope": "complete",
+            "field_facts": {
+                field: {"state": "absent" if field == "participant_titles" else "present"}
+                for field in fields
+            },
+            "missing_fields": ["participant_titles"],
+            "unknown_fields": [],
+        }],
+        "failure_kind": "",
+    }
+    item = {
+        "record_id": "visit-1",
+        "visit_id": "visit-1",
+        "institute_id": "inst-1",
+        "patient_id": "patient-1",
+        "rule_id": "LX0609-09-01-02",
+        "status": "non_compliant",
+        "result_status": "non_compliant",
+        "display_status": "non_compliant",
+        "is_compliant": False,
+        "reason_code": "requirement_violated",
+        "customer_display_facts": safe_facts,
+    }
+    # 用隔离的内存库执行真实 INSERT/SELECT，覆盖任务完成后的读回路径。
+    table = workspace_module._record_result_envelopes_table().to_metadata(
+        MetaData(), schema=None
+    )
+    engine = create_engine("sqlite://")
+    table.metadata.create_all(engine)
+    store = CanonicalResultStore(table)
+    with Session(engine) as db_session:
+        store.replace_for_job(
+            db_session,
+            job_row={
+                "id": "job-current",
+                "created_by": "reviewer-a",
+                "filters_json": json.dumps({
+                    "rule_set_key": "luxian_0609_qc_v1",
+                    "rule_set_version": "2026-06-09",
+                }),
+            },
+            items=[item],
+            now=datetime(2026, 9, 1, 10, 0, 0),
+            projector=lambda raw: envelope_item_from_rule_result(raw, hmac_key="unit-test-key"),
+            projection_key="unit-test-key",
+        )
+        db_session.commit()
+        loaded = store.load_selected(
+            db_session,
+            root_job_id="job-current",
+            institute_id="inst-1",
+            patient_id="patient-1",
+            visit_id="visit-1",
+            rule_set_key="luxian_0609_qc_v1",
+            rule_set_version="2026-06-09",
+        )
+    engine.dispose()
+    assert loaded["items"][0]["customer_display_facts"] == safe_facts
+    projected = project_customer_safe_result_item(
+        loaded["items"][0], hmac_key="unit-test-key",
+    )
+    assert projected["customer_display_facts"] == safe_facts
+    assert projected["status"] == "non_compliant"
+    invalid_item = deepcopy(item)
+    invalid_item["customer_display_facts"]["rescue_content_events"][0]["field_facts"][
+        "participant_titles"
+    ]["quote"] = "内部引文"
+    rejected_session = _WriteSession()
+    with pytest.raises(ValueError):
+        store.replace_for_job(
+            rejected_session,
+            job_row={
+                "id": "job-invalid", "created_by": "reviewer-a",
+                "filters_json": json.dumps({
+                    "rule_set_key": "luxian_0609_qc_v1",
+                    "rule_set_version": "2026-06-09",
+                }),
+            },
+            items=[invalid_item], now=datetime(2026, 9, 1, 10, 0, 0),
+            projector=lambda raw: envelope_item_from_rule_result(raw, hmac_key="unit-test-key"),
+            projection_key="unit-test-key",
+        )
+    assert rejected_session.statements == []
+
+
+@pytest.mark.parametrize(
+    ("status", "event_reason", "report_count", "missing_count", "reason_code"),
+    [
+        ("compliant", "pathology_report_present", 1, 0, "pathology_reports_complete"),
+        ("data_gap", "target_report_missing", 0, 1, "target_report_missing"),
+    ],
+)
+def test_pathology_published_facts_commit_and_read_without_reprojection(
+    status, event_reason, report_count, missing_count, reason_code,
+):
+    facts = {
+        "verification_kind": "pathology_report_completeness",
+        "decision_status": status,
+        "event_count": 1,
+        "report_count": report_count,
+        "missing_report_count": missing_count,
+        "unresolved_event_count": int(status == "data_gap"),
+        "excluded_event_count": 0,
+        "checked_sources": [
+            {"source": source, "state": "present", "completeness": "complete"}
+            for source in ("pathology_exam_master", "pathology_exam_report")
+        ],
+        "events": [{
+            "event_index": 1, "status": status, "reason_code": event_reason,
+            "execution_confirmed": True, "report_count": report_count,
+        }],
+    }
+    item = {
+        "record_id": "visit-1", "visit_id": "visit-1",
+        "institute_id": "inst-1", "patient_id": "patient-1",
+        "schema_version": "lx0609-customer-result-v2",
+        "rule_id": "LX0609-06-02-01", "status": status,
+        "result_status": status, "display_status": status,
+        "is_compliant": True if status == "compliant" else None,
+        "reason_code": reason_code, "customer_display_facts": facts,
+        "conclusion": "已发布结论",
+    }
+    table = workspace_module._record_result_envelopes_table().to_metadata(
+        MetaData(), schema=None,
+    )
+    engine = create_engine("sqlite://")
+    table.metadata.create_all(engine)
+    store = CanonicalResultStore(table)
+    with Session(engine) as db_session:
+        store.replace_for_job(
+            db_session,
+            job_row={
+                "id": "job-pathology", "created_by": "reviewer-a",
+                "filters_json": json.dumps({
+                    "rule_set_key": "luxian_0609_qc_v1",
+                    "rule_set_version": "2026-06-09",
+                }),
+            },
+            items=[item], now=datetime(2026, 9, 1, 10, 0, 0),
+            projector=lambda raw: envelope_item_from_rule_result(raw, hmac_key="unit-test-key"),
+            projection_key="unit-test-key",
+        )
+        db_session.commit()
+        loaded = store.load_selected(
+            db_session, root_job_id="job-pathology",
+            institute_id="inst-1", patient_id="patient-1", visit_id="visit-1",
+            rule_set_key="luxian_0609_qc_v1", rule_set_version="2026-06-09",
+        )
+    engine.dispose()
+    saved = loaded["items"][0]
+    assert saved["customer_display_facts"] == facts
+    assert saved["status"] == status
+    assert saved["reason_code"] == reason_code
+    assert saved["conclusion"] == "已发布结论"
+    projected = project_customer_safe_result_item(saved, hmac_key="unit-test-key")
+    assert projected["customer_display_facts"] == facts
+    assert projected["conclusion"] == "已发布结论"
+    corrupted = deepcopy(loaded)
+    corrupted["items"][0]["customer_display_facts"]["events"][0]["fact_refs"] = ["a" * 64]
+    with pytest.raises(ValueError):
+        store.load_selected(
+            _ReadSession([[{"envelope_json": json.dumps(corrupted)}]]),
+            root_job_id="job-pathology", institute_id="inst-1",
+            patient_id="patient-1", visit_id="visit-1",
+            rule_set_key="luxian_0609_qc_v1", rule_set_version="2026-06-09",
+        )
+
+
+def _published_pilot_item_for_read_boundary(rule_id: str) -> dict[str, Any]:
+    original_timeliness = {
+        "LX0609-01-01-01": ("admission_record", "入院记录", 24),
+        "LX0609-01-02-01": ("first_course_record", "首次病程记录", 8),
+        "LX0609-02-01-01": ("attending_course_record", "主治医师及以上首次查房记录", 48),
+        "LX0609-02-01-02": ("senior_course_record", "副主任医师或主任医师首次查房记录", 72),
+    }
+    if rule_id in original_timeliness:
+        target, label, threshold = original_timeliness[rule_id]
+        facts = safe_basic_timeliness_customer_display_facts(
+            rule_id=rule_id,
+            raw={
+                "failure_kind": "timeliness_requirement_satisfied",
+                "target_document": target, "source_label": label,
+                "timeliness_state": "within", "threshold_hours": threshold,
+                "elapsed_hours": 1.0,
+            },
+        )
+        assert facts is not None
+    elif rule_id == "LX0609-09-01-01":
+        facts = safe_basic_timeliness_customer_display_facts(
+            rule_id=rule_id,
+            raw={
+                "failure_kind": "timeliness_requirement_satisfied",
+                "target_document": "rescue_record", "source_label": "抢救记录",
+                "timeliness_state": "within", "threshold_hours": 6,
+                "elapsed_hours": 5,
+            },
+        )
+        assert facts is not None
+    elif rule_id == "LX0609-06-01-01":
+        facts = {
+            "verification_kind": "ct_order_course_review", "subject": "ct_mri",
+            "requirement": "order_course_consistency", "review_scope_complete": True,
+            "event_count": 1, "event_results": [{"event_position": 1,
+                "event_status": "compliant", "issue_kind": "order_course_consistent"}],
+            "order_results": [{"event_position": 1, "order_position": 1,
+                "status": "compliant", "issue_kind": "order_course_consistent",
+                "order_reference_positions": [1], "course_locations": [{
+                    "reference_position": 2, "field_path": "record_content",
+                    "start": 0, "end": 10, "clause_id": "C1", "offset_unit": "unicode_codepoint"}]}],
+        }
+    elif rule_id == "LX0609-06-01-05":
+        facts = {
+            "verification_kind": "exam_lab_requirement_checked",
+            "subject": "ct_mri",
+            "requirement": "positive_result_analysis_within_24h",
+            "event_phase": "report",
+            "checked_sources": ["exam_lab_report", "course_record"],
+        }
+    elif rule_id == "LX0609-09-01-02":
+        fields = [
+            "condition_change", "rescue_time", "rescue_measures", "rescue_outcome",
+            "participant_names", "participant_titles",
+        ]
+        facts = {
+            "target_document": "rescue_record", "source_label": "抢救记录",
+            "content_state": "compliant", "required_fields": fields,
+            "missing_fields": [], "unknown_fields": [], "failure_kind": "",
+            "rescue_content_events": [{
+                "event_index": 1, "record_time": "2026-09-01T10:00:00+08:00",
+                "body_scope": "complete",
+                "field_facts": {field: {"state": "present"} for field in fields},
+                "missing_fields": [], "unknown_fields": [],
+            }],
+        }
+    else:
+        facts = {
+            "verification_kind": "pathology_report_completeness",
+            "decision_status": "compliant", "event_count": 1,
+            "report_count": 1, "missing_report_count": 0,
+            "unresolved_event_count": 0, "excluded_event_count": 0,
+            "checked_sources": [
+                {"source": source, "state": "present", "completeness": "complete"}
+                for source in ("pathology_exam_master", "pathology_exam_report")
+            ],
+            "events": [{
+                "event_index": 1, "status": "compliant",
+                "reason_code": "pathology_report_present",
+                "execution_confirmed": True, "report_count": 1,
+            }],
+        }
+    return {
+        "record_id": "visit-1", "visit_id": "visit-1",
+        "institute_id": "inst-1", "patient_id": "patient-1",
+        "schema_version": "lx0609-customer-result-v2", "rule_id": rule_id,
+        "status": "compliant", "result_status": "compliant",
+        "display_status": "compliant", "is_compliant": True,
+        "reason_code": "requirement_satisfied", "conclusion": "已发布结论",
+        "customer_display_facts": facts,
+    }
+
+
+@pytest.mark.parametrize(
+    "rule_ids",
+    [
+        ("LX0609-09-01-02", "LX0609-06-02-01"),
+        ("LX0609-09-01-01",),
+        ("LX0609-01-01-01",),
+        ("LX0609-01-02-01", "LX0609-02-01-01", "LX0609-02-01-02"),
+    ],
+    ids=["new_pilots", "original_004", "original_001", "original_002_005_006"],
+)
+def test_published_rules_keep_identity_through_sqlite_dto_feedback_and_exports(
+    monkeypatch, rule_ids,
+):
+    """发布后的同一 Envelope 是反馈与三个导出格式的结果来源。"""
+    import csv
+    from io import StringIO
+
+    from openpyxl import load_workbook
+
+    canonical_table = workspace_module._record_result_envelopes_table().to_metadata(
+        MetaData(), schema=None,
+    )
+    feedback_table = feedback_module._feedback_table().to_metadata(
+        MetaData(), schema=None,
+    )
+    # TestClient 的线程池需要看到同一份隔离内存库。
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    canonical_table.metadata.create_all(engine)
+    feedback_table.metadata.create_all(engine)
+    store = CanonicalResultStore(canonical_table)
+    items = [_published_pilot_item_for_read_boundary(rule_id) for rule_id in rule_ids]
+    for item in items:
+        item["conclusion"] = f"{item['rule_id']} 已核对"
+        item["suggestion"] = f"{item['rule_id']} 无需补充"
+        if item["rule_id"] == "LX0609-09-01-01":
+            item["evidence"] = [{
+                "source_document_id": "synthetic-rescue-document-1",
+                "source_type": "rescue_record",
+                "source_label": "抢救记录",
+                "record_time": "2026-09-01 10:00:00",
+                "evidence_excerpt": "合成记录：抢救结束后五小时完成记录",
+                "excerpt_kind": "文书级依据",
+            }]
+    with Session(engine) as session:
+        store.replace_for_job(
+            session,
+            job_row={
+                "id": "job-pilots", "created_by": "admin-001",
+                "filters_json": json.dumps({
+                    "rule_set_key": "luxian_0609_qc_v1",
+                    "rule_set_version": "2026-06-09",
+                    "scoped_customer_rule_ids": list(rule_ids),
+                }),
+            },
+            items=items,
+            now=datetime(2026, 9, 1, 10, 0, 0),
+            projector=lambda raw: envelope_item_from_rule_result(raw, hmac_key="unit-test-key"),
+            projection_key="unit-test-key",
+        )
+        session.commit()
+        loaded = store.load_selected(
+            session, root_job_id="job-pilots", institute_id="inst-1",
+            patient_id="patient-1", visit_id="visit-1",
+            rule_set_key="luxian_0609_qc_v1", rule_set_version="2026-06-09",
+        )
+    saved_items = loaded["items"]
+    assert [item["rule_id"] for item in saved_items] == list(rule_ids)
+    assert all(item["record_ref"] == loaded["record_ref"] for item in saved_items)
+    assert all(item["status"] == "compliant" for item in saved_items)
+    assert all(item["customer_display_facts"] for item in saved_items)
+    assert all(item["conclusion"].endswith("已核对") for item in saved_items)
+    assert all(item["suggestion"].endswith("无需补充") for item in saved_items)
+    if rule_ids == ("LX0609-09-01-01",):
+        assert len(saved_items[0]["evidence"]) == 1
+        assert saved_items[0]["evidence"][0]["source_ref"].startswith("src_")
+        assert "synthetic-rescue-document-1" not in json.dumps(saved_items)
+
+    # latest-result 真实服务入口读取同一隔离SQLite产生的 Envelope 内容。
+    latest_session = _ReadSession([
+        [_selected_job()], [{"envelope_json": json.dumps(loaded, ensure_ascii=False)}],
+    ])
+    monkeypatch.setattr(workspace_module, "_session", lambda: latest_session)
+    monkeypatch.setattr(workspace_module, "_row_to_batch_job", lambda row: dict(row))
+    monkeypatch.setattr(
+        CustomQCWorkspaceService, "_aggregate_parent_job",
+        lambda _self, _session, job: job,
+    )
+    service = object.__new__(CustomQCWorkspaceService)
+    service._record_result_envelope_table = canonical_table
+    service._batch_job_table = sa.Table(
+        "custom_qc_batch_jobs", MetaData(),
+        sa.Column("id", sa.String(36)),
+        sa.Column("status", sa.String(20)),
+        sa.Column("parent_job_id", sa.String(36)),
+        sa.Column("finished_at", sa.DateTime()),
+        sa.Column("created_at", sa.DateTime()),
+    )
+    latest = service.build_latest_single_record_result_dto(
+        institute_id="inst-1", patient_id="patient-1", visit_id="visit-1",
+        expected_rule_ids=list(rule_ids),
+        rule_set_key="luxian_0609_qc_v1", rule_set_version="2026-06-09",
+    )
+    assert latest["state"] == "ready"
+    assert [item["rule_id"] for item in latest["items"]] == list(rule_ids)
+    assert [item["customer_display_facts"] for item in latest["items"]] == [
+        item["customer_display_facts"] for item in saved_items
+    ]
+    assert [item["evidence"] for item in latest["items"]] == [
+        item["evidence"] for item in saved_items
+    ]
+
+    if rule_ids != ("LX0609-09-01-02", "LX0609-06-02-01"):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from app.core.security import get_current_user
+        from app.routers import qc_sichuan
+
+        app = FastAPI()
+        app.include_router(qc_sichuan.router)
+        app.dependency_overrides[get_current_user] = lambda: {
+            "id": "admin-001", "roles": ["admin"],
+        }
+        monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: service)
+        monkeypatch.setattr(workspace_module, "_session", lambda: _ReadSession([
+            [_selected_job()], [{"envelope_json": json.dumps(loaded, ensure_ascii=False)}],
+        ]))
+        with TestClient(app) as client:
+            response = client.get(
+                "/api/v1/qc/sichuan/workspace/records/visit-1/latest-result",
+                params={"institute_id": "inst-1", "patient_id": "patient-1"},
+            )
+        assert response.status_code == 200
+        http_result = response.json()["data"]
+        assert http_result["state"] == "ready"
+        assert [
+            {key: item[key] for key in (
+                "rule_id", "status", "reason_code", "conclusion", "suggestion",
+                "customer_display_facts", "evidence",
+            )}
+            for item in http_result["items"]
+        ] == [
+            {key: item[key] for key in (
+                "rule_id", "status", "reason_code", "conclusion", "suggestion",
+                "customer_display_facts", "evidence",
+            )}
+            for item in latest["items"]
+        ]
+
+        # 批量详情走正式 HTTP 路由和真实 SQLite Envelope 读取；任务表中的
+        # 旧 items 只用于验证不会越过 Canonical 成为另一份交付结果。
+        detail_job = {
+            "id": "job-pilots",
+            "draft_id": "sichuan-rule-library",
+            "created_by": "admin-001",
+            "status": "completed",
+            "total_records": 1,
+            "filters": {
+                "rule_set_key": "luxian_0609_qc_v1",
+                "rule_set_version": "2026-06-09",
+                "record_refs": [{
+                    "institute_id": "inst-1",
+                    "patient_id": "patient-1",
+                    "visit_id": "visit-1",
+                }],
+            },
+            "items": [{"rule_id": "LX0609-99-99-99", "status": "non_compliant"}],
+        }
+        service.get_batch_job = lambda *, job_id, created_by: (
+            detail_job if job_id == "job-pilots" and created_by == "admin-001" else None
+        )
+        service._load_batch_job_canonical_items = lambda *, job, allow_partial=False: (
+            store.load_root_job_items(
+                job=job,
+                session_factory=lambda: Session(engine),
+                allow_partial=allow_partial,
+            )
+        )
+        with TestClient(app) as client:
+            detail_response = client.get(
+                "/api/v1/qc/sichuan/workspace/batch-jobs/job-pilots"
+            )
+        assert detail_response.status_code == 200
+        detail_items = detail_response.json()["data"]["items"]
+        assert [item["rule_id"] for item in detail_items] == list(rule_ids)
+        assert [
+            {key: item[key] for key in (
+                "rule_id", "status", "reason_code", "conclusion", "suggestion",
+                "customer_display_facts",
+            )}
+            for item in detail_items
+        ] == [
+            {key: item[key] for key in (
+                "rule_id", "status", "reason_code", "conclusion", "suggestion",
+                "customer_display_facts",
+            )}
+            for item in http_result["items"]
+        ]
+        assert [
+            [{key: evidence[key] for key in (
+                "source_type", "source_ref", "record_time",
+                "evidence_excerpt", "excerpt_kind",
+            )} for evidence in item["evidence"]]
+            for item in detail_items
+        ] == [
+            [{key: evidence[key] for key in (
+                "source_type", "source_ref", "record_time",
+                "evidence_excerpt", "excerpt_kind",
+            )} for evidence in item["evidence"]]
+            for item in http_result["items"]
+        ]
+        latest_http_body = response.json()
+        detail_http_body = detail_response.json()
+
+        # 病历详情抽屉也应从同一份已保存 Envelope 读取；不把任务原始项
+        # 或其他数据源重新解释成 0609 结果。
+        from app.routers import records
+
+        record_app = FastAPI()
+        record_app.include_router(records.router)
+        record_app.dependency_overrides[get_current_user] = lambda: {
+            "id": "admin-001", "roles": ["admin"],
+        }
+        monkeypatch.setattr(records, "get_supabase", lambda: None)
+        monkeypatch.setattr(
+            records, "medical_records_db", SimpleNamespace(get=lambda _record_id: None),
+        )
+        monkeypatch.setattr(records, "_load_bundle_payload_for_record", lambda _record_id: {})
+        monkeypatch.setattr(
+            records, "_luxian_0609_envelope_identities",
+            lambda _record_id, **_kwargs: {("inst-1", "patient-1", "visit-1")},
+        )
+        monkeypatch.setattr(
+            records,
+            "_resolve_visit_identity",
+            lambda _record_id: {
+                "institute_id": "inst-1", "patient_id": "patient-1", "visit_id": "visit-1",
+            },
+        )
+        monkeypatch.setattr(workspace_module, "CustomQCWorkspaceService", lambda: service)
+        monkeypatch.setattr(workspace_module, "_session", lambda: _ReadSession([
+            [_selected_job()], [{"envelope_json": json.dumps(loaded, ensure_ascii=False)}],
+        ]))
+        with TestClient(record_app) as client:
+            review_response = client.get("/api/v1/records/visit-1/qc-detail")
+        assert review_response.status_code == 200
+        review_result = review_response.json()["data"]
+        assert review_result["review_result_state"] == (
+            "ready" if http_result["is_complete"] else "incomplete"
+        )
+        assert [item["rule_code"] for item in review_result["review_items"]] == list(rule_ids)
+        assert [item["status"] for item in review_result["review_items"]] == [
+            item["status"] for item in http_result["items"]
+        ]
+        assert [item["findings"] for item in review_result["review_items"]] == [
+            item["conclusion"] for item in http_result["items"]
+        ]
+        assert [item["suggestion"] for item in review_result["review_items"]] == [
+            item["suggestion"] for item in http_result["items"]
+        ]
+        assert all(
+            item["source"] == "canonical_result_envelope"
+            for item in review_result["review_items"]
+        )
+        if rule_ids == ("LX0609-09-01-01",):
+            from app.services.luxian_0609_result_export_service import customer_evidence_summary
+
+            assert review_result["review_items"][0]["evidence"] == (
+                "抢救记录（2026-09-01 10:00:00、文书级依据）："
+                "合成记录：抢救结束后五小时完成记录"
+            )
+            assert customer_evidence_summary(detail_items[0]["evidence"]) == (
+                review_result["review_items"][0]["evidence"]
+            )
+
+    feedback = ResultFeedbackDemoStore.__new__(ResultFeedbackDemoStore)
+    feedback._canonical_table = canonical_table
+    feedback._feedback_table = feedback_table
+    monkeypatch.setattr(feedback_module, "_session", lambda: Session(engine))
+    for item in saved_items:
+        response = feedback.save(
+            root_job_id="job-pilots", record_ref=loaded["record_ref"],
+            rule_id=item["rule_id"], created_by="admin-001",
+            payload=QcResultFeedbackRequest.model_validate({
+                "root_job_id": "job-pilots", "record_ref": loaded["record_ref"],
+                "feedback_type": "note", "comment": "人工核对完成。",
+            }),
+        )
+        assert response["rule_id"] == item["rule_id"]
+        assert response["original_status"] == item["status"]
+        assert response["result_digest"] == feedback_module._result_digest(item)
+    by_rule = feedback.list_for_record(
+        root_job_id="job-pilots", record_ref=loaded["record_ref"],
+        created_by="admin-001",
+    )
+    assert set(by_rule) == set(rule_ids)
+
+    job = {
+        "id": "job-pilots", "filters": {"rule_set_key": "luxian_0609_qc_v1"},
+        "items": saved_items,
+    }
+    projected = workspace_module.flatten_customer_safe_result_items(
+        job, hmac_key="unit-test-key",
+    )
+    assert [item["customer_display_facts"] for item in projected] == [
+        item["customer_display_facts"] for item in saved_items
+    ]
+    _, export_rows, _ = workspace_module._customer_export_rows(
+        job, hmac_key="unit-test-key",
+    )
+    assert [row[1] for row in export_rows] == list(rule_ids)
+    assert all(row[3] == "合规" and row[5].endswith("已核对") for row in export_rows)
+    if rule_ids == ("LX0609-09-01-01",):
+        assert export_rows[0][7] == review_result["review_items"][0]["evidence"]
+    csv_text = workspace_module._export_customer_safe_csv(
+        job, hmac_key="unit-test-key",
+    ).getvalue()
+    csv_rows = list(csv.reader(StringIO(csv_text)))
+    assert all(any(row[1:7] == expected[1:7] for row in csv_rows) for expected in export_rows)
+    if rule_ids == ("LX0609-09-01-01",):
+        assert any(len(row) > 7 and row[7] == export_rows[0][7] for row in csv_rows)
+    workbook = load_workbook(workspace_module._export_customer_safe_workbook(
+        job, hmac_key="unit-test-key",
+    ))
+    xlsx_rows = list(workbook["全部明细"].values)
+    assert all(any(tuple(row[:7]) == tuple(expected[:7]) for row in xlsx_rows) for expected in export_rows)
+    if rule_ids == ("LX0609-09-01-01",):
+        assert any(len(row) > 7 and row[7] == export_rows[0][7] for row in xlsx_rows)
+    html_text = workspace_module._export_customer_safe_html(
+        job, hmac_key="unit-test-key", canonical_items=saved_items,
+    )
+    assert all(rule_id in html_text for rule_id in rule_ids)
+    assert all(item["conclusion"] in html_text for item in saved_items)
+    if rule_ids == ("LX0609-09-01-01",):
+        assert export_rows[0][7] in html_text
+        assert "synthetic-rescue-document-1" not in html_text
+    engine.dispose()
+
+    # 所有交付断言通过后，才为实际浏览器写出本测试的合成 HTTP 产物。
+    browser_fixture_path = os.getenv("MEDQC_LX0609_BROWSER_FIXTURE_OUT")
+    if browser_fixture_path and rule_ids == ("LX0609-09-01-01",):
+        output_path = Path(browser_fixture_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(
+            json.dumps({
+                "fixture_kind": "synthetic_sqlite_http",
+                "latest": latest_http_body,
+                "detail": detail_http_body,
+            }, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "path", "invalid"),
+    [
+        ("LX0609-01-01-01", ("remaining_hours",), 999),
+        ("LX0609-01-02-01", ("remaining_hours",), 999),
+        ("LX0609-02-01-01", ("remaining_hours",), 999),
+        ("LX0609-02-01-02", ("remaining_hours",), 999),
+        ("LX0609-09-01-01", ("remaining_hours",), 999),
+        ("LX0609-06-01-01", ("order_results",), "DELETE"),
+        ("LX0609-06-01-01", ("order_results", 0, "course_locations"), []),
+        ("LX0609-06-01-01", ("order_results", 0, "course_locations", 0, "start"), -1),
+        ("LX0609-06-01-05", ("checked_sources", 0), "corrupted_source"),
+        ("LX0609-09-01-02", ("missing_fields",), [{}]),
+        ("LX0609-06-02-01", ("decision_status",), []),
+        ("LX0609-06-02-01", ("checked_sources", 0, "state"), {}),
+        ("LX0609-06-02-01", ("events", 0, "status"), []),
+    ],
+)
+def test_invalid_published_json_type_is_controlled_through_store_and_single_record_dto(
+    monkeypatch, rule_id, path, invalid,
+):
+    table = workspace_module._record_result_envelopes_table().to_metadata(
+        MetaData(), schema=None,
+    )
+    engine = create_engine("sqlite://")
+    table.metadata.create_all(engine)
+    store = CanonicalResultStore(table)
+    with Session(engine) as db_session:
+        store.replace_for_job(
+            db_session,
+            job_row={
+                "id": "job-current", "created_by": "reviewer-a",
+                "filters_json": json.dumps({
+                    "rule_set_key": "luxian_0609_qc_v1",
+                    "rule_set_version": "2026-06-09",
+                }),
+            },
+            items=[_published_pilot_item_for_read_boundary(rule_id)],
+            now=datetime(2026, 9, 1, 10, 0, 0),
+            projector=lambda raw: envelope_item_from_rule_result(raw, hmac_key="unit-test-key"),
+            projection_key="unit-test-key",
+        )
+        db_session.commit()
+        accepted = store.load_selected(
+            db_session, root_job_id="job-current",
+            institute_id="inst-1", patient_id="patient-1", visit_id="visit-1",
+            rule_set_key="luxian_0609_qc_v1", rule_set_version="2026-06-09",
+        )
+        assert accepted["items"][0]["customer_display_facts"] == (
+            _published_pilot_item_for_read_boundary(rule_id)["customer_display_facts"]
+        )
+        envelope = json.loads(
+            db_session.execute(table.select()).mappings().one()["envelope_json"]
+        )
+        target = envelope["items"][0]["customer_display_facts"]
+        for key in path[:-1]:
+            target = target[key]
+        if invalid == "DELETE":
+            del target[path[-1]]
+        else:
+            target[path[-1]] = invalid
+        envelope_json = json.dumps(envelope, ensure_ascii=False)
+        db_session.execute(table.update().values(envelope_json=envelope_json))
+        db_session.commit()
+        with pytest.raises(ValueError, match="客户结果解释合同"):
+            store.load_selected(
+                db_session, root_job_id="job-current",
+                institute_id="inst-1", patient_id="patient-1", visit_id="visit-1",
+                rule_set_key="luxian_0609_qc_v1", rule_set_version="2026-06-09",
+            )
+    engine.dispose()
+
+    session = _ReadSession([
+        [_selected_job()], [{"envelope_json": envelope_json}],
+    ])
+    monkeypatch.setattr(workspace_module, "_session", lambda: session)
+    monkeypatch.setattr(workspace_module, "_row_to_batch_job", lambda row: dict(row))
+    monkeypatch.setattr(
+        CustomQCWorkspaceService, "_aggregate_parent_job",
+        lambda _self, _session, job: job,
+    )
+    service = object.__new__(CustomQCWorkspaceService)
+    service._record_result_envelope_table = table
+    service._batch_job_table = sa.Table(
+        "custom_qc_batch_jobs", MetaData(),
+        sa.Column("id", sa.String(36)),
+        sa.Column("status", sa.String(20)),
+        sa.Column("parent_job_id", sa.String(36)),
+        sa.Column("finished_at", sa.DateTime()),
+        sa.Column("created_at", sa.DateTime()),
+    )
+    result = service.build_latest_single_record_result_dto(
+        institute_id="inst-1", patient_id="patient-1", visit_id="visit-1",
+        expected_rule_ids=[rule_id],
+        rule_set_key="luxian_0609_qc_v1", rule_set_version="2026-06-09",
+    )
+    assert result["state"] == "technical_error"
+    assert result["reason_code"] == "canonical_result_envelope_invalid"
+    assert result["items"] == []
+
+    if rule_id in {
+        "LX0609-01-01-01", "LX0609-01-02-01", "LX0609-09-01-01",
+        "LX0609-02-01-01", "LX0609-02-01-02",
+    }:
+        # 复用实际SQLite中损坏的字节，补验真实HTTP路由的错误DTO搬运。
+        # 任务选择SQL与认证仍是替身，不能称为部署或权限完整验收。
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from app.core.security import get_current_user
+        from app.routers import qc_sichuan
+
+        app = FastAPI()
+        app.include_router(qc_sichuan.router)
+        app.dependency_overrides[get_current_user] = lambda: {
+            "id": "admin-001", "roles": ["admin"],
+        }
+        monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: service)
+        monkeypatch.setattr(workspace_module, "_session", lambda: _ReadSession([
+            [_selected_job()], [{"envelope_json": envelope_json}],
+        ]))
+        with TestClient(app) as client:
+            response = client.get(
+                "/api/v1/qc/sichuan/workspace/records/visit-1/latest-result",
+                params={"institute_id": "inst-1", "patient_id": "patient-1"},
+            )
+        assert response.status_code == 200
+        body = response.json()["data"]
+        assert body["state"] == "technical_error"
+        assert body["reason_code"] == "canonical_result_envelope_invalid"
+        assert body["items"] == []
 
 
 def test_writer_marks_envelope_as_canonical_straight_through():
@@ -1956,20 +2859,10 @@ def test_writer_marks_envelope_as_canonical_straight_through():
                 }
             ),
         },
-        items=[
-            {
-                "record_id": "visit-1",
-                "visit_id": "visit-1",
-                "institute_id": "inst-1",
-                "patient_id": "patient-1",
-                "rule_id": "LX0609-001",
-                "status": "compliant",
-                "result_status": "compliant",
-                "reason_code": "requirement_satisfied",
-                "is_compliant": True,
-                "conclusion": "引擎结论原文",
-            }
-        ],
+        items=[{
+            **_published_pilot_item_for_read_boundary("LX0609-01-01-01"),
+            "conclusion": "引擎结论原文",
+        }],
         now=datetime(2026, 7, 30, 10, 0, 0),
     )
 
@@ -1987,10 +2880,7 @@ def test_writer_uses_facade_envelope_item_projector(monkeypatch):
     session = _WriteSession()
     service = CustomQCWorkspaceService()
     projected_item = {
-        "rule_id": "LX0609-001",
-        "status": "compliant",
-        "result_status": "compliant",
-        "is_compliant": True,
+        **_published_pilot_item_for_read_boundary("LX0609-01-01-01"),
         "projected_by_facade": True,
     }
     monkeypatch.setattr(
@@ -2011,24 +2901,14 @@ def test_writer_uses_facade_envelope_item_projector(monkeypatch):
                 }
             ),
         },
-        items=[
-            {
-                "record_id": "visit-1",
-                "visit_id": "visit-1",
-                "institute_id": "inst-1",
-                "patient_id": "patient-1",
-                "rule_id": "LX0609-001",
-                "status": "compliant",
-                "result_status": "compliant",
-                "is_compliant": True,
-            }
-        ],
+        items=[_published_pilot_item_for_read_boundary("LX0609-01-01-01")],
         now=datetime(2026, 8, 15, 10, 0, 0),
     )
 
     insert_params = session.statements[-1].compile().params
     envelope = json.loads(insert_params["envelope_json"])
-    assert envelope["items"] == [projected_item]
+    assert envelope["items"] == [{**projected_item, "record_ref": envelope["record_ref"]}]
+    assert "record_ref" not in projected_item
 
 
 def test_pending_rule_conclusion_remains_customer_text_through_canonical_delivery(
@@ -2050,7 +2930,7 @@ def test_pending_rule_conclusion_remains_customer_text_through_canonical_deliver
         {"rule_id": rule_id}
         for rule_id in resolve_package_entry_execution_rule_ids(
             inventory=inventory,
-            selected_rule_ids=("LX0609-049",),
+            selected_rule_ids=("LX0609-07-04-02",),
         )
     ]
     executable_rules, context = asyncio.run(
@@ -2062,7 +2942,7 @@ def test_pending_rule_conclusion_remains_customer_text_through_canonical_deliver
             evidence_payload=None,
             llm_client=object(),
             settings=SimpleNamespace(**settings_values),
-            selected_customer_rule_ids=("LX0609-049",),
+            selected_customer_rule_ids=("LX0609-07-04-02",),
         )
     )
     assert executable_rules == []
@@ -2098,7 +2978,7 @@ def test_pending_rule_conclusion_remains_customer_text_through_canonical_deliver
                             "visit_id": "visit-1",
                         }
                     ],
-                    "scoped_customer_rule_ids": ["LX0609-049"],
+                    "scoped_customer_rule_ids": ["LX0609-07-04-02"],
                 }
             ),
         },
@@ -2124,7 +3004,7 @@ def test_pending_rule_conclusion_remains_customer_text_through_canonical_deliver
         institute_id="inst-1",
         patient_id="patient-1",
         visit_id="visit-1",
-        expected_rule_ids=["LX0609-049"],
+        expected_rule_ids=["LX0609-07-04-02"],
         rule_set_key="luxian_0609_qc_v1",
         rule_set_version="2026-06-09",
     )
@@ -2140,7 +3020,7 @@ def test_pending_rule_conclusion_remains_customer_text_through_canonical_deliver
 def test_typed_050_canonical_finding_survives_envelope_customer_projection() -> None:
     reduced = reduce_luxian_0609_rule_decision(
         RuleDecision(
-            rule_id="LX0609-050",
+            rule_id="LX0609-03-02-01",
             snapshot_hash="a" * 64,
             applicability=ApplicabilityState.APPLICABLE,
             evidence_state=EvidenceState.SUFFICIENT,
@@ -2160,10 +3040,10 @@ def test_typed_050_canonical_finding_survives_envelope_customer_projection() -> 
     }
     context = Luxian0609ExecutionContext(
         enabled=True,
-        wrapper_rules=[{"rule_id": "LX0609-050", "name": "疑难病例讨论"}],
+        wrapper_rules=[{"rule_id": "LX0609-03-02-01", "name": "疑难病例讨论"}],
         prepared_rule_count=1,
         reduced_decisions=(reduced,),
-        customer_display_facts=(("LX0609-050", controlled_facts),),
+        customer_display_facts=(("LX0609-03-02-01", controlled_facts),),
     )
 
     aggregated = aggregate_luxian_0609_orchestrated_results(
@@ -2202,7 +3082,7 @@ def test_typed_050_canonical_finding_survives_envelope_customer_projection() -> 
 def test_typed_050_scope_uncertainty_survives_safe_projection_without_raw_text() -> None:
     projected = project_customer_safe_result_item(
         {
-            "rule_id": "LX0609-050",
+            "rule_id": "LX0609-03-02-01",
             "status": "uncertain",
             "reason_code": "diagnosis_scope_uncertain",
             "customer_display_facts": {
@@ -2250,7 +3130,7 @@ def test_typed_050_customer_projection_rejects_non_datetime_controlled_facts(
     with pytest.raises(ValueError):
         project_customer_safe_result_item(
             {
-                "rule_id": "LX0609-050",
+                "rule_id": "LX0609-03-02-01",
                 "status": "non_compliant",
                 "is_compliant": False,
                 "customer_display_facts": facts,
@@ -2298,7 +3178,7 @@ def test_writer_rejects_invalid_or_conflicting_canonical_status_fields(
                     "visit_id": "visit-1",
                     "institute_id": "inst-1",
                     "patient_id": "patient-1",
-                    "rule_id": "LX0609-001",
+                    "rule_id": "LX0609-01-01-01",
                     "reason_code": "requirement_violated",
                     **invalid_fields,
                 }
@@ -2335,29 +3215,17 @@ def test_writer_validates_all_records_before_mutating_any_envelope():
                                 "visit_id": "visit-2",
                             },
                         ],
-                        "scoped_customer_rule_ids": ["LX0609-001"],
+                        "scoped_customer_rule_ids": ["LX0609-01-01-01"],
                     }
                 ),
             },
             items=[
+                _published_pilot_item_for_read_boundary("LX0609-01-01-01"),
                 {
-                    "record_id": "visit-1",
-                    "visit_id": "visit-1",
-                    "institute_id": "inst-1",
-                    "patient_id": "patient-1",
-                    "rule_id": "LX0609-001",
-                    "status": "compliant",
-                    "result_status": "compliant",
-                    "is_compliant": True,
-                },
-                {
+                    **_published_pilot_item_for_read_boundary("LX0609-01-01-01"),
                     "record_id": "visit-2",
                     "visit_id": "visit-2",
-                    "institute_id": "inst-1",
                     "patient_id": "patient-2",
-                    "rule_id": "LX0609-001",
-                    "status": "compliant",
-                    "result_status": "compliant",
                     "is_compliant": False,
                 },
             ],
@@ -2377,7 +3245,7 @@ def test_writer_validates_all_records_before_mutating_any_envelope():
                 "visit_id": "visit-1",
                 "institute_id": "inst-1",
                 "patient_id": "patient-1",
-                "rule_id": "LX0609-001",
+                "rule_id": "LX0609-01-01-01",
                 "status": "compliant",
                 "result_status": "compliant",
                 "is_compliant": True,
@@ -2422,7 +3290,7 @@ def test_writer_rejects_incomplete_case_coordinate_before_mutating_any_envelope(
         "visit_id": "visit-1",
         "institute_id": "inst-1",
         "patient_id": "patient-1",
-        "rule_id": "LX0609-001",
+        "rule_id": "LX0609-01-01-01",
         "status": "compliant",
         "result_status": "compliant",
         "is_compliant": True,
@@ -2471,7 +3339,7 @@ def test_writer_rejects_non_compliant_without_controlled_explanation_before_muta
                     "visit_id": "visit-1",
                     "institute_id": "inst-1",
                     "patient_id": "patient-1",
-                    "rule_id": "LX0609-071",
+                    "rule_id": "LX0609-10-01-01",
                     "status": "non_compliant",
                     "result_status": "non_compliant",
                     "display_status": "non_compliant",
@@ -2506,7 +3374,7 @@ def test_writer_accepts_non_compliant_with_controlled_failed_criterion():
                 "visit_id": "visit-1",
                 "institute_id": "inst-1",
                 "patient_id": "patient-1",
-                "rule_id": "LX0609-071",
+                "rule_id": "LX0609-10-01-01",
                 "status": "non_compliant",
                 "result_status": "non_compliant",
                 "display_status": "non_compliant",
@@ -2549,7 +3417,7 @@ def test_writer_accepts_064_non_compliant_with_projected_multievent_facts():
                 "visit_id": "visit-1",
                 "institute_id": "inst-1",
                 "patient_id": "patient-1",
-                "rule_id": "LX0609-064",
+                "rule_id": "LX0609-04-05-01",
                 "status": "non_compliant",
                 "result_status": "non_compliant",
                 "display_status": "non_compliant",
@@ -2590,3 +3458,170 @@ def test_writer_accepts_064_non_compliant_with_projected_multievent_facts():
     )
 
     assert len(session.statements) == 2
+
+
+def _rule_scope_caches():
+    from app.services import luxian_0609_rule_catalog, luxian_0609_rule_master
+    from app.services import sample_validation_rule_sets as rule_sets
+    from app.services.luxian_0609 import phase_scope, rule_contracts
+
+    return (
+        luxian_0609_rule_master.load_luxian_0609_rule_master,
+        luxian_0609_rule_catalog.load_luxian_0609_rules,
+        phase_scope.load_luxian_0609_phase_scope,
+        rule_contracts.load_luxian_0609_rule_contracts,
+        rule_sets.get_luxian_0609_sample_validation_rule_set,
+        rule_sets.get_luxian_0609_customer_delivery_rule_ids,
+        rule_sets.get_luxian_0609_customer_execution_scope,
+    )
+
+
+@pytest.fixture
+def stop_new_execution(monkeypatch, tmp_path):
+    """隔离地把一条已登记规则改为不再注册进可执行目录（不改正式配置）。"""
+
+    from app.services import luxian_0609_rule_catalog, luxian_0609_rule_master
+    from app.services.luxian_0609 import rule_contracts
+
+    def without_rule(module, attr: str, rule_id: str) -> None:
+        # 现有“目录注册”机制：总表非 active 时，执行目录与合同不得再含该规则。
+        source = getattr(module, attr)
+        payload = json.loads(source.read_text(encoding="utf-8"))
+
+        def drop(rows):
+            return [
+                row for row in rows
+                if not (isinstance(row, dict) and str(row.get("rule_id") or "").upper() == rule_id)
+            ]
+
+        if isinstance(payload, list):
+            payload = drop(payload)
+        else:
+            payload = {
+                key: drop(value) if isinstance(value, list) else value
+                for key, value in payload.items()
+            }
+        copy = tmp_path / f"{attr}.json"
+        copy.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        monkeypatch.setattr(module, attr, copy)
+
+    def apply(rule_id: str) -> None:
+        for module, attr in (
+            (luxian_0609_rule_catalog, "_DATA_PATH"),
+            (luxian_0609_rule_catalog, "_PHASE1_EXTENSION_PATH"),
+            (rule_contracts, "_CONTRACT_PATH"),
+            (rule_contracts, "_PHASE1_EXTENSION_CONTRACT_PATH"),
+        ):
+            without_rule(module, attr, rule_id)
+        raw = json.loads(luxian_0609_rule_master._MASTER_PATH.read_text(encoding="utf-8"))
+        rows = raw if isinstance(raw, list) else next(v for v in raw.values() if isinstance(v, list))
+        entry = next(row for row in rows if row["rule_id"] == rule_id)
+        entry.update({
+            "implementation_status": "contract_ready",
+            "definition_note": "合成测试：停止新执行",
+            "release_scope": "default",
+            "phase_status": "pending_definition",
+            "pending_reason_code": "synthetic_stop_new_execution",
+        })
+        master_copy = tmp_path / "rule_master.json"
+        master_copy.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
+        monkeypatch.setattr(luxian_0609_rule_master, "_MASTER_PATH", master_copy)
+        for cached in _rule_scope_caches():
+            cached.cache_clear()
+
+    yield apply
+    for cached in _rule_scope_caches():
+        cached.cache_clear()
+
+
+def test_stopping_new_execution_keeps_saved_results_readable(monkeypatch, stop_new_execution):
+    """禁止新执行不能让已保存的合法历史结果变得不可读，也不重判历史结果。"""
+
+    from app.services.luxian_0609.phase_scope import partition_luxian_0609_rule_scope
+    from app.services.sample_validation_rule_sets import (
+        get_luxian_0609_sample_validation_rule_set,
+    )
+
+    rule_id = "LX0609-06-02-01"
+    canonical_table = workspace_module._record_result_envelopes_table().to_metadata(
+        MetaData(), schema=None,
+    )
+    engine = create_engine(
+        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool,
+    )
+    canonical_table.metadata.create_all(engine)
+    store = CanonicalResultStore(canonical_table)
+    items = [_published_pilot_item_for_read_boundary(rule_id)]
+    items[0]["conclusion"] = "病理报告单要素已核对。"
+    items[0]["suggestion"] = "病理报告单完整，\n无需补充。"
+    filters = {
+        "rule_set_key": "luxian_0609_qc_v1", "rule_set_version": "2026-06-09",
+        "scoped_customer_rule_ids": [rule_id],
+        "record_refs": [{"institute_id": "inst-1", "patient_id": "patient-1", "visit_id": "visit-1"}],
+    }
+    # 1) 规则仍启用时按正式保存流程写入一条合法结果。
+    with Session(engine) as session:
+        store.replace_for_job(
+            session,
+            job_row={"id": "job-stop", "created_by": "admin-001", "filters_json": json.dumps(filters)},
+            items=items,
+            now=datetime(2026, 9, 1, 10, 0, 0),
+            projector=lambda raw: envelope_item_from_rule_result(raw, hmac_key="unit-test-key"),
+            projection_key="unit-test-key",
+        )
+        session.commit()
+
+    # 2) 隔离地停止该规则参与新任务。
+    stop_new_execution(rule_id)
+    assert rule_id not in get_luxian_0609_sample_validation_rule_set().rule_ids  # 默认批量/客户样本
+    with pytest.raises(ValueError, match="invalid LX0609 customer rule id"):
+        partition_luxian_0609_rule_scope((rule_id,))  # 显式选规则/单病历执行范围
+
+    # 3) 已保存结果：Canonical 读取、latest、批详情与导出均可读，内容不变。
+    with Session(engine) as session:
+        loaded = store.load_selected(
+            session, root_job_id="job-stop", institute_id="inst-1", patient_id="patient-1",
+            visit_id="visit-1", rule_set_key="luxian_0609_qc_v1", rule_set_version="2026-06-09",
+        )
+    saved = loaded["items"][0]
+    monkeypatch.setattr(workspace_module, "_session", lambda: _ReadSession([
+        [_selected_job()], [{"envelope_json": json.dumps(loaded, ensure_ascii=False)}],
+    ]))
+    monkeypatch.setattr(workspace_module, "_row_to_batch_job", lambda row: dict(row))
+    monkeypatch.setattr(
+        CustomQCWorkspaceService, "_aggregate_parent_job", lambda _self, _session, job: job,
+    )
+    service = object.__new__(CustomQCWorkspaceService)
+    service._record_result_envelope_table = canonical_table
+    service._batch_job_table = sa.Table(
+        "custom_qc_batch_jobs", MetaData(),
+        sa.Column("id", sa.String(36)), sa.Column("status", sa.String(20)),
+        sa.Column("parent_job_id", sa.String(36)), sa.Column("finished_at", sa.DateTime()),
+        sa.Column("created_at", sa.DateTime()),
+    )
+    latest = service.build_latest_single_record_result_dto(
+        institute_id="inst-1", patient_id="patient-1", visit_id="visit-1",
+        rule_set_key="luxian_0609_qc_v1", rule_set_version="2026-06-09",
+    )
+    assert latest["state"] == "ready", latest
+    latest_item = next(item for item in latest["items"] if item["rule_id"] == rule_id)
+    for key in ("status", "reason_code", "customer_display_facts", "conclusion", "suggestion"):
+        assert latest_item[key] == saved[key], key
+
+    job = {
+        "id": "job-stop", "created_by": "admin-001", "status": "completed",
+        "total_records": 1, "filters": filters,
+    }
+    batch_items = store.load_root_job_items(job=job, session_factory=lambda: Session(engine))
+    detail = workspace_module.project_customer_safe_batch_job(
+        {**job, "items": batch_items, "rule_results": []}, hmac_key="unit-test-key",
+    )
+    detail_item = next(item for item in detail["items"] if item["rule_id"] == rule_id)
+    assert (detail_item["status"], detail_item["reason_code"]) == (saved["status"], saved["reason_code"])
+    assert detail_item["customer_display_facts"] == saved["customer_display_facts"]
+    export_items, rows, _summary = workspace_module._canonical_customer_export_rows(
+        job, hmac_key="unit-test-key", canonical_items=batch_items,
+    )
+    assert [item["rule_id"] for item in export_items] == [rule_id]
+    assert export_items[0]["suggestion"] == saved["suggestion"] == rows[0][6]
+    engine.dispose()

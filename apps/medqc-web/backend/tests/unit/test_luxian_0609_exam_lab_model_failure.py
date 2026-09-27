@@ -22,7 +22,7 @@ def _answer():
                 "positive_state": "positive" if rule_id.endswith("012") else "not_relevant",
                 "course_doc_positions": [position],
             }
-            for rule_id in ("LX0609-011", "LX0609-012")
+            for rule_id in ("LX0609-06-01-04", "LX0609-06-01-05")
             for position in (1, 2)
         ],
     }
@@ -84,7 +84,7 @@ async def _execute(
         ),
         evaluation_horizon_rows=({"horizon_date": "2026-04-30"},),
     )
-    rule_ids = ("LX0609-011", "LX0609-012")
+    rule_ids = ("LX0609-06-01-04", "LX0609-06-01-05")
     client = _Client(answers)
     result = await native.execute_luxian_0609_native_exam_lab_rules(
         rule_ids=rule_ids,
@@ -115,7 +115,7 @@ async def test_cross_event_citation_recovers_with_event_isolated_context(monkeyp
 
     result, rows, client = await _execute(
         monkeypatch,
-        [bad, _single_event_answer("LX0609-011"), _single_event_answer("LX0609-011")],
+        [bad, _single_event_answer("LX0609-06-01-04"), _single_event_answer("LX0609-06-01-04")],
         report_texts=(
             "阳性：第一事件异常。\nONLY_EVENT_ONE",
             "阳性：第二事件异常。\nONLY_EVENT_TWO",
@@ -123,8 +123,8 @@ async def test_cross_event_citation_recovers_with_event_isolated_context(monkeyp
     )
 
     assert result.llm_call_count == 3
-    assert rows["LX0609-011"]["status"] == "compliant"
-    assert rows["LX0609-012"]["status"] == "compliant"
+    assert rows["LX0609-06-01-04"]["status"] == "compliant"
+    assert rows["LX0609-06-01-05"]["status"] == "compliant"
     assert "EVENT_DOC=E01-01" in client.prompts[1]
     assert "EVENT_DOC=E01-02" not in client.prompts[1]
     assert "EVENT_DOC=E01-02" in client.prompts[2]
@@ -145,12 +145,12 @@ async def test_complex_assessment_event_recovery_keeps_configured_thinking(monke
 
     result, rows, client = await _execute(
         monkeypatch,
-        [bad, _single_event_answer("LX0609-012"), _single_event_answer("LX0609-012")],
+        [bad, _single_event_answer("LX0609-06-01-05"), _single_event_answer("LX0609-06-01-05")],
     )
 
     assert result.llm_call_count == 3
-    assert rows["LX0609-011"]["status"] == "compliant"
-    assert rows["LX0609-012"]["status"] == "compliant"
+    assert rows["LX0609-06-01-04"]["status"] == "compliant"
+    assert rows["LX0609-06-01-05"]["status"] == "compliant"
     assert client.call_options == [{}, {}, {}]
 
 
@@ -162,15 +162,15 @@ async def test_persistent_cross_event_citation_is_failure_not_missing_field(monk
         monkeypatch,
         [
             bad,
-            _single_event_answer("LX0609-011"),
+            _single_event_answer("LX0609-06-01-04"),
             {"schema_version": "wrong", "facts": []},
         ],
     )
     assert result.llm_call_count == 3
     assert result.parse_failure_kinds == ("evidence_ref",)
-    assert rows["LX0609-011"]["status"] == "technical_error"
-    assert rows["LX0609-011"]["reason_code"] != "required_field_missing"
-    assert rows["LX0609-012"]["status"] == "compliant"
+    assert rows["LX0609-06-01-04"]["status"] == "technical_error"
+    assert rows["LX0609-06-01-04"]["reason_code"] != "required_field_missing"
+    assert rows["LX0609-06-01-05"]["status"] == "compliant"
     assert result.model_execution_stats == {
         "requested_rule_count": 2,
         "first_success_rule_count": 1,
@@ -189,11 +189,11 @@ async def test_repaired_citation_preserves_other_rules_first_answer(monkeypatch)
     bad["facts"][1]["course_doc_positions"] = [1]
     result, rows, _ = await _execute(
         monkeypatch,
-        [bad, _single_event_answer("LX0609-011"), _single_event_answer("LX0609-011")],
+        [bad, _single_event_answer("LX0609-06-01-04"), _single_event_answer("LX0609-06-01-04")],
     )
     assert result.llm_call_count == 3
     assert {rule: row["status"] for rule, row in rows.items()} == {
-        "LX0609-011": "compliant", "LX0609-012": "compliant",
+        "LX0609-06-01-04": "compliant", "LX0609-06-01-05": "compliant",
     }
     assert result.model_execution_stats["first_answer_success_rate"] == 0.5
     assert result.model_execution_stats["recovery_success_rate"] == 1.0
@@ -206,8 +206,8 @@ async def test_outer_schema_failure_cannot_bypass_citation_check_on_retry(monkey
     bad["facts"][1]["course_doc_positions"] = [1]
     result, rows, _ = await _execute(monkeypatch, [{"schema_version": "wrong", "facts": []}, bad])
     assert result.llm_call_count == 2
-    assert rows["LX0609-011"]["status"] == "technical_error"
-    assert rows["LX0609-012"]["status"] == "compliant"
+    assert rows["LX0609-06-01-04"]["status"] == "technical_error"
+    assert rows["LX0609-06-01-05"]["status"] == "compliant"
     assert result.model_execution_stats["first_answer_success_rate"] == 0.0
     assert result.model_execution_stats["recovery_success_rate"] == 0.5
     assert result.model_execution_stats["model_failure_rate"] == 0.5
@@ -224,9 +224,9 @@ async def test_complete_material_model_unknown_is_not_required_field_missing(mon
         monkeypatch, [unknown, deepcopy(unknown)], report_text="待排急性脑梗死。"
     )
     assert result.llm_call_count == 2
-    assert rows["LX0609-011"]["status"] == "compliant"
-    assert rows["LX0609-012"]["status"] == "technical_error"
-    assert rows["LX0609-012"]["reason_code"] != "required_field_missing"
+    assert rows["LX0609-06-01-04"]["status"] == "compliant"
+    assert rows["LX0609-06-01-05"]["status"] == "technical_error"
+    assert rows["LX0609-06-01-05"]["reason_code"] != "required_field_missing"
 
 
 @pytest.mark.asyncio
@@ -235,7 +235,7 @@ async def test_authoritative_positive_hint_resolves_model_classification_unknown
     answer["facts"][3]["positive_state"] = "unknown"
     result, rows, _ = await _execute(monkeypatch, [answer])
     assert result.llm_call_count == 1
-    assert rows["LX0609-012"]["status"] == "compliant"
+    assert rows["LX0609-06-01-05"]["status"] == "compliant"
 
 
 @pytest.mark.asyncio

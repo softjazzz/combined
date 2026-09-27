@@ -1,10 +1,11 @@
+# Windows PowerShell 5.1 decodes BOM-less scripts as ANSI; keep this file ASCII-only.
 param(
   [string]$OutputRoot = "D:\LLM\LX888\release",
   [switch]$SkipBuild,
   [string]$InventoryPath = "",
   [switch]$AllowDirty,
   [int]$BundledActivationMonths = 3,
-  [string]$BundledActivationCustomer = "MedQC 客户试用授权",
+  [string]$BundledActivationCustomer = ("MedQC " + [string]::Concat([char[]]@(0x5BA2, 0x6237, 0x8BD5, 0x7528, 0x6388, 0x6743))),
   [string]$ActivationPrivateKeyPath = "",
   [switch]$SkipBundledActivation
 )
@@ -70,7 +71,7 @@ function Copy-TreeExclude(
   Get-ChildItem -LiteralPath $source -Force | ForEach-Object {
     $name = $_.Name
     if ($_.PSIsContainer) {
-      # 排障制品含临床正文；排除运行数据，保留 services/qc_diagnostics 源码。
+      # Diagnostics may contain clinical text; exclude runtime data, keep services/qc_diagnostics source.
       if ($_.FullName -match '[\\/]storage[\\/]qc_diagnostics$') {
         return
       }
