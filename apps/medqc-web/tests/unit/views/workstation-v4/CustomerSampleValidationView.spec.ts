@@ -1828,6 +1828,15 @@ describe('CustomerSampleValidationView', () => {
     expect(wrapper.text()).not.toContain('客户演示主流程')
   })
 
+  it('首次进入且无演示参数时不自动弹出导览', async () => {
+    window.localStorage.removeItem(CUSTOMER_SAMPLE_GUIDE_STORAGE_KEY)
+
+    const wrapper = await mountView()
+
+    expect(wrapper.text()).not.toContain('客户演示主流程')
+    expect(wrapper.find('.customer-sample-guide-next').exists()).toBe(false)
+  })
+
   it('可从工具栏重新打开导览并进入创建测试病历', async () => {
     const wrapper = await mountView()
 

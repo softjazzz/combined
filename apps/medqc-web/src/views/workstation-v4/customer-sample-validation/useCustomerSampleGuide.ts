@@ -33,14 +33,6 @@ export function useCustomerSampleGuide(dependencies: CustomerSampleGuideDependen
     return Array.isArray(raw) ? raw.includes('1') : raw === '1'
   }
 
-  function hasSeenCustomerSampleGuide(): boolean {
-    try {
-      return window.localStorage?.getItem(CUSTOMER_SAMPLE_GUIDE_STORAGE_KEY) === 'true'
-    } catch {
-      return false
-    }
-  }
-
   function markCustomerSampleGuideSeen() {
     try {
       window.localStorage?.setItem(CUSTOMER_SAMPLE_GUIDE_STORAGE_KEY, 'true')
@@ -153,8 +145,10 @@ export function useCustomerSampleGuide(dependencies: CustomerSampleGuideDependen
     goToCustomerSampleGuideStep(customerSampleGuideStepIndex.value + 1)
   }
 
+  // 首次进入不再自动弹出导览（会与加载提示叠加遮挡操作区）；
+  // 只在演示链接显式带 ?tour=1 时打开，其余由工具栏「功能导览」手动开启。
   function openInitialCustomerSampleGuide() {
-    if (hasCustomerSampleGuideTourQuery() || !hasSeenCustomerSampleGuide()) {
+    if (hasCustomerSampleGuideTourQuery()) {
       openCustomerSampleGuide()
     }
   }
