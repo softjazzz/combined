@@ -39,6 +39,8 @@ def client(monkeypatch):
         tasks, "get_sichuan_rule_set",
         lambda key: SimpleNamespace(key=key, version="test", scope="final"),
     )
+    # 规则集为桩对象，版本 owner 同步打桩为其内置版本（不读版本表）。
+    monkeypatch.setattr(tasks, "current_version", lambda key: "test")
 
     async def fake_execute(query):
         return SimpleNamespace(data=[query])
