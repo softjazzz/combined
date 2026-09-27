@@ -732,6 +732,16 @@ const routes: RouteRecordRaw[] = [
         },
       },
       {
+        path: 'qc/reports/staff-analysis',
+        name: 'StaffAnalysisReport',
+        component: () => import('@/views/qc/reports/StaffAnalysisView.vue'),
+        meta: {
+          title: '质控员工作分析',
+          icon: 'BarChartOutlined',
+          permission: ['admin', 'qc_manager'],
+        },
+      },
+      {
         path: 'analytics',
         name: 'Analytics',
         component: () => import('@/views/analytics/AnalyticsView.vue'),

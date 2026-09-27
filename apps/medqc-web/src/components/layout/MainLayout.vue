@@ -223,6 +223,7 @@
             <a-menu-item v-if="canSee('/dashboard/statistics')" key="/dashboard/statistics">统计总览</a-menu-item>
             <a-menu-item v-if="canSee('/dashboard/qc/reports/record-quality')" key="/dashboard/qc/reports/record-quality?scene=running">运行病历质量分析</a-menu-item>
             <a-menu-item v-if="canSee('/dashboard/qc/reports/record-quality')" key="/dashboard/qc/reports/record-quality?scene=final">终末病历质量分析</a-menu-item>
+            <a-menu-item v-if="canSee('/dashboard/qc/reports/staff-analysis')" key="/dashboard/qc/reports/staff-analysis">质控员工作分析</a-menu-item>
           </a-sub-menu>
 
           <!-- DRG/DIP -->
@@ -564,7 +565,11 @@ const DRG_MENU_TARGETS = [
   '/dashboard/drg/analysis',
 ] as const
 const SYSTEM_MENU_TARGETS = ['/dashboard/settings'] as const
-const REPORT_MENU_TARGETS = ['/dashboard/statistics', '/dashboard/qc/reports/record-quality'] as const
+const REPORT_MENU_TARGETS = [
+  '/dashboard/statistics',
+  '/dashboard/qc/reports/record-quality',
+  '/dashboard/qc/reports/staff-analysis',
+] as const
 
 // 响应式数据
 const collapsed = ref(false)
@@ -602,7 +607,7 @@ const breadcrumbItems = computed(() => {
       case 'qc':
         if (pathSegments[2] === 'reports') {
           items.push({ title: '统计分析', path: '/dashboard/statistics' })
-          items.push({ title: '病历质量分析', path: null })
+          items.push({ title: pathSegments[3] === 'staff-analysis' ? '质控员工作分析' : '病历质量分析', path: null })
         }
         break
       case 'rules':

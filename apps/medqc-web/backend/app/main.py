@@ -44,6 +44,7 @@ from .routers import llm_observability_read as llm_observability_read_router
 from .routers import medical_records_alias as medical_records_alias_router
 from .routers import reports as reports_router
 from .routers import quality_reports as quality_reports_router
+from .routers import staff_work_analysis as staff_work_analysis_router
 from .routers import appeals as appeals_router
 from .routers import remediation as remediation_router
 from .routers import department_qc_rules as department_qc_rules_router
@@ -285,6 +286,7 @@ def create_app() -> FastAPI:
     app.include_router(medical_records_alias_router.router)
     app.include_router(reports_router.router)
     app.include_router(quality_reports_router.router)
+    app.include_router(staff_work_analysis_router.router)
     app.include_router(appeals_router.router)
     app.include_router(remediation_router.router)
     # Department QC Rules (Migration 009)
