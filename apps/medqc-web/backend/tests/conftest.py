@@ -51,6 +51,25 @@ def _isolate_consultation_opinion_freeze(tmp_path, monkeypatch):
     )
 
 
+@pytest.fixture
+def offline_workspace_schema(monkeypatch):
+    """工作区表只在内存中定义，不在构造服务时对数据库执行建表/补列。
+
+    CustomQCWorkspaceService 构造时会 create_all 并检查批任务父子列；
+    注入 session_factory 的单元测试不应因此连接数据库。
+    """
+    import app.services.custom_qc_workspace_service as workspace_module
+
+    cached_tables = (workspace_module._drafts_table, workspace_module._batch_jobs_table)
+    for cached in cached_tables:
+        cached.cache_clear()
+    monkeypatch.setattr(workspace_module.MetaData, "create_all", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(workspace_module, "_sync_batch_job_parent_columns", lambda **_kwargs: None)
+    yield
+    for cached in cached_tables:
+        cached.cache_clear()
+
+
 @pytest.fixture(scope="session")
 def app():
     """

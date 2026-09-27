@@ -13,6 +13,9 @@ import app.services.custom_qc_workspace_service as workspace_module
 from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
 
 
+pytestmark = pytest.mark.usefixtures("offline_workspace_schema")
+
+
 MIGRATION_PATH = (
     Path(__file__).resolve().parents[2]
     / "alembic"
