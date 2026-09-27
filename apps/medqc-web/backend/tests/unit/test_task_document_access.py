@@ -9,7 +9,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.core.security import get_current_user
-from app.routers import emr_render
+from app.routers import emr_render, qc_sichuan
 from app.services import task_document_access
 
 
@@ -60,6 +60,8 @@ def scoped_documents(monkeypatch):
     render_loader = Mock(return_value=document)
     monkeypatch.setattr(emr_render, "_load_documents_from_bundle", list_loader)
     monkeypatch.setattr(emr_render, "_load_document_from_bundle", render_loader)
+    # CDM 共享读锁由 test_emr_documents_qc_data_lock 覆盖；此处只验证任务授权。
+    monkeypatch.setattr(qc_sichuan, "_acquire_cdm_read_lock", lambda: None)
     with TestClient(app) as client:
         yield SimpleNamespace(client=client, actor=actor, factory=factory, records=records,
                               list_loader=list_loader, render_loader=render_loader)
