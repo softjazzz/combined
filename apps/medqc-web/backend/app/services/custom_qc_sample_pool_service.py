@@ -132,6 +132,42 @@ def _parse_cas_timestamp(value: Any) -> Optional[datetime]:
     return parsed
 
 
+def _load_customer_test_removal_payload(value: Any) -> Dict[str, Any]:
+    """严格读取软移除证据载体；损坏或已有终态证据时拒绝覆盖。"""
+    if isinstance(value, dict):
+        payload = dict(value)
+    else:
+        text = str(value or "").strip()
+        if not text:
+            raise CustomerTestRecordConflictError(
+                "测试病历审计载体损坏，无法安全移除",
+                code="invalid_raw_payload",
+            )
+        try:
+            payload = json.loads(text)
+        except (TypeError, ValueError) as exc:
+            raise CustomerTestRecordConflictError(
+                "测试病历审计载体损坏，无法安全移除",
+                code="invalid_raw_payload",
+            ) from exc
+    if not isinstance(payload, dict):
+        raise CustomerTestRecordConflictError(
+            "测试病历审计载体损坏，无法安全移除",
+            code="invalid_raw_payload",
+        )
+    if "removal_audit" in payload:
+        raise CustomerTestRecordConflictError(
+            "测试病历已有移除审计，无法覆盖",
+            code="removal_audit_exists",
+        )
+    return payload
+
+
+def _utc_audit_timestamp(value: datetime) -> str:
+    normalized = value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+    return normalized.isoformat().replace("+00:00", "Z")
+
+
 def _parse_stored_age(age_year: Any, age_text: Any) -> Optional[int]:
     """只解析已存年龄（age_year 纯数字或“N岁”）；不从出生日期推算。"""
     year_text = _safe_text(age_year)
@@ -4954,12 +4990,38 @@ class CustomQCSamplePoolService:
         finally:
             session.close()
 
-    def remove_customer_test_record(self, *, item_id: str, expected_updated_at: Any) -> Dict[str, Any]:
+    def remove_customer_test_record(
+        self,
+        *,
+        item_id: str,
+        expected_updated_at: Any,
+        actor_id: str,
+    ) -> Dict[str, Any]:
         """软移除：不纳入批次并记录原因；CDM 行与历史结果保留，便于追溯。"""
+        actor = _safe_text(actor_id)
+        if not actor or actor.lower() == "anonymous":
+            raise ValueError("移除测试病历需要有效操作人标识")
         expected = _parse_cas_timestamp(expected_updated_at)
         session = _session()
         try:
-            self._lock_active_customer_test_item(session, item_id=item_id, expected_updated_at=expected)
+            row = self._lock_active_customer_test_item(
+                session,
+                item_id=item_id,
+                expected_updated_at=expected,
+            )
+            raw_payload = _load_customer_test_removal_payload(row.get("raw_payload_json"))
+            changed_at = _now_utc()
+            if expected is None:
+                raise CustomerTestRecordConflictError(
+                    "测试病历已被修改，请刷新后重试",
+                    code="stale",
+                )
+            raw_payload["removal_audit"] = {
+                "action": "remove_customer_test_record",
+                "actor_id": actor,
+                "occurred_at": _utc_audit_timestamp(changed_at),
+                "prior_updated_at": _utc_audit_timestamp(expected),
+            }
             self._cas_update_customer_test_item(
                 session,
                 item_id=item_id,
@@ -4967,14 +5029,16 @@ class CustomQCSamplePoolService:
                 values={
                     "include_in_batch_1": False,
                     "exclude_reason": CUSTOMER_TEST_REMOVED_REASON,
-                    "updated_at": _now_utc(),
+                    "raw_payload_json": _safe_json_dumps(raw_payload),
+                    "updated_at": changed_at,
                 },
             )
-            session.commit()
             updated = session.execute(
                 select(self._item_table).where(self._item_table.c.id == _safe_text(item_id))
             ).mappings().first()
-            return self._row_to_customer_test_record(dict(updated or {}))
+            result = self._row_to_customer_test_record(dict(updated or {}))
+            session.commit()
+            return result
         except Exception:
             session.rollback()
             raise

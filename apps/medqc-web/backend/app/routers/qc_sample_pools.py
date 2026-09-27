@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 from sqlalchemy import create_engine, text
 from sqlalchemy.pool import NullPool
 
+from ..core.audit import audit_event
 from ..core.response import get_trace_id, success_response
 from ..core.security import get_current_user, require_roles
 from ..database.connection import SessionLocal
@@ -687,11 +688,53 @@ async def remove_test_record(
     updated_at: str = Query(..., min_length=1, description="条目当前 updated_at，用于 CAS"),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
-    del current_user
+    actor_id = str(current_user.get("id") or current_user.get("user_id") or "").strip()
+    audit_details = {"item_id": item_id, "expected_updated_at": updated_at}
+    if not actor_id or actor_id.lower() == "anonymous":
+        audit_event(
+            request,
+            action="qc.sample_pools.test_records.remove",
+            resource="qc_sample_pool_item",
+            outcome="rejected",
+            details={**audit_details, "code": "missing_actor"},
+            current_user=current_user,
+        )
+        raise HTTPException(status_code=403, detail="当前用户缺少稳定标识，无法移除测试病历")
     try:
-        item = _service().remove_customer_test_record(item_id=item_id, expected_updated_at=updated_at)
-    except (CustomerTestRecordNotFoundError, CustomerTestRecordConflictError) as exc:
+        item = _service().remove_customer_test_record(
+            item_id=item_id,
+            expected_updated_at=updated_at,
+            actor_id=actor_id,
+        )
+    except CustomerTestRecordNotFoundError as exc:
+        audit_event(
+            request,
+            action="qc.sample_pools.test_records.remove",
+            resource="qc_sample_pool_item",
+            outcome="rejected",
+            details={**audit_details, "code": "not_found"},
+            current_user=current_user,
+        )
         _raise_test_record_error(exc)
+    except CustomerTestRecordConflictError as exc:
+        outcome = "conflict" if exc.code in {"stale", "inactive"} else "rejected"
+        audit_event(
+            request,
+            action="qc.sample_pools.test_records.remove",
+            resource="qc_sample_pool_item",
+            outcome=outcome,
+            details={**audit_details, "code": exc.code},
+            current_user=current_user,
+        )
+        _raise_test_record_error(exc)
+    audit_event(
+        request,
+        action="qc.sample_pools.test_records.remove",
+        resource="qc_sample_pool_item",
+        outcome="success",
+        details={"item_id": item_id, "prior_updated_at": updated_at},
+        current_user=current_user,
+    )
     return success_response(
         data=item,
         message="测试病历已移除",

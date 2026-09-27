@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import json
 from contextlib import nullcontext
-from datetime import datetime
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
 import sqlalchemy as sa
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException
+from fastapi.testclient import TestClient
 
+from app.core.security import get_current_user
 from app.database.models.cdm import InpatRegistration, PatientInformation
 from app.routers import qc_sample_pools
 from app.services import custom_qc_sample_pool_service as sample_pool_module
@@ -251,7 +253,9 @@ def test_write_operations_refuse_items_outside_fixed_pool(monkeypatch):
     _insert_item(session_factory, item_table, id="foreign", pool_id="pool-x")
 
     with pytest.raises(CustomerTestRecordNotFoundError):
-        service.remove_customer_test_record(item_id="foreign", expected_updated_at=_T0.isoformat())
+        service.remove_customer_test_record(
+            item_id="foreign", expected_updated_at=_T0.isoformat(), actor_id="qc-manager-1",
+        )
     with pytest.raises(CustomerTestRecordNotFoundError):
         service.update_customer_test_record_rules(
             item_id="foreign", rule_ids=[], expected_updated_at=_T0.isoformat(), allowed_rule_ids=set(),
@@ -264,15 +268,170 @@ def test_remove_is_soft_and_refuses_second_remove(monkeypatch):
     service, session_factory, item_table = _build_service(monkeypatch)
     _insert_item(session_factory, item_table)
 
-    item = service.remove_customer_test_record(item_id="ct-old", expected_updated_at=_T0.isoformat())
+    item = service.remove_customer_test_record(
+        item_id="ct-old", expected_updated_at=_T0.isoformat(), actor_id=" qc-manager-1 ",
+    )
 
     assert item["removed"] is True
     row = _read_item(session_factory, item_table, "ct-old")
     assert row["include_in_batch_1"] is False
     assert row["exclude_reason"] == "test_record_removed"
+    payload = json.loads(row["raw_payload_json"])
+    assert payload["case_title"] == "旧病历"
+    assert payload["document_count"] == 3
+    assert payload["selected_rule_ids"] == ["LX0609-001"]
+    assert payload["removal_audit"] == {
+        "action": "remove_customer_test_record",
+        "actor_id": "qc-manager-1",
+        "occurred_at": payload["removal_audit"]["occurred_at"],
+        "prior_updated_at": "2026-09-27T08:00:00.123456Z",
+    }
+    occurred_at = datetime.fromisoformat(payload["removal_audit"]["occurred_at"].replace("Z", "+00:00"))
+    assert occurred_at.tzinfo == timezone.utc
+    first_payload = row["raw_payload_json"]
+    first_updated_at = row["updated_at"]
     with pytest.raises(CustomerTestRecordConflictError) as inactive:
-        service.remove_customer_test_record(item_id="ct-old", expected_updated_at=row["updated_at"].isoformat())
+        service.remove_customer_test_record(
+            item_id="ct-old", expected_updated_at=row["updated_at"].isoformat(), actor_id="qc-manager-2",
+        )
     assert inactive.value.code == "inactive"
+    repeated = _read_item(session_factory, item_table, "ct-old")
+    assert repeated["raw_payload_json"] == first_payload
+    assert repeated["updated_at"] == first_updated_at
+
+
+@pytest.mark.parametrize("actor_id", ["", "   ", "anonymous", " Anonymous "])
+def test_remove_rejects_missing_actor_before_opening_session(monkeypatch, actor_id):
+    service, _session_factory, _item_table = _build_service(monkeypatch)
+
+    def _unexpected_session():
+        raise AssertionError("actor 校验失败时不应访问数据库")
+
+    monkeypatch.setattr(sample_pool_module, "_session", _unexpected_session)
+    with pytest.raises(ValueError, match="有效操作人"):
+        service.remove_customer_test_record(
+            item_id="ct-old", expected_updated_at=_T0.isoformat(), actor_id=actor_id,
+        )
+
+
+@pytest.mark.parametrize("raw_payload", ["{", "[]", '"patient raw text"'])
+def test_remove_fails_closed_on_invalid_raw_payload(monkeypatch, raw_payload):
+    service, session_factory, item_table = _build_service(monkeypatch)
+    _insert_item(session_factory, item_table, raw_payload_json=raw_payload)
+
+    with pytest.raises(CustomerTestRecordConflictError) as invalid:
+        service.remove_customer_test_record(
+            item_id="ct-old", expected_updated_at=_T0.isoformat(), actor_id="qc-manager-1",
+        )
+
+    assert invalid.value.code == "invalid_raw_payload"
+    row = _read_item(session_factory, item_table, "ct-old")
+    assert row["include_in_batch_1"] is True
+    assert row["exclude_reason"] == ""
+    assert row["raw_payload_json"] == raw_payload
+    assert row["updated_at"] == _T0
+
+
+def test_remove_rejects_existing_audit_without_rewriting_evidence(monkeypatch):
+    service, session_factory, item_table = _build_service(monkeypatch)
+    original = {
+        "case_title": "旧病历",
+        "removal_audit": {
+            "action": "remove_customer_test_record",
+            "actor_id": "first-actor",
+            "occurred_at": "2026-09-27T08:01:00Z",
+            "prior_updated_at": "2026-09-27T08:00:00.123456Z",
+        },
+    }
+    stored = json.dumps(original, ensure_ascii=False)
+    _insert_item(session_factory, item_table, raw_payload_json=stored)
+
+    with pytest.raises(CustomerTestRecordConflictError) as duplicate:
+        service.remove_customer_test_record(
+            item_id="ct-old", expected_updated_at=_T0.isoformat(), actor_id="second-actor",
+        )
+
+    assert duplicate.value.code == "removal_audit_exists"
+    row = _read_item(session_factory, item_table, "ct-old")
+    assert row["include_in_batch_1"] is True
+    assert row["raw_payload_json"] == stored
+    assert row["updated_at"] == _T0
+
+
+def test_remove_cas_failure_rolls_back_without_audit_evidence(monkeypatch):
+    service, session_factory, item_table = _build_service(monkeypatch)
+    _insert_item(session_factory, item_table)
+
+    def _fail_cas(_session, **_kwargs):
+        raise CustomerTestRecordConflictError("测试病历已被修改，请刷新后重试", code="stale")
+
+    monkeypatch.setattr(service, "_cas_update_customer_test_item", _fail_cas)
+    with pytest.raises(CustomerTestRecordConflictError) as stale:
+        service.remove_customer_test_record(
+            item_id="ct-old", expected_updated_at=_T0.isoformat(), actor_id="qc-manager-1",
+        )
+
+    assert stale.value.code == "stale"
+    row = _read_item(session_factory, item_table, "ct-old")
+    assert row["include_in_batch_1"] is True
+    assert "removal_audit" not in json.loads(row["raw_payload_json"])
+    assert row["updated_at"] == _T0
+
+
+def test_remove_update_failure_rolls_back_state_and_audit(monkeypatch):
+    service, session_factory, item_table = _build_service(monkeypatch)
+    _insert_item(session_factory, item_table)
+    bind = session_factory.kw["bind"]
+
+    def _fail_after_update(_conn, _cursor, statement, _parameters, _context, _executemany):
+        if statement.lstrip().upper().startswith("UPDATE ITEMS"):
+            raise RuntimeError("synthetic audit persistence failure")
+
+    sa.event.listen(bind, "after_cursor_execute", _fail_after_update)
+    try:
+        with pytest.raises(RuntimeError, match="audit persistence"):
+            service.remove_customer_test_record(
+                item_id="ct-old", expected_updated_at=_T0.isoformat(), actor_id="qc-manager-1",
+            )
+    finally:
+        sa.event.remove(bind, "after_cursor_execute", _fail_after_update)
+
+    row = _read_item(session_factory, item_table, "ct-old")
+    assert row["include_in_batch_1"] is True
+    assert row["exclude_reason"] == ""
+    assert "removal_audit" not in json.loads(row["raw_payload_json"])
+    assert row["updated_at"] == _T0
+
+
+def test_remove_readback_failure_rolls_back_state_and_audit(monkeypatch):
+    service, session_factory, item_table = _build_service(monkeypatch)
+    _insert_item(session_factory, item_table)
+    bind = session_factory.kw["bind"]
+    update_executed = False
+
+    def _fail_readback(_conn, _cursor, statement, _parameters, _context, _executemany):
+        nonlocal update_executed
+        normalized = statement.lstrip().upper()
+        if normalized.startswith("UPDATE ITEMS"):
+            update_executed = True
+        elif update_executed and normalized.startswith("SELECT"):
+            raise RuntimeError("synthetic readback failure")
+
+    sa.event.listen(bind, "before_cursor_execute", _fail_readback)
+    try:
+        with pytest.raises(RuntimeError, match="readback failure"):
+            service.remove_customer_test_record(
+                item_id="ct-old", expected_updated_at=_T0.isoformat(), actor_id="qc-manager-1",
+            )
+    finally:
+        sa.event.remove(bind, "before_cursor_execute", _fail_readback)
+
+    assert update_executed is True
+    row = _read_item(session_factory, item_table, "ct-old")
+    assert row["include_in_batch_1"] is True
+    assert row["exclude_reason"] == ""
+    assert "removal_audit" not in json.loads(row["raw_payload_json"])
+    assert row["updated_at"] == _T0
 
 
 def _patch_create_side_effects(monkeypatch, service):
@@ -449,6 +608,8 @@ async def test_router_update_rules_fails_closed_when_rule_set_unavailable(monkey
 async def test_router_remove_maps_inactive_conflict(monkeypatch):
     error = CustomerTestRecordConflictError("已移除", code="inactive")
     monkeypatch.setattr(qc_sample_pools, "_service", lambda: _RouterServiceStub(error))
+    events = []
+    monkeypatch.setattr(qc_sample_pools, "audit_event", lambda _request, **kwargs: events.append(kwargs))
 
     with pytest.raises(HTTPException) as exc_info:
         await qc_sample_pools.remove_test_record(
@@ -456,3 +617,115 @@ async def test_router_remove_maps_inactive_conflict(monkeypatch):
         )
     assert exc_info.value.status_code == 409
     assert exc_info.value.detail == "已移除"
+    assert events == [{
+        "action": "qc.sample_pools.test_records.remove",
+        "resource": "qc_sample_pool_item",
+        "outcome": "conflict",
+        "details": {"item_id": "ct-old", "expected_updated_at": "t", "code": "inactive"},
+        "current_user": {"id": "tester"},
+    }]
+
+
+@pytest.mark.asyncio
+async def test_router_remove_passes_actor_and_audits_only_after_success(monkeypatch):
+    stub = _RouterServiceStub()
+    events = []
+    monkeypatch.setattr(qc_sample_pools, "_service", lambda: stub)
+    monkeypatch.setattr(qc_sample_pools, "audit_event", lambda _request, **kwargs: events.append(kwargs))
+
+    response = await qc_sample_pools.remove_test_record(
+        request=_request(),
+        item_id="ct-old",
+        updated_at="2026-09-27T08:00:00.123456",
+        current_user={"id": " qc-manager-1 ", "email": "manager@test.local"},
+    )
+
+    assert response["success"] is True
+    assert stub.calls == [{
+        "item_id": "ct-old",
+        "expected_updated_at": "2026-09-27T08:00:00.123456",
+        "actor_id": "qc-manager-1",
+    }]
+    assert events == [{
+        "action": "qc.sample_pools.test_records.remove",
+        "resource": "qc_sample_pool_item",
+        "outcome": "success",
+        "details": {
+            "item_id": "ct-old",
+            "prior_updated_at": "2026-09-27T08:00:00.123456",
+        },
+        "current_user": {"id": " qc-manager-1 ", "email": "manager@test.local"},
+    }]
+    assert "旧病历" not in json.dumps(events, ensure_ascii=False)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("current_user", [{}, {"username": "legacy-only"}, {"id": "anonymous"}])
+async def test_router_remove_rejects_missing_stable_actor_without_service_call(
+    monkeypatch, current_user,
+):
+    stub = _RouterServiceStub()
+    events = []
+    monkeypatch.setattr(qc_sample_pools, "_service", lambda: stub)
+    monkeypatch.setattr(qc_sample_pools, "audit_event", lambda _request, **kwargs: events.append(kwargs))
+
+    with pytest.raises(HTTPException) as exc_info:
+        await qc_sample_pools.remove_test_record(
+            request=_request(), item_id="ct-old", updated_at="t", current_user=current_user,
+        )
+
+    assert exc_info.value.status_code == 403
+    assert stub.calls == []
+    assert len(events) == 1
+    assert events[0]["outcome"] == "rejected"
+    assert events[0]["details"] == {
+        "item_id": "ct-old", "expected_updated_at": "t", "code": "missing_actor",
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("error", "outcome", "code", "status"),
+    [
+        (CustomerTestRecordNotFoundError("不存在"), "rejected", "not_found", 404),
+        (CustomerTestRecordConflictError("已变化", code="stale"), "conflict", "stale", 409),
+        (CustomerTestRecordConflictError("载体损坏", code="invalid_raw_payload"), "rejected", "invalid_raw_payload", 409),
+        (CustomerTestRecordConflictError("证据已存在", code="removal_audit_exists"), "rejected", "removal_audit_exists", 409),
+    ],
+)
+async def test_router_remove_failure_never_emits_success_audit(
+    monkeypatch, error, outcome, code, status,
+):
+    events = []
+    monkeypatch.setattr(qc_sample_pools, "_service", lambda: _RouterServiceStub(error))
+    monkeypatch.setattr(qc_sample_pools, "audit_event", lambda _request, **kwargs: events.append(kwargs))
+
+    with pytest.raises(HTTPException) as exc_info:
+        await qc_sample_pools.remove_test_record(
+            request=_request(), item_id="ct-old", updated_at="t", current_user={"user_id": "qc-1"},
+        )
+
+    assert exc_info.value.status_code == status
+    assert [event["outcome"] for event in events] == [outcome]
+    assert events[0]["details"]["code"] == code
+    assert not any(event["outcome"] == "success" for event in events)
+
+
+def test_router_remove_role_dependency_rejects_unauthorized_user_before_service(monkeypatch):
+    app = FastAPI()
+    app.include_router(qc_sample_pools.router)
+    app.dependency_overrides[get_current_user] = lambda: {
+        "id": "doctor-1", "email": "doctor@test.local", "roles": ["doctor"],
+    }
+
+    def _unexpected_service():
+        raise AssertionError("越权请求不应触达服务")
+
+    monkeypatch.setattr(qc_sample_pools, "_service", _unexpected_service)
+    with TestClient(app) as client:
+        response = client.delete(
+            "/api/v1/qc/sample-pools/test-records/ct-old",
+            params={"updated_at": "2026-09-27T08:00:00.123456"},
+        )
+
+    assert response.status_code == 403

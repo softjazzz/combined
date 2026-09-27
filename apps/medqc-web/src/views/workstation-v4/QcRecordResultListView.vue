@@ -206,6 +206,14 @@
               />
               查看病历文书
             </button>
+            <QcRecordColumnSettings
+              v-model="visibleColumns"
+              class="qc-record-result-list-view__column-settings"
+              :user-id="currentUserId"
+              :care-phase="carePhase"
+              :available-columns="availableColumns"
+              :default-columns="defaultColumns"
+            />
           </div>
           <QcRecordResultTable
             :care-phase="carePhase"
@@ -214,6 +222,7 @@
             :active-record-key="activePreviewKey"
             :rows="rows"
             :selected-record-keys="selectedRecordKeys"
+            :visible-columns="visibleColumns"
             :empty-message="emptyMessage"
             @open-result="handleSelectPreview"
             @update:selected-record-keys="updateSelectedRecordKeys"
@@ -301,6 +310,7 @@ import { useRoute } from 'vue-router'
 import { ChevronDown, Download, FileText } from 'lucide-vue-next'
 
 import { exportFilteredLuxian0609RecordResults } from '@/services/sichuan-rule-workspace-service'
+import { useAuthStore } from '@/stores/auth'
 
 import QCRecordResultComparisonDrawer, {
   type QCRecordResultFocus,
@@ -313,6 +323,12 @@ import QcRecordResultTable, {
 } from './components/qc/QcRecordResultTable.vue'
 import QcRecordResultAnalysisPanel from './components/qc/QcRecordResultAnalysisPanel.vue'
 import QcRecordReviewPreview from './components/qc/QcRecordReviewPreview.vue'
+import QcRecordColumnSettings from './components/qc/QcRecordColumnSettings.vue'
+import {
+  QC_RECORD_COLUMN_OPTIONS,
+  defaultQcRecordColumns,
+  type QcRecordOptionalColumn,
+} from './components/qc/qcRecordColumnPreferences'
 import { resolveScoreCell, scoreSceneForCarePhase } from './components/qc/qcRecordScore'
 import QcRunSelectedControl from './components/qc/QcRunSelectedControl.vue'
 import RecordFilterTemplateBar from './components/qc/RecordFilterTemplateBar.vue'
@@ -328,6 +344,7 @@ const props = defineProps<{
 }>()
 
 const route = useRoute()
+const authStore = useAuthStore()
 const detailNotice = ref('')
 const exportNotice = ref('')
 const exporting = ref(false)
@@ -354,6 +371,10 @@ const startDate = ref('')
 const endDate = ref('')
 
 const isInpatient = computed(() => props.carePhase === 'inpatient')
+const currentUserId = computed(() => String(authStore.user?.id || '').trim())
+const availableColumns = QC_RECORD_COLUMN_OPTIONS.map((option) => option.key)
+const defaultColumns = defaultQcRecordColumns({ compactReview: true, showScore: true })
+const visibleColumns = ref<QcRecordOptionalColumn[]>([...defaultColumns])
 const pageTitle = computed(() => (isInpatient.value ? '运行病历质控' : '已出院病历质控结果'))
 const scopeLabel = computed(() => (isInpatient.value ? '固定范围：在院' : '固定范围：已出院'))
 
@@ -1189,6 +1210,11 @@ function closeResultDrawer() {
   min-height: 38px;
   padding: 0 15px;
   border-radius: 10px;
+}
+
+.qc-record-result-list-view__column-settings {
+  align-self: center;
+  margin-left: auto;
 }
 
 .qc-record-result-list-view__task-status {

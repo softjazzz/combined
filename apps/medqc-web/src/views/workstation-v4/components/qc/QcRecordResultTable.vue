@@ -4,12 +4,12 @@
     :class="{
       'qc-record-result-table--inpatient': carePhase === 'inpatient' || compactReview,
       'qc-record-result-table--compact-review': compactReview,
-      'qc-record-result-table--with-score': showScore,
+      'qc-record-result-table--with-score': isColumnVisible('score'),
     }"
     data-testid="qc-record-result-table"
   >
     <div class="qc-record-result-table__scroll">
-      <table class="qc-record-result-table__table">
+      <table class="qc-record-result-table__table" :style="compactTableStyle">
         <thead>
           <tr>
             <th scope="col" class="qc-record-result-table__selection-heading">
@@ -22,17 +22,39 @@
                 @change="togglePageSelection"
               />
             </th>
-            <th scope="col">
-              {{ compactReview ? '患者 / 科室' : '患者 / 住院号' }}
+            <th scope="col" class="qc-record-result-table__patient-heading">
+              {{ compactReview && !isColumnVisible('department') ? '患者 / 科室' : '患者 / 住院号' }}
             </th>
-            <th v-if="!compactReview" scope="col">科室 / 床位</th>
-            <th v-if="!compactReview" scope="col">
+            <th
+              v-if="isColumnVisible('department')"
+              scope="col"
+              class="qc-record-result-table__department-heading"
+            >
+              科室 / 床位
+            </th>
+            <th
+              v-if="isColumnVisible('time')"
+              scope="col"
+              class="qc-record-result-table__time-heading"
+            >
               {{ timeColumnLabel }}
             </th>
-            <th scope="col">问题摘要</th>
-            <th scope="col">最近质控</th>
             <th
-              v-if="showScore"
+              v-if="isColumnVisible('summary')"
+              scope="col"
+              class="qc-record-result-table__summary-heading"
+            >
+              问题摘要
+            </th>
+            <th
+              v-if="isColumnVisible('latestQc')"
+              scope="col"
+              class="qc-record-result-table__latest-qc-heading"
+            >
+              最近质控
+            </th>
+            <th
+              v-if="isColumnVisible('score')"
               scope="col"
               class="qc-record-result-table__score-heading"
             >
@@ -69,7 +91,7 @@
                 @change="toggleRowSelection(row.recordKey, $event)"
               />
             </td>
-            <td>
+            <td class="qc-record-result-table__patient-cell-column">
               <div class="qc-record-result-table__patient-cell">
                 <img
                   class="qc-record-result-table__avatar"
@@ -92,7 +114,7 @@
                     >
                   </span>
                   <span
-                    v-if="compactReview"
+                    v-if="compactReview && !isColumnVisible('department')"
                     class="qc-record-result-table__compact-meta"
                     :title="
                       [row.visitId || '待接入', row.department || '未分科室', row.bedNumber]
@@ -104,7 +126,7 @@
                       [row.department || '未分科室', row.bedNumber].filter(Boolean).join(' · ')
                     }}</span>
                   </span>
-                  <span v-else class="qc-record-result-table__visit-line">
+                  <span v-else-if="!compactReview" class="qc-record-result-table__visit-line">
                     <span
                       v-if="carePhase !== 'inpatient'"
                       class="qc-record-result-table__visit-label"
@@ -129,7 +151,10 @@
                 </span>
               </div>
             </td>
-            <td v-if="!compactReview">
+            <td
+              v-if="isColumnVisible('department')"
+              class="qc-record-result-table__department-cell"
+            >
               <span class="qc-record-result-table__department">
                 {{ row.department || '未分科室' }}
               </span>
@@ -137,10 +162,14 @@
                 row.bedNumber
               }}</span>
             </td>
-            <td v-if="!compactReview">
+            <td v-if="isColumnVisible('time')" class="qc-record-result-table__time-cell">
               {{ displayTime(row) }}
             </td>
-            <td class="qc-record-result-table__summary" :title="row.issueSummary">
+            <td
+              v-if="isColumnVisible('summary')"
+              class="qc-record-result-table__summary"
+              :title="row.issueSummary"
+            >
               <span
                 v-if="carePhase === 'inpatient' || compactReview"
                 class="qc-record-result-table__summary-items"
@@ -162,9 +191,14 @@
                 {{ row.issueSummary }}
               </template>
             </td>
-            <td>{{ formatDisplayTime(row.latestQcTime) }}</td>
             <td
-              v-if="showScore"
+              v-if="isColumnVisible('latestQc')"
+              class="qc-record-result-table__latest-qc-cell"
+            >
+              {{ formatDisplayTime(row.latestQcTime) }}
+            </td>
+            <td
+              v-if="isColumnVisible('score')"
               class="qc-record-result-table__score-cell"
               data-testid="qc-record-score"
             >
@@ -211,7 +245,7 @@
             </td>
           </tr>
           <tr v-if="rows.length === 0" class="qc-record-result-table__empty-row">
-            <td :colspan="(compactReview ? 5 : 7) + (showScore ? 1 : 0)">
+            <td :colspan="visibleColumnCount">
               {{ emptyMessage }}
             </td>
           </tr>
@@ -232,6 +266,10 @@ import {
   formatScoreValue,
   type QcRecordScoreCell,
 } from './qcRecordScore'
+import {
+  defaultQcRecordColumns,
+  type QcRecordOptionalColumn,
+} from './qcRecordColumnPreferences'
 
 export type QcRecordCarePhase = 'inpatient' | 'discharged'
 
@@ -290,6 +328,8 @@ const props = withDefaults(
     activeRecordKey?: string
     /** 显示“得分 / 等级”列（V5 运行/终末列表开启）；默认关闭以保持其他调用方列布局。 */
     showScore?: boolean
+    /** 可选列配置；省略时沿用原有 compactReview/showScore 列布局。 */
+    visibleColumns?: QcRecordOptionalColumn[]
   }>(),
   {
     selectedRecordKeys: () => [],
@@ -305,11 +345,32 @@ const emit = defineEmits<{
 }>()
 
 const timeColumnLabel = computed(() => (props.carePhase === 'inpatient' ? '入院时间' : '出院时间'))
+const effectiveVisibleColumns = computed(() =>
+  props.visibleColumns ??
+  defaultQcRecordColumns({ compactReview: props.compactReview, showScore: props.showScore }),
+)
+const visibleColumnCount = computed(() => 3 + effectiveVisibleColumns.value.filter(isColumnAvailable).length)
+const compactTableStyle = computed(() => {
+  if (!props.compactReview) return undefined
+  let minWidth = 600
+  if (isColumnVisible('department')) minWidth += 130
+  if (isColumnVisible('time')) minWidth += 160
+  if (isColumnVisible('score')) minWidth += 120
+  return { minWidth: `${minWidth}px` }
+})
 const allPageRowsSelected = computed(
   () =>
     props.rows.length > 0 &&
     props.rows.every((row) => props.selectedRecordKeys.includes(row.recordKey)),
 )
+
+function isColumnAvailable(column: QcRecordOptionalColumn): boolean {
+  return column !== 'score' || props.showScore
+}
+
+function isColumnVisible(column: QcRecordOptionalColumn): boolean {
+  return isColumnAvailable(column) && effectiveVisibleColumns.value.includes(column)
+}
 
 function displayTime(row: QcRecordResultRow): string {
   return formatDisplayTime(props.carePhase === 'inpatient' ? row.admissionTime : row.dischargeTime)
@@ -648,16 +709,16 @@ function togglePageSelection(event: Event) {
   border-bottom-color: rgba(29, 29, 31, 0.065);
 }
 
-.qc-record-result-table--inpatient .qc-record-result-table__row td:nth-child(2) {
+.qc-record-result-table--inpatient .qc-record-result-table__patient-cell-column {
   min-width: 190px;
 }
 
-.qc-record-result-table--inpatient .qc-record-result-table__row td:nth-child(3) {
+.qc-record-result-table--inpatient .qc-record-result-table__department-cell {
   min-width: 130px;
 }
 
-.qc-record-result-table--inpatient .qc-record-result-table__row td:nth-child(4),
-.qc-record-result-table--inpatient .qc-record-result-table__row td:nth-child(6) {
+.qc-record-result-table--inpatient .qc-record-result-table__time-cell,
+.qc-record-result-table--inpatient .qc-record-result-table__latest-qc-cell {
   min-width: 160px;
   color: #64748b;
   font-variant-numeric: tabular-nums;
@@ -784,7 +845,7 @@ function togglePageSelection(event: Event) {
   padding-left: 10px;
 }
 
-.qc-record-result-table--compact-review th:nth-child(1) {
+.qc-record-result-table--compact-review .qc-record-result-table__selection-heading {
   width: 36px;
 }
 .qc-record-result-table--compact-review .qc-record-result-table__table thead th {
@@ -792,14 +853,11 @@ function togglePageSelection(event: Event) {
   font-weight: 600;
   color: #525e6e;
 }
-.qc-record-result-table--compact-review th:nth-child(2) {
+.qc-record-result-table--compact-review .qc-record-result-table__patient-heading {
   width: 240px;
 }
-.qc-record-result-table--compact-review th:nth-child(4) {
+.qc-record-result-table--compact-review .qc-record-result-table__latest-qc-heading {
   width: 148px;
-}
-.qc-record-result-table--compact-review th:nth-child(5) {
-  width: 46px;
 }
 /* 得分列插在“最近质控”之后：按类名重新指定列宽，避免 nth-child 错位。 */
 .qc-record-result-table--compact-review.qc-record-result-table--with-score .qc-record-result-table__table {
@@ -833,7 +891,7 @@ function togglePageSelection(event: Event) {
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
-.qc-record-result-table--compact-review th:nth-child(3),
+.qc-record-result-table--compact-review .qc-record-result-table__summary-heading,
 .qc-record-result-table--compact-review .qc-record-result-table__summary {
   text-align: left;
 }
@@ -871,7 +929,7 @@ function togglePageSelection(event: Event) {
   padding-top: 8px;
   padding-bottom: 8px;
 }
-.qc-record-result-table--compact-review .qc-record-result-table__row td:nth-child(4) {
+.qc-record-result-table--compact-review .qc-record-result-table__latest-qc-cell {
   color: #727b87;
   font-size: 13px;
   font-variant-numeric: tabular-nums;

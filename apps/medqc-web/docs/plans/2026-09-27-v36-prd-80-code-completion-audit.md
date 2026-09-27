@@ -2,27 +2,27 @@
 
 ## 基线与结论
 
-- 核对日期：2026-09-27；代码基线：`e1703611c`；分支：`codex/v36-manual-gap-drilldown-20260922`。
+- 核对日期：2026-09-27；首次盘点基线：`e1703611c`；最新增量为滚动计划第90节的列配置与移除审计（在 `fc418daa7` 上开发）；分支：`codex/v36-manual-gap-drilldown-20260922`。首次盘点12完整/41部分/27未实现的历史结论保留于第89节，本表为增量后的代码状态。
 - 分母固定为 `docs/PRD-内涵质控V3.6总需求与差距矩阵.md` 中带 P0/P1/P2/P3 的 80 个功能行，按原文顺序编号。没有删除外部阻塞项，也没有把新增技术工作算成额外完成项。
 - 本清单评估代码，不替代原矩阵的业务覆盖/验收状态。部署未做、浏览器未验收，不单独导致代码降级；但真实接口缺失、入口停用、场景身份无法成立、必需动作未实现，会影响代码完整性。
 
 | 代码状态 | 项数 | 占全部80项 |
 | --- | ---: | ---: |
-| 代码完整 | 12 | 15% |
-| 部分实现 | 41 | 51.25% |
-| 未实现 | 27 | 33.75% |
+| 代码完整 | 14 | 17.5% |
+| 部分实现 | 40 | 50% |
+| 未实现 | 26 | 32.5% |
 | 合计 | 80 | 100% |
 
-**整项代码完成率为12/80 = 15%。有直接功能实现的条目为53/80 = 66.25%，但66.25%不是完成率，也不是工时进度。** 部分项不统一按50%折算；一行可能同时要求多个动作或多个场景，各行工作量也不相等。剩余68项不等于还有85%的开发工时。
+**整项代码完成率为14/80 = 17.5%。有直接功能实现的条目为54/80 = 67.5%，但67.5%不是完成率，也不是工时进度。** 部分项不统一按50%折算；一行可能同时要求多个动作或多个场景，各行工作量也不相等。剩余66项不等于还有82.5%的开发工时。
 
-代码完整项：02、03、06、22、35、37、59、63、73、74、77、80。
+代码完整项：02、03、06、22、26、35、37、59、63、73、74、77、79、80。
 
 | 模块 | 完整 | 部分 | 未实现 | 总数 |
 | --- | ---: | ---: | ---: | ---: |
 | 登录、工作台、门急诊（01–20） | 3 | 8 | 9 | 20 |
-| 运行、终末、任务（21–43） | 3 | 17 | 3 | 23 |
+| 运行、终末、任务（21–43） | 4 | 17 | 2 | 23 |
 | 统计分析（44–56） | 0 | 7 | 6 | 13 |
-| 规则、文书、测试病历（57–80） | 6 | 9 | 9 | 24 |
+| 规则、文书、测试病历（57–80） | 7 | 8 | 9 | 24 |
 
 ## 判定方法
 
@@ -67,7 +67,7 @@
 | 23 | 缺陷列表操作 | 部分实现 | 旧运行页有缺陷动作与接口；V5可信全运行范围、整改派发、医生通知未贯通。 | `src/views/dashboard/records/RunningRecordsViewNew.vue:780` | `fcdb32852` |
 | 24 | 病历详情联审 | 部分实现 | 三坐标文书、审核、相邻病例导航和人工缺陷已接；完整运行范围与精确命中片段仍缺。 | `src/views/workstation-v4/QcRecordResultListView.vue:266` | `348ad8b3a` |
 | 25 | 病历列表批量操作 | 部分实现 | 任务抽样/重跑基础存在；运行列表勾选后直接批量重跑及统一进度尚未闭环。 | `backend/app/services/task_sampling_service.py:299`；`src/views/workstation-v4/QcRecordResultListView.vue:725` | `2102a39b8` |
-| 26 | 自定义列 | 未实现 | 运行病历列表没有用户保存/恢复列配置；报表页的本地列配置不算本项。 | `src/views/workstation-v4/components/qc/QcRecordResultTable.vue:1` | 无本项专项交付 |
+| 26 | 自定义列 | 代码完整 | 运行列表列显隐、恢复默认与用户/阶段隔离的浏览器持久化已接；固定身份/选择/操作列，存储异常失败提示，保留旧布局。非跨设备同步。 | `src/views/workstation-v4/components/qc/QcRecordColumnSettings.vue:1`；`src/views/workstation-v4/components/qc/qcRecordColumnPreferences.ts:1` | 第90节专项提交 |
 | 27 | 默认筛选与快捷筛选 | 部分实现 | 审核快捷项、默认模板和重置已接；缺陷临床申诉/待整改默认分区未完成。 | `src/views/workstation-v4/components/qc/RecordFilterTemplateBar.vue:176` | `223d2f6e5` |
 | 28 | 详情分区与结构化文书 | 部分实现 | 结果、人工缺陷、文书可查看；五类分区及逐条命中片段定位未齐。 | `src/views/workstation-v4/components/qc/QcRecordReviewPreview.vue:142` | `348ad8b3a` |
 | 29 | 病历级操作与操作记录 | 部分实现 | 病历通过/存疑与按三坐标操作时间线已接；改标准、催办/通知等动作与相应历史未齐。 | `backend/app/routers/record_reviews.py:1`；`backend/app/services/case_operation_timeline_service.py:283` | `fcdb32852`、`b62fa9790` |
@@ -130,13 +130,14 @@
 | 76 | 导出测试病历 | 未实现 | 固定池列表无标准测试病历文件勾选导出，结果报告导出不是此功能。 | `src/views/test-medical-records/TestMedicalRecordsView.vue:45` | 无专项交付 |
 | 77 | 编辑测试病历 | 代码完整 | 基本信息及文书可改，派生新版本并事务标记旧版本，CAS及前后端测试已做。 | `src/views/test-medical-records/components/TestRecordEditDrawer.vue:75`；`backend/tests/unit/test_customer_test_record_management.py:307` | `1b81e6fdb` |
 | 78 | 复制测试病历 | 未实现 | 新固定池无复制命令/API；旧页复制仅模拟成功，编辑派生版本不当作复制操作。 | `src/views/medical-records/MedicalRecordsView.vue:865` | 无专项交付 |
-| 79 | 删除测试病历 | 部分实现 | 确认、真实软移除、权限与CAS已接；未记录操作者及独立删除审计。 | `src/views/test-medical-records/TestMedicalRecordsView.vue:390`；`backend/app/routers/qc_sample_pools.py:683` | `1b81e6fdb` |
+| 79 | 删除测试病历 | 代码完整 | 确认、软移除、权限与CAS已接；原条目同事务保存操作者/UTC时间/旧版本审计，损坏载荷和重复请求拒绝，回读失败回滚；保留CDM与历史结果。 | `src/views/test-medical-records/TestMedicalRecordsView.vue:390`；`backend/app/services/custom_qc_sample_pool_service.py:4993` | `1b81e6fdb`；第90节专项提交 |
 | 80 | 查看应用质控点 | 代码完整 | 列表及弹窗真实显示关联规则ID/名称，后端归属校验与关联持久化有测试。 | `src/views/test-medical-records/TestMedicalRecordsView.vue:146`；`backend/app/services/custom_qc_sample_pool_service.py:4916` | `1b81e6fdb` |
 
 ## 最近提交实际补齐了什么
 
 | 提交 | 对应条目 | 不能扩大成的结论 |
 | --- | --- | --- |
+| 第90节：列配置与软移除审计 | 26由未实现升为完整，79由部分升为完整 | 不等于跨设备列配置同步、数据库部署或真实病例验收 |
 | `e1703611c` 全场景质控员工作分析 | 50、51、55的共用事件聚合及页面 | 不等于运行、终末分别可统计；不等于整改报表已完成 |
 | `43442c4b9` 当前在院质量报表 | 45、46、48、49、55的相关子能力 | 不等于完整运行/终末范围、七类整改状态或核心制度报表完成 |
 | `8e1af54e9`、`10f2a9592` 评分标准前后端 | 57–61；59代码完整 | 不等于门急诊规则来源、科室/医生生效范围全部完成 |
@@ -148,16 +149,18 @@
 
 | 层级 | 本次结论 |
 | --- | --- |
-| 代码完成 | 12项完整、41项部分、27项未实现；上述是当前代码覆盖，不是本轮净新增量 |
+| 代码完成 | 14项完整、40项部分、26项未实现；第90节净新增2项完整，其余保持首次盘点判定 |
 | 非生产验证 | 历史各批有不同范围的单测/合成PG/只读冒烟，不能给80项统一通过率；最新报表及人员分析只读PG窗口为空，不是非空正向验收 |
 | 业务库部署 | 本开发批次未完成部署；不能把隔离库revision62当业务库已升级 |
 | 真实病例与浏览器验收 | 未对80项形成逐项签收清单；本次代码审计不能代替业务验收 |
 
-关键测试证据入口（此次核对源文件与历史运行记录，没有为了文档重复跑全套业务测试）：
+关键测试证据入口（首次盘点读取历史记录；第90节功能开发另有集中复验）：
 
 - 02：`tests/unit/router/route-permission-matrix.spec.ts`、`backend/tests/unit/test_workstation_data_scope.py`。
 - 03/06：`backend/tests/unit/test_task_todos.py`、`backend/tests/unit/test_tasks_todo_large_scope.py`、`tests/unit/views/workstation/HomeTaskTodos.spec.ts`、`tests/unit/components/dashboard/TodoBoard.spec.ts`。
 - 22：`backend/tests/unit/test_filter_template_service.py`、`backend/tests/unit/test_filter_templates_api.py`。
+- 26：`QcRecordColumnSettings.spec.ts`、`qcRecordColumnPreferences.spec.ts`、`QcRecordResultTable.spec.ts`；合成组件浏览器检查显隐、刷新保持、恢复默认及390px窄屏。
+- 79：`backend/tests/unit/test_customer_test_record_management.py`，35项覆盖权限、CAS、持久审计、原载荷保留与回读失败回滚；不是实际PG写入验收。
 - 35/37：`backend/tests/unit/test_task_detail_scope.py`、`backend/tests/unit/test_task_progress_scope.py`、`backend/tests/unit/test_task_stats_scope.py`。大规模真实PostgREST的详情取数完整性仍需专项验收。
 - 59/63：`tests/unit/views/qc/ScoringStandardsView.spec.ts`、`backend/tests/unit/test_rule_set_version_service.py`、`src/views/dashboard/quality-control/__tests__/QualityControlPointManagement.spec.ts`。
 - 73/74/77/80：`backend/tests/unit/test_customer_test_record_management.py`及相关合成病历创建测试；不同人口学信息、文书类型和真实数据库行为仍需集成验收。

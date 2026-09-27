@@ -86,6 +86,83 @@ describe('QcRecordResultTable', () => {
     expect(normal.get('tbody td').attributes('colspan')).toBe('7')
   })
 
+  it('自定义列仅隐藏选配列，选择、患者和操作列始终保留且表头与单元格对应', () => {
+    const wrapper = mount(QcRecordResultTable, {
+      props: {
+        carePhase: 'inpatient',
+        rows,
+        showScore: true,
+        visibleColumns: ['summary', 'score'],
+      },
+    })
+
+    expect(wrapper.findAll('thead th').map((item) => item.text())).toEqual([
+      '',
+      '患者 / 住院号',
+      '问题摘要',
+      '得分 / 等级',
+      '查看结果',
+    ])
+    expect(wrapper.findAll('tbody tr[data-record-key] td')).toHaveLength(5)
+    expect(wrapper.find('input[aria-label="选择当前页全部病历"]').exists()).toBe(true)
+    expect(wrapper.find('.qc-record-result-table__patient-cell').exists()).toBe(true)
+    expect(wrapper.find('.qc-record-result-table__action-cell').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('科室 / 床位')
+    expect(wrapper.text()).not.toContain('入院时间')
+    expect(wrapper.text()).not.toContain('最近质控')
+  })
+
+  it('自定义列空态 colspan 使用实际可见列数', () => {
+    const wrapper = mount(QcRecordResultTable, {
+      props: {
+        carePhase: 'discharged',
+        rows: [],
+        showScore: true,
+        visibleColumns: ['time', 'latestQc'],
+      },
+    })
+
+    expect(wrapper.findAll('thead th')).toHaveLength(5)
+    expect(wrapper.get('tbody td').attributes('colspan')).toBe('5')
+  })
+
+  it('全部选配列隐藏时仍保留选择、患者和操作三列', () => {
+    const wrapper = mount(QcRecordResultTable, {
+      props: {
+        carePhase: 'inpatient',
+        rows,
+        showScore: true,
+        visibleColumns: [],
+      },
+    })
+
+    expect(wrapper.findAll('thead th').map((item) => item.text())).toEqual([
+      '',
+      '患者 / 住院号',
+      '查看结果',
+    ])
+    expect(wrapper.findAll('tbody tr[data-record-key] td')).toHaveLength(3)
+  })
+
+  it('省略自定义列配置时不改变 showScore=false 与 compactReview 默认列', () => {
+    const normal = mount(QcRecordResultTable, {
+      props: { carePhase: 'inpatient', rows, showScore: false },
+    })
+    const compact = mount(QcRecordResultTable, {
+      props: { carePhase: 'inpatient', rows, compactReview: true, showScore: false },
+    })
+
+    expect(normal.findAll('thead th')).toHaveLength(7)
+    expect(normal.text()).not.toContain('得分 / 等级')
+    expect(compact.findAll('thead th').map((item) => item.text())).toEqual([
+      '',
+      '患者 / 科室',
+      '问题摘要',
+      '最近质控',
+      '预览',
+    ])
+  })
+
   it('运行页只按展示分隔符分组摘要，保留原文和未知说明，不影响终末页', () => {
     const issueSummary = '确定问题 2 · 待核实 18 · 待判断 1 · 自定义说明'
     const wrapper = mount(QcRecordResultTable, {
