@@ -27,7 +27,7 @@
 | 4 | 系统配置剩余部分：连接配置、执行日志、首页抽取设置、模型性能、模型配置 | `components/sync-console/ConnectionStudio.vue`、`SyncRunPanel.vue`、`components/system-config/*`、`components/LLMApiConfig.vue` | 表单 / 设置（SystemConfigV71） | 完成（见执行记录） |
 | 5 | 客户样本验证 `customer-sample-validation` | `workstation-v4/CustomerSampleValidationView.vue` | 列表 + 预览 | 完成（见执行记录） |
 | 6 | 质控反馈记录 `qc-feedback-demo` | `workstation-v4/QcResultFeedbackDemoListView.vue` | 列表 + 预览 | 完成（见执行记录） |
-| 7 | 手术分级目录 `customer-sample-validation/surgery-catalog` | `workstation-v4/components/SurgeryProcedureCatalogView.vue` | 目录 | 待办 |
+| 7 | 手术分级目录 `customer-sample-validation/surgery-catalog` | `workstation-v4/components/SurgeryProcedureCatalogView.vue` | 目录 | 完成（见执行记录） |
 | 8 | 自定义质控点 `rules/custom-workspace` | `views/rules/CustomRuleWorkspaceView.vue` | 目录 + 编辑器（先出设计稿） | 待办 |
 | 9 | 统计分析 `stats` | `workstation-v4/LuxianQcAnalyticsView.vue` | 概览 | 待办 |
 | 10 | DRG/DIP 分析、ICD 编码查询、数据上传 `drg/*` `icd` `upload` | `workstation-v4/WorkstationV2View.vue` 及其子组件 | 概览 / 目录 / 表单 | 待办 |
@@ -77,3 +77,4 @@
 | 2026-09-27 | 4 系统配置其余页签 | 首页抽取设置、模型性能、模型配置三个页签的面板加内边距，内部 `ds-*` 白卡改为半透明子容器，分组小标题统一；模型配置英文眉标改为中文「模型与参数」。高级区连接配置、执行日志面板的 Tailwind 白底改为透明、输入框统一。覆盖只写在 `system-config.css` 内，不改共享的 `settings-design-system.css`，旧版后台不受影响。相关 3 个测试文件 43 项、类型检查通过。首页抽取与模型配置两页 1440 截图核对；模型性能页签与高级区需实施账号，演示账号无权限，未能截图 |
 | 2026-09-27 | 5 客户样本验证 | 标题与页面级操作移出控制台卡片，改为标准页头（眉标 + 40px 标题）；去掉 14 处强制 `!rounded-lg`，按钮统一胶囊；控制台、病历池、底部操作坞改为玻璃卡，规则集卡片选中态改为品牌蓝描边，表格与分页统一 v7.1。`customer-sample-refined.css` 整份重写为 v7.1 覆盖层（对基础样式里的 `!important` 圆角做同级覆盖）。页面 67 项单测、类型检查通过，1440/1180 截图核对 |
 | 2026-09-27 | 6 质控反馈记录 | 页头改为眉标 + 40px 标题，刷新按钮改为玻璃胶囊；四栏指标加定制图标、数值统一中性色（零值不强调）；列表改为玻璃卡，科室与提交时间不再逐字换行，反馈类型改为语义胶囊。样式整块重写（约 200 行，全部基于 Token）。单测 2 项、类型检查通过，1440 截图核对 |
+| 2026-09-27 | 7 手术分级目录 | 页头改为「规则 · 只读配置」眉标 + 40px 标题，工作台改为玻璃卡，统计项（即分类筛选）选中态改为白色浮起胶囊，编码改为浅蓝等宽胶囊，按钮、表格、分页统一 v7.1。在原 scoped 样式末尾追加同选择器覆盖块。单测 1 项、类型检查通过，1440 截图核对 |
