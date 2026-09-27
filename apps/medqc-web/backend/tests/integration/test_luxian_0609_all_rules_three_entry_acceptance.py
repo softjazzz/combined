@@ -961,3 +961,87 @@ def test_customer_exits_choose_same_safe_text_across_aliases(
     _entry_job_ids(app=app, workspace=workspace, pool_id=pool_id, sample_item_id=sample_id,
                    workspace_rule_ids=[rule_id], on_terminal=verify)
     assert len(checked) == 3
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("rule_id,missing", [
+    ("LX0609-04-01-04", ["precautions"]),
+    ("LX0609-04-01-05", []),
+])
+def test_preop_published_documents_survive_worker_store_and_api(
+    monkeypatch, _isolated_database, rule_id, missing,
+):
+    """固定合法发布事实，复现 Worker 误删 documents；三个入口实际落库并读回。"""
+    from app.services.luxian_0609.native_preop_content_execution import RULE_FIELDS, RULE_SOURCES
+    from app.services.luxian_0609.surgery_document_result_mapping import (
+        safe_surgery_document_customer_display_facts,
+    )
+
+    engine, workspace = _isolated_database
+    pool_service = _install_sample_pool_sqlite(monkeypatch, engine)
+    _install_evidence_fixture(monkeypatch, consultation_row=False)
+    service = sichuan_qc_service.SichuanQCService({
+        "provider_code": "isolated", "model": "stable-semantic",
+        "allow_mock_when_unconfigured": True, "source": "preop-transport",
+    })
+    _wire_production_entry(monkeypatch, workspace, pool_service, _settings(), service)
+    facts = {
+        "verification_kind": "preop_content_incomplete" if missing else "preop_content_complete",
+        "target_document": RULE_SOURCES[rule_id],
+        "checked_fields": list(RULE_FIELDS[rule_id]),
+        "missing_fields": missing,
+        "documents": [{
+            "document_index": index, "event_index": None,
+            "association_state": "not_required", "missing_fields": missing,
+        } for index in range(1, 52)],
+    }
+    assert safe_surgery_document_customer_display_facts(rule_id=rule_id, raw=facts) == facts
+    status = "non_compliant" if missing else "compliant"
+    original = luxian_execution.aggregate_luxian_0609_results
+    published = {}
+
+    def inject(**kwargs):
+        result = original(**kwargs)
+        assert len(result) == 1
+        result[0].update(
+            status=status, result_status=status, display_status=status, is_compliant=not bool(missing),
+            reason_code="requirement_violated" if missing else "requirement_satisfied",
+            customer_display_facts=deepcopy(facts), evidence=[], customer_evidence=[],
+            conclusion="术前文书核对完成。", suggestion="请逐份核对术前文书。",
+        )
+        published[kwargs["audit_context"]["visit_id"]] = deepcopy(result[0])
+        return result
+
+    monkeypatch.setattr(luxian_execution, "aggregate_luxian_0609_results", inject)
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", CustomQCWorkspaceService)
+    app = _api_app(service)
+
+    def verify(job_id, job, _ids):
+        assert job["status"] == "completed", job.get("error_message")
+        table = workspace._record_result_envelope_table
+        with engine.connect() as connection:
+            rows = connection.execute(sa.select(table).where(table.c.job_id == job_id)).mappings().all()
+        assert rows
+        for row in rows:
+            saved = json.loads(row["envelope_json"])["items"][0]
+            assert _business_content(saved) == _business_content(published[row["visit_id"]])
+            assert saved["customer_display_facts"] == facts
+        latest = _read_canonical(app, job_id, _RECORD_A, [rule_id])[rule_id]
+        assert _business_content(latest) == _business_content(published[_RECORD_A["visit_id"]])
+        with TestClient(app) as client:
+            response = client.get(f"/api/v1/qc/sichuan/workspace/batch-jobs/{job_id}")
+        assert response.status_code == 200, response.text
+        for item in response.json()["data"]["items"]:
+            assert item["customer_display_facts"] == facts
+            assert item["status"] == status
+        # 非空但缺少文书明细的正式事实仍必须拒绝，不能以放宽合同修复。
+        from app.services.qc_workspace.canonical_result_store import validated_customer_explanation
+        invalid = deepcopy(published[_RECORD_A["visit_id"]])
+        invalid["customer_display_facts"].pop("documents")
+        with pytest.raises(ValueError):
+            validated_customer_explanation(invalid, rule_id=rule_id, status=status)
+
+    pool_id, sample_id = _create_ready_sample_pool(engine, pool_service)
+    jobs = _entry_job_ids(app=app, workspace=workspace, pool_id=pool_id,
+                          sample_item_id=sample_id, workspace_rule_ids=[rule_id], on_terminal=verify)
+    assert len(jobs) == 3

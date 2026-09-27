@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import nullcontext
+from copy import deepcopy
 from datetime import datetime, timezone
 import logging
 import re
@@ -3025,11 +3026,17 @@ async def run_sichuan_workspace_batch_job(
                     }
                     customer_display_facts = eval_item.get("customer_display_facts")
                     if isinstance(customer_display_facts, dict):
-                        issue_item["customer_display_facts"] = _sanitize_trace_value(
-                            customer_display_facts,
-                            set(),
-                            max_text=120,
-                            list_limits={"recommendation_evidence": 96},
+                        # 正式发布事实由规则族合同校验；任务装配只复制，不能套用
+                        # trace 清洗（会删除 documents 明细并截断列表/字符串）。
+                        issue_item["customer_display_facts"] = (
+                            deepcopy(customer_display_facts)
+                            if use_luxian_customer_results
+                            else _sanitize_trace_value(
+                                customer_display_facts,
+                                set(),
+                                max_text=120,
+                                list_limits={"recommendation_evidence": 96},
+                            )
                         )
                     if use_luxian_customer_results:
                         # 服务层仅对正式发布结果提供这些文案字段；此处原样搬运，
