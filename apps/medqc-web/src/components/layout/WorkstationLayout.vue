@@ -5,29 +5,47 @@
   >
     <!-- 侧栏：分组标题 + 平铺入口（配置见 workstationNav.ts） -->
     <aside class="ws-sider">
-      <RouterLink
-        :to="WORKSTATION_BASE"
-        class="ws-brand"
-        aria-label="病案质控系统首页"
-      >
-        <span
-          class="ws-brand__mark"
-          aria-hidden="true"
+      <div class="ws-sider__head">
+        <RouterLink
+          :to="WORKSTATION_BASE"
+          class="ws-brand"
+          aria-label="病案质控系统首页"
         >
-          <MqIcon
-            name="rules"
-            color="#FFFFFF"
-            :size="18"
+          <span
+            class="ws-brand__mark"
+            aria-hidden="true"
+          >
+            <MqIcon
+              name="rules"
+              color="#FFFFFF"
+              :size="18"
+            />
+          </span>
+          <span
+            v-if="!collapsed"
+            class="ws-brand__copy"
+          >
+            <span class="ws-brand__title">病案质控系统</span>
+            <span class="ws-brand__subtitle">Medical Record QC</span>
+          </span>
+        </RouterLink>
+        <button
+          type="button"
+          class="ws-sider__toggle"
+          :aria-label="collapsed ? '展开侧栏' : '收起侧栏'"
+          :aria-expanded="!collapsed"
+          @click="toggleCollapsed"
+        >
+          <PanelLeftOpen
+            v-if="collapsed"
+            aria-hidden="true"
           />
-        </span>
-        <span
-          v-if="!collapsed"
-          class="ws-brand__copy"
-        >
-          <span class="ws-brand__title">病案质控系统</span>
-          <span class="ws-brand__subtitle">Medical Record QC</span>
-        </span>
-      </RouterLink>
+          <PanelLeftClose
+            v-else
+            aria-hidden="true"
+          />
+        </button>
+      </div>
 
       <nav
         class="ws-nav"
@@ -73,69 +91,19 @@
         </section>
       </nav>
 
-      <button
-        type="button"
-        class="ws-sider__toggle"
-        :aria-label="collapsed ? '展开侧栏' : '收起侧栏'"
-        :aria-expanded="!collapsed"
-        @click="toggleCollapsed"
-      >
-        <PanelLeftOpen
-          v-if="collapsed"
-          aria-hidden="true"
-        />
-        <PanelLeftClose
-          v-else
-          aria-hidden="true"
-        />
-        <span v-if="!collapsed">收起</span>
-      </button>
-    </aside>
-
-    <div class="ws-main">
-      <header class="ws-header">
-        <nav
-          class="ws-breadcrumb"
-          aria-label="面包屑"
+      <!-- 账号区：版本状态、通知、账号菜单（原顶栏内容） -->
+      <div class="ws-sider__footer">
+        <div
+          v-if="!collapsed"
+          class="ws-sider__build"
         >
-          <ol>
-            <li
-              v-for="(crumb, index) in breadcrumb"
-              :key="`${index}-${crumb}`"
-              :aria-current="index === breadcrumb.length - 1 ? 'page' : undefined"
-            >
-              {{ crumb }}
-            </li>
-          </ol>
-        </nav>
-
-        <div class="ws-header__actions">
-          <RuntimeBuildStatus />
-
-          <a-popover
-            placement="bottomRight"
-            trigger="click"
+          <RuntimeBuildStatus placement="rightBottom" />
+        </div>
+        <div class="ws-account">
+          <a-dropdown
+            :trigger="['click']"
+            placement="topLeft"
           >
-            <template #content>
-              <div class="ws-notice">
-                <div class="ws-notice__title">
-                  通知
-                </div>
-                <p class="ws-notice__empty">
-                  暂无通知
-                </p>
-              </div>
-            </template>
-            <button
-              type="button"
-              class="ws-icon-button"
-              aria-label="通知"
-            >
-              <Bell aria-hidden="true" />
-            </button>
-          </a-popover>
-
-          <a-dropdown :trigger="['click']">
             <button
               type="button"
               class="ws-user"
@@ -145,14 +113,13 @@
                 class="ws-user__avatar"
                 aria-hidden="true"
               >{{ roleLabel.slice(0, 1) }}</span>
-              <span class="ws-user__meta">
+              <span
+                v-if="!collapsed"
+                class="ws-user__meta"
+              >
                 <span class="ws-user__role">{{ roleLabel }}</span>
                 <span class="ws-user__email">{{ authStore.user?.email || '' }}</span>
               </span>
-              <ChevronDown
-                class="ws-user__caret"
-                aria-hidden="true"
-              />
             </button>
             <template #overlay>
               <a-menu class="ws-user-menu">
@@ -185,9 +152,34 @@
               </a-menu>
             </template>
           </a-dropdown>
-        </div>
-      </header>
 
+          <a-popover
+            placement="rightBottom"
+            trigger="click"
+          >
+            <template #content>
+              <div class="ws-notice">
+                <div class="ws-notice__title">
+                  通知
+                </div>
+                <p class="ws-notice__empty">
+                  暂无通知
+                </p>
+              </div>
+            </template>
+            <button
+              type="button"
+              class="ws-icon-button"
+              aria-label="通知"
+            >
+              <Bell aria-hidden="true" />
+            </button>
+          </a-popover>
+        </div>
+      </div>
+    </aside>
+
+    <div class="ws-main">
       <!-- DRG/DIP 分析：一个导航入口，子页在此切换，地址不变 -->
       <nav
         v-if="drgActiveTab"
@@ -233,7 +225,6 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   Bell,
-  ChevronDown,
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
@@ -251,7 +242,6 @@ import {
   filterVisibleNav,
   findActiveNav,
   findDrgSectionTab,
-  resolveBreadcrumb,
   type NavLocation,
   type NavRouteLike,
 } from './workstationNav'
@@ -328,7 +318,6 @@ const navRoute = computed<NavRouteLike>(() => ({
 }))
 
 const activeKey = computed(() => findActiveNav(WORKSTATION_NAV, navRoute.value)?.item.key ?? '')
-const breadcrumb = computed(() => resolveBreadcrumb(WORKSTATION_NAV, navRoute.value))
 const drgActiveTab = computed(() => findDrgSectionTab(navRoute.value))
 
 const handleLogout = async () => {
@@ -340,7 +329,7 @@ const handleLogout = async () => {
 <style scoped>
 @import '../../styles/source-han-sans-sc.css';
 
-/* v7.1 液态玻璃外壳：光晕底 + 悬浮玻璃侧栏 + 半透明顶栏 */
+/* v7.1 液态玻璃外壳：光晕底 + 悬浮玻璃侧栏（无顶栏，账号区在侧栏底部） */
 .ws-shell {
   display: flex;
   min-height: 100vh;
@@ -380,19 +369,33 @@ const handleLogout = async () => {
   padding-inline: 8px;
 }
 
-.ws-brand {
+.ws-sider__head {
   display: flex;
   flex-shrink: 0;
   align-items: center;
+  gap: 4px;
+  padding: 0 4px 14px 8px;
+}
+
+.ws-shell--collapsed .ws-sider__head {
+  flex-direction: column;
+  gap: 8px;
+  padding-inline: 0;
+}
+
+.ws-brand {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
   gap: 10px;
-  padding: 0 8px 14px;
+  min-width: 0;
   color: var(--mq-text-primary);
   text-decoration: none;
 }
 
 .ws-shell--collapsed .ws-brand {
+  flex: 0 0 auto;
   justify-content: center;
-  padding-inline: 0;
 }
 
 .ws-brand__mark {
@@ -508,19 +511,17 @@ const handleLogout = async () => {
 }
 
 .ws-sider__toggle {
-  display: flex;
+  display: inline-flex;
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  gap: var(--mq-space-2);
-  height: 36px;
-  margin-top: 6px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
   border: 0;
-  border-top: 0.5px solid var(--mq-border);
+  border-radius: 8px;
   background: transparent;
-  color: var(--mq-text-secondary);
-  font: inherit;
-  font-size: var(--mq-font-13);
+  color: var(--mq-text-tertiary);
   cursor: pointer;
 }
 
@@ -530,7 +531,35 @@ const handleLogout = async () => {
 }
 
 .ws-sider__toggle:hover {
+  background: rgba(255, 255, 255, 0.6);
   color: var(--mq-text-primary);
+}
+
+/* 侧栏底部账号区 */
+.ws-sider__footer {
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 10px 2px 0;
+  border-top: 0.5px solid var(--mq-border);
+}
+
+.ws-sider__build {
+  display: flex;
+  padding-left: 6px;
+}
+
+.ws-account {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ws-shell--collapsed .ws-account {
+  flex-direction: column-reverse;
+  gap: 8px;
 }
 
 /* 主区 */
@@ -541,75 +570,29 @@ const handleLogout = async () => {
   min-width: 0;
 }
 
-.ws-header {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--mq-space-4);
-  height: var(--mq-header-height);
-  padding: 0 28px 0 24px;
-  background: rgba(241, 243, 248, 0.55);
-  -webkit-backdrop-filter: var(--mq-glass-blur);
-  backdrop-filter: var(--mq-glass-blur);
-}
-
-.ws-breadcrumb ol {
-  display: flex;
-  align-items: center;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  font-size: var(--mq-font-13);
-  white-space: nowrap;
-}
-
-.ws-breadcrumb li {
-  color: var(--mq-text-tertiary);
-}
-
-.ws-breadcrumb li + li::before {
-  content: '/';
-  margin: 0 var(--mq-space-2);
-  color: var(--mq-text-disabled);
-}
-
-.ws-breadcrumb li[aria-current='page'] {
-  color: var(--mq-text-primary);
-  font-weight: 600;
-}
-
-.ws-header__actions {
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  gap: var(--mq-space-3);
-}
-
 .ws-icon-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
-  border: 1px solid var(--mq-glass-border);
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
   border-radius: 50%;
-  background: var(--mq-bg-subtle);
-  box-shadow: var(--mq-shadow-sm);
+  background: transparent;
   color: var(--mq-text-secondary);
   cursor: pointer;
 }
 
 .ws-icon-button:hover {
+  background: rgba(255, 255, 255, 0.6);
   color: var(--mq-text-primary);
 }
 
 .ws-icon-button svg {
-  width: 17px;
-  height: 17px;
+  width: 16px;
+  height: 16px;
 }
 
 .ws-notice {
@@ -632,17 +615,29 @@ const handleLogout = async () => {
 
 .ws-user {
   display: flex;
+  flex: 1 1 auto;
   align-items: center;
-  gap: var(--mq-space-2);
-  height: 40px;
-  padding: 0 12px 0 4px;
-  border: 1px solid var(--mq-glass-border);
-  border-radius: 999px;
-  background: var(--mq-bg-subtle);
-  box-shadow: var(--mq-shadow-sm);
+  gap: 10px;
+  min-width: 0;
+  height: 44px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
   color: var(--mq-text-primary);
   font: inherit;
+  text-align: left;
   cursor: pointer;
+}
+
+.ws-user:hover {
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.ws-shell--collapsed .ws-user {
+  flex: 0 0 auto;
+  justify-content: center;
+  padding: 0;
 }
 
 .ws-user__avatar {
@@ -663,6 +658,7 @@ const handleLogout = async () => {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
+  min-width: 0;
   line-height: 16px;
 }
 
@@ -673,15 +669,12 @@ const handleLogout = async () => {
 }
 
 .ws-user__email {
+  overflow: hidden;
+  max-width: 100%;
   color: var(--mq-text-tertiary);
   font-size: var(--mq-font-12);
+  text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.ws-user__caret {
-  width: 14px;
-  height: 14px;
-  color: var(--mq-text-tertiary);
 }
 
 .ws-user-menu {
@@ -724,7 +717,7 @@ const handleLogout = async () => {
   flex-shrink: 0;
   align-self: flex-start;
   gap: 2px;
-  margin: 4px 0 0 24px;
+  margin: 26px 0 0 22px;
   padding: 3px;
   border-radius: 13px;
   background: var(--mq-bg-muted);
@@ -756,6 +749,7 @@ const handleLogout = async () => {
 .ws-content {
   flex: 1 1 auto;
   min-width: 0;
+  padding-top: 18px;
   overflow-x: hidden;
   background: transparent;
 }

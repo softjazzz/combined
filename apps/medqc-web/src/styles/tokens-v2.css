@@ -102,6 +102,5 @@
   /* 布局 */
   --mq-sider-width: 240px;
   --mq-sider-collapsed-width: 72px;
-  --mq-header-height: 60px;
   --mq-control-height: 36px;
 }
