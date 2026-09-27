@@ -12,7 +12,9 @@ const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 const loading = ref(false)
-const showDemoAccounts = ref(false)
+
+// 演示入口默认保留（兼容现有演示部署）；正式环境可用 VITE_HIDE_DEMO_LOGIN=true 隐藏
+const showDemoLogin = import.meta.env.VITE_HIDE_DEMO_LOGIN !== 'true'
 
 const redirectTarget = computed(() => {
   const raw = route.query.redirect
@@ -35,8 +37,13 @@ const demoAccounts = [
     role: 'admin' as const,
     account: 'admin',
     password: 'admin888',
-    badge: 'DEMO',
   },
+]
+
+const capabilities = [
+  { title: '病历池', desc: '按范围发起质控' },
+  { title: '结果复核', desc: '证据定位到文书' },
+  { title: '规则管理', desc: '按规则集维护' },
 ]
 
 const navigateAfterLogin = async (target = redirectTarget.value) => {
@@ -93,339 +100,298 @@ const handleDemoLogin = async (account: (typeof demoAccounts)[number]) => {
 </script>
 
 <template>
-  <div class="login-apple relative min-h-screen overflow-hidden bg-slate-50">
-    <!-- 背景光晕 (Tech Glassmorphism Background) -->
-    <div
-      class="pointer-events-none absolute -left-[20%] -top-[10%] h-[800px] w-[800px] rounded-full bg-sky-400/20 mix-blend-multiply blur-[120px]"
-    />
-    <div
-      class="pointer-events-none absolute -bottom-[10%] -right-[10%] h-[700px] w-[700px] rounded-full bg-blue-500/15 mix-blend-multiply blur-[120px]"
-    />
-    <!-- 极细微的网格肌理 -->
-    <div
-      class="login-background-grid pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,#e2e8f0_1px,transparent_1px),linear-gradient(to_bottom,#e2e8f0_1px,transparent_1px)] bg-[size:40px_40px] opacity-40"
-    />
+  <div class="login-page">
+    <section class="login-intro">
+      <img
+        src="@/assets/images/lx-logo-dimensional-v2.png"
+        alt="泸县人民医院"
+        class="login-intro__logo"
+        width="2172"
+        height="724"
+      >
 
-    <div
-      class="relative z-10 mx-auto flex min-h-screen max-w-[1400px] flex-col px-6 py-8 lg:px-12 xl:px-16 animate-in fade-in duration-700"
-    >
-      <header class="login-brand-header mb-6 flex items-center justify-between pb-6">
-        <div class="flex items-center">
-          <img
-            src="@/assets/images/lx-logo-dimensional-v2.png"
-            alt="泸县人民医院"
-            class="login-hospital-logo"
-            width="2172"
-            height="724"
+      <div class="login-intro__body">
+        <h1 class="login-intro__title">
+          病案质控系统
+        </h1>
+        <p class="login-intro__desc">
+          运行病历、终末病历、病案首页与结算清单的质控工作台。
+        </p>
+        <ul class="login-intro__caps">
+          <li
+            v-for="cap in capabilities"
+            :key="cap.title"
           >
-        </div>
-      </header>
+            <span class="login-intro__cap-title">{{ cap.title }}</span>
+            <span class="login-intro__cap-desc">{{ cap.desc }}</span>
+          </li>
+        </ul>
+      </div>
 
-      <main class="grid flex-1 items-center gap-12 lg:grid-cols-[1fr_480px]">
-        <!-- 左侧：产品介绍与标语 -->
-        <section class="login-intro max-w-[720px]">
-          <h1 class="login-intro-title">
-            <img
-              src="@/assets/images/login-slogan-calligraphy-v3.png"
-              alt="让病案质控，更智能，更清晰。基于大模型的医疗质控工作台"
-              class="login-slogan-art"
-            >
-          </h1>
-        </section>
+      <p class="login-intro__foot">
+        V5
+      </p>
+    </section>
 
-        <!-- 右侧：登录卡片 (Glassmorphism) -->
-        <section class="w-full lg:-mt-8 xl:-mt-12">
-          <div
-            class="login-glass-card mx-auto w-full max-w-[480px] rounded-[32px] border border-white/60 bg-white/50 px-8 pb-8 pt-6 shadow-[0_24px_80px_-24px_rgba(15,23,42,0.15)] ring-1 ring-white/80 backdrop-blur-xl lg:ml-auto lg:mr-0 sm:px-12 sm:pb-12 sm:pt-8"
-          >
-            <div class="flex items-start justify-between gap-4">
-              <div>
-                <h2 class="text-[40px] font-black leading-tight tracking-[-0.05em] text-slate-800">
-                  登录工作台
-                </h2>
-              </div>
-              <!-- 登录页版本角标 -->
-              <div
-                class="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-sky-500 to-blue-600 font-black text-white shadow-[0_8px_20px_-6px_rgba(14,165,233,0.5)]"
-              >
-                V5
-              </div>
-            </div>
+    <section class="login-panel">
+      <div class="login-card">
+        <h2 class="login-card__title">
+          登录工作台
+        </h2>
 
-            <!-- 登录表单区 -->
-            <div class="mt-4">
-              <WorkstationLoginForm
-                :loading="loading"
-                @login="handleLogin"
-                @forgot-password="handleForgotPassword"
-              />
-            </div>
+        <WorkstationLoginForm
+          :loading="loading"
+          @login="handleLogin"
+          @forgot-password="handleForgotPassword"
+        />
 
-            <!-- 演示账号区块 (内嵌卡片风格) -->
-            <div
-              class="mt-4 overflow-hidden rounded-xl border border-slate-200/50 bg-slate-50/50 transition-all duration-300"
-            >
-              <button
-                type="button"
-                class="flex w-full items-center justify-between px-4 py-3 text-left transition hover:bg-slate-100/50"
-                @click="showDemoAccounts = !showDemoAccounts"
-              >
-                <div>
-                  <div class="text-[15px] font-bold text-slate-800">
-                    演示账号快速登录
-                  </div>
-                  <div class="mt-0.5 text-xs text-slate-500">
-                    功能演示：admin / admin888
-                  </div>
-                </div>
-                <div
-                  class="flex h-8 w-8 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-slate-200/50"
-                >
-                  <svg
-                    class="h-4 w-4 text-slate-500 transition-transform duration-300"
-                    :class="{ 'rotate-180': showDemoAccounts }"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M19 9l-7 7-7-7"
-                    />
-                  </svg>
-                </div>
-              </button>
-
-              <!-- 平滑展开容器 -->
-              <div
-                class="grid transition-all duration-300 ease-in-out"
-                :class="
-                  showDemoAccounts ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
-                "
-              >
-                <div class="overflow-hidden">
-                  <div class="border-t border-slate-200/50 p-4 pt-2">
-                    <div class="space-y-2">
-                      <button
-                        v-for="account in demoAccounts"
-                        :key="account.role"
-                        type="button"
-                        class="group flex w-full items-center justify-between rounded-xl border border-transparent bg-white/60 px-4 py-3 text-left transition hover:border-sky-200/50 hover:bg-white hover:shadow-sm"
-                        @click="handleDemoLogin(account)"
-                      >
-                        <div class="flex items-center gap-3">
-                          <div
-                            class="flex h-10 w-10 items-center justify-center rounded-[14px] bg-sky-50 text-xs font-bold text-sky-700 transition group-hover:bg-sky-100"
-                          >
-                            {{ account.badge }}
-                          </div>
-                          <div>
-                            <div class="text-[14px] font-bold text-slate-800">
-                              {{ account.label }}
-                            </div>
-                            <div class="text-xs text-slate-500">
-                              {{ account.account }}
-                            </div>
-                          </div>
-                        </div>
-                        <div class="text-xs font-medium text-slate-400">
-                          {{ account.password }}
-                        </div>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="mt-3 flex justify-center text-[13px] text-slate-400">
-              <span class="flex items-center gap-1.5">
-                <LockOutlined class="text-[11px]" />
-                登录即代表同意系统安全与隐私协议
-              </span>
-            </div>
-
-            <div class="mt-2 flex justify-center">
-              <a
-                href="/tender-coverage.html"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="inline-flex items-center gap-2 rounded-xl border border-sky-200/70 bg-white/70 px-4 py-2 text-[13px] font-bold text-sky-700 shadow-sm transition hover:border-sky-300 hover:bg-sky-50 hover:text-blue-700"
-              >
-                <AuditOutlined class="text-[14px]" />
-                招标参数满足度说明
-              </a>
-            </div>
+        <div
+          v-if="showDemoLogin"
+          class="login-demo"
+        >
+          <div class="login-demo__copy">
+            <span class="login-demo__title">演示账号快速登录</span>
+            <span class="login-demo__hint">用于功能演示，无需输入账号密码</span>
           </div>
-        </section>
-      </main>
-    </div>
+          <button
+            v-for="account in demoAccounts"
+            :key="account.role"
+            type="button"
+            class="login-demo__button"
+            :disabled="loading"
+            @click="handleDemoLogin(account)"
+          >
+            {{ account.label }}
+          </button>
+        </div>
+
+        <p class="login-card__privacy">
+          <LockOutlined aria-hidden="true" />
+          登录即表示同意系统安全与隐私协议
+        </p>
+
+        <a
+          href="/tender-coverage.html"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="login-card__tender"
+        >
+          <AuditOutlined aria-hidden="true" />
+          招标参数满足度说明
+        </a>
+      </div>
+    </section>
   </div>
 </template>
 
 <style scoped>
-.login-brand-header {
-  padding-top: 8px;
-  padding-bottom: 32px;
-}
-.login-hospital-logo {
-  display: block;
-  width: 270px;
-  height: auto;
-  max-width: 100%;
-  object-fit: contain;
-}
-.login-background-grid {
-  mask-image: linear-gradient(
-    to bottom,
-    transparent 0,
-    transparent 130px,
-    rgba(0, 0, 0, 0.45) 300px,
-    transparent 80%
-  );
-  -webkit-mask-image: linear-gradient(
-    to bottom,
-    transparent 0,
-    transparent 130px,
-    rgba(0, 0, 0, 0.45) 300px,
-    transparent 80%
-  );
-}
-.login-apple {
-  background: linear-gradient(125deg, #dce8f6 0%, #f1f3f7 48%, #e4eaf3 100%);
-  font-family: 'Source Han Sans SC', 'Microsoft YaHei UI', 'PingFang SC', sans-serif;
-}
-.login-apple > .pointer-events-none {
-  opacity: 0.15;
-}
-.login-intro {
-  align-self: center;
-  padding: 24px 0 60px;
-}
-.login-intro h1 {
-  font-size: clamp(32px, 3.2vw, 46px);
-  font-weight: 600;
-  line-height: 1.3;
-  letter-spacing: -0.025em;
-}
-.login-intro h1 span {
-  background: none;
-  color: #007aff;
-}
-.login-intro .flex-wrap > div {
-  font-size: 14px;
-  font-weight: 400;
-  padding: 10px 14px;
-  border-radius: 10px;
-  box-shadow: none;
-  transform: none;
-}
-.login-glass-card {
-  border-radius: 16px;
-  background: linear-gradient(145deg, rgba(220, 239, 250, 0.88), rgba(230, 237, 253, 0.82));
-  padding: 24px 32px;
-  border: 1px solid rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(24px) saturate(135%);
-  box-shadow: 0 16px 44px rgba(39, 62, 94, 0.1);
-}
-.login-glass-card h2 {
-  font-size: 26px;
-  font-weight: 600;
-  letter-spacing: 0;
-}
-.login-glass-card :deep(input),
-.login-glass-card :deep(select),
-.login-glass-card :deep(option),
-.login-glass-card :deep(button),
-.login-glass-card :deep(label) {
-  font-family: 'Source Han Sans SC', 'Microsoft YaHei UI', 'PingFang SC', sans-serif;
-}
-.login-glass-card :deep(select),
-.login-glass-card :deep(option) {
-  font-size: 14px;
-  font-weight: 400;
-}
-.login-glass-card :deep(form > * + *) {
-  margin-top: 12px;
-  margin-bottom: 0;
-}
-.login-glass-card :deep(form > .pt-2) {
-  padding-top: 0;
-}
-.login-glass-card :deep(label) {
-  font-size: 14px;
-  font-weight: 400;
-  letter-spacing: 0;
-}
-.login-glass-card :deep(input:not([type='checkbox'])),
-.login-glass-card :deep(select) {
-  height: 44px;
-  padding-block: 10px;
-  border-radius: 8px;
-  border: 1px solid #e0e6ee;
-  background: rgba(255, 255, 255, 0.85);
-  font-size: 14px;
-  font-family: inherit;
-}
-.login-glass-card :deep(select) {
-  padding-block: 0;
-  line-height: normal;
-}
-.login-glass-card :deep(button[type='submit']) {
-  height: 44px;
-  border-radius: 8px;
-  background: #007aff;
-  font-size: 14px;
-  font-weight: 500;
-  transform: none;
-  box-shadow: 0 3px 8px rgba(0, 122, 255, 0.18);
-}
-@media (max-width: 1023px) {
-  .login-intro {
-    padding: 12px 0;
-  }
-  .login-glass-card {
-    padding: 24px;
-  }
+.login-page {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(420px, 560px);
+  min-height: 100vh;
+  background: var(--mq-bg-page);
+  color: var(--mq-text-primary);
+  font-family: var(--mq-font-family);
 }
 
 .login-intro {
-  align-self: start;
-  padding-top: 64px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--mq-space-8);
+  padding: 56px 72px;
+  background: var(--mq-bg-surface);
+  border-right: 1px solid var(--mq-border);
 }
-.login-intro-positioning {
-  margin: 14px 0 0;
-  color: #526780;
-  font-size: clamp(15px, 1.3vw, 18px);
-  font-weight: 400;
-  line-height: 28px;
-  letter-spacing: 0.12em;
+
+.login-intro__logo {
+  display: block;
+  width: 240px;
+  max-width: 100%;
+  height: auto;
+  object-fit: contain;
 }
-.login-intro-positioning strong {
-  color: inherit;
+
+.login-intro__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mq-space-4);
+  max-width: 560px;
+}
+
+.login-intro__title {
+  margin: 0;
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.login-intro__desc {
+  margin: 0;
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-16);
+  line-height: 1.8;
+}
+
+.login-intro__caps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--mq-space-3);
+  margin: var(--mq-space-4) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.login-intro__caps li {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mq-space-1);
+  padding: 14px;
+  border: 1px solid var(--mq-border);
+  border-radius: var(--mq-radius-card);
+}
+
+.login-intro__cap-title {
+  font-size: var(--mq-font-14);
   font-weight: 500;
 }
-.login-intro h1.login-intro-title {
+
+.login-intro__cap-desc {
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-12);
+}
+
+.login-intro__foot {
   margin: 0;
-  font-size: clamp(34px, 3.5vw, 48px) !important;
-  font-weight: 500 !important;
-  line-height: 1.4 !important;
-  letter-spacing: -0.025em;
-  color: #23364d;
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
 }
-.login-slogan-art {
-  display: block;
+
+.login-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px;
+}
+
+.login-card {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
   width: 100%;
-  max-width: 528px;
-  height: auto;
-  margin: -36px 0 -12px -12px;
-  filter: saturate(0.78) brightness(0.94);
+  max-width: 400px;
+  box-sizing: border-box;
+  padding: 32px;
+  background: var(--mq-bg-surface);
+  border: 1px solid var(--mq-border);
+  border-radius: var(--mq-radius-overlay);
 }
+
+.login-card__title {
+  margin: 0;
+  font-size: var(--mq-font-20);
+  font-weight: 700;
+}
+
+.login-demo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--mq-space-3);
+  padding: var(--mq-space-3) 14px;
+  border: 1px dashed var(--mq-border-strong);
+  border-radius: var(--mq-radius-card);
+  background: var(--mq-bg-subtle);
+}
+
+.login-demo__copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.login-demo__title {
+  font-size: var(--mq-font-13);
+  font-weight: 500;
+}
+
+.login-demo__hint {
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-12);
+}
+
+.login-demo__button {
+  flex-shrink: 0;
+  height: 28px;
+  padding: 0 var(--mq-space-3);
+  border: 1px solid var(--mq-border-strong);
+  border-radius: var(--mq-radius-control);
+  background: var(--mq-bg-surface);
+  color: var(--mq-text-primary);
+  font-family: inherit;
+  font-size: var(--mq-font-12);
+  cursor: pointer;
+}
+
+.login-demo__button:hover:not(:disabled) {
+  border-color: var(--mq-brand-600);
+  color: var(--mq-brand-700);
+}
+
+.login-demo__button:disabled {
+  color: var(--mq-text-disabled);
+  cursor: not-allowed;
+}
+
+.login-card__privacy {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+}
+
+.login-card__tender {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--mq-brand-600);
+  font-size: var(--mq-font-13);
+  text-decoration: none;
+}
+
+.login-card__tender:hover {
+  color: var(--mq-brand-700);
+}
+
+.login-demo__button:focus-visible,
+.login-card__tender:focus-visible {
+  outline: 2px solid var(--mq-brand-600);
+  outline-offset: 2px;
+}
+
 @media (max-width: 1023px) {
+  .login-page {
+    grid-template-columns: 1fr;
+  }
+
   .login-intro {
-    padding-top: 16px;
+    gap: var(--mq-space-4);
+    padding: 32px 24px;
+    border-right: 0;
+    border-bottom: 1px solid var(--mq-border);
+  }
+
+  .login-intro__caps,
+  .login-intro__foot {
+    display: none;
+  }
+
+  .login-panel {
+    padding: 24px 16px 48px;
   }
 }
 </style>
