@@ -1,127 +1,145 @@
 <template>
-  <div class="qc-home-shell workstation-shell min-h-screen">
-    <div class="px-4 py-6 xl:px-6">
-      <main class="qc-home-canvas mx-auto w-full max-w-[1440px]">
-        <section class="qc-home-header workstation-surface-enter">
-          <div class="qc-home-header__copy">
-            <h1>质控首页概览</h1>
-            <p class="qc-home-header__subtitle">
-              查看质控概况与问题分布，进入对应工作台
-            </p>
-          </div>
+  <div class="qc-home-shell">
+    <main class="qc-home-canvas">
+      <!-- 页头：日期眉标 + 大标题；右侧为范围与刷新（原范围行，功能不变） -->
+      <header class="qc-home-header">
+        <div class="qc-home-header__copy">
+          <span class="qc-home-eyebrow">{{ todayLabel }} · 泸县0609质控点</span>
+          <h1>质控首页概览</h1>
+        </div>
+        <div
+          v-if="clinicalQc"
+          class="qc-home-scope"
+          data-testid="home-scope"
+        >
+          <span class="qc-home-scope__chip qc-home-scope__chip--strong">{{ scopeHospitalText }}</span>
+          <label class="qc-home-scope__select">
+            <select
+              v-model="departmentFilter"
+              class="qc-home-department"
+              aria-label="统计科室"
+              :title="scopeDepartmentText"
+            >
+              <option value="all">全部科室</option>
+              <option
+                v-for="department in departmentOptions"
+                :key="department"
+                :value="department"
+              >
+                {{ department }}
+              </option>
+            </select>
+            <svg
+              class="qc-home-scope__caret"
+              width="11"
+              height="11"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            ><path d="m6 9 6 6 6-6" /></svg>
+          </label>
+          <span class="qc-home-scope__chip">{{ scopeSceneText }}</span>
+          <span class="qc-home-scope__chip qc-home-scope__rule-set">泸县0609质控点</span>
+          <template v-if="keyword.trim()">
+            <span class="qc-home-scope__chip qc-home-scope__keyword">关键词：{{ keyword.trim() }}</span>
+            <button
+              type="button"
+              class="qc-home-scope__clear"
+              aria-label="清除关键词"
+              @click="clearKeyword"
+            >
+              清除关键词
+            </button>
+          </template>
+          <span class="qc-home-scope__time">生成于 {{ formatDateTime(clinicalQc.scope.generated_at) }}</span>
           <button
             type="button"
-            class="qc-home-start"
-            @click="openRecordPool"
-          >
-            选择病历质控 <ArrowRight
-              :size="16"
-              aria-hidden="true"
-            />
-          </button>
-        </section>
-
-        <section
-          v-if="loadError"
-          class="qc-home-notice qc-home-notice--error"
-          data-testid="home-load-error"
-        >
-          <strong>暂时无法加载质控首页</strong>
-          <span>请稍后刷新；不会以旧任务或缓存数据替代当前结果。</span>
-          <a-button
-            size="small"
+            class="qc-home-icon-button"
+            aria-label="刷新首页数据"
             @click="void fetchHome()"
           >
-            重新加载
-          </a-button>
-        </section>
+            <MqIcon
+              name="sync"
+              :size="18"
+              color="#515154"
+            />
+          </button>
+        </div>
+      </header>
 
-        <section
-          v-else-if="loading"
-          class="qc-home-loading workstation-surface-enter"
-          data-testid="home-loading"
-          aria-live="polite"
-          aria-busy="true"
+      <section
+        v-if="loadError"
+        class="qc-home-notice"
+        data-testid="home-load-error"
+      >
+        <MqIconTile
+          name="tech_error"
+          tone="danger"
+          :size="36"
+        />
+        <div class="qc-home-notice__copy">
+          <strong>暂时无法加载质控首页</strong>
+          <span>请稍后刷新；不会以旧任务或缓存数据替代当前结果。</span>
+        </div>
+        <button
+          type="button"
+          class="qc-home-button"
+          @click="void fetchHome()"
         >
-          <a-spin size="large" />
-          <div>
-            <strong>正在加载全院质控概览</strong>
-            <span>正在汇总当前范围内的病历与最新质控结果。</span>
-          </div>
-        </section>
+          重新加载
+        </button>
+      </section>
 
-        <template v-else-if="clinicalQc">
-          <section
-            class="qc-home-overview"
-            aria-label="质控总览"
-            data-testid="home-overview"
-          >
-            <div
-              class="qc-home-scope qc-home-priority-scope"
-              data-testid="home-scope"
-            >
-              <span class="qc-home-scope__label">当前范围</span>
-              <span>{{ scopeHospitalText }}</span>
-              <i />
-              <select
-                v-model="departmentFilter"
-                class="qc-home-department"
-                aria-label="统计科室"
-                :title="scopeDepartmentText"
-              >
-                <option value="all">
-                  全部科室
-                </option>
-                <option
-                  v-for="department in departmentOptions"
-                  :key="department"
-                  :value="department"
-                >
-                  {{ department }}
-                </option>
-              </select>
-              <i />
-              <span>{{ scopeSceneText }}</span>
-              <i />
-              <span class="qc-home-scope__rule-set">泸县0609质控点</span>
-              <template v-if="keyword.trim()">
-                <span class="qc-home-scope__keyword">关键词：{{ keyword.trim() }}</span>
-                <button
-                  type="button"
-                  class="qc-home-refresh"
-                  aria-label="清除关键词"
-                  @click="clearKeyword"
-                >
-                  清除关键词
-                </button>
-              </template>
-              <span class="qc-home-scope__time">生成于 {{ formatDateTime(clinicalQc.scope.generated_at) }}</span>
-              <button
-                type="button"
-                class="qc-home-refresh"
-                aria-label="刷新首页数据"
-                @click="void fetchHome()"
-              >
-                刷新
-              </button>
+      <section
+        v-else-if="loading"
+        class="qc-home-loading"
+        data-testid="home-loading"
+        aria-live="polite"
+        aria-busy="true"
+      >
+        <a-spin />
+        <div>
+          <strong>正在加载全院质控概览</strong>
+          <span>正在汇总当前范围内的病历与最新质控结果。</span>
+        </div>
+      </section>
+
+      <template v-else-if="clinicalQc">
+        <section
+          class="qc-home-overview"
+          aria-label="质控总览"
+          data-testid="home-overview"
+        >
+          <!-- 主卡：待质控 + 工作入口 -->
+          <div class="qc-home-hero">
+            <span
+              class="qc-home-hero__glow"
+              aria-hidden="true"
+            />
+            <span class="qc-home-hero__label">
+              <MqIcon
+                name="task"
+                :size="18"
+                color="#FFFFFF"
+              />待质控
+            </span>
+            <div class="qc-home-hero__value">
+              <strong>{{ pendingKpi.value }}</strong>
+              <span>/ {{ recordsTotal }} 份</span>
             </div>
-
-            <section
-              class="qc-home-kpi-strip qc-home-metrics workstation-surface-enter"
-              data-testid="home-kpis"
-              aria-label="质控指标汇总"
-            >
-              <div
-                v-for="card in kpiCards"
-                :key="card.key"
-                :class="[`qc-home-metric--${card.key}`, { 'is-zero': card.value === 0 }]"
+            <div class="qc-home-hero__progress">
+              <span
+                class="qc-home-hero__track"
+                aria-hidden="true"
               >
-                <span>{{ card.label }}</span>
-                <strong>{{ card.value }}<small>份</small></strong>
-                <p>{{ card.helper }}</p>
-              </div>
-            </section>
-
+                <i :style="{ width: `${rates.pending}%` }" />
+              </span>
+              <span>占纳入病历 {{ formatRate(rates.pending) }}%，尚未生成最终结果。</span>
+            </div>
             <nav
               class="qc-home-shortcuts"
               data-testid="home-workspace"
@@ -129,201 +147,320 @@
             >
               <button
                 type="button"
+                class="qc-home-shortcuts__primary"
                 @click="openRecordPool"
               >
-                <Database
-                  :size="18"
-                  class="qc-home-shortcut-icon"
-                  aria-hidden="true"
-                />
-                <span><strong>病历池</strong><small>查找病历 · 选择质控范围</small></span><ArrowRight :size="18" />
+                选择病历质控
               </button>
               <button
                 type="button"
                 @click="router.push('/workstation-v5/records/running')"
               >
-                <Activity
-                  :size="18"
-                  class="qc-home-shortcut-icon"
-                  aria-hidden="true"
-                />
-                <span><strong>运行病历质控</strong><small>查看在院病历质控结果</small></span><ArrowRight :size="18" />
+                运行病历质控
               </button>
               <button
                 type="button"
                 @click="router.push('/workstation-v5/records/final')"
               >
-                <CircleCheckBig
-                  :size="18"
-                  class="qc-home-shortcut-icon"
-                  aria-hidden="true"
-                />
-                <span><strong>终末病历质控</strong><small>查看已出院病历质控结果</small></span><ArrowRight :size="18" />
+                终末病历质控
               </button>
             </nav>
-          </section>
+          </div>
 
-          <section
-            class="qc-home-analysis workstation-surface-enter"
-            data-testid="home-analysis"
+          <!-- 深色焦点卡：质控进度圆环（比例均由现有 KPI 计算） -->
+          <div
+            class="qc-home-rings"
+            aria-label="质控进度"
           >
-            <section
-              class="qc-home-panel qc-home-defect-analysis"
-              data-testid="defect-analysis-chart"
-              aria-labelledby="defect-analysis-title"
-            >
-              <header class="qc-home-panel__head">
-                <div>
-                  <h2 id="defect-analysis-title">
-                    质控缺陷分析
-                  </h2>
-                  <p>缺陷仅统计确定问题，资料待核实与待判断不计入缺陷数。</p>
-                </div>
-              </header>
-              <div class="qc-home-defect-analysis__toolbar">
-                <div class="qc-home-defect-analysis__control">
-                  <span>统计对象</span>
-                  <div
-                    role="group"
-                    aria-label="统计对象"
-                  >
-                    <button
-                      type="button"
-                      :class="{ 'is-active': analysisObject === 'department' }"
-                      data-testid="analysis-object-department"
-                      @click="analysisObject = 'department'"
-                    >
-                      按科室
-                    </button>
-                    <button
-                      type="button"
-                      :class="{ 'is-active': analysisObject === 'physician' }"
-                      data-testid="analysis-object-physician"
-                      @click="analysisObject = 'physician'"
-                    >
-                      按主治医师
-                    </button>
-                  </div>
-                </div>
-                <div class="qc-home-defect-analysis__control">
-                  <span>分析指标</span>
-                  <div
-                    role="group"
-                    aria-label="分析指标"
-                  >
-                    <button
-                      type="button"
-                      :class="{ 'is-active': analysisMetric === 'total' }"
-                      data-testid="analysis-metric-total"
-                      @click="analysisMetric = 'total'"
-                    >
-                      缺陷总数
-                    </button>
-                    <button
-                      type="button"
-                      :class="{ 'is-active': analysisMetric === 'average' }"
-                      data-testid="analysis-metric-average"
-                      @click="analysisMetric = 'average'"
-                    >
-                      平均缺陷数
-                    </button>
-                  </div>
-                </div>
-                <div class="qc-home-defect-analysis__control">
-                  <span>排序</span>
-                  <div
-                    role="group"
-                    aria-label="排序方式"
-                  >
-                    <button
-                      type="button"
-                      :class="{ 'is-active': analysisSort === 'metric' }"
-                      data-testid="analysis-sort-metric"
-                      @click="analysisSort = 'metric'"
-                    >
-                      当前指标
-                    </button>
-                    <button
-                      type="button"
-                      :class="{ 'is-active': analysisSort === 'risk' }"
-                      data-testid="analysis-sort-risk"
-                      @click="analysisSort = 'risk'"
-                    >
-                      高风险病历
-                    </button>
-                    <button
-                      type="button"
-                      :class="{ 'is-active': analysisSort === 'gap' }"
-                      data-testid="analysis-sort-gap"
-                      @click="analysisSort = 'gap'"
-                    >
-                      资料待核实
-                    </button>
-                  </div>
-                </div>
-              </div>
-              <div
-                v-if="defectAnalysisItems.length"
-                class="qc-home-defect-analysis__list"
+            <span class="qc-home-rings__title">质控进度</span>
+            <div class="qc-home-rings__body">
+              <svg
+                width="176"
+                height="176"
+                viewBox="0 0 200 200"
+                aria-hidden="true"
               >
-                <component
-                  :is="analysisObject === 'department' ? 'button' : 'div'"
-                  v-for="item in defectAnalysisItems"
-                  :key="item.name"
-                  :type="analysisObject === 'department' ? 'button' : undefined"
-                  :class="[
-                    'qc-home-defect-analysis__row',
-                    {
-                      'is-active':
-                        analysisObject === 'department' && departmentFilter === item.name,
-                    },
-                  ]"
-                  data-testid="defect-analysis-row"
-                  :aria-label="
-                    analysisObject === 'department' ? `切换到${item.name}科室质控范围` : undefined
-                  "
-                  @click="analysisObject === 'department' && selectDepartment(item.name)"
-                >
-                  <div class="qc-home-defect-analysis__meta">
-                    <strong>{{ item.name }}</strong>
-                    <span>纳入 {{ item.recordsTotal }} 份 · 完成
-                      {{ item.completedRecordTotal }} 份</span>
-                  </div>
-                  <div
-                    class="qc-home-defect-analysis__metric"
-                    aria-hidden="true"
+                <defs>
+                  <linearGradient
+                    v-for="ring in ringDefs"
+                    :id="ring.gradient"
+                    :key="ring.gradient"
+                    x1="0"
+                    y1="0"
+                    x2="1"
+                    y2="1"
                   >
-                    <div class="qc-home-defect-analysis__track">
-                      <i :style="{ width: `${defectAnalysisPercent(item)}%` }" />
-                    </div>
-                    <strong>{{ formatAnalysisMetric(item) }}</strong>
-                  </div>
-                  <div class="qc-home-defect-analysis__counts">
-                    <strong :class="{ 'is-zero': !item.highRiskReviewTotal }">高风险 {{ item.highRiskReviewTotal }}</strong>
-                    <span :class="{ 'is-zero': !item.dataGapRecordTotal }">待核实 {{ item.dataGapRecordTotal }}</span>
-                  </div>
-                  <ChevronRight
-                    v-if="analysisObject === 'department'"
-                    :size="17"
-                    aria-hidden="true"
-                  />
-                </component>
-                <p
-                  v-if="hiddenDefectAnalysisCount"
-                  class="qc-home-defect-analysis__note"
+                    <stop
+                      offset="0"
+                      :stop-color="ring.from"
+                    />
+                    <stop
+                      offset="1"
+                      :stop-color="ring.to"
+                    />
+                  </linearGradient>
+                </defs>
+                <g
+                  v-for="ring in ringDefs"
+                  :key="ring.key"
                 >
-                  仅展示前 8 项；其余 {{ hiddenDefectAnalysisCount }} 个{{
-                    analysisObjectLabel
-                  }}已收起。
+                  <circle
+                    cx="100"
+                    cy="100"
+                    :r="ring.r"
+                    fill="none"
+                    :stroke="`url(#${ring.gradient})`"
+                    stroke-opacity="0.24"
+                    stroke-width="20"
+                  />
+                  <!-- 零值不画进度弧，避免圆角端点残留成一个点 -->
+                  <circle
+                    v-if="ring.rate > 0"
+                    cx="100"
+                    cy="100"
+                    :r="ring.r"
+                    fill="none"
+                    :stroke="`url(#${ring.gradient})`"
+                    stroke-width="20"
+                    stroke-linecap="round"
+                    :stroke-dasharray="ringDash(ring.r, ring.rate)"
+                    transform="rotate(-90 100 100)"
+                  />
+                </g>
+              </svg>
+              <dl class="qc-home-rings__legend">
+                <div
+                  v-for="ring in ringDefs"
+                  :key="ring.key"
+                >
+                  <dt :style="{ color: ring.textColor }">
+                    {{ ring.label }}
+                  </dt>
+                  <dd>{{ formatRate(ring.rate) }}<small> %</small></dd>
+                </div>
+              </dl>
+            </div>
+          </div>
+        </section>
+
+        <!-- 三栏指标卡 -->
+        <section
+          class="qc-home-metrics"
+          data-testid="home-kpis"
+          aria-label="质控指标汇总"
+        >
+          <div
+            v-for="card in metricCards"
+            :key="card.key"
+            :class="['qc-home-metric', `qc-home-metric--${card.key}`, { 'is-zero': card.value === 0 }]"
+          >
+            <span
+              class="qc-home-metric__watermark"
+              aria-hidden="true"
+            >
+              <MqIcon
+                :name="card.icon"
+                :size="104"
+                :color="toneColor(card.tone)"
+              />
+            </span>
+            <div class="qc-home-metric__head">
+              <MqIconTile
+                :name="card.icon"
+                :tone="card.tone"
+                :size="40"
+              />
+              <div>
+                <span class="qc-home-metric__label">{{ card.label }}</span>
+                <p class="qc-home-metric__helper">
+                  {{ card.helper }}
                 </p>
               </div>
-              <a-empty
-                v-else
-                :description="`当前范围内暂无${analysisObjectLabel}统计`"
-                :image-style="{ height: '58px' }"
-              />
-            </section>
+            </div>
+            <div class="qc-home-metric__foot">
+              <strong class="qc-home-metric__value">{{ card.value }}<small>份</small></strong>
+              <span class="qc-home-metric__rate">
+                <em :style="{ color: toneColor(card.tone) }">{{ card.rateLabel }}</em>
+                <span
+                  class="qc-home-metric__track"
+                  aria-hidden="true"
+                >
+                  <i :style="{ width: `${card.rate}%`, background: toneGradient(card.tone) }" />
+                </span>
+              </span>
+            </div>
+          </div>
+        </section>
 
+        <section
+          class="qc-home-analysis"
+          data-testid="home-analysis"
+        >
+          <section
+            class="qc-home-panel qc-home-defect-analysis"
+            data-testid="defect-analysis-chart"
+            aria-labelledby="defect-analysis-title"
+          >
+            <header class="qc-home-panel__head">
+              <div>
+                <h2 id="defect-analysis-title">
+                  质控缺陷分析
+                </h2>
+                <p>缺陷仅统计确定问题，资料待核实与待判断不计入缺陷数。</p>
+              </div>
+            </header>
+            <div class="qc-home-defect-analysis__toolbar">
+              <div class="qc-home-defect-analysis__control">
+                <span>统计对象</span>
+                <div
+                  role="group"
+                  aria-label="统计对象"
+                >
+                  <button
+                    type="button"
+                    :class="{ 'is-active': analysisObject === 'department' }"
+                    data-testid="analysis-object-department"
+                    @click="analysisObject = 'department'"
+                  >
+                    按科室
+                  </button>
+                  <button
+                    type="button"
+                    :class="{ 'is-active': analysisObject === 'physician' }"
+                    data-testid="analysis-object-physician"
+                    @click="analysisObject = 'physician'"
+                  >
+                    按主治医师
+                  </button>
+                </div>
+              </div>
+              <div class="qc-home-defect-analysis__control">
+                <span>分析指标</span>
+                <div
+                  role="group"
+                  aria-label="分析指标"
+                >
+                  <button
+                    type="button"
+                    :class="{ 'is-active': analysisMetric === 'total' }"
+                    data-testid="analysis-metric-total"
+                    @click="analysisMetric = 'total'"
+                  >
+                    缺陷总数
+                  </button>
+                  <button
+                    type="button"
+                    :class="{ 'is-active': analysisMetric === 'average' }"
+                    data-testid="analysis-metric-average"
+                    @click="analysisMetric = 'average'"
+                  >
+                    平均缺陷数
+                  </button>
+                </div>
+              </div>
+              <div class="qc-home-defect-analysis__control">
+                <span>排序</span>
+                <div
+                  role="group"
+                  aria-label="排序方式"
+                >
+                  <button
+                    type="button"
+                    :class="{ 'is-active': analysisSort === 'metric' }"
+                    data-testid="analysis-sort-metric"
+                    @click="analysisSort = 'metric'"
+                  >
+                    当前指标
+                  </button>
+                  <button
+                    type="button"
+                    :class="{ 'is-active': analysisSort === 'risk' }"
+                    data-testid="analysis-sort-risk"
+                    @click="analysisSort = 'risk'"
+                  >
+                    高风险病历
+                  </button>
+                  <button
+                    type="button"
+                    :class="{ 'is-active': analysisSort === 'gap' }"
+                    data-testid="analysis-sort-gap"
+                    @click="analysisSort = 'gap'"
+                  >
+                    资料待核实
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div
+              v-if="defectAnalysisItems.length"
+              class="qc-home-defect-analysis__list"
+            >
+              <component
+                :is="analysisObject === 'department' ? 'button' : 'div'"
+                v-for="item in defectAnalysisItems"
+                :key="item.name"
+                :type="analysisObject === 'department' ? 'button' : undefined"
+                :class="[
+                  'qc-home-defect-analysis__row',
+                  {
+                    'is-active': analysisObject === 'department' && departmentFilter === item.name,
+                  },
+                ]"
+                data-testid="defect-analysis-row"
+                :aria-label="
+                  analysisObject === 'department' ? `切换到${item.name}科室质控范围` : undefined
+                "
+                @click="analysisObject === 'department' && selectDepartment(item.name)"
+              >
+                <div class="qc-home-defect-analysis__meta">
+                  <strong>{{ item.name }}</strong>
+                  <span>纳入 {{ item.recordsTotal }} 份 · 完成
+                    {{ item.completedRecordTotal }} 份</span>
+                </div>
+                <div
+                  class="qc-home-defect-analysis__metric"
+                  aria-hidden="true"
+                >
+                  <div class="qc-home-defect-analysis__track">
+                    <i :style="{ width: `${defectAnalysisPercent(item)}%` }" />
+                  </div>
+                  <strong>{{ formatAnalysisMetric(item) }}</strong>
+                </div>
+                <div class="qc-home-defect-analysis__counts">
+                  <strong :class="{ 'is-zero': !item.highRiskReviewTotal }">高风险 {{ item.highRiskReviewTotal }}</strong>
+                  <span :class="{ 'is-zero': !item.dataGapRecordTotal }">待核实 {{ item.dataGapRecordTotal }}</span>
+                </div>
+                <svg
+                  v-if="analysisObject === 'department'"
+                  class="qc-home-defect-analysis__chevron"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                ><path d="m9 6 6 6-6 6" /></svg>
+              </component>
+              <p
+                v-if="hiddenDefectAnalysisCount"
+                class="qc-home-defect-analysis__note"
+              >
+                仅展示前 8 项；其余 {{ hiddenDefectAnalysisCount }} 个{{
+                  analysisObjectLabel
+                }}已收起。
+              </p>
+            </div>
+            <a-empty
+              v-else
+              :description="`当前范围内暂无${analysisObjectLabel}统计`"
+              :image-style="{ height: '58px' }"
+            />
+          </section>
+
+          <div class="qc-home-side">
             <section
               class="qc-home-panel qc-home-conclusion"
               data-testid="qc-conclusion-chart"
@@ -372,117 +509,97 @@
               <a-empty
                 v-else
                 description="暂无已完成质控结论"
-                :image-style="{ height: '58px' }"
+                :image-style="{ height: '52px' }"
               />
             </section>
-          </section>
 
-          <section
-            v-if="clinicalQc.trend"
-            class="qc-home-panel workstation-surface-enter"
-            data-testid="home-trend"
-          >
-            <header class="qc-home-panel__head">
-              <div>
-                <h2>质控趋势</h2>
-                <p>仅在后端返回真实时间序列时展示。</p>
-              </div>
-            </header>
-          </section>
-          <section
-            class="qc-home-panel qc-home-panel--health"
-            data-testid="data-health"
-          >
-            <header class="qc-home-panel__head">
-              <div>
-                <h2>数据与服务状态</h2>
-                <p>用于判断数据与任务是否可正常使用，不代表医疗结论。</p>
-              </div>
-            </header>
-            <dl class="qc-home-health-list">
-              <div data-testid="health-status-item">
-                <span class="qc-home-health-list__icon is-brand">
-                  <Database :size="18" />
-                </span>
+            <section
+              class="qc-home-panel qc-home-panel--health"
+              data-testid="data-health"
+            >
+              <header class="qc-home-panel__head">
                 <div>
+                  <h2>数据与服务状态</h2>
+                  <p>用于判断数据与任务是否可正常使用，不代表医疗结论。</p>
+                </div>
+              </header>
+              <dl class="qc-home-health-list">
+                <div data-testid="health-status-item">
+                  <MqIconTile
+                    name="sync"
+                    tone="brand"
+                    :size="34"
+                  />
                   <dt>资料同步</dt>
                   <dd>{{ sourceStateText }}</dd>
                 </div>
-                <small>当前尚无权威同步状态</small>
-              </div>
-              <div data-testid="health-status-item">
-                <span class="qc-home-health-list__icon is-brand">
-                  <Activity :size="18" />
-                </span>
-                <div>
+                <div data-testid="health-status-item">
+                  <MqIconTile
+                    name="task"
+                    tone="brand"
+                    :size="34"
+                  />
                   <dt>质控任务</dt>
                   <dd>{{ runningTaskText }}</dd>
                 </div>
-                <small>运行状态尚未接入首页</small>
-              </div>
-              <div
-                v-if="!isDemoPresentation"
-                data-testid="health-status-item"
-              >
-                <span class="qc-home-health-list__icon is-danger">
-                  <TriangleAlert :size="18" />
-                </span>
-                <div>
+                <div
+                  v-if="!isDemoPresentation"
+                  data-testid="health-status-item"
+                >
+                  <MqIconTile
+                    name="tech_error"
+                    tone="warning"
+                    :size="34"
+                  />
                   <dt>技术异常</dt>
                   <dd :class="{ 'is-danger': clinicalQc.data_health.technical_error_total > 0 }">
                     {{ clinicalQc.data_health.technical_error_total }} 份
                   </dd>
                 </div>
-                <small>仅反映结果交付状态</small>
-              </div>
-              <div data-testid="health-status-item">
-                <span class="qc-home-health-list__icon is-success">
-                  <CircleCheckBig :size="18" />
-                </span>
-                <div>
+                <div data-testid="health-status-item">
+                  <MqIconTile
+                    name="success"
+                    tone="success"
+                    :size="34"
+                  />
                   <dt>最近成功质控</dt>
                   <dd>{{ formatDateTime(clinicalQc.data_health.last_successful_qc_at) }}</dd>
                 </div>
-                <small>最近一次可用结果生成时间</small>
-              </div>
-            </dl>
-          </section>
-        </template>
-
-        <section
-          v-else-if="!loading"
-          class="qc-home-empty workstation-surface-enter"
-          data-testid="home-empty"
-        >
-          <a-empty description="当前暂无可展示的全病历质控汇总">
-            <template #description>
-              <p>请先在病历池完成质控；系统不会用旧工作流数据代替正式质控结果。</p>
-            </template>
-            <a-button
-              type="primary"
-              @click="openRecordPool"
-            >
-              进入病历池
-            </a-button>
-          </a-empty>
+              </dl>
+            </section>
+          </div>
         </section>
-      </main>
-    </div>
+      </template>
+
+      <section
+        v-else-if="!loading"
+        class="qc-home-empty"
+        data-testid="home-empty"
+      >
+        <a-empty description="当前暂无可展示的全病历质控汇总">
+          <template #description>
+            <p>请先在病历池完成质控；系统不会用旧工作流数据代替正式质控结果。</p>
+          </template>
+          <button
+            type="button"
+            class="qc-home-button qc-home-button--primary"
+            @click="openRecordPool"
+          >
+            进入病历池
+          </button>
+        </a-empty>
+      </section>
+    </main>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, type Component } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import dayjs from 'dayjs'
-import {
-  Activity,
-  ArrowRight,
-  ChevronRight,
-  CircleCheckBig,
-  Database,
-  TriangleAlert,
-} from 'lucide-vue-next'
+import MqIcon from '@/components/icons/MqIcon.vue'
+import MqIconTile from '@/components/icons/MqIconTile.vue'
+import { MQ_ICON_TONES, type MqIconName, type MqIconTone } from '@/components/icons/mqIcons'
 import { ApiService } from '@/services/apiService'
 import { useAuthStore } from '@/stores/auth'
 import type {
@@ -496,8 +613,14 @@ interface KpiCard {
   label: string
   value: number
   helper: string
-  icon: Component
-  tone: 'brand' | 'warning' | 'success' | 'danger'
+  icon: MqIconName
+  tone: MqIconTone
+}
+
+interface MetricCard extends KpiCard {
+  /** 进度条比例（0-100） */
+  rate: number
+  rateLabel: string
 }
 
 interface ConclusionSegment {
@@ -567,7 +690,7 @@ const kpiCards = computed<KpiCard[]>(() => {
       label: '有确定问题的病历',
       value: Number(kpis?.high_risk_review_total || 0),
       helper: '含确定问题的病历',
-      icon: TriangleAlert,
+      icon: 'issue',
       tone: 'danger',
     },
     {
@@ -575,7 +698,7 @@ const kpiCards = computed<KpiCard[]>(() => {
       label: '待质控',
       value: Number(kpis?.qc_pending_total || 0),
       helper: '尚未生成最终结果',
-      icon: Activity,
+      icon: 'task',
       tone: 'warning',
     },
     {
@@ -583,7 +706,7 @@ const kpiCards = computed<KpiCard[]>(() => {
       label: '已完成',
       value: Number(kpis?.qc_completed_total || 0),
       helper: '已生成正式质控结果',
-      icon: CircleCheckBig,
+      icon: 'fp_qc',
       tone: 'success',
     },
     {
@@ -591,11 +714,102 @@ const kpiCards = computed<KpiCard[]>(() => {
       label: '纳入病历',
       value: Number(kpis?.records_total || 0),
       helper: '当前筛选范围',
-      icon: Database,
+      icon: 'stack',
       tone: 'brand',
     },
   ]
 })
+
+const kpiByKey = computed(() =>
+  Object.fromEntries(kpiCards.value.map((card) => [card.key, card])),
+)
+const pendingKpi = computed(() => kpiByKey.value.pending)
+const recordsTotal = computed(() => kpiByKey.value.records.value)
+
+function ratio(part: number, whole: number): number {
+  return whole > 0 ? Math.min(100, (part / whole) * 100) : 0
+}
+
+function formatRate(value: number): string {
+  return String(Math.round(value * 10) / 10)
+}
+
+// 进度比例全部由现有 KPI 计算，不引入新口径
+const rates = computed(() => ({
+  pending: ratio(kpiByKey.value.pending.value, recordsTotal.value),
+  completion: ratio(kpiByKey.value.completed.value, recordsTotal.value),
+  issue: ratio(kpiByKey.value.risk.value, kpiByKey.value.completed.value),
+}))
+
+const metricCards = computed<MetricCard[]>(() => [
+  {
+    ...kpiByKey.value.risk,
+    rate: rates.value.issue,
+    rateLabel: `占已完成 ${formatRate(rates.value.issue)}%`,
+  },
+  {
+    ...kpiByKey.value.completed,
+    rate: rates.value.completion,
+    rateLabel: `完成率 ${formatRate(rates.value.completion)}%`,
+  },
+  { ...kpiByKey.value.records, rate: recordsTotal.value > 0 ? 100 : 0, rateLabel: scopeHospitalText.value },
+])
+
+const ringDefs = computed(() => [
+  {
+    key: 'issue',
+    label: '问题率',
+    r: 84,
+    rate: rates.value.issue,
+    gradient: 'qcRingRed',
+    from: '#FF4F7B',
+    to: '#FF2D55',
+    textColor: '#FF4F7B',
+  },
+  {
+    key: 'completion',
+    label: '完成率',
+    r: 60,
+    rate: rates.value.completion,
+    gradient: 'qcRingGreen',
+    from: '#C6FF3D',
+    to: '#30D158',
+    textColor: '#9BEA4A',
+  },
+  {
+    key: 'pending',
+    label: '待质控',
+    r: 36,
+    rate: rates.value.pending,
+    gradient: 'qcRingAmber',
+    from: '#FFE14D',
+    to: '#FF9F0A',
+    textColor: '#FFD23F',
+  },
+])
+
+function ringDash(radius: number, rate: number): string {
+  const circumference = 2 * Math.PI * radius
+  return `${((circumference * rate) / 100).toFixed(1)} ${circumference.toFixed(1)}`
+}
+
+const TONE_GRADIENTS: Record<MqIconTone, string> = {
+  neutral: 'linear-gradient(90deg, #A1A7B3, #6E7585)',
+  brand: 'linear-gradient(90deg, #6FB0FF, #0A6CFF)',
+  success: 'linear-gradient(90deg, #6EE08E, #34C759)',
+  warning: 'linear-gradient(90deg, #FFC36B, #FF9500)',
+  danger: 'linear-gradient(90deg, #FF7A70, #FF3B30)',
+}
+
+function toneColor(tone: MqIconTone): string {
+  return MQ_ICON_TONES[tone].color
+}
+
+function toneGradient(tone: MqIconTone): string {
+  return TONE_GRADIENTS[tone]
+}
+
+const todayLabel = computed(() => dayjs().format('M月D日 dddd'))
 
 const conclusionSegments = computed<ConclusionSegment[]>(() => {
   const counts = clinicalQc.value?.canonical_status_counts || {}
@@ -780,786 +994,4 @@ watch(
 )
 </script>
 
-<style scoped>
-@import '../workstation-v4/styles/workstation-v4-view.css';
-@import '../../styles/source-han-sans-sc.css';
-
-.qc-home-shell {
-  background: var(--mq-bg-page);
-  font-family: var(--mq-font-family);
-  color: var(--mq-text-primary);
-  font-size: 14px;
-  line-height: 1.6;
-}
-.qc-home-canvas {
-  --qc-home-dashboard-columns: minmax(0, 1.88fr) minmax(320px, 0.72fr);
-  align-content: start;
-  display: grid;
-  gap: 18px;
-  min-height: calc(100vh - var(--mq-header-height));
-}
-.qc-home-header,
-.qc-home-panel,
-.qc-home-notice,
-.qc-home-empty,
-.qc-home-loading {
-  border: 1px solid var(--mq-border);
-  border-radius: var(--mq-radius-card);
-  background: #fff;
-  box-shadow: none;
-}
-.qc-home-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 18px 20px;
-  border: 1px solid var(--mq-border);
-  background: var(--mq-bg-surface);
-  box-shadow: none;
-}
-.qc-home-header__subtitle {
-  margin: 6px 0 0;
-  font-size: 13px;
-  color: var(--mq-text-tertiary);
-}
-.qc-home-start {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  height: 36px;
-  padding: 0 14px;
-  border: 0;
-  border-radius: 8px;
-  background: var(--mq-brand-600);
-  color: #fff;
-  font: inherit;
-  font-size: 13px;
-  cursor: pointer;
-}
-.qc-home-start:hover {
-  background: var(--mq-brand-700);
-}
-.qc-home-start:focus-visible {
-  outline: 2px solid var(--mq-brand-600);
-  outline-offset: 3px;
-}
-.qc-home-department,
-.qc-home-refresh {
-  min-height: 32px;
-  border: 1px solid var(--mq-border);
-  border-radius: 8px;
-  padding: 3px 9px;
-  background: var(--mq-bg-subtle);
-  color: var(--mq-text-secondary);
-  font: inherit;
-  cursor: pointer;
-}
-.qc-home-department {
-  max-width: 220px;
-}
-.qc-home-scope__keyword {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-.qc-home-refresh {
-  color: var(--mq-brand-600);
-}
-.qc-home-department:focus-visible,
-.qc-home-refresh:focus-visible {
-  outline: 2px solid var(--mq-brand-600);
-  outline-offset: 2px;
-}
-.qc-home-overview {
-  overflow: hidden;
-  border: 1px solid var(--mq-border);
-  border-radius: var(--mq-radius-card);
-  background: #fff;
-}
-.qc-home-metrics {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  padding: 22px 0;
-  border: 0;
-  border-radius: 0;
-  background: #fff;
-}
-.qc-home-metrics > div {
-  padding: 0 22px;
-  border-right: 1px solid var(--mq-border);
-}
-.qc-home-metrics > div:last-child {
-  border: 0;
-}
-.qc-home-metrics span {
-  font-size: 14px;
-  color: var(--mq-text-secondary);
-}
-.qc-home-metrics strong {
-  display: block;
-  margin: 8px 0 4px;
-  font-size: 28px;
-  line-height: 36px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  color: var(--mq-text-primary);
-}
-.qc-home-metrics small {
-  margin-left: 7px;
-  font-size: 13px;
-  font-weight: 400;
-  color: var(--mq-text-tertiary);
-}
-.qc-home-metrics p {
-  margin: 0;
-  font-size: 13px;
-  color: var(--mq-text-secondary);
-}
-.qc-home-metric--risk:not(.is-zero) strong {
-  color: var(--mq-danger-text);
-}
-@media (max-width: 780px) {
-  .qc-home-metrics {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 18px 0;
-  }
-}
-.qc-home-header__copy {
-  min-width: 230px;
-}
-.qc-home-header h1,
-.qc-home-panel h2 {
-  margin: 0;
-  font-weight: 600;
-}
-.qc-home-header h1 {
-  font-size: var(--mq-font-20);
-  line-height: 28px;
-}
-.qc-home-panel p {
-  margin: 7px 0 0;
-  color: var(--mq-text-secondary);
-  font-size: 13px;
-  line-height: 20px;
-}
-.qc-home-scope {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 9px;
-  padding: 12px 16px;
-  color: var(--mq-text-secondary);
-  font-size: 14px;
-  font-weight: 400;
-}
-.qc-home-scope i {
-  width: 3px;
-  height: 3px;
-  border-radius: 50%;
-  background: var(--mq-border-strong);
-}
-.qc-home-scope__label {
-  color: var(--mq-brand-600);
-}
-.qc-home-scope__rule-set {
-  color: var(--mq-text-primary);
-}
-.qc-home-scope__time {
-  margin-left: auto;
-  color: var(--mq-text-tertiary);
-  font-weight: 500;
-}
-.qc-home-grid {
-  display: grid;
-  grid-template-columns: var(--qc-home-dashboard-columns);
-  gap: 18px;
-  align-items: stretch;
-}
-.qc-home-workspace {
-  min-height: 480px;
-}
-.qc-home-analysis {
-  display: grid;
-  grid-template-columns: var(--qc-home-dashboard-columns);
-  gap: 18px;
-  align-items: stretch;
-}
-.qc-home-department-panel {
-  grid-column: 1;
-}
-.qc-home-panel {
-  padding: 20px 22px;
-  border-radius: var(--mq-radius-card);
-  box-shadow: none;
-}
-.qc-home-side-stack {
-  display: grid;
-  gap: 18px;
-  align-content: start;
-}
-.qc-home-panel--health {
-  display: grid;
-  grid-template-rows: auto auto;
-}
-.qc-home-panel--queue .qc-home-panel__head {
-  border-bottom: 0;
-  padding-bottom: 8px;
-}
-.qc-home-panel__head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  padding-bottom: 15px;
-  border-bottom: 1px solid var(--mq-border);
-}
-.qc-home-panel-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  flex: none;
-  min-height: 32px;
-  padding: 0 2px;
-  border: 0;
-  background: transparent;
-  color: var(--mq-brand-600);
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 600;
-}
-.qc-home-panel-link:hover {
-  color: var(--mq-brand-700);
-}
-.qc-home-panel-link:focus-visible {
-  outline: 2px solid var(--mq-brand-600);
-  outline-offset: 2px;
-}
-.qc-home-panel h2 {
-  font-size: var(--mq-font-16);
-  line-height: 24px;
-  font-weight: 600;
-}
-.qc-home-priority-scope {
-  gap: 10px;
-  padding: 15px 22px;
-  border-bottom: 1px solid var(--mq-border);
-  color: var(--mq-text-secondary);
-  font-size: 14px;
-  line-height: 22px;
-  font-weight: 400;
-}
-.qc-home-priority-scope .qc-home-scope__label,
-.qc-home-priority-scope .qc-home-scope__rule-set {
-  font-weight: 600;
-}
-.qc-home-priority-scope .qc-home-scope__time {
-  font-size: 13px;
-}
-.qc-home-health-list {
-  display: grid;
-  gap: 0;
-  margin: 0;
-}
-.qc-home-health-list > div {
-  display: grid;
-  grid-template-columns: 38px minmax(0, 1fr);
-  gap: 2px 11px;
-  align-items: center;
-  padding: 13px 0;
-  border-bottom: 1px solid var(--mq-border);
-}
-.qc-home-health-list > div:last-child {
-  border-bottom: 0;
-}
-.qc-home-health-list dt,
-.qc-home-health-list dd,
-.qc-home-health-list small {
-  margin: 0;
-}
-.qc-home-health-list dt {
-  color: var(--mq-text-tertiary);
-  font-size: 12px;
-  line-height: 18px;
-}
-.qc-home-health-list dd {
-  margin-top: 1px;
-  color: var(--mq-text-primary);
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 20px;
-}
-.qc-home-health-list small {
-  grid-column: 2;
-  color: var(--mq-text-tertiary);
-  font-size: 12px;
-  line-height: 16px;
-}
-.qc-home-health-list__icon {
-  display: grid;
-  grid-row: 1 / span 2;
-  width: 34px;
-  height: 34px;
-  place-items: center;
-  border-radius: var(--mq-radius-card);
-  background: var(--mq-brand-50);
-  color: var(--mq-brand-600);
-}
-.qc-home-health-list__icon.is-danger {
-  background: var(--mq-danger-bg);
-  color: var(--mq-danger-text);
-}
-.qc-home-health-list__icon.is-success {
-  background: var(--mq-brand-50);
-  color: var(--mq-text-tertiary);
-}
-.qc-home-health-list .is-danger {
-  color: var(--mq-danger-text);
-}
-.qc-home-defect-analysis {
-  display: grid;
-  gap: 14px;
-}
-.qc-home-defect-analysis__toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 9px 18px;
-  padding: 10px 12px;
-  border-radius: var(--mq-radius-card);
-  background: var(--mq-bg-subtle);
-}
-.qc-home-defect-analysis__control {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-.qc-home-defect-analysis__control > span {
-  color: var(--mq-text-secondary);
-  font-size: 13px;
-  white-space: nowrap;
-}
-.qc-home-defect-analysis__control > div {
-  display: inline-flex;
-  gap: 2px;
-  padding: 2px;
-  border-radius: 8px;
-  background: var(--mq-bg-muted);
-}
-.qc-home-defect-analysis__control button {
-  min-height: 28px;
-  padding: 4px 9px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--mq-text-secondary);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: 160ms ease;
-}
-.qc-home-defect-analysis__control button:hover {
-  color: var(--mq-brand-600);
-}
-.qc-home-defect-analysis__control button.is-active {
-  background: #fff;
-  color: var(--mq-brand-600);
-  font-weight: 600;
-  box-shadow: 0 1px 4px var(--mq-border);
-}
-.qc-home-defect-analysis__control button:focus-visible {
-  outline: 2px solid var(--mq-brand-600);
-  outline-offset: 1px;
-}
-.qc-home-defect-analysis__list {
-  display: grid;
-}
-.qc-home-defect-analysis__row {
-  display: grid;
-  grid-template-columns: minmax(145px, 0.9fr) minmax(170px, 1.45fr) auto 18px;
-  align-items: center;
-  gap: 14px;
-  width: 100%;
-  min-height: 56px;
-  padding: 8px 6px;
-  border: 0;
-  border-bottom: 1px solid var(--mq-border);
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-}
-button.qc-home-defect-analysis__row {
-  cursor: pointer;
-  transition:
-    background 160ms ease,
-    transform 160ms ease;
-}
-.qc-home-defect-analysis__row:last-of-type {
-  border-bottom: 0;
-}
-button.qc-home-defect-analysis__row:hover,
-.qc-home-defect-analysis__row.is-active {
-  background: var(--mq-brand-50);
-}
-button.qc-home-defect-analysis__row:hover {
-  transform: none;
-}
-button.qc-home-defect-analysis__row:focus-visible {
-  border-radius: 8px;
-  outline: 2px solid var(--mq-brand-600);
-  outline-offset: -2px;
-}
-.qc-home-defect-analysis__meta {
-  min-width: 0;
-}
-.qc-home-defect-analysis__meta strong,
-.qc-home-defect-analysis__meta span {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.qc-home-defect-analysis__meta strong {
-  color: var(--mq-text-primary);
-  font-size: 14px;
-  font-weight: 600;
-}
-.qc-home-defect-analysis__meta span {
-  margin-top: 3px;
-  color: var(--mq-text-secondary);
-  font-size: 13px;
-}
-.qc-home-defect-analysis__metric {
-  display: grid;
-  grid-template-columns: minmax(90px, 1fr) 42px;
-  align-items: center;
-  gap: 10px;
-}
-.qc-home-defect-analysis__track {
-  height: 10px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: var(--mq-brand-50);
-}
-.qc-home-defect-analysis__track i {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--mq-brand-600);
-  transition: width 250ms cubic-bezier(0.25, 0.1, 0.25, 1);
-}
-.qc-home-defect-analysis__metric strong {
-  color: var(--mq-brand-600);
-  font-size: 13px;
-  font-weight: 600;
-  text-align: right;
-}
-.qc-home-defect-analysis__counts {
-  display: flex;
-  justify-content: flex-end;
-  gap: 11px;
-  min-width: 132px;
-  font-size: 13px;
-  white-space: nowrap;
-}
-.qc-home-defect-analysis__counts strong {
-  color: var(--mq-danger-text);
-  font-weight: 600;
-}
-.qc-home-defect-analysis__counts span {
-  color: var(--mq-warning-text);
-}
-.qc-home-defect-analysis__row > svg {
-  color: var(--mq-text-tertiary);
-}
-.qc-home-defect-analysis__note {
-  margin: 8px 6px 0;
-  color: var(--mq-text-secondary);
-  font-size: 13px;
-  line-height: 20px;
-}
-.qc-home-conclusion {
-  display: grid;
-  gap: 16px;
-}
-.qc-home-conclusion__content {
-  display: grid;
-  justify-items: center;
-  gap: 18px;
-}
-.qc-home-conclusion__ring {
-  display: grid;
-  width: 132px;
-  height: 132px;
-  place-items: center;
-  border-radius: 50%;
-}
-.qc-home-conclusion__ring > div {
-  display: grid;
-  width: 96px;
-  height: 96px;
-  place-content: center;
-  border-radius: 50%;
-  background: #fff;
-  text-align: center;
-}
-.qc-home-conclusion__ring strong,
-.qc-home-conclusion__ring span {
-  display: block;
-}
-.qc-home-conclusion__ring strong {
-  color: var(--mq-text-primary);
-  font-size: 26px;
-  line-height: 30px;
-}
-.qc-home-conclusion__ring span {
-  margin-top: 2px;
-  color: var(--mq-text-tertiary);
-  font-size: 12px;
-}
-.qc-home-conclusion__legend {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  width: 100%;
-  gap: 10px 12px;
-  padding: 0;
-  margin: 0;
-  list-style: none;
-}
-.qc-home-conclusion__legend li {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  min-width: 0;
-  color: var(--mq-text-secondary);
-  font-size: 13px;
-}
-.qc-home-conclusion__legend span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.qc-home-conclusion__legend i {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
-.qc-home-conclusion__legend small {
-  margin-left: auto;
-  white-space: nowrap;
-  color: var(--mq-text-tertiary);
-  font-size: 12px;
-}
-.qc-home-notice {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 18px;
-}
-.qc-home-notice span {
-  flex: 1;
-  color: var(--mq-text-secondary);
-  font-size: 13px;
-}
-.qc-home-notice--error {
-  border-color: var(--mq-danger-border);
-}
-.qc-home-notice--error strong {
-  color: var(--mq-danger-text);
-}
-.qc-home-empty {
-  display: grid;
-  min-height: 280px;
-  place-items: center;
-  padding: 28px;
-}
-.qc-home-loading {
-  display: flex;
-  min-height: 220px;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  padding: 28px;
-  color: var(--mq-text-secondary);
-}
-.qc-home-loading :deep(.ant-spin-dot-item) {
-  background-color: var(--mq-brand-600);
-}
-.qc-home-loading strong,
-.qc-home-loading span {
-  display: block;
-}
-.qc-home-loading strong {
-  color: var(--mq-text-primary);
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 22px;
-}
-.qc-home-loading span {
-  margin-top: 3px;
-  color: var(--mq-text-tertiary);
-  font-size: 13px;
-  line-height: 20px;
-}
-@media (max-width: 1360px) {
-  .qc-home-grid {
-    grid-template-columns: 1fr;
-  }
-  .qc-home-workspace {
-    min-height: auto;
-  }
-}
-@media (max-width: 980px) {
-  .qc-home-header {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-  .qc-home-header :deep(.flex.min-w-\[280px\]) {
-    width: 100%;
-  }
-  .qc-home-analysis {
-    grid-template-columns: 1fr;
-  }
-  .qc-home-defect-analysis__row {
-    grid-template-columns: minmax(145px, 0.9fr) minmax(150px, 1.2fr) auto 18px;
-  }
-}
-@media (max-width: 620px) {
-  .qc-home-canvas {
-    gap: 12px;
-  }
-  .qc-home-header,
-  .qc-home-panel {
-    padding: 17px;
-  }
-  .qc-home-header h1 {
-    font-size: 23px;
-  }
-  .qc-home-conclusion__legend {
-    grid-template-columns: 1fr;
-  }
-  .qc-home-defect-analysis__toolbar,
-  .qc-home-defect-analysis__control {
-    align-items: flex-start;
-    flex-direction: column;
-    width: 100%;
-  }
-  .qc-home-defect-analysis__control > div {
-    flex-wrap: wrap;
-    width: 100%;
-  }
-  .qc-home-defect-analysis__row {
-    grid-template-columns: minmax(0, 1fr) 18px;
-    gap: 7px 10px;
-    padding: 11px 4px;
-  }
-  .qc-home-defect-analysis__metric,
-  .qc-home-defect-analysis__counts {
-    grid-column: 1;
-  }
-  .qc-home-defect-analysis__counts {
-    justify-content: flex-start;
-  }
-  .qc-home-defect-analysis__row > svg {
-    grid-column: 2;
-    grid-row: 1 / span 3;
-  }
-  .qc-home-conclusion__content {
-    grid-template-columns: 1fr;
-    justify-items: center;
-  }
-  .qc-home-scope__time {
-    width: 100%;
-    margin-left: 0;
-  }
-}
-.qc-home-shortcuts {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0;
-  border-top: 1px solid var(--mq-border);
-  background: var(--mq-bg-subtle);
-}
-.qc-home-shortcuts button {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  min-height: 64px;
-  padding: 10px 22px;
-  border: 0;
-  border-right: 1px solid var(--mq-border);
-  border-radius: 0;
-  background: transparent;
-  color: var(--mq-brand-600);
-  text-align: left;
-  cursor: pointer;
-  font: inherit;
-}
-.qc-home-shortcuts strong {
-  display: block;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--mq-text-primary);
-}
-.qc-home-shortcuts button > span {
-  flex: 1;
-  min-width: 0;
-}
-.qc-home-shortcuts button > svg {
-  flex-shrink: 0;
-}
-.qc-home-shortcuts small {
-  display: block;
-  margin-top: 3px;
-  font-size: 13px;
-  color: var(--mq-text-secondary);
-}
-.qc-home-shortcuts button:hover {
-  background: var(--mq-brand-50);
-}
-.qc-home-shortcuts button:last-child {
-  border-right: 0;
-}
-.qc-home-shortcuts button:focus-visible {
-  outline: 2px solid var(--mq-brand-600);
-  outline-offset: 3px;
-}
-.qc-home-panel--health .qc-home-health-list {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 20px;
-}
-.qc-home-panel--health .qc-home-health-list > div {
-  border-bottom: 0;
-}
-@media (max-width: 980px) {
-  .qc-home-panel--health .qc-home-health-list {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-@media (max-width: 620px) {
-  .qc-home-shortcuts,
-  .qc-home-panel--health .qc-home-health-list {
-    grid-template-columns: 1fr;
-  }
-}
-
-.qc-home-defect-analysis__counts .is-zero {
-  color: var(--mq-text-tertiary);
-  font-weight: 400;
-}
-.qc-home-shell :deep(.ant-empty-description) {
-  color: var(--mq-text-secondary);
-}
-.qc-home-shell button,
-.qc-home-shell select {
-  font-family: inherit;
-}
-.qc-home-start,
-.qc-home-defect-analysis__control {
-  font-size: 14px;
-  font-weight: 400;
-}
-</style>
+<style scoped src="./styles/qc-overview.css"></style>
