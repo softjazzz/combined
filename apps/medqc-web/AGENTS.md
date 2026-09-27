@@ -41,7 +41,7 @@
 ## 工具与项目边界
 
 - `.codegraph/` 存在时，理解代码位置和调用链应先用 CodeGraph：`codegraph explore "问题或符号"`，影响分析用 `codegraph impact <symbol>`。修改后若继续依赖索引则运行 `codegraph sync .`；索引异常才重建。CodeGraph 不能替代真实 trace、测试、浏览器验证和性能数据。
-- `workstation-v4` UI 遵循 `docs/gap/WorkstationV4-医疗浅色-DESIGN.md`：浅色医疗中后台、清晰层级、总览/筛选/明细/结果分区，复用现有 token 与组件；纯展示需求不得修改后端合同。
+- `workstation-v4` UI 遵循 `docs/0418/UI/WorkstationV4-医疗浅色-DESIGN.md`：浅色医疗中后台、清晰层级、总览/筛选/明细/结果分区，复用现有 token 与组件；纯展示需求不得修改后端合同。
 - TypeScript 修改优先修复 API DTO、Store、props/emits 等类型边界；新模块启用严格类型。禁止用宽泛 `any` 或 `@ts-ignore` 绕过错误；必要时使用带原因的 `@ts-expect-error`。不得新增 `.vue.ts` 镜像文件。
 - 禁止提交 `dist/`、coverage、临时日志等生成物；禁止通过关闭 CI 门禁强行通过。
 

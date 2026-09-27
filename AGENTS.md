@@ -12,7 +12,7 @@
 - Prefer fixing type boundaries (`api dto`, `store state`, `component props/emits`) over local casts.
 
 ## Frontend UI/UX Rules
-- `workstation-v4` 页面必须优先遵循 `apps/medqc-web/docs/gap/WorkstationV4-医疗浅色-DESIGN.md`。
+- `workstation-v4` 页面必须优先遵循 `apps/medqc-web/docs/0418/UI/WorkstationV4-医疗浅色-DESIGN.md`。
 - 医疗工作台 UI 默认采用浅色医疗中后台风格：浅背景、白色卡片、弱边框、轻阴影、清晰信息层级；不要使用深色大背景、营销化头图或高饱和装饰。
 - 页面结构优先按“总览/筛选/明细/结果”分层，复杂功能必须拆成可扫描的区块，不要把创建、编辑、执行、结果全部平铺在同一大表单里。
 - 组件交互遵循 Vue Pro / Ant Design Vue 的中后台模式：清晰工具栏、主次按钮分明、筛选项聚合、弹窗/抽屉承载复杂创建或编辑流程。
