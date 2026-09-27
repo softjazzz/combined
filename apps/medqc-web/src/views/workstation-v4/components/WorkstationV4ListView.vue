@@ -1,34 +1,22 @@
 <template>
   <main
-    class="relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden"
+    class="wv4-list min-w-0 flex-1"
     :class="{ 'record-pool-refined': !isStageQueueMode }"
   >
-    <div class="custom-scrollbar flex-1 overflow-y-auto px-4 pb-5 pt-4 xl:px-5">
-      <div class="mx-auto w-full max-w-[1440px]">
-        <div class="workstation-surface-enter mb-4">
+    <div class="mq-page wv4-list__page">
+      <div class="wv4-list__stack">
+        <div class="workstation-surface-enter">
           <section
             class="wv4-analysis-overview wv4-record-pool-hero"
             aria-labelledby="workstation-list-overview-title"
           >
-            <div class="wv4-analysis-overview__header">
-              <div>
-                <div
-                  v-if="isFrontpageGenerateStage"
-                  class="wv4-analysis-overview__eyebrow"
-                >
-                  {{ overviewEyebrow }}
-                </div>
+            <div class="wv4-analysis-overview__header mq-page-head">
+              <div class="mq-page-head__copy">
+                <span class="mq-page-eyebrow">{{ overviewEyebrow }}</span>
                 <h3
                   id="workstation-list-overview-title"
-                  class="wv4-analysis-overview__title"
+                  class="wv4-analysis-overview__title mq-page-title"
                 >
-                  <span
-                    v-if="!isStageQueueMode"
-                    class="record-pool-title-icon"
-                  ><FolderHeart
-                    :size="21"
-                    aria-hidden="true"
-                  /></span>
                   {{ overviewTitle }}
                 </h3>
                 <p
@@ -37,13 +25,6 @@
                 >
                   {{ overviewSubtitle }}
                 </p>
-                <div
-                  v-if="isFrontpageGenerateStage"
-                  class="wv4-stage-context mt-2 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold"
-                >
-                  <span class="h-1.5 w-1.5 rounded-full" />
-                  当前阶段：参考首页生成
-                </div>
               </div>
               <div
                 v-if="isFrontpageGenerateStage"
@@ -67,7 +48,7 @@
               </div>
             </div>
 
-            <div class="wv4-analysis-overview__controls wv4-record-pool-filter">
+            <div class="wv4-analysis-overview__controls wv4-record-pool-filter mq-card">
               <div class="workbench-filter-toolbar">
                 <a-input
                   :value="searchText"
@@ -290,7 +271,7 @@
 
         <div
           v-if="loadError"
-          class="workstation-empty-state mb-4 flex items-center gap-2 px-4 py-3 text-[13px]"
+          class="workstation-empty-state wv4-list__alert"
           role="alert"
         >
           病历池暂未加载成功，请检查网络后重试。
@@ -298,9 +279,9 @@
 
         <div
           v-if="isFrontpageGenerateStage"
-          class="workstation-surface-enter mb-4"
+          class="workstation-surface-enter"
         >
-          <section class="wv4-stage-notice">
+          <section class="wv4-stage-notice mq-card">
             <div class="wv4-stage-notice__title">
               生成指引
             </div>
@@ -369,10 +350,10 @@
 
         <div
           v-if="listRecords.length === 0"
-          class="workstation-empty-state mt-4 flex min-h-[160px] flex-col items-center justify-center px-5 py-10 text-center"
+          class="workstation-empty-state wv4-list__empty mq-card"
         >
-          <InboxOutlined class="workstation-empty-state__icon mb-3 text-[36px]" />
-          <div class="workstation-empty-state__text text-[13px] font-medium">
+          <InboxOutlined class="workstation-empty-state__icon" />
+          <div class="workstation-empty-state__text">
             {{ stageEmptyText }}
           </div>
         </div>
@@ -385,7 +366,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import {
-  FolderHeart,
   Building2,
   Stethoscope,
   CalendarDays,
@@ -537,7 +517,7 @@ const showInpatientSort = computed(
 )
 
 const overviewEyebrow = computed(() =>
-  isFrontpageGenerateStage.value ? 'Workstation / Frontpage Generate' : 'Workstation / Record Pool',
+  props.isStageQueueMode ? '首页与结算清单 · 批量工作台' : '质控作业 · 全部病历',
 )
 
 const overviewTitle = computed(() =>

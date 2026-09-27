@@ -21,7 +21,7 @@
 
 | # | 页面（路由 `/workstation-v5/…`） | 源文件 | 模板 | 状态 |
 | --- | --- | --- | --- | --- |
-| 1 | 病历池 `worklist`（含生成首页/首页质控/结算清单质控三个 `?stage=`） | `workstation-v4/WorkstationV4View.vue`、`components/WorkstationV4ListView.vue` | 列表 + 预览（PoolV71） | 待办 |
+| 1 | 病历池 `worklist`（含生成首页/首页质控/结算清单质控三个 `?stage=`） | `workstation-v4/WorkstationV4View.vue`、`components/WorkstationV4ListView.vue` | 列表 + 预览（PoolV71） | 完成（见执行记录）；「左列表 + 右预览」布局待确认 |
 | 2 | 运行病历质控 `records/running`、终末病历质控 `records/final` | `workstation-v4/QcRecordResultListView.vue` 及其预览组件 | 列表 + 预览（RunningV71） | 待办 |
 | 3 | 质控规则 `rules` | `workstation-v4/WorkstationRulesView.vue` 及其子组件 | 目录（RulesV71） | 待办 |
 | 4 | 系统配置剩余部分：连接配置、执行日志、首页抽取设置、模型性能、模型配置 | `components/sync-console/ConnectionStudio.vue`、`SyncRunPanel.vue`、`components/system-config/*`、`components/LLMApiConfig.vue` | 表单 / 设置（SystemConfigV71） | 待办 |
@@ -71,3 +71,4 @@
 | 日期 | 项 | 结果 |
 | --- | --- | --- |
 | 2026-09-27 | 创建计划 | 基础层与系统配置数据同步 Tab 已完成，队列从第 1 项开始 |
+| 2026-09-27 | 1 病历池 | 页头改为眉标 + 40px 标题，筛选区改为玻璃卡，表格改为玻璃卡、浅灰表头和胶囊状态；三个首页/结算清单阶段队列同步换装（指标卡、指引、长住院号截断）。保留原有表格、详情跳转和批量操作；`record-pool-refined.css` 整份重写，对全局 `!important` 白底做反向覆盖。列表 47 项单测、类型检查通过，1440/1180 截图核对。**待确认**：设计稿 PoolV71 的「左列表 + 右预览」会把「点击进入全屏详情」改为「右侧预览」，属于交互变更，未实施 |
