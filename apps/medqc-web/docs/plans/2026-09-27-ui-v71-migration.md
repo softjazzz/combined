@@ -25,7 +25,7 @@
 | 2 | 运行病历质控 `records/running`、终末病历质控 `records/final` | `workstation-v4/QcRecordResultListView.vue` 及其预览组件 | 列表 + 预览（RunningV71） | 完成（见执行记录） |
 | 3 | 质控规则 `rules` | `workstation-v4/WorkstationRulesView.vue` 及其子组件 | 目录（RulesV71） | 完成（见执行记录） |
 | 4 | 系统配置剩余部分：连接配置、执行日志、首页抽取设置、模型性能、模型配置 | `components/sync-console/ConnectionStudio.vue`、`SyncRunPanel.vue`、`components/system-config/*`、`components/LLMApiConfig.vue` | 表单 / 设置（SystemConfigV71） | 完成（见执行记录） |
-| 5 | 客户样本验证 `customer-sample-validation` | `workstation-v4/CustomerSampleValidationView.vue` | 列表 + 预览 | 待办 |
+| 5 | 客户样本验证 `customer-sample-validation` | `workstation-v4/CustomerSampleValidationView.vue` | 列表 + 预览 | 完成（见执行记录） |
 | 6 | 质控反馈记录 `qc-feedback-demo` | `workstation-v4/QcResultFeedbackDemoListView.vue` | 列表 + 预览 | 待办 |
 | 7 | 手术分级目录 `customer-sample-validation/surgery-catalog` | `workstation-v4/components/SurgeryProcedureCatalogView.vue` | 目录 | 待办 |
 | 8 | 自定义质控点 `rules/custom-workspace` | `views/rules/CustomRuleWorkspaceView.vue` | 目录 + 编辑器（先出设计稿） | 待办 |
@@ -75,3 +75,4 @@
 | 2026-09-27 | 2 运行/终末病历质控 | 页头改为眉标 + 40px 标题，视图切换与「质控所选」移到页头右侧；四栏指标卡加定制图标（DOM 顺序不变以保留测试契约）；筛选行改为玻璃胶囊控件，列表与复核预览改为两张玻璃卡，预览卡吸顶。旧样式保留复核卡片阅读排版，末尾追加 v7.1 覆盖层（含对旧窄屏纵向布局的修正），重复规则留待第 12 项清理；外壳去掉该页旧渐变底。单测 20 项、类型检查通过，运行/终末两页 1440/1180 截图核对 |
 | 2026-09-27 | 3 质控规则 | 外壳改为眉标 + 大标题，四类规则页签改为分段切换（去掉装饰计数徽章）；语义规则表头改为蓝色「当前规则集」主卡（规则集下拉保留在主卡内用于切换），表格改为玻璃卡，编号列加宽为等宽单行胶囊，修复三个筛选下拉占位符不显示；编码/首页/结算三个页签的白卡由外壳统一换为玻璃卡。私有样式拆到 `semantic-rules-table.css`。规则相关 14 个测试文件 92 项、类型检查通过，1440/1180 截图核对 |
 | 2026-09-27 | 4 系统配置其余页签 | 首页抽取设置、模型性能、模型配置三个页签的面板加内边距，内部 `ds-*` 白卡改为半透明子容器，分组小标题统一；模型配置英文眉标改为中文「模型与参数」。高级区连接配置、执行日志面板的 Tailwind 白底改为透明、输入框统一。覆盖只写在 `system-config.css` 内，不改共享的 `settings-design-system.css`，旧版后台不受影响。相关 3 个测试文件 43 项、类型检查通过。首页抽取与模型配置两页 1440 截图核对；模型性能页签与高级区需实施账号，演示账号无权限，未能截图 |
+| 2026-09-27 | 5 客户样本验证 | 标题与页面级操作移出控制台卡片，改为标准页头（眉标 + 40px 标题）；去掉 14 处强制 `!rounded-lg`，按钮统一胶囊；控制台、病历池、底部操作坞改为玻璃卡，规则集卡片选中态改为品牌蓝描边，表格与分页统一 v7.1。`customer-sample-refined.css` 整份重写为 v7.1 覆盖层（对基础样式里的 `!important` 圆角做同级覆盖）。页面 67 项单测、类型检查通过，1440/1180 截图核对 |
