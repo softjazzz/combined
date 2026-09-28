@@ -631,26 +631,28 @@
   line-height: 22px;
 }
 
-/* 结果筛选：仅选中项使用纯蓝底白字。 */
+/* 结果筛选：v7.1 分段样式，选中项白色浮起（原“纯蓝底白字”已按设计规范替换）。 */
 :global(.customer-record-result-drawer .result-tab) {
-  background: #fff !important;
+  border: 0 !important;
+  background: transparent !important;
   background-image: none !important;
-  color: #657287 !important;
+  color: var(--mq-text-secondary) !important;
   opacity: 1;
   box-shadow: none;
 }
 :global(.customer-record-result-drawer .result-tab b) {
-  background: #edf0f5;
-  color: #7b8796;
+  background: rgba(118, 128, 160, 0.12);
+  color: var(--mq-text-tertiary);
 }
 :global(.customer-record-result-drawer .result-tab.is-active) {
-  background: #0a6cff !important;
-  color: #fff !important;
-  box-shadow: 0 2px 5px rgba(10, 108, 255, 0.14);
+  background: #ffffff !important;
+  color: var(--mq-text-primary) !important;
+  font-weight: 600;
+  box-shadow: 0 2px 6px rgba(10, 55, 115, 0.12);
 }
 :global(.customer-record-result-drawer .result-tab.is-active b) {
-  background: rgba(255, 255, 255, 0.18);
-  color: #fff;
+  background: var(--mq-info-bg);
+  color: var(--mq-info-text);
 }
 
 :global(.customer-record-result-drawer .customer-record-result-title__context) {
@@ -781,13 +783,6 @@
   border: 1px solid var(--mq-glass-border);
   border-radius: 16px;
   background: var(--mq-glass-bg-strong);
-}
-:global(.customer-record-result-drawer .result-toolbar) {
-  margin: 14px 16px 0;
-  border: 1px solid var(--mq-glass-border);
-  border-radius: var(--mq-radius-card);
-  background: var(--mq-glass-bg);
-  box-shadow: var(--mq-glass-shadow);
 }
 :global(.customer-record-result-drawer .result-tabs) {
   border-radius: 13px;

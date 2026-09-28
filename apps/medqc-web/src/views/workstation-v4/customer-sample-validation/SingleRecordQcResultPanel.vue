@@ -2435,4 +2435,92 @@ watch(
     line-height: 19px;
   }
 }
+
+/* ===== v7.1 液态玻璃覆盖：透明底、分段式筛选、Token 语义色、结果卡圆角 ===== */
+.single-record-result-panel {
+  background: transparent;
+  color: var(--mq-text-primary);
+  font-family: var(--mq-font-family);
+}
+.result-toolbar {
+  border-bottom: 0.5px solid var(--mq-border);
+  background: rgba(255, 255, 255, 0.72);
+  -webkit-backdrop-filter: var(--mq-glass-blur);
+  backdrop-filter: var(--mq-glass-blur);
+}
+.toolbar-summary strong {
+  font-family: var(--mq-font-display);
+  font-weight: 700;
+}
+.result-tabs {
+  gap: 2px;
+  margin: 4px 12px 10px;
+  padding: 3px;
+  border-radius: 13px;
+  background: var(--mq-bg-muted);
+}
+.result-tab {
+  min-height: 30px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-12);
+}
+.result-tab:hover {
+  background: rgba(255, 255, 255, 0.6);
+  color: var(--mq-text-primary);
+}
+.result-tab.is-active {
+  border-color: transparent;
+  background: #ffffff;
+  box-shadow: 0 2px 6px rgba(10, 55, 115, 0.12);
+  color: var(--mq-text-primary);
+  font-weight: 600;
+}
+.result-tab.is-active b {
+  background: var(--mq-info-bg);
+  color: var(--mq-info-text);
+}
+.status-pill {
+  background: var(--mq-neutral-bg);
+  color: var(--mq-text-secondary);
+}
+.is-danger.status-pill {
+  background: var(--mq-danger-bg);
+  color: var(--mq-danger-text);
+}
+.is-danger.status-pill::before {
+  background: var(--mq-danger-icon);
+}
+.is-warning.status-pill {
+  background: var(--mq-warning-bg);
+  color: var(--mq-warning-text);
+}
+.is-warning.status-pill::before {
+  background: var(--mq-warning-icon);
+}
+.is-success.status-pill {
+  background: var(--mq-success-bg);
+  color: var(--mq-success-text);
+}
+.is-success.status-pill::before {
+  background: var(--mq-success-icon);
+}
+.result-row {
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 2px 10px rgba(10, 55, 115, 0.06);
+}
+.result-row.is-active,
+.result-row[aria-current='true'] {
+  border-color: var(--mq-brand-600);
+  box-shadow: 0 0 0 3px rgba(10, 108, 255, 0.1);
+}
+.result-row :deep(.ant-btn),
+.result-card-actions button {
+  border-radius: 999px;
+}
 </style>

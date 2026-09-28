@@ -1824,4 +1824,62 @@ onBeforeUnmount(() => {
     width: 100%;
   }
 }
+
+/* ===== v7.1 液态玻璃覆盖：外框透明，目录 / 原文 / 结果三栏为独立玻璃卡 ===== */
+.record-compare-shell {
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--mq-text-primary);
+  font-family: var(--mq-font-family);
+}
+.record-compare-head {
+  min-height: 0;
+  padding: 14px 18px 10px;
+  border-bottom: 0;
+}
+.record-compare-head strong {
+  font-family: var(--mq-font-display);
+  font-size: var(--mq-font-16);
+  font-weight: 700;
+}
+.record-compare-head span {
+  color: var(--mq-text-tertiary);
+}
+.record-compare-grid {
+  gap: 14px;
+  padding: 0 16px 16px;
+}
+.record-document-nav,
+.record-content-column,
+.record-result-column {
+  overflow: hidden;
+  border: 1px solid var(--mq-glass-border);
+  border-radius: var(--mq-radius-card);
+  background: var(--mq-glass-bg);
+  -webkit-backdrop-filter: var(--mq-glass-blur);
+  backdrop-filter: var(--mq-glass-blur);
+  box-shadow: var(--mq-glass-shadow);
+}
+.record-document-nav {
+  border-right: 1px solid var(--mq-glass-border);
+}
+.record-content-column {
+  background: rgba(255, 255, 255, 0.82);
+}
+.record-content-toolbar {
+  border-bottom: 0.5px solid var(--mq-border);
+  background: transparent;
+}
+.record-column-head {
+  border-bottom: 0.5px solid var(--mq-border);
+}
+.record-result-entry {
+  border-radius: 16px;
+}
+.record-result-entry.is-active {
+  border-color: var(--mq-brand-600);
+  box-shadow: 0 0 0 3px rgba(10, 108, 255, 0.1);
+}
 </style>
