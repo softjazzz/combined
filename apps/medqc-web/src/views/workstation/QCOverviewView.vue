@@ -177,8 +177,8 @@
             <span class="qc-home-rings__title">质控进度</span>
             <div class="qc-home-rings__body">
               <svg
-                width="128"
-                height="128"
+                width="96"
+                height="96"
                 viewBox="0 0 200 200"
                 aria-hidden="true"
               >

@@ -279,6 +279,81 @@ button.qc-home-defect-analysis__row:focus-visible {
   font-size: var(--mq-font-13);
 }
 
+/* 紧凑版概览：蓝卡左数字、右进度与入口；进度卡圆环 96px、比率横排，整行约 150px 高 */
+.qc-home-hero {
+  display: grid;
+  grid-template-areas:
+    'label progress'
+    'value progress'
+    'value nav';
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 32px;
+  row-gap: 8px;
+  padding: 18px 24px;
+}
+
+.qc-home-hero__label {
+  grid-area: label;
+}
+
+.qc-home-hero__value {
+  grid-area: value;
+  align-self: start;
+}
+
+.qc-home-hero__value strong {
+  font-size: 48px;
+}
+
+.qc-home-hero__value span {
+  font-size: 14px;
+}
+
+.qc-home-hero__progress {
+  grid-area: progress;
+  align-self: end;
+}
+
+.qc-home-shortcuts {
+  grid-area: nav;
+}
+
+.qc-home-shortcuts button {
+  height: 32px;
+  padding: 0 14px;
+}
+
+.qc-home-rings {
+  gap: 10px;
+  padding: 18px 24px;
+}
+
+.qc-home-rings__body {
+  gap: 20px;
+}
+
+.qc-home-rings__legend {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+}
+
+.qc-home-rings__legend dd {
+  font-size: 20px;
+}
+
+@media (max-width: 1279px) {
+  .qc-home-hero {
+    grid-template-areas:
+      'label'
+      'value'
+      'progress'
+      'nav';
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* 三栏指标卡 */
 .qc-home-metrics {
   display: grid;
@@ -754,4 +829,18 @@ button.qc-home-defect-analysis__row:hover,
     width: auto;
     height: 0.5px;
   }
+}
+
+/* 三栏指标卡紧凑版：数字 44→32px，内边距收紧 */
+.qc-home-metric {
+  gap: 10px;
+  padding: 16px 22px;
+}
+
+.qc-home-metric__value {
+  font-size: 32px;
+}
+
+.qc-home-metric__value small {
+  font-size: 13px;
 }
