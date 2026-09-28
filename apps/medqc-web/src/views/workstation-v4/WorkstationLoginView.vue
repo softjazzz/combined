@@ -4,6 +4,7 @@ import '@/styles/source-han-sans-sc.css'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { AuditOutlined, LockOutlined } from '@ant-design/icons-vue'
+import { ArrowRight, LoaderCircle, MonitorPlay } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import WorkstationLoginForm from '@/views/workstation-v4/components/WorkstationLoginForm.vue'
 import type { LoginRequest } from '@/types/auth'
@@ -12,7 +13,6 @@ const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 const loading = ref(false)
-const showDemoAccounts = ref(false)
 
 const redirectTarget = computed(() => {
   const raw = route.query.redirect
@@ -173,83 +173,44 @@ const handleDemoLogin = async (account: (typeof demoAccounts)[number]) => {
               />
             </div>
 
-            <!-- 演示账号区块 (内嵌卡片风格) -->
-            <div
-              class="mt-4 overflow-hidden rounded-xl border border-slate-200/50 bg-slate-50/50 transition-all duration-300"
-            >
+            <!-- 演示账号：整行即按钮，点一次直接登录 -->
+            <div class="login-demo-list mt-4">
               <button
+                v-for="account in demoAccounts"
+                :key="account.role"
                 type="button"
-                class="flex w-full items-center justify-between px-4 py-3 text-left transition hover:bg-slate-100/50"
-                @click="showDemoAccounts = !showDemoAccounts"
+                class="login-demo"
+                :disabled="loading"
+                :aria-label="`使用${account.label}一键登录`"
+                @click="handleDemoLogin(account)"
               >
-                <div>
-                  <div class="text-[15px] font-bold text-slate-800">
-                    演示账号快速登录
-                  </div>
-                  <div class="mt-0.5 text-xs text-slate-500">
-                    功能演示：admin / admin888
-                  </div>
-                </div>
-                <div
-                  class="flex h-8 w-8 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-slate-200/50"
+                <span
+                  class="login-demo__icon"
+                  aria-hidden="true"
                 >
-                  <svg
-                    class="h-4 w-4 text-slate-500 transition-transform duration-300"
-                    :class="{ 'rotate-180': showDemoAccounts }"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M19 9l-7 7-7-7"
-                    />
-                  </svg>
-                </div>
+                  <MonitorPlay :size="18" />
+                </span>
+                <span class="login-demo__copy">
+                  <span class="login-demo__title">演示账号快速登录</span>
+                  <span class="login-demo__meta">
+                    {{ account.label }} · {{ account.account }} / {{ account.password }}
+                  </span>
+                </span>
+                <span
+                  class="login-demo__go"
+                  aria-hidden="true"
+                >
+                  <LoaderCircle
+                    v-if="loading"
+                    :size="16"
+                    class="login-demo__spin"
+                  />
+                  <template v-else>
+                    一键进入
+                    <ArrowRight :size="14" />
+                  </template>
+                </span>
               </button>
-
-              <!-- 平滑展开容器 -->
-              <div
-                class="grid transition-all duration-300 ease-in-out"
-                :class="
-                  showDemoAccounts ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
-                "
-              >
-                <div class="overflow-hidden">
-                  <div class="border-t border-slate-200/50 p-4 pt-2">
-                    <div class="space-y-2">
-                      <button
-                        v-for="account in demoAccounts"
-                        :key="account.role"
-                        type="button"
-                        class="group flex w-full items-center justify-between rounded-xl border border-transparent bg-white/60 px-4 py-3 text-left transition hover:border-sky-200/50 hover:bg-white hover:shadow-sm"
-                        @click="handleDemoLogin(account)"
-                      >
-                        <div class="flex items-center gap-3">
-                          <div
-                            class="flex h-10 w-10 items-center justify-center rounded-[14px] bg-sky-50 text-xs font-bold text-sky-700 transition group-hover:bg-sky-100"
-                          >
-                            {{ account.badge }}
-                          </div>
-                          <div>
-                            <div class="text-[14px] font-bold text-slate-800">
-                              {{ account.label }}
-                            </div>
-                            <div class="text-xs text-slate-500">
-                              {{ account.account }}
-                            </div>
-                          </div>
-                        </div>
-                        <div class="text-xs font-medium text-slate-400">
-                          {{ account.password }}
-                        </div>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
             </div>
 
             <div class="mt-3 flex justify-center text-[13px] text-slate-400">
@@ -598,6 +559,115 @@ const handleDemoLogin = async (account: (typeof demoAccounts)[number]) => {
 @media (max-width: 1023px) {
   .login-intro {
     padding-top: 16px;
+  }
+}
+/* ---------- 演示账号一键登录 ---------- */
+.login-demo-list {
+  display: grid;
+  gap: 8px;
+}
+
+.login-demo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid rgba(10, 108, 255, 0.14);
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.78), rgba(234, 243, 255, 0.7));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  color: #1d2b3f;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.login-demo:hover:not(:disabled) {
+  border-color: rgba(10, 108, 255, 0.4);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 8px 20px -10px rgba(10, 108, 255, 0.45);
+  transform: translateY(-1px);
+}
+
+.login-demo:focus-visible {
+  outline: 2px solid #0a6cff;
+  outline-offset: 2px;
+}
+
+.login-demo:disabled {
+  cursor: progress;
+  opacity: 0.8;
+}
+
+.login-demo__icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: rgba(10, 108, 255, 0.1);
+  color: #0a6cff;
+}
+
+.login-demo__copy {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.login-demo__title {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.login-demo__meta {
+  overflow: hidden;
+  color: #6b7a90;
+  font-size: 12px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.login-demo__go {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(10, 108, 255, 0.1);
+  color: #0a6cff;
+  font-size: 13px;
+  font-weight: 500;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
+}
+
+.login-demo:hover:not(:disabled) .login-demo__go {
+  background: #0a6cff;
+  color: #ffffff;
+}
+
+.login-demo__spin {
+  animation: login-demo-spin 0.9s linear infinite;
+}
+
+@keyframes login-demo-spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 </style>
