@@ -13,6 +13,7 @@ const state = vi.hoisted(() => ({
     saveScoringItems: vi.fn(),
     copyScoringStandard: vi.fn(),
     activateScoringStandard: vi.fn(),
+    setDefaultScoringStandard: vi.fn(),
     archiveScoringStandard: vi.fn(),
     deleteScoringStandard: vi.fn(),
   },
@@ -60,6 +61,9 @@ function standard(overrides: Partial<ScoringStandardItem> = {}): ScoringStandard
 }
 
 const active = standard({ id: 'a1', name: '启用标准', status: 'active', is_default: true, version_seq: 3 })
+const activeNonDefault = standard({
+  id: 'a2', name: '原默认标准', status: 'active', is_default: false, version_seq: 6,
+})
 const draft = standard()
 const archived = standard({ id: 'x1', name: '归档标准', status: 'archived', version_seq: 5 })
 
@@ -157,7 +161,7 @@ describe('ScoringStandardsView', () => {
       ok({ items: scene === 'running' ? [active, draft, archived] : [], scenes: catalog }),
     )
     state.api.getScoringStandard.mockImplementation(async (id: string) => {
-      const source = [active, draft, archived].find((item) => item.id === id) ?? draft
+      const source = [active, activeNonDefault, draft, archived].find((item) => item.id === id) ?? draft
       return ok(detailOf(source))
     })
     state.rules.listRuleSetVersions.mockResolvedValue(ok({ rule_set_key: KEY, current_version: '2026-06-09' }))
@@ -269,6 +273,28 @@ describe('ScoringStandardsView', () => {
     expect(state.message.success).toHaveBeenCalled()
   })
 
+  it.each(['archive', 'undefault'] as const)('已启用非默认标准可直接按 %s 设回默认', async (mode) => {
+    state.api.listScoringStandards.mockResolvedValue(ok({
+      items: [active, activeNonDefault], scenes: catalog,
+    }))
+    state.api.setDefaultScoringStandard.mockResolvedValue(ok(detailOf({ ...activeNonDefault, is_default: true })))
+    const wrapper = await render()
+
+    expect(row(wrapper, 'a1').find('[data-testid="scoring-action-set-default"]').exists()).toBe(false)
+    await row(wrapper, 'a2').get('[data-testid="scoring-action-set-default"]').trigger('click')
+    expect(wrapper.get('.modal').text()).toContain('无需复制草稿')
+    expect(wrapper.get('.modal').text()).toContain('原默认标准「启用标准」')
+    await wrapper.get(`.mode-${mode}`).trigger('click')
+    await wrapper.get('.modal-ok').trigger('click')
+    await flushPromises()
+
+    expect(state.api.setDefaultScoringStandard).toHaveBeenCalledWith('a2', {
+      version_seq: 6, replace_mode: mode,
+    })
+    expect(state.api.activateScoringStandard).not.toHaveBeenCalled()
+    expect(state.message.success).toHaveBeenCalledWith('已设为默认评分标准')
+  })
+
   it('启用校验失败时在弹窗中逐条展示 problems', async () => {
     state.api.activateScoringStandard.mockResolvedValue({
       success: false, status: 422, code: 'standard_validation_failed', message: '评分标准校验未通过',
@@ -286,7 +312,7 @@ describe('ScoringStandardsView', () => {
     const wrapper = await render()
     expect(wrapper.get('[data-testid="scoring-readonly-role"]').text()).toContain('当前角色只读')
     expect(wrapper.find('[data-testid="scoring-create"]').exists()).toBe(false)
-    for (const action of ['copy', 'activate', 'delete', 'archive']) {
+    for (const action of ['copy', 'activate', 'set-default', 'delete', 'archive']) {
       expect(wrapper.find(`[data-testid="scoring-action-${action}"]`).exists()).toBe(false)
     }
     expect(row(wrapper, 'd1').get('[data-testid="scoring-action-open"]').text()).toBe('查看')

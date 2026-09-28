@@ -209,6 +209,91 @@ def test_activate_rolls_back_when_default_swap_fails(sessions, monkeypatch):
     assert service.get_default_standard("running")["id"] == first["id"]
 
 
+def test_active_non_default_can_be_set_default_without_copy(sessions):
+    http = client()
+    first = ready_draft(http, "标准一")
+    draft_rejected = http.post(
+        f"{BASE}/standards/{first['id']}/set-default", json={"version_seq": first["version_seq"]},
+    )
+    assert draft_rejected.status_code == 409
+    assert draft_rejected.json()["detail"]["code"] == "not_active"
+    first_active = http.post(
+        f"{BASE}/standards/{first['id']}/activate", json={"version_seq": first["version_seq"]},
+    ).json()["data"]
+    second = http.post(f"{BASE}/standards/{first['id']}/copy", json={"name": "标准二"}).json()["data"]
+    second_active = http.post(
+        f"{BASE}/standards/{second['id']}/activate",
+        json={"version_seq": second["version_seq"], "replace_mode": "undefault"},
+    ).json()["data"]
+    first_non_default = http.get(f"{BASE}/standards/{first['id']}").json()["data"]
+    assert first_non_default["status"] == "active" and first_non_default["is_default"] is False
+
+    restored = http.post(
+        f"{BASE}/standards/{first['id']}/set-default",
+        json={"version_seq": first_non_default["version_seq"], "replace_mode": "undefault"},
+    )
+    assert restored.status_code == 200
+    restored_data = restored.json()["data"]
+    assert restored_data["id"] == first_active["id"]
+    assert restored_data["status"] == "active" and restored_data["is_default"] is True
+    second_non_default = http.get(f"{BASE}/standards/{second['id']}").json()["data"]
+    assert second_non_default["status"] == "active" and second_non_default["is_default"] is False
+
+    stale = http.post(
+        f"{BASE}/standards/{second['id']}/set-default",
+        json={"version_seq": second_active["version_seq"], "replace_mode": "archive"},
+    )
+    assert stale.status_code == 409 and stale.json()["detail"]["code"] == "version_conflict"
+
+    switched = http.post(
+        f"{BASE}/standards/{second['id']}/set-default",
+        json={"version_seq": second_non_default["version_seq"], "replace_mode": "archive"},
+    )
+    assert switched.status_code == 200 and switched.json()["data"]["is_default"] is True
+    assert http.get(f"{BASE}/standards/{first['id']}").json()["data"]["status"] == "archived"
+
+    already_default = http.post(
+        f"{BASE}/standards/{second['id']}/set-default",
+        json={"version_seq": switched.json()["data"]["version_seq"], "replace_mode": "undefault"},
+    )
+    assert already_default.status_code == 409
+    assert already_default.json()["detail"]["code"] == "already_default"
+
+
+def test_set_default_readback_failure_rolls_back_swap(sessions, monkeypatch):
+    http = client()
+    first = ready_draft(http, "标准一")
+    http.post(f"{BASE}/standards/{first['id']}/activate", json={"version_seq": first["version_seq"]})
+    second = http.post(f"{BASE}/standards/{first['id']}/copy", json={"name": "标准二"}).json()["data"]
+    http.post(
+        f"{BASE}/standards/{second['id']}/activate",
+        json={"version_seq": second["version_seq"], "replace_mode": "undefault"},
+    )
+    first_non_default = http.get(f"{BASE}/standards/{first['id']}").json()["data"]
+    second_default = http.get(f"{BASE}/standards/{second['id']}").json()["data"]
+
+    original_detail = service._detail
+
+    def failing_detail(session, row):
+        if row.id == first["id"] and row.is_default:
+            raise sa.exc.OperationalError("select", {}, Exception("回读失败"))
+        return original_detail(session, row)
+
+    monkeypatch.setattr(service, "_detail", failing_detail)
+    response = http.post(
+        f"{BASE}/standards/{first['id']}/set-default",
+        json={"version_seq": first_non_default["version_seq"], "replace_mode": "archive"},
+    )
+    assert response.status_code == 503
+    monkeypatch.setattr(service, "_detail", original_detail)
+
+    first_after = http.get(f"{BASE}/standards/{first['id']}").json()["data"]
+    second_after = http.get(f"{BASE}/standards/{second['id']}").json()["data"]
+    assert first_after["status"] == "active" and first_after["is_default"] is False
+    assert second_after["status"] == "active" and second_after["is_default"] is True
+    assert second_after["version_seq"] == second_default["version_seq"]
+
+
 def test_archive_and_delete_rules(sessions):
     http = client()
     draft = ready_draft(http)
@@ -235,6 +320,7 @@ def test_archive_and_delete_rules(sessions):
     ("put", f"{BASE}/standards/s-1/items", {"version_seq": 1, "groups": [], "items": []}),
     ("post", f"{BASE}/standards/s-1/copy", {"name": "x"}),
     ("post", f"{BASE}/standards/s-1/activate", {"version_seq": 1}),
+    ("post", f"{BASE}/standards/s-1/set-default", {"version_seq": 1}),
     ("post", f"{BASE}/standards/s-1/archive", {"version_seq": 1}),
     ("delete", f"{BASE}/standards/s-1?version_seq=1", None),
 ])

@@ -12,6 +12,7 @@ import {
   listScoringScenes,
   listScoringStandards,
   saveScoringItems,
+  setDefaultScoringStandard,
   updateScoringStandard,
 } from '@/api/scoring'
 
@@ -63,8 +64,9 @@ describe('scoring API', () => {
     })
     await copyScoringStandard('s1', '副本')
     await activateScoringStandard('s1', { version_seq: 4, replace_mode: 'undefault' })
-    await archiveScoringStandard('s1', 5)
-    await deleteScoringStandard('s1', 6)
+    await setDefaultScoringStandard('s1', { version_seq: 5, replace_mode: 'archive' })
+    await archiveScoringStandard('s1', 6)
+    await deleteScoringStandard('s1', 7)
     expect(spy.mock.calls[0]?.[0]).toMatchObject({ method: 'POST', url: '/api/v1/scoring/standards' })
     expect((spy.mock.calls[0]?.[0].data as { grade_bands: object[] }).grade_bands[0]).toEqual(bands[0])
     expect(spy.mock.calls[1]?.[0]).toMatchObject({ method: 'PUT', url: '/api/v1/scoring/standards/s1', data: { version_seq: 2, name: '新名' } })
@@ -76,8 +78,9 @@ describe('scoring API', () => {
     })
     expect(spy.mock.calls[3]?.[0]).toMatchObject({ url: '/api/v1/scoring/standards/s1/copy', data: { name: '副本' } })
     expect(spy.mock.calls[4]?.[0]).toMatchObject({ url: '/api/v1/scoring/standards/s1/activate', data: { version_seq: 4, replace_mode: 'undefault' } })
-    expect(spy.mock.calls[5]?.[0]).toMatchObject({ url: '/api/v1/scoring/standards/s1/archive', data: { version_seq: 5 } })
-    expect(spy.mock.calls[6]?.[0]).toMatchObject({ method: 'DELETE', params: { version_seq: 6 } })
+    expect(spy.mock.calls[5]?.[0]).toMatchObject({ url: '/api/v1/scoring/standards/s1/set-default', data: { version_seq: 5, replace_mode: 'archive' } })
+    expect(spy.mock.calls[6]?.[0]).toMatchObject({ url: '/api/v1/scoring/standards/s1/archive', data: { version_seq: 6 } })
+    expect(spy.mock.calls[7]?.[0]).toMatchObject({ method: 'DELETE', params: { version_seq: 7 } })
   })
 
   it('解析 409 业务 code 与 422 problems（error 与 detail 两种形态）', async () => {

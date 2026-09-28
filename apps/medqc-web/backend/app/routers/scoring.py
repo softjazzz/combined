@@ -8,6 +8,7 @@
 - PUT    /api/v1/scoring/standards/{id}/items            项目组与条目整表保存（version_seq CAS）
 - POST   /api/v1/scoring/standards/{id}/copy             复制为新草稿 {name}
 - POST   /api/v1/scoring/standards/{id}/activate         启用并设为场景默认 {version_seq, replace_mode}
+- POST   /api/v1/scoring/standards/{id}/set-default      已启用标准直接设为场景默认
 - POST   /api/v1/scoring/standards/{id}/archive          归档 {version_seq}
 - DELETE /api/v1/scoring/standards/{id}?version_seq=     删除草稿
 - GET    /api/v1/scoring/case?institute_id&patient_id&visit_id&scene=   单病历计分（不落库）
@@ -41,6 +42,7 @@ from ..services.scoring_standard_service import (
     list_standards,
     save_items,
     scene_catalog,
+    set_default_standard,
     update_standard,
 )
 
@@ -304,6 +306,23 @@ async def post_scoring_standard_archive(
     except Exception as exc:
         _raise_http(exc, "archive")
     return _ok(request, data, "评分标准已归档")
+
+
+@router.post("/standards/{standard_id}/set-default")
+@require_role(_MANAGER_ROLES)
+async def post_scoring_standard_set_default(
+    request: Request, standard_id: str, body: ActivateRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    actor = _actor(current_user)
+    try:
+        data = await run_in_threadpool(
+            set_default_standard, standard_id, actor=actor, version_seq=body.version_seq,
+            replace_mode=body.replace_mode,
+        )
+    except Exception as exc:
+        _raise_http(exc, "set_default")
+    return _ok(request, data, "评分标准已设为默认")
 
 
 @router.delete("/standards/{standard_id}")

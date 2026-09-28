@@ -2,7 +2,7 @@
 
 - 标准的创建、修改、复制、启用、归档、删除；项目组与扣分条目整表保存。
 - 只有 draft 可编辑/删除；active 不可改，须复制为新草稿再启用；archived 只读。
-- 所有写操作以 version_seq 做 CAS；启用时在同一事务内处理同场景原默认标准
+- 所有写操作以 version_seq 做 CAS；启用或重新设为默认时在同一事务内处理同场景原默认标准
   （归档或只取消默认标记，由 replace_mode 决定），部分唯一索引兜底“每场景最多一个默认”。
 - 场景可用规则集（``scene_rule_set_keys``）：按 ``SICHUAN_RULE_SETS`` 的 scope 匹配，另把
   LX0609 纳入 final（见 ``_SCENE_EXTRA_RULE_SET_KEYS`` 注释）；标准的 rule_set_key 必须属于其场景。
@@ -550,6 +550,19 @@ def _locked_draft(session: Any, standard_id: str, version_seq: int) -> Any:
     return row
 
 
+def _locked_active_non_default(session: Any, standard_id: str, version_seq: int) -> Any:
+    row = _standard_row(session, standard_id, for_update=True)
+    if row is None:
+        raise ScoringStandardNotFound("评分标准不存在")
+    if row.status != STATUS_ACTIVE:
+        raise ScoringStandardConflict("只有启用中的标准可以设为默认", code="not_active")
+    if int(row.version_seq) != version_seq:
+        raise ScoringStandardConflict("评分标准已被修改，请刷新后重试", code="version_conflict")
+    if row.is_default:
+        raise ScoringStandardConflict("该评分标准已是当前默认标准", code="already_default")
+    return row
+
+
 def _cas_update(session: Any, row: Any, version_seq: int, **values: Any) -> None:
     updated = session.execute(
         update(_STANDARDS)
@@ -594,6 +607,23 @@ def _write(action: str, func: Any) -> dict[str, Any]:
                 standard_id = func(session)
             row = _standard_row(session, standard_id)
             return _detail(session, row)
+    except IntegrityError as exc:
+        raise ScoringStandardConflict("同一场景下已有同名评分标准，或默认标准并发冲突", code="conflict") from exc
+    except SQLAlchemyError as exc:
+        raise ScoringStandardUnavailable(f"评分标准{action}失败") from exc
+
+
+def _write_transactional_detail(action: str, func: Any) -> dict[str, Any]:
+    """在写事务内完成回读组装，避免提交成功后回读失败造成结果不确定。"""
+    factory = _require_session_factory()
+    try:
+        with factory() as session:
+            with session.begin():
+                standard_id = func(session)
+                row = _standard_row(session, standard_id)
+                if row is None:
+                    raise ScoringStandardUnavailable(f"评分标准{action}后回读失败")
+                return _detail(session, row)
     except IntegrityError as exc:
         raise ScoringStandardConflict("同一场景下已有同名评分标准，或默认标准并发冲突", code="conflict") from exc
     except SQLAlchemyError as exc:
@@ -719,6 +749,37 @@ def copy_standard(standard_id: Any, *, actor: str, name: Any) -> dict[str, Any]:
     return _write("复制", run)
 
 
+def _validate_default_candidate(session: Any, row: Any, universe: frozenset[str]) -> None:
+    """设为默认前按规则集当前版本复核不可变标准内容。"""
+    _checked_header(row.name, row.base_score, _load_bands(row.grade_bands_json), row.veto_grade)
+    groups, items = _groups_items(session, row.id)
+    normalize_groups_items(groups, items, universe)
+    if not any(item["enabled"] for item in items):
+        raise ScoringStandardInvalid(
+            "评分标准校验未通过", code="standard_validation_failed", problems=["至少需要 1 条启用的扣分条目"],
+        )
+
+
+def _replace_scene_default(session: Any, row: Any, *, actor: str, replace_mode: str, now: datetime) -> None:
+    """锁定并处理同场景原默认标准；目标行由调用方另行 CAS。"""
+    previous = session.execute(
+        select(_STANDARDS.c.id).where(
+            _STANDARDS.c.scene == row.scene,
+            _STANDARDS.c.status == STATUS_ACTIVE,
+            _STANDARDS.c.is_default.is_(True),
+            _STANDARDS.c.id != row.id,
+        ).with_for_update()
+    ).all()
+    for item in previous:
+        values: dict[str, Any] = {"is_default": False, "updated_by": actor, "updated_at": now}
+        if replace_mode == REPLACE_ARCHIVE:
+            values["status"] = STATUS_ARCHIVED
+        session.execute(
+            update(_STANDARDS).where(_STANDARDS.c.id == item.id)
+            .values(**values, version_seq=_STANDARDS.c.version_seq + 1)
+        )
+
+
 def activate_standard(
     standard_id: Any, *, actor: str, version_seq: Any, replace_mode: Any = REPLACE_ARCHIVE,
 ) -> dict[str, Any]:
@@ -737,29 +798,9 @@ def activate_standard(
     def run(session: Any) -> str:
         _lock_scene(session, snapshot["scene"])
         row = _locked_draft(session, standard_id, version_seq)
-        # 只做校验：不通过抛 422。
-        _checked_header(row.name, row.base_score, _load_bands(row.grade_bands_json), row.veto_grade)
-        groups, items = _groups_items(session, row.id)
-        normalize_groups_items(groups, items, universe)
-        if not any(item["enabled"] for item in items):
-            raise ScoringStandardInvalid(
-                "评分标准校验未通过", code="standard_validation_failed", problems=["至少需要 1 条启用的扣分条目"],
-            )
+        _validate_default_candidate(session, row, universe)
         now = _now()
-        previous = session.execute(
-            select(_STANDARDS.c.id).where(
-                _STANDARDS.c.scene == row.scene, _STANDARDS.c.status == STATUS_ACTIVE,
-                _STANDARDS.c.is_default.is_(True),
-            ).with_for_update()
-        ).all()
-        for item in previous:
-            values: dict[str, Any] = {"is_default": False, "updated_by": actor, "updated_at": now}
-            if replace_mode == REPLACE_ARCHIVE:
-                values["status"] = STATUS_ARCHIVED
-            session.execute(
-                update(_STANDARDS).where(_STANDARDS.c.id == item.id)
-                .values(**values, version_seq=_STANDARDS.c.version_seq + 1)
-            )
+        _replace_scene_default(session, row, actor=actor, replace_mode=replace_mode, now=now)
         _cas_update(
             session, row, version_seq, status=STATUS_ACTIVE, is_default=True,
             activated_by=actor, activated_at=now, updated_by=actor, updated_at=now,
@@ -767,6 +808,33 @@ def activate_standard(
         return row.id
 
     return _write("启用", run)
+
+
+def set_default_standard(
+    standard_id: Any, *, actor: str, version_seq: Any, replace_mode: Any = REPLACE_ARCHIVE,
+) -> dict[str, Any]:
+    """将 active 非默认标准直接设为场景默认，无需复制草稿。
+
+    目标以 ``version_seq`` 做 CAS；同场景原默认在同一事务内归档或仅取消默认标记。
+    """
+    actor = _actor(actor)
+    version_seq = _version_seq(version_seq)
+    if replace_mode not in REPLACE_MODES:
+        raise ScoringStandardInvalid("replace_mode 只能是 archive 或 undefault")
+    standard_id = str(standard_id or "")
+    snapshot = get_standard(standard_id)
+    universe = rule_set_universe(snapshot["rule_set_key"])
+
+    def run(session: Any) -> str:
+        _lock_scene(session, snapshot["scene"])
+        row = _locked_active_non_default(session, standard_id, version_seq)
+        _validate_default_candidate(session, row, universe)
+        now = _now()
+        _replace_scene_default(session, row, actor=actor, replace_mode=replace_mode, now=now)
+        _cas_update(session, row, version_seq, is_default=True, updated_by=actor, updated_at=now)
+        return row.id
+
+    return _write_transactional_detail("设置默认", run)
 
 
 def archive_standard(standard_id: Any, *, actor: str, version_seq: Any) -> dict[str, Any]:
@@ -838,6 +906,7 @@ __all__ = [
     "save_items",
     "scene_catalog",
     "scene_rule_set_keys",
+    "set_default_standard",
     "update_standard",
     "validate_grade_bands",
 ]

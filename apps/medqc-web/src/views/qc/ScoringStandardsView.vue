@@ -143,6 +143,15 @@
                 >
                   启用
                 </a-button>
+                <a-button
+                  v-if="standard.status === 'active' && !standard.is_default"
+                  type="link"
+                  size="small"
+                  data-testid="scoring-action-set-default"
+                  @click="openSetDefault(standard)"
+                >
+                  设为默认
+                </a-button>
                 <a-popconfirm
                   v-if="standard.status === 'draft'"
                   title="确定删除该草稿？删除后不可恢复。"
@@ -264,16 +273,21 @@
     <!-- 启用 -->
     <a-modal
       :open="activateModal.open"
-      title="启用评分标准"
+      :title="activateModal.action === 'activate' ? '启用评分标准' : '设置默认评分标准'"
       :confirm-loading="activateModal.submitting"
-      ok-text="启用并设为默认"
+      :ok-text="activateModal.action === 'activate' ? '启用并设为默认' : '设为默认'"
       cancel-text="取消"
       data-testid="scoring-activate-modal"
       @ok="submitActivate"
       @cancel="activateModal.open = false"
     >
       <p class="scoring-standards-page__form-hint">
-        启用「{{ activateModal.target?.name }}」后，它将成为{{ sceneLabel }}的默认评分标准，启用后只读。
+        <template v-if="activateModal.action === 'activate'">
+          启用「{{ activateModal.target?.name }}」后，它将成为{{ sceneLabel }}的默认评分标准，启用后只读。
+        </template>
+        <template v-else>
+          「{{ activateModal.target?.name }}」已启用，可直接恢复为{{ sceneLabel }}的默认评分标准，无需复制草稿。
+        </template>
       </p>
       <template v-if="defaultStandard && defaultStandard.id !== activateModal.target?.id">
         <p class="scoring-standards-page__form-hint">
@@ -319,7 +333,7 @@
 /**
  * 评分标准管理页（沿用 qc/scoring-config 路由）。
  * 场景页签：运行/终末/门急诊；无可用规则集的场景不可新建。写操作仅 admin/qc_manager，
- * 其余角色只读。active 标准只读，修改须复制为新草稿；启用时选择原默认“归档”或“仅取消默认”。
+ * 其余角色只读。active 标准只读，修改须复制为新草稿；active 非默认可直接设回默认。
  */
 import { computed, onMounted, reactive, ref } from 'vue'
 import { message } from 'ant-design-vue'
@@ -330,6 +344,7 @@ import {
   createScoringStandard,
   deleteScoringStandard,
   listScoringStandards,
+  setDefaultScoringStandard,
 } from '@/api/scoring'
 import type {
   ScoringApiResult,
@@ -390,6 +405,7 @@ const formModal = reactive({
 const activateModal = reactive({
   open: false,
   target: null as ScoringStandardItem | null,
+  action: 'activate' as 'activate' | 'set-default',
   replaceMode: 'archive' as ScoringReplaceMode,
   submitting: false,
   problems: [] as string[],
@@ -495,6 +511,15 @@ async function submitFormModal() {
 
 function openActivate(standard: ScoringStandardItem) {
   activateModal.target = standard
+  activateModal.action = 'activate'
+  activateModal.replaceMode = 'archive'
+  activateModal.problems = []
+  activateModal.open = true
+}
+
+function openSetDefault(standard: ScoringStandardItem) {
+  activateModal.target = standard
+  activateModal.action = 'set-default'
   activateModal.replaceMode = 'archive'
   activateModal.problems = []
   activateModal.open = true
@@ -506,16 +531,23 @@ async function submitActivate() {
   activateModal.problems = []
   activateModal.submitting = true
   try {
-    const result = await activateScoringStandard(target.id, {
+    const payload = {
       version_seq: target.version_seq,
       replace_mode: activateModal.replaceMode,
-    })
+    }
+    const result = activateModal.action === 'activate'
+      ? await activateScoringStandard(target.id, payload)
+      : await setDefaultScoringStandard(target.id, payload)
     if (!result.success) {
-      reportFailure(result, activateModal, '启用评分标准失败')
+      reportFailure(
+        result,
+        activateModal,
+        activateModal.action === 'activate' ? '启用评分标准失败' : '设置默认评分标准失败',
+      )
       if (result.status === 409) activateModal.open = false
       return
     }
-    message.success('评分标准已启用并设为默认')
+    message.success(activateModal.action === 'activate' ? '评分标准已启用并设为默认' : '已设为默认评分标准')
     activateModal.open = false
     await loadList()
   } finally {

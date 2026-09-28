@@ -20,6 +20,7 @@ export type ScoringErrorCode =
   | 'version_conflict'
   | 'not_draft'
   | 'not_active'
+  | 'already_default'
   | 'name_exists'
   | 'conflict'
   | 'invalid'
@@ -343,6 +344,15 @@ export async function activateScoringStandard(id: string, payload: ScoringActiva
     url: `${standardPath(id)}/activate`,
     data: payload,
   }, '启用评分标准失败')
+}
+
+/** 将已启用但非默认的标准直接设为场景默认。 */
+export async function setDefaultScoringStandard(id: string, payload: ScoringActivatePayload) {
+  return request<ScoringStandardDetail>({
+    method: 'POST',
+    url: `${standardPath(id)}/set-default`,
+    data: payload,
+  }, '设置默认评分标准失败')
 }
 
 /** 归档启用中的标准（同时取消默认）。 */
