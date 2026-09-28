@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios'
 import { ApiService } from '@/services/apiService'
-import { assignTask, completeTaskRecord, createTaskQcRun, getLatestTaskRecordSyncJob, getTaskAssigneeOptions, getTaskDetail, getTaskList, getTaskQcRuns, getTaskRecordSyncJob, getTaskRuleSets, getTaskStats, getTaskTodoStats, startTaskRecord, syncTaskRecords, updateTask } from '@/api/tasks'
+import { assignTask, assignTasksBatch, completeTaskRecord, createTaskQcRun, getLatestTaskRecordSyncJob, getTaskAssigneeOptions, getTaskDetail, getTaskList, getTaskQcRuns, getTaskRecordSyncJob, getTaskRuleSets, getTaskStats, getTaskTodoStats, startTaskRecord, syncTaskRecords, updateTask } from '@/api/tasks'
 
 vi.mock('@/services/apiService', () => ({ ApiService: { requestRaw: vi.fn() } }))
 
@@ -192,6 +192,20 @@ describe('任务统计 API', () => {
     expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
       method: 'POST', url: '/api/v1/tasks/task-1/assign',
       data: { method: 'by_original_reviewer', fallback: 'by_ratio', assignees: options },
+    })
+  })
+
+  it('批量分配使用专属端点并保留每个任务的策略与 fallback', async () => {
+    const payload = {
+      tasks: [
+        { task_id: 'task-1', method: 'by_ratio' as const },
+        { task_id: 'task-2', method: 'by_original_reviewer' as const, fallback: 'reject' as const },
+      ],
+      assignees: [{ user_id: 'qc-1', user_name: '质控员甲' }],
+    }
+    await assignTasksBatch(payload)
+    expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
+      method: 'POST', url: '/api/v1/tasks/batch-assign', data: payload,
     })
   })
 

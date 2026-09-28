@@ -26,6 +26,7 @@ from ..schemas.tasks import (
     TaskCreateRequest,
     TaskUpdateRequest,
     TaskAssignRequest,
+    TaskBatchAssignRequest,
     TaskRecordCompleteRequest,
     TaskManualDefectCreateRequest,
     TaskManualDefectResponse,
@@ -1113,6 +1114,88 @@ async def get_saved_task_record_sync(
         logger.exception("读取任务病历同步作业失败 task_id=%s job_id=%s", task_id, job_id)
         raise HTTPException(status_code=503, detail="同步作业状态暂不可用") from exc
     return success_response(data=result, trace_id=get_trace_id(request))
+
+@router.post("/batch-assign")
+@require_permission(ResourceType.QC_TASKS, PermissionAction.UPDATE)
+async def batch_assign_tasks(
+    request: Request,
+    assign_data: TaskBatchAssignRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """逐项分配所选任务；每项独立提交，响应明确列出成功与失败。"""
+    actor_id = _get_task_scope_user_id(current_user)
+    assignees = [person.model_dump(exclude_none=True) for person in assign_data.assignees]
+    items: list[dict[str, Any]] = []
+    for target in assign_data.tasks:
+        try:
+            result = await run_in_threadpool(
+                assign_task_records,
+                task_id=target.task_id,
+                actor_id=actor_id,
+                assignees=assignees,
+                method=target.method.value,
+                fallback=target.fallback.value if target.fallback else None,
+            )
+            items.append({"task_id": target.task_id, "success": True, "result": result})
+        except AssignmentNotFound as exc:
+            items.append({
+                "task_id": target.task_id, "success": False, "status": 404,
+                "message": str(exc),
+            })
+        except AssignmentForbidden as exc:
+            items.append({
+                "task_id": target.task_id, "success": False, "status": 403,
+                "message": str(exc),
+            })
+        except AssignmentConflict as exc:
+            failure: dict[str, Any] = {
+                "task_id": target.task_id,
+                "success": False,
+                "status": 409,
+                "message": str(exc),
+            }
+            if exc.code:
+                failure["code"] = exc.code
+                failure["details"] = exc.details
+            items.append(failure)
+        except Exception:
+            logger.error("批量任务分配单项失败 code=assignment_unavailable task_id=%s", target.task_id)
+            items.append({
+                "task_id": target.task_id, "success": False, "status": 503,
+                "message": "任务分配暂不可用",
+            })
+
+    success_count = sum(1 for item in items if item["success"])
+    failed_count = len(items) - success_count
+    audit_event(
+        request,
+        action="tasks.assignment.batch_update",
+        resource="/api/v1/tasks/batch-assign",
+        outcome="success" if failed_count == 0 else ("failed" if success_count == 0 else "partial"),
+        current_user=current_user,
+        details={
+            "task_ids": [target.task_id for target in assign_data.tasks],
+            "assignees_count": len(assign_data.assignees),
+            "success_count": success_count,
+            "failed_count": failed_count,
+        },
+    )
+    return success_response(
+        data={
+            "total": len(items),
+            "success_count": success_count,
+            "failed_count": failed_count,
+            "items": items,
+            "atomic": False,
+        },
+        message=(
+            f"批量分配完成：成功 {success_count} 个，失败 {failed_count} 个"
+            if failed_count
+            else f"批量分配完成，共处理 {success_count} 个任务"
+        ),
+        trace_id=get_trace_id(request),
+    )
+
 
 @router.post("/{task_id}/assign")
 @require_permission(ResourceType.QC_TASKS, PermissionAction.UPDATE)

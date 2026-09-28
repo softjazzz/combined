@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   deleteTask: vi.fn(),
   cancelTask: vi.fn(),
   assignTask: vi.fn(),
+  assignTasksBatch: vi.fn(),
   getTaskAssigneeOptions: vi.fn(),
   message: {
     error: vi.fn(),
@@ -26,6 +27,7 @@ vi.mock('@/api/tasks', () => ({
   deleteTask: mocks.deleteTask,
   cancelTask: mocks.cancelTask,
   assignTask: mocks.assignTask,
+  assignTasksBatch: mocks.assignTasksBatch,
   getTaskAssigneeOptions: mocks.getTaskAssigneeOptions,
 }))
 vi.mock('ant-design-vue', () => ({ message: mocks.message }))
@@ -76,10 +78,27 @@ const TaskDetailDrawerStub = defineComponent({
 
 const ATableStub = defineComponent({
   name: 'ATable',
-  props: { dataSource: { type: Array, default: () => [] }, columns: { type: Array, default: () => [] } },
+  props: {
+    dataSource: { type: Array, default: () => [] },
+    columns: { type: Array, default: () => [] },
+    rowSelection: Object,
+  },
   setup(props, { slots }) {
-    return () => h('div', props.dataSource.map((record) => h('div', { 'data-testid': 'task-row' },
-      slots.bodyCell?.({ column: { key: 'action' }, record }))))
+    return () => h('div', [
+      h('button', {
+        'data-testid': 'select-batch-tasks',
+        onClick: () => {
+          const selection = props.rowSelection as {
+            onChange?: (keys: string[], rows: unknown[]) => void
+            getCheckboxProps?: (row: unknown) => { disabled?: boolean }
+          }
+          const rows = props.dataSource.filter((row) => !selection?.getCheckboxProps?.(row)?.disabled)
+          selection?.onChange?.(rows.map((row) => (row as { id: string }).id), rows)
+        },
+      }, '选择可批量任务'),
+      ...props.dataSource.map((record) => h('div', { 'data-testid': 'task-row' },
+        slots.bodyCell?.({ column: { key: 'action' }, record }))),
+    ])
   },
 })
 
@@ -143,6 +162,14 @@ function listWith(taskName: string, scene: 'running' | 'final' | null = null, st
   }
 }
 
+function listWithMany(names: string[]) {
+  const response = listWith(names[0] || '任务', 'running', 'sampling')
+  const base = response.data.items[0]
+  response.data.items = names.map((name) => ({ ...base, id: name, task_number: name, task_name: name }))
+  response.data.total = names.length
+  return response
+}
+
 function statsResponse(total = 6) {
   return {
     success: true,
@@ -196,6 +223,10 @@ describe('AllTasksView 场景口径', () => {
     mocks.getTaskStats.mockResolvedValue(statsResponse())
     mocks.getTaskAssigneeOptions.mockResolvedValue({ success: true, data: [] })
     mocks.assignTask.mockResolvedValue({ success: true, data: { total_assigned: 1 } })
+    mocks.assignTasksBatch.mockResolvedValue({
+      success: true,
+      data: { total: 1, success_count: 1, failed_count: 0, atomic: false, items: [] },
+    })
     authState.user = { id: 'creator' }
   })
 
@@ -516,5 +547,97 @@ describe('AllTasksView 场景口径', () => {
     expect(wrapper.get('[data-testid="assign-confirm"]').attributes('disabled')).toBeUndefined()
     expect(mocks.getTaskList).toHaveBeenCalledTimes(1)
     expect(wrapper.findComponent(TaskAssignmentResult).exists()).toBe(false)
+  })
+
+  it('批量分配逐项提交策略，只清成功项并保留失败项重试', async () => {
+    const list = listWithMany(['比例任务', '科室任务'])
+    list.data.items[1].assign_method = 'by_department'
+    mocks.getTaskList.mockResolvedValue(list)
+    mocks.getTaskAssigneeOptions.mockResolvedValue({
+      success: true, data: [{ user_id: 'qc-1', user_name: '质控员甲', department: '内科' }],
+    })
+    mocks.assignTasksBatch
+      .mockResolvedValueOnce({
+        success: true,
+        message: '部分完成',
+        data: {
+          total: 2, success_count: 1, failed_count: 1, atomic: false,
+          items: [
+            { task_id: '比例任务', success: true, result: { total_assigned: 2 } },
+            { task_id: '科室任务', success: false, status: 409, message: '儿科没有受领人' },
+          ],
+        },
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        data: {
+          total: 1, success_count: 1, failed_count: 0, atomic: false,
+          items: [{ task_id: '科室任务', success: true, result: { total_assigned: 1 } }],
+        },
+      })
+    const wrapper = await mountView()
+
+    await wrapper.get('[data-testid="select-batch-tasks"]').trigger('click')
+    await nextTick()
+    expect(wrapper.get('[data-testid="batch-assign-button"]').text()).toContain('2')
+    await wrapper.get('[data-testid="batch-assign-button"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="batch-assign-contract"]').text()).toContain('独立提交')
+    await wrapper.get('[data-testid="assign-candidates"]').trigger('click')
+    await wrapper.get('[data-testid="assign-confirm"]').trigger('click')
+    await flushPromises()
+
+    expect(mocks.assignTasksBatch).toHaveBeenNthCalledWith(1, {
+      tasks: [
+        { task_id: '比例任务', method: 'by_ratio' },
+        { task_id: '科室任务', method: 'by_department' },
+      ],
+      assignees: [{ user_id: 'qc-1', user_name: '质控员甲', department: '内科' }],
+    })
+    expect(wrapper.get('[data-testid="assign-submit-error"]').text()).toContain('儿科没有受领人')
+    const vm = wrapper.vm as unknown as { selectedBatchTaskIds: string[]; batchAssigningTasks: Array<{ id: string }> }
+    expect(vm.selectedBatchTaskIds).toEqual(['科室任务'])
+    expect(vm.batchAssigningTasks.map((task) => task.id)).toEqual(['科室任务'])
+
+    await wrapper.get('[data-testid="assign-confirm"]').trigger('click')
+    await flushPromises()
+    expect(mocks.assignTasksBatch).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      tasks: [{ task_id: '科室任务', method: 'by_department' }],
+    }))
+    expect(wrapper.find('[data-testid="assign-dialog"]').exists()).toBe(false)
+    expect(vm.selectedBatchTaskIds).toEqual([])
+  })
+
+  it('批量响应未知时锁定再次写入，关闭刷新后清理服务端已完成项', async () => {
+    mocks.getTaskList
+      .mockResolvedValueOnce(listWithMany(['任务一']))
+      .mockResolvedValueOnce(listWith('任务一', 'running', 'assigned'))
+    mocks.getTaskAssigneeOptions.mockResolvedValue({
+      success: true, data: [{ user_id: 'qc-1', user_name: '质控员甲' }],
+    })
+    mocks.assignTasksBatch.mockResolvedValueOnce({ success: false, message: '网关超时' })
+    const wrapper = await mountView()
+    await wrapper.get('[data-testid="select-batch-tasks"]').trigger('click')
+    await wrapper.get('[data-testid="batch-assign-button"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="assign-candidates"]').trigger('click')
+    await wrapper.get('[data-testid="assign-confirm"]').trigger('click')
+    await flushPromises()
+
+    const vm = wrapper.vm as unknown as {
+      assignSubmitting: boolean
+      assignRecoveryRequired: boolean
+      selectedBatchTaskIds: string[]
+    }
+    expect(vm.assignSubmitting).toBe(false)
+    expect(vm.assignRecoveryRequired).toBe(true)
+    expect(wrapper.get('[data-testid="assign-confirm"]').attributes('disabled')).toBeDefined()
+    await wrapper.get('[data-testid="assign-confirm"]').trigger('click')
+    expect(mocks.assignTasksBatch).toHaveBeenCalledTimes(1)
+    await wrapper.get('[data-testid="assign-cancel"]').trigger('click')
+    await flushPromises()
+    expect(mocks.getTaskList).toHaveBeenCalledTimes(2)
+    expect(vm.assignRecoveryRequired).toBe(false)
+    expect(vm.selectedBatchTaskIds).toEqual([])
   })
 })

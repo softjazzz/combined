@@ -75,6 +75,7 @@ class TaskRecordStatus(str, Enum):
 
 NonEmptyCaseCoordinate = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
 RuleSetKey = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)]
+TaskId = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
 
 
 class TaskCaseRef(BaseModel):
@@ -169,6 +170,44 @@ class TaskAssignRequest(BaseModel):
                 raise ValueError("按原质控员分配须指定 fallback（by_ratio 或 reject）")
         elif self.fallback is not None:
             raise ValueError("fallback 仅适用于按原质控员分配")
+        return self
+
+
+class TaskBatchAssignTarget(BaseModel):
+    """批量分配中的单个任务及其创建时分配策略。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    task_id: TaskId
+    method: AssignMethod
+    fallback: Optional[OriginalReviewerFallback] = None
+
+    @model_validator(mode="after")
+    def validate_fallback(self) -> "TaskBatchAssignTarget":
+        if self.method == AssignMethod.BY_ORIGINAL_REVIEWER:
+            if self.fallback is None:
+                raise ValueError("按原质控员分配须指定 fallback（by_ratio 或 reject）")
+        elif self.fallback is not None:
+            raise ValueError("fallback 仅适用于按原质控员分配")
+        return self
+
+
+class TaskBatchAssignRequest(BaseModel):
+    """最多二十个任务的显式逐项分配；每个任务保持独立事务。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    tasks: List[TaskBatchAssignTarget] = Field(..., min_length=1, max_length=20)
+    assignees: List[TaskAssignee] = Field(..., min_length=1)
+
+    @model_validator(mode="after")
+    def unique_targets_and_assignees(self) -> "TaskBatchAssignRequest":
+        task_ids = [target.task_id for target in self.tasks]
+        if len(task_ids) != len(set(task_ids)):
+            raise ValueError("批量分配任务 ID 不可重复")
+        assignee_ids = [assignee.user_id for assignee in self.assignees]
+        if len(assignee_ids) != len(set(assignee_ids)):
+            raise ValueError("分配人员 user_id 不可重复")
         return self
 
 

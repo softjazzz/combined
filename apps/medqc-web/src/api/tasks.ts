@@ -543,6 +543,30 @@ export interface TaskAssignResult {
     idempotent?: boolean
 }
 
+export interface TaskBatchAssignTarget {
+    task_id: string
+    method: TaskAssignableMethod
+    fallback?: AssignFallback
+}
+
+export interface TaskBatchAssignItem {
+    task_id: string
+    success: boolean
+    status?: number
+    code?: string
+    message?: string
+    details?: Record<string, unknown>
+    result?: TaskAssignResult
+}
+
+export interface TaskBatchAssignResult {
+    total: number
+    success_count: number
+    failed_count: number
+    atomic: false
+    items: TaskBatchAssignItem[]
+}
+
 /** 分配任务；fallback 仅 by_original_reviewer 使用 */
 export async function assignTask(taskId: string, data: {
     assignees: Array<{ user_id: string; user_name: string; department?: string }>
@@ -552,6 +576,18 @@ export async function assignTask(taskId: string, data: {
     return request<TaskAssignResult>({
         method: 'POST',
         url: `${BASE_URL}/${encodeURIComponent(taskId)}/assign`,
+        data,
+    })
+}
+
+/** 批量分配任务；服务端逐任务独立事务，响应逐项报告成功与失败。 */
+export async function assignTasksBatch(data: {
+    tasks: TaskBatchAssignTarget[]
+    assignees: Array<{ user_id: string; user_name: string; department?: string }>
+}) {
+    return request<TaskBatchAssignResult>({
+        method: 'POST',
+        url: `${BASE_URL}/batch-assign`,
         data,
     })
 }

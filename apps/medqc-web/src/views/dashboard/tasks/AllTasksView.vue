@@ -13,7 +13,7 @@
     />
     <a-modal
       :open="assignDialogVisible"
-      title="分配质控任务"
+      :title="batchAssigningTasks.length ? '批量分配质控任务' : '分配质控任务'"
       :confirm-loading="assignSubmitting"
       :ok-button-props="{ disabled: assignLoading || !!assignError || assignRecoveryRequired || !selectedAssigneeIds.length || !assigneeCandidates.length || assignFallbackMissing }"
       :cancel-button-props="{ disabled: assignSubmitting }"
@@ -24,12 +24,19 @@
       @cancel="closeAssignDialog"
     >
       <p class="mb-4 text-sm text-gray-600">
-        {{ assigningTask?.task_name }}
+        {{ batchAssigningTasks.length ? `已选择 ${batchAssigningTasks.length} 个任务` : assigningTask?.task_name }}
         <span
           v-if="assigningMethod"
           data-testid="assign-method-label"
         > · 分配方式：{{ ASSIGN_METHOD_LABELS[assigningMethod] }}</span>
       </p>
+      <div
+        v-if="batchAssigningTasks.length"
+        data-testid="batch-assign-contract"
+        class="mb-3 text-xs text-gray-600"
+      >
+        各任务沿用创建时保存的分配策略并独立提交；成功项会从选择中移除，失败项保留以便调整后重试
+      </div>
       <div
         v-if="assigningMethod === 'by_department'"
         data-testid="assign-department-hint"
@@ -38,7 +45,7 @@
         受领人按其账号科室匹配病历科室，历史任务缺科室将无法分配
       </div>
       <div
-        v-if="assigningMethod === 'by_original_reviewer'"
+        v-if="!batchAssigningTasks.length && assigningMethod === 'by_original_reviewer'"
         class="mb-3"
       >
         <label class="mb-1 block text-sm text-gray-700">无原质控员时</label>
@@ -240,11 +247,12 @@
         <a-button
           size="large"
           class="rounded-lg h-16"
-          disabled
-          title="批量分配暂不可用"
+          data-testid="batch-assign-button"
+          :disabled="!selectedBatchTasks.length || assignRecoveryRequired"
+          @click="handleBatchAssign"
         >
           <TeamOutlined class="text-lg" />
-          <span class="ml-2">批量分配（暂不可用）</span>
+          <span class="ml-2">批量分配{{ selectedBatchTasks.length ? `（${selectedBatchTasks.length}）` : '' }}</span>
         </a-button>
         <a-button
           size="large"
@@ -376,6 +384,7 @@
         :loading="loading"
         :pagination="pagination"
         row-key="id"
+        :row-selection="batchRowSelection"
         class="rounded-lg"
         @change="handleTableChange"
       >
@@ -457,9 +466,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { message } from 'ant-design-vue'
-import type { TableColumnsType } from 'ant-design-vue'
+import type { TableColumnsType, TableProps } from 'ant-design-vue'
 import type { Dayjs } from 'dayjs'
-import { getTaskList, getTaskStats, deleteTask, assignTask, getTaskAssigneeOptions } from '@/api/tasks'
+import { getTaskList, getTaskStats, deleteTask, assignTask, assignTasksBatch, getTaskAssigneeOptions } from '@/api/tasks'
 import type {
   AssignFallback,
   TaskAssignableMethod,
@@ -514,6 +523,8 @@ const authStore = useAuthStore()
 const detailRefreshKey = ref(0)
 const assignDialogVisible = ref(false)
 const assigningTask = ref<DashboardTaskItem | null>(null)
+const batchAssigningTasks = ref<DashboardTaskItem[]>([])
+const selectedBatchTaskIds = ref<string[]>([])
 const assignLoading = ref(false)
 const assignError = ref('')
 const assignSubmitError = ref('')
@@ -533,10 +544,12 @@ const ASSIGN_METHOD_LABELS: Record<TaskAssignableMethod, string> = {
 const isAssignableMethod = (method: unknown): method is TaskAssignableMethod =>
   method === 'by_ratio' || method === 'by_original_reviewer' || method === 'by_department'
 const assigningMethod = computed<TaskAssignableMethod | null>(() => {
+  if (batchAssigningTasks.value.length) return null
   const method = assigningTask.value?.assign_method
   return isAssignableMethod(method) ? method : null
 })
 const assignFallbackMissing = computed(() =>
+  !batchAssigningTasks.value.length &&
   assigningMethod.value === 'by_original_reviewer' &&
   assignFallback.value !== 'by_ratio' && assignFallback.value !== 'reject',
 )
@@ -676,12 +689,19 @@ const handleTaskAnalysis = () => {
   message.info('查看任务分析')
 }
 
+const clearBatchSelection = () => {
+  if (assignDialogVisible.value) return
+  selectedBatchTaskIds.value = []
+}
+
 const handleSearch = () => {
+  clearBatchSelection()
   pagination.value.current = 1
   fetchTasks()
 }
 
 const handleReset = () => {
+  clearBatchSelection()
   searchKeyword.value = ''
   selectedStatus.value = undefined
   selectedScene.value = undefined
@@ -693,6 +713,7 @@ const handleReset = () => {
 }
 
 const handleSceneChange = (scene?: TaskSceneFilter) => {
+  clearBatchSelection()
   selectedScene.value = scene
   pagination.value.current = 1
   listRequestId += 1
@@ -726,17 +747,56 @@ const canAssign = (record: DashboardTaskItem) => !!authStore.user?.id
   && record.status === 'sampling'
   && !assignRecoveryRequired.value
 
+const savedFallback = (record: DashboardTaskItem): AssignFallback | undefined => {
+  const fallback = record.assignee_config?.fallback
+  return fallback === 'by_ratio' || fallback === 'reject' ? fallback : undefined
+}
+
+const canBatchAssign = (record: DashboardTaskItem) => canAssign(record)
+  && (record.assign_method !== 'by_original_reviewer' || !!savedFallback(record))
+
+const selectedBatchTasks = computed(() => {
+  const selected = new Set(selectedBatchTaskIds.value)
+  return tasks.value.filter((task) => selected.has(task.id) && canBatchAssign(task))
+})
+
+const batchRowSelection = computed<TableProps<DashboardTaskItem>['rowSelection']>(() => ({
+  selectedRowKeys: selectedBatchTaskIds.value,
+  getCheckboxProps: (record) => ({ disabled: !canBatchAssign(record) }),
+  onChange: (keys) => {
+    const normalized = keys.map(String)
+    if (normalized.length > 20) {
+      message.warning('单次最多批量分配 20 个任务')
+      return
+    }
+    selectedBatchTaskIds.value = normalized
+  },
+}))
+
 const handleAssign = (record: DashboardTaskItem) => {
   if (!canAssign(record) || assignSubmitting.value) return
   assignRequestId += 1
+  batchAssigningTasks.value = []
   assigningTask.value = record
   assignDialogVisible.value = true
   selectedAssigneeIds.value = []
   assigneeCandidates.value = []
   assignSubmitError.value = ''
   // 以创建时保存的处理方式预填；缺失时须在此显式选择
-  const savedFallback = record.assignee_config?.fallback
-  assignFallback.value = savedFallback === 'by_ratio' || savedFallback === 'reject' ? savedFallback : undefined
+  assignFallback.value = savedFallback(record)
+  void loadAssigneeOptions()
+}
+
+const handleBatchAssign = () => {
+  if (assignSubmitting.value || assignRecoveryRequired.value || !selectedBatchTasks.value.length) return
+  assignRequestId += 1
+  assigningTask.value = null
+  batchAssigningTasks.value = [...selectedBatchTasks.value]
+  assignDialogVisible.value = true
+  selectedAssigneeIds.value = []
+  assigneeCandidates.value = []
+  assignFallback.value = undefined
+  assignSubmitError.value = ''
   void loadAssigneeOptions()
 }
 
@@ -745,6 +805,7 @@ const closeAssignDialog = () => {
   assignRequestId += 1
   assignDialogVisible.value = false
   assigningTask.value = null
+  batchAssigningTasks.value = []
   assigneeCandidates.value = []
   selectedAssigneeIds.value = []
   assignFallback.value = undefined
@@ -781,8 +842,12 @@ const loadAssigneeOptions = async () => {
 }
 
 const submitAssignment = async () => {
-  if (assignSubmitting.value || assignLoading.value || assignError.value || assignRecoveryRequired.value || !assigningTask.value) return
-  if (!canAssign(assigningTask.value)) return
+  if (assignSubmitting.value || assignLoading.value || assignError.value || assignRecoveryRequired.value) return
+  if (batchAssigningTasks.value.length) {
+    await submitBatchAssignment()
+    return
+  }
+  if (!assigningTask.value || !canAssign(assigningTask.value)) return
   const method = assigningMethod.value
   if (!method || assignFallbackMissing.value) return
   const selected = assigneeCandidates.value.filter((person) => selectedAssigneeIds.value.includes(person.user_id))
@@ -829,6 +894,70 @@ const submitAssignment = async () => {
   }
 }
 
+async function submitBatchAssignment() {
+  const targets = batchAssigningTasks.value.filter(canBatchAssign)
+  const selected = assigneeCandidates.value.filter((person) => selectedAssigneeIds.value.includes(person.user_id))
+  if (!targets.length || !selected.length || targets.length > 20) return
+  assignSubmitting.value = true
+  assignSubmitError.value = ''
+  try {
+    const result = await assignTasksBatch({
+      tasks: targets.map((task) => ({
+        task_id: task.id,
+        method: task.assign_method as TaskAssignableMethod,
+        ...(task.assign_method === 'by_original_reviewer' && savedFallback(task)
+          ? { fallback: savedFallback(task) }
+          : {}),
+      })),
+      assignees: selected.map((person) => ({
+        user_id: person.user_id,
+        user_name: person.user_name,
+        ...(person.department ? { department: person.department } : {}),
+      })),
+    })
+    const data = result.data
+    const expectedIds = new Set(targets.map((task) => task.id))
+    const responseItems = Array.isArray(data?.items) ? data.items : []
+    const responseIds = responseItems.map((item) => item.task_id)
+    const actualSuccessCount = responseItems.filter((item) => item.success).length
+    if (!result.success || !data || !Array.isArray(data.items)
+      || data.total !== targets.length || data.items.length !== data.total
+      || responseIds.length !== new Set(responseIds).size
+      || responseIds.some((taskId) => !expectedIds.has(taskId))
+      || data.success_count !== actualSuccessCount
+      || data.failed_count !== data.total - actualSuccessCount) {
+      assignRecoveryRequired.value = true
+      assignSubmitError.value = `批量分配结果未确认，请刷新任务列表核对后再操作。${result.message || ''}`
+      return
+    }
+    const successIds = new Set(data.items.filter((item) => item.success).map((item) => item.task_id))
+    const failedItems = data.items.filter((item) => !item.success)
+    selectedBatchTaskIds.value = selectedBatchTaskIds.value.filter((id) => !successIds.has(id))
+    batchAssigningTasks.value = targets.filter((task) => !successIds.has(task.id))
+    if (data.success_count) {
+      await Promise.all([fetchTasks(), fetchStats()])
+    }
+    if (!failedItems.length) {
+      selectedBatchTaskIds.value = []
+      message.success(result.message || `已分配 ${data.success_count} 个任务`)
+      assignSubmitting.value = false
+      closeAssignDialog()
+      return
+    }
+    const names = new Map(targets.map((task) => [task.id, task.task_name]))
+    const failureText = failedItems
+      .map((item) => `${names.get(item.task_id) || item.task_id}：${item.message || '分配失败'}`)
+      .join('；')
+    assignSubmitError.value = `已成功 ${data.success_count} 个，失败 ${data.failed_count} 个。${failureText}`
+    message.warning('部分任务分配失败，失败项已保留')
+  } catch {
+    assignRecoveryRequired.value = true
+    assignSubmitError.value = '批量分配结果未知，请刷新任务列表核对后再操作。'
+  } finally {
+    assignSubmitting.value = false
+  }
+}
+
 const handleEdit = (record: DashboardTaskItem) => {
   message.info(`编辑任务: ${record.task_name}`)
 }
@@ -849,6 +978,7 @@ const handleDelete = async (record: DashboardTaskItem) => {
 }
 
 const handleTableChange = (pag: any) => {
+  clearBatchSelection()
   pagination.value = { ...pagination.value, ...pag }
   fetchTasks()
 }
@@ -897,6 +1027,8 @@ const fetchTasks = async () => {
       tasks.value = data.items || []
       pagination.value.total = data.total || 0
       if (!assignDialogVisible.value) assignRecoveryRequired.value = false
+      const assignableIds = new Set(tasks.value.filter(canBatchAssign).map((task) => task.id))
+      selectedBatchTaskIds.value = selectedBatchTaskIds.value.filter((id) => assignableIds.has(id))
     } else {
       listError.value = res.message || '获取任务列表失败'
       message.error(listError.value)
