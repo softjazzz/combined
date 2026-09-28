@@ -1095,21 +1095,28 @@
 .workstation-shell .wv4-record-pool-hero .wv4-filter-actions__button {
   font-family: inherit !important;
   font-size: 14px !important;
-  font-weight: 600 !important;
+  font-weight: 400 !important;
   letter-spacing: 0 !important;
+}
+
+/* 分段控件与按钮用中等字重；输入值、下拉值保持常规，避免 Windows 雅黑下整块发黑 */
+.workstation-shell .wv4-record-pool-hero .ant-segmented-item-label,
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter__sync-shortcut,
+.workstation-shell .wv4-record-pool-hero .wv4-filter-actions__button {
+  font-weight: 500 !important;
 }
 
 .workstation-shell .wv4-record-pool-hero .workbench-hosp-filter__label {
   font-family: inherit;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 400;
   letter-spacing: 0;
 }
 
 .workstation-shell .wv4-record-pool-hero .workbench-hosp-segmented {
   font-family: inherit;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0;
 }
 
@@ -1126,7 +1133,7 @@
 }
 
 .workstation-shell .wv4-record-pool-hero .workbench-dept-select__name {
-  font-weight: 600;
+  font-weight: 400;
   letter-spacing: 0;
 }
 

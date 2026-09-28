@@ -222,8 +222,8 @@ const stayDaysLabel = computed(() => {
 .pool-preview__visit {
   overflow: hidden;
   color: var(--mq-text-tertiary);
-  font-family: var(--mq-font-mono);
   font-size: var(--mq-font-12);
+  font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

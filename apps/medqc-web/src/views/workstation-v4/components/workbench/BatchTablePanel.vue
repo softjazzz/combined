@@ -143,7 +143,7 @@
               <span class="batch-table-panel__visit-line">
                 <span class="batch-table-panel__visit-label">住院号：</span>
                 <span
-                  class="batch-table-panel__visit-id font-mono"
+                  class="batch-table-panel__visit-id"
                   :title="record.visitId"
                   :tabindex="recordPoolMode ? 0 : undefined"
                 >
