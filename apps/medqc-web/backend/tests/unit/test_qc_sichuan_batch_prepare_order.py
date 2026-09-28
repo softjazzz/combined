@@ -19,7 +19,7 @@ async def test_unknown_rule_set_rejected_before_workspace_access(monkeypatch):
         await qc_sichuan.create_workspace_batch_job(
             request=SimpleNamespace(state=SimpleNamespace()),
             payload=qc_sichuan.SichuanWorkspaceBatchJobCreateRequest(rule_set_key="unknown_v1"),
-            current_user={"id": "user-1"},
+            current_user={"id": "user-1", "roles": ["qc_manager"]},
             qc_service=object(),
         )
     assert exc.value.status_code == 422

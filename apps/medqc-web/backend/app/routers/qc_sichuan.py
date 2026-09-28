@@ -39,9 +39,11 @@ from ..services.sc_rule_launch_tier import (
 )
 from ..core.supabase_client import get_supabase
 from ..core.settings import get_settings
+from ..core.data_scope import resolve_workstation_data_scope
 from ..database.connection import DB_SCHEMA_MODE, SessionLocal
 from ..database.models.qc import QCTaskQCRun
 from ..core.security import require_admin, require_roles, get_current_user
+from ..core.permissions import PermissionAction, ResourceType, require_permission
 from ..services.product_activation import require_product_activation
 from ..services.custom_qc_workspace_service import (
     CustomQCWorkspaceService,
@@ -1967,12 +1969,17 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
 
 
 @router.post("/workspace/batch-jobs")
+@require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.ANALYZE)
 async def create_workspace_batch_job(
     request: Request,
     payload: SichuanWorkspaceBatchJobCreateRequest,
     current_user: Dict[str, Any] = Depends(require_product_activation),
     qc_service: SichuanQCService = Depends(get_qc_service),
 ):
+    # 批量入口接收客户端提供的精确病历坐标；必须在任何取数前同时校验
+    # 操作权限和工作台数据范围，避免仅有 ANALYZE 的账号绕过列表范围。
+    resolve_workstation_data_scope(current_user, payload.department)
+
     if payload.diagnostic_capture and not set(current_user.get("roles", [])).intersection(
         {"admin", "super_admin"}
     ):
@@ -1995,6 +2002,16 @@ async def create_workspace_batch_job(
     )
     prepared_scope = prepared.create_kwargs.get("scope")
     prepared_filters = prepared.create_kwargs.get("filters")
+    selected_count = len(prepared_filters.get("record_refs") or []) if isinstance(prepared_filters, dict) else 0
+    audit_details = {
+        "record_count": selected_count,
+        "scope": prepared_scope,
+        "rule_set_key": (
+            str(prepared_filters.get("rule_set_key") or "").strip()
+            if isinstance(prepared_filters, dict)
+            else ""
+        ),
+    }
     if _requires_archive_verification(prepared_scope, prepared_filters):
         audit_event(
             request,
@@ -2017,6 +2034,18 @@ async def create_workspace_batch_job(
         for active_job in list(getattr(active_jobs, "items", []) or []):
             active_filters = dict(active_job.get("filters") or {})
             if active_filters.get("idempotency_key") == prepared.idempotency_key:
+                audit_event(
+                    request,
+                    action="qc.workspace_batch.create",
+                    resource="/api/v1/qc/sichuan/workspace/batch-jobs",
+                    outcome="success",
+                    details={
+                        **audit_details,
+                        "job_id": str(active_job.get("id") or ""),
+                        "idempotency_reused": True,
+                    },
+                    current_user=current_user,
+                )
                 return success_response(
                     data={
                         **active_job,
@@ -2036,6 +2065,18 @@ async def create_workspace_batch_job(
         "sichuan_workspace_batch_job",
         _run_sichuan_workspace_batch_job,
         job["id"],
+    )
+    audit_event(
+        request,
+        action="qc.workspace_batch.create",
+        resource="/api/v1/qc/sichuan/workspace/batch-jobs",
+        outcome="success",
+        details={
+            **audit_details,
+            "job_id": str(job.get("id") or ""),
+            "idempotency_reused": False,
+        },
+        current_user=current_user,
     )
     return success_response(
         data={

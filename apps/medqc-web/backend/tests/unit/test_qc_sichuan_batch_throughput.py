@@ -258,7 +258,7 @@ async def test_luxian_batch_create_rejects_customer_aggregation_without_unified_
                 ],
             ),
             qc_service=_ServiceStub(),  # type: ignore[arg-type]
-            current_user={"id": "tester"},
+            current_user={"id": "tester", "roles": ["qc_manager"]},
         )
 
     assert workspace.created_job is None
@@ -292,7 +292,7 @@ async def test_luxian_batch_create_rejects_exam_lab_compatibility_without_creati
                 ],
             ),
             qc_service=_ServiceStub(),  # type: ignore[arg-type]
-            current_user={"id": "tester"},
+            current_user={"id": "tester", "roles": ["qc_manager"]},
         )
 
     assert exc_info.value.status_code == 503
@@ -323,7 +323,7 @@ async def test_luxian_batch_create_rejects_legacy_rule_id_as_503_without_creatin
                 ],
             ),
             qc_service=_ServiceStub(),  # type: ignore[arg-type]
-            current_user={"id": "tester"},
+            current_user={"id": "tester", "roles": ["qc_manager"]},
         )
 
     assert exc_info.value.status_code == 503
@@ -2506,7 +2506,7 @@ async def test_create_workspace_batch_job_rejects_luxian_legacy_record_ids_befor
                 record_ids=["VISIT-1"],
             ),
             qc_service=_ServiceStub(),  # type: ignore[arg-type]
-            current_user={"id": "tester"},
+            current_user={"id": "tester", "roles": ["qc_manager"]},
         )
 
     assert error.value.status_code == 422
@@ -2559,7 +2559,7 @@ async def test_create_workspace_batch_job_freezes_full_visit_filter_scope(monkey
             keyword="待复核",
         ),
         qc_service=_ServiceStub(),  # type: ignore[arg-type]
-        current_user={"id": "tester"},
+        current_user={"id": "tester", "roles": ["qc_manager"]},
     )
 
     assert response["success"] is True
@@ -2622,7 +2622,7 @@ async def test_create_workspace_batch_job_preserves_verified_today_inpatient_sco
             date_field="visit",
         ),
         qc_service=_ServiceStub(),  # type: ignore[arg-type]
-        current_user={"id": "tester"},
+        current_user={"id": "tester", "roles": ["qc_manager"]},
     )
 
     assert response["success"] is True
@@ -2671,7 +2671,7 @@ async def test_create_workspace_batch_job_rejects_partial_or_duplicate_explicit_
                 record_refs=requested_refs,
             ),
             qc_service=_ServiceStub(),  # type: ignore[arg-type]
-            current_user={"id": "tester"},
+            current_user={"id": "tester", "roles": ["qc_manager"]},
         )
     assert partial_error.value.status_code == 422
     assert partial_workspace.created_job is None
@@ -2687,7 +2687,7 @@ async def test_create_workspace_batch_job_rejects_partial_or_duplicate_explicit_
                 record_refs=[requested_refs[0], dict(requested_refs[0])],
             ),
             qc_service=_ServiceStub(),  # type: ignore[arg-type]
-            current_user={"id": "tester"},
+            current_user={"id": "tester", "roles": ["qc_manager"]},
         )
     assert duplicate_error.value.status_code == 422
     assert duplicate_workspace.created_job is None
@@ -2717,7 +2717,7 @@ async def test_create_workspace_batch_job_accepts_reordered_complete_explicit_re
             record_refs=requested_refs,
         ),
         qc_service=_ServiceStub(),  # type: ignore[arg-type]
-        current_user={"id": "tester"},
+        current_user={"id": "tester", "roles": ["qc_manager"]},
     )
 
     assert response["success"] is True
@@ -2899,7 +2899,7 @@ async def test_create_workspace_batch_job_full_luxian_set_uses_current_customer_
             ],
         ),
         qc_service=service,  # type: ignore[arg-type]
-        current_user={"id": "tester"},
+        current_user={"id": "tester", "roles": ["qc_manager"]},
     )
 
     assert response["success"] is True
@@ -2952,7 +2952,7 @@ async def test_create_workspace_batch_job_idempotency_separates_pending_delivery
                 ],
             ),
             qc_service=_ServiceStub(),  # type: ignore[arg-type]
-            current_user={"id": "tester"},
+            current_user={"id": "tester", "roles": ["qc_manager"]},
         )
         assert response["success"] is True
         return dict(workspace.created_job["filters"])
@@ -3009,7 +3009,7 @@ async def test_create_luxian_batch_single_family_off_fails_before_sc_source_chec
                 ],
             ),
             qc_service=_CreateGuardService(),  # type: ignore[arg-type]
-            current_user={"id": "tester"},
+            current_user={"id": "tester", "roles": ["qc_manager"]},
         )
 
     assert exc_info.value.status_code == 503
@@ -3714,7 +3714,7 @@ async def test_create_workspace_batch_job_rejects_final_even_with_active_idempot
             request=request,  # type: ignore[arg-type]
             payload=payload,
             qc_service=service,  # type: ignore[arg-type]
-            current_user={"id": "tester"},
+            current_user={"id": "tester", "roles": ["qc_manager"]},
         )
 
     assert exc.value.status_code == 422
@@ -3839,7 +3839,7 @@ async def test_create_workspace_batch_job_rejects_mixed_scope_after_record_becom
                 run_mode="parallel",
             ),
             qc_service=service,  # type: ignore[arg-type]
-            current_user={"id": "tester"},
+            current_user={"id": "tester", "roles": ["qc_manager"]},
         )
 
     assert exc.value.status_code == 422

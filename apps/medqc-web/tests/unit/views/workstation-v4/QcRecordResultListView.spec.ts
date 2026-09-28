@@ -10,6 +10,11 @@ const mocks = vi.hoisted(() => ({
   routerReplace: vi.fn(),
   listFilterTemplates: vi.fn(),
   hasRole: vi.fn(),
+  authStore: null as null | {
+    user: { id: string; email: string } | null
+    userRoles: string[]
+    hasRole: ReturnType<typeof vi.fn>
+  },
 }))
 const routeState = vi.hoisted(() => ({
   path: '/workstation-v5/records',
@@ -35,12 +40,21 @@ vi.mock('vue-router', () => ({
   useRouter: () => ({ replace: mocks.routerReplace }),
 }))
 
-vi.mock('@/stores/auth', () => ({
-  useAuthStore: () => ({
-    user: { id: 'qc-result-list-test', email: 'qc-result-list-test@example.com' },
-    hasRole: mocks.hasRole,
-  }),
-}))
+vi.mock('@/stores/auth', async () => {
+  const { reactive } = await import('vue')
+  return {
+    useAuthStore: () => {
+      if (!mocks.authStore) {
+        mocks.authStore = reactive({
+          user: { id: 'qc-result-list-test', email: 'qc-result-list-test@example.com' },
+          userRoles: ['qc_manager'],
+          hasRole: mocks.hasRole,
+        })
+      }
+      return mocks.authStore
+    },
+  }
+})
 
 vi.mock('@/api/filterTemplates', () => ({
   listFilterTemplates: mocks.listFilterTemplates,
@@ -204,6 +218,7 @@ function mountView(carePhase: 'inpatient' | 'discharged' = 'inpatient') {
     props: { carePhase },
     global: {
       stubs: {
+        'a-modal': true,
         QCRecordResultComparisonDrawer: ResultDrawerStub,
         QCRecordCompareWorkbench: DocumentWorkbenchStub,
         QcRecordResultAnalysisPanel: ResultAnalysisStub,
@@ -231,6 +246,7 @@ describe('QcRecordResultListView', () => {
       })),
     )
     vi.clearAllMocks()
+    mocks.authStore = null
     window.sessionStorage.clear()
     routeState.query = {}
     mocks.getRaw.mockResolvedValue(response())
@@ -703,6 +719,23 @@ describe('QcRecordResultListView', () => {
     await flushPromises()
 
     expect(mocks.getRaw.mock.calls.length).toBe(requestsBeforeRefresh + 1)
+  })
+
+  it('账号或角色变化立即清空已勾选病历', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('input[aria-label="选择患者甲"]').setValue(true)
+    expect(wrapper.getComponent(QcRunSelectedControl).props('selectedCount')).toBe(1)
+    if (!mocks.authStore) throw new Error('auth store missing')
+
+    mocks.authStore.userRoles = ['admin']
+    await flushPromises()
+    expect(wrapper.getComponent(QcRunSelectedControl).props('selectedCount')).toBe(0)
+
+    await wrapper.get('input[aria-label="选择患者甲"]').setValue(true)
+    mocks.authStore.user = { id: 'other-user', email: 'other@example.com' }
+    await flushPromises()
+    expect(wrapper.getComponent(QcRunSelectedControl).props('selectedCount')).toBe(0)
   })
 
   it('在同一页面切换结果分析，并将下钻病历交给既有结果抽屉', async () => {

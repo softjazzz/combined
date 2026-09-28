@@ -372,6 +372,10 @@ const endDate = ref('')
 
 const isInpatient = computed(() => props.carePhase === 'inpatient')
 const currentUserId = computed(() => String(authStore.user?.id || '').trim())
+const actorKey = computed(() => {
+  const roles = Array.isArray(authStore.userRoles) ? [...authStore.userRoles].sort() : []
+  return `${currentUserId.value}|${roles.join(',')}`
+})
 const availableColumns = QC_RECORD_COLUMN_OPTIONS.map((option) => option.key)
 const defaultColumns = defaultQcRecordColumns({ compactReview: true, showScore: true })
 const visibleColumns = ref<QcRecordOptionalColumn[]>([...defaultColumns])
@@ -836,6 +840,8 @@ watch(
     selectHospFilter(carePhase)
   },
 )
+
+watch(actorKey, clearSelection)
 
 onMounted(async () => {
   dateField.value = props.carePhase === 'inpatient' ? 'admission' : 'discharge'

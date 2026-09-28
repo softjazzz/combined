@@ -168,7 +168,7 @@ async def test_route_rejects_outpatient_scope_before_workspace_init(monkeypatch)
                 rule_ids=["SC-001"],
                 scope="outpatient",
             ),
-            current_user={"id": "tester"},
+            current_user={"id": "tester", "roles": ["qc_manager"]},
             qc_service=_ServiceStub(),  # type: ignore[arg-type]
         )
 

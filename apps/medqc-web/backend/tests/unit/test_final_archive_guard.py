@@ -67,7 +67,7 @@ async def test_create_rejects_unverified_final_or_mixed_scope_before_write(
         await qc_sichuan.create_workspace_batch_job(
             request=SimpleNamespace(state=SimpleNamespace()),
             payload=qc_sichuan.SichuanWorkspaceBatchJobCreateRequest(scope=scope),
-            current_user={"id": "tester"},
+            current_user={"id": "tester", "roles": ["qc_manager"]},
             qc_service=object(),
         )
 
@@ -97,7 +97,7 @@ async def test_create_checks_effective_rule_set_scope_not_only_request(monkeypat
         await qc_sichuan.create_workspace_batch_job(
             request=SimpleNamespace(state=SimpleNamespace()),
             payload=qc_sichuan.SichuanWorkspaceBatchJobCreateRequest(scope="running"),
-            current_user={"id": "tester"},
+            current_user={"id": "tester", "roles": ["qc_manager"]},
             qc_service=object(),
         )
     assert workspace.created == 0
@@ -122,7 +122,7 @@ async def test_create_allows_explicit_running_scope(monkeypatch):
     response = await qc_sichuan.create_workspace_batch_job(
         request=SimpleNamespace(state=SimpleNamespace()),
         payload=qc_sichuan.SichuanWorkspaceBatchJobCreateRequest(scope="running"),
-        current_user={"id": "tester"},
+        current_user={"id": "tester", "roles": ["qc_manager"]},
         qc_service=object(),
     )
 
