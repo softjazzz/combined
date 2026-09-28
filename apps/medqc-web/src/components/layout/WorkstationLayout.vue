@@ -74,7 +74,7 @@
             >
               <span>{{ group.label }}</span>
               <ChevronDown
-                :size="14"
+                :size="12"
                 aria-hidden="true"
                 class="ws-nav__group-chevron"
                 :class="{ 'is-closed': !isGroupOpen(group.key) }"
@@ -526,9 +526,10 @@ const handleLogout = async () => {
 
 .ws-nav__group-label {
   padding: 8px 10px 2px;
-  color: var(--mq-text-secondary);
-  font-size: var(--mq-font-14);
-  font-weight: 500;
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+  font-weight: 400;
+  letter-spacing: 0.04em;
   white-space: nowrap;
 }
 
@@ -537,9 +538,9 @@ const handleLogout = async () => {
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  height: 26px;
-  margin-top: 4px;
-  padding: 0 8px 0 10px;
+  height: 24px;
+  margin-top: 8px;
+  padding: 0 8px;
   border: 0;
   border-radius: 8px;
   background: transparent;
@@ -553,7 +554,7 @@ const handleLogout = async () => {
 
 .ws-nav__group-toggle:hover {
   background: rgba(255, 255, 255, 0.5);
-  color: var(--mq-text-primary);
+  color: var(--mq-text-secondary);
 }
 
 .ws-nav__group-toggle:focus-visible {
@@ -564,7 +565,14 @@ const handleLogout = async () => {
 .ws-nav__group-chevron {
   flex-shrink: 0;
   color: var(--mq-text-tertiary);
-  transition: transform 180ms ease;
+  opacity: 0.7;
+  transition:
+    transform 180ms ease,
+    opacity 140ms ease;
+}
+
+.ws-nav__group-toggle:hover .ws-nav__group-chevron {
+  opacity: 1;
 }
 
 .ws-nav__group-chevron.is-closed {
