@@ -55,6 +55,44 @@ describe('工作表现排名 API 合同', () => {
     })
   })
 
+  it('具体场景同时搬运缺陷与病历排名，不在前端重算人员数量', () => {
+    const data = normalizePerformanceData({
+      ...validPayload,
+      scene: 'running',
+      defect_ranking: [
+        { user_id: 'u1', name: '甲', count: 5, approved_count: 2, rejected_count: 1, rank: 1 },
+      ],
+      record_ranking: [
+        { user_id: 'u1', name: '甲', count: 1, initial_count: 1, recheck_count: 1, rank: 1 },
+      ],
+      unavailable_reason: null,
+    })
+    expect(data).toMatchObject({
+      defect_ranking: [
+        { user_id: 'u1', count: 5, approved_count: 2, rejected_count: 1, rank: 1 },
+      ],
+      record_ranking: [
+        { user_id: 'u1', count: 1, initial_count: 1, recheck_count: 1, rank: 1 },
+      ],
+      unavailable_reason: null,
+    })
+  })
+
+  it('具体场景的双空数组表示本期真实为零', () => {
+    expect(normalizePerformanceData({
+      ...validPayload,
+      scene: 'final',
+      defect_ranking: [],
+      record_ranking: [],
+      unavailable_reason: null,
+    })).toMatchObject({
+      scene: 'final',
+      defect_ranking: [],
+      record_ranking: [],
+      unavailable_reason: null,
+    })
+  })
+
   it.each([
     ['排名为 null 却无原因', { defect_ranking: null }],
     ['计数缺失', { record_ranking: [{ user_id: 'u1', name: 'a', count: 2, initial_count: 1, rank: 1 }] }],

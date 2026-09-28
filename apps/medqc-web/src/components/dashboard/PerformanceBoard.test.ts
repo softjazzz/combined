@@ -66,6 +66,25 @@ describe('PerformanceBoard', () => {
     expect(wrapper.find('[data-testid="perf-section-defect"] [data-testid="perf-unavailable"]').exists()).toBe(true)
   })
 
+  it('具体场景同时展示缺陷与病历排名，并保留服务端人员计数', () => {
+    const wrapper = mountBoard({ data: {
+      ...baseData,
+      scene: 'running',
+      defect_ranking: [
+        { user_id: 'u1', name: '李质控', count: 5, approved_count: 2, rejected_count: 1, rank: 1 },
+      ],
+      record_ranking: [{ user_id: 'r1', name: '赵审核', count: 1, initial_count: 1, recheck_count: 1, rank: 1 }],
+      unavailable_reason: null,
+    } })
+    const defect = wrapper.get('[data-testid="perf-section-defect"]')
+    const record = wrapper.get('[data-testid="perf-section-record"]')
+    expect(defect.get('.rank-value').text()).toBe('5项')
+    expect(defect.text()).toContain('通过 2 / 驳回 1')
+    expect(record.get('.rank-value').text()).toBe('1份')
+    expect(record.text()).toContain('初审病历 1 / 复审病历 1')
+    expect(wrapper.find('[data-testid="perf-unavailable"]').exists()).toBe(false)
+  })
+
   it('场景不可归属时显示“该场景暂不支持”', () => {
     const wrapper = mountBoard({ data: {
       ...baseData,

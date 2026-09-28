@@ -159,7 +159,9 @@ def _record_ranking(
     ]
 
 
-def _defect_ranking(session: Any, window: RankingWindow) -> list[dict[str, Any]]:
+def _defect_ranking(
+    session: Any, window: RankingWindow, scene: str,
+) -> list[dict[str, Any]]:
     # 每个缺陷只取一条创建时间（最早的 manual_create 历史），保证一个缺陷最多计一次。
     created = (
         select(
@@ -184,7 +186,7 @@ def _defect_ranking(session: Any, window: RankingWindow) -> list[dict[str, Any]]
         )
         .join(created, created.c.defect_id == QCDefect.id)
         .where(
-            *_manual_scope(),
+            *_manual_scope(scene=scene),
             QCDefect.manual_created_by.is_not(None),
             created.c.created_at >= window.utc_start,
             created.c.created_at < window.utc_end,
@@ -208,7 +210,7 @@ def _defect_ranking(session: Any, window: RankingWindow) -> list[dict[str, Any]]
 def get_performance_ranking(
     *, period: str, scene: str = SCENE_ALL, now: datetime | None = None,
 ) -> dict[str, Any]:
-    """装配工作表现排名；场景筛选只影响有可靠场景归属的病历排名。"""
+    """装配工作表现排名；两类排名均按创建时冻结的场景精确筛选。"""
     if scene != SCENE_ALL and scene not in SCENES:
         raise PerformanceRankingInvalid("scene 无效，仅支持 all / outpatient_emergency / running / final")
     window = compute_window(period, now)
@@ -228,7 +230,7 @@ def get_performance_ranking(
         raise PerformanceRankingUnavailable("数据库会话不可用")
     try:
         with SessionLocal() as session:
-            defect_ranking = _defect_ranking(session, window) if scene == SCENE_ALL else []
+            defect_ranking = _defect_ranking(session, window, scene)
             record_ranking = _record_ranking(session, window, scene)
             names = _display_names(
                 session, {row["user_id"] for row in (*defect_ranking, *record_ranking)},
@@ -237,10 +239,6 @@ def get_performance_ranking(
         raise PerformanceRankingUnavailable("工作表现排名读取失败") from exc
     for row in (*defect_ranking, *record_ranking):
         row["name"] = names.get(row["user_id"])
-    # 人工缺陷尚无稳定 scene owner；场景筛选时仅病历排名可用，缺陷排名保持未知。
-    if scene == SCENE_ALL:
-        data["defect_ranking"] = _competition_ranks(defect_ranking)
-    else:
-        data["unavailable_reason"] = SCENE_NOT_ATTRIBUTABLE
+    data["defect_ranking"] = _competition_ranks(defect_ranking)
     data["record_ranking"] = _competition_ranks(record_ranking)
     return data

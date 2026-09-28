@@ -1,4 +1,4 @@
-"""工作表现排名 HTTP 合同：响应结构、period 422、场景不可用、脱敏 503、无示例数据（SQLite 合成数据）。"""
+"""工作表现排名 HTTP 合同：响应结构、场景筛选、period 422、脱敏 503、无示例数据。"""
 
 from __future__ import annotations
 
@@ -59,10 +59,14 @@ def test_invalid_period_is_422(env, period):
     assert client().get(PATH, params={"period": period}).status_code == 422
 
 
-def test_non_all_scene_returns_record_ranking_only(env):
+def test_non_all_scene_returns_both_rankings(env):
     data = client().get(PATH, params={"scene": "running"}).json()["data"]
-    assert data["defect_ranking"] is None and isinstance(data["record_ranking"], list)
-    assert data["unavailable_reason"] == "scene_not_attributable"
+    assert data["defect_ranking"] == [
+        {"user_id": "qc-1", "name": "合成缺陷员", "count": 1,
+         "approved_count": 1, "rejected_count": 0, "rank": 1},
+    ]
+    assert isinstance(data["record_ranking"], list)
+    assert data["unavailable_reason"] is None
 
 
 @pytest.mark.parametrize("role", ["admin", "qc_manager", "qc_staff"])

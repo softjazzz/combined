@@ -52,13 +52,16 @@ class ManualDefectReviewUnavailable(RuntimeError):
     """数据库不可用或写入失败；对外只给脱敏提示。"""
 
 
-def _manual_scope() -> tuple[Any, ...]:
-    """人工缺陷审核唯一谓词：列表、计数、审核共用。"""
-    return (
+def _manual_scope(*, scene: str = "all") -> tuple[Any, ...]:
+    """人工缺陷唯一谓词；具体场景只匹配冻结值，历史 NULL 仅属于 all。"""
+    predicates = (
         QCDefect.origin == "manual",
         QCDefect.source_key == "task_assigned_qc",
         QCDefect.identity_version == 1,
     )
+    if scene == "all":
+        return predicates
+    return (*predicates, QCDefect.scene == scene)
 
 
 def _require_session_factory() -> Any:

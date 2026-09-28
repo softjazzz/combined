@@ -99,7 +99,9 @@ def _review(
     }
 
 
-def _defect(defect_id, creator, *, review_status="pending", origin="manual"):
+def _defect(
+    defect_id, creator, *, review_status="pending", origin="manual", scene=None,
+):
     manual = origin == "manual"
     return {
         "id": defect_id, "record_id": "tr-1", "identity_version": 1,
@@ -107,6 +109,7 @@ def _defect(defect_id, creator, *, review_status="pending", origin="manual"):
         "institute_id": "hospital-A", "patient_id": "P1", "visit_id": "V1",
         "rule_name": "合成人工规则", "description": "合成缺陷", "severity": "warning",
         "status": "pending", "origin": origin,
+        "scene": scene,
         "manual_review_status": review_status if manual else None,
         # 自动缺陷也填创建人，用以证明是人工缺陷谓词（而非空创建人）把它排除。
         "manual_created_by": creator,
@@ -144,12 +147,12 @@ def build_env(monkeypatch):
             _review("r10", "u-c", -60 * 24 * 7 - 1),
         ])
         session.execute(QCDefect.__table__.insert(), [
-            _defect("d1", "qc-1", review_status="approved"),
-            _defect("d2", "qc-1", review_status="rejected"),
+            _defect("d1", "qc-1", review_status="approved", scene="running"),
+            _defect("d2", "qc-1", review_status="rejected", scene="final"),
             _defect("d3", "qc-1"),
-            _defect("d4", "qc-2", review_status="approved"),
-            _defect("d-old", "qc-2", review_status="rejected"),
-            _defect("auto-1", "qc-9", origin="auto"),
+            _defect("d4", "qc-2", review_status="approved", scene="outpatient_emergency"),
+            _defect("d-old", "qc-2", review_status="rejected", scene="running"),
+            _defect("auto-1", "qc-9", origin="auto", scene="running"),
             _defect("d-dup", "qc-3"),
         ])
         session.execute(QCDefectHistory.__table__.insert(), [
@@ -242,8 +245,11 @@ def test_scene_ranking_is_exact_and_historical_null_only_belongs_to_all(env):
         row for row in ranking()["record_ranking"] if row["user_id"] == "scene-user"
     )["count"] == 4
     scene_data = ranking(scene="final")
-    assert scene_data["defect_ranking"] is None
-    assert scene_data["unavailable_reason"] == "scene_not_attributable"
+    assert scene_data["defect_ranking"] == [
+        {"user_id": "qc-1", "name": "合成缺陷员", "count": 1,
+         "approved_count": 0, "rejected_count": 1, "rank": 1},
+    ]
+    assert scene_data["unavailable_reason"] is None
 
 
 def test_last_week_excludes_this_week_rows(env):
@@ -286,6 +292,26 @@ def test_defect_ranking_counts_manual_only_with_review_split(env):
 def test_auto_defect_not_counted(env):
     users = {row["user_id"] for row in ranking()["defect_ranking"]}
     assert "qc-9" not in users and None not in users
+
+
+@pytest.mark.parametrize(
+    ("scene", "user_id", "approved_count", "rejected_count"),
+    [
+        ("running", "qc-1", 1, 0),
+        ("final", "qc-1", 0, 1),
+        ("outpatient_emergency", "qc-2", 1, 0),
+    ],
+)
+def test_defect_ranking_filters_exact_frozen_scene(
+    env, scene, user_id, approved_count, rejected_count,
+):
+    data = ranking(scene=scene)
+    assert data["defect_ranking"] == [
+        {"user_id": user_id, "name": "合成缺陷员" if user_id == "qc-1" else None,
+         "count": 1, "approved_count": approved_count,
+         "rejected_count": rejected_count, "rank": 1},
+    ]
+    assert data["unavailable_reason"] is None
 
 
 def test_empty_window_returns_empty_lists(env):

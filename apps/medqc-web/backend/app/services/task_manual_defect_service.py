@@ -51,6 +51,15 @@ def _validate_text(value: str | None, name: str, maximum: int, *, required: bool
     return value.strip() or None
 
 
+def _frozen_scene(task: Any) -> str:
+    scene = task.get("scene")
+    if scene == "outpatient":
+        return "outpatient_emergency"
+    if scene in {"running", "final"}:
+        return scene
+    raise TaskManualDefectConflict("任务缺少受支持的质控场景")
+
+
 def _context(session: Any, task_id: str, task_record_id: str, actor_id: str, *, lock: bool) -> tuple[Any, Any]:
     task_query = select(QCTask.__table__).where(QCTask.id == task_id)
     task = session.execute(task_query.with_for_update() if lock else task_query).mappings().first()
@@ -148,12 +157,24 @@ def _replay(
 ) -> dict[str, Any]:
     details = _history_details(session, defect.id, actor_id)
     run = session.get(QCTaskQCRun, (task_id, run_number))
+    frozen_scene = defect.scene
+    scene_receipt_matches = (
+        details is not None
+        and (
+            (frozen_scene is None and details.get("scene") is None)
+            or (
+                frozen_scene in {"running", "final", "outpatient_emergency"}
+                and details.get("scene") == frozen_scene
+            )
+        )
+    )
     if (
         details is None or details.get("task_id") != task_id
         or details.get("task_record_id") != task_record_id
         or details.get("run_number") != run_number
         or run is None or run.run_scope != "assigned"
         or run.triggered_by != actor_id or run.job_id != details.get("job_id")
+        or not scene_receipt_matches
         or defect.record_id != task_record_id
         or defect.origin != "manual"
         or defect.source_key != "task_assigned_qc"
@@ -248,6 +269,7 @@ def _insert_verified_defect(
                     description=description, severity=severity,
                     suggestion=suggestion, evidence=evidence,
                 )
+            scene = _frozen_scene(task)
             if task["status"] != "in_progress" or record["status"] != "in_progress":
                 raise TaskManualDefectConflict("任务或病历当前状态不允许添加人工缺陷")
             run = session.execute(
@@ -265,7 +287,7 @@ def _insert_verified_defect(
             now = datetime.now(timezone.utc).replace(tzinfo=None)
             defect = QCDefect(
                 id=defect_id, record_id=task_record_id, identity_version=1,
-                source_key="task_assigned_qc",
+                source_key="task_assigned_qc", scene=scene,
                 institute_id=record["institute_id"], patient_id=record["patient_id"],
                 visit_id=record["visit_id"],
                 rule_name=rule_name, description=description, severity=severity,
@@ -280,7 +302,7 @@ def _insert_verified_defect(
                 actor_id=actor_id,
                 details=json.dumps({
                     "task_id": task_id, "task_record_id": task_record_id,
-                    "run_number": run_number, "job_id": job_id,
+                    "run_number": run_number, "job_id": job_id, "scene": scene,
                 }, ensure_ascii=False, sort_keys=True),
                 created_at=now,
             ))

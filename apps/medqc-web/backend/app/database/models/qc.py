@@ -112,6 +112,7 @@ class QCDefect(Base):
     record_id = Column(String(100), nullable=False)
     identity_version = Column(SmallInteger, nullable=True)
     source_key = Column(String(64), nullable=True)
+    scene = Column(String(24), nullable=True, comment="创建时冻结的质控场景；历史 NULL")
     institute_id = Column(Text, nullable=True)
     patient_id = Column(Text, nullable=True)
     visit_id = Column(Text, nullable=True)
@@ -155,6 +156,10 @@ class QCDefect(Base):
     __table_args__ = (
         CheckConstraint("origin IN ('auto', 'manual')", name="ck_qc_defects_origin"),
         CheckConstraint(
+            "scene IS NULL OR scene IN ('running', 'final', 'outpatient_emergency')",
+            name="ck_qc_defects_scene",
+        ),
+        CheckConstraint(
             "manual_review_status IS NULL OR "
             "(origin IS NOT NULL AND origin = 'manual' "
             "AND manual_review_status IN ('pending', 'approved', 'rejected'))",
@@ -166,6 +171,7 @@ class QCDefect(Base):
         Index("ix_qc_defects_severity", "severity"),
         Index("ix_qc_defects_category", "category"),
         Index("ix_qc_defects_department", "department"),
+        Index("ix_qc_defects_scene_created", "scene", "created_at"),
         Index("ix_qc_defects_created_at", "created_at"),
     )
 

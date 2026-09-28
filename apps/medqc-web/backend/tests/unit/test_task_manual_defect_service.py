@@ -29,9 +29,11 @@ def env(monkeypatch):
     with sessions.begin() as session:
         session.execute(QCTask.__table__.insert(), [
             {"id": "task-1", "task_number": "TASK-1", "task_name": "任务一",
-             "task_type": "one_time", "status": "in_progress", "creator_id": "creator"},
+             "task_type": "one_time", "scene": "running",
+             "status": "in_progress", "creator_id": "creator"},
             {"id": "task-2", "task_number": "TASK-2", "task_name": "任务二",
-             "task_type": "one_time", "status": "in_progress", "creator_id": "creator"},
+             "task_type": "one_time", "scene": "outpatient",
+             "status": "in_progress", "creator_id": "creator"},
         ])
         session.execute(QCTaskRecord.__table__.insert(), [
             {"id": "record-a", "task_id": "task-1", "record_id": "record-a",
@@ -92,7 +94,7 @@ def snapshot(env):
         defects = session.execute(sa.select(
             QCDefect.id, QCDefect.record_id, QCDefect.institute_id,
             QCDefect.patient_id, QCDefect.visit_id, QCDefect.origin,
-            QCDefect.manual_review_status, QCDefect.manual_created_by,
+            QCDefect.manual_review_status, QCDefect.manual_created_by, QCDefect.scene,
         ).order_by(QCDefect.id)).all()
         history = session.execute(sa.select(
             QCDefectHistory.defect_id, QCDefectHistory.action,
@@ -108,7 +110,7 @@ def test_create_persists_exact_identity_pending_review_and_history(env):
     defects, history = snapshot(env)
     assert defects == [(
         result["id"], "record-a", "hospital-A", "patient", "visit",
-        "manual", "pending", "qc-1",
+        "manual", "pending", "qc-1", "running",
     )]
     assert history == [(result["id"], "manual_create", "qc-1")]
     calls = env[2]
@@ -117,6 +119,57 @@ def test_create_persists_exact_identity_pending_review_and_history(env):
         "task_id": "task-1", "task_record_id": "record-a",
         "actor_id": "qc-1", "run_number": 1, "run_scope": "assigned",
     }
+
+
+def test_create_maps_locked_outpatient_task_scene(env):
+    sessions, verified, _ = env
+    with sessions.begin() as session:
+        session.execute(
+            QCTask.__table__.update()
+            .where(QCTask.id == "task-1")
+            .values(scene="outpatient")
+        )
+
+    result = create(env)
+
+    assert result["id"] == "00000000-0000-4000-8000-000000000001"
+    with sessions() as session:
+        defect_scene = session.execute(
+            sa.select(QCDefect.scene).where(QCDefect.id == result["id"])
+        ).scalar_one()
+        history_details = session.execute(
+            sa.select(QCDefectHistory.details).where(QCDefectHistory.defect_id == result["id"])
+        ).scalar_one()
+    assert defect_scene == "outpatient_emergency"
+    assert json.loads(history_details)["scene"] == "outpatient_emergency"
+    assert verified["task_id"] == "task-1"
+
+
+@pytest.mark.parametrize("scene", [None, "", "unknown"])
+def test_create_rejects_task_without_supported_scene(env, scene):
+    sessions = env[0]
+    if scene in {"", "unknown"}:
+        with sessions() as session:
+            session.execute(sa.text("PRAGMA ignore_check_constraints = ON"))
+            session.execute(
+                QCTask.__table__.update()
+                .where(QCTask.id == "task-1")
+                .values(scene=scene)
+            )
+            session.commit()
+            session.execute(sa.text("PRAGMA ignore_check_constraints = OFF"))
+    else:
+        with sessions.begin() as session:
+            session.execute(
+                QCTask.__table__.update()
+                .where(QCTask.id == "task-1")
+                .values(scene=None)
+            )
+
+    with pytest.raises(service.TaskManualDefectConflict, match="场景"):
+        create(env)
+
+    assert snapshot(env) == ([], [])
 
 
 @pytest.mark.parametrize("actor_id", ["qc-2", "creator", "stranger"])
@@ -202,6 +255,72 @@ def test_same_id_same_payload_replays_without_duplicate_history(env):
     assert second["id"] == first["id"]
     assert second["idempotent"] is True
     assert len(snapshot(env)[0]) == len(snapshot(env)[1]) == 1
+
+
+def test_pre_migration_null_scene_receipt_remains_idempotent(env):
+    sessions = env[0]
+    defect_id = "00000000-0000-4000-8000-000000000001"
+    with sessions.begin() as session:
+        session.add(QCDefect(
+            id=defect_id, record_id="record-a", identity_version=1,
+            source_key="task_assigned_qc", scene=None,
+            institute_id="hospital-A", patient_id="patient", visit_id="visit",
+            origin="manual", manual_review_status="pending", manual_created_by="qc-1",
+            rule_name="病程记录时限", description="合成缺陷说明", severity="warning",
+            suggestion="合成整改建议", evidence="合成证据", status="pending",
+        ))
+        session.add(QCDefectHistory(
+            id="history-legacy", defect_id=defect_id, action="manual_create", actor_id="qc-1",
+            details=json.dumps({
+                "task_id": "task-1", "task_record_id": "record-a",
+                "run_number": 1, "job_id": "job-1",
+            }),
+        ))
+        session.execute(
+            QCTask.__table__.update().where(QCTask.id == "task-1").values(scene=None)
+        )
+
+    result = create(env)
+
+    assert result["idempotent"] is True
+    assert len(snapshot(env)[0]) == len(snapshot(env)[1]) == 1
+    assert env[2] == []
+
+
+@pytest.mark.parametrize("defect_scene,history_scene", [
+    ("running", None),
+    (None, "running"),
+    ("running", "final"),
+    ("invalid", "invalid"),
+])
+def test_replay_rejects_inconsistent_or_invalid_frozen_scene(
+    env, defect_scene, history_scene,
+):
+    create(env)
+    sessions = env[0]
+    defect_id = "00000000-0000-4000-8000-000000000001"
+    with sessions() as session:
+        session.execute(sa.text("PRAGMA ignore_check_constraints = ON"))
+        session.execute(
+            QCDefect.__table__.update().where(QCDefect.id == defect_id).values(scene=defect_scene)
+        )
+        details = json.loads(session.execute(
+            sa.select(QCDefectHistory.details).where(QCDefectHistory.defect_id == defect_id)
+        ).scalar_one())
+        if history_scene is None:
+            details.pop("scene", None)
+        else:
+            details["scene"] = history_scene
+        session.execute(
+            QCDefectHistory.__table__.update()
+            .where(QCDefectHistory.defect_id == defect_id)
+            .values(details=json.dumps(details))
+        )
+        session.commit()
+        session.execute(sa.text("PRAGMA ignore_check_constraints = OFF"))
+
+    with pytest.raises(service.TaskManualDefectConflict):
+        create(env)
 
 
 def test_same_id_different_payload_conflicts(env):
@@ -362,6 +481,9 @@ def test_row_appearing_after_initial_read_replays_after_locked_read(env, monkeyp
     def winner_first(**kwargs):
         job_id = original_verify(**kwargs)
         with env[0].begin() as session:
+            session.execute(
+                QCTask.__table__.update().where(QCTask.id == "task-1").values(scene=None)
+            )
             session.add(QCDefect(
                 id="00000000-0000-4000-8000-000000000001",
                 record_id="record-a", identity_version=1, source_key="task_assigned_qc",
