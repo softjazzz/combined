@@ -626,3 +626,104 @@
     transition: none !important;
   }
 }
+
+/* ---------- 病历池收敛：字号只用 12 / 13 / 14 / 20 / 32；标签与表头不加粗；行高压到约 54px ---------- */
+.wv4-list :deep(.batch-table-panel__title) {
+  font-size: var(--mq-font-20);
+  font-weight: 600;
+}
+
+.wv4-list :deep(.batch-table-panel__summary-pill),
+.wv4-list :deep(.workbench-filter-summary) {
+  font-size: var(--mq-font-12);
+  font-weight: 400;
+}
+
+.wv4-list :deep(.ant-table-thead > tr > th) {
+  font-size: var(--mq-font-12);
+  font-weight: 500;
+}
+
+.wv4-list :deep(.ant-table-tbody > tr > td) {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+.wv4-list :deep(.batch-table-panel__patient-cell) {
+  gap: 10px;
+}
+
+.wv4-list :deep(.batch-table-panel__patient-name) {
+  font-size: var(--mq-font-14);
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.wv4-list :deep(.batch-table-panel__visit-label),
+.wv4-list :deep(.batch-table-panel__visit-id) {
+  color: var(--mq-text-tertiary);
+  font-family: inherit;
+  font-size: var(--mq-font-12);
+  font-weight: 400;
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.wv4-list :deep(.batch-table-panel__tag--demo) {
+  font-size: var(--mq-font-12) !important;
+  font-weight: 500 !important;
+}
+
+.wv4-list :deep(.batch-table-panel__hospitalization-status),
+.wv4-list :deep(.mq-status) {
+  font-size: var(--mq-font-12);
+  font-weight: 500;
+}
+
+.wv4-list :deep(.batch-table-panel__department) {
+  font-size: var(--mq-font-13);
+}
+
+/* 列表标题栏按钮：去粗体；「质控所选」未选中时为灰色禁用态，不再是醒目蓝 */
+.wv4-list :deep(.batch-table-panel__action.ant-btn) {
+  font-weight: 500 !important;
+}
+
+.wv4-list :deep(.batch-table-panel__action--primary.ant-btn:disabled) {
+  background: rgba(118, 128, 160, 0.14) !important;
+  box-shadow: none !important;
+  color: var(--mq-text-tertiary) !important;
+}
+
+/* 筛选区：标签与按钮不加粗 */
+.wv4-list .record-pool-field-label,
+.wv4-list .workbench-hosp-filter__label {
+  font-size: var(--mq-font-13);
+  font-weight: 400;
+}
+
+.wv4-list :deep(.workbench-filter-toolbar .ant-btn),
+.wv4-list :deep(.workbench-filter-toolbar .ant-segmented-item-label),
+.wv4-list :deep(.workbench-dept-select__name) {
+  font-weight: 500;
+}
+
+.wv4-list :deep(.workbench-dept-select__name) {
+  font-weight: 400;
+}
+
+/* 右侧预览 */
+.wv4-list :deep(.pool-preview__name) {
+  font-size: var(--mq-font-20);
+  font-weight: 600;
+}
+
+.wv4-list :deep(.pool-preview__eyebrow),
+.wv4-list :deep(.pool-preview__facts dt) {
+  font-weight: 400;
+}
+
+.wv4-list :deep(.pool-preview__facts dd) {
+  font-size: var(--mq-font-14);
+  font-weight: 500;
+}
