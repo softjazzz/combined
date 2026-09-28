@@ -201,3 +201,66 @@
 .customer-sample-page :deep(.ant-pagination-item-active a) {
   color: #ffffff;
 }
+
+/* ===== 「查看病历 / 编辑副本」弹窗（挂载在 body 下，需 :global） ===== */
+:global(.editable-copy-workstation-modal-wrap) {
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+
+:global(.editable-copy-workstation-modal .ant-modal-content),
+:global(.editable-copy-workstation-modal-wrap.is-readonly-fullscreen .ant-modal-content) {
+  background: var(--mq-bg-mesh) !important;
+  font-family: var(--mq-font-family);
+}
+
+:global(.editable-copy-workstation-modal .editable-copy-hero) {
+  border: 1px solid var(--mq-glass-border) !important;
+  border-radius: var(--mq-radius-card) !important;
+  background: var(--mq-glass-bg) !important;
+  box-shadow: var(--mq-glass-shadow) !important;
+}
+
+:global(.editable-copy-workstation-modal .editable-copy-hero h2) {
+  font-family: var(--mq-font-display);
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+:global(.editable-copy-workstation-modal .editable-copy-source-card) {
+  border-radius: 16px;
+  background: var(--mq-info-bg);
+}
+
+
+:global(.editable-copy-workstation-modal .editable-copy-document-workbench-section),
+:global(.editable-copy-workstation-modal .editable-copy-section) {
+  border: 1px solid var(--mq-glass-border) !important;
+  border-radius: var(--mq-radius-card) !important;
+  background: var(--mq-glass-bg) !important;
+  box-shadow: var(--mq-glass-shadow) !important;
+  overflow: hidden;
+}
+
+:global(.editable-copy-workstation-modal .editable-copy-document-directory) {
+  border-right: 0.5px solid var(--mq-border) !important;
+  background: rgba(255, 255, 255, 0.45) !important;
+}
+
+:global(.editable-copy-workstation-modal .editable-copy-document-nav-item.is-active),
+:global(.editable-copy-workstation-modal .editable-copy-document-nav-item[aria-current='true']) {
+  border-color: transparent !important;
+  background: #ffffff !important;
+  box-shadow: 0 4px 14px rgba(10, 55, 115, 0.12);
+}
+
+:global(.editable-copy-workstation-modal .ant-modal-footer),
+:global(.editable-copy-workstation-modal .editable-copy-footer) {
+  border-top: 0.5px solid var(--mq-border);
+  background: transparent !important;
+}
+
+:global(.editable-copy-workstation-modal .ant-btn) {
+  border-radius: 999px;
+}

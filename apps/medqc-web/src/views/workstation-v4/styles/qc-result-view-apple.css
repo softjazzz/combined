@@ -749,3 +749,67 @@
   font-size: 12px;
   color: #8792a2;
 }
+
+/* ===== v7.1 液态玻璃覆盖：结果抽屉外框、工具栏、页签与结果卡统一 Token ===== */
+:global(.customer-record-result-drawer) {
+  font-family: var(--mq-font-family);
+  color: var(--mq-text-primary);
+}
+:global(.customer-record-result-drawer.ant-drawer-content),
+:global(.customer-record-result-drawer .ant-drawer-content) {
+  background: var(--mq-bg-mesh);
+}
+:global(.customer-record-result-drawer .ant-drawer-header) {
+  border-bottom: 0.5px solid var(--mq-border);
+  background: var(--mq-glass-bg);
+  -webkit-backdrop-filter: var(--mq-glass-blur);
+  backdrop-filter: var(--mq-glass-blur);
+}
+:global(.customer-record-result-drawer .ant-drawer-body) {
+  background: var(--mq-bg-mesh);
+}
+:global(.customer-record-result-drawer .single-record-result-panel) {
+  background: transparent;
+  color: var(--mq-text-primary);
+}
+:global(.customer-record-result-drawer .customer-record-result-title__heading strong) {
+  font-family: var(--mq-font-display);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+:global(.customer-record-result-drawer .customer-record-result-title__context) {
+  border: 1px solid var(--mq-glass-border);
+  border-radius: 16px;
+  background: var(--mq-glass-bg-strong);
+}
+:global(.customer-record-result-drawer .result-toolbar) {
+  margin: 14px 16px 0;
+  border: 1px solid var(--mq-glass-border);
+  border-radius: var(--mq-radius-card);
+  background: var(--mq-glass-bg);
+  box-shadow: var(--mq-glass-shadow);
+}
+:global(.customer-record-result-drawer .result-tabs) {
+  border-radius: 13px;
+  background: var(--mq-bg-muted);
+}
+:global(.customer-record-result-drawer .result-tab) {
+  border-radius: 10px;
+}
+:global(.customer-record-result-drawer .result-tab.is-active) {
+  color: var(--mq-text-primary);
+  font-weight: 600;
+  box-shadow: 0 2px 6px rgba(10, 55, 115, 0.12);
+}
+:global(.customer-record-result-drawer .result-row) {
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 2px 10px rgba(10, 55, 115, 0.06);
+}
+:global(.customer-record-result-drawer .rule-code) {
+  font-family: var(--mq-font-mono);
+}
+:global(.customer-record-result-drawer .ant-btn) {
+  border-radius: 999px;
+}
