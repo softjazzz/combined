@@ -291,6 +291,52 @@ export interface TaskCreateData {
     deadline?: string
 }
 
+/** 任务模板仅保存这些可复用字段，不包含任务名、期限、病例或人员身份。 */
+export interface TaskTemplateConfig {
+    scene: TaskScene
+    rule_set_key: string
+    /** 绝对日期窗；套用时不会解释为相对周期。 */
+    date_range: { start?: string | null; end?: string | null } | null
+    department_filter: string[]
+    sampling_method: SamplingMethod
+    sampling_config: {
+        case_scope?: 'active'
+        total?: number
+        percentage?: number
+        by_department?: boolean
+        group_by?: 'department' | null
+    }
+    assign_method: TaskAssignableMethod
+    assignee_config: TaskAssignConfig
+}
+
+export interface TaskTemplate {
+    id: string
+    name: string
+    config: TaskTemplateConfig | null
+    usable: boolean
+    unavailable_reason: string | null
+    version: number
+    created_at: string
+    updated_at: string
+}
+
+export interface TaskTemplateList {
+    items: TaskTemplate[]
+    max_templates: number
+}
+
+export interface TaskTemplateCreateData {
+    name: string
+    config: TaskTemplateConfig
+}
+
+export interface TaskTemplateUpdateData {
+    version: number
+    name?: string
+    config?: TaskTemplateConfig
+}
+
 export interface TaskRuleSetOption {
     rule_set_key: string
     rule_set_name: string
@@ -486,6 +532,38 @@ export async function createTask(data: TaskCreateData) {
         method: 'POST',
         url: `${BASE_URL}`,
         data,
+    })
+}
+
+/** 当前用户私有任务模板；后端 owner 由认证身份确定。 */
+export async function getTaskTemplates() {
+    return request<TaskTemplateList>({
+        method: 'GET',
+        url: `${BASE_URL}/templates`,
+    })
+}
+
+export async function createTaskTemplate(data: TaskTemplateCreateData) {
+    return request<TaskTemplate>({
+        method: 'POST',
+        url: `${BASE_URL}/templates`,
+        data,
+    })
+}
+
+export async function updateTaskTemplate(templateId: string, data: TaskTemplateUpdateData) {
+    return request<TaskTemplate>({
+        method: 'PUT',
+        url: `${BASE_URL}/templates/${encodeURIComponent(templateId)}`,
+        data,
+    })
+}
+
+export async function deleteTaskTemplate(templateId: string, version: number) {
+    return request<{ id: string; deleted: boolean }>({
+        method: 'DELETE',
+        url: `${BASE_URL}/templates/${encodeURIComponent(templateId)}`,
+        params: { version },
     })
 }
 

@@ -30,6 +30,8 @@ from ..schemas.tasks import (
     TaskRecordCompleteRequest,
     TaskManualDefectCreateRequest,
     TaskManualDefectResponse,
+    TaskTemplateCreateRequest,
+    TaskTemplateUpdateRequest,
     AssignMethod,
     TaskStatus,
 )
@@ -110,6 +112,16 @@ from ..services.task_delete_service import (
 from ..services.task_sampling_service import (
     validate_active_running_date_range,
     validate_scoped_sampling_config,
+)
+from ..services.task_template_service import (
+    TaskTemplateConflict,
+    TaskTemplateInvalid,
+    TaskTemplateNotFound,
+    TaskTemplateUnavailable,
+    create_task_template,
+    delete_task_template,
+    list_task_templates,
+    update_task_template,
 )
 from .qc_sichuan import get_qc_service, _run_sichuan_workspace_batch_job, _sichuan_workspace_service
 from ..core.permissions import (
@@ -349,6 +361,138 @@ def _validate_creation_assign_method(task_data: TaskCreateRequest) -> None:
                 status_code=422,
                 detail="按原质控员分配须在 assignee_config.fallback 指定 by_ratio 或 reject",
             )
+
+
+def _task_template_error(exc: Exception) -> HTTPException:
+    if isinstance(exc, TaskTemplateNotFound):
+        return HTTPException(status_code=404, detail={
+            "code": "template_not_found", "message": "任务模板不存在",
+        })
+    if isinstance(exc, TaskTemplateConflict):
+        return HTTPException(status_code=409, detail={
+            "code": exc.code, "message": str(exc),
+        })
+    if isinstance(exc, TaskTemplateInvalid):
+        return HTTPException(status_code=422, detail={
+            "code": exc.code, "message": str(exc),
+        })
+    return HTTPException(status_code=503, detail={
+        "code": "template_unavailable", "message": "任务模板服务暂不可用，请稍后重试",
+    })
+
+
+@router.get("/templates")
+@require_permission(ResourceType.QC_TASKS, PermissionAction.READ)
+async def list_templates(
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    owner_id = _get_task_scope_user_id(current_user)
+    try:
+        result = await run_in_threadpool(list_task_templates, owner_id=owner_id)
+    except (TaskTemplateNotFound, TaskTemplateConflict, TaskTemplateInvalid, TaskTemplateUnavailable) as exc:
+        raise _task_template_error(exc) from exc
+    except Exception as exc:
+        logger.warning("任务模板列表读取失败: type=%s", type(exc).__name__)
+        raise _task_template_error(TaskTemplateUnavailable()) from exc
+    return success_response(data=result, trace_id=get_trace_id(request))
+
+
+@router.post("/templates")
+@require_permission(ResourceType.QC_TASKS, PermissionAction.CREATE)
+async def create_template(
+    request: Request,
+    payload: TaskTemplateCreateRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    owner_id = _get_task_scope_user_id(current_user)
+    try:
+        result = await run_in_threadpool(
+            create_task_template,
+            owner_id=owner_id,
+            name=payload.name,
+            config=payload.config,
+        )
+    except (TaskTemplateNotFound, TaskTemplateConflict, TaskTemplateInvalid, TaskTemplateUnavailable) as exc:
+        raise _task_template_error(exc) from exc
+    except Exception as exc:
+        logger.warning("任务模板创建失败: type=%s", type(exc).__name__)
+        raise _task_template_error(TaskTemplateUnavailable()) from exc
+    audit_event(
+        request,
+        action="tasks.template.create",
+        resource="/api/v1/tasks/templates",
+        outcome="success",
+        current_user=current_user,
+        details={"template_id": result["id"], "version": result["version"]},
+    )
+    return success_response(data=result, message="任务模板已保存", trace_id=get_trace_id(request))
+
+
+@router.put("/templates/{template_id}")
+@require_permission(ResourceType.QC_TASKS, PermissionAction.UPDATE)
+async def update_template(
+    request: Request,
+    template_id: str,
+    payload: TaskTemplateUpdateRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    owner_id = _get_task_scope_user_id(current_user)
+    try:
+        result = await run_in_threadpool(
+            update_task_template,
+            owner_id=owner_id,
+            template_id=template_id,
+            version=payload.version,
+            name=payload.name,
+            config=payload.config,
+        )
+    except (TaskTemplateNotFound, TaskTemplateConflict, TaskTemplateInvalid, TaskTemplateUnavailable) as exc:
+        raise _task_template_error(exc) from exc
+    except Exception as exc:
+        logger.warning("任务模板更新失败: type=%s", type(exc).__name__)
+        raise _task_template_error(TaskTemplateUnavailable()) from exc
+    audit_event(
+        request,
+        action="tasks.template.update",
+        resource="/api/v1/tasks/templates/{template_id}",
+        outcome="success",
+        current_user=current_user,
+        details={"template_id": result["id"], "version": result["version"]},
+    )
+    return success_response(data=result, message="任务模板已更新", trace_id=get_trace_id(request))
+
+
+@router.delete("/templates/{template_id}")
+@require_permission(ResourceType.QC_TASKS, PermissionAction.DELETE)
+async def remove_template(
+    request: Request,
+    template_id: str,
+    version: int = Query(..., ge=1),
+    current_user: dict = Depends(get_current_user),
+):
+    owner_id = _get_task_scope_user_id(current_user)
+    try:
+        result = await run_in_threadpool(
+            delete_task_template,
+            owner_id=owner_id,
+            template_id=template_id,
+            version=version,
+        )
+    except (TaskTemplateNotFound, TaskTemplateConflict, TaskTemplateInvalid, TaskTemplateUnavailable) as exc:
+        raise _task_template_error(exc) from exc
+    except Exception as exc:
+        logger.warning("任务模板删除失败: type=%s", type(exc).__name__)
+        raise _task_template_error(TaskTemplateUnavailable()) from exc
+    audit_event(
+        request,
+        action="tasks.template.delete",
+        resource="/api/v1/tasks/templates/{template_id}",
+        outcome="success",
+        current_user=current_user,
+        details={"template_id": template_id, "version": version},
+    )
+    return success_response(data=result, message="任务模板已删除", trace_id=get_trace_id(request))
 
 
 @router.post("")

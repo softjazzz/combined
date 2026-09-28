@@ -28,6 +28,7 @@ vi.mock('@ant-design/icons-vue', () => {
     PercentageOutlined: icon,
     PlusOutlined: icon,
     DeleteOutlined: icon,
+    SaveOutlined: icon,
     ThunderboltOutlined: icon,
   }
 })
@@ -68,11 +69,12 @@ type DrawerVm = {
   matchingRuleSets: Array<{ rule_set_key: string }>
   ruleSetsError: string
   submitting: boolean
+  handleSaveTemplate: () => void
 }
 
-function mountDrawer() {
+function mountDrawer(props: Record<string, unknown> = {}) {
   return shallowMount(CreateTaskDrawer, {
-    props: { open: true },
+    props: { open: true, ...props },
     global: {
       stubs: {
         'a-alert': { props: ['message'], template: '<div>{{ message }}</div>' },
@@ -152,6 +154,55 @@ describe('CreateTaskDrawer 创建草稿边界', () => {
     expect(mocks.createTask.mock.calls[0][0]).not.toHaveProperty('description')
     expect(mocks.createTask.mock.calls[0][0]).not.toHaveProperty('assignee_config')
     expect(wrapper.emitted('created')).toHaveLength(1)
+  })
+
+  it('套用模板只回填可复用配置，任务名称和截止日期仍由本次填写', async () => {
+    const wrapper = mountDrawer({
+      initialTemplateConfig: {
+        scene: 'final',
+        rule_set_key: 'final-rules',
+        date_range: { start: '2026-09-01', end: '2026-09-20' },
+        department_filter: ['内科'],
+        sampling_method: 'count',
+        sampling_config: { total: 12, by_department: true },
+        assign_method: 'by_department',
+        assignee_config: {},
+      },
+    })
+    await flushPromises()
+    const vm = vmOf(wrapper)
+
+    expect(vm.formData.task_name).toBe('')
+    expect(vm.formData.deadline).toBeNull()
+    expect(vm.formData.scene).toBe('final')
+    expect(vm.formData.rule_set_key).toBe('final-rules')
+    expect(vm.formData.department_filter).toEqual(['内科'])
+    expect(vm.formData.sampling_method).toBe('count')
+    expect(vm.formData.assign_method).toBe('by_department')
+    expect(mocks.message.success).toHaveBeenCalledWith('模板配置已套用，请填写任务名称和截止日期')
+  })
+
+  it('保存当前配置时不携带任务名、期限、病例或人员身份', async () => {
+    const wrapper = mountDrawer()
+    const vm = vmOf(wrapper)
+    vm.formData.task_name = '不应进入模板'
+    vm.formData.deadline = dayjs('2026-10-01')
+    vm.formData.department_filter = ['内科']
+    await chooseRuleSet(vm, 'running')
+    vm.handleSaveTemplate()
+
+    const payload = wrapper.emitted('save-template')?.[0]?.[0] as Record<string, unknown>
+    expect(payload).toMatchObject({
+      scene: 'running',
+      rule_set_key: 'running-rules',
+      department_filter: ['内科'],
+      sampling_config: { case_scope: 'active' },
+      assign_method: 'by_ratio',
+      assignee_config: {},
+    })
+    expect(payload).not.toHaveProperty('task_name')
+    expect(payload).not.toHaveProperty('deadline')
+    expect(payload).not.toHaveProperty('record_refs')
   })
 
   it('创建时只选择分配策略，不展示或提交虚构质控员', async () => {

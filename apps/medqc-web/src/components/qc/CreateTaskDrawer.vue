@@ -20,6 +20,16 @@
       <a-step title="确认提交" />
     </a-steps>
 
+    <div class="mb-5 flex justify-end">
+      <a-button
+        data-testid="save-current-task-template"
+        :disabled="submitting || ruleSetsLoading"
+        @click="handleSaveTemplate"
+      >
+        <SaveOutlined /> 保存当前配置为模板
+      </a-button>
+    </div>
+
     <!-- Step 1: 基本信息 -->
     <div v-show="currentStep === 0">
       <a-form
@@ -456,7 +466,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, nextTick, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import {
   ThunderboltOutlined,
@@ -467,6 +477,7 @@ import {
   PercentageOutlined,
   PlusOutlined,
   DeleteOutlined,
+  SaveOutlined,
 } from '@ant-design/icons-vue'
 import { createTask, getTaskRuleSets } from '@/api/tasks'
 import type {
@@ -477,6 +488,7 @@ import type {
   TaskItem,
   TaskRuleSetOption,
   TaskScene,
+  TaskTemplateConfig,
 } from '@/api/tasks'
 import { describeTaskAssignError } from '@/utils/taskAssignment'
 import type { Dayjs } from 'dayjs'
@@ -485,11 +497,13 @@ import dayjs from 'dayjs'
 // ============= Props & Emits =============
 const props = defineProps<{
   open: boolean
+  initialTemplateConfig?: TaskTemplateConfig | null
 }>()
 
 const emit = defineEmits<{
   (e: 'update:open', val: boolean): void
   (e: 'created', task: TaskItem): void
+  (e: 'save-template', config: TaskTemplateConfig): void
 }>()
 
 // ============= 状态 =============
@@ -508,6 +522,7 @@ const ruleSets = ref<TaskRuleSetOption[]>([])
 const ruleSetsLoading = ref(false)
 const ruleSetsError = ref('')
 let ruleSetRequestId = 0
+let applyingTemplate = false
 
 // 表单数据
 const formData = ref({
@@ -668,6 +683,7 @@ const assignLabel = computed(() => {
 })
 
 watch(() => formData.value.scene, () => {
+  if (applyingTemplate) return
   formData.value.rule_set_key = undefined
   formData.value.sampling_config.case_scope = undefined
 })
@@ -691,6 +707,9 @@ watch(() => props.open, async (open) => {
       typeof item.rule_set_version === 'string' &&
       typeof item.scope === 'string',
     )
+    if (props.initialTemplateConfig) {
+      await applyTemplateConfig(props.initialTemplateConfig)
+    }
   } catch {
     if (requestId === ruleSetRequestId) ruleSetsError.value = '规则集目录加载失败，请稍后重试'
   } finally {
@@ -730,6 +749,96 @@ const activeDateRangeError = (range: { start?: string; end?: string } | null): s
   if (start && dayjs(start).isBefore(today.subtract(180, 'day'), 'day')) return '入院日期范围最多 180 天'
   if (start && end && dayjs(start).isAfter(dayjs(end), 'day')) return '日期范围起始时间不能晚于结束时间'
   return ''
+}
+
+const applyTemplateConfig = async (config: TaskTemplateConfig) => {
+  const ruleSetAvailable = ruleSets.value.some((item) =>
+    item.scope === config.scene && item.rule_set_key === config.rule_set_key)
+  if (!ruleSetAvailable) {
+    message.warning('模板规则集已不可用，请编辑模板后再套用')
+    return
+  }
+  applyingTemplate = true
+  formData.value.scene = config.scene
+  formData.value.rule_set_key = config.rule_set_key
+  formData.value.date_range = config.date_range
+    ? {
+        start: config.date_range.start || undefined,
+        end: config.date_range.end || undefined,
+      }
+    : null
+  const start = config.date_range?.start
+  const end = config.date_range?.end
+  dateRangeValue.value = start && end ? [dayjs(start), dayjs(end)] : null
+  formData.value.department_filter = [...config.department_filter]
+  formData.value.sampling_method = config.sampling_method
+  formData.value.sampling_config = {
+    case_scope: config.sampling_config.case_scope,
+    total: config.sampling_config.total ?? 50,
+    percentage: config.sampling_config.percentage ?? 10,
+    by_department: config.sampling_config.by_department ?? false,
+    group_by: config.sampling_config.group_by ?? null,
+  }
+  formData.value.assign_method = config.assign_method
+  formData.value.assign_fallback = config.assignee_config.fallback
+  rangeMode.value = 'date'
+  recordRefs.value = [blankRecordRef()]
+  currentStep.value = 0
+  await nextTick()
+  applyingTemplate = false
+  message.success('模板配置已套用，请填写任务名称和截止日期')
+}
+
+const currentTemplateConfig = (): TaskTemplateConfig | null => {
+  const scene = formData.value.scene
+  const ruleSetKey = formData.value.rule_set_key
+  if (!scene || !ruleSetKey || !selectedRuleSetIsValid.value) return null
+  if (scene === 'running' && formData.value.sampling_config.case_scope !== 'active') return null
+  if (assignMethodError.value || (formData.value.sampling_method === 'percentage' && !validSamplingGroup.value)) {
+    return null
+  }
+  const samplingConfig: TaskTemplateConfig['sampling_config'] = {
+    ...(scene === 'running' ? { case_scope: 'active' as const } : {}),
+  }
+  if (formData.value.sampling_method === 'count') {
+    samplingConfig.total = formData.value.sampling_config.total
+    samplingConfig.by_department = formData.value.sampling_config.by_department
+  } else if (formData.value.sampling_method === 'percentage') {
+    samplingConfig.percentage = formData.value.sampling_config.percentage
+    samplingConfig.group_by = formData.value.sampling_config.group_by === 'department'
+      ? 'department'
+      : null
+  }
+  const start = formData.value.date_range?.start?.trim()
+  const end = formData.value.date_range?.end?.trim()
+  return {
+    scene,
+    rule_set_key: ruleSetKey,
+    date_range: start || end ? { start: start || null, end: end || null } : null,
+    department_filter: [...formData.value.department_filter],
+    sampling_method: formData.value.sampling_method,
+    sampling_config: samplingConfig,
+    assign_method: formData.value.assign_method,
+    assignee_config: formData.value.assign_method === 'by_original_reviewer' && formData.value.assign_fallback
+      ? { fallback: formData.value.assign_fallback }
+      : {},
+  }
+}
+
+const handleSaveTemplate = () => {
+  const config = currentTemplateConfig()
+  if (!config) {
+    message.warning('请先填写有效的场景、规则集、抽样和分配配置')
+    return
+  }
+  if (config.scene === 'running') {
+    const rangeError = activeDateRangeError(formData.value.date_range)
+    if (rangeError) {
+      message.warning(rangeError)
+      return
+    }
+  }
+  emit('save-template', config)
 }
 
 const handleClose = () => {

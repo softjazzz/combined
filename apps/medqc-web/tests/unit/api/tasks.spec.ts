@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios'
 import { ApiService } from '@/services/apiService'
-import { assignTask, assignTasksBatch, completeTaskRecord, createTaskQcRun, getLatestTaskRecordSyncJob, getTaskAssigneeOptions, getTaskDetail, getTaskList, getTaskQcRuns, getTaskRecordSyncJob, getTaskRuleSets, getTaskStats, getTaskTodoStats, startTaskRecord, syncTaskRecords, updateTask } from '@/api/tasks'
+import { assignTask, assignTasksBatch, completeTaskRecord, createTaskQcRun, createTaskTemplate, deleteTaskTemplate, getLatestTaskRecordSyncJob, getTaskAssigneeOptions, getTaskDetail, getTaskList, getTaskQcRuns, getTaskRecordSyncJob, getTaskRuleSets, getTaskStats, getTaskTemplates, getTaskTodoStats, startTaskRecord, syncTaskRecords, updateTask, updateTaskTemplate } from '@/api/tasks'
 
 vi.mock('@/services/apiService', () => ({ ApiService: { requestRaw: vi.fn() } }))
 
@@ -63,6 +63,36 @@ describe('任务统计 API', () => {
 
     vi.mocked(ApiService.requestRaw).mockRejectedValueOnce(new Error('目录不可用'))
     await expect(getTaskRuleSets()).resolves.toMatchObject({ success: false })
+  })
+
+  it('任务模板使用本人私有端点并编码模板 ID、携带 CAS version', async () => {
+    const config = {
+      scene: 'final' as const,
+      rule_set_key: 'final-rules',
+      date_range: null,
+      department_filter: [],
+      sampling_method: 'all' as const,
+      sampling_config: {},
+      assign_method: 'by_ratio' as const,
+      assignee_config: {},
+    }
+    await getTaskTemplates()
+    expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
+      method: 'GET', url: '/api/v1/tasks/templates',
+    })
+    await createTaskTemplate({ name: '常用', config })
+    expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
+      method: 'POST', url: '/api/v1/tasks/templates', data: { name: '常用', config },
+    })
+    await updateTaskTemplate('tpl/1', { version: 2, name: '改名', config })
+    expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
+      method: 'PUT', url: '/api/v1/tasks/templates/tpl%2F1',
+      data: { version: 2, name: '改名', config },
+    })
+    await deleteTaskTemplate('tpl/1', 3)
+    expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
+      method: 'DELETE', url: '/api/v1/tasks/templates/tpl%2F1', params: { version: 3 },
+    })
   })
 
   it('任务详情编码路径并显式传递清单范围', async () => {

@@ -4,11 +4,11 @@
 用于质控抽查任务的创建、分配、执行等操作
 """
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
 from typing import Annotated, Optional, List, Dict, Any, Literal
 from enum import Enum
 from uuid import UUID
-from datetime import datetime
+from datetime import date, datetime
 
 
 # ============================================================================
@@ -86,6 +86,151 @@ class TaskCaseRef(BaseModel):
     institute_id: NonEmptyCaseCoordinate
     patient_id: NonEmptyCaseCoordinate
     visit_id: NonEmptyCaseCoordinate
+
+
+TaskTemplateName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=50)]
+TaskTemplateDepartment = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+
+
+class TaskTemplateDateRange(BaseModel):
+    """模板保存的绝对日期窗，不解释为相对周期。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    start: Optional[str] = None
+    end: Optional[str] = None
+
+    @field_validator("start", "end")
+    @classmethod
+    def validate_iso_date(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        if not isinstance(value, str) or len(value) != 10 or value[4] != "-" or value[7] != "-":
+            raise ValueError("日期必须使用 YYYY-MM-DD")
+        try:
+            return date.fromisoformat(value).isoformat()
+        except (TypeError, ValueError):
+            raise ValueError("日期必须使用 YYYY-MM-DD") from None
+
+    @model_validator(mode="after")
+    def validate_order(self) -> "TaskTemplateDateRange":
+        if self.start and self.end and self.start > self.end:
+            raise ValueError("日期范围起始时间不能晚于结束时间")
+        return self
+
+
+class TaskTemplateConfig(BaseModel):
+    """仅包含可复用创建配置；动态任务信息和病例/人员身份一律禁止。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    scene: TaskScene
+    rule_set_key: RuleSetKey
+    date_range: Optional[TaskTemplateDateRange] = None
+    department_filter: List[TaskTemplateDepartment] = Field(default_factory=list, max_length=100)
+    sampling_method: SamplingMethod = SamplingMethod.ALL
+    sampling_config: Dict[str, Any] = Field(default_factory=dict)
+    assign_method: AssignMethod = AssignMethod.BY_RATIO
+    assignee_config: Dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("department_filter")
+    @classmethod
+    def validate_departments(cls, value: List[str]) -> List[str]:
+        if len(value) != len(set(value)):
+            raise ValueError("科室筛选不得重复")
+        return value
+
+    @model_validator(mode="after")
+    def validate_reusable_config(self) -> "TaskTemplateConfig":
+        method = self.sampling_method
+        allowed_sampling_keys = {
+            SamplingMethod.ALL: {"case_scope"},
+            SamplingMethod.COUNT: {"case_scope", "total", "by_department"},
+            SamplingMethod.PERCENTAGE: {"case_scope", "percentage", "group_by"},
+        }[method]
+        unknown_sampling = sorted(set(self.sampling_config) - allowed_sampling_keys)
+        if unknown_sampling:
+            raise ValueError(f"抽样配置含不支持的字段：{', '.join(unknown_sampling)}")
+        case_scope = self.sampling_config.get("case_scope")
+        if self.scene == TaskScene.RUNNING:
+            if case_scope != "active":
+                raise ValueError("运行病历模板当前仅支持当前在院范围")
+        elif case_scope is not None:
+            raise ValueError("当前场景不支持 case_scope")
+        if method == SamplingMethod.COUNT:
+            total = self.sampling_config.get("total")
+            if isinstance(total, bool) or not isinstance(total, int) or not 1 <= total <= 10000:
+                raise ValueError("抽样数量必须为 1 到 10000 的整数")
+            if not isinstance(self.sampling_config.get("by_department", False), bool):
+                raise ValueError("按科室抽样参数必须是布尔值")
+        elif method == SamplingMethod.PERCENTAGE:
+            percentage = self.sampling_config.get("percentage")
+            if (
+                isinstance(percentage, bool)
+                or not isinstance(percentage, (int, float))
+                or not 0 < percentage <= 100
+            ):
+                raise ValueError("抽样比例必须在 0 到 100 之间")
+            if self.sampling_config.get("group_by") not in (None, "department"):
+                raise ValueError("当前仅支持按科室分组")
+
+        if self.assign_method not in {
+            AssignMethod.BY_RATIO,
+            AssignMethod.BY_ORIGINAL_REVIEWER,
+            AssignMethod.BY_DEPARTMENT,
+        }:
+            raise ValueError("模板包含不可用的分配方式")
+        unknown_assignee = sorted(set(self.assignee_config) - {"fallback"})
+        if unknown_assignee:
+            raise ValueError(f"分配配置含不支持的字段：{', '.join(unknown_assignee)}")
+        fallback = self.assignee_config.get("fallback")
+        if self.assign_method == AssignMethod.BY_ORIGINAL_REVIEWER:
+            if fallback not in {"by_ratio", "reject"}:
+                raise ValueError("按原质控员分配必须指定 fallback")
+        elif self.assignee_config:
+            raise ValueError("当前分配方式不支持 assignee_config")
+        return self
+
+
+class TaskTemplateCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: TaskTemplateName
+    config: TaskTemplateConfig
+
+
+class TaskTemplateUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    version: int = Field(..., ge=1)
+    name: Optional[TaskTemplateName] = None
+    config: Optional[TaskTemplateConfig] = None
+
+    @model_validator(mode="after")
+    def require_change(self) -> "TaskTemplateUpdateRequest":
+        if self.name is None and self.config is None:
+            raise ValueError("没有需要更新的字段")
+        return self
+
+
+class TaskTemplateResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    name: str
+    config: Optional[TaskTemplateConfig]
+    usable: bool
+    unavailable_reason: Optional[str] = None
+    version: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class TaskTemplateListResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: List[TaskTemplateResponse]
+    max_templates: int
 
 
 class TaskCreateRequest(BaseModel):

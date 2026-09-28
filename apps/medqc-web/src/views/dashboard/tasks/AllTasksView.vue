@@ -2,8 +2,16 @@
   <div class="all-tasks-container p-8 bg-gray-50 min-h-screen">
     <!-- CreateTaskDrawer -->
     <CreateTaskDrawer
+      :key="createDrawerKey"
       v-model:open="showCreateDrawer"
+      :initial-template-config="taskTemplateSeed"
       @created="onTaskCreated"
+      @save-template="handleSaveTaskTemplate"
+    />
+    <TaskTemplateDrawer
+      v-model:open="showTaskTemplateDrawer"
+      :seed-config="taskTemplateSeed"
+      @apply="handleApplyTaskTemplate"
     />
     <TaskDetailDrawer
       :key="detailRefreshKey"
@@ -11,6 +19,25 @@
       :task-id="detailTaskId"
       tab="all"
     />
+    <TaskAnalysisDrawer
+      v-model:open="analysisDrawerVisible"
+      :task-id="analysisTaskId"
+      @view-detail="handleAnalysisDetail"
+    />
+    <a-modal
+      v-model:open="analysisPickerOpen"
+      title="选择分析任务"
+      :ok-button-props="{ disabled: !analysisSelection }"
+      @ok="confirmAnalysisSelection"
+    >
+      <a-select
+        v-model:value="analysisSelection"
+        aria-label="当前页任务"
+        placeholder="选择当前页任务"
+        style="width: 100%"
+        :options="tasks.map(task => ({ value: task.id, label: task.task_name }))"
+      />
+    </a-modal>
     <a-modal
       :open="assignDialogVisible"
       :title="batchAssigningTasks.length ? '批量分配质控任务' : '分配质控任务'"
@@ -265,6 +292,7 @@
         <a-button
           size="large"
           class="rounded-lg h-16"
+          :disabled="loading || !tasks.length"
           @click="handleTaskAnalysis"
         >
           <BarChartOutlined class="text-lg" />
@@ -430,7 +458,17 @@
                 详情
               </a-button>
               <a-button
+                type="link"
+                size="small"
+                data-testid="task-row-analysis"
+                @click="openTaskAnalysis((record as DashboardTaskItem).id)"
+              >
+                <BarChartOutlined />
+                分析
+              </a-button>
+              <a-button
                 v-if="canAssign(record as DashboardTaskItem)"
+                data-testid="task-row-assign"
                 type="link"
                 size="small"
                 @click="handleAssign(record as DashboardTaskItem)"
@@ -464,7 +502,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import type { TableColumnsType, TableProps } from 'ant-design-vue'
 import type { Dayjs } from 'dayjs'
@@ -478,8 +516,11 @@ import type {
   TaskSceneFilter,
   TaskStats,
   TaskStatus,
+  TaskTemplateConfig,
 } from '@/api/tasks'
 import CreateTaskDrawer from '@/components/qc/CreateTaskDrawer.vue'
+import TaskTemplateDrawer from '@/components/qc/TaskTemplateDrawer.vue'
+import TaskAnalysisDrawer from '@/components/qc/TaskAnalysisDrawer.vue'
 import TaskAssignmentResult from '@/components/qc/TaskAssignmentResult.vue'
 import { describeTaskAssignError } from '@/utils/taskAssignment'
 import TaskDetailDrawer from '@/components/qc/TaskDetailDrawer.vue'
@@ -517,8 +558,15 @@ type DashboardTaskItem = TaskItem & {
 const dateRange = ref<DateRange>(null)
 const tasks = ref<DashboardTaskItem[]>([])
 const showCreateDrawer = ref(false)
+const showTaskTemplateDrawer = ref(false)
+const taskTemplateSeed = ref<TaskTemplateConfig | null>(null)
+const createDrawerKey = ref(0)
 const detailDrawerVisible = ref(false)
 const detailTaskId = ref<string | null>(null)
+const analysisDrawerVisible = ref(false)
+const analysisTaskId = ref<string | null>(null)
+const analysisPickerOpen = ref(false)
+const analysisSelection = ref<string>()
 const authStore = useAuthStore()
 const detailRefreshKey = ref(0)
 const assignDialogVisible = ref(false)
@@ -609,7 +657,7 @@ const columns: TableColumnsType<TaskItem> = [
   { title: '创建人', dataIndex: 'creator_name', key: 'creatorName', width: 100 },
   { title: '创建时间', dataIndex: 'created_at', key: 'createTime', width: 150 },
   { title: '截止时间', dataIndex: 'deadline', key: 'deadline', width: 150 },
-  { title: '操作', key: 'action', width: 250, fixed: 'right' as const },
+  { title: '操作', key: 'action', width: 310, fixed: 'right' as const },
 ]
 
 // 工具函数
@@ -672,22 +720,72 @@ const formatStatValue = (value: number | null) => {
 
 // 事件处理函数
 const handleCreateTask = async () => {
+  taskTemplateSeed.value = null
+  createDrawerKey.value += 1
   showCreateDrawer.value = true
 }
 
 const onTaskCreated = (task: TaskItem) => {
+  taskTemplateSeed.value = null
   message.success(`任务「${task?.task_name || ''}」已创建`)
   fetchTasks()
   fetchStats()
 }
 
 const handleTaskTemplate = () => {
-  message.info('管理任务模板')
+  taskTemplateSeed.value = null
+  showTaskTemplateDrawer.value = true
+}
+
+const handleSaveTaskTemplate = (config: TaskTemplateConfig) => {
+  taskTemplateSeed.value = config
+  showCreateDrawer.value = false
+  showTaskTemplateDrawer.value = true
+}
+
+const handleApplyTaskTemplate = (config: TaskTemplateConfig) => {
+  taskTemplateSeed.value = config
+  showTaskTemplateDrawer.value = false
+  createDrawerKey.value += 1
+  showCreateDrawer.value = true
 }
 
 const handleTaskAnalysis = () => {
-  message.info('查看任务分析')
+  analysisSelection.value = undefined
+  analysisPickerOpen.value = true
 }
+
+const openTaskAnalysis = (taskId: string) => {
+  analysisTaskId.value = taskId
+  analysisDrawerVisible.value = true
+  analysisPickerOpen.value = false
+}
+
+const confirmAnalysisSelection = () => {
+  if (!analysisSelection.value || !tasks.value.some(task => task.id === analysisSelection.value)) {
+    message.warning('任务列表已变化，请重新选择任务')
+    return
+  }
+  openTaskAnalysis(analysisSelection.value)
+}
+
+const handleAnalysisDetail = (taskId: string) => {
+  if (!analysisDrawerVisible.value || taskId !== analysisTaskId.value) return
+  analysisDrawerVisible.value = false
+  detailTaskId.value = taskId
+  detailDrawerVisible.value = true
+}
+
+watch(() => authStore.user?.id, () => {
+  taskTemplateSeed.value = null
+  showTaskTemplateDrawer.value = false
+  showCreateDrawer.value = false
+  createDrawerKey.value += 1
+  analysisDrawerVisible.value = false
+  analysisPickerOpen.value = false
+  analysisTaskId.value = null
+  analysisSelection.value = undefined
+})
 
 const clearBatchSelection = () => {
   if (assignDialogVisible.value) return

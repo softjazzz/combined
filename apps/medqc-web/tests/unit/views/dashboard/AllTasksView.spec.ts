@@ -55,6 +55,7 @@ vi.mock('@ant-design/icons-vue', () => {
 
 import AllTasksView from '@/views/dashboard/tasks/AllTasksView.vue'
 import TaskAssignmentResult from '@/components/qc/TaskAssignmentResult.vue'
+import TaskAnalysisDrawer from '@/components/qc/TaskAnalysisDrawer.vue'
 
 const AButtonStub = defineComponent({
   name: 'AButton',
@@ -256,6 +257,43 @@ describe('AllTasksView 场景口径', () => {
     expect(mocks.getTaskStats).toHaveBeenCalledWith({ scene: 'running' })
   })
 
+  it('任务行分析打开所选任务，并仅允许回到同一任务详情', async () => {
+    mocks.getTaskList.mockResolvedValue(listWith('分析任务'))
+    const wrapper = await mountView()
+    await wrapper.get('[data-testid="task-row-analysis"]').trigger('click')
+    const drawer = wrapper.findComponent(TaskAnalysisDrawer)
+    expect(drawer.props()).toMatchObject({ open: true, taskId: '分析任务' })
+    drawer.vm.$emit('view-detail', '其他任务')
+    await nextTick()
+    expect(wrapper.findComponent(TaskDetailDrawerStub).props('open')).toBe(false)
+    drawer.vm.$emit('view-detail', '分析任务')
+    await nextTick()
+    expect(drawer.props('open')).toBe(false)
+    expect(wrapper.findComponent(TaskDetailDrawerStub).props()).toMatchObject({
+      open: true, taskId: '分析任务', tab: 'all',
+    })
+  })
+
+  it('顶部分析选择在列表变化后拒绝陈旧任务', async () => {
+    mocks.getTaskList.mockResolvedValue(listWith('当前任务'))
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      analysisSelection: string | undefined
+      handleTaskAnalysis: () => void
+      confirmAnalysisSelection: () => void
+    }
+    vm.handleTaskAnalysis()
+    vm.analysisSelection = '已移出列表'
+    vm.confirmAnalysisSelection()
+    await nextTick()
+    expect(wrapper.findComponent(TaskAnalysisDrawer).props('open')).toBe(false)
+    expect(mocks.message.warning).toHaveBeenCalledWith('任务列表已变化，请重新选择任务')
+    vm.analysisSelection = '当前任务'
+    vm.confirmAnalysisSelection()
+    await nextTick()
+    expect(wrapper.findComponent(TaskAnalysisDrawer).props()).toMatchObject({ open: true, taskId: '当前任务' })
+  })
+
   it('连续切换时晚到旧列表与统计不能覆盖新场景', async () => {
     const wrapper = await mountView()
     const vm = wrapper.vm as unknown as {
@@ -339,7 +377,7 @@ describe('AllTasksView 场景口径', () => {
     mocks.getTaskAssigneeOptions.mockResolvedValueOnce({ success: false, message: '目录故障' })
       .mockResolvedValueOnce({ success: true, data: [] })
     const wrapper = await mountView()
-    await wrapper.get('[data-testid="task-row"] button:nth-child(2)').trigger('click')
+    await wrapper.get('[data-testid="task-row-assign"]').trigger('click')
     await flushPromises()
     expect(wrapper.get('[data-testid="assign-error"]').text()).toContain('目录故障')
     await wrapper.get('[data-testid="assign-error"] button').trigger('click')
@@ -377,9 +415,9 @@ describe('AllTasksView 场景口径', () => {
     mocks.getTaskAssigneeOptions.mockReturnValueOnce(old.promise)
       .mockResolvedValueOnce({ success: true, data: [] })
     const wrapper = await mountView()
-    await wrapper.get('[data-testid="task-row"] button:nth-child(2)').trigger('click')
+    await wrapper.get('[data-testid="task-row-assign"]').trigger('click')
     await wrapper.get('[data-testid="assign-cancel"]').trigger('click')
-    await wrapper.get('[data-testid="task-row"] button:nth-child(2)').trigger('click')
+    await wrapper.get('[data-testid="task-row-assign"]').trigger('click')
     await flushPromises()
     old.resolve({ success: true, data: [{ user_id: 'stale', user_name: '旧人员' }] })
     await flushPromises()
@@ -393,7 +431,7 @@ describe('AllTasksView 场景口径', () => {
     const pending = deferred<{ success: boolean; data: { total_assigned: number } }>()
     mocks.assignTask.mockReturnValueOnce(pending.promise)
     const wrapper = await mountView()
-    await wrapper.get('[data-testid="task-row"] button:nth-child(2)').trigger('click')
+    await wrapper.get('[data-testid="task-row-assign"]').trigger('click')
     await flushPromises()
     const vm = wrapper.vm as unknown as { handleViewDetail: (record: { id: string }) => void }
     await wrapper.get('[data-testid="assign-candidates"]').trigger('click')
@@ -421,7 +459,7 @@ describe('AllTasksView 场景口径', () => {
       .mockResolvedValueOnce({ success: false, message: '服务不可用（503）' })
       .mockRejectedValueOnce(new Error('timeout'))
     const wrapper = await mountView()
-    await wrapper.get('[data-testid="task-row"] button:nth-child(2)').trigger('click')
+    await wrapper.get('[data-testid="task-row-assign"]').trigger('click')
     await flushPromises()
     await wrapper.get('[data-testid="assign-candidates"]').trigger('click')
     await nextTick()
@@ -438,7 +476,7 @@ describe('AllTasksView 场景口径', () => {
     expect(mocks.getTaskList).toHaveBeenCalledTimes(2)
     expect(mocks.getTaskStats).toHaveBeenCalledTimes(2)
 
-    await wrapper.get('[data-testid="task-row"] button:nth-child(2)').trigger('click')
+    await wrapper.get('[data-testid="task-row-assign"]').trigger('click')
     await flushPromises()
     await wrapper.get('[data-testid="assign-candidates"]').trigger('click')
     await wrapper.get('[data-testid="assign-confirm"]').trigger('click')
@@ -447,7 +485,7 @@ describe('AllTasksView 场景口径', () => {
     await wrapper.get('[data-testid="assign-cancel"]').trigger('click')
     await flushPromises()
 
-    await wrapper.get('[data-testid="task-row"] button:nth-child(2)').trigger('click')
+    await wrapper.get('[data-testid="task-row-assign"]').trigger('click')
     await flushPromises()
     await wrapper.get('[data-testid="assign-candidates"]').trigger('click')
     await wrapper.get('[data-testid="assign-confirm"]').trigger('click')
@@ -462,7 +500,7 @@ describe('AllTasksView 场景口径', () => {
     mocks.getTaskAssigneeOptions.mockResolvedValue({ success: true, data: [{ user_id: 'qc-1', user_name: '质控员甲' }] })
     mocks.assignTask.mockResolvedValueOnce({ success: false, message: '任务已变化' })
     const wrapper = await mountView()
-    await wrapper.get('[data-testid="task-row"] button:nth-child(2)').trigger('click')
+    await wrapper.get('[data-testid="task-row-assign"]').trigger('click')
     await flushPromises()
     await wrapper.get('[data-testid="assign-candidates"]').trigger('click')
     await wrapper.get('[data-testid="assign-confirm"]').trigger('click')
@@ -489,7 +527,7 @@ describe('AllTasksView 场景口径', () => {
     }
     mocks.assignTask.mockResolvedValueOnce({ success: true, data: assignResult })
     const wrapper = await mountView()
-    await wrapper.get('[data-testid="task-row"] button:nth-child(2)').trigger('click')
+    await wrapper.get('[data-testid="task-row-assign"]').trigger('click')
     await flushPromises()
     expect(wrapper.get('[data-testid="assign-method-label"]').text()).toContain('原质控员')
     await wrapper.get('[data-testid="assign-candidates"]').trigger('click')
@@ -509,7 +547,7 @@ describe('AllTasksView 场景口径', () => {
     mocks.getTaskList.mockResolvedValue(list)
     mocks.getTaskAssigneeOptions.mockResolvedValueOnce({ success: true, data: [{ user_id: 'qc-1', user_name: '质控员甲' }] })
     const wrapper = await mountView()
-    await wrapper.get('[data-testid="task-row"] button:nth-child(2)').trigger('click')
+    await wrapper.get('[data-testid="task-row-assign"]').trigger('click')
     await flushPromises()
     await wrapper.get('[data-testid="assign-candidates"]').trigger('click')
     await nextTick()
@@ -535,7 +573,7 @@ describe('AllTasksView 场景口径', () => {
     mocks.getTaskAssigneeOptions.mockResolvedValueOnce({ success: true, data: [{ user_id: 'qc-1', user_name: '质控员甲', department: '内科' }] })
     mocks.assignTask.mockResolvedValueOnce({ success: false, status: 409, code: detail.code, errorDetail: detail, message: '冲突' })
     const wrapper = await mountView()
-    await wrapper.get('[data-testid="task-row"] button:nth-child(2)').trigger('click')
+    await wrapper.get('[data-testid="task-row-assign"]').trigger('click')
     await flushPromises()
     if (isDepartment) {
       expect(wrapper.get('[data-testid="assign-department-hint"]').text()).toContain('按其账号科室匹配病历科室')

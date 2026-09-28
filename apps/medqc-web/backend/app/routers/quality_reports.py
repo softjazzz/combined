@@ -13,13 +13,22 @@ from starlette.concurrency import run_in_threadpool
 from ..core.audit import audit_event
 from ..core.data_scope import resolve_workstation_data_scope
 from ..core.response import get_trace_id, success_response
-from ..core.security import require_roles
+from ..core.permissions import (
+    PermissionAction,
+    ResourceType,
+    UserRole,
+    has_any_role,
+    require_permission,
+)
+from ..core.security import get_current_user, require_roles
 from ..services import record_quality_report_service as report_service
+from ..services import task_analysis_service
 
 router = APIRouter(prefix="/api/v1/quality-reports", tags=["quality-reports"])
 logger = logging.getLogger(__name__)
 
 _UNAVAILABLE_DETAIL = "病历质量报表暂不可用，请稍后重试"
+_TASK_ANALYSIS_UNAVAILABLE_DETAIL = "任务分析暂不可用，请稍后重试"
 
 
 def _report_params(
@@ -69,6 +78,42 @@ def _raise_report_error(exc: Exception, action: str) -> None:
 def _authorized_params(current_user: dict, params: dict[str, Any]) -> dict[str, Any]:
     scope = resolve_workstation_data_scope(current_user, params["department"])
     return {**params, "department": scope.department}
+
+
+def _task_actor_id(current_user: dict) -> str:
+    actor_id = current_user.get("id") or current_user.get("user_id")
+    if not isinstance(actor_id, str) or not actor_id.strip():
+        raise HTTPException(status_code=401, detail="当前用户缺少有效身份")
+    return actor_id.strip()
+
+
+@router.get("/tasks/{task_id}")
+@require_permission(ResourceType.QC_TASKS, PermissionAction.READ)
+async def get_task_analysis(
+    request: Request,
+    task_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """读取单个任务分析；权限与整任务进度一致。"""
+    actor_id = _task_actor_id(current_user)
+    is_manager = has_any_role(current_user, [UserRole.ADMIN, UserRole.QC_MANAGER])
+    try:
+        data = await run_in_threadpool(
+            task_analysis_service.get_task_analysis,
+            task_id=task_id,
+            actor_id=actor_id,
+            is_manager=is_manager,
+        )
+    except task_analysis_service.TaskAnalysisInvalid as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except task_analysis_service.TaskAnalysisNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except task_analysis_service.TaskAnalysisForbidden as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.error("task_analysis_read_failed error_type=%s", type(exc).__name__)
+        raise HTTPException(status_code=503, detail=_TASK_ANALYSIS_UNAVAILABLE_DETAIL) from None
+    return success_response(data=data, trace_id=get_trace_id(request))
 
 
 @router.get("/record-quality")

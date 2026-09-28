@@ -233,6 +233,38 @@ class QCTask(Base):
     )
 
 
+_TASK_TEMPLATE_WS = "' \t\n\r\f\v'"
+
+
+class QCTaskTemplate(Base):
+    """当前用户私有的任务创建参数快照（迁移 64）。"""
+
+    __tablename__ = "qc_task_templates"
+
+    id = Column(String(36), nullable=False)
+    owner_id = Column(String(64), nullable=False)
+    name = Column(String(50), nullable=False)
+    config_json = Column(Text, nullable=False)
+    version = Column(Integer, nullable=False, server_default=text("1"))
+    created_at = Column(DateTime, nullable=False)
+    updated_at = Column(DateTime, nullable=False)
+
+    __table_args__ = (
+        PrimaryKeyConstraint("id", name="pk_qc_task_templates"),
+        UniqueConstraint("owner_id", "name", name="uq_qc_task_templates_owner_name"),
+        CheckConstraint(
+            f"trim(owner_id, {_TASK_TEMPLATE_WS}) <> ''",
+            name="ck_qc_task_templates_owner_nonblank",
+        ),
+        CheckConstraint(
+            f"trim(name, {_TASK_TEMPLATE_WS}) <> ''",
+            name="ck_qc_task_templates_name_nonblank",
+        ),
+        CheckConstraint("version > 0", name="ck_qc_task_templates_version_positive"),
+        Index("ix_qc_task_templates_owner", "owner_id"),
+    )
+
+
 class QCTaskRecord(Base):
     """Task-to-record assignment and progress."""
 
