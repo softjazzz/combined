@@ -1,0 +1,855 @@
+/* v7.1 液态玻璃 · 首页概览 */
+/* 页头右侧工具栏：科室下拉 + 生成时间 + 刷新 */
+.qc-home-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.qc-home-toolbar__keyword {
+  max-width: 240px;
+  overflow: hidden;
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-13);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qc-home-toolbar__clear {
+  height: 30px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--mq-brand-600);
+  font: inherit;
+  font-size: var(--mq-font-13);
+  cursor: pointer;
+}
+
+.qc-home-toolbar__time {
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+  white-space: nowrap;
+}
+
+/* 下拉按钮：页头与缺陷分析共用 */
+.qc-home-pulldown {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 30px;
+  padding: 0 26px 0 10px;
+  border-radius: 8px;
+  color: var(--mq-text-primary);
+  font-size: var(--mq-font-13);
+  white-space: nowrap;
+  transition: background-color 140ms ease;
+}
+
+.qc-home-pulldown:hover {
+  background: rgba(20, 40, 80, 0.05);
+}
+
+.qc-home-pulldown--bordered {
+  border: 0.5px solid rgba(20, 40, 80, 0.14);
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.qc-home-pulldown__label {
+  color: var(--mq-text-tertiary);
+}
+
+.qc-home-pulldown select {
+  max-width: 180px;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  appearance: none;
+  cursor: pointer;
+}
+
+.qc-home-pulldown select:focus-visible {
+  outline: none;
+}
+
+.qc-home-pulldown:focus-within {
+  box-shadow: 0 0 0 3px rgba(10, 108, 255, 0.18);
+}
+
+.qc-home-pulldown__caret {
+  position: absolute;
+  right: 10px;
+  color: var(--mq-text-tertiary);
+  pointer-events: none;
+}
+
+.qc-home-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 0.5px solid rgba(20, 40, 80, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+}
+
+.qc-home-icon-button:hover {
+  background: #ffffff;
+}
+
+.qc-home-toolbar__clear:focus-visible,
+.qc-home-icon-button:focus-visible,
+.qc-home-shortcuts button:focus-visible,
+.qc-home-button:focus-visible,
+button.qc-home-defect-analysis__row:focus-visible {
+  outline: 2px solid var(--mq-brand-600);
+  outline-offset: 2px;
+}
+
+/* 主卡 + 进度卡：两卡都收紧尺寸，进度卡与其他卡片同为浅色玻璃 */
+.qc-home-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr);
+  gap: 16px;
+}
+
+.qc-home-hero {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
+  padding: 20px 24px;
+  border-radius: var(--mq-radius-card);
+  background: var(--mq-brand-hero);
+  box-shadow:
+    0 12px 28px rgba(10, 100, 230, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  color: #ffffff;
+}
+
+.qc-home-hero__glow {
+  position: absolute;
+  top: -80px;
+  right: -70px;
+  width: 240px;
+  height: 240px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.32), transparent 65%);
+  pointer-events: none;
+}
+
+.qc-home-hero__label {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: var(--mq-font-14);
+  font-weight: 600;
+}
+
+.qc-home-hero__value {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+}
+
+.qc-home-hero__value strong {
+  font-family: var(--mq-font-display);
+  font-size: 48px;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  line-height: 0.9;
+  font-variant-numeric: tabular-nums;
+}
+
+.qc-home-hero__value span {
+  padding-bottom: 4px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: var(--mq-font-14);
+  font-weight: 500;
+}
+
+.qc-home-hero__progress {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: rgba(255, 255, 255, 0.88);
+  font-size: var(--mq-font-13);
+}
+
+.qc-home-hero__track {
+  display: block;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.qc-home-hero__track i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #ffffff, #cfe4ff);
+}
+
+.qc-home-shortcuts {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.qc-home-shortcuts button {
+  height: 34px;
+  padding: 0 16px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+  font: inherit;
+  font-size: var(--mq-font-13);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 140ms ease;
+}
+
+.qc-home-shortcuts button:hover {
+  background: rgba(255, 255, 255, 0.26);
+}
+
+.qc-home-shortcuts .qc-home-shortcuts__primary,
+.qc-home-shortcuts .qc-home-shortcuts__primary:hover {
+  border-color: transparent;
+  background: #ffffff;
+  box-shadow: 0 4px 12px rgba(10, 40, 90, 0.16);
+  color: var(--mq-brand-600);
+  font-weight: 500;
+}
+
+.qc-home-rings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 20px 24px;
+  border: 1px solid var(--mq-glass-border);
+  border-radius: var(--mq-radius-card);
+  background: var(--mq-glass-bg);
+  -webkit-backdrop-filter: var(--mq-glass-blur);
+  backdrop-filter: var(--mq-glass-blur);
+  box-shadow: var(--mq-glass-shadow);
+  color: var(--mq-text-primary);
+}
+
+.qc-home-rings__title {
+  color: var(--mq-text-primary);
+  font-size: var(--mq-font-14);
+  font-weight: 600;
+}
+
+.qc-home-rings__body {
+  display: flex;
+  flex-grow: 1;
+  align-items: center;
+  gap: 24px;
+}
+
+.qc-home-rings__legend {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+}
+
+.qc-home-rings__legend dt {
+  font-size: var(--mq-font-12);
+  font-weight: 500;
+}
+
+.qc-home-rings__legend dd {
+  margin: 0;
+  font-family: var(--mq-font-display);
+  font-size: var(--mq-font-20);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.qc-home-rings__legend small {
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-13);
+}
+
+/* 紧凑版概览：蓝卡左数字、右进度与入口；进度卡圆环 96px、比率横排，整行约 150px 高 */
+.qc-home-hero {
+  display: grid;
+  grid-template-areas:
+    'label progress'
+    'value progress'
+    'value nav';
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 32px;
+  row-gap: 8px;
+  padding: 18px 24px;
+}
+
+.qc-home-hero__label {
+  grid-area: label;
+}
+
+.qc-home-hero__value {
+  grid-area: value;
+  align-self: start;
+}
+
+.qc-home-hero__value strong {
+  font-size: 48px;
+}
+
+.qc-home-hero__value span {
+  font-size: var(--mq-font-14);
+}
+
+.qc-home-hero__progress {
+  grid-area: progress;
+  align-self: end;
+}
+
+.qc-home-shortcuts {
+  grid-area: nav;
+}
+
+.qc-home-shortcuts button {
+  height: 32px;
+  padding: 0 14px;
+}
+
+.qc-home-rings {
+  gap: 10px;
+  padding: 18px 24px;
+}
+
+.qc-home-rings__body {
+  gap: 20px;
+}
+
+.qc-home-rings__legend {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+}
+
+.qc-home-rings__legend dd {
+  font-size: var(--mq-font-20);
+}
+
+@media (max-width: 1279px) {
+  .qc-home-hero {
+    grid-template-areas:
+      'label'
+      'value'
+      'progress'
+      'nav';
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* 三栏指标卡 */
+.qc-home-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  overflow: hidden;
+}
+
+.qc-home-metric {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow: hidden;
+  padding: 20px 24px;
+}
+
+.qc-home-metric + .qc-home-metric::before {
+  position: absolute;
+  top: 22px;
+  bottom: 22px;
+  left: 0;
+  width: 0.5px;
+  background: rgba(0, 0, 0, 0.1);
+  content: '';
+}
+
+.qc-home-metric__watermark {
+  position: absolute;
+  right: -14px;
+  bottom: -18px;
+  opacity: 0.07;
+  pointer-events: none;
+}
+
+.qc-home-metric__head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  line-height: 18px;
+}
+
+.qc-home-metric__label {
+  display: block;
+  font-size: var(--mq-font-14);
+  font-weight: 600;
+}
+
+.qc-home-metric__helper {
+  margin: 2px 0 0;
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+}
+
+.qc-home-metric__foot {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.qc-home-metric__value {
+  font-family: var(--mq-font-display);
+  font-size: 32px;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.qc-home-metric__value small {
+  margin-left: 6px;
+  color: #86868b;
+  font-size: var(--mq-font-13);
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.qc-home-metric__rate {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 5px;
+}
+
+.qc-home-metric__rate em {
+  align-self: flex-end;
+  font-size: var(--mq-font-12);
+  font-style: normal;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.qc-home-metric__track {
+  display: block;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--mq-bg-muted);
+}
+
+.qc-home-metric__track i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+}
+
+/* 零值不强调：数值与比例回到中性色 */
+.qc-home-metric.is-zero .qc-home-metric__rate em {
+  color: var(--mq-text-tertiary) !important;
+}
+
+/* 分析区 */
+.qc-home-analysis {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.qc-home-side {
+  display: grid;
+  gap: 20px;
+}
+
+.qc-home-panel {
+  padding: 20px 24px;
+}
+
+.qc-home-panel__head {
+  padding-bottom: 12px;
+}
+
+.qc-home-panel__head p {
+  margin: 4px 0 0;
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-13);
+}
+
+.qc-home-defect-analysis {
+  display: grid;
+  gap: 12px;
+}
+
+.qc-home-defect-analysis__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 20px;
+}
+
+.qc-home-defect-analysis__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.qc-home-defect-analysis__list {
+  display: grid;
+}
+
+.qc-home-defect-analysis__row {
+  display: grid;
+  grid-template-columns: minmax(140px, 0.9fr) minmax(160px, 1.4fr) auto 16px;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-height: 54px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+button.qc-home-defect-analysis__row {
+  cursor: pointer;
+  transition: background-color 140ms ease;
+}
+
+button.qc-home-defect-analysis__row:hover,
+.qc-home-defect-analysis__row.is-active {
+  background: var(--mq-glass-bg-strong);
+  box-shadow: var(--mq-float-shadow);
+}
+
+.qc-home-defect-analysis__meta {
+  min-width: 0;
+}
+
+.qc-home-defect-analysis__meta strong,
+.qc-home-defect-analysis__meta span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qc-home-defect-analysis__meta strong {
+  font-size: var(--mq-font-14);
+  font-weight: 600;
+}
+
+.qc-home-defect-analysis__meta span {
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+}
+
+.qc-home-defect-analysis__metric {
+  display: grid;
+  grid-template-columns: minmax(80px, 1fr) 40px;
+  align-items: center;
+  gap: 10px;
+}
+
+.qc-home-defect-analysis__track {
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--mq-bg-muted);
+}
+
+.qc-home-defect-analysis__track i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #7fb2ff, #3d7bff);
+  transition: width 250ms ease;
+}
+
+.qc-home-defect-analysis__metric strong {
+  font-size: var(--mq-font-13);
+  font-weight: 600;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.qc-home-defect-analysis__counts {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  font-size: var(--mq-font-12);
+  white-space: nowrap;
+}
+
+.qc-home-defect-analysis__counts strong {
+  color: var(--mq-danger-text);
+  font-weight: 600;
+}
+
+.qc-home-defect-analysis__counts span {
+  color: var(--mq-warning-text);
+}
+
+.qc-home-defect-analysis__counts .is-zero {
+  color: var(--mq-text-tertiary);
+  font-weight: 400;
+}
+
+.qc-home-defect-analysis__chevron {
+  color: #b0b0b8;
+}
+
+.qc-home-defect-analysis__note {
+  margin: 8px 10px 0;
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-13);
+}
+
+/* 结论结构 */
+.qc-home-conclusion__content {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+
+.qc-home-conclusion__ring {
+  display: grid;
+  flex-shrink: 0;
+  width: 120px;
+  height: 120px;
+  place-items: center;
+  border-radius: 50%;
+}
+
+.qc-home-conclusion__ring > div {
+  display: grid;
+  width: 88px;
+  height: 88px;
+  place-content: center;
+  border-radius: 50%;
+  background: #ffffff;
+  text-align: center;
+}
+
+.qc-home-conclusion__ring strong {
+  font-family: var(--mq-font-display);
+  font-size: var(--mq-font-20);
+  line-height: 28px;
+}
+
+.qc-home-conclusion__ring span {
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+}
+
+.qc-home-conclusion__legend {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.qc-home-conclusion__legend li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-13);
+}
+
+.qc-home-conclusion__legend i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.qc-home-conclusion__legend small {
+  margin-left: auto;
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+}
+
+/* 数据与服务 */
+.qc-home-health-list {
+  display: grid;
+  margin: 0;
+}
+
+.qc-home-health-list > div {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  border-bottom: 0.5px solid var(--mq-border);
+}
+
+.qc-home-health-list > div:last-child {
+  border-bottom: 0;
+}
+
+.qc-home-health-list dt {
+  font-size: var(--mq-font-14);
+}
+
+.qc-home-health-list dd {
+  margin: 0;
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-13);
+  font-variant-numeric: tabular-nums;
+}
+
+.qc-home-health-list .is-danger {
+  color: var(--mq-danger-text);
+  font-weight: 600;
+}
+
+/* 空、加载、错误 */
+.qc-home-shell :deep(.ant-empty-description) {
+  color: var(--mq-text-secondary);
+}
+
+.qc-home-notice {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 20px;
+  border-color: var(--mq-danger-border);
+}
+
+.qc-home-notice__copy {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+.qc-home-notice__copy strong {
+  color: var(--mq-danger-text);
+}
+
+.qc-home-notice__copy span,
+.qc-home-loading span {
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-13);
+}
+
+.qc-home-loading {
+  display: flex;
+  min-height: 220px;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 28px;
+}
+
+.qc-home-loading strong,
+.qc-home-loading span {
+  display: block;
+}
+
+.qc-home-empty {
+  display: grid;
+  min-height: 280px;
+  place-items: center;
+  padding: 28px;
+}
+
+.qc-home-button {
+  height: 38px;
+  padding: 0 18px;
+  border: 1px solid var(--mq-glass-border);
+  border-radius: 999px;
+  background: var(--mq-bg-subtle);
+  color: var(--mq-text-primary);
+  font: inherit;
+  font-size: var(--mq-font-14);
+  cursor: pointer;
+}
+
+.qc-home-button--primary {
+  border-color: transparent;
+  background: var(--mq-brand-gradient);
+  box-shadow: var(--mq-brand-shadow);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+@media (max-width: 1279px) {
+  .qc-home-analysis {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 两张概览卡在中等宽度仍并排，只有很窄时才上下堆叠 */
+@media (max-width: 900px) {
+  .qc-home-overview {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 860px) {
+  .qc-home-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .qc-home-metric + .qc-home-metric::before {
+    top: 0;
+    right: 24px;
+    bottom: auto;
+    left: 24px;
+    width: auto;
+    height: 0.5px;
+  }
+}
+
+/* 三栏指标卡紧凑版：数字 44→32px，内边距收紧 */
+.qc-home-metric {
+  gap: 10px;
+  padding: 16px 22px;
+}
+
+.qc-home-metric__value {
+  font-size: 32px;
+}
+
+.qc-home-metric__value small {
+  font-size: var(--mq-font-13);
+}

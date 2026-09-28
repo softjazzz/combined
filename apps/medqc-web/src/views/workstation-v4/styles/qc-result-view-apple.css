@@ -47,7 +47,7 @@
 }
 :global(.customer-record-result-drawer .result-tab.is-active) {
   background: #fff;
-  color: #007aff;
+  color: #0a6cff;
   box-shadow: 0 1px 3px rgba(30, 50, 80, 0.1);
 }
 :global(.customer-record-result-drawer .result-list) {
@@ -98,7 +98,7 @@
   line-height: 22px;
 }
 :global(.customer-record-result-drawer button:focus-visible) {
-  outline: 2px solid rgba(0, 122, 255, 0.65);
+  outline: 2px solid rgba(10, 108, 255, 0.65);
   outline-offset: 2px;
 }
 :global(.customer-record-result-drawer .empty-state) {
@@ -129,7 +129,7 @@
   flex-shrink: 0;
 }
 :global(.customer-record-result-drawer .toolbar-summary .result-section-title svg) {
-  color: #007aff;
+  color: #0a6cff;
 }
 :global(.customer-record-result-drawer .result-tab svg) {
   flex-shrink: 0;
@@ -138,7 +138,7 @@
 :global(.customer-record-result-drawer .result-tab b) {
   padding: 0 5px;
   border-radius: 5px;
-  background: rgba(0, 122, 255, 0.07);
+  background: rgba(10, 108, 255, 0.07);
   font-size: 12px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
@@ -210,15 +210,15 @@
 }
 :global(.customer-record-result-drawer .result-tab.is-active) {
   background: #fff;
-  color: #007aff;
+  color: #0a6cff;
   box-shadow: 0 1px 4px rgba(33, 53, 81, 0.1);
 }
 :global(.customer-record-result-drawer .result-tab.is-active b) {
-  color: #007aff;
+  color: #0a6cff;
   background: #edf5ff;
 }
 :global(.customer-record-result-drawer .result-tab:focus-visible) {
-  outline: 2px solid rgba(0, 122, 255, 0.45);
+  outline: 2px solid rgba(10, 108, 255, 0.45);
   outline-offset: 1px;
 }
 
@@ -335,7 +335,7 @@
   gap: 3px;
   font-size: 12px;
   font-weight: 400;
-  color: #007aff;
+  color: #0a6cff;
   white-space: nowrap;
 }
 :global(.customer-record-result-drawer .evidence-path) {
@@ -383,7 +383,7 @@
 :global(.customer-record-result-drawer .result-card-actions .result-feedback-action:hover) {
   background: #e3efff;
   border-color: #8fb7e8;
-  color: #0057b8;
+  color: #0a5fd6;
 }
 :global(.customer-record-result-drawer .result-card-actions) {
   flex-wrap: wrap;
@@ -425,7 +425,7 @@
 }
 :global(.customer-record-result-drawer .readonly-medical-document-filter button.is-active) {
   background: #fff;
-  color: #007aff;
+  color: #0a6cff;
   box-shadow: 0 1px 3px rgba(33, 53, 81, 0.08);
 }
 :global(.customer-record-result-drawer .readonly-medical-document-group-title) {
@@ -631,26 +631,28 @@
   line-height: 22px;
 }
 
-/* 结果筛选：仅选中项使用纯蓝底白字。 */
+/* 结果筛选：v7.1 分段样式，选中项白色浮起（原“纯蓝底白字”已按设计规范替换）。 */
 :global(.customer-record-result-drawer .result-tab) {
-  background: #fff !important;
+  border: 0 !important;
+  background: transparent !important;
   background-image: none !important;
-  color: #657287 !important;
+  color: var(--mq-text-secondary) !important;
   opacity: 1;
   box-shadow: none;
 }
 :global(.customer-record-result-drawer .result-tab b) {
-  background: #edf0f5;
-  color: #7b8796;
+  background: rgba(118, 128, 160, 0.12);
+  color: var(--mq-text-tertiary);
 }
 :global(.customer-record-result-drawer .result-tab.is-active) {
-  background: #007aff !important;
-  color: #fff !important;
-  box-shadow: 0 2px 5px rgba(0, 122, 255, 0.14);
+  background: #ffffff !important;
+  color: var(--mq-text-primary) !important;
+  font-weight: 600;
+  box-shadow: 0 2px 6px rgba(10, 55, 115, 0.12);
 }
 :global(.customer-record-result-drawer .result-tab.is-active b) {
-  background: rgba(255, 255, 255, 0.18);
-  color: #fff;
+  background: var(--mq-info-bg);
+  color: var(--mq-info-text);
 }
 
 :global(.customer-record-result-drawer .customer-record-result-title__context) {
@@ -748,4 +750,61 @@
 :global(.customer-record-result-drawer .readonly-medical-document-meta) {
   font-size: 12px;
   color: #8792a2;
+}
+
+/* ===== v7.1 液态玻璃覆盖：结果抽屉外框、工具栏、页签与结果卡统一 Token ===== */
+:global(.customer-record-result-drawer) {
+  font-family: var(--mq-font-family);
+  color: var(--mq-text-primary);
+}
+:global(.customer-record-result-drawer.ant-drawer-content),
+:global(.customer-record-result-drawer .ant-drawer-content) {
+  background: var(--mq-bg-mesh);
+}
+:global(.customer-record-result-drawer .ant-drawer-header) {
+  border-bottom: 0.5px solid var(--mq-border);
+  background: var(--mq-glass-bg);
+  -webkit-backdrop-filter: var(--mq-glass-blur);
+  backdrop-filter: var(--mq-glass-blur);
+}
+:global(.customer-record-result-drawer .ant-drawer-body) {
+  background: var(--mq-bg-mesh);
+}
+:global(.customer-record-result-drawer .single-record-result-panel) {
+  background: transparent;
+  color: var(--mq-text-primary);
+}
+:global(.customer-record-result-drawer .customer-record-result-title__heading strong) {
+  font-family: var(--mq-font-display);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+:global(.customer-record-result-drawer .customer-record-result-title__context) {
+  border: 1px solid var(--mq-glass-border);
+  border-radius: 16px;
+  background: var(--mq-glass-bg-strong);
+}
+:global(.customer-record-result-drawer .result-tabs) {
+  border-radius: 13px;
+  background: var(--mq-bg-muted);
+}
+:global(.customer-record-result-drawer .result-tab) {
+  border-radius: 10px;
+}
+:global(.customer-record-result-drawer .result-tab.is-active) {
+  color: var(--mq-text-primary);
+  font-weight: 600;
+  box-shadow: 0 2px 6px rgba(10, 55, 115, 0.12);
+}
+:global(.customer-record-result-drawer .result-row) {
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 2px 10px rgba(10, 55, 115, 0.06);
+}
+:global(.customer-record-result-drawer .rule-code) {
+  font-family: var(--mq-font-mono);
+}
+:global(.customer-record-result-drawer .ant-btn) {
+  border-radius: 999px;
 }

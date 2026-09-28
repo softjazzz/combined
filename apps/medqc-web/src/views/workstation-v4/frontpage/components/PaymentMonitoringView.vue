@@ -13,7 +13,7 @@
           </button>
           <div>
             <div class="payment-eyebrow">
-              DRG/DIP · PAYMENT
+              分析 · DRG/DIP
             </div>
             <h2 class="payment-title">
               付费监测
@@ -1002,8 +1002,8 @@ function renderPaymentTrendChart() {
         data: paymentMonitoringTrend.map((point) => point.actualCost),
         type: 'line',
         smooth: true,
-        lineStyle: { color: '#2b6cf6', width: 2 },
-        itemStyle: { color: '#2b6cf6' },
+        lineStyle: { color: '#0a6cff', width: 2 },
+        itemStyle: { color: '#0a6cff' },
       },
       {
         name: '医保支付',
@@ -1130,8 +1130,8 @@ onUnmounted(() => {
 
 .back-button:hover {
   border-color: #bfdbfe;
-  background: rgba(43, 108, 246, 0.06);
-  color: #2b6cf6;
+  background: rgba(10, 108, 255, 0.06);
+  color: #0a6cff;
 }
 
 .payment-eyebrow {
@@ -1169,10 +1169,10 @@ onUnmounted(() => {
   height: 36px;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(43, 108, 246, 0.16);
+  border: 1px solid rgba(10, 108, 255, 0.16);
   border-radius: 10px;
-  background: rgba(43, 108, 246, 0.06);
-  color: #2b6cf6;
+  background: rgba(10, 108, 255, 0.06);
+  color: #0a6cff;
   cursor: pointer;
   font-size: 13px;
   font-weight: 700;
@@ -1182,7 +1182,7 @@ onUnmounted(() => {
 
 .backend-sync-button:hover:not(:disabled) {
   border-color: #93c5fd;
-  background: rgba(43, 108, 246, 0.1);
+  background: rgba(10, 108, 255, 0.1);
 }
 
 .backend-sync-button:disabled {
@@ -1209,8 +1209,8 @@ onUnmounted(() => {
 
 .standard-config-button:hover {
   border-color: #bfdbfe;
-  background: rgba(43, 108, 246, 0.06);
-  color: #2b6cf6;
+  background: rgba(10, 108, 255, 0.06);
+  color: #0a6cff;
 }
 
 .filter-chip {
@@ -1259,7 +1259,7 @@ onUnmounted(() => {
   gap: 8px;
   border: 0;
   border-radius: 8px;
-  background: #2b6cf6;
+  background: #0a6cff;
   padding: 0 14px;
   color: #ffffff;
   font-size: 13px;
@@ -1269,7 +1269,7 @@ onUnmounted(() => {
 }
 
 .export-button:hover {
-  background: #1e5ae0;
+  background: #0a5fd6;
 }
 
 .dataset-upload-surface {
@@ -1297,7 +1297,7 @@ onUnmounted(() => {
   align-items: center;
   border-radius: 999px;
   background: #eaf2ff;
-  color: #2b6cf6;
+  color: #0a6cff;
   font-size: 12px;
   font-weight: 700;
   line-height: 18px;
@@ -1440,8 +1440,8 @@ onUnmounted(() => {
 }
 
 .primary-action {
-  border: 1px solid #2b6cf6;
-  background: #2b6cf6;
+  border: 1px solid #0a6cff;
+  background: #0a6cff;
   color: #ffffff;
 }
 
@@ -1486,7 +1486,7 @@ onUnmounted(() => {
 }
 
 .kpi-card-blue {
-  border-left: 3px solid #2b6cf6;
+  border-left: 3px solid #0a6cff;
 }
 
 .kpi-card-green {
@@ -1557,7 +1557,7 @@ onUnmounted(() => {
   flex: 0 0 auto;
   border-radius: 50%;
   background: #eff6ff;
-  color: #2b6cf6;
+  color: #0a6cff;
   font-size: 18px;
 }
 
@@ -1610,7 +1610,7 @@ onUnmounted(() => {
 .text-action {
   border: 0;
   background: transparent;
-  color: #2b6cf6;
+  color: #0a6cff;
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
@@ -1832,7 +1832,7 @@ onUnmounted(() => {
   justify-content: center;
   border-radius: 50%;
   background: #eaf2ff;
-  color: #2b6cf6;
+  color: #0a6cff;
   font-weight: 700;
 }
 
@@ -1870,8 +1870,8 @@ onUnmounted(() => {
   --workstation-text: #1d1d1f;
   --workstation-muted: rgba(29, 29, 31, 0.6);
   --workstation-subtle: rgba(29, 29, 31, 0.38);
-  --workstation-primary: #2b6cf6;
-  --workstation-primary-soft: rgba(43, 108, 246, 0.1);
+  --workstation-primary: #0a6cff;
+  --workstation-primary-soft: rgba(10, 108, 255, 0.1);
 
   background: var(--workstation-canvas);
   color: var(--workstation-text);
@@ -1958,7 +1958,7 @@ onUnmounted(() => {
 .back-button:hover,
 .standard-config-button:hover,
 .secondary-action:hover {
-  border-color: rgba(43, 108, 246, 0.22);
+  border-color: rgba(10, 108, 255, 0.22);
   background: var(--workstation-primary-soft);
   color: var(--workstation-primary);
 }
@@ -1976,7 +1976,7 @@ onUnmounted(() => {
 .backend-sync-button,
 .scope-chip,
 .standard-status {
-  border-color: rgba(43, 108, 246, 0.16);
+  border-color: rgba(10, 108, 255, 0.16);
   background: var(--workstation-primary-soft);
 }
 
@@ -1984,12 +1984,12 @@ onUnmounted(() => {
 .primary-action {
   border-color: var(--workstation-primary);
   background: var(--workstation-primary);
-  box-shadow: 0 4px 10px rgba(43, 108, 246, 0.16);
+  box-shadow: 0 4px 10px rgba(10, 108, 255, 0.16);
 }
 
 .export-button:hover,
 .primary-action:hover {
-  background: #0057b8;
+  background: #0a5fd6;
 }
 
 .kpi-card-blue {

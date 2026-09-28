@@ -121,7 +121,7 @@ const BatchTablePanelStub = defineComponent({
       default: false,
     },
   },
-  emits: ['filter-qc', 'update:selectedRowKeys', 'batch-extract', 'open-record'],
+  emits: ['filter-qc', 'update:selectedRowKeys', 'batch-extract', 'open-record', 'select-row'],
   setup(_props, { attrs, slots }) {
     return () =>
       h('div', attrs, [
@@ -510,5 +510,29 @@ describe('WorkstationV4ListView filters', () => {
 
     expect(wrapper.text()).toContain('待生成总量')
     expect(wrapper.text()).toContain('23')
+  })
+
+  it('病历池为左列表 + 右预览：点击行切换预览，预览按钮沿用原有事件', async () => {
+    const rows = [
+      { id: 'a', recordKey: 'key-a', patientName: '患者甲', visitId: 'V-A' },
+      { id: 'b', recordKey: 'key-b', patientName: '患者乙', visitId: 'V-B' },
+    ]
+    const wrapper = mountListView({ workbenchRows: rows })
+    const preview = wrapper.findComponent({ name: 'RecordPoolPreviewPanel' })
+    expect((preview.props('row') as { recordKey: string }).recordKey).toBe('key-a')
+
+    wrapper.findComponent({ name: 'BatchTablePanel' }).vm.$emit('select-row', 'key-b')
+    await wrapper.vm.$nextTick()
+    expect((preview.props('row') as { recordKey: string }).recordKey).toBe('key-b')
+
+    preview.vm.$emit('open-record', 'key-b')
+    preview.vm.$emit('run-qc', 'key-b')
+    expect(wrapper.emitted('open-record')?.at(-1)).toEqual(['key-b'])
+    expect(wrapper.emitted('batch-extract')?.at(-1)).toEqual([['key-b']])
+  })
+
+  it('首页与结算清单阶段队列不显示病历预览', () => {
+    const wrapper = mountListView({ isStageQueueMode: true })
+    expect(wrapper.findComponent({ name: 'RecordPoolPreviewPanel' }).exists()).toBe(false)
   })
 })

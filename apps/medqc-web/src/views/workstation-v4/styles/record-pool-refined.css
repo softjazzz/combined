@@ -1,673 +1,752 @@
-@import '../../../styles/source-han-sans-sc.css';
+/*
+ * v7.1 液态玻璃 · 病历池与首页/结算清单批量工作台（WorkstationV4ListView）
+ * 页头、玻璃卡来自 styles/mq-components.css；这里只写本页布局与 antd 控件外观。
+ * 选择器挂在 .wv4-list（scoped）下，覆盖全局 workstation-v4-view.css 的旧规则。
+ */
 
-/* 病历池专属视觉层：不改变共用队列与任务的布局。 */
-.record-pool-refined {
-  background: linear-gradient(120deg, #e8eff8 0%, #f5f5f7 48%, #edf0f6 100%);
-  color: #1d1d1f;
-  font-family: 'Source Han Sans SC', 'Microsoft YaHei UI', 'PingFang SC', sans-serif;
+.wv4-list {
+  display: block;
+  min-width: 0;
+  background: transparent;
 }
 
-.record-pool-refined > .custom-scrollbar {
-  padding: 28px 36px 24px !important;
-}
-
-.record-pool-refined .wv4-record-pool-hero {
-  padding: 18px 20px;
-  border: 1px solid rgba(255, 255, 255, 0.85);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.62) !important;
-  -webkit-backdrop-filter: blur(20px) saturate(125%);
-  backdrop-filter: blur(20px) saturate(125%) !important;
-  box-shadow:
-    0 4px 18px rgba(38, 58, 86, 0.04),
-    inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
-}
-
-.record-pool-refined .wv4-analysis-overview__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+.wv4-list__stack {
+  display: grid;
   gap: 20px;
+  min-width: 0;
 }
 
-.record-pool-refined .wv4-analysis-overview__title {
-  color: #1d1d1f;
-  font-size: 24px;
-  line-height: 1.3;
-  letter-spacing: -0.6px;
+/* ---------- 页头 + 筛选（原总览区，只保留结构，去掉旧卡片外观） ---------- */
+.wv4-list .wv4-record-pool-hero,
+.wv4-list .wv4-analysis-overview {
+  display: grid;
+  gap: 18px;
+  padding: 0;
+  border: 0 !important;
+  border-radius: 0;
+  /* 全局 workstation-v4-view.css 用 !important 给 .wv4-analysis-overview 刷白底，这里必须反向覆盖 */
+  background: transparent !important;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: none !important;
+}
+
+.wv4-list .wv4-analysis-overview__header {
+  margin: 0;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+}
+
+.wv4-list .wv4-analysis-overview__title {
+  display: block;
+  margin: 0;
+  color: var(--mq-text-primary);
+  font-family: var(--mq-font-display);
+  font-size: var(--mq-font-title);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.wv4-list .wv4-analysis-overview__subtitle {
+  margin: 2px 0 0;
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-13);
+}
+
+.wv4-list .wv4-analysis-overview__actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* 筛选卡 */
+.wv4-list .wv4-record-pool-filter {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 16px 20px;
+  border: 1px solid var(--mq-glass-border);
+  border-radius: var(--mq-radius-card);
+  background: var(--mq-glass-bg);
+  -webkit-backdrop-filter: var(--mq-glass-blur);
+  backdrop-filter: var(--mq-glass-blur);
+  box-shadow: var(--mq-glass-shadow);
+}
+
+.wv4-list .wv4-record-pool-filter__sync-shortcut {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+}
+
+.wv4-list .workbench-filter-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 14px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.wv4-list .workbench-controls__search-input {
+  width: 300px;
+  max-width: 100%;
+}
+
+.wv4-list .record-pool-date-field,
+.wv4-list .workbench-dept-filter,
+.wv4-list .workbench-doctor-filter,
+.wv4-list .workbench-hosp-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.wv4-list .record-pool-field-label,
+.wv4-list .workbench-hosp-filter__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-12);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.wv4-list .record-pool-field-label svg,
+.wv4-list .record-pool-verify-icon {
+  flex-shrink: 0;
+  color: var(--mq-text-tertiary);
+}
+
+.wv4-list .workbench-dept-select {
+  width: 170px;
+}
+
+.wv4-list .workbench-doctor-select {
+  width: 150px;
+}
+
+.wv4-list .workbench-date-row__range {
+  width: 260px;
+}
+
+.wv4-list .wv4-record-pool-filter__inpatient-sort {
+  width: 140px;
+}
+
+.wv4-list .workbench-dept-filter__count {
+  position: static;
+  inset: auto;
+  transform: none;
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--mq-info-bg);
+  color: var(--mq-info-text);
+  font-size: var(--mq-font-12);
   font-weight: 600;
 }
 
-.record-pool-refined .wv4-analysis-overview__subtitle {
-  margin-top: 6px;
-  color: #616c7b;
-  font-size: 14px;
-}
-
-.record-pool-refined .wv4-analysis-overview__controls {
-  margin-top: 20px;
-  padding: 0;
-  border: 0;
-}
-
-.record-pool-refined .wv4-record-pool-hero .workbench-filter-toolbar {
-  display: grid;
-  grid-template-columns:
-    minmax(210px, 1fr) minmax(210px, 1fr) minmax(330px, 1.45fr) minmax(150px, 0.68fr)
-    auto;
-  gap: 14px 16px;
-  align-items: center;
-}
-
-.record-pool-refined .workbench-hosp-filter {
-  grid-column: 1 / 3;
-  grid-row: 1;
-  width: max-content;
-  max-width: 100%;
-  padding: 0;
-  background: transparent;
-  border: 0;
-  box-shadow: none;
-}
-
-.record-pool-refined .workbench-hosp-filter__label {
-  display: inline;
-  color: #6e6e73;
-  font-size: 13px;
-  font-weight: 400;
-}
-
-.record-pool-refined .workbench-controls__search-input {
-  grid-column: 3 / -1;
-  grid-row: 1;
-  width: 100%;
-  max-width: 520px;
-  min-width: 0;
-  justify-self: end;
-}
-
-.record-pool-refined .workbench-dept-filter {
-  grid-column: 1;
-  grid-row: 2;
-}
-.record-pool-refined .workbench-doctor-filter {
-  grid-column: 2;
-  grid-row: 2;
-}
-.record-pool-refined .record-pool-date-field {
-  grid-column: 3;
-  grid-row: 2;
-  width: 100%;
-}
-.record-pool-refined .record-pool-date-field,
-.record-pool-refined .workbench-dept-filter,
-.record-pool-refined .workbench-doctor-filter {
+.wv4-list .wv4-filter-actions {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
+  gap: 8px;
+  margin-left: auto;
 }
-.record-pool-refined .record-pool-field-label {
-  flex-shrink: 0;
-  font-size: 13px;
-  font-weight: 400;
-  color: #6e6e73;
-  white-space: nowrap;
-}
-.record-pool-refined .record-pool-date-field .workbench-date-row__range,
-.record-pool-refined .workbench-dept-select,
-.record-pool-refined .workbench-doctor-select {
-  flex: 1;
-  min-width: 0;
-  width: 0;
-}
-.record-pool-refined .wv4-filter-actions {
-  grid-column: -2 / -1;
-  grid-row: 2;
+
+.wv4-list .wv4-record-pool-filter__summary {
   margin: 0;
-}
-.record-pool-refined .wv4-record-pool-filter__inpatient-sort {
-  grid-column: 4;
-  grid-row: 2;
-  width: 100%;
-}
-
-.record-pool-refined .workbench-dept-filter,
-.record-pool-refined .workbench-doctor-filter,
-.record-pool-refined .workbench-dept-select,
-.record-pool-refined .workbench-doctor-select {
-  width: 100%;
-  min-width: 0;
-}
-
-.record-pool-refined .wv4-record-pool-filter__summary {
-  position: static;
-  width: auto;
-  height: auto;
-  margin-top: 16px;
-  clip: auto;
-  white-space: normal;
-  color: #6e6e73;
-  font-size: 13px;
-  padding: 0;
+  padding: 0 2px;
   border: 0;
   background: transparent;
-  border-radius: 0;
-  font-weight: 400;
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
 }
 
-.record-pool-refined :deep(.batch-table-panel--record-pool) {
-  border: 0;
-  border-radius: 12px;
-  box-shadow: none;
-  font-family: 'Source Han Sans SC', 'Microsoft YaHei UI', 'PingFang SC', sans-serif;
+/* antd 控件：与 .mq-input 同外观 */
+.wv4-list :deep(.ant-input-affix-wrapper),
+.wv4-list :deep(.ant-select:not(.ant-select-customize-input) .ant-select-selector),
+.wv4-list :deep(.ant-picker) {
+  min-height: 36px;
+  border: 1px solid rgba(60, 60, 80, 0.1);
+  border-radius: var(--mq-radius-control);
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: inset 0 1px 2px rgba(10, 55, 115, 0.04);
 }
 
-.record-pool-refined :deep(.batch-table-panel__header) {
-  padding: 12px 0 18px;
+.wv4-list :deep(.ant-input-affix-wrapper-lg),
+.wv4-list :deep(.ant-picker-large) {
+  padding-block: 4px;
+  font-size: var(--mq-font-13);
 }
-.record-pool-refined :deep(.batch-table-panel--record-pool .ant-table) {
-  font-family: inherit;
+
+.wv4-list :deep(.ant-select-lg .ant-select-selector) {
+  height: 36px;
+  font-size: var(--mq-font-13);
 }
-.record-pool-refined :deep(.batch-table-panel--record-pool .ant-table-tbody > tr > td) {
-  padding-block: 9px;
+
+.wv4-list :deep(.ant-select-lg .ant-select-selection-item),
+.wv4-list :deep(.ant-select-lg .ant-select-selection-placeholder),
+.wv4-list :deep(.ant-select-lg .ant-select-selection-search-input) {
+  line-height: 34px;
 }
-.record-pool-refined
-  :deep(.batch-table-panel--record-pool .batch-table-panel__hospitalization-status) {
+
+.wv4-list :deep(.ant-input-affix-wrapper:hover),
+.wv4-list :deep(.ant-select:hover .ant-select-selector),
+.wv4-list :deep(.ant-picker:hover) {
+  border-color: var(--mq-brand-200);
+}
+
+.wv4-list :deep(.ant-input-affix-wrapper-focused),
+.wv4-list :deep(.ant-select-focused .ant-select-selector),
+.wv4-list :deep(.ant-picker-focused) {
+  border-color: var(--mq-brand-600);
+  box-shadow: 0 0 0 3px rgba(10, 108, 255, 0.12);
+}
+
+.wv4-list :deep(.ant-input-affix-wrapper .ant-input) {
   background: transparent;
-  border: 0;
+}
+
+/* 住院状态：antd 分段控件改为 .mq-segmented 外观 */
+.wv4-list .workbench-hosp-segmented {
+  padding: 3px;
+  border-radius: 13px;
+  background: var(--mq-bg-muted);
+}
+
+.wv4-list .workbench-hosp-segmented :deep(.ant-segmented-group) {
+  gap: 2px;
+}
+
+.wv4-list .workbench-hosp-segmented :deep(.ant-segmented-item) {
+  border-radius: 10px;
+  color: var(--mq-text-secondary);
+}
+
+.wv4-list .workbench-hosp-segmented :deep(.ant-segmented-item-label) {
+  min-height: 30px;
+  padding: 0 14px;
+  font-size: var(--mq-font-13);
+  line-height: 30px;
+}
+
+.wv4-list .workbench-hosp-segmented :deep(.ant-segmented-item-selected),
+.wv4-list .workbench-hosp-segmented :deep(.ant-segmented-thumb) {
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 2px 6px rgba(10, 55, 115, 0.12);
+  color: var(--mq-text-primary);
+  font-weight: 600;
+}
+
+/* ---------- 首页生成阶段：指标卡与指引 ---------- */
+.wv4-list .wv4-analysis-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--mq-glass-border);
+  border-radius: var(--mq-radius-card);
+  background: var(--mq-glass-bg);
+  box-shadow: var(--mq-glass-shadow);
+}
+
+.wv4-list .wv4-analysis-kpi-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 18px 22px;
+  border: 0 !important;
   border-radius: 0;
+  /* 同上：覆盖全局 !important 白底 */
+  background: transparent !important;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: none !important;
+}
+
+.wv4-list .wv4-analysis-kpi-card + .wv4-analysis-kpi-card {
+  border-left: 0.5px solid var(--mq-border);
+}
+
+.wv4-list .wv4-analysis-kpi-card__icon {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  background: var(--mq-info-bg);
+  color: var(--mq-info-icon);
+  font-size: 18px;
+}
+
+.wv4-list .wv4-analysis-kpi-card--success .wv4-analysis-kpi-card__icon {
+  background: var(--mq-success-bg);
+  color: var(--mq-success-text);
+}
+
+.wv4-list .wv4-analysis-kpi-card--warning .wv4-analysis-kpi-card__icon {
+  background: var(--mq-warning-bg);
+  color: var(--mq-warning-text);
+}
+
+.wv4-list .wv4-analysis-kpi-card__label {
+  font-size: var(--mq-font-14);
+  font-weight: 600;
+}
+
+.wv4-list .wv4-analysis-kpi-card__value {
+  font-family: var(--mq-font-display);
+  font-size: 34px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+
+.wv4-list .wv4-analysis-kpi-card__desc {
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+}
+
+.wv4-list .wv4-stage-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 18px;
+  padding: 14px 20px;
+}
+
+.wv4-list .wv4-stage-notice__title {
+  font-size: var(--mq-font-14);
+  font-weight: 600;
+}
+
+.wv4-list .wv4-stage-notice__items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-13);
+}
+
+/* ---------- 空状态与错误 ---------- */
+.wv4-list .wv4-list__alert {
+  padding: 12px 18px;
+  border: 1px solid var(--mq-danger-border);
+  border-radius: 16px;
+  background: var(--mq-danger-bg);
+  color: var(--mq-danger-text);
+  font-size: var(--mq-font-13);
+}
+
+.wv4-list .wv4-list__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 160px;
+  padding: 36px 20px;
+  color: var(--mq-text-tertiary);
+  text-align: center;
+}
+
+.wv4-list .wv4-list__empty .workstation-empty-state__icon {
+  color: var(--mq-text-disabled);
+  font-size: 34px;
+}
+
+.wv4-list .wv4-list__empty .workstation-empty-state__text {
+  font-size: var(--mq-font-13);
   font-weight: 500;
 }
-.record-pool-refined
-  :deep(.batch-table-panel--record-pool .batch-table-panel__hospitalization-status::before) {
-  content: '';
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  margin-right: 6px;
-  border-radius: 50%;
-  background: currentColor;
-}
-.record-pool-refined :deep(.batch-table-panel__hospitalization-status--inpatient) {
-  color: #007aff;
-}
-.record-pool-refined :deep(.batch-table-panel__hospitalization-status--discharged) {
-  color: #707b8b;
-}
 
-.record-pool-refined :deep(.ant-input-affix-wrapper),
-.record-pool-refined :deep(.ant-select-selector),
-.record-pool-refined :deep(.ant-picker) {
-  background: #fff !important;
-  border-color: #dedee3 !important;
-  box-shadow: none !important;
-  border-radius: 8px !important;
-}
-
-.record-pool-refined :deep(.ant-btn) {
-  border-radius: 10px;
-  box-shadow: none !important;
-}
-
-/* 统一功能区的视觉节奏，覆盖历史 large 控件的粗字重。 */
-.record-pool-refined .wv4-record-pool-hero :deep(.ant-input),
-.record-pool-refined .wv4-record-pool-hero :deep(.ant-select-selection-item),
-.record-pool-refined .wv4-record-pool-hero :deep(.ant-picker-input > input),
-.record-pool-refined .wv4-record-pool-hero :deep(.ant-segmented-item-label),
-.record-pool-refined .wv4-record-pool-hero :deep(.ant-btn) {
-  font-weight: 400 !important;
-  font-size: 14px !important;
-}
-
-.record-pool-refined .workbench-hosp-segmented :deep(.ant-segmented-item-label) {
-  min-width: 88px;
-  padding-inline: 16px;
-}
-.record-pool-refined .workbench-hosp-segmented :deep(.ant-segmented-item-selected) {
-  color: #007aff;
-  box-shadow: 0 1px 3px rgb(0 0 0 / 10%);
-}
-.record-pool-refined .wv4-filter-actions__button.ant-btn-primary {
-  background: #007aff !important;
-  border-color: #007aff !important;
-  color: #fff !important;
-}
-.record-pool-refined .workbench-dept-filter__count {
-  background: transparent;
-  border: 0;
-  color: #68778b;
-  font-weight: 400;
-}
-
-.record-pool-refined :deep(.batch-table-panel__toolbar) {
+/* ---------- 病历池：左列表 + 右预览 ---------- */
+.wv4-list .wv4-record-pool-main--preview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  align-items: start;
   gap: 16px;
 }
-.record-pool-refined :deep(.batch-table-panel__action) {
-  height: 38px !important;
-  padding-inline: 18px !important;
-  font-size: 14px !important;
-  font-weight: 500 !important;
+
+.wv4-list :deep(.batch-table-panel__row--selectable) {
+  cursor: pointer;
 }
-.record-pool-refined :deep(.batch-table-panel__action--primary:disabled) {
-  color: #8a95a5 !important;
-  background: #f2f5f9 !important;
-  border-color: #e5eaf1 !important;
+
+.wv4-list :deep(.batch-table-panel__row--active > td) {
+  background: rgba(255, 255, 255, 0.92) !important;
 }
-.record-pool-refined :deep(.batch-table-panel__summary-pill) {
-  font-size: 13px !important;
-  color: #647184;
+
+.wv4-list :deep(.batch-table-panel__row--active > td:first-child) {
+  box-shadow: inset 3px 0 0 var(--mq-brand-600);
 }
-.record-pool-refined :deep(.batch-table-panel__summary-pill--selected) {
-  color: #007aff;
+
+@media (max-width: 1360px) {
+  .wv4-list .wv4-record-pool-main--preview {
+    grid-template-columns: minmax(0, 1fr) 280px;
+  }
 }
-.record-pool-refined :deep(.batch-table-panel--record-pool .ant-table-thead > tr > th) {
-  padding-block: 13px;
-  font-family: 'Source Han Sans SC', 'Microsoft YaHei UI', 'PingFang SC', sans-serif !important;
-  font-size: 14px !important;
-  font-weight: 400 !important;
-  color: #6e6e73 !important;
-  background: #f8f8fa !important;
+
+@media (max-width: 1024px) {
+  .wv4-list .wv4-record-pool-main--preview {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
-.record-pool-refined :deep(.batch-table-panel--record-pool .ant-table-thead > tr > th::before) {
+
+/* ---------- 列表：BatchTablePanel 做成玻璃卡 ---------- */
+.wv4-list .wv4-record-pool-main__list {
+  min-width: 0;
+}
+
+.wv4-list :deep(.batch-table-panel) {
+  overflow: hidden;
+  border: 1px solid var(--mq-glass-border);
+  border-radius: var(--mq-radius-card);
+  background: var(--mq-glass-bg);
+  -webkit-backdrop-filter: var(--mq-glass-blur);
+  backdrop-filter: var(--mq-glass-blur);
+  box-shadow: var(--mq-glass-shadow);
+}
+
+.wv4-list :deep(.batch-table-panel__header) {
+  padding: 16px 20px 12px;
+  border: 0;
+  background: transparent;
+}
+
+.wv4-list :deep(.batch-table-panel__title) {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--mq-text-primary);
+  font-family: var(--mq-font-display);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.wv4-list :deep(.record-pool-list-icon) {
   display: none;
 }
-.record-pool-refined :deep(.batch-table-panel__hospitalization-status),
-.record-pool-refined :deep(.batch-table-panel__date-line),
-.record-pool-refined :deep(.batch-table-panel__date-label) {
-  font-size: 12px !important;
-  line-height: 20px;
-  font-variant-numeric: tabular-nums;
+
+.wv4-list :deep(.batch-table-panel__summary-pill) {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--mq-neutral-bg);
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-12);
+  font-weight: 600;
 }
-.record-pool-refined :deep(.batch-table-panel__visit-id) {
-  color: #687487;
-  font-variant-numeric: tabular-nums;
+
+.wv4-list :deep(.batch-table-panel__summary-pill--selected) {
+  background: var(--mq-info-bg);
+  color: var(--mq-info-text);
+}
+
+.wv4-list :deep(.batch-table-panel__action.ant-btn) {
+  height: 34px;
+  padding-inline: 16px;
+  font-size: var(--mq-font-13);
+}
+
+.wv4-list :deep(.batch-table-panel__action--primary:not(:disabled)) {
+  box-shadow: var(--mq-brand-shadow);
+  font-weight: 600;
+}
+
+.wv4-list :deep(.batch-table-panel__task-status) {
+  padding: 0 20px 12px;
+}
+
+/* 表格 */
+.wv4-list :deep(.ant-table),
+.wv4-list :deep(.ant-table-container),
+.wv4-list :deep(.ant-table-placeholder),
+.wv4-list :deep(.ant-table-placeholder > td) {
+  background: transparent;
+}
+
+.wv4-list :deep(.ant-table-thead > tr > th) {
+  height: 40px;
+  padding-block: 0;
+  border-bottom: 0;
+  background: rgba(118, 128, 160, 0.06);
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+  font-weight: 600;
+}
+
+.wv4-list :deep(.ant-table-thead > tr > th::before) {
+  display: none;
+}
+
+.wv4-list :deep(.ant-table-tbody > tr > td) {
+  padding-block: 12px;
+  border-bottom: 0.5px solid var(--mq-border);
+  background: transparent;
+  color: var(--mq-text-primary);
+  font-size: var(--mq-font-13);
+}
+
+.wv4-list :deep(.ant-table-tbody > tr > td.ant-table-cell-row-hover),
+.wv4-list :deep(.ant-table-tbody > tr:hover > td) {
+  background: rgba(10, 108, 255, 0.04);
+}
+
+.wv4-list :deep(.ant-table-tbody > tr.ant-table-row-selected > td) {
+  background: rgba(10, 108, 255, 0.06);
+}
+
+.wv4-list :deep(.batch-table-panel__patient-name) {
+  font-weight: 600;
+}
+
+/* 患者信息在窄列里截断，避免长住院号溢出到相邻列 */
+.wv4-list :deep(.batch-table-panel__patient-cell),
+.wv4-list :deep(.batch-table-panel__patient-meta) {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.wv4-list :deep(.batch-table-panel__patient-meta > *) {
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  min-width: 0;
-  max-width: 220px;
-  display: inline-block;
 }
-.record-pool-refined :deep(.batch-table-panel__visit-id:focus-visible) {
-  white-space: normal;
-  overflow-wrap: anywhere;
-  outline: 2px solid #b8d5fb;
-  border-radius: 3px;
+
+.wv4-list :deep(.batch-table-panel__department) {
+  display: block;
+  color: var(--mq-text-primary);
+  font-size: var(--mq-font-13);
 }
-.record-pool-refined :deep(.batch-table-panel__patient-name) {
-  font-size: 15px;
+
+.wv4-list :deep(.batch-table-panel__visit-id),
+.wv4-list :deep(.batch-table-panel__visit-label) {
+  color: var(--mq-text-tertiary);
+  font-family: var(--mq-font-mono);
+  font-size: var(--mq-font-12);
+}
+
+.wv4-list :deep(.batch-table-panel__hospitalization-status) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--mq-neutral-bg);
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-12);
+  font-weight: 600;
+}
+
+.wv4-list :deep(.batch-table-panel__hospitalization-status--inpatient) {
+  background: var(--mq-info-bg);
+  color: var(--mq-info-text);
+}
+
+.wv4-list :deep(.batch-table-panel__detail-button) {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--mq-brand-600);
   font-weight: 500;
-  color: #1d1d1f;
 }
-.record-pool-refined :deep(.batch-table-panel__visit-label) {
-  display: none;
+
+.wv4-list :deep(.ant-pagination) {
+  margin: 14px 20px !important;
 }
-.record-pool-refined :deep(.batch-table-panel__standalone-date) {
-  font-size: 13px;
-  color: #526075;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+
+.wv4-list :deep(.ant-pagination-item-active) {
+  border-color: transparent;
+  background: var(--mq-brand-gradient);
 }
-.record-pool-refined :deep(.batch-table-panel__hospitalization-status) {
-  font-size: 13px !important;
+
+.wv4-list :deep(.ant-pagination-item-active a) {
+  color: #ffffff;
 }
-.record-pool-refined :deep(.batch-table-panel__action--primary) {
-  order: 2;
+
+.wv4-list :deep(.ant-checkbox-input:focus-visible + .ant-checkbox-inner) {
+  outline: 2px solid var(--mq-brand-600);
+  outline-offset: 2px;
 }
-.record-pool-refined :deep(.batch-table-panel__detail-button) {
-  color: #46627e !important;
-  border: 0 !important;
-  font-weight: 400 !important;
+
+/* ---------- 窄屏 ---------- */
+@media (max-width: 1280px) {
+  .wv4-list .wv4-analysis-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .wv4-list .wv4-analysis-kpi-card:nth-child(3) {
+    border-left: 0;
+  }
+
+  .wv4-list .wv4-filter-actions {
+    margin-left: 0;
+  }
 }
-.record-pool-refined :deep(.batch-table-panel__detail-button:hover) {
-  color: #007aff !important;
-  background: #edf5ff !important;
-}
-.record-pool-refined :deep(.ant-table-tbody > tr > td) {
-  transition: background-color 160ms ease;
-}
-.record-pool-refined :deep(.ant-btn:focus-visible),
-.record-pool-refined :deep(.ant-checkbox-input:focus-visible + .ant-checkbox-inner) {
-  outline: 2px solid #007aff;
-  outline-offset: 3px;
+
+@media (max-width: 900px) {
+  .wv4-list .workbench-controls__search-input,
+  .wv4-list .workbench-date-row__range {
+    width: 100%;
+  }
+
+  .wv4-list .wv4-analysis-kpis {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .wv4-list .wv4-analysis-kpi-card + .wv4-analysis-kpi-card {
+    border-top: 0.5px solid var(--mq-border);
+    border-left: 0;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .record-pool-refined :deep(.ant-table-tbody > tr > td) {
-    transition: none;
+  .wv4-list * {
+    transition: none !important;
   }
 }
 
-.record-pool-refined .wv4-record-pool-main__list {
-  border: 0;
-  border-radius: 12px;
-  background: #fff;
-  box-shadow:
-    0 0 0 1px #e5e5ea,
-    0 4px 16px rgb(0 0 0 / 4%);
+/* ---------- 病历池收敛：字号只用 12 / 13 / 14 / 20 / 32；标签与表头不加粗；行高压到约 54px ---------- */
+.wv4-list :deep(.batch-table-panel__title) {
+  font-size: var(--mq-font-20);
+  font-weight: 600;
 }
 
-@media (max-width: 1400px) {
-  .record-pool-refined > .custom-scrollbar {
-    padding: 24px;
-  }
-  .record-pool-refined .wv4-record-pool-hero .workbench-filter-toolbar {
-    grid-template-columns: minmax(170px, 1fr) minmax(190px, 1fr);
-  }
-  .record-pool-refined .workbench-hosp-filter {
-    grid-column: 1;
-  }
-  .record-pool-refined .workbench-controls__search-input {
-    grid-column: 2;
-  }
-  .record-pool-refined .record-pool-date-field {
-    grid-column: 1;
-    grid-row: 3;
-  }
-  .record-pool-refined .wv4-record-pool-filter__inpatient-sort {
-    grid-column: 2;
-    grid-row: 3;
-  }
-  .record-pool-refined .wv4-filter-actions {
-    grid-column: 1 / 3;
-    grid-row: 4;
-    justify-content: flex-end;
-  }
-}
-
-@media (max-width: 700px) {
-  .record-pool-refined > .custom-scrollbar {
-    padding: 16px;
-  }
-  .record-pool-refined .wv4-analysis-overview__header {
-    flex-wrap: wrap;
-  }
-  .record-pool-refined .wv4-record-pool-hero .workbench-filter-toolbar {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .record-pool-refined .workbench-hosp-filter {
-    width: 100%;
-  }
-}
-
-/* 蓝白视觉试点：只调整外观，保留已有网格、尺寸与间距。 */
-.workstation-shell .record-pool-refined .wv4-record-pool-hero .workbench-filter-toolbar {
-  font-family: 'Source Han Sans SC', 'Microsoft YaHei UI', 'PingFang SC', sans-serif;
-}
-.workstation-shell .record-pool-refined .wv4-record-pool-hero .record-pool-field-label,
-.workstation-shell .record-pool-refined .wv4-record-pool-hero .workbench-hosp-filter__label {
-  font-family: inherit;
-  font-size: 14px;
+.wv4-list :deep(.batch-table-panel__summary-pill),
+.wv4-list :deep(.workbench-filter-summary) {
+  font-size: var(--mq-font-12);
   font-weight: 400;
-  line-height: 22px;
-  color: #6e6e73;
-}
-.record-pool-refined .workbench-filter-toolbar :deep(.ant-select),
-.record-pool-refined .workbench-filter-toolbar :deep(.ant-picker),
-.record-pool-refined .workbench-filter-toolbar :deep(.ant-input-affix-wrapper),
-.record-pool-refined .workbench-filter-toolbar :deep(.ant-segmented),
-.record-pool-refined .workbench-filter-toolbar :deep(.ant-btn) {
-  font-family: inherit;
-}
-.record-pool-refined .workbench-filter-toolbar :deep(.ant-select-selector),
-.record-pool-refined .workbench-filter-toolbar :deep(.ant-select-selection-item),
-.record-pool-refined .workbench-filter-toolbar :deep(.ant-select-selection-placeholder) {
-  font-family: 'Source Han Sans SC', 'Microsoft YaHei UI', 'PingFang SC', sans-serif !important;
-}
-.record-pool-refined .workbench-hosp-segmented {
-  background: #e8e8ed;
-  border-radius: 9px;
-  padding: 3px;
-  border: 1px solid rgba(0, 0, 0, 0.03);
-}
-.record-pool-refined :deep(.workbench-dept-select__name) {
-  color: #3a3a3c;
-  font-weight: 400 !important;
-}
-.record-pool-refined :deep(.ant-input-affix-wrapper:hover),
-.record-pool-refined :deep(.ant-select-selector:hover),
-.record-pool-refined :deep(.ant-picker:hover) {
-  border-color: #a1a1aa !important;
-}
-.record-pool-refined :deep(.ant-input-affix-wrapper-focused),
-.record-pool-refined :deep(.ant-select-focused .ant-select-selector),
-.record-pool-refined :deep(.ant-picker-focused) {
-  border-color: #007aff !important;
-  box-shadow: 0 0 0 2px rgb(0 122 255 / 14%) !important;
-}
-.record-pool-refined :deep(.ant-table-tbody > tr > td) {
-  border-bottom-color: #efeff2;
-}
-.record-pool-refined :deep(.ant-table-tbody > tr:hover > td),
-.record-pool-refined :deep(.ant-table-tbody > tr > td.ant-table-cell-row-hover) {
-  background: #f5f5f7 !important;
-}
-.record-pool-refined :deep(.ant-table-tbody > tr.ant-table-row-selected > td) {
-  background: #eaf3ff !important;
-}
-.record-pool-refined :deep(.batch-table-panel__detail-button) {
-  color: #007aff !important;
-}
-.record-pool-refined .wv4-filter-actions__button.ant-btn-primary:hover {
-  background: #006ee6 !important;
 }
 
-/* 未显示在院排序时移除预留列，避免日期与查询操作之间出现空洞。 */
-@media (min-width: 701px) and (max-width: 1400px) {
-  .record-pool-refined
-    .workbench-filter-toolbar:not(:has(.wv4-record-pool-filter__inpatient-sort))
-    .wv4-filter-actions {
-    grid-column: 2;
-    grid-row: 3;
-  }
-}
-@media (min-width: 1401px) {
-  .record-pool-refined
-    .wv4-record-pool-hero
-    .workbench-filter-toolbar:not(:has(.wv4-record-pool-filter__inpatient-sort)) {
-    grid-template-columns: minmax(210px, 1fr) minmax(230px, 1fr) minmax(340px, 1.4fr) auto;
-  }
-}
-.workstation-shell .record-pool-refined .wv4-record-pool-hero :deep(.ant-input-affix-wrapper),
-.workstation-shell .record-pool-refined .wv4-record-pool-hero :deep(.ant-select-selector),
-.workstation-shell .record-pool-refined .wv4-record-pool-hero :deep(.ant-picker),
-.workstation-shell .record-pool-refined .wv4-record-pool-hero .workbench-hosp-filter,
-.workstation-shell
-  .record-pool-refined
-  .wv4-record-pool-hero
-  .wv4-record-pool-filter__sync-shortcut,
-.workstation-shell .record-pool-refined .wv4-record-pool-hero .wv4-filter-actions__button {
-  height: 36px !important;
-  min-height: 36px !important;
-}
-.record-pool-refined .wv4-record-pool-hero :deep(.ant-select-single .ant-select-selection-item),
-.record-pool-refined
-  .wv4-record-pool-hero
-  :deep(.ant-select-single .ant-select-selection-placeholder) {
-  line-height: 34px !important;
-}
-.record-pool-refined .wv4-record-pool-hero :deep(.ant-select-single) {
-  height: 36px;
-}
-.record-pool-refined .workbench-hosp-filter {
-  gap: 10px;
-}
-.record-pool-refined .workbench-hosp-segmented :deep(.ant-segmented-item-label) {
-  min-width: 76px;
-  padding-inline: 16px;
-  color: inherit;
+.wv4-list :deep(.ant-table-thead > tr > th) {
+  font-size: var(--mq-font-12);
   font-weight: 500;
 }
-.record-pool-refined .wv4-record-pool-filter__summary {
-  color: #86868b;
-  font-size: 12px;
-  margin-top: 12px;
+
+.wv4-list :deep(.ant-table-tbody > tr > td) {
+  padding-top: 8px;
+  padding-bottom: 8px;
 }
 
-/* 苹果风视觉：保持字体、控件尺寸和网格，统一表面与交互色。 */
-.record-pool-refined .workbench-hosp-segmented :deep(.ant-segmented-item-selected) {
-  background: #fff;
-  color: #007aff;
-  border-radius: 6px;
-  box-shadow: 0 1px 3px rgba(26, 49, 78, 0.1);
-}
-.record-pool-refined :deep(.ant-btn-default) {
-  background: #fff;
-  border-color: #dedee3;
-  color: #3a3a3c;
-}
-.record-pool-refined :deep(.ant-btn-primary:not(:disabled)) {
-  background: #007aff !important;
-  border-color: #007aff !important;
-  color: #fff !important;
-}
-.record-pool-refined :deep(.ant-btn-primary:not(:disabled):hover) {
-  background: #006ee6 !important;
-  border-color: #006ee6 !important;
-}
-.record-pool-refined :deep(.ant-checkbox-checked .ant-checkbox-inner) {
-  background-color: #007aff;
-  border-color: #007aff;
-}
-.record-pool-refined :deep(.ant-pagination-item-active) {
-  border-color: #007aff;
-}
-.record-pool-refined :deep(.ant-pagination-item-active a) {
-  color: #007aff;
+.wv4-list :deep(.batch-table-panel__patient-cell) {
+  gap: 10px;
 }
 
-/* 科室、住院状态及两列日期使用相同的正文规格。 */
-.record-pool-refined :deep(.batch-table-panel--record-pool .batch-table-panel__detail-button) {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  height: 30px !important;
-  padding: 0 6px !important;
-  border-radius: 8px;
-  background: transparent !important;
-  color: #52708e !important;
-  font-family: 'Source Han Sans SC', 'Microsoft YaHei UI', 'PingFang SC', sans-serif !important;
-  font-size: 13px !important;
-  font-weight: 400 !important;
-}
-.record-pool-refined
-  :deep(.batch-table-panel--record-pool .batch-table-panel__detail-button:hover) {
-  background: transparent !important;
-  color: #007aff !important;
-}
-.record-pool-refined :deep(.batch-table-panel__detail-button > span) {
-  font-family: inherit !important;
-  font-size: inherit !important;
-  font-weight: inherit !important;
+.wv4-list :deep(.batch-table-panel__patient-name) {
+  font-size: var(--mq-font-14);
+  font-weight: 500;
   line-height: 20px;
-}
-.record-pool-refined .wv4-analysis-overview__title,
-.record-pool-refined .record-pool-field-label {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-.record-pool-title-icon {
-  display: inline-flex;
-  padding: 7px;
-  margin-right: 3px;
-  border-radius: 10px;
-  background: #e5f0ff;
-  color: #007aff;
-}
-.record-pool-refined .record-pool-field-label svg {
-  flex-shrink: 0;
-  color: #8195af;
-}
-.record-pool-verify-icon {
-  display: inline-block;
-  vertical-align: -3px;
-  margin-right: 5px;
-  color: #007aff;
-}
-.record-pool-refined :deep(.record-pool-list-icon) {
-  display: inline-block;
-  vertical-align: -3px;
-  margin-right: 6px;
-  color: #007aff;
-}
-.record-pool-refined :deep(.batch-table-panel__summary-pill) {
-  background: #edf4ff;
-  border-radius: 6px;
-  padding: 3px 8px;
-  color: #3470ae;
-}
-.record-pool-refined :deep(.batch-table-panel__hospitalization-status) {
-  border-radius: 6px !important;
-  padding: 2px 8px;
-}
-.record-pool-refined :deep(.batch-table-panel__hospitalization-status--inpatient) {
-  background: #eaf3ff !important;
-}
-.record-pool-refined :deep(.batch-table-panel__hospitalization-status--discharged) {
-  background: #f1f2f5 !important;
-}
-.record-pool-refined :deep(.batch-table-panel__department),
-.record-pool-refined :deep(.batch-table-panel__hospitalization-status),
-.record-pool-refined :deep(.batch-table-panel__standalone-date) {
-  font-family: 'Source Han Sans SC', 'Microsoft YaHei UI', 'PingFang SC', sans-serif !important;
-  font-size: 14px !important;
-  font-weight: 400 !important;
-  line-height: 22px;
 }
 
-/* 按用户指定，病历列表对齐运行质控结果列表的紧凑排版。 */
-.record-pool-refined :deep(.batch-table-panel--record-pool .ant-table),
-.record-pool-refined :deep(.batch-table-panel--record-pool .ant-table *) {
-  font-family: 'Microsoft YaHei', 'PingFang SC', system-ui, sans-serif !important;
-}
-.record-pool-refined :deep(.batch-table-panel--record-pool .ant-table-thead > tr > th) {
-  font-family: 'Microsoft YaHei', 'PingFang SC', system-ui, sans-serif !important;
-  height: 44px;
-  padding: 10px;
-  background: #f8fafc;
-  color: #525e6e;
-  font-size: 13px !important;
-  font-weight: 600 !important;
-  line-height: 20px;
-}
-.record-pool-refined :deep(.batch-table-panel--record-pool .ant-table-tbody > tr > td) {
-  height: 68px;
-  padding: 8px 10px;
-  font-size: 14px;
-  line-height: 20px;
-  border-bottom: 1px solid #edf0f4;
-}
-.record-pool-refined :deep(.batch-table-panel__patient-name) {
-  color: #1d1d1f;
-  font-size: 13px !important;
-  font-weight: 700 !important;
-  line-height: 20px;
-}
-.record-pool-refined :deep(.batch-table-panel__visit-id) {
-  color: #7a8390;
-  font-size: 12px !important;
+.wv4-list :deep(.batch-table-panel__visit-label),
+.wv4-list :deep(.batch-table-panel__visit-id) {
+  color: var(--mq-text-tertiary);
+  font-family: inherit;
+  font-size: var(--mq-font-12);
   font-weight: 400;
+  line-height: 18px;
   font-variant-numeric: tabular-nums;
-}
-.record-pool-refined :deep(.batch-table-panel__standalone-date) {
-  color: #727b87;
-  font-size: 13px !important;
-  font-variant-numeric: tabular-nums;
-}
-.record-pool-refined :deep(.ant-table-tbody > tr:hover > td),
-.record-pool-refined :deep(.ant-table-tbody > tr > td.ant-table-cell-row-hover) {
-  background: #f8fafc !important;
-}
-.record-pool-refined :deep(.ant-table-tbody > tr.ant-table-row-selected > td) {
-  background: #edf4fc !important;
 }
 
-.record-pool-refined :deep(.batch-table-panel__department),
-.record-pool-refined :deep(.batch-table-panel__hospitalization-status) {
-  font-size: 13px !important;
+.wv4-list :deep(.batch-table-panel__tag--demo) {
+  font-size: var(--mq-font-12) !important;
+  font-weight: 500 !important;
+}
+
+.wv4-list :deep(.batch-table-panel__hospitalization-status),
+.wv4-list :deep(.mq-status) {
+  font-size: var(--mq-font-12);
+  font-weight: 500;
+}
+
+.wv4-list :deep(.batch-table-panel__department) {
+  font-size: var(--mq-font-13);
+}
+
+/* 列表标题栏按钮：去粗体；「质控所选」未选中时为灰色禁用态，不再是醒目蓝 */
+.wv4-list :deep(.batch-table-panel__action.ant-btn) {
+  font-weight: 500 !important;
+}
+
+.wv4-list :deep(.batch-table-panel__action--primary.ant-btn:disabled) {
+  background: rgba(118, 128, 160, 0.14) !important;
+  box-shadow: none !important;
+  color: var(--mq-text-tertiary) !important;
+}
+
+/* 筛选区：标签与按钮不加粗 */
+.wv4-list .record-pool-field-label,
+.wv4-list .workbench-hosp-filter__label {
+  font-size: var(--mq-font-13);
+  font-weight: 400;
+}
+
+.wv4-list :deep(.workbench-filter-toolbar .ant-btn),
+.wv4-list :deep(.workbench-filter-toolbar .ant-segmented-item-label),
+.wv4-list :deep(.workbench-dept-select__name) {
+  font-weight: 500;
+}
+
+.wv4-list :deep(.workbench-dept-select__name) {
+  font-weight: 400;
+}
+
+/* 右侧预览 */
+.wv4-list :deep(.pool-preview__name) {
+  font-size: var(--mq-font-20);
+  font-weight: 600;
+}
+
+.wv4-list :deep(.pool-preview__eyebrow),
+.wv4-list :deep(.pool-preview__facts dt) {
+  font-weight: 400;
+}
+
+.wv4-list :deep(.pool-preview__facts dd) {
+  font-size: var(--mq-font-14);
+  font-weight: 500;
+}
+
+/* 行内「查看」：去眼睛图标，改为安静的浅灰胶囊；悬停与选中行时转为浅蓝 */
+.wv4-list :deep(.batch-table-panel__detail-button.ant-btn) {
+  height: 26px !important;
+  padding: 0 12px !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  background: rgba(118, 128, 160, 0.12) !important;
+  box-shadow: none !important;
+  color: var(--mq-text-primary) !important;
+  font-size: var(--mq-font-12) !important;
+  font-weight: 500 !important;
+}
+
+.wv4-list :deep(.batch-table-panel__detail-button svg) {
+  display: none;
+}
+
+.wv4-list :deep(.batch-table-panel__detail-button.ant-btn:hover),
+.wv4-list :deep(.batch-table-panel__row--active .batch-table-panel__detail-button.ant-btn) {
+  background: rgba(10, 108, 255, 0.12) !important;
+  color: var(--mq-brand-600) !important;
 }

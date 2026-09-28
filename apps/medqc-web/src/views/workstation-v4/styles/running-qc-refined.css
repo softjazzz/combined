@@ -79,18 +79,18 @@
   font-weight: 500;
 }
 .running-qc-refined .qc-record-result-list-view__view-switch button:hover {
-  color: #2b6cf6;
+  color: #0a6cff;
   background: #e8f0fb;
 }
 .running-qc-refined .qc-record-result-list-view__view-switch button:focus-visible {
-  outline: 2px solid #2b6cf6;
+  outline: 2px solid #0a6cff;
   outline-offset: 2px;
 }
 .running-qc-refined .qc-record-result-list-view__view-switch button.is-active {
   box-shadow: 0 1px 3px rgba(26, 49, 78, 0.1);
   background: #fff;
   border-color: #c6dafa;
-  color: #2b6cf6;
+  color: #0a6cff;
   font-weight: 600;
 }
 .review-workbench-primary {
@@ -253,12 +253,12 @@
   font-weight: 400;
 }
 .running-qc-refined .qc-record-result-list-view__query-button {
-  color: #2b6cf6;
+  color: #0a6cff;
 }
 .running-qc-refined .qc-record-result-list-view__query-button:hover:not(:disabled),
 .running-qc-refined .qc-record-result-list-view__export-trigger:hover:not(:disabled),
 .running-qc-refined .qc-record-result-list-view__refresh-button:hover:not(:disabled) {
-  color: #2b6cf6;
+  color: #0a6cff;
   background: #f2f7fd;
 }
 .review-workbench-split {
@@ -287,7 +287,7 @@
 }
 .running-qc-refined .qc-record-result-list-view__selected-count {
   margin-left: auto;
-  color: #2b6cf6;
+  color: #0a6cff;
 }
 .running-qc-refined .qc-record-result-list-view__pagination {
   padding: 16px 0;
@@ -302,7 +302,7 @@
   padding: 0;
 }
 .running-qc-refined :is(input, select, button):focus-visible {
-  outline: 2px solid #2b6cf6;
+  outline: 2px solid #0a6cff;
   outline-offset: 3px;
 }
 @media (max-width: 1450px) {
@@ -408,7 +408,7 @@
 }
 .running-qc-apple .qc-record-result-list-view__view-switch button.is-active {
   background: #fff;
-  color: #007aff;
+  color: #0a6cff;
   border-color: transparent;
   font-weight: 400;
 }
@@ -420,12 +420,12 @@
   font-size: 14px;
 }
 .running-qc-apple .qc-record-result-list-view__filters :is(input, select):focus-visible {
-  outline: 2px solid rgba(0, 122, 255, 0.3);
+  outline: 2px solid rgba(10, 108, 255, 0.3);
   outline-offset: 1px;
 }
 .running-qc-apple .qc-record-result-list-view__query-button,
 .running-qc-apple :deep(.qc-run-selected-control__trigger) {
-  background: #007aff;
+  background: #0a6cff;
   color: #fff;
   border-radius: 8px;
 }
@@ -511,7 +511,7 @@
 }
 .running-qc-apple :deep(.full-result-button) {
   background: #edf4ff;
-  color: #007aff;
+  color: #0a6cff;
   font-weight: 500;
 }
 .running-qc-apple .review-workbench-task-status :deep(.record-pool-qc-task-status) {
@@ -562,8 +562,8 @@
   font-family: inherit;
 }
 .running-qc-apple :deep(.qc-result-analysis__query) {
-  background: #007aff;
-  border-color: #007aff;
+  background: #0a6cff;
+  border-color: #0a6cff;
 }
 .running-qc-apple :deep(.qc-result-analysis h2) {
   font-size: 17px;
@@ -623,7 +623,7 @@
   background: #edf4fc;
 }
 .running-qc-apple :deep(.qc-result-analysis__expand) {
-  color: #007aff;
+  color: #0a6cff;
 }
 
 .running-qc-apple :deep(.qc-result-analysis__summary) {
@@ -689,7 +689,7 @@
   font-family: inherit;
   font-size: 12px;
   font-weight: 400;
-  color: #007aff;
+  color: #0a6cff;
   text-decoration: none;
   line-height: 22px;
   margin-top: 6px;
@@ -744,9 +744,9 @@
   min-height: 34px;
   padding: 6px 12px;
   font-size: 12px;
-  background: #007aff;
+  background: #0a6cff;
   color: #fff;
-  box-shadow: 0 2px 6px rgba(0, 122, 255, 0.16);
+  box-shadow: 0 2px 6px rgba(10, 108, 255, 0.16);
 }
 .running-qc-apple :deep(.preview-primary-action .full-result-button > svg) {
   color: #fff;
@@ -867,4 +867,465 @@
   color: #637084;
   font-size: 13px;
   font-weight: 400;
+}
+
+/* =====================================================================
+ * v7.1 液态玻璃覆盖层（运行 / 终末病历质控）
+ * 外层容器、页头、指标卡、筛选行、列表卡与预览卡统一到 v7.1；
+ * 上方旧规则中的复核卡片阅读排版继续生效，重复规则在全站收尾时清理。
+ * ===================================================================== */
+.running-qc-refined.running-qc-apple {
+  display: grid;
+  gap: 18px;
+  max-width: 1440px;
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 8px 28px 32px 22px;
+  box-sizing: border-box;
+  background: transparent;
+  color: var(--mq-text-primary);
+  font-family: var(--mq-font-family);
+}
+
+/* 页头 */
+.running-qc-apple .qc-record-result-list-view__header.mq-page-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+.running-qc-apple .qc-record-result-list-view__header .mq-page-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  font-family: var(--mq-font-display);
+  font-size: var(--mq-font-title);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.running-qc-apple .review-workbench-scope {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--mq-info-bg);
+  color: var(--mq-info-text);
+  font-family: var(--mq-font-family);
+  font-size: var(--mq-font-12);
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.running-qc-apple .qc-record-result-list-view__view-switch.mq-segmented {
+  margin: 0;
+  padding: 3px;
+  border: 0;
+  border-radius: 13px;
+  background: var(--mq-bg-muted);
+  box-shadow: none;
+}
+
+.running-qc-apple .qc-record-result-list-view__view-switch .mq-segmented__item {
+  height: 32px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-13);
+  font-weight: 400;
+}
+
+.running-qc-apple .qc-record-result-list-view__view-switch .mq-segmented__item.is-active {
+  background: #ffffff;
+  box-shadow: 0 2px 6px rgba(10, 55, 115, 0.12);
+  color: var(--mq-text-primary);
+  font-weight: 600;
+}
+
+.running-qc-apple .review-workbench-primary {
+  margin: 0;
+  padding: 0;
+}
+
+.running-qc-apple :deep(.qc-run-selected-control__trigger) {
+  height: 40px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--mq-brand-gradient);
+  box-shadow: var(--mq-brand-shadow);
+  color: #ffffff;
+  font-size: var(--mq-font-14);
+  font-weight: 600;
+}
+
+.running-qc-apple :deep(.qc-run-selected-control__trigger:disabled) {
+  opacity: 0.55;
+  box-shadow: none;
+}
+
+/* 指标卡：图标在 DOM 末尾，用 flex order 摆到左上；第二行为数值 + 单位 */
+.running-qc-apple .review-workbench-metrics.mq-card {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--mq-glass-border);
+  border-radius: var(--mq-radius-card);
+  background: var(--mq-glass-bg);
+  box-shadow: var(--mq-glass-shadow);
+}
+
+.running-qc-apple .review-workbench-metrics > div {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px 12px;
+  padding: 18px 22px;
+  border: 0;
+  background: transparent;
+}
+
+.running-qc-apple .review-workbench-metrics > div + div {
+  border-left: 0.5px solid var(--mq-border);
+}
+
+.running-qc-apple .review-workbench-metrics > div > .review-metric__icon {
+  order: 0;
+}
+
+.running-qc-apple .review-workbench-metrics > div > span:first-child {
+  flex: 1 1 calc(100% - 50px);
+  order: 1;
+  color: var(--mq-text-primary);
+  font-size: var(--mq-font-14);
+  font-weight: 600;
+}
+
+.running-qc-apple .review-workbench-metrics > div > strong {
+  order: 2;
+  color: var(--mq-text-primary);
+  font-family: var(--mq-font-display);
+  font-size: 40px;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.running-qc-apple .review-workbench-metrics > div > span:nth-child(3) {
+  order: 3;
+  align-self: flex-end;
+  margin-left: -6px;
+  color: #86868b;
+  font-size: var(--mq-font-14);
+  font-weight: 500;
+}
+
+/* 筛选行：不套卡片，控件本身为玻璃胶囊 */
+.running-qc-apple .qc-record-result-list-view__workbench {
+  display: grid;
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+.running-qc-apple .qc-record-result-list-view__toolbar {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+.running-qc-apple .qc-record-result-list-view__filters {
+  display: flex;
+  flex-direction: row;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+}
+
+.running-qc-apple .qc-record-result-list-view__filters input[type='search'],
+.running-qc-apple .qc-record-result-list-view__filters select,
+.running-qc-apple .qc-record-result-list-view__date-inputs {
+  height: 36px;
+  box-sizing: border-box;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: var(--mq-radius-control);
+  background: rgba(255, 255, 255, 0.75);
+  box-shadow: 0 1px 3px rgba(10, 55, 115, 0.06);
+  color: var(--mq-text-primary);
+  font-size: var(--mq-font-13);
+}
+
+.running-qc-apple .qc-record-result-list-view__filters input[type='search'] {
+  width: 300px;
+  padding: 0 14px;
+}
+
+.running-qc-apple .qc-record-result-list-view__filters select {
+  width: 160px;
+  padding: 0 12px;
+}
+
+.running-qc-apple .qc-record-result-list-view__date-inputs {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+}
+
+.running-qc-apple .qc-record-result-list-view__date-inputs input[type='date'] {
+  width: 132px;
+  min-width: 132px;
+  height: 30px;
+  border: 0;
+  background: transparent;
+  color: var(--mq-text-primary);
+  font-size: var(--mq-font-13);
+}
+
+.running-qc-apple .qc-record-result-list-view__query-button,
+.running-qc-apple .qc-record-result-list-view__export-trigger,
+.running-qc-apple .qc-record-result-list-view__refresh-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 16px;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.75);
+  box-shadow: 0 2px 8px rgba(10, 55, 115, 0.08);
+  color: var(--mq-text-primary);
+  font-size: var(--mq-font-13);
+  font-weight: 500;
+}
+
+.running-qc-apple .qc-record-result-list-view__query-button {
+  border-color: transparent;
+  background: var(--mq-brand-gradient);
+  box-shadow: var(--mq-brand-shadow);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.running-qc-apple .qc-record-result-list-view__query-button:hover:not(:disabled) {
+  background: var(--mq-brand-gradient);
+  filter: brightness(1.05);
+}
+
+.running-qc-apple .qc-record-result-list-view__export-options {
+  border: 1px solid var(--mq-glass-border);
+  border-radius: 16px;
+  background: var(--mq-glass-bg-strong);
+  -webkit-backdrop-filter: var(--mq-glass-blur);
+  backdrop-filter: var(--mq-glass-blur);
+  box-shadow: var(--mq-shadow-md);
+}
+
+/* 左列表 + 右预览：两张玻璃卡 */
+.running-qc-apple .review-workbench-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  align-items: start;
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.running-qc-apple .review-workbench-list,
+.running-qc-apple :deep(.qc-review-preview) {
+  overflow: hidden;
+  border: 1px solid var(--mq-glass-border);
+  border-radius: var(--mq-radius-card);
+  background: var(--mq-glass-bg);
+  -webkit-backdrop-filter: var(--mq-glass-blur);
+  backdrop-filter: var(--mq-glass-blur);
+  box-shadow: var(--mq-glass-shadow);
+}
+
+.running-qc-apple .review-workbench-list {
+  padding: 16px 12px 8px;
+}
+
+.running-qc-apple .qc-record-result-list-view__list-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 0 10px 10px;
+}
+
+.running-qc-apple .qc-record-result-list-view__list-heading h2 {
+  margin: 0;
+  font-family: var(--mq-font-display);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.running-qc-apple .qc-record-result-list-view__list-heading > span {
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-13);
+}
+
+.running-qc-apple .qc-record-result-list-view__selected-count {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--mq-info-bg);
+  color: var(--mq-info-text) !important;
+  font-size: var(--mq-font-12) !important;
+  font-weight: 600;
+}
+
+.running-qc-apple :deep(.qc-record-result-table__table thead th) {
+  background: #fafbfd;
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+  font-weight: 500;
+}
+
+.running-qc-apple :deep(.qc-record-result-table__row > td) {
+  border-bottom: 0.5px solid var(--mq-border);
+  background: transparent;
+}
+
+.running-qc-apple :deep(.qc-record-result-table__row:hover > td) {
+  background: rgba(10, 108, 255, 0.04);
+}
+
+.running-qc-apple :deep(.qc-record-result-table__row--active > td) {
+  background: rgba(255, 255, 255, 0.92) !important;
+}
+
+.running-qc-apple :deep(.qc-record-result-table__row--active > td:first-child) {
+  box-shadow: inset 3px 0 0 var(--mq-brand-600);
+}
+
+.running-qc-apple :deep(.qc-record-result-table__patient-name) {
+  font-weight: 500;
+}
+
+.running-qc-apple :deep(.qc-record-result-table__visit-id) {
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+}
+
+/* 页面级 :is(button) 统一为 14px，这里让行内「查看」保持与病历池一致的 12px */
+.running-qc-apple :deep(.qc-record-result-table__view-button) {
+  font-size: var(--mq-font-12);
+}
+
+.running-qc-apple .qc-record-result-list-view__pagination {
+  padding: 12px 10px 6px;
+  border: 0;
+}
+
+/* 预览卡内部 */
+.running-qc-apple :deep(.qc-review-preview) {
+  position: sticky;
+  top: 16px;
+}
+
+.running-qc-apple :deep(.preview-heading) {
+  padding: 20px 20px 12px;
+}
+
+.running-qc-apple :deep(.patient-context) {
+  margin: 0 20px 8px;
+}
+
+.running-qc-apple :deep(.preview-item) {
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.8);
+  box-shadow: 0 2px 10px rgba(10, 55, 115, 0.06);
+}
+
+.running-qc-apple :deep(.preview-primary-action .full-result-button),
+.running-qc-apple :deep(.full-result-button) {
+  border-radius: 999px;
+  background: var(--mq-brand-gradient);
+  box-shadow: var(--mq-brand-shadow);
+  color: #ffffff;
+}
+
+.running-qc-apple :deep(.preview-primary-action .full-result-button:hover),
+.running-qc-apple :deep(.full-result-button:hover) {
+  background: var(--mq-brand-gradient);
+  filter: brightness(1.05);
+}
+
+.running-qc-apple .qc-record-result-list-view__notice {
+  margin: 0;
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+}
+
+@media (max-width: 1280px) {
+  .running-qc-apple .review-workbench-metrics.mq-card {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .running-qc-apple .review-workbench-metrics > div:nth-child(3) {
+    border-left: 0;
+  }
+
+  .running-qc-apple .review-workbench-metrics > div:nth-child(n + 3) {
+    border-top: 0.5px solid var(--mq-border);
+  }
+
+  .running-qc-apple .review-workbench-split {
+    grid-template-columns: minmax(0, 1fr) 320px;
+  }
+}
+
+@media (max-width: 1024px) {
+  .running-qc-apple .review-workbench-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .running-qc-apple :deep(.qc-review-preview) {
+    position: static;
+  }
 }

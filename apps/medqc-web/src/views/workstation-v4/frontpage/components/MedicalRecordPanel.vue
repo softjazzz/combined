@@ -3,22 +3,22 @@
     class="bg-white/90 rounded-2xl shadow-sm flex flex-col flex-1 border border-black/[0.08] overflow-hidden relative min-h-[500px] backdrop-blur-[18px]"
   >
     <div
-      class="px-6 py-4 border-b border-black/[0.08] flex justify-between items-center bg-[rgba(43,108,246,0.04)]"
+      class="px-6 py-4 border-b border-black/[0.08] flex justify-between items-center bg-[rgba(10, 108, 255,0.04)]"
     >
       <div class="flex items-center gap-2">
-        <FileTextOutlined class="text-[#2b6cf6]" />
+        <FileTextOutlined class="text-[#0a6cff]" />
         <h3 class="font-semibold text-[#1d1d1f]">
           病历原文
         </h3>
       </div>
       <div class="flex gap-2">
         <button
-          class="text-xs font-medium text-[rgba(29,29,31,0.56)] hover:text-[#2b6cf6] px-2 py-1 bg-white border border-black/[0.08] rounded-md"
+          class="text-xs font-medium text-[rgba(29,29,31,0.56)] hover:text-[#0a6cff] px-2 py-1 bg-white border border-black/[0.08] rounded-md"
         >
           全屏
         </button>
         <button
-          class="text-xs font-medium text-[rgba(29,29,31,0.56)] hover:text-[#2b6cf6] px-2 py-1 bg-white border border-black/[0.08] rounded-md"
+          class="text-xs font-medium text-[rgba(29,29,31,0.56)] hover:text-[#0a6cff] px-2 py-1 bg-white border border-black/[0.08] rounded-md"
         >
           放大
         </button>
@@ -47,16 +47,16 @@
       class="flex-1 flex flex-col items-center justify-start p-10 pt-16 bg-[#f5f5f7]/55"
     >
       <div
-        class="w-32 h-32 bg-[rgba(43,108,246,0.06)] border border-[rgba(43,108,246,0.12)] rounded-2xl flex items-center justify-center mb-6 relative group cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-[0_2px_12px_rgba(0,0,0,0.10),0_6px_22px_rgba(0,0,0,0.075)]"
+        class="w-32 h-32 bg-[rgba(10, 108, 255,0.06)] border border-[rgba(10, 108, 255,0.12)] rounded-2xl flex items-center justify-center mb-6 relative group cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-[0_2px_12px_rgba(0,0,0,0.10),0_6px_22px_rgba(0,0,0,0.075)]"
         @click="() => $emit('selectTestCase', 0)"
       >
         <UploadOutlined
-          class="text-6xl text-[#2b6cf6]/40 group-hover:text-[#2b6cf6] transition-colors"
+          class="text-6xl text-[#0a6cff]/40 group-hover:text-[#0a6cff] transition-colors"
         />
         <div
           class="absolute -bottom-2 -right-2 bg-white p-2 rounded-full shadow-md border border-black/[0.08]"
         >
-          <RobotOutlined class="text-[#2b6cf6] text-xl" />
+          <RobotOutlined class="text-[#0a6cff] text-xl" />
         </div>
       </div>
       <h3 class="text-lg font-medium text-[#1d1d1f] mb-2">
@@ -67,7 +67,7 @@
       </p>
       <a-dropdown>
         <button
-          class="bg-[#2b6cf6] hover:bg-[#0057b8] text-white px-6 py-3 rounded-xl font-medium shadow-[0_5px_14px_rgba(43,108,246,0.18)] transition-all flex items-center gap-2"
+          class="bg-[#0a6cff] hover:bg-[#0a5fd6] text-white px-6 py-3 rounded-xl font-medium shadow-[0_5px_14px_rgba(10, 108, 255,0.18)] transition-all flex items-center gap-2"
         >
           <PlusOutlined />
           加载测试病历

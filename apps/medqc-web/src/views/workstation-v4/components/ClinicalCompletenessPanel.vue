@@ -339,7 +339,7 @@ watch(visitId, () => {
 
 .clinical-completeness-header p {
   margin: 0 0 6px;
-  color: #2b6cf6;
+  color: #0a6cff;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -365,7 +365,7 @@ watch(visitId, () => {
   min-height: 38px;
   border: 0;
   border-radius: 10px;
-  background: #2b6cf6;
+  background: #0a6cff;
   color: #ffffff;
   cursor: pointer;
   font-size: 13px;
@@ -380,7 +380,7 @@ watch(visitId, () => {
 
 .clinical-state {
   margin-top: 14px;
-  border: 1px dashed rgba(43, 108, 246, 0.24);
+  border: 1px dashed rgba(10, 108, 255, 0.24);
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.72);
   color: rgba(29, 29, 31, 0.6);
@@ -418,7 +418,7 @@ watch(visitId, () => {
 
 .clinical-summary-grid strong {
   display: block;
-  color: #2b6cf6;
+  color: #0a6cff;
   font-size: 28px;
   font-weight: 700;
   line-height: 34px;
@@ -448,8 +448,8 @@ watch(visitId, () => {
 
 .clinical-card-title span {
   border-radius: 999px;
-  background: rgba(43, 108, 246, 0.08);
-  color: #2b6cf6;
+  background: rgba(10, 108, 255, 0.08);
+  color: #0a6cff;
   font-size: 12px;
   font-weight: 600;
   padding: 4px 10px;

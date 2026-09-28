@@ -50,13 +50,12 @@ const showHome = computed(() => !hasLaunchQuery.value)
 <style scoped>
 .wv4-home-entry {
   position: relative;
-  min-height: calc(100vh - 64px);
-  color: #1d1d1f;
-  font-family:
-    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
-    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+  min-height: 100vh;
+  color: var(--mq-text-primary);
+  font-family: var(--mq-font-family);
 }
 
+/* v7.1 智能助手：悬浮玻璃胶囊 */
 .wv4-home-entry__agent-button {
   position: fixed;
   right: 28px;
@@ -64,78 +63,61 @@ const showHome = computed(() => !hasLaunchQuery.value)
   z-index: 30;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-width: 132px;
-  height: 44px;
-  overflow: hidden;
-  border: 1px solid rgba(43, 108, 246, 0.24);
-  border-radius: 12px;
-  background: rgba(43, 108, 246, 0.92);
-  -webkit-backdrop-filter: blur(18px);
-  backdrop-filter: blur(18px);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.22),
-    0 8px 22px rgba(43, 108, 246, 0.22);
-  color: #ffffff;
-  font-size: 13px;
-  font-weight: 650;
-  letter-spacing: 0;
+  gap: 10px;
+  height: 46px;
+  padding: 0 20px 0 10px;
+  border: 1px solid var(--mq-glass-border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  -webkit-backdrop-filter: var(--mq-glass-blur);
+  backdrop-filter: var(--mq-glass-blur);
+  box-shadow: 0 12px 32px rgba(10, 55, 115, 0.18);
+  color: var(--mq-text-primary);
+  font: inherit;
+  font-size: var(--mq-font-14);
+  font-weight: 600;
   cursor: pointer;
   transition:
-    transform 250ms cubic-bezier(0.25, 0.1, 0.25, 1),
-    box-shadow 250ms cubic-bezier(0.25, 0.1, 0.25, 1),
-    background-color 250ms cubic-bezier(0.25, 0.1, 0.25, 1),
-    border-color 250ms cubic-bezier(0.25, 0.1, 0.25, 1);
+    transform 200ms ease,
+    box-shadow 200ms ease;
 }
 
 .wv4-home-entry__agent-icon {
-  position: relative;
-  z-index: 1;
   display: inline-flex;
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(255, 255, 255, 0.32);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.14);
+  border-radius: 50%;
+  background: var(--mq-brand-gradient);
+  box-shadow: 0 0 12px rgba(10, 108, 255, 0.45);
   color: #ffffff;
   font-size: 11px;
   font-weight: 700;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
-  letter-spacing: 0;
   line-height: 1;
 }
 
-.wv4-home-entry__agent-text {
-  position: relative;
-  z-index: 1;
-}
-
 .wv4-home-entry__agent-status {
-  position: relative;
-  z-index: 1;
   width: 7px;
   height: 7px;
-  border: 1px solid rgba(255, 255, 255, 0.72);
   border-radius: 50%;
-  background: #10b981;
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.16);
+  background: var(--mq-success-icon);
+  box-shadow: 0 0 0 3px var(--mq-success-bg);
 }
 
-.wv4-home-entry__agent-button:hover,
-.wv4-home-entry__agent-button:focus-visible {
-  border-color: rgba(43, 108, 246, 0.32);
-  background: #0057b8;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.22),
-    0 10px 26px rgba(43, 108, 246, 0.26);
-  transform: translateY(-2px);
+.wv4-home-entry__agent-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 16px 36px rgba(10, 55, 115, 0.22);
 }
 
 .wv4-home-entry__agent-button:focus-visible {
-  outline: 2px solid rgba(43, 108, 246, 0.24);
-  outline-offset: 3px;
+  outline: 2px solid var(--mq-brand-600);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wv4-home-entry__agent-button {
+    transition: none;
+  }
 }
 </style>

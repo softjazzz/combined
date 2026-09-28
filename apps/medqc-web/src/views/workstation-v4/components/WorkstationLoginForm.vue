@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { reactive, ref } from 'vue'
 import {
   EyeInvisibleOutlined,
   EyeOutlined,
@@ -7,6 +7,7 @@ import {
   LoginOutlined,
   MailOutlined,
 } from '@ant-design/icons-vue'
+import { ChevronDown } from 'lucide-vue-next'
 import { message } from 'ant-design-vue'
 import type { LoginRequest } from '@/types/auth'
 
@@ -37,10 +38,6 @@ const roleOptions = [
   { value: 'admin', label: '系统管理员' },
   { value: 'doctor', label: '临床医生' },
 ]
-
-const canSubmit = computed(() => {
-  return !!form.account.trim() && !!form.password.trim() && !!form.role
-})
 
 const validate = () => {
   if (!form.account.trim()) {
@@ -138,9 +135,11 @@ const handleSubmit = () => {
             {{ option.label }}
           </option>
         </select>
-        <span
-          class="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-xs text-slate-400 transition group-focus-within:text-sky-500"
-        >▼</span>
+        <ChevronDown
+          :size="16"
+          aria-hidden="true"
+          class="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 transition group-focus-within:text-sky-500"
+        />
       </div>
     </div>
 
@@ -182,7 +181,7 @@ const handleSubmit = () => {
     <div class="pt-2">
       <button
         type="submit"
-        :disabled="props.loading || !canSubmit"
+        :disabled="props.loading"
         class="group relative flex h-14 w-full items-center justify-center gap-2 overflow-hidden rounded-2xl bg-gradient-to-r from-sky-500 to-blue-600 text-[16px] font-bold tracking-[0.02em] text-white shadow-[0_12px_24px_-8px_rgba(14,165,233,0.5)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_20px_32px_-12px_rgba(14,165,233,0.7)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0"
       >
         <!-- Button Shine Effect -->
@@ -241,7 +240,7 @@ const handleSubmit = () => {
 .workstation-login-form input:not([type='checkbox']):focus,
 .workstation-login-form select:focus {
   border-color: #80baff;
-  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
+  box-shadow: 0 0 0 3px rgba(10, 108, 255, 0.1);
 }
 .workstation-login-form > .flex > label {
   display: inline-flex;
@@ -250,10 +249,10 @@ const handleSubmit = () => {
 .workstation-login-form button[type='submit'] {
   height: 44px;
   border-radius: 8px;
-  background: #007aff;
+  background: #0a6cff;
   font-size: 14px;
   font-weight: 500;
   transform: none;
-  box-shadow: 0 3px 8px rgba(0, 122, 255, 0.16);
+  box-shadow: 0 3px 8px rgba(10, 108, 255, 0.16);
 }
 </style>

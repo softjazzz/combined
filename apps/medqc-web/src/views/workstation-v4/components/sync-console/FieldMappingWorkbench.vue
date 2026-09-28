@@ -149,13 +149,13 @@ onMounted(() => {
 }
 
 .field-mapping-workbench tbody tr:hover {
-  background: rgba(43, 108, 246, 0.045);
+  background: rgba(10, 108, 255, 0.045);
 }
 
 .field-mapping-workbench :deep(.ant-btn) {
   border-radius: 8px;
   border-color: rgba(0, 0, 0, 0.08);
-  color: #2b6cf6;
+  color: #0a6cff;
   font-weight: 600;
 }
 

@@ -437,19 +437,19 @@ onMounted(() => {
 }
 
 .ds-root :deep(.ant-btn-primary) {
-  background: #2b6cf6;
-  border-color: #2b6cf6;
-  box-shadow: 0 5px 14px rgba(43, 108, 246, 0.18);
+  background: #0a6cff;
+  border-color: #0a6cff;
+  box-shadow: 0 5px 14px rgba(10, 108, 255, 0.18);
 }
 
 .ds-root :deep(.ant-switch-checked) {
-  background: #2b6cf6;
+  background: #0a6cff;
 }
 
 .ds-root :deep(.ant-alert) {
-  border-color: rgba(43, 108, 246, 0.14);
+  border-color: rgba(10, 108, 255, 0.14);
   border-radius: 12px;
-  background: rgba(43, 108, 246, 0.06);
+  background: rgba(10, 108, 255, 0.06);
   color: #1d1d1f;
 }
 

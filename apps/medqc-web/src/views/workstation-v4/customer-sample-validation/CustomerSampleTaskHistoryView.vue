@@ -427,7 +427,7 @@ async function reviewCurrentJob() {
 .customer-task-history-back {
   border: 0;
   background: transparent;
-  color: #2b6cf6;
+  color: #0a6cff;
   cursor: pointer;
   font-size: 13px;
   font-weight: 700;
@@ -525,7 +525,7 @@ async function reviewCurrentJob() {
 }
 
 .customer-task-history-row:hover {
-  background: rgba(43, 108, 246, 0.025);
+  background: rgba(10, 108, 255, 0.025);
 }
 
 .customer-task-history-time,

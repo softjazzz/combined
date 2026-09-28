@@ -106,11 +106,11 @@
     </div>
 
     <!-- Recommendations -->
-    <div class="mt-4 p-3 bg-[rgba(43,108,246,0.06)] rounded-lg border border-[rgba(43,108,246,0.12)]">
-      <div class="text-xs font-medium text-[#0057b8] mb-1">
+    <div class="mt-4 p-3 bg-[rgba(10, 108, 255,0.06)] rounded-lg border border-[rgba(10, 108, 255,0.12)]">
+      <div class="text-xs font-medium text-[#0a5fd6] mb-1">
         瓶颈报告
       </div>
-      <ul class="text-xs text-[#2b6cf6]/80 space-y-1">
+      <ul class="text-xs text-[#0a6cff]/80 space-y-1">
         <li
           v-for="item in recommendations"
           :key="item"

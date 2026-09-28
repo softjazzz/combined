@@ -2,16 +2,16 @@
   <section class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
     <div class="flex flex-wrap items-start justify-between gap-3">
       <div>
-        <h2 class="text-[24px] font-black tracking-tight text-slate-900">
+        <h2 class="rules-header__title">
           {{ title }}
         </h2>
         <div
           v-if="subtitle"
-          class="mt-1 text-[12px] text-slate-500"
+          class="rules-header__meta mt-1"
         >
           {{ subtitle }}
         </div>
-        <div class="mt-1 flex items-center gap-2 text-[12px] text-slate-500">
+        <div class="rules-header__meta mt-1 flex items-center gap-2">
           <span>规则集版本：{{ versionLabel }}</span>
           <a-tag
             v-if="hasPendingChanges"
@@ -95,3 +95,21 @@ const emit = defineEmits<{
   publish: []
 }>()
 </script>
+
+<style scoped>
+/* v7.1：页头已有「质控规则」大标题，这里降为卡片标题，避免两级粗黑标题叠在一起 */
+.rules-header__title {
+  margin: 0;
+  color: var(--mq-text-primary);
+  font-family: var(--mq-font-display);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 26px;
+  letter-spacing: -0.01em;
+}
+
+.rules-header__meta {
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+}
+</style>

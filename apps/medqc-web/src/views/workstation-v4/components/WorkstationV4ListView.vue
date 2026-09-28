@@ -1,34 +1,22 @@
 <template>
   <main
-    class="relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden"
+    class="wv4-list min-w-0 flex-1"
     :class="{ 'record-pool-refined': !isStageQueueMode }"
   >
-    <div class="custom-scrollbar flex-1 overflow-y-auto px-4 pb-5 pt-4 xl:px-5">
-      <div class="mx-auto w-full max-w-[1440px]">
-        <div class="workstation-surface-enter mb-4">
+    <div class="mq-page wv4-list__page">
+      <div class="wv4-list__stack">
+        <div class="workstation-surface-enter">
           <section
             class="wv4-analysis-overview wv4-record-pool-hero"
             aria-labelledby="workstation-list-overview-title"
           >
-            <div class="wv4-analysis-overview__header">
-              <div>
-                <div
-                  v-if="isFrontpageGenerateStage"
-                  class="wv4-analysis-overview__eyebrow"
-                >
-                  {{ overviewEyebrow }}
-                </div>
+            <div class="wv4-analysis-overview__header mq-page-head">
+              <div class="mq-page-head__copy">
+                <span class="mq-page-eyebrow">{{ overviewEyebrow }}</span>
                 <h3
                   id="workstation-list-overview-title"
-                  class="wv4-analysis-overview__title"
+                  class="wv4-analysis-overview__title mq-page-title"
                 >
-                  <span
-                    v-if="!isStageQueueMode"
-                    class="record-pool-title-icon"
-                  ><FolderHeart
-                    :size="21"
-                    aria-hidden="true"
-                  /></span>
                   {{ overviewTitle }}
                 </h3>
                 <p
@@ -37,13 +25,6 @@
                 >
                   {{ overviewSubtitle }}
                 </p>
-                <div
-                  v-if="isFrontpageGenerateStage"
-                  class="wv4-stage-context mt-2 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold"
-                >
-                  <span class="h-1.5 w-1.5 rounded-full" />
-                  当前阶段：参考首页生成
-                </div>
               </div>
               <div
                 v-if="isFrontpageGenerateStage"
@@ -67,7 +48,10 @@
               </div>
             </div>
 
-            <div class="wv4-analysis-overview__controls wv4-record-pool-filter">
+            <div
+              class="wv4-analysis-overview__controls wv4-record-pool-filter mq-card"
+              :class="{ 'wv4-record-pool-filter--pool': !isStageQueueMode }"
+            >
               <div class="workbench-filter-toolbar">
                 <a-input
                   :value="searchText"
@@ -290,7 +274,7 @@
 
         <div
           v-if="loadError"
-          class="workstation-empty-state mb-4 flex items-center gap-2 px-4 py-3 text-[13px]"
+          class="workstation-empty-state wv4-list__alert"
           role="alert"
         >
           病历池暂未加载成功，请检查网络后重试。
@@ -298,9 +282,9 @@
 
         <div
           v-if="isFrontpageGenerateStage"
-          class="workstation-surface-enter mb-4"
+          class="workstation-surface-enter"
         >
-          <section class="wv4-stage-notice">
+          <section class="wv4-stage-notice mq-card">
             <div class="wv4-stage-notice__title">
               生成指引
             </div>
@@ -312,7 +296,10 @@
         </div>
 
         <div class="workstation-surface-enter workstation-surface-enter--delay-1">
-          <div class="wv4-record-pool-main">
+          <div
+            class="wv4-record-pool-main"
+            :class="{ 'wv4-record-pool-main--preview': !isStageQueueMode }"
+          >
             <div class="wv4-record-pool-main__list">
               <BatchTablePanel
                 :rows="workbenchRows"
@@ -338,6 +325,8 @@
                 :record-pool-mode="!isStageQueueMode"
                 :show-defer-action="false"
                 :show-assign-action="false"
+                :active-row-key="!isStageQueueMode ? activePreviewKey : undefined"
+                @select-row="activePreviewKey = $event"
                 @update:selected-row-keys="emit('update:selectedRowKeys', $event)"
                 @open-record="emit('open-record', $event)"
                 @batch-extract="emit('batch-extract', $event)"
@@ -364,15 +353,22 @@
                 </template>
               </BatchTablePanel>
             </div>
+            <RecordPoolPreviewPanel
+              v-if="!isStageQueueMode"
+              :row="previewRow"
+              :qc-loading="batchActionLoading"
+              @open-record="emit('open-record', $event)"
+              @run-qc="emit('batch-extract', [$event])"
+            />
           </div>
         </div>
 
         <div
           v-if="listRecords.length === 0"
-          class="workstation-empty-state mt-4 flex min-h-[160px] flex-col items-center justify-center px-5 py-10 text-center"
+          class="workstation-empty-state wv4-list__empty mq-card"
         >
-          <InboxOutlined class="workstation-empty-state__icon mb-3 text-[36px]" />
-          <div class="workstation-empty-state__text text-[13px] font-medium">
+          <InboxOutlined class="workstation-empty-state__icon" />
+          <div class="workstation-empty-state__text">
             {{ stageEmptyText }}
           </div>
         </div>
@@ -383,9 +379,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import {
-  FolderHeart,
   Building2,
   Stethoscope,
   CalendarDays,
@@ -404,6 +399,7 @@ import {
 import BatchTablePanel, { type WorkbenchRow } from './workbench/BatchTablePanel.vue'
 import RecordPoolQcTaskHistory from './workbench/RecordPoolQcTaskHistory.vue'
 import RecordPoolQcTaskStatusBar from './workbench/RecordPoolQcTaskStatusBar.vue'
+import RecordPoolPreviewPanel from './workbench/RecordPoolPreviewPanel.vue'
 import FrontpageTenderValidationDrawer from './FrontpageTenderValidationDrawer.vue'
 import type { SichuanBatchJob } from '../semantic-rules/types'
 import type { PriorityCard, PriorityGroup } from './workbench/PriorityLane.vue'
@@ -531,13 +527,29 @@ function filterDepartmentSelectOption(
 
 const tenderValidationOpen = ref(false)
 
+// 病历池：点击行在右侧预览，当前行不在本页时回到第一行
+const activePreviewKey = ref('')
+const rowKeyOf = (row: WorkbenchRow) => row.recordKey || row.id
+watch(
+  () => props.workbenchRows,
+  (rows) => {
+    if (!rows.some((row) => rowKeyOf(row) === activePreviewKey.value)) {
+      activePreviewKey.value = rows[0] ? rowKeyOf(rows[0]) : ''
+    }
+  },
+  { immediate: true },
+)
+const previewRow = computed(
+  () => props.workbenchRows.find((row) => rowKeyOf(row) === activePreviewKey.value) ?? null,
+)
+
 const isFrontpageGenerateStage = computed(() => props.currentStageFilter === 'frontpage_generate')
 const showInpatientSort = computed(
   () => props.hospFilter === 'inpatient' || props.syncScope === 'today_inpatient',
 )
 
 const overviewEyebrow = computed(() =>
-  isFrontpageGenerateStage.value ? 'Workstation / Frontpage Generate' : 'Workstation / Record Pool',
+  props.isStageQueueMode ? '首页与结算清单 · 批量工作台' : '质控作业 · 全部病历',
 )
 
 const overviewTitle = computed(() =>

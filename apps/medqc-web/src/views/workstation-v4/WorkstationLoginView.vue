@@ -4,6 +4,7 @@ import '@/styles/source-han-sans-sc.css'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { AuditOutlined, LockOutlined } from '@ant-design/icons-vue'
+import { ArrowRight, LoaderCircle, MonitorPlay } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import WorkstationLoginForm from '@/views/workstation-v4/components/WorkstationLoginForm.vue'
 import type { LoginRequest } from '@/types/auth'
@@ -12,7 +13,6 @@ const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 const loading = ref(false)
-const showDemoAccounts = ref(false)
 
 const redirectTarget = computed(() => {
   const raw = route.query.redirect
@@ -94,13 +94,16 @@ const handleDemoLogin = async (account: (typeof demoAccounts)[number]) => {
 
 <template>
   <div class="login-apple relative min-h-screen overflow-hidden bg-slate-50">
-    <!-- 背景光晕 (Tech Glassmorphism Background) -->
+    <!-- 背景层次：三团缓慢漂移的蓝色光斑 + 卡片后方的光环 + 底部地平线高光 -->
     <div
-      class="pointer-events-none absolute -left-[20%] -top-[10%] h-[800px] w-[800px] rounded-full bg-sky-400/20 mix-blend-multiply blur-[120px]"
-    />
-    <div
-      class="pointer-events-none absolute -bottom-[10%] -right-[10%] h-[700px] w-[700px] rounded-full bg-blue-500/15 mix-blend-multiply blur-[120px]"
-    />
+      class="login-bg"
+      aria-hidden="true"
+    >
+      <span class="login-bg__orb login-bg__orb--sky" />
+      <span class="login-bg__orb login-bg__orb--brand" />
+      <span class="login-bg__orb login-bg__orb--ice" />
+      <span class="login-bg__horizon" />
+    </div>
     <!-- 极细微的网格肌理 -->
     <div
       class="login-background-grid pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,#e2e8f0_1px,transparent_1px),linear-gradient(to_bottom,#e2e8f0_1px,transparent_1px)] bg-[size:40px_40px] opacity-40"
@@ -134,7 +137,16 @@ const handleDemoLogin = async (account: (typeof demoAccounts)[number]) => {
         </section>
 
         <!-- 右侧：登录卡片 (Glassmorphism) -->
-        <section class="w-full lg:-mt-8 xl:-mt-12">
+        <section class="login-card-stage w-full lg:-mt-8 xl:-mt-12">
+          <!-- 卡片后方叠层玻璃：两张半透明卡错位倾斜，营造纵深 -->
+          <span
+            class="login-sheet login-sheet--back"
+            aria-hidden="true"
+          />
+          <span
+            class="login-sheet login-sheet--mid"
+            aria-hidden="true"
+          />
           <div
             class="login-glass-card mx-auto w-full max-w-[480px] rounded-[32px] border border-white/60 bg-white/50 px-8 pb-8 pt-6 shadow-[0_24px_80px_-24px_rgba(15,23,42,0.15)] ring-1 ring-white/80 backdrop-blur-xl lg:ml-auto lg:mr-0 sm:px-12 sm:pb-12 sm:pt-8"
           >
@@ -146,7 +158,7 @@ const handleDemoLogin = async (account: (typeof demoAccounts)[number]) => {
               </div>
               <!-- 登录页版本角标 -->
               <div
-                class="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-sky-500 to-blue-600 font-black text-white shadow-[0_8px_20px_-6px_rgba(14,165,233,0.5)]"
+                class="login-version-badge flex h-9 w-9 items-center justify-center rounded-xl text-white"
               >
                 V5
               </div>
@@ -161,83 +173,44 @@ const handleDemoLogin = async (account: (typeof demoAccounts)[number]) => {
               />
             </div>
 
-            <!-- 演示账号区块 (内嵌卡片风格) -->
-            <div
-              class="mt-4 overflow-hidden rounded-xl border border-slate-200/50 bg-slate-50/50 transition-all duration-300"
-            >
+            <!-- 演示账号：整行即按钮，点一次直接登录 -->
+            <div class="login-demo-list mt-4">
               <button
+                v-for="account in demoAccounts"
+                :key="account.role"
                 type="button"
-                class="flex w-full items-center justify-between px-4 py-3 text-left transition hover:bg-slate-100/50"
-                @click="showDemoAccounts = !showDemoAccounts"
+                class="login-demo"
+                :disabled="loading"
+                :aria-label="`使用${account.label}一键登录`"
+                @click="handleDemoLogin(account)"
               >
-                <div>
-                  <div class="text-[15px] font-bold text-slate-800">
-                    演示账号快速登录
-                  </div>
-                  <div class="mt-0.5 text-xs text-slate-500">
-                    功能演示：admin / admin888
-                  </div>
-                </div>
-                <div
-                  class="flex h-8 w-8 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-slate-200/50"
+                <span
+                  class="login-demo__icon"
+                  aria-hidden="true"
                 >
-                  <svg
-                    class="h-4 w-4 text-slate-500 transition-transform duration-300"
-                    :class="{ 'rotate-180': showDemoAccounts }"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M19 9l-7 7-7-7"
-                    />
-                  </svg>
-                </div>
+                  <MonitorPlay :size="18" />
+                </span>
+                <span class="login-demo__copy">
+                  <span class="login-demo__title">演示账号快速登录</span>
+                  <span class="login-demo__meta">
+                    {{ account.label }} · {{ account.account }} / {{ account.password }}
+                  </span>
+                </span>
+                <span
+                  class="login-demo__go"
+                  aria-hidden="true"
+                >
+                  <LoaderCircle
+                    v-if="loading"
+                    :size="16"
+                    class="login-demo__spin"
+                  />
+                  <template v-else>
+                    一键进入
+                    <ArrowRight :size="14" />
+                  </template>
+                </span>
               </button>
-
-              <!-- 平滑展开容器 -->
-              <div
-                class="grid transition-all duration-300 ease-in-out"
-                :class="
-                  showDemoAccounts ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
-                "
-              >
-                <div class="overflow-hidden">
-                  <div class="border-t border-slate-200/50 p-4 pt-2">
-                    <div class="space-y-2">
-                      <button
-                        v-for="account in demoAccounts"
-                        :key="account.role"
-                        type="button"
-                        class="group flex w-full items-center justify-between rounded-xl border border-transparent bg-white/60 px-4 py-3 text-left transition hover:border-sky-200/50 hover:bg-white hover:shadow-sm"
-                        @click="handleDemoLogin(account)"
-                      >
-                        <div class="flex items-center gap-3">
-                          <div
-                            class="flex h-10 w-10 items-center justify-center rounded-[14px] bg-sky-50 text-xs font-bold text-sky-700 transition group-hover:bg-sky-100"
-                          >
-                            {{ account.badge }}
-                          </div>
-                          <div>
-                            <div class="text-[14px] font-bold text-slate-800">
-                              {{ account.label }}
-                            </div>
-                            <div class="text-xs text-slate-500">
-                              {{ account.account }}
-                            </div>
-                          </div>
-                        </div>
-                        <div class="text-xs font-medium text-slate-400">
-                          {{ account.password }}
-                        </div>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
             </div>
 
             <div class="mt-3 flex justify-center text-[13px] text-slate-400">
@@ -300,6 +273,133 @@ const handleDemoLogin = async (account: (typeof demoAccounts)[number]) => {
 .login-apple > .pointer-events-none {
   opacity: 0.15;
 }
+
+/* ---------- 背景层次 ---------- */
+.login-apple {
+  background:
+    radial-gradient(1200px 700px at 12% -10%, #d6e7ff 0%, transparent 60%),
+    radial-gradient(900px 600px at 100% 110%, #d9ecff 0%, transparent 60%),
+    linear-gradient(125deg, #e3eefb 0%, #f3f6fa 50%, #e6eef8 100%);
+}
+
+.login-bg {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.login-bg__orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(90px);
+  will-change: transform;
+}
+
+.login-bg__orb--sky {
+  top: -18%;
+  left: -12%;
+  width: 720px;
+  height: 720px;
+  background: radial-gradient(circle, rgba(110, 176, 255, 0.55), rgba(110, 176, 255, 0) 70%);
+  animation: login-drift-a 26s ease-in-out infinite alternate;
+}
+
+.login-bg__orb--brand {
+  top: 12%;
+  right: -8%;
+  width: 640px;
+  height: 640px;
+  background: radial-gradient(circle, rgba(10, 108, 255, 0.34), rgba(10, 108, 255, 0) 70%);
+  animation: login-drift-b 32s ease-in-out infinite alternate;
+}
+
+.login-bg__orb--ice {
+  bottom: -22%;
+  left: 24%;
+  width: 760px;
+  height: 560px;
+  background: radial-gradient(ellipse, rgba(150, 214, 255, 0.5), rgba(150, 214, 255, 0) 70%);
+  animation: login-drift-c 38s ease-in-out infinite alternate;
+}
+
+/* 卡片后方的同心光环：给玻璃卡一个可以透出来的层次 */
+.login-card-stage {
+  position: relative;
+  isolation: isolate;
+}
+
+.login-card-stage > .login-glass-card {
+  position: relative;
+  z-index: 1;
+}
+
+.login-bg__horizon {
+  position: absolute;
+  right: -10%;
+  bottom: -40%;
+  left: -10%;
+  height: 70%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0) 60%);
+  filter: blur(48px);
+}
+
+/* 叠层玻璃：两张半透明卡错位倾斜叠在登录卡后方 */
+.login-sheet {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  max-width: 480px;
+  margin-left: auto;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-radius: 24px;
+  pointer-events: none;
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
+.login-sheet--back {
+  background: linear-gradient(160deg, rgba(10, 108, 255, 0.22), rgba(120, 190, 255, 0.12));
+  box-shadow: 0 30px 60px -24px rgba(10, 70, 160, 0.3);
+  transform: translate(46px, 26px) rotate(7deg) scale(0.94);
+}
+
+.login-sheet--mid {
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.5), rgba(214, 232, 255, 0.35));
+  box-shadow: 0 20px 40px -20px rgba(10, 70, 160, 0.22);
+  transform: translate(22px, 12px) rotate(3.5deg) scale(0.97);
+}
+
+@keyframes login-drift-a {
+  to {
+    transform: translate(80px, 60px) scale(1.08);
+  }
+}
+
+@keyframes login-drift-b {
+  to {
+    transform: translate(-70px, 50px) scale(0.94);
+  }
+}
+
+@keyframes login-drift-c {
+  to {
+    transform: translate(90px, -40px) scale(1.06);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-bg__orb {
+    animation: none;
+  }
+}
+
+@media (max-width: 1023px) {
+  .login-sheet {
+    display: none;
+  }
+}
 .login-intro {
   align-self: center;
   padding: 24px 0 60px;
@@ -312,7 +412,7 @@ const handleDemoLogin = async (account: (typeof demoAccounts)[number]) => {
 }
 .login-intro h1 span {
   background: none;
-  color: #007aff;
+  color: #0a6cff;
 }
 .login-intro .flex-wrap > div {
   font-size: 14px;
@@ -323,12 +423,25 @@ const handleDemoLogin = async (account: (typeof demoAccounts)[number]) => {
   transform: none;
 }
 .login-glass-card {
-  border-radius: 16px;
-  background: linear-gradient(145deg, rgba(220, 239, 250, 0.88), rgba(230, 237, 253, 0.82));
+  border-radius: 24px;
+  background: linear-gradient(150deg, rgba(255, 255, 255, 0.72), rgba(232, 242, 255, 0.58));
   padding: 24px 32px;
-  border: 1px solid rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(24px) saturate(135%);
-  box-shadow: 0 16px 44px rgba(39, 62, 94, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  -webkit-backdrop-filter: blur(28px) saturate(160%);
+  backdrop-filter: blur(28px) saturate(160%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 30px 70px -20px rgba(10, 70, 160, 0.28),
+    0 8px 20px rgba(39, 62, 94, 0.06);
+}
+
+.login-version-badge {
+  background: var(--mq-brand-gradient);
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow:
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.45),
+    0 6px 14px -4px rgba(10, 108, 255, 0.5);
 }
 .login-glass-card h2 {
   font-size: 26px;
@@ -374,13 +487,33 @@ const handleDemoLogin = async (account: (typeof demoAccounts)[number]) => {
   line-height: normal;
 }
 .login-glass-card :deep(button[type='submit']) {
-  height: 44px;
-  border-radius: 8px;
-  background: #007aff;
-  font-size: 14px;
+  height: 46px;
+  border-radius: 12px;
+  background: var(--mq-brand-gradient);
+  font-size: 15px;
   font-weight: 500;
+  letter-spacing: 0.04em;
   transform: none;
-  box-shadow: 0 3px 8px rgba(0, 122, 255, 0.18);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 10px 24px -8px rgba(10, 108, 255, 0.55);
+  transition:
+    box-shadow 180ms ease,
+    transform 180ms ease,
+    filter 180ms ease;
+}
+.login-glass-card :deep(button[type='submit']:hover:not(:disabled)) {
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 14px 30px -8px rgba(10, 108, 255, 0.65);
+  filter: brightness(1.04);
+}
+.login-glass-card :deep(input:not([type='checkbox']):focus),
+.login-glass-card :deep(select:focus) {
+  border-color: #6aa9ff;
+  background: #ffffff;
+  box-shadow: 0 0 0 4px rgba(10, 108, 255, 0.12);
 }
 @media (max-width: 1023px) {
   .login-intro {
@@ -426,6 +559,115 @@ const handleDemoLogin = async (account: (typeof demoAccounts)[number]) => {
 @media (max-width: 1023px) {
   .login-intro {
     padding-top: 16px;
+  }
+}
+/* ---------- 演示账号一键登录 ---------- */
+.login-demo-list {
+  display: grid;
+  gap: 8px;
+}
+
+.login-demo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid rgba(10, 108, 255, 0.14);
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.78), rgba(234, 243, 255, 0.7));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  color: #1d2b3f;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.login-demo:hover:not(:disabled) {
+  border-color: rgba(10, 108, 255, 0.4);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 8px 20px -10px rgba(10, 108, 255, 0.45);
+  transform: translateY(-1px);
+}
+
+.login-demo:focus-visible {
+  outline: 2px solid #0a6cff;
+  outline-offset: 2px;
+}
+
+.login-demo:disabled {
+  cursor: progress;
+  opacity: 0.8;
+}
+
+.login-demo__icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: rgba(10, 108, 255, 0.1);
+  color: #0a6cff;
+}
+
+.login-demo__copy {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.login-demo__title {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.login-demo__meta {
+  overflow: hidden;
+  color: #6b7a90;
+  font-size: 12px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.login-demo__go {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(10, 108, 255, 0.1);
+  color: #0a6cff;
+  font-size: 13px;
+  font-weight: 500;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
+}
+
+.login-demo:hover:not(:disabled) .login-demo__go {
+  background: #0a6cff;
+  color: #ffffff;
+}
+
+.login-demo__spin {
+  animation: login-demo-spin 0.9s linear infinite;
+}
+
+@keyframes login-demo-spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 </style>

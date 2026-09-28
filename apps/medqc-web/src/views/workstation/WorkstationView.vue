@@ -77,7 +77,7 @@
           <span class="panel-title">病历列表</span>
           <a-badge
             :count="filteredRecords.length"
-            :number-style="{ backgroundColor: '#2b6cf6' }"
+            :number-style="{ backgroundColor: '#0a6cff' }"
           />
         </div>
         <div class="record-list">
@@ -717,7 +717,7 @@ onMounted(() => {
 }
 
 .divider:hover {
-  background: #2b6cf6;
+  background: #0a6cff;
 }
 
 /* 病历列表 */
@@ -744,7 +744,7 @@ onMounted(() => {
 .record-item.active {
   background: #e6f4ff;
   border-color: #91caff;
-  box-shadow: 0 1px 4px rgba(43, 108, 246, 0.15);
+  box-shadow: 0 1px 4px rgba(10, 108, 255, 0.15);
 }
 
 .record-item-header {
@@ -798,7 +798,7 @@ onMounted(() => {
   font-size: 16px;
   margin-bottom: 12px;
   padding-bottom: 8px;
-  border-bottom: 2px solid #2b6cf6;
+  border-bottom: 2px solid #0a6cff;
 }
 
 .doc-text :deep(b) {
@@ -985,7 +985,7 @@ onMounted(() => {
 .icd-code {
   font-family: 'Cascadia Code', 'Consolas', monospace;
   font-weight: 600;
-  color: #2b6cf6;
+  color: #0a6cff;
   white-space: nowrap;
   font-size: 12px;
 }

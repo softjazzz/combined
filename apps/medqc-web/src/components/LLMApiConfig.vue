@@ -4,7 +4,7 @@
       <div class="ds-split__aside">
         <div class="ds-aside-card">
           <div class="ds-aside-eyebrow">
-            MODEL GOVERNANCE
+            模型与参数
           </div>
           <h2 class="ds-section-title">
             模型配置治理

@@ -1,18 +1,41 @@
 <template>
-  <div class="custom-rule-workspace">
-    <section class="ops-overview">
-      <div class="ops-title-wrap">
-        <p class="ops-eyebrow">
-          规则工作台
-        </p>
-        <h1 class="ops-title">
+  <div class="custom-rule-workspace mq-page">
+    <!-- 页头：眉标 + 大标题；右侧切换执行 / 设计视图 -->
+    <header class="crw-head mq-page-head">
+      <div class="mq-page-head__copy">
+        <span class="mq-page-eyebrow">规则 · 自定义质控点</span>
+        <h1 class="mq-page-title">
           自定义规则工作台
         </h1>
-        <p class="ops-subtitle">
-          单页完成建规、Prompt
-          编辑、病历筛选、批量执行与结果复盘。默认走任务化执行，支持单规则与多规则串行。
+        <p class="crw-head__desc">
+          {{ workspaceModeTip }}
         </p>
       </div>
+      <div
+        class="mq-segmented"
+        role="group"
+        aria-label="工作台视图"
+      >
+        <button
+          type="button"
+          class="mq-segmented__item"
+          :class="{ 'is-active': workspaceMode === 'batch' }"
+          @click="workspaceMode = 'batch'"
+        >
+          批量执行视图
+        </button>
+        <button
+          type="button"
+          class="mq-segmented__item"
+          :class="{ 'is-active': workspaceMode === 'design' }"
+          @click="workspaceMode = 'design'"
+        >
+          规则设计视图
+        </button>
+      </div>
+    </header>
+
+    <section class="ops-overview mq-card">
       <div class="ops-kpis">
         <article class="kpi-card">
           <span class="kpi-label">草稿总数</span>
@@ -35,24 +58,6 @@
       </div>
     </section>
 
-    <section class="view-mode-shell">
-      <a-radio-group
-        v-model:value="workspaceMode"
-        size="small"
-        button-style="solid"
-      >
-        <a-radio-button value="batch">
-          批量执行视图
-        </a-radio-button>
-        <a-radio-button value="design">
-          规则设计视图
-        </a-radio-button>
-      </a-radio-group>
-      <p class="view-mode-tip">
-        {{ workspaceModeTip }}
-      </p>
-    </section>
-
     <section
       v-if="workspaceMode === 'batch'"
       class="step-nav-shell"
@@ -61,8 +66,10 @@
         <button
           v-for="item in stepItems"
           :key="item.anchor"
+          type="button"
           class="step-pill"
-          :class="`step-pill--${item.status}`"
+          :class="[`step-pill--${item.status}`, { 'is-active': activeStep === item.anchor }]"
+          :aria-pressed="activeStep === item.anchor"
           @click="scrollToStep(item.anchor)"
         >
           <span class="step-index">{{ item.index }}</span>
@@ -73,6 +80,7 @@
     </section>
 
     <section
+      v-show="isStepVisible('step-rules')"
       id="step-rules"
       class="workspace-grid"
     >
@@ -210,6 +218,7 @@
     </section>
 
     <section
+      v-show="isStepVisible('step-create')"
       id="step-create"
       class="workspace-panel step-inline-panel"
     >
@@ -353,6 +362,7 @@
 
     <section
       v-if="workspaceMode === 'batch'"
+      v-show="isStepVisible('step-prompt')"
       id="step-prompt"
       class="workspace-panel"
     >
@@ -632,6 +642,7 @@
 
     <section
       v-if="workspaceMode === 'batch'"
+      v-show="isStepVisible('step-records')"
       id="step-records"
       class="workspace-panel"
     >
@@ -2194,10 +2205,16 @@ const stepItems = computed(() => {
   return steps
 })
 
+// 批量执行视图按步骤分屏：步骤导航切换当前步骤；设计视图仍全部展示
+const activeStep = ref('step-rules')
+
+function isStepVisible(anchor: string): boolean {
+  return workspaceMode.value !== 'batch' || activeStep.value === anchor
+}
+
 function scrollToStep(anchor: string) {
-  const target = document.getElementById(anchor)
-  if (!target) return
-  target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  activeStep.value = anchor
+  if (typeof window !== 'undefined') window.scrollTo?.({ top: 0, behavior: 'smooth' })
 }
 
 const ruleResultRows = computed(() => {
@@ -2282,8 +2299,8 @@ onBeforeUnmount(() => {
   --ink-main: rgba(29, 29, 31, 0.78);
   --ink-muted: rgba(29, 29, 31, 0.6);
   --ink-subtle: rgba(29, 29, 31, 0.38);
-  --brand-blue: #2b6cf6;
-  --brand-soft: rgba(43, 108, 246, 0.08);
+  --brand-blue: #0a6cff;
+  --brand-soft: rgba(10, 108, 255, 0.08);
   --surface-muted: rgba(0, 0, 0, 0.03);
   min-height: 100%;
   padding: 14px;
@@ -2423,8 +2440,8 @@ onBeforeUnmount(() => {
 }
 
 .step-pill:hover {
-  border-color: rgba(43, 108, 246, 0.18);
-  background: rgba(43, 108, 246, 0.06);
+  border-color: rgba(10, 108, 255, 0.18);
+  background: rgba(10, 108, 255, 0.06);
   transform: translateY(-1px);
 }
 
@@ -2456,8 +2473,8 @@ onBeforeUnmount(() => {
 }
 
 .step-pill--ready {
-  border-color: rgba(43, 108, 246, 0.22);
-  background: rgba(43, 108, 246, 0.08);
+  border-color: rgba(10, 108, 255, 0.22);
+  background: rgba(10, 108, 255, 0.08);
   color: var(--brand-blue);
 }
 
@@ -2574,16 +2591,16 @@ onBeforeUnmount(() => {
   min-width: 88px;
   padding: 4px 10px;
   border-radius: 10px;
-  border: 1px solid rgba(43, 108, 246, 0.16);
-  background: rgba(43, 108, 246, 0.08);
+  border: 1px solid rgba(10, 108, 255, 0.16);
+  background: rgba(10, 108, 255, 0.08);
   color: var(--brand-blue);
   font-size: 12px;
   font-weight: 600;
 }
 
 .rule-code-pill.active {
-  border-color: rgba(43, 108, 246, 0.28);
-  box-shadow: 0 0 0 3px rgba(43, 108, 246, 0.08);
+  border-color: rgba(10, 108, 255, 0.28);
+  box-shadow: 0 0 0 3px rgba(10, 108, 255, 0.08);
 }
 
 .draft-title {
@@ -2609,7 +2626,7 @@ onBeforeUnmount(() => {
 }
 
 :deep(.draft-row-active > td) {
-  background: rgba(43, 108, 246, 0.06) !important;
+  background: rgba(10, 108, 255, 0.06) !important;
 }
 
 .form-grid {
@@ -2827,7 +2844,7 @@ onBeforeUnmount(() => {
 }
 
 .job-status--queued {
-  background: rgba(43, 108, 246, 0.08);
+  background: rgba(10, 108, 255, 0.08);
   color: var(--brand-blue);
 }
 
@@ -2952,13 +2969,13 @@ onBeforeUnmount(() => {
 :deep(.ant-btn-primary) {
   background: var(--brand-blue);
   border-color: var(--brand-blue);
-  box-shadow: 0 4px 12px rgba(43, 108, 246, 0.18);
+  box-shadow: 0 4px 12px rgba(10, 108, 255, 0.18);
 }
 
 :deep(.ant-btn-primary:not(:disabled):hover) {
   background: #0057b8;
   border-color: #0057b8;
-  box-shadow: 0 6px 16px rgba(43, 108, 246, 0.22);
+  box-shadow: 0 6px 16px rgba(10, 108, 255, 0.22);
   transform: translateY(-1px);
 }
 
@@ -2966,8 +2983,8 @@ onBeforeUnmount(() => {
 :deep(.ant-btn-text:not(:disabled):hover),
 :deep(.ant-btn-link:not(:disabled):hover) {
   color: var(--brand-blue);
-  border-color: rgba(43, 108, 246, 0.22);
-  background: rgba(43, 108, 246, 0.06);
+  border-color: rgba(10, 108, 255, 0.22);
+  background: rgba(10, 108, 255, 0.06);
 }
 
 :deep(.ant-radio-button-wrapper) {
@@ -2979,7 +2996,7 @@ onBeforeUnmount(() => {
 :deep(.ant-radio-button-wrapper-checked:not(.ant-radio-button-wrapper-disabled)) {
   color: var(--brand-blue);
   border-color: var(--brand-blue);
-  background: rgba(43, 108, 246, 0.08);
+  background: rgba(10, 108, 255, 0.08);
   box-shadow: none;
 }
 
@@ -3000,7 +3017,7 @@ onBeforeUnmount(() => {
 :deep(.ant-input-number:hover),
 :deep(.ant-picker:hover),
 :deep(.ant-select:not(.ant-select-disabled):hover .ant-select-selector) {
-  border-color: rgba(43, 108, 246, 0.22) !important;
+  border-color: rgba(10, 108, 255, 0.22) !important;
 }
 
 :deep(.ant-input:focus),
@@ -3008,7 +3025,7 @@ onBeforeUnmount(() => {
 :deep(.ant-picker-focused),
 :deep(.ant-select-focused .ant-select-selector) {
   border-color: var(--brand-blue) !important;
-  box-shadow: 0 0 0 3px rgba(43, 108, 246, 0.08) !important;
+  box-shadow: 0 0 0 3px rgba(10, 108, 255, 0.08) !important;
 }
 
 :deep(.ant-tag) {
@@ -3071,5 +3088,163 @@ onBeforeUnmount(() => {
   .design-meta-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+/* ===== v7.1 液态玻璃覆盖：本页变量改指 --mq-* Token，面板统一玻璃卡 ===== */
+.custom-rule-workspace {
+  --workstation-font: var(--mq-font-family);
+  --panel-bg: var(--mq-glass-bg);
+  --panel-border: var(--mq-glass-border);
+  --panel-shadow: var(--mq-glass-shadow);
+  --panel-hover-shadow: var(--mq-glass-shadow);
+  --ink-strong: var(--mq-text-primary);
+  --ink-main: var(--mq-text-secondary);
+  --ink-muted: var(--mq-text-tertiary);
+  --ink-subtle: var(--mq-text-disabled);
+  --brand-blue: var(--mq-brand-600);
+  --brand-soft: var(--mq-info-bg);
+  --surface-muted: rgba(118, 128, 160, 0.07);
+  padding: 8px 28px 32px 22px;
+  background: transparent;
+}
+
+.crw-head__desc {
+  margin: 2px 0 0;
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-13);
+}
+
+.ops-overview {
+  display: block;
+  padding: 0;
+  overflow: hidden;
+}
+
+.ops-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  width: 100%;
+}
+
+.kpi-card {
+  padding: 18px 22px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.kpi-card + .kpi-card {
+  border-left: 0.5px solid var(--mq-border);
+}
+
+.kpi-label {
+  color: var(--mq-text-primary);
+  font-size: var(--mq-font-14);
+  font-weight: 600;
+}
+
+.kpi-value {
+  color: var(--mq-text-primary);
+  font-family: var(--mq-font-display);
+  font-size: 36px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  white-space: nowrap;
+}
+
+/* 步骤导航：分段切换外观，当前步骤白色浮起 */
+.step-nav-shell {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.step-nav {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 13px;
+  background: var(--mq-bg-muted);
+}
+
+.step-pill {
+  min-height: 34px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.step-pill.is-active {
+  background: #ffffff;
+  box-shadow: 0 2px 6px rgba(10, 55, 115, 0.12);
+}
+
+.step-pill.is-active .step-label {
+  color: var(--mq-text-primary);
+  font-weight: 600;
+}
+
+.workspace-panel {
+  border-radius: var(--mq-radius-card);
+  -webkit-backdrop-filter: var(--mq-glass-blur);
+  backdrop-filter: var(--mq-glass-blur);
+}
+
+.custom-rule-workspace :deep(.ant-btn) {
+  border-radius: 999px;
+}
+
+.custom-rule-workspace :deep(.ant-table-thead > tr > th) {
+  background: rgba(118, 128, 160, 0.06);
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+  font-weight: 600;
+}
+
+.custom-rule-workspace :deep(.ant-table),
+.custom-rule-workspace :deep(.ant-table-container),
+.custom-rule-workspace :deep(.ant-table-tbody > tr > td) {
+  background: transparent;
+}
+
+@media (max-width: 1100px) {
+  .ops-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+/* 字重收敛：Windows 下中文走微软雅黑，600 及以上都会渲染成粗黑体。
+   KPI 条与统计分析页保持一致不动；只保留面板标题、当前步骤用 600，其余标签、行名、按钮、标签一律 500 */
+.step-index {
+  font-weight: 600;
+}
+
+.step-label,
+.panel-eyebrow,
+.rule-code-pill,
+.draft-title,
+.prompt-summary-title,
+.design-meta-value,
+.check-point-title,
+.batch-rule-name {
+  font-weight: 500;
+}
+
+.step-pill.is-active .step-label {
+  font-weight: 600;
+}
+
+.custom-rule-workspace :deep(.ant-btn),
+.custom-rule-workspace :deep(.ant-tag) {
+  font-weight: 500;
+}
+
+.custom-rule-workspace :deep(.ant-table-thead > tr > th) {
+  font-weight: 500 !important;
 }
 </style>

@@ -3,7 +3,7 @@
     <section class="command-header">
       <div class="command-top">
         <div class="title-block">
-          <span class="eyebrow">DRG / DIP PRE-GROUPING</span>
+          <span class="eyebrow">分析 · DRG/DIP</span>
           <h1>事前分析</h1>
           <p>只读完成病历字段抽取、编码核对与模拟入组，不写正式结果。</p>
         </div>
@@ -1109,7 +1109,7 @@ onMounted(() => {
   --text: #1d1d1f;
   --text-muted: rgba(29, 29, 31, 0.6);
   --text-subtle: rgba(29, 29, 31, 0.38);
-  --accent: #2b6cf6;
+  --accent: #0a6cff;
   --accent-soft: #eaf2ff;
   --ok: #15803d;
   --bad: #dc2626;
@@ -1167,7 +1167,7 @@ onMounted(() => {
 .eyebrow {
   display: block;
   margin-bottom: 3px;
-  color: #2b6cf6;
+  color: #0a6cff;
   font-size: 11px;
   line-height: 16px;
   font-weight: 780;
@@ -1213,10 +1213,10 @@ onMounted(() => {
 }
 
 .btn-primary {
-  border-color: #2b6cf6;
-  background: #2b6cf6;
+  border-color: #0a6cff;
+  background: #0a6cff;
   color: #fff;
-  box-shadow: 0 5px 14px rgba(43, 108, 246, 0.16);
+  box-shadow: 0 5px 14px rgba(10, 108, 255, 0.16);
 }
 
 .readonly-badge,
@@ -1260,7 +1260,7 @@ onMounted(() => {
 
 .segmented-item.active {
   background: #eaf2ff;
-  color: #2b6cf6;
+  color: #0a6cff;
 }
 
 .segmented-item:disabled {
@@ -1270,7 +1270,7 @@ onMounted(() => {
 
 .segmented-item.active:disabled {
   background: #dbeafe;
-  color: #2b6cf6;
+  color: #0a6cff;
 }
 
 .segmented--compact .segmented-item {
@@ -1361,7 +1361,7 @@ onMounted(() => {
 }
 
 .current-case strong {
-  color: #2b6cf6;
+  color: #0a6cff;
   font-size: 14px;
   line-height: 1.1;
   font-weight: 790;
@@ -1423,7 +1423,7 @@ onMounted(() => {
 }
 
 .metric-inline--active strong {
-  color: #2b6cf6;
+  color: #0a6cff;
 }
 
 .analysis-layout {
@@ -1621,7 +1621,7 @@ onMounted(() => {
 .safety-note span {
   width: fit-content;
   border-radius: 999px;
-  background: #2b6cf6;
+  background: #0a6cff;
   color: #fff;
   padding: 3px 9px;
   font-size: 12px;
@@ -1880,7 +1880,7 @@ onMounted(() => {
 }
 
 .simulation-version__head strong {
-  color: #2b6cf6;
+  color: #0a6cff;
   font-size: 14px;
   font-weight: 700;
 }
@@ -1909,7 +1909,7 @@ onMounted(() => {
   border-radius: 999px;
   border: 1px solid #dbeafe;
   background: #eff6ff;
-  color: #0057b8;
+  color: #0a5fd6;
   display: inline-flex;
   align-items: center;
   padding: 0 8px;
@@ -2001,7 +2001,7 @@ onMounted(() => {
 .correction-panel__head em {
   border-radius: 999px;
   background: #eaf2ff;
-  color: #2b6cf6;
+  color: #0a6cff;
   font-size: 12px;
   font-style: normal;
   font-weight: 700;
@@ -2045,7 +2045,7 @@ onMounted(() => {
   border: 1px solid #bfdbfe;
   border-radius: 999px;
   background: #eff6ff;
-  color: #0057b8;
+  color: #0a5fd6;
   font-size: 12px;
   font-weight: 760;
   padding: 3px 8px;
@@ -2225,8 +2225,8 @@ onMounted(() => {
   --text: #1d1d1f;
   --text-muted: rgba(29, 29, 31, 0.6);
   --text-subtle: rgba(29, 29, 31, 0.38);
-  --accent: #2b6cf6;
-  --accent-soft: rgba(43, 108, 246, 0.08);
+  --accent: #0a6cff;
+  --accent-soft: rgba(10, 108, 255, 0.08);
   --ok: #10b981;
   --bad: #ff453a;
   background: var(--bg);
@@ -2340,7 +2340,7 @@ onMounted(() => {
   border-color: var(--accent);
   background: var(--accent);
   color: #fff;
-  box-shadow: 0 2px 8px rgba(43, 108, 246, 0.16);
+  box-shadow: 0 2px 8px rgba(10, 108, 255, 0.16);
 }
 
 .readonly-badge {
@@ -2365,7 +2365,7 @@ onMounted(() => {
 .correction-panel__head em,
 .correction-candidates span,
 .tag-item {
-  border-color: rgba(43, 108, 246, 0.18);
+  border-color: rgba(10, 108, 255, 0.18);
   background: var(--accent-soft);
 }
 
@@ -2433,7 +2433,7 @@ onMounted(() => {
 }
 
 .case-pill.active {
-  border-color: rgba(43, 108, 246, 0.26);
+  border-color: rgba(10, 108, 255, 0.26);
   background: var(--accent-soft);
   box-shadow: none;
 }
@@ -2464,7 +2464,7 @@ onMounted(() => {
 }
 
 .metric-inline--active {
-  background: rgba(43, 108, 246, 0.06);
+  background: rgba(10, 108, 255, 0.06);
 }
 
 .metric-inline strong {
@@ -2512,8 +2512,8 @@ onMounted(() => {
 }
 
 .medical-text-editor:focus {
-  border-color: rgba(43, 108, 246, 0.32);
-  box-shadow: 0 0 0 3px rgba(43, 108, 246, 0.08);
+  border-color: rgba(10, 108, 255, 0.32);
+  box-shadow: 0 0 0 3px rgba(10, 108, 255, 0.08);
 }
 
 .medical-text {

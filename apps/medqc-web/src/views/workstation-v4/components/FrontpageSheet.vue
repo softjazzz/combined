@@ -1389,7 +1389,7 @@ function closeDiagnosisEvidence() {
   align-items: center;
   justify-content: center;
   background: rgba(37, 99, 235, 0.15);
-  color: #0057b8;
+  color: #0a5fd6;
   font-size: 13px;
   line-height: 1;
   margin-top: 1px;
@@ -1416,7 +1416,7 @@ function closeDiagnosisEvidence() {
   align-items: center;
   border: 1px solid #93c5fd;
   background: #fff;
-  color: #0057b8;
+  color: #0a5fd6;
   border-radius: 999px;
   padding: 2px 10px;
   font-size: 11px;
@@ -1437,7 +1437,7 @@ function closeDiagnosisEvidence() {
   width: 40%;
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, #2b6cf6 0%, #38bdf8 100%);
+  background: linear-gradient(90deg, #0a6cff 0%, #38bdf8 100%);
   animation: fpPendingSlide 1.4s ease-in-out infinite;
 }
 
@@ -1557,9 +1557,9 @@ u.fill {
   align-items: center;
   padding: 1px 8px;
   border-radius: 999px;
-  border: 1px solid rgba(43, 108, 246, 0.22);
+  border: 1px solid rgba(10, 108, 255, 0.22);
   background: #eff6ff;
-  color: #0057b8;
+  color: #0a5fd6;
   font-size: 11px;
   line-height: 1.2;
   white-space: nowrap;
@@ -1572,10 +1572,10 @@ u.fill {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  border: 1px solid rgba(43, 108, 246, 0.22);
+  border: 1px solid rgba(10, 108, 255, 0.22);
   border-radius: 999px;
   background: #eff6ff;
-  color: #0057b8;
+  color: #0a5fd6;
   font-size: 11px;
   line-height: 1;
   padding: 2px 7px;
@@ -1679,7 +1679,7 @@ u.fill {
 .is-low {
   border-color: #93c5fd !important;
   background: #eff6ff !important;
-  color: #0057b8 !important;
+  color: #0a5fd6 !important;
 }
 
 .fp-evidence-list {
@@ -1715,7 +1715,7 @@ u.fill {
 
 .fp-evidence-btn-tag {
   font-size: 12px;
-  color: #2b6cf6;
+  color: #0a6cff;
   border: 1px solid #93c5fd;
   border-radius: 999px;
   padding: 1px 7px;
@@ -2112,9 +2112,9 @@ u.fill {
 .fp-inline-evidence,
 .fp-evidence-btn-tag,
 .evidence-recommend-label {
-  border-color: rgba(43, 108, 246, 0.18);
-  background: rgba(43, 108, 246, 0.08);
-  color: #2b6cf6;
+  border-color: rgba(10, 108, 255, 0.18);
+  background: rgba(10, 108, 255, 0.08);
+  color: #0a6cff;
 }
 
 .fp-pending__title,

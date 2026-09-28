@@ -1436,8 +1436,8 @@ watch(
 }
 
 .result-tab.is-active {
-  border-color: #2b6cf6;
-  background: #2b6cf6;
+  border-color: #0a6cff;
+  background: #0a6cff;
   color: #fff;
   box-shadow: none;
 }
@@ -1517,7 +1517,7 @@ watch(
 }
 
 .result-document-group-toggle:hover {
-  color: #2b6cf6;
+  color: #0a6cff;
 }
 
 .result-document-group-toggle > span {
@@ -1564,7 +1564,7 @@ watch(
   left: 0;
   width: 3px;
   border-radius: 0 3px 3px 0;
-  background: #2b6cf6;
+  background: #0a6cff;
   content: '';
   opacity: 0;
   transform: scaleY(0.35);
@@ -1581,7 +1581,7 @@ watch(
 }
 
 .result-row:hover {
-  border-color: rgba(43, 108, 246, 0.22);
+  border-color: rgba(10, 108, 255, 0.22);
   background: #fff;
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
 }
@@ -1673,9 +1673,9 @@ watch(
 }
 
 .result-row-debug-copy:hover:not(:disabled) {
-  border-color: rgba(43, 108, 246, 0.28);
+  border-color: rgba(10, 108, 255, 0.28);
   background: #f5f9ff;
-  color: #2b6cf6;
+  color: #0a6cff;
 }
 
 .result-row-debug-copy:disabled {
@@ -1732,8 +1732,8 @@ watch(
 }
 
 .result-row.is-expanded .toggle-mark {
-  background: rgba(43, 108, 246, 0.08);
-  color: #2b6cf6;
+  background: rgba(10, 108, 255, 0.08);
+  color: #0a6cff;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1849,7 +1849,7 @@ watch(
   padding: 4px 0;
   border: 0;
   background: transparent;
-  color: #2b6cf6;
+  color: #0a6cff;
   font-size: 12px;
   line-height: 18px;
   font-weight: 400;
@@ -2030,7 +2030,7 @@ watch(
 }
 
 .detail-disclosure summary:hover {
-  color: #2b6cf6;
+  color: #0a6cff;
 }
 
 .detail-disclosure[open] summary {
@@ -2254,7 +2254,7 @@ watch(
   padding: 8px 9px;
   border: 1px solid rgba(0, 0, 0, 0.07);
   border-radius: 8px;
-  background: rgba(43, 108, 246, 0.025);
+  background: rgba(10, 108, 255, 0.025);
 }
 
 .copy-pair-head {
@@ -2284,7 +2284,7 @@ watch(
 
 .copy-pair-documents svg {
   flex: 0 0 auto;
-  color: rgba(43, 108, 246, 0.55);
+  color: rgba(10, 108, 255, 0.55);
 }
 
 .copy-pair-hint {
@@ -2296,7 +2296,7 @@ watch(
 
 .medical-analysis summary {
   cursor: pointer;
-  color: #2b6cf6;
+  color: #0a6cff;
   list-style-position: inside;
 }
 
@@ -2328,7 +2328,7 @@ watch(
 }
 
 .evidence-link:hover {
-  background: rgba(43, 108, 246, 0.035);
+  background: rgba(10, 108, 255, 0.035);
 }
 
 .evidence-content {
@@ -2369,7 +2369,7 @@ watch(
   flex: 0 0 auto;
   align-items: center;
   gap: 3px;
-  color: #2b6cf6;
+  color: #0a6cff;
   font-size: 11px;
   font-weight: 600;
   line-height: 17px;
@@ -2434,5 +2434,93 @@ watch(
     font-size: 12px;
     line-height: 19px;
   }
+}
+
+/* ===== v7.1 液态玻璃覆盖：透明底、分段式筛选、Token 语义色、结果卡圆角 ===== */
+.single-record-result-panel {
+  background: transparent;
+  color: var(--mq-text-primary);
+  font-family: var(--mq-font-family);
+}
+.result-toolbar {
+  border-bottom: 0.5px solid var(--mq-border);
+  background: rgba(255, 255, 255, 0.72);
+  -webkit-backdrop-filter: var(--mq-glass-blur);
+  backdrop-filter: var(--mq-glass-blur);
+}
+.toolbar-summary strong {
+  font-family: var(--mq-font-display);
+  font-weight: 700;
+}
+.result-tabs {
+  gap: 2px;
+  margin: 4px 12px 10px;
+  padding: 3px;
+  border-radius: 13px;
+  background: var(--mq-bg-muted);
+}
+.result-tab {
+  min-height: 30px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-12);
+}
+.result-tab:hover {
+  background: rgba(255, 255, 255, 0.6);
+  color: var(--mq-text-primary);
+}
+.result-tab.is-active {
+  border-color: transparent;
+  background: #ffffff;
+  box-shadow: 0 2px 6px rgba(10, 55, 115, 0.12);
+  color: var(--mq-text-primary);
+  font-weight: 600;
+}
+.result-tab.is-active b {
+  background: var(--mq-info-bg);
+  color: var(--mq-info-text);
+}
+.status-pill {
+  background: var(--mq-neutral-bg);
+  color: var(--mq-text-secondary);
+}
+.is-danger.status-pill {
+  background: var(--mq-danger-bg);
+  color: var(--mq-danger-text);
+}
+.is-danger.status-pill::before {
+  background: var(--mq-danger-icon);
+}
+.is-warning.status-pill {
+  background: var(--mq-warning-bg);
+  color: var(--mq-warning-text);
+}
+.is-warning.status-pill::before {
+  background: var(--mq-warning-icon);
+}
+.is-success.status-pill {
+  background: var(--mq-success-bg);
+  color: var(--mq-success-text);
+}
+.is-success.status-pill::before {
+  background: var(--mq-success-icon);
+}
+.result-row {
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 2px 10px rgba(10, 55, 115, 0.06);
+}
+.result-row.is-active,
+.result-row[aria-current='true'] {
+  border-color: var(--mq-brand-600);
+  box-shadow: 0 0 0 3px rgba(10, 108, 255, 0.1);
+}
+.result-row :deep(.ant-btn),
+.result-card-actions button {
+  border-radius: 999px;
 }
 </style>

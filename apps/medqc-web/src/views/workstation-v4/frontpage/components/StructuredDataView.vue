@@ -16,7 +16,7 @@
           style="animation-duration: 2s"
         />
         <div
-          class="absolute inset-8 bg-[#2b6cf6] rounded-full flex items-center justify-center shadow-[0_8px_24px_rgba(43,108,246,0.22)] z-10 w-[100px] h-[100px] mx-auto border-[4px] border-white/40"
+          class="absolute inset-8 bg-[#0a6cff] rounded-full flex items-center justify-center shadow-[0_8px_24px_rgba(10, 108, 255,0.22)] z-10 w-[100px] h-[100px] mx-auto border-[4px] border-white/40"
         >
           <RobotOutlined class="text-white text-4xl opacity-90" />
         </div>
@@ -37,7 +37,7 @@
       >
         <div class="flex justify-between text-xs font-bold text-slate-500 mb-3">
           <span>{{ extractionProgress.currentModule ? '正在解析...' : '正在初始化...' }}</span>
-          <span class="font-mono text-[#2b6cf6]">{{ extractionProgress.percent }}%</span>
+          <span class="font-mono text-[#0a6cff]">{{ extractionProgress.percent }}%</span>
         </div>
 
         <!-- 进度轨道 -->
@@ -46,7 +46,7 @@
         >
           <!-- 当前进度 -->
           <div
-            class="absolute left-0 top-0 h-full bg-[#2b6cf6] rounded-full transition-all duration-700 ease-out z-0"
+            class="absolute left-0 top-0 h-full bg-[#0a6cff] rounded-full transition-all duration-700 ease-out z-0"
             :style="{ width: extractionProgress.percent + '%' }"
           />
           <div class="absolute w-full flex justify-between z-10 -ml-1.5 pr-3">
@@ -135,15 +135,15 @@
       class="bg-blue-50 px-4 py-3 rounded-lg border border-blue-100"
     >
       <div class="flex items-center justify-between mb-2">
-        <div class="flex items-center gap-2 text-sm text-[#2b6cf6]">
+        <div class="flex items-center gap-2 text-sm text-[#0a6cff]">
           <a-spin size="small" />
           <span>正在提取：{{ extractionProgress?.currentModule || '首页字段' }}</span>
         </div>
-        <span class="text-xs font-medium text-[#2b6cf6]">{{ extractionProgress?.percent || 0 }}%</span>
+        <span class="text-xs font-medium text-[#0a6cff]">{{ extractionProgress?.percent || 0 }}%</span>
       </div>
       <div class="w-full h-1.5 bg-[#d7e8ff] rounded-full overflow-hidden">
         <div
-          class="h-full bg-[#2b6cf6] rounded-full transition-all duration-500 ease-out"
+          class="h-full bg-[#0a6cff] rounded-full transition-all duration-500 ease-out"
           :style="{ width: (extractionProgress?.percent || 0) + '%' }"
         />
       </div>
@@ -496,7 +496,7 @@
               class="hover:bg-slate-50"
             >
               <td class="px-4 py-3">
-                <span class="bg-blue-100 text-[#0057b8] px-1.5 py-0.5 rounded text-xs font-medium">主要</span>
+                <span class="bg-blue-100 text-[#0a5fd6] px-1.5 py-0.5 rounded text-xs font-medium">主要</span>
               </td>
               <td class="px-4 py-3">
                 <input
@@ -1079,7 +1079,7 @@
           <div class="text-xs text-slate-500">
             医保支付
           </div>
-          <div class="text-xl font-bold text-[#2b6cf6]">
+          <div class="text-xl font-bold text-[#0a6cff]">
             ¥ {{ formatNumber(frontpage.costs?.total_cost - frontpage.costs?.self_paid) }}
           </div>
         </div>
@@ -1095,7 +1095,7 @@
           <span
             class="w-6 h-6 rounded-full bg-[#eaf2ff] border border-[#cfe2ff] flex items-center justify-center"
           >
-            <span class="text-[#2b6cf6] text-xs">📊</span>
+            <span class="text-[#0a6cff] text-xs">📊</span>
           </span>
           字段提取汇总
         </h4>
@@ -1135,7 +1135,7 @@
           </div>
         </div>
         <div class="bg-slate-50 rounded-lg px-3 py-2 text-center">
-          <div class="text-lg font-bold text-[#2b6cf6]">
+          <div class="text-lg font-bold text-[#0a6cff]">
             {{ extractionStats.total }}
           </div>
           <div class="text-xs text-slate-500">
@@ -1645,26 +1645,26 @@ const extractionStats = computed(() => {
 
 .structured-data-view :deep(.text-blue-500),
 .structured-data-view :deep(.text-blue-400),
-.structured-data-view :deep(.text-\[\#2b6cf6\]) {
-  color: #2b6cf6 !important;
+.structured-data-view :deep(.text-\[\#0a6cff\]) {
+  color: #0a6cff !important;
 }
 
 .structured-data-view :deep(.bg-blue-500),
 .structured-data-view :deep(.hover\:bg-blue-600:hover),
-.structured-data-view :deep(.bg-\[\#2b6cf6\]) {
-  background: #2b6cf6 !important;
+.structured-data-view :deep(.bg-\[\#0a6cff\]) {
+  background: #0a6cff !important;
 }
 
 .structured-data-view :deep(.from-blue-400),
-.structured-data-view :deep(.from-\[\#2b6cf6\]),
+.structured-data-view :deep(.from-\[\#0a6cff\]),
 .structured-data-view :deep(.from-purple-500) {
-  --tw-gradient-from: #2b6cf6 var(--tw-gradient-from-position) !important;
-  --tw-gradient-to: rgba(43, 108, 246, 0) var(--tw-gradient-to-position) !important;
+  --tw-gradient-from: #0a6cff var(--tw-gradient-from-position) !important;
+  --tw-gradient-to: rgba(10, 108, 255, 0) var(--tw-gradient-to-position) !important;
 }
 
 .structured-data-view :deep(.to-indigo-500),
 .structured-data-view :deep(.to-indigo-600) {
-  --tw-gradient-to: #0057b8 var(--tw-gradient-to-position) !important;
+  --tw-gradient-to: #0a5fd6 var(--tw-gradient-to-position) !important;
 }
 
 .structured-data-view :deep(.rounded-xl),
@@ -1689,6 +1689,6 @@ const extractionStats = computed(() => {
 
 .structured-data-view button:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 5px 14px rgba(43, 108, 246, 0.18);
+  box-shadow: 0 5px 14px rgba(10, 108, 255, 0.18);
 }
 </style>

@@ -518,7 +518,7 @@ button {
   background: #edf5ff;
 }
 .status-tabs select:focus-visible {
-  outline: 2px solid #2b6cf6;
+  outline: 2px solid #0a6cff;
   outline-offset: 2px;
 }
 .status-tabs > span {
@@ -606,7 +606,7 @@ button {
   padding: 0;
   border: 0;
   background: transparent;
-  color: #2b6cf6;
+  color: #0a6cff;
   font-size: 12px;
 }
 .document-label {
@@ -623,7 +623,7 @@ button {
 summary {
   cursor: pointer;
   font-size: 12px;
-  color: #2b6cf6;
+  color: #0a6cff;
 }
 .full-text {
   white-space: pre-wrap;
@@ -635,7 +635,7 @@ summary {
   gap: 4px;
   margin-top: 10px;
   padding: 0;
-  color: #2b6cf6;
+  color: #0a6cff;
   border: 0;
   background: transparent;
   font-size: 13px;
@@ -686,7 +686,7 @@ summary {
 }
 button:focus-visible,
 summary:focus-visible {
-  outline: 2px solid #2b6cf6;
+  outline: 2px solid #0a6cff;
   outline-offset: 3px;
 }
 </style>
@@ -716,7 +716,7 @@ summary:focus-visible {
   font-size: 13px;
 }
 :global(.preview-status-popup .ant-select-item-option-selected) {
-  color: #007aff;
+  color: #0a6cff;
   background: #eaf3ff;
   font-weight: 500;
 }

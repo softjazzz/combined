@@ -88,7 +88,7 @@ defineProps<{
 .exam-event-summary span {
   padding: 2px 7px;
   border-radius: 999px;
-  background: rgba(0, 122, 255, 0.07);
+  background: rgba(10, 108, 255, 0.07);
   color: #366b9b;
   font-size: 12px;
   font-weight: 400;

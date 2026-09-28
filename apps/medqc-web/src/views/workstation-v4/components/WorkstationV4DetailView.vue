@@ -81,7 +81,7 @@
         </div>
       </div>
 
-      <div class="flex min-h-0 flex-1 overflow-hidden">
+      <div class="detail-workspace-body flex min-h-0 flex-1 overflow-hidden">
         <DetailSidebar
           v-if="detailMainTab === 'records'"
           :record="selectedRecord"
@@ -220,12 +220,12 @@ function tabClass(tab: DetailMainTab) {
 }
 
 .detail-workspace-tab--active {
-  border-color: rgba(43, 108, 246, 0.22);
-  background: rgba(43, 108, 246, 0.08);
+  border-color: rgba(10, 108, 255, 0.22);
+  background: rgba(10, 108, 255, 0.08);
   color: #1d1d1f;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.95),
-    0 3px 12px rgba(43, 108, 246, 0.08);
+    0 3px 12px rgba(10, 108, 255, 0.08);
 }
 
 .detail-workspace-tab__icon {
@@ -236,13 +236,13 @@ function tabClass(tab: DetailMainTab) {
   align-items: center;
   justify-content: center;
   border-radius: 11px;
-  background: rgba(43, 108, 246, 0.08);
-  color: #2b6cf6;
+  background: rgba(10, 108, 255, 0.08);
+  color: #0a6cff;
   font-size: 17px;
 }
 
 .detail-workspace-tab--active .detail-workspace-tab__icon {
-  background: #2b6cf6;
+  background: #0a6cff;
   color: #fff;
 }
 
@@ -278,8 +278,8 @@ function tabClass(tab: DetailMainTab) {
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  background: rgba(43, 108, 246, 0.1);
-  color: #2b6cf6;
+  background: rgba(10, 108, 255, 0.1);
+  color: #0a6cff;
   font-size: 10px;
   font-weight: 650;
   padding: 0 5px;
@@ -290,10 +290,10 @@ function tabClass(tab: DetailMainTab) {
   min-width: 132px;
   align-items: center;
   gap: 8px;
-  border: 1px solid rgba(43, 108, 246, 0.16);
+  border: 1px solid rgba(10, 108, 255, 0.16);
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.68);
-  color: #2b6cf6;
+  color: #0a6cff;
   cursor: pointer;
   padding: 7px 12px;
   text-align: left;
@@ -304,9 +304,9 @@ function tabClass(tab: DetailMainTab) {
 }
 
 .frontpage-profile-entry:hover {
-  border-color: rgba(43, 108, 246, 0.24);
+  border-color: rgba(10, 108, 255, 0.24);
   background: rgba(255, 255, 255, 0.94);
-  box-shadow: 0 3px 12px rgba(43, 108, 246, 0.1);
+  box-shadow: 0 3px 12px rgba(10, 108, 255, 0.1);
 }
 
 .frontpage-profile-entry__icon {
@@ -317,7 +317,7 @@ function tabClass(tab: DetailMainTab) {
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  background: #2b6cf6;
+  background: #0a6cff;
   color: #ffffff;
   font-size: 14px;
 }
@@ -329,7 +329,7 @@ function tabClass(tab: DetailMainTab) {
 }
 
 .frontpage-profile-entry__main span {
-  color: #2b6cf6;
+  color: #0a6cff;
   font-size: 13px;
   font-weight: 650;
   line-height: 16px;
@@ -340,5 +340,85 @@ function tabClass(tab: DetailMainTab) {
   font-size: 11px;
   font-weight: 500;
   line-height: 14px;
+}
+
+/* ===== v7.1 液态玻璃覆盖：详情外壳透明铺满，页头/页签/侧栏/正文统一玻璃卡 ===== */
+.detail-workspace-shell {
+  min-height: 100vh;
+  gap: 14px;
+  padding: 8px 28px 24px 22px;
+  background: transparent !important;
+  color: var(--mq-text-primary);
+  font-family: var(--mq-font-family);
+}
+
+/* 页头：去掉白色横条 */
+.detail-workspace-shell :deep(.detail-apple-header) {
+  padding: 4px 4px 0;
+  border: 0 !important;
+  background: transparent !important;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: none !important;
+}
+
+.detail-workspace-shell :deep(.detail-apple-header h1) {
+  font-family: var(--mq-font-display);
+  font-size: 28px !important;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+/* 页签：分段式胶囊 */
+.detail-workspace-tabs-bar {
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+.detail-workspace-tab {
+  min-width: 0;
+  padding: 8px 14px;
+  border-color: var(--mq-glass-border);
+  border-radius: 16px;
+}
+
+.detail-workspace-tab--idle {
+  background: var(--mq-glass-bg);
+  color: var(--mq-text-secondary);
+}
+
+.detail-workspace-tab--active {
+  border-color: transparent;
+  background: #ffffff;
+  box-shadow: 0 4px 14px rgba(10, 55, 115, 0.12);
+}
+
+.detail-workspace-tab--active .detail-workspace-tab__icon {
+  background: var(--mq-brand-gradient);
+}
+
+/* 侧栏与正文：两张玻璃卡 */
+.detail-workspace-body {
+  gap: 16px;
+  margin-top: 14px;
+  overflow: visible !important;
+}
+
+.detail-workspace-shell :deep(.detail-apple-sidebar),
+.detail-workspace-main {
+  overflow: hidden;
+  border: 1px solid var(--mq-glass-border) !important;
+  border-radius: var(--mq-radius-card);
+  background: var(--mq-glass-bg) !important;
+  -webkit-backdrop-filter: var(--mq-glass-blur);
+  backdrop-filter: var(--mq-glass-blur);
+  box-shadow: var(--mq-glass-shadow);
+}
+
+.detail-workspace-main :deep(.bg-white) {
+  background: rgba(255, 255, 255, 0.7) !important;
 }
 </style>

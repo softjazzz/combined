@@ -1,434 +1,572 @@
 <template>
-  <div class="sync-config-page workstation-shell min-h-screen flex flex-col">
-    <div
-      class="flex-1 p-5 lg:p-6 overflow-hidden flex flex-col min-h-0 container mx-auto max-w-[1680px] w-full"
-    >
-      <a-tabs
-        v-model:active-key="activeTab"
-        class="system-config-tabs flex-1 min-h-0"
+  <main class="mq-page system-config-page">
+    <!-- 页头：眉标 + 大标题；右侧分段切换替代原 Tabs，页签可见性规则不变 -->
+    <header class="mq-page-head">
+      <div class="mq-page-head__copy">
+        <span class="mq-page-eyebrow">数据与配置 · 系统配置</span>
+        <h1 class="mq-page-title">
+          系统配置
+        </h1>
+      </div>
+      <div
+        class="mq-segmented"
+        role="tablist"
+        aria-label="系统配置分类"
+        data-testid="system-config-tabs"
+        :data-active-key="activeTab"
       >
-        <a-tab-pane
-          key="dataSync"
-          tab="数据同步配置"
+        <button
+          v-for="tab in configTabs"
+          :key="tab.key"
+          type="button"
+          role="tab"
+          class="mq-segmented__item"
+          :class="{ 'is-active': activeTab === tab.key }"
+          :aria-selected="activeTab === tab.key"
+          :data-testid="tab.testId"
+          @click="activeTab = tab.key"
         >
-          <div class="system-config-tab-shell flex flex-col h-full min-h-0 gap-4">
-            <section class="system-config-hero">
-              <div class="system-config-hero__main">
-                <div class="system-config-breadcrumb">
-                  系统配置 / 数据同步设置
-                </div>
-                <h2>病历数据同步设置</h2>
-                <p>
-                  {{ pageSubtitle }}
-                </p>
-              </div>
-            </section>
+          {{ tab.label }}
+        </button>
+      </div>
+    </header>
 
-            <section class="sync-guided-workbench">
-              <div class="sync-guided-step">
-                <div class="sync-guided-step__heading">
-                  <span>1</span>
-                  <div>
-                    <h3>选择病历类型</h3>
-                    <p>先明确本次要同步在院病历、已出院病历，或两者一起同步。</p>
-                  </div>
-                </div>
-                <div class="sync-scene-cards">
-                  <button
-                    v-for="option in syncSceneOptions"
-                    :key="option.value"
-                    type="button"
-                    class="sync-scene-card"
-                    :class="{ 'is-active': state.policyForm.scope === option.value }"
-                    :data-testid="`sync-scene-${option.value}`"
-                    :disabled="isReadonly"
-                    @click="selectSyncScene(option.value)"
-                  >
+    <template v-if="activeTab === 'dataSync'">
+      <section
+        class="mq-card mq-card--padded sync-card"
+        aria-labelledby="sync-card-title"
+      >
+        <div class="mq-card__head">
+          <div>
+            <h2
+              id="sync-card-title"
+              class="mq-card__title"
+            >
+              病历数据同步设置
+            </h2>
+            <p class="mq-card__desc">
+              {{ pageSubtitle }}
+            </p>
+          </div>
+          <span
+            v-if="lastSyncLabel"
+            class="mq-status"
+            :class="lastSyncStatusClass"
+          >{{ lastSyncLabel }}</span>
+        </div>
+
+        <ol class="sync-steps">
+          <!-- 第 1 步：病历类型 -->
+          <li class="sync-step is-done">
+            <span
+              class="sync-step__marker"
+              aria-hidden="true"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="3"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              ><path d="m5 12.5 4.5 4.5L19 7.5" /></svg>
+            </span>
+            <div class="sync-step__body">
+              <div class="sync-step__heading">
+                <h3>选择病历类型</h3>
+                <p>先明确本次要同步在院病历、已出院病历，或两者一起同步。</p>
+              </div>
+              <div class="sync-scene-cards">
+                <button
+                  v-for="option in syncSceneOptions"
+                  :key="option.value"
+                  type="button"
+                  class="sync-scene-card"
+                  :class="{ 'is-active': state.policyForm.scope === option.value }"
+                  :data-testid="`sync-scene-${option.value}`"
+                  :disabled="isReadonly"
+                  @click="selectSyncScene(option.value)"
+                >
+                  <span
+                    class="sync-scene-card__radio"
+                    aria-hidden="true"
+                  />
+                  <span class="sync-scene-card__copy">
                     <strong>{{ option.label }}</strong>
                     <span>{{ option.description }}</span>
-                  </button>
+                  </span>
+                </button>
+              </div>
+              <p class="sync-step__note">
+                按机构、患者和就诊三坐标匹配病历；mr_no 不是同步条件。
+              </p>
+            </div>
+          </li>
+
+          <!-- 第 2 步：同步范围 -->
+          <li
+            class="sync-step"
+            :class="{ 'is-done': Boolean(state.preflightResult) }"
+          >
+            <span
+              class="sync-step__marker"
+              aria-hidden="true"
+            >
+              <svg
+                v-if="state.preflightResult"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="3"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              ><path d="m5 12.5 4.5 4.5L19 7.5" /></svg>
+              <template v-else>2</template>
+            </span>
+            <div class="sync-step__body">
+              <div class="sync-step__heading">
+                <h3>设置同步范围</h3>
+                <p>{{ syncScopeDescription }}</p>
+              </div>
+              <div class="sync-scope-fields">
+                <label class="mq-field sync-scope-fields__department">
+                  <span class="mq-field__label">抽取科室</span>
+                  <a-select
+                    v-model:value="state.policyForm.target_departments"
+                    mode="multiple"
+                    :disabled="isReadonly"
+                    :loading="state.departmentsLoading"
+                    :options="policyDepartmentOptions"
+                    :max-tag-count="3"
+                    style="width: 100%"
+                    placeholder="默认全院"
+                    @change="handlePolicyDepartmentChange"
+                  />
+                </label>
+                <div
+                  v-if="state.policyForm.scope === 'running'"
+                  class="mq-field sync-scope-fields__now"
+                >
+                  <span class="mq-field__label">当前在院统计时间</span>
+                  <strong class="sync-scope-fields__now-value">以执行检查时的医院当前时间为准</strong>
                 </div>
-                <p class="sync-identity-note">
-                  按机构、患者和就诊三坐标匹配病历；mr_no 不是同步条件。
+                <label
+                  v-else
+                  class="mq-field"
+                >
+                  <span class="mq-field__label">{{ syncStartDateLabel }}</span>
+                  <a-date-picker
+                    v-model:value="state.policyForm.start_date"
+                    :locale="datePickerZhCN"
+                    format="YYYY年MM月DD日"
+                    value-format="YYYY-MM-DD"
+                    :disabled="isReadonly"
+                    style="width: 100%"
+                    :placeholder="syncStartDatePlaceholder"
+                  />
+                </label>
+                <label
+                  v-if="state.policyForm.scope !== 'running'"
+                  class="mq-field"
+                >
+                  <span class="mq-field__label">{{ syncEndDateLabel }}</span>
+                  <a-date-picker
+                    v-model:value="state.policyForm.end_date"
+                    :locale="datePickerZhCN"
+                    format="YYYY年MM月DD日"
+                    value-format="YYYY-MM-DD"
+                    :disabled="isReadonly"
+                    style="width: 100%"
+                    :placeholder="syncEndDatePlaceholder"
+                  />
+                </label>
+                <a-button
+                  class="sync-scope-fields__action"
+                  data-testid="check-record-scope-action"
+                  :loading="state.isPreflighting"
+                  :disabled="isReadonly"
+                  @click="handleRunPreflight"
+                >
+                  检查病历范围
+                </a-button>
+              </div>
+            </div>
+          </li>
+
+          <!-- 第 3 步：检查结果与执行 -->
+          <li class="sync-step sync-step--last">
+            <span
+              class="sync-step__marker"
+              aria-hidden="true"
+            >3</span>
+            <div class="sync-step__body">
+              <div class="sync-step__heading">
+                <h3>检查结果</h3>
+                <p>{{ preflightSummary }}</p>
+              </div>
+
+              <div
+                v-if="state.preflightResult"
+                class="mq-soft sync-result"
+              >
+                <div class="sync-result__metric sync-result__metric--primary">
+                  <span>{{ candidateProgressLabel }}</span>
+                  <strong>{{ Number(state.preflightResult.estimated_impact || 0).toLocaleString() }}<small>份病历</small></strong>
+                </div>
+                <div class="sync-result__metric">
+                  <span>病历类型</span>
+                  <strong>{{ syncScopeDisplayLabel }}</strong>
+                  <em>{{ syncAnchorLabel }}</em>
+                </div>
+                <div class="sync-result__metric">
+                  <span>同步范围</span>
+                  <strong>{{ policyDepartmentLabel }}</strong>
+                  <em>{{ policyDateRangeLabel }}</em>
+                </div>
+                <span
+                  class="mq-status sync-result__status"
+                  :class="preflightStatusClass"
+                >
+                  {{ hasPreflightPass ? '可同步' : '需处理' }}
+                </span>
+              </div>
+              <div
+                v-else
+                class="sync-result-empty"
+              >
+                <span
+                  class="mq-status"
+                >待检查</span>
+                选择范围后点击“检查病历范围”，这里会显示候选病历数和阻断原因。
+              </div>
+
+              <div
+                v-if="
+                  state.preflightResult?.blockers?.length ||
+                    state.preflightResult?.warnings?.length
+                "
+                class="sync-messages"
+              >
+                <p
+                  v-for="item in state.preflightResult.blockers || []"
+                  :key="`blocker-${item}`"
+                  class="sync-message is-blocker"
+                >
+                  <MqIcon
+                    name="tech_error"
+                    :size="18"
+                    color="#E0263A"
+                  />
+                  {{ item }}
+                </p>
+                <p
+                  v-for="item in state.preflightResult.warnings || []"
+                  :key="`warning-${item}`"
+                  class="sync-message is-warning"
+                >
+                  <MqIcon
+                    name="tech_error"
+                    :size="18"
+                    color="#C25E00"
+                  />
+                  {{ item }}
                 </p>
               </div>
 
-              <div class="sync-guided-divider" />
-
-              <div class="sync-guided-step">
-                <div class="sync-guided-step__heading">
-                  <span>2</span>
+              <div
+                v-if="showSyncProgress"
+                class="mq-inset sync-progress"
+              >
+                <div class="sync-progress__head">
                   <div>
-                    <h3>设置同步范围</h3>
-                    <p>{{ syncScopeDescription }}</p>
+                    <h4>同步执行进度</h4>
+                    <p>{{ syncProgressStageText }}</p>
+                  </div>
+                  <span
+                    class="mq-status"
+                    :class="syncProgressStatusClass"
+                    data-testid="sync-progress-status"
+                  >
+                    {{ state.isSyncing ? '执行中' : syncProgressStatusText }}
+                  </span>
+                </div>
+
+                <a-progress
+                  :percent="syncProgressPercent"
+                  :show-info="false"
+                  :stroke-color="syncProgressStrokeColor"
+                />
+
+                <div class="sync-progress__grid">
+                  <div>
+                    <span>本次候选</span>
+                    <strong>{{ syncProgressCandidateCount.toLocaleString() }} 份</strong>
+                  </div>
+                  <div>
+                    <span>可进入病历池</span>
+                    <strong>{{ syncProgressVisitCompleted }} / {{ syncProgressVisitTotal }} 份</strong>
+                  </div>
+                  <div>
+                    <span>资料类别进度</span>
+                    <strong>{{ syncProgressTablesDone }} / {{ syncProgressTablesTotal }}</strong>
+                  </div>
+                  <div v-if="syncBundleProgressVisible">
+                    <span>病历资料视图</span>
+                    <strong>{{ syncBundleProgressCompleted }} /
+                      {{ syncBundleProgressTotal }} 份</strong>
                   </div>
                 </div>
-                <div class="sync-filter-row">
-                  <label class="system-config-scope-field sync-filter-row__department">
-                    <span>抽取科室</span>
-                    <a-select
-                      v-model:value="state.policyForm.target_departments"
-                      mode="multiple"
-                      :disabled="isReadonly"
-                      :loading="state.departmentsLoading"
-                      :options="policyDepartmentOptions"
-                      :max-tag-count="3"
-                      style="width: 100%"
-                      placeholder="默认全院"
-                      @change="handlePolicyDepartmentChange"
-                    />
-                  </label>
-                  <div
-                    v-if="state.policyForm.scope === 'running'"
-                    class="system-config-scope-field sync-current-time"
-                  >
-                    <span>当前在院统计时间</span>
-                    <strong>以执行检查时的医院当前时间为准</strong>
+
+                <details
+                  v-if="isSyncAdvancedUser"
+                  class="sync-progress__details"
+                  data-testid="sync-technical-details"
+                >
+                  <summary>同步详情</summary>
+                  <div class="sync-progress__meta">
+                    <span>当前资料表：{{ syncProgressCurrentTable }}</span>
+                    <span>剩余资料表：{{ syncProgressTablesRemaining }}</span>
+                    <span>已拉取行数：{{ syncProgressRowsPulled.toLocaleString() }}</span>
+                    <span>已写入行数：{{ syncProgressRowsUpserted.toLocaleString() }}</span>
+                    <span>预计剩余：{{ syncProgressEtaText }}</span>
                   </div>
-                  <label
-                    v-else
-                    class="system-config-scope-field sync-filter-row__date"
+                </details>
+                <p class="sync-progress__note">
+                  病历主记录写入后即可进入病历池；病程、医嘱、检查检验等资料会继续同步并统一刷新。
+                  <span v-if="syncProgressVisitWarning">{{ syncProgressVisitWarning }}</span>
+                </p>
+              </div>
+
+              <div
+                v-if="hasPreflightPass"
+                class="sync-actions"
+              >
+                <label
+                  class="sync-actions__confirm"
+                  :class="{ 'is-disabled': isReadonly }"
+                >
+                  <input
+                    v-model="syncScopeConfirmed"
+                    type="checkbox"
+                    :disabled="isReadonly"
                   >
-                    <span>{{ syncStartDateLabel }}</span>
-                    <a-date-picker
-                      v-model:value="state.policyForm.start_date"
-                      :locale="datePickerZhCN"
-                      format="YYYY年MM月DD日"
-                      value-format="YYYY-MM-DD"
-                      :disabled="isReadonly"
-                      style="width: 100%"
-                      :placeholder="syncStartDatePlaceholder"
-                    />
-                  </label>
-                  <label
-                    v-if="state.policyForm.scope !== 'running'"
-                    class="system-config-scope-field sync-filter-row__date"
-                  >
-                    <span>{{ syncEndDateLabel }}</span>
-                    <a-date-picker
-                      v-model:value="state.policyForm.end_date"
-                      :locale="datePickerZhCN"
-                      format="YYYY年MM月DD日"
-                      value-format="YYYY-MM-DD"
-                      :disabled="isReadonly"
-                      style="width: 100%"
-                      :placeholder="syncEndDatePlaceholder"
-                    />
-                  </label>
+                  <span>我已确认同步
+                    {{ Number(state.preflightResult?.estimated_impact || 0).toLocaleString() }}
+                    份病历</span>
+                </label>
+                <a-tooltip :title="syncScopeConfirmed ? '正式写入本地 CDM' : '请先确认同步范围'">
                   <a-button
                     type="primary"
-                    class="wv4-overview-btn wv4-overview-btn--primary sync-check-action"
-                    data-testid="check-record-scope-action"
-                    :loading="state.isPreflighting"
-                    :disabled="isReadonly"
-                    @click="handleRunPreflight"
+                    size="large"
+                    :loading="state.isSyncing"
+                    :disabled="isReadonly || !syncScopeConfirmed"
+                    @click="handleExecuteSync"
                   >
-                    检查病历范围
+                    {{ executeActionLabel }}
                   </a-button>
-                </div>
+                </a-tooltip>
               </div>
+            </div>
+          </li>
+        </ol>
+      </section>
 
-              <div class="sync-guided-divider" />
-
-              <div class="sync-guided-step sync-result-step">
-                <div class="sync-guided-step__heading sync-guided-step__heading--result">
-                  <span>3</span>
-                  <div>
-                    <h3>检查结果</h3>
-                    <p>{{ preflightSummary }}</p>
-                  </div>
-                  <a-tag
-                    :class="[
-                      'wv4-status-chip',
-                      hasPreflightPass ? 'wv4-status-chip--success' : 'wv4-status-chip--neutral',
-                    ]"
-                  >
-                    {{ hasPreflightPass ? '可同步' : state.preflightResult ? '需处理' : '待检查' }}
-                  </a-tag>
-                </div>
-
-                <div
-                  v-if="state.preflightResult"
-                  class="sync-result-summary"
-                >
-                  <div class="sync-result-metric sync-result-metric--primary">
-                    <span>{{ candidateProgressLabel }}</span>
-                    <strong>{{
-                      Number(state.preflightResult.estimated_impact || 0).toLocaleString()
-                    }}</strong>
-                    <em>份病历</em>
-                  </div>
-                  <div class="sync-result-metric">
-                    <span>病历类型</span>
-                    <strong>{{ syncScopeDisplayLabel }}</strong>
-                    <em>{{ syncAnchorLabel }}</em>
-                  </div>
-                  <div class="sync-result-metric">
-                    <span>同步范围</span>
-                    <strong>{{ policyDepartmentLabel }}</strong>
-                    <em>{{ policyDateRangeLabel }}</em>
-                  </div>
-                </div>
-                <div
-                  v-else
-                  class="sync-result-empty"
-                >
-                  选择范围后点击“检查病历范围”，这里会显示候选病历数和阻断原因。
-                </div>
-
-                <div
-                  v-if="
-                    state.preflightResult?.blockers?.length ||
-                      state.preflightResult?.warnings?.length
-                  "
-                  class="sync-result-messages"
-                >
-                  <p
-                    v-for="item in state.preflightResult.blockers || []"
-                    :key="`blocker-${item}`"
-                    class="is-blocker"
-                  >
-                    {{ item }}
-                  </p>
-                  <p
-                    v-for="item in state.preflightResult.warnings || []"
-                    :key="`warning-${item}`"
-                    class="is-warning"
-                  >
-                    {{ item }}
-                  </p>
-                </div>
-
-                <div
-                  v-if="showSyncProgress"
-                  class="system-config-sync-progress"
-                >
-                  <div class="system-config-sync-progress__head">
-                    <div>
-                      <h4>同步执行进度</h4>
-                      <p>{{ syncProgressStageText }}</p>
-                    </div>
-                    <a-tag
-                      class="wv4-status-chip"
-                      :class="syncProgressStatusClass"
-                    >
-                      {{ state.isSyncing ? '执行中' : syncProgressStatusText }}
-                    </a-tag>
-                  </div>
-
-                  <a-progress
-                    :percent="syncProgressPercent"
-                    :show-info="false"
-                    :stroke-color="syncProgressStrokeColor"
-                  />
-
-                  <div class="system-config-progress-grid">
-                    <div>
-                      <span>本次候选</span>
-                      <strong>{{ syncProgressCandidateCount.toLocaleString() }} 份</strong>
-                    </div>
-                    <div>
-                      <span>可进入病历池</span>
-                      <strong>{{ syncProgressVisitCompleted }} / {{ syncProgressVisitTotal }} 份</strong>
-                    </div>
-                    <div>
-                      <span>资料类别进度</span>
-                      <strong>{{ syncProgressTablesDone }} / {{ syncProgressTablesTotal }}</strong>
-                    </div>
-                    <div v-if="syncBundleProgressVisible">
-                      <span>病历资料视图</span>
-                      <strong>{{ syncBundleProgressCompleted }} /
-                        {{ syncBundleProgressTotal }} 份</strong>
-                    </div>
-                  </div>
-
-                  <details
-                    v-if="isSyncAdvancedUser"
-                    class="system-config-progress-details"
-                    data-testid="sync-technical-details"
-                  >
-                    <summary>同步详情</summary>
-                    <div class="system-config-progress-meta">
-                      <span>当前资料表：{{ syncProgressCurrentTable }}</span>
-                      <span>剩余资料表：{{ syncProgressTablesRemaining }}</span>
-                      <span>已拉取行数：{{ syncProgressRowsPulled.toLocaleString() }}</span>
-                      <span>已写入行数：{{ syncProgressRowsUpserted.toLocaleString() }}</span>
-                      <span>预计剩余：{{ syncProgressEtaText }}</span>
-                    </div>
-                  </details>
-                  <p class="system-config-progress-note">
-                    病历主记录写入后即可进入病历池；病程、医嘱、检查检验等资料会继续同步并统一刷新。
-                    <span v-if="syncProgressVisitWarning">{{ syncProgressVisitWarning }}</span>
-                  </p>
-                </div>
-                <div
-                  v-if="hasPreflightPass"
-                  class="sync-result-actions"
-                >
-                  <label
-                    class="system-config-confirm-check"
-                    :class="{ 'is-disabled': isReadonly }"
-                  >
-                    <input
-                      v-model="syncScopeConfirmed"
-                      type="checkbox"
-                      :disabled="isReadonly"
-                    >
-                    <span>我已确认同步
-                      {{ Number(state.preflightResult?.estimated_impact || 0).toLocaleString() }}
-                      份病历</span>
-                  </label>
-                  <a-tooltip :title="syncScopeConfirmed ? '正式写入本地 CDM' : '请先确认同步范围'">
-                    <a-button
-                      type="primary"
-                      class="wv4-overview-btn wv4-overview-btn--primary"
-                      :loading="state.isSyncing"
-                      :disabled="isReadonly || !syncScopeConfirmed"
-                      @click="handleExecuteSync"
-                    >
-                      {{ executeActionLabel }}
-                    </a-button>
-                  </a-tooltip>
-                </div>
-              </div>
-            </section>
-
-            <section
-              v-if="isSyncAdvancedUser"
-              class="system-config-advanced-section"
+      <!-- 高级设置：仅实施/同步管理员可见 -->
+      <section
+        v-if="isSyncAdvancedUser"
+        class="mq-card mq-card--padded sync-advanced"
+        aria-labelledby="sync-advanced-title"
+      >
+        <div class="mq-card__head">
+          <div>
+            <h2
+              id="sync-advanced-title"
+              class="mq-card__title"
             >
-              <div class="system-config-advanced-head">
-                <div>
-                  <h3>高级设置与运行记录</h3>
-                  <p>仅供实施/管理员排障使用。这里包含连接配置、表组预检、源库诊断和运行日志。</p>
-                </div>
-                <div class="system-config-advanced-actions">
-                  <a-button
-                    class="wv4-overview-btn wv4-overview-btn--ghost"
-                    :loading="state.isTestingAll"
-                    :disabled="isReadonly"
-                    @click="handleTestAllConnections"
+              高级设置与运行记录
+            </h2>
+            <p class="mq-card__desc">
+              仅供实施/管理员排障使用。这里包含连接配置、表组预检、源库诊断和运行日志。
+            </p>
+          </div>
+          <div class="sync-advanced__actions">
+            <a-button
+              :loading="state.isTestingAll"
+              :disabled="isReadonly"
+              @click="handleTestAllConnections"
+            >
+              检测数据连接
+            </a-button>
+            <a-button
+              data-testid="advanced-sync-toggle"
+              @click="detailWorkbenchOpen = !detailWorkbenchOpen"
+            >
+              {{ detailWorkbenchOpen ? '收起' : '展开高级设置' }}
+            </a-button>
+          </div>
+        </div>
+
+        <template v-if="detailWorkbenchOpen">
+          <div class="sync-preflight">
+            <div class="sync-preflight__head">
+              <h4>clinical_data 表组预检</h4>
+              <span>
+                可执行 {{ preflightPassCount }} / {{ preflightTableRows.length }}，阻断
+                {{ preflightBlockerCount }} 项，警告 {{ preflightWarningCount }} 项。
+              </span>
+            </div>
+            <div
+              v-if="preflightTableRows.length === 0"
+              class="mq-inset sync-preflight__empty"
+            >
+              尚未生成表组预检结果。
+            </div>
+            <div
+              v-else
+              class="mq-inset sync-preflight__table"
+            >
+              <table class="mq-table">
+                <thead>
+                  <tr>
+                    <th>本地表</th>
+                    <th>源表</th>
+                    <th>日期字段</th>
+                    <th>状态</th>
+                    <th>说明</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="row in preflightTableRows"
+                    :key="row.table"
                   >
-                    检测数据连接
-                  </a-button>
-                  <a-button
-                    class="wv4-overview-btn wv4-overview-btn--ghost"
-                    data-testid="advanced-sync-toggle"
-                    @click="detailWorkbenchOpen = !detailWorkbenchOpen"
-                  >
-                    {{ detailWorkbenchOpen ? '收起' : '展开高级设置' }}
-                  </a-button>
-                </div>
-              </div>
-
-              <div
-                v-if="detailWorkbenchOpen"
-                class="system-config-preflight-table system-config-advanced-preflight"
-              >
-                <div class="system-config-section-head system-config-section-head--compact">
-                  <div>
-                    <h4>clinical_data 表组预检</h4>
-                    <p>
-                      可执行 {{ preflightPassCount }} / {{ preflightTableRows.length }}，阻断
-                      {{ preflightBlockerCount }} 项，警告 {{ preflightWarningCount }} 项。
-                    </p>
-                  </div>
-                </div>
-                <div
-                  v-if="preflightTableRows.length === 0"
-                  class="system-config-empty-table"
-                >
-                  尚未生成表组预检结果。
-                </div>
-                <table v-else>
-                  <thead>
-                    <tr>
-                      <th>本地表</th>
-                      <th>源表</th>
-                      <th>日期字段</th>
-                      <th>状态</th>
-                      <th>说明</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr
-                      v-for="row in preflightTableRows"
-                      :key="row.table"
-                    >
-                      <td>{{ row.table }}</td>
-                      <td>{{ row.source }}</td>
-                      <td>{{ row.dateField }}</td>
-                      <td>
-                        <span :class="row.executable ? 'is-pass' : 'is-blocked'">
-                          {{ row.executable ? '可执行' : '阻断' }}
-                        </span>
-                      </td>
-                      <td>{{ row.blockers || '字段与连接检查通过' }}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-
-              <div
-                v-if="detailWorkbenchOpen"
-                class="system-config-detail-workbench"
-              >
-                <article
-                  class="system-config-execution-card system-config-execution-card--connection"
-                >
-                  <ConnectionStudio />
-                </article>
-
-                <article class="system-config-execution-card system-config-execution-card--runs">
-                  <SyncRunPanel />
-                </article>
-              </div>
-            </section>
+                    <td class="mq-mono">
+                      {{ row.table }}
+                    </td>
+                    <td class="mq-mono">
+                      {{ row.source }}
+                    </td>
+                    <td class="mq-mono">
+                      {{ row.dateField }}
+                    </td>
+                    <td>
+                      <span
+                        class="mq-status"
+                        :class="row.executable ? 'mq-status--success' : 'mq-status--danger'"
+                      >
+                        {{ row.executable ? '可执行' : '阻断' }}
+                      </span>
+                    </td>
+                    <td :class="{ 'is-blocked': !row.executable }">
+                      {{ row.blockers || '字段与连接检查通过' }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
-        </a-tab-pane>
 
-        <a-tab-pane
-          v-if="canManageFrontpageConfig"
-          key="frontpageExtraction"
-          tab="首页抽取设置"
-          data-testid="frontpage-config-tab"
-        >
-          <div class="system-config-tab-shell system-config-tab-shell--panel">
-            <FrontpageExtractionSettingsPanel />
+          <div class="sync-advanced__panels">
+            <article class="mq-inset sync-advanced__panel">
+              <ConnectionStudio />
+            </article>
+            <article class="mq-inset sync-advanced__panel">
+              <SyncRunPanel />
+            </article>
           </div>
-        </a-tab-pane>
+        </template>
+      </section>
+    </template>
 
-        <a-tab-pane
-          v-if="canViewLlmObservability"
-          key="llmObservability"
-          tab="模型性能"
-          data-testid="llm-observability-tab"
-        >
-          <div class="system-config-tab-shell system-config-tab-shell--panel">
-            <LlmPerformanceObservabilityPanel />
-          </div>
-        </a-tab-pane>
+    <section
+      v-else-if="activeTab === 'frontpageExtraction' && canManageFrontpageConfig"
+      class="mq-card system-config-panel"
+    >
+      <FrontpageExtractionSettingsPanel />
+    </section>
 
-        <a-tab-pane
-          v-if="canManageLlmConfig"
-          key="llmConfig"
-          tab="模型配置"
-          data-testid="llm-config-tab"
-        >
-          <div class="system-config-tab-shell system-config-tab-shell--panel">
-            <LLMApiConfig />
+    <section
+      v-else-if="activeTab === 'llmObservability' && canViewLlmObservability"
+      class="mq-card system-config-panel"
+    >
+      <LlmPerformanceObservabilityPanel />
+    </section>
+
+    <section
+      v-else-if="activeTab === 'llmConfig' && canManageLlmConfig"
+      class="mq-card system-config-panel"
+    >
+      <LLMApiConfig />
+    </section>
+
+    <!-- 执行前确认：页面内弹窗，跟随工作台主题（静态 Modal.confirm 拿不到嵌套主题） -->
+    <a-modal
+      :open="executeConfirm.open"
+      :footer="null"
+      :width="460"
+      centered
+      wrap-class-name="mq-modal"
+      :mask-style="{ backdropFilter: 'blur(6px)' }"
+      @cancel="closeExecuteConfirm(false)"
+    >
+      <div
+        v-if="executeConfirm.open"
+        class="sync-confirm"
+      >
+        <MqIconTile
+          name="sync"
+          tone="brand"
+          :size="52"
+          :icon-size="28"
+        />
+        <div class="sync-confirm__copy">
+          <h2>{{ isDemoSyncUser ? '开始同步' : '执行前确认' }}</h2>
+          <p>
+            找到可同步病历 <b>{{ executeConfirm.count.toLocaleString() }}</b> 份，是否继续？
+          </p>
+        </div>
+        <dl class="mq-soft sync-confirm__summary">
+          <div>
+            <dt>病历类型</dt>
+            <dd>{{ syncScopeDisplayLabel }}</dd>
           </div>
-        </a-tab-pane>
-      </a-tabs>
-    </div>
-  </div>
+          <div>
+            <dt>同步范围</dt>
+            <dd>{{ policyDepartmentLabel }}</dd>
+          </div>
+          <div>
+            <dt>{{ state.policyForm.scope === 'running' ? '统计时间' : '出院日期' }}</dt>
+            <dd>{{ policyDateRangeLabel }}</dd>
+          </div>
+        </dl>
+        <div class="sync-confirm__actions">
+          <button
+            type="button"
+            class="mq-btn"
+            @click="closeExecuteConfirm(false)"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            class="mq-btn mq-btn--primary"
+            data-testid="execute-confirm-ok"
+            @click="closeExecuteConfirm(true)"
+          >
+            {{ isDemoSyncUser ? '开始同步' : '继续执行' }}
+          </button>
+        </div>
+      </div>
+    </a-modal>
+  </main>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import datePickerZhCN from 'ant-design-vue/es/date-picker/locale/zh_CN'
+import dayjs from 'dayjs'
 import 'dayjs/locale/zh-cn'
 import type { SyncTableValidationItem } from '@/api/sync'
 import ConnectionStudio from './components/sync-console/ConnectionStudio.vue'
@@ -438,6 +576,8 @@ import LLMApiConfig from '@/components/LLMApiConfig.vue'
 import { useDataSync } from './composables/useDataSync'
 import LlmPerformanceObservabilityPanel from './components/system-config/LlmPerformanceObservabilityPanel.vue'
 import { useAuthStore } from '@/stores/auth'
+import MqIcon from '@/components/icons/MqIcon.vue'
+import MqIconTile from '@/components/icons/MqIconTile.vue'
 
 const activeTab = ref('dataSync')
 const syncInitialized = ref(false)
@@ -480,6 +620,52 @@ const canViewLlmObservability = computed(
     canManageLlmConfig.value &&
     (authStore.user?.is_demo_account !== true || isObservabilityOperationalAdmin.value),
 )
+// 页签：显示条件与原 a-tab-pane 的 v-if 一致
+const configTabs = computed(() =>
+  [
+    { key: 'dataSync', label: '数据同步', testId: undefined, visible: true },
+    {
+      key: 'frontpageExtraction',
+      label: '首页抽取设置',
+      testId: 'frontpage-config-tab',
+      visible: canManageFrontpageConfig.value,
+    },
+    {
+      key: 'llmObservability',
+      label: '模型性能',
+      testId: 'llm-observability-tab',
+      visible: canViewLlmObservability.value,
+    },
+    {
+      key: 'llmConfig',
+      label: '模型配置',
+      testId: 'llm-config-tab',
+      visible: canManageLlmConfig.value,
+    },
+  ].filter((tab) => tab.visible),
+)
+
+const LAST_SYNC_STATUS_TEXT: Record<string, string> = {
+  success: '成功',
+  partial: '部分完成',
+  failed: '失败',
+  running: '执行中',
+}
+
+const lastSyncLabel = computed(() => {
+  const time = state.stats.lastSyncTime
+  if (!time || !dayjs(time).isValid()) return ''
+  const status = LAST_SYNC_STATUS_TEXT[String(state.pgSyncState?.last_sync_status || '')]
+  return `上次同步 ${dayjs(time).format('MM-DD HH:mm')}${status ? ` · ${status}` : ''}`
+})
+
+const lastSyncStatusClass = computed(() => {
+  const status = String(state.pgSyncState?.last_sync_status || '')
+  if (status === 'failed') return 'mq-status--danger'
+  if (status === 'partial') return 'mq-status--warning'
+  return ''
+})
+
 const syncSceneOptions = [
   { label: '在院病历', value: 'running', description: '同步执行时仍在院的全部病历' },
   { label: '已出院病历', value: 'final', description: '按出院日期范围同步终末病历' },
@@ -538,38 +724,10 @@ const pageSubtitle = computed(() =>
     : '按三坐标病例范围抽取在院及已出院病历，先只读检测，再预检影响，最后人工确认同步。',
 )
 
-const preflightActionLabel = computed(() => (isDemoSyncUser.value ? '检查病历范围' : '重新预检'))
-
 const executeActionLabel = computed(() => (isDemoSyncUser.value ? '开始同步' : '确认执行同步'))
-
-const safeBannerTitle = computed(() =>
-  isDemoSyncUser.value ? '当前不会修改医院源库。' : '当前不会写入源库，所有修改只写入本地 CDM。',
-)
-
-const safeBannerDescription = computed(() =>
-  isDemoSyncUser.value
-    ? '同步只会把符合条件的病历复制到本地，用于后续质控验证和演示。'
-    : '本页与客户样本验证共用三坐标病例同步链；客户样本的定向同步仍在“客户样本验证”页面执行。',
-)
-
-const summaryDescription = computed(() =>
-  isDemoSyncUser.value
-    ? '请先确认住院范围、科室和日期，再检查是否找到可同步病历。'
-    : '用于快速核对源库、范围和调度，详细配置在下方连接面板中维护。',
-)
-
-const safeNoteText = computed(() =>
-  isDemoSyncUser.value
-    ? '点击“开始同步”后，也只会写入本地演示环境；不会回写或修改医院源库。'
-    : '在点击“确认执行同步”前，不会写入源库；同步只影响本地 CDM。客户样本池同步另走专用链路。',
-)
 
 const candidateProgressLabel = computed(() =>
   isDemoSyncUser.value ? '找到可同步病历' : '候选病历',
-)
-
-const connectedCount = computed(() =>
-  Math.max(0, Math.min(2, Number(state.stats.connectedCount || 0))),
 )
 
 const preflightSummary = computed(() => {
@@ -597,25 +755,6 @@ const preflightSummary = computed(() => {
     : `预检未通过：${state.preflightResult.blockers?.join('；') || '存在阻断项，请先处理。'}`
 })
 
-const enabledTableCount = computed(() => state.pgSyncTables.filter((item) => item.enabled).length)
-
-const selectedTableGroupSummary = computed(() => {
-  const selected = Array.isArray(state.selectedTableGroups) ? state.selectedTableGroups : []
-  if (selected.length === 0) {
-    return '默认核心8表'
-  }
-  const labelMap = new Map(
-    state.pgTableGroups.map((item) => [
-      String(item.id || '').trim(),
-      String(item.label || item.id || '').trim(),
-    ]),
-  )
-  const labels = selected
-    .map((item) => labelMap.get(String(item || '').trim()) || String(item || '').trim())
-    .filter(Boolean)
-  return labels.length > 0 ? labels.join(' / ') : '默认核心8表'
-})
-
 const policyDepartmentOptions = computed(() => [
   { label: '全院', value: '*' },
   ...state.availableDepartments.map((name) => ({
@@ -636,189 +775,6 @@ const policyDateRangeLabel = computed(() => {
   if (state.policyForm.scope === 'running') return '执行时刻'
   const start = state.policyForm.start_date || '未设'
   return `${start} ~ ${end}`
-})
-
-const nightWindowLabel = computed(() => {
-  const start = state.policyForm.night_window_start || '--:--'
-  const end = state.policyForm.night_window_end || '--:--'
-  return `${start} ~ ${end}`
-})
-
-const summaryItems = computed(() => {
-  if (isDemoSyncUser.value) {
-    return [
-      {
-        label: '同步方式',
-        value: syncScopeDisplayLabel.value,
-        description: syncAnchorLabel.value,
-      },
-      {
-        label: '筛选范围',
-        value: policyDateRangeLabel.value,
-        description: '可按科室进一步缩小范围',
-      },
-      {
-        label: '同步内容',
-        value: '病历与相关文书资料',
-        description: '同步后可在病历池中查看和质控',
-      },
-      {
-        label: '当前状态',
-        value: state.preflightResult ? candidateProgressLabel.value : '等待检查',
-        description: state.preflightResult
-          ? `${Number(state.preflightResult.estimated_impact || 0).toLocaleString()} 份`
-          : '请先检查病历范围',
-      },
-    ]
-  }
-
-  return [
-    {
-      label: '源库',
-      value: 'clinical_data',
-      description: 'PG 源库 · 只读连接',
-    },
-    {
-      label: '抽取锚点',
-      value: syncAnchorLabel.value,
-      description: '按完整三坐标计算候选病历',
-    },
-    {
-      label: '同步范围',
-      value: selectedTableGroupSummary.value,
-      description: `启用表 ${enabledTableCount.value} / ${state.pgSyncTables.length}`,
-    },
-    {
-      label: '调度窗口',
-      value: policyDateRangeLabel.value,
-      description: `夜间窗口 ${nightWindowLabel.value}`,
-    },
-  ]
-})
-
-const syncSafetySteps = computed(() => [
-  {
-    key: 'readonly',
-    index: '1',
-    title: isDemoSyncUser.value ? '选择同步范围' : '只读源库检测',
-    description: isDemoSyncUser.value
-      ? `选择${syncScopeDisplayLabel.value}、科室和日期，明确本次同步范围。`
-      : connectedCount.value >= 2
-        ? '源库与本地库连接可用。'
-        : '验证 clinical_data 与本地 CDM 连通性。',
-    tone: connectedCount.value >= 2 ? 'ready' : 'neutral',
-  },
-  {
-    key: 'preflight',
-    index: '2',
-    title: isDemoSyncUser.value ? '检查可同步病历' : '试运行预检',
-    description: state.preflightResult
-      ? `${candidateProgressLabel.value} ${Number(state.preflightResult.estimated_impact || 0).toLocaleString()} 份。`
-      : isDemoSyncUser.value
-        ? '检查所选范围内是否能找到可同步病历。'
-        : '按三坐标病例范围模拟抽取，生成影响范围和阻断项。',
-    tone: state.preflightResult?.executable ? 'ready' : state.preflightResult ? 'warn' : 'neutral',
-  },
-  {
-    key: 'confirm',
-    index: '3',
-    title: isDemoSyncUser.value ? '开始同步' : '人工确认写入',
-    description: hasPreflightPass.value
-      ? isDemoSyncUser.value
-        ? '检查通过后即可开始同步。'
-        : '预检结果有效，可人工确认同步。'
-      : isDemoSyncUser.value
-        ? '检查通过后才启用同步。'
-        : '预检通过后才启用正式同步。',
-    tone: hasPreflightPass.value ? 'ready' : 'locked',
-  },
-])
-
-const executionChecklist = computed(() => {
-  const estimated = Number(state.preflightResult?.estimated_impact || 0)
-  const blockers = state.preflightResult?.blockers || []
-  const warnings = state.preflightResult?.warnings || []
-  if (isDemoSyncUser.value) {
-    return [
-      {
-        label: '数据连接',
-        value: connectedCount.value >= 1 ? '连接状态已检测' : '等待连接检测',
-        status: connectedCount.value >= 1 ? '已检测' : '待检测',
-        tone: connectedCount.value >= 1 ? 'ready' : 'neutral',
-      },
-      {
-        label: '筛选依据',
-        value: syncAnchorLabel.value,
-        status: '已确认',
-        tone: 'ready',
-      },
-      {
-        label: candidateProgressLabel.value,
-        value: state.preflightResult ? `${estimated.toLocaleString()} 份病历` : '等待检查',
-        status: state.preflightResult ? '已检查' : '待检查',
-        tone: state.preflightResult ? (estimated > 0 ? 'ready' : 'warn') : 'neutral',
-      },
-      {
-        label: '检查结果',
-        value:
-          blockers.length > 0
-            ? blockers.join('；')
-            : warnings.length > 0
-              ? warnings.join('；')
-              : state.preflightResult
-                ? estimated > 0
-                  ? '可开始同步'
-                  : '请调整科室或日期后重试'
-                : '等待检查病历范围',
-        status:
-          blockers.length > 0
-            ? '需处理'
-            : estimated === 0 && state.preflightResult
-              ? '未找到'
-              : '可继续',
-        tone: blockers.length > 0 || (estimated === 0 && state.preflightResult) ? 'warn' : 'ready',
-      },
-    ]
-  }
-
-  return [
-    {
-      label: '源库 clinical_data',
-      value: connectedCount.value >= 1 ? '连接状态已检测' : '等待只读连接检测',
-      status: connectedCount.value >= 1 ? '已就绪' : '待检测',
-      tone: connectedCount.value >= 1 ? 'ready' : 'neutral',
-    },
-    {
-      label: '本地 CDM',
-      value: connectedCount.value >= 2 ? '本地库可访问' : '等待本地库检测',
-      status: connectedCount.value >= 2 ? '已就绪' : '待检测',
-      tone: connectedCount.value >= 2 ? 'ready' : 'neutral',
-    },
-    {
-      label: '抽取锚点',
-      value: syncAnchorLabel.value,
-      status: '已确认',
-      tone: 'ready',
-    },
-    {
-      label: '同步范围',
-      value: `${selectedTableGroupSummary.value}，启用 ${enabledTableCount.value} 张表`,
-      status: enabledTableCount.value > 0 ? '已选择' : '待配置',
-      tone: enabledTableCount.value > 0 ? 'ready' : 'neutral',
-    },
-    {
-      label: '预计涉及',
-      value: state.preflightResult ? `${estimated.toLocaleString()} 份病历` : '等待预检估算',
-      status: state.preflightResult ? '已估算' : '待预检',
-      tone: state.preflightResult ? 'ready' : 'neutral',
-    },
-    {
-      label: '阻断/警告',
-      value: `阻断 ${blockers.length} 项，警告 ${warnings.length} 项`,
-      status: blockers.length > 0 ? '需处理' : '可继续',
-      tone: blockers.length > 0 ? 'danger' : warnings.length > 0 ? 'warn' : 'ready',
-    },
-  ]
 })
 
 const syncProgress = computed<Record<string, unknown>>(() => {
@@ -862,10 +818,10 @@ const syncProgressStatusText = computed(() => {
 
 const syncProgressStatusClass = computed(() => {
   const status = String(syncProgress.value.status || (state.isSyncing ? 'running' : ''))
-  if (status === 'failed') return 'wv4-status-chip--danger'
-  if (status === 'partial') return 'wv4-status-chip--warning'
-  if (status === 'success') return 'wv4-status-chip--success'
-  return state.isSyncing ? 'wv4-status-chip--brand' : 'wv4-status-chip--neutral'
+  if (status === 'failed') return 'mq-status--danger'
+  if (status === 'partial') return 'mq-status--warning'
+  if (status === 'success') return 'mq-status--success'
+  return state.isSyncing ? 'mq-status--info' : ''
 })
 
 const syncProgressTablesTotal = computed(() => Number(syncProgress.value.tables_total || 0))
@@ -943,8 +899,8 @@ const syncProgressPercent = computed(() => {
 const syncProgressStrokeColor = computed(() => {
   const status = String(syncProgress.value.status || (state.isSyncing ? 'running' : ''))
   if (status === 'failed') return '#ef4444'
-  if (status === 'partial') return '#f59e0b'
-  return '#2b6cf6'
+  if (status === 'partial') return '#ff9500'
+  return '#0a6cff'
 })
 const syncProgressEtaText = computed(() => {
   const eta = Number(syncProgress.value.eta_seconds)
@@ -958,6 +914,29 @@ const syncProgressStageText = computed(() => {
   return label
 })
 const showSyncProgress = true
+
+const preflightStatusClass = computed(() =>
+  hasPreflightPass.value ? 'mq-status--success' : 'mq-status--warning',
+)
+
+// 执行前确认：页面内弹窗，确认结果以 Promise 返回给同步流程
+const executeConfirm = reactive({ open: false, count: 0 })
+let resolveExecuteConfirm: ((ok: boolean) => void) | null = null
+
+function askExecuteConfirm(count: number): Promise<boolean> {
+  resolveExecuteConfirm?.(false)
+  executeConfirm.count = count
+  executeConfirm.open = true
+  return new Promise<boolean>((resolve) => {
+    resolveExecuteConfirm = resolve
+  })
+}
+
+function closeExecuteConfirm(ok: boolean) {
+  executeConfirm.open = false
+  resolveExecuteConfirm?.(ok)
+  resolveExecuteConfirm = null
+}
 
 const preflightSourceRows = computed<SyncTableValidationItem[]>(() => {
   const result = state.preflightResult
@@ -999,32 +978,6 @@ const normalizePolicyDepartments = (values: string[]): string[] => {
 const handlePolicyDepartmentChange = (values: string[]) => {
   state.policyForm.target_departments = normalizePolicyDepartments(values)
 }
-
-const riskAdviceItems = computed(() => {
-  const blockers = state.preflightResult?.blockers || []
-  const warnings = state.preflightResult?.warnings || []
-  const items = [
-    {
-      title: '存在无法匹配的 visit_id',
-      description: '若住院登记或出院记录缺少三坐标身份与关键时间，本页无法计算病历候选范围。',
-      action: '请核对 institute_id、patient_id、visit_id 以及入院/出院时间；mr_no 不是同步前提。',
-      tone: warnings.length || blockers.length ? 'warn' : 'neutral',
-    },
-    {
-      title: '关键文书可能缺表',
-      description: '首次病程、医嘱、检查检验、病理报告缺失会直接影响 0609 质控解释性。',
-      action: '0609/客户样本定向同步建议在客户验证页执行；本页用于全院在院、已出院病历批量同步。',
-      tone: preflightTableRows.value.some((item) => !item.executable) ? 'danger' : 'neutral',
-    },
-    {
-      title: '正式同步前可回退',
-      description: '本页只写入本地 CDM，不写回源库；若同步异常，可重新选择范围后再同步。',
-      action: '建议保留本次预检结果和运行日志。',
-      tone: 'info',
-    },
-  ]
-  return items
-})
 
 async function ensureSyncInitialized() {
   if (syncInitialized.value) return
@@ -1118,16 +1071,7 @@ async function triggerSyncWithConfirm(autoSavePolicy: boolean) {
     return
   }
 
-  const ok = await new Promise<boolean>((resolve) => {
-    Modal.confirm({
-      title: isDemoSyncUser.value ? '开始同步' : '执行前确认',
-      content: `找到可同步病历 ${Number(preflight?.estimated_impact || 0).toLocaleString()} 份，是否继续？`,
-      okText: isDemoSyncUser.value ? '开始同步' : '继续执行',
-      cancelText: '取消',
-      onOk: () => resolve(true),
-      onCancel: () => resolve(false),
-    })
-  })
+  const ok = await askExecuteConfirm(Number(preflight?.estimated_impact || 0))
   if (!ok) return
 
   const result = await executeSync('pg')
@@ -1185,6 +1129,7 @@ watch(hasPreflightPass, (isReady) => {
 })
 
 onUnmounted(() => {
+  closeExecuteConfirm(false)
   resetState()
 })
 </script>
@@ -1192,1484 +1137,4 @@ onUnmounted(() => {
 <style>
 @import './styles/workstation-v4-view.css';
 </style>
-<style scoped>
-.sync-config-page {
-  background: #f5f5f7;
-  color: #1d1d1f;
-  font-family:
-    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
-    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
-  font-feature-settings:
-    'rlig' 1,
-    'calt' 1;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-.sync-config-page :deep(.ant-btn),
-.sync-config-page :deep(.ant-input),
-.sync-config-page :deep(.ant-input-affix-wrapper),
-.sync-config-page :deep(.ant-select),
-.sync-config-page :deep(.ant-tabs),
-.sync-config-page :deep(.ant-table),
-.sync-config-page :deep(.ant-tag),
-.sync-config-page :deep(.ant-select-dropdown),
-.sync-config-page :deep(.ant-select-item),
-.sync-config-page :deep(.ant-picker),
-.sync-config-page :deep(.ant-input-number),
-.sync-config-page :deep(label),
-.sync-config-page :deep(button) {
-  font-family:
-    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
-    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
-}
-
-.system-config-tabs {
-  display: flex !important;
-  flex-direction: column;
-  height: 100%;
-}
-
-.system-config-tabs :deep(.ant-tabs-nav) {
-  margin-bottom: 16px;
-  flex-shrink: 0;
-  border-radius: 16px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  background: rgba(255, 255, 255, 0.86);
-  -webkit-backdrop-filter: blur(18px);
-  backdrop-filter: blur(18px);
-  box-shadow:
-    0 1px 4px rgba(0, 0, 0, 0.045),
-    0 2px 8px rgba(0, 0, 0, 0.035);
-  padding: 8px 12px;
-}
-
-.system-config-tabs :deep(.ant-tabs-content-holder),
-.system-config-tabs :deep(.ant-tabs-content) {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.system-config-tabs :deep(.ant-tabs-tabpane) {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
-.system-config-tabs :deep(.ant-tabs-tab) {
-  font-weight: 600;
-  color: rgba(29, 29, 31, 0.56);
-}
-
-.system-config-tabs :deep(.ant-tabs-tab-active .ant-tabs-tab-btn) {
-  color: #2b6cf6;
-}
-
-.system-config-tabs :deep(.ant-tabs-ink-bar) {
-  background: #2b6cf6;
-}
-
-.system-config-tab-shell {
-  height: 100%;
-  min-height: 0;
-  overflow: auto;
-  padding-bottom: 86px;
-}
-
-.system-config-tab-shell--panel {
-  overflow: auto;
-  padding-right: 2px;
-}
-
-.system-config-hero,
-.system-config-safe-banner,
-.system-config-safety-card,
-.system-config-safe-workbench,
-.system-config-advanced-section,
-.system-config-detail-workbench,
-.system-config-preflight-panel,
-.system-config-risk-panel,
-.system-config-config-summary {
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  background: rgba(255, 255, 255, 0.86);
-  -webkit-backdrop-filter: blur(18px);
-  backdrop-filter: blur(18px);
-  box-shadow:
-    0 1px 4px rgba(0, 0, 0, 0.045),
-    0 2px 8px rgba(0, 0, 0, 0.035);
-}
-
-.system-config-hero {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  border-radius: 20px;
-  padding: 20px 22px;
-}
-
-.system-config-breadcrumb {
-  color: rgba(29, 29, 31, 0.45);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.system-config-hero h2 {
-  margin: 8px 0 0;
-  color: #1d1d1f;
-  font-size: 28px;
-  font-weight: 700;
-  line-height: 32px;
-}
-
-.system-config-hero p {
-  margin: 8px 0 0;
-  color: rgba(29, 29, 31, 0.6);
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.system-config-hero__actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-.sync-guided-workbench {
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.9);
-  box-shadow:
-    0 1px 4px rgba(0, 0, 0, 0.045),
-    0 8px 24px rgba(0, 0, 0, 0.04);
-  padding: 24px;
-}
-
-.sync-guided-step {
-  min-width: 0;
-}
-
-.sync-guided-step__heading {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-}
-
-.sync-guided-step__heading > span {
-  display: inline-flex;
-  width: 28px;
-  height: 28px;
-  flex: 0 0 28px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  background: rgba(43, 108, 246, 0.1);
-  color: #2b6cf6;
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.sync-guided-step__heading h3 {
-  margin: 1px 0 0;
-  color: #1d1d1f;
-  font-size: 17px;
-  font-weight: 700;
-  line-height: 24px;
-}
-
-.sync-guided-step__heading p {
-  margin: 4px 0 0;
-  color: rgba(29, 29, 31, 0.58);
-  font-size: 13px;
-  line-height: 20px;
-}
-
-.sync-guided-step__heading--result {
-  align-items: center;
-}
-
-.sync-guided-step__heading--result > div {
-  flex: 1;
-}
-
-.sync-guided-divider {
-  height: 1px;
-  margin: 24px 0;
-  background: rgba(0, 0, 0, 0.07);
-}
-
-.sync-scene-cards {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 16px;
-}
-
-.sync-scene-card {
-  display: flex;
-  min-height: 86px;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
-  gap: 6px;
-  border: 1px solid rgba(0, 0, 0, 0.09);
-  border-radius: 14px;
-  background: rgba(250, 250, 252, 0.76);
-  color: #1d1d1f;
-  cursor: pointer;
-  padding: 16px 18px;
-  text-align: left;
-  transition:
-    border-color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
-    background 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
-    transform 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
-}
-
-.sync-scene-card:hover:not(:disabled) {
-  transform: translateY(-2px);
-  border-color: rgba(43, 108, 246, 0.22);
-}
-
-.sync-scene-card.is-active {
-  border-color: rgba(43, 108, 246, 0.42);
-  background: rgba(234, 242, 255, 0.82);
-  box-shadow: 0 0 0 3px rgba(43, 108, 246, 0.06);
-}
-
-.sync-scene-card:disabled {
-  cursor: not-allowed;
-  opacity: 0.58;
-}
-
-.sync-scene-card strong {
-  color: inherit;
-  font-size: 15px;
-  font-weight: 700;
-}
-
-.sync-scene-card.is-active strong {
-  color: #2b6cf6;
-}
-
-.sync-scene-card span {
-  color: rgba(29, 29, 31, 0.54);
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.sync-identity-note {
-  margin: 12px 0 0;
-  color: rgba(29, 29, 31, 0.5);
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.sync-filter-row {
-  display: grid;
-  grid-template-columns: minmax(260px, 1.5fr) minmax(180px, 0.8fr) minmax(180px, 0.8fr) auto;
-  align-items: end;
-  gap: 12px;
-  margin-top: 16px;
-}
-
-.sync-filter-row__department,
-.sync-filter-row__date {
-  min-width: 0;
-}
-
-.sync-current-time {
-  grid-column: span 2;
-  min-height: 40px;
-  justify-content: center;
-  padding: 10px 14px;
-  border: 1px solid rgba(43, 108, 246, 0.16);
-  border-radius: 10px;
-  background: rgba(43, 108, 246, 0.04);
-}
-
-.sync-current-time strong {
-  color: rgba(29, 29, 31, 0.78);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.sync-check-action {
-  min-height: 40px;
-  white-space: nowrap;
-}
-
-.sync-result-step {
-  min-height: 160px;
-}
-
-.sync-result-summary {
-  display: grid;
-  grid-template-columns: 0.72fr 1fr 1.2fr;
-  gap: 12px;
-  margin-top: 16px;
-}
-
-.sync-result-metric {
-  min-width: 0;
-  border: 1px solid rgba(0, 0, 0, 0.07);
-  border-radius: 14px;
-  background: rgba(250, 250, 252, 0.72);
-  padding: 14px 16px;
-}
-
-.sync-result-metric--primary {
-  border-color: rgba(43, 108, 246, 0.16);
-  background: rgba(234, 242, 255, 0.62);
-}
-
-.sync-result-metric span,
-.sync-result-metric em {
-  display: block;
-  overflow: hidden;
-  color: rgba(29, 29, 31, 0.5);
-  font-size: 12px;
-  font-style: normal;
-  line-height: 18px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sync-result-metric strong {
-  display: block;
-  overflow: hidden;
-  margin: 5px 0 3px;
-  color: #1d1d1f;
-  font-size: 18px;
-  font-weight: 700;
-  line-height: 24px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sync-result-metric--primary strong {
-  color: #2b6cf6;
-  font-size: 26px;
-  line-height: 30px;
-}
-
-.sync-result-empty {
-  margin-top: 16px;
-  border: 1px dashed rgba(0, 0, 0, 0.12);
-  border-radius: 14px;
-  background: rgba(250, 250, 252, 0.6);
-  color: rgba(29, 29, 31, 0.48);
-  font-size: 13px;
-  line-height: 22px;
-  padding: 22px 18px;
-  text-align: center;
-}
-
-.sync-result-messages {
-  display: grid;
-  gap: 8px;
-  margin-top: 14px;
-}
-
-.sync-result-messages p {
-  margin: 0;
-  border-radius: 10px;
-  font-size: 12px;
-  line-height: 20px;
-  padding: 9px 12px;
-}
-
-.sync-result-messages .is-blocker {
-  background: rgba(254, 242, 242, 0.86);
-  color: #b91c1c;
-}
-
-.sync-result-messages .is-warning {
-  background: rgba(255, 251, 235, 0.86);
-  color: #a16207;
-}
-
-.sync-result-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-  margin-top: 18px;
-  border-top: 1px solid rgba(0, 0, 0, 0.07);
-  padding-top: 16px;
-}
-
-@media (max-width: 980px) {
-  .sync-filter-row {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .sync-current-time {
-    grid-column: auto;
-  }
-
-  .sync-result-summary {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 720px) {
-  .sync-guided-workbench {
-    padding: 18px;
-  }
-
-  .sync-scene-cards,
-  .sync-filter-row {
-    grid-template-columns: 1fr;
-  }
-
-  .sync-result-actions {
-    align-items: stretch;
-    flex-direction: column;
-  }
-}
-
-@media (max-width: 820px) {
-  .sync-scene-cards {
-    grid-template-columns: 1fr;
-  }
-}
-
-.system-config-safe-banner {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  border-color: rgba(43, 108, 246, 0.18);
-  border-radius: 18px;
-  background: rgba(234, 242, 255, 0.78);
-  padding: 16px 18px;
-}
-
-.system-config-safe-shield {
-  display: flex;
-  width: 48px;
-  height: 48px;
-  flex: 0 0 48px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 14px;
-  background: #2b6cf6;
-  color: #fff;
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.system-config-safe-banner strong {
-  color: #2b6cf6;
-  font-size: 15px;
-}
-
-.system-config-safe-banner p {
-  margin: 4px 0 0;
-  color: rgba(29, 29, 31, 0.62);
-  font-size: 13px;
-  line-height: 22px;
-}
-
-.system-config-safety-steps {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.system-config-safety-card {
-  display: flex;
-  min-height: 116px;
-  align-items: flex-start;
-  gap: 14px;
-  border-radius: 18px;
-  padding: 18px;
-}
-
-.system-config-safety-card > span {
-  display: flex;
-  width: 32px;
-  height: 32px;
-  flex: 0 0 32px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  background: rgba(43, 108, 246, 0.1);
-  color: #2b6cf6;
-  font-weight: 800;
-}
-
-.system-config-safety-card strong,
-.system-config-section-head h3,
-.system-config-section-head h4,
-.system-config-config-summary h3 {
-  color: #1d1d1f;
-  font-weight: 700;
-}
-
-.system-config-safety-card p {
-  margin: 6px 0 0;
-  color: rgba(29, 29, 31, 0.58);
-  font-size: 13px;
-  line-height: 22px;
-}
-
-.system-config-safety-card--ready {
-  border-color: rgba(43, 108, 246, 0.16);
-}
-
-.system-config-safety-card--warn {
-  border-color: rgba(245, 158, 11, 0.22);
-  background: rgba(255, 251, 235, 0.86);
-}
-
-.system-config-safety-card--locked {
-  background: rgba(250, 250, 252, 0.84);
-}
-
-.system-config-safe-workbench {
-  display: grid;
-  grid-template-columns: 280px minmax(0, 1fr) 340px;
-  gap: 14px;
-  min-height: 520px;
-  border-radius: 20px;
-  padding: 14px;
-}
-
-.system-config-config-summary,
-.system-config-preflight-panel,
-.system-config-risk-panel {
-  min-height: 0;
-  border-radius: 18px;
-  padding: 18px;
-}
-
-.system-config-config-summary p,
-.system-config-section-head p {
-  margin: 6px 0 0;
-  color: rgba(29, 29, 31, 0.58);
-  font-size: 13px;
-  line-height: 22px;
-}
-
-.system-config-summary-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: 16px;
-}
-
-.system-config-summary-list div {
-  border-radius: 12px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  background: rgba(250, 250, 252, 0.72);
-  padding: 11px 12px;
-}
-
-.system-config-summary-list span {
-  display: block;
-  color: rgba(29, 29, 31, 0.46);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.system-config-summary-list strong {
-  display: block;
-  margin-top: 4px;
-  color: #1d1d1f;
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.system-config-summary-list em,
-.system-config-risk-item em {
-  display: block;
-  margin-top: 4px;
-  color: rgba(29, 29, 31, 0.5);
-  font-size: 12px;
-  font-style: normal;
-}
-
-.system-config-safe-note {
-  margin-top: 16px;
-  border-radius: 14px;
-  border: 1px solid rgba(43, 108, 246, 0.16);
-  background: rgba(234, 242, 255, 0.7);
-  padding: 13px;
-}
-
-.system-config-safe-note strong {
-  color: #2b6cf6;
-}
-
-.system-config-safe-note p {
-  margin: 6px 0 0;
-}
-
-.system-config-section-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.system-config-section-head h3,
-.system-config-section-head h4 {
-  margin: 0;
-  font-size: 17px;
-  line-height: 22px;
-}
-
-.system-config-section-head--compact {
-  align-items: center;
-}
-
-.system-config-checklist {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 16px;
-}
-
-.system-config-check-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  border-radius: 12px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  background: rgba(250, 250, 252, 0.72);
-  padding: 11px 12px;
-}
-
-.system-config-check-row > span {
-  flex: 0 0 auto;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.05);
-  color: rgba(29, 29, 31, 0.55);
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 20px;
-  padding: 0 8px;
-}
-
-.system-config-check-row strong {
-  display: block;
-  color: #1d1d1f;
-  font-size: 13px;
-}
-
-.system-config-check-row em {
-  display: block;
-  margin-top: 3px;
-  color: rgba(29, 29, 31, 0.56);
-  font-size: 12px;
-  font-style: normal;
-  line-height: 18px;
-}
-
-.system-config-check-row--ready > span {
-  background: rgba(43, 108, 246, 0.08);
-  color: #2b6cf6;
-}
-
-.system-config-check-row--warn > span {
-  background: rgba(245, 158, 11, 0.12);
-  color: #b45309;
-}
-
-.system-config-check-row--danger > span {
-  background: rgba(239, 68, 68, 0.1);
-  color: #b91c1c;
-}
-
-.system-config-scope-form {
-  margin-top: 16px;
-  border-radius: 14px;
-  border: 1px solid rgba(43, 108, 246, 0.14);
-  background: rgba(250, 252, 255, 0.9);
-  padding: 14px;
-}
-
-.system-config-scope-grid {
-  display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: 14px;
-  margin-top: 14px;
-}
-
-.system-config-scope-field {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 7px;
-}
-
-.system-config-scope-field--scene {
-  grid-column: span 3;
-}
-
-.system-config-scope-field--department {
-  grid-column: span 4;
-}
-
-.system-config-scope-field--date {
-  grid-column: span 4;
-}
-
-.system-config-scope-field > span {
-  color: rgba(29, 29, 31, 0.58);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.system-config-scope-field :deep(.ant-select-selector),
-.system-config-scope-field :deep(.ant-picker) {
-  min-height: 40px;
-}
-
-@media (max-width: 1280px) {
-  .system-config-scope-field--scene,
-  .system-config-scope-field--department,
-  .system-config-scope-field--date {
-    grid-column: span 6;
-  }
-}
-
-@media (max-width: 760px) {
-  .system-config-scope-field--scene,
-  .system-config-scope-field--department,
-  .system-config-scope-field--date {
-    grid-column: 1 / -1;
-  }
-}
-
-.system-config-preflight-table {
-  margin-top: 16px;
-  overflow: hidden;
-  border-radius: 14px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-}
-
-.system-config-preflight-table .system-config-section-head {
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-  background: rgba(250, 250, 252, 0.82);
-  padding: 12px 14px;
-}
-
-.system-config-preflight-table table {
-  width: 100%;
-  border-collapse: collapse;
-  table-layout: fixed;
-}
-
-.system-config-preflight-table th,
-.system-config-preflight-table td {
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-  padding: 10px 12px;
-  color: rgba(29, 29, 31, 0.72);
-  font-size: 12px;
-  line-height: 18px;
-  text-align: left;
-}
-
-.system-config-preflight-table th {
-  background: rgba(250, 250, 252, 0.7);
-  color: rgba(29, 29, 31, 0.48);
-  font-weight: 700;
-}
-
-.system-config-preflight-table td {
-  word-break: break-word;
-}
-
-.system-config-preflight-table tr:last-child td {
-  border-bottom: 0;
-}
-
-.system-config-preflight-table .is-pass {
-  color: #2b6cf6;
-  font-weight: 700;
-}
-
-.system-config-preflight-table .is-blocked {
-  color: #b91c1c;
-  font-weight: 700;
-}
-
-.system-config-empty-table {
-  padding: 24px 14px;
-  color: rgba(29, 29, 31, 0.48);
-  font-size: 13px;
-}
-
-.system-config-sync-progress {
-  margin-top: 16px;
-  border-radius: 14px;
-  border: 1px solid rgba(43, 108, 246, 0.14);
-  background: rgba(250, 252, 255, 0.86);
-  padding: 14px;
-}
-
-.system-config-sync-progress__head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.system-config-sync-progress__head h4 {
-  margin: 0;
-  color: #1d1d1f;
-  font-size: 15px;
-  font-weight: 700;
-  line-height: 20px;
-}
-
-.system-config-sync-progress__head p {
-  margin: 4px 0 0;
-  color: rgba(29, 29, 31, 0.56);
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.system-config-progress-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(116px, 1fr));
-  gap: 10px;
-  margin-top: 12px;
-}
-
-.system-config-progress-grid div {
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.74);
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  padding: 10px 11px;
-}
-
-.system-config-progress-grid span {
-  display: block;
-  color: rgba(29, 29, 31, 0.48);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.system-config-progress-grid strong {
-  display: block;
-  margin-top: 4px;
-  color: #1d1d1f;
-  font-size: 16px;
-  font-weight: 700;
-  line-height: 22px;
-}
-
-.system-config-progress-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.system-config-progress-details {
-  margin-top: 12px;
-  border-top: 1px solid rgba(0, 0, 0, 0.06);
-  padding-top: 10px;
-}
-
-.system-config-progress-details summary {
-  width: fit-content;
-  cursor: pointer;
-  color: rgba(29, 29, 31, 0.58);
-  font-size: 12px;
-  font-weight: 600;
-  list-style-position: inside;
-}
-
-.system-config-progress-meta span {
-  border-radius: 999px;
-  background: rgba(43, 108, 246, 0.08);
-  color: rgba(0, 70, 140, 0.82);
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 24px;
-  padding: 0 10px;
-}
-
-.system-config-progress-note {
-  margin: 10px 0 0;
-  color: rgba(29, 29, 31, 0.5);
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.system-config-risk-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-top: 14px;
-}
-
-.system-config-risk-item {
-  border-radius: 14px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  background: rgba(250, 250, 252, 0.75);
-  padding: 13px;
-}
-
-.system-config-risk-item strong {
-  color: #1d1d1f;
-  font-size: 13px;
-}
-
-.system-config-risk-item p {
-  margin: 6px 0 0;
-  color: rgba(29, 29, 31, 0.58);
-  font-size: 12px;
-  line-height: 20px;
-}
-
-.system-config-risk-item--warn {
-  border-color: rgba(245, 158, 11, 0.2);
-  background: rgba(255, 251, 235, 0.72);
-}
-
-.system-config-risk-item--danger {
-  border-color: rgba(239, 68, 68, 0.18);
-  background: rgba(254, 242, 242, 0.68);
-}
-
-.system-config-risk-item--info {
-  border-color: rgba(43, 108, 246, 0.14);
-  background: rgba(234, 242, 255, 0.66);
-}
-
-.system-config-advanced-section {
-  overflow: hidden;
-  border-radius: 20px;
-}
-
-.system-config-advanced-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 18px 20px;
-}
-
-.system-config-advanced-head h3 {
-  margin: 0;
-  color: #1d1d1f;
-  font-size: 17px;
-  font-weight: 700;
-  line-height: 22px;
-}
-
-.system-config-advanced-head p {
-  margin: 6px 0 0;
-  color: rgba(29, 29, 31, 0.56);
-  font-size: 13px;
-  line-height: 22px;
-}
-
-.system-config-advanced-actions {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 10px;
-}
-
-.system-config-advanced-preflight {
-  margin: 0 14px 14px;
-}
-
-.system-config-detail-workbench {
-  display: grid;
-  grid-template-columns: minmax(640px, 1.7fr) minmax(340px, 0.82fr);
-  gap: 14px;
-  min-height: 440px;
-  overflow: hidden;
-  border-width: 1px 0 0;
-  border-radius: 0;
-  background: rgba(250, 250, 252, 0.68);
-  box-shadow: none;
-  padding: 14px;
-}
-
-.system-config-safe-action-bar {
-  position: sticky;
-  z-index: 8;
-  bottom: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.92);
-  -webkit-backdrop-filter: blur(18px);
-  backdrop-filter: blur(18px);
-  box-shadow:
-    0 8px 24px rgba(0, 0, 0, 0.08),
-    0 2px 8px rgba(0, 0, 0, 0.06);
-  padding: 14px 16px;
-}
-
-.system-config-safe-action-bar strong {
-  display: block;
-  color: #1d1d1f;
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.system-config-safe-action-bar p {
-  max-width: 560px;
-  margin: 3px 0 0;
-  color: rgba(29, 29, 31, 0.56);
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.system-config-safe-action-bar__actions {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-.system-config-confirm-check {
-  display: inline-flex;
-  min-height: 34px;
-  align-items: center;
-  gap: 8px;
-  border-radius: 10px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  background: rgba(250, 250, 252, 0.9);
-  color: rgba(29, 29, 31, 0.72);
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 700;
-  padding: 0 12px;
-  transition:
-    border-color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
-    background 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
-}
-
-.system-config-confirm-check input {
-  width: 14px;
-  height: 14px;
-  accent-color: #2b6cf6;
-}
-
-.system-config-confirm-check:not(.is-disabled):hover {
-  border-color: rgba(43, 108, 246, 0.24);
-  background: rgba(234, 242, 255, 0.72);
-}
-
-.system-config-confirm-check.is-disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
-.system-config-overview-controls {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.sync-config-page :deep(.wv4-analysis-overview),
-.sync-config-page :deep(.wv4-analysis-kpi-card) {
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  background: rgba(255, 255, 255, 0.86);
-  -webkit-backdrop-filter: blur(18px);
-  backdrop-filter: blur(18px);
-  box-shadow:
-    0 1px 4px rgba(0, 0, 0, 0.045),
-    0 2px 8px rgba(0, 0, 0, 0.035);
-  transition:
-    border-color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
-    box-shadow 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
-    transform 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
-}
-
-.sync-config-page :deep(.wv4-analysis-overview:hover),
-.sync-config-page :deep(.wv4-analysis-kpi-card:hover) {
-  border-color: rgba(0, 0, 0, 0.14);
-  box-shadow:
-    0 2px 12px rgba(0, 0, 0, 0.1),
-    0 6px 22px rgba(0, 0, 0, 0.075);
-  transform: translateY(-2px);
-}
-
-.sync-config-page :deep(.wv4-analysis-overview__title) {
-  color: #1d1d1f;
-  font-size: 28px;
-  font-weight: 700;
-  line-height: 31px;
-}
-
-.sync-config-page :deep(.wv4-analysis-overview p),
-.sync-config-page :deep(.wv4-analysis-kpi-card__desc) {
-  color: rgba(29, 29, 31, 0.58);
-}
-
-.system-config-subtitle {
-  color: rgba(29, 29, 31, 0.6);
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 22px;
-}
-
-.sync-config-page :deep(.wv4-analysis-kpi-card__label) {
-  color: rgba(29, 29, 31, 0.56);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.sync-config-page :deep(.wv4-analysis-kpi-card__value) {
-  color: #1d1d1f;
-  font-weight: 700;
-}
-
-.sync-config-page :deep(.wv4-analysis-kpi-card--brand .wv4-analysis-kpi-card__value) {
-  color: #2b6cf6;
-}
-
-.system-config-overview-hint {
-  font-size: 12px;
-  color: rgba(29, 29, 31, 0.56);
-}
-
-.wv4-overview-btn {
-  height: 34px;
-  border-radius: 10px;
-  font-size: 12px;
-  font-weight: 600;
-  padding-inline: 14px;
-}
-
-.wv4-overview-btn--ghost {
-  border-color: rgba(43, 108, 246, 0.16);
-  color: #2b6cf6;
-  background: rgba(43, 108, 246, 0.06);
-}
-
-.wv4-overview-btn--primary {
-  background: #2b6cf6;
-  border-color: #2b6cf6;
-  color: #ffffff;
-  box-shadow: 0 5px 14px rgba(43, 108, 246, 0.18);
-}
-
-.wv4-overview-btn--primary:not(:disabled):not(.ant-btn-disabled):hover,
-.wv4-overview-btn--primary:not(:disabled):not(.ant-btn-disabled):focus {
-  background: #0057b8;
-  border-color: #0057b8;
-  color: #ffffff;
-}
-
-.wv4-overview-btn--primary:disabled,
-.wv4-overview-btn--primary[disabled],
-.wv4-overview-btn--primary.ant-btn-disabled {
-  background: rgba(0, 0, 0, 0.06) !important;
-  border-color: rgba(0, 0, 0, 0.08) !important;
-  color: rgba(29, 29, 31, 0.46) !important;
-  box-shadow: none !important;
-  cursor: not-allowed;
-}
-
-.wv4-status-chip {
-  height: 24px;
-  border-radius: 999px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  background: rgba(0, 0, 0, 0.04);
-  color: rgba(29, 29, 31, 0.6);
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 22px;
-  padding: 0 10px;
-}
-
-.wv4-status-chip--brand {
-  border-color: rgba(43, 108, 246, 0.16);
-  background: rgba(43, 108, 246, 0.06);
-  color: #2b6cf6;
-}
-
-.wv4-status-chip--green,
-.wv4-status-chip--success {
-  border-color: rgba(16, 185, 129, 0.2);
-  background: rgba(16, 185, 129, 0.08);
-  color: #047857;
-}
-
-.wv4-status-chip--gold,
-.wv4-status-chip--warning {
-  border-color: rgba(245, 158, 11, 0.2);
-  background: rgba(245, 158, 11, 0.08);
-  color: #b45309;
-}
-
-.wv4-status-chip--red,
-.wv4-status-chip--danger {
-  border-color: rgba(239, 68, 68, 0.2);
-  background: rgba(239, 68, 68, 0.08);
-  color: #b91c1c;
-}
-
-.wv4-status-chip--neutral {
-  border-color: rgba(0, 0, 0, 0.08);
-  background: rgba(0, 0, 0, 0.04);
-  color: rgba(29, 29, 31, 0.6);
-}
-
-.system-config-execution-area {
-  display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
-  gap: 14px;
-  border-radius: 20px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  background: rgba(255, 255, 255, 0.86);
-  -webkit-backdrop-filter: blur(18px);
-  backdrop-filter: blur(18px);
-  box-shadow:
-    0 1px 4px rgba(0, 0, 0, 0.045),
-    0 2px 8px rgba(0, 0, 0, 0.035);
-  padding: 14px;
-  transition:
-    border-color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
-    box-shadow 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
-    transform 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
-}
-
-.system-config-execution-area:hover {
-  border-color: rgba(0, 0, 0, 0.14);
-  box-shadow:
-    0 2px 12px rgba(0, 0, 0, 0.1),
-    0 6px 22px rgba(0, 0, 0, 0.075);
-  transform: translateY(-2px);
-}
-
-.system-config-side-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  min-height: 0;
-  border-radius: 18px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  background: rgba(250, 250, 252, 0.76);
-  padding: 18px;
-}
-
-.system-config-side-kicker {
-  color: rgba(29, 29, 31, 0.42);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-}
-
-.system-config-side-panel h3,
-.system-config-danger-box h4 {
-  margin: 4px 0 0;
-  color: #1d1d1f;
-  font-weight: 700;
-}
-
-.system-config-side-panel h3 {
-  font-size: 18px;
-}
-
-.system-config-danger-box h4 {
-  font-size: 15px;
-}
-
-.system-config-side-panel p,
-.system-config-danger-box p {
-  margin: 8px 0 0;
-  color: rgba(29, 29, 31, 0.58);
-  font-size: 13px;
-  line-height: 22px;
-}
-
-.system-config-state-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.system-config-state-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.82);
-  padding: 10px 12px;
-}
-
-.system-config-state-row span {
-  color: rgba(29, 29, 31, 0.56);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.system-config-state-row strong {
-  color: #2b6cf6;
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.system-config-danger-box {
-  margin-top: auto;
-  border: 1px solid rgba(245, 158, 11, 0.18);
-  border-radius: 14px;
-  background: rgba(255, 247, 237, 0.72);
-  padding: 14px;
-}
-
-.system-config-danger-box .system-config-side-kicker,
-.system-config-danger-box h4,
-.system-config-danger-box p {
-  color: #b45309;
-}
-
-.layout-main {
-  display: grid;
-  grid-template-columns: minmax(640px, 1.75fr) minmax(320px, 0.72fr);
-  gap: 14px;
-}
-
-.system-config-execution-card {
-  border-radius: 18px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  background: rgba(255, 255, 255, 0.9);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.88),
-    0 1px 4px rgba(0, 0, 0, 0.045);
-}
-
-.system-config-kpi-time {
-  font-size: 24px;
-  line-height: 1.2;
-}
-
-.sync-config-page :deep(.rounded-xl),
-.sync-config-page :deep(.rounded-lg),
-.sync-config-page :deep(.rounded) {
-  border-color: rgba(0, 0, 0, 0.08) !important;
-}
-
-.sync-config-page :deep(.bg-white),
-.sync-config-page :deep(.bg-slate-50),
-.sync-config-page :deep(.bg-slate-50\/40),
-.sync-config-page :deep(.bg-slate-50\/70),
-.sync-config-page :deep(.bg-slate-50\/80),
-.sync-config-page :deep(.bg-slate-100),
-.sync-config-page :deep(.bg-slate-100\/60),
-.sync-config-page :deep(.bg-slate-100\/80) {
-  background-color: rgba(255, 255, 255, 0.86) !important;
-}
-
-.sync-config-page :deep(.border-slate-100),
-.sync-config-page :deep(.border-slate-200),
-.sync-config-page :deep(.border-slate-200\/50),
-.sync-config-page :deep(.border-slate-200\/80),
-.sync-config-page :deep(.border-\[\#E5E7EB\]\/60) {
-  border-color: rgba(0, 0, 0, 0.08) !important;
-}
-
-.sync-config-page :deep(.text-slate-900),
-.sync-config-page :deep(.text-slate-800),
-.sync-config-page :deep(.text-slate-700) {
-  color: #1d1d1f !important;
-}
-
-.sync-config-page :deep(.text-slate-600),
-.sync-config-page :deep(.text-slate-500) {
-  color: rgba(29, 29, 31, 0.6) !important;
-}
-
-.sync-config-page :deep(.text-slate-400) {
-  color: rgba(29, 29, 31, 0.38) !important;
-}
-
-.sync-config-page :deep(.bg-\[\#2b6cf6\]),
-.sync-config-page :deep(.hover\:bg-\[\#0057b8\]:hover) {
-  background-color: #2b6cf6 !important;
-}
-
-.sync-config-page :deep(.focus\:border-\[\#2b6cf6\]:focus) {
-  border-color: rgba(43, 108, 246, 0.38) !important;
-}
-
-.sync-config-page :deep(.focus\:ring-\[\#2b6cf6\]\/10:focus) {
-  --tw-ring-color: rgba(43, 108, 246, 0.1) !important;
-}
-
-.sync-config-page :deep(.hover\:bg-blue-50\/30:hover) {
-  background-color: rgba(43, 108, 246, 0.045) !important;
-}
-
-.sync-config-page :deep(.shadow-\[0_4px_12px_rgba\(37\,99\,235\,0\.22\)\]) {
-  box-shadow: 0 4px 12px rgba(43, 108, 246, 0.16) !important;
-}
-
-.sync-config-page :deep(.font-mono) {
-  font-family:
-    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
-    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
-}
-
-.sync-config-page :deep(.uppercase) {
-  letter-spacing: 0.02em;
-}
-
-@media (max-width: 1536px) {
-  .layout-main {
-    grid-template-columns: minmax(560px, 1.6fr) minmax(300px, 0.76fr);
-  }
-}
-
-@media (max-width: 1366px) {
-  .layout-main {
-    grid-template-columns: minmax(480px, 1.45fr) minmax(280px, 0.8fr);
-  }
-}
-
-@media (max-width: 980px) {
-  .system-config-execution-area {
-    grid-template-columns: 1fr;
-  }
-
-  .layout-main {
-    grid-template-columns: 1fr;
-  }
-
-  .system-config-execution-card--runs {
-    min-height: 420px;
-  }
-
-  .system-config-policy-area {
-    max-height: none;
-  }
-}
-
-@media (max-width: 768px) {
-  .system-config-tabs :deep(.ant-tabs-nav) {
-    margin-bottom: 12px;
-    padding: 6px 10px;
-  }
-
-  .system-config-execution-area {
-    padding: 10px;
-  }
-
-  .system-config-kpi-time {
-    font-size: 18px;
-  }
-}
-</style>
+<style scoped src="./styles/system-config.css"></style>

@@ -270,30 +270,40 @@ describe('QCOverviewView', () => {
     expect(routerPush).toHaveBeenLastCalledWith('/workstation-v5/records/final')
   })
 
-  it('以运营优先顺序展示四项 KPI，且只保留标题与数值', async () => {
+  it('待质控作为主卡展示，其余三项 KPI 按运营顺序排列', async () => {
     const wrapper = mountView()
     await flushHomeLoad()
 
+    const hero = wrapper.get('.qc-home-hero')
+    expect(hero.get('.qc-home-hero__label').text()).toContain('待质控')
+    expect(hero.get('.qc-home-hero__value').text()).toBe('3/ 18 份')
+
     expect(wrapper.get('[data-testid="home-kpis"]').attributes('aria-label')).toBe('质控指标汇总')
-    const cards = wrapper.findAll('.qc-home-metrics > div')
-    expect(cards).toHaveLength(4)
+    const cards = wrapper.findAll('.qc-home-metrics > .qc-home-metric')
+    expect(cards).toHaveLength(3)
     expect(
       cards.map((card) => ({
-        label: card.get('span').text(),
-        value: card.get('strong').text(),
+        label: card.get('.qc-home-metric__label').text(),
+        value: card.get('.qc-home-metric__value').text(),
+        helper: card.get('.qc-home-metric__helper').text(),
       })),
     ).toEqual([
-      { label: '有确定问题的病历', value: '2份' },
-      { label: '待质控', value: '3份' },
-      { label: '已完成', value: '13份' },
-      { label: '纳入病历', value: '18份' },
+      { label: '有确定问题的病历', value: '2份', helper: '含确定问题的病历' },
+      { label: '已完成', value: '13份', helper: '已生成正式质控结果' },
+      { label: '纳入病历', value: '18份', helper: '当前筛选范围' },
     ])
-    expect(wrapper.findAll('.qc-home-metrics p').map((item) => item.text())).toEqual([
-      '含确定问题的病历',
-      '尚未生成最终结果',
-      '已生成正式质控结果',
-      '当前筛选范围',
-    ])
+  })
+
+  it('进度比例全部由现有 KPI 计算', async () => {
+    const wrapper = mountView()
+    await flushHomeLoad()
+
+    // 待质控 3 / 纳入 18 = 16.7%；完成 13 / 18 = 72.2%；问题 2 / 已完成 13 = 15.4%
+    expect(wrapper.get('.qc-home-hero__progress').text()).toContain('占纳入病历 16.7%')
+    const legend = wrapper.get('.qc-home-rings__legend').text()
+    expect(legend).toContain('问题率15.4')
+    expect(legend).toContain('完成率72.2')
+    expect(legend).toContain('待质控16.7')
   })
 
   it('将技术异常和未知资料状态放入数据运行状态，不计入高风险队列', async () => {
@@ -435,7 +445,7 @@ describe('QCOverviewView', () => {
     await flushHomeLoad()
 
     await wrapper.get('[data-testid="analysis-object-physician"]').trigger('click')
-    await wrapper.get('[data-testid="analysis-metric-average"]').trigger('click')
+    await wrapper.get('[data-testid="analysis-metric"]').setValue('average')
     await nextTick()
 
     const rows = wrapper.findAll('[data-testid="defect-analysis-row"]')
@@ -452,11 +462,11 @@ describe('QCOverviewView', () => {
     await flushHomeLoad()
     await wrapper.get('[data-testid="analysis-object-physician"]').trigger('click')
 
-    await wrapper.get('[data-testid="analysis-sort-risk"]').trigger('click')
+    await wrapper.get('[data-testid="analysis-sort"]').setValue('risk')
     await nextTick()
     expect(wrapper.findAll('[data-testid="defect-analysis-row"]')[0].text()).toContain('张主任医师')
 
-    await wrapper.get('[data-testid="analysis-sort-gap"]').trigger('click')
+    await wrapper.get('[data-testid="analysis-sort"]').setValue('gap')
     await nextTick()
     expect(wrapper.findAll('[data-testid="defect-analysis-row"]')[0].text()).toContain('李主治医师')
   })

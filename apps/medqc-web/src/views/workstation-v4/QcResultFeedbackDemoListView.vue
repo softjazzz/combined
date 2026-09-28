@@ -1,16 +1,18 @@
 <template>
-  <main class="feedback-demo-page">
-    <header class="feedback-demo-head">
-      <div>
-        <p class="feedback-demo-eyebrow">
-          演示功能
+  <main class="feedback-demo-page mq-page">
+    <header class="feedback-demo-head mq-page-head">
+      <div class="mq-page-head__copy">
+        <span class="mq-page-eyebrow">质控作业 · 演示功能</span>
+        <h1 class="mq-page-title">
+          质控反馈记录
+        </h1>
+        <p class="feedback-demo-desc">
+          汇总演示账号已提交的质控结果反馈；不会修改原质控结论。
         </p>
-        <h1>质控反馈记录</h1>
-        <p>汇总演示账号已提交的质控结果反馈；不会修改原质控结论。</p>
       </div>
       <button
         type="button"
-        class="feedback-demo-refresh"
+        class="feedback-demo-refresh mq-btn"
         :disabled="loading"
         @click="load"
       >
@@ -25,26 +27,50 @@
       此页面仅对演示账号开放。
     </section>
     <template v-else>
-      <section class="feedback-demo-metrics">
+      <section class="feedback-demo-metrics mq-card">
         <article>
+          <MqIconTile
+            name="doc"
+            tone="brand"
+            :size="38"
+            :icon-size="22"
+          />
           <span>全部反馈</span>
           <strong>{{ feedbacks.length }}</strong>
         </article>
         <article class="is-success">
+          <MqIconTile
+            name="success"
+            tone="success"
+            :size="38"
+            :icon-size="22"
+          />
           <span>结果准确</span>
           <strong>{{ correctCount }}</strong>
         </article>
         <article class="is-danger">
+          <MqIconTile
+            name="issue"
+            tone="danger"
+            :size="38"
+            :icon-size="22"
+          />
           <span>结果有误</span>
           <strong>{{ incorrectCount }}</strong>
         </article>
         <article class="is-warning">
+          <MqIconTile
+            name="data_gap"
+            tone="warning"
+            :size="38"
+            :icon-size="22"
+          />
           <span>补充说明</span>
           <strong>{{ noteCount }}</strong>
         </article>
       </section>
 
-      <section class="feedback-demo-list">
+      <section class="feedback-demo-list mq-card">
         <p
           v-if="error"
           class="feedback-demo-error"
@@ -120,6 +146,7 @@
 </template>
 
 <script setup lang="ts">
+import MqIconTile from '@/components/icons/MqIconTile.vue'
 import { computed, onMounted, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import {
@@ -205,204 +232,197 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.feedback-demo-page {
-  min-height: 100%;
-  padding: 28px;
-  background: #f5f5f7;
-  color: #1d1d1f;
+/* v7.1：页头、玻璃卡、按钮来自 mq-components.css */
+.feedback-demo-desc {
+  margin: 2px 0 0;
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-13);
 }
-.feedback-demo-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 20px;
-  margin-bottom: 18px;
-}
-.feedback-demo-eyebrow {
-  margin: 0 0 4px;
-  color: #2b6cf6;
-  font-size: 12px;
-  font-weight: 650;
-}
-.feedback-demo-head h1 {
-  margin: 0;
-  font-size: 28px;
-  line-height: 34px;
-}
-.feedback-demo-head p:not(.feedback-demo-eyebrow) {
-  margin: 6px 0 0;
-  color: rgba(29, 29, 31, 0.58);
-  font-size: 14px;
-}
-.feedback-demo-refresh {
-  min-height: 34px;
-  padding: 0 13px;
-  border: 1px solid rgba(43, 108, 246, 0.2);
-  border-radius: 8px;
-  background: #fff;
-  color: #2b6cf6;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 650;
-}
+
 .feedback-demo-refresh:disabled {
-  cursor: not-allowed;
   opacity: 0.55;
+  cursor: wait;
 }
+
+/* 四栏指标：数值为零时保持中性色，不做语义强调 */
 .feedback-demo-metrics {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   overflow: hidden;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.88);
 }
+
 .feedback-demo-metrics article {
   display: grid;
-  gap: 7px;
-  min-height: 96px;
-  padding: 18px 20px;
-  border-right: 1px solid rgba(0, 0, 0, 0.08);
+  grid-template-columns: 38px minmax(0, 1fr);
+  grid-template-areas:
+    'icon label'
+    'value value';
+  align-items: center;
+  gap: 14px 12px;
+  padding: 18px 22px;
 }
-.feedback-demo-metrics article:last-child {
-  border-right: 0;
+
+.feedback-demo-metrics article + article {
+  border-left: 0.5px solid var(--mq-border);
 }
+
+.feedback-demo-metrics article > :first-child {
+  grid-area: icon;
+}
+
 .feedback-demo-metrics span {
-  color: rgba(29, 29, 31, 0.58);
-  font-size: 13px;
+  grid-area: label;
+  font-size: var(--mq-font-14);
   font-weight: 600;
 }
+
 .feedback-demo-metrics strong {
-  color: #2b6cf6;
-  font-size: 28px;
-  line-height: 32px;
+  grid-area: value;
+  color: var(--mq-text-primary);
+  font-family: var(--mq-font-display);
+  font-size: 40px;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
-.feedback-demo-metrics .is-success strong {
-  color: #087443;
+
+/* 列表 */
+.feedback-demo-list {
+  overflow: hidden;
 }
-.feedback-demo-metrics .is-danger strong {
-  color: #c24136;
-}
-.feedback-demo-metrics .is-warning strong {
-  color: #9a6700;
-}
-.feedback-demo-list,
-.feedback-demo-state {
-  margin-top: 18px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.9);
-}
-.feedback-demo-state {
-  padding: 36px;
-  color: rgba(29, 29, 31, 0.58);
-  text-align: center;
-}
+
+.feedback-demo-state,
 .feedback-demo-error {
   margin: 0;
-  padding: 16px 18px;
-  color: #b42318;
+  padding: 36px 24px;
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-13);
+  text-align: center;
 }
+
+.feedback-demo-error {
+  color: var(--mq-danger-text);
+}
+
+section.feedback-demo-state {
+  border: 1px solid var(--mq-glass-border);
+  border-radius: var(--mq-radius-card);
+  background: var(--mq-glass-bg);
+  box-shadow: var(--mq-glass-shadow);
+}
+
 .feedback-demo-table-wrap {
-  overflow: auto;
+  overflow-x: auto;
 }
+
 .feedback-demo-table-wrap table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: var(--mq-font-13);
 }
+
 .feedback-demo-table-wrap th {
-  padding: 12px 16px;
-  color: rgba(29, 29, 31, 0.52);
-  font-size: 12px;
-  font-weight: 650;
+  height: 40px;
+  padding: 0 18px;
+  background: rgba(118, 128, 160, 0.06);
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+  font-weight: 600;
   text-align: left;
   white-space: nowrap;
 }
+
 .feedback-demo-table-wrap td {
-  padding: 15px 16px;
-  border-top: 1px solid rgba(0, 0, 0, 0.07);
-  color: rgba(29, 29, 31, 0.8);
+  padding: 14px 18px;
+  border-top: 0.5px solid var(--mq-border);
   vertical-align: top;
 }
-.feedback-demo-table-wrap tr:hover td {
-  background: rgba(43, 108, 246, 0.025);
+
+.feedback-demo-table-wrap tbody tr:hover td {
+  background: rgba(10, 108, 255, 0.04);
 }
-.feedback-demo-table-wrap code {
-  color: #174f83;
-  font-family: 'SFMono-Regular', Consolas, monospace;
-  font-size: 12px;
-}
+
 .feedback-record,
 .feedback-rule {
-  min-width: 190px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 180px;
 }
+
 .feedback-record strong,
 .feedback-rule strong {
-  display: block;
-  color: #1d1d1f;
-  font-size: 13px;
-  font-weight: 650;
-  line-height: 20px;
+  font-weight: 600;
+  line-height: 1.5;
 }
-.feedback-record span,
-.feedback-rule code {
-  display: block;
-  margin-top: 3px;
-}
+
 .feedback-record span {
-  color: rgba(29, 29, 31, 0.48);
-  font-size: 12px;
-  line-height: 18px;
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
 }
+
+.feedback-rule code {
+  color: var(--mq-brand-700);
+  font-family: var(--mq-font-mono);
+  font-size: var(--mq-font-12);
+}
+
 .feedback-department {
-  min-width: 138px;
-  color: rgba(29, 29, 31, 0.66) !important;
+  min-width: 140px;
+  color: var(--mq-text-secondary);
+  white-space: nowrap;
 }
+
+.feedback-comment {
+  min-width: 200px;
+  color: var(--mq-text-secondary);
+}
+
+.feedback-demo-table-wrap td:last-child {
+  color: var(--mq-text-tertiary);
+  white-space: nowrap;
+}
+
 .status-label,
 .feedback-type {
   display: inline-flex;
-  padding: 3px 7px;
+  align-items: center;
+  padding: 3px 10px;
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.05);
-  color: rgba(29, 29, 31, 0.7);
-  font-size: 12px;
-  font-weight: 650;
+  background: var(--mq-neutral-bg);
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-12);
+  font-weight: 600;
   white-space: nowrap;
 }
+
 .feedback-type.is-correct {
-  background: rgba(16, 185, 129, 0.1);
-  color: #087443;
+  background: var(--mq-success-bg);
+  color: var(--mq-success-text);
 }
+
 .feedback-type.is-incorrect {
-  background: rgba(239, 68, 68, 0.09);
-  color: #c24136;
+  background: var(--mq-danger-bg);
+  color: var(--mq-danger-text);
 }
+
 .feedback-type.is-note {
-  background: rgba(245, 158, 11, 0.12);
-  color: #9a6700;
+  background: var(--mq-warning-bg);
+  color: var(--mq-warning-text);
 }
-.feedback-comment {
-  min-width: 280px;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-@media (max-width: 800px) {
-  .feedback-demo-page {
-    padding: 18px;
-  }
-  .feedback-demo-head {
-    align-items: stretch;
-    flex-direction: column;
-  }
+
+@media (max-width: 1100px) {
   .feedback-demo-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .feedback-demo-metrics article:nth-child(2) {
-    border-right: 0;
+
+  .feedback-demo-metrics article:nth-child(3) {
+    border-left: 0;
   }
-  .feedback-demo-metrics article:nth-child(-n + 2) {
-    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+
+  .feedback-demo-metrics article:nth-child(n + 3) {
+    border-top: 0.5px solid var(--mq-border);
   }
 }
 </style>

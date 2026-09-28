@@ -1353,7 +1353,7 @@ onBeforeUnmount(() => {
 .record-content-time {
   padding: 4px 8px;
   border-radius: 7px;
-  background: rgba(43, 108, 246, 0.07);
+  background: rgba(10, 108, 255, 0.07);
   color: #174f83;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
@@ -1444,7 +1444,7 @@ onBeforeUnmount(() => {
 }
 .record-content-section-title {
   margin: 0 0 9px;
-  color: #2b6cf6;
+  color: #0a6cff;
   font-size: 13px;
   font-weight: 650;
   line-height: 20px;
@@ -1507,10 +1507,10 @@ onBeforeUnmount(() => {
 }
 .record-result-entry.is-expanded {
   background: #fff;
-  box-shadow: inset 2px 0 0 #2b6cf6;
+  box-shadow: inset 2px 0 0 #0a6cff;
 }
 .record-result-entry.is-expanded .record-result-item {
-  background: rgba(43, 108, 246, 0.025);
+  background: rgba(10, 108, 255, 0.025);
 }
 .record-result-item {
   width: 100%;
@@ -1564,7 +1564,7 @@ onBeforeUnmount(() => {
   color: #047857;
 }
 .record-result-code {
-  color: #2b6cf6;
+  color: #0a6cff;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.01em;
@@ -1621,7 +1621,7 @@ onBeforeUnmount(() => {
   gap: 6px;
 }
 .record-result-section-heading svg {
-  color: rgba(43, 108, 246, 0.76);
+  color: rgba(10, 108, 255, 0.76);
   flex: none;
 }
 .record-result-detail p {
@@ -1672,7 +1672,7 @@ onBeforeUnmount(() => {
   gap: 3px;
 }
 .record-evidence-button:hover {
-  background: rgba(43, 108, 246, 0.04);
+  background: rgba(10, 108, 255, 0.04);
 }
 .record-evidence-button strong {
   color: rgba(29, 29, 31, 0.62);
@@ -1710,7 +1710,7 @@ onBeforeUnmount(() => {
   margin-top: 15px;
   padding: 10px 0 0 11px;
   border-top: 1px solid rgba(0, 0, 0, 0.065);
-  border-left: 2px solid rgba(43, 108, 246, 0.32);
+  border-left: 2px solid rgba(10, 108, 255, 0.32);
 }
 .record-result-guidance p {
   color: rgba(29, 29, 31, 0.82);
@@ -1729,7 +1729,7 @@ onBeforeUnmount(() => {
 .record-compare-state button {
   border: 0;
   background: transparent;
-  color: #2b6cf6;
+  color: #0a6cff;
   cursor: pointer;
 }
 .record-content-empty {
@@ -1742,10 +1742,10 @@ onBeforeUnmount(() => {
 .record-content-retry {
   min-height: 32px;
   padding: 0 14px;
-  border: 1px solid rgba(43, 108, 246, 0.2);
+  border: 1px solid rgba(10, 108, 255, 0.2);
   border-radius: 8px;
-  background: rgba(43, 108, 246, 0.07);
-  color: #2b6cf6;
+  background: rgba(10, 108, 255, 0.07);
+  color: #0a6cff;
   cursor: pointer;
   font-size: 13px;
   font-weight: 650;
@@ -1801,7 +1801,7 @@ onBeforeUnmount(() => {
   }
   .record-compare-mobile-tabs button.is-active {
     background: #fff;
-    color: #2b6cf6;
+    color: #0a6cff;
   }
   .record-compare-grid {
     height: clamp(320px, calc(100dvh - 230px), 680px);
@@ -1823,5 +1823,63 @@ onBeforeUnmount(() => {
     order: 3;
     width: 100%;
   }
+}
+
+/* ===== v7.1 液态玻璃覆盖：外框透明，目录 / 原文 / 结果三栏为独立玻璃卡 ===== */
+.record-compare-shell {
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--mq-text-primary);
+  font-family: var(--mq-font-family);
+}
+.record-compare-head {
+  min-height: 0;
+  padding: 14px 18px 10px;
+  border-bottom: 0;
+}
+.record-compare-head strong {
+  font-family: var(--mq-font-display);
+  font-size: var(--mq-font-16);
+  font-weight: 700;
+}
+.record-compare-head span {
+  color: var(--mq-text-tertiary);
+}
+.record-compare-grid {
+  gap: 14px;
+  padding: 0 16px 16px;
+}
+.record-document-nav,
+.record-content-column,
+.record-result-column {
+  overflow: hidden;
+  border: 1px solid var(--mq-glass-border);
+  border-radius: var(--mq-radius-card);
+  background: var(--mq-glass-bg);
+  -webkit-backdrop-filter: var(--mq-glass-blur);
+  backdrop-filter: var(--mq-glass-blur);
+  box-shadow: var(--mq-glass-shadow);
+}
+.record-document-nav {
+  border-right: 1px solid var(--mq-glass-border);
+}
+.record-content-column {
+  background: rgba(255, 255, 255, 0.82);
+}
+.record-content-toolbar {
+  border-bottom: 0.5px solid var(--mq-border);
+  background: transparent;
+}
+.record-column-head {
+  border-bottom: 0.5px solid var(--mq-border);
+}
+.record-result-entry {
+  border-radius: 16px;
+}
+.record-result-entry.is-active {
+  border-color: var(--mq-brand-600);
+  box-shadow: 0 0 0 3px rgba(10, 108, 255, 0.1);
 }
 </style>

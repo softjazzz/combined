@@ -8,7 +8,7 @@
         :value="keyword"
         maxlength="60"
         type="text"
-        class="h-10 w-full rounded-xl border border-black/10 bg-white/85 pl-9 pr-3 text-[13px] text-[#1d1d1f] shadow-sm outline-none transition-all placeholder:text-black/40 hover:border-black/15 focus:border-[#2b6cf6] focus:bg-white focus:shadow-[0_0_0_3px_rgba(43,108,246,0.08)]"
+        class="h-10 w-full rounded-xl border border-black/10 bg-white/85 pl-9 pr-3 text-[13px] text-[#1d1d1f] shadow-sm outline-none transition-all placeholder:text-black/40 hover:border-black/15 focus:border-[#0a6cff] focus:bg-white focus:shadow-[0_0_0_3px_rgba(10, 108, 255,0.08)]"
         placeholder="搜索患者、病历号"
         @input="emit('update:keyword', ($event.target as HTMLInputElement).value)"
       >
@@ -21,7 +21,7 @@
       :value="selectedDate"
       :allow-clear="false"
       :disabled-date="disabledFutureDate"
-      class="!h-10 !w-[144px] !rounded-xl !border-black/10 !bg-white/85 !text-[13px] shadow-sm hover:!border-black/15 focus:!border-[#2b6cf6]"
+      class="!h-10 !w-[144px] !rounded-xl !border-black/10 !bg-white/85 !text-[13px] shadow-sm hover:!border-black/15 focus:!border-[#0a6cff]"
       @update:value="emit('update:selectedDate', $event)"
     />
 

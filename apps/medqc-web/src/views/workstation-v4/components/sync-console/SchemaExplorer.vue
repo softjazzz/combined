@@ -12,7 +12,7 @@
           v-model="searchText"
           type="text"
           placeholder="搜索表或字段"
-          class="w-[200px] pl-[32px] pr-3 py-1.5 text-[12px] bg-slate-100/60 border border-transparent rounded-[8px] focus:bg-white focus:border-[#2b6cf6] focus:ring-[3px] focus:ring-[#2b6cf6]/10 focus:shadow-sm outline-none transition-all duration-200 text-slate-700 placeholder:text-slate-400 leading-tight"
+          class="w-[200px] pl-[32px] pr-3 py-1.5 text-[12px] bg-slate-100/60 border border-transparent rounded-[8px] focus:bg-white focus:border-[#0a6cff] focus:ring-[3px] focus:ring-[#0a6cff]/10 focus:shadow-sm outline-none transition-all duration-200 text-slate-700 placeholder:text-slate-400 leading-tight"
         >
       </div>
     </div>
@@ -32,7 +32,7 @@
               class="w-full text-left px-3 py-1.5 rounded-lg text-[13px] font-mono transition-all duration-200 block truncate"
               :class="
                 selectedTable?.name === table.name
-                  ? 'bg-blue-50/80 text-[#2b6cf6] font-semibold shadow-sm'
+                  ? 'bg-blue-50/80 text-[#0a6cff] font-semibold shadow-sm'
                   : 'hover:bg-slate-100/80 text-slate-600 hover:text-slate-800'
               "
               @click="handleSelectTable(table.name)"
@@ -49,7 +49,7 @@
             class="px-2 py-3 border-b-[2px] text-[13px] mr-6 transition-all"
             :class="
               activeView === 'schema'
-                ? 'border-[#2b6cf6] font-semibold text-[#2b6cf6]'
+                ? 'border-[#0a6cff] font-semibold text-[#0a6cff]'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             "
             @click="activeView = 'schema'"
@@ -60,7 +60,7 @@
             class="px-2 py-3 border-b-[2px] text-[13px] transition-all"
             :class="
               activeView === 'sample'
-                ? 'border-[#2b6cf6] font-semibold text-[#2b6cf6]'
+                ? 'border-[#0a6cff] font-semibold text-[#0a6cff]'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             "
             @click="activeView = 'sample'"
@@ -332,9 +332,9 @@ onMounted(async () => {
 }
 
 .schema-explorer input:focus {
-  border-color: rgba(43, 108, 246, 0.38);
+  border-color: rgba(10, 108, 255, 0.38);
   background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 0 0 3px rgba(43, 108, 246, 0.08);
+  box-shadow: 0 0 0 3px rgba(10, 108, 255, 0.08);
 }
 
 .schema-explorer > div:nth-child(2) > div:first-child {
@@ -355,7 +355,7 @@ onMounted(async () => {
 }
 
 .schema-explorer :deep(.bg-blue-50\/80) {
-  background-color: rgba(43, 108, 246, 0.08) !important;
+  background-color: rgba(10, 108, 255, 0.08) !important;
 }
 
 .schema-explorer :deep(.font-mono) {
@@ -381,7 +381,7 @@ onMounted(async () => {
 }
 
 .schema-explorer tbody tr:hover {
-  background: rgba(43, 108, 246, 0.045);
+  background: rgba(10, 108, 255, 0.045);
 }
 
 .schema-explorer :deep(.text-amber-500) {

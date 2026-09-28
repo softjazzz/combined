@@ -338,7 +338,7 @@ watch(
   height: 38px;
   margin: 0 12px 0 0;
   place-items: center;
-  border: 1px solid rgba(43, 108, 246, 0.18);
+  border: 1px solid rgba(10, 108, 255, 0.18);
   border-radius: 11px;
   background: #f3f8ff;
   color: #31597f;
@@ -347,15 +347,15 @@ watch(
 }
 
 .customer-record-result-drawer :deep(.ant-drawer-close:focus-visible) {
-  outline: 3px solid rgba(43, 108, 246, 0.24);
+  outline: 3px solid rgba(10, 108, 255, 0.24);
   outline-offset: 2px;
 }
 
 .customer-record-result-drawer :deep(.ant-drawer-close:hover) {
-  border-color: rgba(43, 108, 246, 0.38);
+  border-color: rgba(10, 108, 255, 0.38);
   background: #e7f1ff;
   color: #005eb8;
-  box-shadow: 0 4px 12px rgba(43, 108, 246, 0.14);
+  box-shadow: 0 4px 12px rgba(10, 108, 255, 0.14);
   transform: translateY(-1px);
 }
 
@@ -385,10 +385,10 @@ watch(
   height: 34px;
   flex: 0 0 34px;
   place-items: center;
-  border: 1px solid rgba(43, 108, 246, 0.14);
+  border: 1px solid rgba(10, 108, 255, 0.14);
   border-radius: 10px;
   background: #edf5ff;
-  color: #2b6cf6;
+  color: #0a6cff;
 }
 
 .customer-record-result-title__heading {
@@ -419,8 +419,8 @@ watch(
   align-items: center;
   gap: 10px;
   padding: 7px 12px 7px 10px;
-  border: 1px solid rgba(43, 108, 246, 0.12);
-  border-left: 3px solid #2b6cf6;
+  border: 1px solid rgba(10, 108, 255, 0.12);
+  border-left: 3px solid #0a6cff;
   border-radius: 11px;
   background: #f5f9ff;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
@@ -429,8 +429,8 @@ watch(
   flex: none;
   padding: 2px 7px;
   border-radius: 6px;
-  background: rgba(43, 108, 246, 0.11);
-  color: #2b6cf6;
+  background: rgba(10, 108, 255, 0.11);
+  color: #0a6cff;
   font-size: 12px;
   font-weight: 650;
   line-height: 20px;
@@ -455,7 +455,7 @@ watch(
 .customer-record-result-title__context-time {
   flex: none;
   padding-left: 10px;
-  border-left: 1px solid rgba(43, 108, 246, 0.14);
+  border-left: 1px solid rgba(10, 108, 255, 0.14);
   color: rgba(29, 29, 31, 0.58);
   font-size: 12px;
   font-weight: 500;
@@ -472,19 +472,19 @@ watch(
 .customer-record-result-title__export {
   min-height: 36px;
   padding: 0 14px;
-  border: 1px solid rgba(43, 108, 246, 0.22);
+  border: 1px solid rgba(10, 108, 255, 0.22);
   border-radius: 10px;
   background: #f7fbff;
-  color: #2b6cf6;
+  color: #0a6cff;
   font-size: 13px;
   font-weight: 650;
   cursor: pointer;
   transition: 180ms ease;
 }
 .customer-record-result-title__export:hover:not(:disabled) {
-  border-color: rgba(43, 108, 246, 0.38);
+  border-color: rgba(10, 108, 255, 0.38);
   background: #edf5ff;
-  box-shadow: 0 4px 12px rgba(43, 108, 246, 0.1);
+  box-shadow: 0 4px 12px rgba(10, 108, 255, 0.1);
   transform: translateY(-1px);
 }
 .customer-record-result-title__export:disabled {

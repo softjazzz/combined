@@ -10,7 +10,7 @@
           v-if="!sidebarCollapsed"
           class="sidebar-title"
         >
-          <ThunderboltOutlined style="color: #2b6cf6" />
+          <ThunderboltOutlined style="color: #0a6cff" />
           <span>AI 质控工作站</span>
         </div>
         <a-button
@@ -210,7 +210,7 @@
                 v-else-if="activeTab === 'qc'"
                 class="tab-placeholder"
               >
-                <SafetyCertificateOutlined style="font-size: 48px; color: #2b6cf6" />
+                <SafetyCertificateOutlined style="font-size: 48px; color: #0a6cff" />
                 <h3>首页质控</h3>
                 <p>形式质控（M2）+ 内涵质控（M3-A）</p>
                 <p class="hint">
@@ -786,8 +786,8 @@ onUnmounted(() => {
 }
 
 .ws-v2-sidebar :deep(.ant-menu-item-selected) {
-  background: rgba(43, 108, 246, 0.1);
-  color: #2b6cf6;
+  background: rgba(10, 108, 255, 0.1);
+  color: #0a6cff;
 }
 
 .ws-v2-sidebar :deep(.ant-menu-item-selected::after) {
@@ -801,13 +801,13 @@ onUnmounted(() => {
   left: 0;
   width: 3px;
   border-radius: 999px;
-  background: #2b6cf6;
+  background: #0a6cff;
   content: '';
 }
 
 .ws-v2-sidebar :deep(.ant-menu-submenu-selected > .ant-menu-submenu-title),
 .ws-v2-sidebar :deep(.ant-menu-submenu-open > .ant-menu-submenu-title) {
-  color: #2b6cf6;
+  color: #0a6cff;
 }
 
 .ws-v2-sidebar :deep(.ant-menu-sub) {
@@ -836,20 +836,20 @@ onUnmounted(() => {
 }
 
 .ws-v2 :deep(.ant-btn-primary) {
-  border-color: #2b6cf6;
-  background: #2b6cf6;
-  box-shadow: 0 5px 14px rgba(43, 108, 246, 0.16);
+  border-color: #0a6cff;
+  background: #0a6cff;
+  box-shadow: 0 5px 14px rgba(10, 108, 255, 0.16);
 }
 
 .ws-v2 :deep(.ant-btn-primary:not(:disabled):hover) {
-  border-color: #0057b8;
-  background: #0057b8;
+  border-color: #0a5fd6;
+  background: #0a5fd6;
 }
 
 .workbench-layout :deep(.ant-tag-blue) {
-  border-color: rgba(43, 108, 246, 0.14);
-  background: rgba(43, 108, 246, 0.06);
-  color: #2b6cf6;
+  border-color: rgba(10, 108, 255, 0.14);
+  background: rgba(10, 108, 255, 0.06);
+  color: #0a6cff;
   font-size: 12px;
   font-weight: 650;
 }
@@ -869,7 +869,7 @@ onUnmounted(() => {
 }
 
 .workbench-layout :deep(.ant-segmented-item-selected) {
-  color: #2b6cf6;
+  color: #0a6cff;
 }
 
 /* ==================== 嵌入模式 ====================  */
@@ -911,7 +911,7 @@ onUnmounted(() => {
 .workbench-eyebrow {
   display: block;
   margin-bottom: 6px;
-  color: #2b6cf6;
+  color: #0a6cff;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0;
@@ -1048,7 +1048,7 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 .resize-handle:hover {
-  background: rgba(43, 108, 246, 0.42);
+  background: rgba(10, 108, 255, 0.42);
 }
 
 /* ==================== 底部测试用例栏 ==================== */
@@ -1147,7 +1147,7 @@ onUnmounted(() => {
 .qc-message-eyebrow {
   display: block;
   margin-bottom: 6px;
-  color: #2b6cf6;
+  color: #0a6cff;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0;
@@ -1177,13 +1177,13 @@ onUnmounted(() => {
   gap: 7px;
   height: 36px;
   padding: 0 14px;
-  border: 1px solid #2b6cf6;
+  border: 1px solid #0a6cff;
   border-radius: 10px;
-  background: #2b6cf6;
+  background: #0a6cff;
   color: #fff;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    0 5px 14px rgba(43, 108, 246, 0.18);
+    0 5px 14px rgba(10, 108, 255, 0.18);
   font-size: 13px;
   font-weight: 600;
   transition:
@@ -1193,8 +1193,8 @@ onUnmounted(() => {
 }
 
 .qc-message-primary:hover {
-  background: #0057b8;
-  border-color: #0057b8;
+  background: #0a5fd6;
+  border-color: #0a5fd6;
 }
 
 .qc-message-button-icon {
@@ -1234,10 +1234,10 @@ onUnmounted(() => {
   width: 46px;
   height: 46px;
   padding: 11px;
-  border: 1px solid rgba(43, 108, 246, 0.16);
+  border: 1px solid rgba(10, 108, 255, 0.16);
   border-radius: 15px;
-  background: rgba(43, 108, 246, 0.08);
-  color: #2b6cf6;
+  background: rgba(10, 108, 255, 0.08);
+  color: #0a6cff;
   stroke-width: 1.9;
 }
 
@@ -1314,10 +1314,10 @@ onUnmounted(() => {
   align-items: center;
   height: 26px;
   padding: 0 9px;
-  border: 1px solid rgba(43, 108, 246, 0.14);
+  border: 1px solid rgba(10, 108, 255, 0.14);
   border-radius: 999px;
-  background: rgba(43, 108, 246, 0.06);
-  color: #2b6cf6;
+  background: rgba(10, 108, 255, 0.06);
+  color: #0a6cff;
   font-size: 12px;
   font-weight: 650;
 }
@@ -1347,7 +1347,7 @@ onUnmounted(() => {
   width: 8px;
   height: 8px;
   border-radius: 999px;
-  background: #2b6cf6;
+  background: #0a6cff;
 }
 
 .qc-message-item--risk .qc-message-item-dot {
@@ -1381,10 +1381,10 @@ onUnmounted(() => {
 .qc-message-item button {
   height: 32px;
   padding: 0 12px;
-  border: 1px solid rgba(43, 108, 246, 0.16);
+  border: 1px solid rgba(10, 108, 255, 0.16);
   border-radius: 9px;
-  background: rgba(43, 108, 246, 0.06);
-  color: #2b6cf6;
+  background: rgba(10, 108, 255, 0.06);
+  color: #0a6cff;
   font-size: 13px;
   font-weight: 650;
 }
@@ -1412,8 +1412,8 @@ onUnmounted(() => {
   width: 24px;
   height: 24px;
   border-radius: 8px;
-  background: rgba(43, 108, 246, 0.08);
-  color: #2b6cf6;
+  background: rgba(10, 108, 255, 0.08);
+  color: #0a6cff;
   font-size: 12px;
   font-weight: 700;
 }
@@ -1449,7 +1449,7 @@ onUnmounted(() => {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: #2b6cf6;
+  background: #0a6cff;
 }
 
 /* ==================== 滚动条 ==================== */
@@ -1466,5 +1466,72 @@ onUnmounted(() => {
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: rgba(29, 29, 31, 0.26);
+}
+
+/* ===== v7.1 液态玻璃覆盖：工作台内嵌时的容器与各子页页头 ===== */
+.ws-v2,
+.ws-v2-embedded,
+.ws-v2-main,
+.workbench-layout,
+.icd-fullpage,
+.qc-message-page {
+  background: transparent;
+}
+
+/* 外壳已无顶栏，嵌入高度不再扣除 64px */
+.ws-v2-embedded {
+  height: 100vh;
+}
+
+.ws-v2-main :deep(.pre-analysis-shell),
+.ws-v2-main :deep(.in-process-page),
+.ws-v2-main :deep(.payment-monitoring-page),
+.ws-v2-main :deep(.post-event-analysis-page),
+.ws-v2-main :deep(.upload-workstation),
+.ws-v2-main :deep(.icd-search-hero) {
+  --bg: transparent;
+  background: transparent !important;
+  font-family: var(--mq-font-family);
+}
+
+/* 页头标题统一 40px */
+.ws-v2-main :deep(.command-header .title-block h1),
+.ws-v2-main :deep(.in-process-page .page-header h2),
+.ws-v2-main :deep(.payment-title),
+.ws-v2-main :deep(.analysis-header h2),
+.ws-v2-main :deep(.upload-header h2) {
+  margin: 4px 0 0;
+  color: var(--mq-text-primary);
+  font-family: var(--mq-font-display);
+  font-size: var(--mq-font-title) !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+/* 眉标统一灰色、无底色 */
+.ws-v2-main :deep(.command-header .eyebrow),
+.ws-v2-main :deep(.payment-eyebrow),
+.ws-v2-main :deep(.upload-eyebrow),
+.ws-v2-main :deep(.in-process-page .breadcrumb) {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-13);
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* 事前分析顶部主卡与各子页白卡：统一玻璃卡 */
+.ws-v2-main :deep(.command-header),
+.ws-v2-main :deep(.drg-workbench-page .panel),
+.ws-v2-main :deep(.upload-page > section),
+.ws-v2-main :deep(.icd-fullpage .rounded-2xl) {
+  border-color: var(--mq-glass-border) !important;
+  border-radius: var(--mq-radius-card) !important;
+  background: var(--mq-glass-bg) !important;
+  box-shadow: var(--mq-glass-shadow) !important;
 }
 </style>

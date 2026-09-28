@@ -21,7 +21,7 @@
   --workstation-bg-card-soft: rgba(255, 255, 255, 0.72);
   --workstation-bg-table-header: rgba(255, 255, 255, 0.92);
   --workstation-bg-table-row-hover: rgba(0, 0, 0, 0.025);
-  --workstation-bg-table-row-selected: rgba(43, 108, 246, 0.08);
+  --workstation-bg-table-row-selected: rgba(10, 108, 255, 0.08);
   --workstation-text-primary: #1d1d1f;
   --workstation-text-secondary: rgba(29, 29, 31, 0.6);
   --workstation-text-muted: rgba(29, 29, 31, 0.38);
@@ -29,12 +29,12 @@
   --workstation-border-light: rgba(255, 255, 255, 0.92);
   --workstation-border-strong: rgba(0, 0, 0, 0.08);
   --workstation-divider: rgba(0, 0, 0, 0.08);
-  --workstation-brand-500: #2b6cf6;
-  --workstation-brand-600: #0057b8;
-  --workstation-brand-050: rgba(43, 108, 246, 0.08);
-  --workstation-brand-100: rgba(43, 108, 246, 0.1);
-  --workstation-brand-border: rgba(43, 108, 246, 0.18);
-  --workstation-brand-shadow: rgba(43, 108, 246, 0.14);
+  --workstation-brand-500: #0a6cff;
+  --workstation-brand-600: #0a5fd6;
+  --workstation-brand-050: rgba(10, 108, 255, 0.08);
+  --workstation-brand-100: rgba(10, 108, 255, 0.1);
+  --workstation-brand-border: rgba(10, 108, 255, 0.18);
+  --workstation-brand-shadow: rgba(10, 108, 255, 0.14);
   --workstation-state-warning-bg: #fff6e5;
   --workstation-state-warning-text: #b85a00;
   --workstation-state-danger-bg: #fdeded;
@@ -52,8 +52,8 @@
   --workstation-shadow-card-hover: 0 2px 12px rgba(0, 0, 0, 0.1), 0 6px 22px rgba(0, 0, 0, 0.075);
   --workstation-shadow-input:
     inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 1px 1px rgba(0, 0, 0, 0.035);
-  --workstation-shadow-brand: 0 4px 10px rgba(43, 108, 246, 0.16);
-  --workstation-shadow-brand-hover: 0 5px 12px rgba(43, 108, 246, 0.18);
+  --workstation-shadow-brand: 0 4px 10px rgba(10, 108, 255, 0.16);
+  --workstation-shadow-brand-hover: 0 5px 12px rgba(10, 108, 255, 0.18);
   --workstation-analysis-bg: rgba(255, 255, 255, 0.86);
   --workstation-analysis-border: rgba(0, 0, 0, 0.08);
   --workstation-analysis-shadow: var(--workstation-shadow-panel);
@@ -226,8 +226,8 @@
 .wv4-record-pool-hero .ant-select-selector:hover,
 .wv4-record-pool-hero .ant-picker:hover,
 .wv4-record-pool-hero .ant-picker-focused {
-  border-color: rgba(43, 108, 246, 0.42) !important;
-  box-shadow: 0 0 0 3px rgba(43, 108, 246, 0.07) !important;
+  border-color: rgba(10, 108, 255, 0.42) !important;
+  box-shadow: 0 0 0 3px rgba(10, 108, 255, 0.07) !important;
 }
 
 .wv4-record-pool-hero .wv4-filter-actions {
@@ -242,9 +242,9 @@
 }
 
 .wv4-record-pool-hero .wv4-filter-actions__button.ant-btn-primary {
-  border-color: #2b6cf6;
-  background: #2b6cf6;
-  box-shadow: 0 4px 10px rgba(43, 108, 246, 0.16);
+  border-color: #0a6cff;
+  background: #0a6cff;
+  box-shadow: 0 4px 10px rgba(10, 108, 255, 0.16);
 }
 
 .wv4-record-pool-filter__notice {
@@ -259,7 +259,7 @@
 
 .wv4-record-pool-filter__notice svg {
   flex: 0 0 auto;
-  color: rgba(43, 108, 246, 0.68);
+  color: rgba(10, 108, 255, 0.68);
 }
 
 .wv4-record-pool-hero .wv4-analysis-kpi-card {
@@ -307,7 +307,7 @@
   justify-content: center;
   border-radius: 999px;
   font-size: 24px;
-  background: rgba(43, 108, 246, 0.08);
+  background: rgba(10, 108, 255, 0.08);
   color: var(--workstation-brand-600);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
@@ -333,11 +333,11 @@
 }
 
 .wv4-analysis-kpi-card--brand {
-  border-color: rgba(43, 108, 246, 0.18);
+  border-color: rgba(10, 108, 255, 0.18);
 }
 
 .wv4-analysis-kpi-card--brand .wv4-analysis-kpi-card__icon {
-  background: rgba(43, 108, 246, 0.08);
+  background: rgba(10, 108, 255, 0.08);
   color: var(--workstation-brand-600);
 }
 
@@ -498,7 +498,7 @@
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: #2b6cf6;
+  background: #0a6cff;
 }
 
 .wv4-record-insight__split {
@@ -647,8 +647,8 @@
 
 .wv4-stage-notice {
   border-radius: 18px;
-  border: 1px solid rgba(43, 108, 246, 0.16);
-  background: rgba(43, 108, 246, 0.06);
+  border: 1px solid rgba(10, 108, 255, 0.16);
+  background: rgba(10, 108, 255, 0.06);
   padding: 12px 16px;
 }
 
@@ -658,7 +658,7 @@
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #2b6cf6;
+  color: #0a6cff;
 }
 
 .wv4-stage-notice__items {
@@ -758,9 +758,9 @@
   height: 24px;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(43, 108, 246, 0.1);
+  border: 1px solid rgba(10, 108, 255, 0.1);
   border-radius: 999px;
-  background: rgba(43, 108, 246, 0.07);
+  background: rgba(10, 108, 255, 0.07);
   padding: 0 8px;
   pointer-events: none;
   font-size: 12px;
@@ -825,9 +825,9 @@
 
 .wv4-record-pool-select-popup
   .ant-select-item-option-selected:not(.ant-select-item-option-disabled) {
-  background: rgba(43, 108, 246, 0.08);
+  background: rgba(10, 108, 255, 0.08);
   font-weight: 600;
-  color: #2b6cf6;
+  color: #0a6cff;
 }
 
 .workbench-date-row__field {
@@ -849,12 +849,12 @@
   max-width: 100%;
   align-items: center;
   border-radius: 999px;
-  border: 1px solid rgba(43, 108, 246, 0.16);
-  background: rgba(43, 108, 246, 0.08);
+  border: 1px solid rgba(10, 108, 255, 0.16);
+  background: rgba(10, 108, 255, 0.08);
   padding: 5px 12px;
   font-size: 12px;
   font-weight: 600;
-  color: #2b6cf6;
+  color: #0a6cff;
 }
 
 .workbench-dept-row__list {
@@ -902,7 +902,7 @@
 }
 
 .workbench-dept-chip--active .workbench-dept-chip__count {
-  background: rgba(43, 108, 246, 0.12);
+  background: rgba(10, 108, 255, 0.12);
   color: var(--workstation-brand-600);
 }
 
@@ -1064,7 +1064,7 @@
 .workstation-shell :deep(.ant-picker-focused) {
   border-color: var(--workstation-brand-border) !important;
   box-shadow:
-    0 0 0 3px rgba(43, 108, 246, 0.08),
+    0 0 0 3px rgba(10, 108, 255, 0.08),
     var(--workstation-shadow-input) !important;
 }
 
@@ -1095,27 +1095,34 @@
 .workstation-shell .wv4-record-pool-hero .wv4-filter-actions__button {
   font-family: inherit !important;
   font-size: 14px !important;
-  font-weight: 600 !important;
+  font-weight: 400 !important;
   letter-spacing: 0 !important;
+}
+
+/* 分段控件与按钮用中等字重；输入值、下拉值保持常规，避免 Windows 雅黑下整块发黑 */
+.workstation-shell .wv4-record-pool-hero .ant-segmented-item-label,
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter__sync-shortcut,
+.workstation-shell .wv4-record-pool-hero .wv4-filter-actions__button {
+  font-weight: 500 !important;
 }
 
 .workstation-shell .wv4-record-pool-hero .workbench-hosp-filter__label {
   font-family: inherit;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 400;
   letter-spacing: 0;
 }
 
 .workstation-shell .wv4-record-pool-hero .workbench-hosp-segmented {
   font-family: inherit;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0;
 }
 
 .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter__sync-shortcut {
   flex: 0 0 auto;
-  border-color: rgba(43, 108, 246, 0.24);
+  border-color: rgba(10, 108, 255, 0.24);
   color: var(--workstation-primary);
   padding-inline: 13px;
 }
@@ -1126,7 +1133,7 @@
 }
 
 .workstation-shell .wv4-record-pool-hero .workbench-dept-select__name {
-  font-weight: 600;
+  font-weight: 400;
   letter-spacing: 0;
 }
 
@@ -1161,7 +1168,7 @@
 .workstation-shell :deep(.ant-pagination .ant-pagination-item-active) {
   border-color: var(--workstation-brand-border);
   background: var(--workstation-brand-100);
-  box-shadow: 0 0 0 3px rgba(43, 108, 246, 0.08);
+  box-shadow: 0 0 0 3px rgba(10, 108, 255, 0.08);
 }
 
 .workstation-shell :deep(.ant-pagination .ant-pagination-item-active a) {
@@ -1229,13 +1236,13 @@
 }
 
 .wv4-stage-context {
-  border-color: rgba(43, 108, 246, 0.16) !important;
-  background: rgba(43, 108, 246, 0.08) !important;
-  color: #2b6cf6 !important;
+  border-color: rgba(10, 108, 255, 0.16) !important;
+  background: rgba(10, 108, 255, 0.08) !important;
+  color: #0a6cff !important;
 }
 
 .wv4-stage-context > span {
-  background: #2b6cf6 !important;
+  background: #0a6cff !important;
 }
 
 .medical-record-document__content {
@@ -1294,7 +1301,7 @@
 }
 
 .paste-frontpage-preset:hover {
-  border-color: rgba(43, 108, 246, 0.22);
+  border-color: rgba(10, 108, 255, 0.22);
   box-shadow: var(--workstation-shadow-card-hover);
   transform: translateY(-1px);
 }
@@ -1307,8 +1314,8 @@
 }
 
 .paste-frontpage-preset.active {
-  border-color: rgba(43, 108, 246, 0.38);
-  box-shadow: 0 0 0 3px rgba(43, 108, 246, 0.08);
+  border-color: rgba(10, 108, 255, 0.38);
+  box-shadow: 0 0 0 3px rgba(10, 108, 255, 0.08);
 }
 
 .paste-frontpage-preset__title {
@@ -1363,7 +1370,7 @@
   --workstation-bg-card-soft: rgba(255, 255, 255, 0.72);
   --workstation-bg-table-header: rgba(255, 255, 255, 0.92);
   --workstation-bg-table-row-hover: rgba(0, 0, 0, 0.025);
-  --workstation-bg-table-row-selected: rgba(43, 108, 246, 0.08);
+  --workstation-bg-table-row-selected: rgba(10, 108, 255, 0.08);
   --workstation-text-primary: #1d1d1f;
   --workstation-text-secondary: rgba(29, 29, 31, 0.6);
   --workstation-text-muted: rgba(29, 29, 31, 0.42);
@@ -1371,12 +1378,12 @@
   --workstation-border-light: rgba(255, 255, 255, 0.86);
   --workstation-border-strong: rgba(0, 0, 0, 0.08);
   --workstation-divider: rgba(0, 0, 0, 0.08);
-  --workstation-brand-500: #2b6cf6;
-  --workstation-brand-600: #0057b8;
-  --workstation-brand-050: rgba(43, 108, 246, 0.06);
-  --workstation-brand-100: rgba(43, 108, 246, 0.08);
-  --workstation-brand-border: rgba(43, 108, 246, 0.16);
-  --workstation-brand-shadow: rgba(43, 108, 246, 0.16);
+  --workstation-brand-500: #0a6cff;
+  --workstation-brand-600: #0a5fd6;
+  --workstation-brand-050: rgba(10, 108, 255, 0.06);
+  --workstation-brand-100: rgba(10, 108, 255, 0.08);
+  --workstation-brand-border: rgba(10, 108, 255, 0.16);
+  --workstation-brand-shadow: rgba(10, 108, 255, 0.16);
   --workstation-radius-panel: 20px;
   --workstation-radius-card: 16px;
   --workstation-radius-input: 10px;
@@ -1385,8 +1392,8 @@
   --workstation-shadow-card-hover: 0 2px 12px rgba(0, 0, 0, 0.1), 0 6px 22px rgba(0, 0, 0, 0.075);
   --workstation-shadow-input:
     inset 0 1px 0 rgba(255, 255, 255, 0.86), 0 1px 3px rgba(0, 0, 0, 0.035);
-  --workstation-shadow-brand: 0 5px 14px rgba(43, 108, 246, 0.18);
-  --workstation-shadow-brand-hover: 0 6px 18px rgba(43, 108, 246, 0.22);
+  --workstation-shadow-brand: 0 5px 14px rgba(10, 108, 255, 0.18);
+  --workstation-shadow-brand-hover: 0 6px 18px rgba(10, 108, 255, 0.22);
   --workstation-analysis-bg: rgba(255, 255, 255, 0.86);
   --workstation-analysis-border: rgba(0, 0, 0, 0.08);
   --workstation-analysis-shadow: 0 1px 4px rgba(0, 0, 0, 0.045), 0 2px 8px rgba(0, 0, 0, 0.035);
@@ -1440,11 +1447,167 @@
 }
 
 .workstation-shell .paste-frontpage-preset.active {
-  border-color: rgba(43, 108, 246, 0.38) !important;
-  box-shadow: 0 0 0 3px rgba(43, 108, 246, 0.08) !important;
+  border-color: rgba(10, 108, 255, 0.38) !important;
+  box-shadow: 0 0 0 3px rgba(10, 108, 255, 0.08) !important;
 }
 
 .workstation-shell .paste-frontpage-preset__tags span {
-  color: #2b6cf6 !important;
-  background: rgba(43, 108, 246, 0.08) !important;
+  color: #0a6cff !important;
+  background: rgba(10, 108, 255, 0.08) !important;
+}
+
+/* ---------- 病历池筛选区：一行半布局 ----------
+   第一行：搜索 + 住院状态；第二行：入出院日期 / 科室 / 主管医师（统一下拉外观）+ 右侧查询、重置。
+   仅病历池模式生效（阶段队列不带 --pool 类），DOM 与筛选逻辑不变。 */
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-filter-toolbar {
+  display: grid;
+  grid-template-columns: auto auto auto auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    'search search hosp hosp hosp hosp'
+    'date dept doctor sort . actions';
+  align-items: center;
+  gap: 12px 10px;
+}
+
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-controls__search-input {
+  grid-area: search;
+  flex: none;
+  width: 100%;
+  max-width: none;
+}
+
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-hosp-filter {
+  grid-area: hosp;
+  justify-self: end;
+}
+
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .record-pool-date-field {
+  grid-area: date;
+}
+
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-dept-filter {
+  grid-area: dept;
+}
+
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-doctor-filter {
+  grid-area: doctor;
+}
+
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .wv4-record-pool-filter__inpatient-sort {
+  grid-area: sort;
+}
+
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .wv4-filter-actions {
+  grid-area: actions;
+  justify-self: end;
+  margin-left: 0;
+}
+
+/* 三个筛选统一为同一种下拉：外框在字段容器上，标签放在框内左侧 */
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .record-pool-date-field,
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-dept-filter,
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-doctor-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  height: 42px;
+  padding: 0 2px 0 12px;
+  box-sizing: border-box;
+  border: 1px solid rgba(20, 40, 80, 0.12);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.025);
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .record-pool-date-field:hover,
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-dept-filter:hover,
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-doctor-filter:hover {
+  border-color: rgba(10, 108, 255, 0.42);
+}
+
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .record-pool-date-field:focus-within,
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-dept-filter:focus-within,
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-doctor-filter:focus-within {
+  border-color: rgba(10, 108, 255, 0.6);
+  box-shadow: 0 0 0 3px rgba(10, 108, 255, 0.1);
+}
+
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .record-pool-field-label {
+  gap: 0;
+  color: var(--mq-text-tertiary);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .record-pool-field-label svg {
+  display: none;
+}
+
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .record-pool-date-field .ant-picker,
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-dept-filter .ant-select-selector,
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-doctor-filter .ant-select-selector {
+  height: 40px !important;
+  min-height: 40px !important;
+  padding-left: 8px !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-date-row__range {
+  flex: none;
+  width: 216px;
+}
+
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-dept-select,
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-doctor-select {
+  width: 132px;
+}
+
+/* 下拉值与框内标签垂直居中对齐 */
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-dept-filter .ant-select-selection-item,
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-dept-filter .ant-select-selection-placeholder,
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-dept-filter .ant-select-selection-search-input,
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-doctor-filter .ant-select-selection-item,
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-doctor-filter .ant-select-selection-placeholder,
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-doctor-filter .ant-select-selection-search-input,
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .wv4-record-pool-filter__inpatient-sort .ant-select-selection-item {
+  height: 40px !important;
+  line-height: 40px !important;
+}
+
+/* 内容区较窄时退回自动换行，避免第二行溢出 */
+@media (max-width: 1180px) {
+  .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-filter-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-controls__search-input {
+    flex: 1 1 260px;
+    width: auto;
+  }
+
+  .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .wv4-filter-actions {
+    margin-left: auto;
+  }
+
+  /* 换行时保持：搜索、住院状态在前；日期、科室、医师、查询在后 */
+  .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-controls__search-input { order: 1; }
+  .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-hosp-filter { order: 2; }
+  .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .record-pool-date-field { order: 3; }
+  .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-dept-filter { order: 4; }
+  .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-doctor-filter { order: 5; }
+  .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .wv4-record-pool-filter__inpatient-sort { order: 6; }
+  .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .wv4-filter-actions { order: 7; }
+}
+
+/* 中等宽度：隐藏「住院状态」字样（分段选项自身已表意，分组仍有 aria-label），给搜索框让出空间 */
+@media (max-width: 1320px) {
+  .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-hosp-filter__label {
+    display: none;
+  }
 }

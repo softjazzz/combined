@@ -1,6 +1,6 @@
 <template>
   <a-popover
-    placement="bottomRight"
+    :placement="placement"
     trigger="click"
   >
     <template #content>
@@ -68,6 +68,10 @@ import {
   getFrontendBuildIdentity,
   type RuntimeBuildResult,
 } from '@/services/runtime-build-service'
+
+withDefaults(defineProps<{ placement?: 'bottomRight' | 'rightBottom' }>(), {
+  placement: 'bottomRight',
+})
 
 const frontend = getFrontendBuildIdentity()
 const result = ref<RuntimeBuildResult | null>(null)

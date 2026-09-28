@@ -138,7 +138,7 @@ const variant = computed(() => props.variant)
 .timeline-arrow {
   display: inline-flex;
   align-items: center;
-  color: rgba(43, 108, 246, 0.5);
+  color: rgba(10, 108, 255, 0.5);
 }
 
 .timeliness-metrics.is-compliant {

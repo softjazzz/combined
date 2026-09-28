@@ -223,7 +223,7 @@
                         ? '#ef4444'
                         : marker.severity === 'moderate'
                           ? '#eab308'
-                          : '#2b6cf6'
+                          : '#0a6cff'
                     "
                     stroke-width="2"
                     stroke-dasharray="5,5"
@@ -360,7 +360,7 @@
                     class="px-2.5 py-1 text-[11px] font-medium rounded-md transition-all duration-200 flex items-center gap-1"
                     :class="
                       sortOrder === 'asc'
-                        ? 'bg-white dark:bg-slate-700 text-[#2b6cf6] dark:text-blue-400 shadow-sm'
+                        ? 'bg-white dark:bg-slate-700 text-[#0a6cff] dark:text-blue-400 shadow-sm'
                         : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-800/50'
                     "
                     @click="sortOrder = 'asc'"
@@ -371,7 +371,7 @@
                     class="px-2.5 py-1 text-[11px] font-medium rounded-md transition-all duration-200 flex items-center gap-1"
                     :class="
                       sortOrder === 'desc'
-                        ? 'bg-white dark:bg-slate-700 text-[#2b6cf6] dark:text-blue-400 shadow-sm'
+                        ? 'bg-white dark:bg-slate-700 text-[#0a6cff] dark:text-blue-400 shadow-sm'
                         : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-800/50'
                     "
                     @click="sortOrder = 'desc'"
@@ -391,7 +391,7 @@
               <!-- Column 1: Diagnosis -->
               <div class="flex flex-col gap-3">
                 <div
-                  class="sticky top-0 z-10 bg-blue-50/90 text-[#0057b8] dark:bg-blue-900/50 dark:text-blue-300 font-bold px-3 py-2 border-l-4 border-blue-500 rounded-r-md shadow-sm backdrop-blur flex items-center gap-2 text-sm"
+                  class="sticky top-0 z-10 bg-blue-50/90 text-[#0a5fd6] dark:bg-blue-900/50 dark:text-blue-300 font-bold px-3 py-2 border-l-4 border-blue-500 rounded-r-md shadow-sm backdrop-blur flex items-center gap-2 text-sm"
                 >
                   <HeartOutlined /> 诊断
                 </div>
@@ -612,7 +612,7 @@
                               <div class="mb-1">
                                 <span class="text-slate-400">问题:</span> {{ item.description }}
                               </div>
-                              <div class="text-[#2b6cf6] dark:text-blue-400">
+                              <div class="text-[#0a6cff] dark:text-blue-400">
                                 <span class="text-slate-400"> 建议:</span> {{ item.suggestion }}
                               </div>
                             </div>
@@ -851,7 +851,7 @@ const getSeverityBadgeClass = (severity: string): string => {
     case 'moderate':
       return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
     case 'mild':
-      return 'bg-blue-100 text-[#0057b8] dark:bg-blue-900/30 dark:text-blue-400'
+      return 'bg-blue-100 text-[#0a5fd6] dark:bg-blue-900/30 dark:text-blue-400'
     default:
       return 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-400'
   }
@@ -1181,24 +1181,24 @@ onUnmounted(() => {
 
 .ai-profile-dashboard :deep(.text-blue-500),
 .ai-profile-dashboard :deep(.text-blue-400),
-.ai-profile-dashboard :deep(.text-\[\#2b6cf6\]) {
-  color: #2b6cf6 !important;
+.ai-profile-dashboard :deep(.text-\[\#0a6cff\]) {
+  color: #0a6cff !important;
 }
 
 .ai-profile-dashboard :deep(.bg-blue-500),
 .ai-profile-dashboard :deep(.hover\:bg-blue-600:hover) {
-  background: #2b6cf6 !important;
+  background: #0a6cff !important;
 }
 
 .ai-profile-dashboard :deep(.from-blue-400),
-.ai-profile-dashboard :deep(.from-\[\#2b6cf6\]) {
-  --tw-gradient-from: #2b6cf6 var(--tw-gradient-from-position) !important;
-  --tw-gradient-to: rgba(43, 108, 246, 0) var(--tw-gradient-to-position) !important;
+.ai-profile-dashboard :deep(.from-\[\#0a6cff\]) {
+  --tw-gradient-from: #0a6cff var(--tw-gradient-from-position) !important;
+  --tw-gradient-to: rgba(10, 108, 255, 0) var(--tw-gradient-to-position) !important;
 }
 
 .ai-profile-dashboard :deep(.to-indigo-500),
-.ai-profile-dashboard :deep(.to-\[\#0057b8\]) {
-  --tw-gradient-to: #0057b8 var(--tw-gradient-to-position) !important;
+.ai-profile-dashboard :deep(.to-\[\#0a5fd6\]) {
+  --tw-gradient-to: #0a5fd6 var(--tw-gradient-to-position) !important;
 }
 
 .ai-profile-dashboard :deep(.rounded-xl),
@@ -1224,6 +1224,6 @@ onUnmounted(() => {
 
 .ai-profile-dashboard button:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 5px 14px rgba(43, 108, 246, 0.18);
+  box-shadow: 0 5px 14px rgba(10, 108, 255, 0.18);
 }
 </style>

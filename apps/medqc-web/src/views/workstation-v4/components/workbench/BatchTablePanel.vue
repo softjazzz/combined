@@ -121,6 +121,8 @@
       :row-selection="rowSelection"
       :scroll="tableScroll"
       :locale="tableLocale"
+      :custom-row="buildCustomRow"
+      :row-class-name="rowClassName"
       @change="handleTableChange"
     >
       <template #bodyCell="{ column, record }">
@@ -141,7 +143,7 @@
               <span class="batch-table-panel__visit-line">
                 <span class="batch-table-panel__visit-label">住院号：</span>
                 <span
-                  class="batch-table-panel__visit-id font-mono"
+                  class="batch-table-panel__visit-id"
                   :title="record.visitId"
                   :tabindex="recordPoolMode ? 0 : undefined"
                 >
@@ -158,7 +160,10 @@
           </div>
         </template>
         <template v-else-if="column.key === 'department'">
-          <span class="batch-table-panel__department">{{ record.department }}</span>
+          <span
+            class="batch-table-panel__department"
+            :title="record.department"
+          >{{ record.department }}</span>
         </template>
         <template v-else-if="column.key === 'stageStatus'">
           <span
@@ -247,6 +252,14 @@
 import { computed } from 'vue'
 import { Eye, ListChecks } from 'lucide-vue-next'
 import type { RecordLatestQcSummary, RecordSourceState } from '../../types'
+import {
+  dischargeDateLabel,
+  displayHospitalDate,
+  hospitalizationStatusLabel,
+  isDischargedRecord,
+  resolvedHospitalizationStatus,
+  type HospitalizationRow,
+} from './hospitalizationPresentation'
 import patientIconBoy from '@/assets/avatar-icons/patient-icon-boy.png'
 import patientIconElderMan from '@/assets/avatar-icons/patient-icon-elder-man.png'
 import patientIconElderWoman from '@/assets/avatar-icons/patient-icon-elder-woman.png'
@@ -295,12 +308,15 @@ const props = defineProps<{
   showDeferAction?: boolean
   showAssignAction?: boolean
   showClearFiltersAction?: boolean
+  /** 病历池预览：当前预览的病历，点击行时切换 */
+  activeRowKey?: string
   recordPoolMode?: boolean
 }>()
 
 const emit = defineEmits<{
   'update:selectedRowKeys': [keys: string[]]
   'open-record': [id: string]
+  'select-row': [id: string]
   'batch-extract': [keys: string[]]
   'filter-qc': []
   'batch-defer': [keys: string[]]
@@ -347,7 +363,8 @@ const showBatchActions = computed(
     showClearFiltersAction.value,
 )
 const tableScroll = computed(() => ({
-  x: recordPoolMode.value ? 1040 : 980,
+  // 病历池最小宽度 = 固定列 536 + 患者列 136；再窄才出现横向滚动
+  x: recordPoolMode.value ? 672 : 980,
   y: showSelection.value ? undefined : 440,
 }))
 const displayRows = computed(() => {
@@ -404,42 +421,8 @@ function patientAvatarSrc(record: { patientSex?: string; patientAge?: number }) 
   return female ? patientIconWoman : patientIconMan
 }
 
-function displayHospitalDate(value?: string) {
-  const normalized = String(value || '').trim()
-  return normalized && normalized !== '-' ? normalized : '-'
-}
-
-function isDischargedRecord(record: Pick<WorkbenchRow, 'dischargeDate'>) {
-  return displayHospitalDate(record.dischargeDate) !== '-'
-}
-
-type HospitalizationRow = Pick<
-  WorkbenchRow,
-  'dischargeDate' | 'hospitalizationStatus' | 'hospitalizationStatusVerifiedAt'
->
-
-function resolvedHospitalizationStatus(record: HospitalizationRow) {
-  if (record.hospitalizationStatus) return record.hospitalizationStatus
-  return isDischargedRecord(record) ? 'discharged' : 'inpatient'
-}
-
-function hospitalizationStatusLabel(record: HospitalizationRow) {
-  const status = resolvedHospitalizationStatus(record)
-  if (status === 'discharged') return '已出院'
-  if (status === 'unknown') return '待核验'
-  return '在院'
-}
-
 function hospitalizationStatusClass(record: HospitalizationRow) {
   return `batch-table-panel__hospitalization-status--${resolvedHospitalizationStatus(record)}`
-}
-
-function dischargeDateLabel(record: HospitalizationRow) {
-  if (isDischargedRecord(record)) return displayHospitalDate(record.dischargeDate)
-  const status = resolvedHospitalizationStatus(record)
-  if (status === 'discharged') return '时间待同步'
-  if (status === 'unknown') return '状态待核验'
-  return '尚未出院'
 }
 
 function stageTagClass(stageStatus: string) {
@@ -466,21 +449,42 @@ const stageColumns = [
   { title: '操作', key: 'action', dataIndex: 'action', width: 120 },
 ]
 
+// 病历池与右侧预览并排，列表列只剩约 660–760px：患者列不设宽度吃掉剩余空间，其余列按内容收紧
 const recordPoolColumns = [
-  { title: '患者 / 住院号', key: 'patient', dataIndex: 'patient', width: 300 },
-  { title: '科室', key: 'department', dataIndex: 'department', width: 190 },
+  { title: '患者 / 住院号', key: 'patient', dataIndex: 'patient' },
+  { title: '科室', key: 'department', dataIndex: 'department', width: 128, ellipsis: true },
   {
     title: '住院状态',
     key: 'hospitalizationStatus',
     dataIndex: 'hospitalizationStatus',
-    width: 110,
+    width: 88,
   },
-  { title: '入院日期', key: 'admissionDate', dataIndex: 'admissionDate', width: 140 },
-  { title: '出院日期', key: 'dischargeDate', dataIndex: 'dischargeDate', width: 140 },
-  { title: '操作', key: 'action', dataIndex: 'action', width: 100 },
+  { title: '入院日期', key: 'admissionDate', dataIndex: 'admissionDate', width: 104 },
+  { title: '出院日期', key: 'dischargeDate', dataIndex: 'dischargeDate', width: 104 },
+  { title: '操作', key: 'action', dataIndex: 'action', width: 72 },
 ]
 
 const columns = computed(() => (recordPoolMode.value ? recordPoolColumns : stageColumns))
+
+// 病历池模式：点击行（非按钮/勾选框）只切换右侧预览，查看详情仍走“查看”按钮
+const INTERACTIVE_SELECTOR = 'button, a, input, label, .ant-checkbox-wrapper, [role="button"]'
+
+function buildCustomRow(record: WorkbenchRow) {
+  if (!props.recordPoolMode) return {}
+  return {
+    onClick: (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null
+      if (target?.closest(INTERACTIVE_SELECTOR)) return
+      emit('select-row', record.recordKey || record.id)
+    },
+  }
+}
+
+function rowClassName(record: WorkbenchRow): string {
+  if (!props.recordPoolMode) return ''
+  const active = props.activeRowKey && props.activeRowKey === (record.recordKey || record.id)
+  return active ? 'batch-table-panel__row--active' : 'batch-table-panel__row--selectable'
+}
 </script>
 
 <style scoped>
@@ -490,7 +494,7 @@ const columns = computed(() => (recordPoolMode.value ? recordPoolColumns : stage
 
 .batch-table-panel__task-status :deep(.record-pool-qc-status) {
   border-radius: 10px;
-  background: rgba(43, 108, 246, 0.045);
+  background: rgba(10, 108, 255, 0.045);
   box-shadow: none;
 }
 
@@ -538,7 +542,7 @@ const columns = computed(() => (recordPoolMode.value ? recordPoolColumns : stage
 .batch-table-panel__summary-pill--selected {
   border-color: var(--workstation-brand-border, rgba(191, 219, 254, 0.96));
   background: var(--workstation-brand-100, rgba(239, 246, 255, 0.96));
-  color: var(--workstation-brand-600, #1e5ae0);
+  color: var(--workstation-brand-600, #0a5fd6);
 }
 
 .batch-table-panel__action {
@@ -556,13 +560,13 @@ const columns = computed(() => (recordPoolMode.value ? recordPoolColumns : stage
 
 .batch-table-panel__action--primary {
   border: 0 !important;
-  background: var(--workstation-brand-500, #2b6cf6) !important;
+  background: var(--workstation-brand-500, #0a6cff) !important;
   color: #fff !important;
   box-shadow: 0 12px 22px rgba(47, 111, 237, 0.18) !important;
 }
 
 .batch-table-panel__action--primary:hover {
-  background: var(--workstation-brand-600, #1e5ae0) !important;
+  background: var(--workstation-brand-600, #0a5fd6) !important;
   box-shadow: 0 14px 26px rgba(47, 111, 237, 0.22) !important;
 }
 
@@ -587,7 +591,7 @@ const columns = computed(() => (recordPoolMode.value ? recordPoolColumns : stage
 .batch-table-panel__action--ghost:hover,
 .batch-table-panel__detail-button:hover {
   border-color: transparent !important;
-  color: var(--workstation-brand-600, #1e5ae0) !important;
+  color: var(--workstation-brand-600, #0a5fd6) !important;
 }
 
 .batch-table-panel :deep(.ant-pagination-options) {
@@ -633,7 +637,7 @@ const columns = computed(() => (recordPoolMode.value ? recordPoolColumns : stage
   object-fit: cover;
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.96),
-    0 2px 6px rgba(43, 108, 246, 0.08);
+    0 2px 6px rgba(10, 108, 255, 0.08);
 }
 
 .batch-table-panel__patient-meta {
@@ -695,8 +699,8 @@ const columns = computed(() => (recordPoolMode.value ? recordPoolColumns : stage
 }
 
 .batch-table-panel__hospitalization-status--inpatient {
-  background: rgba(43, 108, 246, 0.1);
-  color: var(--workstation-brand-600, #1e5ae0);
+  background: rgba(10, 108, 255, 0.1);
+  color: var(--workstation-brand-600, #0a5fd6);
 }
 
 .batch-table-panel__hospitalization-status--discharged {
@@ -733,7 +737,7 @@ const columns = computed(() => (recordPoolMode.value ? recordPoolColumns : stage
 }
 
 .batch-table-panel__date-pending {
-  color: var(--workstation-brand-600, #1e5ae0);
+  color: var(--workstation-brand-600, #0a5fd6);
 }
 
 .batch-table-panel__updated-at {
@@ -759,7 +763,7 @@ const columns = computed(() => (recordPoolMode.value ? recordPoolColumns : stage
     var(--workstation-brand-050, rgba(234, 242, 255, 0.98)) 88%,
     white
   );
-  color: var(--workstation-brand-600, #1e5ae0);
+  color: var(--workstation-brand-600, #0a5fd6);
 }
 
 .batch-table-panel__tag--review {
@@ -830,8 +834,8 @@ const columns = computed(() => (recordPoolMode.value ? recordPoolColumns : stage
 }
 
 .batch-table-panel :deep(.ant-checkbox-checked .ant-checkbox-inner) {
-  background: var(--workstation-brand-500, #2f6fed);
-  border-color: var(--workstation-brand-500, #2f6fed);
+  background: var(--workstation-brand-500, #0a6cff);
+  border-color: var(--workstation-brand-500, #0a6cff);
 }
 
 .batch-table-panel :deep(.ant-empty) {
@@ -874,7 +878,7 @@ const columns = computed(() => (recordPoolMode.value ? recordPoolColumns : stage
 .batch-table-panel--record-pool .batch-table-panel__clear-selection {
   padding-inline: 2px;
   font-size: 12px;
-  color: var(--workstation-brand-500, #2b6cf6);
+  color: var(--workstation-brand-500, #0a6cff);
 }
 
 .batch-table-panel--record-pool .batch-table-panel__patient-name {
@@ -884,6 +888,7 @@ const columns = computed(() => (recordPoolMode.value ? recordPoolColumns : stage
 }
 
 .batch-table-panel--record-pool .batch-table-panel__department {
+  display: block;
   font-size: 14px;
   color: var(--workstation-text-primary, #1d1d1f);
 }
@@ -891,7 +896,7 @@ const columns = computed(() => (recordPoolMode.value ? recordPoolColumns : stage
 .batch-table-panel--record-pool .batch-table-panel__detail-button {
   height: 30px !important;
   background: transparent !important;
-  color: var(--workstation-brand-500, #2b6cf6) !important;
+  color: var(--workstation-brand-500, #0a6cff) !important;
   box-shadow: none !important;
   font-size: 13px !important;
   font-weight: 500 !important;
@@ -917,6 +922,15 @@ const columns = computed(() => (recordPoolMode.value ? recordPoolColumns : stage
   padding-top: 12px;
   padding-bottom: 12px;
   border-bottom-color: #edf0f4;
+}
+
+.batch-table-panel--record-pool :deep(.ant-table-thead > tr > th),
+.batch-table-panel--record-pool :deep(.ant-table-tbody > tr > td) {
+  padding-inline: 12px;
+}
+
+.batch-table-panel--record-pool .batch-table-panel__detail-button {
+  padding-inline: 6px !important;
 }
 
 .batch-table-panel--record-pool :deep(.ant-table-tbody > tr:hover > td) {

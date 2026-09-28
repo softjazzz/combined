@@ -3,10 +3,12 @@
     <div class="catalog-page-inner">
       <header class="catalog-page-header">
         <div class="catalog-title-block">
-          <div class="catalog-eyebrow">
-            <BookOpen :size="15" /> 只读配置
+          <div class="catalog-eyebrow mq-page-eyebrow">
+            规则 · 只读配置
           </div>
-          <h1>手术操作分级目录</h1>
+          <h1 class="mq-page-title">
+            手术操作分级目录
+          </h1>
           <p>查看质控引擎用于区分手术、操作及手术等级的当前口径。</p>
         </div>
         <div class="catalog-page-actions">
@@ -198,7 +200,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import type { TableColumnsType, TablePaginationConfig } from 'ant-design-vue'
 import { message } from 'ant-design-vue'
-import { ArrowLeft, BookOpen, RefreshCw, Search, ShieldCheck } from 'lucide-vue-next'
+import { ArrowLeft, RefreshCw, Search, ShieldCheck } from 'lucide-vue-next'
 import {
   fetchSurgeryProcedureCatalog,
   type SurgeryProcedureCatalogData,
@@ -627,6 +629,205 @@ onMounted(() => void loadCatalog())
   .summary-item:nth-child(2) {
     border-right: 0;
   }
+}
+
+/* ===== v7.1 液态玻璃覆盖（同选择器后写生效） ===== */
+.catalog-page {
+  padding: 8px 28px 32px 22px;
+  background: transparent;
+  color: var(--mq-text-primary);
+  font-family: var(--mq-font-family);
+}
+
+.catalog-page-header {
+  align-items: flex-end;
+  margin-bottom: 20px;
+  padding: 0 4px;
+}
+
+.catalog-title-block h1 {
+  font-family: var(--mq-font-display);
+  font-size: var(--mq-font-title);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.catalog-eyebrow {
+  margin-bottom: 4px;
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-13);
+}
+
+.catalog-title-block p {
+  margin-top: 4px;
+  color: var(--mq-text-tertiary);
+}
+
+.catalog-page-actions :deep(.ant-btn),
+.filter-bar :deep(.ant-btn) {
+  height: 36px;
+  border-radius: 999px;
+}
+
+.catalog-version {
+  background: var(--mq-bg-muted);
+  color: var(--mq-text-tertiary);
+  font-family: var(--mq-font-mono);
+}
+
+.catalog-workbench {
+  border: 1px solid var(--mq-glass-border);
+  border-radius: var(--mq-radius-card);
+  background: var(--mq-glass-bg);
+  -webkit-backdrop-filter: var(--mq-glass-blur);
+  backdrop-filter: var(--mq-glass-blur);
+  box-shadow: var(--mq-glass-shadow);
+}
+
+.policy-strip {
+  background: var(--mq-info-bg);
+  color: var(--mq-text-secondary);
+}
+
+.policy-strip strong {
+  color: var(--mq-info-text);
+}
+
+/* 统计项即分类筛选：选中为白色浮起胶囊 */
+.summary-item {
+  border-radius: 16px;
+  color: var(--mq-text-secondary);
+}
+
+.summary-item.active {
+  background: #ffffff;
+  box-shadow: 0 2px 10px rgba(10, 55, 115, 0.1);
+  color: var(--mq-brand-600);
+}
+
+.summary-item strong {
+  font-family: var(--mq-font-display);
+  letter-spacing: -0.02em;
+}
+
+.filter-bar :deep(.ant-input-affix-wrapper),
+.filter-bar :deep(.ant-select-selector) {
+  border-color: rgba(60, 60, 80, 0.1) !important;
+  border-radius: var(--mq-radius-control) !important;
+  background: rgba(255, 255, 255, 0.85) !important;
+}
+
+.catalog-table-wrap :deep(.ant-table-thead > tr > th) {
+  border-bottom: 0;
+  background: rgba(118, 128, 160, 0.06);
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+  font-weight: 600;
+}
+
+.catalog-table-wrap :deep(.ant-table-thead > tr > th::before) {
+  display: none;
+}
+
+.catalog-table-wrap :deep(.ant-table-tbody > tr > td) {
+  border-bottom: 0.5px solid var(--mq-border);
+  background: transparent;
+}
+
+.catalog-table-wrap :deep(.ant-table-tbody > tr:hover > td) {
+  background: rgba(10, 108, 255, 0.04);
+}
+
+.catalog-identity code {
+  border-radius: 8px;
+  background: var(--mq-info-bg);
+  color: var(--mq-brand-700);
+  font-family: var(--mq-font-mono);
+}
+
+.level-label,
+.category-label {
+  border-radius: 999px;
+}
+
+.catalog-table-wrap :deep(.ant-pagination-item-active) {
+  border-color: transparent;
+  background: var(--mq-brand-gradient);
+}
+
+.catalog-table-wrap :deep(.ant-pagination-item-active a) {
+  color: #ffffff;
+}
+
+/* 字重收敛：Windows 下中文走微软雅黑，600 及以上都会渲染成粗黑体。
+   只保留统计数字和口径标题用 600，行内名称、分类、等级一律 500 */
+.summary-strip {
+  gap: 8px;
+  padding: 16px 22px 4px;
+}
+
+.summary-item {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 2px;
+  padding: 10px 16px;
+  border-right: 0;
+  text-align: left;
+}
+
+.summary-item span {
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+}
+
+.summary-item strong {
+  color: var(--mq-text-primary);
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 32px;
+  font-variant-numeric: tabular-nums;
+}
+
+.summary-item:hover span,
+.summary-item.active span {
+  color: var(--mq-brand-600);
+}
+
+.summary-item.active strong {
+  color: var(--mq-brand-600);
+}
+
+.catalog-identity strong {
+  color: var(--mq-text-primary);
+  font-weight: 500;
+}
+
+.category-label,
+.category-label.surgery {
+  color: var(--mq-text-secondary);
+  font-weight: 400;
+}
+
+.level-label {
+  background: var(--mq-neutral-bg);
+  color: var(--mq-text-secondary);
+  font-weight: 500;
+}
+
+.level-label.level-4 {
+  background: var(--mq-info-bg);
+  color: var(--mq-brand-600);
+}
+
+.basis-cell strong {
+  color: var(--mq-text-secondary);
+  font-weight: 500;
+}
+
+.catalog-table-wrap :deep(.ant-table-thead > tr > th) {
+  font-weight: 500;
 }
 </style>
 

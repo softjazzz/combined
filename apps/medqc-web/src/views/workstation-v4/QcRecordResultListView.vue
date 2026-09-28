@@ -1,8 +1,10 @@
 <template>
   <main class="qc-record-result-list-view running-qc-refined running-qc-apple">
-    <section class="qc-record-result-list-view__header">
-      <div>
-        <h1>
+    <!-- 页头：眉标 + 大标题；右侧视图切换与“质控所选” -->
+    <section class="qc-record-result-list-view__header mq-page-head">
+      <div class="mq-page-head__copy">
+        <span class="mq-page-eyebrow">质控作业 · 泸县0609质控点</span>
+        <h1 class="mq-page-title">
           {{ pageTitle
           }}<span
             class="review-workbench-scope"
@@ -12,44 +14,46 @@
           }}</span>
         </h1>
       </div>
+      <div class="mq-page-head__actions">
+        <nav
+          class="qc-record-result-list-view__view-switch mq-segmented"
+          aria-label="质控结果视图"
+        >
+          <button
+            type="button"
+            class="mq-segmented__item"
+            data-testid="qc-result-view-records"
+            :class="{ 'is-active': activeView === 'records' }"
+            :aria-pressed="activeView === 'records'"
+            @click="activeView = 'records'"
+          >
+            病历结果
+          </button>
+          <button
+            type="button"
+            class="mq-segmented__item"
+            data-testid="qc-result-view-analysis"
+            :class="{ 'is-active': activeView === 'analysis' }"
+            :aria-pressed="activeView === 'analysis'"
+            @click="activeView = 'analysis'"
+          >
+            结果分析
+          </button>
+        </nav>
+        <div class="review-workbench-primary">
+          <QcRunSelectedControl
+            :care-phase="carePhase"
+            :record-refs="selectedQcRecordRefs"
+            :selected-count="selectedCount"
+            :status-target="`#qc-record-result-task-status-${carePhase}`"
+            @completed="refreshAfterSelectedQc"
+          />
+        </div>
+      </div>
     </section>
 
-    <nav
-      class="qc-record-result-list-view__view-switch"
-      aria-label="质控结果视图"
-    >
-      <button
-        type="button"
-        data-testid="qc-result-view-records"
-        :class="{ 'is-active': activeView === 'records' }"
-        :aria-pressed="activeView === 'records'"
-        @click="activeView = 'records'"
-      >
-        病历结果
-      </button>
-      <button
-        type="button"
-        data-testid="qc-result-view-analysis"
-        :class="{ 'is-active': activeView === 'analysis' }"
-        :aria-pressed="activeView === 'analysis'"
-        @click="activeView = 'analysis'"
-      >
-        结果分析
-      </button>
-    </nav>
-
-    <div class="review-workbench-primary">
-      <QcRunSelectedControl
-        :care-phase="carePhase"
-        :record-refs="selectedQcRecordRefs"
-        :selected-count="selectedCount"
-        :status-target="`#qc-record-result-task-status-${carePhase}`"
-        @completed="refreshAfterSelectedQc"
-      />
-    </div>
-
     <section
-      class="review-workbench-metrics"
+      class="review-workbench-metrics mq-card"
       aria-label="质控结果汇总"
     >
       <div
@@ -60,6 +64,13 @@
         <span>{{ metric.key === 'priority' ? '确定问题' : metric.label }}</span>
         <strong>{{ metric.value }}</strong>
         <span>{{ metric.key === 'records' || metric.key === 'completed' ? '份' : '项' }}</span>
+        <MqIconTile
+          class="review-metric__icon"
+          :name="METRIC_ICONS[metric.key].name"
+          :tone="METRIC_ICONS[metric.key].tone"
+          :size="38"
+          :icon-size="22"
+        />
       </div>
     </section>
 
@@ -221,6 +232,7 @@
             :selected-record-keys="selectedRecordKeys"
             :empty-message="emptyMessage"
             @open-result="handleSelectPreview"
+            @open-full="handleOpenResult"
             @update:selected-record-keys="updateSelectedRecordKeys"
           />
 
@@ -281,6 +293,8 @@ import { Pagination } from 'ant-design-vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ChevronDown, Download } from 'lucide-vue-next'
+import MqIconTile from '@/components/icons/MqIconTile.vue'
+import type { MqIconName, MqIconTone } from '@/components/icons/mqIcons'
 
 import { exportFilteredLuxian0609RecordResults } from '@/services/sichuan-rule-workspace-service'
 
@@ -298,6 +312,11 @@ import { usePatientRecords } from './composables/usePatientRecords'
 import type { PatientRecord, RecordLatestQcSummary } from './types'
 import type { LuxianQcAnalysisRecordItem } from '@/services/luxian-qc-result-analysis-service'
 import { downloadBlob } from './customer-sample-validation/batchExport'
+import {
+  formatQcCompletedAt,
+  resolveResultPresentation,
+  statusCount,
+} from './components/qc/latestQcSummaryPresentation'
 
 const props = defineProps<{
   carePhase: QcRecordCarePhase
@@ -362,6 +381,14 @@ interface QcRecordMetricItem {
   value: number
 }
 
+// 指标卡图标：与首页、设计稿 RunningV71 一致
+const METRIC_ICONS: Record<string, { name: MqIconName; tone: MqIconTone }> = {
+  records: { name: 'stack', tone: 'brand' },
+  completed: { name: 'fp_qc', tone: 'success' },
+  priority: { name: 'issue', tone: 'danger' },
+  dataGap: { name: 'data_gap', tone: 'warning' },
+}
+
 const metricItems = computed<QcRecordMetricItem[]>(() => [
   { key: 'records', label: '纳入病历', value: qcSummary.value.totalRecords },
   { key: 'completed', label: '已完成质控', value: qcSummary.value.readyRecords },
@@ -408,11 +435,6 @@ const emptyMessage = computed(() => {
   return '暂无符合当前范围的病历'
 })
 
-function statusCount(statusCounts: Record<string, number>, status: string): number {
-  const value = Number(statusCounts[status] || 0)
-  return Number.isFinite(value) && value > 0 ? value : 0
-}
-
 function hasCompleteRecordIdentity(record: PatientRecord): boolean {
   return Boolean(record.recordKey && record.instituteId && record.patientId && record.visitId)
 }
@@ -448,104 +470,12 @@ function toResultRow(record: PatientRecord): QcRecordResultRow {
   }
 }
 
-function resolveResultPresentation(
-  summary?: RecordLatestQcSummary,
-): Pick<QcRecordResultRow, 'resultStatus' | 'resultLabel' | 'issueSummary' | 'latestQcTime'> {
-  if (summary?.status === 'technical_error') {
-    return {
-      resultStatus: 'technical-error',
-      resultLabel: '结果校验异常',
-      issueSummary: '请复核结果交付',
-      latestQcTime: '—',
-    }
-  }
-  if (summary?.status !== 'ready') {
-    return {
-      resultStatus: 'not-run',
-      resultLabel: '未质控',
-      issueSummary: '暂无结果',
-      latestQcTime: '—',
-    }
-  }
-
-  const statusCounts = summary.statusCounts || {}
-  const nonCompliant = statusCount(statusCounts, 'non_compliant')
-  const dataGap = statusCount(statusCounts, 'data_gap')
-  const uncertain = statusCount(statusCounts, 'uncertain')
-  const issueSummary =
-    [
-      nonCompliant > 0 ? `确定问题 ${nonCompliant}` : '',
-      dataGap > 0 ? `待核实 ${dataGap}` : '',
-      uncertain > 0 ? `待判断 ${uncertain}` : '',
-    ]
-      .filter(Boolean)
-      .join(' · ') || '未发现确定问题'
-
-  if (nonCompliant > 0) {
-    return {
-      resultStatus: 'priority',
-      resultLabel: '需优先复核',
-      issueSummary,
-      latestQcTime: formatQcCompletedAt(summary.completedAt),
-    }
-  }
-  if (dataGap > 0) {
-    return {
-      resultStatus: 'data-gap',
-      resultLabel: '资料待核实',
-      issueSummary,
-      latestQcTime: formatQcCompletedAt(summary.completedAt),
-    }
-  }
-  if (uncertain > 0) {
-    return {
-      resultStatus: 'uncertain',
-      resultLabel: '待判断',
-      issueSummary,
-      latestQcTime: formatQcCompletedAt(summary.completedAt),
-    }
-  }
-  return {
-    resultStatus: 'completed',
-    resultLabel: '已完成',
-    issueSummary,
-    latestQcTime: formatQcCompletedAt(summary.completedAt),
-  }
-}
-
 function formatMedicalRecordTimestamp(value?: string | null): string {
   const text = String(value || '').trim()
   if (!text) return '—'
   const match = text.match(/^(\d{4}-\d{2}-\d{2})(?:[T\s](\d{2}):(\d{2}))?/u)
   if (!match) return '—'
   return match[2] && match[3] ? `${match[1]} ${match[2]}:${match[3]}` : match[1]
-}
-
-const beijingQcTimeFormatter = new Intl.DateTimeFormat('zh-CN', {
-  timeZone: 'Asia/Shanghai',
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-  hourCycle: 'h23',
-})
-
-function formatQcCompletedAt(value?: string | null): string {
-  const text = String(value || '').trim()
-  if (!text) return '—'
-  const normalized = text.replace(' ', 'T')
-  // 工作区任务时间由 datetime.utcnow() 产生，历史值没有时区后缀，但语义为 UTC。
-  const timestamp = /(?:Z|[+-]\d{2}:\d{2})$/iu.test(normalized) ? normalized : `${normalized}Z`
-  const date = new Date(timestamp)
-  if (Number.isNaN(date.getTime())) return '—'
-  const parts = Object.fromEntries(
-    beijingQcTimeFormatter
-      .formatToParts(date)
-      .filter((part) => part.type !== 'literal')
-      .map((part) => [part.type, part.value]),
-  )
-  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`
 }
 
 function applyFilters() {
@@ -837,8 +767,8 @@ function closeResultDrawer() {
   margin-top: 6px;
   padding: 5px 10px;
   border-radius: 999px;
-  background: rgba(43, 108, 246, 0.08);
-  color: #2b6cf6;
+  background: rgba(10, 108, 255, 0.08);
+  color: #0a6cff;
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
@@ -874,7 +804,7 @@ function closeResultDrawer() {
 .qc-record-result-list-view__view-switch button.is-active {
   background: #fff;
   box-shadow: 0 2px 6px rgba(15, 23, 42, 0.1);
-  color: #2b6cf6;
+  color: #0a6cff;
 }
 
 .qc-record-result-list-view__workbench {
@@ -915,15 +845,15 @@ function closeResultDrawer() {
   gap: 7px;
   min-height: 38px;
   padding: 0 15px;
-  border: 1px solid #2b6cf6;
+  border: 1px solid #0a6cff;
   border-radius: 10px;
-  background: #2b6cf6;
+  background: #0a6cff;
   color: #fff;
   font-size: 13px;
   font-weight: 650;
   white-space: nowrap;
   cursor: pointer;
-  box-shadow: 0 7px 16px rgba(43, 108, 246, 0.18);
+  box-shadow: 0 7px 16px rgba(10, 108, 255, 0.18);
 }
 
 .qc-record-result-list-view__export-options {
@@ -956,7 +886,7 @@ function closeResultDrawer() {
 
 .qc-record-result-list-view__export-options button:hover:not(:disabled),
 .qc-record-result-list-view__export-options button:focus-visible {
-  background: rgba(43, 108, 246, 0.07);
+  background: rgba(10, 108, 255, 0.07);
   outline: none;
 }
 
@@ -1027,7 +957,7 @@ function closeResultDrawer() {
   border: 1px solid rgba(0, 0, 0, 0.09);
   border-radius: 8px;
   background: #fff;
-  color: #2b6cf6;
+  color: #0a6cff;
   cursor: pointer;
   font: inherit;
   font-size: 13px;
@@ -1041,7 +971,7 @@ function closeResultDrawer() {
   border: 1px solid rgba(0, 0, 0, 0.09);
   border-radius: 8px;
   background: #fff;
-  color: #2b6cf6;
+  color: #0a6cff;
   cursor: pointer;
   font: inherit;
   font-size: 13px;
@@ -1050,14 +980,14 @@ function closeResultDrawer() {
 }
 
 .qc-record-result-list-view__query-button {
-  border-color: #2b6cf6;
-  background: #2b6cf6;
+  border-color: #0a6cff;
+  background: #0a6cff;
   color: #fff;
 }
 
 .qc-record-result-list-view__refresh-button {
-  border-color: #2b6cf6;
-  background: #2b6cf6;
+  border-color: #0a6cff;
+  background: #0a6cff;
   color: #fff;
 }
 
@@ -1107,9 +1037,9 @@ function closeResultDrawer() {
 
 .qc-record-result-list-view__notice {
   padding: 12px 20px;
-  border-top: 1px solid rgba(43, 108, 246, 0.1);
-  background: rgba(43, 108, 246, 0.045);
-  color: #2b6cf6 !important;
+  border-top: 1px solid rgba(10, 108, 255, 0.1);
+  background: rgba(10, 108, 255, 0.045);
+  color: #0a6cff !important;
   font-weight: 600;
 }
 

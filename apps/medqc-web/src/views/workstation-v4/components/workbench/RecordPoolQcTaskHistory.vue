@@ -247,8 +247,8 @@ function durationLabel(job: SichuanBatchJob): string {
   font-weight: 400;
 }
 .record-pool-task-history__entry:hover {
-  border-color: rgba(0, 122, 255, 0.24);
-  color: #007aff;
+  border-color: rgba(10, 108, 255, 0.24);
+  color: #0a6cff;
 }
 .record-pool-task-history__title {
   display: flex;
@@ -262,8 +262,8 @@ function durationLabel(job: SichuanBatchJob): string {
   width: 34px;
   height: 34px;
   border-radius: 10px;
-  color: #007aff;
-  background: rgba(0, 122, 255, 0.09);
+  color: #0a6cff;
+  background: rgba(10, 108, 255, 0.09);
 }
 .record-pool-task-history__title span:last-child {
   display: grid;
@@ -318,8 +318,8 @@ function durationLabel(job: SichuanBatchJob): string {
   transition: 180ms ease;
 }
 .record-pool-task-history__item:hover {
-  border-color: rgba(0, 122, 255, 0.22);
-  background: rgba(0, 122, 255, 0.025);
+  border-color: rgba(10, 108, 255, 0.22);
+  background: rgba(10, 108, 255, 0.025);
 }
 .record-pool-task-history__item > svg {
   flex: none;
@@ -349,8 +349,8 @@ function durationLabel(job: SichuanBatchJob): string {
   flex: none;
   padding: 2px 7px;
   border-radius: 999px;
-  background: rgba(0, 122, 255, 0.08);
-  color: #007aff;
+  background: rgba(10, 108, 255, 0.08);
+  color: #0a6cff;
   font-size: 12px;
   font-style: normal;
   font-weight: 500;

@@ -25,7 +25,7 @@
           </div>
           <div class="flex items-center gap-2">
             <span
-              class="rounded-full border border-blue-100 bg-blue-50/80 px-2.5 py-1 text-[11px] font-semibold text-[#0057b8]"
+              class="rounded-full border border-blue-100 bg-blue-50/80 px-2.5 py-1 text-[11px] font-semibold text-[#0a5fd6]"
             >
               {{ codeType === 'icd10' ? 'ICD-10' : 'ICD-9' }}
             </span>
@@ -62,7 +62,7 @@
               @click="selectCode(item)"
             >
               <div
-                class="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] border border-blue-100 bg-blue-50 text-[12px] font-semibold text-[#0057b8]"
+                class="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] border border-blue-100 bg-blue-50 text-[12px] font-semibold text-[#0a5fd6]"
               >
                 {{ item.type === 'icd10' ? '诊' : '术' }}
               </div>
@@ -71,7 +71,7 @@
                   <span
                     :class="[
                       'font-mono text-[13px] font-semibold',
-                      selectedCode?.code === item.code ? 'text-[#0057b8]' : 'text-slate-500',
+                      selectedCode?.code === item.code ? 'text-[#0a5fd6]' : 'text-slate-500',
                     ]"
                   >{{ item.code }}</span>
                   <span
@@ -330,7 +330,7 @@ function highlightMatch(text: string, query: string): string {
   const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   return text.replace(
     new RegExp(`(${escaped})`, 'gi'),
-    '<mark class="rounded bg-blue-100 px-0.5 font-medium text-[#0057b8]">$1</mark>',
+    '<mark class="rounded bg-blue-100 px-0.5 font-medium text-[#0a5fd6]">$1</mark>',
   )
 }
 
@@ -512,9 +512,9 @@ onMounted(() => {
   color: rgba(29, 29, 31, 0.38) !important;
 }
 
-.icd-workstation :deep(.text-\[\#0057b8\]),
+.icd-workstation :deep(.text-\[\#0a5fd6\]),
 .icd-workstation :deep(.text-blue-500) {
-  color: #2b6cf6 !important;
+  color: #0a6cff !important;
 }
 
 .icd-workstation :deep(.border-slate-200),
@@ -531,7 +531,7 @@ onMounted(() => {
 
 .icd-workstation :deep(.bg-blue-50),
 .icd-workstation :deep(.bg-blue-50\/80) {
-  background-color: rgba(43, 108, 246, 0.08) !important;
+  background-color: rgba(10, 108, 255, 0.08) !important;
 }
 
 .icd-workstation :deep(.font-semibold) {
@@ -550,11 +550,11 @@ onMounted(() => {
 }
 
 .icd-result-row.is-selected {
-  border-color: rgba(43, 108, 246, 0.16);
-  background: rgba(43, 108, 246, 0.08);
+  border-color: rgba(10, 108, 255, 0.16);
+  background: rgba(10, 108, 255, 0.08);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.75),
-    0 3px 10px rgba(43, 108, 246, 0.08);
+    0 3px 10px rgba(10, 108, 255, 0.08);
 }
 
 .icd-tree-modern :deep(.ant-tree-switcher) {
@@ -578,8 +578,8 @@ onMounted(() => {
 
 .icd-tree-modern :deep(.ant-tree-node-selected .ant-tree-node-content-wrapper),
 .icd-tree-modern :deep(.ant-tree-node-content-wrapper.ant-tree-node-selected) {
-  background: rgba(43, 108, 246, 0.08) !important;
-  color: #2b6cf6 !important;
+  background: rgba(10, 108, 255, 0.08) !important;
+  color: #0a6cff !important;
 }
 
 .icd-tree-modern :deep(.ant-tree-treenode) {

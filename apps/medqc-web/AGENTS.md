@@ -16,7 +16,7 @@
 
 ## 工具与交付
 
-- 存在 `.codegraph/` 时，定位代码先用 CodeGraph；索引不代替真实 trace、测试或浏览器验证。UI 遵循 `docs/gap/WorkstationV4-医疗浅色-DESIGN.md`；纯展示不改后端合同。
+- 存在 `.codegraph/` 时，定位代码先用 CodeGraph；索引不代替真实 trace、测试或浏览器验证。UI 遵循 `docs/0418/UI/WorkstationV4-医疗浅色-DESIGN.md`；纯展示不改后端合同。
 - TypeScript 优先修 DTO、Store、props/emits 边界；不新增宽泛 `any`、`@ts-ignore` 或 `.vue.ts` 镜像文件。不得提交生成物、临时日志或关闭 CI 门禁。
 - 小改动先跑聚焦测试；提交前默认运行 `npm run check:encoding`、`npm run lint`、`npm run type-check`、`npm run test:unit`，Python 改动另跑相关 pytest/静态检查。资源不足至少跑前两项，并记录未运行项。
 - 提交前检查 `git diff --cached --name-only`，只暂存本任务文件，使用中文提交信息。删除、强推、全局安装和数据库写入须明确授权；已授权交付的普通 `git push` 不必重复询问。

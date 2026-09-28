@@ -351,7 +351,7 @@ describe('QcRecordResultListView', () => {
     await flushPromises()
 
     const renderedTimes = wrapper
-      .findAll('tbody tr[data-record-key] td:nth-child(4)')
+      .findAll('tbody tr[data-record-key] td:nth-child(5)')
       .map((item) => item.text())
     expect(renderedTimes.slice(0, 2)).toEqual(['2026-08-17 16:49', '2026-08-17 16:49'])
     expect(wrapper.getComponent(QcRecordReviewPreview).props('row')?.admissionTime).toBe(
@@ -474,7 +474,8 @@ describe('QcRecordResultListView', () => {
     await flushPromises()
 
     const rows = wrapper.findAll('tbody tr[data-record-key]')
-    await rows[0]!.find('button').trigger('click')
+    // 整行点击只切换右侧预览，不打开抽屉
+    await rows[0]!.trigger('click')
 
     const preview = wrapper.getComponent(QcRecordReviewPreview)
     expect(preview.props('row')).toMatchObject({
@@ -560,6 +561,15 @@ describe('QcRecordResultListView', () => {
       .vm.$emit('open-full', '["H","P","V-priority"]')
     expect(wrapper.getComponent(ResultDrawerStub).props('open')).toBe(true)
     expect(wrapper.text()).not.toContain('下一闭环接入')
+  })
+
+  it('行内「查看」与病历池一致：直接打开当前行的完整质控结果', async () => {
+    const wrapper = mountView('discharged')
+    await flushPromises()
+    expect(wrapper.getComponent(ResultDrawerStub).props('open')).toBe(false)
+    await wrapper.get('tbody tr[data-record-key] .qc-record-result-table__view-button').trigger('click')
+    await flushPromises()
+    expect(wrapper.getComponent(ResultDrawerStub).props('open')).toBe(true)
   })
 
   it('将勾选病历的完整三坐标交给质控控件，完成后刷新当前结果页', async () => {

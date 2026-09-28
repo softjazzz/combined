@@ -23,7 +23,7 @@
           </h1>
           <span
             v-if="record.status === 'completed'"
-            class="rounded-full border border-blue-200/80 bg-blue-50/80 px-2.5 py-0.5 text-[10px] font-bold text-[#0057b8]"
+            class="rounded-full border border-blue-200/80 bg-blue-50/80 px-2.5 py-0.5 text-[10px] font-bold text-[#0a5fd6]"
           >
             &#x5DF2;&#x5B8C;&#x6210;
           </span>
@@ -35,7 +35,7 @@
           </span>
           <span
             v-else-if="record.status === 'processing'"
-            class="rounded-full border border-blue-200/80 bg-blue-50/80 px-2.5 py-0.5 text-[10px] font-bold text-[#0057b8]"
+            class="rounded-full border border-blue-200/80 bg-blue-50/80 px-2.5 py-0.5 text-[10px] font-bold text-[#0a5fd6]"
           >
             &#x5904;&#x7406;&#x4E2D;
           </span>
@@ -85,7 +85,7 @@
               'flex h-[30px] w-[30px] items-center justify-center rounded-full text-sm transition-all',
               currentIndex <= 0
                 ? 'cursor-not-allowed text-slate-300'
-                : 'text-slate-500 hover:bg-blue-50/80 hover:text-[#0057b8]',
+                : 'text-slate-500 hover:bg-blue-50/80 hover:text-[#0a5fd6]',
             ]"
             @click="$emit('prev')"
           >
@@ -99,7 +99,7 @@
               'flex h-[30px] w-[30px] items-center justify-center rounded-full text-sm transition-all',
               currentIndex >= totalCount - 1
                 ? 'cursor-not-allowed text-slate-300'
-                : 'text-slate-500 hover:bg-blue-50/80 hover:text-[#0057b8]',
+                : 'text-slate-500 hover:bg-blue-50/80 hover:text-[#0a5fd6]',
             ]"
             @click="$emit('next')"
           >
@@ -109,7 +109,7 @@
       </div>
 
       <a-button
-        class="!h-9 !rounded-full !border-slate-200/80 !bg-white/92 !px-4 !font-semibold !text-slate-700 !shadow-none hover:!border-blue-200 hover:!text-[#0057b8]"
+        class="!h-9 !rounded-full !border-slate-200/80 !bg-white/92 !px-4 !font-semibold !text-slate-700 !shadow-none hover:!border-blue-200 hover:!text-[#0a5fd6]"
         @click="$emit('open-icd')"
       >
         <template #icon>
@@ -200,10 +200,10 @@ defineEmits<{
 }
 
 .detail-apple-header button:not(:disabled):hover {
-  border-color: rgba(43, 108, 246, 0.2) !important;
-  background: rgba(43, 108, 246, 0.06) !important;
-  color: #2b6cf6 !important;
-  box-shadow: 0 2px 8px rgba(43, 108, 246, 0.08) !important;
+  border-color: rgba(10, 108, 255, 0.2) !important;
+  background: rgba(10, 108, 255, 0.06) !important;
+  color: #0a6cff !important;
+  box-shadow: 0 2px 8px rgba(10, 108, 255, 0.08) !important;
 }
 
 .detail-apple-header :deep(.ant-btn:not(.ant-btn-primary)) {
@@ -216,27 +216,27 @@ defineEmits<{
 }
 
 .detail-apple-header :deep(.ant-btn:not(.ant-btn-primary):hover) {
-  border-color: rgba(43, 108, 246, 0.2) !important;
-  color: #2b6cf6 !important;
+  border-color: rgba(10, 108, 255, 0.2) !important;
+  color: #0a6cff !important;
 }
 
 .detail-apple-header :deep(.ant-btn-primary) {
-  border-color: #2b6cf6 !important;
-  background: #2b6cf6 !important;
+  border-color: #0a6cff !important;
+  background: #0a6cff !important;
   color: #fff !important;
   font-size: 13px !important;
   font-weight: 650 !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    0 4px 12px rgba(43, 108, 246, 0.16) !important;
+    0 4px 12px rgba(10, 108, 255, 0.16) !important;
 }
 
 .detail-apple-header :deep(.ant-btn-primary:hover) {
-  border-color: #0057b8 !important;
-  background: #0057b8 !important;
+  border-color: #0a5fd6 !important;
+  background: #0a5fd6 !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    0 6px 16px rgba(43, 108, 246, 0.2) !important;
+    0 6px 16px rgba(10, 108, 255, 0.2) !important;
 }
 
 .detail-apple-header :deep(.ant-btn-primary[disabled]),
@@ -276,15 +276,15 @@ defineEmits<{
 
 .detail-apple-header .bg-blue-50\/80,
 .detail-apple-header .bg-slate-50\/92 {
-  background: rgba(43, 108, 246, 0.07) !important;
+  background: rgba(10, 108, 255, 0.07) !important;
 }
 
 .detail-apple-header .border-blue-200\/80,
 .detail-apple-header .border-slate-200\/90 {
-  border-color: rgba(43, 108, 246, 0.16) !important;
+  border-color: rgba(10, 108, 255, 0.16) !important;
 }
 
-.detail-apple-header .text-\[\#0057b8\] {
-  color: #2b6cf6 !important;
+.detail-apple-header .text-\[\#0a5fd6\] {
+  color: #0a6cff !important;
 }
 </style>

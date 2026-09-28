@@ -5,10 +5,10 @@
       class="cursor-pointer"
       @click="emit('click-metric', { key: 'total' })"
     >
-      <div class="text-[12px] text-slate-500">
+      <div class="rules-metric__label">
         {{ totalLabel }}
       </div>
-      <div class="mt-1 text-[24px] font-bold text-slate-900">
+      <div class="rules-metric__value">
         {{ totalRules }}
       </div>
     </a-card>
@@ -17,13 +17,13 @@
       class="cursor-pointer"
       @click="emit('click-metric', { key: 'enabled' })"
     >
-      <div class="text-[12px] text-slate-500">
+      <div class="rules-metric__label">
         {{ enabledLabel }}
       </div>
-      <div class="mt-1 text-[24px] font-bold text-blue-700">
+      <div class="rules-metric__value rules-metric__value--brand">
         {{ enabledRules }}
       </div>
-      <div class="text-[11px] text-slate-500">
+      <div class="rules-metric__sub">
         {{ enabledSubtext || `草稿 ${draftRules} · 停用 ${disabledRules}` }}
       </div>
     </a-card>
@@ -32,13 +32,13 @@
       class="cursor-pointer"
       @click="emit('click-metric', { key: 'hit7d' })"
     >
-      <div class="text-[12px] text-slate-500">
+      <div class="rules-metric__label">
         {{ hitLabel }}
       </div>
-      <div class="mt-1 text-[24px] font-bold text-slate-900">
+      <div class="rules-metric__value">
         {{ hit7d }}
       </div>
-      <div class="text-[11px] text-slate-500">
+      <div class="rules-metric__sub">
         {{ hitSubtext || `命中率 ${hitRate7d.toFixed(1)}%` }}
       </div>
     </a-card>
@@ -47,13 +47,13 @@
       class="cursor-pointer"
       @click="emit('click-metric', { key: 'risk' })"
     >
-      <div class="text-[12px] text-slate-500">
+      <div class="rules-metric__label">
         {{ riskLabel }}
       </div>
-      <div class="mt-1 text-[24px] font-bold text-red-600">
+      <div class="rules-metric__value rules-metric__value--danger">
         {{ highRiskRules }}
       </div>
-      <div class="text-[11px] text-slate-500">
+      <div class="rules-metric__sub">
         {{ riskSubtext || `冲突 ${conflictRules} · 误报高 ${falsePositiveHighRules}` }}
       </div>
     </a-card>
@@ -95,3 +95,35 @@ const emit = defineEmits<{
   'click-metric': [payload: { key: 'total' | 'enabled' | 'hit7d' | 'risk' }]
 }>()
 </script>
+
+<style scoped>
+.rules-metric__label {
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+}
+
+.rules-metric__value {
+  margin-top: 4px;
+  color: var(--mq-text-primary);
+  font-family: var(--mq-font-display);
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 34px;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.rules-metric__value--brand {
+  color: var(--mq-brand-600);
+}
+
+.rules-metric__value--danger {
+  color: var(--mq-danger-text, #c93a3a);
+}
+
+.rules-metric__sub {
+  margin-top: 2px;
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+}
+</style>

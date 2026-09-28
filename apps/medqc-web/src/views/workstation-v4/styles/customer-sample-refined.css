@@ -1,111 +1,266 @@
-/* 与运行/终末质控共用视觉规格，仅作用于客户样本验证页面。 */
+/*
+ * v7.1 液态玻璃覆盖层 · 客户样本验证
+ * 叠加在 CustomerSampleValidationView.css 之上：页面容器、页头、玻璃卡、按钮、表格、规则集卡片。
+ */
 .customer-sample-page {
   --customer-sample-canvas: transparent;
-  --customer-sample-primary: #007aff;
-  --customer-sample-primary-soft: #eaf3ff;
-  background: linear-gradient(125deg, #dce8f6 0%, #f1f3f7 48%, #e4eaf3 100%);
-  font-family: 'Source Han Sans SC', 'Microsoft YaHei UI', 'PingFang SC', sans-serif;
+  --customer-sample-primary: var(--mq-brand-600);
+  --customer-sample-primary-soft: var(--mq-brand-50);
+  background: transparent;
+  color: var(--mq-text-primary);
+  font-family: var(--mq-font-family);
 }
+
+.customer-sample-page .customer-sample-scroll {
+  padding: 8px 28px 32px 22px;
+}
+
+.customer-sample-page .customer-sample-main-column {
+  gap: 20px;
+}
+
+/* 页头 */
+.customer-sample-page .customer-sample-toolbar.mq-page-head {
+  margin: 0;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.customer-sample-page .customer-sample-page-title.mq-page-head__copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.customer-sample-page .customer-sample-page-title .mq-page-eyebrow {
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-13);
+  font-weight: 600;
+}
+
+.customer-sample-page .customer-sample-page-title .mq-page-title {
+  margin: 0;
+  font-family: var(--mq-font-display);
+  font-size: var(--mq-font-title);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.customer-sample-page .customer-sample-toolbar-actions :deep(.ant-btn),
+.customer-sample-page .customer-sample-selection-run-actions :deep(.ant-btn) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 16px;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  /* 基础样式用 !important 固定为 10px，这里同样需要 !important 才能改成胶囊 */
+  border-radius: 999px !important;
+  background: rgba(255, 255, 255, 0.75);
+  box-shadow: 0 2px 8px rgba(10, 55, 115, 0.08);
+  color: var(--mq-text-primary);
+  font-size: var(--mq-font-14);
+  font-weight: 500;
+  transform: none;
+}
+
+.customer-sample-page .customer-sample-toolbar-actions :deep(.ant-btn-primary:not(:disabled)),
+.customer-sample-page
+  .customer-sample-selection-run-actions
+  :deep(.ant-btn-primary:not(:disabled)) {
+  border-color: transparent;
+  background: var(--mq-brand-gradient);
+  box-shadow: var(--mq-brand-shadow);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.customer-sample-page .customer-sample-toolbar-actions :deep(.ant-btn-primary:disabled) {
+  border-color: transparent;
+  background: rgba(10, 108, 255, 0.35);
+  color: #ffffff;
+}
+
+.customer-sample-page .customer-sample-task-history-icon {
+  background: transparent;
+  box-shadow: none;
+}
+
+/* 玻璃卡：控制台、病历池列表、底部操作坞 */
 .customer-sample-page .customer-sample-console,
+.customer-sample-page .customer-sample-list-panel,
 .customer-sample-page .customer-sample-work-dock {
-  background: rgba(255, 255, 255, 0.52);
-  border: 1px solid rgba(255, 255, 255, 0.85);
-  border-radius: 12px;
-  backdrop-filter: blur(24px) saturate(140%);
-  -webkit-backdrop-filter: blur(24px) saturate(140%);
-  box-shadow: 0 6px 20px rgba(43, 65, 96, 0.06);
+  border: 1px solid var(--mq-glass-border);
+  border-radius: var(--mq-radius-card);
+  background: var(--mq-glass-bg);
+  -webkit-backdrop-filter: var(--mq-glass-blur);
+  backdrop-filter: var(--mq-glass-blur);
+  box-shadow: var(--mq-glass-shadow);
 }
+
 .customer-sample-page .customer-sample-console:hover,
 .customer-sample-page .customer-sample-list-panel:hover {
   transform: none;
-  box-shadow: 0 3px 12px rgba(43, 65, 96, 0.05);
+  box-shadow: var(--mq-glass-shadow);
 }
-.customer-sample-page .customer-sample-page-title span {
-  font-size: 24px;
+
+.customer-sample-page .customer-sample-field-label {
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-12);
   font-weight: 600;
 }
-.customer-sample-page .customer-sample-page-title small,
-.customer-sample-page .customer-sample-field-label {
-  font-size: 14px;
-  font-weight: 400;
-  color: #778394;
+
+/* 规则集卡片：选中态为品牌蓝描边 */
+.customer-sample-page .customer-sample-rule-card {
+  border: 1.5px solid rgba(255, 255, 255, 0.9);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.6);
+  box-shadow: 0 1px 3px rgba(10, 55, 115, 0.05);
+  transform: none;
 }
+
+.customer-sample-page .customer-sample-rule-card.is-selected {
+  border-color: var(--mq-brand-600);
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 0 0 4px rgba(10, 108, 255, 0.1);
+  color: var(--mq-brand-600);
+}
+
+.customer-sample-page .customer-sample-status-strip {
+  border-color: var(--mq-border);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.55);
+  box-shadow: none;
+  font-weight: 400;
+}
+
+/* 控件 */
+.customer-sample-page :deep(.ant-input),
+.customer-sample-page :deep(.ant-input-affix-wrapper),
+.customer-sample-page :deep(.ant-select:not(.ant-select-customize-input) .ant-select-selector),
+.customer-sample-page :deep(.ant-picker) {
+  border-color: rgba(60, 60, 80, 0.1);
+  border-radius: var(--mq-radius-control);
+  background: rgba(255, 255, 255, 0.85);
+}
+
 .customer-sample-page :deep(.ant-btn),
 .customer-sample-page :deep(.ant-input),
 .customer-sample-page :deep(.ant-select),
 .customer-sample-page :deep(.ant-table) {
   font-family: inherit;
 }
-.customer-sample-page .customer-sample-toolbar-actions :deep(.ant-btn),
-.customer-sample-page .customer-sample-selection-run-actions :deep(.ant-btn) {
-  height: 36px;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 400;
-  background: rgba(255, 255, 255, 0.85);
-  border-color: #dce3ed;
-  color: #526174;
-  transform: none;
-  box-shadow: none;
-}
-.customer-sample-page .customer-sample-toolbar-actions :deep(.ant-btn-primary:not(:disabled)),
-.customer-sample-page
-  .customer-sample-selection-run-actions
-  :deep(.ant-btn-primary:not(:disabled)) {
-  background: #007aff;
-  border-color: #007aff;
-  color: #fff;
-}
-.customer-sample-page .customer-sample-task-history-icon {
+
+/* 表格 */
+.customer-sample-page :deep(.ant-table),
+.customer-sample-page :deep(.ant-table-container) {
   background: transparent;
-  box-shadow: none;
 }
-.customer-sample-page .customer-sample-list-panel {
-  background: #fff;
-  border: 1px solid rgba(99, 119, 145, 0.1);
-  border-radius: 12px;
-  box-shadow: 0 3px 12px rgba(43, 65, 96, 0.04);
-}
+
 .customer-sample-page :deep(.ant-table-thead > tr > th) {
-  background: #f8fafc;
-  font-size: 13px;
-  font-weight: 400;
-  color: #727b87;
-  border-bottom-color: #edf0f4;
+  border-bottom: 0;
+  background: rgba(118, 128, 160, 0.06);
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+  font-weight: 600;
 }
+
+.customer-sample-page :deep(.ant-table-thead > tr > th::before) {
+  display: none;
+}
+
 .customer-sample-page :deep(.ant-table-tbody > tr > td) {
-  font-size: 13px;
-  font-weight: 400;
-  border-bottom-color: #edf0f4;
-}
-.customer-sample-page :deep(.ant-table-tbody > tr:hover > td) {
-  background: #f8fafc;
-}
-.customer-sample-page :deep(.ant-table-tbody > tr.ant-table-row-selected > td) {
-  background: #edf4fc;
-}
-.customer-sample-page .customer-sample-rule-card {
-  background: rgba(255, 255, 255, 0.7);
-  border-color: #e1e7ef;
-  border-radius: 8px;
-  box-shadow: none;
-  transform: none;
-}
-.customer-sample-page .customer-sample-rule-card.is-selected {
-  background: #eaf3ff;
-  border-color: #bad8ff;
-  color: #007aff;
-}
-.customer-sample-page .customer-sample-status-strip {
+  border-bottom: 0.5px solid var(--mq-border);
   background: transparent;
-  box-shadow: none;
-  border-color: rgba(99, 119, 145, 0.1);
+  font-size: var(--mq-font-13);
   font-weight: 400;
 }
-.customer-sample-page :deep(.ant-input),
-.customer-sample-page :deep(.ant-select-selector),
-.customer-sample-page :deep(.ant-picker) {
-  border-color: #dce3ed;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.85);
+
+.customer-sample-page :deep(.ant-table-tbody > tr:hover > td) {
+  background: rgba(10, 108, 255, 0.04);
+}
+
+.customer-sample-page :deep(.ant-table-tbody > tr.ant-table-row-selected > td) {
+  background: rgba(10, 108, 255, 0.06);
+}
+
+/* 表格行内操作：浅蓝胶囊 */
+.customer-sample-page :deep(.ant-table-tbody .ant-btn) {
+  border-radius: 999px !important;
+}
+
+.customer-sample-page :deep(.ant-pagination-item-active) {
+  border-color: transparent;
+  background: var(--mq-brand-gradient);
+}
+
+.customer-sample-page :deep(.ant-pagination-item-active a) {
+  color: #ffffff;
+}
+
+/* ===== 「查看病历 / 编辑副本」弹窗（挂载在 body 下，需 :global） ===== */
+:global(.editable-copy-workstation-modal-wrap) {
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+
+:global(.editable-copy-workstation-modal .ant-modal-content),
+:global(.editable-copy-workstation-modal-wrap.is-readonly-fullscreen .ant-modal-content) {
+  background: var(--mq-bg-mesh) !important;
+  font-family: var(--mq-font-family);
+}
+
+:global(.editable-copy-workstation-modal .editable-copy-hero) {
+  border: 1px solid var(--mq-glass-border) !important;
+  border-radius: var(--mq-radius-card) !important;
+  background: var(--mq-glass-bg) !important;
+  box-shadow: var(--mq-glass-shadow) !important;
+}
+
+:global(.editable-copy-workstation-modal .editable-copy-hero h2) {
+  font-family: var(--mq-font-display);
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+:global(.editable-copy-workstation-modal .editable-copy-source-card) {
+  border-radius: 16px;
+  background: var(--mq-info-bg);
+}
+
+
+:global(.editable-copy-workstation-modal .editable-copy-document-workbench-section),
+:global(.editable-copy-workstation-modal .editable-copy-section) {
+  border: 1px solid var(--mq-glass-border) !important;
+  border-radius: var(--mq-radius-card) !important;
+  background: var(--mq-glass-bg) !important;
+  box-shadow: var(--mq-glass-shadow) !important;
+  overflow: hidden;
+}
+
+:global(.editable-copy-workstation-modal .editable-copy-document-directory) {
+  border-right: 0.5px solid var(--mq-border) !important;
+  background: rgba(255, 255, 255, 0.45) !important;
+}
+
+:global(.editable-copy-workstation-modal .editable-copy-document-nav-item.is-active),
+:global(.editable-copy-workstation-modal .editable-copy-document-nav-item[aria-current='true']) {
+  border-color: transparent !important;
+  background: #ffffff !important;
+  box-shadow: 0 4px 14px rgba(10, 55, 115, 0.12);
+}
+
+:global(.editable-copy-workstation-modal .ant-modal-footer),
+:global(.editable-copy-workstation-modal .editable-copy-footer) {
+  border-top: 0.5px solid var(--mq-border);
+  background: transparent !important;
+}
+
+:global(.editable-copy-workstation-modal .ant-btn) {
+  border-radius: 999px;
 }

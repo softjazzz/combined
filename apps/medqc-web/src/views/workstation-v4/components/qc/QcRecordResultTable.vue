@@ -25,13 +25,10 @@
               >
             </th>
             <th scope="col">
-              {{ compactReview ? '患者 / 科室' : '患者 / 住院号' }}
+              患者 / 住院号
             </th>
-            <th
-              v-if="!compactReview"
-              scope="col"
-            >
-              科室 / 床位
+            <th scope="col">
+              {{ compactReview ? '科室' : '科室 / 床位' }}
             </th>
             <th
               v-if="!compactReview"
@@ -49,7 +46,7 @@
               scope="col"
               class="qc-record-result-table__action-heading"
             >
-              {{ compactReview ? '预览' : '查看结果' }}
+              {{ compactReview ? '操作' : '查看结果' }}
             </th>
           </tr>
         </thead>
@@ -87,43 +84,20 @@
                   :alt="`${row.patientName || '患者'}头像`"
                 >
                 <span class="qc-record-result-table__patient-meta">
-                  <span :class="{ 'qc-record-result-table__identity-line': compactReview }">
-                    <span
-                      class="qc-record-result-table__patient-name"
-                      :title="compactReview ? row.patientName : undefined"
-                    >
-                      {{ row.patientName || '患者信息待接入' }}
-                    </span>
-                    <span
-                      v-if="compactReview"
-                      class="qc-record-result-table__inline-visit"
-                      :title="row.visitId"
-                    >{{ row.visitId || '待接入' }}</span>
-                  </span>
                   <span
-                    v-if="compactReview"
-                    class="qc-record-result-table__compact-meta"
-                    :title="
-                      [row.visitId || '待接入', row.department || '未分科室', row.bedNumber]
-                        .filter(Boolean)
-                        .join(' · ')
-                    "
+                    class="qc-record-result-table__patient-name"
+                    :title="compactReview ? row.patientName : undefined"
                   >
-                    <span>{{
-                      [row.department || '未分科室', row.bedNumber].filter(Boolean).join(' · ')
-                    }}</span>
+                    {{ row.patientName || '患者信息待接入' }}
                   </span>
-                  <span
-                    v-else
-                    class="qc-record-result-table__visit-line"
-                  >
+                  <span class="qc-record-result-table__visit-line">
                     <span
-                      v-if="carePhase !== 'inpatient'"
+                      v-if="carePhase !== 'inpatient' || compactReview"
                       class="qc-record-result-table__visit-label"
                     >住院号：</span>
                     <span
                       class="qc-record-result-table__visit-id"
-                      :title="carePhase === 'inpatient' ? row.visitId : undefined"
+                      :title="carePhase === 'inpatient' || compactReview ? row.visitId : undefined"
                     >{{ row.visitId || '待接入' }}</span>
                   </span>
                   <span
@@ -135,8 +109,11 @@
                 </span>
               </div>
             </td>
-            <td v-if="!compactReview">
-              <span class="qc-record-result-table__department">
+            <td>
+              <span
+                class="qc-record-result-table__department"
+                :title="compactReview ? row.department : undefined"
+              >
                 {{ row.department || '未分科室' }}
               </span>
               <span
@@ -182,23 +159,25 @@
             <td>{{ formatDisplayTime(row.latestQcTime) }}</td>
             <td class="qc-record-result-table__action-cell">
               <button
+                v-if="compactReview"
+                class="qc-record-result-table__view-button"
+                type="button"
+                :aria-label="`查看${row.patientName || '当前病历'}完整质控结果`"
+                @click.stop="emit('open-full', row.recordKey)"
+              >
+                查看
+              </button>
+              <button
+                v-else
                 class="qc-record-result-table__result-button"
                 :class="{
                   'qc-record-result-table__result-button--available':
                     row.resultStatus !== 'not-run',
                 }"
                 type="button"
-                :aria-label="compactReview ? '查看病历预览' : undefined"
                 @click.stop="openResult(row.recordKey)"
               >
-                <ChevronRight
-                  v-if="compactReview"
-                  :size="17"
-                  aria-hidden="true"
-                />
-                <template v-else>
-                  {{ row.resultStatus === 'not-run' ? '暂无结果' : '查看结果' }}
-                </template>
+                {{ row.resultStatus === 'not-run' ? '暂无结果' : '查看结果' }}
               </button>
             </td>
           </tr>
@@ -206,7 +185,7 @@
             v-if="rows.length === 0"
             class="qc-record-result-table__empty-row"
           >
-            <td :colspan="compactReview ? 5 : 7">
+            <td :colspan="compactReview ? 6 : 7">
               {{ emptyMessage }}
             </td>
           </tr>
@@ -218,7 +197,6 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { ChevronRight } from 'lucide-vue-next'
 
 import { patientAvatarSrc } from './patient-avatar'
 
@@ -268,6 +246,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   'open-result': [recordKey: string]
+  'open-full': [recordKey: string]
   'update:selectedRecordKeys': [recordKeys: string[]]
 }>()
 
@@ -360,7 +339,7 @@ function togglePageSelection(event: Event) {
   width: 15px;
   height: 15px;
   margin: 0;
-  accent-color: #2b6cf6;
+  accent-color: #0a6cff;
   cursor: pointer;
 }
 
@@ -384,11 +363,11 @@ function togglePageSelection(event: Event) {
 .qc-record-result-table__row:hover,
 .qc-record-result-table__row:focus-visible {
   background: rgba(248, 250, 252, 0.88);
-  box-shadow: inset 3px 0 0 #2b6cf6;
+  box-shadow: inset 3px 0 0 #0a6cff;
 }
 
 .qc-record-result-table__row--selected {
-  background: rgba(43, 108, 246, 0.045);
+  background: rgba(10, 108, 255, 0.045);
 }
 
 .qc-record-result-table__patient-cell {
@@ -408,7 +387,7 @@ function togglePageSelection(event: Event) {
   object-fit: cover;
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.96),
-    0 2px 6px rgba(43, 108, 246, 0.08);
+    0 2px 6px rgba(10, 108, 255, 0.08);
 }
 
 .qc-record-result-table__patient-meta {
@@ -504,16 +483,16 @@ function togglePageSelection(event: Event) {
 }
 
 .qc-record-result-table__result-button--available {
-  border-color: #2b6cf6;
-  background: #2b6cf6;
+  border-color: #0a6cff;
+  background: #0a6cff;
   color: #fff;
-  box-shadow: 0 3px 9px rgba(43, 108, 246, 0.16);
+  box-shadow: 0 3px 9px rgba(10, 108, 255, 0.16);
 }
 
 .qc-record-result-table__result-button:hover {
-  color: #2b6cf6;
-  border-color: #2b6cf6;
-  box-shadow: 0 4px 11px rgba(43, 108, 246, 0.15);
+  color: #0a6cff;
+  border-color: #0a6cff;
+  box-shadow: 0 4px 11px rgba(10, 108, 255, 0.15);
   transform: translateY(-1px);
 }
 
@@ -592,7 +571,7 @@ function togglePageSelection(event: Event) {
 }
 .qc-record-result-table--inpatient .qc-record-result-table__table input[type='checkbox']:checked {
   appearance: auto;
-  accent-color: #2b6cf6;
+  accent-color: #0a6cff;
 }
 .qc-record-result-table--inpatient .qc-record-result-table__table input[type='checkbox']:disabled {
   background: #f1f4f8;
@@ -631,7 +610,7 @@ function togglePageSelection(event: Event) {
 
 .qc-record-result-table--inpatient .qc-record-result-table__row:focus-visible {
   background: #edf4fc;
-  box-shadow: inset 3px 0 0 #2b6cf6;
+  box-shadow: inset 3px 0 0 #0a6cff;
 }
 
 .qc-record-result-table--inpatient .qc-record-result-table__result-button {
@@ -645,26 +624,25 @@ function togglePageSelection(event: Event) {
 
 .qc-record-result-table--inpatient .qc-record-result-table__result-button--available {
   background: transparent;
-  color: #2b6cf6;
+  color: #0a6cff;
 }
 
 .qc-record-result-table--inpatient .qc-record-result-table__result-button:hover {
-  border-color: rgba(43, 108, 246, 0.14);
-  background: rgba(43, 108, 246, 0.09);
-  color: #2b6cf6;
+  border-color: rgba(10, 108, 255, 0.14);
+  background: rgba(10, 108, 255, 0.09);
+  color: #0a6cff;
   transform: none;
 }
 
 .qc-record-result-table--inpatient .qc-record-result-table__result-button:focus-visible,
 .qc-record-result-table--inpatient input:focus-visible {
-  outline: 2px solid #2b6cf6;
+  outline: 2px solid #0a6cff;
   outline-offset: 3px;
 }
 
-/* 仅主从复核列表合并元数据，横向溢出由表内承接。 */
+/* 主从复核列表：与病历池列表同一套外观（患者 / 住院号、科室、摘要、最近质控、查看胶囊）。 */
 .qc-record-result-table--compact-review .qc-record-result-table__table {
-  font-family: 'Microsoft YaHei', 'PingFang SC', system-ui, sans-serif;
-  min-width: 600px;
+  min-width: 640px;
   table-layout: fixed;
 }
 
@@ -673,66 +651,78 @@ function togglePageSelection(event: Event) {
   box-sizing: border-box;
   min-width: 0;
   max-width: none;
-  padding-right: 10px;
-  padding-left: 10px;
+  padding-right: 12px;
+  padding-left: 12px;
 }
 
 .qc-record-result-table--compact-review th:nth-child(1) {
-  width: 36px;
+  width: 40px;
 }
-.qc-record-result-table--compact-review .qc-record-result-table__table thead th {
-  font-size: 13px;
-  font-weight: 600;
-  color: #525e6e;
-}
-.qc-record-result-table--compact-review th:nth-child(2) {
-  width: 240px;
+.qc-record-result-table--compact-review th:nth-child(3) {
+  width: 120px;
 }
 .qc-record-result-table--compact-review th:nth-child(4) {
-  width: 148px;
+  width: 160px;
 }
 .qc-record-result-table--compact-review th:nth-child(5) {
-  width: 46px;
+  width: 132px;
+}
+.qc-record-result-table--compact-review th:nth-child(6) {
+  width: 76px;
+}
+.qc-record-result-table--compact-review .qc-record-result-table__table thead th {
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
 }
 
 .qc-record-result-table--compact-review .qc-record-result-table__patient-name {
   display: block;
   overflow: hidden;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.qc-record-result-table__identity-line {
+.qc-record-result-table--compact-review .qc-record-result-table__visit-line {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
   min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
 }
-.qc-record-result-table__inline-visit {
+.qc-record-result-table--compact-review .qc-record-result-table__visit-label,
+.qc-record-result-table--compact-review .qc-record-result-table__visit-id {
+  color: #7a8390;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
+}
+.qc-record-result-table--compact-review .qc-record-result-table__visit-id {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.qc-record-result-table--compact-review .qc-record-result-table__department {
+  display: block;
+  overflow: hidden;
+  color: #1d1d1f;
+  font-size: 13px;
+  text-overflow: ellipsis;
   white-space: nowrap;
+}
+.qc-record-result-table--compact-review .qc-record-result-table__bed-number {
+  display: block;
   color: #7a8390;
   font-size: 12px;
-  font-variant-numeric: tabular-nums;
 }
-.qc-record-result-table--compact-review th:nth-child(3),
 .qc-record-result-table--compact-review .qc-record-result-table__summary {
   text-align: left;
 }
 .qc-record-result-table--compact-review .qc-record-result-table__summary-items {
   justify-content: flex-start;
-}
-
-.qc-record-result-table__compact-meta {
-  display: grid;
-  gap: 2px;
-  white-space: normal;
-  overflow-wrap: anywhere;
-  line-height: 18px;
-  color: #727b87;
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
 }
 
 .qc-record-result-table--compact-review .qc-record-result-table__summary-item {
@@ -750,11 +740,11 @@ function togglePageSelection(event: Event) {
   color: #b74b50;
 }
 .qc-record-result-table--compact-review .qc-record-result-table__row td:nth-child(n) {
-  height: 68px;
+  height: 58px;
   padding-top: 8px;
   padding-bottom: 8px;
 }
-.qc-record-result-table--compact-review .qc-record-result-table__row td:nth-child(4) {
+.qc-record-result-table--compact-review .qc-record-result-table__row td:nth-child(5) {
   color: #727b87;
   font-size: 13px;
   font-variant-numeric: tabular-nums;
@@ -764,28 +754,37 @@ function togglePageSelection(event: Event) {
   color: #c4ccd7;
 }
 
-.qc-record-result-table--compact-review .qc-record-result-table__result-button {
-  width: 28px;
-  min-width: 28px;
-  padding: 0;
-  color: #8a98aa;
+/* 「查看」胶囊：与病历池一致，浅灰底，悬停与当前行转浅蓝 */
+.qc-record-result-table__view-button {
+  height: 26px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(118, 128, 160, 0.12);
+  color: #1d1d1f;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
 }
-.qc-record-result-table--compact-review
-  .qc-record-result-table__row:hover
-  .qc-record-result-table__result-button,
-.qc-record-result-table--compact-review
-  .qc-record-result-table__row--active
-  .qc-record-result-table__result-button,
-.qc-record-result-table--compact-review
-  .qc-record-result-table__row--selected
-  .qc-record-result-table__result-button {
-  color: #2b6cf6;
+.qc-record-result-table__view-button:hover,
+.qc-record-result-table__row--active .qc-record-result-table__view-button {
+  background: rgba(10, 108, 255, 0.12);
+  color: #0a5fd6;
+}
+.qc-record-result-table__view-button:focus-visible {
+  outline: 2px solid #0a6cff;
+  outline-offset: 2px;
 }
 
 .qc-record-result-table--compact-review .qc-record-result-table__row--active,
 .qc-record-result-table--compact-review .qc-record-result-table__row--active:hover {
   background: #f2f7fd;
-  box-shadow: inset 3px 0 0 #2b6cf6;
+  box-shadow: inset 3px 0 0 #0a6cff;
 }
 
 @media (max-width: 768px) {

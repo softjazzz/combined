@@ -9,128 +9,131 @@
       <div class="customer-sample-container mx-auto w-full max-w-[1440px]">
         <div class="customer-sample-workspace">
           <div class="customer-sample-main-column">
-            <section class="customer-sample-console">
-              <div class="customer-sample-toolbar">
-                <div class="customer-sample-page-title">
-                  <span>客户样本验证</span>
-                  <small>规则集质控</small>
-                </div>
-
-                <div class="customer-sample-toolbar-actions">
-                  <a-button
-                    class="customer-sample-guide-action !rounded-lg"
-                    data-customer-guide="guide-entry"
-                    @click="openCustomerSampleGuide"
-                  >
-                    <Compass :size="15" />
-                    功能导览
-                  </a-button>
-                  <a-button
-                    class="customer-sample-create-action !rounded-lg"
-                    data-customer-guide="create-record"
-                    :class="customerSampleGuideTargetClass('create-record')"
-                    @click="openTestRecordDrawer"
-                  >
-                    <FilePlus2 :size="15" />
-                    创建测试病历
-                  </a-button>
-                  <a-button
-                    type="primary"
-                    class="!rounded-lg"
-                    data-customer-guide="run-validation"
-                    :class="customerSampleGuideTargetClass('run-validation')"
-                    :disabled="runButtonDisabled"
-                    :loading="runLoading"
-                    @click="handleRunPool"
-                  >
-                    {{ runButtonText }}
-                  </a-button>
-                  <a-button
-                    class="customer-sample-task-history-action !rounded-lg"
-                    @click="openTaskHistoryPage"
-                  >
-                    <span class="customer-sample-task-history-icon">
-                      <History :size="15" />
-                    </span>
-                    <span class="customer-sample-task-history-label">查看质控记录</span>
-                  </a-button>
-                  <a-dropdown :trigger="['click']">
-                    <a-button class="!rounded-lg">
-                      更多操作
-                    </a-button>
-                    <template #overlay>
-                      <a-menu>
-                        <a-menu-item @click="handleMoreActionKey('refresh')">
-                          刷新样本池
-                        </a-menu-item>
-                        <a-menu-item
-                          :disabled="!selectedPoolId || syncLoading"
-                          @click="handleMoreActionKey('sync')"
-                        >
-                          同步样本病历
-                        </a-menu-item>
-                        <a-menu-item
-                          :disabled="!selectedPoolId || syncLoading"
-                          @click="handleMoreActionKey('sync-by-hospitalization')"
-                        >
-                          按住院范围同步…
-                        </a-menu-item>
-                        <a-menu-item
-                          :disabled="!selectedPoolId || matchLoading"
-                          @click="handleMoreActionKey('match')"
-                        >
-                          执行病历匹配
-                        </a-menu-item>
-                        <a-menu-item
-                          :disabled="!selectedPool?.latest_job_id"
-                          @click="handleMoreActionKey('latest')"
-                        >
-                          查看最近任务
-                        </a-menu-item>
-                        <a-menu-divider />
-                        <a-menu-item @click="handleMoreActionKey('surgery-catalog')">
-                          手术分级目录
-                        </a-menu-item>
-                        <a-menu-divider />
-                        <a-sub-menu
-                          key="luxian-report"
-                          title="导出报告"
-                        >
-                          <a-menu-item @click="handleMoreActionKey('export-luxian-md')">
-                            Markdown 评估报告
-                          </a-menu-item>
-                          <a-menu-item @click="handleMoreActionKey('export-luxian-csv')">
-                            CSV 指标明细
-                          </a-menu-item>
-                        </a-sub-menu>
-                        <a-menu-divider />
-                        <a-sub-menu
-                          key="developer-admin"
-                          title="开发/管理员"
-                        >
-                          <a-menu-item @click="handleMoreActionKey('import')">
-                            导入模板
-                          </a-menu-item>
-                          <a-menu-item @click="handleMoreActionKey('export-luxian-json')">
-                            JSON 原始结果
-                          </a-menu-item>
-                          <a-menu-divider />
-                          <a-menu-item @click="handleMoreActionKey('mode-sc')">
-                            SC 样本规则模式
-                          </a-menu-item>
-                          <a-menu-item @click="handleMoreActionKey('mode-programmatic')">
-                            硬门槛程序规则模式
-                          </a-menu-item>
-                          <a-menu-item @click="handleMoreActionKey('mode-legacy-customer')">
-                            历史客户包
-                          </a-menu-item>
-                        </a-sub-menu>
-                      </a-menu>
-                    </template>
-                  </a-dropdown>
-                </div>
+            <!-- 页头：眉标 + 大标题；右侧为页面级操作 -->
+            <div class="customer-sample-toolbar mq-page-head">
+              <div class="customer-sample-page-title mq-page-head__copy">
+                <span class="mq-page-eyebrow">质控作业 · 规则集质控</span>
+                <h1 class="mq-page-title">
+                  客户样本验证
+                </h1>
               </div>
 
+              <div class="customer-sample-toolbar-actions mq-page-head__actions">
+                <a-button
+                  class="customer-sample-guide-action"
+                  data-customer-guide="guide-entry"
+                  @click="openCustomerSampleGuide"
+                >
+                  <Compass :size="15" />
+                  功能导览
+                </a-button>
+                <a-button
+                  class="customer-sample-create-action"
+                  data-customer-guide="create-record"
+                  :class="customerSampleGuideTargetClass('create-record')"
+                  @click="openTestRecordDrawer"
+                >
+                  <FilePlus2 :size="15" />
+                  创建测试病历
+                </a-button>
+                <a-button
+                  type="primary"
+                  
+                  data-customer-guide="run-validation"
+                  :class="customerSampleGuideTargetClass('run-validation')"
+                  :disabled="runButtonDisabled"
+                  :loading="runLoading"
+                  @click="handleRunPool"
+                >
+                  {{ runButtonText }}
+                </a-button>
+                <a-button
+                  class="customer-sample-task-history-action"
+                  @click="openTaskHistoryPage"
+                >
+                  <span class="customer-sample-task-history-icon">
+                    <History :size="15" />
+                  </span>
+                  <span class="customer-sample-task-history-label">查看质控记录</span>
+                </a-button>
+                <a-dropdown :trigger="['click']">
+                  <a-button>
+                    更多操作
+                  </a-button>
+                  <template #overlay>
+                    <a-menu>
+                      <a-menu-item @click="handleMoreActionKey('refresh')">
+                        刷新样本池
+                      </a-menu-item>
+                      <a-menu-item
+                        :disabled="!selectedPoolId || syncLoading"
+                        @click="handleMoreActionKey('sync')"
+                      >
+                        同步样本病历
+                      </a-menu-item>
+                      <a-menu-item
+                        :disabled="!selectedPoolId || syncLoading"
+                        @click="handleMoreActionKey('sync-by-hospitalization')"
+                      >
+                        按住院范围同步…
+                      </a-menu-item>
+                      <a-menu-item
+                        :disabled="!selectedPoolId || matchLoading"
+                        @click="handleMoreActionKey('match')"
+                      >
+                        执行病历匹配
+                      </a-menu-item>
+                      <a-menu-item
+                        :disabled="!selectedPool?.latest_job_id"
+                        @click="handleMoreActionKey('latest')"
+                      >
+                        查看最近任务
+                      </a-menu-item>
+                      <a-menu-divider />
+                      <a-menu-item @click="handleMoreActionKey('surgery-catalog')">
+                        手术分级目录
+                      </a-menu-item>
+                      <a-menu-divider />
+                      <a-sub-menu
+                        key="luxian-report"
+                        title="导出报告"
+                      >
+                        <a-menu-item @click="handleMoreActionKey('export-luxian-md')">
+                          Markdown 评估报告
+                        </a-menu-item>
+                        <a-menu-item @click="handleMoreActionKey('export-luxian-csv')">
+                          CSV 指标明细
+                        </a-menu-item>
+                      </a-sub-menu>
+                      <a-menu-divider />
+                      <a-sub-menu
+                        key="developer-admin"
+                        title="开发/管理员"
+                      >
+                        <a-menu-item @click="handleMoreActionKey('import')">
+                          导入模板
+                        </a-menu-item>
+                        <a-menu-item @click="handleMoreActionKey('export-luxian-json')">
+                          JSON 原始结果
+                        </a-menu-item>
+                        <a-menu-divider />
+                        <a-menu-item @click="handleMoreActionKey('mode-sc')">
+                          SC 样本规则模式
+                        </a-menu-item>
+                        <a-menu-item @click="handleMoreActionKey('mode-programmatic')">
+                          硬门槛程序规则模式
+                        </a-menu-item>
+                        <a-menu-item @click="handleMoreActionKey('mode-legacy-customer')">
+                          历史客户包
+                        </a-menu-item>
+                      </a-sub-menu>
+                    </a-menu>
+                  </template>
+                </a-dropdown>
+              </div>
+            </div>
+
+            <section class="customer-sample-console">
               <div class="customer-sample-command-bar">
                 <div
                   class="customer-sample-field"
@@ -288,14 +291,14 @@
                   <div class="flex shrink-0 flex-wrap items-center gap-2">
                     <a-button
                       :loading="importWorkflow.matching || matchLoading"
-                      class="!rounded-lg"
+                      
                       @click="runPoolMatch({ source: 'workflow' })"
                     >
                       重新匹配
                     </a-button>
                     <a-button
                       type="primary"
-                      class="!rounded-lg"
+                      
                       :disabled="importWorkflow.matched <= 0 || syncLoading"
                       :loading="syncLoading || importWorkflow.status === 'syncing'"
                       @click="handleSyncPoolRecords"
@@ -731,21 +734,21 @@
         </div>
         <div class="customer-sample-selection-run-actions">
           <a-button
-            class="!rounded-lg"
+            
             @click="clearSelectedRecords"
           >
             清空选择
           </a-button>
           <a-button
             v-if="isLuxian0609Mode"
-            class="!rounded-lg"
+            
             @click="scrollToLuxianScope"
           >
             调整质控范围
           </a-button>
           <a-button
             type="primary"
-            class="!rounded-lg"
+            
             :disabled="runButtonDisabled"
             :loading="runLoading"
             @click="handleRunPool"
@@ -785,27 +788,27 @@
         </div>
         <div class="customer-sample-guide-footer">
           <a-button
-            class="customer-sample-guide-dismiss !rounded-lg"
+            class="customer-sample-guide-dismiss"
             @click="closeCustomerSampleGuide"
           >
             跳过
           </a-button>
           <a-button
-            class="customer-sample-guide-start !rounded-lg"
+            class="customer-sample-guide-start"
             @click="startSyntheticCaseFromGuide"
           >
             创建测试病历
           </a-button>
           <a-button
             v-if="customerSampleGuideStepIndex > 0"
-            class="!rounded-lg"
+            
             @click="goToPreviousCustomerSampleGuideStep"
           >
             上一步
           </a-button>
           <a-button
             type="primary"
-            class="customer-sample-guide-next !rounded-lg"
+            class="customer-sample-guide-next"
             @click="goToNextCustomerSampleGuideStep"
           >
             {{ isLastCustomerSampleGuideStep ? '完成导览' : '下一步' }}

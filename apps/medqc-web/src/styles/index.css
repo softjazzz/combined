@@ -10,10 +10,10 @@
    light/dark/subtle 是配套的悬停/激活/浅底取值，供手写 CSS 使用；
    antd 组件自身由 token.colorPrimary 推导，不读这些变量。 */
 :root {
-  --primary-color: #2b6cf6;
-  --primary-color-light: #5b8cf8;
-  --primary-color-dark: #1f55c9;
-  --primary-color-subtle: #eaf1fe;
+  --primary-color: #0a6cff;
+  --primary-color-light: #3b8bff;
+  --primary-color-dark: #0a5fd6;
+  --primary-color-subtle: #eaf2ff;
   --success-color: #52c41a;
   --warning-color: #faad14;
   --error-color: #f5222d;
@@ -106,7 +106,7 @@
   }
 
   .btn-medical:focus-visible {
-    outline: 2px solid #2b6cf6;
+    outline: 2px solid #0a6cff;
     outline-offset: 2px;
   }
 
@@ -116,12 +116,12 @@
   }
 
   .btn-medical-primary {
-    background-color: #2b6cf6;
+    background-color: #0a6cff;
     color: #ffffff;
   }
 
   .btn-medical-primary:hover {
-    background-color: #2b6cf6;
+    background-color: #0a6cff;
     color: #ffffff; /* 确保悬停时文字也保持白色 */
   }
 
@@ -271,7 +271,7 @@
   }
 
   .form-input:focus {
-    border-color: #2b6cf6;
+    border-color: #0a6cff;
     box-shadow: 0 0 0 3px rgba(43, 108, 246, 0.1);
   }
 

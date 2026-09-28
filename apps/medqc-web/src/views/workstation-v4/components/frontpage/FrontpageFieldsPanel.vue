@@ -5,7 +5,7 @@
     <div class="flex flex-wrap items-start justify-between gap-3">
       <div class="flex min-w-0 items-start gap-3">
         <div
-          class="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] bg-[#2b6cf6] shadow-[0_5px_14px_rgba(43,108,246,0.16)]"
+          class="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] bg-[#0a6cff] shadow-[0_5px_14px_rgba(10, 108, 255,0.16)]"
         >
           <CheckCircleOutlined class="text-base text-white" />
         </div>
@@ -274,13 +274,13 @@ function moduleStatusLabel(module: ModuleCard) {
 }
 
 function moduleStatusClass(module: ModuleCard) {
-  if (module.entry?.preview?.length) return 'bg-blue-50 text-[#0057b8]'
+  if (module.entry?.preview?.length) return 'bg-blue-50 text-[#0a5fd6]'
   if (module.status === 'active') return 'bg-cyan-50 text-cyan-700'
   return 'bg-slate-100 text-slate-500'
 }
 
 function moduleIconClass(module: ModuleCard) {
-  if (module.entry?.preview?.length) return 'bg-[#2b6cf6] text-white'
+  if (module.entry?.preview?.length) return 'bg-[#0a6cff] text-white'
   if (module.status === 'active') return 'bg-cyan-500 text-white'
   return 'bg-slate-100 text-slate-400'
 }
@@ -323,20 +323,20 @@ function scrollToModule(key: string) {
 .frontpage-fields-panel .bg-blue-50,
 .frontpage-fields-panel .bg-blue-50\/70,
 .frontpage-fields-panel .bg-blue-50\/85 {
-  background: rgba(43, 108, 246, 0.08) !important;
+  background: rgba(10, 108, 255, 0.08) !important;
 }
 
-.frontpage-fields-panel .text-\[\#0057b8\],
-.frontpage-fields-panel .text-\[\#2b6cf6\],
+.frontpage-fields-panel .text-\[\#0a5fd6\],
+.frontpage-fields-panel .text-\[\#0a6cff\],
 .frontpage-fields-panel .text-blue-500 {
-  color: #2b6cf6 !important;
+  color: #0a6cff !important;
 }
 
 :deep(.ant-btn-primary) {
-  border-color: #2b6cf6 !important;
-  background: #2b6cf6 !important;
+  border-color: #0a6cff !important;
+  background: #0a6cff !important;
   color: #fff !important;
-  box-shadow: 0 4px 12px rgba(43, 108, 246, 0.16) !important;
+  box-shadow: 0 4px 12px rgba(10, 108, 255, 0.16) !important;
 }
 
 :deep(.ant-btn:not(.ant-btn-primary)) {
