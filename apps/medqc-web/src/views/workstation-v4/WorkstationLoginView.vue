@@ -94,13 +94,16 @@ const handleDemoLogin = async (account: (typeof demoAccounts)[number]) => {
 
 <template>
   <div class="login-apple relative min-h-screen overflow-hidden bg-slate-50">
-    <!-- 背景光晕 (Tech Glassmorphism Background) -->
+    <!-- 背景层次：三团缓慢漂移的蓝色光斑 + 卡片后方的光环 + 底部地平线高光 -->
     <div
-      class="pointer-events-none absolute -left-[20%] -top-[10%] h-[800px] w-[800px] rounded-full bg-sky-400/20 mix-blend-multiply blur-[120px]"
-    />
-    <div
-      class="pointer-events-none absolute -bottom-[10%] -right-[10%] h-[700px] w-[700px] rounded-full bg-blue-500/15 mix-blend-multiply blur-[120px]"
-    />
+      class="login-bg"
+      aria-hidden="true"
+    >
+      <span class="login-bg__orb login-bg__orb--sky" />
+      <span class="login-bg__orb login-bg__orb--brand" />
+      <span class="login-bg__orb login-bg__orb--ice" />
+      <span class="login-bg__horizon" />
+    </div>
     <!-- 极细微的网格肌理 -->
     <div
       class="login-background-grid pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,#e2e8f0_1px,transparent_1px),linear-gradient(to_bottom,#e2e8f0_1px,transparent_1px)] bg-[size:40px_40px] opacity-40"
@@ -134,7 +137,16 @@ const handleDemoLogin = async (account: (typeof demoAccounts)[number]) => {
         </section>
 
         <!-- 右侧：登录卡片 (Glassmorphism) -->
-        <section class="w-full lg:-mt-8 xl:-mt-12">
+        <section class="login-card-stage w-full lg:-mt-8 xl:-mt-12">
+          <!-- 卡片后方叠层玻璃：两张半透明卡错位倾斜，营造纵深 -->
+          <span
+            class="login-sheet login-sheet--back"
+            aria-hidden="true"
+          />
+          <span
+            class="login-sheet login-sheet--mid"
+            aria-hidden="true"
+          />
           <div
             class="login-glass-card mx-auto w-full max-w-[480px] rounded-[32px] border border-white/60 bg-white/50 px-8 pb-8 pt-6 shadow-[0_24px_80px_-24px_rgba(15,23,42,0.15)] ring-1 ring-white/80 backdrop-blur-xl lg:ml-auto lg:mr-0 sm:px-12 sm:pb-12 sm:pt-8"
           >
@@ -146,7 +158,7 @@ const handleDemoLogin = async (account: (typeof demoAccounts)[number]) => {
               </div>
               <!-- 登录页版本角标 -->
               <div
-                class="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-sky-500 to-blue-600 font-black text-white shadow-[0_8px_20px_-6px_rgba(14,165,233,0.5)]"
+                class="login-version-badge flex h-9 w-9 items-center justify-center rounded-xl text-white"
               >
                 V5
               </div>
@@ -300,6 +312,133 @@ const handleDemoLogin = async (account: (typeof demoAccounts)[number]) => {
 .login-apple > .pointer-events-none {
   opacity: 0.15;
 }
+
+/* ---------- 背景层次 ---------- */
+.login-apple {
+  background:
+    radial-gradient(1200px 700px at 12% -10%, #d6e7ff 0%, transparent 60%),
+    radial-gradient(900px 600px at 100% 110%, #d9ecff 0%, transparent 60%),
+    linear-gradient(125deg, #e3eefb 0%, #f3f6fa 50%, #e6eef8 100%);
+}
+
+.login-bg {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.login-bg__orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(90px);
+  will-change: transform;
+}
+
+.login-bg__orb--sky {
+  top: -18%;
+  left: -12%;
+  width: 720px;
+  height: 720px;
+  background: radial-gradient(circle, rgba(110, 176, 255, 0.55), rgba(110, 176, 255, 0) 70%);
+  animation: login-drift-a 26s ease-in-out infinite alternate;
+}
+
+.login-bg__orb--brand {
+  top: 12%;
+  right: -8%;
+  width: 640px;
+  height: 640px;
+  background: radial-gradient(circle, rgba(10, 108, 255, 0.34), rgba(10, 108, 255, 0) 70%);
+  animation: login-drift-b 32s ease-in-out infinite alternate;
+}
+
+.login-bg__orb--ice {
+  bottom: -22%;
+  left: 24%;
+  width: 760px;
+  height: 560px;
+  background: radial-gradient(ellipse, rgba(150, 214, 255, 0.5), rgba(150, 214, 255, 0) 70%);
+  animation: login-drift-c 38s ease-in-out infinite alternate;
+}
+
+/* 卡片后方的同心光环：给玻璃卡一个可以透出来的层次 */
+.login-card-stage {
+  position: relative;
+  isolation: isolate;
+}
+
+.login-card-stage > .login-glass-card {
+  position: relative;
+  z-index: 1;
+}
+
+.login-bg__horizon {
+  position: absolute;
+  right: -10%;
+  bottom: -40%;
+  left: -10%;
+  height: 70%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0) 60%);
+  filter: blur(48px);
+}
+
+/* 叠层玻璃：两张半透明卡错位倾斜叠在登录卡后方 */
+.login-sheet {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  max-width: 480px;
+  margin-left: auto;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-radius: 24px;
+  pointer-events: none;
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
+.login-sheet--back {
+  background: linear-gradient(160deg, rgba(10, 108, 255, 0.22), rgba(120, 190, 255, 0.12));
+  box-shadow: 0 30px 60px -24px rgba(10, 70, 160, 0.3);
+  transform: translate(46px, 26px) rotate(7deg) scale(0.94);
+}
+
+.login-sheet--mid {
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.5), rgba(214, 232, 255, 0.35));
+  box-shadow: 0 20px 40px -20px rgba(10, 70, 160, 0.22);
+  transform: translate(22px, 12px) rotate(3.5deg) scale(0.97);
+}
+
+@keyframes login-drift-a {
+  to {
+    transform: translate(80px, 60px) scale(1.08);
+  }
+}
+
+@keyframes login-drift-b {
+  to {
+    transform: translate(-70px, 50px) scale(0.94);
+  }
+}
+
+@keyframes login-drift-c {
+  to {
+    transform: translate(90px, -40px) scale(1.06);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-bg__orb {
+    animation: none;
+  }
+}
+
+@media (max-width: 1023px) {
+  .login-sheet {
+    display: none;
+  }
+}
 .login-intro {
   align-self: center;
   padding: 24px 0 60px;
@@ -323,12 +462,25 @@ const handleDemoLogin = async (account: (typeof demoAccounts)[number]) => {
   transform: none;
 }
 .login-glass-card {
-  border-radius: 16px;
-  background: linear-gradient(145deg, rgba(220, 239, 250, 0.88), rgba(230, 237, 253, 0.82));
+  border-radius: 24px;
+  background: linear-gradient(150deg, rgba(255, 255, 255, 0.72), rgba(232, 242, 255, 0.58));
   padding: 24px 32px;
-  border: 1px solid rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(24px) saturate(135%);
-  box-shadow: 0 16px 44px rgba(39, 62, 94, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  -webkit-backdrop-filter: blur(28px) saturate(160%);
+  backdrop-filter: blur(28px) saturate(160%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 30px 70px -20px rgba(10, 70, 160, 0.28),
+    0 8px 20px rgba(39, 62, 94, 0.06);
+}
+
+.login-version-badge {
+  background: var(--mq-brand-gradient);
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow:
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.45),
+    0 6px 14px -4px rgba(10, 108, 255, 0.5);
 }
 .login-glass-card h2 {
   font-size: 26px;
@@ -374,13 +526,33 @@ const handleDemoLogin = async (account: (typeof demoAccounts)[number]) => {
   line-height: normal;
 }
 .login-glass-card :deep(button[type='submit']) {
-  height: 44px;
-  border-radius: 8px;
-  background: #0a6cff;
-  font-size: 14px;
+  height: 46px;
+  border-radius: 12px;
+  background: var(--mq-brand-gradient);
+  font-size: 15px;
   font-weight: 500;
+  letter-spacing: 0.04em;
   transform: none;
-  box-shadow: 0 3px 8px rgba(10, 108, 255, 0.18);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 10px 24px -8px rgba(10, 108, 255, 0.55);
+  transition:
+    box-shadow 180ms ease,
+    transform 180ms ease,
+    filter 180ms ease;
+}
+.login-glass-card :deep(button[type='submit']:hover:not(:disabled)) {
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 14px 30px -8px rgba(10, 108, 255, 0.65);
+  filter: brightness(1.04);
+}
+.login-glass-card :deep(input:not([type='checkbox']):focus),
+.login-glass-card :deep(select:focus) {
+  border-color: #6aa9ff;
+  background: #ffffff;
+  box-shadow: 0 0 0 4px rgba(10, 108, 255, 0.12);
 }
 @media (max-width: 1023px) {
   .login-intro {
