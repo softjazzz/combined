@@ -64,6 +64,13 @@ export interface TodoStats {
   scene?: DashboardScene
 }
 
+export interface ReviewTodoCounts {
+  pending_record_review: number
+  pending_record_recheck: number
+  pending_manual_defect_review: number | null
+  scene: 'all'
+}
+
 export type PerformancePeriod = 'this_week' | 'last_week' | 'this_month'
 export type PerformanceUnavailableReason = 'scene_not_attributable'
 
@@ -207,6 +214,54 @@ export async function getTodoStats(scene: DashboardScene = 'all') {
     url: `${BASE_URL}/todo-stats`,
     params: { scene },
   })
+}
+
+function isNonNegativeInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0
+}
+
+/**
+ * V5 首页审核待办适配。
+ *
+ * 计数仍由 dashboard/todo-stats 的审核服务谓词给出；这里仅严格提取，避免缺字段、
+ * 无权限或请求失败时被前端当成 0。人工缺陷当前没有场景归属，只允许 all 范围。
+ */
+export async function getReviewTodoCounts(): Promise<{
+  success: boolean
+  data?: ReviewTodoCounts
+  message?: string
+}> {
+  const result = await getTodoStats('all')
+  if (!result.success || !result.data) {
+    return { success: false, message: result.message }
+  }
+
+  const data = result.data as unknown
+  if (!isRecord(data)
+    || data.scene !== 'all'
+    || !isRecord(data.record_stats)
+    || !isRecord(data.defect_stats)) {
+    return { success: false, message: '审核待办数据格式异常' }
+  }
+
+  const recordReview = data.record_stats.pending_review
+  const recordRecheck = data.record_stats.pending_recheck
+  const manualDefectReview = data.defect_stats.pending_review
+  if (!isNonNegativeInteger(recordReview)
+    || !isNonNegativeInteger(recordRecheck)
+    || (manualDefectReview !== null && !isNonNegativeInteger(manualDefectReview))) {
+    return { success: false, message: '审核待办数据格式异常' }
+  }
+
+  return {
+    success: true,
+    data: {
+      pending_record_review: recordReview,
+      pending_record_recheck: recordRecheck,
+      pending_manual_defect_review: isNonNegativeInteger(manualDefectReview) ? manualDefectReview : null,
+      scene: 'all',
+    },
+  }
 }
 
 /** 获取工作表现排名；响应不符合合同时按失败返回，不回退示例数据 */

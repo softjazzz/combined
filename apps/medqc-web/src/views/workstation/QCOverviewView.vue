@@ -13,6 +13,7 @@
         </section>
 
         <HomeTaskTodos v-if="canReadTasks" />
+        <HomeReviewTodos />
         <HomeAppealTodos />
 
         <section
@@ -392,6 +393,7 @@ import {
 import { ApiService } from '@/services/apiService'
 import { useAuthStore } from '@/stores/auth'
 import HomeTaskTodos from './HomeTaskTodos.vue'
+import HomeReviewTodos from './HomeReviewTodos.vue'
 import HomeAppealTodos from './HomeAppealTodos.vue'
 import type {
   ClinicalQcHomeDepartmentItem,
