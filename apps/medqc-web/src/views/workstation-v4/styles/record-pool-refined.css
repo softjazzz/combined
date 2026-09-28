@@ -727,3 +727,26 @@
   font-size: var(--mq-font-14);
   font-weight: 500;
 }
+
+/* 行内「查看」：去眼睛图标，改为安静的浅灰胶囊；悬停与选中行时转为浅蓝 */
+.wv4-list :deep(.batch-table-panel__detail-button.ant-btn) {
+  height: 26px !important;
+  padding: 0 12px !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  background: rgba(118, 128, 160, 0.12) !important;
+  box-shadow: none !important;
+  color: var(--mq-text-primary) !important;
+  font-size: var(--mq-font-12) !important;
+  font-weight: 500 !important;
+}
+
+.wv4-list :deep(.batch-table-panel__detail-button svg) {
+  display: none;
+}
+
+.wv4-list :deep(.batch-table-panel__detail-button.ant-btn:hover),
+.wv4-list :deep(.batch-table-panel__row--active .batch-table-panel__detail-button.ant-btn) {
+  background: rgba(10, 108, 255, 0.12) !important;
+  color: var(--mq-brand-600) !important;
+}
