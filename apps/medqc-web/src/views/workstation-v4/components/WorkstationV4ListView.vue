@@ -293,7 +293,10 @@
         </div>
 
         <div class="workstation-surface-enter workstation-surface-enter--delay-1">
-          <div class="wv4-record-pool-main">
+          <div
+            class="wv4-record-pool-main"
+            :class="{ 'wv4-record-pool-main--preview': !isStageQueueMode }"
+          >
             <div class="wv4-record-pool-main__list">
               <BatchTablePanel
                 :rows="workbenchRows"
@@ -319,6 +322,8 @@
                 :record-pool-mode="!isStageQueueMode"
                 :show-defer-action="false"
                 :show-assign-action="false"
+                :active-row-key="!isStageQueueMode ? activePreviewKey : undefined"
+                @select-row="activePreviewKey = $event"
                 @update:selected-row-keys="emit('update:selectedRowKeys', $event)"
                 @open-record="emit('open-record', $event)"
                 @batch-extract="emit('batch-extract', $event)"
@@ -345,6 +350,13 @@
                 </template>
               </BatchTablePanel>
             </div>
+            <RecordPoolPreviewPanel
+              v-if="!isStageQueueMode"
+              :row="previewRow"
+              :qc-loading="batchActionLoading"
+              @open-record="emit('open-record', $event)"
+              @run-qc="emit('batch-extract', [$event])"
+            />
           </div>
         </div>
 
@@ -364,7 +376,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import {
   Building2,
   Stethoscope,
@@ -384,6 +396,7 @@ import {
 import BatchTablePanel, { type WorkbenchRow } from './workbench/BatchTablePanel.vue'
 import RecordPoolQcTaskHistory from './workbench/RecordPoolQcTaskHistory.vue'
 import RecordPoolQcTaskStatusBar from './workbench/RecordPoolQcTaskStatusBar.vue'
+import RecordPoolPreviewPanel from './workbench/RecordPoolPreviewPanel.vue'
 import FrontpageTenderValidationDrawer from './FrontpageTenderValidationDrawer.vue'
 import type { SichuanBatchJob } from '../semantic-rules/types'
 import type { PriorityCard, PriorityGroup } from './workbench/PriorityLane.vue'
@@ -510,6 +523,22 @@ function filterDepartmentSelectOption(
 }
 
 const tenderValidationOpen = ref(false)
+
+// 病历池：点击行在右侧预览，当前行不在本页时回到第一行
+const activePreviewKey = ref('')
+const rowKeyOf = (row: WorkbenchRow) => row.recordKey || row.id
+watch(
+  () => props.workbenchRows,
+  (rows) => {
+    if (!rows.some((row) => rowKeyOf(row) === activePreviewKey.value)) {
+      activePreviewKey.value = rows[0] ? rowKeyOf(rows[0]) : ''
+    }
+  },
+  { immediate: true },
+)
+const previewRow = computed(
+  () => props.workbenchRows.find((row) => rowKeyOf(row) === activePreviewKey.value) ?? null,
+)
 
 const isFrontpageGenerateStage = computed(() => props.currentStageFilter === 'frontpage_generate')
 const showInpatientSort = computed(

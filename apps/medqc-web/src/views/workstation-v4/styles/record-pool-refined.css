@@ -376,6 +376,38 @@
   font-weight: 500;
 }
 
+/* ---------- 病历池：左列表 + 右预览 ---------- */
+.wv4-list .wv4-record-pool-main--preview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  align-items: start;
+  gap: 16px;
+}
+
+.wv4-list :deep(.batch-table-panel__row--selectable) {
+  cursor: pointer;
+}
+
+.wv4-list :deep(.batch-table-panel__row--active > td) {
+  background: rgba(255, 255, 255, 0.92) !important;
+}
+
+.wv4-list :deep(.batch-table-panel__row--active > td:first-child) {
+  box-shadow: inset 3px 0 0 var(--mq-brand-600);
+}
+
+@media (max-width: 1180px) {
+  .wv4-list .wv4-record-pool-main--preview {
+    grid-template-columns: minmax(0, 1fr) 300px;
+  }
+}
+
+@media (max-width: 1024px) {
+  .wv4-list .wv4-record-pool-main--preview {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* ---------- 列表：BatchTablePanel 做成玻璃卡 ---------- */
 .wv4-list .wv4-record-pool-main__list {
   min-width: 0;

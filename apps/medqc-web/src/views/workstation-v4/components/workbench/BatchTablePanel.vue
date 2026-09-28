@@ -121,6 +121,8 @@
       :row-selection="rowSelection"
       :scroll="tableScroll"
       :locale="tableLocale"
+      :custom-row="buildCustomRow"
+      :row-class-name="rowClassName"
       @change="handleTableChange"
     >
       <template #bodyCell="{ column, record }">
@@ -247,6 +249,14 @@
 import { computed } from 'vue'
 import { Eye, ListChecks } from 'lucide-vue-next'
 import type { RecordLatestQcSummary, RecordSourceState } from '../../types'
+import {
+  dischargeDateLabel,
+  displayHospitalDate,
+  hospitalizationStatusLabel,
+  isDischargedRecord,
+  resolvedHospitalizationStatus,
+  type HospitalizationRow,
+} from './hospitalizationPresentation'
 import patientIconBoy from '@/assets/avatar-icons/patient-icon-boy.png'
 import patientIconElderMan from '@/assets/avatar-icons/patient-icon-elder-man.png'
 import patientIconElderWoman from '@/assets/avatar-icons/patient-icon-elder-woman.png'
@@ -295,12 +305,15 @@ const props = defineProps<{
   showDeferAction?: boolean
   showAssignAction?: boolean
   showClearFiltersAction?: boolean
+  /** 病历池预览：当前预览的病历，点击行时切换 */
+  activeRowKey?: string
   recordPoolMode?: boolean
 }>()
 
 const emit = defineEmits<{
   'update:selectedRowKeys': [keys: string[]]
   'open-record': [id: string]
+  'select-row': [id: string]
   'batch-extract': [keys: string[]]
   'filter-qc': []
   'batch-defer': [keys: string[]]
@@ -404,42 +417,8 @@ function patientAvatarSrc(record: { patientSex?: string; patientAge?: number }) 
   return female ? patientIconWoman : patientIconMan
 }
 
-function displayHospitalDate(value?: string) {
-  const normalized = String(value || '').trim()
-  return normalized && normalized !== '-' ? normalized : '-'
-}
-
-function isDischargedRecord(record: Pick<WorkbenchRow, 'dischargeDate'>) {
-  return displayHospitalDate(record.dischargeDate) !== '-'
-}
-
-type HospitalizationRow = Pick<
-  WorkbenchRow,
-  'dischargeDate' | 'hospitalizationStatus' | 'hospitalizationStatusVerifiedAt'
->
-
-function resolvedHospitalizationStatus(record: HospitalizationRow) {
-  if (record.hospitalizationStatus) return record.hospitalizationStatus
-  return isDischargedRecord(record) ? 'discharged' : 'inpatient'
-}
-
-function hospitalizationStatusLabel(record: HospitalizationRow) {
-  const status = resolvedHospitalizationStatus(record)
-  if (status === 'discharged') return '已出院'
-  if (status === 'unknown') return '待核验'
-  return '在院'
-}
-
 function hospitalizationStatusClass(record: HospitalizationRow) {
   return `batch-table-panel__hospitalization-status--${resolvedHospitalizationStatus(record)}`
-}
-
-function dischargeDateLabel(record: HospitalizationRow) {
-  if (isDischargedRecord(record)) return displayHospitalDate(record.dischargeDate)
-  const status = resolvedHospitalizationStatus(record)
-  if (status === 'discharged') return '时间待同步'
-  if (status === 'unknown') return '状态待核验'
-  return '尚未出院'
 }
 
 function stageTagClass(stageStatus: string) {
@@ -481,6 +460,26 @@ const recordPoolColumns = [
 ]
 
 const columns = computed(() => (recordPoolMode.value ? recordPoolColumns : stageColumns))
+
+// 病历池模式：点击行（非按钮/勾选框）只切换右侧预览，查看详情仍走“查看”按钮
+const INTERACTIVE_SELECTOR = 'button, a, input, label, .ant-checkbox-wrapper, [role="button"]'
+
+function buildCustomRow(record: WorkbenchRow) {
+  if (!props.recordPoolMode) return {}
+  return {
+    onClick: (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null
+      if (target?.closest(INTERACTIVE_SELECTOR)) return
+      emit('select-row', record.recordKey || record.id)
+    },
+  }
+}
+
+function rowClassName(record: WorkbenchRow): string {
+  if (!props.recordPoolMode) return ''
+  const active = props.activeRowKey && props.activeRowKey === (record.recordKey || record.id)
+  return active ? 'batch-table-panel__row--active' : 'batch-table-panel__row--selectable'
+}
 </script>
 
 <style scoped>

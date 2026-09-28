@@ -311,6 +311,11 @@ import { usePatientRecords } from './composables/usePatientRecords'
 import type { PatientRecord, RecordLatestQcSummary } from './types'
 import type { LuxianQcAnalysisRecordItem } from '@/services/luxian-qc-result-analysis-service'
 import { downloadBlob } from './customer-sample-validation/batchExport'
+import {
+  formatQcCompletedAt,
+  resolveResultPresentation,
+  statusCount,
+} from './components/qc/latestQcSummaryPresentation'
 
 const props = defineProps<{
   carePhase: QcRecordCarePhase
@@ -429,11 +434,6 @@ const emptyMessage = computed(() => {
   return '暂无符合当前范围的病历'
 })
 
-function statusCount(statusCounts: Record<string, number>, status: string): number {
-  const value = Number(statusCounts[status] || 0)
-  return Number.isFinite(value) && value > 0 ? value : 0
-}
-
 function hasCompleteRecordIdentity(record: PatientRecord): boolean {
   return Boolean(record.recordKey && record.instituteId && record.patientId && record.visitId)
 }
@@ -469,104 +469,12 @@ function toResultRow(record: PatientRecord): QcRecordResultRow {
   }
 }
 
-function resolveResultPresentation(
-  summary?: RecordLatestQcSummary,
-): Pick<QcRecordResultRow, 'resultStatus' | 'resultLabel' | 'issueSummary' | 'latestQcTime'> {
-  if (summary?.status === 'technical_error') {
-    return {
-      resultStatus: 'technical-error',
-      resultLabel: '结果校验异常',
-      issueSummary: '请复核结果交付',
-      latestQcTime: '—',
-    }
-  }
-  if (summary?.status !== 'ready') {
-    return {
-      resultStatus: 'not-run',
-      resultLabel: '未质控',
-      issueSummary: '暂无结果',
-      latestQcTime: '—',
-    }
-  }
-
-  const statusCounts = summary.statusCounts || {}
-  const nonCompliant = statusCount(statusCounts, 'non_compliant')
-  const dataGap = statusCount(statusCounts, 'data_gap')
-  const uncertain = statusCount(statusCounts, 'uncertain')
-  const issueSummary =
-    [
-      nonCompliant > 0 ? `确定问题 ${nonCompliant}` : '',
-      dataGap > 0 ? `待核实 ${dataGap}` : '',
-      uncertain > 0 ? `待判断 ${uncertain}` : '',
-    ]
-      .filter(Boolean)
-      .join(' · ') || '未发现确定问题'
-
-  if (nonCompliant > 0) {
-    return {
-      resultStatus: 'priority',
-      resultLabel: '需优先复核',
-      issueSummary,
-      latestQcTime: formatQcCompletedAt(summary.completedAt),
-    }
-  }
-  if (dataGap > 0) {
-    return {
-      resultStatus: 'data-gap',
-      resultLabel: '资料待核实',
-      issueSummary,
-      latestQcTime: formatQcCompletedAt(summary.completedAt),
-    }
-  }
-  if (uncertain > 0) {
-    return {
-      resultStatus: 'uncertain',
-      resultLabel: '待判断',
-      issueSummary,
-      latestQcTime: formatQcCompletedAt(summary.completedAt),
-    }
-  }
-  return {
-    resultStatus: 'completed',
-    resultLabel: '已完成',
-    issueSummary,
-    latestQcTime: formatQcCompletedAt(summary.completedAt),
-  }
-}
-
 function formatMedicalRecordTimestamp(value?: string | null): string {
   const text = String(value || '').trim()
   if (!text) return '—'
   const match = text.match(/^(\d{4}-\d{2}-\d{2})(?:[T\s](\d{2}):(\d{2}))?/u)
   if (!match) return '—'
   return match[2] && match[3] ? `${match[1]} ${match[2]}:${match[3]}` : match[1]
-}
-
-const beijingQcTimeFormatter = new Intl.DateTimeFormat('zh-CN', {
-  timeZone: 'Asia/Shanghai',
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-  hourCycle: 'h23',
-})
-
-function formatQcCompletedAt(value?: string | null): string {
-  const text = String(value || '').trim()
-  if (!text) return '—'
-  const normalized = text.replace(' ', 'T')
-  // 工作区任务时间由 datetime.utcnow() 产生，历史值没有时区后缀，但语义为 UTC。
-  const timestamp = /(?:Z|[+-]\d{2}:\d{2})$/iu.test(normalized) ? normalized : `${normalized}Z`
-  const date = new Date(timestamp)
-  if (Number.isNaN(date.getTime())) return '—'
-  const parts = Object.fromEntries(
-    beijingQcTimeFormatter
-      .formatToParts(date)
-      .filter((part) => part.type !== 'literal')
-      .map((part) => [part.type, part.value]),
-  )
-  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`
 }
 
 function applyFilters() {

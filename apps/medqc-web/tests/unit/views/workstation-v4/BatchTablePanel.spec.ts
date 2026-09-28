@@ -438,4 +438,18 @@ describe('BatchTablePanel 病历池列表', () => {
     expect(wrapper.text()).toContain('在院')
     expect(wrapper.text()).toContain('尚未出院')
   })
+
+  it('病历池模式点击行只切换预览，点击按钮或勾选框不触发', () => {
+    const wrapper = mountTable()
+    const table = wrapper.findComponent({ name: 'ATable' })
+    const customRow = (table.vm.$attrs['custom-row'] ?? table.vm.$attrs.customRow) as (
+      record: Record<string, unknown>,
+    ) => { onClick?: (event: MouseEvent) => void }
+    const record = { id: 'record-1' }
+    const cell = document.createElement('td')
+    customRow(record).onClick?.({ target: cell } as unknown as MouseEvent)
+    const button = document.createElement('button')
+    customRow(record).onClick?.({ target: button } as unknown as MouseEvent)
+    expect(wrapper.emitted('select-row')).toEqual([['record-1']])
+  })
 })

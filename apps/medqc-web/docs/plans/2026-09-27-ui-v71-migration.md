@@ -21,7 +21,7 @@
 
 | # | 页面（路由 `/workstation-v5/…`） | 源文件 | 模板 | 状态 |
 | --- | --- | --- | --- | --- |
-| 1 | 病历池 `worklist`（含生成首页/首页质控/结算清单质控三个 `?stage=`） | `workstation-v4/WorkstationV4View.vue`、`components/WorkstationV4ListView.vue` | 列表 + 预览（PoolV71） | 完成（见执行记录）；「左列表 + 右预览」布局待确认 |
+| 1 | 病历池 `worklist`（含生成首页/首页质控/结算清单质控三个 `?stage=`） | `workstation-v4/WorkstationV4View.vue`、`components/WorkstationV4ListView.vue` | 列表 + 预览（PoolV71） | 完成（见执行记录），含右侧预览 |
 | 2 | 运行病历质控 `records/running`、终末病历质控 `records/final` | `workstation-v4/QcRecordResultListView.vue` 及其预览组件 | 列表 + 预览（RunningV71） | 完成（见执行记录） |
 | 3 | 质控规则 `rules` | `workstation-v4/WorkstationRulesView.vue` 及其子组件 | 目录（RulesV71） | 完成（见执行记录） |
 | 4 | 系统配置剩余部分：连接配置、执行日志、首页抽取设置、模型性能、模型配置 | `components/sync-console/ConnectionStudio.vue`、`SyncRunPanel.vue`、`components/system-config/*`、`components/LLMApiConfig.vue` | 表单 / 设置（SystemConfigV71） | 完成（见执行记录） |
@@ -33,6 +33,9 @@
 | 10 | DRG/DIP 分析、ICD 编码查询、数据上传 `drg/*` `icd` `upload` | `workstation-v4/WorkstationV2View.vue` 及其子组件 | 概览 / 目录 / 表单 | 完成（见执行记录） |
 | 11 | 数据管理 `data` | `workstation-v4/CDMDataView.vue` | 目录 | 完成（见执行记录） |
 | 12 | 全站收尾：残留旧色值、`wv4-*` 旧类引用、过渡期 `:deep` 背景覆盖清理，全页截图总览 | `WorkstationLayout.vue` 等 | — | 完成（见执行记录）；重复旧规则清理留作后续 |
+| 13 | 全屏病历详情（病历池/阶段队列点「查看」进入） | `WorkstationV4DetailView.vue` 及详情子组件 | 详情 | 待办 |
+| 14 | 质控结果抽屉（运行/终末质控「查看完整结果」） | `QCRecordResultComparisonDrawer` 等 | 详情 | 待办 |
+| 15 | 客户样本验证「查看病历」「查看结果」 | 客户样本相关抽屉/弹窗 | 详情 | 待办 |
 
 不在范围：登录页（用户要求保留原品牌设计）、旧版后台（非 `/workstation-v5`）。
 
@@ -84,3 +87,4 @@
 | 2026-09-27 | 11 数据管理 | 页头眉标改为「数据与配置 · 数据中心」、标题 40px，刷新按钮改为品牌渐变胶囊；统计卡、数据源条、表浏览与数据预览面板统一玻璃卡。在原 scoped 样式末尾追加覆盖块。无专属单测；类型检查、lint 通过，1180 截图核对 |
 | 2026-09-27 | 12 全站收尾 | `src/views/workstation-v4`、`src/views/workstation` 下 99 个文件共 1235 处旧品牌蓝机械替换为 v7.1：#2b6cf6/#007aff/#2f6fed→#0a6cff，#0057b8/#1e5ae0→#0a5fd6，对应 rgba 同步；共享组件（`components/rules` 等旧后台也在用）未动。全量前端单测 1124 项中 1121 通过，3 项失败均为本机美国中部时区导致（QCOverview 时间断言、date-utils 两项，与本次无关，按用户要求不处理）；lint、类型检查通过，首页截图复核。**未做**：各页旧样式文件中被覆盖层压住的重复规则尚未删除（行为无影响，属代码整洁度，建议另立任务） |
 | 2026-09-27 | 8 自定义质控点 | 用户以 `/goal` 指示完成全部页面，按设计稿方向落地：页头改为眉标 + 40px 标题，「批量执行 / 规则设计」视图切换移入页头分段控件；四项指标合为玻璃卡；批量视图下四个步骤改为分段切换、`v-show` 只显示当前步骤（DOM 与数据流不变，设计视图仍全量显示），解决原先六块平铺与右侧截断。本页 CSS 变量改指 `--mq-*` Token，面板、按钮、表格统一 v7.1；`.mq-page-title` 公共类补显式文字色。单测 4 项、类型检查通过，1440 截图与浏览器内切换到步骤四实测核对 |
+| 2026-09-27 | 1 病历池右侧预览 | 用户确认保留「左列表 + 右预览」。新增 `RecordPoolPreviewPanel`：点击行（非按钮/勾选框）只切换预览，「查看病历」沿用原 open-record 进入全屏详情，「质控此病历」沿用原 batch-extract；预览只展示列表已有字段，未新增接口（设计稿中的病历文书列表、质控记录按钮因无列表数据未做）。质控结果文案从运行/终末列表抽出为 `latestQcSummaryPresentation.ts`、住院状态与日期口径从表格抽出为 `hospitalizationPresentation.ts`，列表与预览共用，行为不变。阶段队列不显示预览。新增/更新单测：预览 4 项、表格点击行 1 项、列表联动 2 项；浏览器实测切换与进入详情。另将详情类页面补为第 13–15 项 |
