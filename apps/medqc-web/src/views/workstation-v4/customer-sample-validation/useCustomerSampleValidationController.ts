@@ -134,6 +134,7 @@ export function useCustomerSampleValidationController() {
     stopCustomerSampleGuidePositionTimer,
   } = useCustomerSampleGuide({ openTestRecordDrawer })
 
+  const validationItemId = ref('')
   const poolLoading = ref(false)
   const route = useRoute()
   const router = useRouter()
@@ -1129,6 +1130,12 @@ export function useCustomerSampleValidationController() {
 
   function buildRecordActions(record: ManualSamplePoolRecord) {
     const actions = []
+    if (selectedPoolId.value === CUSTOMER_TEST_POOL_ID && record.sample_item_ids.length === 1) {
+      actions.push(h('button', {
+        type: 'button', class: 'customer-sample-secondary-link',
+        onClick: () => { validationItemId.value = record.sample_item_ids[0] },
+      }, '规则验收'))
+    }
     if (record.matched_visit_id) {
       actions.push(
         h(
@@ -3229,6 +3236,7 @@ export function useCustomerSampleValidationController() {
     isLastCustomerSampleGuideStep,
     isLuxian0609Mode,
     isSyncedOnlyValidationMode,
+    validationItemId,
     itemColumns,
     itemLoading,
     loadManagedPools,

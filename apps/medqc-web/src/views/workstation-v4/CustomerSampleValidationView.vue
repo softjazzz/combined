@@ -1,4 +1,10 @@
 <template>
+  <RuleValidationDrawer
+    v-if="validationItemId"
+    :item-id="validationItemId"
+    @close="validationItemId = ''"
+    @view-job="openBatchJob"
+  />
   <main class="customer-sample-page relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden">
     <div
       class="customer-sample-scroll custom-scrollbar flex-1 overflow-y-auto px-4 pt-4 xl:px-5"
@@ -38,7 +44,7 @@
                 </a-button>
                 <a-button
                   type="primary"
-                  
+
                   data-customer-guide="run-validation"
                   :class="customerSampleGuideTargetClass('run-validation')"
                   :disabled="runButtonDisabled"
@@ -291,14 +297,14 @@
                   <div class="flex shrink-0 flex-wrap items-center gap-2">
                     <a-button
                       :loading="importWorkflow.matching || matchLoading"
-                      
+
                       @click="runPoolMatch({ source: 'workflow' })"
                     >
                       重新匹配
                     </a-button>
                     <a-button
                       type="primary"
-                      
+
                       :disabled="importWorkflow.matched <= 0 || syncLoading"
                       :loading="syncLoading || importWorkflow.status === 'syncing'"
                       @click="handleSyncPoolRecords"
@@ -734,21 +740,21 @@
         </div>
         <div class="customer-sample-selection-run-actions">
           <a-button
-            
+
             @click="clearSelectedRecords"
           >
             清空选择
           </a-button>
           <a-button
             v-if="isLuxian0609Mode"
-            
+
             @click="scrollToLuxianScope"
           >
             调整质控范围
           </a-button>
           <a-button
             type="primary"
-            
+
             :disabled="runButtonDisabled"
             :loading="runLoading"
             @click="handleRunPool"
@@ -801,7 +807,7 @@
           </a-button>
           <a-button
             v-if="customerSampleGuideStepIndex > 0"
-            
+
             @click="goToPreviousCustomerSampleGuideStep"
           >
             上一步
@@ -1993,6 +1999,7 @@
 </template>
 
 <script setup lang="ts">
+import RuleValidationDrawer from './customer-sample-validation/RuleValidationDrawer.vue'
 import QCRecordCompareWorkbench from './semantic-rules/components/QCRecordCompareWorkbench.vue'
 import { useCustomerSampleValidationController } from './customer-sample-validation/useCustomerSampleValidationController'
 
@@ -2115,6 +2122,7 @@ const {
   isLastCustomerSampleGuideStep,
   isLuxian0609Mode,
   isSyncedOnlyValidationMode,
+  validationItemId,
   itemColumns,
   itemLoading,
   loadManagedPools,
