@@ -105,6 +105,31 @@ describe('QcRemediationSuggestion', () => {
     expect(wrapper.find('.qc-remediation--dense').exists()).toBe(true)
     expect(wrapper.find('.qc-remediation-title').text()).toBe('核对建议')
   })
+
+  it('侧栏排版只改样式：修改对象作标签、注意事项弱化，四段内容逐字保留', () => {
+    const wrapper = mount(QcRemediationSuggestion, {
+      props: { suggestion: STRUCTURED_SUGGESTION, status: 'non_compliant', compact: true },
+    })
+
+    expect(wrapper.find('.qc-remediation--compact').exists()).toBe(true)
+    const sections = wrapper.findAll('.qc-remediation-section')
+    expect(sections).toHaveLength(4)
+    expect(sections[0]!.classes()).toContain('qc-remediation-section--target')
+    expect(sections[3]!.classes()).toContain('qc-remediation-section--caution')
+    expect(sections.map((section) => section.get('.qc-remediation-body').text())).toEqual([
+      '入院记录',
+      '入院记录及完成时间',
+      '请补充入院记录，并确保在入院后24小时内完成。',
+      '请依据本次实际诊疗事实补充，保留原始记录；不要编造未核实事实，不要倒签。',
+    ])
+  })
+
+  it('默认不启用侧栏排版，其他页面保持原表格样式', () => {
+    const wrapper = mount(QcRemediationSuggestion, {
+      props: { suggestion: STRUCTURED_SUGGESTION, status: 'non_compliant' },
+    })
+    expect(wrapper.find('.qc-remediation--compact').exists()).toBe(false)
+  })
 })
 
 const DRAFT_CONTEXT = { instituteId: '泸县人民医院', patientId: 'P-1', visitId: 'V-1' }

@@ -308,8 +308,8 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.find('.result-detail').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('完整判定说明')
     expect(wrapper.text()).not.toContain('关键证据')
-    expect(wrapper.text()).toContain('修改建议')
-    expect(wrapper.text()).toContain(items[0]!.suggestion)
+    // 侧栏收起时只看摘要；修改建议随详情一起展开，避免多条结果时整栏过长
+    expect(wrapper.find('[data-testid="qc-remediation-suggestion"]').exists()).toBe(false)
 
     await ruleName.trigger('click')
 
@@ -319,7 +319,12 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.text()).toContain('完整判定说明')
     expect(wrapper.text()).toContain('关键证据')
     expect(wrapper.text()).toContain('修改建议')
-    expect(wrapper.text()).toContain(items[0]!.suggestion)
+    const suggestion = wrapper.get('[data-testid="qc-remediation-suggestion"]')
+    expect(suggestion.classes()).toContain('qc-remediation--compact')
+    // 侧栏排版只改样式，建议原文逐字保留
+    expect(suggestion.text().replace(/\s+/g, '')).toContain(
+      items[0]!.suggestion!.replace(/\s+/g, ''),
+    )
 
     await ruleName.trigger('click')
 
@@ -806,7 +811,7 @@ describe('SingleRecordQcResultPanel', () => {
       '核对情况共核对3份输血病程记录，记录时间均在本次住院期间。',
     )
     const detailGrid = wrapper.get('[data-testid="single-record-detail-grid"]')
-    expect(detailGrid.text()).toContain('关键证据1 份，可定位原文')
+    expect(detailGrid.text()).toContain('关键证据1 份，可查看相关文书')
     await detailGrid
       .get('[data-testid="single-record-evidence-disclosure"] summary')
       .trigger('click')
@@ -968,7 +973,8 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.text()).toContain('当前主诉缺少可区分第一诊断的特异性线索')
     expect(wrapper.text()).toContain('修改建议')
     expect(wrapper.text()).toContain(items[0]!.suggestion)
-    expect(wrapper.text()).toContain('定位原文')
+    // 规则级证据入口文案不宣称能定位到某一次检查
+    expect(wrapper.text()).toContain('查看相关文书')
     expect(wrapper.find('[data-testid="single-record-detail-grid"]').exists()).toBe(true)
     expect(wrapper.get('[data-testid="single-record-evidence"]').classes()).toContain(
       'evidence-row',
@@ -1314,13 +1320,24 @@ describe('SingleRecordQcResultPanel', () => {
     expect(summary.text()).toContain('检查 6 次')
     expect(summary.text()).toContain('阳性 1 次')
     expect(summary.text()).toContain('未完成分析 1 次')
+    // 六次检查全部保留；需处理的第 3 次在前，其余 5 次折叠在「另有 5 次」里
     const rows = wrapper.findAll('[data-testid="exam-event-row"]')
     expect(rows).toHaveLength(6)
-    expect(rows[0]?.text()).toContain('2026-07-08 11:05:49')
-    expect(rows[0]?.text()).toContain('不适用')
-    expect(rows[2]?.text()).toContain('2026-07-08 17:55:17')
-    expect(rows[2]?.text()).toContain('阳性结果')
-    expect(rows[2]?.text()).toContain('未完成分析')
+    expect(rows[0]?.text()).toContain('第 3 次')
+    expect(rows[0]?.text()).toContain('2026-07-08 17:55:17')
+    expect(rows[0]?.text()).toContain('阳性结果')
+    expect(rows[0]?.text()).toContain('未完成分析')
+    const more = wrapper.get('[data-testid="exam-event-more"]')
+    expect(more.attributes('open')).toBeUndefined()
+    expect(more.get('summary').text()).toBe('另有 5 次：不适用 5')
+    const folded = more.findAll('[data-testid="exam-event-row"]')
+    expect(folded.map((row) => row.text().match(/第 (\d) 次/)?.[1])).toEqual(['1', '2', '4', '5', '6'])
+    expect(folded[0]?.text()).toContain('2026-07-08 11:05:49')
+    expect(folded[0]?.text()).toContain('不适用')
+    // 当前数据没有逐次文书对应关系：明细行只展示，不含任何可点击元素
+    for (const row of rows) {
+      expect(row.findAll('button, a, [role="button"]')).toHaveLength(0)
+    }
   })
 
   it('四级手术MDT问题展示手术等级、等级来源和讨论事实', async () => {

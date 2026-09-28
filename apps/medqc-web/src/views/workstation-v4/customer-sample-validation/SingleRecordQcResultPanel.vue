@@ -243,7 +243,11 @@
         </button>
 
         <ExamLabEventResultBlock
-          v-if="isDocumentGroupExpandedForItem(item.key) && examLabEventPresentation(item)"
+          v-if="
+            isDocumentGroupExpandedForItem(item.key) &&
+              expandedKey === item.key &&
+              examLabEventPresentation(item)
+          "
           class="result-event-overview"
           :presentation="examLabEventPresentation(item)!"
         />
@@ -465,7 +469,7 @@
                     aria-hidden="true"
                   />关键证据</span>
                   <small v-if="displayEvidence(item).length">
-                    {{ displayEvidence(item).length }} 份，可定位原文
+                    {{ displayEvidence(item).length }} 份，可查看相关文书
                   </small>
                 </summary>
                 <div
@@ -503,7 +507,7 @@
                       }}</span>
                     </span>
                     <span class="evidence-action">
-                      定位原文
+                      查看相关文书
                       <ChevronRight
                         aria-hidden="true"
                         :size="14"
@@ -561,10 +565,12 @@
         <QcRemediationSuggestion
           v-if="
             isDocumentGroupExpandedForItem(item.key) &&
+              expandedKey === item.key &&
               !isCompliantResult(item) &&
               item.suggestion
           "
           class="result-suggestion"
+          compact
           :suggestion="item.suggestion"
           :status="item.status"
           :rule-id="item.rule_id"
@@ -608,7 +614,9 @@
               :size="13"
               :stroke-width="2"
             />
-            <span>{{ debugCopyingKey === item.key ? '复制中' : '复制调试信息' }}</span>
+            <span class="visually-hidden">{{
+              debugCopyingKey === item.key ? '复制中' : '复制调试信息'
+            }}</span>
           </button>
         </footer>
       </article>
@@ -1681,6 +1689,24 @@ watch(
 .result-row-debug-copy:disabled {
   cursor: not-allowed;
   opacity: 0.48;
+}
+
+/* 复制调试信息只给实施人员用：弱化为图标按钮，文字仅供读屏 */
+.result-row-debug-copy {
+  width: 28px;
+  justify-content: center;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 
 .result-row-meta {
