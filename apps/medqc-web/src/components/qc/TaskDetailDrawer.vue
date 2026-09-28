@@ -475,7 +475,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import type { TableColumnsType, TablePaginationConfig } from 'ant-design-vue'
 import { Check, Eye, Play, RotateCw, X } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
@@ -559,6 +559,10 @@ const emptyDescription = computed(() =>
   props.tab === 'received' ? '当前任务没有分配给我的病历' : '当前任务暂无病历',
 )
 const isModernTask = computed(() => !!detail.value?.scene)
+const actorId = computed(() => authStore.user?.id?.trim() || '')
+const actorRoleKey = computed(() => [...new Set(
+  authStore.userRoles.map((role) => role.trim()).filter(Boolean),
+)].sort().join('\u0000'))
 const isCreator = computed(() => !!authStore.user?.id && authStore.user.id === detail.value?.creator_id)
 const isAdmin = computed(() => !!authStore.user?.id && authStore.userRoles.includes('admin'))
 const runScope = computed<TaskQcRunScope | null>(() => {
@@ -828,12 +832,15 @@ function clearDetail() {
   jobError.value = ''
   loading.value = false
   error.value = ''
+  pendingFocus = null
   resetFilters()
 }
 
 async function loadDetail() {
   const taskId = String(props.taskId || '').trim()
-  if (!props.open || !taskId) {
+  const currentActorId = actorId.value
+  const currentActorRoleKey = actorRoleKey.value
+  if (!props.open || !taskId || !currentActorId) {
     clearDetail()
     return
   }
@@ -863,7 +870,8 @@ async function loadDetail() {
   resetFilters()
   try {
     const response = await getTaskDetail(taskId, { tab })
-    if (currentSequence !== requestSequence || !props.open) return
+    if (currentSequence !== requestSequence || !props.open
+      || actorId.value !== currentActorId || actorRoleKey.value !== currentActorRoleKey) return
     if (String(props.taskId || '').trim() !== taskId || props.tab !== tab) return
     if (
       response.success
@@ -881,10 +889,12 @@ async function loadDetail() {
         : response.message || '获取任务详情失败'
     }
   } catch {
-    if (currentSequence !== requestSequence || !props.open) return
+    if (currentSequence !== requestSequence || !props.open
+      || actorId.value !== currentActorId || actorRoleKey.value !== currentActorRoleKey) return
     error.value = '网络异常或服务器不可用'
   } finally {
-    if (currentSequence === requestSequence) loading.value = false
+    if (currentSequence === requestSequence
+      && actorId.value === currentActorId && actorRoleKey.value === currentActorRoleKey) loading.value = false
   }
 }
 
@@ -1231,16 +1241,26 @@ function canDisplayLegacyRecordId(record: Pick<TaskRecordItem, 'institute_id' | 
     && [record.institute_id, record.patient_id, record.visit_id].every((value) => value == null)
 }
 
-watch([() => props.open, () => props.taskId, () => props.tab, () => props.focusTaskRecordId, () => props.focusRunNumber], ([open, taskId]) => {
-  if (!open || !String(taskId || '').trim()) {
-    clearDetail()
-    return
-  }
+watch([
+  () => props.open,
+  () => props.taskId,
+  () => props.tab,
+  () => props.focusTaskRecordId,
+  () => props.focusRunNumber,
+  actorId,
+  actorRoleKey,
+], ([open, taskId, , , , currentActorId]) => {
+  clearDetail()
+  if (!open || !String(taskId || '').trim() || !currentActorId) return
   void loadDetail()
 }, { immediate: true })
 
 watch([keyword, recordStatus], () => {
   page.value = 1
+})
+
+onBeforeUnmount(() => {
+  clearDetail()
 })
 
 </script>

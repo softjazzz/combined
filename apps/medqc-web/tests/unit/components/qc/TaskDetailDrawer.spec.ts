@@ -1,6 +1,6 @@
-import { flushPromises, mount } from '@vue/test-utils'
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Select as ASelect, Table as ATable } from 'ant-design-vue'
 
 const mocks = vi.hoisted(() => ({
@@ -14,8 +14,7 @@ const mocks = vi.hoisted(() => ({
   getTaskRecordSyncJob: vi.fn(),
   getLatestTaskRecordSyncJob: vi.fn(),
   getSichuanWorkspaceBatchJob: vi.fn(),
-  user: { id: 'creator' },
-  roles: [] as string[],
+  authStore: null as null | { user: { id: string } | null; userRoles: string[] },
 }))
 
 beforeAll(() => {
@@ -36,6 +35,8 @@ beforeAll(() => {
   })
 })
 
+enableAutoUnmount(afterEach)
+
 vi.mock('@/api/tasks', () => ({
   getTaskDetail: mocks.getTaskDetail,
   getTaskQcRuns: mocks.getTaskQcRuns,
@@ -47,7 +48,12 @@ vi.mock('@/api/tasks', () => ({
   getTaskRecordSyncJob: mocks.getTaskRecordSyncJob,
   getLatestTaskRecordSyncJob: mocks.getLatestTaskRecordSyncJob,
 }))
-vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ user: mocks.user, userRoles: mocks.roles }) }))
+vi.mock('@/stores/auth', async () => {
+  const { reactive } = await import('vue')
+  const authStore = reactive({ user: { id: 'creator' } as { id: string } | null, userRoles: [] as string[] })
+  mocks.authStore = authStore
+  return { useAuthStore: () => authStore }
+})
 vi.mock('@/services/sichuan-rule-workspace-service', () => ({
   getSichuanWorkspaceBatchJob: mocks.getSichuanWorkspaceBatchJob,
 }))
@@ -129,10 +135,12 @@ const TaskRecordReviewPanelStub = defineComponent({
 
 function deferred<T>() {
   let resolve!: (value: T) => void
-  const promise = new Promise<T>((promiseResolve) => {
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
     resolve = promiseResolve
+    reject = promiseReject
   })
-  return { promise, resolve }
+  return { promise, resolve, reject }
 }
 
 function detailResponse(
@@ -245,8 +253,8 @@ describe('TaskDetailDrawer', () => {
         is_compliant: false, conclusion: '记录超时', suggestion: '补充说明',
         evidence: [{ source_type: '文书', source_ref: 'ref-1', excerpt_kind: '时间证据', evidence_excerpt: '签署时间晚于入院时间' }] }],
     } })
-    mocks.user.id = 'creator'
-    mocks.roles.length = 0
+    mocks.authStore!.user = { id: 'creator' }
+    mocks.authStore!.userRoles.length = 0
   })
 
   it('仅本人受领的现代住院病历提供文书入口，切换任务关闭文书', async () => {
@@ -395,6 +403,113 @@ describe('TaskDetailDrawer', () => {
     expect(wrapper.emitted('update:open')).toEqual([[false]])
     const vm = wrapper.vm as unknown as { detail: unknown }
     expect(vm.detail).toBeNull()
+  })
+
+  it('切换账号后立即清空，晚到的旧账号详情不能覆盖新账号详情', async () => {
+    const oldRequest = deferred<ReturnType<typeof detailResponse>>()
+    const newRequest = deferred<ReturnType<typeof detailResponse>>()
+    mocks.getTaskDetail.mockReturnValueOnce(oldRequest.promise).mockReturnValueOnce(newRequest.promise)
+    const wrapper = mountDrawer()
+
+    mocks.authStore!.user = { id: 'user-2' }
+    await flushPromises()
+    newRequest.resolve(detailResponse('新账号任务', [record({ assignee_id: 'user-2' })]))
+    await flushPromises()
+    oldRequest.resolve(detailResponse('旧账号任务', [record({ assignee_id: 'creator' })]))
+    await flushPromises()
+
+    expect(mocks.getTaskDetail).toHaveBeenCalledTimes(2)
+    expect(wrapper.text()).toContain('新账号任务')
+    expect(wrapper.text()).not.toContain('旧账号任务')
+  })
+
+  it('切换账号后丢弃旧账号的作业与单病历结果响应', async () => {
+    const oldJob = deferred<{ success: boolean; data: { id: string; status: string } }>()
+    const oldResult = deferred<{ success: boolean; data: Record<string, unknown> }>()
+    mocks.getTaskDetail
+      .mockResolvedValueOnce(detailResponse('旧账号运行任务', [modernRecord()], {
+        scene: 'running', rule_set_key: 'lx0609', status: 'assigned', creator_id: 'creator',
+      }))
+      .mockResolvedValueOnce(detailResponse('新账号任务', [record({ assignee_id: 'user-2' })]))
+    mocks.getTaskQcRuns.mockResolvedValueOnce({ success: true, data: [
+      { task_id: 'task-1', run_number: 1, job_id: 'old-job', run_scope: 'assigned', triggered_by: 'creator', created_at: '2026-09-22' },
+    ] })
+    mocks.getSichuanWorkspaceBatchJob.mockReturnValueOnce(oldJob.promise)
+    mocks.getTaskQcRunRecordResult.mockReturnValueOnce(oldResult.promise)
+    const wrapper = mountDrawer()
+    await flushPromises()
+    await wrapper.get('[data-testid="task-record-result-association-1"]').trigger('click')
+
+    mocks.authStore!.user = { id: 'user-2' }
+    await flushPromises()
+    oldJob.resolve({ success: true, data: { id: 'old-job', status: 'completed' } })
+    oldResult.resolve({ success: true, data: {
+      task_id: 'task-1', run_number: 1, task_record_id: 'association-1', job_id: 'old-job',
+      result_state: 'available', rule_set_key: 'lx0609', items: [{ rule_name: '旧账号结果' }],
+    } })
+    await flushPromises()
+
+    const vm = wrapper.vm as unknown as { selectedJob: unknown; recordResult: unknown }
+    expect(vm.selectedJob).toBeNull()
+    expect(vm.recordResult).toBeNull()
+    expect(wrapper.text()).not.toContain('old-job')
+    expect(wrapper.text()).not.toContain('旧账号结果')
+  })
+
+  it('角色权限变化重新读取同一任务，角色集合顺序变化不重复读取', async () => {
+    const oldRequest = deferred<ReturnType<typeof detailResponse>>()
+    const newRequest = deferred<ReturnType<typeof detailResponse>>()
+    mocks.getTaskDetail.mockReturnValueOnce(oldRequest.promise).mockReturnValueOnce(newRequest.promise)
+    const wrapper = mountDrawer()
+
+    mocks.authStore!.userRoles.push('qc_manager', 'admin')
+    await flushPromises()
+    newRequest.resolve(detailResponse('管理员权限任务', [record()]))
+    await flushPromises()
+    oldRequest.resolve(detailResponse('普通权限旧任务', [record()]))
+    await flushPromises()
+    expect(wrapper.text()).toContain('管理员权限任务')
+    expect(wrapper.text()).not.toContain('普通权限旧任务')
+    expect(mocks.getTaskDetail).toHaveBeenCalledTimes(2)
+
+    mocks.authStore!.userRoles.reverse()
+    await flushPromises()
+    expect(mocks.getTaskDetail).toHaveBeenCalledTimes(2)
+  })
+
+  it.each(['success', 'failure'] as const)('注销立即清空详情，晚到%s响应无副作用且不以空账号重读', async (outcome) => {
+    const request = deferred<ReturnType<typeof detailResponse>>()
+    mocks.getTaskDetail.mockReturnValueOnce(request.promise)
+    const wrapper = mountDrawer()
+    expect(mocks.getTaskDetail).toHaveBeenCalledTimes(1)
+
+    mocks.authStore!.user = null
+    await flushPromises()
+    if (outcome === 'success') request.resolve(detailResponse('注销后晚到任务', [record()]))
+    else request.reject(new Error('注销后晚到失败'))
+    await flushPromises()
+
+    const vm = wrapper.vm as unknown as { detail: unknown; error: string }
+    expect(vm.detail).toBeNull()
+    expect(vm.error).toBe('')
+    expect(wrapper.text()).not.toContain('注销后晚到任务')
+    expect(mocks.getTaskDetail).toHaveBeenCalledTimes(1)
+  })
+
+  it('卸载时使在途详情失效', async () => {
+    const request = deferred<ReturnType<typeof detailResponse>>()
+    mocks.getTaskDetail.mockReturnValueOnce(request.promise)
+    const wrapper = mountDrawer()
+    const vm = wrapper.vm as unknown as { detail: unknown; error: string }
+
+    wrapper.unmount()
+    request.resolve(detailResponse('卸载后晚到任务', [record()]))
+    await flushPromises()
+
+    expect(vm.detail).toBeNull()
+    expect(vm.error).toBe('')
+    expect(mocks.getTaskQcRuns).not.toHaveBeenCalled()
+    expect(wrapper.emitted('task-updated')).toBeUndefined()
   })
 
   it('支持本地关键字与处理状态筛选，并保留关联id作为独立行', async () => {
@@ -637,7 +752,7 @@ describe('TaskDetailDrawer', () => {
   })
 
   it('非创建人也可在收到视图启动本人子集，零分配与门急诊均不可启动', async () => {
-    mocks.user.id = 'user-1'
+    mocks.authStore!.user = { id: 'user-1' }
     mocks.getTaskDetail.mockResolvedValueOnce(detailResponse('受领任务', [record()], {
       scene: 'final', rule_set_key: 'final-set', rule_set_version: '2026-04-24', status: 'assigned',
     }))
@@ -692,7 +807,7 @@ describe('TaskDetailDrawer', () => {
   })
 
   it('运行历史 403 不展示旧作业或启动按钮', async () => {
-    mocks.user.id = 'user-1'
+    mocks.authStore!.user = { id: 'user-1' }
     mocks.getTaskDetail.mockResolvedValueOnce(detailResponse('无权历史', [record()], {
       scene: 'running', rule_set_key: 'running-set', status: 'assigned',
     }))
@@ -952,7 +1067,7 @@ describe('TaskDetailDrawer', () => {
     expect(mocks.syncTaskRecords).not.toHaveBeenCalled()
     creator.unmount()
 
-    mocks.user.id = 'other'
+    mocks.authStore!.user = { id: 'other' }
     const other = mountDrawer({ tab: 'all' })
     await flushPromises()
     expect(other.find('[data-testid="task-sync-records"]').exists()).toBe(false)
@@ -962,15 +1077,15 @@ describe('TaskDetailDrawer', () => {
     mocks.getTaskDetail.mockResolvedValue(detailResponse('他人任务', [modernRecord()], {
       creator_id: 'other', scene: 'running', total_records: 1,
     }))
-    mocks.user.id = 'admin-user'
-    mocks.roles.push('admin')
+    mocks.authStore!.user = { id: 'admin-user' }
+    mocks.authStore!.userRoles.push('admin')
     const admin = mountDrawer({ tab: 'all' })
     await flushPromises()
     expect(admin.get('[data-testid="task-sync-records"]').attributes('disabled')).toBeUndefined()
     admin.unmount()
 
-    mocks.roles.length = 0
-    mocks.roles.push('qc_manager')
+    mocks.authStore!.userRoles.length = 0
+    mocks.authStore!.userRoles.push('qc_manager')
     const manager = mountDrawer({ tab: 'all' })
     await flushPromises()
     expect(manager.find('[data-testid="task-sync-records"]').exists()).toBe(false)
@@ -1464,7 +1579,7 @@ describe('TaskDetailDrawer', () => {
     await flushPromises()
     await wrapper.get('[data-testid="task-record-complete"]').trigger('click')
     await flushPromises()
-    mocks.user.id = 'other-user'
+    mocks.authStore!.user = { id: 'other-user' }
     refreshed.resolve(detailResponse('原受领人任务', [modernRecord({ status: 'completed' })]))
     await flushPromises()
     expect(wrapper.emitted('task-updated')).toBeUndefined()
@@ -1546,10 +1661,10 @@ describe('TaskDetailDrawer', () => {
     await wrapper.get('[data-testid="task-record-result-association-1"]').trigger('click')
     await flushPromises()
     await wrapper.get('[data-testid="task-record-complete"]').trigger('click')
-    mocks.user.id = 'other-user'
+    mocks.authStore!.user = { id: 'other-user' }
     pending.resolve({ success: true, data: { task_id: 'task-1', task_record_id: 'association-1', run_number: 2, status: 'completed' } })
     await flushPromises()
-    expect(mocks.getTaskDetail).toHaveBeenCalledTimes(1)
+    expect(mocks.getTaskDetail).toHaveBeenCalledTimes(2)
     expect(wrapper.emitted('task-updated')).toBeUndefined()
   })
 

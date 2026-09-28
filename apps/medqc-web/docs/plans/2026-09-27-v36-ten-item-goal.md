@@ -80,6 +80,11 @@
 - 主协调新增API集成测试，确认真实服务响应透传；后端组合78项通过。前端集中门禁见滚动计划，不把来源引用当申诉创建或授权完成。
 - Goal仍4/10，剩余6个整项；无数据库写入或业务部署。
 
+### 第101节增量
+
+- 修复任务详情账号/角色/注销/卸载隔离，组件96项验证通过；不算新增整项。
+- PRD43重抽样已核实不能仅凭“未分配”直接替换旧关联，已有执行/同步/审核引用风险。已询问用户业务选择，未确认前保持守卫；Goal仍4/10。
+
 ### 配置线：62 新评分标准Excel主链
 
 - 文件：新`backend/app/services/scoring_standard_excel_service.py`、`backend/app/services/scoring_standard_service.py`原子导入helper、`backend/app/routers/scoring.py`、`src/api/scoring.ts`、`src/views/qc/ScoringStandardsView.vue`及专属pytest/Vitest。
