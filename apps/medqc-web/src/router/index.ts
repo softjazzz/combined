@@ -1172,6 +1172,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '数据管理' },
       },
       {
+        path: 'document-definitions',
+        name: 'WorkstationV4DocumentDefinitions',
+        component: () => import('@/views/document-definitions/DocumentDefinitionsView.vue'),
+        meta: { title: '文书管理', permission: ['admin', 'qc_manager'] },
+      },
+      {
         path: 'rules',
         name: 'WorkstationV4Rules',
         component: () => import('@/views/workstation-v4/WorkstationRulesView.vue'),

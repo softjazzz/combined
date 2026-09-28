@@ -276,6 +276,51 @@ class QCTaskTemplate(Base):
     )
 
 
+_DOCUMENT_DEFINITION_WS = "' \t\n\r\f\v'"
+
+
+class QCDocumentDefinition(Base):
+    """规则后台导入的文书类型与纯文本模板（迁移 70）。"""
+
+    __tablename__ = "qc_document_definitions"
+
+    id = Column(String(36), nullable=False)
+    code = Column(String(64), nullable=False)
+    name = Column(String(200), nullable=False)
+    category = Column(String(100), nullable=False)
+    template_content = Column(Text, nullable=False)
+    import_batch_id = Column(String(36), nullable=False)
+    created_by = Column(String(64), nullable=False)
+    created_at = Column(DateTime, nullable=False)
+
+    __table_args__ = (
+        PrimaryKeyConstraint("id", name="pk_qc_document_definitions"),
+        UniqueConstraint("code", name="uq_qc_document_definitions_code"),
+        CheckConstraint(
+            f"trim(code, {_DOCUMENT_DEFINITION_WS}) <> ''",
+            name="ck_qc_document_definitions_code_nonblank",
+        ),
+        CheckConstraint(
+            f"trim(name, {_DOCUMENT_DEFINITION_WS}) <> ''",
+            name="ck_qc_document_definitions_name_nonblank",
+        ),
+        CheckConstraint(
+            f"trim(category, {_DOCUMENT_DEFINITION_WS}) <> ''",
+            name="ck_qc_document_definitions_category_nonblank",
+        ),
+        CheckConstraint(
+            f"trim(template_content, {_DOCUMENT_DEFINITION_WS}) <> ''",
+            name="ck_qc_document_definitions_template_nonblank",
+        ),
+        CheckConstraint(
+            f"trim(created_by, {_DOCUMENT_DEFINITION_WS}) <> ''",
+            name="ck_qc_document_definitions_creator_nonblank",
+        ),
+        Index("ix_qc_document_definitions_created", "created_at", "code"),
+        Index("ix_qc_document_definitions_batch", "import_batch_id"),
+    )
+
+
 class QCTaskSchedule(Base):
     """独立定时计划定义；本行永不作为任务执行。"""
 

@@ -286,6 +286,13 @@
             <span class="font-medium">自定义质控点</span>
           </a-menu-item>
 
+          <a-menu-item v-if="canSee('/workstation-v5/document-definitions')" key="/workstation-v5/document-definitions" class="menu-item-base" data-testid="document-definitions-menu">
+            <template #icon>
+              <FileText class="sidebar-icon" />
+            </template>
+            <span class="font-medium">文书管理</span>
+          </a-menu-item>
+
           <!-- 数据上传 -->
           <a-menu-item v-if="canSee('/workstation-v5/upload')" key="/workstation-v5/upload" class="menu-item-base">
             <template #icon>
@@ -561,6 +568,7 @@ const currentPageTitle = computed(() => {
     '/workstation-v5/drg/post': '事后分析',
     '/workstation-v5/grouper': '医保分组器',
     '/workstation-v5/data': '数据管理',
+    '/workstation-v5/document-definitions': '文书管理',
     '/workstation-v5/rules': '质控规则管理',
     '/workstation-v5/rules/custom-workspace': '自定义质控点',
     '/workstation-v5/records/outpatient-emergency': '门急诊病历',
