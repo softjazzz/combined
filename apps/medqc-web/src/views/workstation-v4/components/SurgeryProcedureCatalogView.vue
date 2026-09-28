@@ -759,6 +759,76 @@ onMounted(() => void loadCatalog())
 .catalog-table-wrap :deep(.ant-pagination-item-active a) {
   color: #ffffff;
 }
+
+/* 字重收敛：Windows 下中文走微软雅黑，600 及以上都会渲染成粗黑体。
+   只保留统计数字和口径标题用 600，行内名称、分类、等级一律 500 */
+.summary-strip {
+  gap: 8px;
+  padding: 16px 22px 4px;
+}
+
+.summary-item {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 2px;
+  padding: 10px 16px;
+  border-right: 0;
+  text-align: left;
+}
+
+.summary-item span {
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+}
+
+.summary-item strong {
+  color: var(--mq-text-primary);
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 32px;
+  font-variant-numeric: tabular-nums;
+}
+
+.summary-item:hover span,
+.summary-item.active span {
+  color: var(--mq-brand-600);
+}
+
+.summary-item.active strong {
+  color: var(--mq-brand-600);
+}
+
+.catalog-identity strong {
+  color: var(--mq-text-primary);
+  font-weight: 500;
+}
+
+.category-label,
+.category-label.surgery {
+  color: var(--mq-text-secondary);
+  font-weight: 400;
+}
+
+.level-label {
+  background: var(--mq-neutral-bg);
+  color: var(--mq-text-secondary);
+  font-weight: 500;
+}
+
+.level-label.level-4 {
+  background: var(--mq-info-bg);
+  color: var(--mq-brand-600);
+}
+
+.basis-cell strong {
+  color: var(--mq-text-secondary);
+  font-weight: 500;
+}
+
+.catalog-table-wrap :deep(.ant-table-thead > tr > th) {
+  font-weight: 500;
+}
 </style>
 
 <style>

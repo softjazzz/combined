@@ -3218,4 +3218,33 @@ onBeforeUnmount(() => {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+/* 字重收敛：Windows 下中文走微软雅黑，600 及以上都会渲染成粗黑体。
+   KPI 条与统计分析页保持一致不动；只保留面板标题、当前步骤用 600，其余标签、行名、按钮、标签一律 500 */
+.step-index {
+  font-weight: 600;
+}
+
+.step-label,
+.panel-eyebrow,
+.rule-code-pill,
+.draft-title,
+.prompt-summary-title,
+.design-meta-value,
+.check-point-title,
+.batch-rule-name {
+  font-weight: 500;
+}
+
+.step-pill.is-active .step-label {
+  font-weight: 600;
+}
+
+.custom-rule-workspace :deep(.ant-btn),
+.custom-rule-workspace :deep(.ant-tag) {
+  font-weight: 500;
+}
+
+.custom-rule-workspace :deep(.ant-table-thead > tr > th) {
+  font-weight: 500 !important;
+}
 </style>

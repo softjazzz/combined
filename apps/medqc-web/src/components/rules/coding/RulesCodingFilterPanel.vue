@@ -1,7 +1,7 @@
 <template>
   <aside class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm space-y-4">
     <div>
-      <div class="text-[12px] font-semibold text-slate-700">
+      <div class="rules-filter__title">
         {{ ruleTypeTitle }}
       </div>
       <a-radio-group
@@ -20,7 +20,7 @@
     </div>
 
     <div>
-      <div class="text-[12px] font-semibold text-slate-700">
+      <div class="rules-filter__title">
         {{ statusTitle }}
       </div>
       <a-checkbox-group
@@ -32,7 +32,7 @@
     </div>
 
     <div>
-      <div class="text-[12px] font-semibold text-slate-700">
+      <div class="rules-filter__title">
         {{ riskTitle }}
       </div>
       <a-checkbox-group
@@ -44,7 +44,7 @@
     </div>
 
     <div v-if="showDocumentTypeFilter">
-      <div class="text-[12px] font-semibold text-slate-700">
+      <div class="rules-filter__title">
         {{ documentTypeTitle }}
       </div>
       <a-checkbox-group
@@ -56,7 +56,7 @@
     </div>
 
     <div v-if="showOwnerFilter">
-      <div class="text-[12px] font-semibold text-slate-700">
+      <div class="rules-filter__title">
         {{ ownerTitle }}
       </div>
       <a-select
@@ -178,3 +178,11 @@ const handleOwnerChange = (value: string | number | undefined) => {
   emit('update:ownerId', String(value))
 }
 </script>
+
+<style scoped>
+.rules-filter__title {
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+  font-weight: 500;
+}
+</style>

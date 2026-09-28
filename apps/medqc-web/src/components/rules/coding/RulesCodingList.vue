@@ -1,7 +1,7 @@
 <template>
-  <section class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+  <section class="rules-list rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
     <div
-      class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50 px-4 py-2.5"
+      class="rules-list__toolbar flex flex-wrap items-center justify-between gap-2 px-4 py-2.5"
     >
       <a-space>
         <a-select
@@ -33,7 +33,7 @@
           @update:value="emit('update:statusFilter', $event as any)"
         />
       </a-space>
-      <div class="text-[12px] text-slate-500">
+      <div class="rules-list__count">
         共 {{ pagination.total }} 条
       </div>
     </div>
@@ -58,12 +58,12 @@
         title="规则名称"
       >
         <template #default="{ record }">
-          <div class="font-semibold text-slate-900">
+          <div class="rules-list__name">
             {{ record.name }}
           </div>
           <div
             v-if="viewMode !== 'compact'"
-            class="text-[12px] text-slate-500 mt-0.5"
+            class="rules-list__summary"
           >
             {{ record.conditionSummary }}
           </div>
@@ -72,46 +72,51 @@
       <a-table-column
         key="status"
         title="状态"
-        width="90"
+        :width="92"
       >
         <template #default="{ record }">
-          <a-tag
-            :color="
-              record.status === 'published'
-                ? 'blue'
-                : record.status === 'draft'
-                  ? 'gold'
-                  : 'default'
-            "
+          <span
+            class="mq-status"
+            :class="STATUS_META[record.status as RuleStatus]?.tone"
           >
-            {{
-              record.status === 'published' ? '已发布' : record.status === 'draft' ? '草稿' : '停用'
-            }}
-          </a-tag>
+            {{ STATUS_META[record.status as RuleStatus]?.label || '停用' }}
+          </span>
         </template>
       </a-table-column>
       <a-table-column
         key="risk"
         title="风险"
-        data-index="riskLevel"
-        width="80"
-      />
+        :width="76"
+      >
+        <template #default="{ record }">
+          <span
+            class="rules-list__risk"
+            :class="`rules-list__risk--${record.riskLevel}`"
+          >
+            {{ RISK_LABEL[record.riskLevel as RuleRiskLevel] || record.riskLevel }}
+          </span>
+        </template>
+      </a-table-column>
       <a-table-column
         key="hits"
         title="近7天命中"
-        data-index="hitCount7d"
-        width="110"
-      />
+        :width="104"
+        align="right"
+      >
+        <template #default="{ record }">
+          <span class="rules-list__number">{{ record.hitCount7d }}</span>
+        </template>
+      </a-table-column>
       <a-table-column
         key="updated"
         title="最近修改"
-        width="180"
+        :width="112"
       >
         <template #default="{ record }">
-          <div class="text-[12px] text-slate-700">
+          <div class="rules-list__updated-by">
             {{ record.updatedBy }}
           </div>
-          <div class="text-[12px] text-slate-500">
+          <div class="rules-list__updated-at">
             {{ record.updatedAt || '-' }}
           </div>
         </template>
@@ -119,7 +124,7 @@
       <a-table-column
         key="action"
         title="操作"
-        width="210"
+        :width="172"
       >
         <template #default="{ record }">
           <a-space size="small">
@@ -154,7 +159,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { RuleListItem } from './types'
+import type { RuleListItem, RuleRiskLevel, RuleStatus } from './types'
 
 const props = defineProps<{
   items: RuleListItem[]
@@ -185,6 +190,13 @@ const emit = defineEmits<{
 const documentTypeOptions = computed(() => props.documentTypeOptions || [])
 const documentTypeSet = computed(() => props.documentTypeSet || [])
 const documentTypePlaceholder = computed(() => props.documentTypePlaceholder || '病历文书类型')
+
+const STATUS_META: Record<RuleStatus, { label: string; tone: string }> = {
+  published: { label: '已发布', tone: 'mq-status--info' },
+  draft: { label: '草稿', tone: 'mq-status--warning' },
+  disabled: { label: '停用', tone: '' },
+}
+const RISK_LABEL: Record<RuleRiskLevel, string> = { high: '高', medium: '中', low: '低' }
 
 const viewOptions = [
   { label: '列表', value: 'list' },
@@ -217,6 +229,78 @@ function onTableChange(pagination: any) {
 </script>
 
 <style scoped>
+/* v7.1：工具条去灰底，行名不加粗（Windows 微软雅黑 600 即粗黑体），风险用中文色点 */
+.rules-list__toolbar {
+  border-bottom: 0.5px solid var(--mq-border);
+}
+
+.rules-list__count {
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+}
+
+.rules-list__name {
+  color: var(--mq-text-primary);
+  font-size: var(--mq-font-14);
+  font-weight: 500;
+  line-height: 22px;
+}
+
+.rules-list__summary {
+  margin-top: 2px;
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+  line-height: 18px;
+}
+
+.rules-list__risk {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-13);
+}
+
+.rules-list__risk::before {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #a1a7b3;
+  content: '';
+}
+
+.rules-list__risk--high::before {
+  background: var(--mq-danger-icon);
+}
+
+.rules-list__risk--medium::before {
+  background: var(--mq-warning-icon);
+}
+
+.rules-list__number {
+  color: var(--mq-text-primary);
+  font-size: var(--mq-font-13);
+  font-variant-numeric: tabular-nums;
+}
+
+.rules-list__updated-by {
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-12);
+}
+
+.rules-list__updated-at {
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+}
+
+.rules-list :deep(.ant-table-thead > tr > th) {
+  white-space: nowrap;
+}
+
+.rules-list :deep(.ant-btn-link) {
+  padding-inline: 4px;
+}
+
 :deep(.rules-list-compact-row td) {
   padding-top: 8px !important;
   padding-bottom: 8px !important;
