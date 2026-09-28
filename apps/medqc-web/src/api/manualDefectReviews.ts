@@ -10,6 +10,7 @@ import { extractApiErrorMessageFromError, normalizeApiSuccess } from '@/utils/ap
 
 export type ManualDefectReviewStatus = 'pending' | 'approved' | 'rejected'
 export type ManualDefectReviewDecision = 'approved' | 'rejected'
+export type ManualDefectReviewScene = 'all' | 'running' | 'final' | 'outpatient_emergency'
 
 export interface ManualDefectReviewItem {
   id: string
@@ -35,6 +36,7 @@ export interface ManualDefectReviewPage {
   total: number
   page: number
   page_size: number
+  scene: ManualDefectReviewScene
 }
 
 /** 单病例人工缺陷：按 created_at 倒序，最多返回 200 条；total 为精确总数，可能大于 items 长度。 */
@@ -114,12 +116,17 @@ async function request<T>(
   }
 }
 
-/** 按审核状态分页读取人工缺陷（精确 total）。 */
-export async function getManualDefects(reviewStatus: ManualDefectReviewStatus = 'pending', page = 1, pageSize = 20) {
+/** 按审核状态和冻结场景分页读取人工缺陷（精确 total）；缺省 all 兼容旧调用。 */
+export async function getManualDefects(
+  reviewStatus: ManualDefectReviewStatus = 'pending',
+  page = 1,
+  pageSize = 20,
+  scene: ManualDefectReviewScene = 'all',
+) {
   return request<ManualDefectReviewPage>({
     method: 'GET',
     url: '/api/v1/manual-defects',
-    params: { review_status: reviewStatus, page, page_size: pageSize },
+    params: { review_status: reviewStatus, page, page_size: pageSize, scene },
   }, '读取人工缺陷失败')
 }
 

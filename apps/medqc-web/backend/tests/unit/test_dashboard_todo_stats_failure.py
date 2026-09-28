@@ -83,8 +83,15 @@ def _stub_review_counts(monkeypatch, *, initial=0, recheck=0, manual=0, fail=Fal
             raise RuntimeError("SELECT secret FROM qc_record_reviews")
         return {"initial": initial, "recheck": recheck}
 
+    manual_calls = []
+
+    def manual_counts(*, scene="all"):
+        manual_calls.append(scene)
+        return manual
+
     monkeypatch.setattr(record_reviews, "count_my_record_review_todos", record_counts)
-    monkeypatch.setattr(manual_defect_review_service, "count_pending_manual_defects", lambda: manual)
+    monkeypatch.setattr(manual_defect_review_service, "count_pending_manual_defects", manual_counts)
+    return manual_calls
 
 
 async def _empty_stats(*args, **kwargs):
@@ -100,11 +107,12 @@ async def _empty_stats(*args, **kwargs):
 @pytest.mark.parametrize(("scene", "role", "expected_manual"), [
     ("all", "qc_manager", 7),
     ("all", "qc_staff", None),
-    ("running", "qc_manager", None),
+    ("running", "qc_manager", 7),
+    ("final", "qc_manager", 7),
 ])
 async def test_review_todo_counts_pass_through_with_scope(monkeypatch, scene, role, expected_manual):
     monkeypatch.setattr(dashboard_api, "_get_db_stats_by_scene", _empty_stats)
-    _stub_review_counts(monkeypatch, initial=3, recheck=2, manual=7)
+    manual_calls = _stub_review_counts(monkeypatch, initial=3, recheck=2, manual=7)
 
     result = await dashboard_api.get_todo_stats(
         _request(), scene=scene, current_user={"user_id": "tester", "roles": [role]}
@@ -113,6 +121,7 @@ async def test_review_todo_counts_pass_through_with_scope(monkeypatch, scene, ro
     assert result["data"]["record_stats"]["pending_review"] == 3
     assert result["data"]["record_stats"]["pending_recheck"] == 2
     assert result["data"]["defect_stats"]["pending_review"] == expected_manual
+    assert manual_calls == ([scene] if role == "qc_manager" else [])
 
 
 @pytest.mark.asyncio

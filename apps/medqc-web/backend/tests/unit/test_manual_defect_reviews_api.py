@@ -24,13 +24,16 @@ def review_path(defect_id: str) -> str:
     return f"/api/v1/manual-defects/{defect_id}/review"
 
 
-def _defect(defect_id, minutes, *, created_by="qc-1", review="pending", origin="manual"):
+def _defect(
+    defect_id, minutes, *, created_by="qc-1", review="pending", origin="manual", scene=None,
+):
     return {
         "id": defect_id, "record_id": "record-a", "identity_version": 1,
         "source_key": "task_assigned_qc", "institute_id": "hospital-A",
         "patient_id": "patient", "visit_id": "visit", "rule_name": "合成规则",
         "description": "合成缺陷说明", "severity": "warning", "evidence": "合成证据",
         "status": "pending", "origin": origin,
+        "scene": scene,
         "manual_review_status": review if origin == "manual" else None,
         "manual_created_by": created_by if origin == "manual" else None,
         "deduct_score": 0.0,
@@ -49,7 +52,9 @@ def sessions(monkeypatch):
     factory = sessionmaker(bind=engine, expire_on_commit=False)
     with factory.begin() as session:
         session.execute(QCDefect.__table__.insert(), [
-            _defect("m-1", 1), _defect("m-2", 2), _defect("m-3", 3),
+            _defect("m-1", 1, scene="running"),
+            _defect("m-2", 2, scene="final"),
+            _defect("m-3", 3, scene="outpatient_emergency"),
             _defect("m-own", 4, created_by="mgr-1"),
             _defect("m-done", 5, review="approved"),
             _defect("auto-1", 6, origin="auto"),
@@ -160,6 +165,7 @@ def test_list_filters_total_pagination_and_task_fields(sessions, monkeypatch):
     assert res.status_code == 200
     data = res.json()["data"]
     assert data["total"] == 4 and data["page"] == 1 and data["page_size"] == 2
+    assert data["scene"] == "all"
     assert [i["id"] for i in data["items"]] == ["m-own", "m-3"]
     item = data["items"][1]
     assert (item["task_id"], item["task_record_id"], item["run_number"]) == (
@@ -178,6 +184,16 @@ def test_count_matches_list_pending_total(sessions, monkeypatch):
     http, _ = client(monkeypatch)
     total = http.get(LIST).json()["data"]["total"]
     assert routes.count_pending_manual_defects() == total == 4
+
+
+def test_list_and_count_use_same_scene_and_response_echoes_it(sessions, monkeypatch):
+    http, _ = client(monkeypatch)
+    data = http.get(LIST, params={"scene": "running"}).json()["data"]
+    assert data["scene"] == "running"
+    assert data["total"] == 1
+    assert [item["id"] for item in data["items"]] == ["m-1"]
+    assert routes.count_pending_manual_defects(scene="running") == data["total"]
+    assert http.get(LIST, params={"scene": "outpatient"}).status_code == 422
 
 
 def test_database_errors_are_sanitized_503(monkeypatch):

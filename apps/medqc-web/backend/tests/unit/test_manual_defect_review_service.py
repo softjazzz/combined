@@ -26,7 +26,8 @@ def _defect(defect_id: str, *, minutes: int, created_by: str = "qc-1",
         "visit_id": "visit", "rule_code": "R-1", "rule_name": "合成规则",
         "description": "合成缺陷说明", "severity": "warning", "location": "病程记录",
         "suggestion": "合成整改建议", "evidence": "合成证据", "category": "manual",
-        "status": "pending", "origin": origin, "manual_review_status": review,
+        "status": "pending", "origin": origin, "scene": None,
+        "manual_review_status": review,
         "manual_created_by": created_by if origin == "manual" else None,
         "deduct_score": 0.0,
         "created_at": BASE_TIME + timedelta(minutes=minutes),
@@ -58,8 +59,8 @@ def sessions(monkeypatch):
     with factory.begin() as session:
         session.execute(QCDefect.__table__.insert(), [
             _defect("m-1", minutes=1),
-            _defect("m-2", minutes=2),
-            _defect("m-3", minutes=3),
+            _defect("m-2", minutes=2, scene="final"),
+            _defect("m-3", minutes=3, scene="outpatient_emergency"),
             # 同一 created_at，按 id 倒序稳定
             _defect("m-4a", minutes=4),
             _defect("m-4b", minutes=4),
@@ -268,6 +269,7 @@ def test_list_filters_scope_orders_and_reads_task_identity(sessions):
     ids = [item["id"] for item in data["items"]]
     assert ids == ["m-nohist", "m-self", "m-4b", "m-4a", "m-3", "m-2", "m-1"]
     assert data["total"] == 7
+    assert data["scene"] == "all"
     by_id = {item["id"]: item for item in data["items"]}
     assert (by_id["m-2"]["task_id"], by_id["m-2"]["task_record_id"],
             by_id["m-2"]["run_number"]) == ("task-1", "record-b", 2)
@@ -316,6 +318,38 @@ def test_count_pending_matches_list_total(sessions):
     count = service.count_pending_manual_defects()
     assert count == 6
     assert count == service.list_manual_defects(review_status="pending")["total"]
+
+
+@pytest.mark.parametrize(
+    ("scene", "expected_ids"),
+    [
+        ("running", ["m-1"]),
+        ("final", ["m-2"]),
+        ("outpatient_emergency", ["m-3"]),
+    ],
+)
+def test_list_and_count_filter_exact_scene(sessions, scene, expected_ids):
+    # 给一条明确 running；未标注的历史行仍只应进入 all。
+    with sessions.begin() as session:
+        session.execute(
+            QCDefect.__table__.update().where(QCDefect.id == "m-1").values(scene="running")
+        )
+    data = service.list_manual_defects(scene=scene, page_size=100)
+    assert data["scene"] == scene
+    assert [item["id"] for item in data["items"]] == expected_ids
+    assert data["total"] == service.count_pending_manual_defects(scene=scene) == 1
+    all_data = service.list_manual_defects(scene="all", page_size=100)
+    assert all_data["total"] == 7
+    assert "m-nohist" in {item["id"] for item in all_data["items"]}
+
+
+@pytest.mark.parametrize("scene", ["", "outpatient", "RUNNING", None])
+def test_bad_scene_is_rejected_before_opening_session(monkeypatch, scene):
+    monkeypatch.setattr(service, "SessionLocal", None)
+    with pytest.raises(service.ManualDefectReviewInvalid, match="场景"):
+        service.list_manual_defects(scene=scene)
+    with pytest.raises(service.ManualDefectReviewInvalid, match="场景"):
+        service.count_pending_manual_defects(scene=scene)
 
 
 def test_database_errors_are_unavailable(monkeypatch):

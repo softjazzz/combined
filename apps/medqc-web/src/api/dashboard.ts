@@ -68,7 +68,7 @@ export interface ReviewTodoCounts {
   pending_record_review: number
   pending_record_recheck: number
   pending_manual_defect_review: number | null
-  scene: 'all'
+  scene: DashboardScene
 }
 
 export type PerformancePeriod = 'this_week' | 'last_week' | 'this_month'
@@ -224,21 +224,21 @@ function isNonNegativeInteger(value: unknown): value is number {
  * V5 首页审核待办适配。
  *
  * 计数仍由 dashboard/todo-stats 的审核服务谓词给出；这里仅严格提取，避免缺字段、
- * 无权限或请求失败时被前端当成 0。人工缺陷当前没有场景归属，只允许 all 范围。
+ * 无权限或请求失败时被前端当成 0。响应场景必须与请求场景一致，避免跨场景串数。
  */
-export async function getReviewTodoCounts(): Promise<{
+export async function getReviewTodoCounts(scene: DashboardScene = 'all'): Promise<{
   success: boolean
   data?: ReviewTodoCounts
   message?: string
 }> {
-  const result = await getTodoStats('all')
+  const result = await getTodoStats(scene)
   if (!result.success || !result.data) {
     return { success: false, message: result.message }
   }
 
   const data = result.data as unknown
   if (!isRecord(data)
-    || data.scene !== 'all'
+    || data.scene !== scene
     || !isRecord(data.record_stats)
     || !isRecord(data.defect_stats)) {
     return { success: false, message: '审核待办数据格式异常' }
@@ -259,7 +259,7 @@ export async function getReviewTodoCounts(): Promise<{
       pending_record_review: recordReview,
       pending_record_recheck: recordRecheck,
       pending_manual_defect_review: isNonNegativeInteger(manualDefectReview) ? manualDefectReview : null,
-      scene: 'all',
+      scene,
     },
   }
 }

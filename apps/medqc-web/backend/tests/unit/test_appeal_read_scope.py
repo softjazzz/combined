@@ -156,6 +156,30 @@ def test_reviewable_alias_filters_both_open_statuses_before_pagination(monkeypat
     assert db.queries[-1].bounds == (0, 1)
 
 
+@pytest.mark.parametrize("count", [None, -1, True, False, 1.0, "1"])
+def test_list_rejects_missing_or_invalid_exact_count(monkeypatch, caplog, count):
+    db = _DB(appeals_rows=_APPEALS)
+    monkeypatch.setattr(appeals, "get_supabase", lambda: db)
+    original_execute = _Query.execute
+
+    def execute_with_invalid_count(query):
+        result = original_execute(query)
+        result.count = count
+        return result
+
+    monkeypatch.setattr(_Query, "execute", execute_with_invalid_count)
+
+    with caplog.at_level("ERROR", logger="app.routers.appeals"):
+        response = _client(_user("reviewer-1", "qc_manager")).get(
+            "/api/v1/appeals?status=reviewable&page=1&page_size=1"
+        )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "申诉列表服务暂不可用"
+    assert "appeal_list_failed" in caplog.text
+    assert str(count) not in response.text
+
+
 def test_detail_scope_checks_owner_before_reviews(monkeypatch):
     db = _DB(appeals_rows=_APPEALS, reviews_rows=[{"appeal_id": "a2", "comment": "private review", "created_at": "2026-09-22"}])
     monkeypatch.setattr(appeals, "get_supabase", lambda: db)

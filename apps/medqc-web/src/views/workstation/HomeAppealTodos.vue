@@ -67,7 +67,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import { ArrowRight, ClipboardCheck, RotateCw } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
@@ -77,13 +77,20 @@ import { useAuthStore } from '@/stores/auth'
 const router = useRouter()
 const authStore = useAuthStore()
 const canReview = computed(() => authStore.userRoles.some((role) => role === 'admin' || role === 'qc_manager'))
+const currentUserId = computed(() => authStore.user?.id?.trim() || '')
 const count = ref<number | null>(null)
 const loading = ref(true)
 const error = ref('')
 let requestId = 0
 
 async function fetchTodos() {
-  if (!canReview.value) return
+  if (!canReview.value || !currentUserId.value) {
+    requestId++
+    count.value = null
+    loading.value = false
+    error.value = ''
+    return
+  }
   const currentRequestId = ++requestId
   count.value = null
   loading.value = true
@@ -112,19 +119,23 @@ function openTodo() {
 }
 
 watch(
-  canReview,
-  (allowed) => {
-    if (allowed) {
+  [currentUserId, canReview],
+  ([userId, allowed]) => {
+    requestId++
+    count.value = null
+    error.value = ''
+    if (userId && allowed) {
       void fetchTodos()
     } else {
-      requestId++
-      count.value = null
       loading.value = false
-      error.value = ''
     }
   },
   { immediate: true },
 )
+
+onUnmounted(() => {
+  requestId++
+})
 </script>
 
 <style scoped>

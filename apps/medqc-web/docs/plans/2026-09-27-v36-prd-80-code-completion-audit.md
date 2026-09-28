@@ -2,7 +2,7 @@
 
 ## 基线与结论
 
-- 核对日期：2026-09-28；首次盘点基线：`e1703611c`；最新增量为滚动计划第96节（接续 `423aaf6b3`）；分支：`codex/v36-manual-gap-drilldown-20260922`。12/41/27、14/40/26和16/38/26历史结论保留于第89至91节，本表为增量后的代码状态。
+- 核对日期：2026-09-28；首次盘点基线：`e1703611c`；最新增量为滚动计划第97节（接续 `bac8f6ef5`）；分支：`codex/v36-manual-gap-drilldown-20260922`。12/41/27、14/40/26和16/38/26历史结论保留于第89至91节，本表为增量后的代码状态。
 - 分母固定为 `docs/PRD-内涵质控V3.6总需求与差距矩阵.md` 中带 P0/P1/P2/P3 的 80 个功能行，按原文顺序编号。没有删除外部阻塞项，也没有把新增技术工作算成额外完成项。
 - 本清单评估代码，不替代原矩阵的业务覆盖/验收状态。部署未做、浏览器未验收，不单独导致代码降级；但真实接口缺失、入口停用、场景身份无法成立、必需动作未实现，会影响代码完整性。
 
@@ -40,7 +40,7 @@
 | 01 | 三种登录方式：账号密码、手机号、扫码 | 部分实现 | 账号/邮箱/手机号加密码可登录；缺扫码认证，也没有独立短信验证码方式。 | `src/components/auth/LoginForm.vue:16`；`backend/app/services/auth_store.py:172` | `6c3910685` |
 | 02 | 登录后角色分流 | 代码完整 | 角色落地、路由和菜单过滤、无权落点已实现；数据范围有全院/医生科室/拒绝规则及测试。 | `src/utils/routeAccess.ts:101`；`backend/app/core/data_scope.py:46` | `18f094b8d`、`4876026f0`、`df803acfd` |
 | 03 | 我的待办：倒计时任务、进行中任务、未开始任务 | 代码完整 | 三种真实受领任务计数、场景与as_of同口径下钻及分页已接通。 | `backend/app/routers/tasks.py:588`；`src/views/workstation/HomeTaskTodos.vue:188` | `f8cbae6ae` |
-| 04 | 我的待办：临床申诉、待审核人工缺陷 | 部分实现 | 申诉及人工缺陷计数下钻已有；V5首页新增真实人工缺陷待办、真零/未知区分。人工缺陷仍只支持全场景，完整场景归属未齐。 | `src/views/workstation/HomeReviewTodos.vue:1`；`src/views/qc/ManualDefectReviewView.vue:232` | `8caf74817`；第91节B线 |
+| 04 | 我的待办：临床申诉、待审核人工缺陷 | 部分实现 | 人工缺陷计数与列表按冻结scene同谓词筛选，下钻携带场景，历史NULL仅all；申诉精确计数、权限和账号切换保护已有。但原总验收要求三场景下钻，申诉缺冻结场景与现代身份创建链，不能整项升级。 | `src/views/workstation/HomeReviewTodos.vue:1`；`src/views/qc/ManualDefectReviewView.vue:1`；`src/views/workstation/HomeAppealTodos.vue:1` | 第97节 |
 | 05 | 我的待办：待审核、待复审病历 | 部分实现 | V5首页接入初审/复审真实计数与下钻、权限及迟到请求保护；范围仍为本人受领任务的已核实结果，未覆盖全部病历来源。 | `backend/app/services/record_review_service.py:979`；`src/views/workstation/HomeReviewTodos.vue:1` | `8caf74817`；第91节B线 |
 | 06 | 我的待办：零数量反馈 | 代码完整 | 已知真零显示无待处理事项且不下钻，未知/故障不伪造零；不把尚未接入类别算作零。 | `src/components/dashboard/TodoBoard.vue:139`；`src/views/workstation/HomeTaskTodos.vue:129` | `8caf74817` |
 | 07 | 工作表现：质控缺陷排名 | 代码完整 | 本周/上周窗口、真实人工创建人及通过/驳回计数、竞争排名、三场景精确筛选；场景由创建事务锁内任务冻结，历史NULL仅all；自动缺陷不计。迁移68未执行，不代表部署/真实病例验收。 | `backend/app/services/performance_ranking_service.py:162`；`backend/app/services/task_manual_defect_service.py:1` | `3dc1f3efa`；第95节 |

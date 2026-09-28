@@ -60,7 +60,7 @@ describe('V5 首页审核待办', () => {
     await wrapper.get('[data-testid="review-todo-manual-defect"]').trigger('click')
     expect(mocks.push).toHaveBeenLastCalledWith({
       path: '/dashboard/qc/manual-defects',
-      query: { review_status: 'pending' },
+      query: { review_status: 'pending', scene: 'all' },
     })
   })
 
@@ -80,7 +80,7 @@ describe('V5 首页审核待办', () => {
     const manual = wrapper.get('[data-testid="review-todo-manual-defect"]')
     expect(manual.attributes('disabled')).toBeDefined()
     expect(wrapper.get('[data-testid="review-todo-manual-defect-count"]').text()).toBe('不可用')
-    expect(wrapper.get('[data-testid="manual-defect-scope-note"]').text()).toContain('无全场景审核权限')
+    expect(wrapper.get('[data-testid="manual-defect-scope-note"]').text()).toContain('无人工缺陷审核权限')
     await manual.trigger('click')
     expect(mocks.push).not.toHaveBeenCalled()
   })
@@ -172,5 +172,66 @@ describe('V5 首页审核待办', () => {
     mocks.authStore!.user = null
     await flushPromises()
     expect(wrapper.get('[data-testid="review-todo-record-review-count"]').text()).toBe('不可用')
+  })
+
+  it('场景切换时清空旧计数、丢弃迟到响应并保持计数与下钻同场景', async () => {
+    const first = deferred<{
+      success: true
+      data: {
+        pending_record_review: number
+        pending_record_recheck: number
+        pending_manual_defect_review: number
+        scene: 'running'
+      }
+    }>()
+    const second = deferred<{
+      success: true
+      data: {
+        pending_record_review: number
+        pending_record_recheck: number
+        pending_manual_defect_review: number
+        scene: 'final'
+      }
+    }>()
+    mocks.getReviewTodoCounts
+      .mockReset()
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise)
+    const wrapper = mount(HomeReviewTodos, { props: { scene: 'running' } })
+    await flushPromises()
+    expect(mocks.getReviewTodoCounts).toHaveBeenLastCalledWith('running')
+
+    await wrapper.setProps({ scene: 'final' })
+    expect(wrapper.get('[data-testid="review-todo-record-review-count"]').text()).toBe('加载中')
+    second.resolve({
+      success: true,
+      data: {
+        pending_record_review: 6,
+        pending_record_recheck: 2,
+        pending_manual_defect_review: 3,
+        scene: 'final',
+      },
+    })
+    await flushPromises()
+    expect(mocks.getReviewTodoCounts).toHaveBeenLastCalledWith('final')
+    expect(wrapper.get('[data-testid="review-todo-record-review-count"]').text()).toBe('6')
+
+    first.resolve({
+      success: true,
+      data: {
+        pending_record_review: 99,
+        pending_record_recheck: 99,
+        pending_manual_defect_review: 99,
+        scene: 'running',
+      },
+    })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="review-todo-record-review-count"]').text()).toBe('6')
+
+    await wrapper.get('[data-testid="review-todo-manual-defect"]').trigger('click')
+    expect(mocks.push).toHaveBeenLastCalledWith({
+      path: '/dashboard/qc/manual-defects',
+      query: { review_status: 'pending', scene: 'final' },
+    })
   })
 })

@@ -2,7 +2,7 @@
   <section class="review-todos workstation-surface-enter" aria-labelledby="review-todos-title">
     <header class="review-todos__header">
       <div>
-        <span>全部场景</span>
+        <span>{{ sceneLabel }}</span>
         <h2 id="review-todos-title">我的审核待办</h2>
       </div>
       <button
@@ -41,7 +41,7 @@
     </div>
 
     <p v-if="manualDefectUnavailable" class="review-todos__note" data-testid="manual-defect-scope-note">
-      人工缺陷尚无场景归属；当前账号无全场景审核权限时，计数显示为不可用。
+      当前账号无人工缺陷审核权限，计数显示为不可用。
     </p>
   </section>
 </template>
@@ -51,7 +51,11 @@ import { computed, onUnmounted, ref, watch, type Component } from 'vue'
 import { message } from 'ant-design-vue'
 import { ArrowRight, ClipboardCheck, FileCheck2, Files, RotateCw } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
-import { getReviewTodoCounts, type ReviewTodoCounts } from '@/api/dashboard'
+import {
+  getReviewTodoCounts,
+  type DashboardScene,
+  type ReviewTodoCounts,
+} from '@/api/dashboard'
 import { useAuthStore } from '@/stores/auth'
 
 interface ReviewTodoItem {
@@ -64,12 +68,26 @@ interface ReviewTodoItem {
   query: Record<string, string>
 }
 
+const props = withDefaults(defineProps<{
+  scene?: DashboardScene
+}>(), {
+  scene: 'all',
+})
+
 const router = useRouter()
 const authStore = useAuthStore()
 const counts = ref<ReviewTodoCounts | null>(null)
 const loading = ref(true)
 const error = ref('')
 let requestId = 0
+
+const sceneLabels: Record<DashboardScene, string> = {
+  all: '全部场景',
+  outpatient_emergency: '门急诊',
+  running: '运行病历',
+  final: '终末病历',
+}
+const sceneLabel = computed(() => sceneLabels[props.scene])
 
 const todoItems = computed<ReviewTodoItem[]>(() => [
   {
@@ -79,7 +97,7 @@ const todoItems = computed<ReviewTodoItem[]>(() => [
     value: counts.value?.pending_record_review ?? null,
     icon: FileCheck2,
     path: '/dashboard/qc/record-reviews',
-    query: { stage: 'initial', scene: 'all' },
+    query: { stage: 'initial', scene: props.scene },
   },
   {
     key: 'record-recheck',
@@ -88,16 +106,16 @@ const todoItems = computed<ReviewTodoItem[]>(() => [
     value: counts.value?.pending_record_recheck ?? null,
     icon: Files,
     path: '/dashboard/qc/record-reviews',
-    query: { stage: 'recheck', scene: 'all' },
+    query: { stage: 'recheck', scene: props.scene },
   },
   {
     key: 'manual-defect',
     label: '待审核人工缺陷',
-    scope: '全场景总计（暂不可按场景归属）',
+    scope: `${sceneLabels[props.scene]}待审核缺陷`,
     value: counts.value?.pending_manual_defect_review ?? null,
     icon: ClipboardCheck,
     path: '/dashboard/qc/manual-defects',
-    query: { review_status: 'pending' },
+    query: { review_status: 'pending', scene: props.scene },
   },
 ])
 
@@ -117,7 +135,7 @@ async function fetchTodos() {
   error.value = ''
   counts.value = null
   try {
-    const response = await getReviewTodoCounts()
+    const response = await getReviewTodoCounts(props.scene)
     if (currentRequestId !== requestId) return
     if (!response.success || !response.data) {
       error.value = response.message || '读取审核待办失败'
@@ -142,8 +160,8 @@ function openTodo(item: ReviewTodoItem) {
 }
 
 watch(
-  currentUserId,
-  (userId) => {
+  [currentUserId, () => props.scene],
+  ([userId]) => {
     requestId++
     counts.value = null
     error.value = ''

@@ -13,20 +13,42 @@
       >
         <!-- 筛选 -->
         <div class="manual-defect-review__toolbar">
-          <a-radio-group
-            :value="reviewStatus"
-            button-style="solid"
-            data-testid="manual-defect-status-filter"
-            @change="(event: RadioChangeEvent) => void changeStatus(event.target.value)"
-          >
-            <a-radio-button
-              v-for="option in statusOptions"
-              :key="option.value"
-              :value="option.value"
+          <div class="manual-defect-review__filters">
+            <div class="manual-defect-review__scene-filter">
+              <label for="manual-defect-scene">质控场景</label>
+              <a-select
+                id="manual-defect-scene"
+                :value="scene || undefined"
+                class="manual-defect-review__scene-select"
+                popup-class-name="manual-defect-review-scene-popup"
+                placeholder="场景参数无效"
+                data-testid="manual-defect-scene-filter"
+                @change="(value: unknown) => void changeScene(value)"
+              >
+                <a-select-option
+                  v-for="option in sceneOptions"
+                  :key="option.value"
+                  :value="option.value"
+                >
+                  {{ option.label }}
+                </a-select-option>
+              </a-select>
+            </div>
+            <a-radio-group
+              :value="reviewStatus"
+              button-style="solid"
+              data-testid="manual-defect-status-filter"
+              @change="(event: RadioChangeEvent) => void changeStatus(event.target.value)"
             >
-              {{ option.label }}
-            </a-radio-button>
-          </a-radio-group>
+              <a-radio-button
+                v-for="option in statusOptions"
+                :key="option.value"
+                :value="option.value"
+              >
+                {{ option.label }}
+              </a-radio-button>
+            </a-radio-group>
+          </div>
           <div class="manual-defect-review__summary">
             <span v-if="total !== null">共 {{ total }} 条</span>
             <a-button
@@ -202,6 +224,7 @@ import { getManualDefects, reviewManualDefect } from '@/api/manualDefectReviews'
 import type {
   ManualDefectReviewDecision,
   ManualDefectReviewItem,
+  ManualDefectReviewScene,
   ManualDefectReviewStatus,
 } from '@/api/manualDefectReviews'
 
@@ -212,6 +235,12 @@ const statusOptions: Array<{ value: ManualDefectReviewStatus; label: string }> =
   { value: 'pending', label: '待审核' },
   { value: 'approved', label: '已通过' },
   { value: 'rejected', label: '已驳回' },
+]
+const sceneOptions: Array<{ value: ManualDefectReviewScene; label: string }> = [
+  { value: 'all', label: '全部场景' },
+  { value: 'outpatient_emergency', label: '门急诊' },
+  { value: 'running', label: '运行病历' },
+  { value: 'final', label: '终末病历' },
 ]
 
 const pageSize = 20
@@ -230,10 +259,19 @@ const submitting = ref(false)
 let listSequence = 0
 
 const reviewStatus = computed<ManualDefectReviewStatus>(() => parseStatus(route.query.review_status))
+const scene = computed<ManualDefectReviewScene | null>(() => parseScene(route.query.scene))
 const emptyText = computed(() => `暂无${statusOptions.find((option) => option.value === reviewStatus.value)?.label || ''}的人工缺陷`)
 
 function parseStatus(value: unknown): ManualDefectReviewStatus {
   return value === 'approved' || value === 'rejected' ? value : 'pending'
+}
+
+function parseScene(value: unknown): ManualDefectReviewScene | null {
+  if (value === undefined || value === null || value === '') return 'all'
+  if (value === 'all' || value === 'running' || value === 'final' || value === 'outpatient_emergency') {
+    return value
+  }
+  return null
 }
 
 function known(value: string | null | undefined) {
@@ -268,12 +306,22 @@ function statusColor(value: ManualDefectReviewStatus) {
 
 async function fetchList() {
   const status = reviewStatus.value
+  const requestedScene = scene.value
+  if (!requestedScene) {
+    ++listSequence
+    loading.value = false
+    forbidden.value = false
+    items.value = []
+    total.value = null
+    listError.value = '质控场景参数无效，请重新选择场景'
+    return
+  }
   const currentPage = page.value
   const token = ++listSequence
   loading.value = true
   listError.value = ''
   try {
-    const response = await getManualDefects(status, currentPage, pageSize)
+    const response = await getManualDefects(status, currentPage, pageSize, requestedScene)
     if (token !== listSequence) return
     if (response.status === 403) {
       forbidden.value = true
@@ -284,7 +332,7 @@ async function fetchList() {
     forbidden.value = false
     const data = response.data
     if (!response.success || !data || !Array.isArray(data.items)
-      || !Number.isInteger(data.total) || data.total < 0) {
+      || !Number.isInteger(data.total) || data.total < 0 || data.scene !== requestedScene) {
       items.value = []
       total.value = null
       listError.value = response.message || '读取人工缺陷失败'
@@ -313,6 +361,12 @@ async function changeStatus(value: unknown) {
   const status = parseStatus(value)
   if (status === reviewStatus.value) return
   await router.replace({ query: { ...route.query, review_status: status } })
+}
+
+async function changeScene(value: unknown) {
+  const nextScene = parseScene(value)
+  if (!nextScene || nextScene === scene.value) return
+  await router.replace({ query: { ...route.query, scene: nextScene } })
 }
 
 async function changePage(value: number) {
@@ -377,14 +431,23 @@ async function submitReview() {
   }
 }
 
-watch(reviewStatus, () => {
+watch([reviewStatus, scene], () => {
+  ++listSequence
   page.value = 1
+  items.value = []
+  total.value = null
+  forbidden.value = false
+  if (!submitting.value) closeReview()
   void fetchList()
 }, { immediate: true })
 </script>
 
 <style scoped>
 .manual-defect-review__toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.manual-defect-review__filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
+.manual-defect-review__scene-filter { display: grid; gap: 4px; }
+.manual-defect-review__scene-filter label { color: rgba(29, 29, 31, .6); font-size: 13px; line-height: 20px; }
+.manual-defect-review__scene-select { width: 150px; }
 .manual-defect-review__summary { display: flex; align-items: center; gap: 12px; color: rgba(29, 29, 31, .6); font-size: 13px; }
 .manual-defect-review__list { display: grid; gap: 12px; }
 .manual-defect-review__item { padding: 14px 16px; border: 1px solid #f0f0f0; border-radius: 10px; background: #fff; }
@@ -399,4 +462,10 @@ watch(reviewStatus, () => {
 .manual-defect-review__pagination { display: flex; justify-content: flex-end; margin-top: 16px; }
 .manual-defect-review__muted { color: rgba(29, 29, 31, .6); font-size: 13px; }
 .manual-defect-review__error { margin: 8px 0 0; color: #b42318; }
+</style>
+
+<style>
+.manual-defect-review-scene-popup {
+  font-family: 'Source Han Sans SC', 'Microsoft YaHei UI', 'PingFang SC', sans-serif;
+}
 </style>

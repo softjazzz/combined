@@ -104,6 +104,7 @@ def _require_review(current_user: dict) -> str:
 async def get_manual_defects(
     request: Request,
     review_status: Literal["pending", "approved", "rejected"] = Query("pending"),
+    scene: Literal["all", "running", "final", "outpatient_emergency"] = Query("all"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=MAX_PAGE_SIZE),
     current_user: dict = Depends(get_current_user),
@@ -113,7 +114,7 @@ async def get_manual_defects(
     try:
         data = await run_in_threadpool(
             list_manual_defects,
-            review_status=review_status, page=page, page_size=page_size,
+            review_status=review_status, page=page, page_size=page_size, scene=scene,
         )
         result = {
             "items": [
@@ -123,6 +124,7 @@ async def get_manual_defects(
             "total": data["total"],
             "page": data["page"],
             "page_size": data["page_size"],
+            "scene": data["scene"],
         }
     except ManualDefectReviewInvalid as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

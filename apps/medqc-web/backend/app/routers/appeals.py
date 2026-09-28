@@ -213,10 +213,13 @@ async def list_appeals(
         query = query.order("created_at", desc=True).range(offset, offset + page_size - 1)
 
         result = query.execute()
+        exact_count = result.count
+        if isinstance(exact_count, bool) or not isinstance(exact_count, int) or exact_count < 0:
+            raise RuntimeError("appeal list exact count unavailable")
 
         return paginated_response(
             items=result.data or [],
-            total=result.count or 0,
+            total=exact_count,
             page=page,
             page_size=page_size,
             trace_id=trace_id,

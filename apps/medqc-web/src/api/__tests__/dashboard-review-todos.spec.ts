@@ -19,14 +19,14 @@ function payload(patch: Record<string, unknown> = {}) {
 describe('V5 首页审核待办 API 适配', () => {
   beforeEach(() => vi.restoreAllMocks())
 
-  it('只请求 all 范围并透传真实精确计数', async () => {
-    const request = vi.spyOn(ApiService, 'requestRaw').mockResolvedValueOnce(mockEnvelope(payload()))
+  it.each(['all', 'running', 'final'] as const)('请求 %s 场景并透传真实精确计数', async (scene) => {
+    const request = vi.spyOn(ApiService, 'requestRaw').mockResolvedValueOnce(mockEnvelope(payload({ scene })))
 
-    const result = await getReviewTodoCounts()
+    const result = await getReviewTodoCounts(scene)
 
     expect(request).toHaveBeenCalledWith(expect.objectContaining({
       url: '/api/v1/dashboard/todo-stats',
-      params: { scene: 'all' },
+      params: { scene },
     }))
     expect(result).toEqual({
       success: true,
@@ -34,7 +34,7 @@ describe('V5 首页审核待办 API 适配', () => {
         pending_record_review: 3,
         pending_record_recheck: 2,
         pending_manual_defect_review: 4,
-        scene: 'all',
+        scene,
       },
     })
   })
@@ -69,7 +69,7 @@ describe('V5 首页审核待办 API 适配', () => {
   it.each([
     ['缺少 record_stats', { record_stats: undefined }],
     ['缺少 defect_stats', { defect_stats: undefined }],
-    ['服务端返回非 all 范围', { scene: 'running' }],
+    ['服务端返回非请求范围', { scene: 'running' }],
   ])('结构或范围异常按失败处理：%s', async (_label, patch) => {
     vi.spyOn(ApiService, 'requestRaw').mockResolvedValueOnce(mockEnvelope(payload(patch)))
 

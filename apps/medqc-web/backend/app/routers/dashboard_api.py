@@ -270,7 +270,7 @@ async def _get_db_stats_by_scene(scene: DashboardScene = "all", user_id: str = N
 async def _get_review_todo_counts(current_user: dict, scene: str) -> Dict[str, Any]:
     """病历审核与人工缺陷审核待办的精确计数，分别由各自审核服务的列表谓词给出。
 
-    人工缺陷行不带场景，只有 scene=all 时返回全局计数；无审核权限或非 all 场景返回 None（前端显示不可用）。
+    两类计数均按请求 scene 过滤；无人工缺陷审核权限时返回 None（前端显示不可用）。
     任一计数失败时整体 503，不以 0 冒充。
     """
     from starlette.concurrency import run_in_threadpool
@@ -284,8 +284,8 @@ async def _get_review_todo_counts(current_user: dict, scene: str) -> Dict[str, A
         actor_id = _get_task_scope_user_id(current_user)
         record_counts = await run_in_threadpool(count_my_record_review_todos, actor_id, scene)
         manual_defects = None
-        if scene == "all" and has_permission(current_user, ResourceType.QC_RESULTS, PermissionAction.REVIEW):
-            manual_defects = await run_in_threadpool(count_pending_manual_defects)
+        if has_permission(current_user, ResourceType.QC_RESULTS, PermissionAction.REVIEW):
+            manual_defects = await run_in_threadpool(count_pending_manual_defects, scene=scene)
     except HTTPException:
         raise
     except Exception as exc:

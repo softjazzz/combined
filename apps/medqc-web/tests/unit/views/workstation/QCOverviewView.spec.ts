@@ -212,6 +212,13 @@ describe('QCOverviewView', () => {
     expect(wrapper.find('[data-testid="home-trend"]').exists()).toBe(false)
   })
 
+  it('审核待办沿用首页权威聚合场景，不另造场景筛选', async () => {
+    const wrapper = mountView()
+    await flushHomeLoad()
+
+    expect(wrapper.findComponent({ name: 'HomeReviewTodos' }).props('scene')).toBe('final')
+  })
+
   it('移除搜索栏后在范围行保留科室筛选和刷新', async () => {
     const wrapper = mountView()
     await flushHomeLoad()

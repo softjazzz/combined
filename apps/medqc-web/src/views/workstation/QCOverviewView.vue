@@ -13,7 +13,7 @@
         </section>
 
         <HomeTaskTodos v-if="canReadTasks" />
-        <HomeReviewTodos />
+        <HomeReviewTodos :scene="reviewTodoScene" />
         <HomeAppealTodos />
 
         <section
@@ -391,6 +391,7 @@ import {
   TriangleAlert,
 } from 'lucide-vue-next'
 import { ApiService } from '@/services/apiService'
+import type { DashboardScene } from '@/api/dashboard'
 import { useAuthStore } from '@/stores/auth'
 import HomeTaskTodos from './HomeTaskTodos.vue'
 import HomeReviewTodos from './HomeReviewTodos.vue'
@@ -458,6 +459,17 @@ const syncingFromRoute = ref(false)
 const homeData = ref<WorkstationHomePayload | null>(null)
 
 const clinicalQc = computed(() => homeData.value?.clinical_qc ?? null)
+function isDashboardScene(value: unknown): value is DashboardScene {
+  return value === 'all'
+    || value === 'outpatient_emergency'
+    || value === 'running'
+    || value === 'final'
+}
+
+const reviewTodoScene = computed<DashboardScene>(() => {
+  const scene = clinicalQc.value?.scope.scene
+  return isDashboardScene(scene) ? scene : 'all'
+})
 const canReadTasks = computed(() => authStore.userRoles.some((role) => taskReadRoles.has(role)))
 const isDemoPresentation = computed(() => authStore.user?.is_demo_account === true)
 const departmentOptions = computed(() => homeData.value?.department_options ?? [])

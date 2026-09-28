@@ -20,6 +20,7 @@ from ..database.models.qc import QCDefect, QCDefectHistory
 
 REVIEW_STATUSES = frozenset({"pending", "approved", "rejected"})
 REVIEW_DECISIONS = frozenset({"approved", "rejected"})
+MANUAL_DEFECT_SCENES = frozenset({"all", "running", "final", "outpatient_emergency"})
 MAX_PAGE_SIZE = 100
 MAX_REASON_LENGTH = 2000
 _HISTORY_ACTIONS = {
@@ -54,6 +55,8 @@ class ManualDefectReviewUnavailable(RuntimeError):
 
 def _manual_scope(*, scene: str = "all") -> tuple[Any, ...]:
     """人工缺陷唯一谓词；具体场景只匹配冻结值，历史 NULL 仅属于 all。"""
+    if not isinstance(scene, str) or scene not in MANUAL_DEFECT_SCENES:
+        raise ManualDefectReviewInvalid("场景无效")
     predicates = (
         QCDefect.origin == "manual",
         QCDefect.source_key == "task_assigned_qc",
@@ -120,6 +123,7 @@ def _list_item(defect: Any, identity: dict[str, Any]) -> dict[str, Any]:
 
 def list_manual_defects(
     *, review_status: str = "pending", page: int = 1, page_size: int = 20,
+    scene: str = "all",
 ) -> dict[str, Any]:
     """按审核状态分页读取人工缺陷，返回精确 total。"""
     if review_status not in REVIEW_STATUSES:
@@ -129,8 +133,10 @@ def list_manual_defects(
         or type(page_size) is not int or page_size < 1 or page_size > MAX_PAGE_SIZE
     ):
         raise ManualDefectReviewInvalid("分页参数无效")
+    predicates = (
+        *_manual_scope(scene=scene), QCDefect.manual_review_status == review_status,
+    )
     factory = _require_session_factory()
-    predicates = (*_manual_scope(), QCDefect.manual_review_status == review_status)
     try:
         with factory() as session:
             total = session.execute(
@@ -167,7 +173,10 @@ def list_manual_defects(
         _list_item(row, _task_identity(by_defect.get(row.id, []), row.manual_created_by))
         for row in defects
     ]
-    return {"items": items, "total": int(total), "page": page, "page_size": page_size}
+    return {
+        "items": items, "total": int(total), "page": page,
+        "page_size": page_size, "scene": scene,
+    }
 
 
 CASE_LIST_LIMIT = 200
@@ -273,15 +282,16 @@ def list_manual_defects_for_cases(
     return rows
 
 
-def count_pending_manual_defects() -> int:
+def count_pending_manual_defects(*, scene: str = "all") -> int:
     """待审核人工缺陷精确计数；与 list_manual_defects(review_status='pending') 的 total 同一谓词。"""
+    predicates = (
+        *_manual_scope(scene=scene), QCDefect.manual_review_status == "pending",
+    )
     factory = _require_session_factory()
     try:
         with factory() as session:
             total = session.execute(
-                select(func.count(QCDefect.id)).where(
-                    *_manual_scope(), QCDefect.manual_review_status == "pending",
-                )
+                select(func.count(QCDefect.id)).where(*predicates)
             ).scalar_one()
     except SQLAlchemyError as exc:
         raise ManualDefectReviewUnavailable("人工缺陷计数失败") from exc

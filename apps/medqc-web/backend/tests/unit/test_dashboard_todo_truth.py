@@ -30,7 +30,11 @@ def _stub_review_counts(monkeypatch, *, initial=0, recheck=0, manual=0):
         return {"initial": initial, "recheck": recheck}
 
     monkeypatch.setattr(record_reviews, "count_my_record_review_todos", record_counts)
-    monkeypatch.setattr(manual_defect_review_service, "count_pending_manual_defects", lambda: manual)
+    monkeypatch.setattr(
+        manual_defect_review_service,
+        "count_pending_manual_defects",
+        lambda *, scene="all": manual,
+    )
     return calls
 
 
