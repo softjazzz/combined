@@ -13,12 +13,18 @@
             客户自建测试病历（固定池 {{ CUSTOMER_TEST_POOL_ID }}），用于验证质控点。
           </p>
         </div>
-        <a-button
-          type="primary"
-          @click="goCreate"
-        >
-          新建测试病历
-        </a-button>
+        <a-space>
+          <a-button @click="importOpen = true">
+            <template #icon><FileUp :size="15" aria-hidden="true" /></template>
+            导入 Excel
+          </a-button>
+          <a-button
+            type="primary"
+            @click="goCreate"
+          >
+            新建测试病历
+          </a-button>
+        </a-space>
       </div>
       <a-alert
         type="info"
@@ -185,6 +191,12 @@
       @saved="handleEditSaved"
     />
 
+    <TestRecordImportDrawer
+      :open="importOpen"
+      @close="importOpen = false"
+      @imported="handleImported"
+    />
+
     <a-drawer
       :open="documentsTarget !== null"
       placement="right"
@@ -214,6 +226,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { FileUp } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import type { ColumnsType } from 'ant-design-vue/es/table'
@@ -232,6 +245,7 @@ import QCRecordResultComparisonDrawer, {
 import QCRecordCompareWorkbench from '@/views/workstation-v4/semantic-rules/components/QCRecordCompareWorkbench.vue'
 import TestRecordRulePickerModal from './components/TestRecordRulePickerModal.vue'
 import TestRecordEditDrawer from './components/TestRecordEditDrawer.vue'
+import TestRecordImportDrawer from './components/TestRecordImportDrawer.vue'
 import {
   formatDateTime,
   formatDocumentCount,
@@ -242,7 +256,6 @@ import {
 /** 合同第 3 节阻塞项：只做说明，不提供假功能。 */
 const BLOCKED_NOTES = [
   '预期结果比对：人工预期结果目前只写入、没有权威读取来源。',
-  '含文书的 Excel 导入：尚无客户模板，现有导入只产出样本行。',
   '文书类型“其他”的归属：目前映射到日常病程，待客户确认口径。',
   '新建质控点时的测试病历验证：新质控点需先有执行器实现。',
 ]
@@ -297,6 +310,11 @@ function asItem(record: Record<string, unknown>): TestRecordItem {
 }
 
 const selectedRunnable = computed(() => selectedItems.value.filter(isRunnableTestRecord))
+const importOpen = ref(false)
+
+async function handleImported() {
+  await store.load()
+}
 
 function handleTableChange(info: { current?: number; pageSize?: number }) {
   void store.changePage(info.current || 1, info.pageSize || pageSize.value)

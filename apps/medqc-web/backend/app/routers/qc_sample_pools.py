@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import hashlib
 import json
 import logging
 import os
@@ -10,10 +12,11 @@ from pathlib import Path
 from typing import Annotated, Any, Dict, Iterator, Literal, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 from sqlalchemy import create_engine, text
 from sqlalchemy.pool import NullPool
+from starlette.concurrency import run_in_threadpool
 
 from ..core.audit import audit_event
 from ..core.response import get_trace_id, success_response
@@ -67,6 +70,12 @@ from ..services.sample_validation_rule_sets import (
 )
 from ..services.luxian_0609.phase_scope import load_luxian_0609_phase_scope
 from ..services.qc_rule_sets import get_sichuan_rule_set
+from ..services.test_record_import_service import (
+    MAX_UPLOAD_BYTES,
+    TestRecordImportValidationError,
+    build_test_record_import_template,
+    parse_test_record_import,
+)
 from ..services.llm_config_loader import LLMConfigLoader
 from ..services.llm_execution_concurrency import concurrency_from_custom_parameters
 
@@ -92,6 +101,8 @@ _LUXIAN_0609_REPORT_FILES = {
 }
 _SAMPLE_VALIDATION_DEDUP_WINDOW = timedelta(minutes=2)
 _SAMPLE_VALIDATION_DEDUP_STATUSES = {"queued", "running"}
+_ACTIVE_TEST_RECORD_IMPORTS: set[str] = set()
+_ACTIVE_TEST_RECORD_IMPORTS_LOCK = asyncio.Lock()
 # 阶段冻结规则保留在客户结果集合中，由 worker 统一投影为 not_executed。
 _LUXIAN_0609_PAUSED_CUSTOMER_RULE_IDS = frozenset(
     entry.rule_id
@@ -652,6 +663,164 @@ async def list_test_records(
         message="获取测试病历成功",
         trace_id=get_trace_id(request),
     )
+
+
+@router.get("/test-records/import-template")
+async def download_test_record_import_template(
+    current_user: Dict[str, Any] = Depends(require_roles("admin", "qc_manager")),
+):
+    del current_user
+    content = await run_in_threadpool(build_test_record_import_template)
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": "attachment; filename*=UTF-8''V3.6-test-record-import-template.xlsx",
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@router.post("/test-records/import")
+async def import_test_records(
+    request: Request,
+    file: UploadFile = File(..., description="V3.6 测试病历 .xlsx 模板"),
+    current_user: Dict[str, Any] = Depends(require_roles("admin", "qc_manager")),
+):
+    filename = str(file.filename or "").strip()
+    if Path(filename).suffix.lower() != ".xlsx":
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "invalid_test_record_import",
+                "message": "测试病历导入仅支持 .xlsx 模板",
+                "errors": [
+                    {"sheet": "文件", "row": 0, "field": "文件", "message": "仅支持 .xlsx 文件"},
+                ],
+            },
+        )
+    actor_id = str(current_user.get("id") or current_user.get("user_id") or "").strip()
+    if not actor_id or actor_id.lower() == "anonymous":
+        raise HTTPException(status_code=403, detail="当前用户缺少稳定标识，无法导入测试病历")
+    content = await file.read(MAX_UPLOAD_BYTES + 1)
+    file_sha256 = hashlib.sha256(content).hexdigest()
+    guard_key = f"{actor_id}:{file_sha256}"
+    async with _ACTIVE_TEST_RECORD_IMPORTS_LOCK:
+        if guard_key in _ACTIVE_TEST_RECORD_IMPORTS:
+            raise HTTPException(status_code=409, detail="相同文件正在导入，请等待当前请求完成")
+        _ACTIVE_TEST_RECORD_IMPORTS.add(guard_key)
+    try:
+        try:
+            parsed_records = await run_in_threadpool(
+                parse_test_record_import,
+                content,
+                allowed_rule_ids=_current_version_rule_ids(),
+                file_sha256=file_sha256,
+            )
+        except TestRecordImportValidationError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "invalid_test_record_import",
+                    "message": "模板校验失败，请按行修正后重新导入",
+                    "errors": [item.as_dict() for item in exc.errors],
+                },
+            ) from exc
+
+        results: list[dict[str, Any]] = []
+        created_count = 0
+        unknown_count = 0
+        service = _service()
+        for record in parsed_records:
+            try:
+                created = await run_in_threadpool(
+                    service.create_customer_test_record,
+                    payload=record.payload,
+                    created_by=actor_id,
+                )
+                item = created.get("item") if isinstance(created.get("item"), dict) else {}
+                receipt = {
+                    "item_id": str(item.get("id") or "").strip(),
+                    "institute_id": str(item.get("matched_institute_id") or "").strip(),
+                    "patient_id": str(created.get("patient_id") or "").strip(),
+                    "visit_id": str(created.get("visit_id") or "").strip(),
+                }
+                if not all(receipt.values()):
+                    results.append(
+                        {
+                            "case_key": record.case_key,
+                            "case_row": record.case_row,
+                            "document_rows": list(record.document_rows),
+                            "status": "unknown",
+                            "message": "创建回执不完整，结果未知，请勿盲目重试；请刷新测试病历列表核对",
+                        }
+                    )
+                    unknown_count += 1
+                    continue
+                bundle_error = bool(str(created.get("bundle_error") or "").strip())
+                results.append(
+                    {
+                        "case_key": record.case_key,
+                        "case_row": record.case_row,
+                        "document_rows": list(record.document_rows),
+                        "status": "created",
+                        "message": (
+                            "病历已创建，资料视图仍在准备，请稍后刷新"
+                            if bundle_error or created.get("bundle_status") != "ready"
+                            else "病历已创建"
+                        ),
+                        **receipt,
+                        "bundle_status": str(created.get("bundle_status") or "pending"),
+                    }
+                )
+                created_count += 1
+            except Exception:
+                logging.getLogger(__name__).warning(
+                    "test_record_excel_import_result_unknown code=create_exception case_row=%s",
+                    record.case_row,
+                )
+                results.append(
+                    {
+                        "case_key": record.case_key,
+                        "case_row": record.case_row,
+                        "document_rows": list(record.document_rows),
+                        "status": "unknown",
+                        "message": "创建结果未知，请勿盲目重试；请刷新测试病历列表并按名称核对",
+                    }
+                )
+                unknown_count += 1
+
+        audit_event(
+            request,
+            action="qc.sample_pools.test_records.import",
+            resource="qc_sample_pool_item",
+            outcome="success" if unknown_count == 0 else "partial",
+            details={
+                "file_sha256_prefix": file_sha256[:16],
+                "total": len(parsed_records),
+                "created": created_count,
+                "unknown": unknown_count,
+            },
+            current_user=current_user,
+        )
+        return success_response(
+            data={
+                "total": len(parsed_records),
+                "created": created_count,
+                "unknown": unknown_count,
+                "results": results,
+            },
+            message=(
+                "测试病历导入已完成"
+                if unknown_count == 0
+                else "测试病历导入已结束，部分病例结果未知，请刷新列表核对"
+            ),
+            trace_id=get_trace_id(request),
+        )
+    finally:
+        async with _ACTIVE_TEST_RECORD_IMPORTS_LOCK:
+            _ACTIVE_TEST_RECORD_IMPORTS.discard(guard_key)
 
 
 @router.put("/test-records/{item_id}/rules")

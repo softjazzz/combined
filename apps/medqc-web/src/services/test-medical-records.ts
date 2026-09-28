@@ -21,6 +21,9 @@ import type {
   TestRecordItem,
   TestRecordListQuery,
   TestRecordListResult,
+  TestRecordImportResponse,
+  TestRecordImportResult,
+  TestRecordImportValidationIssue,
 } from '@/types/test-medical-records'
 import type { ManualTestRecordCreateRequest } from '@/views/workstation-v4/customer-sample-validation/types'
 
@@ -29,6 +32,9 @@ export const CUSTOMER_TEST_POOL_ID = 'customer-created-test-records-v1'
 export const TEST_RECORD_RULE_SET_KEY = 'luxian_0609_qc_v1'
 const TEST_RECORDS_URL = '/api/v1/qc/sample-pools/test-records'
 const RUN_TIMEOUT_MS = 90000
+const IMPORT_TIMEOUT_MS = 15 * 60 * 1000
+export const TEST_RECORD_IMPORT_MAX_BYTES = 5 * 1024 * 1024
+export const TEST_RECORD_IMPORT_MAX_CASES = 20
 
 export type ServiceResult<T> = {
   success: boolean
@@ -89,6 +95,192 @@ export function removeTestRecord(item: Pick<TestRecordItem, 'id' | 'updated_at'>
     },
     '移除测试病历失败',
   )
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function validationIssuesFromError(error: unknown): TestRecordImportValidationIssue[] {
+  if (!error || typeof error !== 'object') return []
+  const response = (error as { response?: { data?: unknown } }).response
+  const body = response?.data
+  if (!isRecord(body)) return []
+  const detail = isRecord(body.detail) ? body.detail : isRecord(body.error) ? body.error : null
+  if (!detail) return []
+  const errors = detail.errors
+  if (!Array.isArray(errors)) return []
+  return errors
+    .map((item): TestRecordImportValidationIssue | null => {
+      if (!item || typeof item !== 'object') return null
+      const row = item as Record<string, unknown>
+      if (
+        typeof row.sheet !== 'string' ||
+        typeof row.row !== 'number' ||
+        typeof row.field !== 'string' ||
+        typeof row.message !== 'string'
+      ) {
+        return null
+      }
+      return { sheet: row.sheet, row: row.row, field: row.field, message: row.message }
+    })
+    .filter((item): item is TestRecordImportValidationIssue => Boolean(item))
+}
+
+function isImportCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0
+}
+
+function normalizeImportResult(value: unknown): TestRecordImportResult | null {
+  if (!isRecord(value)
+    || !isImportCount(value.total)
+    || value.total < 1
+    || !isImportCount(value.created)
+    || !isImportCount(value.unknown)
+    || value.total > TEST_RECORD_IMPORT_MAX_CASES
+    || !Array.isArray(value.results)
+    || value.results.length !== value.total
+    || value.created + value.unknown !== value.total) {
+    return null
+  }
+  const results = value.results.map((raw): TestRecordImportResult['results'][number] | null => {
+    if (!isRecord(raw)
+      || typeof raw.case_key !== 'string'
+      || !raw.case_key.trim()
+      || !isImportCount(raw.case_row)
+      || raw.case_row < 2
+      || !Array.isArray(raw.document_rows)
+      || raw.document_rows.length === 0
+      || !raw.document_rows.every((row) => isImportCount(row) && row >= 2)
+      || (raw.status !== 'created' && raw.status !== 'unknown')
+      || typeof raw.message !== 'string'
+      || !raw.message.trim()) {
+      return null
+    }
+    const optionalKeys = ['item_id', 'institute_id', 'patient_id', 'visit_id', 'bundle_status'] as const
+    if (optionalKeys.some((key) => raw[key] !== undefined && typeof raw[key] !== 'string')) return null
+    if (raw.status === 'created'
+      && ['item_id', 'institute_id', 'patient_id', 'visit_id'].some((key) => {
+        const text = raw[key]
+        return typeof text !== 'string' || !text.trim()
+      })) {
+      return null
+    }
+    return {
+      case_key: raw.case_key,
+      case_row: raw.case_row,
+      document_rows: raw.document_rows as number[],
+      status: raw.status,
+      message: raw.message,
+      ...(typeof raw.item_id === 'string' ? { item_id: raw.item_id } : {}),
+      ...(typeof raw.institute_id === 'string' ? { institute_id: raw.institute_id } : {}),
+      ...(typeof raw.patient_id === 'string' ? { patient_id: raw.patient_id } : {}),
+      ...(typeof raw.visit_id === 'string' ? { visit_id: raw.visit_id } : {}),
+      ...(typeof raw.bundle_status === 'string' ? { bundle_status: raw.bundle_status } : {}),
+    }
+  })
+  if (results.some((item) => item === null)) return null
+  const normalized = results as TestRecordImportResult['results']
+  if (new Set(normalized.map((item) => item.case_key)).size !== normalized.length
+    || new Set(normalized.map((item) => item.case_row)).size !== normalized.length) {
+    return null
+  }
+  if (normalized.filter((item) => item.status === 'created').length !== value.created
+    || normalized.filter((item) => item.status === 'unknown').length !== value.unknown) {
+    return null
+  }
+  return { total: value.total, created: value.created, unknown: value.unknown, results: normalized }
+}
+
+export async function downloadTestRecordImportTemplate(): Promise<ServiceResult<Blob>> {
+  try {
+    const response = await ApiService.requestRaw<Blob>({
+      method: 'GET',
+      url: `${TEST_RECORDS_URL}/import-template`,
+      responseType: 'blob',
+      timeout: 60000,
+    })
+    if (!(response.data instanceof Blob) || response.data.size === 0) {
+      return { success: false, message: '下载的测试病历导入模板无效' }
+    }
+    return { success: true, data: response.data }
+  } catch (error) {
+    return {
+      success: false,
+      message: extractApiErrorMessageFromError(error, '下载测试病历导入模板失败'),
+    }
+  }
+}
+
+export async function importTestRecords(file: File): Promise<TestRecordImportResponse> {
+  if (!file.name.toLowerCase().endsWith('.xlsx')) {
+    return {
+      success: false,
+      message: '仅支持 .xlsx 测试病历模板',
+      validationErrors: [],
+      resultUnknown: false,
+    }
+  }
+  if (file.size > TEST_RECORD_IMPORT_MAX_BYTES) {
+    return {
+      success: false,
+      message: '文件不能超过 5 MiB',
+      validationErrors: [],
+      resultUnknown: false,
+    }
+  }
+  const form = new FormData()
+  form.append('file', file)
+  try {
+    const response = await ApiService.requestRaw<TestRecordImportResult>({
+      method: 'POST',
+      url: `${TEST_RECORDS_URL}/import`,
+      data: form,
+      timeout: IMPORT_TIMEOUT_MS,
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    const normalized = normalizeApiSuccess<TestRecordImportResult>(response.data)
+    if (!normalized.success) {
+      return {
+        success: false,
+        message: '服务端未返回可确认的逐病例结果。请先刷新列表核对，不要盲目重试',
+        validationErrors: [],
+        resultUnknown: true,
+      }
+    }
+    const data = normalizeImportResult(normalized.data)
+    if (!data) {
+      return {
+        success: false,
+        message: '服务端返回的逐病例结果格式异常，状态无法确认。请先刷新列表核对，不要盲目重试',
+        validationErrors: [],
+        resultUnknown: true,
+      }
+    }
+    return {
+      success: true,
+      data,
+      message: normalized.message || '测试病历导入已完成',
+      validationErrors: [],
+      resultUnknown: false,
+    }
+  } catch (error) {
+    const validationErrors = validationIssuesFromError(error)
+    const response = error && typeof error === 'object'
+      ? (error as { response?: { status?: number } }).response
+      : undefined
+    const status = response?.status
+    const rejectedBeforeWrite = status === 401 || status === 403 || status === 422
+    const resultUnknown = !rejectedBeforeWrite
+    return {
+      success: false,
+      message: resultUnknown
+        ? '导入请求未获得可确认的服务端结果，可能已写入。请勿盲目重试，先刷新列表核对'
+        : extractApiErrorMessageFromError(error, '导入测试病历失败'),
+      validationErrors,
+      resultUnknown,
+    }
+  }
 }
 
 const ENTRY_STATES: RuleSetEntryState[] = ['active', 'paused', 'offline']

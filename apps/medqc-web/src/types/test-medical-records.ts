@@ -82,3 +82,39 @@ export interface TestRecordDocumentDraft {
   doctor_code?: string
   enabled: boolean
 }
+
+export interface TestRecordImportValidationIssue {
+  sheet: string
+  row: number
+  field: string
+  message: string
+}
+
+export interface TestRecordImportRowResult {
+  case_key: string
+  case_row: number
+  document_rows: number[]
+  status: 'created' | 'unknown'
+  message: string
+  item_id?: string
+  institute_id?: string
+  patient_id?: string
+  visit_id?: string
+  bundle_status?: string
+}
+
+export interface TestRecordImportResult {
+  total: number
+  created: number
+  unknown: number
+  results: TestRecordImportRowResult[]
+}
+
+export interface TestRecordImportResponse {
+  success: boolean
+  data?: TestRecordImportResult
+  message: string
+  validationErrors: TestRecordImportValidationIssue[]
+  /** 请求没有得到服务端确认，可能已经写入，页面必须阻止用户盲目重试。 */
+  resultUnknown: boolean
+}

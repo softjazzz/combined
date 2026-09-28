@@ -8,10 +8,13 @@ vi.mock('@/services/apiService', () => ({
 import {
   buildTestRecordEditPayload,
   buildTestRecordRunPayload,
+  downloadTestRecordImportTemplate,
   findMissingEditBasics,
   getCurrentRuleSetCatalog,
+  importTestRecords,
   listTestRecords,
   removeTestRecord,
+  TEST_RECORD_IMPORT_MAX_BYTES,
   unionTestRecordRuleIds,
   updateTestRecordRules,
 } from '@/services/test-medical-records'
@@ -168,6 +171,146 @@ describe('测试病历服务', () => {
     expect(() =>
       buildTestRecordEditPayload(makeItem(), { caseTitle: '', sex: '', age: 50, admissionTime: '2026-09-01' }, docs),
     ).toThrow('请填写性别')
+  })
+
+  it('导入用 multipart 上传并保留 created/unknown 逐病例结果', async () => {
+    requestRaw.mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          total: 2,
+          created: 1,
+          unknown: 1,
+          results: [
+            {
+              case_key: 'CASE-1', case_row: 2, document_rows: [2], status: 'created',
+              message: '病历已创建', item_id: 'item-1', institute_id: 'CUSTOMER_TEST',
+              patient_id: 'patient-1', visit_id: 'visit-1', bundle_status: 'ready',
+            },
+            {
+              case_key: 'CASE-2', case_row: 3, document_rows: [3, 4], status: 'unknown',
+              message: '创建结果未知',
+            },
+          ],
+        },
+      },
+    })
+    const file = new File(['xlsx'], 'records.xlsx')
+
+    const result = await importTestRecords(file)
+
+    expect(result).toMatchObject({ success: true, data: { total: 2, created: 1, unknown: 1 } })
+    const config = requestRaw.mock.calls[0][0]
+    expect(config).toMatchObject({
+      method: 'POST',
+      url: '/api/v1/qc/sample-pools/test-records/import',
+      timeout: 15 * 60 * 1000,
+    })
+    expect(config.data).toBeInstanceOf(FormData)
+    expect(config.data.get('file')).toBe(file)
+  })
+
+  it('下载模板使用 Blob 响应并拒绝空文件', async () => {
+    requestRaw.mockResolvedValueOnce({ data: new Blob(['xlsx']) })
+    const downloaded = await downloadTestRecordImportTemplate()
+    expect(downloaded.data).toBeInstanceOf(Blob)
+    expect(requestRaw).toHaveBeenLastCalledWith(expect.objectContaining({
+      method: 'GET',
+      url: '/api/v1/qc/sample-pools/test-records/import-template',
+      responseType: 'blob',
+    }))
+
+    requestRaw.mockResolvedValueOnce({ data: new Blob([]) })
+    const empty = await downloadTestRecordImportTemplate()
+    expect(empty).toEqual({ success: false, message: '下载的测试病历导入模板无效' })
+  })
+
+  it.each([
+    ['created 缺回执', {
+      total: 1, created: 1, unknown: 0,
+      results: [{ case_key: 'A', case_row: 2, document_rows: [2], status: 'created', message: '已创建' }],
+    }],
+    ['状态计数不匹配', {
+      total: 1, created: 1, unknown: 0,
+      results: [{ case_key: 'A', case_row: 2, document_rows: [2], status: 'unknown', message: '未知' }],
+    }],
+    ['重复病例编号', {
+      total: 2, created: 0, unknown: 2,
+      results: [
+        { case_key: 'A', case_row: 2, document_rows: [2], status: 'unknown', message: '未知' },
+        { case_key: 'A', case_row: 3, document_rows: [3], status: 'unknown', message: '未知' },
+      ],
+    }],
+    ['空文书行', {
+      total: 1, created: 0, unknown: 1,
+      results: [{ case_key: 'A', case_row: 2, document_rows: [], status: 'unknown', message: '未知' }],
+    }],
+  ])('HTTP 200 的异常逐病例结果不冒充成功：%s', async (_label, data) => {
+    requestRaw.mockResolvedValue({ data: { success: true, data } })
+
+    const result = await importTestRecords(new File(['xlsx'], 'records.xlsx'))
+
+    expect(result).toMatchObject({ success: false, resultUnknown: true })
+    expect(result.message).toContain('不要盲目重试')
+  })
+
+  it('HTTP 200 却声明失败时不能证明整批未写入', async () => {
+    requestRaw.mockResolvedValue({ data: { success: false, message: '服务异常' } })
+
+    const result = await importTestRecords(new File(['xlsx'], 'records.xlsx'))
+
+    expect(result).toMatchObject({ success: false, resultUnknown: true })
+    expect(result.message).toContain('不要盲目重试')
+  })
+
+  it('解析 422 sheet/行号/字段错误，并将包装 error 视为写入前拒绝', async () => {
+    requestRaw.mockRejectedValue({
+      response: {
+        status: 422,
+        data: {
+          error: {
+            code: 'invalid_test_record_import',
+            message: '模板校验失败',
+            errors: [{ sheet: '病历', row: 3, field: '年龄', message: '必须是 1–120 的整数' }],
+          },
+        },
+      },
+    })
+
+    const result = await importTestRecords(new File(['xlsx'], 'records.xlsx'))
+
+    expect(result.resultUnknown).toBe(false)
+    expect(result.validationErrors).toEqual([
+      { sheet: '病历', row: 3, field: '年龄', message: '必须是 1–120 的整数' },
+    ])
+  })
+
+  it.each([409, 500, 503])('HTTP %s 无法证明未写入，结果标记未知', async (status) => {
+    requestRaw.mockRejectedValue({ response: { status, data: { detail: '服务异常' } } })
+
+    const result = await importTestRecords(new File(['xlsx'], 'records.xlsx'))
+
+    expect(result).toMatchObject({ success: false, resultUnknown: true })
+  })
+
+  it('网络无响应时提醒先刷新核对', async () => {
+    requestRaw.mockRejectedValue(new Error('timeout'))
+
+    const result = await importTestRecords(new File(['xlsx'], 'records.xlsx'))
+
+    expect(result).toMatchObject({ success: false, resultUnknown: true })
+    expect(result.message).toContain('先刷新列表核对')
+  })
+
+  it('非 xlsx 或超过 5 MiB 在发请前拒绝', async () => {
+    const wrongType = await importTestRecords(new File(['x'], 'records.xls'))
+    const oversized = await importTestRecords(
+      new File([new Uint8Array(TEST_RECORD_IMPORT_MAX_BYTES + 1)], 'records.xlsx'),
+    )
+
+    expect(wrongType.message).toContain('.xlsx')
+    expect(oversized.message).toContain('5 MiB')
+    expect(requestRaw).not.toHaveBeenCalled()
   })
 })
 
