@@ -24,7 +24,7 @@
 | 玻璃 | `--mq-glass-bg`、`--mq-glass-bg-strong`、`--mq-glass-border`、`--mq-glass-blur`、`--mq-glass-shadow` | 卡片、侧栏 |
 | 语义色 | `--mq-{success,warning,danger,info}-{text,icon,bg,border}`、`--mq-neutral-*` | 只用于数据状态 |
 | 字体 | `--mq-font-family`、`--mq-font-display`、`--mq-font-mono` | 苹果系统字体优先，Windows 回退思源黑体 |
-| 字号 | 12 / 13 / 14 / 16 / 20 / 24 / 28，页面标题 `--mq-font-title` 40px | |
+| 字号 | 12 / 13 / 14 / 16 / 20 / 24 / 28，页面标题 `--mq-font-title` 32px | |
 | 间距 | `--mq-space-1…8`（4 基数） | |
 | 圆角 | 标签 999px / 控件 12px / 卡片 24px / 弹窗 26px | 按钮一律胶囊形 |
 
@@ -34,7 +34,7 @@
 
 | 用途 | 字号 / 字重 |
 | --- | --- |
-| 页面标题 | 40px / 700，字距 -0.03em |
+| 页面标题 | 32px / 700，字距 -0.03em（Windows 下中文走微软雅黑，只有常规/粗体两档，40px 粗体过于沉重，2026-09-27 起降为 32px） |
 | 页面眉标 | 13px / 600，三级文字色 |
 | 卡片标题 | 20px / 700 |
 | 步骤、区块小标题 | 16px / 600 |
