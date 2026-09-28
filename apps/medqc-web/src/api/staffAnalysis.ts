@@ -4,6 +4,8 @@ import { extractApiErrorMessageFromError, normalizeApiSuccess } from '@/utils/ap
 
 export type StaffAnalysisPeriod = 'this_week' | 'last_week' | 'this_month'
 export type StaffAnalysisScene = 'all' | 'running' | 'final'
+export type StaffAnalysisUnavailableMetric = 'appeal_approved_count' | 'appeal_rejected_count'
+export type StaffAnalysisUnavailableReason = 'scene_not_attributable'
 
 export interface StaffWorkCounts {
   record_review_count: number
@@ -13,8 +15,8 @@ export interface StaffWorkCounts {
   manual_defect_created_count: number
   manual_review_approved_count: number
   manual_review_rejected_count: number
-  appeal_approved_count: number
-  appeal_rejected_count: number
+  appeal_approved_count: number | null
+  appeal_rejected_count: number | null
 }
 
 export interface StaffWorkSummary extends StaffWorkCounts {
@@ -38,6 +40,7 @@ export interface StaffAnalysisReport {
   summary: StaffWorkSummary | null
   staff: StaffWorkRow[] | null
   unavailable_reason: string | null
+  unavailable_metrics: Partial<Record<StaffAnalysisUnavailableMetric, StaffAnalysisUnavailableReason>>
 }
 
 export interface StaffAnalysisResult {

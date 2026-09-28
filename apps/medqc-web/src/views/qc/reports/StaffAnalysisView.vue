@@ -50,7 +50,7 @@
         <section class="overview" aria-label="工作量总览">
           <div class="section-title">
             <h2>工作量总览</h2>
-            <span>{{ report.period_label }} · 全部工作记录</span>
+            <span>{{ report.period_label }} · {{ sceneWorkLabel }}</span>
           </div>
           <p class="range-label">{{ rangeLabel(report.range) }}</p>
           <div class="metric-grid">
@@ -99,8 +99,8 @@
                   <td>{{ staff.manual_defect_created_count }}</td>
                   <td>{{ staff.manual_review_approved_count }}</td>
                   <td>{{ staff.manual_review_rejected_count }}</td>
-                  <td>{{ staff.appeal_approved_count }}</td>
-                  <td>{{ staff.appeal_rejected_count }}</td>
+                  <td>{{ displayNullableCount(staff.appeal_approved_count) }}</td>
+                  <td>{{ displayNullableCount(staff.appeal_rejected_count) }}</td>
                 </tr>
               </tbody>
             </table>
@@ -146,9 +146,19 @@ const loading = ref(false)
 const errorMessage = ref('')
 let requestVersion = 0
 
+const sceneWorkLabel = computed(() => {
+  if (report.value?.scene === 'running') return '运行质控工作记录'
+  if (report.value?.scene === 'final') return '终末质控工作记录'
+  return '全部工作记录'
+})
+
 const summaryMetrics = computed(() => {
   const summary = report.value?.summary
   if (!summary) return []
+  const appealTotal = summary.appeal_approved_count === null
+    || summary.appeal_rejected_count === null
+    ? null
+    : summary.appeal_approved_count + summary.appeal_rejected_count
   return [
     { label: '审核病历', value: summary.reviewed_case_count, note: '全局三坐标去重' },
     { label: '审核次数', value: summary.record_review_count, note: `初审 ${summary.initial_count} · 复审 ${summary.recheck_count}` },
@@ -156,9 +166,28 @@ const summaryMetrics = computed(() => {
     { label: '活跃工作人数', value: summary.active_staff_count, note: '周期内有可核实工作动作' },
     { label: '补录人工缺陷', value: summary.manual_defect_created_count, note: '按创建动作计数' },
     { label: '人工缺陷审核', value: summary.manual_review_approved_count + summary.manual_review_rejected_count, note: `通过 ${summary.manual_review_approved_count} · 驳回 ${summary.manual_review_rejected_count}` },
-    { label: '申诉处理', value: summary.appeal_approved_count + summary.appeal_rejected_count, note: `通过 ${summary.appeal_approved_count} · 驳回 ${summary.appeal_rejected_count}` },
+    {
+      label: '申诉处理',
+      value: appealTotal ?? '未知',
+      note: appealTotal !== null
+        ? `通过 ${summary.appeal_approved_count} · 驳回 ${summary.appeal_rejected_count}`
+        : appealUnavailableText(),
+    },
   ]
 })
+
+function appealUnavailableText(): string {
+  const reasons = report.value?.unavailable_metrics
+  if (reasons?.appeal_approved_count === 'scene_not_attributable'
+    || reasons?.appeal_rejected_count === 'scene_not_attributable') {
+    return '当前场景无法可靠归属'
+  }
+  return '数据暂不可用'
+}
+
+function displayNullableCount(value: number | null): number | string {
+  return value ?? '未知'
+}
 
 function unavailableText(reason: string): string {
   if (reason === 'scene_not_attributable') {

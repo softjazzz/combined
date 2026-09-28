@@ -26,6 +26,7 @@ def test_authorized_request_passes_period_and_scene(monkeypatch):
     expected = {
         "period": "last_week", "scene": "all", "summary": {"record_review_count": 3},
         "staff": [{"user_id": "qc-1", "record_review_count": 3}], "unavailable_reason": None,
+        "unavailable_metrics": {},
     }
 
     def get_analysis(**kwargs):
@@ -48,6 +49,25 @@ def test_scene_unavailable_contract_preserves_nulls(monkeypatch):
     assert response.status_code == 200
     assert response.json()["data"]["staff"] is None
     assert response.json()["data"]["unavailable_reason"] == "scene_not_attributable"
+
+
+def test_scene_field_level_unknown_contract_preserves_real_rows(monkeypatch):
+    expected = {
+        "period": "this_week", "scene": "running",
+        "summary": {"record_review_count": 2, "appeal_approved_count": None,
+                    "appeal_rejected_count": None},
+        "staff": [{"user_id": "qc-1", "record_review_count": 2,
+                  "appeal_approved_count": None, "appeal_rejected_count": None}],
+        "unavailable_reason": None,
+        "unavailable_metrics": {
+            "appeal_approved_count": "scene_not_attributable",
+            "appeal_rejected_count": "scene_not_attributable",
+        },
+    }
+    monkeypatch.setattr(service, "get_staff_work_analysis", lambda **_kwargs: expected)
+    response = _client().get(BASE, params={"scene": "running"})
+    assert response.status_code == 200
+    assert response.json()["data"] == expected
 
 
 @pytest.mark.parametrize("roles", [("doctor",), ("qc_staff",), ()])

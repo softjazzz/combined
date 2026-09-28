@@ -25,6 +25,7 @@ COUNT_FIELDS = (
     "manual_defect_created_count", "manual_review_approved_count",
     "manual_review_rejected_count", "appeal_approved_count", "appeal_rejected_count",
 )
+APPEAL_COUNT_FIELDS = ("appeal_approved_count", "appeal_rejected_count")
 
 
 class StaffWorkAnalysisInvalid(ValueError):
@@ -41,24 +42,27 @@ def _row(staff: dict[str, dict[str, Any]], user_id: str) -> dict[str, Any]:
     )
 
 
-def _record_counts(session: Any, window: RankingWindow, staff: dict[str, dict[str, Any]]) -> int:
+def _record_counts(
+    session: Any, window: RankingWindow, staff: dict[str, dict[str, Any]], scene: str,
+) -> int:
+    predicates = [
+        QCRecordReview.created_at >= window.utc_start,
+        QCRecordReview.created_at < window.utc_end,
+    ]
+    if scene != SCENE_ALL:
+        # 审核决定创建时已冻结场景；历史 NULL 不推定到运行或终末。
+        predicates.append(QCRecordReview.scene == scene)
     reviews = select(
         QCRecordReview.reviewer_id, QCRecordReview.institute_id,
         QCRecordReview.patient_id, QCRecordReview.visit_id,
-    ).where(
-        QCRecordReview.created_at >= window.utc_start,
-        QCRecordReview.created_at < window.utc_end,
-    ).subquery()
+    ).where(*predicates).subquery()
     decision_rows = session.execute(
         select(
             QCRecordReview.reviewer_id,
             func.count(QCRecordReview.id).label("total"),
             func.sum(case((QCRecordReview.stage == "initial", 1), else_=0)).label("initial"),
             func.sum(case((QCRecordReview.stage == "recheck", 1), else_=0)).label("recheck"),
-        ).where(
-            QCRecordReview.created_at >= window.utc_start,
-            QCRecordReview.created_at < window.utc_end,
-        ).group_by(QCRecordReview.reviewer_id)
+        ).where(*predicates).group_by(QCRecordReview.reviewer_id)
     ).all()
     for event in decision_rows:
         item = _row(staff, str(event.reviewer_id))
@@ -83,7 +87,9 @@ def _record_counts(session: Any, window: RankingWindow, staff: dict[str, dict[st
     return int(session.scalar(select(func.count()).select_from(unique_cases)) or 0)
 
 
-def _manual_create_counts(session: Any, window: RankingWindow, staff: dict[str, dict[str, Any]]) -> None:
+def _manual_create_counts(
+    session: Any, window: RankingWindow, staff: dict[str, dict[str, Any]], scene: str,
+) -> None:
     created = select(
         QCDefectHistory.defect_id,
         func.min(QCDefectHistory.created_at).label("created_at"),
@@ -101,7 +107,7 @@ def _manual_create_counts(session: Any, window: RankingWindow, staff: dict[str, 
             (QCDefectHistory.defect_id == QCDefect.id)
             & (QCDefectHistory.action == "manual_create"),
         ).where(
-            *_manual_scope(),
+            *_manual_scope(scene=scene),
             QCDefect.manual_created_by.is_not(None),
             created.c.created_at >= window.utc_start,
             created.c.created_at < window.utc_end,
@@ -113,7 +119,9 @@ def _manual_create_counts(session: Any, window: RankingWindow, staff: dict[str, 
         _row(staff, str(event.user_id))["manual_defect_created_count"] = int(event.total)
 
 
-def _manual_review_counts(session: Any, window: RankingWindow, staff: dict[str, dict[str, Any]]) -> None:
+def _manual_review_counts(
+    session: Any, window: RankingWindow, staff: dict[str, dict[str, Any]], scene: str,
+) -> None:
     rows = session.execute(
         select(
             QCDefectHistory.actor_id,
@@ -121,7 +129,7 @@ def _manual_review_counts(session: Any, window: RankingWindow, staff: dict[str, 
             func.count(QCDefectHistory.id).label("total"),
         ).join(QCDefect, QCDefect.id == QCDefectHistory.defect_id)
         .where(
-            *_manual_scope(),
+            *_manual_scope(scene=scene),
             QCDefectHistory.action.in_(("manual_review_approved", "manual_review_rejected")),
             QCDefectHistory.created_at >= window.utc_start,
             QCDefectHistory.created_at < window.utc_end,
@@ -158,8 +166,15 @@ def _appeal_counts(session: Any, window: RankingWindow, staff: dict[str, dict[st
         _row(staff, str(event.reviewer_id))[field] = int(event.total)
 
 
-def _summary(staff: list[dict[str, Any]], global_case_count: int) -> dict[str, Any]:
-    totals = {field: sum(row[field] for row in staff) for field in COUNT_FIELDS}
+def _summary(
+    staff: list[dict[str, Any]], global_case_count: int, *, appeals_attributable: bool,
+) -> dict[str, Any]:
+    known_fields = COUNT_FIELDS if appeals_attributable else tuple(
+        field for field in COUNT_FIELDS if field not in APPEAL_COUNT_FIELDS
+    )
+    totals = {field: sum(row[field] for row in staff) for field in known_fields}
+    if not appeals_attributable:
+        totals.update(dict.fromkeys(APPEAL_COUNT_FIELDS))
     totals["reviewed_case_count"] = global_case_count
     active_reviewers = sum(row["record_review_count"] > 0 for row in staff)
     active_staff = len(staff)
@@ -180,7 +195,7 @@ def _summary(staff: list[dict[str, Any]], global_case_count: int) -> dict[str, A
 def get_staff_work_analysis(
     *, period: str, scene: str = SCENE_ALL, now: datetime | None = None,
 ) -> dict[str, Any]:
-    """返回完整人员列表和全局汇总；无可靠场景归属时失败关闭。"""
+    """返回完整人员列表和全局汇总；具体场景的申诉指标按字段失败关闭。"""
     if scene not in {SCENE_ALL, "running", "final"}:
         raise StaffWorkAnalysisInvalid("scene 无效")
     try:
@@ -195,19 +210,22 @@ def get_staff_work_analysis(
         "summary": None,
         "staff": None,
         "unavailable_reason": None,
+        "unavailable_metrics": {},
     }
     if scene != SCENE_ALL:
-        data["unavailable_reason"] = SCENE_NOT_ATTRIBUTABLE
-        return data
+        data["unavailable_metrics"] = dict.fromkeys(
+            APPEAL_COUNT_FIELDS, SCENE_NOT_ATTRIBUTABLE,
+        )
     if SessionLocal is None:
         raise StaffWorkAnalysisUnavailable("数据库会话不可用")
     try:
         with SessionLocal() as session:
             staff: dict[str, dict[str, Any]] = {}
-            global_case_count = _record_counts(session, window, staff)
-            _manual_create_counts(session, window, staff)
-            _manual_review_counts(session, window, staff)
-            _appeal_counts(session, window, staff)
+            global_case_count = _record_counts(session, window, staff, scene)
+            _manual_create_counts(session, window, staff, scene)
+            _manual_review_counts(session, window, staff, scene)
+            if scene == SCENE_ALL:
+                _appeal_counts(session, window, staff)
             names = _display_names(session, set(staff))
     except SQLAlchemyError as exc:
         raise StaffWorkAnalysisUnavailable("质控员工作分析读取失败") from exc
@@ -216,10 +234,15 @@ def get_staff_work_analysis(
     rank = 0
     for index, row in enumerate(ordered, start=1):
         row["name"] = names.get(row["user_id"])
+        if scene != SCENE_ALL:
+            for field in APPEAL_COUNT_FIELDS:
+                row[field] = None
         if row["record_review_count"] != prior_count:
             rank = index
             prior_count = row["record_review_count"]
         row["rank"] = rank
     data["staff"] = ordered
-    data["summary"] = _summary(ordered, global_case_count)
+    data["summary"] = _summary(
+        ordered, global_case_count, appeals_attributable=scene == SCENE_ALL,
+    )
     return data

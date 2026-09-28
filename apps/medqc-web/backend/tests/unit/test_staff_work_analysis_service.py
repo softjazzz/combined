@@ -25,7 +25,7 @@ def event_time(minutes: int) -> datetime:
 
 def review(
     key: str, actor: str, minutes: int, *, institute: str = "A", patient: str = "P",
-    visit: str = "V", stage: str = "initial",
+    visit: str = "V", stage: str = "initial", scene: str | None = None,
 ) -> dict:
     return {
         "id": key, "request_id": f"req-{key}", "institute_id": institute,
@@ -33,16 +33,19 @@ def review(
         "job_id": f"job-{key}", "envelope_id": f"env-{key}", "task_id": "t",
         "task_record_id": "tr", "run_number": 1, "stage": stage, "decision": "approved",
         "reviewer_id": actor, "created_at": event_time(minutes), "review_context": "task",
+        "scene": scene,
     }
 
 
-def defect(key: str, creator: str, *, source: str = "task_assigned_qc") -> dict:
+def defect(
+    key: str, creator: str, *, source: str = "task_assigned_qc", scene: str | None = None,
+) -> dict:
     return {
         "id": key, "record_id": "tr", "identity_version": 1, "source_key": source,
         "institute_id": "A", "patient_id": "P", "visit_id": "V",
         "rule_name": "合成规则", "description": "合成缺陷", "severity": "warning",
         "status": "pending", "origin": "manual", "manual_review_status": "approved",
-        "manual_created_by": creator, "deduct_score": 0,
+        "manual_created_by": creator, "scene": scene, "deduct_score": 0,
         "created_at": event_time(0), "updated_at": event_time(0),
     }
 
@@ -77,6 +80,10 @@ def db(monkeypatch):
 
 def report() -> dict:
     return service.get_staff_work_analysis(period="this_week", now=NOW)
+
+
+def scene_report(scene: str) -> dict:
+    return service.get_staff_work_analysis(period="this_week", scene=scene, now=NOW)
 
 
 def test_counts_events_by_actor_and_occurrence_time_with_distinct_case_identity(db):
@@ -125,6 +132,7 @@ def test_counts_events_by_actor_and_occurrence_time_with_distinct_case_identity(
     assert data["summary"]["record_reviewer_count"] == 2
     assert data["summary"]["avg_record_reviews_per_active_staff"] == 0.8
     assert data["summary"]["avg_reviewed_cases_per_reviewer"] == 1.5
+    assert data["unavailable_metrics"] == {}
 
 
 def test_more_than_ten_staff_are_not_truncated_before_summary(db):
@@ -152,13 +160,80 @@ def test_bad_manual_create_actor_fails_closed(db):
         report()
 
 
-def test_scene_without_authoritative_attribution_skips_database(monkeypatch):
+def test_scene_requires_database_and_unknown_scene_is_rejected(monkeypatch):
     monkeypatch.setattr(service, "SessionLocal", None)
-    data = service.get_staff_work_analysis(period="this_week", scene="running", now=NOW)
-    assert data["summary"] is None and data["staff"] is None
-    assert data["unavailable_reason"] == "scene_not_attributable"
+    with pytest.raises(service.StaffWorkAnalysisUnavailable):
+        service.get_staff_work_analysis(period="this_week", scene="running", now=NOW)
     with pytest.raises(service.StaffWorkAnalysisInvalid):
         service.get_staff_work_analysis(period="this_week", scene="unknown", now=NOW)
+
+
+def test_scene_filters_attributable_events_and_marks_only_appeals_unknown(db):
+    with db.begin() as session:
+        session.execute(QCRecordReview.__table__.insert(), [
+            review("run-initial", "run-reviewer", 1, scene="running"),
+            review(
+                "run-recheck", "run-reviewer", 2, stage="recheck", scene="running",
+            ),
+            review("final-review", "final-reviewer", 3, scene="final"),
+            review("historic-review", "historic-reviewer", 4, scene=None),
+        ])
+        session.execute(QCDefect.__table__.insert(), [
+            defect("run-defect", "run-creator", scene="running"),
+            defect("final-defect", "final-creator", scene="final"),
+            defect("historic-defect", "historic-creator", scene=None),
+        ])
+        session.execute(QCDefectHistory.__table__.insert(), [
+            history("run-create", "run-defect", "manual_create", "run-creator", 5),
+            history(
+                "run-reject", "run-defect", "manual_review_rejected", "run-approver", 6,
+            ),
+            history("final-create", "final-defect", "manual_create", "final-creator", 7),
+            history(
+                "final-approve", "final-defect", "manual_review_approved", "final-approver", 8,
+            ),
+            history(
+                "historic-create", "historic-defect", "manual_create", "historic-creator", 9,
+            ),
+        ])
+        session.execute(QCAppealReview.__table__.insert(), [
+            appeal("scene-unknown", "appeal-only", "approve", 10),
+        ])
+
+    data = scene_report("running")
+    rows = {row["user_id"]: row for row in data["staff"]}
+    assert set(rows) == {"run-reviewer", "run-creator", "run-approver"}
+    assert data["summary"]["active_staff_count"] == 3
+    assert data["summary"]["record_reviewer_count"] == 1
+    assert data["summary"]["record_review_count"] == 2
+    assert data["summary"]["reviewed_case_count"] == 1
+    assert data["summary"]["avg_record_reviews_per_active_staff"] == 0.67
+    assert data["summary"]["avg_reviewed_cases_per_reviewer"] == 1
+    assert data["summary"]["manual_defect_created_count"] == 1
+    assert data["summary"]["manual_review_rejected_count"] == 1
+    assert data["summary"]["appeal_approved_count"] is None
+    assert data["summary"]["appeal_rejected_count"] is None
+    assert all(row["appeal_approved_count"] is None for row in rows.values())
+    assert all(row["appeal_rejected_count"] is None for row in rows.values())
+    assert data["unavailable_metrics"] == {
+        "appeal_approved_count": "scene_not_attributable",
+        "appeal_rejected_count": "scene_not_attributable",
+    }
+    assert data["unavailable_reason"] is None
+
+    final_data = scene_report("final")
+    final_rows = {row["user_id"]: row for row in final_data["staff"]}
+    assert set(final_rows) == {"final-reviewer", "final-creator", "final-approver"}
+    assert final_data["summary"]["record_review_count"] == 1
+    assert final_data["summary"]["manual_defect_created_count"] == 1
+    assert final_data["summary"]["manual_review_approved_count"] == 1
+    assert final_data["summary"]["appeal_approved_count"] is None
+    assert final_data["unavailable_metrics"] == data["unavailable_metrics"]
+
+    all_data = report()
+    assert all_data["summary"]["appeal_approved_count"] == 1
+    assert "appeal-only" in {row["user_id"] for row in all_data["staff"]}
+    assert "historic-reviewer" in {row["user_id"] for row in all_data["staff"]}
 
 
 def test_empty_and_source_error_are_distinct(db):
