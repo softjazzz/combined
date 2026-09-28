@@ -26,6 +26,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from ..database.connection import SessionLocal
 from ..database.models.qc import QCRecordReview, QCTask, QCTaskQCRun, QCTaskRecord
+from .case_identity import CaseRef
 from .luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY
 from .task_qc_run_service import (
     TaskQCRunConflict,
@@ -801,6 +802,87 @@ def _submit_case(
     return {**response, "state": response["decision"], "idempotent": False}
 
 
+def resolve_workspace_result_reference(
+    *, institute_id: str, patient_id: str, visit_id: str,
+    expected_job_id: str, expected_envelope_id: str,
+    workspace_factory: Callable[[], Any] | None = None,
+    session: Any | None = None,
+) -> dict[str, Any]:
+    """只读解析当前 workspace 结果引用，不授予权限或保证创建原子性。
+
+    返回的是调用时的当前候选。``session`` 仅让 Envelope 存在性、三坐标、
+    job、规则版本与场景在调用方事务内再次核实；当前 DTO
+    读取器仍自行管理会话，因此本函数不能单独充当后续创建写入的 TOCTOU 守卫。
+    它不阻止并发新结果成为 latest；后续创建必须另行明确最新/历史结果政策。
+    """
+    identity = _require_identity(institute_id, patient_id, visit_id)
+    if (
+        not isinstance(expected_job_id, str) or not expected_job_id.strip()
+        or len(expected_job_id.strip()) > 36
+        or not isinstance(expected_envelope_id, str) or not expected_envelope_id.strip()
+        or len(expected_envelope_id.strip()) > 36
+    ):
+        raise RecordReviewInvalid("结果引用无效")
+    if session is None:
+        _require_session()
+    dto = _read_case_dto(identity, workspace_factory or _default_workspace_factory)
+    anchor, reason_code = _case_anchor(dto)
+    if anchor is None:
+        if reason_code == "unsupported_rule_set":
+            raise RecordReviewConflict("unsupported_rule_set", "当前规则集不支持申诉来源解析")
+        raise RecordReviewConflict("result_unavailable", "当前病历没有可引用的最新质控结果")
+    if (
+        anchor.job_id != expected_job_id.strip()
+        or anchor.envelope_id != expected_envelope_id.strip()
+    ):
+        raise RecordReviewConflict("result_changed", "质控结果已更新，请刷新后重试")
+    from .qc_workspace.canonical_result_store import customer_safe_projection_key, keyed_ref
+
+    try:
+        expected_record_ref = keyed_ref(
+            "rec", CaseRef(*identity).as_key(), hmac_key=customer_safe_projection_key(),
+        )
+    except RuntimeError as exc:
+        raise RecordReviewUnavailable("质控结果引用暂不可用") from exc
+    if str(dto.get("record_ref") or "").strip() != expected_record_ref:
+        raise RecordReviewConflict("result_unavailable", "质控结果病例引用不一致")
+    raw_items = dto.get("items") if isinstance(dto, dict) else None
+    if not isinstance(raw_items, list):
+        raise RecordReviewConflict("result_unavailable", "质控结果条目不可用")
+
+    def build(active_session: Any) -> dict[str, Any]:
+        envelope_ids = _envelope_ids(
+            active_session, job_id=anchor.job_id, identity=identity,
+            rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+            rule_set_version=anchor.rule_set_version,
+        )
+        if len(envelope_ids) != 1:
+            raise RecordReviewConflict(
+                "result_unavailable",
+                "质控结果对象缺失" if not envelope_ids else "质控结果对象不唯一",
+            )
+        if envelope_ids[0] != anchor.envelope_id:
+            raise RecordReviewConflict("result_changed", "质控结果已更新，请刷新后重试")
+        return {
+            "institute_id": identity[0], "patient_id": identity[1], "visit_id": identity[2],
+            "scene": _workspace_review_scene(
+                active_session, job_id=anchor.job_id, identity=identity,
+            ),
+            "root_job_id": anchor.job_id, "envelope_id": anchor.envelope_id,
+            "rule_set_key": LUXIAN_0609_RULE_SET_KEY,
+            "rule_set_version": anchor.rule_set_version,
+            "items": [dict(item) if isinstance(item, dict) else item for item in raw_items],
+        }
+
+    try:
+        if session is not None:
+            return build(session)
+        with SessionLocal() as read_session:
+            return build(read_session)
+    except SQLAlchemyError as exc:
+        raise RecordReviewUnavailable("质控结果引用暂不可用") from exc
+
+
 def _batch_anchors(results: Iterable[Any]) -> dict[tuple[str, str, str], tuple[str, str]]:
     """批量锚点校验：锚点不完整或规则集非 LX0609 的病例直接跳过。"""
     anchors: dict[tuple[str, str, str], tuple[str, str]] = {}
@@ -1105,6 +1187,7 @@ __all__ = [
     "get_case_review",
     "get_record_review",
     "list_my_record_review_todos",
+    "resolve_workspace_result_reference",
     "submit_case_review",
     "submit_record_review",
 ]

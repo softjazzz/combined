@@ -807,3 +807,16 @@
 - 四层：只完成本批代码与合成测试；无隔离PG写入/迁移，业务库未部署，无真实病例及登录后浏览器验收。依赖已有迁移68；未新增迁移或整改质控引擎。20完整/35部分/25未实现、Goal4/10保持不变。
 - 下一批申诉设计必须先核实现代缺陷/结果来源及调用人对象授权，不能从legacy record_id推定三坐标或scene；也不能假定任务人工缺陷都有旧qc_result_id。61科室精确引用已向用户询问机构ID＋名称方案，未据此猜测业务口径。
 - 最终门禁：前端6文件59项全部通过，只读全量ESLint、相关Ruff、26个暂存文本编码及diff-check通过；已核对暂存清单。全量Vitest未重跑，不以聚焦结果冒充全量；未推送。
+
+## 98. 第九十一批：现代申诉可信来源解析
+
+- 接续`15bdcdd44`，五个Sol 5.6 medium代理核对并分工workspace来源、人工来源、独立反例、只读复核和评分引用审计；主协调复查真实调用链、原模型及关键diff。不重写引擎，不开放尚未授权的创建入口。
+- 纠正初始候选方案：现代workspace结果owner是Canonical Envelope，不是QCResultBiz；自动缺陷以envelope+唯一rule_id定位，评分以同一envelope及后续标准快照定位。没有为复用旧申诉模型而修改首页/编码/结算所有保存链。
+- 新workspace解析器复用record_review_service的ready/anchor/scene校验，核对三坐标HMAC record_ref、预期job/envelope及调用方session内精确Envelope。自动缺陷只搬运客户投影is_confirmed_issue，不在后续层重判；score仅返回引用和客户items，尚不计算或保存申诉快照。
+- 新人工解析器以defect_id及唯一manual_create历史追溯原task/run/job/冻结scene，不要求旧result_id，不用当前受领人或最新job改写历史。调用方session可FOR SHARE锁定来源；复用CanonicalResultStore公共parser验证schema/delivery/record_id与唯一Envelope，不解释items业务状态。
+- 事务边界明确：workspace DTO选择器仍自持会话；传session只复核精确引用，不保证持续最新性，不等于授权，也不解决未来创建全过程的TOCTOU。当前未写任何申诉，不虚称原子创建已完成。
+- 授权核对发现SysUser无机构绑定，department可由本人修改，不能当跨院申诉写授权。已询问用户科室全部/主管病例、场景科室时点、人工缺陷可申诉状态；未答复前不猜政策。61的机构化科室引用问题也保持待答。
+- 05复核撤销额外“workspace必须先受领”的推断：原PRD允许依既有REVIEW权限实现共享审核池；仍须同一对象范围、三场景和个人/共享去重，不因此提升05完整。长期结论见workspace-review-todo-contract-audit；评分版本引用见appeal-score-reference-audit。
+- 主协调5文件后端组合121项通过（包括原审核服务与API），相关6文件Ruff和只读全量ESLint通过。只有Python/文档变更，本批不重复前端类型/单元全套；上批聚焦59项不冒充本批新增验证。编码和暂存清单作为最终提交门禁。
+- 四层：仅代码前置能力和合成SQLite/假workspace验证；没有新迁移、隔离PG写入、业务部署或真实病例浏览器验收。04/51仍部分；20完整/35部分/25未实现，Goal仍4/10。
+- 最终门禁：12个暂存文本编码通过，暂存diff-check修复文档末尾空行后通过；已核对清单，仅本批源码、测试与长期结论，未推送。
