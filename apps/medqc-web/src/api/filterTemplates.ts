@@ -10,7 +10,10 @@ import { ApiService } from '@/services/apiService'
 import { extractApiErrorMessageFromError, normalizeApiSuccess } from '@/utils/api-envelope'
 import type { RecordLatestReviewState } from '@/views/workstation-v4/types'
 
-export type FilterTemplatePageKey = 'v5_records_inpatient' | 'v5_records_discharged'
+export type FilterTemplatePageKey =
+  | 'v5_records_inpatient'
+  | 'v5_records_discharged'
+  | 'v5_records_outpatient_emergency'
 export type FilterTemplateDateField = 'visit' | 'admission' | 'discharge' | 'updated'
 export type FilterTemplateInpatientSort = 'default' | 'longest' | 'recent'
 export type FilterTemplateConflictCode = 'name_conflict' | 'limit_reached' | 'version_conflict'

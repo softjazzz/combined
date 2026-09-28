@@ -15,6 +15,7 @@ from app.services import filter_template_service as service
 
 BASE = "/api/v1/filter-templates"
 INPATIENT = "v5_records_inpatient"
+OUTPATIENT = "v5_records_outpatient_emergency"
 
 
 @pytest.fixture
@@ -65,6 +66,36 @@ def test_create_list_update_delete_flow(sessions):
     assert stale_delete.status_code == 409 and stale_delete.json()["detail"]["code"] == "version_conflict"
     deleted = http.delete(f"{BASE}/{item['id']}", params={"version": 2})
     assert deleted.status_code == 200 and deleted.json()["data"] == {"id": item["id"], "deleted": True}
+
+
+def test_outpatient_page_key_uses_same_user_isolated_contract(sessions):
+    http = client()
+    created = http.post(BASE, json={
+        "page_key": OUTPATIENT,
+        "name": "门急诊常用",
+        "filters": {"dept": "急诊科", "date_field": "visit"},
+    })
+    assert created.status_code == 200
+    assert created.json()["data"]["page_key"] == OUTPATIENT
+    listed = http.get(BASE, params={"page_key": OUTPATIENT})
+    assert listed.status_code == 200
+    assert listed.json()["data"]["items"][0]["filters"] == {
+        "dept": "急诊科", "date_field": "visit",
+    }
+    assert http.get(BASE, params={"page_key": INPATIENT}).json()["data"]["items"] == []
+
+
+@pytest.mark.parametrize("filters", [
+    {},
+    {"date_field": "updated"},
+    {"date_field": "visit", "doctor": "张医生"},
+    {"date_field": "visit", "end_date": "2026-09-02"},
+])
+def test_outpatient_rejects_filters_not_supported_by_page(sessions, filters):
+    response = client().post(BASE, json={
+        "page_key": OUTPATIENT, "name": "x", "filters": filters,
+    })
+    assert response.status_code == 422
 
 
 def test_name_conflict_and_limit_reached_are_409_with_code(sessions):

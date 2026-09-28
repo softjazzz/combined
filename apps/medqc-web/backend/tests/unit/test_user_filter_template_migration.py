@@ -332,6 +332,13 @@ def test_model_matches_migration_contract():
     from app.database.models.qc import QCUserFilterTemplate
 
     module = migration()
+    outpatient_module_path = (
+        Path(__file__).resolve().parents[2]
+        / "alembic/versions/20260927_000063_outpatient_filter_templates.py"
+    )
+    spec = importlib.util.spec_from_file_location("outpatient_filter_template_migration", outpatient_module_path)
+    outpatient_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(outpatient_module)
     table = QCUserFilterTemplate.__table__
     assert table.name == module.TABLE
     assert set(table.c.keys()) == set(module.COLUMNS)
@@ -346,7 +353,11 @@ def test_model_matches_migration_contract():
         item.name: module.normalized_check(str(item.sqltext))
         for item in table.constraints if isinstance(item, sa.CheckConstraint)
     }
-    assert checks == {name: module.normalized_check(sql) for name, sql in module.CHECKS.items()}
+    expected_checks = {name: module.normalized_check(sql) for name, sql in module.CHECKS.items()}
+    expected_checks[outpatient_module.CHECK_NAME] = module.normalized_check(
+        outpatient_module.check_sql(outpatient_module.NEW_PAGE_KEYS)
+    )
+    assert checks == expected_checks
     uniques = {
         item.name: [column.name for column in item.columns]
         for item in table.constraints if isinstance(item, sa.UniqueConstraint)
@@ -377,6 +388,9 @@ def test_model_partial_unique_index_allows_one_default_per_owner_page_in_sqlite(
         connection.execute(table.insert().values(**row("b", "B", False)))
         connection.execute(table.insert().values(**row("c", "C", False)))
         connection.execute(table.insert().values(**row("d", "D", True, page_key="v5_records_discharged")))
+        connection.execute(table.insert().values(**row(
+            "outpatient", "门急诊", True, page_key="v5_records_outpatient_emergency",
+        )))
         connection.execute(table.insert().values(**row("e", "A", True, owner="u-2")))
     with pytest.raises(sa.exc.IntegrityError):
         with engine.begin() as connection:

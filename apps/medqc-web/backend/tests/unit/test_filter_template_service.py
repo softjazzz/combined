@@ -13,6 +13,7 @@ from app.services import filter_template_service as service
 
 INPATIENT = "v5_records_inpatient"
 DISCHARGED = "v5_records_discharged"
+OUTPATIENT = "v5_records_outpatient_emergency"
 
 
 @pytest.fixture
@@ -116,7 +117,38 @@ def test_duplicate_name_conflict_scoped_to_owner_and_page(sessions):
         _create(" 常用 ")
     assert caught.value.code == "name_conflict"
     _create("常用", page_key=DISCHARGED)
+    _create("常用", page_key=OUTPATIENT, filters={"date_field": "visit"})
     _create("常用", owner="u-2")
+
+
+def test_outpatient_page_key_is_isolated_and_preserves_visit_filters(sessions):
+    item = _create(
+        "门急诊常用",
+        page_key=OUTPATIENT,
+        filters={
+            "keyword": " 张三 ", "dept": "急诊科",
+            "start_date": "2026-09-01", "end_date": "2026-09-02",
+            "date_field": "visit",
+        },
+    )
+    assert item["filters"] == {
+        "keyword": "张三", "dept": "急诊科",
+        "start_date": "2026-09-01", "end_date": "2026-09-02",
+        "date_field": "visit",
+    }
+    assert service.list_templates(owner_id="u-1", page_key=OUTPATIENT)["items"][0]["id"] == item["id"]
+    assert service.list_templates(owner_id="u-1", page_key=INPATIENT)["items"] == []
+
+
+@pytest.mark.parametrize("filters", [
+    {},
+    {"date_field": "discharge"},
+    {"date_field": "visit", "review_state": ["pending_review"]},
+    {"date_field": "visit", "start_date": "2026-09-01"},
+])
+def test_outpatient_rejects_filters_outside_real_query_contract(sessions, filters):
+    with pytest.raises(service.FilterTemplateInvalid):
+        _create("门急诊", page_key=OUTPATIENT, filters=filters)
 
 
 def test_limit_reached_per_owner_and_page(sessions):

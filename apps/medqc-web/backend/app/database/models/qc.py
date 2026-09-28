@@ -723,7 +723,8 @@ class QCUserFilterTemplate(Base):
         PrimaryKeyConstraint("id", name="pk_qc_user_filter_templates"),
         UniqueConstraint("owner_id", "page_key", "name", name="uq_qc_user_filter_templates_name"),
         CheckConstraint(
-            "page_key IN ('v5_records_inpatient', 'v5_records_discharged')",
+            "page_key IN ('v5_records_inpatient', 'v5_records_discharged', "
+            "'v5_records_outpatient_emergency')",
             name="ck_qc_user_filter_templates_page_key",
         ),
         CheckConstraint(

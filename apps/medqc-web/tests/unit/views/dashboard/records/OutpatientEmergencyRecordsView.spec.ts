@@ -40,6 +40,7 @@ vi.mock('@ant-design/icons-vue', () => ({
 }))
 
 import OutpatientEmergencyRecordsView from '@/views/dashboard/records/OutpatientEmergencyRecordsView.vue'
+import OutpatientFilterTemplateBar from '@/views/dashboard/records/OutpatientFilterTemplateBar.vue'
 
 const ButtonStub = defineComponent({
   name: 'AButton',
@@ -147,6 +148,36 @@ describe('OutpatientEmergencyRecordsView 列表故障语义', () => {
     expect(wrapper.text().match(/暂不可用/g)).toHaveLength(4)
   })
 
+  it('把当前真实查询条件交给门急诊模板，并用一次查询应用模板', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    const templateBar = wrapper.getComponent(OutpatientFilterTemplateBar)
+    expect(templateBar.props('currentFilters')).toEqual({
+      keyword: undefined,
+      department: undefined,
+      start_date: undefined,
+      end_date: undefined,
+    })
+
+    mocks.getOutpatientEmergencyRecordList.mockClear()
+    templateBar.vm.$emit('apply', {
+      keyword: '张三',
+      department: '急诊科',
+      start_date: '2026-09-01',
+      end_date: '2026-09-02',
+    })
+    await flushPromises()
+
+    expect(mocks.getOutpatientEmergencyRecordList).toHaveBeenCalledTimes(1)
+    expect(mocks.getOutpatientEmergencyRecordList).toHaveBeenCalledWith(expect.objectContaining({
+      keyword: '张三',
+      department: '急诊科',
+      start_date: '2026-09-01',
+      end_date: '2026-09-02',
+      page: 1,
+    }))
+  })
+
   it('首指标使用当前筛选列表总数，加载与失败不显示假零', async () => {
     const pendingRequest = deferred<{
       success: boolean
@@ -211,16 +242,16 @@ describe('OutpatientEmergencyRecordsView 列表故障语义', () => {
     )
   })
 
-  it('晚到的旧失败不覆盖较新成功，旧请求也不提前结束加载态', async () => {
+  it('默认模板触发的新查询不会被初始未筛选请求的迟到失败覆盖', async () => {
     const oldRequest = deferred<{ success: false; message: string }>()
     const newRequest = deferred<ReturnType<typeof successWith>>()
     mocks.getOutpatientEmergencyRecordList
       .mockReturnValueOnce(oldRequest.promise)
       .mockReturnValueOnce(newRequest.promise)
     const wrapper = mountView()
-    const vm = wrapper.vm as unknown as { fetchRecords: () => Promise<void> }
 
-    void vm.fetchRecords()
+    wrapper.getComponent(OutpatientFilterTemplateBar).vm.$emit('apply', { keyword: '默认模板' })
+    await nextTick()
     oldRequest.resolve({ success: false, message: '旧请求失败' })
     await flushPromises()
 

@@ -20,7 +20,11 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from ..database.connection import SessionLocal
 from ..database.models.qc import QCUserFilterTemplate
 
-PAGE_KEYS = frozenset({"v5_records_inpatient", "v5_records_discharged"})
+PAGE_KEYS = frozenset({
+    "v5_records_inpatient",
+    "v5_records_discharged",
+    "v5_records_outpatient_emergency",
+})
 MAX_TEMPLATES_PER_PAGE = 20
 MAX_NAME_LENGTH = 50
 MAX_OWNER_ID_LENGTH = 64
@@ -34,6 +38,8 @@ _ENUM_FILTERS = {
     "inpatient_sort": frozenset({"default", "longest", "recent"}),
 }
 FILTER_KEYS = frozenset({*_TEXT_FILTER_KEYS, *_DATE_FILTER_KEYS, *_ENUM_FILTERS, "review_state"})
+OUTPATIENT_PAGE_KEY = "v5_records_outpatient_emergency"
+OUTPATIENT_FILTER_KEYS = frozenset({"dept", "keyword", "start_date", "end_date", "date_field"})
 
 _TABLE = QCUserFilterTemplate.__table__
 
@@ -115,7 +121,7 @@ def _iso_date(key: str, value: Any) -> str:
         raise FilterTemplateInvalid(f"筛选项 {key} 必须是 YYYY-MM-DD 日期") from None
 
 
-def validate_filters(filters: Any) -> dict[str, Any]:
+def validate_filters(filters: Any, *, page_key: str | None = None) -> dict[str, Any]:
     """逐键校验筛选条件；未知键或非法值抛 FilterTemplateInvalid。
 
     None 与空字符串/空数组视为“未设置”，不写入模板；返回规范化后的新字典。
@@ -125,6 +131,12 @@ def validate_filters(filters: Any) -> dict[str, Any]:
     unknown = sorted(str(key) for key in filters if key not in FILTER_KEYS)
     if unknown:
         raise FilterTemplateInvalid(f"filters 含不支持的键：{', '.join(unknown)}")
+    if page_key == OUTPATIENT_PAGE_KEY:
+        unsupported = sorted(str(key) for key in filters if key not in OUTPATIENT_FILTER_KEYS)
+        if unsupported:
+            raise FilterTemplateInvalid(f"门急诊筛选模板含不支持的键：{', '.join(unsupported)}")
+        if filters.get("date_field") != "visit":
+            raise FilterTemplateInvalid("门急诊筛选模板 date_field 必须为 visit")
     normalized: dict[str, Any] = {}
     for key, value in filters.items():
         if value is None:
@@ -157,6 +169,10 @@ def validate_filters(filters: Any) -> dict[str, Any]:
         and normalized["start_date"] > normalized["end_date"]
     ):
         raise FilterTemplateInvalid("开始日期不能晚于结束日期")
+    if page_key == OUTPATIENT_PAGE_KEY and (
+        ("start_date" in normalized) != ("end_date" in normalized)
+    ):
+        raise FilterTemplateInvalid("门急诊筛选模板开始日期与结束日期必须同时设置")
     return normalized
 
 
@@ -164,10 +180,10 @@ def _dump_filters(filters: dict[str, Any]) -> str:
     return json.dumps(filters, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
-def _load_filters(raw: Any) -> dict[str, Any] | None:
+def _load_filters(raw: Any, *, page_key: str) -> dict[str, Any] | None:
     """读出时再按白名单校验；损坏或越界的存量内容返回 None（前端显示为不可用），不伪造空筛选。"""
     try:
-        return validate_filters(json.loads(raw))
+        return validate_filters(json.loads(raw), page_key=page_key)
     except (TypeError, ValueError):
         return None
 
@@ -177,7 +193,7 @@ def _item(row: Any) -> dict[str, Any]:
         "id": row.id,
         "page_key": row.page_key,
         "name": row.name,
-        "filters": _load_filters(row.filters_json),
+        "filters": _load_filters(row.filters_json, page_key=row.page_key),
         "is_default": bool(row.is_default),
         "version": int(row.version),
         "created_at": row.created_at,
@@ -281,7 +297,7 @@ def create_template(
     owner_id = _owner(owner_id)
     page_key = _page_key(page_key)
     name = _name(name)
-    filters_json = _dump_filters(validate_filters(filters))
+    filters_json = _dump_filters(validate_filters(filters, page_key=page_key))
     if type(is_default) is not bool:
         raise FilterTemplateInvalid("is_default 必须是布尔值")
     factory = _require_session_factory()
@@ -328,13 +344,11 @@ def update_template(
     changes: dict[str, Any] = {}
     if name is not None:
         changes["name"] = _name(name)
-    if filters is not None:
-        changes["filters_json"] = _dump_filters(validate_filters(filters))
     if is_default is not None:
         if type(is_default) is not bool:
             raise FilterTemplateInvalid("is_default 必须是布尔值")
         changes["is_default"] = is_default
-    if not changes:
+    if not changes and filters is None:
         raise FilterTemplateInvalid("没有需要更新的字段")
     factory = _require_session_factory()
     try:
@@ -344,6 +358,10 @@ def update_template(
                 if current is None:
                     raise FilterTemplateNotFound("筛选模板不存在")
                 page_key = current.page_key
+                if filters is not None:
+                    changes["filters_json"] = _dump_filters(
+                        validate_filters(filters, page_key=page_key)
+                    )
                 _lock_owner_page(session, owner_id, page_key)
                 current = session.execute(
                     select(_TABLE.c.id, _TABLE.c.version)

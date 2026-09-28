@@ -58,6 +58,13 @@ describe('筛选模板 API', () => {
       success: true,
       data: [template],
     })
+    vi.mocked(ApiService.requestRaw).mockResolvedValueOnce(response({ items: [template] }))
+    await listFilterTemplates('v5_records_outpatient_emergency')
+    expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
+      method: 'GET',
+      url: '/api/v1/filter-templates',
+      params: { page_key: 'v5_records_outpatient_emergency' },
+    })
   })
 
   it('GET 返回无法识别的形状或 503 时视为失败，不伪造空列表', async () => {

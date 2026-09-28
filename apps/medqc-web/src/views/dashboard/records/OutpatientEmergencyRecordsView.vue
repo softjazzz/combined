@@ -86,9 +86,15 @@
             class="!rounded-xl !border-slate-200"
             @click="resetFilters"
           >
-            重置
+            清空条件
           </a-button>
         </div>
+
+        <OutpatientFilterTemplateBar
+          :current-filters="currentTemplateFilters"
+          :disabled="loading"
+          @apply="applyTemplateFilters"
+        />
 
         <div class="outpatient-toolbar-row flex items-center gap-2">
           <a-button
@@ -265,10 +271,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import type { TableColumnsType, TableProps } from 'ant-design-vue'
-import type { Dayjs } from 'dayjs'
+import dayjs, { type Dayjs } from 'dayjs'
 import { ReloadOutlined, SearchOutlined } from '@ant-design/icons-vue'
 import {
   getDepartmentList,
@@ -277,6 +283,9 @@ import {
   type AdminRecordItem,
 } from '@/api/qcAdmin'
 import OutpatientEmergencyDetailDrawer from './OutpatientEmergencyDetailDrawer.vue'
+import OutpatientFilterTemplateBar, {
+  type OutpatientFilterSnapshot,
+} from './OutpatientFilterTemplateBar.vue'
 
 const loading = ref(false)
 const listError = ref('')
@@ -285,6 +294,7 @@ const searchKeyword = ref('')
 const selectedDepartment = ref<string | undefined>(undefined)
 type DateRange = [Dayjs, Dayjs] | null
 const dateRange = ref<DateRange>(null)
+let suppressAutomaticFetch = false
 const records = ref<AdminRecordItem[]>([])
 const departmentOptions = ref<Array<{ value: string; label: string }>>([])
 const selectedRowKeys = ref<string[]>([])
@@ -327,6 +337,13 @@ const currentRecordTotal = computed(() => {
   if (listError.value) return '不可用'
   return pagination.value.total.toLocaleString()
 })
+
+const currentTemplateFilters = computed<OutpatientFilterSnapshot>(() => ({
+  keyword: searchKeyword.value || undefined,
+  department: selectedDepartment.value,
+  start_date: dateRange.value?.[0]?.format('YYYY-MM-DD'),
+  end_date: dateRange.value?.[1]?.format('YYYY-MM-DD'),
+}))
 
 const columns: TableColumnsType<AdminRecordItem> = [
   { title: '病历号', dataIndex: 'record_id', key: 'recordNumber', width: 140 },
@@ -393,13 +410,23 @@ const handleSearch = () => {
   fetchRecords()
 }
 
-const resetFilters = () => {
-  searchKeyword.value = ''
-  selectedDepartment.value = undefined
-  dateRange.value = null
+const applyTemplateFilters = async (filters: OutpatientFilterSnapshot) => {
+  suppressAutomaticFetch = true
+  searchKeyword.value = filters.keyword || ''
+  selectedDepartment.value = filters.department || undefined
+  dateRange.value =
+    filters.start_date && filters.end_date
+      ? [dayjs(filters.start_date), dayjs(filters.end_date)]
+      : null
   pagination.value.current = 1
   selectedRowKeys.value = []
+  await nextTick()
+  suppressAutomaticFetch = false
   fetchRecords()
+}
+
+const resetFilters = () => {
+  void applyTemplateFilters({})
 }
 
 const handleRefresh = () => {
@@ -475,6 +502,7 @@ const handleTableChange = (pag: { current?: number; pageSize?: number }) => {
 }
 
 watch([selectedDepartment, dateRange], () => {
+  if (suppressAutomaticFetch) return
   pagination.value.current = 1
   fetchRecords()
 })
@@ -482,6 +510,11 @@ watch([selectedDepartment, dateRange], () => {
 onMounted(() => {
   loadDepartments()
   fetchRecords()
+})
+
+onBeforeUnmount(() => {
+  recordListRequestSequence += 1
+  detailRequestSequence += 1
 })
 </script>
 

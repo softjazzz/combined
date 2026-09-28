@@ -35,7 +35,11 @@ logger = logging.getLogger(__name__)
 
 _UNAVAILABLE_DETAIL = "筛选模板服务暂不可用，请稍后重试"
 
-PageKey = Literal["v5_records_inpatient", "v5_records_discharged"]
+PageKey = Literal[
+    "v5_records_inpatient",
+    "v5_records_discharged",
+    "v5_records_outpatient_emergency",
+]
 
 
 class FilterTemplateCreateRequest(BaseModel):
