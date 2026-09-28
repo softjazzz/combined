@@ -40,7 +40,7 @@ describe('PerformanceBoard', () => {
     const record = wrapper.get('[data-testid="perf-section-record"]')
     expect(record.text()).toContain('赵审核')
     expect(record.text()).toContain('9')
-    expect(record.text()).toContain('初审 7 / 复审 2')
+    expect(record.text()).toContain('初审病历 7 / 复审病历 2')
     expect(wrapper.get('[data-testid="perf-range"]').text()).toContain('2026-09-21 00:00 ~ 2026-09-27 15:30')
   })
 
@@ -49,6 +49,21 @@ describe('PerformanceBoard', () => {
     expect(wrapper.findAll('[data-testid="perf-empty"]')).toHaveLength(2)
     expect(wrapper.text()).toContain('本期暂无')
     expect(wrapper.find('[data-testid="perf-item"]').exists()).toBe(false)
+  })
+
+  it('同一病历初审复审重叠时保留服务端总数，缺陷不可用不影响病历排名', () => {
+    const wrapper = mountBoard({ data: {
+      ...baseData,
+      scene: 'running',
+      defect_ranking: null,
+      record_ranking: [{ user_id: 'r1', name: '赵审核', count: 1, initial_count: 1, recheck_count: 1, rank: 1 }],
+      unavailable_reason: 'scene_not_attributable',
+    } })
+    const record = wrapper.get('[data-testid="perf-section-record"]')
+    expect(record.get('.rank-value').text()).toBe('1份')
+    expect(record.text()).toContain('初审病历 1 / 复审病历 1')
+    expect(record.find('[data-testid="perf-unavailable"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="perf-section-defect"] [data-testid="perf-unavailable"]').exists()).toBe(true)
   })
 
   it('场景不可归属时显示“该场景暂不支持”', () => {

@@ -61,6 +61,7 @@ import AllTasksView from '@/views/dashboard/tasks/AllTasksView.vue'
 import TaskAssignmentResult from '@/components/qc/TaskAssignmentResult.vue'
 import TaskAnalysisDrawer from '@/components/qc/TaskAnalysisDrawer.vue'
 import TaskEditDrawer from '@/components/qc/TaskEditDrawer.vue'
+import TaskScheduleDrawer from '@/components/qc/TaskScheduleDrawer.vue'
 
 const AButtonStub = defineComponent({
   name: 'AButton',
@@ -262,6 +263,21 @@ describe('AllTasksView 场景口径', () => {
     await flushPromises()
     expect(drawer.props('open')).toBe(false)
     expect(mocks.getTaskList).toHaveBeenCalledTimes(1)
+  })
+
+  it('定时计划入口可下钻生成任务，抽屉关闭后不接受迟到下钻', async () => {
+    const wrapper = await mountView()
+    const schedule = wrapper.findComponent(TaskScheduleDrawer)
+    schedule.vm.$emit('view-task', 'ignored-child')
+    await nextTick()
+    expect(wrapper.findComponent(TaskDetailDrawerStub).props('open')).toBe(false)
+    await wrapper.get('[data-testid="task-schedules"]').trigger('click')
+    expect(schedule.props('open')).toBe(true)
+    schedule.vm.$emit('view-task', 'scheduled-child')
+    await nextTick()
+    expect(wrapper.findComponent(TaskDetailDrawerStub).props()).toMatchObject({
+      open: true, taskId: 'scheduled-child', tab: 'all',
+    })
   })
 
   it('已完成任务不能打开编辑抽屉', async () => {

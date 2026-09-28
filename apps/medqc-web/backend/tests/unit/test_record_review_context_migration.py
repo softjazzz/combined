@@ -305,8 +305,17 @@ def test_model_matches_final_contract():
     from app.database.models.qc import QCRecordReview
 
     module = migration()
+    scene_path = (
+        Path(__file__).resolve().parents[2]
+        / "alembic/versions/20260928_000067_record_review_scene.py"
+    )
+    scene_spec = importlib.util.spec_from_file_location(
+        "record_review_scene_migration_for_58", scene_path,
+    )
+    scene = importlib.util.module_from_spec(scene_spec)
+    scene_spec.loader.exec_module(scene)
     table = QCRecordReview.__table__
-    assert set(table.c.keys()) == set(module.FINAL_COLUMNS)
+    assert set(table.c.keys()) == set(module.FINAL_COLUMNS) | {scene.COLUMN}
     for name, (kind, length, nullable, default) in module.FINAL_COLUMNS.items():
         column = table.c[name]
         assert isinstance(column.type, kind) and column.nullable is nullable
@@ -317,4 +326,7 @@ def test_model_matches_final_contract():
         item.name: module.normalized_check(str(item.sqltext))
         for item in table.constraints if isinstance(item, sa.CheckConstraint)
     }
-    assert checks == {name: module.normalized_check(sql) for name, sql in module.FINAL_CHECKS.items()}
+    assert checks == {
+        name: module.normalized_check(sql)
+        for name, sql in {**module.FINAL_CHECKS, scene.CHECK: scene.CHECK_SQL}.items()
+    }

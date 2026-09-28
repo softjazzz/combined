@@ -2,25 +2,25 @@
 
 ## 基线与结论
 
-- 核对日期：2026-09-27；首次盘点基线：`e1703611c`；最新增量为滚动计划第92节（在 `1c7448e19` 上开发）；分支：`codex/v36-manual-gap-drilldown-20260922`。12/41/27、14/40/26和16/38/26历史结论保留于第89至91节，本表为增量后的代码状态。
+- 核对日期：2026-09-28；首次盘点基线：`e1703611c`；最新增量为滚动计划第94节（接续 `cc0fa210f`）；分支：`codex/v36-manual-gap-drilldown-20260922`。12/41/27、14/40/26和16/38/26历史结论保留于第89至91节，本表为增量后的代码状态。
 - 分母固定为 `docs/PRD-内涵质控V3.6总需求与差距矩阵.md` 中带 P0/P1/P2/P3 的 80 个功能行，按原文顺序编号。没有删除外部阻塞项，也没有把新增技术工作算成额外完成项。
 - 本清单评估代码，不替代原矩阵的业务覆盖/验收状态。部署未做、浏览器未验收，不单独导致代码降级；但真实接口缺失、入口停用、场景身份无法成立、必需动作未实现，会影响代码完整性。
 
 | 代码状态 | 项数 | 占全部80项 |
 | --- | ---: | ---: |
 | 代码完整 | 17 | 21.25% |
-| 部分实现 | 37 | 46.25% |
-| 未实现 | 26 | 32.5% |
+| 部分实现 | 38 | 47.5% |
+| 未实现 | 25 | 31.25% |
 | 合计 | 80 | 100% |
 
-**整项代码完成率为17/80 = 21.25%。有直接功能实现的条目为54/80 = 67.5%，但67.5%不是完成率，也不是工时进度。** 部分项不统一按50%折算；一行可能同时要求多个动作或多个场景，各行工作量也不相等。剩余63项不等于还有78.75%的开发工时。
+**整项代码完成率为17/80 = 21.25%。有直接功能实现的条目为55/80 = 68.75%，但68.75%不是完成率，也不是工时进度。** 部分项不统一按50%折算；一行可能同时要求多个动作或多个场景，各行工作量也不相等。剩余63项不等于还有78.75%的开发工时。
 
 代码完整项：02、03、06、10、22、26、35、37、59、62、63、73、74、75、77、79、80。
 
 | 模块 | 完整 | 部分 | 未实现 | 总数 |
 | --- | ---: | ---: | ---: | ---: |
 | 登录、工作台、门急诊（01–20） | 4 | 7 | 9 | 20 |
-| 运行、终末、任务（21–43） | 4 | 17 | 2 | 23 |
+| 运行、终末、任务（21–43） | 4 | 18 | 1 | 23 |
 | 统计分析（44–56） | 0 | 7 | 6 | 13 |
 | 规则、文书、测试病历（57–80） | 9 | 6 | 9 | 24 |
 
@@ -44,7 +44,7 @@
 | 05 | 我的待办：待审核、待复审病历 | 部分实现 | V5首页接入初审/复审真实计数与下钻、权限及迟到请求保护；范围仍为本人受领任务的已核实结果，未覆盖全部病历来源。 | `backend/app/services/record_review_service.py:979`；`src/views/workstation/HomeReviewTodos.vue:1` | `8caf74817`；第91节B线 |
 | 06 | 我的待办：零数量反馈 | 代码完整 | 已知真零显示无待处理事项且不下钻，未知/故障不伪造零；不把尚未接入类别算作零。 | `src/components/dashboard/TodoBoard.vue:139`；`src/views/workstation/HomeTaskTodos.vue:129` | `8caf74817` |
 | 07 | 工作表现：质控缺陷排名 | 部分实现 | 全场景本周/上周人工缺陷排名已接真实事件；单场景归属不可用，不能替代运行/终末排名。 | `backend/app/services/performance_ranking_service.py:129` | `3dc1f3efa` |
-| 08 | 工作表现：质控病历排名 | 部分实现 | 全场景初审/复审决定排名已接真实事件；单场景归属不可用，决定次数不是去重病历数。 | `backend/app/services/performance_ranking_service.py:101` | `3dc1f3efa` |
+| 08 | 工作表现：质控病历排名 | 部分实现 | 已按审核人及病例三坐标去重，初审/复审分别去重；审核事务冻结真实场景，历史NULL仅进全部场景。迁移67未执行；排名角色范围及审核时角色口径待确认，暂不提升整项。 | `backend/app/services/performance_ranking_service.py:102`；`backend/app/services/record_review_service.py:1` | `3dc1f3efa`；第94节 |
 | 09 | 查询：时间、评分标准、病历信息 | 部分实现 | 门急诊可按日期、科室、关键字查询；页面缺评分标准筛选，身份映射和取数上限仍有限制。 | `src/views/dashboard/records/OutpatientEmergencyRecordsView.vue:46`；`backend/app/routers/records.py:588` | `bb74b48dc` |
 | 10 | 筛选：新建筛选、快捷筛选、修改筛选、重置筛选 | 代码完整 | 门急诊专属用户模板创建、快捷应用、更新、默认、删除、重置已接真实服务；用户/页面隔离、字段校验、CAS与账号切换竞态有测试。依赖未执行的迁移63。 | `src/views/dashboard/records/OutpatientFilterTemplateBar.vue:1`；`backend/alembic/versions/20260927_000063_outpatient_filter_templates.py:1` | 第91节A线 |
 | 11 | 缺陷列表：导出全部列表 | 未实现 | 通用导出存在，但门急诊导出禁用，未建立该场景可信缺陷身份与万条模板导出链。 | `src/views/dashboard/records/OutpatientEmergencyRecordsView.vue:120`；`backend/app/routers/defects.py:490` | 无门急诊专项交付 |
@@ -80,11 +80,11 @@
 | 36 | 我收到的任务：重新质控 | 部分实现 | 受领人作业、历史、进度、单例结果已接；场景覆盖和病例级重跑闭环未齐。 | `src/components/qc/TaskDetailDrawer.vue:137`；`backend/app/services/task_qc_run_service.py:1` | `bece2305c` |
 | 37 | 我创建的任务：任务列表 | 代码完整 | 创建人列表、统计、详情、进度与分配信息按created范围查询，有测试。 | `src/views/dashboard/tasks/MyTasksView.vue:394`；`backend/app/routers/tasks.py:1274` | `bab0a581e` |
 | 38 | 新建抽查任务：单次任务 | 部分实现 | 选择场景/规则集、冻结版本和抽样保存已接；完整运行、终末和可用门急诊规则集仍缺。 | `backend/app/routers/tasks.py:355`；`backend/app/services/task_sampling_service.py:323` | `bece2305c` |
-| 39 | 新建抽查任务：定时任务 | 未实现 | 仅保存schedule_config；没有到期调度、自动生成与执行记录。 | `backend/app/routers/tasks.py:402` | `e61da15a4`仅有配置基础 |
+| 39 | 新建抽查任务：定时任务 | 部分实现 | 独立计划管理、到期领取、自动生成抽样子任务、运行回执、失租恢复与失败重试已接；当前限运行中活动病例，其他场景及部署调度未验收。基线为未实现，不计十项Goal。 | `backend/app/services/task_schedule_job_service.py:1`；`backend/app/jobs/task_schedule_tick.py:1` | 第94节 |
 | 40 | 病历范围：自定义筛选、指定病历 | 部分实现 | 三坐标指定病例及基础日期/科室条件可用；复杂条件和完整场景范围未齐。 | `backend/app/services/task_sampling_service.py:94` | `2102a39b8` |
 | 41 | 病历抽样：全部、数量、比例等 | 部分实现 | 全部、数量、比例和科室分层已实现；手册全部抽样方式与完整场景未覆盖。 | `backend/app/services/task_sampling_service.py:334` | `76a134fc3` |
 | 42 | 任务分配：原质控员、科室、比例、病历类型 | 部分实现 | 原质控员、科室、比例三种已实现；病历类型策略明确不可用。 | `backend/app/services/task_assignment_service.py:22`；`src/components/qc/CreateTaskDrawer.vue:537` | `e3e453490` |
-| 43 | 全部任务 | 部分实现 | 列表、批量分配、私有模板及单任务分析已有；新增空单次草稿规划编辑、活动任务名称/截止时间编辑和真实筛选CSV导出。模板/编辑依赖未执行迁移64/65；重抽样编辑、定时任务管理/执行边界未完成，不提升整项。 | `backend/app/services/task_edit_service.py:1`；`backend/app/services/task_export_service.py:1`；`src/views/dashboard/tasks/AllTasksView.vue:1` | `e3e453490`；第91节D线、第92至93节 |
+| 43 | 全部任务 | 部分实现 | 列表、批量分配、私有模板、分析、草稿规划/活动元数据编辑和筛选CSV导出已有；新增持久定时计划、幂等创建、运行回执、租约恢复与抽样子任务。仅接运行中活动病例，重抽样编辑及其他场景未齐，迁移64–66未执行，不提升整项。 | `backend/app/services/task_schedule_service.py:1`；`backend/app/services/task_schedule_job_service.py:1`；`src/views/dashboard/tasks/AllTasksView.vue:1` | `cc0fa210f`；第91至94节 |
 
 ## 44–56 统计分析
 
@@ -152,7 +152,7 @@
 
 | 层级 | 本次结论 |
 | --- | --- |
-| 代码完成 | 17项完整、37项部分、26项未实现；第92节新增62完整，43仅补子能力；新十项Goal累计1/10 |
+| 代码完成 | 17项完整、38项部分、25项未实现；第94节39未实现升部分，08/43仍部分；新十项Goal累计1/10 |
 | 非生产验证 | 历史各批有不同范围的单测/合成PG/只读冒烟，不能给80项统一通过率；最新报表及人员分析只读PG窗口为空，不是非空正向验收 |
 | 业务库部署 | 本开发批次未完成部署；不能把隔离库revision62当业务库已升级 |
 | 真实病例与浏览器验收 | 未对80项形成逐项签收清单；本次代码审计不能代替业务验收 |

@@ -149,9 +149,11 @@ describe('CreateTaskDrawer 创建草稿边界', () => {
     await vm.handleSubmit()
 
     expect(mocks.createTask).toHaveBeenCalledWith(
-      expect.objectContaining({ task_name: '场景任务', scene, rule_set_key: `${scene}-rules`, assign_method: 'by_ratio' }),
+      expect.objectContaining({ task_name: '场景任务', task_type: 'one_time', scene, rule_set_key: `${scene}-rules`, assign_method: 'by_ratio' }),
     )
     expect(mocks.createTask.mock.calls[0][0]).not.toHaveProperty('description')
+    expect(mocks.createTask.mock.calls[0][0]).not.toHaveProperty('schedule_config')
+    expect(wrapper.find('a-radio-button-stub[value="scheduled"]').exists()).toBe(false)
     expect(mocks.createTask.mock.calls[0][0]).not.toHaveProperty('assignee_config')
     expect(wrapper.emitted('created')).toHaveLength(1)
   })

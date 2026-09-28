@@ -1,8 +1,11 @@
-"""工作表现排名（V3.6 合同 docs/plans/2026-09-27-v36-performance-ranking-design.md 第 2、3 节）。
+"""工作表现排名。
+
+质控病历排名遵循 docs/plans/2026-09-28-v36-record-ranking-design.md；
+质控缺陷排名继续遵循 docs/plans/2026-09-27-v36-performance-ranking-design.md。
 
 本服务只做只读聚合，不重新判定任何审核结论：
-- 质控病历排名：qc_record_reviews 按 reviewer_id 统计窗口内审核决定数（任务/病历列表两种上下文都计入），
-  并按 stage 拆分初审/复审；
+- 质控病历排名：qc_record_reviews 按 reviewer_id + 病历三坐标去重统计窗口内审核病历数
+  （任务/病历列表两种上下文都计入），并按 stage 分别统计去重病历数；
 - 质控缺陷排名：人工缺陷谓词（与人工缺陷审核共用 _manual_scope）下，按 manual_created_by 统计
   创建时间落在窗口内的缺陷数；创建时间取 manual_create 历史的 created_at，并给出其中当前
   manual_review_status 为 approved / rejected 的数量。自动缺陷无法归属到人，不计入。
@@ -31,6 +34,7 @@ PERIOD_LABELS = {"this_week": "本周", "last_week": "上周", "this_month": "�
 RANKING_LIMIT = 10
 SCENE_ALL = "all"
 SCENE_NOT_ATTRIBUTABLE = "scene_not_attributable"
+SCENES = frozenset({"outpatient_emergency", "running", "final"})
 _CREATE_ACTION = "manual_create"
 
 
@@ -98,20 +102,49 @@ def _competition_ranks(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return rows
 
 
-def _record_ranking(session: Any, window: RankingWindow) -> list[dict[str, Any]]:
-    total = func.count(QCRecordReview.id)
-    rows = session.execute(
+def _record_ranking(
+    session: Any, window: RankingWindow, scene: str,
+) -> list[dict[str, Any]]:
+    predicates = [
+        QCRecordReview.created_at >= window.utc_start,
+        QCRecordReview.created_at < window.utc_end,
+    ]
+    if scene != SCENE_ALL:
+        # 历史 NULL 只参与全场景排名，不推定到任一工作场景。
+        predicates.append(QCRecordReview.scene == scene)
+    per_case = (
         select(
             QCRecordReview.reviewer_id.label("user_id"),
-            total.label("count"),
-            func.sum(case((QCRecordReview.stage == "initial", 1), else_=0)).label("initial_count"),
-            func.sum(case((QCRecordReview.stage == "recheck", 1), else_=0)).label("recheck_count"),
-        ).where(
-            QCRecordReview.created_at >= window.utc_start,
-            QCRecordReview.created_at < window.utc_end,
+            QCRecordReview.institute_id.label("institute_id"),
+            QCRecordReview.patient_id.label("patient_id"),
+            QCRecordReview.visit_id.label("visit_id"),
+            func.max(case((QCRecordReview.stage == "initial", 1), else_=0)).label(
+                "had_initial"
+            ),
+            func.max(case((QCRecordReview.stage == "recheck", 1), else_=0)).label(
+                "had_recheck"
+            ),
         )
-        .group_by(QCRecordReview.reviewer_id)
-        .order_by(total.desc(), QCRecordReview.reviewer_id.asc())
+        .where(*predicates)
+        .group_by(
+            QCRecordReview.reviewer_id,
+            QCRecordReview.institute_id,
+            QCRecordReview.patient_id,
+            QCRecordReview.visit_id,
+        )
+        .subquery()
+    )
+    total = func.count()
+    rows = session.execute(
+        select(
+            per_case.c.user_id,
+            total.label("count"),
+            func.sum(per_case.c.had_initial).label("initial_count"),
+            func.sum(per_case.c.had_recheck).label("recheck_count"),
+        )
+        .select_from(per_case)
+        .group_by(per_case.c.user_id)
+        .order_by(total.desc(), per_case.c.user_id.asc())
         .limit(RANKING_LIMIT)
     ).all()
     return [
@@ -175,7 +208,9 @@ def _defect_ranking(session: Any, window: RankingWindow) -> list[dict[str, Any]]
 def get_performance_ranking(
     *, period: str, scene: str = SCENE_ALL, now: datetime | None = None,
 ) -> dict[str, Any]:
-    """装配工作表现排名响应 data；非 all 场景不读库，两个排名为 null 并附不可用原因。"""
+    """装配工作表现排名；场景筛选只影响有可靠场景归属的病历排名。"""
+    if scene != SCENE_ALL and scene not in SCENES:
+        raise PerformanceRankingInvalid("scene 无效，仅支持 all / outpatient_emergency / running / final")
     window = compute_window(period, now)
     data: dict[str, Any] = {
         "period": window.period,
@@ -189,16 +224,12 @@ def get_performance_ranking(
         "record_ranking": None,
         "unavailable_reason": None,
     }
-    if scene != SCENE_ALL:
-        # 病历列表上下文审核与人工缺陷都无法可靠归到场景，不给近似数。
-        data["unavailable_reason"] = SCENE_NOT_ATTRIBUTABLE
-        return data
     if SessionLocal is None:
         raise PerformanceRankingUnavailable("数据库会话不可用")
     try:
         with SessionLocal() as session:
-            defect_ranking = _defect_ranking(session, window)
-            record_ranking = _record_ranking(session, window)
+            defect_ranking = _defect_ranking(session, window) if scene == SCENE_ALL else []
+            record_ranking = _record_ranking(session, window, scene)
             names = _display_names(
                 session, {row["user_id"] for row in (*defect_ranking, *record_ranking)},
             )
@@ -206,6 +237,10 @@ def get_performance_ranking(
         raise PerformanceRankingUnavailable("工作表现排名读取失败") from exc
     for row in (*defect_ranking, *record_ranking):
         row["name"] = names.get(row["user_id"])
-    data["defect_ranking"] = _competition_ranks(defect_ranking)
+    # 人工缺陷尚无稳定 scene owner；场景筛选时仅病历排名可用，缺陷排名保持未知。
+    if scene == SCENE_ALL:
+        data["defect_ranking"] = _competition_ranks(defect_ranking)
+    else:
+        data["unavailable_reason"] = SCENE_NOT_ATTRIBUTABLE
     data["record_ranking"] = _competition_ranks(record_ranking)
     return data

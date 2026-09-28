@@ -16,6 +16,7 @@ from fastapi import APIRouter, Request, Depends, Query, HTTPException
 from starlette.concurrency import run_in_threadpool
 
 from ..core.supabase_client import get_supabase, async_execute
+from ..core.permissions import PermissionAction, ResourceType, require_permission
 from ..core.response import success_response, get_trace_id
 from ..core.security import get_current_user
 from ..services.performance_ranking_service import (
@@ -379,6 +380,7 @@ async def get_todo_stats(
 # ============================
 
 @router.get("/performance")
+@require_permission(ResourceType.STATISTICS, PermissionAction.READ)
 async def get_performance_ranking(
     request: Request,
     period: str = Query("this_week", description="时间段: this_week | last_week | this_month"),
@@ -387,10 +389,12 @@ async def get_performance_ranking(
 ):
     """
     获取工作表现排名（质控缺陷排名 + 质控病历排名），口径见
-    docs/plans/2026-09-27-v36-performance-ranking-design.md 第 2、3 节。
+    docs/plans/2026-09-28-v36-record-ranking-design.md；缺陷排名仍沿用
+    docs/plans/2026-09-27-v36-performance-ranking-design.md 的口径。
 
     - period 非法返回 422；
-    - scene 非 all 时两个排名为 null，并附 unavailable_reason="scene_not_attributable"；
+    - scene 非 all 时病历排名按已冻结场景返回，缺陷排名为 null，并附
+      unavailable_reason="scene_not_attributable"；
     - 数据库故障固定脱敏为 503，不兜底示例数据，也不静默返回空列表。
     """
     try:

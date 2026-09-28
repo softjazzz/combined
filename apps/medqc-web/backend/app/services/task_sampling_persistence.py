@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import uuid
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, Callable
 
 from sqlalchemy import DateTime, Integer, String, column, func, insert, literal_column, select, table, update
 
@@ -260,9 +260,13 @@ def _build_task_records(task_id: str, sampled_records: list[dict[str, Any]]) -> 
 
 
 def save_task_sample(
-    task_snapshot: dict[str, Any], sampled_records: list[dict[str, Any]], *, actor_id: str
+    task_snapshot: dict[str, Any],
+    sampled_records: list[dict[str, Any]],
+    *,
+    actor_id: str,
+    transaction_guard: Callable[[Any], None] | None = None,
 ) -> dict[str, Any]:
-    """锁定任务并原子保存；现代结果的 record_id 是关联 UUID，不是病历 ID。"""
+    """锁定任务并原子保存；可选 guard 与抽样写入共享同一事务。"""
     task_id = task_snapshot.get("id")
     if not isinstance(task_id, str) or not task_id.strip():
         raise SamplingConflict("任务ID无效")
@@ -272,6 +276,8 @@ def save_task_sample(
     session = SessionLocal()
     try:
         with session.begin():
+            if transaction_guard is not None:
+                transaction_guard(session)
             row = session.execute(_lock_task_statement(task_id)).mappings().first()
             if row is None:
                 raise SamplingTaskNotFound(f"任务 {task_id} 不存在")

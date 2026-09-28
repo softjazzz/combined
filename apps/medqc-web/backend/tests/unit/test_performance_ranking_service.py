@@ -79,11 +79,15 @@ def test_naive_now_rejected():
 
 # ---------- 合成数据 ----------
 
-def _review(review_id, reviewer, minutes, *, stage="initial", context="task"):
+def _review(
+    review_id, reviewer, minutes, *, stage="initial", context="task",
+    scene=None, patient="P1", visit=None,
+):
     task = context == "task"
     return {
         "id": review_id, "request_id": f"req-{review_id}",
-        "institute_id": "hospital-A", "patient_id": "P1", "visit_id": f"V-{review_id}",
+        "institute_id": "hospital-A", "patient_id": patient,
+        "visit_id": visit or f"V-{review_id}",
         "rule_set_key": "luxian_0609", "rule_set_version": "v1",
         "job_id": "job-1", "envelope_id": f"env-{review_id}",
         "task_id": "task-1" if task else None,
@@ -91,6 +95,7 @@ def _review(review_id, reviewer, minutes, *, stage="initial", context="task"):
         "run_number": 1 if task else None,
         "stage": stage, "decision": "approved", "reason": None,
         "reviewer_id": reviewer, "created_at": utc(minutes), "review_context": context,
+        "scene": scene,
     }
 
 
@@ -202,6 +207,45 @@ def test_record_ranking_counts_both_review_contexts(env):
     assert by_user["u-a"]["count"] == 3
 
 
+def test_record_ranking_deduplicates_case_but_stage_counts_may_overlap(env):
+    with env.begin() as session:
+        session.execute(QCRecordReview.__table__.insert(), [
+            _review(
+                "same-initial", "same-user", 300, scene="running",
+                patient="same-patient", visit="same-visit",
+            ),
+            _review(
+                "same-recheck", "same-user", 301, stage="recheck", scene="running",
+                patient="same-patient", visit="same-visit",
+            ),
+        ])
+    row = next(item for item in ranking()["record_ranking"] if item["user_id"] == "same-user")
+    assert row == {
+        "user_id": "same-user", "name": None, "count": 1,
+        "initial_count": 1, "recheck_count": 1, "rank": 3,
+    }
+
+
+def test_scene_ranking_is_exact_and_historical_null_only_belongs_to_all(env):
+    with env.begin() as session:
+        session.execute(QCRecordReview.__table__.insert(), [
+            _review("scene-running", "scene-user", 310, scene="running"),
+            _review("scene-final", "scene-user", 311, scene="final"),
+            _review("scene-outpatient", "scene-user", 312, scene="outpatient_emergency"),
+            _review("scene-history", "scene-user", 313, scene=None),
+        ])
+    assert next(
+        row for row in ranking(scene="running")["record_ranking"]
+        if row["user_id"] == "scene-user"
+    )["count"] == 1
+    assert next(
+        row for row in ranking()["record_ranking"] if row["user_id"] == "scene-user"
+    )["count"] == 4
+    scene_data = ranking(scene="final")
+    assert scene_data["defect_ranking"] is None
+    assert scene_data["unavailable_reason"] == "scene_not_attributable"
+
+
 def test_last_week_excludes_this_week_rows(env):
     data = ranking("last_week")
     assert data["period_label"] == "上周"
@@ -255,12 +299,16 @@ def test_empty_window_returns_empty_lists(env):
 # ---------- 场景与失败 ----------
 
 @pytest.mark.parametrize("scene", ["outpatient_emergency", "running", "final"])
-def test_non_all_scene_returns_null_without_db(monkeypatch, scene):
+def test_non_all_scene_still_requires_db(monkeypatch, scene):
     monkeypatch.setattr(service, "SessionLocal", None)
-    data = ranking(scene=scene)
-    assert data["defect_ranking"] is None and data["record_ranking"] is None
-    assert data["unavailable_reason"] == "scene_not_attributable"
-    assert data["scene"] == scene and data["period"] == "this_week"
+    with pytest.raises(service.PerformanceRankingUnavailable):
+        ranking(scene=scene)
+
+
+def test_invalid_scene_rejected_before_db(monkeypatch):
+    monkeypatch.setattr(service, "SessionLocal", None)
+    with pytest.raises(service.PerformanceRankingInvalid):
+        ranking(scene="outpatient")
 
 
 def test_invalid_period_rejected_before_db(monkeypatch):

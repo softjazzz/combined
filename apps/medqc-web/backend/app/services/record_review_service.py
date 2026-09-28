@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable, Iterable
@@ -146,6 +147,7 @@ def _review_dict(row: Any) -> dict[str, Any]:
         "id": row.id,
         "request_id": row.request_id,
         "review_context": row.review_context,
+        "scene": row.scene,
         "task_id": row.task_id,
         "task_record_id": row.task_record_id,
         "run_number": row.run_number,
@@ -474,7 +476,7 @@ def _run_submit(submit: Callable[[], dict[str, Any]], req: _DecisionRequest) -> 
 
 def _insert_decision(
     session: Any, req: _DecisionRequest, *, identity: tuple[str, str, str],
-    rule_set_key: str, rule_set_version: str, job_id: str,
+    rule_set_key: str, rule_set_version: str, job_id: str, scene: str,
 ) -> dict[str, Any]:
     """锁内最后一步（两种上下文共用）：已决定检查 → 计算 stage → 追加一行决定。"""
     decisions = _case_decisions(session, identity, rule_set_key, None)
@@ -483,6 +485,7 @@ def _insert_decision(
     stage = _stage_from_decisions(decisions, job_id, req.envelope_id)
     row = QCRecordReview(
         id=str(uuid4()), request_id=req.request_id, review_context=req.review_context,
+        scene=scene,
         institute_id=identity[0], patient_id=identity[1], visit_id=identity[2],
         rule_set_key=rule_set_key, rule_set_version=rule_set_version,
         job_id=job_id, envelope_id=req.envelope_id,
@@ -493,6 +496,85 @@ def _insert_decision(
     session.add(row)
     session.flush()
     return _review_dict(row)
+
+
+def _review_scene(value: Any) -> str | None:
+    """把任务/作业场景规范到工作台场景；未知值不猜测。"""
+    normalized = str(value or "").strip().lower()
+    return {
+        "running": "running",
+        "final": "final",
+        "outpatient": "outpatient_emergency",
+        "outpatient_emergency": "outpatient_emergency",
+    }.get(normalized)
+
+
+def _required_review_scene(value: Any) -> str:
+    scene = _review_scene(value)
+    if scene is None:
+        raise RecordReviewConflict("result_unavailable", "审核上下文缺少可信场景")
+    return scene
+
+
+def _batch_job_table() -> Any:
+    """延迟取得 workspace job 表，便于测试替换且避免模块导入时连接数据库。"""
+    from .custom_qc_workspace_service import _batch_jobs_table
+
+    return _batch_jobs_table()
+
+
+def _workspace_review_scene(
+    session: Any, *, job_id: str, identity: tuple[str, str, str],
+) -> str:
+    """从已核实根 job 的冻结病例快照读取工作场景，不根据病历状态反推。"""
+    table = _batch_job_table()
+    row = session.execute(
+        select(table.c.scene, table.c.scope, table.c.filters_json)
+        .where(table.c.id == job_id)
+        .with_for_update(read=True)
+    ).mappings().first()
+    if row is None:
+        raise RecordReviewConflict("result_changed", "质控结果所属任务已不存在")
+    try:
+        filters = json.loads(row["filters_json"] or "{}")
+    except (TypeError, ValueError) as exc:
+        raise RecordReviewConflict("result_unavailable", "质控结果缺少可信场景") from exc
+    if not isinstance(filters, dict):
+        raise RecordReviewConflict("result_unavailable", "质控结果缺少可信场景")
+
+    raw_snapshot = filters.get("record_scene_snapshot")
+    if raw_snapshot is not None and not isinstance(raw_snapshot, list):
+        raise RecordReviewConflict("result_unavailable", "质控结果场景快照格式无效")
+
+    snapshot_scenes: set[str] = set()
+    matched_snapshot = False
+    for raw in raw_snapshot or []:
+        if not isinstance(raw, dict):
+            raise RecordReviewConflict("result_unavailable", "质控结果场景快照格式无效")
+        snapshot_identity = tuple(str(raw.get(key) or "").strip() for key in _IDENTITY_KEYS)
+        if snapshot_identity != identity:
+            continue
+        matched_snapshot = True
+        scene = _review_scene(raw.get("resolved_scene") or raw.get("record_scene"))
+        if scene is None:
+            raise RecordReviewConflict("result_unavailable", "质控结果场景快照无效")
+        snapshot_scenes.add(scene)
+    if len(snapshot_scenes) > 1:
+        raise RecordReviewConflict("result_unavailable", "质控结果场景快照冲突")
+    if matched_snapshot:
+        # 混合范围 job 的根 scene 只描述任务外壳；病例快照是单病例归属的权威 owner。
+        return next(iter(snapshot_scenes))
+    if raw_snapshot is not None:
+        raise RecordReviewConflict("result_unavailable", "质控结果缺少当前病例场景快照")
+
+    job_scene = _review_scene(row["scene"])
+    scope_scene = _review_scene(row["scope"])
+    if job_scene is not None and scope_scene is not None and job_scene != scope_scene:
+        raise RecordReviewConflict("result_unavailable", "质控结果根场景冲突")
+    scene = job_scene or scope_scene
+    if scene is None:
+        raise RecordReviewConflict("result_unavailable", "质控结果缺少可信场景")
+    return scene
 
 
 def _submit(req: _DecisionRequest, factory: Callable[[], Any]) -> dict[str, Any]:
@@ -568,6 +650,7 @@ def _submit(req: _DecisionRequest, factory: Callable[[], Any]) -> dict[str, Any]
             response = _insert_decision(
                 session, req, identity=identity, rule_set_key=rule_set_key,
                 rule_set_version=rule_set_version, job_id=job_id,
+                scene=_required_review_scene(task["scene"]),
             )
     state = response["decision"]
     return {**response, "state": state, "idempotent": False}
@@ -711,6 +794,9 @@ def _submit_case(
             response = _insert_decision(
                 session, req, identity=identity, rule_set_key=LUXIAN_0609_RULE_SET_KEY,
                 rule_set_version=anchor.rule_set_version, job_id=anchor.job_id,
+                scene=_workspace_review_scene(
+                    session, job_id=anchor.job_id, identity=identity,
+                ),
             )
     return {**response, "state": response["decision"], "idempotent": False}
 

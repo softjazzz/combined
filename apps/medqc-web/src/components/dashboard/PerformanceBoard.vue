@@ -100,7 +100,7 @@
                   class="rank-name"
                   :title="row.label"
                 >{{ row.label }}</span>
-                <span class="rank-value">{{ row.count }}</span>
+                <span class="rank-value">{{ row.count }}{{ section.key === 'record' ? '份' : '项' }}</span>
               </div>
               <div class="rank-bar-container">
                 <div
@@ -205,7 +205,7 @@ const recordRows = (items: RecordRankingItem[] | null): RankingRow[] | null =>
     label: displayName(item),
     count: item.count,
     rank: item.rank,
-    detail: `初审 ${item.initial_count} / 复审 ${item.recheck_count}`,
+    detail: `初审病历 ${item.initial_count} / 复审病历 ${item.recheck_count}`,
   })) ?? null
 
 const maxCount = (rows: RankingRow[] | null) =>

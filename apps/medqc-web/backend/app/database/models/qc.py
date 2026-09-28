@@ -270,6 +270,128 @@ class QCTaskTemplate(Base):
     )
 
 
+class QCTaskSchedule(Base):
+    """独立定时计划定义；本行永不作为任务执行。"""
+
+    __tablename__ = "qc_task_schedules"
+
+    id = Column(String(36), nullable=False)
+    source_task_id = Column(String(36), nullable=False)
+    source_configuration_version = Column(Integer, nullable=False)
+    owner_id = Column(String(64), nullable=False)
+    creation_actor_id = Column(String(64), nullable=False)
+    creation_request_id = Column(String(128), nullable=False)
+    name = Column(String(200), nullable=False)
+    scene = Column(String(32), nullable=False)
+    rule_set_key = Column(String(128), nullable=False)
+    rule_set_version = Column(String(64), nullable=False)
+    task_config_json = Column(Text, nullable=False)
+    timing_config_json = Column(Text, nullable=False)
+    state = Column(String(16), nullable=False)
+    next_fire_at = Column(DateTime, nullable=True)
+    last_fire_at = Column(DateTime, nullable=True)
+    version = Column(Integer, nullable=False, server_default=text("1"))
+    created_at = Column(DateTime, nullable=False)
+    updated_at = Column(DateTime, nullable=False)
+
+    __table_args__ = (
+        PrimaryKeyConstraint("id", name="pk_qc_task_schedules"),
+        ForeignKeyConstraint(
+            ["source_task_id"],
+            ["qc_tasks.id"],
+            name="fk_qc_task_schedules_source_task",
+        ),
+        UniqueConstraint(
+            "creation_actor_id",
+            "creation_request_id",
+            name="uq_qc_task_schedules_creation_request",
+        ),
+        CheckConstraint(
+            "scene IN ('running', 'final', 'outpatient')",
+            name="ck_qc_task_schedules_scene",
+        ),
+        CheckConstraint(
+            "state IN ('active', 'paused', 'ended', 'cancelled')",
+            name="ck_qc_task_schedules_state",
+        ),
+        CheckConstraint("version > 0", name="ck_qc_task_schedules_version_positive"),
+        CheckConstraint(
+            "source_configuration_version > 0",
+            name="ck_qc_task_schedules_source_version_positive",
+        ),
+        CheckConstraint(
+            "state NOT IN ('active') OR next_fire_at IS NOT NULL",
+            name="ck_qc_task_schedules_active_next_fire",
+        ),
+        CheckConstraint(
+            "state NOT IN ('ended', 'cancelled') OR next_fire_at IS NULL",
+            name="ck_qc_task_schedules_terminal_no_next_fire",
+        ),
+        Index("ix_qc_task_schedules_owner", "owner_id"),
+        Index("ix_qc_task_schedules_source", "source_task_id"),
+        Index("ix_qc_task_schedules_due", "state", "next_fire_at", "id"),
+        Index("ix_qc_task_schedules_created", "created_at"),
+    )
+
+
+class QCTaskScheduleRun(Base):
+    """单次自动或手动触发的持久执行回执。"""
+
+    __tablename__ = "qc_task_schedule_runs"
+
+    id = Column(String(36), nullable=False)
+    schedule_id = Column(String(36), nullable=False)
+    trigger_type = Column(String(16), nullable=False)
+    scheduled_fire_at = Column(DateTime, nullable=False)
+    idempotency_key = Column(String(200), nullable=False)
+    status = Column(String(16), nullable=False)
+    generated_task_id = Column(String(36), nullable=True)
+    async_job_id = Column(String(36), nullable=True)
+    attempt_count = Column(Integer, nullable=False, server_default=text("0"))
+    lease_owner = Column(String(128), nullable=True)
+    heartbeat_at = Column(DateTime, nullable=True)
+    started_at = Column(DateTime, nullable=True)
+    finished_at = Column(DateTime, nullable=True)
+    error_code = Column(String(64), nullable=True)
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=False)
+    updated_at = Column(DateTime, nullable=False)
+
+    __table_args__ = (
+        PrimaryKeyConstraint("id", name="pk_qc_task_schedule_runs"),
+        ForeignKeyConstraint(
+            ["schedule_id"],
+            ["qc_task_schedules.id"],
+            name="fk_qc_task_schedule_runs_schedule",
+        ),
+        ForeignKeyConstraint(
+            ["generated_task_id"],
+            ["qc_tasks.id"],
+            name="fk_qc_task_schedule_runs_generated_task",
+        ),
+        UniqueConstraint(
+            "schedule_id",
+            "scheduled_fire_at",
+            name="uq_qc_task_schedule_runs_fire",
+        ),
+        UniqueConstraint("idempotency_key", name="uq_qc_task_schedule_runs_idempotency"),
+        CheckConstraint(
+            "trigger_type IN ('scheduled', 'manual')",
+            name="ck_qc_task_schedule_runs_trigger_type",
+        ),
+        CheckConstraint(
+            "status IN ('queued', 'running', 'succeeded', 'failed', 'cancelled')",
+            name="ck_qc_task_schedule_runs_status",
+        ),
+        CheckConstraint(
+            "attempt_count >= 0",
+            name="ck_qc_task_schedule_runs_attempt_nonnegative",
+        ),
+        Index("ix_qc_task_schedule_runs_schedule_created", "schedule_id", "created_at"),
+        Index("ix_qc_task_schedule_runs_status_fire", "status", "scheduled_fire_at"),
+    )
+
+
 class QCTaskRecord(Base):
     """Task-to-record assignment and progress."""
 
@@ -698,6 +820,7 @@ class QCRecordReview(Base):
     reviewer_id = Column(String(64), nullable=False)
     created_at = Column(DateTime, nullable=False)
     review_context = Column(String(16), nullable=False, server_default="task")
+    scene = Column(String(24), nullable=True)
 
     __table_args__ = (
         PrimaryKeyConstraint("id", name="pk_qc_record_reviews"),
@@ -721,6 +844,10 @@ class QCRecordReview(Base):
         ),
         CheckConstraint("review_context IN ('task', 'workspace')", name="ck_qc_record_reviews_context"),
         CheckConstraint(
+            "scene IS NULL OR scene IN ('outpatient_emergency', 'running', 'final')",
+            name="ck_qc_record_reviews_scene",
+        ),
+        CheckConstraint(
             "(review_context = 'task' AND task_id IS NOT NULL AND task_record_id IS NOT NULL"
             " AND run_number IS NOT NULL)"
             " OR (review_context = 'workspace' AND task_id IS NULL AND task_record_id IS NULL"
@@ -731,6 +858,7 @@ class QCRecordReview(Base):
             "ix_qc_record_reviews_case",
             "institute_id", "patient_id", "visit_id", "rule_set_key", "created_at",
         ),
+        Index("ix_qc_record_reviews_scene_created", "scene", "created_at"),
     )
 
 

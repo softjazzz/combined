@@ -88,17 +88,6 @@
           class="mb-4"
         />
 
-        <a-form-item label="任务类型">
-          <a-radio-group v-model:value="formData.task_type">
-            <a-radio-button value="one_time">
-              <ThunderboltOutlined /> 单次任务
-            </a-radio-button>
-            <a-radio-button value="scheduled">
-              <ClockCircleOutlined /> 定期任务
-            </a-radio-button>
-          </a-radio-group>
-        </a-form-item>
-
         <a-form-item label="截止日期">
           <a-date-picker
             v-model:value="formData.deadline"
@@ -392,7 +381,7 @@
           {{ formData.task_name || '(未设置)' }}
         </a-descriptions-item>
         <a-descriptions-item label="任务类型">
-          {{ formData.task_type === 'one_time' ? '单次任务' : '定期任务' }}
+          单次任务
         </a-descriptions-item>
         <a-descriptions-item label="质控场景">
           {{ sceneLabel }}
@@ -469,8 +458,6 @@
 import { ref, computed, nextTick, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import {
-  ThunderboltOutlined,
-  ClockCircleOutlined,
   CheckOutlined,
   DatabaseOutlined,
   NumberOutlined,
@@ -921,7 +908,7 @@ const handleSubmit = async () => {
       task_name: taskName,
       scene,
       rule_set_key: formData.value.rule_set_key,
-      task_type: formData.value.task_type,
+      task_type: 'one_time',
       deadline: formData.value.deadline?.format('YYYY-MM-DD'),
       sampling_method: formData.value.sampling_method,
       sampling_config: {

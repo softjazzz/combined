@@ -274,7 +274,7 @@ def test_check_constraints_enforce_contract_in_sqlite():
 
 
 def test_model_matches_migration_contract():
-    """模型为迁移 57 + 58 的叠加：58 新增 review_context、放开任务三字段可空、追加两条 CHECK。"""
+    """模型为迁移 57 + 58 + 67 的叠加合同。"""
     from app.database.models.qc import QCRecordReview
 
     module = migration()
@@ -282,9 +282,18 @@ def test_model_matches_migration_contract():
     spec = importlib.util.spec_from_file_location("record_review_context_migration_for_57", path)
     context = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(context)
+    scene_path = (
+        Path(__file__).resolve().parents[2]
+        / "alembic/versions/20260928_000067_record_review_scene.py"
+    )
+    scene_spec = importlib.util.spec_from_file_location(
+        "record_review_scene_migration_for_57", scene_path,
+    )
+    scene = importlib.util.module_from_spec(scene_spec)
+    scene_spec.loader.exec_module(scene)
     table = QCRecordReview.__table__
     assert table.name == module.TABLE
-    assert set(table.c.keys()) == set(module.COLUMNS) | {context.CONTEXT_COLUMN}
+    assert set(table.c.keys()) == set(module.COLUMNS) | {context.CONTEXT_COLUMN, scene.COLUMN}
     for name, (kind, length, nullable) in module.COLUMNS.items():
         column = table.c[name]
         expected_nullable = True if name in context.TASK_FIELDS else nullable
@@ -298,7 +307,9 @@ def test_model_matches_migration_contract():
     }
     assert checks == {
         name: module.normalized_check(sql)
-        for name, sql in {**module.CHECKS, **context.CONTEXT_CHECKS}.items()
+        for name, sql in {
+            **module.CHECKS, **context.CONTEXT_CHECKS, scene.CHECK: scene.CHECK_SQL,
+        }.items()
     }
     uniques = {
         item.name: [column.name for column in item.columns]
@@ -309,7 +320,10 @@ def test_model_matches_migration_contract():
         module.REQUEST_UNIQUE_NAME: ["request_id"],
     }
     indexes = {item.name: [column.name for column in item.columns] for item in table.indexes}
-    assert indexes == {module.CASE_INDEX_NAME: module.CASE_INDEX_COLUMNS}
+    assert indexes == {
+        module.CASE_INDEX_NAME: module.CASE_INDEX_COLUMNS,
+        scene.INDEX: [scene.COLUMN, "created_at"],
+    }
 
 
 @pytest.mark.parametrize("module_name", [

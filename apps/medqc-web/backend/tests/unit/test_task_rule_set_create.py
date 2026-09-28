@@ -100,6 +100,21 @@ def test_legacy_request_without_rule_set_is_rejected(monkeypatch):
     assert database.inserted == []
 
 
+@pytest.mark.parametrize("extra", [
+    {"task_type": "scheduled"},
+    {"task_type": "scheduled", "schedule_config": {"cron": "* * * * *"}},
+    {"task_type": "one_time", "schedule_config": {}},
+])
+def test_legacy_create_cannot_persist_non_executable_schedule(monkeypatch, extra):
+    database = _Database()
+    response = _client(monkeypatch, database).post(
+        "/api/v1/tasks",
+        json={"task_name": "错误计划入口", "scene": "final", "rule_set_key": "sc_content_v1", **extra},
+    )
+    assert response.status_code == 422
+    assert database.inserted == []
+
+
 @pytest.mark.parametrize("rule_set_key", ["sc_content_v1", None])
 def test_update_rejects_rule_set_change_before_database_access(monkeypatch, rule_set_key):
     database = _Database()

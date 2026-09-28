@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta
 
 import pytest
@@ -40,6 +41,17 @@ def _envelope_table():
     )
 
 
+def _batch_job_table():
+    metadata = sa.MetaData()
+    return sa.Table(
+        "custom_qc_batch_jobs", metadata,
+        sa.Column("id", sa.String(36), primary_key=True),
+        sa.Column("scene", sa.String(20), nullable=False),
+        sa.Column("scope", sa.String(20), nullable=False),
+        sa.Column("filters_json", sa.Text, nullable=False),
+    )
+
+
 RECORDS = {
     # id: (task_id, assignee, status, patient, visit)
     "rec-a": ("task-1", "qc-1", "in_progress", "P1", "V1"),
@@ -62,9 +74,10 @@ RUNS = [
 
 
 class Env:
-    def __init__(self, sessions, envelopes, states):
+    def __init__(self, sessions, envelopes, jobs, states):
         self.sessions = sessions
         self.envelopes = envelopes
+        self.jobs = jobs
         self.states = states
         self.reader_calls = []
 
@@ -110,6 +123,8 @@ def env(monkeypatch):
         table.create(engine)
     envelopes = _envelope_table()
     envelopes.create(engine)
+    jobs = _batch_job_table()
+    jobs.create(engine)
     sessions = sessionmaker(bind=engine, expire_on_commit=False)
     base = datetime(2026, 9, 1)
     with sessions.begin() as session:
@@ -138,10 +153,31 @@ def env(monkeypatch):
              "run_scope": scope, "created_at": base}
             for task_id, number, job_id, actor, scope in RUNS
         ])
+        session.execute(jobs.insert(), [
+            {
+                "id": "job-1", "scene": "running", "scope": "all",
+                "filters_json": json.dumps({
+                    "record_scene_snapshot": [
+                        {"institute_id": "H", "patient_id": "P1", "visit_id": "V1",
+                         "resolved_scene": "running"},
+                        {"institute_id": "H", "patient_id": "P2", "visit_id": "V2",
+                         "resolved_scene": "running"},
+                    ],
+                }),
+            },
+            {"id": "job-2", "scene": "final", "scope": "final", "filters_json": "{}"},
+            {"id": "job-9", "scene": "final", "scope": "final", "filters_json": json.dumps({
+                "record_scene_snapshot": [
+                    {"institute_id": "H", "patient_id": "P1", "visit_id": "V1",
+                     "resolved_scene": "final"},
+                ],
+            })},
+        ])
     monkeypatch.setattr(service, "SessionLocal", sessions)
     monkeypatch.setattr(service, "_envelope_table", lambda: envelopes)
+    monkeypatch.setattr(service, "_batch_job_table", lambda: jobs)
     states: dict[tuple[str, int], str] = {}
-    environment = Env(sessions, envelopes, states)
+    environment = Env(sessions, envelopes, jobs, states)
 
     def reader(**kwargs):
         environment.reader_calls.append(kwargs)
@@ -534,6 +570,7 @@ def test_task_context_rows_are_written_with_explicit_task_context(env):
     submit()
     row = env.reviews()[0]
     assert row.review_context == "task" and row.task_id == "task-1" and row.run_number == 1
+    assert row.scene == "running"
 
 
 def test_workspace_initial_review(env, case_ws):
@@ -545,7 +582,7 @@ def test_workspace_initial_review(env, case_ws):
 
     saved = case_submit(case_ws)
     assert saved["state"] == "approved" and saved["stage"] == "initial" and saved["idempotent"] is False
-    assert saved["review_context"] == "workspace"
+    assert saved["review_context"] == "workspace" and saved["scene"] == "running"
     row = env.reviews()[0]
     assert (row.review_context, row.task_id, row.task_record_id, row.run_number) == ("workspace", None, None, None)
     assert (row.job_id, row.envelope_id, row.institute_id, row.patient_id, row.visit_id,
@@ -565,10 +602,63 @@ def test_workspace_doubtful_then_new_result_then_recheck(env, case_ws):
     pending = case_view(case_ws)
     assert pending["state"] == "pending_recheck" and pending["stage"] == "recheck" and pending["can_submit"]
     approved = case_submit(case_ws, job="job-9", envelope="env-a9", request=REQ[7])
-    assert approved["stage"] == "recheck"
+    assert approved["stage"] == "recheck" and approved["scene"] == "final"
     final = case_view(case_ws)
     assert final["state"] == "approved"
     assert [item["decision"] for item in final["history"]] == ["approved", "doubtful"]
+
+
+def test_workspace_scene_snapshot_conflict_fails_closed(env, case_ws):
+    filters = {
+        "record_scene_snapshot": [
+            {"institute_id": "H", "patient_id": "P1", "visit_id": "V1",
+             "resolved_scene": "running"},
+            {"institute_id": "H", "patient_id": "P1", "visit_id": "V1",
+             "resolved_scene": "final"},
+        ],
+    }
+    with env.sessions.begin() as session:
+        session.execute(
+            env.jobs.update().where(env.jobs.c.id == "job-1")
+            .values(filters_json=json.dumps(filters))
+        )
+    with pytest.raises(service.RecordReviewConflict) as exc:
+        case_submit(case_ws)
+    assert exc.value.code == "result_unavailable"
+    assert env.reviews() == []
+
+
+@pytest.mark.parametrize("snapshot", [
+    "bad-json-shape",
+    [{"institute_id": "H", "patient_id": "P1", "visit_id": "V1",
+      "resolved_scene": "unknown"}],
+    [{"institute_id": "H", "patient_id": "other", "visit_id": "V1",
+      "resolved_scene": "running"}],
+])
+def test_workspace_invalid_or_missing_matching_scene_snapshot_fails_closed(
+    env, case_ws, snapshot,
+):
+    with env.sessions.begin() as session:
+        session.execute(
+            env.jobs.update().where(env.jobs.c.id == "job-1")
+            .values(filters_json=json.dumps({"record_scene_snapshot": snapshot}))
+        )
+    with pytest.raises(service.RecordReviewConflict) as exc:
+        case_submit(case_ws)
+    assert exc.value.code == "result_unavailable"
+    assert env.reviews() == []
+
+
+def test_workspace_legacy_job_requires_consistent_root_scene(env, case_ws):
+    with env.sessions.begin() as session:
+        session.execute(
+            env.jobs.update().where(env.jobs.c.id == "job-1")
+            .values(scene="running", scope="final", filters_json="{}")
+        )
+    with pytest.raises(service.RecordReviewConflict) as exc:
+        case_submit(case_ws)
+    assert exc.value.code == "result_unavailable"
+    assert env.reviews() == []
 
 
 @pytest.mark.parametrize("job,envelope", [("job-1", "env-a2"), ("job-2", "env-a1")])

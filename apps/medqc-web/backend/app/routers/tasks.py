@@ -513,6 +513,10 @@ async def create_task(
     创建质控抽查任务
     """
     creator_id = _get_task_scope_user_id(current_user)
+    if task_data.task_type.value != "one_time":
+        raise HTTPException(status_code=422, detail="定时任务请通过定时计划入口创建")
+    if task_data.schedule_config is not None:
+        raise HTTPException(status_code=422, detail="单次任务不能携带定时计划配置")
     rule_set = get_sichuan_rule_set(task_data.rule_set_key)
     if rule_set is None:
         raise HTTPException(status_code=422, detail="规则集不存在或不可用")

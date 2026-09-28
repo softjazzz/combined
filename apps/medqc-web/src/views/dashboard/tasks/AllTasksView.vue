@@ -29,6 +29,10 @@
       :task-id="editTaskId"
       @saved="handleTaskSaved"
     />
+    <TaskScheduleDrawer
+      v-model:open="scheduleDrawerVisible"
+      @view-task="handleScheduleTaskDetail"
+    />
     <a-modal
       v-model:open="analysisPickerOpen"
       title="选择分析任务"
@@ -377,6 +381,13 @@
         </h2>
         <div class="flex space-x-2">
           <a-button
+            data-testid="task-schedules"
+            @click="scheduleDrawerVisible = true"
+          >
+            <ClockCircleOutlined />
+            定时计划
+          </a-button>
+          <a-button
             type="primary"
             :loading="loading"
             class="rounded-lg"
@@ -532,6 +543,7 @@ import CreateTaskDrawer from '@/components/qc/CreateTaskDrawer.vue'
 import TaskTemplateDrawer from '@/components/qc/TaskTemplateDrawer.vue'
 import TaskAnalysisDrawer from '@/components/qc/TaskAnalysisDrawer.vue'
 import TaskEditDrawer from '@/components/qc/TaskEditDrawer.vue'
+import TaskScheduleDrawer from '@/components/qc/TaskScheduleDrawer.vue'
 import { exportTasksCsv } from '@/api/taskExports'
 import TaskAssignmentResult from '@/components/qc/TaskAssignmentResult.vue'
 import { describeTaskAssignError } from '@/utils/taskAssignment'
@@ -581,6 +593,7 @@ const analysisPickerOpen = ref(false)
 const analysisSelection = ref<string>()
 const editDrawerVisible = ref(false)
 const editTaskId = ref<string | null>(null)
+const scheduleDrawerVisible = ref(false)
 const exporting = ref(false)
 let exportRequestId = 0
 const appliedFilters = ref<{ scene?: TaskSceneFilter; keyword?: string; status?: TaskStatus }>({})
@@ -804,6 +817,7 @@ watch(() => authStore.user?.id, () => {
   analysisSelection.value = undefined
   editDrawerVisible.value = false
   editTaskId.value = null
+  scheduleDrawerVisible.value = false
   exportRequestId += 1
   exporting.value = false
 })
@@ -1128,6 +1142,13 @@ const handleTaskSaved = async (taskId: string) => {
   editDrawerVisible.value = false
   detailRefreshKey.value += 1
   await Promise.all([fetchTasks(), fetchStats()])
+}
+
+const handleScheduleTaskDetail = (taskId: string) => {
+  if (!scheduleDrawerVisible.value) return
+  detailTaskId.value = taskId
+  detailRefreshKey.value += 1
+  detailDrawerVisible.value = true
 }
 
 const handleDelete = async (record: DashboardTaskItem) => {

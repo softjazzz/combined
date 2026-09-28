@@ -36,15 +36,23 @@ describe('工作表现排名 API 合同', () => {
     expect(result.data?.record_ranking).toEqual([])
   })
 
-  it('场景不可归属时两个排名为 null 并保留原因', () => {
+  it('具体场景保留病历排名，缺陷排名不可归属并保留原因', () => {
     const data = normalizePerformanceData({
       ...validPayload,
       scene: 'running',
       defect_ranking: null,
-      record_ranking: null,
+      record_ranking: [
+        { user_id: 'u1', name: '甲', count: 1, initial_count: 1, recheck_count: 1, rank: 1 },
+      ],
       unavailable_reason: 'scene_not_attributable',
     })
-    expect(data).toMatchObject({ defect_ranking: null, record_ranking: null, unavailable_reason: 'scene_not_attributable' })
+    expect(data).toMatchObject({
+      defect_ranking: null,
+      record_ranking: [
+        { user_id: 'u1', count: 1, initial_count: 1, recheck_count: 1, rank: 1 },
+      ],
+      unavailable_reason: 'scene_not_attributable',
+    })
   })
 
   it.each([

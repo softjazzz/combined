@@ -33,6 +33,7 @@ from .routers import semantic_rules as semantic_rules_router
 from .routers import tasks as tasks_router
 from .routers import task_edits as task_edits_router
 from .routers import task_exports as task_exports_router
+from .routers import task_schedules as task_schedules_router
 from .routers import record_reviews as record_reviews_router
 from .routers import record_operations as record_operations_router
 from .routers import filter_templates as filter_templates_router
@@ -279,6 +280,7 @@ def create_app() -> FastAPI:
     app.include_router(tasks_router.router)
     app.include_router(task_edits_router.router)
     app.include_router(task_exports_router.router)
+    app.include_router(task_schedules_router.router)
     app.include_router(record_reviews_router.router)
     app.include_router(record_operations_router.router)
     app.include_router(filter_templates_router.router)

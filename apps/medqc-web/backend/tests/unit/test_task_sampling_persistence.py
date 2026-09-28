@@ -123,6 +123,49 @@ def test_successfully_saves_records_and_task_state(database):
     )
 
 
+def test_transaction_guard_runs_before_task_write_in_same_transaction(database):
+    engine, _factory, tasks, records = database
+    snapshot = task_snapshot()
+    insert_task(engine, tasks, snapshot)
+    guarded = []
+
+    def guard(session):
+        guarded.append(session.execute(select(tasks.c.id).where(tasks.c.id == "task-1")).scalar_one())
+
+    result = persistence.save_task_sample(
+        snapshot,
+        [{"id": "r-1"}],
+        actor_id="qc-user",
+        transaction_guard=guard,
+    )
+
+    task, saved = read_state(engine, tasks, records)
+    assert guarded == ["task-1"]
+    assert result["sampled_count"] == 1
+    assert task["status"] == "sampling" and len(saved) == 1
+
+
+def test_transaction_guard_rejection_leaves_task_and_records_unchanged(database):
+    engine, _factory, tasks, records = database
+    snapshot = task_snapshot()
+    insert_task(engine, tasks, snapshot)
+
+    def reject(_session):
+        raise persistence.SamplingConflict("运行租约已失效")
+
+    with pytest.raises(persistence.SamplingConflict, match="租约已失效"):
+        persistence.save_task_sample(
+            snapshot,
+            [{"id": "r-1"}],
+            actor_id="qc-user",
+            transaction_guard=reject,
+        )
+
+    task, saved = read_state(engine, tasks, records)
+    assert task["status"] == "draft" and task["total_records"] == 0
+    assert saved == []
+
+
 @pytest.mark.parametrize(
     ("creator_id", "actor_id"),
     [("another-user", "qc-user"), (None, "qc-user"), ("", "qc-user"), ("qc-user", "")],
