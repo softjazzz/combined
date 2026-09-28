@@ -68,6 +68,12 @@
 
 ## 已批准的实施边界
 
+### 第99节增量
+
+- 评分申诉新增调用方 session 内精确标准校验与只读服务端重算快照；不接收客户端分数，不新建申诉，不替代对象授权。
+- 主协调组合48项后端回归通过，独立复核已通过；规则集 key 必须一致，结果规则版本与标准版本属于不同轴。没有数据库迁移或业务部署。
+- 计分响应和前端引用尚未纳入本批交付；前置服务不计整项收口，Goal仍4/10，剩余6项。
+
 ### 配置线：62 新评分标准Excel主链
 
 - 文件：新`backend/app/services/scoring_standard_excel_service.py`、`backend/app/services/scoring_standard_service.py`原子导入helper、`backend/app/routers/scoring.py`、`src/api/scoring.ts`、`src/views/qc/ScoringStandardsView.vue`及专属pytest/Vitest。

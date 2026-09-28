@@ -511,6 +511,67 @@ def get_default_standard(scene: Any) -> dict[str, Any] | None:
         raise ScoringStandardUnavailable("评分标准读取失败") from exc
 
 
+def _reference_time(value: Any) -> datetime:
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str) and value.strip():
+        try:
+            parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ScoringStandardInvalid("评分标准 updated_at 引用无效") from exc
+    else:
+        raise ScoringStandardInvalid("评分标准 updated_at 引用无效")
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    return parsed
+
+
+def get_exact_default_standard_in_session(
+    session: Any, *, scene: Any, expected_standard_id: Any,
+    expected_version_seq: Any, expected_updated_at: Any,
+    for_update: bool = False,
+) -> dict[str, Any]:
+    """在调用方 session 内精确回读当前默认标准并核对引用。
+
+    ``for_update`` 沿用写链锁顺序：先锁场景，再锁目标标准行，避免与启用或默认切换
+    形成逆序。该 helper 不提交、不回滚，也不比较规则集版本与标准版本。
+    """
+    scene = _scene(scene)
+    standard_id = str(expected_standard_id or "").strip()
+    version_seq = _version_seq(expected_version_seq)
+    updated_at = _reference_time(expected_updated_at)
+    if not standard_id or len(standard_id) > 36:
+        raise ScoringStandardInvalid("评分标准 ID 引用无效")
+    try:
+        if for_update:
+            _lock_scene(session, scene)
+        row = _standard_row(session, standard_id, for_update=for_update)
+        if row is None:
+            raise ScoringStandardConflict("评分标准引用已变化，请刷新后重试", code="reference_conflict")
+        row_updated_at = _reference_time(row.updated_at)
+        defaults = session.execute(
+            select(_STANDARDS.c.id).where(
+                _STANDARDS.c.scene == scene,
+                _STANDARDS.c.status == STATUS_ACTIVE,
+                _STANDARDS.c.is_default.is_(True),
+            ).limit(2)
+        ).scalars().all()
+        if (
+            row.scene != scene
+            or row.status != STATUS_ACTIVE
+            or not bool(row.is_default)
+            or int(row.version_seq) != version_seq
+            or row_updated_at != updated_at
+            or defaults != [standard_id]
+        ):
+            raise ScoringStandardConflict("评分标准引用已变化，请刷新后重试", code="reference_conflict")
+        return _detail(session, row)
+    except (ScoringStandardConflict, ScoringStandardInvalid, ScoringStandardUnavailable):
+        raise
+    except SQLAlchemyError as exc:
+        raise ScoringStandardUnavailable("评分标准读取失败") from exc
+
+
 # ---------------------------------------------------------------------------
 # 写入
 # ---------------------------------------------------------------------------
@@ -963,6 +1024,7 @@ __all__ = [
     "current_rule_set_snapshot",
     "delete_standard",
     "get_default_standard",
+    "get_exact_default_standard_in_session",
     "get_standard",
     "import_standard_draft",
     "list_standards",
