@@ -1251,6 +1251,11 @@
   font-size: var(--mq-font-12);
 }
 
+/* 页面级 :is(button) 统一为 14px，这里让行内「查看」保持与病历池一致的 12px */
+.running-qc-apple :deep(.qc-record-result-table__view-button) {
+  font-size: var(--mq-font-12);
+}
+
 .running-qc-apple .qc-record-result-list-view__pagination {
   padding: 12px 10px 6px;
   border: 0;
