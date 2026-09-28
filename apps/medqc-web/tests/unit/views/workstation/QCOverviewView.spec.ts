@@ -445,7 +445,7 @@ describe('QCOverviewView', () => {
     await flushHomeLoad()
 
     await wrapper.get('[data-testid="analysis-object-physician"]').trigger('click')
-    await wrapper.get('[data-testid="analysis-metric-average"]').trigger('click')
+    await wrapper.get('[data-testid="analysis-metric"]').setValue('average')
     await nextTick()
 
     const rows = wrapper.findAll('[data-testid="defect-analysis-row"]')
@@ -462,11 +462,11 @@ describe('QCOverviewView', () => {
     await flushHomeLoad()
     await wrapper.get('[data-testid="analysis-object-physician"]').trigger('click')
 
-    await wrapper.get('[data-testid="analysis-sort-risk"]').trigger('click')
+    await wrapper.get('[data-testid="analysis-sort"]').setValue('risk')
     await nextTick()
     expect(wrapper.findAll('[data-testid="defect-analysis-row"]')[0].text()).toContain('张主任医师')
 
-    await wrapper.get('[data-testid="analysis-sort-gap"]').trigger('click')
+    await wrapper.get('[data-testid="analysis-sort"]').setValue('gap')
     await nextTick()
     expect(wrapper.findAll('[data-testid="defect-analysis-row"]')[0].text()).toContain('李主治医师')
   })

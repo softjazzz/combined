@@ -1,21 +1,33 @@
 <template>
   <div class="qc-home-shell">
     <main class="mq-page">
-      <!-- 页头：日期眉标 + 大标题；右侧为范围与刷新（原范围行，功能不变） -->
-      <header class="mq-page-head">
+      <!-- 页头：眉标一行写清范围（纯文字，不做胶囊）；右侧工具栏只留科室筛选与刷新 -->
+      <header
+        class="mq-page-head"
+        data-testid="home-scope"
+      >
         <div class="mq-page-head__copy">
-          <span class="mq-page-eyebrow">{{ todayLabel }} · 泸县0609质控点</span>
+          <span class="mq-page-eyebrow">{{ scopeLine }}</span>
           <h1 class="mq-page-title">
             质控首页概览
           </h1>
         </div>
         <div
           v-if="clinicalQc"
-          class="qc-home-scope"
-          data-testid="home-scope"
+          class="qc-home-toolbar"
         >
-          <span class="qc-home-scope__chip qc-home-scope__chip--strong">{{ scopeHospitalText }}</span>
-          <label class="qc-home-scope__select">
+          <template v-if="keyword.trim()">
+            <span class="qc-home-toolbar__keyword">关键词：{{ keyword.trim() }}</span>
+            <button
+              type="button"
+              class="qc-home-toolbar__clear"
+              aria-label="清除关键词"
+              @click="clearKeyword"
+            >
+              清除
+            </button>
+          </template>
+          <label class="qc-home-pulldown qc-home-pulldown--bordered">
             <select
               v-model="departmentFilter"
               class="qc-home-department"
@@ -32,7 +44,7 @@
               </option>
             </select>
             <svg
-              class="qc-home-scope__caret"
+              class="qc-home-pulldown__caret"
               width="11"
               height="11"
               viewBox="0 0 24 24"
@@ -44,20 +56,7 @@
               aria-hidden="true"
             ><path d="m6 9 6 6 6-6" /></svg>
           </label>
-          <span class="qc-home-scope__chip">{{ scopeSceneText }}</span>
-          <span class="qc-home-scope__chip qc-home-scope__rule-set">泸县0609质控点</span>
-          <template v-if="keyword.trim()">
-            <span class="qc-home-scope__chip qc-home-scope__keyword">关键词：{{ keyword.trim() }}</span>
-            <button
-              type="button"
-              class="qc-home-scope__clear"
-              aria-label="清除关键词"
-              @click="clearKeyword"
-            >
-              清除关键词
-            </button>
-          </template>
-          <span class="qc-home-scope__time">生成于 {{ formatDateTime(clinicalQc.scope.generated_at) }}</span>
+          <span class="qc-home-toolbar__time">生成于 {{ formatDateTime(clinicalQc.scope.generated_at) }}</span>
           <button
             type="button"
             class="qc-home-icon-button"
@@ -66,7 +65,7 @@
           >
             <MqIcon
               name="sync"
-              :size="18"
+              :size="16"
               color="#515154"
             />
           </button>
@@ -303,7 +302,7 @@
             data-testid="defect-analysis-chart"
             aria-labelledby="defect-analysis-title"
           >
-            <header class="qc-home-panel__head">
+            <header class="qc-home-panel__head qc-home-defect-analysis__head">
               <div>
                 <h2
                   id="defect-analysis-title"
@@ -313,10 +312,8 @@
                 </h2>
                 <p>缺陷仅统计确定问题，资料待核实与待判断不计入缺陷数。</p>
               </div>
-            </header>
-            <div class="qc-home-defect-analysis__toolbar">
-              <div class="qc-home-defect-analysis__control">
-                <span>统计对象</span>
+              <!-- 一个分段控件切统计对象；指标与排序收进下拉 -->
+              <div class="qc-home-defect-analysis__toolbar">
                 <div
                   class="mq-segmented mq-segmented--sm"
                   role="group"
@@ -341,71 +338,55 @@
                     按主治医师
                   </button>
                 </div>
+                <label class="qc-home-pulldown">
+                  <span class="qc-home-pulldown__label">指标</span>
+                  <select
+                    v-model="analysisMetric"
+                    data-testid="analysis-metric"
+                    aria-label="分析指标"
+                  >
+                    <option value="total">缺陷总数</option>
+                    <option value="average">平均缺陷数</option>
+                  </select>
+                  <svg
+                    class="qc-home-pulldown__caret"
+                    width="11"
+                    height="11"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.6"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  ><path d="m6 9 6 6 6-6" /></svg>
+                </label>
+                <label class="qc-home-pulldown">
+                  <span class="qc-home-pulldown__label">排序</span>
+                  <select
+                    v-model="analysisSort"
+                    data-testid="analysis-sort"
+                    aria-label="排序方式"
+                  >
+                    <option value="metric">当前指标</option>
+                    <option value="risk">高风险病历</option>
+                    <option value="gap">资料待核实</option>
+                  </select>
+                  <svg
+                    class="qc-home-pulldown__caret"
+                    width="11"
+                    height="11"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.6"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  ><path d="m6 9 6 6 6-6" /></svg>
+                </label>
               </div>
-              <div class="qc-home-defect-analysis__control">
-                <span>分析指标</span>
-                <div
-                  class="mq-segmented mq-segmented--sm"
-                  role="group"
-                  aria-label="分析指标"
-                >
-                  <button
-                    type="button"
-                    class="mq-segmented__item"
-                    :class="{ 'is-active': analysisMetric === 'total' }"
-                    data-testid="analysis-metric-total"
-                    @click="analysisMetric = 'total'"
-                  >
-                    缺陷总数
-                  </button>
-                  <button
-                    type="button"
-                    class="mq-segmented__item"
-                    :class="{ 'is-active': analysisMetric === 'average' }"
-                    data-testid="analysis-metric-average"
-                    @click="analysisMetric = 'average'"
-                  >
-                    平均缺陷数
-                  </button>
-                </div>
-              </div>
-              <div class="qc-home-defect-analysis__control">
-                <span>排序</span>
-                <div
-                  class="mq-segmented mq-segmented--sm"
-                  role="group"
-                  aria-label="排序方式"
-                >
-                  <button
-                    type="button"
-                    class="mq-segmented__item"
-                    :class="{ 'is-active': analysisSort === 'metric' }"
-                    data-testid="analysis-sort-metric"
-                    @click="analysisSort = 'metric'"
-                  >
-                    当前指标
-                  </button>
-                  <button
-                    type="button"
-                    class="mq-segmented__item"
-                    :class="{ 'is-active': analysisSort === 'risk' }"
-                    data-testid="analysis-sort-risk"
-                    @click="analysisSort = 'risk'"
-                  >
-                    高风险病历
-                  </button>
-                  <button
-                    type="button"
-                    class="mq-segmented__item"
-                    :class="{ 'is-active': analysisSort === 'gap' }"
-                    data-testid="analysis-sort-gap"
-                    @click="analysisSort = 'gap'"
-                  >
-                    资料待核实
-                  </button>
-                </div>
-              </div>
-            </div>
+            </header>
             <div
               v-if="defectAnalysisItems.length"
               class="qc-home-defect-analysis__list"
@@ -830,6 +811,14 @@ function toneGradient(tone: MqIconTone): string {
 }
 
 const todayLabel = computed(() => dayjs().format('M月D日 dddd'))
+
+// 眉标：日期与范围合成一行纯文字（原先拆成多个胶囊）
+const scopeLine = computed(() => {
+  const parts = [todayLabel.value]
+  if (clinicalQc.value) parts.push(scopeHospitalText.value, scopeSceneText.value)
+  parts.push('泸县0609质控点')
+  return parts.join(' · ')
+})
 
 const conclusionSegments = computed<ConclusionSegment[]>(() => {
   const counts = clinicalQc.value?.canonical_status_counts || {}

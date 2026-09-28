@@ -1,71 +1,27 @@
 /* v7.1 液态玻璃 · 首页概览 */
-/* 页头右侧：范围与刷新 */
-.qc-home-scope {
+/* 页头右侧工具栏：科室下拉 + 生成时间 + 刷新 */
+.qc-home-toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
 }
 
-.qc-home-scope__chip,
-.qc-home-scope__select {
-  display: inline-flex;
-  align-items: center;
-  height: 34px;
-  padding: 0 14px;
-  box-sizing: border-box;
-  border: 1px solid var(--mq-glass-border);
-  border-radius: 999px;
-  background: var(--mq-bg-subtle);
-  box-shadow: var(--mq-shadow-sm);
+.qc-home-toolbar__keyword {
+  max-width: 240px;
+  overflow: hidden;
   color: var(--mq-text-secondary);
   font-size: var(--mq-font-13);
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.qc-home-scope__chip--strong,
-.qc-home-scope__rule-set {
-  color: var(--mq-text-primary);
-  font-weight: 600;
-}
-
-.qc-home-scope__select {
-  position: relative;
-  padding: 0;
-}
-
-.qc-home-department {
-  max-width: 200px;
-  height: 100%;
-  padding: 0 32px 0 14px;
+.qc-home-toolbar__clear {
+  height: 30px;
+  padding: 0 8px;
   border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--mq-text-primary);
-  font: inherit;
-  font-size: var(--mq-font-13);
-  appearance: none;
-  cursor: pointer;
-}
-
-.qc-home-scope__caret {
-  position: absolute;
-  right: 12px;
-  color: var(--mq-text-tertiary);
-  pointer-events: none;
-}
-
-.qc-home-scope__keyword {
-  max-width: 260px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.qc-home-scope__clear {
-  height: 34px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: 999px;
+  border-radius: 8px;
   background: transparent;
   color: var(--mq-brand-600);
   font: inherit;
@@ -73,27 +29,84 @@
   cursor: pointer;
 }
 
-.qc-home-scope__time {
+.qc-home-toolbar__time {
   color: var(--mq-text-tertiary);
   font-size: var(--mq-font-12);
   white-space: nowrap;
+}
+
+/* 下拉按钮：页头与缺陷分析共用 */
+.qc-home-pulldown {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 30px;
+  padding: 0 26px 0 10px;
+  border-radius: 8px;
+  color: var(--mq-text-primary);
+  font-size: var(--mq-font-13);
+  white-space: nowrap;
+  transition: background-color 140ms ease;
+}
+
+.qc-home-pulldown:hover {
+  background: rgba(20, 40, 80, 0.05);
+}
+
+.qc-home-pulldown--bordered {
+  border: 0.5px solid rgba(20, 40, 80, 0.14);
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.qc-home-pulldown__label {
+  color: var(--mq-text-tertiary);
+}
+
+.qc-home-pulldown select {
+  max-width: 180px;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  appearance: none;
+  cursor: pointer;
+}
+
+.qc-home-pulldown select:focus-visible {
+  outline: none;
+}
+
+.qc-home-pulldown:focus-within {
+  box-shadow: 0 0 0 3px rgba(10, 108, 255, 0.18);
+}
+
+.qc-home-pulldown__caret {
+  position: absolute;
+  right: 10px;
+  color: var(--mq-text-tertiary);
+  pointer-events: none;
 }
 
 .qc-home-icon-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
-  border: 1px solid var(--mq-glass-border);
-  border-radius: 50%;
-  background: var(--mq-bg-subtle);
-  box-shadow: var(--mq-shadow-sm);
+  width: 30px;
+  height: 30px;
+  border: 0.5px solid rgba(20, 40, 80, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.85);
   cursor: pointer;
 }
 
-.qc-home-department:focus-visible,
-.qc-home-scope__clear:focus-visible,
+.qc-home-icon-button:hover {
+  background: #ffffff;
+}
+
+.qc-home-toolbar__clear:focus-visible,
 .qc-home-icon-button:focus-visible,
 .qc-home-shortcuts button:focus-visible,
 .qc-home-button:focus-visible,
@@ -154,7 +167,7 @@ button.qc-home-defect-analysis__row:focus-visible {
 
 .qc-home-hero__value strong {
   font-family: var(--mq-font-display);
-  font-size: 56px;
+  font-size: 48px;
   font-weight: 600;
   letter-spacing: -0.04em;
   line-height: 0.9;
@@ -164,7 +177,7 @@ button.qc-home-defect-analysis__row:focus-visible {
 .qc-home-hero__value span {
   padding-bottom: 4px;
   color: rgba(255, 255, 255, 0.72);
-  font-size: 16px;
+  font-size: var(--mq-font-14);
   font-weight: 500;
 }
 
@@ -268,7 +281,7 @@ button.qc-home-defect-analysis__row:focus-visible {
 .qc-home-rings__legend dd {
   margin: 0;
   font-family: var(--mq-font-display);
-  font-size: 22px;
+  font-size: var(--mq-font-20);
   font-weight: 600;
   letter-spacing: -0.02em;
   line-height: 1.2;
@@ -307,7 +320,7 @@ button.qc-home-defect-analysis__row:focus-visible {
 }
 
 .qc-home-hero__value span {
-  font-size: 14px;
+  font-size: var(--mq-font-14);
 }
 
 .qc-home-hero__progress {
@@ -340,7 +353,7 @@ button.qc-home-defect-analysis__row:focus-visible {
 }
 
 .qc-home-rings__legend dd {
-  font-size: 20px;
+  font-size: var(--mq-font-20);
 }
 
 @media (max-width: 1279px) {
@@ -417,7 +430,7 @@ button.qc-home-defect-analysis__row:focus-visible {
 
 .qc-home-metric__value {
   font-family: var(--mq-font-display);
-  font-size: 44px;
+  font-size: 32px;
   font-weight: 600;
   letter-spacing: -0.035em;
   line-height: 1;
@@ -427,7 +440,7 @@ button.qc-home-defect-analysis__row:focus-visible {
 .qc-home-metric__value small {
   margin-left: 6px;
   color: #86868b;
-  font-size: 15px;
+  font-size: var(--mq-font-13);
   font-weight: 500;
   letter-spacing: 0;
 }
@@ -499,23 +512,19 @@ button.qc-home-defect-analysis__row:focus-visible {
   gap: 12px;
 }
 
+.qc-home-defect-analysis__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 20px;
+}
+
 .qc-home-defect-analysis__toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px 18px;
-}
-
-.qc-home-defect-analysis__control {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.qc-home-defect-analysis__control > span {
-  color: var(--mq-text-tertiary);
-  font-size: var(--mq-font-12);
-  white-space: nowrap;
+  gap: 4px;
 }
 
 .qc-home-defect-analysis__list {
@@ -660,7 +669,7 @@ button.qc-home-defect-analysis__row:hover,
 
 .qc-home-conclusion__ring strong {
   font-family: var(--mq-font-display);
-  font-size: 24px;
+  font-size: var(--mq-font-20);
   line-height: 28px;
 }
 
@@ -842,5 +851,5 @@ button.qc-home-defect-analysis__row:hover,
 }
 
 .qc-home-metric__value small {
-  font-size: 13px;
+  font-size: var(--mq-font-13);
 }
