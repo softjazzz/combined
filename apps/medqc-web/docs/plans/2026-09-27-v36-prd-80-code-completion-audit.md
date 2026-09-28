@@ -2,27 +2,27 @@
 
 ## 基线与结论
 
-- 核对日期：2026-09-27；首次盘点基线：`e1703611c`；最新增量为滚动计划第91节的五线收尾（在 `f6a89373c` 上开发）；分支：`codex/v36-manual-gap-drilldown-20260922`。首次12/41/27及上批14/40/26历史结论保留于第89、90节，本表为增量后的代码状态。
+- 核对日期：2026-09-27；首次盘点基线：`e1703611c`；最新增量为滚动计划第92节（在 `1c7448e19` 上开发）；分支：`codex/v36-manual-gap-drilldown-20260922`。12/41/27、14/40/26和16/38/26历史结论保留于第89至91节，本表为增量后的代码状态。
 - 分母固定为 `docs/PRD-内涵质控V3.6总需求与差距矩阵.md` 中带 P0/P1/P2/P3 的 80 个功能行，按原文顺序编号。没有删除外部阻塞项，也没有把新增技术工作算成额外完成项。
 - 本清单评估代码，不替代原矩阵的业务覆盖/验收状态。部署未做、浏览器未验收，不单独导致代码降级；但真实接口缺失、入口停用、场景身份无法成立、必需动作未实现，会影响代码完整性。
 
 | 代码状态 | 项数 | 占全部80项 |
 | --- | ---: | ---: |
-| 代码完整 | 16 | 20% |
-| 部分实现 | 38 | 47.5% |
+| 代码完整 | 17 | 21.25% |
+| 部分实现 | 37 | 46.25% |
 | 未实现 | 26 | 32.5% |
 | 合计 | 80 | 100% |
 
-**整项代码完成率为16/80 = 20%。有直接功能实现的条目为54/80 = 67.5%，但67.5%不是完成率，也不是工时进度。** 部分项不统一按50%折算；一行可能同时要求多个动作或多个场景，各行工作量也不相等。剩余64项不等于还有80%的开发工时。
+**整项代码完成率为17/80 = 21.25%。有直接功能实现的条目为54/80 = 67.5%，但67.5%不是完成率，也不是工时进度。** 部分项不统一按50%折算；一行可能同时要求多个动作或多个场景，各行工作量也不相等。剩余63项不等于还有78.75%的开发工时。
 
-代码完整项：02、03、06、10、22、26、35、37、59、63、73、74、75、77、79、80。
+代码完整项：02、03、06、10、22、26、35、37、59、62、63、73、74、75、77、79、80。
 
 | 模块 | 完整 | 部分 | 未实现 | 总数 |
 | --- | ---: | ---: | ---: | ---: |
 | 登录、工作台、门急诊（01–20） | 4 | 7 | 9 | 20 |
 | 运行、终末、任务（21–43） | 4 | 17 | 2 | 23 |
 | 统计分析（44–56） | 0 | 7 | 6 | 13 |
-| 规则、文书、测试病历（57–80） | 8 | 7 | 9 | 24 |
+| 规则、文书、测试病历（57–80） | 9 | 6 | 9 | 24 |
 
 ## 判定方法
 
@@ -84,7 +84,7 @@
 | 40 | 病历范围：自定义筛选、指定病历 | 部分实现 | 三坐标指定病例及基础日期/科室条件可用；复杂条件和完整场景范围未齐。 | `backend/app/services/task_sampling_service.py:94` | `2102a39b8` |
 | 41 | 病历抽样：全部、数量、比例等 | 部分实现 | 全部、数量、比例和科室分层已实现；手册全部抽样方式与完整场景未覆盖。 | `backend/app/services/task_sampling_service.py:334` | `76a134fc3` |
 | 42 | 任务分配：原质控员、科室、比例、病历类型 | 部分实现 | 原质控员、科室、比例三种已实现；病历类型策略明确不可用。 | `backend/app/services/task_assignment_service.py:22`；`src/components/qc/CreateTaskDrawer.vue:537` | `e3e453490` |
-| 43 | 全部任务 | 部分实现 | 管理员全量列表、统计、详情及最多20项批量分配已接；逐任务独立事务和逐项结果、失败保留与未知结果保护已测。模板和任务分析仍缺。 | `backend/tests/unit/test_task_batch_assignment.py:1`；`src/views/dashboard/tasks/AllTasksView.vue:1` | `e3e453490`；第91节D线 |
+| 43 | 全部任务 | 部分实现 | 列表、批量分配已有；新增私有任务模板保存/套用/编辑/删除及单任务分析，模板依赖未执行迁移64。任务编辑和导出仍占位，定时任务管理/执行边界未完成，不提升整项。 | `backend/app/services/task_template_service.py:1`；`backend/app/services/task_analysis_service.py:1`；`src/views/dashboard/tasks/AllTasksView.vue:1` | `e3e453490`；第91节D线、第92节 |
 
 ## 44–56 统计分析
 
@@ -113,7 +113,7 @@
 | 59 | 评分标准新增、编辑、删除 | 代码完整 | 草稿CRUD、任意等级名称及区间校验、界面和测试已做；已启用版本通过复制草稿再改。 | `backend/app/routers/scoring.py:190`；`backend/app/services/scoring_standard_service.py:221` | `10f2a9592`、`8e1af54e9` |
 | 60 | 默认评分标准配置 | 部分实现 | 运行/终末启用替换及active非默认直接设默认均已接；场景锁、CAS、替换与回读同事务。门急诊规则来源及首页/特殊报表默认场景仍未齐。 | `backend/app/services/scoring_standard_service.py:1`；`src/views/qc/ScoringStandardsView.vue:1` | `10f2a9592`、`8e1af54e9`；第91节C线 |
 | 61 | 评分项目组配置 | 部分实现 | 项目组、扣分条目和启用可维护；生效科室及文书等范围未完整建模。 | `src/views/qc/scoring/ScoringStandardEditor.vue:219`；`backend/app/services/scoring_standard_service.py:317` | `10f2a9592`、`8e1af54e9` |
-| 62 | 规则导入/导出 | 部分实现 | 旧scoring_rules有Excel接口；未接新标准/规则集版本，缺逐行失败明细。 | `backend/app/routers/scoring_rules.py:207`；`backend/app/routers/scoring_rules.py:281` | 无新标准专项交付 |
+| 62 | 规则导入/导出 | 代码完整 | 新评分标准与规则集版本均有版本化Excel模板、导出、导入草稿及逐Sheet/行/字段错误和成功回执。评分标准只新建草稿；生命周期只导入已登记规则状态，不导入新执行器或规则定义。资源/公式/外链、版本竞争、草稿删除重建、事务回滚和未知响应有反例。 | `backend/app/services/scoring_standard_excel_service.py:1`；`backend/app/services/rule_set_version_excel_service.py:1` | 第92节两条Excel专项提交 |
 | 63 | 非编码质控点已上线列表 | 代码完整 | 当前版本真实条目，开启/暂停/下线写草稿并发布，已有组件与服务测试。 | `src/views/dashboard/quality-control/QualityControlPointManagement.vue:69`；`backend/app/services/rule_set_version_service.py:421` | `25340aec6` |
 | 64 | 非编码质控点未上线列表 | 部分实现 | 未上线列表与批量上线可用；单项编辑、删除未接。 | `src/views/dashboard/quality-control/QualityControlPointManagement.vue:73` | `25340aec6` |
 | 65 | 编码质控点管理 | 未实现 | 有编码规则结果，但缺编码质控点已上线/未上线管理及规定批量动作。 | `src/views/dashboard/quality-control/ruleSetVersionModel.ts:15` | 无专项交付 |
@@ -152,7 +152,7 @@
 
 | 层级 | 本次结论 |
 | --- | --- |
-| 代码完成 | 16项完整、38项部分、26项未实现；第91节净新增2项完整，另外4项补子缺口但不升级整项 |
+| 代码完成 | 17项完整、37项部分、26项未实现；第92节新增62完整，43仅补子能力；新十项Goal累计1/10 |
 | 非生产验证 | 历史各批有不同范围的单测/合成PG/只读冒烟，不能给80项统一通过率；最新报表及人员分析只读PG窗口为空，不是非空正向验收 |
 | 业务库部署 | 本开发批次未完成部署；不能把隔离库revision62当业务库已升级 |
 | 真实病例与浏览器验收 | 未对80项形成逐项签收清单；本次代码审计不能代替业务验收 |
@@ -166,6 +166,7 @@
 - 79：`backend/tests/unit/test_customer_test_record_management.py`，35项覆盖权限、CAS、持久审计、原载荷保留与回读失败回滚；不是实际PG写入验收。
 - 35/37：`backend/tests/unit/test_task_detail_scope.py`、`backend/tests/unit/test_task_progress_scope.py`、`backend/tests/unit/test_task_stats_scope.py`。大规模真实PostgREST的详情取数完整性仍需专项验收。
 - 59/63：`tests/unit/views/qc/ScoringStandardsView.spec.ts`、`backend/tests/unit/test_rule_set_version_service.py`、`src/views/dashboard/quality-control/__tests__/QualityControlPointManagement.spec.ts`。
+- 62：两套Excel服务及API测试；第92节主协调后端组合107项通过，全量前端214文件/2020项通过。数据库写入和真实文件浏览器往返仍未验收。
 - 73/74/77/80：`backend/tests/unit/test_customer_test_record_management.py`及相关合成病历创建测试；不同人口学信息、文书类型和真实数据库行为仍需集成验收。
 - 最近代码基线的前端全量204文件/1924项、类型检查、ESLint与编码检查已通过，见滚动计划§88；这不能换算成PRD完成百分比。
 

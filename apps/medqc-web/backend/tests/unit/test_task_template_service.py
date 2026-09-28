@@ -131,4 +131,3 @@ def test_readback_failure_rolls_back_create_and_update(sessions, monkeypatch):
     monkeypatch.setattr(service, "_read_one", original_read)
     listed = service.list_task_templates(owner_id="u-1")["items"]
     assert listed[0]["name"] == "常用" and listed[0]["version"] == 1
-

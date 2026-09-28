@@ -94,4 +94,3 @@ def test_missing_identity_and_unavailable_are_desensitized(sessions, monkeypatch
     assert response.status_code == 503
     assert response.json()["detail"]["code"] == "template_unavailable"
     assert "secret" not in response.text
-
