@@ -232,6 +232,7 @@
             :selected-record-keys="selectedRecordKeys"
             :empty-message="emptyMessage"
             @open-result="handleSelectPreview"
+            @open-full="handleOpenResult"
             @update:selected-record-keys="updateSelectedRecordKeys"
           />
 

@@ -1219,10 +1219,10 @@
 }
 
 .running-qc-apple :deep(.qc-record-result-table__table thead th) {
-  background: transparent;
+  background: #fafbfd;
   color: var(--mq-text-tertiary);
   font-size: var(--mq-font-12);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .running-qc-apple :deep(.qc-record-result-table__row > td) {
@@ -1243,12 +1243,11 @@
 }
 
 .running-qc-apple :deep(.qc-record-result-table__patient-name) {
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .running-qc-apple :deep(.qc-record-result-table__visit-id) {
   color: var(--mq-text-tertiary);
-  font-family: var(--mq-font-mono);
   font-size: var(--mq-font-12);
 }
 

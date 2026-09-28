@@ -24,22 +24,22 @@ const rows = [
 ]
 
 describe('QcRecordResultTable', () => {
-  it('紧凑复核模式为五列，合并患者科室信息并保留完整提示与摘要', () => {
+  it('紧凑复核模式与病历池一致为六列：患者 / 住院号、科室、摘要、最近质控、操作', () => {
     const issueSummary = '确定问题 2 · 待核实 18 · 自定义说明'
     const wrapper = mount(QcRecordResultTable, {
       props: { carePhase: 'inpatient', compactReview: true, rows: [{ ...rows[0], issueSummary }] },
     })
     expect(wrapper.findAll('thead th').map((item) => item.text())).toEqual([
       '',
-      '患者 / 科室',
+      '患者 / 住院号',
+      '科室',
       '问题摘要',
       '最近质控',
-      '预览',
+      '操作',
     ])
-    expect(wrapper.findAll('tbody td')).toHaveLength(5)
-    expect(wrapper.get('.qc-record-result-table__compact-meta').attributes('title')).toBe(
-      'V-1 · 重症医学科 · 12 床',
-    )
+    expect(wrapper.findAll('tbody td')).toHaveLength(6)
+    expect(wrapper.get('.qc-record-result-table__visit-line').text()).toBe('住院号：V-1')
+    expect(wrapper.get('.qc-record-result-table__department').text()).toBe('重症医学科')
     expect(wrapper.get('.qc-record-result-table__avatar').attributes('alt')).toBe('患者甲头像')
     expect(wrapper.get('.qc-record-result-table__summary').attributes('title')).toBe(issueSummary)
     expect(
@@ -73,16 +73,19 @@ describe('QcRecordResultTable', () => {
     expect(row.classes()).not.toContain('qc-record-result-table__row--active')
     expect(row.classes()).toContain('qc-record-result-table__row--selected')
     await row.trigger('click')
-    await wrapper.get('button[aria-label="查看病历预览"]').trigger('click')
-    expect(wrapper.emitted('open-result')).toEqual([[rows[0].recordKey], [rows[0].recordKey]])
+    expect(wrapper.emitted('open-result')).toEqual([[rows[0].recordKey]])
+    // 「查看」只打开完整结果，不重复触发预览
+    await wrapper.get('.qc-record-result-table__view-button').trigger('click')
+    expect(wrapper.emitted('open-full')).toEqual([[rows[0].recordKey]])
+    expect(wrapper.emitted('open-result')).toHaveLength(1)
   })
 
-  it('紧凑空态跨五列，默认空态仍跨七列', () => {
+  it('紧凑空态跨六列，默认空态仍跨七列', () => {
     const compact = mount(QcRecordResultTable, {
       props: { carePhase: 'inpatient', compactReview: true, rows: [] },
     })
     const normal = mount(QcRecordResultTable, { props: { carePhase: 'inpatient', rows: [] } })
-    expect(compact.get('tbody td').attributes('colspan')).toBe('5')
+    expect(compact.get('tbody td').attributes('colspan')).toBe('6')
     expect(normal.get('tbody td').attributes('colspan')).toBe('7')
   })
 
