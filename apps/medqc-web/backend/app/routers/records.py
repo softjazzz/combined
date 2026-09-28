@@ -6,10 +6,13 @@ import logging
 from contextlib import contextmanager
 
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Request, Query
+from fastapi.responses import Response
 from sqlalchemy import and_, desc, func, or_, text
 
 from ..core.supabase_client import get_supabase, async_execute
 from ..core.security import get_current_user
+from ..core.audit import audit_event
+from ..core.data_scope import resolve_workstation_data_scope
 from ..core.response import success_response, paginated_response, get_trace_id, StatusCode
 from ..schemas.records import MedicalRecordResponse
 from ..storage.memory import medical_records_db
@@ -18,6 +21,7 @@ from ..database.connection import DB_SCHEMA_MODE, SessionLocal, engine
 from ..database.models.cdm import AdmissionRecord, DischargeRecord, MedicalRecordFrontpage
 from ..services.bundles.emr_view import build_documents_tree, load_bundle_documents
 from ..services.sample_validation_rule_sets import WORKSPACE_BATCH_DRAFT_IDS
+from ..services import outpatient_record_list_service
 from ..core.permissions import (
     require_permission,
     ResourceType,
@@ -59,74 +63,6 @@ def _validate_record_upload(file: UploadFile, content: bytes) -> None:
 
     if _EICAR_SIGNATURE in content.upper():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="检测到恶意文件特征")
-
-
-def _to_float(value: Any) -> Optional[float]:
-    try:
-        if value is None or value == "":
-            return None
-        return float(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _to_int(value: Any, default: int = 0) -> int:
-    try:
-        if value is None or value == "":
-            return default
-        return int(value)
-    except (TypeError, ValueError):
-        return default
-
-
-def _normalize_visit_type(raw_visit_type: Any, raw_record_type: Any) -> str:
-    visit_type = str(raw_visit_type or "").strip().lower()
-    if visit_type in {"outpatient", "emergency"}:
-        return visit_type
-
-    record_type = str(raw_record_type or "").strip().lower()
-    if "emergency" in record_type or "急诊" in record_type:
-        return "emergency"
-    if "outpatient" in record_type or "门诊" in record_type:
-        return "outpatient"
-    return ""
-
-
-def _normalize_date_only(value: Any) -> str:
-    if value is None:
-        return ""
-    text = str(value).strip()
-    if len(text) >= 10:
-        return text[:10]
-    return text
-
-
-def _normalize_outpatient_item(row: Dict[str, Any]) -> Dict[str, Any]:
-    visit_date = (
-        _normalize_date_only(row.get("visit_date"))
-        or _normalize_date_only(row.get("admission_date"))
-        or _normalize_date_only(row.get("admission_datetime"))
-        or _normalize_date_only(row.get("created_at"))
-    )
-    visit_type = _normalize_visit_type(row.get("visit_type"), row.get("record_type"))
-    score = _to_float(row.get("score"))
-    if score is None:
-        score = _to_float(row.get("overall_score"))
-
-    return {
-        "id": row.get("id") or row.get("record_id") or row.get("visit_id") or "",
-        "record_id": row.get("record_id") or row.get("mr_no") or row.get("visit_id") or row.get("id") or "",
-        "patient_name": row.get("patient_name") or row.get("name") or "",
-        "department": row.get("department") or row.get("department_name") or row.get("admission_dept_name") or "",
-        "doctor_name": row.get("doctor_name") or row.get("attending_physician_sign") or row.get("doctor") or "",
-        "visit_type": visit_type,
-        "visit_date": visit_date,
-        "status": row.get("status") or "pending",
-        "score": score,
-        "defect_count": _to_int(row.get("defect_count"), 0),
-        "scoring_standard": row.get("scoring_standard") or row.get("score_standard"),
-        "source": "records",
-    }
 
 
 def _pick_document_content(documents: List[Dict[str, Any]], keywords: List[str]) -> str:
@@ -597,95 +533,165 @@ async def get_outpatient_emergency_records(
     scoring_standard: Optional[str] = None,
     sort_field: Optional[str] = "visit_date",
     sort_order: Optional[str] = "desc",
-    page: int = 1,
-    page_size: int = 20,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
     current_user: dict = Depends(get_current_user),
 ):
-    """
-    门急诊病历分页查询（最小可落地壳层）。
-
-    返回契约:
-    {
-      items: [
-        {
-          id, record_id, patient_name, department, doctor_name,
-          visit_type, visit_date, status, score, defect_count, scoring_standard, source
-        }
-      ],
-      total, page, page_size
-    }
-    """
-    rows: List[Dict[str, Any]] = []
-
+    """按授权数据范围分页读取门急诊病历。"""
     try:
+        scope = resolve_workstation_data_scope(current_user, department)
+        filters = outpatient_record_list_service.build_filter(
+            keyword=keyword,
+            department=scope.department,
+            status=status,
+            start_date=start_date,
+            end_date=end_date,
+            scoring_standard=scoring_standard,
+            sort_field=sort_field,
+            sort_order=sort_order,
+        )
         supabase = get_supabase()
         settings = get_settings()
         if not supabase:
-            raise HTTPException(
-                status_code=StatusCode.SERVICE_UNAVAILABLE,
-                detail="门急诊病历数据源暂不可用，请稍后重试",
+            raise outpatient_record_list_service.OutpatientRecordSourceUnavailable(
+                "门急诊病历数据源暂不可用"
             )
-        try:
-            resp = await async_execute(
-                supabase.table(settings.RECORDS_TABLE).select("*").limit(5000)
-            )
-            rows = list(getattr(resp, "data", None) or [])
-        except Exception as exc:
-            logger.error("读取门急诊病历数据源失败: %s", exc)
-            raise HTTPException(
-                status_code=StatusCode.SERVICE_UNAVAILABLE,
-                detail="门急诊病历数据源暂不可用，请稍后重试",
-            ) from exc
-
-        normalized = [_normalize_outpatient_item(r) for r in rows]
-        normalized = [r for r in normalized if r.get("visit_type") in {"outpatient", "emergency"}]
-
-        if keyword:
-            kw = keyword.lower()
-            normalized = [
-                r for r in normalized
-                if kw in str(r.get("record_id", "")).lower()
-                or kw in str(r.get("patient_name", "")).lower()
-                or kw in str(r.get("doctor_name", "")).lower()
-            ]
-        if department:
-            normalized = [r for r in normalized if str(r.get("department") or "") == department]
-        if status:
-            normalized = [r for r in normalized if str(r.get("status") or "") == status]
-        if scoring_standard:
-            normalized = [
-                r for r in normalized if str(r.get("scoring_standard") or "") == scoring_standard
-            ]
-        if start_date:
-            normalized = [r for r in normalized if str(r.get("visit_date") or "") >= start_date]
-        if end_date:
-            normalized = [r for r in normalized if str(r.get("visit_date") or "") <= end_date]
-
-        reverse = (sort_order or "desc").lower() == "desc"
-        allowed_sort_fields = {"visit_date", "score", "defect_count", "patient_name", "department"}
-        final_sort_field = sort_field if sort_field in allowed_sort_fields else "visit_date"
-        normalized.sort(key=lambda x: x.get(final_sort_field) or "", reverse=reverse)
-
-        total = len(normalized)
-        start = (page - 1) * page_size
-        end = start + page_size
-        page_data = normalized[start:end]
-
+        result = await outpatient_record_list_service.query_records(
+            source=supabase,
+            table_name=settings.RECORDS_TABLE,
+            filters=filters,
+            page=page,
+            page_size=page_size,
+            execute=async_execute,
+        )
         return paginated_response(
-            items=page_data,
-            total=total,
+            items=result.items,
+            total=result.total,
             page=page,
             page_size=page_size,
             message="获取门急诊病历成功",
             trace_id=get_trace_id(request),
         )
+    except outpatient_record_list_service.OutpatientRecordInvalid as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (
+        outpatient_record_list_service.OutpatientRecordSourceUnavailable,
+        outpatient_record_list_service.OutpatientRecordSourceTooLarge,
+    ) as exc:
+        logger.warning("outpatient_record_list_unavailable error_type=%s", type(exc).__name__)
+        raise HTTPException(
+            status_code=StatusCode.SERVICE_UNAVAILABLE,
+            detail="门急诊病历数据源暂不可用，请稍后重试",
+        ) from None
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception as exc:
+        logger.error("outpatient_record_list_failed error_type=%s", type(exc).__name__)
         raise HTTPException(
-            status_code=StatusCode.INTERNAL_SERVER_ERROR,
-            detail=f"获取门急诊病历失败: {e}",
+            status_code=StatusCode.SERVICE_UNAVAILABLE,
+            detail="门急诊病历数据源暂不可用，请稍后重试",
+        ) from None
+
+
+@router.get("/outpatient-emergency/export")
+@require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.EXPORT)
+async def export_outpatient_emergency_records(
+    request: Request,
+    keyword: Optional[str] = None,
+    department: Optional[str] = None,
+    status: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    scoring_standard: Optional[str] = None,
+    sort_field: Optional[str] = "visit_date",
+    sort_order: Optional[str] = "desc",
+    current_user: dict = Depends(get_current_user),
+):
+    """导出与门急诊列表完全相同筛选和排序下的全部命中项。"""
+    try:
+        scope = resolve_workstation_data_scope(current_user, department)
+        filters = outpatient_record_list_service.build_filter(
+            keyword=keyword,
+            department=scope.department,
+            status=status,
+            start_date=start_date,
+            end_date=end_date,
+            scoring_standard=scoring_standard,
+            sort_field=sort_field,
+            sort_order=sort_order,
         )
+        supabase = get_supabase()
+        settings = get_settings()
+        if not supabase:
+            raise outpatient_record_list_service.OutpatientRecordSourceUnavailable(
+                "门急诊病历数据源暂不可用"
+            )
+        result = await outpatient_record_list_service.export_records(
+            source=supabase,
+            table_name=settings.RECORDS_TABLE,
+            filters=filters,
+            execute=async_execute,
+        )
+    except outpatient_record_list_service.OutpatientRecordInvalid as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except outpatient_record_list_service.OutpatientRecordExportTooLarge as exc:
+        raise HTTPException(
+            status_code=413,
+            detail={
+                "code": "outpatient_export_too_large",
+                "message": str(exc),
+                "matched_count": exc.count,
+                "limit": outpatient_record_list_service.MAX_EXPORT_ROWS,
+            },
+        ) from exc
+    except (
+        outpatient_record_list_service.OutpatientRecordSourceUnavailable,
+        outpatient_record_list_service.OutpatientRecordSourceTooLarge,
+    ) as exc:
+        logger.warning("outpatient_record_export_unavailable error_type=%s", type(exc).__name__)
+        raise HTTPException(
+            status_code=503,
+            detail="门急诊病历导出暂不可用，请稍后重试",
+        ) from None
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("outpatient_record_export_failed error_type=%s", type(exc).__name__)
+        raise HTTPException(
+            status_code=503,
+            detail="门急诊病历导出暂不可用，请稍后重试",
+        ) from None
+
+    audit_event(
+        request,
+        action="records.outpatient_emergency.export",
+        resource="medical_records",
+        outcome="success",
+        details={
+            "keyword_applied": filters.keyword is not None,
+            "department_applied": filters.department is not None,
+            "status_applied": filters.status is not None,
+            "start_date": start_date,
+            "end_date": end_date,
+            "scoring_standard_applied": filters.scoring_standard is not None,
+            "sort_field": filters.sort_field,
+            "sort_order": filters.sort_order,
+            "total_rows": result.row_count,
+            "limit": outpatient_record_list_service.MAX_EXPORT_ROWS,
+        },
+        current_user=current_user,
+    )
+    return Response(
+        content=result.content,
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+            "Content-Disposition": (
+                "attachment; filename*=UTF-8''outpatient-emergency-records.csv"
+            ),
+        },
+    )
 
 
 @router.get("/final")
@@ -821,7 +827,9 @@ async def get_final_records(
                         or row.admission_dept_name
                         or ""
                     ),
-                    "discharge_date": _normalize_date_only(effective_discharge_datetime),
+                    "discharge_date": outpatient_record_list_service.normalize_date_only(
+                        effective_discharge_datetime
+                    ),
                     "identity_status": "unverified",
                     "status": "unverified",
                     "score": None,
@@ -922,7 +930,7 @@ async def get_record_qc_detail(
         record_row = matching_records[0]
         if not isinstance(record_row, dict) or str(record_row.get("id", "")) != record_id:
             raise ValueError("invalid medical record identity")
-        normalized = _normalize_outpatient_item(record_row)
+        normalized = outpatient_record_list_service.normalize_record(record_row)
         payload["record"] = {
             key: normalized[key]
             for key in (

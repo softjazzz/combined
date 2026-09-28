@@ -124,10 +124,16 @@
             批量派发整改
           </a-button>
           <a-button
-            disabled
+            data-testid="export-outpatient-records"
+            :disabled="!appliedExportFilters || loading || exportLoading"
+            :loading="exportLoading"
             class="!rounded-xl"
+            @click="handleExportRecords"
           >
-            导出缺陷
+            <template #icon>
+              <Download :size="15" aria-hidden="true" />
+            </template>
+            导出病历
           </a-button>
           <a-tooltip title="刷新数据">
             <a-button
@@ -276,12 +282,17 @@ import { message } from 'ant-design-vue'
 import type { TableColumnsType, TableProps } from 'ant-design-vue'
 import dayjs, { type Dayjs } from 'dayjs'
 import { ReloadOutlined, SearchOutlined } from '@ant-design/icons-vue'
+import { Download } from 'lucide-vue-next'
 import {
+  exportOutpatientEmergencyRecords,
   getDepartmentList,
   getRecordDetail,
   getOutpatientEmergencyRecordList,
   type AdminRecordItem,
+  type OutpatientEmergencyRecordFilters,
 } from '@/api/qcAdmin'
+import { useAuthStore } from '@/stores/auth'
+import { downloadBlob } from '@/views/workstation-v4/customer-sample-validation/batchExport'
 import OutpatientEmergencyDetailDrawer from './OutpatientEmergencyDetailDrawer.vue'
 import OutpatientFilterTemplateBar, {
   type OutpatientFilterSnapshot,
@@ -290,11 +301,15 @@ import OutpatientFilterTemplateBar, {
 const loading = ref(false)
 const listError = ref('')
 let recordListRequestSequence = 0
+let exportRequestSequence = 0
+const exportLoading = ref(false)
+const appliedExportFilters = ref<OutpatientEmergencyRecordFilters | null>(null)
 const searchKeyword = ref('')
 const selectedDepartment = ref<string | undefined>(undefined)
 type DateRange = [Dayjs, Dayjs] | null
 const dateRange = ref<DateRange>(null)
 let suppressAutomaticFetch = false
+let mounted = false
 const records = ref<AdminRecordItem[]>([])
 const departmentOptions = ref<Array<{ value: string; label: string }>>([])
 const selectedRowKeys = ref<string[]>([])
@@ -307,6 +322,10 @@ let detailRequestSequence = 0
 const detailIndex = computed(() =>
   records.value.findIndex((record) => record.id === detailRecord.value?.id),
 )
+const authStore = useAuthStore()
+const actorKey = computed(() => (
+  `${authStore.user?.id || ''}|${[...authStore.userRoles].sort().join(',')}`
+))
 
 const pagination = ref({
   current: 1,
@@ -364,45 +383,88 @@ const loadDepartments = async () => {
   }
 }
 
+const currentListFilters = (): OutpatientEmergencyRecordFilters => ({
+  keyword: searchKeyword.value || undefined,
+  department: selectedDepartment.value,
+  start_date: dateRange.value?.[0]?.format?.('YYYY-MM-DD'),
+  end_date: dateRange.value?.[1]?.format?.('YYYY-MM-DD'),
+  sort_field: 'visit_date',
+  sort_order: 'desc',
+})
+
+const isValidRecordList = (value: unknown): value is { items: AdminRecordItem[]; total: number } => {
+  if (!value || typeof value !== 'object') return false
+  const payload = value as Record<string, unknown>
+  return Array.isArray(payload.items)
+    && payload.items.every((item) => Boolean(item) && typeof item === 'object' && !Array.isArray(item))
+    && typeof payload.total === 'number'
+    && Number.isInteger(payload.total)
+    && payload.total >= 0
+}
+
 const fetchRecords = async () => {
   const requestSequence = ++recordListRequestSequence
+  const requestActorKey = actorKey.value
+  const listFilters = currentListFilters()
   loading.value = true
   listError.value = ''
   try {
     const res = await getOutpatientEmergencyRecordList({
-      keyword: searchKeyword.value || undefined,
-      department: selectedDepartment.value,
-      start_date: dateRange.value?.[0]?.format?.('YYYY-MM-DD'),
-      end_date: dateRange.value?.[1]?.format?.('YYYY-MM-DD'),
+      ...listFilters,
       page: pagination.value.current,
       page_size: pagination.value.pageSize,
     })
-    if (requestSequence !== recordListRequestSequence) {
+    if (requestSequence !== recordListRequestSequence || requestActorKey !== actorKey.value) {
       return
     }
-    if (res.success && res.data) {
-      records.value = res.data.items || []
-      pagination.value.total = res.data.total || 0
+    if (res.success && isValidRecordList(res.data)) {
+      records.value = res.data.items
+      pagination.value.total = res.data.total
+      appliedExportFilters.value = { ...listFilters }
       return
     }
     records.value = []
     selectedRowKeys.value = []
     pagination.value.total = 0
-    listError.value = res.message || '获取门急诊病历失败，请稍后重试'
+    appliedExportFilters.value = null
+    listError.value = res.success
+      ? '门急诊病历列表返回格式异常，请稍后重试'
+      : res.message || '获取门急诊病历失败，请稍后重试'
   } catch {
-    if (requestSequence !== recordListRequestSequence) {
+    if (requestSequence !== recordListRequestSequence || requestActorKey !== actorKey.value) {
       return
     }
     records.value = []
     selectedRowKeys.value = []
     pagination.value.total = 0
+    appliedExportFilters.value = null
     listError.value = '获取门急诊病历失败，请稍后重试'
     message.error(listError.value)
   } finally {
-    if (requestSequence === recordListRequestSequence) {
+    if (requestSequence === recordListRequestSequence && requestActorKey === actorKey.value) {
       loading.value = false
     }
   }
+}
+
+const invalidatePendingExport = () => {
+  exportRequestSequence += 1
+  exportLoading.value = false
+}
+
+const handleExportRecords = async () => {
+  if (!appliedExportFilters.value || exportLoading.value || loading.value) return
+  const requestSequence = ++exportRequestSequence
+  const filters = { ...appliedExportFilters.value }
+  exportLoading.value = true
+  const result = await exportOutpatientEmergencyRecords(filters)
+  if (requestSequence !== exportRequestSequence) return
+  exportLoading.value = false
+  if (result.success === false) {
+    message.error(result.message)
+    return
+  }
+  downloadBlob(result.blob, result.filename)
 }
 
 const handleSearch = () => {
@@ -507,14 +569,36 @@ watch([selectedDepartment, dateRange], () => {
   fetchRecords()
 })
 
+watch([searchKeyword, selectedDepartment, dateRange], invalidatePendingExport)
+
+watch(actorKey, () => {
+  recordListRequestSequence += 1
+  detailRequestSequence += 1
+  loading.value = false
+  records.value = []
+  selectedRowKeys.value = []
+  pagination.value.total = 0
+  appliedExportFilters.value = null
+  listError.value = ''
+  invalidatePendingExport()
+  if (mounted && authStore.user?.id) {
+    void fetchRecords()
+    return
+  }
+  listError.value = '当前未登录，门急诊病历不可用'
+})
+
 onMounted(() => {
+  mounted = true
   loadDepartments()
   fetchRecords()
 })
 
 onBeforeUnmount(() => {
+  mounted = false
   recordListRequestSequence += 1
   detailRequestSequence += 1
+  invalidatePendingExport()
 })
 </script>
 

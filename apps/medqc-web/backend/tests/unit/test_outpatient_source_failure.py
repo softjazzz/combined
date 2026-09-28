@@ -14,22 +14,34 @@ from app.routers import records
 @dataclass
 class _Result:
     data: list[dict[str, Any]]
+    count: int
 
 
 class _Query:
     def __init__(self, database: "_Database"):
         self.database = database
+        self.start = 0
+        self.end = len(database.rows) - 1
 
     def select(self, *_args, **_kwargs):
         return self
 
-    def limit(self, *_args, **_kwargs):
+    def order(self, _column, *, desc=False):
+        assert desc is False
+        return self
+
+    def range(self, start, end):
+        self.start, self.end = start, end
         return self
 
     def execute(self) -> _Result:
         if self.database.failed:
             raise RuntimeError("records source unavailable")
-        return _Result(data=[dict(row) for row in self.database.rows])
+        rows = sorted(self.database.rows, key=lambda row: str(row.get("id") or ""))
+        return _Result(
+            data=[dict(row) for row in rows[self.start:self.end + 1]],
+            count=len(rows),
+        )
 
 
 class _Database:

@@ -7,6 +7,7 @@
  * @see PRD-病案质控管理员端.md — 补充 C（数据模型映射）
  */
 
+import { isAxiosError } from 'axios'
 import { ApiService } from '@/services/apiService'
 import { extractApiErrorMessageFromError, normalizeApiSuccess } from '@/utils/api-envelope'
 import type { TaskItem, TaskScene } from './tasks'
@@ -124,6 +125,33 @@ export interface FinalRecordListQuery {
   page_size?: number
 }
 
+export type OutpatientEmergencySortField =
+  | 'visit_date'
+  | 'score'
+  | 'defect_count'
+  | 'patient_name'
+  | 'department'
+
+export interface OutpatientEmergencyRecordFilters {
+  keyword?: string
+  department?: string
+  status?: string
+  start_date?: string
+  end_date?: string
+  scoring_standard?: string
+  sort_field?: OutpatientEmergencySortField
+  sort_order?: 'asc' | 'desc'
+}
+
+export interface OutpatientEmergencyRecordListQuery extends OutpatientEmergencyRecordFilters {
+  page?: number
+  page_size?: number
+}
+
+export type OutpatientEmergencyExportResult =
+  | { success: true; blob: Blob; filename: string }
+  | { success: false; message: string; status?: number }
+
 /** 旧终末列表过渡项：三坐标可信，旧单键质控归属和结果尚未核实。 */
 export interface FinalRecordItem {
   id: string
@@ -221,16 +249,7 @@ export async function getFinalRecordList(params?: FinalRecordListQuery) {
 }
 
 /** 获取门急诊病历分页列表（主链路接口） */
-export async function getOutpatientEmergencyRecordList(params?: {
-  keyword?: string
-  department?: string
-  status?: string
-  start_date?: string
-  end_date?: string
-  scoring_standard?: string
-  page?: number
-  page_size?: number
-}) {
+export async function getOutpatientEmergencyRecordList(params?: OutpatientEmergencyRecordListQuery) {
   const queryParams = new URLSearchParams()
   if (params) {
     Object.entries(params).forEach(([key, value]) => {
@@ -244,6 +263,113 @@ export async function getOutpatientEmergencyRecordList(params?: {
     method: 'GET',
     url,
   })
+}
+
+function outpatientExportParams(filters: OutpatientEmergencyRecordFilters) {
+  return Object.fromEntries(
+    Object.entries(filters).filter(([, value]) => value !== undefined && value !== null && value !== ''),
+  )
+}
+
+function responseHeader(headers: unknown, name: string): string {
+  if (!headers || typeof headers !== 'object') return ''
+  const getter = Reflect.get(headers, 'get')
+  if (typeof getter === 'function') {
+    const value: unknown = Reflect.apply(getter, headers, [name])
+    if (typeof value === 'string') return value
+  }
+  const target = name.toLowerCase()
+  for (const [key, value] of Object.entries(headers as Record<string, unknown>)) {
+    if (key.toLowerCase() === target && typeof value === 'string') return value
+  }
+  return ''
+}
+
+async function outpatientExportErrorMessage(value: unknown): Promise<string | undefined> {
+  let body = value
+  if (value instanceof Blob) {
+    const blob = value
+    if (blob.size === 0) return undefined
+    try {
+      const text = Reflect.get(blob, 'text')
+      const payload = typeof text === 'function'
+        ? String(await Reflect.apply(text, blob, []))
+        : await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader()
+            reader.onload = () => typeof reader.result === 'string'
+              ? resolve(reader.result) : reject(new Error('Blob读取结果不是文本'))
+            reader.onerror = () => reject(reader.error || new Error('Blob读取失败'))
+            reader.readAsText(blob, 'utf-8')
+          })
+      body = JSON.parse(payload) as unknown
+    } catch {
+      return undefined
+    }
+  }
+  if (!body || typeof body !== 'object') return undefined
+  const record = body as Record<string, unknown>
+  for (const key of ['detail', 'error', 'message'] as const) {
+    const candidate = record[key]
+    if (typeof candidate === 'string' && candidate.trim()) return candidate.trim()
+    if (candidate && typeof candidate === 'object') {
+      const message = (candidate as Record<string, unknown>).message
+      if (typeof message === 'string' && message.trim()) return message.trim()
+    }
+  }
+  return undefined
+}
+
+function outpatientExportFilename(disposition: string): string {
+  const encoded = disposition.match(/(?:^|;)\s*filename\*\s*=\s*(?:UTF-8'[^']*')?([^;]+)/i)?.[1]
+  if (!encoded) return 'outpatient-emergency-records.csv'
+  try {
+    const filename = decodeURIComponent(encoded.trim().replace(/^"|"$/g, ''))
+    return filename.split(/[\\/]/).pop()?.trim() || 'outpatient-emergency-records.csv'
+  } catch {
+    return 'outpatient-emergency-records.csv'
+  }
+}
+
+/** 导出当前已应用筛选下的全部门急诊病历；页面负责确认响应仍属于当前账号和筛选。 */
+export async function exportOutpatientEmergencyRecords(
+  filters: OutpatientEmergencyRecordFilters,
+): Promise<OutpatientEmergencyExportResult> {
+  try {
+    const response = await ApiService.requestRaw<Blob>({
+      method: 'GET',
+      url: `${RECORDS_URL}/outpatient-emergency/export`,
+      params: outpatientExportParams(filters),
+      responseType: 'blob',
+      timeout: 60000,
+    })
+    const contentType = responseHeader(response.headers, 'content-type')
+    if (
+      response.status !== 200
+      || !(response.data instanceof Blob)
+      || response.data.size === 0
+      || !/^text\/csv(?:\s*;|$)/i.test(contentType)
+    ) {
+      return {
+        success: false,
+        message: await outpatientExportErrorMessage(response.data)
+          || '服务端未返回有效的门急诊病历 CSV 文件',
+        status: response.status,
+      }
+    }
+    return {
+      success: true,
+      blob: response.data,
+      filename: outpatientExportFilename(responseHeader(response.headers, 'content-disposition')),
+    }
+  } catch (error) {
+    const status = isAxiosError(error) ? error.response?.status : undefined
+    const body = isAxiosError(error) ? error.response?.data : undefined
+    return {
+      success: false,
+      message: await outpatientExportErrorMessage(body) || '导出门急诊病历失败，请稍后重试',
+      ...(status === undefined ? {} : { status }),
+    }
+  }
 }
 
 /** 获取管理员端统计概览 */
