@@ -527,7 +527,7 @@ const handleLogout = async () => {
 .ws-nav__group-label {
   padding: 8px 10px 2px;
   color: var(--mq-text-secondary);
-  font-size: var(--mq-font-13);
+  font-size: var(--mq-font-14);
   font-weight: 500;
   white-space: nowrap;
 }
