@@ -73,7 +73,7 @@ def scoring_env(monkeypatch):
     engine.dispose()
 
 
-def _build(session):
+def _build(session, *, department_loader=None):
     return snapshot_service.build_appeal_score_snapshot(
         session=session,
         institute_id="hospital-1", patient_id="patient-1", visit_id="visit-1",
@@ -81,6 +81,7 @@ def _build(session):
         expected_standard_id=STANDARD_ID, expected_standard_version_seq=7,
         expected_standard_updated_at="2026-09-28T08:30:00Z",
         workspace_factory=lambda: object(),
+        department_loader=department_loader,
     )
 
 
@@ -135,3 +136,49 @@ def test_builder_rejects_rule_set_key_mismatch(scoring_env, monkeypatch):
     with scoring_env.begin() as session:
         with pytest.raises(snapshot_service.AppealScoreSnapshotConflict, match="规则集不一致"):
             _build(session)
+
+
+def test_snapshot_consumes_same_exact_department_scope(scoring_env):
+    with scoring_env.begin() as session:
+        item_row = session.get(QCScoringItem, "item-1")
+        item_row.department_scope_mode = "selected"
+        item_row.department_refs_json = json.dumps([
+            {"institute_id": "hospital-1", "department_name": "心内科"},
+        ], ensure_ascii=False)
+    with scoring_env.begin() as session:
+        matched = _build(
+            session,
+            department_loader=lambda identities, session: {identities[0]: "心内科"},
+        )
+    assert matched["score_snapshot"]["score"] == 90.0
+    with scoring_env.begin() as session:
+        outside = _build(
+            session,
+            department_loader=lambda identities, session: {identities[0]: "外科"},
+        )
+    assert outside["score_snapshot"]["score"] == 100.0
+
+
+def test_snapshot_department_loader_is_lazy_and_selected_missing_fails_closed(scoring_env):
+    calls = []
+
+    def broken_loader(identities, session):
+        calls.append(identities)
+        raise RuntimeError("department unavailable")
+
+    with scoring_env.begin() as session:
+        assert _build(session, department_loader=broken_loader)["score_snapshot"]["score"] == 90.0
+    assert calls == []
+
+    with scoring_env.begin() as session:
+        item_row = session.get(QCScoringItem, "item-1")
+        item_row.department_scope_mode = "selected"
+        item_row.department_refs_json = json.dumps([
+            {"institute_id": "hospital-1", "department_name": "心内科"},
+        ], ensure_ascii=False)
+    with scoring_env.begin() as session:
+        with pytest.raises(snapshot_service.AppealScoreSnapshotUnavailable):
+            _build(session, department_loader=lambda identities, session: {})
+    with scoring_env.begin() as session:
+        with pytest.raises(snapshot_service.AppealScoreSnapshotUnavailable):
+            _build(session, department_loader=broken_loader)

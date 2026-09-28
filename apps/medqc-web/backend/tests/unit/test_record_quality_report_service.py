@@ -166,6 +166,48 @@ def test_real_scoring_veto_grade_and_distribution():
     assert page["items"][0]["veto_hit"] is True
 
 
+def test_report_scoring_consumes_exact_department_scope():
+    standard = _standard()
+    standard["items"][0].update({
+        "department_scope_mode": "selected",
+        "department_refs": [{"institute_id": "a", "department_name": "心内科"}],
+    })
+    ctx = _context(
+        standard_loader=lambda scene: standard,
+        department_loader=lambda identities: {
+            ("a", "p1", "same"): "心内科", ("b", "p2", "same"): "心内科",
+        },
+    )
+    rows = {row.identity: row for row in ctx.rows}
+    assert rows[("a", "p1", "same")].score == 99.0
+    assert rows[("b", "p2", "same")].score == 100.0
+
+
+def test_report_department_loader_is_lazy_and_selected_failure_is_unavailable():
+    calls = []
+
+    def broken_loader(identities):
+        calls.append(identities)
+        raise RuntimeError("department unavailable")
+
+    all_context = _context(standard_loader=lambda scene: _standard(), department_loader=broken_loader)
+    assert all(row.score_status == "scored" for row in all_context.rows)
+    assert calls == []
+
+    standard = _standard()
+    standard["items"][0].update({
+        "department_scope_mode": "selected",
+        "department_refs": [{"institute_id": "a", "department_name": "心内科"}],
+    })
+    selected_context = _context(
+        standard_loader=lambda scene: standard,
+        department_loader=broken_loader,
+    )
+    rows = {row.identity: row for row in selected_context.rows}
+    assert rows[("a", "p1", "same")].score_status == "unavailable"
+    assert rows[("a", "p1", "same")].score is None
+
+
 def test_score_above_100_has_separate_distribution_bucket():
     standard = _standard()
     standard["base_score"] = 120

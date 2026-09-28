@@ -1085,6 +1085,8 @@ class QCScoringItem(Base):
     deduction = Column(Numeric(6, 2), nullable=False)
     is_veto = Column(Boolean, nullable=False, server_default=text("false"))
     enabled = Column(Boolean, nullable=False, server_default=text("true"))
+    department_scope_mode = Column(String(16), nullable=False, server_default=text("'all'"))
+    department_refs_json = Column(Text, nullable=False, server_default=text("'[]'"))
 
     __table_args__ = (
         PrimaryKeyConstraint("id", name="pk_qc_scoring_items"),
@@ -1098,4 +1100,8 @@ class QCScoringItem(Base):
         ),
         CheckConstraint(f"trim(rule_id, {_SCORING_WS}) <> ''", name="ck_qc_scoring_items_rule_nonblank"),
         CheckConstraint("deduction >= 0", name="ck_qc_scoring_items_deduction_nonnegative"),
+        CheckConstraint(
+            "department_scope_mode IN ('all', 'selected')",
+            name="ck_qc_scoring_items_department_scope_mode",
+        ),
     )

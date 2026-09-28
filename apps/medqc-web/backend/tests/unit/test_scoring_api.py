@@ -26,8 +26,10 @@ BANDS = [
 ]
 GROUPS = [{"group_name": "病程记录", "max_deduction": 10}, {"group_name": "首页"}]
 ITEMS = [
-    {"group_name": "病程记录", "rule_id": "lx0609-001", "deduction": 2},
-    {"group_name": "首页", "rule_id": "LX0609-002", "deduction": 1.5, "is_veto": True},
+    {"group_name": "病程记录", "rule_id": "lx0609-001", "deduction": 2,
+     "department_scope_mode": "all", "department_refs": []},
+    {"group_name": "首页", "rule_id": "LX0609-002", "deduction": 1.5, "is_veto": True,
+     "department_scope_mode": "all", "department_refs": []},
 ]
 
 
@@ -94,8 +96,10 @@ def test_create_update_items_and_detail_flow(sessions):
     data = saved.json()["data"]
     assert data["version_seq"] == 3
     assert data["items"] == [
-        {"group_name": "病程记录", "rule_id": "LX0609-001", "deduction": 2.0, "is_veto": False, "enabled": True},
-        {"group_name": "首页", "rule_id": "LX0609-002", "deduction": 1.5, "is_veto": True, "enabled": True},
+        {"group_name": "病程记录", "rule_id": "LX0609-001", "deduction": 2.0, "is_veto": False,
+         "enabled": True, "department_scope_mode": "all", "department_refs": []},
+        {"group_name": "首页", "rule_id": "LX0609-002", "deduction": 1.5, "is_veto": True,
+         "enabled": True, "department_scope_mode": "all", "department_refs": []},
     ]
     assert data["groups"][0] == {"group_name": "病程记录", "max_deduction": 10.0, "sort_order": 1}
     assert data["groups"][1]["max_deduction"] is None
@@ -108,6 +112,39 @@ def test_create_update_items_and_detail_flow(sessions):
     assert [item["name"] for item in listed["items"]] == ["运行标准v2"] and "items" not in listed["items"][0]
     assert http.get(f"{BASE}/standards/{draft['id']}").json()["data"]["item_count"] == 1
     assert http.get(f"{BASE}/standards/nope").status_code == 404
+
+
+def test_selected_department_scope_roundtrips_and_keeps_institute_identity(sessions):
+    http = client()
+    draft = create(http, name="科室范围标准").json()["data"]
+    scoped_item = {
+        **ITEMS[0], "department_scope_mode": "selected",
+        "department_refs": [
+            {"institute_id": " H1 ", "department_name": " 心内科 "},
+            {"institute_id": "H2", "department_name": "心内科"},
+        ],
+    }
+    response = http.put(
+        f"{BASE}/standards/{draft['id']}/items",
+        json={"version_seq": 1, "groups": GROUPS[:1], "items": [scoped_item]},
+    )
+    assert response.status_code == 200
+    assert response.json()["data"]["items"][0]["department_refs"] == [
+        {"institute_id": "H1", "department_name": "心内科"},
+        {"institute_id": "H2", "department_name": "心内科"},
+    ]
+
+
+def test_item_scope_fields_are_required_for_every_write(sessions):
+    http = client()
+    draft = create(http, name="显式范围标准").json()["data"]
+    item = {key: value for key, value in ITEMS[0].items()
+            if key not in {"department_scope_mode", "department_refs"}}
+    response = http.put(
+        f"{BASE}/standards/{draft['id']}/items",
+        json={"version_seq": 1, "groups": GROUPS[:1], "items": [item]},
+    )
+    assert response.status_code == 422
 
 
 def test_final_scene_requires_rule_set_key_matching_scene(sessions):
@@ -138,9 +175,15 @@ def test_unknown_rule_ids_are_422(sessions):
     draft = create(http).json()["data"]
     response = http.put(f"{BASE}/standards/{draft['id']}/items", json={
         "version_seq": 1, "groups": GROUPS,
-        "items": [*ITEMS, {"group_name": "首页", "rule_id": "LX0916-001", "deduction": 1},
-                  {"group_name": "不存在", "rule_id": "LX0609-003", "deduction": 1},
-                  {"group_name": "首页", "rule_id": "LX0609-001", "deduction": 1}],
+        "items": [
+            *ITEMS,
+            {"group_name": "首页", "rule_id": "LX0916-001", "deduction": 1,
+             "department_scope_mode": "all", "department_refs": []},
+            {"group_name": "不存在", "rule_id": "LX0609-003", "deduction": 1,
+             "department_scope_mode": "all", "department_refs": []},
+            {"group_name": "首页", "rule_id": "LX0609-001", "deduction": 1,
+             "department_scope_mode": "all", "department_refs": []},
+        ],
     })
     assert response.status_code == 422
     problems = response.json()["detail"]["problems"]

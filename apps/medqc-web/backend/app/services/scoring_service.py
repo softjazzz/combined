@@ -31,6 +31,67 @@ STATE_NO_RESULT = "no_result"
 _CENT = Decimal("0.01")
 
 
+class ScoringScopeContextUnavailable(RuntimeError):
+    """评分条目选择了范围，但病例缺少可信适用上下文。"""
+
+
+def standard_needs_department(standard: Mapping[str, Any]) -> bool:
+    return any(
+        isinstance(item, Mapping)
+        and item.get("enabled", True)
+        and item.get("department_scope_mode", "all") == "selected"
+        for item in standard.get("items") or []
+    )
+
+
+def score_input_needs_department(
+    items: Iterable[Mapping[str, Any]], standard: Mapping[str, Any],
+) -> bool:
+    selected = {
+        str(item.get("rule_id") or "").strip().upper()
+        for item in standard.get("items") or []
+        if isinstance(item, Mapping) and item.get("enabled", True)
+        and item.get("department_scope_mode", "all") == "selected"
+    }
+    return any(
+        isinstance(item, Mapping) and item.get("is_confirmed_issue") is True
+        and str(item.get("rule_id") or "").strip().upper() in selected
+        for item in items
+    )
+
+
+def _in_scope(
+    config: Mapping[str, Any], *, institute_id: str, department_name: str,
+) -> bool:
+    department_mode = config.get("department_scope_mode", "all")
+    refs = config.get("department_refs", [])
+    if not isinstance(refs, list):
+        raise ScoringScopeContextUnavailable("评分科室范围不可用")
+    if department_mode == "selected":
+        if not institute_id or not department_name:
+            raise ScoringScopeContextUnavailable("病例缺少可信科室上下文")
+        normalized_refs = []
+        for ref in refs:
+            if (
+                not isinstance(ref, Mapping)
+                or not isinstance(ref.get("institute_id"), str)
+                or not isinstance(ref.get("department_name"), str)
+                or not ref["institute_id"].strip()
+                or not ref["department_name"].strip()
+            ):
+                raise ScoringScopeContextUnavailable("评分科室范围不可用")
+            normalized_refs.append((ref["institute_id"].strip(), ref["department_name"].strip()))
+        if not normalized_refs:
+            raise ScoringScopeContextUnavailable("评分科室范围不可用")
+        if (institute_id, department_name) not in set(normalized_refs):
+            return False
+    elif department_mode != "all":
+        raise ScoringScopeContextUnavailable("评分科室范围不可用")
+    elif refs:
+        raise ScoringScopeContextUnavailable("全科室模式包含非法科室引用")
+    return True
+
+
 def _decimal(value: Any) -> Decimal:
     return Decimal(str(value)).quantize(_CENT)
 
@@ -49,17 +110,21 @@ def grade_for(score: Decimal, bands: Sequence[Mapping[str, Any]]) -> str | None:
     return None
 
 
-def score_result(items: Iterable[Mapping[str, Any]], standard: Mapping[str, Any]) -> dict[str, Any]:
+def score_result(
+    items: Iterable[Mapping[str, Any]], standard: Mapping[str, Any], *,
+    institute_id: str = "", department_name: str = "",
+) -> dict[str, Any]:
     """纯函数计分。同一条目集合配同一标准，结果恒定（与条目顺序无关）。
 
     返回 {score, grade, veto_hit, deductions, group_deductions, unscored_rule_ids, base_score,
     standard_id, standard_updated_at}。扣分与未配置规则按 rule_id 去重。
     """
+    item_list = list(items)
     configured = {str(item["rule_id"]).strip().upper(): item for item in standard.get("items") or []}
     groups = {str(group["group_name"]): group for group in standard.get("groups") or []}
     confirmed = sorted({
         str(item.get("rule_id") or "").strip().upper()
-        for item in items
+        for item in item_list
         if isinstance(item, Mapping) and item.get("is_confirmed_issue") is True
         and str(item.get("rule_id") or "").strip()
     })
@@ -74,6 +139,12 @@ def score_result(items: Iterable[Mapping[str, Any]], standard: Mapping[str, Any]
             unscored.append(rule_id)
             continue
         if not config.get("enabled", True):
+            continue
+        if not _in_scope(
+            config,
+            institute_id=str(institute_id or "").strip(),
+            department_name=str(department_name or "").strip(),
+        ):
             continue
         amount = _decimal(config["deduction"])
         group_name = str(config["group_name"])
@@ -157,7 +228,11 @@ def score_cases(
             states[key] = _state(STATE_UNAVAILABLE, standard=standard, reason_code="rule_set_mismatch")
             continue
         try:
-            scored = score_result(result.get("items") or [], standard)
+            scored = score_result(
+                result.get("items") or [], standard,
+                institute_id=str(result.get("institute_id") or "").strip(),
+                department_name=str(result.get("department_name") or "").strip(),
+            )
         except Exception as exc:  # noqa: BLE001 - 单病例降级
             logger.warning("单病例计分失败，降级 error_type=%s", type(exc).__name__)
             states[key] = _state(STATE_UNAVAILABLE, standard=standard, reason_code="score_failed")
@@ -250,6 +325,7 @@ def score_case(
     standard_loader: Callable[[str], Mapping[str, Any] | None] | None = None,
     workspace_factory: Callable[[], Any] | None = None,
     projector: Callable[[Iterable[Mapping[str, Any]]], list[dict[str, Any]]] | None = None,
+    department_loader: Callable[[list[tuple[str, str, str]]], Mapping[tuple[str, str, str], str]] | None = None,
 ) -> dict[str, Any]:
     """单病历计分：场景默认标准 + 单病历最新 ready 结果。
 
@@ -277,7 +353,19 @@ def score_case(
     result_ref, standard_ref = _score_case_references(
         identity=identity, dto=dto, standard=standard,
     )
-    scored = score_result((projector or project_customer_items)(dto.get("items") or []), standard)
+    projected_items = (projector or project_customer_items)(dto.get("items") or [])
+    identity_key = tuple(identity)
+    departments: Mapping[tuple[str, str, str], str] = {}
+    if score_input_needs_department(projected_items, standard):
+        if department_loader is None:
+            from .medical_records.query_service import load_scoring_departments
+            department_loader = load_scoring_departments
+        departments = department_loader([identity_key])
+    scored = score_result(
+        projected_items, standard,
+        institute_id=identity.institute_id,
+        department_name=str(departments.get(identity_key) or "").strip(),
+    )
     return {
         "status": STATE_SCORED,
         "scene": scene,
@@ -308,6 +396,7 @@ def score_workstation_page(
     standard_loader: Callable[[str], Mapping[str, Any] | None] = get_default_standard,
     results_loader: Callable[..., Mapping[tuple[str, str, str], Mapping[str, Any]]] = _load_page_results,
     projector: Callable[[Iterable[Mapping[str, Any]]], list[dict[str, Any]]] = project_customer_items,
+    department_loader: Callable[..., Mapping[tuple[str, str, str], str]] | None = None,
 ) -> tuple[dict[tuple[str, str, str], dict[str, Any]], dict[str, dict[str, Any]]]:
     """V5 列表本页 ready 病例计分。
 
@@ -351,6 +440,17 @@ def score_workstation_page(
     if not to_score:
         return states, overview
 
+    departments: Mapping[tuple[str, str, str], str] = {}
+    if any(standard is not None and standard_needs_department(standard) for standard in standards.values()):
+        if department_loader is None:
+            from .medical_records.query_service import load_scoring_departments
+            department_loader = load_scoring_departments
+        try:
+            departments = department_loader(list(to_score), session_factory=session_factory)
+        except Exception as exc:  # noqa: BLE001 - 科室上下文缺失时逐病例失败关闭
+            logger.warning("病历列表评分科室读取失败 error_type=%s", type(exc).__name__)
+            departments = {}
+
     try:
         loaded = results_loader(
             [{"institute_id": i, "patient_id": p, "visit_id": v} for i, p, v in sorted(to_score)],
@@ -371,7 +471,10 @@ def score_workstation_page(
             states[identity] = _state(STATE_UNAVAILABLE, standard=standard, reason_code="result_changed")
             continue
         try:
-            scored = score_result(projector(result.get("items") or []), standard)
+            scored = score_result(
+                projector(result.get("items") or []), standard,
+                institute_id=identity[0], department_name=str(departments.get(identity) or "").strip(),
+            )
         except Exception as exc:  # noqa: BLE001 - 单病例降级
             logger.warning("病历列表单病例计分失败，降级 error_type=%s", type(exc).__name__)
             states[identity] = _state(STATE_UNAVAILABLE, standard=standard, reason_code="score_failed")
@@ -387,5 +490,7 @@ __all__ = [
     "score_case",
     "score_cases",
     "score_result",
+    "score_input_needs_department",
     "score_workstation_page",
+    "standard_needs_department",
 ]

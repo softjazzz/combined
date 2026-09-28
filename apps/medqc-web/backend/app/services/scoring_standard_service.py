@@ -26,7 +26,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from ..database.connection import SessionLocal
 from ..database.models.qc import QCScoringGroup, QCScoringItem, QCScoringStandard
-from .luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY
+from .luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY, load_luxian_0609_rules
 from .qc_rule_sets import SICHUAN_RULE_SETS
 from .rule_set_version_service import (
     RuleSetVersionNotFound,
@@ -161,6 +161,20 @@ def _scene_rule_set(scene: str, rule_set_key: Any) -> str:
 def rule_set_universe(rule_set_key: str) -> frozenset[str]:
     """规则集当前版本全集（active + paused + excluded），规则 id 大写。"""
     return current_rule_set_snapshot(rule_set_key)[1]
+
+
+def rule_document_universe(rule_set_key: str) -> dict[str, frozenset[str]]:
+    """评分文书范围只引用现代规则目录，不另造文书归属。"""
+    if rule_set_key != LUXIAN_0609_RULE_SET_KEY:
+        return {}
+    return {
+        str(rule.get("rule_id") or "").strip().upper(): frozenset(
+            str(value).strip() for value in rule.get("applicable_documents") or []
+            if isinstance(value, str) and value.strip()
+        )
+        for rule in load_luxian_0609_rules()
+        if str(rule.get("rule_id") or "").strip()
+    }
 
 
 def current_rule_set_snapshot(rule_set_key: str) -> tuple[str, frozenset[str]]:
@@ -355,7 +369,10 @@ def normalize_groups_items(
     for index, raw in enumerate(raw_items, start=1):
         if not isinstance(raw, Mapping) or not {"group_name", "rule_id", "deduction"} <= set(raw) or not set(
             raw
-        ) <= {"group_name", "rule_id", "deduction", "is_veto", "enabled"}:
+        ) <= {
+            "group_name", "rule_id", "deduction", "is_veto", "enabled",
+            "department_scope_mode", "department_refs",
+        }:
             problems.append(f"第 {index} 条条目字段无效")
             continue
         rule_id = _text(raw.get("rule_id"), f"第 {index} 条 rule_id", MAX_RULE_ID_LENGTH, problems)
@@ -377,9 +394,39 @@ def normalize_groups_items(
             continue
         if rule_id not in universe:
             unknown.append(rule_id)
+        department_mode = raw.get("department_scope_mode")
+        if department_mode not in {"all", "selected"}:
+            problems.append(f"条目 {rule_id} 必须显式选择科室适用模式")
+        raw_refs = raw.get("department_refs")
+        if not isinstance(raw_refs, list):
+            problems.append(f"条目 {rule_id} 的科室范围必须是数组")
+            continue
+        refs: list[dict[str, str]] = []
+        ref_keys: set[tuple[str, str]] = set()
+        for ref in raw_refs:
+            if not isinstance(ref, Mapping):
+                problems.append(f"条目 {rule_id} 的科室引用无效")
+                continue
+            raw_institute_id = ref.get("institute_id")
+            raw_department_name = ref.get("department_name")
+            institute_id = raw_institute_id.strip() if isinstance(raw_institute_id, str) else ""
+            department_name = raw_department_name.strip() if isinstance(raw_department_name, str) else ""
+            if not institute_id or not department_name or len(institute_id) > 64 or len(department_name) > 100:
+                problems.append(f"条目 {rule_id} 的科室引用缺少机构或科室")
+                continue
+            key = (institute_id, department_name)
+            if key not in ref_keys:
+                ref_keys.add(key)
+                refs.append({"institute_id": institute_id, "department_name": department_name})
+        if department_mode == "all" and refs:
+            problems.append(f"条目 {rule_id} 的全科室模式不得携带科室引用")
+        if department_mode == "selected" and not refs:
+            problems.append(f"条目 {rule_id} 的指定科室模式至少需要一个科室")
         items[rule_id] = {
             "group_name": group_name, "rule_id": rule_id, "deduction": deduction,
             "is_veto": is_veto, "enabled": enabled,
+            "department_scope_mode": department_mode,
+            "department_refs": refs,
         }
     if unknown:
         problems.append(f"以下规则不属于该规则集当前版本：{','.join(sorted(unknown))}")
@@ -421,6 +468,8 @@ def _groups_items(session: Any, standard_id: str) -> tuple[list[dict[str, Any]],
         {
             "group_name": row.group_name, "rule_id": row.rule_id, "deduction": _number(row.deduction),
             "is_veto": bool(row.is_veto), "enabled": bool(row.enabled),
+            "department_scope_mode": row.department_scope_mode,
+            "department_refs": json.loads(row.department_refs_json),
         }
         for row in item_rows
     ]
@@ -454,7 +503,14 @@ def _row_item(row: Any) -> dict[str, Any]:
 
 def _detail(session: Any, row: Any) -> dict[str, Any]:
     groups, items = _groups_items(session, row.id)
-    return {**_row_item(row), "groups": groups, "items": items, "group_count": len(groups), "item_count": len(items)}
+    return {
+        **_row_item(row), "groups": groups, "items": items,
+        "group_count": len(groups), "item_count": len(items),
+        "rule_document_types": {
+            rule_id: sorted(values)
+            for rule_id, values in rule_document_universe(row.rule_set_key).items()
+        },
+    }
 
 
 def list_standards(*, scene: Any = None, status: Any = None) -> dict[str, Any]:
@@ -671,6 +727,8 @@ def _insert_children(
                 "id": str(uuid4()), "standard_id": standard_id, "group_name": item["group_name"],
                 "rule_id": item["rule_id"], "deduction": item["deduction"],
                 "is_veto": item["is_veto"], "enabled": item["enabled"],
+                "department_scope_mode": item["department_scope_mode"],
+                "department_refs_json": json.dumps(item["department_refs"], ensure_ascii=False, separators=(",", ":")),
             }
             for item in items
         ])
@@ -771,7 +829,9 @@ def import_standard_draft(
                 code="rule_set_version_mismatch",
                 problems=[f"工作簿：{expected_rule_set_version}", f"当前：{locked_version}"],
             )
-        normalized_groups, normalized_items = normalize_groups_items(groups, items, locked_universe)
+        normalized_groups, normalized_items = normalize_groups_items(
+            groups, items, locked_universe,
+        )
         if _name_taken(session, header["name"], scene):
             raise ScoringStandardConflict("同一场景下已有同名评分标准", code="name_exists")
         now = _now()
@@ -822,7 +882,9 @@ def save_items(
     standard_id = str(standard_id or "")
     # 先读规则集键以校验 rule_id；规则集版本读取在本事务外（它有自己的会话）。
     rule_set_key = get_standard(standard_id)["rule_set_key"]
-    normalized_groups, normalized_items = normalize_groups_items(groups, items, rule_set_universe(rule_set_key))
+    normalized_groups, normalized_items = normalize_groups_items(
+        groups, items, rule_set_universe(rule_set_key),
+    )
 
     def run(session: Any) -> str:
         row = _locked_draft(session, standard_id, version_seq)

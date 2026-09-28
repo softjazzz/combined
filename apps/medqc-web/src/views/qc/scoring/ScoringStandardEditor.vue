@@ -324,13 +324,16 @@
         >
           {{ rulesError }}
         </p>
-        <table class="scoring-editor__table scoring-editor__table--items">
+        <div class="scoring-editor__table-scroll">
+          <table class="scoring-editor__table scoring-editor__table--items">
           <thead>
             <tr>
               <th>规则</th>
               <th>质控点</th>
               <th>项目组</th>
               <th>扣分</th>
+              <th>科室范围</th>
+              <th>规则文书</th>
               <th>单项否决</th>
               <th>启用</th>
               <th v-if="editable">
@@ -384,6 +387,29 @@
                   data-testid="scoring-item-deduction"
                 />
               </td>
+              <td class="scoring-editor__scope-cell">
+                <a-select
+                  v-model:value="item.department_scope_mode"
+                  :disabled="!editable"
+                  :options="scopeModeOptions"
+                  data-testid="scoring-item-department-mode"
+                  @change="item.department_scope_mode === 'all' && (item.department_refs = [])"
+                />
+                <a-textarea
+                  v-if="item.department_scope_mode === 'selected'"
+                  :value="formatDepartmentRefs(item.department_refs)"
+                  :disabled="!editable"
+                  :rows="2"
+                  placeholder="每行：机构ID|科室名称"
+                  data-testid="scoring-item-department-refs"
+                  @change="updateDepartmentRefs(item, $event.target.value)"
+                />
+              </td>
+              <td class="scoring-editor__scope-cell">
+                <span data-testid="scoring-item-document-types">
+                  {{ documentTypesOf(item.rule_id) }}
+                </span>
+              </td>
               <td>
                 <a-checkbox
                   v-model:checked="item.is_veto"
@@ -412,14 +438,15 @@
             </tr>
             <tr v-if="form.items.length === 0">
               <td
-                :colspan="editable ? 7 : 6"
+                :colspan="editable ? 9 : 8"
                 class="scoring-editor__empty"
               >
                 暂无扣分条目
               </td>
             </tr>
           </tbody>
-        </table>
+          </table>
+        </div>
         <div
           v-if="editable"
           class="scoring-editor__row-actions"
@@ -548,6 +575,10 @@ const ruleOptions = computed<RuleOption[]>(() =>
   })),
 )
 const ruleUniverse = computed(() => new Set(qcPoints.value.keys()))
+const scopeModeOptions = [
+  { value: 'all', label: '全部' },
+  { value: 'selected', label: '指定' },
+]
 
 function nextKey(prefix: string): string {
   rowKey += 1
@@ -564,6 +595,13 @@ function headerState(): string {
 }
 
 function applyDetail(data: ScoringStandardDetail) {
+  const items = data.items.map((item) => {
+    if (item.department_scope_mode !== 'all' && item.department_scope_mode !== 'selected') {
+      throw new TypeError('评分条目科室适用模式无效')
+    }
+    if (!Array.isArray(item.department_refs)) throw new TypeError('评分条目科室引用格式无效')
+    return { key: nextKey('item'), ...item }
+  })
   detail.value = data
   versionSeq.value = data.version_seq
   form.name = data.name
@@ -571,7 +609,7 @@ function applyDetail(data: ScoringStandardDetail) {
   form.bands = data.grade_bands.map((band) => ({ ...band }))
   form.veto_grade = data.veto_grade
   form.groups = data.groups.map((group) => ({ key: nextKey('group'), ...group }))
-  form.items = data.items.map((item) => ({ key: nextKey('item'), ...item }))
+  form.items = items
   headerSnapshot.value = headerState()
 }
 
@@ -672,7 +710,27 @@ function addItem() {
     deduction: 0,
     is_veto: false,
     enabled: true,
+    department_scope_mode: 'all',
+    department_refs: [],
   })
+}
+
+function formatDepartmentRefs(refs: EditableItem['department_refs']): string {
+  return refs.map((ref) => `${ref.institute_id}|${ref.department_name}`).join('\n')
+}
+
+function updateDepartmentRefs(item: EditableItem, value: string): void {
+  item.department_refs = value.split(/\r?\n/u).map((line) => {
+    const separator = line.indexOf('|')
+    return separator < 0
+      ? { institute_id: '', department_name: line.trim() }
+      : { institute_id: line.slice(0, separator).trim(), department_name: line.slice(separator + 1).trim() }
+  }).filter((ref) => ref.institute_id || ref.department_name)
+}
+
+function documentTypesOf(ruleId: string): string {
+  const key = ruleId.trim().toUpperCase()
+  return (detail.value?.rule_document_types?.[key] || []).join('、') || UNKNOWN_TEXT
 }
 
 function removeItem(key: string) {
@@ -842,6 +900,19 @@ watch(
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
+}
+
+.scoring-editor__table--items {
+  min-width: 1280px;
+}
+
+.scoring-editor__table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.scoring-editor__scope-cell {
+  min-width: 210px;
 }
 
 .scoring-editor__table th {

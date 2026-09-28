@@ -53,6 +53,7 @@ from ..services.scoring_standard_service import (
     get_standard,
     import_standard_draft,
     list_standards,
+    rule_document_universe,
     save_items,
     scene_catalog,
     scene_rule_set_keys,
@@ -111,6 +112,13 @@ class ScoringGroupIn(BaseModel):
     sort_order: Optional[StrictInt] = None
 
 
+class DepartmentRefIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    institute_id: StrictStr
+    department_name: StrictStr
+
+
 class ScoringItemIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -119,6 +127,9 @@ class ScoringItemIn(BaseModel):
     deduction: Number
     is_veto: StrictBool = False
     enabled: StrictBool = True
+    # 兼容旧现代客户端：缺省等价于迁移后的显式 all；新版编辑器始终显式提交。
+    department_scope_mode: Literal["all", "selected"]
+    department_refs: list[DepartmentRefIn]
 
 
 class ItemsSaveRequest(BaseModel):
@@ -318,6 +329,7 @@ async def import_scoring_standard(
             content,
             current_rule_set_version=version,
             allowed_rule_ids=universe,
+            allowed_document_types_by_rule=rule_document_universe(identity.rule_set_key),
         )
         data = await run_in_threadpool(
             import_standard_draft,

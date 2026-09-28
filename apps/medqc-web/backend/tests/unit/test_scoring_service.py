@@ -65,6 +65,45 @@ def test_only_confirmed_issues_are_deducted():
     assert result["standard_id"] == "std-1" and result["standard_updated_at"] == "2026-09-27T10:00:00"
 
 
+def test_department_scope_is_exact_within_institute_and_out_of_scope_is_not_unscored():
+    scoped = standard(items=[{
+        "group_name": "病程记录", "rule_id": "LX0609-001", "deduction": 3,
+        "is_veto": False, "enabled": True, "department_scope_mode": "selected",
+        "department_refs": [{"institute_id": "H1", "department_name": "心内科"}],
+    }])
+    matched = score_result([item("LX0609-001")], scoped, institute_id="H1", department_name="心内科")
+    other_hospital = score_result([item("LX0609-001")], scoped, institute_id="H2", department_name="心内科")
+    assert matched["score"] == 97.0
+    assert other_hospital["score"] == 100.0 and other_hospital["unscored_rule_ids"] == []
+    with pytest.raises(scoring_service.ScoringScopeContextUnavailable):
+        score_result([item("LX0609-001")], scoped, institute_id="H1", department_name="")
+    scoped["items"][0]["department_refs"] = []
+    with pytest.raises(scoring_service.ScoringScopeContextUnavailable):
+        score_result([item("LX0609-001")], scoped, institute_id="H1", department_name="心内科")
+    malformed_all = standard(items=[{
+        "group_name": "病程记录", "rule_id": "LX0609-001", "deduction": 3,
+        "is_veto": False, "enabled": True, "department_scope_mode": "all",
+        "department_refs": [{"institute_id": "H1", "department_name": "心内科"}],
+    }])
+    with pytest.raises(scoring_service.ScoringScopeContextUnavailable):
+        score_result([item("LX0609-001")], malformed_all, institute_id="H1", department_name="心内科")
+
+
+def test_score_cases_marks_confirmed_selected_scope_without_department_unavailable():
+    scoped = standard(items=[{
+        "group_name": "病程记录", "rule_id": "LX0609-001", "deduction": 3,
+        "is_veto": False, "enabled": True, "department_scope_mode": "selected",
+        "department_refs": [{"institute_id": "H1", "department_name": "心内科"}],
+    }])
+    states = score_cases(
+        {"case": {"items": [item("LX0609-001")], "institute_id": "H1"}},
+        "running",
+        standard_loader=lambda scene: scoped,
+    )
+    assert states["case"]["status"] == "unavailable"
+    assert states["case"]["reason_code"] == "score_failed"
+
+
 def test_group_cap_limits_deduction_and_uncapped_group_sums():
     result = score_result([item("LX0609-001"), item("LX0609-002"), item("LX0609-003")], standard())
     groups = {group["group_name"]: group for group in result["group_deductions"]}
@@ -258,6 +297,38 @@ def test_score_case_keeps_legacy_score_when_references_are_incomplete():
     assert result["standard_ref"] is None
 
 
+def test_score_case_only_loads_department_for_confirmed_selected_rule():
+    ready = _Workspace({
+        "state": "ready", "job_id": "job-1", "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09", "items": [{"raw": "LX0609-001"}],
+    })
+    scoped = standard(items=[{
+        "group_name": "病程记录", "rule_id": "LX0609-002", "deduction": 4,
+        "is_veto": False, "enabled": True, "department_scope_mode": "selected",
+        "department_refs": [{"institute_id": "H1", "department_name": "心内科"}],
+    }])
+
+    def broken_loader(_identities):
+        raise RuntimeError("department unavailable")
+
+    result = scoring_service.score_case(
+        institute_id="H1", patient_id="P1", visit_id="V1", scene="running",
+        standard_loader=lambda scene: scoped, workspace_factory=lambda: ready,
+        projector=lambda items: [item(entry["raw"]) for entry in items],
+        department_loader=broken_loader,
+    )
+    assert result["status"] == "scored" and result["score"] == 100.0
+
+    scoped["items"][0]["rule_id"] = "LX0609-001"
+    with pytest.raises(RuntimeError, match="department unavailable"):
+        scoring_service.score_case(
+            institute_id="H1", patient_id="P1", visit_id="V1", scene="running",
+            standard_loader=lambda scene: scoped, workspace_factory=lambda: ready,
+            projector=lambda items: [item(entry["raw"]) for entry in items],
+            department_loader=broken_loader,
+        )
+
+
 @pytest.mark.parametrize(
     "standard_override",
     [
@@ -355,6 +426,58 @@ def test_workstation_page_scores_ready_cases_and_checks_anchor():
     }
     assert overview["running"]["status"] == "configured"
     assert len(calls) == 1 and len(calls[0]) == 2
+
+
+def test_workstation_page_uses_exact_department_scope():
+    scoped = standard(items=[{
+        "group_name": "病程记录", "rule_id": "LX0609-001", "deduction": 3,
+        "is_veto": False, "enabled": True, "department_scope_mode": "selected",
+        "department_refs": [{"institute_id": "H1", "department_name": "心内科"}],
+    }])
+    loader, _ = _loader_for({
+        A: {"status": "ready", "envelope_id": "env-a", "items": [{"raw": "LX0609-001"}]},
+        B: {"status": "ready", "envelope_id": "env-b", "items": [{"raw": "LX0609-001"}]},
+    })
+    states, _ = score_workstation_page(
+        {A: "running", B: "running"}, {A: {"envelope_id": "env-a"}, B: {"envelope_id": "env-b"}},
+        standard_loader=lambda scene: scoped, results_loader=loader,
+        projector=lambda values: [item(entry["raw"]) for entry in values],
+        department_loader=lambda identities, **kwargs: {A: "心内科", B: "外科"},
+    )
+    assert states[A]["score"] == 97.0 and states[B]["score"] == 100.0
+
+
+def test_workstation_department_scope_loader_is_lazy_and_fails_closed():
+    calls = []
+
+    def broken_department_loader(identities, **kwargs):
+        calls.append(identities)
+        raise RuntimeError("department unavailable")
+
+    loader, _ = _loader_for({
+        A: {"status": "ready", "envelope_id": "env-a", "items": [{"raw": "LX0609-001"}]},
+    })
+    states, _ = score_workstation_page(
+        {A: "running"}, {A: {"envelope_id": "env-a"}},
+        standard_loader=lambda scene: standard(), results_loader=loader,
+        projector=lambda values: [item(entry["raw"]) for entry in values],
+        department_loader=broken_department_loader,
+    )
+    assert states[A]["status"] == "scored" and calls == []
+
+    scoped = standard(items=[{
+        "group_name": "病程记录", "rule_id": "LX0609-001", "deduction": 3,
+        "is_veto": False, "enabled": True, "department_scope_mode": "selected",
+        "department_refs": [{"institute_id": "H1", "department_name": "心内科"}],
+    }])
+    states, _ = score_workstation_page(
+        {A: "running"}, {A: {"envelope_id": "env-a"}},
+        standard_loader=lambda scene: scoped, results_loader=loader,
+        projector=lambda values: [item(entry["raw"]) for entry in values],
+        department_loader=broken_department_loader,
+    )
+    assert states[A]["status"] == "unavailable"
+    assert states[A]["reason_code"] == "score_failed"
 
 
 def test_workstation_page_without_standard_reads_no_items():

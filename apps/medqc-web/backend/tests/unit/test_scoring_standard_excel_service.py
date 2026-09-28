@@ -7,6 +7,7 @@ import pytest
 from openpyxl import load_workbook
 
 from app.services.scoring_standard_excel_service import (
+    LEGACY_TEMPLATE_VERSION,
     ScoringExcelValidationError,
     build_scoring_standard_workbook,
     inspect_scoring_workbook_identity,
@@ -77,7 +78,65 @@ def test_export_identity_and_parse_roundtrip_preserve_empty_group():
     assert parsed.items == ({
         "group_name": "病程", "rule_id": "LX0609-001", "deduction": 2,
         "is_veto": False, "enabled": True,
+        "department_scope_mode": "all", "department_refs": [],
     },)
+
+
+def test_selected_department_roundtrip_and_rule_documents_are_read_only():
+    detail = _detail()
+    detail["items"][0].update({
+        "department_scope_mode": "selected",
+        "department_refs": [{"institute_id": "H1", "department_name": "心内科"}],
+    })
+    detail["rule_document_types"] = {"LX0609-001": ["admission_record", "daily_course_record"]}
+    allowed_documents = {"LX0609-001": frozenset({"admission_record", "daily_course_record"})}
+    content = build_scoring_standard_workbook(detail, VERSION)
+    parsed = parse_scoring_standard_workbook(
+        content, current_rule_set_version=VERSION, allowed_rule_ids=UNIVERSE,
+        allowed_document_types_by_rule=allowed_documents,
+    )
+    assert parsed.items[0]["department_scope_mode"] == "selected"
+    assert parsed.items[0]["department_refs"] == [{"institute_id": "H1", "department_name": "心内科"}]
+
+    tampered = _mutate(content, lambda workbook: setattr(workbook["评分条目"].cell(2, 10), "value", '["other"]'))
+    with pytest.raises(ScoringExcelValidationError) as caught:
+        parse_scoring_standard_workbook(
+            tampered, current_rule_set_version=VERSION, allowed_rule_ids=UNIVERSE,
+            allowed_document_types_by_rule=allowed_documents,
+        )
+    assert "rule_documents_changed" in _codes(caught.value)
+
+
+def test_legacy_v1_maps_scope_to_all_but_v2_cannot_drop_scope_columns():
+    content = build_scoring_standard_workbook(_detail(), VERSION)
+
+    def to_v1(workbook):
+        workbook["评分标准"]["A2"] = LEGACY_TEMPLATE_VERSION
+        workbook["评分条目"].delete_cols(8, 3)
+
+    legacy = _mutate(content, to_v1)
+    parsed = parse_scoring_standard_workbook(
+        legacy, current_rule_set_version=VERSION, allowed_rule_ids=UNIVERSE,
+    )
+    assert parsed.items[0]["department_scope_mode"] == "all"
+    assert parsed.items[0]["department_refs"] == []
+
+    truncated_v2 = _mutate(content, lambda workbook: workbook["评分条目"].delete_cols(8, 3))
+    with pytest.raises(ScoringExcelValidationError) as caught:
+        parse_scoring_standard_workbook(
+            truncated_v2, current_rule_set_version=VERSION, allowed_rule_ids=UNIVERSE,
+        )
+    assert "template_items_mismatch" in _codes(caught.value)
+
+
+def test_v2_department_mode_is_required_instead_of_defaulting_to_all():
+    content = build_scoring_standard_workbook(_detail(), VERSION)
+    blank_mode = _mutate(content, lambda workbook: setattr(workbook["评分条目"].cell(2, 8), "value", ""))
+    with pytest.raises(ScoringExcelValidationError) as caught:
+        parse_scoring_standard_workbook(
+            blank_mode, current_rule_set_version=VERSION, allowed_rule_ids=UNIVERSE,
+        )
+    assert "required" in _codes(caught.value)
 
 
 def test_export_preserves_equal_prefixed_names_as_text_not_formula():

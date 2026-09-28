@@ -72,10 +72,12 @@ const archived = standard({ id: 'x1', name: '归档标准', status: 'archived', 
 function detailOf(item: ScoringStandardItem, overrides: Partial<ScoringStandardDetail> = {}): ScoringStandardDetail {
   const groups = [{ group_name: '病程记录', max_deduction: 10, sort_order: 1 }]
   const items = [
-    { group_name: '病程记录', rule_id: 'LX0609-001', deduction: 2, is_veto: false, enabled: true },
-    { group_name: '病程记录', rule_id: 'LX0609-002', deduction: 3, is_veto: true, enabled: true },
+    { group_name: '病程记录', rule_id: 'LX0609-001', deduction: 2, is_veto: false, enabled: true,
+      department_scope_mode: 'all' as const, department_refs: [] },
+    { group_name: '病程记录', rule_id: 'LX0609-002', deduction: 3, is_veto: true, enabled: true,
+      department_scope_mode: 'all' as const, department_refs: [] },
   ]
-  return { ...item, groups, items, group_count: 1, item_count: 2, ...overrides }
+  return { ...item, groups, items, group_count: 1, item_count: 2, rule_document_types: {}, ...overrides }
 }
 
 const ok = <T>(data: T) => ({ success: true, data, status: 200 })
@@ -113,6 +115,11 @@ const stubs = {
   },
   'a-drawer': { props: ['open', 'title'], template: '<div v-if="open" class="drawer"><h3>{{ title }}</h3><slot /></div>' },
   'a-input': inputStub,
+  'a-textarea': {
+    props: ['value', 'disabled'],
+    emits: ['change'],
+    template: '<textarea :value="value" :disabled="disabled" @input="$emit(\'change\', $event)" />',
+  },
   'a-input-number': {
     props: ['value', 'disabled'],
     emits: ['update:value'],
@@ -425,6 +432,47 @@ describe('ScoringStandardsView', () => {
     expect(options).toEqual(['LX0609-001 · 入院记录完整性', 'LX0609-002 · 未知', 'LX0609-003 · 首次病程及时性'])
   })
 
+  it('后端返回缺失或错误的科室范围时失败关闭，不解释为全科室', async () => {
+    state.api.getScoringStandard.mockResolvedValue(ok(detailOf(draft, {
+      items: [{
+        ...detailOf(draft).items[0],
+        department_scope_mode: '' as never,
+      }],
+    })))
+    const wrapper = await render()
+    await openEditor(wrapper, 'd1')
+    expect(wrapper.get('[data-testid="scoring-editor-load-error"]').text()).toContain('读取评分标准详情失败')
+    expect(wrapper.find('[data-testid="scoring-item-row"]').exists()).toBe(false)
+  })
+
+  it('指定科室按机构与精确科室编辑并随整表保存', async () => {
+    const scoped = detailOf(draft, {
+      items: [{
+        ...detailOf(draft).items[0],
+        department_scope_mode: 'selected',
+        department_refs: [{ institute_id: 'H1', department_name: '心内科' }],
+      }],
+      rule_document_types: { 'LX0609-001': ['admission_record'] },
+    })
+    state.api.getScoringStandard.mockResolvedValue(ok(scoped))
+    state.api.saveScoringItems.mockResolvedValue(ok({ ...scoped, version_seq: 3 }))
+    const wrapper = await render()
+    await openEditor(wrapper, 'd1')
+    expect(wrapper.get('[data-testid="scoring-item-document-types"]').text()).toBe('admission_record')
+    await wrapper.get('[data-testid="scoring-item-department-refs"]').setValue('H1|心内科\n H2 | 心内科 ')
+    await wrapper.get('[data-testid="scoring-editor-save"]').trigger('click')
+    await flushPromises()
+    expect(state.api.saveScoringItems).toHaveBeenCalledWith('d1', expect.objectContaining({
+      items: [expect.objectContaining({
+        department_scope_mode: 'selected',
+        department_refs: [
+          { institute_id: 'H1', department_name: '心内科' },
+          { institute_id: 'H2', department_name: '心内科' },
+        ],
+      })],
+    }))
+  })
+
   it('档位不连续时前端拦截保存并提示空隙', async () => {
     const wrapper = await render()
     await openEditor(wrapper, 'd1')
@@ -483,9 +531,12 @@ describe('ScoringStandardsView', () => {
         { group_name: '首页', max_deduction: null, sort_order: 2 },
       ],
       items: [
-        { group_name: '病程记录', rule_id: 'LX0609-001', deduction: 2, is_veto: false, enabled: false },
-        { group_name: '病程记录', rule_id: 'LX0609-002', deduction: 3, is_veto: true, enabled: true },
-        { group_name: '首页', rule_id: 'LX0609-003', deduction: 1.5, is_veto: false, enabled: true },
+        { group_name: '病程记录', rule_id: 'LX0609-001', deduction: 2, is_veto: false, enabled: false,
+          department_scope_mode: 'all', department_refs: [] },
+        { group_name: '病程记录', rule_id: 'LX0609-002', deduction: 3, is_veto: true, enabled: true,
+          department_scope_mode: 'all', department_refs: [] },
+        { group_name: '首页', rule_id: 'LX0609-003', deduction: 1.5, is_veto: false, enabled: true,
+          department_scope_mode: 'all', department_refs: [] },
       ],
     })
     expect(state.message.success).toHaveBeenCalledWith('评分标准草稿已保存')

@@ -62,6 +62,7 @@ def build_appeal_score_snapshot(
     expected_standard_id: str, expected_standard_version_seq: int,
     expected_standard_updated_at: Any,
     workspace_factory: Callable[[], Any] | None = None,
+    department_loader: Callable[..., dict[tuple[str, str, str], str]] | None = None,
 ) -> dict[str, Any]:
     """用可信结果引用和精确默认标准重算评分；调用方拥有 session/事务。
 
@@ -94,7 +95,19 @@ def build_appeal_score_snapshot(
         )
         if target.get("rule_set_key") != standard.get("rule_set_key"):
             raise AppealScoreSnapshotConflict("质控结果与评分标准的规则集不一致")
-        scored = score_result(target.get("customer_items") or [], standard)
+        identity = (target["institute_id"], target["patient_id"], target["visit_id"])
+        departments: dict[tuple[str, str, str], str] = {}
+        from .scoring_service import score_input_needs_department
+        if score_input_needs_department(target.get("customer_items") or [], standard):
+            if department_loader is None:
+                from .medical_records.query_service import load_scoring_departments
+                department_loader = load_scoring_departments
+            departments = department_loader([identity], session=session)
+        scored = score_result(
+            target.get("customer_items") or [], standard,
+            institute_id=identity[0],
+            department_name=str(departments.get(identity) or "").strip(),
+        )
     except (AppealScoreSnapshotInvalid, AppealScoreSnapshotNotFound,
             AppealScoreSnapshotConflict, AppealScoreSnapshotUnavailable):
         raise

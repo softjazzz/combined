@@ -81,6 +81,8 @@ export interface ScoringItem {
   deduction: number
   is_veto: boolean
   enabled: boolean
+  department_scope_mode: 'all' | 'selected'
+  department_refs: Array<{ institute_id: string; department_name: string }>
 }
 
 export interface ScoringStandardDetail extends ScoringStandardItem {
@@ -88,6 +90,7 @@ export interface ScoringStandardDetail extends ScoringStandardItem {
   items: ScoringItem[]
   group_count: number
   item_count: number
+  rule_document_types: Record<string, string[]>
 }
 
 export interface ScoringStandardList {
@@ -361,9 +364,28 @@ export function toWriteGroups(groups: readonly ScoringGroupWrite[]): ScoringGrou
 }
 
 export function toWriteItems(items: readonly ScoringItem[]): ScoringItem[] {
-  return items.map(({ group_name, rule_id, deduction, is_veto, enabled }) => ({
-    group_name, rule_id, deduction, is_veto, enabled,
-  }))
+  return items.map(({ group_name, rule_id, deduction, is_veto, enabled, department_scope_mode, department_refs }) => {
+    if (department_scope_mode !== 'all' && department_scope_mode !== 'selected') {
+      throw new TypeError('科室适用模式无效')
+    }
+    if (!Array.isArray(department_refs)) throw new TypeError('科室引用必须是数组')
+    const normalizedRefs = department_refs.map((ref) => {
+      if (typeof ref?.institute_id !== 'string' || typeof ref?.department_name !== 'string') {
+        throw new TypeError('科室引用格式无效')
+      }
+      const normalized = {
+        institute_id: ref.institute_id.trim(),
+        department_name: ref.department_name.trim(),
+      }
+      if (!normalized.institute_id || !normalized.department_name) throw new TypeError('科室引用不能为空')
+      return normalized
+    })
+    return {
+      group_name, rule_id, deduction, is_veto, enabled,
+      department_scope_mode,
+      department_refs: normalizedRefs,
+    }
+  })
 }
 
 /** 场景与可用规则集。 */

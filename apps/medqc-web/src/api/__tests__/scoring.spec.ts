@@ -81,7 +81,10 @@ describe('scoring API', () => {
     await saveScoringItems('s1', {
       version_seq: 3,
       groups: [{ group_name: '病程', max_deduction: null, sort_order: 1, key: 'x' } as never],
-      items: [{ group_name: '病程', rule_id: 'LX0609-001', deduction: 2, is_veto: false, enabled: true, key: 'y' } as never],
+      items: [{
+        group_name: '病程', rule_id: 'LX0609-001', deduction: 2, is_veto: false, enabled: true,
+        department_scope_mode: 'all', department_refs: [], key: 'y',
+      } as never],
     })
     await copyScoringStandard('s1', '副本')
     await activateScoringStandard('s1', { version_seq: 4, replace_mode: 'undefault' })
@@ -95,7 +98,10 @@ describe('scoring API', () => {
     expect(spy.mock.calls[2]?.[0].data).toEqual({
       version_seq: 3,
       groups: [{ group_name: '病程', max_deduction: null, sort_order: 1 }],
-      items: [{ group_name: '病程', rule_id: 'LX0609-001', deduction: 2, is_veto: false, enabled: true }],
+      items: [{
+        group_name: '病程', rule_id: 'LX0609-001', deduction: 2, is_veto: false, enabled: true,
+        department_scope_mode: 'all', department_refs: [],
+      }],
     })
     expect(spy.mock.calls[3]?.[0]).toMatchObject({ url: '/api/v1/scoring/standards/s1/copy', data: { name: '副本' } })
     expect(spy.mock.calls[4]?.[0]).toMatchObject({ url: '/api/v1/scoring/standards/s1/activate', data: { version_seq: 4, replace_mode: 'undefault' } })

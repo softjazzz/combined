@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import json
 import posixpath
 import re
 import zipfile
@@ -14,7 +15,8 @@ from xml.etree import ElementTree
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 
-TEMPLATE_VERSION = "V3.6_SCORING_STANDARD_V1"
+TEMPLATE_VERSION = "V3.6_SCORING_STANDARD_V2"
+LEGACY_TEMPLATE_VERSION = "V3.6_SCORING_STANDARD_V1"
 MAX_UPLOAD_BYTES = 2 * 1024 * 1024
 MAX_ARCHIVE_BYTES = 8 * 1024 * 1024
 MAX_ARCHIVE_ENTRY_BYTES = 4 * 1024 * 1024
@@ -28,7 +30,8 @@ BANDS_SHEET = "等级档位"
 ITEMS_SHEET = "评分条目"
 STANDARD_HEADERS = ("模板版本", "场景", "规则集键", "规则集版本", "标准名称", "满分", "单否档位")
 BAND_HEADERS = ("档位名称", "最低分", "最高分")
-ITEM_HEADERS = ("项目组", "组封顶分", "组排序", "规则ID", "单项扣分", "一票否决", "启用")
+LEGACY_ITEM_HEADERS = ("项目组", "组封顶分", "组排序", "规则ID", "单项扣分", "一票否决", "启用")
+ITEM_HEADERS = (*LEGACY_ITEM_HEADERS, "科室模式", "科室引用", "规则文书")
 REQUIRED_SHEETS = (STANDARD_SHEET, BANDS_SHEET, ITEMS_SHEET)
 BOOL_TRUE = {"是", "true", "1"}
 BOOL_FALSE = {"否", "false", "0"}
@@ -137,8 +140,8 @@ def build_scoring_standard_workbook(detail: Mapping[str, Any], rule_set_version:
     ):
         group = groups.get(group_name, {"max_deduction": None, "sort_order": 0})
         if not group_items:
-            items_sheet.append((group_name, group.get("max_deduction"), group.get("sort_order"), "", "", "", ""))
-            _force_text_cells(items_sheet, items_sheet.max_row, (1, 4, 6, 7))
+            items_sheet.append((group_name, group.get("max_deduction"), group.get("sort_order"), "", "", "", "", "", "", ""))
+            _force_text_cells(items_sheet, items_sheet.max_row, (1, 4, 6, 7, 8, 9, 10))
             continue
         for item in sorted(group_items, key=lambda entry: entry["rule_id"]):
             items_sheet.append((
@@ -149,9 +152,12 @@ def build_scoring_standard_workbook(detail: Mapping[str, Any], rule_set_version:
                 item["deduction"],
                 "是" if item["is_veto"] else "否",
                 "是" if item["enabled"] else "否",
+                item.get("department_scope_mode", "all"),
+                json.dumps(item.get("department_refs") or [], ensure_ascii=False, separators=(",", ":")),
+                json.dumps((detail.get("rule_document_types") or {}).get(item["rule_id"]) or [], ensure_ascii=False, separators=(",", ":")),
             ))
-            _force_text_cells(items_sheet, items_sheet.max_row, (1, 4, 6, 7))
-    _style_sheet(items_sheet, (28, 16, 14, 26, 16, 16, 14))
+            _force_text_cells(items_sheet, items_sheet.max_row, (1, 4, 6, 7, 8, 9, 10))
+    _style_sheet(items_sheet, (28, 16, 14, 26, 16, 16, 14, 14, 42, 36))
     for sheet in workbook.worksheets:
         for row in sheet.iter_rows(min_row=2):
             for cell in row:
@@ -273,6 +279,22 @@ def _boolean(value: Any, *, row: int, field: str, problems: list[ScoringExcelPro
     return None
 
 
+def _json_array(value: Any, row: int, field: str, problems: list[ScoringExcelProblem]) -> list[Any]:
+    if value in (None, ""):
+        return []
+    if not isinstance(value, str):
+        problems.append(_problem(ITEMS_SHEET, row, field, "json_invalid", "必须填写 JSON 数组"))
+        return []
+    try:
+        parsed = json.loads(value)
+    except (TypeError, ValueError):
+        parsed = None
+    if not isinstance(parsed, list):
+        problems.append(_problem(ITEMS_SHEET, row, field, "json_invalid", "必须填写 JSON 数组"))
+        return []
+    return parsed
+
+
 def _read_rows(sheet, headers: tuple[str, ...], maximum: int) -> tuple[list[tuple[int, list[Any]]], list[ScoringExcelProblem]]:
     problems: list[ScoringExcelProblem] = []
     if sheet.sheet_state != "visible":
@@ -348,6 +370,7 @@ def parse_scoring_standard_workbook(
     *,
     current_rule_set_version: str,
     allowed_rule_ids: frozenset[str],
+    allowed_document_types_by_rule: Mapping[str, frozenset[str]] | None = None,
 ) -> ParsedScoringStandard:
     """解析整个工作簿；任何错误都以可定位问题返回，不产生数据库写入。"""
     problems = _archive_problems(content)
@@ -368,7 +391,10 @@ def parse_scoring_standard_workbook(
         problems.extend(row_problems)
         band_rows, row_problems = _read_rows(workbook[BANDS_SHEET], BAND_HEADERS, MAX_BANDS)
         problems.extend(row_problems)
-        item_rows, row_problems = _read_rows(workbook[ITEMS_SHEET], ITEM_HEADERS, MAX_ITEMS + MAX_GROUPS)
+        item_sheet = workbook[ITEMS_SHEET]
+        header_values = tuple(_text(cell.value) for cell in next(item_sheet.iter_rows(min_row=1, max_row=1, values_only=False), ()))
+        item_headers = LEGACY_ITEM_HEADERS if header_values == LEGACY_ITEM_HEADERS else ITEM_HEADERS
+        item_rows, row_problems = _read_rows(item_sheet, item_headers, MAX_ITEMS + MAX_GROUPS)
         problems.extend(row_problems)
         if len(standard_rows) != 1:
             problems.append(_problem(STANDARD_SHEET, 0, "行数", "standard_row_count", "评分标准必须且只能有一条数据"))
@@ -382,8 +408,17 @@ def parse_scoring_standard_workbook(
         for field in STANDARD_HEADERS:
             if not _text(standard[field]):
                 problems.append(_problem(STANDARD_SHEET, standard_row, field, "required", "必填字段不能为空"))
-        if _text(standard["模板版本"]) != TEMPLATE_VERSION:
+        template_version = _text(standard["模板版本"])
+        if template_version not in {TEMPLATE_VERSION, LEGACY_TEMPLATE_VERSION}:
             problems.append(_problem(STANDARD_SHEET, standard_row, "模板版本", "template_version_mismatch", "模板版本不受支持，请重新导出"))
+        elif (
+            (template_version == TEMPLATE_VERSION and item_headers != ITEM_HEADERS)
+            or (template_version == LEGACY_TEMPLATE_VERSION and item_headers != LEGACY_ITEM_HEADERS)
+        ):
+            problems.append(_problem(
+                ITEMS_SHEET, 1, "表头", "template_items_mismatch",
+                "模板版本与评分条目表头不匹配，请重新导出",
+            ))
         if _text(standard["规则集版本"]) != current_rule_set_version:
             problems.append(_problem(STANDARD_SHEET, standard_row, "规则集版本", "rule_set_version_mismatch", "规则集版本已变化，请重新导出"))
         base_score = _decimal(standard["满分"], sheet=STANDARD_SHEET, row=standard_row, field="满分", problems=problems)
@@ -405,7 +440,7 @@ def parse_scoring_standard_workbook(
         items: list[dict[str, Any]] = []
         seen_rules: set[str] = set()
         for row_number, row_values in item_rows:
-            row = dict(zip(ITEM_HEADERS, row_values))
+            row = dict(zip(item_headers, row_values))
             group_name = _text(row["项目组"])
             if not group_name:
                 problems.append(_problem(ITEMS_SHEET, row_number, "项目组", "required", "必填字段不能为空"))
@@ -436,13 +471,34 @@ def parse_scoring_standard_workbook(
             is_veto = _boolean(row["一票否决"], row=row_number, field="一票否决", problems=problems)
             enabled = _boolean(row["启用"], row=row_number, field="启用", problems=problems)
             if deduction is not None and is_veto is not None and enabled is not None:
+                department_scope_mode = (
+                    "all" if item_headers == LEGACY_ITEM_HEADERS else _text(row.get("科室模式"))
+                )
+                if item_headers == ITEM_HEADERS and not department_scope_mode:
+                    problems.append(_problem(
+                        ITEMS_SHEET, row_number, "科室模式", "required", "必填字段不能为空",
+                    ))
                 items.append({
                     "group_name": group_name,
                     "rule_id": rule_id,
                     "deduction": deduction,
                     "is_veto": is_veto,
                     "enabled": enabled,
+                    "department_scope_mode": department_scope_mode,
+                    "department_refs": _json_array(row.get("科室引用"), row_number, "科室引用", problems),
                 })
+                if item_headers == ITEM_HEADERS:
+                    exported_documents = _json_array(row.get("规则文书"), row_number, "规则文书", problems)
+                    expected_documents = sorted((allowed_document_types_by_rule or {}).get(rule_id, frozenset()))
+                    if (
+                        any(not isinstance(value, str) or not value.strip() for value in exported_documents)
+                        or sorted({value.strip() for value in exported_documents if isinstance(value, str)})
+                        != expected_documents
+                    ):
+                        problems.append(_problem(
+                            ITEMS_SHEET, row_number, "规则文书", "rule_documents_changed",
+                            "规则文书由规则目录维护，不允许在评分模板中修改",
+                        ))
         if len(items) > MAX_ITEMS:
             problems.append(_problem(ITEMS_SHEET, 0, "行数", "items_exceeded", "评分条目不能超过 1000 条"))
         if not problems:

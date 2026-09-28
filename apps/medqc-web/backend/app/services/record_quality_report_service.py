@@ -203,6 +203,7 @@ def build_report_context(
     standard_loader: Callable[[str], Mapping[str, Any] | None] = _default_standard_loader,
     projector: Callable[[Iterable[Mapping[str, Any]]], list[dict[str, Any]]] = _default_projector,
     rule_meta_loader: Callable[[], Mapping[str, Mapping[str, str]]] = _default_rule_meta_loader,
+    department_loader: Callable[..., Mapping[tuple[str, str, str], str]] | None = None,
 ) -> ReportContext:
     """读取并装配报表病例行；只在这里访问各 owner，汇总与下钻共用同一病例集。"""
     from .scoring_service import score_result
@@ -284,12 +285,26 @@ def build_report_context(
         score_status = "unavailable"
     if standard is not None:
         score_status = "configured" if standard.get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY else "unavailable"
+    scoring_departments: Mapping[tuple[str, str, str], str] = {}
+    from .scoring_service import standard_needs_department
+    if standard is not None and standard_needs_department(standard):
+        if department_loader is None:
+            from .medical_records.query_service import load_scoring_departments
+            department_loader = load_scoring_departments
+        try:
+            scoring_departments = department_loader([row.identity for row in rows])
+        except Exception as exc:  # noqa: BLE001 - 科室上下文失败关闭为不可用
+            logger.warning("病历质量报表评分科室读取失败 error_type=%s", type(exc).__name__)
     for row in rows:
         if score_status != "configured" or standard is None:
             row.score_status = score_status
             continue
         try:
-            scored = score_result(projected_by_identity[row.identity], standard)
+            scored = score_result(
+                projected_by_identity[row.identity], standard,
+                institute_id=row.identity[0],
+                department_name=str(scoring_departments.get(row.identity) or "").strip(),
+            )
         except Exception as exc:  # noqa: BLE001 - 单病例计分失败只影响该病例
             logger.warning("病历质量报表单病例计分失败 error_type=%s", type(exc).__name__)
             row.score_status = "unavailable"

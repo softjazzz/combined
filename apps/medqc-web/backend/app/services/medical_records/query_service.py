@@ -1007,6 +1007,57 @@ def _workstation_department_expr(discharge_summary=None):
     )
 
 
+def load_scoring_departments(
+    identities: Iterable[tuple[str, str, str]],
+    *,
+    session: Session | None = None,
+    session_factory: Callable[[], Session] | None = None,
+) -> dict[tuple[str, str, str], str]:
+    """按工作台同一优先级读取评分科室，且始终以三坐标精确关联。"""
+    normalized = sorted({
+        tuple(str(value or "").strip() for value in identity)
+        for identity in identities
+        if len(identity) == 3 and all(str(value or "").strip() for value in identity)
+    })
+    if not normalized:
+        return {}
+
+    def read(active: Session) -> dict[tuple[str, str, str], str]:
+        discharge_summary = _workstation_discharge_summary_subquery(active)
+        query = active.query(
+            MedicalRecordFrontpage.institute_id,
+            MedicalRecordFrontpage.patient_id,
+            MedicalRecordFrontpage.visit_id,
+            _workstation_department_expr(discharge_summary).label("department"),
+        )
+        if discharge_summary is not None:
+            query = query.outerjoin(
+                discharge_summary, _workstation_discharge_join_condition(discharge_summary),
+            )
+        rows = query.filter(tuple_(
+            MedicalRecordFrontpage.institute_id,
+            MedicalRecordFrontpage.patient_id,
+            MedicalRecordFrontpage.visit_id,
+        ).in_(normalized)).all()
+        candidates: dict[tuple[str, str, str], set[str]] = {}
+        for row in rows:
+            identity = tuple(str(value or "").strip() for value in row[:3])
+            department = str(row.department or "").strip()
+            if all(identity) and department:
+                candidates.setdefault(identity, set()).add(department)
+        return {
+            identity: next(iter(names))
+            for identity, names in candidates.items()
+            if len(names) == 1
+        }
+
+    if session is not None:
+        return read(session)
+    factory = session_factory or _session_factory
+    with factory() as active:
+        return read(active)
+
+
 def _workstation_resolved_discharge_expr(discharge_summary=None):
     if discharge_summary is None:
         return MedicalRecordFrontpage.discharge_datetime

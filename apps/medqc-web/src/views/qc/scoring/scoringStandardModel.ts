@@ -49,6 +49,8 @@ export interface EditableItem {
   deduction: number | null
   is_veto: boolean
   enabled: boolean
+  department_scope_mode: 'all' | 'selected'
+  department_refs: Array<{ institute_id: string; department_name: string }>
 }
 
 function isNumber(value: unknown): value is number {
@@ -169,6 +171,12 @@ export function validateGroupsAndItems(
       problems.push(`条目 ${label} 所属项目组不存在`)
     }
     if (!isNumber(item.deduction) || item.deduction < 0) problems.push(`条目 ${label} 扣分必须为非负数`)
+    if (item.department_scope_mode === 'selected' && item.department_refs.length === 0) {
+      problems.push(`条目 ${label} 的指定科室不能为空`)
+    }
+    if (item.department_scope_mode === 'all' && item.department_refs.length > 0) {
+      problems.push(`条目 ${label} 的全科室模式不能保留科室引用`)
+    }
   })
   return problems
 }
@@ -189,6 +197,11 @@ export function toItemWrites(items: readonly EditableItem[]): ScoringItem[] {
     deduction: item.deduction as number,
     is_veto: item.is_veto,
     enabled: item.enabled,
+    department_scope_mode: item.department_scope_mode,
+    department_refs: item.department_refs.map((ref) => ({
+      institute_id: ref.institute_id.trim(),
+      department_name: ref.department_name.trim(),
+    })),
   }))
 }
 
