@@ -513,12 +513,17 @@ def _build_event(item: dict[str, Any]) -> dict[str, Any]:
     author_role, author_name, author_title = _classify_course_round_role(title, content)
     source_table = _item_source_table(item)
     authored_at, time_basis, time_note = _resolve_event_authored_at(item, source_table, content)
+    # 可视化条件只允许使用源字段明确返回的 record_time；display_time 及
+    # submit/update/content 回退继续服务旧时间轴，但不得冒充结构化书写时间。
+    visual_record_time = _parse_datetime(item.get("record_time"))
     return {
         "document_id": _safe_text(item.get("document_id") or item.get("id")),
         "title": title,
         "authored_at": authored_at,
         "time_basis": time_basis,
         "time_note": time_note,
+        "visual_record_time": visual_record_time,
+        "visual_record_time_trusted": bool(visual_record_time),
         "signed": any(token in content for token in ("签名", "签字", "审核医师", "审阅医师")),
         "author_role": author_role,
         "author_name": author_name,
@@ -631,13 +636,15 @@ def _flatten_inventory_items(
     bundle_payload: dict[str, Any],
     *,
     strict_structured_source_limits: Mapping[str, int] | None = None,
+    strict_identity: bool = False,
 ) -> list[dict[str, Any]]:
     def fetch_fallback_items() -> tuple[list[dict[str, Any]], dict[str, str]]:
-        if strict_structured_source_limits is None:
+        if strict_structured_source_limits is None and not strict_identity:
             return _fetch_source_table_fallback_items(bundle_payload)
         return _fetch_source_table_fallback_items(
             bundle_payload,
             strict_structured_source_limits=strict_structured_source_limits,
+            strict_identity=strict_identity,
         )
 
     inventory_items = _safe_list(bundle_payload.get("source_documents")) or _safe_list(structured.get("document_inventory"))
@@ -668,6 +675,8 @@ def _flatten_inventory_items(
         bundle_payload["_source_table_fallback_meta"] = fallback_meta
     if fallback_items:
         return fallback_items
+    if strict_identity:
+        return []
     detail_service_items = _fetch_detail_service_fallback_items(_safe_text(bundle_payload.get("visit_id")))
     if detail_service_items:
         bundle_payload["_detail_service_fallback_used"] = True
@@ -679,6 +688,7 @@ def _fetch_source_table_fallback_items(
     bundle_payload: dict[str, Any],
     *,
     strict_structured_source_limits: Mapping[str, int] | None = None,
+    strict_identity: bool = False,
 ) -> tuple[list[dict[str, Any]], dict[str, str]]:
     institute_id = _safe_text(bundle_payload.get("institute_id"))
     visit_id = _safe_text(bundle_payload.get("visit_id"))
@@ -694,13 +704,12 @@ def _fetch_source_table_fallback_items(
     with engine.connect() as conn:
         for table_name in _SOURCE_TABLES:
             strict_limit = (strict_structured_source_limits or {}).get(table_name)
-            strict_mode = (
-                strict_limit is not None
-                and table_name in _STRUCTURED_SOURCE_ROW_FIELDS
+            strict_mode = strict_identity or (
+                strict_limit is not None and table_name in _STRUCTURED_SOURCE_ROW_FIELDS
             )
             limit = (
                 max(1, int(strict_limit))
-                if strict_mode
+                if strict_mode and strict_limit is not None
                 else int(_FALLBACK_DOC_FETCH_LIMITS.get(table_name, 20))
             )
             query_limit = limit + 1
@@ -832,7 +841,25 @@ def _fetch_source_table_fallback_items(
         )
         bundle_payload["_structured_source_rows"] = structured_source_rows
         try:
-            if institute_id:
+            if strict_identity:
+                registration = conn.execute(
+                    text(
+                        """
+                        SELECT admission_datetime, discharge_datetime
+                        FROM cdm.inpat_registration
+                        WHERE institute_id = :institute_id
+                          AND patient_id = :patient_id
+                          AND visit_id = :visit_id
+                        LIMIT 1
+                        """
+                    ),
+                    {
+                        "institute_id": institute_id,
+                        "patient_id": patient_id,
+                        "visit_id": visit_id,
+                    },
+                ).mappings().first()
+            elif institute_id:
                 registration = conn.execute(
                     text(
                         """
@@ -850,7 +877,7 @@ def _fetch_source_table_fallback_items(
                 ).mappings().first()
             else:
                 registration = None
-            if not registration and patient_id:
+            if not strict_identity and not registration and patient_id:
                 registration = conn.execute(
                     text(
                         """
@@ -866,7 +893,7 @@ def _fetch_source_table_fallback_items(
                         "patient_id": patient_id,
                     },
                 ).mappings().first()
-            if not registration:
+            if not strict_identity and not registration:
                 registration = conn.execute(
                     text(
                         """
@@ -878,8 +905,12 @@ def _fetch_source_table_fallback_items(
                     ),
                     {"visit_id": visit_id},
                 ).mappings().first()
+            if strict_identity:
+                bundle_payload["_registration_source_readiness"] = "complete"
         except Exception:
             registration = None
+            if strict_identity:
+                bundle_payload["_registration_source_readiness"] = "unavailable"
         if registration:
             fallback_meta["admission_datetime"] = _safe_text(registration.get("admission_datetime"))
             fallback_meta["discharge_datetime"] = _safe_text(registration.get("discharge_datetime"))
@@ -988,18 +1019,26 @@ def build_programmatic_evidence_payload(
     bundle: dict[str, Any] | None,
     medical_text: str = "",
     strict_structured_source_limits: Mapping[str, int] | None = None,
+    strict_identity: bool = False,
 ) -> dict[str, Any]:
     bundle_payload = dict(bundle or {})
+    if strict_identity and not all(
+        _safe_text(bundle_payload.get(key))
+        for key in ("institute_id", "patient_id", "visit_id")
+    ):
+        raise ValueError("strict_identity_requires_complete_case_ref")
     # 调用方携带的同名元数据不可作为来源证明；仅接受本次受控源表查询写回的值。
     bundle_payload.pop("_source_table_fallback_meta", None)
     bundle_payload.pop("_source_table_readiness", None)
     bundle_payload.pop("_structured_source_readiness", None)
     bundle_payload.pop("_structured_source_rows", None)
+    bundle_payload.pop("_registration_source_readiness", None)
     structured = _safe_dict(bundle_payload.get("structured_context"))
     inventory_items = _flatten_inventory_items(
         structured,
         bundle_payload,
         strict_structured_source_limits=strict_structured_source_limits,
+        strict_identity=strict_identity,
     )
     fallback_meta = _safe_dict(bundle_payload.get("_source_table_fallback_meta"))
     raw_source_readiness = _safe_dict(bundle_payload.get("_source_table_readiness"))
@@ -1063,6 +1102,11 @@ def build_programmatic_evidence_payload(
         )
         or _extract_datetime_by_labels(medical_text_value, ("出院日期", "出院时间", "死亡时间"))
     )
+    trusted_discharge_time = (
+        _parse_datetime(structured.get("discharge_datetime"))
+        or _parse_datetime(bundle_payload.get("discharge_datetime"))
+        or _parse_datetime(fallback_meta.get("discharge_datetime"))
+    )
     supplement_text = _build_supplement_text(
         admission_time=admission_time,
         discharge_time=discharge_time,
@@ -1083,8 +1127,14 @@ def build_programmatic_evidence_payload(
             "admission_time_basis": admission_time_basis,
             "admission_time_trusted": admission_time_trusted,
             "discharge_time": discharge_time,
+            "discharge_time_trusted": bool(
+                discharge_time and trusted_discharge_time == discharge_time
+            ),
             "documents": documents,
             "source_readiness": source_readiness,
+            "registration_source_readiness": _safe_text(
+                bundle_payload.get("_registration_source_readiness")
+            ),
             "structured_source_readiness": structured_source_readiness,
             "structured_source_rows": structured_source_rows,
             "risk_flags": _extract_risk_flags(

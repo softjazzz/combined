@@ -15,6 +15,9 @@ import {
   createWorkspaceBatchJob,
   getDraftBasicInfo,
   getDraftBasicInfoOptions,
+  getDraftCondition,
+  getDraftConditionOptions,
+  updateDraftCondition,
   updateDraftBasicInfo,
 } from '@/services/custom-rule-workspace-service'
 
@@ -73,6 +76,83 @@ describe('custom rule workspace batch service', () => {
     })
     expect(config.data).not.toHaveProperty('record_refs')
     expect(config.data).not.toHaveProperty('record_ids')
+  })
+})
+
+describe('custom rule visual condition service', () => {
+  const options = {
+    schema_version: 'visual-condition-v1',
+    fields: [{
+      key: 'record.department', label: '当前科室', value_type: 'string', kind: 'record',
+      operators: [
+        { value: 'eq', label: '等于', value_required: true },
+        { value: 'in', label: '属于', value_required: true, value_options: [{ value: '内科', label: '内科' }] },
+      ],
+    }],
+    document_types: [{ value: 'discharge_record', label: '出院记录' }],
+    group_operators: ['all', 'any'],
+    limits: { max_groups: 5, max_conditions_per_group: 10 },
+    result_semantics: { true: 'non_compliant', false: 'compliant', unknown: 'data_gap' },
+    timeliness: {
+      start_fields: [{ value: 'record.admission_datetime', label: '入院时间' }],
+      end_fields: [{ value: 'document.discharge_record.latest', label: '出院记录时间' }],
+      allowed_pairs: [{ start_fact: 'record.admission_datetime', end_fact: 'document.discharge_record.latest' }],
+      operators: [{ value: 'gt', label: '超过' }],
+      units: [{ value: 'hours', label: '小时' }],
+    },
+  }
+  const visualCondition = {
+    schema_version: 'visual-condition-v1', root_operator: 'all',
+    groups: [{ id: 'group-1', operator: 'all', conditions: [{
+      id: 'condition-1', kind: 'field', fact_key: 'record.department', operator: 'in', value: ['内科'],
+    }] }],
+  }
+  const response = {
+    id: 'draft-1', rule_code: 'CUSTOM-001', status: 'draft', updated_at: '2026-09-28T13:00:00Z', visual_condition: visualCondition,
+  }
+
+  beforeEach(() => vi.clearAllMocks())
+
+  it('严格接收服务端字段、文书和时效配对目录', async () => {
+    mocks.requestRaw.mockResolvedValueOnce({ data: { success: true, data: options } })
+    expect(await getDraftConditionOptions()).toEqual({ success: true, data: options })
+    mocks.requestRaw.mockResolvedValueOnce({ data: { success: true, data: { ...options, timeliness: { ...options.timeliness, allowed_pairs: ['bad'] } } } })
+    expect(await getDraftConditionOptions()).toMatchObject({ success: false })
+  })
+
+  it('未配置草稿回读null且不冒充已保存条件', async () => {
+    mocks.requestRaw.mockResolvedValueOnce({ data: { success: true, data: { ...response, visual_condition: null } } })
+    expect(await getDraftCondition('draft-1')).toEqual({ success: true, data: { ...response, visual_condition: null } })
+  })
+
+  it('PATCH保留数组比较值并携带CAS，其他草稿回执视为未知', async () => {
+    mocks.requestRaw.mockResolvedValueOnce({ data: { success: true, data: response } })
+    expect(await updateDraftCondition('draft-1', {
+      expected_updated_at: '2026-09-28T12:00:00Z', visual_condition: visualCondition as never,
+    })).toMatchObject({ success: true })
+    expect(mocks.requestRaw).toHaveBeenCalledWith({
+      method: 'PATCH', url: '/api/v1/custom-qc/workspace/draft-condition/draft-1',
+      data: { expected_updated_at: '2026-09-28T12:00:00Z', visual_condition: visualCondition },
+    })
+    mocks.requestRaw.mockResolvedValueOnce({ data: { success: true, data: { ...response, id: 'other' } } })
+    expect(await updateDraftCondition('draft-1', {
+      expected_updated_at: '2026-09-28T12:00:00Z', visual_condition: visualCondition as never,
+    })).toMatchObject({ success: false, resultUnknown: true })
+  })
+
+  it.each([401, 403, 404, 409, 422])('条件PATCH HTTP %s为明确拒绝', async (status) => {
+    mocks.requestRaw.mockRejectedValue({ response: { status, data: { detail: '请求被拒绝' } } })
+    expect(await updateDraftCondition('draft-1', {
+      expected_updated_at: '2026-09-28T12:00:00Z', visual_condition: visualCondition as never,
+    })).toMatchObject({ success: false, resultUnknown: false, conflict: status === 409 })
+  })
+
+  it.each([500, undefined])('条件PATCH HTTP %s或断网结果未知并禁止盲重试', async (status) => {
+    mocks.requestRaw.mockRejectedValue(status ? { response: { status } } : new Error('timeout'))
+    const result = await updateDraftCondition('draft-1', {
+      expected_updated_at: '2026-09-28T12:00:00Z', visual_condition: visualCondition as never,
+    })
+    expect(result).toMatchObject({ success: false, resultUnknown: true })
   })
 })
 

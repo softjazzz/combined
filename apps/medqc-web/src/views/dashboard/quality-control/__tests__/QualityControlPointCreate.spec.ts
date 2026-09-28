@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   list: vi.fn(), options: vi.fn(), get: vi.fn(), create: vi.fn(), update: vi.fn(),
+  conditionOptions: vi.fn(), conditionGet: vi.fn(), conditionUpdate: vi.fn(),
   auth: null as null | { user: { id: string; email: string } | null; userRoles: string[] },
 }))
 
@@ -20,6 +21,9 @@ vi.mock('@/services/custom-rule-workspace-service', () => ({
   getDraftBasicInfo: mocks.get,
   createDraftBasicInfo: mocks.create,
   updateDraftBasicInfo: mocks.update,
+  getDraftConditionOptions: mocks.conditionOptions,
+  getDraftCondition: mocks.conditionGet,
+  updateDraftCondition: mocks.conditionUpdate,
 }))
 
 import QualityControlPointCreate from '@/views/dashboard/quality-control/QualityControlPointCreate.vue'
@@ -32,6 +36,26 @@ const listDraft = {
   ...basicDraft, description: '', source_requirement: '', prompt_template: '', applicable_documents: ['出院记录'],
   severity: 'major', defect_level: '一般缺陷', complexity: '中复杂度', scene: 'final', generation_mode: 'fallback_template',
   examples: [], check_logic: { basic_info: { version: 1 } }, created_by: 'manager-1', created_at: '2026-09-28T12:00:00Z',
+}
+const visualOptions = {
+  schema_version: 'visual-condition-v1',
+  fields: [{ key: 'record.department', label: '当前科室', value_type: 'string', kind: 'record', operators: [{ value: 'eq', label: '等于', value_required: true }] }],
+  document_types: [{ value: 'discharge_record', label: '出院记录' }],
+  group_operators: ['all', 'any'], limits: { max_groups: 3, max_conditions_per_group: 4 },
+  result_semantics: { true: 'non_compliant', false: 'compliant', unknown: 'data_gap' },
+  timeliness: {
+    start_fields: [{ value: 'record.admission_datetime', label: '入院时间' }],
+    end_fields: [{ value: 'document.discharge_record.latest', label: '出院记录时间' }],
+    allowed_pairs: [{ start_fact: 'record.admission_datetime', end_fact: 'document.discharge_record.latest' }],
+    operators: [{ value: 'gt', label: '超过' }], units: [{ value: 'hours', label: '小时' }],
+  },
+}
+const emptyVisualTree = {
+  schema_version: 'visual-condition-v1', root_operator: 'all',
+  groups: [{ id: 'group-1', operator: 'all', conditions: [] }],
+}
+const conditionDraft = {
+  id: 'draft-1', rule_code: 'CUSTOM-001', status: 'draft', updated_at: '2026-09-28T12:00:00Z', visual_condition: null,
 }
 
 function deferred<T>() {
@@ -69,6 +93,13 @@ describe('QualityControlPointCreate', () => {
     mocks.get.mockResolvedValue({ success: true, data: basicDraft })
     mocks.create.mockResolvedValue({ success: true, data: basicDraft, resultUnknown: false, conflict: false })
     mocks.update.mockResolvedValue({ success: true, data: { ...basicDraft, name: '已修改' }, resultUnknown: false, conflict: false })
+    mocks.conditionOptions.mockResolvedValue({ success: true, data: visualOptions })
+    mocks.conditionGet.mockResolvedValue({ success: true, data: conditionDraft })
+    mocks.conditionUpdate.mockResolvedValue({
+      success: true,
+      data: { ...conditionDraft, updated_at: '2026-09-28T13:00:00Z', visual_condition: emptyVisualTree },
+      resultUnknown: false, conflict: false,
+    })
   })
 
   it('无管理权限时不读取目录和草稿且不能提交', async () => {
@@ -95,7 +126,7 @@ describe('QualityControlPointCreate', () => {
       name: '新规则', category: '自定义质量大类', rule_type: '跨文书一致性', document_type: '出院记录',
     })
     expect(wrapper.text()).toContain('草稿 CUSTOM-001 已保存')
-    expect(wrapper.text()).toContain('条件配置与测试验证尚未开放')
+    expect(wrapper.text()).toContain('缺陷触发条件')
     expect(wrapper.text()).not.toContain('保存并下一步')
   })
 
@@ -120,6 +151,105 @@ describe('QualityControlPointCreate', () => {
     expect(mocks.update).toHaveBeenCalledWith('draft-1', expect.objectContaining({
       name: '已修改', expected_updated_at: '2026-09-28T12:00:00Z',
     }))
+  })
+
+  it('未配置条件只显示本地空组，保存后才提交visual_condition与CAS', async () => {
+    const wrapper = render()
+    await flushPromises()
+    await wrapper.get('[data-testid="open-draft-draft-1"]').trigger('click')
+    await flushPromises()
+    expect(mocks.conditionGet).toHaveBeenCalledWith('draft-1')
+    await wrapper.get('[data-testid="save-visual-condition"]').trigger('click')
+    expect(wrapper.text()).toContain('条件组不能为空')
+    await wrapper.find('.group-actions button').trigger('click')
+    const selects = wrapper.findAll('.condition-row select')
+    await selects[1].setValue('record.department')
+    await selects[2].setValue('eq')
+    await wrapper.get('input[aria-label="比较值"]').setValue('内科')
+    await wrapper.get('[data-testid="save-visual-condition"]').trigger('click')
+    await flushPromises()
+    expect(mocks.conditionUpdate).toHaveBeenCalledWith('draft-1', {
+      expected_updated_at: '2026-09-28T12:00:00Z',
+      visual_condition: expect.objectContaining({ schema_version: 'visual-condition-v1' }),
+    })
+    expect(wrapper.text()).toContain('缺陷触发条件已保存')
+  })
+
+  it('条件有未保存修改时阻止基础信息保存，避免重载丢失', async () => {
+    const wrapper = render()
+    await flushPromises()
+    await wrapper.get('[data-testid="open-draft-draft-1"]').trigger('click')
+    await flushPromises()
+    await wrapper.find('.group-actions button').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="draft-name"]').setValue('不应提交的名称')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(mocks.update).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('请先保存条件配置后再修改基础信息')
+    expect(wrapper.find('.condition-row').exists()).toBe(true)
+  })
+
+  it('切换账号后丢弃旧账号迟到的条件详情', async () => {
+    const pending = deferred<{ success: true; data: typeof conditionDraft }>()
+    mocks.conditionGet.mockReturnValueOnce(pending.promise)
+    const wrapper = render()
+    await flushPromises()
+    await wrapper.get('[data-testid="open-draft-draft-1"]').trigger('click')
+    await Promise.resolve()
+    if (!mocks.auth) throw new Error('auth missing')
+    mocks.auth.user = reactive({ id: 'manager-2', email: 'm2@example.com' })
+    await flushPromises()
+    pending.resolve({ success: true, data: conditionDraft })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="save-visual-condition"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('条件组 1')
+  })
+
+  it('条件保存未知结果禁重复，角色变化后旧成功不落地', async () => {
+    mocks.conditionUpdate.mockResolvedValueOnce({ success: false, message: '条件保存结果未知', resultUnknown: true, conflict: false })
+    const wrapper = render()
+    await flushPromises()
+    await wrapper.get('[data-testid="open-draft-draft-1"]').trigger('click')
+    await flushPromises()
+    await wrapper.find('.group-actions button').trigger('click')
+    const selects = wrapper.findAll('.condition-row select')
+    await selects[1].setValue('record.department')
+    await selects[2].setValue('eq')
+    await wrapper.get('input[aria-label="比较值"]').setValue('内科')
+    await wrapper.get('[data-testid="save-visual-condition"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('条件保存结果未知')
+    expect(wrapper.get('[data-testid="save-visual-condition"]').attributes('disabled')).toBeDefined()
+    wrapper.unmount()
+
+    const pending = deferred<{
+      success: true
+      data: typeof conditionDraft & { visual_condition: typeof emptyVisualTree }
+      resultUnknown: false
+      conflict: false
+    }>()
+    mocks.conditionUpdate.mockReturnValueOnce(pending.promise)
+    const editing = render()
+    await flushPromises()
+    await editing.get('[data-testid="open-draft-draft-1"]').trigger('click')
+    await flushPromises()
+    await editing.find('.group-actions button').trigger('click')
+    const editingSelects = editing.findAll('.condition-row select')
+    await editingSelects[1].setValue('record.department')
+    await editingSelects[2].setValue('eq')
+    await editing.get('input[aria-label="比较值"]').setValue('内科')
+    await editing.get('[data-testid="save-visual-condition"]').trigger('click')
+    if (!mocks.auth) throw new Error('auth missing')
+    mocks.auth.userRoles = reactive(['admin'])
+    await flushPromises()
+    pending.resolve({
+      success: true,
+      data: { ...conditionDraft, updated_at: '2026-09-28T13:00:00Z', visual_condition: emptyVisualTree },
+      resultUnknown: false, conflict: false,
+    })
+    await flushPromises()
+    expect(editing.text()).not.toContain('缺陷触发条件已保存')
   })
 
   it('旧workspace草稿只展示且不冒充可编辑基础信息草稿', async () => {

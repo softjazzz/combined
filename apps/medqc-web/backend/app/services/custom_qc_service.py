@@ -344,7 +344,14 @@ async def evaluate_inline_rule_orchestrated(
         "id": str(record.get("record_id") or record.get("visit_id") or record.get("id") or ""),
         "content": str(record.get("medical_text") or ""),
         "document_type": str(inline_rule.get("category") or normalize_document_type(rule.get("document_type"))),
+        "institute_id": str(record.get("institute_id") or "").strip(),
+        "patient_id": str(record.get("patient_id") or "").strip(),
+        "visit_id": str(record.get("visit_id") or "").strip(),
+        "visual_evidence_error": str(record.get("visual_evidence_error") or "").strip(),
     }
+    trusted_evidence = record.get("evidence_payload")
+    if isinstance(trusted_evidence, dict) and trusted_evidence:
+        medical_record["evidence_payload"] = dict(trusted_evidence)
 
     async def _llm_evaluate(candidate_rule: Dict[str, Any], candidate_record: Dict[str, Any]) -> Dict[str, Any]:
         return await qc_service.rule_engine.evaluate(

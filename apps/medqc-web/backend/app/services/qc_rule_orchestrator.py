@@ -7,6 +7,7 @@ import asyncio
 import copy
 
 from .programmatic_rule_executor import ProgrammaticRuleExecutor
+from .visual_condition_executor import VisualConditionExecutor
 from .qc_execution_cache import (
     QCExecutionCache,
     build_execution_cache_key,
@@ -228,6 +229,7 @@ def _bucket_metric_key(bucket_key: tuple[str, str, str]) -> str:
 class QCRuleOrchestrator:
     def __init__(self) -> None:
         self._program_executor = ProgrammaticRuleExecutor()
+        self._visual_condition_executor = VisualConditionExecutor()
 
     async def evaluate_rules(
         self,
@@ -342,6 +344,7 @@ class QCRuleOrchestrator:
             raise_if_cancelled(cancellation_check)
             meta = resolve_rule_execution_meta(rule)
             executor_type = meta.executor_type
+            can_visual_condition = self._visual_condition_executor.can_execute(rule)
             can_program = executor_type == "program" and self._program_executor.can_execute(rule)
             guarded_result = _luxian_0609_copy_guard_result(
                 rule=rule,
@@ -352,7 +355,7 @@ class QCRuleOrchestrator:
                 program_count += 1
                 program_results[idx] = guarded_result
                 continue
-            cache_key = build_execution_cache_key(
+            cache_key = "" if can_visual_condition else build_execution_cache_key(
                 record_snapshot_hash=record_snapshot_hash,
                 rule_id=str(rule.get("rule_id") or rule.get("rule_code") or ""),
                 rule_version=meta.rule_version,
@@ -360,14 +363,23 @@ class QCRuleOrchestrator:
                 model_version=str(model_version or "unknown"),
             )
 
-            if execution_cache is not None:
+            if execution_cache is not None and cache_key:
                 cached = execution_cache.get(cache_key)
                 if isinstance(cached, dict):
                     cached_results[idx] = (copy.deepcopy(cached), meta, cache_key)
                     cache_hit_count += 1
                     continue
 
-            if can_program:
+            if can_visual_condition:
+                # 可视化规则有独立确定性执行合同；配置损坏也由该执行器返回
+                # technical_error，绝不掉入 LLM prompt 猜测条件或时效。
+                program_count += 1
+                program_results[idx] = self._visual_condition_executor.evaluate(
+                    rule=rule,
+                    medical_record=medical_record,
+                    meta=meta.to_dict(),
+                )
+            elif can_program:
                 program_count += 1
                 program_results[idx] = self._program_executor.evaluate(
                     rule=rule,

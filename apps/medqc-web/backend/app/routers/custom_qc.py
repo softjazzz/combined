@@ -21,7 +21,13 @@ from ..services.custom_qc_workspace_service import (
     DraftBasicInfoConflict,
     DraftBasicInfoInvalid,
     DraftBasicInfoNotFound,
+    DraftVisualConditionConflict,
+    DraftVisualConditionNotFound,
     draft_basic_info_document_options,
+)
+from ..services.visual_condition_service import (
+    VisualConditionInvalid,
+    visual_condition_options,
 )
 from ..services.llm_observability import llm_observation_context
 from ..services.product_activation import require_product_activation
@@ -144,7 +150,16 @@ class WorkspaceDraftBasicInfoUpdateRequest(WorkspaceDraftBasicInfoCreateRequest)
     expected_updated_at: datetime
 
 
+class WorkspaceDraftConditionUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_updated_at: datetime
+    visual_condition: Dict[str, Any]
+
+
 class WorkspaceRecordPayload(BaseModel):
+    institute_id: Optional[str] = None
+    patient_id: Optional[str] = None
     record_id: str
     visit_id: Optional[str] = None
     patient_name: Optional[str] = None
@@ -272,6 +287,52 @@ def _requires_archive_verification(scope: Any) -> bool:
     return str(scope or "").strip().lower() != "running"
 
 
+_DETERMINATE_VISUAL_STATUSES = {"compliant", "non_compliant"}
+
+
+def _workspace_record_identity(record: Dict[str, Any]) -> tuple[str, str, str] | None:
+    identity = tuple(
+        str(record.get(key) or "").strip()
+        for key in ("institute_id", "patient_id", "visit_id")
+    )
+    return identity if all(identity) else None
+
+
+def _visual_status_counts(items: List[Dict[str, Any]]) -> Dict[str, int]:
+    statuses = [str(item.get("status") or "").strip().lower() for item in items]
+    return {
+        "success_count": sum(status in _DETERMINATE_VISUAL_STATUSES for status in statuses),
+        "unknown_count": sum(status == "data_gap" for status in statuses),
+        "technical_error_count": sum(status == "technical_error" for status in statuses),
+    }
+
+
+def _record_outcome_counts(
+    record_statuses: Dict[tuple[str, str, str], List[str]],
+    failed_identities: set[tuple[str, str, str]],
+) -> Dict[str, int]:
+    issue_records = 0
+    compliant_records = 0
+    unknown_records = 0
+    technical_error_records = 0
+    for identity, statuses in record_statuses.items():
+        normalized = {str(status or "").strip().lower() for status in statuses}
+        if identity in failed_identities or "technical_error" in normalized:
+            technical_error_records += 1
+        elif "non_compliant" in normalized:
+            issue_records += 1
+        elif "data_gap" in normalized:
+            unknown_records += 1
+        elif normalized and normalized <= {"compliant", "not_applicable"}:
+            compliant_records += 1
+    return {
+        "issue_records": issue_records,
+        "compliant_records": compliant_records,
+        "unknown_records": unknown_records,
+        "technical_error_records": technical_error_records,
+    }
+
+
 async def _run_workspace_batch_job(job_id: str) -> None:
     workspace = get_workspace_service()
     job = workspace.get_batch_job_for_processing(job_id=job_id)
@@ -331,7 +392,11 @@ async def _run_workspace_batch_job(job_id: str) -> None:
             records=records,
         ):
             raise ValueError("批量任务 record_refs 未唯一命中完整病历")
-        hydrated_records = workspace.hydrate_records_with_medical_text(records)
+        hydrated_records = _hydrate_workspace_execution_records(
+            workspace=workspace,
+            records=records,
+            rules=drafts,
+        )
         total_records = len(hydrated_records)
         workspace.update_batch_job_progress(
             job_id=job_id,
@@ -346,7 +411,9 @@ async def _run_workspace_batch_job(job_id: str) -> None:
                 "success_count": 0,
                 "failed_count": 0,
                 "issue_records": 0,
-                "compliant_records": total_records,
+                "compliant_records": 0,
+                "unknown_records": 0,
+                "technical_error_records": 0,
                 "total_tokens": 0,
                 "total_processing_time": 0.0,
                 "executor_breakdown": {"program": 0, "llm": 0},
@@ -358,8 +425,11 @@ async def _run_workspace_batch_job(job_id: str) -> None:
         items: List[Dict[str, Any]] = []
         failed_records: List[Dict[str, Any]] = []
         rule_results: List[Dict[str, Any]] = []
-        issue_record_ids: set[str] = set()
-        failed_record_ids: set[str] = set()
+        record_statuses: Dict[tuple[str, str, str], List[str]] = {}
+        failed_identities: set[tuple[str, str, str]] = set()
+        determinate_result_count = 0
+        unknown_result_count = 0
+        technical_error_result_count = 0
         total_tokens = 0
         total_processing_time = 0.0
         executor_program = 0
@@ -395,13 +465,11 @@ async def _run_workspace_batch_job(job_id: str) -> None:
                     "rule_count": total_rules,
                     "rule_results": rule_results,
                     "total_records": total_records,
-                    "success_count": len(items),
+                    "success_count": determinate_result_count,
                     "failed_count": len(failed_records),
-                    "issue_records": len(issue_record_ids),
-                    "compliant_records": max(
-                        0,
-                        total_records - len(issue_record_ids) - len(failed_record_ids),
-                    ),
+                    "unknown_count": unknown_result_count,
+                    "technical_error_count": technical_error_result_count,
+                    **_record_outcome_counts(record_statuses, failed_identities),
                     "total_tokens": int(total_tokens),
                     "total_processing_time": float(total_processing_time),
                     "executor_breakdown": {
@@ -420,9 +488,9 @@ async def _run_workspace_batch_job(job_id: str) -> None:
                 if not latest or str(latest.get("status") or "").lower() == "canceled":
                     logger.info("workspace 批量任务 %s 已取消，停止执行", job_id)
                     return
-                record_id = str(record.get("record_id") or record.get("visit_id") or "").strip()
                 try:
-                    ensure_record_medical_text([record])
+                    if not _uses_visual_condition(draft):
+                        ensure_record_medical_text([record])
                     result = await evaluate_inline_rule_orchestrated(
                         qc_service=qc_service,
                         rule=rule_payload,
@@ -459,13 +527,26 @@ async def _run_workspace_batch_job(job_id: str) -> None:
                     else:
                         cache_miss_count += 1
                         rule_cache_miss += 1
-                    if str(enriched_result.get("status") or "").lower() == "non_compliant":
-                        issue_record_ids.add(record_id)
+                    status = str(enriched_result.get("status") or "").strip().lower()
+                    identity = _workspace_record_identity(record)
+                    if identity is not None:
+                        record_statuses.setdefault(identity, []).append(status)
+                    if _uses_visual_condition(draft):
+                        if status in _DETERMINATE_VISUAL_STATUSES:
+                            determinate_result_count += 1
+                        elif status == "data_gap":
+                            unknown_result_count += 1
+                        elif status == "technical_error":
+                            technical_error_result_count += 1
+                    else:
+                        determinate_result_count += 1
                     items.append(enriched_result)
                     rule_items.append(enriched_result)
                 except Exception as exc:
                     logger.warning("workspace batch job record failed: %s", exc)
-                    failed_record_ids.add(record_id)
+                    identity = _workspace_record_identity(record)
+                    if identity is not None:
+                        failed_identities.add(identity)
                     failed_payload = {
                         "rule_code": rule_code,
                         "rule_name": rule_name,
@@ -490,13 +571,11 @@ async def _run_workspace_batch_job(job_id: str) -> None:
                         "rule_count": total_rules,
                         "rule_results": rule_results,
                         "total_records": total_records,
-                        "success_count": len(items),
+                        "success_count": determinate_result_count,
                         "failed_count": len(failed_records),
-                        "issue_records": len(issue_record_ids),
-                        "compliant_records": max(
-                            0,
-                            total_records - len(issue_record_ids) - len(failed_record_ids),
-                        ),
+                        "unknown_count": unknown_result_count,
+                        "technical_error_count": technical_error_result_count,
+                        **_record_outcome_counts(record_statuses, failed_identities),
                         "total_tokens": int(total_tokens),
                         "total_processing_time": float(total_processing_time),
                         "executor_breakdown": {
@@ -509,13 +588,26 @@ async def _run_workspace_batch_job(job_id: str) -> None:
                         },
                     },
                 )
+            rule_visual_counts = (
+                _visual_status_counts(rule_items)
+                if _uses_visual_condition(draft)
+                else {
+                    "success_count": len(rule_items),
+                    "unknown_count": 0,
+                    "technical_error_count": 0,
+                }
+            )
             rule_summary = {
                 "total_records": total_records,
-                "success_count": len(rule_items),
+                **rule_visual_counts,
                 "failed_count": len(rule_failed),
                 "issue_records": sum(1 for item in rule_items if item.get("status") == "non_compliant"),
                 "compliant_records": sum(
                     1 for item in rule_items if item.get("status") in {"compliant", "not_applicable"}
+                ),
+                "unknown_records": sum(1 for item in rule_items if item.get("status") == "data_gap"),
+                "technical_error_records": sum(
+                    1 for item in rule_items if item.get("status") == "technical_error"
                 ),
                 "total_tokens": int(rule_tokens),
                 "total_processing_time": float(rule_processing_time),
@@ -557,13 +649,11 @@ async def _run_workspace_batch_job(job_id: str) -> None:
                     "rule_count": total_rules,
                     "rule_results": rule_results,
                     "total_records": total_records,
-                    "success_count": len(items),
+                    "success_count": determinate_result_count,
                     "failed_count": len(failed_records),
-                    "issue_records": len(issue_record_ids),
-                    "compliant_records": max(
-                        0,
-                        total_records - len(issue_record_ids) - len(failed_record_ids),
-                    ),
+                    "unknown_count": unknown_result_count,
+                    "technical_error_count": technical_error_result_count,
+                    **_record_outcome_counts(record_statuses, failed_identities),
                     "total_tokens": int(total_tokens),
                     "total_processing_time": float(total_processing_time),
                     "executor_breakdown": {
@@ -584,10 +674,11 @@ async def _run_workspace_batch_job(job_id: str) -> None:
             "total_tasks": total_records * total_rules,
             "rule_count": total_rules,
             "execution_mode": "multi" if total_rules > 1 else "single",
-            "success_count": len(items),
+            "success_count": determinate_result_count,
             "failed_count": len(failed_records),
-            "issue_records": len(issue_record_ids),
-            "compliant_records": max(0, total_records - len(issue_record_ids) - len(failed_record_ids)),
+            "unknown_count": unknown_result_count,
+            "technical_error_count": technical_error_result_count,
+            **_record_outcome_counts(record_statuses, failed_identities),
             "total_tokens": int(total_tokens),
             "total_processing_time": float(total_processing_time),
             "executor_breakdown": {
@@ -616,10 +707,50 @@ async def _run_workspace_batch_job(job_id: str) -> None:
             failed_records=failed_records,
         )
         for draft in drafts:
+            draft_id = str(draft.get("id") or "")
+            draft_result = next(
+                (item for item in rule_results if str(item.get("draft_id") or "") == draft_id),
+                {},
+            )
+            draft_summary = {
+                "draft_id": draft_id,
+                "total_records": total_records,
+                "total_tasks": total_records,
+                "rule_count": 1,
+                "execution_mode": "single",
+                "success_count": int(draft_result.get("success_count") or 0),
+                "failed_count": int(draft_result.get("failed_count") or 0),
+                "issue_records": int(draft_result.get("issue_records") or 0),
+                "compliant_records": int(draft_result.get("compliant_records") or 0),
+                "unknown_count": int(draft_result.get("unknown_count") or 0),
+                "unknown_records": int(draft_result.get("unknown_records") or 0),
+                "technical_error_count": int(
+                    draft_result.get("technical_error_count") or 0
+                ),
+                "technical_error_records": int(
+                    draft_result.get("technical_error_records") or 0
+                ),
+                "total_tokens": int(draft_result.get("total_tokens") or 0),
+                "total_processing_time": float(
+                    draft_result.get("total_processing_time") or 0.0
+                ),
+                "executor_breakdown": dict(draft_result.get("executor_breakdown") or {}),
+                "cache_breakdown": dict(draft_result.get("cache_breakdown") or {}),
+                "rule_results": [draft_result] if draft_result else [],
+                "processed_rule_count": 1 if draft_result else 0,
+                "progress": {
+                    "step_key": "completed",
+                    "rule_index": 1 if draft_result else 0,
+                    "rule_count": 1,
+                    "processed_records": total_records,
+                    "total_records": total_records,
+                },
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
             workspace.save_last_test_summary(
-                draft_id=str(draft.get("id") or ""),
+                draft_id=draft_id,
                 created_by=current_job["created_by"],
-                summary=summary,
+                summary=draft_summary,
             )
     except Exception as exc:
         logger.exception("workspace batch job failed: %s", exc)
@@ -812,6 +943,105 @@ def _raise_draft_basic_info_http(exc: Exception, *, action: str) -> None:
     raise HTTPException(status_code=503, detail={"code": code, "message": message}) from exc
 
 
+def _raise_draft_condition_http(exc: Exception, *, action: str) -> None:
+    if isinstance(exc, VisualConditionInvalid):
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "draft_visual_condition_invalid", "message": str(exc)},
+        ) from exc
+    if isinstance(exc, DraftVisualConditionNotFound):
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "draft_visual_condition_not_found", "message": str(exc)},
+        ) from exc
+    if isinstance(exc, DraftVisualConditionConflict):
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "draft_visual_condition_conflict", "message": str(exc)},
+        ) from exc
+    if action == "read":
+        code = "draft_visual_condition_unavailable"
+        message = "条件配置读取失败，请稍后重试"
+    else:
+        code = "draft_visual_condition_result_unknown"
+        message = "条件保存结果未确认，请刷新后核对，不要盲目重试"
+    raise HTTPException(status_code=503, detail={"code": code, "message": message}) from exc
+
+
+@router.get("/workspace/draft-condition/options")
+async def get_workspace_draft_condition_options(request: Request):
+    return success_response(
+        data=visual_condition_options(),
+        message="获取可视化条件选项成功",
+        trace_id=get_trace_id(request),
+    )
+
+
+@router.get("/workspace/draft-condition/{draft_id}")
+async def get_workspace_draft_condition(
+    request: Request,
+    draft_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
+):
+    try:
+        draft = workspace.get_visual_condition_draft(
+            draft_id=draft_id,
+            created_by=_current_user_id(current_user),
+        )
+    except Exception as exc:
+        _raise_draft_condition_http(exc, action="read")
+    return success_response(
+        data=_draft_basic_info_response(draft),
+        message="获取可视化条件成功",
+        trace_id=get_trace_id(request),
+    )
+
+
+@router.patch("/workspace/draft-condition/{draft_id}")
+async def update_workspace_draft_condition(
+    request: Request,
+    draft_id: str,
+    payload: WorkspaceDraftConditionUpdateRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
+):
+    try:
+        draft = workspace.update_visual_condition_draft(
+            draft_id=draft_id,
+            created_by=_current_user_id(current_user),
+            visual_condition=payload.visual_condition,
+            expected_updated_at=payload.expected_updated_at,
+        )
+    except Exception as exc:
+        known = isinstance(
+            exc,
+            (VisualConditionInvalid, DraftVisualConditionNotFound, DraftVisualConditionConflict),
+        )
+        audit_event(
+            request,
+            action="custom_qc.draft_visual_condition.update",
+            resource="custom_qc_rule_draft",
+            outcome="rejected" if known else "unknown",
+            details={"draft_id": draft_id, "reason_code": exc.__class__.__name__},
+            current_user=current_user,
+        )
+        _raise_draft_condition_http(exc, action="update")
+    audit_event(
+        request,
+        action="custom_qc.draft_visual_condition.update",
+        resource="custom_qc_rule_draft",
+        outcome="success",
+        details={"draft_id": draft_id, "rule_code": str(draft.get("rule_code") or "")},
+        current_user=current_user,
+    )
+    return success_response(
+        data=_draft_basic_info_response(draft),
+        message="可视化条件已保存",
+        trace_id=get_trace_id(request),
+    )
+
+
 @router.get("/workspace/draft-basic-info/options")
 async def get_workspace_draft_basic_info_options(request: Request):
     return success_response(
@@ -967,10 +1197,16 @@ async def create_workspace_draft(
     current_user: Dict[str, Any] = Depends(get_current_user),
     workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
 ):
-    draft = workspace.create_draft(
-        created_by=_current_user_id(current_user),
-        payload=payload.model_dump(),
-    )
+    try:
+        draft = workspace.create_draft(
+            created_by=_current_user_id(current_user),
+            payload=payload.model_dump(),
+        )
+    except VisualConditionInvalid as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "draft_visual_condition_invalid", "message": str(exc)},
+        ) from exc
     return success_response(
         data=draft,
         message="创建草稿成功",
@@ -986,11 +1222,17 @@ async def update_workspace_draft(
     current_user: Dict[str, Any] = Depends(get_current_user),
     workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
 ):
-    updated = workspace.update_draft(
-        draft_id=draft_id,
-        created_by=_current_user_id(current_user),
-        payload={k: v for k, v in payload.model_dump().items() if v is not None},
-    )
+    try:
+        updated = workspace.update_draft(
+            draft_id=draft_id,
+            created_by=_current_user_id(current_user),
+            payload={k: v for k, v in payload.model_dump().items() if v is not None},
+        )
+    except VisualConditionInvalid as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "draft_visual_condition_invalid", "message": str(exc)},
+        ) from exc
     if not updated:
         raise HTTPException(status_code=404, detail="草稿不存在或无权限")
     return success_response(
@@ -1166,6 +1408,22 @@ def _workspace_rule_payload_from_draft(draft: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _uses_visual_condition(draft_or_rule: Mapping[str, Any]) -> bool:
+    check_logic = draft_or_rule.get("check_logic")
+    return isinstance(check_logic, Mapping) and "visual_condition" in check_logic
+
+
+def _hydrate_workspace_execution_records(
+    *,
+    workspace: CustomQCWorkspaceService,
+    records: Sequence[Dict[str, Any]],
+    rules: Sequence[Mapping[str, Any]],
+) -> List[Dict[str, Any]]:
+    if any(_uses_visual_condition(rule) for rule in rules):
+        return workspace.hydrate_records_with_visual_evidence(records)
+    return workspace.hydrate_records_with_medical_text(records)
+
+
 @router.post("/workspace/test")
 async def test_workspace_single(
     request: Request,
@@ -1181,8 +1439,13 @@ async def test_workspace_single(
     if not draft:
         raise HTTPException(status_code=404, detail="草稿不存在或无权限")
 
-    hydrated = workspace.hydrate_records_with_medical_text([record.model_dump() for record in payload.records[:1]])
-    ensure_record_medical_text(hydrated)
+    hydrated = _hydrate_workspace_execution_records(
+        workspace=workspace,
+        records=[record.model_dump() for record in payload.records[:1]],
+        rules=[draft],
+    )
+    if not _uses_visual_condition(draft):
+        ensure_record_medical_text(hydrated)
     target_record = hydrated[0]
     rule_payload = _workspace_rule_payload_from_draft(draft)
     result = await evaluate_inline_rule_orchestrated(
@@ -1193,12 +1456,17 @@ async def test_workspace_single(
         top_p=payload.top_p,
         max_tokens=payload.max_tokens,
     )
+    visual_counts = (
+        _visual_status_counts([result])
+        if _uses_visual_condition(draft)
+        else {"success_count": 1, "unknown_count": 0, "technical_error_count": 0}
+    )
     summary = {
         "total_records": 1,
-        "success_count": 1,
-        "failed_count": 0,
-        "issue_records": 0 if result.get("is_compliant") else 1,
-        "compliant_records": 1 if result.get("is_compliant") else 0,
+        **visual_counts,
+        "failed_count": visual_counts["technical_error_count"],
+        "issue_records": 1 if result.get("status") == "non_compliant" else 0,
+        "compliant_records": 1 if result.get("status") == "compliant" else 0,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
     workspace.save_last_test_summary(
@@ -1243,7 +1511,11 @@ async def test_workspace_batch(
     if not draft:
         raise HTTPException(status_code=404, detail="草稿不存在或无权限")
 
-    records = workspace.hydrate_records_with_medical_text([record.model_dump() for record in payload.records])
+    records = _hydrate_workspace_execution_records(
+        workspace=workspace,
+        records=[record.model_dump() for record in payload.records],
+        rules=[draft],
+    )
     rule_payload = _workspace_rule_payload_from_draft(draft)
     items: List[Dict[str, Any]] = []
     failed_records: List[Dict[str, Any]] = []
@@ -1256,7 +1528,8 @@ async def test_workspace_batch(
 
     for record in records:
         try:
-            ensure_record_medical_text([record])
+            if not _uses_visual_condition(draft):
+                ensure_record_medical_text([record])
             result = await evaluate_inline_rule_orchestrated(
                 qc_service=qc_service,
                 rule=rule_payload,
@@ -1291,10 +1564,19 @@ async def test_workspace_batch(
                 }
             )
 
+    visual_counts = (
+        _visual_status_counts(items)
+        if _uses_visual_condition(draft)
+        else {
+            "success_count": len(items),
+            "unknown_count": 0,
+            "technical_error_count": 0,
+        }
+    )
     summary = {
         "total_records": len(records),
-        "success_count": len(items),
-        "failed_count": len(failed_records),
+        **visual_counts,
+        "failed_count": len(failed_records) + visual_counts["technical_error_count"],
         "issue_records": sum(1 for item in items if item.get("status") == "non_compliant"),
         "compliant_records": sum(
             1 for item in items if item.get("status") in {"compliant", "not_applicable"}

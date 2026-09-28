@@ -57,6 +57,85 @@ export interface CustomRuleDocumentOption {
   label: string
 }
 
+export type VisualConditionGroupOperator = 'all' | 'any'
+export type VisualConditionValueType = 'string' | 'number' | 'datetime' | 'boolean'
+export type VisualConditionTimeUnit = 'minutes' | 'hours' | 'days'
+
+export interface VisualConditionOption {
+  value: string
+  label: string
+}
+
+export interface VisualConditionFieldOperator extends VisualConditionOption {
+  value_required: boolean
+  value_options?: VisualConditionOption[]
+}
+
+export interface VisualConditionFieldOption {
+  key: string
+  label: string
+  value_type: VisualConditionValueType
+  operators: VisualConditionFieldOperator[]
+  kind: 'record' | 'document'
+  document_type?: string
+  aggregation?: 'earliest' | 'latest'
+}
+
+export interface VisualConditionOptions {
+  schema_version: 'visual-condition-v1'
+  fields: VisualConditionFieldOption[]
+  document_types: VisualConditionOption[]
+  group_operators: VisualConditionGroupOperator[]
+  limits: {
+    max_groups: number
+    max_conditions_per_group: number
+  }
+  result_semantics: {
+    true: 'non_compliant'
+    false: 'compliant'
+    unknown: 'data_gap'
+  }
+  timeliness: {
+    start_fields: VisualConditionOption[]
+    end_fields: VisualConditionOption[]
+    allowed_pairs: Array<{ start_fact: string; end_fact: string }>
+    operators: Array<VisualConditionOption & { value: 'lt' | 'lte' | 'gt' | 'gte' }>
+    units: Array<VisualConditionOption & { value: VisualConditionTimeUnit }>
+  }
+}
+
+export type VisualCondition =
+  | { id: string; kind: 'field'; fact_key: string; operator: string; value?: string | string[] | number | boolean }
+  | { id: string; kind: 'document_presence'; document_type: string; operator: 'exists' | 'not_exists' }
+  | {
+    id: string
+    kind: 'timeliness'
+    start_fact: string
+    end_fact: string
+    operator: 'lt' | 'lte' | 'gt' | 'gte'
+    threshold: { value: number; unit: VisualConditionTimeUnit }
+  }
+
+export interface VisualConditionGroup {
+  id: string
+  operator: VisualConditionGroupOperator
+  conditions: VisualCondition[]
+}
+
+export interface VisualConditionTree {
+  schema_version: 'visual-condition-v1'
+  root_operator: VisualConditionGroupOperator
+  groups: VisualConditionGroup[]
+}
+
+export interface CustomRuleDraftCondition {
+  id: string
+  rule_code: string
+  status: 'draft'
+  updated_at: string
+  visual_condition: VisualConditionTree | null
+}
+
 export interface CustomRuleDraftPayload {
   name: string
   description: string

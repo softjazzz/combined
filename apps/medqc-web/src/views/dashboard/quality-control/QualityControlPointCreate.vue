@@ -36,7 +36,7 @@
             <h2 id="basic-info-title">基础信息</h2>
             <span v-if="editingDraft" class="draft-code">{{ editingDraft.rule_code }}</span>
           </div>
-          <button v-if="editingDraft" type="button" class="text-button" @click="startNewDraft">新建另一条</button>
+          <button v-if="editingDraft" type="button" class="text-button" :disabled="conditionSaving" @click="startNewDraft">新建另一条</button>
         </div>
 
         <form class="basic-form" @submit.prevent="saveDraft">
@@ -66,10 +66,30 @@
             <button class="primary-button" type="submit" data-testid="save-draft-basic-info" :disabled="formBusy || resultUnknown || editConflict || documentOptions.length === 0">
               {{ saving ? '正在保存' : editingDraft ? '保存修改' : '保存草稿' }}
             </button>
-            <span class="scope-note">条件配置与测试验证尚未开放</span>
+            <span class="scope-note">测试验证与发布尚未开放</span>
           </div>
         </form>
       </section>
+
+      <a-alert
+        v-if="conditionNotice"
+        :type="conditionNoticeType"
+        show-icon
+        data-testid="condition-notice"
+        :message="conditionNotice"
+      />
+      <section v-if="editingDraft && conditionOptionsLoading" class="editor-section list-state" role="status">正在读取条件目录</section>
+      <section v-else-if="editingDraft && conditionOptionsError" class="editor-section list-state is-error" role="alert">{{ conditionOptionsError }}</section>
+      <section v-else-if="editingDraft && conditionLoading" class="editor-section list-state" role="status">正在读取条件配置</section>
+      <VisualConditionEditor
+        v-else-if="editingDraft && conditionOptions && conditionTree"
+        :key="`${editingDraft.id}-${conditionEditorVersion}`"
+        :model-value="conditionTree"
+        :options="conditionOptions"
+        :disabled="conditionSaving || conditionResultUnknown || conditionConflict || formBusy"
+        @save="saveCondition"
+        @dirty="conditionDirty = $event"
+      />
 
       <section class="draft-section" aria-labelledby="recent-drafts-title">
         <div class="section-heading"><div><h2 id="recent-drafts-title">最近草稿</h2><span v-if="listTotal !== null">共 {{ listTotal }} 条</span></div></div>
@@ -86,7 +106,7 @@
                 <td>{{ displayText(draft.rule_type) }}</td>
                 <td>{{ displayText(draft.document_type) }}</td>
                 <td>
-                  <button v-if="isBasicInfoDraft(draft)" type="button" class="text-button" :data-testid="`open-draft-${draft.id}`" :disabled="detailLoadingId === draft.id" @click="openDraft(draft.id)">
+                  <button v-if="isBasicInfoDraft(draft)" type="button" class="text-button" :data-testid="`open-draft-${draft.id}`" :disabled="detailLoadingId === draft.id || conditionSaving" @click="openDraft(draft.id)">
                     {{ detailLoadingId === draft.id ? '读取中' : '继续编辑' }}
                   </button>
                   <span v-else class="legacy-note">旧草稿不可在此编辑</span>
@@ -111,10 +131,13 @@ import { RefreshCw } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import {
   createDraftBasicInfo, getDraftBasicInfo, getDraftBasicInfoOptions,
-  listWorkspaceDrafts, updateDraftBasicInfo,
+  getDraftCondition, getDraftConditionOptions, listWorkspaceDrafts,
+  updateDraftBasicInfo, updateDraftCondition,
 } from '@/services/custom-rule-workspace-service'
+import VisualConditionEditor from './components/VisualConditionEditor.vue'
 import type {
   CustomRuleDocumentOption, CustomRuleDraft, CustomRuleDraftBasicInfo, CustomRuleDraftBasicInfoInput,
+  CustomRuleDraftCondition, VisualConditionOptions, VisualConditionTree,
 } from '@/types/custom-rule-workspace'
 
 const CATEGORY_OPTIONS = ['病历书写与管理基本规范', '诊疗规范', '医疗安全'] as const
@@ -131,6 +154,19 @@ const listTotal = ref<number | null>(null)
 const listPage = ref(1)
 const detailLoadingId = ref('')
 const editingDraft = ref<CustomRuleDraftBasicInfo | null>(null)
+const conditionOptions = ref<VisualConditionOptions | null>(null)
+const conditionOptionsLoading = ref(false)
+const conditionOptionsError = ref('')
+const conditionDraft = ref<CustomRuleDraftCondition | null>(null)
+const conditionTree = ref<VisualConditionTree | null>(null)
+const conditionLoading = ref(false)
+const conditionSaving = ref(false)
+const conditionResultUnknown = ref(false)
+const conditionConflict = ref(false)
+const conditionNotice = ref('')
+const conditionNoticeType = ref<'success' | 'error' | 'warning'>('success')
+const conditionEditorVersion = ref(0)
+const conditionDirty = ref(false)
 const saving = ref(false)
 const resultUnknown = ref(false)
 const editConflict = ref(false)
@@ -142,6 +178,7 @@ let disposed = false
 let contextRevision = 0
 let detailRevision = 0
 let listRevision = 0
+let conditionRevision = 0
 
 const actorKey = computed(() => {
   const owner = String(authStore.user?.id || authStore.user?.email || '').trim()
@@ -152,7 +189,7 @@ const canManage = computed(() => {
   const roles = Array.isArray(authStore.userRoles) ? authStore.userRoles : []
   return roles.some((role) => role === 'admin' || role === 'qc_manager')
 })
-const formBusy = computed(() => saving.value || Boolean(detailLoadingId.value) || !canManage.value)
+const formBusy = computed(() => saving.value || conditionSaving.value || Boolean(detailLoadingId.value) || !canManage.value)
 
 function displayText(value: unknown) { return typeof value === 'string' && value.trim() ? value : '未知' }
 function isBasicInfoDraft(draft: CustomRuleDraft) {
@@ -166,10 +203,29 @@ function clearForm() {
   editConflict.value = false
   formNotice.value = ''
 }
+function emptyConditionTree(): VisualConditionTree {
+  return {
+    schema_version: 'visual-condition-v1', root_operator: 'all',
+    groups: [{ id: `group-${Date.now()}`, operator: 'all', conditions: [] }],
+  }
+}
+function clearCondition() {
+  conditionRevision += 1
+  conditionDraft.value = null
+  conditionTree.value = null
+  conditionLoading.value = false
+  conditionSaving.value = false
+  conditionResultUnknown.value = false
+  conditionConflict.value = false
+  conditionNotice.value = ''
+  conditionDirty.value = false
+  conditionEditorVersion.value += 1
+}
 function startNewDraft() {
-  if (saving.value) return
+  if (saving.value || conditionSaving.value) return
   detailRevision += 1
   detailLoadingId.value = ''
+  clearCondition()
   clearForm()
 }
 function hydrateForm(draft: CustomRuleDraftBasicInfo) {
@@ -202,6 +258,39 @@ async function loadOptions(revision: number, actor: string) {
   }
   documentOptions.value = result.data.documents
 }
+async function loadConditionOptions(revision: number, actor: string) {
+  conditionOptionsLoading.value = true
+  conditionOptionsError.value = ''
+  conditionOptions.value = null
+  const result = await getDraftConditionOptions()
+  if (!contextCurrent(revision, actor)) return
+  conditionOptionsLoading.value = false
+  if (!result.success || !result.data) {
+    conditionOptionsError.value = result.message || '条件目录暂不可用'
+    return
+  }
+  conditionOptions.value = result.data
+}
+async function loadCondition(draftId: string, revision = contextRevision, actor = actorKey.value) {
+  const request = ++conditionRevision
+  conditionLoading.value = true
+  conditionNotice.value = ''
+  conditionResultUnknown.value = false
+  conditionConflict.value = false
+  const result = await getDraftCondition(draftId)
+  if (!contextCurrent(revision, actor) || request !== conditionRevision || editingDraft.value?.id !== draftId) return
+  conditionLoading.value = false
+  if (!result.success || !result.data) {
+    conditionDraft.value = null
+    conditionTree.value = null
+    conditionNoticeType.value = 'error'
+    conditionNotice.value = result.message || '读取条件配置失败'
+    return
+  }
+  conditionDraft.value = result.data
+  conditionTree.value = result.data.visual_condition ?? emptyConditionTree()
+  conditionEditorVersion.value += 1
+}
 async function loadDrafts(revision = contextRevision, actor = actorKey.value) {
   const request = ++listRevision
   listLoading.value = true
@@ -221,7 +310,7 @@ async function loadDrafts(revision = contextRevision, actor = actorKey.value) {
 }
 async function initialize(revision: number, actor: string) {
   if (!canManage.value || !String(authStore.user?.id || authStore.user?.email || '').trim()) return
-  await Promise.all([loadOptions(revision, actor), loadDrafts(revision, actor)])
+  await Promise.all([loadOptions(revision, actor), loadConditionOptions(revision, actor), loadDrafts(revision, actor)])
 }
 function validateForm() {
   Object.assign(form, {
@@ -236,6 +325,11 @@ function validateForm() {
 }
 async function saveDraft() {
   if (formBusy.value || resultUnknown.value || editConflict.value) return
+  if (conditionDirty.value) {
+    formNoticeType.value = 'warning'
+    formNotice.value = '条件配置尚未保存，请先保存条件配置后再修改基础信息'
+    return
+  }
   const error = validateForm()
   if (error) { formNoticeType.value = 'error'; formNotice.value = error; return }
   const revision = contextRevision
@@ -255,14 +349,16 @@ async function saveDraft() {
     formNotice.value = result.message
     return
   }
+  clearCondition()
   hydrateForm(result.data)
   formNoticeType.value = 'success'
   formNotice.value = current ? '草稿基础信息已更新' : `草稿 ${result.data.rule_code} 已保存`
   listPage.value = 1
+  await loadCondition(result.data.id, revision, actor)
   await loadDrafts(revision, actor)
 }
 async function openDraft(draftId: string) {
-  if (saving.value) return
+  if (saving.value || conditionSaving.value) return
   const revision = contextRevision
   const actor = actorKey.value
   const request = ++detailRevision
@@ -271,18 +367,55 @@ async function openDraft(draftId: string) {
   if (!contextCurrent(revision, actor) || request !== detailRevision) return
   detailLoadingId.value = ''
   if (!result.success || !result.data) { formNoticeType.value = 'error'; formNotice.value = result.message || '读取草稿失败'; return }
+  clearCondition()
   hydrateForm(result.data)
   if (!documentOptions.value.some((item) => item.value === result.data.document_type)) form.document_type = ''
+  await loadCondition(result.data.id, revision, actor)
+}
+async function saveCondition(value: VisualConditionTree) {
+  const current = conditionDraft.value
+  const draftId = editingDraft.value?.id
+  if (!canManage.value || formBusy.value || conditionResultUnknown.value || conditionConflict.value
+    || !current || !draftId || current.id !== draftId || conditionSaving.value) return
+  const revision = contextRevision
+  const actor = actorKey.value
+  const request = conditionRevision
+  conditionSaving.value = true
+  conditionNotice.value = ''
+  const result = await updateDraftCondition(draftId, {
+    expected_updated_at: current.updated_at,
+    visual_condition: value,
+  })
+  if (!contextCurrent(revision, actor) || request !== conditionRevision || editingDraft.value?.id !== draftId) return
+  conditionSaving.value = false
+  if (result.success === false) {
+    conditionResultUnknown.value = result.resultUnknown
+    conditionConflict.value = result.conflict
+    conditionNoticeType.value = result.conflict ? 'warning' : 'error'
+    conditionNotice.value = result.message
+    return
+  }
+  conditionDraft.value = result.data
+  conditionTree.value = result.data.visual_condition
+  if (editingDraft.value?.id === result.data.id) editingDraft.value = { ...editingDraft.value, updated_at: result.data.updated_at }
+  conditionEditorVersion.value += 1
+  conditionDirty.value = false
+  conditionNoticeType.value = 'success'
+  conditionNotice.value = '缺陷触发条件已保存'
 }
 function changePage(page: number) { if (page >= 1 && !listLoading.value) { listPage.value = page; void loadDrafts() } }
 function refreshDrafts() {
   if (listLoading.value || !canManage.value) return
   void loadDrafts()
   if (optionsError.value) void loadOptions(contextRevision, actorKey.value)
+  if (conditionOptionsError.value) void loadConditionOptions(contextRevision, actorKey.value)
 }
 function resetForActor() {
-  contextRevision += 1; detailRevision += 1; listRevision += 1
+  contextRevision += 1; detailRevision += 1; listRevision += 1; conditionRevision += 1
   saving.value = false; optionsLoading.value = false; listLoading.value = false; detailLoadingId.value = ''
+  conditionOptionsLoading.value = false; conditionOptions.value = null; conditionOptionsError.value = ''
+  conditionDraft.value = null; conditionTree.value = null; conditionLoading.value = false; conditionSaving.value = false
+  conditionResultUnknown.value = false; conditionConflict.value = false; conditionNotice.value = ''
   documentOptions.value = []; drafts.value = []; listTotal.value = null; listPage.value = 1
   optionsError.value = ''; listError.value = ''; resultUnknown.value = false
   clearForm()
@@ -290,7 +423,7 @@ function resetForActor() {
 }
 watch(actorKey, resetForActor)
 onMounted(() => { mounted = true; void initialize(contextRevision, actorKey.value) })
-onUnmounted(() => { disposed = true; contextRevision += 1; detailRevision += 1 })
+onUnmounted(() => { disposed = true; contextRevision += 1; detailRevision += 1; conditionRevision += 1 })
 </script>
 
 <style scoped>

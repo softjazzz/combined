@@ -1168,6 +1168,9 @@ class SichuanQCService:
             "id": document_id,
             "content": content,
             "document_type": document_type,
+            "institute_id": str(source_institute_id or "").strip(),
+            "patient_id": str(source_patient_id or "").strip(),
+            "visit_id": str(source_visit_id or document_id or "").strip(),
         }
         if isinstance(evidence_payload, dict) and evidence_payload:
             medical_record["evidence_payload"] = dict(evidence_payload)

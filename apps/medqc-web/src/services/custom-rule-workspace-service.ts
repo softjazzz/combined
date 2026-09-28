@@ -9,6 +9,12 @@ import type {
   CustomRuleDraftBasicInfoInput,
   CustomRuleDraftPayload,
   CustomRuleDocumentOption,
+  CustomRuleDraftCondition,
+  VisualConditionFieldOperator,
+  VisualConditionFieldOption,
+  VisualConditionOption,
+  VisualConditionOptions,
+  VisualConditionTree,
   CustomRuleBatchJobExport,
   CustomRulePublishResult,
   CustomRuleSingleTestResult,
@@ -32,6 +38,11 @@ export type DraftBasicInfoMutationResult =
   | { success: false; message: string; resultUnknown: boolean; conflict: boolean }
 
 const DRAFT_BASIC_INFO_URL = '/api/v1/custom-qc/workspace/draft-basic-info'
+const DRAFT_CONDITION_URL = '/api/v1/custom-qc/workspace/draft-condition'
+
+export type DraftConditionMutationResult =
+  | { success: true; data: CustomRuleDraftCondition; resultUnknown: false; conflict: false }
+  | { success: false; message: string; resultUnknown: boolean; conflict: boolean }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -45,6 +56,109 @@ function normalizeDraftBasicInfo(value: unknown): CustomRuleDraftBasicInfo | nul
   }
   if (Number.isNaN(Date.parse(String(value.updated_at)))) return null
   return value as unknown as CustomRuleDraftBasicInfo
+}
+
+function nonBlankText(value: unknown): value is string {
+  return typeof value === 'string' && Boolean(value.trim()) && value === value.trim()
+}
+
+function normalizeSimpleOptions(value: unknown): VisualConditionOption[] | null {
+  if (!Array.isArray(value) || value.length === 0) return null
+  const options = value.filter((item): item is VisualConditionOption =>
+    isRecord(item) && nonBlankText(item.value) && nonBlankText(item.label),
+  )
+  return options.length === value.length && new Set(options.map((item) => item.value)).size === options.length
+    ? options
+    : null
+}
+
+function normalizeVisualConditionOptions(value: unknown): VisualConditionOptions | null {
+  if (!isRecord(value) || value.schema_version !== 'visual-condition-v1'
+    || !Array.isArray(value.fields) || !Array.isArray(value.group_operators)
+    || !isRecord(value.limits) || !isRecord(value.timeliness) || !isRecord(value.result_semantics)) return null
+  const documents = normalizeSimpleOptions(value.document_types)
+  const startFields = normalizeSimpleOptions(value.timeliness.start_fields)
+  const endFields = normalizeSimpleOptions(value.timeliness.end_fields)
+  const timeOperators = normalizeSimpleOptions(value.timeliness.operators)
+  const units = normalizeSimpleOptions(value.timeliness.units)
+  if (!documents || !startFields || !endFields || !timeOperators || !units) return null
+  if (!value.group_operators.every((item) => item === 'all' || item === 'any')
+    || new Set(value.group_operators).size !== value.group_operators.length
+    || !Number.isInteger(value.limits.max_groups) || Number(value.limits.max_groups) < 1
+    || !Number.isInteger(value.limits.max_conditions_per_group) || Number(value.limits.max_conditions_per_group) < 1
+    || !Array.isArray(value.timeliness.allowed_pairs)) return null
+  if (value.result_semantics.true !== 'non_compliant'
+    || value.result_semantics.false !== 'compliant'
+    || value.result_semantics.unknown !== 'data_gap') return null
+  const allowedTimeOperators = new Set(['lt', 'lte', 'gt', 'gte'])
+  const allowedUnits = new Set(['minutes', 'hours', 'days'])
+  if (!timeOperators.every((item) => allowedTimeOperators.has(item.value))
+    || !units.every((item) => allowedUnits.has(item.value))) return null
+  const startKeys = new Set(startFields.map((item) => item.value))
+  const endKeys = new Set(endFields.map((item) => item.value))
+  if (!value.timeliness.allowed_pairs.every((pair) => isRecord(pair)
+    && nonBlankText(pair.start_fact) && nonBlankText(pair.end_fact)
+    && startKeys.has(pair.start_fact) && endKeys.has(pair.end_fact))) return null
+  const fields = value.fields.filter((field): field is VisualConditionFieldOption => {
+    if (!isRecord(field) || !nonBlankText(field.key) || !nonBlankText(field.label)
+      || !['string', 'number', 'datetime', 'boolean'].includes(String(field.value_type))
+      || !['record', 'document'].includes(String(field.kind)) || !Array.isArray(field.operators)
+      || field.operators.length === 0) return false
+    const operators = field.operators as unknown[]
+    return operators.every((operator): operator is VisualConditionFieldOperator =>
+      isRecord(operator) && nonBlankText(operator.value) && nonBlankText(operator.label)
+      && typeof operator.value_required === 'boolean'
+      && (operator.value_options === undefined || normalizeSimpleOptions(operator.value_options) !== null),
+    ) && new Set((field.operators as VisualConditionFieldOperator[]).map((item) => item.value)).size === field.operators.length
+  })
+  if (fields.length !== value.fields.length || fields.length === 0
+    || new Set(fields.map((item) => item.key)).size !== fields.length) return null
+  return value as unknown as VisualConditionOptions
+}
+
+function normalizeVisualConditionTree(value: unknown): VisualConditionTree | null {
+  if (!isRecord(value) || value.schema_version !== 'visual-condition-v1'
+    || !['all', 'any'].includes(String(value.root_operator)) || !Array.isArray(value.groups)
+    || value.groups.length === 0) return null
+  const groupIds = new Set<string>()
+  const conditionIds = new Set<string>()
+  if (!value.groups.every((group) => {
+    if (!isRecord(group) || !nonBlankText(group.id) || groupIds.has(group.id)
+      || !['all', 'any'].includes(String(group.operator)) || !Array.isArray(group.conditions)
+      || group.conditions.length === 0) return false
+    groupIds.add(group.id)
+    return group.conditions.every((condition) => {
+      if (!isRecord(condition) || !nonBlankText(condition.id) || conditionIds.has(condition.id)) return false
+      conditionIds.add(condition.id)
+      if (condition.kind === 'field') {
+        const validValue = condition.value === undefined || typeof condition.value === 'string'
+          || typeof condition.value === 'number' || typeof condition.value === 'boolean'
+          || (Array.isArray(condition.value) && condition.value.length > 0
+            && condition.value.every((item) => nonBlankText(item)))
+        return nonBlankText(condition.fact_key) && nonBlankText(condition.operator) && validValue
+      }
+      if (condition.kind === 'document_presence') {
+        return nonBlankText(condition.document_type) && ['exists', 'not_exists'].includes(String(condition.operator))
+      }
+      return condition.kind === 'timeliness'
+        && nonBlankText(condition.start_fact) && nonBlankText(condition.end_fact)
+        && ['lt', 'lte', 'gt', 'gte'].includes(String(condition.operator))
+        && isRecord(condition.threshold) && Number.isInteger(condition.threshold.value)
+        && Number(condition.threshold.value) >= 1
+        && ['minutes', 'hours', 'days'].includes(String(condition.threshold.unit))
+    })
+  })) return null
+  return value as unknown as VisualConditionTree
+}
+
+function normalizeDraftCondition(value: unknown): CustomRuleDraftCondition | null {
+  if (!isRecord(value) || value.status !== 'draft' || !nonBlankText(value.id)
+    || !nonBlankText(value.rule_code) || !nonBlankText(value.updated_at)
+    || Number.isNaN(Date.parse(value.updated_at))) return null
+  const visualCondition = value.visual_condition === null ? null : normalizeVisualConditionTree(value.visual_condition)
+  return value.visual_condition === null || visualCondition
+    ? { ...value, visual_condition: visualCondition } as CustomRuleDraftCondition
+    : null
 }
 
 function errorStatus(error: unknown): number | undefined {
@@ -136,6 +250,57 @@ export async function updateDraftBasicInfo(
     message: '服务端返回了其他草稿，更新结果无法确认，请刷新核对，勿盲目重试',
     resultUnknown: true,
     conflict: false,
+  }
+}
+
+export async function getDraftConditionOptions(): Promise<ServiceResult<VisualConditionOptions>> {
+  const result = await requestEnvelope<unknown>(
+    { method: 'GET', url: `${DRAFT_CONDITION_URL}/options` },
+    '读取条件目录失败',
+  )
+  if (!result.success) return { success: false, message: result.message }
+  const data = normalizeVisualConditionOptions(result.data)
+  return data ? { success: true, data } : { success: false, message: '条件目录回执格式异常' }
+}
+
+export async function getDraftCondition(draftId: string): Promise<ServiceResult<CustomRuleDraftCondition>> {
+  const result = await requestEnvelope<unknown>(
+    { method: 'GET', url: `${DRAFT_CONDITION_URL}/${encodeURIComponent(draftId)}` },
+    '读取条件配置失败',
+  )
+  if (!result.success) return { success: false, message: result.message }
+  const data = normalizeDraftCondition(result.data)
+  return data && data.id === draftId
+    ? { success: true, data }
+    : { success: false, message: '条件配置回执格式异常' }
+}
+
+export async function updateDraftCondition(
+  draftId: string,
+  payload: { expected_updated_at: string; visual_condition: VisualConditionTree },
+): Promise<DraftConditionMutationResult> {
+  try {
+    const response = await ApiService.requestRaw({
+      method: 'PATCH', url: `${DRAFT_CONDITION_URL}/${encodeURIComponent(draftId)}`, data: payload,
+    })
+    const normalized = normalizeApiSuccess<unknown>(response.data)
+    const data = normalized.success ? normalizeDraftCondition(normalized.data) : null
+    if (!data || data.id !== draftId || data.visual_condition === null) {
+      return { success: false, message: '条件保存结果无法确认，请重新读取草稿核对，勿盲目重试', resultUnknown: true, conflict: false }
+    }
+    return { success: true, data, resultUnknown: false, conflict: false }
+  } catch (error) {
+    const status = errorStatus(error)
+    const conflict = status === 409
+    const confirmedRejection = status === 401 || status === 403 || status === 404 || status === 409 || status === 422
+    return {
+      success: false,
+      message: confirmedRejection
+        ? toErrorMessage(error, conflict ? '草稿已变更，请重新读取条件后再修改' : '条件保存被拒绝')
+        : '条件保存结果无法确认，请重新读取草稿核对，勿盲目重试',
+      resultUnknown: !confirmedRejection,
+      conflict,
+    }
   }
 }
 

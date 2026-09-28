@@ -33,6 +33,7 @@ from .document_domain_alignment import (
     align_document_domain_fields,
     normalize_document_label,
 )
+from .visual_condition_service import normalize_visual_condition
 from .luxian_0609.customer_renderer import (
     CUSTOMER_SCHEMA_VERSION as LUXIAN_0609_CUSTOMER_SCHEMA_VERSION,
     exam_lab_data_gap_customer_message,
@@ -2155,6 +2156,14 @@ class DraftBasicInfoConflict(RuntimeError):
     """草稿状态或版本已变化。"""
 
 
+class DraftVisualConditionNotFound(LookupError):
+    """草稿不存在、无权限或不是基础信息草稿。"""
+
+
+class DraftVisualConditionConflict(RuntimeError):
+    """草稿状态或版本已变化。"""
+
+
 def _normalize_draft_basic_text(value: Any, *, field: str, max_length: int) -> str:
     if not isinstance(value, str):
         raise DraftBasicInfoInvalid(f"{field} 必须是字符串")
@@ -2784,15 +2793,133 @@ class CustomQCWorkspaceService:
         finally:
             session.close()
 
+    def get_visual_condition_draft(self, *, draft_id: str, created_by: str) -> Dict[str, Any]:
+        session = _session()
+        try:
+            row = session.execute(
+                select(self._draft_table).where(
+                    and_(
+                        self._draft_table.c.id == draft_id,
+                        self._draft_table.c.created_by == created_by,
+                    )
+                )
+            ).mappings().first()
+            if not row:
+                raise DraftVisualConditionNotFound("条件草稿不存在或无权限")
+            raw = dict(row)
+            # 67 是 66 基础信息草稿的下一步；旧宽接口草稿不在此入口伪装成可编辑。
+            _draft_basic_info_from_row(raw)
+            check_logic = _safe_json_loads(raw.get("check_logic"), {})
+            visual = check_logic.get("visual_condition") if isinstance(check_logic, dict) else None
+            normalized = normalize_visual_condition(visual) if visual is not None else None
+            return {
+                "id": _safe_text(raw.get("id")),
+                "rule_code": _safe_text(raw.get("rule_code")),
+                "status": "draft",
+                "updated_at": raw.get("updated_at"),
+                "visual_condition": normalized,
+            }
+        except DraftBasicInfoNotFound as exc:
+            raise DraftVisualConditionNotFound("条件草稿不存在或无权限") from exc
+        except DraftBasicInfoConflict as exc:
+            raise DraftVisualConditionConflict(str(exc)) from exc
+        finally:
+            session.close()
+
+    def update_visual_condition_draft(
+        self,
+        *,
+        draft_id: str,
+        created_by: str,
+        visual_condition: Mapping[str, Any],
+        expected_updated_at: datetime,
+    ) -> Dict[str, Any]:
+        normalized = normalize_visual_condition(visual_condition)
+        expected = _utc_naive(expected_updated_at)
+        session = _session()
+        try:
+            row = session.execute(
+                select(self._draft_table)
+                .where(
+                    and_(
+                        self._draft_table.c.id == draft_id,
+                        self._draft_table.c.created_by == created_by,
+                    )
+                )
+                .with_for_update()
+            ).mappings().first()
+            if not row:
+                raise DraftVisualConditionNotFound("条件草稿不存在或无权限")
+            existing = dict(row)
+            try:
+                _draft_basic_info_from_row(existing)
+            except DraftBasicInfoNotFound as exc:
+                raise DraftVisualConditionNotFound("条件草稿不存在或无权限") from exc
+            except DraftBasicInfoConflict as exc:
+                raise DraftVisualConditionConflict(str(exc)) from exc
+            current_raw = existing.get("updated_at")
+            if not isinstance(current_raw, datetime) or _utc_naive(current_raw) != expected:
+                raise DraftVisualConditionConflict("草稿已被其他操作更新，请刷新后重试")
+            check_logic = _safe_json_loads(existing.get("check_logic"), {})
+            if not isinstance(check_logic, dict):
+                check_logic = {}
+            check_logic = {**check_logic, "visual_condition": normalized}
+            current = _utc_naive(current_raw)
+            now = max(_now_utc(), current + timedelta(microseconds=1))
+            patch = {
+                "check_logic": _safe_json_dumps(check_logic),
+                "last_test_summary": None,
+                "updated_at": now,
+            }
+            updated = session.execute(
+                update(self._draft_table)
+                .where(
+                    and_(
+                        self._draft_table.c.id == draft_id,
+                        self._draft_table.c.created_by == created_by,
+                        self._draft_table.c.status == "draft",
+                        self._draft_table.c.updated_at == current_raw,
+                    )
+                )
+                .values(**patch)
+            )
+            if getattr(updated, "rowcount", 0) != 1:
+                session.rollback()
+                raise DraftVisualConditionConflict("草稿已被其他操作更新，请刷新后重试")
+            session.commit()
+            try:
+                confirmed = self.get_visual_condition_draft(
+                    draft_id=draft_id,
+                    created_by=created_by,
+                )
+            except Exception as exc:
+                raise RuntimeError("条件保存结果未确认") from exc
+            if (
+                confirmed.get("visual_condition") != normalized
+                or _utc_naive(confirmed.get("updated_at")) != _utc_naive(now)
+            ):
+                raise RuntimeError("条件保存结果未确认")
+            return confirmed
+        finally:
+            session.close()
+
     def create_draft(self, *, created_by: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         session = _session()
         try:
             now = _now_utc()
             severity = _safe_text(payload.get("severity"), "major").lower()
+            requested_check_logic = payload.get("check_logic") or {}
+            if isinstance(requested_check_logic, Mapping) and "visual_condition" in requested_check_logic:
+                requested_check_logic = {
+                    **dict(requested_check_logic),
+                    "visual_condition": normalize_visual_condition(
+                        requested_check_logic.get("visual_condition")
+                    ),
+                }
             document_type, applicable_documents, check_logic = align_document_domain_fields(
                 document_type=payload.get("document_type"),
                 applicable_documents=payload.get("applicable_documents"),
-                check_logic=payload.get("check_logic") or {},
+                check_logic=requested_check_logic,
             )
             draft_id = str(uuid.uuid4())
             row_payload = {
@@ -2858,6 +2985,22 @@ class CustomQCWorkspaceService:
                     patch[key] = payload[key]
 
             existing_check_logic = _safe_json_loads(existing.get("check_logic"), {})
+            requested_check_logic = payload.get("check_logic") if "check_logic" in payload else existing_check_logic
+            if isinstance(requested_check_logic, Mapping) and "visual_condition" in requested_check_logic:
+                requested_check_logic = {
+                    **dict(requested_check_logic),
+                    "visual_condition": normalize_visual_condition(
+                        requested_check_logic.get("visual_condition")
+                    ),
+                }
+                # 条件语义变化后，旧测试证明立即失效；宽兼容接口也不能绕过。
+            if requested_check_logic != existing_check_logic and (
+                isinstance(existing_check_logic, Mapping)
+                and "visual_condition" in existing_check_logic
+                or isinstance(requested_check_logic, Mapping)
+                and "visual_condition" in requested_check_logic
+            ):
+                patch["last_test_summary"] = None
             aligned_document_type, aligned_applicable_documents, aligned_check_logic = align_document_domain_fields(
                 document_type=patch.get("document_type", existing.get("document_type")),
                 applicable_documents=(
@@ -2866,9 +3009,7 @@ class CustomQCWorkspaceService:
                     else _safe_json_loads(existing.get("applicable_documents"), [])
                 ),
                 check_logic=(
-                    payload.get("check_logic")
-                    if "check_logic" in payload
-                    else existing_check_logic
+                    requested_check_logic
                 ),
             )
             patch["document_type"] = aligned_document_type
@@ -3003,6 +3144,61 @@ class CustomQCWorkspaceService:
         records: Sequence[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
         return self._record_repository().hydrate_records_with_medical_text(records)
+
+    def hydrate_records_with_visual_evidence(
+        self,
+        records: Sequence[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """按服务端解析出的三坐标构造确定性条件事实，忽略客户端证据字段。"""
+        from .sample_programmatic_evidence import build_programmatic_evidence_payload
+
+        results: List[Dict[str, Any] | None] = [None] * len(records)
+        valid_records: List[Dict[str, Any]] = []
+        valid_indexes: List[int] = []
+        for index, source in enumerate(records):
+            raw = dict(source)
+            raw.pop("evidence_payload", None)
+            raw.pop("visual_evidence_error", None)
+            identity = tuple(
+                _safe_text(raw.get(key))
+                for key in ("institute_id", "patient_id", "visit_id")
+            )
+            if not all(identity):
+                raw["visual_evidence_error"] = "record_identity_unavailable"
+                results[index] = raw
+                continue
+            valid_records.append(raw)
+            valid_indexes.append(index)
+
+        hydrated = self.hydrate_records_with_medical_text(valid_records)
+        if len(hydrated) != len(valid_records):
+            raise RuntimeError("visual_record_hydration_count_mismatch")
+        for index, raw in zip(valid_indexes, hydrated):
+            item = dict(raw)
+            item.pop("evidence_payload", None)
+            item.pop("visual_evidence_error", None)
+            identity = tuple(
+                _safe_text(item.get(key))
+                for key in ("institute_id", "patient_id", "visit_id")
+            )
+            if not all(identity):
+                item["visual_evidence_error"] = "record_identity_unavailable"
+                results[index] = item
+                continue
+            try:
+                item["evidence_payload"] = build_programmatic_evidence_payload(
+                    bundle={
+                        "institute_id": identity[0],
+                        "patient_id": identity[1],
+                        "visit_id": identity[2],
+                    },
+                    medical_text=_safe_text(item.get("medical_text")),
+                    strict_identity=True,
+                )
+            except Exception:
+                item["visual_evidence_error"] = "visual_evidence_source_unavailable"
+            results[index] = item
+        return [dict(item) for item in results if item is not None]
 
     def save_last_test_summary(
         self,

@@ -28,6 +28,8 @@ class _FakeConnection:
     def __init__(self, rows_by_table):
         self._rows_by_table = rows_by_table
         self.source_query_limits = []
+        self.source_queries = []
+        self.registration_queries = []
 
     def __enter__(self):
         return self
@@ -38,6 +40,7 @@ class _FakeConnection:
     def execute(self, statement, params):
         query = str(statement)
         if "cdm.inpat_registration" in query:
+            self.registration_queries.append((query, dict(params)))
             return _FakeRows([])
         table_name = next(
             table_name
@@ -45,6 +48,7 @@ class _FakeConnection:
             if f"cdm.{table_name}" in query
         )
         self.source_query_limits.append((table_name, params["limit"]))
+        self.source_queries.append((table_name, query, dict(params)))
         rows = self._rows_by_table[table_name]
         if isinstance(rows, Exception):
             raise rows
@@ -381,6 +385,41 @@ def test_fetch_source_table_fallback_items_should_report_readiness_without_chang
         ("senior_course_record", 3),
         ("rescue_record", 3),
     }
+
+
+def test_strict_identity_source_read_never_uses_cross_patient_or_visit_only_fallback(monkeypatch):
+    connection = _FakeConnection({"first_course_record": []})
+    monkeypatch.setattr(evidence_module, "_SOURCE_TABLES", ("first_course_record",))
+    monkeypatch.setattr(evidence_module, "engine", _FakeEngine(connection))
+
+    payload = build_programmatic_evidence_payload(
+        bundle={"institute_id": "H1", "patient_id": "P1", "visit_id": "SAME"},
+        strict_identity=True,
+    )
+
+    assert payload["programmatic_timeline"]["source_readiness"] == {
+        "first_course_record": "complete"
+    }
+    assert len(connection.source_queries) == 1
+    _table, query, params = connection.source_queries[0]
+    assert "institute_id = :institute_id" in query
+    assert "patient_id = :patient_id" in query
+    assert "visit_id = :visit_id" in query
+    assert params == {"institute_id": "H1", "patient_id": "P1", "visit_id": "SAME", "limit": 3}
+    assert len(connection.registration_queries) == 1
+    registration_query, registration_params = connection.registration_queries[0]
+    assert "institute_id = :institute_id" in registration_query
+    assert "patient_id = :patient_id" in registration_query
+    assert "visit_id = :visit_id" in registration_query
+    assert registration_params == {
+        "institute_id": "H1", "patient_id": "P1", "visit_id": "SAME",
+    }
+
+    with pytest.raises(ValueError, match="complete_case_ref"):
+        build_programmatic_evidence_payload(
+            bundle={"institute_id": "H1", "visit_id": "SAME"},
+            strict_identity=True,
+        )
 
 
 def test_build_programmatic_evidence_payload_projects_controlled_lab_rows(
