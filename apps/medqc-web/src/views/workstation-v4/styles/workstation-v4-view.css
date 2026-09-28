@@ -1455,3 +1455,159 @@
   color: #0a6cff !important;
   background: rgba(10, 108, 255, 0.08) !important;
 }
+
+/* ---------- 病历池筛选区：一行半布局 ----------
+   第一行：搜索 + 住院状态；第二行：入出院日期 / 科室 / 主管医师（统一下拉外观）+ 右侧查询、重置。
+   仅病历池模式生效（阶段队列不带 --pool 类），DOM 与筛选逻辑不变。 */
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-filter-toolbar {
+  display: grid;
+  grid-template-columns: auto auto auto auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    'search search hosp hosp hosp hosp'
+    'date dept doctor sort . actions';
+  align-items: center;
+  gap: 12px 10px;
+}
+
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-controls__search-input {
+  grid-area: search;
+  flex: none;
+  width: 100%;
+  max-width: none;
+}
+
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-hosp-filter {
+  grid-area: hosp;
+  justify-self: end;
+}
+
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .record-pool-date-field {
+  grid-area: date;
+}
+
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-dept-filter {
+  grid-area: dept;
+}
+
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-doctor-filter {
+  grid-area: doctor;
+}
+
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .wv4-record-pool-filter__inpatient-sort {
+  grid-area: sort;
+}
+
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .wv4-filter-actions {
+  grid-area: actions;
+  justify-self: end;
+  margin-left: 0;
+}
+
+/* 三个筛选统一为同一种下拉：外框在字段容器上，标签放在框内左侧 */
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .record-pool-date-field,
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-dept-filter,
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-doctor-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  height: 42px;
+  padding: 0 2px 0 12px;
+  box-sizing: border-box;
+  border: 1px solid rgba(20, 40, 80, 0.12);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.025);
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .record-pool-date-field:hover,
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-dept-filter:hover,
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-doctor-filter:hover {
+  border-color: rgba(10, 108, 255, 0.42);
+}
+
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .record-pool-date-field:focus-within,
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-dept-filter:focus-within,
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-doctor-filter:focus-within {
+  border-color: rgba(10, 108, 255, 0.6);
+  box-shadow: 0 0 0 3px rgba(10, 108, 255, 0.1);
+}
+
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .record-pool-field-label {
+  gap: 0;
+  color: var(--mq-text-tertiary);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .record-pool-field-label svg {
+  display: none;
+}
+
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .record-pool-date-field .ant-picker,
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-dept-filter .ant-select-selector,
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-doctor-filter .ant-select-selector {
+  height: 40px !important;
+  min-height: 40px !important;
+  padding-left: 8px !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-date-row__range {
+  flex: none;
+  width: 216px;
+}
+
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-dept-select,
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-doctor-select {
+  width: 132px;
+}
+
+/* 下拉值与框内标签垂直居中对齐 */
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-dept-filter .ant-select-selection-item,
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-dept-filter .ant-select-selection-placeholder,
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-dept-filter .ant-select-selection-search-input,
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-doctor-filter .ant-select-selection-item,
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-doctor-filter .ant-select-selection-placeholder,
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-doctor-filter .ant-select-selection-search-input,
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .wv4-record-pool-filter__inpatient-sort .ant-select-selection-item {
+  height: 40px !important;
+  line-height: 40px !important;
+}
+
+/* 内容区较窄时退回自动换行，避免第二行溢出 */
+@media (max-width: 1180px) {
+  .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-filter-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-controls__search-input {
+    flex: 1 1 260px;
+    width: auto;
+  }
+
+  .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .wv4-filter-actions {
+    margin-left: auto;
+  }
+
+  /* 换行时保持：搜索、住院状态在前；日期、科室、医师、查询在后 */
+  .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-controls__search-input { order: 1; }
+  .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-hosp-filter { order: 2; }
+  .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .record-pool-date-field { order: 3; }
+  .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-dept-filter { order: 4; }
+  .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-doctor-filter { order: 5; }
+  .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .wv4-record-pool-filter__inpatient-sort { order: 6; }
+  .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .wv4-filter-actions { order: 7; }
+}
+
+/* 中等宽度：隐藏「住院状态」字样（分段选项自身已表意，分组仍有 aria-label），给搜索框让出空间 */
+@media (max-width: 1320px) {
+  .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-hosp-filter__label {
+    display: none;
+  }
+}

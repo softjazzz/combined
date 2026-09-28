@@ -48,7 +48,10 @@
               </div>
             </div>
 
-            <div class="wv4-analysis-overview__controls wv4-record-pool-filter mq-card">
+            <div
+              class="wv4-analysis-overview__controls wv4-record-pool-filter mq-card"
+              :class="{ 'wv4-record-pool-filter--pool': !isStageQueueMode }"
+            >
               <div class="workbench-filter-toolbar">
                 <a-input
                   :value="searchText"
