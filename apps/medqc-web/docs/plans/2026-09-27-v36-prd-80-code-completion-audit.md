@@ -2,27 +2,27 @@
 
 ## 基线与结论
 
-- 核对日期：2026-09-27；首次盘点基线：`e1703611c`；最新增量为滚动计划第90节的列配置与移除审计（在 `fc418daa7` 上开发）；分支：`codex/v36-manual-gap-drilldown-20260922`。首次盘点12完整/41部分/27未实现的历史结论保留于第89节，本表为增量后的代码状态。
+- 核对日期：2026-09-27；首次盘点基线：`e1703611c`；最新增量为滚动计划第91节的五线收尾（在 `f6a89373c` 上开发）；分支：`codex/v36-manual-gap-drilldown-20260922`。首次12/41/27及上批14/40/26历史结论保留于第89、90节，本表为增量后的代码状态。
 - 分母固定为 `docs/PRD-内涵质控V3.6总需求与差距矩阵.md` 中带 P0/P1/P2/P3 的 80 个功能行，按原文顺序编号。没有删除外部阻塞项，也没有把新增技术工作算成额外完成项。
 - 本清单评估代码，不替代原矩阵的业务覆盖/验收状态。部署未做、浏览器未验收，不单独导致代码降级；但真实接口缺失、入口停用、场景身份无法成立、必需动作未实现，会影响代码完整性。
 
 | 代码状态 | 项数 | 占全部80项 |
 | --- | ---: | ---: |
-| 代码完整 | 14 | 17.5% |
-| 部分实现 | 40 | 50% |
+| 代码完整 | 16 | 20% |
+| 部分实现 | 38 | 47.5% |
 | 未实现 | 26 | 32.5% |
 | 合计 | 80 | 100% |
 
-**整项代码完成率为14/80 = 17.5%。有直接功能实现的条目为54/80 = 67.5%，但67.5%不是完成率，也不是工时进度。** 部分项不统一按50%折算；一行可能同时要求多个动作或多个场景，各行工作量也不相等。剩余66项不等于还有82.5%的开发工时。
+**整项代码完成率为16/80 = 20%。有直接功能实现的条目为54/80 = 67.5%，但67.5%不是完成率，也不是工时进度。** 部分项不统一按50%折算；一行可能同时要求多个动作或多个场景，各行工作量也不相等。剩余64项不等于还有80%的开发工时。
 
-代码完整项：02、03、06、22、26、35、37、59、63、73、74、77、79、80。
+代码完整项：02、03、06、10、22、26、35、37、59、63、73、74、75、77、79、80。
 
 | 模块 | 完整 | 部分 | 未实现 | 总数 |
 | --- | ---: | ---: | ---: | ---: |
-| 登录、工作台、门急诊（01–20） | 3 | 8 | 9 | 20 |
+| 登录、工作台、门急诊（01–20） | 4 | 7 | 9 | 20 |
 | 运行、终末、任务（21–43） | 4 | 17 | 2 | 23 |
 | 统计分析（44–56） | 0 | 7 | 6 | 13 |
-| 规则、文书、测试病历（57–80） | 7 | 8 | 9 | 24 |
+| 规则、文书、测试病历（57–80） | 8 | 7 | 9 | 24 |
 
 ## 判定方法
 
@@ -40,13 +40,13 @@
 | 01 | 三种登录方式：账号密码、手机号、扫码 | 部分实现 | 账号/邮箱/手机号加密码可登录；缺扫码认证，也没有独立短信验证码方式。 | `src/components/auth/LoginForm.vue:16`；`backend/app/services/auth_store.py:172` | `6c3910685` |
 | 02 | 登录后角色分流 | 代码完整 | 角色落地、路由和菜单过滤、无权落点已实现；数据范围有全院/医生科室/拒绝规则及测试。 | `src/utils/routeAccess.ts:101`；`backend/app/core/data_scope.py:46` | `18f094b8d`、`4876026f0`、`df803acfd` |
 | 03 | 我的待办：倒计时任务、进行中任务、未开始任务 | 代码完整 | 三种真实受领任务计数、场景与as_of同口径下钻及分页已接通。 | `backend/app/routers/tasks.py:588`；`src/views/workstation/HomeTaskTodos.vue:188` | `f8cbae6ae` |
-| 04 | 我的待办：临床申诉、待审核人工缺陷 | 部分实现 | 申诉计数下钻、人工缺陷独立审核页和旧首页待办已实现；V5首页尚缺人工缺陷待办入口，人工缺陷无完整场景归属。 | `src/views/workstation/QCOverviewView.vue:15`；`src/views/qc/ManualDefectReviewView.vue:232` | `8caf74817` |
-| 05 | 我的待办：待审核、待复审病历 | 部分实现 | 本人受领任务结果的初审/复审计数、分页与下钻已实现；未覆盖所有病历来源，V5首页尚缺入口。 | `backend/app/services/record_review_service.py:979`；`src/views/workstation/QCOverviewView.vue:15` | `8caf74817` |
+| 04 | 我的待办：临床申诉、待审核人工缺陷 | 部分实现 | 申诉及人工缺陷计数下钻已有；V5首页新增真实人工缺陷待办、真零/未知区分。人工缺陷仍只支持全场景，完整场景归属未齐。 | `src/views/workstation/HomeReviewTodos.vue:1`；`src/views/qc/ManualDefectReviewView.vue:232` | `8caf74817`；第91节B线 |
+| 05 | 我的待办：待审核、待复审病历 | 部分实现 | V5首页接入初审/复审真实计数与下钻、权限及迟到请求保护；范围仍为本人受领任务的已核实结果，未覆盖全部病历来源。 | `backend/app/services/record_review_service.py:979`；`src/views/workstation/HomeReviewTodos.vue:1` | `8caf74817`；第91节B线 |
 | 06 | 我的待办：零数量反馈 | 代码完整 | 已知真零显示无待处理事项且不下钻，未知/故障不伪造零；不把尚未接入类别算作零。 | `src/components/dashboard/TodoBoard.vue:139`；`src/views/workstation/HomeTaskTodos.vue:129` | `8caf74817` |
 | 07 | 工作表现：质控缺陷排名 | 部分实现 | 全场景本周/上周人工缺陷排名已接真实事件；单场景归属不可用，不能替代运行/终末排名。 | `backend/app/services/performance_ranking_service.py:129` | `3dc1f3efa` |
 | 08 | 工作表现：质控病历排名 | 部分实现 | 全场景初审/复审决定排名已接真实事件；单场景归属不可用，决定次数不是去重病历数。 | `backend/app/services/performance_ranking_service.py:101` | `3dc1f3efa` |
 | 09 | 查询：时间、评分标准、病历信息 | 部分实现 | 门急诊可按日期、科室、关键字查询；页面缺评分标准筛选，身份映射和取数上限仍有限制。 | `src/views/dashboard/records/OutpatientEmergencyRecordsView.vue:46`；`backend/app/routers/records.py:588` | `bb74b48dc` |
-| 10 | 筛选：新建筛选、快捷筛选、修改筛选、重置筛选 | 部分实现 | 门急诊临时筛选和重置可用；没有该页用户模板创建、保存与复用，运行模板不算本项。 | `src/views/dashboard/records/OutpatientEmergencyRecordsView.vue:396` | `e26da7fdc` |
+| 10 | 筛选：新建筛选、快捷筛选、修改筛选、重置筛选 | 代码完整 | 门急诊专属用户模板创建、快捷应用、更新、默认、删除、重置已接真实服务；用户/页面隔离、字段校验、CAS与账号切换竞态有测试。依赖未执行的迁移63。 | `src/views/dashboard/records/OutpatientFilterTemplateBar.vue:1`；`backend/alembic/versions/20260927_000063_outpatient_filter_templates.py:1` | 第91节A线 |
 | 11 | 缺陷列表：导出全部列表 | 未实现 | 通用导出存在，但门急诊导出禁用，未建立该场景可信缺陷身份与万条模板导出链。 | `src/views/dashboard/records/OutpatientEmergencyRecordsView.vue:120`；`backend/app/routers/defects.py:490` | 无门急诊专项交付 |
 | 12 | 缺陷列表：批量催办 | 未实现 | 门急诊批量动作禁用；缺身份、通知及操作记录闭环。 | `src/views/dashboard/records/OutpatientEmergencyRecordsView.vue:100` | 无专项交付 |
 | 13 | 缺陷列表：查看详情并定位病历原文 | 部分实现 | 可打开可信原始病历文书；不能从门急诊缺陷定位命中片段。 | `src/views/dashboard/records/OutpatientEmergencyDetailDrawer.vue:307` | `e2d600c0d` |
@@ -84,7 +84,7 @@
 | 40 | 病历范围：自定义筛选、指定病历 | 部分实现 | 三坐标指定病例及基础日期/科室条件可用；复杂条件和完整场景范围未齐。 | `backend/app/services/task_sampling_service.py:94` | `2102a39b8` |
 | 41 | 病历抽样：全部、数量、比例等 | 部分实现 | 全部、数量、比例和科室分层已实现；手册全部抽样方式与完整场景未覆盖。 | `backend/app/services/task_sampling_service.py:334` | `76a134fc3` |
 | 42 | 任务分配：原质控员、科室、比例、病历类型 | 部分实现 | 原质控员、科室、比例三种已实现；病历类型策略明确不可用。 | `backend/app/services/task_assignment_service.py:22`；`src/components/qc/CreateTaskDrawer.vue:537` | `e3e453490` |
-| 43 | 全部任务 | 部分实现 | 管理员全量列表、统计、详情及部分操作可用；批量分配、模板和任务分析闭环未齐。 | `backend/app/routers/tasks.py:281`；`src/views/dashboard/tasks/AllTasksView.vue:725` | `e3e453490` |
+| 43 | 全部任务 | 部分实现 | 管理员全量列表、统计、详情及最多20项批量分配已接；逐任务独立事务和逐项结果、失败保留与未知结果保护已测。模板和任务分析仍缺。 | `backend/tests/unit/test_task_batch_assignment.py:1`；`src/views/dashboard/tasks/AllTasksView.vue:1` | `e3e453490`；第91节D线 |
 
 ## 44–56 统计分析
 
@@ -111,7 +111,7 @@
 | 57 | 门急诊规则配置 | 部分实现 | 通用标准服务识别场景，但门急诊目录无可评分规则集，页面禁止新建，无法完成项目组配置。 | `backend/app/services/scoring_standard_service.py:112`；`src/views/qc/ScoringStandardsView.vue:35` | `10f2a9592`、`8e1af54e9` |
 | 58 | 住院规则配置 | 部分实现 | 运行/终末标准和规则版本启停可用；科室生效范围、医生端开关未接。 | `backend/app/services/scoring_standard_service.py:38`；`backend/app/services/rule_set_version_service.py:43` | `10f2a9592`、`25340aec6` |
 | 59 | 评分标准新增、编辑、删除 | 代码完整 | 草稿CRUD、任意等级名称及区间校验、界面和测试已做；已启用版本通过复制草稿再改。 | `backend/app/routers/scoring.py:190`；`backend/app/services/scoring_standard_service.py:221` | `10f2a9592`、`8e1af54e9` |
-| 60 | 默认评分标准配置 | 部分实现 | 运行/终末可启用并替换默认；门急诊阻塞，取消默认后直接重新设默认的动作仍待补。 | `backend/app/services/scoring_standard_service.py:489`；`src/views/qc/ScoringStandardsView.vue:267` | `10f2a9592`、`8e1af54e9` |
+| 60 | 默认评分标准配置 | 部分实现 | 运行/终末启用替换及active非默认直接设默认均已接；场景锁、CAS、替换与回读同事务。门急诊规则来源及首页/特殊报表默认场景仍未齐。 | `backend/app/services/scoring_standard_service.py:1`；`src/views/qc/ScoringStandardsView.vue:1` | `10f2a9592`、`8e1af54e9`；第91节C线 |
 | 61 | 评分项目组配置 | 部分实现 | 项目组、扣分条目和启用可维护；生效科室及文书等范围未完整建模。 | `src/views/qc/scoring/ScoringStandardEditor.vue:219`；`backend/app/services/scoring_standard_service.py:317` | `10f2a9592`、`8e1af54e9` |
 | 62 | 规则导入/导出 | 部分实现 | 旧scoring_rules有Excel接口；未接新标准/规则集版本，缺逐行失败明细。 | `backend/app/routers/scoring_rules.py:207`；`backend/app/routers/scoring_rules.py:281` | 无新标准专项交付 |
 | 63 | 非编码质控点已上线列表 | 代码完整 | 当前版本真实条目，开启/暂停/下线写草稿并发布，已有组件与服务测试。 | `src/views/dashboard/quality-control/QualityControlPointManagement.vue:69`；`backend/app/services/rule_set_version_service.py:421` | `25340aec6` |
@@ -126,7 +126,7 @@
 | 72 | 文书搜索 | 未实现 | 病例搜索不是文书定义名称检索，尚无管理入口。 | `backend/app/services/custom_qc_sample_pool_service.py:4760` | 无专项交付 |
 | 73 | 测试病历列表 | 代码完整 | 固定池真实分页、三坐标、文书数和关联规则已接，有列表与关联测试。 | `backend/app/routers/qc_sample_pools.py:631`；`src/views/test-medical-records/TestMedicalRecordsView.vue:67` | `1b81e6fdb` |
 | 74 | 新建测试病历 | 代码完整 | 合成病历编辑器逐文书填写并调用真实创建服务，至少一份有效文书的校验已做。 | `src/views/workstation-v4/customer-sample-validation/SyntheticCaseBuilderView.vue:413`；`backend/app/services/custom_qc_sample_pool_service.py:4311` | `1b81e6fdb` |
-| 75 | 导入测试病历 | 部分实现 | Excel可导入样本池；含文书的V3.6模板和逐行导入结果未齐。 | `backend/app/routers/qc_sample_pools.py:730`；`src/views/test-medical-records/TestMedicalRecordsView.vue:243` | 无V3.6模板专项交付 |
+| 75 | 导入测试病历 | 代码完整 | 应用定义的V3.6 XLSX模板下载、多病例多文书导入、全文件预检、Sheet/行/字段错误、逐病例真实回执及页面接入已测；仅合成数据、单次20病例，不声称兼容未提供的原手册模板或具备持久幂等。 | `backend/app/services/test_record_import_service.py:1`；`src/views/test-medical-records/components/TestRecordImportDrawer.vue:1` | 第91节E线 |
 | 76 | 导出测试病历 | 未实现 | 固定池列表无标准测试病历文件勾选导出，结果报告导出不是此功能。 | `src/views/test-medical-records/TestMedicalRecordsView.vue:45` | 无专项交付 |
 | 77 | 编辑测试病历 | 代码完整 | 基本信息及文书可改，派生新版本并事务标记旧版本，CAS及前后端测试已做。 | `src/views/test-medical-records/components/TestRecordEditDrawer.vue:75`；`backend/tests/unit/test_customer_test_record_management.py:307` | `1b81e6fdb` |
 | 78 | 复制测试病历 | 未实现 | 新固定池无复制命令/API；旧页复制仅模拟成功，编辑派生版本不当作复制操作。 | `src/views/medical-records/MedicalRecordsView.vue:865` | 无专项交付 |
@@ -135,8 +135,11 @@
 
 ## 最近提交实际补齐了什么
 
+第91节五线代码提交映射：A（10）`9530a011d`，B（04/05）`bb55eb59c`，C（60）`bcf627490`，D（43）`4a1da1003`，E（75）`61ebee2f6`。上述条目中的“第91节X线”即此固定提交。
+
 | 提交 | 对应条目 | 不能扩大成的结论 |
 | --- | --- | --- |
+| 第91节：五线收尾 | 10、75部分升完整；04、05、43、60补子缺口，仍为部分 | 不等于40项全部收口、跨场景覆盖、持久导入幂等或数据库/业务验收完成 |
 | 第90节：列配置与软移除审计 | 26由未实现升为完整，79由部分升为完整 | 不等于跨设备列配置同步、数据库部署或真实病例验收 |
 | `e1703611c` 全场景质控员工作分析 | 50、51、55的共用事件聚合及页面 | 不等于运行、终末分别可统计；不等于整改报表已完成 |
 | `43442c4b9` 当前在院质量报表 | 45、46、48、49、55的相关子能力 | 不等于完整运行/终末范围、七类整改状态或核心制度报表完成 |
@@ -149,7 +152,7 @@
 
 | 层级 | 本次结论 |
 | --- | --- |
-| 代码完成 | 14项完整、40项部分、26项未实现；第90节净新增2项完整，其余保持首次盘点判定 |
+| 代码完成 | 16项完整、38项部分、26项未实现；第91节净新增2项完整，另外4项补子缺口但不升级整项 |
 | 非生产验证 | 历史各批有不同范围的单测/合成PG/只读冒烟，不能给80项统一通过率；最新报表及人员分析只读PG窗口为空，不是非空正向验收 |
 | 业务库部署 | 本开发批次未完成部署；不能把隔离库revision62当业务库已升级 |
 | 真实病例与浏览器验收 | 未对80项形成逐项签收清单；本次代码审计不能代替业务验收 |
