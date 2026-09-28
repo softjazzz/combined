@@ -2549,4 +2549,116 @@ watch(
 .result-card-actions button {
   border-radius: 999px;
 }
+
+/* ===== 展开详情轻量化：时限与判定事实统一为左对齐「标签 内容」列表，证据 / 反馈收为细行（只改样式） ===== */
+.result-detail .decision-summary {
+  padding: 4px 0 0;
+  border-bottom: 0;
+  background: transparent;
+}
+
+.result-detail .detail-column {
+  padding-right: 0;
+  padding-left: 0;
+}
+
+.result-detail :deep(.timeliness-metrics) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+}
+
+.result-detail :deep(.timeliness-metric) {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 10px;
+  align-items: baseline;
+  padding: 0;
+  border-right: 0;
+  text-align: left;
+}
+
+.result-detail :deep(.timeliness-metric span),
+.result-detail .decision-fact-block .fact-list dt {
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 20px;
+}
+
+.result-detail :deep(.timeliness-metric strong),
+.result-detail .decision-fact-block .fact-list dd {
+  color: #1f2937;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 20px;
+}
+
+.result-detail :deep(.timeliness-metric.is-overdue strong) {
+  color: #c62828;
+}
+
+.result-detail :deep(.timeline-point strong) {
+  font-weight: 400;
+}
+
+/* 时限与事实已并成同一张列表，分组标题只留给读屏，避免出现「有标签没内容」的空行 */
+.result-detail .decision-fact-block .fact-block-header {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.result-detail .decision-fact-block {
+  padding-top: 6px !important;
+}
+
+.result-detail .detail-disclosure {
+  border-radius: 0;
+}
+
+.result-detail .decision-fact-block .fact-list {
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 6px 10px;
+  padding: 0 0 10px;
+}
+
+.result-detail .decision-fact-block .fact-list dt,
+.result-detail .decision-fact-block .fact-list dd {
+  min-height: 0;
+  padding: 0;
+  border-bottom: 0;
+  text-align: left;
+}
+
+.result-detail .detail-disclosure > summary {
+  min-height: 36px;
+  padding: 7px 0;
+  color: #4a5468;
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.result-detail .detail-disclosure > summary small {
+  color: #8a93a3;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.result-detail .detail-disclosure > summary::after {
+  color: #8a93a3;
+  font-size: 15px;
+}
+
+.result-detail .detail-disclosure .result-section-title :deep(svg) {
+  width: 14px;
+  height: 14px;
+  color: #8a93a3;
+}
 </style>

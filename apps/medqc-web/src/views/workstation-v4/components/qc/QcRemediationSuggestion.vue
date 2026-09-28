@@ -333,6 +333,12 @@ async function copyDraft() {
 }
 
 /* 侧栏排版：浅蓝底一块，修改对象为标签，其余为行内段落，注意事项弱化 */
+.qc-remediation--compact .qc-remediation-title {
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 400;
+}
+
 .qc-remediation--compact .qc-remediation-sections {
   gap: 4px;
   padding: 10px 12px;
