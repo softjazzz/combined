@@ -1,7 +1,7 @@
 import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiService } from '@/services/apiService'
-import { getStaffAnalysis } from '@/api/staffAnalysis'
+import { exportStaffAnalysis, getStaffAnalysis, getStaffAnalysisDetails } from '@/api/staffAnalysis'
 
 describe('staff analysis API', () => {
   beforeEach(() => vi.restoreAllMocks())
@@ -11,7 +11,7 @@ describe('staff analysis API', () => {
       status: 200,
       data: { success: true, data: { scene: 'all', summary: null, staff: [], unavailable_metrics: {} } },
     } as Awaited<ReturnType<typeof ApiService.requestRaw>>)
-    const result = await getStaffAnalysis('last_week', 'all')
+    const result = await getStaffAnalysis({ period: 'last_week', scene: 'all' })
     expect(request).toHaveBeenCalledWith({
       method: 'GET',
       url: '/api/v1/quality-reports/staff-work',
@@ -53,7 +53,7 @@ describe('staff analysis API', () => {
       data: { success: true, data: report },
     } as Awaited<ReturnType<typeof ApiService.requestRaw>>)
 
-    const result = await getStaffAnalysis('this_week', 'running')
+    const result = await getStaffAnalysis({ period: 'this_week', scene: 'running' })
 
     expect(request).toHaveBeenCalledWith(expect.objectContaining({
       params: { period: 'this_week', scene: 'running' },
@@ -83,8 +83,64 @@ describe('staff analysis API', () => {
     vi.spyOn(ApiService, 'requestRaw').mockRejectedValue(
       new AxiosError('failed', '503', undefined, undefined, response),
     )
-    const result = await getStaffAnalysis('this_month', 'running')
+    const result = await getStaffAnalysis({ period: 'this_month', scene: 'running' })
     expect(result).toMatchObject({ success: false, status: 503 })
+    expect(result.data).toBeUndefined()
+  })
+
+  it('passes the frozen report filters to staff details with encoded user and paging', async () => {
+    const request = vi.spyOn(ApiService, 'requestRaw').mockResolvedValue({
+      status: 200, data: { success: true, data: { items: [], total: 0, page: 2, page_size: 20 } },
+    } as Awaited<ReturnType<typeof ApiService.requestRaw>>)
+    await getStaffAnalysisDetails('user/1', {
+      period: 'this_month', scene: 'running', institute_id: 'H1', department: '心内科',
+      task_id: 'task-1', start_date: '2026-09-01', end_date: '2026-09-28',
+      as_of: '2026-09-29T00:00:00+08:00',
+    }, 'record_review_count', 2, 20)
+    expect(request).toHaveBeenCalledWith({
+      method: 'GET',
+      url: '/api/v1/quality-reports/staff-work/user%2F1/details',
+      params: {
+        period: 'this_month', scene: 'running', institute_id: 'H1', department: '心内科',
+        task_id: 'task-1', start_date: '2026-09-01', end_date: '2026-09-28',
+        as_of: '2026-09-29T00:00:00+08:00', metric: 'record_review_count', page: 2, page_size: 20,
+      },
+    })
+  })
+
+  it('exports the same frozen aggregate filters as CSV blob', async () => {
+    const blob = new Blob(['csv'])
+    const response: AxiosResponse<Blob> = {
+      status: 200,
+      statusText: 'OK',
+      data: blob,
+      headers: new AxiosHeaders({ 'content-type': 'text/csv; charset=utf-8' }),
+      config: { headers: new AxiosHeaders() },
+    }
+    const request = vi.spyOn(ApiService, 'requestRaw').mockResolvedValue(response)
+    const result = await exportStaffAnalysis({
+      period: 'this_week', scene: 'all', as_of: '2026-09-28T00:00:00Z',
+    })
+    expect(request).toHaveBeenCalledWith({
+      method: 'GET', url: '/api/v1/quality-reports/staff-work/export',
+      params: { period: 'this_week', scene: 'all', as_of: '2026-09-28T00:00:00Z' },
+      responseType: 'blob',
+    })
+    expect(result).toMatchObject({ success: true, data: blob })
+  })
+
+  it('does not accept a JSON error blob as a CSV download', async () => {
+    const body = new Blob([JSON.stringify({ detail: { message: '筛选范围过大' } })], { type: 'application/json' })
+    const response: AxiosResponse<Blob> = {
+      status: 200,
+      statusText: 'OK',
+      data: body,
+      headers: new AxiosHeaders({ 'content-type': 'application/json' }),
+      config: { headers: new AxiosHeaders() },
+    }
+    vi.spyOn(ApiService, 'requestRaw').mockResolvedValue(response)
+    const result = await exportStaffAnalysis({ period: 'this_month', scene: 'all' })
+    expect(result).toMatchObject({ success: false, message: '筛选范围过大' })
     expect(result.data).toBeUndefined()
   })
 })

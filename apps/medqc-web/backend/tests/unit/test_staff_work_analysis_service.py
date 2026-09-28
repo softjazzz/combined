@@ -10,7 +10,8 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.database.models.qc import (
-    QCDefect, QCDefectHistory, QCAppealReview, QCRecordReview, SysUser,
+    QCDefect, QCDefectHistory, QCAppealReview, QCRecordReview, QCTask,
+    QCTaskRecord, SysUser,
 )
 from app.services import staff_work_analysis_service as service
 from app.services.performance_ranking_service import HOSPITAL_TIMEZONE
@@ -245,3 +246,190 @@ def test_empty_and_source_error_are_distinct(db):
         session.execute(sa.text("DROP TABLE qc_appeal_reviews"))
     with pytest.raises(service.StaffWorkAnalysisUnavailable, match="读取失败"):
         report()
+
+
+def test_custom_date_as_of_excludes_later_events_and_keeps_period_enum(db):
+    with db.begin() as session:
+        session.execute(QCRecordReview.__table__.insert(), [
+            review("before-as-of", "reviewer", 30),
+            review("after-as-of", "reviewer", 90),
+        ])
+    data = service.get_staff_work_analysis(
+        period="this_week",
+        start_date="2026-09-21",
+        end_date="2026-09-21",
+        as_of=datetime(2026, 9, 21, 1, tzinfo=HOSPITAL_TIMEZONE),
+    )
+    assert data["period"] == "this_week"
+    assert data["period_label"] == "自定义"
+    assert data["summary"]["record_review_count"] == 1
+    assert data["staff"][0]["record_review_count"] == 1
+
+
+def test_missing_manual_creator_does_not_create_a_fake_staff_member(db):
+    with db.begin() as session:
+        session.execute(QCDefect.__table__.insert(), [defect("d", None)])
+        session.execute(QCDefectHistory.__table__.insert(), [
+            history("create", "d", "manual_create", None, 1),
+            history("approve", "d", "manual_review_approved", "approver", 2),
+        ])
+    rows = {row["user_id"]: row for row in report()["staff"]}
+    assert "None" not in rows
+    assert rows["approver"]["manual_review_approved_count"] == 1
+
+
+def test_task_identity_requires_the_existing_positive_run_contract():
+    from types import SimpleNamespace
+
+    defect_row = SimpleNamespace(manual_created_by="creator")
+    history_row = SimpleNamespace(
+        actor_id="creator",
+        details='{"task_id":"t","task_record_id":"tr","run_number":0}',
+    )
+    assert service._task_identity([history_row], defect_row) is None
+    history_row.details = '{"task_id":"t","task_record_id":"tr","run_number":2}'
+    assert service._task_identity([history_row], defect_row) == ("t", "tr")
+
+
+def test_department_filter_uses_institute_and_current_case_department(db):
+    with db.begin() as session:
+        session.execute(QCRecordReview.__table__.insert(), [
+            review("a", "reviewer-a", 1, institute="A"),
+            review("b", "reviewer-b", 2, institute="B"),
+        ])
+
+    def departments(identities, *, session):
+        del session
+        return {identity: "内科" for identity in identities}
+
+    data = service.get_staff_work_analysis(
+        period="this_week", institute_id="A", department="内科", now=NOW,
+        department_loader=departments,
+    )
+    assert {row["user_id"] for row in data["staff"]} == {"reviewer-a"}
+    assert data["filter_options"]["departments"] == [
+        {"institute_id": "A", "department_name": "内科"},
+        {"institute_id": "B", "department_name": "内科"},
+    ]
+    assert data["summary"]["appeal_approved_count"] is None
+
+
+def test_summary_details_and_export_share_the_frozen_event_window(db):
+    with db.begin() as session:
+        session.execute(QCRecordReview.__table__.insert(), [
+            review("r1", "reviewer", 1),
+            review("r2", "reviewer", 2),
+        ])
+    filters = {"period": "this_week", "as_of": NOW}
+    summary = service.get_staff_work_analysis(**filters)
+    decision_details = service.get_staff_work_details(
+        user_id="reviewer", metric="record_review_count", **filters,
+    )
+    case_details = service.get_staff_work_details(
+        user_id="reviewer", metric="reviewed_case_count", **filters,
+    )
+    exported, row_count = service.export_staff_work_csv(**filters)
+
+    assert summary["staff"][0]["record_review_count"] == decision_details["total"] == 2
+    assert summary["staff"][0]["reviewed_case_count"] == case_details["total"] == 1
+    assert row_count == 1
+    assert exported.startswith(b"\xef\xbb\xbf")
+    assert "reviewer" in exported.decode("utf-8-sig")
+
+
+@pytest.mark.parametrize("value", ["=1+1", "  =1+1", "\t=1+1", "\r@SUM(A1)"])
+def test_csv_formula_prefixes_are_escaped_after_leading_whitespace(value):
+    assert service._csv_safe(value).startswith("'")
+
+
+def test_task_filter_requires_verified_record_and_manual_create_identity(db):
+    engine = db.kw["bind"]
+    QCTask.__table__.create(engine)
+    QCTaskRecord.__table__.create(engine)
+    with db.begin() as session:
+        session.execute(QCTask.__table__.insert(), [{
+            "id": "task-1", "task_number": "T-1", "task_name": "专项任务",
+            "task_type": "one_time", "status": "in_progress", "progress": 0,
+            "total_records": 4, "completed_records": 0,
+            "created_at": event_time(0), "updated_at": event_time(0),
+        }])
+        session.execute(QCTaskRecord.__table__.insert(), [
+            {
+                "id": "tr-good", "task_id": "task-1", "record_id": "legacy-good",
+                "institute_id": "A", "patient_id": "P", "visit_id": "V",
+                "status": "pending", "created_at": event_time(0),
+            },
+            {
+                "id": "tr-cross", "task_id": "task-1", "record_id": "legacy-cross",
+                "institute_id": "B", "patient_id": "P", "visit_id": "V",
+                "status": "pending", "created_at": event_time(0),
+            },
+        ])
+        task_review = review("task-review", "task-reviewer", 1)
+        task_review["task_id"] = "task-1"
+        workspace_review = review("workspace-review", "workspace-reviewer", 2)
+        workspace_review["task_id"] = None
+        workspace_review["task_record_id"] = None
+        workspace_review["run_number"] = None
+        workspace_review["review_context"] = "workspace"
+        session.execute(QCRecordReview.__table__.insert(), [task_review, workspace_review])
+        defects = [
+            defect("good", "good-creator"), defect("cross", "cross-creator"),
+            defect("bad-run", "bad-run-creator"), defect("duplicate", "duplicate-creator"),
+        ]
+        for item, record_id in zip(
+            defects, ("tr-good", "tr-cross", "tr-bad", "tr-duplicate"), strict=True,
+        ):
+            item["record_id"] = record_id
+        session.execute(QCDefect.__table__.insert(), defects)
+        session.execute(QCDefectHistory.__table__.insert(), [
+            {
+                **history("good-create", "good", "manual_create", "good-creator", 1),
+                "details": '{"task_id":"task-1","task_record_id":"tr-good","run_number":1}',
+            },
+            {
+                **history("cross-create", "cross", "manual_create", "cross-creator", 2),
+                "details": '{"task_id":"task-1","task_record_id":"tr-cross","run_number":1}',
+            },
+            {
+                **history("bad-run-create", "bad-run", "manual_create", "bad-run-creator", 3),
+                "details": '{"task_id":"task-1","task_record_id":"tr-bad","run_number":0}',
+            },
+            {
+                **history(
+                    "duplicate-create-1", "duplicate", "manual_create", "duplicate-creator", 4,
+                ),
+                "details": (
+                    '{"task_id":"task-1","task_record_id":"tr-duplicate","run_number":1}'
+                ),
+            },
+            {
+                **history(
+                    "duplicate-create-2", "duplicate", "manual_create", "duplicate-creator", 5,
+                ),
+                "details": (
+                    '{"task_id":"task-1","task_record_id":"tr-duplicate","run_number":1}'
+                ),
+            },
+        ])
+
+    data = service.get_staff_work_analysis(period="this_week", task_id="task-1", now=NOW)
+    assert {row["user_id"] for row in data["staff"]} == {
+        "good-creator", "task-reviewer",
+    }
+    assert data["summary"]["record_review_count"] == 1
+    assert data["summary"]["manual_defect_created_count"] == 1
+    assert data["context_unavailable_count"] == 4
+    assert data["filter_options"]["tasks"] == [
+        {"task_id": "task-1", "task_name": "专项任务"},
+    ]
+    details = service.get_staff_work_details(
+        user_id="task-reviewer", metric="record_review_count",
+        period="this_week", task_id="task-1", as_of=NOW,
+    )
+    exported, row_count = service.export_staff_work_csv(
+        period="this_week", task_id="task-1", as_of=NOW,
+    )
+    assert details["total"] == data["summary"]["record_review_count"]
+    assert row_count == len(data["staff"])
+    assert "workspace-reviewer" not in exported.decode("utf-8-sig")

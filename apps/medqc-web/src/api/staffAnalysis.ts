@@ -5,7 +5,39 @@ import { extractApiErrorMessageFromError, normalizeApiSuccess } from '@/utils/ap
 export type StaffAnalysisPeriod = 'this_week' | 'last_week' | 'this_month'
 export type StaffAnalysisScene = 'all' | 'running' | 'final'
 export type StaffAnalysisUnavailableMetric = 'appeal_approved_count' | 'appeal_rejected_count'
-export type StaffAnalysisUnavailableReason = 'scene_not_attributable'
+export type StaffAnalysisUnavailableReason = 'scene_not_attributable' | 'filter_not_attributable'
+export type StaffAnalysisMetric =
+  | 'record_review_count'
+  | 'reviewed_case_count'
+  | 'initial_count'
+  | 'recheck_count'
+  | 'manual_defect_created_count'
+  | 'manual_review_approved_count'
+  | 'manual_review_rejected_count'
+  | 'appeal_approved_count'
+  | 'appeal_rejected_count'
+
+export interface StaffAnalysisFilters {
+  period: StaffAnalysisPeriod
+  scene: StaffAnalysisScene
+  institute_id?: string
+  department?: string
+  task_id?: string
+  start_date?: string
+  end_date?: string
+  as_of?: string
+}
+
+export interface StaffAnalysisAppliedFilters {
+  period: StaffAnalysisPeriod
+  scene: StaffAnalysisScene
+  institute_id: string | null
+  department: string | null
+  task_id: string | null
+  start_date: string | null
+  end_date: string | null
+  as_of: string
+}
 
 export interface StaffWorkCounts {
   record_review_count: number
@@ -32,41 +64,77 @@ export interface StaffWorkRow extends StaffWorkCounts {
   rank: number
 }
 
+export interface StaffAnalysisFilterOptions {
+  departments: Array<{ institute_id: string; department_name: string }>
+  tasks: Array<{ task_id: string; task_name: string | null }>
+}
+
 export interface StaffAnalysisReport {
   period: StaffAnalysisPeriod
   period_label: string
   range: { start: string; end: string }
   scene: StaffAnalysisScene
+  filters: StaffAnalysisAppliedFilters
+  filter_options: StaffAnalysisFilterOptions
+  filter_options_unavailable_reason: string | null
+  context_unavailable_count: number
   summary: StaffWorkSummary | null
   staff: StaffWorkRow[] | null
   unavailable_reason: string | null
   unavailable_metrics: Partial<Record<StaffAnalysisUnavailableMetric, StaffAnalysisUnavailableReason>>
 }
 
-export interface StaffAnalysisResult {
+export interface StaffAnalysisDetailItem {
+  event_id: string
+  event_type: 'record_review' | 'manual_defect_created' | 'manual_review_approved'
+    | 'manual_review_rejected' | 'appeal_approved' | 'appeal_rejected'
+  occurred_at: string
+  institute_id: string | null
+  patient_id: string | null
+  visit_id: string | null
+  task_id: string | null
+  department: string | null
+  stage: string | null
+  decision: string | null
+  defect_id: string | null
+  appeal_id: string | null
+}
+
+export interface StaffAnalysisDetailsPage {
+  filters: StaffAnalysisAppliedFilters
+  metric: StaffAnalysisMetric
+  user_id: string
+  items: StaffAnalysisDetailItem[] | null
+  total: number | null
+  page: number
+  page_size: number
+  unavailable_reason: string | null
+}
+
+export interface StaffAnalysisResult<T = StaffAnalysisReport> {
   success: boolean
-  data?: StaffAnalysisReport
+  data?: T
   message?: string
   status?: number
 }
 
-export async function getStaffAnalysis(
-  period: StaffAnalysisPeriod,
-  scene: StaffAnalysisScene,
-): Promise<StaffAnalysisResult> {
+const BASE = '/api/v1/quality-reports/staff-work'
+const CSV_CONTENT_TYPE = /^text\/csv(?:\s*;|$)/i
+
+function paramsOf(filters: StaffAnalysisFilters): Record<string, string> {
+  const params: Record<string, string> = { period: filters.period, scene: filters.scene }
+  for (const key of ['institute_id', 'department', 'task_id', 'start_date', 'end_date', 'as_of'] as const) {
+    const value = filters[key]
+    if (value) params[key] = value
+  }
+  return params
+}
+
+async function read<T>(url: string, params: Record<string, string | number>): Promise<StaffAnalysisResult<T>> {
   try {
-    const response = await ApiService.requestRaw<StaffAnalysisReport>({
-      method: 'GET',
-      url: '/api/v1/quality-reports/staff-work',
-      params: { period, scene },
-    })
-    const result = normalizeApiSuccess<StaffAnalysisReport>(response.data)
-    return {
-      success: result.success,
-      data: result.data,
-      message: result.message,
-      status: response.status,
-    }
+    const response = await ApiService.requestRaw<T>({ method: 'GET', url, params })
+    const result = normalizeApiSuccess<T>(response.data)
+    return { success: result.success, data: result.data, message: result.message, status: response.status }
   } catch (error) {
     return {
       success: false,
@@ -74,4 +142,94 @@ export async function getStaffAnalysis(
       message: extractApiErrorMessageFromError(error, '质控员工作分析暂不可用'),
     }
   }
+}
+
+export function getStaffAnalysis(filters: StaffAnalysisFilters): Promise<StaffAnalysisResult> {
+  return read<StaffAnalysisReport>(BASE, paramsOf(filters))
+}
+
+export function getStaffAnalysisDetails(
+  userId: string,
+  filters: StaffAnalysisFilters,
+  metric: StaffAnalysisMetric,
+  page = 1,
+  pageSize = 20,
+): Promise<StaffAnalysisResult<StaffAnalysisDetailsPage>> {
+  return read<StaffAnalysisDetailsPage>(
+    `${BASE}/${encodeURIComponent(userId)}/details`,
+    { ...paramsOf(filters), metric, page, page_size: pageSize },
+  )
+}
+
+export async function exportStaffAnalysis(
+  filters: StaffAnalysisFilters,
+): Promise<StaffAnalysisResult<Blob>> {
+  try {
+    const response = await ApiService.requestRaw<Blob>({
+      method: 'GET', url: `${BASE}/export`, params: paramsOf(filters), responseType: 'blob',
+    })
+    const contentType = headerValue(response.headers, 'content-type')
+    if (response.status !== 200 || !(response.data instanceof Blob)
+      || response.data.size === 0 || !CSV_CONTENT_TYPE.test(contentType)) {
+      return {
+        success: false,
+        status: response.status,
+        message: await messageFromBlob(response.data) || '服务端未返回有效的质控员工作分析 CSV 文件',
+      }
+    }
+    return { success: true, data: response.data, status: response.status }
+  } catch (error) {
+    const body = isAxiosError(error) ? error.response?.data : undefined
+    return {
+      success: false,
+      status: isAxiosError(error) ? error.response?.status : undefined,
+      message: await messageFromBlob(body) || extractApiErrorMessageFromError(error, '导出质控员工作分析失败'),
+    }
+  }
+}
+
+function headerValue(headers: unknown, name: string): string {
+  if (!headers || typeof headers !== 'object') return ''
+  const getter = Reflect.get(headers, 'get')
+  if (typeof getter === 'function') {
+    const value: unknown = Reflect.apply(getter, headers, [name])
+    if (typeof value === 'string') return value
+  }
+  const target = name.toLowerCase()
+  for (const [key, value] of Object.entries(headers as Record<string, unknown>)) {
+    if (key.toLowerCase() === target && typeof value === 'string') return value
+  }
+  return ''
+}
+
+async function messageFromBlob(value: unknown): Promise<string | undefined> {
+  if (!(value instanceof Blob) || value.size === 0) return undefined
+  try {
+    const parsed: unknown = JSON.parse(await readBlobText(value))
+    if (!parsed || typeof parsed !== 'object') return undefined
+    for (const key of ['detail', 'error', 'message'] as const) {
+      const candidate = (parsed as Record<string, unknown>)[key]
+      if (typeof candidate === 'string' && candidate.trim()) return candidate.trim()
+      if (candidate && typeof candidate === 'object') {
+        const message = (candidate as Record<string, unknown>).message
+        if (typeof message === 'string' && message.trim()) return message.trim()
+      }
+    }
+  } catch {
+    return undefined
+  }
+  return undefined
+}
+
+async function readBlobText(blob: Blob): Promise<string> {
+  const text = Reflect.get(blob, 'text')
+  if (typeof text === 'function') return String(await Reflect.apply(text, blob, []))
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => typeof reader.result === 'string'
+      ? resolve(reader.result) : reject(new Error('Blob读取结果不是文本'))
+    reader.onerror = () => reject(reader.error || new Error('Blob读取失败'))
+    reader.onabort = () => reject(new Error('Blob读取已中止'))
+    reader.readAsText(blob, 'utf-8')
+  })
 }

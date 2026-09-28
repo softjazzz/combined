@@ -96,3 +96,91 @@ def test_read_failure_is_redacted(monkeypatch):
     assert response.status_code == 503
     assert response.json()["detail"] == "质控员工作分析暂不可用，请稍后重试"
     assert "P001" not in response.text and "secret" not in response.text
+
+
+def test_report_forwards_compound_department_custom_dates_and_as_of(monkeypatch):
+    captured = {}
+
+    def get_analysis(**kwargs):
+        captured.update(kwargs)
+        return {"staff": [], "summary": {}}
+
+    monkeypatch.setattr(service, "get_staff_work_analysis", get_analysis)
+    response = _client().get(BASE, params={
+        "institute_id": "H1", "department": "内科", "task_id": "task-1",
+        "start_date": "2026-09-01", "end_date": "2026-09-02",
+        "as_of": "2026-09-02T12:00:00+08:00",
+    })
+    assert response.status_code == 200
+    assert captured == {
+        "period": "this_week", "scene": "all", "institute_id": "H1",
+        "department": "内科", "task_id": "task-1", "start_date": "2026-09-01",
+        "end_date": "2026-09-02", "as_of": "2026-09-02T12:00:00+08:00",
+    }
+
+
+def test_details_forwards_metric_paging_and_same_filters(monkeypatch):
+    captured = {}
+
+    def get_details(**kwargs):
+        captured.update(kwargs)
+        return {"items": [], "total": 0}
+
+    monkeypatch.setattr(service, "get_staff_work_details", get_details)
+    response = _client().get(f"{BASE}/qc-2/details", params={
+        "metric": "record_review_count", "page": 2, "page_size": 10,
+        "scene": "running", "task_id": "task-1",
+    })
+    assert response.status_code == 200
+    assert captured == {
+        "user_id": "qc-2", "metric": "record_review_count", "page": 2,
+        "page_size": 10, "period": "this_week", "scene": "running",
+        "task_id": "task-1",
+    }
+
+
+def test_export_returns_hardened_csv_and_audits_only_filter_metadata(monkeypatch):
+    captured = {}
+    audits = []
+
+    def export(**kwargs):
+        captured.update(kwargs)
+        return b"\xef\xbb\xbfheader\r\n", 2
+
+    monkeypatch.setattr(service, "export_staff_work_csv", export)
+    monkeypatch.setattr(routes, "audit_event", lambda *_args, **kwargs: audits.append(kwargs))
+    response = _client().get(f"{BASE}/export", params={"task_id": "task-1"})
+    assert response.status_code == 200
+    assert response.content.startswith(b"\xef\xbb\xbf")
+    assert response.headers["cache-control"] == "no-store"
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["content-disposition"].endswith("staff-work.csv")
+    assert captured == {"period": "this_week", "scene": "all", "task_id": "task-1"}
+    assert audits[0]["details"]["task_filter_applied"] is True
+    assert audits[0]["details"]["row_count"] == 2
+    assert "institute_id" not in audits[0]["details"]
+
+
+def test_export_too_large_is_413(monkeypatch):
+    monkeypatch.setattr(service, "export_staff_work_csv", lambda **_kwargs: (_ for _ in ()).throw(
+        service.StaffWorkAnalysisTooLarge(5001)
+    ))
+    response = _client().get(f"{BASE}/export")
+    assert response.status_code == 413
+    assert response.json()["detail"]["code"] == "staff_work_export_too_large"
+
+
+@pytest.mark.parametrize("path", [
+    f"{BASE}/export",
+    f"{BASE}/qc-2/details?metric=record_review_count",
+])
+def test_non_manager_cannot_export_or_read_details(monkeypatch, path):
+    monkeypatch.setattr(
+        service, "export_staff_work_csv",
+        lambda **_kwargs: pytest.fail("无权用户不应导出"),
+    )
+    monkeypatch.setattr(
+        service, "get_staff_work_details",
+        lambda **_kwargs: pytest.fail("无权用户不应读取明细"),
+    )
+    assert _client(("qc_staff",)).get(path).status_code == 403
