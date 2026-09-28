@@ -15,9 +15,10 @@
       <span>{{ presentation.positiveLabel }}</span>
       <span class="is-danger">{{ presentation.issueLabel }}</span>
     </div>
+    <!-- 明细行只做展示：当前数据没有「每次检查 → 具体文书」的对应关系，不提供逐次跳转 -->
     <div class="exam-event-list">
       <article
-        v-for="event in presentation.events"
+        v-for="event in attentionEvents"
         :key="event.eventPosition"
         class="exam-event-row"
         data-testid="exam-event-row"
@@ -33,15 +34,64 @@
         <p>{{ event.description }}</p>
       </article>
     </div>
+    <details
+      v-if="otherEvents.length"
+      class="exam-event-more"
+      data-testid="exam-event-more"
+    >
+      <summary>另有 {{ otherEvents.length }} 次：{{ otherSummary }}</summary>
+      <div class="exam-event-list">
+        <article
+          v-for="event in otherEvents"
+          :key="event.eventPosition"
+          class="exam-event-row"
+          data-testid="exam-event-row"
+        >
+          <div class="exam-event-row-head">
+            <span class="exam-event-position">第 {{ event.eventPosition }} 次</span>
+            <time>{{ event.reportTime }}</time>
+            <span
+              class="exam-event-status"
+              :class="`is-${event.tone}`"
+            >{{ event.statusLabel }}</span>
+          </div>
+          <p>{{ event.description }}</p>
+        </article>
+      </div>
+    </details>
   </section>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { ExamLabEventPresentation } from './examLabEventPresentation'
 
-defineProps<{
+const props = defineProps<{
   presentation: ExamLabEventPresentation
 }>()
+
+// 需要质控员处理的次数（未记录/未完成分析、待核实）默认展示；
+// 已记录、已完成、不适用的次数收进折叠区，内容与顺序不变，只是默认不展开。
+// 若没有需处理的次数，则全部直接展示。
+const isAttention = (tone: string) => tone === 'danger' || tone === 'warning'
+const hasAttention = computed(() =>
+  props.presentation.events.some((event) => isAttention(event.tone)),
+)
+const attentionEvents = computed(() =>
+  hasAttention.value
+    ? props.presentation.events.filter((event) => isAttention(event.tone))
+    : props.presentation.events,
+)
+const otherEvents = computed(() =>
+  hasAttention.value ? props.presentation.events.filter((event) => !isAttention(event.tone)) : [],
+)
+const otherSummary = computed(() => {
+  const counts = new Map<string, number>()
+  for (const event of otherEvents.value) {
+    counts.set(event.statusLabel, (counts.get(event.statusLabel) || 0) + 1)
+  }
+  return [...counts.entries()].map(([label, count]) => `${label} ${count}`).join(' · ')
+})
 </script>
 
 <style scoped>
@@ -80,24 +130,64 @@ defineProps<{
 .exam-event-summary {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  padding: 9px 12px;
+  align-items: center;
+  gap: 4px 0;
+  padding: 8px 12px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.065);
 }
 
 .exam-event-summary span {
-  padding: 2px 7px;
-  border-radius: 999px;
-  background: rgba(10, 108, 255, 0.07);
-  color: #366b9b;
+  color: #4a5468;
   font-size: 12px;
   font-weight: 400;
   line-height: 18px;
 }
 
+.exam-event-summary span + span::before {
+  margin: 0 6px;
+  color: #c4ccd7;
+  content: '·';
+}
+
 .exam-event-summary span.is-danger {
-  background: rgba(239, 68, 68, 0.08);
   color: #c62828;
+  font-weight: 500;
+}
+
+.exam-event-more {
+  border-top: 1px solid rgba(0, 0, 0, 0.055);
+}
+
+.exam-event-more > summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  color: #6b7280;
+  font-size: 12px;
+  line-height: 18px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.exam-event-more > summary::-webkit-details-marker {
+  display: none;
+}
+
+.exam-event-more > summary::before {
+  display: inline-block;
+  color: #8a93a3;
+  font-size: 10px;
+  content: '▶';
+  transition: transform 140ms ease;
+}
+
+.exam-event-more[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.exam-event-more .exam-event-row {
+  background: rgba(255, 255, 255, 0.5);
 }
 
 .exam-event-list {

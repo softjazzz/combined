@@ -243,7 +243,11 @@
         </button>
 
         <ExamLabEventResultBlock
-          v-if="isDocumentGroupExpandedForItem(item.key) && examLabEventPresentation(item)"
+          v-if="
+            isDocumentGroupExpandedForItem(item.key) &&
+              expandedKey === item.key &&
+              examLabEventPresentation(item)
+          "
           class="result-event-overview"
           :presentation="examLabEventPresentation(item)!"
         />
@@ -465,7 +469,7 @@
                     aria-hidden="true"
                   />关键证据</span>
                   <small v-if="displayEvidence(item).length">
-                    {{ displayEvidence(item).length }} 份，可定位原文
+                    {{ displayEvidence(item).length }} 份，可查看相关文书
                   </small>
                 </summary>
                 <div
@@ -503,7 +507,7 @@
                       }}</span>
                     </span>
                     <span class="evidence-action">
-                      定位原文
+                      查看相关文书
                       <ChevronRight
                         aria-hidden="true"
                         :size="14"
@@ -561,10 +565,12 @@
         <QcRemediationSuggestion
           v-if="
             isDocumentGroupExpandedForItem(item.key) &&
+              expandedKey === item.key &&
               !isCompliantResult(item) &&
               item.suggestion
           "
           class="result-suggestion"
+          compact
           :suggestion="item.suggestion"
           :status="item.status"
           :rule-id="item.rule_id"
@@ -608,7 +614,9 @@
               :size="13"
               :stroke-width="2"
             />
-            <span>{{ debugCopyingKey === item.key ? '复制中' : '复制调试信息' }}</span>
+            <span class="visually-hidden">{{
+              debugCopyingKey === item.key ? '复制中' : '复制调试信息'
+            }}</span>
           </button>
         </footer>
       </article>
@@ -1683,6 +1691,24 @@ watch(
   opacity: 0.48;
 }
 
+/* 复制调试信息只给实施人员用：弱化为图标按钮，文字仅供读屏 */
+.result-row-debug-copy {
+  width: 28px;
+  justify-content: center;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
 .result-row-meta {
   display: inline-flex;
   min-width: 0;
@@ -2522,5 +2548,117 @@ watch(
 .result-row :deep(.ant-btn),
 .result-card-actions button {
   border-radius: 999px;
+}
+
+/* ===== 展开详情轻量化：时限与判定事实统一为左对齐「标签 内容」列表，证据 / 反馈收为细行（只改样式） ===== */
+.result-detail .decision-summary {
+  padding: 4px 0 0;
+  border-bottom: 0;
+  background: transparent;
+}
+
+.result-detail .detail-column {
+  padding-right: 0;
+  padding-left: 0;
+}
+
+.result-detail :deep(.timeliness-metrics) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+}
+
+.result-detail :deep(.timeliness-metric) {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 10px;
+  align-items: baseline;
+  padding: 0;
+  border-right: 0;
+  text-align: left;
+}
+
+.result-detail :deep(.timeliness-metric span),
+.result-detail .decision-fact-block .fact-list dt {
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 20px;
+}
+
+.result-detail :deep(.timeliness-metric strong),
+.result-detail .decision-fact-block .fact-list dd {
+  color: #1f2937;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 20px;
+}
+
+.result-detail :deep(.timeliness-metric.is-overdue strong) {
+  color: #c62828;
+}
+
+.result-detail :deep(.timeline-point strong) {
+  font-weight: 400;
+}
+
+/* 时限与事实已并成同一张列表，分组标题只留给读屏，避免出现「有标签没内容」的空行 */
+.result-detail .decision-fact-block .fact-block-header {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.result-detail .decision-fact-block {
+  padding-top: 6px !important;
+}
+
+.result-detail .detail-disclosure {
+  border-radius: 0;
+}
+
+.result-detail .decision-fact-block .fact-list {
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 6px 10px;
+  padding: 0 0 10px;
+}
+
+.result-detail .decision-fact-block .fact-list dt,
+.result-detail .decision-fact-block .fact-list dd {
+  min-height: 0;
+  padding: 0;
+  border-bottom: 0;
+  text-align: left;
+}
+
+.result-detail .detail-disclosure > summary {
+  min-height: 36px;
+  padding: 7px 0;
+  color: #4a5468;
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.result-detail .detail-disclosure > summary small {
+  color: #8a93a3;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.result-detail .detail-disclosure > summary::after {
+  color: #8a93a3;
+  font-size: 15px;
+}
+
+.result-detail .detail-disclosure .result-section-title :deep(svg) {
+  width: 14px;
+  height: 14px;
+  color: #8a93a3;
 }
 </style>

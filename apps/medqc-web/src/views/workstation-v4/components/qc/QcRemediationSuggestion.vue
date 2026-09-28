@@ -2,7 +2,7 @@
   <section
     v-if="hasContent"
     class="qc-remediation"
-    :class="{ 'qc-remediation--dense': dense }"
+    :class="{ 'qc-remediation--dense': dense, 'qc-remediation--compact': compact }"
     data-testid="qc-remediation-suggestion"
   >
     <div class="qc-remediation-head">
@@ -16,7 +16,10 @@
         v-for="(section, index) in parsed.sections"
         :key="`qc-remediation-section-${index}`"
         class="qc-remediation-section"
-        :class="{ 'qc-remediation-section--plain': !section.label }"
+        :class="[
+          { 'qc-remediation-section--plain': !section.label },
+          sectionModifier(section.label),
+        ]"
       >
         <dt
           v-if="section.label"
@@ -172,6 +175,8 @@ const props = withDefaults(
     status?: string
     /** 紧凑排版：仅收紧间距，字号与字重保持不变。 */
     dense?: boolean
+    /** 侧栏排版：修改对象作为标签、其余段落改为行内「标签：内容」，四段内容一字不删。 */
+    compact?: boolean
     /** 提供病历三坐标与规则号后，本条才会出现按需草稿入口。 */
     ruleId?: string
     recordContext?: QcRemediationDraftContext
@@ -179,12 +184,19 @@ const props = withDefaults(
   {
     status: '',
     dense: false,
+    compact: false,
     ruleId: '',
     recordContext: undefined,
   },
 )
 
 const parsed = computed(() => parseQcRemediationSuggestion(props.suggestion))
+
+function sectionModifier(label: string) {
+  if (label === '修改对象') return 'qc-remediation-section--target'
+  if (label === '注意事项') return 'qc-remediation-section--caution'
+  return ''
+}
 const hasContent = computed(() => parsed.value.plain.length > 0)
 const title = computed(() => resolveQcRemediationTitle(props.status))
 
@@ -318,6 +330,81 @@ async function copyDraft() {
 
 .qc-remediation--dense .qc-remediation-section {
   padding: 6px 10px;
+}
+
+/* 侧栏排版：浅蓝底一块，修改对象为标签，其余为行内段落，注意事项弱化 */
+.qc-remediation--compact .qc-remediation-title {
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.qc-remediation--compact .qc-remediation-sections {
+  gap: 4px;
+  padding: 10px 12px;
+  border: 0;
+  background: rgba(10, 108, 255, 0.06);
+}
+
+.qc-remediation--compact .qc-remediation-section {
+  display: block;
+  padding: 0;
+}
+
+.qc-remediation--compact .qc-remediation-section + .qc-remediation-section {
+  border-top: 0;
+}
+
+.qc-remediation--compact .qc-remediation-label,
+.qc-remediation--compact .qc-remediation-body {
+  display: inline;
+  font-size: 13px;
+  line-height: 21px;
+}
+
+.qc-remediation--compact .qc-remediation-label {
+  color: #6b7684;
+  font-weight: 400;
+}
+
+.qc-remediation--compact .qc-remediation-label::after {
+  content: '：';
+}
+
+.qc-remediation--compact .qc-remediation-section--target {
+  margin-bottom: 2px;
+}
+
+.qc-remediation--compact .qc-remediation-section--target .qc-remediation-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.qc-remediation--compact .qc-remediation-section--target .qc-remediation-body {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #0a5fd6;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.qc-remediation--compact .qc-remediation-section--caution {
+  margin-top: 2px;
+}
+
+.qc-remediation--compact .qc-remediation-section--caution .qc-remediation-label,
+.qc-remediation--compact .qc-remediation-section--caution .qc-remediation-body {
+  color: #8a93a3;
+  font-size: 12px;
+  line-height: 19px;
 }
 
 .qc-remediation-draft {
