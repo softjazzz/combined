@@ -18,6 +18,13 @@ window.scrollTo = vi.fn()
 const { default: router } = await import('./index')
 
 describe('旧 Dashboard 首页路由', () => {
+  it('扫码确认页必须登录且不额外限制角色', () => {
+    const route = router.getRoutes().find((item) => item.name === 'QrLoginConfirm')
+    expect(route?.path).toBe('/auth/qr-confirm')
+    expect(route?.meta).toMatchObject({ requiresAuth: true, title: '确认电脑登录' })
+    expect(route?.meta.permission).toBeUndefined()
+  })
+
   it('编码质控点管理使用独立菜单路由且仅管理员角色可进入', () => {
     const route = router.getRoutes().find((item) => item.name === 'CodingQualityControlPointManagement')
     expect(route?.path).toBe('/dashboard/coding-quality-control')

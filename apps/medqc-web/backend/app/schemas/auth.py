@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, ConfigDict, model_validator
+from pydantic import BaseModel, EmailStr, ConfigDict, Field, model_validator
 from typing import Optional, List
 from ..core.settings import get_settings
 
@@ -65,4 +65,16 @@ class LoginResponse(BaseModel):
 
 class RefreshTokenRequest(BaseModel):
     refresh_token: str
+
+
+class QrBrowserSecretRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    browser_secret: str = Field(min_length=32, max_length=256)
+
+
+class QrConfirmRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    verification_code: str = Field(pattern=r"^\d{6}$")
 

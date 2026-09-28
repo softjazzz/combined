@@ -1,4 +1,4 @@
-﻿// @ts-nocheck
+// @ts-nocheck
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useAuthStore } from '@/stores/auth'
@@ -22,6 +22,7 @@ vi.mock('@/services/apiService', () => ({
     logout: vi.fn(),
     register: vi.fn(),
     getCurrentUser: vi.fn(),
+    getCurrentUserWithAccessToken: vi.fn(),
     isAuthenticated: vi.fn(),
     refreshToken: vi.fn(),
     updateProfile: vi.fn(),
@@ -221,6 +222,51 @@ describe('Auth Store', () => {
 
       await store.signIn('test@example.com', 'password')
       expect(store.userDepartment).toBe('心内科')
+    })
+  })
+
+  describe('扫码会话安装', () => {
+    it('候选令牌经me确认后才写入登录态', async () => {
+      const store = useAuthStore()
+      vi.mocked(ApiService.getCurrentUserWithAccessToken).mockResolvedValue({
+        success: true, data: mockUser,
+      })
+
+      const result = await store.completeQrLogin({ access_token: 'qr-access', refresh_token: 'qr-refresh', token_type: 'bearer', expires_in: 3600, user: mockUser })
+
+      expect(result.success).toBe(true)
+      expect(ApiService.getCurrentUserWithAccessToken).toHaveBeenCalledWith('qr-access')
+      expect(localStorage.getItem('medqc_access_token')).toBe('qr-access')
+      expect(store.user?.id).toBe('user-001')
+    })
+
+    it('会话失效时不安装候选令牌或覆盖现有用户', async () => {
+      const store = useAuthStore()
+      let current = true
+      vi.mocked(ApiService.getCurrentUserWithAccessToken).mockImplementation(async () => {
+        current = false
+        return { success: true, data: mockUser }
+      })
+
+      const result = await store.completeQrLogin(
+        { access_token: 'stale-access', refresh_token: 'refresh', token_type: 'bearer', expires_in: 3600, user: mockUser },
+        () => current,
+      )
+
+      expect(result.success).toBe(false)
+      expect(localStorage.getItem('medqc_access_token')).toBeNull()
+      expect(store.user).toBeNull()
+    })
+
+    it('me校验失败不使用密码登录的fallback用户', async () => {
+      const store = useAuthStore()
+      vi.mocked(ApiService.getCurrentUserWithAccessToken).mockResolvedValue({
+        success: false, error: 'unauthorized', data: null,
+      })
+      const result = await store.completeQrLogin({ access_token: 'bad-access', refresh_token: 'refresh', token_type: 'bearer', expires_in: 3600, user: mockUser })
+      expect(result.success).toBe(false)
+      expect(store.user).toBeNull()
+      expect(localStorage.getItem('medqc_access_token')).toBeNull()
     })
   })
 

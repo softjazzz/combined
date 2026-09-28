@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from typing import Optional, Iterable
+from typing import Any, Mapping, Optional, Iterable
 import threading
 from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -25,6 +25,29 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     expire = datetime.utcnow() + (expires_delta or timedelta(minutes=15))
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
+
+
+def issue_login_token_pair(user: Mapping[str, Any]) -> dict[str, Any]:
+    """签发密码登录与扫码登录共用的访问/刷新令牌合同。"""
+    settings = get_settings()
+    user_id = str(user.get("id") or "").strip()
+    token_sub = str(user.get("email") or "").strip().lower()
+    if not user_id or not token_sub:
+        raise ValueError("用户缺少令牌签发身份")
+    access_token = create_access_token(
+        data={"sub": token_sub, "uid": user_id},
+        expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+    )
+    refresh_token = create_access_token(
+        data={"sub": token_sub, "uid": user_id, "type": "refresh"},
+        expires_delta=timedelta(days=7),
+    )
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+        "expires_in": settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+    }
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:

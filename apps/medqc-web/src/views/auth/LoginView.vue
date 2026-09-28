@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { nextTick, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { useAuthStore } from '@/stores/auth'
@@ -17,6 +17,7 @@ import {
   UpOutlined,
 } from '@ant-design/icons-vue'
 import LoginForm from '@/components/auth/LoginForm.vue'
+import QrLoginPanel from '@/components/auth/QrLoginPanel.vue'
 
 // 路由和状态管理
 const router = useRouter()
@@ -25,6 +26,18 @@ const authStore = useAuthStore()
 // 页面状态
 const loading = ref(false)
 const showDemoAccounts = ref(false)
+const loginMode = ref<'password' | 'qr'>('password')
+
+const navigateAfterLogin = async () => {
+  const rawRedirect = router.currentRoute.value.query.redirect
+  const { target, redirectDenied } = resolveLoginLanding(
+    router,
+    authStore.userRoles ?? [],
+    typeof rawRedirect === 'string' ? rawRedirect : null,
+  )
+  if (redirectDenied) message.warning(ROUTE_ACCESS_DENIED_MESSAGE)
+  await router.push(target)
+}
 
 // 切换演示账号显示状态
 const toggleDemoAccounts = () => {
@@ -34,6 +47,10 @@ const toggleDemoAccounts = () => {
 // 处理登录
 const handleLogin = async (loginData: LoginRequest) => {
   try {
+    if (loginMode.value === 'qr') {
+      loginMode.value = 'password'
+      await nextTick()
+    }
     loading.value = true
 
     // 确保role是字符串而不是枚举
@@ -50,15 +67,7 @@ const handleLogin = async (loginData: LoginRequest) => {
     if (result.success) {
       message.success('登录成功')
       console.log('✅ 登录成功，准备跳转到dashboard')
-      // redirect 可访问则去 redirect，否则按角色默认落地；redirect 无权访问时提示
-      const rawRedirect = router.currentRoute.value.query.redirect
-      const { target, redirectDenied } = resolveLoginLanding(
-        router,
-        authStore.userRoles ?? [],
-        typeof rawRedirect === 'string' ? rawRedirect : null,
-      )
-      if (redirectDenied) message.warning(ROUTE_ACCESS_DENIED_MESSAGE)
-      await router.push(target)
+      await navigateAfterLogin()
     } else {
       console.error('❌ 登录失败:', result.error)
       message.error(result.error || '登录失败')
@@ -69,6 +78,11 @@ const handleLogin = async (loginData: LoginRequest) => {
   } finally {
     loading.value = false
   }
+}
+
+const handleQrAuthenticated = async () => {
+  message.success('登录成功')
+  await navigateAfterLogin()
 }
 
 const handleForgotPassword = () => {
@@ -295,13 +309,20 @@ const handleDemoLogin = async (role: 'admin' | 'qc_manager' | 'doctor') => {
                   </p>
                 </div>
 
+                <div class="login-method-switch" role="tablist" aria-label="登录方式">
+                  <button type="button" :class="{ active: loginMode === 'password' }" @click="loginMode = 'password'">密码登录</button>
+                  <button type="button" :class="{ active: loginMode === 'qr' }" @click="loginMode = 'qr'">扫码登录</button>
+                </div>
+
                 <!-- 登录表单 -->
                 <LoginForm
+                  v-if="loginMode === 'password'"
                   :loading="loading"
                   class="login-form-dark"
                   @login="handleLogin"
                   @forgot-password="handleForgotPassword"
                 />
+                <QrLoginPanel v-else tone="dark" @authenticated="handleQrAuthenticated" />
 
                 <!-- 演示账号折叠 -->
                 <div class="mt-8 pt-6 border-t border-white/5">
@@ -380,6 +401,9 @@ const handleDemoLogin = async (role: 'admin' | 'qc_manager' | 'doctor') => {
 </template>
 
 <style scoped>
+.login-method-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 22px; padding: 4px; border-radius: 8px; background: rgba(255,255,255,.06); }
+.login-method-switch button { min-height: 34px; border: 0; border-radius: 6px; background: transparent; color: #94a3b8; cursor: pointer; }
+.login-method-switch button.active { background: rgba(255,255,255,.12); color: #fff; }
 /* 基础动画 */
 @keyframes fade-in-up {
   from {

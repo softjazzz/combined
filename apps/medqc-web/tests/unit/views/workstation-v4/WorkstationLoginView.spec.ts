@@ -127,6 +127,13 @@ function mountView() {
     global: {
       stubs: {
         WorkstationLoginForm: WorkstationLoginFormStub,
+        QrLoginPanel: defineComponent({
+          name: 'QrLoginPanel',
+          emits: ['authenticated'],
+          setup(_, { emit }) {
+            return () => h('button', { class: 'qr-authenticated', onClick: () => emit('authenticated') }, '扫码成功')
+          },
+        }),
       },
     },
   })
@@ -138,6 +145,26 @@ describe('WorkstationLoginView', () => {
     Object.keys(routeQuery).forEach((key) => delete routeQuery[key])
     signIn.mockResolvedValue({ success: true })
     authState.userRoles = ['admin']
+  })
+
+  it('扫码登录沿用工作台角色落地', async () => {
+    const wrapper = mountView()
+    const modeButtons = wrapper.findAll('.login-method-switch button')
+    await modeButtons[1].trigger('click')
+    await wrapper.get('.qr-authenticated').trigger('click')
+    await flushPromises()
+    expect(routerReplace).toHaveBeenCalledWith('/workstation-v5')
+  })
+
+  it('扫码模式点击演示账号先卸载扫码会话再执行密码登录', async () => {
+    const wrapper = mountView()
+    await wrapper.findAll('.login-method-switch button')[1].trigger('click')
+    const demoButton = wrapper.findAll('button').find((button) => button.text().includes('DEMO'))
+    expect(demoButton).toBeDefined()
+    await demoButton!.trigger('click')
+    await flushPromises()
+    expect(wrapper.findComponent({ name: 'QrLoginPanel' }).exists()).toBe(false)
+    expect(signIn).toHaveBeenCalledWith('admin@medqc.com', 'admin888', 'admin')
   })
 
   it('演示账号登录后进入工作台首页', async () => {

@@ -14,6 +14,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     Float,
+    ForeignKey,
     ForeignKeyConstraint,
     Index,
     Integer,
@@ -54,6 +55,56 @@ class SysUser(Base):
         Index("ix_sys_users_email", "email"),
         Index("ix_sys_users_phone", "phone"),
         Index("ix_sys_users_role", "role"),
+    )
+
+
+class SysQrLoginSession(Base):
+    """一次性扫码登录会话；浏览器密钥与确认码仅保存 HMAC。"""
+
+    __tablename__ = "sys_qr_login_sessions"
+
+    id = Column(String(36), primary_key=True)
+    browser_secret_hash = Column(String(64), nullable=False)
+    verification_code_hash = Column(String(64), nullable=False)
+    status = Column(String(16), nullable=False, default="pending")
+    failed_attempts = Column(Integer, nullable=False, default=0)
+    approved_user_id = Column(
+        String(36),
+        ForeignKey("sys_users.id", name="fk_sys_qr_login_sessions_user", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=False)
+    approved_at = Column(DateTime, nullable=True)
+    consumed_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "browser_secret_hash", name="uq_sys_qr_login_sessions_browser_secret_hash",
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'approved', 'rejected', 'cancelled', 'expired', 'consumed')",
+            name="ck_sys_qr_login_sessions_status",
+        ),
+        CheckConstraint(
+            "failed_attempts >= 0 AND failed_attempts <= 5",
+            name="ck_sys_qr_login_sessions_failed_attempts",
+        ),
+        CheckConstraint(
+            "expires_at > created_at",
+            name="ck_sys_qr_login_sessions_expiry",
+        ),
+        CheckConstraint(
+            "(status NOT IN ('approved', 'consumed')) OR "
+            "(approved_user_id IS NOT NULL AND approved_at IS NOT NULL)",
+            name="ck_sys_qr_login_sessions_approval",
+        ),
+        CheckConstraint(
+            "(status <> 'consumed') OR consumed_at IS NOT NULL",
+            name="ck_sys_qr_login_sessions_consumed",
+        ),
+        Index("ix_sys_qr_login_sessions_status_expiry", "status", "expires_at"),
+        Index("ix_sys_qr_login_sessions_user", "approved_user_id"),
     )
 
 

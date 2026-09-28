@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import '@/styles/source-han-sans-sc.css'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { AuditOutlined, LockOutlined } from '@ant-design/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import WorkstationLoginForm from '@/views/workstation-v4/components/WorkstationLoginForm.vue'
+import QrLoginPanel from '@/components/auth/QrLoginPanel.vue'
 import type { LoginRequest } from '@/types/auth'
 import { ROUTE_ACCESS_DENIED_MESSAGE, resolveLoginLanding } from '@/utils/routeAccess'
 
@@ -14,6 +15,7 @@ const route = useRoute()
 const authStore = useAuthStore()
 const loading = ref(false)
 const showDemoAccounts = ref(false)
+const loginMode = ref<'password' | 'qr'>('password')
 
 // 工作台登录页只接受工作台内的 redirect；其余视为未指定，交由角色默认落地
 const redirectCandidate = computed<string | null>(() => {
@@ -58,6 +60,10 @@ const navigateAfterLogin = async () => {
 
 const handleLogin = async (loginData: LoginRequest) => {
   try {
+    if (loginMode.value === 'qr') {
+      loginMode.value = 'password'
+      await nextTick()
+    }
     loading.value = true
     // 演示账号映射到后端真实管理员账号
     const account = loginData.account?.trim() || ''
@@ -88,6 +94,11 @@ const handleLogin = async (loginData: LoginRequest) => {
 
 const handleForgotPassword = () => {
   router.push('/auth/forgot-password')
+}
+
+const handleQrAuthenticated = async () => {
+  message.success('登录成功')
+  await navigateAfterLogin()
 }
 
 const handleDemoLogin = async (account: (typeof demoAccounts)[number]) => {
@@ -162,11 +173,17 @@ const handleDemoLogin = async (account: (typeof demoAccounts)[number]) => {
 
             <!-- 登录表单区 -->
             <div class="mt-4">
+              <div class="login-method-switch" role="tablist" aria-label="登录方式">
+                <button type="button" :class="{ active: loginMode === 'password' }" @click="loginMode = 'password'">密码登录</button>
+                <button type="button" :class="{ active: loginMode === 'qr' }" @click="loginMode = 'qr'">扫码登录</button>
+              </div>
               <WorkstationLoginForm
+                v-if="loginMode === 'password'"
                 :loading="loading"
                 @login="handleLogin"
                 @forgot-password="handleForgotPassword"
               />
+              <QrLoginPanel v-else @authenticated="handleQrAuthenticated" />
             </div>
 
             <!-- 演示账号区块 (内嵌卡片风格) -->
@@ -270,6 +287,9 @@ const handleDemoLogin = async (account: (typeof demoAccounts)[number]) => {
 </template>
 
 <style scoped>
+.login-method-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 18px; padding: 4px; border-radius: 8px; background: rgba(0,0,0,.045); }
+.login-method-switch button { min-height: 34px; border: 0; border-radius: 6px; background: transparent; color: rgba(29,29,31,.60); cursor: pointer; }
+.login-method-switch button.active { background: #fff; color: #007aff; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
 .login-brand-header {
   padding-top: 8px;
   padding-bottom: 32px;

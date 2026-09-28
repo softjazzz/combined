@@ -59,7 +59,17 @@ const LOGIN_TIMEOUT = 10000 // 登录请求10秒超时
 const API_DEBUG =
   import.meta.env.DEV && String(import.meta.env.VITE_API_DEBUG || '').toLowerCase() === 'true'
 const DEBUG_REDACTED = '[REDACTED]'
-const DEBUG_SENSITIVE_KEYS = new Set(['activation_code'])
+const DEBUG_SENSITIVE_KEYS = new Set([
+  'activation_code',
+  'authorization',
+  'password',
+  'current_password',
+  'new_password',
+  'access_token',
+  'refresh_token',
+  'browser_secret',
+  'verification_code',
+])
 
 function redactDebugSensitiveValues(value: unknown, seen = new WeakSet<object>()): unknown {
   if (Array.isArray(value)) {
@@ -74,7 +84,9 @@ function redactDebugSensitiveValues(value: unknown, seen = new WeakSet<object>()
   const redacted = Object.fromEntries(
     Object.entries(value as Record<string, unknown>).map(([key, item]) => [
       key,
-      DEBUG_SENSITIVE_KEYS.has(key) ? DEBUG_REDACTED : redactDebugSensitiveValues(item, seen),
+      DEBUG_SENSITIVE_KEYS.has(key.toLowerCase())
+        ? DEBUG_REDACTED
+        : redactDebugSensitiveValues(item, seen),
     ]),
   )
   seen.delete(value)
@@ -147,7 +159,7 @@ class TokenManager {
 apiClient.interceptors.request.use(
   (config: AxiosRequestConfig) => {
     const token = TokenManager.getToken()
-    if (token && !TokenManager.isTokenExpired(token)) {
+    if (token && !TokenManager.isTokenExpired(token) && !config.headers?.Authorization) {
       config.headers = config.headers || {}
       config.headers.Authorization = `Bearer ${token}`
     }
@@ -160,16 +172,16 @@ apiClient.interceptors.request.use(
     if (API_DEBUG) {
       console.log(`🚀 API Request: ${config.method?.toUpperCase()} ${config.url}`, {
         traceId,
-        headers: config.headers,
+        headers: redactDebugSensitiveValues(config.headers),
         data: redactDebugSensitiveValues(config.data),
-        params: config.params,
+        params: redactDebugSensitiveValues(config.params),
       })
     }
 
     return config
   },
   (error: unknown) => {
-    console.error('❌ Request interceptor error:', error)
+    console.error('❌ API请求准备失败')
     return Promise.reject(error)
   },
 )
@@ -182,7 +194,7 @@ apiClient.interceptors.response.use(
         `✅ API Response: ${response.config.method?.toUpperCase()} ${response.config.url}`,
         {
           status: response.status,
-          data: response.data,
+          data: redactDebugSensitiveValues(response.data),
         },
       )
     }
@@ -200,16 +212,17 @@ apiClient.interceptors.response.use(
       !shouldSuppressExpected404(requestUrl, responseStatus) &&
       (process.env.NODE_ENV === 'development' || responseStatus !== 401)
     ) {
+      const isAuthRequest = typeof requestUrl === 'string' && requestUrl.includes('/api/v1/auth/')
       console.error(`❌ API Error: ${error.config?.method?.toUpperCase()} ${requestUrl}`, {
         status: responseStatus,
-        data: error.response?.data,
+        data: isAuthRequest ? DEBUG_REDACTED : redactDebugSensitiveValues(error.response?.data),
         message: error.message,
         traceId,
       })
     }
 
     // Token过期处理（带单航刷新，避免并发冲突）
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (error.response?.status === 401 && !originalRequest._retry && !originalRequest._skipAuthRefresh) {
       // 避免对登录/刷新接口自身进行循环处理
       const url: string = originalRequest?.url || ''
       if (url.includes('/api/v1/auth/login') || url.includes('/api/v1/auth/refresh')) {
@@ -445,15 +458,7 @@ export class ApiService {
         ...credentials,
         account,
       }
-      console.log('🔐 ApiService.login 发送请求:', {
-        account,
-        role: credentials.role,
-        roleType: typeof credentials.role,
-        hasPassword: Boolean(credentials.password),
-      })
-
       const response = await apiClient.post<LoginResponse>('/api/v1/auth/login', payload)
-      console.log('📡 ApiService.login 收到响应:', response.data)
 
       // 保存token
       if (response.data.access_token) {
@@ -513,6 +518,19 @@ export class ApiService {
         error: error.response?.data?.message || '获取用户信息失败',
         data: null,
       }
+    }
+  }
+
+  /** 使用候选令牌只读核实用户，不安装令牌，也不触发现有会话刷新。 */
+  static async getCurrentUserWithAccessToken(accessToken: string): Promise<ApiResponse<User>> {
+    try {
+      const response = await apiClient.get<User>('/api/v1/auth/me', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        _skipAuthRefresh: true,
+      })
+      return { success: true, data: response.data }
+    } catch {
+      return { success: false, error: '无法确认扫码登录用户', data: null }
     }
   }
 

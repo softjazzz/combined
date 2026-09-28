@@ -59,7 +59,15 @@ const LoginFormStub = defineComponent({
 function mountView() {
   return shallowMount(LoginView, {
     global: {
-      stubs: { LoginForm: LoginFormStub, MedicineBoxOutlined: true, BarChartOutlined: true },
+      stubs: {
+        LoginForm: LoginFormStub,
+        QrLoginPanel: defineComponent({
+          name: 'QrLoginPanel', emits: ['authenticated'],
+          setup(_, { emit }) { return () => h('button', { class: 'qr-authenticated', onClick: () => emit('authenticated') }, '扫码成功') },
+        }),
+        MedicineBoxOutlined: true,
+        BarChartOutlined: true,
+      },
     },
   })
 }
@@ -76,6 +84,26 @@ describe('LoginView 登录落地', () => {
     Object.keys(routeQuery).forEach((key) => delete routeQuery[key])
     signIn.mockResolvedValue({ success: true })
     vi.spyOn(console, 'log').mockImplementation(() => undefined)
+  })
+
+  it('扫码登录沿用相同的角色落地', async () => {
+    authState.userRoles = ['qc_staff']
+    const wrapper = mountView()
+    await wrapper.findAll('.login-method-switch button')[1].trigger('click')
+    await wrapper.get('.qr-authenticated').trigger('click')
+    await flushPromises()
+    expect(routerPush).toHaveBeenCalledWith('/dashboard/tasks/my?tab=received')
+  })
+
+  it('扫码模式点击演示账号先卸载扫码会话再执行密码登录', async () => {
+    const wrapper = mountView()
+    await wrapper.findAll('.login-method-switch button')[1].trigger('click')
+    const demoButton = wrapper.findAll('button').find((button) => button.text().includes('系统管理员'))
+    expect(demoButton).toBeDefined()
+    await demoButton!.trigger('click')
+    await flushPromises()
+    expect(wrapper.findComponent({ name: 'QrLoginPanel' }).exists()).toBe(false)
+    expect(signIn).toHaveBeenCalledWith('admin@medqc.com', 'admin888', 'admin')
   })
 
   it('管理员无 redirect 时进入项目现有默认首页', async () => {

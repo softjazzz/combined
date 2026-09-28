@@ -63,6 +63,15 @@ const routes: RouteRecordRaw[] = [
         },
       },
       {
+        path: 'qr-confirm',
+        name: 'QrLoginConfirm',
+        component: () => import('@/views/auth/QrLoginConfirmView.vue'),
+        meta: {
+          requiresAuth: true,
+          title: '确认电脑登录',
+        },
+      },
+      {
         path: 'profile',
         name: 'Profile',
         component: () => import('@/views/auth/ProfileView.vue'),

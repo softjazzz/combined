@@ -2,8 +2,9 @@
 import { defineStore } from 'pinia'
 import { ref, computed, readonly } from 'vue'
 import { ApiService } from '@/services/apiService'
-import type { LoginRequest, RegisterRequest } from '@/types'
+import type { LoginRequest, LoginResponse, RegisterRequest } from '@/types'
 import { message } from 'ant-design-vue'
+import { setAccessToken, setRefreshToken } from '@/utils/auth-token'
 
 // 简化的用户类型定义
 interface User {
@@ -114,9 +115,7 @@ export const useAuthStore = defineStore('auth', () => {
         // role 参数暂时注释掉
       }
 
-      console.warn('🔐 Auth Store 登录请求:', loginRequest)
       const response = await ApiService.login(loginRequest)
-      console.warn('📡 API 响应:', response)
 
       if (response.success && response.data) {
         // 登录成功后，使用token拉取当前用户信息
@@ -164,6 +163,43 @@ export const useAuthStore = defineStore('auth', () => {
         success: false,
         error: '登录过程中发生错误',
       }
+    } finally {
+      loading.value = false
+    }
+  }
+
+  // 扫码兑换只安装服务端签发的令牌；用户身份必须由 /auth/me 再次确认。
+  const completeQrLogin = async (
+    tokens: Pick<LoginResponse, 'access_token' | 'refresh_token' | 'token_type' | 'expires_in'>,
+    isCurrent: () => boolean = () => true,
+  ) => {
+    try {
+      loading.value = true
+      if (!isCurrent()) return { success: false, error: '扫码登录会话已失效' }
+      const me = await ApiService.getCurrentUserWithAccessToken(tokens.access_token)
+      if (!isCurrent()) return { success: false, error: '扫码登录会话已失效' }
+      const verifiedUser = me.success ? me.data : null
+      if (
+        !verifiedUser
+        || typeof verifiedUser.id !== 'string'
+        || !verifiedUser.id.trim()
+        || typeof verifiedUser.email !== 'string'
+        || !verifiedUser.email.trim()
+        || !Array.isArray(verifiedUser.roles)
+        || verifiedUser.roles.length < 1
+        || !verifiedUser.roles.every((role) => typeof role === 'string' && Boolean(role.trim()))
+      ) {
+        return { success: false, error: '无法确认扫码登录用户，请重新扫码' }
+      }
+      setAccessToken(tokens.access_token)
+      if (tokens.refresh_token) setRefreshToken(tokens.refresh_token)
+      user.value = verifiedUser
+      localStorage.setItem('auth_user', JSON.stringify(verifiedUser))
+      localStorage.setItem('medqc_user', JSON.stringify(verifiedUser))
+      localStorage.setItem('medqc_authenticated', 'true')
+      return { success: true, data: verifiedUser }
+    } catch {
+      return { success: false, error: '无法确认扫码登录用户，请重新扫码' }
     } finally {
       loading.value = false
     }
@@ -298,6 +334,7 @@ export const useAuthStore = defineStore('auth', () => {
     // 方法
     initialize,
     signIn,
+    completeQrLogin,
     signUp,
     signOut,
     resetPassword,

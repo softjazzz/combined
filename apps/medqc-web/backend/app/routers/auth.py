@@ -1,10 +1,18 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 import logging
 from fastapi import APIRouter, Depends, HTTPException, status, Form, Request
 from pydantic import EmailStr
+from starlette.concurrency import run_in_threadpool
 
 from ..core.response import success_response, get_trace_id
-from ..schemas.auth import UserCreate, UserUpdate, UserResponse, LoginRequest, RefreshTokenRequest
+from ..schemas.auth import (
+    LoginRequest,
+    QrBrowserSecretRequest,
+    QrConfirmRequest,
+    RefreshTokenRequest,
+    UserCreate,
+    UserUpdate,
+)
 from ..core.settings import get_settings
 from ..core.security import (
     create_access_token,
@@ -12,9 +20,19 @@ from ..core.security import (
     consume_password_reset_jti,
     get_current_user,
     get_password_hash,
-    resolve_user_by_subject,
+    issue_login_token_pair,
     verify_password_reset_token,
     verify_password,
+)
+from ..core.rate_limit import enforce_rate_limit
+from ..services.qr_login_service import (
+    QrLoginCodeMismatch,
+    QrLoginConflict,
+    QrLoginExpired,
+    QrLoginNotFound,
+    QrLoginUnavailable,
+    QrLoginUserInactive,
+    default_qr_login_service,
 )
 from ..services.auth_store import (
     create_user,
@@ -79,7 +97,6 @@ async def login_options(request: Request):
 
 @router.post("/login")
 async def login(request: Request, login_data: LoginRequest):
-    settings = get_settings()
     account = _normalize_account(login_data.account)
     user = _find_user_by_account(account)
     if not user or not verify_password(login_data.password, user["password_hash"]):
@@ -90,27 +107,105 @@ async def login(request: Request, login_data: LoginRequest):
     if updated_user is not None:
         user = updated_user
 
-    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    # 兼容迁移入口：当前仍保留 sub=email，后续可切换到 sub=user_id。
-    token_sub = str(user.get("email") or "")
-    access_token = create_access_token(
-        data={"sub": token_sub, "uid": user.get("id")},
-        expires_delta=access_token_expires,
-    )
-
-    refresh_token_expires = timedelta(days=7)
-    refresh_token = create_access_token(
-        data={"sub": token_sub, "uid": user.get("id"), "type": "refresh"},
-        expires_delta=refresh_token_expires,
-    )
-
     # 审计日志（不记录明文凭据）
     logger.info("auth.login.success account=%s email=%s", account, user["email"])
     return _auth_shell(
         request,
-        _login_payload(access_token=access_token, refresh_token=refresh_token),
+        issue_login_token_pair(user),
         message="登录成功",
     )
+
+
+def _raise_qr_error(exc: Exception) -> None:
+    if isinstance(exc, QrLoginNotFound):
+        raise HTTPException(status_code=404, detail="扫码会话不存在") from exc
+    if isinstance(exc, QrLoginCodeMismatch):
+        raise HTTPException(
+            status_code=422,
+            detail={"message": "确认码错误", "remaining_attempts": exc.remaining_attempts},
+        ) from exc
+    if isinstance(exc, QrLoginUserInactive):
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    if isinstance(exc, (QrLoginExpired, QrLoginConflict)):
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if isinstance(exc, QrLoginUnavailable):
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    raise HTTPException(status_code=503, detail="扫码登录结果未确认，请返回登录页重新扫码") from exc
+
+
+async def _run_qr(callable_, *args):
+    try:
+        return await run_in_threadpool(callable_, *args)
+    except Exception as exc:
+        _raise_qr_error(exc)
+
+
+@router.post("/qr/sessions")
+async def create_qr_session(request: Request):
+    enforce_rate_limit(request, bucket="auth_qr_create", max_requests=10, window_seconds=60)
+    payload = await _run_qr(default_qr_login_service.create)
+    return _auth_shell(request, payload)
+
+
+@router.post("/qr/sessions/{session_id}/status")
+async def get_qr_status(request: Request, session_id: str, body: QrBrowserSecretRequest):
+    enforce_rate_limit(request, bucket="auth_qr_status", max_requests=120, window_seconds=60)
+    payload = await _run_qr(default_qr_login_service.status, session_id, body.browser_secret)
+    return _auth_shell(request, payload)
+
+
+@router.get("/qr/sessions/{session_id}/confirmation")
+async def get_qr_confirmation(
+    request: Request,
+    session_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    payload = await _run_qr(default_qr_login_service.confirmation, session_id)
+    return _auth_shell(request, payload)
+
+
+@router.post("/qr/sessions/{session_id}/confirm")
+async def confirm_qr_session(
+    request: Request,
+    session_id: str,
+    body: QrConfirmRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    enforce_rate_limit(request, bucket="auth_qr_confirm", max_requests=10, window_seconds=60)
+    payload = await _run_qr(
+        default_qr_login_service.confirm,
+        session_id,
+        body.verification_code,
+        str(current_user.get("id") or ""),
+    )
+    return _auth_shell(request, payload)
+
+
+@router.post("/qr/sessions/{session_id}/reject")
+async def reject_qr_session(
+    request: Request,
+    session_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    enforce_rate_limit(request, bucket="auth_qr_reject", max_requests=30, window_seconds=60)
+    payload = await _run_qr(
+        default_qr_login_service.reject, session_id, str(current_user.get("id") or "")
+    )
+    return _auth_shell(request, payload)
+
+
+@router.post("/qr/sessions/{session_id}/cancel")
+async def cancel_qr_session(request: Request, session_id: str, body: QrBrowserSecretRequest):
+    enforce_rate_limit(request, bucket="auth_qr_cancel", max_requests=30, window_seconds=60)
+    payload = await _run_qr(default_qr_login_service.cancel, session_id, body.browser_secret)
+    return _auth_shell(request, payload)
+
+
+@router.post("/qr/sessions/{session_id}/exchange")
+async def exchange_qr_session(request: Request, session_id: str, body: QrBrowserSecretRequest):
+    enforce_rate_limit(request, bucket="auth_qr_exchange", max_requests=30, window_seconds=60)
+    payload = await _run_qr(default_qr_login_service.exchange, session_id, body.browser_secret)
+    return _auth_shell(request, payload, message="登录成功")
 
 
 @router.post("/register")
