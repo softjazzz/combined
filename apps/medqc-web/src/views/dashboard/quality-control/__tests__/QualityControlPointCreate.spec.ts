@@ -72,6 +72,10 @@ function render() {
         'a-breadcrumb': { template: '<nav><slot /></nav>' },
         'a-breadcrumb-item': { template: '<span><slot /></span>' },
         'a-alert': { props: ['message', 'description'], template: '<div class="alert">{{ message }} {{ description }}</div>' },
+        FixedTestValidationPanel: {
+          props: ['draftId', 'draftUpdatedAt', 'actorKey', 'enabled'],
+          template: '<div data-testid="fixed-validation-panel" :data-enabled="String(enabled)" />',
+        },
       },
     },
   })
@@ -397,5 +401,20 @@ describe('QualityControlPointCreate', () => {
     expect(wrapper.get('[data-testid="save-draft-basic-info"]').attributes('disabled')).toBeDefined()
     await wrapper.get('form').trigger('submit')
     expect(mocks.create).not.toHaveBeenCalled()
+  })
+
+  it('仅已保存的基础信息与条件允许进入固定病例验证', async () => {
+    mocks.conditionGet.mockResolvedValue({
+      success: true,
+      data: { ...conditionDraft, visual_condition: emptyVisualTree },
+    })
+    const wrapper = render()
+    await flushPromises()
+    await wrapper.get('[data-testid="open-draft-draft-1"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="fixed-validation-panel"]').attributes('data-enabled')).toBe('true')
+
+    await wrapper.get('[data-testid="draft-name"]').setValue('屏幕上未保存的新名称')
+    expect(wrapper.get('[data-testid="fixed-validation-panel"]').attributes('data-enabled')).toBe('false')
   })
 })

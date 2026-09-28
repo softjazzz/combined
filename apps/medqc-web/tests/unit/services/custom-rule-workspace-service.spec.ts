@@ -17,9 +17,80 @@ import {
   getDraftBasicInfoOptions,
   getDraftCondition,
   getDraftConditionOptions,
+  getFixedTestValidation,
+  publishValidatedWorkspaceDraft,
+  runFixedTestValidation,
   updateDraftCondition,
   updateDraftBasicInfo,
 } from '@/services/custom-rule-workspace-service'
+
+describe('custom rule fixed test validation service', () => {
+  const proof = {
+    schema_version: 'fixed_test_records_v1', validation_id: 'validation-1', draft_id: 'draft-1',
+    validated_revision: 'rev-1', proof_revision: 'proof-1', created_at: '2026-09-28T12:00:00Z',
+    item_count: 1, success_count: 1, failed_count: 0, issue_records: 1, compliant_records: 0,
+    unknown_count: 0, technical_error_count: 0,
+    selected_items: [{ item_id: 'item-1', item_updated_at: 'item-rev-1', record_ref: { institute_id: 'HOSP-A', patient_id: 'PAT-A', visit_id: 'VISIT-A' } }],
+    results: [{ item_id: 'item-1', item_updated_at: 'item-rev-1', record_ref: { institute_id: 'HOSP-A', patient_id: 'PAT-A', visit_id: 'VISIT-A' }, status: 'non_compliant', issue_count: 1, finding: { description: '命中条件', evidence: '可信字段' }, condition_trace: ['condition-1=true'] }],
+    failures: [],
+  }
+  const state = {
+    draft_id: 'draft-1', draft_updated_at: '2026-09-28T12:00:00Z', validation: proof,
+    draft_status: 'draft', published_rule_id: null, publish_ready: true, unavailable_reason: null,
+  }
+
+  beforeEach(() => vi.clearAllMocks())
+
+  it('严格读取版本化测试证明并拒绝未知状态', async () => {
+    mocks.requestRaw.mockResolvedValueOnce({ data: { success: true, data: state } })
+    expect(await getFixedTestValidation('draft-1')).toEqual({ success: true, data: state })
+    mocks.requestRaw.mockResolvedValueOnce({ data: { success: true, data: {
+      ...state, validation: { ...proof, results: [{ ...proof.results[0], status: 'maybe' }] },
+    } } })
+    expect(await getFixedTestValidation('draft-1')).toMatchObject({ success: false })
+  })
+
+  it('已发布草稿回读状态可用于核对未知发布回执', async () => {
+    const published = {
+      ...state, draft_status: 'published', published_rule_id: 'rule-1',
+      publish_ready: false, unavailable_reason: 'draft_changed',
+    }
+    mocks.requestRaw.mockResolvedValueOnce({ data: { success: true, data: published } })
+    expect(await getFixedTestValidation('draft-1')).toEqual({ success: true, data: published })
+  })
+
+  it('测试提交冻结草稿和每条固定池版本', async () => {
+    mocks.requestRaw.mockResolvedValueOnce({ data: { success: true, data: state } })
+    const payload = {
+      expected_updated_at: 'draft-rev-1',
+      items: [{ item_id: 'item-1', expected_updated_at: 'item-rev-1' }],
+    }
+    expect(await runFixedTestValidation('draft-1', payload)).toMatchObject({ success: true })
+    expect(mocks.requestRaw).toHaveBeenCalledWith({
+      method: 'POST', url: '/api/v1/custom-qc/workspace/drafts/draft-1/test-validations', data: payload,
+    })
+  })
+
+  it.each([500, undefined])('测试HTTP %s或断网标记结果未知', async (status) => {
+    mocks.requestRaw.mockRejectedValue(status ? { response: { status } } : new Error('timeout'))
+    expect(await runFixedTestValidation('draft-1', {
+      expected_updated_at: 'draft-rev-1', items: [{ item_id: 'item-1', expected_updated_at: 'item-rev-1' }],
+    })).toMatchObject({ success: false, resultUnknown: true })
+  })
+
+  it('发布精确携带当前草稿和证明版本', async () => {
+    mocks.requestRaw.mockResolvedValueOnce({ data: { success: true, data: {
+      draft_id: 'draft-1', rule_code: 'CUSTOM-001', published_rule_id: 'rule-1', status: 'published',
+    } } })
+    expect(await publishValidatedWorkspaceDraft('draft-1', {
+      expected_updated_at: 'draft-rev-1', validation_id: 'validation-1',
+    })).toMatchObject({ success: true })
+    expect(mocks.requestRaw).toHaveBeenCalledWith({
+      method: 'POST', url: '/api/v1/custom-qc/workspace/drafts/draft-1/publish',
+      data: { expected_updated_at: 'draft-rev-1', validation_id: 'validation-1' },
+    })
+  })
+})
 
 describe('custom rule workspace batch service', () => {
   beforeEach(() => {

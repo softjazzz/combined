@@ -91,6 +91,36 @@ def _visual_condition():
     }
 
 
+def _save_fixed_validation_proof(service, *, draft_id: str, created_by: str = "manager-1"):
+    draft = service.get_draft(draft_id=draft_id, created_by=created_by)
+    item_updated_at = datetime(2026, 9, 28, 8, tzinfo=timezone.utc).isoformat()
+    record_ref = {"institute_id": "CUSTOMER_TEST", "patient_id": "P1", "visit_id": "TEST-V1"}
+    item = {
+        "item_id": "item-1", "item_updated_at": item_updated_at, "record_ref": record_ref,
+    }
+    return service.save_fixed_test_validation_summary(
+        draft_id=draft_id,
+        created_by=created_by,
+        expected_updated_at=draft["updated_at"],
+        summary={
+            "schema_version": "fixed_test_records_v1",
+            "validation_id": "validation-1",
+            "draft_id": draft_id,
+            "validated_revision": draft["updated_at"].replace(tzinfo=timezone.utc).isoformat(),
+            "item_count": 1,
+            "success_count": 1,
+            "failed_count": 0,
+            "issue_records": 0,
+            "compliant_records": 1,
+            "unknown_count": 0,
+            "technical_error_count": 0,
+            "selected_items": [item],
+            "results": [{**item, "status": "compliant", "issue_count": 0}],
+            "failures": [],
+        },
+    )
+
+
 def test_visual_condition_get_is_nullable_then_patch_uses_cas_and_clears_test_proof(workspace):
     service, sessions, drafts = workspace
     created = service.create_basic_info_draft(created_by="manager-1", payload=_basic_payload())
@@ -178,13 +208,7 @@ def test_publish_preserves_visual_condition_for_workspace_execution(workspace, m
         draft_id=created["id"], created_by="manager-1",
         visual_condition=_visual_condition(), expected_updated_at=created["updated_at"],
     )
-    with sessions.begin() as session:
-        session.execute(
-            sa.update(drafts).where(drafts.c.id == created["id"]).values(
-                last_test_summary='{"success_count":1}',
-                updated_at=configured["updated_at"],
-            )
-        )
+    _save_fixed_validation_proof(service, draft_id=configured["id"])
     published = service.publish_draft(draft_id=created["id"], created_by="manager-1")
     assert published["status"] == "published"
     with sessions() as session:
@@ -292,7 +316,7 @@ def test_patch_uses_cas_rederives_document_domain_and_clears_test_proof(workspac
         assert logic["execution_domain"] == "course"
         assert logic["unrelated"] == {"keep": True}
         assert row["last_test_summary"] is None
-    with pytest.raises(ValueError, match="至少完成一次成功测试"):
+    with pytest.raises(ValueError, match="固定测试病历验证"):
         service.publish_draft(draft_id=created["id"], created_by="manager-1")
     with pytest.raises(DraftBasicInfoConflict):
         service.update_basic_info_draft(

@@ -5026,6 +5026,11 @@ class CustomQCSamplePoolService:
         return {
             "source_item_id": _safe_text(row.get("id")),
             "source_updated_at": row.get("updated_at"),
+            "record_ref": {
+                "institute_id": institute_id,
+                "patient_id": patient_id,
+                "visit_id": visit_id,
+            },
             "case_title": _safe_text(raw_payload.get("case_title"), "测试病历"),
             "basic_info": {
                 "patient_name": patient_name,

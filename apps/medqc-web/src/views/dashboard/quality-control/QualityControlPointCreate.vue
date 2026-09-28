@@ -66,7 +66,7 @@
             <button class="primary-button" type="submit" data-testid="save-draft-basic-info" :disabled="formBusy || resultUnknown || editConflict || documentOptions.length === 0">
               {{ saving ? '正在保存' : editingDraft ? '保存修改' : '保存草稿' }}
             </button>
-            <span class="scope-note">测试验证与发布尚未开放</span>
+            <span class="scope-note">完成条件配置后进行固定病例测试</span>
           </div>
         </form>
       </section>
@@ -89,6 +89,17 @@
         :disabled="conditionSaving || conditionResultUnknown || conditionConflict || formBusy"
         @save="saveCondition"
         @dirty="conditionDirty = $event"
+      />
+      <FixedTestValidationPanel
+        v-if="editingDraft"
+        :key="`${editingDraft.id}-${actorKey}`"
+        :draft-id="editingDraft.id"
+        :draft-updated-at="editingDraft.updated_at"
+        :actor-key="actorKey"
+        :enabled="Boolean(conditionDraft?.visual_condition) && !basicInfoDirty && !conditionDirty && !conditionResultUnknown && !conditionConflict"
+        @published="handlePublished"
+        @refresh-drafts="refreshDrafts"
+        @draft-updated="syncDraftUpdatedAt"
       />
 
       <section class="draft-section" aria-labelledby="recent-drafts-title">
@@ -135,6 +146,7 @@ import {
   updateDraftBasicInfo, updateDraftCondition,
 } from '@/services/custom-rule-workspace-service'
 import VisualConditionEditor from './components/VisualConditionEditor.vue'
+import FixedTestValidationPanel from './components/FixedTestValidationPanel.vue'
 import type {
   CustomRuleDocumentOption, CustomRuleDraft, CustomRuleDraftBasicInfo, CustomRuleDraftBasicInfoInput,
   CustomRuleDraftCondition, VisualConditionOptions, VisualConditionTree,
@@ -190,6 +202,12 @@ const canManage = computed(() => {
   return roles.some((role) => role === 'admin' || role === 'qc_manager')
 })
 const formBusy = computed(() => saving.value || conditionSaving.value || Boolean(detailLoadingId.value) || !canManage.value)
+const basicInfoDirty = computed(() => Boolean(editingDraft.value) && (
+  form.name.trim() !== editingDraft.value?.name
+  || form.category.trim() !== editingDraft.value?.category
+  || form.rule_type.trim() !== editingDraft.value?.rule_type
+  || form.document_type.trim() !== editingDraft.value?.document_type
+))
 
 function displayText(value: unknown) { return typeof value === 'string' && value.trim() ? value : '未知' }
 function isBasicInfoDraft(draft: CustomRuleDraft) {
@@ -409,6 +427,19 @@ function refreshDrafts() {
   void loadDrafts()
   if (optionsError.value) void loadOptions(contextRevision, actorKey.value)
   if (conditionOptionsError.value) void loadConditionOptions(contextRevision, actorKey.value)
+}
+function handlePublished() {
+  clearCondition()
+  clearForm()
+  listPage.value = 1
+  void loadDrafts()
+}
+function syncDraftUpdatedAt(updatedAt: string) {
+  if (!editingDraft.value || !updatedAt || Number.isNaN(Date.parse(updatedAt))) return
+  editingDraft.value = { ...editingDraft.value, updated_at: updatedAt }
+  if (conditionDraft.value?.id === editingDraft.value.id) {
+    conditionDraft.value = { ...conditionDraft.value, updated_at: updatedAt }
+  }
 }
 function resetForActor() {
   contextRevision += 1; detailRevision += 1; listRevision += 1; conditionRevision += 1

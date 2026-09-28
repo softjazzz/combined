@@ -136,6 +136,76 @@ export interface CustomRuleDraftCondition {
   visual_condition: VisualConditionTree | null
 }
 
+export type FixedTestValidationStatus =
+  | 'compliant'
+  | 'non_compliant'
+  | 'ai_suggested_compliant'
+  | 'ai_suggested_non_compliant'
+  | 'data_gap'
+  | 'not_applicable'
+  | 'not_executed'
+  | 'technical_error'
+  | 'uncertain'
+export type FixedTestValidationUnavailableReason =
+  | 'not_tested'
+  | 'draft_changed'
+  | 'validation_incomplete'
+  | 'draft_not_executable'
+
+export interface FixedTestRecordRef {
+  institute_id: string
+  patient_id: string
+  visit_id: string
+}
+
+export interface FixedTestValidationResult {
+  item_id: string
+  item_updated_at: string
+  record_ref: FixedTestRecordRef
+  status: FixedTestValidationStatus
+  issue_count: number
+  finding: { description: string; evidence: string }
+  condition_trace: string[]
+}
+
+export interface FixedTestValidationProof {
+  schema_version: 'fixed_test_records_v1'
+  validation_id: string
+  draft_id: string
+  validated_revision: string
+  proof_revision: string
+  created_at: string
+  item_count: number
+  success_count: number
+  failed_count: number
+  issue_records: number
+  compliant_records: number
+  unknown_count: number
+  technical_error_count: number
+  selected_items: Array<{
+    item_id: string
+    item_updated_at: string
+    record_ref: FixedTestRecordRef
+  }>
+  results: FixedTestValidationResult[]
+  failures: Array<{ item_id: string; code: string; message: string }>
+}
+
+export interface FixedTestValidationState {
+  draft_id: string
+  draft_updated_at: string
+  draft_status: 'draft' | 'published'
+  published_rule_id: string | null
+  validation: FixedTestValidationProof | null
+  publish_ready: boolean
+  unavailable_reason: FixedTestValidationUnavailableReason | null
+}
+
+export interface FixedTestValidationInput {
+  expected_updated_at: string
+  items: Array<{ item_id: string; expected_updated_at: string }>
+}
+
 export interface CustomRuleDraftPayload {
   name: string
   description: string

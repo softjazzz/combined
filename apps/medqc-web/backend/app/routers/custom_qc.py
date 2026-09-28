@@ -25,6 +25,18 @@ from ..services.custom_qc_workspace_service import (
     DraftVisualConditionNotFound,
     draft_basic_info_document_options,
 )
+from ..services.custom_qc_sample_pool_service import (
+    CustomerTestRecordConflictError,
+    CustomerTestRecordNotFoundError,
+    CustomQCSamplePoolService,
+)
+from ..services.draft_test_validation_service import (
+    DraftTestValidationConflict,
+    DraftTestValidationInvalid,
+    DraftTestValidationNotFound,
+    DraftTestValidationResultUnknown,
+    DraftTestValidationService,
+)
 from ..services.visual_condition_service import (
     VisualConditionInvalid,
     visual_condition_options,
@@ -109,6 +121,8 @@ class WorkspaceDraftCreateRequest(BaseModel):
 
 
 class WorkspaceDraftUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     name: Optional[str] = None
     description: Optional[str] = None
     source_requirement: Optional[str] = None
@@ -122,9 +136,6 @@ class WorkspaceDraftUpdateRequest(BaseModel):
     applicable_documents: Optional[List[str]] = None
     examples: Optional[List[Dict[str, Any]]] = None
     check_logic: Optional[Dict[str, Any]] = None
-    last_test_summary: Optional[Dict[str, Any]] = None
-    status: Optional[str] = None
-    published_rule_id: Optional[str] = None
 
 
 DraftBasicName = Annotated[
@@ -155,6 +166,27 @@ class WorkspaceDraftConditionUpdateRequest(BaseModel):
 
     expected_updated_at: datetime
     visual_condition: Dict[str, Any]
+
+
+class DraftValidationItemRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    item_id: str = Field(..., min_length=1, max_length=128)
+    expected_updated_at: datetime
+
+
+class DraftTestValidationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: List[DraftValidationItemRequest] = Field(..., min_length=1, max_length=20)
+    expected_updated_at: datetime
+
+
+class WorkspaceDraftPublishRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_updated_at: datetime
+    validation_id: str = Field(..., min_length=1, max_length=128)
 
 
 class WorkspaceRecordPayload(BaseModel):
@@ -1312,10 +1344,91 @@ async def generate_workspace_draft_prompt(
     )
 
 
+@router.get("/workspace/drafts/{draft_id}/test-validations")
+async def get_workspace_draft_test_validation(
+    request: Request,
+    draft_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
+):
+    service = DraftTestValidationService(
+        workspace=workspace,
+        sample_pool=None,
+        qc_service=None,
+    )
+    try:
+        result = service.get(
+            draft_id=draft_id,
+            created_by=_current_user_id(current_user),
+        )
+    except DraftTestValidationNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return success_response(
+        data=result,
+        message="获取固定测试病历验证结果成功",
+        trace_id=get_trace_id(request),
+    )
+
+
+@router.post("/workspace/drafts/{draft_id}/test-validations")
+async def run_workspace_draft_test_validation(
+    request: Request,
+    draft_id: str,
+    payload: DraftTestValidationRequest,
+    qc_service: SichuanQCService = Depends(get_custom_qc_service),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
+):
+    service = DraftTestValidationService(
+        workspace=workspace,
+        sample_pool=CustomQCSamplePoolService(),
+        qc_service=qc_service,
+    )
+    try:
+        result = await service.run(
+            draft_id=draft_id,
+            created_by=_current_user_id(current_user),
+            items=[item.model_dump() for item in payload.items],
+            expected_updated_at=payload.expected_updated_at,
+        )
+    except (DraftTestValidationNotFound, CustomerTestRecordNotFoundError) as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (DraftTestValidationConflict, CustomerTestRecordConflictError) as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": getattr(exc, "code", "validation_conflict"), "message": str(exc)},
+        ) from exc
+    except DraftTestValidationInvalid as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "validation_invalid", "message": str(exc)},
+        ) from exc
+    except DraftTestValidationResultUnknown as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "validation_result_unknown", "message": str(exc)},
+        ) from exc
+    except Exception as exc:
+        logger.exception("draft fixed test validation unavailable: %s", type(exc).__name__)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "validation_unavailable",
+                "message": "固定测试病历验证暂不可用，本次未保存证明",
+            },
+        ) from None
+    return success_response(
+        data=result,
+        message="固定测试病历验证完成",
+        trace_id=get_trace_id(request),
+    )
+
+
 @router.post("/workspace/drafts/{draft_id}/publish")
 async def publish_workspace_draft(
     request: Request,
     draft_id: str,
+    payload: Optional[WorkspaceDraftPublishRequest] = None,
     current_user: Dict[str, Any] = Depends(get_current_user),
     workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
 ):
@@ -1323,9 +1436,13 @@ async def publish_workspace_draft(
         result = workspace.publish_draft(
             draft_id=draft_id,
             created_by=_current_user_id(current_user),
+            expected_updated_at=payload.expected_updated_at if payload else None,
+            validation_id=payload.validation_id if payload else None,
         )
+    except DraftTestValidationConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     return success_response(
         data=result,
         message="发布规则成功",

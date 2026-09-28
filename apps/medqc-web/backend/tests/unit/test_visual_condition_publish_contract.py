@@ -10,6 +10,7 @@ from app.services.custom_qc_service import evaluate_inline_rule_orchestrated
 from app.services.qc_rule_orchestrator import QCRuleOrchestrator
 from tests.unit.test_custom_qc_draft_basic_info import (
     _basic_payload,
+    _save_fixed_validation_proof,
     _visual_condition,
     workspace,  # noqa: F401 - 复用隔离SQLite草稿fixture。
 )
@@ -43,10 +44,8 @@ async def test_published_workspace_retains_visual_definition_and_never_calls_llm
         draft_id=draft["id"], created_by="manager-1",
         expected_updated_at=draft["updated_at"], visual_condition=_visual_condition(),
     )
-    # 发布门禁本身属于68；这里显式建立既有门禁证明，只验证发布搬运和执行路径。
-    service.save_last_test_summary(
-        draft_id=draft["id"], created_by="manager-1", summary={"success_count": 1},
-    )
+    # 发布门禁属于68；这里建立完整固定测试池证明，只验证发布搬运和执行路径。
+    _save_fixed_validation_proof(service, draft_id=draft["id"])
     service.publish_draft(draft_id=draft["id"], created_by="manager-1")
     published = service.get_draft(draft_id=draft["id"], created_by="manager-1")
     assert published["status"] == "published"

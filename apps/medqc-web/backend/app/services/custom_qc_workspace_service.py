@@ -34,6 +34,12 @@ from .document_domain_alignment import (
     normalize_document_label,
 )
 from .visual_condition_service import normalize_visual_condition
+from .draft_test_validation_service import (
+    DraftTestValidationConflict,
+    DraftTestValidationNotFound,
+    DraftTestValidationResultUnknown,
+    fixed_test_validation_state,
+)
 from .luxian_0609.customer_renderer import (
     CUSTOMER_SCHEMA_VERSION as LUXIAN_0609_CUSTOMER_SCHEMA_VERSION,
     exam_lab_data_gap_customer_message,
@@ -2942,7 +2948,7 @@ class CustomQCWorkspaceService:
                 "generation_mode": _safe_text(payload.get("generation_mode"), "fallback_template"),
                 "examples": _safe_json_dumps(payload.get("examples") or []),
                 "check_logic": _safe_json_dumps(check_logic),
-                "last_test_summary": _safe_json_dumps(payload.get("last_test_summary") or None),
+                "last_test_summary": None,
                 "status": "draft",
                 "published_rule_id": None,
                 "created_by": created_by,
@@ -2977,8 +2983,6 @@ class CustomQCWorkspaceService:
                 "complexity",
                 "scene",
                 "generation_mode",
-                "published_rule_id",
-                "status",
             }
             for key in editable_fields:
                 if key in payload and payload[key] is not None:
@@ -2994,13 +2998,8 @@ class CustomQCWorkspaceService:
                     ),
                 }
                 # 条件语义变化后，旧测试证明立即失效；宽兼容接口也不能绕过。
-            if requested_check_logic != existing_check_logic and (
-                isinstance(existing_check_logic, Mapping)
-                and "visual_condition" in existing_check_logic
-                or isinstance(requested_check_logic, Mapping)
-                and "visual_condition" in requested_check_logic
-            ):
-                patch["last_test_summary"] = None
+            # 任一定义编辑都必须使固定测试池证明失效；客户端不能携带旧摘要恢复证明。
+            patch["last_test_summary"] = None
             aligned_document_type, aligned_applicable_documents, aligned_check_logic = align_document_domain_fields(
                 document_type=patch.get("document_type", existing.get("document_type")),
                 applicable_documents=(
@@ -3018,9 +3017,6 @@ class CustomQCWorkspaceService:
 
             if "examples" in payload:
                 patch["examples"] = _safe_json_dumps(payload.get("examples") or [])
-            if "last_test_summary" in payload:
-                patch["last_test_summary"] = _safe_json_dumps(payload.get("last_test_summary"))
-
             if "severity" in patch and "defect_level" not in patch:
                 patch["defect_level"] = _map_severity_to_defect_level(_safe_text(patch.get("severity")))
 
@@ -3218,6 +3214,75 @@ class CustomQCWorkspaceService:
                 )
             )
             session.commit()
+        finally:
+            session.close()
+
+    def save_fixed_test_validation_summary(
+        self,
+        *,
+        draft_id: str,
+        created_by: str,
+        expected_updated_at: datetime,
+        summary: Mapping[str, Any],
+    ) -> Dict[str, Any]:
+        """以草稿版本 CAS 保存固定测试池证明，迟到结果不得覆盖新定义。"""
+        expected = _utc_naive(expected_updated_at)
+        session = _session()
+        try:
+            row = session.execute(
+                select(self._draft_table)
+                .where(
+                    and_(
+                        self._draft_table.c.id == draft_id,
+                        self._draft_table.c.created_by == created_by,
+                    )
+                )
+                .with_for_update()
+            ).mappings().first()
+            if not row:
+                raise DraftTestValidationNotFound("草稿不存在或无权限")
+            current_raw = row.get("updated_at")
+            current = _utc_naive(current_raw)
+            if _safe_text(row.get("status"), "draft") != "draft" or current != expected:
+                raise DraftTestValidationConflict("草稿已被修改，请刷新后重试")
+            now = max(_now_utc(), current + timedelta(microseconds=1))
+            persisted_summary = {
+                **dict(summary),
+                "proof_revision": now.replace(tzinfo=timezone.utc).isoformat(),
+            }
+            updated = session.execute(
+                update(self._draft_table)
+                .where(
+                    and_(
+                        self._draft_table.c.id == draft_id,
+                        self._draft_table.c.created_by == created_by,
+                        self._draft_table.c.status == "draft",
+                        self._draft_table.c.updated_at == current_raw,
+                    )
+                )
+                .values(
+                    last_test_summary=_safe_json_dumps(persisted_summary),
+                    updated_at=now,
+                )
+            )
+            if getattr(updated, "rowcount", 0) != 1:
+                session.rollback()
+                raise DraftTestValidationConflict("草稿已被修改，请刷新后重试")
+            session.commit()
+            try:
+                confirmed = self.get_draft(draft_id=draft_id, created_by=created_by)
+            except Exception as exc:
+                raise DraftTestValidationResultUnknown("测试验证结果未确认") from exc
+            if not confirmed:
+                raise DraftTestValidationResultUnknown("测试验证结果未确认")
+            confirmed_summary = confirmed.get("last_test_summary")
+            if (
+                not isinstance(confirmed_summary, dict)
+                or confirmed_summary.get("validation_id") != persisted_summary.get("validation_id")
+                or _utc_naive(confirmed.get("updated_at")) != now
+            ):
+                raise DraftTestValidationResultUnknown("测试验证结果未确认")
+            return confirmed
         finally:
             session.close()
 
@@ -5900,23 +5965,39 @@ class CustomQCWorkspaceService:
 """
         return "\ufeff" + html_text
 
-    def publish_draft(self, *, draft_id: str, created_by: str) -> Dict[str, Any]:
+    def publish_draft(
+        self,
+        *,
+        draft_id: str,
+        created_by: str,
+        expected_updated_at: Optional[datetime] = None,
+        validation_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
         session = _session()
         try:
             stmt = select(self._draft_table).where(
                 and_(self._draft_table.c.id == draft_id, self._draft_table.c.created_by == created_by)
-            )
+            ).with_for_update()
             row = session.execute(stmt).mappings().first()
             if not row:
                 raise ValueError("草稿不存在或无权限")
 
             draft = _row_to_draft(dict(row))
+            if _safe_text(draft.get("status"), "draft") != "draft":
+                raise DraftTestValidationConflict("只有草稿状态可发布")
+            if expected_updated_at is not None and (
+                _utc_naive(draft.get("updated_at")) != _utc_naive(expected_updated_at)
+            ):
+                raise DraftTestValidationConflict("草稿或测试证明已更新，请刷新后重试")
             last_test_summary = draft.get("last_test_summary") or {}
-            success_count = 0
-            if isinstance(last_test_summary, dict):
-                success_count = int(last_test_summary.get("success_count") or 0)
-            if success_count <= 0:
-                raise ValueError("请至少完成一次成功测试后再发布")
+            if validation_id is not None and (
+                not isinstance(last_test_summary, dict)
+                or _safe_text(last_test_summary.get("validation_id")) != _safe_text(validation_id)
+            ):
+                raise DraftTestValidationConflict("测试证明已更新，请刷新后重试")
+            publish_ready, _ = fixed_test_validation_state(draft)
+            if not publish_ready:
+                raise ValueError("请先使用当前草稿完成固定测试病历验证")
 
             qc_rules_table = _qc_rules_table()
             now = _now_utc()

@@ -10,6 +10,9 @@ import type {
   CustomRuleDraftPayload,
   CustomRuleDocumentOption,
   CustomRuleDraftCondition,
+  FixedTestValidationInput,
+  FixedTestValidationProof,
+  FixedTestValidationState,
   VisualConditionFieldOperator,
   VisualConditionFieldOption,
   VisualConditionOption,
@@ -42,6 +45,14 @@ const DRAFT_CONDITION_URL = '/api/v1/custom-qc/workspace/draft-condition'
 
 export type DraftConditionMutationResult =
   | { success: true; data: CustomRuleDraftCondition; resultUnknown: false; conflict: false }
+  | { success: false; message: string; resultUnknown: boolean; conflict: boolean }
+
+export type FixedTestValidationMutationResult =
+  | { success: true; data: FixedTestValidationState; resultUnknown: false; conflict: false }
+  | { success: false; message: string; resultUnknown: boolean; conflict: boolean }
+
+export type ValidatedDraftPublishResult =
+  | { success: true; data: CustomRulePublishResult; resultUnknown: false; conflict: false }
   | { success: false; message: string; resultUnknown: boolean; conflict: boolean }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -159,6 +170,80 @@ function normalizeDraftCondition(value: unknown): CustomRuleDraftCondition | nul
   return value.visual_condition === null || visualCondition
     ? { ...value, visual_condition: visualCondition } as CustomRuleDraftCondition
     : null
+}
+
+function normalizeRecordRef(value: unknown) {
+  if (!isRecord(value) || !nonBlankText(value.institute_id)
+    || !nonBlankText(value.patient_id) || !nonBlankText(value.visit_id)) return null
+  return {
+    institute_id: value.institute_id,
+    patient_id: value.patient_id,
+    visit_id: value.visit_id,
+  }
+}
+
+function normalizeValidationProof(value: unknown): FixedTestValidationProof | null {
+  if (!isRecord(value) || value.schema_version !== 'fixed_test_records_v1'
+    || !nonBlankText(value.validation_id) || !nonBlankText(value.draft_id)
+    || !nonBlankText(value.validated_revision) || !nonBlankText(value.proof_revision)
+    || !nonBlankText(value.created_at) || Number.isNaN(Date.parse(value.created_at))) return null
+  const countKeys = [
+    'item_count', 'success_count', 'failed_count', 'issue_records', 'compliant_records',
+    'unknown_count', 'technical_error_count',
+  ]
+  if (countKeys.some((key) => !Number.isInteger(value[key]) || Number(value[key]) < 0)
+    || !Array.isArray(value.selected_items) || !Array.isArray(value.results)
+    || !Array.isArray(value.failures)) return null
+  const selectedItems = value.selected_items.map((item) => {
+    if (!isRecord(item) || !nonBlankText(item.item_id) || !nonBlankText(item.item_updated_at)) return null
+    const recordRef = normalizeRecordRef(item.record_ref)
+    return recordRef ? { item_id: item.item_id, item_updated_at: item.item_updated_at, record_ref: recordRef } : null
+  })
+  const allowedStatuses = new Set([
+    'compliant', 'non_compliant', 'ai_suggested_compliant', 'ai_suggested_non_compliant',
+    'data_gap', 'not_applicable', 'not_executed', 'technical_error', 'uncertain',
+  ])
+  const results = value.results.map((item) => {
+    if (!isRecord(item) || !nonBlankText(item.item_id) || !nonBlankText(item.item_updated_at)
+      || !allowedStatuses.has(String(item.status)) || !Number.isInteger(item.issue_count)
+      || Number(item.issue_count) < 0 || !isRecord(item.finding)
+      || typeof item.finding.description !== 'string' || item.finding.description.length > 300
+      || typeof item.finding.evidence !== 'string' || item.finding.evidence.length > 300
+      || !Array.isArray(item.condition_trace) || item.condition_trace.length > 20
+      || !item.condition_trace.every((trace) => typeof trace === 'string' && trace.length <= 300)) return null
+    const recordRef = normalizeRecordRef(item.record_ref)
+    return recordRef ? {
+      item_id: item.item_id, item_updated_at: item.item_updated_at, record_ref: recordRef,
+      status: item.status, issue_count: item.issue_count,
+      finding: { description: item.finding.description, evidence: item.finding.evidence },
+      condition_trace: item.condition_trace,
+    } : null
+  })
+  const failures = value.failures.map((item) => isRecord(item) && nonBlankText(item.item_id)
+    && nonBlankText(item.code) && nonBlankText(item.message)
+    ? { item_id: item.item_id, code: item.code, message: item.message }
+    : null)
+  if (selectedItems.some((item) => item === null) || results.some((item) => item === null)
+    || failures.some((item) => item === null) || selectedItems.length !== value.item_count
+    || results.length + failures.length !== value.item_count) return null
+  return {
+    ...value,
+    selected_items: selectedItems,
+    results,
+    failures,
+  } as FixedTestValidationProof
+}
+
+function normalizeValidationState(value: unknown, draftId: string): FixedTestValidationState | null {
+  if (!isRecord(value) || value.draft_id !== draftId || !nonBlankText(value.draft_updated_at)
+    || typeof value.publish_ready !== 'boolean' || !['draft', 'published'].includes(String(value.draft_status))
+    || (value.published_rule_id !== null && !nonBlankText(value.published_rule_id))) return null
+  const reasons = new Set(['not_tested', 'draft_changed', 'validation_incomplete', 'draft_not_executable'])
+  if (value.unavailable_reason !== null && !reasons.has(String(value.unavailable_reason))) return null
+  const validation = value.validation === null ? null : normalizeValidationProof(value.validation)
+  if (value.validation !== null && (!validation || validation.draft_id !== draftId)) return null
+  if (value.publish_ready && (!validation || value.unavailable_reason !== null || value.draft_status !== 'draft')) return null
+  return { ...value, validation } as FixedTestValidationState
 }
 
 function errorStatus(error: unknown): number | undefined {
@@ -366,7 +451,6 @@ export async function updateWorkspaceDraft(
     prompt_template?: string
     examples?: Array<{ title: string; content: string }>
     check_logic?: Record<string, unknown>
-    last_test_summary?: Record<string, unknown> | null
   },
 ) {
   return requestEnvelope<CustomRuleDraft>(
@@ -407,6 +491,94 @@ export async function publishWorkspaceDraft(draftId: string) {
     },
     '发布规则失败',
   )
+}
+
+const validationUrl = (draftId: string) =>
+  `/api/v1/custom-qc/workspace/drafts/${encodeURIComponent(draftId)}/test-validations`
+
+export async function getFixedTestValidation(
+  draftId: string,
+): Promise<ServiceResult<FixedTestValidationState>> {
+  const result = await requestEnvelope<unknown>(
+    { method: 'GET', url: validationUrl(draftId) },
+    '读取固定测试证明失败',
+  )
+  if (!result.success) return { success: false, message: result.message }
+  const data = normalizeValidationState(result.data, draftId)
+  return data
+    ? { success: true, data }
+    : { success: false, message: '固定测试证明回执格式异常' }
+}
+
+export async function runFixedTestValidation(
+  draftId: string,
+  payload: FixedTestValidationInput,
+): Promise<FixedTestValidationMutationResult> {
+  try {
+    const response = await ApiService.requestRaw({
+      method: 'POST', url: validationUrl(draftId), data: payload,
+    })
+    const normalized = normalizeApiSuccess<unknown>(response.data)
+    const data = normalized.success ? normalizeValidationState(normalized.data, draftId) : null
+    if (!data) {
+      return {
+        success: false, resultUnknown: true, conflict: false,
+        message: '测试结果无法确认，请读取测试证明核对，勿盲目重试',
+      }
+    }
+    return { success: true, data, resultUnknown: false, conflict: false }
+  } catch (error) {
+    const status = errorStatus(error)
+    const conflict = status === 409
+    const confirmedRejection = [401, 403, 404, 409, 422].includes(status || 0)
+    return {
+      success: false,
+      message: confirmedRejection
+        ? toErrorMessage(error, conflict ? '草稿或测试病例版本已变化，请刷新后重新选择' : '固定测试被拒绝')
+        : '测试结果无法确认，请读取测试证明核对，勿盲目重试',
+      resultUnknown: !confirmedRejection,
+      conflict,
+    }
+  }
+}
+
+export async function publishValidatedWorkspaceDraft(
+  draftId: string,
+  payload: { expected_updated_at: string; validation_id: string },
+): Promise<ValidatedDraftPublishResult> {
+  try {
+    const response = await ApiService.requestRaw({
+      method: 'POST',
+      url: `/api/v1/custom-qc/workspace/drafts/${encodeURIComponent(draftId)}/publish`,
+      data: payload,
+    })
+    const normalized = normalizeApiSuccess<unknown>(response.data)
+    const value = normalized.data
+    const data = normalized.success && isRecord(value) && value.draft_id === draftId
+      && nonBlankText(value.rule_code) && nonBlankText(value.published_rule_id)
+      && value.status === 'published'
+      ? value as unknown as CustomRulePublishResult
+      : null
+    if (!data) {
+      return {
+        success: false, resultUnknown: true, conflict: false,
+        message: '发布结果无法确认，请重新读取草稿核对，勿盲目重试',
+      }
+    }
+    return { success: true, data, resultUnknown: false, conflict: false }
+  } catch (error) {
+    const status = errorStatus(error)
+    const conflict = status === 409
+    const confirmedRejection = [401, 403, 404, 409, 422].includes(status || 0)
+    return {
+      success: false,
+      message: confirmedRejection
+        ? toErrorMessage(error, conflict ? '草稿或测试证明已变化，请重新读取后再发布' : '发布被拒绝')
+        : '发布结果无法确认，请重新读取草稿核对，勿盲目重试',
+      resultUnknown: !confirmedRejection,
+      conflict,
+    }
+  }
 }
 
 export async function getWorkspaceRecordFilters(params: {
