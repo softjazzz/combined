@@ -15,13 +15,16 @@
 from __future__ import annotations
 
 import logging
+from urllib.parse import quote
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr
 from starlette.concurrency import run_in_threadpool
+from starlette.responses import Response
 
 from ..core.permissions import UserRole, require_role
+from ..core.audit import audit_event
 from ..core.response import get_trace_id, success_response
 from ..core.security import get_current_user
 from ..services.rule_set_version_service import (
@@ -32,12 +35,23 @@ from ..services.rule_set_version_service import (
     create_draft,
     delete_draft,
     get_draft,
+    get_draft_export_snapshot,
     get_version_detail,
+    import_draft_snapshot,
     list_versions,
+    preflight_draft_import_snapshot,
     publish_draft,
     retire_version,
     update_draft,
     with_executable_flags,
+)
+from ..services.rule_set_version_excel_service import (
+    ExcelIssue,
+    MAX_FILE_BYTES,
+    RuleSetVersionExcelInvalid,
+    build_workbook,
+    parse_workbook,
+    validate_readonly_metadata,
 )
 
 router = APIRouter(prefix="/api/v1/rule-set-versions", tags=["rule-set-versions"])
@@ -146,6 +160,51 @@ def _json(data: Any) -> Any:
     return data
 
 
+def _xlsx_response(content: bytes, filename: str) -> Response:
+    encoded = quote(filename)
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{encoded}",
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+def _raise_import_http(exc: Exception) -> None:
+    if isinstance(exc, RuleSetVersionExcelInvalid):
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "excel_validation_failed",
+                "message": str(exc),
+                "issues": [issue.as_dict() for issue in exc.issues],
+            },
+        ) from exc
+    if isinstance(exc, RuleSetVersionInvalid):
+        problems = exc.problems or [str(exc)]
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": exc.code,
+                "message": str(exc),
+                "issues": [
+                    {
+                        "sheet": "质控点",
+                        "row": None,
+                        "field": None,
+                        "code": exc.code,
+                        "message": problem,
+                    }
+                    for problem in problems
+                ],
+            },
+        ) from exc
+    _raise_http(exc, "excel_import")
+
+
 @router.get("")
 async def get_rule_set_versions(
     request: Request,
@@ -170,6 +229,72 @@ async def get_rule_set_draft(
     except Exception as exc:
         _raise_http(exc, "draft_get")
     return _ok(request, _json(data))
+
+
+@router.get("/{rule_set_key}/draft/export")
+async def export_rule_set_draft(
+    request: Request,
+    rule_set_key: str,
+    current_user: dict = Depends(get_current_user),
+):
+    try:
+        exported = await run_in_threadpool(get_draft_export_snapshot, rule_set_key)
+        snapshot = with_executable_flags(rule_set_key, exported["snapshot"])
+        content = await run_in_threadpool(
+            build_workbook,
+            snapshot,
+            base_version=exported["base_version"],
+            base_content_digest=exported["base_content_digest"],
+        )
+    except Exception as exc:
+        _raise_http(exc, "draft_export")
+    audit_event(
+        request,
+        action="rule_set_versions.draft.export",
+        resource="qc_rule_set_versions",
+        outcome="success",
+        details={
+            "rule_set_key": rule_set_key,
+            "base_version": exported["base_version"],
+            "draft_version_seq": snapshot["version_seq"],
+            "entry_count": len(snapshot["entries"]),
+        },
+        current_user=current_user,
+    )
+    return _xlsx_response(content, f"{rule_set_key}-draft-v{snapshot['version_seq']}.xlsx")
+
+
+@router.get("/{rule_set_key}/{version}/export")
+async def export_rule_set_version(
+    request: Request,
+    rule_set_key: str,
+    version: str,
+    current_user: dict = Depends(get_current_user),
+):
+    try:
+        snapshot = await run_in_threadpool(_with_flags, get_version_detail, rule_set_key, version)
+        content = await run_in_threadpool(
+            build_workbook,
+            snapshot,
+            base_version=snapshot["version"],
+            base_content_digest=snapshot["content_digest"],
+        )
+    except Exception as exc:
+        _raise_http(exc, "version_export")
+    audit_event(
+        request,
+        action="rule_set_versions.version.export",
+        resource="qc_rule_set_versions",
+        outcome="success",
+        details={
+            "rule_set_key": rule_set_key,
+            "version": snapshot["version"],
+            "base_version": snapshot["version"],
+            "entry_count": len(snapshot["entries"]),
+        },
+        current_user=current_user,
+    )
+    return _xlsx_response(content, f"{rule_set_key}-{version}.xlsx")
 
 
 @router.get("/{rule_set_key}/{version}")
@@ -203,6 +328,65 @@ async def post_rule_set_draft(
     except Exception as exc:
         _raise_http(exc, "draft_create")
     return _ok(request, _json(data), "规则集草稿已创建")
+
+
+@router.post("/{rule_set_key}/draft/import")
+@require_role(_MANAGER_ROLES)
+async def import_rule_set_draft(
+    request: Request,
+    rule_set_key: str,
+    file: UploadFile = File(..., description="规则集版本 .xlsx 工作簿"),
+    current_user: dict = Depends(get_current_user),
+):
+    actor = _actor(current_user)
+    try:
+        if not (file.filename or "").lower().endswith(".xlsx"):
+            raise RuleSetVersionExcelInvalid(
+                "规则集版本工作簿校验失败",
+                issues=[ExcelIssue("文件", None, None, "invalid_extension", "仅支持 .xlsx 文件")],
+            )
+        content = await file.read(MAX_FILE_BYTES + 1)
+        parsed = await run_in_threadpool(
+            parse_workbook, content, expected_rule_set_key=rule_set_key,
+        )
+        preflight = await run_in_threadpool(
+            preflight_draft_import_snapshot,
+            rule_set_key,
+            base_version=parsed.base_version,
+            base_content_digest=parsed.base_content_digest,
+            entries=parsed.entries,
+        )
+        catalog = with_executable_flags(rule_set_key, {"entries": preflight["catalog_entries"]})["entries"]
+        await run_in_threadpool(validate_readonly_metadata, parsed, catalog)
+        data = await run_in_threadpool(
+            _with_flags,
+            import_draft_snapshot,
+            rule_set_key,
+            actor=actor,
+            base_version=parsed.base_version,
+            base_content_digest=parsed.base_content_digest,
+            entries=parsed.entries,
+            expected_draft_version=parsed.expected_draft_version,
+            expected_draft_version_seq=parsed.expected_draft_version_seq,
+        )
+    except Exception as exc:
+        _raise_import_http(exc)
+    finally:
+        await file.close()
+    audit_event(
+        request,
+        action="rule_set_versions.draft.import",
+        resource="qc_rule_set_versions",
+        outcome="success",
+        details={
+            "rule_set_key": rule_set_key,
+            "base_version": data["base_version"],
+            "draft_version_seq": data["version_seq"],
+            "entry_count": len(data["entries"]),
+        },
+        current_user=current_user,
+    )
+    return _ok(request, _json(data), "规则集草稿已导入")
 
 
 @router.put("/{rule_set_key}/draft")

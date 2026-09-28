@@ -25,6 +25,9 @@ const state = vi.hoisted(() => ({
     deleteRuleSetDraft: vi.fn(),
     publishRuleSetDraft: vi.fn(),
     retireRuleSetVersion: vi.fn(),
+    exportRuleSetVersion: vi.fn(),
+    exportRuleSetDraft: vi.fn(),
+    importRuleSetDraft: vi.fn(),
   },
 }))
 
@@ -34,6 +37,7 @@ vi.mock('@/stores/auth', () => ({
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: state.push }) }))
 vi.mock('ant-design-vue', () => ({ message: state.message }))
 vi.mock('@/api/ruleSetVersions', () => state.api)
+vi.mock('@/views/workstation-v4/customer-sample-validation/batchExport', () => ({ downloadBlob: vi.fn() }))
 
 const entries: RuleSetEntryView[] = [
   { rule_id: 'LX0609-001', state: 'active', executable: true, qc_point: '入院记录完整性', source_document: '入院记录' },
@@ -118,6 +122,7 @@ const stubs = {
   },
   'a-tab-pane': { props: ['tab'], template: '<span class="tab-label">{{ tab }}</span>' },
   'a-button': { props: ['disabled', 'loading'], emits: ['click'], template: '<button :disabled="disabled" @click="$emit(\'click\')"><slot /></button>' },
+  'a-checkbox': { props: ['checked', 'disabled'], emits: ['update:checked'], template: '<label><input type="checkbox" :disabled="disabled"><slot /></label>' },
   'a-tooltip': { props: ['title'], template: '<span class="tooltip" :data-tip="title"><slot /></span>' },
   'a-popconfirm': { emits: ['confirm'], template: '<span><slot /><button class="pop-ok" @click="$emit(\'confirm\')">确认</button></span>' },
   'a-modal': { props: ['open'], template: '<div v-if="open" class="modal"><slot /></div>' },

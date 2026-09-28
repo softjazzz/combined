@@ -10,9 +10,17 @@
           {{ formatDateTime(draft.created_at) }}</span>
       </div>
       <div
-        v-if="canWrite"
         class="draft-actions"
       >
+        <a-button
+          class="export-btn"
+          :loading="exporting"
+          :disabled="discarding || publishing"
+          @click="handleExport"
+        >
+          导出草稿
+        </a-button>
+        <template v-if="canWrite">
         <a-popconfirm
           title="确认放弃该草稿？草稿中的全部改动将被删除。"
           ok-text="放弃"
@@ -35,6 +43,7 @@
         >
           发布新版本
         </a-button>
+        </template>
       </div>
     </div>
 
@@ -157,7 +166,8 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { message } from 'ant-design-vue'
-import { deleteRuleSetDraft, publishRuleSetDraft, type RuleSetDraft } from '@/api/ruleSetVersions'
+import { deleteRuleSetDraft, exportRuleSetDraft, publishRuleSetDraft, type RuleSetDraft } from '@/api/ruleSetVersions'
+import { downloadBlob } from '@/views/workstation-v4/customer-sample-validation/batchExport'
 import {
   ENTRY_STATE_COLOR,
   ENTRY_STATE_LABEL,
@@ -184,6 +194,7 @@ const emit = defineEmits<{
 const VERSION_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
 
 const discarding = ref(false)
+const exporting = ref(false)
 const publishing = ref(false)
 const publishOpen = ref(false)
 const versionInput = ref('')
@@ -202,6 +213,18 @@ function openPublish() {
 function closePublish() {
   if (publishing.value) return
   publishOpen.value = false
+}
+
+async function handleExport() {
+  if (exporting.value) return
+  exporting.value = true
+  const result = await exportRuleSetDraft(props.ruleSetKey)
+  exporting.value = false
+  if (!result.success || !result.data) {
+    message.error(result.message || '导出规则集草稿失败')
+    return
+  }
+  downloadBlob(result.data, `${props.ruleSetKey}-draft-v${props.draft.version_seq}.xlsx`)
 }
 
 async function handleDiscard() {

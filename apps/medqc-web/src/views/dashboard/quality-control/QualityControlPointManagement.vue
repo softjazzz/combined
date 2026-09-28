@@ -23,6 +23,22 @@
         >
           版本历史
         </a-button>
+        <a-button
+          class="action-btn"
+          :loading="exportingCurrent"
+          :disabled="!versionList?.current_version"
+          @click="downloadCurrentVersion"
+        >
+          导出当前版本
+        </a-button>
+        <a-button
+          v-if="editable"
+          type="primary"
+          class="action-btn"
+          @click="importOpen = true"
+        >
+          导入草稿
+        </a-button>
       </div>
     </div>
 
@@ -209,6 +225,11 @@
       :can-retire="editable"
       @refresh="load"
     />
+    <RuleSetVersionImportDrawer
+      v-model:open="importOpen"
+      :rule-set-key="ruleSetKey"
+      @refresh="load"
+    />
   </div>
 </template>
 
@@ -220,6 +241,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import {
   createRuleSetDraft,
+  exportRuleSetVersion,
   getRuleSetVersion,
   listRuleSetVersions,
   updateRuleSetDraft,
@@ -229,6 +251,8 @@ import {
 } from '@/api/ruleSetVersions'
 import RuleSetDraftPanel from './components/RuleSetDraftPanel.vue'
 import RuleSetVersionHistoryDrawer from './components/RuleSetVersionHistoryDrawer.vue'
+import RuleSetVersionImportDrawer from './components/RuleSetVersionImportDrawer.vue'
+import { downloadBlob } from '@/views/workstation-v4/customer-sample-validation/batchExport'
 import {
   ENTRY_STATE_COLOR,
   ENTRY_STATE_LABEL,
@@ -259,6 +283,8 @@ const searchType = ref<'id' | 'name'>('id')
 const searchKeyword = ref('')
 const appliedKeyword = ref('')
 const historyOpen = ref(false)
+const importOpen = ref(false)
+const exportingCurrent = ref(false)
 
 const loading = ref(false)
 const saving = ref(false)
@@ -358,6 +384,19 @@ async function load() {
   } finally {
     if (key === ruleSetKey.value) loading.value = false
   }
+}
+
+async function downloadCurrentVersion() {
+  const version = versionList.value?.current_version
+  if (!version || exportingCurrent.value) return
+  exportingCurrent.value = true
+  const result = await exportRuleSetVersion(ruleSetKey.value, version)
+  exportingCurrent.value = false
+  if (!result.success || !result.data) {
+    message.error(result.message || '导出当前规则集版本失败')
+    return
+  }
+  downloadBlob(result.data, `${ruleSetKey.value}-${version}.xlsx`)
 }
 
 /** 批量修改质控点状态：只写草稿；无草稿时先以当前版本为基础创建草稿。 */

@@ -25,6 +25,15 @@ export type RuleSetVersionConflictCode =
   | 'current_version'
   | 'builtin_version'
   | 'already_retired'
+  | 'draft_changed'
+
+export interface RuleSetVersionExcelIssue {
+  sheet: string
+  row: number | null
+  field: string | null
+  code: string
+  message: string
+}
 
 /** 写接口只接受 rule_id 与 state。 */
 export interface RuleSetEntry {
@@ -132,12 +141,19 @@ export interface RuleSetVersionApiResult<T> {
   code?: string
   /** 422 发布校验失败的逐条原因。 */
   problems?: string[]
+  /** Excel 合同校验的逐表、行、字段问题。 */
+  issues?: RuleSetVersionExcelIssue[]
+}
+
+export interface RuleSetDraftImportApiResult extends RuleSetVersionApiResult<RuleSetDraft> {
+  resultUnknown: boolean
 }
 
 interface ErrorDetail {
   code?: string
   message?: string
   problems?: string[]
+  issues?: RuleSetVersionExcelIssue[]
 }
 
 /**
@@ -151,13 +167,27 @@ function extractErrorDetail(error: unknown): ErrorDetail {
   for (const key of ['detail', 'error'] as const) {
     const candidate: unknown = (body as Record<string, unknown>)[key]
     if (typeof candidate === 'object' && candidate !== null && !Array.isArray(candidate)) {
-      const { code, message, problems } = candidate as Record<string, unknown>
+      const { code, message, problems, issues } = candidate as Record<string, unknown>
       if (typeof code === 'string' && code.trim()) {
         return {
           code,
           message: typeof message === 'string' && message.trim() ? message : undefined,
           problems: Array.isArray(problems)
             ? problems.filter((item): item is string => typeof item === 'string' && item.trim() !== '')
+            : undefined,
+          issues: Array.isArray(issues)
+            ? issues.flatMap((item): RuleSetVersionExcelIssue[] => {
+                if (typeof item !== 'object' || item === null) return []
+                const raw = item as Record<string, unknown>
+                if (typeof raw.sheet !== 'string' || typeof raw.code !== 'string' || typeof raw.message !== 'string') return []
+                return [{
+                  sheet: raw.sheet,
+                  row: typeof raw.row === 'number' ? raw.row : null,
+                  field: typeof raw.field === 'string' ? raw.field : null,
+                  code: raw.code,
+                  message: raw.message,
+                }]
+              })
             : undefined,
         }
       }
@@ -182,6 +212,7 @@ async function request<T>(
       status: isAxiosError(error) ? error.response?.status : undefined,
       code: detail.code,
       problems: detail.problems,
+      issues: detail.issues,
     }
   }
 }
@@ -259,4 +290,82 @@ export async function retireRuleSetVersion(ruleSetKey: string, version: string) 
     method: 'POST',
     url: `${keyPath(ruleSetKey)}/${encodeURIComponent(version)}/retire`,
   }, '下线规则集版本失败')
+}
+
+async function download(url: string, fallback: string): Promise<RuleSetVersionApiResult<Blob>> {
+  try {
+    const response = await ApiService.requestRaw<Blob>({ method: 'GET', url, responseType: 'blob' })
+    if (!(response.data instanceof Blob)) return { success: false, status: response.status, message: fallback }
+    return { success: true, data: response.data, status: response.status }
+  } catch (error) {
+    return {
+      success: false,
+      status: isAxiosError(error) ? error.response?.status : undefined,
+      message: extractApiErrorMessageFromError(error, fallback),
+    }
+  }
+}
+
+/** 导出冻结的内置/已发布/已下线版本。 */
+export function exportRuleSetVersion(ruleSetKey: string, version: string) {
+  return download(`${keyPath(ruleSetKey)}/${encodeURIComponent(version)}/export`, '导出规则集版本失败')
+}
+
+/** 导出当前草稿，文件携带 version_seq 供再次导入时做 CAS。 */
+export function exportRuleSetDraft(ruleSetKey: string) {
+  return download(`${keyPath(ruleSetKey)}/draft/export`, '导出规则集草稿失败')
+}
+
+/** 导入只能创建或 CAS 更新草稿，不发布版本。 */
+export async function importRuleSetDraft(ruleSetKey: string, file: File) {
+  const form = new FormData()
+  form.append('file', file)
+  const result = await request<unknown>({
+    method: 'POST',
+    url: `${keyPath(ruleSetKey)}/draft/import`,
+    data: form,
+    timeout: 120_000,
+  }, '导入规则集草稿失败')
+  if (!result.success) {
+    const knownNotWritten = [401, 403, 409, 413, 422].includes(result.status ?? 0)
+    return { ...result, resultUnknown: !knownNotWritten } as RuleSetDraftImportApiResult
+  }
+  const data = normalizeImportedDraft(result.data, ruleSetKey)
+  if (!data) {
+    return {
+      success: false,
+      status: result.status,
+      message: '服务端返回的草稿回执不完整，请刷新列表核对后再决定是否重试',
+      resultUnknown: true,
+    }
+  }
+  return { ...result, data, resultUnknown: false } as RuleSetDraftImportApiResult
+}
+
+function normalizeImportedDraft(value: unknown, ruleSetKey: string): RuleSetDraft | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
+  const item = value as Record<string, unknown>
+  if (
+    item.rule_set_key !== ruleSetKey
+    || item.status !== 'draft'
+    || !Number.isInteger(item.version_seq)
+    || Number(item.version_seq) < 1
+    || typeof item.base_version !== 'string'
+    || !item.base_version.trim()
+    || !Array.isArray(item.entries)
+  ) return null
+  const seen = new Set<string>()
+  for (const raw of item.entries) {
+    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null
+    const entry = raw as Record<string, unknown>
+    if (
+      typeof entry.rule_id !== 'string'
+      || !entry.rule_id.trim()
+      || !['active', 'paused', 'offline'].includes(String(entry.state))
+      || typeof entry.executable !== 'boolean'
+      || seen.has(entry.rule_id)
+    ) return null
+    seen.add(entry.rule_id)
+  }
+  return item as unknown as RuleSetDraft
 }

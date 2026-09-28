@@ -157,6 +157,7 @@ const CONFLICT_MESSAGES: Record<string, string> = {
   current_version: '当前版本不能下线',
   builtin_version: '内置版本不能下线',
   already_retired: '该版本已下线，已刷新版本列表',
+  draft_changed: '原草稿已被替换，已刷新为当前草稿，请重新导出后修改',
 }
 
 /** 409 按业务 code 给出提示；其他错误用后端消息或兜底文案。 */
@@ -169,7 +170,7 @@ export function describeFailure(result: RuleSetVersionApiResult<unknown>, fallba
 
 /** 这些冲突说明服务端状态已变化，需要刷新页面数据。 */
 export function needsRefresh(result: RuleSetVersionApiResult<unknown>): boolean {
-  return result.status === 409 && ['draft_exists', 'version_conflict', 'already_retired', 'current_version'].includes(result.code ?? '')
+  return result.status === 409 && ['draft_exists', 'version_conflict', 'draft_changed', 'already_retired', 'current_version'].includes(result.code ?? '')
 }
 
 export function formatDateTime(value: string | null): string {

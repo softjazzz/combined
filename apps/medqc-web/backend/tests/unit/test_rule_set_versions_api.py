@@ -3,17 +3,20 @@
 from __future__ import annotations
 
 import logging
+from io import BytesIO
 
 import pytest
 import sqlalchemy as sa
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from openpyxl import load_workbook
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.database.models.qc import QCRuleSetVersion
 from app.routers import rule_set_versions as routes
 from app.services import rule_set_version_service as service
+from app.services import rule_set_version_excel_service as excel
 
 
 BASE = "/api/v1/rule-set-versions"
@@ -222,3 +225,98 @@ def test_extra_fields_are_rejected(sessions):
     http = client()
     response = http.post(f"{BASE}/{KEY}/draft", json={"status": "published"})
     assert response.status_code == 422
+
+
+def _builtin_workbook():
+    detail = service.with_executable_flags(KEY, service.get_version_detail(KEY, BUILTIN))
+    return excel.build_workbook(
+        detail,
+        base_version=BUILTIN,
+        base_content_digest=detail["content_digest"],
+    )
+
+
+def test_export_and_import_excel_create_then_cas_update_draft(sessions, caplog):
+    http = client()
+    with caplog.at_level(logging.INFO, logger="app.audit"):
+        exported = http.get(f"{BASE}/{KEY}/{BUILTIN}/export")
+        created = http.post(
+            f"{BASE}/{KEY}/draft/import",
+            files={"file": ("规则集.xlsx", exported.content, exported.headers["content-type"])},
+        )
+    assert exported.status_code == 200
+    assert exported.headers["content-type"].startswith(
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    assert "no-store" in exported.headers["cache-control"]
+
+    assert created.status_code == 200
+    draft = created.json()["data"]
+    assert draft["status"] == "draft" and draft["version_seq"] == 1
+    assert service.current_version(KEY) == BUILTIN
+    assert "rule_set_versions.version.export" in caplog.text
+    assert "rule_set_versions.draft.import" in caplog.text
+    assert '"entry_count": 79' in caplog.text
+    assert "规则集.xlsx" not in caplog.text and "入院记录" not in caplog.text
+
+    frozen_again = http.post(
+        f"{BASE}/{KEY}/draft/import",
+        files={"file": ("规则集.xlsx", exported.content, exported.headers["content-type"])},
+    )
+    assert frozen_again.status_code == 409
+    assert frozen_again.json()["detail"]["code"] == "draft_exists"
+
+    draft_export = http.get(f"{BASE}/{KEY}/draft/export")
+    assert draft_export.status_code == 200
+    workbook = load_workbook(BytesIO(draft_export.content))
+    assert workbook[excel.INFO_SHEET]["G2"].value == 1
+    workbook[excel.ENTRY_SHEET]["B2"] = "paused"
+    edited = BytesIO()
+    workbook.save(edited)
+    workbook.close()
+    updated = http.post(
+        f"{BASE}/{KEY}/draft/import",
+        files={"file": ("草稿.xlsx", edited.getvalue(), exported.headers["content-type"])},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["data"]["version_seq"] == 2
+
+    stale = http.post(
+        f"{BASE}/{KEY}/draft/import",
+        files={"file": ("旧草稿.xlsx", draft_export.content, exported.headers["content-type"])},
+    )
+    assert stale.status_code == 409
+    assert stale.json()["detail"]["code"] == "version_conflict"
+
+
+def test_excel_import_validation_has_sheet_row_field_and_does_not_write(sessions):
+    content = _builtin_workbook()
+    workbook = load_workbook(BytesIO(content))
+    workbook[excel.ENTRY_SHEET]["B2"] = "=1+1"
+    broken = BytesIO()
+    workbook.save(broken)
+    workbook.close()
+    response = client().post(
+        f"{BASE}/{KEY}/draft/import",
+        files={"file": ("bad.xlsx", broken.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    )
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert detail["code"] == "excel_validation_failed"
+    assert any(
+        issue["sheet"] == excel.ENTRY_SHEET and issue["row"] == 2
+        and issue["field"] == "状态" and issue["code"] == "formula_not_allowed"
+        for issue in detail["issues"]
+    )
+    assert service.list_versions(KEY)["draft"] is None
+
+
+def test_excel_import_requires_manager_but_export_allows_authenticated_reader(sessions):
+    reader = client(roles=("qc_doctor",))
+    assert reader.get(f"{BASE}/{KEY}/{BUILTIN}/export").status_code == 200
+    denied = reader.post(
+        f"{BASE}/{KEY}/draft/import",
+        files={"file": ("rules.xlsx", _builtin_workbook(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    )
+    assert denied.status_code == 403
+    assert service.list_versions(KEY)["draft"] is None

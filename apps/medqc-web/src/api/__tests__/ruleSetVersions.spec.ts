@@ -4,8 +4,11 @@ import { ApiService } from '@/services/apiService'
 import {
   createRuleSetDraft,
   deleteRuleSetDraft,
+  exportRuleSetDraft,
+  exportRuleSetVersion,
   getRuleSetVersion,
   listRuleSetVersions,
+  importRuleSetDraft,
   publishRuleSetDraft,
   retireRuleSetVersion,
   updateRuleSetDraft,
@@ -77,5 +80,44 @@ describe('ruleSetVersions API', () => {
     const network = await listRuleSetVersions(KEY)
     expect(network.success).toBe(false)
     expect(network.status).toBeUndefined()
+  })
+
+  it('按合同导出版本/草稿并以 multipart 导入', async () => {
+    const blob = new Blob(['xlsx'])
+    const spy = vi.spyOn(ApiService, 'requestRaw')
+      .mockResolvedValueOnce({ status: 200, data: blob } as Awaited<ReturnType<typeof ApiService.requestRaw>>)
+      .mockResolvedValueOnce({ status: 200, data: blob } as Awaited<ReturnType<typeof ApiService.requestRaw>>)
+      .mockResolvedValueOnce(envelope({ version_seq: 2 }))
+    expect((await exportRuleSetVersion(KEY, 'v1/2')).data).toBe(blob)
+    expect((await exportRuleSetDraft(KEY)).data).toBe(blob)
+    const file = new File(['xlsx'], 'rules.xlsx')
+    await importRuleSetDraft(KEY, file)
+    expect(spy.mock.calls[0]?.[0]).toMatchObject({
+      method: 'GET', url: `/api/v1/rule-set-versions/${KEY}/v1%2F2/export`, responseType: 'blob',
+    })
+    expect(spy.mock.calls[1]?.[0]).toMatchObject({
+      method: 'GET', url: `/api/v1/rule-set-versions/${KEY}/draft/export`, responseType: 'blob',
+    })
+    const importConfig = spy.mock.calls[2]?.[0]
+    expect(importConfig).toMatchObject({ method: 'POST', url: `/api/v1/rule-set-versions/${KEY}/draft/import`, timeout: 120_000 })
+    expect(importConfig?.data).toBeInstanceOf(FormData)
+    expect((importConfig?.data as FormData).get('file')).toBe(file)
+  })
+
+  it('解析 Excel 逐字段 issues', async () => {
+    const detail = {
+      code: 'excel_validation_failed', message: '校验失败',
+      issues: [{ sheet: '质控点', row: 3, field: '状态', code: 'invalid_state', message: '状态无效' }],
+    }
+    vi.spyOn(ApiService, 'requestRaw').mockRejectedValue(httpError(422, { detail }))
+    const result = await importRuleSetDraft(KEY, new File(['x'], 'rules.xlsx'))
+    expect(result).toMatchObject({ success: false, status: 422, code: 'excel_validation_failed', issues: detail.issues, resultUnknown: false })
+  })
+
+  it('畸形 200 回执视为结果未知', async () => {
+    vi.spyOn(ApiService, 'requestRaw').mockResolvedValue(envelope({}))
+    const result = await importRuleSetDraft(KEY, new File(['x'], 'rules.xlsx'))
+    expect(result).toMatchObject({ success: false, status: 200, resultUnknown: true })
+    expect(result.message).toContain('回执不完整')
   })
 })

@@ -35,6 +35,15 @@
             当前版本
           </a-tag>
           <span class="history-spacer" />
+          <a-button
+            v-if="item.version"
+            size="small"
+            class="export-btn"
+            :loading="exporting === item.version"
+            @click="handleExport(item.version)"
+          >
+            导出
+          </a-button>
           <a-popconfirm
             v-if="canRetire && item.source === 'published' && !item.is_current && item.version"
             title="确认下线该版本？下线后不能再作为当前版本，已建任务不受影响。"
@@ -84,10 +93,12 @@
 import { ref } from 'vue'
 import { message } from 'ant-design-vue'
 import {
+  exportRuleSetVersion,
   retireRuleSetVersion,
   type RuleSetVersionItem,
   type RuleSetVersionSource,
 } from '@/api/ruleSetVersions'
+import { downloadBlob } from '@/views/workstation-v4/customer-sample-validation/batchExport'
 import {
   UNKNOWN_TEXT,
   VERSION_SOURCE_LABEL,
@@ -110,6 +121,7 @@ const emit = defineEmits<{
 }>()
 
 const retiring = ref<string | null>(null)
+const exporting = ref<string | null>(null)
 
 function sourceColor(source: RuleSetVersionSource | null): string {
   if (source === 'published') return 'green'
@@ -131,6 +143,18 @@ async function handleRetire(version: string) {
   } finally {
     retiring.value = null
   }
+}
+
+async function handleExport(version: string) {
+  if (exporting.value) return
+  exporting.value = version
+  const result = await exportRuleSetVersion(props.ruleSetKey, version)
+  exporting.value = null
+  if (!result.success || !result.data) {
+    message.error(result.message || '导出规则集版本失败')
+    return
+  }
+  downloadBlob(result.data, `${props.ruleSetKey}-${version}.xlsx`)
 }
 </script>
 

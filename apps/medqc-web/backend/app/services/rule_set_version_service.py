@@ -504,6 +504,13 @@ def _draft_row(session: Any, rule_set_key: str, *, for_update: bool = False) -> 
     return session.execute(statement).first()
 
 
+def _draft_export_version(row: Any) -> str:
+    """Excel 使用的不可复用草稿身份；从持久化 row.version 派生，防删除重建 ABA。"""
+    stored = _clean(row.version)
+    suffix = stored[len(DRAFT_VERSION_PREFIX):] if stored.startswith(DRAFT_VERSION_PREFIX) else stored
+    return f"draft:{suffix}"
+
+
 def _counts(entries: Sequence[Mapping[str, str]]) -> dict[str, int]:
     return {
         f"{state}_count": sum(item["state"] == state for item in entries) for state in ENTRY_STATES
@@ -645,6 +652,31 @@ def get_draft(rule_set_key: Any) -> dict[str, Any]:
         raise RuleSetVersionUnavailable("规则集草稿读取失败") from exc
 
 
+def get_draft_export_snapshot(rule_set_key: Any) -> dict[str, Any]:
+    """在同一会话读取草稿及其冻结基础摘要，供 Excel 导出。"""
+    rule_set = _versionable_rule_set(rule_set_key)
+    factory = _require_session_factory()
+    try:
+        with factory() as session:
+            current = _current_in_session(session, rule_set)
+            row = _draft_row(session, rule_set.key)
+            if row is None:
+                raise RuleSetVersionNotFound("草稿不存在")
+            try:
+                base = _resolve_in_session(session, rule_set, row.base_version)
+            except RuleSetVersionNotFound as exc:
+                raise RuleSetVersionUnavailable("草稿的基础版本不可解析") from exc
+            snapshot = _row_item(row, current=current, with_entries=True)
+            snapshot["draft_version"] = _draft_export_version(row)
+            return {
+                "snapshot": snapshot,
+                "base_version": base["version"],
+                "base_content_digest": base["content_digest"],
+            }
+    except SQLAlchemyError as exc:
+        raise RuleSetVersionUnavailable("规则集草稿读取失败") from exc
+
+
 # ---------------------------------------------------------------------------
 # 草稿与发布
 # ---------------------------------------------------------------------------
@@ -733,6 +765,154 @@ def update_draft(
             return _row_item(row, current=current, with_entries=True)
     except SQLAlchemyError as exc:
         raise RuleSetVersionUnavailable("规则集草稿保存失败") from exc
+
+
+def preflight_draft_import_snapshot(
+    rule_set_key: Any, *, base_version: Any, base_content_digest: Any, entries: Any,
+) -> dict[str, Any]:
+    """导入写事务前的完整生命周期预检；事务方法会再次执行同样的关键校验。"""
+    rule_set = _versionable_rule_set(rule_set_key)
+    base_version = _clean(base_version)
+    digest = _clean(base_content_digest).lower()
+    if not base_version:
+        raise RuleSetVersionInvalid("基础版本不能为空", code="base_version_required")
+    if not re.fullmatch(r"[0-9a-f]{64}", digest):
+        raise RuleSetVersionInvalid("基础内容摘要无效", code="base_digest_invalid")
+    normalized_entries = normalize_entries(entries)
+    factory = _require_session_factory()
+    try:
+        with factory() as session:
+            try:
+                base = _resolve_in_session(session, rule_set, base_version)
+            except RuleSetVersionNotFound:
+                raise RuleSetVersionInvalid(
+                    "基础版本不存在，请重新导出", code="base_version_not_found",
+                ) from None
+            if base["content_digest"] != digest:
+                raise RuleSetVersionInvalid(
+                    "基础版本内容摘要已变化，请重新导出", code="base_digest_mismatch",
+                )
+            validate_publish_entries(rule_set, base, normalized_entries)
+            return {
+                "base": base,
+                "entries": normalized_entries,
+                "catalog_entries": _entries_from_partition(
+                    base["active_rule_ids"], base["paused_rule_ids"], base["excluded_rule_ids"],
+                ),
+            }
+    except SQLAlchemyError as exc:
+        raise RuleSetVersionUnavailable("规则集版本导入预检失败") from exc
+
+
+def import_draft_snapshot(
+    rule_set_key: Any,
+    *,
+    actor: str,
+    base_version: Any,
+    base_content_digest: Any,
+    entries: Any,
+    expected_draft_version: Any = None,
+    expected_draft_version_seq: Any = None,
+) -> dict[str, Any]:
+    """把已完成文件预检的快照原子导入草稿。
+
+    冻结基础摘要与用户编辑后的 entries 分开校验。无草稿时只能由冻结版本文件创建；
+    有草稿时必须携带同一草稿导出的 version_seq，并在事务内做 CAS。事务提交前回读，
+    回读失败会回滚写入。
+    """
+    rule_set = _versionable_rule_set(rule_set_key)
+    actor = _actor(actor)
+    base_version = _clean(base_version)
+    if not base_version:
+        raise RuleSetVersionInvalid("基础版本不能为空", code="base_version_required")
+    digest = _clean(base_content_digest).lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", digest):
+        raise RuleSetVersionInvalid("基础内容摘要无效", code="base_digest_invalid")
+    normalized_entries = normalize_entries(entries)
+    expected_version = _clean(expected_draft_version) or None
+    if expected_version is not None and not expected_version.startswith("draft:"):
+        raise RuleSetVersionInvalid("草稿导出身份无效", code="draft_version_invalid")
+    expected_seq = None if expected_draft_version_seq is None else _version_seq(expected_draft_version_seq)
+    if (expected_version is None) != (expected_seq is None):
+        raise RuleSetVersionInvalid("草稿身份与版本序号必须同时提供", code="draft_identity_incomplete")
+    factory = _require_session_factory()
+    draft_id = str(uuid4())
+    try:
+        with factory() as session:
+            with session.begin():
+                _lock_rule_set(session, rule_set.key)
+                try:
+                    base = _resolve_in_session(session, rule_set, base_version)
+                except RuleSetVersionNotFound:
+                    raise RuleSetVersionInvalid(
+                        "基础版本不存在，请重新导出", code="base_version_not_found",
+                    ) from None
+                if base["content_digest"] != digest:
+                    raise RuleSetVersionInvalid(
+                        "基础版本内容摘要已变化，请重新导出", code="base_digest_mismatch",
+                    )
+                # 生命周期规则只在这里判定，Excel 解析器不另造 owner。
+                validate_publish_entries(rule_set, base, normalized_entries)
+                row = _draft_row(session, rule_set.key, for_update=True)
+                if row is None:
+                    if expected_version is not None:
+                        raise RuleSetVersionConflict(
+                            "导出的草稿已不存在，请刷新后重新导出", code="draft_changed",
+                        )
+                    session.execute(insert(_TABLE).values(
+                        id=draft_id,
+                        rule_set_key=rule_set.key,
+                        version=f"{DRAFT_VERSION_PREFIX}{draft_id}",
+                        status=STATUS_DRAFT,
+                        base_version=base["version"],
+                        entries_json=dump_entries(normalized_entries),
+                        content_digest=None,
+                        note=None,
+                        version_seq=1,
+                        created_by=actor,
+                        created_at=_now(),
+                    ))
+                else:
+                    if expected_version is None:
+                        raise RuleSetVersionConflict(
+                            "该规则集已有草稿，请导出当前草稿后再修改导入", code="draft_exists",
+                        )
+                    if _draft_export_version(row) != expected_version:
+                        raise RuleSetVersionConflict(
+                            "导出的草稿已被替换，请刷新后重新导出", code="draft_changed",
+                        )
+                    if row.base_version != base["version"]:
+                        raise RuleSetVersionConflict(
+                            "草稿基础版本已变化，请刷新后重新导出", code="draft_changed",
+                        )
+                    if int(row.version_seq) != expected_seq:
+                        raise RuleSetVersionConflict(
+                            "草稿已被修改，请刷新后重新导出", code="version_conflict",
+                        )
+                    updated = session.execute(
+                        update(_TABLE)
+                        .where(
+                            _TABLE.c.id == row.id,
+                            _TABLE.c.status == STATUS_DRAFT,
+                            _TABLE.c.version_seq == expected_seq,
+                            _TABLE.c.base_version == base["version"],
+                        )
+                        .values(entries_json=dump_entries(normalized_entries), version_seq=expected_seq + 1)
+                    )
+                    if updated.rowcount != 1:
+                        raise RuleSetVersionConflict(
+                            "草稿已被修改，请刷新后重新导出", code="version_conflict",
+                        )
+                # 必须在事务内回读；这里失败时 session.begin 会回滚。
+                current = _current_in_session(session, rule_set)
+                imported = _draft_row(session, rule_set.key)
+                if imported is None:
+                    raise RuleSetVersionUnavailable("规则集草稿回读失败")
+                return _row_item(imported, current=current, with_entries=True)
+    except IntegrityError as exc:
+        raise RuleSetVersionConflict("该规则集已有草稿", code="draft_exists") from exc
+    except SQLAlchemyError as exc:
+        raise RuleSetVersionUnavailable("规则集草稿导入失败") from exc
 
 
 def delete_draft(rule_set_key: Any, *, actor: str, version_seq: Any) -> dict[str, Any]:
