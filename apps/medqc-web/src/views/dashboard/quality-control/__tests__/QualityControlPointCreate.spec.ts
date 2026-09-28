@@ -255,4 +255,17 @@ describe('QualityControlPointCreate', () => {
     expect(mocks.options).toHaveBeenCalledTimes(2)
     expect(wrapper.get('[data-testid="draft-document"]').attributes('disabled')).toBeUndefined()
   })
+
+  it('非管理角色不读取目录或草稿且不能提交', async () => {
+    mocks.auth = reactive({ user: { id: 'staff-1', email: 'staff@example.com' }, userRoles: ['qc_staff'] })
+    const wrapper = render()
+    await flushPromises()
+
+    expect(mocks.options).not.toHaveBeenCalled()
+    expect(mocks.list).not.toHaveBeenCalled()
+    expect(wrapper.get('[data-testid="draft-name"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('[data-testid="save-draft-basic-info"]').attributes('disabled')).toBeDefined()
+    await wrapper.get('form').trigger('submit')
+    expect(mocks.create).not.toHaveBeenCalled()
+  })
 })
