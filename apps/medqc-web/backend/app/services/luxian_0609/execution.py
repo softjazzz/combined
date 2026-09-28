@@ -23,6 +23,7 @@ from .decision_model import RuleDecision
 from .decision_reducer import ReducedRuleDecision
 from ..luxian_0609_result_schema import CANONICAL_RESULT_DELIVERY_MODE
 from ..qc_diagnostics.capture import capture_execution_inputs, capture_execution_context
+from ..test_case_validation_context import build_validation_execution_session, validation_material_active
 from .evidence_material import Luxian0609EvidenceMaterialStore
 from .evidence_snapshot_provider import (
     build_luxian_0609_evidence_read_session,
@@ -307,7 +308,8 @@ async def prepare_luxian_0609_execution(
     ):
         try:
             if unified_engine_enabled or extended_document_required:
-                evidence_session = build_luxian_0609_evidence_read_session(
+                evidence_session = build_validation_execution_session(
+                    build_luxian_0609_evidence_read_session,
                     selected_rule_ids=package_plan.executable_rule_ids,
                     institute_id=str(institute_id),
                     patient_id=str(patient_id),
@@ -357,6 +359,8 @@ async def prepare_luxian_0609_execution(
                 )
             )
         except Exception:
+            if validation_material_active():
+                raise ValueError("验收固定材料无法恢复，禁止回退实时读取") from None
             # 旁路必须 fail-open；具体契约错误由独立质量门证伪，禁止回显原始异常。
             logger.exception("LX0609 evidence snapshot 构建失败")
             evidence_snapshot_build_failed = True

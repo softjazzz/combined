@@ -38,7 +38,9 @@ def test_persist_freeze_conflict_and_append_review(store):
     with pytest.raises(ValidationConflict):
         service.save_answers("case", 1, [ANSWER], "u")
     rows = compare(run, {"status": "completed", "items": [{"rule_id": ANSWER["qc_point_id"], "status": "non_compliant"}]})
-    service.review("case", run["id"], "u", "accepted", "证据定位和建议已核对", rows)
+    with pytest.raises(ValueError, match="缺少固定"):
+        service.review("case", run["id"], "u", "accepted", "证据定位和建议已核对", rows)
+    service.review("case", run["id"], "u", "rejected", "旧运行缺版本", rows)
     service.review("case", run["id"], "u", "rejected", "二次发现证据错误", rows)
     assert len(service.read("case")["runs"][0]["reviews"]) == 2
     with pytest.raises(LookupError):
@@ -69,8 +71,10 @@ async def test_router_without_answer_leak_reads_formal_endpoint(store, monkeypat
     user = {"id": "u"}
     await api.save_test_validation(request, "case", api.TestValidationAnswersRequest(revision=0, answers=[ANSWER]), user)
     captured = []
+    monkeypatch.setattr(service, "freeze_material", lambda *args: None)
     async def run(request, pool_id, payload, current_user, activation):
         captured.append(payload.model_dump())
+        service.bind("case", request.state.rule_validation_reference["run_id"], "u", "job")
         return {"data": {"job_id": "job"}}
     monkeypatch.setattr(api, "run_sample_pool_intrinsic_validation", run)
     created = await api.run_test_validation(request, "case", api.TestValidationRunRequest(revision=1), user, {})
@@ -84,8 +88,68 @@ async def test_router_without_answer_leak_reads_formal_endpoint(store, monkeypat
     result = await api.get_test_validation_result(request, "case", run_id, user)
     assert result["data"]["comparisons"][0]["comparison"] == "same"
     result = await api.review_test_validation(request, "case", run_id,
-        api.TestValidationReviewRequest(decision="accepted", note="已核对原文证据和建议"), user)
+        api.TestValidationReviewRequest(decision="rejected", note="旧运行缺版本"), user)
     assert len(result["data"]["run"]["reviews"]) == 1
     with pytest.raises(Exception) as error:
         await api.get_test_validation_result(request, "case", run_id, {"id": "other"})
     assert error.value.status_code == 404
+
+
+def test_material_freeze_is_bounded_private_and_immutable(store, monkeypatch):
+    from app.services.qc_input_adapters import running_final_bundle_runtime
+    service, _, _ = store
+    source = {"institute_id": "TEST", "patient_id": "P", "visit_id": "V", "medical_text": "原始材料"}
+    monkeypatch.setattr(running_final_bundle_runtime, "load_running_final_bundle", lambda **kwargs: deepcopy(source))
+    service.save_answers("case", 0, [ANSWER], "u")
+    run = service.begin("case", 1, "u")
+    service.freeze_material("case", run["id"], "u")
+    filters = {"sample_pool_id": CUSTOMER_TEST_POOL_ID, "selected_sample_item_ids": ["case"],
+               "source": "manual_problem_sample_pool", "scoped_customer_rule_ids": [ANSWER["qc_point_id"]]}
+    service.bind("case", run["id"], "u", "job", filters)
+    reference = {"item_id": "case", "run_id": run["id"]}
+    job = {"id": "job", "created_by": "u", "filters": filters}
+    source["medical_text"] = "后来改写"
+    loaded = service.load_material(reference=reference, job=job, record_ref=run["record_ref"], scenes=["running"])
+    assert loaded[1]["medical_text"] == "原始材料"
+    assert "原始材料" not in json.dumps(service.read("case"), ensure_ascii=False)
+    with pytest.raises(ValidationConflict):
+        service.freeze_material("case", run["id"], "u")
+    for invalid in ({**job, "id": "other"}, {**job, "created_by": "other"},
+                    {**job, "filters": {**filters, "scoped_customer_rule_ids": []}}):
+        with pytest.raises((ValidationConflict, LookupError)):
+            service.load_material(reference=reference, job=invalid, record_ref=run["record_ref"], scenes=["running"])
+    run2 = service.begin("case", 1, "u")
+    source["medical_text"] = "x" * (5 * 1024 * 1024)
+    with pytest.raises(ValueError, match="5MiB"):
+        service.freeze_material("case", run2["id"], "u")
+
+
+@pytest.mark.asyncio
+async def test_material_context_does_not_leak_to_other_tasks(monkeypatch):
+    import asyncio
+    from app.services.test_case_validation_context import validation_material_scope, build_validation_execution_session
+    called = []
+    monkeypatch.setattr(ValidationService, "__init__", lambda self: None)
+    monkeypatch.setattr(ValidationService, "execution_session", lambda self, **kwargs: "frozen")
+    def original(**kwargs):
+        called.append(True)
+        return "live"
+    async def validation():
+        with validation_material_scope({"run_id": "R"}, {"id": "J"}):
+            await asyncio.sleep(0)
+            assert await asyncio.to_thread(build_validation_execution_session, original) == "frozen"
+        assert build_validation_execution_session(original) == "live"
+    async def ordinary():
+        await asyncio.sleep(0)
+        assert build_validation_execution_session(original) == "live"
+    await asyncio.gather(validation(), ordinary())
+    assert len(called) == 2
+
+
+def test_sample_list_does_not_publish_private_validation_materials():
+    from app.services.custom_qc_sample_pool_service import CustomQCSamplePoolService
+    row = {"raw_payload_json": json.dumps({"golden_answers": [ANSWER],
+        "rule_validation_materials": {"private": "原文"}, "rule_validation_sessions": {"source": "原文"},
+        "rule_validation": {"runs": [{"created_by": "other"}]}})}
+    item = CustomQCSamplePoolService._row_to_item(None, row)
+    assert item["raw_payload"] == {"golden_answers": [ANSWER]}

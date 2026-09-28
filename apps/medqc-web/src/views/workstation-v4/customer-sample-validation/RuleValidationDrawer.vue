@@ -17,7 +17,7 @@
         先保存人工预期，再启动验证。状态一致后仍需核对证据与建议；验收通过不会自动上线规则。
       </p>
       <p class="text-slate-500">
-        本次固定预期答案；材料沿用正式任务读取方式，尚不提供完整病历版本冻结。
+        本次固定人工预期和病历包，首次执行时保存实际读取的材料；同一任务重试使用原材料。修改病例后请建立新运行。
       </p>
       <template v-if="state">
         <h3>人工预期 · 修订 {{ state.revision }}</h3>
@@ -97,6 +97,13 @@
         </a-button>
         <template v-if="result">
           <p>任务状态：{{ jobLabel(result.job_status) }} · 预期修订 {{ result.run.revision }}</p>
+          <p class="text-slate-500">
+            材料版本：{{ result.run.material_version || '旧运行未固定' }} ·
+            {{ result.run.execution_material_frozen_at ? '实际执行材料已保存' : '实际执行材料尚未保存，不能验收通过' }}
+          </p>
+          <p class="text-slate-500">
+            执行版本：{{ executionVersionLabel }} · 模型：{{ result.run.execution_version?.lx0609_task_runtime?.first_pass?.model || '未记录' }}
+          </p>
           <a-button
             v-if="result.run.job_id"
             type="link"
@@ -183,7 +190,11 @@ const columns = [
 const dirty = computed(() => JSON.stringify(answers.value) !== JSON.stringify(state.value?.answers || []))
 const ruleOptions = computed(() => (state.value?.rule_options || []).map(r => ({ value: r.rule_id, label: `${r.rule_id} ${r.name}${r.release_scope === 'acceptance_only' ? '（待验收）' : ''}` })))
 const runOptions = computed(() => [...(state.value?.runs || [])].reverse().map(r => ({ value: r.id, label: `${r.created_at} · 修订${r.revision}` })))
-const canAccept = computed(() => result.value?.job_status === 'completed' && Boolean(result.value.comparisons.length) && result.value.comparisons.every(r => r.comparison === 'same'))
+const executionVersionLabel = computed(() => {
+  const version = result.value?.run.execution_version?.lx0609_task_runtime?.implementation
+  return version?.kind === 'release' ? `${version.build_id} / ${version.git_commit}` : '本地进程版本，仅供开发验收；发布需固定构建后重跑'
+})
+const canAccept = computed(() => result.value?.job_status === 'completed' && Boolean(result.value.run.execution_material_frozen_at && result.value.run.execution_version) && Boolean(result.value.comparisons.length) && result.value.comparisons.every(r => r.comparison === 'same'))
 function addAnswer() {
   answers.value.push({ qc_point_id: '', expected_status: 'non_compliant', human_reason: '', trigger_facts: [], evidence_keywords: [] })
 }

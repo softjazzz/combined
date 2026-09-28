@@ -51,4 +51,29 @@ describe('单病例规则验收', () => {
     expect(wrapper.text()).toContain('无权限')
     expect(wrapper.text()).not.toContain('人工确认通过')
   })
+  it('未固定材料禁止通过，固定后显示任务构建及模型', async () => {
+    const run = { id: 'run', revision: 1, answers: [answer], job_id: 'job', created_at: '2026-09-28', state: 'bound', reviews: [] }
+    vi.mocked(api.readValidation).mockResolvedValue({ success: true, data: { ...initial, runs: [run] } })
+    const comparisons = [{ ...answer, actual_status: 'non_compliant', comparison: 'same' }]
+    vi.mocked(api.readValidationResult).mockResolvedValue({ success: true, data: { run, job_status: 'completed', comparisons } })
+    const wrapper = create()
+    await flushPromises()
+    await wrapper.find('[aria-label="验收运行"]').setValue('run')
+    await flushPromises()
+    await wrapper.find('[aria-label="复核意见"]').setValue('已核对证据')
+    const accept = () => wrapper.findAll('button').find(b => b.text() === '人工确认通过')!
+    expect(accept().attributes('disabled')).toBeDefined()
+    expect(wrapper.text()).toContain('实际执行材料尚未保存')
+    vi.mocked(api.readValidationResult).mockResolvedValue({ success: true, data: { run: { ...run,
+      material_version: 'material-v1', execution_material_frozen_at: '2026-09-28',
+      execution_version: { lx0609_task_runtime: { implementation: { kind: 'release', build_id: 'build-1', git_commit: 'abc' }, first_pass: { provider: 'test', model: 'test-model' } } },
+    }, job_status: 'completed', comparisons } })
+    await wrapper.findAll('button').find(b => b.text() === '刷新结果')!.trigger('click')
+    await flushPromises()
+    await wrapper.find('[aria-label="复核意见"]').setValue('已核对证据')
+    expect(accept().attributes('disabled')).toBeUndefined()
+    expect(wrapper.text()).toContain('build-1 / abc')
+    expect(wrapper.text()).toContain('test-model')
+  })
+
 })

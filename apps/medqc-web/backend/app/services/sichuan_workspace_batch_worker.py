@@ -2340,7 +2340,18 @@ async def run_sichuan_workspace_batch_job(
                             query_scope=query_scope,
                             record_scope=record_scope,
                         )
-                        for scene in candidate_scenes:
+                        validation_reference = filters.get("test_validation_snapshot")
+                        if validation_reference is not None:
+                            from .test_case_validation import TestCaseValidationService
+                            bundle_scene, bundle_payload = TestCaseValidationService().load_material(
+                                reference=validation_reference, job=current,
+                                record_ref={"institute_id": institute_id, "patient_id": patient_id, "visit_id": visit_id},
+                                scenes=candidate_scenes,
+                            )
+                            attempted_bundle_scenes.append(bundle_scene)
+                            # 固定材料为空也不能借用后来更新的病历正文。
+                            record = {**record, "medical_text": str(bundle_payload.get("medical_text") or "")}
+                        for scene in ([] if validation_reference is not None else candidate_scenes):
                             attempted_bundle_scenes.append(scene)
                             try:
                                 bundle_payload = load_running_final_bundle(
@@ -2428,29 +2439,31 @@ async def run_sichuan_workspace_batch_job(
                         package_bundle.setdefault(
                             "text_available", bool(primary_document_text)
                         )
-                        result = await qc_service.evaluate_running_final_bundle_input(
-                            bundle=package_bundle,
-                            rule_ids=active_rule_ids,
-                            bucket_strategy=bucket_strategy,
-                            quality_profile=quality_profile,
-                            batch_output_mode=batch_output_mode,
-                            enable_selective_refine=enable_selective_refine,
-                            refine_confidence_threshold=refine_confidence_threshold,
-                            max_refine_candidates=max_refine_candidates,
-                            rule_set_key=rule_set_key,
-                            **(
-                                {"task_settings": settings}
-                                if rule_set_key == LUXIAN_0609_RULE_SET_KEY
-                                else {}
-                            ),
-                            evaluation_as_of_date=evaluation_as_of_date or None,
-                            evaluation_horizon_policy=evaluation_horizon_policy,
-                            evaluation_horizon_unavailable_reason=(
-                                evaluation_horizon_unavailable_reason
-                            ),
-                            cancellation_check=_is_cancelled,
-                            execution_trace_sink=execution_trace_sink,
-                        )
+                        from .test_case_validation_context import validation_material_scope
+                        with validation_material_scope(filters.get("test_validation_snapshot"), current):
+                            result = await qc_service.evaluate_running_final_bundle_input(
+                                bundle=package_bundle,
+                                rule_ids=active_rule_ids,
+                                bucket_strategy=bucket_strategy,
+                                quality_profile=quality_profile,
+                                batch_output_mode=batch_output_mode,
+                                enable_selective_refine=enable_selective_refine,
+                                refine_confidence_threshold=refine_confidence_threshold,
+                                max_refine_candidates=max_refine_candidates,
+                                rule_set_key=rule_set_key,
+                                **(
+                                    {"task_settings": settings}
+                                    if rule_set_key == LUXIAN_0609_RULE_SET_KEY
+                                    else {}
+                                ),
+                                evaluation_as_of_date=evaluation_as_of_date or None,
+                                evaluation_horizon_policy=evaluation_horizon_policy,
+                                evaluation_horizon_unavailable_reason=(
+                                    evaluation_horizon_unavailable_reason
+                                ),
+                                cancellation_check=_is_cancelled,
+                                execution_trace_sink=execution_trace_sink,
+                            )
                         used_bundle_path = True
                     else:
                         result = await qc_service.evaluate_document_with_rules(

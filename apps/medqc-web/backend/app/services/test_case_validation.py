@@ -12,6 +12,9 @@ from . import custom_qc_sample_pool_service as pools
 from .luxian_0609_rule_master import load_luxian_0609_rule_master
 
 
+VALIDATION_SNAPSHOT_KEY = "test_validation_snapshot"
+
+
 class ValidationConflict(ValueError):
     pass
 
@@ -109,21 +112,127 @@ class TestCaseValidationService:
             return deepcopy(run)
         return self._change(item_id, change)
 
-    def bind(self, item_id: str, run_id: str, user: str, job_id: str | None):
+    def freeze_material(self, item_id: str, run_id: str, user: str):
+        # 仅服务端从现有病历包读取；人工答案从不进入材料。
+        from .qc_input_adapters.running_final_bundle_runtime import load_running_final_bundle
+        run = _owned_run(self.read(item_id), run_id, user)
+        bundles = {}
+        for scene in ("running", "final"):
+            try:
+                bundle = load_running_final_bundle(scene=scene, **run["record_ref"], schema="public")
+            except LookupError:
+                continue
+            if any(str(bundle.get(k) or "") != str(v) for k, v in run["record_ref"].items()):
+                raise ValueError("材料与验收病例坐标不一致")
+            bundles[scene] = bundle
+        if not bundles:
+            raise ValueError("未找到可冻结的测试材料，请先完成病历包生成")
+        # 普通JSON快照不增加摘要/签章，不写普通日志。
+        encoded = json.dumps(bundles, ensure_ascii=False, default=_json_value, allow_nan=False)
+        size = len(encoded.encode("utf-8"))
+        if size > 5 * 1024 * 1024:
+            raise ValueError("单次验收材料超过5MiB，请缩小测试病例")
+        def change(raw, state, row):
+            current = _owned_run(state, run_id, user)
+            if current["state"] != "creating" or current.get("material_version"):
+                raise ValidationConflict("本次材料已固定，不能覆盖")
+            materials = raw.setdefault("rule_validation_materials", {})
+            if len(json.dumps(raw, ensure_ascii=False).encode("utf-8")) + size > 20 * 1024 * 1024:
+                raise ValidationConflict("本病例验收材料累计超过20MiB，请创建新测试副本；历史材料保留")
+            materials[run_id] = json.loads(encoded)
+            current.update(material_version=run_id, material_bytes=size, material_scenes=list(bundles))
+        self._change(item_id, change)
+
+    def bind(self, item_id: str, run_id: str, user: str, job_id: str | None, filters: dict | None = None):
         def change(raw, state, row):
             run = _owned_run(state, run_id, user)
             if run["state"] != "creating":
                 raise ValidationConflict("验收已经绑定，不能更换任务")
             run.update(job_id=job_id, state="bound" if job_id else "creation_failed")
+            if filters is not None:
+                run["execution_version"] = {k: deepcopy(filters.get(k)) for k in (
+                    "lx0609_task_runtime", "lx0609_task_settings", "record_evaluation_snapshot",
+                    "task_frozen_date", "scoped_customer_rule_ids")}
+
         self._change(item_id, change)
+
+    def fail_unbound(self, item_id: str, run_id: str, user: str):
+        def change(raw, state, row):
+            run = _owned_run(state, run_id, user)
+            if run["state"] == "creating":
+                run["state"] = "creation_failed"
+        self._change(item_id, change)
+
+    def load_material(self, *, reference: dict, job: dict, record_ref: dict, scenes: list[str]):
+        """Worker只读：引用、任务、所属用户、规则范围、版本和病例同时校验。"""
+        def read(raw, state, row):
+            run = _owned_run(state, reference.get("run_id"), str(job.get("created_by") or ""))
+            filters = job.get("filters") or {}
+            if (run["job_id"] != job.get("id") or run["state"] != "bound"
+                or run["record_ref"] != record_ref or run.get("material_version") != run["id"]
+                or filters.get("sample_pool_id") != pools.CUSTOMER_TEST_POOL_ID
+                or filters.get("selected_sample_item_ids") != [reference.get("item_id")]
+                or filters.get("source") != "manual_problem_sample_pool"
+                or not run.get("execution_version")
+                or any(filters.get(k) != v for k, v in run.get("execution_version", {}).items())):
+                raise ValidationConflict("验收材料引用与运行任务不一致")
+            bundles = (raw.get("rule_validation_materials") or {}).get(run["id"], {})
+            for scene in scenes:
+                if scene in bundles:
+                    return scene, deepcopy(bundles[scene])
+            raise ValidationConflict("固定材料中没有本次任务需要的场景，禁止回退到实时材料")
+        # 不使用_change：Worker读取不得触发任何写入。
+        with self.sessions() as session:
+            row = session.execute(select(self.table).where(self.table.c.id == reference.get("item_id"))).mappings().first()
+            if not row or row["pool_id"] != pools.CUSTOMER_TEST_POOL_ID:
+                raise LookupError("验收材料不存在")
+            raw = json.loads(row["raw_payload_json"] or "{}")
+            return read(raw, raw.get("rule_validation") or {}, row)
+
+    def execution_session(self, *, reference: dict, job: dict, builder, parameters: dict):
+        from .qc_diagnostics.execution_inputs import freeze_execution_inputs
+        from .qc_diagnostics.session_restore import restore_execution_session
+        from .qc_diagnostics.typed_values import encode_value, decode_value
+        coordinates = tuple(parameters[k] for k in ("institute_id", "patient_id", "visit_id"))
+        self.load_material(reference=reference, job=job, record_ref=dict(zip(
+            ("institute_id", "patient_id", "visit_id"), coordinates)), scenes=["running", "final"])
+        def change(raw, state, row):
+            run = _owned_run(state, reference["run_id"], str(job["created_by"]))
+            frozen = raw.setdefault("rule_validation_sessions", {}).get(run["id"])
+            context = {k: parameters.get(k) for k in (
+                "selected_rule_ids", "evaluation_as_of_date", "evaluation_horizon_policy",
+                "evaluation_horizon_snapshot", "horizon_unavailable_reason", "additional_source_keys")}
+            if frozen is not None:
+                if frozen["context"] != encode_value(context):
+                    raise ValidationConflict("重试范围或评价上下文变化，请建立新的验收运行")
+                return restore_execution_session(decode_value(frozen["inputs"]), coordinates=coordinates)
+            session = builder(**parameters)
+            inputs = freeze_execution_inputs(session, selected_rule_ids=parameters["selected_rule_ids"],
+                evaluation_as_of_date=parameters.get("evaluation_as_of_date"),
+                evaluation_horizon_policy=parameters.get("evaluation_horizon_policy"),
+                horizon_unavailable_reason=parameters.get("horizon_unavailable_reason"))
+            archive = {"context": encode_value(context), "inputs": encode_value(inputs)}
+            size = len(json.dumps(archive, ensure_ascii=False).encode("utf-8"))
+            if size + run["material_bytes"] > 5 * 1024 * 1024:
+                raise ValidationConflict("验收执行材料超过5MiB，停止本次验收")
+            raw["rule_validation_sessions"][run["id"]] = archive
+            if len(json.dumps(raw, ensure_ascii=False).encode("utf-8")) > 20 * 1024 * 1024:
+                raise ValidationConflict("本病例验收材料累计超过20MiB，停止本次验收")
+            # 用正式恢复器核对持久化后仍能原样恢复，不另建材料合同。
+            restored = restore_execution_session(decode_value(archive["inputs"]), coordinates=coordinates)
+            run.update(execution_material_frozen_at=_now(), execution_material_bytes=size)
+            return restored
+        return self._change(reference["item_id"], change)
 
     def review(self, item_id: str, run_id: str, user: str, decision: str, note: str, rows: list[dict]):
         if decision not in {"accepted", "rejected"} or not note.strip():
             raise ValueError("请选择复核结论并填写证据、建议核对意见")
-        if decision == "accepted" and any(x["comparison"] != "same" for x in rows):
+        if decision == "accepted" and (not rows or any(x["comparison"] != "same" for x in rows)):
             raise ValueError("存在差异或未完成项，不能标记通过；请修正后重新运行")
         def change(raw, state, row):
             run = _owned_run(state, run_id, user)
+            if decision == "accepted" and (not run.get("execution_material_frozen_at") or not run.get("execution_version")):
+                raise ValueError("本次运行缺少固定执行材料或版本，请重新运行后验收")
             run["reviews"].append({"decision": decision, "note": note.strip(), "reviewed_by": user,
                                    "reviewed_at": _now(), "comparisons": deepcopy(rows)})
         self._change(item_id, change)
@@ -143,3 +252,12 @@ def _read(raw, state, row):
 
 def _now():
     return datetime.now(timezone.utc).isoformat()
+
+
+def _json_value(value):
+    if isinstance(value, datetime):
+        return value.isoformat()
+    from datetime import date
+    if isinstance(value, date):
+        return value.isoformat()
+    raise TypeError("验收材料包含不支持的类型")

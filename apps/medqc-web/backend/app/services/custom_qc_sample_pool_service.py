@@ -3291,6 +3291,11 @@ class CustomQCSamplePoolService:
 
     def _row_to_item(self, row: Dict[str, Any]) -> Dict[str, Any]:
         raw_payload = _safe_json_loads(row.get("raw_payload_json"), {})
+        if isinstance(raw_payload, dict):
+            # 验收材料与用户意见只经专用授权入口读取，不随样本列表批量返回。
+            raw_payload = {key: value for key, value in raw_payload.items() if key not in {
+                "rule_validation_materials", "rule_validation_sessions", "rule_validation",
+            }}
         visit_id = _safe_text(
             raw_payload.get("visit_id") if isinstance(raw_payload, dict) else ""
         )

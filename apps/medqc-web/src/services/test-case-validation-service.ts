@@ -2,7 +2,13 @@ import { ApiService } from './apiService'
 import type { SyntheticCaseGoldenAnswer } from '@/views/workstation-v4/customer-sample-validation/types'
 
 export type ValidationReview = { decision: 'accepted' | 'rejected'; note: string; reviewed_by: string; reviewed_at: string }
-export type ValidationRun = { id: string; revision: number; answers: SyntheticCaseGoldenAnswer[]; job_id: string | null; created_at: string; state: string; reviews: ValidationReview[] }
+export type ValidationExecutionVersion = {
+  lx0609_task_runtime?: {
+    implementation?: { kind: string; build_id?: string; git_commit?: string; id?: string }
+    first_pass?: { provider: string; model: string }
+  }
+}
+export type ValidationRun = { material_version?: string; execution_material_frozen_at?: string; execution_version?: ValidationExecutionVersion; id: string; revision: number; answers: SyntheticCaseGoldenAnswer[]; job_id: string | null; created_at: string; state: string; reviews: ValidationReview[] }
 export type ValidationState = { revision: number; answers: SyntheticCaseGoldenAnswer[]; runs: ValidationRun[]; rule_options: { rule_id: string; name: string; release_scope: string }[] }
 export type ValidationResult = { run: ValidationRun; job_status: string; comparisons: (SyntheticCaseGoldenAnswer & { actual_status: string | null; comparison: string })[] }
 const base = (id: string) => `/api/v1/qc/sample-pools/test-records/${encodeURIComponent(id)}/validation`

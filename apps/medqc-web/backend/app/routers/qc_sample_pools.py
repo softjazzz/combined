@@ -1410,7 +1410,18 @@ async def run_sample_pool_intrinsic_validation(
         rule_set_key=rule_set_key,
         rule_set_name=rule_set_name,
     )
+    # 仅专用验收路由设置request.state；HTTP请求体不能注入此引用。
+    validation_ref = getattr(request.state, "rule_validation_reference", None)
+    if validation_ref is not None and (
+        pool_id != "customer-created-test-records-v1" or payload.group_by_luxian_family
+        or requested_sample_item_ids != [validation_ref["item_id"]]
+        or rule_set_key != LUXIAN_0609_QC_RULE_SET_KEY
+    ):
+        raise HTTPException(status_code=422, detail="固定材料验收仅支持自建测试池单病例LX0609任务")
+    if validation_ref is not None and not (task_settings_snapshot or {}).get("flags", {}).get("LUXIAN_0609_UNIFIED_ENGINE_ENABLED"):
+        raise HTTPException(status_code=422, detail="固定材料验收需要统一引擎资料会话，当前配置不支持")
     job_filters = {
+        **({"test_validation_snapshot": validation_ref} if validation_ref is not None else {}),
         **({LX0609_TASK_SETTINGS_FILTER_KEY: task_settings_snapshot} if task_settings_snapshot is not None else {}),
         **({LX0609_TASK_RUNTIME_FILTER_KEY: task_runtime_snapshot} if task_runtime_snapshot is not None else {}),
         "rule_ids": rule_ids,
@@ -1533,6 +1544,7 @@ async def run_sample_pool_intrinsic_validation(
         group_by_luxian_family=bool(payload.group_by_luxian_family),
         effective_scope=effective_scope,
         execution_options={
+            **({"test_validation_snapshot": validation_ref} if validation_ref is not None else {}),
             **({LX0609_TASK_SETTINGS_FILTER_KEY: task_settings_snapshot} if task_settings_snapshot is not None else {}),
             **({LX0609_TASK_RUNTIME_FILTER_KEY: task_runtime_snapshot} if task_runtime_snapshot is not None else {}),
             "model_code": payload.model_code,
@@ -1775,6 +1787,9 @@ async def run_sample_pool_intrinsic_validation(
         run_mode="parallel",
         rule_count=len(rule_ids),
     )
+    if validation_ref is not None:
+        _test_validation_service().bind(validation_ref["item_id"], validation_ref["run_id"],
+                                        created_by, job["id"], job_filters)
     service.update_pool_latest_job(pool_id=pool_id, job_id=job["id"], job_status="queued")
     submit_detached_task(
         "sample_pool_sichuan_workspace_batch_job",
@@ -1873,15 +1888,20 @@ async def run_test_validation(request: Request, item_id: str, payload: TestValid
     except (LookupError, ValueError) as exc:
         raise _validation_error(exc) from exc
     try:
+        service.freeze_material(item_id, run["id"], user)
+        request.state.rule_validation_reference = {"item_id": item_id, "run_id": run["id"]}
         result = await run_sample_pool_intrinsic_validation(request, CUSTOMER_TEST_POOL_ID,
             SamplePoolRunRequest(sample_item_ids=[item_id], record_refs=[SamplePoolRunRecordRef(**run["record_ref"])],
                 selected_rule_ids=[a["qc_point_id"] for a in run["answers"]],
                 rule_set_key=LUXIAN_0609_QC_RULE_SET_KEY, group_by_luxian_family=False), current_user, activation)
+    except (LookupError, ValueError) as exc:
+        service.fail_unbound(item_id, run["id"], user)
+        raise _validation_error(exc) from exc
     except Exception:
-        service.bind(item_id, run["id"], user, None)
+        service.fail_unbound(item_id, run["id"], user)
         raise
-    # 绑定失败保留creating记录，不把已启动任务误记为失败或自动重跑。
-    service.bind(item_id, run["id"], user, result["data"]["job_id"])
+    finally:
+        request.state.rule_validation_reference = None
     return success_response(data={"run_id": run["id"], "job_id": result["data"]["job_id"]}, trace_id=get_trace_id(request))
 
 
