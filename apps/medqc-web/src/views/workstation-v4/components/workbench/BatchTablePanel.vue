@@ -160,7 +160,10 @@
           </div>
         </template>
         <template v-else-if="column.key === 'department'">
-          <span class="batch-table-panel__department">{{ record.department }}</span>
+          <span
+            class="batch-table-panel__department"
+            :title="record.department"
+          >{{ record.department }}</span>
         </template>
         <template v-else-if="column.key === 'stageStatus'">
           <span
@@ -360,7 +363,8 @@ const showBatchActions = computed(
     showClearFiltersAction.value,
 )
 const tableScroll = computed(() => ({
-  x: recordPoolMode.value ? 1040 : 980,
+  // 病历池最小宽度 = 固定列 536 + 患者列 136；再窄才出现横向滚动
+  x: recordPoolMode.value ? 672 : 980,
   y: showSelection.value ? undefined : 440,
 }))
 const displayRows = computed(() => {
@@ -445,18 +449,19 @@ const stageColumns = [
   { title: '操作', key: 'action', dataIndex: 'action', width: 120 },
 ]
 
+// 病历池与右侧预览并排，列表列只剩约 660–760px：患者列不设宽度吃掉剩余空间，其余列按内容收紧
 const recordPoolColumns = [
-  { title: '患者 / 住院号', key: 'patient', dataIndex: 'patient', width: 300 },
-  { title: '科室', key: 'department', dataIndex: 'department', width: 190 },
+  { title: '患者 / 住院号', key: 'patient', dataIndex: 'patient' },
+  { title: '科室', key: 'department', dataIndex: 'department', width: 128, ellipsis: true },
   {
     title: '住院状态',
     key: 'hospitalizationStatus',
     dataIndex: 'hospitalizationStatus',
-    width: 110,
+    width: 88,
   },
-  { title: '入院日期', key: 'admissionDate', dataIndex: 'admissionDate', width: 140 },
-  { title: '出院日期', key: 'dischargeDate', dataIndex: 'dischargeDate', width: 140 },
-  { title: '操作', key: 'action', dataIndex: 'action', width: 100 },
+  { title: '入院日期', key: 'admissionDate', dataIndex: 'admissionDate', width: 104 },
+  { title: '出院日期', key: 'dischargeDate', dataIndex: 'dischargeDate', width: 104 },
+  { title: '操作', key: 'action', dataIndex: 'action', width: 72 },
 ]
 
 const columns = computed(() => (recordPoolMode.value ? recordPoolColumns : stageColumns))
@@ -883,6 +888,7 @@ function rowClassName(record: WorkbenchRow): string {
 }
 
 .batch-table-panel--record-pool .batch-table-panel__department {
+  display: block;
   font-size: 14px;
   color: var(--workstation-text-primary, #1d1d1f);
 }
@@ -916,6 +922,15 @@ function rowClassName(record: WorkbenchRow): string {
   padding-top: 12px;
   padding-bottom: 12px;
   border-bottom-color: #edf0f4;
+}
+
+.batch-table-panel--record-pool :deep(.ant-table-thead > tr > th),
+.batch-table-panel--record-pool :deep(.ant-table-tbody > tr > td) {
+  padding-inline: 12px;
+}
+
+.batch-table-panel--record-pool .batch-table-panel__detail-button {
+  padding-inline: 6px !important;
 }
 
 .batch-table-panel--record-pool :deep(.ant-table-tbody > tr:hover > td) {
