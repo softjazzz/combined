@@ -52,6 +52,19 @@ describe('ruleSetVersions API', () => {
     expect(spy.mock.calls[4]?.[0]).toMatchObject({ method: 'POST', url: `/api/v1/rule-set-versions/${KEY}/v1/retire` })
   })
 
+  it('删除态作为版本条目写入草稿，不调用物理删除接口', async () => {
+    const spy = vi.spyOn(ApiService, 'requestRaw').mockResolvedValue(envelope({}))
+    await updateRuleSetDraft(KEY, {
+      version_seq: 7,
+      entries: [{ rule_id: 'LX0609-033', state: 'deleted' }],
+    })
+    expect(spy).toHaveBeenCalledWith(expect.objectContaining({
+      method: 'PUT',
+      url: `/api/v1/rule-set-versions/${KEY}/draft`,
+      data: { version_seq: 7, entries: [{ rule_id: 'LX0609-033', state: 'deleted' }] },
+    }))
+  })
+
   it.each([
     'draft_exists', 'version_conflict', 'version_exists', 'unsupported_rule_set',
     'current_version', 'builtin_version', 'already_retired',
@@ -119,5 +132,24 @@ describe('ruleSetVersions API', () => {
     const result = await importRuleSetDraft(KEY, new File(['x'], 'rules.xlsx'))
     expect(result).toMatchObject({ success: false, status: 200, resultUnknown: true })
     expect(result.message).toContain('回执不完整')
+  })
+
+  it('导入草稿回执接受显式删除态', async () => {
+    vi.spyOn(ApiService, 'requestRaw').mockResolvedValue(envelope({
+      rule_set_key: KEY,
+      status: 'draft',
+      version_seq: 8,
+      base_version: 'v7',
+      entries: [{
+        rule_id: 'LX0609-033', state: 'deleted', executable: false,
+        qc_point: '出院小结规范', source_document: '出院记录',
+      }],
+    }))
+    const result = await importRuleSetDraft(KEY, new File(['x'], 'rules.xlsx'))
+    expect(result).toMatchObject({
+      success: true,
+      resultUnknown: false,
+      data: { entries: [{ rule_id: 'LX0609-033', state: 'deleted' }] },
+    })
   })
 })

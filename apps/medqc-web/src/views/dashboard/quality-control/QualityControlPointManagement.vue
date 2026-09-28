@@ -119,6 +119,21 @@
           >
             批量下线
           </a-button>
+          <a-popconfirm
+            title="确认从后续版本删除所选质控点？删除发布后不能恢复，历史版本仍保留记录。"
+            ok-text="删除"
+            cancel-text="取消"
+            @open-change="handleDeleteConfirmOpen"
+            @confirm="confirmDelete"
+          >
+            <a-button
+              danger
+              :disabled="selectedRowKeys.length === 0 || Boolean(deleteBlockedReason) || saving"
+              class="batch-btn batch-delete"
+            >
+              批量删除
+            </a-button>
+          </a-popconfirm>
           <span class="batch-hint">改动先写入草稿，发布新版本后生效</span>
         </template>
         <a-button
@@ -234,7 +249,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import type { TableColumnsType, TableProps } from 'ant-design-vue'
 import { useRouter } from 'vue-router'
@@ -279,6 +294,7 @@ const ruleSetOptions = RULE_SET_OPTIONS.map((item) => ({ ...item }))
 const ruleSetKey = ref<string>(LX0609_RULE_SET_KEY)
 const activeTab = ref<PointTab>('online')
 const selectedRowKeys = ref<string[]>([])
+const deleteConfirmContext = ref<{ ruleSetKey: string; actorKey: string; ruleIds: string[] } | null>(null)
 const searchType = ref<'id' | 'name'>('id')
 const searchKeyword = ref('')
 const appliedKeyword = ref('')
@@ -293,6 +309,18 @@ const versionList = ref<RuleSetVersionList | null>(null)
 const currentDetail = ref<RuleSetVersionDetail | null>(null)
 /** 草稿基础版本不是当前版本时单独读取的基础版本详情。 */
 const baseDetail = ref<RuleSetVersionDetail | null>(null)
+let contextGeneration = 0
+let loadGeneration = 0
+let mutationGeneration = 0
+let disposed = false
+
+const actorKey = computed(() => {
+  const userId = String(authStore.user?.id ?? '').trim()
+  const roles = Array.isArray(authStore.userRoles)
+    ? authStore.userRoles.map((role) => role.trim()).filter(Boolean).sort()
+    : []
+  return userId ? `${userId}|${roles.join(',')}` : ''
+})
 
 /** 写权限沿用规则管理路由：admin / qc_manager。 */
 const canManage = computed(() => authStore.hasRole('admin') || authStore.hasRole('qc_manager'))
@@ -324,6 +352,15 @@ const enableBlockedReason = computed(() => {
   return `所选质控点中 ${blocked.join('、')} 当前不可执行（执行器未实现或规则未就绪），不能开启`
 })
 
+const deleteBlockedReason = computed(() => {
+  const selected = new Set(selectedRowKeys.value)
+  const blocked = rows.value.filter((row) => selected.has(row.rule_id) && (
+    (row.state !== 'paused' && row.state !== 'offline') || row.draftState === 'deleted'
+  ))
+  if (!blocked.length) return ''
+  return '只能删除当前版本中已暂停或已下线、且草稿中尚未删除的质控点'
+})
+
 const tableColumns = computed<TableColumnsType<QualityPointRow>>(() => [
   { title: '质控点ID', dataIndex: 'rule_id', key: 'rule_id', width: 140 },
   { title: '质控点名称 / 文书', dataIndex: 'name', key: 'name' },
@@ -338,6 +375,9 @@ const tableColumns = computed<TableColumnsType<QualityPointRow>>(() => [
 
 const rowSelection = computed<TableProps['rowSelection']>(() => ({
   selectedRowKeys: selectedRowKeys.value,
+  getCheckboxProps: (record: QualityPointRow) => ({
+    disabled: record.draftState === 'deleted',
+  }),
   onChange: (keys: Array<string | number>) => {
     selectedRowKeys.value = keys.map((key) => String(key))
   },
@@ -357,12 +397,16 @@ function asRow(record: Record<string, unknown>): QualityPointRow {
 
 async function load() {
   const key = ruleSetKey.value
+  const actor = actorKey.value
+  const context = contextGeneration
+  const request = ++loadGeneration
+  if (!actor) return
   loading.value = true
   loadError.value = ''
   selectedRowKeys.value = []
   try {
     const listResult = await listRuleSetVersions(key)
-    if (key !== ruleSetKey.value) return
+    if (!contextCurrent(context, actor, key) || request !== loadGeneration) return
     if (!listResult.success || !listResult.data) {
       versionList.value = null
       currentDetail.value = null
@@ -376,13 +420,13 @@ async function load() {
     const baseResult = draftBase && draftBase !== list.current_version
       ? await getRuleSetVersion(key, draftBase)
       : null
-    if (key !== ruleSetKey.value) return
+    if (!contextCurrent(context, actor, key) || request !== loadGeneration) return
     versionList.value = list
     currentDetail.value = detailResult.success ? detailResult.data ?? null : null
     baseDetail.value = baseResult?.success ? baseResult.data ?? null : null
     if (!detailResult.success) loadError.value = detailResult.message || '读取当前版本详情失败'
   } finally {
-    if (key === ruleSetKey.value) loading.value = false
+    if (contextCurrent(context, actor, key) && request === loadGeneration) loading.value = false
   }
 }
 
@@ -400,19 +444,36 @@ async function downloadCurrentVersion() {
 }
 
 /** 批量修改质控点状态：只写草稿；无草稿时先以当前版本为基础创建草稿。 */
-async function applyBatch(state: RuleSetEntryState) {
+async function applyBatch(state: RuleSetEntryState, frozenRuleIds: readonly string[] = selectedRowKeys.value) {
   const list = versionList.value
-  if (!editable.value || !list || selectedRowKeys.value.length === 0) return
+  const key = ruleSetKey.value
+  const actor = actorKey.value
+  const context = contextGeneration
+  const ruleIds = [...frozenRuleIds]
+  if (!actor || !editable.value || !list || ruleIds.length === 0) return
+  const currentRows = new Map(rows.value.map((row) => [row.rule_id, row]))
+  if (ruleIds.some((ruleId) => currentRows.get(ruleId)?.draftState === 'deleted')) {
+    message.warning('已在草稿中删除的质控点不能恢复或再次修改')
+    return
+  }
+  if (state === 'deleted' && ruleIds.some((ruleId) => {
+    const current = currentRows.get(ruleId)?.state
+    return current !== 'paused' && current !== 'offline'
+  })) {
+    message.warning('只能删除当前版本中已暂停或已下线的质控点；当前在线规则请先下线并发布')
+    return
+  }
   if (state === 'active' && enableBlockedReason.value) {
     message.warning(enableBlockedReason.value)
     return
   }
-  const key = ruleSetKey.value
+  const request = ++mutationGeneration
   saving.value = true
   try {
     let working = list.draft
     if (!working) {
       const created = await createRuleSetDraft(key, { base_version: list.current_version })
+      if (!contextCurrent(context, actor, key) || request !== mutationGeneration) return
       if (!created.success || !created.data) {
         message.warning(describeFailure(created, '创建草稿失败'))
         if (needsRefresh(created)) await load()
@@ -421,12 +482,13 @@ async function applyBatch(state: RuleSetEntryState) {
       working = created.data
       versionList.value = { ...list, draft: working }
     }
-    const { entries, changed } = applyStateToEntries(working.entries, selectedRowKeys.value, state)
+    const { entries, changed } = applyStateToEntries(working.entries, ruleIds, state)
     if (changed === 0) {
       message.info(`所选质控点在草稿中已是“${ENTRY_STATE_LABEL[state]}”`)
       return
     }
     const updated = await updateRuleSetDraft(key, { version_seq: working.version_seq, entries })
+    if (!contextCurrent(context, actor, key) || request !== mutationGeneration) return
     if (!updated.success || !updated.data) {
       message.warning(describeFailure(updated, '保存草稿失败'))
       if (needsRefresh(updated) || updated.status === 404) await load()
@@ -436,8 +498,28 @@ async function applyBatch(state: RuleSetEntryState) {
     selectedRowKeys.value = []
     message.success(`已写入草稿：${changed} 个质控点改为“${ENTRY_STATE_LABEL[state]}”，发布新版本后生效`)
   } finally {
-    saving.value = false
+    if (contextCurrent(context, actor, key) && request === mutationGeneration) saving.value = false
   }
+}
+
+function handleDeleteConfirmOpen(open: boolean) {
+  if (open) {
+    deleteConfirmContext.value = {
+      ruleSetKey: ruleSetKey.value,
+      actorKey: actorKey.value,
+      ruleIds: [...selectedRowKeys.value],
+    }
+  }
+}
+
+function confirmDelete() {
+  const frozen = deleteConfirmContext.value
+  deleteConfirmContext.value = null
+  if (!frozen || frozen.ruleSetKey !== ruleSetKey.value || frozen.actorKey !== actorKey.value) {
+    message.warning('操作上下文已变化，请重新选择质控点')
+    return
+  }
+  void applyBatch('deleted', frozen.ruleIds)
 }
 
 function handleCreateNew() {
@@ -448,11 +530,32 @@ function handleSearch() {
   appliedKeyword.value = searchKeyword.value
 }
 
-watch(ruleSetKey, () => {
+function contextCurrent(generation: number, actor: string, key: string) {
+  return !disposed && generation === contextGeneration && actor === actorKey.value && key === ruleSetKey.value
+}
+
+function invalidateContext() {
+  contextGeneration += 1
+  loadGeneration += 1
+  mutationGeneration += 1
+  loading.value = false
+  saving.value = false
+  selectedRowKeys.value = []
+  deleteConfirmContext.value = null
   versionList.value = null
   currentDetail.value = null
   baseDetail.value = null
-  void load()
+  loadError.value = ''
+}
+
+watch(ruleSetKey, () => {
+  invalidateContext()
+  if (actorKey.value) void load()
+})
+
+watch(actorKey, () => {
+  invalidateContext()
+  if (actorKey.value) void load()
 })
 
 watch(activeTab, () => {
@@ -460,7 +563,12 @@ watch(activeTab, () => {
 })
 
 onMounted(() => {
-  void load()
+  if (actorKey.value) void load()
+})
+
+onBeforeUnmount(() => {
+  disposed = true
+  invalidateContext()
 })
 </script>
 

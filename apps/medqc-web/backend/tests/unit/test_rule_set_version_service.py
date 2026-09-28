@@ -245,6 +245,36 @@ def test_publish_writes_digest_and_becomes_current(sessions):
     assert service.get_version_detail(KEY, "2026-09-27.1")["resolution"] == resolved
 
 
+def test_deleted_tombstone_requires_nonactive_current_and_cannot_be_revived(sessions):
+    active_rule = next(item["rule_id"] for item in _builtin_entries() if item["state"] == "active")
+    with pytest.raises(service.RuleSetVersionInvalid) as active_delete:
+        service.create_draft(
+            KEY,
+            actor=ACTOR,
+            entries=_with_state(_builtin_entries(), active_rule, "deleted"),
+        )
+    assert active_delete.value.code == "delete_validation_failed"
+
+    deleted_entries = _with_state(_builtin_entries(), EXCLUDED_RULE, "deleted")
+    published = _publish_with(deleted_entries, version="deleted-v1")
+    assert published["deleted_count"] == 1
+    resolved = service.resolve_rule_set_version(KEY, "deleted-v1")
+    assert resolved["deleted_rule_ids"] == [EXCLUDED_RULE]
+    assert EXCLUDED_RULE in resolved["excluded_rule_ids"]
+    assert EXCLUDED_RULE not in resolved["offline_rule_ids"]
+
+    draft = service.create_draft(KEY, actor=ACTOR, base_version=BUILTIN)
+    assert {item["rule_id"]: item["state"] for item in draft["entries"]}[EXCLUDED_RULE] == "deleted"
+    with pytest.raises(service.RuleSetVersionInvalid) as revive:
+        service.update_draft(
+            KEY,
+            actor=ACTOR,
+            version_seq=draft["version_seq"],
+            entries=_with_state(draft["entries"], EXCLUDED_RULE, "offline"),
+        )
+    assert revive.value.code == "delete_validation_failed"
+
+
 def test_publish_requires_full_coverage(sessions):
     entries = [item for item in _builtin_entries() if item["rule_id"] != "LX0609-001"]
     with pytest.raises(service.RuleSetVersionInvalid) as error:

@@ -269,6 +269,12 @@ async function handlePublish() {
       return
     }
     publishError.value = describeFailure(result, '发布失败')
+    if (result.status === undefined || result.status >= 500 || (result.status >= 200 && result.status < 300)) {
+      publishOpen.value = false
+      message.warning('发布结果未确认，已刷新规则集版本，请核对当前版本后再操作')
+      emit('refresh')
+      return
+    }
     if (needsRefresh(result) || result.status === 404) {
       publishOpen.value = false
       message.warning(publishError.value)

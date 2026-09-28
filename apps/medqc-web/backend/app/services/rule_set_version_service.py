@@ -43,7 +43,8 @@ VERSIONABLE_RULE_SET_KEYS = frozenset({LUXIAN_0609_RULE_SET_KEY})
 STATE_ACTIVE = "active"
 STATE_PAUSED = "paused"
 STATE_OFFLINE = "offline"
-ENTRY_STATES = (STATE_ACTIVE, STATE_PAUSED, STATE_OFFLINE)
+STATE_DELETED = "deleted"
+ENTRY_STATES = (STATE_ACTIVE, STATE_PAUSED, STATE_OFFLINE, STATE_DELETED)
 
 STATUS_DRAFT = "draft"
 STATUS_PUBLISHED = "published"
@@ -143,12 +144,14 @@ def _builtin_partition(rule_set: QCRuleSet) -> tuple[tuple[str, ...], tuple[str,
 
 
 def _entries_from_partition(
-    active: Iterable[str], paused: Iterable[str], excluded: Iterable[str],
+    active: Iterable[str], paused: Iterable[str], offline: Iterable[str],
+    deleted: Iterable[str] = (),
 ) -> list[dict[str, str]]:
     entries = [
         *({"rule_id": rule_id, "state": STATE_ACTIVE} for rule_id in active),
         *({"rule_id": rule_id, "state": STATE_PAUSED} for rule_id in paused),
-        *({"rule_id": rule_id, "state": STATE_OFFLINE} for rule_id in excluded),
+        *({"rule_id": rule_id, "state": STATE_OFFLINE} for rule_id in offline),
+        *({"rule_id": rule_id, "state": STATE_DELETED} for rule_id in deleted),
     ]
     return sorted(entries, key=lambda item: item["rule_id"])
 
@@ -231,7 +234,7 @@ def normalize_entries(raw: Any) -> list[dict[str, str]]:
         if not isinstance(rule_id, str) or not rule_id.strip() or len(rule_id.strip()) > MAX_RULE_ID_LENGTH:
             raise RuleSetVersionInvalid("entries 中 rule_id 无效")
         if not isinstance(state, str) or state not in ENTRY_STATES:
-            raise RuleSetVersionInvalid("entries 中 state 只能是 active、paused 或 offline")
+            raise RuleSetVersionInvalid("entries 中 state 只能是 active、paused、offline 或 deleted")
         rule_id = rule_id.strip().upper()
         if rule_id in normalized:
             raise RuleSetVersionInvalid(f"entries 中规则重复：{rule_id}")
@@ -271,13 +274,18 @@ def _resolution(
     by_state: dict[str, list[str]] = {state: [] for state in ENTRY_STATES}
     for item in entries:
         by_state[item["state"]].append(item["rule_id"])
+    offline_rule_ids = _ordered(rule_set, by_state[STATE_OFFLINE])
+    deleted_rule_ids = _ordered(rule_set, by_state[STATE_DELETED])
     return {
         "rule_set_key": rule_set.key,
         "version": version,
         "source": source,
         "active_rule_ids": _ordered(rule_set, by_state[STATE_ACTIVE]),
         "paused_rule_ids": _ordered(rule_set, by_state[STATE_PAUSED]),
-        "excluded_rule_ids": _ordered(rule_set, by_state[STATE_OFFLINE]),
+        "offline_rule_ids": offline_rule_ids,
+        "deleted_rule_ids": deleted_rule_ids,
+        # 执行消费者继续只认 excluded；墓碑与下线规则都不得进入执行。
+        "excluded_rule_ids": _ordered(rule_set, [*offline_rule_ids, *deleted_rule_ids]),
         "content_digest": content_digest,
     }
 
@@ -292,6 +300,8 @@ def _builtin_resolution(rule_set: QCRuleSet) -> dict[str, Any]:
         # 内置版本保持现行计算的原始顺序，不重排。
         "active_rule_ids": list(active),
         "paused_rule_ids": list(paused),
+        "offline_rule_ids": list(excluded),
+        "deleted_rule_ids": [],
         "excluded_rule_ids": list(excluded),
         "content_digest": compute_entries_digest(entries),
     }
@@ -418,8 +428,62 @@ def _all_rule_ids(resolution: Mapping[str, Any]) -> set[str]:
     }
 
 
+def _entries_from_resolution(resolution: Mapping[str, Any]) -> list[dict[str, str]]:
+    """精确恢复四态；deleted 不能经 excluded 投影退化为 offline。"""
+    deleted = set(resolution.get("deleted_rule_ids") or ())
+    offline = resolution.get("offline_rule_ids")
+    if offline is None:
+        offline = [
+            rule_id for rule_id in resolution["excluded_rule_ids"]
+            if rule_id not in deleted
+        ]
+    return _entries_from_partition(
+        resolution["active_rule_ids"],
+        resolution["paused_rule_ids"],
+        offline,
+        deleted,
+    )
+
+
+def _deleted_transition_problems(
+    current: Mapping[str, Any], entries: Sequence[Mapping[str, str]],
+) -> list[str]:
+    """墓碑不可复活；当前启用项必须先发布暂停/下线版本才能删除。"""
+    current_by_id = {
+        item["rule_id"]: item["state"] for item in _entries_from_resolution(current)
+    }
+    requested = {item["rule_id"]: item["state"] for item in entries}
+    problems: list[str] = []
+    revived = sorted(
+        rule_id for rule_id, state in current_by_id.items()
+        if state == STATE_DELETED and requested.get(rule_id) != STATE_DELETED
+    )
+    if revived:
+        problems.append(f"已删除规则不能恢复或遗漏：{','.join(revived)}")
+    active_deleted = sorted(
+        rule_id for rule_id, state in requested.items()
+        if state == STATE_DELETED and current_by_id.get(rule_id) == STATE_ACTIVE
+    )
+    if active_deleted:
+        problems.append(
+            f"启用中的规则不能直接删除，请先发布暂停或下线版本：{','.join(active_deleted)}"
+        )
+    return problems
+
+
+def _require_deleted_transitions(
+    current: Mapping[str, Any], entries: Sequence[Mapping[str, str]],
+) -> None:
+    problems = _deleted_transition_problems(current, entries)
+    if problems:
+        raise RuleSetVersionInvalid(
+            "规则删除状态不符合要求", code="delete_validation_failed", problems=problems,
+        )
+
+
 def validate_publish_entries(
     rule_set: QCRuleSet, base: Mapping[str, Any], entries: Sequence[Mapping[str, str]],
+    *, current: Mapping[str, Any] | None = None,
 ) -> None:
     """发布校验（合同第 4 节）；不通过抛 RuleSetVersionInvalid，problems 逐条列出原因。"""
     rule_ids = {item["rule_id"] for item in entries}
@@ -443,6 +507,8 @@ def validate_publish_entries(
         problems.append(f"以下规则当前不可执行，只能设为 paused 或 offline：{','.join(not_executable)}")
     if not any(item["state"] == STATE_ACTIVE for item in entries):
         problems.append("至少需要 1 条 active 规则")
+    if current is not None:
+        problems.extend(_deleted_transition_problems(current, entries))
     if problems:
         raise RuleSetVersionInvalid(
             "规则集版本发布校验未通过", code="publish_validation_failed", problems=problems,
@@ -707,9 +773,19 @@ def create_draft(
                 if _draft_row(session, rule_set.key) is not None:
                     raise RuleSetVersionConflict("该规则集已有草稿", code="draft_exists")
                 if normalized_entries is None:
-                    normalized_entries = _entries_from_partition(
-                        base["active_rule_ids"], base["paused_rule_ids"], base["excluded_rule_ids"],
-                    )
+                    normalized_entries = _entries_from_resolution(base)
+                    current_resolution = _resolve_in_session(session, rule_set, current)
+                    current_deleted = set(current_resolution.get("deleted_rule_ids") or ())
+                    normalized_entries = [
+                        {
+                            **item,
+                            "state": STATE_DELETED if item["rule_id"] in current_deleted else item["state"],
+                        }
+                        for item in normalized_entries
+                    ]
+                else:
+                    current_resolution = _resolve_in_session(session, rule_set, current)
+                _require_deleted_transitions(current_resolution, normalized_entries)
                 session.execute(insert(_TABLE).values(
                     id=draft_id, rule_set_key=rule_set.key,
                     version=f"{DRAFT_VERSION_PREFIX}{draft_id}", status=STATUS_DRAFT,
@@ -750,6 +826,12 @@ def update_draft(
                     raise RuleSetVersionNotFound("草稿不存在")
                 if int(row.version_seq) != version_seq:
                     raise RuleSetVersionConflict("草稿已被修改，请刷新后重试", code="version_conflict")
+                current = _current_in_session(session, rule_set)
+                if entries is not None:
+                    _require_deleted_transitions(
+                        _resolve_in_session(session, rule_set, current),
+                        normalize_entries(entries),
+                    )
                 updated = session.execute(
                     update(_TABLE)
                     .where(
@@ -760,7 +842,6 @@ def update_draft(
                 )
                 if updated.rowcount != 1:
                     raise RuleSetVersionConflict("草稿已被修改，请刷新后重试", code="version_conflict")
-                current = _current_in_session(session, rule_set)
             row = _draft_row(session, rule_set.key)
             return _row_item(row, current=current, with_entries=True)
     except SQLAlchemyError as exc:
@@ -792,13 +873,13 @@ def preflight_draft_import_snapshot(
                 raise RuleSetVersionInvalid(
                     "基础版本内容摘要已变化，请重新导出", code="base_digest_mismatch",
                 )
-            validate_publish_entries(rule_set, base, normalized_entries)
+            current_name = _current_in_session(session, rule_set)
+            current = _resolve_in_session(session, rule_set, current_name)
+            validate_publish_entries(rule_set, base, normalized_entries, current=current)
             return {
                 "base": base,
                 "entries": normalized_entries,
-                "catalog_entries": _entries_from_partition(
-                    base["active_rule_ids"], base["paused_rule_ids"], base["excluded_rule_ids"],
-                ),
+                "catalog_entries": _entries_from_resolution(base),
             }
     except SQLAlchemyError as exc:
         raise RuleSetVersionUnavailable("规则集版本导入预检失败") from exc
@@ -852,7 +933,11 @@ def import_draft_snapshot(
                         "基础版本内容摘要已变化，请重新导出", code="base_digest_mismatch",
                     )
                 # 生命周期规则只在这里判定，Excel 解析器不另造 owner。
-                validate_publish_entries(rule_set, base, normalized_entries)
+                current_name = _current_in_session(session, rule_set)
+                current_resolution = _resolve_in_session(session, rule_set, current_name)
+                validate_publish_entries(
+                    rule_set, base, normalized_entries, current=current_resolution,
+                )
                 row = _draft_row(session, rule_set.key, for_update=True)
                 if row is None:
                     if expected_version is not None:
@@ -982,7 +1067,9 @@ def publish_draft(
                 except RuleSetVersionNotFound as exc:
                     # 基础版本只能下线不能删除；解析不到视为数据异常而非用户错误，失败关闭。
                     raise RuleSetVersionUnavailable("草稿的基础版本不可解析") from exc
-                validate_publish_entries(rule_set, base, entries)
+                current_name = _current_in_session(session, rule_set)
+                current_resolution = _resolve_in_session(session, rule_set, current_name)
+                validate_publish_entries(rule_set, base, entries, current=current_resolution)
                 now = _now()
                 updated = session.execute(
                     update(_TABLE)

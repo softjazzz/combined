@@ -73,7 +73,7 @@
           </template>
         </div>
         <div class="history-counts">
-          开启 {{ item.active_count }} · 暂停 {{ item.paused_count }} · 下线 {{ item.offline_count }}
+          开启 {{ item.active_count }} · 暂停 {{ item.paused_count }} · 下线 {{ item.offline_count }} · 删除 {{ item.deleted_count }}
           <template v-if="item.base_version">
             · 派生自 {{ item.base_version }}
           </template>

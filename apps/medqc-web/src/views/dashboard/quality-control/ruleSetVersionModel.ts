@@ -25,12 +25,14 @@ export const ENTRY_STATE_LABEL: Record<RuleSetEntryState, string> = {
   active: '已开启',
   paused: '已暂停',
   offline: '已下线',
+  deleted: '已删除',
 }
 
 export const ENTRY_STATE_COLOR: Record<RuleSetEntryState, string> = {
   active: 'green',
   paused: 'orange',
   offline: 'default',
+  deleted: 'red',
 }
 
 export const VERSION_SOURCE_LABEL: Record<RuleSetVersionSource, string> = {
@@ -89,7 +91,11 @@ export function buildPointRows(
 }
 
 export function rowsForTab(rows: readonly QualityPointRow[], tab: PointTab): QualityPointRow[] {
-  return rows.filter((row) => (tab === 'online' ? row.state === 'active' : row.state !== 'active'))
+  return rows.filter((row) => (
+    tab === 'online'
+      ? row.state === 'active'
+      : row.state === 'paused' || row.state === 'offline'
+  ))
 }
 
 export function filterRows(

@@ -31,7 +31,7 @@ MAX_UNCOMPRESSED_BYTES = 8 * 1024 * 1024
 MAX_ZIP_MEMBER_BYTES = 4 * 1024 * 1024
 MAX_ENTRY_ROWS = 1000
 ALLOWED_STATUSES = frozenset({"builtin", "published", "retired", "draft"})
-ALLOWED_STATES = frozenset({"active", "paused", "offline"})
+ALLOWED_STATES = frozenset({"active", "paused", "offline", "deleted"})
 
 
 @dataclass(frozen=True)
@@ -133,7 +133,7 @@ def build_workbook(
     _style_headers(entries, len(ENTRY_HEADERS))
     for column, width in zip("ABCD", (18, 14, 44, 34), strict=True):
         entries.column_dimensions[column].width = width
-    validation = DataValidation(type="list", formula1='"active,paused,offline"')
+    validation = DataValidation(type="list", formula1='"active,paused,offline,deleted"')
     entries.add_data_validation(validation)
     if entries.max_row >= 2:
         validation.add(f"B2:B{entries.max_row}")
@@ -285,7 +285,10 @@ def parse_workbook(content: bytes, *, expected_rule_set_key: str) -> ParsedRuleS
             if not rule_id:
                 issues.append(_issue(ENTRY_SHEET, row_no, "质控点ID", "required", "质控点ID不能为空"))
             if state not in ALLOWED_STATES:
-                issues.append(_issue(ENTRY_SHEET, row_no, "状态", "invalid_state", "状态只能是 active、paused 或 offline"))
+                issues.append(_issue(
+                    ENTRY_SHEET, row_no, "状态", "invalid_state",
+                    "状态只能是 active、paused、offline 或 deleted",
+                ))
             entries.append({"rule_id": rule_id, "state": state})
             metadata.append((row_no, rule_id, qc_point, source_document))
         if not entries:

@@ -10,8 +10,8 @@ import { isAxiosError } from 'axios'
 import { ApiService } from '@/services/apiService'
 import { extractApiErrorMessageFromError, normalizeApiSuccess } from '@/utils/api-envelope'
 
-/** 规则在版本中的状态：active 开启、paused 暂停、offline 下线。 */
-export type RuleSetEntryState = 'active' | 'paused' | 'offline'
+/** 规则在版本中的状态：deleted 仅保留在冻结版本和差异中，不参与当前管理列表。 */
+export type RuleSetEntryState = 'active' | 'paused' | 'offline' | 'deleted'
 /** 版本来源：内置、已发布、已下线。 */
 export type RuleSetVersionSource = 'builtin' | 'published' | 'retired'
 export type RuleSetVersionStatus = RuleSetVersionSource | 'draft'
@@ -74,6 +74,7 @@ export interface RuleSetVersionItem {
   active_count: number
   paused_count: number
   offline_count: number
+  deleted_count: number
 }
 
 export interface RuleSetResolution {
@@ -83,6 +84,7 @@ export interface RuleSetResolution {
   active_rule_ids: string[]
   paused_rule_ids: string[]
   excluded_rule_ids: string[]
+  deleted_rule_ids?: string[]
   content_digest: string
 }
 
@@ -361,7 +363,7 @@ function normalizeImportedDraft(value: unknown, ruleSetKey: string): RuleSetDraf
     if (
       typeof entry.rule_id !== 'string'
       || !entry.rule_id.trim()
-      || !['active', 'paused', 'offline'].includes(String(entry.state))
+      || !['active', 'paused', 'offline', 'deleted'].includes(String(entry.state))
       || typeof entry.executable !== 'boolean'
       || seen.has(entry.rule_id)
     ) return null

@@ -108,6 +108,21 @@ def test_draft_roundtrip_carries_base_digest_and_version_seq():
     assert parsed.base_content_digest == service.resolve_rule_set_version(KEY, BUILTIN)["content_digest"]
 
 
+def test_deleted_state_roundtrips_without_becoming_offline():
+    entries = builtin_entries()
+    deleted_rule = next(item["rule_id"] for item in entries if item["state"] == "offline")
+    next(item for item in entries if item["rule_id"] == deleted_rule)["state"] = "deleted"
+    content = workbook_bytes(entries)
+
+    workbook = load_workbook(io.BytesIO(content), data_only=False)
+    validations = list(workbook[excel.ENTRY_SHEET].data_validations.dataValidation)
+    assert validations[0].formula1 == '"active,paused,offline,deleted"'
+    workbook.close()
+
+    parsed = excel.parse_workbook(content, expected_rule_set_key=KEY)
+    assert {item["rule_id"]: item["state"] for item in parsed.entries}[deleted_rule] == "deleted"
+
+
 @pytest.mark.parametrize(
     "edit,code",
     [

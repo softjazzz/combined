@@ -1,4 +1,4 @@
-import { h, nextTick } from 'vue'
+import { h, nextTick, reactive } from 'vue'
 import { mount, type VueWrapper } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import QualityControlPointManagement from '@/views/dashboard/quality-control/QualityControlPointManagement.vue'
@@ -14,7 +14,11 @@ const KEY = 'luxian_0609_qc_v1'
 const BUILTIN = '2026-06-09'
 
 const state = vi.hoisted(() => ({
-  roles: ['qc_manager'] as string[],
+  auth: null as null | {
+    user: { id: string } | null
+    userRoles: string[]
+    hasRole: (role: string) => boolean
+  },
   push: vi.fn(),
   message: { success: vi.fn(), warning: vi.fn(), info: vi.fn(), error: vi.fn() },
   api: {
@@ -32,7 +36,7 @@ const state = vi.hoisted(() => ({
 }))
 
 vi.mock('@/stores/auth', () => ({
-  useAuthStore: () => ({ hasRole: (role: string) => state.roles.includes(role) }),
+  useAuthStore: () => state.auth,
 }))
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: state.push }) }))
 vi.mock('ant-design-vue', () => ({ message: state.message }))
@@ -52,7 +56,7 @@ function versionItem(overrides: Partial<RuleSetVersionItem> = {}): RuleSetVersio
     base_version: null, content_digest: 'digest', note: null, version_seq: null,
     created_by: null, created_at: null, published_by: null, published_at: null,
     retired_by: null, retired_at: null, is_current: true,
-    active_count: 2, paused_count: 1, offline_count: 1,
+    active_count: 2, paused_count: 1, offline_count: 1, deleted_count: 0,
     ...overrides,
   }
 }
@@ -84,6 +88,12 @@ function list(overrides: Partial<RuleSetVersionList> = {}): RuleSetVersionList {
 
 const ok = <T>(data: T) => ({ success: true, data, status: 200 })
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((done) => { resolve = done })
+  return { promise, resolve }
+}
+
 const slot = { template: '<div><slot /></div>' }
 const inputStub = {
   props: ['value'],
@@ -96,11 +106,18 @@ const tableStub = {
     const self = this as unknown as {
       dataSource: Array<{ rule_id: string }>
       columns: Array<{ key: string }>
-      rowSelection?: { onChange: (keys: string[]) => void }
+      rowSelection?: {
+        onChange: (keys: string[]) => void
+        getCheckboxProps?: (record: { rule_id: string }) => { disabled?: boolean }
+      }
       $slots: { bodyCell?: (props: { column: { key: string }; record: unknown }) => unknown }
     }
     return h('div', { class: 'table' }, self.dataSource.map((record) => h('div', { class: 'row', 'data-id': record.rule_id }, [
-      self.rowSelection ? h('button', { class: 'select-row', onClick: () => self.rowSelection?.onChange([record.rule_id]) }, '选择') : null,
+      self.rowSelection ? h('button', {
+        class: 'select-row',
+        disabled: self.rowSelection.getCheckboxProps?.(record).disabled,
+        onClick: () => self.rowSelection?.onChange([record.rule_id]),
+      }, '选择') : null,
       h('span', record.rule_id),
       ...self.columns.map((column) => h('div', self.$slots.bodyCell?.({ column, record }) as never)),
     ])))
@@ -124,7 +141,10 @@ const stubs = {
   'a-button': { props: ['disabled', 'loading'], emits: ['click'], template: '<button :disabled="disabled" @click="$emit(\'click\')"><slot /></button>' },
   'a-checkbox': { props: ['checked', 'disabled'], emits: ['update:checked'], template: '<label><input type="checkbox" :disabled="disabled"><slot /></label>' },
   'a-tooltip': { props: ['title'], template: '<span class="tooltip" :data-tip="title"><slot /></span>' },
-  'a-popconfirm': { emits: ['confirm'], template: '<span><slot /><button class="pop-ok" @click="$emit(\'confirm\')">确认</button></span>' },
+  'a-popconfirm': {
+    emits: ['confirm', 'openChange'],
+    template: '<span><slot /><button class="pop-open" @click="$emit(\'openChange\', true)">打开确认</button><button class="pop-ok" @click="$emit(\'confirm\')">确认</button></span>',
+  },
   'a-modal': { props: ['open'], template: '<div v-if="open" class="modal"><slot /></div>' },
   'a-drawer': { props: ['open'], template: '<div v-if="open" class="drawer"><slot /></div>' },
   'a-input': inputStub,
@@ -161,7 +181,11 @@ async function selectRow(wrapper: VueWrapper, ruleId: string) {
 describe('QualityControlPointManagement', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    state.roles = ['qc_manager']
+    state.auth = reactive({
+      user: { id: 'manager-1' },
+      userRoles: ['qc_manager'],
+      hasRole(role: string) { return this.userRoles.includes(role) },
+    })
     state.api.listRuleSetVersions.mockResolvedValue(ok(list()))
     state.api.getRuleSetVersion.mockResolvedValue(ok(detail()))
   })
@@ -249,6 +273,95 @@ describe('QualityControlPointManagement', () => {
     expect(state.api.listRuleSetVersions).toHaveBeenCalledTimes(2)
   })
 
+  it('只把确认时冻结的当前暂停或下线规则写为删除态，并在草稿中禁止恢复', async () => {
+    state.api.listRuleSetVersions.mockResolvedValue(ok(list({ draft: draftOf(entries, 4) })))
+    const deletedEntries = entries.map((item) => (
+      item.rule_id === 'LX0609-020' ? { ...item, state: 'deleted' as const } : item
+    ))
+    state.api.updateRuleSetDraft.mockResolvedValue(ok(draftOf(deletedEntries, 5)))
+    const wrapper = await render()
+    await wrapper.find('.tab-offline').trigger('click')
+    await flush()
+
+    await selectRow(wrapper, 'LX0609-020')
+    const confirm = wrapper.find('.batch-delete').element.parentElement
+    ;(confirm?.querySelector('.pop-open') as HTMLElement).click()
+    await selectRow(wrapper, 'LX0609-033')
+    ;(confirm?.querySelector('.pop-ok') as HTMLElement).click()
+    await flush()
+
+    expect(state.api.updateRuleSetDraft).toHaveBeenCalledWith(KEY, {
+      version_seq: 4,
+      entries: expect.arrayContaining([{ rule_id: 'LX0609-020', state: 'deleted' }]),
+    })
+    expect(state.api.updateRuleSetDraft.mock.calls[0]?.[1].entries).toContainEqual({ rule_id: 'LX0609-033', state: 'offline' })
+    expect(wrapper.find('.row[data-id="LX0609-020"]').text()).toContain('草稿：已删除')
+    expect(wrapper.find('.row[data-id="LX0609-020"] .select-row').attributes('disabled')).toBeDefined()
+  })
+
+  it('当前在线规则不能直接删除，已发布删除项不出现在管理列表但历史计数保留', async () => {
+    const withDeleted: RuleSetEntryView[] = [
+      ...entries,
+      { rule_id: 'LX0609-099', state: 'deleted', executable: false, qc_point: '历史删除规则', source_document: null },
+    ]
+    state.api.listRuleSetVersions.mockResolvedValue(ok(list({
+      items: [versionItem({ deleted_count: 1 })],
+    })))
+    state.api.getRuleSetVersion.mockResolvedValue(ok(detail(BUILTIN, withDeleted)))
+    const wrapper = await render()
+
+    await selectRow(wrapper, 'LX0609-001')
+    expect(wrapper.find('.batch-delete').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('.row[data-id="LX0609-099"]').exists()).toBe(false)
+    await button(wrapper, '版本历史').trigger('click')
+    await flush()
+    expect(wrapper.find('.history-counts').text()).toContain('删除 1')
+  })
+
+  it('删除确认冻结规则集，切换规则集后不能把同ID删除到新规则集', async () => {
+    state.api.listRuleSetVersions.mockResolvedValue(ok(list({ draft: draftOf(entries, 4) })))
+    const wrapper = await render()
+    await wrapper.find('.tab-offline').trigger('click')
+    await selectRow(wrapper, 'LX0609-033')
+    const confirm = wrapper.find('.batch-delete').element.parentElement
+    ;(confirm?.querySelector('.pop-open') as HTMLElement).click()
+
+    await wrapper.find('.rule-set-select').setValue('luxian_0916_qc_v1')
+    await flush()
+    ;(confirm?.querySelector('.pop-ok') as HTMLElement).click()
+    await flush()
+
+    expect(state.api.updateRuleSetDraft).not.toHaveBeenCalled()
+    expect(state.api.createRuleSetDraft).not.toHaveBeenCalled()
+    expect(state.message.success).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['旧成功', ok(draftOf(entries.map((item) => (
+      item.rule_id === 'LX0609-001' ? { ...item, state: 'paused' as const } : item
+    )), 5))],
+    ['旧失败', { success: false, status: 409, code: 'version_conflict', message: '旧账号冲突' }],
+  ])('同角色换账号后丢弃在途更新的%s回执，不污染新账号状态或提示', async (_label, lateResult) => {
+    state.api.listRuleSetVersions.mockResolvedValue(ok(list({ draft: draftOf(entries, 4) })))
+    const pending = deferred<typeof lateResult>()
+    state.api.updateRuleSetDraft.mockReturnValue(pending.promise)
+    const wrapper = await render()
+    await selectRow(wrapper, 'LX0609-001')
+    await button(wrapper, '批量暂停').trigger('click')
+    await flush()
+    expect(state.api.updateRuleSetDraft).toHaveBeenCalledTimes(1)
+
+    state.auth!.user = { id: 'manager-2' }
+    await flush()
+    pending.resolve(lateResult)
+    await flush()
+
+    expect(state.api.listRuleSetVersions).toHaveBeenCalledTimes(2)
+    expect(state.message.success).not.toHaveBeenCalledWith(expect.stringContaining('改为“已暂停”'))
+    expect(state.message.warning).not.toHaveBeenCalledWith(expect.stringContaining('旧账号冲突'))
+    expect(wrapper.find('.row[data-id="LX0609-001"]').text()).not.toContain('草稿：已暂停')
+  })
+
   it('发布：成功刷新、422 逐条展示 problems、409 提示版本号重复', async () => {
     const changed = entries.map((item) => (item.rule_id === 'LX0609-002' ? { ...item, state: 'offline' as const } : item))
     state.api.listRuleSetVersions.mockResolvedValue(ok(list({ draft: draftOf(changed, 3) })))
@@ -294,6 +407,22 @@ describe('QualityControlPointManagement', () => {
     await flush()
     expect(state.api.publishRuleSetDraft).not.toHaveBeenCalled()
     expect(wrapper.find('.publish-error').text()).toContain('版本号只能包含')
+  })
+
+  it('发布结果未知时不提示成功，先回读版本与草稿', async () => {
+    const changed = entries.map((item) => (item.rule_id === 'LX0609-033' ? { ...item, state: 'deleted' as const } : item))
+    state.api.listRuleSetVersions.mockResolvedValue(ok(list({ draft: draftOf(changed, 6) })))
+    state.api.publishRuleSetDraft.mockResolvedValue({ success: false, status: 503, message: '服务暂不可用' })
+    const wrapper = await render()
+    await button(wrapper, '发布新版本').trigger('click')
+    await flush()
+    await wrapper.find('.modal .version-input').setValue('v-delete')
+    await button(wrapper, '确认发布', '.modal').trigger('click')
+    await flush()
+
+    expect(state.message.success).not.toHaveBeenCalledWith(expect.stringContaining('v-delete'))
+    expect(state.message.warning).toHaveBeenCalledWith(expect.stringContaining('发布结果未确认'))
+    expect(state.api.listRuleSetVersions).toHaveBeenCalledTimes(2)
   })
 
   it('放弃草稿带 version_seq', async () => {
@@ -354,7 +483,7 @@ describe('QualityControlPointManagement', () => {
   })
 
   it('只读角色不显示写操作', async () => {
-    state.roles = ['qc_doctor']
+    state.auth!.userRoles = ['qc_doctor']
     state.api.listRuleSetVersions.mockResolvedValue(ok(list({
       draft: draftOf(entries.map((item) => ({ ...item, state: 'paused' as const })), 1),
       items: [versionItem({ id: 'id-1', version: 'v1', status: 'published', source: 'published', is_current: false }), versionItem()],
