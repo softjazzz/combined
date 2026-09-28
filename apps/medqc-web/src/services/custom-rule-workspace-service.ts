@@ -5,7 +5,10 @@ import type {
   CustomRuleBatchJobQuery,
   CustomRuleBatchResult,
   CustomRuleDraft,
+  CustomRuleDraftBasicInfo,
+  CustomRuleDraftBasicInfoInput,
   CustomRuleDraftPayload,
+  CustomRuleDocumentOption,
   CustomRuleBatchJobExport,
   CustomRulePublishResult,
   CustomRuleSingleTestResult,
@@ -22,6 +25,118 @@ type ServiceResult<T> = {
   success: boolean
   data?: T
   message?: string
+}
+
+export type DraftBasicInfoMutationResult =
+  | { success: true; data: CustomRuleDraftBasicInfo; resultUnknown: false; conflict: false }
+  | { success: false; message: string; resultUnknown: boolean; conflict: boolean }
+
+const DRAFT_BASIC_INFO_URL = '/api/v1/custom-qc/workspace/draft-basic-info'
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function normalizeDraftBasicInfo(value: unknown): CustomRuleDraftBasicInfo | null {
+  if (!isRecord(value)) return null
+  const required = ['id', 'rule_code', 'updated_at', 'name', 'category', 'rule_type', 'document_type']
+  if (value.status !== 'draft' || required.some((key) => typeof value[key] !== 'string' || !String(value[key]).trim())) {
+    return null
+  }
+  if (Number.isNaN(Date.parse(String(value.updated_at)))) return null
+  return value as unknown as CustomRuleDraftBasicInfo
+}
+
+function errorStatus(error: unknown): number | undefined {
+  if (!isRecord(error) || !isRecord(error.response)) return undefined
+  return typeof error.response.status === 'number' ? error.response.status : undefined
+}
+
+async function mutateDraftBasicInfo(
+  method: 'POST' | 'PATCH',
+  url: string,
+  data: Record<string, unknown>,
+): Promise<DraftBasicInfoMutationResult> {
+  try {
+    const response = await ApiService.requestRaw({ method, url, data })
+    const normalized = normalizeApiSuccess<unknown>(response.data)
+    const draft = normalized.success ? normalizeDraftBasicInfo(normalized.data) : null
+    if (!draft) {
+      return {
+        success: false,
+        message: '服务端未返回可确认的草稿回执，请刷新草稿列表核对，勿盲目重试',
+        resultUnknown: true,
+        conflict: false,
+      }
+    }
+    return { success: true, data: draft, resultUnknown: false, conflict: false }
+  } catch (error) {
+    const status = errorStatus(error)
+    const conflict = status === 409
+    const confirmedRejection = status === 401 || status === 403 || status === 404 || status === 409 || status === 422
+    return {
+      success: false,
+      message: confirmedRejection
+        ? toErrorMessage(error, conflict ? '草稿已变更，请重新读取后再修改' : '草稿保存被拒绝')
+        : '草稿保存结果无法确认，请刷新草稿列表核对，勿盲目重试',
+      resultUnknown: !confirmedRejection,
+      conflict,
+    }
+  }
+}
+
+export async function getDraftBasicInfoOptions(): Promise<ServiceResult<{ documents: CustomRuleDocumentOption[] }>> {
+  const result = await requestEnvelope<unknown>(
+    { method: 'GET', url: `${DRAFT_BASIC_INFO_URL}/options` },
+    '获取质控文书选项失败',
+  )
+  if (!result.success) return { success: false, message: result.message }
+  if (!isRecord(result.data) || !Array.isArray(result.data.documents)) {
+    return { success: false, message: '质控文书选项回执格式异常' }
+  }
+  const documents = result.data.documents.filter((item): item is CustomRuleDocumentOption =>
+    isRecord(item)
+    && typeof item.value === 'string'
+    && Boolean(item.value.trim())
+    && item.value === item.value.trim()
+    && typeof item.label === 'string'
+    && Boolean(item.label.trim()),
+  )
+  const distinctValues = new Set(documents.map((item) => item.value.trim()))
+  if (documents.length !== result.data.documents.length || documents.length === 0 || distinctValues.size !== documents.length) {
+    return { success: false, message: '质控文书选项回执格式异常' }
+  }
+  return { success: true, data: { documents } }
+}
+
+export async function getDraftBasicInfo(draftId: string): Promise<ServiceResult<CustomRuleDraftBasicInfo>> {
+  const result = await requestEnvelope<unknown>(
+    { method: 'GET', url: `${DRAFT_BASIC_INFO_URL}/${encodeURIComponent(draftId)}` },
+    '读取草稿基础信息失败',
+  )
+  if (!result.success) return { success: false, message: result.message }
+  const data = normalizeDraftBasicInfo(result.data)
+  return data && data.id === draftId
+    ? { success: true, data }
+    : { success: false, message: '草稿基础信息回执格式异常' }
+}
+
+export function createDraftBasicInfo(payload: CustomRuleDraftBasicInfoInput) {
+  return mutateDraftBasicInfo('POST', DRAFT_BASIC_INFO_URL, { ...payload })
+}
+
+export async function updateDraftBasicInfo(
+  draftId: string,
+  payload: CustomRuleDraftBasicInfoInput & { expected_updated_at: string },
+) {
+  const result = await mutateDraftBasicInfo('PATCH', `${DRAFT_BASIC_INFO_URL}/${encodeURIComponent(draftId)}`, { ...payload })
+  if (result.success === false || result.data.id === draftId) return result
+  return {
+    success: false as const,
+    message: '服务端返回了其他草稿，更新结果无法确认，请刷新核对，勿盲目重试',
+    resultUnknown: true,
+    conflict: false,
+  }
 }
 
 function toErrorMessage(error: unknown, fallback: string): string {

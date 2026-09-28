@@ -7,6 +7,7 @@ from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError
 
+from ..core.audit import audit_event
 from ..core.response import get_trace_id, success_response
 from ..core.security import get_current_user, require_roles
 from ..services.custom_qc_service import (
@@ -15,7 +16,13 @@ from ..services.custom_qc_service import (
     evaluate_inline_rule_orchestrated,
     generate_custom_prompt,
 )
-from ..services.custom_qc_workspace_service import CustomQCWorkspaceService
+from ..services.custom_qc_workspace_service import (
+    CustomQCWorkspaceService,
+    DraftBasicInfoConflict,
+    DraftBasicInfoInvalid,
+    DraftBasicInfoNotFound,
+    draft_basic_info_document_options,
+)
 from ..services.llm_observability import llm_observation_context
 from ..services.product_activation import require_product_activation
 from ..services.sichuan_qc_service import SichuanQCService
@@ -112,6 +119,29 @@ class WorkspaceDraftUpdateRequest(BaseModel):
     last_test_summary: Optional[Dict[str, Any]] = None
     status: Optional[str] = None
     published_rule_id: Optional[str] = None
+
+
+DraftBasicName = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=100),
+]
+DraftBasicValue = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=100),
+]
+
+
+class WorkspaceDraftBasicInfoCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: DraftBasicName
+    category: DraftBasicValue
+    rule_type: DraftBasicValue
+    document_type: DraftBasicValue
+
+
+class WorkspaceDraftBasicInfoUpdateRequest(WorkspaceDraftBasicInfoCreateRequest):
+    expected_updated_at: datetime
 
 
 class WorkspaceRecordPayload(BaseModel):
@@ -742,6 +772,161 @@ async def test_custom_qc_batch(
     return success_response(
         data=response,
         message="批量病历测试完成",
+        trace_id=get_trace_id(request),
+    )
+
+
+def _draft_basic_info_response(data: Mapping[str, Any]) -> Dict[str, Any]:
+    updated_at = data.get("updated_at")
+    if isinstance(updated_at, datetime):
+        if updated_at.tzinfo is None:
+            updated_at = updated_at.replace(tzinfo=timezone.utc)
+        updated_at_value: Any = updated_at.isoformat()
+    else:
+        updated_at_value = updated_at
+    return {**dict(data), "updated_at": updated_at_value}
+
+
+def _raise_draft_basic_info_http(exc: Exception, *, action: str) -> None:
+    if isinstance(exc, DraftBasicInfoInvalid):
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "draft_basic_info_invalid", "message": str(exc)},
+        ) from exc
+    if isinstance(exc, DraftBasicInfoNotFound):
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "draft_basic_info_not_found", "message": str(exc)},
+        ) from exc
+    if isinstance(exc, DraftBasicInfoConflict):
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "draft_basic_info_conflict", "message": str(exc)},
+        ) from exc
+    if action == "read":
+        message = "基础信息草稿读取失败，请稍后重试"
+        code = "draft_basic_info_unavailable"
+    else:
+        message = "草稿保存结果未确认，请刷新草稿列表核对，不要盲目重试"
+        code = "draft_basic_info_result_unknown"
+    raise HTTPException(status_code=503, detail={"code": code, "message": message}) from exc
+
+
+@router.get("/workspace/draft-basic-info/options")
+async def get_workspace_draft_basic_info_options(request: Request):
+    return success_response(
+        data={"documents": draft_basic_info_document_options()},
+        message="获取质控点基础信息选项成功",
+        trace_id=get_trace_id(request),
+    )
+
+
+@router.post("/workspace/draft-basic-info")
+async def create_workspace_draft_basic_info(
+    request: Request,
+    payload: WorkspaceDraftBasicInfoCreateRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
+):
+    try:
+        draft = workspace.create_basic_info_draft(
+            created_by=_current_user_id(current_user),
+            payload=payload.model_dump(),
+        )
+    except Exception as exc:
+        audit_event(
+            request,
+            action="custom_qc.draft_basic_info.create",
+            resource="custom_qc_rule_draft",
+            outcome="unknown" if not isinstance(exc, DraftBasicInfoInvalid) else "rejected",
+            details={"reason_code": exc.__class__.__name__},
+            current_user=current_user,
+        )
+        _raise_draft_basic_info_http(exc, action="create")
+    audit_event(
+        request,
+        action="custom_qc.draft_basic_info.create",
+        resource="custom_qc_rule_draft",
+        outcome="success",
+        details={
+            "draft_id": str(draft.get("id") or ""),
+            "rule_code": str(draft.get("rule_code") or ""),
+            "status": "draft",
+        },
+        current_user=current_user,
+    )
+    return success_response(
+        data=_draft_basic_info_response(draft),
+        message="质控点基础信息草稿已保存",
+        trace_id=get_trace_id(request),
+    )
+
+
+@router.get("/workspace/draft-basic-info/{draft_id}")
+async def get_workspace_draft_basic_info(
+    request: Request,
+    draft_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
+):
+    try:
+        draft = workspace.get_basic_info_draft(
+            draft_id=draft_id,
+            created_by=_current_user_id(current_user),
+        )
+    except Exception as exc:
+        _raise_draft_basic_info_http(exc, action="read")
+    return success_response(
+        data=_draft_basic_info_response(draft),
+        message="获取质控点基础信息草稿成功",
+        trace_id=get_trace_id(request),
+    )
+
+
+@router.patch("/workspace/draft-basic-info/{draft_id}")
+async def update_workspace_draft_basic_info(
+    request: Request,
+    draft_id: str,
+    payload: WorkspaceDraftBasicInfoUpdateRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
+):
+    try:
+        draft = workspace.update_basic_info_draft(
+            draft_id=draft_id,
+            created_by=_current_user_id(current_user),
+            payload=payload.model_dump(exclude={"expected_updated_at"}),
+            expected_updated_at=payload.expected_updated_at,
+        )
+    except Exception as exc:
+        known = isinstance(
+            exc,
+            (DraftBasicInfoInvalid, DraftBasicInfoNotFound, DraftBasicInfoConflict),
+        )
+        audit_event(
+            request,
+            action="custom_qc.draft_basic_info.update",
+            resource="custom_qc_rule_draft",
+            outcome="rejected" if known else "unknown",
+            details={"draft_id": draft_id, "reason_code": exc.__class__.__name__},
+            current_user=current_user,
+        )
+        _raise_draft_basic_info_http(exc, action="update")
+    audit_event(
+        request,
+        action="custom_qc.draft_basic_info.update",
+        resource="custom_qc_rule_draft",
+        outcome="success",
+        details={
+            "draft_id": draft_id,
+            "rule_code": str(draft.get("rule_code") or ""),
+            "status": "draft",
+        },
+        current_user=current_user,
+    )
+    return success_response(
+        data=_draft_basic_info_response(draft),
+        message="质控点基础信息草稿已更新",
         trace_id=get_trace_id(request),
     )
 

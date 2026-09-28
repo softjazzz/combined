@@ -5,7 +5,7 @@ import json
 import re
 import uuid
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 from io import BytesIO, StringIO
 from functools import lru_cache, partial
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence
@@ -28,6 +28,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Session
 from .qc_diagnostics.capture import capture_committed_results, diagnostic_capture_enabled
 
+from ..constants.doc_types import DOC_TYPE_CN_TO_EN
 from .document_domain_alignment import (
     align_document_domain_fields,
     normalize_document_label,
@@ -1564,6 +1565,9 @@ def _qc_rules_table() -> Table:
 
 def _row_to_draft(row: Dict[str, Any]) -> Dict[str, Any]:
     check_logic = _safe_json_loads(row.get("check_logic"), {})
+    basic_info = check_logic.get("basic_info") if isinstance(check_logic, dict) else None
+    if not isinstance(basic_info, dict) or basic_info.get("version") != 1:
+        basic_info = {}
     examples = _safe_json_loads(row.get("examples"), [])
     applicable_documents = _safe_json_loads(row.get("applicable_documents"), [])
     document_type = normalize_document_label(row.get("document_type"), DEFAULT_DOCUMENT_TYPE)
@@ -1572,6 +1576,8 @@ def _row_to_draft(row: Dict[str, Any]) -> Dict[str, Any]:
         "id": _safe_text(row.get("id")),
         "rule_code": _safe_text(row.get("rule_code")),
         "name": _safe_text(row.get("name")),
+        "category": _safe_text(basic_info.get("category")),
+        "rule_type": _safe_text(basic_info.get("rule_type")),
         "description": _safe_text(row.get("description")),
         "source_requirement": _safe_text(row.get("source_requirement")),
         "prompt_template": _safe_text(row.get("prompt_template")),
@@ -2137,6 +2143,86 @@ class WorkspaceBatchJobListResult:
     page_size: int
 
 
+class DraftBasicInfoInvalid(ValueError):
+    """基础信息不符合草稿合同。"""
+
+
+class DraftBasicInfoNotFound(LookupError):
+    """基础信息草稿不存在、非当前用户所有或不是基础信息草稿。"""
+
+
+class DraftBasicInfoConflict(RuntimeError):
+    """草稿状态或版本已变化。"""
+
+
+def _normalize_draft_basic_text(value: Any, *, field: str, max_length: int) -> str:
+    if not isinstance(value, str):
+        raise DraftBasicInfoInvalid(f"{field} 必须是字符串")
+    normalized = value.strip()
+    if not normalized:
+        raise DraftBasicInfoInvalid(f"{field} 不能为空")
+    if len(normalized) > max_length:
+        raise DraftBasicInfoInvalid(f"{field} 不能超过 {max_length} 个字符")
+    return normalized
+
+
+def _normalize_draft_basic_info(payload: Mapping[str, Any]) -> Dict[str, str]:
+    name = _normalize_draft_basic_text(payload.get("name"), field="name", max_length=100)
+    category = _normalize_draft_basic_text(
+        payload.get("category"), field="category", max_length=100,
+    )
+    rule_type = _normalize_draft_basic_text(
+        payload.get("rule_type"), field="rule_type", max_length=100,
+    )
+    document_type = _normalize_draft_basic_text(
+        payload.get("document_type"), field="document_type", max_length=100,
+    )
+    if document_type not in DOC_TYPE_CN_TO_EN:
+        raise DraftBasicInfoInvalid("document_type 不是系统支持的文书类型")
+    return {
+        "name": name,
+        "category": category,
+        "rule_type": rule_type,
+        "document_type": document_type,
+    }
+
+
+def draft_basic_info_document_options() -> List[Dict[str, str]]:
+    """返回执行链真实支持的文书名称，不包含兼容别名。"""
+
+    return [{"value": label, "label": label} for label in DOC_TYPE_CN_TO_EN]
+
+
+def _draft_basic_info_from_row(row: Mapping[str, Any]) -> Dict[str, Any]:
+    check_logic = _safe_json_loads(row.get("check_logic"), {})
+    basic_info = check_logic.get("basic_info") if isinstance(check_logic, dict) else None
+    if not isinstance(basic_info, dict) or basic_info.get("version") != 1:
+        raise DraftBasicInfoNotFound("基础信息草稿不存在或无权限")
+    normalized = _normalize_draft_basic_info({
+        "name": row.get("name"),
+        "category": basic_info.get("category"),
+        "rule_type": basic_info.get("rule_type"),
+        "document_type": row.get("document_type"),
+    })
+    if _safe_text(row.get("status"), "draft") != "draft":
+        raise DraftBasicInfoConflict("只有草稿状态可读取或修改基础信息")
+    return {
+        "id": _safe_text(row.get("id")),
+        "rule_code": _safe_text(row.get("rule_code")),
+        "status": _safe_text(row.get("status"), "draft"),
+        "updated_at": row.get("updated_at"),
+        **normalized,
+    }
+
+
+def _utc_naive(value: Any) -> datetime:
+    if not isinstance(value, datetime):
+        raise DraftBasicInfoInvalid("expected_updated_at 必须是有效时间")
+    if value.tzinfo is not None:
+        value = value.astimezone(timezone.utc).replace(tzinfo=None)
+    return value
+
+
 class CustomQCWorkspaceService:
     def __init__(self) -> None:
         if engine is None:
@@ -2558,6 +2644,143 @@ class CustomQCWorkspaceService:
             if not row:
                 return None
             return _row_to_draft(dict(row))
+        finally:
+            session.close()
+
+    def get_basic_info_draft(self, *, draft_id: str, created_by: str) -> Dict[str, Any]:
+        session = _session()
+        try:
+            row = session.execute(
+                select(self._draft_table).where(
+                    and_(
+                        self._draft_table.c.id == draft_id,
+                        self._draft_table.c.created_by == created_by,
+                    )
+                )
+            ).mappings().first()
+            if not row:
+                raise DraftBasicInfoNotFound("基础信息草稿不存在或无权限")
+            return _draft_basic_info_from_row(dict(row))
+        finally:
+            session.close()
+
+    def create_basic_info_draft(
+        self,
+        *,
+        created_by: str,
+        payload: Mapping[str, Any],
+    ) -> Dict[str, Any]:
+        basic_info = _normalize_draft_basic_info(payload)
+        created = self.create_draft(
+            created_by=created_by,
+            payload={
+                "name": basic_info["name"],
+                "description": "",
+                "source_requirement": "",
+                "prompt_template": "",
+                "document_type": basic_info["document_type"],
+                "applicable_documents": [basic_info["document_type"]],
+                "check_logic": {
+                    "basic_info": {
+                        "version": 1,
+                        "category": basic_info["category"],
+                        "rule_type": basic_info["rule_type"],
+                    },
+                },
+            },
+        )
+        # create_draft 为旧调用保留了内存回退；正式基础信息入口必须再次从
+        # 权威表回读，不能把提交后读取失败的内存对象冒充为确认成功。
+        try:
+            return self.get_basic_info_draft(
+                draft_id=_safe_text(created.get("id")),
+                created_by=created_by,
+            )
+        except Exception as exc:
+            # insert 已提交后，任何严格回读失败都只能判为结果未知；不能把
+            # 数据库触发器改写、截断或并发状态变化伪装成“未创建”的 4xx。
+            raise RuntimeError("基础信息草稿创建结果未确认") from exc
+
+    def update_basic_info_draft(
+        self,
+        *,
+        draft_id: str,
+        created_by: str,
+        payload: Mapping[str, Any],
+        expected_updated_at: datetime,
+    ) -> Dict[str, Any]:
+        basic_info = _normalize_draft_basic_info(payload)
+        expected = _utc_naive(expected_updated_at)
+        session = _session()
+        try:
+            stmt = (
+                select(self._draft_table)
+                .where(
+                    and_(
+                        self._draft_table.c.id == draft_id,
+                        self._draft_table.c.created_by == created_by,
+                    )
+                )
+                .with_for_update()
+            )
+            existing = session.execute(stmt).mappings().first()
+            if not existing:
+                raise DraftBasicInfoNotFound("基础信息草稿不存在或无权限")
+            existing_row = dict(existing)
+            _draft_basic_info_from_row(existing_row)
+
+            current_updated_at = existing_row.get("updated_at")
+            if not isinstance(current_updated_at, datetime):
+                raise DraftBasicInfoConflict("草稿已被其他操作更新，请刷新后重试")
+            current_version = _utc_naive(current_updated_at)
+            if current_version != expected:
+                raise DraftBasicInfoConflict("草稿已被其他操作更新，请刷新后重试")
+
+            check_logic = _safe_json_loads(existing_row.get("check_logic"), {})
+            if not isinstance(check_logic, dict):
+                check_logic = {}
+            check_logic = {
+                **check_logic,
+                "basic_info": {
+                    "version": 1,
+                    "category": basic_info["category"],
+                    "rule_type": basic_info["rule_type"],
+                },
+            }
+            # execution_domain 是由文书范围派生的路由事实；修改文书后必须重算，
+            # 不能把旧文书的执行域当作用户元数据继续保留。
+            check_logic.pop("execution_domain", None)
+            document_type, applicable_documents, check_logic = align_document_domain_fields(
+                document_type=basic_info["document_type"],
+                applicable_documents=[basic_info["document_type"]],
+                check_logic=check_logic,
+            )
+            now = max(_now_utc(), current_version + timedelta(microseconds=1))
+            patch = {
+                "name": basic_info["name"],
+                "document_type": document_type,
+                "applicable_documents": _safe_json_dumps(applicable_documents),
+                "check_logic": _safe_json_dumps(check_logic),
+                "last_test_summary": None,
+                "updated_at": now,
+            }
+            result = session.execute(
+                update(self._draft_table)
+                .where(
+                    and_(
+                        self._draft_table.c.id == draft_id,
+                        self._draft_table.c.created_by == created_by,
+                        self._draft_table.c.status == "draft",
+                        self._draft_table.c.updated_at == current_updated_at,
+                    )
+                )
+                .values(**patch)
+            )
+            if getattr(result, "rowcount", 0) != 1:
+                session.rollback()
+                raise DraftBasicInfoConflict("草稿已被其他操作更新，请刷新后重试")
+            session.commit()
+            return _draft_basic_info_from_row({**existing_row, **patch})
         finally:
             session.close()
 

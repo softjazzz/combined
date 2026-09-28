@@ -30,6 +30,31 @@ export interface CustomRuleDraft {
   created_by: string
   created_at: string
   updated_at: string
+  category?: string
+  rule_type?: string
+}
+
+export interface CustomRuleDraftBasicInfo {
+  id: string
+  rule_code: string
+  status: 'draft'
+  updated_at: string
+  name: string
+  category: string
+  rule_type: string
+  document_type: string
+}
+
+export interface CustomRuleDraftBasicInfoInput {
+  name: string
+  category: string
+  rule_type: string
+  document_type: string
+}
+
+export interface CustomRuleDocumentOption {
+  value: string
+  label: string
 }
 
 export interface CustomRuleDraftPayload {

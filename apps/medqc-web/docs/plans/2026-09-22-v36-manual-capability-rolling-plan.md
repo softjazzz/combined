@@ -929,3 +929,13 @@
 - 较宽的`test_qc_sichuan_workspace_batch_flow.py`实跑4通过/3失败：create_poll_debug_export_flow、persists_full_case_coordinates_for_same_visit、cancel_and_retry_flow旧预期final创建/重试200，与本批前已有final_archive_unverified 422保护冲突。未改这些测试或放宽保护，不宣称全量测试通过。
 - 四层：25代码完成；仅合成服务/路由/组件验证，隔离PG和真实质控作业未执行；业务库未部署；真实病例与浏览器未验收。不写真实库、不推送。
 - 当前29完整/32部分/19未实现，代码完整率36.25%，距64项差35项；Goal继续active。
+
+## 110. 新建质控点基础信息草稿
+
+- 接续`740272d09`，仅收口66名称/大类/类型/文书保存草稿；复用custom_qc现有用户草稿owner，不新建表、迁移或执行器。64列表聚合、67条件编排、68测试发布不计入本批。
+- 专用基础信息POST/options/GET/PATCH，admin/qc_manager及created_by隔离；大类/类型非空可自定义，文书来自现有支持目录，未知值不回退日常病程。元数据受控存basic_info v1并投影明确字段，旧通用DTO兼容。
+- 创建只写draft、空prompt，不测试发布；提交后严格权威回读失败返回503结果未知。PATCH仅同owner基础草稿，以updated_at做CAS且版本严格递增；文书变更重派生execution_domain、保留无关配置并清last_test_summary，旧测试不得自动授权新基础内容。未宣称旧通用发布链的并发原子性整改。
+- 原禁用页改为基础表单、当前用户草稿列表/分页和重新编辑入口；旧无基础字段草稿明确只读。真实目录失败可重试、回执ID和时间校验、账号/角色/列表/详情/保存迟到隔离，冲突重读，未知写结果锁定盲重试。
+- 主协调后端6文件79项实跑70通过/9失败；新基础接口14项全部通过，9失败均旧`test_custom_qc_workspace_service_records.py`在初始化时尝试连接被conftest禁止的PostgreSQL，未进入本批基础信息路径，不绕过禁连。前端4文件40项通过，类型检查、Ruff与独立复核通过；只读ESLint、编码与暂存检查为最终门禁，不宣称全量测试通过。
+- 四层：66代码完整；仅合成SQLite/API/组件验证，未执行隔离PG操作；业务库未部署；真实病例与浏览器未验收。不写真实库、不推送。
+- 当前30完整/32部分/18未实现，代码完整率37.5%，距64项差34项；Goal继续active。
