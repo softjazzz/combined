@@ -911,4 +911,93 @@ const handleLogout = async () => {
     transition: none;
   }
 }
+/* ---------- 侧栏精修：去图标灰块、淡蓝选中、滚动条与折叠箭头按需出现 ---------- */
+.ws-sider {
+  border: 0.5px solid rgba(255, 255, 255, 0.9);
+  background: rgba(250, 251, 254, 0.72);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 10px 30px rgba(30, 55, 100, 0.08),
+    0 1px 2px rgba(30, 55, 100, 0.04);
+}
+
+/* 菜单图标：非选中去掉灰色方块，只留线条图标 */
+.ws-nav__item .mq-icon-tile {
+  background: transparent !important;
+  box-shadow: none !important;
+  transition: background-color 140ms ease;
+}
+
+.ws-nav__item {
+  gap: 8px;
+  padding: 0 6px;
+  border-radius: 8px;
+  color: #2b2f38;
+}
+
+.ws-nav__item:hover {
+  background: rgba(20, 40, 80, 0.05);
+  color: var(--mq-text-primary);
+}
+
+/* 选中：淡蓝底 + 蓝色图标文字，无投影 */
+.ws-nav__item--active,
+.ws-nav__item--active:hover {
+  background: rgba(10, 108, 255, 0.1);
+  box-shadow: none;
+  color: #0a58d0;
+  font-weight: 500;
+}
+
+.ws-shell--collapsed .ws-nav__item--active .mq-icon-tile {
+  background: transparent !important;
+}
+
+/* 分组折叠箭头：默认隐藏，悬停分组标签或该组已折叠时出现 */
+.ws-nav__group-chevron {
+  opacity: 0;
+}
+
+.ws-nav__group-toggle:hover .ws-nav__group-chevron,
+.ws-nav__group-toggle:focus-visible .ws-nav__group-chevron,
+.ws-nav__group-chevron.is-closed {
+  opacity: 0.8;
+}
+
+.ws-nav__group-toggle:hover {
+  background: transparent;
+  color: var(--mq-text-secondary);
+}
+
+/* 滚动条：平时透明，鼠标移入侧栏才显示 */
+.ws-nav {
+  scrollbar-color: transparent transparent;
+}
+
+.ws-sider:hover .ws-nav {
+  scrollbar-color: rgba(60, 60, 80, 0.2) transparent;
+}
+
+.ws-nav::-webkit-scrollbar-thumb {
+  background: transparent;
+}
+
+.ws-sider:hover .ws-nav::-webkit-scrollbar-thumb {
+  background: rgba(60, 60, 80, 0.2);
+}
+
+/* 底部环境标识：去掉胶囊边框，改为一行小字 */
+.ws-sider__build :deep(.runtime-build-status) {
+  height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+}
+
+.ws-sider__footer {
+  border-top-color: rgba(20, 40, 80, 0.08);
+}
 </style>
