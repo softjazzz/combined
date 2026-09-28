@@ -28,6 +28,30 @@
         <span v-if="listLoaded" data-testid="definition-total">共 {{ total }} 条</span>
       </div>
 
+      <div class="document-definitions-page__filters">
+        <label>
+          <span>文书名称</span>
+          <a-input
+            v-model:value="searchDraft"
+            data-testid="definition-name-query"
+            placeholder="输入文书名称"
+            :maxlength="200"
+            allow-clear
+            @press-enter="applySearch"
+          />
+        </label>
+        <div class="document-definitions-page__filter-actions">
+          <a-button type="primary" data-testid="definition-search" @click="applySearch">
+            <template #icon><Search :size="15" /></template>
+            查询
+          </a-button>
+          <a-button data-testid="definition-search-reset" :disabled="!searchDraft && !appliedQuery" @click="resetSearch">
+            <template #icon><RotateCcw :size="15" /></template>
+            重置
+          </a-button>
+        </div>
+      </div>
+
       <a-spin :spinning="loading" tip="正在读取文书定义">
         <div class="document-definitions-page__table-wrap">
           <table :aria-busy="loading">
@@ -55,7 +79,9 @@
               <td>{{ formatTime(definition.created_at) }}</td>
             </tr>
             <tr v-if="listLoaded && definitions.length === 0">
-              <td colspan="7" class="document-definitions-page__empty">暂无已导入的文书定义</td>
+              <td colspan="7" class="document-definitions-page__empty">
+                {{ appliedQuery ? '未找到匹配的文书定义' : '暂无已导入的文书定义' }}
+              </td>
             </tr>
           </tbody>
           </table>
@@ -82,7 +108,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { FileUp } from 'lucide-vue-next'
+import { FileUp, RotateCcw, Search } from 'lucide-vue-next'
 import { listDocumentDefinitions, type DocumentDefinition } from '@/api/documentDefinitions'
 import { useAuthStore } from '@/stores/auth'
 import DocumentDefinitionImportDrawer from './components/DocumentDefinitionImportDrawer.vue'
@@ -98,6 +124,8 @@ const loading = ref(false)
 const listLoaded = ref(false)
 const loadError = ref('')
 const importOpen = ref(false)
+const searchDraft = ref('')
+const appliedQuery = ref('')
 let requestSequence = 0
 let mounted = false
 
@@ -123,7 +151,10 @@ async function loadDefinitions() {
   const actor = actorKey.value
   loading.value = true
   loadError.value = ''
-  const result = await listDocumentDefinitions({ page: page.value, page_size: pageSize })
+  const params = appliedQuery.value
+    ? { page: page.value, page_size: pageSize, q: appliedQuery.value }
+    : { page: page.value, page_size: pageSize }
+  const result = await listDocumentDefinitions(params)
   if (sequence !== requestSequence || actor !== actorKey.value) return
   loading.value = false
   if (result.success === false) {
@@ -140,6 +171,28 @@ async function loadDefinitions() {
 function changePage(nextPage: number) {
   if (!Number.isInteger(nextPage) || nextPage < 1 || nextPage === page.value) return
   page.value = nextPage
+  void loadDefinitions()
+}
+
+function applySearch() {
+  const query = searchDraft.value.trim()
+  if (query.length > 200) {
+    requestSequence += 1
+    loading.value = false
+    clearList()
+    loadError.value = '文书名称不能超过 200 个字符'
+    return
+  }
+  searchDraft.value = query
+  appliedQuery.value = query
+  page.value = 1
+  void loadDefinitions()
+}
+
+function resetSearch() {
+  searchDraft.value = ''
+  appliedQuery.value = ''
+  page.value = 1
   void loadDefinitions()
 }
 
@@ -167,6 +220,8 @@ watch(actorKey, () => {
   importOpen.value = false
   page.value = 1
   clearList()
+  searchDraft.value = ''
+  appliedQuery.value = ''
   if (mounted && auth.user?.id) void loadDefinitions()
   else if (mounted) loadError.value = '当前账号不可用，请重新登录后重试'
 })
@@ -208,6 +263,14 @@ onBeforeUnmount(() => {
 }
 .document-definitions-page__toolbar { margin-bottom: 14px; }
 .document-definitions-page__toolbar span { color: rgba(29, 29, 31, .62); }
+.document-definitions-page__filters {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.document-definitions-page__filters label { display: grid; gap: 6px; width: min(360px, 100%); color: rgba(29, 29, 31, .68); font-size: 13px; }
+.document-definitions-page__filter-actions { display: flex; gap: 8px; }
 .document-definitions-page__table-wrap { max-width: 100%; overflow-x: auto; }
 table { width: 100%; min-width: 1120px; border-collapse: collapse; table-layout: fixed; }
 th, td { padding: 11px 12px; border-bottom: 1px solid rgba(0, 0, 0, .07); overflow-wrap: anywhere; text-align: left; vertical-align: top; }
@@ -241,5 +304,6 @@ code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size
 @media (max-width: 720px) {
   .document-definitions-page { padding: 16px; }
   .document-definitions-page__header { align-items: flex-start; }
+  .document-definitions-page__filters { align-items: stretch; flex-direction: column; }
 }
 </style>

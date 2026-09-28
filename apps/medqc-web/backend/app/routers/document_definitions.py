@@ -70,6 +70,10 @@ def _raise_http(exc: Exception, action: str) -> None:
     if isinstance(exc, DocumentDefinitionExcelError):
         raise HTTPException(status_code=422, detail=_validation_detail(exc)) from exc
     if isinstance(exc, DocumentDefinitionInvalid):
+        if action == "list":
+            raise HTTPException(status_code=422, detail={
+                "code": "document_definition_query_invalid", "message": str(exc),
+            }) from exc
         raise HTTPException(status_code=422, detail={
             "code": "document_definition_import_invalid", "message": str(exc), "problems": [],
         }) from exc
@@ -104,11 +108,14 @@ async def get_document_definitions(
     request: Request,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    q: str | None = Query(None),
     current_user: dict = Depends(get_current_user),
 ):
     del current_user
     try:
-        data = await run_in_threadpool(list_document_definitions, page=page, page_size=page_size)
+        data = await run_in_threadpool(
+            list_document_definitions, page=page, page_size=page_size, q=q,
+        )
         result = {**data, "items": [_dump(item) for item in data["items"]]}
     except Exception as exc:
         _raise_http(exc, "list")

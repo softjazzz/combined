@@ -104,3 +104,27 @@ def test_unknown_import_result_warns_not_to_retry(monkeypatch):
     assert response.status_code == 503
     assert "勿直接重复导入" in response.json()["detail"]
     assert "secret" not in response.text
+
+
+def test_list_search_http_contract_and_validation(sessions):
+    http = _client(("qc_manager",))
+    payload = _xlsx(
+        ("A", "入院记录", "住院", "正文"),
+        ("B", "百分比%模板", "住院", "正文"),
+        ("C", "普通文书", "住院", "正文"),
+    )
+    assert http.post(f"{BASE}/import", files={"file": ("defs.xlsx", payload)}).status_code == 200
+    chinese = http.get(BASE, params={"q": " 入院 "})
+    assert chinese.status_code == 200
+    assert chinese.json()["data"]["total"] == 1
+    literal = http.get(BASE, params={"q": "%"})
+    assert literal.status_code == 200
+    assert [item["code"] for item in literal.json()["data"]["items"]] == ["B"]
+    assert http.get(BASE, params={"q": "无匹配"}).json()["data"] == {
+        "items": [], "total": 0, "page": 1, "page_size": 20,
+    }
+    assert http.get(BASE, params={"q": "   "}).json()["data"]["total"] == 3
+    invalid = http.get(BASE, params={"q": "x" * 201})
+    assert invalid.status_code == 422
+    assert invalid.json()["detail"]["code"] == "document_definition_query_invalid"
+    assert _client(("doctor",)).get(BASE, params={"q": "入院"}).status_code == 403

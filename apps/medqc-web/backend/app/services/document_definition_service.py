@@ -14,6 +14,7 @@ from ..database.models.qc import QCDocumentDefinition
 from .document_definition_excel_service import ParsedDocumentDefinition
 
 MAX_PAGE_SIZE = 100
+MAX_QUERY_LENGTH = 200
 
 _TABLE = QCDocumentDefinition.__table__
 _COLUMNS = (
@@ -67,13 +68,36 @@ def _actor(value: Any) -> str:
     return actor
 
 
+def _query(value: Any) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise DocumentDefinitionInvalid("q 无效")
+    normalized = value.strip()
+    if len(normalized) > MAX_QUERY_LENGTH:
+        raise DocumentDefinitionInvalid("q 不能超过 200 个字符")
+    return normalized or None
+
+
+def _literal_like(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 def _item(row: Any) -> dict[str, Any]:
     return {column.name: getattr(row, column.name) for column in _COLUMNS}
 
 
-def list_document_definitions(*, page: int, page_size: int) -> dict[str, Any]:
+def list_document_definitions(
+    *, page: int, page_size: int, q: str | None = None,
+) -> dict[str, Any]:
     page = _positive_int(page, field="page")
     page_size = _positive_int(page_size, field="page_size", maximum=MAX_PAGE_SIZE)
+    q = _query(q)
+    predicate = None
+    if q is not None:
+        predicate = func.lower(_TABLE.c.name).like(
+            f"%{_literal_like(q.lower())}%", escape="\\",
+        )
     factory = _require_factory()
     try:
         with factory() as session:
@@ -83,9 +107,14 @@ def list_document_definitions(*, page: int, page_size: int) -> dict[str, Any]:
                         "SELECT pg_advisory_xact_lock_shared("
                         "hashtext('qc_document_definitions:import'))"
                     ))
-                total = int(session.execute(select(func.count(_TABLE.c.id))).scalar_one())
+                count_query = select(func.count(_TABLE.c.id))
+                rows_query = select(*_COLUMNS)
+                if predicate is not None:
+                    count_query = count_query.where(predicate)
+                    rows_query = rows_query.where(predicate)
+                total = int(session.execute(count_query).scalar_one())
                 rows = session.execute(
-                    select(*_COLUMNS)
+                    rows_query
                     .order_by(_TABLE.c.created_at.desc(), _TABLE.c.code.asc(), _TABLE.c.id.asc())
                     .offset((page - 1) * page_size)
                     .limit(page_size)

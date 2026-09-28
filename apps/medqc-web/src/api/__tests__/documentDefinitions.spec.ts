@@ -41,6 +41,19 @@ describe('documentDefinitions API', () => {
     })
   })
 
+  it('名称查询 trim 后按 q 发送，空值省略，超过 200 字符前端拒绝', async () => {
+    const request = vi.spyOn(ApiService, 'requestRaw').mockResolvedValue(response({
+      success: true, data: { items: [], total: 0, page: 1, page_size: 20 },
+    }))
+    await listDocumentDefinitions({ page: 1, page_size: 20, q: '  入院记录  ' })
+    await listDocumentDefinitions({ page: 1, page_size: 20, q: '   ' })
+    const oversized = await listDocumentDefinitions({ page: 1, page_size: 20, q: '病'.repeat(201) })
+    expect(request.mock.calls[0]?.[0].params).toEqual({ page: 1, page_size: 20, q: '入院记录' })
+    expect(request.mock.calls[1]?.[0].params).toEqual({ page: 1, page_size: 20 })
+    expect(request).toHaveBeenCalledTimes(2)
+    expect(oversized).toMatchObject({ success: false, message: expect.stringContaining('200') })
+  })
+
   it.each([
     { items: [definition], page: 1, page_size: 20 },
     { items: [definition], total: -1, page: 1, page_size: 20 },

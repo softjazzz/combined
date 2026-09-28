@@ -70,9 +70,12 @@ function normalizePage(value: unknown): DocumentDefinitionPage | null {
   return value as unknown as DocumentDefinitionPage
 }
 
-export async function listDocumentDefinitions(params: { page: number; page_size: number }): Promise<ApiResult<DocumentDefinitionPage>> {
+export async function listDocumentDefinitions(params: { page: number; page_size: number; q?: string }): Promise<ApiResult<DocumentDefinitionPage>> {
+  const q = params.q?.trim() || ''
+  if (q.length > 200) return { success: false, message: '文书名称不能超过 200 个字符' }
+  const requestParams = { page: params.page, page_size: params.page_size, ...(q ? { q } : {}) }
   try {
-    const response = await ApiService.requestRaw({ method: 'GET', url: BASE_URL, params })
+    const response = await ApiService.requestRaw({ method: 'GET', url: BASE_URL, params: requestParams })
     const normalized = normalizeApiSuccess<unknown>(response.data)
     const data = normalized.success ? normalizePage(normalized.data) : null
     return data
