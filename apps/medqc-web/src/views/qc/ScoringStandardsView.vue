@@ -61,15 +61,24 @@
             共 {{ standards.length }} 个标准 · 默认标准：<strong data-testid="scoring-default-name">{{ defaultStandard?.name || '未配置评分标准' }}</strong>
           </template>
         </span>
-        <a-button
-          v-if="canWrite"
-          type="primary"
-          :disabled="!sceneHasRuleSet"
-          data-testid="scoring-create"
-          @click="openCreate"
-        >
-          新建标准
-        </a-button>
+        <div class="scoring-standards-page__toolbar-actions">
+          <a-button
+            v-if="canWrite"
+            data-testid="scoring-import"
+            @click="openImport"
+          >
+            导入标准
+          </a-button>
+          <a-button
+            v-if="canWrite"
+            type="primary"
+            :disabled="!sceneHasRuleSet"
+            data-testid="scoring-create"
+            @click="openCreate"
+          >
+            新建标准
+          </a-button>
+        </div>
       </div>
 
       <table class="scoring-standards-page__table">
@@ -124,6 +133,14 @@
                 @click="openEditor(standard)"
               >
                 {{ canWrite && standard.status === 'draft' ? '编辑' : '查看' }}
+              </a-button>
+              <a-button
+                type="link"
+                size="small"
+                data-testid="scoring-action-export"
+                @click="downloadStandard(standard)"
+              >
+                导出
               </a-button>
               <template v-if="canWrite">
                 <a-button
@@ -270,6 +287,65 @@
       </div>
     </a-modal>
 
+    <a-modal
+      :open="importModal.open"
+      title="导入评分标准"
+      :confirm-loading="importModal.submitting"
+      :ok-button-props="{ disabled: !importModal.file || importModal.resultUnknown }"
+      ok-text="导入为新草稿"
+      cancel-text="取消"
+      data-testid="scoring-import-modal"
+      @ok="submitImport"
+      @cancel="importModal.open = false"
+    >
+      <div class="scoring-standards-page__form">
+        <p class="scoring-standards-page__form-hint">
+          仅接受从本页导出的固定模板。导入会创建新的草稿，不会覆盖、启用或设为默认，也不会修改规则集版本。
+        </p>
+        <input
+          ref="importInput"
+          class="scoring-standards-page__file-input"
+          type="file"
+          accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          data-testid="scoring-import-file"
+          @change="selectImportFile"
+        >
+        <p
+          v-if="importModal.file"
+          class="scoring-standards-page__selected-file"
+          data-testid="scoring-import-filename"
+        >
+          已选择：{{ importModal.file.name }}
+        </p>
+        <a-alert
+          v-if="importModal.resultUnknown"
+          type="warning"
+          show-icon
+          data-testid="scoring-import-unknown"
+          message="导入结果未知：可能已经创建草稿。请先关闭弹窗并刷新列表，按标准名称核对；选择新文件前不能再次提交。"
+        />
+        <ul
+          v-if="importModal.problems.length"
+          class="scoring-standards-page__problems"
+          data-testid="scoring-import-problems"
+        >
+          <li
+            v-for="(problem, index) in importModal.problems"
+            :key="`${problem.sheet}-${problem.row}-${problem.field}-${index}`"
+          >
+            {{ problem.sheet }}<template v-if="problem.row > 0"> 第 {{ problem.row }} 行</template> · {{ problem.field }}：{{ problem.message }}
+          </li>
+        </ul>
+        <p
+          v-else-if="importModal.error"
+          class="scoring-standards-page__error"
+          data-testid="scoring-import-error"
+        >
+          {{ importModal.error }}
+        </p>
+      </div>
+    </a-modal>
+
     <!-- 启用 -->
     <a-modal
       :open="activateModal.open"
@@ -343,11 +419,14 @@ import {
   copyScoringStandard,
   createScoringStandard,
   deleteScoringStandard,
+  exportScoringStandard,
+  importScoringStandard,
   listScoringStandards,
   setDefaultScoringStandard,
 } from '@/api/scoring'
 import type {
   ScoringApiResult,
+  ScoringExcelProblem,
   ScoringReplaceMode,
   ScoringScene,
   ScoringSceneCatalogEntry,
@@ -411,6 +490,16 @@ const activateModal = reactive({
   problems: [] as string[],
 })
 
+const importInput = ref<HTMLInputElement | null>(null)
+const importModal = reactive({
+  open: false,
+  file: null as File | null,
+  submitting: false,
+  resultUnknown: false,
+  error: '',
+  problems: [] as ScoringExcelProblem[],
+})
+
 const editor = reactive({ open: false, standardId: null as string | null })
 
 async function loadList() {
@@ -464,6 +553,63 @@ function openCreate() {
   formModal.source = null
   formModal.problems = []
   formModal.open = true
+}
+
+function openImport() {
+  if (!canWrite.value) return
+  importModal.open = true
+  importModal.file = null
+  importModal.submitting = false
+  importModal.resultUnknown = false
+  importModal.error = ''
+  importModal.problems = []
+  if (importInput.value) importInput.value.value = ''
+}
+
+function selectImportFile(event: Event) {
+  const input = event.target as HTMLInputElement
+  importModal.file = input.files?.[0] ?? null
+  importModal.resultUnknown = false
+  importModal.error = ''
+  importModal.problems = []
+}
+
+async function submitImport() {
+  if (!importModal.file || importModal.resultUnknown || importModal.submitting) return
+  importModal.submitting = true
+  importModal.error = ''
+  importModal.problems = []
+  try {
+    const result = await importScoringStandard(importModal.file)
+    if (!result.success || !result.data) {
+      importModal.resultUnknown = result.resultUnknown
+      importModal.problems = result.problems
+      importModal.error = result.message
+      return
+    }
+    message.success('评分标准已导入为新草稿')
+    importModal.open = false
+    if (SCENE_ORDER.includes(result.data.scene)) scene.value = result.data.scene
+    await loadList()
+    editor.standardId = result.data.id
+    editor.open = true
+  } finally {
+    importModal.submitting = false
+  }
+}
+
+async function downloadStandard(standard: ScoringStandardItem) {
+  const result = await exportScoringStandard(standard.id)
+  if (!result.success || !result.data) {
+    message.error(result.message || '导出评分标准失败')
+    return
+  }
+  const url = URL.createObjectURL(result.data)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = `${standard.name.replace(/[\\/:*?"<>|]/g, '_') || '评分标准'}.xlsx`
+  anchor.click()
+  URL.revokeObjectURL(url)
 }
 
 function openCopy(standard: ScoringStandardItem) {
@@ -599,6 +745,28 @@ onMounted(() => {
   color: #1d1d1f;
   font-size: 20px;
   font-weight: 600;
+}
+
+.scoring-standards-page__toolbar-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.scoring-standards-page__file-input {
+  width: 100%;
+  padding: 10px;
+  color: #475569;
+  background: #f8fafc;
+  border: 1px solid #d8e1ea;
+  border-radius: 4px;
+}
+
+.scoring-standards-page__selected-file {
+  margin: 0;
+  color: #334155;
+  font-size: 13px;
+  overflow-wrap: anywhere;
 }
 
 .scoring-standards-page__subtitle {

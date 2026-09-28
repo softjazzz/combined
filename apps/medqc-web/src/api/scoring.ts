@@ -28,6 +28,8 @@ export type ScoringErrorCode =
   | 'standard_validation_failed'
   | 'scene_without_rule_set'
   | 'rule_set_scene_mismatch'
+  | 'rule_set_version_mismatch'
+  | 'excel_validation_failed'
 
 /** 档位：区间左闭右开，最高档右闭；按分数降序、首尾相接覆盖 [0, base_score]。 */
 export interface ScoringGradeBand {
@@ -206,10 +208,54 @@ export interface ScoringApiResult<T> {
   problems?: string[]
 }
 
+export interface ScoringExcelProblem {
+  sheet: string
+  row: number
+  field: string
+  code: string
+  message: string
+}
+
+export interface ScoringImportResult {
+  success: boolean
+  data?: ScoringStandardDetail
+  message: string
+  status?: number
+  code?: string
+  problems: ScoringExcelProblem[]
+  /** 断网、超时、5xx 或异常成功响应都无法证明服务端未写入。 */
+  resultUnknown: boolean
+}
+
 interface ErrorDetail {
   code?: string
   message?: string
   problems?: string[]
+}
+
+function extractExcelProblems(error: unknown): ScoringExcelProblem[] {
+  if (!isAxiosError(error)) return []
+  const body: unknown = error.response?.data
+  if (typeof body !== 'object' || body === null) return []
+  const container = body as Record<string, unknown>
+  const detail = (typeof container.detail === 'object' && container.detail !== null
+    ? container.detail
+    : container.error) as Record<string, unknown> | undefined
+  if (!detail || !Array.isArray(detail.problems)) return []
+  return detail.problems.flatMap((problem): ScoringExcelProblem[] => {
+    if (typeof problem !== 'object' || problem === null) return []
+    const value = problem as Record<string, unknown>
+    if (typeof value.sheet !== 'string' || typeof value.row !== 'number'
+      || typeof value.field !== 'string' || typeof value.code !== 'string'
+      || typeof value.message !== 'string') return []
+    return [{
+      sheet: value.sheet,
+      row: value.row,
+      field: value.field,
+      code: value.code,
+      message: value.message,
+    }]
+  })
 }
 
 /**
@@ -262,6 +308,25 @@ const BASE = '/api/v1/scoring'
 
 function standardPath(id: string): string {
   return `${BASE}/standards/${encodeURIComponent(id)}`
+}
+
+function isImportedDraft(value: unknown): value is ScoringStandardDetail {
+  if (typeof value !== 'object' || value === null) return false
+  const data = value as Record<string, unknown>
+  const groups = data.groups
+  const items = data.items
+  return typeof data.id === 'string' && Boolean(data.id.trim())
+    && typeof data.name === 'string' && Boolean(data.name.trim())
+    && (data.scene === 'running' || data.scene === 'final' || data.scene === 'outpatient')
+    && typeof data.rule_set_key === 'string' && Boolean(data.rule_set_key.trim())
+    && data.status === 'draft'
+    && data.is_default === false
+    && data.version_seq === 1
+    && Array.isArray(data.grade_bands)
+    && Array.isArray(groups)
+    && Array.isArray(items)
+    && data.group_count === groups.length
+    && data.item_count === items.length
 }
 
 /** 只发送写接口接受的字段，去掉多余属性。 */
@@ -371,6 +436,81 @@ export async function deleteScoringStandard(id: string, versionSeq: number) {
     url: standardPath(id),
     params: { version_seq: versionSeq },
   }, '删除评分标准草稿失败')
+}
+
+/** 导出一个评分标准的固定版本 Excel，不包含病例数据。 */
+export async function exportScoringStandard(id: string): Promise<ScoringApiResult<Blob>> {
+  try {
+    const response = await ApiService.requestRaw<Blob>({
+      method: 'GET',
+      url: `${standardPath(id)}/export`,
+      responseType: 'blob',
+      timeout: 60000,
+    })
+    if (!(response.data instanceof Blob) || response.data.size === 0) {
+      return { success: false, message: '导出的评分标准文件无效', status: response.status }
+    }
+    return { success: true, data: response.data, status: response.status }
+  } catch (error) {
+    return {
+      success: false,
+      message: extractApiErrorMessageFromError(error, '导出评分标准失败'),
+      status: isAxiosError(error) ? error.response?.status : undefined,
+    }
+  }
+}
+
+/** 导入固定模板；服务端成功时始终创建新草稿。 */
+export async function importScoringStandard(file: File): Promise<ScoringImportResult> {
+  if (!file.name.toLowerCase().endsWith('.xlsx')) {
+    return { success: false, message: '仅支持 .xlsx 评分标准文件', problems: [], resultUnknown: false }
+  }
+  if (file.size > 2 * 1024 * 1024) {
+    return { success: false, message: '文件不能超过 2 MiB', problems: [], resultUnknown: false }
+  }
+  const form = new FormData()
+  form.append('file', file)
+  try {
+    const response = await ApiService.requestRaw<ScoringStandardDetail>({
+      method: 'POST',
+      url: `${BASE}/standards/import`,
+      data: form,
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 15 * 60 * 1000,
+    })
+    const normalized = normalizeApiSuccess<ScoringStandardDetail>(response.data)
+    const data = normalized.data
+    if (!normalized.success || !isImportedDraft(data)) {
+      return {
+        success: false,
+        message: '服务端成功响应无法确认新草稿，可能已写入。请先刷新列表核对，不要盲目重试',
+        problems: [],
+        resultUnknown: true,
+        status: response.status,
+      }
+    }
+    return {
+      success: true,
+      data,
+      message: normalized.message || '评分标准已导入为草稿',
+      problems: [],
+      resultUnknown: false,
+      status: response.status,
+    }
+  } catch (error) {
+    const status = isAxiosError(error) ? error.response?.status : undefined
+    const rejectedBeforeWrite = status === 401 || status === 403 || status === 409 || status === 413 || status === 422
+    return {
+      success: false,
+      message: rejectedBeforeWrite
+        ? extractApiErrorMessageFromError(error, '导入评分标准失败')
+        : '导入请求未获得可确认的服务端结果，可能已写入。请勿盲目重试，先刷新列表按标准名称核对',
+      status,
+      code: extractErrorDetail(error).code,
+      problems: extractExcelProblems(error),
+      resultUnknown: !rejectedBeforeWrite,
+    }
+  }
 }
 
 /** 单病历按最新 ready 结果与场景默认标准计分（不落库）。 */

@@ -20,15 +20,26 @@ from __future__ import annotations
 import logging
 from typing import Any, Literal, Optional, Union
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictFloat, StrictInt, StrictStr
+from starlette.responses import Response
 from starlette.concurrency import run_in_threadpool
 
+from ..core.audit import audit_event
 from ..core.permissions import UserRole, require_role
 from ..core.response import get_trace_id, success_response
 from ..core.security import get_current_user
 from ..services import scoring_service
+from ..services.scoring_standard_excel_service import (
+    MAX_UPLOAD_BYTES,
+    ScoringExcelProblem,
+    ScoringExcelValidationError,
+    build_scoring_standard_workbook,
+    inspect_scoring_workbook_identity,
+    parse_scoring_standard_workbook,
+)
 from ..services.scoring_standard_service import (
+    SCENES,
     ScoringStandardConflict,
     ScoringStandardInvalid,
     ScoringStandardNotFound,
@@ -37,11 +48,14 @@ from ..services.scoring_standard_service import (
     archive_standard,
     copy_standard,
     create_standard,
+    current_rule_set_snapshot,
     delete_standard,
     get_standard,
+    import_standard_draft,
     list_standards,
     save_items,
     scene_catalog,
+    scene_rule_set_keys,
     set_default_standard,
     update_standard,
 )
@@ -183,6 +197,27 @@ def _dump(models: Optional[list[BaseModel]], *, exclude_none: bool = False) -> O
     return None if models is None else [item.model_dump(exclude_none=exclude_none) for item in models]
 
 
+def _excel_validation_detail(exc: ScoringExcelValidationError) -> dict[str, Any]:
+    return {
+        "code": "excel_validation_failed",
+        "message": str(exc),
+        "problems": [problem.as_dict() for problem in exc.problems],
+    }
+
+
+def _domain_import_detail(exc: ScoringStandardInvalid) -> dict[str, Any]:
+    field = "规则集版本" if exc.code == "rule_set_version_mismatch" else "评分条目"
+    return {
+        "code": exc.code,
+        "message": str(exc),
+        "problems": [
+            {"sheet": "评分标准" if field == "规则集版本" else "评分条目", "row": 0,
+             "field": field, "code": exc.code, "message": problem}
+            for problem in (exc.problems or [str(exc)])
+        ],
+    }
+
+
 @router.get("/scenes")
 async def get_scoring_scenes(request: Request, current_user: dict = Depends(get_current_user)):
     return _ok(request, {"items": scene_catalog()})
@@ -211,6 +246,115 @@ async def get_scoring_standard(
     except Exception as exc:
         _raise_http(exc, "detail")
     return _ok(request, data)
+
+
+@router.get("/standards/{standard_id}/export")
+async def export_scoring_standard(
+    request: Request,
+    standard_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    try:
+        detail = await run_in_threadpool(get_standard, standard_id)
+        rule_set_version, _ = await run_in_threadpool(current_rule_set_snapshot, detail["rule_set_key"])
+        content = await run_in_threadpool(build_scoring_standard_workbook, detail, rule_set_version)
+    except Exception as exc:
+        _raise_http(exc, "export")
+    audit_event(
+        request,
+        action="scoring.standard.export",
+        resource="qc_scoring_standard",
+        outcome="success",
+        details={
+            "standard_id": detail["id"],
+            "scene": detail["scene"],
+            "rule_set_key": detail["rule_set_key"],
+            "item_count": detail["item_count"],
+        },
+        current_user=current_user,
+    )
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f'attachment; filename="scoring-standard-{standard_id}.xlsx"',
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@router.post("/standards/import")
+@require_role(_MANAGER_ROLES)
+async def import_scoring_standard(
+    request: Request,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user),
+):
+    actor = _actor(current_user)
+    filename = (file.filename or "").strip()
+    if not filename.lower().endswith(".xlsx"):
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "excel_validation_failed",
+                "message": "仅支持 .xlsx 文件",
+                "problems": [{"sheet": "文件", "row": 0, "field": "文件", "code": "file_type_invalid", "message": "仅支持 .xlsx 文件"}],
+            },
+        )
+    try:
+        content = await file.read(MAX_UPLOAD_BYTES + 1)
+        identity = await run_in_threadpool(inspect_scoring_workbook_identity, content)
+        if identity.scene not in SCENES or identity.rule_set_key not in scene_rule_set_keys(identity.scene):
+            raise ScoringExcelValidationError([
+                ScoringExcelProblem(
+                    sheet="评分标准", row=2, field="场景/规则集键",
+                    code="rule_set_scene_mismatch", message="规则集不属于工作簿声明的评分场景",
+                ),
+            ])
+        version, universe = await run_in_threadpool(current_rule_set_snapshot, identity.rule_set_key)
+        parsed = await run_in_threadpool(
+            parse_scoring_standard_workbook,
+            content,
+            current_rule_set_version=version,
+            allowed_rule_ids=universe,
+        )
+        data = await run_in_threadpool(
+            import_standard_draft,
+            actor=actor,
+            name=parsed.name,
+            scene=parsed.scene,
+            rule_set_key=parsed.rule_set_key,
+            expected_rule_set_version=parsed.rule_set_version,
+            base_score=parsed.base_score,
+            grade_bands=list(parsed.grade_bands),
+            veto_grade=parsed.veto_grade,
+            groups=list(parsed.groups),
+            items=list(parsed.items),
+        )
+    except ScoringExcelValidationError as exc:
+        detail = _excel_validation_detail(exc)
+        if not detail["problems"]:
+            detail["problems"] = [{"sheet": "文件", "row": 0, "field": "文件", "code": "file_invalid", "message": "Excel 文件不符合模板或超过资源限制"}]
+        raise HTTPException(status_code=422, detail=detail) from exc
+    except ScoringStandardInvalid as exc:
+        raise HTTPException(status_code=422, detail=_domain_import_detail(exc)) from exc
+    except Exception as exc:
+        _raise_http(exc, "import")
+    audit_event(
+        request,
+        action="scoring.standard.import",
+        resource="qc_scoring_standard",
+        outcome="success",
+        details={
+            "standard_id": data["id"],
+            "scene": data["scene"],
+            "rule_set_key": data["rule_set_key"],
+            "item_count": data["item_count"],
+        },
+        current_user=current_user,
+    )
+    return _ok(request, data, "评分标准已导入为草稿")
 
 
 @router.post("/standards")

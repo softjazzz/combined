@@ -7,10 +7,12 @@ import {
   copyScoringStandard,
   createScoringStandard,
   deleteScoringStandard,
+  exportScoringStandard,
   getCaseScore,
   getScoringStandard,
   listScoringScenes,
   listScoringStandards,
+  importScoringStandard,
   saveScoringItems,
   setDefaultScoringStandard,
   updateScoringStandard,
@@ -111,5 +113,56 @@ describe('scoring API', () => {
     const network = await listScoringStandards()
     expect(network.success).toBe(false)
     expect(network.status).toBeUndefined()
+  })
+
+  it('导出请求读取 Blob；导入使用 multipart 并确认草稿响应', async () => {
+    const detail = {
+      id: 'new-1', name: '导入草稿', scene: 'running', rule_set_key: 'luxian_0609_qc_v1',
+      status: 'draft', is_default: false, base_score: 100, grade_bands: bands, veto_grade: '乙',
+      version_seq: 1, created_by: 'u1', created_at: null, updated_by: 'u1', updated_at: null,
+      activated_by: null, activated_at: null, groups: [], items: [], group_count: 0, item_count: 0,
+    }
+    const blob = new Blob(['xlsx'])
+    const spy = vi.spyOn(ApiService, 'requestRaw')
+      .mockResolvedValueOnce({ status: 200, data: blob } as Awaited<ReturnType<typeof ApiService.requestRaw>>)
+      .mockResolvedValueOnce(envelope(detail))
+
+    expect(await exportScoringStandard('id/1')).toMatchObject({ success: true, data: blob })
+    const imported = await importScoringStandard(new File(['xlsx'], 'standard.xlsx'))
+    expect(imported).toMatchObject({ success: true, data: detail, resultUnknown: false })
+    expect(spy.mock.calls[0]?.[0]).toMatchObject({
+      method: 'GET', url: '/api/v1/scoring/standards/id%2F1/export', responseType: 'blob',
+    })
+    expect(spy.mock.calls[1]?.[0]).toMatchObject({ method: 'POST', url: '/api/v1/scoring/standards/import' })
+    expect(spy.mock.calls[1]?.[0].data).toBeInstanceOf(FormData)
+  })
+
+  it('导入422返回逐行问题；5xx与异常200均锁定为结果未知', async () => {
+    const problems = [{ sheet: '评分条目', row: 3, field: '规则ID', code: 'rule_duplicate', message: '规则重复' }]
+    vi.spyOn(ApiService, 'requestRaw')
+      .mockRejectedValueOnce(httpError(422, {
+        detail: { code: 'excel_validation_failed', message: '校验未通过', problems },
+      }))
+      .mockRejectedValueOnce(httpError(503, { detail: '暂不可用' }))
+      .mockResolvedValueOnce(envelope({ status: 'draft' }))
+    const file = new File(['xlsx'], 'standard.xlsx')
+
+    expect(await importScoringStandard(file)).toMatchObject({
+      success: false, status: 422, code: 'excel_validation_failed', problems, resultUnknown: false,
+    })
+    const unavailable = await importScoringStandard(file)
+    expect(unavailable.resultUnknown).toBe(true)
+    expect(unavailable.message).toContain('可能已写入')
+    const malformed = await importScoringStandard(file)
+    expect(malformed.resultUnknown).toBe(true)
+    expect(malformed.message).toContain('无法确认新草稿')
+  })
+
+  it('导入在客户端拒绝扩展名和超限文件，不发请求', async () => {
+    const spy = vi.spyOn(ApiService, 'requestRaw')
+    expect((await importScoringStandard(new File(['x'], 'standard.csv'))).resultUnknown).toBe(false)
+    expect((await importScoringStandard(new File([new Uint8Array(2 * 1024 * 1024 + 1)], 'standard.xlsx'))).message)
+      .toContain('2 MiB')
+    expect(spy).not.toHaveBeenCalled()
   })
 })

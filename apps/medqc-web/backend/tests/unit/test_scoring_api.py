@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import io
 import logging
 
 import pytest
 import sqlalchemy as sa
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from openpyxl import load_workbook
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -336,6 +338,130 @@ def test_admin_can_write_and_any_user_can_read(sessions):
     reader = client(roles=("qc_doctor",))
     assert reader.get(f"{BASE}/standards").status_code == 200
     assert reader.get(f"{BASE}/scenes").status_code == 200
+
+
+def _renamed_workbook(content: bytes, name: str, *, formula: bool = False) -> bytes:
+    workbook = load_workbook(io.BytesIO(content))
+    workbook["评分标准"]["E2"] = name
+    if formula:
+        workbook["评分条目"]["E2"] = "=1+1"
+    output = io.BytesIO()
+    workbook.save(output)
+    workbook.close()
+    return output.getvalue()
+
+
+def _workbook_with_rule_set(content: bytes, rule_set_key: str) -> bytes:
+    workbook = load_workbook(io.BytesIO(content))
+    workbook["评分标准"]["C2"] = rule_set_key
+    output = io.BytesIO()
+    workbook.save(output)
+    workbook.close()
+    return output.getvalue()
+
+
+def test_scoring_excel_export_import_roundtrip_creates_new_draft(sessions, caplog):
+    manager = client()
+    source = ready_draft(manager, "导出源标准")
+    with caplog.at_level(logging.INFO, logger="app.audit"):
+        exported = manager.get(f"{BASE}/standards/{source['id']}/export")
+    assert exported.status_code == 200
+    assert exported.headers["cache-control"] == "no-store"
+    assert exported.headers["x-content-type-options"] == "nosniff"
+    assert exported.content.startswith(b"PK")
+
+    with caplog.at_level(logging.INFO, logger="app.audit"):
+        imported = manager.post(
+            f"{BASE}/standards/import",
+            files={"file": ("standard.xlsx", _renamed_workbook(exported.content, "导入草稿"),
+                             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        )
+    assert imported.status_code == 200, imported.text
+    data = imported.json()["data"]
+    assert data["name"] == "导入草稿" and data["status"] == "draft"
+    assert data["is_default"] is False and data["version_seq"] == 1
+    assert data["grade_bands"] == source["grade_bands"]
+    assert data["groups"] == source["groups"] and data["items"] == source["items"]
+    assert manager.get(f"{BASE}/standards/{source['id']}").json()["data"]["name"] == "导出源标准"
+    audit_lines = "\n".join(line for line in caplog.text.splitlines() if "audit.event" in line)
+    assert "scoring.standard.export" in audit_lines and "scoring.standard.import" in audit_lines
+    assert '"item_count": 2' in audit_lines and "导出源标准" not in audit_lines and "导入草稿" not in audit_lines
+
+
+def test_scoring_excel_permissions_and_formula_validation_do_not_write(sessions):
+    manager = client()
+    source = ready_draft(manager, "权限源标准")
+    exported = manager.get(f"{BASE}/standards/{source['id']}/export")
+    reader = client(roles=("qc_doctor",))
+    assert reader.get(f"{BASE}/standards/{source['id']}/export").status_code == 200
+    denied = reader.post(
+        f"{BASE}/standards/import",
+        files={"file": ("standard.xlsx", exported.content, "application/octet-stream")},
+    )
+    assert denied.status_code == 403
+
+    invalid = manager.post(
+        f"{BASE}/standards/import",
+        files={"file": ("standard.xlsx", _renamed_workbook(exported.content, "公式标准", formula=True),
+                         "application/octet-stream")},
+    )
+    assert invalid.status_code == 422
+    detail = invalid.json()["detail"]
+    assert detail["code"] == "excel_validation_failed"
+    assert any(problem["code"] == "formula_forbidden" for problem in detail["problems"])
+    bad_key = manager.post(
+        f"{BASE}/standards/import",
+        files={"file": ("standard.xlsx", _workbook_with_rule_set(exported.content, "unknown_rules"),
+                         "application/octet-stream")},
+    )
+    assert bad_key.status_code == 422
+    assert bad_key.json()["detail"]["problems"][0]["code"] == "rule_set_scene_mismatch"
+    assert [item["name"] for item in service.list_standards()["items"]] == ["权限源标准"]
+
+
+def test_scoring_excel_import_readback_failure_rolls_back(sessions, monkeypatch):
+    manager = client()
+    source = ready_draft(manager, "回读源标准")
+    exported = manager.get(f"{BASE}/standards/{source['id']}/export")
+    original_detail = service._detail
+
+    def failing_detail(session, row):
+        if row.name == "回读失败标准":
+            raise sa.exc.OperationalError("select", {}, Exception("readback failed"))
+        return original_detail(session, row)
+
+    monkeypatch.setattr(service, "_detail", failing_detail)
+    response = manager.post(
+        f"{BASE}/standards/import",
+        files={"file": ("standard.xlsx", _renamed_workbook(exported.content, "回读失败标准"),
+                         "application/octet-stream")},
+    )
+    assert response.status_code == 503
+    monkeypatch.setattr(service, "_detail", original_detail)
+    assert [item["name"] for item in service.list_standards()["items"]] == ["回读源标准"]
+
+
+def test_scoring_excel_import_rechecks_version_inside_locked_transaction(sessions, monkeypatch):
+    manager = client()
+    source = ready_draft(manager, "版本源标准")
+    exported = manager.get(f"{BASE}/standards/{source['id']}/export")
+    renamed = _renamed_workbook(exported.content, "过期版本标准")
+    identity = routes.inspect_scoring_workbook_identity(renamed)
+    _, universe = routes.current_rule_set_snapshot(identity.rule_set_key)
+    monkeypatch.setattr(routes, "current_rule_set_snapshot", lambda _key: (identity.rule_set_version, universe))
+    snapshots = iter(((identity.rule_set_version, universe), ("new-version", universe)))
+    monkeypatch.setattr(service, "current_rule_set_snapshot", lambda _key: next(snapshots))
+    locks = []
+    monkeypatch.setattr(service, "_lock_rule_set_version", lambda _session, key: locks.append(key))
+
+    response = manager.post(
+        f"{BASE}/standards/import",
+        files={"file": ("standard.xlsx", renamed, "application/octet-stream")},
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "rule_set_version_mismatch"
+    assert locks == [identity.rule_set_key]
+    assert [item["name"] for item in service.list_standards()["items"]] == ["版本源标准"]
 
 
 def test_database_failure_is_desensitized_503(monkeypatch, caplog):

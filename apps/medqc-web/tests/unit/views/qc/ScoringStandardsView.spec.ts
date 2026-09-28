@@ -16,6 +16,8 @@ const state = vi.hoisted(() => ({
     setDefaultScoringStandard: vi.fn(),
     archiveScoringStandard: vi.fn(),
     deleteScoringStandard: vi.fn(),
+    exportScoringStandard: vi.fn(),
+    importScoringStandard: vi.fn(),
   },
   rules: {
     listRuleSetVersions: vi.fn(),
@@ -163,6 +165,10 @@ describe('ScoringStandardsView', () => {
     state.api.getScoringStandard.mockImplementation(async (id: string) => {
       const source = [active, activeNonDefault, draft, archived].find((item) => item.id === id) ?? draft
       return ok(detailOf(source))
+    })
+    state.api.exportScoringStandard.mockResolvedValue({ success: false, message: '未配置导出' })
+    state.api.importScoringStandard.mockResolvedValue({
+      success: false, message: '未配置导入', problems: [], resultUnknown: false,
     })
     state.rules.listRuleSetVersions.mockResolvedValue(ok({ rule_set_key: KEY, current_version: '2026-06-09' }))
     state.rules.getRuleSetVersion.mockResolvedValue(ok({
@@ -312,6 +318,7 @@ describe('ScoringStandardsView', () => {
     const wrapper = await render()
     expect(wrapper.get('[data-testid="scoring-readonly-role"]').text()).toContain('当前角色只读')
     expect(wrapper.find('[data-testid="scoring-create"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="scoring-import"]').exists()).toBe(false)
     for (const action of ['copy', 'activate', 'set-default', 'delete', 'archive']) {
       expect(wrapper.find(`[data-testid="scoring-action-${action}"]`).exists()).toBe(false)
     }
@@ -321,6 +328,82 @@ describe('ScoringStandardsView', () => {
     expect(wrapper.get('[data-testid="scoring-editor-name"]').attributes('disabled')).toBeDefined()
     expect(wrapper.find('[data-testid="scoring-editor-save"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="scoring-item-remove"]').exists()).toBe(false)
+    expect(row(wrapper, 'd1').find('[data-testid="scoring-action-export"]').exists()).toBe(true)
+  })
+
+  it('导出任意状态标准并使用安全文件名下载', async () => {
+    const blob = new Blob(['xlsx'])
+    state.api.exportScoringStandard.mockResolvedValue(ok(blob))
+    const createObjectURL = vi.fn(() => 'blob:score')
+    const revokeObjectURL = vi.fn()
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectURL })
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectURL })
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
+    const wrapper = await render()
+
+    await row(wrapper, 'd1').get('[data-testid="scoring-action-export"]').trigger('click')
+    await flushPromises()
+    expect(state.api.exportScoringStandard).toHaveBeenCalledWith('d1')
+    expect(createObjectURL).toHaveBeenCalledWith(blob)
+    expect(click).toHaveBeenCalled()
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:score')
+  })
+
+  it('导入成功创建草稿、刷新列表并打开编辑', async () => {
+    const imported = detailOf(standard({ id: 'i1', name: '导入草稿' }))
+    state.api.importScoringStandard.mockResolvedValue({
+      success: true, data: imported, message: '已导入', problems: [], resultUnknown: false,
+    })
+    const wrapper = await render()
+    await wrapper.get('[data-testid="scoring-import"]').trigger('click')
+    const input = wrapper.get('[data-testid="scoring-import-file"]')
+    const file = new File(['xlsx'], 'standard.xlsx')
+    Object.defineProperty(input.element, 'files', { configurable: true, value: [file] })
+    await input.trigger('change')
+    expect(wrapper.get('[data-testid="scoring-import-filename"]').text()).toContain('standard.xlsx')
+    await wrapper.get('.modal-ok').trigger('click')
+    await flushPromises()
+
+    expect(state.api.importScoringStandard).toHaveBeenCalledWith(file)
+    expect(state.message.success).toHaveBeenCalledWith('评分标准已导入为新草稿')
+    expect(state.api.listScoringStandards.mock.calls.length).toBeGreaterThan(1)
+    expect(state.api.getScoringStandard).toHaveBeenCalledWith('i1')
+  })
+
+  it('导入逐行错误可定位；结果未知时同一文件不能重复提交', async () => {
+    state.api.importScoringStandard
+      .mockResolvedValueOnce({
+        success: false,
+        message: '校验未通过',
+        problems: [{ sheet: '评分条目', row: 3, field: '规则ID', code: 'rule_duplicate', message: '规则重复' }],
+        resultUnknown: false,
+      })
+      .mockResolvedValueOnce({
+        success: false,
+        message: '可能已写入',
+        problems: [],
+        resultUnknown: true,
+      })
+    const wrapper = await render()
+    await wrapper.get('[data-testid="scoring-import"]').trigger('click')
+    const input = wrapper.get('[data-testid="scoring-import-file"]')
+    const first = new File(['xlsx'], 'first.xlsx')
+    Object.defineProperty(input.element, 'files', { configurable: true, value: [first] })
+    await input.trigger('change')
+    await wrapper.get('.modal-ok').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="scoring-import-problems"]').text()).toContain('评分条目 第 3 行 · 规则ID：规则重复')
+
+    await wrapper.get('.modal-ok').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="scoring-import-unknown"]').text()).toContain('可能已经创建草稿')
+    await wrapper.get('.modal-ok').trigger('click')
+    expect(state.api.importScoringStandard).toHaveBeenCalledTimes(2)
+
+    const second = new File(['xlsx'], 'second.xlsx')
+    Object.defineProperty(input.element, 'files', { configurable: true, value: [second] })
+    await input.trigger('change')
+    expect(wrapper.find('[data-testid="scoring-import-unknown"]').exists()).toBe(false)
   })
 
   it('启用中的标准只读并提示复制为新草稿', async () => {

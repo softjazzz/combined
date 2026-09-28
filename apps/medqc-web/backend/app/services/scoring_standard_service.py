@@ -160,17 +160,24 @@ def _scene_rule_set(scene: str, rule_set_key: Any) -> str:
 
 def rule_set_universe(rule_set_key: str) -> frozenset[str]:
     """规则集当前版本全集（active + paused + excluded），规则 id 大写。"""
+    return current_rule_set_snapshot(rule_set_key)[1]
+
+
+def current_rule_set_snapshot(rule_set_key: str) -> tuple[str, frozenset[str]]:
+    """返回当前规则集版本及其规则全集，供评分配置的受控引用校验。"""
     try:
-        resolution = resolve_rule_set_version(rule_set_key, current_version(rule_set_key))
+        version = current_version(rule_set_key)
+        resolution = resolve_rule_set_version(rule_set_key, version)
     except RuleSetVersionUnavailable as exc:
         raise ScoringStandardUnavailable("规则集版本读取失败") from exc
     except RuleSetVersionNotFound as exc:
         raise ScoringStandardUnavailable("规则集当前版本不可解析") from exc
-    return frozenset(
+    universe = frozenset(
         str(rule_id).strip().upper()
         for key in ("active_rule_ids", "paused_rule_ids", "excluded_rule_ids")
         for rule_id in resolution[key]
     )
+    return version, universe
 
 
 # ---------------------------------------------------------------------------
@@ -539,6 +546,16 @@ def _lock_scene(session: Any, scene: str) -> None:
     session.execute(text("SELECT pg_advisory_xact_lock(hashtext(:key))"), {"key": f"qc_scoring_standards:{scene}"})
 
 
+def _lock_rule_set_version(session: Any, rule_set_key: str) -> None:
+    """与规则版本发布使用同一事务锁，关闭导入校验后的版本切换窗口。"""
+    if session.get_bind().dialect.name != "postgresql":
+        return
+    session.execute(
+        text("SELECT pg_advisory_xact_lock(hashtext(:key))"),
+        {"key": f"qc_rule_set_versions:{rule_set_key}"},
+    )
+
+
 def _locked_draft(session: Any, standard_id: str, version_seq: int) -> Any:
     row = _standard_row(session, standard_id, for_update=True)
     if row is None:
@@ -660,6 +677,52 @@ def create_standard(
         return standard_id
 
     return _write("保存", run)
+
+
+def import_standard_draft(
+    *, actor: str, name: Any, scene: Any, rule_set_key: Any, expected_rule_set_version: Any,
+    base_score: Any, grade_bands: Any, veto_grade: Any, groups: Any, items: Any,
+) -> dict[str, Any]:
+    """整表导入为新草稿；标准、组、条目和事务内回读要么全部成功，要么全部回滚。"""
+    actor = _actor(actor)
+    scene = _scene(scene)
+    rule_set_key = _scene_rule_set(scene, rule_set_key)
+    if not isinstance(expected_rule_set_version, str) or not expected_rule_set_version.strip():
+        raise ScoringStandardInvalid("规则集版本不能为空", code="rule_set_version_invalid")
+    expected_rule_set_version = expected_rule_set_version.strip()
+    actual_version, universe = current_rule_set_snapshot(rule_set_key)
+    if expected_rule_set_version != actual_version:
+        raise ScoringStandardInvalid(
+            "工作簿规则集版本与当前版本不一致，请重新导出后再导入",
+            code="rule_set_version_mismatch",
+            problems=[f"工作簿：{expected_rule_set_version}", f"当前：{actual_version}"],
+        )
+    header = _checked_header(name, base_score, grade_bands, veto_grade)
+    normalize_groups_items(groups, items, universe)
+    standard_id = str(uuid4())
+
+    def run(session: Any) -> str:
+        _lock_rule_set_version(session, rule_set_key)
+        locked_version, locked_universe = current_rule_set_snapshot(rule_set_key)
+        if expected_rule_set_version != locked_version:
+            raise ScoringStandardInvalid(
+                "工作簿规则集版本与当前版本不一致，请重新导出后再导入",
+                code="rule_set_version_mismatch",
+                problems=[f"工作簿：{expected_rule_set_version}", f"当前：{locked_version}"],
+            )
+        normalized_groups, normalized_items = normalize_groups_items(groups, items, locked_universe)
+        if _name_taken(session, header["name"], scene):
+            raise ScoringStandardConflict("同一场景下已有同名评分标准", code="name_exists")
+        now = _now()
+        session.execute(insert(_STANDARDS).values(
+            id=standard_id, scene=scene, rule_set_key=rule_set_key, status=STATUS_DRAFT,
+            is_default=False, version_seq=1, created_by=actor, created_at=now,
+            updated_by=actor, updated_at=now, **header,
+        ))
+        _insert_children(session, standard_id, normalized_groups, normalized_items)
+        return standard_id
+
+    return _write_transactional_detail("导入", run)
 
 
 def update_standard(
@@ -897,9 +960,11 @@ __all__ = [
     "archive_standard",
     "copy_standard",
     "create_standard",
+    "current_rule_set_snapshot",
     "delete_standard",
     "get_default_standard",
     "get_standard",
+    "import_standard_draft",
     "list_standards",
     "normalize_groups_items",
     "rule_set_universe",
