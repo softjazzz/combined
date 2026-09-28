@@ -13,6 +13,11 @@ function scored(overrides: Record<string, unknown> = {}) {
     status: 'scored', scene: 'running', standard_id: 's1', standard_name: '运行病历评分标准',
     standard_updated_at: '2026-09-27T01:00:00', rule_set_key: 'luxian_0609_qc_v1', rule_set_version: '2026-06-09',
     job_id: 'job-1', score: 82.5, grade: '乙', veto_hit: false, base_score: 100,
+    result_ref: {
+      envelope_id: 'envelope-1', root_job_id: 'job-1', institute_id: 'H1', patient_id: 'P1', visit_id: 'V1',
+      rule_set_key: 'luxian_0609_qc_v1', rule_set_version: '2026-06-09',
+    },
+    standard_ref: { standard_id: 's1', version_seq: 7, updated_at: '2026-09-27T01:00:00' },
     deductions: [
       { rule_id: 'LX0609-001', group_name: '病程记录', deduction: 5, is_veto: false },
       { rule_id: 'LX0609-002', group_name: '病程记录', deduction: 8, is_veto: false },
@@ -57,7 +62,40 @@ describe('CaseScorePanel', () => {
     expect(groups[0].findAll('[data-testid="case-score-deduction"]')).toHaveLength(2)
     expect(groups[1].find('[data-testid="case-score-group-capped"]').exists()).toBe(false)
     expect(wrapper.get('[data-testid="case-score-basis"]').text()).toContain('运行病历评分标准')
+    expect(wrapper.get('[data-testid="case-score-standard-version"]').text()).toBe('标准版本 v7')
     expect(wrapper.find('[data-testid="case-score-unscored"]').exists()).toBe(false)
+  })
+
+  it('历史响应缺少引用仍显示只读分数，不伪造标准版本或申诉入口', async () => {
+    api.get.mockResolvedValueOnce(ok(scored({ result_ref: null, standard_ref: null })))
+    const wrapper = mount(CaseScorePanel, { props })
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="case-score-value"]').text()).toBe('82.5')
+    expect(wrapper.find('[data-testid="case-score-standard-version"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="case-score-appeal"]').exists()).toBe(false)
+  })
+
+  it('标准引用与顶层锚点不一致时不展示为可信版本', async () => {
+    api.get.mockResolvedValueOnce(ok(scored({
+      standard_ref: { standard_id: 's1', version_seq: 8, updated_at: '2026-09-27T02:00:00' },
+    })))
+    const wrapper = mount(CaseScorePanel, { props })
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="case-score-value"]').text()).toBe('82.5')
+    expect(wrapper.find('[data-testid="case-score-standard-version"]').exists()).toBe(false)
+  })
+
+  it('畸形标准引用只隐藏版本，不破坏已有只读分数', async () => {
+    api.get.mockResolvedValueOnce(ok(scored({
+      standard_ref: { standard_id: 7, version_seq: '7', updated_at: null },
+    })))
+    const wrapper = mount(CaseScorePanel, { props })
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="case-score-value"]').text()).toBe('82.5')
+    expect(wrapper.find('[data-testid="case-score-standard-version"]').exists()).toBe(false)
   })
 
   it('命中否决时标记单项否决，并列出未配置扣分的确定问题', async () => {
@@ -118,14 +156,35 @@ describe('CaseScorePanel', () => {
 
   it('三坐标切换后丢弃迟到响应', async () => {
     const first = deferred<unknown>()
-    api.get.mockReturnValueOnce(first.promise).mockResolvedValueOnce(ok(scored({ score: 60, grade: '丙' })))
+    api.get.mockReturnValueOnce(first.promise).mockResolvedValueOnce(ok(scored({
+      score: 60,
+      grade: '丙',
+      standard_ref: { standard_id: 's1', version_seq: 8, updated_at: '2026-09-27T01:00:00' },
+    })))
     const wrapper = mount(CaseScorePanel, { props })
     await wrapper.setProps({ visitId: 'V2' })
     await flushPromises()
-    first.resolve(ok(scored({ score: 99, grade: '甲' })))
+    first.resolve(ok(scored({
+      score: 99,
+      grade: '甲',
+      standard_ref: { standard_id: 's1', version_seq: 9, updated_at: '2026-09-27T01:00:00' },
+    })))
     await flushPromises()
     expect(api.get).toHaveBeenLastCalledWith({ institute_id: 'H1', patient_id: 'P1', visit_id: 'V2', scene: 'running' })
     expect(wrapper.get('[data-testid="case-score-value"]').text()).toBe('60')
     expect(wrapper.get('[data-testid="case-score-grade"]').text()).toBe('丙')
+    expect(wrapper.get('[data-testid="case-score-standard-version"]').text()).toBe('标准版本 v8')
+  })
+
+  it('组件卸载后废弃仍在途的响应', async () => {
+    const pending = deferred<unknown>()
+    api.get.mockReturnValueOnce(pending.promise)
+    const wrapper = mount(CaseScorePanel, { props })
+
+    wrapper.unmount()
+    pending.resolve({ success: false, status: 403, message: '没有权限' })
+    await flushPromises()
+
+    expect(wrapper.emitted('forbidden')).toBeUndefined()
   })
 })

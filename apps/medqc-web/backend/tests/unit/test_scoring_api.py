@@ -533,3 +533,36 @@ def test_case_score_no_standard_no_result_and_scored(sessions, monkeypatch):
 
 def test_case_score_rejects_bad_scene(sessions):
     assert _case(client(), scene="other").status_code == 422
+
+
+def test_case_score_returns_exact_result_and_standard_references(sessions, monkeypatch):
+    from app.services.case_identity import CaseRef
+    from app.services.qc_workspace.canonical_result_store import customer_safe_projection_key, keyed_ref
+
+    manager = client()
+    draft = ready_draft(manager)
+    response = manager.post(
+        f"{BASE}/standards/{draft['id']}/activate", json={"version_seq": 2},
+    )
+    assert response.status_code == 200
+    active = response.json()["data"]
+    record_ref = keyed_ref(
+        "rec", CaseRef("H1", "P1", "V1").as_key(), hmac_key=customer_safe_projection_key(),
+    )
+    monkeypatch.setattr(scoring_service, "_default_workspace", lambda: _Workspace({
+        "state": "ready", "data_origin": "canonical_result_envelope",
+        "job_id": "job-1", "root_job_id": "job-1", "envelope_id": "envelope-1",
+        "record_ref": record_ref, "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "canonical-independent-version", "items": [],
+    }))
+    data = _case(client(roles=("qc_doctor",))).json()["data"]
+    assert data["result_ref"] == {
+        "institute_id": "H1", "patient_id": "P1", "visit_id": "V1",
+        "root_job_id": "job-1", "envelope_id": "envelope-1",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "canonical-independent-version",
+    }
+    assert data["standard_ref"] == {
+        "standard_id": draft["id"], "version_seq": active["version_seq"],
+        "updated_at": active["updated_at"],
+    }

@@ -155,6 +155,24 @@ export interface ScoringGroupDeduction {
   max_deduction: number | null
 }
 
+/** Canonical 结果的完整只读引用；缺失时前端不得用当前页面上下文补齐。 */
+export interface CaseScoreResultRef {
+  envelope_id: string
+  root_job_id: string
+  institute_id: string
+  patient_id: string
+  visit_id: string
+  rule_set_key: string
+  rule_set_version: string
+}
+
+/** 本次计分所用默认标准的精确 CAS 引用。 */
+export interface CaseScoreStandardRef {
+  standard_id: string
+  version_seq: number
+  updated_at: string
+}
+
 export interface CaseScoreScored {
   status: 'scored'
   scene: ScoringScene
@@ -164,6 +182,10 @@ export interface CaseScoreScored {
   rule_set_key: string | null
   rule_set_version: string | null
   job_id: string | null
+  /** 历史响应可能没有引用；缺失不影响只读分数展示。 */
+  result_ref?: CaseScoreResultRef | null
+  /** 历史响应可能没有引用；只有完整引用可用于展示可信标准版本。 */
+  standard_ref?: CaseScoreStandardRef | null
   score: number
   /** 分数落不进任何档位时为 null（显示未知）。 */
   grade: string | null

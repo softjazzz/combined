@@ -12,9 +12,12 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from decimal import Decimal
+from hmac import compare_digest
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
+from .case_identity import CaseRef
 from .luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY
 from .scoring_standard_service import ScoringStandardUnavailable, get_default_standard
 
@@ -178,6 +181,70 @@ def _default_workspace() -> Any:
     return CustomQCWorkspaceService()
 
 
+def _score_case_references(
+    *, identity: CaseRef, dto: Mapping[str, Any], standard: Mapping[str, Any],
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    """只搬运已由本次读取核实的结果和标准引用；旧响应缺字段时保持可读。"""
+    from .qc_workspace.canonical_result_store import customer_safe_projection_key, keyed_ref
+
+    def reference_text(value: Any) -> str:
+        return value.strip() if isinstance(value, str) else ""
+
+    dto_rule_set_key = reference_text(dto.get("rule_set_key"))
+    standard_rule_set_key = reference_text(standard.get("rule_set_key"))
+    if dto_rule_set_key and dto_rule_set_key != standard_rule_set_key:
+        raise ScoringStandardUnavailable("质控结果引用不一致")
+
+    record_ref = reference_text(dto.get("record_ref"))
+    if record_ref:
+        expected_record_ref = keyed_ref(
+            "rec", identity.as_key(), hmac_key=customer_safe_projection_key(),
+        )
+        if not compare_digest(record_ref, expected_record_ref):
+            raise ScoringStandardUnavailable("质控结果引用不一致")
+
+    job_id = reference_text(dto.get("job_id"))
+    root_job_id = reference_text(dto.get("root_job_id"))
+    if job_id and root_job_id and job_id != root_job_id:
+        raise ScoringStandardUnavailable("质控结果引用不一致")
+
+    envelope_id = reference_text(dto.get("envelope_id"))
+    rule_set_version = reference_text(dto.get("rule_set_version"))
+    result_ref = None
+    if all((record_ref, envelope_id, root_job_id, dto_rule_set_key, rule_set_version)):
+        result_ref = {
+            "envelope_id": envelope_id,
+            "root_job_id": root_job_id,
+            **identity.as_dict(),
+            "rule_set_key": dto_rule_set_key,
+            "rule_set_version": rule_set_version,
+        }
+
+    standard_id = reference_text(standard.get("id"))
+    standard_version_seq = standard.get("version_seq")
+    standard_updated_at = standard.get("updated_at")
+    valid_updated_at = isinstance(standard_updated_at, datetime)
+    if isinstance(standard_updated_at, str) and standard_updated_at.strip():
+        try:
+            datetime.fromisoformat(standard_updated_at.strip().replace("Z", "+00:00"))
+            valid_updated_at = True
+        except ValueError:
+            valid_updated_at = False
+    standard_ref = None
+    if (
+        standard_id
+        and type(standard_version_seq) is int
+        and standard_version_seq >= 1
+        and valid_updated_at
+    ):
+        standard_ref = {
+            "standard_id": standard_id,
+            "version_seq": standard_version_seq,
+            "updated_at": standard_updated_at,
+        }
+    return result_ref, standard_ref
+
+
 def score_case(
     *, institute_id: str, patient_id: str, visit_id: str, scene: str,
     standard_loader: Callable[[str], Mapping[str, Any] | None] | None = None,
@@ -189,11 +256,16 @@ def score_case(
     无默认标准 {status: no_standard}；无 ready 结果 {status: no_result, result_state}；
     标准读取失败抛 ScoringStandardUnavailable，结果读取失败原样上抛（路由脱敏为 503）。
     """
+    identity = CaseRef(
+        str(institute_id or "").strip(),
+        str(patient_id or "").strip(),
+        str(visit_id or "").strip(),
+    )
     standard = (standard_loader or get_default_standard)(scene)
     if standard is None:
         return {"status": STATE_NO_STANDARD, "scene": scene}
     dto = (workspace_factory or _default_workspace)().build_latest_single_record_result_dto(
-        institute_id=institute_id, patient_id=patient_id, visit_id=visit_id,
+        **identity.as_dict(),
         rule_set_key=standard["rule_set_key"],
     )
     state = str((dto or {}).get("state") or "") if isinstance(dto, Mapping) else ""
@@ -202,6 +274,9 @@ def score_case(
             "status": STATE_NO_RESULT, "scene": scene, "result_state": state or "unknown",
             "standard_id": standard.get("id"),
         }
+    result_ref, standard_ref = _score_case_references(
+        identity=identity, dto=dto, standard=standard,
+    )
     scored = score_result((projector or project_customer_items)(dto.get("items") or []), standard)
     return {
         "status": STATE_SCORED,
@@ -210,6 +285,8 @@ def score_case(
         "rule_set_key": dto.get("rule_set_key"),
         "rule_set_version": dto.get("rule_set_version"),
         "job_id": dto.get("job_id"),
+        "result_ref": result_ref,
+        "standard_ref": standard_ref,
         **scored,
     }
 

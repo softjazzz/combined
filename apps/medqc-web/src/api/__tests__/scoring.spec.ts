@@ -52,6 +52,25 @@ describe('scoring API', () => {
     })
   })
 
+  it('单病历得分透传可空的结果引用与标准引用，不在前端拼造', async () => {
+    const references = {
+      result_ref: {
+        envelope_id: 'envelope-1', root_job_id: 'job-1', institute_id: 'H', patient_id: 'P', visit_id: 'V',
+        rule_set_key: 'luxian_0609_qc_v1', rule_set_version: 'canonical-2026.09',
+      },
+      standard_ref: { standard_id: 'standard-1', version_seq: 7, updated_at: '2026-09-28T08:30:00' },
+    }
+    vi.spyOn(ApiService, 'requestRaw')
+      .mockResolvedValueOnce(envelope({ status: 'scored', ...references }))
+      .mockResolvedValueOnce(envelope({ status: 'scored', result_ref: null, standard_ref: null }))
+
+    const complete = await getCaseScore({ institute_id: 'H', patient_id: 'P', visit_id: 'V', scene: 'running' })
+    expect(complete.data).toMatchObject(references)
+
+    const legacy = await getCaseScore({ institute_id: 'H', patient_id: 'P', visit_id: 'V', scene: 'running' })
+    expect(legacy.data).toMatchObject({ result_ref: null, standard_ref: null })
+  })
+
   it('写接口只发送合同字段并带 version_seq', async () => {
     const spy = vi.spyOn(ApiService, 'requestRaw').mockResolvedValue(envelope({}))
     await createScoringStandard({

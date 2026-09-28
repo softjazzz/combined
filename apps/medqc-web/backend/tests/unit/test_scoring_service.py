@@ -8,8 +8,10 @@ from decimal import Decimal
 import pytest
 
 from app.services import scoring_service
+from app.services.case_identity import CaseRef
+from app.services.qc_workspace.canonical_result_store import keyed_ref
 from app.services.scoring_service import grade_for, score_cases, score_result, score_workstation_page
-from app.services.scoring_standard_service import validate_grade_bands
+from app.services.scoring_standard_service import ScoringStandardUnavailable, validate_grade_bands
 
 BANDS = [
     {"name": "甲", "min_score": 90, "max_score": 100},
@@ -206,7 +208,7 @@ def test_score_case_no_standard_does_not_read_result():
     assert workspace.calls == []
 
 
-def test_score_case_no_result_and_scored():
+def test_score_case_no_result_and_scored(monkeypatch):
     empty = _Workspace({"state": "not_found", "items": []})
     result = scoring_service.score_case(
         institute_id="H1", patient_id="P1", visit_id="V1", scene="running",
@@ -215,17 +217,91 @@ def test_score_case_no_result_and_scored():
     assert result["status"] == "no_result" and result["result_state"] == "not_found"
     assert empty.calls[0]["rule_set_key"] == "luxian_0609_qc_v1"
 
+    from app.services.qc_workspace import canonical_result_store
+
+    monkeypatch.setattr(canonical_result_store, "customer_safe_projection_key", lambda: "k")
     ready = _Workspace({
-        "state": "ready", "job_id": "job-1", "rule_set_key": "luxian_0609_qc_v1", "rule_set_version": "2026-06-09",
+        "state": "ready", "job_id": "job-1", "root_job_id": "job-1", "envelope_id": "env-1",
+        "record_ref": keyed_ref("rec", CaseRef("H1", "P1", "V1").as_key(), hmac_key="k"),
+        "rule_set_key": "luxian_0609_qc_v1", "rule_set_version": "2026-06-09",
         "items": [{"raw": "LX0609-001"}],
     })
     result = scoring_service.score_case(
         institute_id="H1", patient_id="P1", visit_id="V1", scene="running",
-        standard_loader=lambda scene: standard(), workspace_factory=lambda: ready,
+        standard_loader=lambda scene: standard(version_seq=7), workspace_factory=lambda: ready,
         projector=lambda items: [item(entry["raw"]) for entry in items],
     )
     assert result["status"] == "scored" and result["score"] == 97.0 and result["standard_id"] == "std-1"
     assert result["job_id"] == "job-1"
+    assert result["result_ref"] == {
+        "envelope_id": "env-1", "root_job_id": "job-1",
+        "institute_id": "H1", "patient_id": "P1", "visit_id": "V1",
+        "rule_set_key": "luxian_0609_qc_v1", "rule_set_version": "2026-06-09",
+    }
+    assert result["standard_ref"] == {
+        "standard_id": "std-1", "version_seq": 7, "updated_at": "2026-09-27T10:00:00",
+    }
+
+
+def test_score_case_keeps_legacy_score_when_references_are_incomplete():
+    ready = _Workspace({
+        "state": "ready", "job_id": "job-1", "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09", "items": [],
+    })
+    result = scoring_service.score_case(
+        institute_id="H1", patient_id="P1", visit_id="V1", scene="running",
+        standard_loader=lambda scene: standard(updated_at=None), workspace_factory=lambda: ready,
+        projector=lambda items: [],
+    )
+    assert result["status"] == "scored" and result["score"] == 100.0
+    assert result["result_ref"] is None
+    assert result["standard_ref"] is None
+
+
+@pytest.mark.parametrize(
+    "standard_override",
+    [
+        {"version_seq": True},
+        {"version_seq": 7, "updated_at": 123},
+        {"version_seq": 7, "updated_at": "not-an-iso-time"},
+    ],
+)
+def test_score_case_does_not_trust_malformed_standard_references(standard_override):
+    ready = _Workspace({
+        "state": "ready", "rule_set_key": "luxian_0609_qc_v1", "items": [],
+    })
+    result = scoring_service.score_case(
+        institute_id="H1", patient_id="P1", visit_id="V1", scene="running",
+        standard_loader=lambda scene: standard(**standard_override),
+        workspace_factory=lambda: ready, projector=lambda items: [],
+    )
+    assert result["status"] == "scored" and result["standard_ref"] is None
+
+
+@pytest.mark.parametrize(
+    "dto_override",
+    [
+        {"record_ref": "rec_tampered"},
+        {"root_job_id": "job-other"},
+        {"rule_set_key": "other-rule-set"},
+    ],
+)
+def test_score_case_rejects_explicit_reference_conflicts(monkeypatch, dto_override):
+    from app.services.qc_workspace import canonical_result_store
+
+    monkeypatch.setattr(canonical_result_store, "customer_safe_projection_key", lambda: "k")
+    dto = {
+        "state": "ready", "job_id": "job-1", "root_job_id": "job-1", "envelope_id": "env-1",
+        "record_ref": keyed_ref("rec", CaseRef("H1", "P1", "V1").as_key(), hmac_key="k"),
+        "rule_set_key": "luxian_0609_qc_v1", "rule_set_version": "canonical-v2", "items": [],
+    }
+    dto.update(dto_override)
+    with pytest.raises(ScoringStandardUnavailable, match="引用不一致"):
+        scoring_service.score_case(
+            institute_id="H1", patient_id="P1", visit_id="V1", scene="running",
+            standard_loader=lambda scene: standard(version_seq=9),
+            workspace_factory=lambda: _Workspace(dto), projector=lambda items: [],
+        )
 
 
 def test_project_customer_items_uses_customer_projection(monkeypatch):

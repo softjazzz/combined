@@ -74,6 +74,12 @@
 - 主协调组合48项后端回归通过，独立复核已通过；规则集 key 必须一致，结果规则版本与标准版本属于不同轴。没有数据库迁移或业务部署。
 - 计分响应和前端引用尚未纳入本批交付；前置服务不计整项收口，Goal仍4/10，剩余6项。
 
+### 第100节增量
+
+- 接通评分成功响应的结果与标准引用，HMAC核对三坐标后搬运；前端展示可信标准版本，旧响应缺引用继续只读展示。
+- 主协调新增API集成测试，确认真实服务响应透传；后端组合78项通过。前端集中门禁见滚动计划，不把来源引用当申诉创建或授权完成。
+- Goal仍4/10，剩余6个整项；无数据库写入或业务部署。
+
 ### 配置线：62 新评分标准Excel主链
 
 - 文件：新`backend/app/services/scoring_standard_excel_service.py`、`backend/app/services/scoring_standard_service.py`原子导入helper、`backend/app/routers/scoring.py`、`src/api/scoring.ts`、`src/views/qc/ScoringStandardsView.vue`及专属pytest/Vitest。

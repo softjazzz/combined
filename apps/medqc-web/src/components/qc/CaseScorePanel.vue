@@ -11,7 +11,9 @@
         v-if="scored"
         class="case-score__basis"
         data-testid="case-score-basis"
-      >计分依据：{{ scored.standard_name || '未知标准' }}（满分 {{ formatNumber(scored.base_score) }}）</span>
+      >计分依据：{{ scored.standard_name || '未知标准' }}（<template v-if="trustedStandardVersion !== null"><span
+        data-testid="case-score-standard-version"
+      >标准版本 v{{ trustedStandardVersion }}</span> · </template>满分 {{ formatNumber(scored.base_score) }}）</span>
     </header>
 
     <p
@@ -132,7 +134,7 @@
  * 场景由调用方传入；no_standard / no_result 显示说明；403 整块隐藏；
  * 读取失败可重试，不伪造分数；三坐标或场景切换时丢弃迟到响应。
  */
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { getCaseScore } from '@/api/scoring'
 import type { CaseScore, CaseScoreScored, ScoringDeduction, ScoringScene } from '@/api/scoring'
 
@@ -163,6 +165,20 @@ const sceneLabel = computed(() => SCENE_LABELS[props.scene] ?? '当前场景')
 const scored = computed<CaseScoreScored | null>(() =>
   result.value?.status === 'scored' ? result.value : null,
 )
+const trustedStandardVersion = computed<number | null>(() => {
+  const data = scored.value
+  const reference: unknown = data?.standard_ref
+  if (!data || typeof reference !== 'object' || reference === null) return null
+  const value = reference as Record<string, unknown>
+  if (typeof value.standard_id !== 'string' || !value.standard_id.trim()) return null
+  if (typeof value.updated_at !== 'string' || !value.updated_at.trim()) return null
+  if (typeof value.version_seq !== 'number'
+    || !Number.isInteger(value.version_seq)
+    || value.version_seq < 1) return null
+  if (typeof data.standard_id === 'string' && data.standard_id !== value.standard_id) return null
+  if (typeof data.standard_updated_at === 'string' && data.standard_updated_at !== value.updated_at) return null
+  return value.version_seq
+})
 
 interface GroupView {
   group_name: string
@@ -250,6 +266,10 @@ watch(
   },
   { immediate: true },
 )
+
+onBeforeUnmount(() => {
+  requestSequence += 1
+})
 </script>
 
 <style scoped>
