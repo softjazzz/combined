@@ -10,7 +10,7 @@
 
 1. **两条分支非常接近，合并很简单。** 分叉点是 `3dff664b4`（2026-09-27「记录发布范围复审通过及验收边界」）。源分支领先 55 个提交（52 个 UI + `c10d2c745` AGENTS 路径修正 + 2 个交接文档提交），目标分支领先 4 个提交。`git merge-tree` 试合并**只有 2 个冲突，都是文档**：`apps/medqc-web/AGENTS.md`、`apps/medqc-web/docs/plans/PROJECT_ROLLING_TODO.md`；没有任何代码冲突。
 2. **UI 整改只改了展示层。** 150 个文件：`src/views` 117、`src/components` 14、`tests` 8、`src/styles` 4、`docs` 4、`tailwind.config.js` / `src/main.ts` / `src/App.vue` 各 1；**没有改** `src/api`、`src/stores`、`src/services`、`src/router`、`src/types`、`src/domain` 和后端，也没有改业务流程、筛选项或接口契约。
-3. **目标分支所在的主工作区 `D:\LLM\LX888` 有别人未提交的改动**（4 个修改、2 个已暂存又修改、97 个未跟踪）。已核对：本次合并带入的 153 个文件**与这些未提交文件没有重叠**。但因为存在已暂存改动，**不要直接在 `D:\LLM\LX888` 里做非快进合并**，也不要 stash / reset / checkout 那里的文件——按第 3 节在干净工作树里合并，再让主工作区快进。
+3. **目标分支所在的主工作区 `D:\LLM\LX888` 有别人未提交的改动**（4 个修改、2 个已暂存又修改、97 个未跟踪）。2026-09-28 复核：源分支新增提交 `b5f10635f`（质控结果右侧栏阅读优化）后，合并带入的文件与主工作区未提交文件**有 1 个重叠**：`apps/medqc-web/tests/unit/views/workstation-v4/customer-sample-validation/SingleRecordQcResultPanel.spec.ts`（主工作区对它有未提交修改）。快进时 git 会因「会覆盖本地修改」拒绝，这是安全拒绝，不会丢改动；此时需由用户决定先提交或另行处理主工作区的这份修改，**不要替用户 stash、reset 或 checkout**。另外主工作区还修改了 `CustomerQcResultDetailCard.vue`，本次合并不涉及该文件。因为存在已暂存改动，**不要直接在 `D:\LLM\LX888` 里做非快进合并**，也不要 stash / reset / checkout 那里的文件——按第 3 节在干净工作树里合并，再让主工作区快进。
 4. 推送、删除分支或工作树需要用户明确授权；按路径暂存；提交信息用中文。
 
 ## 1. UI 整改内容
@@ -91,7 +91,7 @@ EOF
 
 ### 3.3 验收（第 4 节）通过后，让目标分支快进
 
-主工作区有已暂存的改动，快进前先确认不会覆盖（已核对无重叠；若 git 仍提示会覆盖本地修改，**停下来问用户**，不要 stash 或丢弃）：
+主工作区有已暂存的改动，快进前先确认不会覆盖（已知 `SingleRecordQcResultPanel.spec.ts` 重叠，见第 0 节第 3 条；git 提示会覆盖本地修改时**停下来问用户**，不要 stash 或丢弃）：
 
 ```bash
 cd D:/LLM/LX888
