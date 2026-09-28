@@ -58,38 +58,59 @@
             :key="group.key"
             class="ws-nav__group"
           >
+            <!-- 收起侧栏时分组标题退化为分隔线；展开时为可折叠的一级菜单 -->
             <div
-              v-if="group.label"
+              v-if="group.label && collapsed"
               class="ws-nav__group-label"
-              :aria-hidden="collapsed ? 'true' : undefined"
+              aria-hidden="true"
+            />
+            <button
+              v-else-if="group.label"
+              type="button"
+              class="ws-nav__group-label ws-nav__group-toggle"
+              :aria-expanded="isGroupOpen(group.key)"
+              :aria-controls="`ws-nav-group-${group.key}`"
+              @click="toggleGroup(group.key)"
             >
-              {{ collapsed ? '' : group.label }}
-            </div>
-            <a-tooltip
-              v-for="item in group.items"
-              :key="item.key"
-              :title="collapsed ? item.label : undefined"
-              placement="right"
+              <span>{{ group.label }}</span>
+              <ChevronDown
+                :size="14"
+                aria-hidden="true"
+                class="ws-nav__group-chevron"
+                :class="{ 'is-closed': !isGroupOpen(group.key) }"
+              />
+            </button>
+            <div
+              v-show="collapsed || !group.label || isGroupOpen(group.key)"
+              :id="`ws-nav-group-${group.key}`"
+              class="ws-nav__group-items"
             >
-              <RouterLink
-                :to="item.to"
-                class="ws-nav__item"
-                :class="{ 'ws-nav__item--active': activeKey === item.key }"
-                :aria-current="activeKey === item.key ? 'page' : undefined"
-                :aria-label="collapsed ? item.label : undefined"
+              <a-tooltip
+                v-for="item in group.items"
+                :key="item.key"
+                :title="collapsed ? item.label : undefined"
+                placement="right"
               >
-                <MqIconTile
-                  :name="item.iconName"
-                  :tone="activeKey === item.key ? 'brand' : 'neutral'"
-                  :size="24"
-                  :icon-size="16"
-                />
-                <span
-                  v-if="!collapsed"
-                  class="ws-nav__label"
-                >{{ item.label }}</span>
-              </RouterLink>
-            </a-tooltip>
+                <RouterLink
+                  :to="item.to"
+                  class="ws-nav__item"
+                  :class="{ 'ws-nav__item--active': activeKey === item.key }"
+                  :aria-current="activeKey === item.key ? 'page' : undefined"
+                  :aria-label="collapsed ? item.label : undefined"
+                >
+                  <MqIconTile
+                    :name="item.iconName"
+                    :tone="activeKey === item.key ? 'brand' : 'neutral'"
+                    :size="24"
+                    :icon-size="16"
+                  />
+                  <span
+                    v-if="!collapsed"
+                    class="ws-nav__label"
+                  >{{ item.label }}</span>
+                </RouterLink>
+              </a-tooltip>
+            </div>
           </section>
         </nav>
 
@@ -224,11 +245,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ConfigProvider } from 'ant-design-vue'
 import {
   Bell,
+  ChevronDown,
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
@@ -322,7 +344,54 @@ const navRoute = computed<NavRouteLike>(() => ({
   meta: route.meta as Record<string, unknown>,
 }))
 
-const activeKey = computed(() => findActiveNav(WORKSTATION_NAV, navRoute.value)?.item.key ?? '')
+const activeNav = computed(() => findActiveNav(WORKSTATION_NAV, navRoute.value))
+const activeKey = computed(() => activeNav.value?.item.key ?? '')
+
+// 分组折叠：记在本机浏览器；当前页面所在分组总是自动展开
+const GROUP_STORAGE_KEY = 'mq-sider-closed-groups'
+const closedGroups = ref<Set<string>>(readClosedGroups())
+
+function readClosedGroups(): Set<string> {
+  try {
+    const raw = window.localStorage.getItem(GROUP_STORAGE_KEY)
+    const parsed: unknown = raw ? JSON.parse(raw) : []
+    return new Set(Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : [])
+  } catch {
+    return new Set()
+  }
+}
+
+function persistClosedGroups() {
+  try {
+    window.localStorage.setItem(GROUP_STORAGE_KEY, JSON.stringify([...closedGroups.value]))
+  } catch {
+    // 隐私模式等场景下无法写入，仅影响记忆，不影响折叠本身
+  }
+}
+
+function isGroupOpen(key: string): boolean {
+  return !closedGroups.value.has(key)
+}
+
+function toggleGroup(key: string) {
+  const next = new Set(closedGroups.value)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  closedGroups.value = next
+  persistClosedGroups()
+}
+
+watch(
+  () => activeNav.value?.group.key,
+  (groupKey) => {
+    if (!groupKey || !closedGroups.value.has(groupKey)) return
+    const next = new Set(closedGroups.value)
+    next.delete(groupKey)
+    closedGroups.value = next
+    persistClosedGroups()
+  },
+  { immediate: true },
+)
 const drgActiveTab = computed(() => findDrgSectionTab(navRoute.value))
 
 const handleLogout = async () => {
@@ -457,11 +526,49 @@ const handleLogout = async () => {
 
 .ws-nav__group-label {
   padding: 8px 10px 2px;
-  color: var(--mq-text-tertiary);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-13);
+  font-weight: 500;
   white-space: nowrap;
+}
+
+.ws-nav__group-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 26px;
+  margin-top: 4px;
+  padding: 0 8px 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
+}
+
+.ws-nav__group-toggle:hover {
+  background: rgba(255, 255, 255, 0.5);
+  color: var(--mq-text-primary);
+}
+
+.ws-nav__group-toggle:focus-visible {
+  outline: 2px solid var(--mq-brand-600);
+  outline-offset: -2px;
+}
+
+.ws-nav__group-chevron {
+  flex-shrink: 0;
+  color: var(--mq-text-tertiary);
+  transition: transform 180ms ease;
+}
+
+.ws-nav__group-chevron.is-closed {
+  transform: rotate(-90deg);
 }
 
 .ws-shell--collapsed .ws-nav__group-label {
@@ -475,12 +582,12 @@ const handleLogout = async () => {
   display: flex;
   align-items: center;
   gap: 10px;
-  height: 31px;
+  height: 30px;
   margin: 0;
   padding: 0 8px;
   border-radius: 10px;
   color: var(--mq-text-primary);
-  font-size: var(--mq-font-13);
+  font-size: var(--mq-font-14);
   text-decoration: none;
   white-space: nowrap;
   transition:
