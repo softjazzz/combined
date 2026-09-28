@@ -123,6 +123,15 @@ from ..services.task_template_service import (
     list_task_templates,
     update_task_template,
 )
+from ..services.task_list_filter_service import (
+    TaskDepartmentScopeInvalid,
+    TaskListFilter,
+    TaskListFilterInvalid,
+    parse_saved_departments,
+    parse_task_list_filter,
+    postgres_timestamp,
+    task_matches_department,
+)
 from .qc_sichuan import get_qc_service, _run_sichuan_workspace_batch_job, _sichuan_workspace_service
 from ..core.permissions import (
     has_any_role,
@@ -139,6 +148,7 @@ TaskSceneFilter = Literal["running", "final", "outpatient", "unclassified"]
 _TODO_READ_PAGE_SIZE = 500
 _TODO_TASK_ID_CHUNK_SIZE = 200
 _TODO_MAX_ASSIGNMENTS = 50000
+_TASK_FILTER_READ_PAGE_SIZE = 500
 
 
 
@@ -256,7 +266,9 @@ async def _received_task_ids(sb, current_user: dict) -> List[str]:
 async def _received_todo_rows(
     sb, current_user: dict, scene: Optional[str], *,
     columns: str, status: Optional[str] = None, keyword: Optional[str] = None,
+    task_filter: TaskListFilter | None = None,
 ) -> List[dict]:
+    task_filter = task_filter or parse_task_list_filter()
     task_ids = await _received_task_ids(sb, current_user)
     rows: List[dict] = []
     for start in range(0, len(task_ids), _TODO_TASK_ID_CHUNK_SIZE):
@@ -269,6 +281,7 @@ async def _received_todo_rows(
             if status:
                 query = query.eq("status", status)
             query = _apply_task_keyword_scope(query, keyword)
+            query = _apply_task_created_scope(query, task_filter)
             resp = await async_execute(
                 query.order("id").range(offset, offset + _TODO_TASK_ID_CHUNK_SIZE - 1)
             )
@@ -281,7 +294,10 @@ async def _received_todo_rows(
             expected_count = count
             if not page and offset < count:
                 raise HTTPException(status_code=503, detail="任务待办读取不完整，请稍后重试")
-            rows.extend(page)
+            rows.extend(
+                row for row in page
+                if task_matches_department(row.get("department_filter"), task_filter.department)
+            )
             offset += len(page)
             if offset >= count:
                 break
@@ -340,6 +356,67 @@ def _apply_task_keyword_scope(query, keyword: Optional[str]):
     if not callable(structured_or):
         raise HTTPException(status_code=503, detail="任务关键词筛选暂不可用")
     return structured_or(("task_name", "task_number"), f"%{keyword}%")
+
+
+def _apply_task_created_scope(query, task_filter: TaskListFilter):
+    if task_filter.utc_start is not None:
+        query = query.gte("created_at", postgres_timestamp(task_filter.utc_start))
+    if task_filter.utc_end_exclusive is not None:
+        query = query.lt("created_at", postgres_timestamp(task_filter.utc_end_exclusive))
+    return query
+
+
+async def _read_all_task_filter_rows(
+    sb,
+    *,
+    tab: str,
+    current_user: dict,
+    scene: Optional[str],
+    status: Optional[str],
+    keyword: Optional[str],
+    task_filter: TaskListFilter,
+    columns: str = "*",
+    apply_department: bool = True,
+) -> List[dict]:
+    """稳定分页读取全部候选任务；科室精确匹配必须先于计数和分页。"""
+    query = sb.table("qc_tasks").select(columns, count="exact")
+    query = await _apply_task_tab_scope(sb, query, tab, current_user)
+    if query is None:
+        return []
+    query = _apply_task_scene_scope(query, scene)
+    if status:
+        query = query.eq("status", status)
+    query = _apply_task_keyword_scope(query, keyword)
+    query = _apply_task_created_scope(query, task_filter)
+    query = query.order("created_at", desc=True).order("id", desc=True)
+
+    rows: List[dict] = []
+    offset = 0
+    expected_count: Optional[int] = None
+    while True:
+        resp = await async_execute(
+            query.range(offset, offset + _TASK_FILTER_READ_PAGE_SIZE - 1)
+        )
+        page = list(getattr(resp, "data", None) or [])
+        count = getattr(resp, "count", None)
+        if type(count) is not int or count < offset + len(page):
+            raise HTTPException(status_code=503, detail="任务列表总数不可验证")
+        if expected_count is not None and count != expected_count:
+            raise HTTPException(status_code=503, detail="任务列表读取期间发生变化，请重试")
+        expected_count = count
+        if not page and offset < count:
+            raise HTTPException(status_code=503, detail="任务列表读取不完整，请稍后重试")
+        rows.extend(page)
+        offset += len(page)
+        if offset >= count:
+            break
+
+    if not apply_department:
+        return rows
+    return [
+        row for row in rows
+        if task_matches_department(row.get("department_filter"), task_filter.department)
+    ]
 
 # ============================
 # 创建任务
@@ -620,6 +697,9 @@ async def list_tasks(
     status: Optional[str] = Query(None, description="任务状态"),
     keyword: Optional[str] = Query(None, description="搜索关键词"),
     scene: Optional[TaskSceneFilter] = Query(None, description="任务病历场景"),
+    department: Optional[str] = Query(None, description="任务保存范围中的精确科室名称"),
+    created_start: Optional[str] = Query(None, description="创建日期起始（医院日历 YYYY-MM-DD）"),
+    created_end: Optional[str] = Query(None, description="创建日期结束（医院日历 YYYY-MM-DD）"),
     todo: Optional[Literal["assigned", "in_progress", "due_soon"]] = Query(
         None, description="个人待办范围"
     ),
@@ -634,6 +714,14 @@ async def list_tasks(
     if todo and tab != "received":
         raise HTTPException(status_code=422, detail="todo 仅支持 received 标签")
     todo_as_of = _parse_todo_as_of(as_of) if todo or as_of is not None else None
+    try:
+        task_filter = parse_task_list_filter(
+            department=department,
+            created_start=created_start,
+            created_end=created_end,
+        )
+    except TaskListFilterInvalid as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     sb = get_supabase()
     if sb is None:
@@ -643,11 +731,25 @@ async def list_tasks(
         if todo:
             data = await _received_todo_rows(
                 sb, current_user, scene, columns="*", status=status, keyword=keyword,
+                task_filter=task_filter,
             )
             data = [row for row in data if _task_matches_todo(row, todo, todo_as_of)]
             data.sort(
                 key=lambda row: (str(row.get("created_at") or ""), str(row.get("id") or "")),
                 reverse=True,
+            )
+            offset = (page - 1) * page_size
+            total = len(data)
+            data = data[offset:offset + page_size]
+        elif task_filter.department is not None:
+            data = await _read_all_task_filter_rows(
+                sb,
+                tab=tab,
+                current_user=current_user,
+                scene=scene,
+                status=status,
+                keyword=keyword,
+                task_filter=task_filter,
             )
             offset = (page - 1) * page_size
             total = len(data)
@@ -665,13 +767,16 @@ async def list_tasks(
             if status:
                 query = query.eq('status', status)
             query = _apply_task_keyword_scope(query, keyword)
+            query = _apply_task_created_scope(query, task_filter)
 
-            query = query.order('created_at', desc=True)
+            query = query.order('created_at', desc=True).order('id', desc=True)
             offset = (page - 1) * page_size
             query = query.range(offset, offset + page_size - 1)
             resp = await async_execute(query)
             data = list(getattr(resp, 'data', None) or [])
-            total = getattr(resp, 'count', None) or len(data)
+            total = getattr(resp, 'count', None)
+            if type(total) is not int or total < len(data):
+                raise HTTPException(status_code=503, detail="任务列表总数不可验证")
 
         return paginated_response(
             items=data, total=total, page=page, page_size=page_size,
@@ -679,6 +784,9 @@ async def list_tasks(
         )
     except HTTPException:
         raise
+    except TaskDepartmentScopeInvalid as exc:
+        logger.warning("任务科室范围无法解析: error_type=%s", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="任务科室范围暂不可筛选") from exc
     except Exception as e:
         logger.error(f"查询任务列表失败: {e}")
         raise HTTPException(status_code=500, detail="查询任务列表失败，请稍后重试")
@@ -696,6 +804,11 @@ async def get_task_stats(
         "all", description="标签: all=全部 | created=我创建 | received=我收到"
     ),
     scene: Optional[TaskSceneFilter] = Query(None, description="任务病历场景"),
+    status: Optional[str] = Query(None, description="任务状态"),
+    keyword: Optional[str] = Query(None, description="搜索关键词"),
+    department: Optional[str] = Query(None, description="任务保存范围中的精确科室名称"),
+    created_start: Optional[str] = Query(None, description="创建日期起始（医院日历 YYYY-MM-DD）"),
+    created_end: Optional[str] = Query(None, description="创建日期结束（医院日历 YYYY-MM-DD）"),
     current_user: dict = Depends(get_current_user),
 ):
     """
@@ -705,19 +818,49 @@ async def get_task_stats(
     if sb is None:
         raise HTTPException(status_code=503, detail="数据库不可用")
 
-    status_counts = {}
     try:
-        query = sb.table("qc_tasks").select("status", count="exact")
-        query = await _apply_task_tab_scope(sb, query, tab, current_user)
-        if query is not None:
-            query = _apply_task_scene_scope(query, scene)
-            resp = await async_execute(query)
-            rows = list(getattr(resp, "data", None) or [])
-            for row in rows:
-                status = row.get("status", "unknown")
-                status_counts[status] = status_counts.get(status, 0) + 1
+        task_filter = parse_task_list_filter(
+            department=department,
+            created_start=created_start,
+            created_end=created_end,
+        )
+    except TaskListFilterInvalid as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    status_counts = {}
+    department_options: set[str] = set()
+    try:
+        candidates = await _read_all_task_filter_rows(
+            sb,
+            tab=tab,
+            current_user=current_user,
+            scene=scene,
+            status=status,
+            keyword=keyword,
+            task_filter=task_filter,
+            columns="status,department_filter,created_at,id",
+            apply_department=False,
+        )
+        for row in candidates:
+            try:
+                saved_departments = parse_saved_departments(row.get("department_filter"))
+            except TaskDepartmentScopeInvalid:
+                if task_filter.department is not None:
+                    raise
+                continue
+            department_options.update(saved_departments)
+        rows = [
+            row for row in candidates
+            if task_matches_department(row.get("department_filter"), task_filter.department)
+        ]
+        for row in rows:
+            row_status = row.get("status", "unknown")
+            status_counts[row_status] = status_counts.get(row_status, 0) + 1
     except HTTPException:
         raise
+    except TaskDepartmentScopeInvalid as exc:
+        logger.warning("任务科室范围无法解析: error_type=%s", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="任务科室范围暂不可筛选") from exc
     except Exception as e:
         logger.error(f"获取任务统计失败: {e}")
         raise HTTPException(status_code=500, detail="获取任务统计失败，请稍后重试")
@@ -732,6 +875,7 @@ async def get_task_stats(
             "in_progress": status_counts.get("in_progress", 0),
             "completed": status_counts.get("completed", 0),
             "cancelled": status_counts.get("cancelled", 0),
+            "department_options": sorted(department_options),
         },
         message="获取任务统计成功",
         trace_id=get_trace_id(request),

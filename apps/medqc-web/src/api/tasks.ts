@@ -376,6 +376,8 @@ export interface TaskStats {
     in_progress: number
     completed: number
     cancelled: number
+    /** 当前账号与其余已应用筛选下，任务显式保存过的科室范围值。 */
+    department_options: string[]
 }
 
 export interface TaskTodoStats {
@@ -387,14 +389,20 @@ export interface TaskTodoStats {
 
 // ============= API 函数 =============
 
-/** 获取任务列表 */
-export async function getTaskList(params?: {
+export interface TaskListFilters {
     tab?: TaskTab
     status?: TaskStatus
     keyword?: string
+    scene?: TaskSceneFilter
+    department?: string
+    created_start?: string
+    created_end?: string
+}
+
+/** 获取任务列表 */
+export async function getTaskList(params?: TaskListFilters & {
     todo?: TaskTodo
     as_of?: string
-    scene?: TaskSceneFilter
     page?: number
     page_size?: number
 }) {
@@ -410,14 +418,15 @@ export async function getTaskList(params?: {
     return request<TaskListResponse>({ method: 'GET', url })
 }
 
-/** 获取任务统计 */
-export async function getTaskStats(params?: { tab?: TaskTab; scene?: TaskSceneFilter }) {
+/** 获取任务统计，使用与列表相同的业务筛选谓词。 */
+export async function getTaskStats(params?: TaskListFilters) {
     const queryParams = new URLSearchParams()
-    if (params?.tab) {
-        queryParams.set('tab', params.tab)
-    }
-    if (params?.scene) {
-        queryParams.set('scene', params.scene)
+    if (params) {
+        Object.entries(params).forEach(([key, value]) => {
+            if (value !== undefined && value !== null && value !== '') {
+                queryParams.set(key, String(value))
+            }
+        })
     }
     const query = queryParams.toString()
     return request<TaskStats>({

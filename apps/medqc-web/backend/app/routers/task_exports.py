@@ -33,10 +33,15 @@ async def export_tasks(
     scene: Literal["running", "final", "outpatient", "unclassified"] | None = Query(None),
     status: str | None = Query(None),
     keyword: str | None = Query(None),
+    department: str | None = Query(None),
+    created_start: str | None = Query(None),
+    created_end: str | None = Query(None),
     current_user: dict = Depends(get_current_user),
 ):
     """按全部任务页的真实筛选条件导出，不受当前分页影响。"""
-    unexpected = set(request.query_params).difference({"scene", "status", "keyword"})
+    unexpected = set(request.query_params).difference({
+        "scene", "status", "keyword", "department", "created_start", "created_end",
+    })
     if unexpected:
         raise HTTPException(status_code=422, detail="包含尚未生效的任务筛选参数")
     actor_id = current_user.get("id") or current_user.get("user_id")
@@ -51,6 +56,9 @@ async def export_tasks(
             scene=scene,
             status=status,
             keyword=keyword,
+            department=department,
+            created_start=created_start,
+            created_end=created_end,
         )
     except task_export_service.TaskExportInvalid as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -77,6 +85,9 @@ async def export_tasks(
             "scene": scene,
             "status": status,
             "keyword_applied": keyword not in (None, ""),
+            "department_applied": department not in (None, ""),
+            "created_start": created_start,
+            "created_end": created_end,
             "total_rows": result.row_count,
             "limit": task_export_service.MAX_EXPORT_ROWS,
         },

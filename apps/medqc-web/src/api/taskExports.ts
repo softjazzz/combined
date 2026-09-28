@@ -6,17 +6,13 @@
  */
 import { isAxiosError } from 'axios'
 import { ApiService } from '@/services/apiService'
-import type { TaskSceneFilter, TaskStatus } from '@/api/tasks'
+import type { TaskListFilters } from '@/api/tasks'
 
 const TASK_EXPORT_URL = '/api/v1/task-exports'
 const DEFAULT_FILENAME = 'task-list.csv'
 const CSV_CONTENT_TYPE = /^text\/csv(?:\s*;|$)/i
 
-export interface TaskExportFilters {
-  scene?: TaskSceneFilter
-  status?: TaskStatus
-  keyword?: string
-}
+export type TaskExportFilters = Omit<TaskListFilters, 'tab'>
 
 export type TaskExportResult =
   | { success: true; blob: Blob; filename: string }
@@ -115,6 +111,9 @@ function requestParams(filters: TaskExportFilters | undefined): TaskExportFilter
   if (filters?.scene) params.scene = filters.scene
   if (filters?.status) params.status = filters.status
   if (filters?.keyword !== undefined && filters.keyword !== '') params.keyword = filters.keyword
+  if (filters?.department) params.department = filters.department
+  if (filters?.created_start) params.created_start = filters.created_start
+  if (filters?.created_end) params.created_end = filters.created_end
   return params
 }
 

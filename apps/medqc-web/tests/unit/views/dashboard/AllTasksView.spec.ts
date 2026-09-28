@@ -134,6 +134,35 @@ const ASelectStub = defineComponent({
   },
 })
 
+const AAutoCompleteStub = defineComponent({
+  name: 'AAutoComplete',
+  props: { options: { type: Array, default: () => [] } },
+  emits: ['update:value'],
+  setup(props, { emit }) {
+    return () => h('button', {
+      'data-testid': 'task-department-filter',
+      onClick: () => {
+        const options = props.options as Array<{ value?: string }>
+        emit('update:value', options.find(option => option.value === '心内科')?.value)
+      },
+    }, '选择任务范围科室')
+  },
+})
+
+const ARangePickerStub = defineComponent({
+  name: 'ARangePicker',
+  emits: ['update:value'],
+  setup(_, { emit }) {
+    return () => h('button', {
+      'data-testid': 'task-created-date-filter',
+      onClick: () => emit('update:value', [
+        { format: () => '2026-09-01' },
+        { format: () => '2026-09-28' },
+      ]),
+    }, '选择创建日期')
+  },
+})
+
 const listResponse = {
   success: true,
   data: { items: [], total: 0, page: 1, page_size: 10, total_pages: 0 },
@@ -187,6 +216,7 @@ function statsResponse(total = 6) {
       in_progress: 0,
       completed: 0,
       cancelled: 0,
+      department_options: ['心内科', '外科'],
     },
   }
 }
@@ -204,13 +234,14 @@ async function mountView() {
     global: {
       stubs: {
         'a-avatar': true,
+        'a-auto-complete': AAutoCompleteStub,
         'a-button': AButtonStub,
         'a-input': true,
         'a-modal': AModalStub,
         'a-progress': true,
         'a-radio': true,
         'a-radio-group': true,
-        'a-range-picker': true,
+        'a-range-picker': ARangePickerStub,
         'a-select': ASelectStub,
         'a-table': ATableStub,
         'a-tag': true,
@@ -319,18 +350,31 @@ describe('AllTasksView 场景口径', () => {
     expect(mocks.createObjectURL).not.toHaveBeenCalled()
   })
 
-  it('错误响应和未接通的科室条件不生成下载', async () => {
+  it('错误响应不生成下载，科室与创建日期按已应用筛选导出', async () => {
     const wrapper = await mountView()
-    const vm = wrapper.vm as unknown as { handleExport: () => Promise<void>; selectedDepartment: string }
+    const vm = wrapper.vm as unknown as {
+      handleExport: () => Promise<void>
+    }
     await vm.handleExport()
     expect(mocks.message.error).toHaveBeenCalledWith('导出失败')
     expect(mocks.createObjectURL).not.toHaveBeenCalled()
     mocks.exportTasksCsv.mockClear()
-    vm.selectedDepartment = '未接通科室'
-    await nextTick()
+    await wrapper.get('[data-testid="task-department-filter"]').trigger('click')
+    await wrapper.get('[data-testid="task-created-date-filter"]').trigger('click')
+    await wrapper.get('[data-testid="task-filter-search"]').trigger('click')
+    await flushPromises()
+    mocks.exportTasksCsv.mockResolvedValue({
+      success: true, blob: new Blob(['CSV']), filename: '任务.csv',
+    })
     await vm.handleExport()
-    expect(mocks.exportTasksCsv).not.toHaveBeenCalled()
-    expect(mocks.message.warning).toHaveBeenCalled()
+    expect(mocks.exportTasksCsv).toHaveBeenCalledWith({
+      scene: undefined,
+      status: undefined,
+      keyword: undefined,
+      department: '心内科',
+      created_start: '2026-09-01',
+      created_end: '2026-09-28',
+    })
   })
 
   it('默认列表与统计覆盖全部场景，切换后使用同一场景范围', async () => {

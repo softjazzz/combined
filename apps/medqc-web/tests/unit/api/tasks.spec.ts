@@ -22,6 +22,7 @@ const stats = {
   in_progress: 1,
   completed: 3,
   cancelled: 0,
+  department_options: ['心内科'],
 }
 
 describe('任务统计 API', () => {
@@ -192,6 +193,28 @@ describe('任务统计 API', () => {
     expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
       method: 'GET',
       url: '/api/v1/tasks/todo-stats?scene=outpatient',
+    })
+  })
+
+  it('列表和统计透传同一科室范围与医院创建日期筛选', async () => {
+    const filters = {
+      scene: 'running' as const,
+      status: 'completed' as const,
+      keyword: '重点',
+      department: '心内科',
+      created_start: '2026-09-01',
+      created_end: '2026-09-28',
+    }
+    await getTaskList({ ...filters, page: 2, page_size: 20 })
+    expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
+      method: 'GET',
+      url: '/api/v1/tasks?scene=running&status=completed&keyword=%E9%87%8D%E7%82%B9&department=%E5%BF%83%E5%86%85%E7%A7%91&created_start=2026-09-01&created_end=2026-09-28&page=2&page_size=20',
+    })
+
+    await getTaskStats(filters)
+    expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
+      method: 'GET',
+      url: '/api/v1/tasks/stats?scene=running&status=completed&keyword=%E9%87%8D%E7%82%B9&department=%E5%BF%83%E5%86%85%E7%A7%91&created_start=2026-09-01&created_end=2026-09-28',
     })
   })
 

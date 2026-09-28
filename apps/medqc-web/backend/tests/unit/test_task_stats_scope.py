@@ -149,6 +149,7 @@ def test_received_stats_are_isolated_by_current_user_and_deduplicate_tasks(
         "in_progress": 1,
         "completed": 0,
         "cancelled": 0,
+        "department_options": [],
     }
 
     user_2 = _make_client(monkeypatch, database, _user("user-2"))
@@ -267,6 +268,7 @@ def test_received_with_no_assignments_returns_real_zero_without_task_query(
         "in_progress": 0,
         "completed": 0,
         "cancelled": 0,
+        "department_options": [],
     }
     assert database.query_count_by_table == {"qc_task_records": 1}
 

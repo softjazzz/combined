@@ -13,6 +13,13 @@ from sqlalchemy import or_, select
 
 from ..database.connection import SessionLocal
 from ..database.models.qc import QCTask
+from .task_list_filter_service import (
+    TaskDepartmentScopeInvalid,
+    TaskListFilterInvalid,
+    parse_task_list_filter,
+    sqlalchemy_timestamp,
+    task_matches_department,
+)
 
 MAX_EXPORT_ROWS = 5_000
 
@@ -138,6 +145,9 @@ def export_all_tasks(
     scene: str | None = None,
     status: str | None = None,
     keyword: str | None = None,
+    department: str | None = None,
+    created_start: str | None = None,
+    created_end: str | None = None,
     session_factory: Callable[[], Any] | None = None,
 ) -> TaskExportResult:
     """一次只读 SQL 快照取得全部匹配行；多一行仅用于显式上限判断。"""
@@ -146,6 +156,14 @@ def export_all_tasks(
     normalized_keyword = _filter_value(keyword, field="keyword")
     if normalized_scene not in {None, "running", "final", "outpatient", "unclassified"}:
         raise TaskExportInvalid("无效的任务场景")
+    try:
+        task_filter = parse_task_list_filter(
+            department=department,
+            created_start=created_start,
+            created_end=created_end,
+        )
+    except TaskListFilterInvalid as exc:
+        raise TaskExportInvalid(str(exc)) from exc
     factory = session_factory or SessionLocal
     if factory is None:
         raise TaskExportUnavailable("数据库会话不可用")
@@ -161,14 +179,34 @@ def export_all_tasks(
     if normalized_keyword is not None:
         pattern = f"%{normalized_keyword}%"
         query = query.where(or_(QCTask.task_name.ilike(pattern), QCTask.task_number.ilike(pattern)))
-    query = query.order_by(QCTask.created_at.desc(), QCTask.id.desc()).limit(MAX_EXPORT_ROWS + 1)
+    if task_filter.utc_start is not None:
+        query = query.where(QCTask.created_at >= sqlalchemy_timestamp(task_filter.utc_start))
+    if task_filter.utc_end_exclusive is not None:
+        query = query.where(
+            QCTask.created_at < sqlalchemy_timestamp(task_filter.utc_end_exclusive)
+        )
+    if task_filter.department is not None:
+        query = query.add_columns(QCTask.department_filter)
+    query = query.order_by(QCTask.created_at.desc(), QCTask.id.desc())
+    if task_filter.department is None:
+        query = query.limit(MAX_EXPORT_ROWS + 1)
 
     try:
         # 单条 SELECT 同时承担范围读取和上限探测，避免跨页时看到不同数据库快照。
         with factory() as session:
-            rows = list(session.execute(query).mappings().all())
+            rows = []
+            for row in session.execute(query).mappings():
+                if not task_matches_department(
+                    row.get("department_filter"), task_filter.department
+                ):
+                    continue
+                rows.append(row)
+                if len(rows) > MAX_EXPORT_ROWS:
+                    break
     except TaskExportTooLarge:
         raise
+    except TaskDepartmentScopeInvalid as exc:
+        raise TaskExportUnavailable("任务科室范围暂不可筛选") from exc
     except Exception as exc:
         raise TaskExportUnavailable("任务导出数据源不可用") from exc
 

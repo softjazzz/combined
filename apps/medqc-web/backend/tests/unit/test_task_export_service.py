@@ -170,6 +170,57 @@ def test_status_and_keyword_keep_list_endpoint_matching_semantics():
     assert _rows(result.content)[0]["任务编号"] == "NO-00001"
 
 
+def test_department_and_hospital_created_date_use_exact_shared_scope():
+    _engine, factory = _environment()
+    with factory.begin() as session:
+        session.add_all([
+            _task(1, department_filter='["心内科"]', created_at=datetime(2026, 9, 1, 16, 0)),
+            _task(2, department_filter="[]", created_at=datetime(2026, 9, 2, 15, 59, 59)),
+            _task(3, department_filter='["心内科一区"]', created_at=datetime(2026, 9, 2, 0, 0)),
+            _task(4, department_filter='["心内科"]', created_at=datetime(2026, 9, 2, 16, 0)),
+        ])
+
+    result = service.export_all_tasks(
+        department="心内科",
+        created_start="2026-09-02",
+        created_end="2026-09-02",
+        session_factory=factory,
+    )
+
+    assert [row["任务编号"] for row in _rows(result.content)] == ["NO-00002", "NO-00001"]
+
+
+def test_malformed_saved_department_only_blocks_selected_department_filter():
+    _engine, factory = _environment()
+    with factory.begin() as session:
+        session.add(_task(1, department_filter="not-json"))
+
+    assert service.export_all_tasks(session_factory=factory).row_count == 1
+    with pytest.raises(service.TaskExportUnavailable):
+        service.export_all_tasks(department="心内科", session_factory=factory)
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"created_start": "2026/09/01"},
+        {"created_start": "2026-09-02", "created_end": "2026-09-01"},
+        {"created_end": "9999-12-31"},
+    ],
+)
+def test_invalid_created_date_fails_before_database_access(kwargs):
+    called = False
+
+    def factory():
+        nonlocal called
+        called = True
+        raise AssertionError("不应连接数据库")
+
+    with pytest.raises(service.TaskExportInvalid):
+        service.export_all_tasks(session_factory=factory, **kwargs)
+    assert called is False
+
+
 def test_database_errors_are_wrapped_without_private_details():
     def factory():
         raise RuntimeError("patient P001 private SQL")

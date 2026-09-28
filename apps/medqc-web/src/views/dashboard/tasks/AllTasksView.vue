@@ -340,22 +340,24 @@
           :options="statusOptions"
         />
 
-        <a-select
+        <a-auto-complete
           v-model:value="selectedDepartment"
-          placeholder="选择科室"
+          placeholder="任务范围科室"
           class="rounded-lg"
           :options="departmentOptions"
+          allow-clear
         />
 
         <a-range-picker
           v-model:value="dateRange"
-          :placeholder="['开始日期', '结束日期']"
+          :placeholder="['创建开始日期', '创建结束日期']"
           class="rounded-lg"
         />
 
         <div class="flex space-x-2">
           <a-button
             type="primary"
+            data-testid="task-filter-search"
             class="rounded-lg"
             @click="handleSearch"
           >
@@ -534,6 +536,7 @@ import type {
   TaskAssigneeOption,
   TaskAssignResult,
   TaskItem,
+  TaskListFilters,
   TaskSceneFilter,
   TaskStats,
   TaskStatus,
@@ -596,7 +599,8 @@ const editTaskId = ref<string | null>(null)
 const scheduleDrawerVisible = ref(false)
 const exporting = ref(false)
 let exportRequestId = 0
-const appliedFilters = ref<{ scene?: TaskSceneFilter; keyword?: string; status?: TaskStatus }>({})
+type AppliedTaskFilters = Omit<TaskListFilters, 'tab'>
+const appliedFilters = ref<AppliedTaskFilters>({})
 const authStore = useAuthStore()
 const detailRefreshKey = ref(0)
 const assignDialogVisible = ref(false)
@@ -667,12 +671,12 @@ const sceneOptions: Array<{ label: string; value: TaskSceneFilter }> = [
   { label: '未标注', value: 'unclassified' },
 ]
 
-const departmentOptions = [
-  { value: 'internal', label: '内科' },
-  { value: 'surgery', label: '外科' },
-  { value: 'pediatrics', label: '儿科' },
-  { value: 'obstetrics', label: '妇产科' },
-]
+const departmentOptions = computed(() => {
+  const values = new Set(taskStats.value?.department_options || [])
+  if (selectedDepartment.value) values.add(selectedDepartment.value)
+  return [...values].sort((left, right) => left.localeCompare(right, 'zh-CN'))
+    .map(value => ({ value, label: value }))
+})
 
 // 表格列配置
 const columns: TableColumnsType<TaskItem> = [
@@ -820,6 +824,20 @@ watch(() => authStore.user?.id, () => {
   scheduleDrawerVisible.value = false
   exportRequestId += 1
   exporting.value = false
+  listRequestId += 1
+  statsRequestId += 1
+  loading.value = false
+  statsLoading.value = false
+  tasks.value = []
+  taskStats.value = null
+  pagination.value.total = 0
+  listError.value = ''
+  statsError.value = ''
+  appliedFilters.value = {}
+  if (authStore.user?.id) {
+    void fetchTasks()
+    void fetchStats()
+  }
 })
 
 watch([selectedScene, searchKeyword, selectedStatus, selectedDepartment, dateRange], () => {
@@ -838,10 +856,25 @@ const clearBatchSelection = () => {
   selectedBatchTaskIds.value = []
 }
 
+const currentFilters = (): AppliedTaskFilters => {
+  const filters: AppliedTaskFilters = {
+    scene: selectedScene.value,
+    keyword: searchKeyword.value || undefined,
+    status: selectedStatus.value || undefined,
+  }
+  if (selectedDepartment.value?.trim()) filters.department = selectedDepartment.value.trim()
+  if (dateRange.value) {
+    filters.created_start = dateRange.value[0].format('YYYY-MM-DD')
+    filters.created_end = dateRange.value[1].format('YYYY-MM-DD')
+  }
+  return filters
+}
+
 const handleSearch = () => {
   clearBatchSelection()
   pagination.value.current = 1
-  fetchTasks()
+  void fetchTasks()
+  void fetchStats()
 }
 
 const handleReset = () => {
@@ -878,10 +911,6 @@ const handleRefresh = () => {
 
 const handleExport = async () => {
   if (exporting.value || loading.value || listError.value) return
-  if (selectedDepartment.value || dateRange.value) {
-    message.warning('科室和日期筛选尚未接通，请清空这两个条件后导出')
-    return
-  }
   const requestId = ++exportRequestId
   const actorId = authStore.user?.id
   exporting.value = true
@@ -1179,7 +1208,11 @@ const fetchStats = async () => {
   statsError.value = ''
   taskStats.value = null
   try {
-    const res = await getTaskStats(selectedScene.value ? { scene: selectedScene.value } : undefined)
+    const filters = currentFilters()
+    const statsFilters = Object.fromEntries(
+      Object.entries(filters).filter(([, value]) => value !== undefined && value !== ''),
+    ) as AppliedTaskFilters
+    const res = await getTaskStats(Object.keys(statsFilters).length ? statsFilters : undefined)
     if (requestId !== statsRequestId) return
     if (res.success && res.data) {
       taskStats.value = res.data
@@ -1199,11 +1232,7 @@ const fetchTasks = async () => {
   const requestId = ++listRequestId
   exportRequestId += 1
   exporting.value = false
-  const filters = {
-    scene: selectedScene.value,
-    keyword: searchKeyword.value || undefined,
-    status: selectedStatus.value || undefined,
-  }
+  const filters = currentFilters()
   loading.value = true
   listError.value = ''
   tasks.value = []

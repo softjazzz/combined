@@ -32,11 +32,19 @@ def test_manager_export_passes_only_real_filters_and_returns_safe_csv(monkeypatc
     monkeypatch.setattr(service, "export_all_tasks", export)
     monkeypatch.setattr(routes, "audit_event", lambda *_args, **kwargs: audits.append(kwargs))
     response = _client({"id": "manager", "roles": [role]}).get(
-        BASE, params={"scene": "running", "status": "completed", "keyword": "重点"},
+        BASE, params={
+            "scene": "running", "status": "completed", "keyword": "重点",
+            "department": "心内科", "created_start": "2026-09-01",
+            "created_end": "2026-09-28",
+        },
     )
 
     assert response.status_code == 200
-    assert captured == {"scene": "running", "status": "completed", "keyword": "重点"}
+    assert captured == {
+        "scene": "running", "status": "completed", "keyword": "重点",
+        "department": "心内科", "created_start": "2026-09-01",
+        "created_end": "2026-09-28",
+    }
     assert response.content.startswith(b"\xef\xbb\xbf")
     assert response.headers["cache-control"] == "no-store"
     assert response.headers["x-content-type-options"] == "nosniff"
@@ -45,6 +53,9 @@ def test_manager_export_passes_only_real_filters_and_returns_safe_csv(monkeypatc
         "scene": "running",
         "status": "completed",
         "keyword_applied": True,
+        "department_applied": True,
+        "created_start": "2026-09-01",
+        "created_end": "2026-09-28",
         "total_rows": 1,
         "limit": 5_000,
     }
@@ -105,7 +116,6 @@ def test_unknown_errors_are_sanitized_and_not_audited(monkeypatch):
         {"scene": "emergency"},
         {"page": 2},
         {"page_size": 100},
-        {"department": "internal"},
         {"start_date": "2026-09-01"},
     ],
 )
