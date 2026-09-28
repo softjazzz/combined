@@ -13,7 +13,6 @@ from .core.middleware_api_version import APIVersionMiddleware
 from .core.access_control import enforce_default_auth
 from .core.http import close_shared_http_resources
 
-logger = logging.getLogger(__name__)
 from .routers import system as system_router
 from .routers import proxy as proxy_router
 from .routers import auth as auth_router
@@ -32,6 +31,8 @@ from .routers import llm_info as llm_info_router
 from .routers import qc_llm_configs as qc_llm_configs_router
 from .routers import semantic_rules as semantic_rules_router
 from .routers import tasks as tasks_router
+from .routers import task_edits as task_edits_router
+from .routers import task_exports as task_exports_router
 from .routers import record_reviews as record_reviews_router
 from .routers import record_operations as record_operations_router
 from .routers import filter_templates as filter_templates_router
@@ -77,6 +78,9 @@ from .routers import clinical_completeness as clinical_completeness_router
 from .routers import pre_grouping as pre_grouping_router
 from .routers import payment_monitoring as payment_monitoring_router
 from .routers import product_activation as product_activation_router
+
+logger = logging.getLogger(__name__)
+
 # Mount legacy routes to preserve all routes during migration
 try:
     from ..main_api import app as legacy_app  # type: ignore
@@ -273,6 +277,8 @@ def create_app() -> FastAPI:
     app.include_router(qc_llm_configs_router.router)
     app.include_router(semantic_rules_router.router)
     app.include_router(tasks_router.router)
+    app.include_router(task_edits_router.router)
+    app.include_router(task_exports_router.router)
     app.include_router(record_reviews_router.router)
     app.include_router(record_operations_router.router)
     app.include_router(filter_templates_router.router)

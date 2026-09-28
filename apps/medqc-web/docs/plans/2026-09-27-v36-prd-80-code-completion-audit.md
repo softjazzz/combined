@@ -84,7 +84,7 @@
 | 40 | 病历范围：自定义筛选、指定病历 | 部分实现 | 三坐标指定病例及基础日期/科室条件可用；复杂条件和完整场景范围未齐。 | `backend/app/services/task_sampling_service.py:94` | `2102a39b8` |
 | 41 | 病历抽样：全部、数量、比例等 | 部分实现 | 全部、数量、比例和科室分层已实现；手册全部抽样方式与完整场景未覆盖。 | `backend/app/services/task_sampling_service.py:334` | `76a134fc3` |
 | 42 | 任务分配：原质控员、科室、比例、病历类型 | 部分实现 | 原质控员、科室、比例三种已实现；病历类型策略明确不可用。 | `backend/app/services/task_assignment_service.py:22`；`src/components/qc/CreateTaskDrawer.vue:537` | `e3e453490` |
-| 43 | 全部任务 | 部分实现 | 列表、批量分配已有；新增私有任务模板保存/套用/编辑/删除及单任务分析，模板依赖未执行迁移64。任务编辑和导出仍占位，定时任务管理/执行边界未完成，不提升整项。 | `backend/app/services/task_template_service.py:1`；`backend/app/services/task_analysis_service.py:1`；`src/views/dashboard/tasks/AllTasksView.vue:1` | `e3e453490`；第91节D线、第92节 |
+| 43 | 全部任务 | 部分实现 | 列表、批量分配、私有模板及单任务分析已有；新增空单次草稿规划编辑、活动任务名称/截止时间编辑和真实筛选CSV导出。模板/编辑依赖未执行迁移64/65；重抽样编辑、定时任务管理/执行边界未完成，不提升整项。 | `backend/app/services/task_edit_service.py:1`；`backend/app/services/task_export_service.py:1`；`src/views/dashboard/tasks/AllTasksView.vue:1` | `e3e453490`；第91节D线、第92至93节 |
 
 ## 44–56 统计分析
 

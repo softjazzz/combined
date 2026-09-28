@@ -24,6 +24,11 @@
       :task-id="analysisTaskId"
       @view-detail="handleAnalysisDetail"
     />
+    <TaskEditDrawer
+      v-model:open="editDrawerVisible"
+      :task-id="editTaskId"
+      @saved="handleTaskSaved"
+    />
     <a-modal
       v-model:open="analysisPickerOpen"
       title="选择分析任务"
@@ -381,7 +386,10 @@
             刷新
           </a-button>
           <a-button
+            data-testid="task-export"
             class="rounded-lg"
+            :loading="exporting"
+            :disabled="loading || !!listError || exporting"
             @click="handleExport"
           >
             <DownloadOutlined />
@@ -477,8 +485,10 @@
                 分配
               </a-button>
               <a-button
+                data-testid="task-row-edit"
                 type="link"
                 size="small"
+                :disabled="record.status === 'completed' || record.status === 'cancelled'"
                 @click="handleEdit(record as DashboardTaskItem)"
               >
                 <EditOutlined />
@@ -502,7 +512,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import type { TableColumnsType, TableProps } from 'ant-design-vue'
 import type { Dayjs } from 'dayjs'
@@ -521,6 +531,8 @@ import type {
 import CreateTaskDrawer from '@/components/qc/CreateTaskDrawer.vue'
 import TaskTemplateDrawer from '@/components/qc/TaskTemplateDrawer.vue'
 import TaskAnalysisDrawer from '@/components/qc/TaskAnalysisDrawer.vue'
+import TaskEditDrawer from '@/components/qc/TaskEditDrawer.vue'
+import { exportTasksCsv } from '@/api/taskExports'
 import TaskAssignmentResult from '@/components/qc/TaskAssignmentResult.vue'
 import { describeTaskAssignError } from '@/utils/taskAssignment'
 import TaskDetailDrawer from '@/components/qc/TaskDetailDrawer.vue'
@@ -567,6 +579,11 @@ const analysisDrawerVisible = ref(false)
 const analysisTaskId = ref<string | null>(null)
 const analysisPickerOpen = ref(false)
 const analysisSelection = ref<string>()
+const editDrawerVisible = ref(false)
+const editTaskId = ref<string | null>(null)
+const exporting = ref(false)
+let exportRequestId = 0
+const appliedFilters = ref<{ scene?: TaskSceneFilter; keyword?: string; status?: TaskStatus }>({})
 const authStore = useAuthStore()
 const detailRefreshKey = ref(0)
 const assignDialogVisible = ref(false)
@@ -785,6 +802,21 @@ watch(() => authStore.user?.id, () => {
   analysisPickerOpen.value = false
   analysisTaskId.value = null
   analysisSelection.value = undefined
+  editDrawerVisible.value = false
+  editTaskId.value = null
+  exportRequestId += 1
+  exporting.value = false
+})
+
+watch([selectedScene, searchKeyword, selectedStatus, selectedDepartment, dateRange], () => {
+  exportRequestId += 1
+  exporting.value = false
+})
+
+onBeforeUnmount(() => {
+  exportRequestId += 1
+  listRequestId += 1
+  statsRequestId += 1
 })
 
 const clearBatchSelection = () => {
@@ -830,8 +862,37 @@ const handleRefresh = () => {
   fetchStats()
 }
 
-const handleExport = () => {
-  message.info('导出任务数据')
+const handleExport = async () => {
+  if (exporting.value || loading.value || listError.value) return
+  if (selectedDepartment.value || dateRange.value) {
+    message.warning('科室和日期筛选尚未接通，请清空这两个条件后导出')
+    return
+  }
+  const requestId = ++exportRequestId
+  const actorId = authStore.user?.id
+  exporting.value = true
+  try {
+    const result = await exportTasksCsv({ ...appliedFilters.value })
+    if (requestId !== exportRequestId || actorId !== authStore.user?.id) return
+    if (result.success === false) {
+      message.error(result.message || '任务导出失败')
+      return
+    }
+    const url = URL.createObjectURL(result.blob)
+    const link = document.createElement('a')
+    try {
+      link.href = url
+      link.download = result.filename || '质控任务.csv'
+      link.click()
+      message.success('任务列表已导出')
+    } finally {
+      URL.revokeObjectURL(url)
+    }
+  } catch {
+    if (requestId === exportRequestId) message.error('任务导出失败，请稍后重试')
+  } finally {
+    if (requestId === exportRequestId) exporting.value = false
+  }
 }
 
 const handleViewDetail = (record: DashboardTaskItem) => {
@@ -1057,7 +1118,16 @@ async function submitBatchAssignment() {
 }
 
 const handleEdit = (record: DashboardTaskItem) => {
-  message.info(`编辑任务: ${record.task_name}`)
+  if (record.status === 'completed' || record.status === 'cancelled') return
+  editTaskId.value = record.id
+  editDrawerVisible.value = true
+}
+
+const handleTaskSaved = async (taskId: string) => {
+  if (!editDrawerVisible.value || taskId !== editTaskId.value) return
+  editDrawerVisible.value = false
+  detailRefreshKey.value += 1
+  await Promise.all([fetchTasks(), fetchStats()])
 }
 
 const handleDelete = async (record: DashboardTaskItem) => {
@@ -1106,21 +1176,27 @@ const fetchStats = async () => {
 // 获取任务列表数据
 const fetchTasks = async () => {
   const requestId = ++listRequestId
+  exportRequestId += 1
+  exporting.value = false
+  const filters = {
+    scene: selectedScene.value,
+    keyword: searchKeyword.value || undefined,
+    status: selectedStatus.value || undefined,
+  }
   loading.value = true
   listError.value = ''
   tasks.value = []
   pagination.value.total = 0
   try {
     const res = await getTaskList({
-      scene: selectedScene.value,
-      keyword: searchKeyword.value || undefined,
-      status: selectedStatus.value || undefined,
+      ...filters,
       page: pagination.value.current,
       page_size: pagination.value.pageSize,
     })
 
     if (requestId !== listRequestId) return
     if (res.success && res.data) {
+      appliedFilters.value = filters
       const data = res.data
       tasks.value = data.items || []
       pagination.value.total = data.total || 0

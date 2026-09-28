@@ -76,6 +76,8 @@ class TaskRecordStatus(str, Enum):
 NonEmptyCaseCoordinate = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
 RuleSetKey = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)]
 TaskId = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+TaskEditName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+TaskDeadline = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=32)]
 
 
 class TaskCaseRef(BaseModel):
@@ -282,6 +284,106 @@ class TaskUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     status: Literal["in_progress"]
+
+
+class TaskDraftConfigurationUpdateRequest(BaseModel):
+    """完整替换尚未抽样的单次任务规划；任务身份和冻结规则不在接口内。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    configuration_version: int = Field(..., ge=1)
+    task_name: TaskEditName
+    deadline: Optional[TaskDeadline]
+    date_range: Optional[TaskTemplateDateRange]
+    department_filter: List[TaskTemplateDepartment] = Field(..., max_length=100)
+    record_refs: List[TaskCaseRef] = Field(..., max_length=10000)
+    sampling_method: SamplingMethod
+    sampling_config: Dict[str, Any]
+    assign_method: AssignMethod
+    assignee_config: Dict[str, Any]
+
+    @field_validator("deadline")
+    @classmethod
+    def validate_deadline(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        try:
+            if len(value) == 10:
+                return date.fromisoformat(value).isoformat()
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            raise ValueError("截止时间必须是 ISO 日期或时间") from None
+        if parsed.tzinfo is None:
+            raise ValueError("截止时间包含时刻时必须携带时区")
+        return parsed.isoformat()
+
+    @field_validator("department_filter")
+    @classmethod
+    def validate_departments(cls, value: List[str]) -> List[str]:
+        if len(value) != len(set(value)):
+            raise ValueError("科室筛选不得重复")
+        return value
+
+    @model_validator(mode="after")
+    def validate_scope(self) -> "TaskDraftConfigurationUpdateRequest":
+        identities = [
+            (item.institute_id, item.patient_id, item.visit_id)
+            for item in self.record_refs
+        ]
+        if len(identities) != len(set(identities)):
+            raise ValueError("record_refs 不得包含重复病例三坐标")
+        if self.record_refs and (self.date_range is not None or self.department_filter):
+            raise ValueError("指定病历不得与日期范围或科室筛选混用")
+        return self
+
+
+class TaskMetadataUpdateRequest(BaseModel):
+    """修改不改变任务范围或执行事实的名称、截止时间。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    configuration_version: int = Field(..., ge=1)
+    task_name: Optional[TaskEditName] = None
+    deadline: Optional[TaskDeadline] = None
+
+    @field_validator("deadline")
+    @classmethod
+    def validate_deadline(cls, value: Optional[str]) -> Optional[str]:
+        return TaskDraftConfigurationUpdateRequest.validate_deadline(value)
+
+    @model_validator(mode="after")
+    def require_change(self) -> "TaskMetadataUpdateRequest":
+        if not ({"task_name", "deadline"} & self.model_fields_set):
+            raise ValueError("没有需要更新的字段")
+        if "task_name" in self.model_fields_set and self.task_name is None:
+            raise ValueError("任务名称不能为空")
+        return self
+
+
+class TaskEditResponse(BaseModel):
+    """任务编辑读取及写后回读的同一响应合同。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    task_number: str
+    task_name: str
+    task_type: str
+    status: str
+    scene: Optional[TaskScene]
+    rule_set_key: Optional[str]
+    rule_set_version: Optional[str]
+    deadline: Optional[str]
+    date_range: Optional[Dict[str, Any]]
+    department_filter: Optional[List[str]]
+    record_refs: Optional[List[TaskCaseRef]]
+    sampling_method: Optional[str]
+    sampling_config: Optional[Dict[str, Any]]
+    assign_method: Optional[str]
+    assignee_config: Optional[Dict[str, Any]]
+    configuration_version: int = Field(..., ge=1)
+    editable_fields: List[str]
+    updated_at: Optional[str]
 
 
 class TaskAssignee(BaseModel):

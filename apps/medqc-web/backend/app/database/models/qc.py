@@ -216,6 +216,7 @@ class QCTask(Base):
     assign_method = Column(String(30), comment="keep/by_department/by_ratio/by_type")
     assignee_config = Column(Text, comment="JSON text")
     status = Column(String(20), default="draft", nullable=False)
+    configuration_version = Column(Integer, nullable=False, server_default=text("1"))
     progress = Column(Float, default=0.0, nullable=False)
     total_records = Column(Integer, default=0, nullable=False)
     completed_records = Column(Integer, default=0, nullable=False)
@@ -227,6 +228,10 @@ class QCTask(Base):
 
     __table_args__ = (
         CheckConstraint("scene IS NULL OR scene IN ('running', 'final', 'outpatient')", name="ck_qc_tasks_scene"),
+        CheckConstraint(
+            "configuration_version > 0",
+            name="ck_qc_tasks_configuration_version_positive",
+        ),
         Index("ix_qc_tasks_status", "status"),
         Index("ix_qc_tasks_creator", "creator_id"),
         Index("ix_qc_tasks_created_at", "created_at"),

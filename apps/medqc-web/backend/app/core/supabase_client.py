@@ -115,6 +115,7 @@ class _Query:
         self._columns = "*"
         self._filters: List[Tuple[str, str, Any]] = []  # (column, op, value)
         self._or_filters: List[str] = []  # raw OR filter strings
+        self._structured_or_filters: List[List[Tuple[str, str, Any]]] = []
         self._orders: List[Tuple[str, bool]] = []  # (column, ascending)
         self._limit_val: Optional[int] = None
         self._range_val: Optional[Tuple[int, int]] = None
@@ -201,6 +202,17 @@ class _Query:
     def or_(self, filter_str: str) -> _Query:
         """兼容 Supabase 的 or_ 过滤，格式如 'col1.ilike.%val%,col2.ilike.%val%'"""
         self._or_filters.append(filter_str)
+        return self
+
+    def or_ilike(self, columns: List[str] | Tuple[str, ...], pattern: str) -> _Query:
+        """用绑定参数构造多列 ILIKE，避免把用户文本拼入 PostgREST 表达式。"""
+        if not columns:
+            raise ValueError("or_ilike_requires_columns")
+        group: List[Tuple[str, str, Any]] = []
+        for column in columns:
+            _quote_qualified_identifier(column)
+            group.append((column, "ILIKE", pattern))
+        self._structured_or_filters.append(group)
         return self
 
     # ---------- 排序/分页 ----------
@@ -306,6 +318,15 @@ class _Query:
                         params[pname] = val
             if or_parts:
                 clauses.append(f"({' OR '.join(or_parts)})")
+
+        for group in self._structured_or_filters:
+            or_parts = []
+            for col, op, val in group:
+                pname = f"p{param_idx}"
+                param_idx += 1
+                or_parts.append(f"{_quote_qualified_identifier(col)} {op} :{pname}")
+                params[pname] = val
+            clauses.append(f"({' OR '.join(or_parts)})")
 
         where = " AND ".join(clauses) if clauses else ""
         return where, params

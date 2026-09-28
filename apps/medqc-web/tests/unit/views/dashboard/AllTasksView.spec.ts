@@ -1,6 +1,6 @@
 import { flushPromises, shallowMount } from '@vue/test-utils'
 import { defineComponent, h, nextTick } from 'vue'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   getTaskList: vi.fn(),
@@ -10,6 +10,9 @@ const mocks = vi.hoisted(() => ({
   assignTask: vi.fn(),
   assignTasksBatch: vi.fn(),
   getTaskAssigneeOptions: vi.fn(),
+  exportTasksCsv: vi.fn(),
+  createObjectURL: vi.fn(),
+  revokeObjectURL: vi.fn(),
   message: {
     error: vi.fn(),
     info: vi.fn(),
@@ -31,6 +34,7 @@ vi.mock('@/api/tasks', () => ({
   getTaskAssigneeOptions: mocks.getTaskAssigneeOptions,
 }))
 vi.mock('ant-design-vue', () => ({ message: mocks.message }))
+vi.mock('@/api/taskExports', () => ({ exportTasksCsv: mocks.exportTasksCsv }))
 vi.mock('@ant-design/icons-vue', () => {
   const icon = { template: '<span />' }
   return {
@@ -56,6 +60,7 @@ vi.mock('@ant-design/icons-vue', () => {
 import AllTasksView from '@/views/dashboard/tasks/AllTasksView.vue'
 import TaskAssignmentResult from '@/components/qc/TaskAssignmentResult.vue'
 import TaskAnalysisDrawer from '@/components/qc/TaskAnalysisDrawer.vue'
+import TaskEditDrawer from '@/components/qc/TaskEditDrawer.vue'
 
 const AButtonStub = defineComponent({
   name: 'AButton',
@@ -229,6 +234,87 @@ describe('AllTasksView 场景口径', () => {
       data: { total: 1, success_count: 1, failed_count: 0, atomic: false, items: [] },
     })
     authState.user = { id: 'creator' }
+    mocks.exportTasksCsv.mockResolvedValue({ success: false, message: '导出失败' })
+    mocks.createObjectURL.mockReturnValue('blob:task-export')
+    vi.stubGlobal('URL', class extends URL {
+      static createObjectURL = mocks.createObjectURL
+      static revokeObjectURL = mocks.revokeObjectURL
+    })
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  it('编辑所选任务，只有当前抽屉保存才刷新列表', async () => {
+    mocks.getTaskList.mockResolvedValue(listWith('待编辑任务'))
+    const wrapper = await mountView()
+    await wrapper.get('[data-testid="task-row-edit"]').trigger('click')
+    const drawer = wrapper.findComponent(TaskEditDrawer)
+    expect(drawer.props()).toMatchObject({ open: true, taskId: '待编辑任务' })
+    mocks.getTaskList.mockClear()
+    drawer.vm.$emit('saved', '别的任务')
+    await flushPromises()
+    expect(mocks.getTaskList).not.toHaveBeenCalled()
+    drawer.vm.$emit('saved', '待编辑任务')
+    await flushPromises()
+    expect(drawer.props('open')).toBe(false)
+    expect(mocks.getTaskList).toHaveBeenCalledTimes(1)
+  })
+
+  it('已完成任务不能打开编辑抽屉', async () => {
+    mocks.getTaskList.mockResolvedValue(listWith('已完成任务', 'running', 'completed'))
+    const wrapper = await mountView()
+    await wrapper.get('[data-testid="task-row-edit"]').trigger('click')
+    expect(wrapper.findComponent(TaskEditDrawer).props('open')).toBe(false)
+  })
+
+  it('导出已应用筛选而非尚未搜索的输入，且不传分页', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      searchKeyword: string; handleSearch: () => void; handleExport: () => Promise<void>
+    }
+    vm.searchKeyword = '已查询'
+    vm.handleSearch()
+    await flushPromises()
+    vm.searchKeyword = '尚未查询'
+    await nextTick()
+    mocks.exportTasksCsv.mockResolvedValue({ success: true, blob: new Blob(['CSV']), filename: '任务.csv' })
+    await vm.handleExport()
+    expect(mocks.exportTasksCsv).toHaveBeenCalledWith({ scene: undefined, status: undefined, keyword: '已查询' })
+    expect(mocks.createObjectURL).toHaveBeenCalledTimes(1)
+    expect(mocks.revokeObjectURL).toHaveBeenCalledWith('blob:task-export')
+  })
+
+  it('导出锁定重复点击，筛选切换后不下载旧响应', async () => {
+    const wrapper = await mountView()
+    const pending = deferred<{ success: boolean; blob: Blob; filename: string }>()
+    mocks.exportTasksCsv.mockReturnValue(pending.promise)
+    const vm = wrapper.vm as unknown as { handleExport: () => Promise<void>; handleSceneChange: (scene: 'running') => void }
+    const first = vm.handleExport()
+    await vm.handleExport()
+    expect(mocks.exportTasksCsv).toHaveBeenCalledTimes(1)
+    vm.handleSceneChange('running')
+    pending.resolve({ success: true, blob: new Blob(['CSV']), filename: '旧任务.csv' })
+    await first
+    await flushPromises()
+    expect(mocks.createObjectURL).not.toHaveBeenCalled()
+  })
+
+  it('错误响应和未接通的科室条件不生成下载', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as { handleExport: () => Promise<void>; selectedDepartment: string }
+    await vm.handleExport()
+    expect(mocks.message.error).toHaveBeenCalledWith('导出失败')
+    expect(mocks.createObjectURL).not.toHaveBeenCalled()
+    mocks.exportTasksCsv.mockClear()
+    vm.selectedDepartment = '未接通科室'
+    await nextTick()
+    await vm.handleExport()
+    expect(mocks.exportTasksCsv).not.toHaveBeenCalled()
+    expect(mocks.message.warning).toHaveBeenCalled()
   })
 
   it('默认列表与统计覆盖全部场景，切换后使用同一场景范围', async () => {

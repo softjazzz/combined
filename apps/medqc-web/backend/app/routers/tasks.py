@@ -268,10 +268,7 @@ async def _received_todo_rows(
             query = _apply_task_scene_scope(query, scene)
             if status:
                 query = query.eq("status", status)
-            if keyword:
-                query = query.or_(
-                    f"task_name.ilike.%{keyword}%,task_number.ilike.%{keyword}%"
-                )
+            query = _apply_task_keyword_scope(query, keyword)
             resp = await async_execute(
                 query.order("id").range(offset, offset + _TODO_TASK_ID_CHUNK_SIZE - 1)
             )
@@ -333,6 +330,16 @@ def _apply_task_scene_scope(query, scene: Optional[str]):
     if scene in {"running", "final", "outpatient"}:
         return query.eq("scene", scene)
     raise HTTPException(status_code=422, detail="无效的任务场景")
+
+
+def _apply_task_keyword_scope(query, keyword: Optional[str]):
+    """任务名称/编号关键词只作为绑定值，不解析为 PostgREST 条件。"""
+    if not keyword:
+        return query
+    structured_or = getattr(query, "or_ilike", None)
+    if not callable(structured_or):
+        raise HTTPException(status_code=503, detail="任务关键词筛选暂不可用")
+    return structured_or(("task_name", "task_number"), f"%{keyword}%")
 
 # ============================
 # 创建任务
@@ -653,10 +660,7 @@ async def list_tasks(
 
             if status:
                 query = query.eq('status', status)
-            if keyword:
-                query = query.or_(
-                    f"task_name.ilike.%{keyword}%,task_number.ilike.%{keyword}%"
-                )
+            query = _apply_task_keyword_scope(query, keyword)
 
             query = query.order('created_at', desc=True)
             offset = (page - 1) * page_size
