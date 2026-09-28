@@ -18,6 +18,16 @@ window.scrollTo = vi.fn()
 const { default: router } = await import('./index')
 
 describe('旧 Dashboard 首页路由', () => {
+  it('编码质控点管理使用独立菜单路由且仅管理员角色可进入', () => {
+    const route = router.getRoutes().find((item) => item.name === 'CodingQualityControlPointManagement')
+    expect(route?.path).toBe('/dashboard/coding-quality-control')
+    expect(route?.meta).toMatchObject({
+      title: '编码质控点管理',
+      permission: ['admin', 'qc_manager'],
+    })
+    expect(route?.props?.default).toEqual({ managementMode: 'coding' })
+  })
+
   it('不再挂载 DashboardView，并安全跳转到工作台首页', async () => {
     const dashboardRoute = router.getRoutes().find((route) => route.name === 'Dashboard')
 

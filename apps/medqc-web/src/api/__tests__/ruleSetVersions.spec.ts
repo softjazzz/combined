@@ -38,7 +38,10 @@ describe('ruleSetVersions API', () => {
 
   it('写草稿只发送 rule_id/state，去掉只读派生字段', async () => {
     const spy = vi.spyOn(ApiService, 'requestRaw').mockResolvedValue(envelope({}))
-    const entries = [{ rule_id: 'LX0609-001', state: 'active' as const, executable: true, qc_point: '名称', source_document: '入院记录' }]
+    const entries = [{
+      rule_id: 'LX0609-001', state: 'active' as const, executable: true, qc_point: '名称',
+      source_document: '入院记录', category: 'format', category_name: '格式校验',
+    }]
     await createRuleSetDraft(KEY, { base_version: '2026-06-09' })
     await updateRuleSetDraft(KEY, { version_seq: 3, entries })
     await deleteRuleSetDraft(KEY, 4)

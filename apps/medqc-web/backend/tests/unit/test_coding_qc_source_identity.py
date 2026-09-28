@@ -458,9 +458,9 @@ class _CapturingEngine:
     def __init__(self) -> None:
         self.contexts: List[Any] = []
 
-    async def run_all(self, frontpage):
+    async def run_all(self, frontpage, **kwargs):
         self.contexts.append(current_llm_observation_context())
-        return await CodingQCEngine(llm_client=None).run_all(frontpage)
+        return await CodingQCEngine(llm_client=None).run_all(frontpage, **kwargs)
 
 
 def _fake_request() -> Request:

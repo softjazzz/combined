@@ -1,18 +1,26 @@
 <template>
-  <div class="quality-control-point-management">
+  <div
+    class="quality-control-point-management"
+    :class="{ 'quality-control-point-management--embedded': embedded }"
+  >
     <!-- 页面标题与规则集 -->
     <div class="page-header mb-6">
       <h2 class="page-title">
-        非编码质控点管理
+        {{ pageTitle }}
       </h2>
       <div class="rule-set-bar">
         <span class="bar-label">规则集</span>
         <a-select
+          v-if="!isCodingMode"
           v-model:value="ruleSetKey"
           class="rule-set-select"
           :options="ruleSetOptions"
           :disabled="saving"
         />
+        <span
+          v-else
+          class="coding-rule-set-label"
+        >编码质控规则</span>
         <span class="current-version">
           当前生效版本：<strong>{{ versionList?.current_version || UNKNOWN_TEXT }}</strong>
         </span>
@@ -137,7 +145,7 @@
           <span class="batch-hint">改动先写入草稿，发布新版本后生效</span>
         </template>
         <a-button
-          v-if="canManage"
+          v-if="canManage && !isCodingMode"
           type="primary"
           class="create-btn"
           @click="handleCreateNew"
@@ -189,7 +197,12 @@
                 {{ asRow(record).name || UNKNOWN_TEXT }}
               </div>
               <div class="source-text">
-                文书：{{ asRow(record).document || UNKNOWN_TEXT }}
+                <template v-if="isCodingMode">
+                  分类：{{ asRow(record).category || UNKNOWN_TEXT }}
+                </template>
+                <template v-else>
+                  文书：{{ asRow(record).document || UNKNOWN_TEXT }}
+                </template>
               </div>
             </div>
           </template>
@@ -269,6 +282,7 @@ import RuleSetVersionHistoryDrawer from './components/RuleSetVersionHistoryDrawe
 import RuleSetVersionImportDrawer from './components/RuleSetVersionImportDrawer.vue'
 import { downloadBlob } from '@/views/workstation-v4/customer-sample-validation/batchExport'
 import {
+  CODING_QC_RULE_SET_KEY,
   ENTRY_STATE_COLOR,
   ENTRY_STATE_LABEL,
   LX0609_RULE_SET_KEY,
@@ -290,8 +304,19 @@ import {
 const router = useRouter()
 const authStore = useAuthStore()
 
+const props = withDefaults(defineProps<{
+  managementMode?: 'noncoding' | 'coding'
+  embedded?: boolean
+}>(), {
+  managementMode: 'noncoding',
+  embedded: false,
+})
+
+const isCodingMode = computed(() => props.managementMode === 'coding')
+const pageTitle = computed(() => (isCodingMode.value ? '编码质控点管理' : '非编码质控点管理'))
+
 const ruleSetOptions = RULE_SET_OPTIONS.map((item) => ({ ...item }))
-const ruleSetKey = ref<string>(LX0609_RULE_SET_KEY)
+const ruleSetKey = ref<string>(isCodingMode.value ? CODING_QC_RULE_SET_KEY : LX0609_RULE_SET_KEY)
 const activeTab = ref<PointTab>('online')
 const selectedRowKeys = ref<string[]>([])
 const deleteConfirmContext = ref<{ ruleSetKey: string; actorKey: string; ruleIds: string[] } | null>(null)
@@ -363,7 +388,7 @@ const deleteBlockedReason = computed(() => {
 
 const tableColumns = computed<TableColumnsType<QualityPointRow>>(() => [
   { title: '质控点ID', dataIndex: 'rule_id', key: 'rule_id', width: 140 },
-  { title: '质控点名称 / 文书', dataIndex: 'name', key: 'name' },
+  { title: isCodingMode.value ? '质控点名称 / 分类' : '质控点名称 / 文书', dataIndex: 'name', key: 'name' },
   {
     title: activeTab.value === 'online' ? '状态' : '状态（暂停 / 下线）',
     dataIndex: 'state',
@@ -551,6 +576,11 @@ function invalidateContext() {
 watch(ruleSetKey, () => {
   invalidateContext()
   if (actorKey.value) void load()
+})
+
+watch(isCodingMode, (coding) => {
+  const nextKey = coding ? CODING_QC_RULE_SET_KEY : LX0609_RULE_SET_KEY
+  if (ruleSetKey.value !== nextKey) ruleSetKey.value = nextKey
 })
 
 watch(actorKey, () => {
@@ -768,6 +798,17 @@ onBeforeUnmount(() => {
       }
     }
   }
+}
+
+.quality-control-point-management--embedded {
+  min-height: auto;
+  padding: 0;
+  background: transparent;
+}
+
+.coding-rule-set-label {
+  color: #1d1d1f;
+  font-size: 14px;
 }
 
 /* 响应式设计 */

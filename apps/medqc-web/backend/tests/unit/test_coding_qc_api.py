@@ -81,9 +81,9 @@ class TestCodingQCAPI:
         }
 
         class _CapturingEngine:
-            async def run_all(self, received_frontpage):
+            async def run_all(self, received_frontpage, **kwargs):
                 captured["context"] = current_llm_observation_context()
-                return await CodingQCEngine(llm_client=None).run_all(received_frontpage)
+                return await CodingQCEngine(llm_client=None).run_all(received_frontpage, **kwargs)
 
         with (
             patch(

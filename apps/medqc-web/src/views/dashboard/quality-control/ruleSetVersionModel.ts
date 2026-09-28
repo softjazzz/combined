@@ -13,6 +13,7 @@ import type {
 
 export const LX0609_RULE_SET_KEY = 'luxian_0609_qc_v1'
 export const LX0916_RULE_SET_KEY = 'luxian_0916_qc_v1'
+export const CODING_QC_RULE_SET_KEY = 'coding_qc_v1'
 
 export const RULE_SET_OPTIONS: ReadonlyArray<{ value: string; label: string }> = [
   { value: LX0609_RULE_SET_KEY, label: '泸县 0609 质控点' },
@@ -49,6 +50,8 @@ export interface QualityPointRow {
   name: string | null
   /** 来源文书（规则主表 source_document）；无权威元数据时为 null。 */
   document: string | null
+  /** 编码规则目录给出的权威分类名称。 */
+  category: string | null
   /** 当前生效版本中的状态。 */
   state: RuleSetEntryState
   /** 草稿中的状态；与当前状态相同或无草稿时为 null。 */
@@ -83,6 +86,7 @@ export function buildPointRows(
       rule_id: entry.rule_id,
       name: entry.qc_point ?? draftEntry?.qc_point ?? null,
       document: entry.source_document ?? draftEntry?.source_document ?? null,
+      category: entry.category_name ?? draftEntry?.category_name ?? entry.category ?? draftEntry?.category ?? null,
       state: entry.state,
       draftState: draftEntry && draftEntry.state !== entry.state ? draftEntry.state : null,
       executable: typeof executable === 'boolean' ? executable : null,

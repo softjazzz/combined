@@ -161,8 +161,8 @@ async function flush() {
   }
 }
 
-async function render() {
-  const wrapper = mount(QualityControlPointManagement, { global: { stubs } })
+async function render(props: Record<string, unknown> = {}) {
+  const wrapper = mount(QualityControlPointManagement, { props, global: { stubs } })
   await flush()
   return wrapper
 }
@@ -513,5 +513,77 @@ describe('QualityControlPointManagement', () => {
     expect(row).toContain('文书：未知')
     expect(wrapper.findAll('button').some((item) => item.text() === '批量开启')).toBe(false)
     expect(wrapper.find('.select-row').exists()).toBe(false)
+  })
+
+  it('编码模式使用独立规则集与权威分类，不提供新建或单项查看编辑', async () => {
+    const codingEntries: RuleSetEntryView[] = [
+      {
+        rule_id: 'CR-001', state: 'active', executable: true, qc_point: '诊断编码格式校验',
+        source_document: null, category: 'format', category_name: '格式校验',
+      },
+      {
+        rule_id: 'CR-011', state: 'paused', executable: false, qc_point: '非特指编码检测',
+        source_document: null, category: 'specificity', category_name: '特异性校验',
+      },
+      {
+        rule_id: 'CR-018', state: 'paused', executable: false, qc_point: 'AI语义综合审查',
+        source_document: null, category: 'ai_semantic', category_name: 'AI语义审查',
+      },
+    ]
+    state.api.listRuleSetVersions.mockResolvedValue(ok({
+      rule_set_key: 'coding_qc_v1', versionable: true, builtin_version: '1.0', current_version: '1.0',
+      items: [versionItem({ rule_set_key: 'coding_qc_v1', version: '1.0', active_count: 1, paused_count: 2, offline_count: 0 })],
+      draft: null,
+    }))
+    state.api.getRuleSetVersion.mockResolvedValue(ok({
+      ...detail('1.0', codingEntries),
+      rule_set_key: 'coding_qc_v1',
+      resolution: {
+        rule_set_key: 'coding_qc_v1', version: '1.0', source: 'builtin', active_rule_ids: ['CR-001'],
+        paused_rule_ids: ['CR-011', 'CR-018'], excluded_rule_ids: ['CR-011', 'CR-018'], content_digest: 'coding-digest',
+      },
+    }))
+
+    const wrapper = await render({ managementMode: 'coding' })
+    expect(state.api.listRuleSetVersions).toHaveBeenCalledWith('coding_qc_v1')
+    expect(wrapper.text()).toContain('编码质控点管理')
+    expect(wrapper.text()).toContain('格式校验')
+    expect(wrapper.find('.rule-set-select').exists()).toBe(false)
+    expect(wrapper.findAll('button').some((item) => ['新建质控点', '查看', '编辑'].includes(item.text()))).toBe(false)
+
+    await wrapper.find('.tab-offline').trigger('click')
+    await selectRow(wrapper, 'CR-011')
+    expect(button(wrapper, '批量开启').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('.tooltip').attributes('data-tip')).toContain('CR-011 当前不可执行')
+  })
+
+  it('同一组件双向切换管理模式时切换真实规则集，并丢弃旧模式迟到回执', async () => {
+    const oldNoncoding = deferred<{ success: boolean; data: RuleSetVersionList; status: number }>()
+    const codingList: RuleSetVersionList = {
+      rule_set_key: 'coding_qc_v1', versionable: true, builtin_version: '1.0', current_version: '1.0',
+      items: [versionItem({ rule_set_key: 'coding_qc_v1', version: '1.0' })], draft: null,
+    }
+    state.api.listRuleSetVersions
+      .mockReturnValueOnce(oldNoncoding.promise)
+      .mockResolvedValueOnce(ok(codingList))
+      .mockResolvedValueOnce(ok(list()))
+    const wrapper = await render()
+    expect(state.api.listRuleSetVersions).toHaveBeenNthCalledWith(1, KEY)
+
+    await wrapper.setProps({ managementMode: 'coding' })
+    await flush()
+    expect(state.api.listRuleSetVersions).toHaveBeenNthCalledWith(2, 'coding_qc_v1')
+    expect(wrapper.text()).toContain('编码质控点管理')
+
+    oldNoncoding.resolve(ok(list()))
+    await flush()
+    expect(wrapper.text()).toContain('编码质控点管理')
+    expect(wrapper.find('.rule-set-select').exists()).toBe(false)
+
+    await wrapper.setProps({ managementMode: 'noncoding' })
+    await flush()
+    expect(state.api.listRuleSetVersions).toHaveBeenNthCalledWith(3, KEY)
+    expect(wrapper.text()).toContain('非编码质控点管理')
+    expect(wrapper.find('.rule-set-select').exists()).toBe(true)
   })
 })

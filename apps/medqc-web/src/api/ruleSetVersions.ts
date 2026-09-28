@@ -49,6 +49,9 @@ export interface RuleSetEntryView extends RuleSetEntry {
   executable: boolean
   qc_point: string | null
   source_document: string | null
+  /** 编码规则目录的权威分类；非编码规则可为 null。 */
+  category?: string | null
+  category_name?: string | null
 }
 
 export interface RuleSetVersionItem {

@@ -27,6 +27,8 @@ from ..services.qc_persistence_service import (
 )
 from ..services.workflow_queue_state_service import default_workflow_queue_state_service
 from ..services.llm_observability import llm_observation_context
+from ..services.coding_rule_catalog import CODING_RULE_SET_KEY, load_coding_rule_catalog
+from ..services.rule_set_version_service import current_version, resolve_rule_set_version
 from ..services.sc_rule_launch_tier import (
     load_sc_intrinsic_launch_tier_map,
     resolve_sc_intrinsic_launch_tier,
@@ -87,6 +89,7 @@ def _coding_issue_to_persistence_issue(issue: Dict[str, Any], fallback_category:
         "location": str(issue.get("location") or issue.get("field_name") or "病案首页编码区"),
         "suggestion": str(issue.get("suggestion") or issue.get("recommendation") or "请复核相关编码"),
         "evidence": issue.get("evidence"),
+        "legacy_rule_id": str(issue.get("legacy_rule_id") or "") or None,
     }
 
 
@@ -196,8 +199,24 @@ def _build_coding_qc_persistence_result(
     }
     if identity is not None:
         metadata["institute_id"] = identity.institute_id
-    if semantic_completed:
-        metadata["executed_defect_scope"] = {"kind": "all"}
+    rule_set_key = str(report.get("rule_set_key") or "").strip()
+    rule_set_version = str(report.get("rule_set_version") or "").strip()
+    rule_set_content_digest = str(report.get("rule_set_content_digest") or "").strip()
+    active_rule_ids = [str(value) for value in report.get("active_rule_ids") or []]
+    executed_rule_ids = [str(value) for value in report.get("executed_rule_ids") or []]
+    if rule_set_key and rule_set_version:
+        metadata.update({
+            "rule_set_key": rule_set_key,
+            "rule_set_version": rule_set_version,
+            "rule_set_content_digest": rule_set_content_digest,
+            "active_rule_ids": active_rule_ids,
+            "executed_rule_ids": executed_rule_ids,
+        })
+    if executed_rule_ids:
+        metadata["executed_defect_scope"] = {
+            "kind": "rule_codes",
+            "values": executed_rule_ids,
+        }
     return {
         "record_id": f"coding::{visit_id or patient_id or uuid.uuid4().hex[:8]}",
         "workflow_type": "coding",
@@ -1060,20 +1079,9 @@ async def get_formal_qc_rule_coverage(request: Request):
 
 # ==================== 编码质控规则管理 API ====================
 
-import os as _os
-
 def _load_coding_rules() -> list:
-    """从 JSON 文件加载编码质控规则数据。"""
-    json_path = _os.path.join(
-        _os.path.dirname(_os.path.dirname(__file__)),
-        "data", "coding_rules.json"
-    )
-    try:
-        with open(json_path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception as e:
-        logger.warning(f"加载编码质控规则失败: {e}")
-        return []
+    """从正式目录 owner 加载编码质控点。"""
+    return [dict(item) for item in load_coding_rule_catalog()]
 
 
 @router.get("/coding-rules")
@@ -1084,8 +1092,23 @@ async def list_coding_rules(
     severity: Optional[str] = Query(None, description="严重程度"),
     source: Optional[str] = Query(None, description="规则来源"),
 ):
-    """获取编码质控规则列表（从 JSON 文件加载）。"""
-    rules = _load_coding_rules()
+    """获取编码质控规则列表，并叠加当前发布版本的启停状态。"""
+    version = await run_in_threadpool(current_version, CODING_RULE_SET_KEY)
+    resolution = await run_in_threadpool(resolve_rule_set_version, CODING_RULE_SET_KEY, version)
+    state_by_id = {
+        rule_id: state
+        for state, key in (("active", "active_rule_ids"), ("paused", "paused_rule_ids"),
+                           ("offline", "excluded_rule_ids"), ("deleted", "deleted_rule_ids"))
+        for rule_id in resolution.get(key, [])
+    }
+    rules = [
+        {
+            **rule,
+            "state": state_by_id.get(rule["rule_id"], "paused"),
+            "is_active": state_by_id.get(rule["rule_id"]) == "active",
+        }
+        for rule in _load_coding_rules()
+    ]
 
     # 筛选
     if keyword:
@@ -1101,7 +1124,14 @@ async def list_coding_rules(
         rules = [r for r in rules if r.get("source") == source]
 
     # 统计信息
-    all_rules = _load_coding_rules()
+    all_rules = [
+        {
+            **rule,
+            "state": state_by_id.get(rule["rule_id"], "paused"),
+            "is_active": state_by_id.get(rule["rule_id"]) == "active",
+        }
+        for rule in _load_coding_rules()
+    ]
     total_rule_count = sum(r.get("rule_count", 0) for r in all_rules)
     categories_set = set(r.get("category") for r in all_rules)
     severity_counts = {}
@@ -1116,6 +1146,8 @@ async def list_coding_rules(
         data={
             "items": rules,
             "total": len(rules),
+            "rule_set_key": CODING_RULE_SET_KEY,
+            "rule_set_version": version,
             "statistics": {
                 "total_types": len(all_rules),
                 "total_rule_count": total_rule_count,
@@ -1266,6 +1298,11 @@ async def check_coding_qc(
     identity: Optional[CodingQcIdentity] = None
 
     try:
+        frozen_version = await run_in_threadpool(current_version, CODING_RULE_SET_KEY)
+        frozen_resolution = await run_in_threadpool(
+            resolve_rule_set_version, CODING_RULE_SET_KEY, frozen_version,
+        )
+        frozen_active_rule_ids = list(frozen_resolution["active_rule_ids"])
         if visit_id:
             # === 1) 服务端以 cdm.mr 为唯一权威确立三坐标 ===
             try:
@@ -1345,9 +1382,19 @@ async def check_coding_qc(
         ):
             if skip_llm:
                 temp_engine = CodingQCEngine(llm_client=None)
-                report = await temp_engine.run_all(frontpage)
+                report = await temp_engine.run_all(
+                    frontpage,
+                    rule_set_version=frozen_version,
+                    rule_set_content_digest=str(frozen_resolution["content_digest"]),
+                    active_rule_ids=frozen_active_rule_ids,
+                )
             else:
-                report = await engine.run_all(frontpage)
+                report = await engine.run_all(
+                    frontpage,
+                    rule_set_version=frozen_version,
+                    rule_set_content_digest=str(frozen_resolution["content_digest"]),
+                    active_rule_ids=frozen_active_rule_ids,
+                )
         report_dict = report.to_dict()
         persistence_result = _build_coding_qc_persistence_result(
             payload,

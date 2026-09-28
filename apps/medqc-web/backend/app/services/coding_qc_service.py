@@ -12,6 +12,8 @@ import logging
 from typing import List, Optional
 from dataclasses import dataclass, field, asdict
 
+from .coding_rule_catalog import CODING_RULE_SET_KEY, coding_rule_metadata
+
 logger = logging.getLogger(__name__)
 
 
@@ -32,6 +34,7 @@ class CodingIssue:
     rule_name: str = ""      # 规则名称
     location: str = "病案首页编码区"
     evidence: str = ""
+    legacy_rule_id: str = ""
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -49,6 +52,11 @@ class CodingQCReport:
     llm_raw_output: str = ""
     semantic_completed: bool = False
     overall_assessment: str = "通过"  # 通过 / 需修改 / 严重问题
+    rule_set_key: str = ""
+    rule_set_version: str = ""
+    rule_set_content_digest: str = ""
+    active_rule_ids: List[str] = field(default_factory=list)
+    executed_rule_ids: List[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -59,7 +67,37 @@ class CodingQCReport:
             "rule_issues": [i.to_dict() for i in self.rule_issues],
             "llm_issues": [i.to_dict() for i in self.llm_issues],
             "overall_assessment": self.overall_assessment,
+            "rule_set_key": self.rule_set_key,
+            "rule_set_version": self.rule_set_version,
+            "rule_set_content_digest": self.rule_set_content_digest,
+            "active_rule_ids": list(self.active_rule_ids),
+            "executed_rule_ids": list(self.executed_rule_ids),
         }
+
+
+DETERMINISTIC_RULE_IDS = frozenset({
+    "CR-001", "CR-002", "CR-003", "CR-004", "CR-009", "CR-013", "CR-014", "CR-017",
+})
+SEMANTIC_RULE_IDS = frozenset({
+    "CR-005", "CR-006", "CR-007", "CR-008", "CR-009", "CR-010", "CR-012", "CR-013",
+    "CR-014", "CR-015", "CR-016",
+})
+SEMANTIC_DIMENSION_RULE_IDS = {
+    "merge": frozenset({"CR-009"}),
+    "exclusion": frozenset({"CR-010"}),
+    "primary": frozenset({"CR-008"}),
+    "primary_surgery": frozenset({"CR-015"}),
+    "consistency": frozenset({"CR-005", "CR-006", "CR-007", "CR-016"}),
+    "additional": frozenset({"CR-012", "CR-013", "CR-014"}),
+}
+_SEMANTIC_PROMPT_SECTIONS = (
+    ("## 1. 编码合并", frozenset({"CR-009"})),
+    ("## 2. 编码互斥", frozenset({"CR-010"})),
+    ("## 3. 主诊断选择", frozenset({"CR-008"})),
+    ("## 3b. 主手术选择", frozenset({"CR-015"})),
+    ("## 4. 编码一致性", frozenset({"CR-005", "CR-006", "CR-007", "CR-016"})),
+    ("## 5. 另编码/附加编码", frozenset({"CR-012", "CR-013", "CR-014"})),
+)
 
 
 # ============================================================
@@ -384,7 +422,8 @@ CODING_QC_SYSTEM_PROMPT = """你是一位具有临床医学知识和 ICD 病案�
 {
   "issues": [
     {
-      "dimension": "merge|exclusion|primary|consistency|additional",
+      "rule_id": "CR-005至CR-016中的已启用质控点ID",
+      "dimension": "merge|exclusion|primary|primary_surgery|consistency|additional",
       "severity": "error|warning|info",
       "code": "涉及的编码",
       "description": "问题描述（含编码规则依据）",
@@ -402,6 +441,27 @@ CODING_QC_SYSTEM_PROMPT = """你是一位具有临床医学知识和 ICD 病案�
 - 只报告确实存在的问题，不要过度报告
 - 非肿瘤疾病不需要M码；肿瘤仅在**主诊断**时才需要M码，次诊断/既往史不需要
 - severity 分级：error=编码规则明确禁止, warning=建议修改, info=可优化"""
+
+
+def _system_prompt_for_active_rules(active_rule_ids: set[str]) -> str:
+    """按已启用章节裁剪原医学提示词；不改写各节判据。"""
+    output_marker = "请严格按以下 JSON 格式输出"
+    first_section = _SEMANTIC_PROMPT_SECTIONS[0][0]
+    prefix_end = CODING_QC_SYSTEM_PROMPT.index(first_section)
+    output_start = CODING_QC_SYSTEM_PROMPT.index(output_marker)
+    chunks = [CODING_QC_SYSTEM_PROMPT[:prefix_end].rstrip()]
+    for index, (marker, rule_ids) in enumerate(_SEMANTIC_PROMPT_SECTIONS):
+        if not active_rule_ids.intersection(rule_ids):
+            continue
+        start = CODING_QC_SYSTEM_PROMPT.index(marker)
+        if index + 1 < len(_SEMANTIC_PROMPT_SECTIONS):
+            end = CODING_QC_SYSTEM_PROMPT.index(_SEMANTIC_PROMPT_SECTIONS[index + 1][0])
+        else:
+            end = output_start
+        enabled = "、".join(sorted(active_rule_ids.intersection(rule_ids)))
+        chunks.append(f"{CODING_QC_SYSTEM_PROMPT[start:end].rstrip()}\n本节启用质控点：{enabled}")
+    chunks.append(CODING_QC_SYSTEM_PROMPT[output_start:])
+    return "\n\n".join(chunks)
 
 
 def _build_llm_user_prompt(frontpage: dict) -> str:
@@ -444,7 +504,9 @@ def _build_llm_user_prompt(frontpage: dict) -> str:
     return "\n".join(lines)
 
 
-def _parse_llm_issues(raw_output: str) -> List[CodingIssue]:
+def _parse_llm_issues(
+    raw_output: str, *, allowed_rule_ids: Optional[set[str]] = None,
+) -> List[CodingIssue]:
     """从 LLM 原始输出中解析质控问题。"""
     parsed = _parse_json_from_text(raw_output)
     if not parsed:
@@ -453,13 +515,26 @@ def _parse_llm_issues(raw_output: str) -> List[CodingIssue]:
 
     issues = []
     for item in parsed.get("issues", []):
+        rule_id = str(item.get("rule_id") or "").strip().upper()
+        dimension = item.get("dimension", "unknown")
+        if allowed_rule_ids is not None:
+            if rule_id not in allowed_rule_ids:
+                continue
+            if rule_id not in SEMANTIC_DIMENSION_RULE_IDS.get(dimension, frozenset()):
+                continue
         issues.append(CodingIssue(
-            dimension=item.get("dimension", "unknown"),
+            dimension=dimension,
             severity=item.get("severity", "info"),
             code=item.get("code", ""),
             description=item.get("description", ""),
             suggestion=item.get("suggestion", ""),
             source="llm",
+            rule_id=rule_id,
+            rule_name=(
+                coding_rule_metadata()[rule_id]["qc_point"]
+                if allowed_rule_ids is not None
+                else str(item.get("rule_name") or "").strip()
+            ),
         ))
     return issues
 
@@ -516,12 +591,16 @@ class CodingQCEngine:
         """
         self.llm_client = llm_client
 
-    def check_format(self, frontpage: dict) -> List[CodingIssue]:
+    def check_format(
+        self, frontpage: dict, active_rule_ids: Optional[set[str]] = None,
+    ) -> List[CodingIssue]:
         """D1：编码格式校验。"""
         issues = []
 
         # 诊断编码格式
         for diag in (frontpage.get("diagnoses") or []):
+            if active_rule_ids is not None and "CR-001" not in active_rule_ids:
+                break
             code = _diag_code(diag)
             name = _diag_name(diag)
             if name and not code:
@@ -533,16 +612,22 @@ class CodingQCEngine:
                         description=f"诊断“{name}”缺少 ICD-10 编码",
                         suggestion="请为该诊断补充规范 ICD-10 编码",
                         source="rule",
+                        rule_id="CR-001",
+                        rule_name="诊断编码格式校验",
                     )
                 )
                 continue
             if code:
                 issue = check_icd10_format(code)
                 if issue:
+                    issue.rule_id = "CR-001"
+                    issue.rule_name = "诊断编码格式校验"
                     issues.append(issue)
 
         # 手术编码格式
         for surg in (frontpage.get("surgeries") or []):
+            if active_rule_ids is not None and "CR-002" not in active_rule_ids:
+                break
             code = _surgery_code(surg)
             name = _surgery_name(surg)
             if name and not code:
@@ -554,39 +639,55 @@ class CodingQCEngine:
                         description=f"手术“{name}”缺少 ICD-9-CM-3 编码",
                         suggestion="请为该手术补充规范 ICD-9-CM-3 编码",
                         source="rule",
+                        rule_id="CR-002",
+                        rule_name="手术编码格式校验",
                     )
                 )
                 continue
             if code:
                 issue = check_icd9cm3_format(code)
                 if issue:
+                    issue.rule_id = "CR-002"
+                    issue.rule_name = "手术编码格式校验"
                     issues.append(issue)
 
         return issues
 
-    def check_existence(self, frontpage: dict) -> List[CodingIssue]:
+    def check_existence(
+        self, frontpage: dict, active_rule_ids: Optional[set[str]] = None,
+    ) -> List[CodingIssue]:
         """D2：编码存在性验证（需要本地 ICD 编码库）。"""
         issues = []
 
         for diag in (frontpage.get("diagnoses") or []):
+            if active_rule_ids is not None and "CR-003" not in active_rule_ids:
+                break
             code = _diag_code(diag)
             name = _diag_name(diag)
             if code:
                 issue = check_diagnosis_existence(code, name)
                 if issue:
+                    issue.rule_id = "CR-003"
+                    issue.rule_name = "诊断编码存在性验证"
                     issues.append(issue)
 
         for surg in (frontpage.get("surgeries") or []):
+            if active_rule_ids is not None and "CR-004" not in active_rule_ids:
+                break
             code = _surgery_code(surg)
             name = _surgery_name(surg)
             if code:
                 issue = check_procedure_existence(code, name)
                 if issue:
+                    issue.rule_id = "CR-004"
+                    issue.rule_name = "手术编码存在性验证"
                     issues.append(issue)
 
         return issues
 
-    def check_bidding_scenarios(self, frontpage: dict) -> List[CodingIssue]:
+    def check_bidding_scenarios(
+        self, frontpage: dict, active_rule_ids: Optional[set[str]] = None,
+    ) -> List[CodingIssue]:
         """
         招标专项编码规范检查（确定性规则兜底）。
 
@@ -618,7 +719,9 @@ class CodingQCEngine:
             if code.startswith("M"):
                 has_morphology = True
 
-        if primary_tumor_code and not has_morphology:
+        if primary_tumor_code and not has_morphology and (
+            active_rule_ids is None or "CR-013" in active_rule_ids
+        ):
             issues.append(CodingIssue(
                 dimension="consistency",
                 severity="warning",
@@ -626,13 +729,21 @@ class CodingQCEngine:
                 description=f"出院主要诊断为肿瘤编码（{primary_tumor_code}），但未见病理形态学诊断编码（M 码），建议补充病理诊断",
                 suggestion="肿瘤相关诊断应同时提供病理形态学编码（M 码），以确保编码完整性",
                 source="rule",
-                rule_id="CQ-TENDER-001",
-                rule_name="肿瘤诊断病理形态学编码完整性",
+                rule_id="CR-013" if active_rule_ids is not None else "CQ-TENDER-001",
+                rule_name=(
+                    "肿瘤形态学编码审查" if active_rule_ids is not None
+                    else "肿瘤诊断病理形态学编码完整性"
+                ),
                 evidence="; ".join(code for code in diagnosis_codes if code),
+                legacy_rule_id="CQ-TENDER-001" if active_rule_ids is not None else "",
             ))
 
         # 场景 B：病理编码或肿瘤诊断存在时，病理诊断费字段应一致。
-        if (primary_tumor_code or has_morphology) and not _has_positive_pathology_fee(frontpage):
+        if (
+            (primary_tumor_code or has_morphology)
+            and not _has_positive_pathology_fee(frontpage)
+            and (active_rule_ids is None or "CR-017" in active_rule_ids)
+        ):
             issues.append(CodingIssue(
                 dimension="consistency",
                 severity="warning",
@@ -640,9 +751,13 @@ class CodingQCEngine:
                 description="存在肿瘤诊断或病理形态学编码，但未见病理诊断费字段有效金额，需核对病理诊断与费用一致性",
                 suggestion="请核对首页/结算清单病理诊断费，确认是否漏填或费用归类错误",
                 source="rule",
-                rule_id="CQ-TENDER-002",
-                rule_name="病理编码与病理诊断费一致性",
+                rule_id="CR-017" if active_rule_ids is not None else "CQ-TENDER-002",
+                rule_name=(
+                    "病理编码-费用关联校验" if active_rule_ids is not None
+                    else "病理编码与病理诊断费一致性"
+                ),
                 evidence="; ".join(code for code in diagnosis_codes if code),
+                legacy_rule_id="CQ-TENDER-002" if active_rule_ids is not None else "",
             ))
 
         # 场景 C：阑尾炎与腹膜炎同时出现时，提示是否应合并编码。
@@ -655,7 +770,10 @@ class CodingQCEngine:
             for code, name in zip(diagnosis_codes, diagnosis_names)
         )
         has_appendicitis_combined_code = any(code.startswith(("K35.2", "K35.3")) for code in diagnosis_codes)
-        if has_appendicitis and has_peritonitis and not has_appendicitis_combined_code:
+        if (
+            has_appendicitis and has_peritonitis and not has_appendicitis_combined_code
+            and (active_rule_ids is None or "CR-009" in active_rule_ids)
+        ):
             issues.append(CodingIssue(
                 dimension="merge",
                 severity="warning",
@@ -663,13 +781,17 @@ class CodingQCEngine:
                 description="阑尾炎与腹膜炎诊断同时出现，可能需要使用急性阑尾炎伴腹膜炎合并编码，而不是分开编码",
                 suggestion="请优先核对 K35.2 或 K35.3 等急性阑尾炎伴腹膜炎编码是否更符合病案首页编码规范",
                 source="rule",
-                rule_id="CQ-TENDER-003",
-                rule_name="阑尾炎伴腹膜炎合并编码提示",
+                rule_id="CR-009" if active_rule_ids is not None else "CQ-TENDER-003",
+                rule_name=(
+                    "编码合并审查" if active_rule_ids is not None
+                    else "阑尾炎伴腹膜炎合并编码提示"
+                ),
                 evidence="; ".join(
                     f"{code} {name}".strip()
                     for code, name in zip(diagnosis_codes, diagnosis_names)
                     if code or name
                 ),
+                legacy_rule_id="CQ-TENDER-003" if active_rule_ids is not None else "",
             ))
 
         # 场景 D：冠状动脉支架置入术需要共同使用附加编码。
@@ -679,7 +801,10 @@ class CodingQCEngine:
         )
         has_stent_count_code = any(code.startswith("00.66") for code in surgery_codes)
         has_vessel_count_code = any(code.startswith("00.40") for code in surgery_codes)
-        if has_coronary_stent and (not has_stent_count_code or not has_vessel_count_code):
+        if (
+            has_coronary_stent and (not has_stent_count_code or not has_vessel_count_code)
+            and (active_rule_ids is None or "CR-014" in active_rule_ids)
+        ):
             missing_codes = []
             if not has_stent_count_code:
                 missing_codes.append("00.66 支架数目")
@@ -692,24 +817,37 @@ class CodingQCEngine:
                 description="冠状动脉支架置入术应补充共同使用的附加编码",
                 suggestion=f"请补充或核对附加编码：{'、'.join(missing_codes)}",
                 source="rule",
-                rule_id="CQ-TENDER-004",
-                rule_name="冠状动脉支架置入术附加编码完整性",
+                rule_id="CR-014" if active_rule_ids is not None else "CQ-TENDER-004",
+                rule_name=(
+                    "手术附加编码完整性" if active_rule_ids is not None
+                    else "冠状动脉支架置入术附加编码完整性"
+                ),
                 evidence="; ".join(
                     f"{code} {name}".strip()
                     for code, name in zip(surgery_codes, surgery_names)
                     if code or name
                 ),
+                legacy_rule_id="CQ-TENDER-004" if active_rule_ids is not None else "",
             ))
 
         return issues
 
-    async def check_semantic(self, frontpage: dict) -> tuple[List[CodingIssue], str, bool]:
+    async def check_semantic(
+        self, frontpage: dict, active_rule_ids: Optional[set[str]] = None,
+    ) -> tuple[List[CodingIssue], str, bool]:
         """
         D3-D6：LLM 语义审查。
 
         Returns:
             (issues: List[CodingIssue], raw_output: str, completed: bool)
         """
+        semantic_active = (
+            set(SEMANTIC_RULE_IDS)
+            if active_rule_ids is None
+            else set(active_rule_ids) & set(SEMANTIC_RULE_IDS)
+        )
+        if active_rule_ids is not None and not semantic_active:
+            return [], "", True
         if not self.llm_client:
             logger.info("LLM 客户端未配置，跳过语义审查")
             return [], "", False
@@ -720,7 +858,25 @@ class CodingQCEngine:
             return [], "", False
 
         user_prompt = _build_llm_user_prompt(frontpage)
-        full_prompt = f"{CODING_QC_SYSTEM_PROMPT}\n\n{user_prompt}"
+        strict_contract = ""
+        if active_rule_ids is not None:
+            enabled_labels = coding_rule_metadata()
+            enabled_contract = "；".join(
+                f"{rule_id}={enabled_labels[rule_id]['qc_point']}"
+                for rule_id in sorted(semantic_active)
+            )
+            strict_contract = (
+                "\n\n本次只允许执行以下质控点："
+                + enabled_contract
+                + "。每个issues条目必须增加rule_id字段，且rule_id必须属于上述列表；"
+                "不得输出未启用质控点的问题。"
+            )
+        system_prompt = (
+            _system_prompt_for_active_rules(semantic_active)
+            if active_rule_ids is not None
+            else CODING_QC_SYSTEM_PROMPT
+        )
+        full_prompt = f"{system_prompt}{strict_contract}\n\n{user_prompt}"
 
         try:
             result = await self.llm_client.generate(full_prompt)
@@ -730,20 +886,41 @@ class CodingQCEngine:
                 return [], content, False
             if any(
                 not isinstance(item, dict)
-                or item.get("dimension") not in {"merge", "exclusion", "primary", "consistency", "additional"}
+                or item.get("dimension") not in {
+                    "merge", "exclusion", "primary", "primary_surgery", "consistency", "additional",
+                }
                 or item.get("severity") not in {"error", "warning", "info"}
                 or not isinstance(item.get("description"), str)
                 or not item["description"].strip()
                 for item in parsed["issues"]
             ):
                 return [], content, False
-            issues = _parse_llm_issues(content)
+            if active_rule_ids is not None and any(
+                not isinstance(item.get("rule_id"), str)
+                or item["rule_id"].strip().upper() not in semantic_active
+                or item["rule_id"].strip().upper()
+                not in SEMANTIC_DIMENSION_RULE_IDS.get(item["dimension"], frozenset())
+                for item in parsed["issues"]
+            ):
+                # 模型越过启用白名单时，本次语义执行整体不完整，不能据此清除旧缺陷。
+                return [], content, False
+            issues = _parse_llm_issues(
+                content,
+                allowed_rule_ids=(semantic_active if active_rule_ids is not None else None),
+            )
             return issues, content, True
         except Exception as e:
             logger.error(f"LLM 语义审查失败: {e}")
             return [], f"LLM 调用失败: {e}", False
 
-    async def run_all(self, frontpage: dict) -> CodingQCReport:
+    async def run_all(
+        self,
+        frontpage: dict,
+        *,
+        rule_set_version: str = "",
+        rule_set_content_digest: str = "",
+        active_rule_ids: Optional[List[str]] = None,
+    ) -> CodingQCReport:
         """
         执行全量编码质控（规则层 + LLM 层）。
 
@@ -753,7 +930,17 @@ class CodingQCEngine:
         Returns:
             CodingQCReport
         """
-        report = CodingQCReport()
+        frozen_active = None if active_rule_ids is None else {
+            str(rule_id).strip().upper() for rule_id in active_rule_ids
+        }
+        report = CodingQCReport(
+            rule_set_key=CODING_RULE_SET_KEY if frozen_active is not None else "",
+            rule_set_version=str(rule_set_version or "") if frozen_active is not None else "",
+            rule_set_content_digest=(
+                str(rule_set_content_digest or "") if frozen_active is not None else ""
+            ),
+            active_rule_ids=sorted(frozen_active or ()),
+        )
 
         diagnoses = frontpage.get("diagnoses") or []
         surgeries = frontpage.get("surgeries") or []
@@ -768,16 +955,27 @@ class CodingQCEngine:
         )
 
         # --- 规则层 ---
-        format_issues = self.check_format(frontpage)
-        existence_issues = self.check_existence(frontpage)
-        bidding_issues = self.check_bidding_scenarios(frontpage)
+        format_issues = self.check_format(frontpage, frozen_active)
+        existence_issues = self.check_existence(frontpage, frozen_active)
+        bidding_issues = self.check_bidding_scenarios(frontpage, frozen_active)
         report.rule_issues = format_issues + existence_issues + bidding_issues
 
         # --- LLM 层 ---
-        llm_issues, raw_output, semantic_completed = await self.check_semantic(frontpage)
+        llm_issues, raw_output, semantic_completed = await self.check_semantic(
+            frontpage, frozen_active,
+        )
         report.llm_issues = llm_issues
         report.llm_raw_output = raw_output
         report.semantic_completed = semantic_completed and semantic_input_complete
+        if frozen_active is not None:
+            selected_semantic = frozen_active & set(SEMANTIC_RULE_IDS)
+            executed = frozen_active & set(DETERMINISTIC_RULE_IDS)
+            if selected_semantic and not report.semantic_completed:
+                # 语义输入不完整/调用失败时，不能声明共享 CR 已完整执行并据此清旧缺陷。
+                executed = set()
+            elif report.semantic_completed:
+                executed.update(selected_semantic)
+            report.executed_rule_ids = sorted(executed)
 
         # --- 汇总 ---
         all_issues = report.rule_issues + report.llm_issues

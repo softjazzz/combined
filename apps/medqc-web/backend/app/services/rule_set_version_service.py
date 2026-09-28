@@ -35,10 +35,17 @@ from .luxian_0609.phase_scope import (
 from .luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY
 from .luxian_0609_rule_master import load_luxian_0609_rule_master
 from .qc_rule_sets import QCRuleSet, get_sichuan_rule_set
+from .coding_rule_catalog import (
+    CODING_EXECUTABLE_RULE_IDS,
+    CODING_PENDING_RULE_IDS,
+    CODING_RULE_SET_KEY,
+    coding_rule_metadata,
+    get_coding_rule_set,
+)
 from .sample_validation_rule_sets import LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
 
-# 本批只允许 LX0609 发布新版本；0916 等其余规则集只支持内置版本。
-VERSIONABLE_RULE_SET_KEYS = frozenset({LUXIAN_0609_RULE_SET_KEY})
+# 本批允许 LX0609 与编码质控发布新版本；0916 等其余规则集只支持内置版本。
+VERSIONABLE_RULE_SET_KEYS = frozenset({LUXIAN_0609_RULE_SET_KEY, CODING_RULE_SET_KEY})
 
 STATE_ACTIVE = "active"
 STATE_PAUSED = "paused"
@@ -110,7 +117,7 @@ def _clean(value: Any) -> str:
 
 
 def _rule_set(rule_set_key: Any) -> QCRuleSet:
-    rule_set = get_sichuan_rule_set(rule_set_key)
+    rule_set = get_coding_rule_set(rule_set_key) or get_sichuan_rule_set(rule_set_key)
     if rule_set is None:
         raise RuleSetVersionNotFound("规则集不存在")
     return rule_set
@@ -140,6 +147,12 @@ def _builtin_partition(rule_set: QCRuleSet) -> tuple[tuple[str, ...], tuple[str,
             if _clean(rule_id).upper() in LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
         )
         return tuple(active), tuple(paused), excluded
+    if rule_set.key == CODING_RULE_SET_KEY:
+        return (
+            tuple(rule_id for rule_id in rule_set.rule_ids if rule_id not in CODING_PENDING_RULE_IDS),
+            tuple(rule_id for rule_id in rule_set.rule_ids if rule_id in CODING_PENDING_RULE_IDS),
+            (),
+        )
     return tuple(rule_set.rule_ids), (), ()
 
 
@@ -163,6 +176,8 @@ def executable_rule_ids(rule_set_key: Any) -> frozenset[str]:
     即目录已注册）且在执行依赖清单中有执行包；其余规则集：内置 rule_ids 全部视为可执行。
     """
     rule_set = _rule_set(rule_set_key)
+    if rule_set.key == CODING_RULE_SET_KEY:
+        return CODING_EXECUTABLE_RULE_IDS
     if rule_set.key != LUXIAN_0609_RULE_SET_KEY:
         return frozenset(rule_set.rule_ids)
     inventory = {item.rule_id for item in load_luxian_0609_dependency_inventory()}
@@ -175,16 +190,23 @@ def executable_rule_ids(rule_set_key: Any) -> frozenset[str]:
     )
 
 
-def _rule_display_metadata(rule_set_key: str) -> dict[str, tuple[str | None, str | None]]:
-    """规则展示元数据 {rule_id: (qc_point, source_document)}。
+def _rule_display_metadata(rule_set_key: str) -> dict[str, dict[str, str | None]]:
+    """规则展示元数据 {rule_id: {qc_point, source_document, category, category_name}}。
 
     LX0609 取规则主表（含已下线规则，一次加载且模块内缓存）；其余规则集暂无权威元数据，返回空映射，
     调用方给 null（前端显示未知，不猜测）。
     """
+    if rule_set_key == CODING_RULE_SET_KEY:
+        return coding_rule_metadata()
     if rule_set_key != LUXIAN_0609_RULE_SET_KEY:
         return {}
     return {
-        entry.rule_id: (entry.qc_point or None, entry.source_document or None)
+        entry.rule_id: {
+            "qc_point": entry.qc_point or None,
+            "source_document": entry.source_document or None,
+            "category": None,
+            "category_name": None,
+        }
         for entry in load_luxian_0609_rule_master()
     }
 
@@ -204,12 +226,14 @@ def with_executable_flags(rule_set_key: Any, item: Mapping[str, Any]) -> dict[st
     metadata = _rule_display_metadata(rule_set.key)
     flagged = []
     for entry in entries:
-        qc_point, source_document = metadata.get(entry["rule_id"], (None, None))
+        display = metadata.get(entry["rule_id"], {})
         flagged.append({
             **entry,
             "executable": entry["rule_id"] in executable,
-            "qc_point": qc_point,
-            "source_document": source_document,
+            "qc_point": display.get("qc_point"),
+            "source_document": display.get("source_document"),
+            "category": display.get("category"),
+            "category_name": display.get("category_name"),
         })
     return {**item, "entries": flagged}
 

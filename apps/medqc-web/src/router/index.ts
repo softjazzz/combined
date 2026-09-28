@@ -385,6 +385,18 @@ const routes: RouteRecordRaw[] = [
           permission: ['admin', 'qc_manager'],
         },
       },
+      {
+        path: 'coding-quality-control',
+        name: 'CodingQualityControlPointManagement',
+        component: () =>
+          import('@/views/dashboard/quality-control/QualityControlPointManagement.vue'),
+        props: { managementMode: 'coding' },
+        meta: {
+          title: '编码质控点管理',
+          icon: 'CodeOutlined',
+          permission: ['admin', 'qc_manager'],
+        },
+      },
 
       // 评分标准配置路由
       {
