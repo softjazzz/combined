@@ -169,7 +169,7 @@
             </nav>
           </div>
 
-          <!-- 深色焦点卡：质控进度圆环（比例均由现有 KPI 计算） -->
+          <!-- 质控进度圆环卡（浅色玻璃，比例均由现有 KPI 计算） -->
           <div
             class="qc-home-rings"
             aria-label="质控进度"
@@ -177,8 +177,8 @@
             <span class="qc-home-rings__title">质控进度</span>
             <div class="qc-home-rings__body">
               <svg
-                width="176"
-                height="176"
+                width="128"
+                height="128"
                 viewBox="0 0 200 200"
                 aria-hidden="true"
               >
@@ -212,7 +212,7 @@
                     :r="ring.r"
                     fill="none"
                     :stroke="`url(#${ring.gradient})`"
-                    stroke-opacity="0.24"
+                    stroke-opacity="0.14"
                     stroke-width="20"
                   />
                   <!-- 零值不画进度弧，避免圆角端点残留成一个点 -->
@@ -782,9 +782,9 @@ const ringDefs = computed(() => [
     r: 84,
     rate: rates.value.issue,
     gradient: 'qcRingRed',
-    from: '#FF4F7B',
-    to: '#FF2D55',
-    textColor: '#FF4F7B',
+    from: '#FF6B61',
+    to: '#FF3B30',
+    textColor: 'var(--mq-danger-text)',
   },
   {
     key: 'completion',
@@ -792,9 +792,9 @@ const ringDefs = computed(() => [
     r: 60,
     rate: rates.value.completion,
     gradient: 'qcRingGreen',
-    from: '#C6FF3D',
-    to: '#30D158',
-    textColor: '#9BEA4A',
+    from: '#5FD97E',
+    to: '#34C759',
+    textColor: 'var(--mq-success-text)',
   },
   {
     key: 'pending',
@@ -802,9 +802,9 @@ const ringDefs = computed(() => [
     r: 36,
     rate: rates.value.pending,
     gradient: 'qcRingAmber',
-    from: '#FFE14D',
-    to: '#FF9F0A',
-    textColor: '#FFD23F',
+    from: '#FFB340',
+    to: '#FF9500',
+    textColor: 'var(--mq-warning-text)',
   },
 ])
 

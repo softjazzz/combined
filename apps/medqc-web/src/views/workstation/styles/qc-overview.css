@@ -102,34 +102,34 @@ button.qc-home-defect-analysis__row:focus-visible {
   outline-offset: 2px;
 }
 
-/* 主卡 + 深色进度卡 */
+/* 主卡 + 进度卡：两卡都收紧尺寸，进度卡与其他卡片同为浅色玻璃 */
 .qc-home-overview {
   display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 1fr);
-  gap: 20px;
+  grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr);
+  gap: 16px;
 }
 
 .qc-home-hero {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
   overflow: hidden;
-  padding: 26px 30px;
-  border-radius: var(--mq-radius-overlay);
+  padding: 20px 24px;
+  border-radius: var(--mq-radius-card);
   background: var(--mq-brand-hero);
   box-shadow:
-    0 18px 40px rgba(10, 100, 230, 0.3),
+    0 12px 28px rgba(10, 100, 230, 0.24),
     inset 0 1px 0 rgba(255, 255, 255, 0.35);
   color: #ffffff;
 }
 
 .qc-home-hero__glow {
   position: absolute;
-  top: -90px;
-  right: -80px;
-  width: 300px;
-  height: 300px;
+  top: -80px;
+  right: -70px;
+  width: 240px;
+  height: 240px;
   border-radius: 50%;
   background: radial-gradient(circle, rgba(255, 255, 255, 0.32), transparent 65%);
   pointer-events: none;
@@ -154,17 +154,17 @@ button.qc-home-defect-analysis__row:focus-visible {
 
 .qc-home-hero__value strong {
   font-family: var(--mq-font-display);
-  font-size: 88px;
-  font-weight: 700;
-  letter-spacing: -0.045em;
+  font-size: 56px;
+  font-weight: 600;
+  letter-spacing: -0.04em;
   line-height: 0.9;
   font-variant-numeric: tabular-nums;
 }
 
 .qc-home-hero__value span {
-  padding-bottom: 8px;
+  padding-bottom: 4px;
   color: rgba(255, 255, 255, 0.72);
-  font-size: 20px;
+  font-size: 16px;
   font-weight: 500;
 }
 
@@ -172,14 +172,14 @@ button.qc-home-defect-analysis__row:focus-visible {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   color: rgba(255, 255, 255, 0.88);
-  font-size: var(--mq-font-14);
+  font-size: var(--mq-font-13);
 }
 
 .qc-home-hero__track {
   display: block;
-  height: 8px;
+  height: 6px;
   overflow: hidden;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.22);
@@ -196,18 +196,18 @@ button.qc-home-defect-analysis__row:focus-visible {
   position: relative;
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
 }
 
 .qc-home-shortcuts button {
-  height: 40px;
-  padding: 0 18px;
+  height: 34px;
+  padding: 0 16px;
   border: 1px solid rgba(255, 255, 255, 0.4);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.16);
   color: #ffffff;
   font: inherit;
-  font-size: var(--mq-font-14);
+  font-size: var(--mq-font-13);
   font-weight: 500;
   cursor: pointer;
   transition: background-color 140ms ease;
@@ -221,26 +221,27 @@ button.qc-home-defect-analysis__row:focus-visible {
 .qc-home-shortcuts .qc-home-shortcuts__primary:hover {
   border-color: transparent;
   background: #ffffff;
-  box-shadow: 0 6px 16px rgba(10, 40, 90, 0.2);
+  box-shadow: 0 4px 12px rgba(10, 40, 90, 0.16);
   color: var(--mq-brand-600);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .qc-home-rings {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 22px 26px;
-  border-radius: var(--mq-radius-overlay);
-  background:
-    radial-gradient(420px 260px at 20% 0%, #2e2e36, transparent 70%),
-    linear-gradient(160deg, #1c1c22, #09090b);
-  box-shadow: 0 20px 44px rgba(10, 10, 20, 0.28);
-  color: #f5f5f7;
+  padding: 20px 24px;
+  border: 1px solid var(--mq-glass-border);
+  border-radius: var(--mq-radius-card);
+  background: var(--mq-glass-bg);
+  -webkit-backdrop-filter: var(--mq-glass-blur);
+  backdrop-filter: var(--mq-glass-blur);
+  box-shadow: var(--mq-glass-shadow);
+  color: var(--mq-text-primary);
 }
 
 .qc-home-rings__title {
-  color: rgba(245, 245, 247, 0.85);
+  color: var(--mq-text-primary);
   font-size: var(--mq-font-14);
   font-weight: 600;
 }
@@ -249,33 +250,33 @@ button.qc-home-defect-analysis__row:focus-visible {
   display: flex;
   flex-grow: 1;
   align-items: center;
-  gap: 22px;
+  gap: 24px;
 }
 
 .qc-home-rings__legend {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
   margin: 0;
 }
 
 .qc-home-rings__legend dt {
   font-size: var(--mq-font-12);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .qc-home-rings__legend dd {
   margin: 0;
   font-family: var(--mq-font-display);
-  font-size: 28px;
+  font-size: 22px;
   font-weight: 600;
   letter-spacing: -0.02em;
   line-height: 1.2;
 }
 
 .qc-home-rings__legend small {
-  color: rgba(245, 245, 247, 0.55);
-  font-size: var(--mq-font-14);
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-13);
 }
 
 /* 三栏指标卡 */
@@ -728,8 +729,14 @@ button.qc-home-defect-analysis__row:hover,
 }
 
 @media (max-width: 1279px) {
-  .qc-home-overview,
   .qc-home-analysis {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 两张概览卡在中等宽度仍并排，只有很窄时才上下堆叠 */
+@media (max-width: 900px) {
+  .qc-home-overview {
     grid-template-columns: 1fr;
   }
 }
