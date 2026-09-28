@@ -2,7 +2,7 @@
 
 ## 基线与结论
 
-**当前状态以本表为唯一入口。** 2026-09-28外部评审曾纠正50缺少通用报表筛选、下钻及导出的完整判定；第104节补齐后恢复代码完整，只计一次。当前22完整/33部分/25未实现，原部分项收口6/10（07、08、43、50、61、62）。以下第96–103节计数是历史结论，不继续作为当前数字。未逐项重审的原16个完整项不冒称本次重新验收。
+**当前状态以本表为唯一入口。** 2026-09-28外部评审曾纠正50缺少通用报表筛选、下钻及导出的完整判定；第104节补齐后恢复代码完整，只计一次。第105节按用户简单项优先要求完成76、78，当前24完整/33部分/23未实现。原部分项收口仍为6/10（07、08、43、50、61、62），76/78不顶替原部分项。以下第96–104节计数是历史结论，不继续作为当前数字。未逐项重审的原16个完整项不冒称本次重新验收。
 
 ## 固定验收边界
 
@@ -21,21 +21,21 @@
 
 | 代码状态 | 项数 | 占全部80项 |
 | --- | ---: | ---: |
-| 代码完整 | 22 | 27.5% |
+| 代码完整 | 24 | 30% |
 | 部分实现 | 33 | 41.25% |
-| 未实现 | 25 | 31.25% |
+| 未实现 | 23 | 28.75% |
 | 合计 | 80 | 100% |
 
-**当前账本代码完整率为22/80 = 27.5%，这是补齐50通用报表缺口后的账本值，不是对全部80项新一轮独立验收。** 有直接实现的55项不等于完成率；各项工作量不同，不据此推算剩余工时。
+**当前账本代码完整率为24/80 = 30%，这是补齐76/78后的账本值，不是对全部80项新一轮独立验收。** 有直接实现的57项不等于完成率；各项工作量不同，不据此推算剩余工时。
 
-代码完整项：02、03、06、07、08、10、22、26、35、37、43、50、59、61、62、63、73、74、75、77、79、80。
+代码完整项：02、03、06、07、08、10、22、26、35、37、43、50、59、61、62、63、73、74、75、76、77、78、79、80。
 
 | 模块 | 完整 | 部分 | 未实现 | 总数 |
 | --- | ---: | ---: | ---: | ---: |
 | 登录、工作台、门急诊（01–20） | 6 | 5 | 9 | 20 |
 | 运行、终末、任务（21–43） | 5 | 17 | 1 | 23 |
 | 统计分析（44–56） | 1 | 6 | 6 | 13 |
-| 规则、文书、测试病历（57–80） | 10 | 5 | 9 | 24 |
+| 规则、文书、测试病历（57–80） | 12 | 5 | 7 | 24 |
 
 ## 判定方法
 
@@ -140,9 +140,9 @@
 | 73 | 测试病历列表 | 代码完整 | 固定池真实分页、三坐标、文书数和关联规则已接，有列表与关联测试。 | `backend/app/routers/qc_sample_pools.py:631`；`src/views/test-medical-records/TestMedicalRecordsView.vue:67` | `1b81e6fdb` |
 | 74 | 新建测试病历 | 代码完整 | 合成病历编辑器逐文书填写并调用真实创建服务，至少一份有效文书的校验已做。 | `src/views/workstation-v4/customer-sample-validation/SyntheticCaseBuilderView.vue:413`；`backend/app/services/custom_qc_sample_pool_service.py:4311` | `1b81e6fdb` |
 | 75 | 导入测试病历 | 代码完整 | 应用定义的V3.6 XLSX模板下载、多病例多文书导入、全文件预检、Sheet/行/字段错误、逐病例真实回执及页面接入已测；仅合成数据、单次20病例，不声称兼容未提供的原手册模板或具备持久幂等。 | `backend/app/services/test_record_import_service.py:1`；`src/views/test-medical-records/components/TestRecordImportDrawer.vue:1` | 第91节E线 |
-| 76 | 导出测试病历 | 未实现 | 固定池列表无标准测试病历文件勾选导出，结果报告导出不是此功能。 | `src/views/test-medical-records/TestMedicalRecordsView.vue:45` | 无专项交付 |
+| 76 | 导出测试病历 | 完整 | 固定池勾选1–20条导出V3.6 XLSX，权限审计、公式防护、完整性拒绝及现有导入解析器回读；不是结果报告导出。 | `backend/app/services/test_record_transfer_service.py`、`src/views/test-medical-records/TestMedicalRecordsView.vue` | 第105节；合成/HTTP/组件验证，未做隔离PG和浏览器验收 |
 | 77 | 编辑测试病历 | 代码完整 | 基本信息及文书可改，派生新版本并事务标记旧版本，CAS及前后端测试已做。 | `src/views/test-medical-records/components/TestRecordEditDrawer.vue:75`；`backend/tests/unit/test_customer_test_record_management.py:307` | `1b81e6fdb` |
-| 78 | 复制测试病历 | 未实现 | 新固定池无复制命令/API；旧页复制仅模拟成功，编辑派生版本不当作复制操作。 | `src/views/medical-records/MedicalRecordsView.vue:865` | 无专项交付 |
+| 78 | 复制测试病历 | 完整 | 固定池active源版本核验后复用创建生成新三坐标并保留文书，不替换源、不复制历史结果；结果未知不引导盲目重试。 | `backend/app/services/test_record_transfer_service.py`、`src/views/test-medical-records/TestMedicalRecordsView.vue` | 第105节；合成/HTTP/组件验证，未做隔离PG和浏览器验收 |
 | 79 | 删除测试病历 | 代码完整 | 确认、软移除、权限与CAS已接；原条目同事务保存操作者/UTC时间/旧版本审计，损坏载荷和重复请求拒绝，回读失败回滚；保留CDM与历史结果。 | `src/views/test-medical-records/TestMedicalRecordsView.vue:390`；`backend/app/services/custom_qc_sample_pool_service.py:4993` | `1b81e6fdb`；第90节专项提交 |
 | 80 | 查看应用质控点 | 代码完整 | 列表及弹窗真实显示关联规则ID/名称，后端归属校验与关联持久化有测试。 | `src/views/test-medical-records/TestMedicalRecordsView.vue:146`；`backend/app/services/custom_qc_sample_pool_service.py:4916` | `1b81e6fdb` |
 

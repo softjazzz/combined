@@ -8,7 +8,9 @@ vi.mock('@/services/apiService', () => ({
 import {
   buildTestRecordEditPayload,
   buildTestRecordRunPayload,
+  copyTestRecord,
   downloadTestRecordImportTemplate,
+  exportTestRecords,
   findMissingEditBasics,
   getCurrentRuleSetCatalog,
   importTestRecords,
@@ -86,6 +88,78 @@ describe('测试病历服务', () => {
     expect(requestRaw).toHaveBeenLastCalledWith(
       expect.objectContaining({ method: 'DELETE', params: { updated_at: item.updated_at } }),
     )
+  })
+
+  it('勾选导出只提交不重复的条目 ID，并严格接收 XLSX', async () => {
+    const blob = new Blob(['xlsx'], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    })
+    requestRaw.mockResolvedValue({
+      data: blob,
+      headers: { 'content-type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+    })
+
+    const result = await exportTestRecords(['ct-1', ' ct-2 '])
+
+    expect(result).toEqual({ success: true, data: blob })
+    expect(requestRaw).toHaveBeenCalledWith(expect.objectContaining({
+      method: 'POST',
+      url: '/api/v1/qc/sample-pools/test-records/export',
+      data: { item_ids: ['ct-1', 'ct-2'] },
+      responseType: 'blob',
+    }))
+  })
+
+  it('导出拒绝空选择、重复 ID 及非 XLSX 响应，不下载伪成功文件', async () => {
+    expect((await exportTestRecords([])).success).toBe(false)
+    expect((await exportTestRecords(['ct-1', 'ct-1'])).success).toBe(false)
+    expect(requestRaw).not.toHaveBeenCalled()
+
+    requestRaw.mockResolvedValue({
+      data: new Blob(['{"detail":"failed"}'], { type: 'application/json' }),
+      headers: { 'content-type': 'application/json' },
+    })
+    const result = await exportTestRecords(['ct-1'])
+    expect(result).toEqual({ success: false, message: '后端未返回可回导的测试病历 XLSX 文件' })
+  })
+
+  it('复制使用源 updated_at 做 CAS，且只有源引用和新身份完整才确认成功', async () => {
+    const source = makeItem()
+    requestRaw.mockResolvedValueOnce({
+      data: {
+        success: true,
+        data: {
+          visit_id: 'CUSTOMER_TEST_COPY_1',
+          patient_id: 'CUSTOMER_PATIENT_COPY_1',
+          mr_no: 'MR-COPY-1',
+          inserted_tables: {},
+          bundle_status: 'ready',
+          source_item_id: source.id,
+          source_updated_at: source.updated_at,
+        },
+      },
+    })
+    const result = await copyTestRecord(source)
+    expect(result.success).toBe(true)
+    expect(requestRaw).toHaveBeenCalledWith(expect.objectContaining({
+      method: 'POST',
+      url: '/api/v1/qc/sample-pools/test-records/ct-1/copy',
+      data: { updated_at: source.updated_at },
+    }))
+
+    requestRaw.mockResolvedValueOnce({
+      data: {
+        success: true,
+        data: {
+          visit_id: 'CUSTOMER_TEST_COPY_2', patient_id: 'CUSTOMER_PATIENT_COPY_2',
+          source_item_id: 'another-source', source_updated_at: source.updated_at,
+        },
+      },
+    })
+    expect(await copyTestRecord(source)).toEqual({
+      success: false,
+      message: '复制回执不完整，请刷新列表核对结果',
+    })
   })
 
   it('冲突错误把后端 detail 透传给页面', async () => {

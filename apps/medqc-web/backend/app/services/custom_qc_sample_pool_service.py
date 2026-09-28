@@ -4849,6 +4849,203 @@ class CustomQCSamplePoolService:
         finally:
             session.close()
 
+    def load_customer_test_record_transfer_payloads(
+        self,
+        *,
+        item_ids: Sequence[str],
+        expected_updated_at: Any = None,
+    ) -> List[Dict[str, Any]]:
+        """只读固定测试池 active 条目，重建可导出或复制的创建载荷。"""
+        normalized_ids = [_safe_text(item_id) for item_id in item_ids]
+        if not normalized_ids or any(not item_id for item_id in normalized_ids):
+            raise ValueError("测试病历 ID 不能为空")
+        if len(set(normalized_ids)) != len(normalized_ids):
+            raise ValueError("测试病历 ID 不能重复")
+        expected = _parse_cas_timestamp(expected_updated_at)
+        session = _session()
+        try:
+            statement = select(self._item_table).where(
+                self._item_table.c.id.in_(normalized_ids)
+            )
+            if expected_updated_at is not None:
+                statement = statement.with_for_update()
+            rows = session.execute(statement).mappings().all()
+            by_id = {_safe_text(row.get("id")): dict(row) for row in rows}
+            payloads: List[Dict[str, Any]] = []
+            metadata = MetaData()
+            for item_id in normalized_ids:
+                row = by_id.get(item_id)
+                if not row or _safe_text(row.get("pool_id")) != CUSTOMER_TEST_POOL_ID:
+                    raise CustomerTestRecordNotFoundError("测试病历不存在")
+                state, _ = _customer_test_record_state(
+                    row.get("include_in_batch_1"), row.get("exclude_reason"),
+                )
+                if state != "active":
+                    raise CustomerTestRecordConflictError(
+                        "测试病历已移除或已被替换", code="inactive",
+                    )
+                if expected_updated_at is not None and (
+                    expected is None or _parse_cas_timestamp(row.get("updated_at")) != expected
+                ):
+                    raise CustomerTestRecordConflictError(
+                        "测试病历已被修改，请刷新后重试", code="stale",
+                    )
+                payloads.append(
+                    self._build_customer_test_record_transfer_payload(
+                        session=session, row=row, metadata=metadata,
+                    )
+                )
+            return payloads
+        finally:
+            session.close()
+
+    def _build_customer_test_record_transfer_payload(
+        self, *, session: Session, row: Dict[str, Any], metadata: MetaData,
+    ) -> Dict[str, Any]:
+        institute_id = _safe_text(row.get("matched_institute_id"))
+        patient_id = _safe_text(row.get("matched_patient_id"))
+        visit_id = _safe_text(row.get("matched_visit_id"))
+        if (
+            institute_id != CUSTOMER_TEST_INSTITUTE_ID
+            or not patient_id or not visit_id.startswith(CUSTOMER_TEST_VISIT_PREFIX)
+        ):
+            raise CustomerTestRecordConflictError(
+                "测试病历身份不可信，无法导出或复制", code="invalid_identity",
+            )
+
+        def read_rows(table_name: str) -> List[Dict[str, Any]]:
+            table = self._reflect_cdm_table(table_name, metadata)
+            if table is None:
+                return []
+            required = {"institute_id", "patient_id", "visit_id"}
+            if not required.issubset(table.c.keys()):
+                return []
+            result = session.execute(
+                select(table).where(
+                    table.c.institute_id == institute_id,
+                    table.c.patient_id == patient_id,
+                    table.c.visit_id == visit_id,
+                )
+            ).mappings().all()
+            return [dict(item) for item in result]
+
+        registration_rows = read_rows("inpat_registration")
+        if len(registration_rows) != 1:
+            raise CustomerTestRecordConflictError(
+                "测试病历基础信息不完整", code="invalid_source",
+            )
+        registration = registration_rows[0]
+        demographics = self._load_test_record_demographics(
+            session, [(institute_id, patient_id, visit_id)],
+        ).get((institute_id, patient_id, visit_id), {})
+        raw_payload = _safe_json_loads(row.get("raw_payload_json"), {})
+        raw_payload = raw_payload if isinstance(raw_payload, dict) else {}
+        diagnoses = read_rows("diagnosis")
+        main_diagnosis = ""
+        other_diagnoses: List[str] = []
+        for diagnosis in diagnoses:
+            name = _safe_text(diagnosis.get("diagnosis_name"))
+            if not name:
+                continue
+            if _safe_text(diagnosis.get("diagnosis_type")) == "主要诊断" and not main_diagnosis:
+                main_diagnosis = name
+            else:
+                other_diagnoses.append(name)
+
+        document_tables = (
+            ("admission_record", "admission_record", "入院记录"),
+            ("first_course_record", "first_course_record", "首次病程记录"),
+            ("daily_course_record", "daily_course_record", "日常病程记录"),
+            ("senior_course_record", "senior_course_record", "上级医师查房记录"),
+            ("rescue_record", "rescue_record", "抢救记录"),
+            ("consultation_record", "consultation_record", "会诊记录"),
+            ("discharge_record", "discharge_record", "出院记录"),
+            ("presurg_summary", "presurg_summary", "术前小结"),
+            ("presurg_discussion", "presurg_discussion", "术前讨论"),
+            ("surgery_record", "surgery_record", "手术记录"),
+            ("surgery_safecheck_record", "surgery_safecheck_record", "手术安全核查"),
+            ("surgery_inform_consent", "surgery_inform_consent", "手术知情同意"),
+            ("anesthesia_record", "anesthesia_record", "麻醉记录"),
+            ("exam_report", "exam_item_report", "检查报告"),
+            ("lab_report", "labtest_item_report", "检验报告"),
+            ("medical_order", "inpat_nondrug_order", "医嘱记录"),
+            ("blood_application", "blood_application", "输血申请"),
+            ("bloodtrans_record", "bloodtrans_record", "输血记录"),
+        )
+        documents: List[Dict[str, Any]] = []
+        for document_type, table_name, default_title in document_tables:
+            for source in read_rows(table_name):
+                content = _safe_text(source.get("record_content"))
+                if not content:
+                    continue
+                documents.append(
+                    {
+                        "document_type": document_type,
+                        "title": _safe_text(source.get("document_title"), default_title),
+                        "record_time": source.get("record_datetime")
+                        or source.get("report_datetime") or source.get("order_datetime")
+                        or source.get("submit_datetime"),
+                        "submit_time": source.get("submit_datetime"),
+                        "content": content,
+                        "doctor_name": _safe_text(source.get("submitter")) or None,
+                        "doctor_code": _safe_text(source.get("submitter_id")) or None,
+                        "enabled": True,
+                        "_sort_key": _safe_text(
+                            source.get("document_id") or source.get("order_id")
+                            or source.get("application_id") or source.get("record_datetime")
+                        ),
+                    }
+                )
+        if not documents:
+            raise CustomerTestRecordConflictError(
+                "测试病历缺少可复制文书", code="documents_unavailable",
+            )
+        expected_document_count = raw_payload.get("document_count")
+        if type(expected_document_count) is not int or expected_document_count != len(documents):
+            raise CustomerTestRecordConflictError(
+                "测试病历文书数量不一致", code="documents_unavailable",
+            )
+        documents.sort(key=lambda item: (str(item["_sort_key"]), item["document_type"]))
+        for document in documents:
+            document.pop("_sort_key", None)
+
+        patient_name = _safe_text(row.get("patient_name"))
+        department = _safe_text(row.get("department"))
+        sex = _safe_text(demographics.get("sex"))
+        age = demographics.get("age")
+        admission_time = self._parse_test_record_datetime(
+            demographics.get("admission_time") or registration.get("admission_datetime")
+        )
+        if (
+            not patient_name or not department or sex not in {"男", "女"}
+            or type(age) is not int or not 1 <= age <= 120 or admission_time is None
+        ):
+            raise CustomerTestRecordConflictError(
+                "测试病历基础信息不完整", code="invalid_source",
+            )
+        return {
+            "source_item_id": _safe_text(row.get("id")),
+            "source_updated_at": row.get("updated_at"),
+            "case_title": _safe_text(raw_payload.get("case_title"), "测试病历"),
+            "basic_info": {
+                "patient_name": patient_name,
+                "sex": sex,
+                "age": age,
+                "mr_no": _safe_text(row.get("mr_no")),
+                "department": department,
+                "admission_time": admission_time,
+                "discharge_time": registration.get("discharge_datetime"),
+                "main_diagnosis": main_diagnosis or None,
+                "other_diagnoses": other_diagnoses,
+                "doctor_name": _safe_text(row.get("doctor_name")) or None,
+            },
+            "documents": documents,
+            "selected_rule_ids": _stored_test_record_rule_ids(
+                row.get("candidate_rule_ids_json")
+            ),
+            "manual_issue_text": _safe_text(row.get("manual_issue_text")) or None,
+        }
+
     @staticmethod
     def _load_test_record_demographics(
         session: Session, case_keys: Sequence[CaseKey],

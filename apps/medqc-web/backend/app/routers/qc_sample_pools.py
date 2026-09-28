@@ -76,6 +76,12 @@ from ..services.test_record_import_service import (
     build_test_record_import_template,
     parse_test_record_import,
 )
+from ..services.test_record_transfer_service import (
+    CustomerTestRecordCopyResultUnknown,
+    EXPORT_FILENAME as TEST_RECORD_EXPORT_FILENAME,
+    copy_customer_test_record,
+    export_customer_test_records,
+)
 from ..services.llm_config_loader import LLMConfigLoader
 from ..services.llm_execution_concurrency import concurrency_from_custom_parameters
 
@@ -373,6 +379,15 @@ class TestRecordRulesUpdateRequest(BaseModel):
     updated_at: str = Field(..., min_length=1, description="条目当前 updated_at，用于 CAS")
 
 
+class TestRecordExportRequest(BaseModel):
+    item_ids: list[str] = Field(..., min_length=1, max_length=20)
+
+
+class TestRecordCopyRequest(BaseModel):
+    updated_at: str = Field(..., min_length=1, description="源条目 updated_at，用于 CAS")
+    case_title: Optional[str] = Field(default=None, max_length=200)
+
+
 def _raise_test_record_error(exc: Exception) -> None:
     if isinstance(exc, CustomerTestRecordNotFoundError):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -636,6 +651,137 @@ async def create_test_record(
     return success_response(
         data=result,
         message="客户自建测试病历已创建",
+        trace_id=get_trace_id(request),
+    )
+
+
+@router.post("/test-records/export")
+async def export_test_records(
+    request: Request,
+    payload: TestRecordExportRequest,
+    current_user: Dict[str, Any] = Depends(require_roles("admin", "qc_manager")),
+):
+    try:
+        content, row_count = await run_in_threadpool(
+            export_customer_test_records,
+            item_ids=payload.item_ids,
+            allowed_rule_ids=_current_version_rule_ids(),
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "invalid_test_record_export", "message": str(exc)},
+        ) from exc
+    except CustomerTestRecordNotFoundError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "test_record_not_found", "message": str(exc)},
+        ) from exc
+    except CustomerTestRecordConflictError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    except Exception as exc:
+        logging.getLogger(__name__).error(
+            "test_record_export_failed error_type=%s", type(exc).__name__,
+        )
+        raise HTTPException(status_code=503, detail="测试病历导出暂不可用，请稍后重试") from None
+    audit_event(
+        request,
+        action="qc.sample_pools.test_records.export",
+        resource="qc_sample_pool_item",
+        outcome="success",
+        details={"selected_count": len(payload.item_ids), "exported_count": row_count},
+        current_user=current_user,
+    )
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{TEST_RECORD_EXPORT_FILENAME}",
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@router.post("/test-records/{item_id}/copy")
+async def copy_test_record(
+    request: Request,
+    item_id: str,
+    payload: TestRecordCopyRequest,
+    current_user: Dict[str, Any] = Depends(require_roles("admin", "qc_manager")),
+):
+    actor_id = str(current_user.get("id") or current_user.get("user_id") or "").strip()
+    if not actor_id or actor_id.lower() == "anonymous":
+        raise HTTPException(status_code=403, detail="当前用户缺少稳定标识，无法复制测试病历")
+    try:
+        result = await run_in_threadpool(
+            copy_customer_test_record,
+            item_id=item_id,
+            expected_updated_at=payload.updated_at,
+            case_title=payload.case_title,
+            created_by=actor_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "invalid_test_record_copy", "message": str(exc)},
+        ) from exc
+    except CustomerTestRecordNotFoundError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "test_record_not_found", "message": str(exc)},
+        ) from exc
+    except CustomerTestRecordConflictError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    except CustomerTestRecordCopyResultUnknown as exc:
+        logging.getLogger(__name__).warning(
+            "test_record_copy_result_unknown source_item_id=%s", item_id,
+        )
+        try:
+            audit_event(
+                request,
+                action="qc.sample_pools.test_records.copy",
+                resource="qc_sample_pool_item",
+                outcome="unknown",
+                details={"source_item_id": item_id},
+                current_user=current_user,
+            )
+        except Exception:
+            logging.getLogger(__name__).exception(
+                "test_record_copy_unknown_audit_failed source_item_id=%s", item_id,
+            )
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "copy_result_unknown", "message": str(exc)},
+        ) from None
+    except Exception as exc:
+        logging.getLogger(__name__).error(
+            "test_record_copy_failed error_type=%s", type(exc).__name__,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="测试病历复制结果未知，请刷新列表核对后再操作",
+        ) from None
+    audit_event(
+        request,
+        action="qc.sample_pools.test_records.copy",
+        resource="qc_sample_pool_item",
+        outcome="success",
+        details={
+            "source_item_id": item_id,
+            "created_item_id": str((result.get("item") or {}).get("id") or ""),
+        },
+        current_user=current_user,
+    )
+    return success_response(
+        data=result,
+        message="测试病历副本已创建",
         trace_id=get_trace_id(request),
     )
 

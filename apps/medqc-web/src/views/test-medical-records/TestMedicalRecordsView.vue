@@ -65,6 +65,16 @@
         <a-space>
           <span class="test-records-page__muted">已选 {{ selectedIds.length }} 条</span>
           <a-button
+            v-if="canTransferRecords"
+            data-testid="export-selected-records"
+            :disabled="!selectedRunnable.length || exporting"
+            :loading="exporting"
+            @click="exportSelected"
+          >
+            <template #icon><Download :size="15" aria-hidden="true" /></template>
+            导出所选
+          </a-button>
+          <a-button
             :disabled="!selectedRunnable.length"
             @click="openRun(selectedRunnable)"
           >
@@ -143,6 +153,18 @@
               <a @click="openResult(record)">查看结果</a>
               <template v-if="record.state === 'active'">
                 <a @click="openEdit(record)">编辑</a>
+                <a-button
+                  v-if="canTransferRecords"
+                  type="link"
+                  size="small"
+                  class="test-records-page__link-button"
+                  :data-testid="`copy-record-${record.id}`"
+                  :disabled="copyingId !== null"
+                  :loading="copyingId === record.id"
+                  @click="confirmCopy(record)"
+                >
+                  复制
+                </a-button>
                 <a @click="openRules(record)">关联质控点</a>
                 <a @click="openRun([record])">运行</a>
                 <a
@@ -225,15 +247,19 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { FileUp } from 'lucide-vue-next'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { Download, FileUp } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import type { ColumnsType } from 'ant-design-vue/es/table'
 import { storeToRefs } from 'pinia'
 import { useTestMedicalRecordsStore } from '@/stores/testMedicalRecords'
+import { useAuthStore } from '@/stores/auth'
 import {
   CUSTOMER_TEST_POOL_ID,
+  TEST_RECORD_EXPORT_FILENAME,
+  copyTestRecord,
+  exportTestRecords,
   isRunnableTestRecord,
   runTestRecords,
   unionTestRecordRuleIds,
@@ -243,6 +269,7 @@ import QCRecordResultComparisonDrawer, {
   type QCRecordResultFocus,
 } from '@/views/workstation-v4/customer-sample-validation/QCRecordResultComparisonDrawer.vue'
 import QCRecordCompareWorkbench from '@/views/workstation-v4/semantic-rules/components/QCRecordCompareWorkbench.vue'
+import { downloadBlob } from '@/views/workstation-v4/customer-sample-validation/batchExport'
 import TestRecordRulePickerModal from './components/TestRecordRulePickerModal.vue'
 import TestRecordEditDrawer from './components/TestRecordEditDrawer.vue'
 import TestRecordImportDrawer from './components/TestRecordImportDrawer.vue'
@@ -262,6 +289,7 @@ const BLOCKED_NOTES = [
 
 const router = useRouter()
 const store = useTestMedicalRecordsStore()
+const authStore = useAuthStore()
 const {
   items,
   total,
@@ -311,6 +339,72 @@ function asItem(record: Record<string, unknown>): TestRecordItem {
 
 const selectedRunnable = computed(() => selectedItems.value.filter(isRunnableTestRecord))
 const importOpen = ref(false)
+const exporting = ref(false)
+const copyingId = ref<string | null>(null)
+const exportRevision = ref(0)
+const copyRevision = ref(0)
+const actorKey = computed(() => {
+  const actor = authStore.user
+  const roles = [...authStore.userRoles].sort()
+  return `${actor?.id || ''}|${roles.join(',')}`
+})
+const canTransferRecords = computed(() => (
+  authStore.userRoles.includes('admin') || authStore.userRoles.includes('qc_manager')
+))
+
+function invalidatePendingActions() {
+  exportRevision.value += 1
+  copyRevision.value += 1
+  exporting.value = false
+  copyingId.value = null
+}
+
+async function exportSelected() {
+  if (!selectedRunnable.value.length || exporting.value) return
+  if (selectedRunnable.value.length !== selectedIds.value.length) {
+    message.warning('所选病历中包含不可导出的条目，请刷新后重新选择')
+    return
+  }
+  const revision = ++exportRevision.value
+  exporting.value = true
+  const result = await exportTestRecords(selectedRunnable.value.map((item) => item.id))
+  if (revision !== exportRevision.value) return
+  exporting.value = false
+  if (!result.success || !result.data) {
+    message.error(result.message || '导出测试病历失败')
+    return
+  }
+  downloadBlob(result.data, TEST_RECORD_EXPORT_FILENAME)
+}
+
+function confirmCopy(item: TestRecordItem) {
+  if (copyingId.value !== null) return
+  Modal.confirm({
+    title: '复制该测试病历？',
+    content: '将按当前源版本创建一份全新测试病例；原病历、历史质控结果和最近任务不会修改或复制。',
+    okText: '确认复制',
+    cancelText: '取消',
+    onOk: async () => {
+      const revision = ++copyRevision.value
+      copyingId.value = item.id
+      const result = await copyTestRecord(item)
+      if (revision !== copyRevision.value) return
+      copyingId.value = null
+      if (!result.success || !result.data) {
+        message.error(result.message || '复制测试病历失败')
+        return
+      }
+      if (result.data.bundle_status === 'ready') {
+        message.success(`测试病历已复制：${result.data.visit_id}`)
+      } else if (result.data.bundle_status === 'pending') {
+        message.info(`测试病历已创建：${result.data.visit_id}，资料准备中`)
+      } else {
+        message.warning(`测试病历已创建：${result.data.visit_id}，资料状态尚未就绪，请刷新核对`)
+      }
+      await store.load()
+    },
+  })
+}
 
 async function handleImported() {
   await store.load()
@@ -437,6 +531,10 @@ function confirmRemove(item: TestRecordItem) {
 onMounted(() => {
   void store.load()
 })
+
+watch(actorKey, invalidatePendingActions)
+
+onBeforeUnmount(invalidatePendingActions)
 </script>
 
 <style scoped>
@@ -508,5 +606,10 @@ onMounted(() => {
 
 .test-records-page__danger {
   color: var(--ant-color-error, #dc2626);
+}
+
+.test-records-page__link-button {
+  height: auto;
+  padding: 0;
 }
 </style>

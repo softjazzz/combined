@@ -25,7 +25,10 @@ import type {
   TestRecordImportResult,
   TestRecordImportValidationIssue,
 } from '@/types/test-medical-records'
-import type { ManualTestRecordCreateRequest } from '@/views/workstation-v4/customer-sample-validation/types'
+import type {
+  ManualTestRecordCreateRequest,
+  ManualTestRecordCreateResult,
+} from '@/views/workstation-v4/customer-sample-validation/types'
 
 export const CUSTOMER_TEST_POOL_ID = 'customer-created-test-records-v1'
 /** 测试病历按泸县0609客户规则集验证，与新建测试病历页一致。 */
@@ -35,6 +38,9 @@ const RUN_TIMEOUT_MS = 90000
 const IMPORT_TIMEOUT_MS = 15 * 60 * 1000
 export const TEST_RECORD_IMPORT_MAX_BYTES = 5 * 1024 * 1024
 export const TEST_RECORD_IMPORT_MAX_CASES = 20
+export const TEST_RECORD_EXPORT_MAX_CASES = 20
+export const TEST_RECORD_EXPORT_FILENAME = 'V3.6-test-records.xlsx'
+const XLSX_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 
 export type ServiceResult<T> = {
   success: boolean
@@ -95,6 +101,89 @@ export function removeTestRecord(item: Pick<TestRecordItem, 'id' | 'updated_at'>
     },
     '移除测试病历失败',
   )
+}
+
+export interface TestRecordCopyResult extends ManualTestRecordCreateResult {
+  source_item_id: string
+  source_updated_at: string
+}
+
+function headerValue(headers: unknown, name: string): string {
+  if (!headers || typeof headers !== 'object') return ''
+  const candidate = headers as { get?: (key: string) => unknown } & Record<string, unknown>
+  const value = typeof candidate.get === 'function'
+    ? candidate.get(name)
+    : candidate[name] ?? candidate[name.toLowerCase()]
+  return typeof value === 'string' ? value : ''
+}
+
+/** 导出固定池勾选条目；响应必须是后端声明的 XLSX，避免把 JSON 错误页下载成文件。 */
+export async function exportTestRecords(itemIds: string[]): Promise<ServiceResult<Blob>> {
+  const normalizedIds = itemIds.map((id) => id.trim()).filter(Boolean)
+  if (
+    normalizedIds.length < 1
+    || normalizedIds.length > TEST_RECORD_EXPORT_MAX_CASES
+    || new Set(normalizedIds).size !== normalizedIds.length
+  ) {
+    return { success: false, message: '请选择 1–20 条不重复的有效测试病历' }
+  }
+  try {
+    const response = await ApiService.requestRaw<Blob>({
+      method: 'POST',
+      url: `${TEST_RECORDS_URL}/export`,
+      data: { item_ids: normalizedIds },
+      responseType: 'blob',
+      timeout: 60000,
+    })
+    const contentType = headerValue(response.headers, 'content-type').toLowerCase()
+      || String(response.data?.type || '').toLowerCase()
+    if (
+      !(response.data instanceof Blob)
+      || response.data.size === 0
+      || !contentType.includes(XLSX_CONTENT_TYPE)
+    ) {
+      return { success: false, message: '后端未返回可回导的测试病历 XLSX 文件' }
+    }
+    return { success: true, data: response.data }
+  } catch (error) {
+    return {
+      success: false,
+      message: extractApiErrorMessageFromError(error, '导出测试病历失败'),
+    }
+  }
+}
+
+/** 复制会创建全新测试病例；服务端回执必须明确指向源版本，前端才确认成功。 */
+export async function copyTestRecord(
+  item: Pick<TestRecordItem, 'id' | 'updated_at'>,
+  caseTitle?: string,
+): Promise<ServiceResult<TestRecordCopyResult>> {
+  const result = await requestEnvelope<TestRecordCopyResult>(
+    {
+      method: 'POST',
+      url: `${TEST_RECORDS_URL}/${encodeURIComponent(item.id)}/copy`,
+      data: {
+        updated_at: item.updated_at,
+        ...(caseTitle?.trim() ? { case_title: caseTitle.trim() } : {}),
+      },
+    },
+    '复制测试病历失败',
+  )
+  const data = result.data
+  if (!result.success || !data) return result
+  if (
+    data.source_item_id !== item.id
+    || data.source_updated_at !== item.updated_at
+    || typeof data.visit_id !== 'string'
+    || !data.visit_id.trim()
+    || typeof data.patient_id !== 'string'
+    || !data.patient_id.trim()
+    || typeof data.bundle_status !== 'string'
+    || !data.bundle_status.trim()
+  ) {
+    return { success: false, message: '复制回执不完整，请刷新列表核对结果' }
+  }
+  return result
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
