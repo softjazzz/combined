@@ -441,15 +441,22 @@ const handleLogout = async () => {
   min-height: 0;
   overflow-y: auto;
   padding: 0 2px;
-  scrollbar-width: none;
+  /* 矮屏时导航需要滚动，保留细滚动条作为可滚动提示，避免末项被无提示地藏起来 */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(60, 60, 80, 0.18) transparent;
 }
 
 .ws-nav::-webkit-scrollbar {
-  display: none;
+  width: 4px;
+}
+
+.ws-nav::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(60, 60, 80, 0.18);
 }
 
 .ws-nav__group-label {
-  padding: 10px 10px 3px;
+  padding: 8px 10px 2px;
   color: var(--mq-text-tertiary);
   font-size: 11px;
   font-weight: 600;
@@ -468,7 +475,7 @@ const handleLogout = async () => {
   display: flex;
   align-items: center;
   gap: 10px;
-  height: 32px;
+  height: 31px;
   margin: 0;
   padding: 0 8px;
   border-radius: 10px;
@@ -545,9 +552,9 @@ const handleLogout = async () => {
   display: flex;
   flex-shrink: 0;
   flex-direction: column;
-  gap: 8px;
-  margin-top: 6px;
-  padding: 10px 2px 0;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 8px 2px 0;
   border-top: 0.5px solid var(--mq-border);
 }
 
