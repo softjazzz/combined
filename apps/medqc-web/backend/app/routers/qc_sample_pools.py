@@ -792,6 +792,8 @@ async def match_sample_pool(
         raise HTTPException(status_code=404, detail="样本池不存在")
     try:
         result = _service().match_pool_items_from_source(pool_id=pool_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"源库病历匹配失败: {exc}") from exc
     return success_response(

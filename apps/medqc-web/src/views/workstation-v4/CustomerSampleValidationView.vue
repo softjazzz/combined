@@ -71,20 +71,21 @@
                       <a-menu-item @click="handleMoreActionKey('refresh')">
                         刷新样本池
                       </a-menu-item>
+                      <!-- 自建测试病历创建后固定，源库匹配/同步会改写病例绑定，后端同样拒绝 -->
                       <a-menu-item
-                        :disabled="!selectedPoolId || syncLoading"
+                        :disabled="!selectedPoolId || selectedPoolId === CUSTOMER_TEST_POOL_ID || syncLoading"
                         @click="handleMoreActionKey('sync')"
                       >
                         同步样本病历
                       </a-menu-item>
                       <a-menu-item
-                        :disabled="!selectedPoolId || syncLoading"
+                        :disabled="!selectedPoolId || selectedPoolId === CUSTOMER_TEST_POOL_ID || syncLoading"
                         @click="handleMoreActionKey('sync-by-hospitalization')"
                       >
                         按住院范围同步…
                       </a-menu-item>
                       <a-menu-item
-                        :disabled="!selectedPoolId || matchLoading"
+                        :disabled="!selectedPoolId || selectedPoolId === CUSTOMER_TEST_POOL_ID || matchLoading"
                         @click="handleMoreActionKey('match')"
                       >
                         执行病历匹配

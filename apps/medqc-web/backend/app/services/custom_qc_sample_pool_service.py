@@ -65,6 +65,12 @@ CUSTOMER_TEST_INSTITUTE_ID = "CUSTOMER_TEST"
 CUSTOMER_TEST_VISIT_PREFIX = "CUSTOMER_TEST_"
 
 
+def _reject_customer_test_pool_source_write(pool_id: str) -> None:
+    """自建测试病历创建后固定；源库匹配/同步会改写病例绑定，甚至绑定到真实患者。"""
+    if _safe_text(pool_id) == CUSTOMER_TEST_POOL_ID:
+        raise ValueError("客户自建测试病历创建后固定，不支持源库匹配或同步；如需修改请复制为新病例")
+
+
 class SampleSyncJobConflictError(RuntimeError):
     """同一样本池已有排队中或执行中的同步任务。"""
 
@@ -3685,6 +3691,7 @@ class CustomQCSamplePoolService:
         created_by: str,
         payload: Dict[str, Any],
     ) -> Dict[str, Any]:
+        _reject_customer_test_pool_source_write(pool_id)
         session = _session()
         now = _now_utc()
         job_id = str(uuid.uuid4())
@@ -5154,6 +5161,7 @@ class CustomQCSamplePoolService:
         pool_id: str,
         item_ids: Optional[Sequence[str]] = None,
     ) -> Dict[str, Any]:
+        _reject_customer_test_pool_source_write(pool_id)
         session = _session()
         try:
             clauses = [self._item_table.c.pool_id == pool_id]
@@ -5389,6 +5397,7 @@ class CustomQCSamplePoolService:
             session.close()
 
     def match_pool_items_from_source(self, *, pool_id: str) -> Dict[str, Any]:
+        _reject_customer_test_pool_source_write(pool_id)
         remote_url = get_remote_db_url()
         if not remote_url:
             return self.match_pool_items(pool_id=pool_id)
@@ -5843,6 +5852,7 @@ class CustomQCSamplePoolService:
         discharge_end_date: Optional[date],
         departments: Sequence[str],
     ) -> Dict[str, Any]:
+        _reject_customer_test_pool_source_write(pool_id)
         resolved = self._resolve_remote_hospitalization_scope(
             scope_mode=scope_mode,
             as_of_date=as_of_date,
@@ -5932,6 +5942,7 @@ class CustomQCSamplePoolService:
         discharge_end_date: Optional[date],
         departments: Sequence[str],
     ) -> Dict[str, Any]:
+        _reject_customer_test_pool_source_write(pool_id)
         resolved = self._resolve_remote_hospitalization_scope(
             scope_mode=scope_mode,
             as_of_date=as_of_date,
@@ -6315,6 +6326,7 @@ class CustomQCSamplePoolService:
         item_ids: Optional[Sequence[str]] = None,
         progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
     ) -> Dict[str, Any]:
+        _reject_customer_test_pool_source_write(pool_id)
         overall_started_at = time.perf_counter()
         items = self._list_sync_candidate_items(
             pool_id=pool_id,
