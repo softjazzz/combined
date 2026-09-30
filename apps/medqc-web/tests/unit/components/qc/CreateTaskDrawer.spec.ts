@@ -39,7 +39,8 @@ import type { TaskScene } from '@/api/tasks'
 const selectStub = {
   props: ['value', 'options'],
   emits: ['update:value'],
-  template: '<select :value="value" @change="$emit(\'update:value\', $event.target.value)"><option value="">请选择</option><option v-for="option in options" :key="option.value" :value="option.value">{{ option.label }}</option></select>',
+  template:
+    '<select :value="value" @change="$emit(\'update:value\', $event.target.value)"><option value="">请选择</option><option v-for="option in options" :key="option.value" :value="option.value">{{ option.label }}</option></select>',
 }
 
 type DrawerVm = {
@@ -56,7 +57,7 @@ type DrawerVm = {
     date_range: { start?: string; end?: string } | null
     department_filter: string[]
     sampling_method: 'all' | 'count' | 'percentage'
-    sampling_config: { case_scope?: 'active'; group_by: string | null | undefined }
+    sampling_config: { case_scope?: 'active' | 'discharged'; group_by: string | null | undefined }
   }
   handleSubmit: () => Promise<void>
   nextStep: () => void
@@ -88,7 +89,11 @@ function mountDrawer(props: Record<string, unknown> = {}) {
         'a-form-item': { template: '<div><slot /></div>' },
         'a-input': true,
         'a-input-number': true,
-        'a-radio': { props: ['value', 'disabled'], template: '<label :data-value="value" :data-disabled="String(!!disabled)"><slot /></label>' },
+        'a-radio': {
+          props: ['value', 'disabled'],
+          template:
+            '<label :data-value="value" :data-disabled="String(!!disabled)"><slot /></label>',
+        },
         'a-radio-button': true,
         'a-radio-group': { template: '<div><slot /></div>' },
         'a-range-picker': true,
@@ -112,7 +117,18 @@ async function chooseRuleSet(vm: DrawerVm, scene: 'running' | 'final') {
   await nextTick()
   vm.formData.rule_set_key = `${scene}-rules`
   if (scene === 'running') vm.formData.sampling_config.case_scope = 'active'
+  if (scene === 'final') {
+    // 终末口径 B：终末任务须选择已出院范围并给出出院日期窗（最多 31 天）。
+    vm.formData.sampling_config.case_scope = 'discharged'
+    vm.formData.date_range = { ...FINAL_WINDOW }
+  }
   await nextTick()
+}
+
+const HOSPITAL_TODAY = dayjs(new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10))
+const FINAL_WINDOW = {
+  start: HOSPITAL_TODAY.subtract(10, 'day').format('YYYY-MM-DD'),
+  end: HOSPITAL_TODAY.subtract(1, 'day').format('YYYY-MM-DD'),
 }
 
 describe('CreateTaskDrawer 创建草稿边界', () => {
@@ -126,8 +142,18 @@ describe('CreateTaskDrawer 创建草稿边界', () => {
       success: true,
       data: {
         items: [
-          { rule_set_key: 'running-rules', rule_set_name: '运行规则', rule_set_version: 'v1', scope: 'running' },
-          { rule_set_key: 'final-rules', rule_set_name: '终末规则', rule_set_version: 'v2', scope: 'final' },
+          {
+            rule_set_key: 'running-rules',
+            rule_set_name: '运行规则',
+            rule_set_version: 'v1',
+            scope: 'running',
+          },
+          {
+            rule_set_key: 'final-rules',
+            rule_set_name: '终末规则',
+            rule_set_version: 'v2',
+            scope: 'final',
+          },
         ],
       },
     })
@@ -149,7 +175,13 @@ describe('CreateTaskDrawer 创建草稿边界', () => {
     await vm.handleSubmit()
 
     expect(mocks.createTask).toHaveBeenCalledWith(
-      expect.objectContaining({ task_name: '场景任务', task_type: 'one_time', scene, rule_set_key: `${scene}-rules`, assign_method: 'by_ratio' }),
+      expect.objectContaining({
+        task_name: '场景任务',
+        task_type: 'one_time',
+        scene,
+        rule_set_key: `${scene}-rules`,
+        assign_method: 'by_ratio',
+      }),
     )
     expect(mocks.createTask.mock.calls[0][0]).not.toHaveProperty('description')
     expect(mocks.createTask.mock.calls[0][0]).not.toHaveProperty('schedule_config')
@@ -223,24 +255,29 @@ describe('CreateTaskDrawer 创建草稿边界', () => {
     expect(wrapper.text()).not.toContain('王质控')
 
     await vm.handleSubmit()
-    expect(mocks.createTask).toHaveBeenCalledWith(expect.objectContaining({ assign_method: 'by_ratio' }))
+    expect(mocks.createTask).toHaveBeenCalledWith(
+      expect.objectContaining({ assign_method: 'by_ratio' }),
+    )
     expect(mocks.createTask.mock.calls[0][0]).not.toHaveProperty('assignee_config')
   })
 
-  it.each(['keep', 'by_type', 'by_record_type'] as const)('不可用分配策略 %s 即使被强制设置也不可创建', async (method) => {
-    const wrapper = mountDrawer()
-    const vm = vmOf(wrapper)
-    vm.formData.task_name = '无效分配任务'
-    await chooseRuleSet(vm, 'running')
-    vm.currentStep = 3
-    vm.formData.assign_method = method
-    await nextTick()
+  it.each(['keep', 'by_type', 'by_record_type'] as const)(
+    '不可用分配策略 %s 即使被强制设置也不可创建',
+    async (method) => {
+      const wrapper = mountDrawer()
+      const vm = vmOf(wrapper)
+      vm.formData.task_name = '无效分配任务'
+      await chooseRuleSet(vm, 'running')
+      vm.currentStep = 3
+      vm.formData.assign_method = method
+      await nextTick()
 
-    expect(vm.canProceed).toBe(false)
-    await vm.handleSubmit()
-    expect(mocks.createTask).not.toHaveBeenCalled()
-    expect(mocks.message.warning).toHaveBeenCalledWith('请选择可用的分配方式')
-  })
+      expect(vm.canProceed).toBe(false)
+      await vm.handleSubmit()
+      expect(mocks.createTask).not.toHaveBeenCalled()
+      expect(mocks.message.warning).toHaveBeenCalledWith('请选择可用的分配方式')
+    },
+  )
 
   it('分配方式提供比例/原质控员/科室，病历类型禁用并说明原因', async () => {
     const wrapper = mountDrawer()
@@ -249,13 +286,17 @@ describe('CreateTaskDrawer 创建草稿边界', () => {
     vm.currentStep = 3
     await nextTick()
     const radios = wrapper.findAll('[data-testid="assign-method-group"] label')
-    expect(radios.map((item) => [item.attributes('data-value'), item.attributes('data-disabled')])).toEqual([
+    expect(
+      radios.map((item) => [item.attributes('data-value'), item.attributes('data-disabled')]),
+    ).toEqual([
       ['by_ratio', 'false'],
       ['by_original_reviewer', 'false'],
       ['by_department', 'false'],
       ['by_record_type', 'true'],
     ])
-    expect(wrapper.get('[data-testid="assign-method-record-type-hint"]').text()).toContain('当前场景病历类型无区分，暂不可用')
+    expect(wrapper.get('[data-testid="assign-method-record-type-hint"]').text()).toContain(
+      '当前场景病历类型无区分，暂不可用',
+    )
     expect(wrapper.find('[data-testid="assign-fallback-group"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="assign-department-hint"]').exists()).toBe(false)
   })
@@ -280,10 +321,12 @@ describe('CreateTaskDrawer 创建草稿边界', () => {
     await nextTick()
     expect(vm.canProceed).toBe(true)
     await vm.handleSubmit()
-    expect(mocks.createTask).toHaveBeenCalledWith(expect.objectContaining({
-      assign_method: 'by_original_reviewer',
-      assignee_config: { fallback: 'reject' },
-    }))
+    expect(mocks.createTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        assign_method: 'by_original_reviewer',
+        assignee_config: { fallback: 'reject' },
+      }),
+    )
   })
 
   it('按科室提示账号科室匹配，提交不带 assignee_config', async () => {
@@ -296,11 +339,14 @@ describe('CreateTaskDrawer 创建草稿边界', () => {
     vm.formData.assign_fallback = 'by_ratio'
     await nextTick()
 
-    expect(wrapper.get('[data-testid="assign-department-hint"]').text())
-      .toContain('受领人按其账号科室匹配病历科室，历史任务缺科室将无法分配')
+    expect(wrapper.get('[data-testid="assign-department-hint"]').text()).toContain(
+      '受领人按其账号科室匹配病历科室，历史任务缺科室将无法分配',
+    )
     expect(vm.canProceed).toBe(true)
     await vm.handleSubmit()
-    expect(mocks.createTask).toHaveBeenCalledWith(expect.objectContaining({ assign_method: 'by_department' }))
+    expect(mocks.createTask).toHaveBeenCalledWith(
+      expect.objectContaining({ assign_method: 'by_department' }),
+    )
     expect(mocks.createTask.mock.calls[0][0]).not.toHaveProperty('assignee_config')
   })
 
@@ -310,7 +356,11 @@ describe('CreateTaskDrawer 创建草稿边界', () => {
       status: 422,
       code: 'method_unavailable',
       message: '病历类型无可区分事实',
-      errorDetail: { code: 'method_unavailable', message: '按病历类型分配暂不可用', reason: '病历类型无可区分事实' },
+      errorDetail: {
+        code: 'method_unavailable',
+        message: '按病历类型分配暂不可用',
+        reason: '病历类型无可区分事实',
+      },
     })
     const wrapper = mountDrawer()
     const vm = vmOf(wrapper)
@@ -332,7 +382,9 @@ describe('CreateTaskDrawer 创建草稿边界', () => {
 
     expect(wrapper.text()).toContain('按科室')
     expect(wrapper.text()).not.toContain('按主治医生')
-    expect(wrapper.findAll('option').map((option) => option.attributes('value'))).not.toContain('doctor_name')
+    expect(wrapper.findAll('option').map((option) => option.attributes('value'))).not.toContain(
+      'doctor_name',
+    )
 
     vm.formData.sampling_config.group_by = 'doctor_name'
     await nextTick()
@@ -403,7 +455,7 @@ describe('CreateTaskDrawer 创建草稿边界', () => {
     await wrapper.find('[data-testid="task-rule-set-select"]').setValue('running-rules')
     vm.currentStep = 1
     await nextTick()
-    expect(wrapper.text()).toContain('出院未归档病历暂不可抽样')
+    expect(wrapper.text()).toContain('运行病历仅含当前在院')
     expect(vm.canProceed).toBe(false)
     await vm.handleSubmit()
     expect(mocks.createTask).not.toHaveBeenCalled()
@@ -411,17 +463,36 @@ describe('CreateTaskDrawer 创建草稿边界', () => {
     await wrapper.find('[data-testid="task-case-scope-select"]').setValue('active')
     expect(vm.canProceed).toBe(true)
     await vm.handleSubmit()
-    expect(mocks.createTask).toHaveBeenLastCalledWith(expect.objectContaining({
-      scene: 'running', sampling_config: expect.objectContaining({ case_scope: 'active' }),
-    }))
+    expect(mocks.createTask).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        scene: 'running',
+        sampling_config: expect.objectContaining({ case_scope: 'active' }),
+      }),
+    )
 
     vm.currentStep = 0
     await wrapper.find('[data-testid="task-scene-select"]').setValue('final')
     await nextTick()
     expect(vm.formData.sampling_config.case_scope).toBeUndefined()
     await wrapper.find('[data-testid="task-rule-set-select"]').setValue('final-rules')
+    const calls = mocks.createTask.mock.calls.length
+    // 终末口径 B：未选已出院范围不得提交，也不得沿用运行的在院范围。
+    vm.currentStep = 1
+    await nextTick()
+    expect(wrapper.text()).toContain('归档状态未核验')
+    expect(vm.canProceed).toBe(false)
     await vm.handleSubmit()
-    expect(mocks.createTask.mock.calls.at(-1)?.[0].sampling_config).not.toHaveProperty('case_scope')
+    expect(mocks.createTask.mock.calls.length).toBe(calls)
+    await wrapper.find('[data-testid="task-case-scope-select"]').setValue('discharged')
+    vm.formData.date_range = { ...FINAL_WINDOW }
+    await vm.handleSubmit()
+    expect(mocks.createTask).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        scene: 'final',
+        sampling_config: expect.objectContaining({ case_scope: 'discharged' }),
+        date_range: FINAL_WINDOW,
+      }),
+    )
   })
 
   it('门急诊无匹配可用规则集时明确阻止创建', async () => {
@@ -524,7 +595,7 @@ describe('CreateTaskDrawer 创建草稿边界', () => {
     const wrapper = mountDrawer()
     const vm = vmOf(wrapper)
     vm.formData.task_name = '范围任务'
-    await chooseRuleSet(vm, 'final')
+    await chooseRuleSet(vm, 'running')
     vm.formData.date_range = { start: '2026-09-01', end: '2026-09-30' }
     vm.formData.department_filter = ['内科']
     vm.recordRefs[0] = { institute_id: 'H-OLD', patient_id: 'P-OLD', visit_id: 'V-OLD' }
@@ -544,10 +615,12 @@ describe('CreateTaskDrawer 创建草稿边界', () => {
     vm.recordRefs[1] = { institute_id: 'H-1', patient_id: 'P-1', visit_id: 'V-2' }
     await vm.handleSubmit()
     expect(mocks.createTask).toHaveBeenLastCalledWith(
-      expect.objectContaining({ record_refs: [
-        { institute_id: 'H-1', patient_id: 'P-1', visit_id: 'V-1' },
-        { institute_id: 'H-1', patient_id: 'P-1', visit_id: 'V-2' },
-      ] }),
+      expect.objectContaining({
+        record_refs: [
+          { institute_id: 'H-1', patient_id: 'P-1', visit_id: 'V-1' },
+          { institute_id: 'H-1', patient_id: 'P-1', visit_id: 'V-2' },
+        ],
+      }),
     )
     expect(mocks.createTask.mock.calls.at(-1)?.[0]).not.toHaveProperty('record_ids')
     expect(mocks.createTask.mock.calls.at(-1)?.[0]).not.toHaveProperty('date_range')
@@ -559,6 +632,37 @@ describe('CreateTaskDrawer 创建草稿边界', () => {
     await vm.handleSubmit()
     expect(mocks.createTask.mock.calls.at(-1)?.[0]).not.toHaveProperty('date_range')
     expect(mocks.createTask.mock.calls.at(-1)?.[0]).not.toHaveProperty('record_refs')
+  })
+
+  it('终末指定病历模式随病历提交出院日期窗，缺窗口不提交', async () => {
+    mocks.createTask.mockResolvedValue({ success: false, message: '测试停止' })
+    const wrapper = mountDrawer()
+    const vm = vmOf(wrapper)
+    vm.formData.task_name = '终末指定病历'
+    await chooseRuleSet(vm, 'final')
+    vm.rangeMode = 'refs'
+    vm.formData.department_filter = ['内科']
+    vm.recordRefs[0] = { institute_id: 'H-1', patient_id: 'P-1', visit_id: 'V-1' }
+    vm.currentStep = 1
+    await nextTick()
+    expect(wrapper.find('[data-testid="task-refs-discharge-range"]').exists()).toBe(true)
+
+    vm.formData.date_range = null
+    await vm.handleSubmit()
+    expect(mocks.message.warning).toHaveBeenLastCalledWith('终末任务必须选择出院开始日期和结束日期')
+    expect(mocks.createTask).not.toHaveBeenCalled()
+
+    vm.formData.date_range = { ...FINAL_WINDOW }
+    await vm.handleSubmit()
+    const submitted = mocks.createTask.mock.calls.at(-1)?.[0]
+    expect(submitted).toMatchObject({
+      scene: 'final',
+      date_range: FINAL_WINDOW,
+      record_refs: [{ institute_id: 'H-1', patient_id: 'P-1', visit_id: 'V-1' }],
+      sampling_config: expect.objectContaining({ case_scope: 'discharged' }),
+    })
+    // 指定病历模式不提交科室筛选。
+    expect(submitted).not.toHaveProperty('department_filter')
   })
 
   it('当前在院入院起日允许恰好 180 天和今天，超界日期不创建草稿', async () => {
@@ -586,14 +690,17 @@ describe('CreateTaskDrawer 创建草稿边界', () => {
     expect(mocks.createTask).toHaveBeenCalledTimes(2)
   })
 
-  it('当前在院拒绝逆序及无效日期，切换终末场景后沿用原有日期提交行为', async () => {
+  it('当前在院拒绝逆序及无效日期；终末按出院日期窗校验后提交', async () => {
     mocks.createTask.mockResolvedValue({ success: false, message: '测试停止' })
     const wrapper = mountDrawer()
     const vm = vmOf(wrapper)
     vm.formData.task_name = '日期错误任务'
     await chooseRuleSet(vm, 'running')
     const today = dayjs(new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10))
-    vm.formData.date_range = { start: today.format('YYYY-MM-DD'), end: today.subtract(1, 'day').format('YYYY-MM-DD') }
+    vm.formData.date_range = {
+      start: today.format('YYYY-MM-DD'),
+      end: today.subtract(1, 'day').format('YYYY-MM-DD'),
+    }
     await vm.handleSubmit()
     expect(mocks.message.warning).toHaveBeenLastCalledWith('日期范围起始时间不能晚于结束时间')
     vm.formData.date_range = { start: '2026-02-30', end: today.format('YYYY-MM-DD') }
@@ -604,11 +711,41 @@ describe('CreateTaskDrawer 创建草稿边界', () => {
     vm.formData.scene = 'final'
     await nextTick()
     vm.formData.rule_set_key = 'final-rules'
+    vm.formData.sampling_config.case_scope = 'discharged'
     vm.formData.date_range = { start: '2026-02-30', end: today.format('YYYY-MM-DD') }
     await vm.handleSubmit()
-    expect(mocks.createTask).toHaveBeenCalledWith(expect.objectContaining({
-      scene: 'final', date_range: { start: '2026-02-30', end: today.format('YYYY-MM-DD') },
-    }))
+    expect(mocks.message.warning).toHaveBeenLastCalledWith('出院日期范围格式无效，请选择有效日期')
+    vm.formData.date_range = {
+      start: today.subtract(31, 'day').format('YYYY-MM-DD'),
+      end: today.format('YYYY-MM-DD'),
+    }
+    await vm.handleSubmit()
+    expect(mocks.message.warning).toHaveBeenLastCalledWith('出院日期范围最多 31 天')
+    vm.formData.date_range = {
+      start: today.subtract(1, 'day').format('YYYY-MM-DD'),
+      end: today.add(1, 'day').format('YYYY-MM-DD'),
+    }
+    await vm.handleSubmit()
+    expect(mocks.message.warning).toHaveBeenLastCalledWith('出院结束日期不能晚于今天')
+    vm.formData.date_range = null
+    await vm.handleSubmit()
+    expect(mocks.message.warning).toHaveBeenLastCalledWith('终末任务必须选择出院开始日期和结束日期')
+    expect(mocks.createTask).not.toHaveBeenCalled()
+    vm.formData.date_range = {
+      start: today.subtract(30, 'day').format('YYYY-MM-DD'),
+      end: today.format('YYYY-MM-DD'),
+    }
+    await vm.handleSubmit()
+    expect(mocks.createTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scene: 'final',
+        sampling_config: expect.objectContaining({ case_scope: 'discharged' }),
+        date_range: {
+          start: today.subtract(30, 'day').format('YYYY-MM-DD'),
+          end: today.format('YYYY-MM-DD'),
+        },
+      }),
+    )
   })
 
   it('截止日期统一提交 YYYY-MM-DD，后端失败时保留输入且不发成功事件', async () => {

@@ -15,10 +15,7 @@
         class="task-detail-drawer__state"
         aria-live="polite"
       >
-        <a-skeleton
-          active
-          :paragraph="{ rows: 8 }"
-        />
+        <a-skeleton active :paragraph="{ rows: 8 }" />
       </div>
 
       <div
@@ -31,31 +28,18 @@
           <strong>任务详情暂不可用</strong>
           <span>{{ error }}</span>
         </div>
-        <a-button
-          data-testid="retry-task-detail"
-          type="primary"
-          ghost
-          @click="void loadDetail()"
-        >
-          <RotateCw
-            :size="15"
-            aria-hidden="true"
-          />
+        <a-button data-testid="retry-task-detail" type="primary" ghost @click="void loadDetail()">
+          <RotateCw :size="15" aria-hidden="true" />
           重试
         </a-button>
       </div>
 
       <template v-else-if="detail">
-        <section
-          class="task-detail-drawer__summary"
-          aria-labelledby="task-detail-summary-title"
-        >
+        <section class="task-detail-drawer__summary" aria-labelledby="task-detail-summary-title">
           <div class="task-detail-drawer__section-heading">
             <div>
               <span>全任务口径</span>
-              <h3 id="task-detail-summary-title">
-                任务信息
-              </h3>
+              <h3 id="task-detail-summary-title">任务信息</h3>
             </div>
             <a-tag :color="taskStatusColor(detail.status)">
               {{ taskStatusLabel(detail.status) }}
@@ -73,16 +57,24 @@
               <dt>场景</dt>
               <dd>{{ sceneLabel(detail.scene) }}</dd>
             </div>
-            <div v-if="detail.scene === 'running'">
-              <dt>运行病历范围</dt>
+            <div v-if="detail.scene === 'running' || detail.scene === 'final'">
+              <dt>{{ detail.scene === 'final' ? '终末病历范围' : '运行病历范围' }}</dt>
               <dd data-testid="task-detail-case-scope">
-                {{ detail.sampling_config?.case_scope === 'active' ? '当前在院' : '未明确（历史任务）' }}
+                {{
+                  detail.sampling_config?.case_scope === sceneCaseScope(detail.scene)
+                    ? caseScopeLabel(detail.sampling_config?.case_scope)
+                    : '未明确（历史任务）'
+                }}
               </dd>
             </div>
             <div v-if="detail.scene">
               <dt>规则集</dt>
               <dd class="task-detail-drawer__breakable">
-                {{ detail.rule_set_key ? `${detail.rule_set_key} · ${detail.rule_set_version || '未冻结版本'}` : '未选择' }}
+                {{
+                  detail.rule_set_key
+                    ? `${detail.rule_set_key} · ${detail.rule_set_version || '未冻结版本'}`
+                    : '未选择'
+                }}
               </dd>
             </div>
             <div>
@@ -91,7 +83,15 @@
             </div>
             <div>
               <dt>任务类型</dt>
-              <dd>{{ detail.task_type === 'one_time' ? '单次任务' : detail.task_type === 'scheduled' ? '定时任务' : '未知' }}</dd>
+              <dd>
+                {{
+                  detail.task_type === 'one_time'
+                    ? '单次任务'
+                    : detail.task_type === 'scheduled'
+                      ? '定时任务'
+                      : '未知'
+                }}
+              </dd>
             </div>
             <div>
               <dt>创建时间</dt>
@@ -120,9 +120,7 @@
           <div class="task-detail-drawer__section-heading">
             <div>
               <span>按运行批次查看</span>
-              <h3 id="task-detail-runs-title">
-                质控运行
-              </h3>
+              <h3 id="task-detail-runs-title">质控运行</h3>
             </div>
             <div class="task-detail-drawer__run-actions">
               <TaskRecordSyncControl
@@ -140,49 +138,20 @@
                 :loading="startingRun"
                 @click="void startRun()"
               >
-                <Play
-                  :size="15"
-                  aria-hidden="true"
-                />
+                <Play :size="15" aria-hidden="true" />
                 {{ runs.length ? '重新质控' : '启动质控' }}
               </a-button>
             </div>
           </div>
           <template v-if="canViewRuns">
-            <p
-              v-if="runsLoading"
-              class="task-detail-drawer__muted"
-            >
-              正在读取运行历史…
-            </p>
-            <div
-              v-else-if="runsError"
-              class="task-detail-drawer__run-error"
-              role="alert"
-            >
+            <p v-if="runsLoading" class="task-detail-drawer__muted">正在读取运行历史…</p>
+            <div v-else-if="runsError" class="task-detail-drawer__run-error" role="alert">
               {{ runsError }}
-              <a-button
-                size="small"
-                @click="void loadRuns()"
-              >
-                重试
-              </a-button>
+              <a-button size="small" @click="void loadRuns()"> 重试 </a-button>
             </div>
-            <p
-              v-else-if="!runs.length"
-              class="task-detail-drawer__muted"
-            >
-              暂无质控运行
-            </p>
-            <div
-              v-else
-              class="task-detail-drawer__run-list"
-            >
-              <div
-                v-for="run in runs"
-                :key="run.job_id"
-                class="task-detail-drawer__run-row"
-              >
+            <p v-else-if="!runs.length" class="task-detail-drawer__muted">暂无质控运行</p>
+            <div v-else class="task-detail-drawer__run-list">
+              <div v-for="run in runs" :key="run.job_id" class="task-detail-drawer__run-row">
                 <div>
                   <strong>第 {{ run.run_number }} 次运行</strong>
                   <span>{{ formatDate(run.created_at) }}</span>
@@ -196,35 +165,15 @@
                 </a-button>
               </div>
             </div>
-            <div
-              v-if="selectedJobId"
-              class="task-detail-drawer__job"
-              data-testid="task-qc-job"
-            >
+            <div v-if="selectedJobId" class="task-detail-drawer__job" data-testid="task-qc-job">
               <div class="task-detail-drawer__job-heading">
                 <strong>运行结果</strong>
-                <a-button
-                  size="small"
-                  :loading="jobLoading"
-                  @click="void loadJob(selectedJobId)"
-                >
-                  <RotateCw
-                    :size="14"
-                    aria-hidden="true"
-                  />刷新
+                <a-button size="small" :loading="jobLoading" @click="void loadJob(selectedJobId)">
+                  <RotateCw :size="14" aria-hidden="true" />刷新
                 </a-button>
               </div>
-              <p
-                v-if="jobLoading"
-                class="task-detail-drawer__muted"
-              >
-                正在读取作业状态…
-              </p>
-              <p
-                v-else-if="jobError"
-                class="task-detail-drawer__run-error"
-                role="alert"
-              >
+              <p v-if="jobLoading" class="task-detail-drawer__muted">正在读取作业状态…</p>
+              <p v-else-if="jobError" class="task-detail-drawer__run-error" role="alert">
                 {{ jobError }}
               </p>
               <template v-else-if="selectedJob">
@@ -233,26 +182,52 @@
                 </a-tag>
                 <span class="task-detail-drawer__job-id">作业 {{ selectedJob.id }}</span>
                 <dl class="task-detail-drawer__job-metrics">
-                  <div><dt>病历</dt><dd>{{ formatNumber(selectedJob.summary?.total_records ?? selectedJob.total_records) }}</dd></div>
-                  <div><dt>成功</dt><dd>{{ formatNumber(selectedJob.summary?.success_count ?? selectedJob.success_count) }}</dd></div>
-                  <div><dt>失败</dt><dd>{{ formatNumber(selectedJob.summary?.failed_count ?? selectedJob.failed_count) }}</dd></div>
-                  <div><dt>有问题</dt><dd>{{ formatNumber(selectedJob.summary?.issue_records ?? selectedJob.issue_records) }}</dd></div>
+                  <div>
+                    <dt>病历</dt>
+                    <dd>
+                      {{
+                        formatNumber(
+                          selectedJob.summary?.total_records ?? selectedJob.total_records,
+                        )
+                      }}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>成功</dt>
+                    <dd>
+                      {{
+                        formatNumber(
+                          selectedJob.summary?.success_count ?? selectedJob.success_count,
+                        )
+                      }}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>失败</dt>
+                    <dd>
+                      {{
+                        formatNumber(selectedJob.summary?.failed_count ?? selectedJob.failed_count)
+                      }}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>有问题</dt>
+                    <dd>
+                      {{
+                        formatNumber(
+                          selectedJob.summary?.issue_records ?? selectedJob.issue_records,
+                        )
+                      }}
+                    </dd>
+                  </div>
                 </dl>
-                <p
-                  v-if="selectedJob.error_message"
-                  class="task-detail-drawer__run-error"
-                >
+                <p v-if="selectedJob.error_message" class="task-detail-drawer__run-error">
                   {{ selectedJob.error_message }}
                 </p>
               </template>
             </div>
           </template>
-          <p
-            v-else
-            class="task-detail-drawer__muted"
-          >
-            当前范围没有可查看的运行历史
-          </p>
+          <p v-else class="task-detail-drawer__muted">当前范围没有可查看的运行历史</p>
           <p
             v-if="!canStartRun && canViewRuns && !runsLoading && !runsError && runUnavailableReason"
             class="task-detail-drawer__muted"
@@ -261,16 +236,11 @@
           </p>
         </section>
 
-        <section
-          class="task-detail-drawer__records"
-          aria-labelledby="task-detail-records-title"
-        >
+        <section class="task-detail-drawer__records" aria-labelledby="task-detail-records-title">
           <div class="task-detail-drawer__section-heading task-detail-drawer__records-heading">
             <div>
               <span>{{ scopeLabel }}</span>
-              <h3 id="task-detail-records-title">
-                病历清单
-              </h3>
+              <h3 id="task-detail-records-title">病历清单</h3>
             </div>
             <strong data-testid="task-detail-record-count">{{ detail.records.length }} 份</strong>
           </div>
@@ -305,23 +275,22 @@
           >
             <template #bodyCell="{ column, record }">
               <template v-if="column.key === 'caseIdentity'">
-                <div
-                  v-if="hasCaseIdentity(record)"
-                  class="task-detail-drawer__case-identity"
-                >
-                  <div><span>机构</span><strong>{{ record.institute_id }}</strong></div>
-                  <div><span>患者</span><strong>{{ record.patient_id }}</strong></div>
-                  <div><span>就诊</span><strong>{{ record.visit_id }}</strong></div>
+                <div v-if="hasCaseIdentity(record)" class="task-detail-drawer__case-identity">
+                  <div>
+                    <span>机构</span><strong>{{ record.institute_id }}</strong>
+                  </div>
+                  <div>
+                    <span>患者</span><strong>{{ record.patient_id }}</strong>
+                  </div>
+                  <div>
+                    <span>就诊</span><strong>{{ record.visit_id }}</strong>
+                  </div>
                 </div>
-                <span
-                  v-else
-                  class="task-detail-drawer__missing-identity"
-                >未记录病例坐标</span>
-                <div
-                  v-if="canDisplayLegacyRecordId(record)"
-                  class="task-detail-drawer__legacy-id"
-                >
-                  历史病历号：<span class="task-detail-drawer__record-id">{{ record.record_id || '未记录' }}</span>
+                <span v-else class="task-detail-drawer__missing-identity">未记录病例坐标</span>
+                <div v-if="canDisplayLegacyRecordId(record)" class="task-detail-drawer__legacy-id">
+                  历史病历号：<span class="task-detail-drawer__record-id">{{
+                    record.record_id || '未记录'
+                  }}</span>
                 </div>
               </template>
               <template v-else-if="column.key === 'assignee'">
@@ -369,10 +338,18 @@
                   size="small"
                   :data-testid="`task-record-start-${record.id}`"
                   :loading="startingRecordId === record.id"
-                  :disabled="!!verifyingRecordId || (!!startingRecordId && startingRecordId !== record.id)"
+                  :disabled="
+                    !!verifyingRecordId || (!!startingRecordId && startingRecordId !== record.id)
+                  "
                   @click="void startRecord(record)"
-                >开始处理</a-button>
-                <div v-if="recordActionTargetId === record.id && recordActionError" class="task-detail-drawer__run-error" role="alert">
+                >
+                  开始处理
+                </a-button>
+                <div
+                  v-if="recordActionTargetId === record.id && recordActionError"
+                  class="task-detail-drawer__run-error"
+                  role="alert"
+                >
                   {{ recordActionError }}
                   <a-button
                     v-if="verifyingRecordId === record.id"
@@ -380,7 +357,9 @@
                     :loading="startingRecordId === record.id"
                     :data-testid="`task-record-verify-${record.id}`"
                     @click="void verifyRecordStart(record.id)"
-                  >重新查询</a-button>
+                  >
+                    重新查询
+                  </a-button>
                 </div>
               </template>
             </template>
@@ -400,27 +379,68 @@
             <div class="task-detail-drawer__job-heading">
               <div>
                 <strong>本次质控结果</strong>
-                <span class="task-detail-drawer__result-context">第 {{ selectedRun?.run_number }} 次运行 · {{ selectedRecordLabel }}</span>
+                <span class="task-detail-drawer__result-context"
+                  >第 {{ selectedRun?.run_number }} 次运行 · {{ selectedRecordLabel }}</span
+                >
               </div>
               <a-button size="small" aria-label="关闭本次质控结果" @click="clearRecordResult()">
                 <X :size="14" aria-hidden="true" />
               </a-button>
             </div>
-            <p v-if="recordResultLoading" class="task-detail-drawer__muted">正在读取本次病例结果…</p>
-            <p v-else-if="recordResultError" class="task-detail-drawer__run-error" role="alert">{{ recordResultError }}</p>
+            <p v-if="recordResultLoading" class="task-detail-drawer__muted">
+              正在读取本次病例结果…
+            </p>
+            <p v-else-if="recordResultError" class="task-detail-drawer__run-error" role="alert">
+              {{ recordResultError }}
+            </p>
             <template v-else-if="recordResult">
-              <p class="task-detail-drawer__result-context">规则集：{{ recordResult.rule_set_key || '未记录' }} · {{ recordResult.job_status === 'failed' && recordResult.result_state === 'available' ? '批作业部分失败，该病历结果完整' : jobStatusLabel(recordResult.job_status) }}</p>
-              <p v-if="recordResult.result_state === 'pending'" class="task-detail-drawer__muted">本次质控尚未形成该病历结果，请稍后重试。</p>
-              <p v-else-if="recordResult.result_state === 'unavailable' || !recordResult.items.length" class="task-detail-drawer__run-error">本次质控结果不可用，不能据此判断是否存在缺陷。</p>
+              <p class="task-detail-drawer__result-context">
+                规则集：{{ recordResult.rule_set_key || '未记录' }} ·
+                {{
+                  recordResult.job_status === 'failed' && recordResult.result_state === 'available'
+                    ? '批作业部分失败，该病历结果完整'
+                    : jobStatusLabel(recordResult.job_status)
+                }}
+              </p>
+              <p v-if="recordResult.result_state === 'pending'" class="task-detail-drawer__muted">
+                本次质控尚未形成该病历结果，请稍后重试。
+              </p>
+              <p
+                v-else-if="
+                  recordResult.result_state === 'unavailable' || !recordResult.items.length
+                "
+                class="task-detail-drawer__run-error"
+              >
+                本次质控结果不可用，不能据此判断是否存在缺陷。
+              </p>
               <div v-else class="task-detail-drawer__result-list">
-                <div v-for="(item, index) in recordResult.items" :key="`${item.rule_id || item.rule_code || index}-${index}`" class="task-detail-drawer__result-row">
+                <div
+                  v-for="(item, index) in recordResult.items"
+                  :key="`${item.rule_id || item.rule_code || index}-${index}`"
+                  class="task-detail-drawer__result-row"
+                >
                   <div class="task-detail-drawer__result-title">
-                    <strong>{{ item.rule_name || item.rule_code || item.qc_point_id || '质控规则' }}</strong>
-                    <a-tag :color="resultStatusColor(item.result_status || item.display_status || item.status)">{{ resultStatusLabel(item.result_status || item.display_status || item.status) }}</a-tag>
+                    <strong>{{
+                      item.rule_name || item.rule_code || item.qc_point_id || '质控规则'
+                    }}</strong>
+                    <a-tag
+                      :color="
+                        resultStatusColor(item.result_status || item.display_status || item.status)
+                      "
+                    >
+                      {{
+                        resultStatusLabel(item.result_status || item.display_status || item.status)
+                      }}
+                    </a-tag>
                   </div>
-                  <p v-if="item.findings || item.conclusion"><b>{{ item.findings ? '发现' : '结论' }}</b>{{ item.findings || item.conclusion }}</p>
+                  <p v-if="item.findings || item.conclusion">
+                    <b>{{ item.findings ? '发现' : '结论' }}</b
+                    >{{ item.findings || item.conclusion }}
+                  </p>
                   <p v-if="item.suggestion"><b>建议</b>{{ item.suggestion }}</p>
-                  <p v-if="item.evidence?.length"><b>证据</b>{{ item.evidence.map(evidenceLabel).join('；') }}</p>
+                  <p v-if="item.evidence?.length">
+                    <b>证据</b>{{ item.evidence.map(evidenceLabel).join('；') }}
+                  </p>
                 </div>
               </div>
               <TaskManualDefectPanel
@@ -442,13 +462,18 @@
                 :job-id="selectedRun!.job_id"
                 :user-id="authStore.user!.id"
               />
-              <div v-if="canCompleteRecord || completionNeedsVerification" class="task-detail-drawer__run-actions">
+              <div
+                v-if="canCompleteRecord || completionNeedsVerification"
+                class="task-detail-drawer__run-actions"
+              >
                 <a-button
                   v-if="completionNeedsVerification"
                   data-testid="task-record-complete-verify"
                   :loading="completingRecord"
                   @click="void verifyRecordCompletion()"
-                >重新查询完成状态</a-button>
+                >
+                  重新查询完成状态
+                </a-button>
                 <a-button
                   v-else
                   type="primary"
@@ -456,12 +481,15 @@
                   :loading="completingRecord"
                   :disabled="completingRecord"
                   @click="void completeRecord()"
-                ><Check :size="14" aria-hidden="true" />完成处理</a-button>
+                >
+                  <Check :size="14" aria-hidden="true" />完成处理
+                </a-button>
               </div>
-              <p v-if="completionError" class="task-detail-drawer__run-error" role="alert">{{ completionError }}</p>
+              <p v-if="completionError" class="task-detail-drawer__run-error" role="alert">
+                {{ completionError }}
+              </p>
             </template>
           </div>
-
         </section>
       </template>
     </div>
@@ -475,13 +503,21 @@
 </template>
 
 <script setup lang="ts">
+import { caseScopeLabel, sceneCaseScope } from '@/utils/taskCaseScope'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import type { TableColumnsType, TablePaginationConfig } from 'ant-design-vue'
 import { Check, Eye, Play, RotateCw, X } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import { getSichuanWorkspaceBatchJob } from '@/services/sichuan-rule-workspace-service'
 import type { SichuanBatchJob } from '@/views/workstation-v4/semantic-rules/types'
-import { completeTaskRecord, createTaskQcRun, getTaskDetail, getTaskQcRunRecordResult, getTaskQcRuns, startTaskRecord } from '@/api/tasks'
+import {
+  completeTaskRecord,
+  createTaskQcRun,
+  getTaskDetail,
+  getTaskQcRunRecordResult,
+  getTaskQcRuns,
+  startTaskRecord,
+} from '@/api/tasks'
 import TaskRecordSyncControl from './TaskRecordSyncControl.vue'
 import TaskRecordDocumentDrawer from './TaskRecordDocumentDrawer.vue'
 import TaskManualDefectPanel from './TaskManualDefectPanel.vue'
@@ -560,10 +596,14 @@ const emptyDescription = computed(() =>
 )
 const isModernTask = computed(() => !!detail.value?.scene)
 const actorId = computed(() => authStore.user?.id?.trim() || '')
-const actorRoleKey = computed(() => [...new Set(
-  authStore.userRoles.map((role) => role.trim()).filter(Boolean),
-)].sort().join('\u0000'))
-const isCreator = computed(() => !!authStore.user?.id && authStore.user.id === detail.value?.creator_id)
+const actorRoleKey = computed(() =>
+  [...new Set(authStore.userRoles.map((role) => role.trim()).filter(Boolean))]
+    .sort()
+    .join('\u0000'),
+)
+const isCreator = computed(
+  () => !!authStore.user?.id && authStore.user.id === detail.value?.creator_id,
+)
 const isAdmin = computed(() => !!authStore.user?.id && authStore.userRoles.includes('admin'))
 const runScope = computed<TaskQcRunScope | null>(() => {
   if (props.tab === 'received') return authStore.user?.id ? 'assigned' : null
@@ -571,10 +611,15 @@ const runScope = computed<TaskQcRunScope | null>(() => {
   return null
 })
 const canViewRuns = computed(() => isModernTask.value && !!runScope.value)
-const canOfferSync = computed(() => (isCreator.value || isAdmin.value)
-  && (props.tab === 'created' || props.tab === 'all')
-  && (detail.value?.scene === 'running' || detail.value?.scene === 'final'))
-const selectedRun = computed(() => runs.value.find((run) => run.job_id === selectedJobId.value) || null)
+const canOfferSync = computed(
+  () =>
+    (isCreator.value || isAdmin.value) &&
+    (props.tab === 'created' || props.tab === 'all') &&
+    (detail.value?.scene === 'running' || detail.value?.scene === 'final'),
+)
+const selectedRun = computed(
+  () => runs.value.find((run) => run.job_id === selectedJobId.value) || null,
+)
 const selectedRecordLabel = computed(() => {
   const record = detail.value?.records.find((item) => item.id === selectedTaskRecordId.value)
   return record && hasCaseIdentity(record)
@@ -586,57 +631,92 @@ const canCompleteRecord = computed(() => {
   const run = selectedRun.value
   const result = recordResult.value
   const record = task?.records.find((item) => item.id === selectedTaskRecordId.value)
-  return props.open && props.tab === 'received' && task?.status === 'in_progress'
-    && runScope.value === 'assigned' && run?.run_scope === 'assigned'
-    && Number.isInteger(run.run_number) && run.run_number > 0
-    && record?.status === 'in_progress' && record.task_id === task.id
-    && record.assignee_id === authStore.user?.id && hasCaseIdentity(record)
-    && result?.task_id === task.id && result.task_record_id === record.id
-    && result.run_number === run.run_number && result.job_id === run.job_id
-    && result.result_state === 'available' && result.items.length > 0
-    && !completionNeedsVerification.value
+  return (
+    props.open &&
+    props.tab === 'received' &&
+    task?.status === 'in_progress' &&
+    runScope.value === 'assigned' &&
+    run?.run_scope === 'assigned' &&
+    Number.isInteger(run.run_number) &&
+    run.run_number > 0 &&
+    record?.status === 'in_progress' &&
+    record.task_id === task.id &&
+    record.assignee_id === authStore.user?.id &&
+    hasCaseIdentity(record) &&
+    result?.task_id === task.id &&
+    result.task_record_id === record.id &&
+    result.run_number === run.run_number &&
+    result.job_id === run.job_id &&
+    result.result_state === 'available' &&
+    result.items.length > 0 &&
+    !completionNeedsVerification.value
+  )
 })
 const canViewManualDefects = computed(() => {
   const task = detail.value
   const run = selectedRun.value
   const result = recordResult.value
   const record = task?.records.find((item) => item.id === selectedTaskRecordId.value)
-  return props.open && props.tab === 'received' && runScope.value === 'assigned'
-    && !!authStore.user?.id && !!task && !!run && !!result && !!record
-    && run.run_scope === 'assigned' && record.task_id === task.id
-    && record.assignee_id === authStore.user.id && hasCaseIdentity(record)
-    && result.task_id === task.id && result.task_record_id === record.id
-    && result.run_number === run.run_number && result.job_id === run.job_id
-    && result.result_state === 'available' && result.items.length > 0
+  return (
+    props.open &&
+    props.tab === 'received' &&
+    runScope.value === 'assigned' &&
+    !!authStore.user?.id &&
+    !!task &&
+    !!run &&
+    !!result &&
+    !!record &&
+    run.run_scope === 'assigned' &&
+    record.task_id === task.id &&
+    record.assignee_id === authStore.user.id &&
+    hasCaseIdentity(record) &&
+    result.task_id === task.id &&
+    result.task_record_id === record.id &&
+    result.run_number === run.run_number &&
+    result.job_id === run.job_id &&
+    result.result_state === 'available' &&
+    result.items.length > 0
+  )
 })
-const canStartRun = computed(() => canViewRuns.value
-  && (detail.value?.scene === 'running' || detail.value?.scene === 'final')
-  && !!detail.value.rule_set_key
-  && !!detail.value.rule_set_version
-  && (runScope.value === 'assigned'
-    ? detail.value.records.some((record) => record.assignee_id === authStore.user?.id)
-    : detail.value.total_records > 0)
-  && (runScope.value === 'assigned'
-    ? ['assigned', 'in_progress', 'completed'].includes(detail.value.status)
-    : ['sampling', 'assigned', 'in_progress', 'completed'].includes(detail.value.status))
-  && !runsLoading.value
-  && !runsError.value
-  && !startingRun.value
-  && !syncingRecords.value
-  && !jobLoading.value
-  && (!runs.value.length || selectedJobId.value === runs.value[0]?.job_id)
-  && (!runs.value.length || !!selectedJob.value)
-  && selectedJob.value?.status !== 'queued'
-  && selectedJob.value?.status !== 'running')
+const canStartRun = computed(
+  () =>
+    canViewRuns.value &&
+    (detail.value?.scene === 'running' || detail.value?.scene === 'final') &&
+    !!detail.value.rule_set_key &&
+    !!detail.value.rule_set_version &&
+    (runScope.value === 'assigned'
+      ? detail.value.records.some((record) => record.assignee_id === authStore.user?.id)
+      : detail.value.total_records > 0) &&
+    (runScope.value === 'assigned'
+      ? ['assigned', 'in_progress', 'completed'].includes(detail.value.status)
+      : ['sampling', 'assigned', 'in_progress', 'completed'].includes(detail.value.status)) &&
+    !runsLoading.value &&
+    !runsError.value &&
+    !startingRun.value &&
+    !syncingRecords.value &&
+    !jobLoading.value &&
+    (!runs.value.length || selectedJobId.value === runs.value[0]?.job_id) &&
+    (!runs.value.length || !!selectedJob.value) &&
+    selectedJob.value?.status !== 'queued' &&
+    selectedJob.value?.status !== 'running',
+)
 const runUnavailableReason = computed(() => {
   if (detail.value?.scene === 'outpatient') return '门急诊场景质控执行尚未接入'
   if (!detail.value?.rule_set_key) return '未选择规则集，无法执行质控'
   if (!detail.value.rule_set_version) return '任务未冻结规则集版本，无法执行质控'
-  if (runScope.value === 'assigned' && !detail.value.records.some((record) => record.assignee_id === authStore.user?.id)) return '当前任务没有分配给我的病历'
+  if (
+    runScope.value === 'assigned' &&
+    !detail.value.records.some((record) => record.assignee_id === authStore.user?.id)
+  )
+    return '当前任务没有分配给我的病历'
   if (!detail.value.total_records) return '请先完成病历抽样'
-  if (!['sampling', 'assigned', 'in_progress', 'completed'].includes(detail.value.status)
-    || (runScope.value === 'assigned' && detail.value.status === 'sampling')) return '当前任务状态不可执行质控'
-  if (selectedJob.value?.status === 'queued' || selectedJob.value?.status === 'running') return '当前质控运行中'
+  if (
+    !['sampling', 'assigned', 'in_progress', 'completed'].includes(detail.value.status) ||
+    (runScope.value === 'assigned' && detail.value.status === 'sampling')
+  )
+    return '当前任务状态不可执行质控'
+  if (selectedJob.value?.status === 'queued' || selectedJob.value?.status === 'running')
+    return '当前质控运行中'
   return ''
 })
 
@@ -661,26 +741,44 @@ const recordColumns = computed<TableColumnsType<TaskRecordItem>>(() => [
 function isTaskRecordItem(record: unknown): record is TaskRecordItem {
   if (!record || typeof record !== 'object') return false
   const item = record as Partial<TaskRecordItem>
-  return typeof item.id === 'string' && typeof item.task_id === 'string'
-    && (typeof item.record_id === 'string' || item.record_id === null)
-    && (typeof item.status === 'string' || item.status === null)
+  return (
+    typeof item.id === 'string' &&
+    typeof item.task_id === 'string' &&
+    (typeof item.record_id === 'string' || item.record_id === null) &&
+    (typeof item.status === 'string' || item.status === null)
+  )
 }
 
 function canStartRecord(record: unknown): record is TaskRecordItem {
-  return isTaskRecordItem(record) && props.open && props.tab === 'received' && !!detail.value?.scene
-    && detail.value.status === 'in_progress' && record.status === 'pending'
-    && record.task_id === detail.value.id && hasCaseIdentity(record)
-    && !!authStore.user?.id && record.assignee_id === authStore.user.id
-    && !verifyingRecordId.value
+  return (
+    isTaskRecordItem(record) &&
+    props.open &&
+    props.tab === 'received' &&
+    !!detail.value?.scene &&
+    detail.value.status === 'in_progress' &&
+    record.status === 'pending' &&
+    record.task_id === detail.value.id &&
+    hasCaseIdentity(record) &&
+    !!authStore.user?.id &&
+    record.assignee_id === authStore.user.id &&
+    !verifyingRecordId.value
+  )
 }
 
 function canViewDocuments(record: unknown): record is TaskRecordItem {
-  if (!isTaskRecordItem(record) || !props.open || !detail.value
-    || !['running', 'final'].includes(detail.value.scene || '')
-    || record.task_id !== detail.value.id || record.record_id !== record.id
-    || !hasCaseIdentity(record)) return false
+  if (
+    !isTaskRecordItem(record) ||
+    !props.open ||
+    !detail.value ||
+    !['running', 'final'].includes(detail.value.scene || '') ||
+    record.task_id !== detail.value.id ||
+    record.record_id !== record.id ||
+    !hasCaseIdentity(record)
+  )
+    return false
   const privileged = authStore.userRoles.some((role) =>
-    ['admin', 'qc_manager', 'sync_admin', 'super_admin'].includes(role))
+    ['admin', 'qc_manager', 'sync_admin', 'super_admin'].includes(role),
+  )
   return privileged || (props.tab === 'received' && record.assignee_id === authStore.user?.id)
 }
 
@@ -690,11 +788,24 @@ function openRecordDocuments(record: unknown) {
   recordDocumentsOpen.value = true
 }
 
-function recordActionIsCurrent(taskId: string, taskRecordId: string, userId: string, sequence: number) {
-  return sequence === recordActionSequence && props.open && props.tab === 'received'
-    && String(props.taskId || '').trim() === taskId && detail.value?.id === taskId
-    && authStore.user?.id === userId
-    && detail.value.records.some((record) => record.id === taskRecordId && record.task_id === taskId && record.assignee_id === userId)
+function recordActionIsCurrent(
+  taskId: string,
+  taskRecordId: string,
+  userId: string,
+  sequence: number,
+) {
+  return (
+    sequence === recordActionSequence &&
+    props.open &&
+    props.tab === 'received' &&
+    String(props.taskId || '').trim() === taskId &&
+    detail.value?.id === taskId &&
+    authStore.user?.id === userId &&
+    detail.value.records.some(
+      (record) =>
+        record.id === taskRecordId && record.task_id === taskId && record.assignee_id === userId,
+    )
+  )
 }
 
 function clearRecordAction() {
@@ -709,7 +820,8 @@ function clearRecordAction() {
 async function verifyRecordStart(taskRecordId: string) {
   const taskId = detail.value?.id
   const userId = authStore.user?.id
-  if (!taskId || !userId || verifyingRecordId.value !== taskRecordId || startingRecordId.value) return
+  if (!taskId || !userId || verifyingRecordId.value !== taskRecordId || startingRecordId.value)
+    return
   const sequence = recordActionSequence
   startingRecordId.value = taskRecordId
   const previousError = recordActionError.value
@@ -719,18 +831,33 @@ async function verifyRecordStart(taskRecordId: string) {
     if (!recordActionIsCurrent(taskId, taskRecordId, userId, sequence)) return
     const refreshed = response.data
     const updated = refreshed?.records?.find((record) => record.id === taskRecordId)
-    if (response.success && refreshed?.id === taskId && Array.isArray(refreshed.records)
-      && updated?.task_id === taskId && updated.assignee_id === userId
-      && hasCaseIdentity(updated) && refreshed.status === 'in_progress'
-      && updated.status === 'pending' && !recordStartAcknowledged.value) {
+    if (
+      response.success &&
+      refreshed?.id === taskId &&
+      Array.isArray(refreshed.records) &&
+      updated?.task_id === taskId &&
+      updated.assignee_id === userId &&
+      hasCaseIdentity(updated) &&
+      refreshed.status === 'in_progress' &&
+      updated.status === 'pending' &&
+      !recordStartAcknowledged.value
+    ) {
       detail.value = refreshed
       verifyingRecordId.value = ''
       recordActionError.value = `${previousError ? `${previousError}；` : ''}病历尚未开始，可重试`
       return
     }
-    if (!response.success || refreshed?.id !== taskId || !Array.isArray(refreshed.records)
-      || !updated || updated.task_id !== taskId || updated.assignee_id !== userId
-      || !hasCaseIdentity(updated) || refreshed.status !== 'in_progress' || updated.status !== 'in_progress') {
+    if (
+      !response.success ||
+      refreshed?.id !== taskId ||
+      !Array.isArray(refreshed.records) ||
+      !updated ||
+      updated.task_id !== taskId ||
+      updated.assignee_id !== userId ||
+      !hasCaseIdentity(updated) ||
+      refreshed.status !== 'in_progress' ||
+      updated.status !== 'in_progress'
+    ) {
       recordActionError.value = response.success
         ? '尚未确认该病历处于处理中，请重新查询'
         : response.message || '读取病历处理状态失败，请重新查询'
@@ -740,7 +867,8 @@ async function verifyRecordStart(taskRecordId: string) {
     verifyingRecordId.value = ''
     recordActionTargetId.value = ''
   } catch {
-    if (recordActionIsCurrent(taskId, taskRecordId, userId, sequence)) recordActionError.value = '网络异常，请重新查询处理状态'
+    if (recordActionIsCurrent(taskId, taskRecordId, userId, sequence))
+      recordActionError.value = '网络异常，请重新查询处理状态'
   } finally {
     if (recordActionIsCurrent(taskId, taskRecordId, userId, sequence)) startingRecordId.value = ''
   }
@@ -764,8 +892,11 @@ async function startRecord(record: unknown) {
       recordActionError.value = response.message || '开始处理结果未知，请重新查询'
     } else {
       verifyingRecordId.value = taskRecordId
-      if (response.data?.task_id !== taskId || response.data.task_record_id !== taskRecordId
-        || response.data.status !== 'in_progress') {
+      if (
+        response.data?.task_id !== taskId ||
+        response.data.task_record_id !== taskRecordId ||
+        response.data.status !== 'in_progress'
+      ) {
         recordActionError.value = '响应身份或状态校验失败，请重新查询'
         return
       }
@@ -792,8 +923,11 @@ const filteredRecords = computed(() => {
       ? [record.institute_id, record.patient_id, record.visit_id]
       : []
     const legacyIds = canDisplayLegacyRecordId(record) ? [record.record_id] : []
-    return [record.assignee_name, record.assignee_id, ...coordinates, ...legacyIds]
-      .some((value) => String(value || '').toLocaleLowerCase().includes(normalizedKeyword))
+    return [record.assignee_name, record.assignee_id, ...coordinates, ...legacyIds].some((value) =>
+      String(value || '')
+        .toLocaleLowerCase()
+        .includes(normalizedKeyword),
+    )
   })
 })
 
@@ -849,7 +983,9 @@ async function loadDetail() {
   recordDocumentsRecord.value = null
   const tab = props.tab
   const focusRecordId = String(props.focusTaskRecordId || '').trim()
-  pendingFocus = focusRecordId ? { taskId, taskRecordId: focusRecordId, runNumber: props.focusRunNumber ?? null } : null
+  pendingFocus = focusRecordId
+    ? { taskId, taskRecordId: focusRecordId, runNumber: props.focusRunNumber ?? null }
+    : null
   clearRecordAction()
   syncingRecords.value = false
   const currentSequence = ++requestSequence
@@ -870,31 +1006,46 @@ async function loadDetail() {
   resetFilters()
   try {
     const response = await getTaskDetail(taskId, { tab })
-    if (currentSequence !== requestSequence || !props.open
-      || actorId.value !== currentActorId || actorRoleKey.value !== currentActorRoleKey) return
+    if (
+      currentSequence !== requestSequence ||
+      !props.open ||
+      actorId.value !== currentActorId ||
+      actorRoleKey.value !== currentActorRoleKey
+    )
+      return
     if (String(props.taskId || '').trim() !== taskId || props.tab !== tab) return
     if (
-      response.success
-      && response.data
-      && response.data.id === taskId
-      && Array.isArray(response.data.records)
+      response.success &&
+      response.data &&
+      response.data.id === taskId &&
+      Array.isArray(response.data.records)
     ) {
       detail.value = response.data
       if (response.data.scene && runScope.value) {
         void loadRuns()
       }
     } else {
-      error.value = response.success && response.data?.id !== taskId
-        ? '任务详情身份校验失败，请重试'
-        : response.message || '获取任务详情失败'
+      error.value =
+        response.success && response.data?.id !== taskId
+          ? '任务详情身份校验失败，请重试'
+          : response.message || '获取任务详情失败'
     }
   } catch {
-    if (currentSequence !== requestSequence || !props.open
-      || actorId.value !== currentActorId || actorRoleKey.value !== currentActorRoleKey) return
+    if (
+      currentSequence !== requestSequence ||
+      !props.open ||
+      actorId.value !== currentActorId ||
+      actorRoleKey.value !== currentActorRoleKey
+    )
+      return
     error.value = '网络异常或服务器不可用'
   } finally {
-    if (currentSequence === requestSequence
-      && actorId.value === currentActorId && actorRoleKey.value === currentActorRoleKey) loading.value = false
+    if (
+      currentSequence === requestSequence &&
+      actorId.value === currentActorId &&
+      actorRoleKey.value === currentActorRoleKey
+    )
+      loading.value = false
   }
 }
 
@@ -915,20 +1066,37 @@ async function loadRuns() {
   runsError.value = ''
   try {
     const response = await getTaskQcRuns(taskId, scope)
-    if (sequence !== runSequence || detailSequence !== requestSequence || detail.value?.id !== taskId || runScope.value !== scope || !props.open) return
+    if (
+      sequence !== runSequence ||
+      detailSequence !== requestSequence ||
+      detail.value?.id !== taskId ||
+      runScope.value !== scope ||
+      !props.open
+    )
+      return
     if (!response.success || !Array.isArray(response.data)) {
       runsError.value = response.message || '获取运行历史失败'
       return
     }
-    runs.value = response.data.filter((run) => run.task_id === taskId && run.run_scope === scope && !!run.job_id)
+    runs.value = response.data
+      .filter((run) => run.task_id === taskId && run.run_scope === scope && !!run.job_id)
       .sort((a, b) => b.run_number - a.run_number)
     const focus = pendingFocus?.taskId === taskId ? pendingFocus : null
     pendingFocus = null
-    const target = runs.value.find((run) => focus?.runNumber != null && run.run_number === focus.runNumber) || runs.value[0]
+    const target =
+      runs.value.find((run) => focus?.runNumber != null && run.run_number === focus.runNumber) ||
+      runs.value[0]
     if (target) void selectRun(target.job_id)
-    if (target && focus && detail.value?.records.some((record) => record.id === focus.taskRecordId)) void loadRecordResult(focus.taskRecordId)
+    if (target && focus && detail.value?.records.some((record) => record.id === focus.taskRecordId))
+      void loadRecordResult(focus.taskRecordId)
   } catch {
-    if (sequence === runSequence && detailSequence === requestSequence && detail.value?.id === taskId && runScope.value === scope) runsError.value = '网络异常或服务器不可用'
+    if (
+      sequence === runSequence &&
+      detailSequence === requestSequence &&
+      detail.value?.id === taskId &&
+      runScope.value === scope
+    )
+      runsError.value = '网络异常或服务器不可用'
   } finally {
     if (sequence === runSequence && detailSequence === requestSequence) runsLoading.value = false
   }
@@ -953,13 +1121,28 @@ function clearRecordResult() {
   recordResultError.value = ''
 }
 
-function completionIsCurrent(taskId: string, taskRecordId: string, userId: string, runNumber: number, jobId: string, sequence: number, detailSequence: number) {
-  return sequence === completionSequence && detailSequence === requestSequence
-    && props.open && props.tab === 'received' && props.taskId === taskId
-    && detail.value?.id === taskId && authStore.user?.id === userId
-    && selectedTaskRecordId.value === taskRecordId
-    && selectedRun.value?.run_number === runNumber && selectedRun.value.job_id === jobId
-    && runScope.value === 'assigned'
+function completionIsCurrent(
+  taskId: string,
+  taskRecordId: string,
+  userId: string,
+  runNumber: number,
+  jobId: string,
+  sequence: number,
+  detailSequence: number,
+) {
+  return (
+    sequence === completionSequence &&
+    detailSequence === requestSequence &&
+    props.open &&
+    props.tab === 'received' &&
+    props.taskId === taskId &&
+    detail.value?.id === taskId &&
+    authStore.user?.id === userId &&
+    selectedTaskRecordId.value === taskRecordId &&
+    selectedRun.value?.run_number === runNumber &&
+    selectedRun.value.job_id === jobId &&
+    runScope.value === 'assigned'
+  )
 }
 
 async function verifyRecordCompletion() {
@@ -967,19 +1150,43 @@ async function verifyRecordCompletion() {
   const taskRecordId = selectedTaskRecordId.value
   const userId = authStore.user?.id
   const run = selectedRun.value
-  if (!taskId || !taskRecordId || !userId || !run || completingRecord.value
-    || (!completionNeedsVerification.value && !canCompleteRecord.value)) return
+  if (
+    !taskId ||
+    !taskRecordId ||
+    !userId ||
+    !run ||
+    completingRecord.value ||
+    (!completionNeedsVerification.value && !canCompleteRecord.value)
+  )
+    return
   const sequence = completionSequence
   const detailSequence = requestSequence
   completingRecord.value = true
   completionError.value = ''
   try {
     const response = await getTaskDetail(taskId, { tab: 'received' })
-    if (!completionIsCurrent(taskId, taskRecordId, userId, run.run_number, run.job_id, sequence, detailSequence)) return
+    if (
+      !completionIsCurrent(
+        taskId,
+        taskRecordId,
+        userId,
+        run.run_number,
+        run.job_id,
+        sequence,
+        detailSequence,
+      )
+    )
+      return
     const refreshed = response.data
     const record = refreshed?.records?.find((item) => item.id === taskRecordId)
-    if (!response.success || refreshed?.id !== taskId || !Array.isArray(refreshed.records)
-      || record?.task_id !== taskId || record.assignee_id !== userId || !hasCaseIdentity(record)) {
+    if (
+      !response.success ||
+      refreshed?.id !== taskId ||
+      !Array.isArray(refreshed.records) ||
+      record?.task_id !== taskId ||
+      record.assignee_id !== userId ||
+      !hasCaseIdentity(record)
+    ) {
       completionNeedsVerification.value = true
       completionError.value = '无法确认病历完成状态，请重新查询'
       return
@@ -996,12 +1203,33 @@ async function verifyRecordCompletion() {
       emit('task-updated', taskId)
     }
   } catch {
-    if (completionIsCurrent(taskId, taskRecordId, userId, run.run_number, run.job_id, sequence, detailSequence)) {
+    if (
+      completionIsCurrent(
+        taskId,
+        taskRecordId,
+        userId,
+        run.run_number,
+        run.job_id,
+        sequence,
+        detailSequence,
+      )
+    ) {
       completionNeedsVerification.value = true
       completionError.value = '网络异常，请重新查询完成状态'
     }
   } finally {
-    if (completionIsCurrent(taskId, taskRecordId, userId, run.run_number, run.job_id, sequence, detailSequence)) completingRecord.value = false
+    if (
+      completionIsCurrent(
+        taskId,
+        taskRecordId,
+        userId,
+        run.run_number,
+        run.job_id,
+        sequence,
+        detailSequence,
+      )
+    )
+      completingRecord.value = false
   }
 }
 
@@ -1017,19 +1245,66 @@ async function completeRecord() {
   completionError.value = ''
   try {
     const response = await completeTaskRecord(taskId, taskRecordId, run.run_number)
-    if (!completionIsCurrent(taskId, taskRecordId, userId, run.run_number, run.job_id, sequence, detailSequence)) return
-    if (!response.success || response.data?.task_id !== taskId
-      || response.data.task_record_id !== taskRecordId || response.data.run_number !== run.run_number
-      || response.data.status !== 'completed') {
+    if (
+      !completionIsCurrent(
+        taskId,
+        taskRecordId,
+        userId,
+        run.run_number,
+        run.job_id,
+        sequence,
+        detailSequence,
+      )
+    )
+      return
+    if (
+      !response.success ||
+      response.data?.task_id !== taskId ||
+      response.data.task_record_id !== taskRecordId ||
+      response.data.run_number !== run.run_number ||
+      response.data.status !== 'completed'
+    ) {
       completionError.value = response.message || '完成响应未确认，正在重新查询'
     }
   } catch {
-    if (!completionIsCurrent(taskId, taskRecordId, userId, run.run_number, run.job_id, sequence, detailSequence)) return
+    if (
+      !completionIsCurrent(
+        taskId,
+        taskRecordId,
+        userId,
+        run.run_number,
+        run.job_id,
+        sequence,
+        detailSequence,
+      )
+    )
+      return
     completionError.value = '网络异常，正在重新查询'
   } finally {
-    if (completionIsCurrent(taskId, taskRecordId, userId, run.run_number, run.job_id, sequence, detailSequence)) completingRecord.value = false
+    if (
+      completionIsCurrent(
+        taskId,
+        taskRecordId,
+        userId,
+        run.run_number,
+        run.job_id,
+        sequence,
+        detailSequence,
+      )
+    )
+      completingRecord.value = false
   }
-  if (completionIsCurrent(taskId, taskRecordId, userId, run.run_number, run.job_id, sequence, detailSequence)) {
+  if (
+    completionIsCurrent(
+      taskId,
+      taskRecordId,
+      userId,
+      run.run_number,
+      run.job_id,
+      sequence,
+      detailSequence,
+    )
+  ) {
     completionNeedsVerification.value = true
     await verifyRecordCompletion()
   }
@@ -1039,7 +1314,13 @@ async function loadRecordResult(taskRecordId: string) {
   const taskId = detail.value?.id
   const run = selectedRun.value
   const scope = runScope.value
-  if (!taskId || !run || !scope || !detail.value?.records.some((record) => record.id === taskRecordId)) return
+  if (
+    !taskId ||
+    !run ||
+    !scope ||
+    !detail.value?.records.some((record) => record.id === taskRecordId)
+  )
+    return
   const detailSequence = requestSequence
   const sequence = ++recordResultSequence
   selectedTaskRecordId.value = taskRecordId
@@ -1048,23 +1329,36 @@ async function loadRecordResult(taskRecordId: string) {
   recordResultLoading.value = true
   try {
     const response = await getTaskQcRunRecordResult(taskId, run.run_number, taskRecordId, scope)
-    if (sequence !== recordResultSequence || detailSequence !== requestSequence || !props.open
-      || detail.value?.id !== taskId || selectedRun.value?.job_id !== run.job_id
-      || runScope.value !== scope || selectedTaskRecordId.value !== taskRecordId) return
+    if (
+      sequence !== recordResultSequence ||
+      detailSequence !== requestSequence ||
+      !props.open ||
+      detail.value?.id !== taskId ||
+      selectedRun.value?.job_id !== run.job_id ||
+      runScope.value !== scope ||
+      selectedTaskRecordId.value !== taskRecordId
+    )
+      return
     const result = response.data
     if (!response.success || !result) {
       recordResultError.value = response.message || '本次质控结果暂不可用'
-    } else if (result.task_id !== taskId || result.run_number !== run.run_number
-      || result.task_record_id !== taskRecordId || result.job_id !== run.job_id
-      || !Array.isArray(result.items)) {
+    } else if (
+      result.task_id !== taskId ||
+      result.run_number !== run.run_number ||
+      result.task_record_id !== taskRecordId ||
+      result.job_id !== run.job_id ||
+      !Array.isArray(result.items)
+    ) {
       recordResultError.value = '本次质控结果身份校验失败，请重试'
     } else {
       recordResult.value = result
     }
   } catch {
-    if (sequence === recordResultSequence && detailSequence === requestSequence) recordResultError.value = '网络异常或服务器不可用'
+    if (sequence === recordResultSequence && detailSequence === requestSequence)
+      recordResultError.value = '网络异常或服务器不可用'
   } finally {
-    if (sequence === recordResultSequence && detailSequence === requestSequence) recordResultLoading.value = false
+    if (sequence === recordResultSequence && detailSequence === requestSequence)
+      recordResultLoading.value = false
   }
 }
 
@@ -1079,11 +1373,25 @@ async function loadJob(jobId: string) {
   jobLoading.value = true
   try {
     const response = await getSichuanWorkspaceBatchJob(jobId)
-    if (sequence !== jobSequence || detailSequence !== requestSequence || detail.value?.id !== taskId || runScope.value !== scope || selectedJobId.value !== jobId || !props.open) return
+    if (
+      sequence !== jobSequence ||
+      detailSequence !== requestSequence ||
+      detail.value?.id !== taskId ||
+      runScope.value !== scope ||
+      selectedJobId.value !== jobId ||
+      !props.open
+    )
+      return
     if (response.success && response.data?.id === jobId) selectedJob.value = response.data
     else jobError.value = response.message || '获取运行结果失败'
   } catch {
-    if (sequence === jobSequence && detailSequence === requestSequence && detail.value?.id === taskId && runScope.value === scope) jobError.value = '网络异常或服务器不可用'
+    if (
+      sequence === jobSequence &&
+      detailSequence === requestSequence &&
+      detail.value?.id === taskId &&
+      runScope.value === scope
+    )
+      jobError.value = '网络异常或服务器不可用'
   } finally {
     if (sequence === jobSequence && detailSequence === requestSequence) jobLoading.value = false
   }
@@ -1097,33 +1405,64 @@ async function startRun() {
   startingRun.value = true
   try {
     const response = await createTaskQcRun(taskId, scope)
-    if (!props.open || detailSequence !== requestSequence || detail.value?.id !== taskId || runScope.value !== scope) return
-    if (!response.success || !response.data?.job_id || response.data.task_id !== taskId || response.data.run_scope !== scope) {
+    if (
+      !props.open ||
+      detailSequence !== requestSequence ||
+      detail.value?.id !== taskId ||
+      runScope.value !== scope
+    )
+      return
+    if (
+      !response.success ||
+      !response.data?.job_id ||
+      response.data.task_id !== taskId ||
+      response.data.run_scope !== scope
+    ) {
       runsError.value = response.message || '启动质控失败'
       return
     }
     await loadRuns()
   } catch {
-    if (detailSequence === requestSequence && detail.value?.id === taskId && runScope.value === scope) runsError.value = '网络异常或服务器不可用'
+    if (
+      detailSequence === requestSequence &&
+      detail.value?.id === taskId &&
+      runScope.value === scope
+    )
+      runsError.value = '网络异常或服务器不可用'
   } finally {
-    if (detailSequence === requestSequence && detail.value?.id === taskId && runScope.value === scope) startingRun.value = false
+    if (
+      detailSequence === requestSequence &&
+      detail.value?.id === taskId &&
+      runScope.value === scope
+    )
+      startingRun.value = false
   }
 }
 
 function jobStatusLabel(status: string) {
   const labels: Record<string, string> = {
-    queued: '作业排队中', pending: '作业待执行', running: '作业运行中',
-    processing: '作业处理中', completed: '作业已完成', failed: '作业失败',
-    canceled: '作业已取消', cancelled: '作业已取消',
+    queued: '作业排队中',
+    pending: '作业待执行',
+    running: '作业运行中',
+    processing: '作业处理中',
+    completed: '作业已完成',
+    failed: '作业失败',
+    canceled: '作业已取消',
+    cancelled: '作业已取消',
   }
   return labels[status] || '作业状态未知'
 }
 
 function resultStatusLabel(status: string) {
   const labels: Record<string, string> = {
-    compliant: '符合', non_compliant: '不符合', not_applicable: '不适用',
-    needs_review: '需复核', data_gap: '数据不足', data_quality_gap: '数据不足',
-    ai_suggested_compliant: 'AI 建议符合', ai_suggested_non_compliant: 'AI 建议不符合',
+    compliant: '符合',
+    non_compliant: '不符合',
+    not_applicable: '不适用',
+    needs_review: '需复核',
+    data_gap: '数据不足',
+    data_quality_gap: '数据不足',
+    ai_suggested_compliant: 'AI 建议符合',
+    ai_suggested_non_compliant: 'AI 建议不符合',
     uncertain: '结论待确认',
     not_executed: '未执行',
   }
@@ -1133,8 +1472,15 @@ function resultStatusLabel(status: string) {
 function resultStatusColor(status: string) {
   if (status === 'compliant') return 'success'
   if (status === 'non_compliant') return 'error'
-  if (status === 'needs_review' || status === 'uncertain' || status === 'data_gap' || status === 'data_quality_gap'
-    || status === 'ai_suggested_non_compliant' || status === 'ai_suggested_compliant') return 'warning'
+  if (
+    status === 'needs_review' ||
+    status === 'uncertain' ||
+    status === 'data_gap' ||
+    status === 'data_quality_gap' ||
+    status === 'ai_suggested_non_compliant' ||
+    status === 'ai_suggested_compliant'
+  )
+    return 'warning'
   return 'default'
 }
 
@@ -1175,7 +1521,9 @@ function formatDate(value: string | null | undefined) {
   if (!value) return '未记录'
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value
   const timestamp = Date.parse(value)
-  return Number.isNaN(timestamp) ? value : new Date(timestamp).toLocaleString('zh-CN', { hour12: false })
+  return Number.isNaN(timestamp)
+    ? value
+    : new Date(timestamp).toLocaleString('zh-CN', { hour12: false })
 }
 
 function sceneLabel(scene?: TaskScene | null) {
@@ -1194,7 +1542,9 @@ function taskStatusLabel(status: TaskStatus | string | null | undefined) {
     completed: '已完成',
     cancelled: '已取消',
   }
-  return status && Object.prototype.hasOwnProperty.call(labels, status) ? labels[status as TaskStatus] : '未知'
+  return status && Object.prototype.hasOwnProperty.call(labels, status)
+    ? labels[status as TaskStatus]
+    : '未知'
 }
 
 function taskStatusColor(status: TaskStatus | string | null | undefined) {
@@ -1222,38 +1572,44 @@ function recordStatusColor(status: string | null | undefined) {
   return 'default'
 }
 
-function assigneeLabel(record: {
-  assignee_id?: string | null
-  assignee_name?: string | null
-}) {
+function assigneeLabel(record: { assignee_id?: string | null; assignee_name?: string | null }) {
   if (record.assignee_name) return record.assignee_name
   if (record.assignee_id) return `${record.assignee_id}（姓名未记录）`
   return '未分配'
 }
 
 function hasCaseIdentity(record: Pick<TaskRecordItem, 'institute_id' | 'patient_id' | 'visit_id'>) {
-  return [record.institute_id, record.patient_id, record.visit_id]
-    .every((value) => typeof value === 'string' && value.trim().length > 0)
+  return [record.institute_id, record.patient_id, record.visit_id].every(
+    (value) => typeof value === 'string' && value.trim().length > 0,
+  )
 }
 
-function canDisplayLegacyRecordId(record: Pick<TaskRecordItem, 'institute_id' | 'patient_id' | 'visit_id'>) {
-  return detail.value?.scene == null
-    && [record.institute_id, record.patient_id, record.visit_id].every((value) => value == null)
+function canDisplayLegacyRecordId(
+  record: Pick<TaskRecordItem, 'institute_id' | 'patient_id' | 'visit_id'>,
+) {
+  return (
+    detail.value?.scene == null &&
+    [record.institute_id, record.patient_id, record.visit_id].every((value) => value == null)
+  )
 }
 
-watch([
-  () => props.open,
-  () => props.taskId,
-  () => props.tab,
-  () => props.focusTaskRecordId,
-  () => props.focusRunNumber,
-  actorId,
-  actorRoleKey,
-], ([open, taskId, , , , currentActorId]) => {
-  clearDetail()
-  if (!open || !String(taskId || '').trim() || !currentActorId) return
-  void loadDetail()
-}, { immediate: true })
+watch(
+  [
+    () => props.open,
+    () => props.taskId,
+    () => props.tab,
+    () => props.focusTaskRecordId,
+    () => props.focusRunNumber,
+    actorId,
+    actorRoleKey,
+  ],
+  ([open, taskId, , , , currentActorId]) => {
+    clearDetail()
+    if (!open || !String(taskId || '').trim() || !currentActorId) return
+    void loadDetail()
+  },
+  { immediate: true },
+)
 
 watch([keyword, recordStatus], () => {
   page.value = 1
@@ -1262,7 +1618,6 @@ watch([keyword, recordStatus], () => {
 onBeforeUnmount(() => {
   clearDetail()
 })
-
 </script>
 
 <style scoped>
@@ -1372,9 +1727,17 @@ onBeforeUnmount(() => {
   gap: 12px;
   margin: 12px 0 0;
 }
-.task-detail-drawer__job-metrics dt { color: rgba(29, 29, 31, 0.6); font-size: 13px; }
-.task-detail-drawer__job-metrics dd { margin: 2px 0 0; font-weight: 600; }
-.task-detail-drawer__run-error { color: #b42318; }
+.task-detail-drawer__job-metrics dt {
+  color: rgba(29, 29, 31, 0.6);
+  font-size: 13px;
+}
+.task-detail-drawer__job-metrics dd {
+  margin: 2px 0 0;
+  font-weight: 600;
+}
+.task-detail-drawer__run-error {
+  color: #b42318;
+}
 .task-detail-drawer__record-result {
   margin-top: 18px;
   padding-top: 16px;
@@ -1386,7 +1749,9 @@ onBeforeUnmount(() => {
   color: rgba(29, 29, 31, 0.6);
   font-size: 13px;
 }
-.task-detail-drawer__result-list { border-top: 1px solid rgba(0, 0, 0, 0.08); }
+.task-detail-drawer__result-list {
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
 .task-detail-drawer__result-row {
   padding: 13px 0;
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);

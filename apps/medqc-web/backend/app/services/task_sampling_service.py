@@ -19,6 +19,22 @@ _OUTPATIENT_PAGE_SIZE = 500
 _OUTPATIENT_MAX_DOCUMENTS = 50000
 
 
+def _date_bound(value: Any) -> date | None:
+    """日期窗边界：只接受 date 或 YYYY-MM-DD 字符串，不接受带时刻的值。"""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        raise ValueError("日期范围格式无效")
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+        try:
+            return date.fromisoformat(value)
+        except ValueError:
+            pass
+    raise ValueError("日期范围格式无效")
+
+
 def validate_active_running_date_range(date_range: Any) -> tuple[date | None, date | None, date]:
     """校验显式在院任务的入院日期窗；创建与抽样共用。"""
     if date_range is None:
@@ -26,21 +42,7 @@ def validate_active_running_date_range(date_range: Any) -> tuple[date | None, da
     if not isinstance(date_range, dict):
         raise ValueError("日期范围格式无效")
 
-    def bound(value: Any) -> date | None:
-        if value is None:
-            return None
-        if isinstance(value, datetime):
-            raise ValueError("日期范围格式无效")
-        if isinstance(value, date):
-            return value
-        if isinstance(value, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
-            try:
-                return date.fromisoformat(value)
-            except ValueError:
-                pass
-        raise ValueError("日期范围格式无效")
-
-    start, end = bound(date_range.get("start")), bound(date_range.get("end"))
+    start, end = _date_bound(date_range.get("start")), _date_bound(date_range.get("end"))
     if start and end and start > end:
         raise ValueError("日期范围起始时间不能晚于结束时间")
     today = datetime.now(HOSPITAL_TZ).date()
@@ -51,9 +53,55 @@ def validate_active_running_date_range(date_range: Any) -> tuple[date | None, da
     return start, end, today
 
 
+# 终末口径 B（2026-09-30）：终末任务按“期间出院”取候选，不核验是否已归档。
+FINAL_CASE_SCOPE = "discharged"
+MAX_DISCHARGE_WINDOW_DAYS = 31
+
+
+def validate_discharged_final_date_range(date_range: Any) -> tuple[date, date]:
+    """校验终末（已出院）任务的出院日期窗；创建与抽样共用。
+
+    起止必须同时填写，起不晚于止、止不晚于今天（医院时区），跨度最多 31 天
+    （与病例范围服务“期间出院”合同一致，避免创建通过、抽样才失败）。
+    """
+    if not isinstance(date_range, dict):
+        raise ValueError("终末任务必须填写出院日期范围")
+    start, end = _date_bound(date_range.get("start")), _date_bound(date_range.get("end"))
+    if start is None or end is None:
+        raise ValueError("终末任务必须填写出院开始日期和结束日期")
+    if start > end:
+        raise ValueError("出院开始日期不能晚于结束日期")
+    if end > datetime.now(HOSPITAL_TZ).date():
+        raise ValueError("出院结束日期不能晚于今天")
+    if (end - start).days + 1 > MAX_DISCHARGE_WINDOW_DAYS:
+        raise ValueError("出院日期范围最多 31 天")
+    return start, end
+
+
+def validate_scene_case_scope(scene: Any, method: Any, config: Any, date_range: Any) -> None:
+    """创建、编辑、模板共用：场景病例范围与日期窗的唯一校验入口。
+
+    显式选择的病例范围才按新合同校验，与实际抽样同一合同：运行=当前在院（入院日期窗），
+    终末=已出院（出院日期窗，口径 B），门急诊校验抽样参数。未带 case_scope 的历史运行/终末
+    配置保持原兼容行为（创建不校验，抽样时明确不可用），其他 case_scope 取值一律拒绝。
+    """
+    config = config if isinstance(config, dict) else {}
+    case_scope = config.get("case_scope")
+    if scene == "outpatient":
+        validate_scoped_sampling_config(scene, method, config)
+    elif scene == "running" and case_scope == "active":
+        validate_scoped_sampling_config(scene, method, config)
+        validate_active_running_date_range(date_range)
+    elif scene == "final" and case_scope == FINAL_CASE_SCOPE:
+        validate_scoped_sampling_config(scene, method, config)
+        validate_discharged_final_date_range(date_range)
+    elif case_scope is not None:
+        raise ValueError("病例范围与任务场景不匹配")
+
+
 def validate_scoped_sampling_config(scene: Any, method: Any, config: Any) -> None:
     """校验新场景抽样参数，创建与实际抽样使用同一合同。"""
-    if scene not in {"outpatient", "running"}:
+    if scene not in {"outpatient", "running", "final"}:
         return
     if not isinstance(config, dict):
         raise ValueError("抽样配置格式无效")
@@ -76,13 +124,18 @@ def validate_scoped_sampling_config(scene: Any, method: Any, config: Any) -> Non
 class TaskSamplingService:
     """任务抽样引擎"""
 
-    async def _get_active_running_candidates(self, task: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """仅为显式在院范围的运行任务生成可信三坐标候选。"""
-        import anyio
+    @staticmethod
+    def _identity(item: Any) -> tuple[str, str, str]:
+        if not isinstance(item, dict):
+            raise ValueError("指定病例三坐标格式无效")
+        coordinates = tuple(item.get(key) for key in ("institute_id", "patient_id", "visit_id"))
+        if any(not isinstance(value, str) or not value.strip() for value in coordinates):
+            raise ValueError("指定病例三坐标不完整")
+        return tuple(value.strip() for value in coordinates)
 
-        from .case_scope_service import CaseScopeService
-
-        start, end, today = validate_active_running_date_range(task.get("date_range"))
+    @classmethod
+    def _scope_inputs(cls, task: Dict[str, Any]) -> tuple[list[str], list[tuple[str, str, str]]]:
+        """住院类场景任务共用：科室范围与指定三坐标（去重校验）。"""
         departments = task.get("department_filter")
         if departments is None:
             departments = []
@@ -90,24 +143,25 @@ class TaskSamplingService:
             not isinstance(item, str) or not item.strip() for item in departments
         ):
             raise ValueError("科室范围格式无效")
-        departments = [item.strip() for item in departments]
         refs = task.get("record_refs")
         if refs is None:
             refs = []
         if not isinstance(refs, list):
             raise ValueError("指定病例三坐标格式无效")
-
-        def identity(item: Any) -> tuple[str, str, str]:
-            if not isinstance(item, dict):
-                raise ValueError("指定病例三坐标格式无效")
-            coordinates = tuple(item.get(key) for key in ("institute_id", "patient_id", "visit_id"))
-            if any(not isinstance(value, str) or not value.strip() for value in coordinates):
-                raise ValueError("指定病例三坐标不完整")
-            return tuple(value.strip() for value in coordinates)
-
-        requested = [identity(ref) for ref in refs]
+        requested = [cls._identity(ref) for ref in refs]
         if len(requested) != len(set(requested)):
             raise ValueError("指定病例三坐标重复")
+        return [item.strip() for item in departments], requested
+
+    async def _get_active_running_candidates(self, task: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """仅为显式在院范围的运行任务生成可信三坐标候选。"""
+        import anyio
+
+        from .case_scope_service import CaseScopeService
+
+        start, end, today = validate_active_running_date_range(task.get("date_range"))
+        departments, requested = self._scope_inputs(task)
+        identity = self._identity
 
         try:
             result = await anyio.to_thread.run_sync(
@@ -161,6 +215,64 @@ class TaskSamplingService:
             raise ValueError("指定病历不存在或不属于在院筛选范围")
         if not candidates:
             raise ValueError("在院筛选范围内无候选病历")
+        return [candidates[key] for key in requested] if requested else list(candidates.values())
+
+    async def _get_discharged_final_candidates(self, task: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """终末任务（口径 B：期间出院，未核验归档）从源库住院口径生成可信三坐标候选。"""
+        import anyio
+
+        from .case_scope_service import CaseScopeService
+
+        start, end = validate_discharged_final_date_range(task.get("date_range"))
+        departments, requested = self._scope_inputs(task)
+        today = datetime.now(HOSPITAL_TZ).date()
+        try:
+            result = await anyio.to_thread.run_sync(
+                lambda: CaseScopeService().resolve_hospitalization_scope(
+                    scope_mode=FINAL_CASE_SCOPE,
+                    as_of_date=today,
+                    admission_start_date=None,
+                    discharge_start_date=start,
+                    discharge_end_date=end,
+                    departments=departments,
+                )
+            )
+        except Exception as exc:
+            logger.warning("终末任务出院候选查询失败: %s", type(exc).__name__)
+            raise RuntimeError("候选病历数据源不可用") from exc
+        if result.source_status != "ready":
+            raise RuntimeError("候选病历数据源未就绪")
+        try:
+            if len(result.case_refs) != len(result.selected):
+                raise ValueError("三坐标数量不一致")
+            candidates: Dict[tuple[str, str, str], Dict[str, Any]] = {}
+            for case_ref, row in zip(result.case_refs, result.selected):
+                key = self._identity(row)
+                if key != (case_ref.institute_id, case_ref.patient_id, case_ref.visit_id):
+                    raise ValueError("三坐标不一致")
+                discharge = row.get("discharge_time")
+                if (
+                    key in candidates
+                    or row.get("hospitalization_status") != "discharged"
+                    or not isinstance(discharge, datetime)
+                    or discharge.tzinfo is not None
+                    or not start <= discharge.date() <= end
+                    or (departments and row.get("department") not in departments)
+                ):
+                    raise ValueError("出院候选状态或范围无效")
+                candidates[key] = {
+                    "institute_id": key[0],
+                    "patient_id": key[1],
+                    "visit_id": key[2],
+                    "department": row.get("department"),
+                    "discharge_date": discharge.date().isoformat(),
+                }
+        except (AttributeError, TypeError, ValueError) as exc:
+            raise RuntimeError("终末任务候选病历数据无效") from exc
+        if requested and not set(requested).issubset(candidates):
+            raise ValueError("指定病历不存在或不属于出院筛选范围")
+        if not candidates:
+            raise ValueError("出院筛选范围内无候选病历")
         return [candidates[key] for key in requested] if requested else list(candidates.values())
 
     async def _get_outpatient_candidates(self, task: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -324,6 +436,10 @@ class TaskSamplingService:
             if task.get("record_ids"):
                 raise ValueError("运行任务不能使用旧病历 ID，请提供三坐标")
             candidates = await self._get_active_running_candidates(task)
+        elif scene == "final" and config.get("case_scope") == FINAL_CASE_SCOPE:
+            if task.get("record_ids"):
+                raise ValueError("终末任务不能使用旧病历 ID，请提供三坐标")
+            candidates = await self._get_discharged_final_candidates(task)
         elif scene is not None:
             raise NotImplementedError("场景抽样暂不可用：尚未接通可验证的病历场景范围")
         else:

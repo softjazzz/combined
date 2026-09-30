@@ -20,8 +20,7 @@ from ..database.models.qc import QCTaskTemplate
 from ..schemas.tasks import TaskTemplateConfig
 from .qc_rule_sets import get_sichuan_rule_set
 from .task_sampling_service import (
-    validate_active_running_date_range,
-    validate_scoped_sampling_config,
+    validate_scene_case_scope,
 )
 
 MAX_TEMPLATES_PER_USER = 20
@@ -120,11 +119,10 @@ def validate_task_template_config(config: Any) -> dict[str, Any]:
     if rule_set.scope != normalized["scene"]:
         raise TaskTemplateInvalid("规则集与任务场景不匹配")
     try:
-        validate_scoped_sampling_config(
+        validate_scene_case_scope(
             normalized["scene"], normalized["sampling_method"], normalized["sampling_config"],
+            normalized.get("date_range"),
         )
-        if normalized["scene"] == "running":
-            validate_active_running_date_range(normalized.get("date_range"))
     except ValueError as exc:
         raise TaskTemplateInvalid(str(exc)) from exc
     return normalized

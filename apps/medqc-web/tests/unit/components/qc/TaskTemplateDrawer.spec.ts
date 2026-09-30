@@ -38,19 +38,27 @@ const config: TaskTemplateConfig = {
   date_range: { start: '2026-09-01', end: '2026-09-20' },
   department_filter: ['内科'],
   sampling_method: 'count',
-  sampling_config: { total: 20, by_department: true },
+  sampling_config: { case_scope: 'discharged', total: 20, by_department: true },
   assign_method: 'by_ratio',
   assignee_config: {},
 }
 
 const template: TaskTemplate = {
-  id: 'tpl-1', name: '常用模板', config, usable: true, unavailable_reason: null,
-  version: 1, created_at: '2026-09-27T00:00:00', updated_at: '2026-09-27T00:00:00',
+  id: 'tpl-1',
+  name: '常用模板',
+  config,
+  usable: true,
+  unavailable_reason: null,
+  version: 1,
+  created_at: '2026-09-27T00:00:00',
+  updated_at: '2026-09-27T00:00:00',
 }
 
 function deferred<T>() {
   let resolve!: (value: T) => void
-  const promise = new Promise<T>((done) => { resolve = done })
+  const promise = new Promise<T>((done) => {
+    resolve = done
+  })
   return { promise, resolve }
 }
 
@@ -59,8 +67,14 @@ function mountDrawer(props: Record<string, unknown> = {}) {
     props: { open: true, ...props },
     global: {
       stubs: {
-        'a-alert': { props: ['message'], template: '<div><span>{{ message }}</span><slot name="action" /></div>' },
-        'a-button': { emits: ['click'], template: '<button @click="$emit(\'click\')"><slot /></button>' },
+        'a-alert': {
+          props: ['message'],
+          template: '<div><span>{{ message }}</span><slot name="action" /></div>',
+        },
+        'a-button': {
+          emits: ['click'],
+          template: '<button @click="$emit(\'click\')"><slot /></button>',
+        },
         'a-checkbox': true,
         'a-date-picker': true,
         'a-drawer': { template: '<div><slot /></div>' },
@@ -85,15 +99,28 @@ describe('TaskTemplateDrawer', () => {
     vi.clearAllMocks()
     authState.user = { id: 'u-1' }
     mocks.getTaskTemplates.mockResolvedValue({
-      success: true, data: { items: [template], max_templates: 20 },
+      success: true,
+      data: { items: [template], max_templates: 20 },
     })
     mocks.getTaskRuleSets.mockResolvedValue({
       success: true,
-      data: { items: [{ rule_set_key: 'final-rules', rule_set_name: '终末规则', rule_set_version: 'v1', scope: 'final' }] },
+      data: {
+        items: [
+          {
+            rule_set_key: 'final-rules',
+            rule_set_name: '终末规则',
+            rule_set_version: 'v1',
+            scope: 'final',
+          },
+        ],
+      },
     })
     mocks.createTaskTemplate.mockResolvedValue({ success: true, data: template })
     mocks.updateTaskTemplate.mockResolvedValue({ success: true, data: { ...template, version: 2 } })
-    mocks.deleteTaskTemplate.mockResolvedValue({ success: true, data: { id: 'tpl-1', deleted: true } })
+    mocks.deleteTaskTemplate.mockResolvedValue({
+      success: true,
+      data: { id: 'tpl-1', deleted: true },
+    })
   })
 
   it('仅列出当前账号模板并显式套用可用配置', async () => {
@@ -101,8 +128,9 @@ describe('TaskTemplateDrawer', () => {
     await flushPromises()
     expect(mocks.getTaskTemplates).toHaveBeenCalledTimes(1)
     expect(wrapper.text()).toContain('常用模板')
-
-    ;(wrapper.vm as unknown as { applyTemplate: (item: TaskTemplate) => void }).applyTemplate(template)
+    ;(wrapper.vm as unknown as { applyTemplate: (item: TaskTemplate) => void }).applyTemplate(
+      template,
+    )
     expect(wrapper.emitted('apply')?.[0]?.[0]).toEqual(config)
     expect(wrapper.emitted('update:open')?.at(-1)).toEqual([false])
   })
@@ -110,7 +138,8 @@ describe('TaskTemplateDrawer', () => {
   it('损坏模板不可套用，但可进入显式修复编辑', async () => {
     const damaged = { ...template, config: null, usable: false, unavailable_reason: '配置损坏' }
     mocks.getTaskTemplates.mockResolvedValue({
-      success: true, data: { items: [damaged], max_templates: 20 },
+      success: true,
+      data: { items: [damaged], max_templates: 20 },
     })
     const wrapper = mountDrawer()
     await flushPromises()
@@ -142,7 +171,10 @@ describe('TaskTemplateDrawer', () => {
   })
 
   it('抽屉关闭后晚到旧请求不能写回模板', async () => {
-    const pending = deferred<{ success: boolean; data: { items: TaskTemplate[]; max_templates: number } }>()
+    const pending = deferred<{
+      success: boolean
+      data: { items: TaskTemplate[]; max_templates: number }
+    }>()
     mocks.getTaskTemplates.mockReturnValueOnce(pending.promise)
     const wrapper = mountDrawer()
     await wrapper.setProps({ open: false })

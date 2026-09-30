@@ -20,7 +20,7 @@ from ..schemas.tasks import (
     TaskMetadataUpdateRequest,
     TaskTemplateConfig,
 )
-from .task_sampling_service import validate_active_running_date_range, validate_scoped_sampling_config
+from .task_sampling_service import validate_scene_case_scope
 
 
 class TaskEditError(Exception):
@@ -278,9 +278,9 @@ def _validate_configuration(task: dict[str, Any], configuration: Any) -> dict[st
     }
     try:
         normalized = TaskTemplateConfig.model_validate(reusable).model_dump(mode="json")
-        validate_scoped_sampling_config(scene, normalized["sampling_method"], normalized["sampling_config"])
-        if scene == "running":
-            validate_active_running_date_range(normalized.get("date_range"))
+        validate_scene_case_scope(
+            scene, normalized["sampling_method"], normalized["sampling_config"], normalized.get("date_range"),
+        )
     except (ValidationError, ValueError, KeyError) as exc:
         if isinstance(exc, ValidationError) and exc.errors():
             message = str(exc.errors(include_url=False)[0].get("msg") or "任务配置无效")

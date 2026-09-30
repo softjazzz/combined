@@ -155,9 +155,18 @@ def _json_object(value: Any) -> dict[str, Any] | None:
     return parsed if isinstance(parsed, dict) else None
 
 
-def _active_remote_task(task: dict[str, Any]) -> bool:
+# 从源库住院口径抽样、须先完成资料同步再质控的任务：运行=当前在院，终末=期间出院（口径 B）。
+_REMOTE_CASE_SCOPES = {"running": "active", "final": "discharged"}
+
+
+def _remote_scope_task(task: dict[str, Any]) -> bool:
     config = _json_object(task.get("sampling_config"))
-    return task.get("scene") == "running" and config is not None and config.get("case_scope") == "active"
+    scene = task.get("scene")
+    return (
+        scene in _REMOTE_CASE_SCOPES
+        and config is not None
+        and config.get("case_scope") == _REMOTE_CASE_SCOPES[scene]
+    )
 
 
 _TASK_RUN_SCENES = frozenset({"running", "final"})
@@ -177,11 +186,12 @@ def _prepared_scope_mismatch(task_scene: Any, prepared_kwargs: Any) -> bool:
     return scene not in _TASK_RUN_SCENES or scope != scene or query_scope not in {"", scene}
 
 
-def _assert_active_sync_receipt(
+def _assert_task_sync_receipt(
     session: Session, task: dict[str, Any], refs: list[dict[str, str]], run_scope: str, actor_id: str,
 ) -> None:
     """Under the task row lock, admit only an exact completed hydration snapshot."""
     task_id = str(task["id"])
+    scene = str(task.get("scene") or "")
     active = session.execute(text("""
         SELECT id FROM qc.qc_async_jobs
         WHERE job_type = 'task_record_sync' AND business_type = 'qc_task'
@@ -205,7 +215,7 @@ def _assert_active_sync_receipt(
     if any(
         value.get("contract_version") != CONTRACT_VERSION
         or value.get("task_id") != task_id
-        or value.get("scene") != "running"
+        or value.get("scene") != scene
         for value in (payload, summary)
     ):
         raise TaskQCRunConflict("任务病历资料同步收据合同不一致")
@@ -263,7 +273,7 @@ def _assert_active_sync_receipt(
         receipt = receipt_by_id[record_id]
         try:
             bundle = _load_scene_bundle(
-                scene="running", institute_id=identity[0], patient_id=identity[1],
+                scene=scene, institute_id=identity[0], patient_id=identity[1],
                 visit_id=identity[2], schema="public",
             )
             usable = _scene_bundle_has_usable_content(bundle)
@@ -308,8 +318,8 @@ def create_task_qc_run(
     with SessionLocal() as session:
         with session.begin():
             task, refs = _task_and_refs(session, task_id, actor_id, run_scope)
-            if _active_remote_task(task):
-                _assert_active_sync_receipt(session, task, refs, run_scope, actor_id)
+            if _remote_scope_task(task):
+                _assert_task_sync_receipt(session, task, refs, run_scope, actor_id)
             workspace = workspace_factory()
             run_number = _next_run_number(session, task_id, workspace)
             payload = SichuanWorkspaceBatchJobCreateRequest(

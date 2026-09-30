@@ -131,7 +131,7 @@ def test_task_job_rechecks_receipt_after_lock_and_rejects_stale(monkeypatch):
         calls.append("rechecked")
         raise task_qc_run_service.TaskQCRunConflict("stale")
 
-    monkeypatch.setattr(task_qc_run_service, "_assert_active_sync_receipt", stale_receipt)
+    monkeypatch.setattr(task_qc_run_service, "_assert_task_sync_receipt", stale_receipt)
     filters = {"task_id": "task-1", "task_run_number": "1", "record_refs": [
         {"institute_id": "H", "patient_id": "P", "visit_id": "V"},
     ]}

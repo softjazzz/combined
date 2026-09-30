@@ -8,11 +8,7 @@
     @close="handleClose"
   >
     <!-- 步骤条 -->
-    <a-steps
-      :current="currentStep"
-      size="small"
-      class="mb-8"
-    >
+    <a-steps :current="currentStep" size="small" class="mb-8">
       <a-step title="基本信息" />
       <a-step title="病历范围" />
       <a-step title="抽样规则" />
@@ -32,14 +28,8 @@
 
     <!-- Step 1: 基本信息 -->
     <div v-show="currentStep === 0">
-      <a-form
-        :model="formData"
-        layout="vertical"
-      >
-        <a-form-item
-          label="任务名称"
-          required
-        >
+      <a-form :model="formData" layout="vertical">
+        <a-form-item label="任务名称" required>
           <a-input
             v-model:value="formData.task_name"
             placeholder="例如：2026年3月终末病历质控"
@@ -48,10 +38,7 @@
           />
         </a-form-item>
 
-        <a-form-item
-          label="质控场景"
-          required
-        >
+        <a-form-item label="质控场景" required>
           <a-select
             v-model:value="formData.scene"
             data-testid="task-scene-select"
@@ -60,16 +47,15 @@
           />
         </a-form-item>
 
-        <a-form-item
-          label="质控规则集"
-          required
-        >
+        <a-form-item label="质控规则集" required>
           <a-select
             v-model:value="formData.rule_set_key"
             data-testid="task-rule-set-select"
             placeholder="请选择规则集"
             :loading="ruleSetsLoading"
-            :disabled="!formData.scene || ruleSetsLoading || !!ruleSetsError || !matchingRuleSets.length"
+            :disabled="
+              !formData.scene || ruleSetsLoading || !!ruleSetsError || !matchingRuleSets.length
+            "
             :options="ruleSetSelectOptions"
           />
         </a-form-item>
@@ -113,33 +99,36 @@
     <div v-show="currentStep === 1">
       <a-form layout="vertical">
         <a-form-item
-          v-if="formData.scene === 'running'"
-          label="运行病历范围"
+          v-if="requiredCaseScope"
+          :label="formData.scene === 'final' ? '终末病历范围' : '运行病历范围'"
           required
         >
           <a-select
             v-model:value="formData.sampling_config.case_scope"
             data-testid="task-case-scope-select"
-            placeholder="请选择运行病历范围"
-            :options="[{ value: 'active', label: '当前在院' }]"
+            :placeholder="formData.scene === 'final' ? '请选择终末病历范围' : '请选择运行病历范围'"
+            :options="[{ value: requiredCaseScope, label: caseScopeLabel(requiredCaseScope) }]"
           />
-          <div class="text-xs text-gray-500 mt-2">
-            出院未归档病历暂不可抽样。
+          <div class="text-xs text-gray-500 mt-2" data-testid="task-case-scope-hint">
+            {{
+              formData.scene === 'final'
+                ? '按出院日期抽取已出院病历，归档状态未核验；出院日期范围必填，最多 31 天。'
+                : '运行病历仅含当前在院；已出院病历请在终末场景抽样。'
+            }}
           </div>
         </a-form-item>
         <a-form-item label="选择方式">
           <a-radio-group v-model:value="rangeMode">
-            <a-radio-button value="date">
-              按日期范围
-            </a-radio-button>
-            <a-radio-button value="refs">
-              指定病历
-            </a-radio-button>
+            <a-radio-button value="date"> 按日期范围 </a-radio-button>
+            <a-radio-button value="refs"> 指定病历 </a-radio-button>
           </a-radio-group>
         </a-form-item>
 
         <template v-if="rangeMode === 'date'">
-          <a-form-item label="日期范围">
+          <a-form-item
+            :label="formData.scene === 'final' ? '出院日期范围' : '日期范围'"
+            :required="formData.scene === 'final'"
+          >
             <a-range-picker
               v-model:value="dateRangeValue"
               style="width: 100%"
@@ -159,11 +148,21 @@
         </template>
 
         <template v-else>
-          <a-form-item
-            label="病历坐标"
-            required
-          >
-            <div class="hidden sm:grid grid-cols-[repeat(3,minmax(0,1fr))_36px] gap-2 text-xs text-gray-500 mb-2">
+          <a-form-item v-if="formData.scene === 'final'" label="出院日期范围" required>
+            <a-range-picker
+              v-model:value="dateRangeValue"
+              data-testid="task-refs-discharge-range"
+              style="width: 100%"
+              @change="handleDateRangeChange"
+            />
+            <div class="text-xs text-gray-500 mt-2">
+              指定病历须在该出院日期范围内（最多 31 天）。
+            </div>
+          </a-form-item>
+          <a-form-item label="病历坐标" required>
+            <div
+              class="hidden sm:grid grid-cols-[repeat(3,minmax(0,1fr))_36px] gap-2 text-xs text-gray-500 mb-2"
+            >
               <span>机构 ID</span><span>患者 ID</span><span>就诊 ID</span><span />
             </div>
             <div
@@ -198,19 +197,11 @@
                 <DeleteOutlined />
               </a-button>
             </div>
-            <a-button @click="addRecordRef">
-              <PlusOutlined /> 添加病历
-            </a-button>
-            <div
-              v-if="recordRefsError"
-              class="text-xs text-red-500 mt-2"
-            >
+            <a-button @click="addRecordRef"> <PlusOutlined /> 添加病历 </a-button>
+            <div v-if="recordRefsError" class="text-xs text-red-500 mt-2">
               {{ recordRefsError }}
             </div>
-            <div
-              v-else
-              class="text-xs text-gray-500 mt-2"
-            >
+            <div v-else class="text-xs text-gray-500 mt-2">
               已填写 {{ normalizedRecordRefs.length }} 条病历
             </div>
           </a-form-item>
@@ -222,10 +213,7 @@
     <div v-show="currentStep === 2">
       <a-form layout="vertical">
         <a-form-item label="抽样方式">
-          <a-radio-group
-            v-model:value="formData.sampling_method"
-            class="w-full"
-          >
+          <a-radio-group v-model:value="formData.sampling_method" class="w-full">
             <div class="grid grid-cols-3 gap-3">
               <div
                 v-for="opt in samplingOptions"
@@ -290,9 +278,7 @@
               v-model:value="formData.sampling_config.group_by"
               placeholder="选择分组方式"
               style="width: 100%"
-              :options="[
-                { value: 'department', label: '按科室' },
-              ]"
+              :options="[{ value: 'department', label: '按科室' }]"
               allow-clear
             />
           </a-form-item>
@@ -304,10 +290,7 @@
     <div v-show="currentStep === 3">
       <a-form layout="vertical">
         <a-form-item label="分配方式">
-          <a-radio-group
-            v-model:value="formData.assign_method"
-            data-testid="assign-method-group"
-          >
+          <a-radio-group v-model:value="formData.assign_method" data-testid="assign-method-group">
             <a-radio
               v-for="opt in assignMethodOptions"
               :key="opt.value"
@@ -318,10 +301,7 @@
               {{ opt.label }}
             </a-radio>
           </a-radio-group>
-          <div
-            class="text-xs text-gray-500 mt-2"
-            data-testid="assign-method-record-type-hint"
-          >
+          <div class="text-xs text-gray-500 mt-2" data-testid="assign-method-record-type-hint">
             病历类型：当前场景病历类型无区分，暂不可用
           </div>
         </a-form-item>
@@ -335,12 +315,8 @@
             v-model:value="formData.assign_fallback"
             data-testid="assign-fallback-group"
           >
-            <a-radio value="by_ratio">
-              按比例分给选定人员
-            </a-radio>
-            <a-radio value="reject">
-              拒绝分配
-            </a-radio>
+            <a-radio value="by_ratio"> 按比例分给选定人员 </a-radio>
+            <a-radio value="reject"> 拒绝分配 </a-radio>
           </a-radio-group>
           <div
             v-if="!formData.assign_fallback"
@@ -371,18 +347,11 @@
 
     <!-- Step 5: 确认提交 -->
     <div v-show="currentStep === 4">
-      <a-descriptions
-        title="任务概览"
-        bordered
-        :column="1"
-        size="small"
-      >
+      <a-descriptions title="任务概览" bordered :column="1" size="small">
         <a-descriptions-item label="任务名称">
           {{ formData.task_name || '(未设置)' }}
         </a-descriptions-item>
-        <a-descriptions-item label="任务类型">
-          单次任务
-        </a-descriptions-item>
+        <a-descriptions-item label="任务类型"> 单次任务 </a-descriptions-item>
         <a-descriptions-item label="质控场景">
           {{ sceneLabel }}
         </a-descriptions-item>
@@ -394,10 +363,10 @@
         </a-descriptions-item>
         <a-descriptions-item label="病历范围">
           <template v-if="rangeMode === 'date'">
-            {{ formData.scene === 'running' && formData.sampling_config.case_scope === 'active' ? '当前在院 · ' : '' }}日期范围 + {{ formData.department_filter?.length || 0 }} 个科室筛选
+            {{ caseScopePrefix }}日期范围 + {{ formData.department_filter?.length || 0 }} 个科室筛选
           </template>
           <template v-else>
-            {{ formData.scene === 'running' && formData.sampling_config.case_scope === 'active' ? '当前在院 · ' : '' }}指定 {{ normalizedRecordRefs.length }} 条病历
+            {{ caseScopePrefix }}指定 {{ normalizedRecordRefs.length }} 条病历
           </template>
         </a-descriptions-item>
         <a-descriptions-item label="抽样方式">
@@ -420,32 +389,15 @@
     <!-- 底部按钮 -->
     <template #footer>
       <div class="flex justify-between">
-        <a-button
-          v-if="currentStep > 0"
-          @click="prevStep"
-        >
-          上一步
-        </a-button>
+        <a-button v-if="currentStep > 0" @click="prevStep"> 上一步 </a-button>
         <div v-else />
 
         <div class="flex gap-3">
-          <a-button @click="handleClose">
-            取消
-          </a-button>
-          <a-button
-            v-if="currentStep < 4"
-            type="primary"
-            :disabled="!canProceed"
-            @click="nextStep"
-          >
+          <a-button @click="handleClose"> 取消 </a-button>
+          <a-button v-if="currentStep < 4" type="primary" :disabled="!canProceed" @click="nextStep">
             下一步
           </a-button>
-          <a-button
-            v-else
-            type="primary"
-            :loading="submitting"
-            @click="handleSubmit"
-          >
+          <a-button v-else type="primary" :loading="submitting" @click="handleSubmit">
             <CheckOutlined /> 创建任务
           </a-button>
         </div>
@@ -478,6 +430,12 @@ import type {
   TaskTemplateConfig,
 } from '@/api/tasks'
 import { describeTaskAssignError } from '@/utils/taskAssignment'
+import {
+  caseScopeLabel,
+  dischargedDateRangeError,
+  sceneCaseScope,
+  type TaskCaseScope,
+} from '@/utils/taskCaseScope'
 import type { Dayjs } from 'dayjs'
 import dayjs from 'dayjs'
 
@@ -523,7 +481,7 @@ const formData = ref({
   department_filter: [] as string[],
   sampling_method: 'all' as 'all' | 'count' | 'percentage',
   sampling_config: {
-    case_scope: undefined as 'active' | undefined,
+    case_scope: undefined as TaskCaseScope | undefined,
     total: 50,
     percentage: 10,
     by_department: false,
@@ -535,8 +493,16 @@ const formData = ref({
 })
 
 // ============= 选项配置 =============
-const ASSIGNABLE_METHODS: readonly TaskAssignableMethod[] = ['by_ratio', 'by_original_reviewer', 'by_department']
-const assignMethodOptions: Array<{ value: TaskAssignableMethod | 'by_record_type'; label: string; disabled?: boolean }> = [
+const ASSIGNABLE_METHODS: readonly TaskAssignableMethod[] = [
+  'by_ratio',
+  'by_original_reviewer',
+  'by_department',
+]
+const assignMethodOptions: Array<{
+  value: TaskAssignableMethod | 'by_record_type'
+  label: string
+  disabled?: boolean
+}> = [
   { value: 'by_ratio', label: '按比例均分' },
   { value: 'by_original_reviewer', label: '原质控员' },
   { value: 'by_department', label: '按科室' },
@@ -585,18 +551,30 @@ const samplingOptions: Array<{
 ]
 
 // ============= 计算属性 =============
-const normalizedRecordRefs = computed(() => recordRefs.value.map((item) => ({
-  institute_id: item.institute_id.trim(),
-  patient_id: item.patient_id.trim(),
-  visit_id: item.visit_id.trim(),
-})))
+const normalizedRecordRefs = computed(() =>
+  recordRefs.value.map((item) => ({
+    institute_id: item.institute_id.trim(),
+    patient_id: item.patient_id.trim(),
+    visit_id: item.visit_id.trim(),
+  })),
+)
 const recordRefsError = computed(() => {
-  if (!recordRefs.value.length || normalizedRecordRefs.value.every((item) =>
-    !item.institute_id && !item.patient_id && !item.visit_id)) return '请至少填写一条完整的病历坐标'
-  if (normalizedRecordRefs.value.some((item) =>
-    !item.institute_id || !item.patient_id || !item.visit_id)) return '每条病历均须填写机构 ID、患者 ID 和就诊 ID'
+  if (
+    !recordRefs.value.length ||
+    normalizedRecordRefs.value.every(
+      (item) => !item.institute_id && !item.patient_id && !item.visit_id,
+    )
+  )
+    return '请至少填写一条完整的病历坐标'
+  if (
+    normalizedRecordRefs.value.some(
+      (item) => !item.institute_id || !item.patient_id || !item.visit_id,
+    )
+  )
+    return '每条病历均须填写机构 ID、患者 ID 和就诊 ID'
   const keys = normalizedRecordRefs.value.map((item) =>
-    JSON.stringify([item.institute_id, item.patient_id, item.visit_id]))
+    JSON.stringify([item.institute_id, item.patient_id, item.visit_id]),
+  )
   return new Set(keys).size === keys.length ? '' : '存在重复的病历坐标，请合并后继续'
 })
 
@@ -609,18 +587,25 @@ const ruleSetSelectOptions = computed(() =>
     label: `${item.rule_set_name} (${item.rule_set_version})`,
   })),
 )
-const selectedRuleSetLabel = computed(() =>
-  ruleSetSelectOptions.value.find((item) => item.value === formData.value.rule_set_key)?.label || '(未选择)',
+const selectedRuleSetLabel = computed(
+  () =>
+    ruleSetSelectOptions.value.find((item) => item.value === formData.value.rule_set_key)?.label ||
+    '(未选择)',
 )
-const selectedRuleSetIsValid = computed(() =>
-  !ruleSetsLoading.value && !ruleSetsError.value &&
-  matchingRuleSets.value.some((item) => item.rule_set_key === formData.value.rule_set_key),
+const selectedRuleSetIsValid = computed(
+  () =>
+    !ruleSetsLoading.value &&
+    !ruleSetsError.value &&
+    matchingRuleSets.value.some((item) => item.rule_set_key === formData.value.rule_set_key),
 )
 const assignMethodError = computed(() => {
   const method = formData.value.assign_method
   if (!ASSIGNABLE_METHODS.includes(method)) return '请选择可用的分配方式'
-  if (method === 'by_original_reviewer' &&
-    formData.value.assign_fallback !== 'by_ratio' && formData.value.assign_fallback !== 'reject') {
+  if (
+    method === 'by_original_reviewer' &&
+    formData.value.assign_fallback !== 'by_ratio' &&
+    formData.value.assign_fallback !== 'reject'
+  ) {
     return '请选择“无原质控员时”的处理方式'
   }
   return ''
@@ -634,11 +619,13 @@ const validSamplingGroup = computed(() => {
 const canProceed = computed(() => {
   switch (currentStep.value) {
     case 0:
-      return formData.value.task_name.trim().length > 0 &&
-        formData.value.scene !== null && selectedRuleSetIsValid.value
+      return (
+        formData.value.task_name.trim().length > 0 &&
+        formData.value.scene !== null &&
+        selectedRuleSetIsValid.value
+      )
     case 1:
-      return (formData.value.scene !== 'running' || formData.value.sampling_config.case_scope === 'active') &&
-        (rangeMode.value !== 'refs' || !recordRefsError.value)
+      return caseScopeSatisfied.value && (rangeMode.value !== 'refs' || !recordRefsError.value)
     case 2:
       return formData.value.sampling_method !== 'percentage' || validSamplingGroup.value
     case 3:
@@ -647,6 +634,19 @@ const canProceed = computed(() => {
       return true
   }
 })
+
+/** 该场景新建任务必须选择的病例范围：运行=当前在院，终末=已出院（未核验归档）。 */
+const requiredCaseScope = computed(() => sceneCaseScope(formData.value.scene))
+const caseScopeSatisfied = computed(
+  () =>
+    !requiredCaseScope.value ||
+    formData.value.sampling_config.case_scope === requiredCaseScope.value,
+)
+const caseScopePrefix = computed(() =>
+  requiredCaseScope.value && caseScopeSatisfied.value
+    ? `${caseScopeLabel(requiredCaseScope.value)} · `
+    : '',
+)
 
 const sceneLabel = computed(() => {
   return sceneOptions.find((option) => option.value === formData.value.scene)?.label || '(未选择)'
@@ -669,40 +669,48 @@ const assignLabel = computed(() => {
     : ASSIGN_LABELS[method]
 })
 
-watch(() => formData.value.scene, () => {
-  if (applyingTemplate) return
-  formData.value.rule_set_key = undefined
-  formData.value.sampling_config.case_scope = undefined
-})
+watch(
+  () => formData.value.scene,
+  () => {
+    if (applyingTemplate) return
+    formData.value.rule_set_key = undefined
+    formData.value.sampling_config.case_scope = undefined
+  },
+)
 
-watch(() => props.open, async (open) => {
-  const requestId = ++ruleSetRequestId
-  if (!open) return
-  ruleSetsLoading.value = true
-  ruleSetsError.value = ''
-  ruleSets.value = []
-  try {
-    const result = await getTaskRuleSets()
-    if (requestId !== ruleSetRequestId) return
-    if (!result.success || !Array.isArray(result.data?.items)) {
-      ruleSetsError.value = result.message || '规则集目录加载失败，请稍后重试'
-      return
+watch(
+  () => props.open,
+  async (open) => {
+    const requestId = ++ruleSetRequestId
+    if (!open) return
+    ruleSetsLoading.value = true
+    ruleSetsError.value = ''
+    ruleSets.value = []
+    try {
+      const result = await getTaskRuleSets()
+      if (requestId !== ruleSetRequestId) return
+      if (!result.success || !Array.isArray(result.data?.items)) {
+        ruleSetsError.value = result.message || '规则集目录加载失败，请稍后重试'
+        return
+      }
+      ruleSets.value = result.data.items.filter(
+        (item) =>
+          typeof item.rule_set_key === 'string' &&
+          typeof item.rule_set_name === 'string' &&
+          typeof item.rule_set_version === 'string' &&
+          typeof item.scope === 'string',
+      )
+      if (props.initialTemplateConfig) {
+        await applyTemplateConfig(props.initialTemplateConfig)
+      }
+    } catch {
+      if (requestId === ruleSetRequestId) ruleSetsError.value = '规则集目录加载失败，请稍后重试'
+    } finally {
+      if (requestId === ruleSetRequestId) ruleSetsLoading.value = false
     }
-    ruleSets.value = result.data.items.filter((item) =>
-      typeof item.rule_set_key === 'string' &&
-      typeof item.rule_set_name === 'string' &&
-      typeof item.rule_set_version === 'string' &&
-      typeof item.scope === 'string',
-    )
-    if (props.initialTemplateConfig) {
-      await applyTemplateConfig(props.initialTemplateConfig)
-    }
-  } catch {
-    if (requestId === ruleSetRequestId) ruleSetsError.value = '规则集目录加载失败，请稍后重试'
-  } finally {
-    if (requestId === ruleSetRequestId) ruleSetsLoading.value = false
-  }
-}, { immediate: true })
+  },
+  { immediate: true },
+)
 
 // ============= 方法 =============
 const nextStep = () => {
@@ -721,26 +729,33 @@ const removeRecordRef = (index: number) => {
 
 const handleDateRangeChange = (_dates: [Dayjs, Dayjs] | null, dateStrings: [string, string]) => {
   const [start, end] = dateStrings
-  formData.value.date_range = start || end ? { start: start || undefined, end: end || undefined } : null
+  formData.value.date_range =
+    start || end ? { start: start || undefined, end: end || undefined } : null
 }
 
 const activeDateRangeError = (range: { start?: string; end?: string } | null): string => {
   if (!range) return ''
   const start = range.start?.trim()
   const end = range.end?.trim()
-  const validDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) &&
-    dayjs(value).isValid() && dayjs(value).format('YYYY-MM-DD') === value
-  if ((start && !validDate(start)) || (end && !validDate(end))) return '入院日期范围格式无效，请选择有效日期'
+  const validDate = (value: string) =>
+    /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+    dayjs(value).isValid() &&
+    dayjs(value).format('YYYY-MM-DD') === value
+  if ((start && !validDate(start)) || (end && !validDate(end)))
+    return '入院日期范围格式无效，请选择有效日期'
   const today = dayjs(new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10))
   if (start && dayjs(start).isAfter(today, 'day')) return '入院开始日期不能晚于在院截止日期'
-  if (start && dayjs(start).isBefore(today.subtract(180, 'day'), 'day')) return '入院日期范围最多 180 天'
-  if (start && end && dayjs(start).isAfter(dayjs(end), 'day')) return '日期范围起始时间不能晚于结束时间'
+  if (start && dayjs(start).isBefore(today.subtract(180, 'day'), 'day'))
+    return '入院日期范围最多 180 天'
+  if (start && end && dayjs(start).isAfter(dayjs(end), 'day'))
+    return '日期范围起始时间不能晚于结束时间'
   return ''
 }
 
 const applyTemplateConfig = async (config: TaskTemplateConfig) => {
-  const ruleSetAvailable = ruleSets.value.some((item) =>
-    item.scope === config.scene && item.rule_set_key === config.rule_set_key)
+  const ruleSetAvailable = ruleSets.value.some(
+    (item) => item.scope === config.scene && item.rule_set_key === config.rule_set_key,
+  )
   if (!ruleSetAvailable) {
     message.warning('模板规则集已不可用，请编辑模板后再套用')
     return
@@ -780,21 +795,23 @@ const currentTemplateConfig = (): TaskTemplateConfig | null => {
   const scene = formData.value.scene
   const ruleSetKey = formData.value.rule_set_key
   if (!scene || !ruleSetKey || !selectedRuleSetIsValid.value) return null
-  if (scene === 'running' && formData.value.sampling_config.case_scope !== 'active') return null
-  if (assignMethodError.value || (formData.value.sampling_method === 'percentage' && !validSamplingGroup.value)) {
+  if (!caseScopeSatisfied.value) return null
+  if (
+    assignMethodError.value ||
+    (formData.value.sampling_method === 'percentage' && !validSamplingGroup.value)
+  ) {
     return null
   }
   const samplingConfig: TaskTemplateConfig['sampling_config'] = {
-    ...(scene === 'running' ? { case_scope: 'active' as const } : {}),
+    ...(requiredCaseScope.value ? { case_scope: requiredCaseScope.value } : {}),
   }
   if (formData.value.sampling_method === 'count') {
     samplingConfig.total = formData.value.sampling_config.total
     samplingConfig.by_department = formData.value.sampling_config.by_department
   } else if (formData.value.sampling_method === 'percentage') {
     samplingConfig.percentage = formData.value.sampling_config.percentage
-    samplingConfig.group_by = formData.value.sampling_config.group_by === 'department'
-      ? 'department'
-      : null
+    samplingConfig.group_by =
+      formData.value.sampling_config.group_by === 'department' ? 'department' : null
   }
   const start = formData.value.date_range?.start?.trim()
   const end = formData.value.date_range?.end?.trim()
@@ -806,9 +823,10 @@ const currentTemplateConfig = (): TaskTemplateConfig | null => {
     sampling_method: formData.value.sampling_method,
     sampling_config: samplingConfig,
     assign_method: formData.value.assign_method,
-    assignee_config: formData.value.assign_method === 'by_original_reviewer' && formData.value.assign_fallback
-      ? { fallback: formData.value.assign_fallback }
-      : {},
+    assignee_config:
+      formData.value.assign_method === 'by_original_reviewer' && formData.value.assign_fallback
+        ? { fallback: formData.value.assign_fallback }
+        : {},
   }
 }
 
@@ -845,7 +863,13 @@ const resetForm = () => {
     date_range: null,
     department_filter: [],
     sampling_method: 'all',
-    sampling_config: { case_scope: undefined, total: 50, percentage: 10, by_department: false, group_by: null },
+    sampling_config: {
+      case_scope: undefined,
+      total: 50,
+      percentage: 10,
+      by_department: false,
+      group_by: null,
+    },
     assign_method: 'by_ratio',
     assign_fallback: undefined,
   }
@@ -882,9 +906,20 @@ const handleSubmit = async () => {
     message.warning(recordRefsError.value)
     return
   }
-  if (scene === 'running' && formData.value.sampling_config.case_scope !== 'active') {
-    message.warning('请选择当前在院病历范围')
+  if (!caseScopeSatisfied.value) {
+    message.warning(scene === 'final' ? '请选择已出院病历范围' : '请选择当前在院病历范围')
     return
+  }
+  if (scene === 'final') {
+    // 终末任务的候选池由出院日期窗决定，指定病历也须在窗口内。
+    const rangeError = dischargedDateRangeError(
+      formData.value.date_range?.start,
+      formData.value.date_range?.end,
+    )
+    if (rangeError) {
+      message.warning(rangeError)
+      return
+    }
   }
   if (scene === 'running' && rangeMode.value === 'date') {
     const rangeError = activeDateRangeError(formData.value.date_range)
@@ -912,9 +947,7 @@ const handleSubmit = async () => {
       deadline: formData.value.deadline?.format('YYYY-MM-DD'),
       sampling_method: formData.value.sampling_method,
       sampling_config: {
-        ...(scene === 'running' && formData.value.sampling_config.case_scope === 'active'
-          ? { case_scope: 'active' }
-          : {}),
+        ...(requiredCaseScope.value ? { case_scope: requiredCaseScope.value } : {}),
         ...(formData.value.sampling_method === 'count'
           ? {
               total: formData.value.sampling_config.total,
@@ -935,6 +968,13 @@ const handleSubmit = async () => {
 
     if (rangeMode.value === 'refs') {
       submitData.record_refs = normalizedRecordRefs.value.map((item) => ({ ...item }))
+      if (scene === 'final' && formData.value.date_range?.start && formData.value.date_range?.end) {
+        // 终末候选池由出院日期窗决定：指定病历须在窗口内，窗口随病历一并提交。
+        submitData.date_range = {
+          start: formData.value.date_range.start.trim(),
+          end: formData.value.date_range.end.trim(),
+        }
+      }
     } else {
       const start = formData.value.date_range?.start?.trim()
       const end = formData.value.date_range?.end?.trim()
@@ -952,7 +992,9 @@ const handleSubmit = async () => {
       emit('created', res.data)
       handleClose()
     } else {
-      message.error(describeTaskAssignError(res.errorDetail, res.status) || res.message || '创建失败')
+      message.error(
+        describeTaskAssignError(res.errorDetail, res.status) || res.message || '创建失败',
+      )
     }
   } catch (err: unknown) {
     message.error(err instanceof Error ? err.message : '创建任务异常')

@@ -25,14 +25,15 @@ import CreateTaskModal from '@/components/qc/CreateTaskModal.vue'
 const selectStub = {
   props: ['value', 'options'],
   emits: ['update:value'],
-  template: '<select :value="value" @change="$emit(\'update:value\', $event.target.value)"><option value="">请选择</option><option v-for="option in options" :key="option.value" :value="option.value">{{ option.label }}</option></select>',
+  template:
+    '<select :value="value" @change="$emit(\'update:value\', $event.target.value)"><option value="">请选择</option><option v-for="option in options" :key="option.value" :value="option.value">{{ option.label }}</option></select>',
 }
 
 type ModalVm = {
   form: {
     task_name: string
     rule_set_key: string | undefined
-    case_scope: 'active' | undefined
+    case_scope: 'active' | 'discharged' | undefined
     dateRange: [ReturnType<typeof dayjs>, ReturnType<typeof dayjs>] | null
     department_filter: string[]
     sampling_method: 'all' | 'count' | 'percentage'
@@ -96,7 +97,16 @@ describe('CreateTaskModal 运行病历创建链路', () => {
     mocks.getDepartmentList.mockResolvedValue({ success: true, data: [] })
     mocks.getTaskRuleSets.mockResolvedValue({
       success: true,
-      data: { items: [{ rule_set_key: 'running-v1', rule_set_name: '运行病历规则集', rule_set_version: 'v1', scope: 'running' }] },
+      data: {
+        items: [
+          {
+            rule_set_key: 'running-v1',
+            rule_set_name: '运行病历规则集',
+            rule_set_version: 'v1',
+            scope: 'running',
+          },
+        ],
+      },
     })
   })
 
@@ -132,9 +142,7 @@ describe('CreateTaskModal 运行病历创建链路', () => {
         deadline: '2026-10-09',
       }),
     )
-    expect(wrapper.emitted('created')?.[0]?.[0]).toEqual(
-      expect.objectContaining({ sampled: true }),
-    )
+    expect(wrapper.emitted('created')?.[0]?.[0]).toEqual(expect.objectContaining({ sampled: true }))
     expect(wrapper.emitted('update:visible')).toEqual([[false]])
   })
 
@@ -164,12 +172,27 @@ describe('CreateTaskModal 运行病历创建链路', () => {
     expect(mocks.createQCTaskAndSample).toHaveBeenCalledTimes(2)
   })
 
-  it('当前在院拒绝逆序及无效日期，切换终末后不应用在院限制', async () => {
+  it('当前在院拒绝逆序及无效日期；终末须选已出院范围并校验出院日期窗', async () => {
     mocks.createQCTaskAndSample.mockResolvedValue({ success: false, message: '测试停止' })
-    mocks.getTaskRuleSets.mockResolvedValue({ success: true, data: { items: [
-      { rule_set_key: 'running-v1', rule_set_name: '运行', rule_set_version: 'v1', scope: 'running' },
-      { rule_set_key: 'final-v1', rule_set_name: '终末', rule_set_version: 'v1', scope: 'final' },
-    ] } })
+    mocks.getTaskRuleSets.mockResolvedValue({
+      success: true,
+      data: {
+        items: [
+          {
+            rule_set_key: 'running-v1',
+            rule_set_name: '运行',
+            rule_set_version: 'v1',
+            scope: 'running',
+          },
+          {
+            rule_set_key: 'final-v1',
+            rule_set_name: '终末',
+            rule_set_version: 'v1',
+            scope: 'final',
+          },
+        ],
+      },
+    })
     const wrapper = mountModal()
     const vm = vmOf(wrapper)
     await flushPromises()
@@ -188,11 +211,25 @@ describe('CreateTaskModal 运行病历创建链路', () => {
     await wrapper.setProps({ scene: 'final' })
     await flushPromises()
     vm.form.rule_set_key = 'final-v1'
-    vm.form.dateRange = [dayjs('2026-02-20'), dayjs('2026-03-20')]
+    vm.form.dateRange = [today.subtract(40, 'day'), today.subtract(1, 'day')]
     await vm.handleSubmit()
-    expect(mocks.createQCTaskAndSample).toHaveBeenCalledWith(expect.objectContaining({
-      scene: 'final', date_range: { start: '2026-02-20', end: '2026-03-20' },
-    }))
+    expect(mocks.message.warning).toHaveBeenLastCalledWith('请选择已出院病历范围')
+    vm.form.case_scope = 'discharged'
+    await vm.handleSubmit()
+    expect(mocks.message.warning).toHaveBeenLastCalledWith('出院日期范围最多 31 天')
+    expect(mocks.createQCTaskAndSample).not.toHaveBeenCalled()
+    vm.form.dateRange = [today.subtract(10, 'day'), today.subtract(1, 'day')]
+    await vm.handleSubmit()
+    expect(mocks.createQCTaskAndSample).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scene: 'final',
+        date_range: {
+          start: today.subtract(10, 'day').format('YYYY-MM-DD'),
+          end: today.subtract(1, 'day').format('YYYY-MM-DD'),
+        },
+        sampling_config: expect.objectContaining({ case_scope: 'discharged' }),
+      }),
+    )
   })
 
   it('创建失败时保留输入，不关闭也不发 created', async () => {
@@ -269,9 +306,7 @@ describe('CreateTaskModal 运行病历创建链路', () => {
 
     await vm.handleSubmit()
 
-    expect(mocks.message.warning).toHaveBeenCalledWith(
-      '任务已创建，抽样未完成：场景候选尚未接通',
-    )
+    expect(mocks.message.warning).toHaveBeenCalledWith('任务已创建，抽样未完成：场景候选尚未接通')
     expect(mocks.message.success).not.toHaveBeenCalled()
     expect(wrapper.emitted('created')).toEqual([[draft]])
     expect(wrapper.emitted('update:visible')).toEqual([[false]])
@@ -307,7 +342,19 @@ describe('CreateTaskModal 运行病历创建链路', () => {
     for (const catalog of [
       { success: false, message: '目录不可用' },
       { success: true, data: { items: [] } },
-      { success: true, data: { items: [{ rule_set_key: 'final-v1', rule_set_name: '终末', rule_set_version: 'v1', scope: 'final' }] } },
+      {
+        success: true,
+        data: {
+          items: [
+            {
+              rule_set_key: 'final-v1',
+              rule_set_name: '终末',
+              rule_set_version: 'v1',
+              scope: 'final',
+            },
+          ],
+        },
+      },
     ]) {
       mocks.getTaskRuleSets.mockResolvedValueOnce(catalog)
       const wrapper = mountModal()
@@ -335,10 +382,23 @@ describe('CreateTaskModal 运行病历创建链路', () => {
   it('切换场景清除旧规则集，并忽略先前请求的过期响应', async () => {
     mocks.createQCTaskAndSample.mockResolvedValue({ success: false, message: '测试创建失败' })
     let resolveOld!: (value: unknown) => void
-    mocks.getTaskRuleSets.mockReturnValueOnce(new Promise((resolve) => { resolveOld = resolve }))
+    mocks.getTaskRuleSets.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveOld = resolve
+      }),
+    )
     mocks.getTaskRuleSets.mockResolvedValueOnce({
       success: true,
-      data: { items: [{ rule_set_key: 'final-v1', rule_set_name: '终末', rule_set_version: 'v1', scope: 'final' }] },
+      data: {
+        items: [
+          {
+            rule_set_key: 'final-v1',
+            rule_set_name: '终末',
+            rule_set_version: 'v1',
+            scope: 'final',
+          },
+        ],
+      },
     })
     const wrapper = mountModal()
     const vm = vmOf(wrapper)
@@ -350,26 +410,59 @@ describe('CreateTaskModal 运行病历创建链路', () => {
     expect(vm.form.rule_set_key).toBeUndefined()
     expect(vm.form.case_scope).toBeUndefined()
     vm.form.rule_set_key = 'final-v1'
+    // 终末口径 B：切换到终末后须重新选择已出院范围与出院日期窗，不沿用运行的在院范围。
+    expect(vm.canSubmit).toBe(false)
+    const today = dayjs(new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10))
+    vm.form.case_scope = 'discharged'
+    vm.form.dateRange = [today.subtract(5, 'day'), today.subtract(1, 'day')]
     expect(vm.canSubmit).toBe(true)
-    resolveOld({ success: true, data: { items: [{ rule_set_key: 'running-v1', rule_set_name: '运行', rule_set_version: 'v1', scope: 'running' }] } })
+    resolveOld({
+      success: true,
+      data: {
+        items: [
+          {
+            rule_set_key: 'running-v1',
+            rule_set_name: '运行',
+            rule_set_version: 'v1',
+            scope: 'running',
+          },
+        ],
+      },
+    })
     await flushPromises()
     expect(vm.canSubmit).toBe(true)
     await vm.handleSubmit()
-    expect(mocks.createQCTaskAndSample).toHaveBeenCalledWith(expect.objectContaining({ scene: 'final', rule_set_key: 'final-v1' }))
-    expect(mocks.createQCTaskAndSample.mock.calls[0][0].sampling_config).toBeUndefined()
+    expect(mocks.createQCTaskAndSample).toHaveBeenCalledWith(
+      expect.objectContaining({ scene: 'final', rule_set_key: 'final-v1' }),
+    )
+    expect(mocks.createQCTaskAndSample.mock.calls[0][0].sampling_config).toEqual({
+      case_scope: 'discharged',
+    })
 
     mocks.getTaskRuleSets.mockResolvedValueOnce({
       success: true,
-      data: { items: [{ rule_set_key: 'outpatient-v1', rule_set_name: '门急诊', rule_set_version: 'v1', scope: 'outpatient' }] },
+      data: {
+        items: [
+          {
+            rule_set_key: 'outpatient-v1',
+            rule_set_name: '门急诊',
+            rule_set_version: 'v1',
+            scope: 'outpatient',
+          },
+        ],
+      },
     })
     await wrapper.setProps({ scene: 'outpatient' })
     await flushPromises()
     vm.form.rule_set_key = 'outpatient-v1'
     vm.form.case_scope = 'active'
     await vm.handleSubmit()
-    expect(mocks.createQCTaskAndSample).toHaveBeenLastCalledWith(expect.objectContaining({
-      scene: 'outpatient', rule_set_key: 'outpatient-v1',
-    }))
+    expect(mocks.createQCTaskAndSample).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        scene: 'outpatient',
+        rule_set_key: 'outpatient-v1',
+      }),
+    )
     expect(mocks.createQCTaskAndSample.mock.calls.at(-1)?.[0].sampling_config).toBeUndefined()
   })
 
@@ -386,8 +479,11 @@ describe('CreateTaskModal 运行病历创建链路', () => {
     expect(vm.canSubmit).toBe(true)
     mocks.createQCTaskAndSample.mockResolvedValue({ success: false, message: '测试停止' })
     await vm.handleSubmit()
-    expect(mocks.createQCTaskAndSample).toHaveBeenCalledWith(expect.objectContaining({
-      scene: 'running', sampling_config: { case_scope: 'active' },
-    }))
+    expect(mocks.createQCTaskAndSample).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scene: 'running',
+        sampling_config: { case_scope: 'active' },
+      }),
+    )
   })
 })

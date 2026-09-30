@@ -110,8 +110,7 @@ from ..services.task_delete_service import (
     delete_empty_draft_task,
 )
 from ..services.task_sampling_service import (
-    validate_active_running_date_range,
-    validate_scoped_sampling_config,
+    validate_scene_case_scope,
 )
 from ..services.task_template_service import (
     TaskTemplateConflict,
@@ -600,23 +599,15 @@ async def create_task(
     if rule_set.scope != task_data.scene.value:
         raise HTTPException(status_code=422, detail="规则集与任务场景不匹配")
     _validate_creation_assign_method(task_data)
-    if task_data.scene.value == "outpatient" or (
-        task_data.scene.value == "running"
-        and (task_data.sampling_config or {}).get("case_scope") == "active"
-    ):
-        try:
-            validate_scoped_sampling_config(
-                task_data.scene.value,
-                task_data.sampling_method.value,
-                task_data.sampling_config or {},
-            )
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
-    if task_data.scene.value == "running" and (task_data.sampling_config or {}).get("case_scope") == "active":
-        try:
-            validate_active_running_date_range(task_data.date_range)
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
+    try:
+        validate_scene_case_scope(
+            task_data.scene.value,
+            task_data.sampling_method.value,
+            task_data.sampling_config or {},
+            task_data.date_range,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     # 任务冻结创建时的当前规则集版本（最近一次发布；未发布时为内置版本）。
     try:
         frozen_rule_set_version = await run_in_threadpool(current_version, rule_set.key)

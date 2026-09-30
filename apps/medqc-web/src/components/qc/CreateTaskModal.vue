@@ -37,7 +37,13 @@
           :disabled="ruleSetsLoading || !!ruleSetsError || !matchingRuleSets.length"
           :options="ruleSetOptions"
         />
-        <a-alert v-if="ruleSetsError" type="error" :message="ruleSetsError" show-icon class="mt-2" />
+        <a-alert
+          v-if="ruleSetsError"
+          type="error"
+          :message="ruleSetsError"
+          show-icon
+          class="mt-2"
+        />
         <a-alert
           v-else-if="!ruleSetsLoading && !matchingRuleSets.length"
           type="warning"
@@ -47,26 +53,34 @@
         />
       </div>
 
-      <div v-if="scene === 'running'">
+      <div v-if="requiredCaseScope">
         <label class="block text-sm font-medium text-slate-700 mb-1.5">
-          运行病历范围 <span class="text-rose-500">*</span>
+          {{ scene === 'final' ? '终末病历范围' : '运行病历范围' }}
+          <span class="text-rose-500">*</span>
         </label>
         <a-select
           v-model:value="form.case_scope"
           data-testid="legacy-task-case-scope-select"
-          placeholder="请选择运行病历范围"
+          :placeholder="scene === 'final' ? '请选择终末病历范围' : '请选择运行病历范围'"
           class="w-full"
           size="large"
-          :options="[{ value: 'active', label: '当前在院' }]"
+          :options="[{ value: requiredCaseScope, label: caseScopeLabel(requiredCaseScope) }]"
         />
         <div class="text-xs text-slate-500 mt-2">
-          出院未归档病历暂不可抽样。
+          {{
+            scene === 'final'
+              ? '按出院日期抽取已出院病历，归档状态未核验；出院日期范围必填，最多 31 天。'
+              : '运行病历仅含当前在院；已出院病历请在终末场景抽样。'
+          }}
         </div>
       </div>
 
       <!-- 日期范围 -->
       <div>
-        <label class="block text-sm font-medium text-slate-700 mb-1.5">入院日期范围</label>
+        <label class="block text-sm font-medium text-slate-700 mb-1.5">
+          {{ scene === 'final' ? '出院日期范围' : '入院日期范围' }}
+          <span v-if="scene === 'final'" class="text-rose-500">*</span>
+        </label>
         <a-range-picker
           v-model:value="form.dateRange"
           class="w-full !rounded-lg"
@@ -92,30 +106,12 @@
       <!-- 抽样方式 -->
       <div>
         <label class="block text-sm font-medium text-slate-700 mb-1.5">抽样方式</label>
-        <a-radio-group
-          v-model:value="form.sampling_method"
-          class="w-full"
-        >
-          <a-radio-button
-            value="all"
-            class="!rounded-l-lg"
-          >
-            全部
-          </a-radio-button>
-          <a-radio-button value="count">
-            按数量
-          </a-radio-button>
-          <a-radio-button
-            value="percentage"
-            class="!rounded-r-lg"
-          >
-            按比例
-          </a-radio-button>
+        <a-radio-group v-model:value="form.sampling_method" class="w-full">
+          <a-radio-button value="all" class="!rounded-l-lg"> 全部 </a-radio-button>
+          <a-radio-button value="count"> 按数量 </a-radio-button>
+          <a-radio-button value="percentage" class="!rounded-r-lg"> 按比例 </a-radio-button>
         </a-radio-group>
-        <div
-          v-if="form.sampling_method === 'count'"
-          class="mt-2"
-        >
+        <div v-if="form.sampling_method === 'count'" class="mt-2">
           <a-input-number
             v-model:value="form.sampling_count"
             :min="1"
@@ -124,10 +120,7 @@
             class="w-full"
           />
         </div>
-        <div
-          v-if="form.sampling_method === 'percentage'"
-          class="mt-2"
-        >
+        <div v-if="form.sampling_method === 'percentage'" class="mt-2">
           <a-slider
             v-model:value="form.sampling_pct"
             :min="1"
@@ -152,6 +145,12 @@
 </template>
 
 <script setup lang="ts">
+import {
+  caseScopeLabel,
+  dischargedDateRangeError,
+  sceneCaseScope,
+  type TaskCaseScope,
+} from '@/utils/taskCaseScope'
 import { ref, reactive, computed, watch, onMounted, type PropType } from 'vue'
 import { message } from 'ant-design-vue'
 import {
@@ -191,7 +190,7 @@ let ruleSetRequestId = 0
 const form = reactive({
   task_name: '',
   rule_set_key: undefined as string | undefined,
-  case_scope: undefined as 'active' | undefined,
+  case_scope: undefined as TaskCaseScope | undefined,
   dateRange: null as [Dayjs, Dayjs] | null,
   department_filter: [] as string[],
   sampling_method: 'all' as 'all' | 'count' | 'percentage',
@@ -203,49 +202,64 @@ const form = reactive({
 const matchingRuleSets = computed(() =>
   ruleSets.value.filter((item) => item.scope === props.scene && item.rule_set_key.trim()),
 )
-const ruleSetOptions = computed(() => matchingRuleSets.value.map((item) => ({
-  value: item.rule_set_key,
-  label: `${item.rule_set_name} (${item.rule_set_version})`,
-})))
-const selectedRuleSetIsValid = computed(() =>
-  !ruleSetsLoading.value && !ruleSetsError.value &&
-  matchingRuleSets.value.some((item) => item.rule_set_key === form.rule_set_key),
+const ruleSetOptions = computed(() =>
+  matchingRuleSets.value.map((item) => ({
+    value: item.rule_set_key,
+    label: `${item.rule_set_name} (${item.rule_set_version})`,
+  })),
 )
-const canSubmit = computed(() =>
-  !submitting.value && !!form.task_name.trim() && isTaskScene(props.scene) && selectedRuleSetIsValid.value &&
-  (props.scene !== 'running' || form.case_scope === 'active'),
+const selectedRuleSetIsValid = computed(
+  () =>
+    !ruleSetsLoading.value &&
+    !ruleSetsError.value &&
+    matchingRuleSets.value.some((item) => item.rule_set_key === form.rule_set_key),
+)
+/** 运行=当前在院；终末=已出院（口径 B，未核验归档）；门急诊无病例范围。 */
+const requiredCaseScope = computed(() => sceneCaseScope(props.scene))
+const canSubmit = computed(
+  () =>
+    !submitting.value &&
+    !!form.task_name.trim() &&
+    isTaskScene(props.scene) &&
+    selectedRuleSetIsValid.value &&
+    (!requiredCaseScope.value || form.case_scope === requiredCaseScope.value),
 )
 
-watch(() => [props.visible, props.scene] as const, async ([visible]) => {
-  const requestId = ++ruleSetRequestId
-  form.rule_set_key = undefined
-  form.case_scope = undefined
-  ruleSets.value = []
-  ruleSetsError.value = ''
-  if (!visible) {
-    ruleSetsLoading.value = false
-    return
-  }
-  ruleSetsLoading.value = true
-  try {
-    const result = await getTaskRuleSets()
-    if (requestId !== ruleSetRequestId) return
-    if (!result.success || !Array.isArray(result.data?.items)) {
-      ruleSetsError.value = result.message || '规则集目录加载失败，请稍后重试'
+watch(
+  () => [props.visible, props.scene] as const,
+  async ([visible]) => {
+    const requestId = ++ruleSetRequestId
+    form.rule_set_key = undefined
+    form.case_scope = undefined
+    ruleSets.value = []
+    ruleSetsError.value = ''
+    if (!visible) {
+      ruleSetsLoading.value = false
       return
     }
-    ruleSets.value = result.data.items.filter((item) =>
-      typeof item.rule_set_key === 'string' &&
-      typeof item.rule_set_name === 'string' &&
-      typeof item.rule_set_version === 'string' &&
-      typeof item.scope === 'string',
-    )
-  } catch {
-    if (requestId === ruleSetRequestId) ruleSetsError.value = '规则集目录加载失败，请稍后重试'
-  } finally {
-    if (requestId === ruleSetRequestId) ruleSetsLoading.value = false
-  }
-}, { immediate: true })
+    ruleSetsLoading.value = true
+    try {
+      const result = await getTaskRuleSets()
+      if (requestId !== ruleSetRequestId) return
+      if (!result.success || !Array.isArray(result.data?.items)) {
+        ruleSetsError.value = result.message || '规则集目录加载失败，请稍后重试'
+        return
+      }
+      ruleSets.value = result.data.items.filter(
+        (item) =>
+          typeof item.rule_set_key === 'string' &&
+          typeof item.rule_set_name === 'string' &&
+          typeof item.rule_set_version === 'string' &&
+          typeof item.scope === 'string',
+      )
+    } catch {
+      if (requestId === ruleSetRequestId) ruleSetsError.value = '规则集目录加载失败，请稍后重试'
+    } finally {
+      if (requestId === ruleSetRequestId) ruleSetsLoading.value = false
+    }
+  },
+  { immediate: true },
+)
 
 /** 加载科室选项 */
 const loadDepartments = async () => {
@@ -263,8 +277,11 @@ const activeDateRangeError = (range: [Dayjs, Dayjs] | null): string => {
   if (!range) return ''
   const start = range[0]?.format('YYYY-MM-DD')
   const end = range[1]?.format('YYYY-MM-DD')
-  const validDate = (value: string | undefined): value is string => !!value && /^\d{4}-\d{2}-\d{2}$/.test(value) &&
-    dayjs(value).isValid() && dayjs(value).format('YYYY-MM-DD') === value
+  const validDate = (value: string | undefined): value is string =>
+    !!value &&
+    /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+    dayjs(value).isValid() &&
+    dayjs(value).format('YYYY-MM-DD') === value
   if (!validDate(start) || !validDate(end)) return '入院日期范围格式无效，请选择有效日期'
   const today = dayjs(new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10))
   if (dayjs(start).isAfter(today, 'day')) return '入院开始日期不能晚于在院截止日期'
@@ -287,9 +304,19 @@ const handleSubmit = async () => {
     message.warning(ruleSetsError.value || '请选择与质控场景匹配的规则集')
     return
   }
-  if (props.scene === 'running' && form.case_scope !== 'active') {
-    message.warning('请选择当前在院病历范围')
+  if (requiredCaseScope.value && form.case_scope !== requiredCaseScope.value) {
+    message.warning(props.scene === 'final' ? '请选择已出院病历范围' : '请选择当前在院病历范围')
     return
+  }
+  if (props.scene === 'final') {
+    const rangeError = dischargedDateRangeError(
+      form.dateRange?.[0]?.format('YYYY-MM-DD'),
+      form.dateRange?.[1]?.format('YYYY-MM-DD'),
+    )
+    if (rangeError) {
+      message.warning(rangeError)
+      return
+    }
   }
   if (props.scene === 'running') {
     const rangeError = activeDateRangeError(form.dateRange)
@@ -322,8 +349,8 @@ const handleSubmit = async () => {
   } else if (form.sampling_method === 'percentage') {
     params.sampling_config = { percentage: form.sampling_pct }
   }
-  if (props.scene === 'running' && form.case_scope === 'active') {
-    params.sampling_config = { ...params.sampling_config, case_scope: 'active' }
+  if (requiredCaseScope.value && form.case_scope === requiredCaseScope.value) {
+    params.sampling_config = { ...params.sampling_config, case_scope: requiredCaseScope.value }
   }
 
   submitting.value = true

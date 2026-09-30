@@ -157,6 +157,10 @@ class TaskTemplateConfig(BaseModel):
         if self.scene == TaskScene.RUNNING:
             if case_scope != "active":
                 raise ValueError("运行病历模板当前仅支持当前在院范围")
+        elif self.scene == TaskScene.FINAL:
+            # 终末口径 B：终末任务可选“期间出院”（未核验归档）；未选范围的历史配置保持兼容。
+            if case_scope not in (None, "discharged"):
+                raise ValueError("终末病历模板仅支持已出院范围")
         elif case_scope is not None:
             raise ValueError("当前场景不支持 case_scope")
         if method == SamplingMethod.COUNT:

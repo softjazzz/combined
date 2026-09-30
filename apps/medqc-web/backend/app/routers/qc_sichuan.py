@@ -1852,7 +1852,7 @@ def _validate_task_job_after_cdm_lock(job_id: str, filters: dict[str, Any]) -> N
         if task_id != association["task_id"] or run_number != str(association["run_number"]):
             raise RuntimeError("任务运行快照与关联不一致")
         from ..services.task_qc_run_service import (
-            _active_remote_task, _assert_active_sync_receipt, _task_and_refs,
+            _remote_scope_task, _assert_task_sync_receipt, _task_and_refs,
         )
 
         task, refs = _task_and_refs(
@@ -1865,8 +1865,8 @@ def _validate_task_job_after_cdm_lock(job_id: str, filters: dict[str, Any]) -> N
         frozen = {tuple(item.get(key) for key in keys) for item in frozen_refs if isinstance(item, dict)}
         if len(frozen) != len(refs) or frozen != {tuple(ref[key] for key in keys) for ref in refs}:
             raise RuntimeError("任务运行病例快照不一致")
-        if _active_remote_task(task):
-            _assert_active_sync_receipt(session, task, refs, association["run_scope"], association["triggered_by"])
+        if _remote_scope_task(task):
+            _assert_task_sync_receipt(session, task, refs, association["run_scope"], association["triggered_by"])
 
 
 def _resolve_shared_sample_pool_latest_job(

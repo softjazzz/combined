@@ -217,3 +217,55 @@ def test_non_active_running_task_preserves_legacy_local_contract(env):
         session.execute(QCTask.__table__.update().where(QCTask.id == "task-1")
                         .values(sampling_config=json.dumps({"case_scope": "discharged"})))
     assert _run(env)["job_id"] == "workspace-1"
+
+
+# ---------------------------------------------------------------------------
+# 终末口径 B：终末“已出院”任务与在院任务同一回执合同，场景按任务自身校验
+# ---------------------------------------------------------------------------
+
+
+def _as_final_discharged(env):
+    with env.sessions.begin() as session:
+        session.execute(QCTask.__table__.update().where(QCTask.id == "task-1").values(
+            scene="final", rule_set_key="sc_content_v1",
+            rule_set_version=get_sichuan_rule_set("sc_content_v1").version,
+            sampling_config=json.dumps({"case_scope": "discharged"}),
+        ))
+    env.payload["scene"] = "final"
+    env.summary["scene"] = "final"
+
+
+def test_final_discharged_run_requires_successful_receipt(env):
+    _as_final_discharged(env)
+    _blocked(env, "缺少成功的资料同步收据")
+
+
+def test_final_discharged_run_accepts_exact_final_receipt_and_final_bundle(env, monkeypatch):
+    _as_final_discharged(env)
+    _job(env)
+    scenes = []
+
+    def bundle(**kwargs):
+        scenes.append(kwargs["scene"])
+        return env.bundle
+
+    monkeypatch.setattr(service, "_load_scene_bundle", bundle)
+    result = _run(env)
+    assert result["job_id"] == "workspace-1"
+    assert scenes == ["final"]
+
+
+def test_final_discharged_run_rejects_running_receipt(env):
+    _as_final_discharged(env)
+    env.payload["scene"] = "running"
+    env.summary["scene"] = "running"
+    _job(env)
+    _blocked(env, "合同不一致")
+
+
+def test_final_task_without_scope_keeps_legacy_local_contract(env):
+    _as_final_discharged(env)
+    with env.sessions.begin() as session:
+        session.execute(QCTask.__table__.update().where(QCTask.id == "task-1")
+                        .values(sampling_config=json.dumps({})))
+    assert _run(env)["job_id"] == "workspace-1"
