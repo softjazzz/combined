@@ -153,7 +153,8 @@ class TestAuthAPI:
         data = response.json()
         assert data["email"] == register_data["email"]
         assert data["display_name"] == register_data["display_name"]
-        assert data["department"] == register_data["department"]
+        # 科室只由管理员分配，公开注册提交的科室不保存。
+        assert not data["department"]
         assert "doctor" in data["roles"]
         assert data["phone"] == register_data["phone"]
         assert data["bio"] == register_data["bio"]
@@ -235,7 +236,7 @@ class TestAuthAPI:
         data = response.json()
         assert data["email"] == email
         assert data["display_name"] == "当前用户"
-        assert data["department"] == "测试部门"
+        assert not data["department"]
 
     def test_get_current_user_no_token(self, client):
         """测试获取当前用户信息 - 未提供 token"""
@@ -270,10 +271,18 @@ class TestAuthAPI:
         })
         token = login_response.json()["access_token"]
 
+        # 非管理员不能自改科室，整次更新被拒绝
+        forbidden = client.put(
+            "/api/v1/auth/profile",
+            json={"display_name": "越权", "department": "新部门"},
+            headers={"Authorization": f"Bearer {token}"}
+        )
+        assert forbidden.status_code == 403
+
         # 更新资料
         update_data = {
             "display_name": "新用户名",
-            "department": "新部门",
+            "department": "",
             "phone": _unique_phone(),
             "bio": "新的个人简介"
         }
@@ -286,7 +295,7 @@ class TestAuthAPI:
         assert response.status_code == 200
         data = response.json()
         assert data["display_name"] == "新用户名"
-        assert data["department"] == "新部门"
+        assert not data["department"]
         assert data["phone"] == update_data["phone"]
         assert data["bio"] == "新的个人简介"
 
@@ -322,7 +331,7 @@ class TestAuthAPI:
         assert response.status_code == 200
         data = response.json()
         assert data["display_name"] == "新用户名"
-        assert data["department"] == "原始部门"  # 未更新
+        assert not data["department"]  # 注册不保存科室，部分更新也不改变
         assert data["phone"] == register_data["phone"]  # 未更新
 
     def test_update_profile_no_token(self, client):

@@ -119,7 +119,8 @@ export interface RegisterRequest {
   email: string
   password: string
   display_name: string
-  department: string
+  /** 已废弃：科室由管理员分配，后端不保存注册时提交的值。 */
+  department?: string
   hospital_id?: string
   role?: UserRole
 }

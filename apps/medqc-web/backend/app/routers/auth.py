@@ -218,7 +218,8 @@ async def register(request: Request, user_data: UserCreate):
             email=str(user_data.email),
             username=user_data.username,
             display_name=user_data.display_name,
-            department=user_data.department,
+            # 科室决定医生的数据范围，公开注册不能自选，需管理员分配。
+            department=None,
             phone=user_data.phone,
             bio=user_data.bio,
             role="doctor",
@@ -236,11 +237,22 @@ async def get_current_user_info(    request: Request,current_user: dict = Depend
 
 @router.put("/profile")
 async def update_profile(    request: Request,profile_data: UserUpdate, current_user: dict = Depends(get_current_user)):
+    department = profile_data.department
+    if department is not None:
+        requested = department.strip()
+        current = str(current_user.get("department") or "").strip()
+        roles = {str(role) for role in current_user.get("roles") or []}
+        if requested != current and "admin" not in roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="科室由管理员维护，个人资料不能修改科室",
+            )
+        department = requested if requested != current else None
     try:
         user = update_user_profile(
             user_id=str(current_user.get("id") or ""),
             display_name=profile_data.display_name,
-            department=profile_data.department,
+            department=department,
             phone=profile_data.phone,
             bio=profile_data.bio,
         )

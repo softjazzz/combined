@@ -49,29 +49,19 @@
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        <!-- 科室 -->
-        <a-form-item
-          name="department"
-          class="mb-4"
-        >
+        <!-- 科室：数据范围依据，只读，由管理员维护 -->
+        <div class="mb-4">
           <label class="block text-xs font-medium text-slate-300 mb-2">科室</label>
-          <a-select
-            v-model:value="profileForm.department"
-            placeholder="选择所属科室"
-            size="large"
-            class="department-select"
-            show-search
-            :filter-option="filterDepartment"
+          <p
+            class="department-readonly"
+            data-testid="profile-department"
           >
-            <a-select-option
-              v-for="dept in departments"
-              :key="dept.value"
-              :value="dept.value"
-            >
-              {{ dept.label }}
-            </a-select-option>
-          </a-select>
-        </a-form-item>
+            {{ props.user?.department || '未分配' }}
+          </p>
+          <p class="text-xs text-slate-400 mt-1">
+            科室由管理员维护，如需调整请联系管理员。
+          </p>
+        </div>
 
         <!-- 手机号 -->
         <a-form-item
@@ -275,7 +265,6 @@ const profileForm = reactive({
   avatar: '',
   display_name: '',
   email: '',
-  department: '',
   phone: '',
   bio: '',
   notifications: {
@@ -285,31 +274,6 @@ const profileForm = reactive({
   },
 })
 
-// 科室列表（复用注册表单的）
-const departments = [
-  { value: '内科', label: '内科' },
-  { value: '外科', label: '外科' },
-  { value: '妇产科', label: '妇产科' },
-  { value: '儿科', label: '儿科' },
-  { value: '急诊科', label: '急诊科' },
-  { value: '骨科', label: '骨科' },
-  { value: '神经科', label: '神经科' },
-  { value: '心血管科', label: '心血管科' },
-  { value: '呼吸科', label: '呼吸科' },
-  { value: '消化科', label: '消化科' },
-  { value: '泌尿科', label: '泌尿科' },
-  { value: '眼科', label: '眼科' },
-  { value: '耳鼻喉科', label: '耳鼻喉科' },
-  { value: '皮肤科', label: '皮肤科' },
-  { value: '精神科', label: '精神科' },
-  { value: '康复科', label: '康复科' },
-  { value: '影像科', label: '影像科' },
-  { value: '检验科', label: '检验科' },
-  { value: '药剂科', label: '药剂科' },
-  { value: '质控科', label: '质控科' },
-  { value: '信息科', label: '信息科' },
-  { value: '其他', label: '其他' },
-]
 
 // 用户角色
 const userRoles = computed(() => props.user?.roles || [])
@@ -321,7 +285,6 @@ const profileRules = {
     { min: 2, message: '姓名至少2个字符', trigger: 'blur' },
     { max: 20, message: '姓名不能超过20个字符', trigger: 'blur' },
   ],
-  department: [{ required: true, message: '请选择科室', trigger: 'change' }],
   phone: [
     {
       validator: (_: unknown, value: string) => {
@@ -344,7 +307,6 @@ const initializeForm = () => {
       avatar: props.user.avatar || '',
       display_name: props.user.display_name || '',
       email: props.user.email || '',
-      department: props.user.department || '',
       phone: props.user.phone || '',
       bio: props.user.bio || '',
       notifications: {
@@ -382,13 +344,6 @@ const handleAvatarSuccess = (url: string) => {
 // Handle avatar upload error
 const handleAvatarError = (error: string) => {
   console.error('头像上传失败:', error)
-}
-
-// Filter department options
-const filterDepartment = (input: string, option: unknown) => {
-  if (typeof option !== 'object' || !option || !('children' in option)) return false
-  const children = String((option as { children?: unknown }).children || '')
-  return children.toLowerCase().includes(input.toLowerCase())
 }
 
 // Get role color
@@ -493,17 +448,10 @@ watch(
   margin-top: 4px;
 }
 
-.department-select :deep(.ant-select-dropdown) {
-  background: rgb(15 23 42) !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
-}
-
-.department-select :deep(.ant-select-item) {
-  color: rgb(241 245 249) !important;
-}
-
-.department-select :deep(.ant-select-item-option-selected) {
-  background: rgba(6, 182, 212, 0.2) !important;
+.department-readonly {
+  margin: 0;
+  color: rgb(241 245 249);
+  font-size: 15px;
 }
 
 /* 通知设置项动画 */

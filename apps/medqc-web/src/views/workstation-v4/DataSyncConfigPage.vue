@@ -419,6 +419,17 @@
             <LLMApiConfig />
           </div>
         </a-tab-pane>
+
+        <a-tab-pane
+          v-if="canManageUserDepartments"
+          key="userDepartments"
+          tab="账号科室"
+          data-testid="user-departments-tab"
+        >
+          <div class="system-config-tab-shell system-config-tab-shell--panel">
+            <UserDepartmentPanel />
+          </div>
+        </a-tab-pane>
       </a-tabs>
     </div>
   </div>
@@ -437,6 +448,7 @@ import FrontpageExtractionSettingsPanel from './components/system-config/Frontpa
 import LLMApiConfig from '@/components/LLMApiConfig.vue'
 import { useDataSync } from './composables/useDataSync'
 import LlmPerformanceObservabilityPanel from './components/system-config/LlmPerformanceObservabilityPanel.vue'
+import UserDepartmentPanel from './components/system-config/UserDepartmentPanel.vue'
 import { useAuthStore } from '@/stores/auth'
 
 const activeTab = ref('dataSync')
@@ -471,6 +483,9 @@ const canManageLlmConfig = computed(() =>
   authStore.userRoles.some((role) => ['admin', 'sync_admin', 'super_admin'].includes(role)),
 )
 const isDemoSyncUser = computed(() => !isSyncAdvancedUser.value)
+/** 账号科室是医生数据范围依据，仅管理员维护（后端同样只放行 admin）。 */
+const canManageUserDepartments = computed(() => authStore.userRoles.includes('admin'))
+const NON_SYNC_TABS = new Set(['llmConfig', 'llmObservability', 'userDepartments'])
 
 const isObservabilityOperationalAdmin = computed(() =>
   authStore.userRoles.some((role) => role === 'sync_admin' || role === 'super_admin'),
@@ -1164,17 +1179,18 @@ onMounted(async () => {
   const canOpenRequestedTab =
     (requestedTab === 'frontpageExtraction' && canManageFrontpageConfig.value) ||
     (requestedTab === 'llmConfig' && canManageLlmConfig.value) ||
-    (requestedTab === 'llmObservability' && canViewLlmObservability.value)
+    (requestedTab === 'llmObservability' && canViewLlmObservability.value) ||
+    (requestedTab === 'userDepartments' && canManageUserDepartments.value)
   if (canOpenRequestedTab) {
     activeTab.value = requestedTab
   }
-  if (activeTab.value !== 'llmConfig' && activeTab.value !== 'llmObservability') {
+  if (!NON_SYNC_TABS.has(activeTab.value)) {
     await ensureSyncInitialized()
   }
 })
 
 watch(activeTab, async (tab) => {
-  if (tab === 'llmConfig' || tab === 'llmObservability') return
+  if (NON_SYNC_TABS.has(tab)) return
   await ensureSyncInitialized()
 })
 

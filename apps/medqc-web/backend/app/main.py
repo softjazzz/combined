@@ -40,6 +40,7 @@ from .routers import filter_templates as filter_templates_router
 from .routers import rule_set_versions as rule_set_versions_router
 from .routers import scoring as scoring_router
 from .routers import document_definitions as document_definitions_router
+from .routers import admin_users as admin_users_router
 from .routers import manual_defect_reviews as manual_defect_reviews_router
 from .routers import classification as classification_router
 from .routers import llm_configs as llm_configs_router
@@ -288,6 +289,7 @@ def create_app() -> FastAPI:
     app.include_router(rule_set_versions_router.router)
     app.include_router(scoring_router.router)
     app.include_router(document_definitions_router.router)
+    app.include_router(admin_users_router.router)
     app.include_router(manual_defect_reviews_router.router)
     app.include_router(classification_router.router)
     app.include_router(llm_configs_router.router)

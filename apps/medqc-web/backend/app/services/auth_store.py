@@ -261,7 +261,7 @@ def create_user(
     email: str,
     username: str | None,
     display_name: str,
-    department: str,
+    department: str | None,
     phone: str | None,
     bio: str | None,
     role: str,

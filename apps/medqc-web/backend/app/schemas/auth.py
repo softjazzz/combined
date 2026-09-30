@@ -10,7 +10,8 @@ class UserBase(BaseModel):
     email: EmailStr
     username: Optional[str] = None
     display_name: str
-    department: str
+    # 科室是数据范围授权依据，只由管理员维护；注册时提交的值不会保存。
+    department: Optional[str] = None
     phone: Optional[str] = None
     bio: Optional[str] = None
 

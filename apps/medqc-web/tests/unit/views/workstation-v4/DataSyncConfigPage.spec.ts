@@ -113,6 +113,7 @@ function mountPage() {
         FrontpageExtractionSettingsPanel: { template: '<div />' },
         LLMApiConfig: { template: '<div />' },
         LlmPerformanceObservabilityPanel: { template: '<div />' },
+        UserDepartmentPanel: { template: '<div />' },
       },
     },
   })
@@ -344,12 +345,12 @@ describe('DataSyncConfigPage visit progress', () => {
   })
 
   it.each([
-    { role: 'qc_manager', frontpage: true, llm: false, observability: false },
-    { role: 'admin', frontpage: true, llm: true, observability: true },
-    { role: 'sync_admin', frontpage: true, llm: true, observability: true },
-    { role: 'super_admin', frontpage: true, llm: true, observability: true },
-    { role: 'doctor', frontpage: false, llm: false, observability: false },
-  ])('按 $role 的后端角色合同展示系统配置页签', ({ role, frontpage, llm, observability }) => {
+    { role: 'qc_manager', frontpage: true, llm: false, observability: false, departments: false },
+    { role: 'admin', frontpage: true, llm: true, observability: true, departments: true },
+    { role: 'sync_admin', frontpage: true, llm: true, observability: true, departments: false },
+    { role: 'super_admin', frontpage: true, llm: true, observability: true, departments: false },
+    { role: 'doctor', frontpage: false, llm: false, observability: false, departments: false },
+  ])('按 $role 的后端角色合同展示系统配置页签', ({ role, frontpage, llm, observability, departments }) => {
     mockUserRoles = [role]
 
     const wrapper = mountPage()
@@ -357,6 +358,20 @@ describe('DataSyncConfigPage visit progress', () => {
     expect(wrapper.find('[data-testid="frontpage-config-tab"]').exists()).toBe(frontpage)
     expect(wrapper.find('[data-testid="llm-config-tab"]').exists()).toBe(llm)
     expect(wrapper.find('[data-testid="llm-observability-tab"]').exists()).toBe(observability)
+    expect(wrapper.find('[data-testid="user-departments-tab"]').exists()).toBe(departments)
+  })
+
+  it('管理员可通过 tab 查询参数打开账号科室，非管理员不能', async () => {
+    mockUserRoles = ['admin']
+    mockRoute.query = { tab: 'userDepartments' }
+    const wrapper = mountPage()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.get('[data-testid="system-config-tabs"]').attributes('data-active-key')).toBe('userDepartments')
+
+    mockUserRoles = ['sync_admin']
+    const other = mountPage()
+    await other.vm.$nextTick()
+    expect(other.get('[data-testid="system-config-tabs"]').attributes('data-active-key')).toBe('dataSync')
   })
 
   it('演示账号不显示模型性能页签', () => {

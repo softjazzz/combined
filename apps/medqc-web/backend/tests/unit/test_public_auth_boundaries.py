@@ -83,6 +83,8 @@ def test_public_registration_only_creates_doctor(registration_client, role):
     assert response.json()["data"]["roles"] == ["doctor"]
     assert len(create_calls) == 1
     assert create_calls[0]["role"] == "doctor"
+    # 科室是医生数据范围依据，公开注册提交的科室不写入。
+    assert create_calls[0]["department"] is None
     assert len(hash_calls) == 1
 
 
