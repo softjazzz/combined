@@ -1,0 +1,209 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
+import { defineComponent } from 'vue'
+import * as api from '@/services/rule-validation-service'
+import type { ComparisonRow, RuleDetail, RuleListItem, ValidationCase } from '@/services/rule-validation-service'
+import RuleValidationListView from '@/views/workstation-v4/rule-validation/RuleValidationListView.vue'
+import RuleValidationDetailView from '@/views/workstation-v4/rule-validation/RuleValidationDetailView.vue'
+import CaseReviewDrawer from '@/views/workstation-v4/rule-validation/CaseReviewDrawer.vue'
+
+vi.mock('@/services/rule-validation-service', () => ({
+  listValidationRules: vi.fn(),
+  getValidationRule: vi.fn(),
+  listCandidateCases: vi.fn(),
+  saveCaseAnswer: vi.fn(),
+  removeCaseAnswer: vi.fn(),
+  startValidationRun: vi.fn(),
+  getValidationRun: vi.fn(),
+  reviewCase: vi.fn(),
+  concludeRule: vi.fn(),
+  approveRule: vi.fn(),
+}))
+const push = vi.fn()
+vi.mock('vue-router', () => ({
+  useRoute: () => ({ params: { ruleId: 'LX0609-06-01-01' }, query: {} }),
+  useRouter: () => ({ push }),
+}))
+vi.mock('ant-design-vue', () => ({ message: { success: vi.fn(), warning: vi.fn() } }))
+
+const wrap = { template: '<div><slot /></div>' }
+const textarea = defineComponent({
+  props: ['value'],
+  emits: ['update:value'],
+  template: `<textarea :value="value" @input="$emit('update:value', $event.target.value)" />`,
+})
+const stubs = {
+  ASpin: wrap,
+  AModal: true,
+  ADrawer: { props: ['open'], template: '<div v-if="open"><slot /></div>' },
+  AAlert: { props: ['message'], template: '<p class="alert">{{ message }}</p>' },
+  AInput: textarea,
+  ATextarea: textarea,
+  RouterLink: { props: ['to'], template: '<a><slot /></a>' },
+  CaseAnswerModal: true,
+  ApprovalModal: true,
+  MqIconTile: true,
+}
+
+const coverage = (gaps: string[] = []) => ({
+  counts: {
+    compliant: { synthetic: 1, real_copy: 1 },
+    non_compliant: { synthetic: 1, real_copy: 0 },
+    not_applicable: { synthetic: 0, real_copy: 0 },
+    data_gap: { synthetic: 0, real_copy: 0 },
+  },
+  gaps,
+  acceptance_cases: 1,
+}) as RuleDetail['coverage']
+
+function listItem(overrides: Partial<RuleListItem>): RuleListItem {
+  return {
+    rule_id: 'LX0609-06-01-01', name: '医嘱与病程一致性', source_document: 'CT/MRI检查记录',
+    release_scope: 'acceptance_only', policy_summary: '', stage: 'reviewing', case_count: 3,
+    coverage: coverage(['not_applicable', 'data_gap']), latest_run: null, ...overrides,
+  }
+}
+
+const caseA: ValidationCase = {
+  item_id: 'a', case_title: '合成 · 已记录', record_ref: { institute_id: 'I', patient_id: 'P', visit_id: 'A' },
+  source_kind: 'synthetic', evaluation_as_of_date: '2026-07-05', expected_status: 'compliant',
+  human_reason: '病程已记录', purpose: 'development', answer_revision: 1,
+}
+const caseB: ValidationCase = { ...caseA, item_id: 'b', case_title: '真实副本 · 未记录', source_kind: 'real_copy', expected_status: 'non_compliant', purpose: 'acceptance' }
+const run = {
+  id: 'run-1', rule_id: 'LX0609-06-01-01', cases: [caseA, caseB], job_id: 'job-1', state: 'bound' as const,
+  execution_version: { lx0609_task_runtime: { implementation: { kind: 'process' } } }, build_kind: 'development' as const,
+  created_by: 'u', created_at: '2026-09-29T06:20:00',
+}
+const rows: ComparisonRow[] = [
+  { ...caseA, actual_status: 'compliant', comparison: 'same', result: { status: 'compliant', customer_conclusion: '病程已记录检查目的' } },
+  { ...caseB, actual_status: 'compliant', comparison: 'different', result: { status: 'compliant', evidence: [{ document_title: '日常病程', evidence_excerpt: '片段' }] } },
+]
+
+function detail(overrides: Partial<RuleDetail> = {}): RuleDetail {
+  return {
+    rule: { rule_id: 'LX0609-06-01-01', name: '医嘱与病程一致性', source_document: 'CT/MRI检查记录', release_scope: 'acceptance_only', policy_summary: '口径', impact_class: '未声明' },
+    stage: 'reviewing', cases: [caseA, caseB], coverage: coverage(['not_applicable', 'data_gap']), runs: [run],
+    latest_run_rows: rows, acceptance_blockers: ['存在状态不一致、缺少结果或执行失败的病例'],
+    events: [{ id: 'e1', rule_id: 'LX0609-06-01-01', run_id: 'run-1', item_id: 'a', kind: 'case_review', decision: 'confirmed', note: '证据对', payload: {}, actor: 'r', created_at: '2026-09-29T07:00:00' }],
+    ...overrides,
+  }
+}
+
+const button = (wrapper: ReturnType<typeof mount>, text: string) =>
+  wrapper.findAll('button').find((b) => b.text().includes(text))!
+
+beforeEach(() => {
+  vi.resetAllMocks()
+})
+
+describe('规则验收列表', () => {
+  it('只列待验收规则，按阶段汇总并链接到详情', async () => {
+    vi.mocked(api.listValidationRules).mockResolvedValue({ success: true, data: { items: [
+      listItem({}),
+      listItem({ rule_id: 'LX0609-06-01-03', name: '报告单完整性', stage: 'pending_approval', case_count: 8, coverage: coverage() }),
+      listItem({ rule_id: 'LX0609-06-01-04', name: '已上线规则', release_scope: 'default', stage: 'released' }),
+    ] } })
+    const wrapper = mount(RuleValidationListView, { global: { stubs } })
+    await flushPromises()
+
+    expect(api.listValidationRules).toHaveBeenCalledWith(false)
+    const rowsText = wrapper.findAll('[data-testid="rule-row"]').map((r) => r.text())
+    expect(rowsText).toHaveLength(2)
+    expect(rowsText[0]).toContain('待复核')
+    expect(rowsText[0]).toContain('缺 2 类')
+    expect(rowsText[1]).toContain('待批准')
+    expect(wrapper.text()).toContain('2 条规则待验收')
+    expect(wrapper.text()).toContain('11')  // 待验收规则的测试病例合计
+  })
+
+  it('切换到已上线时带上 include_released 重新加载，只显示已上线规则', async () => {
+    vi.mocked(api.listValidationRules).mockResolvedValue({ success: true, data: { items: [
+      listItem({}),
+      listItem({ rule_id: 'LX0609-06-01-04', name: '已上线规则', release_scope: 'default', stage: 'released' }),
+    ] } })
+    const wrapper = mount(RuleValidationListView, { global: { stubs } })
+    await flushPromises()
+    await wrapper.find('[data-testid="scope-released"]').trigger('click')
+    await flushPromises()
+
+    expect(api.listValidationRules).toHaveBeenLastCalledWith(true)
+    const rowsText = wrapper.findAll('[data-testid="rule-row"]').map((r) => r.text())
+    expect(rowsText).toEqual([expect.stringContaining('已上线规则')])
+  })
+})
+
+describe('规则验收详情', () => {
+  it('展示病例、逐例对照与未满足的通过条件；存在阻碍时不能验收通过', async () => {
+    vi.mocked(api.getValidationRule).mockResolvedValue({ success: true, data: detail() })
+    const wrapper = mount(RuleValidationDetailView, { global: { stubs } })
+    await flushPromises()
+
+    expect(api.getValidationRule).toHaveBeenCalledWith('LX0609-06-01-01')
+    expect(wrapper.findAll('[data-testid="case-row"]')).toHaveLength(2)
+    const compare = wrapper.findAll('[data-testid="compare-row"]').map((r) => r.text())
+    expect(compare[0]).toContain('已确认')
+    expect(compare[1]).toContain('不一致')
+    expect(compare[1]).toContain('待核对')
+    expect(wrapper.text()).toContain('还有 1 例未确认')
+    expect(wrapper.text()).toContain('执行版本：开发版本')
+
+    await wrapper.find('textarea[aria-label="验收意见"]').setValue('已核对')
+    expect(wrapper.find('[data-testid="accept-rule"]').attributes('disabled')).toBeDefined()
+    expect(button(wrapper, '记录不通过').attributes('disabled')).toBeUndefined()
+  })
+
+  it('无阻碍时须填写覆盖缺口说明才能通过，并提交最新运行', async () => {
+    const confirmedRows = rows.map((r) => ({ ...r, comparison: 'same' as const, actual_status: r.expected_status }))
+    vi.mocked(api.getValidationRule).mockResolvedValue({ success: true, data: detail({
+      stage: 'pending_conclusion', latest_run_rows: confirmedRows, acceptance_blockers: [],
+      events: ['a', 'b'].map((item) => ({ id: item, rule_id: 'LX0609-06-01-01', run_id: 'run-1', item_id: item, kind: 'case_review' as const, decision: 'confirmed', note: 'ok', payload: {}, actor: 'r', created_at: '2026-09-29T07:00:00' })),
+    }) })
+    vi.mocked(api.concludeRule).mockResolvedValue({ success: true, data: {} as never })
+    const wrapper = mount(RuleValidationDetailView, { global: { stubs } })
+    await flushPromises()
+
+    const accept = () => wrapper.find('[data-testid="accept-rule"]')
+    await wrapper.find('textarea[aria-label="验收意见"]').setValue('两例均核对')
+    expect(accept().attributes('disabled')).toBeDefined()
+    await wrapper.find('textarea[aria-label="覆盖缺口说明"]').setValue('不适用、资料不足暂无病例')
+    expect(accept().attributes('disabled')).toBeUndefined()
+    await accept().trigger('click')
+    await flushPromises()
+
+    expect(api.concludeRule).toHaveBeenCalledWith('LX0609-06-01-01', {
+      run_id: 'run-1', decision: 'accepted', note: '两例均核对', gap_ack: '不适用、资料不足暂无病例',
+    })
+  })
+
+  it('运行本规则后重新加载详情', async () => {
+    vi.mocked(api.getValidationRule).mockResolvedValue({ success: true, data: detail({ runs: [], latest_run_rows: null, stage: 'ready_to_run', events: [] }) })
+    vi.mocked(api.startValidationRun).mockResolvedValue({ success: true, data: { run_id: 'run-2', job_id: 'job-2' } })
+    const wrapper = mount(RuleValidationDetailView, { global: { stubs } })
+    await flushPromises()
+
+    await wrapper.find('[data-testid="start-run"]').trigger('click')
+    await flushPromises()
+    expect(api.startValidationRun).toHaveBeenCalledWith('LX0609-06-01-01')
+    expect(api.getValidationRule).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('逐例核对抽屉', () => {
+  it('状态不一致时不能确认通过，只能记录问题', async () => {
+    vi.mocked(api.reviewCase).mockResolvedValue({ success: true, data: {} as never })
+    const wrapper = mount(CaseReviewDrawer, {
+      props: { runId: 'run-1', runTime: '09-29 14:20', rows, index: 1, reviews: [] },
+      global: { stubs },
+    })
+    expect(wrapper.text()).toContain('真实副本 · 未记录')
+    expect(wrapper.text()).toContain('日常病程')
+    await wrapper.find('textarea[aria-label="核对意见"]').setValue('系统误判为合规')
+    expect(wrapper.find('[data-testid="confirm-case"]').attributes('disabled')).toBeDefined()
+    await button(wrapper, '记录问题').trigger('click')
+    await flushPromises()
+
+    expect(api.reviewCase).toHaveBeenCalledWith('run-1', 'b', 'problem', '系统误判为合规')
+    expect(wrapper.emitted('reviewed')).toHaveLength(1)
+  })
+})

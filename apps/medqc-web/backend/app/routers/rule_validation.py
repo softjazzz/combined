@@ -84,7 +84,18 @@ async def _run_rows(request: Request, run: dict, current_user: Dict[str, Any]) -
     job = await _read_job(request, run["job_id"], current_user)
     if job is None:
         job = {"status": "creation_failed" if run["state"] == "creation_failed" else "creating"}
-    return compare_cases(run["rule_id"], run["cases"], job)
+    return compare_cases(run["rule_id"], run["cases"], job, project=_project_result)
+
+
+_RESULT_FIELDS = ("status", "display_status", "reason_code", "customer_conclusion", "conclusion",
+                  "customer_suggestion", "suggestion", "findings", "evidence")
+
+
+def _project_result(item: dict) -> dict:
+    """逐例核对只展示客户安全投影字段，不回传病历身份或内部审计字段。"""
+    from ..services.custom_qc_workspace_service import customer_safe_projection_key, project_customer_safe_result_item
+    projected = project_customer_safe_result_item(item, hmac_key=customer_safe_projection_key())
+    return {k: projected.get(k) for k in _RESULT_FIELDS}
 
 
 async def _detail(request: Request, service: RuleValidationService, rule_id: str, current_user) -> dict:

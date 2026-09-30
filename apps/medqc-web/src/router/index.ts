@@ -1125,6 +1125,18 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '自定义质控点', permission: ['admin', 'qc_manager'] },
       },
       {
+        path: 'rules/validation',
+        name: 'WorkstationV4RuleValidation',
+        component: () => import('@/views/workstation-v4/rule-validation/RuleValidationListView.vue'),
+        meta: { title: '规则验收', permission: ['admin', 'qc_manager'] },
+      },
+      {
+        path: 'rules/validation/:ruleId',
+        name: 'WorkstationV4RuleValidationDetail',
+        component: () => import('@/views/workstation-v4/rule-validation/RuleValidationDetailView.vue'),
+        meta: { title: '规则验收详情', permission: ['admin', 'qc_manager'] },
+      },
+      {
         path: 'qc-overview',
         name: 'WorkstationV4QCOverview',
         component: () => import('@/views/workstation/QCOverviewView.vue'),

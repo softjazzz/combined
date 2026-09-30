@@ -1433,11 +1433,11 @@ async def run_sample_pool_intrinsic_validation(
         rule_set_key=rule_set_key,
         rule_set_name=rule_set_name,
     )
-    # 仅专用验收路由设置request.state；HTTP请求体不能注入此引用。
+    # 仅规则验收路由设置request.state；HTTP请求体不能注入此引用。
     validation_ref = getattr(request.state, "rule_validation_reference", None)
     if validation_ref is not None and (
         pool_id != CUSTOMER_TEST_POOL_ID or payload.group_by_luxian_family
-        or sorted(requested_sample_item_ids) != sorted(validation_ref.get("item_ids") or [validation_ref.get("item_id")])
+        or sorted(requested_sample_item_ids) != sorted(validation_ref["item_ids"])
         or rule_set_key != LUXIAN_0609_QC_RULE_SET_KEY
     ):
         raise HTTPException(status_code=422, detail="规则验收仅支持自建测试池的LX0609任务，且病例须与验收运行一致")
@@ -1806,12 +1806,9 @@ async def run_sample_pool_intrinsic_validation(
         run_mode="parallel",
         rule_count=len(rule_ids),
     )
-    if validation_ref is not None and validation_ref.get("kind") == "rule":
+    if validation_ref is not None:
         from ..services.rule_validation import RuleValidationService
         RuleValidationService().bind_run(validation_ref["run_id"], job["id"], job_filters)
-    elif validation_ref is not None:
-        _test_validation_service().bind(validation_ref["item_id"], validation_ref["run_id"],
-                                        created_by, job["id"], job_filters)
     service.update_pool_latest_job(pool_id=pool_id, job_id=job["id"], job_status="queued")
     submit_detached_task(
         "sample_pool_sichuan_workspace_batch_job",
@@ -1846,116 +1843,3 @@ async def run_sample_pool_intrinsic_validation(
         message="正式质控任务已创建" if is_formal_fast_screen_full else "客户样本验证任务已创建",
         trace_id=get_trace_id(request),
     )
-
-
-# 验收元数据独立于医学任务；人工答案不进入运行请求或Worker filters。
-class TestValidationAnswersRequest(BaseModel):
-    revision: int = Field(ge=0)
-    answers: list[TestRecordGoldenAnswer] = Field(min_length=1, max_length=20)
-
-
-class TestValidationRunRequest(BaseModel):
-    revision: int = Field(ge=0)
-
-
-class TestValidationReviewRequest(BaseModel):
-    decision: Literal["accepted", "rejected"]
-    note: str = Field(min_length=1, max_length=4000)
-
-
-def _test_validation_service():
-    from ..services.test_case_validation import TestCaseValidationService
-    return TestCaseValidationService()
-
-
-def _validation_error(exc):
-    from ..services.test_case_validation import ValidationConflict
-    return HTTPException(status_code=404 if isinstance(exc, LookupError) else 409 if isinstance(exc, ValidationConflict) else 422,
-                         detail=str(exc))
-
-
-@router.get("/test-records/{item_id}/validation")
-async def get_test_validation(request: Request, item_id: str,
-                              current_user: Dict[str, Any] = Depends(get_current_user)):
-    from ..services.test_case_validation import rule_options
-    try:
-        data = _test_validation_service().read(item_id)
-    except (LookupError, ValueError) as exc:
-        raise _validation_error(exc) from exc
-    data["runs"] = [r for r in data["runs"] if r["created_by"] == _current_user_id(current_user)]
-    data["rule_options"] = rule_options()
-    return success_response(data=data, trace_id=get_trace_id(request))
-
-
-@router.put("/test-records/{item_id}/validation")
-async def save_test_validation(request: Request, item_id: str, payload: TestValidationAnswersRequest,
-                               current_user: Dict[str, Any] = Depends(get_current_user)):
-    try:
-        _test_validation_service().save_answers(item_id, payload.revision,
-            [a.model_dump(mode="json") for a in payload.answers], _current_user_id(current_user))
-    except (LookupError, ValueError) as exc:
-        raise _validation_error(exc) from exc
-    return await get_test_validation(request, item_id, current_user)
-
-
-@router.post("/test-records/{item_id}/validation/runs")
-async def run_test_validation(request: Request, item_id: str, payload: TestValidationRunRequest,
-                              current_user: Dict[str, Any] = Depends(get_current_user),
-                              activation: Dict[str, Any] = Depends(require_product_activation)):
-    user = _current_user_id(current_user)
-    service = _test_validation_service()
-    try:
-        run = service.begin(item_id, payload.revision, user)
-    except (LookupError, ValueError) as exc:
-        raise _validation_error(exc) from exc
-    try:
-        request.state.rule_validation_reference = {"item_id": item_id, "run_id": run["id"]}
-        result = await run_sample_pool_intrinsic_validation(request, CUSTOMER_TEST_POOL_ID,
-            SamplePoolRunRequest(sample_item_ids=[item_id], record_refs=[SamplePoolRunRecordRef(**run["record_ref"])],
-                selected_rule_ids=[a["qc_point_id"] for a in run["answers"]],
-                rule_set_key=LUXIAN_0609_QC_RULE_SET_KEY, group_by_luxian_family=False), current_user, activation)
-    except (LookupError, ValueError) as exc:
-        service.fail_unbound(item_id, run["id"], user)
-        raise _validation_error(exc) from exc
-    except Exception:
-        service.fail_unbound(item_id, run["id"], user)
-        raise
-    finally:
-        request.state.rule_validation_reference = None
-    return success_response(data={"run_id": run["id"], "job_id": result["data"]["job_id"]}, trace_id=get_trace_id(request))
-
-
-@router.get("/test-records/{item_id}/validation/runs/{run_id}")
-async def get_test_validation_result(request: Request, item_id: str, run_id: str,
-                                     current_user: Dict[str, Any] = Depends(get_current_user)):
-    from ..services.test_case_validation import compare
-    from .qc_sichuan import get_workspace_batch_job
-    try:
-        state = _test_validation_service().read(item_id)
-        run = next((r for r in state["runs"] if r["id"] == run_id and r["created_by"] == _current_user_id(current_user)), None)
-        if run is None:
-            raise LookupError("验收不存在或无权限")
-    except (LookupError, ValueError) as exc:
-        raise _validation_error(exc) from exc
-    if not run["job_id"]:
-        return success_response(data={"run": run, "job_status": run["state"], "comparisons": []}, trace_id=get_trace_id(request))
-    # 使用正式授权/Canonical读取/客户投影，禁止直接读取旧items_json绕过交付合同。
-    response = await get_workspace_batch_job(request, run["job_id"], current_user)
-    job = response["data"]
-    return success_response(data={"run": run, "job_status": job["status"], "comparisons": compare(run, job)},
-                            trace_id=get_trace_id(request))
-
-
-@router.post("/test-records/{item_id}/validation/runs/{run_id}/reviews")
-async def review_test_validation(request: Request, item_id: str, run_id: str, payload: TestValidationReviewRequest,
-                                 current_user: Dict[str, Any] = Depends(get_current_user)):
-    response = await get_test_validation_result(request, item_id, run_id, current_user)
-    data = response["data"]
-    if data["job_status"] != "completed" or not data["comparisons"]:
-        raise HTTPException(status_code=409, detail="任务尚未完成或无可比较结果，不能提交验收")
-    try:
-        _test_validation_service().review(item_id, run_id, _current_user_id(current_user),
-                                         payload.decision, payload.note, data["comparisons"])
-    except (LookupError, ValueError) as exc:
-        raise _validation_error(exc) from exc
-    return await get_test_validation_result(request, item_id, run_id, current_user)

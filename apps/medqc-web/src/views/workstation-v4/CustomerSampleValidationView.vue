@@ -1,10 +1,4 @@
 <template>
-  <RuleValidationDrawer
-    v-if="validationItemId"
-    :item-id="validationItemId"
-    @close="validationItemId = ''"
-    @view-job="openBatchJob"
-  />
   <main class="customer-sample-page relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden">
     <div
       class="customer-sample-scroll custom-scrollbar flex-1 overflow-y-auto px-4 pt-4 xl:px-5"
@@ -2000,7 +1994,6 @@
 </template>
 
 <script setup lang="ts">
-import RuleValidationDrawer from './customer-sample-validation/RuleValidationDrawer.vue'
 import QCRecordCompareWorkbench from './semantic-rules/components/QCRecordCompareWorkbench.vue'
 import { useCustomerSampleValidationController } from './customer-sample-validation/useCustomerSampleValidationController'
 
@@ -2123,7 +2116,6 @@ const {
   isLastCustomerSampleGuideStep,
   isLuxian0609Mode,
   isSyncedOnlyValidationMode,
-  validationItemId,
   itemColumns,
   itemLoading,
   loadManagedPools,

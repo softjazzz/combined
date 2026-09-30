@@ -70,6 +70,11 @@ export const MQ_ICONS = {
     { kind: 'body', d: SHIELD },
     { kind: 'line', d: 'M12 8.5v6M9 11.5h6', opacity: 0.9 },
   ],
+  rule_validation: [
+    { kind: 'body', d: SHIELD },
+    { kind: 'line', d: 'M9 9.5h6M9 12.5h4' },
+    { kind: 'badge', mark: 'check' },
+  ],
   surgery_catalog: [
     { kind: 'body', d: 'M5 5.5A2.5 2.5 0 0 1 7.5 3H19v15H7.5A2.5 2.5 0 0 0 5 20.5z' },
     { kind: 'stroke', d: 'M5 20.5A2.5 2.5 0 0 1 7.5 18H19v2.5H7.5' },

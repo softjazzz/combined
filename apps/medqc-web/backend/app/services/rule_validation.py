@@ -87,8 +87,12 @@ def build_kind(execution_version: dict | None) -> str:
     return "release" if implementation.get("kind") == "release" else "development"
 
 
-def compare_cases(rule_id: str, cases: list[dict], job: dict | None) -> list[dict]:
-    """按病例三坐标比较已发布状态；一致只代表状态一致，证据和建议仍需人工复核。"""
+def compare_cases(rule_id: str, cases: list[dict], job: dict | None,
+                  project: Callable[[dict], dict] | None = None) -> list[dict]:
+    """按病例三坐标比较已发布状态；一致只代表状态一致，证据和建议仍需人工复核。
+
+    ``project`` 把唯一匹配的结果投影为可展示的结论/证据/建议（客户安全 DTO），供逐例核对。
+    """
     status = (job or {}).get("status")
     items = [x for x in (job or {}).get("items") or [] if x.get("rule_id") == rule_id]
     rows = []
@@ -102,7 +106,10 @@ def compare_cases(rule_id: str, cases: list[dict], job: dict | None) -> list[dic
                        else "same" if actual == case["expected_status"] else "different")
         elif status in {"failed", "canceled", "creation_failed"}:
             outcome = "failed"
-        rows.append({**case, "actual_status": actual, "comparison": outcome})
+        row = {**case, "actual_status": actual, "comparison": outcome}
+        if project is not None and len(matches) == 1:
+            row["result"] = project(matches[0])
+        rows.append(row)
     return rows
 
 
@@ -305,7 +312,9 @@ class RuleValidationService:
             raise ValueError("状态与预期不一致，不能确认通过；请记录问题")
         return self._append(rule_id=run["rule_id"], run_id=run["id"], item_id=item_id, kind="case_review",
                             decision=decision, note=note.strip(), actor=user,
-                            payload_json=json.dumps({"comparison": row}, ensure_ascii=False))
+                            # 事件只记比较结论，不复制结果证据。
+                            payload_json=json.dumps({"comparison": {k: v for k, v in row.items() if k != "result"}},
+                                                    ensure_ascii=False))
 
     def conclude(self, run: dict, rows: list[dict], *, decision: str, note: str, gap_ack: str, user: str) -> dict:
         if decision not in {"accepted", "rejected"} or not note.strip():

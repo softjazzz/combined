@@ -209,6 +209,13 @@ export const WORKSTATION_NAV: NavGroup[] = [
         iconName: 'surgery_catalog',
         match: matchPrefix(p('/customer-sample-validation/surgery-catalog')),
       },
+      {
+        key: 'rule-validation',
+        label: '规则验收',
+        to: { path: p('/rules/validation') },
+        iconName: 'rule_validation',
+        match: matchPrefix(p('/rules/validation')),
+      },
     ],
   },
   {

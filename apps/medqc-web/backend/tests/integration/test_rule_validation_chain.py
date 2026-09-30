@@ -1,7 +1,6 @@
 """规则验收全链路：两个测试病例预期→真实Worker→正式API比较→逐例复核→结论→批准，无真实模型。"""
 import json
 
-import pytest
 import sqlalchemy as sa
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
@@ -76,6 +75,9 @@ def test_rule_centric_validation_to_release_sheet(monkeypatch, _isolated_databas
 
         run = client.get(f"/api/v1/qc/rule-validation/runs/{ids['run_id']}").json()["data"]
         assert {r["item_id"]: r["comparison"] for r in run["rows"]} == {item_a: "same", "case-b": "same"}
+        # 逐例核对所需结果为客户安全投影：有结论/建议，不含病例坐标
+        assert all(r["result"]["status"] == "not_applicable" for r in run["rows"])
+        assert not any(k in r["result"] for r in run["rows"] for k in ("visit_id", "patient_id", "record_ref"))
         assert client.get(base).json()["data"]["stage"] == "reviewing"
 
         early = client.post(f"{base}/conclusion", json={"run_id": ids["run_id"], "decision": "accepted", "note": "通过", "gap_ack": "x"})
@@ -95,6 +97,7 @@ def test_rule_centric_validation_to_release_sheet(monkeypatch, _isolated_databas
         detail = client.get(base).json()["data"]
         assert detail["stage"] == "approved_pending_release"
         assert [e["kind"] for e in detail["events"]] == ["case_review", "case_review", "conclusion", "approval"]
+        assert all("result" not in e["payload"].get("comparison", {}) for e in detail["events"])
 
     # 新连接核对持久化
     with Session(engine) as session:

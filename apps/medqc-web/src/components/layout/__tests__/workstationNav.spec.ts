@@ -24,6 +24,8 @@ describe('workstationNav 选中项', () => {
     [route(`${B}/worklist`, { stage: 'settlement_qc' }), 'stage-settlement-qc'],
     [route(`${B}/rules`, { tab: 'semantic', ruleSetKey: 'luxian_0609_qc_v1' }), 'rules'],
     [route(`${B}/rules/custom-workspace`), 'custom-rules'],
+    [route(`${B}/rules/validation`), 'rule-validation'],
+    [route(`${B}/rules/validation/LX0609-06-01-01`), 'rule-validation'],
     [route(`${B}/customer-sample-validation/tasks`), 'customer-sample-validation'],
     [route(`${B}/customer-sample-validation/surgery-catalog`), 'surgery-catalog'],
     [route(`${B}/drg/payment`), 'drg'],
@@ -93,6 +95,7 @@ describe('workstationNav 可见性', () => {
   const permissions: Record<string, string[]> = {
     [`${B}/records/running`]: ['admin', 'qc_manager'],
     [`${B}/customer-sample-validation/surgery-catalog`]: ['admin', 'qc_manager', 'sync_admin'],
+    [`${B}/rules/validation`]: ['admin', 'qc_manager'],
   }
   const resolvePermission = (to: { path: string }) => permissions[to.path]
 
@@ -109,6 +112,7 @@ describe('workstationNav 可见性', () => {
     )
     expect(visible).not.toContain('records-running')
     expect(visible).not.toContain('surgery-catalog')
+    expect(visible).not.toContain('rule-validation')
     expect(visible).toContain('worklist')
   })
 
@@ -130,6 +134,8 @@ describe('workstationNav 可见性', () => {
         resolvePermission,
       }),
     )
-    expect(visible).toHaveLength(18)
+    // 18 个原有入口 + 规则验收
+    expect(visible).toHaveLength(19)
+    expect(visible).toContain('rule-validation')
   })
 })

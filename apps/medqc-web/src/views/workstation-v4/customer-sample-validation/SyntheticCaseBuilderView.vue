@@ -1051,7 +1051,17 @@ function tabDocumentCount(tab: 'orders' | 'exams') {
   return tabDocuments(tab).length
 }
 
+/** 从规则验收页进入时（?returnRule=规则编号），返回该规则的验收详情 */
+function returnRuleId(): string {
+  return typeof route.query.returnRule === 'string' ? route.query.returnRule.trim() : ''
+}
+
 function goBack() {
+  const ruleId = returnRuleId()
+  if (ruleId) {
+    router.push({ name: 'WorkstationV4RuleValidationDetail', params: { ruleId } })
+    return
+  }
   router.push({ name: 'WorkstationV4CustomerSampleValidation' })
 }
 
@@ -1559,6 +1569,10 @@ async function handleSave(runAfterSave: boolean) {
       }
     } else {
       message.success(`测试病历已创建：${result.data.mr_no || visitId}`)
+    }
+    if (returnRuleId() && !createdJobId) {
+      await router.push({ name: 'WorkstationV4RuleValidationDetail', params: { ruleId: returnRuleId() } })
+      return
     }
     await router.push({
       name: 'WorkstationV4CustomerSampleValidation',
