@@ -69,7 +69,7 @@ function defect(overrides: Record<string, unknown> = {}) {
 }
 
 function page(items: Array<Record<string, unknown>>, total = items.length) {
-  return { success: true, status: 200, data: { items, total, page: 1, page_size: 20 } }
+  return { success: true, status: 200, data: { items, total, page: 1, page_size: 20, scene: 'all' } }
 }
 
 function mountView() {
@@ -96,7 +96,7 @@ describe('ManualDefectReviewView', () => {
   it('默认读取 pending，展示三坐标、任务、规则、创建人；未知值显示为未知', async () => {
     const wrapper = mountView()
     await flushPromises()
-    expect(mocks.list).toHaveBeenCalledWith('pending', 1, 20)
+    expect(mocks.list).toHaveBeenCalledWith('pending', 1, 20, 'all')
     const text = wrapper.get('[data-testid="manual-defect-review-item"]').text()
     expect(text).toContain('机构 H1 / 患者 P1 / 就诊 V1')
     expect(text).toContain('task-1 · 第 2 次运行')
@@ -111,14 +111,14 @@ describe('ManualDefectReviewView', () => {
     mocks.list.mockResolvedValueOnce(page([defect({ manual_review_status: 'rejected' })]))
     const wrapper = mountView()
     await flushPromises()
-    expect(mocks.list).toHaveBeenCalledWith('rejected', 1, 20)
+    expect(mocks.list).toHaveBeenCalledWith('rejected', 1, 20, 'all')
     expect(wrapper.find('[data-testid="manual-defect-approve-d-1"]').exists()).toBe(false)
     wrapper.unmount()
 
     mocks.route = reactive({ query: { review_status: 'bogus' } })
     mountView()
     await flushPromises()
-    expect(mocks.list).toHaveBeenLastCalledWith('pending', 1, 20)
+    expect(mocks.list).toHaveBeenLastCalledWith('pending', 1, 20, 'all')
   })
 
   it('驳回必须填写原因；通过后提交 expected_status 并刷新', async () => {

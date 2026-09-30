@@ -100,7 +100,7 @@ describe('人工缺陷审核 API', () => {
     vi.mocked(ApiService.requestRaw).mockResolvedValueOnce(response({ success: true, data: { items: [], total: 0, page: 1, page_size: 20 } }))
     await expect(getManualDefects('approved', 3, 20)).resolves.toMatchObject({ success: true, status: 200 })
     expect(ApiService.requestRaw).toHaveBeenCalledWith({
-      method: 'GET', url: '/api/v1/manual-defects', params: { review_status: 'approved', page: 3, page_size: 20 },
+      method: 'GET', url: '/api/v1/manual-defects', params: { review_status: 'approved', page: 3, page_size: 20, scene: 'all' },
     })
   })
 

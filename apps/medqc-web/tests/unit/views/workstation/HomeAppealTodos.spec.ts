@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({
   getAppeals: vi.fn(),
   routerPush: vi.fn(),
   messageInfo: vi.fn(),
-  auth: { userRoles: ['qc_manager'] as string[] },
+  auth: { user: { id: 'qc-manager-1' } as { id: string } | null, userRoles: ['qc_manager'] as string[] },
 }))
 
 vi.mock('@/api/appeal', () => ({ getAppeals: mocks.getAppeals }))
@@ -18,6 +18,7 @@ import HomeAppealTodos from '@/views/workstation/HomeAppealTodos.vue'
 describe('HomeAppealTodos', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.auth.user = { id: 'qc-manager-1' }
     mocks.auth.userRoles = ['qc_manager']
     mocks.getAppeals.mockResolvedValue({ items: [], total: 2, page: 1, page_size: 1, total_pages: 2 })
   })

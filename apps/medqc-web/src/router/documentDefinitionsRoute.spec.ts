@@ -1,6 +1,9 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import router from '@/router'
 import { canAccessRouteMeta } from '@/utils/routeAccess'
+
+// 全量并发下首次动态加载整套路由与视图模块可能超过默认 5s，与其他路由 spec 保持一致
+vi.setConfig({ testTimeout: 30_000 })
 
 describe('文书管理路由', () => {
   it('V5 正式入口可解析且只允许管理员与质控管理员', async () => {

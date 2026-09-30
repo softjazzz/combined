@@ -33,6 +33,10 @@ vi.mock('@/api/qcAdmin', () => ({
   urgeDefect: mocks.urgeDefect,
 }))
 
+// 视图按当前登录用户隔离列表与导出；本组用例固定为已登录管理员
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: () => ({ user: { id: 'admin-1', roles: ['admin'] }, userRoles: ['admin'] }),
+}))
 vi.mock('ant-design-vue', () => ({ message: mocks.message }))
 vi.mock('@ant-design/icons-vue', () => ({
   ReloadOutlined: { template: '<span />' },
