@@ -35,6 +35,10 @@ class ScoringScopeContextUnavailable(RuntimeError):
     """评分条目选择了范围，但病例缺少可信适用上下文。"""
 
 
+class ScoringBatchUnavailable(RuntimeError):
+    """严格模式（按得分筛选）下标准或条目读取失败：不能降级为部分结果。"""
+
+
 def standard_needs_department(standard: Mapping[str, Any]) -> bool:
     return any(
         isinstance(item, Mapping)
@@ -397,11 +401,14 @@ def score_workstation_page(
     results_loader: Callable[..., Mapping[tuple[str, str, str], Mapping[str, Any]]] = _load_page_results,
     projector: Callable[[Iterable[Mapping[str, Any]]], list[dict[str, Any]]] = project_customer_items,
     department_loader: Callable[..., Mapping[tuple[str, str, str], str]] | None = None,
+    strict: bool = False,
 ) -> tuple[dict[tuple[str, str, str], dict[str, Any]], dict[str, dict[str, Any]]]:
-    """V5 列表本页 ready 病例计分。
+    """V5 列表 ready 病例批量计分（本页挂载，或按得分筛选时的完整集合）。
 
     page_scenes 为 {三坐标: 场景}；anchors 为读取器原始摘要（取 envelope_id 核对结果对象未变）。
     返回 (每病例 score_state, 每场景标准概况)。没有默认标准的场景不读条目（零额外成本）。
+    strict=True（按得分筛选）时，标准读取或条目批量读取失败抛 ScoringBatchUnavailable，
+    不降级为 unavailable（否则筛选结果会静默缺失）；单病例失败仍按病例降级。
     """
     standards: dict[str, Mapping[str, Any] | None] = {}
     overview: dict[str, dict[str, Any]] = {}
@@ -420,6 +427,8 @@ def score_workstation_page(
             )
         except Exception as exc:  # noqa: BLE001 - 标准不可用降级
             logger.warning("病历列表评分标准读取失败，降级 error_type=%s", type(exc).__name__)
+            if strict:
+                raise ScoringBatchUnavailable("评分标准读取失败") from None
             standards[scene] = None
             overview[scene] = {
                 "status": "unavailable", "standard_id": None, "standard_name": None, "standard_updated_at": None,
@@ -458,7 +467,11 @@ def score_workstation_page(
         )
     except Exception as exc:  # noqa: BLE001 - 条目读取失败降级
         logger.warning("病历列表计分条目读取失败，降级 error_type=%s", type(exc).__name__)
+        if strict:
+            raise ScoringBatchUnavailable("计分条目读取失败") from None
         loaded = None
+    if strict and not isinstance(loaded, Mapping):
+        raise ScoringBatchUnavailable("计分条目读取返回值无效")
     for identity, scene in to_score.items():
         standard = standards[scene]
         result = loaded.get(identity) if isinstance(loaded, Mapping) else None
@@ -483,8 +496,48 @@ def score_workstation_page(
     return states, overview
 
 
+def default_standard_filter_options(
+    scenes: Iterable[str],
+    *,
+    standard_loader: Callable[[str], Mapping[str, Any] | None] = get_default_standard,
+) -> dict[str, dict[str, Any]]:
+    """列表得分筛选项：各场景默认标准概况与可选等级（档位名，按分数降序；否决等级是其中之一）。
+
+    只读默认标准，不计分。读取失败的场景 status=unavailable（grades 为空），由调用方决定是否失败关闭。
+    """
+    options: dict[str, dict[str, Any]] = {}
+    for scene in sorted(set(scenes)):
+        empty = {"standard_id": None, "standard_name": None, "standard_updated_at": None,
+                 "base_score": None, "grades": [], "veto_grade": None}
+        try:
+            standard = standard_loader(scene)
+        except Exception as exc:  # noqa: BLE001 - 标准不可用，交由调用方处理
+            logger.warning("评分筛选项读取失败 error_type=%s", type(exc).__name__)
+            options[scene] = {"status": "unavailable", **empty}
+            continue
+        if standard is None:
+            options[scene] = {"status": "no_standard", **empty}
+            continue
+        grades = [
+            str(band["name"]) for band in standard.get("grade_bands") or []
+            if isinstance(band, Mapping) and str(band.get("name") or "").strip()
+        ]
+        options[scene] = {
+            "status": "configured",
+            "standard_id": standard.get("id"),
+            "standard_name": standard.get("name"),
+            "standard_updated_at": standard.get("updated_at"),
+            "base_score": standard.get("base_score"),
+            "grades": list(dict.fromkeys(grades)),
+            "veto_grade": standard.get("veto_grade"),
+        }
+    return options
+
+
 __all__ = [
+    "ScoringBatchUnavailable",
     "ScoringStandardUnavailable",
+    "default_standard_filter_options",
     "grade_for",
     "project_customer_items",
     "score_case",
