@@ -25,8 +25,8 @@ class _Query:
         self.filters: list[tuple[str, str, Any]] = []
         self.start = 0
         self.end: int | None = None
-        self.order_field: str | None = None
-        self.order_desc = False
+        # 与 PostgREST 一致：多次 .order() 依调用顺序组成主次排序键。
+        self.orders: list[tuple[str, bool]] = []
         self.insert_payload: dict[str, Any] | None = None
 
     def select(self, *_args, **_kwargs):
@@ -59,8 +59,7 @@ class _Query:
         return self
 
     def order(self, field: str, *, desc: bool = False):
-        self.order_field = field
-        self.order_desc = desc
+        self.orders.append((field, desc))
         return self
 
     def range(self, start: int, end: int):
@@ -84,11 +83,8 @@ class _Query:
                 rows = [row for row in rows if row.get(field) is expected]
             elif operation == "in":
                 rows = [row for row in rows if row.get(field) in expected]
-        if self.order_field:
-            rows.sort(
-                key=lambda row: str(row.get(self.order_field) or ""),
-                reverse=self.order_desc,
-            )
+        for field, desc in reversed(self.orders):
+            rows.sort(key=lambda row, field=field: str(row.get(field) or ""), reverse=desc)
         total = len(rows)
         if self.end is not None:
             rows = rows[self.start : self.end + 1]

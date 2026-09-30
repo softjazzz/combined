@@ -44,14 +44,30 @@ def test_coding_scope_keeps_llm_defects_when_semantics_not_completed():
         "llm_issues": [{"dimension": "semantic", "rule_id": "C-2"}],
     }
 
-    skipped = _build_coding_qc_persistence_result(payload, report, semantic_completed=False)
-    completed = _build_coding_qc_persistence_result(payload, report, semantic_completed=True)
+    # 未绑定规则集版本的报告无法证明执行了哪些规则：即便语义完成也不声明范围、不清旧缺陷。
+    unversioned = _build_coding_qc_persistence_result(payload, report, semantic_completed=True)
+    assert "executed_defect_scope" not in unversioned["metadata"]
 
-    assert "executed_defect_scope" not in skipped["metadata"]
-    assert completed["metadata"]["executed_defect_scope"] == {"kind": "all"}
+    # 版本化执行（abd60ffb3）：范围只取执行器报告的已执行规则号，语义未完成时执行器不报语义规则。
+    versioned = {
+        **report,
+        "rule_set_key": "coding_qc",
+        "rule_set_version": "v1",
+        "active_rule_ids": ["C-1", "C-2"],
+        "executed_rule_ids": ["C-1", "C-2"],
+    }
+    completed = _build_coding_qc_persistence_result(payload, versioned, semantic_completed=True)
+    assert completed["metadata"]["executed_defect_scope"] == {
+        "kind": "rule_codes",
+        "values": ["C-1", "C-2"],
+    }
     assert [issue["category"] for issue in completed["issues"]] == [
         "format", "semantic"
     ]
+    skipped = _build_coding_qc_persistence_result(
+        payload, {**versioned, "executed_rule_ids": []}, semantic_completed=False,
+    )
+    assert "executed_defect_scope" not in skipped["metadata"]
 
 
 @pytest.mark.asyncio

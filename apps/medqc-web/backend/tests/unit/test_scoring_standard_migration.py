@@ -10,12 +10,28 @@ import pytest
 import sqlalchemy as sa
 
 
-def migration():
-    path = Path(__file__).resolve().parents[2] / "alembic/versions/20260927_000062_scoring_standards.py"
-    spec = importlib.util.spec_from_file_location("scoring_standard_migration", path)
+def _load_migration(filename, module_name):
+    path = Path(__file__).resolve().parents[2] / "alembic/versions" / filename
+    spec = importlib.util.spec_from_file_location(module_name, path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def migration():
+    return _load_migration("20260927_000062_scoring_standards.py", "scoring_standard_migration")
+
+
+def _model_contract_specs():
+    """ORM 模型对应“62 建表 + 后续增量迁移”的累计合同；目前只有 69 为评分条目加科室范围列。"""
+    specs = copy.deepcopy(migration().SPECS)
+    scope = _load_migration("20260928_000069_scoring_item_scope.py", "scoring_item_scope_migration")
+    item_spec = specs[scope.TABLE]
+    for name, (column_type, default) in scope.COLUMNS.items():
+        size = getattr(column_type, "length", None)
+        item_spec["columns"][name] = (type(column_type), size, False, default)
+    item_spec["checks"].update(scope.CHECKS)
+    return specs
 
 
 def _type(spec):
@@ -329,9 +345,10 @@ def test_models_match_migration_contract():
     from app.database.models.qc import QCScoringGroup, QCScoringItem, QCScoringStandard
 
     module = migration()
+    specs = _model_contract_specs()
     for model in (QCScoringStandard, QCScoringGroup, QCScoringItem):
         table = model.__table__
-        spec = module.SPECS[table.name]
+        spec = specs[table.name]
         assert set(table.c.keys()) == set(spec["columns"])
         for name, (kind, size, nullable, default) in spec["columns"].items():
             column = table.c[name]

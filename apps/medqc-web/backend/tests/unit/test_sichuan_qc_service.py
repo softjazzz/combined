@@ -13,7 +13,7 @@
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
@@ -332,6 +332,25 @@ class TestCDMDataAccess:
 
 class TestEvaluation:
     """测试完整评估流程"""
+
+    @pytest.fixture(autouse=True)
+    def _block_real_llm(self, service):
+        """编排器默认走批量 LLM；本类只 mock 逐条 evaluate，须禁用批量入口并阻断真实外呼。
+
+        批量失败时编排器逐级拆包，最终回退到逐条 rule_engine.evaluate（各用例的 mock）。
+        """
+
+        async def _refuse_batch(*_args, **_kwargs):
+            raise RuntimeError("单元测试禁止真实批量 LLM 调用")
+
+        def _refuse_http(*_args, **_kwargs):
+            raise RuntimeError("单元测试禁止真实外呼")
+
+        with (
+            patch.object(service.rule_engine, "evaluate_batch_compact", side_effect=_refuse_batch),
+            patch("app.core.http._post_json", side_effect=_refuse_http),
+        ):
+            yield
 
     @pytest.mark.asyncio
     async def test_evaluate_with_admission_rules(self, service):
