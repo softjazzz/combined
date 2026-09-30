@@ -52,12 +52,35 @@ def _context(*, records=None, results=None, reviews=None, manual=None,
     )
 
 
-def test_final_fails_before_any_read():
+def test_final_reads_discharged_scope_and_marks_archive_unverified():
+    """终末口径 B：已出院且有质控结果，报表范围显式标注归档未核验，不冒称已归档。"""
     called = []
-    with pytest.raises(report.RecordQualityReportBlocked) as exc:
-        report.build_report_context(scene="final", scope_loader=lambda **kwargs: called.append(kwargs))
-    assert exc.value.code == "archive_scope_unverified"
-    assert not called
+    standard_scenes = []
+    ctx = report.build_report_context(
+        scene="final",
+        scope_loader=lambda **kwargs: called.append(kwargs) or [_case("a", "p1")],
+        results_loader=lambda refs: {("a", "p1", "same"): {
+            "status": "ready", "completed_at": "2026-09-26T16:00:00Z",
+            "root_job_id": "job-a", "envelope_id": "env-a", "items": [],
+        }},
+        review_loader=lambda anchors: {},
+        manual_loader=lambda identities: [],
+        standard_loader=lambda scene: standard_scenes.append(scene),
+        projector=lambda items: list(items),
+        rule_meta_loader=lambda: {},
+    )
+    assert called == [{"department": None, "doctor": None, "hospital_status": "discharged"}]
+    assert standard_scenes == ["final"]
+    assert ctx.scope["scope_basis"] == "discharged_with_qc_result"
+    assert ctx.scope["archive_status"] == "unverified"
+    assert ctx.scope["scope_label"] == "已出院病历（未核验归档）"
+    assert report.summarize(ctx)["kpis"]["qc_ready_total"] == 1
+
+
+def test_running_scope_has_no_archive_status():
+    ctx = _context()
+    assert ctx.scope["scope_basis"] == "inpatient_with_qc_result"
+    assert ctx.scope["archive_status"] is None
 
 
 def test_three_coordinate_identity_drilldown_and_csv_match():

@@ -68,8 +68,6 @@ def _raise_report_error(exc: Exception, action: str) -> None:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     if isinstance(exc, report_service.RecordQualityReportTooLarge):
         raise HTTPException(status_code=422, detail={"code": "range_too_large", "message": str(exc)}) from exc
-    if isinstance(exc, report_service.RecordQualityReportBlocked):
-        raise HTTPException(status_code=409, detail={"code": exc.code, "message": str(exc)}) from exc
     # 范围、结果及未知读取错误只记录类型，避免泄露患者资料或 SQL。
     logger.error("quality_report_%s_failed error_type=%s", action, type(exc).__name__)
     raise HTTPException(status_code=503, detail=_UNAVAILABLE_DETAIL) from None

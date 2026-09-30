@@ -55,7 +55,14 @@ export interface ReportDistributionItem {
 }
 
 export interface RecordQualityReport {
-  scope: RecordQualityFilters & { rule_set_key?: string }
+  scope: RecordQualityFilters & {
+    rule_set_key?: string
+    scope_label?: string
+    /** 统计口径：running 为当前在院，final 为已出院且有质控结果（口径 B） */
+    scope_basis?: 'inpatient_with_qc_result' | 'discharged_with_qc_result'
+    /** 终末归档是否经医院归档标记核验；未接入来源前为 unverified */
+    archive_status?: 'unverified' | null
+  }
   score_standard: {
     status: 'configured' | 'no_standard' | 'unavailable'
     standard_id: string | null

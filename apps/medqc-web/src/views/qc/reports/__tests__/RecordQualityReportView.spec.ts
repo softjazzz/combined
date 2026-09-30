@@ -89,17 +89,33 @@ describe('RecordQualityReportView', () => {
     expect(wrapper.findAll('.data-panel').length).toBe(2)
   })
 
-  it('shows the archive blocker instead of discharged cases in final scene', async () => {
+  it('serves the final scene as discharged cases with an unverified-archive notice', async () => {
     routeState.query.scene = 'final'
     state.getReport.mockResolvedValue({
-      success: false,
-      status: 409,
-      code: 'archive_scope_unverified',
+      success: true,
+      data: {
+        ...report,
+        scope: {
+          scene: 'final',
+          scope_basis: 'discharged_with_qc_result',
+          archive_status: 'unverified',
+        },
+      },
     })
     const wrapper = render()
     await flush()
-    expect(wrapper.get('[data-testid="report-error"]').text()).toContain('终末归档范围尚未核实')
-    expect(wrapper.findAll('.metric')).toHaveLength(0)
+    expect(state.getReport).toHaveBeenCalledWith(expect.objectContaining({ scene: 'final' }))
+    expect(wrapper.text()).toContain('未核验归档')
+    expect(wrapper.get('[data-testid="archive-unverified"]').text()).toContain(
+      '医院归档标记尚未接入',
+    )
+    expect(wrapper.findAll('.metric').length).toBeGreaterThan(0)
+  })
+
+  it('does not show the archive notice in running scene', async () => {
+    const wrapper = render()
+    await flush()
+    expect(wrapper.find('[data-testid="archive-unverified"]').exists()).toBe(false)
   })
 
   it('ignores a late response after a newer refresh', async () => {

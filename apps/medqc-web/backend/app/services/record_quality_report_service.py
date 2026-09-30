@@ -23,7 +23,17 @@ from .luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY
 
 logger = logging.getLogger(__name__)
 
-SCENES = {"running": "inpatient"}
+SCENES = {"running": "inpatient", "final": "discharged"}
+# 终末口径 B（2026-09-30 用户确认）：医院归档标记来源（archive_sign）未接入前，终末按
+# “已出院且有已完成质控结果”统计，并在报表范围中显式标注归档未核验，不冒称已归档。
+SCENE_SCOPES = {
+    "running": {"scope_label": "当前在院病历", "scope_basis": "inpatient_with_qc_result", "archive_status": None},
+    "final": {
+        "scope_label": "已出院病历（未核验归档）",
+        "scope_basis": "discharged_with_qc_result",
+        "archive_status": "unverified",
+    },
+}
 DEFECT_SOURCES = frozenset({"all", "auto", "manual"})
 MAX_REPORT_CASES = 5000
 TOP_LIMIT = 20
@@ -55,12 +65,6 @@ class RecordQualityReportTooLarge(ValueError):
 
 class RecordQualityReportUnavailable(RuntimeError):
     """病历范围或质控结果读取失败；对外只给脱敏提示。"""
-
-
-class RecordQualityReportBlocked(RuntimeError):
-    """缺少经核实的业务范围，不能生成对应场景报表。"""
-
-    code = "archive_scope_unverified"
 
 
 # ---------------------------------------------------------------------------
@@ -174,8 +178,6 @@ def _normalize_params(
     completed_to: datetime | None, defect_source: Any,
 ) -> tuple[str, str | None, str | None, str]:
     scene_value = _text(scene).lower()
-    if scene_value == "final":
-        raise RecordQualityReportBlocked("终末归档范围尚未核实")
     if scene_value not in SCENES:
         raise RecordQualityReportInvalid("scene 必须为 running 或 final")
     source = _text(defect_source, "all").lower()
@@ -364,7 +366,7 @@ def build_report_context(
         scene=scene,
         scope={
             "scene": scene,
-            "scope_label": "当前在院病历",
+            **SCENE_SCOPES[scene],
             "department": department,
             "doctor": doctor,
             "completed_from": completed_from.isoformat() if completed_from else None,

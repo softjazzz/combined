@@ -129,14 +129,25 @@ def test_non_manager_roles_are_forbidden_before_read(monkeypatch, roles):
 @pytest.mark.parametrize("path, extra", [
     (BASE, {}), (f"{BASE}/records", {}), (f"{BASE}/export", {"sheet": "records"}),
 ])
-def test_final_archive_scope_fails_closed(monkeypatch, path, extra):
-    def blocked(**_kwargs):
-        raise service.RecordQualityReportBlocked("终末归档范围尚未核实")
+def test_final_scene_is_served_with_unverified_archive_scope(monkeypatch, path, extra):
+    captured = {}
+    context = service.ReportContext(
+        scene="final", scope={"scene": "final", "defect_source": "all", **service.SCENE_SCOPES["final"]},
+        record_total=0, unavailable_total=0, rows=[], standard=None,
+        score_status="no_standard", review_status="available", manual_status="available",
+        rule_meta={}, department_record_totals={}, doctor_record_totals={},
+    )
 
-    monkeypatch.setattr(service, "build_report_context", blocked)
+    def build(**kwargs):
+        captured.update(kwargs)
+        return context
+
+    monkeypatch.setattr(service, "build_report_context", build)
     response = _client().get(path, params={"scene": "final", **extra})
-    assert response.status_code == 409
-    assert response.json()["detail"]["code"] == "archive_scope_unverified"
+    assert response.status_code == 200
+    assert captured["scene"] == "final"
+    if path == BASE:
+        assert response.json()["data"]["scope"]["archive_status"] == "unverified"
 
 
 def test_read_failure_is_redacted_and_export_not_audited(monkeypatch):

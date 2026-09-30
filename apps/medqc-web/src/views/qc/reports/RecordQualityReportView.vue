@@ -3,7 +3,13 @@
     <header class="page-head">
       <div>
         <h1>病历质量分析</h1>
-        <p>{{ scene === 'running' ? '当前在院病历的已完成质控结果' : '终末归档病历质量分析' }}</p>
+        <p>
+          {{
+            scene === 'running'
+              ? '当前在院病历的已完成质控结果'
+              : '已出院且有已完成质控结果的病历（未核验归档）'
+          }}
+        </p>
       </div>
       <div class="head-actions">
         <button class="secondary" type="button" :disabled="loading" @click="loadReport">
@@ -76,6 +82,15 @@
       <CircleAlert :size="18" />{{ loadError }}
     </div>
     <template v-else-if="report">
+      <div
+        v-if="report.scope.archive_status === 'unverified'"
+        class="notice archive-notice"
+        role="note"
+        data-testid="archive-unverified"
+      >
+        <CircleAlert :size="16" />终末口径：已出院且有已完成质控结果的病历。医院归档标记尚未接入，
+        统计范围未按“已归档”核验，可能包含尚未归档的病历。
+      </div>
       <section class="overview" aria-label="总览">
         <h2>总览</h2>
         <div class="metrics">
@@ -128,8 +143,8 @@
           </div>
           <div class="data-panel">
             <h3>缺陷等级</h3>
-            <template v-if="report.defect_level_distribution"
-              ><div
+            <template v-if="report.defect_level_distribution">
+              <div
                 v-for="item in report.defect_level_distribution"
                 :key="item.name"
                 class="data-row"
@@ -137,16 +152,14 @@
                 <span>{{ item.name }}</span
                 ><strong>{{ item.defect_total }}</strong>
               </div>
-              <p v-if="!report.defect_level_distribution.length" class="empty">
-                暂无数据
-              </p></template
-            >
+              <p v-if="!report.defect_level_distribution.length" class="empty">暂无数据</p>
+            </template>
             <p v-else class="empty">不可用</p>
           </div>
           <div class="data-panel">
             <h3>文书分布</h3>
-            <template v-if="report.document_distribution"
-              ><button
+            <template v-if="report.document_distribution">
+              <button
                 v-for="item in report.document_distribution"
                 :key="item.name"
                 class="data-row row-button"
@@ -156,8 +169,8 @@
                 <span>{{ item.name }}</span
                 ><strong>{{ item.defect_total }}</strong>
               </button>
-              <p v-if="!report.document_distribution.length" class="empty">暂无数据</p></template
-            >
+              <p v-if="!report.document_distribution.length" class="empty">暂无数据</p>
+            </template>
             <p v-else class="empty">不可用</p>
           </div>
         </div>
@@ -230,7 +243,9 @@
               <thead>
                 <tr>
                   <th>科室</th>
-                  <th v-for="column in shownColumns" :key="column.key">{{ column.label }}</th>
+                  <th v-for="column in shownColumns" :key="column.key">
+                    {{ column.label }}
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -265,7 +280,9 @@
               <thead>
                 <tr>
                   <th>主治医师</th>
-                  <th v-for="column in shownColumns" :key="column.key">{{ column.label }}</th>
+                  <th v-for="column in shownColumns" :key="column.key">
+                    {{ column.label }}
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -311,7 +328,9 @@
           <Download :size="16" />导出病例 CSV
         </button>
       </div>
-      <p v-if="recordsError" class="status error" role="alert">{{ recordsError }}</p>
+      <p v-if="recordsError" class="status error" role="alert">
+        {{ recordsError }}
+      </p>
       <p v-else-if="recordsLoading" class="status">正在读取病例…</p>
       <div v-else-if="recordsPage" class="table-scroll">
         <table>
@@ -569,11 +588,7 @@ async function loadReport(): Promise<void> {
   if (request !== reportRequest) return
   loading.value = false
   if (result.success && result.data) report.value = result.data
-  else
-    loadError.value =
-      result.code === 'archive_scope_unverified'
-        ? '终末归档范围尚未核实，暂不能生成终末质量报表。'
-        : result.message || '病历质量报表暂不可用'
+  else loadError.value = result.message || '病历质量报表暂不可用'
 }
 function applyFilters(): void {
   if (
@@ -894,6 +909,13 @@ h3 {
   background: #fff9ec;
   padding: 9px 12px;
   border-radius: 6px;
+}
+.archive-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 0 12px;
+  line-height: 1.6;
 }
 .distribution-grid {
   display: grid;

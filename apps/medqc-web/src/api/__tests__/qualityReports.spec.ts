@@ -57,14 +57,14 @@ describe('quality reports API', () => {
     })
   })
 
-  it('preserves the final archive blocker code', async () => {
+  it('preserves the backend error code for range limits', async () => {
     vi.spyOn(ApiService, 'requestRaw').mockRejectedValue(
-      error(409, { error: { code: 'archive_scope_unverified', message: '归档范围未核实' } }),
+      error(422, { error: { code: 'range_too_large', message: '报表范围过大' } }),
     )
     expect(await getRecordQualityReport({ scene: 'final' })).toMatchObject({
       success: false,
-      status: 409,
-      code: 'archive_scope_unverified',
+      status: 422,
+      code: 'range_too_large',
     })
   })
 
