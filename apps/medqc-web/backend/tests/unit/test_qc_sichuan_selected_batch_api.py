@@ -201,6 +201,11 @@ async def test_job_detail_remains_owner_isolated(monkeypatch):
         return None
 
     monkeypatch.setattr(qc_sichuan, "_resolve_shared_sample_pool_latest_job", no_shared)
+    monkeypatch.setattr(
+        qc_sichuan,
+        "resolve_task_qc_run_job_owner",
+        lambda **_kwargs: None,
+    )
     with pytest.raises(HTTPException) as caught:
         await qc_sichuan.get_workspace_batch_job(
             request=_request(), job_id="job-owned-by-other",
@@ -208,3 +213,45 @@ async def test_job_detail_remains_owner_isolated(monkeypatch):
         )
     assert caught.value.status_code == 404
     assert workspace.calls == [("job-owned-by-other", "staff-2")]
+
+
+@pytest.mark.asyncio
+async def test_task_admin_reads_other_owner_job_as_progress_only(monkeypatch):
+    class TaskWorkspace:
+        def __init__(self):
+            self.calls = []
+
+        def get_batch_job(self, *, job_id, created_by):
+            self.calls.append((job_id, created_by))
+            if created_by != "creator-1":
+                return None
+            return {
+                "id": job_id,
+                "draft_id": "sichuan-rule-library",
+                "created_by": "creator-1",
+                "status": "running",
+                "error_message": "患者张三原始文书解析失败",
+                "filters": {"record_refs": [{"patient_id": "private"}]},
+                "items": [{"patient_name": "private"}],
+                "summary": {"total_records": 2, "success_count": 1, "private": "secret"},
+            }
+
+    workspace = TaskWorkspace()
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+    monkeypatch.setattr(
+        qc_sichuan, "resolve_task_qc_run_job_owner",
+        lambda **kwargs: "creator-1" if kwargs["is_admin"] else None,
+    )
+
+    response = await qc_sichuan.get_workspace_batch_job(
+        request=_request(), job_id="job-1",
+        current_user={"id": "admin-1", "roles": ["admin"]},
+    )
+
+    assert workspace.calls == [("job-1", "admin-1"), ("job-1", "creator-1")]
+    data = response["data"]
+    assert data["id"] == "job-1"
+    assert data["status"] == "running"
+    assert data["summary"] == {"total_records": 2, "success_count": 1}
+    assert data["read_only"] is True
+    assert all(key not in data for key in ("filters", "items", "created_by", "error_message"))

@@ -121,7 +121,7 @@ def test_task_job_rechecks_receipt_after_lock_and_rejects_stale(monkeypatch):
     factory, engine = _task_session_factory()
     monkeypatch.setattr(qc_sichuan, "SessionLocal", factory)
     monkeypatch.setattr(qc_sichuan, "DB_SCHEMA_MODE", "single")
-    monkeypatch.setattr(task_qc_run_service, "_task_and_refs", lambda *_args: (
+    monkeypatch.setattr(task_qc_run_service, "_task_and_refs", lambda *_args, **_kwargs: (
         {"id": "task-1", "scene": "running", "sampling_config": '{"case_scope":"active"}'},
         [{"institute_id": "H", "patient_id": "P", "visit_id": "V"}],
     ))
@@ -144,6 +144,43 @@ def test_task_job_rechecks_receipt_after_lock_and_rejects_stale(monkeypatch):
         with pytest.raises(RuntimeError, match="快照与关联不一致"):
             qc_sichuan._validate_task_job_after_cdm_lock("job-1", {})
         qc_sichuan._validate_task_job_after_cdm_lock("ordinary-job", {})
+    finally:
+        engine.dispose()
+
+
+def test_task_subset_worker_rechecks_only_frozen_subset_and_requires_marker(monkeypatch):
+    factory, engine = _task_session_factory()
+    monkeypatch.setattr(qc_sichuan, "SessionLocal", factory)
+    monkeypatch.setattr(qc_sichuan, "DB_SCHEMA_MODE", "single")
+    refs = [
+        {"institute_id": "H", "patient_id": "P1", "visit_id": "V1"},
+        {"institute_id": "H", "patient_id": "P2", "visit_id": "V2"},
+    ]
+    task_calls = []
+    monkeypatch.setattr(task_qc_run_service, "_task_and_refs", lambda *_args, **kwargs: (
+        task_calls.append(kwargs) or
+        {"id": "task-1", "scene": "running", "sampling_config": '{"case_scope":"active"}'},
+        refs,
+    ))
+    receipt_calls = []
+    monkeypatch.setattr(
+        task_qc_run_service, "_assert_task_sync_receipt",
+        lambda _session, _task, selected, *_args: receipt_calls.append(selected),
+    )
+    selected_filters = {
+        "task_id": "task-1", "task_run_number": "1",
+        "task_run_record_subset": True, "task_run_admin_scope": True,
+        "record_refs": [refs[1]],
+    }
+    try:
+        qc_sichuan._validate_task_job_after_cdm_lock("job-1", selected_filters)
+        assert receipt_calls == [[refs[1]]]
+        assert task_calls == [{"is_admin": True}]
+
+        with pytest.raises(RuntimeError, match="病例快照不一致"):
+            qc_sichuan._validate_task_job_after_cdm_lock(
+                "job-1", {**selected_filters, "task_run_record_subset": False},
+            )
     finally:
         engine.dispose()
 

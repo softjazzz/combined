@@ -460,6 +460,8 @@ def prepare_workspace_batch_job(
         # 病例级重新质控：record_refs 是任务运行范围的显式子集，worker 按子集复核。
         if str(task_run_context.get("record_subset") or "").strip() == "1":
             task_context_filters["task_run_record_subset"] = True
+        if str(task_run_context.get("admin_scope") or "").strip() == "1":
+            task_context_filters["task_run_admin_scope"] = True
         idempotency_payload["task_run_context"] = task_context_filters
     idempotency_digest = hashlib.sha256(
         json.dumps(idempotency_payload, ensure_ascii=False, sort_keys=True).encode("utf-8")

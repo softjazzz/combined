@@ -154,7 +154,7 @@
               <div v-for="run in runs" :key="run.job_id" class="task-detail-drawer__run-row">
                 <div>
                   <strong>第 {{ run.run_number }} 次运行</strong>
-                  <span>{{ formatDate(run.created_at) }}</span>
+                  <span>{{ formatDate(run.created_at) }} · {{ runRecordScopeLabel(run) }}</span>
                 </div>
                 <a-button
                   size="small"
@@ -242,7 +242,24 @@
               <span>{{ scopeLabel }}</span>
               <h3 id="task-detail-records-title">病历清单</h3>
             </div>
-            <strong data-testid="task-detail-record-count">{{ detail.records.length }} 份</strong>
+            <div class="task-detail-drawer__record-actions">
+              <span v-if="selectedRerunRecordIds.length">
+                已选 {{ selectedRerunRecordIds.length }} 份
+              </span>
+              <a-button
+                v-if="selectedRerunRecordIds.length"
+                data-testid="task-rerun-selected"
+                type="primary"
+                size="small"
+                :loading="startingRun"
+                :disabled="!canStartRun"
+                @click="void startRun(selectedRerunRecordIds)"
+              >
+                <RotateCw :size="14" aria-hidden="true" />
+                重新质控所选
+              </a-button>
+              <strong data-testid="task-detail-record-count">{{ detail.records.length }} 份</strong>
+            </div>
           </div>
 
           <div class="task-detail-drawer__filters">
@@ -268,7 +285,8 @@
             :columns="recordColumns"
             :data-source="filteredRecords"
             :pagination="recordPagination"
-            :scroll="{ x: tab === 'received' ? 1260 : 1160 }"
+            :row-selection="recordRowSelection"
+            :scroll="{ x: tab === 'received' ? 1380 : 1280 }"
             row-key="id"
             size="small"
             @change="handleTableChange"
@@ -323,6 +341,18 @@
                 <span v-else class="task-detail-drawer__muted">未选择运行</span>
               </template>
               <template v-else-if="column.key === 'action'">
+                <a-button
+                  v-if="canRerunRecord(record)"
+                  type="text"
+                  size="small"
+                  :data-testid="`task-record-rerun-${record.id}`"
+                  :loading="startingRun"
+                  :disabled="!canStartRun"
+                  @click="void startRun([record.id])"
+                >
+                  <RotateCw :size="14" aria-hidden="true" />
+                  重新质控
+                </a-button>
                 <a-button
                   v-if="canViewDocuments(record)"
                   type="text"
@@ -560,6 +590,7 @@ const selectedJob = ref<SichuanBatchJob | null>(null)
 const jobLoading = ref(false)
 const jobError = ref('')
 const selectedTaskRecordId = ref('')
+const selectedRerunRecordIds = ref<string[]>([])
 const recordResult = ref<TaskQcRunRecordResult | null>(null)
 const recordResultLoading = ref(false)
 const recordResultError = ref('')
@@ -607,7 +638,8 @@ const isCreator = computed(
 const isAdmin = computed(() => !!authStore.user?.id && authStore.userRoles.includes('admin'))
 const runScope = computed<TaskQcRunScope | null>(() => {
   if (props.tab === 'received') return authStore.user?.id ? 'assigned' : null
-  if ((props.tab === 'created' || props.tab === 'all') && isCreator.value) return 'all'
+  if ((props.tab === 'created' || props.tab === 'all') && (isCreator.value || isAdmin.value))
+    return 'all'
   return null
 })
 const canViewRuns = computed(() => isModernTask.value && !!runScope.value)
@@ -735,8 +767,34 @@ const recordColumns = computed<TableColumnsType<TaskRecordItem>>(() => [
   { title: '缺陷数', dataIndex: 'defect_count', key: 'defects', width: 90 },
   { title: '完成时间', dataIndex: 'completed_at', key: 'completedAt', width: 160 },
   { title: '本次结果', key: 'result', width: 145 },
-  { title: '操作', key: 'action', width: props.tab === 'received' ? 230 : 125 },
+  { title: '操作', key: 'action', width: props.tab === 'received' ? 330 : 225 },
 ])
+
+function canRerunRecord(record: unknown): record is TaskRecordItem {
+  if (
+    !isTaskRecordItem(record) ||
+    !canViewRuns.value ||
+    !hasCaseIdentity(record) ||
+    record.task_id !== detail.value?.id
+  )
+    return false
+  return runScope.value === 'all' || record.assignee_id === authStore.user?.id
+}
+
+const recordRowSelection = computed(() =>
+  canViewRuns.value
+    ? {
+        selectedRowKeys: selectedRerunRecordIds.value,
+        onChange: (keys: Array<string | number>) => {
+          const allowed = new Set(
+            (detail.value?.records || []).filter(canRerunRecord).map((record) => record.id),
+          )
+          selectedRerunRecordIds.value = keys.map(String).filter((key) => allowed.has(key))
+        },
+        getCheckboxProps: (record: TaskRecordItem) => ({ disabled: !canRerunRecord(record) }),
+      }
+    : undefined,
+)
 
 function isTaskRecordItem(record: unknown): record is TaskRecordItem {
   if (!record || typeof record !== 'object') return false
@@ -956,6 +1014,7 @@ function clearDetail() {
   jobSequence += 1
   clearRecordResult()
   detail.value = null
+  selectedRerunRecordIds.value = []
   runs.value = []
   runsLoading.value = false
   runsError.value = ''
@@ -1397,14 +1456,25 @@ async function loadJob(jobId: string) {
   }
 }
 
-async function startRun() {
+async function startRun(taskRecordIds?: string[]) {
   const taskId = detail.value?.id
   const scope = runScope.value
   if (!taskId || !scope || !canStartRun.value) return
   const detailSequence = requestSequence
   startingRun.value = true
   try {
-    const response = await createTaskQcRun(taskId, scope)
+    const selectedIds = taskRecordIds ? [...taskRecordIds] : undefined
+    if (
+      selectedIds &&
+      (!selectedIds.length ||
+        selectedIds.some(
+          (id) => !canRerunRecord(detail.value?.records.find((record) => record.id === id)),
+        ))
+    )
+      return
+    const response = selectedIds
+      ? await createTaskQcRun(taskId, scope, selectedIds)
+      : await createTaskQcRun(taskId, scope)
     if (
       !props.open ||
       detailSequence !== requestSequence ||
@@ -1416,11 +1486,13 @@ async function startRun() {
       !response.success ||
       !response.data?.job_id ||
       response.data.task_id !== taskId ||
-      response.data.run_scope !== scope
+      response.data.run_scope !== scope ||
+      (selectedIds && JSON.stringify(response.data.task_record_ids) !== JSON.stringify(selectedIds))
     ) {
       runsError.value = response.message || '启动质控失败'
       return
     }
+    selectedRerunRecordIds.value = []
     await loadRuns()
   } catch {
     if (
@@ -1451,6 +1523,14 @@ function jobStatusLabel(status: string) {
     cancelled: '作业已取消',
   }
   return labels[status] || '作业状态未知'
+}
+
+function runRecordScopeLabel(run: TaskQcRun) {
+  if (run.record_scope === 'selected' && Number.isInteger(run.record_count))
+    return `所选 ${run.record_count} 份病历`
+  if (run.record_scope === 'all' && Number.isInteger(run.record_count))
+    return `整范围 ${run.record_count} 份病历`
+  return '运行范围未知'
 }
 
 function resultStatusLabel(status: string) {
@@ -1808,6 +1888,19 @@ onBeforeUnmount(() => {
 .task-detail-drawer__records-heading strong {
   color: #007aff;
   font-size: 14px;
+}
+
+.task-detail-drawer__record-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.task-detail-drawer__record-actions > span {
+  color: rgba(29, 29, 31, 0.6);
+  font-size: 13px;
 }
 
 .task-detail-drawer__metadata {

@@ -100,11 +100,15 @@ def env(monkeypatch):
     engine.dispose()
 
 
-def _start(env, *, actor_id="user-1", dispatch=None, run_scope="all"):
+def _start(
+    env, *, actor_id="user-1", dispatch=None, run_scope="all",
+    task_record_ids=None, is_admin=False,
+):
     return service.create_task_qc_run(
         task_id="task-1", actor_id=actor_id, current_user={"id": actor_id},
         workspace_factory=lambda: env.workspace,
         qc_service=object(), dispatch=dispatch or (lambda _: None), run_scope=run_scope,
+        task_record_ids=task_record_ids, is_admin=is_admin,
     )
 
 
@@ -213,6 +217,66 @@ def test_assigned_run_uses_only_actors_three_coordinates_and_isolates_history(en
     )] == ["job-1"]
 
 
+def test_selected_run_uses_exact_task_record_subset_and_marks_frozen_scope(env):
+    first_id = "11111111-1111-4111-8111-111111111111"
+    second_id = "22222222-2222-4222-8222-222222222222"
+    _assign_two_people(env)
+    with env.sessions.begin() as session:
+        session.execute(QCTaskRecord.__table__.update().where(
+            QCTaskRecord.id == "association-1"
+        ).values(id=first_id, record_id=first_id))
+        session.execute(QCTaskRecord.__table__.update().where(
+            QCTaskRecord.id == "association-2"
+        ).values(id=second_id, record_id=second_id))
+
+    created = _start(env, task_record_ids=[second_id])
+
+    assert created["task_record_ids"] == [second_id]
+    assert env.prepared_calls[0][0].record_refs == [
+        {"institute_id": "hospital", "patient_id": "patient-b", "visit_id": "visit-1"}
+    ]
+    assert env.prepared_calls[0][1]["task_run_context"]["record_subset"] == "1"
+
+
+def test_assignee_cannot_select_another_assignees_record(env):
+    first_id = "11111111-1111-4111-8111-111111111111"
+    second_id = "22222222-2222-4222-8222-222222222222"
+    _assign_two_people(env)
+    with env.sessions.begin() as session:
+        session.execute(QCTaskRecord.__table__.update().where(
+            QCTaskRecord.id == "association-1"
+        ).values(id=first_id, record_id=first_id))
+        session.execute(QCTaskRecord.__table__.update().where(
+            QCTaskRecord.id == "association-2"
+        ).values(id=second_id, record_id=second_id))
+
+    with pytest.raises(service.TaskQCRunForbidden, match="本人获分配"):
+        _start(env, actor_id="user-a", run_scope="assigned", task_record_ids=[second_id])
+    assert env.workspace.next_id == 1
+
+
+@pytest.mark.parametrize("record_ids", [["not-a-uuid"], []])
+def test_selected_run_rejects_invalid_or_empty_record_ids_before_database(env, record_ids):
+    with pytest.raises(service.TaskQCRunConflict, match="格式无效|至少选择"):
+        _start(env, task_record_ids=record_ids)
+    assert env.prepared_calls == []
+
+
+def test_admin_can_start_all_scope_without_becoming_task_creator(env):
+    result = _start(env, actor_id="admin-1", is_admin=True)
+    assert result["run_scope"] == "all"
+    assert env.prepared_calls[0][1]["task_run_context"]["admin_scope"] == "1"
+    assert service.resolve_task_qc_run_job_owner(
+        job_id=result["job_id"], actor_id="user-1",
+    ) == "admin-1"
+    assert service.resolve_task_qc_run_job_owner(
+        job_id=result["job_id"], actor_id="admin-2", is_admin=True,
+    ) == "admin-1"
+    assert service.resolve_task_qc_run_job_owner(
+        job_id=result["job_id"], actor_id="other",
+    ) is None
+
+
 def test_unassigned_actor_cannot_create_or_read_assigned_runs(env):
     _assign_two_people(env)
     with pytest.raises(service.TaskQCRunForbidden):
@@ -276,6 +340,34 @@ def test_active_run_blocks_rerun_and_terminal_run_creates_new_job(env):
         session.execute(env.jobs.update().where(env.jobs.c.id == "job-1").values(status="completed"))
     assert _start(env)["run_number"] == 2
     assert [item["job_id"] for item in service.list_task_qc_runs(task_id="task-1", actor_id="user-1")] == ["job-2", "job-1"]
+
+
+def test_active_full_run_also_blocks_selected_rerun(env):
+    selected_id = "11111111-1111-4111-8111-111111111111"
+    with env.sessions.begin() as session:
+        session.execute(QCTaskRecord.__table__.update().where(
+            QCTaskRecord.id == "association-1"
+        ).values(id=selected_id, record_id=selected_id))
+    _start(env)
+    with pytest.raises(service.TaskQCRunConflict, match="运行中"):
+        _start(env, task_record_ids=[selected_id])
+    assert env.workspace.next_id == 2
+
+
+def test_run_history_projects_selected_count_from_frozen_job(env, monkeypatch):
+    _start(env)
+    monkeypatch.setattr(env.workspace, "get_batch_job", lambda **_: {
+        "id": "job-1",
+        "filters": {
+            "task_run_record_subset": True,
+            "record_refs": [{"institute_id": "hospital", "patient_id": "patient", "visit_id": "visit-1"}],
+        },
+    })
+    runs = service.list_task_qc_runs(
+        task_id="task-1", actor_id="user-1", workspace_factory=lambda: env.workspace,
+    )
+    assert runs[0]["record_scope"] == "selected"
+    assert runs[0]["record_count"] == 1
 
 
 def test_not_creator_cannot_create_job_or_read_history(env):
@@ -404,10 +496,14 @@ def _result_setup(env, monkeypatch, *, status="completed", run_scope="all", part
     return job, ref
 
 
-def _read_result(env, *, actor="user-1", scope="all", record_id="association-1", run_number=1):
+def _read_result(
+    env, *, actor="user-1", scope="all", record_id="association-1", run_number=1,
+    is_admin=False,
+):
     return service.get_task_qc_run_record_result(
         task_id="task-1", run_number=run_number, task_record_id=record_id,
         actor_id=actor, workspace_factory=lambda: env.workspace, run_scope=scope,
+        is_admin=is_admin,
     )
 
 
@@ -482,6 +578,15 @@ def test_exact_record_result_rejects_invalid_frozen_refs(env, monkeypatch):
     job["filters"]["record_refs"] = [ref, dict(ref)]
     with pytest.raises(service.TaskQCRunConflict, match="冻结质控范围"):
         _read_result(env)
+
+
+def test_selected_run_reports_record_not_in_this_run_without_falling_back(env, monkeypatch):
+    job, ref = _result_setup(env, monkeypatch)
+    job["filters"]["task_run_record_subset"] = True
+    job["filters"]["record_refs"] = [{**ref, "patient_id": "another-patient"}]
+
+    with pytest.raises(service.TaskQCRunNotFound, match="本次运行未包含"):
+        _read_result(env)
     job["filters"]["record_refs"] = [ref, {"institute_id": "hospital", "patient_id": "patient"}]
     with pytest.raises(service.TaskQCRunConflict, match="冻结质控范围"):
         _read_result(env)
@@ -500,6 +605,15 @@ def test_exact_record_result_enforces_creator_or_current_assignee(env, monkeypat
                         .values(assignee_id="user-3"))
     with pytest.raises(service.TaskQCRunForbidden):
         _read_result(env, actor="user-2", scope="assigned")
+
+
+def test_admin_reads_creator_triggered_all_run_without_changing_job_owner(env, monkeypatch):
+    _result_setup(env, monkeypatch)
+
+    result = _read_result(env, actor="admin-1", is_admin=True)
+
+    assert result["job_id"] == "job-1"
+    assert result["result_state"] == "available"
 
 
 def _result_setup_assigned(env, monkeypatch):

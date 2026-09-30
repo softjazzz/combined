@@ -9,10 +9,10 @@ from app.services.product_activation import require_product_activation
 from app.services.task_qc_run_service import TaskQCRunConflict, TaskQCRunForbidden
 
 
-def _client(monkeypatch):
+def _client(monkeypatch, *, user=None):
     app = FastAPI()
     app.include_router(tasks.router)
-    user = {"id": "user-1", "roles": ["admin"]}
+    user = user or {"id": "user-1", "roles": ["admin"]}
     app.dependency_overrides[get_current_user] = lambda: user
     app.dependency_overrides[require_product_activation] = lambda: user
     app.dependency_overrides[tasks.get_qc_service] = lambda: object()
@@ -38,6 +38,57 @@ def test_start_returns_exact_workspace_job_id(monkeypatch):
     assert callable(calls[0]["dispatch"])
 
 
+def test_start_selected_records_validates_uuid_and_forwards_exact_ids(monkeypatch):
+    record_id = "11111111-1111-4111-8111-111111111111"
+    calls = []
+    monkeypatch.setattr(tasks, "create_task_qc_run", lambda **kwargs: calls.append(kwargs) or {
+        "task_id": "task-1", "run_number": 2, "job_id": "job-2", "run_scope": "all",
+        "status": "queued", "task_record_ids": kwargs["task_record_ids"],
+    })
+    client = _client(monkeypatch)
+
+    response = client.post("/api/v1/tasks/task-1/qc-runs", json={"task_record_ids": [record_id]})
+
+    assert response.status_code == 200
+    assert calls[0]["task_record_ids"] == [record_id]
+    assert calls[0]["is_admin"] is True
+    assert client.post(
+        "/api/v1/tasks/task-1/qc-runs", json={"task_record_ids": ["not-a-uuid"]},
+    ).status_code == 422
+
+
+def test_non_admin_role_is_forwarded_without_elevation(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        tasks,
+        "create_task_qc_run",
+        lambda **kwargs: calls.append(("create", kwargs))
+        or {"task_id": "task-1", "run_number": 1, "job_id": "job-1", "status": "queued"},
+    )
+    monkeypatch.setattr(
+        tasks,
+        "list_task_qc_runs",
+        lambda **kwargs: calls.append(("list", kwargs)) or [],
+    )
+    monkeypatch.setattr(
+        tasks,
+        "get_task_qc_run_record_result",
+        lambda **kwargs: calls.append(("result", kwargs))
+        or {"task_id": "task-1", "run_number": 1, "task_record_id": "record-1"},
+    )
+    client = _client(
+        monkeypatch,
+        user={"id": "staff-1", "roles": ["qc_staff"]},
+    )
+
+    assert client.post("/api/v1/tasks/task-1/qc-runs").status_code == 200
+    assert client.get("/api/v1/tasks/task-1/qc-runs").status_code == 200
+    assert client.get(
+        "/api/v1/tasks/task-1/qc-runs/1/records/record-1",
+    ).status_code == 200
+    assert [item[1]["is_admin"] for item in calls] == [False, False, False]
+
+
 def test_run_history_path_is_not_task_detail_and_is_creator_scoped(monkeypatch):
     calls = []
 
@@ -50,7 +101,11 @@ def test_run_history_path_is_not_task_detail_and_is_creator_scoped(monkeypatch):
 
     assert response.status_code == 200
     assert response.json()["data"][0]["job_id"] == "job-1"
-    assert calls == [{"task_id": "task-1", "actor_id": "user-1", "run_scope": "all"}]
+    assert calls[0]["task_id"] == "task-1"
+    assert calls[0]["actor_id"] == "user-1"
+    assert calls[0]["run_scope"] == "all"
+    assert calls[0]["is_admin"] is True
+    assert callable(calls[0]["workspace_factory"])
 
 
 def test_assigned_scope_is_forwarded_and_invalid_scope_is_422(monkeypatch):
@@ -65,7 +120,10 @@ def test_assigned_scope_is_forwarded_and_invalid_scope_is_422(monkeypatch):
     assert client.post("/api/v1/tasks/task-1/qc-runs?scope=assigned").json()["data"]["run_scope"] == "assigned"
     assert client.get("/api/v1/tasks/task-1/qc-runs?scope=assigned").status_code == 200
     assert creates[0]["run_scope"] == "assigned"
-    assert lists == [{"task_id": "task-1", "actor_id": "user-1", "run_scope": "assigned"}]
+    assert lists[0]["task_id"] == "task-1"
+    assert lists[0]["actor_id"] == "user-1"
+    assert lists[0]["run_scope"] == "assigned"
+    assert lists[0]["is_admin"] is True
     assert client.post("/api/v1/tasks/task-1/qc-runs?scope=other").status_code == 422
     assert client.get("/api/v1/tasks/task-1/qc-runs?scope=other").status_code == 422
     assert len(creates) == len(lists) == 1

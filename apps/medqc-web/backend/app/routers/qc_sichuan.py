@@ -96,6 +96,7 @@ from ..services.sichuan_workspace_batch_worker import (
     _result_diagnostic_trace,
     run_sichuan_workspace_batch_job,
 )
+from ..services.task_qc_run_service import resolve_task_qc_run_job_owner
 
 logger = logging.getLogger(__name__)
 
@@ -762,6 +763,39 @@ def _project_luxian_0916_shared_job(job: Dict[str, Any]) -> Dict[str, Any]:
         response.pop(private_key, None)
     response["read_only"] = True
     return response
+
+
+def _project_task_run_job_progress(job: Dict[str, Any]) -> Dict[str, Any]:
+    """任务创建人/管理员跨 owner 只读取进度，不暴露 job 的冻结输入与原始结果。"""
+    summary = job.get("summary") if isinstance(job.get("summary"), dict) else {}
+    safe_summary = {
+        key: summary.get(key)
+        for key in (
+            "execution_status",
+            "total_records",
+            "processed_records",
+            "success_count",
+            "failed_count",
+            "issue_records",
+        )
+        if key in summary
+    }
+    return {
+        key: job.get(key)
+        for key in (
+            "id",
+            "status",
+            "total_records",
+            "processed_records",
+            "success_count",
+            "failed_count",
+            "issue_records",
+            "created_at",
+            "started_at",
+            "completed_at",
+        )
+        if key in job
+    } | {"summary": safe_summary, "read_only": True}
 
 
 
@@ -1856,7 +1890,8 @@ def _validate_task_job_after_cdm_lock(job_id: str, filters: dict[str, Any]) -> N
         )
 
         task, refs = _task_and_refs(
-            session, task_id, association["triggered_by"], association["run_scope"]
+            session, task_id, association["triggered_by"], association["run_scope"],
+            is_admin=filters.get("task_run_admin_scope") is True,
         )
         frozen_refs = filters.get("record_refs")
         keys = ("institute_id", "patient_id", "visit_id")
@@ -2179,11 +2214,24 @@ async def get_workspace_batch_job(
 ):
     workspace = _sichuan_workspace_service()
     shared_read = False
+    task_run_read = False
     job = await run_in_threadpool(
         workspace.get_batch_job,
         job_id=job_id,
         created_by=_current_user_id(current_user),
     )
+    if not job:
+        task_owner = await run_in_threadpool(
+            resolve_task_qc_run_job_owner,
+            job_id=job_id,
+            actor_id=_current_user_id(current_user),
+            is_admin="admin" in _extract_user_roles(current_user),
+        )
+        if task_owner:
+            job = await run_in_threadpool(
+                workspace.get_batch_job, job_id=job_id, created_by=task_owner,
+            )
+            task_run_read = job is not None
     if not job:
         job = await run_in_threadpool(
             _resolve_shared_sample_pool_latest_job,
@@ -2201,7 +2249,9 @@ async def get_workspace_batch_job(
             workspace=workspace,
             job=job,
         )
-    if shared_read:
+    if task_run_read:
+        response_data = _project_task_run_job_progress(job)
+    elif shared_read:
         if str(filters.get("rule_set_key") or "").strip() == LUXIAN_0916_QC_RULE_SET_KEY:
             response_data = _project_luxian_0916_shared_job(job)
         else:

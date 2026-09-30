@@ -141,6 +141,7 @@ def test_active_run_cannot_reuse_old_receipt_after_partial_sync_failure(env):
     lambda env: env.payload["records"][0].update(patient_id="other"),
     lambda env: env.payload["records"][0].update(task_record_id="other"),
     lambda env: env.summary.update(ready_count=0),
+    lambda env: env.summary.update(ready_count=0, failed_count=1),
     lambda env: env.summary["records"][0].update(status="failed"),
     lambda env: env.summary["records"][0].update(task_record_id="other"),
     lambda env: env.summary["records"][0].update(policy_version="old"),
@@ -210,6 +211,63 @@ def test_assigned_active_run_checks_only_actors_exact_case(env, monkeypatch):
     result = _run(env, actor="user-a", scope="assigned")
     assert result["run_scope"] == "assigned"
     assert looked_up == ["patient"]
+
+
+def test_selected_run_accepts_ready_receipt_when_unselected_record_failed(env, monkeypatch):
+    selected_id = "11111111-1111-4111-8111-111111111111"
+    failed_id = "22222222-2222-4222-8222-222222222222"
+    other_ref = {"institute_id": "hospital", "patient_id": "patient-2", "visit_id": "visit-2"}
+    with env.sessions.begin() as session:
+        session.execute(QCTask.__table__.update().where(QCTask.id == "task-1").values(total_records=2))
+        session.execute(QCTaskRecord.__table__.update().where(
+            QCTaskRecord.id == "association-1"
+        ).values(id=selected_id, record_id=selected_id))
+        session.execute(QCTaskRecord.__table__.insert().values(
+            id=failed_id, task_id="task-1", record_id=failed_id, **other_ref,
+            status="pending", defect_count=0,
+        ))
+    env.payload["records"] = [
+        {"task_record_id": selected_id, **REF},
+        {"task_record_id": failed_id, **other_ref},
+    ]
+    env.summary.update(total=2, ready_count=1, failed_count=1)
+    env.summary["records"] = [
+        {**env.summary["records"][0], "task_record_id": selected_id},
+        {"task_record_id": failed_id, "status": "failed", "reason_code": "workspace_not_ready"},
+    ]
+    _job(env, status="failed")
+    looked_up = []
+    monkeypatch.setattr(service, "_load_scene_bundle", lambda **kwargs: looked_up.append(kwargs) or env.bundle)
+
+    result = service.create_task_qc_run(
+        task_id="task-1", actor_id="creator", current_user={"id": "creator"},
+        workspace_factory=lambda: env.workspace, qc_service=object(),
+        dispatch=env.dispatched.append, task_record_ids=[selected_id],
+    )
+
+    assert result["task_record_ids"] == [selected_id]
+    assert [item["patient_id"] for item in looked_up] == ["patient"]
+
+
+def test_selected_run_rejects_failed_receipt_for_selected_record(env):
+    selected_id = "11111111-1111-4111-8111-111111111111"
+    with env.sessions.begin() as session:
+        session.execute(QCTaskRecord.__table__.update().where(
+            QCTaskRecord.id == "association-1"
+        ).values(id=selected_id, record_id=selected_id))
+    env.payload["records"][0]["task_record_id"] = selected_id
+    env.summary.update(ready_count=0, failed_count=1)
+    env.summary["records"] = [{
+        "task_record_id": selected_id, "status": "failed", "reason_code": "workspace_not_ready",
+    }]
+    _job(env, status="failed")
+
+    with pytest.raises(service.TaskQCRunConflict, match="所选病历同步收据未成功"):
+        service.create_task_qc_run(
+            task_id="task-1", actor_id="creator", current_user={"id": "creator"},
+            workspace_factory=lambda: env.workspace, qc_service=object(),
+            dispatch=env.dispatched.append, task_record_ids=[selected_id],
+        )
 
 
 def test_non_active_running_task_preserves_legacy_local_contract(env):

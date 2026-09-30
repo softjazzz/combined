@@ -216,6 +216,8 @@ export interface TaskQcRun {
   job_id: string
   triggered_by: string
   run_scope: TaskQcRunScope
+  record_scope?: 'all' | 'selected' | 'unknown'
+  record_count?: number | null
   created_at: string
 }
 
@@ -227,6 +229,7 @@ export interface TaskQcRunCreated {
   job_id: string
   run_scope: TaskQcRunScope
   status: 'queued'
+  task_record_ids?: string[]
 }
 
 export interface TaskQcRunRecordResult {
@@ -552,10 +555,15 @@ export async function getTaskQcRuns(taskId: string, scope?: TaskQcRunScope) {
   })
 }
 
-export async function createTaskQcRun(taskId: string, scope?: TaskQcRunScope) {
+export async function createTaskQcRun(
+  taskId: string,
+  scope?: TaskQcRunScope,
+  taskRecordIds?: string[],
+) {
   return request<TaskQcRunCreated>({
     method: 'POST',
     url: `${BASE_URL}/${encodeURIComponent(taskId)}/qc-runs${scope ? `?scope=${scope}` : ''}`,
+    ...(taskRecordIds ? { data: { task_record_ids: taskRecordIds } } : {}),
   })
 }
 

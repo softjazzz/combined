@@ -1,7 +1,28 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios'
 import { ApiService } from '@/services/apiService'
-import { assignTask, assignTasksBatch, completeTaskRecord, createTaskQcRun, createTaskTemplate, deleteTaskTemplate, getLatestTaskRecordSyncJob, getTaskAssigneeOptions, getTaskDetail, getTaskList, getTaskQcRuns, getTaskRecordSyncJob, getTaskRuleSets, getTaskStats, getTaskTemplates, getTaskTodoStats, startTaskRecord, syncTaskRecords, updateTask, updateTaskTemplate } from '@/api/tasks'
+import {
+  assignTask,
+  assignTasksBatch,
+  completeTaskRecord,
+  createTaskQcRun,
+  createTaskTemplate,
+  deleteTaskTemplate,
+  getLatestTaskRecordSyncJob,
+  getTaskAssigneeOptions,
+  getTaskDetail,
+  getTaskList,
+  getTaskQcRuns,
+  getTaskRecordSyncJob,
+  getTaskRuleSets,
+  getTaskStats,
+  getTaskTemplates,
+  getTaskTodoStats,
+  startTaskRecord,
+  syncTaskRecords,
+  updateTask,
+  updateTaskTemplate,
+} from '@/api/tasks'
 
 vi.mock('@/services/apiService', () => ({ ApiService: { requestRaw: vi.fn() } }))
 
@@ -54,7 +75,16 @@ describe('任务统计 API', () => {
   })
 
   it('通过工作区目录读取已发布规则集并保留请求失败语义', async () => {
-    const catalog = { items: [{ rule_set_key: 'running-rules', rule_set_name: '运行规则', rule_set_version: 'v1', scope: 'running' }] }
+    const catalog = {
+      items: [
+        {
+          rule_set_key: 'running-rules',
+          rule_set_name: '运行规则',
+          rule_set_version: 'v1',
+          scope: 'running',
+        },
+      ],
+    }
     vi.mocked(ApiService.requestRaw).mockResolvedValueOnce(response(catalog))
     await expect(getTaskRuleSets()).resolves.toMatchObject({ success: true, data: catalog })
     expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
@@ -79,20 +109,26 @@ describe('任务统计 API', () => {
     }
     await getTaskTemplates()
     expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
-      method: 'GET', url: '/api/v1/tasks/templates',
+      method: 'GET',
+      url: '/api/v1/tasks/templates',
     })
     await createTaskTemplate({ name: '常用', config })
     expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
-      method: 'POST', url: '/api/v1/tasks/templates', data: { name: '常用', config },
+      method: 'POST',
+      url: '/api/v1/tasks/templates',
+      data: { name: '常用', config },
     })
     await updateTaskTemplate('tpl/1', { version: 2, name: '改名', config })
     expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
-      method: 'PUT', url: '/api/v1/tasks/templates/tpl%2F1',
+      method: 'PUT',
+      url: '/api/v1/tasks/templates/tpl%2F1',
       data: { version: 2, name: '改名', config },
     })
     await deleteTaskTemplate('tpl/1', 3)
     expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
-      method: 'DELETE', url: '/api/v1/tasks/templates/tpl%2F1', params: { version: 3 },
+      method: 'DELETE',
+      url: '/api/v1/tasks/templates/tpl%2F1',
+      params: { version: 3 },
     })
   })
 
@@ -114,38 +150,68 @@ describe('任务统计 API', () => {
   it('运行历史与新运行使用任务专属端点且编码任务 ID', async () => {
     await getTaskQcRuns('task/1')
     expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
-      method: 'GET', url: '/api/v1/tasks/task%2F1/qc-runs',
+      method: 'GET',
+      url: '/api/v1/tasks/task%2F1/qc-runs',
     })
     await createTaskQcRun('task/1')
     expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
-      method: 'POST', url: '/api/v1/tasks/task%2F1/qc-runs',
+      method: 'POST',
+      url: '/api/v1/tasks/task%2F1/qc-runs',
     })
     await getTaskQcRuns('task/1', 'assigned')
     expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
-      method: 'GET', url: '/api/v1/tasks/task%2F1/qc-runs?scope=assigned',
+      method: 'GET',
+      url: '/api/v1/tasks/task%2F1/qc-runs?scope=assigned',
     })
     await createTaskQcRun('task/1', 'all')
     expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
-      method: 'POST', url: '/api/v1/tasks/task%2F1/qc-runs?scope=all',
+      method: 'POST',
+      url: '/api/v1/tasks/task%2F1/qc-runs?scope=all',
+    })
+    await createTaskQcRun('task/1', 'assigned', ['record-1', 'record-2'])
+    expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
+      method: 'POST',
+      url: '/api/v1/tasks/task%2F1/qc-runs?scope=assigned',
+      data: { task_record_ids: ['record-1', 'record-2'] },
     })
   })
 
   it('单病历开始处理编码任务和关联 ID，并保留服务端确认字段', async () => {
-    const started = { task_id: 'task/1', task_record_id: 'record/甲', status: 'in_progress', idempotent: true }
+    const started = {
+      task_id: 'task/1',
+      task_record_id: 'record/甲',
+      status: 'in_progress',
+      idempotent: true,
+    }
     vi.mocked(ApiService.requestRaw).mockResolvedValueOnce(response(started))
-    await expect(startTaskRecord('task/1', 'record/甲')).resolves.toMatchObject({ success: true, data: started })
+    await expect(startTaskRecord('task/1', 'record/甲')).resolves.toMatchObject({
+      success: true,
+      data: started,
+    })
     expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
-      method: 'POST', url: '/api/v1/tasks/task%2F1/records/record%2F%E7%94%B2/start',
+      method: 'POST',
+      url: '/api/v1/tasks/task%2F1/records/record%2F%E7%94%B2/start',
     })
   })
 
   it('单病历显式完成只提交所选运行编号并编码任务与关联 ID', async () => {
-    const completed = { task_id: 'task/1', task_record_id: 'record/甲', status: 'completed', run_number: 2,
-      idempotent: false, score: null, defect_count: null }
+    const completed = {
+      task_id: 'task/1',
+      task_record_id: 'record/甲',
+      status: 'completed',
+      run_number: 2,
+      idempotent: false,
+      score: null,
+      defect_count: null,
+    }
     vi.mocked(ApiService.requestRaw).mockResolvedValueOnce(response(completed))
-    await expect(completeTaskRecord('task/1', 'record/甲', 2)).resolves.toMatchObject({ success: true, data: completed })
+    await expect(completeTaskRecord('task/1', 'record/甲', 2)).resolves.toMatchObject({
+      success: true,
+      data: completed,
+    })
     expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
-      method: 'POST', url: '/api/v1/tasks/task%2F1/records/record%2F%E7%94%B2/complete',
+      method: 'POST',
+      url: '/api/v1/tasks/task%2F1/records/record%2F%E7%94%B2/complete',
       data: { run_number: 2 },
     })
   })
@@ -153,27 +219,42 @@ describe('任务统计 API', () => {
   it('显式同步任务病历只调用本地任务端点且不附带请求体', async () => {
     await syncTaskRecords('task/1')
     expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
-      method: 'POST', url: '/api/v1/tasks/task%2F1/sync-records',
+      method: 'POST',
+      url: '/api/v1/tasks/task%2F1/sync-records',
     })
     await getTaskRecordSyncJob('task/1', 'job/甲')
     expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
-      method: 'GET', url: '/api/v1/tasks/task%2F1/sync-records/job%2F%E7%94%B2',
+      method: 'GET',
+      url: '/api/v1/tasks/task%2F1/sync-records/job%2F%E7%94%B2',
     })
     await getLatestTaskRecordSyncJob('task/1')
-    expect(ApiService.requestRaw).toHaveBeenLastCalledWith(expect.objectContaining({
-      method: 'GET', url: '/api/v1/tasks/task%2F1/sync-records/latest',
-    }))
+    expect(ApiService.requestRaw).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        method: 'GET',
+        url: '/api/v1/tasks/task%2F1/sync-records/latest',
+      }),
+    )
   })
 
   it('latest 404 保留 HTTP 状态，供首次同步区分无作业与网络故障', async () => {
     const notFound = { ...response({ detail: '同步作业不存在' }), status: 404 }
-    vi.mocked(ApiService.requestRaw).mockRejectedValueOnce(new AxiosError('Not Found', 'ERR_BAD_RESPONSE', undefined, undefined, notFound))
-    await expect(getLatestTaskRecordSyncJob('task-1')).resolves.toMatchObject({ success: false, status: 404 })
-    vi.mocked(ApiService.requestRaw).mockResolvedValueOnce({ ...notFound, data: { detail: '同步作业不存在' } })
+    vi.mocked(ApiService.requestRaw).mockRejectedValueOnce(
+      new AxiosError('Not Found', 'ERR_BAD_RESPONSE', undefined, undefined, notFound),
+    )
+    await expect(getLatestTaskRecordSyncJob('task-1')).resolves.toMatchObject({
+      success: false,
+      status: 404,
+    })
+    vi.mocked(ApiService.requestRaw).mockResolvedValueOnce({
+      ...notFound,
+      data: { detail: '同步作业不存在' },
+    })
     await expect(getLatestTaskRecordSyncJob('task-1')).resolves.toMatchObject({ status: 404 })
-    expect(ApiService.requestRaw).toHaveBeenLastCalledWith(expect.objectContaining({
-      validateStatus: expect.any(Function),
-    }))
+    expect(ApiService.requestRaw).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        validateStatus: expect.any(Function),
+      }),
+    )
   })
 
   it('列表、统计和待办统计使用同一场景筛选合同', async () => {
@@ -223,12 +304,14 @@ describe('任务统计 API', () => {
     vi.mocked(ApiService.requestRaw).mockResolvedValueOnce(response(options))
     await expect(getTaskAssigneeOptions()).resolves.toMatchObject({ success: true, data: options })
     expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
-      method: 'GET', url: '/api/v1/tasks/assignee-options',
+      method: 'GET',
+      url: '/api/v1/tasks/assignee-options',
     })
 
     await assignTask('task/1', { method: 'by_ratio', assignees: options })
     expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
-      method: 'POST', url: '/api/v1/tasks/task%2F1/assign',
+      method: 'POST',
+      url: '/api/v1/tasks/task%2F1/assign',
       data: { method: 'by_ratio', assignees: options },
     })
   })
@@ -237,13 +320,28 @@ describe('任务统计 API', () => {
     const options = [{ user_id: 'qc-1', user_name: '质控员甲' }]
     const result = {
       total_assigned: 3,
-      assignment_details: [{ user_id: 'qc-1', user_name: '质控员甲', count: 3, reason_counts: { original_reviewer: 2, ratio_fallback: 1 } }],
+      assignment_details: [
+        {
+          user_id: 'qc-1',
+          user_name: '质控员甲',
+          count: 3,
+          reason_counts: { original_reviewer: 2, ratio_fallback: 1 },
+        },
+      ],
     }
-    vi.mocked(ApiService.requestRaw).mockResolvedValueOnce(response({ success: true, data: result }))
-    await expect(assignTask('task-1', { method: 'by_original_reviewer', fallback: 'by_ratio', assignees: options }))
-      .resolves.toMatchObject({ success: true, data: result })
+    vi.mocked(ApiService.requestRaw).mockResolvedValueOnce(
+      response({ success: true, data: result }),
+    )
+    await expect(
+      assignTask('task-1', {
+        method: 'by_original_reviewer',
+        fallback: 'by_ratio',
+        assignees: options,
+      }),
+    ).resolves.toMatchObject({ success: true, data: result })
     expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
-      method: 'POST', url: '/api/v1/tasks/task-1/assign',
+      method: 'POST',
+      url: '/api/v1/tasks/task-1/assign',
       data: { method: 'by_original_reviewer', fallback: 'by_ratio', assignees: options },
     })
   })
@@ -258,40 +356,83 @@ describe('任务统计 API', () => {
     }
     await assignTasksBatch(payload)
     expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
-      method: 'POST', url: '/api/v1/tasks/batch-assign', data: payload,
+      method: 'POST',
+      url: '/api/v1/tasks/batch-assign',
+      data: payload,
     })
   })
 
   it.each([
-    ['detail', { code: 'department_unassigned', message: '存在无受领人科室', departments: ['内科', ' ', 3, '外科'] }],
-    ['error', { code: 'original_reviewer_unmatched', message: '有病历无原质控员', unmatched_count: 4 }],
+    [
+      'detail',
+      {
+        code: 'department_unassigned',
+        message: '存在无受领人科室',
+        departments: ['内科', ' ', 3, '外科'],
+      },
+    ],
+    [
+      'error',
+      { code: 'original_reviewer_unmatched', message: '有病历无原质控员', unmatched_count: 4 },
+    ],
   ] as const)('409 结构化业务码从 %s 字段解析并保留数量/科室', async (key, detail) => {
-    vi.mocked(ApiService.requestRaw).mockRejectedValueOnce(new AxiosError(
-      'Request failed', 'ERR_BAD_REQUEST', undefined, undefined,
-      { data: { success: false, [key]: detail }, status: 409, statusText: 'Conflict', headers: new AxiosHeaders(), config: { headers: new AxiosHeaders() } },
-    ))
-    const res = await assignTask('task-1', { method: 'by_department', assignees: [{ user_id: 'qc-1', user_name: '甲' }] })
-    expect(res).toMatchObject({ success: false, status: 409, code: detail.code, message: detail.message })
+    vi.mocked(ApiService.requestRaw).mockRejectedValueOnce(
+      new AxiosError('Request failed', 'ERR_BAD_REQUEST', undefined, undefined, {
+        data: { success: false, [key]: detail },
+        status: 409,
+        statusText: 'Conflict',
+        headers: new AxiosHeaders(),
+        config: { headers: new AxiosHeaders() },
+      }),
+    )
+    const res = await assignTask('task-1', {
+      method: 'by_department',
+      assignees: [{ user_id: 'qc-1', user_name: '甲' }],
+    })
+    expect(res).toMatchObject({
+      success: false,
+      status: 409,
+      code: detail.code,
+      message: detail.message,
+    })
     if (detail.code === 'department_unassigned') {
-      expect(res.errorDetail).toEqual({ code: detail.code, message: detail.message, departments: ['内科', '外科'] })
+      expect(res.errorDetail).toEqual({
+        code: detail.code,
+        message: detail.message,
+        departments: ['内科', '外科'],
+      })
     } else {
-      expect(res.errorDetail).toEqual({ code: detail.code, message: detail.message, unmatched_count: 4 })
+      expect(res.errorDetail).toEqual({
+        code: detail.code,
+        message: detail.message,
+        unmatched_count: 4,
+      })
     }
   })
 
   it('字符串 detail 的错误不附带业务码', async () => {
-    vi.mocked(ApiService.requestRaw).mockRejectedValueOnce(new AxiosError(
-      'Request failed', 'ERR_BAD_REQUEST', undefined, undefined,
-      { data: { detail: '任务病历已有分配或状态变化' }, status: 409, statusText: 'Conflict', headers: new AxiosHeaders(), config: { headers: new AxiosHeaders() } },
-    ))
-    const res = await assignTask('task-1', { method: 'by_ratio', assignees: [{ user_id: 'qc-1', user_name: '甲' }] })
+    vi.mocked(ApiService.requestRaw).mockRejectedValueOnce(
+      new AxiosError('Request failed', 'ERR_BAD_REQUEST', undefined, undefined, {
+        data: { detail: '任务病历已有分配或状态变化' },
+        status: 409,
+        statusText: 'Conflict',
+        headers: new AxiosHeaders(),
+        config: { headers: new AxiosHeaders() },
+      }),
+    )
+    const res = await assignTask('task-1', {
+      method: 'by_ratio',
+      assignees: [{ user_id: 'qc-1', user_name: '甲' }],
+    })
     expect(res).toEqual({ success: false, status: 409, message: '任务病历已有分配或状态变化' })
   })
 
   it('开始受领任务沿用 PUT 状态接口', async () => {
     await updateTask('task-1', { status: 'in_progress' })
     expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
-      method: 'PUT', url: '/api/v1/tasks/task-1', data: { status: 'in_progress' },
+      method: 'PUT',
+      url: '/api/v1/tasks/task-1',
+      data: { status: 'in_progress' },
     })
   })
 
@@ -322,8 +463,7 @@ describe('任务统计 API', () => {
     })
     expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
       method: 'GET',
-      url:
-        '/api/v1/tasks?tab=received&todo=due_soon&as_of=2026-09-22T07%3A30%3A00%2B00%3A00&page=2',
+      url: '/api/v1/tasks?tab=received&todo=due_soon&as_of=2026-09-22T07%3A30%3A00%2B00%3A00&page=2',
     })
   })
 })

@@ -30,6 +30,7 @@ from ..schemas.tasks import (
     TaskRecordCompleteRequest,
     TaskManualDefectCreateRequest,
     TaskManualDefectResponse,
+    TaskQCRunCreateRequest,
     TaskTemplateCreateRequest,
     TaskTemplateUpdateRequest,
     AssignMethod,
@@ -1551,6 +1552,7 @@ async def start_task_qc_run(
     request: Request,
     task_id: str,
     scope: Literal["all", "assigned"] = Query("all"),
+    payload: Optional[TaskQCRunCreateRequest] = Body(None),
     current_user: dict = Depends(require_product_activation),
     qc_service: SichuanQCService = Depends(get_qc_service),
 ):
@@ -1569,6 +1571,11 @@ async def start_task_qc_run(
             qc_service=qc_service,
             dispatch=dispatch,
             run_scope=scope,
+            task_record_ids=(
+                [str(record_id) for record_id in payload.task_record_ids]
+                if payload is not None else None
+            ),
+            is_admin=has_any_role(current_user, [UserRole.ADMIN]),
         )
     except TaskQCRunNotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -1598,6 +1605,8 @@ async def get_task_qc_runs(
     try:
         runs = await run_in_threadpool(
             list_task_qc_runs, task_id=task_id, actor_id=actor_id, run_scope=scope,
+            workspace_factory=_sichuan_workspace_service,
+            is_admin=has_any_role(current_user, [UserRole.ADMIN]),
         )
     except TaskQCRunNotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -1628,6 +1637,7 @@ async def get_task_qc_run_record(
             task_id=task_id, run_number=run_number, task_record_id=task_record_id,
             actor_id=actor_id, workspace_factory=_sichuan_workspace_service,
             run_scope=scope,
+            is_admin=has_any_role(current_user, [UserRole.ADMIN]),
         )
     except TaskQCRunNotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

@@ -80,6 +80,21 @@ TaskEditName = Annotated[str, StringConstraints(strip_whitespace=True, min_lengt
 TaskDeadline = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=32)]
 
 
+class TaskQCRunCreateRequest(BaseModel):
+    """可选的病例级质控范围；无请求体时沿用整范围运行。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    task_record_ids: List[UUID] = Field(..., min_length=1, max_length=500)
+
+    @field_validator("task_record_ids")
+    @classmethod
+    def validate_unique_record_ids(cls, value: List[UUID]) -> List[UUID]:
+        if len(value) != len(set(value)):
+            raise ValueError("所选病历存在重复")
+        return value
+
+
 class TaskCaseRef(BaseModel):
     """任务指定病历的完整工作台身份。"""
 

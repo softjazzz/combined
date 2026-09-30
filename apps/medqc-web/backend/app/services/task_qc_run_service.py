@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import uuid
 from datetime import datetime, timezone
 from itertools import chain
 from typing import Any, Callable, Sequence
@@ -56,7 +57,7 @@ class TaskQCRunDispatchError(RuntimeError):
 
 
 def _task_and_refs(
-    session: Session, task_id: str, actor_id: str, run_scope: str,
+    session: Session, task_id: str, actor_id: str, run_scope: str, *, is_admin: bool = False,
 ) -> tuple[dict[str, Any], list[dict[str, str]]]:
     task_row = session.execute(
         select(QCTask.__table__)
@@ -66,8 +67,8 @@ def _task_and_refs(
     if task_row is None:
         raise TaskQCRunNotFound("任务不存在")
     task = dict(task_row)
-    if run_scope == "all" and task.get("creator_id") != actor_id:
-        raise TaskQCRunForbidden("仅任务创建人可启动整批质控")
+    if run_scope == "all" and task.get("creator_id") != actor_id and not is_admin:
+        raise TaskQCRunForbidden("仅任务创建人或管理员可启动整批质控")
     scene = task.get("scene")
     if scene == "outpatient":
         raise TaskQCRunConflict("门急诊场景尚无可执行的规则集与 workspace 资料链")
@@ -139,9 +140,12 @@ def _normalize_task_record_ids(task_record_ids: Sequence[str] | None) -> list[st
         raise TaskQCRunConflict("所选病历格式无效")
     normalized: list[str] = []
     for value in task_record_ids:
-        if not isinstance(value, str) or not value.strip() or len(value.strip()) > 36:
+        if not isinstance(value, str):
             raise TaskQCRunConflict("所选病历格式无效")
-        normalized.append(value.strip())
+        try:
+            normalized.append(str(uuid.UUID(value.strip())))
+        except (AttributeError, ValueError):
+            raise TaskQCRunConflict("所选病历格式无效") from None
     if not normalized:
         raise TaskQCRunConflict("请至少选择一份病历")
     if len(normalized) > MAX_TASK_RECORD_SUBSET:
@@ -255,7 +259,7 @@ def _assert_task_sync_receipt(
           AND business_id = :task_id
         ORDER BY created_at DESC, id DESC LIMIT 1
     """), {"task_id": task_id}).mappings().first()
-    if row is None or row["status"] != "succeeded":
+    if row is None or row["status"] not in {"succeeded", "failed"}:
         raise TaskQCRunConflict("任务病历缺少成功的资料同步收据")
     payload = _json_object(row["payload"])
     summary = _json_object(row["result_summary"])
@@ -293,22 +297,30 @@ def _assert_task_sync_receipt(
         frozen_by_id[record_id] = identity
     if frozen_by_id != task_records or len(frozen) != len(rows):
         raise TaskQCRunConflict("任务病历资料同步收据与当前抽样不一致")
-    if any(type(summary.get(key)) is not int for key in ("total", "ready_count", "failed_count")) or (
-        summary["total"] != len(rows) or summary["ready_count"] != len(rows) or summary["failed_count"] != 0
+    if any(type(summary.get(key)) is not int for key in ("total", "ready_count", "failed_count")):
+        raise TaskQCRunConflict("任务病历资料同步收据计数无效")
+    if (
+        summary["total"] != len(rows)
+        or summary["ready_count"] + summary["failed_count"] != len(rows)
+        or (row["status"] == "succeeded") != (summary["failed_count"] == 0)
     ):
-        raise TaskQCRunConflict("任务病历资料同步收据未覆盖全部病例")
+        raise TaskQCRunConflict("任务病历资料同步收据计数不一致")
     receipt_by_id: dict[str, dict[str, Any]] = {}
     for item in receipts:
-        if not isinstance(item, dict) or item.get("status") != "ready":
-            raise TaskQCRunConflict("任务病历资料同步收据未覆盖全部病例")
+        if not isinstance(item, dict) or item.get("status") not in {"ready", "failed"}:
+            raise TaskQCRunConflict("任务病历资料同步收据状态无效")
         record_id = item.get("task_record_id")
         if not isinstance(record_id, str) or record_id not in frozen_by_id or record_id in receipt_by_id:
             raise TaskQCRunConflict("任务病历资料同步收据身份无效")
         receipt_by_id[record_id] = item
     if len(receipt_by_id) != len(rows):
         raise TaskQCRunConflict("任务病历资料同步收据未覆盖全部病例")
+    actual_ready = sum(item.get("status") == "ready" for item in receipt_by_id.values())
+    actual_failed = sum(item.get("status") == "failed" for item in receipt_by_id.values())
+    if actual_ready != summary["ready_count"] or actual_failed != summary["failed_count"]:
+        raise TaskQCRunConflict("任务病历资料同步收据计数与明细不一致")
 
-    # 收据仍须覆盖全任务（不放宽）；Bundle 就绪只检查本次运行病例（整批、本人或所选子集）。
+    # 快照身份仍覆盖全任务；逐例成功回执与 Bundle 就绪只要求覆盖本次运行病例。
     run_identities = {tuple(ref[key] for key in ("institute_id", "patient_id", "visit_id")) for ref in refs}
     selected = {record_id for record_id, identity in task_records.items() if identity in run_identities}
     if len(selected) != len(refs) or (run_scope == "assigned" and any(
@@ -318,6 +330,8 @@ def _assert_task_sync_receipt(
     for record_id in selected:
         identity = task_records[record_id]
         receipt = receipt_by_id[record_id]
+        if receipt.get("status") != "ready":
+            raise TaskQCRunConflict("所选病历同步收据未成功")
         try:
             bundle = _load_scene_bundle(
                 scene=scene, institute_id=identity[0], patient_id=identity[1],
@@ -354,6 +368,7 @@ def create_task_qc_run(
     dispatch: Callable[[str], Any],
     run_scope: str = "all",
     task_record_ids: Sequence[str] | None = None,
+    is_admin: bool = False,
 ) -> dict[str, Any]:
     """任务行锁串行化重跑；job 和运行关联同一事务，提交后才派发。
 
@@ -369,7 +384,9 @@ def create_task_qc_run(
 
     with SessionLocal() as session:
         with session.begin():
-            task, refs = _task_and_refs(session, task_id, actor_id, run_scope)
+            task, refs = _task_and_refs(
+                session, task_id, actor_id, run_scope, is_admin=is_admin,
+            )
             if subset_ids is not None:
                 refs = _select_task_record_subset(session, task_id, refs, subset_ids, run_scope)
             if _remote_scope_task(task):
@@ -389,6 +406,7 @@ def create_task_qc_run(
                 task_run_context={
                     "task_id": task_id, "run_number": str(run_number),
                     **({"record_subset": "1"} if subset_ids is not None else {}),
+                    **({"admin_scope": "1"} if is_admin and task["creator_id"] != actor_id else {}),
                 },
                 frozen_rule_set_version=task["rule_set_version"],
             )
@@ -434,7 +452,10 @@ def create_task_qc_run(
     return created
 
 
-def list_task_qc_runs(*, task_id: str, actor_id: str, run_scope: str = "all") -> list[dict[str, Any]]:
+def list_task_qc_runs(
+    *, task_id: str, actor_id: str, run_scope: str = "all",
+    workspace_factory: Callable[[], Any] | None = None, is_admin: bool = False,
+) -> list[dict[str, Any]]:
     """只返回请求范围内本人可见的 run；job 状态由 workspace 接口提供。"""
     if SessionLocal is None:
         raise RuntimeError("数据库会话不可用")
@@ -448,8 +469,8 @@ def list_task_qc_runs(*, task_id: str, actor_id: str, run_scope: str = "all") ->
         ).mappings().first()
         if task is None:
             raise TaskQCRunNotFound("任务不存在")
-        if run_scope == "all" and task["creator_id"] != actor_id:
-            raise TaskQCRunForbidden("仅任务创建人可查看整批质控运行历史")
+        if run_scope == "all" and task["creator_id"] != actor_id and not is_admin:
+            raise TaskQCRunForbidden("仅任务创建人或管理员可查看整批质控运行历史")
         if run_scope == "assigned":
             is_assignee = session.execute(
                 select(QCTaskRecord.id).where(
@@ -473,13 +494,57 @@ def list_task_qc_runs(*, task_id: str, actor_id: str, run_scope: str = "all") ->
         )
         if run_scope == "assigned":
             statement = statement.where(QCTaskQCRun.triggered_by == actor_id)
-        rows = session.execute(statement).mappings().all()
-        return [dict(row) for row in rows]
+        rows = [dict(row) for row in session.execute(statement).mappings().all()]
+    if workspace_factory is None:
+        return rows
+    workspace = workspace_factory()
+    for row in rows:
+        try:
+            job = workspace.get_batch_job(job_id=row["job_id"], created_by=row["triggered_by"])
+        except Exception:
+            logger.warning(
+                "task_run_history_job_unavailable task_id=%s run_number=%s",
+                task_id, row["run_number"],
+            )
+            job = None
+        filters = job.get("filters") if isinstance(job, dict) else None
+        record_refs = filters.get("record_refs") if isinstance(filters, dict) else None
+        if not isinstance(record_refs, list) or not record_refs:
+            row.update(record_scope="unknown", record_count=None)
+            continue
+        row.update(
+            record_scope=("selected" if filters.get("task_run_record_subset") is True else "all"),
+            record_count=len(record_refs),
+        )
+    return rows
+
+
+def resolve_task_qc_run_job_owner(
+    *, job_id: str, actor_id: str, is_admin: bool = False,
+) -> str | None:
+    """为任务详情只读进度解析真实 job owner，不扩大非任务 job 的读取范围。"""
+    if SessionLocal is None or not actor_id or len(actor_id) > 64:
+        return None
+    with SessionLocal() as session:
+        row = session.execute(
+            select(
+                QCTaskQCRun.triggered_by,
+                QCTaskQCRun.run_scope,
+                QCTask.creator_id,
+            )
+            .join(QCTask, QCTask.id == QCTaskQCRun.task_id)
+            .where(QCTaskQCRun.job_id == job_id)
+        ).mappings().first()
+        if row is None:
+            return None
+        if row["run_scope"] == "all":
+            return str(row["triggered_by"]) if is_admin or row["creator_id"] == actor_id else None
+        return str(row["triggered_by"]) if row["triggered_by"] == actor_id else None
 
 
 def get_task_qc_run_record_result(
     *, task_id: str, run_number: int, task_record_id: str, actor_id: str,
-    workspace_factory: Callable[[], Any], run_scope: str = "all",
+    workspace_factory: Callable[[], Any], run_scope: str = "all", is_admin: bool = False,
 ) -> dict[str, Any]:
     """只读取指定运行的权威结果，不改写任务病历状态。"""
     if SessionLocal is None:
@@ -514,8 +579,8 @@ def get_task_qc_run_record_result(
         if run["run_scope"] != run_scope:
             raise TaskQCRunForbidden("当前范围不可查看此运行")
         if run_scope == "all":
-            if task["creator_id"] != actor_id or run["triggered_by"] != actor_id:
-                raise TaskQCRunForbidden("仅任务创建人可查看整批质控结果")
+            if not is_admin and (task["creator_id"] != actor_id or run["triggered_by"] != actor_id):
+                raise TaskQCRunForbidden("仅任务创建人或管理员可查看整批质控结果")
         elif run["triggered_by"] != actor_id or record["assignee_id"] != actor_id:
             raise TaskQCRunForbidden("仅运行人可查看当前受领的病历结果")
         identity = tuple(str(record.get(key) or "").strip() for key in ("institute_id", "patient_id", "visit_id"))
