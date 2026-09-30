@@ -123,6 +123,24 @@
             {{ getDocTypeZh(item) }}
           </a-select-option>
         </a-select>
+
+        <a-select
+          v-if="hasReleaseScope"
+          :value="releaseScope || undefined"
+          class="query-select"
+          placeholder="发布范围"
+          allow-clear
+          aria-label="发布范围"
+          popup-class-name="semantic-rule-select-dropdown"
+          @update:value="emit('update:releaseScope', String($event || ''))"
+        >
+          <a-select-option value="acceptance_only">
+            待验收
+          </a-select-option>
+          <a-select-option value="default">
+            已上线
+          </a-select-option>
+        </a-select>
       </template>
     </ProQueryBar>
 
@@ -146,6 +164,15 @@
           <template v-if="column.key === 'rule_id'">
             <span class="rule-code-pill">
               {{ record.rule_code || record.rule_id }}
+            </span>
+          </template>
+
+          <template v-if="column.key === 'release_scope'">
+            <span
+              :class="record.release_scope === 'acceptance_only' ? 'mq-status mq-status--warning' : 'mq-status mq-status--success'"
+              data-testid="release-scope"
+            >
+              {{ record.release_scope === 'acceptance_only' ? '待验收' : '已上线' }}
             </span>
           </template>
 
@@ -183,6 +210,14 @@
                   <ClipboardCheck class="button-icon" />
                   {{ rowAction.secondaryLabel }}
                 </a-button>
+                <router-link
+                  v-if="record.release_scope === 'acceptance_only'"
+                  class="ant-btn ant-btn-sm action-secondary"
+                  data-testid="go-rule-validation"
+                  :to="{ name: 'WorkstationV4RuleValidationDetail', params: { ruleId: record.rule_id } }"
+                >
+                  去验收
+                </router-link>
               </div>
             </div>
           </template>
@@ -221,6 +256,7 @@ const props = defineProps<{
   complexity: string
   defectLevel: string
   documentType: string
+  releaseScope?: string
   complexityOptions: string[]
   defectOptions: string[]
   documentOptions: string[]
@@ -234,6 +270,7 @@ const emit = defineEmits<{
   'update:complexity': [value: string]
   'update:defectLevel': [value: string]
   'update:documentType': [value: string]
+  'update:releaseScope': [value: string]
   openQcEvaluation: []
   openCustomWorkspace: []
   tableChange: [pagination: TablePaginationConfig]
@@ -241,9 +278,12 @@ const emit = defineEmits<{
   startTest: [rule: SemanticRuleItem]
 }>()
 
+/** 只有 LX0609 规则带目录发布范围；其他规则集不显示发布范围列与筛选 */
+const hasReleaseScope = computed(() => props.rules.some((rule) => Boolean(rule.release_scope)) || Boolean(props.releaseScope))
 const columns = computed(() => [
   { title: '序号', key: 'index', width: 64, fixed: 'left' as const, align: 'center' as const },
   { title: '编号', key: 'rule_id', width: 160, fixed: 'left' as const },
+  ...(hasReleaseScope.value ? [{ title: '发布范围', key: 'release_scope', width: 110 }] : []),
   { title: '适用文书', key: 'applicable_documents', width: 150 },
   { title: '规则名称', key: 'name', width: 760 },
 ])

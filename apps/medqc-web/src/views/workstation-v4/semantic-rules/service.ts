@@ -271,6 +271,7 @@ export function normalizeSemanticRule(raw: Record<string, any>): SemanticRuleIte
     rule_basis: raw.rule_basis ? String(raw.rule_basis) : undefined,
     customer_text: raw.customer_text ? String(raw.customer_text) : undefined,
     customer_policy: normalizeCustomerPolicy(raw.customer_policy),
+    release_scope: raw.release_scope ? String(raw.release_scope) : undefined,
     standardized_rule: raw.standardized_rule ? String(raw.standardized_rule) : undefined,
     required_documents_label: raw.required_documents_label
       ? String(raw.required_documents_label)
@@ -418,13 +419,15 @@ export function filterSemanticRules(
   query: Pick<
     SemanticRuleWorkspaceQueryState,
     'keyword' | 'complexity' | 'defectLevel' | 'documentType'
-  >,
+  > &
+    Partial<Pick<SemanticRuleWorkspaceQueryState, 'releaseScope'>>,
 ): SemanticRuleItem[] {
   const keyword = query.keyword.trim().toLowerCase()
 
   return rules.filter((rule) => {
     if (query.complexity && rule.complexity !== query.complexity) return false
     if (query.defectLevel && rule.defect_level !== query.defectLevel) return false
+    if (query.releaseScope && rule.release_scope !== query.releaseScope) return false
 
     if (query.documentType) {
       const hasDocType = (rule.applicable_documents || []).some((docType) => {
@@ -554,6 +557,7 @@ export function parseSemanticWorkspaceQuery(query: LocationQuery): SemanticRuleW
     complexity: parseQueryStringValue(query.complexity),
     defectLevel: parseQueryStringValue(query.defectLevel),
     documentType: parseQueryStringValue(query.documentType),
+    releaseScope: parseQueryStringValue(query.releaseScope),
     page: parsePositiveInt(query.page, 1),
     pageSize: parsePositiveInt(query.pageSize, DEFAULT_SEMANTIC_RULE_PAGE_SIZE),
   }
@@ -574,6 +578,7 @@ export function buildSemanticWorkspaceQuery(
   if (state.complexity) nextQuery.complexity = state.complexity
   if (state.defectLevel) nextQuery.defectLevel = state.defectLevel
   if (state.documentType) nextQuery.documentType = state.documentType
+  if (state.releaseScope) nextQuery.releaseScope = state.releaseScope
   if (state.page > 1) nextQuery.page = String(state.page)
   if (state.pageSize !== DEFAULT_SEMANTIC_RULE_PAGE_SIZE)
     nextQuery.pageSize = String(state.pageSize)

@@ -171,4 +171,74 @@ describe('SemanticRulesTableSection', () => {
     expect(wrapper.text()).not.toContain('主执行 SC-002')
     expect(wrapper.text()).not.toContain('映射规则：SC-002')
   })
+
+  function mountLuxian(rule: Partial<SemanticRuleItem>) {
+    return mount(SemanticRulesTableSection, {
+      props: {
+        loading: false,
+        rules: [
+          {
+            rule_id: 'LX0609-06-01-01',
+            rule_code: 'LX0609-06-01-01',
+            name: '医嘱与病程一致性',
+            description: '',
+            category: 'CT/MRI检查记录',
+            complexity: '中复杂度',
+            defect_level: '一般缺陷',
+            score_deduction: 1,
+            applicable_documents: ['exam_report'],
+            medical_domain: '通用',
+            requires_rag: false,
+            requires_cot: false,
+            ...rule,
+          },
+        ],
+        total: 1,
+        ruleSetKey: 'luxian_0609_qc_v1',
+        ruleSetOptions: [],
+        keywordInput: '',
+        complexity: '',
+        defectLevel: '',
+        documentType: '',
+        releaseScope: '',
+        complexityOptions: [],
+        defectOptions: [],
+        documentOptions: [],
+        pagination: { current: 1, pageSize: 20, total: 1 },
+      },
+      global: {
+        stubs: {
+          ProQueryBar: ProQueryBarStub,
+          ProStandardTable: ProStandardTableStub,
+          RouterLink: { props: ['to'], template: '<a :data-to="JSON.stringify(to)"><slot /></a>' },
+          'a-button': { template: '<button><slot /></button>' },
+          'a-input': { template: '<input />' },
+          'a-select': { template: '<select><slot /></select>' },
+          'a-select-option': { template: '<option><slot /></option>' },
+        },
+      },
+    })
+  }
+
+  it('泸县待验收规则显示“待验收”并可跳转到规则验收详情', () => {
+    const wrapper = mountLuxian({ release_scope: 'acceptance_only' })
+    expect(wrapper.find('[data-testid="release-scope"]').text()).toBe('待验收')
+    expect(wrapper.find('select[aria-label="发布范围"]').exists()).toBe(true)
+    const link = wrapper.find('[data-testid="go-rule-validation"]')
+    expect(link.text()).toBe('去验收')
+    expect(JSON.parse(link.attributes('data-to')!)).toEqual({
+      name: 'WorkstationV4RuleValidationDetail',
+      params: { ruleId: 'LX0609-06-01-01' },
+    })
+  })
+
+  it('已上线规则显示“已上线”，不提供去验收入口；无发布范围的规则集不显示该列', () => {
+    const released = mountLuxian({ release_scope: 'default' })
+    expect(released.find('[data-testid="release-scope"]').text()).toBe('已上线')
+    expect(released.find('[data-testid="go-rule-validation"]').exists()).toBe(false)
+
+    const sc = mountLuxian({ rule_id: 'SC-001', rule_code: 'SC-001', release_scope: undefined })
+    expect(sc.find('[data-testid="release-scope"]').exists()).toBe(false)
+    expect(sc.find('select[aria-label="发布范围"]').exists()).toBe(false)
+  })
 })

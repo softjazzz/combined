@@ -88,6 +88,7 @@ export function useSemanticRulesWorkspace() {
     complexity: '',
     defectLevel: '',
     documentType: '',
+    releaseScope: '',
     page: 1,
     pageSize: DEFAULT_RULE_PAGE_SIZE,
   })
@@ -216,6 +217,7 @@ export function useSemanticRulesWorkspace() {
       complexity: queryState.complexity,
       defectLevel: queryState.defectLevel,
       documentType: queryState.documentType,
+      releaseScope: queryState.releaseScope,
     }),
   )
 
@@ -290,6 +292,8 @@ export function useSemanticRulesWorkspace() {
       normalizeQueryValue(route.query.defectLevel) === normalizeQueryValue(nextQuery.defectLevel) &&
       normalizeQueryValue(route.query.documentType) ===
         normalizeQueryValue(nextQuery.documentType) &&
+      normalizeQueryValue(route.query.releaseScope) ===
+        normalizeQueryValue(nextQuery.releaseScope) &&
       normalizeQueryValue(route.query.page) === normalizeQueryValue(nextQuery.page) &&
       normalizeQueryValue(route.query.pageSize) === normalizeQueryValue(nextQuery.pageSize)
     )
@@ -303,6 +307,7 @@ export function useSemanticRulesWorkspace() {
     queryState.complexity = parsed.complexity
     queryState.defectLevel = parsed.defectLevel
     queryState.documentType = parsed.documentType
+    queryState.releaseScope = parsed.releaseScope
     queryState.page = parsed.page
     queryState.pageSize = parsed.pageSize
     keywordInput.value = parsed.keyword
@@ -334,6 +339,7 @@ export function useSemanticRulesWorkspace() {
       queryState.complexity,
       queryState.defectLevel,
       queryState.documentType,
+      queryState.releaseScope,
       queryState.keyword,
     ],
     () => {

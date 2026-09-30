@@ -8,6 +8,8 @@ export interface SemanticRuleCustomerPolicy {
 export interface SemanticRuleItem {
   rule_id: string
   rule_code?: string
+  /** LX0609 规则目录的发布范围：default 已上线，acceptance_only 待验收 */
+  release_scope?: string
   name: string
   description: string
   category: string
@@ -632,6 +634,8 @@ export interface SemanticRuleWorkspaceQueryState {
   complexity: string
   defectLevel: string
   documentType: string
+  /** 发布范围筛选：acceptance_only 待验收 / default 已上线；空为全部 */
+  releaseScope: string
   page: number
   pageSize: number
 }
@@ -664,6 +668,7 @@ export const SEMANTIC_RULE_QUERY_KEYS = [
   'complexity',
   'defectLevel',
   'documentType',
+  'releaseScope',
   'page',
   'pageSize',
 ] as const

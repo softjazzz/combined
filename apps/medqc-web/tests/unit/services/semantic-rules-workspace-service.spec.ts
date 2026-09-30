@@ -62,6 +62,17 @@ describe('semantic rules workspace service', () => {
     })
     expect(byFilters).toHaveLength(1)
     expect(byFilters[0]?.rule_id).toBe('SC-102')
+
+    const pending = { ...seedRules[0]!, rule_id: 'LX0609-06-01-01', release_scope: 'acceptance_only' }
+    const released = { ...seedRules[1]!, rule_id: 'LX0609-06-01-04', release_scope: 'default' }
+    const byScope = filterSemanticRules([pending, released], {
+      keyword: '',
+      complexity: '',
+      defectLevel: '',
+      documentType: '',
+      releaseScope: 'acceptance_only',
+    })
+    expect(byScope.map((item) => item.rule_id)).toEqual(['LX0609-06-01-01'])
   })
 
   it('应能分页切片', () => {
@@ -85,6 +96,7 @@ describe('semantic rules workspace service', () => {
       complexity: '',
       defectLevel: '严重缺陷',
       documentType: '',
+      releaseScope: '',
       page: 2,
       pageSize: 50,
     })
@@ -97,6 +109,7 @@ describe('semantic rules workspace service', () => {
         complexity: '高复杂度',
         defectLevel: '',
         documentType: '',
+        releaseScope: 'acceptance_only',
         page: 1,
         pageSize: 20,
       },
@@ -106,6 +119,7 @@ describe('semantic rules workspace service', () => {
       ruleSetKey: 'luxian_0609_qc_v1',
       keyword: '手术',
       complexity: '高复杂度',
+      releaseScope: 'acceptance_only',
       pageSize: '20',
     })
   })
@@ -148,9 +162,11 @@ describe('semantic rules workspace service', () => {
       customer_text: '无入院记录或24小时内未完成',
       standardized_rule: '入院记录应在24小时内完成',
       applicable_documents: ['admission_record'],
+      release_scope: 'acceptance_only',
     })
 
     expect(normalized.rule_id).toBe('LX0609-01-01-01')
+    expect(normalized.release_scope).toBe('acceptance_only')
     expect(normalized.primary_execution_rule_id).toBe('SC-002')
     expect(
       filterSemanticRules([normalized], {
