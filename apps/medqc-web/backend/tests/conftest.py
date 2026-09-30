@@ -42,6 +42,20 @@ from app.services.sync_idempotency import reset_sync_idempotency_memory_for_test
 pytest_plugins = ["tests.fixtures.semantic_rules_fixtures"]
 
 
+# 真实 LLM 联调用例（文件名以 _real_llm.py 结尾）会用 backend/.env 的密钥外呼并计费，
+# 默认跳过；需要联调时显式设置 MEDQC_ALLOW_REAL_LLM=1。
+_ALLOW_REAL_LLM = os.environ.get("MEDQC_ALLOW_REAL_LLM", "").strip() == "1"
+
+
+def pytest_collection_modifyitems(config, items):
+    if _ALLOW_REAL_LLM:
+        return
+    skip_real_llm = pytest.mark.skip(reason="真实 LLM 联调用例默认跳过；设置 MEDQC_ALLOW_REAL_LLM=1 后运行")
+    for item in items:
+        if item.path.name.endswith("_real_llm.py"):
+            item.add_marker(skip_real_llm)
+
+
 @pytest.fixture(autouse=True)
 def _isolate_consultation_opinion_freeze(tmp_path, monkeypatch):
     """会诊意见事实冻结按用例隔离：避免用例之间复用第一阶段事实。"""

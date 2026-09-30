@@ -8,7 +8,8 @@
   D6 临床一致性 — 诊断与手术是否一致
 
 运行方式：
-  pytest tests/integration/test_coding_qc_real_llm.py -v -s
+  MEDQC_ALLOW_REAL_LLM=1 pytest tests/integration/test_coding_qc_real_llm.py -v -s
+  （未设置该变量时由 tests/conftest.py 统一跳过，避免全量测试意外计费）
   （需要 LLM 服务可用，预计单个用例 3-8 秒）
 """
 

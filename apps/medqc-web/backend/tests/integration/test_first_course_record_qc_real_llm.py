@@ -12,6 +12,10 @@
 与 test_first_course_record_qc.py 的区别：
 - test_first_course_record_qc.py: 使用模拟引擎（QCService）
 - test_first_course_record_qc_real_llm.py: 使用真实 LLM（SichuanQCService）
+
+运行方式：
+  MEDQC_ALLOW_REAL_LLM=1 pytest tests/integration/test_first_course_record_qc_real_llm.py -v -s
+  （未设置该变量时由 tests/conftest.py 统一跳过，避免全量测试意外计费）
 """
 
 import pytest
