@@ -429,36 +429,44 @@ export function useCustomerSampleValidationController() {
   const allLuxianRuleIds = computed(() =>
     normalizeLuxianRuleIds(luxianRuleFamilies.value.flatMap((family) => family.ruleIds)),
   )
-  const acceptanceOnlyRuleIds = computed(() => new Set(
-    luxian0609RuleCatalog.value
-      .filter((rule) => rule.release_scope === 'acceptance_only')
-      .map((rule) => rule.rule_id),
-  ))
+  const acceptanceOnlyRuleIds = computed(
+    () =>
+      new Set(
+        luxian0609RuleCatalog.value
+          .filter((rule) => rule.release_scope === 'acceptance_only')
+          .map((rule) => rule.rule_id),
+      ),
+  )
   const defaultLuxianRuleIds = computed(() =>
     allLuxianRuleIds.value.filter((id) => !acceptanceOnlyRuleIds.value.has(id)),
   )
-  const selectedAcceptanceCount = computed(() =>
-    selectedLuxianCustomerRuleIds.value.filter((id) => acceptanceOnlyRuleIds.value.has(id)).length,
+  const selectedAcceptanceCount = computed(
+    () =>
+      selectedLuxianCustomerRuleIds.value.filter((id) => acceptanceOnlyRuleIds.value.has(id))
+        .length,
   )
   const isAllLuxianRulesSelected = computed(() => {
     if (!allLuxianRuleIds.value.length) return false
     const selected = new Set(selectedLuxianCustomerRuleIds.value)
-    return defaultLuxianRuleIds.value.length > 0 && defaultLuxianRuleIds.value.every((ruleId) => selected.has(ruleId))
+    return (
+      defaultLuxianRuleIds.value.length > 0 &&
+      defaultLuxianRuleIds.value.every((ruleId) => selected.has(ruleId))
+    )
   })
   const selectedLuxianFamilyCount = computed(
     () =>
       luxianRuleFamilies.value.filter((family) => luxianRuleFamilySelectedCount(family) > 0).length,
   )
-  const luxianDefaultRuleCount = computed(() =>
-    Number(selectedRuleSet.value?.rule_count || 71) - acceptanceOnlyRuleIds.value.size,
+  const luxianDefaultRuleCount = computed(
+    () => Number(selectedRuleSet.value?.rule_count || 71) - acceptanceOnlyRuleIds.value.size,
   )
   const luxianScopeModeText = computed(() =>
     selectedLuxianCustomerRuleIds.value.length
       ? selectedAcceptanceCount.value
         ? `当前将运行：${selectedLuxianCustomerRuleIds.value.length} 个质控点 · 待验收 ${selectedAcceptanceCount.value} 条`
         : isAllLuxianRulesSelected.value
-        ? `当前将运行：全部 ${selectedLuxianCustomerRuleIds.value.length} 个质控点`
-        : `当前将运行：${selectedLuxianFamilyCount.value} 个质控族 · ${selectedLuxianCustomerRuleIds.value.length} 个质控点`
+          ? `当前将运行：全部 ${selectedLuxianCustomerRuleIds.value.length} 个质控点`
+          : `当前将运行：${selectedLuxianFamilyCount.value} 个质控族 · ${selectedLuxianCustomerRuleIds.value.length} 个质控点`
       : `当前将运行：全部 ${luxianDefaultRuleCount.value} 个0609质控点`,
   )
   const luxianScopeHelperText = computed(() =>
@@ -2404,21 +2412,11 @@ export function useCustomerSampleValidationController() {
 
   function markBatchJobReadFailure(jobId: string, errorMessage?: string) {
     const messageText = String(errorMessage || '获取质控任务失败').trim()
-    if (currentQcTask.value?.id === jobId) {
-      currentQcTask.value = {
-        ...currentQcTask.value,
-        status: 'failed',
-        error_message: messageText,
-      }
-    }
-    if (batchJobDetail.value?.id === jobId) {
-      batchJobDetail.value = {
-        ...batchJobDetail.value,
-        status: 'failed',
-        error_message: messageText,
-      }
-    }
-    message.error(messageText)
+    // 读取异常不代表后台执行终止；保留最后一次权威状态并继续轮询。
+    message.error({
+      key: `task-read-${jobId}`,
+      content: `进度暂时读取失败，正在重试：${messageText}`,
+    })
   }
 
   async function trackCurrentQcTask(jobId: string, options: { showError?: boolean } = {}) {
@@ -2757,6 +2755,48 @@ export function useCustomerSampleValidationController() {
     }
   }
 
+  async function openCurrentTaskResult(jobId: string) {
+    const response = await getSichuanWorkspaceBatchJob(jobId)
+    if (!response.success || !response.data) {
+      message.error(response.message || '获取任务详情失败')
+      return
+    }
+    const job = response.data
+    updateCurrentQcTask(job)
+    const refs = job.filters?.record_refs
+    // 只用任务冻结的完整身份，不用当前勾选项或仅凭住院号匹配。
+    if (Array.isArray(refs) && refs.length === 1) {
+      const ref = refs[0] as Record<string, unknown> | null
+      const instituteId = String(ref?.institute_id || '').trim()
+      const patientId = String(ref?.patient_id || '').trim()
+      const visitId = String(ref?.visit_id || '').trim()
+      if (instituteId && patientId && visitId) {
+        const record = records.value.find(
+          (item) =>
+            item.matched_institute_id === instituteId &&
+            item.matched_patient_id === patientId &&
+            item.matched_visit_id === visitId,
+        )
+        openRecordResultComparison(
+          record
+            ? resolveRecordResultFocus(record)
+            : {
+                instituteId,
+                patientId,
+                visitId,
+                recordId: visitId,
+                patientName: '',
+                admissionTime: '',
+                dischargeTime: '',
+                label: `住院号 ${visitId}`,
+              },
+        )
+        return
+      }
+    }
+    await openBatchJob(jobId)
+  }
+
   async function openBatchJob(jobId: string) {
     stopBatchJobPolling()
     batchJobDebugRequestId += 1
@@ -2854,7 +2894,6 @@ export function useCustomerSampleValidationController() {
       const result = await getSichuanWorkspaceBatchJob(normalizedJobId)
       if (!result.success || !result.data) {
         if (result.message?.includes(LEGACY_RESULT_CONTRACT_ERROR)) {
-          stopCurrentQcTaskPolling()
           markBatchJobReadFailure(normalizedJobId, result.message)
         }
         return
@@ -2952,7 +2991,6 @@ export function useCustomerSampleValidationController() {
         const result = await getSichuanWorkspaceBatchJob(jobId)
         if (!result.success || !result.data) {
           if (result.message?.includes(LEGACY_RESULT_CONTRACT_ERROR)) {
-            stopBatchJobPolling()
             markBatchJobReadFailure(jobId, result.message)
           }
           return
@@ -3253,6 +3291,7 @@ export function useCustomerSampleValidationController() {
     matchStatusLabel,
     matchStatusOptions,
     openBatchJob,
+    openCurrentTaskResult,
     openCustomerSampleGuide,
     openLuxianAggregateChildJob,
     openPoolManagement,

@@ -75,13 +75,17 @@ def _tables() -> tuple[Table, Table]:
 
 def rule_catalog() -> dict[str, dict]:
     from .luxian_0609.impact_scope import rule_impacts
+    from .sample_validation_rule_sets import get_luxian_0609_sample_validation_rule_set
+
+    selectable = set(get_luxian_0609_sample_validation_rule_set().rule_ids)
     impacts = rule_impacts()
     return {
         e.rule_id: {"rule_id": e.rule_id, "name": e.qc_point, "source_document": e.source_document,
                     "release_scope": e.release_scope, "policy_summary": e.policy_summary,
                     "impact": impacts.get(e.rule_id)}
         for e in load_luxian_0609_rule_master()
-        if e.implementation_status == "active" and e.phase_status == "phase_1_target"
+        if e.rule_id in selectable
+        and e.implementation_status == "active" and e.phase_status == "phase_1_target"
     }
 
 

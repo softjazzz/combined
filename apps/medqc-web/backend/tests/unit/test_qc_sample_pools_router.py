@@ -293,6 +293,12 @@ class _WorkspaceServiceStub:
         }
         return dict(self.updated_parent)
 
+    def list_recent_batch_job_candidates(self, **_kwargs):
+        return list(self.recent_jobs)
+
+    def get_batch_job(self, *, job_id, created_by):
+        return next((job for job in self.recent_jobs if job["id"] == job_id), None)
+
     def list_batch_jobs(self, **_kwargs):
         return SimpleNamespace(
             items=list(self.recent_jobs),

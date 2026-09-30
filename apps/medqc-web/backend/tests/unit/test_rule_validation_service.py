@@ -15,6 +15,20 @@ from app.services.rule_validation import (
 )
 
 RULE = "LX0609-06-01-04"
+
+
+def test_catalog_uses_formal_selectable_scope():
+    from app.services.rule_validation import rule_catalog
+    from app.services.sample_validation_rule_sets import (
+        LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS,
+        get_luxian_0609_sample_validation_rule_set,
+    )
+
+    catalog = rule_catalog()
+    assert set(catalog) <= set(get_luxian_0609_sample_validation_rule_set().rule_ids)
+    assert not set(catalog) & LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
+    assert catalog["LX0609-06-01-03"]["release_scope"] == "acceptance_only"
+
 CATALOG = {RULE: {"rule_id": RULE, "name": "CT报告未记录", "source_document": "CT/MRI检查记录",
                   "release_scope": "acceptance_only", "policy_summary": "口径"}}
 RELEASE = {"lx0609_task_runtime": {"implementation": {"kind": "release", "build_id": "b1", "git_commit": "c1"}}}

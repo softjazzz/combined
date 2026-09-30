@@ -1419,13 +1419,19 @@ describe('CustomerSampleValidationView', () => {
     const acceptanceId = rules[0].rule_id
     listLuxian0609CustomerRules.mockResolvedValue({
       success: true,
-      data: { rules: rules.map((rule) => ({ ...rule,
-        release_scope: rule.rule_id === acceptanceId ? 'acceptance_only' : 'default',
-      })) },
+      data: {
+        rules: rules.map((rule) => ({
+          ...rule,
+          release_scope: rule.rule_id === acceptanceId ? 'acceptance_only' : 'default',
+        })),
+      },
     })
     const wrapper = await mountView()
     await flushPromises()
-    await wrapper.findAll('button').find((node) => node.text().includes('全选8个质控族'))!.trigger('click')
+    await wrapper
+      .findAll('button')
+      .find((node) => node.text().includes('全选8个质控族'))!
+      .trigger('click')
     await nextTick()
     const group = wrapper.findAll('.customer-sample-luxian-rule-group')[0]
     const expand = group.findAll('button').find((node) => node.text().includes('查看质控点'))
@@ -1436,8 +1442,14 @@ describe('CustomerSampleValidationView', () => {
     expect((input.element as HTMLInputElement).checked).toBe(false)
     expect(group.text()).toContain('待验收')
     // 取消/重选本组均不自动勾选待验收项。
-    await group.findAll('button').find((node) => node.text().includes('取消本组'))!.trigger('click')
-    await group.findAll('button').find((node) => node.text().includes('选择本组'))!.trigger('click')
+    await group
+      .findAll('button')
+      .find((node) => node.text().includes('取消本组'))!
+      .trigger('click')
+    await group
+      .findAll('button')
+      .find((node) => node.text().includes('选择本组'))!
+      .trigger('click')
     expect((input.element as HTMLInputElement).checked).toBe(false)
     await input.setValue(true)
     expect((input.element as HTMLInputElement).checked).toBe(true)
@@ -1712,7 +1724,7 @@ describe('CustomerSampleValidationView', () => {
     expect(statusBar.text()).not.toContain('执行中')
   })
 
-  it('任务详情因交付合同错误无法读取时停止主状态轮询并显示失败', async () => {
+  it('任务详情读取失败时保留执行状态并继续轮询恢复', async () => {
     vi.useFakeTimers()
     listManualSamplePools.mockResolvedValue({
       success: true,
@@ -1737,12 +1749,16 @@ describe('CustomerSampleValidationView', () => {
           created_at: '2026-08-17T02:43:20Z',
         },
       })
-      .mockResolvedValue({
+      .mockResolvedValueOnce({
         success: false,
         message: '历史质控结果交付合同不完整，无法安全展示',
       })
 
-    await mountView()
+    getSichuanWorkspaceBatchJob.mockResolvedValue({
+      success: true,
+      data: { id: 'job-contract-error', status: 'running' },
+    })
+    const wrapper = await mountView()
     await flushPromises()
 
     expect(getSichuanWorkspaceBatchJob).toHaveBeenCalledTimes(1)
@@ -1752,8 +1768,11 @@ describe('CustomerSampleValidationView', () => {
     await vi.advanceTimersByTimeAsync(10000)
     await flushPromises()
 
-    expect(getSichuanWorkspaceBatchJob).toHaveBeenCalledTimes(2)
-    expect(message.error).toHaveBeenCalledWith('历史质控结果交付合同不完整，无法安全展示')
+    expect(getSichuanWorkspaceBatchJob).toHaveBeenCalledTimes(4)
+    expect(message.error).toHaveBeenCalledWith(
+      expect.objectContaining({ content: expect.stringContaining('进度暂时读取失败，正在重试') }),
+    )
+    expect(wrapper.text()).not.toContain('执行失败')
   })
 
   it('默认选中泸县0609规则集并弱化内部覆盖标签', async () => {
@@ -2876,6 +2895,34 @@ describe('CustomerSampleValidationView', () => {
       visitId: 'V002',
       recordId: '2249001',
     })
+  })
+
+  it('悬浮条单病例任务按冻结身份打开新版结果面板', async () => {
+    getSichuanWorkspaceBatchJob.mockResolvedValue({
+      success: true,
+      data: {
+        id: 'job-0609',
+        status: 'completed',
+        rule_set_key: 'luxian_0609_qc_v1',
+        filters: {
+          record_refs: [
+            { institute_id: 'task-hospital', patient_id: 'task-patient', visit_id: 'task-visit' },
+          ],
+        },
+        items: [],
+      },
+    })
+    const wrapper = await mountView()
+    await wrapper.get('[data-testid="qc-task-view-result"]').trigger('click')
+    await flushPromises()
+    await nextTick()
+    expect(latestRecordResultComparisonDrawerProps?.open).toBe(true)
+    expect(latestRecordResultComparisonDrawerProps?.focus).toMatchObject({
+      instituteId: 'task-hospital',
+      patientId: 'task-patient',
+      visitId: 'task-visit',
+    })
+    expect(latestBatchResultDrawerProps?.open).not.toBe(true)
   })
 
   it('打开泸县0609任务详情时保留 scoped run 计数和映射字段', async () => {

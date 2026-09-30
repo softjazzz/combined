@@ -259,6 +259,10 @@ export function normalizeSemanticRule(raw: Record<string, any>): SemanticRuleIte
     custom_prompt: raw.custom_prompt ? String(raw.custom_prompt) : undefined,
     mapped_rule_ids: mappedRuleIds,
     primary_execution_rule_id: normalizeRuleIdentity(raw.primary_execution_rule_id) || undefined,
+    release_scope: normalizeNonEmptyText(raw.release_scope),
+    phase_status: normalizeNonEmptyText(raw.phase_status),
+    pending_reason_code: normalizeNonEmptyText(raw.pending_reason_code),
+    pending_definition_note: normalizeNonEmptyText(raw.pending_definition_note),
     implementation_status: raw.implementation_status
       ? String(raw.implementation_status)
       : undefined,
@@ -271,7 +275,6 @@ export function normalizeSemanticRule(raw: Record<string, any>): SemanticRuleIte
     rule_basis: raw.rule_basis ? String(raw.rule_basis) : undefined,
     customer_text: raw.customer_text ? String(raw.customer_text) : undefined,
     customer_policy: normalizeCustomerPolicy(raw.customer_policy),
-    release_scope: raw.release_scope ? String(raw.release_scope) : undefined,
     standardized_rule: raw.standardized_rule ? String(raw.standardized_rule) : undefined,
     required_documents_label: raw.required_documents_label
       ? String(raw.required_documents_label)

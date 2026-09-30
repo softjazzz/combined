@@ -140,17 +140,9 @@ def _find_recent_sample_validation_job(
     execution_scope_hash: str,
     now: Optional[datetime] = None,
 ) -> Optional[Dict[str, Any]]:
-    try:
-        page = workspace.list_batch_jobs(
-            created_by=created_by,
-            include_children=False,
-            page=1,
-            page_size=100,
-        )
-    except (AttributeError, TypeError):
-        return None
     cutoff = (now or datetime.utcnow()) - _SAMPLE_VALIDATION_DEDUP_WINDOW
-    for job in list(getattr(page, "items", None) or []):
+    candidates = workspace.list_recent_batch_job_candidates(created_by=created_by, cutoff=cutoff)
+    for job in candidates:
         if str(job.get("status") or "").strip().lower() not in _SAMPLE_VALIDATION_DEDUP_STATUSES:
             continue
         created_at = _as_utc_naive_datetime(job.get("created_at"))
@@ -158,7 +150,7 @@ def _find_recent_sample_validation_job(
             continue
         filters = job.get("filters") if isinstance(job.get("filters"), dict) else {}
         if str(filters.get("execution_scope_hash") or "").strip() == execution_scope_hash:
-            return job
+            return workspace.get_batch_job(job_id=job["id"], created_by=created_by)
     return None
 
 

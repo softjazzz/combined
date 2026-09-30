@@ -38,7 +38,7 @@
         </div>
         <div class="table-shell-meta">
           <span class="table-shell-count">{{ total }}</span>
-          <span class="table-shell-label">条规则 · 当前结果可查看</span>
+          <span class="table-shell-label">条目录规则 · 当前结果可查看</span>
         </div>
       </div>
       <div class="table-shell-actions">
@@ -58,6 +58,13 @@
         </a-button>
       </div>
     </div>
+
+    <p
+      v-if="ruleSetKey === 'luxian_0609_qc_v1'"
+      class="execution-summary"
+    >
+      当前筛选范围：{{ executionSummary }}。目录数量不等于实际执行数量。
+    </p>
 
     <ProQueryBar>
       <template #filters>
@@ -182,6 +189,10 @@
             </span>
           </template>
 
+          <template v-if="column.key === 'execution_status'">
+            <span :title="executionStatusHint(record as SemanticRuleItem)">{{ executionStatus(record as SemanticRuleItem) }}</span>
+          </template>
+
           <template v-if="column.key === 'name'">
             <div class="rule-main">
               <div class="rule-main-content">
@@ -242,6 +253,7 @@ import ProQueryBar from '@/components/pro/ProQueryBar.vue'
 import ProStandardTable from '@/components/pro/ProStandardTable.vue'
 import type { SemanticRuleItem, SichuanRuleSetOption } from '../types'
 import { getDocTypeZh } from '../types'
+import { executionStatus, executionStatusHint } from '../executionStatus'
 import { buildSemanticRuleRowActionModel } from '../service'
 
 const DEFAULT_RULE_SET_SELECT_VALUE = '__default_sc_rules__'
@@ -249,6 +261,7 @@ const DEFAULT_RULE_SET_SELECT_VALUE = '__default_sc_rules__'
 const props = defineProps<{
   loading: boolean
   rules: SemanticRuleItem[]
+  scopeRules?: SemanticRuleItem[]
   total: number
   ruleSetKey: string
   ruleSetOptions: SichuanRuleSetOption[]
@@ -285,8 +298,19 @@ const columns = computed(() => [
   { title: '编号', key: 'rule_id', width: 160, fixed: 'left' as const },
   ...(hasReleaseScope.value ? [{ title: '发布范围', key: 'release_scope', width: 110 }] : []),
   { title: '适用文书', key: 'applicable_documents', width: 150 },
+  ...(props.ruleSetKey === 'luxian_0609_qc_v1'
+    ? [{ title: '执行状态', key: 'execution_status', width: 120 }] : []),
   { title: '规则名称', key: 'name', width: 760 },
 ])
+
+const executionSummary = computed(() => {
+  const counts = new Map<string, number>()
+  for (const rule of props.scopeRules || props.rules) {
+    const label = executionStatus(rule)
+    counts.set(label, (counts.get(label) || 0) + 1)
+  }
+  return [...counts].map(([label, count]) => `${label} ${count} 条`).join(' · ')
+})
 
 const rowAction = buildSemanticRuleRowActionModel()
 const normalizedRuleSetOptions = computed(() =>
@@ -338,6 +362,10 @@ function buildCustomRow(record: SemanticRuleItem) {
   }
 }
 </script>
+
+<style scoped>
+.execution-summary { margin: 12px 20px; color: var(--mq-text-secondary); font-size: 14px; line-height: 22px; }
+</style>
 
 <style scoped src="./styles/semantic-rules-table.css"></style>
 

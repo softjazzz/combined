@@ -690,7 +690,7 @@
           :loading="currentQcTaskLoading"
           :canceling="cancelBatchJobLoading"
           :reviewing="reviewBatchJobLoadingId === currentQcTask?.id"
-          @view-result="openBatchJob"
+          @view-result="openCurrentTaskResult"
           @cancel="confirmCancelBatchJob"
           @review="handleReviewCurrentTask"
           @export="handleExportCurrentTask"
@@ -2140,6 +2140,7 @@ const {
   matchStatusLabel,
   matchStatusOptions,
   openBatchJob,
+  openCurrentTaskResult,
   openCustomerSampleGuide,
   openLuxianAggregateChildJob,
   openPoolManagement,

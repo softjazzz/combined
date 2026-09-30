@@ -980,6 +980,8 @@ def project_customer_safe_batch_job(
         if item.get("is_confirmed_issue") is True
     }
     raw_summary = job.get("summary") if isinstance(job.get("summary"), dict) else {}
+    raw_timing = raw_summary.get("record_timing")
+    raw_timing = raw_timing if isinstance(raw_timing, dict) else {}
     filters = job.get("filters") if isinstance(job.get("filters"), dict) else {}
     progress = _safe_operational_progress(
         raw_summary.get("progress") or job.get("progress")
@@ -990,6 +992,14 @@ def project_customer_safe_batch_job(
         _validate_luxian=validate_luxian,
     )
     safe_summary: Dict[str, Any] = {
+        "record_timing": {
+            "measured_record_count": _to_int(raw_timing.get("measured_record_count")),
+            "completed_timed_record_count": _to_int(raw_timing.get("completed_timed_record_count")),
+            "average_complete_seconds": (
+                _to_float(raw_timing["average_complete_seconds"])
+                if raw_timing.get("average_complete_seconds") is not None else None
+            ),
+        },
         "total_records": _to_int(raw_summary.get("total_records"), _to_int(job.get("total_records"))),
         "success_count": _to_int(raw_summary.get("success_count"), _to_int(job.get("success_count"))),
         "failed_count": _to_int(raw_summary.get("failed_count"), _to_int(job.get("failed_count"))),
@@ -3136,6 +3146,29 @@ class CustomQCWorkspaceService:
                 and isinstance((filters := _safe_json_loads(row.get("filters_json"), {})), dict)
                 and filters.get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY
             )
+        finally:
+            session.close()
+
+    def list_recent_batch_job_candidates(
+        self, *, created_by: str, cutoff: datetime,
+    ) -> List[Dict[str, Any]]:
+        """提交去重仅读取身份、状态及范围，不加载历史结果大对象。"""
+        session = _session()
+        table = self._batch_job_table
+        try:
+            rows = session.execute(
+                select(table.c.id, table.c.status, table.c.created_at, table.c.filters_json)
+                .where(and_(
+                    table.c.created_by == created_by,
+                    table.c.created_at >= cutoff,
+                    or_(table.c.parent_job_id.is_(None), table.c.parent_job_id == ""),
+                ))
+                .order_by(desc(table.c.created_at)).limit(100)
+            ).mappings().all()
+            return [{
+                "id": row["id"], "status": row["status"], "created_at": row["created_at"],
+                "filters": _safe_json_loads(row["filters_json"], {}),
+            } for row in rows]
         finally:
             session.close()
 

@@ -8,8 +8,6 @@ export interface SemanticRuleCustomerPolicy {
 export interface SemanticRuleItem {
   rule_id: string
   rule_code?: string
-  /** LX0609 规则目录的发布范围：default 已上线，acceptance_only 待验收 */
-  release_scope?: string
   name: string
   description: string
   category: string
@@ -32,6 +30,11 @@ export interface SemanticRuleItem {
   launch_tier_label?: string
   mapped_rule_ids?: string[]
   primary_execution_rule_id?: string
+  /** LX0609 规则目录的发布范围：default 已上线，acceptance_only 待验收 */
+  release_scope?: string
+  phase_status?: string
+  pending_reason_code?: string
+  pending_definition_note?: string
   implementation_status?: string
   dependency_type?: string
   data_status?: string

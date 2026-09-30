@@ -16,6 +16,7 @@ from fastapi import HTTPException
 from ..core.settings import get_settings
 from .luxian_0609.phase_scope import frozen_luxian_0609_delivery_scope
 from .case_identity import CaseRef, case_refs_from_records, normalize_case_refs
+from .qc_workspace.record_timing import summarize_record_timings
 from .custom_qc_workspace_service import (
     CustomQCWorkspaceService,
     LX0609_ATTEMPT_FILTER_KEY,
@@ -3246,6 +3247,10 @@ async def run_sichuan_workspace_batch_job(
                     "luxian_0609_usage_unknown_executor_keys": sorted(record_usage_unknown_executor_keys),
                 }
 
+        record_timing_attempts = list(
+            (retry_base_summary.get("record_timing") or {}).get("attempts") or []
+        )
+
         async def _evaluate_single_record(record: Dict[str, Any]) -> Dict[str, Any]:
             institute_id = str(record.get("institute_id") or "").strip()
             patient_id = str(record.get("patient_id") or "").strip()
@@ -3266,7 +3271,22 @@ async def run_sichuan_workspace_batch_job(
                 executor_key="legacy_orchestrated",
             ):
                 with diagnostic_capture.record_scope((institute_id, patient_id, visit_id)) if diagnostic_capture else nullcontext():
-                    return await _evaluate_single_record_impl(record)
+                    started_at = datetime.now(timezone.utc).isoformat()
+                    started_clock = time.perf_counter()
+                    result = None
+                    try:
+                        result = await _evaluate_single_record_impl(record)
+                        return result
+                    finally:
+                        record_timing_attempts.append({
+                            "record_key": CaseRef(institute_id, patient_id, visit_id).as_key(),
+                            "attempt_kind": "retry" if is_failed_rule_retry else "initial",
+                            "started_at": started_at,
+                            "finished_at": datetime.now(timezone.utc).isoformat(),
+                            "execution_seconds": round(max(0.0, time.perf_counter() - started_clock), 4),
+                            "completed": bool(result is not None and not result.get("failed_record")
+                                              and not any(result.get("failed_by_rule", {}).values())),
+                        })
 
         def _merge_record_result(record_result: Dict[str, Any], processed_records_count: int) -> None:
             nonlocal total_tokens
@@ -3756,6 +3776,7 @@ async def run_sichuan_workspace_batch_job(
         )
 
         summary = {
+            "record_timing": summarize_record_timings(record_timing_attempts),
             "rule_set_key": rule_set_key,
             "rule_set_name": rule_set_name,
             "rule_set_version": rule_set_version,

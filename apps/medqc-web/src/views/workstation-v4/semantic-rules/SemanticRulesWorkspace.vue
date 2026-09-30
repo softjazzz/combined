@@ -4,6 +4,7 @@
       <SemanticRulesTableSection
         :loading="loading"
         :rules="tableRules"
+        :scope-rules="filteredRules"
         :total="filteredRules.length"
         :rule-set-key="queryState.ruleSetKey"
         :rule-set-options="ruleSetOptions"
