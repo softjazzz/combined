@@ -42,8 +42,8 @@ class _Workspace:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("scope", ["final", "all", "", "unexpected"])
-async def test_create_rejects_unverified_archive_before_accessing_workspace(scope: str) -> None:
+@pytest.mark.parametrize("scope", ["", "unexpected", "outpatient"])
+async def test_create_rejects_unsupported_scope_before_accessing_workspace(scope: str) -> None:
     workspace = _Workspace(scope)
     background_tasks = BackgroundTasks()
 
@@ -57,14 +57,14 @@ async def test_create_rejects_unverified_archive_before_accessing_workspace(scop
         )
 
     assert error.value.status_code == 422
-    assert "final_archive_unverified" in str(error.value.detail)
+    assert "unsupported_scope" in str(error.value.detail)
     assert workspace.calls == []
     assert background_tasks.tasks == []
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("scope", ["final", "all", "", "unexpected"])
-async def test_retry_rejects_unverified_archive_before_requeue(scope: str) -> None:
+@pytest.mark.parametrize("scope", ["", "unexpected", "outpatient"])
+async def test_retry_rejects_unsupported_scope_before_requeue(scope: str) -> None:
     workspace = _Workspace(scope)
     background_tasks = BackgroundTasks()
 
@@ -78,14 +78,14 @@ async def test_retry_rejects_unverified_archive_before_requeue(scope: str) -> No
         )
 
     assert error.value.status_code == 422
-    assert "final_archive_unverified" in str(error.value.detail)
+    assert "unsupported_scope" in str(error.value.detail)
     assert workspace.calls == ["get_batch_job"]
     assert background_tasks.tasks == []
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("scope", ["final", "all", "", "unexpected"])
-async def test_worker_fails_historical_unverified_archive_before_running(
+@pytest.mark.parametrize("scope", ["", "unexpected", "outpatient"])
+async def test_worker_fails_historical_unsupported_scope_before_running(
     scope: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -98,12 +98,13 @@ async def test_worker_fails_historical_unverified_archive_before_running(
     assert workspace.calls == ["get_batch_job_for_processing", "fail_batch_job"]
     assert workspace.failure is not None
     assert workspace.failure["job_id"] == "job-1"
-    assert "final_archive_unverified" in workspace.failure["error_message"]
+    assert "unsupported_scope" in workspace.failure["error_message"]
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("scope", ["running", " RUNNING "])
-async def test_retry_preserves_running_scope(scope: str) -> None:
+# 终末口径 B（2026-09-30）：终末/全部按已出院（未核验归档）执行，不再因归档未核验拒绝。
+@pytest.mark.parametrize("scope", ["running", " RUNNING ", "final", "all"])
+async def test_retry_allows_supported_inpatient_scopes(scope: str) -> None:
     workspace = _Workspace(scope)
     background_tasks = BackgroundTasks()
 

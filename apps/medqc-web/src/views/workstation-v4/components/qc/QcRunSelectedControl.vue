@@ -4,26 +4,26 @@
       class="qc-run-selected-control__trigger"
       type="button"
       data-testid="run-selected-qc-trigger"
-      :disabled="!canRunSelectedQc || isBusy || effectiveSelectedCount === 0 || Boolean(selectionError)"
+      :disabled="
+        !canRunSelectedQc || isBusy || effectiveSelectedCount === 0 || Boolean(selectionError)
+      "
       @click="prepareSelectedQc"
     >
-      <Play
-        :size="15"
-        aria-hidden="true"
-      />
+      <Play :size="15" aria-hidden="true" />
       质控所选
-      <span
-        v-if="effectiveSelectedCount > 0"
-        class="qc-run-selected-control__count"
-      >
+      <span v-if="effectiveSelectedCount > 0" class="qc-run-selected-control__count">
         {{ effectiveSelectedCount }}
       </span>
     </button>
-    <span v-if="!canRunSelectedQc" class="qc-run-selected-control__scope-note">
-      此列表未核验归档状态，暂不可发起终末质控。
-    </span>
-    <span v-else-if="selectionError" class="qc-run-selected-control__scope-note is-error" role="alert">
+    <span v-if="selectionError" class="qc-run-selected-control__scope-note is-error" role="alert">
       {{ selectionError }}
+    </span>
+    <span
+      v-else-if="scene === 'final'"
+      class="qc-run-selected-control__scope-note"
+      data-testid="final-archive-note"
+    >
+      终末按已出院病历执行，归档状态未核验。
     </span>
 
     <a-modal
@@ -38,19 +38,25 @@
       @cancel="cancelConfirmation"
     >
       <div class="qc-run-selected-control__confirmation">
-        <p>将对已冻结的 <strong>{{ frozenRecordRefs.length }}</strong> 份在院病历执行质控。</p>
+        <p>
+          将对已冻结的 <strong>{{ frozenRecordRefs.length }}</strong> 份{{
+            sceneRecordLabel
+          }}执行质控。
+        </p>
         <dl>
-          <div><dt>规则集</dt><dd>LX0609 内涵质控（luxian_0609_qc_v1）</dd></div>
-          <div><dt>执行范围</dt><dd>仅本次勾选的完整病历三坐标</dd></div>
+          <div>
+            <dt>规则集</dt>
+            <dd>LX0609 内涵质控（luxian_0609_qc_v1）</dd>
+          </div>
+          <div>
+            <dt>执行范围</dt>
+            <dd>仅本次勾选的完整病历三坐标</dd>
+          </div>
         </dl>
       </div>
     </a-modal>
 
-    <Teleport
-      v-if="statusTarget"
-      :to="statusTarget"
-      defer
-    >
+    <Teleport v-if="statusTarget" :to="statusTarget" defer>
       <div class="qc-run-selected-control__task-status">
         <div
           v-if="state === 'creating' || state === 'failed' || state === 'unknown'"
@@ -65,11 +71,7 @@
             class="is-spinning"
             aria-hidden="true"
           />
-          <TriangleAlert
-            v-else
-            :size="15"
-            aria-hidden="true"
-          />
+          <TriangleAlert v-else :size="15" aria-hidden="true" />
           <span>{{ progressMessage }}</span>
         </div>
         <RecordPoolQcTaskStatusBar
@@ -94,11 +96,7 @@
           class="is-spinning"
           aria-hidden="true"
         />
-        <TriangleAlert
-          v-else
-          :size="15"
-          aria-hidden="true"
-        />
+        <TriangleAlert v-else :size="15" aria-hidden="true" />
         <span>{{ progressMessage }}</span>
       </div>
       <RecordPoolQcTaskStatusBar
@@ -166,18 +164,29 @@ const canAnalyze = computed(() => {
   const roles = Array.isArray(authStore.userRoles) ? authStore.userRoles : []
   return roles.some((role) => role === 'admin' || role === 'qc_manager')
 })
-const canRunSelectedQc = computed(() => props.carePhase === 'inpatient' && canAnalyze.value)
-const isBusy = computed(() => state.value === 'creating' || state.value === 'running' || state.value === 'unknown')
+// 终末口径 B：已出院列表按“已出院（未核验归档）”发起，与在院列表同一 LX0609 结果来源。
+const canRunSelectedQc = computed(() => canAnalyze.value)
+const sceneRecordLabel = computed(() =>
+  scene.value === 'running' ? '在院病历' : '已出院病历（未核验归档）',
+)
+const isBusy = computed(
+  () => state.value === 'creating' || state.value === 'running' || state.value === 'unknown',
+)
 const effectiveSelectedCount = computed(() => props.selectedCount ?? props.recordRefs.length)
 const actorKey = computed(() => {
   const roles = Array.isArray(authStore.userRoles) ? [...authStore.userRoles].sort() : []
   return `${workflowOwner()}|${roles.join(',')}`
 })
-const selectionValidation = computed(() => validateRecordRefs(props.recordRefs, effectiveSelectedCount.value))
+const selectionValidation = computed(() =>
+  validateRecordRefs(props.recordRefs, effectiveSelectedCount.value),
+)
 const selectionError = computed(() => selectionValidation.value.error)
 const statusTarget = computed(() => String(props.statusTarget || '').trim())
 
-function validateRecordRefs(values: SelectedQcRecordRef[], selectedCount: number): {
+function validateRecordRefs(
+  values: SelectedQcRecordRef[],
+  selectedCount: number,
+): {
   refs: SelectedQcRecordRef[]
   error: string
 } {
@@ -237,11 +246,19 @@ function clearPollTimer() {
 
 function schedulePoll(jobId: string, revision: number, owner: string, sceneValue: string) {
   clearPollTimer()
-  pollTimer = window.setTimeout(() => void pollJob(jobId, revision, owner, sceneValue), POLL_INTERVAL_MS)
+  pollTimer = window.setTimeout(
+    () => void pollJob(jobId, revision, owner, sceneValue),
+    POLL_INTERVAL_MS,
+  )
 }
 
 function contextIsCurrent(revision: number, owner: string, sceneValue: string) {
-  return !disposed && revision === operationRevision && owner === workflowOwner() && sceneValue === scene.value
+  return (
+    !disposed &&
+    revision === operationRevision &&
+    owner === workflowOwner() &&
+    sceneValue === scene.value
+  )
 }
 
 function fail(message: string, sceneValue: string, owner: string) {
@@ -274,7 +291,11 @@ async function pollJob(jobId: string, revision: number, owner: string, sceneValu
     if (!response.success || !response.data) {
       pollFailures += 1
       if (pollFailures >= MAX_POLL_FAILURES) {
-        fail(response.message || '连续获取质控任务状态失败，请稍后刷新结果页查看。', sceneValue, owner)
+        fail(
+          response.message || '连续获取质控任务状态失败，请稍后刷新结果页查看。',
+          sceneValue,
+          owner,
+        )
         return
       }
       schedulePoll(jobId, revision, owner, sceneValue)
@@ -326,7 +347,13 @@ async function pollJob(jobId: string, revision: number, owner: string, sceneValu
 }
 
 function prepareSelectedQc() {
-  if (!canRunSelectedQc.value || isBusy.value || selectionError.value || selectionValidation.value.refs.length === 0) return
+  if (
+    !canRunSelectedQc.value ||
+    isBusy.value ||
+    selectionError.value ||
+    selectionValidation.value.refs.length === 0
+  )
+    return
   frozenRecordRefs.value = selectionValidation.value.refs.map((item) => ({ ...item }))
   confirmOpen.value = true
 }
@@ -526,12 +553,29 @@ button {
   font-size: 12px;
   line-height: 18px;
 }
-.qc-run-selected-control__scope-note.is-error { color: #b42318; }
-.qc-run-selected-control__confirmation p { margin: 0 0 14px; }
-.qc-run-selected-control__confirmation dl { display: grid; gap: 10px; margin: 0; }
-.qc-run-selected-control__confirmation dl div { display: grid; grid-template-columns: 76px 1fr; gap: 12px; }
-.qc-run-selected-control__confirmation dt { color: rgba(29, 29, 31, .58); }
-.qc-run-selected-control__confirmation dd { margin: 0; color: #1d1d1f; }
+.qc-run-selected-control__scope-note.is-error {
+  color: #b42318;
+}
+.qc-run-selected-control__confirmation p {
+  margin: 0 0 14px;
+}
+.qc-run-selected-control__confirmation dl {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+.qc-run-selected-control__confirmation dl div {
+  display: grid;
+  grid-template-columns: 76px 1fr;
+  gap: 12px;
+}
+.qc-run-selected-control__confirmation dt {
+  color: rgba(29, 29, 31, 0.58);
+}
+.qc-run-selected-control__confirmation dd {
+  margin: 0;
+  color: #1d1d1f;
+}
 
 .is-spinning {
   animation: qc-run-selected-spin 0.9s linear infinite;

@@ -6,7 +6,6 @@ from types import SimpleNamespace
 
 import pytest
 import sqlalchemy as sa
-from fastapi import HTTPException
 from sqlalchemy.orm import sessionmaker
 
 from app.services import custom_qc_workspace_service as workspace
@@ -565,7 +564,8 @@ def test_retry_partial_failure_preserves_valid_items_and_queues_only_failed_rule
 
 
 @pytest.mark.asyncio
-async def test_retry_route_rejects_unverified_final_without_requeue(storage, monkeypatch):
+async def test_retry_route_requeues_final_partial_job_under_scope_b(storage, monkeypatch):
+    """终末口径 B：终末部分失败任务可重试入队，不再因归档未核验拒绝。"""
     service, _, _ = storage
     summary, items, failures = _payload()
     service.complete_batch_job(
@@ -574,16 +574,16 @@ async def test_retry_route_rejects_unverified_final_without_requeue(storage, mon
         items=items,
         failed_records=failures,
     )
+    queued = []
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: service)
-    monkeypatch.setattr(qc_sichuan, "submit_detached_task", lambda *args, **kwargs: None)
+    monkeypatch.setattr(qc_sichuan, "submit_detached_task", lambda *args, **kwargs: queued.append(args))
 
-    with pytest.raises(HTTPException) as exc:
-        await qc_sichuan.retry_workspace_batch_job(
-            request=SimpleNamespace(state=SimpleNamespace()),
-            job_id="partial-job",
-            current_user={"id": "tester"},
-        )
+    response = await qc_sichuan.retry_workspace_batch_job(
+        request=SimpleNamespace(state=SimpleNamespace()),
+        job_id="partial-job",
+        current_user={"id": "tester"},
+    )
 
-    assert exc.value.status_code == 422
-    assert "final_archive_unverified" in exc.value.detail
-    assert service.get_batch_job(job_id="partial-job", created_by="tester")["status"] == "failed"
+    assert response["data"]["id"] == "partial-job"
+    assert len(queued) == 1
+    assert service.get_batch_job(job_id="partial-job", created_by="tester")["status"] != "failed"

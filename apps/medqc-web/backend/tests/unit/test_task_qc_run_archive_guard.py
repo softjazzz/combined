@@ -1,4 +1,8 @@
-"""任务质控直达入口的归档前置守卫。"""
+"""任务质控直达入口的场景一致性守卫。
+
+终末口径 B（2026-09-30）：终末任务按已出院（未核验归档）执行，不再因归档未核验拒绝；
+任务场景与准备出的质控范围仍须一致（运行只取运行、终末只取终末，混合范围拒绝）。
+"""
 
 from __future__ import annotations
 
@@ -68,8 +72,19 @@ def _assert_no_side_effects(env):
         assert session.scalar(sa.select(sa.func.count()).select_from(QCTaskQCRun.__table__)) == 0
 
 
-def test_final_task_is_rejected_before_job_creation(task_env):
-    with pytest.raises(service.TaskQCRunConflict, match="final_archive_unverified"):
+def test_final_task_with_final_prepare_creates_and_dispatches(task_env):
+    result = _run(task_env)
+    assert result["job_id"] == "job-1"
+    assert len(task_env.created) == 1
+    assert task_env.dispatched == ["job-1"]
+
+
+@pytest.mark.parametrize("scope,query_scope", [("running", "running"), ("final", "all"), ("all", "all")])
+def test_final_task_rejects_prepared_running_or_mixed_scope(task_env, scope, query_scope):
+    task_env.prepared.update(scope=scope, filters={
+        **task_env.prepared["filters"], "query_scope": query_scope,
+    })
+    with pytest.raises(service.TaskQCRunConflict, match="scene_scope_mismatch"):
         _run(task_env)
     _assert_no_side_effects(task_env)
 
@@ -86,7 +101,7 @@ def test_running_task_rejects_prepared_final_or_mixed_scope(task_env, scope, que
         "rule_set_version": get_sichuan_rule_set("luxian_0609_qc_v1").version,
         "query_scope": query_scope,
     })
-    with pytest.raises(service.TaskQCRunConflict, match="final_archive_unverified"):
+    with pytest.raises(service.TaskQCRunConflict, match="scene_scope_mismatch"):
         _run(task_env)
     _assert_no_side_effects(task_env)
 

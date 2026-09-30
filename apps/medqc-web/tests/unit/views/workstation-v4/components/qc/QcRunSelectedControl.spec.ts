@@ -17,7 +17,8 @@ vi.mock('@/stores/auth', async () => {
   const { reactive } = await import('vue')
   return {
     useAuthStore: () => {
-      if (!mocks.authStore) mocks.authStore = reactive({ user: { id: 'selected-qc-user' }, userRoles: ['qc_manager'] })
+      if (!mocks.authStore)
+        mocks.authStore = reactive({ user: { id: 'selected-qc-user' }, userRoles: ['qc_manager'] })
       return mocks.authStore
     },
   }
@@ -31,11 +32,17 @@ const recordRefs = [
 ]
 
 const ModalStub = defineComponent({
-  props: { open: Boolean }, emits: ['ok', 'cancel'],
-  template: '<section v-if="open" data-testid="selected-qc-confirm"><slot/><button data-testid="selected-qc-confirm-ok" @click="$emit(\'ok\')">确认</button><button data-testid="selected-qc-confirm-cancel" @click="$emit(\'cancel\')">取消</button></section>',
+  props: { open: Boolean },
+  emits: ['ok', 'cancel'],
+  template:
+    '<section v-if="open" data-testid="selected-qc-confirm"><slot/><button data-testid="selected-qc-confirm-ok" @click="$emit(\'ok\')">确认</button><button data-testid="selected-qc-confirm-cancel" @click="$emit(\'cancel\')">取消</button></section>',
 })
 
-function mountControl(props: { carePhase: 'inpatient' | 'discharged'; recordRefs: typeof recordRefs; selectedCount?: number }) {
+function mountControl(props: {
+  carePhase: 'inpatient' | 'discharged'
+  recordRefs: typeof recordRefs
+  selectedCount?: number
+}) {
   return mount(QcRunSelectedControl, { props, global: { stubs: { 'a-modal': ModalStub } } })
 }
 
@@ -46,7 +53,9 @@ async function confirmRun(wrapper: ReturnType<typeof mountControl>) {
 
 function deferred<T>() {
   let resolve!: (value: T) => void
-  const promise = new Promise<T>((done) => { resolve = done })
+  const promise = new Promise<T>((done) => {
+    resolve = done
+  })
   return { promise, resolve }
 }
 
@@ -64,17 +73,33 @@ describe('QcRunSelectedControl', () => {
     expect(wrapper.text()).toContain('质控所选')
   })
 
-  it('已出院列表即使有完整三坐标也不能创建未核验归档的终末任务', async () => {
+  it('已出院列表按终末口径 B 用三坐标创建终末任务并标注未核验归档', async () => {
+    mocks.createJob.mockResolvedValue({
+      success: true,
+      data: { id: 'job-final', status: 'queued' },
+    })
+    mocks.getJob.mockResolvedValue({
+      success: true,
+      data: { id: 'job-final', status: 'completed' },
+    })
     const wrapper = mountControl({ carePhase: 'discharged', recordRefs })
 
+    expect(wrapper.get('[data-testid="final-archive-note"]').text()).toContain('归档状态未核验')
     const trigger = wrapper.get('[data-testid="run-selected-qc-trigger"]')
-    expect(trigger.attributes('disabled')).toBe('')
-    expect(wrapper.text()).toContain('此列表未核验归档状态，暂不可发起终末质控')
+    expect(trigger.attributes('disabled')).toBeUndefined()
     await trigger.trigger('click')
+    expect(wrapper.get('[data-testid="selected-qc-confirm"]').text()).toContain(
+      '已出院病历（未核验归档）',
+    )
+    await wrapper.get('[data-testid="selected-qc-confirm-ok"]').trigger('click')
     await flushPromises()
 
-    expect(mocks.createJob).not.toHaveBeenCalled()
-    expect(mocks.getJob).not.toHaveBeenCalled()
+    expect(mocks.createJob).toHaveBeenCalledWith({
+      rule_set_key: 'luxian_0609_qc_v1',
+      scope: 'final',
+      date_field: 'discharge',
+      record_refs: recordRefs,
+    })
   })
 
   it('只用在院勾选病历三坐标创建本地质控任务，不触发资料同步', async () => {
@@ -126,22 +151,36 @@ describe('QcRunSelectedControl', () => {
   })
 
   it('取消二次确认不创建任务，确认后仍使用打开时冻结的精确三坐标', async () => {
-    mocks.createJob.mockResolvedValue({ success: true, data: { id: 'job-frozen', status: 'queued' } })
-    mocks.getJob.mockResolvedValue({ success: true, data: { id: 'job-frozen', status: 'completed' } })
+    mocks.createJob.mockResolvedValue({
+      success: true,
+      data: { id: 'job-frozen', status: 'queued' },
+    })
+    mocks.getJob.mockResolvedValue({
+      success: true,
+      data: { id: 'job-frozen', status: 'completed' },
+    })
     const wrapper = mountControl({ carePhase: 'inpatient', recordRefs })
     await wrapper.get('[data-testid="run-selected-qc-trigger"]').trigger('click')
     await wrapper.get('[data-testid="selected-qc-confirm-cancel"]').trigger('click')
     expect(mocks.createJob).not.toHaveBeenCalled()
 
     await wrapper.get('[data-testid="run-selected-qc-trigger"]').trigger('click')
-    await wrapper.setProps({ recordRefs: [{ institute_id: 'H3', patient_id: 'P3', visit_id: 'V3' }] })
+    await wrapper.setProps({
+      recordRefs: [{ institute_id: 'H3', patient_id: 'P3', visit_id: 'V3' }],
+    })
     await wrapper.get('[data-testid="selected-qc-confirm-ok"]').trigger('click')
     await flushPromises()
-    expect(mocks.createJob).toHaveBeenCalledWith(expect.objectContaining({ record_refs: recordRefs }))
+    expect(mocks.createJob).toHaveBeenCalledWith(
+      expect.objectContaining({ record_refs: recordRefs }),
+    )
   })
 
   it.each([
-    { refs: [{ institute_id: 'H1', patient_id: '', visit_id: 'V1' }], count: 1, text: '不完整身份' },
+    {
+      refs: [{ institute_id: 'H1', patient_id: '', visit_id: 'V1' }],
+      count: 1,
+      text: '不完整身份',
+    },
     { refs: [recordRefs[0]!, recordRefs[0]!], count: 2, text: '重复身份' },
     { refs: [recordRefs[0]!], count: 2, text: '数量与身份清单不一致' },
   ])('身份清单异常时整批拒绝：$text', async ({ refs, count, text }) => {
@@ -181,8 +220,14 @@ describe('QcRunSelectedControl', () => {
   })
 
   it('轮询回执 job id 不匹配时失败关闭且不刷新', async () => {
-    mocks.createJob.mockResolvedValue({ success: true, data: { id: 'expected-job', status: 'queued' } })
-    mocks.getJob.mockResolvedValue({ success: true, data: { id: 'other-job', status: 'completed' } })
+    mocks.createJob.mockResolvedValue({
+      success: true,
+      data: { id: 'expected-job', status: 'queued' },
+    })
+    mocks.getJob.mockResolvedValue({
+      success: true,
+      data: { id: 'other-job', status: 'completed' },
+    })
     const wrapper = mountControl({ carePhase: 'inpatient', recordRefs })
     await confirmRun(wrapper)
     await flushPromises()
@@ -212,8 +257,14 @@ describe('QcRunSelectedControl', () => {
   })
 
   it('未知任务状态失败关闭且不刷新', async () => {
-    mocks.createJob.mockResolvedValue({ success: true, data: { id: 'unknown-job', status: 'queued' } })
-    mocks.getJob.mockResolvedValue({ success: true, data: { id: 'unknown-job', status: 'mystery' } })
+    mocks.createJob.mockResolvedValue({
+      success: true,
+      data: { id: 'unknown-job', status: 'queued' },
+    })
+    mocks.getJob.mockResolvedValue({
+      success: true,
+      data: { id: 'unknown-job', status: 'mystery' },
+    })
     const wrapper = mountControl({ carePhase: 'inpatient', recordRefs })
     await confirmRun(wrapper)
     await flushPromises()
@@ -258,7 +309,10 @@ describe('QcRunSelectedControl', () => {
       `medqc:selected-qc:running:${encodeURIComponent(actor)}`,
       JSON.stringify({ jobId: 'recover-job', actor }),
     )
-    mocks.getJob.mockResolvedValue({ success: true, data: { id: 'recover-job', status: 'completed' } })
+    mocks.getJob.mockResolvedValue({
+      success: true,
+      data: { id: 'recover-job', status: 'completed' },
+    })
     const wrapper = mountControl({ carePhase: 'inpatient', recordRefs })
     await flushPromises()
     expect(mocks.getJob).toHaveBeenCalledWith('recover-job')

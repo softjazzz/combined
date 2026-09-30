@@ -4,21 +4,16 @@
     <div class="apple-hero-panel mb-5 p-5">
       <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <div class="text-[11px] font-semibold tracking-normal text-slate-500">
-            已出院队列
-          </div>
+          <div class="text-[11px] font-semibold tracking-normal text-slate-500">已出院队列</div>
           <h1 class="mt-1 text-[28px] font-bold leading-8 tracking-normal text-slate-900">
             已出院病历（归档未核验）
           </h1>
           <p class="mt-1 text-sm font-medium text-slate-500">
-            当前列表仅按出院状态筛选；归档口径未确认，暂不发起终末批量质控。
+            当前列表仅按出院状态筛选；本页病例缺少三坐标身份，终末质控请到工作站“已出院病历质控”勾选发起（按已出院执行，归档未核验）。
           </p>
         </div>
         <div class="flex items-center gap-2">
-          <a-button
-            class="apple-secondary-button !h-9 !rounded-lg"
-            @click="handleRefresh"
-          >
+          <a-button class="apple-secondary-button !h-9 !rounded-lg" @click="handleRefresh">
             <ReloadOutlined :spin="loading" />
             刷新
           </a-button>
@@ -26,7 +21,7 @@
             type="primary"
             class="apple-primary-button !h-9 !rounded-lg"
             disabled
-            title="归档口径未确认，暂不可发起终末批量质控"
+            title="本页病例缺少三坐标身份，请到工作站“已出院病历质控”发起终末质控"
             @click="openBatchLaunchModal"
           >
             <FileSearchOutlined />
@@ -44,15 +39,11 @@
             <FileTextOutlined />
           </div>
           <div>
-            <div class="queue-kpi-label">
-              总病历数
-            </div>
+            <div class="queue-kpi-label">总病历数</div>
             <div class="queue-kpi-value">
               {{ formatInteger(overviewStats.total_records) }}
             </div>
-            <div class="queue-kpi-desc">
-              全场景筛选范围
-            </div>
+            <div class="queue-kpi-desc">全场景筛选范围</div>
           </div>
         </div>
 
@@ -61,15 +52,9 @@
             <CheckCircleOutlined />
           </div>
           <div>
-            <div class="queue-kpi-label">
-              已归档
-            </div>
-            <div class="queue-kpi-value">
-              未核验
-            </div>
-            <div class="queue-kpi-desc">
-              归档字段暂无权威口径
-            </div>
+            <div class="queue-kpi-label">已归档</div>
+            <div class="queue-kpi-value">未核验</div>
+            <div class="queue-kpi-desc">归档字段暂无权威口径</div>
           </div>
         </div>
 
@@ -78,15 +63,9 @@
             <ClockCircleOutlined />
           </div>
           <div>
-            <div class="queue-kpi-label">
-              待处理
-            </div>
-            <div class="queue-kpi-value">
-              暂无口径
-            </div>
-            <div class="queue-kpi-desc">
-              待处理范围未定义
-            </div>
+            <div class="queue-kpi-label">待处理</div>
+            <div class="queue-kpi-value">暂无口径</div>
+            <div class="queue-kpi-desc">待处理范围未定义</div>
           </div>
         </div>
 
@@ -95,15 +74,9 @@
             <TrophyOutlined />
           </div>
           <div>
-            <div class="queue-kpi-label">
-              质控通过率
-            </div>
-            <div class="queue-kpi-value">
-              {{ formatRate(overviewStats.pass_rate) }}%
-            </div>
-            <div class="queue-kpi-desc">
-              全场景质控结果
-            </div>
+            <div class="queue-kpi-label">质控通过率</div>
+            <div class="queue-kpi-value">{{ formatRate(overviewStats.pass_rate) }}%</div>
+            <div class="queue-kpi-desc">全场景质控结果</div>
           </div>
         </div>
       </div>
@@ -123,19 +96,10 @@
               />
               <SearchOutlined class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             </div>
-            <a-button
-              type="primary"
-              class="!h-9 !rounded-lg"
-              @click="handleSearch"
-            >
+            <a-button type="primary" class="!h-9 !rounded-lg" @click="handleSearch">
               查询
             </a-button>
-            <a-button
-              class="!h-9 !rounded-lg"
-              @click="handleResetFilters"
-            >
-              重置
-            </a-button>
+            <a-button class="!h-9 !rounded-lg" @click="handleResetFilters"> 重置 </a-button>
           </div>
 
           <a-select
@@ -184,7 +148,7 @@
             <a-button
               class="!h-9 !rounded-lg !border-slate-200 text-slate-600 hover:text-[#2b6cf6]"
               disabled
-              title="归档口径未确认，暂不可按终末范围试跑自定义质控"
+              title="本页病例缺少三坐标身份，暂不可试跑自定义质控"
               @click="openCustomQCExperience()"
             >
               自定义质控点
@@ -194,7 +158,7 @@
               type="primary"
               class="apple-primary-button !flex !h-9 items-center gap-1 !rounded-lg"
               disabled
-              title="归档口径未确认，暂不可发起终末批量质控"
+              title="本页病例缺少三坐标身份，请到工作站“已出院病历质控”发起终末质控"
               @click="openBatchLaunchModal"
             >
               <FileSearchOutlined /> 发起批量质控
@@ -230,10 +194,7 @@
           </ProTableToolbar>
         </template>
 
-        <template
-          v-if="stageHint"
-          #hint
-        >
+        <template v-if="stageHint" #hint>
           {{ stageHint }}
         </template>
       </ProQueryBar>
@@ -248,12 +209,7 @@
           class="mt-6"
         >
           <template #extra>
-            <a-button
-              type="primary"
-              @click="fetchRecords"
-            >
-              重试
-            </a-button>
+            <a-button type="primary" @click="fetchRecords"> 重试 </a-button>
           </template>
         </a-result>
         <ProStandardTable
@@ -285,7 +241,7 @@
                   :src="patientAvatarSrc(record as FinalRecordItem)"
                   alt=""
                   class="record-patient-avatar"
-                >
+                />
                 <div class="min-w-0">
                   <div class="truncate text-sm font-semibold text-slate-800">
                     {{ record.patient_name || '-' }}
@@ -301,9 +257,7 @@
               <span
                 class="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600"
               >
-                <span
-                  class="h-1.5 w-1.5 rounded-full bg-slate-400"
-                />
+                <span class="h-1.5 w-1.5 rounded-full bg-slate-400" />
                 质控归属待核实
               </span>
             </template>
@@ -371,7 +325,7 @@
                   size="small"
                   class="!h-7 !rounded-full !border-amber-200/90 !text-amber-700 !px-2.5 !text-xs"
                   disabled
-                  title="归档口径未确认，暂不可按终末范围试跑自定义质控"
+                  title="本页病例缺少三坐标身份，暂不可试跑自定义质控"
                   @click="openCustomQCExperience(record)"
                 >
                   自定义质控
@@ -411,14 +365,16 @@
           v-if="selectedRowKeys.length > 0"
           class="absolute bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-5 rounded-[14px] border border-slate-200 bg-white px-5 py-3 text-slate-700 shadow-[0_16px_36px_rgba(15,23,42,0.12)]"
         >
-          <span class="text-sm font-semibold">已选择
-            <span class="mx-1 font-bold text-[#2b6cf6]">{{ selectedRowKeys.length }}</span> 项</span>
+          <span class="text-sm font-semibold"
+            >已选择
+            <span class="mx-1 font-bold text-[#2b6cf6]">{{ selectedRowKeys.length }}</span> 项</span
+          >
           <div class="h-4 w-px bg-slate-200" />
           <div class="flex items-center gap-2">
             <button
               class="apple-primary-action flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition-colors"
               disabled
-              title="归档口径未确认，暂不可发起终末批量质控"
+              title="本页病例缺少三坐标身份，请到工作站“已出院病历质控”发起终末质控"
               @click="openBatchLaunchModal"
             >
               <FileSearchOutlined /> 发起批量质控
@@ -439,15 +395,12 @@
       class="apple-collapse mt-4 overflow-hidden"
       ghost
     >
-      <a-collapse-panel
-        key="final-batch-jobs"
-        header="历史终末批量任务（仅可查看或停止）"
-      >
+      <a-collapse-panel key="final-batch-jobs" header="历史终末批量任务（仅可查看或停止）">
         <a-alert
           class="mb-3"
           type="warning"
           show-icon
-          message="归档口径未确认，已暂停从此页发起或重试终末批量任务"
+          message="本页病例缺少三坐标身份，已停止从此页发起或重试终末批量任务；请到工作站“已出院病历质控”发起"
         />
         <SemanticRulesBatchPanel
           :allow-launch="false"
@@ -490,15 +443,11 @@
       @cancel="launchModalOpen = false"
     >
       <div class="space-y-4">
-        <a-alert
-          type="info"
-          show-icon
-          message="流程：选择规则集 → 确认病历范围 → 创建任务"
-        />
-        <div class="rounded-2xl border border-[rgba(43,108,246,0.14)] bg-[rgba(43,108,246,0.06)] p-3">
-          <div class="mb-2 text-sm font-semibold text-slate-800">
-            规则集选择
-          </div>
+        <a-alert type="info" show-icon message="流程：选择规则集 → 确认病历范围 → 创建任务" />
+        <div
+          class="rounded-2xl border border-[rgba(43,108,246,0.14)] bg-[rgba(43,108,246,0.06)] p-3"
+        >
+          <div class="mb-2 text-sm font-semibold text-slate-800">规则集选择</div>
           <a-radio-group
             v-model:value="launchRuleMode"
             class="flex flex-wrap gap-2"
@@ -510,16 +459,10 @@
               :value="option.value"
             >
               {{ option.label
-              }}<template v-if="option.ruleCount">
-                （{{ option.ruleCount }}）
-              </template>
+              }}<template v-if="option.ruleCount"> （{{ option.ruleCount }}） </template>
             </a-radio-button>
-            <a-radio-button value="manual">
-              手工选择规则
-            </a-radio-button>
-            <a-radio-button value="all">
-              全部四川规则（高级/调试）
-            </a-radio-button>
+            <a-radio-button value="manual"> 手工选择规则 </a-radio-button>
+            <a-radio-button value="all"> 全部四川规则（高级/调试） </a-radio-button>
           </a-radio-group>
           <div class="mt-2 text-xs leading-5 text-slate-600">
             {{ launchRuleModeDescription }}
@@ -527,25 +470,19 @@
         </div>
         <div class="grid grid-cols-3 gap-3">
           <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-            <div class="text-xs text-slate-500">
-              已选规则
-            </div>
+            <div class="text-xs text-slate-500">已选规则</div>
             <div class="text-lg font-semibold text-slate-800">
               {{ selectedRuleCount }}
             </div>
           </div>
           <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-            <div class="text-xs text-slate-500">
-              当前筛选病历
-            </div>
+            <div class="text-xs text-slate-500">当前筛选病历</div>
             <div class="text-lg font-semibold text-slate-800">
               {{ pagination.total }}
             </div>
           </div>
           <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-            <div class="text-xs text-slate-500">
-              已勾选病历
-            </div>
+            <div class="text-xs text-slate-500">已勾选病历</div>
             <div class="text-lg font-semibold text-slate-800">
               {{ selectedRecordIds.length }}
             </div>
@@ -560,16 +497,10 @@
             placeholder="搜索规则编码/名称/文书域"
           />
           <div class="flex items-center gap-2">
-            <a-button
-              :disabled="launchRuleMode !== 'manual'"
-              @click="selectAllFilteredRules"
-            >
+            <a-button :disabled="launchRuleMode !== 'manual'" @click="selectAllFilteredRules">
               全选当前过滤
             </a-button>
-            <a-button
-              :disabled="launchRuleMode !== 'manual'"
-              @click="clearSelectedRules"
-            >
+            <a-button :disabled="launchRuleMode !== 'manual'" @click="clearSelectedRules">
               清空
             </a-button>
           </div>
@@ -589,17 +520,10 @@
         <a-divider class="!my-2" />
 
         <div class="space-y-2">
-          <div class="text-sm font-medium text-slate-700">
-            病历范围
-          </div>
+          <div class="text-sm font-medium text-slate-700">病历范围</div>
           <a-radio-group v-model:value="launchOnlySelectedRecords">
-            <a-radio :value="false">
-              当前筛选结果（科室/状态/日期/关键词）
-            </a-radio>
-            <a-radio
-              :value="true"
-              :disabled="selectedRecordIds.length === 0"
-            >
+            <a-radio :value="false"> 当前筛选结果（科室/状态/日期/关键词） </a-radio>
+            <a-radio :value="true" :disabled="selectedRecordIds.length === 0">
               仅当前勾选病历（{{ selectedRecordIds.length }}）
             </a-radio>
           </a-radio-group>
@@ -753,7 +677,8 @@ const recordListError = ref('')
 
 const archiveFeatureEnabled = false
 const finalBatchLaunchEnabled = false
-const finalBatchBlockedReason = '归档口径未确认，当前仅支持查看或停止历史终末批量任务'
+const finalBatchBlockedReason =
+  '本页病例缺少三坐标身份，仅支持查看或停止历史终末批量任务；请到工作站“已出院病历质控”发起'
 
 const batchTaskPanelOpenKeys = ref<string[]>(['final-batch-jobs'])
 const batchResultDrawerOpen = ref(false)
@@ -1056,9 +981,7 @@ const launchRuleRowSelection = computed<TableProps['rowSelection']>(() => ({
 const departmentOptions = ref<Array<{ value: string; label: string }>>([])
 
 // 质控状态选项
-const qcStatusOptions = [
-  { value: 'unverified', label: '质控归属待核实' },
-]
+const qcStatusOptions = [{ value: 'unverified', label: '质控归属待核实' }]
 
 // 表格列配置 — 增加缺陷数列
 const columns: TableColumnsType<FinalRecordItem> = [
@@ -1490,7 +1413,7 @@ const jumpToWorkstation = (_record: any, _action: WorkstationLaunchAction) => {
 
 const openCustomQCExperience = (record?: any) => {
   if (!finalBatchLaunchEnabled) {
-    message.warning('归档口径未确认，暂不可按终末范围试跑自定义质控')
+    message.warning('本页病例缺少三坐标身份，暂不可试跑自定义质控')
     return
   }
   const selectedRecords = record

@@ -160,15 +160,21 @@ def _active_remote_task(task: dict[str, Any]) -> bool:
     return task.get("scene") == "running" and config is not None and config.get("case_scope") == "active"
 
 
-def _requires_archive_verification(task_scene: Any, prepared_kwargs: Any) -> bool:
+_TASK_RUN_SCENES = frozenset({"running", "final"})
+
+
+def _prepared_scope_mismatch(task_scene: Any, prepared_kwargs: Any) -> bool:
+    """任务场景与准备出的质控范围必须一致：运行任务只取运行、终末任务只取终末（口径 B：已出院）。
+
+    混合范围（all）与门急诊不经本链路；终末不再因归档未核验而拒绝。
+    """
     if not isinstance(prepared_kwargs, dict):
         return True
+    scene = str(task_scene or "").strip().lower()
     scope = str(prepared_kwargs.get("scope") or task_scene or "").strip().lower()
     filters = prepared_kwargs.get("filters")
     query_scope = str(filters.get("query_scope") or "").strip().lower() if isinstance(filters, dict) else ""
-    return str(task_scene or "").strip().lower() != "running" or scope != "running" or query_scope not in {
-        "", "running",
-    }
+    return scene not in _TASK_RUN_SCENES or scope != scene or query_scope not in {"", scene}
 
 
 def _assert_active_sync_receipt(
@@ -326,10 +332,8 @@ def create_task_qc_run(
                 or filters.get("rule_set_version") != task["rule_set_version"]
             ):
                 raise TaskQCRunConflict("准备后的规则集版本与任务冻结值不一致")
-            if _requires_archive_verification(task["scene"], prepared.create_kwargs):
-                raise TaskQCRunConflict(
-                    "final_archive_unverified: 归档状态未核验，终末或包含终末的混合范围暂不能执行质控任务"
-                )
+            if _prepared_scope_mismatch(task["scene"], prepared.create_kwargs):
+                raise TaskQCRunConflict("scene_scope_mismatch: 任务场景与准备的质控范围不一致")
             job = workspace.create_batch_job(
                 created_by=actor_id,
                 session=session,

@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from sqlalchemy import create_engine, inspect as sa_inspect, select, text
 from sqlalchemy.pool import NullPool
 
+from ..core.final_scope_policy import UNSUPPORTED_SCOPE_DETAIL, is_executable_inpatient_scope
 from ..core.response import success_response, error_response, get_trace_id, ErrorCode, StatusCode
 from ..core.audit import audit_event
 from ..services.sichuan_qc_service import SichuanQCService
@@ -589,15 +590,12 @@ def _is_workspace_batch_job(job: Optional[Dict[str, Any]]) -> bool:
     return is_workspace_batch_draft_id(job.get("draft_id"))
 
 
-_FINAL_ARCHIVE_UNVERIFIED = (
-    "final_archive_unverified: 归档状态未核验，终末或包含终末的混合范围暂不能执行质控任务"
-)
-
-
-def _requires_archive_verification(scope: Any, filters: Any = None) -> bool:
-    normalized_scope = str(scope or "").strip().lower()
-    query_scope = str((filters or {}).get("query_scope") or "").strip().lower() if isinstance(filters, dict) else ""
-    return normalized_scope != "running" or query_scope not in {"", "running"}
+def _unsupported_scope(scope: Any, filters: Any = None) -> bool:
+    """终末口径 B：终末/全部按已出院（未核验归档）执行；任务范围与取数范围须均为受支持的住院范围。"""
+    query_scope = (filters or {}).get("query_scope") if isinstance(filters, dict) else None
+    return not is_executable_inpatient_scope(scope) or (
+        bool(str(query_scope or "").strip()) and not is_executable_inpatient_scope(query_scope)
+    )
 
 
 def _compact_workspace_summary(summary: Dict[str, Any], rule_results: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -1921,13 +1919,13 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
         if not job or job.get("status") in {"completed", "failed", "canceled", "cancelled"}:
             return
         filters = job.get("filters") if isinstance(job, dict) and isinstance(job.get("filters"), dict) else {}
-        if _requires_archive_verification(job.get("scope"), filters):
+        if _unsupported_scope(job.get("scope"), filters):
             logger.warning(
-                "qc_batch_archive_guard_failed job_id=%s reason_code=final_archive_unverified",
+                "qc_batch_scope_guard_failed job_id=%s reason_code=unsupported_scope",
                 job_id,
             )
             await run_in_threadpool(
-                workspace.fail_batch_job, job_id=job_id, error_message=_FINAL_ARCHIVE_UNVERIFIED,
+                workspace.fail_batch_job, job_id=job_id, error_message=UNSUPPORTED_SCOPE_DETAIL,
             )
             return
         try:
@@ -2012,16 +2010,16 @@ async def create_workspace_batch_job(
             else ""
         ),
     }
-    if _requires_archive_verification(prepared_scope, prepared_filters):
+    if _unsupported_scope(prepared_scope, prepared_filters):
         audit_event(
             request,
             action="qc.workspace_batch.create",
             resource="/api/v1/qc/sichuan/workspace/batch-jobs",
             outcome="rejected",
-            details={"reason_code": "final_archive_unverified", "scope": prepared_scope},
+            details={"reason_code": "unsupported_scope", "scope": prepared_scope},
             current_user=current_user,
         )
-        raise HTTPException(status_code=422, detail=_FINAL_ARCHIVE_UNVERIFIED)
+        raise HTTPException(status_code=422, detail=UNSUPPORTED_SCOPE_DETAIL)
     workspace = workspace_provider()
     created_by = _current_user_id(current_user)
     for active_status in ("queued", "running"):
@@ -2703,16 +2701,16 @@ async def retry_workspace_batch_job(
     job = workspace.get_batch_job(job_id=job_id, created_by=created_by)
     if not _is_workspace_batch_job(job):
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
-    if _requires_archive_verification(job.get("scope"), job.get("filters")):
+    if _unsupported_scope(job.get("scope"), job.get("filters")):
         audit_event(
             request,
             action="qc.workspace_batch.retry",
             resource="/api/v1/qc/sichuan/workspace/batch-jobs/{job_id}/retry",
             outcome="rejected",
-            details={"reason_code": "final_archive_unverified", "scope": job.get("scope")},
+            details={"reason_code": "unsupported_scope", "scope": job.get("scope")},
             current_user=current_user,
         )
-        raise HTTPException(status_code=422, detail=_FINAL_ARCHIVE_UNVERIFIED)
+        raise HTTPException(status_code=422, detail=UNSUPPORTED_SCOPE_DETAIL)
     job = workspace.retry_batch_job(job_id=job_id, created_by=created_by)
     if str(job.get("job_kind") or "").strip().lower() == "parent":
         child_jobs = list(job.get("child_jobs") or job.get("children") or [])

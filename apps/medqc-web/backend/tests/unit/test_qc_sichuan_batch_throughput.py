@@ -2044,7 +2044,8 @@ async def test_workspace_batch_final_should_prefer_bundle_path(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_workspace_batch_all_rejects_unverified_final_record_before_bundle(monkeypatch):
+async def test_workspace_batch_all_evaluates_final_record_with_final_bundle_under_scope_b(monkeypatch):
+    """终末口径 B：全部范围内的已出院病例按 final 组包评估，不再因归档未核验失败。"""
     workspace = _WorkspaceStub()
     workspace.job["scope"] = "all"
     service = _ServiceStub(
@@ -2143,14 +2144,13 @@ async def test_workspace_batch_all_rejects_unverified_final_record_before_bundle
 
     await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
 
-    assert workspace.job["status"] == "failed"
-    assert "final_archive_unverified" in workspace.job["error_message"]
-    assert service.evaluate_calls == 0
-    assert service.evaluate_rule_for_visit_calls == 0
+    assert workspace.job["status"] == "completed"
+    assert service.evaluate_rule_for_visit_calls > 0
 
 
 @pytest.mark.asyncio
-async def test_sample_pool_mixed_scope_rejects_unverified_final_before_eval(monkeypatch):
+async def test_sample_pool_mixed_scope_evaluates_final_record_under_scope_b(monkeypatch):
+    """终末口径 B：样本池混合范围内的已出院病例正常逐规则评估并产出条目。"""
     workspace = _WorkspaceStub()
     workspace.job["scope"] = "all"
     workspace.job["filters"] = {
@@ -2223,14 +2223,14 @@ async def test_sample_pool_mixed_scope_rejects_unverified_final_before_eval(monk
 
     await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
 
-    assert workspace.job["status"] == "failed"
-    assert "final_archive_unverified" in workspace.job["error_message"]
-    assert service.evaluate_rule_for_visit_calls == 0
-    assert workspace.items == []
+    assert workspace.job["status"] == "completed"
+    assert service.evaluate_rule_for_visit_calls > 0
+    assert workspace.items
 
 
 @pytest.mark.asyncio
-async def test_workspace_batch_final_rejects_before_fast_screen(monkeypatch):
+async def test_workspace_batch_final_runs_fast_screen_under_scope_b(monkeypatch):
+    """终末口径 B：终末快速筛查正常进入 run_final_fast_screen。"""
     workspace = _WorkspaceStub()
     workspace.job["scope"] = "final"
     workspace.job["filters"] = {
@@ -2328,10 +2328,8 @@ async def test_workspace_batch_final_rejects_before_fast_screen(monkeypatch):
 
     await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
 
-    assert fast_screen_calls == []
-    assert service.evaluate_calls == 0
-    assert workspace.job["status"] == "failed"
-    assert "final_archive_unverified" in workspace.job["error_message"]
+    assert fast_screen_calls
+    assert workspace.job["status"] == "completed"
 
 
 @pytest.mark.asyncio
@@ -3639,7 +3637,8 @@ async def test_prepare_workspace_batch_job_should_resolve_full_intrinsic_fast_sc
 
 
 @pytest.mark.asyncio
-async def test_create_workspace_batch_job_rejects_final_even_with_active_idempotent_job(monkeypatch):
+async def test_create_workspace_batch_job_reuses_active_idempotent_final_job_under_scope_b(monkeypatch):
+    """终末口径 B：终末请求与活动任务幂等键一致时复用原任务，不新建、不重复入队。"""
     workspace = _IdempotentWorkspaceStub()
     service = _ServiceStub()
     submitted_tasks: List[Dict[str, Any]] = []
@@ -3709,19 +3708,16 @@ async def test_create_workspace_batch_job_rejects_final_even_with_active_idempot
         "idempotency_payload": idempotency_payload,
     }
 
-    with pytest.raises(HTTPException) as exc:
-        await qc_sichuan.create_workspace_batch_job(
-            request=request,  # type: ignore[arg-type]
-            payload=payload,
-            qc_service=service,  # type: ignore[arg-type]
-            current_user={"id": "tester", "roles": ["qc_manager"]},
-        )
+    response = await qc_sichuan.create_workspace_batch_job(
+        request=request,  # type: ignore[arg-type]
+        payload=payload,
+        qc_service=service,  # type: ignore[arg-type]
+        current_user={"id": "tester", "roles": ["qc_manager"]},
+    )
 
-    assert exc.value.status_code == 422
-    assert "final_archive_unverified" in exc.value.detail
+    assert response["data"]["id"] == workspace.job["id"]
     assert workspace.create_called is False
     assert submitted_tasks == []
-    assert workspace.list_calls == []
 
 
 def test_prepare_workspace_batch_job_isolates_task_runs_without_creating_job():
@@ -3758,7 +3754,7 @@ def test_prepare_workspace_batch_job_isolates_task_runs_without_creating_job():
 
 
 @pytest.mark.asyncio
-async def test_create_workspace_batch_job_rejects_mixed_scope_after_record_becomes_final(
+async def test_create_workspace_batch_job_creates_new_job_after_record_becomes_final_under_scope_b(
     monkeypatch,
 ):
     class _StatusChangedWorkspaceStub(_IdempotentWorkspaceStub):
@@ -3828,24 +3824,22 @@ async def test_create_workspace_batch_job_rejects_mixed_scope_after_record_becom
         "idempotency_payload": active_payload,
     }
 
-    with pytest.raises(HTTPException) as exc:
-        await qc_sichuan.create_workspace_batch_job(
-            request=SimpleNamespace(state=SimpleNamespace()),  # type: ignore[arg-type]
-            payload=qc_sichuan.SichuanWorkspaceBatchJobCreateRequest(
-                rule_ids=["SC-001"],
-                scope="all",
-                date_field="admission",
-                record_ids=["visit-001"],
-                run_mode="parallel",
-            ),
-            qc_service=service,  # type: ignore[arg-type]
-            current_user={"id": "tester", "roles": ["qc_manager"]},
-        )
+    # 终末口径 B：病例由运行变为终末后场景快照不同，不得复用旧（运行）任务，应新建任务。
+    await qc_sichuan.create_workspace_batch_job(
+        request=SimpleNamespace(state=SimpleNamespace()),  # type: ignore[arg-type]
+        payload=qc_sichuan.SichuanWorkspaceBatchJobCreateRequest(
+            rule_ids=["SC-001"],
+            scope="all",
+            date_field="admission",
+            record_ids=["visit-001"],
+            run_mode="parallel",
+        ),
+        qc_service=service,  # type: ignore[arg-type]
+        current_user={"id": "tester", "roles": ["qc_manager"]},
+    )
 
-    assert exc.value.status_code == 422
-    assert "final_archive_unverified" in exc.value.detail
-    assert workspace.create_called is False
-    assert submitted_tasks == []
+    assert workspace.create_called is True
+    assert len(submitted_tasks) == 1
 
 
 @pytest.mark.asyncio

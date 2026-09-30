@@ -7,6 +7,7 @@ from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError
 
+from ..core.final_scope_policy import UNSUPPORTED_SCOPE_DETAIL, is_executable_inpatient_scope
 from ..core.audit import audit_event
 from ..core.response import get_trace_id, success_response
 from ..core.security import get_current_user, require_roles
@@ -325,13 +326,9 @@ def _normalize_run_mode(value: Optional[str]) -> str:
     return "serial"
 
 
-_FINAL_ARCHIVE_UNVERIFIED = (
-    "final_archive_unverified: 归档状态未核验，终末或包含终末的混合范围暂不能执行质控任务"
-)
-
-
-def _requires_archive_verification(scope: Any) -> bool:
-    return str(scope or "").strip().lower() != "running"
+def _unsupported_scope(scope: Any) -> bool:
+    # 终末口径 B：终末/全部按已出院（未核验归档）执行；空值与未知范围仍拒绝。
+    return not is_executable_inpatient_scope(scope)
 
 
 _DETERMINATE_VISUAL_STATUSES = {"compliant", "non_compliant"}
@@ -387,10 +384,10 @@ async def _run_workspace_batch_job(job_id: str) -> None:
         return
 
     try:
-        if str(job.get("status") or "").strip().lower() == "queued" and _requires_archive_verification(
+        if str(job.get("status") or "").strip().lower() == "queued" and _unsupported_scope(
             job.get("scope")
         ):
-            raise ValueError(_FINAL_ARCHIVE_UNVERIFIED)
+            raise ValueError(UNSUPPORTED_SCOPE_DETAIL)
         if not workspace.mark_batch_job_running(job_id=job_id):
             return
         current_job = workspace.get_batch_job_for_processing(job_id=job_id) or job
@@ -1795,8 +1792,8 @@ async def create_workspace_batch_job(
     current_user: Dict[str, Any] = Depends(require_product_activation),
     workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
 ):
-    if _requires_archive_verification(payload.scope):
-        raise HTTPException(status_code=422, detail=_FINAL_ARCHIVE_UNVERIFIED)
+    if _unsupported_scope(payload.scope):
+        raise HTTPException(status_code=422, detail=UNSUPPORTED_SCOPE_DETAIL)
     created_by = _current_user_id(current_user)
     if payload.record_ids:
         raise HTTPException(
@@ -2005,8 +2002,8 @@ async def retry_workspace_batch_job(
     existing_job = workspace.get_batch_job(job_id=job_id, created_by=created_by)
     if not existing_job:
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
-    if _requires_archive_verification(existing_job.get("scope")):
-        raise HTTPException(status_code=422, detail=_FINAL_ARCHIVE_UNVERIFIED)
+    if _unsupported_scope(existing_job.get("scope")):
+        raise HTTPException(status_code=422, detail=UNSUPPORTED_SCOPE_DETAIL)
     job = workspace.retry_batch_job(job_id=job_id, created_by=created_by)
     if not job:
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")

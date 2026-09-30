@@ -1513,7 +1513,8 @@ async def test_match_sample_pool_should_match_against_source_database(monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_run_sample_pool_rejects_all_scope_after_running_fallback_without_creating_job(monkeypatch):
+async def test_run_sample_pool_runs_all_scope_after_running_fallback_under_scope_b(monkeypatch):
+    """终末口径 B：running 未命中回退到 all 后按已出院（未核验归档）执行，创建作业。"""
     sample_service = _SamplePoolServiceStub()
     workspace_service = _WorkspaceServiceStub()
     workspace_service.records_by_scope["running"] = []
@@ -1535,13 +1536,12 @@ async def test_run_sample_pool_rejects_all_scope_after_running_fallback_without_
     )
     current_user = {"id": "tester"}
 
-    with pytest.raises(HTTPException) as exc_info:
-        await qc_sample_pools.run_sample_pool_intrinsic_validation(
-            request=request,
-            pool_id="pool-1",
-            payload=payload,
-            current_user=current_user,
-        )
+    await qc_sample_pools.run_sample_pool_intrinsic_validation(
+        request=request,
+        pool_id="pool-1",
+        payload=payload,
+        current_user=current_user,
+    )
 
     assert workspace_service.collect_records_calls == [
         {
@@ -1567,15 +1567,13 @@ async def test_run_sample_pool_rejects_all_scope_after_running_fallback_without_
             ],
         },
     ]
-    assert exc_info.value.status_code == 422
-    assert "final_archive_unverified" in exc_info.value.detail
-    assert workspace_service.create_batch_job_calls == []
-    assert sample_service.updated_pool_job is None
-    assert qc_sample_pools._submitted_tasks_for_test == []
+    assert len(workspace_service.create_batch_job_calls) == 1
+    assert workspace_service.create_batch_job_calls[0]["scope"] == "all"
 
 
 @pytest.mark.asyncio
-async def test_run_sample_pool_rejects_explicit_final_scene_without_creating_job(monkeypatch):
+async def test_run_sample_pool_runs_explicit_final_scene_under_scope_b(monkeypatch):
+    """终末口径 B：显式终末场景按已出院（未核验归档）取数并创建作业。"""
     sample_service = _SamplePoolServiceStub()
     original_get_pool = sample_service.get_pool
     sample_service.get_pool = lambda *, pool_id: {
@@ -1586,24 +1584,20 @@ async def test_run_sample_pool_rejects_explicit_final_scene_without_creating_job
     monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_service)
     monkeypatch.setattr(qc_sample_pools, "_workspace_service", lambda: workspace_service)
 
-    with pytest.raises(HTTPException) as exc_info:
-        await qc_sample_pools.run_sample_pool_intrinsic_validation(
-            request=_build_request(),
-            pool_id="pool-1",
-            payload=qc_sample_pools.SamplePoolRunRequest(
-                record_refs=[_run_record_ref(), _run_record_ref("I001", "P002", "V002")],
-                sample_item_ids=["item-1", "item-2"],
-                validation_mode="sc",
-            ),
-            current_user={"id": "tester"},
-        )
+    await qc_sample_pools.run_sample_pool_intrinsic_validation(
+        request=_build_request(),
+        pool_id="pool-1",
+        payload=qc_sample_pools.SamplePoolRunRequest(
+            record_refs=[_run_record_ref(), _run_record_ref("I001", "P002", "V002")],
+            sample_item_ids=["item-1", "item-2"],
+            validation_mode="sc",
+        ),
+        current_user={"id": "tester"},
+    )
 
-    assert exc_info.value.status_code == 422
-    assert "final_archive_unverified" in exc_info.value.detail
     assert [call["scope"] for call in workspace_service.collect_records_calls] == ["final"]
-    assert workspace_service.create_batch_job_calls == []
-    assert sample_service.updated_pool_job is None
-    assert qc_sample_pools._submitted_tasks_for_test == []
+    assert len(workspace_service.create_batch_job_calls) == 1
+    assert workspace_service.create_batch_job_calls[0]["scope"] == "final"
 
 
 @pytest.mark.asyncio
@@ -2690,7 +2684,8 @@ async def test_run_sample_pool_intrinsic_validation_should_use_fixed_programmati
 
 
 @pytest.mark.asyncio
-async def test_run_sample_pool_intrinsic_validation_rejects_formal_fast_screen_full_without_archive_proof(monkeypatch):
+async def test_run_sample_pool_intrinsic_validation_runs_formal_fast_screen_full_under_scope_b(monkeypatch):
+    """终末口径 B：全量快速筛查按终末（已出院、未核验归档）取数并创建作业。"""
     sample_service = _SamplePoolServiceStub()
     workspace_service = _WorkspaceServiceStub()
 
@@ -2698,19 +2693,18 @@ async def test_run_sample_pool_intrinsic_validation_rejects_formal_fast_screen_f
     monkeypatch.setattr(qc_sample_pools, "_workspace_service", lambda: workspace_service)
     monkeypatch.setattr(qc_sample_pools, "_run_sichuan_workspace_batch_job", lambda job_id: None)
 
-    with pytest.raises(HTTPException) as exc_info:
-        await qc_sample_pools.run_sample_pool_intrinsic_validation(
-            request=_build_request(),
-            pool_id="pool-1",
-            payload=qc_sample_pools.SamplePoolRunRequest(
-                record_refs=[_run_record_ref(), _run_record_ref("I001", "P002", "V002")],
-                sample_item_ids=["item-1", "item-2"],
-                max_parallel_records=2,
-                validation_mode="formal_fast_screen_full",
-                rule_set_key="sc_content_full_v1",
-            ),
-            current_user={"id": "tester"},
-        )
+    await qc_sample_pools.run_sample_pool_intrinsic_validation(
+        request=_build_request(),
+        pool_id="pool-1",
+        payload=qc_sample_pools.SamplePoolRunRequest(
+            record_refs=[_run_record_ref(), _run_record_ref("I001", "P002", "V002")],
+            sample_item_ids=["item-1", "item-2"],
+            max_parallel_records=2,
+            validation_mode="formal_fast_screen_full",
+            rule_set_key="sc_content_full_v1",
+        ),
+        current_user={"id": "tester"},
+    )
 
     assert sample_service.get_runnable_items_calls[0]["validation_mode"] == "formal_fast_screen_full"
     assert workspace_service.collect_records_calls == [
@@ -2726,11 +2720,8 @@ async def test_run_sample_pool_intrinsic_validation_rejects_formal_fast_screen_f
             ],
         }
     ]
-    assert exc_info.value.status_code == 422
-    assert "final_archive_unverified" in exc_info.value.detail
-    assert workspace_service.create_batch_job_calls == []
-    assert sample_service.updated_pool_job is None
-    assert qc_sample_pools._submitted_tasks_for_test == []
+    assert len(workspace_service.create_batch_job_calls) == 1
+    assert workspace_service.create_batch_job_calls[0]["scope"] == "final"
 
 
 @pytest.mark.asyncio

@@ -18,6 +18,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.pool import NullPool
 from starlette.concurrency import run_in_threadpool
 
+from ..core.final_scope_policy import UNSUPPORTED_SCOPE_DETAIL, is_executable_inpatient_scope
 from ..core.audit import audit_event
 from ..core.response import get_trace_id, success_response
 from ..core.security import get_current_user, require_roles
@@ -1812,6 +1813,9 @@ async def run_sample_pool_intrinsic_validation(
     )
     requested_scope = "final" if is_formal_fast_screen_full else str(pool.get("scene") or "running").strip().lower() or "running"
     effective_scope = requested_scope
+    if not is_executable_inpatient_scope(effective_scope):
+        # 取数前拒绝无效范围（门急诊等不在住院批量链路内），不产生读取副作用。
+        raise HTTPException(status_code=422, detail=UNSUPPORTED_SCOPE_DETAIL)
     selected_records = workspace.collect_records(
         scope=effective_scope,
         department=payload.department,
@@ -1859,11 +1863,7 @@ async def run_sample_pool_intrinsic_validation(
         raise HTTPException(status_code=422, detail="样本池匹配病历未同步到当前 PG，无法执行")
     if set(selected_record_refs) != set(record_refs):
         raise HTTPException(status_code=422, detail="样本病历三坐标未完整命中当前病历池，请刷新后重试")
-    if effective_scope in {"final", "all"}:
-        raise HTTPException(
-            status_code=422,
-            detail="final_archive_unverified: 归档状态未核验，终末或包含终末的混合范围暂不能执行质控任务",
-        )
+    # 终末口径 B：终末/全部按已出院（未核验归档）执行，不再因归档未核验拒绝。
     record_refs = selected_record_refs
     if selected_execution_rule_ids:
         record_rule_map = {

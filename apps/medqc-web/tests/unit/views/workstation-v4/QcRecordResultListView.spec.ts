@@ -200,7 +200,10 @@ function response() {
         },
       ],
       departments: [{ name: '重症医学科', total: 6 }],
-      doctors: [{ name: '全部主管医师', total: 6 }, { name: '张医师', total: 3 }],
+      doctors: [
+        { name: '全部主管医师', total: 6 },
+        { name: '张医师', total: 3 },
+      ],
       total: 6,
       page: 1,
       qc_summary: {
@@ -280,7 +283,8 @@ describe('QcRecordResultListView', () => {
       expect(wrapper.text()).toContain(title)
       if (carePhase === 'discharged') {
         expect(wrapper.get('.qc-record-result-list-view__header').text()).not.toContain('终末')
-        expect(wrapper.text()).toContain('此列表未核验归档状态，暂不可发起终末质控')
+        // 终末口径 B：已出院列表可发起质控所选，常驻未核验归档提示。
+        expect(wrapper.text()).toContain('终末按已出院病历执行，归档状态未核验')
       }
       if (carePhase === 'inpatient') {
         expect(wrapper.get('.review-workbench-scope').text()).toBe('在院')
@@ -491,7 +495,10 @@ describe('QcRecordResultListView', () => {
     const wrapper = mountView('inpatient')
     await flushPromises()
     expect(
-      wrapper.get('select[aria-label="主管医师筛选"]').findAll('option').map((option) => option.text()),
+      wrapper
+        .get('select[aria-label="主管医师筛选"]')
+        .findAll('option')
+        .map((option) => option.text()),
     ).toEqual(['全部主管医师'])
   })
 
@@ -519,7 +526,10 @@ describe('QcRecordResultListView', () => {
       end_date: '2026-08-10',
       keyword: '患者甲',
     })
-    expect(mocks.downloadBlob).toHaveBeenCalledWith(expect.any(Blob), '已出院病历质控-当前筛选.xlsx')
+    expect(mocks.downloadBlob).toHaveBeenCalledWith(
+      expect.any(Blob),
+      '已出院病历质控-当前筛选.xlsx',
+    )
   })
 
   it('未勾选病历时只禁用导出所选，仍可导出当前筛选结果', async () => {
@@ -789,16 +799,36 @@ describe('QcRecordResultListView', () => {
     >
     summaries[0]!.review_state = 'pending_review'
     summaries[0]!.score_state = {
-      status: 'scored', score: 86.5, grade: '乙', veto_hit: false, standard_id: 's1', reason_code: null,
+      status: 'scored',
+      score: 86.5,
+      grade: '乙',
+      veto_hit: false,
+      standard_id: 's1',
+      reason_code: null,
     }
     summaries[1]!.score_state = {
-      status: 'scored', score: 95, grade: '丙', veto_hit: true, standard_id: 's1', reason_code: null,
+      status: 'scored',
+      score: 95,
+      grade: '丙',
+      veto_hit: true,
+      standard_id: 's1',
+      reason_code: null,
     }
     summaries[2]!.score_state = {
-      status: 'unavailable', score: null, grade: null, veto_hit: null, standard_id: 's1', reason_code: 'result_changed',
+      status: 'unavailable',
+      score: null,
+      grade: null,
+      veto_hit: null,
+      standard_id: 's1',
+      reason_code: 'result_changed',
     }
     payload.data.score_standards = {
-      running: { status: 'configured', standard_id: 's1', standard_name: '运行标准', standard_updated_at: null },
+      running: {
+        status: 'configured',
+        standard_id: 's1',
+        standard_name: '运行标准',
+        standard_updated_at: null,
+      },
     }
     mocks.getRaw.mockResolvedValue(payload)
 
@@ -807,10 +837,14 @@ describe('QcRecordResultListView', () => {
 
     expect(wrapper.findAll('thead th').map((item) => item.text())).toContain('得分 / 等级')
     const cellOf = (visitId: string) =>
-      wrapper.get(`tbody tr[data-record-key='["H","P","${visitId}"]']`).get('[data-testid="qc-record-score"]')
+      wrapper
+        .get(`tbody tr[data-record-key='["H","P","${visitId}"]']`)
+        .get('[data-testid="qc-record-score"]')
     expect(cellOf('V-priority').text()).toBe('86.5 / 乙')
     expect(cellOf('V-data-gap').text()).toContain('95 / 丙')
-    expect(cellOf('V-data-gap').find('[data-testid="qc-record-score-veto"]').text()).toBe('单项否决')
+    expect(cellOf('V-data-gap').find('[data-testid="qc-record-score-veto"]').text()).toBe(
+      '单项否决',
+    )
     expect(cellOf('V-uncertain').text()).toBe('得分暂不可用')
     expect(cellOf('V-not-run').text()).toBe('')
     expect(cellOf('V-technical').text()).toBe('')
@@ -832,12 +866,22 @@ describe('QcRecordResultListView', () => {
     for (const summary of summaries) {
       if (summary?.status === 'ready') {
         summary.score_state = {
-          status: 'no_standard', score: null, grade: null, veto_hit: null, standard_id: null, reason_code: null,
+          status: 'no_standard',
+          score: null,
+          grade: null,
+          veto_hit: null,
+          standard_id: null,
+          reason_code: null,
         }
       }
     }
     payload.data.score_standards = {
-      final: { status: 'no_standard', standard_id: null, standard_name: null, standard_updated_at: null },
+      final: {
+        status: 'no_standard',
+        standard_id: null,
+        standard_name: null,
+        standard_updated_at: null,
+      },
     }
     mocks.getRaw.mockResolvedValue(payload)
 
@@ -909,18 +953,33 @@ describe('QcRecordResultListView', () => {
       // 排序后：V-data-gap、V-priority、V-not-run、V-technical、V-uncertain
       await openFull(wrapper, 'V-data-gap')
       const drawer = wrapper.getComponent(ResultDrawerStub)
-      expect(drawer.props()).toMatchObject({ hasPrev: false, hasNext: true, currentIndex: 1, totalCount: 3 })
+      expect(drawer.props()).toMatchObject({
+        hasPrev: false,
+        hasNext: true,
+        currentIndex: 1,
+        totalCount: 3,
+      })
 
       drawer.vm.$emit('navigate-next')
       await flushPromises()
       expect(drawer.props('focus')).toMatchObject({ visitId: 'V-priority' })
-      expect(drawer.props()).toMatchObject({ hasPrev: true, hasNext: true, currentIndex: 2, totalCount: 3 })
+      expect(drawer.props()).toMatchObject({
+        hasPrev: true,
+        hasNext: true,
+        currentIndex: 2,
+        totalCount: 3,
+      })
 
       drawer.vm.$emit('navigate-next')
       await flushPromises()
       expect(drawer.props('open')).toBe(true)
       expect(drawer.props('focus')).toMatchObject({ visitId: 'V-uncertain' })
-      expect(drawer.props()).toMatchObject({ hasPrev: true, hasNext: false, currentIndex: 3, totalCount: 3 })
+      expect(drawer.props()).toMatchObject({
+        hasPrev: true,
+        hasNext: false,
+        currentIndex: 3,
+        totalCount: 3,
+      })
       expect(wrapper.findComponent(DocumentWorkbenchStub).exists()).toBe(false)
 
       drawer.vm.$emit('navigate-next')
@@ -1088,9 +1147,11 @@ describe('QcRecordResultListView', () => {
     it('审核角色显式选“全部”写入前端标记 review_scope=all，请求参数不含该键', async () => {
       mocks.hasRole.mockImplementation((role: string) => role === 'qc_manager')
       // 模拟路由：replace 后 query 即为新值。
-      mocks.routerReplace.mockImplementation(async (location: { query: Record<string, string> }) => {
-        routeState.query = location.query
-      })
+      mocks.routerReplace.mockImplementation(
+        async (location: { query: Record<string, string> }) => {
+          routeState.query = location.query
+        },
+      )
       const wrapper = mountView('inpatient')
       await flushPromises()
       expect(workstationParams()).toMatchObject({ review_state: 'pending_review,pending_recheck' })
@@ -1125,7 +1186,9 @@ describe('QcRecordResultListView', () => {
         hospital_status: 'inpatient',
       })
       expect(mocks.routerReplace).not.toHaveBeenCalled()
-      expect(wrapper.get('[data-testid="quick-filter-all"]').attributes('aria-pressed')).toBe('true')
+      expect(wrapper.get('[data-testid="quick-filter-all"]').attributes('aria-pressed')).toBe(
+        'true',
+      )
     })
 
     it('选其他快捷筛选或重置时移除 review_scope 标记', async () => {
