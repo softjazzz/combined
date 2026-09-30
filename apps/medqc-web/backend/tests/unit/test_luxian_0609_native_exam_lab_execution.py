@@ -1852,7 +1852,7 @@ def test_rule_scoped_course_catalog_keeps_010_expansion_out_of_011():
         projection=projection,
     )
     catalog = json.loads(
-        prompt.split("逐规则事件目录=", 1)[1].split("。010目录", 1)[0]
+        prompt.split("逐规则事件目录=", 1)[1].split("。LX0609-06-01-02目录", 1)[0]
     )
 
     assert catalog["LX0609-06-01-02"][0]["course_doc_positions"] == [1, 2]
@@ -1899,7 +1899,7 @@ def test_non_010_keeps_nearest_pre_exam_course_outside_010_48h_window():
         projection=projection,
     )
     catalog = json.loads(
-        prompt.split("逐规则事件目录=", 1)[1].split("。010目录", 1)[0]
+        prompt.split("逐规则事件目录=", 1)[1].split("。LX0609-06-01-02目录", 1)[0]
     )
 
     assert catalog["LX0609-06-01-02"][0]["course_doc_positions"] == []
@@ -4965,7 +4965,8 @@ def test_010_shared_course_different_same_modality_body_does_not_cover_second():
     assert facts[1].semantic_state == "unknown"
 
 
-def test_multi_event_parser_does_not_treat_imaging_result_restatement_as_analysis():
+@pytest.mark.parametrize("additional_text", ["", "该影像证实本次症状来源，故选择手术治疗。"])
+def test_multi_event_parser_does_not_treat_imaging_result_restatement_as_analysis(additional_text):
     projection = build_exam_lab_text_projection(
         rows_by_source={
             "exam_master": (
@@ -4985,7 +4986,7 @@ def test_multi_event_parser_does_not_treat_imaging_result_restatement_as_analysi
             "daily_course_record": (
                 {
                     "record_time": "2026-04-01 13:00:00",
-                    "record_content": "查看胸部CT报告，记录提示右肺结节。",
+                    "record_content": "查看胸部CT报告，记录提示右肺结节。" + additional_text,
                 },
                 {
                     "record_time": "2026-04-02 13:00:00",
@@ -5018,8 +5019,9 @@ def test_multi_event_parser_does_not_treat_imaging_result_restatement_as_analysi
         projection=projection,
     )
 
-    assert [fact.semantic_state for fact in facts] == ["absent", "absent"]
-    assert [fact.course_doc_refs for fact in facts] == [(), ()]
+    assert [fact.semantic_state for fact in facts] == ["present" if additional_text else "unknown", "unknown"]
+    assert bool(facts[0].course_doc_refs) is bool(additional_text)
+    assert facts[1].course_doc_refs == ()
 
 
 def test_multi_event_parser_keeps_explicit_clinical_analysis_of_imaging_result():
@@ -5075,7 +5077,7 @@ def test_multi_event_parser_keeps_explicit_clinical_analysis_of_imaging_result()
         projection=projection,
     )
 
-    assert facts[0].semantic_state == "absent"
+    assert facts[0].semantic_state == "unknown"
     assert facts[0].course_doc_refs == ()
     assert facts[1].semantic_state == "present"
     assert len(facts[1].course_doc_refs) == 1
@@ -5591,6 +5593,9 @@ def test_exam_lab_fact_prompt_contains_per_rule_decision_table_for_single_event(
     )
 
     assert "逐规则决策表" in prompt
+    assert "LX0609-06-01-04=CT/MRI报告后记录结果" in prompt
+    assert "LX0609-06-01-05=检出异常病灶或异常征象的CT/MRI结果分析" in prompt
+    assert "010=" not in prompt and "011=" not in prompt and "012=" not in prompt
     assert "unknown 不是默认答案" in prompt
     assert "最小有效引用示例" in prompt
     assert "COURSE_DOC_POSITION=[1]" in prompt

@@ -253,6 +253,11 @@ _RULE_MISSING_ITEM_LABELS = {
     "LX0609-04-01-05": ("术前讨论结构字段与正文/可核验内容",),
 }
 _RULE_DATA_GAP_MESSAGES = {
+    "LX0609-08-01-05": (
+        "暂无法完成出院诊疗经过与主要住院事件的内容核对",
+        "出院记录、关联诊断或住院过程材料尚不足以形成可靠的内容核对事实。",
+        "请先确认相关材料完整，并复核无法确定的内容对应关系；不要据此补写未经确认的诊疗事项。",
+    ),
     "LX0609-06-01-01": (
         "暂无法完整核对CT/MRI医嘱与病程的一致性",
         "当前存在检查执行、医嘱关联、病程正文或同步覆盖缺口，未找到材料不等同于医生漏记。",
@@ -577,6 +582,11 @@ _RULE_DATA_GAP_REASON_MESSAGES = {
         "已读取抢救记录和抢救结束时间，但无法计算抢救结束至记录完成的间隔。",
         "请核对并补充抢救记录的权威完成时间后重新评估。",
     ),
+    ("LX0609-04-01-04", "association_failed"): (
+        "已读取术前小结，但尚无法确定其对应的具体手术，暂无法完成核对",
+        "当前问题是文书与手术事件的对应关系未确定，不代表术前小结正文缺失。",
+        "请核对拟行术式、拟行时间与实际手术的对应关系后重新评估。",
+    ),
     ("LX0609-04-01-01", "association_failed"): (
         "已确认本次存在已实施手术且已读取术前小结，但现有资料无法确认术前小结"
         "对应哪一台手术，暂无法逐台完成核对",
@@ -710,6 +720,11 @@ def _evaluation_window_gap_message(
         )
     return None
 _RULE_NON_COMPLIANT_MESSAGES = {
+    "LX0609-08-01-05": (
+        "出院记录诊疗经过不全面或不详细",
+        "已根据可核对材料确认内容缺项；各阶段是否完成及其余不确定内容见判定明细。",
+        "请依据实际诊疗事实补充缺失或过于笼统的内容，说明主要措施、病情变化及治疗效果；不得补造未实施的诊疗。",
+    ),
     "LX0609-06-01-01": (
         "CT/MRI医嘱与同一检查的病程描述存在明确矛盾",
         "已核对原始检查标识及病程记载，相关材料指向同一次检查。",
@@ -893,6 +908,11 @@ _RULE_NON_COMPLIANT_MESSAGES = {
     ),
 }
 _RULE_NOT_APPLICABLE_MESSAGES = {
+    ("LX0609-08-01-05", "eligibility_not_met"): (
+        "尚无出院记录，不启动诊疗经过内容核对",
+        "本项检查已形成出院记录的内容，不替代出院记录存在性及时效性检查。",
+        "出院记录形成后可重新执行内容核对。",
+    ),
     ("LX0609-04-01-04", "eligibility_not_met"): (
         "未发现可用于术前小结内容核对的实质正文",
         "术前小结存在性由 LX0609-04-01-01 单独核对，本项不重复作出缺失判断。",
@@ -1336,6 +1356,7 @@ _RULE_UNCERTAIN_MESSAGES = {
 # 合规结果也必须回答“为什么合规”。这里仅使用规则目录身份和 reducer 已确认的
 # 终态生成受控短句，不读取病历原文，也不在展示层重新判断规则。
 _RULE_COMPLIANT_FINDINGS = {
+    "LX0609-08-01-05": "已核对出院诊疗经过的具体措施、病情演变及疗效转归，未发现所核查重要事件遗漏。",
     "LX0609-01-01-01": "已确认入院记录在入院后 24 小时内完成。",
     "LX0609-01-02-01": "已确认首次病程记录在入院后 8 小时内完成。",
     "LX0609-04-02-01": "已确认手术记录在手术后 24 小时内完成。",
@@ -1703,6 +1724,32 @@ def customer_finding_from_controlled_facts(
     *, rule_id: str, facts: Mapping[str, Any] | None
 ) -> str:
     """将已白名单化的受控事实投影为客户可核对短句，不接受原始病历正文。"""
+
+    if rule_id == "LX0609-08-01-05" and isinstance(facts, Mapping):
+        if facts.get("verification_kind") == "discharge_course_pending":
+            if facts.get("state") == "not_applicable":
+                return "尚无出院记录，本次未启动诊疗经过内容核对。"
+            return "当前出院诊疗经过或对照材料不足，尚无法完成内容核对。"
+        if facts.get("verification_kind") == "discharge_course_content":
+            labels = {"treatment": "具体诊疗措施", "evolution": "病情演变", "outcome": "疗效及转归"}
+            missing = [f"第{c['document_index']}份出院记录的{labels[c['field']]}"
+                       for c in facts["checks"] if c["state"] == "missing"]
+            omitted = sum(m["state"] == "missing" for e in facts["events"] for m in e["matches"])
+            uncertain = any(c["state"] == "uncertain" for c in facts["checks"]) or any(
+                m["state"] == "uncertain" for e in facts["events"] for m in e["matches"])
+            parts = []
+            if missing:
+                parts.append("未明确记录：" + "、".join(missing))
+            if omitted:
+                parts.append(f"有{omitted}项重要事件与出院记录核对时未找到对应记载")
+            if uncertain:
+                parts.append("另有内容关联尚不能可靠确认，需人工复核")
+            review = facts.get("review", {})
+            if any(s == "failed" for s in review.get("stages", {}).values()):
+                parts.append("部分抽取或概述核对未完成，已确认的问题保留，其余内容尚不能判定")
+            if review.get("unresolved_events"):
+                parts.append("另有事件的重要性依据尚不能确认，未作为确定缺项")
+            return "；".join(parts) + "。" if parts else "已逐份核对具体诊疗措施、病情演变、疗效及转归，并完成重要事件对照。"
 
     if rule_id not in {
         "LX0609-01-01-01",
@@ -3478,6 +3525,40 @@ _RESCUE_CONTENT_FIELD_LABELS = {
 }
 
 
+def preop_summary_customer_message(
+    *, rule_id: str, status: str, facts: Mapping[str, Any] | None,
+) -> tuple[str, str, str] | None:
+    """只解释执行器确认缺项，不从单份文书缺项重新推导同台手术结论。"""
+    if rule_id != "LX0609-04-01-04" or status != "non_compliant":
+        return None
+    labels = {
+        "brief_condition": "简要病情", "preop_diagnosis": "术前诊断",
+        "surgical_indication": "手术指征", "planned_procedure": "拟施手术名称和方式",
+        "planned_anesthesia": "拟施麻醉方式", "precautions": "注意事项",
+        "surgeon_preop_visit": "术者术前查看患者情况",
+    }
+    missing = facts.get("missing_fields") if isinstance(facts, Mapping) else None
+    if (
+        not isinstance(facts, Mapping)
+        or facts.get("verification_kind") != "preop_content_incomplete"
+        or not isinstance(missing, list) or not missing
+        or any(not isinstance(field, str) or field not in labels for field in missing)
+    ):
+        return (
+            "术前小结被判为内容不完整，但本次结果未提供可核验的具体缺项。",
+            "现有结果不足以说明缺少哪项内容，请核对原文或重新质控。",
+            "请先确认具体缺项，不要仅凭此概括结论补写病历。",
+        )
+    text = "、".join(label for field, label in labels.items() if field in missing)
+    return (
+        f"术前小结内容不完整，确认缺少：{text}。",
+        "本次核查在对应术前小结及已确认同台手术的关联材料中未找到上述内容。"
+        "缺项为本次核查范围内的汇总，不表示每份相关文书均缺少全部项目。",
+        f"请核对对应手术的术前小结及相关原文，依据实际情况补充：{text}。"
+        "已记录的项目无需重复补写，不得补造未发生的诊疗事实。",
+    )
+
+
 def handbook_customer_message(
     *,
     rule_id: str,
@@ -3755,7 +3836,10 @@ def render_luxian_0609_customer_result(
             evidence = "主诉字数已核对，但诊断指向的自动判断未形成可靠结论。"
             suggestion = "请人工核对主诉提供的诊断线索是否能够支持入院第一诊断。"
 
-    handbook_message = handbook_customer_message(
+    handbook_message = preop_summary_customer_message(
+        rule_id=decision.rule_id, status=decision.final_state.value,
+        facts=safe_customer_display_facts,
+    ) or handbook_customer_message(
         rule_id=decision.rule_id,
         status=decision.final_state.value,
         facts=safe_customer_display_facts,

@@ -202,9 +202,14 @@ def _prompt(documents: Sequence[tuple[str, str, str]], selected: Sequence[str]) 
         f"[document_id={doc_id}; source_type={source}]\n{text}"
         for doc_id, source, text in documents
     )
-    return f"""你是病历质控原子事实抽取器。只从每份给定术前文书的受控文本或结构字段投影中摘取字段值；没有明确的连续输入片段时填 null。禁止总结、推断、跨文书补全，不得输出状态、建议或未请求字段。
+    return f"""你是病历质控原子事实抽取器。只从每份给定术前文书的受控文本或结构字段投影中摘取字段值；术前小结没有明确的连续输入片段时填 null，术前讨论按下述三态合同返回。禁止总结、推断、跨文书补全，不得输出状态、建议或未请求字段。
 
 按 source_type 使用字段全集：{schemas}
+术前讨论presurg_discussion的每项返回对象：{{"state":"present|missing|unknown","quote":"连续原文或null","reviewed_all_sections":true或false}}。
+present必须有对应原文；missing仅在检查该文书全部输入（正文、主持人小结、讨论建议及结构字段）后仍无对应内容时使用，quote为null且reviewed_all_sections为true。未抽到、含义不明或无法完整核查用unknown，绝不能以未抽到代替确认缺失。一个原文片段可以支持多个不同检查项，不因位于主持人小结就只能用于chair_summary。
+九项定义：preop_preparation=已完成或拟实施的术前检查、准备及禁忌评估；surgical_indication=疾病、症状、保守治疗效果等手术理由；surgical_plan=拟行术式和方案；risk_and_prevention=可能风险及对应防范措施；participants_with_titles=参加者姓名及职称；specific_opinions=参加者具体讨论意见；chair_summary=主持人总结意见；discussion_date=讨论日期；recorder_signature=记录者签名。按内容识别，不要求固定栏目标题。
+术前小结presurg_summary仍返回连续原文或null，不使用上述对象。
+specific_opinions是参加讨论者的具体意见，chair_summary是主持人总结，两者分别抽取；仅有参加人员名单、拟行术式或主持人同意手术，不能代替具体讨论意见。“略”、空白和仅有栏目标题均填null，不算实质内容。
 只输出 JSON：{{\"documents\":[{{\"document_id\":\"原document_id\",\"source_type\":\"presurg_summary或presurg_discussion\",\"items\":{{\"字段\":\"输入中的连续片段或null\"}}}}]}}。
 
 文书：
@@ -240,6 +245,18 @@ def _validated_items(
         ):
             return None
         for field, quote in facts.items():
+            if source == "presurg_discussion" and isinstance(quote, Mapping):
+                if set(quote) != {"state", "quote", "reviewed_all_sections"}:
+                    return None
+                state, excerpt = quote["state"], quote["quote"]
+                if state not in {"present", "missing", "unknown"} or type(quote["reviewed_all_sections"]) is not bool:
+                    return None
+                if state == "present":
+                    if not isinstance(excerpt, str) or not clean_text(excerpt) or clean_text(excerpt) not in original:
+                        return None
+                elif excerpt is not None or (state == "missing" and not quote["reviewed_all_sections"]):
+                    return None
+                continue
             if quote is not None and (
                 not isinstance(quote, str)
                 or not clean_text(quote)
@@ -286,7 +303,10 @@ def _missing_fields_for_document(
             and field == "recorder_signature"
             and _has_structured_recorder_signature(row)
         )
-        and values.get(field) is None
+        and (
+            values.get(field) is None if rule_id == "LX0609-04-01-04"
+            else isinstance(values.get(field), Mapping) and values[field].get("state") == "missing"
+        )
     }
 
 
@@ -309,6 +329,12 @@ def _association_state_for_rule(
             # 079 只核对每份术前讨论记录自身的九项内容，不跨文书补字段；
             # 文书归属哪台手术不改变这些内容是否完整。
             association_state, event_index = "not_required", None
+            if any(
+                (value is None or isinstance(value, Mapping) and value.get("state") == "unknown")
+                and not (field == "recorder_signature" and _has_structured_recorder_signature(row))
+                for field, value in values.items()
+            ):
+                ambiguous_values.append(values)
             grouped.setdefault(document_index, []).append((row, values))
         else:
             association = associate_preop_document_to_surgery_event(
@@ -324,8 +350,9 @@ def _association_state_for_rule(
             if association.state == "matched" and association.event_index is not None:
                 grouped.setdefault(association.event_index, []).append((row, values))
             elif association.state == "not_required":
-                # 没有已实施手术事件时保持既有内容核对语义，不凭此新增错误结论。
-                grouped.setdefault(0, []).append((row, values))
+                # 尚无实际手术事件时逐份检查；不能把同住院的不同拟行手术
+                # 合并成事件0，让一份小结替另一份补齐缺项。
+                grouped.setdefault(-document_index, []).append((row, values))
             else:
                 ambiguous_values.append(values)
         display_documents.append(
@@ -545,7 +572,9 @@ async def evaluate_preop_content_rules(
             events=events or (),
         )
         if has_ambiguous and not missing:
-            status, reason = "data_gap", "association_failed"
+            status, reason = "data_gap", (
+                "source_readiness_unproven" if rule == "LX0609-04-01-05" else "association_failed"
+            )
         elif missing:
             status, reason = "non_compliant", "requirement_violated"
         else:

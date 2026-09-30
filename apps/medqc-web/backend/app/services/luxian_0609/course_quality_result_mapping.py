@@ -582,6 +582,15 @@ def validate_published_course_quality_facts(
 ) -> tuple[bool, dict[str, Any] | None]:
     """返回合同是否有效及原值；仅明确的无触发终态可缺少独立 facts。"""
     normalized = str(rule_id or "").strip().upper()
+    # 007 执行器在观察窗尚未成熟时直接短路，尚无病程区间事实可发布。
+    # 仅接受这一明确终态；其他状态和原因仍执行原事实合同。
+    if (
+        normalized == "LX0609-02-01-03"
+        and (raw is None or raw == {})
+        and status == "not_applicable"
+        and reason_code == "evaluation_window_not_mature"
+    ):
+        return True, None
     if normalized == "LX0609-01-01-02" and raw is None:
         return True, None
     if (

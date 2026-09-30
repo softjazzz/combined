@@ -1,0 +1,267 @@
+{
+  "schema_version": 1,
+  "release_id": "20260930-customer-test",
+  "base_commit": "31ffdf606",
+  "scope": "规则验收台及当前工作区CT/术前文书修复，出院诊疗经过仅显式验收；不含本地CDM工具、临时材料或生成样式",
+  "entries": [
+    {
+      "path": "apps/medqc-web/backend/app/data/luxian_0609_phase1_rule_contracts_extension_v1.json",
+      "category": "A",
+      "owner": "MedQC 打包前验收",
+      "release_required": true,
+      "reason": "固定当前已授权功能及其回归测试"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/data/luxian_0609_phase1_rules_extension_v1.json",
+      "category": "A",
+      "owner": "MedQC 打包前验收",
+      "release_required": true,
+      "reason": "固定当前已授权功能及其回归测试"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/data/luxian_0609_rule_master_v1.json",
+      "category": "A",
+      "owner": "MedQC 打包前验收",
+      "release_required": true,
+      "reason": "固定当前已授权功能及其回归测试"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/qc_sichuan.py",
+      "category": "A",
+      "owner": "MedQC 打包前验收",
+      "release_required": true,
+      "reason": "固定当前已授权功能及其回归测试"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/course_quality_result_mapping.py",
+      "category": "A",
+      "owner": "MedQC 打包前验收",
+      "release_required": true,
+      "reason": "固定当前已授权功能及其回归测试"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/customer_remediation.py",
+      "category": "A",
+      "owner": "MedQC 打包前验收",
+      "release_required": true,
+      "reason": "固定当前已授权功能及其回归测试"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/customer_renderer.py",
+      "category": "A",
+      "owner": "MedQC 打包前验收",
+      "release_required": true,
+      "reason": "固定当前已授权功能及其回归测试"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/customer_rule_package.py",
+      "category": "A",
+      "owner": "MedQC 打包前验收",
+      "release_required": true,
+      "reason": "固定当前已授权功能及其回归测试"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/discharge_result_mapping.py",
+      "category": "A",
+      "owner": "MedQC 打包前验收",
+      "release_required": true,
+      "reason": "固定当前已授权功能及其回归测试"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/exam_lab_fact_extraction.py",
+      "category": "A",
+      "owner": "MedQC 打包前验收",
+      "release_required": true,
+      "reason": "固定当前已授权功能及其回归测试"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/executor_registry.py",
+      "category": "A",
+      "owner": "MedQC 打包前验收",
+      "release_required": true,
+      "reason": "固定当前已授权功能及其回归测试"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/discharge_course_content.py",
+      "category": "A",
+      "owner": "MedQC 打包前验收",
+      "release_required": true,
+      "reason": "固定当前已授权功能及其回归测试"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/discharge_course_stages.py",
+      "category": "A",
+      "owner": "MedQC 打包前验收",
+      "release_required": true,
+      "reason": "固定当前已授权功能及其回归测试"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_extended_document_execution.py",
+      "category": "A",
+      "owner": "MedQC 打包前验收",
+      "release_required": true,
+      "reason": "固定当前已授权功能及其回归测试"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_preop_content_execution.py",
+      "category": "A",
+      "owner": "MedQC 打包前验收",
+      "release_required": true,
+      "reason": "固定当前已授权功能及其回归测试"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/source_evidence_reader.py",
+      "category": "A",
+      "owner": "MedQC 打包前验收",
+      "release_required": true,
+      "reason": "固定当前已授权功能及其回归测试"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/source_registry.py",
+      "category": "A",
+      "owner": "MedQC 打包前验收",
+      "release_required": true,
+      "reason": "固定当前已授权功能及其回归测试"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609_rule_catalog.py",
+      "category": "A",
+      "owner": "MedQC 打包前验收",
+      "release_required": true,
+      "reason": "固定当前已授权功能及其回归测试"
+    },
+    {
+      "path": "apps/medqc-web/backend/requirements.txt",
+      "category": "A",
+      "owner": "MedQC 打包前验收",
+      "release_required": true,
+      "reason": "固定当前已授权功能及其回归测试"
+    },
+    {
+      "path": "apps/medqc-web/backend/tests/fixtures/luxian_0609/discharge_scope_v1.json",
+      "category": "A",
+      "owner": "MedQC 打包前验收",
+      "release_required": true,
+      "reason": "固定当前已授权功能及其回归测试"
+    },
+    {
+      "path": "apps/medqc-web/backend/tests/integration/test_luxian_0609_discharge_course_chain.py",
+      "category": "A",
+      "owner": "MedQC 打包前验收",
+      "release_required": true,
+      "reason": "固定当前已授权功能及其回归测试"
+    },
+    {
+      "path": "apps/medqc-web/backend/tests/integration/test_luxian_0609_release_scope.py",
+      "category": "A",
+      "owner": "MedQC 打包前验收",
+      "release_required": true,
+      "reason": "固定当前已授权功能及其回归测试"
+    },
+    {
+      "path": "apps/medqc-web/backend/tests/unit/test_course_007_immature_saved_boundary.py",
+      "category": "A",
+      "owner": "MedQC 打包前验收",
+      "release_required": true,
+      "reason": "固定当前已授权功能及其回归测试"
+    },
+    {
+      "path": "apps/medqc-web/backend/tests/unit/test_luxian_0609_attempt_boundary_audit.py",
+      "category": "A",
+      "owner": "MedQC 打包前验收",
+      "release_required": true,
+      "reason": "固定当前已授权功能及其回归测试"
+    },
+    {
+      "path": "apps/medqc-web/backend/tests/unit/test_luxian_0609_customer_renderer.py",
+      "category": "A",
+      "owner": "MedQC 打包前验收",
+      "release_required": true,
+      "reason": "固定当前已授权功能及其回归测试"
+    },
+    {
+      "path": "apps/medqc-web/backend/tests/unit/test_luxian_0609_discharge_course_content.py",
+      "category": "A",
+      "owner": "MedQC 打包前验收",
+      "release_required": true,
+      "reason": "固定当前已授权功能及其回归测试"
+    },
+    {
+      "path": "apps/medqc-web/backend/tests/unit/test_luxian_0609_formal_extension_chain.py",
+      "category": "A",
+      "owner": "MedQC 打包前验收",
+      "release_required": true,
+      "reason": "固定当前已授权功能及其回归测试"
+    },
+    {
+      "path": "apps/medqc-web/backend/tests/unit/test_luxian_0609_native_exam_lab_execution.py",
+      "category": "A",
+      "owner": "MedQC 打包前验收",
+      "release_required": true,
+      "reason": "固定当前已授权功能及其回归测试"
+    },
+    {
+      "path": "apps/medqc-web/backend/tests/unit/test_luxian_0609_native_preop_content_execution.py",
+      "category": "A",
+      "owner": "MedQC 打包前验收",
+      "release_required": true,
+      "reason": "固定当前已授权功能及其回归测试"
+    },
+    {
+      "path": "apps/medqc-web/backend/tests/unit/test_luxian_0609_rule_catalog.py",
+      "category": "A",
+      "owner": "MedQC 打包前验收",
+      "release_required": true,
+      "reason": "固定当前已授权功能及其回归测试"
+    },
+    {
+      "path": "apps/medqc-web/backend/tests/unit/test_qc_sichuan_result_review.py",
+      "category": "A",
+      "owner": "MedQC 打包前验收",
+      "release_required": true,
+      "reason": "固定当前已授权功能及其回归测试"
+    },
+    {
+      "path": "apps/medqc-web/scripts/customer-db-preflight.ps1",
+      "category": "B",
+      "owner": "MedQC 打包前验收",
+      "release_required": true,
+      "reason": "固定当前已授权功能及其回归测试"
+    },
+    {
+      "path": "apps/medqc-web/src/views/workstation-v4/CustomerSampleValidationView.css",
+      "category": "B",
+      "owner": "MedQC 打包前验收",
+      "release_required": true,
+      "reason": "固定当前已授权功能及其回归测试"
+    },
+    {
+      "path": "apps/medqc-web/src/views/workstation-v4/WorkstationRulesView.vue",
+      "category": "B",
+      "owner": "MedQC 打包前验收",
+      "release_required": true,
+      "reason": "固定当前已授权功能及其回归测试"
+    },
+    {
+      "path": "apps/medqc-web/src/views/workstation-v4/semantic-rules/components/CustomerQcResultDetailCard.vue",
+      "category": "B",
+      "owner": "MedQC 打包前验收",
+      "release_required": true,
+      "reason": "固定当前已授权功能及其回归测试"
+    },
+    {
+      "path": "apps/medqc-web/src/views/workstation-v4/styles/customer-sample-refined.css",
+      "category": "B",
+      "owner": "MedQC 打包前验收",
+      "release_required": true,
+      "reason": "固定当前已授权功能及其回归测试"
+    },
+    {
+      "path": "apps/medqc-web/tests/unit/views/workstation-v4/semantic-rules/CustomerQcResultDetailCard.spec.ts",
+      "category": "B",
+      "owner": "MedQC 打包前验收",
+      "release_required": true,
+      "reason": "固定当前已授权功能及其回归测试"
+    }
+  ]
+}

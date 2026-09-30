@@ -643,3 +643,57 @@ def test_debug_snapshot_preserves_luxian_0916_semantic_failure_coordinates() -> 
         "semantic_extraction_invalid_count": 1,
         "semantic_extraction_failures": failures,
     }
+
+
+def test_list_isolates_legacy_result_but_detail_still_rejects():
+    from copy import deepcopy
+    job = {
+        "id": "legacy-list-row", "status": "completed",
+        "rule_set_key": "luxian_0609_qc_v1", "total_records": 1,
+        "summary": {"rule_results": [{"rule_id": "LX0609-010", "items": [
+            {"rule_id": "LX0609-010", "customer_conclusion": "PRIVATE_LEGACY_TEXT"}
+        ]}]},
+        "rule_results": [{"rule_id": "LX0609-010"}],
+    }
+    original = deepcopy(job)
+    result = qc_sichuan._workspace_batch_list_item(job)
+    assert result["id"] == job["id"]
+    assert result["status"] == "completed"
+    assert result["items"] == []
+    assert "无法安全展示" in result["error_message"]
+    assert "PRIVATE_LEGACY_TEXT" not in str(result)
+    assert "issue_records" not in result
+    assert "result_count" not in result["summary"]
+    assert job == original
+    with pytest.raises(HTTPException) as error:
+        qc_sichuan._workspace_batch_response_item(job)
+    assert error.value.status_code == 409
+
+
+def test_list_does_not_swallow_unrelated_errors(monkeypatch):
+    def fail(*args, **kwargs):
+        raise ValueError("unexpected")
+    monkeypatch.setattr(qc_sichuan, "_workspace_batch_response_item", fail)
+    with pytest.raises(ValueError, match="unexpected"):
+        qc_sichuan._workspace_batch_list_item({})
+
+
+@pytest.mark.asyncio
+async def test_list_keeps_other_rows_when_one_historical_result_is_invalid(monkeypatch):
+    jobs = [
+        {"id": "good", "rule_set_key": "luxian_0609_qc_v1", "status": "queued"},
+        {"id": "old", "rule_set_key": "luxian_0609_qc_v1", "status": "completed",
+         "summary": {"rule_results": [{"rule_id": "LX0609-010"}]}},
+    ]
+    monkeypatch.setattr(qc_sichuan, "_is_workspace_batch_job", lambda job: True)
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: SimpleNamespace(
+        list_batch_jobs=lambda **kwargs: SimpleNamespace(items=jobs, total=2, page=1, page_size=5)
+    ))
+    result = await qc_sichuan.list_workspace_batch_jobs(
+        _request(), status=None, scope=None, q=None, executor_type=None, cache_hit=None,
+        created_start_date=None, created_end_date=None, record_id=None,
+        page=1, page_size=5, current_user={"id": "u-1"},
+    )
+    assert result["data"]["total"] == 2
+    assert [row["id"] for row in result["data"]["items"]] == ["good", "old"]
+    assert "error_message" in result["data"]["items"][1]

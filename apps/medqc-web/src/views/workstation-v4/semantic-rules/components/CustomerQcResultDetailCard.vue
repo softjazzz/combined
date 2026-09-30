@@ -30,7 +30,6 @@ const visibleRows = computed(() =>
     { key: 'requirement', label: '规则要求', value: props.model.requirement },
     { key: 'actual-value', label: '实际值', value: props.model.actualValue },
     { key: 'source', label: '证据来源', value: props.model.evidenceSource },
-    { key: 'suggestion', label: '处理建议', value: props.model.suggestion },
   ].filter((row) => Boolean(row.value)),
 )
 </script>

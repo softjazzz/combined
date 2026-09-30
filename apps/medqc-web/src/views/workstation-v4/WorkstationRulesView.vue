@@ -32,14 +32,14 @@
         <CodingRulesTab v-if="activeTab === 'coding'" />
         <FrontpageRulesTab v-else-if="activeTab === 'frontpage'" />
         <WorkstationSemanticRulesView v-else-if="activeTab === 'semantic'" />
-        <SettlementRulesTab v-else />
+        <SettlementRulesTab v-else-if="activeTab === 'settlement'" />
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import CodingRulesTab from '@/components/rules/CodingRulesTab.vue'
 import FrontpageRulesTab from '@/components/rules/FrontpageRulesTab.vue'
@@ -52,7 +52,7 @@ const router = useRouter()
 type TabKey = 'coding' | 'frontpage' | 'settlement' | 'semantic'
 const SUPPORTED_TABS: TabKey[] = ['coding', 'frontpage', 'settlement', 'semantic']
 
-const activeTab = ref<TabKey>('coding')
+const activeTab = ref<TabKey>()
 
 const tabs: Array<{ key: TabKey; label: string }> = [
   { key: 'coding', label: '编码规则' },
@@ -65,7 +65,7 @@ const resolveTab = (tab: string | undefined): TabKey => {
   if (tab && SUPPORTED_TABS.includes(tab as TabKey)) {
     return tab as TabKey
   }
-  return 'coding'
+  return 'semantic'
 }
 
 // 导航合并为单一入口后，语义规则 Tab 沿用原侧栏入口的默认规则集
@@ -80,15 +80,21 @@ const selectTab = (tab: TabKey) => {
   void router.replace({ query: query as typeof route.query })
 }
 
-onMounted(() => {
-  activeTab.value = resolveTab(route.query.tab as string | undefined)
-})
-
+// 默认入口先补齐0609查询参数，再挂载规则列表，避免先请求其他规则集。
 watch(
-  () => route.query.tab,
-  (newTab) => {
-    activeTab.value = resolveTab(newTab as string | undefined)
+  () => [route.query.tab, route.query.ruleSetKey],
+  () => {
+    const tab = resolveTab(route.query.tab as string | undefined)
+    if (tab === 'semantic' && route.query.ruleSetKey == null) {
+      activeTab.value = undefined
+      void router.replace({
+        query: { ...route.query, tab, ruleSetKey: DEFAULT_SEMANTIC_RULE_SET_KEY },
+      })
+      return
+    }
+    activeTab.value = tab
   },
+  { immediate: true },
 )
 </script>
 

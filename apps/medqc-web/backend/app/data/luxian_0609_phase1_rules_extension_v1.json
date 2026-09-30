@@ -789,5 +789,39 @@
       "not_applicable",
       "data_gap"
     ]
+  },
+  {
+    "rule_id": "LX0609-08-01-05",
+    "rule_code": "LX0609-08-01-05",
+    "name": "出院记录：诊疗经过不全面或不详细",
+    "description": "逐份核对诊疗措施、病情演变、疗效与转归，并对照同次住院病程及手术记录核对重要事件遗漏；来源缺口不判临床缺陷。",
+    "positive_example": "诊疗措施、病情演变和治疗效果具体，重要手术及病情变化均有概述。",
+    "negative_example": "仅写对症治疗好转出院，未描述具体措施；或遗漏本次实际手术。",
+    "category": "出院记录",
+    "applicable_documents": [
+      "discharge_record"
+    ],
+    "applicable_document_labels": [
+      "出院记录"
+    ],
+    "data_dependencies": [
+      "出院记录诊疗经过",
+      "本次住院病程",
+      "实际手术记录"
+    ],
+    "dependency_type": "受控原子事实与跨文书核对",
+    "executor_type": "program_then_optional_llm",
+    "rule_version": "2026-09-28",
+    "prompt_version": "lx0609-discharge-course-v1",
+    "mapped_rule_ids": [
+      "LX0609-08-01-05"
+    ],
+    "primary_execution_rule_id": "LX0609-08-01-05",
+    "allowed_result_statuses": [
+      "compliant",
+      "non_compliant",
+      "not_applicable",
+      "data_gap"
+    ]
   }
 ]

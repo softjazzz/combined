@@ -1,0 +1,618 @@
+{
+  "catalog_count": 86,
+  "selectable_count": 80,
+  "default_delivery_count": 75,
+  "default_executable_count": 65,
+  "paused_count": 10,
+  "acceptance_only": [
+    "LX0609-06-01-03",
+    "LX0609-06-03-02",
+    "LX0609-06-02-01",
+    "LX0609-09-01-02",
+    "LX0609-08-01-05"
+  ],
+  "rules": [
+    {
+      "rule_id": "LX0609-01-01-01",
+      "name": "入院后24小时内是否完成",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-01-02-01",
+      "name": "入院后8小时内无首次病程记录",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-04-02-01",
+      "name": "手术后24小时内是否完成",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-09-01-01",
+      "name": "抢救结束后6小时内是否完成",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-02-01-01",
+      "name": "入院后48小时内无主治医师首次查房记录",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-02-01-02",
+      "name": "入院后72小时内无最高级别（副主任医师或主任医师）首次查房记录",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-02-01-03",
+      "name": "病情稳定（未下病危、病重医嘱）患者3天内无查房病程记录",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-02-01-04",
+      "name": "病重（下了病重医嘱）患者2天内无查房病程记录",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-02-01-05",
+      "name": "病危（下了病危医嘱）患者未每天记录查房病程，或病情变化时未记录病程",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-06-01-02",
+      "name": "CT/MRI检查前无说明检查原因的病程记录",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-06-01-04",
+      "name": "CT/MRI影像报告结果出具后24小时内未在病程中记录",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-06-01-05",
+      "name": "CT/MRI影像报告结果出具后24小时内未对阳性结果进行分析",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-06-02-03",
+      "name": "病理检查结果在手术记录、病程中未记录",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-06-03-03",
+      "name": "细菌培养结果在报告出具后24小时内未在病程中记录",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-06-03-04",
+      "name": "细菌培养结果有阳性菌，报告出具后24小时内未在病程记录中分析",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-12-01-01",
+      "name": "首次病程记录病例特点与入院记录、现病史完全相同",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-12-01-02",
+      "name": "2次以上病程记录完全相同（相似度大于70%）",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-01-01-02",
+      "name": "主诉只写症状不写诊断、超过20字，或不能导出第一诊断",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-06-02-02",
+      "name": "取材情况未在病程记录或手术记录中记录",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-03-01-01",
+      "name": "有会诊记录单无请会诊执行记录",
+      "release_scope": "default",
+      "phase_status": "pending_definition",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-03-01-02",
+      "name": "会诊申请单会诊目的不明确",
+      "release_scope": "default",
+      "phase_status": "pending_definition",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-03-01-03",
+      "name": "会诊记录单会诊意见不明确（如出现必要时行检查或药物治疗）",
+      "release_scope": "default",
+      "phase_status": "pending_definition",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-03-01-04",
+      "name": "会诊建议未找到执行证据，或执行记录未明确具体执行情况",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-04-02-03",
+      "name": "恶性肿瘤手术记录未书写淋巴结清扫情况",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-04-02-04",
+      "name": "未记录植入物名称、种类、规格或型号、材质及数量等信息",
+      "release_scope": "default",
+      "phase_status": "pending_definition",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-05-02-01",
+      "name": "病程中化学治疗记录的药物名称、剂量、使用方法、时间与医嘱不一致",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-08-01-04",
+      "name": "恶性肿瘤患者出院记录中无出院后肿瘤相关治疗计划",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-05-01-01",
+      "name": "I类、II类切口手术预防使用抗菌药物超过24小时，特殊情况超过48小时",
+      "release_scope": "default",
+      "phase_status": "pending_definition",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-04-01-01",
+      "name": "有手术医嘱但无术前小结",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-04-02-02",
+      "name": "有手术医嘱但无手术记录",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-04-02-05",
+      "name": "手术记录非手术者签字（核对术者及签名医生）",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-04-03-01",
+      "name": "有手术记录但无手术安全核查表",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-11-01-01",
+      "name": "有手术记录但无手术知情同意书",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": false
+    },
+    {
+      "rule_id": "LX0609-11-02-01",
+      "name": "有麻醉记录但无麻醉知情同意书",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": false
+    },
+    {
+      "rule_id": "LX0609-11-02-02",
+      "name": "填写不规范（无患者或医生签名、签名时间未精确到分钟）",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": false
+    },
+    {
+      "rule_id": "LX0609-04-04-01",
+      "name": "无麻醉术前或麻醉术后访视记录（局麻除外）",
+      "release_scope": "default",
+      "phase_status": "pending_definition",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-04-04-02",
+      "name": "麻醉术前和术后访视记录填写不规范（局麻除外）",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-04-04-03",
+      "name": "无麻醉记录单（局麻除外）",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-04-01-02",
+      "name": "除紧急抢救生命的急诊手术外，住院患者手术无术前讨论或术者未参加",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-04-01-03",
+      "name": "四级手术术前讨论未开展多学科讨论",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-11-03-01",
+      "name": "无输血知情同意书",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": false
+    },
+    {
+      "rule_id": "LX0609-11-03-02",
+      "name": "输血知情同意书填写或签名不完整",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": false
+    },
+    {
+      "rule_id": "LX0609-07-01-01",
+      "name": "输血前常规检查不完整",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-07-01-02",
+      "name": "无输血前评估记录或记录不完整",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-07-02-01",
+      "name": "无输血病程记录",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-07-02-02",
+      "name": "输血病程记录不完整或不规范",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-07-03-01",
+      "name": "无输血后评价",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-07-04-01",
+      "name": "有术中输血，但手术记录、麻醉记录、术后首次病程记录中输血相关内容不一致",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-07-04-02",
+      "name": "输血医嘱与收费不一致",
+      "release_scope": "default",
+      "phase_status": "pending_definition",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-03-02-01",
+      "name": "诊断不明确（入院后7天）未书写疑难病历讨论",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-09-02-01",
+      "name": "患者死亡后7天未书写死亡病历讨论记录",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-06-04-01",
+      "name": "6小时内未书写危急值处置记录",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-06-04-02",
+      "name": "检验检查危急值报告后无危急值处置记录",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-05-01-02",
+      "name": "使用、停用、更换、联合或超说明书范围使用时，无用药理由或理由不充分",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-05-01-03",
+      "name": "48至72小时内无效果评价",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-05-01-04",
+      "name": "接受两个或两个以上重点抗菌药物，使用前未完善病原学检查",
+      "release_scope": "default",
+      "phase_status": "pending_definition",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-05-01-05",
+      "name": "经验用药时未说明理由，无样可采时未注明原因",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-05-01-06",
+      "name": "使用特殊级抗菌药物缺少专家查房或会诊记录",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-05-03-01",
+      "name": "缺诊疗医嘱，或诊疗医嘱与病程记录不一致",
+      "release_scope": "default",
+      "phase_status": "pending_definition",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-04-02-06",
+      "name": "死亡患者无死亡记录",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-08-01-01",
+      "name": "出院记录未在出院后24小时内完成",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-08-01-02",
+      "name": "出院带药不详细（无药品名称、剂量、途径、时间，或药名、剂量错误）",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-08-01-03",
+      "name": "出院诊断或死亡诊断错填、漏填、顺序错误",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-04-05-01",
+      "name": "术后三天无连续病程记录（包含术后术者查房记录）",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-04-05-02",
+      "name": "无术后三天内上级医师查看病人记录",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-04-05-03",
+      "name": "无术后首次病程记录",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-08-02-01",
+      "name": "无出院前一天或当天的病程记录",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-08-02-02",
+      "name": "无上级医师同意出院的意见",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-04-02-07",
+      "name": "会诊记录单未在会诊申请发出后24小时内完成",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-07-01-03",
+      "name": "未做输血前相关九项检查",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-10-01-01",
+      "name": "经治医师变更时无交接班记录，或交班前、接班后24小时内未按时完成",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-10-02-01",
+      "name": "转科病人24小时内未完成转入、转出记录",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-10-02-02",
+      "name": "有转科医嘱但无转入、转出记录",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-12-02-01",
+      "name": "修正或补充诊断时，未记录修改或补充理由及诊断依据",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-10-03-01",
+      "name": "有创操作医嘱但无有创操作记录",
+      "release_scope": "default",
+      "phase_status": "pending_definition",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-04-02-08",
+      "name": "死亡时间缺失",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-01-02-02",
+      "name": "鉴别诊断未与初步诊断中第一诊断相关联",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-04-01-04",
+      "name": "术前小结内容不完整",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-04-01-05",
+      "name": "术前讨论记录内容不完整",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-06-01-01",
+      "name": "医嘱与病程一致性",
+      "release_scope": "default",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-06-01-03",
+      "name": "报告单完整性",
+      "release_scope": "acceptance_only",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-06-03-01",
+      "name": "医嘱与病程一致性",
+      "release_scope": "default",
+      "phase_status": "pending_definition",
+      "customer_selectable": false
+    },
+    {
+      "rule_id": "LX0609-06-03-02",
+      "name": "报告单完整性",
+      "release_scope": "acceptance_only",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-06-02-01",
+      "name": "报告单完整性",
+      "release_scope": "acceptance_only",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-09-01-02",
+      "name": "内容完整性",
+      "release_scope": "acceptance_only",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    },
+    {
+      "rule_id": "LX0609-08-01-05",
+      "name": "诊疗经过不全面或不详细",
+      "release_scope": "acceptance_only",
+      "phase_status": "phase_1_target",
+      "customer_selectable": true
+    }
+  ]
+}

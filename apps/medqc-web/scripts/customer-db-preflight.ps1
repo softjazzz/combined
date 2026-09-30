@@ -79,6 +79,14 @@ required = {
         "id", "pool_id", "matched_institute_id", "matched_patient_id",
         "matched_visit_id"
     },
+    (qc_schema, "rule_validation_runs"): {
+        "id", "rule_id", "cases_json", "job_id", "state",
+        "execution_version_json", "created_by", "created_at"
+    },
+    (qc_schema, "rule_validation_events"): {
+        "id", "rule_id", "run_id", "item_id", "kind", "decision",
+        "note", "payload_json", "actor", "created_at"
+    },
 }
 
 connect_args = {"connect_timeout": int(os.getenv("DB_CONNECT_TIMEOUT_SECONDS", "5"))}

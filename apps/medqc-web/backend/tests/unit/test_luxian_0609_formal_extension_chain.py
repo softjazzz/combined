@@ -296,6 +296,12 @@ async def test_test_only_native_rule_crosses_formal_catalog_admission_engine_and
         )
         persisted_job = persisted_workspace.get_batch_job_for_processing(job_id=admitted_job_id)
         assert persisted_job["status"] == "completed"
+        timing = persisted_job["summary"]["record_timing"]
+        assert timing["completed_timed_record_count"] == 1
+        assert timing["average_complete_seconds"] >= 0
+        assert timing["attempts"][0]["attempt_kind"] == "initial"
+        assert timing["attempts"][0]["execution_seconds"] >= 0
+
         expected_observed = not usage_unknown
         expected_unknown_keys = ["surgery_presence"] if usage_unknown else []
         assert emitted_usage == [(expected_observed, expected_observed)]
@@ -309,6 +315,8 @@ async def test_test_only_native_rule_crosses_formal_catalog_admission_engine_and
         )
         assert safe_job["summary"]["luxian_0609_usage_observation_complete"] is expected_observed
         assert safe_job["summary"]["luxian_0609_usage_unknown_executor_keys"] == expected_unknown_keys
+        assert safe_job["summary"]["record_timing"]["average_complete_seconds"] == timing["average_complete_seconds"]
+        assert "attempts" not in safe_job["summary"]["record_timing"]
         with Session(persisted_engine) as db:
             persisted_results = CanonicalResultStore(envelope_table).load_selected(
                 db, root_job_id=admitted_job_id, institute_id="I", patient_id="P", visit_id="V",

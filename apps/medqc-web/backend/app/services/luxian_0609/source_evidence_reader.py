@@ -425,6 +425,11 @@ _NATIVE_SOURCE_FIELDS = {
         "discharge_order",
         "discharge_medications",
         "treatment_course",
+        "admission_condition",
+        "positive_assist_exam",
+        "discharge_condition",
+        "discharge_sympton_condition",
+        "condition_transform",
         "record_content",
     ),
     "postsurg_firstcourse_record": (

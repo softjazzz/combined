@@ -666,7 +666,7 @@
     },
     {
       "rule_id": "LX0609-06-01-01",
-      "release_scope": "acceptance_only",
+      "release_scope": "default",
       "source_document": "CT/MRI检查记录",
       "qc_point": "医嘱与病程一致性",
       "implementation_status": "active",
@@ -732,6 +732,18 @@
         "sichuan_2026_handbook"
       ],
       "policy_summary": "逐份核对病情变化、抢救时间、措施、结果、参加医务人员姓名和专业技术职称；不拼接不同抢救记录补齐内容。"
+    },
+    {
+      "rule_id": "LX0609-08-01-05",
+      "release_scope": "acceptance_only",
+      "source_document": "出院记录",
+      "qc_point": "诊疗经过不全面或不详细",
+      "implementation_status": "active",
+      "policy_sources": [
+        "sichuan_2023_standard",
+        "customer_confirmed"
+      ],
+      "policy_summary": "逐份核对诊疗措施、病情演变、疗效与转归，并对照同次住院病程及手术记录核对重要事件遗漏；来源缺口不判临床缺陷。"
     }
   ]
 }
