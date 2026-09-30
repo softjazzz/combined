@@ -6,7 +6,7 @@ import json
 import logging
 from datetime import datetime, timezone
 from itertools import chain
-from typing import Any, Callable
+from typing import Any, Callable, Sequence
 
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
@@ -124,6 +124,55 @@ def _task_and_refs(
             raise TaskQCRunForbidden("当前用户未获分配此任务病历")
         return task, assigned_refs
     return task, refs
+
+
+# 病例级重跑单次最多可选病历数；远大于单任务常规抽样量，只防止异常请求放大。
+MAX_TASK_RECORD_SUBSET = 500
+_CASE_KEYS = ("institute_id", "patient_id", "visit_id")
+
+
+def _normalize_task_record_ids(task_record_ids: Sequence[str] | None) -> list[str] | None:
+    """None 表示沿用整范围运行；显式列表必须非空、去重且为合法任务病历 ID。"""
+    if task_record_ids is None:
+        return None
+    if isinstance(task_record_ids, (str, bytes)) or not isinstance(task_record_ids, Sequence):
+        raise TaskQCRunConflict("所选病历格式无效")
+    normalized: list[str] = []
+    for value in task_record_ids:
+        if not isinstance(value, str) or not value.strip() or len(value.strip()) > 36:
+            raise TaskQCRunConflict("所选病历格式无效")
+        normalized.append(value.strip())
+    if not normalized:
+        raise TaskQCRunConflict("请至少选择一份病历")
+    if len(normalized) > MAX_TASK_RECORD_SUBSET:
+        raise TaskQCRunConflict(f"单次最多重新质控 {MAX_TASK_RECORD_SUBSET} 份病历")
+    if len(set(normalized)) != len(normalized):
+        raise TaskQCRunConflict("所选病历存在重复")
+    return normalized
+
+
+def _select_task_record_subset(
+    session: Session, task_id: str, scope_refs: list[dict[str, str]],
+    task_record_ids: list[str], run_scope: str,
+) -> list[dict[str, str]]:
+    """只在既有运行范围内收窄病例，不扩大权限；返回顺序沿用任务抽样顺序。"""
+    rows = session.execute(
+        select(QCTaskRecord.__table__).where(
+            QCTaskRecord.task_id == task_id, QCTaskRecord.id.in_(task_record_ids),
+        )
+    ).mappings().all()
+    if len(rows) != len(task_record_ids):
+        raise TaskQCRunNotFound("所选病历不属于该任务")
+    scope_identities = {tuple(ref[key] for key in _CASE_KEYS) for ref in scope_refs}
+    selected: set[tuple[str, ...]] = set()
+    for row in rows:
+        identity = tuple(str(row.get(key) or "").strip() for key in _CASE_KEYS)
+        if identity not in scope_identities:
+            if run_scope == "assigned":
+                raise TaskQCRunForbidden("只能重新质控本人获分配的病历")
+            raise TaskQCRunConflict("所选病历不在本次运行范围内")
+        selected.add(identity)
+    return [ref for ref in scope_refs if tuple(ref[key] for key in _CASE_KEYS) in selected]
 
 
 def _next_run_number(session: Session, task_id: str, workspace: Any) -> int:
@@ -259,15 +308,13 @@ def _assert_task_sync_receipt(
     if len(receipt_by_id) != len(rows):
         raise TaskQCRunConflict("任务病历资料同步收据未覆盖全部病例")
 
+    # 收据仍须覆盖全任务（不放宽）；Bundle 就绪只检查本次运行病例（整批、本人或所选子集）。
     run_identities = {tuple(ref[key] for key in ("institute_id", "patient_id", "visit_id")) for ref in refs}
-    if run_scope == "assigned":
-        selected = {record_id for record_id, identity in task_records.items() if identity in run_identities}
-        if len(selected) != len(refs) or any(
-            row["assignee_id"] != actor_id for row in rows if row["id"] in selected
-        ):
-            raise TaskQCRunConflict("任务运行范围与同步收据不一致")
-    else:
-        selected = set(task_records)
+    selected = {record_id for record_id, identity in task_records.items() if identity in run_identities}
+    if len(selected) != len(refs) or (run_scope == "assigned" and any(
+        row["assignee_id"] != actor_id for row in rows if row["id"] in selected
+    )):
+        raise TaskQCRunConflict("任务运行范围与同步收据不一致")
     for record_id in selected:
         identity = task_records[record_id]
         receipt = receipt_by_id[record_id]
@@ -306,18 +353,25 @@ def create_task_qc_run(
     qc_service: Any,
     dispatch: Callable[[str], Any],
     run_scope: str = "all",
+    task_record_ids: Sequence[str] | None = None,
 ) -> dict[str, Any]:
-    """任务行锁串行化重跑；job 和运行关联同一事务，提交后才派发。"""
+    """任务行锁串行化重跑；job 和运行关联同一事务，提交后才派发。
+
+    task_record_ids 为 None 时沿用整范围运行；给定时只在 run_scope 允许的病例内收窄（病例级重新质控）。
+    """
     if SessionLocal is None:
         raise RuntimeError("数据库会话不可用")
     if not actor_id or len(actor_id) > 64:
         raise TaskQCRunForbidden("当前用户缺少有效身份")
     if run_scope not in {"all", "assigned"}:
         raise TaskQCRunConflict("运行范围无效")
+    subset_ids = _normalize_task_record_ids(task_record_ids)
 
     with SessionLocal() as session:
         with session.begin():
             task, refs = _task_and_refs(session, task_id, actor_id, run_scope)
+            if subset_ids is not None:
+                refs = _select_task_record_subset(session, task_id, refs, subset_ids, run_scope)
             if _remote_scope_task(task):
                 _assert_task_sync_receipt(session, task, refs, run_scope, actor_id)
             workspace = workspace_factory()
@@ -332,7 +386,10 @@ def create_task_qc_run(
                 current_user=current_user,
                 qc_service=qc_service,
                 workspace=workspace,
-                task_run_context={"task_id": task_id, "run_number": str(run_number)},
+                task_run_context={
+                    "task_id": task_id, "run_number": str(run_number),
+                    **({"record_subset": "1"} if subset_ids is not None else {}),
+                },
                 frozen_rule_set_version=task["rule_set_version"],
             )
             filters = prepared.create_kwargs.get("filters")
@@ -370,8 +427,11 @@ def create_task_qc_run(
         except Exception:
             logger.exception("无法标记派发失败的 job: %s", job_id)
         raise TaskQCRunDispatchError(job_id) from exc
-    return {"task_id": task_id, "run_number": run_number, "job_id": job_id,
-            "run_scope": run_scope, "status": "queued"}
+    created = {"task_id": task_id, "run_number": run_number, "job_id": job_id,
+               "run_scope": run_scope, "status": "queued"}
+    if subset_ids is not None:
+        created["task_record_ids"] = subset_ids
+    return created
 
 
 def list_task_qc_runs(*, task_id: str, actor_id: str, run_scope: str = "all") -> list[dict[str, Any]]:
@@ -504,8 +564,12 @@ def get_task_qc_run_record_result(
             not all(str(ref.get(key) or "").strip() for key in ("institute_id", "patient_id", "visit_id"))
             for ref in frozen_refs
         )
-        or case_ref not in valid_frozen_refs
     ):
+        raise TaskQCRunConflict("任务运行与冻结质控范围不一致")
+    if case_ref not in valid_frozen_refs:
+        # 病例级重跑只冻结所选病例；整范围运行缺病例仍是合同不一致。
+        if filters.get("task_run_record_subset") is True:
+            raise TaskQCRunNotFound("本次运行未包含该病历")
         raise TaskQCRunConflict("任务运行与冻结质控范围不一致")
 
     result = {

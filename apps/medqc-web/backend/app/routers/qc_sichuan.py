@@ -1859,14 +1859,24 @@ def _validate_task_job_after_cdm_lock(job_id: str, filters: dict[str, Any]) -> N
             session, task_id, association["triggered_by"], association["run_scope"]
         )
         frozen_refs = filters.get("record_refs")
-        if not isinstance(frozen_refs, list) or len(frozen_refs) != len(refs):
-            raise RuntimeError("任务运行病例快照不一致")
         keys = ("institute_id", "patient_id", "visit_id")
-        frozen = {tuple(item.get(key) for key in keys) for item in frozen_refs if isinstance(item, dict)}
-        if len(frozen) != len(refs) or frozen != {tuple(ref[key] for key in keys) for ref in refs}:
+        scope_identities = {tuple(ref[key] for key in keys) for ref in refs}
+        subset = filters.get("task_run_record_subset") is True
+        if not isinstance(frozen_refs, list) or not frozen_refs or (
+            not subset and len(frozen_refs) != len(refs)
+        ):
             raise RuntimeError("任务运行病例快照不一致")
+        frozen = {tuple(item.get(key) for key in keys) for item in frozen_refs if isinstance(item, dict)}
+        if len(frozen) != len(frozen_refs) or (
+            not frozen <= scope_identities if subset else frozen != scope_identities
+        ):
+            raise RuntimeError("任务运行病例快照不一致")
+        # 病例级重跑只复核所选病例仍在运行人范围内且资料就绪；整范围运行语义不变。
+        run_refs = [ref for ref in refs if tuple(ref[key] for key in keys) in frozen]
         if _remote_scope_task(task):
-            _assert_task_sync_receipt(session, task, refs, association["run_scope"], association["triggered_by"])
+            _assert_task_sync_receipt(
+                session, task, run_refs, association["run_scope"], association["triggered_by"],
+            )
 
 
 def _resolve_shared_sample_pool_latest_job(
