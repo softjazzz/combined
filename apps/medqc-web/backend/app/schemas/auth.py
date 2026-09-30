@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, ConfigDict, Field, model_validator
+from pydantic import BaseModel, EmailStr, ConfigDict, Field, field_validator, model_validator
 from typing import Optional, List
 from ..core.settings import get_settings
 
@@ -16,9 +16,24 @@ class UserBase(BaseModel):
     bio: Optional[str] = None
 
 
+PASSWORD_MIN_LENGTH = 8
+
+
 class UserCreate(UserBase):
     password: str
     role: Optional[str] = "doctor"
+
+    @field_validator("password")
+    @classmethod
+    def _password_strength(cls, value: str) -> str:
+        # 公开注册密码下限：至少 8 位，且同时包含字母和数字。
+        if (
+            len(value) < PASSWORD_MIN_LENGTH
+            or not any(ch.isascii() and ch.isalpha() for ch in value)
+            or not any(ch.isdigit() for ch in value)
+        ):
+            raise ValueError(f"密码至少 {PASSWORD_MIN_LENGTH} 位，且需同时包含字母和数字")
+        return value
 
 
 class UserUpdate(BaseModel):
