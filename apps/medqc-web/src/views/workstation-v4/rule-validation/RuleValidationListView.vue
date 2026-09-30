@@ -126,7 +126,7 @@
                   <div class="rv-strong">
                     {{ row.name }}
                   </div>
-                  <small class="rv-muted">{{ row.source_document }}</small>
+                  <small class="rv-muted">{{ row.source_document }}{{ row.impact ? ` · ${row.impact.label}` : '' }}</small>
                 </td>
                 <td><span :class="statusClass(STAGES[row.stage].tone)">{{ STAGES[row.stage].label }}</span></td>
                 <td>

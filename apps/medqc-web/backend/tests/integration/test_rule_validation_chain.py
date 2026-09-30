@@ -72,6 +72,12 @@ def test_rule_centric_validation_to_release_sheet(monkeypatch, _isolated_databas
         filters = json.dumps(job["filters"], ensure_ascii=False)
         assert "golden_answers" not in filters and "人工基线" not in filters
         assert sorted(job["filters"]["selected_sample_item_ids"]) == sorted([item_a, "case-b"])
+        # 检查检验族是共享抽取批次：按“上线后范围”带上已上线同族一起执行，无保护集的同族列为缺口
+        detail_run = client.get(base).json()["data"]["runs"][0]
+        assert detail_run["impact"]["impact"] == "shared_batch"
+        assert detail_run["scope_rule_ids"][0] == RULE and len(detail_run["scope_rule_ids"]) > 1
+        assert set(job["filters"]["scoped_customer_rule_ids"]) == set(detail_run["scope_rule_ids"])
+        assert {g["rule_id"] for g in detail_run["regression_gaps"]} == set(detail_run["scope_rule_ids"][1:])
 
         run = client.get(f"/api/v1/qc/rule-validation/runs/{ids['run_id']}").json()["data"]
         assert {r["item_id"]: r["comparison"] for r in run["rows"]} == {item_a: "same", "case-b": "same"}

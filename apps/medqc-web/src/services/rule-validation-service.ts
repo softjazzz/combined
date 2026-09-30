@@ -17,14 +17,26 @@ export type ValidationStage =
   | 'rejected'
 export type Comparison = 'same' | 'different' | 'missing' | 'ambiguous' | 'pending' | 'failed'
 
+/** 上线影响范围：共享抽取批次的规则须按“上线后范围”运行并回归同族保护集 */
+export type ImpactKind = 'independent' | 'shared_batch' | 'unverified'
+export type RuleImpact = {
+  impact: ImpactKind
+  label: string
+  executor_key: string
+  basis: string
+  peer_rule_ids: string[]
+}
+
 export type RuleInfo = {
   rule_id: string
   name: string
   source_document: string
   release_scope: 'default' | 'acceptance_only'
   policy_summary: string
-  impact_class?: string
+  impact?: RuleImpact | null
 }
+
+export type RegressionGap = { rule_id: string; name: string; reason: string }
 
 export type CoverageCounts = Record<ExpectedStatus, Record<SourceKind, number>>
 export type Coverage = { counts: CoverageCounts; gaps: ExpectedStatus[]; acceptance_cases: number }
@@ -59,6 +71,11 @@ export type ValidationRun = {
   id: string
   rule_id: string
   cases: ValidationCase[]
+  /** 同族已上线规则的保护集病例（rule_id 为同族规则） */
+  regression_cases: (ValidationCase & { rule_id: string })[]
+  scope_rule_ids: string[]
+  regression_gaps: RegressionGap[]
+  impact: RuleImpact | null
   job_id: string | null
   state: 'creating' | 'bound' | 'creation_failed'
   execution_version: ExecutionVersion | null
@@ -81,6 +98,8 @@ export type CaseResult = {
 }
 
 export type ComparisonRow = ValidationCase & {
+  rule_id: string
+  role: 'candidate' | 'regression'
   actual_status: string | null
   comparison: Comparison
   result?: CaseResult
@@ -114,6 +133,7 @@ export type RuleDetail = {
   runs: ValidationRun[]
   latest_run_rows: ComparisonRow[] | null
   acceptance_blockers: string[]
+  regression_gaps: RegressionGap[]
   events: ValidationEvent[]
 }
 

@@ -61,7 +61,13 @@
         </div>
         <div>
           <dt>影响范围</dt>
-          <dd>{{ detail.rule.impact_class || '未声明' }}</dd>
+          <dd>
+            {{ detail.rule.impact?.label || '未声明' }}
+            <span
+              v-if="run && run.scope_rule_ids.length > 1"
+              class="rv-muted"
+            > · 同族回归 {{ run.regression_cases.length }} 例{{ run.regression_gaps.length ? `，${run.regression_gaps.length} 条同族无保护集` : '' }}</span>
+          </dd>
         </div>
       </dl>
 

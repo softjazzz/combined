@@ -74,17 +74,18 @@ const run = {
   id: 'run-1', rule_id: 'LX0609-06-01-01', cases: [caseA, caseB], job_id: 'job-1', state: 'bound' as const,
   execution_version: { lx0609_task_runtime: { implementation: { kind: 'process' } } }, build_kind: 'development' as const,
   created_by: 'u', created_at: '2026-09-29T06:20:00',
+  regression_cases: [], scope_rule_ids: ['LX0609-06-01-01'], regression_gaps: [], impact: null,
 }
 const rows: ComparisonRow[] = [
-  { ...caseA, actual_status: 'compliant', comparison: 'same', result: { status: 'compliant', customer_conclusion: '病程已记录检查目的' } },
-  { ...caseB, actual_status: 'compliant', comparison: 'different', result: { status: 'compliant', evidence: [{ document_title: '日常病程', evidence_excerpt: '片段' }] } },
+  { ...caseA, rule_id: 'LX0609-06-01-01', role: 'candidate', actual_status: 'compliant', comparison: 'same', result: { status: 'compliant', customer_conclusion: '病程已记录检查目的' } },
+  { ...caseB, rule_id: 'LX0609-06-01-01', role: 'candidate', actual_status: 'compliant', comparison: 'different', result: { status: 'compliant', evidence: [{ document_title: '日常病程', evidence_excerpt: '片段' }] } },
 ]
 
 function detail(overrides: Partial<RuleDetail> = {}): RuleDetail {
   return {
-    rule: { rule_id: 'LX0609-06-01-01', name: '医嘱与病程一致性', source_document: 'CT/MRI检查记录', release_scope: 'acceptance_only', policy_summary: '口径', impact_class: '未声明' },
+    rule: { rule_id: 'LX0609-06-01-01', name: '医嘱与病程一致性', source_document: 'CT/MRI检查记录', release_scope: 'acceptance_only', policy_summary: '口径', impact: null },
     stage: 'reviewing', cases: [caseA, caseB], coverage: coverage(['not_applicable', 'data_gap']), runs: [run],
-    latest_run_rows: rows, acceptance_blockers: ['存在状态不一致、缺少结果或执行失败的病例'],
+    latest_run_rows: rows, acceptance_blockers: ['存在状态不一致、缺少结果或执行失败的病例'], regression_gaps: [],
     events: [{ id: 'e1', rule_id: 'LX0609-06-01-01', run_id: 'run-1', item_id: 'a', kind: 'case_review', decision: 'confirmed', note: '证据对', payload: {}, actor: 'r', created_at: '2026-09-29T07:00:00' }],
     ...overrides,
   }
@@ -174,6 +175,34 @@ describe('规则验收详情', () => {
     expect(api.concludeRule).toHaveBeenCalledWith('LX0609-06-01-01', {
       run_id: 'run-1', decision: 'accepted', note: '两例均核对', gap_ack: '不适用、资料不足暂无病例',
     })
+  })
+
+  it('共享抽取批次规则显示同族回归，回归有差异或缺保护集时列入通过条件', async () => {
+    const impact = {
+      impact: 'shared_batch' as const, label: '共享抽取批次', executor_key: 'exam_lab',
+      basis: '检查检验族按选中规则拼接抽取 Prompt', peer_rule_ids: ['LX0609-06-01-04', 'LX0609-06-01-05'],
+    }
+    const peerCase = { ...caseA, item_id: 'p', case_title: '同族保护集病例', rule_id: 'LX0609-06-01-04' }
+    const gap = { rule_id: 'LX0609-06-01-05', name: '同族规则', reason: '尚无验收通过的运行' }
+    vi.mocked(api.getValidationRule).mockResolvedValue({ success: true, data: detail({
+      rule: { ...detail().rule, impact },
+      runs: [{ ...run, impact, regression_cases: [peerCase], scope_rule_ids: ['LX0609-06-01-01', 'LX0609-06-01-04'], regression_gaps: [gap] }],
+      latest_run_rows: [...rows, { ...peerCase, role: 'regression', actual_status: 'non_compliant', comparison: 'different' }],
+      regression_gaps: [gap],
+    }) })
+    const wrapper = mount(RuleValidationDetailView, { global: { stubs } })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="impact-label"]').text()).toBe('共享抽取批次')
+    // 回归行不进入本规则的逐例对照
+    expect(wrapper.findAll('[data-testid="compare-row"]')).toHaveLength(2)
+    const regression = wrapper.findAll('[data-testid="regression-row"]').map((r) => r.text())
+    expect(regression).toEqual([expect.stringContaining('LX0609-06-01-04')])
+    expect(regression[0]).toContain('不一致')
+    expect(wrapper.find('[data-testid="regression-gap"]').text()).toContain('LX0609-06-01-05')
+    expect(wrapper.text()).toContain('同族回归无差异')
+    expect(wrapper.text()).toContain('同族保护集缺口')
+    expect(wrapper.find('textarea[aria-label="覆盖缺口说明"]').exists()).toBe(true)
   })
 
   it('运行本规则后重新加载详情', async () => {

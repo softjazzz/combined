@@ -74,9 +74,12 @@ def _tables() -> tuple[Table, Table]:
 
 
 def rule_catalog() -> dict[str, dict]:
+    from .luxian_0609.impact_scope import rule_impacts
+    impacts = rule_impacts()
     return {
         e.rule_id: {"rule_id": e.rule_id, "name": e.qc_point, "source_document": e.source_document,
-                    "release_scope": e.release_scope, "policy_summary": e.policy_summary}
+                    "release_scope": e.release_scope, "policy_summary": e.policy_summary,
+                    "impact": impacts.get(e.rule_id)}
         for e in load_luxian_0609_rule_master()
         if e.implementation_status == "active" and e.phase_status == "phase_1_target"
     }
@@ -94,11 +97,13 @@ def compare_cases(rule_id: str, cases: list[dict], job: dict | None,
     ``project`` 把唯一匹配的结果投影为可展示的结论/证据/建议（客户安全 DTO），供逐例核对。
     """
     status = (job or {}).get("status")
-    items = [x for x in (job or {}).get("items") or [] if x.get("rule_id") == rule_id]
+    items = (job or {}).get("items") or []
     rows = []
     for case in cases:
+        # 同族回归病例带自己的 rule_id，其余按本规则比较
+        case_rule = case.get("rule_id") or rule_id
         ref = CaseRef.from_mapping(case["record_ref"])
-        matches = [x for x in items if _item_ref(x) == ref]
+        matches = [x for x in items if x.get("rule_id") == case_rule and _item_ref(x) == ref]
         actual = matches[0].get("status") if len(matches) == 1 else None
         outcome = "pending"
         if status == "completed":
@@ -106,7 +111,8 @@ def compare_cases(rule_id: str, cases: list[dict], job: dict | None,
                        else "same" if actual == case["expected_status"] else "different")
         elif status in {"failed", "canceled", "creation_failed"}:
             outcome = "failed"
-        row = {**case, "actual_status": actual, "comparison": outcome}
+        row = {**case, "rule_id": case_rule, "role": case.get("role") or "candidate",
+               "actual_status": actual, "comparison": outcome}
         if project is not None and len(matches) == 1:
             row["result"] = project(matches[0])
         rows.append(row)
@@ -245,17 +251,53 @@ class RuleValidationService:
             raise ValueError(f"单次运行最多 {MAX_CASES_PER_RUN} 个病例")
         if any(not all(c["record_ref"].values()) for c in cases):
             raise ValueError("存在住院标识不完整的测试病例")
+        scope = self._release_scope_plan(rule_id)
+        if len({c["item_id"] for c in cases + scope["regression_cases"]}) > MAX_CASES_PER_RUN:
+            raise ValueError(f"本规则病例与同族回归病例合计超过 {MAX_CASES_PER_RUN} 个，请分批验收")
         with self.sessions() as session:
             creating = session.execute(select(self.runs.c.id).where(
                 self.runs.c.rule_id == rule_id, self.runs.c.state == "creating")).first()
             if creating:
                 raise RuleValidationConflict("本规则有尚未完成任务绑定的运行，请稍后刷新，避免重复提交")
-            run = {"id": str(uuid4()), "rule_id": rule_id, "cases_json": json.dumps(cases, ensure_ascii=False),
+            snapshot = {"cases": cases, **scope}
+            run = {"id": str(uuid4()), "rule_id": rule_id, "cases_json": json.dumps(snapshot, ensure_ascii=False),
                    "job_id": None, "state": "creating", "execution_version_json": None,
                    "created_by": user, "created_at": _now()}
             session.execute(self.runs.insert().values(**run))
             session.commit()
         return self.get_run(run["id"])
+
+    def _release_scope_plan(self, rule_id: str) -> dict:
+        """共享抽取批次规则按“上线后范围”运行：本规则 + 同执行器已上线规则，并带上它们的保护集。"""
+        from .luxian_0609.impact_scope import IMPACT_INDEPENDENT, requires_family_regression
+        catalog = self.catalog()
+        impact = (catalog[rule_id].get("impact") or {}) if rule_id in catalog else {}
+        kind = impact.get("impact") or IMPACT_INDEPENDENT
+        plan = {"impact": impact or None, "scope_rule_ids": [rule_id], "regression_cases": [], "regression_gaps": []}
+        if not requires_family_regression(kind):
+            return plan
+        for peer in impact.get("peer_rule_ids") or []:
+            peer_rule = catalog.get(peer)
+            if not peer_rule or peer_rule["release_scope"] != "default":
+                continue  # 只有已上线规则才会与新规则同批执行
+            plan["scope_rule_ids"].append(peer)
+            protection = self._protection_cases(peer)
+            if not protection:
+                plan["regression_gaps"].append({"rule_id": peer, "name": peer_rule["name"],
+                                                "reason": "已上线但没有验收通过的保护集"})
+            plan["regression_cases"].extend({**c, "rule_id": peer, "role": "regression"} for c in protection)
+        return plan
+
+    def _protection_cases(self, rule_id: str) -> list[dict]:
+        """规则的保护集 = 最近一次验收通过所依据运行中的本规则病例及其预期。"""
+        conclusion = next((e for e in reversed(self.list_events(rule_id))
+                           if e["kind"] == "conclusion" and e["decision"] == "accepted"), None)
+        if conclusion is None or not conclusion.get("run_id"):
+            return []
+        try:
+            return self.get_run(conclusion["run_id"])["cases"]
+        except LookupError:
+            return []
 
     def bind_run(self, run_id: str, job_id: str | None, filters: dict | None) -> None:
         version = None
@@ -303,7 +345,8 @@ class RuleValidationService:
     def review_case(self, run: dict, rows: list[dict], item_id: str, *, decision: str, note: str, user: str) -> dict:
         if decision not in {"confirmed", "problem"} or not note.strip():
             raise ValueError("请选择复核结论并填写核对意见")
-        row = next((r for r in rows if r["item_id"] == item_id), None)
+        # 逐例核对只针对本规则病例；同族回归行只做状态比对
+        row = next((r for r in rows if r["item_id"] == item_id and r.get("role", "candidate") == "candidate"), None)
         if row is None:
             raise LookupError("该病例不在本次运行中")
         if row["comparison"] in {"pending", "failed"}:
@@ -324,11 +367,16 @@ class RuleValidationService:
             blockers = summary["acceptance_blockers"]
             if blockers:
                 raise ValueError("不能验收通过：" + "；".join(blockers))
-            if summary["coverage"]["gaps"] and not gap_ack.strip():
-                raise ValueError("存在覆盖缺口，请逐项说明可接受的原因")
+            if (summary["coverage"]["gaps"] or summary["regression_gaps"]) and not gap_ack.strip():
+                raise ValueError("存在覆盖缺口或同族保护集缺口，请逐项说明可接受的原因")
         return self._append(rule_id=run["rule_id"], run_id=run["id"], kind="conclusion", decision=decision,
                             note=note.strip(), actor=user, payload_json=json.dumps(
                                 {"gap_ack": gap_ack.strip(), "coverage": summary["coverage"],
+                                 "regression_gaps": summary["regression_gaps"],
+                                 "regression_rows": [
+                                     {k: r.get(k) for k in ("rule_id", "item_id", "case_title", "expected_status",
+                                                            "actual_status", "comparison")}
+                                     for r in rows if r.get("role") == "regression"],
                                  "build_kind": build_kind(run.get("execution_version"))}, ensure_ascii=False))
 
     def approve(self, rule_id: str, *, decision: str, note: str, user: str) -> dict:
@@ -365,7 +413,12 @@ class RuleValidationService:
         reviews = [e for e in events if e["kind"] == "case_review" and e["run_id"] == run["id"]]
         return {
             "rule": {k: rule[k] for k in ("rule_id", "name", "source_document", "policy_summary")},
-            "impact_class": "未声明",
+            "impact": run.get("impact") or rule.get("impact"),
+            "family_regression": {
+                "scope_rule_ids": run.get("scope_rule_ids") or [rule["rule_id"]],
+                "rows": conclusion.get("payload", {}).get("regression_rows") or [],
+                "gaps": run.get("regression_gaps") or [],
+            },
             "version": {"build_kind": kind, "development_version": kind != "release",
                         "implementation": runtime.get("implementation"), "first_pass": runtime.get("first_pass")},
             "inputs": [{k: c[k] for k in ("item_id", "case_title", "source_kind", "expected_status",
@@ -388,22 +441,29 @@ class RuleValidationService:
         cases = self.list_cases(rule_id)
         coverage = _coverage(cases)
         blockers: list[str] = []
+        regression_gaps = (run or {}).get("regression_gaps") or []
         if run is not None and rows is not None:
             events = [e for e in self.list_events(rule_id) if e["run_id"] == run["id"] and e["kind"] == "case_review"]
             latest = {}
             for e in events:
                 latest[e["item_id"]] = e["decision"]
+            own = [r for r in rows if r.get("role", "candidate") == "candidate"]
+            regression = [r for r in rows if r.get("role") == "regression"]
             if any(r["comparison"] in {"pending"} for r in rows):
                 blockers.append("运行尚未完成")
-            if any(r["comparison"] not in {"same", "pending"} for r in rows):
+            if any(r["comparison"] not in {"same", "pending"} for r in own):
                 blockers.append("存在状态不一致、缺少结果或执行失败的病例")
-            if any(latest.get(r["item_id"]) != "confirmed" for r in rows):
+            drift = [r for r in regression if r["comparison"] not in {"same", "pending"}]
+            if drift:
+                blockers.append("同族回归存在差异：" + "、".join(
+                    f"{r['rule_id']} {r.get('case_title') or r['item_id']}" for r in drift[:5]))
+            if any(latest.get(r["item_id"]) != "confirmed" for r in own):
                 blockers.append("存在未逐例确认的病例")
-            if any(not r.get("evaluation_as_of_date") for r in rows):
+            if any(not r.get("evaluation_as_of_date") for r in own):
                 blockers.append("存在未固定评价时间点的历史病例")
             if not run.get("execution_version"):
                 blockers.append("运行缺少执行版本记录")
-        return {"coverage": coverage, "acceptance_blockers": blockers}
+        return {"coverage": coverage, "acceptance_blockers": blockers, "regression_gaps": regression_gaps}
 
 
 def derive_stage(rule: dict, cases: list[dict], runs: list[dict], events: list[dict], latest_rows: list[dict] | None) -> str:
@@ -425,7 +485,7 @@ def derive_stage(rule: dict, cases: list[dict], runs: list[dict], events: list[d
             r["comparison"] == "pending" for r in latest_rows):
         return "running" if latest_run["state"] != "creation_failed" else "ready_to_run"
     reviewed = {e["item_id"] for e in events if e["kind"] == "case_review" and e["run_id"] == latest_run["id"]}
-    if any(r["item_id"] not in reviewed for r in latest_rows):
+    if any(r["item_id"] not in reviewed for r in latest_rows if r.get("role", "candidate") == "candidate"):
         return "reviewing"
     return "pending_conclusion"
 
@@ -456,7 +516,14 @@ def _coverage(cases: list[dict]) -> dict:
 
 
 def _run_view(row: dict) -> dict:
-    return {"id": row["id"], "rule_id": row["rule_id"], "cases": json.loads(row["cases_json"]),
+    snapshot = json.loads(row["cases_json"])
+    if isinstance(snapshot, list):  # 第 5 步之前的运行只存本规则病例
+        snapshot = {"cases": snapshot}
+    return {"id": row["id"], "rule_id": row["rule_id"], "cases": snapshot.get("cases") or [],
+            "regression_cases": snapshot.get("regression_cases") or [],
+            "scope_rule_ids": snapshot.get("scope_rule_ids") or [row["rule_id"]],
+            "regression_gaps": snapshot.get("regression_gaps") or [],
+            "impact": snapshot.get("impact"),
             "job_id": row["job_id"], "state": row["state"],
             "execution_version": json.loads(row["execution_version_json"]) if row.get("execution_version_json") else None,
             "build_kind": build_kind(json.loads(row["execution_version_json"])) if row.get("execution_version_json") else None,

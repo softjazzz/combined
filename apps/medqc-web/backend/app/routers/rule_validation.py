@@ -84,7 +84,8 @@ async def _run_rows(request: Request, run: dict, current_user: Dict[str, Any]) -
     job = await _read_job(request, run["job_id"], current_user)
     if job is None:
         job = {"status": "creation_failed" if run["state"] == "creation_failed" else "creating"}
-    return compare_cases(run["rule_id"], run["cases"], job, project=_project_result)
+    # 本规则病例 + 同族回归病例（各按自己的规则比较）
+    return compare_cases(run["rule_id"], run["cases"] + run["regression_cases"], job, project=_project_result)
 
 
 _RESULT_FIELDS = ("status", "display_status", "reason_code", "customer_conclusion", "conclusion",
@@ -106,13 +107,14 @@ async def _detail(request: Request, service: RuleValidationService, rule_id: str
     latest_rows = await _run_rows(request, runs[0], current_user) if runs else None
     summary = service.summarize(rule_id, run=runs[0] if runs else None, rows=latest_rows)
     return {
-        "rule": {**rule, "impact_class": "未声明"},
+        "rule": rule,
         "stage": derive_stage(rule, cases, runs, events, latest_rows),
         "cases": cases,
         "coverage": summary["coverage"],
         "runs": runs,
         "latest_run_rows": latest_rows,
         "acceptance_blockers": summary["acceptance_blockers"] if runs else [],
+        "regression_gaps": summary["regression_gaps"],
         "events": events,
     }
 
@@ -197,7 +199,9 @@ async def start_run(request: Request, rule_id: str, payload: RunRequest,
         run = service.begin_run(rule_id, payload.item_ids, _user(current_user))
     except (LookupError, ValueError) as exc:
         raise _error(exc) from exc
-    item_ids = [c["item_id"] for c in run["cases"]]
+    # 同一测试病例可能同时是本规则病例与同族保护集病例，提交任务时按病例去重
+    unique_cases = list({c["item_id"]: c for c in run["cases"] + run["regression_cases"]}.values())
+    item_ids = [c["item_id"] for c in unique_cases]
     try:
         request.state.rule_validation_reference = {"kind": "rule", "run_id": run["id"], "item_ids": item_ids}
         # 人工预期不进入运行请求；只传病例和目标规则，走正式样本池执行链。
@@ -205,8 +209,9 @@ async def start_run(request: Request, rule_id: str, payload: RunRequest,
             request, CUSTOMER_TEST_POOL_ID,
             pools_api.SamplePoolRunRequest(
                 sample_item_ids=item_ids,
-                record_refs=[pools_api.SamplePoolRunRecordRef(**c["record_ref"]) for c in run["cases"]],
-                selected_rule_ids=[rule_id], rule_set_key=pools_api.LUXIAN_0609_QC_RULE_SET_KEY,
+                record_refs=[pools_api.SamplePoolRunRecordRef(**c["record_ref"]) for c in unique_cases],
+                # 共享抽取批次规则按“上线后范围”执行：本规则 + 同执行器已上线规则
+                selected_rule_ids=run["scope_rule_ids"], rule_set_key=pools_api.LUXIAN_0609_QC_RULE_SET_KEY,
                 group_by_luxian_family=False),
             current_user, activation)
     except Exception:

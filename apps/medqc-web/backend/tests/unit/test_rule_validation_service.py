@@ -213,3 +213,79 @@ def test_timestamps_are_emitted_with_utc_offset():
     from datetime import datetime
     from app.services.rule_validation import _iso
     assert _iso(datetime(2026, 9, 30, 5, 47, 59)) == "2026-09-30T05:47:59+00:00"
+
+
+def _impact(kind, peers=()):
+    return {"impact": kind, "label": "", "executor_key": "exam_lab", "basis": "", "peer_rule_ids": list(peers)}
+
+
+def test_shared_batch_runs_with_released_peers_and_blocks_on_drift(make_service):
+    peer_ok, peer_gap, peer_pending = "LX0609-06-01-02", "LX0609-06-01-05", "LX0609-06-01-03"
+    base = {"source_document": "CT/MRI检查记录", "policy_summary": ""}
+    catalog = {
+        RULE: {**base, "rule_id": RULE, "name": "候选", "release_scope": "acceptance_only",
+               "impact": _impact("shared_batch", [peer_ok, peer_gap, peer_pending])},
+        peer_ok: {**base, "rule_id": peer_ok, "name": "已上线有保护集", "release_scope": "default",
+                  "impact": _impact("independent")},
+        peer_gap: {**base, "rule_id": peer_gap, "name": "已上线无保护集", "release_scope": "default",
+                   "impact": _impact("independent")},
+        peer_pending: {**base, "rule_id": peer_pending, "name": "同族待验收", "release_scope": "acceptance_only",
+                       "impact": _impact("independent")},
+    }
+    service = make_service()
+    service.catalog = lambda: catalog
+
+    # 已上线同族规则的保护集：其最近一次验收通过所依据运行中的病例
+    service.upsert_answer(peer_ok, "c2", revision=0, expected_status="non_compliant", human_reason="r", purpose="acceptance", user="u")
+    peer_run = service.begin_run(peer_ok, None, "u")
+    service.bind_run(peer_run["id"], "job-peer", RELEASE)
+    peer_run = service.get_run(peer_run["id"])
+    peer_rows = compare_cases(peer_ok, peer_run["cases"], {"status": "completed", "items": [
+        {"rule_id": peer_ok, "status": "non_compliant", **_ref("C2")}]})
+    service.review_case(peer_run, peer_rows, "c2", decision="confirmed", note="ok", user="r")
+    service.conclude(peer_run, peer_rows, decision="accepted", note="ok", gap_ack="缺口已知", user="u")
+
+    _label(service, "c1", status="compliant")
+    run = service.begin_run(RULE, None, "u")
+    # 上线后范围只带已上线同族；待验收同族不进入
+    assert run["scope_rule_ids"] == [RULE, peer_ok, peer_gap]
+    assert [(c["rule_id"], c["item_id"], c["expected_status"]) for c in run["regression_cases"]] == [
+        (peer_ok, "c2", "non_compliant")]
+    assert [g["rule_id"] for g in run["regression_gaps"]] == [peer_gap]
+    service.bind_run(run["id"], "job-b", RELEASE)
+    run = service.get_run(run["id"])
+
+    def job(peer_status):
+        return {"status": "completed", "items": [
+            {"rule_id": RULE, "status": "compliant", **_ref("C1")},
+            {"rule_id": peer_ok, "status": peer_status, **_ref("C2")}]}
+
+    drifted = compare_cases(RULE, run["cases"] + run["regression_cases"], job("compliant"))
+    assert [(r["role"], r["comparison"]) for r in drifted] == [("candidate", "same"), ("regression", "different")]
+    with pytest.raises(LookupError):
+        service.review_case(run, drifted, "c2", decision="confirmed", note="x", user="r")  # 回归行不做逐例核对
+    service.review_case(run, drifted, "c1", decision="confirmed", note="ok", user="r")
+    assert derive_stage(catalog[RULE], service.list_cases(RULE), service.list_runs(RULE),
+                        service.list_events(RULE), drifted) == "pending_conclusion"
+    with pytest.raises(ValueError, match="同族回归存在差异"):
+        service.conclude(run, drifted, decision="accepted", note="通过", gap_ack="说明", user="u")
+
+    stable = compare_cases(RULE, run["cases"] + run["regression_cases"], job("non_compliant"))
+    with pytest.raises(ValueError, match="同族保护集缺口"):
+        service.conclude(run, stable, decision="accepted", note="通过", gap_ack="", user="u")
+    service.conclude(run, stable, decision="accepted", note="通过",
+                     gap_ack="06-01-05 无保护集，待补病例；其余覆盖缺口已知", user="u")
+    sheet = service.approve(RULE, decision="approved", note="批准", user="boss")["payload"]
+    assert sheet["impact"]["impact"] == "shared_batch"
+    assert sheet["family_regression"]["scope_rule_ids"] == [RULE, peer_ok, peer_gap]
+    assert [(r["rule_id"], r["comparison"]) for r in sheet["family_regression"]["rows"]] == [(peer_ok, "same")]
+    assert [g["rule_id"] for g in sheet["family_regression"]["gaps"]] == [peer_gap]
+
+
+def test_legacy_run_snapshot_without_scope_still_reads(make_service):
+    from app.services.rule_validation import _run_view
+    view = _run_view({"id": "r", "rule_id": RULE, "cases_json": json.dumps([{"item_id": "c1"}]), "job_id": None,
+                      "state": "bound", "execution_version_json": None, "created_by": "u",
+                      "created_at": "2026-09-30T00:00:00"})
+    assert view["cases"] == [{"item_id": "c1"}]
+    assert view["scope_rule_ids"] == [RULE] and view["regression_cases"] == []

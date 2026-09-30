@@ -76,13 +76,13 @@
                 <small class="rv-muted">发布范围</small><b>{{ detail.rule.release_scope === 'default' ? '已上线' : '待验收' }}</b>
               </div>
               <div class="mq-inset rv-fact">
-                <small class="rv-muted">影响范围</small><b>{{ detail.rule.impact_class || '未声明' }}</b>
+                <small class="rv-muted">影响范围</small><b data-testid="impact-label">{{ detail.rule.impact?.label || '未声明' }}</b>
               </div>
               <div class="mq-inset rv-fact">
                 <small class="rv-muted">规则族</small><b>{{ detail.rule.source_document }}</b>
               </div>
             </div>
-            <small class="rv-muted">影响范围（独立判定 / 共享抽取批次 / 修改共享抽取）由代码声明，共享抽取规则需额外做同族回归。</small>
+            <small class="rv-muted">{{ impactNote }}</small>
           </div>
           <div class="mq-card mq-card--padded rv-section">
             <div class="mq-card__head">
@@ -256,6 +256,12 @@
               <p class="mq-card__desc">
                 只运行本规则，走正式执行、保存和读取链路；人工预期不进入任务。新运行会使旧结论和批准失效。
               </p>
+              <p
+                v-if="sharedBatch"
+                class="mq-card__desc"
+              >
+                本规则属于共享抽取批次：运行范围为本规则 + 同执行器已上线规则，并回归它们的保护集。
+              </p>
             </div>
             <button
               type="button"
@@ -281,7 +287,7 @@
               <b>{{ formatTime(run.created_at) }}</b>
               <span>{{ run.cases.length }} 例</span>
               <span class="rv-tag">{{ buildLabel(run) }}</span>
-              <span class="rv-run__note">{{ i === 0 ? '当前运行 · 比较与复核基于此次' : '已被后续运行取代' }}</span>
+              <span class="rv-run__note">{{ i === 0 ? '当前运行 · 比较与复核基于此次' : '已被后续运行取代' }}{{ run.scope_rule_ids.length > 1 ? ` · 上线后范围 ${run.scope_rule_ids.length} 条规则` : '' }}</span>
               <span class="mq-mono rv-muted">{{ run.job_id || '—' }}</span>
             </div>
           </div>
@@ -376,6 +382,60 @@
           >
             运行完成后在这里逐例对照。
           </p>
+          <div
+            v-if="regressionRows.length || regressionGaps.length"
+            class="rv-regression"
+            data-testid="family-regression"
+          >
+            <h3>同族回归</h3>
+            <p class="mq-card__desc">
+              同执行器已上线规则在“上线后范围”下的保护集结果，须与其验收时一致；只比对状态，不做逐例核对。
+            </p>
+            <div
+              v-if="regressionRows.length"
+              class="rv-scroll"
+            >
+              <table class="mq-table">
+                <thead>
+                  <tr>
+                    <th>同族规则</th>
+                    <th>病例</th>
+                    <th>保护集预期</th>
+                    <th>本次实际</th>
+                    <th>比较</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="row in regressionRows"
+                    :key="`${row.rule_id}-${row.item_id}`"
+                    data-testid="regression-row"
+                  >
+                    <td><span class="mq-mono">{{ row.rule_id }}</span></td>
+                    <td class="rv-strong">
+                      {{ row.case_title }}
+                    </td>
+                    <td>{{ STATUS[row.expected_status].label }}</td>
+                    <td>{{ statusLabel(row.actual_status).label }}</td>
+                    <td><span :class="statusClass(COMPARISONS[row.comparison].tone)">{{ COMPARISONS[row.comparison].label }}</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <ul
+              v-if="regressionGaps.length"
+              class="rv-history"
+            >
+              <li
+                v-for="gap in regressionGaps"
+                :key="gap.rule_id"
+                data-testid="regression-gap"
+              >
+                <span class="mq-status mq-status--warning">无保护集</span>
+                <span><span class="mq-mono">{{ gap.rule_id }}</span> {{ gap.name }}：{{ gap.reason }}</span>
+              </li>
+            </ul>
+          </div>
         </section>
 
         <!-- ④ 验收结论与批准 -->
@@ -438,16 +498,16 @@
               />
             </label>
             <label
-              v-if="detail.coverage.gaps.length"
+              v-if="hasGaps"
               class="mq-field"
             >
-              <span class="mq-field__label">覆盖缺口说明<span class="mq-field__required">*</span></span>
+              <span class="mq-field__label">缺口说明<span class="mq-field__required">*</span></span>
               <a-textarea
                 v-model:value="gapAck"
                 aria-label="覆盖缺口说明"
                 :rows="2"
                 :maxlength="4000"
-                :placeholder="`缺少：${detail.coverage.gaps.map((s) => STATUS[s].label).join('、')}；逐项说明为何可接受`"
+                :placeholder="gapPlaceholder"
               />
             </label>
             <a-alert
@@ -469,7 +529,7 @@
                 type="button"
                 class="mq-btn mq-btn--primary"
                 data-testid="accept-rule"
-                :disabled="!canAccept || busy || !conclusionNote.trim() || (detail.coverage.gaps.length > 0 && !gapAck.trim())"
+                :disabled="!canAccept || busy || !conclusionNote.trim() || (hasGaps && !gapAck.trim())"
                 @click="conclude('accepted')"
               >
                 验收通过
@@ -568,9 +628,31 @@ const gapAck = ref('')
 let pollTimer: ReturnType<typeof setTimeout> | undefined
 
 const latestRun = computed<ValidationRun | null>(() => detail.value?.runs[0] ?? null)
-const rows = computed(() => detail.value?.latest_run_rows ?? [])
+const allRows = computed(() => detail.value?.latest_run_rows ?? [])
+/** 本规则病例：逐例核对与通过条件；同族回归行只比对状态 */
+const rows = computed(() => allRows.value.filter((r) => (r.role ?? 'candidate') === 'candidate'))
+const regressionRows = computed(() => allRows.value.filter((r) => r.role === 'regression'))
+const regressionGaps = computed(() => latestRun.value?.regression_gaps ?? [])
+const sharedBatch = computed(() => {
+  const kind = detail.value?.rule.impact?.impact
+  return Boolean(kind && kind !== 'independent')
+})
+const impactNote = computed(() => {
+  const impact = detail.value?.rule.impact
+  if (!impact) return '执行器未声明影响范围，按共享抽取批次从严处理。'
+  if (impact.impact === 'independent') return `${impact.basis}；启用本规则不影响同族其他规则的模型输入。`
+  return `${impact.basis}。启用本规则会改变同族已上线规则的抽取输入，须按“上线后范围”运行并回归同族保护集。`
+})
+const hasGaps = computed(() => Boolean(detail.value?.coverage.gaps.length || regressionGaps.value.length))
+const gapPlaceholder = computed(() => {
+  const parts: string[] = []
+  const coverage = detail.value?.coverage.gaps ?? []
+  if (coverage.length) parts.push(`覆盖缺少：${coverage.map((s) => STATUS[s].label).join('、')}`)
+  if (regressionGaps.value.length) parts.push(`同族无保护集：${regressionGaps.value.map((g) => g.rule_id).join('、')}`)
+  return `${parts.join('；')}；逐项说明为何可接受`
+})
 const runInProgress = computed(
-  () => latestRun.value?.state === 'creating' || rows.value.some((r) => r.comparison === 'pending'),
+  () => latestRun.value?.state === 'creating' || allRows.value.some((r) => r.comparison === 'pending'),
 )
 const latestRunReviews = computed(() =>
   (detail.value?.events ?? []).filter((e) => e.kind === 'case_review' && e.run_id === latestRun.value?.id),
@@ -604,7 +686,7 @@ function runState(run: ValidationRun, index: number): Labeled {
   if (index > 0) return { label: '已失效', tone: '' }
   if (run.state === 'creation_failed') return { label: '创建失败', tone: 'danger' }
   if (runInProgress.value) return { label: '运行中', tone: 'info' }
-  if (rows.value.some((r) => r.comparison === 'failed')) return { label: '执行失败', tone: 'danger' }
+  if (allRows.value.some((r) => r.comparison === 'failed')) return { label: '执行失败', tone: 'danger' }
   return { label: '已完成', tone: 'success' }
 }
 function decisionLabel(event: ValidationEvent) {
@@ -648,10 +730,25 @@ const checks = computed(() => {
   const abnormal = rows.value.filter((r) => r.comparison !== 'same' && r.comparison !== 'pending')
   const unconfirmed = rows.value.filter((r) => latestReview(r.item_id)?.decision !== 'confirmed')
   const unpinned = rows.value.filter((r) => !r.evaluation_as_of_date)
+  const drift = regressionRows.value.filter((r) => r.comparison !== 'same' && r.comparison !== 'pending')
   const release = latestRun.value.build_kind === 'release'
   return [
     { label: '最近一次运行已完成', note: `${formatTime(latestRun.value.created_at)} · ${rows.value.length} 例`, state: runInProgress.value ? 'no' : 'ok' },
     { label: '全部病例状态一致', note: abnormal.map((r) => `${r.case_title}：${COMPARISONS[r.comparison].label}`).join('；'), state: abnormal.length ? 'no' : 'ok' },
+    ...(sharedBatch.value
+      ? [
+          {
+            label: '同族回归无差异',
+            note: drift.length
+              ? drift.map((r) => `${r.rule_id} ${r.case_title}：${COMPARISONS[r.comparison].label}`).join('；')
+              : `回归 ${regressionRows.value.length} 例，范围 ${latestRun.value.scope_rule_ids.length} 条规则`,
+            state: drift.length ? 'no' : 'ok',
+          },
+          ...(regressionGaps.value.length
+            ? [{ label: '同族保护集缺口', note: `${regressionGaps.value.map((g) => g.rule_id).join('、')} 无保护集，通过时须说明`, state: 'warn' }]
+            : []),
+        ]
+      : []),
     { label: '全部病例已逐例确认', note: unconfirmed.length ? `还有 ${unconfirmed.length} 例未确认` : '', state: unconfirmed.length ? 'no' : 'ok' },
     { label: '评价时间点均已固定', note: unpinned.length ? `${unpinned.length} 例为未固定的历史病例` : '', state: unpinned.length ? 'no' : 'ok' },
     {

@@ -494,3 +494,17 @@
 .rv-history li > .mq-status {
   flex-shrink: 0;
 }
+
+.rv-regression {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 16px;
+  border-top: 0.5px solid var(--mq-bg-muted);
+}
+
+.rv-regression h3 {
+  margin: 0;
+  font-size: var(--mq-font-16);
+  font-weight: 600;
+}
