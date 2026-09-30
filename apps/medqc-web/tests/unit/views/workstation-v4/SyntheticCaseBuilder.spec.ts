@@ -123,6 +123,13 @@ describe('SyntheticCaseBuilder 按质控点创建', () => {
     expect(payload.documents[0]?.document_type).toBe('consultation_record')
   })
 
+  it('评价时间点：填写时随请求提交，留空由服务端取创建当天', () => {
+    const form = createDefaultSyntheticCaseForm()
+    expect(normalizeSyntheticCasePayload(form).evaluation_as_of_date).toBeUndefined()
+    form.evaluationAsOfDate = '2026-07-05'
+    expect(normalizeSyntheticCasePayload(form).evaluation_as_of_date).toBe('2026-07-05')
+  })
+
   it('保存并验证 payload 只请求选中的 LX0609 质控点', () => {
     const form = createDefaultSyntheticCaseForm()
     form.selectedRuleIds = ['lx0609-03-01-01', 'LX0609-03-01-02', 'LX0609-03-01-01']

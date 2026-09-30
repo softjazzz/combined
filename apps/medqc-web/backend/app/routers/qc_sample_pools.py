@@ -24,6 +24,7 @@ from ..routers.qc_sichuan import (
     get_qc_service,
 )
 from ..services.custom_qc_sample_pool_service import (
+    CUSTOMER_TEST_POOL_ID,
     CustomQCSamplePoolService,
     SampleSyncJobConflictError,
     build_sample_validation_execution_scope_hash,
@@ -345,6 +346,10 @@ class TestRecordCreateRequest(BaseModel):
     template_key: Optional[str] = Field(default=None, description="使用的测试病历模板 key")
     golden_answers: list[TestRecordGoldenAnswer] = Field(default_factory=list, description="人工预期结果")
     source: Optional[TestRecordSourceMeta] = Field(default=None, description="派生测试病历来源记录")
+    evaluation_as_of_date: Optional[date] = Field(
+        default=None,
+        description="评价时间点：运行病历时限类规则的评价终点，创建后固定；为空取创建当天",
+    )
 
 
 def _run_sample_pool_sync_job(job_id: str) -> None:
@@ -1364,10 +1369,26 @@ async def run_sample_pool_intrinsic_validation(
         if rule_set_key == LUXIAN_0609_QC_RULE_SET_KEY
         else ""
     )
+    # 自建测试病例固定了评价时间点，逐病例代替任务当天；历史病例无此字段时仍取当天。
+    pinned_evaluation_dates = (
+        {
+            CaseRef(
+                str(item.get("matched_institute_id") or "").strip(),
+                str(item.get("matched_patient_id") or "").strip(),
+                str(item.get("matched_visit_id") or "").strip(),
+            ).as_key(): str((item.get("raw_payload") or {}).get("evaluation_as_of_date") or "").strip()
+            for item in runnable_items
+            if isinstance(item.get("raw_payload"), dict)
+            and str(item["raw_payload"].get("evaluation_as_of_date") or "").strip()
+        }
+        if pool_id == CUSTOMER_TEST_POOL_ID
+        else {}
+    )
     record_evaluation_snapshot = (
         build_record_evaluation_horizon_snapshot(
             selected_records,
             task_frozen_date=task_frozen_date,
+            record_frozen_dates=pinned_evaluation_dates,
         )
         if task_frozen_date
         else []
@@ -1415,15 +1436,12 @@ async def run_sample_pool_intrinsic_validation(
     # 仅专用验收路由设置request.state；HTTP请求体不能注入此引用。
     validation_ref = getattr(request.state, "rule_validation_reference", None)
     if validation_ref is not None and (
-        pool_id != "customer-created-test-records-v1" or payload.group_by_luxian_family
+        pool_id != CUSTOMER_TEST_POOL_ID or payload.group_by_luxian_family
         or requested_sample_item_ids != [validation_ref["item_id"]]
         or rule_set_key != LUXIAN_0609_QC_RULE_SET_KEY
     ):
-        raise HTTPException(status_code=422, detail="固定材料验收仅支持自建测试池单病例LX0609任务")
-    if validation_ref is not None and not (task_settings_snapshot or {}).get("flags", {}).get("LUXIAN_0609_UNIFIED_ENGINE_ENABLED"):
-        raise HTTPException(status_code=422, detail="固定材料验收需要统一引擎资料会话，当前配置不支持")
+        raise HTTPException(status_code=422, detail="规则验收仅支持自建测试池单病例LX0609任务")
     job_filters = {
-        **({"test_validation_snapshot": validation_ref} if validation_ref is not None else {}),
         **({LX0609_TASK_SETTINGS_FILTER_KEY: task_settings_snapshot} if task_settings_snapshot is not None else {}),
         **({LX0609_TASK_RUNTIME_FILTER_KEY: task_runtime_snapshot} if task_runtime_snapshot is not None else {}),
         "rule_ids": rule_ids,
@@ -1546,7 +1564,6 @@ async def run_sample_pool_intrinsic_validation(
         group_by_luxian_family=bool(payload.group_by_luxian_family),
         effective_scope=effective_scope,
         execution_options={
-            **({"test_validation_snapshot": validation_ref} if validation_ref is not None else {}),
             **({LX0609_TASK_SETTINGS_FILTER_KEY: task_settings_snapshot} if task_settings_snapshot is not None else {}),
             **({LX0609_TASK_RUNTIME_FILTER_KEY: task_runtime_snapshot} if task_runtime_snapshot is not None else {}),
             "model_code": payload.model_code,
@@ -1882,7 +1899,6 @@ async def save_test_validation(request: Request, item_id: str, payload: TestVali
 async def run_test_validation(request: Request, item_id: str, payload: TestValidationRunRequest,
                               current_user: Dict[str, Any] = Depends(get_current_user),
                               activation: Dict[str, Any] = Depends(require_product_activation)):
-    from ..services.custom_qc_sample_pool_service import CUSTOMER_TEST_POOL_ID
     user = _current_user_id(current_user)
     service = _test_validation_service()
     try:
@@ -1890,7 +1906,6 @@ async def run_test_validation(request: Request, item_id: str, payload: TestValid
     except (LookupError, ValueError) as exc:
         raise _validation_error(exc) from exc
     try:
-        service.freeze_material(item_id, run["id"], user)
         request.state.rule_validation_reference = {"item_id": item_id, "run_id": run["id"]}
         result = await run_sample_pool_intrinsic_validation(request, CUSTOMER_TEST_POOL_ID,
             SamplePoolRunRequest(sample_item_ids=[item_id], record_refs=[SamplePoolRunRecordRef(**run["record_ref"])],

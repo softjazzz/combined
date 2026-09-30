@@ -25,7 +25,7 @@ def store(tmp_path):
     yield ValidationService(table, sessionmaker(bind=engine)), engine, table
     engine.dispose()
 
-def test_persist_freeze_conflict_and_append_review(store):
+def test_persist_conflict_and_append_review(store):
     service, engine, table = store
     service.save_answers("case", 0, [ANSWER], "u")
     with engine.connect() as c:
@@ -38,7 +38,7 @@ def test_persist_freeze_conflict_and_append_review(store):
     with pytest.raises(ValidationConflict):
         service.save_answers("case", 1, [ANSWER], "u")
     rows = compare(run, {"status": "completed", "items": [{"rule_id": ANSWER["qc_point_id"], "status": "non_compliant"}]})
-    with pytest.raises(ValueError, match="缺少固定"):
+    with pytest.raises(ValueError, match="缺少执行版本"):
         service.review("case", run["id"], "u", "accepted", "证据定位和建议已核对", rows)
     service.review("case", run["id"], "u", "rejected", "旧运行缺版本", rows)
     service.review("case", run["id"], "u", "rejected", "二次发现证据错误", rows)
@@ -71,7 +71,6 @@ async def test_router_without_answer_leak_reads_formal_endpoint(store, monkeypat
     user = {"id": "u"}
     await api.save_test_validation(request, "case", api.TestValidationAnswersRequest(revision=0, answers=[ANSWER]), user)
     captured = []
-    monkeypatch.setattr(service, "freeze_material", lambda *args: None)
     async def run(request, pool_id, payload, current_user, activation):
         captured.append(payload.model_dump())
         service.bind("case", request.state.rule_validation_reference["run_id"], "u", "job")
@@ -95,55 +94,59 @@ async def test_router_without_answer_leak_reads_formal_endpoint(store, monkeypat
     assert error.value.status_code == 404
 
 
-def test_material_freeze_is_bounded_private_and_immutable(store, monkeypatch):
-    from app.services.qc_input_adapters import running_final_bundle_runtime
-    service, _, _ = store
-    source = {"institute_id": "TEST", "patient_id": "P", "visit_id": "V", "medical_text": "原始材料"}
-    monkeypatch.setattr(running_final_bundle_runtime, "load_running_final_bundle", lambda **kwargs: deepcopy(source))
+def _pin(engine, table, value):
+    with engine.begin() as c:
+        raw = json.loads(c.execute(select(table.c.raw_payload_json).where(table.c.id == "case")).scalar_one())
+        c.execute(table.update().where(table.c.id == "case").values(
+            raw_payload_json=json.dumps({**raw, "evaluation_as_of_date": value})))
+
+
+def test_accept_requires_pinned_evaluation_date(store):
+    service, engine, table = store
+    rows = [{**ANSWER, "actual_status": "non_compliant", "comparison": "same"}]
+    version = {"lx0609_task_runtime": {"implementation": {"kind": "process"}}}
     service.save_answers("case", 0, [ANSWER], "u")
+    # 历史病例未固定评价时间点：可记录不通过，不能通过。
+    legacy = service.begin("case", 1, "u")
+    assert legacy["evaluation_as_of_date"] is None
+    service.bind("case", legacy["id"], "u", "job", version)
+    with pytest.raises(ValueError, match="未固定评价时间点"):
+        service.review("case", legacy["id"], "u", "accepted", "已核对", rows)
+    service.review("case", legacy["id"], "u", "rejected", "评价时间点未固定", rows)
+    # 固定后的新运行记录该时间点，可以通过。
+    _pin(engine, table, "2026-07-05")
+    assert service.read("case")["evaluation_as_of_date"] == "2026-07-05"
     run = service.begin("case", 1, "u")
-    service.freeze_material("case", run["id"], "u")
-    filters = {"sample_pool_id": CUSTOMER_TEST_POOL_ID, "selected_sample_item_ids": ["case"],
-               "source": "manual_problem_sample_pool", "scoped_customer_rule_ids": [ANSWER["qc_point_id"]]}
-    service.bind("case", run["id"], "u", "job", filters)
-    reference = {"item_id": "case", "run_id": run["id"]}
-    job = {"id": "job", "created_by": "u", "filters": filters}
-    source["medical_text"] = "后来改写"
-    loaded = service.load_material(reference=reference, job=job, record_ref=run["record_ref"], scenes=["running"])
-    assert loaded[1]["medical_text"] == "原始材料"
-    assert "原始材料" not in json.dumps(service.read("case"), ensure_ascii=False)
-    with pytest.raises(ValidationConflict):
-        service.freeze_material("case", run["id"], "u")
-    for invalid in ({**job, "id": "other"}, {**job, "created_by": "other"},
-                    {**job, "filters": {**filters, "scoped_customer_rule_ids": []}}):
-        with pytest.raises((ValidationConflict, LookupError)):
-            service.load_material(reference=reference, job=invalid, record_ref=run["record_ref"], scenes=["running"])
-    run2 = service.begin("case", 1, "u")
-    source["medical_text"] = "x" * (5 * 1024 * 1024)
-    with pytest.raises(ValueError, match="5MiB"):
-        service.freeze_material("case", run2["id"], "u")
+    assert run["evaluation_as_of_date"] == "2026-07-05"
+    service.bind("case", run["id"], "u", "job2", version)
+    service.review("case", run["id"], "u", "accepted", "证据与建议已核对", rows)
 
 
-@pytest.mark.asyncio
-async def test_material_context_does_not_leak_to_other_tasks(monkeypatch):
-    import asyncio
-    from app.services.test_case_validation_context import validation_material_scope, build_validation_execution_session
-    called = []
-    monkeypatch.setattr(ValidationService, "__init__", lambda self: None)
-    monkeypatch.setattr(ValidationService, "execution_session", lambda self, **kwargs: "frozen")
-    def original(**kwargs):
-        called.append(True)
-        return "live"
-    async def validation():
-        with validation_material_scope({"run_id": "R"}, {"id": "J"}):
-            await asyncio.sleep(0)
-            assert await asyncio.to_thread(build_validation_execution_session, original) == "frozen"
-        assert build_validation_execution_session(original) == "live"
-    async def ordinary():
-        await asyncio.sleep(0)
-        assert build_validation_execution_session(original) == "live"
-    await asyncio.gather(validation(), ordinary())
-    assert len(called) == 2
+def test_record_frozen_dates_override_only_matching_running_records():
+    from app.services.case_identity import CaseRef
+    from app.services.luxian_0609.evaluation_horizon import build_record_evaluation_horizon_snapshot
+    base = {"admission_datetime": "2026-07-01T08:00:00", "institute_id": "CUSTOMER_TEST", "patient_id": "P"}
+    records = [
+        {**base, "record_id": "V1", "visit_id": "V1", "scope": "running"},
+        {**base, "record_id": "V2", "visit_id": "V2", "scope": "running"},
+        {**base, "record_id": "V3", "visit_id": "V3", "scope": "final", "discharge_datetime": "2026-07-03T10:00:00"},
+    ]
+    pinned = {CaseRef("CUSTOMER_TEST", "P", v).as_key(): "2026-07-05" for v in ("V1", "V3")}
+    for task_date in ("2026-09-29", "2026-10-06"):
+        by_id = {s["record_id"]: s for s in build_record_evaluation_horizon_snapshot(
+            records, task_frozen_date=task_date, record_frozen_dates=pinned)}
+        assert by_id["V1"]["evaluation_horizon"] == "2026-07-05"  # 固定：不随运行日期变化
+        assert by_id["V2"]["evaluation_horizon"] == task_date  # 未固定：沿用任务当天
+        assert by_id["V3"]["evaluation_horizon"] == "2026-07-03"  # 终末病历仍以出院为终点
+
+
+def test_create_rejects_evaluation_date_before_admission():
+    from app.services.custom_qc_sample_pool_service import CustomQCSamplePoolService
+    service = object.__new__(CustomQCSamplePoolService)
+    payload = {"basic_info": {"admission_time": "2026-07-01 08:00:00"}, "evaluation_as_of_date": "2026-06-30",
+               "documents": [{"document_type": "admission_record", "title": "入院记录", "content": "测试"}]}
+    with pytest.raises(ValueError, match="不能早于入院日期"):
+        service.create_customer_test_record(payload=payload, created_by="u")
 
 
 def test_sample_list_does_not_publish_private_validation_materials():

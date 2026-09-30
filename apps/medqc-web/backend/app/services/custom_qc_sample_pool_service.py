@@ -4162,7 +4162,15 @@ class CustomQCSamplePoolService:
         department = _safe_text(basic.get("department"), "测试科室")
         admission_time = self._parse_test_record_datetime(basic.get("admission_time")) or now_value
         discharge_time = self._parse_test_record_datetime(basic.get("discharge_time"))
-        case_title = _safe_text(payload.get("case_title"), f"{patient_name}测试病历")
+        # 评价时间点随病例固定：运行病历时限类规则以它为终点，避免结果随运行日期漂移。
+        # 默认口径与任务冻结日相同（本地日期）。
+        evaluation_as_of = self._parse_test_record_datetime(payload.get("evaluation_as_of_date"))
+        evaluation_as_of_date = (
+            evaluation_as_of.date() if evaluation_as_of else datetime.now().astimezone().date()
+        )
+        if evaluation_as_of_date < admission_time.date():
+            raise ValueError("评价时间点不能早于入院日期")
+        case_title =_safe_text(payload.get("case_title"), f"{patient_name}测试病历")
         sequence = now_value.strftime("%Y%m%d%H%M%S") + uuid.uuid4().hex[:6].upper()
         visit_id = f"{CUSTOMER_TEST_VISIT_PREFIX}{sequence}"
         patient_id = f"CUSTOMER_PATIENT_{sequence}"
@@ -4371,6 +4379,7 @@ class CustomQCSamplePoolService:
                 "document_count": len(enabled_documents),
                 "selected_rule_ids": payload.get("selected_rule_ids") or [],
                 "golden_answers": golden_answers,
+                "evaluation_as_of_date": evaluation_as_of_date.isoformat(),
             }
             if source_meta:
                 item_payload["builder_version"] = "v2-derived"

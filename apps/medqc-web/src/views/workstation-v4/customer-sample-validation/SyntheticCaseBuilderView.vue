@@ -391,6 +391,16 @@
                 type="datetime-local"
               />
             </label>
+            <label>
+              <span>评价时间点</span>
+              <a-input
+                v-model:value="form.evaluationAsOfDate"
+                type="date"
+                aria-label="评价时间点"
+                placeholder="留空取创建当天"
+              />
+              <small class="field-hint">未出院病例的时限规则按此日期评价，创建后固定</small>
+            </label>
             <label class="is-wide">
               <span>主要诊断</span>
               <a-input
@@ -2310,6 +2320,12 @@ onUnmounted(() => {
 
 .synthetic-case-form-grid .is-wide {
   grid-column: span 2;
+}
+
+.synthetic-case-form-grid .field-hint {
+  color: rgba(29, 29, 31, 0.48);
+  font-size: 11px;
+  font-weight: 400;
 }
 
 .synthetic-case-doc {

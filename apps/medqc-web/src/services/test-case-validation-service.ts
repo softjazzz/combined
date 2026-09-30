@@ -8,8 +8,8 @@ export type ValidationExecutionVersion = {
     first_pass?: { provider: string; model: string }
   }
 }
-export type ValidationRun = { material_version?: string; execution_material_frozen_at?: string; execution_version?: ValidationExecutionVersion; id: string; revision: number; answers: SyntheticCaseGoldenAnswer[]; job_id: string | null; created_at: string; state: string; reviews: ValidationReview[] }
-export type ValidationState = { revision: number; answers: SyntheticCaseGoldenAnswer[]; runs: ValidationRun[]; rule_options: { rule_id: string; name: string; release_scope: string }[] }
+export type ValidationRun = { evaluation_as_of_date?: string | null; execution_version?: ValidationExecutionVersion; id: string; revision: number; answers: SyntheticCaseGoldenAnswer[]; job_id: string | null; created_at: string; state: string; reviews: ValidationReview[] }
+export type ValidationState = { revision: number; answers: SyntheticCaseGoldenAnswer[]; evaluation_as_of_date?: string | null; runs: ValidationRun[]; rule_options: { rule_id: string; name: string; release_scope: string }[] }
 export type ValidationResult = { run: ValidationRun; job_status: string; comparisons: (SyntheticCaseGoldenAnswer & { actual_status: string | null; comparison: string })[] }
 const base = (id: string) => `/api/v1/qc/sample-pools/test-records/${encodeURIComponent(id)}/validation`
 export const readValidation = (id: string) => ApiService.get<ValidationState>(base(id))

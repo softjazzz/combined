@@ -63,9 +63,9 @@ describe('单病例规则验收', () => {
     await wrapper.find('[aria-label="复核意见"]').setValue('已核对证据')
     const accept = () => wrapper.findAll('button').find(b => b.text() === '人工确认通过')!
     expect(accept().attributes('disabled')).toBeDefined()
-    expect(wrapper.text()).toContain('实际执行材料尚未保存')
+    expect(wrapper.text()).toContain('未固定，不能验收通过')
     vi.mocked(api.readValidationResult).mockResolvedValue({ success: true, data: { run: { ...run,
-      material_version: 'material-v1', execution_material_frozen_at: '2026-09-28',
+      evaluation_as_of_date: '2026-07-05',
       execution_version: { lx0609_task_runtime: { implementation: { kind: 'release', build_id: 'build-1', git_commit: 'abc' }, first_pass: { provider: 'test', model: 'test-model' } } },
     }, job_status: 'completed', comparisons } })
     await wrapper.findAll('button').find(b => b.text() === '刷新结果')!.trigger('click')

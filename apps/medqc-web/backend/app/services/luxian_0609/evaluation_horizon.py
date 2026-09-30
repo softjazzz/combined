@@ -213,12 +213,20 @@ def build_record_evaluation_horizon_snapshot(
     records: list[dict[str, Any]],
     *,
     task_frozen_date: str,
+    record_frozen_dates: Mapping[str, str] | None = None,
 ) -> list[dict[str, str]]:
+    """``record_frozen_dates`` 按 record_key 覆盖冻结日，仅供自建测试病例固定评价时间点。"""
     snapshots = []
     for record in records:
         record_id = _normalized_text(record.get("record_id") or record.get("visit_id"))
         if not record_id:
             continue
+        record_ref = CaseRef.from_mapping(record)
+        frozen_date = (
+            _normalized_text((record_frozen_dates or {}).get(record_ref.as_key()))
+            if all(record_ref)
+            else ""
+        ) or task_frozen_date
         snapshot = resolve_record_evaluation_horizon(
             record_id=record_id,
             record_scene=record.get("scope"),
@@ -228,9 +236,8 @@ def build_record_evaluation_horizon_snapshot(
             discharge_datetime=(
                 record.get("discharge_datetime") or record.get("discharge_date")
             ),
-            task_frozen_date=task_frozen_date,
+            task_frozen_date=frozen_date,
         ).to_dict()
-        record_ref = CaseRef.from_mapping(record)
         if all(record_ref):
             snapshot.update(
                 {

@@ -317,6 +317,7 @@ export function normalizeSyntheticCasePayload(form: TestRecordForm): ManualTestR
       other_diagnoses: splitLines(form.otherDiagnosesText),
     },
     documents,
+    evaluation_as_of_date: String(form.evaluationAsOfDate || '').trim() || undefined,
     selected_rule_ids: form.selectedRuleIds,
     manual_issue_text: form.manualIssueText.trim() || undefined,
     template_key: form.templateKey || undefined,

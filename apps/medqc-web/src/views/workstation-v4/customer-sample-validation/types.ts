@@ -501,6 +501,8 @@ export type TestRecordForm = {
   department: string
   admissionTime: string
   dischargeTime: string
+  /** 评价时间点（YYYY-MM-DD）：未出院病例时限规则的评价终点，创建后固定；留空取创建当天 */
+  evaluationAsOfDate?: string
   mainDiagnosis: string
   otherDiagnosesText: string
   manualIssueText: string
@@ -533,6 +535,7 @@ export type ManualTestRecordCreateRequest = {
   template_key?: string
   golden_answers?: SyntheticCaseGoldenAnswer[]
   source?: ManualTestRecordSourceMeta
+  evaluation_as_of_date?: string
 }
 
 export type ManualTestRecordCreateResult = {
