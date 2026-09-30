@@ -58,7 +58,10 @@ export type ValidationCase = {
   labeled_at?: string | null
 }
 
-export type CandidateCase = Pick<ValidationCase, 'item_id' | 'case_title' | 'source_kind' | 'evaluation_as_of_date'>
+export type CandidateCase = Pick<
+  ValidationCase,
+  'item_id' | 'case_title' | 'source_kind' | 'evaluation_as_of_date'
+>
 
 export type ExecutionVersion = {
   lx0609_task_runtime?: {
@@ -93,6 +96,8 @@ export type CaseResult = {
   conclusion?: string
   customer_suggestion?: string
   suggestion?: string
+  customer_display_facts?: Record<string, unknown>
+  criterion_results?: import('@/views/workstation-v4/customer-sample-validation/single-record-result-model').SingleRecordQcCriterionResult[]
   findings?: unknown
   evidence?: unknown
 }
@@ -170,7 +175,12 @@ export const startValidationRun = (ruleId: string, itemIds?: string[]) =>
   )
 export const getValidationRun = (runId: string) =>
   ApiService.get<RunDetail>(`${BASE}/runs/${encodeURIComponent(runId)}`)
-export const reviewCase = (runId: string, itemId: string, decision: 'confirmed' | 'problem', note: string) =>
+export const reviewCase = (
+  runId: string,
+  itemId: string,
+  decision: 'confirmed' | 'problem',
+  note: string,
+) =>
   ApiService.post<ValidationEvent>(
     `${BASE}/runs/${encodeURIComponent(runId)}/cases/${encodeURIComponent(itemId)}/reviews`,
     { decision, note },

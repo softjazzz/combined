@@ -3,6 +3,11 @@ import path from 'node:path'
 import { execSync } from 'node:child_process'
 
 const ROOT = process.cwd()
+// Git hook 导出的 GIT_DIR 会让子目录调用把 cwd 当作工作树根；
+// 只读查询重新从 cwd 发现仓库，保留 GIT_INDEX_FILE 以读取实际暂存区。
+const gitReadEnv = { ...process.env }
+delete gitReadEnv.GIT_DIR
+delete gitReadEnv.GIT_WORK_TREE
 
 const TEXT_EXTS = new Set([
   '.vue',
@@ -49,6 +54,7 @@ function getRepoRoot() {
       cwd: ROOT,
       stdio: ['ignore', 'pipe', 'ignore'],
       encoding: 'utf8',
+      env: gitReadEnv,
     })
     return out.trim() || ROOT
   } catch {
@@ -77,6 +83,7 @@ function gitOutput(args) {
       cwd: REPO_ROOT,
       stdio: ['ignore', 'pipe', 'ignore'],
       encoding: 'utf8',
+      env: gitReadEnv,
     })
   } catch {
     return null
@@ -90,7 +97,7 @@ function toAbsoluteFromGit(args) {
     out
       .split(/\r?\n/)
       .map((s) => s.trim())
-      .filter(Boolean)
+      .filter(Boolean),
   )
 }
 
@@ -158,14 +165,12 @@ async function collectFiles(mode) {
 
   const candidates = getStagedFiles()
   const files = await existingTextFiles(candidates)
-  const textCandidates = candidates.filter((abs) =>
-    TEXT_EXTS.has(path.extname(abs).toLowerCase())
-  )
+  const textCandidates = candidates.filter((abs) => TEXT_EXTS.has(path.extname(abs).toLowerCase()))
   if (textCandidates.length > 0 && files.length === 0) {
     // 静默空转是危险的：此前路径解析失效时该门禁永远报 passed。
     throw new Error(
       `staged 模式解析到 ${textCandidates.length} 个暂存文本文件，但 0 个可读；` +
-        '路径解析可能失效，禁止静默通过'
+        '路径解析可能失效，禁止静默通过',
     )
   }
   return files

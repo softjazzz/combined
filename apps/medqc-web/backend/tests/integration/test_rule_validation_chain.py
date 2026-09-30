@@ -105,7 +105,26 @@ def test_rule_centric_validation_to_release_sheet(monkeypatch, _isolated_databas
         assert [e["kind"] for e in detail["events"]] == ["case_review", "case_review", "conclusion", "approval"]
         assert all("result" not in e["payload"].get("comparison", {}) for e in detail["events"])
 
+        review_url = f"/api/v1/qc/rule-validation/runs/{ids['run_id']}/cases/{item_a}/reviews"
+        assert client.post(review_url, json={"decision": "problem", "note": "再次复核发现问题"}).status_code == 200
+        assert client.get(base).json()["data"]["stage"] == "pending_conclusion"
+        assert client.post(f"{base}/approval", json={"decision": "approved", "note": "旧结论不得复用"}).status_code == 422
+        assert client.post(review_url, json={"decision": "confirmed", "note": "重新确认"}).status_code == 200
+        assert client.post(f"{base}/approval", json={"decision": "approved", "note": "仍需新结论"}).status_code == 422
+
+        # 模拟生产去重查询返回原任务，正式端点应拒绝并结束创建；解除后允许再次运行。
+        from app.routers import qc_sample_pools
+        with monkeypatch.context() as patch:
+            patch.setattr(qc_sample_pools, "_find_recent_sample_validation_job", lambda **kwargs: job)
+            duplicate = client.post(f"{base}/runs", json={})
+            assert duplicate.status_code == 409, duplicate.text
+            failed_run = client.get(base).json()["data"]["runs"][0]
+            assert failed_run["state"] == "creation_failed" and failed_run["job_id"] is None
+        again = client.post(f"{base}/runs", json={})
+        assert again.status_code == 200, again.text
+        assert _wait_for_terminal_job(workspace, again.json()["data"]["job_id"])["status"] == "completed"
+
     # 新连接核对持久化
     with Session(engine) as session:
         kinds = session.execute(sa.select(rule_validation_module._tables()[1].c.kind)).scalars().all()
-    assert sorted(kinds) == ["approval", "case_review", "case_review", "conclusion"]
+    assert sorted(kinds) == ["approval", "case_review", "case_review", "case_review", "case_review", "conclusion"]

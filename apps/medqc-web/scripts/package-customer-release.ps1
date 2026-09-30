@@ -352,6 +352,13 @@ foreach ($fileName in $backendRuntimeFiles) {
 
 $customerLauncherPath = Join-Path $backendDir "start_dev_backend.ps1"
 $customerLauncherSource = Get-Content -LiteralPath $customerLauncherPath -Raw
+# 客户包不得把开发默认密钥注入进程并遮蔽 .env。
+$developmentSecretBlock = 'if (-not $env:JWT_SECRET) {' + "`n" + '    $env:JWT_SECRET = "dev-secret"' + "`n" + '}'
+$customerLauncherSource = $customerLauncherSource.Replace("`r`n", "`n")
+if (-not $customerLauncherSource.Contains($developmentSecretBlock)) {
+  throw "Cannot locate development JWT fallback in launcher."
+}
+$customerLauncherSource = $customerLauncherSource.Replace($developmentSecretBlock, '')
 $activationEnvironmentLine = '$env:PRODUCT_ACTIVATION_REQUIRED = "true"'
 if (-not $customerLauncherSource.Contains($activationEnvironmentLine)) {
   $launcherMarker = '$ErrorActionPreference = "Stop"'
@@ -474,7 +481,8 @@ $readmeLines = @(
   "3. Run the read-only preflight from the package root: powershell -NoProfile -ExecutionPolicy Bypass -File tools/customer-db-preflight.ps1",
   "4. Compare alembic current with alembic heads. The preflight never writes the database.",
   "5. After an authorized operator confirms the backup and version gap, run from backend: python -m alembic -c alembic.ini upgrade head",
-  "6. Restart the backend and smoke-test the workstation, notifications, sample-pool list, and sample-pool upload endpoints.",
+  "6. Rule validation additionally requires qc.rule_validation_runs and qc.rule_validation_events. Alembic head alone is insufficient. An authorized administrator may create missing tables from backend using python -c `"from app.services.rule_validation import _tables; _tables()`". Existing tables with missing columns must be investigated, not silently repaired. Confirm application SELECT/INSERT/UPDATE privileges and rerun preflight.",
+  "7. Restart the backend and smoke-test the workstation, notifications, sample-pool list, and sample-pool upload endpoints.",
   "",
   "## Core API smoke tests",
   "Use an authenticated browser session or an authorized API client. Expected result is not HTTP 500:",

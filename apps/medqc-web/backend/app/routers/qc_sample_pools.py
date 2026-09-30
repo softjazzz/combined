@@ -1579,6 +1579,9 @@ async def run_sample_pool_intrinsic_validation(
         execution_scope_hash=execution_scope_hash,
     )
     if duplicate_job is not None:
+        if validation_ref is not None:
+            # 验收运行必须绑定自己的冻结版本；拒绝复用并由外层结束 creating 状态。
+            raise HTTPException(status_code=409, detail="相同范围的任务仍在运行，请完成后重新发起验收")
         duplicate_filters = duplicate_job.get("filters") if isinstance(duplicate_job.get("filters"), dict) else {}
         return success_response(
             data={

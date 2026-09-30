@@ -89,7 +89,7 @@ async def _run_rows(request: Request, run: dict, current_user: Dict[str, Any]) -
 
 
 _RESULT_FIELDS = ("status", "display_status", "reason_code", "customer_conclusion", "conclusion",
-                  "customer_suggestion", "suggestion", "findings", "evidence")
+                  "customer_suggestion", "suggestion", "findings", "evidence", "customer_display_facts", "criterion_results")
 
 
 def _project_result(item: dict) -> dict:

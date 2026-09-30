@@ -392,4 +392,8 @@ def get_settings() -> Settings:
 
     if not settings.JWT_SECRET:
         raise RuntimeError("JWT_SECRET is required and must not be empty")
+    if settings.PRODUCT_ACTIVATION_REQUIRED:
+        secret = settings.JWT_SECRET.strip().lower()
+        if secret in {"dev-secret", "secret", "changeme", "change-me", "your-secret-key"} or secret.startswith(("replace-", "your-jwt-")):
+            raise RuntimeError("Customer JWT_SECRET must not be a development or placeholder value")
     return settings

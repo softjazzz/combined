@@ -121,7 +121,6 @@ def test_full_flow_stages_conclusion_and_release_sheet(make_service):
     assert run["build_kind"] == "release"
 
     # 运行后改预期不影响本次快照
-    _label(service, "c1", status="compliant", revision=1)
     assert service.get_run(run["id"])["cases"][0]["expected_status"] == "not_applicable"
 
     rows = compare_cases(RULE, run["cases"], _job({"c1": "not_applicable", "c2": "non_compliant"}))
@@ -303,3 +302,101 @@ def test_legacy_run_snapshot_without_scope_still_reads(make_service):
                       "created_at": "2026-09-30T00:00:00"})
     assert view["cases"] == [{"item_id": "c1"}]
     assert view["scope_rule_ids"] == [RULE] and view["regression_cases"] == []
+
+
+def test_run_coverage_ignores_later_labels(make_service):
+    service = make_service()
+    _label(service, "c1")
+    run = service.begin_run(RULE, ["c1"], "u")
+    _label(service, "c2", status="compliant")
+    _label(service, "c1", status="non_compliant", revision=1, purpose="development")
+    coverage = service.summarize(RULE, run=run)["coverage"]
+    assert coverage["counts"]["not_applicable"]["synthetic"] == 1
+    assert coverage["counts"]["compliant"]["real_copy"] == 0
+    assert coverage["counts"]["non_compliant"]["synthetic"] == 0
+    assert coverage["acceptance_cases"] == 1
+
+
+@pytest.mark.parametrize("already_approved", [False, True])
+def test_new_review_invalidates_decision(make_service, already_approved):
+    service = make_service()
+    _label(service, "c1")
+    run = service.begin_run(RULE, None, "u")
+    service.bind_run(run["id"], "job", RELEASE)
+    run = service.get_run(run["id"])
+    rows = compare_cases(RULE, run["cases"], _job({"c1": "not_applicable"}))
+    service.review_case(run, rows, "c1", decision="confirmed", note="核对", user="u")
+    service.conclude(run, rows, decision="accepted", note="通过", gap_ack="三类缺口", user="u")
+    if already_approved:
+        service.approve(RULE, decision="approved", note="批准", user="u")
+    service.review_case(run, rows, "c1", decision="problem", note="证据有问题", user="u")
+    assert derive_stage(CATALOG[RULE], service.list_cases(RULE), service.list_runs(RULE),
+                        service.list_events(RULE), rows) == "pending_conclusion"
+    with pytest.raises(ValueError, match="复核已更新"):
+        service.approve(RULE, decision="approved", note="不应批准", user="u")
+    with pytest.raises(ValueError, match="未逐例确认"):
+        service.conclude(run, rows, decision="accepted", note="不应通过", gap_ack="三类缺口", user="u")
+    service.review_case(run, rows, "c1", decision="confirmed", note="重新核对", user="u")
+    with pytest.raises(ValueError, match="复核已更新"):
+        service.approve(RULE, decision="approved", note="仍需新结论", user="u")
+    service.conclude(run, rows, decision="accepted", note="重新通过", gap_ack="三类缺口", user="u")
+    assert service.approve(RULE, decision="approved", note="批准", user="u")["decision"] == "approved"
+
+
+def test_review_projection_preserves_only_customer_approved_facts(monkeypatch):
+    from app.routers.rule_validation import _project_result
+    from app.services import custom_qc_workspace_service as workspace
+    safe = {"status": "non_compliant", "customer_display_facts": {"event_results": [{"missing_items": ["手术指征"]}]},
+            "criterion_results": [{"criterion_id": "indication", "status": "missing"}]}
+    monkeypatch.setattr(workspace, "customer_safe_projection_key", lambda: "test")
+    monkeypatch.setattr(workspace, "project_customer_safe_result_item", lambda item, **kwargs: safe)
+    result = _project_result({"patient_id": "private", "internal_fact": "not-public"})
+    assert result["customer_display_facts"] == safe["customer_display_facts"]
+    assert result["criterion_results"] == safe["criterion_results"]
+    assert "patient_id" not in result and "internal_fact" not in result
+
+
+@pytest.mark.parametrize("first_action", ["approval", "case_review"])
+def test_approval_and_problem_review_are_serialized(make_service, monkeypatch, first_action):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+    service = make_service()
+    _label(service, "c1")
+    run = service.begin_run(RULE, None, "u")
+    service.bind_run(run["id"], "job", RELEASE)
+    run = service.get_run(run["id"])
+    rows = compare_cases(RULE, run["cases"], _job({"c1": "not_applicable"}))
+    service.review_case(run, rows, "c1", decision="confirmed", note="核对", user="u")
+    service.conclude(run, rows, decision="accepted", note="通过", gap_ack="缺口", user="u")
+    entered, second_started = Event(), Event()
+    append = service._append
+
+    def gated_append(**event):
+        if event["kind"] == first_action:
+            entered.set()
+            assert second_started.wait(5)
+        return append(**event)
+
+    monkeypatch.setattr(service, "_append", gated_append)
+
+    def approve():
+        try:
+            return service.approve(RULE, decision="approved", note="批准", user="u")["decision"]
+        except ValueError:
+            return "blocked"
+
+    def review():
+        return service.review_case(run, rows, "c1", decision="problem", note="问题", user="r")["decision"]
+
+    first, second = (approve, review) if first_action == "approval" else (review, approve)
+    with ThreadPoolExecutor(2) as pool:
+        a = pool.submit(first)
+        assert entered.wait(5)
+        def start_second():
+            second_started.set()
+            return second()
+        b = pool.submit(start_second)
+        values = [a.result(10), b.result(10)]
+    assert values == (["approved", "problem"] if first_action == "approval" else ["problem", "blocked"])
+    assert derive_stage(CATALOG[RULE], service.list_cases(RULE), service.list_runs(RULE),
+                        service.list_events(RULE), rows) == "pending_conclusion"

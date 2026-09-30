@@ -8,14 +8,12 @@
     root-class-name="rv-review-drawer"
     @close="emit('close')"
   >
-    <div
-      v-if="row"
-      class="rv-review"
-      data-testid="case-review-drawer"
-    >
+    <div v-if="row" class="rv-review" data-testid="case-review-drawer">
       <header class="rv-review__head">
         <div class="rv-review__title">
-          <span class="rv-muted">逐例核对 · {{ index + 1 }} / {{ rows.length }} · 运行 {{ runTime }}</span>
+          <span class="rv-muted"
+            >逐例核对 · {{ index + 1 }} / {{ rows.length }} · 运行 {{ runTime }}</span
+          >
           <h2>{{ row.case_title }}</h2>
           <div class="rv-review__tags">
             <span class="rv-tag">{{ SOURCE_KINDS[row.source_kind] }}</span>
@@ -42,12 +40,7 @@
           >
             ›
           </button>
-          <button
-            type="button"
-            class="mq-btn rv-icon-btn"
-            aria-label="关闭"
-            @click="emit('close')"
-          >
+          <button type="button" class="mq-btn rv-icon-btn" aria-label="关闭" @click="emit('close')">
             ×
           </button>
         </div>
@@ -56,8 +49,13 @@
       <div class="rv-review__body">
         <div class="rv-review__pair">
           <div class="mq-inset rv-review__side">
-            <span class="rv-muted">人工预期 · r{{ row.answer_revision }}{{ row.labeled_by ? ` · 标注人 ${row.labeled_by}` : '' }}</span>
-            <span :class="statusClass(STATUS[row.expected_status].tone)">{{ STATUS[row.expected_status].label }}</span>
+            <span class="rv-muted"
+              >人工预期 · r{{ row.answer_revision
+              }}{{ row.labeled_by ? ` · 标注人 ${row.labeled_by}` : '' }}</span
+            >
+            <span :class="statusClass(STATUS[row.expected_status].tone)">{{
+              STATUS[row.expected_status].label
+            }}</span>
             <p>{{ row.human_reason }}</p>
           </div>
           <div
@@ -73,26 +71,27 @@
         <section v-if="findings.length">
           <h3>判定事实</h3>
           <ul class="mq-soft rv-review__list">
-            <li
-              v-for="(item, i) in findings"
-              :key="i"
-            >
+            <li v-for="(item, i) in findings" :key="i">
               {{ item }}
             </li>
           </ul>
         </section>
 
+        <section v-if="publicFacts.length">
+          <h3>结构化判定事实</h3>
+          <ul class="mq-soft rv-review__list">
+            <li v-for="fact in publicFacts" :key="fact.path">{{ fact.path }}：{{ fact.value }}</li>
+          </ul>
+        </section>
+        <CriterionResultBlock
+          v-if="row.result?.criterion_results?.length"
+          :criteria="row.result.criterion_results"
+          variant="decision"
+        />
         <section>
           <h3>证据原文</h3>
-          <div
-            v-if="evidence.length"
-            class="rv-review__evidence"
-          >
-            <div
-              v-for="(item, i) in evidence"
-              :key="i"
-              class="mq-inset rv-review__quote"
-            >
+          <div v-if="evidence.length" class="rv-review__evidence">
+            <div v-for="(item, i) in evidence" :key="i" class="mq-inset rv-review__quote">
               <div class="rv-review__quote-head">
                 <b>{{ item.title }}</b>
                 <span class="mq-mono rv-muted">{{ item.time }}</span>
@@ -100,12 +99,7 @@
               <p>{{ item.text }}</p>
             </div>
           </div>
-          <p
-            v-else
-            class="rv-muted"
-          >
-            本条结果没有返回证据片段。
-          </p>
+          <p v-else class="rv-muted">本条结果没有返回证据片段。</p>
         </section>
 
         <section>
@@ -118,11 +112,10 @@
         <section v-if="history.length">
           <h3>核对记录</h3>
           <ul class="rv-review__history">
-            <li
-              v-for="entry in history"
-              :key="entry.id"
-            >
-              <span :class="statusClass(entry.decision === 'confirmed' ? 'success' : 'danger')">{{ entry.decision === 'confirmed' ? '已确认' : '有问题' }}</span>
+            <li v-for="entry in history" :key="entry.id">
+              <span :class="statusClass(entry.decision === 'confirmed' ? 'success' : 'danger')">{{
+                entry.decision === 'confirmed' ? '已确认' : '有问题'
+              }}</span>
               <span>{{ entry.note }}</span>
               <span class="rv-muted">{{ entry.actor }} · {{ formatTime(entry.created_at) }}</span>
             </li>
@@ -139,16 +132,13 @@
             placeholder="写明证据是否指向正确原文、建议是否可用；状态不一致时说明原因"
           />
         </label>
-        <a-alert
-          v-if="error"
-          type="error"
-          :message="error"
-          show-icon
-        />
+        <a-alert v-if="error" type="error" :message="error" show-icon />
       </div>
 
       <footer class="rv-review__foot">
-        <span class="rv-muted">状态与预期不一致时只能记录问题；确认通过要求状态一致且证据、建议均正确。</span>
+        <span class="rv-muted"
+          >状态与预期不一致时只能记录问题；确认通过要求状态一致且证据、建议均正确。</span
+        >
         <div class="rv-review__actions">
           <button
             type="button"
@@ -175,9 +165,19 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import CriterionResultBlock from '../customer-sample-validation/CriterionResultBlock.vue'
+import { customerFactValueLabel } from '../customer-sample-validation/customerFactValuePresentation'
 import { reviewCase } from '@/services/rule-validation-service'
 import type { ComparisonRow, ValidationEvent } from '@/services/rule-validation-service'
-import { COMPARISONS, PURPOSES, SOURCE_KINDS, STATUS, formatTime, statusClass, statusLabel } from './presentation'
+import {
+  COMPARISONS,
+  PURPOSES,
+  SOURCE_KINDS,
+  STATUS,
+  formatTime,
+  statusClass,
+  statusLabel,
+} from './presentation'
 import { typeLabel } from './caseDraft'
 
 const props = defineProps<{
@@ -193,11 +193,19 @@ const note = ref('')
 const busy = ref(false)
 const error = ref('')
 
-const row = computed<ComparisonRow | null>(() => (props.index >= 0 ? props.rows[props.index] ?? null : null))
+const row = computed<ComparisonRow | null>(() =>
+  props.index >= 0 ? (props.rows[props.index] ?? null) : null,
+)
 const actual = computed(() => statusLabel(row.value?.actual_status))
-const reviewable = computed(() => Boolean(row.value && !['pending', 'failed'].includes(row.value.comparison)))
-const conclusion = computed(() => text(row.value?.result?.customer_conclusion) || text(row.value?.result?.conclusion))
-const suggestion = computed(() => text(row.value?.result?.customer_suggestion) || text(row.value?.result?.suggestion))
+const reviewable = computed(() =>
+  Boolean(row.value && !['pending', 'failed'].includes(row.value.comparison)),
+)
+const conclusion = computed(
+  () => text(row.value?.result?.customer_conclusion) || text(row.value?.result?.conclusion),
+)
+const suggestion = computed(
+  () => text(row.value?.result?.customer_suggestion) || text(row.value?.result?.suggestion),
+)
 const history = computed(() => props.reviews.filter((e) => e.item_id === row.value?.item_id))
 
 function text(value: unknown): string {
@@ -205,7 +213,9 @@ function text(value: unknown): string {
 }
 function asList(value: unknown): Record<string, unknown>[] {
   if (!Array.isArray(value)) return []
-  return value.map((v) => (v && typeof v === 'object' ? (v as Record<string, unknown>) : { text: String(v) }))
+  return value.map((v) =>
+    v && typeof v === 'object' ? (v as Record<string, unknown>) : { text: String(v) },
+  )
 }
 function pick(item: Record<string, unknown>, keys: string[]): string {
   for (const key of keys) {
@@ -221,6 +231,19 @@ const findings = computed(() =>
     .map((f) => pick(f, ['text', 'summary', 'finding', 'description', 'message']))
     .filter(Boolean),
 )
+// 只展开已通过服务端客户安全投影的事实，不重算状态或删减事件。
+function factRows(value: unknown, path = ''): { path: string; value: string }[] {
+  if (Array.isArray(value)) return value.flatMap((v, i) => factRows(v, `${path} · 第${i + 1}项`))
+  if (value !== null && typeof value === 'object') {
+    return Object.entries(value).flatMap(([key, child]) =>
+      factRows(child, [path, customerFactValueLabel(key) || key].filter(Boolean).join(' / ')),
+    )
+  }
+  return [
+    { path, value: value == null ? '未提供' : customerFactValueLabel(value) || String(value) },
+  ]
+}
+const publicFacts = computed(() => factRows(row.value?.result?.customer_display_facts || {}))
 const evidence = computed(() =>
   asList(row.value?.result?.evidence).map((e) => ({
     title:
@@ -228,7 +251,8 @@ const evidence = computed(() =>
       typeLabel(pick(e, ['source_type', 'document_type', 'source'])) ||
       '证据',
     time: pick(e, ['document_time', 'record_time', 'time']),
-    text: pick(e, ['evidence_excerpt', 'excerpt', 'matched_text', 'text', 'summary']) || '（无摘录）',
+    text:
+      pick(e, ['evidence_excerpt', 'excerpt', 'matched_text', 'text', 'summary']) || '（无摘录）',
   })),
 )
 

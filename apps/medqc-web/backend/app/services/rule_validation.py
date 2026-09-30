@@ -5,6 +5,9 @@
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
+from contextvars import ContextVar
+from functools import wraps
 from copy import deepcopy
 from datetime import datetime, timezone
 from functools import lru_cache
@@ -23,6 +26,45 @@ EXPECTED_STATUSES = ("compliant", "non_compliant", "not_applicable", "data_gap")
 PURPOSES = ("development", "acceptance")
 DEVELOPMENT_ENVS = frozenset({"development", "dev", "local", "test"})
 MAX_CASES_PER_RUN = 50
+
+
+_decision_session = ContextVar("rule_validation_decision_session", default=None)
+
+
+def _serialize_decision(method):
+    """同一运行的复核、结论、批准串行写入；跨进程由数据库锁保证。"""
+    @wraps(method)
+    def wrapped(self, target, *args, **kwargs):
+        run_id = target["id"] if isinstance(target, dict) else None
+        if run_id is None:
+            runs = self.list_runs(target)
+            run_id = runs[0]["id"] if runs else None
+        with self.sessions() as session:
+            if session.get_bind().dialect.name == "sqlite":
+                session.execute(sa.text("BEGIN IMMEDIATE"))
+            if run_id:
+                session.execute(select(self.runs.c.id).where(
+                    self.runs.c.id == run_id).with_for_update()).first()
+            token = _decision_session.set(session)
+            try:
+                value = method(self, target, *args, **kwargs)
+                session.commit()
+                return value
+            finally:
+                _decision_session.reset(token)
+    return wrapped
+
+
+def _answers_changed(run, cases):
+    current = {c["item_id"]: c for c in cases}
+    return any(current.get(c["item_id"], {}).get("answer_revision") != c.get("answer_revision")
+               for c in run["cases"])
+
+
+def _later_reviews(events, conclusion):
+    index = next(i for i, event in enumerate(events) if event["id"] == conclusion["id"])
+    return any(e["kind"] == "case_review" and e["run_id"] == conclusion["run_id"]
+               for e in events[index + 1:])
 
 
 class RuleValidationConflict(ValueError):
@@ -294,9 +336,11 @@ class RuleValidationService:
 
     def _protection_cases(self, rule_id: str) -> list[dict]:
         """规则的保护集 = 最近一次验收通过所依据运行中的本规则病例及其预期。"""
-        conclusion = next((e for e in reversed(self.list_events(rule_id))
-                           if e["kind"] == "conclusion" and e["decision"] == "accepted"), None)
-        if conclusion is None or not conclusion.get("run_id"):
+        events = self.list_events(rule_id)
+        conclusion = next((e for e in reversed(events)
+                           if e["kind"] == "conclusion"), None)
+        if (conclusion is None or conclusion["decision"] != "accepted"
+                or not conclusion.get("run_id") or _later_reviews(events, conclusion)):
             return []
         try:
             return self.get_run(conclusion["run_id"])["cases"]
@@ -333,19 +377,29 @@ class RuleValidationService:
 
     # ---- 复核、结论、批准 ----
 
+    @contextmanager
+    def _event_connection(self):
+        active = _decision_session.get()
+        if active is not None:
+            yield active
+        else:
+            with self.sessions() as session:
+                yield session
+                session.commit()
+
     def _append(self, **event) -> dict:
         record = {"id": str(uuid4()), "created_at": _now(), "run_id": None, "item_id": None, "payload_json": None, **event}
-        with self.sessions() as session:
+        with self._event_connection() as session:
             session.execute(self.events.insert().values(**record))
-            session.commit()
         return _event_view(record)
 
     def list_events(self, rule_id: str) -> list[dict]:
-        with self.sessions() as session:
+        with self._event_connection() as session:
             rows = session.execute(select(self.events).where(self.events.c.rule_id == rule_id)
                                    .order_by(self.events.c.created_at.asc())).mappings().all()
         return [_event_view(dict(r)) for r in rows]
 
+    @_serialize_decision
     def review_case(self, run: dict, rows: list[dict], item_id: str, *, decision: str, note: str, user: str) -> dict:
         if decision not in {"confirmed", "problem"} or not note.strip():
             raise ValueError("请选择复核结论并填写核对意见")
@@ -363,6 +417,7 @@ class RuleValidationService:
                             payload_json=json.dumps({"comparison": {k: v for k, v in row.items() if k != "result"}},
                                                     ensure_ascii=False))
 
+    @_serialize_decision
     def conclude(self, run: dict, rows: list[dict], *, decision: str, note: str, gap_ack: str, user: str) -> dict:
         if decision not in {"accepted", "rejected"} or not note.strip():
             raise ValueError("请选择验收结论并填写意见")
@@ -383,6 +438,7 @@ class RuleValidationService:
                                      for r in rows if r.get("role") == "regression"],
                                  "build_kind": build_kind(run.get("execution_version"))}, ensure_ascii=False))
 
+    @_serialize_decision
     def approve(self, rule_id: str, *, decision: str, note: str, user: str) -> dict:
         if decision not in {"approved", "rejected"} or not note.strip():
             raise ValueError("请选择批准结论并填写意见")
@@ -396,6 +452,14 @@ class RuleValidationService:
             if runs and runs[0]["id"] != conclusion["run_id"]:
                 raise ValueError("验收结论之后又有新的运行，请先对最新运行下结论")
             run = self.get_run(conclusion["run_id"])
+            if _answers_changed(run, self.list_cases(rule_id)):
+                raise ValueError("运行病例预期已修改或移除，请重新运行验收")
+            if _later_reviews(events, conclusion):
+                raise ValueError("验收结论之后复核已更新，请重新形成验收结论")
+            reviews = {e["item_id"]: e["decision"] for e in events
+                       if e["kind"] == "case_review" and e["run_id"] == run["id"]}
+            if any(reviews.get(c["item_id"]) != "confirmed" for c in run["cases"]):
+                raise ValueError("存在未逐例确认的病例，不能批准")
             kind = build_kind(run.get("execution_version"))
             if kind != "release" and not self._is_development_env():
                 raise ValueError("客户环境只能依据正式构建的验收运行批准；本地进程版本请在固定发布构建上重跑")
@@ -442,11 +506,13 @@ class RuleValidationService:
 
     def summarize(self, rule_id: str, *, run: dict | None = None, rows: list[dict] | None = None) -> dict:
         """覆盖、复核完成度与通过阻碍；rows 为该 run 的比较结果。"""
-        cases = self.list_cases(rule_id)
+        cases = run["cases"] if run is not None else self.list_cases(rule_id)
         coverage = _coverage(cases)
         blockers: list[str] = []
         regression_gaps = (run or {}).get("regression_gaps") or []
         if run is not None and rows is not None:
+            if _answers_changed(run, self.list_cases(rule_id)):
+                blockers.append("运行病例预期已修改或移除，请重新运行验收")
             events = [e for e in self.list_events(rule_id) if e["run_id"] == run["id"] and e["kind"] == "case_review"]
             latest = {}
             for e in events:
@@ -477,6 +543,12 @@ def derive_stage(rule: dict, cases: list[dict], runs: list[dict], events: list[d
     # 只看最近一次运行上的最后一条结论/批准；新运行会让旧结论和批准失效。
     decided = next((e for e in reversed(events) if e["kind"] in {"conclusion", "approval"}
                     and latest_run and e["run_id"] == latest_run["id"]), None)
+    conclusion = next((e for e in reversed(events) if e["kind"] == "conclusion"
+                       and latest_run and e["run_id"] == latest_run["id"]), None)
+    if latest_run and _answers_changed(latest_run, cases):
+        return "ready_to_run"
+    if conclusion and _later_reviews(events, conclusion):
+        decided = None
     if decided:
         if decided["kind"] == "approval":
             return "approved_pending_release" if decided["decision"] == "approved" else "rejected"
