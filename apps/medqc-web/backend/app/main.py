@@ -63,6 +63,7 @@ from .routers import sync as sync_router
 from .routers import workstation as workstation_router
 from .routers import custom_qc as custom_qc_router
 from .routers import qc_sample_pools as qc_sample_pools_router
+from .routers import rule_validation as rule_validation_router
 from .routers import qc_agent as qc_agent_router
 from .routers import sqlbot as sqlbot_router
 from .routers import clinical_completeness as clinical_completeness_router
@@ -320,6 +321,8 @@ def create_app() -> FastAPI:
     app.include_router(custom_qc_router.router)
     # 客户人工问题样本池
     app.include_router(qc_sample_pools_router.router)
+    # 规则验收（以规则为中心的测试病例、运行、复核与批准）
+    app.include_router(rule_validation_router.router)
     # 受控质控 Agent 工具层
     app.include_router(qc_agent_router.router)
     # SQLBot 独立问数嵌入配置

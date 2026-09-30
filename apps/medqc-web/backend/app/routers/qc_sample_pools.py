@@ -1437,10 +1437,10 @@ async def run_sample_pool_intrinsic_validation(
     validation_ref = getattr(request.state, "rule_validation_reference", None)
     if validation_ref is not None and (
         pool_id != CUSTOMER_TEST_POOL_ID or payload.group_by_luxian_family
-        or requested_sample_item_ids != [validation_ref["item_id"]]
+        or sorted(requested_sample_item_ids) != sorted(validation_ref.get("item_ids") or [validation_ref.get("item_id")])
         or rule_set_key != LUXIAN_0609_QC_RULE_SET_KEY
     ):
-        raise HTTPException(status_code=422, detail="规则验收仅支持自建测试池单病例LX0609任务")
+        raise HTTPException(status_code=422, detail="规则验收仅支持自建测试池的LX0609任务，且病例须与验收运行一致")
     job_filters = {
         **({LX0609_TASK_SETTINGS_FILTER_KEY: task_settings_snapshot} if task_settings_snapshot is not None else {}),
         **({LX0609_TASK_RUNTIME_FILTER_KEY: task_runtime_snapshot} if task_runtime_snapshot is not None else {}),
@@ -1806,7 +1806,10 @@ async def run_sample_pool_intrinsic_validation(
         run_mode="parallel",
         rule_count=len(rule_ids),
     )
-    if validation_ref is not None:
+    if validation_ref is not None and validation_ref.get("kind") == "rule":
+        from ..services.rule_validation import RuleValidationService
+        RuleValidationService().bind_run(validation_ref["run_id"], job["id"], job_filters)
+    elif validation_ref is not None:
         _test_validation_service().bind(validation_ref["item_id"], validation_ref["run_id"],
                                         created_by, job["id"], job_filters)
     service.update_pool_latest_job(pool_id=pool_id, job_id=job["id"], job_status="queued")
