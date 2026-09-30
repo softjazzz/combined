@@ -1660,7 +1660,10 @@ def test_get_workstation_data_today_inpatient_scope_uses_verified_status(
 ):
     """快捷范围只保留今日由轻量状态核验确认仍在院的记录。"""
 
-    today = datetime.now().replace(hour=9, minute=0, second=0, microsecond=0)
+    # “今日”按医院时区（Asia/Shanghai）与产品同源，避免本机时区跨日时误判。
+    from app.services.medical_records.query_service import _hospital_today
+
+    today = datetime.combine(_hospital_today(), datetime.min.time()).replace(hour=9)
     _insert_workstation_records(
         workstation_session_factory,
         MedicalRecordFrontpage(

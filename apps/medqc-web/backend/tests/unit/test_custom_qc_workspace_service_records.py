@@ -1,5 +1,5 @@
 from types import SimpleNamespace
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import pytest
 
 import app.services.custom_qc_workspace_service as workspace_module
@@ -556,7 +556,8 @@ def test_collect_records_today_inpatient_includes_filtered_visit_index_anchors()
     ):
         model.__table__.create(bind=engine)
 
-    now = datetime.now()
+    # “今日”按医院时区（Asia/Shanghai）与产品同源，避免本机时区跨日时误判。
+    now = datetime.now(timezone(timedelta(hours=8))).replace(tzinfo=None)
     admission_time = now - timedelta(days=2)
     expected_visit_ids = [f"INDEXED-{index:02d}" for index in range(14)]
     with Session(engine) as session:
