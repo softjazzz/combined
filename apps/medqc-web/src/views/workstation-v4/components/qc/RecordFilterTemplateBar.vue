@@ -19,7 +19,10 @@
     <div class="record-filter-template-bar__templates" role="group" aria-label="筛选模板">
       <span class="record-filter-template-bar__label">筛选模板</span>
       <template v-if="loadFailed">
-        <span class="record-filter-template-bar__unavailable" data-testid="filter-template-unavailable">
+        <span
+          class="record-filter-template-bar__unavailable"
+          data-testid="filter-template-unavailable"
+        >
           筛选模板暂不可用
         </span>
         <button type="button" :disabled="busy" @click="loadTemplates">重新加载</button>
@@ -32,12 +35,17 @@
           :disabled="disabled || busy || loading"
           @change="handleTemplateSelect"
         >
-          <option value="">{{ templates.length > 0 ? '选择模板…' : '暂无模板' }}</option>
+          <option value="">
+            {{ templates.length > 0 ? '选择模板…' : '暂无模板' }}
+          </option>
           <option v-for="template in templates" :key="template.id" :value="template.id">
             {{ templateOptionLabel(template) }}
           </option>
         </select>
-        <span v-if="activeTemplate && activeTemplateModified" class="record-filter-template-bar__hint">
+        <span
+          v-if="activeTemplate && activeTemplateModified"
+          class="record-filter-template-bar__hint"
+        >
           已修改
         </span>
         <button
@@ -122,7 +130,9 @@
       <button type="button" :disabled="busy" @click="confirmingDelete = false">取消</button>
     </div>
 
-    <p v-if="notice" class="record-filter-template-bar__notice" role="status">{{ notice }}</p>
+    <p v-if="notice" class="record-filter-template-bar__notice" role="status">
+      {{ notice }}
+    </p>
   </div>
 </template>
 
@@ -243,8 +253,32 @@ function systemDefaultFilters(): RecordFilterSnapshot {
 /** 模板只取本页暴露的筛选键；date_field/inpatient_sort 由页面固定。内容不可用时返回 null。 */
 function templateSnapshot(template: FilterTemplate): RecordFilterSnapshot | null {
   if (!template.filters) return null
-  const { dept, doctor, keyword, start_date, end_date, review_state } = template.filters
-  return normalizeRecordFilter({ dept, doctor, keyword, start_date, end_date, review_state })
+  const {
+    dept,
+    doctor,
+    keyword,
+    start_date,
+    end_date,
+    review_state,
+    standard_id,
+    score_status,
+    grade,
+    score_min,
+    score_max,
+  } = template.filters
+  return normalizeRecordFilter({
+    dept,
+    doctor,
+    keyword,
+    start_date,
+    end_date,
+    review_state,
+    standard_id,
+    score_status,
+    grade,
+    score_min,
+    score_max,
+  })
 }
 
 function defaultTemplate(): FilterTemplate | null {
@@ -342,7 +376,9 @@ async function handleWriteResult<T>(
     return true
   }
   if (result.status === 409) {
-    notice.value = result.code ? CONFLICT_MESSAGES[result.code] : result.message || '模板已冲突，已刷新模板列表'
+    notice.value = result.code
+      ? CONFLICT_MESSAGES[result.code]
+      : result.message || '模板已冲突，已刷新模板列表'
     await loadTemplates()
     return false
   }

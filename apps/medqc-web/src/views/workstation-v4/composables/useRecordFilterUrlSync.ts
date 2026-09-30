@@ -2,6 +2,7 @@ import { ref, watch, type Ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import type { RecordLatestReviewState } from '../types'
+import type { RecordScoreFilterStatus } from '@/api/filterTemplates'
 import type { WorkstationDateRange } from './usePatientRecords'
 import {
   hasExplicitRecordQuery,
@@ -24,6 +25,11 @@ export interface RecordFilterState {
   endDate: Ref<string>
   dateRange: Ref<WorkstationDateRange>
   reviewStateFilter: Ref<RecordLatestReviewState[]>
+  standardIdFilter: Ref<string>
+  scoreStatusFilter: Ref<RecordScoreFilterStatus | ''>
+  gradeFilter: Ref<string>
+  scoreMinFilter: Ref<number | null>
+  scoreMaxFilter: Ref<number | null>
   currentPage: Ref<number>
 }
 
@@ -58,6 +64,11 @@ export function useRecordFilterUrlSync(options: {
       start_date: state.startDate.value,
       end_date: state.endDate.value,
       review_state: state.reviewStateFilter.value,
+      standard_id: state.standardIdFilter.value,
+      score_status: state.scoreStatusFilter.value || undefined,
+      grade: state.gradeFilter.value,
+      score_min: state.scoreMinFilter.value ?? undefined,
+      score_max: state.scoreMaxFilter.value ?? undefined,
     })
   }
 
@@ -76,6 +87,11 @@ export function useRecordFilterUrlSync(options: {
         ? [state.startDate.value, state.endDate.value]
         : null
     state.reviewStateFilter.value = [...(normalized.review_state ?? [])]
+    state.standardIdFilter.value = normalized.standard_id ?? ''
+    state.scoreStatusFilter.value = normalized.score_status ?? ''
+    state.gradeFilter.value = normalized.grade ?? ''
+    state.scoreMinFilter.value = normalized.score_min ?? null
+    state.scoreMaxFilter.value = normalized.score_max ?? null
     state.currentPage.value = 1
     return fetchData(1)
   }

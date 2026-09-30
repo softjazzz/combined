@@ -40,7 +40,10 @@ describe('recordFilterQuery', () => {
   })
 
   it('review_scope=all 标记：显式写入/移除/沿用，且有审核状态时不写', () => {
-    expect(mergeRecordFilterQuery({ tab: 'x' }, {}, true)).toEqual({ tab: 'x', review_scope: 'all' })
+    expect(mergeRecordFilterQuery({ tab: 'x' }, {}, true)).toEqual({
+      tab: 'x',
+      review_scope: 'all',
+    })
     expect(mergeRecordFilterQuery({ review_scope: 'all' }, {}, false)).toEqual({})
     expect(mergeRecordFilterQuery({ review_scope: 'all' }, { doctor: '张' })).toEqual({
       doctor: '张',
@@ -61,5 +64,31 @@ describe('recordFilterQuery', () => {
         { review_state: ['pending_review', 'pending_recheck'] },
       ),
     ).toBe(true)
+  })
+
+  it('评分筛选在 URL 中完整往返，并忽略非法状态或非数值', () => {
+    const parsed = parseRecordFilterQuery({
+      standard_id: '11111111-1111-4111-8111-111111111111',
+      score_status: 'scored',
+      grade: ' 甲 ',
+      score_min: '80',
+      score_max: '99.5',
+    })
+    expect(parsed).toEqual({
+      standard_id: '11111111-1111-4111-8111-111111111111',
+      score_status: 'scored',
+      grade: '甲',
+      score_min: 80,
+      score_max: 99.5,
+    })
+    expect(mergeRecordFilterQuery({ tab: 'records' }, parsed)).toEqual({
+      tab: 'records',
+      standard_id: '11111111-1111-4111-8111-111111111111',
+      score_status: 'scored',
+      grade: '甲',
+      score_min: '80',
+      score_max: '99.5',
+    })
+    expect(parseRecordFilterQuery({ score_status: 'bogus', score_min: 'NaN' })).toEqual({})
   })
 })

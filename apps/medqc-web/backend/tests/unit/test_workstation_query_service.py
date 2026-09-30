@@ -2227,3 +2227,129 @@ def test_workstation_default_score_loader_uses_scoring_service(workstation_sessi
     summaries = {record["id"]: record["latest_qc_summary"] for record in result["records"]}
     assert summaries["V1"]["score_state"]["status"] == "no_standard"
     assert calls == [workstation_session_factory]
+
+
+# ---------------------------------------------------------------------------
+# 列表评分筛选：完整集合计分后过滤、再分页
+# ---------------------------------------------------------------------------
+
+
+def _score_filter_loader(calls, *, fail=False):
+    states = {
+        "V1": {"status": "scored", "score": 98.0, "grade": "甲"},
+        "V2": {"status": "scored", "score": 95.0, "grade": "甲"},
+        "V3": {"status": "scored", "score": 88.0, "grade": "乙"},
+        "V4": {"status": "unavailable", "score": None, "grade": None},
+        "V5": {"status": "no_standard", "score": None, "grade": None},
+    }
+
+    def loader(page_scenes, anchors, **kwargs):
+        calls.append((sorted(identity[2] for identity in page_scenes), kwargs))
+        if fail:
+            raise RuntimeError("SELECT secret FROM score_items")
+        return (
+            {identity: states[identity[2]] for identity in page_scenes if identity[2] in states},
+            {"running": {"status": "configured", "standard_id": "std-1"}},
+        )
+
+    return loader
+
+
+def test_score_filter_uses_full_set_before_paging_and_keeps_total_summary_consistent(
+    workstation_session_factory,
+):
+    _insert_review_filter_records(workstation_session_factory)
+    calls = []
+
+    result = get_workstation_data(
+        page=2,
+        page_size=1,
+        score_min=90,
+        session_factory=workstation_session_factory,
+        settings_loader=_workstation_settings_loader,
+        demo_policy=_no_demo_policy,
+        qc_projection_loader=_review_filter_projection_loader,
+        score_state_loader=_score_filter_loader(calls),
+    )
+
+    assert [record["id"] for record in result["records"]] == ["V2"]
+    assert result["total"] == 2 and result["totalPages"] == 2
+    assert result["qc_summary"]["total_records"] == 2
+    assert result["qc_summary"]["ready_records"] == 2
+    assert calls == [(["V1", "V2", "V3", "V4", "V5"], {"strict": True})]
+
+
+@pytest.mark.parametrize(
+    ("filters", "expected"),
+    [
+        ({"score_status": "unavailable"}, ["V4"]),
+        ({"score_status": "no_standard"}, ["V5"]),
+        ({"grade": "乙"}, ["V3"]),
+        ({"score_min": 88, "score_max": 95}, ["V2", "V3"]),
+    ],
+)
+def test_score_filter_supports_status_grade_and_inclusive_range(
+    workstation_session_factory, filters, expected,
+):
+    _insert_review_filter_records(workstation_session_factory)
+    result = get_workstation_data(
+        **filters,
+        session_factory=workstation_session_factory,
+        settings_loader=_workstation_settings_loader,
+        demo_policy=_no_demo_policy,
+        qc_projection_loader=_review_filter_projection_loader,
+        score_state_loader=_score_filter_loader([]),
+    )
+    assert [record["id"] for record in result["records"]] == expected
+
+
+def test_score_filter_batch_failure_fails_closed_but_single_unavailable_is_filterable(
+    workstation_session_factory, caplog,
+):
+    _insert_review_filter_records(workstation_session_factory)
+    with caplog.at_level("WARNING", logger=query_service_module.__name__):
+        with pytest.raises(query_service_module.WorkstationScoreUnavailable):
+            get_workstation_data(
+                score_status="scored",
+                session_factory=workstation_session_factory,
+                settings_loader=_workstation_settings_loader,
+                demo_policy=_no_demo_policy,
+                qc_projection_loader=_review_filter_projection_loader,
+                score_state_loader=_score_filter_loader([], fail=True),
+            )
+    assert "RuntimeError" in caplog.text and "secret" not in caplog.text
+
+
+def test_score_filter_rejects_oversized_full_set_without_truncating(
+    workstation_session_factory, monkeypatch,
+):
+    _insert_review_filter_records(workstation_session_factory)
+    monkeypatch.setattr(query_service_module, "_SCORE_FILTER_MAX_RECORDS", 2)
+
+    with pytest.raises(query_service_module.WorkstationScoreRangeTooLarge):
+        get_workstation_data(
+            score_status="scored",
+            session_factory=workstation_session_factory,
+            settings_loader=_workstation_settings_loader,
+            demo_policy=_no_demo_policy,
+            qc_projection_loader=_review_filter_projection_loader,
+            score_state_loader=_score_filter_loader([]),
+        )
+
+
+@pytest.mark.parametrize(
+    "filters",
+    [
+        {"score_status": "unknown"},
+        {"score_min": 90, "score_max": 80},
+        {"score_min": float("inf")},
+    ],
+)
+def test_score_filter_rejects_invalid_values(workstation_session_factory, filters):
+    with pytest.raises(ValueError):
+        get_workstation_data(
+            **filters,
+            session_factory=workstation_session_factory,
+            settings_loader=_workstation_settings_loader,
+            demo_policy=_no_demo_policy,
+        )

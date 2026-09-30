@@ -7,8 +7,14 @@ import type {
   RecordLatestReviewState,
   RecordPoolQcSummary,
   ScoreStandardOverviewMap,
+  WorkstationScoreStandardOption,
 } from '../types'
-import { normalizeRecord, normalizeRecordPoolQcSummary, normalizeScoreStandards } from '../normalize'
+import type { RecordScoreFilterStatus } from '@/api/filterTemplates'
+import {
+  normalizeRecord,
+  normalizeRecordPoolQcSummary,
+  normalizeScoreStandards,
+} from '../normalize'
 import { ANALYTICS_DRILLDOWN_QUERY_KEYS } from '../analyticsDrilldown'
 
 const WORKSTATION_PAGE_SIZE = 15
@@ -93,6 +99,8 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
   const qcSummary = ref<RecordPoolQcSummary>({ ...EMPTY_QC_SUMMARY })
   /** 响应顶层 score_standards：本页涉及场景的默认评分标准概况。 */
   const scoreStandards = ref<ScoreStandardOverviewMap>({})
+  const scoreStandardOptions = ref<WorkstationScoreStandardOption[]>([])
+  const scoreStandardOptionsStatus = ref<'available' | 'unavailable'>('available')
 
   const activeDept = ref(initialDepartment || ALL_DEPARTMENTS)
   const activeDoctor = ref(initialDoctor || ALL_DOCTORS)
@@ -104,6 +112,11 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
   const inpatientSort = ref<InpatientSort>('default')
   /** 审核状态筛选（多选）；空数组表示不按审核状态过滤。 */
   const reviewStateFilter = ref<RecordLatestReviewState[]>([])
+  const standardIdFilter = ref('')
+  const scoreStatusFilter = ref<RecordScoreFilterStatus | ''>('')
+  const gradeFilter = ref('')
+  const scoreMinFilter = ref<number | null>(null)
+  const scoreMaxFilter = ref<number | null>(null)
   let activeRequestSequence = 0
 
   const hospOptions: Array<{ value: HospitalStatusScope; label: string }> = [
@@ -161,6 +174,11 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
         // 合同：逗号分隔多值；服务端按列表同源的审核状态过滤后再分页。
         params.review_state = reviewStateFilter.value.join(',')
       }
+      if (standardIdFilter.value) params.standard_id = standardIdFilter.value
+      if (scoreStatusFilter.value) params.score_status = scoreStatusFilter.value
+      if (gradeFilter.value.trim()) params.grade = gradeFilter.value.trim()
+      if (scoreMinFilter.value !== null) params.score_min = scoreMinFilter.value
+      if (scoreMaxFilter.value !== null) params.score_max = scoreMaxFilter.value
       // 下钻上下文只有 analyticsDrilldown 一条资料链，参数名与后端查询项保持一致。
       const analyticsQuery = new URLSearchParams(window.location.search)
       for (const key of ANALYTICS_DRILLDOWN_QUERY_KEYS) {
@@ -204,12 +222,30 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
       pageSize.value = requestedPageSize
       qcSummary.value = normalizeRecordPoolQcSummary(data.qc_summary)
       scoreStandards.value = normalizeScoreStandards(data.score_standards)
+      scoreStandardOptions.value = Array.isArray(data.score_standard_options)
+        ? data.score_standard_options.flatMap((raw): WorkstationScoreStandardOption[] => {
+            const item = raw as Record<string, unknown>
+            const id = String(item.id ?? '').trim()
+            const name = String(item.name ?? '').trim()
+            const versionSeq = Number(item.version_seq)
+            const grades = Array.isArray(item.grades)
+              ? item.grades.map((value) => String(value).trim()).filter(Boolean)
+              : []
+            return id && name && Number.isInteger(versionSeq) && versionSeq > 0
+              ? [{ id, name, versionSeq, isDefault: item.is_default === true, grades }]
+              : []
+          })
+        : []
+      scoreStandardOptionsStatus.value =
+        data.score_standard_options_status === 'unavailable' ? 'unavailable' : 'available'
     } catch (error) {
       if (requestSequence !== activeRequestSequence) return
       console.error('\u52a0\u8f7d\u5de5\u4f5c\u53f0\u6570\u636e\u5931\u8d25:', error)
       loadError.value = true
       qcSummary.value = { ...EMPTY_QC_SUMMARY }
       scoreStandards.value = {}
+      scoreStandardOptions.value = []
+      scoreStandardOptionsStatus.value = 'unavailable'
     } finally {
       if (requestSequence === activeRequestSequence) {
         loading.value = false
@@ -273,6 +309,11 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
     syncScope.value = 'all'
     inpatientSort.value = 'default'
     reviewStateFilter.value = []
+    standardIdFilter.value = ''
+    scoreStatusFilter.value = ''
+    gradeFilter.value = ''
+    scoreMinFilter.value = null
+    scoreMaxFilter.value = null
     currentPage.value = 1
   }
 
@@ -289,6 +330,8 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
     loadError,
     qcSummary,
     scoreStandards,
+    scoreStandardOptions,
+    scoreStandardOptionsStatus,
     activeDept,
     activeDoctor,
     searchText,
@@ -298,6 +341,11 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
     syncScope,
     inpatientSort,
     reviewStateFilter,
+    standardIdFilter,
+    scoreStatusFilter,
+    gradeFilter,
+    scoreMinFilter,
+    scoreMaxFilter,
     hospOptions,
     filteredRecords,
     fetchData,

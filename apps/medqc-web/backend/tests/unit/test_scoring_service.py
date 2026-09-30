@@ -508,3 +508,73 @@ def test_workstation_page_degrades_on_failures():
     other = standard(rule_set_key="sc_content_v1")
     states, _ = score_workstation_page({A: "final"}, {A: {}}, standard_loader=lambda scene: other)
     assert states[A]["reason_code"] == "rule_set_mismatch"
+
+
+def test_workstation_page_strict_fails_on_batch_reads_but_keeps_single_case_unavailable():
+    with pytest.raises(scoring_service.ScoringBatchUnavailable):
+        score_workstation_page(
+            {A: "running"},
+            {A: {}},
+            standard_loader=lambda _scene: (_ for _ in ()).throw(RuntimeError("db down")),
+            strict=True,
+        )
+
+    loader, _ = _loader_for({
+        A: {"status": "ready", "envelope_id": "changed", "items": []},
+    })
+    states, _ = score_workstation_page(
+        {A: "running"},
+        {A: {"envelope_id": "expected"}},
+        standard_loader=lambda _scene: standard(),
+        results_loader=loader,
+        strict=True,
+    )
+    assert states[A]["status"] == "unavailable"
+    assert states[A]["reason_code"] == "result_changed"
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"status": "draft"},
+        {"status": "archived"},
+        {"scene": "final"},
+        {"rule_set_key": "other"},
+    ],
+)
+def test_workstation_selected_standard_must_be_active_same_scene_lx0609(override):
+    selected = {
+        **standard(),
+        "status": "active",
+        "scene": "running",
+        **override,
+    }
+    with pytest.raises(scoring_service.ScoringStandardSelectionInvalid):
+        scoring_service.get_workstation_standard(
+            "running", "std-1", standard_loader=lambda _standard_id: selected,
+        )
+
+
+def test_workstation_standard_options_only_expose_active_same_scene_lx0609_metadata():
+    options = scoring_service.workstation_standard_options(
+        "running",
+        standards_loader=lambda **_kwargs: {
+            "items": [
+                {
+                    "id": "std-1", "name": "运行标准", "version_seq": 3,
+                    "is_default": True, "status": "active", "scene": "running",
+                    "rule_set_key": "luxian_0609_qc_v1",
+                    "grade_bands": [{"name": "甲", "min_score": 90, "max_score": 100}],
+                },
+                {
+                    "id": "std-2", "name": "终末标准", "version_seq": 1,
+                    "is_default": False, "status": "active", "scene": "final",
+                    "rule_set_key": "luxian_0609_qc_v1", "grade_bands": [],
+                },
+            ]
+        },
+    )
+    assert options == [{
+        "id": "std-1", "name": "运行标准", "version_seq": 3,
+        "is_default": True, "grades": ["甲"],
+    }]

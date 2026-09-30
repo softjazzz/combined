@@ -11,11 +11,14 @@ from ..core.pagination import HEAVY_MAX_PAGE_SIZE, page_param, page_size_param
 from ..services.medical_records.query_service import (
     WORKSTATION_REVIEW_STATES,
     WorkstationReviewStateUnavailable,
+    WorkstationScoreRangeTooLarge,
+    WorkstationScoreUnavailable,
     get_departments,
     get_stats,
     get_workstation_data,
     list_medical_records,
 )
+from ..services.scoring_service import ScoringStandardSelectionInvalid
 from ..services.medical_records.hospitalization_status_service import (
     default_hospitalization_status_service,
 )
@@ -136,6 +139,13 @@ async def get_workstation_data_api(
         None,
         description="审核状态筛选，逗号分隔：pending_review/pending_recheck/approved/doubtful",
     ),
+    standard_id: Optional[UUID] = Query(None, description="评分标准 ID；不传使用场景默认标准"),
+    score_status: Optional[Literal["scored", "no_standard", "unavailable"]] = Query(
+        None, description="计分状态筛选",
+    ),
+    grade: Optional[str] = Query(None, min_length=1, max_length=50, description="评分等级筛选"),
+    score_min: Optional[float] = Query(None, description="最低得分（含）"),
+    score_max: Optional[float] = Query(None, description="最高得分（含）"),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     review_states = _parse_review_state(review_state)
@@ -159,10 +169,27 @@ async def get_workstation_data_api(
             analytics_rule_id=analytics_rule_id,
             analytics_result_status=analytics_result_status,
             analytics_scope=analytics_scope,
+            standard_id=str(standard_id) if standard_id else None,
+            score_status=score_status,
+            grade=grade,
+            score_min=score_min,
+            score_max=score_max,
             **extra,
         )
     except WorkstationReviewStateUnavailable:
         # 带审核状态筛选却读不到审核状态：不能返回未过滤结果，固定脱敏 503。
         raise HTTPException(status_code=503, detail=_REVIEW_STATE_UNAVAILABLE_DETAIL) from None
+    except WorkstationScoreRangeTooLarge:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "range_too_large", "message": "评分筛选范围超过 5000 例，请缩小范围"},
+        ) from None
+    except ScoringStandardSelectionInvalid as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    except WorkstationScoreUnavailable:
+        raise HTTPException(
+            status_code=503,
+            detail="评分数据暂不可用，无法按评分条件筛选，请稍后重试",
+        ) from None
     except Exception as exc:
         raise_medical_records_http_error(exc)

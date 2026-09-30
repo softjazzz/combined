@@ -19,7 +19,13 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from .case_identity import CaseRef
 from .luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY
-from .scoring_standard_service import ScoringStandardUnavailable, get_default_standard
+from .scoring_standard_service import (
+    ScoringStandardUnavailable,
+    ScoringStandardNotFound,
+    get_default_standard,
+    get_standard,
+    list_standards,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +43,10 @@ class ScoringScopeContextUnavailable(RuntimeError):
 
 class ScoringBatchUnavailable(RuntimeError):
     """严格模式（按得分筛选）下标准或条目读取失败：不能降级为部分结果。"""
+
+
+class ScoringStandardSelectionInvalid(ValueError):
+    """工作台显式选择的评分标准不可用于当前场景。"""
 
 
 def standard_needs_department(standard: Mapping[str, Any]) -> bool:
@@ -496,51 +506,69 @@ def score_workstation_page(
     return states, overview
 
 
-def default_standard_filter_options(
-    scenes: Iterable[str],
+def get_workstation_standard(
+    scene: str,
+    standard_id: str,
     *,
-    standard_loader: Callable[[str], Mapping[str, Any] | None] = get_default_standard,
-) -> dict[str, dict[str, Any]]:
-    """列表得分筛选项：各场景默认标准概况与可选等级（档位名，按分数降序；否决等级是其中之一）。
+    standard_loader: Callable[[str], Mapping[str, Any]] = get_standard,
+) -> Mapping[str, Any]:
+    """读取工作台显式选择的标准，并限制为当前场景已启用的 LX0609 标准。"""
 
-    只读默认标准，不计分。读取失败的场景 status=unavailable（grades 为空），由调用方决定是否失败关闭。
-    """
-    options: dict[str, dict[str, Any]] = {}
-    for scene in sorted(set(scenes)):
-        empty = {"standard_id": None, "standard_name": None, "standard_updated_at": None,
-                 "base_score": None, "grades": [], "veto_grade": None}
-        try:
-            standard = standard_loader(scene)
-        except Exception as exc:  # noqa: BLE001 - 标准不可用，交由调用方处理
-            logger.warning("评分筛选项读取失败 error_type=%s", type(exc).__name__)
-            options[scene] = {"status": "unavailable", **empty}
-            continue
-        if standard is None:
-            options[scene] = {"status": "no_standard", **empty}
-            continue
-        grades = [
-            str(band["name"]) for band in standard.get("grade_bands") or []
-            if isinstance(band, Mapping) and str(band.get("name") or "").strip()
-        ]
-        options[scene] = {
-            "status": "configured",
-            "standard_id": standard.get("id"),
-            "standard_name": standard.get("name"),
-            "standard_updated_at": standard.get("updated_at"),
-            "base_score": standard.get("base_score"),
-            "grades": list(dict.fromkeys(grades)),
-            "veto_grade": standard.get("veto_grade"),
+    try:
+        selected = standard_loader(str(standard_id or "").strip())
+    except ScoringStandardNotFound as exc:
+        raise ScoringStandardSelectionInvalid("评分标准不存在") from exc
+    if (
+        selected.get("status") != "active"
+        or selected.get("scene") != scene
+        or selected.get("rule_set_key") != LUXIAN_0609_RULE_SET_KEY
+    ):
+        raise ScoringStandardSelectionInvalid("评分标准不可用于当前病历场景")
+    return selected
+
+
+def workstation_standard_options(
+    scene: str,
+    *,
+    standards_loader: Callable[..., Mapping[str, Any]] = list_standards,
+) -> list[dict[str, Any]]:
+    """工作台评分标准选项；只暴露当前场景可计分的已启用标准必要元数据。"""
+
+    payload = standards_loader(scene=scene, status="active")
+    items = payload.get("items") if isinstance(payload, Mapping) else None
+    if not isinstance(items, list):
+        raise ScoringStandardUnavailable("评分标准读取失败")
+    return [
+        {
+            "id": item.get("id"),
+            "name": item.get("name"),
+            "version_seq": item.get("version_seq"),
+            "is_default": bool(item.get("is_default")),
+            "grades": [
+                str(band.get("name"))
+                for band in item.get("grade_bands") or []
+                if isinstance(band, Mapping) and str(band.get("name") or "").strip()
+            ],
         }
-    return options
+        for item in items
+        if isinstance(item, Mapping)
+        and item.get("status") == "active"
+        and item.get("scene") == scene
+        and item.get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY
+        and item.get("id")
+        and item.get("name")
+    ]
 
 
 __all__ = [
     "ScoringBatchUnavailable",
+    "ScoringStandardSelectionInvalid",
     "ScoringStandardUnavailable",
-    "default_standard_filter_options",
+    "get_workstation_standard",
     "grade_for",
     "project_customer_items",
     "score_case",
+    "workstation_standard_options",
     "score_cases",
     "score_result",
     "score_input_needs_department",

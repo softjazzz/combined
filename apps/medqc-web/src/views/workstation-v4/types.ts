@@ -79,7 +79,17 @@ export interface ScoreStandardOverview {
   standardUpdatedAt: string | null
 }
 
-export type ScoreStandardOverviewMap = Partial<Record<'running' | 'final' | 'outpatient', ScoreStandardOverview>>
+export type ScoreStandardOverviewMap = Partial<
+  Record<'running' | 'final' | 'outpatient', ScoreStandardOverview>
+>
+
+export interface WorkstationScoreStandardOption {
+  id: string
+  name: string
+  versionSeq: number
+  isDefault: boolean
+  grades: string[]
+}
 
 export interface RecordPoolQcSummary {
   totalRecords: number

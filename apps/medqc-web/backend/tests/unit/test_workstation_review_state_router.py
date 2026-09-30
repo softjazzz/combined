@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from app.services.medical_records.query_service import WorkstationReviewStateUnavailable
+from app.services.medical_records.query_service import (
+    WorkstationReviewStateUnavailable,
+    WorkstationScoreRangeTooLarge,
+    WorkstationScoreUnavailable,
+)
 
 URL = "/api/medical-records/workstation"
 HEADERS = {"Authorization": "Bearer test-token"}
@@ -76,3 +80,54 @@ def test_review_state_batch_failure_is_desensitized_503(client, monkeypatch):
     assert response.status_code == 503
     assert "secret" not in response.text
     assert "审核状态" in response.text
+
+
+def test_score_filters_are_validated_and_forwarded(client, monkeypatch):
+    _authenticate(monkeypatch)
+    captured = _capture(monkeypatch)
+    standard_id = "11111111-1111-4111-8111-111111111111"
+
+    response = client.get(
+        URL,
+        params={
+            "standard_id": standard_id,
+            "score_status": "scored",
+            "grade": "甲",
+            "score_min": 80,
+            "score_max": 99.5,
+        },
+        headers=HEADERS,
+    )
+
+    assert response.status_code == 200
+    assert captured["standard_id"] == standard_id
+    assert captured["score_status"] == "scored"
+    assert captured["grade"] == "甲"
+    assert captured["score_min"] == 80.0
+    assert captured["score_max"] == 99.5
+
+
+@pytest.mark.parametrize("params", [{"score_status": "unknown"}, {"standard_id": "not-uuid"}])
+def test_invalid_score_query_is_422(client, monkeypatch, params):
+    _authenticate(monkeypatch)
+    captured = _capture(monkeypatch)
+    response = client.get(URL, params=params, headers=HEADERS)
+    assert response.status_code == 422 and captured == {}
+
+
+@pytest.mark.parametrize(
+    ("error", "status", "text"),
+    [
+        (WorkstationScoreUnavailable("secret"), 503, "评分数据暂不可用"),
+        (WorkstationScoreRangeTooLarge("secret"), 422, "range_too_large"),
+    ],
+)
+def test_score_filter_errors_are_desensitized(client, monkeypatch, error, status, text):
+    _authenticate(monkeypatch)
+    monkeypatch.setattr(
+        "app.routers.medical_records_query.get_workstation_data",
+        lambda **_kwargs: (_ for _ in ()).throw(error),
+    )
+    response = client.get(URL, params={"score_status": "scored"}, headers=HEADERS)
+    assert response.status_code == status
+    assert text in response.text and "secret" not in response.text

@@ -120,6 +120,59 @@
               />
             </div>
           </div>
+          <label class="qc-record-result-list-view__filter-field">
+            <span class="qc-record-result-list-view__field-label">评分标准</span>
+            <select v-model="standardIdFilter" aria-label="评分标准筛选" @change="applyFilters">
+              <option value="">
+                {{
+                  scoreStandardOptionsStatus === 'unavailable' ? '评分标准暂不可用' : '场景默认标准'
+                }}
+              </option>
+              <option
+                v-for="standard in scoreStandardOptions"
+                :key="standard.id"
+                :value="standard.id"
+              >
+                {{ standard.name }}{{ standard.isDefault ? '（默认）' : '' }}
+              </option>
+            </select>
+          </label>
+          <label class="qc-record-result-list-view__filter-field">
+            <span class="qc-record-result-list-view__field-label">计分状态</span>
+            <select v-model="scoreStatusFilter" aria-label="计分状态筛选" @change="applyFilters">
+              <option value="">全部状态</option>
+              <option value="scored">已计分</option>
+              <option value="no_standard">未配置评分标准</option>
+              <option value="unavailable">已质控但评分不可用</option>
+            </select>
+          </label>
+          <label class="qc-record-result-list-view__filter-field">
+            <span class="qc-record-result-list-view__field-label">评分等级</span>
+            <select v-model="gradeFilter" aria-label="评分等级筛选" @change="applyFilters">
+              <option value="">全部等级</option>
+              <option v-for="grade in scoreGradeOptions" :key="grade" :value="grade">
+                {{ grade }}
+              </option>
+            </select>
+          </label>
+          <div class="qc-record-result-list-view__filter-field">
+            <span class="qc-record-result-list-view__field-label">分数区间</span>
+            <div class="qc-record-result-list-view__score-range">
+              <input
+                v-model.number="scoreMinFilter"
+                type="number"
+                step="0.01"
+                aria-label="最低得分"
+              />
+              <span>至</span>
+              <input
+                v-model.number="scoreMaxFilter"
+                type="number"
+                step="0.01"
+                aria-label="最高得分"
+              />
+            </div>
+          </div>
           <button
             class="qc-record-result-list-view__query-button"
             type="button"
@@ -200,10 +253,7 @@
               data-testid="open-unchecked-record-documents"
               @click="handleOpenResult(activePreviewKey)"
             >
-              <FileText
-                :size="15"
-                aria-hidden="true"
-              />
+              <FileText :size="15" aria-hidden="true" />
               查看病历文书
             </button>
             <QcRecordColumnSettings
@@ -399,7 +449,14 @@ const {
   qcSummary,
   refreshData,
   reviewStateFilter,
+  standardIdFilter,
+  scoreStatusFilter,
+  gradeFilter,
+  scoreMinFilter,
+  scoreMaxFilter,
   scoreStandards,
+  scoreStandardOptions,
+  scoreStandardOptionsStatus,
   searchText,
   selectHospFilter,
   serverTotal,
@@ -420,6 +477,11 @@ const filterSync = useRecordFilterUrlSync({
     endDate,
     dateRange,
     reviewStateFilter,
+    standardIdFilter,
+    scoreStatusFilter,
+    gradeFilter,
+    scoreMinFilter,
+    scoreMaxFilter,
     currentPage,
   },
   fetchData,
@@ -433,6 +495,12 @@ const departmentOptions = computed(() =>
 const doctorOptions = computed(() =>
   doctors.value.map((item) => item.name).filter((name) => name && name !== '全部主管医师'),
 )
+const scoreGradeOptions = computed(() => {
+  const selected = standardIdFilter.value
+    ? scoreStandardOptions.value.find((item) => item.id === standardIdFilter.value)
+    : scoreStandardOptions.value.find((item) => item.isDefault)
+  return selected?.grades ?? []
+})
 
 type QcRecordMetricKey = 'records' | 'completed' | 'priority' | 'dataGap'
 
@@ -506,9 +574,7 @@ const previewRow = computed(
 )
 const canOpenUnreviewedDocuments = computed(() => {
   const row = previewRow.value
-  return Boolean(
-    row?.resultStatus === 'not-run' && row.instituteId && row.patientId && row.visitId,
-  )
+  return Boolean(row?.resultStatus === 'not-run' && row.instituteId && row.patientId && row.visitId)
 })
 watch(
   rows,
@@ -1126,8 +1192,25 @@ function closeResultDrawer() {
 .qc-record-result-list-view__filters {
   display: flex;
   flex: 1;
+  flex-wrap: wrap;
   min-width: 0;
   gap: 10px;
+}
+
+.qc-record-result-list-view__score-range {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.qc-record-result-list-view__score-range input[type='number'] {
+  width: 84px;
+  padding: 0 8px;
+}
+
+.qc-record-result-list-view__score-range span {
+  color: rgba(29, 29, 31, 0.45);
+  font-size: 12px;
 }
 
 .qc-record-result-list-view__filters input,
@@ -1333,7 +1416,10 @@ function closeResultDrawer() {
 @import './styles/running-qc-refined.css';
 
 .running-qc-refined .qc-record-result-list-view__filters {
-  grid-template-columns: minmax(140px, 1fr) minmax(125px, 150px) minmax(125px, 160px) minmax(280px, 330px) auto;
+  grid-template-columns: minmax(140px, 1fr) minmax(125px, 150px) minmax(125px, 160px) minmax(
+      280px,
+      330px
+    ) auto;
 }
 
 @media (max-width: 1100px) {

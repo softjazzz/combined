@@ -314,7 +314,16 @@ describe('QcRecordResultListView', () => {
     expect(wrapper.classes()).toContain('running-qc-refined')
     expect(
       wrapper.findAll('.qc-record-result-list-view__field-label').map((label) => label.text()),
-    ).toEqual(['关键词', '科室', '主管医师', '入院日期'])
+    ).toEqual([
+      '关键词',
+      '科室',
+      '主管医师',
+      '入院日期',
+      '评分标准',
+      '计分状态',
+      '评分等级',
+      '分数区间',
+    ])
     expect(
       wrapper
         .find('.qc-record-result-list-view__filters .qc-record-result-list-view__export-trigger')
@@ -332,7 +341,16 @@ describe('QcRecordResultListView', () => {
     expect(finalView.find('.qc-record-result-list-view__list-heading').exists()).toBe(true)
     expect(
       finalView.findAll('.qc-record-result-list-view__field-label').map((label) => label.text()),
-    ).toEqual(['关键词', '科室', '主管医师', '出院日期'])
+    ).toEqual([
+      '关键词',
+      '科室',
+      '主管医师',
+      '出院日期',
+      '评分标准',
+      '计分状态',
+      '评分等级',
+      '分数区间',
+    ])
     expect(finalView.getComponent(QcRecordReviewPreview).props('carePhase')).toBe('discharged')
     expect(finalView.findAllComponents(QcRunSelectedControl)).toHaveLength(1)
   })

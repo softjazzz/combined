@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 from collections import Counter
 from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
-from typing import Any, Callable, Iterable, Optional
+from typing import Any, Callable, Iterable, Mapping, Optional
 
 from sqlalchemy import (
     DateTime,
@@ -47,11 +48,21 @@ logger = logging.getLogger(__name__)
 
 # 列表按审核状态筛选的合法取值（与审核服务 batch_review_states 的输出值域一致）。
 WORKSTATION_REVIEW_STATES = frozenset({"pending_review", "pending_recheck", "approved", "doubtful"})
+WORKSTATION_SCORE_STATES = frozenset({"scored", "no_standard", "unavailable"})
 _REVIEW_FILTER_CHUNK = 1000
+_SCORE_FILTER_MAX_RECORDS = 5000
 
 
 class WorkstationReviewStateUnavailable(RuntimeError):
     """带 review_state 筛选时审核状态批量读取失败：无法兑现筛选，路由映射为 503。"""
+
+
+class WorkstationScoreUnavailable(RuntimeError):
+    """带评分筛选时评分标准或结果批量读取失败。"""
+
+
+class WorkstationScoreRangeTooLarge(ValueError):
+    """评分筛选候选全集超过同步计分上限。"""
 
 
 def _session_factory() -> Session:
@@ -585,12 +596,23 @@ def _load_score_states(
     anchors: dict[tuple[str, str, str], dict[str, Any]],
     *,
     session_factory: Callable[[], Any],
+    strict: bool = False,
+    standard_id: str | None = None,
 ) -> tuple[dict[tuple[str, str, str], dict[str, Any]], dict[str, dict[str, Any]]]:
     """病历列表得分唯一来源：计分服务（场景默认标准 + 纯函数计分）。"""
 
-    from ...services.scoring_service import score_workstation_page
+    from ...services.scoring_service import get_workstation_standard, score_workstation_page
 
-    return score_workstation_page(page_scenes, anchors, session_factory=session_factory)
+    standard_loader = (
+        (lambda scene: get_workstation_standard(scene, standard_id))
+        if standard_id else None
+    )
+    kwargs = {"standard_loader": standard_loader} if standard_loader else {}
+    if strict:
+        kwargs["strict"] = True
+    return score_workstation_page(
+        page_scenes, anchors, session_factory=session_factory, **kwargs,
+    )
 
 
 def _attach_score_states(
@@ -657,6 +679,45 @@ def _normalize_review_state_filter(value: Optional[Iterable[str]]) -> frozenset[
     if not normalized or not normalized <= WORKSTATION_REVIEW_STATES:
         raise ValueError("review_state 无效")
     return normalized
+
+
+def _normalize_score_filters(
+    score_status: str | None,
+    grade: str | None,
+    score_min: float | None,
+    score_max: float | None,
+) -> tuple[str | None, str | None, float | None, float | None]:
+    status = str(score_status or "").strip() or None
+    if status is not None and status not in WORKSTATION_SCORE_STATES:
+        raise ValueError("score_status 无效")
+    normalized_grade = str(grade or "").strip() or None
+    minimum = float(score_min) if score_min is not None else None
+    maximum = float(score_max) if score_max is not None else None
+    if any(value is not None and not math.isfinite(value) for value in (minimum, maximum)):
+        raise ValueError("分数区间必须是有限数值")
+    if minimum is not None and maximum is not None and minimum > maximum:
+        raise ValueError("score_min 不能大于 score_max")
+    return status, normalized_grade, minimum, maximum
+
+
+def _score_state_matches(
+    state: Mapping[str, Any], *, score_status: str | None, grade: str | None,
+    score_min: float | None, score_max: float | None,
+) -> bool:
+    status = state.get("status")
+    if score_status is not None and status != score_status:
+        return False
+    if grade is not None and (status != "scored" or state.get("grade") != grade):
+        return False
+    if score_min is not None or score_max is not None:
+        score = state.get("score")
+        if status != "scored" or not isinstance(score, (int, float)):
+            return False
+        if score_min is not None and float(score) < score_min:
+            return False
+        if score_max is not None and float(score) > score_max:
+            return False
+    return True
 
 
 def _collect_full_record_refs(q, indexed_filtered_records: list[Any]) -> list[dict[str, str]]:
@@ -1277,10 +1338,25 @@ def get_workstation_data(
     analytics_result_status: Optional[str] = None,
     analytics_scope: Optional[str] = None,
     review_state: Optional[Iterable[str]] = None,
+    standard_id: Optional[str] = None,
+    score_status: Optional[str] = None,
+    grade: Optional[str] = None,
+    score_min: Optional[float] = None,
+    score_max: Optional[float] = None,
     score_state_loader: Optional[Callable[..., Any]] = None,
 ) -> dict[str, Any]:
     session_factory = session_factory or _session_factory
     review_state_filter = _normalize_review_state_filter(review_state)
+    normalized_score_status, normalized_grade, normalized_score_min, normalized_score_max = (
+        _normalize_score_filters(score_status, grade, score_min, score_max)
+    )
+    normalized_standard_id = str(standard_id or "").strip() or None
+    has_score_filter = any(
+        value is not None
+        for value in (
+            normalized_score_status, normalized_grade, normalized_score_min, normalized_score_max,
+        )
+    )
     normalized_hospital_status = str(hospital_status or "all").strip().lower()
     if normalized_hospital_status not in {"all", "inpatient", "discharged"}:
         raise ValueError("hospital_status must be one of: all, inpatient, discharged")
@@ -1295,6 +1371,10 @@ def get_workstation_data(
         or normalized_sync_scope == "today_inpatient"
     )
     effective_inpatient_sort = normalized_inpatient_sort if is_inpatient_scope else "default"
+    if normalized_standard_id and not (
+        is_inpatient_scope or normalized_hospital_status == "discharged"
+    ):
+        raise ValueError("显式评分标准只支持运行或终末固定场景")
     if (
         analytics_completed_from
         and analytics_completed_to
@@ -1318,6 +1398,37 @@ def get_workstation_data(
 
     with session_factory() as session:
         settings, _ = settings_loader()
+        score_standard_options: list[dict[str, Any]] = []
+        score_standard_options_status = "available"
+        fixed_score_scene = (
+            "running" if is_inpatient_scope
+            else "final" if normalized_hospital_status == "discharged"
+            else None
+        )
+        if fixed_score_scene is not None:
+            from ...services.scoring_service import (
+                get_workstation_standard,
+                workstation_standard_options,
+            )
+
+            if normalized_standard_id:
+                # 先严格校验，避免普通列表挂载路径把非法选择降级为“未知”。
+                try:
+                    get_workstation_standard(fixed_score_scene, normalized_standard_id)
+                except Exception as exc:
+                    from ...services.scoring_service import ScoringStandardSelectionInvalid
+
+                    if isinstance(exc, ScoringStandardSelectionInvalid):
+                        raise
+                    logger.warning("病历列表显式评分标准读取失败 error_type=%s", type(exc).__name__)
+                    raise WorkstationScoreUnavailable("评分标准暂不可用") from None
+            try:
+                score_standard_options = workstation_standard_options(fixed_score_scene)
+            except Exception as exc:  # noqa: BLE001 - 不带显式选择时选项失败不阻断列表
+                logger.warning("病历列表评分标准选项读取失败 error_type=%s", type(exc).__name__)
+                if normalized_standard_id:
+                    raise WorkstationScoreUnavailable("评分标准暂不可用") from None
+                score_standard_options_status = "unavailable"
         hospitalization_projection_map = _load_hospitalization_projection_map(session)
         indexed_registration_records = _load_indexed_registration_records(session)
         real_total_count = (
@@ -1471,6 +1582,15 @@ def get_workstation_data(
             )
         )
         page_review_state_loader = review_state_loader or _load_review_states
+        page_score_state_loader = score_state_loader or (
+            lambda page_scenes, anchors, **kwargs: _load_score_states(
+                page_scenes,
+                anchors,
+                session_factory=session_factory,
+                standard_id=normalized_standard_id,
+                **kwargs,
+            )
+        )
         prefiltered_summary = None
         if review_state_filter is not None:
             # 审核状态筛选：在“其他筛选条件得出的完整集合”上先过滤，再分页；
@@ -1508,6 +1628,75 @@ def get_workstation_data(
             def page_review_state_loader(_anchors, _states=filter_states):
                 return _states
 
+            prefiltered_summary = (raw_qc_summary_map, latest_qc_summary_map)
+
+        filter_score_states: dict[tuple[str, str, str], dict[str, Any]] | None = None
+        filter_score_overview: dict[str, dict[str, Any]] | None = None
+        if has_score_filter:
+            # 评分筛选必须对其他条件形成的完整集合先计分再分页，不允许静默截断。
+            candidate_count = q.count() + len(indexed_filtered_records)
+            if candidate_count > _SCORE_FILTER_MAX_RECORDS:
+                raise WorkstationScoreRangeTooLarge("评分筛选范围超过 5000 例，请缩小范围")
+            frontpage_records = q.all()
+            full_records = [*frontpage_records, *indexed_filtered_records]
+            full_record_refs = _collect_full_record_refs(q, indexed_filtered_records)
+            if prefiltered_summary is None:
+                raw_qc_summary_map = summary_loader(full_record_refs)
+                latest_qc_summary_map = _normalize_latest_qc_summary_map(raw_qc_summary_map)
+            else:
+                raw_qc_summary_map, latest_qc_summary_map = prefiltered_summary
+            full_scenes: dict[tuple[str, str, str], str] = {}
+            for record in full_records:
+                identity = (
+                    str(record.institute_id).strip(),
+                    str(record.patient_id).strip(),
+                    str(record.visit_id).strip(),
+                )
+                if (latest_qc_summary_map.get(identity) or {}).get("status") == "ready":
+                    full_scenes[identity] = _record_scoring_scene(
+                        record, normalized_hospital_status, is_inpatient_scope,
+                    )
+            try:
+                loaded_states, loaded_overview = page_score_state_loader(
+                    full_scenes,
+                    {identity: raw_qc_summary_map.get(identity) or {} for identity in full_scenes},
+                    strict=True,
+                )
+            except Exception as exc:  # noqa: BLE001 - 筛选时整体读取失败必须失败关闭
+                from ...services.scoring_service import ScoringStandardSelectionInvalid
+
+                if isinstance(exc, ScoringStandardSelectionInvalid):
+                    raise
+                logger.warning("病历列表评分筛选批量读取失败 error_type=%s", type(exc).__name__)
+                raise WorkstationScoreUnavailable("评分暂不可用，无法筛选") from None
+            if not isinstance(loaded_states, dict) or not isinstance(loaded_overview, dict):
+                raise WorkstationScoreUnavailable("评分暂不可用，无法筛选")
+            matching_score_identities = {
+                identity
+                for identity, state in loaded_states.items()
+                if isinstance(state, Mapping)
+                and _score_state_matches(
+                    state,
+                    score_status=normalized_score_status,
+                    grade=normalized_grade,
+                    score_min=normalized_score_min,
+                    score_max=normalized_score_max,
+                )
+            }
+            q = q.filter(_identity_in_condition(matching_score_identities))
+            indexed_filtered_records = [
+                row for row in indexed_filtered_records
+                if (str(row.institute_id).strip(), str(row.patient_id).strip(), str(row.visit_id).strip())
+                in matching_score_identities
+            ]
+            full_record_refs = [
+                ref for ref in full_record_refs
+                if (ref["institute_id"], ref["patient_id"], ref["visit_id"])
+                in matching_score_identities
+            ]
+            visible_demos = []
+            filter_score_states = loaded_states
+            filter_score_overview = loaded_overview
             prefiltered_summary = (raw_qc_summary_map, latest_qc_summary_map)
 
         total_real_filtered = q.count() + len(indexed_filtered_records)
@@ -1560,11 +1749,10 @@ def get_workstation_data(
             records,
             raw_qc_summary_map if isinstance(raw_qc_summary_map, dict) else {},
             latest_qc_summary_map,
-            score_state_loader
-            or (
-                lambda page_scenes, anchors: _load_score_states(
-                    page_scenes, anchors, session_factory=session_factory,
-                )
+            (
+                lambda _page_scenes, _anchors: (filter_score_states, filter_score_overview)
+                if filter_score_states is not None and filter_score_overview is not None
+                else page_score_state_loader(_page_scenes, _anchors)
             ),
             lambda record: _record_scoring_scene(
                 record, normalized_hospital_status, is_inpatient_scope,
@@ -1863,4 +2051,6 @@ def get_workstation_data(
         "qc_summary": qc_summary,
         # 本页涉及场景的评分标准概况：{scene: {status: configured|no_standard|unavailable, ...}}。
         "score_standards": score_standards,
+        "score_standard_options": score_standard_options,
+        "score_standard_options_status": score_standard_options_status,
     }

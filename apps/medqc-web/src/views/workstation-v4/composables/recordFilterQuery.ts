@@ -7,13 +7,24 @@
 
 import type { LocationQuery, LocationQueryRaw } from 'vue-router'
 import type { FilterTemplateFilters } from '@/api/filterTemplates'
+import type { RecordScoreFilterStatus } from '@/api/filterTemplates'
 import { ANALYTICS_DRILLDOWN_QUERY_KEYS } from '../analyticsDrilldown'
 import type { RecordLatestReviewState } from '../types'
 
 /** 本页暴露的筛选项；date_field 与 inpatient_sort 由页面固定，不参与模板。 */
 export type RecordFilterSnapshot = Pick<
   FilterTemplateFilters,
-  'dept' | 'doctor' | 'keyword' | 'start_date' | 'end_date' | 'review_state'
+  | 'dept'
+  | 'doctor'
+  | 'keyword'
+  | 'start_date'
+  | 'end_date'
+  | 'review_state'
+  | 'standard_id'
+  | 'score_status'
+  | 'grade'
+  | 'score_min'
+  | 'score_max'
 >
 
 /** 审核状态固定顺序，保证同一组合的 query 与签名稳定。 */
@@ -32,6 +43,11 @@ const QUERY_KEY_BY_FIELD = {
   start_date: 'start_date',
   end_date: 'end_date',
   review_state: 'review_state',
+  standard_id: 'standard_id',
+  score_status: 'score_status',
+  grade: 'grade',
+  score_min: 'score_min',
+  score_max: 'score_max',
 } as const satisfies Record<keyof RecordFilterSnapshot, string>
 
 export const RECORD_FILTER_QUERY_KEYS: readonly string[] = Object.values(QUERY_KEY_BY_FIELD)
@@ -49,7 +65,21 @@ export const REVIEW_SCOPE_ALL = 'all'
  */
 export type ReviewScopeAllIntent = boolean | undefined
 
-const TEXT_FIELDS = ['dept', 'doctor', 'keyword', 'start_date', 'end_date'] as const
+const TEXT_FIELDS = [
+  'dept',
+  'doctor',
+  'keyword',
+  'start_date',
+  'end_date',
+  'standard_id',
+  'grade',
+] as const
+const SCORE_STATUS_VALUES: readonly RecordScoreFilterStatus[] = [
+  'scored',
+  'no_standard',
+  'unavailable',
+]
+const NUMBER_FIELDS = ['score_min', 'score_max'] as const
 
 function isReviewState(value: unknown): value is RecordLatestReviewState {
   return typeof value === 'string' && (REVIEW_STATE_VALUES as readonly string[]).includes(value)
@@ -70,6 +100,15 @@ export function normalizeRecordFilter(snapshot: RecordFilterSnapshot): RecordFil
   const states = new Set((snapshot.review_state ?? []).filter(isReviewState))
   const reviewState = REVIEW_STATE_VALUES.filter((state) => states.has(state))
   if (reviewState.length > 0) normalized.review_state = reviewState
+  if (SCORE_STATUS_VALUES.includes(snapshot.score_status as RecordScoreFilterStatus)) {
+    normalized.score_status = snapshot.score_status
+  }
+  for (const field of NUMBER_FIELDS) {
+    const value = Number(snapshot[field])
+    if (snapshot[field] !== undefined && snapshot[field] !== null && Number.isFinite(value)) {
+      normalized[field] = value
+    }
+  }
   return normalized
 }
 
@@ -82,7 +121,15 @@ export function parseRecordFilterQuery(query: LocationQuery): RecordFilterSnapsh
   }
   const reviewText = firstQueryText(query[QUERY_KEY_BY_FIELD.review_state])
   if (reviewText) {
-    snapshot.review_state = reviewText.split(',').map((item) => item.trim()) as RecordLatestReviewState[]
+    snapshot.review_state = reviewText
+      .split(',')
+      .map((item) => item.trim()) as RecordLatestReviewState[]
+  }
+  const scoreStatus = firstQueryText(query[QUERY_KEY_BY_FIELD.score_status])
+  if (scoreStatus) snapshot.score_status = scoreStatus as RecordScoreFilterStatus
+  for (const field of NUMBER_FIELDS) {
+    const text = firstQueryText(query[QUERY_KEY_BY_FIELD[field]])
+    if (text) snapshot[field] = Number(text)
   }
   return normalizeRecordFilter(snapshot)
 }
@@ -92,10 +139,15 @@ export function recordFilterSignature(snapshot: RecordFilterSnapshot): string {
   return JSON.stringify([
     ...TEXT_FIELDS.map((field) => normalized[field] ?? ''),
     (normalized.review_state ?? []).join(','),
+    normalized.score_status ?? '',
+    ...NUMBER_FIELDS.map((field) => normalized[field] ?? ''),
   ])
 }
 
-export function isSameRecordFilter(left: RecordFilterSnapshot, right: RecordFilterSnapshot): boolean {
+export function isSameRecordFilter(
+  left: RecordFilterSnapshot,
+  right: RecordFilterSnapshot,
+): boolean {
   return recordFilterSignature(left) === recordFilterSignature(right)
 }
 
@@ -122,6 +174,13 @@ export function mergeRecordFilterQuery(
   }
   if (normalized.review_state) {
     next[QUERY_KEY_BY_FIELD.review_state] = normalized.review_state.join(',')
+  }
+  if (normalized.score_status) {
+    next[QUERY_KEY_BY_FIELD.score_status] = normalized.score_status
+  }
+  for (const field of NUMBER_FIELDS) {
+    const value = normalized[field]
+    if (value !== undefined) next[QUERY_KEY_BY_FIELD[field]] = String(value)
   }
   const keepScopeAll =
     reviewScopeAll ?? firstQueryText(current[REVIEW_SCOPE_QUERY_KEY]) === REVIEW_SCOPE_ALL

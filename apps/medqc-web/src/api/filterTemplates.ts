@@ -17,6 +17,7 @@ export type FilterTemplatePageKey =
 export type FilterTemplateDateField = 'visit' | 'admission' | 'discharge' | 'updated'
 export type FilterTemplateInpatientSort = 'default' | 'longest' | 'recent'
 export type FilterTemplateConflictCode = 'name_conflict' | 'limit_reached' | 'version_conflict'
+export type RecordScoreFilterStatus = 'scored' | 'no_standard' | 'unavailable'
 
 /** 模板保存的筛选条件：仅服务端白名单键，不含页码与分页大小。 */
 export interface FilterTemplateFilters {
@@ -28,6 +29,11 @@ export interface FilterTemplateFilters {
   date_field?: FilterTemplateDateField
   inpatient_sort?: FilterTemplateInpatientSort
   review_state?: RecordLatestReviewState[]
+  standard_id?: string
+  score_status?: RecordScoreFilterStatus
+  grade?: string
+  score_min?: number
+  score_max?: number
 }
 
 export interface FilterTemplate {

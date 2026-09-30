@@ -114,6 +114,30 @@ describe('usePatientRecords workstation filters', () => {
     expect(mocks.getRaw.mock.lastCall?.[1]).not.toHaveProperty('review_state')
   })
 
+  it('评分标准、状态、等级与分数区间传给服务端，重置全部清空', async () => {
+    const records = usePatientRecords('inpatient')
+    records.standardIdFilter.value = '11111111-1111-4111-8111-111111111111'
+    records.scoreStatusFilter.value = 'scored'
+    records.gradeFilter.value = '甲'
+    records.scoreMinFilter.value = 80
+    records.scoreMaxFilter.value = 99.5
+    await records.fetchData(1)
+    expect(mocks.getRaw.mock.lastCall?.[1]).toMatchObject({
+      standard_id: '11111111-1111-4111-8111-111111111111',
+      score_status: 'scored',
+      grade: '甲',
+      score_min: 80,
+      score_max: 99.5,
+    })
+
+    records.resetFilters()
+    expect(records.standardIdFilter.value).toBe('')
+    expect(records.scoreStatusFilter.value).toBe('')
+    expect(records.gradeFilter.value).toBe('')
+    expect(records.scoreMinFilter.value).toBeNull()
+    expect(records.scoreMaxFilter.value).toBeNull()
+  })
+
   it('允许运行和终末页面以显式初始住院状态固定服务端范围', async () => {
     const runningRecords = usePatientRecords('inpatient')
     await runningRecords.fetchData()

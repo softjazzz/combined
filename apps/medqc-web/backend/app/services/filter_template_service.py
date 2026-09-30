@@ -10,9 +10,10 @@
 from __future__ import annotations
 
 import json
+import math
 from datetime import date, datetime, timezone
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from sqlalchemy import delete, func, insert, select, text, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -31,13 +32,23 @@ MAX_OWNER_ID_LENGTH = 64
 MAX_TEXT_FILTER_LENGTH = 100
 
 REVIEW_STATES = ("pending_review", "pending_recheck", "approved", "doubtful")
-_TEXT_FILTER_KEYS = ("dept", "doctor", "keyword")
+SCORE_STATES = ("scored", "no_standard", "unavailable")
+_TEXT_FILTER_KEYS = ("dept", "doctor", "keyword", "grade")
 _DATE_FILTER_KEYS = ("start_date", "end_date")
 _ENUM_FILTERS = {
     "date_field": frozenset({"visit", "admission", "discharge", "updated"}),
     "inpatient_sort": frozenset({"default", "longest", "recent"}),
 }
-FILTER_KEYS = frozenset({*_TEXT_FILTER_KEYS, *_DATE_FILTER_KEYS, *_ENUM_FILTERS, "review_state"})
+FILTER_KEYS = frozenset({
+    *_TEXT_FILTER_KEYS,
+    *_DATE_FILTER_KEYS,
+    *_ENUM_FILTERS,
+    "review_state",
+    "standard_id",
+    "score_status",
+    "score_min",
+    "score_max",
+})
 OUTPATIENT_PAGE_KEY = "v5_records_outpatient_emergency"
 OUTPATIENT_FILTER_KEYS = frozenset({"dept", "keyword", "start_date", "end_date", "date_field"})
 
@@ -157,18 +168,38 @@ def validate_filters(filters: Any, *, page_key: str | None = None) -> dict[str, 
             if not isinstance(value, str) or value not in _ENUM_FILTERS[key]:
                 raise FilterTemplateInvalid(f"筛选项 {key} 取值无效")
             normalized[key] = value
-        else:  # review_state
+        elif key == "review_state":
             if not isinstance(value, list) or any(
                 not isinstance(item, str) or item not in REVIEW_STATES for item in value
             ):
                 raise FilterTemplateInvalid("筛选项 review_state 取值无效")
             if value:
                 normalized[key] = list(dict.fromkeys(value))
+        elif key == "score_status":
+            if not isinstance(value, str) or value not in SCORE_STATES:
+                raise FilterTemplateInvalid("筛选项 score_status 取值无效")
+            normalized[key] = value
+        elif key == "standard_id":
+            if not isinstance(value, str):
+                raise FilterTemplateInvalid("筛选项 standard_id 取值无效")
+            try:
+                normalized[key] = str(UUID(value.strip()))
+            except (ValueError, AttributeError):
+                raise FilterTemplateInvalid("筛选项 standard_id 取值无效") from None
+        else:  # score_min / score_max
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+                raise FilterTemplateInvalid(f"筛选项 {key} 必须是有限数值")
+            normalized[key] = float(value)
     if (
         "start_date" in normalized and "end_date" in normalized
         and normalized["start_date"] > normalized["end_date"]
     ):
         raise FilterTemplateInvalid("开始日期不能晚于结束日期")
+    if (
+        "score_min" in normalized and "score_max" in normalized
+        and normalized["score_min"] > normalized["score_max"]
+    ):
+        raise FilterTemplateInvalid("最低得分不能大于最高得分")
     if page_key == OUTPATIENT_PAGE_KEY and (
         ("start_date" in normalized) != ("end_date" in normalized)
     ):
