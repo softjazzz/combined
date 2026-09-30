@@ -152,6 +152,10 @@ const stubs = {
   'a-input-search': inputStub,
   'a-table': tableStub,
   'a-tag': { template: '<span class="tag"><slot /></span>' },
+  CustomDraftPointsPanel: {
+    props: ['actorKey', 'canManage'],
+    template: '<div class="custom-draft-panel-stub" :data-actor="actorKey" :data-can-manage="String(canManage)" />',
+  },
 }
 
 async function flush() {
@@ -482,6 +486,27 @@ describe('QualityControlPointManagement', () => {
     expect(state.message.warning).toHaveBeenCalledWith('该版本已下线，已刷新版本列表')
   })
 
+  it('未上线页签接入本人自定义草稿，内置规则只提供只读查看', async () => {
+    const wrapper = await render()
+    expect(wrapper.find('.custom-draft-panel-stub').exists()).toBe(false)
+    await wrapper.find('.tab-offline').trigger('click')
+    await flush()
+    const panel = wrapper.get('.custom-draft-panel-stub')
+    expect(panel.attributes('data-actor')).toBe('manager-1|qc_manager')
+    expect(panel.attributes('data-can-manage')).toBe('true')
+
+    await button(wrapper, '查看', '.row[data-id="LX0609-020"]').trigger('click')
+    await flush()
+    const drawer = wrapper.get('.drawer')
+    expect(drawer.text()).toContain('LX0609-020')
+    expect(drawer.text()).toContain('会诊记录')
+    expect(drawer.text()).toContain('已暂停')
+    expect(drawer.text()).toContain('不可执行')
+    expect(drawer.text()).toContain('不支持在线编辑')
+    expect(drawer.findAll('input, textarea, select').length).toBe(0)
+    expect(drawer.findAll('button').some((item) => item.text() === '编辑')).toBe(false)
+  })
+
   it('只读角色不显示写操作', async () => {
     state.auth!.userRoles = ['qc_doctor']
     state.api.listRuleSetVersions.mockResolvedValue(ok(list({
@@ -552,6 +577,9 @@ describe('QualityControlPointManagement', () => {
     expect(wrapper.findAll('button').some((item) => ['新建质控点', '查看', '编辑'].includes(item.text()))).toBe(false)
 
     await wrapper.find('.tab-offline').trigger('click')
+    await flush()
+    expect(wrapper.find('.custom-draft-panel-stub').exists()).toBe(false)
+    expect(wrapper.findAll('button').some((item) => item.text() === '查看')).toBe(false)
     await selectRow(wrapper, 'CR-011')
     expect(button(wrapper, '批量开启').attributes('disabled')).toBeDefined()
     expect(wrapper.find('.tooltip').attributes('data-tip')).toContain('CR-011 当前不可执行')

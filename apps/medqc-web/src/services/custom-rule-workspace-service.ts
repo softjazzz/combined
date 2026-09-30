@@ -7,6 +7,7 @@ import type {
   CustomRuleDraft,
   CustomRuleDraftBasicInfo,
   CustomRuleDraftBasicInfoInput,
+  CustomRuleDraftBatchPublishItem,
   CustomRuleDraftPayload,
   CustomRuleDocumentOption,
   CustomRuleDraftCondition,
@@ -53,6 +54,14 @@ export type FixedTestValidationMutationResult =
 
 export type ValidatedDraftPublishResult =
   | { success: true; data: CustomRulePublishResult; resultUnknown: false; conflict: false }
+  | { success: false; message: string; resultUnknown: boolean; conflict: boolean }
+
+export type DraftBatchPublishResult =
+  | { success: true; data: CustomRulePublishResult[]; resultUnknown: false; conflict: false }
+  | { success: false; message: string; resultUnknown: boolean; conflict: boolean }
+
+export type DraftDeleteResult =
+  | { success: true; resultUnknown: false; conflict: false }
   | { success: false; message: string; resultUnknown: boolean; conflict: boolean }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -471,6 +480,85 @@ export async function deleteWorkspaceDraft(draftId: string) {
     },
     '删除草稿失败',
   )
+}
+
+/** 按草稿版本 CAS 删除；只能删除本人未上线草稿。 */
+export async function deleteWorkspaceDraftChecked(
+  draftId: string,
+  expectedUpdatedAt: string,
+): Promise<DraftDeleteResult> {
+  try {
+    const response = await ApiService.requestRaw({
+      method: 'DELETE',
+      url: `/api/v1/custom-qc/workspace/drafts/${encodeURIComponent(draftId)}`,
+      params: { expected_updated_at: expectedUpdatedAt },
+    })
+    const normalized = normalizeApiSuccess<unknown>(response.data)
+    if (!normalized.success || !isRecord(normalized.data) || normalized.data.id !== draftId) {
+      return {
+        success: false, resultUnknown: true, conflict: false,
+        message: '删除结果无法确认，请刷新列表核对，勿盲目重试',
+      }
+    }
+    return { success: true, resultUnknown: false, conflict: false }
+  } catch (error) {
+    const status = errorStatus(error)
+    const conflict = status === 409
+    const confirmedRejection = [401, 403, 404, 409, 422].includes(status || 0)
+    return {
+      success: false,
+      message: confirmedRejection
+        ? toErrorMessage(error, conflict ? '草稿已变化或已上线，请刷新后重试' : '删除被拒绝')
+        : '删除结果无法确认，请刷新列表核对，勿盲目重试',
+      resultUnknown: !confirmedRejection,
+      conflict,
+    }
+  }
+}
+
+/** 批量上线：服务端全批校验后同一事务发布，任一失败整批不发布。 */
+export async function publishWorkspaceDraftsBatch(
+  items: CustomRuleDraftBatchPublishItem[],
+): Promise<DraftBatchPublishResult> {
+  try {
+    const response = await ApiService.requestRaw({
+      method: 'POST',
+      url: '/api/v1/custom-qc/workspace/drafts/publish-batch',
+      data: { items },
+    })
+    const normalized = normalizeApiSuccess<unknown>(response.data)
+    const value = normalized.data
+    const expected = new Set(items.map((item) => item.draft_id))
+    const published = normalized.success && isRecord(value) && Array.isArray(value.items)
+      ? value.items
+      : null
+    const valid = published !== null && published.length === expected.size
+      && published.every((item) => isRecord(item) && typeof item.draft_id === 'string'
+        && expected.has(item.draft_id) && nonBlankText(item.rule_code)
+        && nonBlankText(item.published_rule_id) && item.status === 'published')
+      && new Set(published.map((item) => (item as Record<string, unknown>).draft_id)).size === expected.size
+    if (!valid) {
+      return {
+        success: false, resultUnknown: true, conflict: false,
+        message: '批量上线结果无法确认，请刷新列表核对，勿盲目重试',
+      }
+    }
+    return {
+      success: true, data: published as unknown as CustomRulePublishResult[], resultUnknown: false, conflict: false,
+    }
+  } catch (error) {
+    const status = errorStatus(error)
+    const conflict = status === 409
+    const confirmedRejection = [401, 403, 404, 409, 422].includes(status || 0)
+    return {
+      success: false,
+      message: confirmedRejection
+        ? toErrorMessage(error, conflict ? '所选草稿或测试证明已变化，整批未上线，请刷新后重试' : '批量上线被拒绝，整批未上线')
+        : '批量上线结果无法确认，请刷新列表核对，勿盲目重试',
+      resultUnknown: !confirmedRejection,
+      conflict,
+    }
+  }
 }
 
 export async function generateWorkspaceDraftPrompt(draftId: string) {

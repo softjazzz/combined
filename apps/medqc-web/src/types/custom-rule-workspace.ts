@@ -32,6 +32,15 @@ export interface CustomRuleDraft {
   updated_at: string
   category?: string
   rule_type?: string
+  /** 列表接口按服务端固定测试证明计算的可上线标记；旧接口缺失时视为未知。 */
+  publish_ready?: boolean
+  publish_blocked_reason?: string | null
+}
+
+export interface CustomRuleDraftBatchPublishItem {
+  draft_id: string
+  expected_updated_at: string
+  validation_id: string
 }
 
 export interface CustomRuleDraftBasicInfo {

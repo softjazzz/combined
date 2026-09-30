@@ -139,6 +139,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { RefreshCw } from 'lucide-vue-next'
+import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import {
   createDraftBasicInfo, getDraftBasicInfo, getDraftBasicInfoOptions,
@@ -156,6 +157,7 @@ const CATEGORY_OPTIONS = ['病历书写与管理基本规范', '诊疗规范', '
 const RULE_TYPE_OPTIONS = ['规范性', '完整性', '及时性'] as const
 const PAGE_SIZE = 10
 const authStore = useAuthStore()
+const route = useRoute()
 const documentOptions = ref<CustomRuleDocumentOption[]>([])
 const optionsLoading = ref(false)
 const optionsError = ref('')
@@ -326,9 +328,16 @@ async function loadDrafts(revision = contextRevision, actor = actorKey.value) {
   listTotal.value = result.data.total
   listPage.value = result.data.page
 }
+/** 管理页“查看/编辑”通过 ?draftId= 进入；归属与状态仍由服务端校验。 */
+function requestedDraftId() {
+  const value = route?.query?.draftId
+  return typeof value === 'string' && value.trim() ? value.trim() : ''
+}
 async function initialize(revision: number, actor: string) {
   if (!canManage.value || !String(authStore.user?.id || authStore.user?.email || '').trim()) return
   await Promise.all([loadOptions(revision, actor), loadConditionOptions(revision, actor), loadDrafts(revision, actor)])
+  const draftId = requestedDraftId()
+  if (draftId && contextCurrent(revision, actor) && !editingDraft.value && !detailLoadingId.value) await openDraft(draftId)
 }
 function validateForm() {
   Object.assign(form, {

@@ -2238,6 +2238,22 @@ def _utc_naive(value: Any) -> datetime:
     return value
 
 
+DRAFT_BATCH_PUBLISH_LIMIT = 50
+
+
+class DraftDeleteConflict(RuntimeError):
+    """草稿已发布或版本已变化，拒绝删除。"""
+
+
+def _qc_rule_belongs_to_draft(row: Mapping[str, Any], draft_id: str) -> bool:
+    """已存在的同编码规则只有来自同一草稿时才允许覆盖。"""
+    for column in ("check_logic", "metadata"):
+        payload = _safe_json_loads(row.get(column), {})
+        if isinstance(payload, dict) and _safe_text(payload.get("workspace_draft_id")) == draft_id:
+            return True
+    return False
+
+
 class CustomQCWorkspaceService:
     def __init__(self) -> None:
         if engine is None:
@@ -3030,16 +3046,36 @@ class CustomQCWorkspaceService:
         finally:
             session.close()
 
-    def delete_draft(self, *, draft_id: str, created_by: str) -> bool:
+    def delete_draft(
+        self,
+        *,
+        draft_id: str,
+        created_by: str,
+        expected_updated_at: Optional[datetime] = None,
+    ) -> bool:
+        """只删除本人未发布草稿；已发布草稿保留来源记录。传入版本时按 CAS 删除。"""
         session = _session()
         try:
-            result = session.execute(
-                self._draft_table.delete().where(
-                    and_(self._draft_table.c.id == draft_id, self._draft_table.c.created_by == created_by)
-                )
-            )
+            owned = and_(self._draft_table.c.id == draft_id, self._draft_table.c.created_by == created_by)
+            row = session.execute(
+                select(self._draft_table.c.status, self._draft_table.c.updated_at)
+                .where(owned)
+                .with_for_update()
+            ).mappings().first()
+            if not row:
+                return False
+            if _safe_text(row.get("status"), "draft") != "draft":
+                raise DraftDeleteConflict("已上线草稿不能删除")
+            clauses = [owned, self._draft_table.c.status == "draft"]
+            if expected_updated_at is not None:
+                if _utc_naive(row.get("updated_at")) != _utc_naive(expected_updated_at):
+                    raise DraftDeleteConflict("草稿已更新，请刷新后重试")
+                clauses.append(self._draft_table.c.updated_at == row.get("updated_at"))
+            result = session.execute(self._draft_table.delete().where(and_(*clauses)))
+            if not result.rowcount:
+                raise DraftDeleteConflict("草稿已更新，请刷新后重试")
             session.commit()
-            return bool(result.rowcount and result.rowcount > 0)
+            return True
         finally:
             session.close()
 
@@ -5975,112 +6011,185 @@ class CustomQCWorkspaceService:
     ) -> Dict[str, Any]:
         session = _session()
         try:
-            stmt = select(self._draft_table).where(
-                and_(self._draft_table.c.id == draft_id, self._draft_table.c.created_by == created_by)
-            ).with_for_update()
-            row = session.execute(stmt).mappings().first()
-            if not row:
-                raise ValueError("草稿不存在或无权限")
-
-            draft = _row_to_draft(dict(row))
-            if _safe_text(draft.get("status"), "draft") != "draft":
-                raise DraftTestValidationConflict("只有草稿状态可发布")
-            if expected_updated_at is not None and (
-                _utc_naive(draft.get("updated_at")) != _utc_naive(expected_updated_at)
-            ):
-                raise DraftTestValidationConflict("草稿或测试证明已更新，请刷新后重试")
-            last_test_summary = draft.get("last_test_summary") or {}
-            if validation_id is not None and (
-                not isinstance(last_test_summary, dict)
-                or _safe_text(last_test_summary.get("validation_id")) != _safe_text(validation_id)
-            ):
-                raise DraftTestValidationConflict("测试证明已更新，请刷新后重试")
-            publish_ready, _ = fixed_test_validation_state(draft)
-            if not publish_ready:
-                raise ValueError("请先使用当前草稿完成固定测试病历验证")
-
-            qc_rules_table = _qc_rules_table()
-            now = _now_utc()
-            draft_check_logic = dict(draft.get("check_logic") or {})
-            aligned_document_type, aligned_applicable_documents, aligned_check_logic = align_document_domain_fields(
-                document_type=draft.get("document_type"),
-                applicable_documents=draft.get("applicable_documents"),
-                check_logic=draft_check_logic,
-            )
-            check_logic = {
-                **aligned_check_logic,
-                "source": "custom_rule_workspace",
-                "workspace_draft_id": draft["id"],
-                "applicable_documents": aligned_applicable_documents,
-                "generation_mode": draft.get("generation_mode") or "fallback_template",
-                "examples": draft.get("examples") or [],
-                "last_test_summary": draft.get("last_test_summary"),
-                "document_type": aligned_document_type,
-                "scene": draft.get("scene"),
-            }
-            values: Dict[str, Any] = {
-                "id": str(uuid.uuid4()),
-                "rule_code": draft["rule_code"],
-                "name": draft["name"],
-                "description": draft["description"],
-                "category": "consistency",
-                "severity": draft.get("severity") or _map_defect_level_to_severity(draft.get("defect_level")),
-                "rule_type": "semantic",
-                "scope": "global",
-                "status": "published",
-                "version": "1.0",
-                "priority": 0,
-                "is_active": True,
-                "prompt_template": draft.get("prompt_template"),
-                "check_logic": check_logic,
-                "applicable_documents": aligned_applicable_documents,
-                "metadata": {
-                    "source": "custom_rule_workspace",
-                    "workspace_draft_id": draft["id"],
-                },
-                "created_by": created_by,
-                "updated_by": created_by,
-                "created_at": now,
-                "updated_at": now,
-            }
-
-            existing_stmt = select(qc_rules_table).where(qc_rules_table.c.rule_code == draft["rule_code"]).limit(1)
-            existing = session.execute(existing_stmt).mappings().first()
-            filtered_values = {
-                key: _value_for_column(qc_rules_table.c[key], value)
-                for key, value in values.items()
-                if key in qc_rules_table.c
-            }
-            if existing:
-                session.execute(
-                    update(qc_rules_table)
-                    .where(qc_rules_table.c.rule_code == draft["rule_code"])
-                    .values(**{k: v for k, v in filtered_values.items() if k != "id"})
-                )
-                published_rule_id = _safe_text(existing.get("id")) or draft["rule_code"]
-            else:
-                session.execute(qc_rules_table.insert().values(**filtered_values))
-                inserted = session.execute(existing_stmt).mappings().first()
-                published_rule_id = _safe_text((inserted or {}).get("id")) or draft["rule_code"]
-
-            session.execute(
-                update(self._draft_table)
-                .where(and_(self._draft_table.c.id == draft_id, self._draft_table.c.created_by == created_by))
-                .values(
-                    status="published",
-                    published_rule_id=published_rule_id,
-                    updated_at=now,
-                )
+            result = self._publish_locked_draft(
+                session,
+                draft_id=draft_id,
+                created_by=created_by,
+                expected_updated_at=expected_updated_at,
+                validation_id=validation_id,
+                now=_now_utc(),
             )
             session.commit()
-            return {
-                "draft_id": draft_id,
-                "rule_code": draft["rule_code"],
-                "published_rule_id": published_rule_id,
-                "status": "published",
-            }
+            return result
         finally:
             session.close()
+
+    def publish_drafts_batch(
+        self,
+        *,
+        created_by: str,
+        items: Sequence[Mapping[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """批量上线：每项必须携带版本与测试证明，全批校验通过后同一事务发布，任一失败整批回滚。"""
+        if not items:
+            raise ValueError("请至少选择一个草稿")
+        if len(items) > DRAFT_BATCH_PUBLISH_LIMIT:
+            raise ValueError(f"单次最多批量上线 {DRAFT_BATCH_PUBLISH_LIMIT} 个草稿")
+        normalized: Dict[str, Mapping[str, Any]] = {}
+        for item in items:
+            draft_id = _safe_text(item.get("draft_id"))
+            if not draft_id:
+                raise ValueError("草稿ID不能为空")
+            if draft_id in normalized:
+                raise ValueError("批量上线列表存在重复草稿")
+            if item.get("expected_updated_at") is None or not _safe_text(item.get("validation_id")):
+                raise ValueError("每个草稿都必须提交版本和测试证明")
+            normalized[draft_id] = item
+        session = _session()
+        try:
+            now = _now_utc()
+            results: List[Dict[str, Any]] = []
+            # 稳定顺序加锁，避免并发批量上线互相死锁。
+            for draft_id in sorted(normalized):
+                item = normalized[draft_id]
+                try:
+                    results.append(
+                        self._publish_locked_draft(
+                            session,
+                            draft_id=draft_id,
+                            created_by=created_by,
+                            expected_updated_at=item["expected_updated_at"],
+                            validation_id=_safe_text(item.get("validation_id")),
+                            now=now,
+                        )
+                    )
+                except DraftTestValidationConflict as exc:
+                    raise DraftTestValidationConflict(f"草稿 {draft_id}：{exc}") from exc
+                except ValueError as exc:
+                    raise ValueError(f"草稿 {draft_id}：{exc}") from exc
+            session.commit()
+            return results
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
+    def _publish_locked_draft(
+        self,
+        session: Session,
+        *,
+        draft_id: str,
+        created_by: str,
+        expected_updated_at: Optional[datetime],
+        validation_id: Optional[str],
+        now: datetime,
+    ) -> Dict[str, Any]:
+        """在调用方事务内锁定、校验并发布单个草稿；不提交。"""
+        stmt = select(self._draft_table).where(
+            and_(self._draft_table.c.id == draft_id, self._draft_table.c.created_by == created_by)
+        ).with_for_update()
+        row = session.execute(stmt).mappings().first()
+        if not row:
+            raise ValueError("草稿不存在或无权限")
+
+        draft = _row_to_draft(dict(row))
+        if _safe_text(draft.get("status"), "draft") != "draft":
+            raise DraftTestValidationConflict("只有草稿状态可发布")
+        if expected_updated_at is not None and (
+            _utc_naive(draft.get("updated_at")) != _utc_naive(expected_updated_at)
+        ):
+            raise DraftTestValidationConflict("草稿或测试证明已更新，请刷新后重试")
+        last_test_summary = draft.get("last_test_summary") or {}
+        if validation_id is not None and (
+            not isinstance(last_test_summary, dict)
+            or _safe_text(last_test_summary.get("validation_id")) != _safe_text(validation_id)
+        ):
+            raise DraftTestValidationConflict("测试证明已更新，请刷新后重试")
+        publish_ready, _ = fixed_test_validation_state(draft)
+        if not publish_ready:
+            raise ValueError("请先使用当前草稿完成固定测试病历验证")
+
+        qc_rules_table = _qc_rules_table()
+        draft_check_logic = dict(draft.get("check_logic") or {})
+        aligned_document_type, aligned_applicable_documents, aligned_check_logic = align_document_domain_fields(
+            document_type=draft.get("document_type"),
+            applicable_documents=draft.get("applicable_documents"),
+            check_logic=draft_check_logic,
+        )
+        check_logic = {
+            **aligned_check_logic,
+            "source": "custom_rule_workspace",
+            "workspace_draft_id": draft["id"],
+            "applicable_documents": aligned_applicable_documents,
+            "generation_mode": draft.get("generation_mode") or "fallback_template",
+            "examples": draft.get("examples") or [],
+            "last_test_summary": draft.get("last_test_summary"),
+            "document_type": aligned_document_type,
+            "scene": draft.get("scene"),
+        }
+        values: Dict[str, Any] = {
+            "id": str(uuid.uuid4()),
+            "rule_code": draft["rule_code"],
+            "name": draft["name"],
+            "description": draft["description"],
+            "category": "consistency",
+            "severity": draft.get("severity") or _map_defect_level_to_severity(draft.get("defect_level")),
+            "rule_type": "semantic",
+            "scope": "global",
+            "status": "published",
+            "version": "1.0",
+            "priority": 0,
+            "is_active": True,
+            "prompt_template": draft.get("prompt_template"),
+            "check_logic": check_logic,
+            "applicable_documents": aligned_applicable_documents,
+            "metadata": {
+                "source": "custom_rule_workspace",
+                "workspace_draft_id": draft["id"],
+            },
+            "created_by": created_by,
+            "updated_by": created_by,
+            "created_at": now,
+            "updated_at": now,
+        }
+
+        existing_stmt = select(qc_rules_table).where(qc_rules_table.c.rule_code == draft["rule_code"]).limit(1)
+        existing = session.execute(existing_stmt).mappings().first()
+        filtered_values = {
+            key: _value_for_column(qc_rules_table.c[key], value)
+            for key, value in values.items()
+            if key in qc_rules_table.c
+        }
+        if existing and not _qc_rule_belongs_to_draft(existing, draft["id"]):
+            raise DraftTestValidationConflict("规则编码已被其他规则占用，未覆盖")
+        if existing:
+            session.execute(
+                update(qc_rules_table)
+                .where(qc_rules_table.c.rule_code == draft["rule_code"])
+                .values(**{k: v for k, v in filtered_values.items() if k != "id"})
+            )
+            published_rule_id = _safe_text(existing.get("id")) or draft["rule_code"]
+        else:
+            session.execute(qc_rules_table.insert().values(**filtered_values))
+            inserted = session.execute(existing_stmt).mappings().first()
+            published_rule_id = _safe_text((inserted or {}).get("id")) or draft["rule_code"]
+
+        session.execute(
+            update(self._draft_table)
+            .where(and_(self._draft_table.c.id == draft_id, self._draft_table.c.created_by == created_by))
+            .values(
+                status="published",
+                published_rule_id=published_rule_id,
+                updated_at=now,
+            )
+        )
+        return {
+            "draft_id": draft_id,
+            "rule_code": draft["rule_code"],
+            "published_rule_id": published_rule_id,
+            "status": "published",
+        }
 
 
 # SQLAlchemy is imported lazily here to avoid polluting top-level namespace usage above.

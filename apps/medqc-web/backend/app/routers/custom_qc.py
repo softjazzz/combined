@@ -17,10 +17,12 @@ from ..services.custom_qc_service import (
     generate_custom_prompt,
 )
 from ..services.custom_qc_workspace_service import (
+    DRAFT_BATCH_PUBLISH_LIMIT,
     CustomQCWorkspaceService,
     DraftBasicInfoConflict,
     DraftBasicInfoInvalid,
     DraftBasicInfoNotFound,
+    DraftDeleteConflict,
     DraftVisualConditionConflict,
     DraftVisualConditionNotFound,
     draft_basic_info_document_options,
@@ -36,6 +38,7 @@ from ..services.draft_test_validation_service import (
     DraftTestValidationNotFound,
     DraftTestValidationResultUnknown,
     DraftTestValidationService,
+    fixed_test_validation_state,
 )
 from ..services.visual_condition_service import (
     VisualConditionInvalid,
@@ -187,6 +190,18 @@ class WorkspaceDraftPublishRequest(BaseModel):
 
     expected_updated_at: datetime
     validation_id: str = Field(..., min_length=1, max_length=128)
+
+
+class WorkspaceDraftBatchPublishItem(WorkspaceDraftPublishRequest):
+    draft_id: str = Field(..., min_length=1, max_length=64)
+
+
+class WorkspaceDraftBatchPublishRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: List[WorkspaceDraftBatchPublishItem] = Field(
+        ..., min_length=1, max_length=DRAFT_BATCH_PUBLISH_LIMIT,
+    )
 
 
 class WorkspaceRecordPayload(BaseModel):
@@ -1210,9 +1225,13 @@ async def list_workspace_drafts(
         page=page,
         page_size=page_size,
     )
+    items = []
+    for item in result.items:
+        ready, blocked_reason = fixed_test_validation_state(item)
+        items.append({**item, "publish_ready": ready, "publish_blocked_reason": blocked_reason})
     return success_response(
         data={
-            "items": result.items,
+            "items": items,
             "total": result.total,
             "page": result.page,
             "page_size": result.page_size,
@@ -1278,13 +1297,21 @@ async def update_workspace_draft(
 async def delete_workspace_draft(
     request: Request,
     draft_id: str,
+    expected_updated_at: Optional[datetime] = Query(None, description="草稿版本；传入时按 CAS 删除"),
     current_user: Dict[str, Any] = Depends(get_current_user),
     workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
 ):
-    ok = workspace.delete_draft(
-        draft_id=draft_id,
-        created_by=_current_user_id(current_user),
-    )
+    try:
+        ok = workspace.delete_draft(
+            draft_id=draft_id,
+            created_by=_current_user_id(current_user),
+            expected_updated_at=expected_updated_at,
+        )
+    except DraftDeleteConflict as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=str(exc),
+        ) from exc
     if not ok:
         raise HTTPException(status_code=404, detail="草稿不存在或无权限")
     return success_response(
@@ -1420,6 +1447,35 @@ async def run_workspace_draft_test_validation(
     return success_response(
         data=result,
         message="固定测试病历验证完成",
+        trace_id=get_trace_id(request),
+    )
+
+
+@router.post("/workspace/drafts/publish-batch")
+async def publish_workspace_drafts_batch(
+    request: Request,
+    payload: WorkspaceDraftBatchPublishRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
+):
+    try:
+        results = workspace.publish_drafts_batch(
+            created_by=_current_user_id(current_user),
+            items=[item.model_dump() for item in payload.items],
+        )
+    except DraftTestValidationConflict as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=str(exc),
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=str(exc),
+        ) from exc
+    return success_response(
+        data={"items": results},
+        message=f"已批量上线 {len(results)} 个质控点",
         trace_id=get_trace_id(request),
     )
 

@@ -242,9 +242,54 @@
               class="unknown-text"
             >{{ UNKNOWN_TEXT }}</span>
           </template>
+
+          <template v-else-if="column.key === 'operation'">
+            <a-button
+              type="link"
+              size="small"
+              class="view-btn"
+              @click="openBuiltinDetail(asRow(record))"
+            >
+              查看
+            </a-button>
+          </template>
         </template>
       </a-table>
     </div>
+
+    <CustomDraftPointsPanel
+      v-if="!isCodingMode && activeTab === 'offline' && canManage"
+      :actor-key="actorKey"
+      :can-manage="canManage"
+    />
+
+    <a-drawer
+      :open="Boolean(builtinDetail)"
+      title="质控点详情"
+      width="420"
+      @close="builtinDetail = null"
+    >
+      <dl
+        v-if="builtinDetail"
+        class="builtin-detail"
+      >
+        <dt>质控点ID</dt>
+        <dd>{{ builtinDetail.rule_id }}</dd>
+        <dt>质控点名称</dt>
+        <dd>{{ builtinDetail.name || UNKNOWN_TEXT }}</dd>
+        <dt>来源文书</dt>
+        <dd>{{ builtinDetail.document || UNKNOWN_TEXT }}</dd>
+        <dt>当前版本状态</dt>
+        <dd>{{ ENTRY_STATE_LABEL[builtinDetail.state] }}</dd>
+        <dt>草稿状态</dt>
+        <dd>{{ builtinDetail.draftState ? ENTRY_STATE_LABEL[builtinDetail.draftState] : '无变更' }}</dd>
+        <dt>是否可执行</dt>
+        <dd>{{ builtinDetail.executable === true ? '可执行' : builtinDetail.executable === false ? '不可执行' : UNKNOWN_TEXT }}</dd>
+      </dl>
+      <p class="builtin-detail-note">
+        内置质控点由规则执行器实现，判定逻辑不支持在线编辑；可通过批量操作调整上线状态或删除。
+      </p>
+    </a-drawer>
 
     <RuleSetVersionHistoryDrawer
       v-model:open="historyOpen"
@@ -278,6 +323,7 @@ import {
   type RuleSetVersionList,
 } from '@/api/ruleSetVersions'
 import RuleSetDraftPanel from './components/RuleSetDraftPanel.vue'
+import CustomDraftPointsPanel from './components/CustomDraftPointsPanel.vue'
 import RuleSetVersionHistoryDrawer from './components/RuleSetVersionHistoryDrawer.vue'
 import RuleSetVersionImportDrawer from './components/RuleSetVersionImportDrawer.vue'
 import { downloadBlob } from '@/views/workstation-v4/customer-sample-validation/batchExport'
@@ -326,6 +372,8 @@ const appliedKeyword = ref('')
 const historyOpen = ref(false)
 const importOpen = ref(false)
 const exportingCurrent = ref(false)
+/** 内置质控点只读详情；编码模式按手册不提供单项查看。 */
+const builtinDetail = ref<QualityPointRow | null>(null)
 
 const loading = ref(false)
 const saving = ref(false)
@@ -396,6 +444,7 @@ const tableColumns = computed<TableColumnsType<QualityPointRow>>(() => [
     width: 220,
   },
   { title: '是否可执行', dataIndex: 'executable', key: 'executable', width: 120 },
+  ...(isCodingMode.value ? [] : [{ title: '操作', key: 'operation', width: 90 }]),
 ])
 
 const rowSelection = computed<TableProps['rowSelection']>(() => ({
@@ -547,6 +596,11 @@ function confirmDelete() {
   void applyBatch('deleted', frozen.ruleIds)
 }
 
+function openBuiltinDetail(row: QualityPointRow) {
+  if (isCodingMode.value) return
+  builtinDetail.value = row
+}
+
 function handleCreateNew() {
   router.push('/dashboard/quality-control/create')
 }
@@ -567,6 +621,7 @@ function invalidateContext() {
   saving.value = false
   selectedRowKeys.value = []
   deleteConfirmContext.value = null
+  builtinDetail.value = null
   versionList.value = null
   currentDetail.value = null
   baseDetail.value = null
@@ -834,5 +889,30 @@ onBeforeUnmount(() => {
       }
     }
   }
+}
+
+.builtin-detail {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 10px 12px;
+  margin: 0;
+
+  dt {
+    color: rgba(0, 0, 0, 0.45);
+  }
+
+  dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+}
+
+.builtin-detail-note {
+  margin: 18px 0 0;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: #f7f8fa;
+  color: rgba(0, 0, 0, 0.6);
+  font-size: 13px;
 }
 </style>

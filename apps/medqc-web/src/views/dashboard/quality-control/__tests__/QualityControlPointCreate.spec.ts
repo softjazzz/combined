@@ -6,7 +6,10 @@ const mocks = vi.hoisted(() => ({
   list: vi.fn(), options: vi.fn(), get: vi.fn(), create: vi.fn(), update: vi.fn(),
   conditionOptions: vi.fn(), conditionGet: vi.fn(), conditionUpdate: vi.fn(),
   auth: null as null | { user: { id: string; email: string } | null; userRoles: string[] },
+  query: {} as Record<string, unknown>,
 }))
+
+vi.mock('vue-router', () => ({ useRoute: () => ({ query: mocks.query }) }))
 
 vi.mock('@/stores/auth', async () => {
   const { reactive: makeReactive } = await import('vue')
@@ -92,6 +95,7 @@ describe('QualityControlPointCreate', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.auth = null
+    mocks.query = {}
     mocks.options.mockResolvedValue({ success: true, data: { documents: [{ value: '出院记录', label: '出院记录' }] } })
     mocks.list.mockResolvedValue({ success: true, data: { items: [listDraft], total: 1, page: 1, page_size: 10 } })
     mocks.get.mockResolvedValue({ success: true, data: basicDraft })
@@ -116,6 +120,27 @@ describe('QualityControlPointCreate', () => {
     await wrapper.get('form').trigger('submit')
     expect(mocks.create).not.toHaveBeenCalled()
     expect(mocks.update).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('管理页带 draftId 进入时回读该草稿进入编辑', async () => {
+    mocks.query = { draftId: 'draft-1' }
+    const wrapper = render()
+    await flushPromises()
+    expect(mocks.get).toHaveBeenCalledTimes(1)
+    expect(mocks.get).toHaveBeenCalledWith('draft-1')
+    expect((wrapper.get('[data-testid="draft-name"]').element as HTMLInputElement).value).toBe('出院记录完整性')
+    expect(mocks.conditionGet).toHaveBeenCalledWith('draft-1')
+    wrapper.unmount()
+  })
+
+  it('draftId 草稿不可读时提示错误且不进入编辑', async () => {
+    mocks.query = { draftId: 'foreign-draft' }
+    mocks.get.mockResolvedValue({ success: false, message: '基础信息草稿不存在或无权限' })
+    const wrapper = render()
+    await flushPromises()
+    expect(wrapper.get('[data-testid="draft-form-notice"]').text()).toContain('不存在或无权限')
+    expect(wrapper.find('[data-testid="fixed-validation-panel"]').exists()).toBe(false)
     wrapper.unmount()
   })
 
