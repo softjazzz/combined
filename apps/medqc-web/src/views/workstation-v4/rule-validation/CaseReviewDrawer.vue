@@ -1,7 +1,7 @@
 <template>
   <a-drawer
     :open="Boolean(row)"
-    :width="760"
+    width="min(760px, 100vw)"
     placement="right"
     :closable="false"
     :body-style="{ padding: 0 }"
@@ -178,6 +178,7 @@ import { computed, ref, watch } from 'vue'
 import { reviewCase } from '@/services/rule-validation-service'
 import type { ComparisonRow, ValidationEvent } from '@/services/rule-validation-service'
 import { COMPARISONS, PURPOSES, SOURCE_KINDS, STATUS, formatTime, statusClass, statusLabel } from './presentation'
+import { typeLabel } from './caseDraft'
 
 const props = defineProps<{
   runId: string
@@ -222,7 +223,10 @@ const findings = computed(() =>
 )
 const evidence = computed(() =>
   asList(row.value?.result?.evidence).map((e) => ({
-    title: pick(e, ['document_title', 'document_name', 'source_label', 'document_type', 'source']) || '证据',
+    title:
+      pick(e, ['document_title', 'document_name', 'source_label']) ||
+      typeLabel(pick(e, ['source_type', 'document_type', 'source'])) ||
+      '证据',
     time: pick(e, ['document_time', 'record_time', 'time']),
     text: pick(e, ['evidence_excerpt', 'excerpt', 'matched_text', 'text', 'summary']) || '（无摘录）',
   })),

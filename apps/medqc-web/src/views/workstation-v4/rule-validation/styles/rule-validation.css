@@ -205,10 +205,10 @@
 
 .rv-step {
   display: flex;
-  flex: 1 1 0;
+  /* 不小于文字宽度，窄屏时整步换行而不是文字互相重叠 */
+  flex: 1 0 auto;
   align-items: center;
   gap: 10px;
-  min-width: 0;
 }
 
 .rv-step:last-child {
@@ -462,4 +462,35 @@
   .rv-facts {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+.rv-row-actions {
+  white-space: nowrap;
+}
+
+.rv-row-actions > * + * {
+  margin-left: 6px;
+}
+
+/* 窄屏：表格在自身容器内横向滚动，页面不横向滚动 */
+.rv-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.rv-scroll > table {
+  min-width: 100%;
+}
+
+.rv-run {
+  flex-wrap: wrap;
+}
+
+.rv-history li {
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.rv-history li > .mq-status {
+  flex-shrink: 0;
 }

@@ -1137,6 +1137,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '规则验收详情', permission: ['admin', 'qc_manager'] },
       },
       {
+        path: 'rules/validation/:ruleId/cases/new',
+        name: 'WorkstationV4RuleValidationNewCase',
+        component: () => import('@/views/workstation-v4/rule-validation/RuleValidationNewCaseView.vue'),
+        meta: { title: '新建测试病例', permission: ['admin', 'qc_manager'] },
+      },
+      {
         path: 'qc-overview',
         name: 'WorkstationV4QCOverview',
         component: () => import('@/views/workstation/QCOverviewView.vue'),

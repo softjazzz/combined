@@ -35,6 +35,7 @@ export type ValidationCase = {
   item_id: string
   case_title: string
   record_ref: RecordRef
+  department?: string
   source_kind: SourceKind
   evaluation_as_of_date: string | null
   expected_status: ExpectedStatus
@@ -139,8 +140,14 @@ export const removeCaseAnswer = (ruleId: string, itemId: string, revision: numbe
   ApiService.delete<{ removed: boolean }>(`${rule(ruleId)}/cases/${encodeURIComponent(itemId)}`, {
     params: { revision },
   })
+/** 创建运行要走正式任务创建链路（实测约 25 秒），不能用默认 15 秒超时，否则前端报错而后台已建成 */
+export const RUN_CREATE_TIMEOUT_MS = 120000
 export const startValidationRun = (ruleId: string, itemIds?: string[]) =>
-  ApiService.post<{ run_id: string; job_id: string }>(`${rule(ruleId)}/runs`, { item_ids: itemIds ?? null })
+  ApiService.post<{ run_id: string; job_id: string }>(
+    `${rule(ruleId)}/runs`,
+    { item_ids: itemIds ?? null },
+    { timeout: RUN_CREATE_TIMEOUT_MS },
+  )
 export const getValidationRun = (runId: string) =>
   ApiService.get<RunDetail>(`${BASE}/runs/${encodeURIComponent(runId)}`)
 export const reviewCase = (runId: string, itemId: string, decision: 'confirmed' | 'problem', note: string) =>

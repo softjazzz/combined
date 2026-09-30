@@ -144,8 +144,8 @@ class RuleValidationService:
             "item_id": row["id"],
             "case_title": raw.get("case_title") or row.get("patient_name") or row["id"],
             "record_ref": {k: row.get("matched_" + k) for k in ("institute_id", "patient_id", "visit_id")},
-            # 从真实病例复制的测试病例保留真实材料；模板/手工构建的是合成病例，不能冒充客户验收。
-            "source_kind": "real_copy" if raw.get("source_record") else "synthetic",
+            "source_kind": _source_kind(raw),
+            "department": row.get("department") or raw.get("department") or "",
             "evaluation_as_of_date": raw.get("evaluation_as_of_date") or None,
             "expected_status": answer.get("expected_status"),
             "human_reason": answer.get("human_reason") or "",
@@ -171,7 +171,7 @@ class RuleValidationService:
             if self._case_view(row, rule_id) is None:
                 raw = json.loads(row.get("raw_payload_json") or "{}")
                 result.append({"item_id": row["id"], "case_title": raw.get("case_title") or row.get("patient_name") or row["id"],
-                               "source_kind": "real_copy" if raw.get("source_record") else "synthetic",
+                               "source_kind": _source_kind(raw),
                                "evaluation_as_of_date": raw.get("evaluation_as_of_date") or None})
         return sorted(result, key=lambda v: v["item_id"])
 
@@ -430,6 +430,15 @@ def derive_stage(rule: dict, cases: list[dict], runs: list[dict], events: list[d
     return "pending_conclusion"
 
 
+REAL_SOURCE_COPY_TYPE = "customer_source_editable_copy"
+
+
+def _source_kind(raw: dict) -> str:
+    """只有从真实病历复制的测试病例算真实副本；测试病例之间的复制、模板/手工构建都是合成病例。"""
+    source = raw.get("source_record") or {}
+    return "real_copy" if source.get("type") == REAL_SOURCE_COPY_TYPE else "synthetic"
+
+
 def _item_ref(item: dict) -> CaseRef | None:
     """Canonical 结果条目自带三坐标；缺失或不完整时不匹配任何病例（记为缺少结果，不会误判一致）。"""
     ref = CaseRef.from_mapping(item)
@@ -470,4 +479,7 @@ def _now_iso() -> str:
 
 
 def _iso(value: Any) -> str:
-    return value.isoformat() if isinstance(value, datetime) else str(value or "")
+    """库内存的是无时区 UTC 时间，输出时补上时区，避免发布单等处被误读为本地时间。"""
+    if isinstance(value, datetime):
+        return (value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value).isoformat()
+    return str(value or "")

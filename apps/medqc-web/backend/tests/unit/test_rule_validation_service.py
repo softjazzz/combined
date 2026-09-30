@@ -199,3 +199,17 @@ def test_coverage_splits_synthetic_and_real_copy(make_service):
     assert coverage["counts"]["non_compliant"] == {"synthetic": 1, "real_copy": 1}
     assert coverage["gaps"] == ["compliant", "not_applicable", "data_gap"]
     assert coverage["acceptance_cases"] == 1
+
+
+def test_only_copies_of_real_records_count_as_real():
+    from app.services.rule_validation import _source_kind
+    assert _source_kind({"source_record": {"type": "customer_source_editable_copy"}}) == "real_copy"
+    # 测试病例之间复制仍是合成病例，不能冒充客户真实病例验收
+    assert _source_kind({"source_record": {"type": "rule_validation_case_copy"}}) == "synthetic"
+    assert _source_kind({}) == "synthetic"
+
+
+def test_timestamps_are_emitted_with_utc_offset():
+    from datetime import datetime
+    from app.services.rule_validation import _iso
+    assert _iso(datetime(2026, 9, 30, 5, 47, 59)) == "2026-09-30T05:47:59+00:00"

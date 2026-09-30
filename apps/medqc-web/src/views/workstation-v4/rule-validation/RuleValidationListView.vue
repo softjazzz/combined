@@ -30,13 +30,6 @@
             {{ tab.label }}
           </button>
         </div>
-        <button
-          type="button"
-          class="mq-btn"
-          @click="openCaseBuilder"
-        >
-          新建测试病例
-        </button>
       </div>
     </header>
 
@@ -109,80 +102,82 @@
         />
       </div>
       <a-spin :spinning="loading">
-        <table class="mq-table rv-table">
-          <thead>
-            <tr>
-              <th>编号</th>
-              <th>规则</th>
-              <th>阶段</th>
-              <th>测试病例</th>
-              <th>覆盖（合/不/适/缺）</th>
-              <th>最近运行</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="row in visibleRows"
-              :key="row.rule_id"
-              data-testid="rule-row"
-            >
-              <td><span class="mq-mono">{{ row.rule_id }}</span></td>
-              <td>
-                <div class="rv-strong">
-                  {{ row.name }}
-                </div>
-                <small class="rv-muted">{{ row.source_document }}</small>
-              </td>
-              <td><span :class="statusClass(STAGES[row.stage].tone)">{{ STAGES[row.stage].label }}</span></td>
-              <td>
-                <div>{{ row.case_count }} 例</div>
-                <small class="rv-muted">{{ caseNote(row) }}</small>
-              </td>
-              <td>
-                <div
-                  class="rv-dots"
-                  :aria-label="coverageLabel(row)"
-                >
-                  <span
-                    v-for="status in EXPECTED_STATUSES"
-                    :key="status"
-                    class="rv-dot"
-                    :class="{ 'is-on': covered(row, status) }"
-                    :title="STATUS[status].label"
-                  />
-                  <small class="rv-muted">{{ row.coverage.gaps.length ? `缺 ${row.coverage.gaps.length} 类` : '4/4' }}</small>
-                </div>
-              </td>
-              <td>
-                <template v-if="row.latest_run">
-                  <div>{{ formatTime(row.latest_run.created_at) }}</div>
-                  <small class="rv-muted">{{ buildLabel(row.latest_run) }}</small>
-                </template>
-                <span
-                  v-else
-                  class="rv-muted"
-                >尚未运行</span>
-              </td>
-              <td class="rv-right">
-                <router-link
-                  :to="detailLink(row.rule_id)"
-                  class="rv-link"
-                >
-                  进入验收
-                </router-link>
-              </td>
-            </tr>
-            <tr v-if="!loading && !visibleRows.length">
-              <td
-                colspan="7"
-                class="rv-empty"
+        <div class="rv-scroll">
+          <table class="mq-table rv-table">
+            <thead>
+              <tr>
+                <th>编号</th>
+                <th>规则</th>
+                <th>阶段</th>
+                <th>测试病例</th>
+                <th>覆盖（合/不/适/缺）</th>
+                <th>最近运行</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="row in visibleRows"
+                :key="row.rule_id"
+                data-testid="rule-row"
               >
-                {{ scope === 'pending' ? '当前没有待验收规则' : '没有符合条件的规则' }}
-              </td>
-            </tr>
-          </tbody>
-        </table>
+                <td><span class="mq-mono">{{ row.rule_id }}</span></td>
+                <td>
+                  <div class="rv-strong">
+                    {{ row.name }}
+                  </div>
+                  <small class="rv-muted">{{ row.source_document }}</small>
+                </td>
+                <td><span :class="statusClass(STAGES[row.stage].tone)">{{ STAGES[row.stage].label }}</span></td>
+                <td>
+                  <div>{{ row.case_count }} 例</div>
+                  <small class="rv-muted">{{ caseNote(row) }}</small>
+                </td>
+                <td>
+                  <div
+                    class="rv-dots"
+                    :aria-label="coverageLabel(row)"
+                  >
+                    <span
+                      v-for="status in EXPECTED_STATUSES"
+                      :key="status"
+                      class="rv-dot"
+                      :class="{ 'is-on': covered(row, status) }"
+                      :title="STATUS[status].label"
+                    />
+                    <small class="rv-muted">{{ row.coverage.gaps.length ? `缺 ${row.coverage.gaps.length} 类` : '4/4' }}</small>
+                  </div>
+                </td>
+                <td>
+                  <template v-if="row.latest_run">
+                    <div>{{ formatTime(row.latest_run.created_at) }}</div>
+                    <small class="rv-muted">{{ buildLabel(row.latest_run) }}</small>
+                  </template>
+                  <span
+                    v-else
+                    class="rv-muted"
+                  >尚未运行</span>
+                </td>
+                <td class="rv-right">
+                  <router-link
+                    :to="detailLink(row.rule_id)"
+                    class="rv-link"
+                  >
+                    进入验收
+                  </router-link>
+                </td>
+              </tr>
+              <tr v-if="!loading && !visibleRows.length">
+                <td
+                  colspan="7"
+                  class="rv-empty"
+                >
+                  {{ scope === 'pending' ? '当前没有待验收规则' : '没有符合条件的规则' }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </a-spin>
     </section>
   </main>
@@ -190,7 +185,6 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import { listValidationRules } from '@/services/rule-validation-service'
 import type { ExpectedStatus, RuleListItem, ValidationStage } from '@/services/rule-validation-service'
 import { EXPECTED_STATUSES, STAGES, STATUS, buildLabel, formatTime, statusClass } from './presentation'
@@ -203,7 +197,6 @@ const scopeTabs: { key: Scope; label: string }[] = [
   { key: 'all', label: '全部' },
 ]
 
-const router = useRouter()
 const rows = ref<RuleListItem[]>([])
 const loading = ref(false)
 const error = ref('')
@@ -253,9 +246,6 @@ function caseNote(row: RuleListItem) {
 }
 function detailLink(ruleId: string) {
   return { name: 'WorkstationV4RuleValidationDetail', params: { ruleId } }
-}
-function openCaseBuilder() {
-  void router.push({ name: 'WorkstationV4SyntheticCaseNew' })
 }
 
 async function load() {

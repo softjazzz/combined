@@ -91,45 +91,47 @@
               </h2>
               <span class="rv-tag rv-tag--blue">独立验收集 {{ detail.coverage.acceptance_cases }} 例</span>
             </div>
-            <table class="mq-table">
-              <thead>
-                <tr>
-                  <th>预期状态</th>
-                  <th class="rv-num">
-                    合成病例
-                  </th>
-                  <th class="rv-num">
-                    真实病例副本
-                  </th>
-                  <th class="rv-num">
-                    合计
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr
-                  v-for="status in EXPECTED_STATUSES"
-                  :key="status"
-                >
-                  <td>
-                    {{ STATUS[status].label }}
-                    <span
-                      v-if="detail.coverage.gaps.includes(status)"
-                      class="mq-status mq-status--warning"
-                    >缺口</span>
-                  </td>
-                  <td class="rv-num">
-                    {{ detail.coverage.counts[status].synthetic }}
-                  </td>
-                  <td class="rv-num">
-                    {{ detail.coverage.counts[status].real_copy }}
-                  </td>
-                  <td class="rv-num rv-strong">
-                    {{ detail.coverage.counts[status].synthetic + detail.coverage.counts[status].real_copy }}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+            <div class="rv-scroll">
+              <table class="mq-table">
+                <thead>
+                  <tr>
+                    <th>预期状态</th>
+                    <th class="rv-num">
+                      合成病例
+                    </th>
+                    <th class="rv-num">
+                      真实病例副本
+                    </th>
+                    <th class="rv-num">
+                      合计
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="status in EXPECTED_STATUSES"
+                    :key="status"
+                  >
+                    <td>
+                      {{ STATUS[status].label }}
+                      <span
+                        v-if="detail.coverage.gaps.includes(status)"
+                        class="mq-status mq-status--warning"
+                      >缺口</span>
+                    </td>
+                    <td class="rv-num">
+                      {{ detail.coverage.counts[status].synthetic }}
+                    </td>
+                    <td class="rv-num">
+                      {{ detail.coverage.counts[status].real_copy }}
+                    </td>
+                    <td class="rv-num rv-strong">
+                      {{ detail.coverage.counts[status].synthetic + detail.coverage.counts[status].real_copy }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
             <small class="rv-muted">合成病例只验证程序行为，不能替代客户真实病例验收；缺少的类别在验收结论时须逐项说明。</small>
           </div>
         </section>
@@ -162,71 +164,80 @@
               </button>
               <router-link
                 class="mq-btn"
-                :to="{ name: 'WorkstationV4SyntheticCaseNew', query: { ruleIds: ruleId, returnRule: ruleId } }"
+                data-testid="new-case"
+                :to="{ name: 'WorkstationV4RuleValidationNewCase', params: { ruleId } }"
               >
                 新建测试病例
               </router-link>
             </div>
           </div>
-          <table class="mq-table">
-            <thead>
-              <tr>
-                <th>病例</th>
-                <th>来源</th>
-                <th>用途</th>
-                <th>评价时间点</th>
-                <th>预期</th>
-                <th>人工依据</th>
-                <th>修订</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                v-for="item in detail.cases"
-                :key="item.item_id"
-                data-testid="case-row"
-              >
-                <td class="rv-strong">
-                  {{ item.case_title }}
-                </td>
-                <td><span :class="['rv-tag', item.source_kind === 'real_copy' ? 'rv-tag--blue' : '']">{{ SOURCE_KINDS[item.source_kind] }}</span></td>
-                <td>{{ PURPOSES[item.purpose] }}</td>
-                <td>
-                  <span
-                    v-if="item.evaluation_as_of_date"
-                    class="mq-mono"
-                  >{{ item.evaluation_as_of_date }}</span>
-                  <span
-                    v-else
-                    class="mq-status mq-status--warning"
-                  >未固定</span>
-                </td>
-                <td><span :class="statusClass(STATUS[item.expected_status].tone)">{{ STATUS[item.expected_status].label }}</span></td>
-                <td class="rv-reason">
-                  {{ item.human_reason }}
-                </td>
-                <td><span class="mq-mono">r{{ item.answer_revision }}</span></td>
-                <td class="rv-right">
-                  <button
-                    type="button"
-                    class="mq-btn"
-                    @click="openAnswer(item)"
-                  >
-                    编辑预期
-                  </button>
-                </td>
-              </tr>
-              <tr v-if="!detail.cases.length">
-                <td
-                  colspan="8"
-                  class="rv-empty"
+          <div class="rv-scroll">
+            <table class="mq-table">
+              <thead>
+                <tr>
+                  <th>病例</th>
+                  <th>来源</th>
+                  <th>用途</th>
+                  <th>评价时间点</th>
+                  <th>预期</th>
+                  <th>人工依据</th>
+                  <th>修订</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="item in detail.cases"
+                  :key="item.item_id"
+                  data-testid="case-row"
                 >
-                  还没有关联测试病例。请关联已有病例，或新建测试病例后回到这里标注预期。
-                </td>
-              </tr>
-            </tbody>
-          </table>
+                  <td class="rv-strong">
+                    {{ item.case_title }}
+                  </td>
+                  <td><span :class="['rv-tag', item.source_kind === 'real_copy' ? 'rv-tag--blue' : '']">{{ SOURCE_KINDS[item.source_kind] }}</span></td>
+                  <td>{{ PURPOSES[item.purpose] }}</td>
+                  <td>
+                    <span
+                      v-if="item.evaluation_as_of_date"
+                      class="mq-mono"
+                    >{{ item.evaluation_as_of_date }}</span>
+                    <span
+                      v-else
+                      class="mq-status mq-status--warning"
+                    >未固定</span>
+                  </td>
+                  <td><span :class="statusClass(STATUS[item.expected_status].tone)">{{ STATUS[item.expected_status].label }}</span></td>
+                  <td class="rv-reason">
+                    {{ item.human_reason }}
+                  </td>
+                  <td><span class="mq-mono">r{{ item.answer_revision }}</span></td>
+                  <td class="rv-right rv-row-actions">
+                    <router-link
+                      class="mq-btn"
+                      :to="{ name: 'WorkstationV4RuleValidationNewCase', params: { ruleId }, query: { copyFrom: item.item_id } }"
+                    >
+                      复制
+                    </router-link>
+                    <button
+                      type="button"
+                      class="mq-btn"
+                      @click="openAnswer(item)"
+                    >
+                      编辑预期
+                    </button>
+                  </td>
+                </tr>
+                <tr v-if="!detail.cases.length">
+                  <td
+                    colspan="8"
+                    class="rv-empty"
+                  >
+                    还没有关联测试病例。请关联已有病例，或新建测试病例后回到这里标注预期。
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </section>
 
         <!-- ② 运行验证 -->
@@ -253,7 +264,7 @@
               :disabled="!detail.cases.length || starting || runInProgress"
               @click="startRun"
             >
-              {{ runInProgress ? '运行中…' : `运行本规则（${detail.cases.length} 例）` }}
+              {{ starting ? '正在创建运行…' : runInProgress ? '运行中…' : `运行本规则（${detail.cases.length} 例）` }}
             </button>
           </div>
           <div
@@ -311,52 +322,54 @@
               <span class="mq-status mq-status--info">已核对 {{ reviewedCount }} / {{ rows.length }}</span>
             </div>
           </div>
-          <table
+          <div
             v-if="rows.length"
-            class="mq-table"
+            class="rv-scroll"
           >
-            <thead>
-              <tr>
-                <th>病例</th>
-                <th>预期</th>
-                <th>实际</th>
-                <th>比较</th>
-                <th>逐例核对</th>
-                <th>核对意见</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                v-for="(row, i) in rows"
-                :key="row.item_id"
-                data-testid="compare-row"
-              >
-                <td class="rv-strong">
-                  {{ row.case_title }}
-                </td>
-                <td>{{ STATUS[row.expected_status].label }}</td>
-                <td>{{ statusLabel(row.actual_status).label }}</td>
-                <td><span :class="statusClass(COMPARISONS[row.comparison].tone)">{{ COMPARISONS[row.comparison].label }}</span></td>
-                <td>
-                  <span :class="statusClass(reviewOf(row.item_id).tone)">{{ reviewOf(row.item_id).label }}</span>
-                </td>
-                <td class="rv-reason">
-                  {{ latestReview(row.item_id)?.note || '—' }}
-                </td>
-                <td class="rv-right">
-                  <button
-                    type="button"
-                    class="mq-btn"
-                    :disabled="row.comparison === 'pending'"
-                    @click="reviewIndex = i"
-                  >
-                    核对证据
-                  </button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+            <table class="mq-table">
+              <thead>
+                <tr>
+                  <th>病例</th>
+                  <th>预期</th>
+                  <th>实际</th>
+                  <th>比较</th>
+                  <th>逐例核对</th>
+                  <th>核对意见</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="(row, i) in rows"
+                  :key="row.item_id"
+                  data-testid="compare-row"
+                >
+                  <td class="rv-strong">
+                    {{ row.case_title }}
+                  </td>
+                  <td>{{ STATUS[row.expected_status].label }}</td>
+                  <td>{{ statusLabel(row.actual_status).label }}</td>
+                  <td><span :class="statusClass(COMPARISONS[row.comparison].tone)">{{ COMPARISONS[row.comparison].label }}</span></td>
+                  <td>
+                    <span :class="statusClass(reviewOf(row.item_id).tone)">{{ reviewOf(row.item_id).label }}</span>
+                  </td>
+                  <td class="rv-reason">
+                    {{ latestReview(row.item_id)?.note || '—' }}
+                  </td>
+                  <td class="rv-right">
+                    <button
+                      type="button"
+                      class="mq-btn"
+                      :disabled="row.comparison === 'pending'"
+                      @click="reviewIndex = i"
+                    >
+                      核对证据
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
           <p
             v-else
             class="rv-muted"
@@ -689,7 +702,12 @@ async function startRun() {
   const response = await startValidationRun(ruleId.value)
   starting.value = false
   if (!response.success) {
-    actionError.value = response.error || '运行创建失败'
+    // 超时不代表失败：任务可能已在后台建成，刷新后以服务端记录为准，避免重复创建
+    const timedOut = /timeout/i.test(response.error || '')
+    actionError.value = timedOut
+      ? '创建运行超时，可能仍在后台完成；已刷新详情，请勿重复点击运行'
+      : response.error || '运行创建失败'
+    if (timedOut) await load()
     return
   }
   message.success('已创建验收运行')
