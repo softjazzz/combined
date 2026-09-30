@@ -63,6 +63,7 @@ from ..services.luxian_0609_result_export_service import (
 )
 from ..services.custom_qc_sample_pool_service import CustomQCSamplePoolService
 from ..services.luxian_0609.remediation_draft import generate_remediation_draft
+from ..services.case_defect_partition_service import build_case_defect_partitions
 from ..schemas.qc_sichuan import QcResultFeedbackRequest
 from ..services.qc_workspace.result_feedback_demo_store import (
     ResultFeedbackDemoConflict,
@@ -2292,6 +2293,48 @@ async def get_latest_workspace_record_result(
     return success_response(
         data=result,
         message="获取单病历最新质控结果成功",
+        trace_id=get_trace_id(request),
+    )
+
+
+@router.get("/workspace/records/{record_id}/defect-partitions")
+async def get_latest_workspace_record_defect_partitions(
+    request: Request,
+    record_id: str,
+    institute_id: str = Query(..., min_length=1, max_length=128, description="机构标识"),
+    patient_id: str = Query(..., min_length=1, max_length=128, description="患者标识"),
+    scene: Optional[Literal["running", "final", "outpatient"]] = Query(
+        None, description="计分场景；缺省时单否分区返回 no_scene"
+    ),
+    current_user: Dict[str, Any] = Depends(
+        require_roles("admin", "qc_manager", "sync_admin", "super_admin")
+    ),
+):
+    """单病历详情缺陷分区：只装配确认缺陷、单否、核心制度的 rule_id，不返回正文。
+
+    权限与单病历最新结果接口一致；读取失败统一脱敏为 503。
+    """
+
+    if not record_id.strip() or not institute_id.strip() or not patient_id.strip():
+        raise HTTPException(status_code=422, detail="病历三坐标无效")
+    workspace = _sichuan_workspace_service()
+    try:
+        result = await run_in_threadpool(
+            build_case_defect_partitions,
+            institute_id=institute_id,
+            patient_id=patient_id,
+            visit_id=record_id,
+            scene=scene,
+            workspace=workspace,
+        )
+    except Exception as exc:
+        logger.error("缺陷分区读取失败 error_type=%s", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="缺陷分区暂时不可用") from None
+    if str(result.get("state") or "") == "not_found":
+        raise HTTPException(status_code=404, detail="该病历暂无已保存质控结果或无访问权限")
+    return success_response(
+        data=result,
+        message="获取单病历缺陷分区成功",
         trace_id=get_trace_id(request),
     )
 
