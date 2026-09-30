@@ -1154,3 +1154,60 @@ def test_unavailable_session_factory_and_bad_identity(monkeypatch):
         modern.ModernCaseQCResultService(session_factory=lambda: _FakeSession()).get_snapshot(
             "visit-1", None
         )
+
+
+# ---------------------------------------------------------------------------
+# 报表批量读取：list_latest_results
+# ---------------------------------------------------------------------------
+
+FRONTPAGE = VerifiedQCIdentity("LX001", "patient-a", "visit-1", "frontpage_formal_qc")
+CODING = VerifiedQCIdentity("LX001", "patient-a", "visit-1", "coding_qc")
+OTHER_CASE = VerifiedQCIdentity("LX001", "patient-b", "visit-1", "frontpage_formal_qc")
+
+
+def test_batch_latest_uses_single_case_order_per_source_and_case(store):
+    _result(store, "fp-old", identity=FRONTPAGE, date=datetime(2026, 9, 1), created=datetime(2026, 9, 1))
+    _result(store, "fp-new", identity=FRONTPAGE, date=datetime(2026, 9, 2), created=datetime(2026, 9, 1))
+    # analysis_date 为空排最后，即使 created_at 更晚也不是最新。
+    _result(store, "fp-null", identity=FRONTPAGE, date=None, created=datetime(2026, 9, 9))
+    _result(store, "cd-only", identity=CODING, date=datetime(2026, 9, 3), created=datetime(2026, 9, 3))
+    _result(store, "b-1", identity=OTHER_CASE, date=datetime(2026, 9, 4), created=datetime(2026, 9, 4))
+    _result(store, "settle", identity=IDENTITY, date=datetime(2026, 9, 5), created=datetime(2026, 9, 5))
+
+    latest = store.service.list_latest_results(("frontpage_formal_qc", "coding_qc"))
+
+    picked = {(item["source_key"], item["patient_id"]): item["result"]["id"] for item in latest}
+    assert picked == {
+        ("frontpage_formal_qc", "patient-a"): "fp-new",
+        ("coding_qc", "patient-a"): "cd-only",
+        ("frontpage_formal_qc", "patient-b"): "b-1",
+    }
+    assert all(set(item["result"]) == set(modern.RESULT_COLUMNS) for item in latest)
+    # 与单病例快照同一排序：快照的最新结果也是 fp-new。
+    _case(store)
+    assert store.service.get_snapshot(FRONTPAGE)["latest_qc_result"]["id"] == "fp-new"
+
+
+def test_batch_latest_ignores_legacy_rows_and_attaches_only_matching_defects(store):
+    _result(store, "fp-1", identity=FRONTPAGE, date=datetime(2026, 9, 2), created=datetime(2026, 9, 2))
+    _result(
+        store, "legacy", identity=FRONTPAGE, date=datetime(2026, 9, 9), created=datetime(2026, 9, 9),
+        identity_version=None,
+    )
+    _defect(store, "d-1", result_id="fp-1", identity=FRONTPAGE)
+    _defect(store, "d-old", result_id="fp-0", identity=FRONTPAGE)
+    # result_id 指向本结果但归属病例不一致：不得串入。
+    _defect(store, "d-foreign", result_id="fp-1", identity=OTHER_CASE)
+
+    latest = store.service.list_latest_results(("frontpage_formal_qc",))
+
+    assert [item["result"]["id"] for item in latest] == ["fp-1"]
+    assert [defect["id"] for defect in latest[0]["defects"]] == ["d-1"]
+    assert "evidence" not in latest[0]["defects"][0]
+
+
+def test_batch_latest_rejects_unknown_source_before_reading(store):
+    executed = len(store.statements)
+    with pytest.raises(ValueError):
+        store.service.list_latest_results(("analysis",))
+    assert len(store.statements) == executed

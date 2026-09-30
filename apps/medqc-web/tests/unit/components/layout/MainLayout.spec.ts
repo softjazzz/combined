@@ -32,7 +32,11 @@ vi.mock('@/stores/auth', () => ({
 
 import MainLayout from '@/components/layout/MainLayout.vue'
 
-const reactiveRoute = reactive({ path: '/dashboard/tasks/my', fullPath: '/dashboard/tasks/my', query: {} })
+const reactiveRoute = reactive({
+  path: '/dashboard/tasks/my',
+  fullPath: '/dashboard/tasks/my',
+  query: {},
+})
 
 window.scrollTo = vi.fn()
 realRouterRef.current = (await import('@/router')).default as unknown as {
@@ -109,6 +113,7 @@ describe('MainLayout 菜单按路由权限过滤', () => {
         '统计总览',
         '运行病历质量分析',
         '终末病历质量分析',
+        '病案首页统计分析',
         '质控员工作分析',
         ...DRG,
         '系统设置',
@@ -131,6 +136,7 @@ describe('MainLayout 菜单按路由权限过滤', () => {
         '统计总览',
         '运行病历质量分析',
         '终末病历质量分析',
+        '病案首页统计分析',
         '质控员工作分析',
         ...DRG,
       ],

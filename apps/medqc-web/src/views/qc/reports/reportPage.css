@@ -1,0 +1,391 @@
+/* 质量报表页共用样式（病历质量分析、病案首页统计分析）。 */
+.report-page {
+  min-height: 100%;
+  padding: 24px;
+  background: #f5f5f7;
+  color: #1d1d1f;
+  font-family: 'Source Han Sans SC', 'Microsoft YaHei UI', 'PingFang SC', sans-serif;
+  font-size: 14px;
+  line-height: 22px;
+}
+.page-head,
+.section-head,
+.table-head,
+.top-head,
+.drawer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.page-head {
+  margin-bottom: 18px;
+}
+.page-head h1 {
+  font-size: 24px;
+  line-height: 31px;
+  font-weight: 600;
+  margin: 0;
+}
+.page-head p {
+  margin: 4px 0 0;
+  color: #62666d;
+}
+.head-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.primary,
+.secondary {
+  height: 36px;
+  border-radius: 8px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.primary {
+  background: #007aff;
+  color: white;
+  border: 1px solid #007aff;
+}
+.secondary {
+  background: white;
+  color: #30343b;
+  border: 1px solid #d9dee5;
+}
+.primary:disabled,
+.secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+  padding: 16px 18px;
+  margin-bottom: 20px;
+  background: white;
+  border: 1px solid #e4e7eb;
+  border-radius: 8px;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 128px;
+}
+.field label {
+  color: #5e6670;
+}
+.field input,
+.field select,
+.column-picker select {
+  height: 36px;
+  border: 1px solid #d9dee5;
+  border-radius: 8px;
+  background: white;
+  padding: 0 10px;
+  color: #1d1d1f;
+  min-width: 0;
+}
+.field input[type='datetime-local'] {
+  min-width: 180px;
+}
+.segmented {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 8px;
+  background: #eceef1;
+  gap: 2px;
+}
+.segmented button {
+  height: 30px;
+  border: 0;
+  background: transparent;
+  border-radius: 6px;
+  padding: 0 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  color: #535b66;
+}
+.segmented button.active {
+  background: white;
+  color: #007aff;
+  box-shadow: 0 1px 3px #00000015;
+}
+.status {
+  padding: 22px;
+  background: white;
+  border: 1px solid #e5e8ed;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #62666d;
+}
+.status.error {
+  color: #b42318;
+  background: #fff9f8;
+  border-color: #ffd8d2;
+}
+section {
+  margin-bottom: 22px;
+}
+h2 {
+  font-size: 17px;
+  line-height: 22px;
+  font-weight: 600;
+  margin: 0 0 12px;
+}
+h3 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0;
+}
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.metric {
+  background: white;
+  border: 1px solid #e5e8ed;
+  border-radius: 8px;
+  padding: 14px;
+  min-height: 100px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.metric span {
+  color: #62666d;
+}
+.metric strong {
+  font-size: 22px;
+  line-height: 28px;
+  font-weight: 600;
+  color: #1d1d1f;
+  overflow-wrap: anywhere;
+}
+.metric small {
+  color: #7e858d;
+  font-size: 12px;
+}
+.notice {
+  margin-top: 10px;
+  color: #8b5a14;
+  background: #fff9ec;
+  padding: 9px 12px;
+  border-radius: 6px;
+}
+.archive-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 0 12px;
+  line-height: 1.6;
+}
+.distribution-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.data-panel,
+.top-panel,
+.table-panel,
+.unavailable {
+  background: white;
+  border: 1px solid #e5e8ed;
+  border-radius: 8px;
+}
+.data-panel {
+  padding: 14px;
+  min-height: 180px;
+}
+.data-panel h3 {
+  margin-bottom: 10px;
+}
+.data-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 0;
+  border-top: 1px solid #f0f1f3;
+  width: 100%;
+}
+.data-row strong,
+.top-row strong {
+  font-weight: 600;
+}
+.row-button {
+  border-left: 0;
+  border-right: 0;
+  border-bottom: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.row-button:hover,
+.top-row:hover {
+  color: #007aff;
+}
+.empty {
+  padding: 22px;
+  text-align: center;
+  color: #8b919a;
+}
+.top-panel {
+  margin-top: 10px;
+  padding: 14px;
+}
+.top-head {
+  margin-bottom: 12px;
+}
+.top-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 24px;
+}
+.top-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 0;
+  border: 0;
+  border-bottom: 1px solid #f0f1f3;
+  background: white;
+  text-align: left;
+  cursor: pointer;
+}
+.rank {
+  width: 24px;
+  color: #8b919a;
+}
+.top-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.details .section-head h2 {
+  margin: 0;
+}
+.column-picker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.column-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 12px 0;
+}
+.column-options label {
+  white-space: nowrap;
+  color: #535b66;
+}
+.column-options input {
+  margin-right: 5px;
+}
+.table-panel {
+  margin-top: 10px;
+  overflow: hidden;
+}
+.table-head {
+  padding: 12px 14px;
+  border-bottom: 1px solid #e5e8ed;
+}
+.table-head span {
+  color: #7e858d;
+}
+.table-scroll {
+  overflow: auto;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  white-space: nowrap;
+}
+th,
+td {
+  text-align: left;
+  padding: 11px 14px;
+  border-bottom: 1px solid #edf0f2;
+}
+th {
+  background: #f8f9fb;
+  color: #62666d;
+  font-weight: 400;
+}
+td strong,
+td small {
+  display: block;
+}
+td small {
+  font-size: 12px;
+  color: #7e858d;
+}
+.link {
+  background: none;
+  border: 0;
+  color: #007aff;
+  padding: 0;
+  cursor: pointer;
+}
+.unavailable {
+  padding: 14px;
+}
+.unavailable p {
+  margin: 5px 0;
+  color: #62666d;
+}
+.drawer-actions {
+  margin-bottom: 12px;
+}
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin: 16px;
+}
+.pager .secondary {
+  height: 32px;
+}
+@media (max-width: 1100px) {
+  .metrics,
+  .distribution-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 640px) {
+  .report-page {
+    padding: 14px;
+  }
+  .page-head,
+  .top-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .metrics,
+  .distribution-grid,
+  .top-grid {
+    grid-template-columns: 1fr;
+  }
+  .field {
+    flex: 1 1 150px;
+  }
+  .field input[type='datetime-local'] {
+    min-width: 0;
+  }
+}

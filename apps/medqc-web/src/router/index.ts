@@ -6,18 +6,16 @@ import {
   resolveDeniedFallback,
   resolveLoginLanding,
 } from '@/utils/routeAccess'
-import {
-  DRG_ANALYSIS_ROLES,
-  DRG_ROLES,
-  QC_ANALYTICS_ROLES,
-  RULE_ADMIN_ROLES,
-} from './routeRoles'
+import { DRG_ANALYSIS_ROLES, DRG_ROLES, QC_ANALYTICS_ROLES, RULE_ADMIN_ROLES } from './routeRoles'
 
 const WORKSTATION_BASE_PATH = '/workstation-v5'
 const LEGACY_WORKSTATION_BASE_PATH = '/workstation-v4'
 
 function normalizeWorkstationPath(path: string) {
-  if (path === LEGACY_WORKSTATION_BASE_PATH || path.startsWith(`${LEGACY_WORKSTATION_BASE_PATH}/`)) {
+  if (
+    path === LEGACY_WORKSTATION_BASE_PATH ||
+    path.startsWith(`${LEGACY_WORKSTATION_BASE_PATH}/`)
+  ) {
     return `${WORKSTATION_BASE_PATH}${path.slice(LEGACY_WORKSTATION_BASE_PATH.length)}`
   }
   return path.startsWith(WORKSTATION_BASE_PATH) ? path : WORKSTATION_BASE_PATH
@@ -753,6 +751,16 @@ const routes: RouteRecordRaw[] = [
         },
       },
       {
+        path: 'qc/reports/frontpage-quality',
+        name: 'FrontpageQualityReport',
+        component: () => import('@/views/qc/reports/FrontpageQualityReportView.vue'),
+        meta: {
+          title: '病案首页统计分析',
+          icon: 'BarChartOutlined',
+          permission: ['admin', 'qc_manager'],
+        },
+      },
+      {
         path: 'qc/reports/staff-analysis',
         name: 'StaffAnalysisReport',
         component: () => import('@/views/qc/reports/StaffAnalysisView.vue'),
@@ -1115,7 +1123,9 @@ const routes: RouteRecordRaw[] = [
         path: 'customer-sample-validation/tasks',
         name: 'WorkstationV4CustomerSampleValidationTasks',
         component: () =>
-          import('@/views/workstation-v4/customer-sample-validation/CustomerSampleTaskHistoryView.vue'),
+          import(
+            '@/views/workstation-v4/customer-sample-validation/CustomerSampleTaskHistoryView.vue'
+          ),
         meta: { title: '质控记录', permission: ['admin', 'qc_manager', 'sync_admin'] },
       },
       {

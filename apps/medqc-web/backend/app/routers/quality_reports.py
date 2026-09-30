@@ -22,6 +22,7 @@ from ..core.permissions import (
 )
 from ..core.security import get_current_user, require_roles
 from ..services import record_quality_report_service as report_service
+from ..services import frontpage_quality_report_service as frontpage_report_service
 from ..services import task_analysis_service
 
 router = APIRouter(prefix="/api/v1/quality-reports", tags=["quality-reports"])
@@ -189,5 +190,122 @@ async def export_record_quality(
             "Cache-Control": "no-store",
             "X-Content-Type-Options": "nosniff",
             "Content-Disposition": f'attachment; filename="record_quality_{query["scene"]}_{sheet}.csv"',
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# 病案首页统计分析（PRD 第 47 项）
+# ---------------------------------------------------------------------------
+
+_FRONTPAGE_UNAVAILABLE_DETAIL = "病案首页统计暂不可用，请稍后重试"
+
+
+def _frontpage_params(
+    department: str | None = Query(None),
+    doctor: str | None = Query(None),
+    analyzed_from: datetime | None = Query(None),
+    analyzed_to: datetime | None = Query(None),
+) -> dict[str, Any]:
+    return {
+        "department": department,
+        "doctor": doctor,
+        "analyzed_from": analyzed_from,
+        "analyzed_to": analyzed_to,
+    }
+
+
+def _frontpage_drilldown(
+    source: Literal["all", "frontpage", "coding"] = Query("all"),
+    rule_code: str | None = Query(None),
+    problem_only: bool = Query(False),
+) -> dict[str, Any]:
+    return {"source": source, "rule_code": rule_code, "problem_only": problem_only}
+
+
+def _raise_frontpage_error(exc: Exception, action: str) -> None:
+    if isinstance(exc, frontpage_report_service.FrontpageQualityReportInvalid):
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if isinstance(exc, frontpage_report_service.FrontpageQualityReportTooLarge):
+        raise HTTPException(status_code=422, detail={"code": "range_too_large", "message": str(exc)}) from exc
+    if isinstance(exc, frontpage_report_service.FrontpageQualityReportSchemaUnavailable):
+        raise HTTPException(
+            status_code=503,
+            detail={"code": exc.code, "message": "首页质控现代数据源未部署"},
+        ) from exc
+    logger.error("frontpage_quality_report_%s_failed error_type=%s", action, type(exc).__name__)
+    raise HTTPException(status_code=503, detail=_FRONTPAGE_UNAVAILABLE_DETAIL) from None
+
+
+@router.get("/frontpage-quality")
+async def get_frontpage_quality(
+    request: Request,
+    params: dict[str, Any] = Depends(_frontpage_params),
+    current_user: dict = Depends(require_roles("admin", "qc_manager")),
+):
+    query = _authorized_params(current_user, params)
+    try:
+        context = await run_in_threadpool(frontpage_report_service.build_report_context, **query)
+        data = await run_in_threadpool(frontpage_report_service.summarize, context)
+    except Exception as exc:
+        _raise_frontpage_error(exc, "summary")
+    return success_response(data=data, trace_id=get_trace_id(request))
+
+
+@router.get("/frontpage-quality/records")
+async def get_frontpage_quality_records(
+    request: Request,
+    params: dict[str, Any] = Depends(_frontpage_params),
+    drilldown: dict[str, Any] = Depends(_frontpage_drilldown),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    current_user: dict = Depends(require_roles("admin", "qc_manager")),
+):
+    query = _authorized_params(current_user, params)
+    try:
+        context = await run_in_threadpool(frontpage_report_service.build_report_context, **query)
+        data = await run_in_threadpool(
+            frontpage_report_service.records_page, context,
+            page=page, page_size=page_size, department=query["department"], **drilldown,
+        )
+    except Exception as exc:
+        _raise_frontpage_error(exc, "records")
+    return success_response(data=data, trace_id=get_trace_id(request))
+
+
+@router.get("/frontpage-quality/export")
+async def export_frontpage_quality(
+    request: Request,
+    params: dict[str, Any] = Depends(_frontpage_params),
+    drilldown: dict[str, Any] = Depends(_frontpage_drilldown),
+    sheet: Literal["departments", "records"] = Query(...),
+    current_user: dict = Depends(require_roles("admin", "qc_manager")),
+):
+    query = _authorized_params(current_user, params)
+    try:
+        context = await run_in_threadpool(frontpage_report_service.build_report_context, **query)
+        export_filters = {"department": query["department"], **drilldown} if sheet == "records" else {}
+        content = await run_in_threadpool(
+            frontpage_report_service.export_csv, context, sheet=sheet, **export_filters,
+        )
+        if not isinstance(content, bytes):
+            raise TypeError("导出服务未返回 CSV 字节")
+    except Exception as exc:
+        _raise_frontpage_error(exc, "export")
+    audit_event(
+        request,
+        action="quality_reports.frontpage_quality.export",
+        resource="/api/v1/quality-reports/frontpage-quality/export",
+        outcome="success",
+        details={"sheet": sheet, "bytes": len(content)},
+        current_user=current_user,
+    )
+    return Response(
+        content=content,
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+            "Content-Disposition": f'attachment; filename="frontpage_quality_{sheet}.csv"',
         },
     )

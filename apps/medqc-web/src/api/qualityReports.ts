@@ -132,7 +132,8 @@ function paramsOf(
   return params
 }
 
-function errorCode(error: unknown): string | undefined {
+/** 报表接口统一错误码解析（detail.code 或 error.code），供各报表 API 复用。 */
+export function errorCode(error: unknown): string | undefined {
   if (!isAxiosError(error)) return undefined
   const body: unknown = error.response?.data
   if (!body || typeof body !== 'object') return undefined

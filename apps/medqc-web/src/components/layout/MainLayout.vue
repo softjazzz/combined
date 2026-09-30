@@ -21,12 +21,13 @@
           >
             <MedicineBoxOutlined class="text-white text-xl" />
           </div>
-          <div
-            v-if="!collapsed"
-            class="flex flex-col transition-all duration-300 opacity-100"
-          >
-            <span class="text-white font-bold text-lg leading-tight tracking-tight">病案质控系统</span>
-            <span class="text-slate-400 text-xs font-medium tracking-wide">AI-Powered QC Platform</span>
+          <div v-if="!collapsed" class="flex flex-col transition-all duration-300 opacity-100">
+            <span class="text-white font-bold text-lg leading-tight tracking-tight"
+              >病案质控系统</span
+            >
+            <span class="text-slate-400 text-xs font-medium tracking-wide"
+              >AI-Powered QC Platform</span
+            >
           </div>
         </div>
       </div>
@@ -42,11 +43,7 @@
           @select="handleMenuSelect"
         >
           <!-- 仪表板 -->
-          <a-menu-item
-            v-if="canSee('/dashboard')"
-            key="/dashboard"
-            class="menu-item-base"
-          >
+          <a-menu-item v-if="canSee('/dashboard')" key="/dashboard" class="menu-item-base">
             <template #icon>
               <DashboardOutlined />
             </template>
@@ -97,10 +94,7 @@
               </template>
               <span>运行病历</span>
             </a-menu-item>
-            <a-menu-item
-              v-if="canSee('/dashboard/records/final')"
-              key="/dashboard/records/final"
-            >
+            <a-menu-item v-if="canSee('/dashboard/records/final')" key="/dashboard/records/final">
               <template #icon>
                 <CheckCircleOutlined />
               </template>
@@ -181,19 +175,13 @@
             <template #title>
               <span class="font-medium">任务管理</span>
             </template>
-            <a-menu-item
-              v-if="canSee('/dashboard/tasks/my')"
-              key="/dashboard/tasks/my"
-            >
+            <a-menu-item v-if="canSee('/dashboard/tasks/my')" key="/dashboard/tasks/my">
               <template #icon>
                 <UserOutlined />
               </template>
               <span>我的任务</span>
             </a-menu-item>
-            <a-menu-item
-              v-if="canSee('/dashboard/tasks/all')"
-              key="/dashboard/tasks/all"
-            >
+            <a-menu-item v-if="canSee('/dashboard/tasks/all')" key="/dashboard/tasks/all">
               <template #icon>
                 <TeamOutlined />
               </template>
@@ -219,11 +207,36 @@
             <template #icon>
               <BarChartOutlined />
             </template>
-            <template #title><span class="font-medium">统计分析</span></template>
-            <a-menu-item v-if="canSee('/dashboard/statistics')" key="/dashboard/statistics">统计总览</a-menu-item>
-            <a-menu-item v-if="canSee('/dashboard/qc/reports/record-quality')" key="/dashboard/qc/reports/record-quality?scene=running">运行病历质量分析</a-menu-item>
-            <a-menu-item v-if="canSee('/dashboard/qc/reports/record-quality')" key="/dashboard/qc/reports/record-quality?scene=final">终末病历质量分析</a-menu-item>
-            <a-menu-item v-if="canSee('/dashboard/qc/reports/staff-analysis')" key="/dashboard/qc/reports/staff-analysis">质控员工作分析</a-menu-item>
+            <template #title>
+              <span class="font-medium">统计分析</span>
+            </template>
+            <a-menu-item v-if="canSee('/dashboard/statistics')" key="/dashboard/statistics">
+              统计总览
+            </a-menu-item>
+            <a-menu-item
+              v-if="canSee('/dashboard/qc/reports/record-quality')"
+              key="/dashboard/qc/reports/record-quality?scene=running"
+            >
+              运行病历质量分析
+            </a-menu-item>
+            <a-menu-item
+              v-if="canSee('/dashboard/qc/reports/record-quality')"
+              key="/dashboard/qc/reports/record-quality?scene=final"
+            >
+              终末病历质量分析
+            </a-menu-item>
+            <a-menu-item
+              v-if="canSee('/dashboard/qc/reports/frontpage-quality')"
+              key="/dashboard/qc/reports/frontpage-quality"
+            >
+              病案首页统计分析
+            </a-menu-item>
+            <a-menu-item
+              v-if="canSee('/dashboard/qc/reports/staff-analysis')"
+              key="/dashboard/qc/reports/staff-analysis"
+            >
+              质控员工作分析
+            </a-menu-item>
           </a-sub-menu>
 
           <!-- DRG/DIP -->
@@ -238,37 +251,25 @@
             <template #title>
               <span class="font-medium">DRG/DIP</span>
             </template>
-            <a-menu-item
-              v-if="canSee('/dashboard/drg/index')"
-              key="/dashboard/drg/index"
-            >
+            <a-menu-item v-if="canSee('/dashboard/drg/index')" key="/dashboard/drg/index">
               <template #icon>
                 <HomeOutlined />
               </template>
               <span>DRG 首页</span>
             </a-menu-item>
-            <a-menu-item
-              v-if="canSee('/dashboard/drg/coding')"
-              key="/dashboard/drg/coding"
-            >
+            <a-menu-item v-if="canSee('/dashboard/drg/coding')" key="/dashboard/drg/coding">
               <template #icon>
                 <FileTextOutlined />
               </template>
               <span>编码辅助</span>
             </a-menu-item>
-            <a-menu-item
-              v-if="canSee('/dashboard/drg/grouping')"
-              key="/dashboard/drg/grouping"
-            >
+            <a-menu-item v-if="canSee('/dashboard/drg/grouping')" key="/dashboard/drg/grouping">
               <template #icon>
                 <BranchesOutlined />
               </template>
               <span>分组预测</span>
             </a-menu-item>
-            <a-menu-item
-              v-if="canSee('/dashboard/drg/monitor')"
-              key="/dashboard/drg/monitor"
-            >
+            <a-menu-item v-if="canSee('/dashboard/drg/monitor')" key="/dashboard/drg/monitor">
               <template #icon>
                 <RadarChartOutlined />
               </template>
@@ -283,10 +284,7 @@
               </template>
               <span>付费监测</span>
             </a-menu-item>
-            <a-menu-item
-              v-if="canSee('/dashboard/drg/analysis')"
-              key="/dashboard/drg/analysis"
-            >
+            <a-menu-item v-if="canSee('/dashboard/drg/analysis')" key="/dashboard/drg/analysis">
               <template #icon>
                 <BarChartOutlined />
               </template>
@@ -308,10 +306,7 @@
             </template>
 
             <!-- 系统设置 -->
-            <a-menu-item
-              v-if="canSee('/dashboard/settings')"
-              key="/dashboard/settings"
-            >
+            <a-menu-item v-if="canSee('/dashboard/settings')" key="/dashboard/settings">
               <template #icon>
                 <SettingOutlined />
               </template>
@@ -334,14 +329,8 @@
             class="trigger hover:bg-slate-100 text-slate-500 hover:text-slate-700 border-0 mr-4 rounded-lg w-9 h-9 flex items-center justify-center transition-colors"
             @click="collapsed = !collapsed"
           >
-            <MenuUnfoldOutlined
-              v-if="collapsed"
-              class="text-lg"
-            />
-            <MenuFoldOutlined
-              v-else
-              class="text-lg"
-            />
+            <MenuUnfoldOutlined v-if="collapsed" class="text-lg" />
+            <MenuFoldOutlined v-else class="text-lg" />
           </a-button>
 
           <!-- 面包屑 (胶囊风格) -->
@@ -354,10 +343,7 @@
                 <HomeOutlined class="text-base" />
               </router-link>
             </a-breadcrumb-item>
-            <a-breadcrumb-item
-              v-for="item in breadcrumbItems"
-              :key="item.path"
-            >
+            <a-breadcrumb-item v-for="item in breadcrumbItems" :key="item.path">
               <router-link
                 v-if="item.path"
                 :to="item.path"
@@ -365,10 +351,7 @@
               >
                 {{ item.title }}
               </router-link>
-              <span
-                v-else
-                class="text-slate-800 font-semibold text-sm px-2 py-1"
-              >{{
+              <span v-else class="text-slate-800 font-semibold text-sm px-2 py-1">{{
                 item.title
               }}</span>
             </a-breadcrumb-item>
@@ -378,10 +361,7 @@
         <!-- 右侧用户信息 -->
         <div class="flex items-center space-x-3">
           <!-- 通知 -->
-          <a-popover
-            placement="bottomRight"
-            trigger="click"
-          >
+          <a-popover placement="bottomRight" trigger="click">
             <template #content>
               <div class="w-72 p-2">
                 <div class="flex justify-between items-center mb-2 px-2">
@@ -394,12 +374,8 @@
                   >
                     <div class="w-2 h-2 rounded-full bg-blue-500 mt-1.5 shrink-0" />
                     <div>
-                      <div class="text-sm text-slate-700 font-medium">
-                        系统升级通知
-                      </div>
-                      <div class="text-xs text-slate-400 mt-0.5">
-                        系统将于今晚进行维护升级...
-                      </div>
+                      <div class="text-sm text-slate-700 font-medium">系统升级通知</div>
+                      <div class="text-xs text-slate-400 mt-0.5">系统将于今晚进行维护升级...</div>
                     </div>
                   </div>
                 </div>
@@ -436,7 +412,8 @@
               <div class="flex flex-col mr-1 hidden sm:flex">
                 <span
                   class="text-sm font-bold text-slate-700 leading-tight group-hover:text-blue-600 transition-colors"
-                >{{ authStore.userName }}</span>
+                  >{{ authStore.userName }}</span
+                >
                 <span class="text-[10px] text-slate-400 font-medium uppercase tracking-wider">{{
                   authStore.userRoles?.[0] || 'User'
                 }}</span>
@@ -450,25 +427,17 @@
                 class="min-w-[180px] p-2 rounded-2xl border border-slate-100 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.1)]"
               >
                 <div class="px-3 py-2 mb-1">
-                  <div class="text-xs text-slate-400">
-                    Signed in as
-                  </div>
+                  <div class="text-xs text-slate-400">Signed in as</div>
                   <div class="font-bold text-slate-700 truncate">
                     {{ authStore.user?.email || 'user@example.com' }}
                   </div>
                 </div>
                 <div class="h-px bg-slate-100 my-1" />
-                <a-menu-item
-                  key="profile"
-                  class="rounded-lg mb-1 !py-2"
-                >
+                <a-menu-item key="profile" class="rounded-lg mb-1 !py-2">
                   <UserOutlined />
                   <span class="ml-2 font-medium">个人中心</span>
                 </a-menu-item>
-                <a-menu-item
-                  key="settings"
-                  class="rounded-lg mb-1 !py-2"
-                >
+                <a-menu-item key="settings" class="rounded-lg mb-1 !py-2">
                   <SettingOutlined />
                   <span class="ml-2 font-medium">账户设置</span>
                 </a-menu-item>
@@ -490,10 +459,7 @@
       <!-- 内容区域 (移除原有内层卡片，由页面自行控制布局) -->
       <a-layout-content class="bg-slate-100 overflow-x-hidden">
         <router-view v-slot="{ Component }">
-          <transition
-            name="fade"
-            mode="out-in"
-          >
+          <transition name="fade" mode="out-in">
             <component :is="Component" />
           </transition>
         </router-view>
@@ -568,6 +534,7 @@ const SYSTEM_MENU_TARGETS = ['/dashboard/settings'] as const
 const REPORT_MENU_TARGETS = [
   '/dashboard/statistics',
   '/dashboard/qc/reports/record-quality',
+  '/dashboard/qc/reports/frontpage-quality',
   '/dashboard/qc/reports/staff-analysis',
 ] as const
 
@@ -607,7 +574,10 @@ const breadcrumbItems = computed(() => {
       case 'qc':
         if (pathSegments[2] === 'reports') {
           items.push({ title: '统计分析', path: '/dashboard/statistics' })
-          items.push({ title: pathSegments[3] === 'staff-analysis' ? '质控员工作分析' : '病历质量分析', path: null })
+          items.push({
+            title: pathSegments[3] === 'staff-analysis' ? '质控员工作分析' : '病历质量分析',
+            path: null,
+          })
         }
         break
       case 'rules':

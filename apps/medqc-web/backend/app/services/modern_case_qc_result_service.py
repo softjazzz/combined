@@ -77,6 +77,10 @@ RECENT_RESULT_LIMIT = 5
 DEFAULT_DEFECTS_LIMIT = 20
 MIN_DEFECTS_LIMIT = 1
 MAX_DEFECTS_LIMIT = 50
+# 报表批量读取缺陷时按结果 id 分块。
+BATCH_CHUNK = 1000
+# 现代结果/缺陷的归属维度（identity_version 在查询条件中固定为 1）。
+_OWNER_KEYS = ("source_key", "institute_id", "patient_id", "visit_id")
 
 
 class ModernCaseQCResultError(RuntimeError):
@@ -142,6 +146,82 @@ class ModernCaseQCResultService:
     def __init__(self, session_factory: Optional[Any] = None) -> None:
         # 不在导入期强制数据库可用；无 DATABASE_URL 时由 get_snapshot 返回 SourceUnavailable。
         self._session_factory = session_factory or SessionLocal
+
+    def list_latest_results(self, source_keys: Tuple[str, ...]) -> List[Dict[str, Any]]:
+        """报表批量读取：每个 source_key + 三坐标只取最新 1 条现代结果，附本次结果缺陷。
+
+        排序与单病例快照同一（_latest_first）；只读 identity_version = 1 的行，不回退旧行。
+        返回 [{source_key, institute_id, patient_id, visit_id, result, defects}]；
+        现代身份列未部署抛 SchemaUnavailable，其余读取失败抛 SourceUnavailable。
+        """
+        keys = tuple(sorted({str(key) for key in source_keys}))
+        for key in keys:
+            VerifiedQCIdentity("_", "_", "_", key)  # 校验来源白名单
+        if self._session_factory is None:
+            raise SourceUnavailable("modern case QC source is unavailable")
+        try:
+            session: Session = self._session_factory()
+        except Exception:
+            raise SourceUnavailable("modern case QC source is unavailable") from None
+        try:
+            tables = self._require_modern_tables()
+            return self._load_latest_batch(session, tables, keys)
+        except ModernCaseQCResultError:
+            raise
+        except Exception:
+            raise SourceUnavailable("modern case QC source is unavailable") from None
+        finally:
+            try:
+                session.close()
+            except Exception:
+                pass
+
+    def _load_latest_batch(
+        self, session: Session, tables: Dict[str, Table], keys: Tuple[str, ...]
+    ) -> List[Dict[str, Any]]:
+        results = tables["qc_results"]
+        owner_columns = [results.c[name] for name in _OWNER_KEYS]
+        ranked = (
+            select(
+                *owner_columns,
+                *_projection(results),
+                func.row_number().over(
+                    partition_by=owner_columns, order_by=self._latest_first(results)
+                ).label("latest_rank"),
+            )
+            .where(results.c.identity_version == 1, results.c.source_key.in_(keys))
+            .subquery()
+        )
+        rows = session.execute(
+            select(ranked).where(ranked.c.latest_rank == 1)
+        ).mappings().all()
+        latest: List[Dict[str, Any]] = []
+        for row in rows:
+            data = dict(row)
+            data.pop("latest_rank", None)
+            owner = {name: data.pop(name) for name in _OWNER_KEYS}
+            latest.append({**owner, "result": _serialize_row(data), "defects": []})
+        by_result = {str(item["result"]["id"]): item for item in latest}
+        defects = tables["qc_defects"]
+        result_ids = sorted(by_result)
+        for start in range(0, len(result_ids), BATCH_CHUNK):
+            chunk = result_ids[start:start + BATCH_CHUNK]
+            for row in session.execute(
+                select(
+                    defects.c.result_id.label("owner_result_id"),
+                    *(defects.c[name].label(f"owner_{name}") for name in _OWNER_KEYS),
+                    *_projection(defects),
+                )
+                .where(defects.c.identity_version == 1, defects.c.result_id.in_(chunk))
+                .order_by(defects.c.result_id, defects.c.id)
+            ).mappings().all():
+                data = dict(row)
+                owner = by_result.get(str(data.pop("owner_result_id")))
+                defect_owner = {name: data.pop(f"owner_{name}") for name in _OWNER_KEYS}
+                # 缺陷四维身份必须与所属结果一致，否则不归属该结果（不跨病例串数）。
+                if owner is not None and all(defect_owner[name] == owner[name] for name in _OWNER_KEYS):
+                    owner["defects"].append(_serialize_row(data))
+        return latest
 
     def get_snapshot(
         self,
@@ -290,17 +370,22 @@ class ModernCaseQCResultService:
     def _owner_clause(table: Table, identity: VerifiedQCIdentity) -> List[Any]:
         return [table.c[name] == value for name, value in identity.columns().items()]
 
+    @staticmethod
+    def _latest_first(table: Table) -> List[Any]:
+        """“最新结果”唯一排序：单病例快照与批量报表共用。"""
+        return [
+            nullslast(desc(table.c.analysis_date)),
+            nullslast(desc(table.c.created_at)),
+            desc(table.c.id),
+        ]
+
     def _load_results(
         self, session: Session, table: Table, identity: VerifiedQCIdentity
     ) -> List[Dict[str, Any]]:
         stmt = (
             select(*_projection(table))
             .where(*self._owner_clause(table, identity))
-            .order_by(
-                nullslast(desc(table.c.analysis_date)),
-                nullslast(desc(table.c.created_at)),
-                desc(table.c.id),
-            )
+            .order_by(*self._latest_first(table))
             .limit(LATEST_RESULT_LIMIT + RECENT_RESULT_LIMIT)
         )
         return [_serialize_row(dict(row)) for row in session.execute(stmt).mappings().all()]
