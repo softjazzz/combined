@@ -44,9 +44,16 @@ function toPosix(p) {
 }
 
 function getRepoRoot() {
+  // git 钩子会向子进程导出 GIT_DIR；带着它执行 --show-toplevel 时，git 把当前目录
+  // 当作工作树根，拼出双重前缀路径，暂存文件全部“不可读”。取根目录时去掉这两个变量，
+  // 让 git 从 ROOT 自行发现所在仓库/工作树。
+  const env = { ...process.env }
+  delete env.GIT_DIR
+  delete env.GIT_WORK_TREE
   try {
     const out = execSync('git rev-parse --show-toplevel', {
       cwd: ROOT,
+      env,
       stdio: ['ignore', 'pipe', 'ignore'],
       encoding: 'utf8',
     })
@@ -90,7 +97,7 @@ function toAbsoluteFromGit(args) {
     out
       .split(/\r?\n/)
       .map((s) => s.trim())
-      .filter(Boolean)
+      .filter(Boolean),
   )
 }
 
@@ -158,14 +165,12 @@ async function collectFiles(mode) {
 
   const candidates = getStagedFiles()
   const files = await existingTextFiles(candidates)
-  const textCandidates = candidates.filter((abs) =>
-    TEXT_EXTS.has(path.extname(abs).toLowerCase())
-  )
+  const textCandidates = candidates.filter((abs) => TEXT_EXTS.has(path.extname(abs).toLowerCase()))
   if (textCandidates.length > 0 && files.length === 0) {
     // 静默空转是危险的：此前路径解析失效时该门禁永远报 passed。
     throw new Error(
       `staged 模式解析到 ${textCandidates.length} 个暂存文本文件，但 0 个可读；` +
-        '路径解析可能失效，禁止静默通过'
+        '路径解析可能失效，禁止静默通过',
     )
   }
   return files
