@@ -9,7 +9,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy.exc import OperationalError
 
 from app.routers import record_operations as routes
-from tests.unit.test_case_operation_timeline_service import build_env
+from tests.unit.test_case_operation_timeline_service import add_rectification, build_env
+from app.database.models.qc import SysUser
 
 PATH = "/api/v1/record-operations/case"
 CASE = {"institute_id": "hospital-A", "patient_id": "P1", "visit_id": "V1"}
@@ -52,6 +53,34 @@ def test_case_timeline_response_shape(env):
 def test_limit_query(env):
     data = client().get(PATH, params={**CASE, "limit": 3}).json()["data"]
     assert data["total"] == 6 and data["limit"] == 3 and len(data["items"]) == 3
+
+
+def test_rectification_events_http_contract(monkeypatch):
+    engine, factory, _ = build_env(monkeypatch)
+    try:
+        add_rectification(factory)
+        data = client().get(PATH, params=CASE).json()["data"]
+        assert data["total"] == 11
+        urge = next(item for item in data["items"] if item["type"] == "rectification_urged")
+        assert urge["summary"]["new_status"] == "pending"
+        assert urge["summary"]["root_job_id"] == "old-job"
+        assert urge["summary"]["envelope_id"] == "old-envelope"
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.parametrize("changes", [
+    {"is_active": False}, {"institute_id": "hospital-B"}, {"roles_json": '["doctor"]'},
+])
+def test_stale_token_does_not_override_persistent_authorization(env, changes):
+    with env.begin() as connection:
+        connection.execute(sa.update(SysUser).where(SysUser.id == "mgr-1").values(**changes))
+    assert client().get(PATH, params=CASE).status_code == 403
+
+
+@pytest.mark.parametrize("user_id", [None, ""])
+def test_missing_identity_rejected(env, user_id):
+    assert client(user_id=user_id).get(PATH, params=CASE).status_code == 401
 
 
 @pytest.mark.parametrize("roles", [("doctor",), ("qc_staff",), ()])

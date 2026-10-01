@@ -195,11 +195,20 @@ const TYPE_LABELS: Record<string, string> = {
   manual_defect_created: '人工缺陷创建',
   manual_defect_reviewed: '人工缺陷审核',
   task_record_completed: '完成任务病历',
+  rectification_assigned: '派发整改',
+  rectification_submitted: '提交整改',
+  rectification_approved: '验收整改',
+  rectification_rejected: '驳回整改',
+  rectification_urged: '催办整改',
 }
 const STAGE_LABELS: Record<string, string> = { initial: '初审', recheck: '复审' }
 const REVIEW_DECISION_LABELS: Record<string, string> = { approved: '通过', doubtful: '存疑' }
 const DEFECT_DECISION_LABELS: Record<string, string> = { approved: '通过', rejected: '驳回' }
 const CONTEXT_LABELS: Record<string, string> = { task: '任务', workspace: '病历列表' }
+const RECTIFICATION_STATUS_LABELS: Record<string, string> = {
+  pending: '待整改', submitted: '待验收', approved: '已验收', rejected: '已驳回',
+}
+const SCENE_LABELS: Record<string, string> = { running: '运行', final: '终末', outpatient_emergency: '门急诊' }
 
 function typeLabel(item: CaseOperation) {
   return TYPE_LABELS[item.type] ?? '未知操作'
@@ -268,6 +277,22 @@ function summaryParts(item: CaseOperation): string[] {
       const s = item.summary
       if (text(s.task_id)) push(`任务 ${text(s.task_id)}`)
       if (isCount(s.completed_run_number)) push(`完成第 ${s.completed_run_number} 次运行`)
+      break
+    }
+    case 'rectification_assigned':
+    case 'rectification_submitted':
+    case 'rectification_approved':
+    case 'rectification_rejected':
+    case 'rectification_urged': {
+      const s = item.summary
+      if (text(s.target_id)) push(`缺陷 ${text(s.target_id)}`)
+      push(enumPart('场景', s.scene, SCENE_LABELS))
+      push(enumPart('事件后状态', s.new_status, RECTIFICATION_STATUS_LABELS))
+      if (text(s.comment)) push(`说明 ${text(s.comment)}`)
+      if (text(s.root_job_id)) push(`运行 ${text(s.root_job_id)}`)
+      if (text(s.envelope_id)) push(`结果 ${text(s.envelope_id)}`)
+      if (text(s.rule_set_version)) push(`规则集 ${text(s.rule_set_version)}`)
+      if (isCount(s.version)) push(`整改版本 ${s.version}`)
       break
     }
   }

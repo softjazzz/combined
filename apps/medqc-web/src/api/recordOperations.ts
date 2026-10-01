@@ -17,6 +17,31 @@ export type KnownCaseOperationType =
   | 'manual_defect_created'
   | 'manual_defect_reviewed'
   | 'task_record_completed'
+  | RectificationOperationType
+
+export type RectificationOperationType =
+  | 'rectification_assigned'
+  | 'rectification_submitted'
+  | 'rectification_approved'
+  | 'rectification_rejected'
+  | 'rectification_urged'
+
+/** 整改 owner 的冻结来源及事件快照，不从当前病例结果推导归属。 */
+export interface RectificationOperationSummary {
+  rectification_id: string
+  target_kind: string
+  target_id: string
+  scene: string
+  root_job_id: string
+  envelope_id: string
+  rule_set_key: string
+  rule_set_version: string
+  version: number
+  old_status: string | null
+  new_status: string
+  comment: string
+  recipient_id: string
+}
 
 /** 质控运行完成：结果对象 join 批量任务。 */
 export interface QcRunCompletedSummary {
@@ -72,6 +97,7 @@ export type KnownCaseOperation =
   | (CaseOperationBase & { type: 'manual_defect_created'; summary: ManualDefectCreatedSummary })
   | (CaseOperationBase & { type: 'manual_defect_reviewed'; summary: ManualDefectReviewedSummary })
   | (CaseOperationBase & { type: 'task_record_completed'; summary: TaskRecordSummary })
+  | (CaseOperationBase & { type: RectificationOperationType; summary: RectificationOperationSummary })
 
 /** 未知类型兜底：保留原始 summary，前端只显示“未知操作”，不伪造字段。 */
 export interface UnknownCaseOperation extends CaseOperationBase {
@@ -114,6 +140,11 @@ const KNOWN_TYPES: ReadonlySet<string> = new Set<KnownCaseOperationType>([
   'manual_defect_created',
   'manual_defect_reviewed',
   'task_record_completed',
+  'rectification_assigned',
+  'rectification_submitted',
+  'rectification_approved',
+  'rectification_rejected',
+  'rectification_urged',
 ])
 
 export function isKnownCaseOperation(item: CaseOperation): item is KnownCaseOperation {

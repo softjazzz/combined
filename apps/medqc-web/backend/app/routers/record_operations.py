@@ -22,6 +22,7 @@ from ..services.case_operation_timeline_service import (
     MAX_IDENTITY_LENGTH,
     MAX_LIMIT,
     CaseOperationTimelineInvalid,
+    CaseOperationTimelineForbidden,
     list_case_operations,
 )
 
@@ -43,6 +44,11 @@ class CaseOperationItem(BaseModel):
         "manual_defect_created",
         "manual_defect_reviewed",
         "task_record_completed",
+        "rectification_assigned",
+        "rectification_submitted",
+        "rectification_approved",
+        "rectification_rejected",
+        "rectification_urged",
     ]
     occurred_at: datetime
     actor_id: Optional[str]
@@ -73,6 +79,7 @@ async def get_case_operations(
     try:
         data = await run_in_threadpool(
             list_case_operations,
+            actor_id=str(current_user.get("id") or current_user.get("user_id")),
             institute_id=institute_id, patient_id=patient_id, visit_id=visit_id, limit=limit,
         )
         result = {
@@ -89,6 +96,8 @@ async def get_case_operations(
         }
     except CaseOperationTimelineInvalid as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except CaseOperationTimelineForbidden as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     except Exception as exc:
         # CaseOperationTimelineUnavailable 与未知异常一律脱敏为 503，只记录异常类型。
         logger.error("case_operation_timeline_failed error_type=%s", type(exc).__name__)

@@ -6,6 +6,7 @@
 - manual_defect_created / manual_defect_reviewed：人工缺陷谓词下的 qc_defect_history
 - task_record_completed：qc_task_records 的完成时间（由任务病历完成服务写入）；
   started_at 目前无任何写入方，不作为事件来源
+- rectification_*：现代整改 owner 的派发/提交/验收/驳回/催办事件及冻结来源
 所有来源都按 institute_id/patient_id/visit_id 三坐标精确匹配；任一来源读取失败，
 整个时间线视为不可用，不返回“只缺一部分”的结果。
 """
@@ -21,7 +22,10 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from ..database.connection import SessionLocal
 from ..database.models.qc import QCDefect, QCDefectHistory, QCRecordReview, SysUser
+from ..database.models.defect_rectification import DefectRectification, DefectRectificationEvent
+from .defect_rectification_service import RectificationError, _person
 from .manual_defect_review_service import _manual_scope, _task_identity
+from .user_scope_owner import user_owner_options
 
 DEFAULT_LIMIT = 100
 MAX_LIMIT = 200
@@ -54,6 +58,10 @@ class CaseOperationTimelineInvalid(ValueError):
 
 class CaseOperationTimelineUnavailable(RuntimeError):
     """数据库不可用或任一来源读取失败；对外只给脱敏提示。"""
+
+
+class CaseOperationTimelineForbidden(ValueError):
+    """持久账号无病例历史查看权限。"""
 
 
 def _envelope_table() -> Any:
@@ -275,13 +283,48 @@ def _display_names(session: Any, actor_ids: set[str]) -> dict[str, str]:
     if not actor_ids:
         return {}
     rows = session.execute(
-        select(SysUser.id, SysUser.display_name).where(SysUser.id.in_(sorted(actor_ids)))
+        select(SysUser.id, SysUser.display_name).where(SysUser.id.in_(sorted(actor_ids))),
+        execution_options=user_owner_options(session),
     ).all()
     return {str(row.id): row.display_name for row in rows if row.display_name}
 
 
+def _rectification_events(session: Any, identity: tuple[str, str, str]) -> list[dict[str, Any]]:
+    # 归属来自派发时冻结的整改行；历史状态、版本及文案只读取事件 owner，不读取当前状态代替。
+    rows = session.execute(select(DefectRectificationEvent, DefectRectification).join(
+        DefectRectification, DefectRectification.id == DefectRectificationEvent.rectification_id,
+    ).where(
+        DefectRectification.institute_id == identity[0],
+        DefectRectification.patient_id == identity[1],
+        DefectRectification.visit_id == identity[2],
+    )).all()
+    event_types = {
+        "assign": "rectification_assigned", "submit": "rectification_submitted",
+        "approve": "rectification_approved", "reject": "rectification_rejected",
+        "urge": "rectification_urged",
+    }
+    events = []
+    for event, rectification in rows:
+        if event.action not in event_types:
+            raise CaseOperationTimelineUnavailable("整改事件类型不可用")
+        events.append(_event(
+            f"rectification_event:{event.id}", event_types[event.action], event.created_at,
+            event.actor_id, {
+                "rectification_id": rectification.id,
+                "target_kind": rectification.target_kind, "target_id": rectification.target_id,
+                "scene": rectification.scene, "root_job_id": rectification.root_job_id,
+                "envelope_id": rectification.envelope_id, "rule_set_key": rectification.rule_set_key,
+                "rule_set_version": rectification.rule_set_version,
+                "version": event.version, "old_status": event.old_status,
+                "new_status": event.new_status, "comment": event.comment,
+                "recipient_id": event.recipient_id,
+            },
+        ))
+    return events
+
+
 def list_case_operations(
-    *, institute_id: str, patient_id: str, visit_id: str, limit: int = DEFAULT_LIMIT,
+    *, actor_id: str, institute_id: str, patient_id: str, visit_id: str, limit: int = DEFAULT_LIMIT,
 ) -> dict[str, Any]:
     """按三坐标装配病历操作记录：倒序（同时间按 id）排序后截断，total 为合并后的精确总数。"""
     identity = _case_identity(institute_id, patient_id, visit_id)
@@ -291,11 +334,20 @@ def list_case_operations(
         raise CaseOperationTimelineUnavailable("数据库会话不可用")
     try:
         with SessionLocal() as session:
+            try:
+                actor = _person(session, actor_id)
+            except RectificationError as exc:
+                raise CaseOperationTimelineForbidden("账号无病例历史查看权限") from exc
+            if not actor["roles"] & {"admin", "qc_manager"} or (
+                "admin" not in actor["roles"] and actor["institute_id"] != identity[0]
+            ):
+                raise CaseOperationTimelineForbidden("账号无该机构病例历史查看权限")
             events = [
                 *_run_events(session, identity),
                 *_review_events(session, identity),
                 *_manual_defect_events(session, identity),
                 *_task_record_events(session, identity),
+                *_rectification_events(session, identity),
             ]
             events = [event for event in events if isinstance(event["occurred_at"], datetime)]
             events.sort(key=_sort_key, reverse=True)

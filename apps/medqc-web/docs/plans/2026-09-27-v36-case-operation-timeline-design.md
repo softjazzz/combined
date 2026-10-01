@@ -11,17 +11,20 @@
 | `manual_defect_created` | `qc_defects`（人工谓词）+ `qc_defect_history` 中的 `manual_create` | 历史 `created_at` | 历史 `actor_id` | defect_id、rule_name、task_id、run_number |
 | `manual_defect_reviewed` | `qc_defect_history` 中的 `manual_review_approved/rejected` | 历史 `created_at` | 历史 `actor_id` | defect_id、decision、reason |
 | `task_record_completed` | `qc_task_records`（由任务病历完成服务写入 `completed_at`） | `completed_at` | `assignee_id` | task_id、task_record_id、completed_run_number |
+| `rectification_assigned/submitted/approved/rejected/urged` | `qc.qc_defect_rectification_events` join `qc.qc_defect_rectifications` | 事件 `created_at` | 事件 `actor_id` | rectification_id、target_kind/target_id、scene、root_job_id/envelope_id、rule_set_key/version、事件 version/old_status/new_status/comment/recipient_id |
 
 - 人工缺陷只取与审核接口相同的谓词：`origin='manual' AND source_key='task_assigned_qc' AND identity_version=1`。
 - 自动缺陷的历史不进入时间线（旧入口的身份尚未核实）。
 - `qc_task_records.started_at` 目前没有任何代码写入，不作为事件来源（读取没有 owner 的列会误导，缺列的库还会导致 503）；“开始处理”事件等有权威写入方后再加入。
 - 操作人显示名：按 id 批量读取 `sys_users.display_name`，一次查询；读不到时给 `actor_name=null`，前端显示 id。
+- 整改历史按全部病例历史装配，保留旧轮和新轮，每条归属使用整改创建时冻结的 job/envelope、场景与规则版本，不关联当前最新结果；状态和版本使用事件快照，不用整改当前状态覆盖历史。催办是提醒事件，不等于整改完成。
 
 ## 2. 接口
 
 `GET /api/v1/record-operations/case?institute_id&patient_id&visit_id&limit=100`
 
 - 权限：`QC_RESULTS.REVIEW`（admin/qc_manager），与抽屉审核面板一致，没有权限返回 403。
+- 请求还按应用配置的持久账号 owner 重验有效账号、明确 admin/qc_manager 角色；非 admin 必须与病例机构一致。账号失活、缺少范围或角色配置损坏返回 403，持久读取故障返回 503。
 - 响应 `data`：
   - 顶层回显 `institute_id`/`patient_id`/`visit_id`，供前端校验返回的是当前病例；
   - `items`：`[{id, type, occurred_at, actor_id, actor_name, summary:{...}}]`，按 `occurred_at` 倒序，同一时间再按 `id` 排序，保证顺序稳定；
@@ -29,6 +32,7 @@
   - `limit`：上限 100，最大 200。
 - 事件 `id` 是来源前缀加来源行主键，例如 `review:<id>`、`envelope:<id>`、`defect_history:<id>`、`task_record:<id>:started`。
 - 失败语义：三坐标非法返回 422；数据库故障返回固定脱敏的 503。任一来源读取失败，整个请求返回 503，不返回“只缺一部分”的时间线，避免被误读为完整记录。
+- 发布前提：现代整改迁移 `20260930_000077` 已执行。未升级库缺少整改来源表时整体 503，不把缺表伪装为零事件。本轮未执行迁移。
 
 ## 3. 前端
 
@@ -39,6 +43,6 @@
 
 ## 4. 不在本批
 
-- 催办和医生通知：依赖医生—用户映射，属于外部阻塞。
+- 外部医生通知；现代整改站内催办事件已纳入时间线。
 - “改评分标准”：没有评分标准的权威 owner。
 - 自动缺陷的操作历史：旧入口身份未核实。

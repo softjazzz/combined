@@ -88,6 +88,33 @@ describe('CaseOperationTimeline', () => {
     expect(summary).not.toContain('通过')
   })
 
+  it('整改五类事件显示自身冻结来源与事件状态，催办不显示已验收', async () => {
+    const summary = {
+      rectification_id: 'r-old', target_kind: 'canonical_defect', target_id: 'rule-001',
+      scene: 'final', root_job_id: 'old-job', envelope_id: 'old-envelope',
+      rule_set_key: 'luxian_0609', rule_set_version: 'frozen-v1', version: 2,
+      old_status: 'pending', new_status: 'pending', comment: '请及时整改', recipient_id: 'doctor-1',
+    }
+    api.get.mockResolvedValueOnce(ok([
+      op('rectification_assigned', summary), op('rectification_submitted', { ...summary, new_status: 'submitted' }),
+      op('rectification_approved', { ...summary, new_status: 'approved' }),
+      op('rectification_rejected', { ...summary, new_status: 'rejected' }), op('rectification_urged', summary),
+    ]))
+    const wrapper = mount(CaseOperationTimeline, { props })
+    await flushPromises()
+    expect(texts(wrapper, 'case-operation-type')).toEqual(['派发整改', '提交整改', '验收整改', '驳回整改', '催办整改'])
+    const rows = wrapper.findAll('[data-testid="case-operation-item"]')
+    for (const row of rows) {
+      expect(row.text()).toContain('运行 old-job')
+      expect(row.text()).toContain('结果 old-envelope')
+      expect(row.text()).toContain('规则集 frozen-v1')
+      expect(row.text()).toContain('场景 终末')
+    }
+    expect(rows[4].text()).toContain('事件后状态 待整改')
+    expect(rows[4].text()).not.toContain('已验收')
+    expect(rows[4].text()).toContain('说明 请及时整改')
+  })
+
   it('操作人优先显示名，缺失时回退 id，均缺失显示未知', async () => {
     api.get.mockResolvedValueOnce(ok([
       op('record_review', {}, { id: 'a' }),

@@ -12,6 +12,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.database.models.qc import QCDefect, QCDefectHistory, QCRecordReview, SysUser
+from app.database.models.defect_rectification import DefectRectification, DefectRectificationEvent
 from app.services import case_operation_timeline_service as service
 
 T0 = datetime(2026, 9, 1, 8, 0, 0)
@@ -117,9 +118,12 @@ def build_env(monkeypatch):
     metadata = sa.MetaData()
     tables = _tables(metadata)
     metadata.create_all(engine)
+    rectification_engine = engine.execution_options(schema_translate_map={"qc": None})
+    for model in (DefectRectification, DefectRectificationEvent):
+        model.__table__.create(rectification_engine)
     for model in (QCDefect, QCDefectHistory, QCRecordReview, SysUser):
         model.__table__.create(engine)
-    factory = sessionmaker(bind=engine, expire_on_commit=False)
+    factory = sessionmaker(bind=rectification_engine, expire_on_commit=False)
     with factory.begin() as session:
         session.execute(tables["jobs"].insert(), [
             {"id": "job-task", "created_by": "qc-1",
@@ -165,8 +169,12 @@ def build_env(monkeypatch):
         ])
         session.execute(SysUser.__table__.insert(), [
             {"id": "qc-1", "username": "qc1", "display_name": "合成质控员",
+             "role": "qc_staff", "roles_json": '["qc_staff"]', "is_active": True,
+             "institute_id": CASE[0],
              "created_at": T0, "updated_at": T0},
             {"id": "mgr-1", "username": "mgr1", "display_name": "合成质控主管",
+             "role": "qc_manager", "roles_json": '["qc_manager"]', "is_active": True,
+             "institute_id": CASE[0],
              "created_at": T0, "updated_at": T0},
         ])
     monkeypatch.setattr(service, "SessionLocal", factory)
@@ -183,8 +191,9 @@ def env(monkeypatch):
     engine.dispose()
 
 
-def timeline(identity=CASE, limit=100):
+def timeline(identity=CASE, limit=100, actor_id="mgr-1"):
     return service.list_case_operations(
+        actor_id=actor_id,
         institute_id=identity[0], patient_id=identity[1], visit_id=identity[2], limit=limit,
     )
 
@@ -232,7 +241,80 @@ def test_bad_filters_json_keeps_event_without_task_fields(env):
     assert item["summary"] == {"job_id": "job-bad", "rule_set_version": "v1", "result_count": 0}
 
 
+def add_rectification(factory, *, task_id="rect-old", identity=CASE, job="old-job", envelope="old-envelope"):
+    with factory.begin() as session:
+        session.add(DefectRectification(
+            id=task_id, institute_id=identity[0], patient_id=identity[1], visit_id=identity[2],
+            scene="final", target_kind="canonical_defect", target_id="rule-001",
+            root_job_id=job, envelope_id=envelope, rule_set_key="luxian_0609",
+            rule_set_version="frozen-v1", department="合成科室", creator_id="mgr-1",
+            assignee_id="doctor-1", assignee_name="合成医生", requirement="合成要求",
+            status="approved", version=5, created_at=at(45), updated_at=at(49),
+        ))
+        for version, (action, old, new) in enumerate([
+            ("assign", None, "pending"), ("urge", "pending", "pending"),
+            ("submit", "pending", "submitted"), ("reject", "submitted", "rejected"),
+            ("approve", "submitted", "approved"),
+        ], 1):
+            session.add(DefectRectificationEvent(
+                id=f"{task_id}-{version}", rectification_id=task_id, action=action,
+                actor_id="mgr-1", old_status=old, new_status=new, version=version,
+                comment=f"合成{action}", recipient_id="doctor-1", created_at=at(44 + version),
+            ))
+
+
+def test_rectification_history_keeps_frozen_round_and_event_snapshots(env):
+    factory, _ = env
+    add_rectification(factory)
+    add_rectification(factory, task_id="rect-new", job="new-job", envelope="new-envelope")
+    add_rectification(factory, task_id="rect-other", identity=OTHER_INSTITUTE)
+    data = timeline()
+    events = [event for event in data["items"] if event["id"].startswith("rectification_event:")]
+    assert len(events) == 10 and data["total"] == 16
+    assert {event["type"] for event in events} == {
+        "rectification_assigned", "rectification_urged", "rectification_submitted",
+        "rectification_rejected", "rectification_approved",
+    }
+    old = {event["type"]: event for event in events if event["summary"]["rectification_id"] == "rect-old"}
+    for event in old.values():
+        assert event["summary"]["root_job_id"] == "old-job"
+        assert event["summary"]["envelope_id"] == "old-envelope"
+        assert event["summary"]["rule_set_version"] == "frozen-v1"
+        assert event["summary"]["scene"] == "final"
+        assert event["actor_name"] == "合成质控主管"
+    assert old["rectification_assigned"]["summary"]["new_status"] == "pending"
+    assert old["rectification_urged"]["summary"]["new_status"] == "pending"
+    assert old["rectification_urged"]["summary"]["version"] == 2
+    limited = timeline(limit=2)
+    assert len(limited["items"]) == 2 and limited["total"] == 16
+    with factory() as session:
+        assert session.get(DefectRectification, "rect-old").status == "approved"
+        assert session.get(DefectRectification, "rect-old").version == 5
+
+
+@pytest.mark.parametrize("changes", [
+    {"is_active": False}, {"institute_id": "hospital-B"}, {"institute_id": None},
+    {"roles_json": '["doctor"]'}, {"roles_json": "broken"},
+])
+def test_persistent_account_scope_fails_closed(env, changes):
+    factory, _ = env
+    with factory.begin() as session:
+        session.execute(sa.update(SysUser).where(SysUser.id == "mgr-1").values(**changes))
+    with pytest.raises(service.CaseOperationTimelineForbidden):
+        timeline()
+
+
+def test_unknown_persistent_account_fails_closed(env):
+    with pytest.raises(service.CaseOperationTimelineForbidden):
+        timeline(actor_id="missing-user")
+
+
 def test_same_visit_other_institute_is_isolated(env):
+    factory, _ = env
+    with factory.begin() as session:
+        session.execute(sa.update(SysUser).where(SysUser.id == "mgr-1").values(
+            role="admin", roles_json='["admin"]',
+        ))
     data = timeline(OTHER_INSTITUTE)
     assert sorted(item["id"] for item in data["items"]) == [
         "defect_history:h-other", "envelope:env-other", "review:rv-other",
@@ -270,7 +352,7 @@ def test_limit_truncates_and_total_is_exact(env):
 def test_missing_display_name_is_null(env):
     factory, _ = env
     with factory.begin() as session:
-        session.execute(sa.delete(SysUser.__table__).where(SysUser.__table__.c.id == "mgr-1"))
+        session.execute(sa.update(SysUser).where(SysUser.id == "mgr-1").values(display_name=""))
     item = {i["id"]: i for i in timeline()["items"]}["review:rv-1"]
     assert item["actor_id"] == "mgr-1" and item["actor_name"] is None
 
@@ -282,9 +364,9 @@ def test_display_names_loaded_in_one_query(env):
     sa.event.listen(engine, "before_cursor_execute",
                     lambda conn, cursor, stmt, *a: statements.append(stmt))
     timeline()
-    assert sum("sys_users" in stmt for stmt in statements) == 1
+    assert sum("sys_users" in stmt for stmt in statements) == 2
     # 各来源各一次查询（Envelope 与 job 分两次批量），加一次显示名。
-    assert len(statements) == 6
+    assert len(statements) == 8
 
 
 @pytest.mark.parametrize("identity", [
@@ -302,7 +384,7 @@ def test_invalid_limit_rejected(env, limit):
         timeline(limit=limit)
 
 
-@pytest.mark.parametrize("source", ["envelopes", "jobs", "reviews", "defects", "task_records", "users"])
+@pytest.mark.parametrize("source", ["envelopes", "jobs", "reviews", "defects", "task_records", "users", "rectifications"])
 def test_any_source_failure_makes_whole_timeline_unavailable(env, monkeypatch, source):
     factory, tables = env
     engine = factory.kw["bind"]
@@ -310,6 +392,7 @@ def test_any_source_failure_makes_whole_timeline_unavailable(env, monkeypatch, s
         "envelopes": "luxian_0609_record_result_envelopes", "jobs": "custom_qc_batch_jobs",
         "reviews": "qc_record_reviews", "defects": "qc_defect_history",
         "task_records": "qc_task_records", "users": "sys_users",
+        "rectifications": "qc_defect_rectification_events",
     }
 
     def fail(conn, cursor, statement, *args):
