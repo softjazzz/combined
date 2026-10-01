@@ -77,3 +77,44 @@ async def test_score_source_failure_does_not_return_empty_success(monkeypatch):
     monkeypatch.setattr(scoring, "get_workstation_standard", unavailable)
     with pytest.raises(RuntimeError, match="评分暂不可用"):
         await TaskSamplingService()._filter_scored_candidates([], "running", {"standard_id": "S"})
+
+
+@pytest.mark.asyncio
+async def test_required_department_source_failure_does_not_return_empty_success(monkeypatch):
+    from app.services import scoring_service as scoring
+    from app.services.medical_records import query_service
+    monkeypatch.setattr(scoring, "get_workstation_standard", lambda *_: {"items": [{"department_scope_mode": "selected"}]})
+    def unavailable(*args, **kwargs):
+        raise RuntimeError("SYN department source unavailable")
+    monkeypatch.setattr(query_service, "load_scoring_departments", unavailable)
+    scored = []
+    monkeypatch.setattr(scoring, "score_workstation_page", lambda *args, **kwargs: scored.append(True))
+    with pytest.raises(RuntimeError, match="评分暂不可用"):
+        await TaskSamplingService()._filter_scored_candidates(
+            [{"institute_id": "SYN-I", "patient_id": "SYN-P", "visit_id": "SYN-V"}],
+            "running", {"standard_id": "S"},
+        )
+    assert not scored
+
+
+@pytest.mark.asyncio
+async def test_department_preload_is_reused_by_scoring_owner(monkeypatch):
+    from app.services import scoring_service as scoring
+    from app.services.medical_records import query_service
+    from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
+    candidate = {"institute_id": "SYN-I", "patient_id": "SYN-P", "visit_id": "SYN-V"}
+    identity = TaskSamplingService._identity(candidate)
+    calls = []
+    monkeypatch.setattr(scoring, "get_workstation_standard", lambda *_: {"items": [{"department_scope_mode": "selected"}]})
+    def departments(identities, **kwargs):
+        calls.append(identities)
+        return {identity: "合成内科"}
+    monkeypatch.setattr(query_service, "load_scoring_departments", departments)
+    monkeypatch.setattr(CustomQCWorkspaceService, "__init__", lambda self: None)
+    monkeypatch.setattr(CustomQCWorkspaceService, "build_luxian_0609_completed_record_result_summaries", lambda *args, **kwargs: {})
+    def score(*args, **kwargs):
+        assert kwargs["department_loader"]([identity], session_factory=None) == {identity: "合成内科"}
+        return {identity: {"status": "scored", "score": 80}}, {}
+    monkeypatch.setattr(scoring, "score_workstation_page", score)
+    assert await TaskSamplingService()._filter_scored_candidates([candidate], "running", {"standard_id": "S"}) == [candidate]
+    assert calls == [[identity]]

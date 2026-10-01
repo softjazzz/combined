@@ -514,13 +514,20 @@ class TaskSamplingService:
         import anyio
         from ..database.connection import SessionLocal
         from .custom_qc_workspace_service import CustomQCWorkspaceService
-        from .scoring_service import get_workstation_standard, score_workstation_page
+        from .scoring_service import get_workstation_standard, score_workstation_page, standard_needs_department
+        from .medical_records.query_service import load_scoring_departments
 
         if len(candidates) > 5000:
             raise ValueError("评分筛选范围超过 5000 例，请缩小范围")
 
         def load():
             standard = get_workstation_standard(scene, score_filter["standard_id"])
+            identities = [self._identity(row) for row in candidates]
+            # 任务筛选不能将科室来源故障降级为空命中；在计分 owner 的兼容降级路径外读取。
+            departments = (
+                load_scoring_departments(identities, session_factory=SessionLocal)
+                if standard_needs_department(standard) else {}
+            )
             refs = [{key: row[key] for key in ("institute_id", "patient_id", "visit_id")} for row in candidates]
             anchors = CustomQCWorkspaceService().build_luxian_0609_completed_record_result_summaries(
                 record_refs=refs, session_factory=SessionLocal,
@@ -528,6 +535,7 @@ class TaskSamplingService:
             states, _ = score_workstation_page(
                 {self._identity(row): scene for row in candidates}, anchors,
                 session_factory=SessionLocal, standard_loader=lambda _: standard, strict=True,
+                department_loader=lambda *_args, **_kwargs: departments,
             )
             matching = []
             for row in candidates:
