@@ -108,6 +108,29 @@ function tab(wrapper: ReturnType<typeof mountPanel>, label: string) {
 }
 
 describe('CaseDefectPartitionsPanel', () => {
+  it.each([null, {}, [{ id: 'CORE-15', name: '病历管理制度', rule_ids: null }]])(
+    '核心制度分组回执损坏时不渲染为正常分类 %j',
+    async (systems) => {
+      getPartitions.mockResolvedValue({
+        success: true,
+        data: partitionPayload({
+          core: {
+            status: 'ready',
+            source: 'core_system_classification',
+            rule_ids: ['LX0609-001'],
+            unknown_rule_ids: [],
+            systems,
+          },
+        }),
+      })
+      const wrapper = mountPanel()
+      await flushPromises()
+      await tab(wrapper, '核心制度').trigger('click')
+      expect(wrapper.text()).toContain('核心制度分区引用不可用')
+      expect(wrapper.find('[data-testid="partition-locate-evidence"]').exists()).toBe(false)
+      wrapper.unmount()
+    },
+  )
   it('核心制度显示冻结归属的确认缺陷并复用文书定位，不展示未确认规则', async () => {
     const evidence = {
       source_ref: 'safe-admission-ref',

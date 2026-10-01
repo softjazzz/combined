@@ -41,9 +41,7 @@
       v-if="activeTab === 'core' && partition?.core.status === 'partial'"
       class="case-defect-partitions__source-note"
     >
-      {{
-        partition.core.unknown_rule_ids?.length ?? 0
-      }}
+      {{ partition.core.unknown_rule_ids?.length ?? 0 }}
       项确认缺陷未配置核心制度归属，仅展示已配置项
     </p>
 
@@ -227,18 +225,38 @@ function isRulePartition(
   return value.rule_ids.every((ruleId) => typeof ruleId === 'string' && Boolean(ruleId.trim()))
 }
 
+function isCorePartition(value: unknown): boolean {
+  if (!isRecord(value) || value.source !== 'core_system_classification') return false
+  if (value.status === 'not_integrated') return true
+  if (
+    !Array.isArray(value.rule_ids) ||
+    !value.rule_ids.every((id) => typeof id === 'string' && id.trim())
+  )
+    return false
+  if (value.status === 'unavailable') return true
+  if (value.status !== 'ready' && value.status !== 'partial') return false
+  return (
+    Array.isArray(value.unknown_rule_ids) &&
+    value.unknown_rule_ids.every((id) => typeof id === 'string' && id.trim()) &&
+    Array.isArray(value.systems) &&
+    value.systems.every(
+      (system) =>
+        isRecord(system) &&
+        typeof system.id === 'string' &&
+        typeof system.name === 'string' &&
+        Array.isArray(system.rule_ids) &&
+        system.rule_ids.every((id) => typeof id === 'string'),
+    )
+  )
+}
+
 function isPartitionPayload(value: unknown): value is CaseDefectPartitionsPayload {
   return (
     isRecord(value) &&
     value.schema_version === 'case-defect-partitions-v1' &&
     isRulePartition(value.confirmed, 'luxian_0609_canonical_projection') &&
     isRulePartition(value.veto, 'scoring_deductions') &&
-    isRecord(value.core) &&
-    value.core.source === 'core_system_classification' &&
-    ['not_integrated', 'ready', 'partial', 'unavailable'].includes(String(value.core.status)) &&
-    (value.core.status === 'not_integrated' ||
-      (Array.isArray(value.core.rule_ids) &&
-        value.core.rule_ids.every((id) => typeof id === 'string')))
+    isCorePartition(value.core)
   )
 }
 

@@ -1,16 +1,18 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const api = vi.hoisted(() => ({ get: vi.fn(), list: vi.fn() }))
+const api = vi.hoisted(() => ({ get: vi.fn(), list: vi.fn(), setActor: vi.fn() }))
 vi.mock('@/api/scoring', () => ({ getCaseScore: api.get, listScoringStandards: api.list }))
 vi.mock('@/stores/auth', async () => {
   const { reactive } = await import('vue')
   const auth = reactive({ user: { id: 'user-1' } })
+  api.setActor.mockImplementation((id: string) => {
+    auth.user.id = id
+  })
   return { useAuthStore: () => auth }
 })
 
 import CaseScorePanel from '@/components/qc/CaseScorePanel.vue'
-import { useAuthStore } from '@/stores/auth'
 
 const props = { instituteId: 'H1', patientId: 'P1', visitId: 'V1', scene: 'running' as const }
 
@@ -66,22 +68,21 @@ function deferred<T>() {
 
 describe('CaseScorePanel', () => {
   beforeEach(() => {
+    api.setActor('user-1')
     api.get.mockReset()
-    api.list
-      .mockReset()
-      .mockResolvedValue(
-        ok({
-          items: [
-            {
-              id: 's2',
-              name: '另一运行标准',
-              scene: 'running',
-              status: 'active',
-              rule_set_key: 'luxian_0609_qc_v1',
-            },
-          ],
-        }),
-      )
+    api.list.mockReset().mockResolvedValue(
+      ok({
+        items: [
+          {
+            id: 's2',
+            name: '另一运行标准',
+            scene: 'running',
+            status: 'active',
+            rule_set_key: 'luxian_0609_qc_v1',
+          },
+        ],
+      }),
+    )
   })
 
   it('显式选择仅重读本病例分数，失败不退回默认，切病例恢复默认', async () => {
@@ -138,7 +139,7 @@ describe('CaseScorePanel', () => {
     expect(api.get.mock.calls[2][0]).toMatchObject({ scene: 'final' })
     expect(api.get.mock.calls[2][0]).not.toHaveProperty('standard_id')
     expect(wrapper.get('[data-testid="case-score-value"]').text()).toBe('91')
-    useAuthStore().user!.id = 'user-2'
+    api.setActor('user-2')
     await flushPromises()
     expect(api.get).toHaveBeenCalledTimes(4)
     expect(api.get.mock.calls[3][0]).not.toHaveProperty('standard_id')

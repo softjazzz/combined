@@ -738,7 +738,7 @@ async function saveApplicability(coreOnly = false) {
     message.warning('请明确选择科室范围和医生端开关')
     return
   }
-  const configuredScopeMode = scopeMode.value
+  const configuredScopeMode = scopeMode.value || undefined
   let departmentRefs: Array<{ institute_id: string; department_name: string }>
   try {
     departmentRefs = coreOnly ? [] : parseDepartmentRefs()
