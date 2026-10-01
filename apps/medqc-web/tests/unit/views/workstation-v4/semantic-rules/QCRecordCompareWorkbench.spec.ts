@@ -71,7 +71,7 @@ describe('QCRecordCompareWorkbench', () => {
         jobId: 'job1',
         issues: [],
         singleRecordItems: [
-          { rule_id: 'LX0609-001', status: 'non_compliant', evidence: [evidence] },
+          { rule_id: 'LX0609-001', rule_name: '合成定位规则', status: 'non_compliant', evidence: [evidence] },
         ],
         evidenceTarget: {
           visitId: 'V1',
@@ -213,7 +213,7 @@ describe('QCRecordCompareWorkbench', () => {
         jobId: 'job1',
         issues: [],
         singleRecordItems: [
-          { rule_id: 'LX0609-001', status: 'non_compliant', evidence: [evidence] },
+          { rule_id: 'LX0609-001', rule_name: '合成定位规则', status: 'non_compliant', evidence: [evidence] },
         ],
         evidenceTarget: {
           visitId: 'V1',
@@ -246,8 +246,8 @@ describe('QCRecordCompareWorkbench', () => {
         visitId: 'V1',
         issues: [{ ...issues[1]!, evidences: [{ key: 'legacy', quote: '腹痛3天' }] }],
         providedDocuments: [
-          { key: 'loaded', title: '文书一', content: '腹痛3天', content_loaded: true },
-          { key: 'unloaded', title: '文书二', content_loaded: false },
+          { key: 'loaded', title: '文书一', document_type: 'admission_record', content: '腹痛3天', content_loaded: true },
+          { key: 'unloaded', title: '文书二', document_type: 'admission_record', content: '', content_loaded: false },
         ],
       },
     })
