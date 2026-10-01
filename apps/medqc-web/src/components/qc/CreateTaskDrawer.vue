@@ -145,6 +145,10 @@
               :options="departmentOptions"
             />
           </a-form-item>
+          <TaskClinicalDoctorFields
+            v-model="formData.sampling_config.clinical_doctors"
+            :scene="formData.scene"
+          />
           <TaskScoreFilterFields
             v-model="formData.sampling_config.score_filter"
             :scene="formData.scene"
@@ -467,6 +471,8 @@ import {
   type TaskCaseScope,
 } from '@/utils/taskCaseScope'
 import TaskScoreFilterFields from './TaskScoreFilterFields.vue'
+import TaskClinicalDoctorFields from './TaskClinicalDoctorFields.vue'
+import type { TaskClinicalDoctorRef } from '@/api/tasks'
 import type { TaskScoreFilter } from '@/api/tasks'
 import type { Dayjs } from 'dayjs'
 import dayjs from 'dayjs'
@@ -523,6 +529,7 @@ const formData = ref({
     group_by: null as string | null,
     max_per_group: 50,
     score_filter: undefined as TaskScoreFilter | undefined,
+    clinical_doctors: undefined as TaskClinicalDoctorRef[] | undefined,
   },
   assign_method: 'by_ratio' as TaskAssignableMethod,
   // 原质控员策略必选，不给默认值，避免用户未确认即拒绝或兜底
@@ -723,6 +730,7 @@ watch(
     formData.value.rule_set_key = undefined
     formData.value.sampling_config.case_scope = undefined
     formData.value.sampling_config.score_filter = undefined
+    formData.value.sampling_config.clinical_doctors = undefined
   },
 )
 
@@ -832,6 +840,7 @@ const applyTemplateConfig = async (config: TaskTemplateConfig) => {
     score_filter: config.sampling_config.score_filter
       ? { ...config.sampling_config.score_filter }
       : undefined,
+    clinical_doctors: config.sampling_config.clinical_doctors?.map((item) => ({ ...item })),
   }
   formData.value.assign_method = config.assign_method
   formData.value.assign_fallback = config.assignee_config.fallback
@@ -855,6 +864,14 @@ const currentTemplateConfig = (): TaskTemplateConfig | null => {
     return null
   }
   const samplingConfig: TaskTemplateConfig['sampling_config'] = {
+    ...(formData.value.sampling_config.clinical_doctors
+      ? {
+          clinical_doctors: formData.value.sampling_config.clinical_doctors.map((item) => ({
+            institute_id: item.institute_id.trim(),
+            physician_name: item.physician_name.trim(),
+          })),
+        }
+      : {}),
     ...(formData.value.sampling_config.score_filter
       ? { score_filter: { ...formData.value.sampling_config.score_filter } }
       : {}),
@@ -932,6 +949,7 @@ const resetForm = () => {
     sampling_config: {
       case_scope: undefined,
       score_filter: undefined,
+      clinical_doctors: undefined,
       total: 50,
       percentage: 10,
       by_department: false,
@@ -1015,6 +1033,14 @@ const handleSubmit = async () => {
       deadline: formData.value.deadline?.format('YYYY-MM-DD'),
       sampling_method: rangeMode.value === 'refs' ? 'all' : formData.value.sampling_method,
       sampling_config: {
+        ...(rangeMode.value !== 'refs' && formData.value.sampling_config.clinical_doctors
+          ? {
+              clinical_doctors: formData.value.sampling_config.clinical_doctors.map((item) => ({
+                institute_id: item.institute_id.trim(),
+                physician_name: item.physician_name.trim(),
+              })),
+            }
+          : {}),
         ...(rangeMode.value !== 'refs' && formData.value.sampling_config.score_filter
           ? { score_filter: { ...formData.value.sampling_config.score_filter } }
           : {}),

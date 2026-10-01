@@ -119,6 +119,30 @@ describe('TaskEditDrawer', () => {
     mocks.confirm.mockImplementation((options: { onOk?: () => unknown }) => options.onOk?.())
   })
 
+  it('仅改变临床医生也走完整配置编辑并保留机构引用', async () => {
+    const wrapper = mountDrawer()
+    await flushPromises()
+    const vm = wrapper.vm as unknown as {
+      clinicalDoctors: import('@/api/tasks').TaskClinicalDoctorRef[]
+      confirmSave: () => void
+    }
+    vm.clinicalDoctors = [{ institute_id: ' SYN-I ', physician_name: ' 张医师 ' }]
+    vm.confirmSave()
+    await flushPromises()
+    expect(mocks.updateTaskDraftConfiguration).toHaveBeenCalledWith(
+      'task-1',
+      expect.objectContaining({
+        sampling_config: {
+          case_scope: 'active',
+          total: 20,
+          by_department: true,
+          clinical_doctors: [{ institute_id: 'SYN-I', physician_name: '张医师' }],
+        },
+      }),
+    )
+    expect(mocks.updateTaskMetadata).not.toHaveBeenCalled()
+  })
+
   it('仅改变评分上下界也走完整配置编辑并保存标准引用', async () => {
     const wrapper = mountDrawer()
     await flushPromises()

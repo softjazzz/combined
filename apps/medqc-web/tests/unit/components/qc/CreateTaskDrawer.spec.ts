@@ -64,6 +64,7 @@ type DrawerVm = {
       percentage?: number
       max_per_group?: number
       score_filter?: import('@/api/tasks').TaskScoreFilter
+      clinical_doctors?: import('@/api/tasks').TaskClinicalDoctorRef[]
     }
   }
   handleSubmit: () => Promise<void>
@@ -221,6 +222,33 @@ describe('CreateTaskDrawer 创建草稿边界', () => {
     expect(vm.formData.sampling_method).toBe('count')
     expect(vm.formData.assign_method).toBe('by_department')
     expect(mocks.message.success).toHaveBeenCalledWith('模板配置已套用，请填写任务名称和截止日期')
+  })
+
+  it('临床医生配置在创建和模板往返保存，指定集合清空筛选', async () => {
+    mocks.createTask.mockResolvedValue({ success: false, message: '测试停止' })
+    const wrapper = mountDrawer()
+    const vm = vmOf(wrapper)
+    await chooseRuleSet(vm, 'running')
+    vm.formData.task_name = 'SYN-临床医生'
+    vm.formData.sampling_config.clinical_doctors = [
+      { institute_id: ' SYN-I ', physician_name: ' 张医师 ' },
+    ]
+    vm.handleSaveTemplate()
+    await vm.handleSubmit()
+    const doctors = [{ institute_id: 'SYN-I', physician_name: '张医师' }]
+    expect(mocks.createTask.mock.calls.at(-1)?.[0].sampling_config.clinical_doctors).toEqual(
+      doctors,
+    )
+    expect(wrapper.emitted('save-template')?.[0]?.[0]).toMatchObject({
+      sampling_config: { clinical_doctors: doctors },
+    })
+    vm.rangeMode = 'refs'
+    vm.recordRefs[0] = { institute_id: 'SYN-I', patient_id: 'SYN-P', visit_id: 'SYN-V' }
+    await flushPromises()
+    await vm.handleSubmit()
+    expect(mocks.createTask.mock.calls.at(-1)?.[0].sampling_config).toEqual({
+      case_scope: 'active',
+    })
   })
 
   it('创建和模板保存同一评分上下界，指定集合不提交评分筛选', async () => {

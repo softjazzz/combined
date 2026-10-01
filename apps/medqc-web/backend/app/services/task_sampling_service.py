@@ -87,6 +87,7 @@ def validate_scene_case_scope(scene: Any, method: Any, config: Any, date_range: 
     配置保持原兼容行为（创建不校验，抽样时明确不可用），其他 case_scope 取值一律拒绝。
     """
     config = config if isinstance(config, dict) else {}
+    validate_task_clinical_doctors(scene, config.get("clinical_doctors"))
     validate_task_score_filter(scene, config.get("score_filter"))
     if config.get("score_filter") is not None:
         from .scoring_service import get_workstation_standard
@@ -110,11 +111,12 @@ def validate_scoped_sampling_config(scene: Any, method: Any, config: Any) -> Non
         return
     if not isinstance(config, dict):
         raise ValueError("抽样配置格式无效")
+    validate_task_clinical_doctors(scene, config.get("clinical_doctors"))
     validate_task_score_filter(scene, config.get("score_filter"))
     if not isinstance(method, str) or method not in {"all", "count", "percentage", "department_count", "department_ratio"}:
         raise ValueError("无效的抽样方式")
     if method in {"department_count", "department_ratio"}:
-        allowed = {"case_scope", "total", "score_filter"} if method == "department_count" else {"case_scope", "percentage", "max_per_group", "score_filter"}
+        allowed = {"case_scope", "total", "score_filter", "clinical_doctors"} if method == "department_count" else {"case_scope", "percentage", "max_per_group", "score_filter", "clinical_doctors"}
         if set(config) - allowed:
             raise ValueError("科室抽样配置含不支持的字段")
     if method in {"count", "department_count"}:
@@ -135,6 +137,26 @@ def validate_scoped_sampling_config(scene: Any, method: Any, config: Any) -> Non
             maximum = config.get("max_per_group")
             if isinstance(maximum, bool) or not isinstance(maximum, int) or not 1 <= maximum <= 10000:
                 raise ValueError("每科室最多份数必须为 1 到 10000 的整数")
+
+
+def validate_task_clinical_doctors(scene: Any, value: Any) -> None:
+    """临床医生沿用病案首页主治医师签名，机构隔离，不推断账号身份。"""
+    if value is None:
+        return
+    if scene not in {"running", "final"}:
+        raise ValueError("临床医生筛选仅支持运行和终末场景")
+    if not isinstance(value, list) or not 1 <= len(value) <= 100:
+        raise ValueError("临床医生筛选须为 1 到 100 条机构与主治医师引用")
+    identities = []
+    for item in value:
+        if not isinstance(item, dict) or set(item) != {"institute_id", "physician_name"} or any(
+            not isinstance(item[key], str) or not item[key].strip() or len(item[key]) > 100
+            for key in ("institute_id", "physician_name")
+        ):
+            raise ValueError("临床医生筛选缺少有效机构或主治医师签名")
+        identities.append((item["institute_id"].strip(), item["physician_name"].strip()))
+    if len(identities) != len(set(identities)):
+        raise ValueError("临床医生筛选引用重复")
 
 
 def validate_task_score_filter(scene: Any, value: Any) -> None:
@@ -466,6 +488,7 @@ class TaskSamplingService:
             config = {}
 
         if isinstance(config, dict):
+            validate_task_clinical_doctors(scene, config.get("clinical_doctors"))
             validate_task_score_filter(scene, config.get("score_filter"))
         validate_scoped_sampling_config(scene, method, config)
         validate_specified_case_sampling(method, config, task.get("record_refs"))
@@ -488,6 +511,8 @@ class TaskSamplingService:
         else:
             candidates = await self._get_candidate_records(task)
 
+        if config.get("clinical_doctors") is not None:
+            candidates = await self._filter_clinical_doctor_candidates(candidates, config["clinical_doctors"])
         if config.get("score_filter") is not None:
             candidates = await self._filter_scored_candidates(candidates, scene, config["score_filter"])
 
@@ -506,6 +531,40 @@ class TaskSamplingService:
         else:
             logger.warning(f"未知的抽样方式: {method}，使用全量")
             return candidates
+
+    async def _filter_clinical_doctor_candidates(
+        self, candidates: List[Dict[str, Any]], doctors: List[Dict[str, str]],
+    ) -> List[Dict[str, Any]]:
+        import anyio
+        from ..database.connection import SessionLocal
+        from ..database.models.cdm import MedicalRecordFrontpage
+        from sqlalchemy import select, tuple_
+
+        identities = {self._identity(row) for row in candidates}
+        selected = {(item["institute_id"].strip(), item["physician_name"].strip()) for item in doctors}
+
+        def load():
+            matching = set()
+            with SessionLocal() as session:
+                ordered = sorted(identities)
+                for start in range(0, len(ordered), 500):
+                    rows = session.execute(select(
+                        MedicalRecordFrontpage.institute_id, MedicalRecordFrontpage.patient_id,
+                        MedicalRecordFrontpage.visit_id, MedicalRecordFrontpage.attending_physician_sign,
+                    ).where(tuple_(
+                        MedicalRecordFrontpage.institute_id, MedicalRecordFrontpage.patient_id,
+                        MedicalRecordFrontpage.visit_id,
+                    ).in_(ordered[start:start + 500]))).all()
+                    for institute, patient, visit, physician in rows:
+                        if (str(institute).strip(), str(physician or "").strip()) in selected:
+                            matching.add((str(institute).strip(), str(patient).strip(), str(visit).strip()))
+            return [row for row in candidates if self._identity(row) in matching]
+
+        try:
+            return await anyio.to_thread.run_sync(load)
+        except Exception as exc:
+            logger.warning("临床医生筛选来源不可用 error_type=%s", type(exc).__name__)
+            raise RuntimeError("临床医生筛选来源不可用") from None
 
     async def _filter_scored_candidates(
         self, candidates: List[Dict[str, Any]], scene: str, score_filter: Dict[str, Any],

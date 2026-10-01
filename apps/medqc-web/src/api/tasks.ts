@@ -325,6 +325,11 @@ export interface TaskCreateData {
 }
 
 /** 任务模板仅保存这些可复用字段，不包含任务名、期限、病例或人员身份。 */
+export interface TaskClinicalDoctorRef {
+  institute_id: string
+  physician_name: string
+}
+
 export interface TaskScoreFilter {
   standard_id: string
   score_min?: number
@@ -342,6 +347,7 @@ export interface TaskTemplateConfig {
     /** 运行=active（当前在院），终末=discharged（已出院，未核验归档） */
     case_scope?: TaskCaseScope
     score_filter?: TaskScoreFilter
+    clinical_doctors?: TaskClinicalDoctorRef[]
     total?: number
     percentage?: number
     max_per_group?: number

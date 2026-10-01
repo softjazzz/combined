@@ -122,6 +122,11 @@
                   :scene="form.scene"
                   :disabled="saving || refreshRequired"
                 />
+                <TaskClinicalDoctorFields
+                  v-model="clinicalDoctors"
+                  :scene="form.scene"
+                  :disabled="saving || refreshRequired"
+                />
               </template>
               <template v-else>
                 <a-form-item v-if="form.scene === 'final'" label="出院日期范围" required>
@@ -320,9 +325,12 @@ import {
 } from '@/api/taskEdits'
 
 import TaskScoreFilterFields from './TaskScoreFilterFields.vue'
+import TaskClinicalDoctorFields from './TaskClinicalDoctorFields.vue'
+import type { TaskClinicalDoctorRef } from '@/api/tasks'
 import type { TaskScoreFilter } from '@/api/tasks'
 
 const scoreFilter = ref<TaskScoreFilter | undefined>()
+const clinicalDoctors = ref<TaskClinicalDoctorRef[] | undefined>()
 const props = defineProps<{ open: boolean; taskId: string | null }>()
 const emit = defineEmits<{
   (event: 'update:open', value: boolean): void
@@ -405,6 +413,7 @@ function canEdit(field: string): boolean {
 
 function resetForm() {
   scoreFilter.value = undefined
+  clinicalDoctors.value = undefined
   form.task_name = ''
   form.scene = null
   form.rule_set_key = ''
@@ -447,6 +456,17 @@ function fillForm(value: TaskEditDetail) {
     typeof value.sampling_config?.percentage === 'number' ? value.sampling_config.percentage : 10
   form.by_department = value.sampling_config?.by_department === true
   const rawScore = value.sampling_config?.score_filter
+  const rawDoctors = value.sampling_config?.clinical_doctors
+  clinicalDoctors.value = Array.isArray(rawDoctors)
+    ? rawDoctors.flatMap((item) =>
+        item &&
+        typeof item === 'object' &&
+        typeof item.institute_id === 'string' &&
+        typeof item.physician_name === 'string'
+          ? [{ institute_id: item.institute_id, physician_name: item.physician_name }]
+          : [],
+      )
+    : undefined
   scoreFilter.value =
     rawScore &&
     typeof rawScore === 'object' &&
@@ -575,6 +595,12 @@ function buildDraftPayload(): TaskDraftConfigurationUpdate | null {
   delete samplingConfig.group_by
   delete samplingConfig.max_per_group
   delete samplingConfig.score_filter
+  delete samplingConfig.clinical_doctors
+  if (rangeMode.value !== 'refs' && clinicalDoctors.value)
+    samplingConfig.clinical_doctors = clinicalDoctors.value.map((item) => ({
+      institute_id: item.institute_id.trim(),
+      physician_name: item.physician_name.trim(),
+    }))
   if (rangeMode.value !== 'refs' && scoreFilter.value)
     samplingConfig.score_filter = { ...scoreFilter.value }
   if (
@@ -713,6 +739,7 @@ function planningFingerprint(): string {
     })),
     samplingMethod: form.sampling_method,
     scoreFilter: rangeMode.value === 'refs' ? null : (scoreFilter.value ?? null),
+    clinicalDoctors: rangeMode.value === 'refs' ? null : (clinicalDoctors.value ?? null),
     total: form.total,
     percentage: form.percentage,
     byDepartment: form.by_department,
