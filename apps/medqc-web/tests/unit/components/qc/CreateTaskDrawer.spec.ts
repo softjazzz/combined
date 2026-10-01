@@ -63,6 +63,7 @@ type DrawerVm = {
       total?: number
       percentage?: number
       max_per_group?: number
+      score_filter?: import('@/api/tasks').TaskScoreFilter
     }
   }
   handleSubmit: () => Promise<void>
@@ -220,6 +221,29 @@ describe('CreateTaskDrawer 创建草稿边界', () => {
     expect(vm.formData.sampling_method).toBe('count')
     expect(vm.formData.assign_method).toBe('by_department')
     expect(mocks.message.success).toHaveBeenCalledWith('模板配置已套用，请填写任务名称和截止日期')
+  })
+
+  it('创建和模板保存同一评分上下界，指定集合不提交评分筛选', async () => {
+    mocks.createTask.mockResolvedValue({ success: false, message: '测试停止' })
+    const wrapper = mountDrawer()
+    const vm = vmOf(wrapper)
+    await chooseRuleSet(vm, 'running')
+    vm.formData.task_name = 'SYN-评分范围'
+    const score = { standard_id: 'SYN-S', score_min: 0, score_max: 90 }
+    vm.formData.sampling_config.score_filter = score
+    vm.handleSaveTemplate()
+    await vm.handleSubmit()
+    expect(mocks.createTask.mock.calls.at(-1)?.[0].sampling_config.score_filter).toEqual(score)
+    expect(wrapper.emitted('save-template')?.[0]?.[0]).toMatchObject({
+      sampling_config: { score_filter: score },
+    })
+    vm.rangeMode = 'refs'
+    vm.recordRefs[0] = { institute_id: 'SYN-I', patient_id: 'SYN-P', visit_id: 'SYN-V' }
+    await flushPromises()
+    await vm.handleSubmit()
+    expect(mocks.createTask.mock.calls.at(-1)?.[0].sampling_config).toEqual({
+      case_scope: 'active',
+    })
   })
 
   it.each(['department_count', 'department_ratio'] as const)(

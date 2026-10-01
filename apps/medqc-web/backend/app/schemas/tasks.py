@@ -162,6 +162,8 @@ class TaskTemplateConfig(BaseModel):
     @model_validator(mode="after")
     def validate_reusable_config(self) -> "TaskTemplateConfig":
         method = self.sampling_method
+        from ..services.task_sampling_service import validate_task_score_filter
+        validate_task_score_filter(self.scene, self.sampling_config.get("score_filter"))
         allowed_sampling_keys = {
             SamplingMethod.ALL: {"case_scope"},
             SamplingMethod.COUNT: {"case_scope", "total", "by_department"},
@@ -169,6 +171,7 @@ class TaskTemplateConfig(BaseModel):
             SamplingMethod.DEPARTMENT_COUNT: {"case_scope", "total"},
             SamplingMethod.DEPARTMENT_PERCENTAGE: {"case_scope", "percentage", "max_per_group"},
         }[method]
+        allowed_sampling_keys = allowed_sampling_keys | {"score_filter"}
         unknown_sampling = sorted(set(self.sampling_config) - allowed_sampling_keys)
         if unknown_sampling:
             raise ValueError(f"抽样配置含不支持的字段：{', '.join(unknown_sampling)}")

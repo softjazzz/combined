@@ -117,6 +117,11 @@
                     placeholder="不选则包含全部科室"
                   />
                 </a-form-item>
+                <TaskScoreFilterFields
+                  v-model="scoreFilter"
+                  :scene="form.scene"
+                  :disabled="saving || refreshRequired"
+                />
               </template>
               <template v-else>
                 <a-form-item v-if="form.scene === 'final'" label="出院日期范围" required>
@@ -314,6 +319,10 @@ import {
   type TaskMetadataUpdate,
 } from '@/api/taskEdits'
 
+import TaskScoreFilterFields from './TaskScoreFilterFields.vue'
+import type { TaskScoreFilter } from '@/api/tasks'
+
+const scoreFilter = ref<TaskScoreFilter | undefined>()
 const props = defineProps<{ open: boolean; taskId: string | null }>()
 const emit = defineEmits<{
   (event: 'update:open', value: boolean): void
@@ -395,6 +404,7 @@ function canEdit(field: string): boolean {
 }
 
 function resetForm() {
+  scoreFilter.value = undefined
   form.task_name = ''
   form.scene = null
   form.rule_set_key = ''
@@ -436,6 +446,22 @@ function fillForm(value: TaskEditDetail) {
   form.percentage =
     typeof value.sampling_config?.percentage === 'number' ? value.sampling_config.percentage : 10
   form.by_department = value.sampling_config?.by_department === true
+  const rawScore = value.sampling_config?.score_filter
+  scoreFilter.value =
+    rawScore &&
+    typeof rawScore === 'object' &&
+    'standard_id' in rawScore &&
+    typeof rawScore.standard_id === 'string'
+      ? {
+          standard_id: rawScore.standard_id,
+          ...('score_min' in rawScore && typeof rawScore.score_min === 'number'
+            ? { score_min: rawScore.score_min }
+            : {}),
+          ...('score_max' in rawScore && typeof rawScore.score_max === 'number'
+            ? { score_max: rawScore.score_max }
+            : {}),
+        }
+      : undefined
   form.max_per_group =
     typeof value.sampling_config?.max_per_group === 'number'
       ? value.sampling_config.max_per_group
@@ -548,6 +574,9 @@ function buildDraftPayload(): TaskDraftConfigurationUpdate | null {
   delete samplingConfig.percentage
   delete samplingConfig.group_by
   delete samplingConfig.max_per_group
+  delete samplingConfig.score_filter
+  if (rangeMode.value !== 'refs' && scoreFilter.value)
+    samplingConfig.score_filter = { ...scoreFilter.value }
   if (
     rangeMode.value !== 'refs' &&
     (form.sampling_method === 'count' || form.sampling_method === 'department_count')
@@ -683,6 +712,7 @@ function planningFingerprint(): string {
       visit_id: item.visit_id.trim(),
     })),
     samplingMethod: form.sampling_method,
+    scoreFilter: rangeMode.value === 'refs' ? null : (scoreFilter.value ?? null),
     total: form.total,
     percentage: form.percentage,
     byDepartment: form.by_department,

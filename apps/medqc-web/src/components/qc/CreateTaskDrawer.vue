@@ -145,8 +145,11 @@
               :options="departmentOptions"
             />
           </a-form-item>
+          <TaskScoreFilterFields
+            v-model="formData.sampling_config.score_filter"
+            :scene="formData.scene"
+          />
         </template>
-
         <template v-else>
           <a-form-item v-if="formData.scene === 'final'" label="出院日期范围" required>
             <a-range-picker
@@ -463,6 +466,8 @@ import {
   sceneCaseScope,
   type TaskCaseScope,
 } from '@/utils/taskCaseScope'
+import TaskScoreFilterFields from './TaskScoreFilterFields.vue'
+import type { TaskScoreFilter } from '@/api/tasks'
 import type { Dayjs } from 'dayjs'
 import dayjs from 'dayjs'
 
@@ -517,6 +522,7 @@ const formData = ref({
     by_department: false,
     group_by: null as string | null,
     max_per_group: 50,
+    score_filter: undefined as TaskScoreFilter | undefined,
   },
   assign_method: 'by_ratio' as TaskAssignableMethod,
   // 原质控员策略必选，不给默认值，避免用户未确认即拒绝或兜底
@@ -716,6 +722,7 @@ watch(
     if (applyingTemplate) return
     formData.value.rule_set_key = undefined
     formData.value.sampling_config.case_scope = undefined
+    formData.value.sampling_config.score_filter = undefined
   },
 )
 
@@ -822,6 +829,9 @@ const applyTemplateConfig = async (config: TaskTemplateConfig) => {
     by_department: config.sampling_config.by_department ?? false,
     group_by: config.sampling_config.group_by ?? null,
     max_per_group: config.sampling_config.max_per_group ?? 50,
+    score_filter: config.sampling_config.score_filter
+      ? { ...config.sampling_config.score_filter }
+      : undefined,
   }
   formData.value.assign_method = config.assign_method
   formData.value.assign_fallback = config.assignee_config.fallback
@@ -845,6 +855,9 @@ const currentTemplateConfig = (): TaskTemplateConfig | null => {
     return null
   }
   const samplingConfig: TaskTemplateConfig['sampling_config'] = {
+    ...(formData.value.sampling_config.score_filter
+      ? { score_filter: { ...formData.value.sampling_config.score_filter } }
+      : {}),
     ...(requiredCaseScope.value ? { case_scope: requiredCaseScope.value } : {}),
   }
   if (
@@ -918,6 +931,7 @@ const resetForm = () => {
     sampling_method: 'all',
     sampling_config: {
       case_scope: undefined,
+      score_filter: undefined,
       total: 50,
       percentage: 10,
       by_department: false,
@@ -1001,6 +1015,9 @@ const handleSubmit = async () => {
       deadline: formData.value.deadline?.format('YYYY-MM-DD'),
       sampling_method: rangeMode.value === 'refs' ? 'all' : formData.value.sampling_method,
       sampling_config: {
+        ...(rangeMode.value !== 'refs' && formData.value.sampling_config.score_filter
+          ? { score_filter: { ...formData.value.sampling_config.score_filter } }
+          : {}),
         ...(requiredCaseScope.value ? { case_scope: requiredCaseScope.value } : {}),
         ...(rangeMode.value === 'refs'
           ? {}

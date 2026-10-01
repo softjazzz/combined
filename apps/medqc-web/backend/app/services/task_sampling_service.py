@@ -10,6 +10,7 @@
 import random
 import logging
 import re
+import math
 from datetime import date, datetime, timedelta, timezone
 from typing import Dict, Any, List
 
@@ -86,6 +87,10 @@ def validate_scene_case_scope(scene: Any, method: Any, config: Any, date_range: 
     配置保持原兼容行为（创建不校验，抽样时明确不可用），其他 case_scope 取值一律拒绝。
     """
     config = config if isinstance(config, dict) else {}
+    validate_task_score_filter(scene, config.get("score_filter"))
+    if config.get("score_filter") is not None:
+        from .scoring_service import get_workstation_standard
+        get_workstation_standard(scene, config["score_filter"]["standard_id"])
     case_scope = config.get("case_scope")
     if scene == "outpatient":
         validate_scoped_sampling_config(scene, method, config)
@@ -105,10 +110,11 @@ def validate_scoped_sampling_config(scene: Any, method: Any, config: Any) -> Non
         return
     if not isinstance(config, dict):
         raise ValueError("抽样配置格式无效")
+    validate_task_score_filter(scene, config.get("score_filter"))
     if not isinstance(method, str) or method not in {"all", "count", "percentage", "department_count", "department_ratio"}:
         raise ValueError("无效的抽样方式")
     if method in {"department_count", "department_ratio"}:
-        allowed = {"case_scope", "total"} if method == "department_count" else {"case_scope", "percentage", "max_per_group"}
+        allowed = {"case_scope", "total", "score_filter"} if method == "department_count" else {"case_scope", "percentage", "max_per_group", "score_filter"}
         if set(config) - allowed:
             raise ValueError("科室抽样配置含不支持的字段")
     if method in {"count", "department_count"}:
@@ -129,6 +135,24 @@ def validate_scoped_sampling_config(scene: Any, method: Any, config: Any) -> Non
             maximum = config.get("max_per_group")
             if isinstance(maximum, bool) or not isinstance(maximum, int) or not 1 <= maximum <= 10000:
                 raise ValueError("每科室最多份数必须为 1 到 10000 的整数")
+
+
+def validate_task_score_filter(scene: Any, value: Any) -> None:
+    """评分条件只引用同场景既有标准，不推断缺失得分。"""
+    if value is None:
+        return
+    if scene not in {"running", "final"}:
+        raise ValueError("评分筛选仅支持运行和终末场景")
+    if not isinstance(value, dict) or set(value) - {"standard_id", "score_min", "score_max"}:
+        raise ValueError("评分筛选配置格式无效")
+    if not isinstance(value.get("standard_id"), str) or not value["standard_id"].strip():
+        raise ValueError("评分筛选必须选择评分标准")
+    for key in ("score_min", "score_max"):
+        number = value.get(key)
+        if key in value and (isinstance(number, bool) or not isinstance(number, (int, float)) or not math.isfinite(number)):
+            raise ValueError("得分区间必须是有限数值")
+    if value.get("score_min") is not None and value.get("score_max") is not None and value["score_min"] > value["score_max"]:
+        raise ValueError("最低得分不能高于最高得分")
 
 
 def validate_specified_case_sampling(method: Any, config: Any, refs: Any) -> None:
@@ -441,6 +465,8 @@ class TaskSamplingService:
         if config is None:
             config = {}
 
+        if isinstance(config, dict):
+            validate_task_score_filter(scene, config.get("score_filter"))
         validate_scoped_sampling_config(scene, method, config)
         validate_specified_case_sampling(method, config, task.get("record_refs"))
 
@@ -462,6 +488,9 @@ class TaskSamplingService:
         else:
             candidates = await self._get_candidate_records(task)
 
+        if config.get("score_filter") is not None:
+            candidates = await self._filter_scored_candidates(candidates, scene, config["score_filter"])
+
         if not candidates:
             logger.info("任务候选病历为空")
             return []
@@ -477,6 +506,49 @@ class TaskSamplingService:
         else:
             logger.warning(f"未知的抽样方式: {method}，使用全量")
             return candidates
+
+    async def _filter_scored_candidates(
+        self, candidates: List[Dict[str, Any]], scene: str, score_filter: Dict[str, Any],
+    ) -> List[Dict[str, Any]]:
+        """对完整真实候选集计分后再抽样，复用病历池的 Canonical 评分 owner。"""
+        import anyio
+        from ..database.connection import SessionLocal
+        from .custom_qc_workspace_service import CustomQCWorkspaceService
+        from .scoring_service import get_workstation_standard, score_workstation_page
+
+        if len(candidates) > 5000:
+            raise ValueError("评分筛选范围超过 5000 例，请缩小范围")
+
+        def load():
+            standard = get_workstation_standard(scene, score_filter["standard_id"])
+            refs = [{key: row[key] for key in ("institute_id", "patient_id", "visit_id")} for row in candidates]
+            anchors = CustomQCWorkspaceService().build_luxian_0609_completed_record_result_summaries(
+                record_refs=refs, session_factory=SessionLocal,
+            )
+            states, _ = score_workstation_page(
+                {self._identity(row): scene for row in candidates}, anchors,
+                session_factory=SessionLocal, standard_loader=lambda _: standard, strict=True,
+            )
+            matching = []
+            for row in candidates:
+                state = states.get(self._identity(row)) or {}
+                score = state.get("score")
+                if state.get("status") != "scored" or isinstance(score, bool) or not isinstance(score, (int, float)) or not math.isfinite(score):
+                    continue
+                if score_filter.get("score_min") is not None and score < score_filter["score_min"]:
+                    continue
+                if score_filter.get("score_max") is not None and score > score_filter["score_max"]:
+                    continue
+                matching.append(row)
+            return matching
+
+        try:
+            return await anyio.to_thread.run_sync(load)
+        except ValueError:
+            raise
+        except Exception as exc:
+            logger.warning("任务评分筛选不可用 error_type=%s", type(exc).__name__)
+            raise RuntimeError("评分暂不可用，无法筛选") from None
 
     async def _get_candidate_records(self, task: Dict[str, Any]) -> List[Dict[str, Any]]:
         """获取候选病历池"""

@@ -119,6 +119,30 @@ describe('TaskEditDrawer', () => {
     mocks.confirm.mockImplementation((options: { onOk?: () => unknown }) => options.onOk?.())
   })
 
+  it('仅改变评分上下界也走完整配置编辑并保存标准引用', async () => {
+    const wrapper = mountDrawer()
+    await flushPromises()
+    const vm = wrapper.vm as unknown as {
+      scoreFilter: import('@/api/tasks').TaskScoreFilter
+      confirmSave: () => void
+    }
+    vm.scoreFilter = { standard_id: 'SYN-S', score_min: 0, score_max: 80 }
+    vm.confirmSave()
+    await flushPromises()
+    expect(mocks.updateTaskDraftConfiguration).toHaveBeenCalledWith(
+      'task-1',
+      expect.objectContaining({
+        sampling_config: {
+          case_scope: 'active',
+          total: 20,
+          by_department: true,
+          score_filter: { standard_id: 'SYN-S', score_min: 0, score_max: 80 },
+        },
+      }),
+    )
+    expect(mocks.updateTaskMetadata).not.toHaveBeenCalled()
+  })
+
   it('加载真实详情，冻结场景与规则集，只编辑后端允许字段', async () => {
     const wrapper = mountDrawer()
     await flushPromises()
