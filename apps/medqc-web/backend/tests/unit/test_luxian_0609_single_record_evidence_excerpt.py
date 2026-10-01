@@ -1,6 +1,26 @@
 from __future__ import annotations
 
 from app.services import custom_qc_workspace_service as workspace_service
+import pytest
+
+
+@pytest.mark.parametrize("documents", [[], [
+    {"document_id": "admission-001", "content": "当前正文已经修改", "sections": []},
+], [
+    {"document_id": "admission-001", "content": "正文一", "sections": []},
+    {"document_id": "admission-001", "content": "正文二", "sections": []},
+]])
+def test_saved_evidence_excerpt_is_not_replaced_by_current_body(monkeypatch, documents) -> None:
+    source_ref = workspace_service.build_customer_safe_source_ref("admission-001")
+    monkeypatch.setattr(workspace_service, "load_bundle_documents", lambda **kwargs: {
+        "documents": documents,
+    })
+    evidence = {"source_type": "admission_record", "source_ref": source_ref,
+                "evidence_excerpt": "已保存的原文证据", "excerpt_kind": "字段级依据"}
+    items = [{"evidence": [evidence]}]
+    workspace_service.attach_authorized_evidence_excerpts(items, institute_id="H1", patient_id="P1", visit_id="V1")
+    assert evidence["evidence_excerpt"] == "已保存的原文证据"
+    assert evidence["excerpt_kind"] == "字段级依据"
 
 
 def test_authorized_evidence_excerpt_requires_exact_source_ref(monkeypatch) -> None:

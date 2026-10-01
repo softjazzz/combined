@@ -3,6 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import QCRecordCompareWorkbench from '@/views/workstation-v4/semantic-rules/components/QCRecordCompareWorkbench.vue'
 import SingleRecordQcResultPanel from '@/views/workstation-v4/customer-sample-validation/SingleRecordQcResultPanel.vue'
 import type { QCRecordCompareIssue } from '@/views/workstation-v4/semantic-rules/types'
+import type { EditableMedicalRecordDocument } from '@/views/workstation-v4/customer-sample-validation/types'
 
 const { getDocumentsMock, getDocumentMock } = vi.hoisted(() => ({
   getDocumentsMock: vi.fn(),
@@ -51,6 +52,212 @@ const issues: QCRecordCompareIssue[] = [
 ]
 
 describe('QCRecordCompareWorkbench', () => {
+  function mountSavedEvidence(
+    content: string,
+    excerpt: string,
+    extraDocuments: EditableMedicalRecordDocument[] = [],
+    sections: EditableMedicalRecordDocument['sections'] = [],
+  ) {
+    const evidence = {
+      source_ref: 'saved-source',
+      source_type: 'admission_record',
+      evidence_excerpt: excerpt,
+    }
+    return mount(QCRecordCompareWorkbench, {
+      props: {
+        visitId: 'V1',
+        instituteId: 'H1',
+        patientId: 'P1',
+        jobId: 'job1',
+        issues: [],
+        singleRecordItems: [
+          { rule_id: 'LX0609-001', status: 'non_compliant', evidence: [evidence] },
+        ],
+        evidenceTarget: {
+          visitId: 'V1',
+          instituteId: 'H1',
+          patientId: 'P1',
+          jobId: 'job1',
+          ruleId: 'LX0609-001',
+          evidence,
+        },
+        providedDocuments: [
+          {
+            key: 'saved-document',
+            source_ref: 'saved-source',
+            document_type: 'admission_record',
+            title: '入院记录',
+            content,
+            sections,
+          },
+          ...extraDocuments,
+        ],
+      },
+    })
+  }
+
+  it('已保存短摘录在唯一文书正文精确高亮', async () => {
+    const wrapper = mountSavedEvidence('主诉：腹痛3天，神志清楚。', '腹痛3天')
+    await flushPromises()
+    expect(wrapper.get('mark').text()).toBe('腹痛3天')
+    expect(wrapper.text()).toContain('已定位到证据段落')
+    wrapper.unmount()
+  })
+
+  it.each([
+    ['腹痛3天。再次记载腹痛3天', '腹痛3天', '重复出现'],
+    ['当前患者头痛', '腹痛3天', '当前正文不一致'],
+    ['', '腹痛3天', '缺少正文'],
+    ['腹痛3天，神志清楚', '腹痛3天…', '已截断'],
+  ])('无法精确定位时不首个命中或裁剪证据 %s', async (body, quote, reason) => {
+    const wrapper = mountSavedEvidence(body, quote)
+    await flushPromises()
+    expect(wrapper.find('mark').exists()).toBe(false)
+    expect(wrapper.get('.record-location-chip').text()).toContain(reason)
+    expect(wrapper.get('.record-location-chip').text()).toContain('无法精确定位')
+    wrapper.unmount()
+  })
+
+  it('同引用同类型重名文书不选择首份正文', async () => {
+    const wrapper = mountSavedEvidence('腹痛3天', '腹痛3天', [
+      {
+        key: 'second',
+        source_ref: 'saved-source',
+        document_type: 'admission_record',
+        title: '入院记录',
+        content: '另一份腹痛3天',
+      },
+    ])
+    await flushPromises()
+    expect(wrapper.find('mark').exists()).toBe(false)
+    expect(wrapper.get('.record-location-chip').text()).toContain('来源不唯一')
+    wrapper.unmount()
+  })
+
+  it('证据跨结构化章节时使用完整原文呈现真实范围', async () => {
+    const body = '主诉\n胸痛3天\n现病史\n持续气促'
+    const wrapper = mountSavedEvidence(
+      body,
+      '胸痛3天 现病史 持续气促',
+      [],
+      [
+        { key: 'chief_complaint', label: '主诉', text: '胸痛3天' },
+        { key: 'present_illness', label: '现病史', text: '持续气促' },
+      ],
+    )
+    await flushPromises()
+    expect(wrapper.get('pre mark').text()).toBe('胸痛3天\n现病史\n持续气促')
+    wrapper.unmount()
+  })
+
+  it('不能以相同引用替换当前结果中保存的摘录', async () => {
+    const wrapper = mountSavedEvidence('腹痛3天，神志清楚', '腹痛3天')
+    await flushPromises()
+    await wrapper.setProps({
+      evidenceTarget: {
+        visitId: 'V1',
+        instituteId: 'H1',
+        patientId: 'P1',
+        jobId: 'job1',
+        ruleId: 'LX0609-001',
+        evidence: {
+          source_ref: 'saved-source',
+          source_type: 'admission_record',
+          evidence_excerpt: '神志清楚',
+        },
+      },
+    })
+    await flushPromises()
+    expect(wrapper.get('mark').text()).toBe('腹痛3天')
+    wrapper.unmount()
+  })
+  it('手动切换文书取消同病例迟到证据定位', async () => {
+    let resolveOld!: (value: unknown) => void
+    getDocumentsMock.mockResolvedValue({
+      success: true,
+      data: {
+        documents: [
+          {
+            key: 'old',
+            source_ref: 'saved-source',
+            document_type: 'admission_record',
+            title: '入院记录',
+            execution_domain: 'admission_record',
+            content_loaded: false,
+          },
+          {
+            key: 'manual',
+            document_type: 'course_record',
+            title: '病程记录',
+            content: '手动选择的正文',
+            content_loaded: true,
+          },
+        ],
+      },
+    })
+    getDocumentMock.mockReturnValue(
+      new Promise((resolve) => {
+        resolveOld = resolve
+      }),
+    )
+    const evidence = {
+      source_ref: 'saved-source',
+      source_type: 'admission_record',
+      evidence_excerpt: '腹痛3天',
+    }
+    const wrapper = mount(QCRecordCompareWorkbench, {
+      props: {
+        visitId: 'V1',
+        instituteId: 'H1',
+        patientId: 'P1',
+        jobId: 'job1',
+        issues: [],
+        singleRecordItems: [
+          { rule_id: 'LX0609-001', status: 'non_compliant', evidence: [evidence] },
+        ],
+        evidenceTarget: {
+          visitId: 'V1',
+          instituteId: 'H1',
+          patientId: 'P1',
+          jobId: 'job1',
+          ruleId: 'LX0609-001',
+          evidence,
+        },
+      },
+    })
+    await flushPromises()
+    await wrapper.get('.record-document-select select').setValue('manual')
+    await flushPromises()
+    resolveOld({
+      success: true,
+      data: { document_type: 'admission_record', content: '腹痛3天', content_loaded: true },
+    })
+    await flushPromises()
+    expect(wrapper.text()).toContain('手动选择的正文')
+    expect(wrapper.find('mark').exists()).toBe(false)
+    expect((wrapper.get('.record-document-select select').element as HTMLSelectElement).value).toBe(
+      'manual',
+    )
+    wrapper.unmount()
+  })
+  it('无引用时存在未加载候选文书不能宣称正文唯一命中', async () => {
+    const wrapper = mount(QCRecordCompareWorkbench, {
+      props: {
+        visitId: 'V1',
+        issues: [{ ...issues[1]!, evidences: [{ key: 'legacy', quote: '腹痛3天' }] }],
+        providedDocuments: [
+          { key: 'loaded', title: '文书一', content: '腹痛3天', content_loaded: true },
+          { key: 'unloaded', title: '文书二', content_loaded: false },
+        ],
+      },
+    })
+    await flushPromises()
+    await wrapper.get('.record-result-item').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('mark').exists()).toBe(false)
+    expect(wrapper.text()).toContain('无法精确定位')
+    wrapper.unmount()
+  })
   it('定位正文迟到时不能覆盖已切换病例的正文与高亮', async () => {
     let resolveOld!: (value: unknown) => void
     const pending = new Promise((resolve) => {
@@ -760,7 +967,7 @@ describe('QCRecordCompareWorkbench', () => {
 
     await flushPromises()
 
-    expect(wrapper.text()).toContain('未找到对应文书，请手动核对')
+    expect(wrapper.text()).toContain('未找到对应文书或来源不唯一，无法精确定位，请手动核对')
     expect(wrapper.find('mark').exists()).toBe(false)
   })
 
@@ -1349,11 +1556,11 @@ describe('QCRecordCompareWorkbench', () => {
     await flushPromises()
 
     expect(wrapper.find('.record-content-toolbar').text()).toContain('日常病程记录')
-    expect(wrapper.text()).toContain('已定位到文书，未定位到具体片段')
+    expect(wrapper.text()).toContain('无法精确定位片段')
     expect(wrapper.find('mark').exists()).toBe(false)
   })
 
-  it('缺少文书ID和元数据时可按规范化证据片段定位', async () => {
+  it('缺少文书ID时不以额外空白猜测未保存的原文片段', async () => {
     const wrapper = mount(QCRecordCompareWorkbench, {
       props: {
         visitId: 'visit-1',
@@ -1376,8 +1583,8 @@ describe('QCRecordCompareWorkbench', () => {
     await flushPromises()
 
     expect(wrapper.find('.record-content-toolbar').text()).toContain('日常病程记录')
-    expect(wrapper.find('mark').text()).toContain('患者今日病情稳定')
-    expect(wrapper.text()).toContain('已定位到证据段落')
+    expect(wrapper.find('mark').exists()).toBe(false)
+    expect(wrapper.text()).toContain('无法精确定位')
   })
 
   it('点击质控结果时跳过不可定位摘要并切换到可定位原文', async () => {
@@ -1414,7 +1621,8 @@ describe('QCRecordCompareWorkbench', () => {
     await flushPromises()
 
     expect(wrapper.find('.record-content-toolbar').text()).toContain('日常病程记录')
-    expect(wrapper.find('mark').text()).toContain('患者今日病情稳定')
+    expect(wrapper.find('mark').exists()).toBe(false)
+    expect(wrapper.text()).toContain('无法精确定位片段')
   })
 
   it('没有证据引用时按规则文书域跳转且不伪造段落高亮', async () => {

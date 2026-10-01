@@ -118,7 +118,7 @@
             :selected-key="selectedDocumentKey"
             @select="selectDocument"
           />
-          <div v-else-if="documentSectionViews.length" class="record-content-sections">
+          <div v-else-if="showStructuredSections" class="record-content-sections">
             <section
               v-for="section in documentSectionViews"
               :key="section.key"
@@ -338,6 +338,7 @@ import type {
   QCRecordCompareIssue,
 } from '@/views/workstation-v4/semantic-rules/types'
 import type { SaveQcResultFeedbackInput } from '@/api/qc-result-feedback-demo'
+import { locateUniqueEvidenceQuote } from '../evidenceQuoteLocation'
 import type { QcResultDebugContext } from '@/views/workstation-v4/customer-sample-validation/qcResultDebugExport'
 import { useQcResultFeedback } from '@/views/workstation-v4/customer-sample-validation/useQcResultFeedback'
 
@@ -397,10 +398,12 @@ const expandedIssueKey = ref('')
 const matchedRange = ref<{ start: number; end: number } | null>(null)
 const matchedSectionKey = ref('')
 const locationState = ref<LocationState>('idle')
+const exactLocationWarning = ref('')
 const mobileTab = ref<'record' | 'result'>('record')
 const recordScroller = ref<HTMLElement | null>(null)
 const highlightElement = ref<HTMLElement | null>(null)
 let loadGeneration = 0
+let locationGeneration = 0
 const documentRequests = new Map<string, ReturnType<typeof getEditableMedicalRecordDocument>>()
 
 const STATUS_PRIORITY: Record<string, number> = {
@@ -505,6 +508,7 @@ const locationMessage = computed(() => {
   if (contentLoading.value) return '正在读取当前文书'
   if (contentLoadError.value) return '当前文书读取失败'
   if (loadError.value) return '原文读取失败'
+  if (exactLocationWarning.value) return exactLocationWarning.value
   if (locationState.value === 'matched') return '已定位到证据段落'
   if (locationState.value === 'section') {
     const section = selectedDocument.value?.sections?.find(
@@ -513,7 +517,8 @@ const locationMessage = computed(() => {
     return section?.label ? `已定位到${displaySectionLabel(section.label)}章节` : '已定位到对应章节'
   }
   if (locationState.value === 'document') return '已定位到文书，未定位到具体片段'
-  if (locationState.value === 'missing') return '未找到对应文书，请手动核对'
+  if (locationState.value === 'missing')
+    return '未找到对应文书或来源不唯一，无法精确定位，请手动核对'
   return selectedDocument.value ? '手动浏览文书' : '等待选择质控结果'
 })
 const documentTextParts = computed(() => {
@@ -562,6 +567,11 @@ const documentSectionViews = computed(() => {
     }
   })
 })
+const showStructuredSections = computed(
+  () =>
+    documentSectionViews.value.length > 0 &&
+    (!matchedRange.value || documentSectionViews.value.some((section) => section.parts.match)),
+)
 
 function formatDocumentTime(value?: string) {
   return formatMedicalDocumentTime(value)
@@ -577,59 +587,6 @@ function normalizeReference(value?: string) {
 function normalizeDate(value?: string) {
   const match = String(value || '').match(/\d{4}[-/]\d{1,2}[-/]\d{1,2}/u)
   return match ? match[0].replace(/\//gu, '-') : ''
-}
-
-function buildNormalizedText(value: string) {
-  let normalized = ''
-  const positions: number[] = []
-  let offset = 0
-  for (const character of value) {
-    const start = offset
-    const converted = character.normalize('NFKC').toLowerCase()
-    for (const normalizedCharacter of converted) {
-      if (/\s/u.test(normalizedCharacter)) continue
-      normalized += normalizedCharacter
-      positions.push(start)
-    }
-    offset += character.length
-  }
-  return { normalized, positions }
-}
-
-function buildQuoteCandidates(value: string) {
-  const quote = value
-    .replace(/\.{3,}$/u, '')
-    .replace(/…+$/u, '')
-    .trim()
-  const candidates = [
-    quote,
-    ...quote
-      .split(/[\n。；！？]+/u)
-      .map((part) =>
-        part.replace(/^(?:证据说明|关键证据|来源片段|证据片段|判定依据|原文)[：:\s]*/u, '').trim(),
-      ),
-  ]
-  return Array.from(new Set(candidates))
-    .filter((candidate) => buildNormalizedText(candidate).normalized.length >= 8)
-    .sort(
-      (left, right) =>
-        buildNormalizedText(right).normalized.length - buildNormalizedText(left).normalized.length,
-    )
-}
-
-function findQuoteRange(document: EditableMedicalRecordDocument, quote: string) {
-  const normalizedDocument = buildNormalizedText(document.content || '')
-  for (const candidate of buildQuoteCandidates(quote)) {
-    const normalizedQuote = buildNormalizedText(candidate).normalized
-    const index = normalizedDocument.normalized.indexOf(normalizedQuote)
-    if (index < 0) continue
-    const start = normalizedDocument.positions[index]
-    const lastPosition = normalizedDocument.positions[index + normalizedQuote.length - 1]
-    if (start === undefined || lastPosition === undefined) continue
-    const trailingCharacter = Array.from((document.content || '').slice(lastPosition))[0] || ''
-    return { start, end: lastPosition + trailingCharacter.length }
-  }
-  return null
 }
 
 function findSectionKey(document: EditableMedicalRecordDocument, fieldPath?: string) {
@@ -742,12 +699,22 @@ function matchDocumentByIdWithOverride(evidence: QCRecordCompareEvidence): Docum
   }
   const sourceId = normalizeReference(evidence.source_document_id)
   if (!sourceId) return null
-  const sourceDocument = documents.value.find(
+  const sourceDocuments = documents.value.filter(
     (document) =>
       normalizeReference(document.source_document_id) === sourceId ||
       normalizeReference(document.key) === sourceId,
   )
-  return sourceDocument ? { document: sourceDocument } : null
+  const sourceTypes = [evidence.source_document_type, evidence.source_table]
+    .map(normalizeReference)
+    .filter(Boolean)
+  const typedDocuments = sourceTypes.length
+    ? sourceDocuments.filter((document) =>
+        [document.document_type, document.source_table]
+          .map(normalizeReference)
+          .some((type) => sourceTypes.includes(type)),
+      )
+    : sourceDocuments
+  return typedDocuments.length === 1 ? { document: typedDocuments[0]! } : null
 }
 
 function isDocumentLoaded(document: EditableMedicalRecordDocument) {
@@ -781,6 +748,7 @@ async function ensureDocumentLoaded(
   }
 
   const generation = loadGeneration
+  const location = locationGeneration
   if (selectedDocumentKey.value === documentKey) {
     contentLoadingKey.value = documentKey
     contentLoadError.value = ''
@@ -809,9 +777,21 @@ async function ensureDocumentLoaded(
   if (generation !== loadGeneration) return null
   if (contentLoadingKey.value === documentKey) contentLoadingKey.value = ''
   if (!result.success || !result.data) {
-    if (selectedDocumentKey.value === documentKey) {
+    if (selectedDocumentKey.value === documentKey && location === locationGeneration) {
       contentLoadError.value = result.message || '读取当前文书失败'
     }
+    return null
+  }
+  const expectedId = renderOverride?.sourceDocumentId || summary.source_document_id
+  if (
+    (result.data.document_type &&
+      summary.document_type &&
+      normalizeReference(result.data.document_type) !==
+        normalizeReference(summary.document_type)) ||
+    (expectedId && result.data.source_document_id && result.data.source_document_id !== expectedId)
+  ) {
+    if (selectedDocumentKey.value === documentKey && location === locationGeneration)
+      contentLoadError.value = '返回文书与请求来源不一致，已停止定位。'
     return null
   }
   const loadedDocument = {
@@ -861,23 +841,25 @@ function scoreDocumentMetadata(
 }
 
 function matchDocumentByMetadata(evidence: QCRecordCompareEvidence) {
-  return (
-    documents.value
-      .map((document) => ({ document, score: scoreDocumentMetadata(document, evidence) }))
-      .filter((item) => item.score > 0)
-      .sort((left, right) => right.score - left.score)[0]?.document || null
-  )
+  const candidates = documents.value
+    .map((document) => ({ document, score: scoreDocumentMetadata(document, evidence) }))
+    .filter((item) => item.score > 0)
+    .sort((left, right) => right.score - left.score)
+  const first = candidates[0]
+  return first && first.score > (candidates[1]?.score ?? 0) ? first.document : null
 }
 
 async function applyLocatedDocument(
   document: EditableMedicalRecordDocument,
   range: { start: number; end: number } | null,
   sectionKey = '',
+  warning = '',
 ) {
   selectedDocumentKey.value = document.key
   matchedRange.value = range
   matchedSectionKey.value = range ? '' : sectionKey
   locationState.value = range ? 'matched' : sectionKey ? 'section' : 'document'
+  exactLocationWarning.value = warning
   mobileTab.value = 'record'
   await nextTick()
   if (range) highlightElement.value?.scrollIntoView?.({ behavior: 'smooth', block: 'center' })
@@ -894,6 +876,7 @@ async function tryLocateEvidence(
   allowMetadataFallback: boolean,
 ) {
   const generation = loadGeneration
+  const location = locationGeneration
   const exactMatch = matchDocumentByIdWithOverride(evidence)
   if (exactMatch) {
     const exactSummary = exactMatch.document
@@ -907,23 +890,43 @@ async function tryLocateEvidence(
           }
         : undefined,
     )
-    if (!exactDocument || generation !== loadGeneration) return false
-    const range = findQuoteRange(exactDocument, evidence.quote)
+    if (!exactDocument || generation !== loadGeneration || location !== locationGeneration)
+      return false
+    const result = locateUniqueEvidenceQuote(exactDocument.content || '', evidence.quote)
+    const range = result.range
     await applyLocatedDocument(
       exactDocument,
       range,
       range ? '' : findSectionKey(exactDocument, evidence.section_field_path),
+      result.state === 'ambiguous'
+        ? '证据原文重复出现，无法精确定位片段'
+        : result.state === 'truncated'
+          ? '证据摘录已截断，无法精确定位片段'
+          : result.state === 'not_found'
+            ? '证据摘录与当前正文不一致，无法精确定位片段'
+            : result.state === 'no_content'
+              ? '当前文书缺少正文，无法精确定位片段'
+              : '',
     )
     return true
   }
   // 安全引用是精确定位合同；存在但未命中时不得再猜测其他文书。
-  if (normalizeReference(evidence.source_ref)) return false
-  const quoteDocument = documents.value
+  if (normalizeReference(evidence.source_ref) || normalizeReference(evidence.source_document_id))
+    return false
+  const quoteDocuments = documents.value
     .filter(isDocumentLoaded)
-    .map((document) => ({ document, range: findQuoteRange(document, evidence.quote) }))
-    .find((item) => item.range)
-  if (quoteDocument) {
-    await applyLocatedDocument(quoteDocument.document, quoteDocument.range)
+    .map((document) => ({
+      document,
+      result: locateUniqueEvidenceQuote(document.content || '', evidence.quote),
+    }))
+    .filter((item) => item.result.state === 'matched' || item.result.state === 'ambiguous')
+  if (
+    documents.value.every(isDocumentLoaded) &&
+    quoteDocuments.length === 1 &&
+    quoteDocuments[0]!.result.state === 'matched'
+  ) {
+    const quoteDocument = quoteDocuments[0]!
+    await applyLocatedDocument(quoteDocument.document, quoteDocument.result.range)
     return true
   }
   if (allowMetadataFallback) {
@@ -931,11 +934,13 @@ async function tryLocateEvidence(
     if (metadataSummary) {
       selectedDocumentKey.value = metadataSummary.key
       const metadataDocument = await ensureDocumentLoaded(metadataSummary.key)
-      if (!metadataDocument || generation !== loadGeneration) return false
+      if (!metadataDocument || generation !== loadGeneration || location !== locationGeneration)
+        return false
       await applyLocatedDocument(
         metadataDocument,
         null,
         findSectionKey(metadataDocument, evidence.section_field_path),
+        evidence.quote.trim() ? '证据摘录无法在唯一正文中核实，无法精确定位片段' : '',
       )
       return true
     }
@@ -945,8 +950,12 @@ async function tryLocateEvidence(
 
 async function locateEvidence(evidence: QCRecordCompareEvidence) {
   const generation = loadGeneration
+  const location = ++locationGeneration
+  exactLocationWarning.value = ''
+  matchedRange.value = null
+  matchedSectionKey.value = ''
   if (documents.value.length && (await tryLocateEvidence(evidence, true))) return
-  if (generation !== loadGeneration) return
+  if (generation !== loadGeneration || location !== locationGeneration) return
   locationState.value = 'missing'
   matchedRange.value = null
   matchedSectionKey.value = ''
@@ -980,7 +989,8 @@ async function locateRequestedEvidence() {
     target.jobId !== props.jobId
   )
     return
-  const item = props.singleRecordItems?.find((row) => row.rule_id === target.ruleId)
+  const items = props.singleRecordItems?.filter((row) => row.rule_id === target.ruleId) ?? []
+  const item = items.length === 1 ? items[0] : undefined
   const evidence =
     item &&
     recommendationEvidenceForSingleRecord(item).find(
@@ -988,6 +998,7 @@ async function locateRequestedEvidence() {
         entry.source_ref === target.evidence.source_ref &&
         entry.source_type === target.evidence.source_type &&
         entry.field_path === target.evidence.field_path &&
+        entry.evidence_excerpt === target.evidence.evidence_excerpt &&
         entry.recommendation_index === target.evidence.recommendation_index &&
         entry.evidence_role === target.evidence.evidence_role,
     )
@@ -1003,6 +1014,8 @@ async function selectSingleRecordResult(key: string) {
 }
 
 async function locateSelectedIssue() {
+  const location = ++locationGeneration
+  exactLocationWarning.value = ''
   if (props.documentOnly) return
   const issue = selectedIssue.value
   if (!issue) {
@@ -1021,7 +1034,7 @@ async function locateSelectedIssue() {
   if (referencedEvidences.length) {
     const orderedReferencedEvidences = [...referencedEvidences].sort((left, right) => {
       const priority = (evidence: QCRecordCompareEvidence) => {
-        if (buildQuoteCandidates(evidence.quote).length) return 3
+        if (evidence.quote.trim()) return 3
         if (normalizeReference(evidence.section_field_path)) return 2
         return 1
       }
@@ -1029,6 +1042,7 @@ async function locateSelectedIssue() {
     })
     for (const evidence of orderedReferencedEvidences) {
       if (await tryLocateEvidence(evidence, false)) return
+      if (location !== locationGeneration) return
     }
     locationState.value = 'missing'
     matchedRange.value = null
@@ -1037,9 +1051,11 @@ async function locateSelectedIssue() {
   }
   for (const evidence of issue.evidences) {
     if (await tryLocateEvidence(evidence, false)) return
+    if (location !== locationGeneration) return
   }
   for (const evidence of issue.evidences) {
     if (await tryLocateEvidence(evidence, true)) return
+    if (location !== locationGeneration) return
   }
   const document = matchDocumentByMetadata({
     key: `${issue.key}-target-document`,
@@ -1049,6 +1065,7 @@ async function locateSelectedIssue() {
   if (document) {
     selectedDocumentKey.value = document.key
     const loadedDocument = await ensureDocumentLoaded(document.key)
+    if (location !== locationGeneration) return
     if (!loadedDocument) {
       locationState.value = 'missing'
       return
@@ -1080,11 +1097,13 @@ function setHighlightElement(value: unknown) {
 }
 
 async function selectDocument(documentKey: string) {
+  locationGeneration += 1
   selectedDocumentKey.value = documentKey
   contentLoadError.value = ''
   matchedRange.value = null
   matchedSectionKey.value = ''
   locationState.value = 'idle'
+  exactLocationWarning.value = ''
   await ensureDocumentLoaded(documentKey)
 }
 

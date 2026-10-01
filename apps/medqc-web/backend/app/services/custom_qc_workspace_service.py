@@ -504,6 +504,9 @@ def attach_authorized_evidence_excerpts(
         for evidence in list(item.get("evidence") or []):
             if not isinstance(evidence, dict):
                 continue
+            # 已保存的摘录属于冻结证据，不以当前文书内容覆盖；只有缺摘录时补只读依据。
+            if _safe_text(evidence.get("evidence_excerpt")):
+                continue
             source_ref = _safe_text(evidence.get("source_ref"))
             matches = documents_by_ref.get(source_ref) or []
             # 同一 src_ref 对应零份或多份文书时 fail-closed，绝不返回摘录。
