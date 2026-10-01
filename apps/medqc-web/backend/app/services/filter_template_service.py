@@ -38,6 +38,8 @@ _DATE_FILTER_KEYS = ("start_date", "end_date")
 _ENUM_FILTERS = {
     "date_field": frozenset({"visit", "admission", "discharge", "updated"}),
     "inpatient_sort": frozenset({"default", "longest", "recent"}),
+    "result_view": frozenset({"records", "defects"}),
+    "defect_source": frozenset({"all", "auto", "manual"}),
 }
 FILTER_KEYS = frozenset({
     *_TEXT_FILTER_KEYS,
@@ -48,6 +50,7 @@ FILTER_KEYS = frozenset({
     "score_status",
     "score_min",
     "score_max",
+    "has_defect",
 })
 OUTPATIENT_PAGE_KEY = "v5_records_outpatient_emergency"
 OUTPATIENT_FILTER_KEYS = frozenset({"dept", "keyword", "start_date", "end_date", "date_field"})
@@ -186,6 +189,10 @@ def validate_filters(filters: Any, *, page_key: str | None = None) -> dict[str, 
                 normalized[key] = str(UUID(value.strip()))
             except (ValueError, AttributeError):
                 raise FilterTemplateInvalid("筛选项 standard_id 取值无效") from None
+        elif key == "has_defect":
+            if not isinstance(value, bool):
+                raise FilterTemplateInvalid("筛选项 has_defect 必须是布尔值")
+            normalized[key] = value
         else:  # score_min / score_max
             if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
                 raise FilterTemplateInvalid(f"筛选项 {key} 必须是有限数值")
@@ -200,6 +207,12 @@ def validate_filters(filters: Any, *, page_key: str | None = None) -> dict[str, 
         and normalized["score_min"] > normalized["score_max"]
     ):
         raise FilterTemplateInvalid("最低得分不能大于最高得分")
+    if "defect_source" in normalized and not (
+        normalized.get("result_view") == "defects" or "has_defect" in normalized
+    ):
+        raise FilterTemplateInvalid("筛选项 defect_source 缺少缺陷视图或缺陷状态")
+    if normalized.get("result_view") == "defects" and "has_defect" in normalized:
+        raise FilterTemplateInvalid("缺陷结果视图不支持 has_defect 筛选")
     if page_key == OUTPATIENT_PAGE_KEY and (
         ("start_date" in normalized) != ("end_date" in normalized)
     ):

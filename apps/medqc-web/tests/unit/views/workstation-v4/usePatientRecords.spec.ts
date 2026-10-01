@@ -138,6 +138,50 @@ describe('usePatientRecords workstation filters', () => {
     expect(records.scoreMaxFilter.value).toBeNull()
   })
 
+  it('缺陷视图请求真实来源并规范化缺陷明细，重置回病历视图', async () => {
+    mocks.getRaw.mockResolvedValueOnce({
+      data: {
+        records: [],
+        defects: [
+          {
+            institute_id: 'H1',
+            patient_id: 'P1',
+            visit_id: 'V1',
+            patient_name: '患者甲',
+            source: 'manual',
+            defect_id: 'D1',
+            rule_id: 'M1',
+            rule_name: '人工缺陷',
+            document: '病程记录',
+            description: '描述',
+            status: 'approved',
+            occurred_at: '2026-09-30',
+          },
+        ],
+        total: 1,
+      },
+    })
+    const records = usePatientRecords('inpatient')
+    records.resultView.value = 'defects'
+    records.defectSourceFilter.value = 'manual'
+    await records.fetchData(1)
+    expect(mocks.getRaw.mock.lastCall?.[1]).toMatchObject({
+      result_view: 'defects',
+      defect_source: 'manual',
+      hospital_status: 'inpatient',
+    })
+    expect(records.defects.value[0]).toMatchObject({
+      source: 'manual',
+      defect_id: 'D1',
+      visit_id: 'V1',
+    })
+
+    records.resetFilters()
+    expect(records.resultView.value).toBe('records')
+    expect(records.defectSourceFilter.value).toBe('all')
+    expect(records.hasDefectFilter.value).toBeNull()
+  })
+
   it('允许运行和终末页面以显式初始住院状态固定服务端范围', async () => {
     const runningRecords = usePatientRecords('inpatient')
     await runningRecords.fetchData()

@@ -17,7 +17,7 @@
         data-testid="qc-result-view-records"
         :class="{ 'is-active': activeView === 'records' }"
         :aria-pressed="activeView === 'records'"
-        @click="activeView = 'records'"
+        @click="switchResultView('records')"
       >
         病历结果
       </button>
@@ -29,6 +29,15 @@
         @click="activeView = 'analysis'"
       >
         结果分析
+      </button>
+      <button
+        type="button"
+        data-testid="qc-result-view-defects"
+        :class="{ 'is-active': activeView === 'defects' }"
+        :aria-pressed="activeView === 'defects'"
+        @click="switchResultView('defects')"
+      >
+        缺陷结果
       </button>
     </nav>
 
@@ -55,7 +64,7 @@
       class="qc-record-result-list-view__task-status review-workbench-task-status"
     />
 
-    <section v-if="activeView === 'records'" class="qc-record-result-list-view__workbench">
+    <section v-if="activeView !== 'analysis'" class="qc-record-result-list-view__workbench">
       <RecordFilterTemplateBar
         :page-key="filterTemplatePageKey"
         :current-filters="activeFilters"
@@ -84,6 +93,22 @@
               <option v-for="department in departmentOptions" :key="department" :value="department">
                 {{ department }}
               </option>
+            </select>
+          </label>
+          <label class="qc-record-result-list-view__filter-field">
+            <span class="qc-record-result-list-view__field-label">缺陷来源</span>
+            <select v-model="defectSourceFilter" aria-label="缺陷来源筛选" @change="applyFilters">
+              <option value="all">全部真实来源</option>
+              <option value="auto">自动缺陷</option>
+              <option value="manual">人工缺陷</option>
+            </select>
+          </label>
+          <label v-if="activeView === 'records'" class="qc-record-result-list-view__filter-field">
+            <span class="qc-record-result-list-view__field-label">缺陷状态</span>
+            <select v-model="hasDefectSelection" aria-label="缺陷状态筛选" @change="applyFilters">
+              <option value="">全部病历</option>
+              <option value="true">存在缺陷</option>
+              <option value="false">无确认缺陷</option>
             </select>
           </label>
           <label class="qc-record-result-list-view__filter-field">
@@ -235,7 +260,7 @@
         </div>
       </div>
 
-      <div class="review-workbench-split">
+      <div v-if="activeView === 'records'" class="review-workbench-split">
         <div class="review-workbench-list">
           <div class="qc-record-result-list-view__list-heading">
             <h2>病历结果</h2>
@@ -302,6 +327,64 @@
           @open-full="handleOpenResult"
         />
       </div>
+      <div v-else class="review-workbench-list qc-record-result-list-view__defects">
+        <div class="qc-record-result-list-view__list-heading">
+          <h2>缺陷结果</h2>
+          <span v-if="!loadError">共 {{ serverTotal }} 条 · 本页 {{ defects.length }} 条</span>
+          <span v-else role="alert">缺陷数据加载失败，请重试</span>
+        </div>
+        <div
+          class="qc-record-result-list-view__defect-table"
+          role="table"
+          aria-label="缺陷结果列表"
+        >
+          <div class="qc-record-result-list-view__defect-row is-header" role="row">
+            <span>患者与病历</span><span>来源</span><span>质控点</span><span>文书/位置</span
+            ><span>状态</span><span>操作</span>
+          </div>
+          <div
+            v-for="item in defects"
+            :key="defectRowKey(item)"
+            class="qc-record-result-list-view__defect-row"
+            role="row"
+          >
+            <span
+              ><strong>{{ item.patient_name || '姓名未知' }}</strong
+              ><small>{{ item.visit_id }} · {{ item.department || '科室未知' }}</small></span
+            >
+            <span>{{ item.source === 'auto' ? '自动缺陷' : '人工缺陷' }}</span>
+            <span
+              ><strong>{{ item.rule_id || '未编码' }}</strong
+              ><small>{{ item.rule_name || item.description || '未返回名称' }}</small></span
+            >
+            <span>{{ item.document || '位置未知' }}</span>
+            <span>{{ defectStatusLabel(item) }}</span>
+            <span><button type="button" @click="openDefectResult(item)">查看病例</button></span>
+          </div>
+          <p
+            v-if="!loading && !loadError && defects.length === 0"
+            class="qc-record-result-list-view__defect-empty"
+          >
+            当前条件下暂无缺陷
+          </p>
+        </div>
+        <footer v-if="serverTotal > 0" class="qc-record-result-list-view__pagination">
+          <Pagination
+            :current="currentPage"
+            :page-size="pageSize"
+            :total="serverTotal"
+            :disabled="loading"
+            :show-total="(total: number) => `共 ${total} 条缺陷`"
+            :page-size-options="['15', '30', '50', '100']"
+            :locale="{ items_per_page: '条/页', jump_to: '跳至', page: '页' }"
+            show-size-changer
+            show-quick-jumper
+            show-less-items
+            size="small"
+            @change="handlePageChange"
+          />
+        </footer>
+      </div>
 
       <p
         v-if="detailNotice || exportNotice"
@@ -328,6 +411,8 @@
       :has-next="drawerNavigation?.hasNext"
       :current-index="drawerNavigation?.currentIndex"
       :total-count="drawerNavigation?.totalCount"
+      :initial-defect-partition="selectedDefectPartition"
+      :initial-defect-target="selectedDefectTarget"
       @close="closeResultDrawer"
       @review-submitted="refreshAfterRecordReview"
       @navigate-prev="navigateResult(-1)"
@@ -385,6 +470,7 @@ import RecordFilterTemplateBar from './components/qc/RecordFilterTemplateBar.vue
 import { isEmptyRecordFilter, parseRecordFilterQuery } from './composables/recordFilterQuery'
 import { useRecordFilterUrlSync } from './composables/useRecordFilterUrlSync'
 import { usePatientRecords } from './composables/usePatientRecords'
+import type { WorkstationDefectItem } from './composables/usePatientRecords'
 import type { PatientRecord, RecordLatestQcSummary } from './types'
 import type { LuxianQcAnalysisRecordItem } from '@/services/luxian-qc-result-analysis-service'
 import { downloadBlob } from './customer-sample-validation/batchExport'
@@ -416,7 +502,13 @@ const selectedQcRecordRefs = computed(() =>
         Boolean(recordRef),
     ),
 )
-const activeView = ref<'records' | 'analysis'>('records')
+const activeView = ref<'records' | 'defects' | 'analysis'>('records')
+const selectedDefectPartition = ref<'confirmed' | 'manual'>('confirmed')
+const selectedDefectTarget = ref<{
+  source: 'auto' | 'manual'
+  ruleId?: string
+  defectId?: string
+} | null>(null)
 const startDate = ref('')
 const endDate = ref('')
 
@@ -434,6 +526,7 @@ const scopeLabel = computed(() => (isInpatient.value ? '固定范围：在院' :
 
 const {
   allRecords,
+  defects,
   activeDept,
   activeDoctor,
   currentPage,
@@ -454,6 +547,9 @@ const {
   gradeFilter,
   scoreMinFilter,
   scoreMaxFilter,
+  resultView,
+  defectSourceFilter,
+  hasDefectFilter,
   scoreStandards,
   scoreStandardOptions,
   scoreStandardOptionsStatus,
@@ -482,6 +578,9 @@ const filterSync = useRecordFilterUrlSync({
     gradeFilter,
     scoreMinFilter,
     scoreMaxFilter,
+    resultView,
+    defectSourceFilter,
+    hasDefectFilter,
     currentPage,
   },
   fetchData,
@@ -501,6 +600,53 @@ const scoreGradeOptions = computed(() => {
     : scoreStandardOptions.value.find((item) => item.isDefault)
   return selected?.grades ?? []
 })
+const hasDefectSelection = computed({
+  get: () => (hasDefectFilter.value === null ? '' : String(hasDefectFilter.value)),
+  set: (value: string) => {
+    hasDefectFilter.value = value === '' ? null : value === 'true'
+  },
+})
+
+function switchResultView(view: 'records' | 'defects') {
+  if (activeView.value === view && resultView.value === view) return
+  activeView.value = view
+  resultView.value = view
+  if (view === 'defects') hasDefectFilter.value = null
+  applyFilters()
+}
+
+function defectRowKey(item: WorkstationDefectItem): string {
+  return [
+    item.source,
+    item.defect_id || item.rule_id,
+    item.institute_id,
+    item.patient_id,
+    item.visit_id,
+  ].join(':')
+}
+
+function defectStatusLabel(item: WorkstationDefectItem): string {
+  if (item.source === 'manual') return item.status === 'approved' ? '审核通过' : '待审核'
+  return '确认缺陷'
+}
+
+function openDefectResult(item: WorkstationDefectItem) {
+  selectedDefectPartition.value = item.source === 'manual' ? 'manual' : 'confirmed'
+  selectedDefectTarget.value =
+    item.source === 'manual'
+      ? { source: 'manual', defectId: item.defect_id || undefined }
+      : { source: 'auto', ruleId: item.rule_id || undefined }
+  selectedRecordKey.value = ''
+  selectedFocus.value = {
+    visitId: item.visit_id,
+    instituteId: item.institute_id,
+    patientId: item.patient_id,
+    recordId: item.visit_id,
+    patientName: item.patient_name,
+    label: `${item.patient_name || item.visit_id} · ${item.source === 'manual' ? '人工缺陷' : '自动缺陷'}`,
+  }
+  drawerOpen.value = true
+}
 
 type QcRecordMetricKey = 'records' | 'completed' | 'priority' | 'dataGap'
 
@@ -908,6 +1054,9 @@ watch(
 )
 
 watch(actorKey, clearSelection)
+watch(resultView, (view) => {
+  if (activeView.value !== 'analysis') activeView.value = view
+})
 
 onMounted(async () => {
   dateField.value = props.carePhase === 'inpatient' ? 'admission' : 'discharge'
@@ -994,6 +1143,8 @@ function closeResultDrawer() {
   documentDrawerOpen.value = false
   selectedFocus.value = null
   selectedRecordKey.value = ''
+  selectedDefectPartition.value = 'confirmed'
+  selectedDefectTarget.value = null
   detailNotice.value = ''
 }
 </script>
@@ -1239,6 +1390,61 @@ function closeResultDrawer() {
   padding: 0 8px;
 }
 
+.qc-record-result-list-view__defects {
+  width: 100%;
+}
+
+.qc-record-result-list-view__defect-table {
+  overflow-x: auto;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.qc-record-result-list-view__defect-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.2fr) 90px minmax(220px, 1.5fr) minmax(130px, 1fr) 90px 88px;
+  min-width: 900px;
+  align-items: center;
+  gap: 12px;
+  min-height: 58px;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  color: #1d1d1f;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.qc-record-result-list-view__defect-row.is-header {
+  min-height: 40px;
+  background: rgba(0, 0, 0, 0.025);
+  color: rgba(29, 29, 31, 0.6);
+}
+
+.qc-record-result-list-view__defect-row span,
+.qc-record-result-list-view__defect-row strong,
+.qc-record-result-list-view__defect-row small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.qc-record-result-list-view__defect-row small {
+  display: block;
+  color: rgba(29, 29, 31, 0.6);
+}
+
+.qc-record-result-list-view__defect-row button {
+  border: 0;
+  background: transparent;
+  color: #007aff;
+  cursor: pointer;
+}
+
+.qc-record-result-list-view__defect-empty {
+  margin: 0;
+  padding: 32px 16px;
+  text-align: center;
+  color: rgba(29, 29, 31, 0.6);
+}
+
 .qc-record-result-list-view__date-separator {
   align-self: center;
   color: rgba(29, 29, 31, 0.45);
@@ -1416,10 +1622,9 @@ function closeResultDrawer() {
 @import './styles/running-qc-refined.css';
 
 .running-qc-refined .qc-record-result-list-view__filters {
-  grid-template-columns: minmax(140px, 1fr) minmax(125px, 150px) minmax(125px, 160px) minmax(
-      280px,
-      330px
-    ) auto;
+  grid-template-columns:
+    minmax(140px, 1fr) minmax(125px, 150px) minmax(125px, 160px) minmax(280px, 330px)
+    auto;
 }
 
 @media (max-width: 1100px) {

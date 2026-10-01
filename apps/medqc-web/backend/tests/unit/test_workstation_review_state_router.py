@@ -5,6 +5,8 @@ from __future__ import annotations
 import pytest
 
 from app.services.medical_records.query_service import (
+    WorkstationDefectRangeTooLarge,
+    WorkstationDefectUnavailable,
     WorkstationReviewStateUnavailable,
     WorkstationScoreRangeTooLarge,
     WorkstationScoreUnavailable,
@@ -14,14 +16,14 @@ URL = "/api/medical-records/workstation"
 HEADERS = {"Authorization": "Bearer test-token"}
 
 
-def _authenticate(monkeypatch) -> None:
+def _authenticate(monkeypatch, roles=None) -> None:
     monkeypatch.setattr(
         "app.core.security._decode_token",
         lambda _token, expected_type=None: {"sub": "u-review"},
     )
     monkeypatch.setattr(
         "app.core.security.resolve_user_by_subject",
-        lambda _subject: {"id": "u-review", "roles": ["qc_manager"]},
+        lambda _subject: {"id": "u-review", "roles": roles or ["qc_manager"]},
     )
 
 
@@ -129,5 +131,68 @@ def test_score_filter_errors_are_desensitized(client, monkeypatch, error, status
         lambda **_kwargs: (_ for _ in ()).throw(error),
     )
     response = client.get(URL, params={"score_status": "scored"}, headers=HEADERS)
+    assert response.status_code == status
+    assert text in response.text and "secret" not in response.text
+
+
+def test_defect_view_and_source_are_forwarded(client, monkeypatch):
+    _authenticate(monkeypatch)
+    captured = _capture(monkeypatch)
+    response = client.get(
+        URL,
+        params={"result_view": "defects", "defect_source": "manual"},
+        headers=HEADERS,
+    )
+    assert response.status_code == 200
+    assert captured["result_view"] == "defects"
+    assert captured["defect_source"] == "manual"
+
+
+def test_defect_view_rejects_record_only_has_defect_before_service(client, monkeypatch):
+    _authenticate(monkeypatch)
+    captured = _capture(monkeypatch)
+    response = client.get(
+        URL,
+        params={"result_view": "defects", "has_defect": "true"},
+        headers=HEADERS,
+    )
+    assert response.status_code == 422
+    assert "不支持 has_defect" in response.text
+    assert captured == {}
+
+
+def test_record_view_rejects_source_without_has_defect_before_service(client, monkeypatch):
+    _authenticate(monkeypatch)
+    captured = _capture(monkeypatch)
+    response = client.get(URL, params={"defect_source": "manual"}, headers=HEADERS)
+    assert response.status_code == 422
+    assert "必须与 has_defect" in response.text
+    assert captured == {}
+
+
+@pytest.mark.parametrize("params", [{"result_view": "defects"}, {"has_defect": "true"}])
+def test_new_defect_queries_reject_doctor_role(client, monkeypatch, params):
+    _authenticate(monkeypatch, ["doctor"])
+    captured = _capture(monkeypatch)
+    response = client.get(URL, params=params, headers=HEADERS)
+    assert response.status_code == 403
+    assert "权限不足" in response.text
+    assert captured == {}
+
+
+@pytest.mark.parametrize(
+    ("error", "status", "text"),
+    [
+        (WorkstationDefectUnavailable("secret"), 503, "缺陷数据暂不可用"),
+        (WorkstationDefectRangeTooLarge("secret"), 422, "range_too_large"),
+    ],
+)
+def test_defect_query_errors_are_desensitized(client, monkeypatch, error, status, text):
+    _authenticate(monkeypatch)
+    monkeypatch.setattr(
+        "app.routers.medical_records_query.get_workstation_data",
+        lambda **_kwargs: (_ for _ in ()).throw(error),
+    )
+    response = client.get(URL, params={"result_view": "defects"}, headers=HEADERS)
     assert response.status_code == status
     assert text in response.text and "secret" not in response.text

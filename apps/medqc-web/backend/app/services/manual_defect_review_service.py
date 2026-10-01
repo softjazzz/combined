@@ -192,7 +192,9 @@ def _case_identity(institute_id: Any, patient_id: Any, visit_id: Any) -> tuple[s
     return (str(institute_id), str(patient_id), str(visit_id))
 
 
-def list_case_manual_defects(*, institute_id: str, patient_id: str, visit_id: str) -> dict[str, Any]:
+def list_case_manual_defects(
+    *, institute_id: str, patient_id: str, visit_id: str, scene: str = "all",
+) -> dict[str, Any]:
     """按三坐标只读取该病例全部审核状态的任务人工缺陷（最近 CASE_LIST_LIMIT 条 + 精确 total）。
 
     与审核列表共用人工缺陷谓词与字段白名单；只读，不改变任何状态。
@@ -200,7 +202,7 @@ def list_case_manual_defects(*, institute_id: str, patient_id: str, visit_id: st
     identity = _case_identity(institute_id, patient_id, visit_id)
     factory = _require_session_factory()
     predicates = (
-        *_manual_scope(),
+        *_manual_scope(scene=scene),
         QCDefect.institute_id == identity[0],
         QCDefect.patient_id == identity[1],
         QCDefect.visit_id == identity[2],
@@ -245,11 +247,14 @@ _CASE_BATCH_CHUNK = 200
 
 def list_manual_defects_for_cases(
     identities: Iterable[tuple[str, str, str]],
+    *,
+    scene: str = "all",
 ) -> list[dict[str, Any]]:
-    """报表用：按三坐标集合批量只读人工缺陷的最小字段（三坐标、rule_code、审核状态）。
+    """按三坐标集合批量只读人工缺陷字段，供报表与工作台缺陷列表复用。
 
     与审核列表同一谓词；在 SQL 中按完整三坐标分块过滤。
-    不返回描述、证据等正文字段。数据库故障抛 ManualDefectReviewUnavailable。
+    仅返回缺陷结果列表所需字段，不返回证据与整改建议。数据库故障抛
+    ManualDefectReviewUnavailable。
     """
     wanted = {_case_identity(i, p, v) for i, p, v in identities}
     if not wanted:
@@ -264,9 +269,11 @@ def list_manual_defects_for_cases(
                 for row in session.execute(
                     select(
                         QCDefect.institute_id, QCDefect.patient_id, QCDefect.visit_id,
-                        QCDefect.rule_code, QCDefect.manual_review_status,
+                        QCDefect.id, QCDefect.rule_code, QCDefect.rule_name,
+                        QCDefect.description, QCDefect.severity, QCDefect.location,
+                        QCDefect.manual_review_status, QCDefect.created_at,
                     ).where(
-                        *_manual_scope(),
+                        *_manual_scope(scene=scene),
                         tuple_(QCDefect.institute_id, QCDefect.patient_id, QCDefect.visit_id).in_(chunk),
                     )
                 ).all():
@@ -274,8 +281,14 @@ def list_manual_defects_for_cases(
                     if identity in wanted:
                         rows.append({
                             "identity": identity,
+                            "id": str(row.id),
                             "rule_code": str(row.rule_code or "").strip().upper(),
+                            "rule_name": str(row.rule_name or "").strip(),
+                            "description": str(row.description or "").strip(),
+                            "severity": str(row.severity or "").strip(),
+                            "location": str(row.location or "").strip(),
                             "review_status": row.manual_review_status,
+                            "created_at": row.created_at,
                         })
     except SQLAlchemyError as exc:
         raise ManualDefectReviewUnavailable("人工缺陷读取失败") from exc

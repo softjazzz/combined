@@ -138,6 +138,8 @@
           :job-id="latestResult.job_id"
           :scene="scoreScene"
           :canonical-items="latestResult.items"
+          :initial-tab="initialDefectPartition"
+          :initial-target="initialDefectTarget"
           @forbidden="defectPartitionsForbidden = true"
         />
         <!-- 操作记录时间线：只装配各 owner 的事件，只读；与缺陷分区同一挂载条件。 -->
@@ -181,6 +183,7 @@ import { ShieldCheck, X } from 'lucide-vue-next'
 import QcDiagnosticExport from '@/components/qc/QcDiagnosticExport.vue'
 import CaseRecordReviewPanel from '@/components/qc/CaseRecordReviewPanel.vue'
 import CaseDefectPartitionsPanel from '@/components/qc/CaseDefectPartitionsPanel.vue'
+import type { CaseDefectTarget } from '@/components/qc/CaseDefectPartitionsPanel.vue'
 import CaseOperationTimeline from '@/components/qc/CaseOperationTimeline.vue'
 import CaseScorePanel from '@/components/qc/CaseScorePanel.vue'
 import type { ScoringScene } from '@/api/scoring'
@@ -222,6 +225,8 @@ const props = withDefaults(
     /** 当前病历在可导航集合中的序号（从 1 开始）与集合总数；缺失时不显示位置。 */
     currentIndex?: number
     totalCount?: number
+    initialDefectPartition?: 'confirmed' | 'manual'
+    initialDefectTarget?: CaseDefectTarget | null
     /** 得分场景：运行列表 running、终末列表 final；未传时不显示得分分区。 */
     scoreScene?: ScoringScene
   }>(),
@@ -232,6 +237,8 @@ const props = withDefaults(
     hasNext: undefined,
     currentIndex: undefined,
     totalCount: undefined,
+    initialDefectPartition: 'confirmed',
+    initialDefectTarget: null,
     scoreScene: undefined,
   },
 )

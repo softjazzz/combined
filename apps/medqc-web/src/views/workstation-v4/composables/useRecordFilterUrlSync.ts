@@ -2,7 +2,11 @@ import { ref, watch, type Ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import type { RecordLatestReviewState } from '../types'
-import type { RecordScoreFilterStatus } from '@/api/filterTemplates'
+import type {
+  RecordDefectSource,
+  RecordResultView,
+  RecordScoreFilterStatus,
+} from '@/api/filterTemplates'
 import type { WorkstationDateRange } from './usePatientRecords'
 import {
   hasExplicitRecordQuery,
@@ -30,6 +34,9 @@ export interface RecordFilterState {
   gradeFilter: Ref<string>
   scoreMinFilter: Ref<number | null>
   scoreMaxFilter: Ref<number | null>
+  resultView: Ref<RecordResultView>
+  defectSourceFilter: Ref<RecordDefectSource>
+  hasDefectFilter: Ref<boolean | null>
   currentPage: Ref<number>
 }
 
@@ -69,6 +76,12 @@ export function useRecordFilterUrlSync(options: {
       grade: state.gradeFilter.value,
       score_min: state.scoreMinFilter.value ?? undefined,
       score_max: state.scoreMaxFilter.value ?? undefined,
+      result_view: state.resultView.value === 'defects' ? 'defects' : undefined,
+      defect_source:
+        state.resultView.value === 'defects' || state.hasDefectFilter.value !== null
+          ? state.defectSourceFilter.value
+          : undefined,
+      has_defect: state.hasDefectFilter.value ?? undefined,
     })
   }
 
@@ -92,6 +105,9 @@ export function useRecordFilterUrlSync(options: {
     state.gradeFilter.value = normalized.grade ?? ''
     state.scoreMinFilter.value = normalized.score_min ?? null
     state.scoreMaxFilter.value = normalized.score_max ?? null
+    state.resultView.value = normalized.result_view ?? 'records'
+    state.defectSourceFilter.value = normalized.defect_source ?? 'all'
+    state.hasDefectFilter.value = normalized.has_defect ?? null
     state.currentPage.value = 1
     return fetchData(1)
   }

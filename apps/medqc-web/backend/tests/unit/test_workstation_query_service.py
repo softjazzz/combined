@@ -2353,3 +2353,166 @@ def test_score_filter_rejects_invalid_values(workstation_session_factory, filter
             settings_loader=_workstation_settings_loader,
             demo_policy=_no_demo_policy,
         )
+
+
+# ---------------------------------------------------------------------------
+# 缺陷结果查询：真实 owner 明细、完整集合分页与病例筛选
+# ---------------------------------------------------------------------------
+
+
+def _defect_projection_loader(record_refs):
+    result = {}
+    for ref in record_refs:
+        identity = (ref["institute_id"], ref["patient_id"], ref["visit_id"])
+        visit_id = identity[2]
+        if visit_id in {"V1", "V2", "V3"}:
+            result[identity] = {
+                "status": "ready",
+                "completed_at": f"2026-09-0{visit_id[-1]}T10:00:00",
+                "status_counts": {"non_compliant": 1},
+                "items": [{
+                    "rule_id": f"LX0609-00{visit_id[-1]}",
+                    "rule_name": f"自动规则{visit_id[-1]}",
+                    "source_document": "入院记录",
+                    "status": "non_compliant",
+                    "is_confirmed_issue": visit_id != "V3",
+                }],
+            }
+        else:
+            result[identity] = {"status": "not_run"}
+    return result
+
+
+def _manual_defect_loader(identities):
+    return [{
+        "identity": identity,
+        "id": f"manual-{identity[2]}",
+        "rule_code": "MANUAL-1",
+        "rule_name": "人工补充缺陷",
+        "description": "人工描述",
+        "location": "病程记录",
+        "review_status": "approved" if identity[2] == "V2" else "rejected",
+        "created_at": "2026-09-10T10:00:00",
+    } for identity in identities if identity[2] in {"V2", "V3"}]
+
+
+def test_defect_view_returns_owner_rows_then_pages_with_exact_total(workstation_session_factory):
+    _insert_review_filter_records(workstation_session_factory)
+    result = get_workstation_data(
+        result_view="defects",
+        defect_source="all",
+        page=2,
+        page_size=1,
+        session_factory=workstation_session_factory,
+        settings_loader=_workstation_settings_loader,
+        demo_policy=_no_demo_policy,
+        qc_projection_loader=_review_filter_projection_loader,
+        defect_projection_loader=_defect_projection_loader,
+        manual_defect_loader=_manual_defect_loader,
+    )
+
+    assert result["total"] == 3 and result["totalPages"] == 3
+    assert result["case_total"] == 7 and result["records"] == []
+    assert len(result["defects"]) == 1
+    assert result["defects"][0]["source"] in {"auto", "manual"}
+    assert result["defects"][0]["institute_id"] == "H1"
+
+
+def test_record_defect_filter_uses_owner_facts_before_paging(workstation_session_factory):
+    _insert_review_filter_records(workstation_session_factory)
+    result = get_workstation_data(
+        defect_source="manual",
+        has_defect=True,
+        page_size=1,
+        session_factory=workstation_session_factory,
+        settings_loader=_workstation_settings_loader,
+        demo_policy=_no_demo_policy,
+        qc_projection_loader=_review_filter_projection_loader,
+        manual_defect_loader=_manual_defect_loader,
+    )
+
+    assert result["total"] == 1 and result["totalPages"] == 1
+    assert result["qc_summary"]["total_records"] == 1
+    assert [item["id"] for item in result["records"]] == ["V2"]
+
+
+def test_defect_view_owner_failure_is_desensitized(workstation_session_factory, caplog):
+    _insert_review_filter_records(workstation_session_factory)
+    with caplog.at_level("WARNING", logger=query_service_module.__name__):
+        with pytest.raises(query_service_module.WorkstationDefectUnavailable):
+            get_workstation_data(
+                result_view="defects",
+                session_factory=workstation_session_factory,
+                settings_loader=_workstation_settings_loader,
+                demo_policy=_no_demo_policy,
+                defect_projection_loader=lambda _refs: (_ for _ in ()).throw(
+                    RuntimeError("SELECT patient_secret")
+                ),
+            )
+    assert "RuntimeError" in caplog.text and "patient_secret" not in caplog.text
+
+
+@pytest.mark.parametrize(
+    "broken_projection",
+    [
+        lambda _refs: {},
+        lambda refs: {
+            (ref["institute_id"], ref["patient_id"], ref["visit_id"]): {
+                "status": "technical_error",
+            }
+            for ref in refs
+        },
+    ],
+)
+def test_defect_view_fails_closed_when_canonical_result_is_not_decidable(
+    workstation_session_factory, broken_projection,
+):
+    _insert_review_filter_records(workstation_session_factory)
+    with pytest.raises(query_service_module.WorkstationDefectUnavailable):
+        get_workstation_data(
+            result_view="defects",
+            session_factory=workstation_session_factory,
+            settings_loader=_workstation_settings_loader,
+            demo_policy=_no_demo_policy,
+            defect_projection_loader=broken_projection,
+        )
+
+
+def test_defect_view_rejects_record_only_has_defect_filter(workstation_session_factory):
+    with pytest.raises(ValueError, match="不支持 has_defect"):
+        get_workstation_data(
+            result_view="defects",
+            has_defect=True,
+            session_factory=workstation_session_factory,
+            settings_loader=_workstation_settings_loader,
+            demo_policy=_no_demo_policy,
+        )
+
+
+@pytest.mark.parametrize(
+    ("hospital_status", "expected_scene"),
+    [("inpatient", "running"), ("discharged", "final")],
+)
+def test_defect_view_maps_hospital_scope_to_manual_owner_scene(
+    workstation_session_factory, monkeypatch, hospital_status, expected_scene,
+):
+    captured = {}
+
+    def fake_loader(_identities, *, scene):
+        captured["scene"] = scene
+        return []
+
+    monkeypatch.setattr(
+        query_service_module,
+        "_load_manual_defects_for_workstation_cases",
+        fake_loader,
+    )
+    get_workstation_data(
+        result_view="defects",
+        defect_source="manual",
+        hospital_status=hospital_status,
+        session_factory=workstation_session_factory,
+        settings_loader=_workstation_settings_loader,
+        demo_policy=_no_demo_policy,
+    )
+    assert captured["scene"] == expected_scene

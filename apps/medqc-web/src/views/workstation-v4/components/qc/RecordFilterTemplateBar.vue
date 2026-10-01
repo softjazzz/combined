@@ -265,6 +265,9 @@ function templateSnapshot(template: FilterTemplate): RecordFilterSnapshot | null
     grade,
     score_min,
     score_max,
+    result_view,
+    defect_source,
+    has_defect,
   } = template.filters
   return normalizeRecordFilter({
     dept,
@@ -278,6 +281,9 @@ function templateSnapshot(template: FilterTemplate): RecordFilterSnapshot | null
     grade,
     score_min,
     score_max,
+    result_view,
+    defect_source,
+    has_defect,
   })
 }
 

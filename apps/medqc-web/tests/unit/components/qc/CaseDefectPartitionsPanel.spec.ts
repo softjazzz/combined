@@ -144,6 +144,7 @@ describe('CaseDefectPartitionsPanel', () => {
       institute_id: 'H-1',
       patient_id: 'P-1',
       visit_id: 'V-1',
+      scene: 'running',
     })
     expect(getCoding).toHaveBeenCalledWith(
       { institute_id: 'H-1', patient_id: 'P-1', visit_id: 'V-1', source_key: 'coding_qc' },
@@ -240,6 +241,41 @@ describe('CaseDefectPartitionsPanel', () => {
     expect(wrapper.text()).toContain('预览最近 1 条，共 2 条')
     await tab(wrapper, '编码').trigger('click')
     expect(wrapper.text()).toContain('预览本次前 1 条，共 3 条')
+  })
+
+  it('按具体人工缺陷ID定位，超出200条预览时明确提示未定位', async () => {
+    getManual.mockResolvedValue({
+      success: true,
+      data: {
+        total: 201,
+        items: [
+          {
+            id: 'manual-1',
+            institute_id: 'H-1',
+            patient_id: 'P-1',
+            visit_id: 'V-1',
+            manual_review_status: 'approved',
+          },
+        ],
+      },
+    })
+    const wrapper = mountPanel({
+      initialTab: 'manual',
+      initialTarget: { source: 'manual', defectId: 'manual-201' },
+    })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('目标人工缺陷 manual-201 不在最近 200 条预览范围')
+    expect(wrapper.find('.case-defect-partitions__item.is-target').exists()).toBe(false)
+  })
+
+  it('按具体Canonical规则定位并高亮', async () => {
+    const wrapper = mountPanel({
+      initialTarget: { source: 'auto', ruleId: 'LX0609-001' },
+    })
+    await flushPromises()
+
+    expect(wrapper.get('.case-defect-partitions__item.is-target').text()).toContain('确认缺陷一')
   })
 
   it('各 owner 错误独立展示，刷新可恢复', async () => {

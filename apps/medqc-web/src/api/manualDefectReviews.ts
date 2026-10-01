@@ -49,6 +49,7 @@ export interface CaseManualDefectQuery {
   institute_id: string
   patient_id: string
   visit_id: string
+  scene?: ManualDefectReviewScene
 }
 
 export interface ManualDefectReviewPayload {
@@ -90,7 +91,10 @@ function extractErrorDetail(error: unknown): { code?: string; message?: string }
     if (typeof candidate === 'object' && candidate !== null) {
       const { code, message } = candidate as Record<string, unknown>
       if (typeof code === 'string' && code.trim()) {
-        return { code, message: typeof message === 'string' && message.trim() ? message : undefined }
+        return {
+          code,
+          message: typeof message === 'string' && message.trim() ? message : undefined,
+        }
       }
     }
   }
@@ -104,7 +108,12 @@ async function request<T>(
   try {
     const response = await ApiService.requestRaw<T>(config)
     const normalized = normalizeApiSuccess<T>(response.data)
-    return { success: normalized.success, data: normalized.data, message: normalized.message, status: response.status }
+    return {
+      success: normalized.success,
+      data: normalized.data,
+      message: normalized.message,
+      status: response.status,
+    }
   } catch (error) {
     const detail = extractErrorDetail(error)
     return {
@@ -123,27 +132,42 @@ export async function getManualDefects(
   pageSize = 20,
   scene: ManualDefectReviewScene = 'all',
 ) {
-  return request<ManualDefectReviewPage>({
-    method: 'GET',
-    url: '/api/v1/manual-defects',
-    params: { review_status: reviewStatus, page, page_size: pageSize, scene },
-  }, '读取人工缺陷失败')
+  return request<ManualDefectReviewPage>(
+    {
+      method: 'GET',
+      url: '/api/v1/manual-defects',
+      params: { review_status: reviewStatus, page, page_size: pageSize, scene },
+    },
+    '读取人工缺陷失败',
+  )
 }
 
 /** 通过/驳回人工缺陷；仅 pending 可审（服务端 CAS）。 */
 export async function reviewManualDefect(defectId: string, payload: ManualDefectReviewPayload) {
-  return request<ManualDefectReviewResult>({
-    method: 'POST',
-    url: `/api/v1/manual-defects/${encodeURIComponent(defectId)}/review`,
-    data: payload,
-  }, '提交人工缺陷审核失败')
+  return request<ManualDefectReviewResult>(
+    {
+      method: 'POST',
+      url: `/api/v1/manual-defects/${encodeURIComponent(defectId)}/review`,
+      data: payload,
+    },
+    '提交人工缺陷审核失败',
+  )
 }
 
 /** 按三坐标读取单病例全部人工缺陷（含已审核），供病历结果抽屉只读展示。 */
 export async function getCaseManualDefects(query: CaseManualDefectQuery) {
-  return request<CaseManualDefectList>({
-    method: 'GET',
-    url: '/api/v1/manual-defects/case',
-    params: { institute_id: query.institute_id, patient_id: query.patient_id, visit_id: query.visit_id },
-  }, '读取本病例人工缺陷失败')
+  const params: Record<string, string> = {
+    institute_id: query.institute_id,
+    patient_id: query.patient_id,
+    visit_id: query.visit_id,
+  }
+  if (query.scene) params.scene = query.scene
+  return request<CaseManualDefectList>(
+    {
+      method: 'GET',
+      url: '/api/v1/manual-defects/case',
+      params,
+    },
+    '读取本病例人工缺陷失败',
+  )
 }

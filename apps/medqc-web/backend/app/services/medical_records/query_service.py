@@ -49,8 +49,10 @@ logger = logging.getLogger(__name__)
 # 列表按审核状态筛选的合法取值（与审核服务 batch_review_states 的输出值域一致）。
 WORKSTATION_REVIEW_STATES = frozenset({"pending_review", "pending_recheck", "approved", "doubtful"})
 WORKSTATION_SCORE_STATES = frozenset({"scored", "no_standard", "unavailable"})
+WORKSTATION_DEFECT_SOURCES = frozenset({"all", "auto", "manual"})
 _REVIEW_FILTER_CHUNK = 1000
 _SCORE_FILTER_MAX_RECORDS = 5000
+_DEFECT_FILTER_MAX_RECORDS = 5000
 
 
 class WorkstationReviewStateUnavailable(RuntimeError):
@@ -63,6 +65,14 @@ class WorkstationScoreUnavailable(RuntimeError):
 
 class WorkstationScoreRangeTooLarge(ValueError):
     """评分筛选候选全集超过同步计分上限。"""
+
+
+class WorkstationDefectUnavailable(RuntimeError):
+    """带缺陷筛选时 Canonical 或人工缺陷 owner 读取失败。"""
+
+
+class WorkstationDefectRangeTooLarge(ValueError):
+    """缺陷筛选候选全集超过同步读取上限。"""
 
 
 def _session_factory() -> Session:
@@ -511,6 +521,138 @@ def _load_latest_luxian_0609_qc_summaries(
     return CustomQCWorkspaceService().build_luxian_0609_completed_record_result_summaries(
         record_refs=record_refs,
         session_factory=session_factory,
+    )
+
+
+def _load_luxian_0609_defect_projections(
+    record_refs: list[dict[str, str]],
+    *,
+    session_factory: Callable[[], Any],
+) -> dict[tuple[str, str, str], dict[str, Any]]:
+    """读取最新 Canonical 结果并使用客户投影 owner 标记确认缺陷。"""
+
+    from ...services.custom_qc_workspace_service import CustomQCWorkspaceService
+    from ...services.scoring_service import project_customer_items
+
+    raw = CustomQCWorkspaceService().build_luxian_0609_completed_record_result_summaries(
+        record_refs=record_refs,
+        session_factory=session_factory,
+        include_items=True,
+    )
+    projected: dict[tuple[str, str, str], dict[str, Any]] = {}
+    for identity, summary in raw.items():
+        item = dict(summary) if isinstance(summary, Mapping) else {"status": "technical_error"}
+        if item.get("status") == "ready":
+            items = item.get("items")
+            if not isinstance(items, list):
+                item = {"status": "technical_error", "reason_code": "canonical_result_invalid"}
+            else:
+                item["items"] = project_customer_items(items)
+        projected[identity] = item
+    return projected
+
+
+def _load_manual_defects_for_workstation_cases(
+    identities: Iterable[tuple[str, str, str]],
+    *,
+    scene: str,
+) -> list[dict[str, Any]]:
+    from ...services.manual_defect_review_service import list_manual_defects_for_cases
+
+    return list_manual_defects_for_cases(identities, scene=scene)
+
+
+def _workstation_defect_record_meta(record: Any) -> dict[str, str]:
+    identity = (
+        str(getattr(record, "institute_id", "") or "").strip(),
+        str(getattr(record, "patient_id", "") or "").strip(),
+        str(getattr(record, "visit_id", "") or "").strip(),
+    )
+    return {
+        "institute_id": identity[0],
+        "patient_id": identity[1],
+        "visit_id": identity[2],
+        "patient_name": str(getattr(record, "name", "") or "").strip(),
+        "department": str(
+            getattr(record, "discharge_dept_name", "")
+            or getattr(record, "admission_dept_name", "")
+            or ""
+        ).strip(),
+        "doctor": str(getattr(record, "attending_physician_sign", "") or "").strip(),
+    }
+
+
+def _build_workstation_defect_rows(
+    records: Iterable[Any],
+    canonical: Mapping[tuple[str, str, str], Any],
+    manual: Iterable[Mapping[str, Any]],
+    *,
+    source: str,
+) -> list[dict[str, Any]]:
+    """扁平化真实缺陷 owner 的只读字段；不在查询层重判状态。"""
+
+    meta_by_identity: dict[tuple[str, str, str], dict[str, str]] = {}
+    for record in records:
+        meta = _workstation_defect_record_meta(record)
+        identity = (meta["institute_id"], meta["patient_id"], meta["visit_id"])
+        if all(identity):
+            meta_by_identity[identity] = meta
+
+    rows: list[dict[str, Any]] = []
+    if source in {"all", "auto"}:
+        for identity, summary in canonical.items():
+            if identity not in meta_by_identity or not isinstance(summary, Mapping):
+                continue
+            if summary.get("status") != "ready" or not isinstance(summary.get("items"), list):
+                continue
+            for item in summary["items"]:
+                if not isinstance(item, Mapping) or item.get("is_confirmed_issue") is not True:
+                    continue
+                rows.append({
+                    **meta_by_identity[identity],
+                    "source": "auto",
+                    "defect_id": None,
+                    "rule_id": str(item.get("rule_id") or item.get("rule_code") or "").strip().upper(),
+                    "rule_name": str(item.get("rule_name") or item.get("qc_point") or "").strip(),
+                    "document": str(item.get("source_document") or "").strip(),
+                    "description": str(item.get("findings") or item.get("conclusion") or "").strip(),
+                    "status": str(item.get("status") or "").strip(),
+                    "occurred_at": summary.get("completed_at"),
+                })
+    if source in {"all", "manual"}:
+        for item in manual:
+            raw_identity = item.get("identity")
+            identity = (
+                tuple(str(value).strip() for value in raw_identity)
+                if isinstance(raw_identity, (tuple, list)) and len(raw_identity) == 3
+                else ()
+            )
+            if (
+                len(identity) != 3
+                or identity not in meta_by_identity
+                or item.get("review_status") not in {"pending", "approved"}
+            ):
+                continue
+            rows.append({
+                **meta_by_identity[identity],
+                "source": "manual",
+                "defect_id": item.get("id"),
+                "rule_id": str(item.get("rule_code") or "").strip().upper(),
+                "rule_name": str(item.get("rule_name") or "").strip(),
+                "document": str(item.get("location") or "").strip(),
+                "description": str(item.get("description") or "").strip(),
+                "status": str(item.get("review_status") or "").strip(),
+                "occurred_at": item.get("created_at"),
+            })
+    return sorted(
+        rows,
+        key=lambda item: (
+            str(item.get("occurred_at") or ""),
+            item["institute_id"], item["patient_id"], item["visit_id"],
+            str(item.get("source") or ""), str(item.get("rule_id") or ""),
+            str(item.get("defect_id") or ""), str(item.get("rule_name") or ""),
+        ),
+        reverse=True,
     )
 
 
@@ -1371,6 +1513,11 @@ def get_workstation_data(
     score_min: Optional[float] = None,
     score_max: Optional[float] = None,
     score_state_loader: Optional[Callable[..., Any]] = None,
+    defect_source: Optional[str] = None,
+    has_defect: Optional[bool] = None,
+    defect_projection_loader: Optional[Callable[[list[dict[str, str]]], Any]] = None,
+    manual_defect_loader: Optional[Callable[[Iterable[tuple[str, str, str]]], Any]] = None,
+    result_view: str = "records",
 ) -> dict[str, Any]:
     session_factory = session_factory or _session_factory
     review_state_filter = _normalize_review_state_filter(review_state)
@@ -1384,6 +1531,17 @@ def get_workstation_data(
             normalized_score_status, normalized_grade, normalized_score_min, normalized_score_max,
         )
     )
+    normalized_result_view = str(result_view or "records").strip().lower()
+    if normalized_result_view not in {"records", "defects"}:
+        raise ValueError("result_view 无效")
+    normalized_defect_source = str(defect_source or "all").strip().lower()
+    if normalized_defect_source not in WORKSTATION_DEFECT_SOURCES:
+        raise ValueError("defect_source 无效")
+    if normalized_result_view == "records" and has_defect is None and defect_source is not None:
+        raise ValueError("defect_source 必须与 has_defect 同时使用")
+    if normalized_result_view == "defects" and has_defect is not None:
+        raise ValueError("缺陷结果视图不支持 has_defect 参数")
+    has_defect_filter = has_defect is not None
     normalized_hospital_status = str(hospital_status or "all").strip().lower()
     if normalized_hospital_status not in {"all", "inpatient", "discharged"}:
         raise ValueError("hospital_status must be one of: all, inpatient, discharged")
@@ -1618,6 +1776,20 @@ def get_workstation_data(
                 **kwargs,
             )
         )
+        page_defect_projection_loader = defect_projection_loader or (
+            lambda refs: _load_luxian_0609_defect_projections(
+                refs, session_factory=session_factory,
+            )
+        )
+        manual_defect_scene = {
+            "inpatient": "running",
+            "discharged": "final",
+        }.get(normalized_hospital_status, "all")
+        page_manual_defect_loader = manual_defect_loader or (
+            lambda identities: _load_manual_defects_for_workstation_cases(
+                identities, scene=manual_defect_scene,
+            )
+        )
         prefiltered_summary = None
         if review_state_filter is not None:
             # 审核状态筛选：在“其他筛选条件得出的完整集合”上先过滤，再分页；
@@ -1725,6 +1897,175 @@ def get_workstation_data(
             filter_score_states = loaded_states
             filter_score_overview = loaded_overview
             prefiltered_summary = (raw_qc_summary_map, latest_qc_summary_map)
+
+        if normalized_result_view == "defects":
+            candidate_count = q.count() + len(indexed_filtered_records)
+            if candidate_count > _DEFECT_FILTER_MAX_RECORDS:
+                raise WorkstationDefectRangeTooLarge("缺陷查询范围超过 5000 例，请缩小范围")
+            frontpage_records = q.all()
+            full_records = [*frontpage_records, *indexed_filtered_records]
+            full_record_refs = _collect_full_record_refs(q, indexed_filtered_records)
+            identities = {
+                (ref["institute_id"], ref["patient_id"], ref["visit_id"])
+                for ref in full_record_refs
+            }
+            try:
+                canonical = (
+                    page_defect_projection_loader(full_record_refs)
+                    if normalized_defect_source in {"all", "auto"} else {}
+                )
+                manual = (
+                    page_manual_defect_loader(identities)
+                    if normalized_defect_source in {"all", "manual"} else []
+                )
+                if not isinstance(canonical, Mapping) or not isinstance(manual, list):
+                    raise ValueError("缺陷批量结果格式无效")
+                if normalized_defect_source in {"all", "auto"}:
+                    for identity in identities:
+                        if identity not in canonical:
+                            raise ValueError("Canonical 缺陷结果缺少病例映射")
+                        summary = canonical[identity]
+                        if not isinstance(summary, Mapping):
+                            raise ValueError("Canonical 缺陷结果格式无效")
+                        status = str(summary.get("status") or "").strip()
+                        if status in {"not_found", "not_run"}:
+                            continue
+                        if status != "ready" or not isinstance(summary.get("items"), list):
+                            raise ValueError("Canonical 缺陷结果不可判定")
+                defect_rows = _build_workstation_defect_rows(
+                    full_records, canonical, manual, source=normalized_defect_source,
+                )
+            except Exception as exc:  # noqa: BLE001 - 缺陷列表必须失败关闭
+                logger.warning("病历缺陷列表批量读取失败 error_type=%s", type(exc).__name__)
+                raise WorkstationDefectUnavailable("缺陷数据暂不可用，无法查询") from None
+
+            if normalized_defect_source in {"all", "auto"}:
+                raw_qc_summary_map = dict(canonical)
+            else:
+                raw_qc_summary_map = summary_loader(full_record_refs)
+            latest_qc_summary_map = _normalize_latest_qc_summary_map(raw_qc_summary_map)
+            qc_summary = _build_qc_summary(full_record_refs, latest_qc_summary_map)
+            offset = (page - 1) * page_size
+            page_rows = defect_rows[offset:offset + page_size]
+            department_counts = Counter(
+                str(_workstation_defect_record_meta(record).get("department") or "未分科室")
+                for record in full_records
+            )
+            doctor_counts = Counter(
+                str(_workstation_defect_record_meta(record).get("doctor") or "未登记主管医师")
+                for record in full_records
+            )
+            return {
+                "departments": [
+                    {"name": "全部科室", "total": len(full_records), "warningCount": 0},
+                    *[
+                        {"name": name, "total": total, "warningCount": 0}
+                        for name, total in sorted(department_counts.items(), key=lambda item: (-item[1], item[0]))
+                    ],
+                ],
+                "doctors": [
+                    {"name": "全部主管医师", "total": len(full_records)},
+                    *[
+                        {"name": name, "total": total}
+                        for name, total in sorted(doctor_counts.items(), key=lambda item: (-item[1], item[0]))
+                    ],
+                ],
+                "records": [],
+                "defects": page_rows,
+                "total": len(defect_rows),
+                "case_total": len(full_records),
+                "page": page,
+                "pageSize": page_size,
+                "totalPages": (len(defect_rows) + page_size - 1) // page_size,
+                "qc_summary": qc_summary,
+                "score_standards": {},
+                "score_standard_options": score_standard_options,
+                "score_standard_options_status": score_standard_options_status,
+            }
+
+        if has_defect_filter:
+            # 缺陷筛选必须在其他条件形成的完整病例集合上执行，再进入分页。
+            candidate_count = q.count() + len(indexed_filtered_records)
+            if candidate_count > _DEFECT_FILTER_MAX_RECORDS:
+                raise WorkstationDefectRangeTooLarge("缺陷筛选范围超过 5000 例，请缩小范围")
+            full_record_refs = _collect_full_record_refs(q, indexed_filtered_records)
+            identities = {
+                (ref["institute_id"], ref["patient_id"], ref["visit_id"])
+                for ref in full_record_refs
+            }
+            auto_matches: set[tuple[str, str, str]] = set()
+            auto_known: set[tuple[str, str, str]] = set()
+            manual_matches: set[tuple[str, str, str]] = set()
+            raw_defect_projection: Mapping[tuple[str, str, str], Any] = {}
+            try:
+                if normalized_defect_source in {"all", "auto"}:
+                    loaded = page_defect_projection_loader(full_record_refs)
+                    if not isinstance(loaded, Mapping):
+                        raise ValueError("Canonical 缺陷批量结果格式无效")
+                    raw_defect_projection = loaded
+                    for identity in identities:
+                        summary = loaded.get(identity)
+                        if not isinstance(summary, Mapping) or summary.get("status") != "ready":
+                            continue
+                        items = summary.get("items")
+                        if not isinstance(items, list):
+                            raise ValueError("Canonical 缺陷条目格式无效")
+                        auto_known.add(identity)
+                        if any(
+                            isinstance(item, Mapping) and item.get("is_confirmed_issue") is True
+                            for item in items
+                        ):
+                            auto_matches.add(identity)
+
+                if normalized_defect_source in {"all", "manual"}:
+                    manual_rows = page_manual_defect_loader(identities)
+                    if not isinstance(manual_rows, list) or any(
+                        not isinstance(item, Mapping) for item in manual_rows
+                    ):
+                        raise ValueError("人工缺陷批量结果格式无效")
+                    for item in manual_rows:
+                        raw_identity = item.get("identity")
+                        identity = tuple(raw_identity) if isinstance(raw_identity, (tuple, list)) else ()
+                        if (
+                            len(identity) == 3
+                            and identity in identities
+                            and item.get("review_status") in {"pending", "approved"}
+                        ):
+                            manual_matches.add(identity)  # type: ignore[arg-type]
+            except Exception as exc:  # noqa: BLE001 - 显式缺陷筛选必须失败关闭
+                logger.warning("病历列表缺陷筛选批量读取失败 error_type=%s", type(exc).__name__)
+                raise WorkstationDefectUnavailable("缺陷数据暂不可用，无法筛选") from None
+
+            if normalized_defect_source == "auto":
+                positive, known = auto_matches, auto_known
+            elif normalized_defect_source == "manual":
+                positive, known = manual_matches, identities
+            else:
+                positive, known = auto_matches | manual_matches, auto_known
+            # “无缺陷”必须有可判定的 owner 事实；未质控/技术错误不冒充无缺陷。
+            matching_defect_identities = positive if has_defect else (known - positive)
+            q = q.filter(_identity_in_condition(matching_defect_identities))
+            indexed_filtered_records = [
+                row for row in indexed_filtered_records
+                if (str(row.institute_id).strip(), str(row.patient_id).strip(), str(row.visit_id).strip())
+                in matching_defect_identities
+            ]
+            full_record_refs = [
+                ref for ref in full_record_refs
+                if (ref["institute_id"], ref["patient_id"], ref["visit_id"])
+                in matching_defect_identities
+            ]
+            visible_demos = []
+            if normalized_defect_source in {"all", "auto"}:
+                filtered_raw = {
+                    identity: dict(summary)
+                    for identity, summary in raw_defect_projection.items()
+                    if identity in matching_defect_identities and isinstance(summary, Mapping)
+                }
+                prefiltered_summary = (
+                    filtered_raw,
+                    _normalize_latest_qc_summary_map(filtered_raw),
+                )
 
         total_real_filtered = q.count() + len(indexed_filtered_records)
         offset = (page - 1) * page_size

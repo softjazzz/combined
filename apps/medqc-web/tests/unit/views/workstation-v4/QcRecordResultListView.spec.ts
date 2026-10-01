@@ -78,6 +78,8 @@ const ResultDrawerStub = defineComponent({
     hasNext: { type: Boolean, default: undefined },
     currentIndex: { type: Number, default: undefined },
     totalCount: { type: Number, default: undefined },
+    initialDefectPartition: { type: String, default: 'confirmed' },
+    initialDefectTarget: { type: Object, default: null },
     scoreScene: { type: String, default: undefined },
   },
   emits: ['close', 'review-submitted', 'navigate-prev', 'navigate-next'],
@@ -262,6 +264,68 @@ describe('QcRecordResultListView', () => {
     })
   })
 
+  it('同页查询缺陷明细并按匹配来源打开既有缺陷分区', async () => {
+    const wrapper = mountView('inpatient')
+    await flushPromises()
+    mocks.getRaw.mockResolvedValue({
+      data: {
+        records: [],
+        defects: [
+          {
+            institute_id: 'H',
+            patient_id: 'P',
+            visit_id: 'V-manual',
+            patient_name: '患者人工',
+            department: '内科',
+            doctor: '张医师',
+            source: 'manual',
+            defect_id: 'D1',
+            rule_id: 'MANUAL-1',
+            rule_name: '人工补充缺陷',
+            document: '病程记录',
+            description: '缺陷描述',
+            status: 'approved',
+            occurred_at: '2026-09-30T10:00:00',
+          },
+        ],
+        total: 1,
+        page: 1,
+      },
+    })
+    await wrapper.get('[data-testid="qc-result-view-defects"]').trigger('click')
+    await flushPromises()
+
+    expect(mocks.getRaw.mock.lastCall?.[1]).toMatchObject({
+      result_view: 'defects',
+      defect_source: 'all',
+      hospital_status: 'inpatient',
+    })
+    expect(wrapper.text()).toContain('人工补充缺陷')
+    expect(wrapper.text()).toContain('共 1 条')
+    await wrapper.get('.qc-record-result-list-view__defect-row button').trigger('click')
+    const drawer = wrapper.getComponent(ResultDrawerStub)
+    expect(drawer.props('initialDefectPartition')).toBe('manual')
+    expect(drawer.props('initialDefectTarget')).toEqual({ source: 'manual', defectId: 'D1' })
+    expect(drawer.props('focus')).toMatchObject({
+      instituteId: 'H',
+      patientId: 'P',
+      visitId: 'V-manual',
+    })
+  })
+
+  it('缺陷owner返回503时显示失败且不伪装成零缺陷', async () => {
+    const wrapper = mountView('inpatient')
+    await flushPromises()
+    mocks.getRaw.mockRejectedValueOnce(new Error('503'))
+
+    await wrapper.get('[data-testid="qc-result-view-defects"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('缺陷数据加载失败，请重试')
+    expect(wrapper.text()).not.toContain('当前条件下暂无缺陷')
+    expect(wrapper.text()).not.toContain('共 0 条')
+  })
+
   afterEach(() => {
     vi.unstubAllGlobals()
     mountedWrappers
@@ -317,6 +381,8 @@ describe('QcRecordResultListView', () => {
     ).toEqual([
       '关键词',
       '科室',
+      '缺陷来源',
+      '缺陷状态',
       '主管医师',
       '入院日期',
       '评分标准',
@@ -344,6 +410,8 @@ describe('QcRecordResultListView', () => {
     ).toEqual([
       '关键词',
       '科室',
+      '缺陷来源',
+      '缺陷状态',
       '主管医师',
       '出院日期',
       '评分标准',

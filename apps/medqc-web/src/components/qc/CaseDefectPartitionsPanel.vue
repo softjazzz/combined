@@ -1,5 +1,6 @@
 <template>
   <section
+    ref="panelRoot"
     class="case-defect-partitions"
     aria-label="缺陷分区"
     data-testid="case-defect-partitions"
@@ -55,6 +56,8 @@
         v-for="item in activeCanonicalItems"
         :key="item.rule_id"
         class="case-defect-partitions__item"
+        :class="{ 'is-target': isCanonicalTarget(item) }"
+        :data-target="isCanonicalTarget(item) ? 'true' : undefined"
       >
         <div class="case-defect-partitions__item-title">
           <strong>{{ item.rule_name || item.rule_id }}</strong>
@@ -66,7 +69,13 @@
     </div>
 
     <div v-else-if="activeTab === 'manual'" class="case-defect-partitions__list">
-      <article v-for="item in manualItems" :key="item.id" class="case-defect-partitions__item">
+      <article
+        v-for="item in manualItems"
+        :key="item.id"
+        class="case-defect-partitions__item"
+        :class="{ 'is-target': isManualTarget(item) }"
+        :data-target="isManualTarget(item) ? 'true' : undefined"
+      >
         <div class="case-defect-partitions__item-title">
           <strong>{{ item.rule_name || item.rule_code || '人工缺陷' }}</strong>
           <span>{{ manualStatusLabel(item.manual_review_status) }}</span>
@@ -78,6 +87,10 @@
         预览最近 {{ manualItems.length }} 条，共 {{ manualTotal }} 条。
       </p>
     </div>
+
+    <p v-if="targetNotice" class="case-defect-partitions__target-notice" role="status">
+      {{ targetNotice }}
+    </p>
 
     <div v-else-if="activeTab === 'coding'" class="case-defect-partitions__list">
       <article
@@ -104,7 +117,7 @@
 <script setup lang="ts">
 import { isAxiosError } from 'axios'
 import { CircleAlert, Info, RefreshCw } from 'lucide-vue-next'
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { getCaseManualDefects } from '@/api/manualDefectReviews'
 import type { ManualDefectReviewItem } from '@/api/manualDefectReviews'
 import { getModernCaseQcSnapshot } from '@/api/modernCaseQcResult'
@@ -116,6 +129,11 @@ import {
 import type { SingleRecordQcResultItem } from '@/views/workstation-v4/customer-sample-validation/single-record-result-model'
 
 type PartitionKey = 'confirmed' | 'veto' | 'manual' | 'coding' | 'core'
+export interface CaseDefectTarget {
+  source: 'auto' | 'manual'
+  ruleId?: string
+  defectId?: string
+}
 
 const props = defineProps<{
   instituteId: string
@@ -124,10 +142,13 @@ const props = defineProps<{
   jobId: string
   scene: 'running' | 'final' | 'outpatient'
   canonicalItems: SingleRecordQcResultItem[]
+  initialTab?: 'confirmed' | 'manual'
+  initialTarget?: CaseDefectTarget | null
 }>()
 const emit = defineEmits<{ forbidden: [] }>()
 
-const activeTab = ref<PartitionKey>('confirmed')
+const activeTab = ref<PartitionKey>(props.initialTab ?? 'confirmed')
+const panelRoot = ref<HTMLElement | null>(null)
 const partition = ref<CaseDefectPartitionsPayload | null>(null)
 const partitionError = ref('')
 const manualItems = ref<ManualDefectReviewItem[]>([])
@@ -201,6 +222,41 @@ const vetoItems = computed(() => canonicalItemsFor(vetoRuleIds.value))
 const activeCanonicalItems = computed(() =>
   activeTab.value === 'veto' ? vetoItems.value : confirmedItems.value,
 )
+const normalizedTargetRuleId = computed(() =>
+  String(props.initialTarget?.ruleId || '')
+    .trim()
+    .toUpperCase(),
+)
+const isCanonicalTarget = (item: SingleRecordQcResultItem) =>
+  props.initialTarget?.source === 'auto' &&
+  Boolean(normalizedTargetRuleId.value) &&
+  String(item.rule_id || '')
+    .trim()
+    .toUpperCase() === normalizedTargetRuleId.value
+const isManualTarget = (item: ManualDefectReviewItem) =>
+  props.initialTarget?.source === 'manual' &&
+  Boolean(props.initialTarget.defectId) &&
+  item.id === props.initialTarget.defectId
+const targetNotice = computed(() => {
+  if (!props.initialTarget || loading.value) return ''
+  if (props.initialTarget.source === 'auto') {
+    if (!partition.value || partitionError.value) return ''
+    return activeCanonicalItems.value.some(isCanonicalTarget)
+      ? ''
+      : `未在当前 Canonical 结果中找到规则 ${normalizedTargetRuleId.value || '未知'} 的缺陷`
+  }
+  if (!manualReady.value || manualError.value || manualItems.value.some(isManualTarget)) return ''
+  return manualTotal.value > manualItems.value.length
+    ? `目标人工缺陷 ${props.initialTarget.defectId || '未知'} 不在最近 200 条预览范围`
+    : `未找到目标人工缺陷 ${props.initialTarget.defectId || '未知'}`
+})
+
+async function scrollToTarget() {
+  await nextTick()
+  panelRoot.value?.querySelector<HTMLElement>('[data-target="true"]')?.scrollIntoView?.({
+    block: 'center',
+  })
+}
 const codingItems = computed<ModernCaseQcDefect[]>(
   () => codingSnapshot.value?.current_result_defects || [],
 )
@@ -314,6 +370,7 @@ async function loadManual(sequence: number) {
     institute_id: props.instituteId,
     patient_id: props.patientId,
     visit_id: props.visitId,
+    scene: props.scene === 'outpatient' ? 'outpatient_emergency' : props.scene,
   })
   if (!isCurrent(sequence)) return
   if (response.status === 403) emit('forbidden')
@@ -379,12 +436,21 @@ async function loadAll() {
   loading.value = true
   await Promise.allSettled([loadPartition(sequence), loadManual(sequence), loadCoding(sequence)])
   if (isCurrent(sequence)) loading.value = false
+  if (isCurrent(sequence)) await scrollToTarget()
 }
 
 watch(
   () => [props.instituteId, props.patientId, props.visitId, props.jobId, props.scene],
   () => void loadAll(),
   { immediate: true },
+)
+
+watch(
+  () => [props.initialTab, props.initialTarget] as const,
+  ([tab]) => {
+    if (tab === 'confirmed' || tab === 'manual') activeTab.value = tab
+    void scrollToTarget()
+  },
 )
 </script>
 
@@ -415,6 +481,16 @@ watch(
 .case-defect-partitions__footnote {
   color: rgba(29, 29, 31, 0.6);
   font-size: 12px;
+  line-height: 20px;
+}
+.case-defect-partitions__item.is-target {
+  border-color: #1677ff;
+  box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.16);
+}
+.case-defect-partitions__target-notice {
+  margin: 10px 0 0;
+  color: #ad6800;
+  font-size: 13px;
   line-height: 20px;
 }
 .case-defect-partitions__refresh {

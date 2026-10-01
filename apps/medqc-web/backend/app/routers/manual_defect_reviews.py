@@ -141,6 +141,7 @@ async def get_case_manual_defects(
     institute_id: str = Query(..., min_length=1, max_length=128),
     patient_id: str = Query(..., min_length=1, max_length=128),
     visit_id: str = Query(..., min_length=1, max_length=128),
+    scene: Literal["all", "running", "final", "outpatient_emergency"] = Query("all"),
     current_user: dict = Depends(get_current_user),
 ):
     """按三坐标只读取该病例的任务人工缺陷（全部审核状态，最近 200 条 + 精确 total）。"""
@@ -148,7 +149,7 @@ async def get_case_manual_defects(
     try:
         data = await run_in_threadpool(
             list_case_manual_defects,
-            institute_id=institute_id, patient_id=patient_id, visit_id=visit_id,
+            institute_id=institute_id, patient_id=patient_id, visit_id=visit_id, scene=scene,
         )
         result = {
             "items": [

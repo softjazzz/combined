@@ -25,6 +25,9 @@ export type RecordFilterSnapshot = Pick<
   | 'grade'
   | 'score_min'
   | 'score_max'
+  | 'result_view'
+  | 'defect_source'
+  | 'has_defect'
 >
 
 /** 审核状态固定顺序，保证同一组合的 query 与签名稳定。 */
@@ -48,6 +51,9 @@ const QUERY_KEY_BY_FIELD = {
   grade: 'grade',
   score_min: 'score_min',
   score_max: 'score_max',
+  result_view: 'result_view',
+  defect_source: 'defect_source',
+  has_defect: 'has_defect',
 } as const satisfies Record<keyof RecordFilterSnapshot, string>
 
 export const RECORD_FILTER_QUERY_KEYS: readonly string[] = Object.values(QUERY_KEY_BY_FIELD)
@@ -80,6 +86,10 @@ const SCORE_STATUS_VALUES: readonly RecordScoreFilterStatus[] = [
   'unavailable',
 ]
 const NUMBER_FIELDS = ['score_min', 'score_max'] as const
+const ENUM_FIELDS = {
+  result_view: ['records', 'defects'],
+  defect_source: ['all', 'auto', 'manual'],
+} as const
 
 function isReviewState(value: unknown): value is RecordLatestReviewState {
   return typeof value === 'string' && (REVIEW_STATE_VALUES as readonly string[]).includes(value)
@@ -109,6 +119,13 @@ export function normalizeRecordFilter(snapshot: RecordFilterSnapshot): RecordFil
       normalized[field] = value
     }
   }
+  for (const field of Object.keys(ENUM_FIELDS) as Array<keyof typeof ENUM_FIELDS>) {
+    const value = snapshot[field]
+    if (typeof value === 'string' && (ENUM_FIELDS[field] as readonly string[]).includes(value)) {
+      normalized[field] = value
+    }
+  }
+  if (typeof snapshot.has_defect === 'boolean') normalized.has_defect = snapshot.has_defect
   return normalized
 }
 
@@ -131,6 +148,12 @@ export function parseRecordFilterQuery(query: LocationQuery): RecordFilterSnapsh
     const text = firstQueryText(query[QUERY_KEY_BY_FIELD[field]])
     if (text) snapshot[field] = Number(text)
   }
+  for (const field of Object.keys(ENUM_FIELDS) as Array<keyof typeof ENUM_FIELDS>) {
+    const text = firstQueryText(query[QUERY_KEY_BY_FIELD[field]])
+    if (text) snapshot[field] = text as never
+  }
+  const hasDefect = firstQueryText(query[QUERY_KEY_BY_FIELD.has_defect])
+  if (hasDefect === 'true' || hasDefect === 'false') snapshot.has_defect = hasDefect === 'true'
   return normalizeRecordFilter(snapshot)
 }
 
@@ -141,6 +164,10 @@ export function recordFilterSignature(snapshot: RecordFilterSnapshot): string {
     (normalized.review_state ?? []).join(','),
     normalized.score_status ?? '',
     ...NUMBER_FIELDS.map((field) => normalized[field] ?? ''),
+    ...Object.keys(ENUM_FIELDS).map(
+      (field) => normalized[field as keyof RecordFilterSnapshot] ?? '',
+    ),
+    normalized.has_defect === undefined ? '' : String(normalized.has_defect),
   ])
 }
 
@@ -181,6 +208,13 @@ export function mergeRecordFilterQuery(
   for (const field of NUMBER_FIELDS) {
     const value = normalized[field]
     if (value !== undefined) next[QUERY_KEY_BY_FIELD[field]] = String(value)
+  }
+  for (const field of Object.keys(ENUM_FIELDS) as Array<keyof typeof ENUM_FIELDS>) {
+    const value = normalized[field]
+    if (value) next[QUERY_KEY_BY_FIELD[field]] = value
+  }
+  if (normalized.has_defect !== undefined) {
+    next[QUERY_KEY_BY_FIELD.has_defect] = String(normalized.has_defect)
   }
   const keepScopeAll =
     reviewScopeAll ?? firstQueryText(current[REVIEW_SCOPE_QUERY_KEY]) === REVIEW_SCOPE_ALL

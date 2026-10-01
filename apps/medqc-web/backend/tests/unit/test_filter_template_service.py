@@ -67,6 +67,7 @@ def test_create_normalizes_filters_and_name(sessions):
         "review_state": ["pending_review", "pending_recheck", "pending_review"],
         "standard_id": "11111111-1111-4111-8111-111111111111",
         "score_status": "scored", "grade": " 甲 ", "score_min": 80, "score_max": 99.5,
+        "result_view": "defects", "defect_source": "manual",
     })
     assert item["name"] == "常用"
     assert item["filters"] == {
@@ -75,6 +76,7 @@ def test_create_normalizes_filters_and_name(sessions):
         "review_state": ["pending_review", "pending_recheck"],
         "standard_id": "11111111-1111-4111-8111-111111111111",
         "score_status": "scored", "grade": "甲", "score_min": 80.0, "score_max": 99.5,
+        "result_view": "defects", "defect_source": "manual",
     }
 
 
@@ -98,6 +100,7 @@ def test_create_normalizes_filters_and_name(sessions):
     {"score_min": True},
     {"score_min": float("inf")},
     {"score_min": 90, "score_max": 80},
+    {"result_view": "defects", "defect_source": "all", "has_defect": True},
     [],
 ])
 def test_create_rejects_invalid_filters(sessions, filters):

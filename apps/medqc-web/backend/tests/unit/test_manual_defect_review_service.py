@@ -120,7 +120,17 @@ def test_report_batch_uses_full_identity_and_manual_scope(sessions, monkeypatch)
     assert len(items) == 9
     assert {row["identity"] for row in items} == {("hospital-A", "patient", "visit")}
     assert {row["review_status"] for row in items} == {"pending", "approved", "rejected"}
-    assert all(set(row) == {"identity", "rule_code", "review_status"} for row in items)
+    assert all({"identity", "id", "rule_code", "review_status"} <= set(row) for row in items)
+
+
+def test_report_batch_filters_same_identity_by_frozen_scene(sessions):
+    with sessions.begin() as session:
+        session.execute(
+            QCDefect.__table__.update().where(QCDefect.id == "m-1").values(scene="running")
+        )
+    identity = [("hospital-A", "patient", "visit")]
+    assert {row["id"] for row in service.list_manual_defects_for_cases(identity, scene="running")} == {"m-1"}
+    assert {row["id"] for row in service.list_manual_defects_for_cases(identity, scene="final")} == {"m-2"}
 
 
 def test_report_batch_empty_does_not_open_session(monkeypatch):

@@ -91,4 +91,23 @@ describe('recordFilterQuery', () => {
     })
     expect(parseRecordFilterQuery({ score_status: 'bogus', score_min: 'NaN' })).toEqual({})
   })
+
+  it('缺陷视图、来源和病例缺陷状态在 URL 中完整往返', () => {
+    const parsed = parseRecordFilterQuery({
+      result_view: 'defects',
+      defect_source: 'manual',
+      has_defect: 'true',
+    })
+    expect(parsed).toEqual({
+      result_view: 'defects',
+      defect_source: 'manual',
+      has_defect: true,
+    })
+    expect(mergeRecordFilterQuery({}, parsed)).toEqual({
+      result_view: 'defects',
+      defect_source: 'manual',
+      has_defect: 'true',
+    })
+    expect(parseRecordFilterQuery({ result_view: 'bogus', has_defect: 'unknown' })).toEqual({})
+  })
 })

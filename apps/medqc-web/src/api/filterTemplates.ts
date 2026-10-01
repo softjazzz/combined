@@ -18,6 +18,8 @@ export type FilterTemplateDateField = 'visit' | 'admission' | 'discharge' | 'upd
 export type FilterTemplateInpatientSort = 'default' | 'longest' | 'recent'
 export type FilterTemplateConflictCode = 'name_conflict' | 'limit_reached' | 'version_conflict'
 export type RecordScoreFilterStatus = 'scored' | 'no_standard' | 'unavailable'
+export type RecordResultView = 'records' | 'defects'
+export type RecordDefectSource = 'all' | 'auto' | 'manual'
 
 /** 模板保存的筛选条件：仅服务端白名单键，不含页码与分页大小。 */
 export interface FilterTemplateFilters {
@@ -34,6 +36,9 @@ export interface FilterTemplateFilters {
   grade?: string
   score_min?: number
   score_max?: number
+  result_view?: RecordResultView
+  defect_source?: RecordDefectSource
+  has_defect?: boolean
 }
 
 export interface FilterTemplate {

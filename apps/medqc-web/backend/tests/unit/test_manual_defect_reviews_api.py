@@ -240,6 +240,19 @@ def test_case_list_returns_all_review_states_for_exact_identity(sessions, monkey
     assert data["items"][0]["task_id"] == "task-1"
 
 
+@pytest.mark.parametrize(
+    ("scene", "expected_id"),
+    [("running", "m-1"), ("final", "m-2"), ("outpatient_emergency", "m-3")],
+)
+def test_case_list_filters_same_identity_by_scene(sessions, monkeypatch, scene, expected_id):
+    http, _ = client(monkeypatch)
+    res = http.get(CASE, params={**CASE_PARAMS, "scene": scene})
+    assert res.status_code == 200
+    data = res.json()["data"]
+    assert data["total"] == 1
+    assert [item["id"] for item in data["items"]] == [expected_id]
+
+
 def test_case_list_requires_review_permission_and_identity(sessions, monkeypatch):
     http, _ = client(monkeypatch, user_id="qc-2", roles=("qc_staff",))
     assert http.get(CASE, params=CASE_PARAMS).status_code == 403

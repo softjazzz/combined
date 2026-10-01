@@ -9,7 +9,11 @@ import type {
   ScoreStandardOverviewMap,
   WorkstationScoreStandardOption,
 } from '../types'
-import type { RecordScoreFilterStatus } from '@/api/filterTemplates'
+import type {
+  RecordDefectSource,
+  RecordResultView,
+  RecordScoreFilterStatus,
+} from '@/api/filterTemplates'
 import {
   normalizeRecord,
   normalizeRecordPoolQcSummary,
@@ -33,6 +37,23 @@ export type WorkstationDateRange = [string, string] | null
 export type HospitalStatusScope = 'all' | 'inpatient' | 'discharged'
 export type RecordPoolSyncScope = 'all' | 'today_inpatient'
 export type InpatientSort = 'default' | 'longest' | 'recent'
+
+export interface WorkstationDefectItem {
+  institute_id: string
+  patient_id: string
+  visit_id: string
+  patient_name: string
+  department: string
+  doctor: string
+  source: 'auto' | 'manual'
+  defect_id: string | null
+  rule_id: string
+  rule_name: string
+  document: string
+  description: string
+  status: string
+  occurred_at: string | null
+}
 
 function normalizeDepartment(raw: unknown): DeptInfo {
   const source = (raw || {}) as Record<string, unknown>
@@ -87,6 +108,7 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
   const initialDepartment = initialRouteQuery.get('department')?.trim()
   const initialDoctor = initialRouteQuery.get('doctor')?.trim()
   const allRecords = ref<PatientRecord[]>([])
+  const defects = ref<WorkstationDefectItem[]>([])
   const departments = ref<DeptInfo[]>([])
   const doctors = ref<DoctorInfo[]>([])
   const currentPage = ref(1)
@@ -117,6 +139,9 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
   const gradeFilter = ref('')
   const scoreMinFilter = ref<number | null>(null)
   const scoreMaxFilter = ref<number | null>(null)
+  const resultView = ref<RecordResultView>('records')
+  const defectSourceFilter = ref<RecordDefectSource>('all')
+  const hasDefectFilter = ref<boolean | null>(null)
   let activeRequestSequence = 0
 
   const hospOptions: Array<{ value: HospitalStatusScope; label: string }> = [
@@ -179,6 +204,11 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
       if (gradeFilter.value.trim()) params.grade = gradeFilter.value.trim()
       if (scoreMinFilter.value !== null) params.score_min = scoreMinFilter.value
       if (scoreMaxFilter.value !== null) params.score_max = scoreMaxFilter.value
+      if (resultView.value === 'defects') params.result_view = resultView.value
+      if (resultView.value === 'defects' || hasDefectFilter.value !== null) {
+        params.defect_source = defectSourceFilter.value
+      }
+      if (hasDefectFilter.value !== null) params.has_defect = String(hasDefectFilter.value)
       // 下钻上下文只有 analyticsDrilldown 一条资料链，参数名与后端查询项保持一致。
       const analyticsQuery = new URLSearchParams(window.location.search)
       for (const key of ANALYTICS_DRILLDOWN_QUERY_KEYS) {
@@ -204,6 +234,41 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
       if (requestSequence !== activeRequestSequence) return
 
       allRecords.value = normalizedRecords
+      defects.value = Array.isArray(data.defects)
+        ? data.defects.flatMap((raw): WorkstationDefectItem[] => {
+            const item = raw as Record<string, unknown>
+            const source = item.source
+            const instituteId = String(item.institute_id ?? '').trim()
+            const patientId = String(item.patient_id ?? '').trim()
+            const visitId = String(item.visit_id ?? '').trim()
+            if (
+              !instituteId ||
+              !patientId ||
+              !visitId ||
+              (source !== 'auto' && source !== 'manual')
+            ) {
+              return []
+            }
+            return [
+              {
+                institute_id: instituteId,
+                patient_id: patientId,
+                visit_id: visitId,
+                patient_name: String(item.patient_name ?? '').trim(),
+                department: String(item.department ?? '').trim(),
+                doctor: String(item.doctor ?? '').trim(),
+                source,
+                defect_id: item.defect_id == null ? null : String(item.defect_id),
+                rule_id: String(item.rule_id ?? '').trim(),
+                rule_name: String(item.rule_name ?? '').trim(),
+                document: String(item.document ?? '').trim(),
+                description: String(item.description ?? '').trim(),
+                status: String(item.status ?? '').trim(),
+                occurred_at: item.occurred_at == null ? null : String(item.occurred_at),
+              },
+            ]
+          })
+        : []
       departments.value =
         Array.isArray(data.departments) && data.departments.length > 0
           ? data.departments.map((dept: unknown) => normalizeDepartment(dept))
@@ -242,6 +307,10 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
       if (requestSequence !== activeRequestSequence) return
       console.error('\u52a0\u8f7d\u5de5\u4f5c\u53f0\u6570\u636e\u5931\u8d25:', error)
       loadError.value = true
+      allRecords.value = []
+      defects.value = []
+      serverTotal.value = 0
+      serverTotalPages.value = 1
       qcSummary.value = { ...EMPTY_QC_SUMMARY }
       scoreStandards.value = {}
       scoreStandardOptions.value = []
@@ -314,11 +383,15 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
     gradeFilter.value = ''
     scoreMinFilter.value = null
     scoreMaxFilter.value = null
+    resultView.value = 'records'
+    defectSourceFilter.value = 'all'
+    hasDefectFilter.value = null
     currentPage.value = 1
   }
 
   return {
     allRecords,
+    defects,
     departments,
     doctors,
     currentPage,
@@ -346,6 +419,9 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
     gradeFilter,
     scoreMinFilter,
     scoreMaxFilter,
+    resultView,
+    defectSourceFilter,
+    hasDefectFilter,
     hospOptions,
     filteredRecords,
     fetchData,
