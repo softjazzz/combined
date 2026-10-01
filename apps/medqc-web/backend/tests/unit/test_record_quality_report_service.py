@@ -100,6 +100,17 @@ def test_three_coordinate_identity_drilldown_and_csv_match():
     assert csv_rows[0]["患者编号"] == page["items"][0]["patient_id"]
 
 
+def test_duplicate_projected_rule_status_fails_closed_instead_of_last_write_wins():
+    def duplicate_projector(items):
+        return [
+            {"rule_id": "LX0609-003", "status": "compliant", "is_confirmed_issue": False},
+            {"rule_id": "LX0609-003", "status": "non_compliant", "is_confirmed_issue": True},
+        ]
+
+    ctx = _context(projector=duplicate_projector)
+    assert ctx.rows[0].rule_statuses["LX0609-003"] == "unknown"
+
+
 def test_mixed_timezone_bounds_are_normalized():
     ctx = _context(completed_from=datetime(2026, 9, 27, 0, 0),
                    completed_to=datetime(2026, 9, 26, 16, 0, tzinfo=timezone.utc))

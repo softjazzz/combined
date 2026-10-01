@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -23,6 +23,7 @@ from ..core.permissions import (
 from ..core.security import get_current_user, require_roles
 from ..services import record_quality_report_service as report_service
 from ..services import frontpage_quality_report_service as frontpage_report_service
+from ..services import medical_record_indicator_service as indicator_service
 from ..services import task_analysis_service
 
 router = APIRouter(prefix="/api/v1/quality-reports", tags=["quality-reports"])
@@ -30,6 +31,7 @@ logger = logging.getLogger(__name__)
 
 _UNAVAILABLE_DETAIL = "病历质量报表暂不可用，请稍后重试"
 _TASK_ANALYSIS_UNAVAILABLE_DETAIL = "任务分析暂不可用，请稍后重试"
+_INDICATOR_UNAVAILABLE_DETAIL = "病案管理指标报表暂不可用，请稍后重试"
 
 
 def _report_params(
@@ -84,6 +86,32 @@ def _task_actor_id(current_user: dict) -> str:
     if not isinstance(actor_id, str) or not actor_id.strip():
         raise HTTPException(status_code=401, detail="当前用户缺少有效身份")
     return actor_id.strip()
+
+
+def _indicator_params(
+    department: str | None = Query(None),
+    doctor: str | None = Query(None),
+    discharged_from: date | None = Query(None),
+    discharged_to: date | None = Query(None),
+) -> dict[str, Any]:
+    return {
+        "department": department,
+        "doctor": doctor,
+        "discharged_from": discharged_from,
+        "discharged_to": discharged_to,
+    }
+
+
+def _authorized_indicator_params(current_user: dict, params: dict[str, Any]) -> dict[str, Any]:
+    scope = resolve_workstation_data_scope(current_user, params["department"])
+    return {**params, "department": scope.department}
+
+
+def _raise_indicator_error(exc: Exception, action: str) -> None:
+    if isinstance(exc, indicator_service.MedicalRecordIndicatorInvalid):
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    logger.error("medical_record_indicator_%s_failed error_type=%s", action, type(exc).__name__)
+    raise HTTPException(status_code=503, detail=_INDICATOR_UNAVAILABLE_DETAIL) from None
 
 
 @router.get("/tasks/{task_id}")
@@ -190,6 +218,109 @@ async def export_record_quality(
             "Cache-Control": "no-store",
             "X-Content-Type-Options": "nosniff",
             "Content-Disposition": f'attachment; filename="record_quality_{query["scene"]}_{sheet}.csv"',
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# 病案管理 27 项指标（PRD 第 53 项）
+# ---------------------------------------------------------------------------
+
+
+@router.get("/medical-record-indicators")
+async def get_medical_record_indicators(
+    request: Request,
+    params: dict[str, Any] = Depends(_indicator_params),
+    current_user: dict = Depends(require_roles("admin", "qc_manager")),
+):
+    query = _authorized_indicator_params(current_user, params)
+    try:
+        context = await run_in_threadpool(indicator_service.build_report_context, **query)
+        data = await run_in_threadpool(indicator_service.summarize, context)
+    except Exception as exc:
+        _raise_indicator_error(exc, "summary")
+    data["scope"].update({
+        "discharged_from": query["discharged_from"].isoformat() if query["discharged_from"] else None,
+        "discharged_to": query["discharged_to"].isoformat() if query["discharged_to"] else None,
+    })
+    return success_response(data=data, trace_id=get_trace_id(request))
+
+
+@router.get("/medical-record-indicators/breakdown")
+async def get_medical_record_indicator_breakdown(
+    request: Request,
+    indicator_code: str = Query(...),
+    dimension: Literal["department", "doctor"] = Query("department"),
+    params: dict[str, Any] = Depends(_indicator_params),
+    current_user: dict = Depends(require_roles("admin", "qc_manager")),
+):
+    query = _authorized_indicator_params(current_user, params)
+    try:
+        context = await run_in_threadpool(indicator_service.build_report_context, **query)
+        data = await run_in_threadpool(
+            indicator_service.breakdown, context, indicator_code=indicator_code, dimension=dimension,
+        )
+    except Exception as exc:
+        _raise_indicator_error(exc, "breakdown")
+    return success_response(data=data, trace_id=get_trace_id(request))
+
+
+@router.get("/medical-record-indicators/cases")
+async def get_medical_record_indicator_cases(
+    request: Request,
+    indicator_code: str = Query(...),
+    state: Literal["compliant", "non_compliant", "not_applicable", "unknown"] | None = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    params: dict[str, Any] = Depends(_indicator_params),
+    current_user: dict = Depends(require_roles("admin", "qc_manager")),
+):
+    query = _authorized_indicator_params(current_user, params)
+    try:
+        context = await run_in_threadpool(indicator_service.build_report_context, **query)
+        data = await run_in_threadpool(
+            indicator_service.cases_page, context, indicator_code=indicator_code,
+            state=state, page=page, page_size=page_size,
+        )
+    except Exception as exc:
+        _raise_indicator_error(exc, "cases")
+    return success_response(data=data, trace_id=get_trace_id(request))
+
+
+@router.get("/medical-record-indicators/export")
+async def export_medical_record_indicators(
+    request: Request,
+    kind: Literal["indicators", "breakdown", "cases"] = Query("indicators"),
+    indicator_code: str | None = Query(None),
+    dimension: Literal["department", "doctor"] = Query("department"),
+    state: Literal["compliant", "non_compliant", "not_applicable", "unknown"] | None = Query(None),
+    params: dict[str, Any] = Depends(_indicator_params),
+    current_user: dict = Depends(require_roles("admin", "qc_manager")),
+):
+    query = _authorized_indicator_params(current_user, params)
+    try:
+        context = await run_in_threadpool(indicator_service.build_report_context, **query)
+        content = await run_in_threadpool(
+            indicator_service.export_csv, context, kind=kind, indicator_code=indicator_code,
+            dimension=dimension, state=state,
+        )
+    except Exception as exc:
+        _raise_indicator_error(exc, "export")
+    audit_event(
+        request,
+        action="quality_reports.medical_record_indicators.export",
+        resource="/api/v1/quality-reports/medical-record-indicators/export",
+        outcome="success",
+        details={"kind": kind, "indicator_code": indicator_code, "bytes": len(content)},
+        current_user=current_user,
+    )
+    return Response(
+        content=content,
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+            "Content-Disposition": f'attachment; filename="medical_record_indicators_{kind}.csv"',
         },
     )
 

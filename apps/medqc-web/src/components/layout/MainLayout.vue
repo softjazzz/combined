@@ -232,6 +232,12 @@
               病案首页统计分析
             </a-menu-item>
             <a-menu-item
+              v-if="canSee('/dashboard/qc/reports/medical-record-indicators')"
+              key="/dashboard/qc/reports/medical-record-indicators"
+            >
+              病案管理 27 项指标
+            </a-menu-item>
+            <a-menu-item
               v-if="canSee('/dashboard/qc/reports/staff-analysis')"
               key="/dashboard/qc/reports/staff-analysis"
             >
@@ -535,6 +541,7 @@ const REPORT_MENU_TARGETS = [
   '/dashboard/statistics',
   '/dashboard/qc/reports/record-quality',
   '/dashboard/qc/reports/frontpage-quality',
+  '/dashboard/qc/reports/medical-record-indicators',
   '/dashboard/qc/reports/staff-analysis',
 ] as const
 
@@ -575,7 +582,14 @@ const breadcrumbItems = computed(() => {
         if (pathSegments[2] === 'reports') {
           items.push({ title: '统计分析', path: '/dashboard/statistics' })
           items.push({
-            title: pathSegments[3] === 'staff-analysis' ? '质控员工作分析' : '病历质量分析',
+            title:
+              pathSegments[3] === 'staff-analysis'
+                ? '质控员工作分析'
+                : pathSegments[3] === 'frontpage-quality'
+                  ? '病案首页统计分析'
+                  : pathSegments[3] === 'medical-record-indicators'
+                    ? '病案管理 27 项指标'
+                    : '病历质量分析',
             path: null,
           })
         }

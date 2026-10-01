@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any, Callable, Mapping, Sequence
 from zoneinfo import ZoneInfo
 
@@ -79,6 +79,9 @@ def _load_current_workstation_records(
     department: str | None,
     doctor: str | None,
     hospital_status: str,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    date_field: str = "visit",
 ) -> list[dict[str, str]]:
     """用病历池同一筛选口径读取当前范围的最小身份与维度字段。"""
 
@@ -108,9 +111,9 @@ def _load_current_workstation_records(
             dept=department,
             doctor=doctor,
             keyword=None,
-            start_date=None,
-            end_date=None,
-            date_field="visit",
+            start_date=start_date,
+            end_date=end_date,
+            date_field=date_field,
             hospital_status=hospital_status,
             sync_scope="all",
             include_department=True,
@@ -146,9 +149,9 @@ def _load_current_workstation_records(
             dept=department,
             doctor=doctor,
             keyword=None,
-            start_date=None,
-            end_date=None,
-            date_field="visit",
+            start_date=start_date,
+            end_date=end_date,
+            date_field=date_field,
             hospital_status=hospital_status,
             sync_scope="all",
             hospitalization_projection_map=_load_hospitalization_projection_map(session),

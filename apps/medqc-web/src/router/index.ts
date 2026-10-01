@@ -761,6 +761,16 @@ const routes: RouteRecordRaw[] = [
         },
       },
       {
+        path: 'qc/reports/medical-record-indicators',
+        name: 'MedicalRecordIndicatorsReport',
+        component: () => import('@/views/qc/reports/MedicalRecordIndicatorsView.vue'),
+        meta: {
+          title: '病案管理 27 项指标',
+          icon: 'BarChartOutlined',
+          permission: ['admin', 'qc_manager'],
+        },
+      },
+      {
         path: 'qc/reports/staff-analysis',
         name: 'StaffAnalysisReport',
         component: () => import('@/views/qc/reports/StaffAnalysisView.vue'),

@@ -151,6 +151,7 @@ class CaseRow:
     review_state: str | None = None
     manual_rule_codes: list[str] = field(default_factory=list)
     manual_rejected: int = 0
+    rule_statuses: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -167,10 +168,28 @@ class ReportContext:
     rule_meta: Mapping[str, Mapping[str, str]]
     department_record_totals: Mapping[str, int]
     doctor_record_totals: Mapping[str, int]
+    scope_records: Mapping[tuple[str, str, str], Mapping[str, Any]] = field(default_factory=dict)
 
 
 def _text(value: Any, default: str = "") -> str:
     return default if value is None else (str(value).strip() or default)
+
+
+def _projected_rule_statuses(projected: Iterable[Mapping[str, Any]]) -> dict[str, str]:
+    """保留唯一规则状态；重复条目无法证明病例级唯一结论，失败关闭为 unknown。"""
+    statuses: dict[str, str] = {}
+    duplicates: set[str] = set()
+    for item in projected:
+        rule_id = _text(item.get("rule_id")).upper()
+        if not rule_id:
+            continue
+        if rule_id in statuses:
+            duplicates.add(rule_id)
+        else:
+            statuses[rule_id] = _text(item.get("status"))
+    for rule_id in duplicates:
+        statuses[rule_id] = "unknown"
+    return statuses
 
 
 def _normalize_params(
@@ -271,6 +290,7 @@ def build_report_context(
                 _text(item.get("rule_id")).upper() for item in projected
                 if item.get("is_confirmed_issue") is True and _text(item.get("rule_id"))
             ),
+            rule_statuses=_projected_rule_statuses(projected),
         ))
         raw_by_identity[identity] = raw
         projected_by_identity[identity] = projected
@@ -384,6 +404,7 @@ def build_report_context(
         rule_meta=rule_meta,
         department_record_totals=_count_by(records_by_identity.values(), "department", "未分科室"),
         doctor_record_totals=_count_by(records_by_identity.values(), "attending_physician", "未登记主治医师"),
+        scope_records=records_by_identity,
     )
 
 
