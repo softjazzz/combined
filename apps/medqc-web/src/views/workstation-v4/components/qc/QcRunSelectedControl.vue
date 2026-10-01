@@ -10,8 +10,8 @@
       @click="prepareSelectedQc"
     >
       <Play :size="15" aria-hidden="true" />
-      质控所选
-      <span v-if="effectiveSelectedCount > 0" class="qc-run-selected-control__count">
+      {{ caseMode ? '重新质控' : '质控所选' }}
+      <span v-if="!caseMode && effectiveSelectedCount > 0" class="qc-run-selected-control__count">
         {{ effectiveSelectedCount }}
       </span>
     </button>
@@ -28,7 +28,7 @@
 
     <a-modal
       :open="confirmOpen"
-      title="确认质控所选病历"
+      :title="caseMode ? '确认重新质控当前病历' : '确认质控所选病历'"
       ok-text="确认并开始"
       cancel-text="取消"
       :confirm-loading="state === 'creating'"
@@ -50,7 +50,7 @@
           </div>
           <div>
             <dt>执行范围</dt>
-            <dd>仅本次勾选的完整病历三坐标</dd>
+            <dd>{{ caseMode ? '仅当前病历的完整三坐标' : '仅本次勾选的完整病历三坐标' }}</dd>
           </div>
         </dl>
       </div>
@@ -136,6 +136,7 @@ const props = defineProps<{
   recordRefs: SelectedQcRecordRef[]
   selectedCount?: number
   statusTarget?: string
+  mode?: 'selected' | 'case'
 }>()
 
 const emit = defineEmits<{
@@ -143,6 +144,9 @@ const emit = defineEmits<{
 }>()
 
 const authStore = useAuthStore()
+const caseMode = computed(() => props.mode === 'case')
+const caseContextKey = computed(() => caseMode.value
+  ? JSON.stringify(props.recordRefs.map((value) => [value.institute_id, value.patient_id, value.visit_id])) : '')
 const POLL_INTERVAL_MS = 3000
 const MAX_POLL_FAILURES = 3
 const state = ref<RunState>('idle')
@@ -180,7 +184,8 @@ const actorKey = computed(() => {
 const selectionValidation = computed(() =>
   validateRecordRefs(props.recordRefs, effectiveSelectedCount.value),
 )
-const selectionError = computed(() => selectionValidation.value.error)
+const selectionError = computed(() => caseMode.value && props.recordRefs.length !== 1
+  ? '当前病历身份不唯一，已停止重新质控' : selectionValidation.value.error)
 const statusTarget = computed(() => String(props.statusTarget || '').trim())
 
 function validateRecordRefs(
@@ -218,7 +223,7 @@ function workflowOwner(): string {
 }
 
 function storageKey(sceneValue: string, actor: string): string {
-  return `medqc:selected-qc:${sceneValue}:${encodeURIComponent(actor)}`
+  return `medqc:selected-qc:${sceneValue}:${encodeURIComponent(actor)}${caseMode.value ? `:case:${encodeURIComponent(caseContextKey.value)}` : ''}`
 }
 
 function persistJob(jobId: string, sceneValue: string, actor: string) {
@@ -311,6 +316,10 @@ async function pollJob(jobId: string, revision: number, owner: string, sceneValu
       .trim()
       .toLowerCase()
     if (status === 'completed') {
+      if (caseMode.value && Number(response.data.failed_count || 0) > 0) {
+        fail(response.data.error_message || '当前病历质控失败，请核对任务详情后重试。', sceneValue, owner)
+        return
+      }
       clearPollTimer()
       clearPersistedJob(sceneValue, actorKey.value)
       state.value = 'completed'
@@ -390,6 +399,10 @@ async function confirmSelectedQc() {
     })
     if (!contextIsCurrent(revision, owner, sceneValue)) return
     if (!response.success) {
+      if (caseMode.value && [401, 403, 404, 409, 413, 422].includes(response.status || 0)) {
+        fail(localDataFailureMessage(response.message || '当前病历重新质控请求被拒绝'), sceneValue, owner)
+        return
+      }
       markCreateResultUnknown(response.message || '质控任务创建失败')
       return
     }
@@ -452,7 +465,7 @@ function resetForContext() {
   if (mounted) void recoverPersistedJob()
 }
 
-watch([actorKey, scene], resetForContext)
+watch([actorKey, scene, caseContextKey, caseMode], resetForContext)
 
 onMounted(() => {
   mounted = true

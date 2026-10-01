@@ -163,6 +163,12 @@ const CaseScorePanelStub = defineComponent({
   },
 })
 
+const CaseRerunStub = defineComponent({
+  props: { mode: String, carePhase: String, recordRefs: Array },
+  emits: ['completed'],
+  template: '<button data-testid="case-rerun-stub" @click="$emit(\'completed\')">重新质控</button>',
+})
+
 function mountDrawer(
   presentationMode?: 'flat' | 'grouped',
   extraProps: Record<string, unknown> = {},
@@ -207,6 +213,7 @@ function mountDrawer(
         CaseRectificationCreate: { template: '<div data-testid="rectification-create" />' },
         CaseOperationTimeline: CaseOperationTimelineStub,
         CaseScorePanel: CaseScorePanelStub,
+        QcRunSelectedControl: CaseRerunStub,
       },
     },
   })
@@ -229,6 +236,27 @@ describe('QCRecordResultComparisonDrawer', () => {
     scorePanelProps = null
     authState.roles = []
     authState.calls = 0
+  })
+
+  it.each(['running', 'final'] as const)('重新质控完成重读当前病例并重挂载全部owner分区 %s', async (scoreScene) => {
+    authState.roles = ['qc_manager']
+    getLatestLuxian0609RecordResult.mockResolvedValueOnce({ success: true, data: readyResult }).mockResolvedValueOnce({ success: true, data: { ...readyResult, job_id: 'new-job' } })
+    const wrapper = mountDrawer(undefined, { recordReview: true, scoreScene })
+    await flushPromises()
+    const rerun = wrapper.getComponent(CaseRerunStub)
+    expect(rerun.props()).toMatchObject({ mode: 'case', carePhase: scoreScene === 'running' ? 'inpatient' : 'discharged', recordRefs: [{ institute_id: 'H1', patient_id: 'P001', visit_id: 'V001' }] })
+    const scoreBefore = wrapper.getComponent(CaseScorePanelStub).vm
+    const timelineBefore = wrapper.getComponent(CaseOperationTimelineStub).vm
+    await wrapper.get('[data-testid="case-rerun-stub"]').trigger('click')
+    await flushPromises()
+    expect(getLatestLuxian0609RecordResult).toHaveBeenCalledTimes(2)
+    expect(reviewPanelProps?.jobId).toBe('new-job')
+    expect(defectPartitionsPanelProps?.jobId).toBe('new-job')
+    expect(workbenchProps?.jobId).toBe('new-job')
+    expect(wrapper.getComponent(CaseScorePanelStub).vm).not.toBe(scoreBefore)
+    expect(wrapper.getComponent(CaseOperationTimelineStub).vm).not.toBe(timelineBefore)
+    expect(wrapper.emitted('qc-completed')?.[0]).toEqual([{ instituteId: 'H1', patientId: 'P001', visitId: 'V001' }])
+    wrapper.unmount()
   })
 
   it('以醒目的当前病历上下文栏展示患者与质控完成信息', async () => {

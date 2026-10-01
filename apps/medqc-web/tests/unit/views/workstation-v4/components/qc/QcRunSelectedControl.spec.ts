@@ -42,6 +42,7 @@ function mountControl(props: {
   carePhase: 'inpatient' | 'discharged'
   recordRefs: typeof recordRefs
   selectedCount?: number
+  mode?: 'selected' | 'case'
 }) {
   return mount(QcRunSelectedControl, { props, global: { stubs: { 'a-modal': ModalStub } } })
 }
@@ -64,6 +65,62 @@ describe('QcRunSelectedControl', () => {
     vi.clearAllMocks()
     window.sessionStorage.clear()
     mocks.authStore = null
+  })
+
+  it.each(['inpatient', 'discharged'] as const)('病例入口按明确场景和当前唯一三坐标执行 %s', async (carePhase) => {
+    mocks.createJob.mockResolvedValue({ success: true, data: { id: 'case-job', status: 'queued' } })
+    mocks.getJob.mockResolvedValue({ success: true, data: { id: 'case-job', status: 'completed' } })
+    const wrapper = mountControl({ carePhase, recordRefs: [recordRefs[0]!], mode: 'case' })
+    expect(wrapper.get('[data-testid="run-selected-qc-trigger"]').text()).toBe('重新质控')
+    await confirmRun(wrapper)
+    await flushPromises()
+    expect(mocks.createJob).toHaveBeenCalledWith({ rule_set_key: 'luxian_0609_qc_v1', scope: carePhase === 'inpatient' ? 'running' : 'final', date_field: carePhase === 'inpatient' ? 'admission' : 'discharge', record_refs: [recordRefs[0]] })
+    expect(wrapper.emitted('completed')).toHaveLength(1)
+    wrapper.unmount()
+  })
+
+  it('病例切换取消旧创建回执且不恢复列表批量任务', async () => {
+    const pending = deferred<{ success: true; data: { id: string; status: string } }>()
+    mocks.createJob.mockReturnValue(pending.promise)
+    const actor = 'selected-qc-user|qc_manager'
+    window.sessionStorage.setItem(`medqc:selected-qc:running:${encodeURIComponent(actor)}`, JSON.stringify({ jobId: 'list-job', actor }))
+    const wrapper = mountControl({ carePhase: 'inpatient', recordRefs: [recordRefs[0]!], mode: 'case' })
+    await flushPromises()
+    expect(mocks.getJob).not.toHaveBeenCalled()
+    await confirmRun(wrapper)
+    expect(wrapper.get('[data-testid="run-selected-qc-trigger"]').attributes('disabled')).toBe('')
+    await wrapper.setProps({ recordRefs: [recordRefs[1]!] })
+    pending.resolve({ success: true, data: { id: 'old-case-job', status: 'queued' } })
+    await flushPromises()
+    expect(mocks.getJob).not.toHaveBeenCalled()
+    expect(wrapper.emitted('completed')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('病例任务完成但当前病例失败时显示失败而不刷新旧结果', async () => {
+    mocks.createJob.mockResolvedValue({ success: true, data: { id: 'case-failed', status: 'queued' } })
+    mocks.getJob.mockResolvedValue({ success: true, data: { id: 'case-failed', status: 'completed', failed_count: 1, error_message: '当前资料校验失败' } })
+    const wrapper = mountControl({ carePhase: 'inpatient', recordRefs: [recordRefs[0]!], mode: 'case' })
+    await confirmRun(wrapper)
+    await flushPromises()
+    expect(wrapper.text()).toContain('当前资料校验失败')
+    expect(wrapper.emitted('completed')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('病例请求明确被拒绝显示真实错误，断网未知仍锁定重复', async () => {
+    mocks.createJob.mockResolvedValueOnce({ success: false, status: 422, message: '当前病历不属于运行范围' }).mockResolvedValueOnce({ success: false, message: '网络中断' })
+    const wrapper = mountControl({ carePhase: 'inpatient', recordRefs: [recordRefs[0]!], mode: 'case' })
+    await confirmRun(wrapper)
+    await flushPromises()
+    expect(wrapper.text()).toContain('当前病历不属于运行范围')
+    expect(wrapper.get('[data-testid="run-selected-qc-trigger"]').attributes('disabled')).toBeUndefined()
+    await confirmRun(wrapper)
+    await flushPromises()
+    expect(wrapper.text()).toContain('网络中断')
+    expect(wrapper.text()).toContain('勿直接重复提交')
+    expect(wrapper.get('[data-testid="run-selected-qc-trigger"]').attributes('disabled')).toBe('')
+    wrapper.unmount()
   })
 
   it('没有勾选病历时禁用质控入口', () => {

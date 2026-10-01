@@ -83,7 +83,7 @@ const ResultDrawerStub = defineComponent({
     rectificationIntent: { type: Number, default: 0 },
     scoreScene: { type: String, default: undefined },
   },
-  emits: ['close', 'review-submitted', 'navigate-prev', 'navigate-next'],
+  emits: ['close', 'review-submitted', 'navigate-prev', 'navigate-next', 'qc-completed'],
   setup(props) {
     return () => h('div', { 'data-testid': 'result-drawer-stub', 'data-open': String(props.open) })
   },
@@ -1099,6 +1099,10 @@ describe('QcRecordResultListView', () => {
       '/api/medical-records/workstation',
       expect.objectContaining({ page: 2 }),
     )
+    drawer.vm.$emit('qc-completed', { instituteId: 'H', patientId: 'P', visitId: 'V-priority' })
+    await flushPromises()
+    expect(mocks.getRaw.mock.calls.length).toBe(requestsBefore + 2)
+    expect(mocks.getRaw).toHaveBeenLastCalledWith('/api/medical-records/workstation', expect.objectContaining({ page: 2 }))
   })
 
   describe('抽屉上一个/下一个导航', () => {

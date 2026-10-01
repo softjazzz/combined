@@ -53,6 +53,15 @@
           </span>
         </div>
         <div class="customer-record-result-title__actions">
+          <QcRunSelectedControl
+            v-if="open && focus && canRerunCase && (scoreScene === 'running' || scoreScene === 'final')"
+            :key="rerunContextKey"
+            mode="case"
+            :status-target="`#${rerunStatusId}`"
+            :care-phase="scoreScene === 'running' ? 'inpatient' : 'discharged'"
+            :record-refs="[{ institute_id: focus.instituteId, patient_id: focus.patientId, visit_id: focus.visitId }]"
+            @completed="handleCaseQcCompleted"
+          />
           <div
             v-if="showNavigation"
             class="customer-record-result-title__nav"
@@ -103,6 +112,7 @@
       </div>
     </template>
 
+    <div :id="rerunStatusId" class="customer-record-result-drawer__rerun-status" />
     <a-spin :spinning="loading">
       <div
         v-if="(showReviewSection || showScorePanel) && latestResult && focus"
@@ -189,7 +199,7 @@
 
 <script setup lang="ts">
 import { message } from 'ant-design-vue'
-import { computed, ref, watch } from 'vue'
+import { computed, getCurrentInstance, ref, watch } from 'vue'
 import { ShieldCheck, X } from 'lucide-vue-next'
 import QcDiagnosticExport from '@/components/qc/QcDiagnosticExport.vue'
 import CaseRecordReviewPanel from '@/components/qc/CaseRecordReviewPanel.vue'
@@ -198,6 +208,7 @@ import CaseRectificationCreate from '@/components/qc/CaseRectificationCreate.vue
 import type { CaseDefectTarget } from '@/components/qc/CaseDefectPartitionsPanel.vue'
 import CaseOperationTimeline from '@/components/qc/CaseOperationTimeline.vue'
 import CaseScorePanel from '@/components/qc/CaseScorePanel.vue'
+import QcRunSelectedControl from '../components/qc/QcRunSelectedControl.vue'
 import type { ScoringScene } from '@/api/scoring'
 import type { RecordReviewDecision } from '@/api/recordReviews'
 import { useAuthStore } from '@/stores/auth'
@@ -272,6 +283,7 @@ const emit = defineEmits<{
   (event: 'review-submitted', payload: QCRecordReviewSubmittedEvent): void
   (event: 'navigate-prev'): void
   (event: 'navigate-next'): void
+  (event: 'qc-completed', payload: { instituteId: string; patientId: string; visitId: string }): void
 }>()
 
 const showNavigation = computed(() => props.hasPrev !== undefined || props.hasNext !== undefined)
@@ -306,6 +318,18 @@ const reviewAuth = computed(() => {
   }
 })
 const reviewerId = computed(() => reviewAuth.value?.userId ?? '')
+const rerunStatusId = `case-rerun-status-${getCurrentInstance()?.uid}`
+const canRerunCase = computed(() => !!reviewAuth.value?.allowed)
+const rerunContextKey = computed(() => JSON.stringify([
+  props.focus?.instituteId, props.focus?.patientId, props.focus?.visitId, props.scoreScene, reviewerId.value,
+]))
+
+async function handleCaseQcCompleted() {
+  const focus = props.focus
+  if (!props.open || !focus || !canRerunCase.value) return
+  emit('qc-completed', { instituteId: focus.instituteId, patientId: focus.patientId, visitId: focus.visitId })
+  await loadLatestResult()
+}
 const showRectification = computed(() => !!reviewAuth.value?.canRectify && !!props.scoreScene)
 const showRecordReview = computed(() => !!reviewAuth.value?.allowed && !reviewForbidden.value)
 const showDefectPartitions = computed(
@@ -506,6 +530,8 @@ watch(
     props.focus?.visitId,
     props.focus?.recordId,
     props.focus?.recordRef,
+    props.scoreScene,
+    reviewerId.value,
   ],
   () => void loadLatestResult(),
   { immediate: true },
@@ -558,6 +584,16 @@ watch(
   grid-template-columns: 180px minmax(280px, 1fr) auto;
   align-items: center;
   gap: 18px;
+}
+
+.customer-record-result-drawer__rerun-status :deep(.qc-run-selected-control__task-status:not(:empty)) {
+  padding: 12px 16px;
+  border-bottom: 1px solid #edf0f4;
+}
+
+.customer-record-result-title__actions :deep(.qc-run-selected-control) {
+  max-width: 240px;
+  white-space: normal;
 }
 
 .customer-record-result-title__brand {

@@ -421,6 +421,7 @@
       :rectification-intent="rectificationIntent"
       @close="closeResultDrawer"
       @review-submitted="refreshAfterRecordReview"
+      @qc-completed="refreshAfterRecordReview"
       @navigate-prev="navigateResult(-1)"
       @navigate-next="navigateResult(1)"
     />
