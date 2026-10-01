@@ -122,6 +122,14 @@ def _latest_reviewers(session, rows: list[dict[str, Any]]) -> dict[tuple[str, st
     return {identity: reviewer for identity, (_, reviewer) in latest.items() if reviewer}
 
 
+def load_latest_task_reviewers(rows: list[dict[str, Any]]) -> dict[tuple[str, str, str], str]:
+    """抽样与原质控员分配共用最近审核人 owner 及三坐标、排序合同。"""
+    if SessionLocal is None:
+        raise RuntimeError("数据库会话不可用")
+    with SessionLocal() as session:
+        return _latest_reviewers(session, rows)
+
+
 def _plan_by_original_reviewer(
     rows: list[dict[str, Any]],
     assignees: list[dict[str, str]],

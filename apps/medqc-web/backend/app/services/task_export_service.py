@@ -55,7 +55,12 @@ _STATUS_LABELS = {
     "completed": "已完成",
     "cancelled": "已取消",
 }
-_SAMPLING_LABELS = {"all": "全部", "count": "按数量", "percentage": "按比例"}
+_SAMPLING_LABELS = {
+    "all": "全部", "count": "按数量", "percentage": "按比例",
+    "department_count": "每科室定额", "department_ratio": "每科室比例",
+    "qc_physician_count": "每质控医师签名定额", "qc_physician_ratio": "每质控医师签名比例",
+    "qc_reviewer_count": "每最近审核质控员定额", "qc_reviewer_ratio": "每最近审核质控员比例",
+}
 _ASSIGN_LABELS = {
     "keep": "保留原分配",
     "by_department": "按科室",

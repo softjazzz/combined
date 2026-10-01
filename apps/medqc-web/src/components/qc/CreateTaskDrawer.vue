@@ -225,9 +225,12 @@
             class="w-full"
             :disabled="rangeMode === 'refs'"
           >
-            <div class="grid grid-cols-3 gap-3">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               <div
-                v-for="opt in samplingOptions"
+                v-for="opt in samplingOptions.filter(
+                  (item) =>
+                    formData.scene !== 'outpatient' || !item.value.startsWith('qc_physician_'),
+                )"
                 :key="opt.value"
                 :class="[
                   'border rounded-xl p-4 cursor-pointer transition-all text-center',
@@ -257,11 +260,15 @@
 
         <template
           v-if="
-            formData.sampling_method === 'count' || formData.sampling_method === 'department_count'
+            ['count', 'department_count', 'qc_physician_count', 'qc_reviewer_count'].includes(
+              formData.sampling_method,
+            )
           "
         >
           <a-form-item
-            :label="formData.sampling_method === 'department_count' ? '每科室固定份数' : '抽样数量'"
+            :label="
+              formData.sampling_method === 'count' ? '抽样数量' : `${samplingGroupLabel}固定份数`
+            "
           >
             <a-input-number
               v-model:value="formData.sampling_config.total"
@@ -281,7 +288,9 @@
         <template
           v-if="
             formData.sampling_method === 'percentage' ||
-            formData.sampling_method === 'department_ratio'
+            ['department_ratio', 'qc_physician_ratio', 'qc_reviewer_ratio'].includes(
+              formData.sampling_method,
+            )
           "
         >
           <a-form-item label="抽样比例">
@@ -296,8 +305,12 @@
             </div>
           </a-form-item>
           <a-form-item
-            v-if="formData.sampling_method === 'department_ratio'"
-            label="每科室最多份数"
+            v-if="
+              ['department_ratio', 'qc_physician_ratio', 'qc_reviewer_ratio'].includes(
+                formData.sampling_method,
+              )
+            "
+            :label="`${samplingGroupLabel}最多份数`"
             required
           >
             <a-input-number
@@ -594,6 +607,30 @@ const samplingOptions: Array<{
   { value: 'percentage', label: '按比例', desc: '各组取X%', icon: PercentageOutlined },
   { value: 'department_count', label: '每科室定额', desc: '各科室固定份数', icon: NumberOutlined },
   {
+    value: 'qc_physician_count',
+    label: '每质控医师签名定额',
+    desc: '机构内源签名固定份数',
+    icon: NumberOutlined,
+  },
+  {
+    value: 'qc_physician_ratio',
+    label: '每质控医师签名比例',
+    desc: '机构内源签名比例加上限',
+    icon: PercentageOutlined,
+  },
+  {
+    value: 'qc_reviewer_count',
+    label: '每最近审核质控员定额',
+    desc: '机构内最近审核人固定份数',
+    icon: NumberOutlined,
+  },
+  {
+    value: 'qc_reviewer_ratio',
+    label: '每最近审核质控员比例',
+    desc: '机构内最近审核人比例加上限',
+    icon: PercentageOutlined,
+  },
+  {
     value: 'department_ratio',
     label: '每科室比例',
     desc: '按比例且不超过上限',
@@ -703,12 +740,27 @@ const sceneLabel = computed(() => {
   return sceneOptions.find((option) => option.value === formData.value.scene)?.label || '(未选择)'
 })
 
+const samplingGroupLabel = computed(() =>
+  formData.value.sampling_method.startsWith('qc_physician_')
+    ? '每质控医师签名'
+    : formData.value.sampling_method.startsWith('qc_reviewer_')
+      ? '每最近审核质控员'
+      : '每科室',
+)
 const samplingLabel = computed(() => {
   const method = formData.value.sampling_method
   if (method === 'all') return '全部病历'
   if (method === 'count') return `随机抽取 ${formData.value.sampling_config.total} 条`
   if (method === 'percentage') return `各组抽取 ${formData.value.sampling_config.percentage}%`
   if (method === 'department_count') return `每科室抽取 ${formData.value.sampling_config.total} 份`
+  if (method === 'qc_physician_count')
+    return `每机构内质控医师签名抽取 ${formData.value.sampling_config.total} 份`
+  if (method === 'qc_physician_ratio')
+    return `每机构内质控医师签名抽取 ${formData.value.sampling_config.percentage}%，最多 ${formData.value.sampling_config.max_per_group} 份`
+  if (method === 'qc_reviewer_count')
+    return `每机构内最近审核质控员抽取 ${formData.value.sampling_config.total} 份`
+  if (method === 'qc_reviewer_ratio')
+    return `每机构内最近审核质控员抽取 ${formData.value.sampling_config.percentage}%，最多 ${formData.value.sampling_config.max_per_group} 份`
   if (method === 'department_ratio')
     return `每科室抽取 ${formData.value.sampling_config.percentage}%，最多 ${formData.value.sampling_config.max_per_group} 份`
   return method
@@ -879,7 +931,9 @@ const currentTemplateConfig = (): TaskTemplateConfig | null => {
   }
   if (
     formData.value.sampling_method === 'count' ||
-    formData.value.sampling_method === 'department_count'
+    ['department_count', 'qc_physician_count', 'qc_reviewer_count'].includes(
+      formData.value.sampling_method,
+    )
   ) {
     samplingConfig.total = formData.value.sampling_config.total
     if (formData.value.sampling_method === 'count')
@@ -888,7 +942,11 @@ const currentTemplateConfig = (): TaskTemplateConfig | null => {
     samplingConfig.percentage = formData.value.sampling_config.percentage
     samplingConfig.group_by =
       formData.value.sampling_config.group_by === 'department' ? 'department' : null
-  } else if (formData.value.sampling_method === 'department_ratio') {
+  } else if (
+    ['department_ratio', 'qc_physician_ratio', 'qc_reviewer_ratio'].includes(
+      formData.value.sampling_method,
+    )
+  ) {
     samplingConfig.percentage = formData.value.sampling_config.percentage
     samplingConfig.max_per_group = formData.value.sampling_config.max_per_group
   }
@@ -1047,9 +1105,13 @@ const handleSubmit = async () => {
         ...(requiredCaseScope.value ? { case_scope: requiredCaseScope.value } : {}),
         ...(rangeMode.value === 'refs'
           ? {}
-          : formData.value.sampling_method === 'department_count'
+          : ['department_count', 'qc_physician_count', 'qc_reviewer_count'].includes(
+                formData.value.sampling_method,
+              )
             ? { total: formData.value.sampling_config.total }
-            : formData.value.sampling_method === 'department_ratio'
+            : ['department_ratio', 'qc_physician_ratio', 'qc_reviewer_ratio'].includes(
+                  formData.value.sampling_method,
+                )
               ? {
                   percentage: formData.value.sampling_config.percentage,
                   max_per_group: formData.value.sampling_config.max_per_group,

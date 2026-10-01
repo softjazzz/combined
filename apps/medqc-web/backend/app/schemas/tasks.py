@@ -45,6 +45,10 @@ class SamplingMethod(str, Enum):
     PERCENTAGE = "percentage"   # 按百分比
     DEPARTMENT_COUNT = "department_count"  # 每科室固定份数
     DEPARTMENT_PERCENTAGE = "department_ratio"  # 每科室比例与最多份数
+    QC_PHYSICIAN_COUNT = "qc_physician_count"  # 每机构质控医师源签名固定份数
+    QC_PHYSICIAN_RATIO = "qc_physician_ratio"  # 每机构质控医师源签名比例加上限
+    QC_REVIEWER_COUNT = "qc_reviewer_count"  # 最近审核质控员固定份数
+    QC_REVIEWER_RATIO = "qc_reviewer_ratio"  # 最近审核质控员比例加上限
 
 
 class AssignMethod(str, Enum):
@@ -171,6 +175,10 @@ class TaskTemplateConfig(BaseModel):
             SamplingMethod.PERCENTAGE: {"case_scope", "percentage", "group_by"},
             SamplingMethod.DEPARTMENT_COUNT: {"case_scope", "total"},
             SamplingMethod.DEPARTMENT_PERCENTAGE: {"case_scope", "percentage", "max_per_group"},
+            SamplingMethod.QC_PHYSICIAN_COUNT: {"case_scope", "total"},
+            SamplingMethod.QC_PHYSICIAN_RATIO: {"case_scope", "percentage", "max_per_group"},
+            SamplingMethod.QC_REVIEWER_COUNT: {"case_scope", "total"},
+            SamplingMethod.QC_REVIEWER_RATIO: {"case_scope", "percentage", "max_per_group"},
         }[method]
         allowed_sampling_keys = allowed_sampling_keys | {"score_filter", "clinical_doctors"}
         unknown_sampling = sorted(set(self.sampling_config) - allowed_sampling_keys)
@@ -186,13 +194,15 @@ class TaskTemplateConfig(BaseModel):
                 raise ValueError("终末病历模板仅支持已出院范围")
         elif case_scope is not None:
             raise ValueError("当前场景不支持 case_scope")
-        if method in {SamplingMethod.COUNT, SamplingMethod.DEPARTMENT_COUNT}:
+        if method in {SamplingMethod.QC_PHYSICIAN_COUNT, SamplingMethod.QC_PHYSICIAN_RATIO} and self.scene not in {TaskScene.RUNNING, TaskScene.FINAL}:
+            raise ValueError("质控医师签名抽样仅支持运行和终末场景")
+        if method in {SamplingMethod.COUNT, SamplingMethod.DEPARTMENT_COUNT, SamplingMethod.QC_PHYSICIAN_COUNT, SamplingMethod.QC_REVIEWER_COUNT}:
             total = self.sampling_config.get("total")
             if isinstance(total, bool) or not isinstance(total, int) or not 1 <= total <= 10000:
                 raise ValueError("抽样数量必须为 1 到 10000 的整数")
             if not isinstance(self.sampling_config.get("by_department", False), bool):
                 raise ValueError("按科室抽样参数必须是布尔值")
-        elif method in {SamplingMethod.PERCENTAGE, SamplingMethod.DEPARTMENT_PERCENTAGE}:
+        elif method in {SamplingMethod.PERCENTAGE, SamplingMethod.DEPARTMENT_PERCENTAGE, SamplingMethod.QC_PHYSICIAN_RATIO, SamplingMethod.QC_REVIEWER_RATIO}:
             percentage = self.sampling_config.get("percentage")
             if (
                 isinstance(percentage, bool)
@@ -202,7 +212,7 @@ class TaskTemplateConfig(BaseModel):
                 raise ValueError("抽样比例必须在 0 到 100 之间")
             if self.sampling_config.get("group_by") not in (None, "department"):
                 raise ValueError("当前仅支持按科室分组")
-            if method == SamplingMethod.DEPARTMENT_PERCENTAGE:
+            if method in {SamplingMethod.DEPARTMENT_PERCENTAGE, SamplingMethod.QC_PHYSICIAN_RATIO, SamplingMethod.QC_REVIEWER_RATIO}:
                 maximum = self.sampling_config.get("max_per_group")
                 if isinstance(maximum, bool) or not isinstance(maximum, int) or not 1 <= maximum <= 10000:
                     raise ValueError("每科室最多份数必须为 1 到 10000 的整数")

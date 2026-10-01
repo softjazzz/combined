@@ -233,7 +233,11 @@ function parseTaskConfig(value: unknown): TaskScheduleTaskConfig {
       value.sampling_method !== 'count' &&
       value.sampling_method !== 'percentage' &&
       value.sampling_method !== 'department_count' &&
-      value.sampling_method !== 'department_ratio') ||
+      value.sampling_method !== 'department_ratio' &&
+      value.sampling_method !== 'qc_physician_count' &&
+      value.sampling_method !== 'qc_physician_ratio' &&
+      value.sampling_method !== 'qc_reviewer_count' &&
+      value.sampling_method !== 'qc_reviewer_ratio') ||
     !isObject(value.sampling_config) ||
     (value.assign_method !== 'by_ratio' &&
       value.assign_method !== 'by_original_reviewer' &&

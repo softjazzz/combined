@@ -246,31 +246,37 @@ describe('TaskEditDrawer', () => {
     expect(wrapper.emitted('saved')?.[0]).toEqual(['task-1'])
   })
 
-  it('每科室比例编辑保留上限并只提交该方式参数', async () => {
-    mocks.getTaskEdit.mockResolvedValue({
-      success: true,
-      data: {
-        ...detail,
-        sampling_method: 'department_ratio',
-        sampling_config: { case_scope: 'active', percentage: 25, max_per_group: 5 },
-      },
-    })
-    const wrapper = mountDrawer()
-    await flushPromises()
-    const vm = wrapper.vm as unknown as { form: { max_per_group: number }; confirmSave: () => void }
-    expect(vm.form.max_per_group).toBe(5)
-    vm.form.max_per_group = 3
-    vm.confirmSave()
-    await flushPromises()
-    expect(mocks.updateTaskDraftConfiguration).toHaveBeenCalledWith(
-      'task-1',
-      expect.objectContaining({
-        sampling_method: 'department_ratio',
-        sampling_config: { case_scope: 'active', percentage: 25, max_per_group: 3 },
-      }),
-    )
-    wrapper.unmount()
-  })
+  it.each(['department_ratio', 'qc_physician_ratio', 'qc_reviewer_ratio'] as const)(
+    '%s 编辑保留上限并只提交该方式参数',
+    async (method) => {
+      mocks.getTaskEdit.mockResolvedValue({
+        success: true,
+        data: {
+          ...detail,
+          sampling_method: method,
+          sampling_config: { case_scope: 'active', percentage: 25, max_per_group: 5 },
+        },
+      })
+      const wrapper = mountDrawer()
+      await flushPromises()
+      const vm = wrapper.vm as unknown as {
+        form: { max_per_group: number }
+        confirmSave: () => void
+      }
+      expect(vm.form.max_per_group).toBe(5)
+      vm.form.max_per_group = 3
+      vm.confirmSave()
+      await flushPromises()
+      expect(mocks.updateTaskDraftConfiguration).toHaveBeenCalledWith(
+        'task-1',
+        expect.objectContaining({
+          sampling_method: method,
+          sampling_config: { case_scope: 'active', percentage: 25, max_per_group: 3 },
+        }),
+      )
+      wrapper.unmount()
+    },
+  )
 
   it('终末指定病例修改规划仍保留出院窗口与三坐标且禁止抽样', async () => {
     const refs = [{ institute_id: 'H-1', patient_id: 'P-1', visit_id: 'V-1' }]

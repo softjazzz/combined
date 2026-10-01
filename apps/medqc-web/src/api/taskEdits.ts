@@ -12,6 +12,10 @@ export type TaskEditSamplingMethod =
   | 'percentage'
   | 'department_count'
   | 'department_ratio'
+  | 'qc_physician_count'
+  | 'qc_physician_ratio'
+  | 'qc_reviewer_count'
+  | 'qc_reviewer_ratio'
 export type TaskEditableAssignMethod = 'by_ratio' | 'by_original_reviewer' | 'by_department'
 export type TaskEditAssignMethod = TaskEditableAssignMethod | 'keep' | 'by_type' | 'by_record_type'
 export type TaskEditField =
@@ -164,9 +168,17 @@ function parseTaskEditDetail(value: unknown, expectedTaskId: string): TaskEditDe
       (!Array.isArray(departments) || departments.some((item) => typeof item !== 'string'))) ||
     (refs !== null && (!Array.isArray(refs) || refs.some((item) => !isTaskEditCaseRef(item)))) ||
     (value.sampling_method !== null &&
-      !['all', 'count', 'percentage', 'department_count', 'department_ratio'].includes(
-        String(value.sampling_method),
-      )) ||
+      ![
+        'all',
+        'count',
+        'percentage',
+        'department_count',
+        'department_ratio',
+        'qc_physician_count',
+        'qc_physician_ratio',
+        'qc_reviewer_count',
+        'qc_reviewer_ratio',
+      ].includes(String(value.sampling_method))) ||
     (value.sampling_config !== null && !isObject(value.sampling_config)) ||
     (value.assign_method !== null &&
       value.assign_method !== 'by_ratio' &&

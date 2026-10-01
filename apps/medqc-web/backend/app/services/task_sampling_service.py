@@ -113,30 +113,59 @@ def validate_scoped_sampling_config(scene: Any, method: Any, config: Any) -> Non
         raise ValueError("抽样配置格式无效")
     validate_task_clinical_doctors(scene, config.get("clinical_doctors"))
     validate_task_score_filter(scene, config.get("score_filter"))
-    if not isinstance(method, str) or method not in {"all", "count", "percentage", "department_count", "department_ratio"}:
+    if not isinstance(method, str) or method not in {"all", "count", "percentage", "department_count", "department_ratio", "qc_physician_count", "qc_physician_ratio", "qc_reviewer_count", "qc_reviewer_ratio"}:
         raise ValueError("无效的抽样方式")
-    if method in {"department_count", "department_ratio"}:
-        allowed = {"case_scope", "total", "score_filter", "clinical_doctors"} if method == "department_count" else {"case_scope", "percentage", "max_per_group", "score_filter", "clinical_doctors"}
+    if method in {"qc_physician_count", "qc_physician_ratio"} and scene not in {"running", "final"}:
+        raise ValueError("质控医师签名抽样仅支持运行和终末场景")
+    if method in {"department_count", "department_ratio", "qc_physician_count", "qc_physician_ratio", "qc_reviewer_count", "qc_reviewer_ratio"}:
+        allowed = {"case_scope", "total", "score_filter", "clinical_doctors"} if method.endswith("_count") else {"case_scope", "percentage", "max_per_group", "score_filter", "clinical_doctors"}
         if set(config) - allowed:
             raise ValueError("科室抽样配置含不支持的字段")
-    if method in {"count", "department_count"}:
-        total = config.get("total") if method == "department_count" else config.get("total", 50)
+    if method in {"count", "department_count", "qc_physician_count", "qc_reviewer_count"}:
+        total = config.get("total", 50) if method == "count" else config.get("total")
         if isinstance(total, bool) or not isinstance(total, int) or total <= 0:
             raise ValueError("抽样数量必须为正整数")
-        if method == "department_count" and total > 10000:
+        if method != "count" and total > 10000:
             raise ValueError("每科室抽样数量不能超过 10000")
         if not isinstance(config.get("by_department", False), bool):
             raise ValueError("按科室抽样参数必须为布尔值")
-    if method in {"percentage", "department_ratio"}:
+    if method in {"percentage", "department_ratio", "qc_physician_ratio", "qc_reviewer_ratio"}:
         percentage = config.get("percentage", 10)
         if isinstance(percentage, bool) or not isinstance(percentage, (int, float)) or not 0 < percentage <= 100:
             raise ValueError("抽样比例必须在 0 到 100 之间")
         if config.get("group_by") not in (None, "department"):
             raise ValueError("场景抽样仅支持按科室分组")
-        if method == "department_ratio":
+        if method != "percentage":
             maximum = config.get("max_per_group")
             if isinstance(maximum, bool) or not isinstance(maximum, int) or not 1 <= maximum <= 10000:
                 raise ValueError("每科室最多份数必须为 1 到 10000 的整数")
+
+
+def _load_task_physician_signatures(
+    identities: set[tuple[str, str, str]], *, qc_physician: bool,
+) -> dict[tuple[str, str, str], str]:
+    """病案首页签名唯一读取入口，临床与质控签名严格选择各自字段。"""
+    from ..database.connection import SessionLocal
+    from ..database.models.cdm import MedicalRecordFrontpage
+    from sqlalchemy import select, tuple_
+
+    field = MedicalRecordFrontpage.QC_physician_sign if qc_physician else MedicalRecordFrontpage.attending_physician_sign
+    signatures = {}
+    with SessionLocal() as session:
+        ordered = sorted(identities)
+        for start in range(0, len(ordered), 500):
+            rows = session.execute(select(
+                MedicalRecordFrontpage.institute_id, MedicalRecordFrontpage.patient_id,
+                MedicalRecordFrontpage.visit_id, field,
+            ).where(tuple_(
+                MedicalRecordFrontpage.institute_id, MedicalRecordFrontpage.patient_id,
+                MedicalRecordFrontpage.visit_id,
+            ).in_(ordered[start:start + 500]))).all()
+            for institute, patient, visit, physician in rows:
+                identity = (str(institute).strip(), str(patient).strip(), str(visit).strip())
+                if identity in identities and str(physician or "").strip():
+                    signatures[identity] = str(physician).strip()
+    return signatures
 
 
 def validate_task_clinical_doctors(scene: Any, value: Any) -> None:
@@ -528,6 +557,27 @@ class TaskSamplingService:
             return self._sample_by_percentage(candidates, config)
         elif method in {"department_count", "department_ratio"}:
             return self._sample_by_department(candidates, method, config)
+        elif method in {"qc_physician_count", "qc_physician_ratio", "qc_reviewer_count", "qc_reviewer_ratio"}:
+            import anyio
+            from functools import partial
+            try:
+                if method.startswith("qc_physician_"):
+                    signatures = await anyio.to_thread.run_sync(partial(
+                        _load_task_physician_signatures, {self._identity(row) for row in candidates}, qc_physician=True,
+                    ))
+                else:
+                    from .task_assignment_service import load_latest_task_reviewers
+                    signatures = await anyio.to_thread.run_sync(partial(load_latest_task_reviewers, candidates))
+            except Exception as exc:
+                logger.warning("质控人员分组来源不可用 error_type=%s", type(exc).__name__)
+                raise RuntimeError("质控人员分组来源不可用") from None
+            grouped = []
+            for row in candidates:
+                signature = signatures.get(self._identity(row))
+                if not signature:
+                    raise ValueError("质控医师抽样缺少权威质控医师签名" if method.startswith("qc_physician_") else "质控员抽样缺少最近审核质控员归属")
+                grouped.append({**row, "qc_sampling_group": signature})
+            return self._sample_by_department(grouped, method, config, group_field="qc_sampling_group")
         else:
             logger.warning(f"未知的抽样方式: {method}，使用全量")
             return candidates
@@ -536,28 +586,13 @@ class TaskSamplingService:
         self, candidates: List[Dict[str, Any]], doctors: List[Dict[str, str]],
     ) -> List[Dict[str, Any]]:
         import anyio
-        from ..database.connection import SessionLocal
-        from ..database.models.cdm import MedicalRecordFrontpage
-        from sqlalchemy import select, tuple_
 
         identities = {self._identity(row) for row in candidates}
         selected = {(item["institute_id"].strip(), item["physician_name"].strip()) for item in doctors}
 
         def load():
-            matching = set()
-            with SessionLocal() as session:
-                ordered = sorted(identities)
-                for start in range(0, len(ordered), 500):
-                    rows = session.execute(select(
-                        MedicalRecordFrontpage.institute_id, MedicalRecordFrontpage.patient_id,
-                        MedicalRecordFrontpage.visit_id, MedicalRecordFrontpage.attending_physician_sign,
-                    ).where(tuple_(
-                        MedicalRecordFrontpage.institute_id, MedicalRecordFrontpage.patient_id,
-                        MedicalRecordFrontpage.visit_id,
-                    ).in_(ordered[start:start + 500]))).all()
-                    for institute, patient, visit, physician in rows:
-                        if (str(institute).strip(), str(physician or "").strip()) in selected:
-                            matching.add((str(institute).strip(), str(patient).strip(), str(visit).strip()))
+            signatures = _load_task_physician_signatures(identities, qc_physician=False)
+            matching = {identity for identity, signature in signatures.items() if (identity[0], signature) in selected}
             return [row for row in candidates if self._identity(row) in matching]
 
         try:
@@ -670,17 +705,17 @@ class TaskSamplingService:
                 logger.warning("从数据库获取候选病历失败", exc_info=True)
                 raise RuntimeError("候选病历数据源不可用") from exc
 
-    def _sample_by_department(self, candidates: List[Dict], method: str, config: Dict[str, Any]) -> List[Dict]:
-        """按机构内科室分别抽样；比例沿用向下取整、非空组至少一份的约定。"""
+    def _sample_by_department(self, candidates: List[Dict], method: str, config: Dict[str, Any], *, group_field: str = "department") -> List[Dict]:
+        """按机构内科室或已验证人员归属抽样；比例向下取整、非空组至少一份。"""
         groups: Dict[tuple[str, str], List[Dict]] = {}
         for candidate in candidates:
-            institute, department = candidate.get("institute_id"), candidate.get("department")
+            institute, department = candidate.get("institute_id"), candidate.get(group_field)
             if not isinstance(institute, str) or not institute.strip() or not isinstance(department, str) or not department.strip():
                 raise ValueError("科室抽样缺少可信机构或科室归属")
             groups.setdefault((institute, department), []).append(candidate)
         sampled = []
         for records in groups.values():
-            count = config["total"] if method == "department_count" else min(
+            count = config["total"] if method.endswith("_count") else min(
                 config["max_per_group"], max(1, int(len(records) * config["percentage"] / 100)),
             )
             sampled.extend(random.sample(records, min(count, len(records))))

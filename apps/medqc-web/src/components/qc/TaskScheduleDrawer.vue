@@ -297,7 +297,7 @@
               {{ selectedSchedule.source_task_id }}
             </a-descriptions-item>
             <a-descriptions-item label="抽样方式">
-              {{ selectedSchedule.task_config.sampling_method }}
+              {{ samplingMethodLabels[selectedSchedule.task_config.sampling_method] }}
             </a-descriptions-item>
             <a-descriptions-item label="分配方式">
               {{ selectedSchedule.task_config.assign_method }}
@@ -440,6 +440,17 @@ const createAttempt = computed(() => {
 })
 const sourceLockedByUnknownResult = computed(() => !!createAttempt.value)
 const createAttemptOwnedByCurrentActor = computed(() => !!createAttempt.value)
+const samplingMethodLabels: Record<import('@/api/tasks').SamplingMethod, string> = {
+  all: '全部病历',
+  count: '总数抽样',
+  percentage: '比例抽样',
+  department_count: '每科室定额',
+  department_ratio: '每科室比例',
+  qc_physician_count: '每质控医师签名定额',
+  qc_physician_ratio: '每质控医师签名比例',
+  qc_reviewer_count: '每最近审核质控员定额',
+  qc_reviewer_ratio: '每最近审核质控员比例',
+}
 const samplingLabel = computed(() => {
   const detail = sourceDetail.value
   if (!detail?.sampling_method) return '未知'
@@ -452,6 +463,17 @@ const samplingLabel = computed(() => {
     return `每科室固定 ${String(detail.sampling_config?.total ?? '未知')} 份`
   if (detail.sampling_method === 'department_ratio')
     return `每科室 ${String(detail.sampling_config?.percentage ?? '未知')}%，最多 ${String(detail.sampling_config?.max_per_group ?? '未知')} 份`
+  if (
+    detail.sampling_method.startsWith('qc_physician_') ||
+    detail.sampling_method.startsWith('qc_reviewer_')
+  ) {
+    const group = detail.sampling_method.startsWith('qc_physician_')
+      ? '每机构内质控医师签名'
+      : '每机构内最近审核质控员'
+    return detail.sampling_method.endsWith('_count')
+      ? `${group}固定 ${String(detail.sampling_config?.total ?? '未知')} 份`
+      : `${group} ${String(detail.sampling_config?.percentage ?? '未知')}%，最多 ${String(detail.sampling_config?.max_per_group ?? '未知')} 份`
+  }
   return `按比例 ${String(detail.sampling_config?.percentage ?? '未知')}%`
 })
 const assignLabel = computed(() => {

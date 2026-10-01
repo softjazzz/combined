@@ -108,6 +108,10 @@ export type SamplingMethod =
   | 'percentage'
   | 'department_count'
   | 'department_ratio'
+  | 'qc_physician_count'
+  | 'qc_physician_ratio'
+  | 'qc_reviewer_count'
+  | 'qc_reviewer_ratio'
 export type AssignMethod =
   | 'keep'
   | 'by_department'

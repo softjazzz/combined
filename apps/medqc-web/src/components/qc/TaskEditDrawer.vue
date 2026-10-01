@@ -189,16 +189,26 @@
                   <a-radio value="percentage">按比例</a-radio>
                   <a-radio value="department_count">每科室定额</a-radio>
                   <a-radio value="department_ratio">每科室比例</a-radio>
+                  <a-radio v-if="form.scene !== 'outpatient'" value="qc_physician_count"
+                    >每质控医师签名定额</a-radio
+                  >
+                  <a-radio v-if="form.scene !== 'outpatient'" value="qc_physician_ratio"
+                    >每质控医师签名比例</a-radio
+                  >
+                  <a-radio value="qc_reviewer_count">每最近审核质控员定额</a-radio>
+                  <a-radio value="qc_reviewer_ratio">每最近审核质控员比例</a-radio>
                 </a-radio-group>
               </a-form-item>
               <template
                 v-if="
-                  form.sampling_method === 'count' || form.sampling_method === 'department_count'
+                  ['count', 'department_count', 'qc_physician_count', 'qc_reviewer_count'].includes(
+                    form.sampling_method || '',
+                  )
                 "
               >
                 <a-form-item
                   :label="
-                    form.sampling_method === 'department_count' ? '每科室固定份数' : '抽样数量'
+                    form.sampling_method === 'count' ? '抽样数量' : `${samplingGroupLabel}固定份数`
                   "
                   required
                 >
@@ -222,7 +232,9 @@
               <template
                 v-else-if="
                   form.sampling_method === 'percentage' ||
-                  form.sampling_method === 'department_ratio'
+                  ['department_ratio', 'qc_physician_ratio', 'qc_reviewer_ratio'].includes(
+                    form.sampling_method || '',
+                  )
                 "
               >
                 <a-form-item label="抽样比例" required>
@@ -235,8 +247,12 @@
                   <p class="sampling-value">{{ form.percentage }}%</p>
                 </a-form-item>
                 <a-form-item
-                  v-if="form.sampling_method === 'department_ratio'"
-                  label="每科室最多份数"
+                  v-if="
+                    ['department_ratio', 'qc_physician_ratio', 'qc_reviewer_ratio'].includes(
+                      form.sampling_method || '',
+                    )
+                  "
+                  :label="`${samplingGroupLabel}最多份数`"
                   required
                 >
                   <a-input-number
@@ -371,6 +387,13 @@ const form = reactive({
   fallback: undefined as 'by_ratio' | 'reject' | undefined,
 })
 
+const samplingGroupLabel = computed(() =>
+  form.sampling_method?.startsWith('qc_physician_')
+    ? '每质控医师签名'
+    : form.sampling_method?.startsWith('qc_reviewer_')
+      ? '每最近审核质控员'
+      : '每科室',
+)
 const hasEditableFields = computed(() => !!detail.value?.editable_fields.length)
 const fullConfigurationEditable = computed(
   () =>
@@ -605,7 +628,9 @@ function buildDraftPayload(): TaskDraftConfigurationUpdate | null {
     samplingConfig.score_filter = { ...scoreFilter.value }
   if (
     rangeMode.value !== 'refs' &&
-    (form.sampling_method === 'count' || form.sampling_method === 'department_count')
+    ['count', 'department_count', 'qc_physician_count', 'qc_reviewer_count'].includes(
+      form.sampling_method,
+    )
   ) {
     if (!Number.isInteger(form.total) || form.total < 1 || form.total > 10000) {
       message.warning('抽样数量须为 1 至 10000 的整数')
@@ -615,7 +640,9 @@ function buildDraftPayload(): TaskDraftConfigurationUpdate | null {
     if (form.sampling_method === 'count') samplingConfig.by_department = form.by_department
   } else if (
     rangeMode.value !== 'refs' &&
-    (form.sampling_method === 'percentage' || form.sampling_method === 'department_ratio')
+    ['percentage', 'department_ratio', 'qc_physician_ratio', 'qc_reviewer_ratio'].includes(
+      form.sampling_method,
+    )
   ) {
     if (!Number.isFinite(form.percentage) || form.percentage < 1 || form.percentage > 100) {
       message.warning('抽样比例须在 1% 至 100% 之间')
