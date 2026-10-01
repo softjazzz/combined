@@ -363,7 +363,7 @@
             <span>{{ defectStatusLabel(item) }}</span>
             <span>
               <button type="button" @click="openDefectResult(item)">查看病例</button>
-              <button type="button" @click="openDefectResult(item)">整改 / 催办</button>
+              <button type="button" @click="openDefectResult(item, true)">整改 / 催办</button>
             </span>
           </div>
           <p
@@ -418,6 +418,7 @@
       :total-count="drawerNavigation?.totalCount"
       :initial-defect-partition="selectedDefectPartition"
       :initial-defect-target="selectedDefectTarget"
+      :rectification-intent="rectificationIntent"
       @close="closeResultDrawer"
       @review-submitted="refreshAfterRecordReview"
       @navigate-prev="navigateResult(-1)"
@@ -509,6 +510,8 @@ const selectedQcRecordRefs = computed(() =>
 )
 const activeView = ref<'records' | 'defects' | 'analysis'>('records')
 const selectedDefectPartition = ref<'confirmed' | 'manual'>('confirmed')
+const rectificationIntent = ref(0)
+let rectificationSequence = 0
 const selectedDefectTarget = ref<{
   source: 'auto' | 'manual'
   ruleId?: string
@@ -664,7 +667,8 @@ function defectStatusLabel(item: WorkstationDefectItem): string {
   return '确认缺陷'
 }
 
-function openDefectResult(item: WorkstationDefectItem) {
+function openDefectResult(item: WorkstationDefectItem, rectify = false) {
+  rectificationIntent.value = rectify ? ++rectificationSequence : 0
   selectedDefectPartition.value = item.source === 'manual' ? 'manual' : 'confirmed'
   selectedDefectTarget.value =
     item.source === 'manual'

@@ -53,6 +53,7 @@ const props = defineProps<{
   visitId: string
   jobId: string
   initialTarget?: { source: 'auto' | 'manual'; ruleId?: string; defectId?: string; rootJobId?: string; envelopeId?: string } | null
+  openIntent?: number
 }>()
 const auth = useAuthStore()
 const open = ref(false),
@@ -175,4 +176,7 @@ watch(open, (value) => {
   if (!value) reset()
 })
 onUnmounted(reset)
+watch(() => props.openIntent, (intent) => {
+  if (intent && props.initialTarget) openForm()
+}, { immediate: true })
 </script>

@@ -80,6 +80,7 @@ const ResultDrawerStub = defineComponent({
     totalCount: { type: Number, default: undefined },
     initialDefectPartition: { type: String, default: 'confirmed' },
     initialDefectTarget: { type: Object, default: null },
+    rectificationIntent: { type: Number, default: 0 },
     scoreScene: { type: String, default: undefined },
   },
   emits: ['close', 'review-submitted', 'navigate-prev', 'navigate-next'],
@@ -306,6 +307,13 @@ describe('QcRecordResultListView', () => {
     const drawer = wrapper.getComponent(ResultDrawerStub)
     expect(drawer.props('initialDefectPartition')).toBe('manual')
     expect(drawer.props('initialDefectTarget')).toEqual({ source: 'manual', defectId: 'D1' })
+    expect(drawer.props('rectificationIntent')).toBe(0)
+    const buttons = wrapper.findAll('.qc-record-result-list-view__defect-row button')
+    await buttons[1].trigger('click')
+    expect(drawer.props('rectificationIntent')).toBeGreaterThan(0)
+    expect(drawer.props('initialDefectTarget')).toEqual({ source: 'manual', defectId: 'D1' })
+    await buttons[0].trigger('click')
+    expect(drawer.props('rectificationIntent')).toBe(0)
     expect(drawer.props('focus')).toMatchObject({
       instituteId: 'H',
       patientId: 'P',

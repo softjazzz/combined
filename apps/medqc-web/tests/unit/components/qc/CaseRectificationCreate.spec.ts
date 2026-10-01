@@ -62,6 +62,17 @@ beforeEach(() => {
   mocks.create.mockResolvedValue({ id: 'rect1' })
 })
 describe('病例缺陷整改派发', () => {
+  it('列表整改直达意图自动展开冻结缺陷处理，普通查看不自动展开', async () => {
+    const initialTarget = { source: 'auto', ruleId: 'R1', rootJobId: 'J1', envelopeId: 'E1' }
+    const wrapper = make({ initialTarget })
+    await flushPromises()
+    expect(mocks.candidates).not.toHaveBeenCalled()
+    await wrapper.setProps({ openIntent: 1 })
+    await flushPromises()
+    expect(mocks.candidates).toHaveBeenCalledWith({ institute_id: 'H1', patient_id: 'P1', visit_id: 'V1' }, 'J1')
+    expect(wrapper.findComponent({ name: 'HomeRectificationTodos' }).exists()).toBe(true)
+    wrapper.unmount()
+  })
   it('缺陷列表所选项冻结八维处理来源，不挂到其他缺陷或新一轮', async () => {
     mocks.candidates.mockResolvedValue({ targets: [target, { ...target, target_id: 'R2' }], doctors: [] })
     const wrapper = make({ initialTarget: { source: 'auto', ruleId: 'R1', rootJobId: 'J1', envelopeId: 'E1' } })
