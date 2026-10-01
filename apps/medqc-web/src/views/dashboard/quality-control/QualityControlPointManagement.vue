@@ -691,6 +691,7 @@ async function saveApplicability() {
     message.warning('请明确选择科室范围和医生端开关')
     return
   }
+  const configuredScopeMode = scopeMode.value
   let departmentRefs: Array<{ institute_id: string; department_name: string }>
   try {
     departmentRefs = parseDepartmentRefs()
@@ -720,7 +721,7 @@ async function saveApplicability() {
         targets.has(entry.rule_id)
           ? {
               ...entry,
-              department_scope_mode: scopeMode.value,
+              department_scope_mode: configuredScopeMode,
               department_refs: departmentRefs,
               doctor_visible: doctorVisibleChoice.value === 'visible',
             }
