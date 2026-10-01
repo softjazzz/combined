@@ -27,6 +27,16 @@ def test_actor_from_login_and_bounded_pagination(client):
     assert http.get("/api/v1/defect-rectifications?page_size=101").status_code == 422
 
 
+def test_comparison_requires_exact_submit_event_and_login(client):
+    http, service = client
+    service.comparison.return_value = {"available": False, "documents": []}
+    assert http.get("/api/v1/defect-rectifications/t1/comparison").status_code == 422
+    assert http.get("/api/v1/defect-rectifications/t1/comparison?event_id=submit1").status_code == 200
+    service.comparison.assert_called_once_with("u1", "t1", "submit1")
+    service.comparison.side_effect = RectificationError("无权访问", 403)
+    assert http.get("/api/v1/defect-rectifications/t1/comparison?event_id=submit1").status_code == 403
+
+
 @pytest.mark.parametrize("body", [
     {"version": True, "action": "submit", "comment": "这是足够长的整改说明内容"},
     {"version": 1, "action": "approve", "comment": "短"},

@@ -1,6 +1,7 @@
 """现代已保存缺陷的整改状态与站内待办；旧主键整改留在旧入口。"""
 
 from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy.orm import deferred
 
 from ..connection import Base
 
@@ -28,6 +29,7 @@ class DefectRectification(Base):
     version = Column(Integer, nullable=False, default=1)
     submission = Column(Text)
     review_comment = Column(Text)
+    dispatch_document_snapshot = deferred(Column(Text))
     created_at = Column(DateTime, nullable=False)
     updated_at = Column(DateTime, nullable=False)
     __table_args__ = (
@@ -51,6 +53,7 @@ class DefectRectificationEvent(Base):
     comment = Column(Text, nullable=False)
     recipient_id = Column(String(36), nullable=False)
     related_event_id = Column(String(36), ForeignKey("qc.qc_defect_rectification_events.id"))
+    submission_document_snapshot = deferred(Column(Text))
     created_at = Column(DateTime, nullable=False)
     __table_args__ = (
         UniqueConstraint("rectification_id", "version", name="uq_rectification_event_version"),

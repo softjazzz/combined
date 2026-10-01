@@ -101,3 +101,9 @@ def detail(task_id: str, user=Depends(get_current_user)):
 @router.post("/{task_id}/actions")
 def action(task_id: str, body: Action, user=Depends(get_current_user)):
     return _call(user, service.transition, task_id, **body.model_dump())
+
+
+@router.get("/{task_id}/comparison")
+def comparison(task_id: str, event_id: str = Query(min_length=1, max_length=36),
+               user=Depends(get_current_user)):
+    return _call(user, service.comparison, task_id, event_id)

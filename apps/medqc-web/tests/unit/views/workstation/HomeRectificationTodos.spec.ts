@@ -2,11 +2,12 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import HomeRectificationTodos from '@/views/workstation/HomeRectificationTodos.vue'
 
-const mocks = vi.hoisted(() => ({ list: vi.fn(), detail: vi.fn(), act: vi.fn(), roles: ['doctor'], userId: 'd1' }))
+const mocks = vi.hoisted(() => ({ list: vi.fn(), detail: vi.fn(), act: vi.fn(), comparison: vi.fn(), roles: ['doctor'], userId: 'd1' }))
 vi.mock('@/api/defectRectifications', () => ({
   listRectifications: mocks.list,
   getRectification: mocks.detail,
   actOnRectification: mocks.act,
+  getRectificationComparison: mocks.comparison,
 }))
 vi.mock('@/stores/auth', () => ({
   useAuthStore: () => ({
@@ -66,6 +67,58 @@ beforeEach(() => {
   mocks.act.mockResolvedValue({ ...task, status: 'submitted' })
 })
 describe('站内整改待办', () => {
+  it('按需读取选中提交版本，字段差异高亮且不推断整改完成', async () => {
+    mocks.detail.mockResolvedValue({ ...task, events: [{ id: 'submit1', action: 'submit', comment: '合成提交', created_at: '2026-10-01', version: 2 }] })
+    const before = { label: '合成入院记录', content: '合成前正文', sections: [{ source_field: 'history', label: '现病史', text: '合成前字段' }] }
+    const after = { ...before, content: '合成后正文', sections: [{ source_field: 'history', label: '现病史', text: '合成后字段' }] }
+    mocks.comparison.mockResolvedValue({ available: true, documents: [{ key: ['admission', 'admission_record', 'doc1'], state: 'matched', before, after }] })
+    const wrapper = make()
+    await flushPromises()
+    await wrapper.get('li button').trigger('click')
+    await flushPromises()
+    expect(mocks.comparison).not.toHaveBeenCalled()
+    await wrapper.findAll('button').find((button) => button.text() === '查看本次正文比较')!.trigger('click')
+    await flushPromises()
+    expect(mocks.comparison).toHaveBeenCalledWith('r1', 'submit1')
+    expect(wrapper.text()).toContain('派发时 / 本次提交时正文')
+    expect(wrapper.get('.comparison-row.changed').text()).toContain('合成前字段')
+    expect(wrapper.text()).toContain('合成后正文')
+    expect(mocks.act).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+  it('旧整改缺少快照明确不可比较，读取故障不显示无差异', async () => {
+    mocks.detail.mockResolvedValue({ ...task, events: [{ id: 'submit1', action: 'submit', comment: '合成提交', created_at: '2026-10-01', version: 2 }] })
+    mocks.comparison.mockResolvedValue({ available: false, reason: '缺少派发快照不可比较', documents: [] })
+    const wrapper = make()
+    await flushPromises()
+    await wrapper.get('li button').trigger('click')
+    await flushPromises()
+    const button = wrapper.findAll('button').find((item) => item.text() === '查看本次正文比较')!
+    await button.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('缺少派发快照不可比较')
+    mocks.comparison.mockRejectedValue(new Error('文书读取失败'))
+    await button.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('文书读取失败')
+    expect(wrapper.text()).not.toContain('缺少派发快照不可比较')
+    wrapper.unmount()
+  })
+  it('切换所选缺陷后丢弃迟到的私有正文比较', async () => {
+    mocks.detail.mockResolvedValue({ ...task, events: [{ id: 'submit1', action: 'submit', comment: '合成提交', created_at: '2026-10-01', version: 2 }] })
+    let resolve!: (value: unknown) => void
+    mocks.comparison.mockImplementation(() => new Promise((done) => { resolve = done }))
+    const wrapper = make()
+    await flushPromises()
+    await wrapper.get('li button').trigger('click')
+    await flushPromises()
+    await wrapper.findAll('button').find((item) => item.text() === '查看本次正文比较')!.trigger('click')
+    await wrapper.setProps({ refreshKey: 1 })
+    resolve({ available: true, documents: [{ key: ['admission', 'record', 'doc'], state: 'matched', before: { label: '不应显示', content: '迟到私有正文', sections: [] }, after: { label: '不应显示', content: '迟到私有正文', sections: [] } }] })
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('迟到私有正文')
+    wrapper.unmount()
+  })
   it('八维所选缺陷范围查询全部状态并拒绝串入新轮详情', async () => {
     const scope = { institute_id: 'H1', patient_id: 'P1', visit_id: 'V1', scene: 'running',
       target_kind: 'canonical_defect', target_id: 'R1', root_job_id: 'J1', envelope_id: 'E1' }

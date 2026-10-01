@@ -123,7 +123,8 @@ def _visible(target, person):
 
 
 def _view(row):
-    return {c.name: getattr(row, c.name) for c in row.__table__.columns}
+    return {c.name: getattr(row, c.name) for c in row.__table__.columns
+            if c.name not in {"dispatch_document_snapshot", "submission_document_snapshot"}}
 
 
 def _active_urge_ids(events):
@@ -136,12 +137,18 @@ def _active_urge_ids(events):
 
 class DefectRectificationService:
     def __init__(self, session_factory=None, source_loader=None, department_loader=None,
-                 person_loader=None, visibility_check=None):
+                 person_loader=None, visibility_check=None, document_loader=None):
         self.sessions = session_factory or SessionLocal
         self.source = source_loader or _source
         self.department = department_loader or _department
         self.person = person_loader or _person
         self.visible = visibility_check or _visible
+        self.document_loader = document_loader
+
+    def _snapshot(self, row):
+        from .rectification_document_snapshot import capture_documents
+        identity = {key: getattr(row, key) for key in ("institute_id", "patient_id", "visit_id")}
+        return capture_documents(identity, loader=self.document_loader)
 
     def candidates(self, actor_id, *, institute_id, patient_id, visit_id, expected_job_id):
         from .custom_qc_workspace_service import CustomQCWorkspaceService
@@ -203,11 +210,13 @@ class DefectRectificationService:
                 )} | {"label": row.rule_name or row.rule_code or "人工缺陷"})
             return {"targets": targets, "doctors": doctors, "department": department}
 
-    def _event(self, session, row, actor, action, old, comment, recipient, related_event_id=None):
+    def _event(self, session, row, actor, action, old, comment, recipient, related_event_id=None,
+               document_snapshot=None):
         session.add(Event(id=str(uuid4()), rectification_id=row.id, action=action,
                           actor_id=actor["id"], old_status=old, new_status=row.status,
                           version=row.version, comment=comment, recipient_id=recipient,
-                          created_at=_now(), related_event_id=related_event_id))
+                          created_at=_now(), related_event_id=related_event_id,
+                          submission_document_snapshot=document_snapshot))
 
     def create(self, actor_id, data):
         try:
@@ -231,6 +240,7 @@ class DefectRectificationService:
                 )}, department=department, creator_id=actor_id, assignee_id=assignee["id"],
                     assignee_name=assignee["name"], requirement=data["requirement"],
                     status="pending", version=1, created_at=now, updated_at=now)
+                row.dispatch_document_snapshot = self._snapshot(row)
                 session.add(row)
                 session.flush()
                 self._event(session, row, actor, "assign", None, data["requirement"], assignee["id"])
@@ -286,14 +296,31 @@ class DefectRectificationService:
                 recipient = row.assignee_id
             else:
                 raise RectificationError("不支持的整改操作")
+            snapshot = self._snapshot(row) if action == "submit" else None
             changed = session.execute(update(Task).where(Task.id == row.id, Task.version == version)
                                       .values(**changes, version=version + 1, updated_at=_now()))
             if changed.rowcount != 1:
                 raise RectificationError("整改已被更新，请刷新", 409)
             session.refresh(row)
-            self._event(session, row, actor, action, old, comment, recipient, urge_event_id)
+            self._event(session, row, actor, action, old, comment, recipient, urge_event_id, snapshot)
             session.flush()
             return _view(row)
+
+    def comparison(self, actor_id, task_id, event_id):
+        from .rectification_document_snapshot import compare_documents
+        with self.sessions() as session:
+            actor = self.person(session, actor_id)
+            row = session.get(Task, task_id)
+            if row is None:
+                raise RectificationError("整改记录不存在", 404)
+            _scope(actor, row.institute_id, row.department, assignee_id=row.assignee_id)
+            event = session.execute(select(Event).where(
+                Event.id == event_id, Event.rectification_id == row.id, Event.action == "submit",
+            )).scalar_one_or_none()
+            if event is None:
+                raise RectificationError("该整改提交不存在", 404)
+            identity = {key: getattr(row, key) for key in ("institute_id", "patient_id", "visit_id")}
+            return compare_documents(row.dispatch_document_snapshot, event.submission_document_snapshot, identity)
 
     def list(self, actor_id, *, state=None, page=1, page_size=20, source=None):
         with self.sessions() as session:

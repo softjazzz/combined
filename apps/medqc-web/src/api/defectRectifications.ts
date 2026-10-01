@@ -71,6 +71,28 @@ export const listRectifications = (state?: RectificationState, page = 1, source?
   })
 export const getRectification = (id: string) =>
   request<RectificationDetail>({ url: `${base}/${encodeURIComponent(id)}`, method: 'GET' })
+export interface RectificationDocumentSnapshot {
+  label: string
+  content: string
+  sections: Array<{ source_field: string; label: string; text: string }>
+}
+export interface RectificationComparison {
+  available: boolean
+  reason?: string
+  before_at?: string
+  after_at?: string
+  unavailable_documents?: number
+  documents: Array<{
+    key: string[]
+    state: 'added' | 'missing' | 'empty' | 'matched'
+    before: RectificationDocumentSnapshot | null
+    after: RectificationDocumentSnapshot | null
+  }>
+}
+export const getRectificationComparison = (id: string, eventId: string) =>
+  request<RectificationComparison>({
+    url: `${base}/${encodeURIComponent(id)}/comparison`, method: 'GET', params: { event_id: eventId },
+  })
 export const actOnRectification = (
   id: string,
   version: number,

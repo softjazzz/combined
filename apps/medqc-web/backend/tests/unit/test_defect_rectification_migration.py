@@ -53,3 +53,21 @@ def test_withdrawal_migration_preserves_qc_event_owner(monkeypatch):
     with pytest.raises(RuntimeError):
         module.downgrade()
     operations.drop_column.assert_not_called()
+
+
+def test_snapshot_migration_has_nullable_no_backfill_and_nonempty_downgrade_refused(monkeypatch):
+    path = Path(__file__).parents[2] / "alembic/versions/20261001_000079_rectification_document_snapshots.py"
+    spec = importlib.util.spec_from_file_location("snapshot_migration", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    operations = Mock()
+    monkeypatch.setattr(module, "op", operations)
+    module.upgrade()
+    assert module.down_revision == "20261001_000078"
+    assert len(operations.add_column.call_args_list) == 2
+    assert all(call.kwargs["schema"] == "qc" and call.args[1].nullable for call in operations.add_column.call_args_list)
+    operations.execute.assert_not_called()
+    operations.get_bind.return_value.execute.return_value.scalar.return_value = 1
+    with pytest.raises(RuntimeError):
+        module.downgrade()
+    operations.drop_column.assert_not_called()

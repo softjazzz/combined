@@ -12,6 +12,12 @@ from app.services.defect_rectification_service import (
 )
 
 
+def document_payload(document):
+    return {"documents": [deepcopy(document)], "domain_projection": {"domains": {
+        "admission": {"per_source": {"admission_record": {"has_more": False}}},
+    }}}
+
+
 @pytest.mark.parametrize("role,roles_json", [
     (None, None), ("", None), (" ", ""), (None, "[]"), ("doctor", "[]"),
     (None, "broken"), ("doctor", "broken"), ("doctor", '{"role": "doctor"}'),
@@ -73,6 +79,8 @@ def setup():
     service = DefectRectificationService(
         sessions, source, lambda session, identity: "内科",
         lambda session, user_id: deepcopy(people[user_id]), lambda target, person: None,
+        document_loader=lambda **identity: document_payload({"execution_domain": "admission",
+            "doc_type": "admission_record", "document_id": "synthetic-doc", "content": "合成正文", "sections": []}),
     )
     return service, sessions, people, data
 
@@ -94,6 +102,55 @@ def test_full_cycle_and_station_events_without_appeal_or_defect_updates(setup):
     assert [event["action"] for event in detail["events"]] == ["assign", "urge", "submit", "reject", "submit", "approve"]
     assert [event["recipient_id"] for event in detail["events"]] == ["doc", "doc", "qc", "doc", "qc", "doc"]
     assert service.list("doc", state="pending")["total"] == 0
+
+
+def test_document_versions_are_private_immutable_and_each_submit_is_preserved(setup):
+    service, sessions, _, data = setup
+    document = {"execution_domain": "admission", "doc_type": "admission_record", "document_id": "synthetic-doc", "content": "派发正文"}
+    service.document_loader = lambda **identity: document_payload(document)
+    created = service.create("qc", data)
+    document["content"] = "第一次提交正文"
+    service.transition("doc", created["id"], version=1, action="submit", comment="合成医生第一次提交说明")
+    service.transition("qc", created["id"], version=2, action="reject", comment="合成质控驳回后继续整改")
+    document["content"] = "第二次提交正文"
+    service.transition("doc", created["id"], version=3, action="submit", comment="合成医生第二次提交说明")
+    detail = service.detail("doc", created["id"])
+    assert "dispatch_document_snapshot" not in created
+    assert "dispatch_document_snapshot" not in service.list("qc")["items"][0]
+    assert all("submission_document_snapshot" not in event for event in detail["events"])
+    submits = [event for event in detail["events"] if event["action"] == "submit"]
+    for event, content in zip(submits, ("第一次提交正文", "第二次提交正文")):
+        result = service.comparison("doc", created["id"], event["id"])
+        assert result["documents"][0]["before"]["content"] == "派发正文"
+        assert result["documents"][0]["after"]["content"] == content
+    with pytest.raises(RectificationError) as error:
+        service.comparison("other", created["id"], submits[0]["id"])
+    assert error.value.status == 403
+    with pytest.raises(RectificationError):
+        service.comparison("cross", created["id"], submits[0]["id"])
+    with pytest.raises(RectificationError):
+        service.comparison("qc", created["id"], detail["events"][0]["id"])
+    with sessions() as session:
+        assert session.get(Task, created["id"]).dispatch_document_snapshot
+
+
+def test_document_source_failure_rolls_back_assignment_and_submission(setup):
+    service, sessions, _, data = setup
+    def fault(**identity):
+        raise RuntimeError("synthetic-source-failure")
+    service.document_loader = fault
+    with pytest.raises(RuntimeError):
+        service.create("qc", data)
+    with sessions() as session:
+        assert session.scalar(select(func.count()).select_from(Task)) == 0
+        assert session.scalar(select(func.count()).select_from(Event)) == 0
+    service.document_loader = lambda **identity: document_payload({"execution_domain": "admission", "doc_type": "admission_record", "document_id": "synthetic-doc", "content": "合成正文"})
+    created = service.create("qc", data)
+    service.document_loader = fault
+    with pytest.raises(RuntimeError):
+        service.transition("doc", created["id"], version=1, action="submit", comment="合成医生提交整改说明")
+    assert service.detail("doc", created["id"])["status"] == "pending"
+    assert len(service.detail("doc", created["id"])["events"]) == 1
 
 
 def test_same_round_unique_but_new_round_distinct(setup):

@@ -67,10 +67,29 @@
           </a-space>
         </a-form>
         <h3>操作记录</h3>
+        <a-alert v-if="comparisonError" :message="comparisonError" type="error" show-icon />
+        <section v-if="comparison" class="document-comparison">
+          <h3>派发时 / 本次提交时正文</h3>
+          <p v-if="!comparison.available">{{ comparison.reason }}</p>
+          <template v-else>
+            <p>{{ comparison.before_at }} / {{ comparison.after_at }}</p>
+            <p v-if="comparison.unavailable_documents">{{ comparison.unavailable_documents }} 份文书缺少稳定标识或完整正文，不可比较</p>
+            <article v-for="document in comparison.documents" :key="document.key.join(':')">
+              <h4>{{ document.before?.label || document.after?.label }} · {{ comparisonStates[document.state] }}</h4>
+              <template v-if="document.state === 'matched'">
+                <div v-for="field in compareFields(document.before!, document.after!)" :key="field.key" :class="['comparison-row', { changed: field.changed }]">
+                  <strong>{{ field.label }}</strong><pre>{{ field.before }}</pre><pre>{{ field.after }}</pre>
+                </div>
+              </template>
+              <div v-else class="comparison-row"><pre>{{ document.before?.content || '无可比较正文' }}</pre><pre>{{ document.after?.content || '无可比较正文' }}</pre></div>
+            </article>
+          </template>
+        </section>
         <a-timeline>
           <a-timeline-item v-for="event in selected.events" :key="event.id">
             {{ eventLabels[event.action] || event.action }} · {{ event.comment }}
             <div>{{ event.created_at }}</div>
+            <a-button v-if="event.action === 'submit'" :loading="comparisonLoading" @click="compare(event.id)">查看本次正文比较</a-button>
             <a-button
               v-if="manager && event.can_withdraw"
               :disabled="saving || uncertain || comment.trim().length < 10"
@@ -90,6 +109,9 @@ import { useAuthStore } from '@/stores/auth'
 import {
   actOnRectification,
   getRectification,
+  getRectificationComparison,
+  type RectificationComparison,
+  type RectificationDocumentSnapshot,
   listRectifications,
   type Rectification,
   type RectificationAction,
@@ -131,6 +153,49 @@ const error = ref(''),
   detailError = ref(''),
   comment = ref('')
 const activeId = ref('')
+const comparison = ref<RectificationComparison | null>(null)
+const comparisonError = ref(''), comparisonLoading = ref(false)
+let comparisonToken = 0
+const comparisonStates = { added: '仅提交时快照存在', missing: '仅派发时快照存在', empty: '空正文不可比较', matched: '同文书' }
+function compareFields(before: RectificationDocumentSnapshot, after: RectificationDocumentSnapshot) {
+  const index = (document: RectificationDocumentSnapshot) => {
+    const fields = new Map<string, { label: string; text: string }>()
+    for (const section of document.sections) {
+      if (!section.source_field || fields.has(section.source_field)) return null
+      fields.set(section.source_field, section)
+    }
+    return fields.size ? fields : null
+  }
+  const old = index(before), current = index(after)
+  if (!old || !current) return [{ key: 'content', label: '完整正文', before: before.content, after: after.content, changed: before.content !== after.content }]
+  const fields = [...new Set([...old.keys(), ...current.keys()])].map((key) => ({
+    key: `field:${key}`, label: old.get(key)?.label || current.get(key)?.label || key,
+    before: old.get(key)?.text ?? '字段缺失', after: current.get(key)?.text ?? '字段缺失',
+    changed: old.get(key)?.text !== current.get(key)?.text,
+  }))
+  return [...fields, { key: 'content', label: '完整正文', before: before.content, after: after.content, changed: before.content !== after.content }]
+}
+async function compare(eventId: string) {
+  if (!selected.value) return
+  const token = ++comparisonToken
+  comparison.value = null
+  comparisonError.value = ''
+  comparisonLoading.value = true
+  try {
+    const result = await getRectificationComparison(selected.value.id, eventId)
+    if (token === comparisonToken) comparison.value = result
+  } catch (e) {
+    if (token === comparisonToken) comparisonError.value = e instanceof Error ? e.message : '文书比较不可用'
+  } finally {
+    if (token === comparisonToken) comparisonLoading.value = false
+  }
+}
+function resetComparison() {
+  ++comparisonToken
+  comparison.value = null
+  comparisonError.value = ''
+  comparisonLoading.value = false
+}
 let listToken = 0,
   detailToken = 0
 const actions = computed<Array<{ value: RectificationAction; label: string }>>(() => {
@@ -172,6 +237,7 @@ async function load() {
   }
 }
 async function show(id: string) {
+  resetComparison()
   const token = ++detailToken
   activeId.value = id
   open.value = true
@@ -210,6 +276,7 @@ async function submit(action: RectificationAction, urgeEventId?: string) {
   }
 }
 function reset() {
+  resetComparison()
   ++listToken
   ++detailToken
   items.value = []
@@ -228,7 +295,8 @@ watch(
   { immediate: true, deep: true },
 )
 watch(open, (value) => {
-  if (!value) {
+    if (!value) {
+    resetComparison()
     ++detailToken
     selected.value = null
     saving.value = false
@@ -279,4 +347,10 @@ li button {
 .rectification-todos__action {
   margin: 20px 0;
 }
+.document-comparison article { border-top: 1px solid #e5e7eb; }
+.comparison-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; padding: 8px 0; }
+.comparison-row strong { grid-column: 1 / -1; }
+.comparison-row pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; font: inherit; }
+.comparison-row.changed { background: #fff7d6; }
+@media (max-width: 480px) { .comparison-row { grid-template-columns: minmax(0, 1fr); } }
 </style>
