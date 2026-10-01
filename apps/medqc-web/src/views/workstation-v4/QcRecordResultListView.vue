@@ -71,7 +71,8 @@
         :resolve-initial-filters="!urlHadExplicitFilters && !filtersInitialized"
         :disabled="loading"
         :defect-view="activeView === 'defects'"
-        @apply="commitFilters"
+        @apply="handleTemplateFilters"
+        @default-resolved="hasUserDefaultTemplate = $event"
       />
       <div class="qc-record-result-list-view__toolbar">
         <div class="qc-record-result-list-view__filters" aria-label="病历筛选条件">
@@ -590,6 +591,16 @@ const filterSync = useRecordFilterUrlSync({
   onBeforeLoad: clearSelection,
 })
 const { activeFilters, urlHadExplicitFilters, filtersInitialized, commitFilters } = filterSync
+const hasUserDefaultTemplate = ref(false)
+const hasExplicitFilterSelection = ref(false)
+let defectViewVisited = false
+let lastDefectWorkflow: typeof defectWorkflowFilter.value = ''
+let recordViewReviewStates = [...reviewStateFilter.value]
+
+function handleTemplateFilters(filters: Parameters<typeof commitFilters>[0], scopeAll: boolean) {
+  if (filtersInitialized.value) hasExplicitFilterSelection.value = true
+  commitFilters(filters, scopeAll)
+}
 
 const departmentOptions = computed(() =>
   departments.value.map((item) => item.name).filter((name) => name && name !== '全部科室'),
@@ -614,9 +625,23 @@ function switchResultView(view: 'records' | 'defects') {
   if (activeView.value === view && resultView.value === view) return
   activeView.value = view
   resultView.value = view
-  if (view === 'defects') hasDefectFilter.value = null
-  else defectWorkflowFilter.value = ''
-  applyFilters()
+  if (view === 'defects') {
+    recordViewReviewStates = [...reviewStateFilter.value]
+    reviewStateFilter.value = []
+    hasDefectFilter.value = null
+    defectWorkflowFilter.value = defectViewVisited
+      ? lastDefectWorkflow
+      : !urlHadExplicitFilters && !hasUserDefaultTemplate.value && !hasExplicitFilterSelection.value
+        ? 'pending_work'
+        : defectWorkflowFilter.value
+    defectViewVisited = true
+  } else {
+    defectViewVisited = true
+    lastDefectWorkflow = defectWorkflowFilter.value
+    defectWorkflowFilter.value = ''
+    reviewStateFilter.value = [...recordViewReviewStates]
+  }
+  commitFilters(filterSync.currentFilterSnapshot())
 }
 
 function defectRowKey(item: WorkstationDefectItem): string {
@@ -897,6 +922,7 @@ function formatQcCompletedAt(value?: string | null): string {
 }
 
 function applyFilters() {
+  hasExplicitFilterSelection.value = true
   commitFilters(filterSync.currentFilterSnapshot())
 }
 

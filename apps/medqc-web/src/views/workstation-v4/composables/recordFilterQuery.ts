@@ -90,6 +90,12 @@ const SCORE_STATUS_VALUES: readonly RecordScoreFilterStatus[] = [
 const NUMBER_FIELDS = ['score_min', 'score_max'] as const
 const RESULT_VIEW_VALUES = ['records', 'defects'] as const
 const DEFECT_SOURCE_VALUES = ['all', 'auto', 'manual'] as const
+const DEFECT_WORKFLOW_VALUES = [
+  'all',
+  'clinical_appeal',
+  'pending_rectification',
+  'pending_work',
+] as const
 
 function isReviewState(value: unknown): value is RecordLatestReviewState {
   return typeof value === 'string' && (REVIEW_STATE_VALUES as readonly string[]).includes(value)
@@ -128,8 +134,8 @@ export function normalizeRecordFilter(snapshot: RecordFilterSnapshot): RecordFil
   if (typeof snapshot.has_defect === 'boolean') normalized.has_defect = snapshot.has_defect
   if (
     normalized.result_view === 'defects' &&
-    (snapshot.defect_workflow === 'clinical_appeal' ||
-      snapshot.defect_workflow === 'pending_rectification')
+    snapshot.defect_workflow &&
+    DEFECT_WORKFLOW_VALUES.includes(snapshot.defect_workflow)
   ) {
     normalized.defect_workflow = snapshot.defect_workflow
   }
@@ -163,7 +169,12 @@ export function parseRecordFilterQuery(query: LocationQuery): RecordFilterSnapsh
   }
   const hasDefect = firstQueryText(query[QUERY_KEY_BY_FIELD.has_defect])
   const workflow = firstQueryText(query[QUERY_KEY_BY_FIELD.defect_workflow])
-  if (workflow === 'clinical_appeal' || workflow === 'pending_rectification') {
+  if (
+    workflow === 'clinical_appeal' ||
+    workflow === 'pending_rectification' ||
+    workflow === 'pending_work' ||
+    workflow === 'all'
+  ) {
     snapshot.defect_workflow = workflow
   }
   if (hasDefect === 'true' || hasDefect === 'false') snapshot.has_defect = hasDefect === 'true'

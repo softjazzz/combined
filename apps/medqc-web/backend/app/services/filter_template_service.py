@@ -40,7 +40,7 @@ _ENUM_FILTERS = {
     "inpatient_sort": frozenset({"default", "longest", "recent"}),
     "result_view": frozenset({"records", "defects"}),
     "defect_source": frozenset({"all", "auto", "manual"}),
-    "defect_workflow": frozenset({"clinical_appeal", "pending_rectification"}),
+    "defect_workflow": frozenset({"all", "clinical_appeal", "pending_rectification", "pending_work"}),
 }
 FILTER_KEYS = frozenset({
     *_TEXT_FILTER_KEYS,

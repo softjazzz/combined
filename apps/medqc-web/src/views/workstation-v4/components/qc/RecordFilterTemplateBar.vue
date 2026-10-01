@@ -172,6 +172,7 @@ const emit = defineEmits<{
    * reviewScopeAll：true 表示审核角色显式选择“全部”（写入前端标记），false 表示移除该标记。
    */
   apply: [filters: RecordFilterSnapshot, reviewScopeAll: boolean]
+  defaultResolved: [hasUserDefault: boolean]
 }>()
 
 type QuickKey =
@@ -181,6 +182,7 @@ type QuickKey =
   | 'reviewing'
   | 'clinical_appeal'
   | 'pending_rectification'
+  | 'pending_work'
 
 interface QuickOption {
   key: QuickKey
@@ -226,6 +228,7 @@ const visibleQuickOptions = computed(() =>
   props.defectView
     ? ([
         QUICK_OPTIONS[0],
+        { key: 'pending_work', label: '待处理', states: [], reviewOnly: false },
         { key: 'clinical_appeal', label: '临床申诉（待处理）', states: [], reviewOnly: false },
         { key: 'pending_rectification', label: '待整改（已派发）', states: [], reviewOnly: false },
       ] as QuickOption[])
@@ -261,6 +264,7 @@ function templateOptionLabel(template: FilterTemplate): string {
 
 /** 系统默认：审核角色为“审核中”（待审核+待复审），其他角色为“全部”。 */
 function systemDefaultFilters(): RecordFilterSnapshot {
+  if (props.defectView) return { result_view: 'defects', defect_workflow: 'pending_work' }
   return canReview.value ? { review_state: ['pending_review', 'pending_recheck'] } : {}
 }
 
@@ -317,10 +321,13 @@ async function loadTemplates(): Promise<boolean> {
     loadFailed.value = true
     templates.value = []
     activeTemplateId.value = ''
+    emit('defaultResolved', false)
     return false
   }
   loadFailed.value = false
   templates.value = result.data
+  const preferred = defaultTemplate()
+  emit('defaultResolved', Boolean(preferred && templateSnapshot(preferred)))
   if (activeTemplateId.value && !activeTemplate.value) activeTemplateId.value = ''
   return true
 }
@@ -349,9 +356,11 @@ async function initialize() {
 function applyQuick(option: QuickOption) {
   if (props.defectView) {
     const workflow =
-      option.key === 'clinical_appeal' || option.key === 'pending_rectification'
+      option.key === 'clinical_appeal' ||
+      option.key === 'pending_rectification' ||
+      option.key === 'pending_work'
         ? option.key
-        : undefined
+        : 'all'
     emit(
       'apply',
       normalizeRecordFilter({

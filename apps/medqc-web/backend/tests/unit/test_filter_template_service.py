@@ -80,7 +80,7 @@ def test_create_normalizes_filters_and_name(sessions):
     }
 
 
-@pytest.mark.parametrize("workflow", ["clinical_appeal", "pending_rectification"])
+@pytest.mark.parametrize("workflow", ["all", "clinical_appeal", "pending_rectification", "pending_work"])
 def test_workflow_filter_round_trips_as_user_default(sessions, workflow):
     filters = {"result_view": "defects", "defect_workflow": workflow}
     created = _create(filters=filters, is_default=True)

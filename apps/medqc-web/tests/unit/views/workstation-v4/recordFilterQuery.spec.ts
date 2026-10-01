@@ -7,6 +7,12 @@ import {
 } from '@/views/workstation-v4/composables/recordFilterQuery'
 
 describe('recordFilterQuery', () => {
+  it.each(['pending_work', 'all'] as const)('组合默认与显式全部 %s 可刷新往返', (workflow) => {
+    const filters = { result_view: 'defects' as const, defect_workflow: workflow }
+    expect(mergeRecordFilterQuery({}, filters)).toEqual(filters)
+    expect(parseRecordFilterQuery(filters)).toEqual(filters)
+    expect(hasExplicitRecordQuery(filters)).toBe(true)
+  })
   it('申诉整改分区随URL往返，切回病历清除分区', () => {
     const filters = { result_view: 'defects' as const, defect_workflow: 'clinical_appeal' as const }
     const query = mergeRecordFilterQuery({}, filters)

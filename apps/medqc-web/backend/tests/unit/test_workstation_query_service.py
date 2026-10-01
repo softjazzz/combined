@@ -2432,7 +2432,9 @@ def test_workflow_filter_runs_before_exact_paging_and_default_does_not_read_owne
                    page=2, page_size=1)
     result = get_workstation_data(**options)
     assert calls == [] and result["total"] == 3
-    result = get_workstation_data(**options, defect_workflow="pending_rectification", defect_workflow_actor_id="qc")
+    result = get_workstation_data(**options, defect_workflow="all")
+    assert calls == [] and result["total"] == 3
+    result = get_workstation_data(**options, defect_workflow="pending_work", defect_workflow_actor_id="qc")
     assert result["total"] == 2 and result["totalPages"] == 2 and len(result["defects"]) == 1
     assert calls[0]["actor_id"] == "qc" and calls[0]["scene"] == "all"
 

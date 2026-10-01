@@ -318,7 +318,7 @@ describe('QcRecordResultListView', () => {
     await flushPromises()
     await wrapper.get('[data-testid="qc-result-view-defects"]').trigger('click')
     await flushPromises()
-    expect(mocks.getRaw.mock.lastCall?.[1]).not.toHaveProperty('defect_workflow')
+    expect(mocks.getRaw.mock.lastCall?.[1]).toHaveProperty('defect_workflow', 'pending_work')
     await wrapper.get('[data-testid="quick-filter-clinical_appeal"]').trigger('click')
     await flushPromises()
     expect(mocks.getRaw.mock.lastCall?.[1]).toMatchObject({
@@ -333,6 +333,62 @@ describe('QcRecordResultListView', () => {
     await flushPromises()
     expect(mocks.getRaw.mock.lastCall?.[1]).not.toHaveProperty('defect_workflow')
     expect(mocks.routerReplace.mock.lastCall?.[0].query).not.toHaveProperty('defect_workflow')
+  })
+
+  it('从默认审核中进入缺陷默认待处理，并清除病历审核筛选；显式全部再次切换仍保持', async () => {
+    mocks.hasRole.mockImplementation((role: string) => role === 'qc_manager')
+    const wrapper = mountView('inpatient')
+    await flushPromises()
+    expect(mocks.getRaw.mock.lastCall?.[1]).toHaveProperty(
+      'review_state',
+      'pending_review,pending_recheck',
+    )
+    await wrapper.get('[data-testid="qc-result-view-defects"]').trigger('click')
+    await flushPromises()
+    expect(mocks.getRaw.mock.lastCall?.[1]).toHaveProperty('defect_workflow', 'pending_work')
+    expect(mocks.getRaw.mock.lastCall?.[1]).not.toHaveProperty('review_state')
+    await wrapper.get('[data-testid="quick-filter-all"]').trigger('click')
+    await flushPromises()
+    expect(mocks.routerReplace.mock.lastCall?.[0].query).toHaveProperty('defect_workflow', 'all')
+    await wrapper.get('[data-testid="qc-result-view-records"]').trigger('click')
+    await flushPromises()
+    expect(mocks.getRaw.mock.lastCall?.[1]).toHaveProperty(
+      'review_state',
+      'pending_review,pending_recheck',
+    )
+    await wrapper.get('[data-testid="qc-result-view-defects"]').trigger('click')
+    await flushPromises()
+    expect(mocks.getRaw.mock.lastCall?.[1]).toHaveProperty('defect_workflow', 'all')
+  })
+
+  it('显式URL缺陷全部优先于系统默认', async () => {
+    routeState.query = { result_view: 'defects', defect_workflow: 'all' }
+    const wrapper = mountView('inpatient')
+    await flushPromises()
+    expect(mocks.getRaw.mock.lastCall?.[1]).toHaveProperty('defect_workflow', 'all')
+    expect(wrapper.get('[data-testid="quick-filter-all"]').attributes('aria-pressed')).toBe('true')
+  })
+
+  it('用户默认模板优先，切换缺陷不附加待处理组合', async () => {
+    mocks.listFilterTemplates.mockResolvedValue({
+      success: true,
+      data: [
+        {
+          id: 'default-all',
+          page_key: 'v5_records_inpatient',
+          name: '本人默认',
+          is_default: true,
+          version: 1,
+          filters: { dept: '内科' },
+        },
+      ],
+    })
+    const wrapper = mountView('inpatient')
+    await flushPromises()
+    await wrapper.get('[data-testid="qc-result-view-defects"]').trigger('click')
+    await flushPromises()
+    expect(mocks.getRaw.mock.lastCall?.[1]).not.toHaveProperty('defect_workflow')
+    expect(mocks.getRaw.mock.lastCall?.[1]).toHaveProperty('dept', '内科')
   })
 
   it('缺陷owner返回503时显示失败且不伪装成零缺陷', async () => {

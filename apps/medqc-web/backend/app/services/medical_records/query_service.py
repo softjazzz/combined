@@ -1544,7 +1544,7 @@ def get_workstation_data(
     normalized_result_view = str(result_view or "records").strip().lower()
     from ..defect_workflow_filter_service import WORKFLOW_FILTERS
     if defect_workflow is not None and (
-        defect_workflow not in WORKFLOW_FILTERS or normalized_result_view != "defects"
+        defect_workflow not in WORKFLOW_FILTERS | {"all"} or normalized_result_view != "defects"
     ):
         raise ValueError("defect_workflow 仅支持缺陷视图的临床申诉或待整改")
     if normalized_result_view not in {"records", "defects"}:
@@ -1950,7 +1950,7 @@ def get_workstation_data(
                 defect_rows = _build_workstation_defect_rows(
                     full_records, canonical, manual, source=normalized_defect_source,
                 )
-                if defect_workflow is not None:
+                if defect_workflow is not None and defect_workflow != "all":
                     from ..defect_workflow_filter_service import filter_defect_workflow
                     loader = defect_workflow_loader or filter_defect_workflow
                     defect_rows = loader(

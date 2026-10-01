@@ -13,7 +13,7 @@ from .record_review_service import (
 )
 from .custom_qc_workspace_service import CustomQCWorkspaceService
 
-WORKFLOW_FILTERS = frozenset({"clinical_appeal", "pending_rectification"})
+WORKFLOW_FILTERS = frozenset({"clinical_appeal", "pending_rectification", "pending_work"})
 SOURCE_KEYS = (
     "institute_id", "patient_id", "visit_id", "scene", "target_kind", "target_id",
     "root_job_id", "envelope_id",
@@ -71,17 +71,21 @@ def filter_defect_workflow(rows, *, workflow, actor_id, session_factory, scene):
             except (RecordReviewConflict, AppealManualTargetConflict, AppealManualTargetNotFound):
                 # 不完整或已换轮的引用是未知，不能串接历史状态。
                 continue
-        owner = QCAppeal if workflow == "clinical_appeal" else DefectRectification
-        states = ("pending", "reviewing") if workflow == "clinical_appeal" else ("pending", "rejected")
-        columns = [getattr(owner, key) for key in SOURCE_KEYS]
+        owners = []
+        if workflow in {"clinical_appeal", "pending_work"}:
+            owners.append((QCAppeal, ("pending", "reviewing")))
+        if workflow in {"pending_rectification", "pending_work"}:
+            owners.append((DefectRectification, ("pending", "rejected")))
         matching = set()
         keys = sorted({key for _, key in targets})
         # 空集合仍核对所选 owner 可读，迁移未部署不得伪装空结果。
-        for start in range(0, max(1, len(keys)), 100):
-            statement = select(*columns).where(
-                owner.status.in_(states), tuple_(*columns).in_(keys[start:start + 100]),
-            )
-            matching.update(tuple(row) for row in session.execute(statement).all())
+        for owner, states in owners:
+            columns = [getattr(owner, key) for key in SOURCE_KEYS]
+            for start in range(0, max(1, len(keys)), 100):
+                statement = select(*columns).where(
+                    owner.status.in_(states), tuple_(*columns).in_(keys[start:start + 100]),
+                )
+                matching.update(tuple(row) for row in session.execute(statement).all())
         return [row for row, key in targets if key in matching]
 
 

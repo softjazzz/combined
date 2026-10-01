@@ -85,7 +85,7 @@ describe('RecordFilterTemplateBar', () => {
     })
     await wrapper.get('[data-testid="quick-filter-all"]').trigger('click')
     expect(wrapper.emitted('apply')?.at(-1)).toEqual([
-      { result_view: 'defects', dept: '内科' },
+      { result_view: 'defects', dept: '内科', defect_workflow: 'all' },
       false,
     ])
   })
@@ -110,6 +110,25 @@ describe('RecordFilterTemplateBar', () => {
     expect(wrapper.emitted('apply')?.at(-1)?.[0]).toEqual({
       result_view: 'defects',
       defect_workflow: 'clinical_appeal',
+    })
+  })
+
+  it('缺陷视图系统默认与重置覆盖两个待处理来源', async () => {
+    const wrapper = mountBar({ defectView: true, resolveInitialFilters: true })
+    await flushPromises()
+    expect(wrapper.emitted('apply')?.at(-1)?.[0]).toEqual({
+      result_view: 'defects',
+      defect_workflow: 'pending_work',
+    })
+    await wrapper.get('[data-testid="quick-filter-all"]').trigger('click')
+    expect(wrapper.emitted('apply')?.at(-1)?.[0]).toEqual({
+      result_view: 'defects',
+      defect_workflow: 'all',
+    })
+    await wrapper.get('[data-testid="filter-template-reset"]').trigger('click')
+    expect(wrapper.emitted('apply')?.at(-1)?.[0]).toEqual({
+      result_view: 'defects',
+      defect_workflow: 'pending_work',
     })
   })
   beforeEach(() => {

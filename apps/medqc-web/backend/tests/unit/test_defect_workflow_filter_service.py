@@ -105,6 +105,17 @@ def test_unknown_workflow_is_rejected_before_database_read(setup):
     assert calls == []
 
 
+def test_pending_work_union_deduplicates_and_does_not_require_both_owners(setup):
+    sessions, _ = setup
+    save(sessions, Task)
+    save(sessions, QCAppeal)
+    assert filtered(sessions, "pending_work") == [ROW]
+    appeal_only = {**ROW, "rule_id": "LX0609-002"}
+    save(sessions, QCAppeal, id="synthetic-2", target_id="LX0609-002")
+    assert filtered(sessions, "pending_work", rows=[ROW, appeal_only]) == [ROW, appeal_only]
+    assert filtered(sessions, "pending_rectification", rows=[ROW, appeal_only]) == [ROW]
+
+
 def test_five_thousand_cases_read_job_once_and_never_rebuild_latest_result(setup):
     sessions, calls = setup
     rows = [{**ROW, "patient_id": f"P{number}"} for number in range(5000)]

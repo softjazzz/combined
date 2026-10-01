@@ -153,7 +153,7 @@ async def get_workstation_data_api(
         None, description="缺陷来源：全部、Canonical 自动缺陷、任务人工缺陷",
     ),
     has_defect: Optional[bool] = Query(None, description="病历视图按是否存在指定来源缺陷筛选"),
-    defect_workflow: Optional[Literal["clinical_appeal", "pending_rectification"]] = Query(
+    defect_workflow: Optional[Literal["all", "clinical_appeal", "pending_rectification", "pending_work"]] = Query(
         None, description="本轮待处理申诉或已派发待整改缺陷",
     ),
     current_user: Dict[str, Any] = Depends(get_current_user),
