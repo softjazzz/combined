@@ -94,6 +94,18 @@ def test_empty_one_time_draft_exposes_full_edit_and_replaces_plan(task_db):
     assert updated["rule_set_version"] == "v1"
 
 
+def test_record_type_mapping_is_preserved_in_draft_edit(task_db):
+    seed(task_db, scene="running", rule_set_key="running-rules")
+    types = {"institutes": [{"institute_id": "SYN-H", "critical": {"positive_codes": ["C+"], "negative_codes": ["C-"]}, "difficult": {"positive_codes": ["D+"], "negative_codes": ["D-"]}}], "overlap_policy": "priority", "priority": ["difficult", "critical"]}
+    updated = service.replace_draft_configuration(
+        "task-1", actor_id="owner", is_manager=False, expected_version=1,
+        configuration=configuration(record_refs=[], sampling_method="record_type_ratio", sampling_config={"case_scope": "active", "percentage": 50, "max_per_group": 2, "record_type_config": types}, assign_method="by_record_type"),
+    )
+    assert updated["sampling_config"]["record_type_config"] == types
+    assert updated["sampling_method"] == "record_type_ratio"
+    assert updated["assign_method"] == "by_record_type"
+
+
 def test_draft_plan_requires_owner_or_manager_and_rejects_stale_version(task_db):
     seed(task_db)
     with pytest.raises(service.TaskEditForbidden):

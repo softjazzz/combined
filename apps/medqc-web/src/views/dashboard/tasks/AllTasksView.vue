@@ -44,14 +44,22 @@
         aria-label="当前页任务"
         placeholder="选择当前页任务"
         style="width: 100%"
-        :options="tasks.map(task => ({ value: task.id, label: task.task_name }))"
+        :options="tasks.map((task) => ({ value: task.id, label: task.task_name }))"
       />
     </a-modal>
     <a-modal
       :open="assignDialogVisible"
       :title="batchAssigningTasks.length ? '批量分配质控任务' : '分配质控任务'"
       :confirm-loading="assignSubmitting"
-      :ok-button-props="{ disabled: assignLoading || !!assignError || assignRecoveryRequired || !selectedAssigneeIds.length || !assigneeCandidates.length || assignFallbackMissing }"
+      :ok-button-props="{
+        disabled:
+          assignLoading ||
+          !!assignError ||
+          assignRecoveryRequired ||
+          !selectedAssigneeIds.length ||
+          !assigneeCandidates.length ||
+          assignFallbackMissing,
+      }"
       :cancel-button-props="{ disabled: assignSubmitting }"
       :mask-closable="!assignSubmitting"
       :closable="!assignSubmitting"
@@ -60,11 +68,14 @@
       @cancel="closeAssignDialog"
     >
       <p class="mb-4 text-sm text-gray-600">
-        {{ batchAssigningTasks.length ? `已选择 ${batchAssigningTasks.length} 个任务` : assigningTask?.task_name }}
-        <span
-          v-if="assigningMethod"
-          data-testid="assign-method-label"
-        > · 分配方式：{{ ASSIGN_METHOD_LABELS[assigningMethod] }}</span>
+        {{
+          batchAssigningTasks.length
+            ? `已选择 ${batchAssigningTasks.length} 个任务`
+            : assigningTask?.task_name
+        }}
+        <span v-if="assigningMethod" data-testid="assign-method-label">
+          · 分配方式：{{ ASSIGN_METHOD_LABELS[assigningMethod] }}</span
+        >
       </p>
       <div
         v-if="batchAssigningTasks.length"
@@ -90,32 +101,14 @@
           data-testid="assign-fallback-group"
           :disabled="assignSubmitting"
         >
-          <a-radio value="by_ratio">
-            按比例分给选定人员
-          </a-radio>
-          <a-radio value="reject">
-            拒绝分配
-          </a-radio>
+          <a-radio value="by_ratio"> 按比例分给选定人员 </a-radio>
+          <a-radio value="reject"> 拒绝分配 </a-radio>
         </a-radio-group>
       </div>
-      <div
-        v-if="assignLoading"
-        data-testid="assign-loading"
-      >
-        正在读取质控员目录…
-      </div>
-      <div
-        v-else-if="assignError"
-        data-testid="assign-error"
-        role="alert"
-        class="text-red-700"
-      >
+      <div v-if="assignLoading" data-testid="assign-loading">正在读取质控员目录…</div>
+      <div v-else-if="assignError" data-testid="assign-error" role="alert" class="text-red-700">
         {{ assignError }}
-        <a-button
-          size="small"
-          :disabled="assignSubmitting"
-          @click="loadAssigneeOptions"
-        >
+        <a-button size="small" :disabled="assignSubmitting" @click="loadAssigneeOptions">
           重试
         </a-button>
       </div>
@@ -135,8 +128,36 @@
           mode="multiple"
           class="w-full"
           placeholder="选择质控员"
-          :options="assigneeCandidates.map((person) => ({ value: person.user_id, label: person.department ? `${person.user_name} · ${person.department}` : person.user_name }))"
+          :options="
+            assigneeCandidates.map((person) => ({
+              value: person.user_id,
+              label: person.department
+                ? `${person.user_name} · ${person.department}`
+                : person.user_name,
+            }))
+          "
         />
+        <template
+          v-if="
+            assigningMethod === 'by_record_type' ||
+            batchAssigningTasks.some((task) => task.assign_method === 'by_record_type')
+          "
+        >
+          <div v-for="userId in selectedAssigneeIds" :key="userId" class="mt-3">
+            <label
+              >{{
+                assigneeCandidates.find((person) => person.user_id === userId)?.user_name
+              }}受领类型桶</label
+            >
+            <a-select
+              v-model:value="assigneeTypes[userId]"
+              mode="multiple"
+              class="w-full"
+              :options="recordTypeOptions"
+              :disabled="assignSubmitting"
+            />
+          </div>
+        </template>
       </div>
       <div
         v-if="assignSubmitError"
@@ -150,12 +171,8 @@
 
     <!-- 页面标题 -->
     <div class="mb-8">
-      <h1 class="text-3xl font-bold text-gray-800 mb-2">
-        全部任务
-      </h1>
-      <p class="text-gray-600">
-        管理和监控系统中的所有质控任务
-      </p>
+      <h1 class="text-3xl font-bold text-gray-800 mb-2">全部任务</h1>
+      <p class="text-gray-600">管理和监控系统中的所有质控任务</p>
     </div>
 
     <TaskAssignmentResult
@@ -171,9 +188,7 @@
       <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
         <div class="flex items-center justify-between">
           <div>
-            <p class="text-gray-600 text-sm mb-1">
-              总任务数
-            </p>
+            <p class="text-gray-600 text-sm mb-1">总任务数</p>
             <p class="text-3xl font-bold text-gray-800">
               {{ formatStatValue(taskStats?.total ?? null) }}
             </p>
@@ -187,9 +202,7 @@
       <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
         <div class="flex items-center justify-between">
           <div>
-            <p class="text-gray-600 text-sm mb-1">
-              草稿
-            </p>
+            <p class="text-gray-600 text-sm mb-1">草稿</p>
             <p class="text-3xl font-bold text-orange-600">
               {{ formatStatValue(taskStats?.draft ?? null) }}
             </p>
@@ -203,9 +216,7 @@
       <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
         <div class="flex items-center justify-between">
           <div>
-            <p class="text-gray-600 text-sm mb-1">
-              进行中
-            </p>
+            <p class="text-gray-600 text-sm mb-1">进行中</p>
             <p class="text-3xl font-bold text-blue-600">
               {{ formatStatValue(taskStats?.in_progress ?? null) }}
             </p>
@@ -219,9 +230,7 @@
       <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
         <div class="flex items-center justify-between">
           <div>
-            <p class="text-gray-600 text-sm mb-1">
-              已完成
-            </p>
+            <p class="text-gray-600 text-sm mb-1">已完成</p>
             <p class="text-3xl font-bold text-green-600">
               {{ formatStatValue(taskStats?.completed ?? null) }}
             </p>
@@ -235,9 +244,7 @@
       <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
         <div class="flex items-center justify-between">
           <div>
-            <p class="text-gray-600 text-sm mb-1">
-              已取消
-            </p>
+            <p class="text-gray-600 text-sm mb-1">已取消</p>
             <p class="text-3xl font-bold text-red-600">
               {{ formatStatValue(taskStats?.cancelled ?? null) }}
             </p>
@@ -256,27 +263,14 @@
       class="flex items-center justify-between gap-4 rounded-lg border border-red-100 bg-red-50 px-4 py-3 mb-8 text-sm text-red-700"
     >
       <span>任务统计暂不可用：{{ statsError }}</span>
-      <a-button
-        size="small"
-        :loading="statsLoading"
-        @click="fetchStats"
-      >
-        重试
-      </a-button>
+      <a-button size="small" :loading="statsLoading" @click="fetchStats"> 重试 </a-button>
     </div>
 
     <!-- 管理操作区域 -->
     <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 mb-8">
-      <h2 class="text-xl font-semibold text-gray-800 mb-4">
-        任务管理
-      </h2>
+      <h2 class="text-xl font-semibold text-gray-800 mb-4">任务管理</h2>
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <a-button
-          type="primary"
-          size="large"
-          class="rounded-lg h-16"
-          @click="handleCreateTask"
-        >
+        <a-button type="primary" size="large" class="rounded-lg h-16" @click="handleCreateTask">
           <PlusOutlined class="text-lg" />
           <span class="ml-2">创建任务</span>
         </a-button>
@@ -288,13 +282,11 @@
           @click="handleBatchAssign"
         >
           <TeamOutlined class="text-lg" />
-          <span class="ml-2">批量分配{{ selectedBatchTasks.length ? `（${selectedBatchTasks.length}）` : '' }}</span>
+          <span class="ml-2"
+            >批量分配{{ selectedBatchTasks.length ? `（${selectedBatchTasks.length}）` : '' }}</span
+          >
         </a-button>
-        <a-button
-          size="large"
-          class="rounded-lg h-16"
-          @click="handleTaskTemplate"
-        >
+        <a-button size="large" class="rounded-lg h-16" @click="handleTaskTemplate">
           <FileOutlined class="text-lg" />
           <span class="ml-2">任务模板</span>
         </a-button>
@@ -323,11 +315,7 @@
           @change="handleSceneChange"
         />
 
-        <a-input
-          v-model:value="searchKeyword"
-          placeholder="搜索任务名称、编号"
-          class="rounded-lg"
-        >
+        <a-input v-model:value="searchKeyword" placeholder="搜索任务名称、编号" class="rounded-lg">
           <template #prefix>
             <SearchOutlined class="text-gray-400" />
           </template>
@@ -364,10 +352,7 @@
             <SearchOutlined />
             搜索
           </a-button>
-          <a-button
-            class="rounded-lg"
-            @click="handleReset"
-          >
+          <a-button class="rounded-lg" @click="handleReset">
             <ReloadOutlined />
             重置
           </a-button>
@@ -378,23 +363,13 @@
     <!-- 任务列表 -->
     <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
       <div class="flex justify-between items-center mb-6">
-        <h2 class="text-xl font-semibold text-gray-800">
-          任务列表
-        </h2>
+        <h2 class="text-xl font-semibold text-gray-800">任务列表</h2>
         <div class="flex space-x-2">
-          <a-button
-            data-testid="task-schedules"
-            @click="scheduleDrawerVisible = true"
-          >
+          <a-button data-testid="task-schedules" @click="scheduleDrawerVisible = true">
             <ClockCircleOutlined />
             定时计划
           </a-button>
-          <a-button
-            type="primary"
-            :loading="loading"
-            class="rounded-lg"
-            @click="handleRefresh"
-          >
+          <a-button type="primary" :loading="loading" class="rounded-lg" @click="handleRefresh">
             <ReloadOutlined />
             刷新
           </a-button>
@@ -418,13 +393,7 @@
         class="flex items-center justify-between gap-4 rounded-lg border border-red-100 bg-red-50 px-4 py-3 mb-5 text-sm text-red-700"
       >
         <span>任务列表暂不可用：{{ listError }}</span>
-        <a-button
-          size="small"
-          :loading="loading"
-          @click="fetchTasks"
-        >
-          重试
-        </a-button>
+        <a-button size="small" :loading="loading" @click="fetchTasks"> 重试 </a-button>
       </div>
 
       <a-table
@@ -452,17 +421,11 @@
             {{ sceneLabel((record as DashboardTaskItem).scene) }}
           </template>
           <template v-if="column.key === 'progress'">
-            <a-progress
-              :percent="(record as DashboardTaskItem).progress"
-              size="small"
-            />
+            <a-progress :percent="(record as DashboardTaskItem).progress" size="small" />
           </template>
           <template v-if="column.key === 'assignee'">
             <div class="flex items-center">
-              <a-avatar
-                size="small"
-                class="mr-2"
-              >
+              <a-avatar size="small" class="mr-2">
                 {{ (record as DashboardTaskItem).assignee?.charAt(0) }}
               </a-avatar>
               {{ (record as DashboardTaskItem).assignee || '未分配' }}
@@ -529,7 +492,14 @@ import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import type { TableColumnsType, TableProps } from 'ant-design-vue'
 import type { Dayjs } from 'dayjs'
-import { getTaskList, getTaskStats, deleteTask, assignTask, assignTasksBatch, getTaskAssigneeOptions } from '@/api/tasks'
+import {
+  getTaskList,
+  getTaskStats,
+  deleteTask,
+  assignTask,
+  assignTasksBatch,
+  getTaskAssigneeOptions,
+} from '@/api/tasks'
 import type {
   AssignFallback,
   TaskAssignableMethod,
@@ -614,6 +584,13 @@ const assignSubmitting = ref(false)
 const assignRecoveryRequired = ref(false)
 const assigneeCandidates = ref<TaskAssigneeOption[]>([])
 const selectedAssigneeIds = ref<string[]>([])
+const assigneeTypes = ref<Record<string, import('@/api/tasks').TaskRecordTypeBucket[]>>({})
+const recordTypeOptions = [
+  { value: 'critical', label: '危重桶' },
+  { value: 'difficult', label: '疑难桶' },
+  { value: 'critical_and_difficult', label: '危重且疑难桶' },
+  { value: 'ordinary', label: '双阴性普通桶' },
+]
 const assignFallback = ref<AssignFallback | undefined>(undefined)
 const lastAssignResult = ref<{ taskName: string; result: TaskAssignResult } | null>(null)
 let assignRequestId = 0
@@ -622,18 +599,24 @@ const ASSIGN_METHOD_LABELS: Record<TaskAssignableMethod, string> = {
   by_ratio: '按比例均分',
   by_original_reviewer: '原质控员',
   by_department: '按科室',
+  by_record_type: '按冻结病历类型桶',
 }
 const isAssignableMethod = (method: unknown): method is TaskAssignableMethod =>
-  method === 'by_ratio' || method === 'by_original_reviewer' || method === 'by_department'
+  method === 'by_ratio' ||
+  method === 'by_original_reviewer' ||
+  method === 'by_department' ||
+  method === 'by_record_type'
 const assigningMethod = computed<TaskAssignableMethod | null>(() => {
   if (batchAssigningTasks.value.length) return null
   const method = assigningTask.value?.assign_method
   return isAssignableMethod(method) ? method : null
 })
-const assignFallbackMissing = computed(() =>
-  !batchAssigningTasks.value.length &&
-  assigningMethod.value === 'by_original_reviewer' &&
-  assignFallback.value !== 'by_ratio' && assignFallback.value !== 'reject',
+const assignFallbackMissing = computed(
+  () =>
+    !batchAssigningTasks.value.length &&
+    assigningMethod.value === 'by_original_reviewer' &&
+    assignFallback.value !== 'by_ratio' &&
+    assignFallback.value !== 'reject',
 )
 const listError = ref('')
 let listRequestId = 0
@@ -674,8 +657,9 @@ const sceneOptions: Array<{ label: string; value: TaskSceneFilter }> = [
 const departmentOptions = computed(() => {
   const values = new Set(taskStats.value?.department_options || [])
   if (selectedDepartment.value) values.add(selectedDepartment.value)
-  return [...values].sort((left, right) => left.localeCompare(right, 'zh-CN'))
-    .map(value => ({ value, label: value }))
+  return [...values]
+    .sort((left, right) => left.localeCompare(right, 'zh-CN'))
+    .map((value) => ({ value, label: value }))
 })
 
 // 表格列配置
@@ -796,7 +780,10 @@ const openTaskAnalysis = (taskId: string) => {
 }
 
 const confirmAnalysisSelection = () => {
-  if (!analysisSelection.value || !tasks.value.some(task => task.id === analysisSelection.value)) {
+  if (
+    !analysisSelection.value ||
+    !tasks.value.some((task) => task.id === analysisSelection.value)
+  ) {
     message.warning('任务列表已变化，请重新选择任务')
     return
   }
@@ -810,35 +797,38 @@ const handleAnalysisDetail = (taskId: string) => {
   detailDrawerVisible.value = true
 }
 
-watch(() => authStore.user?.id, () => {
-  taskTemplateSeed.value = null
-  showTaskTemplateDrawer.value = false
-  showCreateDrawer.value = false
-  createDrawerKey.value += 1
-  analysisDrawerVisible.value = false
-  analysisPickerOpen.value = false
-  analysisTaskId.value = null
-  analysisSelection.value = undefined
-  editDrawerVisible.value = false
-  editTaskId.value = null
-  scheduleDrawerVisible.value = false
-  exportRequestId += 1
-  exporting.value = false
-  listRequestId += 1
-  statsRequestId += 1
-  loading.value = false
-  statsLoading.value = false
-  tasks.value = []
-  taskStats.value = null
-  pagination.value.total = 0
-  listError.value = ''
-  statsError.value = ''
-  appliedFilters.value = {}
-  if (authStore.user?.id) {
-    void fetchTasks()
-    void fetchStats()
-  }
-})
+watch(
+  () => authStore.user?.id,
+  () => {
+    taskTemplateSeed.value = null
+    showTaskTemplateDrawer.value = false
+    showCreateDrawer.value = false
+    createDrawerKey.value += 1
+    analysisDrawerVisible.value = false
+    analysisPickerOpen.value = false
+    analysisTaskId.value = null
+    analysisSelection.value = undefined
+    editDrawerVisible.value = false
+    editTaskId.value = null
+    scheduleDrawerVisible.value = false
+    exportRequestId += 1
+    exporting.value = false
+    listRequestId += 1
+    statsRequestId += 1
+    loading.value = false
+    statsLoading.value = false
+    tasks.value = []
+    taskStats.value = null
+    pagination.value.total = 0
+    listError.value = ''
+    statsError.value = ''
+    appliedFilters.value = {}
+    if (authStore.user?.id) {
+      void fetchTasks()
+      void fetchStats()
+    }
+  },
+)
 
 watch([selectedScene, searchKeyword, selectedStatus, selectedDepartment, dateRange], () => {
   exportRequestId += 1
@@ -943,19 +933,20 @@ const handleViewDetail = (record: DashboardTaskItem) => {
   detailDrawerVisible.value = true
 }
 
-const canAssign = (record: DashboardTaskItem) => !!authStore.user?.id
-  && record.creator_id === authStore.user.id
-  && isAssignableMethod(record.assign_method)
-  && record.status === 'sampling'
-  && !assignRecoveryRequired.value
+const canAssign = (record: DashboardTaskItem) =>
+  !!authStore.user?.id &&
+  record.creator_id === authStore.user.id &&
+  isAssignableMethod(record.assign_method) &&
+  record.status === 'sampling' &&
+  !assignRecoveryRequired.value
 
 const savedFallback = (record: DashboardTaskItem): AssignFallback | undefined => {
   const fallback = record.assignee_config?.fallback
   return fallback === 'by_ratio' || fallback === 'reject' ? fallback : undefined
 }
 
-const canBatchAssign = (record: DashboardTaskItem) => canAssign(record)
-  && (record.assign_method !== 'by_original_reviewer' || !!savedFallback(record))
+const canBatchAssign = (record: DashboardTaskItem) =>
+  canAssign(record) && (record.assign_method !== 'by_original_reviewer' || !!savedFallback(record))
 
 const selectedBatchTasks = computed(() => {
   const selected = new Set(selectedBatchTaskIds.value)
@@ -982,6 +973,7 @@ const handleAssign = (record: DashboardTaskItem) => {
   assigningTask.value = record
   assignDialogVisible.value = true
   selectedAssigneeIds.value = []
+  assigneeTypes.value = {}
   assigneeCandidates.value = []
   assignSubmitError.value = ''
   // 以创建时保存的处理方式预填；缺失时须在此显式选择
@@ -990,12 +982,14 @@ const handleAssign = (record: DashboardTaskItem) => {
 }
 
 const handleBatchAssign = () => {
-  if (assignSubmitting.value || assignRecoveryRequired.value || !selectedBatchTasks.value.length) return
+  if (assignSubmitting.value || assignRecoveryRequired.value || !selectedBatchTasks.value.length)
+    return
   assignRequestId += 1
   assigningTask.value = null
   batchAssigningTasks.value = [...selectedBatchTasks.value]
   assignDialogVisible.value = true
   selectedAssigneeIds.value = []
+  assigneeTypes.value = {}
   assigneeCandidates.value = []
   assignFallback.value = undefined
   assignSubmitError.value = ''
@@ -1010,6 +1004,7 @@ const closeAssignDialog = () => {
   batchAssigningTasks.value = []
   assigneeCandidates.value = []
   selectedAssigneeIds.value = []
+  assigneeTypes.value = {}
   assignFallback.value = undefined
   assignError.value = ''
   assignSubmitError.value = ''
@@ -1027,6 +1022,7 @@ const loadAssigneeOptions = async () => {
   assignError.value = ''
   assigneeCandidates.value = []
   selectedAssigneeIds.value = []
+  assigneeTypes.value = {}
   try {
     const result = await getTaskAssigneeOptions()
     if (requestId !== assignRequestId || !assignDialogVisible.value) return
@@ -1044,7 +1040,13 @@ const loadAssigneeOptions = async () => {
 }
 
 const submitAssignment = async () => {
-  if (assignSubmitting.value || assignLoading.value || assignError.value || assignRecoveryRequired.value) return
+  if (
+    assignSubmitting.value ||
+    assignLoading.value ||
+    assignError.value ||
+    assignRecoveryRequired.value
+  )
+    return
   if (batchAssigningTasks.value.length) {
     await submitBatchAssignment()
     return
@@ -1052,8 +1054,17 @@ const submitAssignment = async () => {
   if (!assigningTask.value || !canAssign(assigningTask.value)) return
   const method = assigningMethod.value
   if (!method || assignFallbackMissing.value) return
-  const selected = assigneeCandidates.value.filter((person) => selectedAssigneeIds.value.includes(person.user_id))
+  const selected = assigneeCandidates.value.filter((person) =>
+    selectedAssigneeIds.value.includes(person.user_id),
+  )
   if (!selected.length) return
+  if (
+    method === 'by_record_type' &&
+    selected.some((person) => !assigneeTypes.value[person.user_id]?.length)
+  ) {
+    assignSubmitError.value = '请为每位受领质控员明确选择类型桶'
+    return
+  }
   const taskId = assigningTask.value.id
   const taskName = assigningTask.value.task_name
   assignSubmitting.value = true
@@ -1065,11 +1076,18 @@ const submitAssignment = async () => {
         user_id: person.user_id,
         user_name: person.user_name,
         ...(person.department ? { department: person.department } : {}),
+        ...(method === 'by_record_type'
+          ? { record_types: assigneeTypes.value[person.user_id] }
+          : {}),
       })),
-      ...(method === 'by_original_reviewer' && assignFallback.value ? { fallback: assignFallback.value } : {}),
+      ...(method === 'by_original_reviewer' && assignFallback.value
+        ? { fallback: assignFallback.value }
+        : {}),
     })
     // 已知策略业务码在写入前判定，未落库，可调整人员后重试
-    const businessError = result.success ? undefined : describeTaskAssignError(result.errorDetail, result.status)
+    const businessError = result.success
+      ? undefined
+      : describeTaskAssignError(result.errorDetail, result.status)
     if (businessError) {
       assignSubmitError.value = businessError
       return
@@ -1098,8 +1116,15 @@ const submitAssignment = async () => {
 
 async function submitBatchAssignment() {
   const targets = batchAssigningTasks.value.filter(canBatchAssign)
-  const selected = assigneeCandidates.value.filter((person) => selectedAssigneeIds.value.includes(person.user_id))
+  const selected = assigneeCandidates.value.filter((person) =>
+    selectedAssigneeIds.value.includes(person.user_id),
+  )
   if (!targets.length || !selected.length || targets.length > 20) return
+  const needsRecordTypes = targets.some((task) => task.assign_method === 'by_record_type')
+  if (needsRecordTypes && selected.some((person) => !assigneeTypes.value[person.user_id]?.length)) {
+    assignSubmitError.value = '请为每位质控员明确选择可接收的冻结病历类型桶'
+    return
+  }
   assignSubmitting.value = true
   assignSubmitError.value = ''
   try {
@@ -1115,6 +1140,7 @@ async function submitBatchAssignment() {
         user_id: person.user_id,
         user_name: person.user_name,
         ...(person.department ? { department: person.department } : {}),
+        ...(needsRecordTypes ? { record_types: assigneeTypes.value[person.user_id] } : {}),
       })),
     })
     const data = result.data
@@ -1122,17 +1148,24 @@ async function submitBatchAssignment() {
     const responseItems = Array.isArray(data?.items) ? data.items : []
     const responseIds = responseItems.map((item) => item.task_id)
     const actualSuccessCount = responseItems.filter((item) => item.success).length
-    if (!result.success || !data || !Array.isArray(data.items)
-      || data.total !== targets.length || data.items.length !== data.total
-      || responseIds.length !== new Set(responseIds).size
-      || responseIds.some((taskId) => !expectedIds.has(taskId))
-      || data.success_count !== actualSuccessCount
-      || data.failed_count !== data.total - actualSuccessCount) {
+    if (
+      !result.success ||
+      !data ||
+      !Array.isArray(data.items) ||
+      data.total !== targets.length ||
+      data.items.length !== data.total ||
+      responseIds.length !== new Set(responseIds).size ||
+      responseIds.some((taskId) => !expectedIds.has(taskId)) ||
+      data.success_count !== actualSuccessCount ||
+      data.failed_count !== data.total - actualSuccessCount
+    ) {
       assignRecoveryRequired.value = true
       assignSubmitError.value = `批量分配结果未确认，请刷新任务列表核对后再操作。${result.message || ''}`
       return
     }
-    const successIds = new Set(data.items.filter((item) => item.success).map((item) => item.task_id))
+    const successIds = new Set(
+      data.items.filter((item) => item.success).map((item) => item.task_id),
+    )
     const failedItems = data.items.filter((item) => !item.success)
     selectedBatchTaskIds.value = selectedBatchTaskIds.value.filter((id) => !successIds.has(id))
     batchAssigningTasks.value = targets.filter((task) => !successIds.has(task.id))

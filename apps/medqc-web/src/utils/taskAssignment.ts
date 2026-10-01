@@ -9,6 +9,8 @@ export const TASK_ASSIGN_ERROR_CODES = [
   'department_missing',
   'department_unassigned',
   'method_unavailable',
+  'record_type_unassigned',
+  'record_type_unknown',
 ] as const
 
 export type TaskAssignErrorCode = (typeof TASK_ASSIGN_ERROR_CODES)[number]
@@ -42,6 +44,10 @@ export function describeTaskAssignError(
     case 'method_unavailable':
       if (status !== undefined && status !== 422) return undefined
       return `该分配方式当前不可用${suffix}`
+    case 'record_type_unassigned':
+    case 'record_type_unknown':
+      if (status !== undefined && status !== 409) return undefined
+      return reason || '冻结类型桶或受领人类型选择不完整，未执行分配'
     default:
       return undefined
   }
@@ -57,10 +63,13 @@ const REASON_LABELS: Array<[keyof TaskAssignReasonCounts, string]> = [
   ['original_reviewer', '原质控员'],
   ['department', '科室'],
   ['ratio_fallback', '按比例补充'],
+  ['record_type', '冻结类型桶'],
 ]
 
 /** 来源分布：只列出后端给出的合法非负整数字段。 */
-export function assignReasonParts(counts: TaskAssignReasonCounts | undefined | null): AssignReasonPart[] {
+export function assignReasonParts(
+  counts: TaskAssignReasonCounts | undefined | null,
+): AssignReasonPart[] {
   if (!counts || typeof counts !== 'object') return []
   return REASON_LABELS.flatMap(([key, label]) => {
     const value = counts[key]

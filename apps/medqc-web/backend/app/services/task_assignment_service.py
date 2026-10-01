@@ -19,7 +19,7 @@ from ..database.connection import SessionLocal
 from ..database.models.qc import QCRecordReview, QCTask, QCTaskRecord, SysUser
 from .auth_store import _normalize_roles
 
-SUPPORTED_ASSIGN_METHODS = frozenset({"by_ratio", "by_original_reviewer", "by_department"})
+SUPPORTED_ASSIGN_METHODS = frozenset({"by_ratio", "by_original_reviewer", "by_department", "by_record_type"})
 ORIGINAL_REVIEWER_FALLBACKS = frozenset({"by_ratio", "reject"})
 REASON_KEYS = ("original_reviewer", "department", "ratio_fallback")
 _REVIEW_LOOKUP_CHUNK = 500
@@ -299,6 +299,14 @@ def assign_task_records(
                 {"user_id": user_id, "user_name": str(users[user_id]["display_name"]).strip()}
                 for user_id in requested_ids
             ]
+            if method == "by_record_type":
+                from .task_sampling_service import RECORD_TYPE_BUCKETS
+                requested_types = {person["user_id"]: person.get("record_types") for person in assignees}
+                for person in verified_assignees:
+                    buckets = requested_types[person["user_id"]]
+                    if not isinstance(buckets, list) or not buckets or any(bucket not in RECORD_TYPE_BUCKETS for bucket in buckets) or len(buckets) != len(set(buckets)):
+                        raise AssignmentConflict("按类型分配须为每位质控员明确选择不重复的类型桶", code="record_type_unassigned")
+                    person["record_types"] = buckets
 
             rows = [dict(row) for row in session.execute(
                 select(QCTaskRecord.__table__)
@@ -346,6 +354,24 @@ def assign_task_records(
                 planned = _plan_by_original_reviewer(
                     rows, verified_assignees, _latest_reviewers(session, rows), str(fallback)
                 )
+            elif method == "by_record_type":
+                groups: dict[str, list[dict[str, Any]]] = {}
+                for row in rows:
+                    snapshot = row.get("record_type_snapshot")
+                    if isinstance(snapshot, str):
+                        try:
+                            snapshot = json.loads(snapshot)
+                        except ValueError:
+                            snapshot = None
+                    if not isinstance(snapshot, dict) or snapshot.get("schema_version") != "task-record-type-v1" or snapshot.get("source") != "cdm.mr_customize" or snapshot.get("bucket") not in RECORD_TYPE_BUCKETS:
+                        raise AssignmentConflict("任务病历缺少已冻结的已知类型桶，请重新核对抽样配置", code="record_type_unknown")
+                    groups.setdefault(snapshot["bucket"], []).append(row)
+                planned = []
+                for bucket, records in groups.items():
+                    staff = [person for person in verified_assignees if bucket in person["record_types"]]
+                    if not staff:
+                        raise AssignmentConflict(f"类型桶 {bucket} 未指定受领质控员", code="record_type_unassigned")
+                    planned.extend(_split_by_ratio(records, staff, "record_type"))
             else:
                 planned = _plan_by_department(rows, verified_assignees, {
                     user_id: str(users[user_id].get("department") or "").strip()
@@ -402,6 +428,8 @@ def assign_task_records(
                 if method != "by_ratio":
                     # by_ratio 响应保持原样；新方法按人统计获得途径。
                     detail["reason_counts"] = {key: reasons.count(key) for key in REASON_KEYS}
+                    if method == "by_record_type":
+                        detail["reason_counts"]["record_type"] = reasons.count("record_type")
                 details.append(detail)
             return {
                 "task_id": task_id,

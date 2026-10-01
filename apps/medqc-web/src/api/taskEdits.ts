@@ -16,7 +16,13 @@ export type TaskEditSamplingMethod =
   | 'qc_physician_ratio'
   | 'qc_reviewer_count'
   | 'qc_reviewer_ratio'
-export type TaskEditableAssignMethod = 'by_ratio' | 'by_original_reviewer' | 'by_department'
+  | 'record_type_count'
+  | 'record_type_ratio'
+export type TaskEditableAssignMethod =
+  | 'by_ratio'
+  | 'by_original_reviewer'
+  | 'by_department'
+  | 'by_record_type'
 export type TaskEditAssignMethod = TaskEditableAssignMethod | 'keep' | 'by_type' | 'by_record_type'
 export type TaskEditField =
   | 'task_name'
@@ -178,6 +184,8 @@ function parseTaskEditDetail(value: unknown, expectedTaskId: string): TaskEditDe
         'qc_physician_ratio',
         'qc_reviewer_count',
         'qc_reviewer_ratio',
+        'record_type_count',
+        'record_type_ratio',
       ].includes(String(value.sampling_method))) ||
     (value.sampling_config !== null && !isObject(value.sampling_config)) ||
     (value.assign_method !== null &&

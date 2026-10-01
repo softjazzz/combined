@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Any, Callable
 
-from sqlalchemy import DateTime, Integer, String, column, func, insert, literal_column, select, table, update
+from sqlalchemy import DateTime, Integer, String, JSON, column, func, insert, literal_column, select, table, update
 
 from ..database.connection import SessionLocal
 
@@ -53,6 +53,7 @@ _TASK_RECORDS = table(
     column("defect_count", Integer),
     column("created_at", DateTime),
     column("department", String),
+    column("record_type_snapshot", JSON),
 )
 _SNAPSHOT_FIELDS = (
     "scene",
@@ -202,7 +203,8 @@ def _candidate_department(record: dict[str, Any]) -> str | None:
 
 
 def _build_modern_task_records(
-    task_id: str, sampled_records: list[dict[str, Any]], allowed: set[tuple[str, str, str]] | None
+    task_id: str, sampled_records: list[dict[str, Any]], allowed: set[tuple[str, str, str]] | None,
+    *, record_type_required: bool = False,
 ) -> list[dict[str, Any]]:
     task_records: list[dict[str, Any]] = []
     seen: set[tuple[str, str, str]] = set()
@@ -214,6 +216,13 @@ def _build_modern_task_records(
         if allowed is not None and identity not in allowed:
             raise SamplingConflict("候选病历不属于任务指定的三坐标范围")
         seen.add(identity)
+        type_snapshot = record.get("record_type_snapshot")
+        if record_type_required and type_snapshot is None:
+            raise SamplingConflict("候选病历缺少抽样冻结类型事实")
+        if type_snapshot is not None:
+            from .task_sampling_service import RECORD_TYPE_BUCKETS
+            if not isinstance(type_snapshot, dict) or type_snapshot.get("schema_version") != "task-record-type-v1" or type_snapshot.get("source") != "cdm.mr_customize" or type_snapshot.get("bucket") not in RECORD_TYPE_BUCKETS | {"unknown"}:
+                raise SamplingConflict("候选病历冻结类型快照格式无效")
         association_id = str(uuid.uuid4())
         task_records.append(
             {
@@ -230,6 +239,7 @@ def _build_modern_task_records(
                 "defect_count": 0,
                 "created_at": created_at + timedelta(microseconds=index),
                 "department": _candidate_department(record),
+                **({"record_type_snapshot": record["record_type_snapshot"]} if "record_type_snapshot" in record else {}),
             }
         )
     if allowed is not None and seen != allowed:
@@ -323,7 +333,8 @@ def save_task_sample(
                     _ensure_snapshot_unchanged(task_snapshot, locked_task)
                 task_records = (
                     _build_modern_task_records(
-                        task_id, sampled_records, _configured_case_identities(locked_task)
+                        task_id, sampled_records, _configured_case_identities(locked_task),
+                        record_type_required=bool((_normalize_snapshot_value("sampling_config", locked_task.get("sampling_config")) or {}).get("record_type_config")),
                     )
                     if modern else _build_task_records(task_id, sampled_records)
                 )

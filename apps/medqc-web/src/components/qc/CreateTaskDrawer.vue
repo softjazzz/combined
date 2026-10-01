@@ -216,6 +216,14 @@
       </a-form>
     </div>
 
+    <TaskRecordTypeFields
+      v-if="currentStep === 1 && formData.scene !== 'outpatient'"
+      v-model="formData.sampling_config.record_type_config"
+      :required="
+        formData.sampling_method.startsWith('record_type_') ||
+        formData.assign_method === 'by_record_type'
+      "
+    />
     <!-- Step 3: 抽样规则 -->
     <div v-show="currentStep === 2">
       <a-form layout="vertical">
@@ -229,7 +237,9 @@
               <div
                 v-for="opt in samplingOptions.filter(
                   (item) =>
-                    formData.scene !== 'outpatient' || !item.value.startsWith('qc_physician_'),
+                    formData.scene !== 'outpatient' ||
+                    (!item.value.startsWith('qc_physician_') &&
+                      !item.value.startsWith('record_type_')),
                 )"
                 :key="opt.value"
                 :class="[
@@ -260,9 +270,13 @@
 
         <template
           v-if="
-            ['count', 'department_count', 'qc_physician_count', 'qc_reviewer_count'].includes(
-              formData.sampling_method,
-            )
+            [
+              'count',
+              'department_count',
+              'qc_physician_count',
+              'qc_reviewer_count',
+              'record_type_count',
+            ].includes(formData.sampling_method)
           "
         >
           <a-form-item
@@ -288,9 +302,12 @@
         <template
           v-if="
             formData.sampling_method === 'percentage' ||
-            ['department_ratio', 'qc_physician_ratio', 'qc_reviewer_ratio'].includes(
-              formData.sampling_method,
-            )
+            [
+              'department_ratio',
+              'qc_physician_ratio',
+              'qc_reviewer_ratio',
+              'record_type_ratio',
+            ].includes(formData.sampling_method)
           "
         >
           <a-form-item label="抽样比例">
@@ -306,9 +323,12 @@
           </a-form-item>
           <a-form-item
             v-if="
-              ['department_ratio', 'qc_physician_ratio', 'qc_reviewer_ratio'].includes(
-                formData.sampling_method,
-              )
+              [
+                'department_ratio',
+                'qc_physician_ratio',
+                'qc_reviewer_ratio',
+                'record_type_ratio',
+              ].includes(formData.sampling_method)
             "
             :label="`${samplingGroupLabel}最多份数`"
             required
@@ -349,7 +369,7 @@
             </a-radio>
           </a-radio-group>
           <div class="text-xs text-gray-500 mt-2" data-testid="assign-method-record-type-hint">
-            病历类型：当前场景病历类型无区分，暂不可用
+            病历类型分配使用任务冻结的类型桶；源标志字典与双阳性策略须显式填写。
           </div>
         </a-form-item>
 
@@ -485,6 +505,8 @@ import {
 } from '@/utils/taskCaseScope'
 import TaskScoreFilterFields from './TaskScoreFilterFields.vue'
 import TaskClinicalDoctorFields from './TaskClinicalDoctorFields.vue'
+import TaskRecordTypeFields from './TaskRecordTypeFields.vue'
+import type { TaskRecordTypeConfig } from '@/api/tasks'
 import type { TaskClinicalDoctorRef } from '@/api/tasks'
 import type { TaskScoreFilter } from '@/api/tasks'
 import type { Dayjs } from 'dayjs'
@@ -543,6 +565,7 @@ const formData = ref({
     max_per_group: 50,
     score_filter: undefined as TaskScoreFilter | undefined,
     clinical_doctors: undefined as TaskClinicalDoctorRef[] | undefined,
+    record_type_config: undefined as TaskRecordTypeConfig | undefined,
   },
   assign_method: 'by_ratio' as TaskAssignableMethod,
   // 原质控员策略必选，不给默认值，避免用户未确认即拒绝或兜底
@@ -554,6 +577,7 @@ const ASSIGNABLE_METHODS: readonly TaskAssignableMethod[] = [
   'by_ratio',
   'by_original_reviewer',
   'by_department',
+  'by_record_type',
 ]
 const assignMethodOptions: Array<{
   value: TaskAssignableMethod | 'by_record_type'
@@ -563,12 +587,13 @@ const assignMethodOptions: Array<{
   { value: 'by_ratio', label: '按比例均分' },
   { value: 'by_original_reviewer', label: '原质控员' },
   { value: 'by_department', label: '按科室' },
-  { value: 'by_record_type', label: '病历类型（暂不可用）', disabled: true },
+  { value: 'by_record_type', label: '按冻结病历类型桶' },
 ]
 const ASSIGN_LABELS: Record<TaskAssignableMethod, string> = {
   by_ratio: '按比例均分（抽样后选人）',
   by_original_reviewer: '原质控员（抽样后选人）',
   by_department: '按科室（抽样后选人，按账号科室匹配）',
+  by_record_type: '按冻结类型桶（抽样后为质控员选类型）',
 }
 const FALLBACK_LABELS: Record<AssignFallback, string> = {
   by_ratio: '无原质控员时按比例分给选定人员',
@@ -603,6 +628,18 @@ const samplingOptions: Array<{
   icon: unknown
 }> = [
   { value: 'all', label: '全部', desc: '取全部匹配病历', icon: DatabaseOutlined },
+  {
+    value: 'record_type_count',
+    label: '每病历类型定额',
+    desc: '每冻结类型桶固定份数',
+    icon: NumberOutlined,
+  },
+  {
+    value: 'record_type_ratio',
+    label: '每病历类型比例',
+    desc: '每冻结类型桶比例与上限',
+    icon: PercentageOutlined,
+  },
   { value: 'count', label: '按数量', desc: '随机抽取N条', icon: NumberOutlined },
   { value: 'percentage', label: '按比例', desc: '各组取X%', icon: PercentageOutlined },
   { value: 'department_count', label: '每科室定额', desc: '各科室固定份数', icon: NumberOutlined },
@@ -689,6 +726,8 @@ const selectedRuleSetIsValid = computed(
 const assignMethodError = computed(() => {
   const method = formData.value.assign_method
   if (!ASSIGNABLE_METHODS.includes(method)) return '请选择可用的分配方式'
+  if (method === 'by_record_type' && !formData.value.sampling_config.record_type_config)
+    return '请明确填写病历类型字典与双阳性策略'
   if (
     method === 'by_original_reviewer' &&
     formData.value.assign_fallback !== 'by_ratio' &&
@@ -750,6 +789,8 @@ const samplingGroupLabel = computed(() =>
 const samplingLabel = computed(() => {
   const method = formData.value.sampling_method
   if (method === 'all') return '全部病历'
+  if (method === 'record_type_count') return `每机构类型桶抽取 ${formData.value.sampling_config.total} 份`
+  if (method === 'record_type_ratio') return `每机构类型桶抽取 ${formData.value.sampling_config.percentage}%，最多 ${formData.value.sampling_config.max_per_group} 份`
   if (method === 'count') return `随机抽取 ${formData.value.sampling_config.total} 条`
   if (method === 'percentage') return `各组抽取 ${formData.value.sampling_config.percentage}%`
   if (method === 'department_count') return `每科室抽取 ${formData.value.sampling_config.total} 份`
@@ -783,6 +824,7 @@ watch(
     formData.value.sampling_config.case_scope = undefined
     formData.value.sampling_config.score_filter = undefined
     formData.value.sampling_config.clinical_doctors = undefined
+    formData.value.sampling_config.record_type_config = undefined
   },
 )
 
@@ -893,6 +935,9 @@ const applyTemplateConfig = async (config: TaskTemplateConfig) => {
       ? { ...config.sampling_config.score_filter }
       : undefined,
     clinical_doctors: config.sampling_config.clinical_doctors?.map((item) => ({ ...item })),
+    record_type_config: config.sampling_config.record_type_config
+      ? JSON.parse(JSON.stringify(config.sampling_config.record_type_config))
+      : undefined,
   }
   formData.value.assign_method = config.assign_method
   formData.value.assign_fallback = config.assignee_config.fallback
@@ -916,6 +961,13 @@ const currentTemplateConfig = (): TaskTemplateConfig | null => {
     return null
   }
   const samplingConfig: TaskTemplateConfig['sampling_config'] = {
+    ...(formData.value.sampling_config.record_type_config
+      ? {
+          record_type_config: JSON.parse(
+            JSON.stringify(formData.value.sampling_config.record_type_config),
+          ),
+        }
+      : {}),
     ...(formData.value.sampling_config.clinical_doctors
       ? {
           clinical_doctors: formData.value.sampling_config.clinical_doctors.map((item) => ({
@@ -931,7 +983,7 @@ const currentTemplateConfig = (): TaskTemplateConfig | null => {
   }
   if (
     formData.value.sampling_method === 'count' ||
-    ['department_count', 'qc_physician_count', 'qc_reviewer_count'].includes(
+    ['department_count', 'qc_physician_count', 'qc_reviewer_count', 'record_type_count'].includes(
       formData.value.sampling_method,
     )
   ) {
@@ -943,7 +995,7 @@ const currentTemplateConfig = (): TaskTemplateConfig | null => {
     samplingConfig.group_by =
       formData.value.sampling_config.group_by === 'department' ? 'department' : null
   } else if (
-    ['department_ratio', 'qc_physician_ratio', 'qc_reviewer_ratio'].includes(
+    ['department_ratio', 'qc_physician_ratio', 'qc_reviewer_ratio', 'record_type_ratio'].includes(
       formData.value.sampling_method,
     )
   ) {
@@ -1008,6 +1060,7 @@ const resetForm = () => {
       case_scope: undefined,
       score_filter: undefined,
       clinical_doctors: undefined,
+      record_type_config: undefined,
       total: 50,
       percentage: 10,
       by_department: false,
@@ -1091,6 +1144,13 @@ const handleSubmit = async () => {
       deadline: formData.value.deadline?.format('YYYY-MM-DD'),
       sampling_method: rangeMode.value === 'refs' ? 'all' : formData.value.sampling_method,
       sampling_config: {
+        ...(formData.value.sampling_config.record_type_config
+          ? {
+              record_type_config: JSON.parse(
+                JSON.stringify(formData.value.sampling_config.record_type_config),
+              ),
+            }
+          : {}),
         ...(rangeMode.value !== 'refs' && formData.value.sampling_config.clinical_doctors
           ? {
               clinical_doctors: formData.value.sampling_config.clinical_doctors.map((item) => ({
@@ -1105,13 +1165,19 @@ const handleSubmit = async () => {
         ...(requiredCaseScope.value ? { case_scope: requiredCaseScope.value } : {}),
         ...(rangeMode.value === 'refs'
           ? {}
-          : ['department_count', 'qc_physician_count', 'qc_reviewer_count'].includes(
-                formData.value.sampling_method,
-              )
+          : [
+                'department_count',
+                'qc_physician_count',
+                'qc_reviewer_count',
+                'record_type_count',
+              ].includes(formData.value.sampling_method)
             ? { total: formData.value.sampling_config.total }
-            : ['department_ratio', 'qc_physician_ratio', 'qc_reviewer_ratio'].includes(
-                  formData.value.sampling_method,
-                )
+            : [
+                  'department_ratio',
+                  'qc_physician_ratio',
+                  'qc_reviewer_ratio',
+                  'record_type_ratio',
+                ].includes(formData.value.sampling_method)
               ? {
                   percentage: formData.value.sampling_config.percentage,
                   max_per_group: formData.value.sampling_config.max_per_group,

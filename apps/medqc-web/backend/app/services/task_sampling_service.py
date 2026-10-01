@@ -18,6 +18,85 @@ logger = logging.getLogger(__name__)
 HOSPITAL_TZ = timezone(timedelta(hours=8))
 _OUTPATIENT_PAGE_SIZE = 500
 _OUTPATIENT_MAX_DOCUMENTS = 50000
+RECORD_TYPE_BUCKETS = frozenset({"critical", "difficult", "critical_and_difficult", "ordinary"})
+
+
+def validate_task_record_type_config(scene: Any, value: Any, *, required: bool = False) -> None:
+    """院方源标志字典随任务冻结，无默认阳性码或重叠策略。"""
+    if value is None and not required:
+        return
+    if scene not in {"running", "final"} or not isinstance(value, dict):
+        raise ValueError("病历类型配置仅支持运行/终末场景且必须显式填写")
+    if set(value) - {"institutes", "overlap_policy", "priority"}:
+        raise ValueError("病历类型配置字段无效")
+    policy = value.get("overlap_policy")
+    if policy not in ("separate", "priority"):
+        raise ValueError("必须选择双阳性独立桶或显式优先级策略")
+    if policy == "priority" and value.get("priority") not in (["critical", "difficult"], ["difficult", "critical"]):
+        raise ValueError("优先级策略必须明确危重和疑难的先后顺序")
+    if policy == "separate" and value.get("priority") is not None:
+        raise ValueError("独立双阳性桶不接受优先级")
+    institutes = value.get("institutes")
+    if not isinstance(institutes, list) or not 1 <= len(institutes) <= 100:
+        raise ValueError("必须填写至少一个机构的类型字典")
+    seen = set()
+    for institute in institutes:
+        if not isinstance(institute, dict) or set(institute) != {"institute_id", "critical", "difficult"}:
+            raise ValueError("机构类型字典字段无效")
+        identifier = institute["institute_id"]
+        if not isinstance(identifier, str) or not identifier.strip() or len(identifier) > 100 or identifier != identifier.strip() or identifier in seen:
+            raise ValueError("类型字典机构ID无效或重复")
+        seen.add(identifier)
+        for flag in ("critical", "difficult"):
+            codes = institute[flag]
+            if not isinstance(codes, dict) or set(codes) != {"positive_codes", "negative_codes"}:
+                raise ValueError("类型标志须明确正负码")
+            for items in codes.values():
+                if not isinstance(items, list) or not 1 <= len(items) <= 100 or any(not isinstance(code, str) or not code.strip() or code != code.strip() or len(code) > 100 for code in items) or len(items) != len(set(items)):
+                    raise ValueError("正负码必须为非空且不重复的字符串数组")
+            if set(codes["positive_codes"]) & set(codes["negative_codes"]):
+                raise ValueError("同一标志的正负码不得重叠")
+
+
+def _load_task_record_type_flags(identities: set[tuple[str, str, str]]) -> dict[tuple[str, str, str], tuple[Any, Any]]:
+    from ..database.connection import SessionLocal
+    from ..database.models.cdm import MrCustomize
+    from sqlalchemy import select, tuple_
+    flags = {}
+    with SessionLocal() as session:
+        ordered = sorted(identities)
+        for start in range(0, len(ordered), 500):
+            rows = session.execute(select(MrCustomize.institute_id, MrCustomize.patient_id, MrCustomize.visit_id,
+                MrCustomize.criticalcare_record_sign, MrCustomize.difficult_record_sign).where(
+                    tuple_(MrCustomize.institute_id, MrCustomize.patient_id, MrCustomize.visit_id).in_(ordered[start:start + 500]))).all()
+            for institute, patient, visit, critical, difficult in rows:
+                identity = (str(institute).strip(), str(patient).strip(), str(visit).strip())
+                pair = (critical, difficult)
+                if identity in flags and flags[identity] != pair:
+                    raise ValueError("同病例类型源标志冲突")
+                flags[identity] = pair
+    return flags
+
+
+def classify_task_record_type(identity: tuple[str, str, str], flags: tuple[Any, Any] | None, config: dict[str, Any]) -> dict[str, Any]:
+    """唯一分类owner：不从NULL、未知码或诊断文字生成普通类。"""
+    dictionary = next((item for item in config["institutes"] if item["institute_id"] == identity[0]), None)
+    states = {}
+    for index, flag in enumerate(("critical", "difficult")):
+        code = flags[index] if flags else None
+        codes = dictionary[flag] if dictionary else None
+        states[flag] = "positive" if codes and code in codes["positive_codes"] else "negative" if codes and code in codes["negative_codes"] else "unknown"
+    bucket = "unknown"
+    if "unknown" not in states.values():
+        if all(state == "positive" for state in states.values()):
+            bucket = "critical_and_difficult" if config["overlap_policy"] == "separate" else config["priority"][0]
+        elif states["critical"] == "positive":
+            bucket = "critical"
+        elif states["difficult"] == "positive":
+            bucket = "difficult"
+        else:
+            bucket = "ordinary"
+    return {"schema_version": "task-record-type-v1", "source": "cdm.mr_customize", "bucket": bucket, "flags": states, "overlap_policy": config["overlap_policy"]}
 
 
 def _date_bound(value: Any) -> date | None:
@@ -89,6 +168,7 @@ def validate_scene_case_scope(scene: Any, method: Any, config: Any, date_range: 
     config = config if isinstance(config, dict) else {}
     validate_task_clinical_doctors(scene, config.get("clinical_doctors"))
     validate_task_score_filter(scene, config.get("score_filter"))
+    validate_task_record_type_config(scene, config.get("record_type_config"), required=method in ("record_type_count", "record_type_ratio"))
     if config.get("score_filter") is not None:
         from .scoring_service import get_workstation_standard
         get_workstation_standard(scene, config["score_filter"]["standard_id"])
@@ -113,15 +193,16 @@ def validate_scoped_sampling_config(scene: Any, method: Any, config: Any) -> Non
         raise ValueError("抽样配置格式无效")
     validate_task_clinical_doctors(scene, config.get("clinical_doctors"))
     validate_task_score_filter(scene, config.get("score_filter"))
-    if not isinstance(method, str) or method not in {"all", "count", "percentage", "department_count", "department_ratio", "qc_physician_count", "qc_physician_ratio", "qc_reviewer_count", "qc_reviewer_ratio"}:
+    validate_task_record_type_config(scene, config.get("record_type_config"), required=method in ("record_type_count", "record_type_ratio"))
+    if not isinstance(method, str) or method not in {"all", "count", "percentage", "department_count", "department_ratio", "qc_physician_count", "qc_physician_ratio", "qc_reviewer_count", "qc_reviewer_ratio", "record_type_count", "record_type_ratio"}:
         raise ValueError("无效的抽样方式")
     if method in {"qc_physician_count", "qc_physician_ratio"} and scene not in {"running", "final"}:
         raise ValueError("质控医师签名抽样仅支持运行和终末场景")
-    if method in {"department_count", "department_ratio", "qc_physician_count", "qc_physician_ratio", "qc_reviewer_count", "qc_reviewer_ratio"}:
-        allowed = {"case_scope", "total", "score_filter", "clinical_doctors"} if method.endswith("_count") else {"case_scope", "percentage", "max_per_group", "score_filter", "clinical_doctors"}
+    if method in {"department_count", "department_ratio", "qc_physician_count", "qc_physician_ratio", "qc_reviewer_count", "qc_reviewer_ratio", "record_type_count", "record_type_ratio"}:
+        allowed = {"case_scope", "total", "score_filter", "clinical_doctors", "record_type_config"} if method.endswith("_count") else {"case_scope", "percentage", "max_per_group", "score_filter", "clinical_doctors", "record_type_config"}
         if set(config) - allowed:
             raise ValueError("科室抽样配置含不支持的字段")
-    if method in {"count", "department_count", "qc_physician_count", "qc_reviewer_count"}:
+    if method in {"count", "department_count", "qc_physician_count", "qc_reviewer_count", "record_type_count"}:
         total = config.get("total", 50) if method == "count" else config.get("total")
         if isinstance(total, bool) or not isinstance(total, int) or total <= 0:
             raise ValueError("抽样数量必须为正整数")
@@ -129,7 +210,7 @@ def validate_scoped_sampling_config(scene: Any, method: Any, config: Any) -> Non
             raise ValueError("每科室抽样数量不能超过 10000")
         if not isinstance(config.get("by_department", False), bool):
             raise ValueError("按科室抽样参数必须为布尔值")
-    if method in {"percentage", "department_ratio", "qc_physician_ratio", "qc_reviewer_ratio"}:
+    if method in {"percentage", "department_ratio", "qc_physician_ratio", "qc_reviewer_ratio", "record_type_ratio"}:
         percentage = config.get("percentage", 10)
         if isinstance(percentage, bool) or not isinstance(percentage, (int, float)) or not 0 < percentage <= 100:
             raise ValueError("抽样比例必须在 0 到 100 之间")
@@ -208,7 +289,7 @@ def validate_task_score_filter(scene: Any, value: Any) -> None:
 
 def validate_specified_case_sampling(method: Any, config: Any, refs: Any) -> None:
     """指定三坐标病例是固定集合，不允许再次随机抽样。"""
-    if refs and (method != "all" or set(config or {}) - {"case_scope"}):
+    if refs and (method != "all" or set(config or {}) - {"case_scope", "record_type_config"}):
         raise ValueError("指定病历不允许二次抽样，请使用全部病历且清空抽样参数")
 
 
@@ -544,6 +625,15 @@ class TaskSamplingService:
             candidates = await self._filter_clinical_doctor_candidates(candidates, config["clinical_doctors"])
         if config.get("score_filter") is not None:
             candidates = await self._filter_scored_candidates(candidates, scene, config["score_filter"])
+        if config.get("record_type_config") is not None:
+            import anyio
+            from functools import partial
+            try:
+                flags = await anyio.to_thread.run_sync(partial(_load_task_record_type_flags, {self._identity(row) for row in candidates}))
+            except Exception as exc:
+                logger.warning("病历类型来源不可用 error_type=%s", type(exc).__name__)
+                raise RuntimeError("病历类型来源不可用") from None
+            candidates = [{**row, "record_type_snapshot": classify_task_record_type(self._identity(row), flags.get(self._identity(row)), config["record_type_config"])} for row in candidates]
 
         if not candidates:
             logger.info("任务候选病历为空")
@@ -557,6 +647,11 @@ class TaskSamplingService:
             return self._sample_by_percentage(candidates, config)
         elif method in {"department_count", "department_ratio"}:
             return self._sample_by_department(candidates, method, config)
+        elif method in {"record_type_count", "record_type_ratio"}:
+            if any(row["record_type_snapshot"]["bucket"] == "unknown" for row in candidates):
+                raise ValueError("病历类型存在NULL、未知码或缺少机构字典，不能按类型抽样")
+            grouped = [{**row, "record_type_group": row["record_type_snapshot"]["bucket"]} for row in candidates]
+            return self._sample_by_department(grouped, method, config, group_field="record_type_group")
         elif method in {"qc_physician_count", "qc_physician_ratio", "qc_reviewer_count", "qc_reviewer_ratio"}:
             import anyio
             from functools import partial

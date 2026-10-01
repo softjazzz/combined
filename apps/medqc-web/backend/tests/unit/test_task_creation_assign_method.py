@@ -132,11 +132,20 @@ def test_original_reviewer_requires_fallback(client, config):
     assert inserted == []
 
 
-def test_record_type_method_unavailable_without_insert(client):
+def test_record_type_method_requires_explicit_configuration_without_insert(client):
     test_client, inserted = client
     response = test_client.post("/api/v1/tasks", json=payload(assign_method="by_record_type"))
     assert response.status_code == 422
     detail = response.json()["detail"]
-    assert detail["code"] == "method_unavailable"
-    assert detail["reason"]
+    assert isinstance(detail, str)
+    assert "显式填写" in detail
     assert inserted == []
+
+
+def test_explicit_record_type_configuration_is_saved_at_http_creation(client):
+    test_client, inserted = client
+    config = {"institutes": [{"institute_id": "SYN-H", "critical": {"positive_codes": ["C+"], "negative_codes": ["C-"]}, "difficult": {"positive_codes": ["D+"], "negative_codes": ["D-"]}}], "overlap_policy": "separate"}
+    response = test_client.post("/api/v1/tasks", json=payload(assign_method="by_record_type", sampling_method="record_type_count", sampling_config={"total": 1, "record_type_config": config}))
+    assert response.status_code == 200
+    assert len(inserted) == 1
+    assert inserted[0]["sampling_config"]["record_type_config"] == config

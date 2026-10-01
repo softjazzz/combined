@@ -65,6 +65,7 @@ type DrawerVm = {
       max_per_group?: number
       score_filter?: import('@/api/tasks').TaskScoreFilter
       clinical_doctors?: import('@/api/tasks').TaskClinicalDoctorRef[]
+      record_type_config?: import('@/api/tasks').TaskRecordTypeConfig
     }
   }
   handleSubmit: () => Promise<void>
@@ -224,6 +225,38 @@ describe('CreateTaskDrawer 创建草稿边界', () => {
     expect(mocks.message.success).toHaveBeenCalledWith('模板配置已套用，请填写任务名称和截止日期')
   })
 
+  it('显式类型配置在创建与模板中保留，双阳性策略不自动填写', async () => {
+    mocks.createTask.mockResolvedValue({ success: false, message: '测试停止' })
+    const wrapper = mountDrawer()
+    const vm = vmOf(wrapper)
+    await chooseRuleSet(vm, 'running')
+    vm.formData.task_name = 'SYN-类型配置'
+    const config: import('@/api/tasks').TaskRecordTypeConfig = {
+      institutes: [
+        {
+          institute_id: 'SYN-I',
+          critical: { positive_codes: ['C+'], negative_codes: ['C-'] },
+          difficult: { positive_codes: ['D+'], negative_codes: ['D-'] },
+        },
+      ],
+      overlap_policy: 'priority',
+      priority: ['difficult', 'critical'],
+    }
+    vm.formData.sampling_config.record_type_config = config
+    vm.formData.sampling_method = 'record_type_count'
+    vm.formData.assign_method = 'by_record_type'
+    vm.handleSaveTemplate()
+    await vm.handleSubmit()
+    expect(mocks.createTask.mock.calls.at(-1)?.[0]).toMatchObject({
+      sampling_method: 'record_type_count',
+      assign_method: 'by_record_type',
+      sampling_config: { record_type_config: config },
+    })
+    expect(wrapper.emitted('save-template')?.[0]?.[0]).toMatchObject({
+      sampling_config: { record_type_config: config },
+    })
+  })
+
   it('临床医生配置在创建和模板往返保存，指定集合清空筛选', async () => {
     mocks.createTask.mockResolvedValue({ success: false, message: '测试停止' })
     const wrapper = mountDrawer()
@@ -363,7 +396,7 @@ describe('CreateTaskDrawer 创建草稿边界', () => {
     expect(vm.formData.assign_method).toBe('by_ratio')
     expect(vm.canProceed).toBe(true)
     expect(wrapper.text()).toContain('抽样后分配质控员')
-    expect(wrapper.text()).toContain('病历类型（暂不可用）')
+    expect(wrapper.text()).toContain('按冻结病历类型桶')
     expect(wrapper.text()).not.toContain('王质控')
 
     await vm.handleSubmit()
@@ -373,7 +406,7 @@ describe('CreateTaskDrawer 创建草稿边界', () => {
     expect(mocks.createTask.mock.calls[0][0]).not.toHaveProperty('assignee_config')
   })
 
-  it.each(['keep', 'by_type', 'by_record_type'] as const)(
+  it.each(['keep', 'by_type'] as const)(
     '不可用分配策略 %s 即使被强制设置也不可创建',
     async (method) => {
       const wrapper = mountDrawer()
@@ -391,7 +424,7 @@ describe('CreateTaskDrawer 创建草稿边界', () => {
     },
   )
 
-  it('分配方式提供比例/原质控员/科室，病历类型禁用并说明原因', async () => {
+  it('分配方式提供冻结类型桶并明确配置要求', async () => {
     const wrapper = mountDrawer()
     const vm = vmOf(wrapper)
     await chooseRuleSet(vm, 'running')
@@ -404,10 +437,10 @@ describe('CreateTaskDrawer 创建草稿边界', () => {
       ['by_ratio', 'false'],
       ['by_original_reviewer', 'false'],
       ['by_department', 'false'],
-      ['by_record_type', 'true'],
+      ['by_record_type', 'false'],
     ])
     expect(wrapper.get('[data-testid="assign-method-record-type-hint"]').text()).toContain(
-      '当前场景病历类型无区分，暂不可用',
+      '源标志字典与双阳性策略须显式填写',
     )
     expect(wrapper.find('[data-testid="assign-fallback-group"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="assign-department-hint"]').exists()).toBe(false)

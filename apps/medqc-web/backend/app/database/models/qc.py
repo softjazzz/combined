@@ -517,6 +517,7 @@ class QCTaskRecord(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     # 抽样时持久化的候选科室（迁移 60）；历史行保持 NULL，按科室分配时失败关闭。
     department = Column(String(100), nullable=True)
+    record_type_snapshot = Column(JSON().with_variant(JSONB(), "postgresql"), nullable=True, comment="抽样冻结类型桶；历史NULL不推断")
 
     __table_args__ = (
         CheckConstraint(

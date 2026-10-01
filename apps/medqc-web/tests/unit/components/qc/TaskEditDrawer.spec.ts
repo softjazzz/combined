@@ -119,6 +119,35 @@ describe('TaskEditDrawer', () => {
     mocks.confirm.mockImplementation((options: { onOk?: () => unknown }) => options.onOk?.())
   })
 
+  it('只变更类型配置也触发完整配置保存且保留无默认的显式策略', async () => {
+    const wrapper = mountDrawer()
+    await flushPromises()
+    const vm = wrapper.vm as unknown as {
+      recordTypeConfig: import('@/api/tasks').TaskRecordTypeConfig
+      confirmSave: () => void
+    }
+    const config: import('@/api/tasks').TaskRecordTypeConfig = {
+      institutes: [
+        {
+          institute_id: 'SYN-H',
+          critical: { positive_codes: ['C+'], negative_codes: ['C-'] },
+          difficult: { positive_codes: ['D+'], negative_codes: ['D-'] },
+        },
+      ],
+      overlap_policy: 'separate',
+    }
+    vm.recordTypeConfig = config
+    vm.confirmSave()
+    await flushPromises()
+    expect(mocks.updateTaskDraftConfiguration).toHaveBeenCalledWith(
+      'task-1',
+      expect.objectContaining({
+        sampling_config: expect.objectContaining({ record_type_config: config }),
+      }),
+    )
+    expect(mocks.updateTaskMetadata).not.toHaveBeenCalled()
+  })
+
   it('仅改变临床医生也走完整配置编辑并保留机构引用', async () => {
     const wrapper = mountDrawer()
     await flushPromises()

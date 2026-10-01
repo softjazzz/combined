@@ -49,6 +49,8 @@ class SamplingMethod(str, Enum):
     QC_PHYSICIAN_RATIO = "qc_physician_ratio"  # 每机构质控医师源签名比例加上限
     QC_REVIEWER_COUNT = "qc_reviewer_count"  # 最近审核质控员固定份数
     QC_REVIEWER_RATIO = "qc_reviewer_ratio"  # 最近审核质控员比例加上限
+    RECORD_TYPE_COUNT = "record_type_count"  # 每冻结病历类型桶固定份数
+    RECORD_TYPE_RATIO = "record_type_ratio"  # 每冻结病历类型桶比例加上限
 
 
 class AssignMethod(str, Enum):
@@ -57,7 +59,7 @@ class AssignMethod(str, Enum):
     BY_DEPARTMENT = "by_department"  # 按科室
     BY_RATIO = "by_ratio"       # 按比例
     BY_ORIGINAL_REVIEWER = "by_original_reviewer"  # 按原质控员
-    BY_RECORD_TYPE = "by_record_type"  # 按病历类型（无权威事实，创建时 422 method_unavailable）
+    BY_RECORD_TYPE = "by_record_type"  # 消费任务冻结的类型桶
     BY_TYPE = "by_type"         # 旧值：按类型（不可用）
 
 
@@ -166,9 +168,10 @@ class TaskTemplateConfig(BaseModel):
     @model_validator(mode="after")
     def validate_reusable_config(self) -> "TaskTemplateConfig":
         method = self.sampling_method
-        from ..services.task_sampling_service import validate_task_score_filter, validate_task_clinical_doctors
+        from ..services.task_sampling_service import validate_task_score_filter, validate_task_clinical_doctors, validate_task_record_type_config
         validate_task_clinical_doctors(self.scene, self.sampling_config.get("clinical_doctors"))
         validate_task_score_filter(self.scene, self.sampling_config.get("score_filter"))
+        validate_task_record_type_config(self.scene, self.sampling_config.get("record_type_config"), required=method in {SamplingMethod.RECORD_TYPE_COUNT, SamplingMethod.RECORD_TYPE_RATIO} or self.assign_method == AssignMethod.BY_RECORD_TYPE)
         allowed_sampling_keys = {
             SamplingMethod.ALL: {"case_scope"},
             SamplingMethod.COUNT: {"case_scope", "total", "by_department"},
@@ -179,8 +182,10 @@ class TaskTemplateConfig(BaseModel):
             SamplingMethod.QC_PHYSICIAN_RATIO: {"case_scope", "percentage", "max_per_group"},
             SamplingMethod.QC_REVIEWER_COUNT: {"case_scope", "total"},
             SamplingMethod.QC_REVIEWER_RATIO: {"case_scope", "percentage", "max_per_group"},
+            SamplingMethod.RECORD_TYPE_COUNT: {"case_scope", "total"},
+            SamplingMethod.RECORD_TYPE_RATIO: {"case_scope", "percentage", "max_per_group"},
         }[method]
-        allowed_sampling_keys = allowed_sampling_keys | {"score_filter", "clinical_doctors"}
+        allowed_sampling_keys = allowed_sampling_keys | {"score_filter", "clinical_doctors", "record_type_config"}
         unknown_sampling = sorted(set(self.sampling_config) - allowed_sampling_keys)
         if unknown_sampling:
             raise ValueError(f"抽样配置含不支持的字段：{', '.join(unknown_sampling)}")
@@ -196,13 +201,13 @@ class TaskTemplateConfig(BaseModel):
             raise ValueError("当前场景不支持 case_scope")
         if method in {SamplingMethod.QC_PHYSICIAN_COUNT, SamplingMethod.QC_PHYSICIAN_RATIO} and self.scene not in {TaskScene.RUNNING, TaskScene.FINAL}:
             raise ValueError("质控医师签名抽样仅支持运行和终末场景")
-        if method in {SamplingMethod.COUNT, SamplingMethod.DEPARTMENT_COUNT, SamplingMethod.QC_PHYSICIAN_COUNT, SamplingMethod.QC_REVIEWER_COUNT}:
+        if method in {SamplingMethod.COUNT, SamplingMethod.DEPARTMENT_COUNT, SamplingMethod.QC_PHYSICIAN_COUNT, SamplingMethod.QC_REVIEWER_COUNT, SamplingMethod.RECORD_TYPE_COUNT}:
             total = self.sampling_config.get("total")
             if isinstance(total, bool) or not isinstance(total, int) or not 1 <= total <= 10000:
                 raise ValueError("抽样数量必须为 1 到 10000 的整数")
             if not isinstance(self.sampling_config.get("by_department", False), bool):
                 raise ValueError("按科室抽样参数必须是布尔值")
-        elif method in {SamplingMethod.PERCENTAGE, SamplingMethod.DEPARTMENT_PERCENTAGE, SamplingMethod.QC_PHYSICIAN_RATIO, SamplingMethod.QC_REVIEWER_RATIO}:
+        elif method in {SamplingMethod.PERCENTAGE, SamplingMethod.DEPARTMENT_PERCENTAGE, SamplingMethod.QC_PHYSICIAN_RATIO, SamplingMethod.QC_REVIEWER_RATIO, SamplingMethod.RECORD_TYPE_RATIO}:
             percentage = self.sampling_config.get("percentage")
             if (
                 isinstance(percentage, bool)
@@ -212,7 +217,7 @@ class TaskTemplateConfig(BaseModel):
                 raise ValueError("抽样比例必须在 0 到 100 之间")
             if self.sampling_config.get("group_by") not in (None, "department"):
                 raise ValueError("当前仅支持按科室分组")
-            if method in {SamplingMethod.DEPARTMENT_PERCENTAGE, SamplingMethod.QC_PHYSICIAN_RATIO, SamplingMethod.QC_REVIEWER_RATIO}:
+            if method in {SamplingMethod.DEPARTMENT_PERCENTAGE, SamplingMethod.QC_PHYSICIAN_RATIO, SamplingMethod.QC_REVIEWER_RATIO, SamplingMethod.RECORD_TYPE_RATIO}:
                 maximum = self.sampling_config.get("max_per_group")
                 if isinstance(maximum, bool) or not isinstance(maximum, int) or not 1 <= maximum <= 10000:
                     raise ValueError("每科室最多份数必须为 1 到 10000 的整数")
@@ -221,6 +226,7 @@ class TaskTemplateConfig(BaseModel):
             AssignMethod.BY_RATIO,
             AssignMethod.BY_ORIGINAL_REVIEWER,
             AssignMethod.BY_DEPARTMENT,
+            AssignMethod.BY_RECORD_TYPE,
         }:
             raise ValueError("模板包含不可用的分配方式")
         unknown_assignee = sorted(set(self.assignee_config) - {"fallback"})
@@ -440,6 +446,7 @@ class TaskAssignee(BaseModel):
     user_id: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=36)]
     user_name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
     department: Optional[str] = None
+    record_types: Optional[List[Literal["critical", "difficult", "critical_and_difficult", "ordinary"]]] = None
 
 
 class TaskAssignRequest(BaseModel):

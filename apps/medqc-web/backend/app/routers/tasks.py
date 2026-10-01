@@ -423,7 +423,7 @@ async def _read_all_task_filter_rows(
 # ============================
 
 _CREATABLE_ASSIGN_METHODS = frozenset({
-    AssignMethod.BY_RATIO, AssignMethod.BY_ORIGINAL_REVIEWER, AssignMethod.BY_DEPARTMENT,
+    AssignMethod.BY_RATIO, AssignMethod.BY_ORIGINAL_REVIEWER, AssignMethod.BY_DEPARTMENT, AssignMethod.BY_RECORD_TYPE,
 })
 
 
@@ -431,11 +431,11 @@ def _validate_creation_assign_method(task_data: TaskCreateRequest) -> None:
     """创建时只接受可执行的分配方式；按原质控员须在 assignee_config.fallback 给出处理方式。"""
     method = task_data.assign_method
     if method == AssignMethod.BY_RECORD_TYPE:
-        raise HTTPException(status_code=422, detail={
-            "code": "method_unavailable",
-            "message": "按病历类型分配暂不可用",
-            "reason": "当前可抽样场景内病历类型相同，没有可区分的权威事实",
-        })
+        from ..services.task_sampling_service import validate_task_record_type_config
+        try:
+            validate_task_record_type_config(task_data.scene, (task_data.sampling_config or {}).get("record_type_config"), required=True)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
     if method not in _CREATABLE_ASSIGN_METHODS:
         raise HTTPException(status_code=422, detail="新建任务不支持该分配方式")
     if method == AssignMethod.BY_ORIGINAL_REVIEWER:

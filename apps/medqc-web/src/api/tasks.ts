@@ -112,14 +112,31 @@ export type SamplingMethod =
   | 'qc_physician_ratio'
   | 'qc_reviewer_count'
   | 'qc_reviewer_ratio'
+  | 'record_type_count'
+  | 'record_type_ratio'
 export type AssignMethod =
   | 'keep'
   | 'by_department'
   | 'by_ratio'
   | 'by_type'
   | 'by_original_reviewer'
+  | 'by_record_type'
 /** 新建任务与分配接口当前可用的分配方式（病历类型不可用，见 V3.6 分配策略合同）。 */
-export type TaskAssignableMethod = 'by_ratio' | 'by_original_reviewer' | 'by_department'
+export type TaskAssignableMethod =
+  | 'by_ratio'
+  | 'by_original_reviewer'
+  | 'by_department'
+  | 'by_record_type'
+export type TaskRecordTypeBucket = 'critical' | 'difficult' | 'critical_and_difficult' | 'ordinary'
+export interface TaskRecordTypeConfig {
+  institutes: Array<{
+    institute_id: string
+    critical: { positive_codes: string[]; negative_codes: string[] }
+    difficult: { positive_codes: string[]; negative_codes: string[] }
+  }>
+  overlap_policy?: 'separate' | 'priority'
+  priority?: Array<'critical' | 'difficult'>
+}
 /** 原质控员策略下，病历无原质控员或其不在选定人中时的处理方式。 */
 export type AssignFallback = 'by_ratio' | 'reject'
 
@@ -352,6 +369,7 @@ export interface TaskTemplateConfig {
     case_scope?: TaskCaseScope
     score_filter?: TaskScoreFilter
     clinical_doctors?: TaskClinicalDoctorRef[]
+    record_type_config?: TaskRecordTypeConfig
     total?: number
     percentage?: number
     max_per_group?: number
@@ -680,6 +698,7 @@ export interface TaskAssignReasonCounts {
   original_reviewer?: number
   department?: number
   ratio_fallback?: number
+  record_type?: number
 }
 
 export interface TaskAssignmentDetail {
@@ -726,7 +745,12 @@ export interface TaskBatchAssignResult {
 export async function assignTask(
   taskId: string,
   data: {
-    assignees: Array<{ user_id: string; user_name: string; department?: string }>
+    assignees: Array<{
+      user_id: string
+      user_name: string
+      department?: string
+      record_types?: TaskRecordTypeBucket[]
+    }>
     method?: AssignMethod
     fallback?: AssignFallback
   },
@@ -741,7 +765,12 @@ export async function assignTask(
 /** 批量分配任务；服务端逐任务独立事务，响应逐项报告成功与失败。 */
 export async function assignTasksBatch(data: {
   tasks: TaskBatchAssignTarget[]
-  assignees: Array<{ user_id: string; user_name: string; department?: string }>
+  assignees: Array<{
+    user_id: string
+    user_name: string
+    department?: string
+    record_types?: TaskRecordTypeBucket[]
+  }>
 }) {
   return request<TaskBatchAssignResult>({
     method: 'POST',

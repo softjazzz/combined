@@ -598,6 +598,26 @@ describe('AllTasksView 场景口径', () => {
     expect(wrapper.getComponent(TaskDetailDrawerStub).element).not.toBe(initialDrawer)
   })
 
+  it('类型分配须明确为真实质控员选择冻结桶并随请求发送', async () => {
+    const list = listWith('类型任务', 'running', 'sampling')
+    list.data.items[0].assign_method = 'by_record_type'
+    mocks.getTaskList.mockResolvedValue(list)
+    mocks.getTaskAssigneeOptions.mockResolvedValue({ success: true, data: [{ user_id: 'qc-1', user_name: '质控员甲' }] })
+    mocks.assignTask.mockResolvedValue({ success: false, message: '配置未覆盖', detail: { code: 'record_type_unassigned', reason: '未覆盖' } })
+    const wrapper = await mountView()
+    await wrapper.get('[data-testid="task-row-assign"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="assign-candidates"]').trigger('click')
+    await wrapper.get('[data-testid="assign-confirm"]').trigger('click')
+    await flushPromises()
+    expect(mocks.assignTask).not.toHaveBeenCalled()
+    const vm = wrapper.vm as unknown as { assigneeTypes: Record<string, string[]> }
+    vm.assigneeTypes = { 'qc-1': ['critical', 'critical_and_difficult'] }
+    await wrapper.get('[data-testid="assign-confirm"]').trigger('click')
+    await flushPromises()
+    expect(mocks.assignTask).toHaveBeenCalledWith('类型任务', { method: 'by_record_type', assignees: [{ user_id: 'qc-1', user_name: '质控员甲', record_types: ['critical', 'critical_and_difficult'] }] })
+  })
+
   it('409/503 和未知结果均不乐观关闭，也不自动重试写入', async () => {
     mocks.getTaskList.mockResolvedValue(listWith('抽样任务', 'running', 'sampling'))
     mocks.getTaskAssigneeOptions.mockResolvedValue({ success: true, data: [{ user_id: 'qc-1', user_name: '质控员甲' }] })
