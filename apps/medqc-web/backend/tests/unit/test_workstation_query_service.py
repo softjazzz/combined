@@ -2418,6 +2418,38 @@ def test_defect_view_returns_owner_rows_then_pages_with_exact_total(workstation_
     assert result["defects"][0]["institute_id"] == "H1"
 
 
+def test_workflow_filter_runs_before_exact_paging_and_default_does_not_read_owner(workstation_session_factory):
+    _insert_review_filter_records(workstation_session_factory)
+    calls = []
+    def workflow(rows, **kwargs):
+        calls.append(kwargs)
+        return [row for row in rows if row["source"] == "auto"]
+    options = dict(result_view="defects", session_factory=workstation_session_factory,
+                   settings_loader=_workstation_settings_loader, demo_policy=_no_demo_policy,
+                   qc_projection_loader=_review_filter_projection_loader,
+                   defect_projection_loader=_defect_projection_loader,
+                   manual_defect_loader=_manual_defect_loader, defect_workflow_loader=workflow,
+                   page=2, page_size=1)
+    result = get_workstation_data(**options)
+    assert calls == [] and result["total"] == 3
+    result = get_workstation_data(**options, defect_workflow="pending_rectification", defect_workflow_actor_id="qc")
+    assert result["total"] == 2 and result["totalPages"] == 2 and len(result["defects"]) == 1
+    assert calls[0]["actor_id"] == "qc" and calls[0]["scene"] == "all"
+
+
+def test_workflow_source_failure_is_not_empty_result(workstation_session_factory):
+    from app.services.medical_records.query_service import WorkstationDefectUnavailable
+    _insert_review_filter_records(workstation_session_factory)
+    def broken(rows, **kwargs):
+        raise RuntimeError("selected owner not deployed")
+    with pytest.raises(WorkstationDefectUnavailable):
+        get_workstation_data(result_view="defects", defect_workflow="clinical_appeal",
+            session_factory=workstation_session_factory, settings_loader=_workstation_settings_loader,
+            demo_policy=_no_demo_policy, qc_projection_loader=_review_filter_projection_loader,
+            defect_projection_loader=_defect_projection_loader, manual_defect_loader=_manual_defect_loader,
+            defect_workflow_loader=broken)
+
+
 def test_record_defect_filter_uses_owner_facts_before_paging(workstation_session_factory):
     _insert_review_filter_records(workstation_session_factory)
     result = get_workstation_data(

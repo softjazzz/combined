@@ -11,6 +11,7 @@ import type {
 } from '../types'
 import type {
   RecordDefectSource,
+  RecordDefectWorkflow,
   RecordResultView,
   RecordScoreFilterStatus,
 } from '@/api/filterTemplates'
@@ -141,6 +142,7 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
   const scoreMaxFilter = ref<number | null>(null)
   const resultView = ref<RecordResultView>('records')
   const defectSourceFilter = ref<RecordDefectSource>('all')
+  const defectWorkflowFilter = ref<RecordDefectWorkflow | ''>('')
   const hasDefectFilter = ref<boolean | null>(null)
   let activeRequestSequence = 0
 
@@ -205,6 +207,9 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
       if (scoreMinFilter.value !== null) params.score_min = scoreMinFilter.value
       if (scoreMaxFilter.value !== null) params.score_max = scoreMaxFilter.value
       if (resultView.value === 'defects') params.result_view = resultView.value
+      if (resultView.value === 'defects' && defectWorkflowFilter.value) {
+        params.defect_workflow = defectWorkflowFilter.value
+      }
       if (resultView.value === 'defects' || hasDefectFilter.value !== null) {
         params.defect_source = defectSourceFilter.value
       }
@@ -385,6 +390,7 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
     scoreMaxFilter.value = null
     resultView.value = 'records'
     defectSourceFilter.value = 'all'
+    defectWorkflowFilter.value = ''
     hasDefectFilter.value = null
     currentPage.value = 1
   }
@@ -421,6 +427,7 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
     scoreMaxFilter,
     resultView,
     defectSourceFilter,
+    defectWorkflowFilter,
     hasDefectFilter,
     hospOptions,
     filteredRecords,

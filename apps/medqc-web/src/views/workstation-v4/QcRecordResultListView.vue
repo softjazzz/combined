@@ -70,6 +70,7 @@
         :current-filters="activeFilters"
         :resolve-initial-filters="!urlHadExplicitFilters && !filtersInitialized"
         :disabled="loading"
+        :defect-view="activeView === 'defects'"
         @apply="commitFilters"
       />
       <div class="qc-record-result-list-view__toolbar">
@@ -549,6 +550,7 @@ const {
   scoreMaxFilter,
   resultView,
   defectSourceFilter,
+  defectWorkflowFilter,
   hasDefectFilter,
   scoreStandards,
   scoreStandardOptions,
@@ -580,6 +582,7 @@ const filterSync = useRecordFilterUrlSync({
     scoreMaxFilter,
     resultView,
     defectSourceFilter,
+    defectWorkflowFilter,
     hasDefectFilter,
     currentPage,
   },
@@ -612,6 +615,7 @@ function switchResultView(view: 'records' | 'defects') {
   activeView.value = view
   resultView.value = view
   if (view === 'defects') hasDefectFilter.value = null
+  else defectWorkflowFilter.value = ''
   applyFilters()
 }
 

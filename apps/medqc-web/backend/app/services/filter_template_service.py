@@ -40,6 +40,7 @@ _ENUM_FILTERS = {
     "inpatient_sort": frozenset({"default", "longest", "recent"}),
     "result_view": frozenset({"records", "defects"}),
     "defect_source": frozenset({"all", "auto", "manual"}),
+    "defect_workflow": frozenset({"clinical_appeal", "pending_rectification"}),
 }
 FILTER_KEYS = frozenset({
     *_TEXT_FILTER_KEYS,
@@ -207,6 +208,8 @@ def validate_filters(filters: Any, *, page_key: str | None = None) -> dict[str, 
         and normalized["score_min"] > normalized["score_max"]
     ):
         raise FilterTemplateInvalid("最低得分不能大于最高得分")
+    if "defect_workflow" in normalized and normalized.get("result_view") != "defects":
+        raise FilterTemplateInvalid("整改/申诉筛选仅支持缺陷视图")
     if "defect_source" in normalized and not (
         normalized.get("result_view") == "defects" or "has_defect" in normalized
     ):

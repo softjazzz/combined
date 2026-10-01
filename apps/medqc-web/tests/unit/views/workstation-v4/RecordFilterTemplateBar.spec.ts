@@ -35,13 +35,18 @@ function template(overrides: Record<string, unknown> = {}) {
 }
 
 function mountBar(
-  options: { currentFilters?: RecordFilterSnapshot; resolveInitialFilters?: boolean } = {},
+  options: {
+    currentFilters?: RecordFilterSnapshot
+    resolveInitialFilters?: boolean
+    defectView?: boolean
+  } = {},
 ) {
   return mount(RecordFilterTemplateBar, {
     props: {
       pageKey: 'v5_records_inpatient',
       currentFilters: options.currentFilters ?? {},
       resolveInitialFilters: options.resolveInitialFilters ?? false,
+      defectView: options.defectView,
     },
   })
 }
@@ -62,6 +67,51 @@ async function selectTemplate(wrapper: ReturnType<typeof mountBar>, id: string) 
 }
 
 describe('RecordFilterTemplateBar', () => {
+  it('缺陷快捷分区搬运明确状态，全部不推断未整改', async () => {
+    const wrapper = mountBar({
+      defectView: true,
+      currentFilters: { result_view: 'defects', dept: '内科', review_state: ['pending_review'] },
+    })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="quick-filter-pending_review"]').exists()).toBe(false)
+    await wrapper.get('[data-testid="quick-filter-clinical_appeal"]').trigger('click')
+    expect(wrapper.emitted('apply')?.at(-1)).toEqual([
+      { result_view: 'defects', dept: '内科', defect_workflow: 'clinical_appeal' },
+      false,
+    ])
+    await wrapper.get('[data-testid="quick-filter-pending_rectification"]').trigger('click')
+    expect(wrapper.emitted('apply')?.at(-1)?.[0]).toMatchObject({
+      defect_workflow: 'pending_rectification',
+    })
+    await wrapper.get('[data-testid="quick-filter-all"]').trigger('click')
+    expect(wrapper.emitted('apply')?.at(-1)).toEqual([
+      { result_view: 'defects', dept: '内科' },
+      false,
+    ])
+  })
+
+  it('申诉分区可随用户默认模板加载与重置', async () => {
+    mocks.listFilterTemplates.mockResolvedValue({
+      success: true,
+      data: [
+        template({
+          is_default: true,
+          filters: { result_view: 'defects', defect_workflow: 'clinical_appeal' },
+        }),
+      ],
+    })
+    const wrapper = mountBar({ resolveInitialFilters: true })
+    await flushPromises()
+    expect(wrapper.emitted('apply')?.at(-1)?.[0]).toEqual({
+      result_view: 'defects',
+      defect_workflow: 'clinical_appeal',
+    })
+    await wrapper.get('[data-testid="filter-template-reset"]').trigger('click')
+    expect(wrapper.emitted('apply')?.at(-1)?.[0]).toEqual({
+      result_view: 'defects',
+      defect_workflow: 'clinical_appeal',
+    })
+  })
   beforeEach(() => {
     vi.clearAllMocks()
     setReviewer(true)
@@ -71,20 +121,26 @@ describe('RecordFilterTemplateBar', () => {
   it('审核角色可见全部快捷筛选，非审核角色只见“全部”', async () => {
     const reviewer = mountBar()
     await flushPromises()
-    expect(reviewer.findAll('[role="group"][aria-label="快捷筛选"] button').map((b) => b.text()))
-      .toEqual(['全部', '待审核', '待复审', '审核中'])
+    expect(
+      reviewer.findAll('[role="group"][aria-label="快捷筛选"] button').map((b) => b.text()),
+    ).toEqual(['全部', '待审核', '待复审', '审核中'])
 
     setReviewer(false)
     const doctor = mountBar()
     await flushPromises()
-    expect(doctor.findAll('[role="group"][aria-label="快捷筛选"] button').map((b) => b.text()))
-      .toEqual(['全部'])
+    expect(
+      doctor.findAll('[role="group"][aria-label="快捷筛选"] button').map((b) => b.text()),
+    ).toEqual(['全部'])
   })
 
   it('快捷筛选只改审核状态并保留其他筛选，按当前筛选高亮', async () => {
-    const wrapper = mountBar({ currentFilters: { dept: '心内科', review_state: ['pending_recheck'] } })
+    const wrapper = mountBar({
+      currentFilters: { dept: '心内科', review_state: ['pending_recheck'] },
+    })
     await flushPromises()
-    expect(wrapper.get('[data-testid="quick-filter-pending_recheck"]').attributes('aria-pressed')).toBe('true')
+    expect(
+      wrapper.get('[data-testid="quick-filter-pending_recheck"]').attributes('aria-pressed'),
+    ).toBe('true')
 
     await wrapper.get('[data-testid="quick-filter-reviewing"]').trigger('click')
     expect(wrapper.emitted('apply')?.at(-1)).toEqual([
@@ -143,21 +199,32 @@ describe('RecordFilterTemplateBar', () => {
 
     await selectTemplate(wrapper, 'tpl-1')
     expect(wrapper.emitted('apply')).toHaveLength(1)
-    expect(wrapper.get('[data-testid="filter-template-update"]').attributes('disabled')).toBeUndefined()
+    expect(
+      wrapper.get('[data-testid="filter-template-update"]').attributes('disabled'),
+    ).toBeUndefined()
   })
 
   it('URL 已显式给出筛选时不发出初始筛选', async () => {
-    mocks.listFilterTemplates.mockResolvedValue({ success: true, data: [template({ is_default: true })] })
+    mocks.listFilterTemplates.mockResolvedValue({
+      success: true,
+      data: [template({ is_default: true })],
+    })
     const wrapper = mountBar({ resolveInitialFilters: false })
     await flushPromises()
     expect(wrapper.emitted('apply')).toBeUndefined()
   })
 
   it('模板加载失败不阻塞：提示不可用并按系统默认发出初始筛选，快捷筛选仍可用', async () => {
-    mocks.listFilterTemplates.mockResolvedValue({ success: false, status: 503, message: '服务不可用' })
+    mocks.listFilterTemplates.mockResolvedValue({
+      success: false,
+      status: 503,
+      message: '服务不可用',
+    })
     const wrapper = mountBar({ resolveInitialFilters: true })
     await flushPromises()
-    expect(wrapper.get('[data-testid="filter-template-unavailable"]').text()).toBe('筛选模板暂不可用')
+    expect(wrapper.get('[data-testid="filter-template-unavailable"]').text()).toBe(
+      '筛选模板暂不可用',
+    )
     expect(wrapper.find('[data-testid="filter-template-select"]').exists()).toBe(false)
     expect(wrapper.emitted('apply')).toEqual([
       [{ review_state: ['pending_review', 'pending_recheck'] }, false],
@@ -233,7 +300,9 @@ describe('RecordFilterTemplateBar', () => {
     })
     await flushPromises()
     await selectTemplate(wrapper, 'tpl-1')
-    expect(wrapper.get('[data-testid="filter-template-update"]').attributes('disabled')).toBeDefined()
+    expect(
+      wrapper.get('[data-testid="filter-template-update"]').attributes('disabled'),
+    ).toBeDefined()
 
     await wrapper.setProps({ currentFilters: { dept: '心内科', doctor: '张医师' } })
     expect(wrapper.text()).toContain('已修改')

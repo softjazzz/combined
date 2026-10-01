@@ -80,6 +80,22 @@ def test_create_normalizes_filters_and_name(sessions):
     }
 
 
+@pytest.mark.parametrize("workflow", ["clinical_appeal", "pending_rectification"])
+def test_workflow_filter_round_trips_as_user_default(sessions, workflow):
+    filters = {"result_view": "defects", "defect_workflow": workflow}
+    created = _create(filters=filters, is_default=True)
+    assert created["filters"] == filters
+    assert service.list_templates(owner_id="u-1", page_key=INPATIENT)["items"][0]["filters"] == filters
+
+
+@pytest.mark.parametrize("filters", [{"defect_workflow": "clinical_appeal"},
+    {"result_view": "records", "defect_workflow": "pending_rectification"},
+    {"result_view": "defects", "defect_workflow": "unknown"}])
+def test_workflow_filter_requires_supported_defect_view(sessions, filters):
+    with pytest.raises(service.FilterTemplateInvalid):
+        _create(filters=filters)
+
+
 @pytest.mark.parametrize("filters", [
     {"page": 2},
     {"page_size": 50},

@@ -7,6 +7,27 @@ import {
 } from '@/views/workstation-v4/composables/recordFilterQuery'
 
 describe('recordFilterQuery', () => {
+  it('申诉整改分区随URL往返，切回病历清除分区', () => {
+    const filters = { result_view: 'defects' as const, defect_workflow: 'clinical_appeal' as const }
+    const query = mergeRecordFilterQuery({}, filters)
+    expect(query).toEqual({ result_view: 'defects', defect_workflow: 'clinical_appeal' })
+    expect(
+      parseRecordFilterQuery({ result_view: 'defects', defect_workflow: 'clinical_appeal' }),
+    ).toEqual(filters)
+    expect(
+      isSameRecordFilter(filters, {
+        result_view: 'defects',
+        defect_workflow: 'pending_rectification',
+      }),
+    ).toBe(false)
+    expect(parseRecordFilterQuery({ defect_workflow: 'clinical_appeal' })).toEqual({})
+    expect(parseRecordFilterQuery({ result_view: 'defects', defect_workflow: 'unknown' })).toEqual({
+      result_view: 'defects',
+    })
+    expect(
+      mergeRecordFilterQuery({ result_view: 'defects', defect_workflow: 'clinical_appeal' }, {}),
+    ).toEqual({})
+  })
   it('解析 query：去空白、忽略非法审核状态并按固定顺序去重', () => {
     expect(
       parseRecordFilterQuery({

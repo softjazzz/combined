@@ -536,6 +536,11 @@ def _workspace_review_scene(
     ).mappings().first()
     if row is None:
         raise RecordReviewConflict("result_changed", "质控结果所属任务已不存在")
+    return _workspace_scene_from_job(row, identity=identity)
+
+
+def _workspace_scene_from_job(row: Any, *, identity: tuple[str, str, str]) -> str:
+    """单例与批量读取共用冻结场景判定，批量调用不重复查询任务。"""
     try:
         filters = json.loads(row["filters_json"] or "{}")
     except (TypeError, ValueError) as exc:
@@ -1191,4 +1196,3 @@ __all__ = [
     "submit_case_review",
     "submit_record_review",
 ]
-

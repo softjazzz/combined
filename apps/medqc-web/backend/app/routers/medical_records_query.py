@@ -153,8 +153,13 @@ async def get_workstation_data_api(
         None, description="缺陷来源：全部、Canonical 自动缺陷、任务人工缺陷",
     ),
     has_defect: Optional[bool] = Query(None, description="病历视图按是否存在指定来源缺陷筛选"),
+    defect_workflow: Optional[Literal["clinical_appeal", "pending_rectification"]] = Query(
+        None, description="本轮待处理申诉或已派发待整改缺陷",
+    ),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
+    if defect_workflow is not None and result_view != "defects":
+        raise HTTPException(status_code=422, detail="defect_workflow 仅支持缺陷视图")
     if result_view == "defects" and has_defect is not None:
         raise HTTPException(status_code=422, detail="缺陷结果视图不支持 has_defect 参数")
     if result_view == "records" and defect_source is not None and has_defect is None:
@@ -196,6 +201,9 @@ async def get_workstation_data_api(
             result_view=result_view,
             defect_source=defect_source,
             has_defect=has_defect,
+            **({"defect_workflow": defect_workflow,
+                "defect_workflow_actor_id": str(current_user.get("id") or "")}
+               if defect_workflow is not None else {}),
             **extra,
         )
     except WorkstationReviewStateUnavailable:
@@ -224,4 +232,7 @@ async def get_workstation_data_api(
             detail="缺陷数据暂不可用，无法按当前条件查询，请稍后重试",
         ) from None
     except Exception as exc:
+        from ..services.defect_rectification_service import RectificationError
+        if isinstance(exc, RectificationError) and exc.status == 403:
+            raise HTTPException(status_code=403, detail=str(exc)) from None
         raise_medical_records_http_error(exc)

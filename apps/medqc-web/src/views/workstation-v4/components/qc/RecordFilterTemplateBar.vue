@@ -10,7 +10,7 @@
         :class="{ 'is-active': activeQuickKey === option.key }"
         :aria-pressed="activeQuickKey === option.key"
         :disabled="disabled"
-        @click="applyQuick(option.states)"
+        @click="applyQuick(option)"
       >
         {{ option.label }}
       </button>
@@ -163,6 +163,7 @@ const props = defineProps<{
   /** URL 未显式给出筛选时，由本组件在模板加载后决定初始筛选（默认模板优先于系统默认）。 */
   resolveInitialFilters: boolean
   disabled?: boolean
+  defectView?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -173,7 +174,13 @@ const emit = defineEmits<{
   apply: [filters: RecordFilterSnapshot, reviewScopeAll: boolean]
 }>()
 
-type QuickKey = 'all' | 'pending_review' | 'pending_recheck' | 'reviewing'
+type QuickKey =
+  | 'all'
+  | 'pending_review'
+  | 'pending_recheck'
+  | 'reviewing'
+  | 'clinical_appeal'
+  | 'pending_rectification'
 
 interface QuickOption {
   key: QuickKey
@@ -216,11 +223,18 @@ const confirmingDelete = ref(false)
 let loadSequence = 0
 
 const visibleQuickOptions = computed(() =>
-  QUICK_OPTIONS.filter((option) => !option.reviewOnly || canReview.value),
+  props.defectView
+    ? ([
+        QUICK_OPTIONS[0],
+        { key: 'clinical_appeal', label: '临床申诉（待处理）', states: [], reviewOnly: false },
+        { key: 'pending_rectification', label: '待整改（已派发）', states: [], reviewOnly: false },
+      ] as QuickOption[])
+    : QUICK_OPTIONS.filter((option) => !option.reviewOnly || canReview.value),
 )
 
 /** 快捷筛选只作用于审核状态，其他筛选项保持不变。 */
 const activeQuickKey = computed<QuickKey | ''>(() => {
+  if (props.defectView) return props.currentFilters.defect_workflow ?? 'all'
   const current = (normalizeRecordFilter(props.currentFilters).review_state ?? []).join(',')
   const matched = visibleQuickOptions.value.find((option) => option.states.join(',') === current)
   return matched?.key ?? ''
@@ -267,6 +281,7 @@ function templateSnapshot(template: FilterTemplate): RecordFilterSnapshot | null
     score_max,
     result_view,
     defect_source,
+    defect_workflow,
     has_defect,
   } = template.filters
   return normalizeRecordFilter({
@@ -283,6 +298,7 @@ function templateSnapshot(template: FilterTemplate): RecordFilterSnapshot | null
     score_max,
     result_view,
     defect_source,
+    defect_workflow,
     has_defect,
   })
 }
@@ -330,7 +346,26 @@ async function initialize() {
   }
 }
 
-function applyQuick(states: RecordLatestReviewState[]) {
+function applyQuick(option: QuickOption) {
+  if (props.defectView) {
+    const workflow =
+      option.key === 'clinical_appeal' || option.key === 'pending_rectification'
+        ? option.key
+        : undefined
+    emit(
+      'apply',
+      normalizeRecordFilter({
+        ...props.currentFilters,
+        result_view: 'defects',
+        defect_workflow: workflow,
+        review_state: undefined,
+        has_defect: undefined,
+      }),
+      false,
+    )
+    return
+  }
+  const states = option.states
   emit(
     'apply',
     normalizeRecordFilter({ ...props.currentFilters, review_state: states }),

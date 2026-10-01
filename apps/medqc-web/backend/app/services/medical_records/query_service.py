@@ -605,6 +605,10 @@ def _build_workstation_defect_rows(
                 continue
             if summary.get("status") != "ready" or not isinstance(summary.get("items"), list):
                 continue
+            rule_counts = Counter(
+                str(item.get("rule_id") or item.get("rule_code") or "").strip().upper()
+                for item in summary["items"] if isinstance(item, Mapping)
+            )
             for item in summary["items"]:
                 if not isinstance(item, Mapping) or item.get("is_confirmed_issue") is not True:
                     continue
@@ -612,6 +616,9 @@ def _build_workstation_defect_rows(
                     **meta_by_identity[identity],
                     "source": "auto",
                     "defect_id": None,
+                    "root_job_id": summary.get("root_job_id"),
+                    "envelope_id": summary.get("envelope_id"),
+                    "source_unique": rule_counts[str(item.get("rule_id") or item.get("rule_code") or "").strip().upper()] == 1,
                     "rule_id": str(item.get("rule_id") or item.get("rule_code") or "").strip().upper(),
                     "rule_name": str(item.get("rule_name") or item.get("qc_point") or "").strip(),
                     "document": str(item.get("source_document") or "").strip(),
@@ -1518,6 +1525,9 @@ def get_workstation_data(
     defect_projection_loader: Optional[Callable[[list[dict[str, str]]], Any]] = None,
     manual_defect_loader: Optional[Callable[[Iterable[tuple[str, str, str]]], Any]] = None,
     result_view: str = "records",
+    defect_workflow: Optional[str] = None,
+    defect_workflow_actor_id: Optional[str] = None,
+    defect_workflow_loader: Optional[Callable[..., Any]] = None,
 ) -> dict[str, Any]:
     session_factory = session_factory or _session_factory
     review_state_filter = _normalize_review_state_filter(review_state)
@@ -1532,6 +1542,11 @@ def get_workstation_data(
         )
     )
     normalized_result_view = str(result_view or "records").strip().lower()
+    from ..defect_workflow_filter_service import WORKFLOW_FILTERS
+    if defect_workflow is not None and (
+        defect_workflow not in WORKFLOW_FILTERS or normalized_result_view != "defects"
+    ):
+        raise ValueError("defect_workflow 仅支持缺陷视图的临床申诉或待整改")
     if normalized_result_view not in {"records", "defects"}:
         raise ValueError("result_view 无效")
     normalized_defect_source = str(defect_source or "all").strip().lower()
@@ -1935,7 +1950,18 @@ def get_workstation_data(
                 defect_rows = _build_workstation_defect_rows(
                     full_records, canonical, manual, source=normalized_defect_source,
                 )
+                if defect_workflow is not None:
+                    from ..defect_workflow_filter_service import filter_defect_workflow
+                    loader = defect_workflow_loader or filter_defect_workflow
+                    defect_rows = loader(
+                        defect_rows, workflow=defect_workflow, actor_id=defect_workflow_actor_id,
+                        session_factory=session_factory,
+                        scene=manual_defect_scene,
+                    )
             except Exception as exc:  # noqa: BLE001 - 缺陷列表必须失败关闭
+                from ..defect_rectification_service import RectificationError
+                if isinstance(exc, RectificationError) and exc.status == 403:
+                    raise
                 logger.warning("病历缺陷列表批量读取失败 error_type=%s", type(exc).__name__)
                 raise WorkstationDefectUnavailable("缺陷数据暂不可用，无法查询") from None
 

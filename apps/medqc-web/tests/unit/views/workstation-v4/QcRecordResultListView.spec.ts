@@ -313,6 +313,28 @@ describe('QcRecordResultListView', () => {
     })
   })
 
+  it('缺陷快捷分区进入请求与URL，切回病历移除分区', async () => {
+    const wrapper = mountView('inpatient')
+    await flushPromises()
+    await wrapper.get('[data-testid="qc-result-view-defects"]').trigger('click')
+    await flushPromises()
+    expect(mocks.getRaw.mock.lastCall?.[1]).not.toHaveProperty('defect_workflow')
+    await wrapper.get('[data-testid="quick-filter-clinical_appeal"]').trigger('click')
+    await flushPromises()
+    expect(mocks.getRaw.mock.lastCall?.[1]).toMatchObject({
+      result_view: 'defects',
+      defect_workflow: 'clinical_appeal',
+    })
+    expect(mocks.routerReplace.mock.lastCall?.[0].query).toMatchObject({
+      result_view: 'defects',
+      defect_workflow: 'clinical_appeal',
+    })
+    await wrapper.get('[data-testid="qc-result-view-records"]').trigger('click')
+    await flushPromises()
+    expect(mocks.getRaw.mock.lastCall?.[1]).not.toHaveProperty('defect_workflow')
+    expect(mocks.routerReplace.mock.lastCall?.[0].query).not.toHaveProperty('defect_workflow')
+  })
+
   it('缺陷owner返回503时显示失败且不伪装成零缺陷', async () => {
     const wrapper = mountView('inpatient')
     await flushPromises()

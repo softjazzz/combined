@@ -27,6 +27,7 @@ export type RecordFilterSnapshot = Pick<
   | 'score_max'
   | 'result_view'
   | 'defect_source'
+  | 'defect_workflow'
   | 'has_defect'
 >
 
@@ -53,6 +54,7 @@ const QUERY_KEY_BY_FIELD = {
   score_max: 'score_max',
   result_view: 'result_view',
   defect_source: 'defect_source',
+  defect_workflow: 'defect_workflow',
   has_defect: 'has_defect',
 } as const satisfies Record<keyof RecordFilterSnapshot, string>
 
@@ -124,6 +126,13 @@ export function normalizeRecordFilter(snapshot: RecordFilterSnapshot): RecordFil
     normalized.defect_source = snapshot.defect_source
   }
   if (typeof snapshot.has_defect === 'boolean') normalized.has_defect = snapshot.has_defect
+  if (
+    normalized.result_view === 'defects' &&
+    (snapshot.defect_workflow === 'clinical_appeal' ||
+      snapshot.defect_workflow === 'pending_rectification')
+  ) {
+    normalized.defect_workflow = snapshot.defect_workflow
+  }
   return normalized
 }
 
@@ -153,6 +162,10 @@ export function parseRecordFilterQuery(query: LocationQuery): RecordFilterSnapsh
     snapshot.defect_source = defectSource
   }
   const hasDefect = firstQueryText(query[QUERY_KEY_BY_FIELD.has_defect])
+  const workflow = firstQueryText(query[QUERY_KEY_BY_FIELD.defect_workflow])
+  if (workflow === 'clinical_appeal' || workflow === 'pending_rectification') {
+    snapshot.defect_workflow = workflow
+  }
   if (hasDefect === 'true' || hasDefect === 'false') snapshot.has_defect = hasDefect === 'true'
   return normalizeRecordFilter(snapshot)
 }
@@ -166,6 +179,7 @@ export function recordFilterSignature(snapshot: RecordFilterSnapshot): string {
     ...NUMBER_FIELDS.map((field) => normalized[field] ?? ''),
     normalized.result_view ?? '',
     normalized.defect_source ?? '',
+    normalized.defect_workflow ?? '',
     normalized.has_defect === undefined ? '' : String(normalized.has_defect),
   ])
 }
@@ -217,6 +231,8 @@ export function mergeRecordFilterQuery(
   if (normalized.has_defect !== undefined) {
     next[QUERY_KEY_BY_FIELD.has_defect] = String(normalized.has_defect)
   }
+  if (normalized.defect_workflow)
+    next[QUERY_KEY_BY_FIELD.defect_workflow] = normalized.defect_workflow
   const keepScopeAll =
     reviewScopeAll ?? firstQueryText(current[REVIEW_SCOPE_QUERY_KEY]) === REVIEW_SCOPE_ALL
   if (keepScopeAll && !normalized.review_state) {

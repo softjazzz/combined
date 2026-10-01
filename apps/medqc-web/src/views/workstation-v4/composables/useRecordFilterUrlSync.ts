@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import type { RecordLatestReviewState } from '../types'
 import type {
   RecordDefectSource,
+  RecordDefectWorkflow,
   RecordResultView,
   RecordScoreFilterStatus,
 } from '@/api/filterTemplates'
@@ -36,6 +37,7 @@ export interface RecordFilterState {
   scoreMaxFilter: Ref<number | null>
   resultView: Ref<RecordResultView>
   defectSourceFilter: Ref<RecordDefectSource>
+  defectWorkflowFilter: Ref<RecordDefectWorkflow | ''>
   hasDefectFilter: Ref<boolean | null>
   currentPage: Ref<number>
 }
@@ -77,6 +79,7 @@ export function useRecordFilterUrlSync(options: {
       score_min: state.scoreMinFilter.value ?? undefined,
       score_max: state.scoreMaxFilter.value ?? undefined,
       result_view: state.resultView.value === 'defects' ? 'defects' : undefined,
+      defect_workflow: state.defectWorkflowFilter.value || undefined,
       defect_source:
         state.resultView.value === 'defects' || state.hasDefectFilter.value !== null
           ? state.defectSourceFilter.value
@@ -107,6 +110,7 @@ export function useRecordFilterUrlSync(options: {
     state.scoreMaxFilter.value = normalized.score_max ?? null
     state.resultView.value = normalized.result_view ?? 'records'
     state.defectSourceFilter.value = normalized.defect_source ?? 'all'
+    state.defectWorkflowFilter.value = normalized.defect_workflow ?? ''
     state.hasDefectFilter.value = normalized.has_defect ?? null
     state.currentPage.value = 1
     return fetchData(1)

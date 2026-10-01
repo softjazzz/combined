@@ -56,6 +56,28 @@ def test_without_review_state_service_call_is_unchanged(client, monkeypatch):
 
     assert response.status_code == 200
     assert "review_state" not in captured
+    assert "defect_workflow" not in captured
+
+
+def test_workflow_filter_forwards_persistent_subject_and_rejects_record_view(client, monkeypatch):
+    _authenticate(monkeypatch)
+    captured = _capture(monkeypatch)
+    response = client.get(URL, params={"result_view": "defects", "defect_workflow": "clinical_appeal"}, headers=HEADERS)
+    assert response.status_code == 200
+    assert captured["defect_workflow"] == "clinical_appeal"
+    assert captured["defect_workflow_actor_id"] == "u-review"
+    response = client.get(URL, params={"defect_workflow": "pending_rectification"}, headers=HEADERS)
+    assert response.status_code == 422
+
+
+def test_workflow_persistent_permission_error_is_403(client, monkeypatch):
+    from app.services.defect_rectification_service import RectificationError
+    _authenticate(monkeypatch)
+    def broken(**kwargs):
+        raise RectificationError("缺陷查询权限不足", 403)
+    monkeypatch.setattr("app.routers.medical_records_query.get_workstation_data", broken)
+    response = client.get(URL, params={"result_view": "defects", "defect_workflow": "clinical_appeal"}, headers=HEADERS)
+    assert response.status_code == 403
 
 
 @pytest.mark.parametrize("value", ["", "rejected", "pending_review,", "approved,bogus", "APPROVED"])
