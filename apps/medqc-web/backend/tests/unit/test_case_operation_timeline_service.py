@@ -13,6 +13,8 @@ from sqlalchemy.pool import StaticPool
 
 from app.database.models.qc import QCDefect, QCDefectHistory, QCRecordReview, SysUser
 from app.database.models.defect_rectification import DefectRectification, DefectRectificationEvent
+from app.database.models.case_communication import CaseCommunication
+from app.database.models.qc import Notification
 from app.services import case_operation_timeline_service as service
 
 T0 = datetime(2026, 9, 1, 8, 0, 0)
@@ -119,9 +121,9 @@ def build_env(monkeypatch):
     tables = _tables(metadata)
     metadata.create_all(engine)
     rectification_engine = engine.execution_options(schema_translate_map={"qc": None})
-    for model in (DefectRectification, DefectRectificationEvent):
+    for model in (DefectRectification, DefectRectificationEvent, CaseCommunication):
         model.__table__.create(rectification_engine)
-    for model in (QCDefect, QCDefectHistory, QCRecordReview, SysUser):
+    for model in (QCDefect, QCDefectHistory, QCRecordReview, SysUser, Notification):
         model.__table__.create(engine)
     factory = sessionmaker(bind=rectification_engine, expire_on_commit=False)
     with factory.begin() as session:
@@ -373,16 +375,37 @@ def test_missing_display_name_is_null(env):
     assert item["actor_id"] == "mgr-1" and item["actor_name"] is None
 
 
-def test_display_names_loaded_in_one_query(env):
+@pytest.mark.parametrize("communication_count", [0, 3, 20])
+def test_display_names_loaded_in_one_query(env, communication_count):
     factory, _ = env
+    with factory.begin() as session:
+        for index in range(communication_count):
+            notice_id = f"notice-{index}"
+            session.add(Notification(
+                id=notice_id, type="case_communication", title="合成催办",
+                content="合成沟通正文", recipient_id="qc-1", sender_id="mgr-1",
+                source_key="case_communication", identity_version=1,
+                related_type="case_communication", related_id=f"communication-{index}",
+                institute_id=CASE[0], patient_id=CASE[1], visit_id=CASE[2],
+                is_read=True, read_at=at(61 + index), created_at=at(60 + index),
+            ))
+            session.add(CaseCommunication(
+                id=f"communication-{index}", institute_id=CASE[0], patient_id=CASE[1], visit_id=CASE[2],
+                scene="running", root_job_id="job-task", envelope_id="env-1",
+                rule_set_key="luxian_0609_qc_v1", rule_set_version="v1", department="合成科室",
+                actor_id="mgr-1", recipient_id="qc-1", action="urge", content="合成沟通正文",
+                request_id=f"request-{index}", notification_id=notice_id, created_at=at(60 + index),
+            ))
     statements: list[str] = []
     engine = factory.kw["bind"]
     sa.event.listen(engine, "before_cursor_execute",
                     lambda conn, cursor, stmt, *a: statements.append(stmt))
-    timeline()
+    result = timeline()
+    assert result["total"] == 6 + communication_count * 2
     assert sum("sys_users" in stmt for stmt in statements) == 2
-    # 各来源各一次查询（Envelope 与 job 分两次批量），加一次显示名。
-    assert len(statements) == 8
+    # 沟通与通知一次 JOIN，事件增长不增加人员或通知的逐条查询。
+    assert sum("qc_case_communications" in stmt for stmt in statements) == 1
+    assert len(statements) == 9
 
 
 @pytest.mark.parametrize("identity", [

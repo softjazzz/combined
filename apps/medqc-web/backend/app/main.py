@@ -53,6 +53,7 @@ from .routers import staff_work_analysis as staff_work_analysis_router
 from .routers import appeals as appeals_router
 from .routers import remediation as remediation_router
 from .routers import defect_rectifications as defect_rectifications_router
+from .routers import case_communications as case_communications_router
 from .routers import department_qc_rules as department_qc_rules_router
 from .routers import demo as demo_router
 from .routers import frontpage as frontpage_router
@@ -305,6 +306,7 @@ def create_app() -> FastAPI:
     app.include_router(appeals_router.router)
     app.include_router(remediation_router.router)
     app.include_router(defect_rectifications_router.router)
+    app.include_router(case_communications_router.router)
     # Department QC Rules (Migration 009)
     app.include_router(department_qc_rules_router.router)
     # Demo page for LX33 rules (no auth required)

@@ -18,6 +18,7 @@ export type KnownCaseOperationType =
   | 'manual_defect_reviewed'
   | 'task_record_completed'
   | RectificationOperationType
+  | 'case_urge' | 'case_opinion' | 'case_withdraw' | 'case_notification_read'
 
 export type RectificationOperationType =
   | 'rectification_assigned'
@@ -94,6 +95,7 @@ interface CaseOperationBase {
 }
 
 export type KnownCaseOperation =
+  | (CaseOperationBase & { type: 'case_urge' | 'case_opinion' | 'case_withdraw' | 'case_notification_read'; summary: { scene?: string; content?: string; recipient_id?: string; root_job_id?: string; envelope_id?: string; related_event_id?: string } })
   | (CaseOperationBase & { type: 'qc_run_completed'; summary: QcRunCompletedSummary })
   | (CaseOperationBase & { type: 'record_review'; summary: RecordReviewSummary })
   | (CaseOperationBase & { type: 'manual_defect_created'; summary: ManualDefectCreatedSummary })
@@ -137,6 +139,7 @@ export interface RecordOperationApiResult<T> {
 }
 
 const KNOWN_TYPES: ReadonlySet<string> = new Set<KnownCaseOperationType>([
+  'case_urge', 'case_opinion', 'case_withdraw', 'case_notification_read',
   'qc_run_completed',
   'record_review',
   'manual_defect_created',

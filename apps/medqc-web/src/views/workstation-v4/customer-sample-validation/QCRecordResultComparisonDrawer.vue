@@ -138,6 +138,16 @@
           :scene="scoreScene"
           @forbidden="scoreForbidden = true"
         />
+        <CaseCommunicationPanel
+          v-if="canRerunCase && (scoreScene === 'running' || scoreScene === 'final')"
+          :key="`communication:${rerunContextKey}:${latestResult.job_id}`"
+          :institute-id="focus.instituteId"
+          :patient-id="focus.patientId"
+          :visit-id="focus.visitId"
+          :scene="scoreScene"
+          :job-id="latestResult.job_id"
+          @saved="communicationRevision += 1"
+        />
         <!-- 五分区只装配各自 owner：Canonical / 计分 / 人工 / 编码；核心制度明确未接入。 -->
         <CaseRectificationCreate
           v-if="showRectification && scoreScene"
@@ -165,7 +175,7 @@
         <!-- 操作记录时间线：只装配各 owner 的事件，只读；与缺陷分区同一挂载条件。 -->
         <CaseOperationTimeline
           v-if="showOperations"
-          :key="`case-operations:${focus.instituteId}:${focus.patientId}:${focus.visitId}`"
+          :key="`case-operations:${focus.instituteId}:${focus.patientId}:${focus.visitId}:${communicationRevision}`"
           :institute-id="focus.instituteId"
           :patient-id="focus.patientId"
           :visit-id="focus.visitId"
@@ -208,6 +218,7 @@ import CaseRectificationCreate from '@/components/qc/CaseRectificationCreate.vue
 import type { CaseDefectTarget } from '@/components/qc/CaseDefectPartitionsPanel.vue'
 import CaseOperationTimeline from '@/components/qc/CaseOperationTimeline.vue'
 import CaseScorePanel from '@/components/qc/CaseScorePanel.vue'
+import CaseCommunicationPanel from '@/components/qc/CaseCommunicationPanel.vue'
 import QcRunSelectedControl from '../components/qc/QcRunSelectedControl.vue'
 import type { ScoringScene } from '@/api/scoring'
 import type { RecordReviewDecision } from '@/api/recordReviews'
@@ -305,6 +316,7 @@ const reviewForbidden = ref(false)
 const defectPartitionsForbidden = ref(false)
 const operationsForbidden = ref(false)
 const scoreForbidden = ref(false)
+const communicationRevision = ref(0)
 /** 得分读取只需登录，不依赖审核角色；403 时隐藏。 */
 const showScorePanel = computed(() => !!props.scoreScene && !scoreForbidden.value)
 /** 未开启审核的调用方（如客户样本验证）不访问登录态。 */

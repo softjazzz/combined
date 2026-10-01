@@ -201,6 +201,10 @@ const TYPE_LABELS: Record<string, string> = {
   rectification_rejected: '驳回整改',
   rectification_urged: '催办整改',
   rectification_urge_withdrawn: '撤回催办',
+  case_urge: '病例催办',
+  case_opinion: '新增质控意见',
+  case_withdraw: '撤回病例催办',
+  case_notification_read: '医生已读通知',
 }
 const STAGE_LABELS: Record<string, string> = { initial: '初审', recheck: '复审' }
 const REVIEW_DECISION_LABELS: Record<string, string> = { approved: '通过', doubtful: '存疑' }
@@ -243,6 +247,19 @@ function summaryParts(item: CaseOperation): string[] {
     if (value) parts.push(value)
   }
   switch (item.type) {
+    case 'case_urge':
+    case 'case_opinion':
+    case 'case_withdraw':
+    case 'case_notification_read': {
+      const s = item.summary
+      push(enumPart('场景', s.scene, SCENE_LABELS))
+      if (text(s.content)) push(text(s.content))
+      if (text(s.recipient_id)) push(`受领人 ${text(s.recipient_id)}`)
+      if (text(s.root_job_id)) push(`运行 ${text(s.root_job_id)}`)
+      if (text(s.envelope_id)) push(`结果 ${text(s.envelope_id)}`)
+      if (text(s.related_event_id)) push(`原催办 ${text(s.related_event_id)}`)
+      break
+    }
     case 'qc_run_completed': {
       const s = item.summary
       if (isCount(s.result_count)) push(`结果 ${s.result_count} 条`)

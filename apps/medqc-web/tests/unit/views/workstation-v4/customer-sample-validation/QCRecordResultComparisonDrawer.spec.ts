@@ -148,6 +148,13 @@ const CaseOperationTimelineStub = defineComponent({
 
 let scorePanelProps: Record<string, unknown> | null = null
 
+const CommunicationPanelStub = defineComponent({
+  name: 'CaseCommunicationPanel',
+  props: ['instituteId', 'patientId', 'visitId', 'scene', 'jobId'],
+  emits: ['saved'],
+  template: '<button data-testid="communication-save" @click="$emit(\'saved\')">保存沟通</button>',
+})
+
 const CaseScorePanelStub = defineComponent({
   name: 'CaseScorePanel',
   props: {
@@ -213,6 +220,7 @@ function mountDrawer(
         CaseRectificationCreate: { template: '<div data-testid="rectification-create" />' },
         CaseOperationTimeline: CaseOperationTimelineStub,
         CaseScorePanel: CaseScorePanelStub,
+        CaseCommunicationPanel: CommunicationPanelStub,
         QcRunSelectedControl: CaseRerunStub,
       },
     },
@@ -256,6 +264,26 @@ describe('QCRecordResultComparisonDrawer', () => {
     expect(wrapper.getComponent(CaseScorePanelStub).vm).not.toBe(scoreBefore)
     expect(wrapper.getComponent(CaseOperationTimelineStub).vm).not.toBe(timelineBefore)
     expect(wrapper.emitted('qc-completed')?.[0]).toEqual([{ instituteId: 'H1', patientId: 'P001', visitId: 'V001' }])
+    wrapper.unmount()
+  })
+
+  it.each(['running', 'final'] as const)('病例沟通传递三坐标与明确场景，保存仅重挂载统一历史 %s', async (scoreScene) => {
+    authState.roles = ['qc_manager']
+    getLatestLuxian0609RecordResult.mockResolvedValue({ success: true, data: readyResult })
+    const wrapper = mountDrawer(undefined, { recordReview: true, scoreScene })
+    await flushPromises()
+    expect(wrapper.getComponent(CommunicationPanelStub).props()).toMatchObject({ instituteId: 'H1', patientId: 'P001', visitId: 'V001', scene: scoreScene, jobId: 'job-safe-001' })
+    const score = wrapper.getComponent(CaseScorePanelStub).vm
+    const review = wrapper.getComponent(CaseRecordReviewPanelStub).vm
+    const defects = wrapper.getComponent(CaseDefectPartitionsPanelStub).vm
+    const timeline = wrapper.getComponent(CaseOperationTimelineStub).vm
+    await wrapper.get('[data-testid="communication-save"]').trigger('click'); await flushPromises()
+    expect(wrapper.getComponent(CaseOperationTimelineStub).vm).not.toBe(timeline)
+    expect(wrapper.getComponent(CaseScorePanelStub).vm).toBe(score)
+    expect(wrapper.getComponent(CaseRecordReviewPanelStub).vm).toBe(review)
+    expect(wrapper.getComponent(CaseDefectPartitionsPanelStub).vm).toBe(defects)
+    expect(getLatestLuxian0609RecordResult).toHaveBeenCalledTimes(1)
+    expect(wrapper.emitted('qc-completed')).toBeUndefined()
     wrapper.unmount()
   })
 

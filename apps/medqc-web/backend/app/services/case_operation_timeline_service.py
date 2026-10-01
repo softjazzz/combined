@@ -325,6 +325,19 @@ def _rectification_events(session: Any, identity: tuple[str, str, str]) -> list[
     return events
 
 
+def _communication_events(session: Any, identity: tuple[str, str, str]) -> list[dict[str, Any]]:
+    from .case_communication_service import communication_rows, event_view
+    events = []
+    for entry, notice in communication_rows(session, identity):
+        events.append(_event(f"case_communication:{entry.id}", f"case_{entry.action}", entry.created_at,
+            entry.actor_id, event_view(entry, notice)))
+        if notice and notice.is_read is True and isinstance(notice.read_at, datetime):
+            events.append(_event(f"notification_read:{notice.id}", "case_notification_read", notice.read_at,
+                notice.recipient_id, {"communication_id": entry.id, "scene": entry.scene,
+                    "root_job_id": entry.root_job_id, "envelope_id": entry.envelope_id}))
+    return events
+
+
 def list_case_operations(
     *, actor_id: str, institute_id: str, patient_id: str, visit_id: str, limit: int = DEFAULT_LIMIT,
 ) -> dict[str, Any]:
@@ -350,6 +363,7 @@ def list_case_operations(
                 *_manual_defect_events(session, identity),
                 *_task_record_events(session, identity),
                 *_rectification_events(session, identity),
+                *_communication_events(session, identity),
             ]
             events = [event for event in events if isinstance(event["occurred_at"], datetime)]
             events.sort(key=_sort_key, reverse=True)

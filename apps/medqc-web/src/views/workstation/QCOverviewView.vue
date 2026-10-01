@@ -16,6 +16,7 @@
         <HomeReviewTodos :scene="reviewTodoScene" />
         <HomeAppealTodos />
         <HomeRectificationTodos />
+        <HomeCaseCommunications />
 
         <section
           v-if="loadError"
@@ -421,6 +422,7 @@ import HomeTaskTodos from './HomeTaskTodos.vue'
 import HomeReviewTodos from './HomeReviewTodos.vue'
 import HomeAppealTodos from './HomeAppealTodos.vue'
 import HomeRectificationTodos from './HomeRectificationTodos.vue'
+import HomeCaseCommunications from './HomeCaseCommunications.vue'
 import type {
   ClinicalQcHomeDepartmentItem,
   ClinicalQcHomePriorityItem,
