@@ -118,6 +118,29 @@
                 ><ArrowRight :size="18" />
               </button>
             </nav>
+            <section
+              v-if="canCreateAppeal && appealPriorityItems.length"
+              class="qc-home-appeal-cases"
+              aria-labelledby="appeal-case-title"
+            >
+              <header>
+                <div>
+                  <h2 id="appeal-case-title">可申诉问题病例</h2>
+                  <p>从已确认问题病例进入，申诉页将再次向服务端核验可申诉项。</p>
+                </div>
+              </header>
+              <div class="qc-home-appeal-cases__list">
+                <article v-for="item in appealPriorityItems" :key="item.record_key">
+                  <div>
+                    <strong>{{ item.patient_name || item.patient_id }}</strong>
+                    <span>{{ item.department }} · {{ item.patient_id }} / {{ item.visit_id }}</span>
+                  </div>
+                  <button type="button" @click="openAppeal(item)">
+                    发起申诉 <ArrowRight :size="15" />
+                  </button>
+                </article>
+              </div>
+            </section>
           </section>
 
           <section class="qc-home-analysis workstation-surface-enter" data-testid="home-analysis">
@@ -398,6 +421,7 @@ import HomeReviewTodos from './HomeReviewTodos.vue'
 import HomeAppealTodos from './HomeAppealTodos.vue'
 import type {
   ClinicalQcHomeDepartmentItem,
+  ClinicalQcHomePriorityItem,
   ClinicalQcHomePhysicianItem,
   WorkstationHomePayload,
 } from '@/views/workstation-v2/types'
@@ -460,10 +484,9 @@ const homeData = ref<WorkstationHomePayload | null>(null)
 
 const clinicalQc = computed(() => homeData.value?.clinical_qc ?? null)
 function isDashboardScene(value: unknown): value is DashboardScene {
-  return value === 'all'
-    || value === 'outpatient_emergency'
-    || value === 'running'
-    || value === 'final'
+  return (
+    value === 'all' || value === 'outpatient_emergency' || value === 'running' || value === 'final'
+  )
 }
 
 const reviewTodoScene = computed<DashboardScene>(() => {
@@ -471,6 +494,12 @@ const reviewTodoScene = computed<DashboardScene>(() => {
   return isDashboardScene(scene) ? scene : 'all'
 })
 const canReadTasks = computed(() => authStore.userRoles.some((role) => taskReadRoles.has(role)))
+const canCreateAppeal = computed(() => authStore.userRoles.includes('doctor'))
+const appealPriorityItems = computed(() =>
+  (clinicalQc.value?.priority_items || [])
+    .filter((item) => item.priority_kind === 'non_compliant')
+    .slice(0, 5),
+)
 const isDemoPresentation = computed(() => authStore.user?.is_demo_account === true)
 const departmentOptions = computed(() => homeData.value?.department_options ?? [])
 const scopeHospitalText = computed(() =>
@@ -651,6 +680,19 @@ function openRecordPool() {
       source: 'dashboard',
       department: departmentFilter.value !== 'all' ? departmentFilter.value : undefined,
       keyword: keyword.value.trim() || undefined,
+    },
+  })
+}
+
+function openAppeal(item: ClinicalQcHomePriorityItem) {
+  void router.push({
+    path: '/dashboard/qc/appeals',
+    query: {
+      action: 'create',
+      institute_id: item.institute_id,
+      patient_id: item.patient_id,
+      visit_id: item.visit_id,
+      from: 'workstation-home',
     },
   })
 }
@@ -981,6 +1023,66 @@ watch(
 }
 .qc-home-priority-scope .qc-home-scope__time {
   font-size: 13px;
+}
+.qc-home-appeal-cases {
+  margin-top: 16px;
+  padding: 16px 18px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
+  background: #fff;
+}
+.qc-home-appeal-cases header h2 {
+  margin: 0;
+  font-size: 17px;
+  line-height: 22px;
+  font-weight: 600;
+}
+.qc-home-appeal-cases header p {
+  margin: 4px 0 0;
+  color: rgba(29, 29, 31, 0.6);
+  font-size: 13px;
+  line-height: 20px;
+}
+.qc-home-appeal-cases__list {
+  display: grid;
+  gap: 0;
+  margin-top: 10px;
+}
+.qc-home-appeal-cases__list article {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 54px;
+  border-top: 1px solid rgba(0, 0, 0, 0.07);
+}
+.qc-home-appeal-cases__list article div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.qc-home-appeal-cases__list article strong {
+  font-size: 14px;
+  line-height: 22px;
+}
+.qc-home-appeal-cases__list article span {
+  color: rgba(29, 29, 31, 0.6);
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+.qc-home-appeal-cases__list article button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid rgba(0, 122, 255, 0.24);
+  border-radius: 8px;
+  background: #fff;
+  color: #007aff;
+  cursor: pointer;
 }
 .qc-home-health-list {
   display: grid;

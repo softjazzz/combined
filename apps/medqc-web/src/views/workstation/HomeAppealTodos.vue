@@ -5,9 +5,7 @@
     aria-labelledby="appeal-todos-title"
   >
     <header class="appeal-todos__header">
-      <h2 id="appeal-todos-title">
-        缺陷审核待办
-      </h2>
+      <h2 id="appeal-todos-title">缺陷审核待办</h2>
       <div class="appeal-todos__tools">
         <button
           type="button"
@@ -22,41 +20,33 @@
           aria-label="刷新临床申诉待办"
           @click="void fetchTodos()"
         >
-          <RotateCw
-            :size="16"
-            aria-hidden="true"
-          />刷新
+          <RotateCw :size="16" aria-hidden="true" />刷新
         </button>
       </div>
     </header>
-    <p
-      v-if="error"
-      class="appeal-todos__error"
-      role="alert"
-      data-testid="appeal-todos-error"
-    >
+    <p v-if="error" class="appeal-todos__error" role="alert" data-testid="appeal-todos-error">
       {{ error }}
     </p>
-    <button
-      type="button"
-      class="appeal-todos__item"
-      data-testid="appeal-review-todo"
-      :disabled="loading || count === null"
-      @click="openTodo"
-    >
-      <ClipboardCheck
-        :size="19"
-        aria-hidden="true"
-      />
-      <span>临床申诉待审核</span>
-      <strong data-testid="appeal-review-count">{{ loading ? '加载中' : count ?? '不可用' }}</strong>
-      <ArrowRight
-        :size="17"
-        aria-hidden="true"
-      />
-    </button>
+    <div class="appeal-todos__list">
+      <button
+        v-for="item in sceneTodos"
+        :key="item.scene"
+        type="button"
+        class="appeal-todos__item"
+        :data-testid="`appeal-review-todo-${item.scene}`"
+        :disabled="loading || counts[item.scene] === null"
+        @click="openTodo(item.scene)"
+      >
+        <ClipboardCheck :size="19" aria-hidden="true" />
+        <span>{{ item.label }}</span>
+        <strong :data-testid="`appeal-review-count-${item.scene}`">{{
+          loading ? '加载中' : (counts[item.scene] ?? '不可用')
+        }}</strong>
+        <ArrowRight :size="17" aria-hidden="true" />
+      </button>
+    </div>
     <p
-      v-if="!loading && count === 0"
+      v-if="!loading && totalCount === 0"
       class="appeal-todos__empty"
       data-testid="appeal-todos-empty"
       role="status"
@@ -73,12 +63,30 @@ import { ArrowRight, ClipboardCheck, RotateCw } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 import { getAppeals } from '@/api/appeal'
 import { useAuthStore } from '@/stores/auth'
+import type { AppealScene } from '@/types/appeal'
 
 const router = useRouter()
 const authStore = useAuthStore()
-const canReview = computed(() => authStore.userRoles.some((role) => role === 'admin' || role === 'qc_manager'))
+const canReview = computed(() =>
+  authStore.userRoles.some((role) => role === 'admin' || role === 'qc_manager'),
+)
 const currentUserId = computed(() => authStore.user?.id?.trim() || '')
-const count = ref<number | null>(null)
+const sceneTodos: Array<{ scene: AppealScene; label: string }> = [
+  { scene: 'running', label: '运行质控申诉待审核' },
+  { scene: 'final', label: '终末质控申诉待审核' },
+  { scene: 'outpatient_emergency', label: '门急诊质控申诉待审核' },
+]
+const counts = ref<Record<AppealScene, number | null>>({
+  running: null,
+  final: null,
+  outpatient_emergency: null,
+})
+const totalCount = computed(() => {
+  const values = Object.values(counts.value)
+  return values.every((value) => value !== null)
+    ? values.reduce<number>((sum, value) => sum + (value ?? 0), 0)
+    : null
+})
 const loading = ref(true)
 const error = ref('')
 let requestId = 0
@@ -86,43 +94,55 @@ let requestId = 0
 async function fetchTodos() {
   if (!canReview.value || !currentUserId.value) {
     requestId++
-    count.value = null
+    counts.value = { running: null, final: null, outpatient_emergency: null }
     loading.value = false
     error.value = ''
     return
   }
   const currentRequestId = ++requestId
-  count.value = null
+  counts.value = { running: null, final: null, outpatient_emergency: null }
   loading.value = true
   error.value = ''
   try {
-    const page = await getAppeals({ status: 'reviewable', page: 1, pageSize: 1 })
+    const pages = await Promise.all(
+      sceneTodos.map(async ({ scene }) => {
+        try {
+          const page = await getAppeals({ status: 'reviewable', scene, page: 1, pageSize: 1 })
+          return Number.isInteger(page.total) && page.total >= 0
+            ? ([scene, page.total] as const)
+            : ([scene, null] as const)
+        } catch {
+          return [scene, null] as const
+        }
+      }),
+    )
     if (currentRequestId !== requestId) return
-    if (!Number.isInteger(page.total) || page.total < 0) throw new Error('申诉待办数据暂不可用')
-    count.value = page.total
+    counts.value = Object.fromEntries(pages) as Record<AppealScene, number | null>
+    if (pages.some(([, value]) => value === null)) error.value = '部分申诉待办暂不可用，请重试'
   } catch {
     if (currentRequestId !== requestId) return
-    count.value = null
+    counts.value = { running: null, final: null, outpatient_emergency: null }
     error.value = '申诉待办暂不可用，请重试'
   } finally {
     if (currentRequestId === requestId) loading.value = false
   }
 }
 
-function openTodo() {
-  if (count.value === null) return
-  if (count.value === 0) {
+function openTodo(scene: AppealScene) {
+  const count = counts.value[scene]
+  if (count === null) return
+  if (count === 0) {
     message.info('没有待审核的临床申诉')
     return
   }
-  void router.push({ path: '/dashboard/qc/appeals', query: { todo: 'review' } })
+  void router.push({ path: '/dashboard/qc/appeals', query: { todo: 'review', scene } })
 }
 
 watch(
   [currentUserId, canReview],
   ([userId, allowed]) => {
     requestId++
-    count.value = null
+    counts.value = { running: null, final: null, outpatient_emergency: null }
     error.value = ''
     if (userId && allowed) {
       void fetchTodos()
@@ -176,6 +196,10 @@ onUnmounted(() => {
   margin: 0 0 10px;
   color: #b42318;
   font-size: 13px;
+}
+.appeal-todos__list {
+  display: grid;
+  gap: 8px;
 }
 .appeal-todos__item {
   display: grid;

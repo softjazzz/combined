@@ -5,6 +5,7 @@
 
 import { ApiService } from '@/services/apiService'
 import { extractApiErrorMessageFromError, unwrapApiEnvelope } from '@/utils/api-envelope'
+import { AppealStatus } from '@/types/appeal'
 import type {
   Appeal,
   AppealEvidence,
@@ -15,6 +16,10 @@ import type {
   AppealListResponse,
   AppealFilters,
   AppealStats,
+  AppealCandidates,
+  AppealCaseIdentity,
+  AppealScene,
+  AppealTargetKind,
 } from '@/types/appeal'
 
 const API_V1_PREFIX = '/api/v1'
@@ -22,8 +27,8 @@ const API_V1_PREFIX = '/api/v1'
 interface AppealDto {
   id: string
   appeal_number?: string | null
-  qc_result_id: string
-  record_id: string
+  qc_result_id?: string | null
+  record_id?: string | null
   appeal_type: Appeal['appealType']
   defect_item?: string | null
   reason: string
@@ -43,6 +48,38 @@ interface AppealDto {
   created_at: string
   updated_at: string
   reviews?: AppealReviewDto[]
+  target_kind?: AppealTargetKind | null
+  target_id?: string | null
+  institute_id?: string | null
+  patient_id?: string | null
+  visit_id?: string | null
+  scene?: AppealScene | null
+  root_job_id?: string | null
+  envelope_id?: string | null
+  rule_set_key?: string | null
+  rule_set_version?: string | null
+  case_department?: string | null
+}
+
+interface AppealCandidatesDto {
+  institute_id: string
+  patient_id: string
+  visit_id: string
+  case_department?: string | null
+  canonical: {
+    state: 'ready' | 'no_result' | 'unavailable'
+    scene?: AppealScene | null
+    job_id?: string | null
+    envelope_id?: string | null
+    items: Array<{ rule_id: string; rule_name?: string | null; conclusion?: string | null }>
+  }
+  manual_defects: Array<{
+    defect_id: string
+    rule_code?: string | null
+    rule_name?: string | null
+    description?: string | null
+    scene: AppealScene
+  }>
 }
 
 interface AppealReviewDto {
@@ -73,16 +110,22 @@ function normalizeEvidence(value: AppealDto['evidence']): AppealEvidence[] {
     }
   }
   return Array.isArray(parsed)
-    ? parsed.filter((item): item is AppealEvidence => typeof item === 'object' && item !== null && !Array.isArray(item))
+    ? parsed.filter(
+        (item): item is AppealEvidence =>
+          typeof item === 'object' && item !== null && !Array.isArray(item),
+      )
     : []
 }
 
 function mapAppeal(dto: AppealDto): Appeal {
+  if (!Object.values(AppealStatus).includes(dto.status)) {
+    throw new Error('申诉响应包含未知状态，已停止写入页面')
+  }
   return {
     id: dto.id,
     appealNumber: dto.appeal_number ?? null,
-    qcResultId: dto.qc_result_id,
-    recordId: dto.record_id,
+    qcResultId: dto.qc_result_id ?? '',
+    recordId: dto.record_id ?? '',
     appealType: dto.appeal_type,
     defectItem: dto.defect_item ?? null,
     appealReason: dto.reason,
@@ -110,7 +153,34 @@ function mapAppeal(dto: AppealDto): Appeal {
       comment: review.comment ?? null,
       createdAt: review.created_at,
     })),
+    targetKind: dto.target_kind ?? null,
+    targetId: dto.target_id ?? null,
+    instituteId: dto.institute_id ?? null,
+    patientId: dto.patient_id ?? null,
+    visitId: dto.visit_id ?? null,
+    scene: dto.scene ?? null,
+    rootJobId: dto.root_job_id ?? null,
+    envelopeId: dto.envelope_id ?? null,
+    ruleSetKey: dto.rule_set_key ?? null,
+    ruleSetVersion: dto.rule_set_version ?? null,
+    caseDepartment: dto.case_department ?? null,
   }
+}
+
+function requireIdentity(identity: AppealCaseIdentity): AppealCaseIdentity {
+  const normalized = {
+    instituteId: identity.instituteId.trim(),
+    patientId: identity.patientId.trim(),
+    visitId: identity.visitId.trim(),
+  }
+  if (!normalized.instituteId || !normalized.patientId || !normalized.visitId) {
+    throw new Error('病例三坐标不完整，无法发起申诉')
+  }
+  return normalized
+}
+
+function isAppealScene(value: unknown): value is AppealScene {
+  return value === 'running' || value === 'final' || value === 'outpatient_emergency'
 }
 
 async function requestOrThrow<T>(
@@ -129,23 +199,92 @@ async function requestOrThrow<T>(
  * 创建申诉
  */
 export async function createAppeal(data: AppealCreateRequest): Promise<Appeal> {
+  const identity = requireIdentity(data)
+  const target =
+    data.targetKind === 'canonical_defect'
+      ? {
+          expected_job_id: data.expectedJobId,
+          expected_envelope_id: data.expectedEnvelopeId,
+          rule_id: data.ruleId,
+        }
+      : {
+          defect_id: data.defectId,
+          ...(data.expectedJobId ? { expected_job_id: data.expectedJobId } : {}),
+          ...(data.expectedEnvelopeId ? { expected_envelope_id: data.expectedEnvelopeId } : {}),
+        }
   const dto = await requestOrThrow<AppealDto>(
     {
       method: 'POST',
-      url: `${API_V1_PREFIX}/appeals`,
+      url: `${API_V1_PREFIX}/appeals/modern`,
       data: {
-        qc_result_id: data.qcResultId,
-        record_id: data.recordId,
-        appeal_type: data.appealType,
-        defect_item: data.defectId,
+        target_kind: data.targetKind,
+        institute_id: identity.instituteId,
+        patient_id: identity.patientId,
+        visit_id: identity.visitId,
+        scene: data.scene,
+        ...target,
         reason: data.appealReason,
-        evidence: data.evidenceUrls?.map((url) => ({ url })) ?? [],
+        evidence: data.evidence ?? [],
         priority: data.priority ?? 'medium',
       },
     },
     '创建申诉失败',
   )
   return mapAppeal(dto)
+}
+
+export async function getAppealCandidates(identity: AppealCaseIdentity): Promise<AppealCandidates> {
+  const normalized = requireIdentity(identity)
+  const dto = await requestOrThrow<AppealCandidatesDto>(
+    {
+      method: 'GET',
+      url: `${API_V1_PREFIX}/appeals/modern/candidates`,
+      params: {
+        institute_id: normalized.instituteId,
+        patient_id: normalized.patientId,
+        visit_id: normalized.visitId,
+      },
+    },
+    '读取可申诉问题失败',
+  )
+  if (
+    dto.institute_id !== normalized.instituteId ||
+    dto.patient_id !== normalized.patientId ||
+    dto.visit_id !== normalized.visitId
+  ) {
+    throw new Error('可申诉问题与当前病例不一致，已停止展示')
+  }
+  if (!['ready', 'no_result', 'unavailable'].includes(dto.canonical.state)) {
+    throw new Error('可申诉问题包含未知来源状态，已停止展示')
+  }
+  if (dto.canonical.scene != null && !isAppealScene(dto.canonical.scene)) {
+    throw new Error('可申诉问题包含未知质控场景，已停止展示')
+  }
+  if (dto.manual_defects.some((item) => !isAppealScene(item.scene))) {
+    throw new Error('人工缺陷包含未知质控场景，已停止展示')
+  }
+  return {
+    ...normalized,
+    caseDepartment: dto.case_department ?? null,
+    canonical: {
+      state: dto.canonical.state,
+      scene: dto.canonical.scene ?? null,
+      jobId: dto.canonical.job_id ?? null,
+      envelopeId: dto.canonical.envelope_id ?? null,
+      items: dto.canonical.items.map((item) => ({
+        ruleId: item.rule_id,
+        ruleName: item.rule_name ?? null,
+        conclusion: item.conclusion ?? null,
+      })),
+    },
+    manualDefects: dto.manual_defects.map((item) => ({
+      defectId: item.defect_id,
+      ruleCode: item.rule_code ?? null,
+      ruleName: item.rule_name ?? null,
+      description: item.description ?? null,
+      scene: item.scene,
+    })),
+  }
 }
 
 /**
@@ -159,6 +298,7 @@ export async function getAppeals(filters: AppealFilters = {}): Promise<AppealLis
   if (filters.priority) params.priority = filters.priority
   if (filters.startDate) params.start_date = filters.startDate
   if (filters.endDate) params.end_date = filters.endDate
+  if (filters.scene) params.scene = filters.scene
   if (filters.page) params.page = filters.page
   if (filters.pageSize) params.page_size = filters.pageSize
 
@@ -196,10 +336,7 @@ export async function getAppeal(appealId: string): Promise<Appeal> {
 /**
  * 更新申诉
  */
-export async function updateAppeal(
-  appealId: string,
-  data: AppealUpdateRequest,
-): Promise<Appeal> {
+export async function updateAppeal(appealId: string, data: AppealUpdateRequest): Promise<Appeal> {
   const dto = await requestOrThrow<AppealDto>(
     {
       method: 'PUT',
@@ -219,10 +356,7 @@ export async function updateAppeal(
 /**
  * 审核申诉
  */
-export async function reviewAppeal(
-  appealId: string,
-  review: AppealReviewRequest,
-): Promise<Appeal> {
+export async function reviewAppeal(appealId: string, review: AppealReviewRequest): Promise<Appeal> {
   const dto = await requestOrThrow<AppealDto>(
     {
       method: 'POST',

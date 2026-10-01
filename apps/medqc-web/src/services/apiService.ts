@@ -19,6 +19,7 @@ import type {
   ApiResponse,
   LoginRequest,
   LoginResponse,
+  ProfileUpdateRequest,
   RegisterRequest,
   User,
   MedicalRecord,
@@ -222,7 +223,11 @@ apiClient.interceptors.response.use(
     }
 
     // Token过期处理（带单航刷新，避免并发冲突）
-    if (error.response?.status === 401 && !originalRequest._retry && !originalRequest._skipAuthRefresh) {
+    if (
+      error.response?.status === 401 &&
+      !originalRequest._retry &&
+      !originalRequest._skipAuthRefresh
+    ) {
       // 避免对登录/刷新接口自身进行循环处理
       const url: string = originalRequest?.url || ''
       if (url.includes('/api/v1/auth/login') || url.includes('/api/v1/auth/refresh')) {
@@ -537,9 +542,20 @@ export class ApiService {
   /**
    * 更新用户资料
    */
-  static async updateProfile(profileData: Partial<User>): Promise<ApiResponse<User>> {
+  static async updateProfile(profileData: ProfileUpdateRequest): Promise<ApiResponse<User>> {
     try {
-      const response = await apiClient.put<User>('/api/v1/auth/profile', profileData)
+      const editable: ProfileUpdateRequest = {
+        ...(profileData.display_name !== undefined
+          ? { display_name: profileData.display_name }
+          : {}),
+        ...(profileData.avatar !== undefined ? { avatar: profileData.avatar } : {}),
+        ...(profileData.phone !== undefined ? { phone: profileData.phone } : {}),
+        ...(profileData.bio !== undefined ? { bio: profileData.bio } : {}),
+        ...(profileData.notifications !== undefined
+          ? { notifications: profileData.notifications }
+          : {}),
+      }
+      const response = await apiClient.put<User>('/api/v1/auth/profile', editable)
       return {
         success: true,
         data: response.data,

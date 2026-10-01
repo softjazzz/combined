@@ -21,10 +21,7 @@
       <!-- 基本信息 -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <!-- 姓名 -->
-        <a-form-item
-          name="display_name"
-          class="mb-4"
-        >
+        <a-form-item name="display_name" class="mb-4">
           <label class="block text-xs font-medium text-slate-300 mb-2">姓名</label>
           <a-input
             v-model:value="profileForm.display_name"
@@ -34,10 +31,7 @@
         </a-form-item>
 
         <!-- 邮箱（只读） -->
-        <a-form-item
-          name="email"
-          class="mb-4"
-        >
+        <a-form-item name="email" class="mb-4">
           <label class="block text-xs font-medium text-slate-300 mb-2">邮箱</label>
           <a-input
             v-model:value="profileForm.email"
@@ -48,26 +42,27 @@
         </a-form-item>
       </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <!-- 医院：数据范围依据，只读，由管理员维护 -->
+        <div class="mb-4">
+          <label class="block text-xs font-medium text-slate-300 mb-2">医院编号</label>
+          <p class="department-readonly" data-testid="profile-institute">
+            {{ props.user?.institute_id || '未分配' }}
+          </p>
+          <p class="text-xs text-slate-400 mt-1">医院由管理员维护。</p>
+        </div>
+
         <!-- 科室：数据范围依据，只读，由管理员维护 -->
         <div class="mb-4">
           <label class="block text-xs font-medium text-slate-300 mb-2">科室</label>
-          <p
-            class="department-readonly"
-            data-testid="profile-department"
-          >
+          <p class="department-readonly" data-testid="profile-department">
             {{ props.user?.department || '未分配' }}
           </p>
-          <p class="text-xs text-slate-400 mt-1">
-            科室由管理员维护，如需调整请联系管理员。
-          </p>
+          <p class="text-xs text-slate-400 mt-1">科室由管理员维护，如需调整请联系管理员。</p>
         </div>
 
         <!-- 手机号 -->
-        <a-form-item
-          name="phone"
-          class="mb-4"
-        >
+        <a-form-item name="phone" class="mb-4">
           <label class="block text-xs font-medium text-slate-300 mb-2">手机号</label>
           <a-input
             v-model:value="profileForm.phone"
@@ -98,10 +93,7 @@
       </div>
 
       <!-- 个人简介 -->
-      <a-form-item
-        name="bio"
-        class="mb-6"
-      >
+      <a-form-item name="bio" class="mb-6">
         <label class="block text-xs font-medium text-slate-300 mb-2">个人简介</label>
         <a-textarea
           v-model:value="profileForm.bio"
@@ -121,51 +113,30 @@
             class="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10"
           >
             <div>
-              <div class="text-sm text-slate-200">
-                邮件通知
-              </div>
-              <div class="text-xs text-slate-400">
-                接收系统重要通知邮件
-              </div>
+              <div class="text-sm text-slate-200">邮件通知</div>
+              <div class="text-xs text-slate-400">接收系统重要通知邮件</div>
             </div>
-            <a-switch
-              v-model:checked="profileForm.notifications.email"
-              class="bg-slate-600"
-            />
+            <a-switch v-model:checked="profileForm.notifications.email" class="bg-slate-600" />
           </div>
 
           <div
             class="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10"
           >
             <div>
-              <div class="text-sm text-slate-200">
-                短信通知
-              </div>
-              <div class="text-xs text-slate-400">
-                接收紧急事件短信提醒
-              </div>
+              <div class="text-sm text-slate-200">短信通知</div>
+              <div class="text-xs text-slate-400">接收紧急事件短信提醒</div>
             </div>
-            <a-switch
-              v-model:checked="profileForm.notifications.sms"
-              class="bg-slate-600"
-            />
+            <a-switch v-model:checked="profileForm.notifications.sms" class="bg-slate-600" />
           </div>
 
           <div
             class="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10"
           >
             <div>
-              <div class="text-sm text-slate-200">
-                系统推送
-              </div>
-              <div class="text-xs text-slate-400">
-                接收浏览器推送通知
-              </div>
+              <div class="text-sm text-slate-200">系统推送</div>
+              <div class="text-xs text-slate-400">接收浏览器推送通知</div>
             </div>
-            <a-switch
-              v-model:checked="profileForm.notifications.push"
-              class="bg-slate-600"
-            />
+            <a-switch v-model:checked="profileForm.notifications.push" class="bg-slate-600" />
           </div>
         </div>
       </div>
@@ -179,10 +150,7 @@
           size="large"
           class="flex-1 h-12 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 border-none font-semibold shadow-lg hover:shadow-xl"
         >
-          <SaveOutlined
-            v-if="!loading"
-            class="mr-2"
-          />
+          <SaveOutlined v-if="!loading" class="mr-2" />
           保存更改
         </a-button>
 
@@ -201,12 +169,8 @@
     <div class="mt-8 p-4 rounded-xl bg-amber-500/10 border border-amber-500/20">
       <div class="flex items-center justify-between">
         <div>
-          <h4 class="text-sm font-medium text-amber-200 mb-1">
-            账户安全
-          </h4>
-          <p class="text-xs text-amber-200/80">
-            管理密码和安全设置
-          </p>
+          <h4 class="text-sm font-medium text-amber-200 mb-1">账户安全</h4>
+          <p class="text-xs text-amber-200/80">管理密码和安全设置</p>
         </div>
         <a-button
           size="small"
@@ -273,7 +237,6 @@ const profileForm = reactive({
     push: true,
   },
 })
-
 
 // 用户角色
 const userRoles = computed(() => props.user?.roles || [])

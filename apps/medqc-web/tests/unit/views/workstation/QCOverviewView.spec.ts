@@ -189,11 +189,11 @@ describe('QCOverviewView', () => {
     { label: 'super_admin', roles: ['super_admin'] },
     { label: 'sync_admin/super_admin', roles: ['sync_admin', 'super_admin'] },
   ])('角色 $label 无任务 READ 权限时不挂载待办模块', async ({ roles }) => {
-      authState.roles = roles
-      const wrapper = mountView()
-      await flushHomeLoad()
+    authState.roles = roles
+    const wrapper = mountView()
+    await flushHomeLoad()
 
-      expect(wrapper.findComponent({ name: 'HomeTaskTodos' }).exists()).toBe(false)
+    expect(wrapper.findComponent({ name: 'HomeTaskTodos' }).exists()).toBe(false)
   })
 
   it('以客户可读范围和真实 KPI 展示概况，不重复病历池', async () => {
@@ -302,6 +302,25 @@ describe('QCOverviewView', () => {
     expect(routerPush).toHaveBeenLastCalledWith('/workstation-v5/records/running')
     await entries[2].trigger('click')
     expect(routerPush).toHaveBeenLastCalledWith('/workstation-v5/records/final')
+  })
+
+  it('医生从真实已确认问题病例携三坐标进入申诉候选', async () => {
+    authState.roles = ['doctor']
+    const wrapper = mountView()
+    await flushHomeLoad()
+    const button = wrapper.get('.qc-home-appeal-cases__list button')
+    await button.trigger('click')
+    expect(routerPush).toHaveBeenLastCalledWith({
+      path: '/dashboard/qc/appeals',
+      query: {
+        action: 'create',
+        institute_id: 'H1',
+        patient_id: 'P1',
+        visit_id: 'V1',
+        from: 'workstation-home',
+      },
+    })
+    expect(routerPush.mock.calls.at(-1)?.[0].query).not.toHaveProperty('record_key')
   })
 
   it('以运营优先顺序展示四项 KPI，且只保留标题与数值', async () => {

@@ -9,13 +9,9 @@
           >
             <UserOutlined class="text-white text-sm" />
           </div>
-          <h1 class="text-2xl font-bold text-slate-100">
-            个人资料
-          </h1>
+          <h1 class="text-2xl font-bold text-slate-100">个人资料</h1>
         </div>
-        <p class="text-slate-400 text-sm">
-          管理您的个人信息和账户设置
-        </p>
+        <p class="text-slate-400 text-sm">管理您的个人信息和账户设置</p>
       </div>
 
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -35,11 +31,8 @@
                     :src="user.avatar"
                     :alt="user.display_name || '用户头像'"
                     class="w-full h-full object-cover"
-                  >
-                  <div
-                    v-else
-                    class="text-white text-3xl font-bold"
-                  >
+                  />
+                  <div v-else class="text-white text-3xl font-bold">
                     {{ avatarInitial }}
                   </div>
                 </div>
@@ -138,9 +131,7 @@
         <div class="lg:col-span-2">
           <div class="rounded-2xl bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 p-6">
             <div class="flex items-center justify-between mb-6">
-              <h3 class="text-lg font-semibold text-slate-100">
-                编辑资料
-              </h3>
+              <h3 class="text-lg font-semibold text-slate-100">编辑资料</h3>
               <div class="flex items-center gap-2">
                 <div class="w-2 h-2 rounded-full bg-emerald-400" />
                 <span class="text-xs text-slate-400">实时保存</span>
@@ -207,8 +198,6 @@ type UserProfileModel = User & {
 
 interface ProfileUpdatePayload {
   display_name?: string
-  email?: string
-  department?: string
   avatar?: string
   phone?: string
   bio?: string

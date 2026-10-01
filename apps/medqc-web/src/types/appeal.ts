@@ -15,6 +15,9 @@ export enum AppealStatus {
 export type AppealPriority = 'low' | 'medium' | 'high' | 'urgent'
 export type AppealReviewAction = 'approve' | 'reject' | 'request_info' | 'forward'
 export type AppealStatusFilter = AppealStatus | 'reviewable'
+export type AppealScene = 'running' | 'final' | 'outpatient_emergency'
+export type AppealSceneFilter = AppealScene | 'all'
+export type AppealTargetKind = 'canonical_defect' | 'task_manual_defect'
 
 export interface AppealEvidence {
   url?: string
@@ -56,17 +59,72 @@ export interface Appeal {
   createdAt: string
   updatedAt: string
   reviews?: AppealReview[]
+  targetKind: AppealTargetKind | null
+  targetId: string | null
+  instituteId: string | null
+  patientId: string | null
+  visitId: string | null
+  scene: AppealScene | null
+  rootJobId: string | null
+  envelopeId: string | null
+  ruleSetKey: string | null
+  ruleSetVersion: string | null
+  caseDepartment: string | null
 }
 
-// 保持创建表单已有的调用形状，API 层负责转换为后端字段。
-export interface AppealCreateRequest {
-  qcResultId: string
-  defectId?: string
-  recordId: string
+export interface AppealCaseIdentity {
+  instituteId: string
+  patientId: string
+  visitId: string
+}
+
+interface AppealCreateRequestBase extends AppealCaseIdentity {
+  scene: AppealScene
   appealReason: string
-  appealType: AppealType
-  evidenceUrls?: string[]
+  evidence?: AppealEvidence[]
   priority?: AppealPriority
+}
+
+export type AppealCreateRequest =
+  | (AppealCreateRequestBase & {
+      targetKind: 'canonical_defect'
+      expectedJobId: string
+      expectedEnvelopeId: string
+      ruleId: string
+    })
+  | (AppealCreateRequestBase & {
+      targetKind: 'task_manual_defect'
+      defectId: string
+      expectedJobId?: string
+      expectedEnvelopeId?: string
+    })
+
+export interface CanonicalAppealCandidateItem {
+  ruleId: string
+  ruleName: string | null
+  conclusion: string | null
+}
+
+export interface CanonicalAppealCandidates {
+  state: 'ready' | 'no_result' | 'unavailable'
+  scene: AppealScene | null
+  jobId: string | null
+  envelopeId: string | null
+  items: CanonicalAppealCandidateItem[]
+}
+
+export interface ManualAppealCandidate {
+  defectId: string
+  ruleCode: string | null
+  ruleName: string | null
+  description: string | null
+  scene: AppealScene
+}
+
+export interface AppealCandidates extends AppealCaseIdentity {
+  caseDepartment: string | null
+  canonical: CanonicalAppealCandidates
+  manualDefects: ManualAppealCandidate[]
 }
 
 export interface AppealUpdateRequest {
@@ -96,6 +154,7 @@ export interface AppealFilters {
   priority?: AppealPriority
   startDate?: string
   endDate?: string
+  scene?: AppealSceneFilter
   page?: number
   pageSize?: number
 }
@@ -130,15 +189,25 @@ export function getAppealTypeLabel(type: AppealType): string {
 }
 
 export function getAppealStatusInfo(status: AppealStatus): { label: string; color: string } {
-  return APPEAL_STATUS_OPTIONS.find((option) => option.value === status) || { label: status, color: 'default' }
+  return (
+    APPEAL_STATUS_OPTIONS.find((option) => option.value === status) || {
+      label: status,
+      color: 'default',
+    }
+  )
 }
 
 export function canReviewAppeal(appeal: Appeal, roles: readonly string[]): boolean {
-  return roles.some((role) => role === 'admin' || role === 'qc_manager') &&
+  return (
+    roles.some((role) => role === 'admin' || role === 'qc_manager') &&
     [AppealStatus.PENDING, AppealStatus.REVIEWING].includes(appeal.status)
+  )
 }
 
 export function canWithdrawAppeal(appeal: Appeal, userId: string | undefined): boolean {
-  return !!userId && appeal.appellantId === userId &&
+  return (
+    !!userId &&
+    appeal.appellantId === userId &&
     [AppealStatus.PENDING, AppealStatus.REVIEWING].includes(appeal.status)
+  )
 }

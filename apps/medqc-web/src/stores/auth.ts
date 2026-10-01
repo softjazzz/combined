@@ -2,7 +2,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed, readonly } from 'vue'
 import { ApiService } from '@/services/apiService'
-import type { LoginRequest, LoginResponse, RegisterRequest } from '@/types'
+import type { LoginRequest, LoginResponse, ProfileUpdateRequest, RegisterRequest } from '@/types'
 import { message } from 'ant-design-vue'
 import { setAccessToken, setRefreshToken } from '@/utils/auth-token'
 
@@ -12,6 +12,7 @@ interface User {
   email?: string
   display_name?: string
   department?: string
+  institute_id?: string | null
   hospital_id?: string
   roles?: string[]
   is_active?: boolean
@@ -54,6 +55,7 @@ export const useAuthStore = defineStore('auth', () => {
     return user.value.display_name || user.value.email || '未知用户'
   })
   const userDepartment = computed(() => user.value?.department || '')
+  const userInstituteId = computed(() => user.value?.institute_id || '')
 
   // 权限检查
   const hasRole = (role: string): boolean => {
@@ -180,14 +182,14 @@ export const useAuthStore = defineStore('auth', () => {
       if (!isCurrent()) return { success: false, error: '扫码登录会话已失效' }
       const verifiedUser = me.success ? me.data : null
       if (
-        !verifiedUser
-        || typeof verifiedUser.id !== 'string'
-        || !verifiedUser.id.trim()
-        || typeof verifiedUser.email !== 'string'
-        || !verifiedUser.email.trim()
-        || !Array.isArray(verifiedUser.roles)
-        || verifiedUser.roles.length < 1
-        || !verifiedUser.roles.every((role) => typeof role === 'string' && Boolean(role.trim()))
+        !verifiedUser ||
+        typeof verifiedUser.id !== 'string' ||
+        !verifiedUser.id.trim() ||
+        typeof verifiedUser.email !== 'string' ||
+        !verifiedUser.email.trim() ||
+        !Array.isArray(verifiedUser.roles) ||
+        verifiedUser.roles.length < 1 ||
+        !verifiedUser.roles.every((role) => typeof role === 'string' && Boolean(role.trim()))
       ) {
         return { success: false, error: '无法确认扫码登录用户，请重新扫码' }
       }
@@ -299,10 +301,21 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   // 更新用户档案
-  const updateProfile = async (updates: Partial<User>) => {
+  const updateProfile = async (updates: ProfileUpdateRequest) => {
     try {
       loading.value = true
-      const response = await ApiService.updateProfile(updates)
+      const account = user.value?.id || ''
+      const editable: ProfileUpdateRequest = {
+        ...(updates.display_name !== undefined ? { display_name: updates.display_name } : {}),
+        ...(updates.avatar !== undefined ? { avatar: updates.avatar } : {}),
+        ...(updates.phone !== undefined ? { phone: updates.phone } : {}),
+        ...(updates.bio !== undefined ? { bio: updates.bio } : {}),
+        ...(updates.notifications !== undefined ? { notifications: updates.notifications } : {}),
+      }
+      const response = await ApiService.updateProfile(editable)
+      if (account !== (user.value?.id || '')) {
+        return { success: false, error: '账号身份已变更，请重新操作' }
+      }
       if (response.success && response.data) {
         user.value = response.data
         localStorage.setItem('auth_user', JSON.stringify(response.data))
@@ -330,6 +343,7 @@ export const useAuthStore = defineStore('auth', () => {
     userRoles,
     userName,
     userDepartment,
+    userInstituteId,
 
     // 方法
     initialize,

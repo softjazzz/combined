@@ -45,6 +45,8 @@ export interface User extends BaseAuthUser {
   email?: string
   display_name?: string
   department?: string
+  institute_id?: string | null
+  /** 旧客户端字段；数据范围以 institute_id 为准。 */
   hospital_id?: string
   roles?: UserRole[]
   permissions?: Permission[]
@@ -146,8 +148,14 @@ export interface PasswordUpdateRequest {
 // 用户档案更新请求
 export interface ProfileUpdateRequest {
   display_name?: string
-  department?: string
-  hospital_id?: string
+  avatar?: string
+  phone?: string
+  bio?: string
+  notifications?: {
+    email?: boolean
+    sms?: boolean
+    push?: boolean
+  }
 }
 
 // 会话信息

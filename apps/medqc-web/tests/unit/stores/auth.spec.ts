@@ -49,6 +49,7 @@ describe('Auth Store', () => {
     email: 'test@example.com',
     display_name: '测试用户',
     roles: ['doctor'],
+    institute_id: 'H1',
     department: '心内科',
     is_active: true,
   }
@@ -222,6 +223,7 @@ describe('Auth Store', () => {
 
       await store.signIn('test@example.com', 'password')
       expect(store.userDepartment).toBe('心内科')
+      expect(store.userInstituteId).toBe('H1')
     })
   })
 
@@ -229,10 +231,17 @@ describe('Auth Store', () => {
     it('候选令牌经me确认后才写入登录态', async () => {
       const store = useAuthStore()
       vi.mocked(ApiService.getCurrentUserWithAccessToken).mockResolvedValue({
-        success: true, data: mockUser,
+        success: true,
+        data: mockUser,
       })
 
-      const result = await store.completeQrLogin({ access_token: 'qr-access', refresh_token: 'qr-refresh', token_type: 'bearer', expires_in: 3600, user: mockUser })
+      const result = await store.completeQrLogin({
+        access_token: 'qr-access',
+        refresh_token: 'qr-refresh',
+        token_type: 'bearer',
+        expires_in: 3600,
+        user: mockUser,
+      })
 
       expect(result.success).toBe(true)
       expect(ApiService.getCurrentUserWithAccessToken).toHaveBeenCalledWith('qr-access')
@@ -249,7 +258,13 @@ describe('Auth Store', () => {
       })
 
       const result = await store.completeQrLogin(
-        { access_token: 'stale-access', refresh_token: 'refresh', token_type: 'bearer', expires_in: 3600, user: mockUser },
+        {
+          access_token: 'stale-access',
+          refresh_token: 'refresh',
+          token_type: 'bearer',
+          expires_in: 3600,
+          user: mockUser,
+        },
         () => current,
       )
 
@@ -261,9 +276,17 @@ describe('Auth Store', () => {
     it('me校验失败不使用密码登录的fallback用户', async () => {
       const store = useAuthStore()
       vi.mocked(ApiService.getCurrentUserWithAccessToken).mockResolvedValue({
-        success: false, error: 'unauthorized', data: null,
+        success: false,
+        error: 'unauthorized',
+        data: null,
       })
-      const result = await store.completeQrLogin({ access_token: 'bad-access', refresh_token: 'refresh', token_type: 'bearer', expires_in: 3600, user: mockUser })
+      const result = await store.completeQrLogin({
+        access_token: 'bad-access',
+        refresh_token: 'refresh',
+        token_type: 'bearer',
+        expires_in: 3600,
+        user: mockUser,
+      })
       expect(result.success).toBe(false)
       expect(store.user).toBeNull()
       expect(localStorage.getItem('medqc_access_token')).toBeNull()
@@ -543,6 +566,19 @@ describe('Auth Store', () => {
 
       expect(result.success).toBe(false)
       expect(store.user).toBeNull()
+    })
+
+    it('个人资料更新不向 API 传递医院或科室', async () => {
+      const store = useAuthStore()
+      vi.mocked(ApiService.updateProfile).mockResolvedValue({ success: false, error: '未登录' })
+
+      await store.updateProfile({
+        display_name: '医生甲',
+        institute_id: 'H2',
+        department: '骨科',
+      } as never)
+
+      expect(ApiService.updateProfile).toHaveBeenCalledWith({ display_name: '医生甲' })
     })
   })
 })
