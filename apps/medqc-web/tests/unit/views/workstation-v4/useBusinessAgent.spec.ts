@@ -91,6 +91,48 @@ describe('业务助手病例与账号隔离', () => {
       close()
     }
   })
+  it('同一UID更新资料后仍恢复既有会话，并兼容旧定位键', async () => {
+    const oldAccount = JSON.stringify({ id: 'account-a', display_name: '旧名' })
+    const key = `medqc-business-agent:${JSON.stringify([oldAccount, JSON.stringify(Object.entries(A).sort(([a], [b]) => a.localeCompare(b)))])}`
+    sessionStorage.setItem(key, 'legacy-a')
+    localStorage.setItem('auth_user', JSON.stringify({ display_name: '新名', id: 'account-a' }))
+    api.restore.mockResolvedValue({ session_id: 'legacy-a', context: A, turns: [turn] })
+    const { agent, close } = setup()
+    try {
+      await agent.activate(A)
+      expect(api.restore).toHaveBeenCalledWith('legacy-a')
+      expect(agent.turns.value).toEqual([turn])
+      localStorage.setItem('auth_user', JSON.stringify({ id: 'account-a', last_login: 'new-time' }))
+      await agent.activate(A)
+      expect(agent.sessionId.value).toBe('legacy-a')
+      await agent.reset(A)
+      expect(agent.sessionId.value).toBe('')
+      expect(agent.turns.value).toEqual([])
+    } finally {
+      close()
+    }
+  })
+  it('旧定位键属于其他UID、患者或含多个候选时不猜测恢复', async () => {
+    const context = JSON.stringify(Object.entries(A).sort(([a], [b]) => a.localeCompare(b)))
+    const put = (account: object, id: string) =>
+      sessionStorage.setItem(
+        `medqc-business-agent:${JSON.stringify([JSON.stringify(account), context])}`,
+        id,
+      )
+    put({ id: 'account-b' }, 'other')
+    const { agent, close } = setup()
+    try {
+      await agent.activate(A)
+      expect(api.restore).not.toHaveBeenCalled()
+      put({ id: 'account-a', display_name: 'old-1' }, 'one')
+      put({ id: 'account-a', display_name: 'old-2' }, 'two')
+      await agent.activate(A)
+      expect(api.restore).not.toHaveBeenCalled()
+      expect(agent.turns.value).toEqual([])
+    } finally {
+      close()
+    }
+  })
   it('恢复完成前不发送新问题，避免迟到历史覆盖新回答', async () => {
     api.chat.mockResolvedValue(turn)
     const { agent, close } = setup()

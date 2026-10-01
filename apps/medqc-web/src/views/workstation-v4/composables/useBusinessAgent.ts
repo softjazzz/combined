@@ -21,9 +21,55 @@ export function useBusinessAgent() {
         .sort(([a], [b]) => a.localeCompare(b)),
     )
   }
+  function accountIdentity(serialized: string): string | undefined {
+    try {
+      const account: unknown = JSON.parse(serialized)
+      if (
+        account &&
+        typeof account === 'object' &&
+        'id' in account &&
+        typeof account.id === 'string' &&
+        account.id &&
+        account.id !== 'unknown'
+      )
+        return account.id
+    } catch {
+      /* 无有效身份时不跨资料版本寻找会话。 */
+    }
+    return undefined
+  }
+  function currentAccount() {
+    return localStorage.getItem('auth_user') || localStorage.getItem('medqc_user') || ''
+  }
   function storageScope(context: BusinessAgentContext) {
-    const account = localStorage.getItem('auth_user') || localStorage.getItem('medqc_user') || ''
-    return `medqc-business-agent:${JSON.stringify([account, contextKey(context)])}`
+    const account = currentAccount()
+    return `medqc-business-agent:v2:${JSON.stringify([accountIdentity(account) || account, contextKey(context)])}`
+  }
+  function legacySession(context: BusinessAgentContext) {
+    const uid = accountIdentity(currentAccount())
+    const candidates: { key: string; id: string }[] = []
+    if (!uid) return candidates
+    for (let index = 0; index < sessionStorage.length; index++) {
+      const key = sessionStorage.key(index)
+      if (!key?.startsWith('medqc-business-agent:')) continue
+      try {
+        const entry: unknown = JSON.parse(key.slice('medqc-business-agent:'.length))
+        if (
+          !Array.isArray(entry) ||
+          entry.length !== 2 ||
+          typeof entry[0] !== 'string' ||
+          accountIdentity(entry[0]) !== uid ||
+          entry[1] !== contextKey(context)
+        )
+          continue
+        const id = sessionStorage.getItem(key)
+        if (id) candidates.push({ key, id })
+      } catch {
+        /* 其他版本或损坏定位键不参与恢复。 */
+      }
+    }
+    // 多个独立会话不能靠字段顺序选择；由用户明确新建。
+    return new Set(candidates.map(({ id }) => id)).size === 1 ? candidates : []
   }
   async function stop() {
     const current = active
@@ -49,7 +95,8 @@ export function useBusinessAgent() {
     turns.value = []
     error.value = ''
     storageKey = storageScope(context)
-    const stored = sessionStorage.getItem(storageKey)
+    const legacy = sessionStorage.getItem(storageKey) ? [] : legacySession(context)
+    const stored = sessionStorage.getItem(storageKey) || legacy[0]?.id
     if (!stored) return
     loading.value = true
     try {
@@ -61,6 +108,11 @@ export function useBusinessAgent() {
       }
       sessionId.value = session.session_id
       turns.value = session.turns
+      // 服务端再次校验归属及权限、上下文一致后才迁移定位；不复制执行历史。
+      if (legacy.length) {
+        sessionStorage.setItem(storageKey, session.session_id)
+        for (const { key } of legacy) sessionStorage.removeItem(key)
+      }
     } catch {
       if (epoch === generation) error.value = '会话恢复失败，可刷新重试或新建会话。'
     } finally {
