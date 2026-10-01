@@ -110,4 +110,14 @@ describe('recordFilterQuery', () => {
     })
     expect(parseRecordFilterQuery({ result_view: 'bogus', has_defect: 'unknown' })).toEqual({})
   })
+
+  it('视图与缺陷来源按各自枚举边界独立解析和写回', () => {
+    const parsed = parseRecordFilterQuery({ result_view: 'records', defect_source: 'auto' })
+    expect(parsed).toEqual({ result_view: 'records', defect_source: 'auto' })
+    expect(mergeRecordFilterQuery({}, parsed)).toEqual({
+      result_view: 'records',
+      defect_source: 'auto',
+    })
+    expect(parseRecordFilterQuery({ result_view: 'manual', defect_source: 'defects' })).toEqual({})
+  })
 })
