@@ -4,6 +4,12 @@ import { execSync } from 'node:child_process'
 
 const ROOT = process.cwd()
 
+// 钩子的 GIT_DIR/GIT_WORK_TREE 在 pnpm 切到应用目录后会让 Git 将其当作仓库根。
+// 当前检查只针对本 checkout，按 .git 定位；保留暂存索引等其余钩子环境及失败门禁。
+const gitEnvironment = { ...process.env }
+delete gitEnvironment.GIT_DIR
+delete gitEnvironment.GIT_WORK_TREE
+
 const TEXT_EXTS = new Set([
   '.vue',
   '.ts',
@@ -47,6 +53,7 @@ function getRepoRoot() {
   try {
     const out = execSync('git rev-parse --show-toplevel', {
       cwd: ROOT,
+      env: gitEnvironment,
       stdio: ['ignore', 'pipe', 'ignore'],
       encoding: 'utf8',
     })
@@ -75,6 +82,7 @@ function gitOutput(args) {
   try {
     return execSync(`git ${args}`, {
       cwd: REPO_ROOT,
+      env: gitEnvironment,
       stdio: ['ignore', 'pipe', 'ignore'],
       encoding: 'utf8',
     })
@@ -90,7 +98,7 @@ function toAbsoluteFromGit(args) {
     out
       .split(/\r?\n/)
       .map((s) => s.trim())
-      .filter(Boolean)
+      .filter(Boolean),
   )
 }
 
@@ -158,14 +166,13 @@ async function collectFiles(mode) {
 
   const candidates = getStagedFiles()
   const files = await existingTextFiles(candidates)
-  const textCandidates = candidates.filter((abs) =>
-    TEXT_EXTS.has(path.extname(abs).toLowerCase())
-  )
+  const textCandidates = candidates.filter((abs) => TEXT_EXTS.has(path.extname(abs).toLowerCase()))
   if (textCandidates.length > 0 && files.length === 0) {
     // 静默空转是危险的：此前路径解析失效时该门禁永远报 passed。
     throw new Error(
       `staged 模式解析到 ${textCandidates.length} 个暂存文本文件，但 0 个可读；` +
-        '路径解析可能失效，禁止静默通过'
+        `路径解析可能失效，禁止静默通过；cwd=${ROOT}；repo=${REPO_ROOT}；` +
+        `worktree=${gitEnvironment.GIT_WORK_TREE || ''}；gitdir=${gitEnvironment.GIT_DIR || ''}；first=${textCandidates[0]}`,
     )
   }
   return files

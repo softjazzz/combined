@@ -1,4 +1,5 @@
-import { defineComponent, h } from 'vue'
+import { defineComponent, h, type PropType } from 'vue'
+import type { BusinessAgentContext } from '@/api/businessAgent'
 import { shallowMount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -27,16 +28,16 @@ vi.mock('@/stores/auth', () => ({
 
 import WorkstationV4HomeEntry from '@/views/workstation-v4/WorkstationV4HomeEntry.vue'
 
-const QCAgentChatDrawerStub = defineComponent({
-  name: 'QCAgentChatDrawer',
+const BusinessAgentDrawerStub = defineComponent({
+  name: 'BusinessAgentDrawer',
   props: {
     open: {
       type: Boolean,
       default: false,
     },
-    contextLabel: {
-      type: String,
-      default: '',
+    userContext: {
+      type: Object as PropType<BusinessAgentContext>,
+      required: true,
     },
   },
   setup(props) {
@@ -44,7 +45,7 @@ const QCAgentChatDrawerStub = defineComponent({
       h('div', {
         'data-testid': 'qc-agent-home-drawer',
         open: props.open,
-        'data-context-label': props.contextLabel,
+        'data-scope': props.userContext.view,
       })
   },
 })
@@ -65,7 +66,7 @@ function mountHomeEntry() {
             return () => h('section', { 'data-testid': 'workstation-v4-view' }, '列表页')
           },
         }),
-        QCAgentChatDrawer: QCAgentChatDrawerStub,
+        BusinessAgentDrawer: BusinessAgentDrawerStub,
       },
     },
   })
@@ -89,7 +90,7 @@ describe('WorkstationV4HomeEntry qc agent entry', () => {
 
     const drawer = wrapper.find('[data-testid="qc-agent-home-drawer"]')
     expect(drawer.attributes('open')).toBe('true')
-    expect(drawer.attributes('data-context-label')).toContain('工作台首页')
+    expect(drawer.attributes('data-scope')).toBe('manager')
   })
 
   it('shows the all-hospital home for any authenticated session without an admin role gate', () => {

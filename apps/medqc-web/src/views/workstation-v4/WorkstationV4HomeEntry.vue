@@ -1,8 +1,5 @@
 <template>
-  <div
-    v-if="showHome"
-    class="wv4-home-entry"
-  >
+  <div v-if="showHome" class="wv4-home-entry">
     <QCOverviewView />
     <button
       type="button"
@@ -12,16 +9,9 @@
     >
       <span class="wv4-home-entry__agent-icon"> AI </span>
       <span class="wv4-home-entry__agent-text">智能助手</span>
-      <span
-        class="wv4-home-entry__agent-status"
-        aria-hidden="true"
-      />
+      <span class="wv4-home-entry__agent-status" aria-hidden="true" />
     </button>
-    <QCAgentChatDrawer
-      v-model:open="qcAgentOpen"
-      context-label="工作台首页，可输入 visit_id、住院号、患者姓名或科室"
-      :user-context="{}"
-    />
+    <BusinessAgentDrawer v-model:open="qcAgentOpen" :user-context="{ view: 'manager' }" />
   </div>
   <WorkstationV4View v-else />
 </template>
@@ -31,7 +21,7 @@ import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import QCOverviewView from '@/views/workstation/QCOverviewView.vue'
 import WorkstationV4View from './WorkstationV4View.vue'
-import QCAgentChatDrawer from './components/QCAgentChatDrawer.vue'
+import BusinessAgentDrawer from './components/BusinessAgentDrawer.vue'
 
 const route = useRoute()
 const qcAgentOpen = ref(false)

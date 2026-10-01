@@ -8,7 +8,7 @@ import { cp } from 'node:fs/promises'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
-const backendTarget = 'http://localhost:8001'
+const backendTarget = process.env.VITE_BACKEND_TARGET || 'http://localhost:8001'
 const normalizeId = (id) => id.replace(/\\/g, '/')
 const cliPortArgIndex = process.argv.findIndex((arg) => arg === '--port')
 const cliPort = cliPortArgIndex >= 0 ? Number(process.argv[cliPortArgIndex + 1]) : NaN

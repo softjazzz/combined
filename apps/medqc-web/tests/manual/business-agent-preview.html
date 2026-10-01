@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>智能业务助手合成联调</title></head>
+<body><div id="app"></div><script type="module">
+import {createApp} from 'vue'
+import Antd from 'ant-design-vue'
+import 'ant-design-vue/dist/reset.css'
+import '/src/styles/tokens-v2.css'
+import '/src/styles/mq-components.css'
+import Preview from './business-agent-preview.vue'
+localStorage.setItem('medqc_access_token','synthetic-business-agent')
+localStorage.setItem('auth_user','{"id":"synthetic-validation"}')
+createApp(Preview).use(Antd).mount('#app')
+</script></body></html>
