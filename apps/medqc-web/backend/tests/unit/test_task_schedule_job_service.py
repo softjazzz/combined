@@ -35,35 +35,51 @@ def schedule_db():
     engine.dispose()
 
 
-def _task_config() -> dict:
+def _task_config(*, scene="running") -> dict:
     return {
         "date_range": None,
         "department_filter": [],
         "sampling_method": "all",
-        "sampling_config": {"case_scope": "active"},
+        "sampling_config": {"case_scope": "discharged" if scene == "final" else "active"},
         "assign_method": "by_ratio",
         "assignee_config": {},
     }
 
 
-def _seed_source_and_schedule(factory, *, state="active", next_fire_at=None) -> None:
+def _seed_source_and_schedule(
+    factory,
+    *,
+    state="active",
+    next_fire_at=None,
+    scene="running",
+    timing_config=None,
+) -> None:
     now = datetime(2026, 9, 28, 1, 0)
+    rule_key = "sc_content_launch_a_v1" if scene == "final" else "luxian_0609_qc_v1"
+    rule_version = "2026-04-24" if scene == "final" else "2026-06-09"
+    timing_config = timing_config or {
+        "kind": "daily",
+        "timezone": "Asia/Shanghai",
+        "time": "09:00",
+        "start_date": "2026-09-01",
+        "end_date": None,
+    }
     with factory.begin() as session:
         session.execute(sa.insert(QCTask.__table__).values(
             id="source-task",
             task_number="SOURCE-1",
             task_name="每日在院抽样",
             task_type="one_time",
-            scene="running",
-            rule_set_key="luxian_0609_qc_v1",
-            rule_set_version="2026-06-09",
+            scene=scene,
+            rule_set_key=rule_key,
+            rule_set_version=rule_version,
             schedule_config=None,
             date_range=None,
             department_filter=json.dumps([]),
             record_ids=json.dumps([]),
             record_refs=None,
             sampling_method="all",
-            sampling_config=json.dumps({"case_scope": "active"}),
+            sampling_config=json.dumps(_task_config(scene=scene)["sampling_config"]),
             assign_method="by_ratio",
             assignee_config=json.dumps({}),
             status="draft",
@@ -85,17 +101,11 @@ def _seed_source_and_schedule(factory, *, state="active", next_fire_at=None) -> 
             creation_actor_id="owner",
             creation_request_id="create-request-1",
             name="每日在院抽样",
-            scene="running",
-            rule_set_key="luxian_0609_qc_v1",
-            rule_set_version="2026-06-09",
-            task_config_json=json.dumps(_task_config()),
-            timing_config_json=json.dumps({
-                "kind": "daily",
-                "timezone": "Asia/Shanghai",
-                "time": "09:00",
-                "start_date": "2026-09-01",
-                "end_date": None,
-            }),
+            scene=scene,
+            rule_set_key=rule_key,
+            rule_set_version=rule_version,
+            task_config_json=json.dumps(_task_config(scene=scene)),
+            timing_config_json=json.dumps(timing_config),
             state=state,
             next_fire_at=next_fire_at,
             last_fire_at=None,
@@ -253,6 +263,67 @@ def test_worker_persists_nonempty_sample_and_freezes_exact_version(schedule_db):
     assert child.status == "draft"  # 持久函数的真实状态转换由抽样持久层独立测试。
     assert child.deadline is None
     assert child.task_name.endswith("2026-09-28 09:00")
+
+
+@pytest.mark.parametrize(
+    ("kind", "fire_at", "expected"),
+    [
+        ("daily", datetime(2026, 10, 1, 16, 30), {"start": "2026-10-01", "end": "2026-10-01"}),
+        ("weekly", datetime(2026, 10, 4, 16, 30), {"start": "2026-09-28", "end": "2026-10-04"}),
+        ("monthly", datetime(2028, 2, 29, 16, 30), {"start": "2028-02-01", "end": "2028-02-29"}),
+    ],
+)
+def test_final_window_uses_hospital_calendar_and_excludes_current_period(kind, fire_at, expected):
+    schedule = {
+        "scene": "final",
+        "timing_config_json": json.dumps({"kind": kind}),
+    }
+    assert service._final_discharge_range(schedule, fire_at) == expected
+
+
+def test_delayed_final_retry_and_manual_run_keep_original_fire_window(schedule_db, monkeypatch):
+    _seed_source_and_schedule(schedule_db, scene="final", next_fire_at=datetime(2026, 10, 2, 1, 0))
+    original_now = datetime(2026, 10, 1, 16, 30)  # 医院时间 10 月 2 日 00:30
+    monkeypatch.setattr(service, "_now", lambda: original_now)
+    run = service.enqueue_manual_schedule_run(
+        schedule_id="schedule-1",
+        request_id="manual-final-window",
+        actor_id="owner",
+        dispatch=lambda _run_id: None,
+        session_factory=schedule_db,
+    )
+    with schedule_db.begin() as session:
+        session.execute(
+            sa.update(QCTaskScheduleRun)
+            .where(QCTaskScheduleRun.id == run["id"])
+            .values(status="failed")
+        )
+
+    retry_now = datetime(2026, 10, 9, 16, 30)
+    monkeypatch.setattr(service, "_now", lambda: retry_now)
+    retried = service.retry_schedule_run(
+        run_id=run["id"],
+        actor_id="owner",
+        dispatch=lambda _run_id: None,
+        session_factory=schedule_db,
+    )
+    assert retried["scheduled_fire_at"] == run["scheduled_fire_at"]
+
+    seen = []
+    result = service.run_schedule_job(
+        run["id"],
+        session_factory=schedule_db,
+        sample_func=lambda child: seen.append(child["date_range"]) or [{
+            "institute_id": "hospital-1", "patient_id": "patient-1", "visit_id": "visit-1",
+        }],
+        persist_func=lambda child, _sampled, **_kwargs: {
+            "task_id": child["id"], "sampled_count": 1, "records": [{"id": "record-1"}],
+            "record_id_semantics": "association_id_not_medical_record_id",
+        },
+        resolve_version_func=lambda *_args: {},
+    )
+    assert result["status"] == "succeeded"
+    assert seen == [{"start": "2026-10-01", "end": "2026-10-01"}]
 
 
 def test_empty_sample_fails_and_retry_reuses_same_child(schedule_db):

@@ -35,10 +35,20 @@ export interface TaskScheduleTimingWeekly {
   weekdays: number[]
 }
 
+export interface TaskScheduleTimingMonthly {
+  kind: 'monthly'
+  timezone: typeof TASK_SCHEDULE_TIMEZONE
+  time: string
+  start_date: string
+  end_date: string | null
+  day: number
+}
+
 export type TaskScheduleTiming =
   | TaskScheduleTimingOnce
   | TaskScheduleTimingDaily
   | TaskScheduleTimingWeekly
+  | TaskScheduleTimingMonthly
 
 export interface TaskScheduleCreateRequest {
   source_task_id: string
@@ -64,7 +74,7 @@ export interface TaskScheduleResponse {
   source_task_id: string
   owner_id: string
   name: string
-  scene: 'running'
+  scene: 'running' | 'final'
   rule_set_key: string
   rule_set_version: string
   task_config: TaskScheduleTaskConfig
@@ -148,7 +158,13 @@ const ERROR_CODES = new Set<TaskScheduleErrorCode>([
   'request_conflict',
 ])
 const SCHEDULE_STATES = new Set<TaskScheduleState>(['active', 'paused', 'ended', 'cancelled'])
-const RUN_STATUSES = new Set<TaskScheduleRunStatus>(['queued', 'running', 'succeeded', 'failed', 'cancelled'])
+const RUN_STATUSES = new Set<TaskScheduleRunStatus>([
+  'queued',
+  'running',
+  'succeeded',
+  'failed',
+  'cancelled',
+])
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -171,61 +187,80 @@ function isNonNegativeInteger(value: unknown): value is number {
 }
 
 function parseTiming(value: unknown): TaskScheduleTiming {
-  if (!isObject(value) || value.timezone !== TASK_SCHEDULE_TIMEZONE) throw new Error('定时计划响应格式无效')
+  if (!isObject(value) || value.timezone !== TASK_SCHEDULE_TIMEZONE)
+    throw new Error('定时计划响应格式无效')
   if (value.kind === 'once') {
     if (!isNonBlank(value.run_at)) throw new Error('定时计划响应格式无效')
     return value as unknown as TaskScheduleTimingOnce
   }
-  if (value.kind !== 'daily' && value.kind !== 'weekly') throw new Error('定时计划响应格式无效')
-  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(String(value.time || ''))
-    || !/^\d{4}-\d{2}-\d{2}$/.test(String(value.start_date || ''))
-    || !(value.end_date === null || /^\d{4}-\d{2}-\d{2}$/.test(String(value.end_date || '')))) {
+  if (value.kind !== 'daily' && value.kind !== 'weekly' && value.kind !== 'monthly') {
+    throw new Error('定时计划响应格式无效')
+  }
+  if (
+    !/^([01]\d|2[0-3]):[0-5]\d$/.test(String(value.time || '')) ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(String(value.start_date || '')) ||
+    !(value.end_date === null || /^\d{4}-\d{2}-\d{2}$/.test(String(value.end_date || '')))
+  ) {
     throw new Error('定时计划响应格式无效')
   }
   if (value.kind === 'weekly') {
-    if (!Array.isArray(value.weekdays)
-      || !value.weekdays.length
-      || value.weekdays.some((item) => !Number.isInteger(item) || item < 1 || item > 7)
-      || new Set(value.weekdays).size !== value.weekdays.length
-      || value.weekdays.some((item, index) => index > 0 && item <= value.weekdays[index - 1])) {
+    if (
+      !Array.isArray(value.weekdays) ||
+      !value.weekdays.length ||
+      value.weekdays.some((item) => !Number.isInteger(item) || item < 1 || item > 7) ||
+      new Set(value.weekdays).size !== value.weekdays.length ||
+      value.weekdays.some((item, index) => index > 0 && item <= value.weekdays[index - 1])
+    ) {
       throw new Error('定时计划响应格式无效')
     }
+  }
+  if (
+    value.kind === 'monthly' &&
+    (!Number.isInteger(value.day) || Number(value.day) < 1 || Number(value.day) > 31)
+  ) {
+    throw new Error('定时计划响应格式无效')
   }
   return value as unknown as TaskScheduleTiming
 }
 
 function parseTaskConfig(value: unknown): TaskScheduleTaskConfig {
-  if (!isObject(value)
-    || value.date_range !== null
-    || !Array.isArray(value.department_filter)
-    || value.department_filter.some((item) => typeof item !== 'string')
-    || (value.sampling_method !== 'all' && value.sampling_method !== 'count' && value.sampling_method !== 'percentage')
-    || !isObject(value.sampling_config)
-    || (value.assign_method !== 'by_ratio'
-      && value.assign_method !== 'by_original_reviewer'
-      && value.assign_method !== 'by_department')
-    || !isObject(value.assignee_config)) {
+  if (
+    !isObject(value) ||
+    value.date_range !== null ||
+    !Array.isArray(value.department_filter) ||
+    value.department_filter.some((item) => typeof item !== 'string') ||
+    (value.sampling_method !== 'all' &&
+      value.sampling_method !== 'count' &&
+      value.sampling_method !== 'percentage') ||
+    !isObject(value.sampling_config) ||
+    (value.assign_method !== 'by_ratio' &&
+      value.assign_method !== 'by_original_reviewer' &&
+      value.assign_method !== 'by_department') ||
+    !isObject(value.assignee_config)
+  ) {
     throw new Error('定时计划响应格式无效')
   }
   return value as unknown as TaskScheduleTaskConfig
 }
 
 function parseSchedule(value: unknown, expectedId?: string): TaskScheduleResponse {
-  if (!isObject(value)
-    || !isNonBlank(value.id)
-    || (expectedId !== undefined && value.id !== expectedId)
-    || !isNonBlank(value.source_task_id)
-    || !isNonBlank(value.owner_id)
-    || !isNonBlank(value.name)
-    || value.scene !== 'running'
-    || !isNonBlank(value.rule_set_key)
-    || !isNonBlank(value.rule_set_version)
-    || !SCHEDULE_STATES.has(value.state as TaskScheduleState)
-    || !isNullableString(value.next_fire_at)
-    || !isNullableString(value.last_fire_at)
-    || !isPositiveInteger(value.version)
-    || !isNonBlank(value.created_at)
-    || !isNonBlank(value.updated_at)) {
+  if (
+    !isObject(value) ||
+    !isNonBlank(value.id) ||
+    (expectedId !== undefined && value.id !== expectedId) ||
+    !isNonBlank(value.source_task_id) ||
+    !isNonBlank(value.owner_id) ||
+    !isNonBlank(value.name) ||
+    (value.scene !== 'running' && value.scene !== 'final') ||
+    !isNonBlank(value.rule_set_key) ||
+    !isNonBlank(value.rule_set_version) ||
+    !SCHEDULE_STATES.has(value.state as TaskScheduleState) ||
+    !isNullableString(value.next_fire_at) ||
+    !isNullableString(value.last_fire_at) ||
+    !isPositiveInteger(value.version) ||
+    !isNonBlank(value.created_at) ||
+    !isNonBlank(value.updated_at)
+  ) {
     throw new Error('定时计划响应格式无效')
   }
   parseTaskConfig(value.task_config)
@@ -234,11 +269,13 @@ function parseSchedule(value: unknown, expectedId?: string): TaskScheduleRespons
 }
 
 function parseScheduleList(value: unknown): TaskScheduleListResponse {
-  if (!isObject(value)
-    || !Array.isArray(value.items)
-    || !isNonNegativeInteger(value.total)
-    || !isPositiveInteger(value.page)
-    || !isPositiveInteger(value.page_size)) {
+  if (
+    !isObject(value) ||
+    !Array.isArray(value.items) ||
+    !isNonNegativeInteger(value.total) ||
+    !isPositiveInteger(value.page) ||
+    !isPositiveInteger(value.page_size)
+  ) {
     throw new Error('定时计划列表响应格式无效')
   }
   return {
@@ -250,35 +287,39 @@ function parseScheduleList(value: unknown): TaskScheduleListResponse {
 }
 
 function parseRun(value: unknown, expectedScheduleId?: string): TaskScheduleRunResponse {
-  if (!isObject(value)
-    || !isNonBlank(value.id)
-    || !isNonBlank(value.schedule_id)
-    || (expectedScheduleId !== undefined && value.schedule_id !== expectedScheduleId)
-    || (value.trigger_type !== 'scheduled' && value.trigger_type !== 'manual')
-    || !isNonBlank(value.scheduled_fire_at)
-    || !isNonBlank(value.idempotency_key)
-    || !RUN_STATUSES.has(value.status as TaskScheduleRunStatus)
-    || !isNullableString(value.generated_task_id)
-    || !isNullableString(value.async_job_id)
-    || !isNonNegativeInteger(value.attempt_count)
-    || !isNullableString(value.heartbeat_at)
-    || !isNullableString(value.started_at)
-    || !isNullableString(value.finished_at)
-    || !isNullableString(value.error_code)
-    || !isNullableString(value.error_message)
-    || !isNonBlank(value.created_at)
-    || !isNonBlank(value.updated_at)) {
+  if (
+    !isObject(value) ||
+    !isNonBlank(value.id) ||
+    !isNonBlank(value.schedule_id) ||
+    (expectedScheduleId !== undefined && value.schedule_id !== expectedScheduleId) ||
+    (value.trigger_type !== 'scheduled' && value.trigger_type !== 'manual') ||
+    !isNonBlank(value.scheduled_fire_at) ||
+    !isNonBlank(value.idempotency_key) ||
+    !RUN_STATUSES.has(value.status as TaskScheduleRunStatus) ||
+    !isNullableString(value.generated_task_id) ||
+    !isNullableString(value.async_job_id) ||
+    !isNonNegativeInteger(value.attempt_count) ||
+    !isNullableString(value.heartbeat_at) ||
+    !isNullableString(value.started_at) ||
+    !isNullableString(value.finished_at) ||
+    !isNullableString(value.error_code) ||
+    !isNullableString(value.error_message) ||
+    !isNonBlank(value.created_at) ||
+    !isNonBlank(value.updated_at)
+  ) {
     throw new Error('定时运行历史响应格式无效')
   }
   return value as unknown as TaskScheduleRunResponse
 }
 
 function parseRunList(value: unknown, scheduleId: string): TaskScheduleRunListResponse {
-  if (!isObject(value)
-    || !Array.isArray(value.items)
-    || !isNonNegativeInteger(value.total)
-    || !isPositiveInteger(value.page)
-    || !isPositiveInteger(value.page_size)) {
+  if (
+    !isObject(value) ||
+    !Array.isArray(value.items) ||
+    !isNonNegativeInteger(value.total) ||
+    !isPositiveInteger(value.page) ||
+    !isPositiveInteger(value.page_size)
+  ) {
     throw new Error('定时运行历史响应格式无效')
   }
   return {
@@ -289,15 +330,19 @@ function parseRunList(value: unknown, scheduleId: string): TaskScheduleRunListRe
   }
 }
 
-function extractStructuredError(error: unknown): { code?: TaskScheduleErrorCode; message?: string } {
+function extractStructuredError(error: unknown): {
+  code?: TaskScheduleErrorCode
+  message?: string
+} {
   if (!isAxiosError(error) || !isObject(error.response?.data)) return {}
   const body = error.response.data
   for (const key of ['detail', 'error'] as const) {
     const raw = body[key]
     if (!isObject(raw)) continue
-    const code = typeof raw.code === 'string' && ERROR_CODES.has(raw.code as TaskScheduleErrorCode)
-      ? raw.code as TaskScheduleErrorCode
-      : undefined
+    const code =
+      typeof raw.code === 'string' && ERROR_CODES.has(raw.code as TaskScheduleErrorCode)
+        ? (raw.code as TaskScheduleErrorCode)
+        : undefined
     const message = isNonBlank(raw.message) ? raw.message : undefined
     if (code || message) return { code, message }
   }
@@ -320,7 +365,12 @@ async function request<T>(
         uncertain: write && response.status >= 200 && response.status < 300,
       }
     }
-    return { success: true, status: response.status, data: parser(normalized.data), uncertain: false }
+    return {
+      success: true,
+      status: response.status,
+      data: parser(normalized.data),
+      uncertain: false,
+    }
   } catch (error) {
     if (error instanceof Error && !isAxiosError(error)) {
       return { success: false, message: error.message, uncertain: write }
@@ -331,13 +381,16 @@ async function request<T>(
       success: false,
       status,
       code: structured.code,
-      message: structured.message || extractApiErrorMessageFromError(error, '网络异常或服务器不可用'),
+      message:
+        structured.message || extractApiErrorMessageFromError(error, '网络异常或服务器不可用'),
       uncertain: write && (status === undefined || status >= 500),
     }
   }
 }
 
-export function listTaskSchedules(params: { state?: TaskScheduleState; page?: number; page_size?: number } = {}) {
+export function listTaskSchedules(
+  params: { state?: TaskScheduleState; page?: number; page_size?: number } = {},
+) {
   const query = new URLSearchParams()
   Object.entries(params).forEach(([key, value]) => {
     if (value !== undefined) query.set(key, String(value))
@@ -347,18 +400,21 @@ export function listTaskSchedules(params: { state?: TaskScheduleState; page?: nu
 }
 
 export function createTaskSchedule(data: TaskScheduleCreateRequest, idempotencyKey: string) {
-  return request({
-    method: 'POST',
-    url: BASE_URL,
-    headers: { 'Idempotency-Key': idempotencyKey },
-    data,
-  }, parseSchedule, true)
+  return request(
+    {
+      method: 'POST',
+      url: BASE_URL,
+      headers: { 'Idempotency-Key': idempotencyKey },
+      data,
+    },
+    parseSchedule,
+    true,
+  )
 }
 
 export function getTaskSchedule(scheduleId: string) {
-  return request(
-    { method: 'GET', url: `${BASE_URL}/${encodeURIComponent(scheduleId)}` },
-    (value) => parseSchedule(value, scheduleId),
+  return request({ method: 'GET', url: `${BASE_URL}/${encodeURIComponent(scheduleId)}` }, (value) =>
+    parseSchedule(value, scheduleId),
   )
 }
 

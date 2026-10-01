@@ -88,8 +88,18 @@ class TaskScheduleTimingWeekly(_RecurringTimingBase):
         return value
 
 
+class TaskScheduleTimingMonthly(_RecurringTimingBase):
+    kind: Literal["monthly"]
+    day: int = Field(..., ge=1, le=31)
+
+
 TaskScheduleTimingConfig = Annotated[
-    Union[TaskScheduleTimingOnce, TaskScheduleTimingDaily, TaskScheduleTimingWeekly],
+    Union[
+        TaskScheduleTimingOnce,
+        TaskScheduleTimingDaily,
+        TaskScheduleTimingWeekly,
+        TaskScheduleTimingMonthly,
+    ],
     Field(discriminator="kind"),
 ]
 

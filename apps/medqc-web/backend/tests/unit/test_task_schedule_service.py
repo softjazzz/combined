@@ -46,6 +46,19 @@ def _future_once(days: int = 1) -> dict[str, str]:
     }
 
 
+def _future_daily() -> dict[str, object]:
+    start = (datetime.now(timezone.utc) + timedelta(days=1)).astimezone(
+        timezone(timedelta(hours=8))
+    ).date()
+    return {
+        "kind": "daily",
+        "timezone": "Asia/Shanghai",
+        "time": "09:00",
+        "start_date": start.isoformat(),
+        "end_date": None,
+    }
+
+
 def _insert_source(factory, **changes) -> dict:
     values = {
         "id": "source-1",
@@ -119,6 +132,90 @@ def test_calculate_next_fire_keeps_end_date_inclusive() -> None:
         2026, 9, 28, 15, 59
     )
     assert service.calculate_next_fire(config, after_utc=datetime(2026, 9, 28, 15, 59)) is None
+
+
+def test_calculate_next_fire_monthly_uses_stable_day_and_shanghai_timezone() -> None:
+    config = {
+        "kind": "monthly",
+        "timezone": "Asia/Shanghai",
+        "time": "00:30",
+        "start_date": date(2028, 1, 1),
+        "end_date": None,
+        "day": 31,
+    }
+    assert service.calculate_next_fire(config, after_utc=datetime(2028, 2, 28, 16, 29)) == datetime(
+        2028, 2, 28, 16, 30
+    )
+    assert service.calculate_next_fire(config, after_utc=datetime(2028, 2, 28, 16, 30)) == datetime(
+        2028, 3, 30, 16, 30
+    )
+
+
+def test_calculate_next_fire_monthly_clamps_april_31_to_month_end() -> None:
+    config = {
+        "kind": "monthly",
+        "timezone": "Asia/Shanghai",
+        "time": "00:30",
+        "start_date": date(2027, 4, 1),
+        "end_date": None,
+        "day": 31,
+    }
+    assert service.calculate_next_fire(config, after_utc=datetime(2027, 4, 29, 16, 29)) == datetime(
+        2027, 4, 29, 16, 30
+    )
+
+
+@pytest.mark.parametrize(
+    ("day", "expected"),
+    [
+        (29, datetime(2028, 3, 28, 16, 30)),
+        (30, datetime(2028, 3, 29, 16, 30)),
+        (31, datetime(2028, 3, 30, 16, 30)),
+    ],
+)
+def test_calculate_next_fire_after_leap_february_advances_to_march(day, expected) -> None:
+    config = {
+        "kind": "monthly",
+        "timezone": "Asia/Shanghai",
+        "time": "00:30",
+        "start_date": date(2028, 1, 1),
+        "end_date": None,
+        "day": day,
+    }
+    assert service.calculate_next_fire(config, after_utc=datetime(2028, 2, 28, 16, 30)) == expected
+
+
+def test_create_final_schedule_replaces_source_window_and_rejects_once(schedule_store) -> None:
+    _insert_source(
+        schedule_store,
+        task_name="终末出院抽查",
+        scene="final",
+        rule_set_key="sc_content_launch_a_v1",
+        rule_set_version="2026-04-24",
+        date_range=json.dumps({"start": "2026-09-01", "end": "2026-09-30"}),
+        sampling_config=json.dumps({"case_scope": "discharged"}),
+    )
+    with pytest.raises(service.TaskScheduleInvalid, match="每日、每周或每月"):
+        service.create_task_schedule(
+            actor_id="owner-1",
+            is_manager=False,
+            request_id="create-final-once",
+            source_task_id="source-1",
+            source_configuration_version=3,
+            timing_config=_future_once(),
+        )
+
+    created = service.create_task_schedule(
+        actor_id="owner-1",
+        is_manager=False,
+        request_id="create-final-daily",
+        source_task_id="source-1",
+        source_configuration_version=3,
+        timing_config=_future_daily(),
+    )
+    assert created["scene"] == "final"
+    assert created["task_config"]["date_range"] is None
+    assert created["task_config"]["sampling_config"]["case_scope"] == "discharged"
 
 
 def test_create_freezes_source_without_mutating_it(schedule_store) -> None:

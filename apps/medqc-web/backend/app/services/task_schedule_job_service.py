@@ -8,7 +8,7 @@ import json
 import logging
 import threading
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable
 from zoneinfo import ZoneInfo
 
@@ -192,14 +192,46 @@ def _task_config(schedule: dict[str, Any]) -> dict[str, Any]:
     config = _decode_object(schedule.get("task_config_json"), field="任务快照")
     if set(config) != _TASK_CONFIG_FIELDS:
         raise TaskScheduleJobConflict("任务快照字段不完整", code="run_conflict")
-    if schedule.get("scene") != "running":
-        raise TaskScheduleJobConflict("当前仅支持运行病历定时抽样", code="state_conflict")
+    scene = schedule.get("scene")
     sampling_config = config.get("sampling_config")
-    if not isinstance(sampling_config, dict) or sampling_config.get("case_scope") != "active":
-        raise TaskScheduleJobConflict("定时任务必须使用当前在院病历范围", code="run_conflict")
+    expected_scope = {"running": "active", "final": "discharged"}.get(scene)
+    if expected_scope is None:
+        raise TaskScheduleJobConflict("定时任务场景不可用", code="state_conflict")
+    if not isinstance(sampling_config, dict) or sampling_config.get("case_scope") != expected_scope:
+        raise TaskScheduleJobConflict("定时任务病例范围与场景不匹配", code="run_conflict")
     if config.get("date_range") is not None:
         raise TaskScheduleJobConflict("定时任务暂不支持固定日期范围", code="run_conflict")
+    timing = _decode_object(schedule.get("timing_config_json"), field="时间配置")
+    if scene == "final" and timing.get("kind") not in {"daily", "weekly", "monthly"}:
+        raise TaskScheduleJobConflict("终末定时抽样周期不可用", code="run_conflict")
     return config
+
+
+def _final_discharge_range(schedule: dict[str, Any], fire_at: datetime) -> dict[str, str] | None:
+    """把上一完整周期的左闭右开窗口映射为现有日期闭区间合同。"""
+    if schedule.get("scene") != "final":
+        return None
+    timing = _decode_object(schedule.get("timing_config_json"), field="时间配置")
+    kind = timing.get("kind")
+    local_day = _utc_naive(fire_at, field="scheduled_fire_at").replace(
+        tzinfo=timezone.utc,
+    ).astimezone(_HOSPITAL_TZ).date()
+    if kind == "daily":
+        exclusive_end = local_day
+        start = exclusive_end - timedelta(days=1)
+    elif kind == "weekly":
+        exclusive_end = local_day - timedelta(days=local_day.isoweekday() - 1)
+        start = exclusive_end - timedelta(days=7)
+    elif kind == "monthly":
+        exclusive_end = local_day.replace(day=1)
+        previous_month_end = exclusive_end - timedelta(days=1)
+        start = date(previous_month_end.year, previous_month_end.month, 1)
+    else:
+        raise TaskScheduleJobConflict("终末定时抽样周期不可用", code="run_conflict")
+    return {
+        "start": start.isoformat(),
+        "end": (exclusive_end - timedelta(days=1)).isoformat(),
+    }
 
 
 def _authorize(schedule: dict[str, Any], actor_id: str, is_manager: bool) -> None:
@@ -654,6 +686,7 @@ def _child_snapshot(factory: Any, claimed: dict[str, Any], lease_token: str) -> 
                 if existing_child_id:
                     raise TaskScheduleJobConflict("运行子任务不存在", code="run_conflict")
                 config = _task_config(schedule)
+                date_range = _final_discharge_range(schedule, claimed["scheduled_fire_at"])
                 now = _now()
                 fire_local = claimed["scheduled_fire_at"].replace(
                     tzinfo=timezone.utc,
@@ -668,7 +701,9 @@ def _child_snapshot(factory: Any, claimed: dict[str, Any], lease_token: str) -> 
                     "rule_set_key": schedule["rule_set_key"],
                     "rule_set_version": schedule["rule_set_version"],
                     "schedule_config": None,
-                    "date_range": None,
+                    "date_range": (
+                        json.dumps(date_range, ensure_ascii=False) if date_range is not None else None
+                    ),
                     "department_filter": json.dumps(config["department_filter"], ensure_ascii=False),
                     "record_ids": json.dumps([], ensure_ascii=False),
                     "record_refs": None,
@@ -702,6 +737,7 @@ def _child_snapshot(factory: Any, claimed: dict[str, Any], lease_token: str) -> 
                 return child
             child = _decode_child(dict(child_row))
             config = _task_config(schedule)
+            date_range = _final_discharge_range(schedule, claimed["scheduled_fire_at"])
             if (
                 child.get("task_type") != "one_time"
                 or child.get("scene") != schedule.get("scene")
@@ -709,7 +745,7 @@ def _child_snapshot(factory: Any, claimed: dict[str, Any], lease_token: str) -> 
                 or child.get("rule_set_version") != schedule.get("rule_set_version")
                 or child.get("creator_id") != schedule.get("owner_id")
                 or child.get("deadline") is not None
-                or child.get("date_range") is not None
+                or child.get("date_range") != date_range
                 or child.get("department_filter") != config.get("department_filter")
                 or child.get("record_ids") != []
                 or child.get("record_refs") is not None
@@ -756,11 +792,14 @@ def _sample_child(
     transaction_guard: Callable[[Any], None],
 ) -> dict[str, Any]:
     child = _decode_child(child)
+    scene = child.get("scene")
+    expected_scope = {"running": "active", "final": "discharged"}.get(scene)
     if (
-        child.get("scene") != "running"
-        or child.get("date_range") is not None
+        expected_scope is None
+        or (scene == "running" and child.get("date_range") is not None)
+        or (scene == "final" and not isinstance(child.get("date_range"), dict))
         or not isinstance(child.get("sampling_config"), dict)
-        or child["sampling_config"].get("case_scope") != "active"
+        or child["sampling_config"].get("case_scope") != expected_scope
     ):
         raise TaskScheduleJobConflict("运行子任务配置已漂移", code="run_conflict")
     if child.get("status") == "draft":
@@ -846,14 +885,14 @@ def run_schedule_job(
         if not claimed.get("generated_task_id"):
             schedule = claimed["schedule"]
             scheduled_rule_set = get_sichuan_rule_set(schedule.get("rule_set_key"))
-            if scheduled_rule_set is None or scheduled_rule_set.scope != "running":
-                raise TaskScheduleJobConflict("冻结规则集与运行场景不匹配", code="run_conflict")
+            if scheduled_rule_set is None or scheduled_rule_set.scope != schedule.get("scene"):
+                raise TaskScheduleJobConflict("冻结规则集与任务场景不匹配", code="run_conflict")
             resolve_version_func(scheduled_rule_set.key, schedule.get("rule_set_version"))
         child = _child_snapshot(factory, claimed, lease_token)
         child = _decode_child(child)
         rule_set = get_sichuan_rule_set(child.get("rule_set_key"))
-        if rule_set is None or rule_set.scope != "running":
-            raise TaskScheduleJobConflict("冻结规则集与运行场景不匹配", code="run_conflict")
+        if rule_set is None or rule_set.scope != child.get("scene"):
+            raise TaskScheduleJobConflict("冻结规则集与任务场景不匹配", code="run_conflict")
         if claimed.get("generated_task_id"):
             resolve_version_func(rule_set.key, child.get("rule_set_version"))
         if lost.is_set():

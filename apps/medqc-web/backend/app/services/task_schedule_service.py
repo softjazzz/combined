@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import json
+from calendar import monthrange
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Any
 from uuid import uuid4
@@ -165,12 +166,18 @@ def calculate_next_fire(timing_config: Any, *, after_utc: datetime) -> datetime 
     if end_date is not None and candidate_date > end_date:
         return None
 
-    # 周计划最多检查七天即可找到下次时点；八次覆盖首日已过时点的边界。
-    for offset in range(8):
+    # 月末不足指定日时取当月最后一天；40 天足以跨过任意相邻月份。
+    search_days = 40 if timing.kind == "monthly" else 8
+    for offset in range(search_days):
         current_date = candidate_date + timedelta(days=offset)
         if end_date is not None and current_date > end_date:
             return None
         if timing.kind == "weekly" and current_date.isoweekday() not in timing.weekdays:
+            continue
+        if timing.kind == "monthly" and current_date.day != min(
+            timing.day,
+            monthrange(current_date.year, current_date.month)[1],
+        ):
             continue
         local_candidate = datetime.combine(
             current_date,
@@ -200,7 +207,7 @@ def _decode_json(raw: Any, *, field: str, expected: type, default: Any) -> Any:
 
 
 def _source_task_config(source: Any) -> dict[str, Any]:
-    if source.date_range is not None:
+    if source.scene == "running" and source.date_range is not None:
         raise TaskScheduleInvalid("定时计划源草稿必须清空固定日期范围")
     if source.deadline is not None:
         raise TaskScheduleInvalid("定时计划源草稿必须清空固定截止时间")
@@ -456,12 +463,15 @@ def create_task_schedule(
                         "源草稿已有病例或执行记录，不能创建定时计划",
                         code="state_conflict",
                     )
-                if source.get("scene") != "running":
-                    raise TaskScheduleInvalid("定时计划当前仅支持运行病历")
+                scene = source.get("scene")
+                if scene not in {"running", "final"}:
+                    raise TaskScheduleInvalid("定时计划仅支持运行或终末病历")
+                if scene == "final" and timing.get("kind") == "once":
+                    raise TaskScheduleInvalid("终末定时抽样仅支持每日、每周或每月计划")
                 rule_key = source.get("rule_set_key")
                 rule_version = source.get("rule_set_version")
                 rule_set = get_sichuan_rule_set(rule_key)
-                if rule_set is None or rule_set.scope != "running":
+                if rule_set is None or rule_set.scope != scene:
                     raise TaskScheduleInvalid("源草稿冻结的规则集版本不存在或不可用")
                 try:
                     resolution = _resolve_in_session(session, rule_set, rule_version)
@@ -483,7 +493,7 @@ def create_task_schedule(
                     creation_actor_id=actor,
                     creation_request_id=request,
                     name=name.strip(),
-                    scene="running",
+                    scene=scene,
                     rule_set_key=rule_set.key,
                     rule_set_version=resolution["version"],
                     task_config_json=_json_dump(task_config),
