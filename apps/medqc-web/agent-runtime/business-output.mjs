@@ -10,8 +10,6 @@ export function businessModelValue(name, _args, value) {
       'reason_code',
       'job_id',
       'rule_set_version',
-      'is_complete',
-      'missing_rule_ids',
       'result_time',
       'result_time_note',
       'result_page',
@@ -31,9 +29,18 @@ export function businessModelValue(name, _args, value) {
     if (value.result_page?.detail === 'saved_text') fields.push('conclusion', 'suggestion')
     return {
       ...result,
+      saved_result_coverage: select(value, [
+        'is_complete',
+        'missing_rule_ids',
+        'conflicting_rule_ids',
+      ]),
+      task_status_scope:
+        value.state === 'ready'
+          ? '本工具未读取任务运行状态；保存结果完整性描述保存项覆盖及冲突，不能据此推断任务正在运行、未运行完或已停止。'
+          : '本次未取得可读保存结果；按state和reason_code说明正式读取状态，不从结果为空推断任务运行状态。',
       results: (value.references || []).map((ref) => select(ref, fields)),
       display_note:
-        '下方同序卡片保留原结论建议；页码/范围不表示已读其他页。仅解释时按稳定id读取证据。',
+        '下方同序卡片保留保存结论与建议原文。回答改写只能称概述，不能称原文照录；逐字引用须保留完整原句及否定条件。页码/范围不表示已读其他页。仅解释时按稳定id读取证据。',
     }
   }
   if (name === 'read_saved_issue')
@@ -48,6 +55,8 @@ export function businessModelValue(name, _args, value) {
       ]),
       ...select(value, ['reason_code', 'evidence_scope']),
       evidence: value.evidence || [],
+      evidence_read_note:
+        '本工具仅回读保存问题与证据摘录，当前文书和规范原文均未读取。摘录可能不完整，不能据此重新判定已保存状态或新增原因；保存依据不足以解释细节时应说明无法确认。查看当前文书请使用该问题卡片的“查看依据与详情→查看对应文书原文”。',
     }
   if (name === 'read_rule')
     return {

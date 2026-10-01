@@ -26,6 +26,8 @@ function dtoSchema(node) {
 
 const READING_INSTRUCTIONS = `保存结果概览采用明确分页和状态范围：仅列不合规时statuses选择non_compliant；要列前三条就page_size=3。用户要正式结论和建议时detail选择saved_text即可，完整同序卡片也保留原文，列清单不额外查证据或规则。只有解释原因/依据才按稳定id调用read_saved_issue和read_rule。不能把本页当全量，也不能从未返回类别断言其不存在；有下一页携带当前job_id作为expected_job_id。用户说第二条时绑定此前results中position=2的id，不能重新排序。统计rule_scope明确返回范围，需更多规则使用rule_limit，原指标不能自行重算。`
 
+const EXPLANATION_INSTRUCTIONS = `解释追问只围绕用户选定的问题：读取该问题保存证据和对应规则后即可作答，不为交叉核对扩查统计、同族问题或其他状态。保存覆盖率仅说明保存项是否完整，未提供任务运行状态时不得推断任务仍在运行。回答概述须称概述；只有完整照录工具返回原句才能称原文，不能删改否定条件。摘录可能截断，未出现某内容不能证明完整文书缺失；不得用摘录重新判断保存状态、补造原因或评价保存判定是否正确。依据不足时明确说明无法从保存材料确认该细节。当前病历文书与医学规范原文分别说明读取情况；未读取当前文书时引导用户从问题卡片打开对应文书，不声称已核查当前原文。历史回答如有越界推断，须依据当前工具范围纠正，不能沿用为事实。`
+
 const contextKey = (context) =>
   JSON.stringify(
     Object.entries(context)
@@ -146,7 +148,7 @@ export async function createRuntime({
     ctx.plugin(SystemPrompt, {
       includeHarnessIdentity: false,
       includeRuntimeContext: false,
-      personaPrefix: `${INSTRUCTIONS}\n${READING_INSTRUCTIONS}`,
+      personaPrefix: `${INSTRUCTIONS}\n${READING_INSTRUCTIONS}\n${EXPLANATION_INSTRUCTIONS}`,
     }),
     ctx.plugin(ToolRuntime, { mode: 'native' }),
     ctx.plugin(AgentRegistry),

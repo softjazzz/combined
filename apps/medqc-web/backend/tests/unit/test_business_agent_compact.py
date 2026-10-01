@@ -60,7 +60,7 @@ def test_filtered_page_keeps_full_cards_counts_and_exact_second_binding(tmp_path
 
 
 def test_subsequent_page_requires_seen_version_and_rejects_large_page():
-    schema = next(spec["parameters"] for spec in tool_specs() if spec["name"] == "read_saved_results")
+    schema = next(spec["parameters"] for spec in tool_specs("doctor") if spec["name"] == "read_saved_results")
     assert schema["properties"]["statuses"]["type"] == "array"
     assert ReadResults(statuses=[]).statuses == []
     with pytest.raises(ValidationError):

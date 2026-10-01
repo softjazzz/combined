@@ -82,6 +82,48 @@ async function fixture(steps, response, toolSpec = spec) {
   return { runtime, root, adapter, callbacks, sessionId, context, body, fetchImpl }
 }
 
+test('旧医生历史恢复后使用当前工具范围，历史统计调用不能重新执行', async () => {
+  const oldStatistics = { ...spec, name: 'query_statistics' }
+  const f = await fixture(
+    [{ tool: 'query_statistics' }, { text: '旧轮次。' }],
+    { statistics: {}, references: [] },
+    oldStatistics,
+  )
+  await f.runtime.chat(f.sessionId, f.body)
+  await f.runtime.close()
+  const adapter = new ScriptedAdapter([
+    { tool: 'query_statistics' },
+    { tool: 'read_saved_results' },
+    { text: '已读取当前病例。' },
+  ])
+  const restored = await createRuntime({
+    root: f.root,
+    adapter,
+    model: 'synthetic',
+    fetchImpl: f.fetchImpl,
+  })
+  const current = { ...f.body, tools: [spec] }
+  try {
+    await restored.restore(f.sessionId, current)
+    const turn = await restored.chat(f.sessionId, { ...current, run_id: randomUUID() })
+    assert.equal(turn.status, 'completed')
+    assert.equal(f.callbacks.length, 2)
+    assert.ok(f.callbacks[1].url.endsWith('/tools/read_saved_results'))
+    for (const request of adapter.requests)
+      assert.deepEqual(
+        request.tools.map((tool) => tool.name),
+        ['read_saved_results'],
+      )
+    assert.ok(
+      adapter.requests[1].messages.some((message) =>
+        message.content.some((block) => block.type === 'tool-result' && block.isError),
+      ),
+    )
+  } finally {
+    await restored.close()
+  }
+})
+
 test('状态筛选数组在原生 schema 和业务传输中保持数组类型', async () => {
   const toolSpec = {
     ...spec,

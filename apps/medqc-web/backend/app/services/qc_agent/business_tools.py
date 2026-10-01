@@ -55,9 +55,10 @@ TOOL_DEFINITIONS = {
 }
 
 
-def tool_specs() -> list[dict]:
+def tool_specs(view: Literal["doctor", "manager"]) -> list[dict]:
     return [{"name": name, "description": description, "parameters": model.model_json_schema()}
-            for name, (model, description) in TOOL_DEFINITIONS.items()]
+            for name, (model, description) in TOOL_DEFINITIONS.items()
+            if name != "query_statistics" or view == "manager"]
 
 
 def statistics_text(payload: dict) -> str:
@@ -140,6 +141,7 @@ class BusinessTools:
         return {
             "state": "ready", "job_id": payload["job_id"], "rule_set_version": payload.get("rule_set_version"),
             "is_complete": payload.get("is_complete"), "missing_rule_ids": payload.get("missing_rule_ids", []),
+            "conflicting_rule_ids": payload.get("conflicting_rule_ids", []),
             "result_time": payload.get("completed_at"),
             "result_time_note": "正式接口未提供保存时间" if not payload.get("completed_at") else "",
             "references": references,

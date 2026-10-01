@@ -78,7 +78,7 @@ async def create_session(payload: BusinessSessionCreate, user: dict = Depends(ge
     # 先确认运行时可用，再创建仅含归属/上下文的本地元数据。
     await runtime_call("GET", "/health")
     metadata = store.create(user, payload.context)
-    await runtime_call("POST", f"/sessions/{metadata['session_id']}", {"context": metadata["context"], "tools": tool_specs()})
+    await runtime_call("POST", f"/sessions/{metadata['session_id']}", {"context": metadata["context"], "tools": tool_specs(metadata["context"]["view"])})
     return {"session_id": metadata["session_id"], "context": metadata["context"], "turns": []}
 
 
@@ -86,7 +86,7 @@ async def create_session(payload: BusinessSessionCreate, user: dict = Depends(ge
 async def restore_session(session_id: UUID, user: dict = Depends(get_current_user), store: BusinessSessionStore = Depends(get_business_store), access: BusinessAccess = Depends(get_business_access)):
     metadata = store.get(str(session_id), user)
     access.require_context(user, BusinessContext.model_validate(metadata["context"]))
-    data = await runtime_call("POST", f"/sessions/{session_id}/restore", {"context": metadata["context"], "tools": tool_specs()})
+    data = await runtime_call("POST", f"/sessions/{session_id}/restore", {"context": metadata["context"], "tools": tool_specs(metadata["context"]["view"])})
     return {"session_id": str(session_id), "context": metadata["context"], "turns": data["turns"]}
 
 
@@ -101,7 +101,7 @@ async def chat(session_id: UUID, payload: BusinessChat, request: Request, user: 
         "reference_id": payload.reference_id,
         "authorization": request.headers.get("authorization", ""),
         "backend_url": loopback_url("MEDQC_AGENT_BACKEND_URL", "http://127.0.0.1:8003"),
-        "tools": tool_specs(),
+        "tools": tool_specs(metadata["context"]["view"]),
     })
 
 
@@ -146,7 +146,7 @@ async def get_reference(session_id: UUID, reference_id: str, request: Request, u
             if binding["kind"] == "statistics":
                 data = await tools.read_api("/api/v1/qc-agent/business/statistics", binding["filters"])
                 return {"id": reference_id, "kind": "statistics", "title": "正式统计口径与规则分布", "locator": "按原筛选条件刷新读取；数据可能较上一轮更新", "text": "按质控完成时间，使用范围内每份病例最新 Canonical 结果。\n" + statistics_text(data)}
-    return await runtime_call("POST", f"/sessions/{session_id}/reference", {"reference_id": reference_id, "context": metadata["context"], "tools": tool_specs()})
+    return await runtime_call("POST", f"/sessions/{session_id}/reference", {"reference_id": reference_id, "context": metadata["context"], "tools": tool_specs(metadata["context"]["view"])})
 
 
 @router.get("/sessions/{session_id}/evidence-document")

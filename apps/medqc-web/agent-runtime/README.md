@@ -17,6 +17,8 @@
 
 模型文本通过 `business-output.mjs` 纯投影，完整卡片和分页范围保留在原生 `presentationMeta`。保存概览默认 `index`、每页最多10条；正式结论建议用 `saved_text`，状态数组为空表示全部类别，后续页必须携带已见 `expected_job_id`。不截断单问题证据或重判状态；旧会话的大输出不会自动重写。同五轮性能/质量边界见[精简输入验证](../docs/plans/2026-10-01-business-agent-compact-input-validation.md)。
 
+服务端按会话视图选择工具：医生只接收保存结果、问题和规则，管理会话另有统计。保存完整性在模型输入中归入 `saved_result_coverage`，包含原缺失/冲突项，不表示任务运行状态。加载此改动需同时重启独立后端和DSH，使驻留会话重新注册当前工具；旧历史不重写。确定性闭环与真实复验缺口见[解释追问验证](../docs/plans/2026-10-01-business-agent-explanation-validation.md)。
+
 ## 本机合成业务联调
 
 使用 `backend/tests/manual/business_agent_validation_app.py` 的独立 FastAPI 应用，不使用主应用启动钩子，不创建表、启动 Worker 或读取客户数据库。它的固定合成身份只对该测试应用生效。

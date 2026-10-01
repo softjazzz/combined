@@ -2,6 +2,58 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { businessModelValue } from './business-output.mjs'
 
+test('保存覆盖率不能冒充任务运行状态，摘录不冒充当前文书', () => {
+  const canonical = {
+    state: 'ready',
+    is_complete: false,
+    missing_rule_ids: ['R2'],
+    references: [
+      {
+        id: 'result-a',
+        status: 'non_compliant',
+        conclusion: '否定条件必须保留',
+        suggestion: '保存建议',
+      },
+    ],
+  }
+  const model = businessModelValue('read_saved_results', {}, canonical)
+  assert.equal(model.is_complete, undefined)
+  assert.deepEqual(model.saved_result_coverage, { is_complete: false, missing_rule_ids: ['R2'] })
+  assert.match(model.task_status_scope, /未读取任务运行状态/)
+  assert.match(model.display_note, /改写.*不能称.*原文/)
+  const issue = businessModelValue(
+    'read_saved_issue',
+    {},
+    {
+      references: canonical.references,
+      evidence: [{ evidence_excerpt: '未发现结果……' }],
+      evidence_scope: '执行时保存摘录',
+    },
+  )
+  assert.match(issue.evidence_read_note, /不能.*重新判定/)
+  assert.match(issue.evidence_read_note, /当前文书.*未读取/)
+  assert.equal(issue.evidence[0].evidence_excerpt, '未发现结果……')
+  assert.equal(canonical.is_complete, false)
+  const conflicted = businessModelValue(
+    'read_saved_results',
+    {},
+    { ...canonical, missing_rule_ids: [], conflicting_rule_ids: ['R3'] },
+  )
+  assert.deepEqual(conflicted.saved_result_coverage, {
+    is_complete: false,
+    missing_rule_ids: [],
+    conflicting_rule_ids: ['R3'],
+  })
+  const unavailable = businessModelValue(
+    'read_saved_results',
+    {},
+    { state: 'technical_error', reason_code: 'canonical_result_envelope_invalid', references: [] },
+  )
+  assert.equal(unavailable.reason_code, 'canonical_result_envelope_invalid')
+  assert.deepEqual(unavailable.saved_result_coverage, {})
+  assert.match(unavailable.task_status_scope, /正式读取状态/)
+})
+
 test('统计概览缩小规则范围但保留正式计数与病例下钻标识', () => {
   const statistics = {
     kpis: { scoped_record_total: 13, ready_record_total: 6, unavailable_result_total: 7 },
